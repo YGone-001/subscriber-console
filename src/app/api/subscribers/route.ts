@@ -85,7 +85,7 @@ export async function GET(request: Request) {
 
     // Assemble enriched output
     const enriched = subDataList.map(({ imsi, sub4g, trafficObj, ocsImsi, ratingGroupId }) => {
-      let balance = Number(trafficObj.traffic_balance) || 0;
+      const balance = Number(trafficObj.traffic_balance) || 0;
       let total = Number(trafficObj.traffic_total);
 
       // If traffic_total is not defined in Redis, assume the current balance IS the total (0% usage state)

@@ -70,7 +70,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Username and password required' }, { status: 400 });
     }
 
-    let storedUserStr = await redis.get(`SYS_USER:${username}`);
+    const storedUserStr = await redis.get(`SYS_USER:${username}`);
     let storedUser: any = null;
 
     if (!storedUserStr && username === 'admin') {
