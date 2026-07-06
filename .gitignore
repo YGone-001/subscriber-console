@@ -1,0 +1,77 @@
+# Dependencies
+node_modules/
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# Build output
+.next/
+out/
+build/
+dist/
+
+# Next.js and TypeScript generated files
+next-env.d.ts
+*.tsbuildinfo
+
+# Test and coverage artifacts
+coverage/
+.nyc_output/
+playwright-report/
+test-results/
+*.lcov
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-debug.log*
+
+# Environment and local secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Redis data and local bundled runtimes
+*.rdb
+*.aof
+dump.rdb
+/redis/bin/
+/redis/*.zip
+/node/
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*.sublime-project
+*.sublime-workspace
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Temporary files
+tmp/
+temp/
+.tmp/
+*.tmp
+*.bak
+
+# Deployment metadata
+.vercel/
+.netlify/
