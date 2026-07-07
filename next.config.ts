@@ -26,7 +26,7 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
-  serverExternalPackages: ['ioredis'],
+  serverExternalPackages: ['ioredis', 'mongodb'],
   async headers() {
     return [
       {
