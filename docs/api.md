@@ -11,7 +11,7 @@ For each endpoint, document:
 - Request body or query parameters
 - Response shape
 - Error responses
-- Redis keys touched
+- MongoDB collections touched
 - Audit action emitted
 
 ## Current Endpoint Groups

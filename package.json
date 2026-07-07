@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "mongo:init": "node scripts/init-mongo-indexes.mjs",
+    "mongo:migrate-redis": "node scripts/migrate-redis-to-mongo.mjs",
     "clean": "rimraf .next/dev .next/cache .next/types",
     "clean:all": "rimraf .next node_modules/.cache",
     "rebuild": "npm run clean && npm run build"

@@ -4,14 +4,14 @@
 
 - Node.js 20 or newer
 - npm compatible with the checked-in `package-lock.json`
-- Redis 6 or newer
-- Network access from the Next.js server to Redis
+- MongoDB reachable from the Next.js server
 - TLS termination in front of the application for production
 
 ## Build Steps
 
 ```bash
 npm ci
+npm run mongo:init
 npm run build
 ```
 
@@ -25,16 +25,24 @@ Required variables:
 
 | Variable | Description |
 | --- | --- |
-| `REDIS_HOST` | Redis host |
-| `REDIS_PORT` | Redis port |
+| `MONGODB_URI` | MongoDB connection URI, usually the same database used by Open5GS |
+| `MONGODB_DB` | MongoDB database name, default `open5gs` |
 | `JWT_SECRET` | JWT signing secret, at least 32 bytes |
 | `INITIAL_ADMIN_PASSWORD` | Optional bootstrap password for the first `admin` account |
+
+Optional MongoDB tuning variables:
+
+| Variable | Default |
+| --- | --- |
+| `MONGODB_MAX_POOL_SIZE` | `20` |
+| `MONGODB_MIN_POOL_SIZE` | `0` |
+| `MONGODB_SERVER_SELECTION_TIMEOUT_MS` | `5000` |
 
 Security notes:
 
 - Use a unique `JWT_SECRET` for each environment.
 - Rotate `INITIAL_ADMIN_PASSWORD` after bootstrap by changing the admin password or disabling bootstrap usage.
-- Keep Redis private to the application network.
+- Keep MongoDB private to the application and Open5GS network.
 
 ## Start Command
 
@@ -46,13 +54,25 @@ The default Next.js server listens on port `3000` unless configured otherwise th
 
 ## Recommended Production Flow
 
-1. Provision Redis.
+1. Provision MongoDB or reuse the Open5GS MongoDB database.
 2. Configure environment variables in the deployment platform.
 3. Run `npm ci`.
-4. Run `npm run build`.
-5. Start with `npm run start`.
-6. Log in with the bootstrap `admin` account if needed.
-7. Create named operator/viewer accounts and store credentials securely.
+4. Run `npm run mongo:init` to create indexes.
+5. Run `npm run build`.
+6. Start with `npm run start`.
+7. Log in with the bootstrap `admin` account if needed.
+8. Create named operator/viewer accounts and store credentials securely.
+
+## Legacy Data Migration
+
+If the old deployment still has data in Redis, run the one-time migration before cutting over:
+
+```bash
+REDIS_URL=redis://127.0.0.1:6379/0 npm run mongo:migrate-redis -- --dry-run
+REDIS_URL=redis://127.0.0.1:6379/0 npm run mongo:migrate-redis
+```
+
+Use `--overwrite` only when you intentionally want Redis values to replace existing MongoDB documents.
 
 ## Common Issues
 
@@ -66,7 +86,7 @@ Ensure `INITIAL_ADMIN_PASSWORD` is set and satisfies the password policy: at lea
 
 ### Dashboard or API data is empty
 
-Verify Redis connectivity and confirm the expected subscriber, profile, rating, and analytics keys exist.
+Confirm `MONGODB_URI` and `MONGODB_DB` point to the expected Open5GS database, then run `npm run mongo:init`.
 
 ### Build succeeds but runtime APIs fail
 

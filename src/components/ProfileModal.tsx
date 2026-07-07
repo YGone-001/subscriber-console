@@ -141,9 +141,8 @@ export default function ProfileModal({ profileName, onClose, onRefresh }: Profil
   }, []);
 
   /**
- * Load full Profile data from Redis
- * Mapping: PROFILE:<name> -> { auth, ambr, sliceList }
- */
+   * Load full Profile data from MongoDB.
+   */
   useEffect(() => {
     if (!profileName) return;
     loadProfileData();
@@ -235,9 +234,8 @@ export default function ProfileModal({ profileName, onClose, onRefresh }: Profil
   };
 
   /**
- * Save Profile to Redis
- * POST to create, PUT to update
- */
+   * Save Profile to MongoDB.
+   */
   const handleSave = async () => {
     setIsSaving(true);
     setError(null);

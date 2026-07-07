@@ -44,8 +44,7 @@ export default function RatingPage() {
   const [newForm, setNewForm] = useState({ rating_group_id: "", currency: "USD", rates: "0", rates_type: 1 });
 
   /**
-   * 创建新费率模板
-   * 写入 Redis: OCS:RATES:RATES_[rating_group_id]
+   * Create a rating template through the MongoDB-backed API.
    */
   const handleCreate = async () => {
     if (!newForm.rating_group_id) return;

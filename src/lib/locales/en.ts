@@ -278,7 +278,7 @@ export const en: Record<string, string> = {
     account_del_confirm: "Delete account {user}?",
     health_data_score: "Data Health Score",
     health_active_anomalies: "Active Anomalies",
-    health_last_bgsave: "Last Redis BGSAVE",
+    health_last_bgsave: "Last Mongo Check",
     health_loading: "Loading...",
     health_idle_msg: "System is idle. Click Run Full Audit to begin.",
     health_btn_run: "Run Full Audit",

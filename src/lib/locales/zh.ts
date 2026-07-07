@@ -278,7 +278,7 @@ export const zh: Record<string, string> = {
     account_del_confirm: "确定要删除账户 {user} 吗？",
     health_data_score: "数据健康度",
     health_active_anomalies: "异常总数",
-    health_last_bgsave: "上次备份时间",
+    health_last_bgsave: "上次 Mongo 检查",
     health_loading: "加载中...",
     health_idle_msg: "系统空闲。点击“全面诊断”开始。",
     health_btn_run: "全面诊断",

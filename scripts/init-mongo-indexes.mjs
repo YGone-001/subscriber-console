@@ -30,8 +30,8 @@ async function ensureIndexes() {
   ]);
 
   await db.collection('app_profile_versions').createIndexes([
-    { key: { profile_name: 1, created_at: -1 }, name: 'profile_versions_by_profile' },
-    { key: { version_id: 1 }, unique: true, name: 'uniq_profile_version_id' },
+    { key: { profileName: 1, savedAt: -1 }, name: 'profile_versions_by_profile' },
+    { key: { versionId: 1 }, unique: true, name: 'uniq_profile_version_id' },
   ]);
 
   await db.collection('app_ratings').createIndexes([

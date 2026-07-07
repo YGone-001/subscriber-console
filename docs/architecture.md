@@ -2,7 +2,7 @@
 
 ## Project Goal
 
-`subscriber-console` provides a web-based operations console for 4G/5G/OCS subscriber data. It focuses on practical operator workflows: provisioning IMSI records, managing reusable profile templates, configuring rating policies, observing traffic metrics, auditing changes, and repairing Redis data inconsistencies.
+`subscriber-console` provides a web-based operations console for Open5GS 4G/5G/OCS subscriber data. It focuses on practical operator workflows: provisioning IMSI records, managing reusable profile templates, configuring rating policies, observing traffic metrics, auditing changes, and repairing MongoDB document consistency.
 
 ## Module Breakdown
 
@@ -18,39 +18,49 @@
 - `src/app/api/subscribers` handles subscriber CRUD, import, batch precheck, and batch creation.
 - `src/app/api/profiles` handles profile templates and version restore flows.
 - `src/app/api/ratings` handles OCS rating group templates.
-- `src/app/api/analytics` provides metric initialization, snapshots, and sparklines.
+- `src/app/api/analytics` provides metric snapshots and sparklines from MongoDB.
 - `src/app/api/audit` exposes audit log search.
-- `src/app/api/system/audit` scans and repairs Redis data consistency.
+- `src/app/api/system/audit` scans and repairs subscriber document consistency.
 - `src/app/api/alerts` exposes local alert data and acknowledgment.
 
 ### Domain Services
 
-- `src/lib/redis.ts` centralizes Redis access.
+- `src/lib/mongo.ts` centralizes MongoDB client access.
+- `src/server/repositories` contains MongoDB persistence logic.
+- `src/lib/open5gsSubscriber.ts` builds Open5GS-compatible subscriber documents.
 - `src/lib/audit.ts` records operator actions and change details.
-- `src/lib/analytics.ts` updates aggregate metrics after data mutations.
+- `src/lib/analytics.ts` handles event hooks for analytics and sentinel checks.
 - `src/lib/authz.ts` enforces API role authorization.
 - `src/lib/security.ts` validates secret and password policy requirements.
 - `src/lib/sentinel.ts` evaluates abnormal traffic events and local alerts.
 - `src/lib/csv.ts` parses and emits CSV data.
 
-### Data Model
+## Data Model
 
-The application stores and reads domain data from Redis keys for subscriber definitions, OCS account data, profile templates, rating groups, audit records, alerts, and derived statistics. TypeScript interfaces under `src/types` describe subscriber, session, slice, QoS, rating, and PLMN-related data.
+The application stores subscriber documents in MongoDB `subscribers`, following the Open5GS-compatible document shape. Web UI metadata is kept under `webui_meta`. Console-owned collections use the `app_` prefix:
+
+- `app_profiles`
+- `app_profile_versions`
+- `app_ratings`
+- `app_users`
+- `app_audit_logs`
+- `app_alerts`
+- `app_rate_limits`
 
 ## Data Flow
 
 1. A user logs in through `/api/auth/login`.
 2. The proxy verifies the JWT cookie and forwards user context through request headers.
 3. Dashboard pages call API Route Handlers through SWR.
-4. API handlers validate authorization, read/write Redis, and record audit events.
-5. Audit writes update analytics and may trigger Sentinel checks.
+4. API handlers validate authorization, read/write MongoDB through repositories, and record audit events.
+5. Audit writes may trigger analytics hooks and Sentinel checks.
 6. UI components refresh affected SWR resources and show updated operational state.
 
 ## Key Dependencies
 
 - Next.js App Router and Route Handlers
 - React client components
-- Redis through ioredis
+- MongoDB Node.js driver
 - jose for JWT signing and verification
 - bcryptjs for password hashing
 - SWR for client data fetching
@@ -59,10 +69,10 @@ The application stores and reads domain data from Redis keys for subscriber defi
 
 ## Extension Directions
 
-- Add automated tests for Redis data contracts and API authorization.
+- Add automated tests for MongoDB repository contracts and API authorization.
 - Introduce typed validation schemas for API request bodies.
 - Add OpenAPI documentation generation for Route Handlers.
 - Add container deployment artifacts and health probes.
 - Support external identity providers or SSO.
 - Add structured observability for logs, metrics, and traces.
-- Add data migration scripts for Redis key schema changes.
+- Add migration scripts for future Open5GS document schema changes.
