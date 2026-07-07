@@ -1,4 +1,4 @@
-import { Document, Filter, MongoServerError } from 'mongodb';
+import { AnyBulkWriteOperation, Document, Filter, MongoServerError } from 'mongodb';
 import { getMongoCollection, mongoCollections } from '@/lib/mongo';
 import {
   buildDefaultOpen5gsSubscriber,
@@ -36,6 +36,63 @@ type RatingDoc = {
   currency?: string;
   rates?: string | number;
   rates_type?: number;
+};
+
+type ProfileDoc = Document & {
+  name?: string;
+  auth?: Record<string, unknown>;
+  ambr?: unknown;
+  msisdnList?: unknown;
+  sliceList?: unknown;
+  ocsDefaults?: Record<string, unknown>;
+  ocs_defaults?: Record<string, unknown>;
+};
+
+type BatchCreateOptions = {
+  startImsi: string;
+  count: number;
+  plmn?: string;
+  trafficTotal?: unknown;
+  trafficBalance?: unknown;
+  withhold?: unknown;
+  withholdingResidue?: unknown;
+  withholdingTime?: unknown;
+  ratingGroupId?: unknown;
+  profileName?: string;
+  currency?: string;
+  balance?: unknown;
+  strategy?: 'skip' | 'overwrite';
+};
+
+type BatchCreateResult = {
+  createdImsis: string[];
+  skippedImsis: string[];
+  metrics: {
+    totalTraffic: number;
+    batchSize: number;
+    plmn: string;
+    ratingGroupId?: unknown;
+  };
+};
+
+type ImportRecord = Record<string, unknown> & {
+  imsi?: unknown;
+  k?: unknown;
+  opc?: unknown;
+  op?: unknown;
+  amf?: unknown;
+  traffic_balance?: unknown;
+  plmn?: unknown;
+  currency?: unknown;
+  balance?: unknown;
+  access_restriction_data?: unknown;
+  withhold?: unknown;
+};
+
+type ImportResult = {
+  imported: number;
+  skipped: number;
+  importedImsis: string[];
 };
 
 function isDuplicateKey(error: unknown): boolean {
@@ -106,6 +163,154 @@ async function subscribersCollection() {
 
 async function ratingsCollection() {
   return getMongoCollection<RatingDoc & Document>(mongoCollections.ratings);
+}
+
+async function profilesCollection() {
+  return getMongoCollection<ProfileDoc>(mongoCollections.profiles);
+}
+
+function asNumber(value: unknown, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function asString(value: unknown, fallback = ''): string {
+  if (value === undefined || value === null || value === '') return fallback;
+  return String(value);
+}
+
+function isValidImsi(imsi: string): boolean {
+  return /^\d{15}$/.test(imsi);
+}
+
+function generateImsiRange(startImsi: string, count: number): string[] {
+  const start = BigInt(startImsi);
+  return Array.from({ length: count }, (_, index) => (start + BigInt(index)).toString());
+}
+
+async function findProfile(profileName?: string): Promise<ProfileDoc | null> {
+  if (!profileName) return null;
+  const collection = await profilesCollection();
+  return collection.findOne({ name: profileName });
+}
+
+async function findRating(ratingGroupId: unknown): Promise<RatingDoc | null> {
+  if (ratingGroupId === undefined || ratingGroupId === null || ratingGroupId === '') return null;
+  const collection = await ratingsCollection();
+  return collection.findOne({ rating_group_id: Number(ratingGroupId) });
+}
+
+function profileOcs(profile: ProfileDoc | null | undefined): Record<string, unknown> {
+  return profile?.ocsDefaults || profile?.ocs_defaults || {};
+}
+
+async function existingImsiSet(imsis: string[]): Promise<Set<string>> {
+  const collection = await subscribersCollection();
+  const docs = await collection
+    .find({ imsi: { $in: imsis } }, { projection: { imsi: 1 } })
+    .toArray();
+  return new Set(docs.map((doc) => doc.imsi));
+}
+
+function batchDocForImsi(
+  imsi: string,
+  profileData: ProfileDoc | null,
+  options: {
+    effectivePlmn: string;
+    initialTotal: number;
+    initialBalance: number;
+    withholdValue: number;
+    withholdingResidueValue: number;
+    withholdingTimeValue: number;
+    accountBalance: string;
+    accountCurrency: string;
+    effectiveRatingGroupId?: unknown;
+    ratingMapValue?: unknown;
+  }
+): Open5gsSubscriberDocument {
+  const auth4G = profileData?.auth
+    ? { ...profileData.auth, sqn: 1 }
+    : { k: '00000000000000000000000000000000', opc: '00000000000000000000000000000000', sqn: 1, amf: '8000' };
+  const sub4G = {
+    ambr: profileData?.ambr,
+    msisdnList: profileData?.msisdnList,
+    sliceList: profileData?.sliceList,
+    access_restriction_data: 32,
+    network_access_mode: 0,
+  };
+  const ocsImsiSet = options.effectiveRatingGroupId !== undefined && options.effectiveRatingGroupId !== null && options.effectiveRatingGroupId !== ''
+    ? {
+        rates_map: { [options.effectivePlmn]: options.ratingMapValue ?? Number(options.effectiveRatingGroupId) },
+        imsi,
+      }
+    : undefined;
+
+  return buildOpen5gsSubscriberFromLegacy(imsi, {
+    sub4G,
+    auth4G,
+    ocsTraffic: {
+      traffic_total: options.initialTotal,
+      traffic_balance: options.initialBalance,
+      imsi,
+      plmn: options.effectivePlmn,
+    },
+    ocsImsi: {
+      account_id: imsi,
+      imsi,
+      withhold: options.withholdValue,
+      withholding_residue: options.withholdingResidueValue,
+      withholding_time: options.withholdingTimeValue,
+    },
+    ocsAccount: {
+      account_id: imsi,
+      balance: options.accountBalance,
+      currency: options.accountCurrency,
+    },
+    ocsImsiSet,
+  });
+}
+
+function csvDocForRecord(record: ImportRecord): Open5gsSubscriberDocument | null {
+  const imsi = asString(record.imsi).trim();
+  if (!isValidImsi(imsi)) return null;
+
+  const trafficBalance = asNumber(record.traffic_balance, 10737418240);
+  const accessRestriction = asNumber(record.access_restriction_data, 32);
+
+  return buildOpen5gsSubscriberFromLegacy(imsi, {
+    sub4G: {
+      access_restriction_data: accessRestriction,
+      network_access_mode: 0,
+    },
+    auth4G: {
+      k: asString(record.k, '00000000000000000000000000000000'),
+      opc: asString(record.opc ?? record.op, '00000000000000000000000000000000'),
+      sqn: 1,
+      amf: asString(record.amf, '8000'),
+    },
+    ocsTraffic: {
+      imsi,
+      plmn: asString(record.plmn, '45400'),
+      traffic_total: trafficBalance,
+      traffic_balance: trafficBalance,
+    },
+    ocsImsi: {
+      imsi,
+      account_id: imsi,
+      withhold: asNumber(record.withhold, 100),
+      withholding_residue: 0,
+      withholding_time: 3600,
+    },
+    ocsAccount: {
+      account_id: imsi,
+      balance: asString(record.balance, '10000'),
+      currency: asString(record.currency, 'USD'),
+    },
+    ocsImsiSet: {
+      rates_map: {},
+      imsi,
+    },
+  });
 }
 
 async function ratingMapFor(docs: Open5gsSubscriberDocument[]): Promise<Map<string, RatingDoc>> {
@@ -261,4 +466,149 @@ export async function deleteSubscriber(imsi: string): Promise<boolean> {
   const collection = await subscribersCollection();
   const result = await collection.deleteOne({ imsi });
   return result.deletedCount > 0;
+}
+
+export async function precheckSubscriberImsis(imsis: string[]) {
+  const validImsis = imsis.map((imsi) => String(imsi).trim()).filter(isValidImsi);
+  const existing = await existingImsiSet(validImsis);
+
+  return validImsis.map((imsi) => ({
+    imsi,
+    exists: existing.has(imsi),
+  }));
+}
+
+export async function precheckSubscriberRange(startImsi: string, count: number) {
+  const imsis = generateImsiRange(startImsi, count);
+  const existing = await existingImsiSet(imsis);
+  const conflictImsis = imsis.filter((imsi) => existing.has(imsi));
+
+  return {
+    conflictCount: conflictImsis.length,
+    conflictImsis,
+    totalCount: count,
+  };
+}
+
+export async function createSubscribersBatch(options: BatchCreateOptions): Promise<BatchCreateResult> {
+  const profileData = await findProfile(options.profileName);
+  const ocs = profileOcs(profileData);
+  let effectiveRatingGroupId = options.ratingGroupId;
+
+  if (effectiveRatingGroupId === undefined || effectiveRatingGroupId === null || effectiveRatingGroupId === '') {
+    effectiveRatingGroupId = ocs.ratingGroupId ?? ocs.rating_group_id;
+  }
+
+  const ratingData = await findRating(effectiveRatingGroupId);
+  const effectivePlmn = options.plmn || asString(ocs.plmn, '45400');
+  const initialTotal = asNumber(
+    options.trafficTotal ?? ocs.trafficTotal ?? ocs.traffic_total ?? options.trafficBalance ?? ocs.trafficBalance ?? ocs.traffic_balance,
+    5368709120
+  );
+  const initialBalance = asNumber(
+    options.trafficBalance ?? ocs.trafficBalance ?? ocs.traffic_balance,
+    initialTotal
+  );
+  const withholdValue = asNumber(options.withhold ?? ocs.withhold, 100);
+  const withholdingResidueValue = asNumber(
+    options.withholdingResidue ?? ocs.withholdingResidue ?? ocs.withholding_residue,
+    0
+  );
+  const withholdingTimeValue = asNumber(
+    options.withholdingTime ?? ocs.withholdingTime ?? ocs.withholding_time,
+    3600
+  );
+  const accountBalance = asString(options.balance ?? ocs.balance, '10000');
+  const accountCurrency = options.currency || asString(ocs.currency, 'USD');
+  const ratingMapValue = ratingData ? ratingData.rating_group_id : effectiveRatingGroupId;
+
+  const imsis = generateImsiRange(options.startImsi, options.count);
+  const existing = options.strategy === 'skip' ? await existingImsiSet(imsis) : new Set<string>();
+  const createdImsis: string[] = [];
+  const skippedImsis: string[] = [];
+  const operations: AnyBulkWriteOperation<SubscriberDoc>[] = [];
+
+  for (const imsi of imsis) {
+    if (options.strategy === 'skip' && existing.has(imsi)) {
+      skippedImsis.push(imsi);
+      continue;
+    }
+
+    const doc = batchDocForImsi(imsi, profileData, {
+      effectivePlmn,
+      initialTotal,
+      initialBalance,
+      withholdValue,
+      withholdingResidueValue,
+      withholdingTimeValue,
+      accountBalance,
+      accountCurrency,
+      effectiveRatingGroupId,
+      ratingMapValue,
+    });
+
+    operations.push({
+      replaceOne: {
+        filter: { imsi },
+        replacement: doc as SubscriberDoc,
+        upsert: true,
+      },
+    });
+    createdImsis.push(imsi);
+  }
+
+  if (operations.length > 0) {
+    const collection = await subscribersCollection();
+    await collection.bulkWrite(operations, { ordered: false });
+  }
+
+  return {
+    createdImsis,
+    skippedImsis,
+    metrics: {
+      totalTraffic: initialTotal * createdImsis.length,
+      batchSize: createdImsis.length,
+      plmn: effectivePlmn,
+      ratingGroupId: effectiveRatingGroupId,
+    },
+  };
+}
+
+export async function importSubscribersFromRecords(records: ImportRecord[], overwrite: boolean): Promise<ImportResult> {
+  const normalized = records
+    .map(csvDocForRecord)
+    .filter((doc): doc is Open5gsSubscriberDocument => doc !== null);
+  const imsis = normalized.map((doc) => doc.imsi);
+  const existing = await existingImsiSet(imsis);
+  const operations: AnyBulkWriteOperation<SubscriberDoc>[] = [];
+  const importedImsis: string[] = [];
+  let skipped = records.length - normalized.length;
+
+  for (const doc of normalized) {
+    const exists = existing.has(doc.imsi);
+    if (exists && !overwrite) {
+      skipped++;
+      continue;
+    }
+
+    operations.push({
+      replaceOne: {
+        filter: { imsi: doc.imsi },
+        replacement: doc as SubscriberDoc,
+        upsert: true,
+      },
+    });
+    importedImsis.push(doc.imsi);
+  }
+
+  if (operations.length > 0) {
+    const collection = await subscribersCollection();
+    await collection.bulkWrite(operations, { ordered: false });
+  }
+
+  return {
+    imported: importedImsis.length,
+    skipped,
+    importedImsis,
+  };
 }

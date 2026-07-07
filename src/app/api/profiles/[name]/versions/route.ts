@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server';
-import { redis } from '@/lib/redis';
 import { requireAuth } from '@/lib/authz';
 import { enforceRateLimit } from '@/lib/rateLimit';
-import { getProfileVersion, listProfileVersions, summarizeProfileVersion } from '@/lib/profileVersions';
+import {
+  getProfile,
+  getProfileVersion,
+  listProfileVersions,
+  summarizeProfileVersion,
+} from '@/server/repositories/profileRepository';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,8 +27,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ name
   const limit = parseInt(searchParams.get('limit') || '20', 10);
 
   try {
-    const currentRaw = await redis.get(`PROFILE:${name}`);
-    const current = currentRaw ? JSON.parse(currentRaw) : null;
+    const current = await getProfile(name);
 
     if (versionId) {
       const version = await getProfileVersion(name, versionId);

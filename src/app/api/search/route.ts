@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
-import { redis } from '@/lib/redis';
 import { enforceRateLimit } from '@/lib/rateLimit';
-import { searchSubscriberImsisByPrefix } from '@/lib/subscriberIndex';
 import { requireAuth } from '@/lib/authz';
+import { listSubscriberImsis } from '@/server/repositories/subscriberRepository';
+import { listProfiles } from '@/server/repositories/profileRepository';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,68 +20,38 @@ function clampLimit(value: string | null): number {
   return Math.min(Math.max(parsed, 1), 12);
 }
 
-function escapeRedisGlob(value: string): string {
-  return value.replace(/[\\*?\[\]]/g, '\\$&');
-}
-
-async function scanLimited(pattern: string, limit: number, count = 200): Promise<string[]> {
-  const keys: string[] = [];
-  let cursor = '0';
-
-  do {
-    const [nextCursor, elements] = await redis.scan(cursor, 'MATCH', pattern, 'COUNT', count);
-    cursor = nextCursor;
-    keys.push(...elements);
-  } while (cursor !== '0' && keys.length < limit);
-
-  return keys.slice(0, limit);
-}
-
 async function searchSubscribers(query: string, limit: number): Promise<SearchResult[]> {
   if (!/^\d+$/.test(query)) return [];
 
-  const imsis = await searchSubscriberImsisByPrefix(query, limit);
-  return imsis.map((imsi) => {
-    return {
-      id: `imsi-${imsi}`,
-      label: imsi,
-      desc: 'Open subscriber',
-      type: 'imsi' as const,
-      path: '/subscribers',
-    };
-  });
+  const { subscribers } = await listSubscriberImsis(1, limit, query);
+  return subscribers.map((imsi) => ({
+    id: `imsi-${imsi}`,
+    label: imsi,
+    desc: 'Open subscriber',
+    type: 'imsi',
+    path: '/subscribers',
+  }));
 }
 
 async function searchProfiles(query: string, limit: number): Promise<SearchResult[]> {
-  const keys = await scanLimited(`PROFILE:*${escapeRedisGlob(query)}*`, limit);
-  if (keys.length === 0) return [];
+  if (limit <= 0) return [];
+  const needle = query.toLowerCase();
+  const profiles = await listProfiles();
 
-  const pipeline = redis.pipeline();
-  keys.forEach((key) => pipeline.get(key));
-  const values = await pipeline.exec();
-
-  return keys.map((key, index) => {
-    const name = key.replace('PROFILE:', '');
-    let title = name;
-    const raw = values?.[index]?.[1];
-
-    if (typeof raw === 'string') {
-      try {
-        const data = JSON.parse(raw) as { title?: unknown };
-        if (typeof data.title === 'string' && data.title.trim()) title = data.title;
-      } catch {
-        title = name;
-      }
-    }
-
-    return {
-      id: `profile-${name}`,
-      label: name,
-      desc: title === name ? 'Open profile template' : title,
-      type: 'profile' as const,
+  return profiles
+    .filter((profile) => {
+      const name = String(profile.name || '').toLowerCase();
+      const title = String(profile.title || '').toLowerCase();
+      return name.includes(needle) || title.includes(needle);
+    })
+    .slice(0, limit)
+    .map((profile) => ({
+      id: `profile-${profile.name}`,
+      label: profile.name,
+      desc: profile.title === profile.name ? 'Open profile template' : profile.title,
+      type: 'profile',
       path: '/profile',
-    };
-  });
+    }));
 }
 
 export async function GET(request: Request) {
