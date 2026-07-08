@@ -164,7 +164,7 @@ export default function ProfileModal({ profileName, onClose, onRefresh }: Profil
   const openVersion = async (versionId: string) => {
     if (!profileName) return;
     try {
-      const res = await fetch(`/api/profiles/${profileName}/versions?versionId=${encodeURIComponent(versionId)}&t=${Date.now()}`);
+      const res = await fetch(`/api/profiles/${profileName}/versions?versionId=${encodeURIComponent(versionId)}`);
       if (!res.ok) throw new Error("Failed to fetch version");
       const data = await res.json();
       setSelectedVersion(data.version || null);

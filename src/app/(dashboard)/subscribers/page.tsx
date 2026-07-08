@@ -238,7 +238,7 @@ export default function SubscriberPage() {
 
   const totalPages = Math.max(1, Math.ceil(totalSubscribers / pageSize));
   const paginatedSubscribers = sortedSubscribers;
-  const pageImsis = useMemo(() => paginatedSubscribers.map((s) => s.imsi), [paginatedSubscribers]);
+  const pageImsis = paginatedSubscribers.map((s) => s.imsi);
   const selectedOnPageCount = pageImsis.filter((imsi) => selectedImsis.includes(imsi)).length;
   const isAllPageSelected = pageImsis.length > 0 && selectedOnPageCount === pageImsis.length;
 

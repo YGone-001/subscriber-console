@@ -154,7 +154,7 @@ export default function CommandPalette({ isOpen, onClose, onAction }: CommandPal
     }
   }, [onAction, onClose, router]);
 
-  const handleKeyDown = useCallback((e: KeyboardEvent<HTMLDivElement>) => {
+  const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key === "ArrowDown") {
       e.preventDefault();
       setSelectedIndex((prev) => Math.min(prev + 1, filteredItems.length - 1));
@@ -169,7 +169,7 @@ export default function CommandPalette({ isOpen, onClose, onAction }: CommandPal
     } else if (e.key === "Escape") {
       onClose();
     }
-  }, [filteredItems, handleSelect, onClose, selectedIndex]);
+  };
 
   if (!isOpen) return null;
 
