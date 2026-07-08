@@ -49,7 +49,15 @@ Current baseline checks:
 
 ```bash
 npm run lint
+npm run typecheck
+npm test
 npm run build
+```
+
+For the full local quality gate, run:
+
+```bash
+npm run check
 ```
 
 Recommended future tests:
@@ -76,5 +84,5 @@ Before committing:
 ```bash
 git status
 git diff --check
-npm run lint
+npm run check
 ```

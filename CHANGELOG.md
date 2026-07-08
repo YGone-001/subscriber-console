@@ -10,6 +10,7 @@ and this project follows semantic versioning where practical.
 ### Added
 
 - Initial project documentation, contribution guidelines, security policy, and GitHub templates.
+- Development quality gate with `typecheck`, `check`, Node version pinning, and GitHub Actions CI.
 
 ## [0.1.0] - 2026-07-06
 

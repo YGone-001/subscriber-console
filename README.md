@@ -60,6 +60,9 @@ npm run dev                 # Start development server
 npm run build               # Production build
 npm run start               # Start production server
 npm run lint                # Run ESLint
+npm run typecheck           # Run TypeScript without emitting files
+npm test                    # Run Node.js unit tests
+npm run check               # Run lint, typecheck, tests, and build
 npm run mongo:init          # Create MongoDB indexes
 npm run mongo:migrate-redis # One-time legacy data migration
 ```
@@ -93,8 +96,7 @@ More detail is available in [Deployment](docs/deployment.md).
 Before committing, run:
 
 ```bash
-npm run lint
-npm run build
+npm run check
 ```
 
 ## License

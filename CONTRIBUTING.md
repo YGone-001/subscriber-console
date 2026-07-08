@@ -58,8 +58,7 @@ For feature requests, include:
 Before submitting a PR, run:
 
 ```bash
-npm run lint
-npm run build
+npm run check
 ```
 
 Add tests for high-risk behavior when introducing or changing:
