@@ -1,0 +1,270 @@
+type ValidationResult<T> =
+  | { ok: true; value: T }
+  | { ok: false; error: string };
+
+type BatchCreatePayload = {
+  startImsi: string;
+  count: number;
+  plmn?: string;
+  trafficTotal?: unknown;
+  trafficBalance?: unknown;
+  withhold?: unknown;
+  withholdingResidue?: unknown;
+  withholdingTime?: unknown;
+  ratingGroupId?: unknown;
+  profileName?: string;
+  currency?: string;
+  balance?: unknown;
+  strategy: 'skip' | 'overwrite';
+};
+
+const HEX_32 = /^[0-9a-fA-F]{32}$/;
+const HEX_4 = /^[0-9a-fA-F]{4}$/;
+const HEX_1_TO_6 = /^[0-9a-fA-F]{1,6}$/;
+const SESSION_NAME = /^[A-Za-z0-9_.-]{1,63}$/;
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function isBlank(value: unknown): boolean {
+  return value === undefined || value === null || value === '';
+}
+
+function finiteNumber(value: unknown): number | null {
+  if (isBlank(value)) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function validateOptionalNonNegativeNumber(value: unknown, field: string): string | null {
+  if (isBlank(value)) return null;
+  const parsed = finiteNumber(value);
+  if (parsed === null || parsed < 0) return `${field} must be a non-negative number`;
+  return null;
+}
+
+function validateOptionalInteger(value: unknown, field: string, min: number, max: number): string | null {
+  if (isBlank(value)) return null;
+  const parsed = finiteNumber(value);
+  if (parsed === null || !Number.isInteger(parsed) || parsed < min || parsed > max) {
+    return `${field} must be an integer between ${min} and ${max}`;
+  }
+  return null;
+}
+
+function validateAmbr(value: unknown, field: string): string | null {
+  if (isBlank(value)) return null;
+  const ambr = asRecord(value);
+
+  for (const direction of ['downlink', 'uplink'] as const) {
+    const bitrate = asRecord(ambr[direction]);
+    const valueError = validateOptionalNonNegativeNumber(bitrate.value, `${field}.${direction}.value`);
+    if (valueError) return valueError;
+    const unitError = validateOptionalInteger(bitrate.unit, `${field}.${direction}.unit`, 0, 4);
+    if (unitError) return unitError;
+  }
+
+  return null;
+}
+
+function validateSlices(sliceList: unknown): string | null {
+  if (isBlank(sliceList)) return null;
+  if (!Array.isArray(sliceList)) return 'sub4G.sliceList must be an array';
+  if (sliceList.length > 16) return 'sub4G.sliceList cannot contain more than 16 slices';
+
+  for (const [sliceIndex, rawSlice] of sliceList.entries()) {
+    const slice = asRecord(rawSlice);
+    const sstError = validateOptionalInteger(slice.sst, `sub4G.sliceList[${sliceIndex}].sst`, 1, 255);
+    if (sstError) return sstError;
+
+    if (!isBlank(slice.sd) && !HEX_1_TO_6.test(String(slice.sd))) {
+      return `sub4G.sliceList[${sliceIndex}].sd must be 1 to 6 hexadecimal characters`;
+    }
+
+    const sessions = slice.session_list;
+    if (isBlank(sessions)) continue;
+    if (!Array.isArray(sessions)) return `sub4G.sliceList[${sliceIndex}].session_list must be an array`;
+    if (sessions.length > 32) return `sub4G.sliceList[${sliceIndex}].session_list cannot contain more than 32 sessions`;
+
+    for (const [sessionIndex, rawSession] of sessions.entries()) {
+      const session = asRecord(rawSession);
+      if (!isBlank(session.name) && !SESSION_NAME.test(String(session.name))) {
+        return `session ${sliceIndex + 1}.${sessionIndex + 1} name contains invalid characters`;
+      }
+
+      const typeError = validateOptionalInteger(session.type, `session ${sliceIndex + 1}.${sessionIndex + 1}.type`, 1, 5);
+      if (typeError) return typeError;
+
+      const qos = asRecord(session.qos);
+      const qiError = validateOptionalInteger(qos._5qi ?? qos.index, `session ${sliceIndex + 1}.${sessionIndex + 1}.qos`, 1, 255);
+      if (qiError) return qiError;
+
+      const arp = asRecord(qos.arp);
+      const priorityError = validateOptionalInteger(
+        arp.priorityLevel ?? arp.arpPriority ?? arp.priority_level,
+        `session ${sliceIndex + 1}.${sessionIndex + 1}.arp.priority`,
+        1,
+        15
+      );
+      if (priorityError) return priorityError;
+
+      const ambrError = validateAmbr(session.ambr, `session ${sliceIndex + 1}.${sessionIndex + 1}.ambr`);
+      if (ambrError) return ambrError;
+    }
+  }
+
+  return null;
+}
+
+export function isValidImsi(value: unknown): value is string {
+  return typeof value === 'string' && /^\d{15}$/.test(value);
+}
+
+export function validateImsi(value: unknown, field = 'IMSI'): ValidationResult<string> {
+  if (typeof value !== 'string' || value.length === 0) {
+    return { ok: false, error: `${field} is required` };
+  }
+  if (!isValidImsi(value)) {
+    return { ok: false, error: `${field} must be exactly 15 digits` };
+  }
+  return { ok: true, value };
+}
+
+export function validateBatchCount(value: unknown): ValidationResult<number> {
+  const count = finiteNumber(value);
+  if (count === null || !Number.isInteger(count) || count < 1 || count > 1000) {
+    return { ok: false, error: 'Count must be an integer between 1 and 1000' };
+  }
+  return { ok: true, value: count };
+}
+
+export function validateBatchCreatePayload(body: unknown): ValidationResult<BatchCreatePayload> {
+  const payload = asRecord(body);
+  const imsi = validateImsi(payload.startImsi, 'startImsi');
+  if (!imsi.ok) return imsi;
+
+  const count = validateBatchCount(payload.count);
+  if (!count.ok) return count;
+
+  if (!isBlank(payload.plmn) && !/^\d{5,6}$/.test(String(payload.plmn))) {
+    return { ok: false, error: 'plmn must be 5 or 6 digits' };
+  }
+
+  for (const field of ['trafficTotal', 'trafficBalance', 'withhold', 'withholdingResidue', 'withholdingTime', 'balance']) {
+    const error = validateOptionalNonNegativeNumber(payload[field], field);
+    if (error) return { ok: false, error };
+  }
+
+  const ratingError = validateOptionalInteger(payload.ratingGroupId, 'ratingGroupId', 1, 999999999);
+  if (ratingError) return { ok: false, error: ratingError };
+
+  if (!isBlank(payload.currency) && !/^[A-Z]{3}$/.test(String(payload.currency))) {
+    return { ok: false, error: 'currency must be a 3-letter uppercase code' };
+  }
+
+  return {
+    ok: true,
+    value: {
+      ...payload,
+      startImsi: imsi.value,
+      count: count.value,
+      profileName: isBlank(payload.profileName) ? undefined : String(payload.profileName),
+      currency: isBlank(payload.currency) ? undefined : String(payload.currency),
+      strategy: payload.strategy === 'skip' ? 'skip' : 'overwrite',
+    },
+  };
+}
+
+export function validateSubscriberUpdatePayload(body: unknown): ValidationResult<Record<string, unknown>> {
+  const payload = asRecord(body);
+  const sub4G = asRecord(payload.sub4G);
+  const auth4G = asRecord(payload.auth4G);
+  const ocsTraffic = asRecord(payload.ocsTraffic);
+  const ocsImsi = asRecord(payload.ocsImsi);
+  const ocsAccount = asRecord(payload.ocsAccount);
+  const ocsImsiSet = asRecord(payload.ocsImsiSet);
+
+  if (payload.auth4G !== undefined) {
+    if (!isBlank(auth4G.k) && !HEX_32.test(String(auth4G.k))) return { ok: false, error: 'auth4G.k must be 32 hexadecimal characters' };
+    if (!isBlank(auth4G.op) && !HEX_32.test(String(auth4G.op))) return { ok: false, error: 'auth4G.op must be 32 hexadecimal characters' };
+    if (!isBlank(auth4G.opc) && !HEX_32.test(String(auth4G.opc))) return { ok: false, error: 'auth4G.opc must be 32 hexadecimal characters' };
+    if (!isBlank(auth4G.amf) && !HEX_4.test(String(auth4G.amf))) return { ok: false, error: 'auth4G.amf must be 4 hexadecimal characters' };
+
+    const sqnError = validateOptionalInteger(auth4G.sqn, 'auth4G.sqn', 0, Number.MAX_SAFE_INTEGER);
+    if (sqnError) return { ok: false, error: sqnError };
+  }
+
+  if (payload.sub4G !== undefined) {
+    const ardError = validateOptionalInteger(sub4G.access_restriction_data, 'sub4G.access_restriction_data', 0, 255);
+    if (ardError) return { ok: false, error: ardError };
+    const namError = validateOptionalInteger(sub4G.network_access_mode, 'sub4G.network_access_mode', 0, 2);
+    if (namError) return { ok: false, error: namError };
+    const ambrError = validateAmbr(sub4G.ambr, 'sub4G.ambr');
+    if (ambrError) return { ok: false, error: ambrError };
+
+    if (!isBlank(sub4G.msisdnList)) {
+      if (!Array.isArray(sub4G.msisdnList)) return { ok: false, error: 'sub4G.msisdnList must be an array' };
+      for (const [index, rawMsisdn] of sub4G.msisdnList.entries()) {
+        const msisdn = asRecord(rawMsisdn).msisdn;
+        if (!isBlank(msisdn) && !/^\d{1,20}$/.test(String(msisdn))) {
+          return { ok: false, error: `sub4G.msisdnList[${index}].msisdn must contain 1 to 20 digits` };
+        }
+      }
+    }
+
+    const sliceError = validateSlices(sub4G.sliceList);
+    if (sliceError) return { ok: false, error: sliceError };
+  }
+
+  if (payload.ocsTraffic !== undefined) {
+    if (!isBlank(ocsTraffic.plmn) && !/^\d{5,6}$/.test(String(ocsTraffic.plmn))) {
+      return { ok: false, error: 'ocsTraffic.plmn must be 5 or 6 digits' };
+    }
+    for (const field of ['traffic_total', 'traffic_balance']) {
+      const error = validateOptionalNonNegativeNumber(ocsTraffic[field], `ocsTraffic.${field}`);
+      if (error) return { ok: false, error };
+    }
+  }
+
+  if (payload.ocsImsi !== undefined) {
+    for (const field of ['withhold', 'withholding_residue', 'withholding_time']) {
+      const error = validateOptionalNonNegativeNumber(ocsImsi[field], `ocsImsi.${field}`);
+      if (error) return { ok: false, error };
+    }
+  }
+
+  if (payload.ocsAccount !== undefined) {
+    const balanceError = validateOptionalNonNegativeNumber(ocsAccount.balance, 'ocsAccount.balance');
+    if (balanceError) return { ok: false, error: balanceError };
+    if (!isBlank(ocsAccount.currency) && !/^[A-Z]{3}$/.test(String(ocsAccount.currency))) {
+      return { ok: false, error: 'ocsAccount.currency must be a 3-letter uppercase code' };
+    }
+  }
+
+  if (payload.ocsImsiSet !== undefined) {
+    const ratesMap = asRecord(ocsImsiSet.rates_map);
+    for (const [plmn, ratingGroupId] of Object.entries(ratesMap)) {
+      if (!/^\d{5,6}$/.test(plmn)) return { ok: false, error: 'ocsImsiSet.rates_map keys must be 5 or 6 digit PLMNs' };
+      const error = validateOptionalInteger(ratingGroupId, `ocsImsiSet.rates_map.${plmn}`, 1, 999999999);
+      if (error) return { ok: false, error };
+    }
+  }
+
+  return { ok: true, value: payload };
+}
+
+export function validateImsiList(value: unknown): ValidationResult<string[]> {
+  if (!Array.isArray(value)) return { ok: false, error: 'imsiList array is required' };
+  if (value.length > 5000) return { ok: false, error: 'imsiList cannot contain more than 5000 entries' };
+  const imsis = value.map((item) => String(item).trim()).filter(Boolean);
+  const invalid = imsis.find((imsi) => !isValidImsi(imsi));
+  if (invalid) return { ok: false, error: `Invalid IMSI in list: ${invalid}` };
+  return { ok: true, value: imsis };
+}
+
+export function validateImportRecords(value: unknown): ValidationResult<Record<string, unknown>[]> {
+  if (!Array.isArray(value)) return { ok: false, error: 'records array is required' };
+  if (value.length > 5000) return { ok: false, error: 'records cannot contain more than 5000 entries' };
+  return { ok: true, value: value.map((item) => asRecord(item)) };
+}

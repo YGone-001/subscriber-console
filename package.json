@@ -11,6 +11,8 @@
     "lint": "eslint",
     "check": "npm run lint && npm run typecheck && npm test && npm run build",
     "mongo:init": "node scripts/init-mongo-indexes.mjs",
+    "mongo:test-core": "node scripts/test-mongo-core.mjs",
+    "mongo:perf": "node scripts/check-mongo-query-performance.mjs",
     "mongo:migrate-redis": "node scripts/migrate-redis-to-mongo.mjs",
     "clean": "rimraf .next/dev .next/cache .next/types",
     "clean:all": "rimraf .next node_modules/.cache",

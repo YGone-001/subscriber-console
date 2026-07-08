@@ -6,6 +6,7 @@ import {
   importSubscribersFromRecords,
   precheckSubscriberImsis,
 } from '@/server/repositories/subscriberRepository';
+import { validateImportRecords, validateImsiList } from '@/lib/subscriberValidation';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,11 +24,10 @@ export async function POST(request: Request) {
 
     if (mode === 'precheck') {
       const { imsiList } = body;
-      if (!imsiList || !Array.isArray(imsiList)) {
-        return NextResponse.json({ error: 'imsiList array is required' }, { status: 400 });
-      }
+      const validation = validateImsiList(imsiList);
+      if (!validation.ok) return NextResponse.json({ error: validation.error }, { status: 400 });
 
-      const conflicts = await precheckSubscriberImsis(imsiList);
+      const conflicts = await precheckSubscriberImsis(validation.value);
 
       return NextResponse.json({
         total: conflicts.length,
@@ -39,11 +39,10 @@ export async function POST(request: Request) {
 
     if (mode === 'import') {
       const { records, overwrite } = body;
-      if (!records || !Array.isArray(records)) {
-        return NextResponse.json({ error: 'records array is required' }, { status: 400 });
-      }
+      const validation = validateImportRecords(records);
+      if (!validation.ok) return NextResponse.json({ error: validation.error }, { status: 400 });
 
-      const result = await importSubscribersFromRecords(records, !!overwrite);
+      const result = await importSubscribersFromRecords(validation.value, !!overwrite);
 
       if (result.importedImsis.length > 0) {
         logAudit(

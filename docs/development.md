@@ -54,6 +54,22 @@ npm test
 npm run build
 ```
 
+MongoDB core integration smoke test:
+
+```bash
+npm run mongo:test-core
+```
+
+This command creates a temporary database based on `MONGODB_DB`, verifies required indexes, exercises core subscriber/profile/rating/user/audit/alert/rate-limit/metric writes, and drops the temporary database when it finishes. Set `MONGODB_TEST_DB` to choose the temporary database name. Use `-- --keep-db` only when you intentionally want to inspect the generated test database.
+
+MongoDB query performance smoke test:
+
+```bash
+npm run mongo:perf
+```
+
+This command is read-only against the configured `MONGODB_DB`. It runs `explain("executionStats")` for key subscriber, audit, alert, profile, rating, and analytics queries, then flags collection scans, high scan ratios, and queries slower than the threshold. Use `-- --json` for machine-readable output, `-- --imsi-prefix=460020` to force the subscriber search prefix, `-- --slow-ms=500` to tune the slow-query threshold, and `-- --allow-collscan` when full-collection analytics scans are acceptable for the current dataset.
+
 For the full local quality gate, run:
 
 ```bash
@@ -63,7 +79,6 @@ npm run check
 Recommended future tests:
 
 - API authorization tests
-- MongoDB repository integration tests
 - Subscriber import/export tests
 - Batch creation conflict tests
 - Audit and analytics side-effect tests

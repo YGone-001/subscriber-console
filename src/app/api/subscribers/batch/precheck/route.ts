@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireAnyRole } from '@/lib/authz';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import { precheckSubscriberRange } from '@/server/repositories/subscriberRepository';
+import { validateBatchCount, validateImsi } from '@/lib/subscriberValidation';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,19 +17,12 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { startImsi, count } = body;
 
-    if (!startImsi || !count) {
-      return NextResponse.json({ error: 'startImsi and count are required' }, { status: 400 });
-    }
-    if (!/^\d{15}$/.test(startImsi)) {
-      return NextResponse.json({ error: 'startImsi must be strictly 15 digits' }, { status: 400 });
-    }
+    const imsiResult = validateImsi(startImsi, 'startImsi');
+    if (!imsiResult.ok) return NextResponse.json({ error: imsiResult.error }, { status: 400 });
+    const countResult = validateBatchCount(count);
+    if (!countResult.ok) return NextResponse.json({ error: countResult.error }, { status: 400 });
 
-    const numCount = Number(count);
-    if (numCount <= 0 || numCount > 1000) {
-      return NextResponse.json({ error: 'Count must be between 1 and 1000' }, { status: 400 });
-    }
-
-    const result = await precheckSubscriberRange(startImsi, numCount);
+    const result = await precheckSubscriberRange(imsiResult.value, countResult.value);
     return NextResponse.json(result, { status: 200 });
   } catch (error) {
     console.error('Error in batch precheck:', error);

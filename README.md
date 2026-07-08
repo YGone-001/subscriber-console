@@ -64,6 +64,8 @@ npm run typecheck           # Run TypeScript without emitting files
 npm test                    # Run Node.js unit tests
 npm run check               # Run lint, typecheck, tests, and build
 npm run mongo:init          # Create MongoDB indexes
+npm run mongo:test-core     # Run MongoDB core integration smoke test against a temporary DB
+npm run mongo:perf          # Explain key MongoDB queries and flag slow scans
 npm run mongo:migrate-redis # One-time legacy data migration
 ```
 

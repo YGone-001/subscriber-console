@@ -100,12 +100,13 @@ export type SubscriberWebuiMeta = {
 
 export type Open5gsSubscriberDocument = {
   _id?: ObjectId;
+  __v?: number;
   schema_version: number;
   imsi: string;
   msisdn: string[];
   imeisv: string[];
   mme_host: string[];
-  mme_realm: string[];
+  mm_realm: string[];
   purge_flag: boolean[];
   security: Open5gsSecurity;
   ambr: Open5gsAmbr;

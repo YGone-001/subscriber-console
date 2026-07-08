@@ -3,6 +3,7 @@ import { logAudit } from '@/lib/audit';
 import { requireAnyRole } from '@/lib/authz';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import { createSubscribersBatch } from '@/server/repositories/subscriberRepository';
+import { validateBatchCreatePayload } from '@/lib/subscriberValidation';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,48 +16,24 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const {
-      startImsi,
-      count,
-      plmn,
-      trafficTotal,
-      trafficBalance,
-      withhold,
-      withholdingResidue,
-      withholdingTime,
-      ratingGroupId,
-      profileName,
-      currency,
-      balance,
-      strategy,
-    } = body;
-
-    if (!startImsi || !count) {
-      return NextResponse.json({ error: 'startImsi and count are required' }, { status: 400 });
-    }
-    if (!/^\d{15}$/.test(startImsi)) {
-      return NextResponse.json({ error: 'Invalid startImsi format (must be 15 digits)' }, { status: 400 });
-    }
-
-    const numCount = Number(count);
-    if (numCount <= 0 || numCount > 1000) {
-      return NextResponse.json({ error: 'Count must be between 1 and 1000' }, { status: 400 });
-    }
+    const validation = validateBatchCreatePayload(body);
+    if (!validation.ok) return NextResponse.json({ error: validation.error }, { status: 400 });
+    const payload = validation.value;
 
     const result = await createSubscribersBatch({
-      startImsi,
-      count: numCount,
-      plmn,
-      trafficTotal,
-      trafficBalance,
-      withhold,
-      withholdingResidue,
-      withholdingTime,
-      ratingGroupId,
-      profileName,
-      currency,
-      balance,
-      strategy: strategy === 'skip' ? 'skip' : 'overwrite',
+      startImsi: payload.startImsi,
+      count: payload.count,
+      plmn: payload.plmn,
+      trafficTotal: payload.trafficTotal,
+      trafficBalance: payload.trafficBalance,
+      withhold: payload.withhold,
+      withholdingResidue: payload.withholdingResidue,
+      withholdingTime: payload.withholdingTime,
+      ratingGroupId: payload.ratingGroupId,
+      profileName: payload.profileName,
+      currency: payload.currency,
+      balance: payload.balance,
+      strategy: payload.strategy,
     });
     const { createdImsis, skippedImsis, metrics } = result;
 
@@ -68,7 +45,7 @@ export async function POST(request: Request) {
         {
           batchSize: createdImsis.length,
           skipped: skippedImsis.length,
-          profileTemplate: profileName,
+          profileTemplate: payload.profileName,
           batchMetrics: metrics,
         },
         request

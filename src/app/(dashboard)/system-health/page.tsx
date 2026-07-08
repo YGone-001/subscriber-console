@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { Activity, ShieldAlert, HeartPulse, HardDrive, Database, Check } from "lucide-react";
+import { Activity, ShieldAlert, HeartPulse, HardDrive, Database, Check, RefreshCw } from "lucide-react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
 import { useI18n } from "@/components/I18nProvider";
@@ -13,6 +13,13 @@ export default function SystemHealthPage() {
 
   const { data: statusData, mutate: mutateStatus } = useSWR("/api/system/audit/status", fetcher, { refreshInterval: 60000 });
   const lastSaveTime = statusData?.lastSaveTime || null;
+  const { data: mongoHealth, error: mongoHealthError, mutate: refreshMongoHealth, isLoading: isMongoHealthLoading } = useSWR(
+    "/api/system/mongo/health",
+    fetcher,
+    { refreshInterval: 60000 }
+  );
+  const mongoReady = Boolean(mongoHealth?.ok && !mongoHealthError);
+  const missingMongoItems = (mongoHealth?.missingCollections?.length || 0) + (mongoHealth?.missingIndexes?.length || 0);
 
   // Scan states
   const [isAuditing, setIsAuditing] = useState(false);
@@ -143,6 +150,68 @@ export default function SystemHealthPage() {
   return (
     <>
       <div className="container animate-fade-in" style={{ padding: "3rem", paddingBottom: "100px" }}>
+
+      <div style={{ background: "var(--surface)", backdropFilter: "blur(12px)", borderRadius: "12px", border: "1px solid var(--surface-border)", boxShadow: "0 4px 20px rgba(0,0,0,0.2)", padding: "1.5rem 2rem", marginBottom: "2rem" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem", marginBottom: "1.25rem" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.85rem" }}>
+            <Database size={22} color={mongoReady ? "var(--success)" : "var(--danger)"} />
+            <div>
+              <h2 style={{ margin: 0, fontSize: "1.15rem", fontWeight: 600, color: "var(--text-main)" }}>MongoDB Readiness</h2>
+              <div style={{ color: "var(--text-secondary)", fontSize: "0.85rem", marginTop: "0.25rem" }}>
+                {isMongoHealthLoading ? "Checking database..." : mongoReady ? "Connection and required indexes are ready." : "Database check requires attention."}
+              </div>
+            </div>
+          </div>
+          <button
+            className="btn btn-outline"
+            onClick={() => refreshMongoHealth()}
+            disabled={isMongoHealthLoading}
+            style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.45rem 0.9rem", borderRadius: "20px" }}
+          >
+            <RefreshCw size={14} />
+            Refresh
+          </button>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: "1rem" }}>
+          <div style={{ border: "1px solid var(--surface-border)", borderRadius: "8px", padding: "1rem" }}>
+            <div style={{ color: "var(--text-secondary)", fontSize: "0.75rem", textTransform: "uppercase", fontWeight: 600 }}>Status</div>
+            <div style={{ marginTop: "0.5rem", fontSize: "1.05rem", fontWeight: 700, color: mongoReady ? "var(--success)" : "var(--danger)" }}>
+              {mongoReady ? "Ready" : "Attention"}
+            </div>
+          </div>
+          <div style={{ border: "1px solid var(--surface-border)", borderRadius: "8px", padding: "1rem" }}>
+            <div style={{ color: "var(--text-secondary)", fontSize: "0.75rem", textTransform: "uppercase", fontWeight: 600 }}>Database</div>
+            <div style={{ marginTop: "0.5rem", fontSize: "1.05rem", fontWeight: 700, color: "var(--text-main)" }}>
+              {mongoHealth?.database || "--"}
+            </div>
+          </div>
+          <div style={{ border: "1px solid var(--surface-border)", borderRadius: "8px", padding: "1rem" }}>
+            <div style={{ color: "var(--text-secondary)", fontSize: "0.75rem", textTransform: "uppercase", fontWeight: 600 }}>Collections</div>
+            <div style={{ marginTop: "0.5rem", fontSize: "1.05rem", fontWeight: 700, color: "var(--text-main)" }}>
+              {mongoHealth?.collections?.filter((item: any) => item.exists).length ?? "--"} / {mongoHealth?.collections?.length ?? "--"}
+            </div>
+          </div>
+          <div style={{ border: "1px solid var(--surface-border)", borderRadius: "8px", padding: "1rem" }}>
+            <div style={{ color: "var(--text-secondary)", fontSize: "0.75rem", textTransform: "uppercase", fontWeight: 600 }}>Missing Items</div>
+            <div style={{ marginTop: "0.5rem", fontSize: "1.05rem", fontWeight: 700, color: missingMongoItems > 0 ? "var(--danger)" : "var(--text-main)" }}>
+              {mongoHealth ? missingMongoItems : "--"}
+            </div>
+          </div>
+        </div>
+
+        {!mongoReady && mongoHealth && (
+          <div style={{ marginTop: "1rem", borderTop: "1px solid var(--surface-border)", paddingTop: "1rem", color: "var(--text-secondary)", fontSize: "0.9rem" }}>
+            {mongoHealth.error ? (
+              <span>{mongoHealth.error}</span>
+            ) : (
+              <span>
+                Missing collections: {mongoHealth.missingCollections?.join(", ") || "none"}. Missing indexes: {mongoHealth.missingIndexes?.map((item: any) => `${item.collection}.${item.index}`).join(", ") || "none"}.
+              </span>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* KPI Board */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "1.5rem", marginBottom: "2.5rem" }}>

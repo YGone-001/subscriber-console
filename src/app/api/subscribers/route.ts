@@ -8,6 +8,7 @@ import {
   listSubscriberRows,
 } from '@/server/repositories/subscriberRepository';
 import { open5gsToLegacyState } from '@/lib/open5gsSubscriber';
+import { validateImsi } from '@/lib/subscriberValidation';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,14 +46,9 @@ export async function POST(request: Request) {
     if (!rateLimit.ok) return rateLimit.response;
 
     const data = await request.json();
-    const { imsi } = data;
-
-    if (!imsi) {
-      return NextResponse.json({ error: 'IMSI is required' }, { status: 400 });
-    }
-    if (!/^\d{15}$/.test(imsi)) {
-      return NextResponse.json({ error: 'Invalid IMSI format' }, { status: 400 });
-    }
+    const imsiResult = validateImsi(data?.imsi);
+    if (!imsiResult.ok) return NextResponse.json({ error: imsiResult.error }, { status: 400 });
+    const imsi = imsiResult.value;
 
     const created = await createDefaultSubscriber(imsi);
     const legacyState = open5gsToLegacyState(created);

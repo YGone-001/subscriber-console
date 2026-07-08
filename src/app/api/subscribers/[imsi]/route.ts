@@ -8,16 +8,13 @@ import {
   updateSubscriberFromLegacy,
 } from '@/server/repositories/subscriberRepository';
 import { open5gsToLegacyState } from '@/lib/open5gsSubscriber';
+import { validateImsi, validateSubscriberUpdatePayload } from '@/lib/subscriberValidation';
 
 export const dynamic = 'force-dynamic';
 
 type RouteContext = {
   params: Promise<{ imsi: string }>;
 };
-
-function validateImsi(imsi: string) {
-  return /^\d{15}$/.test(imsi);
-}
 
 export async function GET(request: Request, { params }: RouteContext) {
   const { imsi } = await params;
@@ -27,9 +24,8 @@ export async function GET(request: Request, { params }: RouteContext) {
   const rateLimit = await enforceRateLimit(`subscribers:detail:${auth.auth.user}`, 180, 60);
   if (!rateLimit.ok) return rateLimit.response;
 
-  if (!validateImsi(imsi)) {
-    return NextResponse.json({ error: 'Invalid IMSI format' }, { status: 400 });
-  }
+  const imsiResult = validateImsi(imsi);
+  if (!imsiResult.ok) return NextResponse.json({ error: imsiResult.error }, { status: 400 });
 
   try {
     const state = await findSubscriberLegacyState(imsi);
@@ -52,9 +48,8 @@ export async function DELETE(request: Request, { params }: RouteContext) {
   const rateLimit = await enforceRateLimit(`subscribers:delete:${auth.auth.user}`, 30, 60);
   if (!rateLimit.ok) return rateLimit.response;
 
-  if (!validateImsi(imsi)) {
-    return NextResponse.json({ error: 'Invalid IMSI format' }, { status: 400 });
-  }
+  const imsiResult = validateImsi(imsi);
+  if (!imsiResult.ok) return NextResponse.json({ error: imsiResult.error }, { status: 400 });
 
   try {
     const oldState = await findSubscriberLegacyState(imsi);
@@ -81,12 +76,13 @@ export async function PUT(request: Request, { params }: RouteContext) {
   const rateLimit = await enforceRateLimit(`subscribers:update:${auth.auth.user}`, 60, 60);
   if (!rateLimit.ok) return rateLimit.response;
 
-  if (!validateImsi(imsi)) {
-    return NextResponse.json({ error: 'Invalid IMSI format' }, { status: 400 });
-  }
+  const imsiResult = validateImsi(imsi);
+  if (!imsiResult.ok) return NextResponse.json({ error: imsiResult.error }, { status: 400 });
 
   try {
     const body = await request.json();
+    const validation = validateSubscriberUpdatePayload(body);
+    if (!validation.ok) return NextResponse.json({ error: validation.error }, { status: 400 });
     const oldState = await findSubscriberLegacyState(imsi);
     const updated = await updateSubscriberFromLegacy(imsi, {
       sub4G: body.sub4G,

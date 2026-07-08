@@ -311,12 +311,13 @@ function buildSubscriberDocument(imsi, legacy) {
   const ocsRating = asRecord(legacy.ocsImsiSet);
 
   return {
+    __v: 0,
     schema_version: 1,
     imsi,
     msisdn: asArray(sub4G.msisdnList).map((item) => asString(asRecord(item).msisdn)).filter(Boolean),
     imeisv: [],
     mme_host: [],
-    mme_realm: [],
+    mm_realm: [],
     purge_flag: [],
     security: toOpen5gsSecurity(legacy.auth4G),
     ambr: normalizeAmbr(sub4G.ambr),
