@@ -76,7 +76,7 @@ export default function DataHub({ isOpen, onClose, onComplete, subscribers, sele
   const [overwriteExisting, setOverwriteExisting] = useState(false);
   const [importResult, setImportResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [, setIsProcessing] = useState(false);
   const [exportFormat, setExportFormat] = useState<ExportFormat>("csv");
   const [selectedExportFields, setSelectedExportFields] = useState<string[]>(() => EXPORT_FIELDS.map(field => field.key));
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -205,7 +205,7 @@ export default function DataHub({ isOpen, onClose, onComplete, subscribers, sele
 
         setParsedRecords(records);
         runPrecheck(records);
-      } catch (err) {
+      } catch {
         setError(t("dh_err_parse"));
       }
     };

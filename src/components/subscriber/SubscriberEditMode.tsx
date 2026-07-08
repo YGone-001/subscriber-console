@@ -1,4 +1,4 @@
-import { Users, Pencil, Shield, Signal, Lock, ChevronDown, ChevronUp, Gauge, Server, Plus } from "lucide-react";
+import { Users, Shield, Signal, Lock, ChevronDown, ChevronUp, Gauge, Server, Plus } from "lucide-react";
 import ProfileSliceEditor from "../profile/ProfileSliceEditor";
 import { parseBytes, formatBytes, formatBytesAligned } from "@/lib/unitParser";
 import { AMBR_UNITS } from "./utils";

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import Image from "next/image";
 import {
   Activity,
   ChevronRight,
@@ -102,7 +103,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="header-left">
           <div className="brand-lockup">
             <div className="brand-mark">
-              <img src="/images/xCloud_picture.png" alt="xCloud Trademark" />
+              <Image src="/images/xCloud_picture.png" alt="xCloud Trademark" width={1254} height={1254} />
             </div>
             <h1>xCloud</h1>
           </div>

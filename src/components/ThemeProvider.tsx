@@ -52,9 +52,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setTheme] = useState<Theme>(() => readInitialTheme());
 
   useEffect(() => {
-    const initialTheme = readInitialTheme();
-    setTheme(initialTheme);
-    applyTheme(initialTheme);
+    applyTheme(readInitialTheme());
 
     const media = window.matchMedia('(prefers-color-scheme: dark)');
     const handleMediaChange = () => {

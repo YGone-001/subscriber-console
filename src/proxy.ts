@@ -38,7 +38,7 @@ export async function proxy(request: NextRequest) {
             headers: requestHeaders,
         }
     });
-  } catch (error) {
+  } catch {
     if (isAuthRoute) return NextResponse.next();
 
     if (isApiRoute) {

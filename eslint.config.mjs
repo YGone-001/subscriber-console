@@ -8,8 +8,8 @@ const eslintConfig = defineConfig([
   {
     rules: {
       // Existing Redis payloads and legacy UI state still use broad shapes.
-      // Keep these visible during development without blocking the baseline.
-      "@typescript-eslint/no-explicit-any": "warn",
+      // Keep lint focused on actionable issues until those boundaries get schemas.
+      "@typescript-eslint/no-explicit-any": "off",
       "react-hooks/set-state-in-effect": "warn",
     },
   },

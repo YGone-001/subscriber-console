@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useCallback, useState, useEffect } from "react";
 import { parseBytes, formatBytes, parseSeconds, formatSeconds } from "@/lib/unitParser";
 
 export function useSubscriberForm(imsi: string | null, t: any, onClose: () => void, onRefresh: () => void) {
@@ -42,7 +42,7 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
     return parts.every((part) => /^\d+$/.test(part) && Number(part) >= 0 && Number(part) <= 255);
   };
 
-  const resolvePlmnFromImsi = (value: string) => {
+  const resolvePlmnFromImsi = useCallback((value: string) => {
     if (!value || value.length < 5) return null;
     const prefix6 = value.substring(0, 6);
     const prefix5 = value.substring(0, 5);
@@ -53,16 +53,16 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
       if (matched5) return prefix5;
     }
     return prefix5;
-  };
+  }, [plmnDb]);
 
-  const updatePlmnByImsi = (currentImsi: string) => {
+  const updatePlmnByImsi = useCallback((currentImsi: string) => {
     const plmn = resolvePlmnFromImsi(currentImsi);
     if (plmn) {
       setOcsPlmn(plmn);
       return true;
     }
     return false;
-  };
+  }, [resolvePlmnFromImsi]);
 
   useEffect(() => {
     const fetchProfileList = async () => {
@@ -70,21 +70,21 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
         const res = await fetch('/api/profiles');
         const data = await res.json();
         setProfileList(data.profiles || []);
-      } catch (e) {}
+      } catch {}
     };
     const fetchRatingList = async () => {
       try {
         const res = await fetch('/api/ratings');
         const data = await res.json();
         setRatingList(data.ratings || []);
-      } catch (e) {}
+      } catch {}
     };
     const fetchPlmnDb = async () => {
       try {
         const res = await fetch('/data/mcc-mnc-table.json');
         const data = await res.json();
         setPlmnDb(data || []);
-      } catch (e) {}
+      } catch {}
     };
     fetchProfileList();
     fetchRatingList();
@@ -94,7 +94,7 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
   useEffect(() => {
     const targetImsi = imsi || inputImsi;
     updatePlmnByImsi(targetImsi);
-  }, [imsi, inputImsi, plmnDb]);
+  }, [imsi, inputImsi, updatePlmnByImsi]);
 
   const loadFromProfile = async (profileName: string) => {
     if (!profileName) return;
@@ -136,7 +136,7 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
         setToastMessage(t("sub_toast_profile", { name: profileName }));
         setTimeout(() => setToastMessage(null), 3000);
       }
-    } catch (e) {
+    } catch {
       setError('Failed to load profile template.');
     }
   };
@@ -190,14 +190,14 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
           const plmnKey = Object.keys(data.ocsImsiSet.rates_map)[0];
           if (plmnKey) setSelectedRatingGroupId(String(data.ocsImsiSet.rates_map[plmnKey]));
         }
-      } catch (err) {
-        setError(t("sub_err_load"));
+    } catch {
+      setError(t("sub_err_load"));
       } finally {
         setIsLoading(false);
       }
     };
     fetchData();
-  }, [imsi]);
+  }, [imsi, t]);
 
   const handleDelete = async () => {
     if (!imsi) return;
@@ -208,7 +208,7 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
         onRefresh();
         onClose();
       }
-    } catch (e) {
+    } catch {
       setError(t("sub_err_delete"));
     }
   };

@@ -1,4 +1,5 @@
 import { Eye, EyeOff, Loader2, Lock, User } from "lucide-react";
+import Image from "next/image";
 
 const loginScript = `
 (function () {
@@ -156,9 +157,11 @@ export default function LoginForm() {
               overflow: "hidden",
             }}
           >
-            <img
+            <Image
               src="/images/xCloud_picture.png"
               alt="xCloud Trademark"
+              width={1254}
+              height={1254}
               style={{ height: "100%", width: "auto", objectFit: "contain" }}
             />
           </div>

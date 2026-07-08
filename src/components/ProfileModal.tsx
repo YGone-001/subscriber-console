@@ -1,12 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useI18n } from "./I18nProvider";
-import { Save, Shield, Signal, Plus, Trash2, X, Pencil, Server, Gauge, Lock, ChevronDown, ChevronUp, History, RotateCcw, GitCompareArrows } from "lucide-react";
-import { parseBytes, formatBytes, parseSeconds, formatSeconds, formatBytesAligned } from "@/lib/unitParser";
+import { Save, Trash2, X, Pencil, History, RotateCcw, GitCompareArrows } from "lucide-react";
+import { parseBytes, formatBytes, parseSeconds, formatSeconds } from "@/lib/unitParser";
 import ProfileViewMode from "./profile/ProfileViewMode";
 import ProfileEditMode from "./profile/ProfileEditMode";
-import { AMBR_UNITS } from "./subscriber/utils";
 import { useAuth } from "@/hooks/useAuth";
 
 // Session type mapping (IPv4/IPv6/IPv4v6)
@@ -78,7 +77,7 @@ export default function ProfileModal({ profileName, onClose, onRefresh }: Profil
     ratingGroupId: ""
   });
 
-  const applyProfileData = (p: any) => {
+  const applyProfileData = useCallback((p: any) => {
     setProfileSnapshot(p);
     setProfileTitle(p.title || profileName || "");
     if (p.auth) {
@@ -103,9 +102,9 @@ export default function ProfileModal({ profileName, onClose, onRefresh }: Profil
         withholdingTime: p.ocsDefaults.withholdingTime !== undefined ? formatSeconds(p.ocsDefaults.withholdingTime) : prev.withholdingTime,
       }));
     }
-  };
+  }, [profileName]);
 
-  const loadProfileData = async () => {
+  const loadProfileData = useCallback(async () => {
     if (!profileName) return;
     setIsLoading(true);
     try {
@@ -113,14 +112,14 @@ export default function ProfileModal({ profileName, onClose, onRefresh }: Profil
       if (!res.ok) throw new Error("Failed to fetch");
       const data = await res.json();
       if (data.profile) applyProfileData(data.profile);
-    } catch (err) {
+    } catch {
       setError(t("prof_err_load"));
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [applyProfileData, profileName, t]);
 
-  const loadVersions = async () => {
+  const loadVersions = useCallback(async () => {
     if (!profileName) return;
     setIsVersionsLoading(true);
     try {
@@ -133,7 +132,7 @@ export default function ProfileModal({ profileName, onClose, onRefresh }: Profil
     } finally {
       setIsVersionsLoading(false);
     }
-  };
+  }, [profileName]);
 
   // Load available Rating Group list
   useEffect(() => {
@@ -147,7 +146,7 @@ export default function ProfileModal({ profileName, onClose, onRefresh }: Profil
     if (!profileName) return;
     loadProfileData();
     loadVersions();
-  }, [profileName]);
+  }, [loadProfileData, loadVersions, profileName]);
 
   /** Delete Profile */
   const handleDelete = async () => {
@@ -156,7 +155,7 @@ export default function ProfileModal({ profileName, onClose, onRefresh }: Profil
     try {
       const res = await fetch(`/api/profiles/${profileName}`, { method: "DELETE" });
       if (res.ok) { onRefresh(); onClose(); }
-    } catch (e) {
+    } catch {
       setError(t("prof_err_delete"));
     }
   };
@@ -325,14 +324,6 @@ export default function ProfileModal({ profileName, onClose, onRefresh }: Profil
     const s = [...slices];
     s[i] = newSlice;
     setSlices(s);
-  };
-
-  // Helper: AMBR display string format
-  const getAmbrString = (ambr: any) => {
-    if (!ambr || (!ambr.downlink && !ambr.uplink)) return "-";
-    const dlU = AMBR_UNITS.find(u => u.val === (ambr.downlink?.unit || 1))?.label || '';
-    const ulU = AMBR_UNITS.find(u => u.val === (ambr.uplink?.unit || 1))?.label || '';
-    return `${ambr.downlink?.value || 0} ${dlU} / ${ambr.uplink?.value || 0} ${ulU}`;
   };
 
   const renderVersionHistory = () => {

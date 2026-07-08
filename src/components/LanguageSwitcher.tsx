@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useSyncExternalStore } from "react";
 import { Languages } from "lucide-react";
 import { useI18n } from "./I18nProvider";
 
@@ -13,11 +13,11 @@ import { useI18n } from "./I18nProvider";
  */
 export default function LanguageSwitcher() {
   const { lang, setLang } = useI18n();
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const mounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false
+  );
 
   const toggleLang = () => {
     setLang(lang === "en" ? "zh" : "en");

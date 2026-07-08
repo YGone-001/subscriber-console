@@ -41,7 +41,7 @@ export async function emitSyslog(level: SyslogLevel, imsi: string, message: stri
         }
         client.close();
       });
-    } catch (e) {
+    } catch {
       // Drop packet entirely
     }
   }, 0);

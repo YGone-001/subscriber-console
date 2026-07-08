@@ -67,7 +67,7 @@ export default function BatchCreateModal({ isOpen, onClose, onSuccess, profileLi
 
       await executeBatchStrategy('overwrite');
 
-    } catch (e) {
+    } catch {
       setBatchResult({ error: t("err_network_precheck") });
       setBatchLoading(false);
     }
@@ -95,7 +95,7 @@ export default function BatchCreateModal({ isOpen, onClose, onSuccess, profileLi
       } else {
         setBatchResult({ error: data.error || t("err_batch_failed") });
       }
-    } catch (e) {
+    } catch {
       setBatchResult({ error: t("err_network_batch") });
     } finally {
       setBatchLoading(false);

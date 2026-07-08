@@ -23,18 +23,15 @@ const I18nContext = createContext<I18nContextType | undefined>(undefined);
  * - Exposes `t(key)` helper that returns the translated string.
  */
 export function I18nProvider({ children }: { children: React.ReactNode }) {
-  const [lang, setLangState] = useState<Locale>("en");
-
-  useEffect(() => {
+  const [lang, setLangState] = useState<Locale>(() => {
+    if (typeof window === "undefined") return "en";
     try {
-      const stored = localStorage.getItem(STORAGE_KEY) as Locale | null;
-      if (stored === "zh" || stored === "en") {
-        setLangState(stored);
-      }
+      const stored = window.localStorage.getItem(STORAGE_KEY) as Locale | null;
+      return stored === "zh" || stored === "en" ? stored : "en";
     } catch {
-      // Ignore
+      return "en";
     }
-  }, []);
+  });
 
   useEffect(() => {
     document.documentElement.setAttribute("lang", lang === "zh" ? "zh-CN" : "en");

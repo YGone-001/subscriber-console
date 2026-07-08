@@ -76,7 +76,7 @@ export default function SystemHealthPage() {
           setIsAuditing(false);
         }
       }
-    } catch (e) {
+    } catch {
       setIsAuditing(false);
       setAuditPhase('ABORTED');
     }
