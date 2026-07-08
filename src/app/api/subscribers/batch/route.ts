@@ -35,7 +35,7 @@ export async function POST(request: Request) {
       balance: payload.balance,
       strategy: payload.strategy,
     });
-    const { createdImsis, skippedImsis, metrics } = result;
+    const { createdImsis, skippedImsis, failedImsis, metrics } = result;
 
     if (createdImsis.length > 0) {
       logAudit(
@@ -54,14 +54,20 @@ export async function POST(request: Request) {
 
     return NextResponse.json(
       {
-        message: `Successfully created ${createdImsis.length} subscribers${skippedImsis.length > 0 ? ` (Skipped ${skippedImsis.length})` : ''}`,
+        message: `Successfully created ${createdImsis.length} subscribers${skippedImsis.length > 0 ? ` (Skipped ${skippedImsis.length})` : ''}${failedImsis.length > 0 ? ` (Failed ${failedImsis.length})` : ''}`,
         count: createdImsis.length,
         skippedCount: skippedImsis.length,
+        failedCount: failedImsis.length,
+        failedImsis,
         range: createdImsis.length > 0 ? { from: createdImsis[0], to: createdImsis[createdImsis.length - 1] } : null,
       },
-      { status: 201 }
+      { status: failedImsis.length > 0 ? 207 : 201 }
     );
   } catch (error) {
+    if (error instanceof Error && error.message === 'IMSI_RANGE_OVERFLOW') {
+      return NextResponse.json({ error: 'Generated IMSI range exceeds 15 digits' }, { status: 400 });
+    }
+
     console.error('Error in batch creation:', error);
     return NextResponse.json({ error: 'Batch creation failed' }, { status: 500 });
   }

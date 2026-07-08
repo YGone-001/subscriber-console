@@ -177,6 +177,11 @@ export default function BatchCreateModal({ isOpen, onClose, onSuccess, profileLi
               ) : (
                 <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "8px", padding: "1rem", color: "#15803d", fontWeight: 500 }}>
                   {t("created_subscribers", { count: batchResult.count, start: batchResult.range?.from, end: batchResult.range?.to })}
+                  {batchResult.failedCount > 0 && (
+                    <div style={{ marginTop: "0.5rem", color: "#b45309" }}>
+                      Failed: {batchResult.failedCount}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

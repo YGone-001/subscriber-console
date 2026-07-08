@@ -1,6 +1,19 @@
 import { useCallback, useState, useEffect } from "react";
 import { parseBytes, formatBytes, parseSeconds, formatSeconds } from "@/lib/unitParser";
 
+const resolvePlmnFromRecords = (records: any[], value: string) => {
+  if (!value || value.length < 5) return null;
+  const prefix6 = value.substring(0, 6);
+  const prefix5 = value.substring(0, 5);
+  if (records.length > 0) {
+    const matched6 = records.find(item => `${item.mcc}${item.mnc}` === prefix6);
+    if (matched6) return prefix6;
+    const matched5 = records.find(item => `${item.mcc}${item.mnc}` === prefix5);
+    if (matched5) return prefix5;
+  }
+  return prefix5;
+};
+
 export function useSubscriberForm(imsi: string | null, t: any, onClose: () => void, onRefresh: () => void) {
   const [isEditing, setIsEditing] = useState(!imsi);
   const [isLoading, setIsLoading] = useState(!!imsi);
@@ -42,18 +55,7 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
     return parts.every((part) => /^\d+$/.test(part) && Number(part) >= 0 && Number(part) <= 255);
   };
 
-  const resolvePlmnFromImsi = useCallback((value: string) => {
-    if (!value || value.length < 5) return null;
-    const prefix6 = value.substring(0, 6);
-    const prefix5 = value.substring(0, 5);
-    if (plmnDb.length > 0) {
-      const matched6 = plmnDb.find(item => `${item.mcc}${item.mnc}` === prefix6);
-      if (matched6) return prefix6;
-      const matched5 = plmnDb.find(item => `${item.mcc}${item.mnc}` === prefix5);
-      if (matched5) return prefix5;
-    }
-    return prefix5;
-  }, [plmnDb]);
+  const resolvePlmnFromImsi = useCallback((value: string) => resolvePlmnFromRecords(plmnDb, value), [plmnDb]);
 
   const updatePlmnByImsi = useCallback((currentImsi: string) => {
     const plmn = resolvePlmnFromImsi(currentImsi);
@@ -63,6 +65,12 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
     }
     return false;
   }, [resolvePlmnFromImsi]);
+
+  const handleInputImsiChange = useCallback((value: string) => {
+    const nextImsi = value.replace(/\D/g, "");
+    setInputImsi(nextImsi);
+    updatePlmnByImsi(nextImsi);
+  }, [updatePlmnByImsi]);
 
   useEffect(() => {
     const fetchProfileList = async () => {
@@ -83,7 +91,8 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
       try {
         const res = await fetch('/data/mcc-mnc-table.json');
         const data = await res.json();
-        setPlmnDb(data || []);
+        const records = data || [];
+        setPlmnDb(records);
       } catch {}
     };
     fetchProfileList();
@@ -93,7 +102,9 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
 
   useEffect(() => {
     const targetImsi = imsi || inputImsi;
-    updatePlmnByImsi(targetImsi);
+    void Promise.resolve().then(() => {
+      updatePlmnByImsi(targetImsi);
+    });
   }, [imsi, inputImsi, updatePlmnByImsi]);
 
   const loadFromProfile = async (profileName: string) => {
@@ -355,7 +366,7 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
       ocsCurrency, ocsBalance
     },
     actions: {
-      setIsEditing, setInputImsi, setMsisdn, loadFromProfile, setSelectedRatingGroupId, setAuth4GData,
+      setIsEditing, setInputImsi: handleInputImsiChange, setMsisdn, loadFromProfile, setSelectedRatingGroupId, setAuth4GData,
       setUsimType, setUeAmbr, setIsAccessRestrictionsExpanded, setAccessRestriction, setOcsTrafficTotalStr,
       setOcsTrafficBalanceStr, setOcsCurrency, setOcsBalance, setOcsWithholdStr, setOcsWithholdingResidueStr,
       setOcsWithholdingTimeStr, addSlice, handleSliceChange, removeSlice, setExpandedSlices, handleDelete,

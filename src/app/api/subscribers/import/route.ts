@@ -58,10 +58,12 @@ export async function POST(request: Request) {
       }
 
       return NextResponse.json({
-        message: `Import completed: ${result.imported} imported, ${result.skipped} skipped`,
+        message: `Import completed: ${result.imported} imported, ${result.skipped} skipped${result.failed > 0 ? `, ${result.failed} failed` : ''}`,
         imported: result.imported,
         skipped: result.skipped,
-      });
+        failed: result.failed,
+        failedImsis: result.failedImsis,
+      }, { status: result.failed > 0 ? 207 : 200 });
     }
 
     return NextResponse.json({ error: 'Invalid mode parameter' }, { status: 400 });

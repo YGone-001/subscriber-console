@@ -8,7 +8,7 @@ Recommended report contents:
 
 - A clear description of the issue
 - Steps to reproduce
-- Affected routes, APIs, or Redis keys
+- Affected routes, APIs, or MongoDB documents
 - Potential impact
 - Suggested fix, if known
 
@@ -29,7 +29,6 @@ Never commit:
 - `.env` files with real values
 - Passwords, tokens, API keys, JWT secrets, or certificates
 - Private keys or SSH keys
-- Redis dumps containing production data
 - Customer, subscriber, IMSI, MSISDN, or billing data from real systems
 - Private deployment configuration
 
@@ -39,6 +38,5 @@ Use `.env.example` for placeholder configuration only.
 
 - `JWT_SECRET` must be unique per environment and at least 32 bytes.
 - `INITIAL_ADMIN_PASSWORD` must satisfy the configured strong password policy.
-- Redis should not be exposed publicly.
 - Production deployments should terminate TLS before the Next.js service.
 - Review audit logs after any administrative or repair action.

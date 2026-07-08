@@ -653,6 +653,7 @@ export default function DataHub({ isOpen, onClose, onComplete, subscribers, sele
                     {t("dh_import_summary")
                       .replace("{imported}", importResult.imported)
                       .replace("{skipped}", importResult.skipped)}
+                    {importResult.failed > 0 ? `, ${importResult.failed} failed` : ""}
                   </p>
                   <button
                     onClick={() => { onComplete(); onClose(); }}

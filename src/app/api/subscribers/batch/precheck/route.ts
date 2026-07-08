@@ -25,6 +25,10 @@ export async function POST(request: Request) {
     const result = await precheckSubscriberRange(imsiResult.value, countResult.value);
     return NextResponse.json(result, { status: 200 });
   } catch (error) {
+    if (error instanceof Error && error.message === 'IMSI_RANGE_OVERFLOW') {
+      return NextResponse.json({ error: 'Generated IMSI range exceeds 15 digits' }, { status: 400 });
+    }
+
     console.error('Error in batch precheck:', error);
     return NextResponse.json({ error: 'Pre-flight check failed' }, { status: 500 });
   }

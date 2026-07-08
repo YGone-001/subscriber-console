@@ -66,19 +66,9 @@ npm run check               # Run lint, typecheck, tests, and build
 npm run mongo:init          # Create MongoDB indexes
 npm run mongo:test-core     # Run MongoDB core integration smoke test against a temporary DB
 npm run mongo:perf          # Explain key MongoDB queries and flag slow scans
-npm run mongo:migrate-redis # One-time legacy data migration
 ```
 
-## Legacy Migration
-
-Older deployments may still have data in Redis. Use the one-time migration script before cutting over:
-
-```bash
-REDIS_URL=redis://127.0.0.1:6379/0 npm run mongo:migrate-redis -- --dry-run
-REDIS_URL=redis://127.0.0.1:6379/0 npm run mongo:migrate-redis
-```
-
-See [Legacy Redis To MongoDB Migration](docs/redis-to-mongo-migration.md).
+MongoDB operational scripts write JSON reports to `reports/ops/` by default. Set `OPS_REPORT_DIR` to override the location.
 
 ## Deployment
 

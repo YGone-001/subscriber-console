@@ -15,7 +15,7 @@ Use concise Conventional Commits:
 
 ```text
 feat: add subscriber batch precheck
-fix: handle missing Redis profile data
+fix: handle missing MongoDB profile data
 docs: update deployment guide
 chore: refresh dependencies
 ```
@@ -51,7 +51,7 @@ For feature requests, include:
 - Prefer existing `src/lib`, `src/components`, and `src/hooks` patterns.
 - Keep API authorization checks close to Route Handler entry points.
 - Keep UI text in the existing i18n structure when practical.
-- Do not commit generated build output, local Redis data, or real secrets.
+- Do not commit generated build output, local database files, or real secrets.
 
 ## Testing Requirements
 
@@ -64,7 +64,7 @@ npm run check
 Add tests for high-risk behavior when introducing or changing:
 
 - Authentication or role authorization
-- Redis key schema writes
+- MongoDB document schema writes
 - Subscriber import/export
 - Batch provisioning
 - Audit logging

@@ -67,6 +67,7 @@ type BatchCreateOptions = {
 type BatchCreateResult = {
   createdImsis: string[];
   skippedImsis: string[];
+  failedImsis: string[];
   metrics: {
     totalTraffic: number;
     batchSize: number;
@@ -92,7 +93,9 @@ type ImportRecord = Record<string, unknown> & {
 type ImportResult = {
   imported: number;
   skipped: number;
+  failed: number;
   importedImsis: string[];
+  failedImsis: string[];
 };
 
 function isDuplicateKey(error: unknown): boolean {
@@ -185,7 +188,12 @@ function isValidImsi(imsi: string): boolean {
 
 function generateImsiRange(startImsi: string, count: number): string[] {
   const start = BigInt(startImsi);
-  return Array.from({ length: count }, (_, index) => (start + BigInt(index)).toString());
+  return Array.from({ length: count }, (_, index) => (start + BigInt(index)).toString().padStart(15, '0'));
+}
+
+function ensureImsiRange(imsis: string[]) {
+  const invalid = imsis.find((imsi) => !isValidImsi(imsi));
+  if (invalid) throw new Error('IMSI_RANGE_OVERFLOW');
 }
 
 async function findProfile(profileName?: string): Promise<ProfileDoc | null> {
@@ -210,6 +218,41 @@ async function existingImsiSet(imsis: string[]): Promise<Set<string>> {
     .find({ imsi: { $in: imsis } }, { projection: { imsi: 1 } })
     .toArray();
   return new Set(docs.map((doc) => doc.imsi));
+}
+
+function bulkWriteErrorIndexes(error: unknown): Set<number> {
+  const candidate = error as {
+    writeErrors?: Array<{ index?: number }>;
+    result?: { result?: { writeErrors?: Array<{ index?: number }> } };
+  };
+  const writeErrors = candidate.writeErrors || candidate.result?.result?.writeErrors || [];
+  return new Set(
+    writeErrors
+      .map((item) => Number(item.index))
+      .filter((index) => Number.isInteger(index) && index >= 0)
+  );
+}
+
+async function bulkWriteSubscribers(
+  operations: AnyBulkWriteOperation<SubscriberDoc>[],
+  operationImsis: string[]
+): Promise<{ successfulImsis: string[]; failedImsis: string[] }> {
+  if (operations.length === 0) return { successfulImsis: [], failedImsis: [] };
+
+  const collection = await subscribersCollection();
+
+  try {
+    await collection.bulkWrite(operations, { ordered: false });
+    return { successfulImsis: operationImsis, failedImsis: [] };
+  } catch (error) {
+    const failedIndexes = bulkWriteErrorIndexes(error);
+    if (failedIndexes.size === 0) throw error;
+
+    return {
+      successfulImsis: operationImsis.filter((_, index) => !failedIndexes.has(index)),
+      failedImsis: operationImsis.filter((_, index) => failedIndexes.has(index)),
+    };
+  }
 }
 
 function batchDocForImsi(
@@ -480,6 +523,7 @@ export async function precheckSubscriberImsis(imsis: string[]) {
 
 export async function precheckSubscriberRange(startImsi: string, count: number) {
   const imsis = generateImsiRange(startImsi, count);
+  ensureImsiRange(imsis);
   const existing = await existingImsiSet(imsis);
   const conflictImsis = imsis.filter((imsi) => existing.has(imsi));
 
@@ -523,8 +567,9 @@ export async function createSubscribersBatch(options: BatchCreateOptions): Promi
   const ratingMapValue = ratingData ? ratingData.rating_group_id : effectiveRatingGroupId;
 
   const imsis = generateImsiRange(options.startImsi, options.count);
+  ensureImsiRange(imsis);
   const existing = options.strategy === 'skip' ? await existingImsiSet(imsis) : new Set<string>();
-  const createdImsis: string[] = [];
+  const pendingImsis: string[] = [];
   const skippedImsis: string[] = [];
   const operations: AnyBulkWriteOperation<SubscriberDoc>[] = [];
 
@@ -554,20 +599,18 @@ export async function createSubscribersBatch(options: BatchCreateOptions): Promi
         upsert: true,
       },
     });
-    createdImsis.push(imsi);
+    pendingImsis.push(imsi);
   }
 
-  if (operations.length > 0) {
-    const collection = await subscribersCollection();
-    await collection.bulkWrite(operations, { ordered: false });
-  }
+  const { successfulImsis, failedImsis } = await bulkWriteSubscribers(operations, pendingImsis);
 
   return {
-    createdImsis,
+    createdImsis: successfulImsis,
     skippedImsis,
+    failedImsis,
     metrics: {
-      totalTraffic: initialTotal * createdImsis.length,
-      batchSize: createdImsis.length,
+      totalTraffic: initialTotal * successfulImsis.length,
+      batchSize: successfulImsis.length,
       plmn: effectivePlmn,
       ratingGroupId: effectiveRatingGroupId,
     },
@@ -581,7 +624,7 @@ export async function importSubscribersFromRecords(records: ImportRecord[], over
   const imsis = normalized.map((doc) => doc.imsi);
   const existing = await existingImsiSet(imsis);
   const operations: AnyBulkWriteOperation<SubscriberDoc>[] = [];
-  const importedImsis: string[] = [];
+  const pendingImsis: string[] = [];
   let skipped = records.length - normalized.length;
 
   for (const doc of normalized) {
@@ -598,17 +641,16 @@ export async function importSubscribersFromRecords(records: ImportRecord[], over
         upsert: true,
       },
     });
-    importedImsis.push(doc.imsi);
+    pendingImsis.push(doc.imsi);
   }
 
-  if (operations.length > 0) {
-    const collection = await subscribersCollection();
-    await collection.bulkWrite(operations, { ordered: false });
-  }
+  const { successfulImsis, failedImsis } = await bulkWriteSubscribers(operations, pendingImsis);
 
   return {
-    imported: importedImsis.length,
+    imported: successfulImsis.length,
     skipped,
-    importedImsis,
+    failed: failedImsis.length,
+    importedImsis: successfulImsis,
+    failedImsis,
   };
 }

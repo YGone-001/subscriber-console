@@ -1,5 +1,6 @@
 import { MongoClient, ObjectId, Long } from 'mongodb';
 import nextEnv from '@next/env';
+import { errorSummary, writeOpsReport } from './lib/ops-report.mjs';
 
 const { loadEnvConfig } = nextEnv;
 loadEnvConfig(process.cwd());
@@ -13,6 +14,8 @@ const mongoUri = process.env.MONGODB_URI || DEFAULT_MONGODB_URI;
 const configuredDbName = process.env.MONGODB_DB || DEFAULT_MONGODB_DB;
 const explicitTestDb = process.env.MONGODB_TEST_DB;
 const dbName = explicitTestDb || `${configuredDbName}_core_test_${Date.now()}_${process.pid}`;
+const startedAt = new Date();
+const checks = [];
 
 const client = new MongoClient(mongoUri, {
   maxPoolSize: Number(process.env.MONGODB_MAX_POOL_SIZE || 10),
@@ -33,6 +36,12 @@ const expectedIndexes = {
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
+}
+
+async function runCheck(name, fn) {
+  const started = Date.now();
+  await fn();
+  checks.push({ name, ok: true, durationMs: Date.now() - started });
 }
 
 function assertDuplicateKey(error, label) {
@@ -315,23 +324,30 @@ async function main() {
   console.log(`Connecting to MongoDB and using test database "${dbName}"...`);
   await client.connect();
   const db = client.db(dbName);
-  const startedAt = Date.now();
+  const runStartedAt = Date.now();
 
   try {
-    await db.command({ ping: 1 });
-    await ensureIndexes(db);
-    await verifyIndexes(db);
-    await testSubscribers(db);
-    await testProfilesAndRatings(db);
-    await testUsersAuditAlertsAndRuntimeCollections(db);
+    await runCheck('mongo.ping', () => db.command({ ping: 1 }));
+    await runCheck('indexes.ensure', () => ensureIndexes(db));
+    await runCheck('indexes.verify', () => verifyIndexes(db));
+    await runCheck('subscribers.crud_and_batch', () => testSubscribers(db));
+    await runCheck('profiles.ratings', () => testProfilesAndRatings(db));
+    await runCheck('users.audit.alerts.runtime', () => testUsersAuditAlertsAndRuntimeCollections(db));
 
-    console.log(JSON.stringify({
+    const report = {
       ok: true,
+      command: 'mongo:test-core',
       database: dbName,
       kept: keepDb,
-      durationMs: Date.now() - startedAt,
+      durationMs: Date.now() - runStartedAt,
+      checkedAt: new Date().toISOString(),
       collections: Object.keys(expectedIndexes).length,
-    }, null, 2));
+      checks,
+      cleanup: keepDb ? 'kept' : 'dropped',
+    };
+    const outputPath = await writeOpsReport('mongo-test-core', report, startedAt);
+    console.log(JSON.stringify(report, null, 2));
+    console.log(`Ops report written to ${outputPath}`);
   } finally {
     if (!keepDb) {
       await db.dropDatabase();
@@ -340,7 +356,25 @@ async function main() {
   }
 }
 
-main().catch((error) => {
+main().catch(async (error) => {
+  const report = {
+    ok: false,
+    command: 'mongo:test-core',
+    database: dbName,
+    kept: keepDb,
+    checkedAt: new Date().toISOString(),
+    durationMs: Date.now() - startedAt.getTime(),
+    checks,
+    error: errorSummary(error),
+    recommendations: [
+      'Confirm MongoDB is reachable from this host.',
+      'Run npm run mongo:init before retrying if index verification failed.',
+      'Use MONGODB_TEST_DB to force a disposable database name.',
+      'Avoid --allow-configured-db unless you intentionally want to run against the configured database.',
+    ],
+  };
+  const outputPath = await writeOpsReport('mongo-test-core', report, startedAt);
   console.error('MongoDB core integration test failed:', error);
+  console.error(`Failure report written to ${outputPath}`);
   process.exitCode = 1;
 });

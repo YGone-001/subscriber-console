@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Plus, Layers, Download, Users, Trash2, DatabaseZap, PenLine, MoreHorizontal, Settings2, FileUp, Copy, CheckCircle2 } from "lucide-react";
 import SubscriberModal from "@/components/SubscriberModal";
 import BatchCreateModal from "@/components/BatchCreateModal";
@@ -237,14 +237,15 @@ export default function SubscriberPage() {
   });
 
   const totalPages = Math.max(1, Math.ceil(totalSubscribers / pageSize));
+  const displayPage = Math.min(currentPage, totalPages);
   const paginatedSubscribers = sortedSubscribers;
   const pageImsis = paginatedSubscribers.map((s) => s.imsi);
   const selectedOnPageCount = pageImsis.filter((imsi) => selectedImsis.includes(imsi)).length;
   const isAllPageSelected = pageImsis.length > 0 && selectedOnPageCount === pageImsis.length;
 
-  useEffect(() => {
-    if (currentPage > totalPages) setCurrentPage(totalPages);
-  }, [currentPage, totalPages]);
+  if (currentPage > totalPages) {
+    setCurrentPage(totalPages);
+  }
 
   const formatBytes = (bytes: number) => {
     if (bytes === 0) return '0 B';
@@ -271,7 +272,7 @@ export default function SubscriberPage() {
 
   const getPageNumbers = () => {
     const maxButtons = 5;
-    const start = Math.max(1, Math.min(currentPage - 2, totalPages - maxButtons + 1));
+    const start = Math.max(1, Math.min(displayPage - 2, totalPages - maxButtons + 1));
     const end = Math.min(totalPages, start + maxButtons - 1);
     return Array.from({ length: end - start + 1 }, (_, index) => start + index);
   };
@@ -591,7 +592,7 @@ export default function SubscriberPage() {
         {!isLoading && totalSubscribers > 0 && (
           <div className="table-pagination">
              <div style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
-               {t("showing")} {((currentPage - 1) * pageSize) + 1} {t("to")} {Math.min(currentPage * pageSize, totalSubscribers)} {t("of")} {totalSubscribers} {t("entries")}
+               {t("showing")} {((displayPage - 1) * pageSize) + 1} {t("to")} {Math.min(displayPage * pageSize, totalSubscribers)} {t("of")} {totalSubscribers} {t("entries")}
              </div>
              <div className="pagination-controls">
                <select className="page-size-select" value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}>
@@ -600,26 +601,26 @@ export default function SubscriberPage() {
                  <option value={50}>50 {t("per_page")}</option>
                </select>
                <div className="page-buttons" aria-label="Subscriber pagination">
-                 <button className="page-button icon" onClick={() => setCurrentPage(1)} disabled={currentPage === 1} title="First page">
+                 <button className="page-button icon" onClick={() => setCurrentPage(1)} disabled={displayPage === 1} title="First page">
                    <ChevronsLeft size={15} />
                  </button>
-                 <button className="page-button icon" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} title={t("prev")}>
+                 <button className="page-button icon" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={displayPage === 1} title={t("prev")}>
                    <ChevronLeft size={15} />
                  </button>
                  {getPageNumbers().map((page) => (
                    <button
                      key={page}
-                     className={page === currentPage ? "page-button active" : "page-button"}
+                     className={page === displayPage ? "page-button active" : "page-button"}
                      onClick={() => setCurrentPage(page)}
-                     aria-current={page === currentPage ? "page" : undefined}
+                     aria-current={page === displayPage ? "page" : undefined}
                    >
                      {page}
                    </button>
                  ))}
-                 <button className="page-button icon" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} title={t("next")}>
+                 <button className="page-button icon" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={displayPage === totalPages} title={t("next")}>
                    <ChevronRight size={15} />
                  </button>
-                 <button className="page-button icon" onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages} title="Last page">
+                 <button className="page-button icon" onClick={() => setCurrentPage(totalPages)} disabled={displayPage === totalPages} title="Last page">
                    <ChevronsRight size={15} />
                  </button>
                </div>

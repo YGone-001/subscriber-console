@@ -63,17 +63,6 @@ The default Next.js server listens on port `3000` unless configured otherwise th
 7. Log in with the bootstrap `admin` account if needed.
 8. Create named operator/viewer accounts and store credentials securely.
 
-## Legacy Data Migration
-
-If the old deployment still has data in Redis, run the one-time migration before cutting over:
-
-```bash
-REDIS_URL=redis://127.0.0.1:6379/0 npm run mongo:migrate-redis -- --dry-run
-REDIS_URL=redis://127.0.0.1:6379/0 npm run mongo:migrate-redis
-```
-
-Use `--overwrite` only when you intentionally want Redis values to replace existing MongoDB documents.
-
 ## Common Issues
 
 ### Login fails with server error

@@ -1,5 +1,6 @@
 import { MongoClient } from 'mongodb';
 import nextEnv from '@next/env';
+import { errorSummary, writeOpsReport } from './lib/ops-report.mjs';
 
 const { loadEnvConfig } = nextEnv;
 loadEnvConfig(process.cwd());
@@ -15,6 +16,7 @@ const sampleImsiPrefix = sampleImsiPrefixArg?.split('=')[1] || process.env.MONGO
 const slowMs = Number(slowMsArg?.split('=')[1] || process.env.MONGO_PERF_SLOW_MS || 250);
 const mongoUri = process.env.MONGODB_URI || DEFAULT_MONGODB_URI;
 const dbName = process.env.MONGODB_DB || DEFAULT_MONGODB_DB;
+const startedAt = new Date();
 
 const client = new MongoClient(mongoUri, {
   maxPoolSize: Number(process.env.MONGODB_MAX_POOL_SIZE || 10),
@@ -88,6 +90,31 @@ function assess(result) {
   if (slow) return 'SLOW';
   if (highScan) return 'HIGH_SCAN_RATIO';
   return 'OK';
+}
+
+function recommendationsFor(result) {
+  if (result.status === 'OK') return [];
+  if (result.status === 'COLLSCAN') {
+    return [
+      'Check whether this query is intentionally analytical and allowed to scan the collection.',
+      'If this is user-facing, add a selective match stage or supporting index.',
+      'For subscriber analytics, consider precomputed metrics when subscriber volume grows.',
+    ];
+  }
+  if (result.status === 'SLOW') {
+    return [
+      'Review executionStats.executionTimeMillis and server load during the check.',
+      'Confirm indexes are present with npm run mongo:init.',
+      'Consider lowering returned document count or adding a more selective filter.',
+    ];
+  }
+  if (result.status === 'HIGH_SCAN_RATIO') {
+    return [
+      'The query examines far more documents than it returns.',
+      'Add or adjust a compound index matching the filter and sort order.',
+    ];
+  }
+  return ['Review the query plan and add a supporting index if this is user-facing.'];
 }
 
 async function timedExplain(name, run) {
@@ -187,11 +214,17 @@ async function main() {
   const results = await Promise.all(checks);
   const report = {
     ok: results.every((result) => result.status === 'OK'),
+    command: 'mongo:perf',
     database: dbName,
     checkedAt: new Date().toISOString(),
+    durationMs: Date.now() - startedAt.getTime(),
     slowThresholdMs: slowMs,
+    allowCollscan,
     imsiPrefix: prefix,
-    results,
+    results: results.map((result) => ({
+      ...result,
+      recommendations: recommendationsFor(result),
+    })),
   };
 
   if (jsonOutput) {
@@ -199,7 +232,7 @@ async function main() {
   } else {
     console.log(`MongoDB query performance report for "${dbName}"`);
     console.log(`IMSI prefix sample: ${prefix}; slow threshold: ${slowMs}ms`);
-    for (const result of results) {
+    for (const result of report.results) {
       const indexes = result.indexes.length > 0 ? result.indexes.join(',') : 'none';
       const stages = result.stages.length > 0 ? result.stages.join(',') : 'unknown';
       console.log(
@@ -208,14 +241,34 @@ async function main() {
     }
   }
 
+  const outputPath = await writeOpsReport('mongo-perf', report, startedAt);
+  console.log(`Ops report written to ${outputPath}`);
+
   await client.close();
-  if (!report.ok && !(allowCollscan && results.every((result) => result.status === 'OK' || result.status === 'COLLSCAN'))) {
+  if (!report.ok && !(allowCollscan && report.results.every((result) => result.status === 'OK' || result.status === 'COLLSCAN'))) {
     process.exitCode = 1;
   }
 }
 
 main().catch(async (error) => {
+  const report = {
+    ok: false,
+    command: 'mongo:perf',
+    database: dbName,
+    checkedAt: new Date().toISOString(),
+    durationMs: Date.now() - startedAt.getTime(),
+    slowThresholdMs: slowMs,
+    allowCollscan,
+    error: errorSummary(error),
+    recommendations: [
+      'Confirm MONGODB_URI and MONGODB_DB point to the intended database.',
+      'Run npm run mongo:init if query plans indicate missing indexes.',
+      'Use -- --json when collecting machine-readable reports in automation.',
+    ],
+  };
+  const outputPath = await writeOpsReport('mongo-perf', report, startedAt);
   console.error('MongoDB query performance check failed:', error);
+  console.error(`Failure report written to ${outputPath}`);
   await client.close().catch(() => {});
   process.exitCode = 1;
 });

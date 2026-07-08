@@ -144,8 +144,10 @@ export default function ProfileModal({ profileName, onClose, onRefresh }: Profil
    */
   useEffect(() => {
     if (!profileName) return;
-    loadProfileData();
-    loadVersions();
+    void Promise.resolve().then(() => {
+      void loadProfileData();
+      void loadVersions();
+    });
   }, [loadProfileData, loadVersions, profileName]);
 
   /** Delete Profile */

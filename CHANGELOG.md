@@ -17,5 +17,5 @@ and this project follows semantic versioning where practical.
 ### Added
 
 - Initial Next.js subscriber operations console source.
-- Redis-backed IMSI subscriber management.
+- MongoDB-backed IMSI subscriber management.
 - Profile, Rating, analytics, audit log, system health, and role-based access features.

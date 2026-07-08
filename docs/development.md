@@ -70,6 +70,14 @@ npm run mongo:perf
 
 This command is read-only against the configured `MONGODB_DB`. It runs `explain("executionStats")` for key subscriber, audit, alert, profile, rating, and analytics queries, then flags collection scans, high scan ratios, and queries slower than the threshold. Use `-- --json` for machine-readable output, `-- --imsi-prefix=460020` to force the subscriber search prefix, `-- --slow-ms=500` to tune the slow-query threshold, and `-- --allow-collscan` when full-collection analytics scans are acceptable for the current dataset.
 
+Operational scripts write JSON reports under `reports/ops/` by default:
+
+- `npm run mongo:init`
+- `npm run mongo:test-core`
+- `npm run mongo:perf`
+
+Set `OPS_REPORT_DIR` to write reports elsewhere.
+
 For the full local quality gate, run:
 
 ```bash

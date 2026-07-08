@@ -43,6 +43,15 @@ export default function CommandPalette({ isOpen, onClose, onAction }: CommandPal
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [remoteItems, setRemoteItems] = useState<PaletteItem[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [wasOpen, setWasOpen] = useState(isOpen);
+
+  if (isOpen !== wasOpen) {
+    setWasOpen(isOpen);
+    if (query) setQuery("");
+    if (remoteItems.length > 0) setRemoteItems([]);
+    if (selectedIndex !== 0) setSelectedIndex(0);
+    if (isSearching) setIsSearching(false);
+  }
 
   const navItems: PaletteItem[] = [
     { id: "nav-dashboard", label: t("cp_nav_dashboard"), desc: t("cp_nav_dashboard_desc"), icon: LayoutDashboard, path: "/", type: "navigation" },
@@ -63,20 +72,13 @@ export default function CommandPalette({ isOpen, onClose, onAction }: CommandPal
 
   useEffect(() => {
     if (!isOpen) return;
-    setQuery("");
-    setRemoteItems([]);
-    setSelectedIndex(0);
     setTimeout(() => inputRef.current?.focus(), 50);
   }, [isOpen]);
 
   useEffect(() => {
     const trimmed = query.trim();
 
-    if (!isOpen || trimmed.length < 2) {
-      setRemoteItems([]);
-      setIsSearching(false);
-      return;
-    }
+    if (!isOpen || trimmed.length < 2) return;
 
     const controller = new AbortController();
     const timer = window.setTimeout(async () => {
@@ -133,11 +135,7 @@ export default function CommandPalette({ isOpen, onClose, onAction }: CommandPal
     return results;
   })();
 
-  useEffect(() => {
-    if (selectedIndex >= filteredItems.length) {
-      setSelectedIndex(Math.max(0, filteredItems.length - 1));
-    }
-  }, [filteredItems.length, selectedIndex]);
+  const activeSelectedIndex = Math.min(selectedIndex, Math.max(0, filteredItems.length - 1));
 
   const handleSelect = useCallback((item: PaletteItem) => {
     onClose();
@@ -157,14 +155,14 @@ export default function CommandPalette({ isOpen, onClose, onAction }: CommandPal
   const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setSelectedIndex((prev) => Math.min(prev + 1, filteredItems.length - 1));
+      setSelectedIndex((prev) => Math.min(prev + 1, Math.max(0, filteredItems.length - 1)));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setSelectedIndex((prev) => Math.max(prev - 1, 0));
     } else if (e.key === "Enter") {
       e.preventDefault();
-      if (filteredItems[selectedIndex]) {
-        handleSelect(filteredItems[selectedIndex]);
+      if (filteredItems[activeSelectedIndex]) {
+        handleSelect(filteredItems[activeSelectedIndex]);
       }
     } else if (e.key === "Escape") {
       onClose();
@@ -182,7 +180,7 @@ export default function CommandPalette({ isOpen, onClose, onAction }: CommandPal
 
   const renderRow = (item: PaletteItem, idx: number, accent: string, badge?: string) => {
     const Icon = item.icon;
-    const selected = selectedIndex === idx;
+    const selected = activeSelectedIndex === idx;
 
     return (
       <div
@@ -280,8 +278,13 @@ export default function CommandPalette({ isOpen, onClose, onAction }: CommandPal
             type="text"
             value={query}
             onChange={(e) => {
-              setQuery(e.target.value);
+              const nextQuery = e.target.value;
+              setQuery(nextQuery);
               setSelectedIndex(0);
+              if (nextQuery.trim().length < 2) {
+                setRemoteItems([]);
+                setIsSearching(false);
+              }
             }}
             placeholder={t("cp_placeholder")}
             style={{
