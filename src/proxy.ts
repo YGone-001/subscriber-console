@@ -10,8 +10,9 @@ export async function proxy(request: NextRequest) {
 
   const isAuthRoute = request.nextUrl.pathname.startsWith('/login');
   const isPublicApiRoute = request.nextUrl.pathname === '/api/auth/login' || request.nextUrl.pathname === '/api/auth/logout';
+  const isPublicImage = request.nextUrl.pathname.startsWith('/images/');
 
-  if (isPublicApiRoute || request.nextUrl.pathname.startsWith('/_next')) {
+  if (isPublicApiRoute || isPublicImage || request.nextUrl.pathname.startsWith('/_next')) {
     return NextResponse.next();
   }
 
@@ -54,5 +55,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  matcher: ['/((?!_next/static|_next/image|images/|favicon.ico).*)'],
 }
