@@ -1,8 +1,8 @@
 type Ambr = { downlink: { unit: number; value: number }; uplink: { unit: number; value: number } };
 
 const DEFAULT_AMBR: Ambr = {
-  downlink: { unit: 2, value: 10 },
-  uplink: { unit: 2, value: 10 },
+  downlink: { unit: 3, value: 1 },
+  uplink: { unit: 3, value: 1 },
 };
 
 function mapArp(arp: any, fallbackPriorityLevel: number) {
@@ -27,7 +27,7 @@ function normalizeSession(session: any, idx: number) {
   return {
     name,
     type: Number(session?.type ?? (isIms ? 3 : 1)),
-    pgwIpv4: session?.pgwIpv4 ?? "127.0.0.4",
+    pgwIpv4: session?.pgwIpv4 ?? "",
     pgwIpv6: session?.pgwIpv6 ?? "",
     qos: {
       _5qi: fiveQi,
@@ -52,11 +52,26 @@ export function normalizeSliceList(sliceList: any): any[] {
   if (!Array.isArray(sliceList) || sliceList.length === 0) {
     return [{
       default_indicator: true,
-      sd: "000001",
       sst: 1,
       session_list: [
         normalizeSession({ name: "internet", type: 1, qos: { _5qi: 9, arp: { priorityLevel: 8 } } }, 0),
-        normalizeSession({ name: "ims", type: 3, qos: { _5qi: 5, arp: { priorityLevel: 1 } } }, 1),
+        normalizeSession({ name: "mobile", type: 1, qos: { _5qi: 9, arp: { priorityLevel: 8 } } }, 1),
+        {
+          ...normalizeSession({ name: "ims", type: 3, qos: { _5qi: 5, arp: { priorityLevel: 1 } } }, 2),
+          pcc_rule: [{
+            qos: {
+              index: 1,
+              gbr: { uplink: { value: 128, unit: 1 }, downlink: { value: 128, unit: 1 } },
+              mbr: { uplink: { value: 128, unit: 1 }, downlink: { value: 128, unit: 1 } },
+              arp: {
+                priority_level: 2,
+                pre_emption_capability: 2,
+                pre_emption_vulnerability: 2,
+              },
+            },
+            flow: [],
+          }],
+        },
       ],
     }];
   }
@@ -69,8 +84,8 @@ export function normalizeSliceList(sliceList: any): any[] {
   }));
 }
 
-export function buildDefaultSub4G(msisdn = "8529000006", profileData?: any) {
-  const resolvedMsisdn = msisdn || profileData?.msisdnList?.[0]?.msisdn || "8529000006";
+export function buildDefaultSub4G(msisdn = "", profileData?: any) {
+  const resolvedMsisdn = msisdn || profileData?.msisdnList?.[0]?.msisdn || "";
   return {
     access_restriction_data: 0,
     allowedVisitedPlmns: "all",
@@ -86,7 +101,7 @@ export function buildDefaultSub4G(msisdn = "8529000006", profileData?: any) {
           },
         }
       : DEFAULT_AMBR,
-    msisdnList: [{ msisdn: String(resolvedMsisdn) }],
+    msisdnList: resolvedMsisdn ? [{ msisdn: String(resolvedMsisdn) }] : [],
     network_access_mode: 0,
     sliceList: normalizeSliceList(profileData?.sliceList),
   };

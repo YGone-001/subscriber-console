@@ -10,13 +10,13 @@ import type {
   Open5gsSession,
   Open5gsSlice,
   Open5gsSubscriberDocument,
-  SubscriberOcsData,
 } from '@/types/open5gs';
 
 type UnknownRecord = Record<string, unknown>;
 
 const ZERO_128 = '00000000000000000000000000000000';
-const DEFAULT_PLMN = '45400';
+const DEFAULT_AUTH_KEY = '000102030405060708090A0B0C0D0E0F';
+const DEFAULT_IMEISV = '8672710677532401';
 
 function asRecord(value: unknown): UnknownRecord {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as UnknownRecord : {};
@@ -43,6 +43,15 @@ function longToNumber(value: unknown): number {
 
 function toLong(value: unknown): Long {
   return Long.fromNumber(asNumber(value, 1));
+}
+
+function epcRealm(imsi: string) {
+  const mcc = imsi.slice(0, 3) || '417';
+  const mnc = imsi.slice(3, 5).padStart(3, '0') || '001';
+  return {
+    mme_host: `mme.epc.mnc${mnc}.mcc${mcc}.3gppnetwork.org`,
+    mme_realm: `epc.mnc${mnc}.mcc${mcc}.3gppnetwork.org`,
+  };
 }
 
 function normalizeAmbr(value: unknown, fallback: Open5gsAmbr = defaultAmbr()): Open5gsAmbr {
@@ -77,7 +86,11 @@ function toOpen5gsArp(value: unknown, fallbackPriorityLevel: number): Open5gsArp
   return {
     priority_level: asNumber(arp.priorityLevel ?? arp.arpPriority ?? arp.priority_level, fallbackPriorityLevel),
     pre_emption_capability: preemptCap === 'PREEMPT' || preemptCap === '0' ? 0 : 1,
-    pre_emption_vulnerability: preemptVuln === 'PREEMPTABLE' || preemptVuln === '0' ? 0 : 2,
+    pre_emption_vulnerability: preemptVuln === 'PREEMPTABLE' || preemptVuln === '0'
+      ? 0
+      : preemptVuln === '2'
+        ? 2
+        : 1,
   };
 }
 
@@ -138,8 +151,8 @@ function toOpen5gsSession(session: unknown, index: number): Open5gsSession {
     qos: toOpen5gsQos(source.qos, isIms ? 5 : 9, isIms ? 1 : 8),
     ambr: normalizeAmbr(source.ambr),
     pcc_rule: asArray(source.pcc_rule).map(toOpen5gsPccRule),
-    lbo_roaming_allowed: !!source.lbo_roaming_allowed,
   };
+  if (source.lbo_roaming_allowed !== undefined) output.lbo_roaming_allowed = !!source.lbo_roaming_allowed;
 
   const ue = asRecord(source.ue);
   const ueIpv4 = asString(ue.ipv4, '');
@@ -163,127 +176,55 @@ function toOpen5gsSlice(slice: unknown): Open5gsSlice {
   const source = asRecord(slice);
   const sessionList = asArray(source.session_list ?? source.session);
 
-  return {
+  const output: Open5gsSlice = {
     _id: new ObjectId(),
     sst: asNumber(source.sst, 1),
-    sd: asString(source.sd, '000001'),
     default_indicator: source.default_indicator !== undefined ? !!source.default_indicator : true,
     session: sessionList.length > 0
       ? sessionList.map(toOpen5gsSession)
       : [toOpen5gsSession({ name: 'internet', type: 3 }, 0)],
   };
+  const sd = asString(source.sd, '');
+  if (sd && sd !== '000001') output.sd = sd;
+  return output;
 }
 
 function toOpen5gsSecurity(auth4G: unknown, existing?: Open5gsSecurity): Open5gsSecurity {
   const auth = asRecord(auth4G);
   const op = auth.op !== undefined ? asString(auth.op) : existing?.op ?? null;
   const opc = auth.opc !== undefined ? asString(auth.opc) : existing?.opc ?? ZERO_128;
-
-  return {
-    k: asString(auth.k, existing?.k || ZERO_128),
+  const output: Open5gsSecurity = {
+    k: asString(auth.k, existing?.k || DEFAULT_AUTH_KEY),
     op: op || null,
-    opc: opc || null,
+    opc: opc || DEFAULT_AUTH_KEY,
     amf: asString(auth.amf, existing?.amf || '8000'),
-    sqn: toLong(auth.sqn ?? existing?.sqn ?? 1),
   };
-}
 
-function defaultOcs(imsi: string): SubscriberOcsData {
-  return {
-    traffic: {
-      traffic_total: 0,
-      traffic_balance: 0,
-      imsi,
-      plmn: DEFAULT_PLMN,
-    },
-    imsi: {
-      account_id: imsi,
-      imsi,
-      withhold: 0,
-      withholding_residue: 0,
-      withholding_time: 3600,
-    },
-    account: {
-      account_id: imsi,
-      balance: '0',
-      currency: 'USD',
-    },
-    rating: {
-      rates_map: {},
-      imsi,
-    },
-  };
-}
-
-function mergeOcs(imsi: string, existing: SubscriberOcsData | undefined, input: {
-  ocsTraffic?: unknown;
-  ocsImsi?: unknown;
-  ocsImsiSet?: unknown;
-  ocsAccount?: unknown;
-}): SubscriberOcsData {
-  const defaults = defaultOcs(imsi);
-  const traffic = asRecord(input.ocsTraffic);
-  const ocsImsi = asRecord(input.ocsImsi);
-  const rating = asRecord(input.ocsImsiSet);
-  const account = asRecord(input.ocsAccount);
-
-  return {
-    traffic: {
-      ...defaults.traffic,
-      ...existing?.traffic,
-      ...traffic,
-      imsi,
-    },
-    imsi: {
-      ...defaults.imsi,
-      ...existing?.imsi,
-      ...ocsImsi,
-      imsi,
-      account_id: asString(ocsImsi.account_id ?? existing?.imsi?.account_id, imsi),
-    },
-    account: {
-      ...defaults.account,
-      ...existing?.account,
-      ...account,
-      account_id: asString(account.account_id ?? existing?.account?.account_id, imsi),
-    },
-    rating: {
-      ...defaults.rating,
-      ...existing?.rating,
-      ...rating,
-      imsi,
-    },
-  };
+  output.sqn = toLong(auth.sqn ?? existing?.sqn ?? 1719756);
+  return output;
 }
 
 export function buildDefaultOpen5gsSubscriber(imsi: string, profileData?: unknown): Open5gsSubscriberDocument {
   const sub4G = buildDefaultSub4G('', profileData);
-  const now = new Date();
+  const realm = epcRealm(imsi);
 
   return {
     __v: 0,
     schema_version: 1,
     imsi,
-    msisdn: asArray<{ msisdn?: unknown }>(sub4G.msisdnList).map((item) => asString(item.msisdn)).filter(Boolean),
-    imeisv: [],
-    mme_host: [],
-    mm_realm: [],
-    purge_flag: [],
+    msisdn: [],
+    imeisv: DEFAULT_IMEISV,
     security: toOpen5gsSecurity({}),
     ambr: normalizeAmbr(sub4G.ambr),
     slice: asArray(sub4G.sliceList).map(toOpen5gsSlice),
     access_restriction_data: 32,
     subscriber_status: 0,
-    operator_determined_barring: 0,
     network_access_mode: 0,
     subscribed_rau_tau_timer: 12,
-    ocs: defaultOcs(imsi),
-    webui_meta: {
-      created_at: now,
-      updated_at: now,
-    },
-    created_at: now,
-    updated_at: now,
+    mme_host: realm.mme_host,
+    mme_realm: realm.mme_realm,
+    mme_timestamp: Date.now() * 1000,
+    purge_flag: false,
   };
 }
 
@@ -300,17 +241,14 @@ export function buildOpen5gsSubscriberFromLegacy(
   existing?: Open5gsSubscriberDocument | null
 ): Open5gsSubscriberDocument {
   const normalizedSub4G = input.sub4G ? normalizeSub4G(input.sub4G) : null;
-  const now = new Date();
   const base = existing || buildDefaultOpen5gsSubscriber(imsi);
-  const msisdn = normalizedSub4G
-    ? asArray<{ msisdn?: unknown }>(normalizedSub4G.msisdnList).map((item) => asString(item.msisdn)).filter(Boolean)
-    : base.msisdn || [];
+  const realm = epcRealm(imsi);
 
   return {
     ...base,
     schema_version: 1,
     imsi,
-    msisdn,
+    msisdn: [],
     security: input.auth4G ? toOpen5gsSecurity(input.auth4G, base.security) : base.security,
     ambr: normalizedSub4G ? normalizeAmbr(normalizedSub4G.ambr, base.ambr) : base.ambr,
     slice: normalizedSub4G ? asArray(normalizedSub4G.sliceList).map(toOpen5gsSlice) : base.slice,
@@ -320,15 +258,11 @@ export function buildOpen5gsSubscriberFromLegacy(
     network_access_mode: normalizedSub4G
       ? asNumber(normalizedSub4G.network_access_mode, base.network_access_mode)
       : base.network_access_mode,
-    ocs: mergeOcs(imsi, base.ocs, input),
-    webui_meta: {
-      ...base.webui_meta,
-      profile_name: asString(asRecord(input.sub4G).profile_name ?? base.webui_meta?.profile_name, ''),
-      updated_at: now,
-      created_at: base.webui_meta?.created_at || base.created_at || now,
-    },
-    created_at: base.created_at || now,
-    updated_at: now,
+    imeisv: base.imeisv || DEFAULT_IMEISV,
+    mme_host: base.mme_host || realm.mme_host,
+    mme_realm: base.mme_realm || realm.mme_realm,
+    mme_timestamp: base.mme_timestamp || Date.now() * 1000,
+    purge_flag: base.purge_flag ?? false,
   };
 }
 

@@ -15,7 +15,8 @@ const slowMsArg = process.argv.find((arg) => arg.startsWith('--slow-ms='));
 const sampleImsiPrefix = sampleImsiPrefixArg?.split('=')[1] || process.env.MONGO_PERF_IMSI_PREFIX || '';
 const slowMs = Number(slowMsArg?.split('=')[1] || process.env.MONGO_PERF_SLOW_MS || 250);
 const mongoUri = process.env.MONGODB_URI || DEFAULT_MONGODB_URI;
-const dbName = process.env.MONGODB_DB || DEFAULT_MONGODB_DB;
+const dbName = process.env.MONGODB_OPEN5GS_DB || process.env.MONGODB_DB || DEFAULT_MONGODB_DB;
+const appDbName = process.env.MONGODB_APP_DB || 'xcloud_ops';
 const startedAt = new Date();
 
 const client = new MongoClient(mongoUri, {
@@ -139,7 +140,8 @@ async function samplePrefix(db) {
 async function main() {
   await client.connect();
   const db = client.db(dbName);
-  await db.command({ ping: 1 });
+  const appDb = client.db(appDbName);
+  await Promise.all([db.command({ ping: 1 }), appDb.command({ ping: 1 })]);
 
   const prefix = await samplePrefix(db);
   const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
@@ -165,57 +167,60 @@ async function main() {
         .limit(50)
         .explain('executionStats')
     ),
-    timedExplain('subscribers.analytics.plmn_group', () =>
-      db.collection('subscribers')
+    timedExplain('ocs_balances.analytics.plmn_group', () =>
+      db.collection('ocs_balances')
         .aggregate([
-          { $group: { _id: '$ocs.traffic.plmn', count: { $sum: 1 }, totalTraffic: { $sum: '$ocs.traffic.traffic_total' } } },
+          { $project: { plmn: { $substr: ['$imsi', 0, 5] }, data_available: 1 } },
+          { $group: { _id: '$plmn', count: { $sum: 1 }, totalTraffic: { $sum: '$data_available' } } },
           { $sort: { totalTraffic: -1 } },
           { $limit: 10 },
         ])
         .explain('executionStats')
     ),
     timedExplain('audit.recent.timestamp', () =>
-      db.collection('app_audit_logs')
+      appDb.collection('app_audit_logs')
         .find({ timestamp: { $gte: since } })
         .sort({ timestamp: -1 })
         .limit(100)
         .explain('executionStats')
     ),
     timedExplain('audit.target.recent', () =>
-      db.collection('app_audit_logs')
+      appDb.collection('app_audit_logs')
         .find({ targetId: '460020000000001' })
         .sort({ timestamp: -1 })
         .limit(50)
         .explain('executionStats')
     ),
     timedExplain('alerts.active.by_level', () =>
-      db.collection('app_alerts')
+      appDb.collection('app_alerts')
         .find({ is_acknowledged: false, level: { $in: ['warning', 'critical'] } })
         .sort({ timestamp: -1 })
         .limit(100)
         .explain('executionStats')
     ),
     timedExplain('profiles.updated', () =>
-      db.collection('app_profiles')
+      appDb.collection('app_profiles')
         .find({}, { projection: { name: 1, updated_at: 1 } })
         .sort({ updated_at: -1 })
         .limit(50)
         .explain('executionStats')
     ),
-    timedExplain('ratings.by_id', () =>
-      db.collection('app_ratings')
-        .find({})
-        .sort({ rating_group_id: 1 })
+    timedExplain('ocs_tariff_plans.rules.by_rating_group', () =>
+      db.collection('ocs_tariff_plans')
+        .find({ 'rules.rating_group': { $exists: true } })
+        .sort({ 'rules.rating_group': 1 })
         .limit(50)
         .explain('executionStats')
     ),
   ];
 
   const results = await Promise.all(checks);
+  const reportOk = results.every((result) => result.status === 'OK')
+    || (allowCollscan && results.every((result) => result.status === 'OK' || result.status === 'COLLSCAN'));
   const report = {
-    ok: results.every((result) => result.status === 'OK'),
+    ok: reportOk,
     command: 'mongo:perf',
-    database: dbName,
+    databases: { open5gs: dbName, app: appDbName },
     checkedAt: new Date().toISOString(),
     durationMs: Date.now() - startedAt.getTime(),
     slowThresholdMs: slowMs,
@@ -230,7 +235,7 @@ async function main() {
   if (jsonOutput) {
     console.log(JSON.stringify(report, null, 2));
   } else {
-    console.log(`MongoDB query performance report for "${dbName}"`);
+    console.log(`MongoDB query performance report for "${dbName}" and "${appDbName}"`);
     console.log(`IMSI prefix sample: ${prefix}; slow threshold: ${slowMs}ms`);
     for (const result of report.results) {
       const indexes = result.indexes.length > 0 ? result.indexes.join(',') : 'none';
@@ -254,14 +259,14 @@ main().catch(async (error) => {
   const report = {
     ok: false,
     command: 'mongo:perf',
-    database: dbName,
+    databases: { open5gs: dbName, app: appDbName },
     checkedAt: new Date().toISOString(),
     durationMs: Date.now() - startedAt.getTime(),
     slowThresholdMs: slowMs,
     allowCollscan,
     error: errorSummary(error),
     recommendations: [
-      'Confirm MONGODB_URI and MONGODB_DB point to the intended database.',
+      'Confirm MONGODB_URI, MONGODB_DB, and MONGODB_APP_DB point to the intended databases.',
       'Run npm run mongo:init if query plans indicate missing indexes.',
       'Use -- --json when collecting machine-readable reports in automation.',
     ],

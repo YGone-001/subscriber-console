@@ -1,4 +1,4 @@
-import { getMongoCollection, mongoCollections } from '@/lib/mongo';
+import { getAppCollection, mongoCollections } from '@/lib/mongo';
 import type { SyslogLevel } from '@/lib/syslog';
 
 export type AlertDocument = {
@@ -13,7 +13,7 @@ export type AlertDocument = {
 const ALERT_LIMIT = 10000;
 
 function collection() {
-  return getMongoCollection<AlertDocument>(mongoCollections.alerts);
+  return getAppCollection<AlertDocument>(mongoCollections.alerts);
 }
 
 function stripMongoId<T extends Record<string, unknown>>(doc: T): T {

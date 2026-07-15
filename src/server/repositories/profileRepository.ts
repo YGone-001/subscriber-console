@@ -1,5 +1,5 @@
 import { Document, MongoServerError } from 'mongodb';
-import { getMongoCollection, mongoCollections } from '@/lib/mongo';
+import { getAppCollection, mongoCollections } from '@/lib/mongo';
 
 export const PROFILE_VERSION_LIMIT = 50;
 
@@ -44,11 +44,11 @@ function nowIso(): string {
 }
 
 function profilesCollection() {
-  return getMongoCollection<ProfileDocument>(mongoCollections.profiles);
+  return getAppCollection<ProfileDocument>(mongoCollections.profiles);
 }
 
 function versionsCollection() {
-  return getMongoCollection<ProfileVersionRecord & Document>(mongoCollections.profileVersions);
+  return getAppCollection<ProfileVersionRecord & Document>(mongoCollections.profileVersions);
 }
 
 export function defaultProfile(name: string, user: string): ProfileDocument {

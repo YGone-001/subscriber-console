@@ -25,8 +25,9 @@ Required variables:
 
 | Variable | Description |
 | --- | --- |
-| `MONGODB_URI` | MongoDB connection URI, usually the same database used by Open5GS |
-| `MONGODB_DB` | MongoDB database name, default `open5gs` |
+| `MONGODB_URI` | MongoDB connection URI, usually the Open5GS MongoDB host |
+| `MONGODB_DB` | Open5GS data database name, default `open5gs` |
+| `MONGODB_APP_DB` | Application operations database for `app_*` collections, default `xcloud_ops` |
 | `JWT_SECRET` | JWT signing secret, at least 32 bytes |
 | `INITIAL_ADMIN_PASSWORD` | Optional bootstrap password for the first `admin` account |
 
@@ -54,10 +55,10 @@ The default Next.js server listens on port `3000` unless configured otherwise th
 
 ## Recommended Production Flow
 
-1. Provision MongoDB or reuse the Open5GS MongoDB database.
+1. Provision MongoDB or reuse the Open5GS MongoDB host.
 2. Configure environment variables in the deployment platform.
 3. Run `npm ci`.
-4. Run `npm run mongo:init` to create indexes.
+4. Run `npm run mongo:init` to create indexes in both the Open5GS and application databases.
 5. Run `npm run build`.
 6. Start with `npm run start`.
 7. Log in with the bootstrap `admin` account if needed.
@@ -75,7 +76,7 @@ Ensure `INITIAL_ADMIN_PASSWORD` is set and satisfies the password policy: at lea
 
 ### Dashboard or API data is empty
 
-Confirm `MONGODB_URI` and `MONGODB_DB` point to the expected Open5GS database, then run `npm run mongo:init`.
+Confirm `MONGODB_URI`, `MONGODB_DB`, and `MONGODB_APP_DB` point to the expected databases, then run `npm run mongo:init`.
 
 ### Build succeeds but runtime APIs fail
 

@@ -41,7 +41,18 @@ export default function RatingPage() {
 
   // 新增表单
   const [isAdding, setIsAdding] = useState(false);
-  const [newForm, setNewForm] = useState({ rating_group_id: "", currency: "USD", rates: "0", rates_type: 1 });
+  const defaultForm = {
+    rating_group_id: "",
+    currency: "USD",
+    rates: "0",
+    rates_type: 2,
+    apn: "internet",
+    service_identifier: "1",
+    quota_per_grant: "10485760",
+    validity_time: "300",
+    volume_threshold: "8388608",
+  };
+  const [newForm, setNewForm] = useState(defaultForm);
 
   /**
    * Create a rating template through the MongoDB-backed API.
@@ -56,7 +67,7 @@ export default function RatingPage() {
       });
       if (res.ok) {
         setIsAdding(false);
-        setNewForm({ rating_group_id: "", currency: "USD", rates: "0", rates_type: 1 });
+        setNewForm(defaultForm);
         mutate();
       } else {
         const err = await res.json();
@@ -102,7 +113,16 @@ export default function RatingPage() {
   // 进入行内编辑模式, 预填充现有数据
   const startEdit = (rating: any) => {
     setEditingId(rating.rating_group_id);
-    setEditForm({ currency: rating.currency, rates: rating.rates, rates_type: rating.rates_type });
+    setEditForm({
+      currency: rating.currency,
+      rates: rating.rates,
+      rates_type: rating.rates_type,
+      apn: rating.apn || "internet",
+      service_identifier: String(rating.service_identifier ?? 1),
+      quota_per_grant: String(rating.quota_per_grant ?? 10485760),
+      validity_time: String(rating.validity_time ?? 300),
+      volume_threshold: String(rating.volume_threshold ?? 8388608),
+    });
   };
 
   return (
@@ -126,7 +146,7 @@ export default function RatingPage() {
       </div>
 
       {/* Rate Table */}
-      <div className="dash-card" style={{ overflow: "hidden" }}>
+      <div className="dash-card" style={{ overflowX: "auto" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.95rem" }}>
           <thead>
             <tr style={{ background: "var(--surface-hover)", borderBottom: "2px solid var(--surface-border)" }}>
@@ -142,6 +162,11 @@ export default function RatingPage() {
               <th className="table-header-cap" style={{ padding: "1.25rem 1.5rem", textAlign: "left" }}>
                 <span style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}><Tag size={16} /> {t("rating_col_type")}</span>
               </th>
+              <th className="table-header-cap" style={{ padding: "1.25rem 1.5rem", textAlign: "left" }}>APN</th>
+              <th className="table-header-cap" style={{ padding: "1.25rem 1.5rem", textAlign: "left" }}>SI</th>
+              <th className="table-header-cap" style={{ padding: "1.25rem 1.5rem", textAlign: "left" }}>Grant</th>
+              <th className="table-header-cap" style={{ padding: "1.25rem 1.5rem", textAlign: "left" }}>Validity</th>
+              <th className="table-header-cap" style={{ padding: "1.25rem 1.5rem", textAlign: "left" }}>Threshold</th>
               {canEditTemplates && <th className="table-header-cap" style={{ padding: "1.25rem 1.5rem", textAlign: "right", width: "120px" }}>{t("rating_col_actions")}</th>}
             </tr>
           </thead>
@@ -165,6 +190,21 @@ export default function RatingPage() {
                     {RATE_TYPES.map(t => <option key={t.val} value={t.val}>{t.label}</option>)}
                   </select>
                 </td>
+                <td style={{ padding: "1rem 1.5rem" }}>
+                  <input type="text" className="form-input" style={{ width: "110px" }} value={newForm.apn} onChange={e => setNewForm({...newForm, apn: e.target.value})} />
+                </td>
+                <td style={{ padding: "1rem 1.5rem" }}>
+                  <input type="number" className="form-input" style={{ width: "80px" }} value={newForm.service_identifier} onChange={e => setNewForm({...newForm, service_identifier: e.target.value})} />
+                </td>
+                <td style={{ padding: "1rem 1.5rem" }}>
+                  <input type="number" className="form-input" style={{ width: "130px" }} value={newForm.quota_per_grant} onChange={e => setNewForm({...newForm, quota_per_grant: e.target.value})} />
+                </td>
+                <td style={{ padding: "1rem 1.5rem" }}>
+                  <input type="number" className="form-input" style={{ width: "90px" }} value={newForm.validity_time} onChange={e => setNewForm({...newForm, validity_time: e.target.value})} />
+                </td>
+                <td style={{ padding: "1rem 1.5rem" }}>
+                  <input type="number" className="form-input" style={{ width: "130px" }} value={newForm.volume_threshold} onChange={e => setNewForm({...newForm, volume_threshold: e.target.value})} />
+                </td>
                 <td style={{ padding: "1rem 1.5rem", textAlign: "right" }}>
                   <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
                     <button className="btn-icon" onClick={handleCreate} title={t("save")}><Save size={18} color="var(--success)" /></button>
@@ -176,9 +216,9 @@ export default function RatingPage() {
 
             {/* Data Rows */}
             {isLoading ? (
-              <tr><td colSpan={5} style={{ padding: "3rem", textAlign: "center", color: "var(--text-muted)" }}>{t("rating_loading")}</td></tr>
+              <tr><td colSpan={10} style={{ padding: "3rem", textAlign: "center", color: "var(--text-muted)" }}>{t("rating_loading")}</td></tr>
             ) : ratings.length === 0 ? (
-              <tr><td colSpan={5} style={{ padding: "3rem", textAlign: "center", color: "var(--text-muted)" }}>{t("rating_no_data")}</td></tr>
+              <tr><td colSpan={10} style={{ padding: "3rem", textAlign: "center", color: "var(--text-muted)" }}>{t("rating_no_data")}</td></tr>
             ) : ratings.map(r => (
               <tr key={r.rating_group_id} style={{ borderBottom: "1px solid var(--surface-border)", transition: "background 0.15s" }} onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-hover)')} onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                 {editingId === r.rating_group_id ? (
@@ -198,6 +238,21 @@ export default function RatingPage() {
                       <select className="form-input" value={editForm.rates_type} onChange={e => setEditForm({...editForm, rates_type: Number(e.target.value)})}>
                         {RATE_TYPES.map(t => <option key={t.val} value={t.val}>{t.label}</option>)}
                       </select>
+                    </td>
+                    <td style={{ padding: "1rem 1.5rem" }}>
+                      <input type="text" className="form-input" style={{ width: "110px" }} value={editForm.apn} onChange={e => setEditForm({...editForm, apn: e.target.value})} />
+                    </td>
+                    <td style={{ padding: "1rem 1.5rem" }}>
+                      <input type="number" className="form-input" style={{ width: "80px" }} value={editForm.service_identifier} onChange={e => setEditForm({...editForm, service_identifier: e.target.value})} />
+                    </td>
+                    <td style={{ padding: "1rem 1.5rem" }}>
+                      <input type="number" className="form-input" style={{ width: "130px" }} value={editForm.quota_per_grant} onChange={e => setEditForm({...editForm, quota_per_grant: e.target.value})} />
+                    </td>
+                    <td style={{ padding: "1rem 1.5rem" }}>
+                      <input type="number" className="form-input" style={{ width: "90px" }} value={editForm.validity_time} onChange={e => setEditForm({...editForm, validity_time: e.target.value})} />
+                    </td>
+                    <td style={{ padding: "1rem 1.5rem" }}>
+                      <input type="number" className="form-input" style={{ width: "130px" }} value={editForm.volume_threshold} onChange={e => setEditForm({...editForm, volume_threshold: e.target.value})} />
                     </td>
                     <td style={{ padding: "1rem 1.5rem", textAlign: "right" }}>
                       <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
@@ -220,6 +275,11 @@ export default function RatingPage() {
                         {RATE_TYPES.find(t => t.val === r.rates_type)?.label || r.rates_type}
                       </span>
                     </td>
+                    <td style={{ padding: "1.25rem 1.5rem", fontFamily: "monospace", color: "var(--text-main)" }}>{r.apn || "internet"}</td>
+                    <td style={{ padding: "1.25rem 1.5rem", fontFamily: "monospace", color: "var(--text-main)" }}>{r.service_identifier ?? 1}</td>
+                    <td style={{ padding: "1.25rem 1.5rem", fontFamily: "monospace", color: "var(--text-main)" }}>{r.quota_per_grant ?? 10485760}</td>
+                    <td style={{ padding: "1.25rem 1.5rem", fontFamily: "monospace", color: "var(--text-main)" }}>{r.validity_time ?? 300}s</td>
+                    <td style={{ padding: "1.25rem 1.5rem", fontFamily: "monospace", color: "var(--text-main)" }}>{r.volume_threshold ?? 8388608}</td>
                     {canEditTemplates && (
                       <td style={{ padding: "1.25rem 1.5rem", textAlign: "right" }}>
                         <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>

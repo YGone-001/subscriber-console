@@ -11,9 +11,12 @@ const args = new Set(process.argv.slice(2));
 const keepDb = args.has('--keep-db');
 const allowConfiguredDb = args.has('--allow-configured-db');
 const mongoUri = process.env.MONGODB_URI || DEFAULT_MONGODB_URI;
-const configuredDbName = process.env.MONGODB_DB || DEFAULT_MONGODB_DB;
+const configuredOpen5gsDbName = process.env.MONGODB_OPEN5GS_DB || process.env.MONGODB_DB || DEFAULT_MONGODB_DB;
+const configuredAppDbName = process.env.MONGODB_APP_DB || 'xcloud_ops';
 const explicitTestDb = process.env.MONGODB_TEST_DB;
-const dbName = explicitTestDb || `${configuredDbName}_core_test_${Date.now()}_${process.pid}`;
+const explicitTestAppDb = process.env.MONGODB_TEST_APP_DB;
+const dbName = explicitTestDb || `${configuredOpen5gsDbName}_core_test_${Date.now()}_${process.pid}`;
+const appDbName = explicitTestAppDb || `${configuredAppDbName}_core_test_${Date.now()}_${process.pid}`;
 const startedAt = new Date();
 const checks = [];
 
@@ -23,10 +26,12 @@ const client = new MongoClient(mongoUri, {
 });
 
 const expectedIndexes = {
-  subscribers: ['uniq_imsi', 'profile_name', 'ocs_plmn', 'ocs_rating_map', 'updated_at_desc'],
+  subscribers: ['uniq_imsi'],
+  ocs_tariff_plans: ['uniq_plan_id', 'rules_rating_group'],
+  ocs_subscribers: ['uniq_ocs_subscriber_imsi', 'ocs_subscriber_plan_id'],
+  ocs_balances: ['uniq_ocs_balance_imsi', 'ocs_balance_updated_at_desc'],
   app_profiles: ['uniq_profile_name', 'profile_updated_at_desc'],
   app_profile_versions: ['profile_versions_by_profile', 'uniq_profile_version_id'],
-  app_ratings: ['uniq_rating_group_id'],
   app_users: ['uniq_username'],
   app_audit_logs: ['audit_timestamp_desc', 'audit_target_timestamp', 'audit_action_timestamp'],
   app_alerts: ['alerts_timestamp_desc', 'alerts_active_by_level', 'alerts_imsi_timestamp'],
@@ -48,24 +53,35 @@ function assertDuplicateKey(error, label) {
   assert(error?.code === 11000, `${label} should fail with duplicate-key error`);
 }
 
-function subscriberDoc(imsi, profileName = 'default') {
-  const now = new Date();
+function numericValue(value) {
+  if (Long.isLong(value)) return value.toNumber();
+  return Number(value);
+}
+
+function epcRealm(imsi) {
+  const mcc = imsi.slice(0, 3) || '417';
+  const mnc = (imsi.slice(3, 5) || '1').padStart(3, '0');
+  return {
+    mme_host: `mme.epc.mnc${mnc}.mcc${mcc}.3gppnetwork.org`,
+    mme_realm: `epc.mnc${mnc}.mcc${mcc}.3gppnetwork.org`,
+  };
+}
+
+function subscriberDoc(imsi) {
+  const realm = epcRealm(imsi);
 
   return {
     __v: 0,
     schema_version: 1,
     imsi,
-    msisdn: [`86${imsi.slice(-11)}`],
-    imeisv: [],
-    mme_host: [],
-    mm_realm: [],
-    purge_flag: [],
+    msisdn: [],
+    imeisv: '8672710677532401',
     security: {
       k: '00000000000000000000000000000000',
       op: null,
       opc: '00000000000000000000000000000000',
       amf: '8000',
-      sqn: Long.fromNumber(1),
+      sqn: 1719756,
     },
     ambr: {
       downlink: { value: 1, unit: 3 },
@@ -75,7 +91,6 @@ function subscriberDoc(imsi, profileName = 'default') {
       {
         _id: new ObjectId(),
         sst: 1,
-        sd: '000001',
         default_indicator: true,
         session: [
           {
@@ -95,103 +110,82 @@ function subscriberDoc(imsi, profileName = 'default') {
               uplink: { value: 1, unit: 3 },
             },
             pcc_rule: [],
-            lbo_roaming_allowed: false,
           },
         ],
       },
     ],
     access_restriction_data: 32,
     subscriber_status: 0,
-    operator_determined_barring: 0,
     network_access_mode: 0,
     subscribed_rau_tau_timer: 12,
-    ocs: {
-      traffic: {
-        traffic_total: 10737418240,
-        traffic_balance: 10737418240,
-        imsi,
-        plmn: '45400',
-      },
-      imsi: {
-        account_id: imsi,
-        imsi,
-        withhold: 100,
-        withholding_residue: 0,
-        withholding_time: 3600,
-      },
-      account: {
-        account_id: imsi,
-        balance: '10000',
-        currency: 'USD',
-      },
-      rating: {
-        rates_map: { 45400: 1001 },
-        imsi,
-      },
-    },
-    webui_meta: {
-      profile_name: profileName,
-      created_at: now,
-      updated_at: now,
-    },
-    created_at: now,
-    updated_at: now,
+    mme_host: realm.mme_host,
+    mme_realm: realm.mme_realm,
+    mme_timestamp: Date.now() * 1000,
+    purge_flag: false,
   };
 }
 
-async function ensureIndexes(db) {
+async function ensureIndexes(db, appDb) {
   await db.collection('subscribers').createIndexes([
     { key: { imsi: 1 }, unique: true, name: 'uniq_imsi' },
-    { key: { 'webui_meta.profile_name': 1 }, name: 'profile_name' },
-    { key: { 'ocs.traffic.plmn': 1 }, name: 'ocs_plmn' },
-    { key: { 'ocs.rating.rates_map': 1 }, name: 'ocs_rating_map' },
-    { key: { updated_at: -1 }, name: 'updated_at_desc' },
   ]);
 
-  await db.collection('app_profiles').createIndexes([
+  await db.collection('ocs_tariff_plans').createIndexes([
+    { key: { plan_id: 1 }, unique: true, name: 'uniq_plan_id' },
+    { key: { 'rules.rating_group': 1 }, name: 'rules_rating_group' },
+  ]);
+
+  await db.collection('ocs_subscribers').createIndexes([
+    { key: { imsi: 1 }, unique: true, name: 'uniq_ocs_subscriber_imsi' },
+    { key: { plan_id: 1 }, name: 'ocs_subscriber_plan_id' },
+  ]);
+
+  await db.collection('ocs_balances').createIndexes([
+    { key: { imsi: 1 }, unique: true, name: 'uniq_ocs_balance_imsi' },
+    { key: { updated_at: -1 }, name: 'ocs_balance_updated_at_desc' },
+  ]);
+
+  await appDb.collection('app_profiles').createIndexes([
     { key: { name: 1 }, unique: true, name: 'uniq_profile_name' },
     { key: { updated_at: -1 }, name: 'profile_updated_at_desc' },
   ]);
 
-  await db.collection('app_profile_versions').createIndexes([
+  await appDb.collection('app_profile_versions').createIndexes([
     { key: { profileName: 1, savedAt: -1 }, name: 'profile_versions_by_profile' },
     { key: { versionId: 1 }, unique: true, name: 'uniq_profile_version_id' },
   ]);
 
-  await db.collection('app_ratings').createIndexes([
-    { key: { rating_group_id: 1 }, unique: true, name: 'uniq_rating_group_id' },
-  ]);
-
-  await db.collection('app_users').createIndexes([
+  await appDb.collection('app_users').createIndexes([
     { key: { username: 1 }, unique: true, name: 'uniq_username' },
   ]);
 
-  await db.collection('app_audit_logs').createIndexes([
+  await appDb.collection('app_audit_logs').createIndexes([
     { key: { timestamp: -1 }, name: 'audit_timestamp_desc' },
     { key: { targetId: 1, timestamp: -1 }, name: 'audit_target_timestamp' },
     { key: { action: 1, timestamp: -1 }, name: 'audit_action_timestamp' },
   ]);
 
-  await db.collection('app_alerts').createIndexes([
+  await appDb.collection('app_alerts').createIndexes([
     { key: { timestamp: -1 }, name: 'alerts_timestamp_desc' },
     { key: { is_acknowledged: 1, level: 1, timestamp: -1 }, name: 'alerts_active_by_level' },
     { key: { imsi: 1, timestamp: -1 }, name: 'alerts_imsi_timestamp' },
   ]);
 
-  await db.collection('app_rate_limits').createIndexes([
+  await appDb.collection('app_rate_limits').createIndexes([
     { key: { key: 1 }, unique: true, name: 'uniq_rate_limit_key' },
     { key: { reset_at: 1 }, expireAfterSeconds: 0, name: 'ttl_rate_limit_reset_at' },
   ]);
 
-  await db.collection('app_metrics').createIndexes([
+  await appDb.collection('app_metrics').createIndexes([
     { key: { key: 1 }, unique: true, name: 'uniq_metric_key' },
     { key: { updated_at: -1 }, name: 'metrics_updated_at_desc' },
   ]);
 }
 
-async function verifyIndexes(db) {
+async function verifyIndexes(db, appDb) {
   for (const [collectionName, indexNames] of Object.entries(expectedIndexes)) {
-    const indexes = await db.collection(collectionName).listIndexes().toArray();
+    const targetDb = collectionName === 'subscribers' || collectionName.startsWith('ocs_') ? db : appDb;
+    const indexes = await targetDb.collection(collectionName).listIndexes().toArray();
     const actualNames = new Set(indexes.map((index) => index.name));
     for (const indexName of indexNames) {
       assert(actualNames.has(indexName), `${collectionName} missing index ${indexName}`);
@@ -205,11 +199,10 @@ async function testSubscribers(db) {
 
   await subscribers.insertOne(subscriberDoc(imsi));
   const inserted = await subscribers.findOne({ imsi });
-  assert(inserted?.mm_realm && !('mme_realm' in inserted), 'subscriber must use mm_realm and not mme_realm');
-  assert(
-    Long.isLong(inserted.security.sqn) || typeof inserted.security.sqn === 'number',
-    'subscriber security.sqn must round-trip as a BSON Long-compatible numeric value'
-  );
+  assert(inserted?.security?.k && inserted?.security?.opc, 'subscriber authentication fields must exist');
+  assert(inserted?.mme_realm && inserted?.mme_host, 'subscriber must include EPC MME realm fields');
+  assert(!('ocs' in inserted), 'HSS subscriber must not embed OCS data');
+  assert(!('webui_meta' in inserted), 'HSS subscriber must not embed Web UI metadata');
 
   try {
     await subscribers.insertOne(subscriberDoc(imsi));
@@ -218,26 +211,26 @@ async function testSubscribers(db) {
     assertDuplicateKey(error, 'duplicate subscriber insert');
   }
 
-  await subscribers.updateOne({ imsi }, { $set: { 'ocs.account.balance': '9000', updated_at: new Date() } });
+  await subscribers.updateOne({ imsi }, { $set: { access_restriction_data: 0 } });
   const updated = await subscribers.findOne({ imsi });
-  assert(updated?.ocs?.account?.balance === '9000', 'subscriber update should persist OCS account balance');
+  assert(updated?.access_restriction_data === 0, 'subscriber update should persist HSS access restriction');
 
   const batchOps = [2, 3, 4].map((suffix) => ({
     replaceOne: {
       filter: { imsi: `46002000000000${suffix}` },
-      replacement: subscriberDoc(`46002000000000${suffix}`, 'batch'),
+      replacement: subscriberDoc(`46002000000000${suffix}`),
       upsert: true,
     },
   }));
   await subscribers.bulkWrite(batchOps, { ordered: false });
-  assert(await subscribers.countDocuments({ 'webui_meta.profile_name': 'batch' }) === 3, 'batch subscriber upsert count mismatch');
+  assert(await subscribers.countDocuments({ imsi: /^46002000000000[234]$/ }) === 3, 'batch subscriber upsert count mismatch');
 }
 
-async function testProfilesAndRatings(db) {
+async function testProfilesAndOcsTariffs(db, appDb) {
   const now = new Date();
-  const profiles = db.collection('app_profiles');
-  const versions = db.collection('app_profile_versions');
-  const ratings = db.collection('app_ratings');
+  const profiles = appDb.collection('app_profiles');
+  const versions = appDb.collection('app_profile_versions');
+  const tariffPlans = db.collection('ocs_tariff_plans');
 
   await profiles.insertOne({ name: 'default', title: 'Default', updated_at: now, sliceList: [] });
   try {
@@ -256,22 +249,77 @@ async function testProfilesAndRatings(db) {
   });
   assert(await versions.countDocuments({ profileName: 'default' }) === 1, 'profile version should be queryable by profileName');
 
-  await ratings.insertOne({ rating_group_id: 1001, currency: 'USD', rates: '0.01', rates_type: 2 });
+  await tariffPlans.insertOne({
+    plan_id: 'plan_default_10gb',
+    status: 'active',
+    quota_per_grant: Long.fromNumber(10485760),
+    validity_time: 300,
+    volume_threshold: Long.fromNumber(8388608),
+    rules: [{
+      rule_id: 'internet_rg1001_si1',
+      apn: 'internet',
+      rating_group: Long.fromNumber(1001),
+      service_identifier: Long.fromNumber(1),
+      charging_type: 'data_volume',
+      unit: 'octets',
+      quota_per_grant: Long.fromNumber(10485760),
+      validity_time: 300,
+      volume_threshold: Long.fromNumber(8388608),
+      priority: 100,
+      status: 'active',
+      currency: 'USD',
+      rates: '0.01',
+      rates_type: 2,
+    }],
+    created_at: now,
+    updated_at: now,
+  });
   try {
-    await ratings.insertOne({ rating_group_id: 1001, currency: 'USD', rates: '0.02', rates_type: 2 });
-    throw new Error('duplicate rating insert unexpectedly succeeded');
+    await tariffPlans.insertOne({ plan_id: 'plan_default_10gb', status: 'active', rules: [] });
+    throw new Error('duplicate tariff plan insert unexpectedly succeeded');
   } catch (error) {
-    assertDuplicateKey(error, 'duplicate rating insert');
+    assertDuplicateKey(error, 'duplicate tariff plan insert');
   }
 }
 
-async function testUsersAuditAlertsAndRuntimeCollections(db) {
+async function testOcsProvisioning(db) {
   const now = new Date();
-  const users = db.collection('app_users');
-  const auditLogs = db.collection('app_audit_logs');
-  const alerts = db.collection('app_alerts');
-  const rateLimits = db.collection('app_rate_limits');
-  const metrics = db.collection('app_metrics');
+  const imsi = '460020000000001';
+  const ocsSubscribers = db.collection('ocs_subscribers');
+  const balances = db.collection('ocs_balances');
+
+  await ocsSubscribers.insertOne({ imsi, msisdn: '', status: 'active', plan_id: 'plan_default_10gb', created_at: now, updated_at: now });
+  try {
+    await ocsSubscribers.insertOne({ imsi, status: 'active', plan_id: 'plan_default_10gb' });
+    throw new Error('duplicate OCS subscriber insert unexpectedly succeeded');
+  } catch (error) {
+    assertDuplicateKey(error, 'duplicate OCS subscriber insert');
+  }
+
+  await balances.insertOne({
+    imsi,
+    data_total: Long.fromNumber(10737418240),
+    data_used: Long.fromNumber(0),
+    data_reserved: Long.fromNumber(0),
+    data_available: Long.fromNumber(10737418240),
+    version: Long.fromNumber(1),
+    updated_at: now,
+  });
+  const balance = await balances.findOne({ imsi });
+  const total = numericValue(balance.data_total);
+  const used = numericValue(balance.data_used);
+  const reserved = numericValue(balance.data_reserved);
+  const available = numericValue(balance.data_available);
+  assert(total === used + reserved + available, 'OCS balance invariant mismatch');
+}
+
+async function testUsersAuditAlertsAndRuntimeCollections(appDb) {
+  const now = new Date();
+  const users = appDb.collection('app_users');
+  const auditLogs = appDb.collection('app_audit_logs');
+  const alerts = appDb.collection('app_alerts');
+  const rateLimits = appDb.collection('app_rate_limits');
+  const metrics = appDb.collection('app_metrics');
 
   await users.insertOne({ username: 'admin', role: 'root', passwordHash: 'hash', created_at: now, updated_at: now });
   try {
@@ -315,29 +363,32 @@ async function testUsersAuditAlertsAndRuntimeCollections(db) {
 }
 
 async function main() {
-  if (dbName === configuredDbName && !allowConfiguredDb) {
+  if ((dbName === configuredOpen5gsDbName || appDbName === configuredAppDbName) && !allowConfiguredDb) {
     throw new Error(
-      `Refusing to run against configured database "${configuredDbName}". Set MONGODB_TEST_DB or pass --allow-configured-db intentionally.`
+      `Refusing to run against configured databases "${configuredOpen5gsDbName}" or "${configuredAppDbName}". Set MONGODB_TEST_DB/MONGODB_TEST_APP_DB or pass --allow-configured-db intentionally.`
     );
   }
 
-  console.log(`Connecting to MongoDB and using test database "${dbName}"...`);
+  console.log(`Connecting to MongoDB and using test databases "${dbName}" and "${appDbName}"...`);
   await client.connect();
   const db = client.db(dbName);
+  const appDb = client.db(appDbName);
   const runStartedAt = Date.now();
 
   try {
     await runCheck('mongo.ping', () => db.command({ ping: 1 }));
-    await runCheck('indexes.ensure', () => ensureIndexes(db));
-    await runCheck('indexes.verify', () => verifyIndexes(db));
+    await runCheck('mongo.app_ping', () => appDb.command({ ping: 1 }));
+    await runCheck('indexes.ensure', () => ensureIndexes(db, appDb));
+    await runCheck('indexes.verify', () => verifyIndexes(db, appDb));
     await runCheck('subscribers.crud_and_batch', () => testSubscribers(db));
-    await runCheck('profiles.ratings', () => testProfilesAndRatings(db));
-    await runCheck('users.audit.alerts.runtime', () => testUsersAuditAlertsAndRuntimeCollections(db));
+    await runCheck('profiles.ocs_tariffs', () => testProfilesAndOcsTariffs(db, appDb));
+    await runCheck('ocs.provisioning', () => testOcsProvisioning(db));
+    await runCheck('users.audit.alerts.runtime', () => testUsersAuditAlertsAndRuntimeCollections(appDb));
 
     const report = {
       ok: true,
       command: 'mongo:test-core',
-      database: dbName,
+      databases: { open5gs: dbName, app: appDbName },
       kept: keepDb,
       durationMs: Date.now() - runStartedAt,
       checkedAt: new Date().toISOString(),
@@ -351,6 +402,7 @@ async function main() {
   } finally {
     if (!keepDb) {
       await db.dropDatabase();
+      await appDb.dropDatabase();
     }
     await client.close();
   }
@@ -360,7 +412,7 @@ main().catch(async (error) => {
   const report = {
     ok: false,
     command: 'mongo:test-core',
-    database: dbName,
+    databases: { open5gs: dbName, app: appDbName },
     kept: keepDb,
     checkedAt: new Date().toISOString(),
     durationMs: Date.now() - startedAt.getTime(),
@@ -369,7 +421,7 @@ main().catch(async (error) => {
     recommendations: [
       'Confirm MongoDB is reachable from this host.',
       'Run npm run mongo:init before retrying if index verification failed.',
-      'Use MONGODB_TEST_DB to force a disposable database name.',
+      'Use MONGODB_TEST_DB and MONGODB_TEST_APP_DB to force disposable database names.',
       'Avoid --allow-configured-db unless you intentionally want to run against the configured database.',
     ],
   };

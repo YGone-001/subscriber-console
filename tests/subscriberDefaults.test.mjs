@@ -7,17 +7,18 @@ import {
   normalizeSub4G,
 } from "../src/lib/subscriberDefaults.ts";
 
-test("normalizeSliceList creates Open5GS-ready default internet and ims sessions", () => {
+test("normalizeSliceList creates Open5GS-ready default sessions without an SD override", () => {
   const slices = normalizeSliceList(undefined);
 
   assert.equal(slices.length, 1);
   assert.equal(slices[0].sst, 1);
-  assert.equal(slices[0].sd, "000001");
+  assert.equal(slices[0].sd, undefined);
   assert.equal(slices[0].default_indicator, true);
   assert.deepEqual(
     slices[0].session_list.map((session) => [session.name, session.type, session.qos._5qi, session.qos.arp.priorityLevel]),
     [
       ["internet", 1, 9, 8],
+      ["mobile", 1, 9, 8],
       ["ims", 3, 5, 1],
     ]
   );
@@ -35,7 +36,7 @@ test("buildDefaultSub4G applies profile AMBR, MSISDN fallback, and slice default
   assert.equal(sub4g.msisdnList[0].msisdn, "13900000000");
   assert.deepEqual(sub4g.ambr.downlink, { unit: 3, value: 1 });
   assert.deepEqual(sub4g.ambr.uplink, { unit: 3, value: 2 });
-  assert.equal(sub4g.sliceList[0].session_list.length, 2);
+  assert.equal(sub4g.sliceList[0].session_list.length, 3);
 });
 
 test("normalizeSub4G preserves existing access settings and normalizes nested sessions", () => {

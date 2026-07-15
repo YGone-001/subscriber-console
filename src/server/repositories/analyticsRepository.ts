@@ -1,5 +1,6 @@
-import { Document } from 'mongodb';
-import { getMongoCollection, mongoCollections } from '@/lib/mongo';
+import { Document, Long } from 'mongodb';
+import { getOpen5gsCollection, mongoCollections } from '@/lib/mongo';
+import { firstActiveRatingPolicy } from '@/server/repositories/ocsBillingRepository';
 import type { Open5gsSubscriberDocument } from '@/types/open5gs';
 
 type SubscriberDoc = Open5gsSubscriberDocument & Document;
@@ -13,39 +14,40 @@ export type AnalyticsMetrics = {
 };
 
 function subscribersCollection() {
-  return getMongoCollection<SubscriberDoc>(mongoCollections.subscribers);
+  return getOpen5gsCollection<SubscriberDoc>(mongoCollections.subscribers);
 }
 
-function firstRateId(doc: Open5gsSubscriberDocument): string | null {
-  const map = doc.ocs?.rating?.rates_map;
-  if (!map) return null;
-  const first = Object.values(map)[0];
-  return first === undefined || first === null || first === '' ? null : String(first);
+function balancesCollection() {
+  return getOpen5gsCollection<Document & {
+    imsi: string;
+    data_available?: Long | number;
+  }>(mongoCollections.ocsBalances);
+}
+
+function numericValue(value: unknown): number {
+  if (Long.isLong(value)) return value.toNumber();
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 export async function computeAnalyticsMetrics(): Promise<AnalyticsMetrics> {
-  const docs = await subscribersCollection();
-  const cursor = docs.find(
-    {},
-    { projection: { imsi: 1, 'ocs.traffic': 1, 'ocs.rating.rates_map': 1 } }
-  );
+  const balances = await balancesCollection();
+  const policy = await firstActiveRatingPolicy();
+  const cursor = balances.find({}, { projection: { imsi: 1, data_available: 1 } });
   let totalTraffic = 0;
   const plmnMap = new Map<string, number>();
-  const rateMap = new Map<string, number>();
+  const policyCount = policy ? await balances.estimatedDocumentCount() : 0;
   const leaderboard: Array<{ imsi: string; balance: number }> = [];
 
-  for await (const doc of cursor) {
-    const balance = Number(doc.ocs?.traffic?.traffic_balance || 0);
-    const plmn = String(doc.ocs?.traffic?.plmn || '45400');
+  for await (const balanceDoc of cursor) {
+    const balance = numericValue(balanceDoc.data_available);
+    const plmn = balanceDoc.imsi.slice(0, 5) || '45400';
 
     if (balance > 0) {
       totalTraffic += balance;
       plmnMap.set(plmn, (plmnMap.get(plmn) || 0) + balance);
-      leaderboard.push({ imsi: doc.imsi, balance });
+      leaderboard.push({ imsi: balanceDoc.imsi, balance });
     }
-
-    const rateId = firstRateId(doc);
-    if (rateId) rateMap.set(rateId, (rateMap.get(rateId) || 0) + 1);
   }
 
   leaderboard.sort((a, b) => b.balance - a.balance);
@@ -53,7 +55,7 @@ export async function computeAnalyticsMetrics(): Promise<AnalyticsMetrics> {
   return {
     totalTraffic,
     plmnDist: Array.from(plmnMap, ([name, value]) => ({ name, value })),
-    ratesDist: Array.from(rateMap, ([name, value]) => ({ name: `Group #${name}`, value })),
+    ratesDist: policy ? [{ name: `Group #${policy.rating_group_id}`, value: policyCount }] : [],
     top5: leaderboard.slice(0, 5),
     timestamp: Date.now(),
   };

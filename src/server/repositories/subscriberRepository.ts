@@ -1,10 +1,19 @@
-import { AnyBulkWriteOperation, Document, Filter, MongoServerError } from 'mongodb';
-import { getMongoCollection, mongoCollections } from '@/lib/mongo';
+import { AnyBulkWriteOperation, Document, Filter, Long, MongoServerError, ObjectId } from 'mongodb';
+import { getAppCollection, getOpen5gsCollection, mongoCollections } from '@/lib/mongo';
 import {
   buildDefaultOpen5gsSubscriber,
   buildOpen5gsSubscriberFromLegacy,
   open5gsToLegacyState,
 } from '@/lib/open5gsSubscriber';
+import {
+  cloneOcsProvisioningFromReference,
+  deleteOcsProvisioning,
+  findRatingPolicy,
+  provisionOcsSubscriber,
+  readOcsProvisioning,
+  readOcsProvisioningForImsis,
+  type RatingPolicy,
+} from '@/server/repositories/ocsBillingRepository';
 import type { LegacySubscriberState, Open5gsSubscriberDocument } from '@/types/open5gs';
 
 type SubscriberDoc = Open5gsSubscriberDocument & Document;
@@ -31,12 +40,7 @@ export type SubscriberRow = {
   lastActive: string;
 };
 
-type RatingDoc = {
-  rating_group_id: number;
-  currency?: string;
-  rates?: string | number;
-  rates_type?: number;
-};
+type RatingDoc = RatingPolicy;
 
 type ProfileDoc = Document & {
   name?: string;
@@ -125,17 +129,28 @@ function ratingTypeLabel(type: unknown): string {
   return 'Flat';
 }
 
-function firstRatingGroupId(doc: Open5gsSubscriberDocument): string | null {
-  const ratesMap = doc.ocs?.rating?.rates_map;
-  if (!ratesMap) return null;
-  const first = Object.values(ratesMap)[0];
-  return first === undefined || first === null || first === '' ? null : String(first);
+function numericValue(value: unknown, fallback = 0): number {
+  if (Long.isLong(value)) return value.toNumber();
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-function normalizedTraffic(doc: Open5gsSubscriberDocument) {
-  const traffic = doc.ocs?.traffic || {};
-  const balance = Number(traffic.traffic_balance) || 0;
-  let total = Number(traffic.traffic_total);
+function cloneMongoValue<T>(value: T): T {
+  if (value instanceof ObjectId) return new ObjectId() as T;
+  if (Long.isLong(value) || value instanceof Date) return value;
+  if (Array.isArray(value)) return value.map((item) => cloneMongoValue(item)) as T;
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, item]) => [key, cloneMongoValue(item)])
+    ) as T;
+  }
+  return value;
+}
+
+function normalizedTraffic(balanceDoc?: { data_total?: unknown; data_used?: unknown; data_available?: unknown } | null) {
+  const balance = numericValue(balanceDoc?.data_available);
+  let total = numericValue(balanceDoc?.data_total, balance);
+  const used = numericValue(balanceDoc?.data_used);
 
   if (!Number.isFinite(total)) total = balance;
   if (total < balance) total = balance;
@@ -143,13 +158,15 @@ function normalizedTraffic(doc: Open5gsSubscriberDocument) {
   return {
     total,
     balance,
-    used: Math.max(0, total - balance),
+    used: Math.max(0, used || total - balance),
   };
 }
 
-function lastActive(doc: Open5gsSubscriberDocument): string {
-  const raw = doc.ocs?.imsi?.last_update_time || doc.updated_at || doc.created_at;
-  const date = raw ? new Date(raw) : new Date();
+function lastActive(balanceDoc?: { updated_at?: unknown } | null, subscriberDoc?: { updated_at?: unknown; created_at?: unknown } | null): string {
+  const raw = balanceDoc?.updated_at || subscriberDoc?.updated_at || subscriberDoc?.created_at;
+  const date = raw instanceof Date || typeof raw === 'string' || typeof raw === 'number'
+    ? new Date(raw)
+    : new Date();
   return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
 }
 
@@ -161,15 +178,11 @@ function statusFromAccessRestriction(accessRestriction: unknown): string {
 }
 
 async function subscribersCollection() {
-  return getMongoCollection<SubscriberDoc>(mongoCollections.subscribers);
-}
-
-async function ratingsCollection() {
-  return getMongoCollection<RatingDoc & Document>(mongoCollections.ratings);
+  return getOpen5gsCollection<SubscriberDoc>(mongoCollections.subscribers);
 }
 
 async function profilesCollection() {
-  return getMongoCollection<ProfileDoc>(mongoCollections.profiles);
+  return getAppCollection<ProfileDoc>(mongoCollections.profiles);
 }
 
 function asNumber(value: unknown, fallback: number): number {
@@ -180,6 +193,13 @@ function asNumber(value: unknown, fallback: number): number {
 function asString(value: unknown, fallback = ''): string {
   if (value === undefined || value === null || value === '') return fallback;
   return String(value);
+}
+
+function msisdnFromLegacyPayload(payload: { sub4G?: unknown }): string {
+  const sub4G = payload.sub4G && typeof payload.sub4G === 'object' ? payload.sub4G as Record<string, unknown> : {};
+  const msisdnList = Array.isArray(sub4G.msisdnList) ? sub4G.msisdnList : [];
+  const first = msisdnList[0] && typeof msisdnList[0] === 'object' ? msisdnList[0] as Record<string, unknown> : {};
+  return asString(first.msisdn);
 }
 
 function isValidImsi(imsi: string): boolean {
@@ -203,9 +223,7 @@ async function findProfile(profileName?: string): Promise<ProfileDoc | null> {
 }
 
 async function findRating(ratingGroupId: unknown): Promise<RatingDoc | null> {
-  if (ratingGroupId === undefined || ratingGroupId === null || ratingGroupId === '') return null;
-  const collection = await ratingsCollection();
-  return collection.findOne({ rating_group_id: Number(ratingGroupId) });
+  return findRatingPolicy(ratingGroupId);
 }
 
 function profileOcs(profile: ProfileDoc | null | undefined): Record<string, unknown> {
@@ -356,38 +374,27 @@ function csvDocForRecord(record: ImportRecord): Open5gsSubscriberDocument | null
   });
 }
 
-async function ratingMapFor(docs: Open5gsSubscriberDocument[]): Promise<Map<string, RatingDoc>> {
-  const ids = Array.from(new Set(docs.map(firstRatingGroupId).filter((id): id is string => !!id)));
-  const ratings = new Map<string, RatingDoc>();
-  if (ids.length === 0) return ratings;
-
-  const collection = await ratingsCollection();
-  const rows = await collection
-    .find({ rating_group_id: { $in: ids.map((id) => Number(id)) } })
-    .toArray();
-
-  rows.forEach((row) => ratings.set(String(row.rating_group_id), row));
-  return ratings;
-}
-
-function toSubscriberRow(doc: Open5gsSubscriberDocument, ratings: Map<string, RatingDoc>): SubscriberRow {
-  const ratingGroupId = firstRatingGroupId(doc);
-  const rating = ratingGroupId ? ratings.get(ratingGroupId) : null;
+function toSubscriberRow(
+  doc: Open5gsSubscriberDocument,
+  ocsSubscriber: { plan_id?: string; updated_at?: unknown; created_at?: unknown } | null | undefined,
+  balance: { data_total?: unknown; data_used?: unknown; data_available?: unknown; updated_at?: unknown } | null | undefined,
+  rating: RatingDoc | null
+): SubscriberRow {
   const policy = rating
     ? `${rating.currency || 'USD'} ${rating.rates || '0'} (${ratingTypeLabel(rating.rates_type)})`
     : '';
-  const traffic = normalizedTraffic(doc);
+  const traffic = normalizedTraffic(balance);
   const ard = Number(doc.access_restriction_data ?? 32);
 
   return {
     imsi: doc.imsi,
     status: statusFromAccessRestriction(ard),
     ard,
-    plmn: doc.ocs?.traffic?.plmn || '45400',
+    plmn: doc.imsi.slice(0, 5) || '45400',
     profile: doc.webui_meta?.profile_name || '',
     policy,
     traffic,
-    lastActive: lastActive(doc),
+    lastActive: lastActive(balance, ocsSubscriber),
   };
 }
 
@@ -446,10 +453,12 @@ export async function listSubscriberRows(
       .limit(limitValue)
       .toArray(),
   ]);
-  const ratings = await ratingMapFor(docs);
+  const ocs = await readOcsProvisioningForImsis(docs.map((doc) => doc.imsi));
 
   return {
-    subscribers: docs.map((doc) => toSubscriberRow(doc, ratings)),
+    subscribers: docs.map((doc) =>
+      toSubscriberRow(doc, ocs.subscribers.get(doc.imsi), ocs.balances.get(doc.imsi), ocs.policy)
+    ),
     total,
     page: pageValue,
     limit: limitValue,
@@ -463,7 +472,30 @@ export async function findSubscriberDocument(imsi: string): Promise<Open5gsSubsc
 
 export async function findSubscriberLegacyState(imsi: string): Promise<LegacySubscriberState | null> {
   const doc = await findSubscriberDocument(imsi);
-  return open5gsToLegacyState(doc);
+  const state = open5gsToLegacyState(doc);
+  if (!state) return null;
+
+  const ocs = await readOcsProvisioning(imsi);
+  return {
+    ...state,
+    ocsTraffic: ocs.traffic,
+    ocsImsi: ocs.subscriber
+      ? {
+          account_id: imsi,
+          imsi,
+          status: ocs.subscriber.status,
+          plan_id: ocs.subscriber.plan_id,
+        }
+      : null,
+    ocsImsiSet: ocs.imsiSet,
+    ocsAccount: ocs.balance
+      ? {
+          account_id: imsi,
+          balance: String(numericValue(ocs.balance.data_available)),
+          currency: ocs.policy?.currency || 'USD',
+        }
+      : null,
+  };
 }
 
 export async function createDefaultSubscriber(imsi: string): Promise<Open5gsSubscriberDocument> {
@@ -472,11 +504,40 @@ export async function createDefaultSubscriber(imsi: string): Promise<Open5gsSubs
 
   try {
     await collection.insertOne(doc as SubscriberDoc);
+    await provisionOcsSubscriber({ imsi });
     return doc;
   } catch (error) {
     if (isDuplicateKey(error)) {
       throw new Error('SUBSCRIBER_EXISTS');
     }
+    throw error;
+  }
+}
+
+export async function createSubscriberFromReference(
+  imsi: string,
+  referenceImsi: string
+): Promise<Open5gsSubscriberDocument> {
+  const collection = await subscribersCollection();
+  const [existing, reference] = await Promise.all([
+    collection.findOne({ imsi }),
+    collection.findOne({ imsi: referenceImsi }),
+  ]);
+
+  if (existing) throw new Error('SUBSCRIBER_EXISTS');
+  if (!reference) throw new Error('REFERENCE_SUBSCRIBER_NOT_FOUND');
+
+  const doc = cloneMongoValue(reference) as SubscriberDoc;
+  delete (doc as { _id?: unknown })._id;
+  doc.imsi = imsi;
+
+  try {
+    await collection.insertOne(doc);
+    await cloneOcsProvisioningFromReference(imsi, referenceImsi);
+    return doc;
+  } catch (error) {
+    await collection.deleteOne({ imsi }).catch(() => {});
+    if (isDuplicateKey(error)) throw new Error('SUBSCRIBER_EXISTS');
     throw error;
   }
 }
@@ -501,6 +562,12 @@ export async function updateSubscriberFromLegacy(
     next as SubscriberDoc,
     { upsert: true }
   );
+  await provisionOcsSubscriber({
+    imsi,
+    msisdn: msisdnFromLegacyPayload(payload),
+    total: (payload.ocsTraffic as Record<string, unknown> | undefined)?.traffic_total,
+    available: (payload.ocsTraffic as Record<string, unknown> | undefined)?.traffic_balance,
+  });
 
   return next;
 }
@@ -508,6 +575,7 @@ export async function updateSubscriberFromLegacy(
 export async function deleteSubscriber(imsi: string): Promise<boolean> {
   const collection = await subscribersCollection();
   const result = await collection.deleteOne({ imsi });
+  if (result.deletedCount > 0) await deleteOcsProvisioning(imsi);
   return result.deletedCount > 0;
 }
 
@@ -603,6 +671,13 @@ export async function createSubscribersBatch(options: BatchCreateOptions): Promi
   }
 
   const { successfulImsis, failedImsis } = await bulkWriteSubscribers(operations, pendingImsis);
+  await Promise.all(successfulImsis.map((imsi) =>
+    provisionOcsSubscriber({
+      imsi,
+      total: initialTotal,
+      available: initialBalance,
+    })
+  ));
 
   return {
     createdImsis: successfulImsis,
@@ -619,15 +694,16 @@ export async function createSubscribersBatch(options: BatchCreateOptions): Promi
 
 export async function importSubscribersFromRecords(records: ImportRecord[], overwrite: boolean): Promise<ImportResult> {
   const normalized = records
-    .map(csvDocForRecord)
-    .filter((doc): doc is Open5gsSubscriberDocument => doc !== null);
-  const imsis = normalized.map((doc) => doc.imsi);
+    .map((record) => ({ record, doc: csvDocForRecord(record) }))
+    .filter((item): item is { record: ImportRecord; doc: Open5gsSubscriberDocument } => item.doc !== null);
+  const imsis = normalized.map((item) => item.doc.imsi);
   const existing = await existingImsiSet(imsis);
   const operations: AnyBulkWriteOperation<SubscriberDoc>[] = [];
   const pendingImsis: string[] = [];
+  const provisioningByImsi = new Map<string, { total: number; available: number }>();
   let skipped = records.length - normalized.length;
 
-  for (const doc of normalized) {
+  for (const { record, doc } of normalized) {
     const exists = existing.has(doc.imsi);
     if (exists && !overwrite) {
       skipped++;
@@ -641,10 +717,20 @@ export async function importSubscribersFromRecords(records: ImportRecord[], over
         upsert: true,
       },
     });
+    const available = asNumber(record.traffic_balance, 10737418240);
+    provisioningByImsi.set(doc.imsi, { total: available, available });
     pendingImsis.push(doc.imsi);
   }
 
   const { successfulImsis, failedImsis } = await bulkWriteSubscribers(operations, pendingImsis);
+  await Promise.all(successfulImsis.map((imsi) => {
+    const provisioning = provisioningByImsi.get(imsi);
+    return provisionOcsSubscriber({
+      imsi,
+      total: provisioning?.total,
+      available: provisioning?.available,
+    });
+  }));
 
   return {
     imported: successfulImsis.length,

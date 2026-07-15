@@ -60,7 +60,7 @@ MongoDB core integration smoke test:
 npm run mongo:test-core
 ```
 
-This command creates a temporary database based on `MONGODB_DB`, verifies required indexes, exercises core subscriber/profile/rating/user/audit/alert/rate-limit/metric writes, and drops the temporary database when it finishes. Set `MONGODB_TEST_DB` to choose the temporary database name. Use `-- --keep-db` only when you intentionally want to inspect the generated test database.
+This command creates temporary databases based on `MONGODB_DB` and `MONGODB_APP_DB`, verifies required indexes, exercises core subscriber/profile/rating/user/audit/alert/rate-limit/metric writes, and drops the temporary databases when it finishes. Set `MONGODB_TEST_DB` and `MONGODB_TEST_APP_DB` to choose the temporary database names. Use `-- --keep-db` only when you intentionally want to inspect the generated test databases.
 
 MongoDB query performance smoke test:
 
@@ -68,11 +68,12 @@ MongoDB query performance smoke test:
 npm run mongo:perf
 ```
 
-This command is read-only against the configured `MONGODB_DB`. It runs `explain("executionStats")` for key subscriber, audit, alert, profile, rating, and analytics queries, then flags collection scans, high scan ratios, and queries slower than the threshold. Use `-- --json` for machine-readable output, `-- --imsi-prefix=460020` to force the subscriber search prefix, `-- --slow-ms=500` to tune the slow-query threshold, and `-- --allow-collscan` when full-collection analytics scans are acceptable for the current dataset.
+This command is read-only against the configured `MONGODB_DB` and `MONGODB_APP_DB`. It runs `explain("executionStats")` for key subscriber, audit, alert, profile, rating, and analytics queries, then flags collection scans, high scan ratios, and queries slower than the threshold. Use `-- --json` for machine-readable output, `-- --imsi-prefix=460020` to force the subscriber search prefix, `-- --slow-ms=500` to tune the slow-query threshold, and `-- --allow-collscan` when full-collection analytics scans are acceptable for the current dataset.
 
 Operational scripts write JSON reports under `reports/ops/` by default:
 
 - `npm run mongo:init`
+- `npm run mongo:migrate-app-db`
 - `npm run mongo:test-core`
 - `npm run mongo:perf`
 

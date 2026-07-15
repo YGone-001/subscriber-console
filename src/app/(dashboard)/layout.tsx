@@ -8,6 +8,7 @@ import {
   ChevronRight,
   Command,
   CreditCard,
+  Gauge,
   HelpCircle,
   History,
   LayoutDashboard,
@@ -62,6 +63,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       { key: "nav_dashboard", path: "/", match: "/", icon: <LayoutDashboard size={20} /> },
       { key: "nav_subscriber", path: "/subscribers", match: "/subscribers", icon: <Users size={20} /> },
       { key: "nav_profile", path: "/profile", match: "/profile", icon: <CreditCard size={20} /> },
+      { key: "nav_rating", path: "/rating", match: "/rating", icon: <Gauge size={20} /> },
       { key: "nav_system_health", path: "/system-health", match: "/system-health", icon: <Activity size={20} /> },
       { key: "nav_audit_logs", path: "/audit-logs", match: "/audit-logs", icon: <History size={20} /> },
     ];

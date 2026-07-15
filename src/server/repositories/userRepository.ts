@@ -1,5 +1,5 @@
 import { Document, MongoServerError } from 'mongodb';
-import { getMongoCollection, mongoCollections } from '@/lib/mongo';
+import { getAppCollection, mongoCollections } from '@/lib/mongo';
 import type { UserRole } from '@/lib/authz';
 
 export type UserDocument = {
@@ -14,7 +14,7 @@ export type UserDocument = {
 export type SafeUserDocument = Omit<UserDocument, 'passwordHash'>;
 
 function collection() {
-  return getMongoCollection<UserDocument & Document>(mongoCollections.users);
+  return getAppCollection<UserDocument & Document>(mongoCollections.users);
 }
 
 function stripPassword(user: UserDocument & Record<string, unknown>): SafeUserDocument {

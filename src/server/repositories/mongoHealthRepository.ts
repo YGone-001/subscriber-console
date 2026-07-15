@@ -1,7 +1,10 @@
 import { Document } from 'mongodb';
-import { getMongoDb, mongoCollections, mongoDbName } from '@/lib/mongo';
+import { getAppDb, getOpen5gsDb, mongoCollections, mongoDbNames } from '@/lib/mongo';
+
+type DatabaseRole = 'open5gs' | 'app';
 
 type ExpectedIndex = {
+  database: DatabaseRole;
   collection: string;
   name: string;
   key: Record<string, 1 | -1>;
@@ -10,6 +13,7 @@ type ExpectedIndex = {
 };
 
 type CollectionHealth = {
+  database: string;
   name: string;
   exists: boolean;
   documentCount: number | null;
@@ -19,6 +23,10 @@ type CollectionHealth = {
 export type MongoHealthReport = {
   ok: boolean;
   database: string;
+  databases: {
+    open5gs: string;
+    app: string;
+  };
   checkedAt: string;
   latencyMs: number;
   collections: CollectionHealth[];
@@ -27,30 +35,43 @@ export type MongoHealthReport = {
 };
 
 const expectedIndexes: ExpectedIndex[] = [
-  { collection: 'subscribers', name: 'uniq_imsi', key: { imsi: 1 }, unique: true },
-  { collection: 'subscribers', name: 'profile_name', key: { 'webui_meta.profile_name': 1 } },
-  { collection: 'subscribers', name: 'ocs_plmn', key: { 'ocs.traffic.plmn': 1 } },
-  { collection: 'subscribers', name: 'ocs_rating_map', key: { 'ocs.rating.rates_map': 1 } },
-  { collection: 'subscribers', name: 'updated_at_desc', key: { updated_at: -1 } },
-  { collection: 'app_profiles', name: 'uniq_profile_name', key: { name: 1 }, unique: true },
-  { collection: 'app_profiles', name: 'profile_updated_at_desc', key: { updated_at: -1 } },
-  { collection: 'app_profile_versions', name: 'profile_versions_by_profile', key: { profileName: 1, savedAt: -1 } },
-  { collection: 'app_profile_versions', name: 'uniq_profile_version_id', key: { versionId: 1 }, unique: true },
-  { collection: 'app_ratings', name: 'uniq_rating_group_id', key: { rating_group_id: 1 }, unique: true },
-  { collection: 'app_users', name: 'uniq_username', key: { username: 1 }, unique: true },
-  { collection: 'app_audit_logs', name: 'audit_timestamp_desc', key: { timestamp: -1 } },
-  { collection: 'app_audit_logs', name: 'audit_target_timestamp', key: { targetId: 1, timestamp: -1 } },
-  { collection: 'app_audit_logs', name: 'audit_action_timestamp', key: { action: 1, timestamp: -1 } },
-  { collection: 'app_alerts', name: 'alerts_timestamp_desc', key: { timestamp: -1 } },
-  { collection: 'app_alerts', name: 'alerts_active_by_level', key: { is_acknowledged: 1, level: 1, timestamp: -1 } },
-  { collection: 'app_alerts', name: 'alerts_imsi_timestamp', key: { imsi: 1, timestamp: -1 } },
-  { collection: 'app_rate_limits', name: 'uniq_rate_limit_key', key: { key: 1 }, unique: true },
-  { collection: 'app_rate_limits', name: 'ttl_rate_limit_reset_at', key: { reset_at: 1 }, expireAfterSeconds: 0 },
-  { collection: 'app_metrics', name: 'uniq_metric_key', key: { key: 1 }, unique: true },
-  { collection: 'app_metrics', name: 'metrics_updated_at_desc', key: { updated_at: -1 } },
+  { database: 'open5gs', collection: 'subscribers', name: 'uniq_imsi', key: { imsi: 1 }, unique: true },
+  { database: 'open5gs', collection: 'ocs_tariff_plans', name: 'uniq_plan_id', key: { plan_id: 1 }, unique: true },
+  { database: 'open5gs', collection: 'ocs_tariff_plans', name: 'rules_rating_group', key: { 'rules.rating_group': 1 } },
+  { database: 'open5gs', collection: 'ocs_subscribers', name: 'uniq_ocs_subscriber_imsi', key: { imsi: 1 }, unique: true },
+  { database: 'open5gs', collection: 'ocs_subscribers', name: 'ocs_subscriber_plan_id', key: { plan_id: 1 } },
+  { database: 'open5gs', collection: 'ocs_balances', name: 'uniq_ocs_balance_imsi', key: { imsi: 1 }, unique: true },
+  { database: 'open5gs', collection: 'ocs_balances', name: 'ocs_balance_updated_at_desc', key: { updated_at: -1 } },
+  { database: 'app', collection: 'app_profiles', name: 'uniq_profile_name', key: { name: 1 }, unique: true },
+  { database: 'app', collection: 'app_profiles', name: 'profile_updated_at_desc', key: { updated_at: -1 } },
+  { database: 'app', collection: 'app_profile_versions', name: 'profile_versions_by_profile', key: { profileName: 1, savedAt: -1 } },
+  { database: 'app', collection: 'app_profile_versions', name: 'uniq_profile_version_id', key: { versionId: 1 }, unique: true },
+  { database: 'app', collection: 'app_users', name: 'uniq_username', key: { username: 1 }, unique: true },
+  { database: 'app', collection: 'app_audit_logs', name: 'audit_timestamp_desc', key: { timestamp: -1 } },
+  { database: 'app', collection: 'app_audit_logs', name: 'audit_target_timestamp', key: { targetId: 1, timestamp: -1 } },
+  { database: 'app', collection: 'app_audit_logs', name: 'audit_action_timestamp', key: { action: 1, timestamp: -1 } },
+  { database: 'app', collection: 'app_alerts', name: 'alerts_timestamp_desc', key: { timestamp: -1 } },
+  { database: 'app', collection: 'app_alerts', name: 'alerts_active_by_level', key: { is_acknowledged: 1, level: 1, timestamp: -1 } },
+  { database: 'app', collection: 'app_alerts', name: 'alerts_imsi_timestamp', key: { imsi: 1, timestamp: -1 } },
+  { database: 'app', collection: 'app_rate_limits', name: 'uniq_rate_limit_key', key: { key: 1 }, unique: true },
+  { database: 'app', collection: 'app_rate_limits', name: 'ttl_rate_limit_reset_at', key: { reset_at: 1 }, expireAfterSeconds: 0 },
+  { database: 'app', collection: 'app_metrics', name: 'uniq_metric_key', key: { key: 1 }, unique: true },
+  { database: 'app', collection: 'app_metrics', name: 'metrics_updated_at_desc', key: { updated_at: -1 } },
 ];
 
-const expectedCollections = Object.values(mongoCollections);
+const expectedCollections: Array<{ database: DatabaseRole; collection: string }> = [
+  { database: 'open5gs', collection: mongoCollections.subscribers },
+  { database: 'open5gs', collection: mongoCollections.ocsTariffPlans },
+  { database: 'open5gs', collection: mongoCollections.ocsSubscribers },
+  { database: 'open5gs', collection: mongoCollections.ocsBalances },
+  { database: 'app', collection: mongoCollections.profiles },
+  { database: 'app', collection: mongoCollections.profileVersions },
+  { database: 'app', collection: mongoCollections.users },
+  { database: 'app', collection: mongoCollections.auditLogs },
+  { database: 'app', collection: mongoCollections.alerts },
+  { database: 'app', collection: mongoCollections.rateLimits },
+  { database: 'app', collection: mongoCollections.metrics },
+];
 
 function sameKey(actual: Document | undefined, expected: Record<string, 1 | -1>): boolean {
   return JSON.stringify(actual || {}) === JSON.stringify(expected);
@@ -66,35 +87,51 @@ function indexMatches(actual: Document | undefined, expected: ExpectedIndex): bo
 
 export async function getMongoHealthReport(): Promise<MongoHealthReport> {
   const startedAt = Date.now();
-  const db = await getMongoDb();
-  await db.command({ ping: 1 });
+  const [open5gsDb, appDb] = await Promise.all([getOpen5gsDb(), getAppDb()]);
+  await Promise.all([open5gsDb.command({ ping: 1 }), appDb.command({ ping: 1 })]);
+  const databases = mongoDbNames();
+  const dbByRole = {
+    open5gs: open5gsDb,
+    app: appDb,
+  };
 
-  const existingCollections = new Set(
-    (await db.listCollections({}, { nameOnly: true }).toArray()).map((collection) => collection.name)
-  );
-  const missingCollections = expectedCollections.filter((name) => !existingCollections.has(name));
+  const existingCollectionsByRole = {
+    open5gs: new Set(
+      (await open5gsDb.listCollections({}, { nameOnly: true }).toArray()).map((collection) => collection.name)
+    ),
+    app: new Set(
+      (await appDb.listCollections({}, { nameOnly: true }).toArray()).map((collection) => collection.name)
+    ),
+  };
+  const missingCollections = expectedCollections
+    .filter(({ database, collection }) => !existingCollectionsByRole[database].has(collection))
+    .map(({ database, collection }) => `${databases[database]}.${collection}`);
   const collections: CollectionHealth[] = [];
   const missingIndexes: Array<{ collection: string; index: string }> = [];
 
-  for (const name of expectedCollections) {
-    if (!existingCollections.has(name)) {
+  for (const { database, collection: name } of expectedCollections) {
+    const db = dbByRole[database];
+    const displayName = `${databases[database]}.${name}`;
+
+    if (!existingCollectionsByRole[database].has(name)) {
       const collectionIndexes = expectedIndexes
-        .filter((index) => index.collection === name)
+        .filter((index) => index.database === database && index.collection === name)
         .map((index) => index.name);
-      collectionIndexes.forEach((index) => missingIndexes.push({ collection: name, index }));
-      collections.push({ name, exists: false, documentCount: null, missingIndexes: collectionIndexes });
+      collectionIndexes.forEach((index) => missingIndexes.push({ collection: displayName, index }));
+      collections.push({ database: databases[database], name, exists: false, documentCount: null, missingIndexes: collectionIndexes });
       continue;
     }
 
     const collection = db.collection(name);
     const indexes = await collection.listIndexes().toArray();
     const collectionMissingIndexes = expectedIndexes
-      .filter((expected) => expected.collection === name)
+      .filter((expected) => expected.database === database && expected.collection === name)
       .filter((expected) => !indexMatches(indexes.find((index) => index.name === expected.name), expected))
       .map((index) => index.name);
 
-    collectionMissingIndexes.forEach((index) => missingIndexes.push({ collection: name, index }));
+    collectionMissingIndexes.forEach((index) => missingIndexes.push({ collection: displayName, index }));
     collections.push({
+      database: databases[database],
       name,
       exists: true,
       documentCount: await collection.estimatedDocumentCount(),
@@ -104,7 +141,8 @@ export async function getMongoHealthReport(): Promise<MongoHealthReport> {
 
   return {
     ok: missingCollections.length === 0 && missingIndexes.length === 0,
-    database: mongoDbName(),
+    database: `${databases.open5gs} / ${databases.app}`,
+    databases,
     checkedAt: new Date().toISOString(),
     latencyMs: Date.now() - startedAt,
     collections,

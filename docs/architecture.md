@@ -37,11 +37,16 @@
 
 ## Data Model
 
-The application stores subscriber documents in MongoDB `subscribers`, following the Open5GS-compatible document shape. Web UI metadata is kept under `webui_meta`. Console-owned collections use the `app_` prefix:
+The Open5GS database stores HSS subscriber documents in MongoDB `subscribers`, following the Open5GS-compatible document shape without embedded OCS data. OCS operational preset data is stored alongside it in:
+
+- `ocs_tariff_plans`
+- `ocs_subscribers`
+- `ocs_balances`
+
+Console-owned collections use the `app_` prefix:
 
 - `app_profiles`
 - `app_profile_versions`
-- `app_ratings`
 - `app_users`
 - `app_audit_logs`
 - `app_alerts`

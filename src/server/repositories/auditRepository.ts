@@ -1,5 +1,5 @@
 import { Filter } from 'mongodb';
-import { getMongoCollection, mongoCollections } from '@/lib/mongo';
+import { getAppCollection, mongoCollections } from '@/lib/mongo';
 import type { AuditAction } from '@/lib/audit';
 
 export type AuditLogRecord = {
@@ -27,7 +27,7 @@ type AuditQuery = {
 const AUDIT_LIMIT = 50000;
 
 function collection() {
-  return getMongoCollection<AuditLogRecord>(mongoCollections.auditLogs);
+  return getAppCollection<AuditLogRecord>(mongoCollections.auditLogs);
 }
 
 function stripMongoId<T extends Record<string, unknown>>(doc: T): T {

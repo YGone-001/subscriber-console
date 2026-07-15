@@ -1,4 +1,4 @@
-import { getMongoCollection, mongoCollections } from '@/lib/mongo';
+import { getAppCollection, mongoCollections } from '@/lib/mongo';
 
 type RateLimitDocument = {
   key: string;
@@ -8,7 +8,7 @@ type RateLimitDocument = {
 };
 
 function collection() {
-  return getMongoCollection<RateLimitDocument>(mongoCollections.rateLimits);
+  return getAppCollection<RateLimitDocument>(mongoCollections.rateLimits);
 }
 
 export async function incrementFixedWindow(key: string, resetAtSeconds: number) {

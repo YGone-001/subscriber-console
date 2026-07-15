@@ -22,6 +22,7 @@ export async function GET(request: Request) {
       {
         ok: false,
         database: null,
+        databases: null,
         checkedAt: new Date().toISOString(),
         latencyMs: null,
         collections: [],
