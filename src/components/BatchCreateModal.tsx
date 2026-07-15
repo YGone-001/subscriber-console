@@ -7,12 +7,11 @@ interface BatchCreateModalProps {
   onClose: () => void;
   onSuccess: () => void;
   profileList: any[];
-  ratingList: any[];
 }
 
-export default function BatchCreateModal({ isOpen, onClose, onSuccess, profileList, ratingList }: BatchCreateModalProps) {
+export default function BatchCreateModal({ isOpen, onClose, onSuccess, profileList }: BatchCreateModalProps) {
   const { t } = useI18n();
-  const [batchForm, setBatchForm] = useState({ startImsi: "", count: "10", profileName: "", ratingGroupId: "" });
+  const [batchForm, setBatchForm] = useState({ startImsi: "", count: "10", profileName: "" });
   const [batchLoading, setBatchLoading] = useState(false);
   const [batchResult, setBatchResult] = useState<any>(null);
 
@@ -84,7 +83,6 @@ export default function BatchCreateModal({ isOpen, onClose, onSuccess, profileLi
           startImsi: batchForm.startImsi,
           count: Number(batchForm.count),
           profileName: batchForm.profileName || undefined,
-          ratingGroupId: batchForm.ratingGroupId,
           strategy: strategy
         })
       });
@@ -141,26 +139,13 @@ export default function BatchCreateModal({ isOpen, onClose, onSuccess, profileLi
               <label className="form-label" style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}><Download size={14} /> {t("profile_template")}</label>
               <select className="form-input" value={batchForm.profileName} onChange={e => {
                 const pName = e.target.value;
-                const selectedProfile = profileList.find((p: any) => p.name === pName);
                 setBatchForm({
                   ...batchForm,
                   profileName: pName,
-                  ratingGroupId: selectedProfile?.ratingGroupId || ""
                 });
               }}>
                 <option value="">{t("none_use_defaults")}</option>
                 {profileList.map((p: any) => <option key={p.name} value={p.name}>{p.title || p.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="form-label">{t("rating_group")}</label>
-              <select className="form-input" value={batchForm.ratingGroupId} onChange={e => setBatchForm({...batchForm, ratingGroupId: e.target.value})}>
-                <option value="">{t("none")}</option>
-                {ratingList.map((r: any) => (
-                  <option key={r.rating_group_id} value={String(r.rating_group_id)}>
-                    #{r.rating_group_id} - {r.currency} {r.rates} ({r.rates_type === 1 ? 'Time' : r.rates_type === 2 ? 'Vol' : r.rates_type === 3 ? 'Event' : 'Flat'})
-                  </option>
-                ))}
               </select>
             </div>
           </div>

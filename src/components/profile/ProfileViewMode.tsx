@@ -32,26 +32,23 @@ export default function ProfileViewMode({ t, authData, usimType, ocsDefaults, ra
           <Gauge size={20} color="var(--primary)" />
           <h3 style={{ fontSize: "1.1rem", margin: 0, color: "var(--text-main)", fontWeight: 600 }}>{t("sec_billing_config")}</h3>
         </div>
-        <div className="dash-card-body" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "2rem" }}>
+        <div className="dash-card-body" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2rem" }}>
            <div><div style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "0.25rem" }}>{t("prof_lbl_quota")}</div><div style={{ fontFamily: "monospace", color: "var(--text-main)", fontSize: "1rem" }}>{ocsDefaults.trafficTotal}</div></div>
            <div><div style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "0.25rem" }}>{t("prof_lbl_balance")}</div><div style={{ fontFamily: "monospace", color: "var(--text-main)", fontSize: "1rem" }}>{ocsDefaults.trafficBalance}</div></div>
-           <div><div style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "0.25rem" }}>PLMN</div><div style={{ fontFamily: "monospace", color: "var(--text-main)", fontSize: "1rem" }}>{ocsDefaults.plmn}</div></div>
-           <div><div style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "0.25rem" }}>{t("prof_lbl_curr_bal")}</div><div style={{ fontFamily: "monospace", color: "var(--text-main)", fontSize: "1rem" }}>{ocsDefaults.currency} {ocsDefaults.balance}</div></div>
-           <div><div style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "0.25rem" }}>{t("prof_lbl_withhold")}</div><div style={{ fontFamily: "monospace", color: "var(--text-main)", fontSize: "1rem" }}>{ocsDefaults.withhold} ({t("sub_every")} {ocsDefaults.withholdingTime})</div></div>
-           <div><div style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "0.25rem" }}>{t("prof_lbl_residue")}</div><div style={{ fontFamily: "monospace", color: "var(--text-main)", fontSize: "1rem" }}>{ocsDefaults.withholdingResidue}</div></div>
-           {(() => {
-              const r = ratingList.find((x: any) => String(x.rating_group_id) === String(ocsDefaults.ratingGroupId));
-              return (
-                <div>
-                  <div style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "0.25rem" }}>{t("prof_lbl_rating")}</div>
-                  <div style={{ fontFamily: "monospace", fontSize: "1rem", color: ocsDefaults.ratingGroupId ? "var(--primary)" : "var(--text-muted)", whiteSpace: "nowrap" }}>
-                    {ocsDefaults.ratingGroupId && r
-                      ? `#${r.rating_group_id} - ${r.currency} ${r.rates} (${r.rates_type === 1 ? t("rating_type_time") : r.rates_type === 2 ? t("rating_type_vol") : r.rates_type === 3 ? t("rating_type_event") : t("rating_type_flat")})`
-                      : (ocsDefaults.ratingGroupId ? `#${ocsDefaults.ratingGroupId}` : 'None Assigned')}
-                  </div>
-                </div>
-              );
-           })()}
+           <div style={{ gridColumn: "1 / -1" }}>
+             <div style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "0.75rem" }}>Tariff Plan Rules</div>
+             <div style={{ display: "grid", gap: "0.5rem" }}>
+               {ratingList.length > 0 ? ratingList.map((rule: any) => (
+                 <div key={rule.rule_id || `${rule.apn}-${rule.rating_group_id}`} style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr 1fr 1fr", gap: "1rem", padding: "0.75rem 1rem", border: "1px solid var(--surface-border)", borderRadius: "6px", fontFamily: "monospace", fontSize: "0.9rem" }}>
+                   <span>{rule.apn}</span>
+                   <span>RG {rule.rating_group_id}</span>
+                   <span>SI {rule.service_identifier}</span>
+                   <span>{rule.charging_type}</span>
+                   <span>{rule.unit}</span>
+                 </div>
+               )) : <span style={{ color: "var(--text-muted)" }}>No tariff rules</span>}
+             </div>
+           </div>
         </div>
       </div>
 

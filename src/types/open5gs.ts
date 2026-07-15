@@ -66,32 +66,6 @@ export type Open5gsSecurity = {
   sqn?: Long | number;
 };
 
-export type SubscriberOcsData = {
-  traffic?: {
-    traffic_total?: number;
-    traffic_balance?: number;
-    imsi?: string;
-    plmn?: string;
-  };
-  imsi?: {
-    account_id?: string;
-    imsi?: string;
-    withhold?: number;
-    withholding_residue?: number;
-    withholding_time?: number;
-    last_update_time?: string | number | Date;
-  };
-  account?: {
-    account_id?: string;
-    balance?: string | number;
-    currency?: string;
-  };
-  rating?: {
-    rates_map?: Record<string, number | string>;
-    imsi?: string;
-  };
-};
-
 export type SubscriberWebuiMeta = {
   profile_name?: string;
   created_at?: Date;
@@ -118,7 +92,6 @@ export type Open5gsSubscriberDocument = {
   operator_determined_barring?: number;
   network_access_mode: number;
   subscribed_rau_tau_timer: number;
-  ocs?: SubscriberOcsData;
   webui_meta?: SubscriberWebuiMeta;
   created_at?: Date;
   updated_at?: Date;
@@ -130,6 +103,5 @@ export type LegacySubscriberState = {
   auth4G: Record<string, unknown> | null;
   ocsImsi: Record<string, unknown> | null;
   ocsTraffic: Record<string, unknown> | null;
-  ocsImsiSet: Record<string, unknown> | null;
-  ocsAccount: Record<string, unknown> | null;
+  ocsTariffPlan?: Record<string, unknown> | null;
 };

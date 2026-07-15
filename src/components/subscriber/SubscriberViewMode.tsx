@@ -1,6 +1,6 @@
 import { Shield, Signal, Wifi, Gauge, Server, ChevronDown, ChevronUp } from "lucide-react";
 import { Pill, MaskedValue, AMBR_UNITS, getAmbrString, typeLabel } from "./utils";
-import type { Ambr, Auth4GData, Rating, Slice } from "@/types/subscriber";
+import type { Ambr, Auth4GData, Slice } from "@/types/subscriber";
 
 interface SubscriberViewModeProps {
   t: any;
@@ -10,13 +10,9 @@ interface SubscriberViewModeProps {
   ocsTrafficTotalStr: string;
   ocsTrafficBalanceStr: string;
   ocsPlmn: string;
-  ocsCurrency: string;
-  ocsBalance: string;
-  ocsWithholdStr: string;
-  ocsWithholdingResidueStr: string;
-  ocsWithholdingTimeStr: string;
-  selectedRatingGroupId: string;
-  ratingList: Rating[];
+  ocsPlanId: string;
+  ocsPlanStatus: string;
+  ocsRules: any[];
   slices: Slice[];
   expandedSlices: number[];
   setExpandedSlices: React.Dispatch<React.SetStateAction<number[]>>;
@@ -30,13 +26,9 @@ export default function SubscriberViewMode({
   ocsTrafficTotalStr,
   ocsTrafficBalanceStr,
   ocsPlmn,
-  ocsCurrency,
-  ocsBalance,
-  ocsWithholdStr,
-  ocsWithholdingResidueStr,
-  ocsWithholdingTimeStr,
-  selectedRatingGroupId,
-  ratingList,
+  ocsPlanId,
+  ocsPlanStatus,
+  ocsRules,
   slices,
   expandedSlices,
   setExpandedSlices
@@ -110,22 +102,22 @@ export default function SubscriberViewMode({
            <div><div style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "0.25rem" }}>{t("sub_traffic_quota")}</div><div style={{ fontFamily: "monospace", color: "var(--text-main)", fontSize: "1rem" }}>{ocsTrafficTotalStr}</div></div>
            <div><div style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "0.25rem" }}>{t("sub_traffic_balance")}</div><div style={{ fontFamily: "monospace", color: "var(--text-main)", fontSize: "1rem" }}>{ocsTrafficBalanceStr}</div></div>
            <div><div style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "0.25rem" }}>PLMN</div><div style={{ fontFamily: "monospace", color: "var(--text-main)", fontSize: "1rem" }}>{ocsPlmn}</div></div>
-           <div><div style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "0.25rem" }}>{t("sub_currency_balance")}</div><div style={{ fontFamily: "monospace", color: "var(--text-main)", fontSize: "1rem" }}>{ocsCurrency} {ocsBalance}</div></div>
-           <div><div style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "0.25rem" }}>{t("sub_withhold_time_label")}</div><div style={{ fontFamily: "monospace", color: "var(--text-main)", fontSize: "1rem" }}>{ocsWithholdStr} (every {ocsWithholdingTimeStr})</div></div>
-           <div><div style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "0.25rem" }}>{t("sub_withhold_residue")}</div><div style={{ fontFamily: "monospace", color: "var(--text-main)", fontSize: "1rem" }}>{ocsWithholdingResidueStr}</div></div>
-           {(() => {
-              const r = ratingList.find(x => String(x.rating_group_id) === String(selectedRatingGroupId));
-              return (
-                <div>
-                  <div style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "0.25rem" }}>{t("sub_rating_group_policy")}</div>
-                  <div style={{ fontFamily: "monospace", fontSize: "1rem", color: selectedRatingGroupId ? "var(--primary)" : "var(--text-muted)", whiteSpace: "nowrap" }}>
-                    {selectedRatingGroupId && r
-                      ? `#${r.rating_group_id} - ${r.currency} ${r.rates} (${r.rates_type === 1 ? 'Time' : r.rates_type === 2 ? 'Vol' : r.rates_type === 3 ? 'Event' : 'Flat'})`
-                      : (selectedRatingGroupId ? `#${selectedRatingGroupId}` : 'None Assigned')}
-                  </div>
-                </div>
-              );
-           })()}
+           <div><div style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "0.25rem" }}>Tariff Plan</div><div style={{ fontFamily: "monospace", color: "var(--primary)", fontSize: "1rem" }}>{ocsPlanId || "None"}</div></div>
+           <div><div style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "0.25rem" }}>Plan Status</div><div style={{ fontFamily: "monospace", color: "var(--text-main)", fontSize: "1rem" }}>{ocsPlanStatus || "unknown"}</div></div>
+           <div style={{ gridColumn: "1 / -1" }}>
+             <div style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "0.75rem" }}>APN Rating Rules</div>
+             <div style={{ display: "grid", gap: "0.5rem" }}>
+               {ocsRules.length > 0 ? ocsRules.map((rule: any) => (
+                 <div key={rule.rule_id || `${rule.apn}-${rule.rating_group_id}`} style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr 1fr 1fr", gap: "1rem", padding: "0.75rem 1rem", border: "1px solid var(--surface-border)", borderRadius: "6px", fontFamily: "monospace", fontSize: "0.9rem" }}>
+                   <span>{rule.apn}</span>
+                   <span>RG {rule.rating_group_id}</span>
+                   <span>SI {rule.service_identifier}</span>
+                   <span>{rule.charging_type}</span>
+                   <span>{rule.unit}</span>
+                 </div>
+               )) : <span style={{ color: "var(--text-muted)" }}>No tariff rules</span>}
+             </div>
+           </div>
         </div>
       </div>
 

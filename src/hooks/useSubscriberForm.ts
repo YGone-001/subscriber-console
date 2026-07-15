@@ -1,5 +1,5 @@
 import { useCallback, useState, useEffect } from "react";
-import { parseBytes, formatBytes, parseSeconds, formatSeconds } from "@/lib/unitParser";
+import { parseBytes, formatBytes } from "@/lib/unitParser";
 
 const resolvePlmnFromRecords = (records: any[], value: string) => {
   if (!value || value.length < 5) return null;
@@ -36,16 +36,13 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
   const [accessRestriction, setAccessRestriction] = useState<number>(0);
   const [profileList, setProfileList] = useState<any[]>([]);
   const [ratingList, setRatingList] = useState<any[]>([]);
-  const [selectedRatingGroupId, setSelectedRatingGroupId] = useState<string>("");
+  const [ocsPlanId, setOcsPlanId] = useState("plan_default_10gb");
+  const [ocsPlanStatus, setOcsPlanStatus] = useState("active");
+  const [ocsRules, setOcsRules] = useState<any[]>([]);
 
   const [ocsPlmn, setOcsPlmn] = useState("45400");
   const [ocsTrafficTotalStr, setOcsTrafficTotalStr] = useState("10 GB");
   const [ocsTrafficBalanceStr, setOcsTrafficBalanceStr] = useState("10 GB");
-  const [ocsWithholdStr, setOcsWithholdStr] = useState("10 MB");
-  const [ocsWithholdingResidueStr, setOcsWithholdingResidueStr] = useState("8 MB");
-  const [ocsWithholdingTimeStr, setOcsWithholdingTimeStr] = useState("60m");
-  const [ocsCurrency, setOcsCurrency] = useState("USD");
-  const [ocsBalance, setOcsBalance] = useState("10000");
 
   const [plmnDb, setPlmnDb] = useState<any[]>([]);
 
@@ -135,12 +132,6 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
           if (p.ocsDefaults.trafficTotal !== undefined) setOcsTrafficTotalStr(formatBytes(p.ocsDefaults.trafficTotal));
           else if (p.ocsDefaults.trafficBalance !== undefined) setOcsTrafficTotalStr(formatBytes(p.ocsDefaults.trafficBalance));
           if (p.ocsDefaults.trafficBalance !== undefined) setOcsTrafficBalanceStr(formatBytes(p.ocsDefaults.trafficBalance));
-          setOcsCurrency(p.ocsDefaults.currency || ocsCurrency);
-          setOcsBalance(p.ocsDefaults.balance || ocsBalance);
-          if (p.ocsDefaults.withhold !== undefined) setOcsWithholdStr(formatBytes(p.ocsDefaults.withhold));
-          if (p.ocsDefaults.withholdingResidue !== undefined) setOcsWithholdingResidueStr(formatBytes(p.ocsDefaults.withholdingResidue));
-          if (p.ocsDefaults.withholdingTime !== undefined) setOcsWithholdingTimeStr(formatSeconds(p.ocsDefaults.withholdingTime));
-          if (p.ocsDefaults.ratingGroupId) setSelectedRatingGroupId(String(p.ocsDefaults.ratingGroupId));
         }
         const targetImsi = imsi || inputImsi;
         updatePlmnByImsi(targetImsi);
@@ -164,6 +155,8 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
           setBaseSub4G(data.sub4G);
           if (Array.isArray(data.sub4G.msisdnList) && data.sub4G.msisdnList[0]?.msisdn !== undefined) {
             setMsisdn(String(data.sub4G.msisdnList[0].msisdn));
+          } else if (data.ocsImsi?.msisdn) {
+            setMsisdn(String(data.ocsImsi.msisdn));
           }
           if (data.sub4G.ambr) setUeAmbr(data.sub4G.ambr);
           if (data.sub4G.sliceList && Array.isArray(data.sub4G.sliceList)) {
@@ -193,14 +186,13 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
           if (data.ocsTraffic.traffic_balance !== undefined) setOcsTrafficBalanceStr(formatBytes(data.ocsTraffic.traffic_balance));
         }
         if (data.ocsImsi) {
-          if (data.ocsImsi.withhold !== undefined) setOcsWithholdStr(formatBytes(data.ocsImsi.withhold));
-          if (data.ocsImsi.withholding_residue !== undefined) setOcsWithholdingResidueStr(formatBytes(data.ocsImsi.withholding_residue));
-          if (data.ocsImsi.withholding_time !== undefined) setOcsWithholdingTimeStr(formatSeconds(data.ocsImsi.withholding_time));
+          if (data.ocsImsi.msisdn) setMsisdn(String(data.ocsImsi.msisdn));
+          if (data.ocsImsi.plan_id) setOcsPlanId(String(data.ocsImsi.plan_id));
+          if (data.ocsImsi.status) setOcsPlanStatus(String(data.ocsImsi.status));
         }
-        if (data.ocsImsiSet && data.ocsImsiSet.rates_map) {
-          const plmnKey = Object.keys(data.ocsImsiSet.rates_map)[0];
-          if (plmnKey) setSelectedRatingGroupId(String(data.ocsImsiSet.rates_map[plmnKey]));
-        }
+        if (data.ocsTariffPlan?.plan_id) setOcsPlanId(String(data.ocsTariffPlan.plan_id));
+        if (data.ocsTariffPlan?.status) setOcsPlanStatus(String(data.ocsTariffPlan.status));
+        if (Array.isArray(data.ocsTariffPlan?.rules)) setOcsRules(data.ocsTariffPlan.rules);
     } catch {
       setError(t("sub_err_load"));
       } finally {
@@ -269,41 +261,14 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
 
       const ocsTrafficPayload = {
         traffic_total: parseBytes(ocsTrafficTotalStr),
-        traffic_balance: parseBytes(ocsTrafficBalanceStr),
-        imsi: targetImsi,
-        plmn: ocsPlmn
+        traffic_balance: parseBytes(ocsTrafficBalanceStr)
       };
-
-      const ocsImsiPayload = {
-        account_id: targetImsi,
-        imsi: targetImsi,
-        withhold: parseBytes(ocsWithholdStr),
-        withholding_residue: parseBytes(ocsWithholdingResidueStr),
-        withholding_time: parseSeconds(ocsWithholdingTimeStr)
-      };
-
-      const ocsAccountPayload = {
-        account_id: targetImsi,
-        balance: String(ocsBalance),
-        currency: ocsCurrency
-      };
-
-      let ocsImsiSetPayload: any = undefined;
-      if (selectedRatingGroupId) {
-        ocsImsiSetPayload = {
-          rates_map: { [ocsPlmn]: Number(selectedRatingGroupId) },
-          imsi: targetImsi
-        };
-      }
 
       const payload: any = {
         sub4G: finalSub4G,
         auth4G: authPayload,
-        ocsTraffic: ocsTrafficPayload,
-        ocsImsi: ocsImsiPayload,
-        ocsAccount: ocsAccountPayload
+        ocsTraffic: ocsTrafficPayload
       };
-      if (ocsImsiSetPayload) payload.ocsImsiSet = ocsImsiSetPayload;
 
       const res = await fetch(`/api/subscribers/${targetImsi}`, {
         method: "PUT",
@@ -361,15 +326,13 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
     state: {
       isEditing, isLoading, isSaving, error, newlyAddedSliceIndex, inputImsi, toastMessage,
       expandedSlices, isAccessRestrictionsExpanded, auth4GData, usimType, msisdn, ueAmbr, slices,
-      accessRestriction, profileList, ratingList, selectedRatingGroupId, ocsPlmn, ocsTrafficTotalStr,
-      ocsTrafficBalanceStr, ocsWithholdStr, ocsWithholdingResidueStr, ocsWithholdingTimeStr,
-      ocsCurrency, ocsBalance
+      accessRestriction, profileList, ratingList, ocsPlanId, ocsPlanStatus, ocsRules, ocsPlmn,
+      ocsTrafficTotalStr, ocsTrafficBalanceStr
     },
     actions: {
-      setIsEditing, setInputImsi: handleInputImsiChange, setMsisdn, loadFromProfile, setSelectedRatingGroupId, setAuth4GData,
+      setIsEditing, setInputImsi: handleInputImsiChange, setMsisdn, loadFromProfile, setAuth4GData,
       setUsimType, setUeAmbr, setIsAccessRestrictionsExpanded, setAccessRestriction, setOcsTrafficTotalStr,
-      setOcsTrafficBalanceStr, setOcsCurrency, setOcsBalance, setOcsWithholdStr, setOcsWithholdingResidueStr,
-      setOcsWithholdingTimeStr, addSlice, handleSliceChange, removeSlice, setExpandedSlices, handleDelete,
+      setOcsTrafficBalanceStr, addSlice, handleSliceChange, removeSlice, setExpandedSlices, handleDelete,
       handleSave, scrollTo
     }
   };

@@ -8,7 +8,6 @@ import {
 import {
   cloneOcsProvisioningFromReference,
   deleteOcsProvisioning,
-  findRatingPolicy,
   provisionOcsSubscriber,
   readOcsProvisioning,
   readOcsProvisioningForImsis,
@@ -55,16 +54,9 @@ type ProfileDoc = Document & {
 type BatchCreateOptions = {
   startImsi: string;
   count: number;
-  plmn?: string;
   trafficTotal?: unknown;
   trafficBalance?: unknown;
-  withhold?: unknown;
-  withholdingResidue?: unknown;
-  withholdingTime?: unknown;
-  ratingGroupId?: unknown;
   profileName?: string;
-  currency?: string;
-  balance?: unknown;
   strategy?: 'skip' | 'overwrite';
 };
 
@@ -75,8 +67,6 @@ type BatchCreateResult = {
   metrics: {
     totalTraffic: number;
     batchSize: number;
-    plmn: string;
-    ratingGroupId?: unknown;
   };
 };
 
@@ -86,12 +76,9 @@ type ImportRecord = Record<string, unknown> & {
   opc?: unknown;
   op?: unknown;
   amf?: unknown;
+  traffic_total?: unknown;
   traffic_balance?: unknown;
-  plmn?: unknown;
-  currency?: unknown;
-  balance?: unknown;
   access_restriction_data?: unknown;
-  withhold?: unknown;
 };
 
 type ImportResult = {
@@ -222,10 +209,6 @@ async function findProfile(profileName?: string): Promise<ProfileDoc | null> {
   return collection.findOne({ name: profileName });
 }
 
-async function findRating(ratingGroupId: unknown): Promise<RatingDoc | null> {
-  return findRatingPolicy(ratingGroupId);
-}
-
 function profileOcs(profile: ProfileDoc | null | undefined): Record<string, unknown> {
   return profile?.ocsDefaults || profile?.ocs_defaults || {};
 }
@@ -275,19 +258,7 @@ async function bulkWriteSubscribers(
 
 function batchDocForImsi(
   imsi: string,
-  profileData: ProfileDoc | null,
-  options: {
-    effectivePlmn: string;
-    initialTotal: number;
-    initialBalance: number;
-    withholdValue: number;
-    withholdingResidueValue: number;
-    withholdingTimeValue: number;
-    accountBalance: string;
-    accountCurrency: string;
-    effectiveRatingGroupId?: unknown;
-    ratingMapValue?: unknown;
-  }
+  profileData: ProfileDoc | null
 ): Open5gsSubscriberDocument {
   const auth4G = profileData?.auth
     ? { ...profileData.auth, sqn: 1 }
@@ -299,35 +270,9 @@ function batchDocForImsi(
     access_restriction_data: 32,
     network_access_mode: 0,
   };
-  const ocsImsiSet = options.effectiveRatingGroupId !== undefined && options.effectiveRatingGroupId !== null && options.effectiveRatingGroupId !== ''
-    ? {
-        rates_map: { [options.effectivePlmn]: options.ratingMapValue ?? Number(options.effectiveRatingGroupId) },
-        imsi,
-      }
-    : undefined;
-
   return buildOpen5gsSubscriberFromLegacy(imsi, {
     sub4G,
     auth4G,
-    ocsTraffic: {
-      traffic_total: options.initialTotal,
-      traffic_balance: options.initialBalance,
-      imsi,
-      plmn: options.effectivePlmn,
-    },
-    ocsImsi: {
-      account_id: imsi,
-      imsi,
-      withhold: options.withholdValue,
-      withholding_residue: options.withholdingResidueValue,
-      withholding_time: options.withholdingTimeValue,
-    },
-    ocsAccount: {
-      account_id: imsi,
-      balance: options.accountBalance,
-      currency: options.accountCurrency,
-    },
-    ocsImsiSet,
   });
 }
 
@@ -335,7 +280,6 @@ function csvDocForRecord(record: ImportRecord): Open5gsSubscriberDocument | null
   const imsi = asString(record.imsi).trim();
   if (!isValidImsi(imsi)) return null;
 
-  const trafficBalance = asNumber(record.traffic_balance, 10737418240);
   const accessRestriction = asNumber(record.access_restriction_data, 32);
 
   return buildOpen5gsSubscriberFromLegacy(imsi, {
@@ -348,28 +292,6 @@ function csvDocForRecord(record: ImportRecord): Open5gsSubscriberDocument | null
       opc: asString(record.opc ?? record.op, '00000000000000000000000000000000'),
       sqn: 1,
       amf: asString(record.amf, '8000'),
-    },
-    ocsTraffic: {
-      imsi,
-      plmn: asString(record.plmn, '45400'),
-      traffic_total: trafficBalance,
-      traffic_balance: trafficBalance,
-    },
-    ocsImsi: {
-      imsi,
-      account_id: imsi,
-      withhold: asNumber(record.withhold, 100),
-      withholding_residue: 0,
-      withholding_time: 3600,
-    },
-    ocsAccount: {
-      account_id: imsi,
-      balance: asString(record.balance, '10000'),
-      currency: asString(record.currency, 'USD'),
-    },
-    ocsImsiSet: {
-      rates_map: {},
-      imsi,
     },
   });
 }
@@ -483,18 +405,12 @@ export async function findSubscriberLegacyState(imsi: string): Promise<LegacySub
       ? {
           account_id: imsi,
           imsi,
+          msisdn: ocs.subscriber.msisdn,
           status: ocs.subscriber.status,
           plan_id: ocs.subscriber.plan_id,
         }
       : null,
-    ocsImsiSet: ocs.imsiSet,
-    ocsAccount: ocs.balance
-      ? {
-          account_id: imsi,
-          balance: String(numericValue(ocs.balance.data_available)),
-          currency: ocs.policy?.currency || 'USD',
-        }
-      : null,
+    ocsTariffPlan: ocs.tariffPlan,
   };
 }
 
@@ -547,10 +463,7 @@ export async function updateSubscriberFromLegacy(
   payload: {
     sub4G?: unknown;
     auth4G?: unknown;
-    ocsImsi?: unknown;
     ocsTraffic?: unknown;
-    ocsImsiSet?: unknown;
-    ocsAccount?: unknown;
   }
 ): Promise<Open5gsSubscriberDocument> {
   const collection = await subscribersCollection();
@@ -605,14 +518,6 @@ export async function precheckSubscriberRange(startImsi: string, count: number) 
 export async function createSubscribersBatch(options: BatchCreateOptions): Promise<BatchCreateResult> {
   const profileData = await findProfile(options.profileName);
   const ocs = profileOcs(profileData);
-  let effectiveRatingGroupId = options.ratingGroupId;
-
-  if (effectiveRatingGroupId === undefined || effectiveRatingGroupId === null || effectiveRatingGroupId === '') {
-    effectiveRatingGroupId = ocs.ratingGroupId ?? ocs.rating_group_id;
-  }
-
-  const ratingData = await findRating(effectiveRatingGroupId);
-  const effectivePlmn = options.plmn || asString(ocs.plmn, '45400');
   const initialTotal = asNumber(
     options.trafficTotal ?? ocs.trafficTotal ?? ocs.traffic_total ?? options.trafficBalance ?? ocs.trafficBalance ?? ocs.traffic_balance,
     5368709120
@@ -621,18 +526,6 @@ export async function createSubscribersBatch(options: BatchCreateOptions): Promi
     options.trafficBalance ?? ocs.trafficBalance ?? ocs.traffic_balance,
     initialTotal
   );
-  const withholdValue = asNumber(options.withhold ?? ocs.withhold, 100);
-  const withholdingResidueValue = asNumber(
-    options.withholdingResidue ?? ocs.withholdingResidue ?? ocs.withholding_residue,
-    0
-  );
-  const withholdingTimeValue = asNumber(
-    options.withholdingTime ?? ocs.withholdingTime ?? ocs.withholding_time,
-    3600
-  );
-  const accountBalance = asString(options.balance ?? ocs.balance, '10000');
-  const accountCurrency = options.currency || asString(ocs.currency, 'USD');
-  const ratingMapValue = ratingData ? ratingData.rating_group_id : effectiveRatingGroupId;
 
   const imsis = generateImsiRange(options.startImsi, options.count);
   ensureImsiRange(imsis);
@@ -647,18 +540,7 @@ export async function createSubscribersBatch(options: BatchCreateOptions): Promi
       continue;
     }
 
-    const doc = batchDocForImsi(imsi, profileData, {
-      effectivePlmn,
-      initialTotal,
-      initialBalance,
-      withholdValue,
-      withholdingResidueValue,
-      withholdingTimeValue,
-      accountBalance,
-      accountCurrency,
-      effectiveRatingGroupId,
-      ratingMapValue,
-    });
+    const doc = batchDocForImsi(imsi, profileData);
 
     operations.push({
       replaceOne: {
@@ -686,8 +568,6 @@ export async function createSubscribersBatch(options: BatchCreateOptions): Promi
     metrics: {
       totalTraffic: initialTotal * successfulImsis.length,
       batchSize: successfulImsis.length,
-      plmn: effectivePlmn,
-      ratingGroupId: effectiveRatingGroupId,
     },
   };
 }
@@ -718,7 +598,8 @@ export async function importSubscribersFromRecords(records: ImportRecord[], over
       },
     });
     const available = asNumber(record.traffic_balance, 10737418240);
-    provisioningByImsi.set(doc.imsi, { total: available, available });
+    const total = asNumber(record.traffic_total, available);
+    provisioningByImsi.set(doc.imsi, { total, available });
     pendingImsis.push(doc.imsi);
   }
 

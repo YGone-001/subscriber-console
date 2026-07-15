@@ -5,16 +5,9 @@ type ValidationResult<T> =
 type BatchCreatePayload = {
   startImsi: string;
   count: number;
-  plmn?: string;
   trafficTotal?: unknown;
   trafficBalance?: unknown;
-  withhold?: unknown;
-  withholdingResidue?: unknown;
-  withholdingTime?: unknown;
-  ratingGroupId?: unknown;
   profileName?: string;
-  currency?: string;
-  balance?: unknown;
   strategy: 'skip' | 'overwrite';
 };
 
@@ -147,20 +140,9 @@ export function validateBatchCreatePayload(body: unknown): ValidationResult<Batc
   const count = validateBatchCount(payload.count);
   if (!count.ok) return count;
 
-  if (!isBlank(payload.plmn) && !/^\d{5,6}$/.test(String(payload.plmn))) {
-    return { ok: false, error: 'plmn must be 5 or 6 digits' };
-  }
-
-  for (const field of ['trafficTotal', 'trafficBalance', 'withhold', 'withholdingResidue', 'withholdingTime', 'balance']) {
+  for (const field of ['trafficTotal', 'trafficBalance']) {
     const error = validateOptionalNonNegativeNumber(payload[field], field);
     if (error) return { ok: false, error };
-  }
-
-  const ratingError = validateOptionalInteger(payload.ratingGroupId, 'ratingGroupId', 1, 999999999);
-  if (ratingError) return { ok: false, error: ratingError };
-
-  if (!isBlank(payload.currency) && !/^[A-Z]{3}$/.test(String(payload.currency))) {
-    return { ok: false, error: 'currency must be a 3-letter uppercase code' };
   }
 
   return {
@@ -170,7 +152,6 @@ export function validateBatchCreatePayload(body: unknown): ValidationResult<Batc
       startImsi: imsi.value,
       count: count.value,
       profileName: isBlank(payload.profileName) ? undefined : String(payload.profileName),
-      currency: isBlank(payload.currency) ? undefined : String(payload.currency),
       strategy: payload.strategy === 'skip' ? 'skip' : 'overwrite',
     },
   };
@@ -181,9 +162,6 @@ export function validateSubscriberUpdatePayload(body: unknown): ValidationResult
   const sub4G = asRecord(payload.sub4G);
   const auth4G = asRecord(payload.auth4G);
   const ocsTraffic = asRecord(payload.ocsTraffic);
-  const ocsImsi = asRecord(payload.ocsImsi);
-  const ocsAccount = asRecord(payload.ocsAccount);
-  const ocsImsiSet = asRecord(payload.ocsImsiSet);
 
   if (payload.auth4G !== undefined) {
     if (!isBlank(auth4G.k) && !HEX_32.test(String(auth4G.k))) return { ok: false, error: 'auth4G.k must be 32 hexadecimal characters' };
@@ -223,30 +201,6 @@ export function validateSubscriberUpdatePayload(body: unknown): ValidationResult
     }
     for (const field of ['traffic_total', 'traffic_balance']) {
       const error = validateOptionalNonNegativeNumber(ocsTraffic[field], `ocsTraffic.${field}`);
-      if (error) return { ok: false, error };
-    }
-  }
-
-  if (payload.ocsImsi !== undefined) {
-    for (const field of ['withhold', 'withholding_residue', 'withholding_time']) {
-      const error = validateOptionalNonNegativeNumber(ocsImsi[field], `ocsImsi.${field}`);
-      if (error) return { ok: false, error };
-    }
-  }
-
-  if (payload.ocsAccount !== undefined) {
-    const balanceError = validateOptionalNonNegativeNumber(ocsAccount.balance, 'ocsAccount.balance');
-    if (balanceError) return { ok: false, error: balanceError };
-    if (!isBlank(ocsAccount.currency) && !/^[A-Z]{3}$/.test(String(ocsAccount.currency))) {
-      return { ok: false, error: 'ocsAccount.currency must be a 3-letter uppercase code' };
-    }
-  }
-
-  if (payload.ocsImsiSet !== undefined) {
-    const ratesMap = asRecord(ocsImsiSet.rates_map);
-    for (const [plmn, ratingGroupId] of Object.entries(ratesMap)) {
-      if (!/^\d{5,6}$/.test(plmn)) return { ok: false, error: 'ocsImsiSet.rates_map keys must be 5 or 6 digit PLMNs' };
-      const error = validateOptionalInteger(ratingGroupId, `ocsImsiSet.rates_map.${plmn}`, 1, 999999999);
       if (error) return { ok: false, error };
     }
   }

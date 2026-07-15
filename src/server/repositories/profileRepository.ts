@@ -141,7 +141,6 @@ export async function listProfiles() {
     createdAt: doc.createdAt || null,
     updatedAt: doc.updatedAt || null,
     updatedBy: doc.updatedBy || doc.createdBy || null,
-    ratingGroupId: doc.ocsDefaults?.ratingGroupId || '',
   }));
 }
 

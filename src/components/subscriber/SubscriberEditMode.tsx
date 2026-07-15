@@ -1,6 +1,6 @@
 import { Users, Shield, Signal, Lock, ChevronDown, ChevronUp, Gauge, Server, Plus } from "lucide-react";
 import ProfileSliceEditor from "../profile/ProfileSliceEditor";
-import { parseBytes, formatBytes, formatBytesAligned } from "@/lib/unitParser";
+import { parseBytes, formatBytesAligned } from "@/lib/unitParser";
 import { AMBR_UNITS } from "./utils";
 import type { Ambr, Auth4GData, Rating, Slice } from "@/types/subscriber";
 
@@ -11,7 +11,6 @@ interface SubscriberEditModeProps {
     inputImsi: string;
     msisdn: string;
     profileList: any[];
-    selectedRatingGroupId: string;
     ratingList: Rating[];
     auth4GData: Auth4GData;
     usimType: "opc" | "op";
@@ -21,11 +20,9 @@ interface SubscriberEditModeProps {
     ocsPlmn: string;
     ocsTrafficTotalStr: string;
     ocsTrafficBalanceStr: string;
-    ocsCurrency: string;
-    ocsBalance: string;
-    ocsWithholdStr: string;
-    ocsWithholdingResidueStr: string;
-    ocsWithholdingTimeStr: string;
+    ocsPlanId: string;
+    ocsPlanStatus: string;
+    ocsRules: any[];
     slices: Slice[];
     newlyAddedSliceIndex: number | null;
     expandedSlices: number[];
@@ -35,18 +32,16 @@ interface SubscriberEditModeProps {
 
 export default function SubscriberEditMode({ t, imsi, state, actions }: SubscriberEditModeProps) {
   const {
-    inputImsi, msisdn, profileList, selectedRatingGroupId, ratingList,
+    inputImsi, msisdn, profileList,
     auth4GData, usimType, ueAmbr, isAccessRestrictionsExpanded, accessRestriction,
-    ocsPlmn, ocsTrafficTotalStr, ocsTrafficBalanceStr, ocsCurrency, ocsBalance,
-    ocsWithholdStr, ocsWithholdingResidueStr, ocsWithholdingTimeStr,
+    ocsPlmn, ocsTrafficTotalStr, ocsTrafficBalanceStr, ocsPlanId, ocsPlanStatus, ocsRules,
     slices, newlyAddedSliceIndex, expandedSlices
   } = state;
 
   const {
-    setInputImsi, setMsisdn, loadFromProfile, setSelectedRatingGroupId,
+    setInputImsi, setMsisdn, loadFromProfile,
     setAuth4GData, setUsimType, setUeAmbr, setIsAccessRestrictionsExpanded, setAccessRestriction,
-    setOcsTrafficTotalStr, setOcsTrafficBalanceStr, setOcsCurrency, setOcsBalance,
-    setOcsWithholdStr, setOcsWithholdingResidueStr, setOcsWithholdingTimeStr,
+    setOcsTrafficTotalStr, setOcsTrafficBalanceStr,
     addSlice, handleSliceChange, removeSlice, setExpandedSlices
   } = actions;
 
@@ -104,15 +99,6 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
                 <option value="" disabled>{profileList.length > 0 ? t("sub_load_profile") : t("sub_no_profiles")}</option>
                 {profileList.map((p: any) => (
                   <option key={p.name} value={p.name}>{p.title || p.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="form-label">Rating Group</label>
-              <select className="form-input" value={selectedRatingGroupId} onChange={e => setSelectedRatingGroupId(e.target.value)}>
-                <option value="">{t("sub_none_no_billing")}</option>
-                {ratingList.map((r: any) => (
-                  <option key={r.rating_group_id} value={r.rating_group_id}>#{r.rating_group_id} - {r.currency} {r.rates} ({r.rates_type === 1 ? "Time" : r.rates_type === 2 ? "Volume" : r.rates_type === 3 ? "Event" : "Flat"})</option>
                 ))}
               </select>
             </div>
@@ -272,7 +258,6 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
           <h3 style={{ fontSize: "1.1rem", margin: 0, color: "var(--text-main)", fontWeight: 600 }}>{t("sec_billing_config")}</h3>
         </div>
         <div className="dash-card-body" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "1.5rem" }}>
-          {/* PLMN + Traffic Balance (OCS:TRAFFIC) */}
           <div>
             <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
               <span><span style={{ color: "var(--danger)", marginRight: "0.25rem" }}>*</span>PLMN</span>
@@ -303,45 +288,26 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
                placeholder="e.g. 10G or 500MB" />
           </div>
           <div>
-            <label className="form-label">{t("sub_currency")}</label>
-            <select className="form-input" value={ocsCurrency} onChange={e => setOcsCurrency(e.target.value)}>
-              {["USD","EUR","GBP","CNY","HKD","JPY","KRW","SGD"].map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </div>
-          {/* Withhold Params (OCS:IMSI) */}
-          <div>
-            <label className="form-label">{t("sub_withhold_quota")}</label>
-            <input type="text" className="form-input" value={ocsWithholdStr} onChange={e => {
-              const val = e.target.value;
-              setOcsWithholdStr(val);
-              const bytes = parseBytes(val);
-              if (bytes > 0) {
-                setOcsWithholdingResidueStr(formatBytes(Math.floor(bytes * 0.8)));
-              }
-            }} placeholder="e.g. 100MB" />
+            <label className="form-label">Tariff Plan</label>
+            <input type="text" className="form-input" value={ocsPlanId} readOnly style={{ background: "var(--surface-hover)", fontFamily: "monospace" }} />
           </div>
           <div>
-            <label className="form-label">{t("sub_withhold_residue")}</label>
-            <input type="text" className="form-input" value={ocsWithholdingResidueStr} onChange={e => setOcsWithholdingResidueStr(e.target.value)} placeholder="e.g. 80MB" />
+            <label className="form-label">Plan Status</label>
+            <input type="text" className="form-input" value={ocsPlanStatus} readOnly style={{ background: "var(--surface-hover)", fontFamily: "monospace" }} />
           </div>
-          <div>
-            <label className="form-label">{t("sub_withhold_time")}</label>
-            <input type="text" className="form-input" value={ocsWithholdingTimeStr} onChange={e => setOcsWithholdingTimeStr(e.target.value)} placeholder="e.g. 60m or 1h" />
-          </div>
-          {/* Account Balance (OCS:ACCOUNT) */}
-          <div>
-            <label className="form-label">{t("sub_account_balance")}</label>
-            <input type="text" className="form-input" value={ocsBalance} onChange={e => setOcsBalance(e.target.value)} placeholder="e.g. 10000" />
-          </div>
-          {/* Rating Group Selector (OCS:IMSI_SET) */}
-          <div style={{ gridColumn: "span 2" }}>
-            <label className="form-label">{t("sub_rating_group_mapping")}</label>
-            <select className="form-input" value={selectedRatingGroupId} onChange={e => setSelectedRatingGroupId(e.target.value)}>
-              <option value="">{t("sub_none_no_billing")}</option>
-              {ratingList.map((r: any) => (
-                <option key={r.rating_group_id} value={r.rating_group_id}>#{r.rating_group_id} - {r.currency} {r.rates} ({r.rates_type === 1 ? "Time" : r.rates_type === 2 ? "Volume" : r.rates_type === 3 ? "Event" : "Flat"})</option>
-              ))}
-            </select>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label className="form-label">APN Rating Rules</label>
+            <div style={{ display: "grid", gap: "0.5rem" }}>
+              {ocsRules.length > 0 ? ocsRules.map((rule: any) => (
+                <div key={rule.rule_id || `${rule.apn}-${rule.rating_group_id}`} style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr 1fr 1fr", gap: "1rem", padding: "0.75rem 1rem", border: "1px solid var(--surface-border)", borderRadius: "6px", background: "var(--surface-hover)", fontFamily: "monospace", fontSize: "0.9rem" }}>
+                  <span>{rule.apn}</span>
+                  <span>RG {rule.rating_group_id}</span>
+                  <span>SI {rule.service_identifier}</span>
+                  <span>{rule.charging_type}</span>
+                  <span>{rule.unit}</span>
+                </div>
+              )) : <span style={{ color: "var(--text-muted)" }}>No tariff rules</span>}
+            </div>
           </div>
         </div>
       </div>

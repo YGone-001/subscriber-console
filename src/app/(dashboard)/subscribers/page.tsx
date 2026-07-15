@@ -35,10 +35,6 @@ interface ProfilesResponse {
   profiles: Array<{ name: string; title?: string }>;
 }
 
-interface RatingsResponse {
-  ratings: Array<{ rating_group_id: number; currency: string; rates: number; rates_type: number }>;
-}
-
 interface SubscribersResponse {
   subscribers: SubscriberRow[];
   total: number;
@@ -113,12 +109,9 @@ export default function SubscriberPage() {
   // Batch creation modal state
   const [isBatchOpen, setIsBatchOpen] = useState(false);
 
-  // Profile and Rating lists (for batch creation dropdowns)
+  // Profile list for batch creation dropdowns
   const { data: profileData } = useSWR<ProfilesResponse>("/api/profiles", fetcher);
   const profileList = profileData?.profiles || [];
-
-  const { data: ratingData } = useSWR<RatingsResponse>("/api/ratings", fetcher);
-  const ratingList = ratingData?.ratings || [];
 
   const handleOpenNew = () => {
     setModalImsi(null);
@@ -656,7 +649,6 @@ export default function SubscriberPage() {
         onClose={() => setIsBatchOpen(false)}
         onSuccess={() => mutateSubscribers()}
         profileList={profileList}
-        ratingList={ratingList}
       />
 
       {isModalOpen && (

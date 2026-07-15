@@ -23,16 +23,9 @@ export async function POST(request: Request) {
     const result = await createSubscribersBatch({
       startImsi: payload.startImsi,
       count: payload.count,
-      plmn: payload.plmn,
       trafficTotal: payload.trafficTotal,
       trafficBalance: payload.trafficBalance,
-      withhold: payload.withhold,
-      withholdingResidue: payload.withholdingResidue,
-      withholdingTime: payload.withholdingTime,
-      ratingGroupId: payload.ratingGroupId,
       profileName: payload.profileName,
-      currency: payload.currency,
-      balance: payload.balance,
       strategy: payload.strategy,
     });
     const { createdImsis, skippedImsis, failedImsis, metrics } = result;

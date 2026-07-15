@@ -234,9 +234,6 @@ export function buildOpen5gsSubscriberFromLegacy(
     sub4G?: unknown;
     auth4G?: unknown;
     ocsTraffic?: unknown;
-    ocsImsi?: unknown;
-    ocsImsiSet?: unknown;
-    ocsAccount?: unknown;
   },
   existing?: Open5gsSubscriberDocument | null
 ): Open5gsSubscriberDocument {
@@ -281,7 +278,25 @@ function legacySession(session: Open5gsSession, index: number) {
       arp: toLegacyArp(session.qos?.arp, isIms ? 1 : 8),
     },
     ambr: normalizeAmbr(session.ambr),
-    pcc_rule: session.pcc_rule || [],
+    pcc_rule: (session.pcc_rule || []).map(legacyPccRule),
+  };
+}
+
+function legacyPccRule(rule: Open5gsPccRule) {
+  const qos = rule.qos;
+
+  return {
+    ...rule,
+    flow: rule.flow || [],
+    qos: qos
+      ? {
+          _5qi: qos.index ?? 1,
+          index: qos.index ?? 1,
+          arp: toLegacyArp(qos.arp, 2),
+          mbr: qos.mbr ? normalizeAmbr(qos.mbr) : undefined,
+          gbr: qos.gbr ? normalizeAmbr(qos.gbr) : undefined,
+        }
+      : undefined,
   };
 }
 
@@ -315,9 +330,7 @@ export function open5gsToLegacyState(doc: Open5gsSubscriberDocument | null): Leg
     sub4G,
     pcrf4G: { sliceList: sub4G.sliceList },
     auth4G,
-    ocsImsi: doc.ocs?.imsi || null,
-    ocsTraffic: doc.ocs?.traffic || null,
-    ocsImsiSet: doc.ocs?.rating || null,
-    ocsAccount: doc.ocs?.account || null,
+    ocsImsi: null,
+    ocsTraffic: null,
   };
 }

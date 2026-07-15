@@ -55,6 +55,17 @@ test("normalizeSub4G preserves existing access settings and normalizes nested se
             name: "private",
             type: "3",
             qos: { index: 6, arp: { priority_level: 4, pre_emption_capability: 0, pre_emption_vulnerability: 0 } },
+            pcc_rule: [
+              {
+                qos: {
+                  index: 1,
+                  arp: { priority_level: 2, pre_emption_capability: 2, pre_emption_vulnerability: 2 },
+                  mbr: { downlink: { value: 128, unit: 1 }, uplink: { value: 128, unit: 1 } },
+                  gbr: { downlink: { value: 64, unit: 1 }, uplink: { value: 64, unit: 1 } },
+                },
+                flow: [],
+              },
+            ],
           },
         ],
       },
@@ -70,4 +81,8 @@ test("normalizeSub4G preserves existing access settings and normalizes nested se
   assert.equal(normalized.sliceList[0].session_list[0].qos._5qi, 6);
   assert.equal(normalized.sliceList[0].session_list[0].qos.arp.preemptCap, "PREEMPT");
   assert.equal(normalized.sliceList[0].session_list[0].qos.arp.preemptVuln, "PREEMPTABLE");
+  assert.equal(normalized.sliceList[0].session_list[0].pcc_rule.length, 1);
+  assert.equal(normalized.sliceList[0].session_list[0].pcc_rule[0].qos._5qi, 1);
+  assert.equal(normalized.sliceList[0].session_list[0].pcc_rule[0].qos.arp.priorityLevel, 2);
+  assert.deepEqual(normalized.sliceList[0].session_list[0].pcc_rule[0].qos.mbr.downlink, { unit: 1, value: 128 });
 });

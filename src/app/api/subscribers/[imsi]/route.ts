@@ -87,10 +87,7 @@ export async function PUT(request: Request, { params }: RouteContext) {
     const updated = await updateSubscriberFromLegacy(imsi, {
       sub4G: body.sub4G,
       auth4G: body.auth4G,
-      ocsImsi: body.ocsImsi,
       ocsTraffic: body.ocsTraffic,
-      ocsImsiSet: body.ocsImsiSet,
-      ocsAccount: body.ocsAccount,
     });
     const newState = open5gsToLegacyState(updated);
 

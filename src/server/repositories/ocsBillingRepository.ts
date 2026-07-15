@@ -202,6 +202,15 @@ function normalizePolicy(rule: OcsTariffRule, planId = DEFAULT_OCS_PLAN_ID): Rat
   };
 }
 
+function tariffPlanSnapshot(plan: OcsTariffPlan | null) {
+  if (!plan) return null;
+  return {
+    plan_id: plan.plan_id,
+    status: plan.status,
+    rules: (plan.rules || []).map((rule) => normalizePolicy(rule, plan.plan_id)),
+  };
+}
+
 async function getOrCreateDefaultPlan(): Promise<OcsTariffPlan> {
   const collection = await tariffPlansCollection();
   const existing = await collection.findOne({ plan_id: DEFAULT_OCS_PLAN_ID });
@@ -482,8 +491,14 @@ export async function cloneOcsProvisioningFromReference(targetImsi: string, sour
         data_used: sourceBalance.data_used,
         data_reserved: sourceBalance.data_reserved,
         data_available: sourceBalance.data_available,
+        money_balance: sourceBalance.money_balance ?? Long.ZERO,
+        plan_id: sourceBalance.plan_id || sourceSubscriber.plan_id || DEFAULT_OCS_PLAN_ID,
+        status: sourceBalance.status || sourceSubscriber.status || 'active',
         version: sourceBalance.version,
+        created_at: now,
         updated_at: now,
+        cycle_start_at: sourceBalance.cycle_start_at || now,
+        cycle_reset_at: sourceBalance.cycle_reset_at || now,
       },
       { upsert: true }
     ),
@@ -491,20 +506,25 @@ export async function cloneOcsProvisioningFromReference(targetImsi: string, sour
 }
 
 export async function readOcsProvisioning(imsi: string) {
-  const [subscriberCollection, balanceCollection, policy] = await Promise.all([
+  const [subscriberCollection, balanceCollection, policy, defaultPlan] = await Promise.all([
     ocsSubscribersCollection(),
     ocsBalancesCollection(),
     firstActiveRatingPolicy(),
+    getOrCreateDefaultPlan(),
   ]);
   const [subscriber, balance] = await Promise.all([
     subscriberCollection.findOne({ imsi }),
     balanceCollection.findOne({ imsi }),
   ]);
+  const plan = subscriber?.plan_id && subscriber.plan_id !== defaultPlan.plan_id
+    ? await (await tariffPlansCollection()).findOne({ plan_id: subscriber.plan_id })
+    : defaultPlan;
 
   return {
     subscriber,
     balance,
     policy,
+    tariffPlan: tariffPlanSnapshot(plan),
     traffic: balance
       ? {
           traffic_total: toNumber(balance.data_total),
@@ -513,12 +533,7 @@ export async function readOcsProvisioning(imsi: string) {
           plmn: imsi.slice(0, 5),
         }
       : null,
-    imsiSet: policy
-      ? {
-          rates_map: { [imsi.slice(0, 5)]: policy.rating_group_id },
-          imsi,
-        }
-      : null,
+    imsiSet: null,
   };
 }
 

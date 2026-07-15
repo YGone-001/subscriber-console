@@ -5,14 +5,49 @@ const DEFAULT_AMBR: Ambr = {
   uplink: { unit: 3, value: 1 },
 };
 
+const DEFAULT_PCC_AMBR: Ambr = {
+  downlink: { unit: 1, value: 0 },
+  uplink: { unit: 1, value: 0 },
+};
+
+function normalizeAmbr(value: any, fallback: Ambr = DEFAULT_AMBR): Ambr {
+  return {
+    downlink: {
+      unit: Number(value?.downlink?.unit ?? fallback.downlink.unit),
+      value: Number(value?.downlink?.value ?? fallback.downlink.value),
+    },
+    uplink: {
+      unit: Number(value?.uplink?.unit ?? fallback.uplink.unit),
+      value: Number(value?.uplink?.value ?? fallback.uplink.value),
+    },
+  };
+}
+
 function mapArp(arp: any, fallbackPriorityLevel: number) {
   const preemptCapRaw = arp?.preemptCap ?? arp?.pre_emption_capability;
   const preemptVulnRaw = arp?.preemptVuln ?? arp?.pre_emption_vulnerability;
 
   return {
     priorityLevel: Number(arp?.priorityLevel ?? arp?.arpPriority ?? arp?.priority_level ?? fallbackPriorityLevel),
-    preemptCap: preemptCapRaw === 0 ? "PREEMPT" : "NOT_PREEMPT",
-    preemptVuln: preemptVulnRaw === 0 ? "PREEMPTABLE" : "NOT_PREEMPTABLE",
+    preemptCap: preemptCapRaw === 0 || preemptCapRaw === "0" || preemptCapRaw === "PREEMPT" ? "PREEMPT" : "NOT_PREEMPT",
+    preemptVuln: preemptVulnRaw === 0 || preemptVulnRaw === "0" || preemptVulnRaw === "PREEMPTABLE" ? "PREEMPTABLE" : "NOT_PREEMPTABLE",
+  };
+}
+
+function normalizePccRule(rule: any) {
+  const qos = rule?.qos || {};
+
+  return {
+    ...rule,
+    flow: Array.isArray(rule?.flow) ? rule.flow : [],
+    qos: {
+      ...qos,
+      _5qi: Number(qos?._5qi ?? qos?.index ?? 1),
+      index: Number(qos?.index ?? qos?._5qi ?? 1),
+      arp: mapArp(qos?.arp, 2),
+      mbr: normalizeAmbr(qos?.mbr, DEFAULT_PCC_AMBR),
+      gbr: normalizeAmbr(qos?.gbr, DEFAULT_PCC_AMBR),
+    },
   };
 }
 
@@ -34,17 +69,8 @@ function normalizeSession(session: any, idx: number) {
       index: 0,
       arp,
     },
-    ambr: {
-      downlink: {
-        unit: Number(session?.ambr?.downlink?.unit ?? DEFAULT_AMBR.downlink.unit),
-        value: Number(session?.ambr?.downlink?.value ?? DEFAULT_AMBR.downlink.value),
-      },
-      uplink: {
-        unit: Number(session?.ambr?.uplink?.unit ?? DEFAULT_AMBR.uplink.unit),
-        value: Number(session?.ambr?.uplink?.value ?? DEFAULT_AMBR.uplink.value),
-      },
-    },
-    pcc_rule: [],
+    ambr: normalizeAmbr(session?.ambr),
+    pcc_rule: Array.isArray(session?.pcc_rule) ? session.pcc_rule.map(normalizePccRule) : [],
   };
 }
 

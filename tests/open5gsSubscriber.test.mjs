@@ -16,3 +16,10 @@ test("Open5GS subscriber generator emits current collection fields", () => {
   assert.match(types, /mm_realm\?:\s*string\[\]/);
   assert.match(types, /mme_realm\?:\s*string/);
 });
+
+test("Open5GS subscriber reader maps PCC rules into editable fields", () => {
+  assert.match(source, /function legacyPccRule/);
+  assert.match(source, /pcc_rule:\s*\(session\.pcc_rule \|\| \[\]\)\.map\(legacyPccRule\)/);
+  assert.match(source, /_5qi:\s*qos\.index \?\? 1/);
+  assert.match(source, /arp:\s*toLegacyArp\(qos\.arp,\s*2\)/);
+});

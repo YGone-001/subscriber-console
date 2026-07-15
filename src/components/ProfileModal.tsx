@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useI18n } from "./I18nProvider";
 import { Save, Trash2, X, Pencil, History, RotateCcw, GitCompareArrows } from "lucide-react";
-import { parseBytes, formatBytes, parseSeconds, formatSeconds } from "@/lib/unitParser";
+import { parseBytes, formatBytes } from "@/lib/unitParser";
 import ProfileViewMode from "./profile/ProfileViewMode";
 import ProfileEditMode from "./profile/ProfileEditMode";
 import { useAuth } from "@/hooks/useAuth";
@@ -66,15 +66,8 @@ export default function ProfileModal({ profileName, onClose, onRefresh }: Profil
   // ======== OCS preset parameter template ========
   const [ratingList, setRatingList] = useState<any[]>([]);
   const [ocsDefaults, setOcsDefaults] = useState<any>({
-    plmn: "45400",
     trafficTotal: "10 GB",
     trafficBalance: "10 GB",
-    currency: "USD",
-    balance: "10000",
-    withhold: "10 MB",
-    withholdingResidue: "8 MB",
-    withholdingTime: "60m",
-    ratingGroupId: ""
   });
 
   const applyProfileData = useCallback((p: any) => {
@@ -97,9 +90,6 @@ export default function ProfileModal({ profileName, onClose, onRefresh }: Profil
         ...p.ocsDefaults,
         trafficTotal: p.ocsDefaults.trafficTotal !== undefined ? formatBytes(p.ocsDefaults.trafficTotal) : (p.ocsDefaults.trafficBalance !== undefined ? formatBytes(p.ocsDefaults.trafficBalance) : prev.trafficTotal),
         trafficBalance: p.ocsDefaults.trafficBalance !== undefined ? formatBytes(p.ocsDefaults.trafficBalance) : prev.trafficBalance,
-        withhold: p.ocsDefaults.withhold !== undefined ? formatBytes(p.ocsDefaults.withhold) : prev.withhold,
-        withholdingResidue: p.ocsDefaults.withholdingResidue !== undefined ? formatBytes(p.ocsDefaults.withholdingResidue) : prev.withholdingResidue,
-        withholdingTime: p.ocsDefaults.withholdingTime !== undefined ? formatSeconds(p.ocsDefaults.withholdingTime) : prev.withholdingTime,
       }));
     }
   }, [profileName]);
@@ -275,12 +265,8 @@ export default function ProfileModal({ profileName, onClose, onRefresh }: Profil
         access_restriction_data: accessRestriction,
         sliceList: slices,
         ocsDefaults: {
-          ...ocsDefaults,
           trafficTotal: parseBytes(ocsDefaults.trafficTotal || ocsDefaults.trafficBalance),
           trafficBalance: parseBytes(ocsDefaults.trafficBalance),
-          withhold: parseBytes(ocsDefaults.withhold),
-          withholdingResidue: parseBytes(ocsDefaults.withholdingResidue),
-          withholdingTime: parseSeconds(ocsDefaults.withholdingTime)
         }
       };
 

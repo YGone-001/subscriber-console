@@ -17,7 +17,7 @@ export default function SubscriberModal({ imsi, onClose, onRefresh }: Subscriber
   const { state, actions } = useSubscriberForm(imsi, t, onClose, onRefresh);
   const {
     isEditing, isLoading, isSaving, error, inputImsi, toastMessage,
-    slices, selectedRatingGroupId
+    slices, ocsPlanId
   } = state;
   const { handleDelete, handleSave, setIsEditing, scrollTo } = actions;
 
@@ -30,13 +30,9 @@ export default function SubscriberModal({ imsi, onClose, onRefresh }: Subscriber
       ocsTrafficTotalStr={state.ocsTrafficTotalStr}
       ocsTrafficBalanceStr={state.ocsTrafficBalanceStr}
       ocsPlmn={state.ocsPlmn}
-      ocsCurrency={state.ocsCurrency}
-      ocsBalance={state.ocsBalance}
-      ocsWithholdStr={state.ocsWithholdStr}
-      ocsWithholdingResidueStr={state.ocsWithholdingResidueStr}
-      ocsWithholdingTimeStr={state.ocsWithholdingTimeStr}
-      selectedRatingGroupId={state.selectedRatingGroupId}
-      ratingList={state.ratingList}
+      ocsPlanId={state.ocsPlanId}
+      ocsPlanStatus={state.ocsPlanStatus}
+      ocsRules={state.ocsRules}
       slices={state.slices}
       expandedSlices={state.expandedSlices}
       setExpandedSlices={actions.setExpandedSlices}
@@ -78,7 +74,7 @@ export default function SubscriberModal({ imsi, onClose, onRefresh }: Subscriber
                   <p style={{ margin: "0.25rem 0 0", color: "var(--text-muted)", fontSize: "0.9rem" }}>{t("sub_new_desc")}</p>
                 </div>
               )}
-              {selectedRatingGroupId && <span className="badge-active"><Check size={12}/> {t("sub_billing_active")}</span>}
+              {ocsPlanId && <span className="badge-active"><Check size={12}/> {t("sub_billing_active")}</span>}
               {slices.length > 1 && <span className="badge-secondary"><Layers size={12}/> {t("sub_multi_slice")}</span>}
             </div>
           </div>

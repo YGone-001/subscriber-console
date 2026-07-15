@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useRef } from "react";
 import { Upload, Download, FileText, X, AlertTriangle, Check, FileUp, Loader2 } from "lucide-react";
@@ -8,24 +8,24 @@ import { parseCsv, toCsvRow } from "@/lib/csv";
 /**
  * DataHub -- CSV Import/Export Hub
  * ---------------------------------------------------------
- * 数据枢纽组件, 提供以下功能:
+ * 鏁版嵁鏋㈢航缁勪欢, 鎻愪緵浠ヤ笅鍔熻兘:
  *
- * 1. CSV 导出: 将当前过滤/选中的订阅者列表导出为标准 CSV 文件
- * 2. CSV 导入:
- *    a. 模板下载 (提供标准 CSV 模板)
- *    b. 文件上传 + 客户端解析 (FileReader API)
- *    c. 预检冲突检测 (/api/subscribers/import?mode=precheck)
- *    d. 冲突确认后执行导入 (/api/subscribers/import?mode=import)
+ * 1. CSV 瀵煎嚭: 灏嗗綋鍓嶈繃婊?閫変腑鐨勮闃呰€呭垪琛ㄥ鍑轰负鏍囧噯 CSV 鏂囦欢
+ * 2. CSV 瀵煎叆:
+ *    a. 妯℃澘涓嬭浇 (鎻愪緵鏍囧噯 CSV 妯℃澘)
+ *    b. 鏂囦欢涓婁紶 + 瀹㈡埛绔В鏋?(FileReader API)
+ *    c. 棰勬鍐茬獊妫€娴?(/api/subscribers/import?mode=precheck)
+ *    d. 鍐茬獊纭鍚庢墽琛屽鍏?(/api/subscribers/import?mode=import)
  *
- * 解析流程:
- *   用户选文件 -> 客户端 CSV 解析 -> 发送 IMSI 列表预检
- *   -> 展示冲突表格 -> 用户确认跳过/覆盖 -> 执行导入
+ * 瑙ｆ瀽娴佺▼:
+ *   鐢ㄦ埛閫夋枃浠?-> 瀹㈡埛绔?CSV 瑙ｆ瀽 -> 鍙戦€?IMSI 鍒楄〃棰勬
+ *   -> 灞曠ず鍐茬獊琛ㄦ牸 -> 鐢ㄦ埛纭璺宠繃/瑕嗙洊 -> 鎵ц瀵煎叆
  * ---------------------------------------------------------
  */
 
-// CSV 模板列定义
-const CSV_TEMPLATE_HEADER = "imsi,k,opc,amf,traffic_balance,plmn,currency,balance,access_restriction_data,withhold";
-const CSV_TEMPLATE_EXAMPLE = "454001234567890,00112233445566778899aabbccddeeff,00112233445566778899aabbccddeeff,8000,10737418240,45400,USD,10000,32,100";
+// CSV import only seeds HSS subscriber data and current OCS balance fields.
+const CSV_TEMPLATE_HEADER = "imsi,k,opc,amf,traffic_total,traffic_balance,access_restriction_data";
+const CSV_TEMPLATE_EXAMPLE = "454001234567890,00112233445566778899aabbccddeeff,00112233445566778899aabbccddeeff,8000,10737418240,10737418240,32";
 
 interface DataHubProps {
   isOpen: boolean;
@@ -43,12 +43,9 @@ interface ParsedRecord {
   k: string;
   opc: string;
   amf: string;
+  traffic_total: string;
   traffic_balance: string;
-  plmn: string;
-  currency: string;
-  balance: string;
   access_restriction_data: string;
-  withhold: string;
   [key: string]: string;
 }
 
@@ -83,17 +80,16 @@ export default function DataHub({ isOpen, onClose, onComplete, subscribers, sele
 
   if (!isOpen) return null;
 
-  // ========== CSV 导出逻辑 ==========
+  // ========== CSV 瀵煎嚭閫昏緫 ==========
 
   /**
-   * 根据当前选中或全部订阅者生成 CSV 并触发下载
-   * 导出字段: IMSI, Status, PLMN, Policy, Traffic Used, Traffic Total
+   * 鏍规嵁褰撳墠閫変腑鎴栧叏閮ㄨ闃呰€呯敓鎴?CSV 骞惰Е鍙戜笅杞?   * 瀵煎嚭瀛楁: IMSI, Status, PLMN, Policy, Traffic Used, Traffic Total
    */
   const handleExport = () => {
     if (!subscribers || subscribers.length === 0) return;
     if (selectedExportFields.length === 0) return;
 
-    // 如果有选中的 IMSI, 只导出选中的; 否则导出全部
+    // 濡傛灉鏈夐€変腑鐨?IMSI, 鍙鍑洪€変腑鐨? 鍚﹀垯瀵煎嚭鍏ㄩ儴
     const dataToExport = selectedImsis && selectedImsis.length > 0
       ? subscribers.filter(s => selectedImsis.includes(s.imsi))
       : subscribers;
@@ -140,7 +136,7 @@ export default function DataHub({ isOpen, onClose, onComplete, subscribers, sele
     setSelectedExportFields(checked ? EXPORT_FIELDS.map(field => field.key) : []);
   };
 
-  // ========== CSV 模板下载 ==========
+  // ========== CSV 妯℃澘涓嬭浇 ==========
   const downloadTemplate = () => {
     const content = [CSV_TEMPLATE_HEADER, CSV_TEMPLATE_EXAMPLE].join("\n");
     const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
@@ -152,12 +148,11 @@ export default function DataHub({ isOpen, onClose, onComplete, subscribers, sele
     URL.revokeObjectURL(url);
   };
 
-  // ========== CSV 文件解析 ==========
+  // ========== CSV 鏂囦欢瑙ｆ瀽 ==========
 
   /**
-   * 客户端 CSV 解析器 (无外部依赖)
-   * 处理流程: FileReader 读取文本 -> 按行分割 -> 按逗号拆解 -> 映射为对象数组
-   * 注意: 支持双引号包裹的字段 (含逗号)
+   * 瀹㈡埛绔?CSV 瑙ｆ瀽鍣?(鏃犲閮ㄤ緷璧?
+   * 澶勭悊娴佺▼: FileReader 璇诲彇鏂囨湰 -> 鎸夎鍒嗗壊 -> 鎸夐€楀彿鎷嗚В -> 鏄犲皠涓哄璞℃暟缁?   * 娉ㄦ剰: 鏀寔鍙屽紩鍙峰寘瑁圭殑瀛楁 (鍚€楀彿)
    */
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -176,7 +171,7 @@ export default function DataHub({ isOpen, onClose, onComplete, subscribers, sele
           return;
         }
 
-        // 解析表头
+        // 瑙ｆ瀽琛ㄥご
         const headers = rows[0].map(h => h.trim().toLowerCase());
         const imsiIdx = headers.indexOf("imsi");
         if (imsiIdx === -1) {
@@ -184,7 +179,7 @@ export default function DataHub({ isOpen, onClose, onComplete, subscribers, sele
           return;
         }
 
-        // 逐行解析数据
+        // 閫愯瑙ｆ瀽鏁版嵁
         const records: ParsedRecord[] = [];
         for (let i = 1; i < rows.length; i++) {
           const values = rows[i];
@@ -193,8 +188,7 @@ export default function DataHub({ isOpen, onClose, onComplete, subscribers, sele
             record[h] = (values[idx] || "").trim();
           });
 
-          // IMSI 格式校验: 必须为 15 位数字
-          if (!/^\d{15}$/.test(record.imsi)) continue;
+          // IMSI 鏍煎紡鏍￠獙: 蹇呴』涓?15 浣嶆暟瀛?          if (!/^\d{15}$/.test(record.imsi)) continue;
           records.push(record as ParsedRecord);
         }
 
@@ -213,7 +207,7 @@ export default function DataHub({ isOpen, onClose, onComplete, subscribers, sele
     reader.readAsText(file);
   };
 
-  // ========== 预检冲突检测 ==========
+  // ========== 棰勬鍐茬獊妫€娴?==========
   const runPrecheck = async (records: ParsedRecord[]) => {
     setImportStage("precheck");
     setIsProcessing(true);
@@ -241,7 +235,7 @@ export default function DataHub({ isOpen, onClose, onComplete, subscribers, sele
     }
   };
 
-  // ========== 执行导入 ==========
+  // ========== 鎵ц瀵煎叆 ==========
   const executeImport = async () => {
     setImportStage("importing");
     setIsProcessing(true);
@@ -269,7 +263,7 @@ export default function DataHub({ isOpen, onClose, onComplete, subscribers, sele
     }
   };
 
-  // 重置导入流程
+  // 閲嶇疆瀵煎叆娴佺▼
   const resetImport = () => {
     setImportStage("upload");
     setParsedRecords([]);
@@ -584,7 +578,7 @@ export default function DataHub({ isOpen, onClose, onComplete, subscribers, sele
                       <thead>
                         <tr style={{ background: "var(--surface-hover)", position: "sticky", top: 0 }}>
                           <th style={{ padding: "0.5rem 1rem", textAlign: "left", fontWeight: 600, color: "var(--text-muted)" }}>{t("dh_col_imsi")}</th>
-                          <th style={{ padding: "0.5rem 1rem", textAlign: "left", fontWeight: 600, color: "var(--text-muted)" }}>{t("dh_col_plmn")}</th>
+                          <th style={{ padding: "0.5rem 1rem", textAlign: "left", fontWeight: 600, color: "var(--text-muted)" }}>Traffic Balance</th>
                           <th style={{ padding: "0.5rem 1rem", textAlign: "center", fontWeight: 600, color: "var(--text-muted)" }}>{t("dh_col_status")}</th>
                         </tr>
                       </thead>
@@ -593,7 +587,7 @@ export default function DataHub({ isOpen, onClose, onComplete, subscribers, sele
                           <tr key={c.imsi} style={{ borderTop: "1px solid var(--surface-border)" }}>
                             <td style={{ padding: "0.4rem 1rem", fontFamily: "monospace", fontWeight: 600 }}>{c.imsi}</td>
                             <td style={{ padding: "0.4rem 1rem", color: "#64748b" }}>
-                              {parsedRecords.find(r => r.imsi === c.imsi)?.plmn || "-"}
+                              {parsedRecords.find(r => r.imsi === c.imsi)?.traffic_balance || "-"}
                             </td>
                             <td style={{ padding: "0.4rem 1rem", textAlign: "center" }}>
                               <span style={{

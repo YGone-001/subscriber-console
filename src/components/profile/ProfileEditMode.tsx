@@ -1,6 +1,6 @@
 import { Pencil, Shield, Signal, Lock, ChevronDown, ChevronUp, Gauge, Server, Plus } from "lucide-react";
 import ProfileSliceEditor from "./ProfileSliceEditor";
-import { parseBytes, formatBytes, formatBytesAligned } from "@/lib/unitParser";
+import { parseBytes, formatBytesAligned } from "@/lib/unitParser";
 import { AMBR_UNITS } from "../subscriber/utils";
 
 export default function ProfileEditMode({ t, profileName, state, actions }: any) {
@@ -72,12 +72,7 @@ export default function ProfileEditMode({ t, profileName, state, actions }: any)
           <Gauge size={20} color="var(--primary)" />
           <h3 style={{ fontSize: "1.1rem", margin: 0, color: "var(--text-main)", fontWeight: 600 }}>{t("sec_billing_config")}</h3>
         </div>
-        <div className="dash-card-body" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "1.5rem" }}>
-          {/* PLMN + Traffic Balance (OCS:TRAFFIC) */}
-          <div>
-            <label className="form-label">{t("prof_plmn_tpl")}</label>
-            <input type="text" className="form-input" value={ocsDefaults.plmn} onChange={e => setOcsDefaults({...ocsDefaults, plmn: e.target.value})} placeholder="e.g. 45400" />
-          </div>
+        <div className="dash-card-body" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem" }}>
           <div>
             <label className="form-label">{t("prof_quota_tpl")}</label>
             <input type="text" className="form-input" value={ocsDefaults.trafficTotal}
@@ -98,47 +93,19 @@ export default function ProfileEditMode({ t, profileName, state, actions }: any)
                }}
                placeholder="e.g. 10G" />
           </div>
-          <div>
-            <label className="form-label">{t("prof_currency_tpl")}</label>
-            <select className="form-input" value={ocsDefaults.currency} onChange={e => setOcsDefaults({...ocsDefaults, currency: e.target.value})}>
-              {["USD","EUR","GBP","CNY","HKD","JPY","KRW","SGD"].map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </div>
-          {/* Withhold Params (OCS:IMSI) */}
-          <div>
-            <label className="form-label">{t("prof_withhold_limit")}</label>
-            <input type="text" className="form-input" value={ocsDefaults.withhold} onChange={e => {
-              const val = e.target.value;
-              const bytes = parseBytes(val);
-              setOcsDefaults({
-                ...ocsDefaults,
-                withhold: val,
-                withholdingResidue: bytes > 0 ? formatBytes(Math.floor(bytes * 0.8)) : ocsDefaults.withholdingResidue
-              });
-            }} placeholder="e.g. 100MB" />
-          </div>
-          <div>
-            <label className="form-label">{t("prof_withhold_residue")}</label>
-            <input type="text" className="form-input" value={ocsDefaults.withholdingResidue} onChange={e => setOcsDefaults({...ocsDefaults, withholdingResidue: e.target.value})} placeholder="e.g. 80MB" />
-          </div>
-          <div>
-            <label className="form-label">{t("prof_withhold_interval")}</label>
-            <input type="text" className="form-input" value={ocsDefaults.withholdingTime} onChange={e => setOcsDefaults({...ocsDefaults, withholdingTime: e.target.value})} placeholder="e.g. 60m or 1h" />
-          </div>
-          {/* Account Balance (OCS:ACCOUNT) */}
-          <div>
-            <label className="form-label">{t("prof_starter_balance")}</label>
-            <input type="text" className="form-input" value={ocsDefaults.balance} onChange={e => setOcsDefaults({...ocsDefaults, balance: e.target.value})} placeholder="e.g. 10000" />
-          </div>
-          {/* Rating Group Selector (OCS:IMSI_SET) */}
-          <div style={{ gridColumn: "span 2" }}>
-            <label className="form-label">{t("prof_rating_ref")}</label>
-            <select className="form-input" value={ocsDefaults.ratingGroupId} onChange={e => setOcsDefaults({...ocsDefaults, ratingGroupId: e.target.value})}>
-              <option value="">{t("prof_none_skip")}</option>
-              {ratingList.map((r: any) => (
-                <option key={r.rating_group_id} value={r.rating_group_id}>#{r.rating_group_id} - {r.currency} {r.rates} ({r.rates_type === 1 ? t("rating_type_time") : r.rates_type === 2 ? t("rating_type_vol") : r.rates_type === 3 ? t("rating_type_event") : t("rating_type_flat")})</option>
-              ))}
-            </select>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label className="form-label">Tariff Plan Rules</label>
+            <div style={{ display: "grid", gap: "0.5rem" }}>
+              {ratingList.length > 0 ? ratingList.map((rule: any) => (
+                <div key={rule.rule_id || `${rule.apn}-${rule.rating_group_id}`} style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr 1fr 1fr", gap: "1rem", padding: "0.75rem 1rem", border: "1px solid var(--surface-border)", borderRadius: "6px", background: "var(--surface-hover)", fontFamily: "monospace", fontSize: "0.9rem" }}>
+                  <span>{rule.apn}</span>
+                  <span>RG {rule.rating_group_id}</span>
+                  <span>SI {rule.service_identifier}</span>
+                  <span>{rule.charging_type}</span>
+                  <span>{rule.unit}</span>
+                </div>
+              )) : <span style={{ color: "var(--text-muted)" }}>No tariff rules</span>}
+            </div>
           </div>
         </div>
       </div>

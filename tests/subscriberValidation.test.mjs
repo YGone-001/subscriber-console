@@ -18,9 +18,6 @@ test("validateBatchCreatePayload normalizes safe batch input", () => {
   const result = validateBatchCreatePayload({
     startImsi: "460020000000001",
     count: "10",
-    plmn: "45400",
-    ratingGroupId: "1001",
-    currency: "USD",
     strategy: "skip",
   });
 
@@ -33,7 +30,6 @@ test("validateBatchCreatePayload rejects unsafe ranges and values", () => {
   assert.equal(validateBatchCreatePayload({ startImsi: "460020000000001", count: 0 }).ok, false);
   assert.equal(validateBatchCreatePayload({ startImsi: "460020000000001", count: 1001 }).ok, false);
   assert.equal(validateBatchCreatePayload({ startImsi: "460020000000001", count: 1, trafficBalance: -1 }).ok, false);
-  assert.equal(validateBatchCreatePayload({ startImsi: "460020000000001", count: 1, currency: "usd" }).ok, false);
 });
 
 test("validateSubscriberUpdatePayload rejects malformed auth and slice fields", () => {
