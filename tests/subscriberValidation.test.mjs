@@ -6,6 +6,7 @@ import {
   validateImsi,
   validateImsiList,
   validateSubscriberUpdatePayload,
+  validateTrafficAdjustmentPayload,
 } from "../src/lib/subscriberValidation.ts";
 
 test("validateImsi accepts only 15 digit strings", () => {
@@ -37,6 +38,25 @@ test("validateSubscriberUpdatePayload rejects malformed auth and slice fields", 
   assert.equal(validateSubscriberUpdatePayload({ auth4G: { amf: "8000", sqn: 1 } }).ok, true);
   assert.equal(validateSubscriberUpdatePayload({ sub4G: { sliceList: [{ sst: 999 }] } }).ok, false);
   assert.equal(validateSubscriberUpdatePayload({ sub4G: { sliceList: [{ sd: "000001", session_list: [{ name: "internet" }] }] } }).ok, true);
+});
+
+test("validateTrafficAdjustmentPayload normalizes supported balance actions", () => {
+  const recharge = validateTrafficAdjustmentPayload({ mode: "recharge", amount: "1048576", reason: "top up" });
+  assert.equal(recharge.ok, true);
+  assert.equal(recharge.ok && recharge.value.amount, 1048576);
+  assert.equal(recharge.ok && recharge.value.reason, "top up");
+
+  const reset = validateTrafficAdjustmentPayload({ mode: "reset" });
+  assert.equal(reset.ok, true);
+  assert.equal(reset.ok && reset.value.mode, "reset");
+});
+
+test("validateTrafficAdjustmentPayload rejects unsafe balance actions", () => {
+  assert.equal(validateTrafficAdjustmentPayload({ mode: "bad", amount: 1 }).ok, false);
+  assert.equal(validateTrafficAdjustmentPayload({ mode: "recharge", amount: 0 }).ok, false);
+  assert.equal(validateTrafficAdjustmentPayload({ mode: "recharge", amount: 1.5 }).ok, false);
+  assert.equal(validateTrafficAdjustmentPayload({ mode: "set_available", value: -1 }).ok, false);
+  assert.equal(validateTrafficAdjustmentPayload({ mode: "set_total" }).ok, false);
 });
 
 test("validateImsiList rejects invalid entries", () => {

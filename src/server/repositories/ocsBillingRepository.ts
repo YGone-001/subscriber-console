@@ -1,5 +1,6 @@
 import { Document, Long } from 'mongodb';
 import { getAppCollection, getOpen5gsCollection, mongoCollections } from '@/lib/mongo';
+import type { TrafficAdjustmentPayload } from '@/lib/subscriberValidation';
 
 export const DEFAULT_OCS_PLAN_ID = 'plan_default_10gb';
 const DEFAULT_QUOTA_PER_GRANT = 10 * 1024 * 1024;
@@ -92,6 +93,22 @@ export type OcsProvisioningInput = {
   total?: unknown;
   available?: unknown;
   status?: unknown;
+};
+
+export type OcsTrafficSnapshot = {
+  imsi: string;
+  traffic_total: number;
+  traffic_balance: number;
+  data_used: number;
+  data_reserved: number;
+  version: number;
+};
+
+export type OcsTrafficAdjustmentResult = {
+  mode: TrafficAdjustmentPayload['mode'];
+  reason?: string;
+  before: OcsTrafficSnapshot;
+  after: OcsTrafficSnapshot;
 };
 
 function tariffPlansCollection() {
@@ -208,6 +225,22 @@ function tariffPlanSnapshot(plan: OcsTariffPlan | null) {
     plan_id: plan.plan_id,
     status: plan.status,
     rules: (plan.rules || []).map((rule) => normalizePolicy(rule, plan.plan_id)),
+  };
+}
+
+function trafficSnapshot(imsi: string, balance: Pick<OcsBalance, 'data_total' | 'data_used' | 'data_reserved' | 'data_available' | 'version'>): OcsTrafficSnapshot {
+  const dataUsed = Math.max(0, toNumber(balance.data_used));
+  const dataReserved = Math.max(0, toNumber(balance.data_reserved));
+  const dataAvailable = Math.max(0, toNumber(balance.data_available));
+  const dataTotal = Math.max(toNumber(balance.data_total), dataUsed + dataReserved + dataAvailable);
+
+  return {
+    imsi,
+    traffic_total: dataTotal,
+    traffic_balance: dataAvailable,
+    data_used: dataUsed,
+    data_reserved: dataReserved,
+    version: toNumber(balance.version, 0),
   };
 }
 
@@ -435,6 +468,80 @@ export async function provisionOcsSubscriber(input: OcsProvisioningInput): Promi
     },
     { upsert: true }
   );
+}
+
+export async function adjustOcsTrafficBalance(
+  imsi: string,
+  input: TrafficAdjustmentPayload
+): Promise<OcsTrafficAdjustmentResult> {
+  const collection = await ocsBalancesCollection();
+  const existingBalance = await collection.findOne({ imsi });
+
+  if (!existingBalance) {
+    throw new Error('OCS_BALANCE_NOT_FOUND');
+  }
+
+  const before = trafficSnapshot(imsi, existingBalance);
+  let nextTotal = before.traffic_total;
+  let nextUsed = before.data_used;
+  let nextReserved = before.data_reserved;
+  let nextAvailable = before.traffic_balance;
+
+  if (input.mode === 'recharge') {
+    const amount = Number(input.amount || 0);
+    nextTotal += amount;
+    nextAvailable += amount;
+  } else if (input.mode === 'set_available') {
+    nextAvailable = Number(input.value || 0);
+    nextTotal = Math.max(nextTotal, nextUsed + nextReserved + nextAvailable);
+  } else if (input.mode === 'set_total') {
+    const requestedTotal = Number(input.value || 0);
+    if (requestedTotal < nextUsed + nextReserved) {
+      throw new Error('OCS_TOTAL_BELOW_COMMITTED');
+    }
+    nextTotal = requestedTotal;
+    nextAvailable = Math.min(nextAvailable, Math.max(0, nextTotal - nextUsed - nextReserved));
+  } else if (input.mode === 'reset') {
+    nextUsed = 0;
+    nextReserved = 0;
+    nextAvailable = nextTotal;
+  }
+
+  const nextVersion = before.version + 1;
+  const versionFilter = existingBalance.version === undefined
+    ? { version: { $exists: false } }
+    : { version: existingBalance.version };
+  const updateResult = await collection.updateOne(
+    { imsi, ...versionFilter },
+    {
+      $set: {
+        data_total: Long.fromNumber(nextTotal),
+        data_used: Long.fromNumber(nextUsed),
+        data_reserved: Long.fromNumber(nextReserved),
+        data_available: Long.fromNumber(nextAvailable),
+        version: Long.fromNumber(nextVersion),
+        updated_at: new Date(),
+      },
+    }
+  );
+
+  if (updateResult.matchedCount === 0) {
+    throw new Error('OCS_BALANCE_CONFLICT');
+  }
+
+  return {
+    mode: input.mode,
+    reason: input.reason,
+    before,
+    after: {
+      imsi,
+      traffic_total: nextTotal,
+      traffic_balance: nextAvailable,
+      data_used: nextUsed,
+      data_reserved: nextReserved,
+      version: nextVersion,
+    },
+  };
 }
 
 export async function deleteOcsProvisioning(imsi: string): Promise<void> {

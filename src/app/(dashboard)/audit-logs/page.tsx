@@ -149,6 +149,9 @@ export default function AuditLogsPage() {
                 <option value="BATCH_CREATE">{t("audit_action_BATCH_CREATE")}</option>
                 <option value="CSV_IMPORT">{t("audit_action_csv_import")}</option>
                 <option value="HEAL">{t("audit_action_HEAL")}</option>
+                <option value="TRAFFIC_RECHARGE">{t("audit_action_TRAFFIC_RECHARGE")}</option>
+                <option value="TRAFFIC_ADJUST">{t("audit_action_TRAFFIC_ADJUST")}</option>
+                <option value="TRAFFIC_RESET">{t("audit_action_TRAFFIC_RESET")}</option>
                 <option value="PROFILE_CREATE">{t("audit_action_profile_create")}</option>
                 <option value="PROFILE_UPDATE">{t("audit_action_profile_update")}</option>
                 <option value="PROFILE_DELETE">{t("audit_action_profile_delete")}</option>

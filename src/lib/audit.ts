@@ -11,7 +11,10 @@ export type AuditAction =
   | 'PROFILE_CREATE'
   | 'PROFILE_UPDATE'
   | 'PROFILE_DELETE'
-  | 'CSV_IMPORT';
+  | 'CSV_IMPORT'
+  | 'TRAFFIC_RECHARGE'
+  | 'TRAFFIC_ADJUST'
+  | 'TRAFFIC_RESET';
 
 function maskIp(ip: string): string {
   if (!ip || ip.includes('::1') || ip === '127.0.0.1') return '127.0.0.***';

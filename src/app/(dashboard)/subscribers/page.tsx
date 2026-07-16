@@ -9,6 +9,7 @@ import { useI18n } from "@/components/I18nProvider";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
 import { useAuth } from "@/hooks/useAuth";
+import TrafficAdjustmentModal from "@/components/TrafficAdjustmentModal";
 
 interface PlmnRecord {
   mcc: string;
@@ -27,9 +28,22 @@ interface SubscriberRow {
   traffic?: {
     used: number;
     total: number;
+    balance?: number;
   };
   [key: string]: unknown;
 }
+
+type TrafficAdjustmentMode = "recharge" | "set_available" | "set_total" | "reset";
+
+type TrafficAdjustmentTarget = {
+  imsi: string;
+  traffic: {
+    used: number;
+    total: number;
+    balance: number;
+  };
+  mode: TrafficAdjustmentMode;
+};
 
 interface ProfilesResponse {
   profiles: Array<{ name: string; title?: string }>;
@@ -57,6 +71,7 @@ export default function SubscriberPage() {
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   const [isDataHubOpen, setIsDataHubOpen] = useState(false);
   const [copiedImsi, setCopiedImsi] = useState<string | null>(null);
+  const [trafficAdjustmentTarget, setTrafficAdjustmentTarget] = useState<TrafficAdjustmentTarget | null>(null);
   const { t } = useI18n();
   const { canEditSubscribers } = useAuth();
 
@@ -135,6 +150,19 @@ export default function SubscriberPage() {
     } catch (error) {
       console.error("Failed to delete", error);
     }
+  };
+
+  const handleOpenTrafficAdjustment = (sub: SubscriberRow, mode: TrafficAdjustmentMode, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setActiveDropdown(null);
+    const used = sub.traffic?.used || 0;
+    const total = sub.traffic?.total || 0;
+    const balance = sub.traffic?.balance ?? Math.max(0, total - used);
+    setTrafficAdjustmentTarget({
+      imsi: sub.imsi,
+      traffic: { used, total, balance },
+      mode,
+    });
   };
 
   const handleBulkDelete = async () => {
@@ -569,9 +597,10 @@ export default function SubscriberPage() {
                                  <MoreHorizontal size={18} />
                                </button>
                                {activeDropdown === sub.imsi && (
-                                 <div style={{ position: "absolute", right: "2rem", top: "70%", background: "var(--surface)", backdropFilter: "blur(12px)", boxShadow: "0 4px 12px rgba(0,0,0,0.3)", borderRadius: "6px", width: "160px", zIndex: 50, border: "1px solid var(--surface-border)", overflow: "hidden" }}>
+                                 <div style={{ position: "absolute", right: "2rem", top: "70%", background: "var(--surface)", backdropFilter: "blur(12px)", boxShadow: "0 4px 12px rgba(0,0,0,0.3)", borderRadius: "6px", width: "180px", zIndex: 50, border: "1px solid var(--surface-border)", overflow: "hidden" }}>
                                    <button style={{ width: "100%", padding: "0.6rem 1rem", textAlign: "left", background: "transparent", border: "none", borderBottom: "1px solid var(--surface-border)", fontSize: "0.85rem", cursor: "pointer", color: "var(--text-main)" }} onClick={(e) => {e.stopPropagation(); alert('Trace Signaling Action triggered');}}>{t("action_trace")}</button>
-                                   <button style={{ width: "100%", padding: "0.6rem 1rem", textAlign: "left", background: "transparent", border: "none", fontSize: "0.85rem", cursor: "pointer", color: "var(--text-main)" }} onClick={(e) => {e.stopPropagation(); alert('Reset Balance Action triggered');}}>{t("action_reset")}</button>
+                                   <button style={{ width: "100%", padding: "0.6rem 1rem", textAlign: "left", background: "transparent", border: "none", borderBottom: "1px solid var(--surface-border)", fontSize: "0.85rem", cursor: "pointer", color: "var(--text-main)" }} onClick={(e) => handleOpenTrafficAdjustment(sub, "recharge", e)}>{t("traffic_adjust")}</button>
+                                   <button style={{ width: "100%", padding: "0.6rem 1rem", textAlign: "left", background: "transparent", border: "none", fontSize: "0.85rem", cursor: "pointer", color: "var(--text-main)" }} onClick={(e) => handleOpenTrafficAdjustment(sub, "reset", e)}>{t("action_reset")}</button>
                                  </div>
                                )}
                              </div>
@@ -660,6 +689,17 @@ export default function SubscriberPage() {
           imsi={modalImsi}
           onClose={() => setIsModalOpen(false)}
           onRefresh={() => mutateSubscribers()}
+        />
+      )}
+
+      {trafficAdjustmentTarget && (
+        <TrafficAdjustmentModal
+          imsi={trafficAdjustmentTarget.imsi}
+          t={t}
+          defaultMode={trafficAdjustmentTarget.mode}
+          currentTraffic={trafficAdjustmentTarget.traffic}
+          onClose={() => setTrafficAdjustmentTarget(null)}
+          onSuccess={() => mutateSubscribers()}
         />
       )}
 

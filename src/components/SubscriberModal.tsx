@@ -1,10 +1,13 @@
 "use client";
 
-import { Save, Trash2, X, Pencil, Check, Layers, Copy } from "lucide-react";
+import { Save, Trash2, X, Pencil, Check, Layers, Copy, BatteryCharging } from "lucide-react";
+import { useState } from "react";
 import { useI18n } from "./I18nProvider";
 import SubscriberViewMode from "./subscriber/SubscriberViewMode";
 import SubscriberEditMode from "./subscriber/SubscriberEditMode";
+import TrafficAdjustmentModal from "./TrafficAdjustmentModal";
 import { useSubscriberForm } from "@/hooks/useSubscriberForm";
+import { formatBytes, parseBytes } from "@/lib/unitParser";
 
 interface SubscriberModalProps {
   imsi: string | null;
@@ -14,12 +17,16 @@ interface SubscriberModalProps {
 
 export default function SubscriberModal({ imsi, onClose, onRefresh }: SubscriberModalProps) {
   const { t } = useI18n();
+  const [isTrafficModalOpen, setIsTrafficModalOpen] = useState(false);
   const { state, actions } = useSubscriberForm(imsi, t, onClose, onRefresh);
   const {
     isEditing, isLoading, isSaving, error, inputImsi, toastMessage,
-    slices, ocsPlanId
+    slices, ocsPlanId, ocsTrafficTotalStr, ocsTrafficBalanceStr
   } = state;
   const { handleDelete, handleSave, setIsEditing, scrollTo } = actions;
+  const trafficTotal = parseBytes(ocsTrafficTotalStr);
+  const trafficBalance = parseBytes(ocsTrafficBalanceStr);
+  const trafficUsed = Math.max(0, trafficTotal - trafficBalance);
 
   const renderViewMode = () => {
     return <SubscriberViewMode
@@ -81,7 +88,14 @@ export default function SubscriberModal({ imsi, onClose, onRefresh }: Subscriber
 
           <div className="workflow-header-actions">
             {!isEditing && (
-              <button className="btn-icon" onClick={() => setIsEditing(true)} title={t("sub_btn_edit")}><Pencil size={24} color="var(--primary)" /></button>
+              <>
+                {imsi && (
+                  <button className="btn-icon" onClick={() => setIsTrafficModalOpen(true)} title={t("traffic_adjust")}>
+                    <BatteryCharging size={24} color="var(--primary)" />
+                  </button>
+                )}
+                <button className="btn-icon" onClick={() => setIsEditing(true)} title={t("sub_btn_edit")}><Pencil size={24} color="var(--primary)" /></button>
+              </>
             )}
 
             {imsi && <button className="btn-icon" onClick={handleDelete} title={t("sub_btn_delete")}><Trash2 size={24} color="var(--danger)" /></button>}
@@ -158,6 +172,22 @@ export default function SubscriberModal({ imsi, onClose, onRefresh }: Subscriber
         </div>
 
       </div>
+
+      {imsi && isTrafficModalOpen && (
+        <TrafficAdjustmentModal
+          imsi={imsi}
+          t={t}
+          currentTraffic={{ total: trafficTotal, balance: trafficBalance, used: trafficUsed }}
+          onClose={() => setIsTrafficModalOpen(false)}
+          onSuccess={(adjustment) => {
+            if (adjustment?.after) {
+              actions.setOcsTrafficTotalStr(formatBytes(adjustment.after.traffic_total));
+              actions.setOcsTrafficBalanceStr(formatBytes(adjustment.after.traffic_balance));
+            }
+            onRefresh();
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -11,6 +11,15 @@ type BatchCreatePayload = {
   strategy: 'skip' | 'overwrite';
 };
 
+export type TrafficAdjustmentMode = 'recharge' | 'set_available' | 'set_total' | 'reset';
+
+export type TrafficAdjustmentPayload = {
+  mode: TrafficAdjustmentMode;
+  amount?: number;
+  value?: number;
+  reason?: string;
+};
+
 const HEX_32 = /^[0-9a-fA-F]{32}$/;
 const HEX_4 = /^[0-9a-fA-F]{4}$/;
 const HEX_1_TO_6 = /^[0-9a-fA-F]{1,6}$/;
@@ -35,6 +44,14 @@ function validateOptionalNonNegativeNumber(value: unknown, field: string): strin
   const parsed = finiteNumber(value);
   if (parsed === null || parsed < 0) return `${field} must be a non-negative number`;
   return null;
+}
+
+function parseNonNegativeInteger(value: unknown, field: string): ValidationResult<number> {
+  const parsed = finiteNumber(value);
+  if (parsed === null || !Number.isInteger(parsed) || parsed < 0) {
+    return { ok: false, error: `${field} must be a non-negative integer` };
+  }
+  return { ok: true, value: parsed };
 }
 
 function validateOptionalInteger(value: unknown, field: string, min: number, max: number): string | null {
@@ -206,6 +223,36 @@ export function validateSubscriberUpdatePayload(body: unknown): ValidationResult
   }
 
   return { ok: true, value: payload };
+}
+
+export function validateTrafficAdjustmentPayload(body: unknown): ValidationResult<TrafficAdjustmentPayload> {
+  const payload = asRecord(body);
+  const rawMode = String(payload.mode || '');
+
+  if (!['recharge', 'set_available', 'set_total', 'reset'].includes(rawMode)) {
+    return { ok: false, error: 'mode must be one of recharge, set_available, set_total, reset' };
+  }
+  const mode = rawMode as TrafficAdjustmentMode;
+
+  const reason = isBlank(payload.reason) ? undefined : String(payload.reason).trim();
+  if (reason !== undefined && (reason.length === 0 || reason.length > 200)) {
+    return { ok: false, error: 'reason must be between 1 and 200 characters' };
+  }
+
+  if (mode === 'recharge') {
+    const amount = parseNonNegativeInteger(payload.amount, 'amount');
+    if (!amount.ok) return amount;
+    if (amount.value <= 0) return { ok: false, error: 'amount must be greater than 0' };
+    return { ok: true, value: { mode, amount: amount.value, reason } };
+  }
+
+  if (mode === 'set_available' || mode === 'set_total') {
+    const value = parseNonNegativeInteger(payload.value, 'value');
+    if (!value.ok) return value;
+    return { ok: true, value: { mode, value: value.value, reason } };
+  }
+
+  return { ok: true, value: { mode, reason } };
 }
 
 export function validateImsiList(value: unknown): ValidationResult<string[]> {
