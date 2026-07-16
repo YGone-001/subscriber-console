@@ -1,92 +1,49 @@
+"use client";
+
+import { useState } from "react";
 import { Eye, EyeOff, Loader2, Lock, User } from "lucide-react";
 import Image from "next/image";
 
-const loginScript = `
-(function () {
-  function ready(fn) {
-    if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", fn, { once: true });
-    } else {
-      fn();
-    }
-  }
-
-  ready(function () {
-    var form = document.getElementById("xcloud-login-form");
-    var username = document.getElementById("xcloud-login-username");
-    var password = document.getElementById("xcloud-login-password");
-    var toggle = document.getElementById("xcloud-password-toggle");
-    var eye = document.getElementById("xcloud-eye");
-    var eyeOff = document.getElementById("xcloud-eye-off");
-    var errorBox = document.getElementById("xcloud-login-error");
-    var errorText = document.getElementById("xcloud-login-error-text");
-    var submit = document.getElementById("xcloud-login-submit");
-    var submitText = document.getElementById("xcloud-login-submit-text");
-    var spinner = document.getElementById("xcloud-login-spinner");
-
-    function showError(message) {
-      if (!errorBox || !errorText) return;
-      errorText.textContent = message || "Login failed";
-      errorBox.hidden = false;
-    }
-
-    function setLoading(isLoading) {
-      if (submit) {
-        submit.disabled = isLoading;
-        submit.style.cursor = isLoading ? "not-allowed" : "pointer";
-        submit.style.opacity = isLoading ? "0.8" : "1";
-      }
-      if (submitText) submitText.hidden = isLoading;
-      if (spinner) spinner.hidden = !isLoading;
-    }
-
-    if (toggle && password) {
-      toggle.addEventListener("click", function () {
-        var showing = password.getAttribute("type") === "text";
-        password.setAttribute("type", showing ? "password" : "text");
-        if (eye) eye.hidden = !showing;
-        if (eyeOff) eyeOff.hidden = showing;
-      });
-    }
-
-    if (form && username && password) {
-      form.addEventListener("submit", async function (event) {
-        event.preventDefault();
-        if (errorBox) errorBox.hidden = true;
-        setLoading(true);
-
-        try {
-          var response = await fetch("/api/auth/login", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              username: username.value,
-              password: password.value
-            })
-          });
-
-          if (response.ok) {
-            window.location.assign("/");
-            return;
-          }
-
-          var data = {};
-          try {
-            data = await response.json();
-          } catch (err) {}
-          showError(data.error || "Login failed");
-        } catch (err) {
-          showError("Network error");
-        } finally {
-          setLoading(false);
-        }
-      });
-    }
-  });
-})();
-`;
-
 export default function LoginForm() {
+  const [passwordVisible, setPasswordVisible] = useState(false);
+  const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const username = String(formData.get("username") || "");
+    const password = String(formData.get("password") || "");
+
+    setError("");
+    setIsLoading(true);
+
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+
+      if (response.ok) {
+        window.location.assign("/");
+        return;
+      }
+
+      let data: { error?: string } = {};
+      try {
+        data = await response.json();
+      } catch {
+        // Keep the generic fallback below
+      }
+      setError(data.error || "Login failed");
+    } catch {
+      setError("Network error");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div
       style={{
@@ -171,26 +128,27 @@ export default function LoginForm() {
           </p>
         </div>
 
-        <form id="xcloud-login-form" style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-          <div
-            id="xcloud-login-error"
-            hidden
-            style={{
-              background: "rgba(220, 38, 38, 0.15)",
-              border: "1px solid rgba(220, 38, 38, 0.3)",
-              color: "#fca5a5",
-              padding: "0.75rem 1rem",
-              borderRadius: "12px",
-              fontSize: "0.85rem",
-              display: "flex",
-              alignItems: "center",
-              gap: "0.5rem",
-              animation: "shake 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) both",
-            }}
-          >
-            <div style={{ width: "4px", height: "16px", background: "#ef4444", borderRadius: "2px" }} />
-            <span id="xcloud-login-error-text">Login failed</span>
-          </div>
+        <form id="xcloud-login-form" onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+          {error && (
+            <div
+              id="xcloud-login-error"
+              style={{
+                background: "rgba(220, 38, 38, 0.15)",
+                border: "1px solid rgba(220, 38, 38, 0.3)",
+                color: "#fca5a5",
+                padding: "0.75rem 1rem",
+                borderRadius: "12px",
+                fontSize: "0.85rem",
+                display: "flex",
+                alignItems: "center",
+                gap: "0.5rem",
+                animation: "shake 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) both",
+              }}
+            >
+              <div style={{ width: "4px", height: "16px", background: "#ef4444", borderRadius: "2px" }} />
+              <span id="xcloud-login-error-text">{error}</span>
+            </div>
+          )}
 
           <div style={{ position: "relative" }}>
             <div style={{ position: "absolute", left: "1rem", top: "50%", transform: "translateY(-50%)", color: "#64748b" }}>
@@ -198,6 +156,7 @@ export default function LoginForm() {
             </div>
             <input
               id="xcloud-login-username"
+              name="username"
               type="text"
               placeholder="Username"
               required
@@ -220,7 +179,8 @@ export default function LoginForm() {
             </div>
             <input
               id="xcloud-login-password"
-              type="password"
+              name="password"
+              type={passwordVisible ? "text" : "password"}
               placeholder="Password"
               required
               style={{
@@ -237,7 +197,8 @@ export default function LoginForm() {
             <button
               id="xcloud-password-toggle"
               type="button"
-              title="Show password"
+              title={passwordVisible ? "Hide password" : "Show password"}
+              onClick={() => setPasswordVisible((visible) => !visible)}
               style={{
                 position: "absolute",
                 right: "1rem",
@@ -253,10 +214,10 @@ export default function LoginForm() {
                 justifyContent: "center",
               }}
             >
-              <span id="xcloud-eye">
+              <span id="xcloud-eye" hidden={passwordVisible}>
                 <Eye size={18} />
               </span>
-              <span id="xcloud-eye-off" hidden>
+              <span id="xcloud-eye-off" hidden={!passwordVisible}>
                 <EyeOff size={18} />
               </span>
             </button>
@@ -265,6 +226,7 @@ export default function LoginForm() {
           <button
             id="xcloud-login-submit"
             type="submit"
+            disabled={isLoading}
             style={{
               marginTop: "0.5rem",
               width: "100%",
@@ -275,7 +237,8 @@ export default function LoginForm() {
               color: "white",
               fontSize: "1rem",
               fontWeight: 600,
-              cursor: "pointer",
+              cursor: isLoading ? "not-allowed" : "pointer",
+              opacity: isLoading ? "0.8" : "1",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -283,10 +246,10 @@ export default function LoginForm() {
               boxShadow: "0 10px 20px -5px rgba(78, 115, 223, 0.4)",
             }}
           >
-            <span id="xcloud-login-spinner" hidden>
+            <span id="xcloud-login-spinner" hidden={!isLoading}>
               <Loader2 size={20} style={{ animation: "spin 1s linear infinite" }} />
             </span>
-            <span id="xcloud-login-submit-text">Login</span>
+            <span id="xcloud-login-submit-text" hidden={isLoading}>Login</span>
           </button>
         </form>
 
@@ -322,7 +285,6 @@ export default function LoginForm() {
           `,
         }}
       />
-      <script dangerouslySetInnerHTML={{ __html: loginScript }} />
     </div>
   );
 }

@@ -18,7 +18,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <head>
+      <body>
         <Script id="xcloud-init-preferences" strategy="beforeInteractive">
           {`
             (function() {
@@ -39,8 +39,6 @@ export default function RootLayout({
             })();
           `}
         </Script>
-      </head>
-      <body>
         <GlobalErrorBoundary>
           <SWRProvider>
             <ThemeProvider>

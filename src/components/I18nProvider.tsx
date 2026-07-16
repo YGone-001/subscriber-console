@@ -1,9 +1,10 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
+import React, { createContext, useContext, useEffect, useSyncExternalStore, useCallback } from "react";
 import { LOCALES, Locale } from "@/lib/locales";
 
 const STORAGE_KEY = "XCLOUD_LANGUAGE_PREFERENCE";
+const LANGUAGE_CHANGE_EVENT = "xcloud-language-change";
 
 interface I18nContextType {
   lang: Locale;
@@ -12,6 +13,45 @@ interface I18nContextType {
 }
 
 const I18nContext = createContext<I18nContextType | undefined>(undefined);
+
+function isLocale(value: unknown): value is Locale {
+  return value === "zh" || value === "en";
+}
+
+function readStoredLang(): Locale {
+  if (typeof window === "undefined") return "en";
+  try {
+    const stored = window.localStorage.getItem(STORAGE_KEY);
+    return isLocale(stored) ? stored : "en";
+  } catch {
+    return "en";
+  }
+}
+
+function readServerLang(): Locale {
+  return "en";
+}
+
+function subscribeLang(listener: () => void) {
+  if (typeof window === "undefined") return () => {};
+
+  const handleChange = (event: Event) => {
+    if (event.type === LANGUAGE_CHANGE_EVENT || (event instanceof StorageEvent && event.key === STORAGE_KEY)) {
+      listener();
+    }
+  };
+
+  window.addEventListener("storage", handleChange);
+  window.addEventListener(LANGUAGE_CHANGE_EVENT, handleChange);
+  return () => {
+    window.removeEventListener("storage", handleChange);
+    window.removeEventListener(LANGUAGE_CHANGE_EVENT, handleChange);
+  };
+}
+
+function applyLanguage(lang: Locale) {
+  document.documentElement.setAttribute("lang", lang === "zh" ? "zh-CN" : "en");
+}
 
 /**
  * I18nProvider
@@ -23,25 +63,17 @@ const I18nContext = createContext<I18nContextType | undefined>(undefined);
  * - Exposes `t(key)` helper that returns the translated string.
  */
 export function I18nProvider({ children }: { children: React.ReactNode }) {
-  const [lang, setLangState] = useState<Locale>(() => {
-    if (typeof window === "undefined") return "en";
-    try {
-      const stored = window.localStorage.getItem(STORAGE_KEY) as Locale | null;
-      return stored === "zh" || stored === "en" ? stored : "en";
-    } catch {
-      return "en";
-    }
-  });
+  const lang = useSyncExternalStore(subscribeLang, readStoredLang, readServerLang);
 
   useEffect(() => {
-    document.documentElement.setAttribute("lang", lang === "zh" ? "zh-CN" : "en");
+    applyLanguage(lang);
   }, [lang]);
 
   const setLang = useCallback((newLang: Locale) => {
-    setLangState(newLang);
-    document.documentElement.setAttribute("lang", newLang === "zh" ? "zh-CN" : "en");
+    applyLanguage(newLang);
     try {
       localStorage.setItem(STORAGE_KEY, newLang);
+      window.dispatchEvent(new Event(LANGUAGE_CHANGE_EVENT));
     } catch {
       // Silently ignore write failures
     }
