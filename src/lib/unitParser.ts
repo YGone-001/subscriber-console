@@ -29,6 +29,14 @@ const BYTE_UNITS: Record<string, number> = {
   TIB: 1024 ** 4,
 };
 
+export const BYTE_INPUT_UNITS = [
+  { label: 'B', value: 'B' },
+  { label: 'KB', value: 'KB' },
+  { label: 'MB', value: 'MB' },
+  { label: 'GB', value: 'GB' },
+  { label: 'TB', value: 'TB' },
+] as const;
+
 const BYTE_UNIT_PATTERN = Object.keys(BYTE_UNITS)
   .filter(Boolean)
   .sort((a, b) => b.length - a.length)
@@ -47,6 +55,30 @@ export function parseBytes(input: string | number): number {
 
   const unit = match[2] || "";
   return Math.floor(val * BYTE_UNITS[unit]);
+}
+
+export function composeByteInput(value: string | number, unit: string): string {
+  const normalizedValue = String(value).trim();
+  const normalizedUnit = String(unit || 'GB').trim().toUpperCase();
+  if (!normalizedValue) return `0 ${normalizedUnit}`;
+  return `${normalizedValue} ${BYTE_UNITS[normalizedUnit] ? normalizedUnit : 'GB'}`;
+}
+
+export function splitByteInput(input: string | number, fallbackUnit = 'GB'): { value: string; unit: string } {
+  if (typeof input === 'number') {
+    const formatted = formatBytes(input);
+    return splitByteInput(formatted, fallbackUnit);
+  }
+
+  const str = String(input).trim().replace(/,/g, '').toUpperCase();
+  const match = str.match(new RegExp(`^(\\d+(?:\\.\\d+)?|\\.\\d+)\\s*(${BYTE_UNIT_PATTERN})?$`));
+  if (!match) return { value: '0', unit: fallbackUnit };
+
+  const unit = match[2] || fallbackUnit;
+  return {
+    value: match[1],
+    unit: BYTE_UNITS[unit] ? unit : fallbackUnit,
+  };
 }
 
 export function formatBytes(bytes: number): string {

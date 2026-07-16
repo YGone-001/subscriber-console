@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Plus, Layers, Download, Users, Trash2, DatabaseZap, PenLine, MoreHorizontal, Settings2, FileUp, Copy, CheckCircle2 } from "lucide-react";
 import SubscriberModal from "@/components/SubscriberModal";
 import BatchCreateModal from "@/components/BatchCreateModal";
@@ -98,7 +98,9 @@ export default function SubscriberPage() {
 
   const subscriberQuery = searchQuery.trim();
   const subscribersUrl = `/api/subscribers?detail=true&page=${currentPage}&limit=${pageSize}${subscriberQuery ? `&q=${encodeURIComponent(subscriberQuery)}` : ""}`;
-  const { data: subscribersData, isLoading, mutate: mutateSubscribers } = useSWR<SubscribersResponse>(subscribersUrl, fetcher);
+  const { data: subscribersData, isLoading, mutate: mutateSubscribers } = useSWR<SubscribersResponse>(subscribersUrl, fetcher, {
+    keepPreviousData: true,
+  });
   const subscribers = subscribersData?.subscribers || [];
   const totalSubscribers = subscribersData?.total || 0;
 
@@ -236,9 +238,11 @@ export default function SubscriberPage() {
   const selectedOnPageCount = pageImsis.filter((imsi) => selectedImsis.includes(imsi)).length;
   const isAllPageSelected = pageImsis.length > 0 && selectedOnPageCount === pageImsis.length;
 
-  if (currentPage > totalPages) {
-    setCurrentPage(totalPages);
-  }
+  useEffect(() => {
+    if (subscribersData && currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, subscribersData, totalPages]);
 
   const formatBytes = (bytes: number) => {
     if (bytes === 0) return '0 B';

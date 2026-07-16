@@ -2,11 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  composeByteInput,
   formatBytes,
   formatBytesAligned,
   formatSeconds,
   parseBytes,
   parseSeconds,
+  splitByteInput,
 } from "../src/lib/unitParser.ts";
 
 test("parseBytes accepts binary units, decimals, commas, and invalid input", () => {
@@ -25,6 +27,14 @@ test("formatBytes chooses stable binary display units", () => {
 
 test("formatBytesAligned formats both values with the larger unit", () => {
   assert.deepEqual(formatBytesAligned(512, 2 * 1024 ** 2), ["0 MB", "2 MB"]);
+});
+
+test("splitByteInput and composeByteInput support value plus unit controls", () => {
+  assert.deepEqual(splitByteInput("10 GB"), { value: "10", unit: "GB" });
+  assert.deepEqual(splitByteInput("512", "MB"), { value: "512", unit: "MB" });
+  assert.deepEqual(splitByteInput(2 * 1024 ** 3), { value: "2", unit: "GB" });
+  assert.equal(composeByteInput("1.5", "TB"), "1.5 TB");
+  assert.equal(composeByteInput("", "GB"), "0 GB");
 });
 
 test("parseSeconds and formatSeconds round-trip common operator inputs", () => {

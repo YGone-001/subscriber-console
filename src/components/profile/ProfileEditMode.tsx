@@ -1,6 +1,6 @@
 import { Pencil, Shield, Signal, Lock, ChevronDown, ChevronUp, Gauge, Server, Plus } from "lucide-react";
 import ProfileSliceEditor from "./ProfileSliceEditor";
-import { parseBytes, formatBytesAligned } from "@/lib/unitParser";
+import { BYTE_INPUT_UNITS, composeByteInput, splitByteInput } from "@/lib/unitParser";
 import { AMBR_UNITS } from "../subscriber/utils";
 
 export default function ProfileEditMode({ t, profileName, state, actions }: any) {
@@ -13,6 +13,8 @@ export default function ProfileEditMode({ t, profileName, state, actions }: any)
     setInputName, setProfileTitle, setAuthData, setUsimType, setUeAmbr, setIsAccessRestrictionsExpanded, setAccessRestriction,
     setOcsDefaults, addSlice, handleSliceChange, removeSlice
   } = actions;
+  const totalTrafficInput = splitByteInput(ocsDefaults.trafficTotal);
+  const balanceTrafficInput = splitByteInput(ocsDefaults.trafficBalance, totalTrafficInput.unit);
 
   return (
     <div style={{ paddingBottom: '2rem' }}>
@@ -75,23 +77,41 @@ export default function ProfileEditMode({ t, profileName, state, actions }: any)
         <div className="dash-card-body" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem" }}>
           <div>
             <label className="form-label">{t("prof_quota_tpl")}</label>
-            <input type="text" className="form-input" value={ocsDefaults.trafficTotal}
-               onChange={e => setOcsDefaults({...ocsDefaults, trafficTotal: e.target.value})}
-               onBlur={() => {
-                 const [tStr, bStr] = formatBytesAligned(parseBytes(ocsDefaults.trafficTotal), parseBytes(ocsDefaults.trafficBalance));
-                 setOcsDefaults({...ocsDefaults, trafficTotal: tStr, trafficBalance: bStr});
-               }}
-               placeholder="e.g. 10G" />
+            <div className="input-composite">
+              <input
+                type="number"
+                min="0"
+                step="any"
+                value={totalTrafficInput.value}
+                onFocus={(e) => e.target.select()}
+                onChange={(e) => setOcsDefaults({ ...ocsDefaults, trafficTotal: composeByteInput(e.target.value, totalTrafficInput.unit) })}
+              />
+              <select
+                value={totalTrafficInput.unit}
+                onChange={(e) => setOcsDefaults({ ...ocsDefaults, trafficTotal: composeByteInput(totalTrafficInput.value, e.target.value) })}
+              >
+                {BYTE_INPUT_UNITS.map((unit) => <option key={unit.value} value={unit.value}>{unit.label}</option>)}
+              </select>
+            </div>
           </div>
           <div>
             <label className="form-label">{t("prof_balance_tpl")}</label>
-            <input type="text" className="form-input" value={ocsDefaults.trafficBalance}
-               onChange={e => setOcsDefaults({...ocsDefaults, trafficBalance: e.target.value})}
-               onBlur={() => {
-                 const [tStr, bStr] = formatBytesAligned(parseBytes(ocsDefaults.trafficTotal), parseBytes(ocsDefaults.trafficBalance));
-                 setOcsDefaults({...ocsDefaults, trafficTotal: tStr, trafficBalance: bStr});
-               }}
-               placeholder="e.g. 10G" />
+            <div className="input-composite">
+              <input
+                type="number"
+                min="0"
+                step="any"
+                value={balanceTrafficInput.value}
+                onFocus={(e) => e.target.select()}
+                onChange={(e) => setOcsDefaults({ ...ocsDefaults, trafficBalance: composeByteInput(e.target.value, balanceTrafficInput.unit) })}
+              />
+              <select
+                value={balanceTrafficInput.unit}
+                onChange={(e) => setOcsDefaults({ ...ocsDefaults, trafficBalance: composeByteInput(balanceTrafficInput.value, e.target.value) })}
+              >
+                {BYTE_INPUT_UNITS.map((unit) => <option key={unit.value} value={unit.value}>{unit.label}</option>)}
+              </select>
+            </div>
           </div>
           <div style={{ gridColumn: "1 / -1" }}>
             <label className="form-label">Tariff Plan Rules</label>

@@ -1,6 +1,6 @@
 import { Users, Shield, Signal, Lock, ChevronDown, ChevronUp, Gauge, Server, Plus } from "lucide-react";
 import ProfileSliceEditor from "../profile/ProfileSliceEditor";
-import { parseBytes, formatBytesAligned } from "@/lib/unitParser";
+import { BYTE_INPUT_UNITS, composeByteInput, splitByteInput } from "@/lib/unitParser";
 import { AMBR_UNITS } from "./utils";
 import type { Ambr, Auth4GData, Rating, Slice } from "@/types/subscriber";
 
@@ -44,6 +44,8 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
     setOcsTrafficTotalStr, setOcsTrafficBalanceStr,
     addSlice, handleSliceChange, removeSlice, setExpandedSlices
   } = actions;
+  const totalTrafficInput = splitByteInput(ocsTrafficTotalStr);
+  const balanceTrafficInput = splitByteInput(ocsTrafficBalanceStr, totalTrafficInput.unit);
 
   return (
     <div style={{ paddingBottom: '2rem', display: "flex", flexDirection: "column" }}>
@@ -267,25 +269,41 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
           </div>
           <div>
             <label className="form-label">{t("sub_traffic_total_quota")}</label>
-            <input type="text" className="form-input" value={ocsTrafficTotalStr}
-               onChange={e => setOcsTrafficTotalStr(e.target.value)}
-               onBlur={() => {
-                 const [tStr, bStr] = formatBytesAligned(parseBytes(ocsTrafficTotalStr), parseBytes(ocsTrafficBalanceStr));
-                 setOcsTrafficTotalStr(tStr);
-                 setOcsTrafficBalanceStr(bStr);
-               }}
-               placeholder="e.g. 10G or 500MB" />
+            <div className="input-composite">
+              <input
+                type="number"
+                min="0"
+                step="any"
+                value={totalTrafficInput.value}
+                onFocus={(e) => e.target.select()}
+                onChange={(e) => setOcsTrafficTotalStr(composeByteInput(e.target.value, totalTrafficInput.unit))}
+              />
+              <select
+                value={totalTrafficInput.unit}
+                onChange={(e) => setOcsTrafficTotalStr(composeByteInput(totalTrafficInput.value, e.target.value))}
+              >
+                {BYTE_INPUT_UNITS.map((unit) => <option key={unit.value} value={unit.value}>{unit.label}</option>)}
+              </select>
+            </div>
           </div>
           <div>
             <label className="form-label">{t("sub_traffic_balance")}</label>
-            <input type="text" className="form-input" value={ocsTrafficBalanceStr}
-               onChange={e => setOcsTrafficBalanceStr(e.target.value)}
-               onBlur={() => {
-                 const [tStr, bStr] = formatBytesAligned(parseBytes(ocsTrafficTotalStr), parseBytes(ocsTrafficBalanceStr));
-                 setOcsTrafficTotalStr(tStr);
-                 setOcsTrafficBalanceStr(bStr);
-               }}
-               placeholder="e.g. 10G or 500MB" />
+            <div className="input-composite">
+              <input
+                type="number"
+                min="0"
+                step="any"
+                value={balanceTrafficInput.value}
+                onFocus={(e) => e.target.select()}
+                onChange={(e) => setOcsTrafficBalanceStr(composeByteInput(e.target.value, balanceTrafficInput.unit))}
+              />
+              <select
+                value={balanceTrafficInput.unit}
+                onChange={(e) => setOcsTrafficBalanceStr(composeByteInput(balanceTrafficInput.value, e.target.value))}
+              >
+                {BYTE_INPUT_UNITS.map((unit) => <option key={unit.value} value={unit.value}>{unit.label}</option>)}
+              </select>
+            </div>
           </div>
           <div>
             <label className="form-label">Tariff Plan</label>
