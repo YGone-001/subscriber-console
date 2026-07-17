@@ -123,6 +123,22 @@ export type OcsTrafficAdjustmentResult = {
   after: OcsTrafficSnapshot;
 };
 
+export type OcsPolicyChangeInput = {
+  imsiList: string[];
+  planId: string;
+  status: 'active' | 'suspended';
+  resetBalances: boolean;
+};
+
+export type OcsPolicyChangeResult = {
+  requested: number;
+  subscriberModified: number;
+  balanceModified: number;
+  planId: string;
+  status: 'active' | 'suspended';
+  resetBalances: boolean;
+};
+
 function tariffPlansCollection() {
   return getOpen5gsCollection<OcsTariffPlan>(mongoCollections.ocsTariffPlans);
 }
@@ -646,6 +662,104 @@ export async function adjustOcsTrafficBalance(
       voice_reserved: before.voice_reserved,
       version: nextVersion,
     },
+  };
+}
+
+export async function changeOcsPolicyForSubscribers(input: OcsPolicyChangeInput): Promise<OcsPolicyChangeResult> {
+  const now = new Date();
+  const planId = asString(input.planId, DEFAULT_OCS_PLAN_ID);
+  const [tariffPlans, subscriberCollection, balanceCollection] = await Promise.all([
+    tariffPlansCollection(),
+    ocsSubscribersCollection(),
+    ocsBalancesCollection(),
+  ]);
+  const plan = planId === DEFAULT_OCS_PLAN_ID
+    ? await getOrCreateDefaultPlan()
+    : await tariffPlans.findOne({ plan_id: planId });
+
+  if (!plan) {
+    throw new Error('OCS_PLAN_NOT_FOUND');
+  }
+
+  const uniqueImsis = Array.from(new Set(input.imsiList));
+  const existingBalances = await balanceCollection
+    .find({ imsi: { $in: uniqueImsis } })
+    .toArray();
+  const balanceByImsi = new Map(existingBalances.map((balance) => [balance.imsi, balance]));
+
+  const subscriberResult = await subscriberCollection.bulkWrite(
+    uniqueImsis.map((imsi) => ({
+      updateOne: {
+        filter: { imsi },
+        update: {
+          $set: {
+            plan_id: planId,
+            status: input.status,
+            updated_at: now,
+          },
+          $setOnInsert: {
+            imsi,
+            msisdn: '',
+            created_at: now,
+          },
+        },
+        upsert: true,
+      },
+    })),
+    { ordered: false }
+  );
+
+  const balanceResult = await balanceCollection.bulkWrite(
+    uniqueImsis.map((imsi) => {
+      const existing = balanceByImsi.get(imsi);
+      const dataTotal = Math.max(toNumber(existing?.data_total, DEFAULT_TOTAL_BALANCE), 0);
+      const voiceTotal = Math.max(toNumber(existing?.voice_total, DEFAULT_VOICE_TOTAL), 0);
+      const version = toNumber(existing?.version, 0) + 1;
+      const setPayload: Record<string, unknown> = {
+        plan_id: planId,
+        status: input.status,
+        version: Long.fromNumber(version),
+        updated_at: now,
+      };
+
+      if (input.resetBalances || !existing) {
+        setPayload.data_total = Long.fromNumber(dataTotal);
+        setPayload.data_used = Long.ZERO;
+        setPayload.data_reserved = Long.ZERO;
+        setPayload.data_available = Long.fromNumber(dataTotal);
+        setPayload.voice_total = Long.fromNumber(voiceTotal);
+        setPayload.voice_used = Long.ZERO;
+        setPayload.voice_reserved = Long.ZERO;
+        setPayload.voice_available = Long.fromNumber(voiceTotal);
+        setPayload.money_balance = Long.ZERO;
+        setPayload.cycle_start_at = now;
+        setPayload.cycle_reset_at = now;
+      }
+
+      return {
+        updateOne: {
+          filter: { imsi },
+          update: {
+            $set: setPayload,
+            $setOnInsert: {
+              imsi,
+              created_at: now,
+            },
+          },
+          upsert: true,
+        },
+      };
+    }),
+    { ordered: false }
+  );
+
+  return {
+    requested: uniqueImsis.length,
+    subscriberModified: subscriberResult.modifiedCount + subscriberResult.upsertedCount,
+    balanceModified: balanceResult.modifiedCount + balanceResult.upsertedCount,
+    planId,
+    status: input.status,
+    resetBalances: input.resetBalances,
   };
 }
 

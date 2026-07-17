@@ -20,6 +20,13 @@ export type TrafficAdjustmentPayload = {
   reason?: string;
 };
 
+export type PolicyChangePayload = {
+  imsiList: string[];
+  planId: string;
+  status: 'active' | 'suspended';
+  resetBalances: boolean;
+};
+
 const HEX_32 = /^[0-9a-fA-F]{32}$/;
 const HEX_4 = /^[0-9a-fA-F]{4}$/;
 const HEX_1_TO_6 = /^[0-9a-fA-F]{1,6}$/;
@@ -253,6 +260,33 @@ export function validateTrafficAdjustmentPayload(body: unknown): ValidationResul
   }
 
   return { ok: true, value: { mode, reason } };
+}
+
+export function validatePolicyChangePayload(body: unknown): ValidationResult<PolicyChangePayload> {
+  const payload = asRecord(body);
+  const imsiList = validateImsiList(payload.imsiList);
+  if (!imsiList.ok) return imsiList;
+  if (imsiList.value.length === 0) return { ok: false, error: 'imsiList cannot be empty' };
+
+  const planId = isBlank(payload.planId) ? 'plan_default_10gb' : String(payload.planId).trim();
+  if (!/^[A-Za-z0-9_.-]{1,64}$/.test(planId)) {
+    return { ok: false, error: 'planId contains invalid characters' };
+  }
+
+  const status = String(payload.status || 'active');
+  if (status !== 'active' && status !== 'suspended') {
+    return { ok: false, error: 'status must be active or suspended' };
+  }
+
+  return {
+    ok: true,
+    value: {
+      imsiList: imsiList.value,
+      planId,
+      status,
+      resetBalances: payload.resetBalances === true,
+    },
+  };
 }
 
 export function validateImsiList(value: unknown): ValidationResult<string[]> {

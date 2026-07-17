@@ -5,6 +5,7 @@ import {
   validateBatchCreatePayload,
   validateImsi,
   validateImsiList,
+  validatePolicyChangePayload,
   validateSubscriberUpdatePayload,
   validateTrafficAdjustmentPayload,
 } from "../src/lib/subscriberValidation.ts";
@@ -59,6 +60,25 @@ test("validateTrafficAdjustmentPayload rejects unsafe balance actions", () => {
   assert.equal(validateTrafficAdjustmentPayload({ mode: "recharge", amount: 1.5 }).ok, false);
   assert.equal(validateTrafficAdjustmentPayload({ mode: "set_available", value: -1 }).ok, false);
   assert.equal(validateTrafficAdjustmentPayload({ mode: "set_total" }).ok, false);
+});
+
+test("validatePolicyChangePayload normalizes bulk policy changes", () => {
+  const result = validatePolicyChangePayload({
+    imsiList: ["460020000000001", "460020000000002"],
+    status: "suspended",
+    resetBalances: true,
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.ok && result.value.planId, "plan_default_10gb");
+  assert.equal(result.ok && result.value.status, "suspended");
+  assert.equal(result.ok && result.value.resetBalances, true);
+});
+
+test("validatePolicyChangePayload rejects unsafe policy changes", () => {
+  assert.equal(validatePolicyChangePayload({ imsiList: [], planId: "plan_default_10gb" }).ok, false);
+  assert.equal(validatePolicyChangePayload({ imsiList: ["460020000000001"], planId: "../bad" }).ok, false);
+  assert.equal(validatePolicyChangePayload({ imsiList: ["460020000000001"], status: "locked" }).ok, false);
 });
 
 test("validateImsiList rejects invalid entries", () => {

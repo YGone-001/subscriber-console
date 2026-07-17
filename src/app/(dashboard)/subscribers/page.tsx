@@ -4,6 +4,7 @@ import React, { useEffect, useState, useMemo } from "react";
 import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Plus, Layers, Download, Users, Trash2, DatabaseZap, PenLine, MoreHorizontal, Settings2, FileUp, Copy, CheckCircle2 } from "lucide-react";
 import SubscriberModal from "@/components/SubscriberModal";
 import BatchCreateModal from "@/components/BatchCreateModal";
+import BulkPolicyModal from "@/components/BulkPolicyModal";
 import DataHub from "@/components/DataHub";
 import { useI18n } from "@/components/I18nProvider";
 import useSWR from "swr";
@@ -68,6 +69,7 @@ export default function SubscriberPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedImsis, setSelectedImsis] = useState<string[]>([]);
   const [isDeletingBulk, setIsDeletingBulk] = useState(false);
+  const [isPolicyModalOpen, setIsPolicyModalOpen] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   const [isDataHubOpen, setIsDataHubOpen] = useState(false);
   const [copiedImsi, setCopiedImsi] = useState<string | null>(null);
@@ -333,9 +335,11 @@ export default function SubscriberPage() {
             <div className="animate-fade-in" style={{ display: "flex", alignItems: "center", gap: "1.5rem", background: "rgba(59, 130, 246, 0.1)", borderRadius: "8px", padding: "0.4rem 1.2rem", border: "1px solid rgba(59, 130, 246, 0.2)" }}>
               <span style={{ fontWeight: 600, color: "var(--primary)", fontSize: "0.9rem" }}>{selectedImsis.length} {t("selected")}</span>
               <div style={{ paddingLeft: "1.5rem", borderLeft: "1px solid rgba(59, 130, 246, 0.2)", display: "flex", gap: "0.75rem" }}>
-                <button className="btn btn-outline" style={{ display: "flex", alignItems: "center", gap: "0.4rem", padding: "0.4rem 1rem", fontSize: "0.85rem", borderColor: "var(--primary)", color: "var(--primary)", background: "var(--surface)" }} onClick={() => alert("Change Policy: Feature coming soon")}>
-                  <Settings2 size={14}/> {t("change_policy")}
-                </button>
+                {canEditSubscribers && (
+                  <button className="btn btn-outline" style={{ display: "flex", alignItems: "center", gap: "0.4rem", padding: "0.4rem 1rem", fontSize: "0.85rem", borderColor: "var(--primary)", color: "var(--primary)", background: "var(--surface)" }} onClick={() => setIsPolicyModalOpen(true)}>
+                    <Settings2 size={14}/> {t("change_policy")}
+                  </button>
+                )}
                 <button className="btn btn-outline" style={{ display: "flex", alignItems: "center", gap: "0.4rem", padding: "0.4rem 1rem", fontSize: "0.85rem", borderColor: "var(--primary)", color: "var(--primary)", background: "var(--surface)" }} onClick={() => setIsDataHubOpen(true)}>
                   <Download size={14}/> {t("export_csv")}
                 </button>
@@ -702,6 +706,17 @@ export default function SubscriberPage() {
           onSuccess={() => mutateSubscribers()}
         />
       )}
+
+      <BulkPolicyModal
+        isOpen={isPolicyModalOpen}
+        selectedImsis={selectedImsis}
+        t={t}
+        onClose={() => setIsPolicyModalOpen(false)}
+        onSuccess={() => {
+          setSelectedImsis([]);
+          mutateSubscribers();
+        }}
+      />
 
       {/* Data Hub Modal */}
       <DataHub
