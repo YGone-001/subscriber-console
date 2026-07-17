@@ -1,5 +1,6 @@
 import { Users, Shield, Signal, Lock, ChevronDown, ChevronUp, Gauge, Server, Plus } from "lucide-react";
 import ProfileSliceEditor from "../profile/ProfileSliceEditor";
+import RatingRuleLinkPanel from "./RatingRuleLinkPanel";
 import { BYTE_INPUT_UNITS, TIME_INPUT_UNITS, composeByteInput, composeSecondsInput, splitByteInput, splitSecondsInput } from "@/lib/unitParser";
 import { AMBR_UNITS } from "./utils";
 import type { Ambr, Auth4GData, Rating, Slice } from "@/types/subscriber";
@@ -36,7 +37,7 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
   const {
     inputImsi, msisdn, profileList,
     auth4GData, usimType, ueAmbr, isAccessRestrictionsExpanded, accessRestriction,
-    ocsPlmn, ocsTrafficTotalStr, ocsTrafficBalanceStr, ocsVoiceTotalStr, ocsVoiceBalanceStr, ocsPlanId, ocsPlanStatus, ocsRules,
+    ocsPlmn, ocsTrafficTotalStr, ocsTrafficBalanceStr, ocsVoiceTotalStr, ocsVoiceBalanceStr, ocsPlanId, ocsPlanStatus, ocsRules, ratingList,
     slices, newlyAddedSliceIndex, expandedSlices
   } = state;
 
@@ -317,6 +318,12 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
             <label className="form-label">Plan Status</label>
             <input type="text" className="form-input" value={ocsPlanStatus} readOnly style={{ background: "var(--surface-hover)", fontFamily: "monospace" }} />
           </div>
+          <RatingRuleLinkPanel
+            planId={ocsPlanId}
+            planStatus={ocsPlanStatus}
+            ocsRules={ocsRules}
+            ratingList={ratingList}
+          />
           <div>
             <label className="form-label">IMS Voice Quota</label>
             <div className="input-composite">

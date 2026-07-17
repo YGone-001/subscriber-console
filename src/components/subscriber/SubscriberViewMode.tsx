@@ -1,4 +1,5 @@
 import { BadgeCheck, Gauge, KeyRound, Network, PhoneCall, Server, Signal, Wifi, ChevronDown, ChevronUp } from "lucide-react";
+import RatingRuleLinkPanel from "./RatingRuleLinkPanel";
 import { Pill, MaskedValue, AMBR_UNITS, getAmbrString, typeLabel } from "./utils";
 import type { Ambr, Auth4GData, Slice } from "@/types/subscriber";
 
@@ -15,6 +16,7 @@ interface SubscriberViewModeProps {
   ocsPlanId: string;
   ocsPlanStatus: string;
   ocsRules: any[];
+  ratingList?: any[];
   slices: Slice[];
   expandedSlices: number[];
   setExpandedSlices: React.Dispatch<React.SetStateAction<number[]>>;
@@ -103,6 +105,7 @@ export default function SubscriberViewMode({
   ocsPlanId,
   ocsPlanStatus,
   ocsRules,
+  ratingList,
   slices,
   expandedSlices,
   setExpandedSlices
@@ -240,6 +243,14 @@ export default function SubscriberViewMode({
             <SummaryMetric label="Plan Status" value={ocsPlanStatus || "unknown"} />
           </div>
           <div style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "0.75rem", fontWeight: 700 }}>APN Rating Rules</div>
+          <RatingRuleLinkPanel
+            planId={ocsPlanId}
+            planStatus={ocsPlanStatus}
+            ocsRules={ocsRules}
+            ratingList={ratingList}
+            compact
+          />
+          <div style={{ color: "var(--text-muted)", fontSize: "0.85rem", margin: "1rem 0 0.75rem", fontWeight: 700 }}>Raw Rule Mapping</div>
           <div style={{ display: "grid", gap: "0.5rem" }}>
             {ocsRules.length > 0 ? ocsRules.map((rule: any) => (
               <div key={rule.rule_id || `${rule.apn}-${rule.rating_group_id}`} style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr 1fr 1fr", gap: "1rem", padding: "0.75rem 1rem", border: "1px solid var(--surface-border)", borderRadius: "6px", fontFamily: "monospace", fontSize: "0.9rem", overflowX: "auto" }}>

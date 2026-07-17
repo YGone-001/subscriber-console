@@ -42,6 +42,7 @@ export default function SubscriberModal({ imsi, onClose, onRefresh }: Subscriber
       ocsPlanId={state.ocsPlanId}
       ocsPlanStatus={state.ocsPlanStatus}
       ocsRules={state.ocsRules}
+      ratingList={state.ratingList}
       slices={state.slices}
       expandedSlices={state.expandedSlices}
       setExpandedSlices={actions.setExpandedSlices}
