@@ -37,6 +37,13 @@ export const BYTE_INPUT_UNITS = [
   { label: 'TB', value: 'TB' },
 ] as const;
 
+export const TIME_INPUT_UNITS = [
+  { label: 'sec', value: 's' },
+  { label: 'min', value: 'm' },
+  { label: 'hour', value: 'h' },
+  { label: 'day', value: 'd' },
+] as const;
+
 const BYTE_UNIT_PATTERN = Object.keys(BYTE_UNITS)
   .filter(Boolean)
   .sort((a, b) => b.length - a.length)
@@ -107,7 +114,7 @@ export function formatBytesAligned(b1: number, b2: number): [string, string] {
 
 
 export function parseSeconds(input: string | number): number {
-  if (typeof input === 'number') return input;
+  if (typeof input === 'number') return Number.isFinite(input) ? Math.floor(input) : 0;
   const str = String(input).trim().toLowerCase();
   // match number and optional time suffix (e.g. 60m, 1h, 2d)
   const match = str.match(/^([\d.]+)\s*([smhd]?)$/);
@@ -122,6 +129,30 @@ export function parseSeconds(input: string | number): number {
   if (unit === 'h') return Math.floor(val * 3600);
   if (unit === 'd') return Math.floor(val * 86400);
   return Math.floor(val);
+}
+
+export function composeSecondsInput(value: string | number, unit: string): string {
+  const normalizedValue = String(value).trim();
+  const normalizedUnit = TIME_INPUT_UNITS.some((item) => item.value === unit) ? unit : 'h';
+  if (!normalizedValue) return `0${normalizedUnit}`;
+  return `${normalizedValue}${normalizedUnit}`;
+}
+
+export function splitSecondsInput(input: string | number, fallbackUnit = 'h'): { value: string; unit: string } {
+  if (typeof input === 'number') {
+    const formatted = formatSeconds(input);
+    return splitSecondsInput(formatted, fallbackUnit);
+  }
+
+  const str = String(input).trim().toLowerCase();
+  const match = str.match(/^(\d+(?:\.\d+)?|\.\d+)\s*([smhd]?)$/);
+  if (!match) return { value: '0', unit: fallbackUnit };
+
+  const unit = match[2] || fallbackUnit;
+  return {
+    value: match[1],
+    unit: TIME_INPUT_UNITS.some((item) => item.value === unit) ? unit : fallbackUnit,
+  };
 }
 
 export function formatSeconds(seconds: number): string {

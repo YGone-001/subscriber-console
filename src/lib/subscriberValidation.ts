@@ -216,7 +216,7 @@ export function validateSubscriberUpdatePayload(body: unknown): ValidationResult
     if (!isBlank(ocsTraffic.plmn) && !/^\d{5,6}$/.test(String(ocsTraffic.plmn))) {
       return { ok: false, error: 'ocsTraffic.plmn must be 5 or 6 digits' };
     }
-    for (const field of ['traffic_total', 'traffic_balance']) {
+    for (const field of ['traffic_total', 'traffic_balance', 'voice_total', 'voice_balance']) {
       const error = validateOptionalNonNegativeNumber(ocsTraffic[field], `ocsTraffic.${field}`);
       if (error) return { ok: false, error };
     }

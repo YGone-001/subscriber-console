@@ -1,6 +1,6 @@
 import { Users, Shield, Signal, Lock, ChevronDown, ChevronUp, Gauge, Server, Plus } from "lucide-react";
 import ProfileSliceEditor from "../profile/ProfileSliceEditor";
-import { BYTE_INPUT_UNITS, composeByteInput, splitByteInput } from "@/lib/unitParser";
+import { BYTE_INPUT_UNITS, TIME_INPUT_UNITS, composeByteInput, composeSecondsInput, splitByteInput, splitSecondsInput } from "@/lib/unitParser";
 import { AMBR_UNITS } from "./utils";
 import type { Ambr, Auth4GData, Rating, Slice } from "@/types/subscriber";
 
@@ -20,6 +20,8 @@ interface SubscriberEditModeProps {
     ocsPlmn: string;
     ocsTrafficTotalStr: string;
     ocsTrafficBalanceStr: string;
+    ocsVoiceTotalStr: string;
+    ocsVoiceBalanceStr: string;
     ocsPlanId: string;
     ocsPlanStatus: string;
     ocsRules: any[];
@@ -34,18 +36,20 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
   const {
     inputImsi, msisdn, profileList,
     auth4GData, usimType, ueAmbr, isAccessRestrictionsExpanded, accessRestriction,
-    ocsPlmn, ocsTrafficTotalStr, ocsTrafficBalanceStr, ocsPlanId, ocsPlanStatus, ocsRules,
+    ocsPlmn, ocsTrafficTotalStr, ocsTrafficBalanceStr, ocsVoiceTotalStr, ocsVoiceBalanceStr, ocsPlanId, ocsPlanStatus, ocsRules,
     slices, newlyAddedSliceIndex, expandedSlices
   } = state;
 
   const {
     setInputImsi, setMsisdn, loadFromProfile,
     setAuth4GData, setUsimType, setUeAmbr, setIsAccessRestrictionsExpanded, setAccessRestriction,
-    setOcsTrafficTotalStr, setOcsTrafficBalanceStr,
+    setOcsTrafficTotalStr, setOcsTrafficBalanceStr, setOcsVoiceTotalStr, setOcsVoiceBalanceStr,
     addSlice, handleSliceChange, removeSlice, setExpandedSlices
   } = actions;
   const totalTrafficInput = splitByteInput(ocsTrafficTotalStr);
   const balanceTrafficInput = splitByteInput(ocsTrafficBalanceStr, totalTrafficInput.unit);
+  const totalVoiceInput = splitSecondsInput(ocsVoiceTotalStr);
+  const balanceVoiceInput = splitSecondsInput(ocsVoiceBalanceStr, totalVoiceInput.unit);
 
   return (
     <div style={{ paddingBottom: '2rem', display: "flex", flexDirection: "column" }}>
@@ -312,6 +316,44 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
           <div>
             <label className="form-label">Plan Status</label>
             <input type="text" className="form-input" value={ocsPlanStatus} readOnly style={{ background: "var(--surface-hover)", fontFamily: "monospace" }} />
+          </div>
+          <div>
+            <label className="form-label">IMS Voice Quota</label>
+            <div className="input-composite">
+              <input
+                type="number"
+                min="0"
+                step="any"
+                value={totalVoiceInput.value}
+                onFocus={(e) => e.target.select()}
+                onChange={(e) => setOcsVoiceTotalStr(composeSecondsInput(e.target.value, totalVoiceInput.unit))}
+              />
+              <select
+                value={totalVoiceInput.unit}
+                onChange={(e) => setOcsVoiceTotalStr(composeSecondsInput(totalVoiceInput.value, e.target.value))}
+              >
+                {TIME_INPUT_UNITS.map((unit) => <option key={unit.value} value={unit.value}>{unit.label}</option>)}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="form-label">IMS Voice Balance</label>
+            <div className="input-composite">
+              <input
+                type="number"
+                min="0"
+                step="any"
+                value={balanceVoiceInput.value}
+                onFocus={(e) => e.target.select()}
+                onChange={(e) => setOcsVoiceBalanceStr(composeSecondsInput(e.target.value, balanceVoiceInput.unit))}
+              />
+              <select
+                value={balanceVoiceInput.unit}
+                onChange={(e) => setOcsVoiceBalanceStr(composeSecondsInput(balanceVoiceInput.value, e.target.value))}
+              >
+                {TIME_INPUT_UNITS.map((unit) => <option key={unit.value} value={unit.value}>{unit.label}</option>)}
+              </select>
+            </div>
           </div>
           <div style={{ gridColumn: "1 / -1" }}>
             <label className="form-label">APN Rating Rules</label>

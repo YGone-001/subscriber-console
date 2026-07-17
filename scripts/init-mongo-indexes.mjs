@@ -16,6 +16,8 @@ const DEFAULT_QUOTA_PER_GRANT = 10 * 1024 * 1024;
 const DEFAULT_VOLUME_THRESHOLD = 8 * 1024 * 1024;
 const DEFAULT_VALIDITY_TIME = 300;
 const DEFAULT_TOTAL_BALANCE = 10 * 1024 * 1024 * 1024;
+const DEFAULT_VOICE_TOTAL = 60 * 60;
+const DEFAULT_VOICE_QUOTA_PER_GRANT = 60;
 
 const client = new MongoClient(uri, {
   maxPoolSize: Number(process.env.MONGODB_MAX_POOL_SIZE || 10),
@@ -55,7 +57,7 @@ function defaultInternetRule() {
     rating_group: Long.fromNumber(1001),
     service_identifier: Long.fromNumber(1),
     charging_type: 'data_volume',
-    unit: 'octets',
+    unit: 'bytes',
     quota_per_grant: Long.fromNumber(DEFAULT_QUOTA_PER_GRANT),
     validity_time: DEFAULT_VALIDITY_TIME,
     volume_threshold: Long.fromNumber(DEFAULT_VOLUME_THRESHOLD),
@@ -66,16 +68,33 @@ function defaultInternetRule() {
 
 function defaultImsRule() {
   return {
-    rule_id: 'ims_rg2001_si2',
+    rule_id: 'ims_default',
     apn: 'ims',
-    rating_group: Long.fromNumber(2001),
-    service_identifier: Long.fromNumber(2),
+    rating_group: Long.ZERO,
+    service_identifier: Long.ZERO,
     charging_type: 'free',
-    unit: 'octets',
-    quota_per_grant: Long.fromNumber(DEFAULT_QUOTA_PER_GRANT),
+    unit: 'bytes',
+    quota_per_grant: Long.ZERO,
+    validity_time: 0,
+    volume_threshold: Long.ZERO,
+    priority: 200,
+    status: 'active',
+  };
+}
+
+function defaultVoiceRule() {
+  return {
+    rule_id: 'voice_rg3001_si1',
+    apn: 'ims',
+    rating_group: Long.fromNumber(3001),
+    service_identifier: Long.fromNumber(1),
+    charging_type: 'voice_time',
+    unit: 'seconds',
+    quota_per_grant: Long.fromNumber(DEFAULT_VOICE_QUOTA_PER_GRANT),
     validity_time: DEFAULT_VALIDITY_TIME,
-    volume_threshold: Long.fromNumber(DEFAULT_VOLUME_THRESHOLD),
-    priority: 100,
+    volume_threshold: Long.ZERO,
+    priority: 90,
+    status: 'active',
   };
 }
 
@@ -90,7 +109,7 @@ function tariffRuleFromRating(rating) {
     rating_group: Long.fromNumber(ratingGroupId),
     service_identifier: Long.fromNumber(serviceIdentifier),
     charging_type: asString(rating.charging_type, 'data_volume'),
-    unit: 'octets',
+    unit: asString(rating.unit, rating.charging_type === 'voice_time' ? 'seconds' : 'bytes'),
     quota_per_grant: Long.fromNumber(Number(rating.quota_per_grant ?? DEFAULT_QUOTA_PER_GRANT)),
     validity_time: Number(rating.validity_time ?? DEFAULT_VALIDITY_TIME),
     volume_threshold: Long.fromNumber(Number(rating.volume_threshold ?? DEFAULT_VOLUME_THRESHOLD)),
@@ -119,8 +138,13 @@ async function seedOcsTariffPlan(open5gsDb, appDb) {
     changed = true;
   }
 
-  if (!rules.some((rule) => rule.rule_id === 'ims_rg2001_si2')) {
+  if (!rules.some((rule) => rule.rule_id === 'ims_default')) {
     rules.push(defaultImsRule());
+    changed = true;
+  }
+
+  if (!rules.some((rule) => rule.rule_id === 'voice_rg3001_si1')) {
+    rules.push(defaultVoiceRule());
     changed = true;
   }
 
@@ -137,7 +161,7 @@ async function seedOcsTariffPlan(open5gsDb, appDb) {
       plan_id: DEFAULT_OCS_PLAN_ID,
       name: 'Default 10GB Data Plan',
       status: 'active',
-      unit: 'octets',
+      unit: 'bytes',
       quota_per_grant: Long.fromNumber(DEFAULT_QUOTA_PER_GRANT),
       validity_time: DEFAULT_VALIDITY_TIME,
       volume_threshold: Long.fromNumber(DEFAULT_VOLUME_THRESHOLD),
@@ -235,6 +259,10 @@ async function provisionExistingOcsSubscribers(open5gsDb) {
             data_used: Long.ZERO,
             data_reserved: Long.ZERO,
             data_available: Long.fromNumber(DEFAULT_TOTAL_BALANCE),
+            voice_total: Long.fromNumber(DEFAULT_VOICE_TOTAL),
+            voice_used: Long.ZERO,
+            voice_reserved: Long.ZERO,
+            voice_available: Long.fromNumber(DEFAULT_VOICE_TOTAL),
             version: Long.fromNumber(1),
             updated_at: now,
           },
@@ -247,6 +275,25 @@ async function provisionExistingOcsSubscribers(open5gsDb) {
   }
 
   await flush();
+  const voiceBackfill = await balances.updateMany(
+    {
+      $or: [
+        { voice_total: { $exists: false } },
+        { voice_used: { $exists: false } },
+        { voice_reserved: { $exists: false } },
+        { voice_available: { $exists: false } },
+      ],
+    },
+    [{
+      $set: {
+        voice_total: { $ifNull: ['$voice_total', Long.fromNumber(DEFAULT_VOICE_TOTAL)] },
+        voice_used: { $ifNull: ['$voice_used', Long.ZERO] },
+        voice_reserved: { $ifNull: ['$voice_reserved', Long.ZERO] },
+        voice_available: { $ifNull: ['$voice_available', Long.fromNumber(DEFAULT_VOICE_TOTAL)] },
+        updated_at: now,
+      },
+    }]
+  );
   maintenanceActions.push({
     database: open5gsDbName,
     collections: ['ocs_subscribers', 'ocs_balances'],
@@ -254,6 +301,7 @@ async function provisionExistingOcsSubscribers(open5gsDb) {
     subscribersScanned: scanned,
     ocsSubscribersInserted: ocsSubscriberInserted,
     balancesInserted: balanceInserted,
+    voiceBalancesBackfilled: voiceBackfill.modifiedCount,
   });
 }
 

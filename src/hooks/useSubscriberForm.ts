@@ -1,5 +1,5 @@
 import { useCallback, useState, useEffect } from "react";
-import { parseBytes, formatBytes } from "@/lib/unitParser";
+import { parseBytes, formatBytes, parseSeconds, formatSeconds } from "@/lib/unitParser";
 
 const resolvePlmnFromRecords = (records: any[], value: string) => {
   if (!value || value.length < 5) return null;
@@ -43,6 +43,8 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
   const [ocsPlmn, setOcsPlmn] = useState("45400");
   const [ocsTrafficTotalStr, setOcsTrafficTotalStr] = useState("10 GB");
   const [ocsTrafficBalanceStr, setOcsTrafficBalanceStr] = useState("10 GB");
+  const [ocsVoiceTotalStr, setOcsVoiceTotalStr] = useState("1h");
+  const [ocsVoiceBalanceStr, setOcsVoiceBalanceStr] = useState("1h");
 
   const [plmnDb, setPlmnDb] = useState<any[]>([]);
 
@@ -132,6 +134,9 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
           if (p.ocsDefaults.trafficTotal !== undefined) setOcsTrafficTotalStr(formatBytes(p.ocsDefaults.trafficTotal));
           else if (p.ocsDefaults.trafficBalance !== undefined) setOcsTrafficTotalStr(formatBytes(p.ocsDefaults.trafficBalance));
           if (p.ocsDefaults.trafficBalance !== undefined) setOcsTrafficBalanceStr(formatBytes(p.ocsDefaults.trafficBalance));
+          if (p.ocsDefaults.voiceTotal !== undefined) setOcsVoiceTotalStr(formatSeconds(Number(p.ocsDefaults.voiceTotal)));
+          else if (p.ocsDefaults.voiceBalance !== undefined) setOcsVoiceTotalStr(formatSeconds(Number(p.ocsDefaults.voiceBalance)));
+          if (p.ocsDefaults.voiceBalance !== undefined) setOcsVoiceBalanceStr(formatSeconds(Number(p.ocsDefaults.voiceBalance)));
         }
         const targetImsi = imsi || inputImsi;
         updatePlmnByImsi(targetImsi);
@@ -184,6 +189,8 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
              setOcsTrafficTotalStr(formatBytes(data.ocsTraffic.traffic_balance || 0));
           }
           if (data.ocsTraffic.traffic_balance !== undefined) setOcsTrafficBalanceStr(formatBytes(data.ocsTraffic.traffic_balance));
+          if (data.ocsTraffic.voice_total !== undefined) setOcsVoiceTotalStr(formatSeconds(Number(data.ocsTraffic.voice_total)));
+          if (data.ocsTraffic.voice_balance !== undefined) setOcsVoiceBalanceStr(formatSeconds(Number(data.ocsTraffic.voice_balance)));
         }
         if (data.ocsImsi) {
           if (data.ocsImsi.msisdn) setMsisdn(String(data.ocsImsi.msisdn));
@@ -261,7 +268,9 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
 
       const ocsTrafficPayload = {
         traffic_total: parseBytes(ocsTrafficTotalStr),
-        traffic_balance: parseBytes(ocsTrafficBalanceStr)
+        traffic_balance: parseBytes(ocsTrafficBalanceStr),
+        voice_total: parseSeconds(ocsVoiceTotalStr),
+        voice_balance: parseSeconds(ocsVoiceBalanceStr)
       };
 
       const payload: any = {
@@ -327,12 +336,12 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
       isEditing, isLoading, isSaving, error, newlyAddedSliceIndex, inputImsi, toastMessage,
       expandedSlices, isAccessRestrictionsExpanded, auth4GData, usimType, msisdn, ueAmbr, slices,
       accessRestriction, profileList, ratingList, ocsPlanId, ocsPlanStatus, ocsRules, ocsPlmn,
-      ocsTrafficTotalStr, ocsTrafficBalanceStr
+      ocsTrafficTotalStr, ocsTrafficBalanceStr, ocsVoiceTotalStr, ocsVoiceBalanceStr
     },
     actions: {
       setIsEditing, setInputImsi: handleInputImsiChange, setMsisdn, loadFromProfile, setAuth4GData,
       setUsimType, setUeAmbr, setIsAccessRestrictionsExpanded, setAccessRestriction, setOcsTrafficTotalStr,
-      setOcsTrafficBalanceStr, addSlice, handleSliceChange, removeSlice, setExpandedSlices, handleDelete,
+      setOcsTrafficBalanceStr, setOcsVoiceTotalStr, setOcsVoiceBalanceStr, addSlice, handleSliceChange, removeSlice, setExpandedSlices, handleDelete,
       handleSave, scrollTo
     }
   };

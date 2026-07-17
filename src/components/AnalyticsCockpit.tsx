@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { useTheme } from "./ThemeProvider";
 import { fetcher } from "@/lib/fetcher";
+import { formatSeconds } from "@/lib/unitParser";
 import { useI18n } from "./I18nProvider";
 
 const COLORS = ["#4e73df", "#1cc88a", "#36b9cc", "#f6c23e", "#e74a3b", "#858796"];
@@ -44,6 +45,7 @@ type DistributionPoint = {
 type TopConsumer = {
   imsi: string;
   balance: number;
+  voiceBalance: number;
 };
 
 type MetricsData = {
@@ -71,6 +73,10 @@ type KpiCardProps = {
   sparkline?: number[];
   ringValue?: number;
   tone?: "normal" | "warning" | "danger";
+};
+
+type TopConsumerTooltipPayload = {
+  payload?: TopConsumer;
 };
 
 function CountUpNumber({ value, decimals = 0, suffix = "" }: { value: number; decimals?: number; suffix?: string }) {
@@ -111,6 +117,37 @@ function CountUpNumber({ value, decimals = 0, suffix = "" }: { value: number; de
 
 function formatGb(bytes: number, decimals = 2) {
   return (bytes / BYTES_IN_GB).toFixed(decimals);
+}
+
+function TopConsumerTooltip({
+  active,
+  payload,
+  contentStyle,
+  t,
+}: {
+  active?: boolean;
+  payload?: TopConsumerTooltipPayload[];
+  contentStyle: React.CSSProperties;
+  t: (key: string, params?: Record<string, string | number>) => string;
+}) {
+  const consumer = payload?.[0]?.payload;
+  if (!active || !consumer) return null;
+
+  return (
+    <div style={{ ...contentStyle, padding: "0.75rem 0.85rem", minWidth: 210 }}>
+      <div style={{ fontFamily: "monospace", fontWeight: 700, marginBottom: "0.55rem" }}>{consumer.imsi}</div>
+      <div style={{ display: "grid", gap: "0.35rem", fontSize: "0.82rem" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem" }}>
+          <span>{t("dash_chart_top5_tooltip")}</span>
+          <strong>{formatGb(consumer.balance)} GB</strong>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem" }}>
+          <span>{t("dash_chart_top5_voice_tooltip")}</span>
+          <strong>{formatSeconds(consumer.voiceBalance)}</strong>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function computeHourlyBurnGb(points: number[]) {
@@ -391,8 +428,7 @@ export default function AnalyticsCockpit() {
                   />
                   <Tooltip
                     cursor={{ fill: theme === "dark" ? "rgba(255,255,255,0.04)" : "rgba(15,23,42,0.04)" }}
-                    contentStyle={tooltipStyle}
-                    formatter={(value: number) => [`${formatGb(value)} GB`, t("dash_chart_top5_tooltip")]}
+                    content={<TopConsumerTooltip contentStyle={tooltipStyle} t={t} />}
                   />
                   <Bar dataKey="balance" radius={[0, 6, 6, 0]} barSize={18}>
                     {top5.map((entry, index) => (

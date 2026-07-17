@@ -377,6 +377,7 @@ export const en: Record<string, string> = {
     dash_unit_hours: "Hours",
     dash_chart_top5_title: "Top 5 Traffic Consumers",
     dash_chart_top5_tooltip: "Balance",
+    dash_chart_top5_voice_tooltip: "Voice Balance",
     dash_chart_top5_empty: "Insufficient Traffic History",
     dash_chart_plmn_title: "PLMN Traffic Density",
     dash_chart_plmn_tooltip: "Total Allocated",

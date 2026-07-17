@@ -3,12 +3,14 @@ import assert from "node:assert/strict";
 
 import {
   composeByteInput,
+  composeSecondsInput,
   formatBytes,
   formatBytesAligned,
   formatSeconds,
   parseBytes,
   parseSeconds,
   splitByteInput,
+  splitSecondsInput,
 } from "../src/lib/unitParser.ts";
 
 test("parseBytes accepts binary units, decimals, commas, and invalid input", () => {
@@ -41,7 +43,11 @@ test("parseSeconds and formatSeconds round-trip common operator inputs", () => {
   assert.equal(parseSeconds("60m"), 3600);
   assert.equal(parseSeconds("1.5h"), 5400);
   assert.equal(parseSeconds("2d"), 172800);
+  assert.equal(parseSeconds(Number.NaN), 0);
   assert.equal(parseSeconds("bad"), 0);
   assert.equal(formatSeconds(3600), "1h");
   assert.equal(formatSeconds(90), "90s");
+  assert.deepEqual(splitSecondsInput("1.5h"), { value: "1.5", unit: "h" });
+  assert.deepEqual(splitSecondsInput(3600), { value: "1", unit: "h" });
+  assert.equal(composeSecondsInput("30", "m"), "30m");
 });

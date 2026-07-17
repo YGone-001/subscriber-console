@@ -36,6 +36,8 @@ export default function SubscriberModal({ imsi, onClose, onRefresh }: Subscriber
       ueAmbr={state.ueAmbr}
       ocsTrafficTotalStr={state.ocsTrafficTotalStr}
       ocsTrafficBalanceStr={state.ocsTrafficBalanceStr}
+      ocsVoiceTotalStr={state.ocsVoiceTotalStr}
+      ocsVoiceBalanceStr={state.ocsVoiceBalanceStr}
       ocsPlmn={state.ocsPlmn}
       ocsPlanId={state.ocsPlanId}
       ocsPlanStatus={state.ocsPlanStatus}
@@ -114,26 +116,41 @@ export default function SubscriberModal({ imsi, onClose, onRefresh }: Subscriber
                 <span className="workflow-step-label"><strong>{t("sub_step_id")}</strong><span>{t("sub_step_id_desc")}</span></span>
               </button>
             )}
-            <button className="workflow-step" onClick={() => scrollTo('sec-security')}>
-              <span className="workflow-step-index">{isEditing ? "2" : "1"}</span>
-              <span className="workflow-step-label"><strong>{t("sub_step_sec")}</strong><span>{t("sub_step_sec_desc")}</span></span>
-            </button>
-            <button className="workflow-step" onClick={() => scrollTo(isEditing ? 'sec-rating' : 'sec-ocs-view')}>
-              <span className="workflow-step-index">{isEditing ? "3" : "2"}</span>
-              <span className="workflow-step-label"><strong>{t("sub_step_bill")}</strong><span>{t("sub_step_bill_desc")}</span></span>
-            </button>
-            <button className="workflow-step" onClick={() => scrollTo('sec-network')}>
-              <span className="workflow-step-index">{isEditing ? "4" : "3"}</span>
-              <span className="workflow-step-label"><strong>{t("sub_step_net")}</strong><span>{t("sub_step_net_desc")}</span></span>
-            </button>
-            <button className="workflow-step" onClick={() => scrollTo('sec-access-restrictions')}>
-              <span className="workflow-step-index">{isEditing ? "5" : "4"}</span>
-              <span className="workflow-step-label"><strong>{t("sub_step_acc")}</strong><span>{t("sub_step_acc_desc")}</span></span>
-            </button>
-            <button className="workflow-step" onClick={() => scrollTo('sec-slices')}>
-              <span className="workflow-step-index">{isEditing ? "6" : "5"}</span>
-              <span className="workflow-step-label"><strong>{t("sub_step_slice")}</strong><span>{t("sub_step_slice_desc")}</span></span>
-            </button>
+            {isEditing ? (
+              <>
+                <button className="workflow-step" onClick={() => scrollTo('sec-security')}>
+                  <span className="workflow-step-index">2</span>
+                  <span className="workflow-step-label"><strong>{t("sub_step_sec")}</strong><span>{t("sub_step_sec_desc")}</span></span>
+                </button>
+                <button className="workflow-step" onClick={() => scrollTo('sec-rating')}>
+                  <span className="workflow-step-index">3</span>
+                  <span className="workflow-step-label"><strong>{t("sub_step_bill")}</strong><span>{t("sub_step_bill_desc")}</span></span>
+                </button>
+                <button className="workflow-step" onClick={() => scrollTo('sec-network')}>
+                  <span className="workflow-step-index">4</span>
+                  <span className="workflow-step-label"><strong>{t("sub_step_net")}</strong><span>{t("sub_step_net_desc")}</span></span>
+                </button>
+                <button className="workflow-step" onClick={() => scrollTo('sec-access-restrictions')}>
+                  <span className="workflow-step-index">5</span>
+                  <span className="workflow-step-label"><strong>{t("sub_step_acc")}</strong><span>{t("sub_step_acc_desc")}</span></span>
+                </button>
+                <button className="workflow-step" onClick={() => scrollTo('sec-slices')}>
+                  <span className="workflow-step-index">6</span>
+                  <span className="workflow-step-label"><strong>{t("sub_step_slice")}</strong><span>{t("sub_step_slice_desc")}</span></span>
+                </button>
+              </>
+            ) : (
+              <>
+                <button className="workflow-step" onClick={() => scrollTo('sec-subscription-overview')}>
+                  <span className="workflow-step-index">1</span>
+                  <span className="workflow-step-label"><strong>Subscription</strong><span>Package, balance, services</span></span>
+                </button>
+                <button className="workflow-step" onClick={() => scrollTo('sec-technical-details')}>
+                  <span className="workflow-step-index">2</span>
+                  <span className="workflow-step-label"><strong>Technical</strong><span>Auth, rating, slice details</span></span>
+                </button>
+              </>
+            )}
           </div>
 
           <div className="workflow-content">

@@ -377,6 +377,7 @@ export const zh: Record<string, string> = {
     dash_unit_hours: "小时",
     dash_chart_top5_title: "Top 5 流量消耗用户",
     dash_chart_top5_tooltip: "账户余额",
+    dash_chart_top5_voice_tooltip: "语音余额",
     dash_chart_top5_empty: "无足够的流量历史记录",
     dash_chart_plmn_title: "PLMN 流量分布密度",
     dash_chart_plmn_tooltip: "总分配量",

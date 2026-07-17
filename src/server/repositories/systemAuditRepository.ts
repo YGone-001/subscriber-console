@@ -28,6 +28,10 @@ function ocsBalancesCollection() {
     data_used?: Long | number;
     data_reserved?: Long | number;
     data_available?: Long | number;
+    voice_total?: Long | number;
+    voice_used?: Long | number;
+    voice_reserved?: Long | number;
+    voice_available?: Long | number;
   }>(mongoCollections.ocsBalances);
 }
 
@@ -93,7 +97,25 @@ export async function scanSubscriberDocuments(cursor: unknown, phase: unknown) {
       const reserved = numericValue(balance.data_reserved);
       const available = numericValue(balance.data_available);
       if (total !== used + reserved + available) {
-        anomalies.push({ imsi: row.imsi, type: 'balance_mismatch', details: 'OCS balance invariant mismatch' });
+        anomalies.push({ imsi: row.imsi, type: 'balance_mismatch', details: 'OCS data balance invariant mismatch' });
+      }
+
+      if (
+        balance.voice_total === undefined ||
+        balance.voice_used === undefined ||
+        balance.voice_reserved === undefined ||
+        balance.voice_available === undefined
+      ) {
+        anomalies.push({ imsi: row.imsi, type: 'balance_mismatch', details: 'OCS voice balance fields missing' });
+        continue;
+      }
+
+      const voiceTotal = numericValue(balance.voice_total);
+      const voiceUsed = numericValue(balance.voice_used);
+      const voiceReserved = numericValue(balance.voice_reserved);
+      const voiceAvailable = numericValue(balance.voice_available);
+      if (voiceTotal !== voiceUsed + voiceReserved + voiceAvailable) {
+        anomalies.push({ imsi: row.imsi, type: 'balance_mismatch', details: 'OCS voice balance invariant mismatch' });
       }
     }
 

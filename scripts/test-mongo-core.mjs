@@ -261,7 +261,7 @@ async function testProfilesAndOcsTariffs(db, appDb) {
       rating_group: Long.fromNumber(1001),
       service_identifier: Long.fromNumber(1),
       charging_type: 'data_volume',
-      unit: 'octets',
+      unit: 'bytes',
       quota_per_grant: Long.fromNumber(10485760),
       validity_time: 300,
       volume_threshold: Long.fromNumber(8388608),
@@ -270,6 +270,30 @@ async function testProfilesAndOcsTariffs(db, appDb) {
       currency: 'USD',
       rates: '0.01',
       rates_type: 2,
+    }, {
+      rule_id: 'ims_default',
+      apn: 'ims',
+      rating_group: Long.ZERO,
+      service_identifier: Long.ZERO,
+      charging_type: 'free',
+      unit: 'bytes',
+      quota_per_grant: Long.ZERO,
+      validity_time: 0,
+      volume_threshold: Long.ZERO,
+      priority: 200,
+      status: 'active',
+    }, {
+      rule_id: 'voice_rg3001_si1',
+      apn: 'ims',
+      rating_group: Long.fromNumber(3001),
+      service_identifier: Long.fromNumber(1),
+      charging_type: 'voice_time',
+      unit: 'seconds',
+      quota_per_grant: Long.fromNumber(60),
+      validity_time: 300,
+      volume_threshold: Long.ZERO,
+      priority: 90,
+      status: 'active',
     }],
     created_at: now,
     updated_at: now,
@@ -302,6 +326,10 @@ async function testOcsProvisioning(db) {
     data_used: Long.fromNumber(0),
     data_reserved: Long.fromNumber(0),
     data_available: Long.fromNumber(10737418240),
+    voice_total: Long.fromNumber(3600),
+    voice_used: Long.fromNumber(0),
+    voice_reserved: Long.fromNumber(0),
+    voice_available: Long.fromNumber(3600),
     version: Long.fromNumber(1),
     updated_at: now,
   });
@@ -310,7 +338,12 @@ async function testOcsProvisioning(db) {
   const used = numericValue(balance.data_used);
   const reserved = numericValue(balance.data_reserved);
   const available = numericValue(balance.data_available);
+  const voiceTotal = numericValue(balance.voice_total);
+  const voiceUsed = numericValue(balance.voice_used);
+  const voiceReserved = numericValue(balance.voice_reserved);
+  const voiceAvailable = numericValue(balance.voice_available);
   assert(total === used + reserved + available, 'OCS balance invariant mismatch');
+  assert(voiceTotal === voiceUsed + voiceReserved + voiceAvailable, 'OCS voice balance invariant mismatch');
 }
 
 async function testUsersAuditAlertsAndRuntimeCollections(appDb) {

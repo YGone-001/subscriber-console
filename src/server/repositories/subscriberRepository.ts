@@ -480,6 +480,8 @@ export async function updateSubscriberFromLegacy(
     msisdn: msisdnFromLegacyPayload(payload),
     total: (payload.ocsTraffic as Record<string, unknown> | undefined)?.traffic_total,
     available: (payload.ocsTraffic as Record<string, unknown> | undefined)?.traffic_balance,
+    voiceTotal: (payload.ocsTraffic as Record<string, unknown> | undefined)?.voice_total,
+    voiceAvailable: (payload.ocsTraffic as Record<string, unknown> | undefined)?.voice_balance,
   });
 
   return next;
