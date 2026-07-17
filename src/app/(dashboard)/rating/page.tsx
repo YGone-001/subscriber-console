@@ -46,6 +46,11 @@ type RatingForm = {
   volume_threshold: string;
 };
 
+type Notice = {
+  type: "error" | "success";
+  text: string;
+};
+
 const SERVICE_FILTERS: ServiceKey[] = ["all", "data", "voice", "ims"];
 
 function defaultsFor(type: ChargingType): Omit<RatingForm, "rating_group_id" | "currency" | "rates"> {
@@ -127,6 +132,10 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
+function isWholeNumber(value: string): boolean {
+  return /^\d+$/.test(String(value || "").trim());
+}
+
 export default function RatingPage() {
   const { t } = useI18n();
   const { data, isLoading, mutate } = useSWR("/api/ratings", fetcher);
@@ -138,6 +147,8 @@ export default function RatingPage() {
   const [newForm, setNewForm] = useState<RatingForm>(makeDefaultForm());
   const [filter, setFilter] = useState<ServiceKey>("all");
   const [query, setQuery] = useState("");
+  const [notice, setNotice] = useState<Notice | null>(null);
+  const [savingKey, setSavingKey] = useState<string | null>(null);
 
   const rateTypes = useMemo(() => [
     { label: t("rating_type_time"), val: 1 },
@@ -185,8 +196,30 @@ export default function RatingPage() {
     ims: enrichedRatings.filter((rating) => rating.serviceKey === "ims").length,
   }), [enrichedRatings]);
 
+  const validateRatingForm = (form: RatingForm, isNew: boolean): string | null => {
+    if (isNew && !isWholeNumber(form.rating_group_id)) return t("rating_err_id_required");
+    if (!/^[A-Za-z0-9_.-]{1,63}$/.test(form.apn.trim())) return t("rating_err_apn");
+    if (!isWholeNumber(form.service_identifier)) return t("rating_err_si");
+    if (form.rates.trim() === "" || !Number.isFinite(Number(form.rates)) || Number(form.rates) < 0) return t("rating_err_rate");
+    if (!isWholeNumber(form.quota_per_grant)) return t("rating_err_grant");
+    if (!isWholeNumber(form.validity_time)) return t("rating_err_validity");
+    if (!isWholeNumber(form.volume_threshold)) return t("rating_err_threshold");
+    return null;
+  };
+
+  const readError = async (res: Response, fallback: string) => {
+    const data = await res.json().catch(() => ({}));
+    return data.error || fallback;
+  };
+
   const handleCreate = async () => {
-    if (!newForm.rating_group_id) return;
+    const validationError = validateRatingForm(newForm, true);
+    if (validationError) {
+      setNotice({ type: "error", text: validationError });
+      return;
+    }
+    setSavingKey("new");
+    setNotice(null);
     try {
       const res = await fetch("/api/ratings", {
         method: "POST",
@@ -197,16 +230,26 @@ export default function RatingPage() {
         setIsAdding(false);
         setNewForm(makeDefaultForm());
         mutate();
+        setNotice({ type: "success", text: t("rating_msg_created") });
       } else {
-        const err = await res.json();
-        alert(err.error || t("rating_err_create"));
+        setNotice({ type: "error", text: await readError(res, t("rating_err_create")) });
       }
     } catch (error) {
       console.error("Create failed", error);
+      setNotice({ type: "error", text: t("rating_err_create") });
+    } finally {
+      setSavingKey(null);
     }
   };
 
   const handleUpdate = async (id: number) => {
+    const validationError = validateRatingForm(editForm, false);
+    if (validationError) {
+      setNotice({ type: "error", text: validationError });
+      return;
+    }
+    setSavingKey(String(id));
+    setNotice(null);
     try {
       const res = await fetch(`/api/ratings/${id}`, {
         method: "PUT",
@@ -216,23 +259,40 @@ export default function RatingPage() {
       if (res.ok) {
         setEditingId(null);
         mutate();
+        setNotice({ type: "success", text: t("rating_msg_updated") });
+      } else {
+        setNotice({ type: "error", text: await readError(res, t("rating_err_update")) });
       }
     } catch (error) {
       console.error("Update failed", error);
+      setNotice({ type: "error", text: t("rating_err_update") });
+    } finally {
+      setSavingKey(null);
     }
   };
 
   const handleDelete = async (id: number) => {
     if (!confirm(t("rating_del_confirm").replace("{id}", id.toString()))) return;
+    setSavingKey(`delete:${id}`);
+    setNotice(null);
     try {
       const res = await fetch(`/api/ratings/${id}`, { method: "DELETE" });
-      if (res.ok) mutate();
+      if (res.ok) {
+        mutate();
+        setNotice({ type: "success", text: t("rating_msg_deleted") });
+      } else {
+        setNotice({ type: "error", text: await readError(res, t("rating_err_delete")) });
+      }
     } catch (error) {
       console.error("Delete failed", error);
+      setNotice({ type: "error", text: t("rating_err_delete") });
+    } finally {
+      setSavingKey(null);
     }
   };
 
   const startEdit = (rating: RatingPolicy) => {
+    setNotice(null);
     const chargingType = (rating.charging_type || "data_volume") as ChargingType;
     setEditingId(rating.rating_group_id);
     setEditForm({
@@ -249,7 +309,12 @@ export default function RatingPage() {
     });
   };
 
-  const renderFormCells = (form: RatingForm, setForm: React.Dispatch<React.SetStateAction<RatingForm>>, isNew: boolean, ratingGroupId?: number) => (
+  const renderFormCells = (form: RatingForm, setForm: React.Dispatch<React.SetStateAction<RatingForm>>, isNew: boolean, ratingGroupId?: number) => {
+    const validationMessage = validateRatingForm(form, isNew);
+    const formKey = isNew ? "new" : String(ratingGroupId || "");
+    const isSaving = savingKey === formKey;
+
+    return (
     <td colSpan={canEditTemplates ? 6 : 5} style={{ padding: "1rem 1.5rem" }}>
       <div style={{ display: "grid", gridTemplateColumns: "minmax(180px, 0.7fr) minmax(220px, 1fr) minmax(260px, 1.25fr) auto", gap: "1rem", alignItems: "end" }}>
         <div style={{ display: "grid", gridTemplateColumns: isNew ? "1fr" : "auto", gap: "0.7rem" }}>
@@ -290,8 +355,8 @@ export default function RatingPage() {
           </Field>
         </div>
         <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
-          <button className="btn-icon" onClick={isNew ? handleCreate : () => ratingGroupId && handleUpdate(ratingGroupId)} title={t("save")}><Save size={18} color="var(--success)" /></button>
-          <button className="btn-icon" onClick={() => isNew ? setIsAdding(false) : setEditingId(null)} title={t("cancel")}><X size={18} color="var(--text-muted)" /></button>
+          <button className="btn-icon" onClick={isNew ? handleCreate : () => ratingGroupId && handleUpdate(ratingGroupId)} title={t("save")} disabled={!!validationMessage || isSaving}><Save size={18} color={validationMessage ? "var(--text-muted)" : "var(--success)"} /></button>
+          <button className="btn-icon" onClick={() => isNew ? setIsAdding(false) : setEditingId(null)} title={t("cancel")} disabled={isSaving}><X size={18} color="var(--text-muted)" /></button>
         </div>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(130px, 1fr))", gap: "0.8rem", marginTop: "0.9rem" }}>
@@ -308,8 +373,14 @@ export default function RatingPage() {
           <input type="number" className="form-input" value={form.volume_threshold} onChange={(event) => setForm((current) => ({ ...current, volume_threshold: event.target.value }))} />
         </Field>
       </div>
+      {validationMessage && (
+        <div style={{ marginTop: "0.8rem", color: "var(--danger)", fontSize: "0.82rem", fontWeight: 700 }}>
+          {validationMessage}
+        </div>
+      )}
     </td>
-  );
+    );
+  };
 
   return (
     <div className="container animate-fade-in" style={{ padding: "3rem", paddingBottom: "100px" }}>
@@ -324,6 +395,25 @@ export default function RatingPage() {
           </button>
         )}
       </div>
+
+      {notice && (
+        <div style={{
+          marginBottom: "1rem",
+          border: `1px solid ${notice.type === "error" ? "rgba(239, 68, 68, 0.35)" : "rgba(16, 185, 129, 0.35)"}`,
+          background: notice.type === "error" ? "rgba(239, 68, 68, 0.08)" : "rgba(16, 185, 129, 0.08)",
+          color: notice.type === "error" ? "var(--danger)" : "var(--success)",
+          borderRadius: 8,
+          padding: "0.75rem 1rem",
+          fontWeight: 700,
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: "1rem",
+        }}>
+          <span>{notice.text}</span>
+          <button className="btn-icon" onClick={() => setNotice(null)} title={t("close")}><X size={16} /></button>
+        </div>
+      )}
 
       <section style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(220px, 1fr))", gap: "1rem", marginBottom: "1.5rem" }}>
         {(["data", "voice", "ims"] as const).map((key) => {
@@ -446,7 +536,7 @@ export default function RatingPage() {
                           <td style={{ padding: "1.15rem 1.5rem", textAlign: "right" }}>
                             <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
                               <button className="btn-icon" onClick={() => startEdit(rating)} title={t("edit")}><Pencil size={16} color="var(--primary)" /></button>
-                              <button className="btn-icon" onClick={() => handleDelete(rating.rating_group_id)} title={t("delete")}><Trash2 size={16} color="var(--danger)" /></button>
+                              <button className="btn-icon" onClick={() => handleDelete(rating.rating_group_id)} title={t("delete")} disabled={savingKey === `delete:${rating.rating_group_id}`}><Trash2 size={16} color="var(--danger)" /></button>
                             </div>
                           </td>
                         )}
