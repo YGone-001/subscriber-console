@@ -160,9 +160,30 @@ function ratesTypeToChargingType(value: unknown): string {
   const type = Number(value);
   if (type === 2) return 'data_volume';
   if (type === 4) return 'data_volume';
-  if (type === 1) return 'time';
+  if (type === 1) return 'voice_time';
   if (type === 3) return 'event';
   return 'data_volume';
+}
+
+function defaultGrantForChargingType(chargingType: string): number {
+  if (chargingType === 'voice_time') return DEFAULT_VOICE_QUOTA_PER_GRANT;
+  if (chargingType === 'free') return 0;
+  return DEFAULT_QUOTA_PER_GRANT;
+}
+
+function defaultThresholdForChargingType(chargingType: string): number {
+  if (chargingType === 'voice_time' || chargingType === 'free') return 0;
+  return DEFAULT_VOLUME_THRESHOLD;
+}
+
+function defaultValidityForChargingType(chargingType: string): number {
+  if (chargingType === 'free') return 0;
+  return DEFAULT_VALIDITY_TIME;
+}
+
+function unitForChargingType(chargingType: string): string {
+  if (chargingType === 'voice_time') return 'seconds';
+  return 'bytes';
 }
 
 function defaultInternetRule(): OcsTariffRule {
@@ -314,6 +335,7 @@ function makeRule(input: {
   const apn = asString(input.apn, 'internet');
   const serviceIdentifier = Number(input.service_identifier ?? 1);
   const chargingType = asString(input.charging_type, ratesTypeToChargingType(input.rates_type));
+  const unit = unitForChargingType(chargingType);
 
   return {
     rule_id: `${apn}_rg${ratingGroupId}_si${serviceIdentifier}`,
@@ -321,10 +343,10 @@ function makeRule(input: {
     rating_group: Long.fromNumber(ratingGroupId),
     service_identifier: Long.fromNumber(serviceIdentifier),
     charging_type: chargingType,
-    unit: chargingType === 'voice_time' ? 'seconds' : 'bytes',
-    quota_per_grant: toLong(input.quota_per_grant, DEFAULT_QUOTA_PER_GRANT),
-    validity_time: Number(input.validity_time ?? DEFAULT_VALIDITY_TIME),
-    volume_threshold: toLong(input.volume_threshold, DEFAULT_VOLUME_THRESHOLD),
+    unit,
+    quota_per_grant: toLong(input.quota_per_grant, defaultGrantForChargingType(chargingType)),
+    validity_time: Number(input.validity_time ?? defaultValidityForChargingType(chargingType)),
+    volume_threshold: toLong(input.volume_threshold, defaultThresholdForChargingType(chargingType)),
     priority: Number(input.priority ?? 100),
     status: asString(input.status, 'active'),
     currency: asString(input.currency, 'USD'),
