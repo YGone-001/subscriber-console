@@ -34,6 +34,9 @@ export default function SubscriberModal({ imsi, onClose, onRefresh }: Subscriber
       auth4GData={state.auth4GData}
       usimType={state.usimType}
       ueAmbr={state.ueAmbr}
+      imsi={imsi || state.inputImsi}
+      msisdn={state.msisdn}
+      accessRestriction={state.accessRestriction}
       ocsTrafficTotalStr={state.ocsTrafficTotalStr}
       ocsTrafficBalanceStr={state.ocsTrafficBalanceStr}
       ocsVoiceTotalStr={state.ocsVoiceTotalStr}
@@ -144,11 +147,11 @@ export default function SubscriberModal({ imsi, onClose, onRefresh }: Subscriber
               <>
                 <button className="workflow-step" onClick={() => scrollTo('sec-subscription-overview')}>
                   <span className="workflow-step-index">1</span>
-                  <span className="workflow-step-label"><strong>Subscription</strong><span>Package, balance, services</span></span>
+                  <span className="workflow-step-label"><strong>{t("sub_360_nav")}</strong><span>{t("sub_360_nav_desc")}</span></span>
                 </button>
                 <button className="workflow-step" onClick={() => scrollTo('sec-technical-details')}>
                   <span className="workflow-step-index">2</span>
-                  <span className="workflow-step-label"><strong>Technical</strong><span>Auth, rating, slice details</span></span>
+                  <span className="workflow-step-label"><strong>{t("sub_technical_nav")}</strong><span>{t("sub_technical_nav_desc")}</span></span>
                 </button>
               </>
             )}

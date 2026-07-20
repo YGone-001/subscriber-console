@@ -1,13 +1,17 @@
-import { BadgeCheck, Gauge, KeyRound, Network, PhoneCall, Server, Signal, Wifi, ChevronDown, ChevronUp } from "lucide-react";
+import { AlertTriangle, BadgeCheck, CheckCircle2, Gauge, KeyRound, ListChecks, Network, PhoneCall, Route, Server, ShieldCheck, Signal, Wifi, ChevronDown, ChevronUp } from "lucide-react";
 import RatingRuleLinkPanel from "./RatingRuleLinkPanel";
 import { Pill, MaskedValue, AMBR_UNITS, getAmbrString, typeLabel } from "./utils";
 import type { Ambr, Auth4GData, Slice } from "@/types/subscriber";
+import { parseBytes, parseSeconds } from "@/lib/unitParser";
 
 interface SubscriberViewModeProps {
   t: any;
   auth4GData: Auth4GData;
   usimType: "opc" | "op";
   ueAmbr: Ambr;
+  imsi: string;
+  msisdn: string;
+  accessRestriction: number;
   ocsTrafficTotalStr: string;
   ocsTrafficBalanceStr: string;
   ocsVoiceTotalStr: string;
@@ -92,11 +96,37 @@ function DetailPanel({ id, icon, title, children, defaultOpen = false }: { id: s
   );
 }
 
+function HealthPill({ tone, children }: { tone: "ok" | "warn" | "danger"; children: React.ReactNode }) {
+  const color = tone === "ok" ? "var(--success)" : tone === "warn" ? "var(--warning)" : "var(--danger)";
+  return (
+    <span style={{
+      display: "inline-flex",
+      alignItems: "center",
+      gap: "0.35rem",
+      minHeight: 28,
+      padding: "0.3rem 0.55rem",
+      borderRadius: "999px",
+      border: `1px solid color-mix(in srgb, ${color} 36%, var(--surface-border))`,
+      background: `color-mix(in srgb, ${color} 9%, var(--surface))`,
+      color,
+      fontSize: "0.76rem",
+      fontWeight: 800,
+      whiteSpace: "nowrap",
+    }}>
+      {tone === "ok" ? <CheckCircle2 size={13} /> : <AlertTriangle size={13} />}
+      {children}
+    </span>
+  );
+}
+
 export default function SubscriberViewMode({
   t,
   auth4GData,
   usimType,
   ueAmbr,
+  imsi,
+  msisdn,
+  accessRestriction,
   ocsTrafficTotalStr,
   ocsTrafficBalanceStr,
   ocsVoiceTotalStr,
@@ -122,6 +152,39 @@ export default function SubscriberViewMode({
       ? slice.session_list.reduce((sum, session: any) => sum + (Array.isArray(session.pcc_rule) ? session.pcc_rule.length : 0), 0)
       : 0), 0)
     : 0;
+  const trafficTotal = parseBytes(ocsTrafficTotalStr);
+  const trafficBalance = parseBytes(ocsTrafficBalanceStr);
+  const voiceTotal = parseSeconds(ocsVoiceTotalStr);
+  const voiceBalance = parseSeconds(ocsVoiceBalanceStr);
+  const trafficPercent = trafficTotal > 0 ? Math.max(0, Math.min(100, (trafficBalance / trafficTotal) * 100)) : 0;
+  const voicePercent = voiceTotal > 0 ? Math.max(0, Math.min(100, (voiceBalance / voiceTotal) * 100)) : 0;
+  const hasPlan = Boolean(ocsPlanId);
+  const isSuspended = ocsPlanStatus && ocsPlanStatus !== "active";
+  const hasRestriction = Number(accessRestriction || 0) !== 0 && Number(accessRestriction || 0) !== 32;
+  const healthScore = Math.max(0, Math.min(100,
+    100
+    - (hasPlan ? 0 : 18)
+    - (hasDataRule ? 0 : 14)
+    - (hasVoiceRule ? 0 : 12)
+    - (hasImsRule ? 0 : 10)
+    - (sliceCount > 0 ? 0 : 12)
+    - (trafficPercent < 15 ? 16 : trafficPercent < 30 ? 8 : 0)
+    - (voicePercent < 15 ? 10 : voicePercent < 30 ? 5 : 0)
+    - (isSuspended ? 14 : 0)
+    - (hasRestriction ? 8 : 0)
+  ));
+  const healthTone = healthScore >= 86 ? "ok" : healthScore >= 68 ? "warn" : "danger";
+  const focusItems = [
+    !hasPlan ? t("sub_360_focus_plan") : "",
+    !hasDataRule ? t("sub_360_focus_data_rule") : "",
+    !hasVoiceRule ? t("sub_360_focus_voice_rule") : "",
+    !hasImsRule ? t("sub_360_focus_ims_rule") : "",
+    sliceCount === 0 ? t("sub_360_focus_slice") : "",
+    trafficPercent < 30 ? t("sub_360_focus_traffic") : "",
+    voicePercent < 30 ? t("sub_360_focus_voice") : "",
+    isSuspended ? t("sub_360_focus_status") : "",
+    hasRestriction ? t("sub_360_focus_access") : "",
+  ].filter(Boolean).slice(0, 4);
 
   return (
     <div className="animate-fade-in" style={{ paddingBottom: '2rem' }}>
@@ -129,18 +192,64 @@ export default function SubscriberViewMode({
       <section className="dash-card" id="sec-subscription-overview">
         <div className="dash-card-header">
           <BadgeCheck size={20} color="var(--primary)" />
-          <h3 style={{ fontSize: "1.1rem", margin: 0, color: "var(--text-main)", fontWeight: 700 }}>Subscription Overview</h3>
+          <h3 style={{ fontSize: "1.1rem", margin: 0, color: "var(--text-main)", fontWeight: 700 }}>{t("sub_360_title")}</h3>
         </div>
         <div className="dash-card-body" style={{ display: "grid", gap: "1rem" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(220px, 0.7fr) minmax(280px, 1.3fr)", gap: "1rem" }}>
+            <div style={{ border: "1px solid var(--surface-border)", borderRadius: "8px", padding: "1rem", background: "var(--header-bg)", display: "grid", gap: "0.8rem" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem" }}>
+                <div>
+                  <div style={{ color: "var(--text-muted)", fontSize: "0.76rem", fontWeight: 800, textTransform: "uppercase", letterSpacing: 0 }}>{t("sub_360_health")}</div>
+                  <div style={{ color: "var(--text-main)", fontSize: "2rem", fontWeight: 900, lineHeight: 1 }}>{healthScore}</div>
+                </div>
+                <HealthPill tone={healthTone}>{t(`sub_360_health_${healthTone}`)}</HealthPill>
+              </div>
+              <div style={{ height: 8, borderRadius: 999, background: "var(--surface-border)", overflow: "hidden" }}>
+                <div style={{ width: `${healthScore}%`, height: "100%", background: healthTone === "ok" ? "var(--success)" : healthTone === "warn" ? "var(--warning)" : "var(--danger)" }} />
+              </div>
+              <div style={{ display: "grid", gap: "0.45rem", color: "var(--text-secondary)", fontSize: "0.82rem" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem" }}><span>IMSI</span><strong style={{ color: "var(--text-main)", fontFamily: "monospace" }}>{imsi || "N/A"}</strong></div>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem" }}><span>MSISDN</span><strong style={{ color: "var(--text-main)", fontFamily: "monospace" }}>{msisdn || "N/A"}</strong></div>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem" }}><span>{t("sub_360_access")}</span><strong style={{ color: hasRestriction ? "var(--warning)" : "var(--success)" }}>{hasRestriction ? accessRestriction : t("sub_360_access_open")}</strong></div>
+              </div>
+            </div>
+
+            <div style={{ border: "1px solid var(--surface-border)", borderRadius: "8px", padding: "1rem", background: "var(--header-bg)", display: "grid", gap: "0.9rem" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.55rem", color: "var(--text-main)", fontWeight: 800 }}>
+                <ListChecks size={18} color="var(--primary)" />
+                {t("sub_360_next_actions")}
+              </div>
+              {focusItems.length === 0 ? (
+                <div style={{ display: "flex", alignItems: "center", gap: "0.55rem", color: "var(--success)", fontWeight: 800, minHeight: 72 }}>
+                  <ShieldCheck size={18} /> {t("sub_360_no_action")}
+                </div>
+              ) : (
+                <div style={{ display: "grid", gap: "0.55rem" }}>
+                  {focusItems.map((item, index) => (
+                    <div key={item} style={{ display: "grid", gridTemplateColumns: "auto minmax(0, 1fr)", gap: "0.55rem", alignItems: "center", color: "var(--text-secondary)", fontSize: "0.86rem" }}>
+                      <span style={{ width: 24, height: 24, borderRadius: "999px", display: "grid", placeItems: "center", background: "var(--surface-hover)", color: "var(--primary)", fontWeight: 900, fontSize: "0.75rem" }}>{index + 1}</span>
+                      <span>{item}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "0.65rem", paddingTop: "0.65rem", borderTop: "1px solid var(--surface-border)" }}>
+                <SummaryMetric label={t("sub_360_data_remaining")} value={`${trafficPercent.toFixed(0)}%`} accent={trafficPercent >= 30} />
+                <SummaryMetric label={t("sub_360_voice_remaining")} value={`${voicePercent.toFixed(0)}%`} accent={voicePercent >= 30} />
+                <SummaryMetric label={t("sub_360_rule_coverage")} value={`${[hasDataRule, hasVoiceRule, hasImsRule].filter(Boolean).length}/3`} accent={hasDataRule && hasVoiceRule && hasImsRule} />
+              </div>
+            </div>
+          </div>
+
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: "1rem" }}>
             <div style={{ border: "1px solid var(--surface-border)", borderRadius: "8px", padding: "1rem", background: "var(--header-bg)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "0.55rem", marginBottom: "0.9rem", color: "var(--text-main)", fontWeight: 800 }}>
                 <Gauge size={18} color="var(--primary)" />
-                Package
+                {t("sub_360_package")}
               </div>
               <div style={{ display: "grid", gap: "0.85rem" }}>
-                <SummaryMetric label="Tariff Plan" value={ocsPlanId || "None"} accent />
-                <SummaryMetric label="Plan Status" value={ocsPlanStatus || "unknown"} />
+                <SummaryMetric label={t("sub_360_tariff_plan")} value={ocsPlanId || t("none")} accent />
+                <SummaryMetric label={t("sub_360_plan_status")} value={ocsPlanStatus || "unknown"} />
                 <SummaryMetric label="PLMN" value={ocsPlmn || "N/A"} />
               </div>
             </div>
@@ -148,42 +257,42 @@ export default function SubscriberViewMode({
             <div style={{ border: "1px solid var(--surface-border)", borderRadius: "8px", padding: "1rem", background: "var(--header-bg)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "0.55rem", marginBottom: "0.9rem", color: "var(--text-main)", fontWeight: 800 }}>
                 <Network size={18} color="var(--primary)" />
-                Data Balance
+                {t("sub_360_data_balance")}
               </div>
               <div style={{ display: "grid", gap: "0.85rem" }}>
-                <SummaryMetric label="Total Quota" value={ocsTrafficTotalStr} />
-                <SummaryMetric label="Available" value={ocsTrafficBalanceStr} accent />
+                <SummaryMetric label={t("sub_360_total_quota")} value={ocsTrafficTotalStr} />
+                <SummaryMetric label={t("sub_360_available")} value={ocsTrafficBalanceStr} accent />
               </div>
             </div>
 
             <div style={{ border: "1px solid var(--surface-border)", borderRadius: "8px", padding: "1rem", background: "var(--header-bg)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "0.55rem", marginBottom: "0.9rem", color: "var(--text-main)", fontWeight: 800 }}>
                 <PhoneCall size={18} color="var(--primary)" />
-                IMS Voice
+                {t("sub_360_ims_voice")}
               </div>
               <div style={{ display: "grid", gap: "0.85rem" }}>
-                <SummaryMetric label="Total Duration" value={ocsVoiceTotalStr} />
-                <SummaryMetric label="Available" value={ocsVoiceBalanceStr} accent />
+                <SummaryMetric label={t("sub_360_total_duration")} value={ocsVoiceTotalStr} />
+                <SummaryMetric label={t("sub_360_available")} value={ocsVoiceBalanceStr} accent />
               </div>
             </div>
 
             <div style={{ border: "1px solid var(--surface-border)", borderRadius: "8px", padding: "1rem", background: "var(--header-bg)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "0.55rem", marginBottom: "0.9rem", color: "var(--text-main)", fontWeight: 800 }}>
                 <Signal size={18} color="var(--primary)" />
-                Network Entitlement
+                {t("sub_360_network_entitlement")}
               </div>
               <div style={{ display: "grid", gap: "0.85rem" }}>
-                <SummaryMetric label="Slices / Sessions" value={`${sliceCount} / ${sessionCount}`} />
-                <SummaryMetric label="PCC Rules" value={String(pccRuleCount)} />
+                <SummaryMetric label={t("sub_360_slices_sessions")} value={`${sliceCount} / ${sessionCount}`} />
+                <SummaryMetric label={t("sub_360_pcc_rules")} value={String(pccRuleCount)} />
               </div>
             </div>
           </div>
 
           <div style={{ display: "flex", flexWrap: "wrap", gap: "0.6rem" }}>
-            <ServicePill enabled={hasDataRule}>Packet Data</ServicePill>
-            <ServicePill enabled={hasImsRule}>IMS Service</ServicePill>
-            <ServicePill enabled={hasVoiceRule}>Voice Time</ServicePill>
-            <ServicePill enabled={sliceCount > 0}>Slice Profile</ServicePill>
+            <ServicePill enabled={hasDataRule}>{t("sub_360_packet_data")}</ServicePill>
+            <ServicePill enabled={hasImsRule}>{t("sub_360_ims_service")}</ServicePill>
+            <ServicePill enabled={hasVoiceRule}>{t("sub_360_voice_time")}</ServicePill>
+            <ServicePill enabled={sliceCount > 0}>{t("sub_360_slice_profile")}</ServicePill>
           </div>
         </div>
       </section>
@@ -191,7 +300,7 @@ export default function SubscriberViewMode({
       <section id="sec-technical-details" style={{ display: "grid", gap: "1rem", marginTop: "1.5rem" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", color: "var(--text-main)", fontWeight: 800, fontSize: "1.15rem" }}>
           <Server size={20} />
-          Technical Details
+          {t("sub_technical_title")}
         </div>
 
         <DetailPanel id="sec-security" title={t("sec_security_auth")} icon={<KeyRound size={18} color="var(--primary)" />} defaultOpen>
@@ -236,13 +345,13 @@ export default function SubscriberViewMode({
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "1.25rem", marginBottom: "1.25rem" }}>
             <SummaryMetric label={t("sub_traffic_quota")} value={ocsTrafficTotalStr} />
             <SummaryMetric label={t("sub_traffic_balance")} value={ocsTrafficBalanceStr} accent />
-            <SummaryMetric label="IMS Voice Quota" value={ocsVoiceTotalStr} />
-            <SummaryMetric label="IMS Voice Balance" value={ocsVoiceBalanceStr} accent />
+            <SummaryMetric label={t("sub_360_voice_quota")} value={ocsVoiceTotalStr} />
+            <SummaryMetric label={t("sub_360_voice_balance")} value={ocsVoiceBalanceStr} accent />
             <SummaryMetric label="PLMN" value={ocsPlmn} />
-            <SummaryMetric label="Tariff Plan" value={ocsPlanId || "None"} accent />
-            <SummaryMetric label="Plan Status" value={ocsPlanStatus || "unknown"} />
+            <SummaryMetric label={t("sub_360_tariff_plan")} value={ocsPlanId || t("none")} accent />
+            <SummaryMetric label={t("sub_360_plan_status")} value={ocsPlanStatus || "unknown"} />
           </div>
-          <div style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "0.75rem", fontWeight: 700 }}>APN Rating Rules</div>
+          <div style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "0.75rem", fontWeight: 700 }}>{t("sub_360_apn_rules")}</div>
           <RatingRuleLinkPanel
             planId={ocsPlanId}
             planStatus={ocsPlanStatus}
@@ -250,7 +359,7 @@ export default function SubscriberViewMode({
             ratingList={ratingList}
             compact
           />
-          <div style={{ color: "var(--text-muted)", fontSize: "0.85rem", margin: "1rem 0 0.75rem", fontWeight: 700 }}>Raw Rule Mapping</div>
+          <div style={{ color: "var(--text-muted)", fontSize: "0.85rem", margin: "1rem 0 0.75rem", fontWeight: 700 }}>{t("sub_360_raw_mapping")}</div>
           <div style={{ display: "grid", gap: "0.5rem" }}>
             {ocsRules.length > 0 ? ocsRules.map((rule: any) => (
               <div key={rule.rule_id || `${rule.apn}-${rule.rating_group_id}`} style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr 1fr 1fr", gap: "1rem", padding: "0.75rem 1rem", border: "1px solid var(--surface-border)", borderRadius: "6px", fontFamily: "monospace", fontSize: "0.9rem", overflowX: "auto" }}>
@@ -260,11 +369,11 @@ export default function SubscriberViewMode({
                 <span>{rule.charging_type}</span>
                 <span>{rule.unit}</span>
               </div>
-            )) : <span style={{ color: "var(--text-muted)" }}>No tariff rules</span>}
+            )) : <span style={{ color: "var(--text-muted)" }}>{t("sub_360_no_tariff_rules")}</span>}
           </div>
         </DetailPanel>
 
-        <DetailPanel id="sec-slices" title="Slices Architecture" icon={<Server size={18} color="var(--primary)" />}>
+        <DetailPanel id="sec-slices" title={t("sub_slices_arch")} icon={<Route size={18} color="var(--primary)" />}>
           {Array.isArray(slices) && slices.length > 0 ? slices.map((slice, sIdx) => {
             return (
               <div key={sIdx} className="slice-strip-card" id={`slice-card-${sIdx}`} style={{ marginTop: sIdx === 0 ? 0 : "1rem" }}>
