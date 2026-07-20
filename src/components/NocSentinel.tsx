@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import React, { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import useSWR from "swr";
-import { AlertTriangle, Bell, CheckSquare, Play, Settings2, ShieldCheck } from "lucide-react";
+import { AlertTriangle, Bell, CheckCircle2, CheckSquare, Play, Settings2, ShieldCheck, UserRoundCheck, Wrench } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
@@ -14,6 +14,10 @@ interface AlertItem {
   imsi?: string;
   reason: string;
   is_acknowledged?: boolean;
+  workflow_status?: AlertWorkflowStatus;
+  assigned_to?: string;
+  handling_note?: string;
+  workflow_updated_at?: string;
 }
 
 interface AlertResponse {
@@ -24,6 +28,33 @@ interface AlertResponse {
 
 const ALARM_WAV_BASE64 =
   "data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YTgGAAAAAAAAAAAAAP//AAD//wAA//8AAP//AAD//wAA//8AAP//AAD//wAA//8AAP//AAD//wAA//8AAP//AAD//wAA//8AAP//AAD//wAA//8AAP//AAD//wAA//8AAP//";
+
+type AlertWorkflowStatus = "triage" | "acknowledged" | "assigned" | "recovering" | "resolved";
+
+const ASSIGNEE_OPTIONS = ["NOC L1", "Packet Core L2", "Billing/OCS", "Security", "Platform SRE"];
+
+const WORKFLOW_CLASS: Record<AlertWorkflowStatus, string> = {
+  triage: "triage",
+  acknowledged: "acknowledged",
+  assigned: "assigned",
+  recovering: "recovering",
+  resolved: "resolved",
+};
+
+function getWorkflowStatus(alert: AlertItem): AlertWorkflowStatus {
+  if (alert.workflow_status === "acknowledged" || alert.workflow_status === "assigned" || alert.workflow_status === "recovering" || alert.workflow_status === "resolved") {
+    return alert.workflow_status;
+  }
+
+  return alert.is_acknowledged ? "resolved" : "triage";
+}
+
+function defaultAssignee(alert: AlertItem) {
+  if (alert.assigned_to) return alert.assigned_to;
+  if (alert.reason.toLowerCase().includes("ocs")) return "Billing/OCS";
+  if (alert.imsi) return "Packet Core L2";
+  return "Platform SRE";
+}
 
 export default function NocSentinel() {
   const { t } = useI18n();
@@ -42,11 +73,24 @@ export default function NocSentinel() {
   );
   const [expanded, setExpanded] = useState(false);
   const [audioBlocked, setAudioBlocked] = useState(false);
+  const [draftOwners, setDraftOwners] = useState<Record<string, string>>({});
+  const [busyAlertId, setBusyAlertId] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
 
   const activeCriticalCount = data?.activeCriticalCount || 0;
   const activeWarningCount = data?.activeWarningCount || 0;
   const activeAlerts = (data?.alerts || []).filter((alert) => !alert.is_acknowledged);
+  const workflowSummary = useMemo(
+    () =>
+      activeAlerts.reduce(
+        (summary, alert) => {
+          summary[getWorkflowStatus(alert)] += 1;
+          return summary;
+        },
+        { triage: 0, acknowledged: 0, assigned: 0, recovering: 0, resolved: 0 } as Record<AlertWorkflowStatus, number>
+      ),
+    [activeAlerts]
+  );
   const activeCount = activeCriticalCount + activeWarningCount;
   const hasCritical = activeCriticalCount > 0;
   const hasWarning = activeWarningCount > 0;
@@ -79,23 +123,39 @@ export default function NocSentinel() {
     if (!val) setAudioBlocked(false);
   };
 
-  const handleAcknowledge = async (id: string) => {
-    await fetch("/api/alerts/acknowledge", {
+  const persistAlertWorkflow = async (alert: AlertItem, status: Exclude<AlertWorkflowStatus, "triage">) => {
+    const assignedTo = draftOwners[alert.id] || defaultAssignee(alert);
+    await fetch("/api/alerts/workflow", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
+      body: JSON.stringify({
+        id: alert.id,
+        status,
+        assignedTo,
+        note: t(`noc_workflow_note_${status}`),
+      }),
     });
-    mutate();
+  };
+
+  const updateAlertWorkflow = async (alert: AlertItem, status: Exclude<AlertWorkflowStatus, "triage">) => {
+    setBusyAlertId(alert.id);
+    try {
+      await persistAlertWorkflow(alert, status);
+      mutate();
+    } finally {
+      setBusyAlertId(null);
+    }
   };
 
   const handleAcknowledgeAll = async () => {
     if (activeAlerts.length === 0) return;
-    await fetch("/api/alerts/acknowledge", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ids: activeAlerts.map((alert) => alert.id) }),
-    });
-    mutate();
+    setBusyAlertId("all");
+    try {
+      await Promise.all(activeAlerts.map((alert) => persistAlertWorkflow(alert, "acknowledged")));
+      mutate();
+    } finally {
+      setBusyAlertId(null);
+    }
   };
 
   const statusClass = hasCritical ? "critical" : hasWarning ? "warning" : needsActivation ? "muted" : "healthy";
@@ -172,6 +232,15 @@ export default function NocSentinel() {
               </label>
             </div>
 
+            {activeAlerts.length > 0 ? (
+              <div className="noc-workflow-summary">
+                <span>{t("noc_workflow_triage")}: {workflowSummary.triage}</span>
+                <span>{t("noc_workflow_acknowledged")}: {workflowSummary.acknowledged}</span>
+                <span>{t("noc_workflow_assigned")}: {workflowSummary.assigned}</span>
+                <span>{t("noc_workflow_recovering")}: {workflowSummary.recovering}</span>
+              </div>
+            ) : null}
+
             <div className="noc-alert-list">
               {activeAlerts.length === 0 ? (
                 <div className="noc-empty">
@@ -180,21 +249,84 @@ export default function NocSentinel() {
                   <span>{t("noc_no_alerts")}</span>
                 </div>
               ) : (
-                activeAlerts.map((alert) => (
-                  <article className={alert.level === "CRITICAL" ? "noc-alert critical" : "noc-alert"} key={alert.id}>
-                    <AlertTriangle size={19} />
-                    <div className="noc-alert-content">
-                      <div className="noc-alert-meta">
-                        {new Date(alert.timestamp).toLocaleTimeString()} | IMSI: <span>{alert.imsi || "N/A"}</span>
+                activeAlerts.map((alert) => {
+                  const workflowStatus = getWorkflowStatus(alert);
+                  const owner = draftOwners[alert.id] || defaultAssignee(alert);
+                  const isBusy = busyAlertId === alert.id || busyAlertId === "all";
+                  const canRecover = workflowStatus === "assigned" || workflowStatus === "recovering";
+
+                  return (
+                    <article className={alert.level === "CRITICAL" ? "noc-alert critical" : "noc-alert"} key={alert.id}>
+                      <AlertTriangle size={19} />
+                      <div className="noc-alert-content">
+                        <div className="noc-alert-meta">
+                          {new Date(alert.timestamp).toLocaleTimeString()} | IMSI: <span>{alert.imsi || "N/A"}</span>
+                        </div>
+                        <div className="noc-alert-reason">{alert.reason}</div>
+                        <div className="noc-workflow-row">
+                          <span className={`noc-workflow-pill ${WORKFLOW_CLASS[workflowStatus]}`}>
+                            {t(`noc_workflow_${workflowStatus}`)}
+                          </span>
+                          {alert.workflow_updated_at ? <span>{new Date(alert.workflow_updated_at).toLocaleTimeString()}</span> : null}
+                        </div>
+                        {alert.handling_note ? <div className="noc-alert-note">{alert.handling_note}</div> : null}
+                        <div className="noc-assignee-row">
+                          <label htmlFor={`noc-assignee-${alert.id}`}>{t("noc_assignee")}</label>
+                          <select
+                            id={`noc-assignee-${alert.id}`}
+                            value={owner}
+                            onChange={(event) => setDraftOwners((current) => ({ ...current, [alert.id]: event.target.value }))}
+                            disabled={isBusy}
+                          >
+                            {ASSIGNEE_OPTIONS.map((item) => (
+                              <option value={item} key={item}>
+                                {item}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="noc-action-grid">
+                          <button
+                            type="button"
+                            className="btn btn-outline noc-action-button"
+                            onClick={() => updateAlertWorkflow(alert, "acknowledged")}
+                            disabled={isBusy || workflowStatus !== "triage"}
+                          >
+                            <CheckSquare size={14} />
+                            {t("noc_btn_ack")}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-outline noc-action-button"
+                            onClick={() => updateAlertWorkflow(alert, "assigned")}
+                            disabled={isBusy || workflowStatus === "recovering"}
+                          >
+                            <UserRoundCheck size={14} />
+                            {t("noc_btn_assign")}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-outline noc-action-button"
+                            onClick={() => updateAlertWorkflow(alert, "recovering")}
+                            disabled={isBusy || !canRecover}
+                          >
+                            <Wrench size={14} />
+                            {t("noc_btn_recovering")}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-outline noc-action-button resolve"
+                            onClick={() => updateAlertWorkflow(alert, "resolved")}
+                            disabled={isBusy}
+                          >
+                            <CheckCircle2 size={14} />
+                            {t("noc_btn_resolve")}
+                          </button>
+                        </div>
                       </div>
-                      <div className="noc-alert-reason">{alert.reason}</div>
-                      <button type="button" className="btn btn-outline noc-ack-button" onClick={() => handleAcknowledge(alert.id)}>
-                        <CheckSquare size={14} />
-                        {t("noc_btn_ack")}
-                      </button>
-                    </div>
-                  </article>
-                ))
+                    </article>
+                  );
+                })
               )}
             </div>
           </section>
@@ -376,6 +508,29 @@ const styles = `
     border-bottom: 1px solid var(--surface-border);
   }
 
+  .noc-workflow-summary {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.45rem;
+    padding: 0.65rem 1rem;
+    border-bottom: 1px solid var(--surface-border);
+    background: color-mix(in srgb, var(--primary) 5%, var(--surface));
+  }
+
+  .noc-workflow-summary span {
+    min-height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--surface-border);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    background: var(--surface);
+    font-size: 0.68rem;
+    font-weight: 800;
+    white-space: nowrap;
+  }
+
   .noc-monitor-row label {
     display: inline-flex;
     align-items: center;
@@ -460,12 +615,98 @@ const styles = `
     line-height: 1.42;
   }
 
-  .noc-ack-button {
-    min-height: 30px;
+  .noc-workflow-row {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin-top: 0.55rem;
+    color: var(--text-muted);
+    font-size: 0.7rem;
+    font-weight: 750;
+  }
+
+  .noc-workflow-pill {
+    min-height: 22px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 0.5rem;
+    border-radius: 999px;
+    border: 1px solid var(--surface-border);
+    background: var(--surface-hover);
+    color: var(--text-secondary);
+    font-size: 0.68rem;
+    font-weight: 900;
+  }
+
+  .noc-workflow-pill.acknowledged {
+    color: var(--primary);
+    border-color: color-mix(in srgb, var(--primary) 30%, var(--surface-border));
+    background: color-mix(in srgb, var(--primary) 10%, var(--surface));
+  }
+
+  .noc-workflow-pill.assigned {
+    color: #7c3aed;
+    border-color: rgba(124, 58, 237, 0.3);
+    background: rgba(124, 58, 237, 0.1);
+  }
+
+  .noc-workflow-pill.recovering {
+    color: #0f766e;
+    border-color: rgba(15, 118, 110, 0.3);
+    background: rgba(15, 118, 110, 0.1);
+  }
+
+  .noc-alert-note {
+    margin-top: 0.45rem;
+    color: var(--text-secondary);
+    font-size: 0.73rem;
+    line-height: 1.4;
+  }
+
+  .noc-assignee-row {
+    display: grid;
+    grid-template-columns: 64px minmax(0, 1fr);
+    align-items: center;
+    gap: 0.5rem;
     margin-top: 0.7rem;
+  }
+
+  .noc-assignee-row label {
+    color: var(--text-muted);
+    font-size: 0.7rem;
+    font-weight: 800;
+  }
+
+  .noc-assignee-row select {
+    width: 100%;
+    min-height: 32px;
+    border: 1px solid var(--surface-border);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--text-main);
+    padding: 0 0.45rem;
+    font-size: 0.74rem;
+    font-weight: 750;
+  }
+
+  .noc-action-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.45rem;
+    margin-top: 0.7rem;
+  }
+
+  .noc-action-button {
+    min-height: 30px;
     padding: 0.3rem 0.55rem;
     border-radius: 6px;
     font-size: 0.74rem;
+    justify-content: center;
+  }
+
+  .noc-action-button.resolve {
+    color: var(--success);
+    border-color: color-mix(in srgb, var(--success) 38%, var(--surface-border));
   }
 
   .noc-critical-ticker {
@@ -511,6 +752,10 @@ const styles = `
       position: fixed;
       top: 76px;
       right: 0.75rem;
+    }
+
+    .noc-workflow-summary {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
 `;

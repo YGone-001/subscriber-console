@@ -8,9 +8,21 @@ export type AlertDocument = {
   imsi: string;
   reason: string;
   is_acknowledged: boolean;
+  workflow_status?: AlertWorkflowStatus;
+  assigned_to?: string;
+  handling_note?: string;
+  workflow_updated_at?: string;
 };
 
 const ALERT_LIMIT = 10000;
+
+export type AlertWorkflowStatus = 'acknowledged' | 'assigned' | 'recovering' | 'resolved';
+
+export type AlertWorkflowUpdate = {
+  status: AlertWorkflowStatus;
+  assignedTo?: string;
+  note?: string;
+};
 
 function collection() {
   return getAppCollection<AlertDocument>(mongoCollections.alerts);
@@ -56,4 +68,28 @@ export async function acknowledgeAlerts(ids: string[]) {
     { $set: { is_acknowledged: true } }
   );
   return result.modifiedCount;
+}
+
+export async function updateAlertWorkflow(id: string, update: AlertWorkflowUpdate) {
+  const docs = await collection();
+  const now = new Date().toISOString();
+  const $set: Partial<AlertDocument> = {
+    workflow_status: update.status,
+    workflow_updated_at: now,
+  };
+
+  if (update.assignedTo !== undefined) {
+    $set.assigned_to = update.assignedTo;
+  }
+
+  if (update.note !== undefined) {
+    $set.handling_note = update.note;
+  }
+
+  if (update.status === 'resolved') {
+    $set.is_acknowledged = true;
+  }
+
+  const result = await docs.updateOne({ id }, { $set });
+  return { matched: result.matchedCount, modified: result.modifiedCount };
 }
