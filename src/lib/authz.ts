@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { capabilityAllowed, capabilityDecision, type Capability, type CapabilityGuardOptions } from '@/lib/permissions';
 
 export type UserRole = 'root' | 'operator' | 'viewer';
 
@@ -50,4 +51,27 @@ export function requireAnyRole(request: Request, allowedRoles: UserRole[]): Auth
 
 export function requireRole(request: Request, role: UserRole): AuthResult {
   return requireAnyRole(request, [role]);
+}
+
+export function requireCapability(request: Request, capability: Capability, options: CapabilityGuardOptions = {}): AuthResult {
+  const authResult = requireAuth(request);
+  if (!authResult.ok) return authResult;
+
+  const decision = capabilityDecision(authResult.auth.role, capability);
+  if (!capabilityAllowed(decision, options)) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        {
+          error: 'Forbidden: Insufficient permissions',
+          capability,
+          decision,
+          requiresApproval: decision === 'approval',
+        },
+        { status: 403 }
+      ),
+    };
+  }
+
+  return authResult;
 }

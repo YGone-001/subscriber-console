@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { requireAnyRole } from '@/lib/authz';
+import { requireCapability } from '@/lib/authz';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import { precheckSubscriberRange } from '@/server/repositories/subscriberRepository';
 import { validateBatchCount, validateImsi } from '@/lib/subscriberValidation';
@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
   try {
-    const auth = requireAnyRole(request, ['root', 'operator']);
+    const auth = requireCapability(request, 'subscriber_write');
     if (!auth.ok) return auth.response;
 
     const rateLimit = await enforceRateLimit(`subscribers:batch-precheck:${auth.auth.user}`, 30, 60);

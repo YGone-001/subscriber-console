@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { logAudit } from '@/lib/audit';
-import { requireAnyRole } from '@/lib/authz';
+import { requireCapability } from '@/lib/authz';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import { healSubscriberDocument } from '@/server/repositories/systemAuditRepository';
 
@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
   try {
-    const auth = requireAnyRole(request, ['root', 'operator']);
+    const auth = requireCapability(request, 'system_heal', { allowApproval: true });
     if (!auth.ok) return auth.response;
     const rateLimit = await enforceRateLimit(`system:audit-heal:${auth.auth.user}`, 20, 60);
     if (!rateLimit.ok) return rateLimit.response;

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { requireAuth, requireRole } from '@/lib/authz';
+import { requireAuth, requireCapability } from '@/lib/authz';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import {
   deleteRating,
@@ -42,7 +42,7 @@ export async function GET(request: Request, { params }: RouteContext) {
 
 export async function PUT(request: Request, { params }: RouteContext) {
   const { id } = await params;
-  const auth = requireRole(request, 'root');
+  const auth = requireCapability(request, 'rating_publish');
   if (!auth.ok) return auth.response;
 
   const rateLimit = await enforceRateLimit(`ratings:update:${auth.auth.user}`, 30, 60);
@@ -62,7 +62,7 @@ export async function PUT(request: Request, { params }: RouteContext) {
 
 export async function DELETE(request: Request, { params }: RouteContext) {
   const { id } = await params;
-  const auth = requireRole(request, 'root');
+  const auth = requireCapability(request, 'rating_publish');
   if (!auth.ok) return auth.response;
 
   const rateLimit = await enforceRateLimit(`ratings:delete:${auth.auth.user}`, 20, 60);

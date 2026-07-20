@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { logAudit } from '@/lib/audit';
-import { requireAnyRole } from '@/lib/authz';
+import { requireCapability } from '@/lib/authz';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import { validatePolicyChangePayload } from '@/lib/subscriberValidation';
 import { changeOcsPolicyForSubscribers } from '@/server/repositories/ocsBillingRepository';
@@ -8,7 +8,7 @@ import { changeOcsPolicyForSubscribers } from '@/server/repositories/ocsBillingR
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
-  const auth = requireAnyRole(request, ['root', 'operator']);
+  const auth = requireCapability(request, 'policy_approve', { allowApproval: true });
   if (!auth.ok) return auth.response;
 
   const rateLimit = await enforceRateLimit(`subscribers:policy:${auth.auth.user}`, 20, 60);

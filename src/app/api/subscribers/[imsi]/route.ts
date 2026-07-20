@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { logAudit } from '@/lib/audit';
-import { requireAnyRole, requireAuth } from '@/lib/authz';
+import { requireAuth, requireCapability } from '@/lib/authz';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import {
   deleteSubscriber,
@@ -42,7 +42,7 @@ export async function GET(request: Request, { params }: RouteContext) {
 
 export async function DELETE(request: Request, { params }: RouteContext) {
   const { imsi } = await params;
-  const auth = requireAnyRole(request, ['root', 'operator']);
+  const auth = requireCapability(request, 'subscriber_write');
   if (!auth.ok) return auth.response;
 
   const rateLimit = await enforceRateLimit(`subscribers:delete:${auth.auth.user}`, 30, 60);
@@ -70,7 +70,7 @@ export async function DELETE(request: Request, { params }: RouteContext) {
 
 export async function PUT(request: Request, { params }: RouteContext) {
   const { imsi } = await params;
-  const auth = requireAnyRole(request, ['root', 'operator']);
+  const auth = requireCapability(request, 'subscriber_write');
   if (!auth.ok) return auth.response;
 
   const rateLimit = await enforceRateLimit(`subscribers:update:${auth.auth.user}`, 60, 60);

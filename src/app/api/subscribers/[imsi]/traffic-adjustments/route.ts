@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { logAudit, type AuditAction } from '@/lib/audit';
-import { requireAnyRole } from '@/lib/authz';
+import { requireCapability } from '@/lib/authz';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import { validateImsi, validateTrafficAdjustmentPayload } from '@/lib/subscriberValidation';
 import { adjustOcsTrafficBalance } from '@/server/repositories/ocsBillingRepository';
@@ -34,7 +34,7 @@ function errorResponse(error: unknown) {
 
 export async function POST(request: Request, { params }: RouteContext) {
   const { imsi } = await params;
-  const auth = requireAnyRole(request, ['root', 'operator']);
+  const auth = requireCapability(request, 'balance_adjust', { allowApproval: true });
   if (!auth.ok) return auth.response;
 
   const rateLimit = await enforceRateLimit(`traffic-adjustments:${auth.auth.user}`, 30, 60);

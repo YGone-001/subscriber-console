@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { logAudit } from '@/lib/audit';
-import { requireAnyRole } from '@/lib/authz';
+import { requireCapability } from '@/lib/authz';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import { createSubscribersBatch } from '@/server/repositories/subscriberRepository';
 import { validateBatchCreatePayload } from '@/lib/subscriberValidation';
@@ -8,7 +8,7 @@ import { validateBatchCreatePayload } from '@/lib/subscriberValidation';
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
-  const auth = requireAnyRole(request, ['root', 'operator']);
+  const auth = requireCapability(request, 'subscriber_write');
   if (!auth.ok) return auth.response;
 
   const rateLimit = await enforceRateLimit(`subscribers:batch:${auth.auth.user}`, 10, 60);

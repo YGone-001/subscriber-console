@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { logAudit } from '@/lib/audit';
-import { requireRole } from '@/lib/authz';
+import { requireCapability } from '@/lib/authz';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import { deleteUser, safeUser, updateUser } from '@/server/repositories/userRepository';
 import type { UserRole } from '@/lib/authz';
@@ -19,7 +19,7 @@ function isValidRole(role: unknown): role is UserRole {
 export async function PUT(request: Request, { params }: RouteContext) {
   const { username } = await params;
   try {
-    const auth = requireRole(request, 'root');
+    const auth = requireCapability(request, 'user_admin');
     if (!auth.ok) return auth.response;
     const rateLimit = await enforceRateLimit(`users:update:${auth.auth.user}`, 20, 60);
     if (!rateLimit.ok) return rateLimit.response;
@@ -60,7 +60,7 @@ export async function PUT(request: Request, { params }: RouteContext) {
 export async function DELETE(request: Request, { params }: RouteContext) {
   const { username } = await params;
   try {
-    const auth = requireRole(request, 'root');
+    const auth = requireCapability(request, 'user_admin');
     if (!auth.ok) return auth.response;
     const rateLimit = await enforceRateLimit(`users:delete:${auth.auth.user}`, 10, 60);
     if (!rateLimit.ok) return rateLimit.response;

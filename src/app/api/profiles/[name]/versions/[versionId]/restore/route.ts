@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { logAudit } from '@/lib/audit';
-import { requireRole } from '@/lib/authz';
+import { requireCapability } from '@/lib/authz';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import { restoreProfileVersion } from '@/server/repositories/profileRepository';
 
@@ -11,7 +11,7 @@ export async function POST(
   { params }: { params: Promise<{ name: string; versionId: string }> }
 ) {
   const { name, versionId } = await params;
-  const auth = requireRole(request, 'root');
+  const auth = requireCapability(request, 'profile_rollback');
   if (!auth.ok) return auth.response;
 
   const rateLimit = await enforceRateLimit(`profiles:restore:${auth.auth.user}`, 10, 60);

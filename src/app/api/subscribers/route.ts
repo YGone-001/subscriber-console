@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import { logAudit } from '@/lib/audit';
-import { requireAnyRole, requireAuth } from '@/lib/authz';
+import { requireAuth, requireCapability } from '@/lib/authz';
 import {
   createDefaultSubscriber,
   listSubscriberImsis,
@@ -39,7 +39,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const auth = requireAnyRole(request, ['root', 'operator']);
+    const auth = requireCapability(request, 'subscriber_write');
     if (!auth.ok) return auth.response;
 
     const rateLimit = await enforceRateLimit(`subscribers:create:${auth.auth.user}`, 30, 60);

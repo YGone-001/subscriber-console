@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { logAudit } from '@/lib/audit';
-import { requireRole } from '@/lib/authz';
+import { requireCapability } from '@/lib/authz';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import { isPasswordStrong, PASSWORD_POLICY_MESSAGE } from '@/lib/security';
 import { createUser, listUsers } from '@/server/repositories/userRepository';
@@ -15,7 +15,7 @@ function isValidRole(role: unknown): role is UserRole {
 
 export async function GET(request: Request) {
   try {
-    const auth = requireRole(request, 'root');
+    const auth = requireCapability(request, 'user_admin');
     if (!auth.ok) return auth.response;
     const rateLimit = await enforceRateLimit(`users:list:${auth.auth.user}`, 60, 60);
     if (!rateLimit.ok) return rateLimit.response;
@@ -29,7 +29,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const auth = requireRole(request, 'root');
+    const auth = requireCapability(request, 'user_admin');
     if (!auth.ok) return auth.response;
     const rateLimit = await enforceRateLimit(`users:create:${auth.auth.user}`, 15, 60);
     if (!rateLimit.ok) return rateLimit.response;
