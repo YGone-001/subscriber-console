@@ -25,9 +25,12 @@ import {
   Clock,
   DatabaseZap,
   ExternalLink,
+  GitBranch,
   Globe,
   ListChecks,
   PieChart as PieChartIcon,
+  Rocket,
+  RotateCcw,
   Server,
   ShieldCheck,
   Signal,
@@ -108,6 +111,18 @@ type WorkItem = {
   detail: string;
   href: string;
   action: string;
+};
+
+type ChangeTask = {
+  id: string;
+  tone: "danger" | "warning" | "normal";
+  title: string;
+  scope: string;
+  phase: string;
+  canary: number;
+  owner: string;
+  href: string;
+  rollbackHref: string;
 };
 
 function CountUpNumber({ value, decimals = 0, suffix = "" }: { value: number; decimals?: number; suffix?: string }) {
@@ -437,6 +452,41 @@ export default function AnalyticsCockpit() {
   }
 
   const visibleWorkItems = workItems.slice(0, 4);
+  const changeQueue: ChangeTask[] = [
+    {
+      id: "CHG-NOC-001",
+      tone: activeAlertCount > 0 ? "danger" : "normal",
+      title: activeAlertCount > 0 ? t("dash_change_alert_title") : t("dash_change_health_title"),
+      scope: t("dash_change_alert_scope", { count: activeAlertCount }),
+      phase: activeAlertCount > 0 ? t("dash_change_phase_review") : t("dash_change_phase_ready"),
+      canary: activeAlertCount > 0 ? 0 : 100,
+      owner: "NOC",
+      href: "/system-health",
+      rollbackHref: "/audit-logs",
+    },
+    {
+      id: "CHG-RATE-002",
+      tone: ratingGroupCount === 0 ? "warning" : "normal",
+      title: ratingGroupCount === 0 ? t("dash_change_rating_title") : t("dash_change_rating_ready_title"),
+      scope: t("dash_change_rating_scope", { count: ratingGroupCount }),
+      phase: ratingGroupCount === 0 ? t("dash_change_phase_draft") : t("dash_change_phase_canary"),
+      canary: ratingGroupCount === 0 ? 0 : 25,
+      owner: "BSS/OCS",
+      href: "/rating",
+      rollbackHref: "/profile",
+    },
+    {
+      id: "CHG-POL-003",
+      tone: exhaustionTone === "danger" ? "danger" : exhaustionTone === "warning" || topConsumerShare >= 35 ? "warning" : "normal",
+      title: t("dash_change_policy_title"),
+      scope: t("dash_change_policy_scope", { imsi: topImsi, hours: theoreticalLifeHr > 0 ? theoreticalLifeHr.toFixed(1) : "--" }),
+      phase: exhaustionTone === "normal" ? t("dash_change_phase_ready") : t("dash_change_phase_canary"),
+      canary: exhaustionTone === "danger" ? 5 : exhaustionTone === "warning" ? 10 : 50,
+      owner: "Provisioning",
+      href: "/subscribers",
+      rollbackHref: "/audit-logs",
+    },
+  ];
 
   return (
     <div className="analytics-root">
@@ -488,6 +538,48 @@ export default function AnalyticsCockpit() {
             <a href="/rating">{t("dash_quick_rating")}</a>
             <a href="/audit-logs">{t("dash_quick_audit")}</a>
           </div>
+        </div>
+      </section>
+
+      <section className="analytics-change-queue">
+        <div className="analytics-change-header">
+          <div>
+            <h3>
+              <GitBranch size={18} />
+              {t("dash_change_title")}
+            </h3>
+            <p>{t("dash_change_subtitle")}</p>
+          </div>
+          <span>{t("dash_change_count", { count: changeQueue.length })}</span>
+        </div>
+        <div className="analytics-change-grid">
+          {changeQueue.map((task) => (
+            <article className={`analytics-change-card analytics-change-${task.tone}`} key={task.id}>
+              <div className="analytics-change-top">
+                <span className="analytics-change-id">{task.id}</span>
+                <span className="analytics-change-phase">{task.phase}</span>
+              </div>
+              <div className="analytics-change-title">{task.title}</div>
+              <div className="analytics-change-scope">{task.scope}</div>
+              <div className="analytics-change-meta">
+                <span>{task.owner}</span>
+                <span>{t("dash_change_canary", { percent: task.canary })}</span>
+              </div>
+              <div className="analytics-change-progress" aria-hidden="true">
+                <span style={{ width: `${task.canary}%` }} />
+              </div>
+              <div className="analytics-change-actions">
+                <a href={task.href}>
+                  <Rocket size={13} />
+                  {t("dash_change_open")}
+                </a>
+                <a href={task.rollbackHref}>
+                  <RotateCcw size={13} />
+                  {t("dash_change_rollback")}
+                </a>
+              </div>
+            </article>
+          ))}
         </div>
       </section>
 
@@ -856,6 +948,165 @@ const analyticsStyles = `
     color: var(--primary);
   }
 
+  .analytics-change-queue {
+    padding: 1rem;
+    display: grid;
+    gap: 0.95rem;
+    background: var(--surface);
+    border: 1px solid var(--surface-border);
+    border-radius: 8px;
+    box-shadow: 0 14px 32px -24px rgba(15, 23, 42, 0.55);
+  }
+
+  .analytics-change-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .analytics-change-header h3 {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--text-main);
+    font-size: 1rem;
+    font-weight: 800;
+  }
+
+  .analytics-change-header p {
+    margin: 0.25rem 0 0;
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    line-height: 1.4;
+  }
+
+  .analytics-change-header > span {
+    min-height: 28px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.55rem;
+    border: 1px solid var(--surface-border);
+    border-radius: 999px;
+    color: var(--text-secondary);
+    background: var(--header-bg);
+    font-size: 0.74rem;
+    font-weight: 800;
+    white-space: nowrap;
+  }
+
+  .analytics-change-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+
+  .analytics-change-card {
+    min-height: 184px;
+    padding: 0.85rem;
+    display: grid;
+    gap: 0.6rem;
+    border: 1px solid var(--surface-border);
+    border-radius: 8px;
+    background: var(--header-bg);
+  }
+
+  .analytics-change-danger {
+    border-color: color-mix(in srgb, #e74a3b 34%, var(--surface-border));
+  }
+
+  .analytics-change-warning {
+    border-color: color-mix(in srgb, #f6c23e 36%, var(--surface-border));
+  }
+
+  .analytics-change-top,
+  .analytics-change-meta,
+  .analytics-change-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.65rem;
+  }
+
+  .analytics-change-id {
+    color: var(--primary);
+    font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+    font-size: 0.76rem;
+    font-weight: 900;
+  }
+
+  .analytics-change-phase {
+    min-height: 24px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0.2rem 0.5rem;
+    border-radius: 999px;
+    background: var(--surface-hover);
+    color: var(--text-secondary);
+    font-size: 0.7rem;
+    font-weight: 850;
+    white-space: nowrap;
+  }
+
+  .analytics-change-title {
+    color: var(--text-main);
+    font-size: 0.92rem;
+    font-weight: 850;
+    line-height: 1.28;
+  }
+
+  .analytics-change-scope {
+    min-height: 38px;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    line-height: 1.4;
+  }
+
+  .analytics-change-meta {
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    font-weight: 800;
+  }
+
+  .analytics-change-progress {
+    height: 8px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--surface-border);
+  }
+
+  .analytics-change-progress span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--primary), var(--success));
+  }
+
+  .analytics-change-actions {
+    padding-top: 0.2rem;
+  }
+
+  .analytics-change-actions a {
+    min-height: 30px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    padding: 0.3rem 0.55rem;
+    border: 1px solid var(--surface-border);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-size: 0.74rem;
+    font-weight: 800;
+  }
+
+  .analytics-change-actions a:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+  }
+
   .analytics-kpi-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1138,6 +1389,10 @@ const analyticsStyles = `
       grid-template-columns: 1fr;
     }
 
+    .analytics-change-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
     .analytics-kpi-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
@@ -1154,6 +1409,14 @@ const analyticsStyles = `
   }
 
   @media (max-width: 640px) {
+    .analytics-change-header {
+      flex-direction: column;
+    }
+
+    .analytics-change-grid {
+      grid-template-columns: 1fr;
+    }
+
     .analytics-kpi-grid {
       grid-template-columns: 1fr;
     }
