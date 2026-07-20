@@ -15,6 +15,7 @@ interface ProfileModalProps {
   onClose: () => void;
   onRefresh: () => void;
   onOperation?: (notice: { type: "success" | "error"; text: string }) => void;
+  impactedSubscribers?: number;
 }
 
 type ProfileVersionSummary = {
@@ -31,7 +32,13 @@ type ProfileVersionDetail = ProfileVersionSummary & {
   profile: any;
 };
 
-export default function ProfileModal({ profileName, onClose, onRefresh, onOperation }: ProfileModalProps) {
+type DraftDiffRow = {
+  key: string;
+  label: string;
+  changed: boolean;
+};
+
+export default function ProfileModal({ profileName, onClose, onRefresh, onOperation, impactedSubscribers = 0 }: ProfileModalProps) {
   const { t } = useI18n();
   const { isRoot } = useAuth();
   const [isEditing, setIsEditing] = useState(!profileName);
@@ -41,6 +48,7 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
   const [isRestoring, setIsRestoring] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [isSaveConfirmOpen, setIsSaveConfirmOpen] = useState(false);
   const [isAccessRestrictionsExpanded, setIsAccessRestrictionsExpanded] = useState(false);
   const [profileSnapshot, setProfileSnapshot] = useState<any>(null);
   const [versions, setVersions] = useState<ProfileVersionSummary[]>([]);
@@ -101,6 +109,52 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
   const readError = async (res: Response, fallback: string) => {
     const data = await res.json().catch(() => ({}));
     return data.error || fallback;
+  };
+
+  const buildProfilePayload = (targetName: string) => {
+    const authPayload: any = { k: authData.k, amf: authData.amf };
+    authPayload[usimType] = authData.opValue;
+    return {
+      title: profileTitle || targetName,
+      auth: authPayload,
+      ambr: ueAmbr,
+      access_restriction_data: accessRestriction,
+      sliceList: slices,
+      ocsDefaults: {
+        trafficTotal: parseBytes(ocsDefaults.trafficTotal || ocsDefaults.trafficBalance),
+        trafficBalance: parseBytes(ocsDefaults.trafficBalance),
+      }
+    };
+  };
+
+  const validateProfileDraft = (targetName: string) => {
+    if (!targetName) throw new Error(t("prof_err_name_req"));
+    for (const slice of slices || []) {
+      for (const session of slice?.session_list || []) {
+        const pgwIpv4 = String(session?.pgwIpv4 || "").trim();
+        if (pgwIpv4 && !/^(\d{1,3}\.){3}\d{1,3}$/.test(pgwIpv4)) {
+          throw new Error(t("prof_err_pgw_ipv4", { name: session?.name || "unknown" }));
+        }
+      }
+    }
+  };
+
+  const getProfileDraftDiffRows = (draft: any): DraftDiffRow[] => {
+    const current = profileSnapshot || {};
+    const fields = [
+      { key: "title", label: t("prof_title") },
+      { key: "auth", label: t("sec_security_auth") },
+      { key: "ambr", label: t("sec_global_network") },
+      { key: "ocsDefaults", label: t("sec_billing_config") },
+      { key: "access_restriction_data", label: t("sec_access_restrict") },
+      { key: "sliceList", label: t("prof_sec_slices") },
+    ];
+
+    return fields.map(field => ({
+      key: field.key,
+      label: field.label,
+      changed: JSON.stringify(current[field.key]) !== JSON.stringify(draft[field.key]),
+    }));
   };
 
   const loadProfileData = useCallback(async () => {
@@ -255,21 +309,9 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
   /**
    * Save Profile to MongoDB.
    */
-  const handleSave = async () => {
+  const submitProfile = async (targetName: string, payload: any) => {
     setIsSaving(true);
-    setError(null);
     try {
-      const targetName = profileName || inputName;
-      if (!targetName) throw new Error(t("prof_err_name_req"));
-      for (const slice of slices || []) {
-        for (const session of slice?.session_list || []) {
-          const pgwIpv4 = String(session?.pgwIpv4 || "").trim();
-          if (pgwIpv4 && !/^(\d{1,3}\.){3}\d{1,3}$/.test(pgwIpv4)) {
-            throw new Error(t("prof_err_pgw_ipv4", { name: session?.name || "unknown" }));
-          }
-        }
-      }
-
       //  Profile
       if (!profileName) {
         const createRes = await fetch("/api/profiles", {
@@ -283,21 +325,6 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
         }
       }
 
-      // Construct payload
-      const authPayload: any = { k: authData.k, amf: authData.amf };
-      authPayload[usimType] = authData.opValue;
-      const payload = {
-        title: profileTitle || targetName,
-        auth: authPayload,
-        ambr: ueAmbr,
-        access_restriction_data: accessRestriction,
-        sliceList: slices,
-        ocsDefaults: {
-          trafficTotal: parseBytes(ocsDefaults.trafficTotal || ocsDefaults.trafficBalance),
-          trafficBalance: parseBytes(ocsDefaults.trafficBalance),
-        }
-      };
-
       const res = await fetch(`/api/profiles/${targetName}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -305,6 +332,7 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
       });
 
       if (!res.ok) throw new Error(t("prof_err_save"));
+      setIsSaveConfirmOpen(false);
       onRefresh();
       onOperation?.({ type: "success", text: t("prof_msg_saved") });
       onClose();
@@ -314,6 +342,40 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
       onOperation?.({ type: "error", text: message });
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleSave = async () => {
+    setError(null);
+    try {
+      const targetName = (profileName || inputName).trim();
+      validateProfileDraft(targetName);
+      const payload = buildProfilePayload(targetName);
+      const changedRows = profileName ? getProfileDraftDiffRows(payload).filter(row => row.changed) : [];
+
+      if (profileName && changedRows.length > 0 && !isSaveConfirmOpen) {
+        setIsSaveConfirmOpen(true);
+        return;
+      }
+
+      await submitProfile(targetName, payload);
+    } catch (err: any) {
+      const message = err.message || t("sub_err_save");
+      setError(message);
+      onOperation?.({ type: "error", text: message });
+    }
+  };
+
+  const handleConfirmSave = async () => {
+    setError(null);
+    try {
+      const targetName = (profileName || inputName).trim();
+      validateProfileDraft(targetName);
+      await submitProfile(targetName, buildProfilePayload(targetName));
+    } catch (err: any) {
+      const message = err.message || t("sub_err_save");
+      setError(message);
+      onOperation?.({ type: "error", text: message });
     }
   };
 
@@ -480,6 +542,12 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
     />;
   };
 
+  const draftTargetName = (profileName || inputName).trim();
+  const draftPayload = profileName && draftTargetName ? buildProfilePayload(draftTargetName) : null;
+  const draftDiffRows = draftPayload ? getProfileDraftDiffRows(draftPayload) : [];
+  const changedDraftRows = draftDiffRows.filter(row => row.changed);
+  const changedSectionText = changedDraftRows.map(row => row.label).join(", ") || t("prof_change_none");
+
   // --- Root Return: Modal skeleton & sidebar ---
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -495,7 +563,7 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
           </div>
           <div className="workflow-header-actions">
             {!isEditing && (
-              <button className="btn-icon" onClick={() => setIsEditing(true)} title={t("prof_btn_edit")}><Pencil size={24} color="var(--primary)" /></button>
+              <button className="btn-icon" onClick={() => { setIsEditing(true); setIsSaveConfirmOpen(false); }} title={t("prof_btn_edit")}><Pencil size={24} color="var(--primary)" /></button>
             )}
             {profileName && <button className="btn-icon" onClick={handleDelete} title={t("prof_btn_delete")} disabled={isDeleting || isDeleteConfirmOpen}><Trash2 size={24} color="var(--danger)" /></button>}
             <div style={{ width: "1px", height: "30px", background: "var(--surface-border)", margin: "0 0.5rem" }} />
@@ -514,6 +582,60 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
               onConfirm={executeDelete}
               onCancel={() => setIsDeleteConfirmOpen(false)}
             />
+          </div>
+        )}
+
+        {isSaveConfirmOpen && (
+          <div style={{ padding: "0 1.5rem" }}>
+            <ConfirmActionPanel
+              tone={impactedSubscribers > 0 ? "warning" : "info"}
+              title={t("prof_change_confirm_title")}
+              message={t("prof_change_confirm_desc", { count: impactedSubscribers, sections: changedSectionText })}
+              confirmLabel={t("prof_change_confirm_btn")}
+              cancelLabel={t("cancel")}
+              isWorking={isSaving}
+              onConfirm={handleConfirmSave}
+              onCancel={() => setIsSaveConfirmOpen(false)}
+            />
+            <div
+              style={{
+                marginBottom: "1rem",
+                border: "1px solid var(--surface-border)",
+                borderRadius: "8px",
+                background: "var(--surface)",
+                padding: "1rem",
+                display: "grid",
+                gap: "0.85rem",
+              }}
+            >
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "0.75rem" }}>
+                <div style={{ border: "1px solid var(--surface-border)", borderRadius: "8px", padding: "0.75rem" }}>
+                  <div className="table-header-cap" style={{ color: "var(--text-muted)", fontSize: "0.72rem" }}>{t("prof_change_impacted")}</div>
+                  <div style={{ marginTop: "0.35rem", fontSize: "1.25rem", fontWeight: 800, color: impactedSubscribers > 0 ? "var(--warning)" : "var(--success)" }}>
+                    {impactedSubscribers}
+                  </div>
+                </div>
+                <div style={{ border: "1px solid var(--surface-border)", borderRadius: "8px", padding: "0.75rem" }}>
+                  <div className="table-header-cap" style={{ color: "var(--text-muted)", fontSize: "0.72rem" }}>{t("prof_change_sections")}</div>
+                  <div style={{ marginTop: "0.35rem", fontWeight: 800, color: "var(--text-main)" }}>
+                    {changedDraftRows.length}
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: "grid", gap: "0.45rem" }}>
+                {draftDiffRows.map(row => (
+                  <div key={row.key} style={{ display: "flex", justifyContent: "space-between", gap: "1rem", padding: "0.45rem 0", borderBottom: "1px solid var(--surface-border)" }}>
+                    <span style={{ color: "var(--text-secondary)" }}>{row.label}</span>
+                    <strong style={{ color: row.changed ? "var(--warning)" : "var(--success)" }}>
+                      {row.changed ? t("prof_version_changed") : t("prof_version_unchanged")}
+                    </strong>
+                  </div>
+                ))}
+              </div>
+              <div style={{ color: "var(--text-muted)", fontSize: "0.82rem", lineHeight: 1.5 }}>
+                {t("prof_change_confirm_note")}
+              </div>
+            </div>
           </div>
         )}
 
@@ -585,7 +707,7 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
                 <Save size={16}/> {isSaving ? t("sub_btn_saving") : (profileName ? t("prof_btn_save") : t("prof_btn_create"))}
               </button>
             ) : (
-              <button className="btn btn-primary" onClick={() => setIsEditing(true)}>
+              <button className="btn btn-primary" onClick={() => { setIsEditing(true); setIsSaveConfirmOpen(false); }}>
                 <Pencil size={16}/> {t("prof_btn_edit")}
               </button>
             )}

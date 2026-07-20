@@ -324,6 +324,7 @@ export default function ProfilePage() {
           onClose={() => setIsModalOpen(false)}
           onRefresh={() => mutate()}
           onOperation={setNotice}
+          impactedSubscribers={modalProfileName ? profileImpactCounts.get(modalProfileName) || 0 : 0}
         />
       )}
     </>
