@@ -6,6 +6,7 @@ import SubscriberModal from "@/components/SubscriberModal";
 import BatchCreateModal from "@/components/BatchCreateModal";
 import BulkPolicyModal from "@/components/BulkPolicyModal";
 import DataHub from "@/components/DataHub";
+import { ConfirmActionPanel, EmptyState, LoadingRows, OperationNotice, type FeedbackTone } from "@/components/OperationFeedback";
 import { useI18n } from "@/components/I18nProvider";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
@@ -47,6 +48,17 @@ type TrafficAdjustmentTarget = {
   mode: TrafficAdjustmentMode;
 };
 
+type FeedbackState = {
+  tone: FeedbackTone;
+  title?: string;
+  message: string;
+};
+
+type PendingDelete = {
+  mode: "single" | "bulk";
+  imsis: string[];
+};
+
 interface ProfilesResponse {
   profiles: Array<{ name: string; title?: string }>;
 }
@@ -76,6 +88,9 @@ export default function SubscriberPage() {
   const [copiedImsi, setCopiedImsi] = useState<string | null>(null);
   const [traceImsi, setTraceImsi] = useState<string | null>(null);
   const [trafficAdjustmentTarget, setTrafficAdjustmentTarget] = useState<TrafficAdjustmentTarget | null>(null);
+  const [feedback, setFeedback] = useState<FeedbackState | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
+  const [isDeletingSingle, setIsDeletingSingle] = useState<string | null>(null);
   const { t } = useI18n();
   const { canEditSubscribers } = useAuth();
 
@@ -145,15 +160,10 @@ export default function SubscriberPage() {
     setIsModalOpen(true);
   };
 
-  const handleDelete = async (imsi: string, e: React.MouseEvent) => {
+  const handleDelete = (imsi: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm(`Are you sure you want to delete ${imsi}?`)) return;
-    try {
-      const res = await fetch(`/api/subscribers/${imsi}`, { method: "DELETE" });
-      if (res.ok) mutateSubscribers();
-    } catch (error) {
-      console.error("Failed to delete", error);
-    }
+    setActiveDropdown(null);
+    setPendingDelete({ mode: "single", imsis: [imsi] });
   };
 
   const handleOpenTrafficAdjustment = (sub: SubscriberRow, mode: TrafficAdjustmentMode, e: React.MouseEvent) => {
@@ -169,22 +179,49 @@ export default function SubscriberPage() {
     });
   };
 
-  const handleBulkDelete = async () => {
+  const handleBulkDelete = () => {
     if (selectedImsis.length === 0) return;
-    if (!confirm(`Are you sure you want to delete ${selectedImsis.length} subscribers?`)) return;
+    setPendingDelete({ mode: "bulk", imsis: [...selectedImsis] });
+  };
 
-    setIsDeletingBulk(true);
+  const executePendingDelete = async () => {
+    if (!pendingDelete || pendingDelete.imsis.length === 0) return;
+
+    const { mode, imsis } = pendingDelete;
+    const singleImsi = imsis[0] || "";
+    if (mode === "bulk") setIsDeletingBulk(true);
+    if (mode === "single") setIsDeletingSingle(singleImsi);
     try {
-      // Execute UI promises using a map to backend delete endpoints
-      await Promise.all(selectedImsis.map(imsi =>
-        fetch(`/api/subscribers/${imsi}`, { method: "DELETE" })
-      ));
-      setSelectedImsis([]);
-      mutateSubscribers();
+      const results = await Promise.all(imsis.map((imsi) => fetch(`/api/subscribers/${imsi}`, { method: "DELETE" })));
+      if (results.some((res) => !res.ok)) {
+        throw new Error("One or more delete requests failed.");
+      }
+      if (mode === "bulk") {
+        setSelectedImsis([]);
+        setFeedback({
+          tone: "success",
+          title: t("sub_feedback_success_title"),
+          message: t("sub_feedback_bulk_delete_success", { count: imsis.length }),
+        });
+      } else {
+        setFeedback({
+          tone: "success",
+          title: t("sub_feedback_success_title"),
+          message: t("sub_feedback_delete_success", { imsi: singleImsi }),
+        });
+      }
+      setPendingDelete(null);
+      await mutateSubscribers();
     } catch (error) {
-      console.error("Failed to perform bulk delete", error);
+      console.error("Failed to perform subscriber delete", error);
+      setFeedback({
+        tone: "danger",
+        title: t("sub_feedback_error_title"),
+        message: mode === "bulk" ? t("sub_feedback_bulk_delete_error") : t("sub_feedback_delete_error", { imsi: singleImsi }),
+      });
     } finally {
       setIsDeletingBulk(false);
+      setIsDeletingSingle(null);
     }
   };
 
@@ -269,6 +306,8 @@ export default function SubscriberPage() {
   const pageImsis = paginatedSubscribers.map((s) => s.imsi);
   const selectedOnPageCount = pageImsis.filter((imsi) => selectedImsis.includes(imsi)).length;
   const isAllPageSelected = pageImsis.length > 0 && selectedOnPageCount === pageImsis.length;
+  const pendingDeleteItems = pendingDelete?.imsis.slice(0, 3).join(", ") || "";
+  const pendingDeleteOverflow = pendingDelete && pendingDelete.imsis.length > 3 ? ` +${pendingDelete.imsis.length - 3}` : "";
 
   useEffect(() => {
     if (subscribersData && currentPage > totalPages) {
@@ -322,6 +361,31 @@ export default function SubscriberPage() {
         </div>
       </div>
 
+      {feedback && (
+        <OperationNotice
+          tone={feedback.tone}
+          title={feedback.title}
+          message={feedback.message}
+          onClose={() => setFeedback(null)}
+        />
+      )}
+
+      {pendingDelete && (
+        <ConfirmActionPanel
+          title={pendingDelete.mode === "bulk" ? t("sub_confirm_bulk_delete_title", { count: pendingDelete.imsis.length }) : t("sub_confirm_delete_title")}
+          message={
+            pendingDelete.mode === "bulk"
+              ? t("sub_confirm_bulk_delete_desc", { items: `${pendingDeleteItems}${pendingDeleteOverflow}` })
+              : t("sub_confirm_delete_desc", { items: pendingDeleteItems })
+          }
+          confirmLabel={t("delete")}
+          cancelLabel={t("cancel")}
+          isWorking={isDeletingBulk || Boolean(isDeletingSingle)}
+          onConfirm={executePendingDelete}
+          onCancel={() => setPendingDelete(null)}
+        />
+      )}
+
       {/* Search, Bulk Action & Data Sync Bar */}
       <div className="page-action-bar">
         <div style={{ display: "flex", alignItems: "center", gap: "1.5rem" }}>
@@ -346,7 +410,7 @@ export default function SubscriberPage() {
                   <Download size={14}/> {t("export_csv")}
                 </button>
                 {canEditSubscribers && (
-                  <button className="btn" style={{ background: "var(--danger)", padding: "0.4rem 1rem", display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.85rem" }} onClick={handleBulkDelete} disabled={isDeletingBulk}>
+                  <button className="btn" style={{ background: "var(--danger)", padding: "0.4rem 1rem", display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.85rem" }} onClick={handleBulkDelete} disabled={isDeletingBulk || Boolean(pendingDelete)}>
                     {isDeletingBulk ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }}/> : <Trash2 size={14}/>}
                     {t("delete")}
                   </button>
@@ -420,25 +484,20 @@ export default function SubscriberPage() {
       {/* Main Data Table */}
       <div className="dash-card shadow" style={{ borderRadius: "12px", overflow: "hidden", padding: 0 }}>
         {isLoading ? (
-          <div style={{ padding: "1rem" }}>
-            <div style={{ display: "flex", gap: "1rem", marginBottom: "1rem", padding: "1rem", background: "var(--surface-hover)", borderRadius: "6px" }}>
-              {[1,2,3,4,5,6].map(i => <div key={i} className="skeleton-loader" style={{ height: "20px", flex: 1 }} />)}
-            </div>
-            {[1,2,3,4,5].map(i => (
-              <div key={i} style={{ display: "flex", gap: "1rem", padding: "1.5rem 1rem", borderBottom: "1px solid var(--surface-border)" }}>
-                <div className="skeleton-loader" style={{ height: "20px", width: "40px" }} />
-                <div className="skeleton-loader" style={{ height: "20px", width: "100px" }} />
-                <div className="skeleton-loader" style={{ height: "20px", width: "150px" }} />
-                <div className="skeleton-loader" style={{ height: "20px", flex: 1 }} />
-                <div className="skeleton-loader" style={{ height: "20px", width: "80px" }} />
-              </div>
-            ))}
-          </div>
+          <LoadingRows columns={canEditSubscribers ? 8 : 7} rows={5} />
         ) : totalSubscribers === 0 ? (
-          <div style={{ padding: "4rem", textAlign: "center", color: "var(--text-muted)" }}>
-            <Users size={48} style={{ margin: "0 auto 1rem", opacity: 0.2 }} />
-            {searchQuery ? t("no_subscribers_search") : t("no_subscribers_empty")}
-          </div>
+          <EmptyState
+            icon={<Users size={48} />}
+            title={searchQuery ? t("no_subscribers_search") : t("no_subscribers_empty")}
+            description={searchQuery ? t("sub_empty_search_desc") : t("sub_empty_create_desc")}
+            action={
+              canEditSubscribers && !searchQuery ? (
+                <button type="button" className="btn btn-primary" onClick={handleOpenNew}>
+                  <Plus size={16} /> {t("add_subscriber")}
+                </button>
+              ) : undefined
+            }
+          />
         ) : (
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "0.9rem" }}>
@@ -595,8 +654,13 @@ export default function SubscriberPage() {
                              <button onClick={() => handleOpenEdit(sub.imsi)} title={t("action_edit")} style={{ background: "transparent", border: "none", color: "var(--primary)", cursor: "pointer", display: "flex" }}>
                                <PenLine size={18} />
                              </button>
-                             <button onClick={(e) => handleDelete(sub.imsi, e)} title={t("action_delete")} style={{ background: "transparent", border: "none", color: "var(--danger)", cursor: "pointer", display: "flex" }}>
-                               <Trash2 size={18} />
+                             <button
+                               onClick={(e) => handleDelete(sub.imsi, e)}
+                               title={t("action_delete")}
+                               disabled={isDeletingSingle === sub.imsi || Boolean(pendingDelete)}
+                               style={{ background: "transparent", border: "none", color: "var(--danger)", cursor: pendingDelete ? "not-allowed" : "pointer", display: "flex", opacity: isDeletingSingle === sub.imsi ? 0.6 : 1 }}
+                             >
+                               {isDeletingSingle === sub.imsi ? <span className="spinner" style={{ width: 18, height: 18, borderWidth: 2 }} /> : <Trash2 size={18} />}
                              </button>
                              <div style={{ position: "static" }}>
                                <button title={t("action_more")} onClick={(e) => { e.stopPropagation(); setActiveDropdown(activeDropdown === sub.imsi ? null : sub.imsi); }} style={{ background: "transparent", border: "none", color: "var(--text-muted)", cursor: "pointer", display: "flex", padding: "0.2rem" }}>

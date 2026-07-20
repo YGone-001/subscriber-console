@@ -592,6 +592,10 @@ h2 {
   100% { background-position: -200% 0; }
 }
 
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 /* Layout Utilities */
 .container {
   width: 100%;
