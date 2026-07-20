@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useI18n } from "@/components/I18nProvider";
 import { AlertTriangle, ArrowRight, Boxes, Clock, Gauge, Layers, Plus, ShieldCheck, UserRound, Users } from "lucide-react";
 import ProfileModal from "@/components/ProfileModal";
+import { EmptyState, LoadingRows, OperationNotice } from "@/components/OperationFeedback";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
 import { useAuth } from "@/hooks/useAuth";
@@ -34,6 +35,7 @@ interface SubscribersResponse {
 type GovernanceDomain = "all" | "billing" | "network" | "slice" | "access";
 type ProfileDomain = Exclude<GovernanceDomain, "all">;
 type RiskLevel = "low" | "medium" | "high";
+type ProfileNotice = { type: "success" | "error"; text: string };
 
 const DOMAIN_OPTIONS: GovernanceDomain[] = ["all", "billing", "network", "slice", "access"];
 
@@ -82,6 +84,7 @@ export default function ProfilePage() {
   const [domainFilter, setDomainFilter] = useState<GovernanceDomain>("all");
   const [modalProfileName, setModalProfileName] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [notice, setNotice] = useState<ProfileNotice | null>(null);
   const [currentTime] = useState(() => Date.now());
   const { canEditTemplates } = useAuth();
 
@@ -129,11 +132,13 @@ export default function ProfilePage() {
   }), [currentTime, governedProfiles]);
 
   const handleOpenNew = () => {
+    setNotice(null);
     setModalProfileName(null);
     setIsModalOpen(true);
   };
 
   const handleOpenEdit = (name: string) => {
+    setNotice(null);
     setModalProfileName(name);
     setIsModalOpen(true);
   };
@@ -150,6 +155,15 @@ export default function ProfilePage() {
           <h1 style={{ margin: 0, fontSize: "1.75rem", fontWeight: 700, color: "var(--text-main)" }}>{t("prof_governance_title")}</h1>
           <p style={{ margin: "0.5rem 0 0", color: "var(--text-muted)", fontSize: "0.95rem" }}>{t("prof_governance_subtitle")}</p>
         </div>
+
+        {notice && (
+          <OperationNotice
+            tone={notice.type === "error" ? "danger" : "success"}
+            title={notice.type === "error" ? t("error") : t("success")}
+            message={notice.text}
+            onClose={() => setNotice(null)}
+          />
+        )}
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: "1rem", marginBottom: "1.5rem" }}>
           {[
@@ -202,10 +216,23 @@ export default function ProfilePage() {
         </div>
 
         {isLoading ? (
-          <div className="text-center mt-8 text-muted">{t("prof_loading_list")}</div>
+          <div className="dash-card" style={{ padding: 0, overflow: "hidden" }}>
+            <LoadingRows columns={4} rows={4} />
+          </div>
         ) : filteredProfiles.length === 0 ? (
-          <div className="text-center mt-8 text-muted bg-white p-12 shadow" style={{ borderRadius: "4px" }}>
-            {searchQuery ? t("prof_no_match") : t("prof_empty_list")}
+          <div className="dash-card" style={{ padding: 0, overflow: "hidden" }}>
+            <EmptyState
+              icon={<Boxes size={48} />}
+              title={searchQuery || domainFilter !== "all" ? t("prof_no_match") : t("prof_empty_list")}
+              description={searchQuery || domainFilter !== "all" ? t("prof_empty_filtered_desc") : t("prof_empty_desc")}
+              action={
+                canEditTemplates && !searchQuery && domainFilter === "all" ? (
+                  <button type="button" className="btn btn-primary" onClick={handleOpenNew}>
+                    <Plus size={16} /> {t("prof_new_profile")}
+                  </button>
+                ) : undefined
+              }
+            />
           </div>
         ) : (
           <div className="imsi-grid">
@@ -296,6 +323,7 @@ export default function ProfilePage() {
           profileName={modalProfileName}
           onClose={() => setIsModalOpen(false)}
           onRefresh={() => mutate()}
+          onOperation={setNotice}
         />
       )}
     </>

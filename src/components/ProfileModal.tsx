@@ -7,12 +7,14 @@ import { parseBytes, formatBytes } from "@/lib/unitParser";
 import ProfileViewMode from "./profile/ProfileViewMode";
 import ProfileEditMode from "./profile/ProfileEditMode";
 import { useAuth } from "@/hooks/useAuth";
+import { ConfirmActionPanel, LoadingRows, OperationNotice } from "./OperationFeedback";
 
 // Session type mapping (IPv4/IPv6/IPv4v6)
 interface ProfileModalProps {
   profileName: string | null;
   onClose: () => void;
   onRefresh: () => void;
+  onOperation?: (notice: { type: "success" | "error"; text: string }) => void;
 }
 
 type ProfileVersionSummary = {
@@ -29,14 +31,16 @@ type ProfileVersionDetail = ProfileVersionSummary & {
   profile: any;
 };
 
-export default function ProfileModal({ profileName, onClose, onRefresh }: ProfileModalProps) {
+export default function ProfileModal({ profileName, onClose, onRefresh, onOperation }: ProfileModalProps) {
   const { t } = useI18n();
   const { isRoot } = useAuth();
   const [isEditing, setIsEditing] = useState(!profileName);
   const [isLoading, setIsLoading] = useState(!!profileName);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [isAccessRestrictionsExpanded, setIsAccessRestrictionsExpanded] = useState(false);
   const [profileSnapshot, setProfileSnapshot] = useState<any>(null);
   const [versions, setVersions] = useState<ProfileVersionSummary[]>([]);
@@ -94,6 +98,11 @@ export default function ProfileModal({ profileName, onClose, onRefresh }: Profil
     }
   }, [profileName]);
 
+  const readError = async (res: Response, fallback: string) => {
+    const data = await res.json().catch(() => ({}));
+    return data.error || fallback;
+  };
+
   const loadProfileData = useCallback(async () => {
     if (!profileName) return;
     setIsLoading(true);
@@ -141,14 +150,30 @@ export default function ProfileModal({ profileName, onClose, onRefresh }: Profil
   }, [loadProfileData, loadVersions, profileName]);
 
   /** Delete Profile */
-  const handleDelete = async () => {
+  const handleDelete = () => {
     if (!profileName) return;
-    if (!confirm(t("prof_del_confirm", { name: profileName }))) return;
+    setError(null);
+    setIsDeleteConfirmOpen(true);
+  };
+
+  const executeDelete = async () => {
+    if (!profileName) return;
+    setIsDeleting(true);
+    setError(null);
     try {
       const res = await fetch(`/api/profiles/${profileName}`, { method: "DELETE" });
-      if (res.ok) { onRefresh(); onClose(); }
-    } catch {
-      setError(t("prof_err_delete"));
+      if (!res.ok) {
+        throw new Error(await readError(res, t("prof_err_delete")));
+      }
+      onRefresh();
+      onOperation?.({ type: "success", text: t("prof_msg_deleted") });
+      onClose();
+    } catch (err: any) {
+      const message = err.message || t("prof_err_delete");
+      setError(message);
+      onOperation?.({ type: "error", text: message });
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -185,8 +210,11 @@ export default function ProfileModal({ profileName, onClose, onRefresh }: Profil
       setRestoreConfirmVersionId(null);
       setIsEditing(false);
       onRefresh();
+      onOperation?.({ type: "success", text: t("prof_version_msg_restored") });
     } catch (err: any) {
-      setError(err.message || t("prof_version_err_restore"));
+      const message = err.message || t("prof_version_err_restore");
+      setError(message);
+      onOperation?.({ type: "error", text: message });
     } finally {
       setIsRestoring(false);
     }
@@ -278,9 +306,12 @@ export default function ProfileModal({ profileName, onClose, onRefresh }: Profil
 
       if (!res.ok) throw new Error(t("prof_err_save"));
       onRefresh();
+      onOperation?.({ type: "success", text: t("prof_msg_saved") });
       onClose();
     } catch (err: any) {
-      setError(err.message || t("sub_err_save"));
+      const message = err.message || t("sub_err_save");
+      setError(message);
+      onOperation?.({ type: "error", text: message });
     } finally {
       setIsSaving(false);
     }
@@ -466,11 +497,25 @@ export default function ProfileModal({ profileName, onClose, onRefresh }: Profil
             {!isEditing && (
               <button className="btn-icon" onClick={() => setIsEditing(true)} title={t("prof_btn_edit")}><Pencil size={24} color="var(--primary)" /></button>
             )}
-            {profileName && <button className="btn-icon" onClick={handleDelete} title={t("prof_btn_delete")}><Trash2 size={24} color="var(--danger)" /></button>}
+            {profileName && <button className="btn-icon" onClick={handleDelete} title={t("prof_btn_delete")} disabled={isDeleting || isDeleteConfirmOpen}><Trash2 size={24} color="var(--danger)" /></button>}
             <div style={{ width: "1px", height: "30px", background: "var(--surface-border)", margin: "0 0.5rem" }} />
             <button className="btn-icon" onClick={onClose} title={t("close")}><X size={26} color="var(--text-muted)" /></button>
           </div>
         </div>
+
+        {isDeleteConfirmOpen && (
+          <div style={{ padding: "0 1.5rem" }}>
+            <ConfirmActionPanel
+              title={t("prof_del_confirm", { name: profileName || "" })}
+              message={t("prof_del_desc")}
+              confirmLabel={t("delete")}
+              cancelLabel={t("cancel")}
+              isWorking={isDeleting}
+              onConfirm={executeDelete}
+              onCancel={() => setIsDeleteConfirmOpen(false)}
+            />
+          </div>
+        )}
 
         {/* Body: Left TOC + Right Content */}
         <div className="workflow-body">
@@ -512,12 +557,15 @@ export default function ProfileModal({ profileName, onClose, onRefresh }: Profil
 
           <div className="workflow-content">
             {error && (
-              <div className="dash-card" style={{ borderLeft: '4px solid var(--danger)', marginBottom: '1.5rem', padding: "1rem 1.5rem", background: "var(--surface)" }}>
-                <p style={{ color: 'var(--danger)', margin: 0, fontWeight: 600 }}>{error}</p>
-              </div>
+              <OperationNotice
+                tone="danger"
+                title={t("error")}
+                message={error}
+                onClose={() => setError(null)}
+              />
             )}
             {isLoading ? (
-              <div style={{ textAlign: "center", marginTop: "4rem", color: "var(--text-muted)", fontSize: "1.1rem" }}>{t("prof_loading_data")}</div>
+              <LoadingRows columns={4} rows={4} />
             ) : (
               <div className="workflow-content-inner">
                 {renderVersionHistory()}
