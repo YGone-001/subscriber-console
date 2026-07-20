@@ -2,6 +2,7 @@ import { logAudit } from '@/lib/audit';
 import { validateImsi, validatePolicyChangePayload, validateTrafficAdjustmentPayload } from '@/lib/subscriberValidation';
 import type { ApprovalDocument } from '@/server/repositories/approvalRepository';
 import { adjustOcsTrafficBalance, changeOcsPolicyForSubscribers } from '@/server/repositories/ocsBillingRepository';
+import { createRating, deleteRating, updateRating } from '@/server/repositories/ratingRepository';
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -60,6 +61,39 @@ export async function executeApproval(approval: ApprovalDocument, request: Reque
       request
     );
 
+    return result;
+  }
+
+  if (approval.action === 'RATING_CREATE') {
+    if (approval.payload.rating_group_id === undefined || approval.payload.rating_group_id === null || approval.payload.rating_group_id === '') {
+      throw new Error('rating_group_id is required');
+    }
+    const result = await createRating(approval.payload as { rating_group_id: unknown } & Record<string, unknown>);
+    logAudit('CREATE', `rating:${result.rating_group_id}`, null, { ...result, approvalId: approval.id }, request);
+    return result;
+  }
+
+  if (approval.action === 'RATING_UPDATE') {
+    const payload = asRecord(approval.payload);
+    const id = String(payload.id || '');
+    if (!/^\d+$/.test(id)) throw new Error('Invalid rating ID format');
+
+    const result = await updateRating(id, asRecord(payload.changes));
+    logAudit('UPDATE', `rating:${id}`, { approvalId: approval.id }, { ...result, approvalId: approval.id }, request);
+    return result;
+  }
+
+  if (approval.action === 'RATING_DELETE') {
+    const payload = asRecord(approval.payload);
+    const id = String(payload.id || '');
+    if (!/^\d+$/.test(id)) throw new Error('Invalid rating ID format');
+
+    const result = await deleteRating(id);
+    if (!result.deleted) {
+      throw new Error(`Cannot delete: Rating group is currently used by ${result.references.count} subscribers`);
+    }
+
+    logAudit('DELETE', `rating:${id}`, { id, approvalId: approval.id }, null, request);
     return result;
   }
 

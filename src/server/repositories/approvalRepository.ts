@@ -1,7 +1,12 @@
 import { Document, Filter } from 'mongodb';
 import { getAppCollection, mongoCollections } from '@/lib/mongo';
 
-export type ApprovalAction = 'POLICY_CHANGE' | 'TRAFFIC_ADJUSTMENT';
+export type ApprovalAction =
+  | 'POLICY_CHANGE'
+  | 'TRAFFIC_ADJUSTMENT'
+  | 'RATING_CREATE'
+  | 'RATING_UPDATE'
+  | 'RATING_DELETE';
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'executed' | 'failed';
 
 export type ApprovalDocument = {

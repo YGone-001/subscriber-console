@@ -26,7 +26,7 @@ type RoleKey = "root" | "operator" | "viewer";
 type PermissionLevel = "manage" | "write" | "read" | "none";
 type CapabilityLevel = "allow" | "approval" | "export" | "deny";
 type ApprovalStatus = "pending" | "approved" | "rejected" | "executed" | "failed";
-type ApprovalAction = "POLICY_CHANGE" | "TRAFFIC_ADJUSTMENT";
+type ApprovalAction = "POLICY_CHANGE" | "TRAFFIC_ADJUSTMENT" | "RATING_CREATE" | "RATING_UPDATE" | "RATING_DELETE";
 
 type ApprovalRequest = {
   id: string;

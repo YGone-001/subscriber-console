@@ -25,6 +25,12 @@ function approvalErrorResponse(error: unknown) {
   if (message === 'OCS_TOTAL_BELOW_COMMITTED') {
     return NextResponse.json({ error: 'Total quota cannot be lower than used plus reserved traffic' }, { status: 400 });
   }
+  if (message === 'RATING_EXISTS') {
+    return NextResponse.json({ error: 'Rating Group ID already exists' }, { status: 409 });
+  }
+  if (message.startsWith('Cannot delete: Rating group')) {
+    return NextResponse.json({ error: message }, { status: 409 });
+  }
   if (message) {
     return NextResponse.json({ error: message }, { status: 400 });
   }

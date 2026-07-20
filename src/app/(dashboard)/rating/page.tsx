@@ -209,9 +209,9 @@ export default function RatingPage() {
     return null;
   };
 
-  const readError = async (res: Response, fallback: string) => {
-    const data = await res.json().catch(() => ({}));
-    return data.error || fallback;
+  const noticeForRatingResponse = (data: any, fallback: string) => {
+    if (data?.approval?.id) return t("approval_msg_submitted", { id: data.approval.id });
+    return fallback;
   };
 
   const handleCreate = async () => {
@@ -228,13 +228,14 @@ export default function RatingPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newForm),
       });
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
         setIsAdding(false);
         setNewForm(makeDefaultForm());
-        mutate();
-        setNotice({ type: "success", text: t("rating_msg_created") });
+        if (!data?.approval?.id) mutate();
+        setNotice({ type: "success", text: noticeForRatingResponse(data, t("rating_msg_created")) });
       } else {
-        setNotice({ type: "error", text: await readError(res, t("rating_err_create")) });
+        setNotice({ type: "error", text: data.error || t("rating_err_create") });
       }
     } catch (error) {
       console.error("Create failed", error);
@@ -258,12 +259,13 @@ export default function RatingPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(editForm),
       });
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
         setEditingId(null);
-        mutate();
-        setNotice({ type: "success", text: t("rating_msg_updated") });
+        if (!data?.approval?.id) mutate();
+        setNotice({ type: "success", text: noticeForRatingResponse(data, t("rating_msg_updated")) });
       } else {
-        setNotice({ type: "error", text: await readError(res, t("rating_err_update")) });
+        setNotice({ type: "error", text: data.error || t("rating_err_update") });
       }
     } catch (error) {
       console.error("Update failed", error);
@@ -285,12 +287,13 @@ export default function RatingPage() {
     setNotice(null);
     try {
       const res = await fetch(`/api/ratings/${id}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
         setPendingDeleteId(null);
-        await mutate();
-        setNotice({ type: "success", text: t("rating_msg_deleted") });
+        if (!data?.approval?.id) await mutate();
+        setNotice({ type: "success", text: noticeForRatingResponse(data, t("rating_msg_deleted")) });
       } else {
-        setNotice({ type: "error", text: await readError(res, t("rating_err_delete")) });
+        setNotice({ type: "error", text: data.error || t("rating_err_delete") });
       }
     } catch (error) {
       console.error("Delete failed", error);

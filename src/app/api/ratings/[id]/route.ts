@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
+import { logAudit } from '@/lib/audit';
 import { requireAuth, requireCapability } from '@/lib/authz';
+import { capabilityDecision } from '@/lib/permissions';
 import { enforceRateLimit } from '@/lib/rateLimit';
+import { createApprovalRequest } from '@/server/repositories/approvalRepository';
 import {
   deleteRating,
   getRating,
@@ -42,7 +45,7 @@ export async function GET(request: Request, { params }: RouteContext) {
 
 export async function PUT(request: Request, { params }: RouteContext) {
   const { id } = await params;
-  const auth = requireCapability(request, 'rating_publish');
+  const auth = requireCapability(request, 'rating_publish', { allowApproval: true });
   if (!auth.ok) return auth.response;
 
   const rateLimit = await enforceRateLimit(`ratings:update:${auth.auth.user}`, 30, 60);
@@ -52,6 +55,25 @@ export async function PUT(request: Request, { params }: RouteContext) {
 
   try {
     const body = await request.json();
+    if (capabilityDecision(auth.auth.role, 'rating_publish') === 'approval') {
+      const approval = await createApprovalRequest({
+        action: 'RATING_UPDATE',
+        requester: auth.auth.user,
+        targetId: `rating:${id}`,
+        summary: `Update rating group ${id}`,
+        payload: {
+          id,
+          changes: body,
+        },
+      });
+
+      logAudit('UPDATE', `approval:${approval.id}`, null, approval, request);
+      return NextResponse.json(
+        { message: 'Approval required before rating update', approval },
+        { status: 202 }
+      );
+    }
+
     await updateRating(id, body);
     return NextResponse.json({ message: 'Rating updated successfully' });
   } catch (error) {
@@ -62,7 +84,7 @@ export async function PUT(request: Request, { params }: RouteContext) {
 
 export async function DELETE(request: Request, { params }: RouteContext) {
   const { id } = await params;
-  const auth = requireCapability(request, 'rating_publish');
+  const auth = requireCapability(request, 'rating_publish', { allowApproval: true });
   if (!auth.ok) return auth.response;
 
   const rateLimit = await enforceRateLimit(`ratings:delete:${auth.auth.user}`, 20, 60);
@@ -71,6 +93,22 @@ export async function DELETE(request: Request, { params }: RouteContext) {
   if (!isValidRatingId(id)) return NextResponse.json({ error: 'Invalid rating ID format' }, { status: 400 });
 
   try {
+    if (capabilityDecision(auth.auth.role, 'rating_publish') === 'approval') {
+      const approval = await createApprovalRequest({
+        action: 'RATING_DELETE',
+        requester: auth.auth.user,
+        targetId: `rating:${id}`,
+        summary: `Delete rating group ${id}`,
+        payload: { id },
+      });
+
+      logAudit('UPDATE', `approval:${approval.id}`, null, approval, request);
+      return NextResponse.json(
+        { message: 'Approval required before rating deletion', approval },
+        { status: 202 }
+      );
+    }
+
     const result = await deleteRating(id);
     if (!result.deleted) {
       return NextResponse.json(
