@@ -32,7 +32,7 @@ export const ROLE_CAPABILITIES: Record<UserRole, Record<Capability, CapabilityDe
     subscriber_write: 'allow',
     policy_approve: 'approval',
     balance_adjust: 'approval',
-    profile_rollback: 'deny',
+    profile_rollback: 'approval',
     rating_publish: 'approval',
     audit_export: 'export',
     system_heal: 'approval',

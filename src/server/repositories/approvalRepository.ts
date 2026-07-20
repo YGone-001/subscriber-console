@@ -6,7 +6,8 @@ export type ApprovalAction =
   | 'TRAFFIC_ADJUSTMENT'
   | 'RATING_CREATE'
   | 'RATING_UPDATE'
-  | 'RATING_DELETE';
+  | 'RATING_DELETE'
+  | 'PROFILE_RESTORE';
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'executed' | 'failed';
 
 export type ApprovalDocument = {

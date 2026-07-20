@@ -26,7 +26,7 @@ type RoleKey = "root" | "operator" | "viewer";
 type PermissionLevel = "manage" | "write" | "read" | "none";
 type CapabilityLevel = "allow" | "approval" | "export" | "deny";
 type ApprovalStatus = "pending" | "approved" | "rejected" | "executed" | "failed";
-type ApprovalAction = "POLICY_CHANGE" | "TRAFFIC_ADJUSTMENT" | "RATING_CREATE" | "RATING_UPDATE" | "RATING_DELETE";
+type ApprovalAction = "POLICY_CHANGE" | "TRAFFIC_ADJUSTMENT" | "RATING_CREATE" | "RATING_UPDATE" | "RATING_DELETE" | "PROFILE_RESTORE";
 
 type ApprovalRequest = {
   id: string;
@@ -98,7 +98,7 @@ const ACTION_CAPABILITIES: Array<{
   { key: "subscriber_write", icon: <User size={16} />, root: "allow", operator: "allow", viewer: "deny" },
   { key: "policy_approve", icon: <GitBranch size={16} />, root: "allow", operator: "approval", viewer: "deny" },
   { key: "balance_adjust", icon: <SlidersHorizontal size={16} />, root: "allow", operator: "approval", viewer: "deny" },
-  { key: "profile_rollback", icon: <RotateCcw size={16} />, root: "allow", operator: "deny", viewer: "deny" },
+  { key: "profile_rollback", icon: <RotateCcw size={16} />, root: "allow", operator: "approval", viewer: "deny" },
   { key: "rating_publish", icon: <CheckCircle2 size={16} />, root: "allow", operator: "approval", viewer: "deny" },
   { key: "audit_export", icon: <Download size={16} />, root: "export", operator: "export", viewer: "export" },
   { key: "system_heal", icon: <Activity size={16} />, root: "allow", operator: "approval", viewer: "deny" },

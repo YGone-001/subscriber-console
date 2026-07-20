@@ -40,7 +40,7 @@ type DraftDiffRow = {
 
 export default function ProfileModal({ profileName, onClose, onRefresh, onOperation, impactedSubscribers = 0 }: ProfileModalProps) {
   const { t } = useI18n();
-  const { isRoot } = useAuth();
+  const { isRoot, isOperator } = useAuth();
   const [isEditing, setIsEditing] = useState(!profileName);
   const [isLoading, setIsLoading] = useState(!!profileName);
   const [isSaving, setIsSaving] = useState(false);
@@ -254,9 +254,14 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
     setError(null);
     try {
       const res = await fetch(`/api/profiles/${profileName}/versions/${selectedVersion.versionId}/restore`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
         throw new Error(data.error || t("prof_version_err_restore"));
+      }
+      if (data?.approval?.id) {
+        setRestoreConfirmVersionId(null);
+        onOperation?.({ type: "success", text: t("approval_msg_submitted", { id: data.approval.id }) });
+        return;
       }
       await loadProfileData();
       await loadVersions();
@@ -479,7 +484,7 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
                       {formatVersionTime(selectedVersion.savedAt)} · {selectedVersion.savedBy}
                     </div>
                   </div>
-                  {isRoot && (
+                  {(isRoot || isOperator) && (
                     <button className="btn btn-primary" onClick={handleRestoreVersion} disabled={isRestoring} style={{ padding: "0.55rem 0.85rem", fontSize: "0.82rem", whiteSpace: "nowrap" }}>
                       <RotateCcw size={14} /> {isRestoring ? t("prof_version_restoring") : (restoreConfirmVersionId === selectedVersion.versionId ? t("prof_version_restore_confirm_btn") : t("prof_version_restore"))}
                     </button>
@@ -562,10 +567,10 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
             </div>
           </div>
           <div className="workflow-header-actions">
-            {!isEditing && (
+            {isRoot && !isEditing && (
               <button className="btn-icon" onClick={() => { setIsEditing(true); setIsSaveConfirmOpen(false); }} title={t("prof_btn_edit")}><Pencil size={24} color="var(--primary)" /></button>
             )}
-            {profileName && <button className="btn-icon" onClick={handleDelete} title={t("prof_btn_delete")} disabled={isDeleting || isDeleteConfirmOpen}><Trash2 size={24} color="var(--danger)" /></button>}
+            {isRoot && profileName && <button className="btn-icon" onClick={handleDelete} title={t("prof_btn_delete")} disabled={isDeleting || isDeleteConfirmOpen}><Trash2 size={24} color="var(--danger)" /></button>}
             <div style={{ width: "1px", height: "30px", background: "var(--surface-border)", margin: "0 0.5rem" }} />
             <button className="btn-icon" onClick={onClose} title={t("close")}><X size={26} color="var(--text-muted)" /></button>
           </div>
@@ -706,11 +711,11 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
               <button className="btn btn-primary" onClick={handleSave} disabled={isSaving || (!profileName && !inputName)}>
                 <Save size={16}/> {isSaving ? t("sub_btn_saving") : (profileName ? t("prof_btn_save") : t("prof_btn_create"))}
               </button>
-            ) : (
+            ) : isRoot ? (
               <button className="btn btn-primary" onClick={() => { setIsEditing(true); setIsSaveConfirmOpen(false); }}>
                 <Pencil size={16}/> {t("prof_btn_edit")}
               </button>
-            )}
+            ) : null}
           </div>
         </div>
       </div>

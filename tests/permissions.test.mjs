@@ -12,6 +12,7 @@ test('role capability matrix matches operator guardrails', () => {
   assert.equal(capabilityDecision('operator', 'subscriber_write'), 'allow');
   assert.equal(capabilityDecision('operator', 'policy_approve'), 'approval');
   assert.equal(capabilityDecision('operator', 'balance_adjust'), 'approval');
+  assert.equal(capabilityDecision('operator', 'profile_rollback'), 'approval');
   assert.equal(capabilityDecision('operator', 'user_admin'), 'deny');
   assert.equal(capabilityDecision('viewer', 'audit_export'), 'export');
   assert.equal(capabilityDecision('viewer', 'subscriber_write'), 'deny');

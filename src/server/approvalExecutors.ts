@@ -2,6 +2,7 @@ import { logAudit } from '@/lib/audit';
 import { validateImsi, validatePolicyChangePayload, validateTrafficAdjustmentPayload } from '@/lib/subscriberValidation';
 import type { ApprovalDocument } from '@/server/repositories/approvalRepository';
 import { adjustOcsTrafficBalance, changeOcsPolicyForSubscribers } from '@/server/repositories/ocsBillingRepository';
+import { restoreProfileVersion } from '@/server/repositories/profileRepository';
 import { createRating, deleteRating, updateRating } from '@/server/repositories/ratingRepository';
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -95,6 +96,27 @@ export async function executeApproval(approval: ApprovalDocument, request: Reque
 
     logAudit('DELETE', `rating:${id}`, { id, approvalId: approval.id }, null, request);
     return result;
+  }
+
+  if (approval.action === 'PROFILE_RESTORE') {
+    const payload = asRecord(approval.payload);
+    const name = String(payload.name || '');
+    const versionId = String(payload.versionId || '');
+    const requester = String(payload.requester || approval.requester);
+    if (!/^[a-zA-Z0-9_\s-]+$/.test(name)) throw new Error('Invalid profile name format');
+    if (!versionId) throw new Error('versionId is required');
+
+    const result = await restoreProfileVersion(name, versionId, requester);
+    if (!result) throw new Error('Version not found');
+
+    logAudit(
+      'PROFILE_UPDATE',
+      name,
+      result.current,
+      { ...result.restored, approvalId: approval.id },
+      request
+    );
+    return { profile: result.restored, version: result.version };
   }
 
   throw new Error('Unsupported approval action');
