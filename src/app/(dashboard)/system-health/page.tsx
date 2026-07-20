@@ -5,6 +5,12 @@ import { Activity, ShieldAlert, HeartPulse, HardDrive, Database, Check, RefreshC
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
 import { useI18n } from "@/components/I18nProvider";
+import { EmptyState, LoadingRows, OperationNotice } from "@/components/OperationFeedback";
+
+type HealthNotice = {
+  type: "success" | "error" | "warning";
+  text: string;
+};
 
 export default function SystemHealthPage() {
   const { t } = useI18n();
@@ -26,6 +32,7 @@ export default function SystemHealthPage() {
   const [scannedTotal, setScannedTotal] = useState(0);
   const [anomalies, setAnomalies] = useState<any[]>([]);
   const [auditPhase, setAuditPhase] = useState<'IDLE' | 'INIT' | 'SCAN_SUB' | 'SCAN_OCS' | 'COMPLETE' | 'ABORTED'>('IDLE');
+  const [notice, setNotice] = useState<HealthNotice | null>(null);
 
   // Heal Modal states
   const [healModalOpen, setHealModalOpen] = useState(false);
@@ -39,6 +46,7 @@ export default function SystemHealthPage() {
 
   const runFullAudit = async () => {
     setIsAuditing(true);
+    setNotice(null);
     setAnomalies([]);
     setScannedTotal(0);
     setAuditPhase('INIT');
@@ -86,6 +94,7 @@ export default function SystemHealthPage() {
     } catch {
       setIsAuditing(false);
       setAuditPhase('ABORTED');
+      setNotice({ type: "error", text: t("health_scan_abort") });
     }
   };
 
@@ -93,6 +102,7 @@ export default function SystemHealthPage() {
     setTargetAnomaly(anomaly);
     setIsHealConfirmed(false);
     setHealProfile("");
+    setNotice(null);
     setHealModalOpen(true);
   };
 
@@ -115,14 +125,17 @@ export default function SystemHealthPage() {
         // optimistic remove from list
         const updatedList = anomalies.filter(a => a.imsi !== targetAnomaly.imsi || a.type !== targetAnomaly.type);
         setAnomalies(updatedList);
-        mutateStatus();
+        await mutateStatus();
         scanMetrics.current.anomaliesList = updatedList;
+        setNotice({ type: "success", text: t("health_msg_heal_success", { imsi: targetAnomaly.imsi }) });
         setHealModalOpen(false);
       } else {
-        alert(t("health_err_heal_backend"));
+        const message = t("health_err_heal_backend");
+        setNotice({ type: "error", text: message });
       }
     } catch {
-      alert(t("health_err_heal_net"));
+      const message = t("health_err_heal_net");
+      setNotice({ type: "error", text: message });
     } finally {
       setIsHealing(false);
     }
@@ -150,6 +163,15 @@ export default function SystemHealthPage() {
   return (
     <>
       <div className="container animate-fade-in" style={{ padding: "3rem", paddingBottom: "100px" }}>
+
+      {notice && (
+        <OperationNotice
+          tone={notice.type === "success" ? "success" : notice.type === "warning" ? "warning" : "danger"}
+          title={notice.type === "success" ? t("success") : notice.type === "warning" ? t("status") : t("error")}
+          message={notice.text}
+          onClose={() => setNotice(null)}
+        />
+      )}
 
       <div style={{ background: "var(--surface)", backdropFilter: "blur(12px)", borderRadius: "12px", border: "1px solid var(--surface-border)", boxShadow: "0 4px 20px rgba(0,0,0,0.2)", padding: "1.5rem 2rem", marginBottom: "2rem" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem", marginBottom: "1.25rem" }}>
@@ -290,10 +312,21 @@ export default function SystemHealthPage() {
           <h2 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 600, color: "var(--text-main)" }}>{t("health_anomalies_detected")}</h2>
         </div>
 
-        {anomalies.length === 0 ? (
-          <div style={{ padding: "4rem", textAlign: "center", color: "var(--text-muted)" }}>
-            {t("health_no_anomalies")}
-          </div>
+        {isAuditing && anomalies.length === 0 ? (
+          <LoadingRows columns={4} rows={4} />
+        ) : anomalies.length === 0 ? (
+          <EmptyState
+            icon={<ShieldAlert size={48} />}
+            title={t("health_no_anomalies")}
+            description={auditPhase === "IDLE" ? t("health_empty_idle_desc") : t("health_empty_complete_desc")}
+            action={
+              auditPhase === "IDLE" ? (
+                <button type="button" className="btn btn-primary" onClick={runFullAudit}>
+                  <Database size={16} /> {t("health_btn_run")}
+                </button>
+              ) : undefined
+            }
+          />
         ) : (
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -342,6 +375,15 @@ export default function SystemHealthPage() {
             </div>
 
             <div style={{ padding: "2rem" }}>
+              {notice?.type === "error" && (
+                <OperationNotice
+                  tone="danger"
+                  title={t("error")}
+                  message={notice.text}
+                  onClose={() => setNotice(null)}
+                />
+              )}
+
               <div style={{ marginBottom: "1.5rem" }}>
                 <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "0.25rem" }}>{t("health_modal_target")}</div>
                 <div style={{ fontWeight: 600, fontSize: "1.1rem" }}>{targetAnomaly.imsi}</div>
