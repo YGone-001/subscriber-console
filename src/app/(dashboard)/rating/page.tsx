@@ -7,6 +7,7 @@ import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
 import { useI18n } from "@/components/I18nProvider";
 import { useAuth } from "@/hooks/useAuth";
+import { ConfirmActionPanel, EmptyState, LoadingRows, OperationNotice } from "@/components/OperationFeedback";
 
 const CURRENCIES = ["USD", "EUR", "GBP", "CNY", "HKD", "JPY", "KRW", "SGD", "AUD", "CAD"];
 const DATA_GRANT = "10485760";
@@ -149,6 +150,7 @@ export default function RatingPage() {
   const [query, setQuery] = useState("");
   const [notice, setNotice] = useState<Notice | null>(null);
   const [savingKey, setSavingKey] = useState<string | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
 
   const rateTypes = useMemo(() => [
     { label: t("rating_type_time"), val: 1 },
@@ -271,14 +273,21 @@ export default function RatingPage() {
     }
   };
 
-  const handleDelete = async (id: number) => {
-    if (!confirm(t("rating_del_confirm").replace("{id}", id.toString()))) return;
+  const handleDelete = (id: number) => {
+    setPendingDeleteId(id);
+    setNotice(null);
+  };
+
+  const executeDelete = async () => {
+    if (pendingDeleteId == null) return;
+    const id = pendingDeleteId;
     setSavingKey(`delete:${id}`);
     setNotice(null);
     try {
       const res = await fetch(`/api/ratings/${id}`, { method: "DELETE" });
       if (res.ok) {
-        mutate();
+        setPendingDeleteId(null);
+        await mutate();
         setNotice({ type: "success", text: t("rating_msg_deleted") });
       } else {
         setNotice({ type: "error", text: await readError(res, t("rating_err_delete")) });
@@ -397,22 +406,24 @@ export default function RatingPage() {
       </div>
 
       {notice && (
-        <div style={{
-          marginBottom: "1rem",
-          border: `1px solid ${notice.type === "error" ? "rgba(239, 68, 68, 0.35)" : "rgba(16, 185, 129, 0.35)"}`,
-          background: notice.type === "error" ? "rgba(239, 68, 68, 0.08)" : "rgba(16, 185, 129, 0.08)",
-          color: notice.type === "error" ? "var(--danger)" : "var(--success)",
-          borderRadius: 8,
-          padding: "0.75rem 1rem",
-          fontWeight: 700,
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: "1rem",
-        }}>
-          <span>{notice.text}</span>
-          <button className="btn-icon" onClick={() => setNotice(null)} title={t("close")}><X size={16} /></button>
-        </div>
+        <OperationNotice
+          tone={notice.type === "error" ? "danger" : "success"}
+          title={notice.type === "error" ? t("error") : t("success")}
+          message={notice.text}
+          onClose={() => setNotice(null)}
+        />
+      )}
+
+      {pendingDeleteId != null && (
+        <ConfirmActionPanel
+          title={t("rating_del_confirm", { id: pendingDeleteId })}
+          message={t("rating_del_desc")}
+          confirmLabel={t("delete")}
+          cancelLabel={t("cancel")}
+          isWorking={savingKey === `delete:${pendingDeleteId}`}
+          onConfirm={executeDelete}
+          onCancel={() => setPendingDeleteId(null)}
+        />
       )}
 
       <section style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(220px, 1fr))", gap: "1rem", marginBottom: "1.5rem" }}>
@@ -486,9 +497,28 @@ export default function RatingPage() {
               )}
 
               {isLoading ? (
-                <tr><td colSpan={canEditTemplates ? 6 : 5} style={{ padding: "3rem", textAlign: "center", color: "var(--text-muted)" }}>{t("rating_loading")}</td></tr>
+                <tr>
+                  <td colSpan={canEditTemplates ? 6 : 5}>
+                    <LoadingRows columns={canEditTemplates ? 6 : 5} rows={4} />
+                  </td>
+                </tr>
               ) : visibleRatings.length === 0 ? (
-                <tr><td colSpan={canEditTemplates ? 6 : 5} style={{ padding: "3rem", textAlign: "center", color: "var(--text-muted)" }}>{t("rating_no_data")}</td></tr>
+                <tr>
+                  <td colSpan={canEditTemplates ? 6 : 5}>
+                    <EmptyState
+                      icon={<Tag size={46} />}
+                      title={query || filter !== "all" ? t("rating_empty_filtered_title") : t("rating_no_data")}
+                      description={query || filter !== "all" ? t("rating_empty_filtered_desc") : t("rating_empty_desc")}
+                      action={
+                        canEditTemplates && !query && filter === "all" ? (
+                          <button type="button" className="btn btn-primary" onClick={() => setIsAdding(true)}>
+                            <Plus size={16} /> {t("rating_new_rate")}
+                          </button>
+                        ) : undefined
+                      }
+                    />
+                  </td>
+                </tr>
               ) : visibleRatings.map((rating) => {
                 const meta = serviceMeta(rating.serviceKey);
                 const rateType = rateTypes.find((type) => type.val === rating.rates_type)?.label || rating.rates_type;
@@ -536,7 +566,7 @@ export default function RatingPage() {
                           <td style={{ padding: "1.15rem 1.5rem", textAlign: "right" }}>
                             <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
                               <button className="btn-icon" onClick={() => startEdit(rating)} title={t("edit")}><Pencil size={16} color="var(--primary)" /></button>
-                              <button className="btn-icon" onClick={() => handleDelete(rating.rating_group_id)} title={t("delete")} disabled={savingKey === `delete:${rating.rating_group_id}`}><Trash2 size={16} color="var(--danger)" /></button>
+                              <button className="btn-icon" onClick={() => handleDelete(rating.rating_group_id)} title={t("delete")} disabled={savingKey === `delete:${rating.rating_group_id}` || pendingDeleteId != null}><Trash2 size={16} color="var(--danger)" /></button>
                             </div>
                           </td>
                         )}
