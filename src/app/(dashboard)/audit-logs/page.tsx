@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState } from 'react';
-import { ShieldAlert, History, Activity, ChevronRight, Braces, X, Download, RefreshCw } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { ShieldAlert, History, Activity, ChevronRight, Braces, X, Download, RefreshCw, AlertTriangle, DatabaseZap, Gauge, Target, UserRound } from 'lucide-react';
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
 import { useI18n } from "@/components/I18nProvider";
@@ -17,6 +17,10 @@ interface AuditLog {
   oldData: any;
   newData: any;
 }
+
+type AuditQuickFilter = 'warnings' | 'profile' | 'traffic' | 'destructive';
+
+const DESTRUCTIVE_ACTIONS = new Set(['DELETE', 'PROFILE_DELETE', 'TRAFFIC_RESET']);
 
 export default function AuditLogsPage() {
   const { t } = useI18n();
@@ -55,12 +59,55 @@ export default function AuditLogsPage() {
   })();
 
   const { data, error: fetchError, isLoading: loading, mutate } = useSWR(auditUrl, fetcher);
-  const logs: AuditLog[] = data?.logs || [];
+  const logRows = data?.logs as AuditLog[] | undefined;
+  const logs = useMemo(() => logRows || [], [logRows]);
   const filteredTotal = data?.filteredTotal ?? logs.length;
   const totalScanned = data?.totalScanned ?? 0;
   const error = fetchError ? fetchError.message : '';
 
   const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
+
+  const formatActionLabel = (action: string) => {
+    const key = `audit_action_${action}`;
+    const label = t(key as any);
+    return label !== key ? label : action;
+  };
+
+  const auditSummary = useMemo(() => {
+    const actionCounts = new Map<string, number>();
+    const operatorCounts = new Map<string, number>();
+    const targetCounts = new Map<string, number>();
+    let warningCount = 0;
+    let destructiveCount = 0;
+    let profileChangeCount = 0;
+    let trafficChangeCount = 0;
+
+    logs.forEach(log => {
+      actionCounts.set(log.action, (actionCounts.get(log.action) || 0) + 1);
+      operatorCounts.set(log.operatorIp || 'unknown', (operatorCounts.get(log.operatorIp || 'unknown') || 0) + 1);
+      targetCounts.set(log.targetId || 'unknown', (targetCounts.get(log.targetId || 'unknown') || 0) + 1);
+      if (log.level === 'warning') warningCount += 1;
+      if (DESTRUCTIVE_ACTIONS.has(log.action)) destructiveCount += 1;
+      if (log.action.startsWith('PROFILE_')) profileChangeCount += 1;
+      if (log.action.startsWith('TRAFFIC_')) trafficChangeCount += 1;
+    });
+
+    const topList = (map: Map<string, number>) => Array.from(map.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([name, count]) => ({ name, count }));
+
+    return {
+      warningCount,
+      destructiveCount,
+      profileChangeCount,
+      trafficChangeCount,
+      uniqueTargets: targetCounts.size,
+      topActions: topList(actionCounts),
+      topOperators: topList(operatorCounts),
+      topTargets: topList(targetCounts),
+    };
+  }, [logs]);
 
   const handleQuery = () => {
     // Combine fields into target if necessary, or just pick the non-empty one
@@ -86,6 +133,33 @@ export default function AuditLogsPage() {
     setInputFrom('');
     setInputTo('');
     setQueryPayload({ action: 'ALL', level: 'ALL', target: '', operator: '', q: '', from: '', to: '' });
+  };
+
+  const applyQuickFilter = (filter: AuditQuickFilter) => {
+    const nextPayload = {
+      action: 'ALL',
+      level: 'ALL',
+      target: '',
+      operator: '',
+      q: '',
+      from: '',
+      to: '',
+    };
+
+    if (filter === 'warnings') nextPayload.level = 'warning';
+    if (filter === 'profile') nextPayload.q = 'PROFILE_';
+    if (filter === 'traffic') nextPayload.q = 'TRAFFIC_';
+    if (filter === 'destructive') nextPayload.q = 'DELETE';
+
+    setInputAction(nextPayload.action);
+    setInputLevel(nextPayload.level);
+    setInputImsi('');
+    setInputProfile('');
+    setInputOperator('');
+    setInputKeyword(nextPayload.q);
+    setInputFrom('');
+    setInputTo('');
+    setQueryPayload(nextPayload);
   };
 
   const exportLogs = () => {
@@ -134,6 +208,104 @@ export default function AuditLogsPage() {
           </div>
           <div style={{ background: "rgba(59, 130, 246, 0.12)", color: "var(--primary)", padding: "0.5rem 1rem", borderRadius: "20px", fontSize: "0.85rem", fontWeight: 600, display: "flex", alignItems: "center", gap: "0.5rem" }}>
             <Activity size={16} /> {t("audit_tracking")}
+          </div>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: "1rem", marginBottom: "1.25rem" }}>
+          {[
+            { icon: <Gauge size={18} color="var(--primary)" />, label: t("audit_ops_matched"), value: filteredTotal },
+            { icon: <ShieldAlert size={18} color="var(--danger)" />, label: t("audit_ops_warnings"), value: auditSummary.warningCount },
+            { icon: <AlertTriangle size={18} color="var(--danger)" />, label: t("audit_ops_destructive"), value: auditSummary.destructiveCount },
+            { icon: <Target size={18} color="var(--primary)" />, label: t("audit_ops_targets"), value: auditSummary.uniqueTargets },
+          ].map(metric => (
+            <div key={metric.label} className="dash-card" style={{ padding: "1rem", display: "flex", alignItems: "center", gap: "0.75rem", minHeight: "86px" }}>
+              <div style={{ width: 38, height: 38, borderRadius: "8px", display: "grid", placeItems: "center", background: "var(--surface-hover)", flex: "0 0 auto" }}>
+                {metric.icon}
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ color: "var(--text-muted)", fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0 }}>{metric.label}</div>
+                <div style={{ color: "var(--text-main)", fontSize: "1.35rem", fontWeight: 800, marginTop: "0.15rem" }}>{metric.value}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="glass-card" style={{ marginBottom: "1.25rem", padding: "1rem 1.25rem", display: "grid", gridTemplateColumns: "minmax(260px, 0.9fr) minmax(260px, 0.9fr) minmax(280px, 1fr)", gap: "1rem" }}>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "var(--text-main)", fontWeight: 800, marginBottom: "0.75rem" }}>
+              <Activity size={16} color="var(--primary)" /> {t("audit_hot_actions")}
+            </div>
+            <div style={{ display: "grid", gap: "0.5rem" }}>
+              {auditSummary.topActions.length === 0 ? (
+                <span style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>{t("audit_no_data")}</span>
+              ) : auditSummary.topActions.map(item => (
+                <div key={item.name} style={{ display: "flex", justifyContent: "space-between", gap: "1rem", color: "var(--text-secondary)", fontSize: "0.86rem" }}>
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{formatActionLabel(item.name)}</span>
+                  <strong style={{ color: "var(--text-main)" }}>{item.count}</strong>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "var(--text-main)", fontWeight: 800, marginBottom: "0.75rem" }}>
+              <UserRound size={16} color="var(--primary)" /> {t("audit_hot_operators")}
+            </div>
+            <div style={{ display: "grid", gap: "0.5rem" }}>
+              {auditSummary.topOperators.length === 0 ? (
+                <span style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>{t("audit_no_data")}</span>
+              ) : auditSummary.topOperators.map(item => (
+                <button
+                  key={item.name}
+                  type="button"
+                  onClick={() => {
+                    setInputOperator(item.name);
+                    setQueryPayload({ ...queryPayload, operator: item.name });
+                  }}
+                  style={{ border: 0, background: "transparent", padding: 0, display: "flex", justifyContent: "space-between", gap: "1rem", color: "var(--text-secondary)", fontSize: "0.86rem", cursor: "pointer", textAlign: "left" }}
+                >
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: "monospace" }}>{item.name}</span>
+                  <strong style={{ color: "var(--text-main)" }}>{item.count}</strong>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "var(--text-main)", fontWeight: 800, marginBottom: "0.75rem" }}>
+              <DatabaseZap size={16} color="var(--primary)" /> {t("audit_fast_filters")}
+            </div>
+            <div style={{ display: "flex", gap: "0.55rem", flexWrap: "wrap" }}>
+              <button type="button" className="btn btn-outline" onClick={() => applyQuickFilter('warnings')} style={{ padding: "0.5rem 0.75rem", fontSize: "0.82rem" }}>{t("audit_quick_warnings")}</button>
+              <button type="button" className="btn btn-outline" onClick={() => applyQuickFilter('profile')} style={{ padding: "0.5rem 0.75rem", fontSize: "0.82rem" }}>{t("audit_quick_profile")} ({auditSummary.profileChangeCount})</button>
+              <button type="button" className="btn btn-outline" onClick={() => applyQuickFilter('traffic')} style={{ padding: "0.5rem 0.75rem", fontSize: "0.82rem" }}>{t("audit_quick_traffic")} ({auditSummary.trafficChangeCount})</button>
+              <button type="button" className="btn btn-outline" onClick={() => applyQuickFilter('destructive')} style={{ padding: "0.5rem 0.75rem", fontSize: "0.82rem" }}>{t("audit_quick_destructive")}</button>
+            </div>
+            <div style={{ marginTop: "0.75rem", color: "var(--text-muted)", fontSize: "0.8rem", lineHeight: 1.5 }}>
+              {t("audit_fast_filters_hint")}
+            </div>
+            <div style={{ marginTop: "1rem", paddingTop: "0.85rem", borderTop: "1px solid var(--surface-border)" }}>
+              <div style={{ color: "var(--text-main)", fontWeight: 800, fontSize: "0.86rem", marginBottom: "0.65rem" }}>{t("audit_hot_targets")}</div>
+              <div style={{ display: "grid", gap: "0.45rem" }}>
+                {auditSummary.topTargets.length === 0 ? (
+                  <span style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>{t("audit_no_data")}</span>
+                ) : auditSummary.topTargets.map(item => (
+                  <button
+                    key={item.name}
+                    type="button"
+                    onClick={() => {
+                      setInputImsi(/^\d{1,15}$/.test(item.name) ? item.name : '');
+                      setInputProfile(/^\d{1,15}$/.test(item.name) ? '' : item.name);
+                      setQueryPayload({ ...queryPayload, target: item.name });
+                    }}
+                    style={{ border: 0, background: "transparent", padding: 0, display: "flex", justifyContent: "space-between", gap: "1rem", color: "var(--text-secondary)", fontSize: "0.86rem", cursor: "pointer", textAlign: "left" }}
+                  >
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontFamily: "monospace" }}>{item.name}</span>
+                    <strong style={{ color: "var(--text-main)" }}>{item.count}</strong>
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
 
@@ -292,7 +464,7 @@ export default function AuditLogsPage() {
                         border: `1px solid ${log.level === 'warning' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(59, 130, 246, 0.3)'}`
                       }}>
                         {log.level === 'warning' && <ShieldAlert size={12} style={{ marginRight: "0.25rem" }}/>}
-                        {t(`audit_action_${log.action}` as any) !== `audit_action_${log.action}` ? t(`audit_action_${log.action}` as any) : log.action}
+                        {formatActionLabel(log.action)}
                       </span>
                     </td>
                     <td style={{ padding: "1rem 1.25rem", fontWeight: 600, color: "var(--text-main)" }}>
