@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import type React from "react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
-import { Plus, Trash2, Shield, User, Clock, Settings, Save, X, Activity } from "lucide-react";
+import { Plus, Trash2, Shield, User, Clock, Settings, Save, X, Activity, CheckCircle2, Eye, LockKeyhole, SlidersHorizontal } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useI18n } from "@/components/I18nProvider";
 import { ConfirmActionPanel, EmptyState, LoadingRows, OperationNotice } from "@/components/OperationFeedback";
@@ -21,9 +22,39 @@ type Notice = {
   text: string;
 };
 
+type RoleKey = "root" | "operator" | "viewer";
+type PermissionLevel = "manage" | "write" | "read" | "none";
+
 const USERNAME_PATTERN = /^[A-Za-z0-9_.-]{3,32}$/;
-const VALID_ROLES = ["root", "operator", "viewer"];
+const VALID_ROLES: string[] = ["root", "operator", "viewer"];
 const VALID_STATUS = ["active", "disabled"];
+
+const ROLE_STYLE: Record<RoleKey, { color: string; bg: string; border: string }> = {
+  root: { color: "var(--danger)", bg: "rgba(239, 68, 68, 0.1)", border: "rgba(239, 68, 68, 0.28)" },
+  operator: { color: "#d97706", bg: "rgba(245, 158, 11, 0.1)", border: "rgba(245, 158, 11, 0.28)" },
+  viewer: { color: "var(--primary)", bg: "rgba(59, 130, 246, 0.1)", border: "rgba(59, 130, 246, 0.28)" },
+};
+
+const PERMISSION_STYLE: Record<PermissionLevel, { color: string; bg: string; icon: React.ReactNode }> = {
+  manage: { color: "var(--danger)", bg: "rgba(239, 68, 68, 0.1)", icon: <LockKeyhole size={14} /> },
+  write: { color: "var(--success)", bg: "rgba(16, 185, 129, 0.1)", icon: <CheckCircle2 size={14} /> },
+  read: { color: "var(--primary)", bg: "rgba(59, 130, 246, 0.1)", icon: <Eye size={14} /> },
+  none: { color: "var(--text-muted)", bg: "var(--surface-hover)", icon: <X size={14} /> },
+};
+
+const PERMISSION_MODULES: Array<{
+  key: string;
+  root: PermissionLevel;
+  operator: PermissionLevel;
+  viewer: PermissionLevel;
+}> = [
+  { key: "subscribers", root: "write", operator: "write", viewer: "read" },
+  { key: "profiles", root: "manage", operator: "read", viewer: "read" },
+  { key: "rating", root: "manage", operator: "read", viewer: "read" },
+  { key: "audit", root: "read", operator: "read", viewer: "read" },
+  { key: "health", root: "manage", operator: "read", viewer: "read" },
+  { key: "users", root: "manage", operator: "none", viewer: "none" },
+];
 
 export default function UsersPage() {
   const { data, isLoading, mutate } = useSWR<{ users: SysUser[] }>("/api/auth/users", fetcher);
@@ -65,6 +96,34 @@ export default function UsersPage() {
 
   const newFormError = isAdding ? getCreateError() : "";
   const editFormError = editingUser ? getEditError() : "";
+  const roleCounts = VALID_ROLES.reduce<Record<RoleKey, number>>((acc, role) => {
+    acc[role as RoleKey] = users.filter((item) => item.role === role).length;
+    return acc;
+  }, { root: 0, operator: 0, viewer: 0 });
+
+  const renderPermissionBadge = (level: PermissionLevel) => {
+    const style = PERMISSION_STYLE[level];
+    return (
+      <span
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: "0.35rem",
+          minWidth: 86,
+          padding: "0.35rem 0.55rem",
+          borderRadius: "999px",
+          background: style.bg,
+          color: style.color,
+          fontSize: "0.78rem",
+          fontWeight: 800,
+        }}
+      >
+        {style.icon}
+        {t(`users_perm_${level}`)}
+      </span>
+    );
+  };
 
   if (!isRoot) {
     return (
@@ -220,6 +279,85 @@ export default function UsersPage() {
           onCancel={() => setPendingDeleteUsername(null)}
         />
       )}
+
+      <section
+        className="dash-card"
+        style={{
+          padding: "1.25rem",
+          marginBottom: "1.5rem",
+          display: "grid",
+          gap: "1.25rem",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: "1.1rem", color: "var(--text-main)", display: "flex", alignItems: "center", gap: "0.55rem" }}>
+              <SlidersHorizontal size={18} color="var(--primary)" />
+              {t("users_perm_title")}
+            </h2>
+            <p style={{ margin: "0.35rem 0 0", color: "var(--text-muted)", fontSize: "0.88rem" }}>
+              {t("users_perm_subtitle")}
+            </p>
+          </div>
+          <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
+            {(VALID_ROLES as RoleKey[]).map((role) => {
+              const style = ROLE_STYLE[role];
+              return (
+                <span
+                  key={role}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "0.45rem",
+                    padding: "0.45rem 0.65rem",
+                    borderRadius: "999px",
+                    border: `1px solid ${style.border}`,
+                    background: style.bg,
+                    color: style.color,
+                    fontSize: "0.82rem",
+                    fontWeight: 800,
+                  }}
+                >
+                  {t(`users_${role}`)}
+                  <strong style={{ color: "var(--text-main)" }}>{roleCounts[role]}</strong>
+                </span>
+              );
+            })}
+          </div>
+        </div>
+
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", minWidth: 760, borderCollapse: "collapse", fontSize: "0.9rem" }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid var(--surface-border)" }}>
+                <th className="table-header-cap" style={{ padding: "0.85rem 1rem", textAlign: "left" }}>{t("users_perm_module")}</th>
+                {(VALID_ROLES as RoleKey[]).map((role) => (
+                  <th key={role} className="table-header-cap" style={{ padding: "0.85rem 1rem", textAlign: "center" }}>
+                    {t(`users_${role}`)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {PERMISSION_MODULES.map((module) => (
+                <tr key={module.key} style={{ borderBottom: "1px solid var(--surface-border)" }}>
+                  <td style={{ padding: "0.9rem 1rem", color: "var(--text-main)", fontWeight: 800 }}>
+                    {t(`users_perm_module_${module.key}`)}
+                    <div style={{ marginTop: "0.25rem", color: "var(--text-muted)", fontSize: "0.78rem", fontWeight: 500 }}>
+                      {t(`users_perm_module_${module.key}_desc`)}
+                    </div>
+                  </td>
+                  {(VALID_ROLES as RoleKey[]).map((role) => (
+                    <td key={role} style={{ padding: "0.9rem 1rem", textAlign: "center" }}>
+                      {renderPermissionBadge(module[role])}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       <div className="dash-card" style={{ overflow: "hidden" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.95rem" }}>
