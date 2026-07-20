@@ -19,14 +19,20 @@ import {
 import {
   Activity,
   AlertCircle,
+  AlertTriangle,
   BarChart3,
+  CheckCircle2,
   Clock,
   DatabaseZap,
+  ExternalLink,
   Globe,
+  ListChecks,
   PieChart as PieChartIcon,
   Server,
+  ShieldCheck,
   Signal,
   TrendingUp,
+  Users,
   Zap,
 } from "lucide-react";
 import { useTheme } from "./ThemeProvider";
@@ -64,6 +70,22 @@ type SparklineData = {
   currentTraffic?: number;
 };
 
+type AlertItem = {
+  id: string;
+  timestamp: string;
+  level: "CRITICAL" | "WARNING" | string;
+  imsi?: string;
+  reason: string;
+  is_acknowledged?: boolean;
+};
+
+type AlertResponse = {
+  alerts?: AlertItem[];
+  activeCriticalCount?: number;
+  activeWarningCount?: number;
+  activeCount?: number;
+};
+
 type KpiCardProps = {
   color: string;
   icon: React.ReactNode;
@@ -77,6 +99,15 @@ type KpiCardProps = {
 
 type TopConsumerTooltipPayload = {
   payload?: TopConsumer;
+};
+
+type WorkItem = {
+  id: string;
+  tone: "danger" | "warning" | "normal";
+  title: string;
+  detail: string;
+  href: string;
+  action: string;
 };
 
 function CountUpNumber({ value, decimals = 0, suffix = "" }: { value: number; decimals?: number; suffix?: string }) {
@@ -291,6 +322,7 @@ export default function AnalyticsCockpit() {
   const { t } = useI18n();
   const { data, error, isLoading } = useSWR<MetricsData>("/api/analytics/metrics", fetcher, { refreshInterval: 5000 });
   const { data: sparkData } = useSWR<SparklineData>("/api/analytics/sparkline", fetcher, { refreshInterval: 30000 });
+  const { data: alertData } = useSWR<AlertResponse>("/api/alerts", fetcher, { refreshInterval: 5000 });
 
   const chartStroke = theme === "dark" ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.08)";
   const tickColor = theme === "dark" ? "#CBD5E1" : "#475569";
@@ -335,9 +367,130 @@ export default function AnalyticsCockpit() {
   const plmnCoverage = normalizeRingValue((plmnCount / 8) * 100);
   const ratingCoverage = normalizeRingValue((ratingGroupCount / 12) * 100);
   const exhaustionTone = theoreticalLifeHr > 0 && theoreticalLifeHr < 24 ? "danger" : theoreticalLifeHr > 0 && theoreticalLifeHr < 72 ? "warning" : "normal";
+  const activeAlerts = (alertData?.alerts || []).filter((alert) => !alert.is_acknowledged);
+  const activeCriticalCount = alertData?.activeCriticalCount || activeAlerts.filter((alert) => alert.level === "CRITICAL").length;
+  const activeWarningCount = alertData?.activeWarningCount || activeAlerts.filter((alert) => alert.level === "WARNING").length;
+  const activeAlertCount = alertData?.activeCount || activeAlerts.length;
+  const operationsScore = normalizeRingValue(100 - activeCriticalCount * 22 - activeWarningCount * 10 - (exhaustionTone === "danger" ? 20 : exhaustionTone === "warning" ? 10 : 0));
+  const topImsi = top5[0]?.imsi || "--";
+
+  const workItems: WorkItem[] = [];
+  if (activeCriticalCount > 0) {
+    workItems.push({
+      id: "critical-alerts",
+      tone: "danger",
+      title: t("dash_work_critical_title", { count: activeCriticalCount }),
+      detail: t("dash_work_critical_detail"),
+      href: "/system-health",
+      action: t("dash_work_open_health"),
+    });
+  }
+  if (activeWarningCount > 0) {
+    workItems.push({
+      id: "warning-alerts",
+      tone: "warning",
+      title: t("dash_work_warning_title", { count: activeWarningCount }),
+      detail: t("dash_work_warning_detail"),
+      href: "/system-health",
+      action: t("dash_work_open_health"),
+    });
+  }
+  if (exhaustionTone !== "normal") {
+    workItems.push({
+      id: "exhaustion",
+      tone: exhaustionTone,
+      title: t("dash_work_exhaustion_title"),
+      detail: theoreticalLifeHr > 0 ? t("dash_work_exhaustion_detail", { hours: theoreticalLifeHr.toFixed(1) }) : t("dash_work_exhaustion_unknown"),
+      href: "/subscribers",
+      action: t("dash_work_open_subscribers"),
+    });
+  }
+  if (topConsumerShare >= 35 && topImsi !== "--") {
+    workItems.push({
+      id: "top-consumer",
+      tone: "warning",
+      title: t("dash_work_top_consumer_title"),
+      detail: t("dash_work_top_consumer_detail", { imsi: topImsi, share: topConsumerShare.toFixed(0) }),
+      href: "/subscribers",
+      action: t("dash_work_open_subscribers"),
+    });
+  }
+  if (ratingGroupCount === 0) {
+    workItems.push({
+      id: "rating",
+      tone: "warning",
+      title: t("dash_work_rating_title"),
+      detail: t("dash_work_rating_detail"),
+      href: "/rating",
+      action: t("dash_work_open_rating"),
+    });
+  }
+  if (workItems.length === 0) {
+    workItems.push({
+      id: "healthy",
+      tone: "normal",
+      title: t("dash_work_healthy_title"),
+      detail: t("dash_work_healthy_detail"),
+      href: "/audit-logs",
+      action: t("dash_work_open_audit"),
+    });
+  }
+
+  const visibleWorkItems = workItems.slice(0, 4);
 
   return (
     <div className="analytics-root">
+      <section className="analytics-workbench">
+        <div className="analytics-workbench-main">
+          <div className="analytics-workbench-title">
+            <ListChecks size={19} color="var(--primary)" />
+            <div>
+              <h3>{t("dash_workbench_title")}</h3>
+              <p>{t("dash_workbench_subtitle")}</p>
+            </div>
+          </div>
+
+          <div className="analytics-workqueue">
+            {visibleWorkItems.map((item) => (
+              <a key={item.id} href={item.href} className={`analytics-workitem analytics-workitem-${item.tone}`}>
+                <div className="analytics-workitem-icon">
+                  {item.tone === "danger" ? <AlertTriangle size={17} /> : item.tone === "warning" ? <AlertCircle size={17} /> : <CheckCircle2 size={17} />}
+                </div>
+                <div className="analytics-workitem-copy">
+                  <strong>{item.title}</strong>
+                  <span>{item.detail}</span>
+                </div>
+                <div className="analytics-workitem-action">
+                  {item.action}
+                  <ExternalLink size={13} />
+                </div>
+              </a>
+            ))}
+          </div>
+        </div>
+
+        <div className="analytics-readiness">
+          <div className="analytics-readiness-score">
+            <MiniRing value={operationsScore} color={operationsScore < 70 ? "#e74a3b" : operationsScore < 88 ? "#f6c23e" : "#1cc88a"} />
+            <div>
+              <span>{t("dash_ops_score")}</span>
+              <strong>{Math.round(operationsScore)}</strong>
+            </div>
+          </div>
+          <div className="analytics-readiness-list">
+            <div><ShieldCheck size={15} /> {t("dash_ops_alerts", { count: activeAlertCount })}</div>
+            <div><Users size={15} /> {t("dash_ops_subscribers", { count: subscriberCount })}</div>
+            <div><Globe size={15} /> {t("dash_ops_plmn", { count: plmnCount })}</div>
+            <div><Zap size={15} /> {t("dash_ops_top_imsi", { imsi: topImsi })}</div>
+          </div>
+          <div className="analytics-quicklinks">
+            <a href="/subscribers">{t("dash_quick_subscribers")}</a>
+            <a href="/rating">{t("dash_quick_rating")}</a>
+            <a href="/audit-logs">{t("dash_quick_audit")}</a>
+          </div>
+        </div>
+      </section>
+
       <div className="analytics-kpi-grid">
         <KpiCard
           color="#4e73df"
@@ -509,6 +662,198 @@ const analyticsStyles = `
     flex-direction: column;
     gap: 1.5rem;
     margin-bottom: 2.5rem;
+  }
+
+  .analytics-workbench {
+    display: grid;
+    grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.55fr);
+    gap: 1rem;
+  }
+
+  .analytics-workbench-main,
+  .analytics-readiness {
+    background: var(--surface);
+    border: 1px solid var(--surface-border);
+    border-radius: 8px;
+    box-shadow: 0 14px 32px -24px rgba(15, 23, 42, 0.55);
+  }
+
+  .analytics-workbench-main {
+    padding: 1rem;
+    display: grid;
+    gap: 0.95rem;
+  }
+
+  .analytics-workbench-title {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.7rem;
+  }
+
+  .analytics-workbench-title h3 {
+    margin: 0;
+    color: var(--text-main);
+    font-size: 1rem;
+    font-weight: 800;
+  }
+
+  .analytics-workbench-title p {
+    margin: 0.25rem 0 0;
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    line-height: 1.4;
+  }
+
+  .analytics-workqueue {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+
+  .analytics-workitem {
+    min-height: 92px;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 0.7rem;
+    align-items: center;
+    padding: 0.8rem;
+    border: 1px solid var(--surface-border);
+    border-radius: 8px;
+    background: var(--header-bg);
+    color: var(--text-main);
+    text-decoration: none;
+    transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+  }
+
+  .analytics-workitem:hover {
+    transform: translateY(-1px);
+    border-color: color-mix(in srgb, var(--primary) 34%, var(--surface-border));
+    background: var(--surface-hover);
+  }
+
+  .analytics-workitem-danger {
+    border-color: color-mix(in srgb, #e74a3b 32%, var(--surface-border));
+  }
+
+  .analytics-workitem-warning {
+    border-color: color-mix(in srgb, #f6c23e 32%, var(--surface-border));
+  }
+
+  .analytics-workitem-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--primary);
+    background: color-mix(in srgb, var(--primary) 10%, var(--surface));
+    flex-shrink: 0;
+  }
+
+  .analytics-workitem-danger .analytics-workitem-icon {
+    color: #e74a3b;
+    background: color-mix(in srgb, #e74a3b 12%, var(--surface));
+  }
+
+  .analytics-workitem-warning .analytics-workitem-icon {
+    color: #f6c23e;
+    background: color-mix(in srgb, #f6c23e 14%, var(--surface));
+  }
+
+  .analytics-workitem-copy {
+    min-width: 0;
+    display: grid;
+    gap: 0.25rem;
+  }
+
+  .analytics-workitem-copy strong {
+    color: var(--text-main);
+    font-size: 0.88rem;
+    line-height: 1.3;
+  }
+
+  .analytics-workitem-copy span {
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    line-height: 1.35;
+  }
+
+  .analytics-workitem-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    color: var(--primary);
+    font-size: 0.76rem;
+    font-weight: 800;
+    white-space: nowrap;
+  }
+
+  .analytics-readiness {
+    padding: 1rem;
+    display: grid;
+    gap: 0.85rem;
+  }
+
+  .analytics-readiness-score {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .analytics-readiness-score span {
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0;
+  }
+
+  .analytics-readiness-score strong {
+    display: block;
+    color: var(--text-main);
+    font-size: 1.45rem;
+    line-height: 1.1;
+  }
+
+  .analytics-readiness-list {
+    display: grid;
+    gap: 0.48rem;
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+  }
+
+  .analytics-readiness-list div {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-width: 0;
+  }
+
+  .analytics-quicklinks {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    padding-top: 0.85rem;
+    border-top: 1px solid var(--surface-border);
+  }
+
+  .analytics-quicklinks a {
+    min-height: 30px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0.35rem 0.55rem;
+    border: 1px solid var(--surface-border);
+    border-radius: 999px;
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-size: 0.76rem;
+    font-weight: 800;
+  }
+
+  .analytics-quicklinks a:hover {
+    border-color: var(--primary);
+    color: var(--primary);
   }
 
   .analytics-kpi-grid {
@@ -789,12 +1134,20 @@ const analyticsStyles = `
   }
 
   @media (max-width: 1280px) {
+    .analytics-workbench {
+      grid-template-columns: 1fr;
+    }
+
     .analytics-kpi-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
 
   @media (max-width: 980px) {
+    .analytics-workqueue {
+      grid-template-columns: 1fr;
+    }
+
     .analytics-chart-grid {
       grid-template-columns: 1fr;
     }
@@ -813,6 +1166,14 @@ const analyticsStyles = `
     .analytics-panel-body {
       height: 280px;
       padding: 0.85rem;
+    }
+
+    .analytics-workitem {
+      grid-template-columns: auto minmax(0, 1fr);
+    }
+
+    .analytics-workitem-action {
+      grid-column: 2;
     }
   }
 `;
