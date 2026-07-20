@@ -89,7 +89,7 @@ export default function BatchCreateModal({ isOpen, onClose, onSuccess, profileLi
       const data = await res.json();
       if (res.ok) {
         setBatchResult(data);
-        onSuccess();
+        if (!data?.approval?.id) onSuccess();
       } else {
         setBatchResult({ error: data.error || t("err_batch_failed") });
       }
@@ -161,7 +161,9 @@ export default function BatchCreateModal({ isOpen, onClose, onSuccess, profileLi
                 <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "8px", padding: "1rem", color: "#dc2626", fontWeight: 500 }}>{batchResult.error}</div>
               ) : (
                 <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "8px", padding: "1rem", color: "#15803d", fontWeight: 500 }}>
-                  {t("created_subscribers", { count: batchResult.count, start: batchResult.range?.from, end: batchResult.range?.to })}
+                  {batchResult.approval?.id
+                    ? t("approval_msg_submitted", { id: batchResult.approval.id })
+                    : t("created_subscribers", { count: batchResult.count, start: batchResult.range?.from, end: batchResult.range?.to })}
                   {batchResult.failedCount > 0 && (
                     <div style={{ marginTop: "0.5rem", color: "#b45309" }}>
                       Failed: {batchResult.failedCount}

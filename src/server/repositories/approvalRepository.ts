@@ -8,7 +8,10 @@ export type ApprovalAction =
   | 'RATING_UPDATE'
   | 'RATING_DELETE'
   | 'PROFILE_RESTORE'
-  | 'SYSTEM_HEAL';
+  | 'SYSTEM_HEAL'
+  | 'SUBSCRIBER_BATCH_CREATE'
+  | 'SUBSCRIBER_IMPORT'
+  | 'SUBSCRIBER_BULK_DELETE';
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'executed' | 'failed';
 
 export type ApprovalDocument = {

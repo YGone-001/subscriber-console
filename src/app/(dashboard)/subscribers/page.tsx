@@ -192,24 +192,34 @@ export default function SubscriberPage() {
     if (mode === "bulk") setIsDeletingBulk(true);
     if (mode === "single") setIsDeletingSingle(singleImsi);
     try {
-      const results = await Promise.all(imsis.map((imsi) => fetch(`/api/subscribers/${imsi}`, { method: "DELETE" })));
-      if (results.some((res) => !res.ok)) {
-        throw new Error("One or more delete requests failed.");
-      }
       if (mode === "bulk") {
+        const res = await fetch("/api/subscribers/bulk-delete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imsiList: imsis }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || "Bulk delete failed.");
         setSelectedImsis([]);
+        setPendingDelete(null);
         setFeedback({
           tone: "success",
           title: t("sub_feedback_success_title"),
-          message: t("sub_feedback_bulk_delete_success", { count: imsis.length }),
+          message: data.approval?.id
+            ? t("approval_msg_submitted", { id: data.approval.id })
+            : t("sub_feedback_bulk_delete_success", { count: data.deleted ?? imsis.length }),
         });
-      } else {
-        setFeedback({
-          tone: "success",
-          title: t("sub_feedback_success_title"),
-          message: t("sub_feedback_delete_success", { imsi: singleImsi }),
-        });
+        if (!data.approval?.id) await mutateSubscribers();
+        return;
       }
+
+      const res = await fetch(`/api/subscribers/${singleImsi}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Delete request failed.");
+      setFeedback({
+        tone: "success",
+        title: t("sub_feedback_success_title"),
+        message: t("sub_feedback_delete_success", { imsi: singleImsi }),
+      });
       setPendingDelete(null);
       await mutateSubscribers();
     } catch (error) {

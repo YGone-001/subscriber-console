@@ -1,9 +1,21 @@
 import { logAudit } from '@/lib/audit';
-import { validateImsi, validatePolicyChangePayload, validateTrafficAdjustmentPayload } from '@/lib/subscriberValidation';
+import {
+  validateBatchCreatePayload,
+  validateImsi,
+  validateImsiList,
+  validateImportRecords,
+  validatePolicyChangePayload,
+  validateTrafficAdjustmentPayload,
+} from '@/lib/subscriberValidation';
 import type { ApprovalDocument } from '@/server/repositories/approvalRepository';
 import { adjustOcsTrafficBalance, changeOcsPolicyForSubscribers } from '@/server/repositories/ocsBillingRepository';
 import { restoreProfileVersion } from '@/server/repositories/profileRepository';
 import { createRating, deleteRating, updateRating } from '@/server/repositories/ratingRepository';
+import {
+  createSubscribersBatch,
+  deleteSubscriber,
+  importSubscribersFromRecords,
+} from '@/server/repositories/subscriberRepository';
 import { healSubscriberDocument } from '@/server/repositories/systemAuditRepository';
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -132,6 +144,84 @@ export async function executeApproval(approval: ApprovalDocument, request: Reque
     const result = { imsi, type, profileName };
     logAudit('HEAL', imsi, { approvalId: approval.id }, { ...result, approvalId: approval.id }, request);
     return result;
+  }
+
+  if (approval.action === 'SUBSCRIBER_BATCH_CREATE') {
+    const validation = validateBatchCreatePayload(approval.payload);
+    if (!validation.ok) throw new Error(validation.error);
+    const payload = validation.value;
+
+    const result = await createSubscribersBatch({
+      startImsi: payload.startImsi,
+      count: payload.count,
+      trafficTotal: payload.trafficTotal,
+      trafficBalance: payload.trafficBalance,
+      profileName: payload.profileName,
+      strategy: payload.strategy,
+    });
+    const { createdImsis, skippedImsis, failedImsis, metrics } = result;
+
+    if (createdImsis.length > 0) {
+      logAudit(
+        'BATCH_CREATE',
+        `${createdImsis[0]} ~ ${createdImsis[createdImsis.length - 1]}`,
+        null,
+        {
+          approvalId: approval.id,
+          batchSize: createdImsis.length,
+          skipped: skippedImsis.length,
+          failed: failedImsis.length,
+          profileTemplate: payload.profileName,
+          batchMetrics: metrics,
+        },
+        request
+      );
+    }
+
+    return result;
+  }
+
+  if (approval.action === 'SUBSCRIBER_IMPORT') {
+    const payload = asRecord(approval.payload);
+    const validation = validateImportRecords(payload.records);
+    if (!validation.ok) throw new Error(validation.error);
+
+    const result = await importSubscribersFromRecords(validation.value, payload.overwrite === true);
+    if (result.importedImsis.length > 0) {
+      logAudit(
+        'CSV_IMPORT',
+        result.importedImsis.join(','),
+        null,
+        {
+          approvalId: approval.id,
+          count: result.imported,
+          overwrite: payload.overwrite === true,
+          skipped: result.skipped,
+          failed: result.failed,
+        },
+        request
+      );
+    }
+    return result;
+  }
+
+  if (approval.action === 'SUBSCRIBER_BULK_DELETE') {
+    const validation = validateImsiList(approval.payload.imsiList);
+    if (!validation.ok) throw new Error(validation.error);
+    const imsiList = validation.value;
+    if (imsiList.length === 0) throw new Error('imsiList cannot be empty');
+
+    const results = await Promise.all(imsiList.map(async (imsi) => ({ imsi, deleted: await deleteSubscriber(imsi) })));
+    const deletedImsis = results.filter((item) => item.deleted).map((item) => item.imsi);
+    logAudit(
+      'BATCH_DELETE',
+      deletedImsis.length > 0 ? `${deletedImsis[0]} ~ ${deletedImsis[deletedImsis.length - 1]}` : 'subscriber:bulk-delete',
+      { approvalId: approval.id, requested: imsiList },
+      { approvalId: approval.id, deleted: deletedImsis.length, deletedImsis },
+      request
+    );
+
+    return { requested: imsiList.length, deleted: deletedImsis.length, deletedImsis };
   }
 
   throw new Error('Unsupported approval action');

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { logAudit } from '@/lib/audit';
 import { requireCapability } from '@/lib/authz';
 import { enforceRateLimit } from '@/lib/rateLimit';
+import { createApprovalRequest } from '@/server/repositories/approvalRepository';
 import {
   importSubscribersFromRecords,
   precheckSubscriberImsis,
@@ -41,6 +42,25 @@ export async function POST(request: Request) {
       const { records, overwrite } = body;
       const validation = validateImportRecords(records);
       if (!validation.ok) return NextResponse.json({ error: validation.error }, { status: 400 });
+
+      if (auth.auth.role !== 'root') {
+        const approval = await createApprovalRequest({
+          action: 'SUBSCRIBER_IMPORT',
+          requester: auth.auth.user,
+          targetId: 'subscriber:csv-import',
+          summary: `Import ${validation.value.length} subscriber record(s)${overwrite ? ' with overwrite' : ''}`,
+          payload: {
+            records: validation.value,
+            overwrite: !!overwrite,
+          },
+        });
+
+        logAudit('UPDATE', `approval:${approval.id}`, null, approval, request);
+        return NextResponse.json(
+          { message: 'Approval required before subscriber import', approval },
+          { status: 202 }
+        );
+      }
 
       const result = await importSubscribersFromRecords(validation.value, !!overwrite);
 

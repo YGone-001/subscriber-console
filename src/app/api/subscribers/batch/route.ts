@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { logAudit } from '@/lib/audit';
 import { requireCapability } from '@/lib/authz';
 import { enforceRateLimit } from '@/lib/rateLimit';
+import { createApprovalRequest } from '@/server/repositories/approvalRepository';
 import { createSubscribersBatch } from '@/server/repositories/subscriberRepository';
 import { validateBatchCreatePayload } from '@/lib/subscriberValidation';
 
@@ -19,6 +20,22 @@ export async function POST(request: Request) {
     const validation = validateBatchCreatePayload(body);
     if (!validation.ok) return NextResponse.json({ error: validation.error }, { status: 400 });
     const payload = validation.value;
+
+    if (auth.auth.role !== 'root') {
+      const approval = await createApprovalRequest({
+        action: 'SUBSCRIBER_BATCH_CREATE',
+        requester: auth.auth.user,
+        targetId: `subscriber:batch:${payload.startImsi}`,
+        summary: `Batch create ${payload.count} subscriber(s) from ${payload.startImsi}`,
+        payload,
+      });
+
+      logAudit('UPDATE', `approval:${approval.id}`, null, approval, request);
+      return NextResponse.json(
+        { message: 'Approval required before batch subscriber creation', approval },
+        { status: 202 }
+      );
+    }
 
     const result = await createSubscribersBatch({
       startImsi: payload.startImsi,

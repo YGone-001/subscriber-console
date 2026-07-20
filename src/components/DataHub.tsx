@@ -642,15 +642,21 @@ export default function DataHub({ isOpen, onClose, onComplete, subscribers, sele
                   }}>
                     <Check size={28} color="#16a34a" />
                   </div>
-                  <h4 style={{ margin: "0 0 0.5rem", color: "var(--text-main)" }}>{t("dh_import_complete")}</h4>
+                  <h4 style={{ margin: "0 0 0.5rem", color: "var(--text-main)" }}>{importResult.approval?.id ? t("approval_status_pending") : t("dh_import_complete")}</h4>
                   <p style={{ color: "#64748b", fontSize: "0.9rem" }}>
-                    {t("dh_import_summary")
-                      .replace("{imported}", importResult.imported)
-                      .replace("{skipped}", importResult.skipped)}
-                    {importResult.failed > 0 ? `, ${importResult.failed} failed` : ""}
+                    {importResult.approval?.id
+                      ? t("approval_msg_submitted", { id: importResult.approval.id })
+                      : (
+                        <>
+                          {t("dh_import_summary")
+                            .replace("{imported}", importResult.imported)
+                            .replace("{skipped}", importResult.skipped)}
+                          {importResult.failed > 0 ? `, ${importResult.failed} failed` : ""}
+                        </>
+                      )}
                   </p>
                   <button
-                    onClick={() => { onComplete(); onClose(); }}
+                    onClick={() => { if (!importResult.approval?.id) onComplete(); onClose(); }}
                     className="btn"
                     style={{
                       marginTop: "1rem",
