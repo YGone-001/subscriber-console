@@ -6,6 +6,7 @@ import { fetcher } from "@/lib/fetcher";
 import { Plus, Trash2, Shield, User, Clock, Settings, Save, X, Activity } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useI18n } from "@/components/I18nProvider";
+import { ConfirmActionPanel, EmptyState, LoadingRows, OperationNotice } from "@/components/OperationFeedback";
 
 interface SysUser {
   username: string;
@@ -37,9 +38,7 @@ export default function UsersPage() {
   const [editForm, setEditForm] = useState({ role: "", status: "", password: "" });
   const [notice, setNotice] = useState<Notice | null>(null);
   const [savingAction, setSavingAction] = useState<string | null>(null);
-
-  const format = (key: string, values: Record<string, string | number>) =>
-    Object.entries(values).reduce((text, [token, value]) => text.replace(`{${token}}`, String(value)), t(key));
+  const [pendingDeleteUsername, setPendingDeleteUsername] = useState<string | null>(null);
 
   const readError = async (res: Response, fallback: string) => {
     try {
@@ -69,10 +68,14 @@ export default function UsersPage() {
 
   if (!isRoot) {
     return (
-      <div style={{ padding: "4rem", textAlign: "center", color: "var(--text-muted)" }}>
-        <Shield size={48} style={{ margin: "0 auto 1rem", opacity: 0.2 }} />
-        <h2>{t("users_access_denied")}</h2>
-        <p>{t("users_access_denied_desc")}</p>
+      <div className="container animate-fade-in" style={{ padding: "3rem" }}>
+        <div className="dash-card" style={{ padding: 0, overflow: "hidden" }}>
+          <EmptyState
+            icon={<Shield size={48} />}
+            title={t("users_access_denied")}
+            description={t("users_access_denied_desc")}
+          />
+        </div>
       </div>
     );
   }
@@ -148,19 +151,25 @@ export default function UsersPage() {
     }
   };
 
-  const handleDelete = async (username: string) => {
+  const handleDelete = (username: string) => {
     if (username === "admin" || username === currentUser?.username) {
       setNotice({ type: "error", text: t("users_err_protected") });
       return;
     }
-    if (!confirm(format("users_delete_confirm", { username }))) return;
+    setNotice(null);
+    setPendingDeleteUsername(username);
+  };
 
+  const executeDelete = async () => {
+    if (!pendingDeleteUsername) return;
+    const username = pendingDeleteUsername;
     setSavingAction(`delete:${username}`);
     try {
       const res = await fetch(`/api/auth/users/${username}`, { method: "DELETE" });
       if (res.ok) {
+        setPendingDeleteUsername(null);
         setNotice({ type: "success", text: t("users_msg_deleted") });
-        void mutate();
+        await mutate();
       } else {
         setNotice({ type: "error", text: await readError(res, t("users_err_delete")) });
       }
@@ -192,20 +201,24 @@ export default function UsersPage() {
       </div>
 
       {notice && (
-        <div
-          style={{
-            marginBottom: "1rem",
-            padding: "0.85rem 1rem",
-            borderRadius: "10px",
-            border: `1px solid ${notice.type === "success" ? "rgba(16, 185, 129, 0.24)" : "rgba(239, 68, 68, 0.24)"}`,
-            background: notice.type === "success" ? "rgba(16, 185, 129, 0.08)" : "rgba(239, 68, 68, 0.08)",
-            color: notice.type === "success" ? "var(--success)" : "var(--danger)",
-            fontSize: "0.9rem",
-            fontWeight: 600
-          }}
-        >
-          {notice.text}
-        </div>
+        <OperationNotice
+          tone={notice.type === "success" ? "success" : "danger"}
+          title={notice.type === "success" ? t("success") : t("error")}
+          message={notice.text}
+          onClose={() => setNotice(null)}
+        />
+      )}
+
+      {pendingDeleteUsername && (
+        <ConfirmActionPanel
+          title={t("users_delete_confirm", { username: pendingDeleteUsername })}
+          message={t("users_delete_desc")}
+          confirmLabel={t("delete")}
+          cancelLabel={t("cancel")}
+          isWorking={savingAction === `delete:${pendingDeleteUsername}`}
+          onConfirm={executeDelete}
+          onCancel={() => setPendingDeleteUsername(null)}
+        />
       )}
 
       <div className="dash-card" style={{ overflow: "hidden" }}>
@@ -260,9 +273,26 @@ export default function UsersPage() {
             )}
 
             {isLoading ? (
-              <tr><td colSpan={5} style={{ padding: "3rem", textAlign: "center", color: "var(--text-muted)" }}>{t("users_loading")}</td></tr>
+              <tr>
+                <td colSpan={5}>
+                  <LoadingRows columns={5} rows={4} />
+                </td>
+              </tr>
             ) : users.length === 0 ? (
-              <tr><td colSpan={5} style={{ padding: "3rem", textAlign: "center", color: "var(--text-muted)" }}>{t("users_empty")}</td></tr>
+              <tr>
+                <td colSpan={5}>
+                  <EmptyState
+                    icon={<User size={46} />}
+                    title={t("users_empty")}
+                    description={t("users_empty_desc")}
+                    action={
+                      <button type="button" className="btn btn-primary" onClick={() => setIsAdding(true)}>
+                        <Plus size={16} /> {t("users_new")}
+                      </button>
+                    }
+                  />
+                </td>
+              </tr>
             ) : users.map(u => {
               const isSelf = u.username === currentUser?.username;
               const isLockedIdentity = isSelf || u.username === "admin";
@@ -332,7 +362,7 @@ export default function UsersPage() {
                         <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
                           <button className="btn-icon" onClick={() => startEdit(u)} title={t("edit")}><Settings size={16} color="var(--primary)" /></button>
                           {u.username !== "admin" && !isSelf && (
-                            <button className="btn-icon" onClick={() => handleDelete(u.username)} title={t("delete")} disabled={savingAction === `delete:${u.username}`}><Trash2 size={16} color="var(--danger)" /></button>
+                            <button className="btn-icon" onClick={() => handleDelete(u.username)} title={t("delete")} disabled={savingAction === `delete:${u.username}` || pendingDeleteUsername != null}><Trash2 size={16} color="var(--danger)" /></button>
                           )}
                         </div>
                       </td>
