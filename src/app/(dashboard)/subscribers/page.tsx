@@ -769,7 +769,17 @@ export default function SubscriberPage() {
           defaultMode={trafficAdjustmentTarget.mode}
           currentTraffic={trafficAdjustmentTarget.traffic}
           onClose={() => setTrafficAdjustmentTarget(null)}
-          onSuccess={() => mutateSubscribers()}
+          onSuccess={(response) => {
+            if (response?.approval?.id) {
+              setFeedback({
+                tone: "success",
+                title: t("success"),
+                message: t("approval_msg_submitted", { id: response.approval.id }),
+              });
+              return;
+            }
+            mutateSubscribers();
+          }}
         />
       )}
 
@@ -778,8 +788,16 @@ export default function SubscriberPage() {
         selectedImsis={selectedImsis}
         t={t}
         onClose={() => setIsPolicyModalOpen(false)}
-        onSuccess={() => {
+        onSuccess={(response) => {
           setSelectedImsis([]);
+          if (response?.approval?.id) {
+            setFeedback({
+              tone: "success",
+              title: t("success"),
+              message: t("approval_msg_submitted", { id: response.approval.id }),
+            });
+            return;
+          }
           mutateSubscribers();
         }}
       />

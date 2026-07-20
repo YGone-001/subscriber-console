@@ -343,6 +343,11 @@ async function ensureIndexes() {
     { key: { username: 1 }, unique: true, name: 'uniq_username' },
   ])).map((name) => ({ database: appDbName, collection: 'app_users', name })));
 
+  createdIndexes.push(...(await appDb.collection('app_approvals').createIndexes([
+    { key: { status: 1, createdAt: -1 }, name: 'approvals_status_created' },
+    { key: { id: 1 }, unique: true, name: 'uniq_approval_id' },
+  ])).map((name) => ({ database: appDbName, collection: 'app_approvals', name })));
+
   createdIndexes.push(...(await appDb.collection('app_audit_logs').createIndexes([
     { key: { timestamp: -1 }, name: 'audit_timestamp_desc' },
     { key: { targetId: 1, timestamp: -1 }, name: 'audit_target_timestamp' },

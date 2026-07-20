@@ -14,11 +14,21 @@ type BulkPolicyResult = {
   resetBalances: boolean;
 };
 
+type ApprovalRequest = {
+  id: string;
+  status: string;
+};
+
+type BulkPolicySuccess = {
+  result?: BulkPolicyResult;
+  approval?: ApprovalRequest;
+};
+
 type BulkPolicyModalProps = {
   isOpen: boolean;
   selectedImsis: string[];
   onClose: () => void;
-  onSuccess: (result: BulkPolicyResult) => void;
+  onSuccess: (result: BulkPolicySuccess) => void;
   t: (key: string, params?: Record<string, string | number>) => string;
 };
 
@@ -66,7 +76,7 @@ export default function BulkPolicyModal({ isOpen, selectedImsis, onClose, onSucc
         throw new Error(data.error || t("policy_change_err_save"));
       }
 
-      onSuccess(data.result);
+      onSuccess(data);
       onClose();
     } catch (err: any) {
       setError(err.message || t("policy_change_err_save"));

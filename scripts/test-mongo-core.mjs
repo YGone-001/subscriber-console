@@ -33,6 +33,7 @@ const expectedIndexes = {
   app_profiles: ['uniq_profile_name', 'profile_updated_at_desc'],
   app_profile_versions: ['profile_versions_by_profile', 'uniq_profile_version_id'],
   app_users: ['uniq_username'],
+  app_approvals: ['approvals_status_created', 'uniq_approval_id'],
   app_audit_logs: ['audit_timestamp_desc', 'audit_target_timestamp', 'audit_action_timestamp'],
   app_alerts: ['alerts_timestamp_desc', 'alerts_active_by_level', 'alerts_imsi_timestamp'],
   app_rate_limits: ['uniq_rate_limit_key', 'ttl_rate_limit_reset_at'],
@@ -157,6 +158,11 @@ async function ensureIndexes(db, appDb) {
 
   await appDb.collection('app_users').createIndexes([
     { key: { username: 1 }, unique: true, name: 'uniq_username' },
+  ]);
+
+  await appDb.collection('app_approvals').createIndexes([
+    { key: { status: 1, createdAt: -1 }, name: 'approvals_status_created' },
+    { key: { id: 1 }, unique: true, name: 'uniq_approval_id' },
   ]);
 
   await appDb.collection('app_audit_logs').createIndexes([

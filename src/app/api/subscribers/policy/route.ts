@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server';
 import { logAudit } from '@/lib/audit';
 import { requireCapability } from '@/lib/authz';
+import { capabilityDecision } from '@/lib/permissions';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import { validatePolicyChangePayload } from '@/lib/subscriberValidation';
+import { createApprovalRequest } from '@/server/repositories/approvalRepository';
 import { changeOcsPolicyForSubscribers } from '@/server/repositories/ocsBillingRepository';
 
 export const dynamic = 'force-dynamic';
@@ -18,6 +20,23 @@ export async function POST(request: Request) {
     const body = await request.json();
     const validation = validatePolicyChangePayload(body);
     if (!validation.ok) return NextResponse.json({ error: validation.error }, { status: 400 });
+
+    if (capabilityDecision(auth.auth.role, 'policy_approve') === 'approval') {
+      const uniqueImsis = Array.from(new Set(validation.value.imsiList));
+      const approval = await createApprovalRequest({
+        action: 'POLICY_CHANGE',
+        requester: auth.auth.user,
+        targetId: `policy:${validation.value.planId}`,
+        summary: `${uniqueImsis.length} subscriber(s) -> ${validation.value.planId} (${validation.value.status})`,
+        payload: validation.value,
+      });
+
+      logAudit('UPDATE', `approval:${approval.id}`, null, approval, request);
+      return NextResponse.json(
+        { message: 'Approval required before policy update', approval },
+        { status: 202 }
+      );
+    }
 
     const result = await changeOcsPolicyForSubscribers(validation.value);
     logAudit(

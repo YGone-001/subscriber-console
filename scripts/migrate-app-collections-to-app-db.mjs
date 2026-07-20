@@ -25,6 +25,7 @@ const appCollections = [
   'app_profile_versions',
   'app_ratings',
   'app_users',
+  'app_approvals',
   'app_audit_logs',
   'app_alerts',
   'app_rate_limits',

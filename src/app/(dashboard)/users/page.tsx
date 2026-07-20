@@ -4,7 +4,7 @@ import { useState } from "react";
 import type React from "react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
-import { Plus, Trash2, Shield, User, Clock, Settings, Save, X, Activity, CheckCircle2, Eye, LockKeyhole, SlidersHorizontal, Download, RotateCcw, GitBranch } from "lucide-react";
+import { Plus, Trash2, Shield, User, Clock, Settings, Save, X, Activity, CheckCircle2, Eye, LockKeyhole, SlidersHorizontal, Download, RotateCcw, GitBranch, RefreshCw } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useI18n } from "@/components/I18nProvider";
 import { ConfirmActionPanel, EmptyState, LoadingRows, OperationNotice } from "@/components/OperationFeedback";
@@ -25,6 +25,22 @@ type Notice = {
 type RoleKey = "root" | "operator" | "viewer";
 type PermissionLevel = "manage" | "write" | "read" | "none";
 type CapabilityLevel = "allow" | "approval" | "export" | "deny";
+type ApprovalStatus = "pending" | "approved" | "rejected" | "executed" | "failed";
+type ApprovalAction = "POLICY_CHANGE" | "TRAFFIC_ADJUSTMENT";
+
+type ApprovalRequest = {
+  id: string;
+  action: ApprovalAction;
+  status: ApprovalStatus;
+  requester: string;
+  reviewer?: string;
+  targetId: string;
+  summary: string;
+  createdAt: string;
+  reviewedAt?: string;
+  executedAt?: string;
+  error?: string;
+};
 
 const USERNAME_PATTERN = /^[A-Za-z0-9_.-]{3,32}$/;
 const VALID_ROLES: string[] = ["root", "operator", "viewer"];
@@ -48,6 +64,14 @@ const CAPABILITY_STYLE: Record<CapabilityLevel, { color: string; bg: string; ico
   approval: { color: "#d97706", bg: "rgba(245, 158, 11, 0.12)", icon: <GitBranch size={14} /> },
   export: { color: "var(--primary)", bg: "rgba(59, 130, 246, 0.1)", icon: <Download size={14} /> },
   deny: { color: "var(--text-muted)", bg: "var(--surface-hover)", icon: <X size={14} /> },
+};
+
+const APPROVAL_STATUS_STYLE: Record<ApprovalStatus, { color: string; bg: string }> = {
+  pending: { color: "#d97706", bg: "rgba(245, 158, 11, 0.12)" },
+  approved: { color: "var(--primary)", bg: "rgba(59, 130, 246, 0.1)" },
+  rejected: { color: "var(--danger)", bg: "rgba(239, 68, 68, 0.1)" },
+  executed: { color: "var(--success)", bg: "rgba(16, 185, 129, 0.1)" },
+  failed: { color: "var(--danger)", bg: "rgba(239, 68, 68, 0.1)" },
 };
 
 const PERMISSION_MODULES: Array<{
@@ -82,10 +106,16 @@ const ACTION_CAPABILITIES: Array<{
 ];
 
 export default function UsersPage() {
-  const { data, isLoading, mutate } = useSWR<{ users: SysUser[] }>("/api/auth/users", fetcher);
-  const users = data?.users || [];
   const { user: currentUser, isRoot } = useAuth();
   const { t } = useI18n();
+  const { data, isLoading, mutate } = useSWR<{ users: SysUser[] }>("/api/auth/users", fetcher);
+  const { data: approvalData, isLoading: isApprovalLoading, mutate: mutateApprovals } = useSWR<{ approvals: ApprovalRequest[]; pending: number }>(
+    isRoot ? "/api/approvals?limit=8" : null,
+    fetcher,
+    { refreshInterval: 30000 }
+  );
+  const users = data?.users || [];
+  const approvals = approvalData?.approvals || [];
 
   const [isAdding, setIsAdding] = useState(false);
   const [newForm, setNewForm] = useState({ username: "", password: "", role: "operator" });
@@ -95,6 +125,7 @@ export default function UsersPage() {
   const [notice, setNotice] = useState<Notice | null>(null);
   const [savingAction, setSavingAction] = useState<string | null>(null);
   const [pendingDeleteUsername, setPendingDeleteUsername] = useState<string | null>(null);
+  const [reviewingApprovalId, setReviewingApprovalId] = useState<string | null>(null);
 
   const readError = async (res: Response, fallback: string) => {
     try {
@@ -125,6 +156,8 @@ export default function UsersPage() {
     acc[role as RoleKey] = users.filter((item) => item.role === role).length;
     return acc;
   }, { root: 0, operator: 0, viewer: 0 });
+
+  const approvalPendingCount = approvalData?.pending || approvals.filter((item) => item.status === "pending").length;
 
   const renderPermissionBadge = (level: PermissionLevel) => {
     const style = PERMISSION_STYLE[level];
@@ -172,6 +205,28 @@ export default function UsersPage() {
       >
         {style.icon}
         {t(`users_cap_${level}`)}
+      </span>
+    );
+  };
+
+  const renderApprovalStatus = (status: ApprovalStatus) => {
+    const style = APPROVAL_STATUS_STYLE[status] || APPROVAL_STATUS_STYLE.pending;
+    return (
+      <span
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          minWidth: 82,
+          padding: "0.3rem 0.55rem",
+          borderRadius: "999px",
+          background: style.bg,
+          color: style.color,
+          fontSize: "0.74rem",
+          fontWeight: 800,
+        }}
+      >
+        {t(`approval_status_${status}`)}
       </span>
     );
   };
@@ -288,6 +343,34 @@ export default function UsersPage() {
       setNotice({ type: "error", text: t("users_err_delete") });
     } finally {
       setSavingAction(null);
+    }
+  };
+
+  const handleApprovalDecision = async (approval: ApprovalRequest, decision: "approve" | "reject") => {
+    setReviewingApprovalId(`${decision}:${approval.id}`);
+    setNotice(null);
+    try {
+      const res = await fetch(`/api/approvals/${approval.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ decision }),
+      });
+
+      if (res.ok) {
+        setNotice({
+          type: "success",
+          text: decision === "approve" ? t("approval_msg_approved") : t("approval_msg_rejected"),
+        });
+        await mutateApprovals();
+      } else {
+        setNotice({ type: "error", text: await readError(res, t("approval_err_review")) });
+        await mutateApprovals();
+      }
+    } catch (e) {
+      console.error(e);
+      setNotice({ type: "error", text: t("approval_err_review") });
+    } finally {
+      setReviewingApprovalId(null);
     }
   };
 
@@ -467,6 +550,111 @@ export default function UsersPage() {
               </article>
             ))}
           </div>
+        </div>
+      </section>
+
+      <section
+        className="dash-card"
+        style={{
+          padding: "1.25rem",
+          marginBottom: "1.5rem",
+          display: "grid",
+          gap: "1rem",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: "1.1rem", color: "var(--text-main)", display: "flex", alignItems: "center", gap: "0.55rem" }}>
+              <GitBranch size={18} color="var(--primary)" />
+              {t("approval_center_title")}
+            </h2>
+            <p style={{ margin: "0.35rem 0 0", color: "var(--text-muted)", fontSize: "0.88rem" }}>
+              {t("approval_center_subtitle")}
+            </p>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: "0.45rem", padding: "0.45rem 0.65rem", borderRadius: "999px", background: "rgba(245, 158, 11, 0.12)", color: "#d97706", fontSize: "0.82rem", fontWeight: 800 }}>
+              <Clock size={14} />
+              {t("approval_pending_count", { count: approvalPendingCount })}
+            </span>
+            <button type="button" className="btn btn-outline" onClick={() => mutateApprovals()} style={{ minHeight: 34, padding: "0.4rem 0.65rem" }}>
+              <RefreshCw size={14} /> {t("audit_refresh")}
+            </button>
+          </div>
+        </div>
+
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", minWidth: 820, borderCollapse: "collapse", fontSize: "0.88rem" }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid var(--surface-border)" }}>
+                <th className="table-header-cap" style={{ padding: "0.85rem 1rem", textAlign: "left" }}>{t("approval_col_action")}</th>
+                <th className="table-header-cap" style={{ padding: "0.85rem 1rem", textAlign: "left" }}>{t("approval_col_target")}</th>
+                <th className="table-header-cap" style={{ padding: "0.85rem 1rem", textAlign: "left" }}>{t("approval_col_requester")}</th>
+                <th className="table-header-cap" style={{ padding: "0.85rem 1rem", textAlign: "left" }}>{t("approval_col_status")}</th>
+                <th className="table-header-cap" style={{ padding: "0.85rem 1rem", textAlign: "left" }}>{t("approval_col_created")}</th>
+                <th className="table-header-cap" style={{ padding: "0.85rem 1rem", textAlign: "right" }}>{t("users_actions")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {isApprovalLoading ? (
+                <tr>
+                  <td colSpan={6}>
+                    <LoadingRows columns={6} rows={3} />
+                  </td>
+                </tr>
+              ) : approvals.length === 0 ? (
+                <tr>
+                  <td colSpan={6}>
+                    <EmptyState
+                      icon={<CheckCircle2 size={44} />}
+                      title={t("approval_empty")}
+                      description={t("approval_empty_desc")}
+                    />
+                  </td>
+                </tr>
+              ) : approvals.map((approval) => {
+                const isPending = approval.status === "pending";
+                return (
+                  <tr key={approval.id} style={{ borderBottom: "1px solid var(--surface-border)" }}>
+                    <td style={{ padding: "0.9rem 1rem" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.55rem", color: "var(--text-main)", fontWeight: 800 }}>
+                        {approval.action === "POLICY_CHANGE" ? <GitBranch size={15} color="var(--primary)" /> : <SlidersHorizontal size={15} color="var(--primary)" />}
+                        {t(`approval_action_${approval.action}`)}
+                      </div>
+                      <div style={{ marginTop: "0.25rem", color: "var(--text-muted)", fontSize: "0.76rem", lineHeight: 1.35, maxWidth: 320 }}>
+                        {approval.summary}
+                      </div>
+                      {approval.error && (
+                        <div style={{ marginTop: "0.25rem", color: "var(--danger)", fontSize: "0.74rem", lineHeight: 1.35 }}>
+                          {approval.error}
+                        </div>
+                      )}
+                    </td>
+                    <td style={{ padding: "0.9rem 1rem", color: "var(--text-main)", fontFamily: "monospace", fontWeight: 700 }}>{approval.targetId}</td>
+                    <td style={{ padding: "0.9rem 1rem", color: "var(--text-main)" }}>{approval.requester}</td>
+                    <td style={{ padding: "0.9rem 1rem" }}>{renderApprovalStatus(approval.status)}</td>
+                    <td style={{ padding: "0.9rem 1rem", color: "var(--text-muted)", fontSize: "0.82rem" }}>{new Date(approval.createdAt).toLocaleString()}</td>
+                    <td style={{ padding: "0.9rem 1rem", textAlign: "right" }}>
+                      {isPending ? (
+                        <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
+                          <button className="btn btn-outline" onClick={() => handleApprovalDecision(approval, "reject")} disabled={Boolean(reviewingApprovalId)} style={{ padding: "0.4rem 0.75rem", minHeight: 34 }}>
+                            {reviewingApprovalId === `reject:${approval.id}` ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> : <X size={14} />}
+                            {t("approval_reject")}
+                          </button>
+                          <button className="btn btn-primary" onClick={() => handleApprovalDecision(approval, "approve")} disabled={Boolean(reviewingApprovalId)} style={{ padding: "0.4rem 0.75rem", minHeight: 34 }}>
+                            {reviewingApprovalId === `approve:${approval.id}` ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> : <CheckCircle2 size={14} />}
+                            {t("approval_approve")}
+                          </button>
+                        </div>
+                      ) : (
+                        <span style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>{approval.reviewer || "--"}</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       </section>
 

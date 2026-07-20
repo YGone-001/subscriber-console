@@ -17,7 +17,7 @@ type TrafficAdjustmentModalProps = {
   currentTraffic: TrafficInfo;
   defaultMode?: TrafficAdjustmentMode;
   onClose: () => void;
-  onSuccess: (adjustment: any) => void;
+  onSuccess: (response: any) => void;
   t: (key: string, params?: Record<string, string | number>) => string;
 };
 
@@ -121,7 +121,7 @@ export default function TrafficAdjustmentModal({
         throw new Error(data.error || t("traffic_err_save"));
       }
 
-      onSuccess(data.adjustment);
+      onSuccess(data);
       onClose();
     } catch (err: any) {
       setError(err.message || t("traffic_err_save"));
