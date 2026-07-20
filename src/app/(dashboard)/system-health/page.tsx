@@ -122,6 +122,13 @@ export default function SystemHealthPage() {
       });
 
       if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (data?.approval?.id) {
+          setNotice({ type: "success", text: t("approval_msg_submitted", { id: data.approval.id }) });
+          setHealModalOpen(false);
+          return;
+        }
+
         // optimistic remove from list
         const updatedList = anomalies.filter(a => a.imsi !== targetAnomaly.imsi || a.type !== targetAnomaly.type);
         setAnomalies(updatedList);

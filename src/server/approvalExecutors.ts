@@ -4,6 +4,7 @@ import type { ApprovalDocument } from '@/server/repositories/approvalRepository'
 import { adjustOcsTrafficBalance, changeOcsPolicyForSubscribers } from '@/server/repositories/ocsBillingRepository';
 import { restoreProfileVersion } from '@/server/repositories/profileRepository';
 import { createRating, deleteRating, updateRating } from '@/server/repositories/ratingRepository';
+import { healSubscriberDocument } from '@/server/repositories/systemAuditRepository';
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -117,6 +118,20 @@ export async function executeApproval(approval: ApprovalDocument, request: Reque
       request
     );
     return { profile: result.restored, version: result.version };
+  }
+
+  if (approval.action === 'SYSTEM_HEAL') {
+    const payload = asRecord(approval.payload);
+    const imsi = String(payload.imsi || '');
+    const type = String(payload.type || '');
+    const profileName = payload.profileName ? String(payload.profileName) : undefined;
+    if (!/^\d{15}$/.test(imsi)) throw new Error('IMSI must be exactly 15 digits');
+    if (!type) throw new Error('type is required');
+
+    await healSubscriberDocument(imsi, type, profileName);
+    const result = { imsi, type, profileName };
+    logAudit('HEAL', imsi, { approvalId: approval.id }, { ...result, approvalId: approval.id }, request);
+    return result;
   }
 
   throw new Error('Unsupported approval action');

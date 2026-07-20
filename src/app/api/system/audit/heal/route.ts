@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import { logAudit } from '@/lib/audit';
 import { requireCapability } from '@/lib/authz';
+import { capabilityDecision } from '@/lib/permissions';
 import { enforceRateLimit } from '@/lib/rateLimit';
+import { createApprovalRequest } from '@/server/repositories/approvalRepository';
 import { healSubscriberDocument } from '@/server/repositories/systemAuditRepository';
 
 export const dynamic = 'force-dynamic';
@@ -16,6 +18,29 @@ export async function POST(request: Request) {
     const { imsi, type, profileName } = await request.json();
     if (!imsi || !type) {
       return NextResponse.json({ error: 'imsi and type are required' }, { status: 400 });
+    }
+    if (!/^\d{15}$/.test(String(imsi))) {
+      return NextResponse.json({ error: 'IMSI must be exactly 15 digits' }, { status: 400 });
+    }
+
+    if (capabilityDecision(auth.auth.role, 'system_heal') === 'approval') {
+      const approval = await createApprovalRequest({
+        action: 'SYSTEM_HEAL',
+        requester: auth.auth.user,
+        targetId: String(imsi),
+        summary: `Self-heal ${imsi} (${type})`,
+        payload: {
+          imsi: String(imsi),
+          type: String(type),
+          profileName: profileName ? String(profileName) : undefined,
+        },
+      });
+
+      logAudit('UPDATE', `approval:${approval.id}`, null, approval, request);
+      return NextResponse.json(
+        { message: `Approval required before self-healing ${imsi}`, approval },
+        { status: 202 }
+      );
     }
 
     await healSubscriberDocument(String(imsi), String(type), profileName ? String(profileName) : undefined);

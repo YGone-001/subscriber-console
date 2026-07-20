@@ -7,7 +7,8 @@ export type ApprovalAction =
   | 'RATING_CREATE'
   | 'RATING_UPDATE'
   | 'RATING_DELETE'
-  | 'PROFILE_RESTORE';
+  | 'PROFILE_RESTORE'
+  | 'SYSTEM_HEAL';
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'executed' | 'failed';
 
 export type ApprovalDocument = {

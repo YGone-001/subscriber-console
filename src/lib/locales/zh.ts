@@ -459,6 +459,7 @@ export const zh: Record<string, string> = {
     approval_action_RATING_UPDATE: "资费修改",
     approval_action_RATING_DELETE: "资费删除",
     approval_action_PROFILE_RESTORE: "Profile 回滚",
+    approval_action_SYSTEM_HEAL: "系统自愈",
     approval_status_pending: "待审批",
     approval_status_approved: "已批准",
     approval_status_rejected: "已拒绝",

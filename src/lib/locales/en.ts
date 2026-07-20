@@ -459,6 +459,7 @@ export const en: Record<string, string> = {
     approval_action_RATING_UPDATE: "Rating Update",
     approval_action_RATING_DELETE: "Rating Delete",
     approval_action_PROFILE_RESTORE: "Profile Restore",
+    approval_action_SYSTEM_HEAL: "System Self-Heal",
     approval_status_pending: "Pending",
     approval_status_approved: "Approved",
     approval_status_rejected: "Rejected",
