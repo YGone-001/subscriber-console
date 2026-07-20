@@ -4,7 +4,7 @@ import { useState } from "react";
 import type React from "react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
-import { Plus, Trash2, Shield, User, Clock, Settings, Save, X, Activity, CheckCircle2, Eye, LockKeyhole, SlidersHorizontal } from "lucide-react";
+import { Plus, Trash2, Shield, User, Clock, Settings, Save, X, Activity, CheckCircle2, Eye, LockKeyhole, SlidersHorizontal, Download, RotateCcw, GitBranch } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useI18n } from "@/components/I18nProvider";
 import { ConfirmActionPanel, EmptyState, LoadingRows, OperationNotice } from "@/components/OperationFeedback";
@@ -24,6 +24,7 @@ type Notice = {
 
 type RoleKey = "root" | "operator" | "viewer";
 type PermissionLevel = "manage" | "write" | "read" | "none";
+type CapabilityLevel = "allow" | "approval" | "export" | "deny";
 
 const USERNAME_PATTERN = /^[A-Za-z0-9_.-]{3,32}$/;
 const VALID_ROLES: string[] = ["root", "operator", "viewer"];
@@ -42,6 +43,13 @@ const PERMISSION_STYLE: Record<PermissionLevel, { color: string; bg: string; ico
   none: { color: "var(--text-muted)", bg: "var(--surface-hover)", icon: <X size={14} /> },
 };
 
+const CAPABILITY_STYLE: Record<CapabilityLevel, { color: string; bg: string; icon: React.ReactNode }> = {
+  allow: { color: "var(--success)", bg: "rgba(16, 185, 129, 0.1)", icon: <CheckCircle2 size={14} /> },
+  approval: { color: "#d97706", bg: "rgba(245, 158, 11, 0.12)", icon: <GitBranch size={14} /> },
+  export: { color: "var(--primary)", bg: "rgba(59, 130, 246, 0.1)", icon: <Download size={14} /> },
+  deny: { color: "var(--text-muted)", bg: "var(--surface-hover)", icon: <X size={14} /> },
+};
+
 const PERMISSION_MODULES: Array<{
   key: string;
   root: PermissionLevel;
@@ -54,6 +62,23 @@ const PERMISSION_MODULES: Array<{
   { key: "audit", root: "read", operator: "read", viewer: "read" },
   { key: "health", root: "manage", operator: "read", viewer: "read" },
   { key: "users", root: "manage", operator: "none", viewer: "none" },
+];
+
+const ACTION_CAPABILITIES: Array<{
+  key: string;
+  icon: React.ReactNode;
+  root: CapabilityLevel;
+  operator: CapabilityLevel;
+  viewer: CapabilityLevel;
+}> = [
+  { key: "subscriber_write", icon: <User size={16} />, root: "allow", operator: "allow", viewer: "deny" },
+  { key: "policy_approve", icon: <GitBranch size={16} />, root: "allow", operator: "approval", viewer: "deny" },
+  { key: "balance_adjust", icon: <SlidersHorizontal size={16} />, root: "allow", operator: "approval", viewer: "deny" },
+  { key: "profile_rollback", icon: <RotateCcw size={16} />, root: "allow", operator: "deny", viewer: "deny" },
+  { key: "rating_publish", icon: <CheckCircle2 size={16} />, root: "allow", operator: "approval", viewer: "deny" },
+  { key: "audit_export", icon: <Download size={16} />, root: "export", operator: "export", viewer: "export" },
+  { key: "system_heal", icon: <Activity size={16} />, root: "allow", operator: "approval", viewer: "deny" },
+  { key: "user_admin", icon: <Shield size={16} />, root: "allow", operator: "deny", viewer: "deny" },
 ];
 
 export default function UsersPage() {
@@ -121,6 +146,32 @@ export default function UsersPage() {
       >
         {style.icon}
         {t(`users_perm_${level}`)}
+      </span>
+    );
+  };
+
+  const renderCapabilityBadge = (level: CapabilityLevel) => {
+    const style = CAPABILITY_STYLE[level];
+    return (
+      <span
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: "0.35rem",
+          width: "100%",
+          minWidth: 0,
+          padding: "0.35rem 0.55rem",
+          borderRadius: "999px",
+          background: style.bg,
+          color: style.color,
+          fontSize: "0.74rem",
+          fontWeight: 800,
+          whiteSpace: "nowrap",
+        }}
+      >
+        {style.icon}
+        {t(`users_cap_${level}`)}
       </span>
     );
   };
@@ -356,6 +407,66 @@ export default function UsersPage() {
               ))}
             </tbody>
           </table>
+        </div>
+
+        <div style={{ borderTop: "1px solid var(--surface-border)", paddingTop: "1rem", display: "grid", gap: "0.85rem" }}>
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
+            <div>
+              <h3 style={{ margin: 0, color: "var(--text-main)", fontSize: "0.98rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <LockKeyhole size={16} color="var(--primary)" />
+                {t("users_cap_title")}
+              </h3>
+              <p style={{ margin: "0.3rem 0 0", color: "var(--text-muted)", fontSize: "0.82rem" }}>
+                {t("users_cap_subtitle")}
+              </p>
+            </div>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", minHeight: 30, padding: "0.35rem 0.65rem", borderRadius: "999px", background: "var(--surface-hover)", color: "var(--text-secondary)", fontSize: "0.78rem", fontWeight: 800 }}>
+              <GitBranch size={14} />
+              {t("users_cap_approval_hint")}
+            </span>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "0.75rem" }}>
+            {ACTION_CAPABILITIES.map((capability) => (
+              <article
+                key={capability.key}
+                style={{
+                  minHeight: 142,
+                  border: "1px solid var(--surface-border)",
+                  borderRadius: "8px",
+                  padding: "0.9rem",
+                  background: "var(--header-bg)",
+                  display: "grid",
+                  gap: "0.75rem",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "flex-start", gap: "0.65rem" }}>
+                  <div style={{ width: 34, height: 34, borderRadius: "8px", display: "grid", placeItems: "center", background: "var(--surface-hover)", color: "var(--primary)", flex: "0 0 auto" }}>
+                    {capability.icon}
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <strong style={{ display: "block", color: "var(--text-main)", fontSize: "0.9rem", lineHeight: 1.25 }}>
+                      {t(`users_cap_action_${capability.key}`)}
+                    </strong>
+                    <span style={{ display: "block", marginTop: "0.25rem", color: "var(--text-muted)", fontSize: "0.76rem", lineHeight: 1.35 }}>
+                      {t(`users_cap_action_${capability.key}_desc`)}
+                    </span>
+                  </div>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "0.45rem" }}>
+                  {(VALID_ROLES as RoleKey[]).map((role) => (
+                    <div key={role} style={{ display: "grid", gap: "0.35rem", justifyItems: "center", minWidth: 0 }}>
+                      <span style={{ color: "var(--text-muted)", fontSize: "0.68rem", fontWeight: 800, textTransform: "uppercase", letterSpacing: 0 }}>
+                        {t(`users_${role}`)}
+                      </span>
+                      {renderCapabilityBadge(capability[role])}
+                    </div>
+                  ))}
+                </div>
+              </article>
+            ))}
+          </div>
         </div>
       </section>
 
