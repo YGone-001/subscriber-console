@@ -373,6 +373,7 @@ export default function SubscriberPage() {
 
       {feedback && (
         <OperationNotice
+          presentation="modal"
           tone={feedback.tone}
           title={feedback.title}
           message={feedback.message}
@@ -382,6 +383,7 @@ export default function SubscriberPage() {
 
       {pendingDelete && (
         <ConfirmActionPanel
+          presentation="modal"
           title={pendingDelete.mode === "bulk" ? t("sub_confirm_bulk_delete_title", { count: pendingDelete.imsis.length }) : t("sub_confirm_delete_title")}
           message={
             pendingDelete.mode === "bulk"

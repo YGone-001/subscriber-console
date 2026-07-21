@@ -40,30 +40,34 @@ function ToneIcon({ tone, size = 18 }: { tone: FeedbackTone; size?: number }) {
 
 export function OperationNotice({
   tone,
+  presentation = "inline",
   title,
   message,
   onClose,
 }: {
   tone: FeedbackTone;
+  presentation?: "inline" | "modal";
   title?: string;
   message: string;
   onClose?: () => void;
 }) {
   const style = toneStyles[tone];
-
-  return (
+  const notice = (
     <div
       role={tone === "danger" ? "alert" : "status"}
       style={{
         display: "flex",
         alignItems: "flex-start",
         gap: "0.75rem",
-        padding: "0.85rem 1rem",
-        marginBottom: "1rem",
+        padding: presentation === "modal" ? "1.05rem" : "0.85rem 1rem",
+        marginBottom: presentation === "modal" ? 0 : "1rem",
         borderRadius: "8px",
         border: `1px solid ${style.border}`,
-        background: style.bg,
+        background: presentation === "modal" ? "var(--surface)" : style.bg,
         color: "var(--text-main)",
+        boxShadow: presentation === "modal" ? "0 22px 54px -24px rgba(15, 23, 42, 0.72)" : undefined,
+        maxWidth: presentation === "modal" ? 520 : undefined,
+        width: presentation === "modal" ? "min(520px, calc(100vw - 32px))" : undefined,
       }}
     >
       <div style={{ color: style.color, display: "flex", paddingTop: "0.1rem" }}>
@@ -72,6 +76,17 @@ export function OperationNotice({
       <div style={{ flex: 1, minWidth: 0 }}>
         {title && <div style={{ fontWeight: 800, fontSize: "0.92rem", marginBottom: "0.15rem" }}>{title}</div>}
         <div style={{ color: "var(--text-secondary)", fontSize: "0.86rem", lineHeight: 1.5 }}>{message}</div>
+        {presentation === "modal" && onClose && (
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={onClose}
+            autoFocus
+            style={{ marginTop: "0.9rem", minWidth: 92, minHeight: 36 }}
+          >
+            OK
+          </button>
+        )}
       </div>
       {onClose && (
         <button
@@ -95,10 +110,36 @@ export function OperationNotice({
       )}
     </div>
   );
+
+  if (presentation === "modal") {
+    return (
+      <div
+        role="presentation"
+        onClick={onClose}
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 10000,
+          display: "grid",
+          placeItems: "center",
+          padding: "1rem",
+          background: "rgba(15, 23, 42, 0.38)",
+          backdropFilter: "blur(3px)",
+        }}
+      >
+        <div onClick={(event) => event.stopPropagation()}>
+          {notice}
+        </div>
+      </div>
+    );
+  }
+
+  return notice;
 }
 
 export function ConfirmActionPanel({
   tone = "danger",
+  presentation = "inline",
   title,
   message,
   confirmLabel,
@@ -108,6 +149,7 @@ export function ConfirmActionPanel({
   onCancel,
 }: {
   tone?: FeedbackTone;
+  presentation?: "inline" | "modal";
   title: string;
   message: string;
   confirmLabel: string;
@@ -117,22 +159,24 @@ export function ConfirmActionPanel({
   onCancel: () => void;
 }) {
   const style = toneStyles[tone];
-
-  return (
+  const panel = (
     <div
       role="dialog"
-      aria-modal="false"
+      aria-modal={presentation === "modal"}
       aria-label={title}
       style={{
         display: "flex",
         flexWrap: "wrap",
         gap: "0.85rem",
         alignItems: "center",
-        padding: "1rem",
-        marginBottom: "1rem",
+        padding: presentation === "modal" ? "1.1rem" : "1rem",
+        marginBottom: presentation === "modal" ? 0 : "1rem",
         borderRadius: "8px",
         border: `1px solid ${style.border}`,
-        background: style.bg,
+        background: presentation === "modal" ? "var(--surface)" : style.bg,
+        boxShadow: presentation === "modal" ? "0 22px 54px -24px rgba(15, 23, 42, 0.72)" : undefined,
+        maxWidth: presentation === "modal" ? 560 : undefined,
+        width: presentation === "modal" ? "min(560px, calc(100vw - 32px))" : undefined,
       }}
     >
       <div
@@ -144,6 +188,7 @@ export function ConfirmActionPanel({
           placeItems: "center",
           background: style.soft,
           color: style.color,
+          flexShrink: 0,
         }}
       >
         <ToneIcon tone={tone} size={19} />
@@ -161,6 +206,7 @@ export function ConfirmActionPanel({
           className="btn"
           onClick={onConfirm}
           disabled={isWorking}
+          autoFocus={presentation === "modal"}
           style={{ background: tone === "danger" ? "var(--danger)" : style.color, minWidth: 96 }}
         >
           {isWorking ? <Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} /> : confirmLabel}
@@ -168,6 +214,31 @@ export function ConfirmActionPanel({
       </div>
     </div>
   );
+
+  if (presentation === "modal") {
+    return (
+      <div
+        role="presentation"
+        onClick={onCancel}
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 10000,
+          display: "grid",
+          placeItems: "center",
+          padding: "1rem",
+          background: "rgba(15, 23, 42, 0.45)",
+          backdropFilter: "blur(3px)",
+        }}
+      >
+        <div onClick={(event) => event.stopPropagation()}>
+          {panel}
+        </div>
+      </div>
+    );
+  }
+
+  return panel;
 }
 
 export function EmptyState({
