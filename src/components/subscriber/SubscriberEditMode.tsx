@@ -23,6 +23,8 @@ interface SubscriberEditModeProps {
     ocsTrafficBalanceStr: string;
     ocsVoiceTotalStr: string;
     ocsVoiceBalanceStr: string;
+    ocsSmsTotalStr: string;
+    ocsSmsBalanceStr: string;
     ocsPlanId: string;
     ocsPlanStatus: string;
     ocsRules: any[];
@@ -37,14 +39,14 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
   const {
     inputImsi, msisdn, profileList,
     auth4GData, usimType, ueAmbr, isAccessRestrictionsExpanded, accessRestriction,
-    ocsPlmn, ocsTrafficTotalStr, ocsTrafficBalanceStr, ocsVoiceTotalStr, ocsVoiceBalanceStr, ocsPlanId, ocsPlanStatus, ocsRules, ratingList,
+    ocsPlmn, ocsTrafficTotalStr, ocsTrafficBalanceStr, ocsVoiceTotalStr, ocsVoiceBalanceStr, ocsSmsTotalStr, ocsSmsBalanceStr, ocsPlanId, ocsPlanStatus, ocsRules, ratingList,
     slices, newlyAddedSliceIndex, expandedSlices
   } = state;
 
   const {
     setInputImsi, setMsisdn, loadFromProfile,
     setAuth4GData, setUsimType, setUeAmbr, setIsAccessRestrictionsExpanded, setAccessRestriction,
-    setOcsTrafficTotalStr, setOcsTrafficBalanceStr, setOcsVoiceTotalStr, setOcsVoiceBalanceStr,
+    setOcsTrafficTotalStr, setOcsTrafficBalanceStr, setOcsVoiceTotalStr, setOcsVoiceBalanceStr, setOcsSmsTotalStr, setOcsSmsBalanceStr,
     addSlice, handleSliceChange, removeSlice, setExpandedSlices
   } = actions;
   const totalTrafficInput = splitByteInput(ocsTrafficTotalStr);
@@ -361,6 +363,30 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
                 {TIME_INPUT_UNITS.map((unit) => <option key={unit.value} value={unit.value}>{unit.label}</option>)}
               </select>
             </div>
+          </div>
+          <div>
+            <label className="form-label">IMS SMS Quota</label>
+            <input
+              type="number"
+              className="form-input"
+              min="0"
+              step="1"
+              value={ocsSmsTotalStr}
+              onFocus={(e) => e.target.select()}
+              onChange={(e) => setOcsSmsTotalStr(e.target.value.replace(/\D/g, ""))}
+            />
+          </div>
+          <div>
+            <label className="form-label">IMS SMS Balance</label>
+            <input
+              type="number"
+              className="form-input"
+              min="0"
+              step="1"
+              value={ocsSmsBalanceStr}
+              onFocus={(e) => e.target.select()}
+              onChange={(e) => setOcsSmsBalanceStr(e.target.value.replace(/\D/g, ""))}
+            />
           </div>
           <div style={{ gridColumn: "1 / -1" }}>
             <label className="form-label">APN Rating Rules</label>

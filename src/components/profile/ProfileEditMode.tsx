@@ -113,6 +113,30 @@ export default function ProfileEditMode({ t, profileName, state, actions }: any)
               </select>
             </div>
           </div>
+          <div>
+            <label className="form-label">SMS Quota Template</label>
+            <input
+              type="number"
+              className="form-input"
+              min="0"
+              step="1"
+              value={ocsDefaults.smsTotal || "0"}
+              onFocus={(e) => e.target.select()}
+              onChange={(e) => setOcsDefaults({ ...ocsDefaults, smsTotal: e.target.value.replace(/\D/g, "") })}
+            />
+          </div>
+          <div>
+            <label className="form-label">SMS Balance Template</label>
+            <input
+              type="number"
+              className="form-input"
+              min="0"
+              step="1"
+              value={ocsDefaults.smsBalance || "0"}
+              onFocus={(e) => e.target.select()}
+              onChange={(e) => setOcsDefaults({ ...ocsDefaults, smsBalance: e.target.value.replace(/\D/g, "") })}
+            />
+          </div>
           <div style={{ gridColumn: "1 / -1" }}>
             <label className="form-label">Tariff Plan Rules</label>
             <div style={{ display: "grid", gap: "0.5rem" }}>

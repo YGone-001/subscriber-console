@@ -1,6 +1,6 @@
-import { AlertTriangle, CheckCircle2, Database, ExternalLink, Mic2, ShieldCheck } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Database, ExternalLink, MessageSquare, Mic2, ShieldCheck } from "lucide-react";
 import type React from "react";
-import { formatBytes, formatSeconds } from "@/lib/unitParser";
+import { formatBytes, formatEvents, formatSeconds } from "@/lib/unitParser";
 
 type RatingRule = {
   rating_group_id?: number;
@@ -19,7 +19,7 @@ type RatingRule = {
   status?: string;
 };
 
-type ScenarioKey = "data" | "ims" | "voice";
+type ScenarioKey = "data" | "ims" | "voice" | "sms";
 
 type Scenario = {
   key: ScenarioKey;
@@ -51,6 +51,13 @@ const scenarios: Scenario[] = [
     icon: <Mic2 size={16} />,
     match: (rule) => rule.charging_type === "voice_time",
   },
+  {
+    key: "sms",
+    label: "IMS SMS",
+    description: "SMS event charging",
+    icon: <MessageSquare size={16} />,
+    match: (rule) => rule.charging_type === "sms_event" || rule.unit === "events",
+  },
 ];
 
 function ratingGroup(rule: RatingRule) {
@@ -62,6 +69,7 @@ function formatGrant(rule?: RatingRule) {
   const grant = Number(rule.quota_per_grant ?? 0);
   if (rule.charging_type === "free" || grant <= 0) return "Included";
   if (rule.charging_type === "voice_time" || rule.unit === "seconds") return formatSeconds(grant);
+  if (rule.charging_type === "sms_event" || rule.unit === "events") return formatEvents(grant);
   return formatBytes(grant);
 }
 

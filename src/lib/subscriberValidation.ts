@@ -7,6 +7,8 @@ type BatchCreatePayload = {
   count: number;
   trafficTotal?: unknown;
   trafficBalance?: unknown;
+  smsTotal?: unknown;
+  smsBalance?: unknown;
   profileName?: string;
   strategy: 'skip' | 'overwrite';
 };
@@ -164,7 +166,7 @@ export function validateBatchCreatePayload(body: unknown): ValidationResult<Batc
   const count = validateBatchCount(payload.count);
   if (!count.ok) return count;
 
-  for (const field of ['trafficTotal', 'trafficBalance']) {
+  for (const field of ['trafficTotal', 'trafficBalance', 'smsTotal', 'smsBalance']) {
     const error = validateOptionalNonNegativeNumber(payload[field], field);
     if (error) return { ok: false, error };
   }
@@ -223,7 +225,7 @@ export function validateSubscriberUpdatePayload(body: unknown): ValidationResult
     if (!isBlank(ocsTraffic.plmn) && !/^\d{5,6}$/.test(String(ocsTraffic.plmn))) {
       return { ok: false, error: 'ocsTraffic.plmn must be 5 or 6 digits' };
     }
-    for (const field of ['traffic_total', 'traffic_balance', 'voice_total', 'voice_balance']) {
+    for (const field of ['traffic_total', 'traffic_balance', 'voice_total', 'voice_balance', 'sms_total', 'sms_balance']) {
       const error = validateOptionalNonNegativeNumber(ocsTraffic[field], `ocsTraffic.${field}`);
       if (error) return { ok: false, error };
     }

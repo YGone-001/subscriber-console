@@ -24,8 +24,8 @@ import { parseCsv, toCsvRow } from "@/lib/csv";
  */
 
 // CSV import only seeds HSS subscriber data and current OCS balance fields.
-const CSV_TEMPLATE_HEADER = "imsi,k,opc,amf,traffic_total,traffic_balance,access_restriction_data";
-const CSV_TEMPLATE_EXAMPLE = "454001234567890,00112233445566778899aabbccddeeff,00112233445566778899aabbccddeeff,8000,10737418240,10737418240,32";
+const CSV_TEMPLATE_HEADER = "imsi,k,opc,amf,traffic_total,traffic_balance,sms_total,sms_balance,access_restriction_data";
+const CSV_TEMPLATE_EXAMPLE = "454001234567890,00112233445566778899aabbccddeeff,00112233445566778899aabbccddeeff,8000,10737418240,10737418240,100,100,32";
 
 interface DataHubProps {
   isOpen: boolean;
@@ -45,6 +45,8 @@ interface ParsedRecord {
   amf: string;
   traffic_total: string;
   traffic_balance: string;
+  sms_total: string;
+  sms_balance: string;
   access_restriction_data: string;
   [key: string]: string;
 }
@@ -61,6 +63,9 @@ const EXPORT_FIELDS = [
   { key: "policy", labelKey: "dh_field_policy", header: "Policy", getValue: (s: any) => s.policy || "" },
   { key: "traffic_used", labelKey: "dh_field_traffic_used", header: "Traffic_Used_Bytes", getValue: (s: any) => s.traffic?.used || 0 },
   { key: "traffic_total", labelKey: "dh_field_traffic_total", header: "Traffic_Total_Bytes", getValue: (s: any) => s.traffic?.total || 0 },
+  { key: "sms_used", labelKey: "dh_field_sms_used", header: "SMS_Used_Events", getValue: (s: any) => s.sms?.used || 0 },
+  { key: "sms_total", labelKey: "dh_field_sms_total", header: "SMS_Total_Events", getValue: (s: any) => s.sms?.total || 0 },
+  { key: "sms_balance", labelKey: "dh_field_sms_balance", header: "SMS_Balance_Events", getValue: (s: any) => s.sms?.balance || 0 },
   { key: "last_active", labelKey: "dh_field_last_active", header: "Last_Active", getValue: (s: any) => s.lastActive || "" },
 ] as const;
 
@@ -579,6 +584,7 @@ export default function DataHub({ isOpen, onClose, onComplete, subscribers, sele
                         <tr style={{ background: "var(--surface-hover)", position: "sticky", top: 0 }}>
                           <th style={{ padding: "0.5rem 1rem", textAlign: "left", fontWeight: 600, color: "var(--text-muted)" }}>{t("dh_col_imsi")}</th>
                           <th style={{ padding: "0.5rem 1rem", textAlign: "left", fontWeight: 600, color: "var(--text-muted)" }}>Traffic Balance</th>
+                          <th style={{ padding: "0.5rem 1rem", textAlign: "left", fontWeight: 600, color: "var(--text-muted)" }}>SMS Balance</th>
                           <th style={{ padding: "0.5rem 1rem", textAlign: "center", fontWeight: 600, color: "var(--text-muted)" }}>{t("dh_col_status")}</th>
                         </tr>
                       </thead>
@@ -588,6 +594,9 @@ export default function DataHub({ isOpen, onClose, onComplete, subscribers, sele
                             <td style={{ padding: "0.4rem 1rem", fontFamily: "monospace", fontWeight: 600 }}>{c.imsi}</td>
                             <td style={{ padding: "0.4rem 1rem", color: "#64748b" }}>
                               {parsedRecords.find(r => r.imsi === c.imsi)?.traffic_balance || "-"}
+                            </td>
+                            <td style={{ padding: "0.4rem 1rem", color: "#64748b" }}>
+                              {parsedRecords.find(r => r.imsi === c.imsi)?.sms_balance || "-"}
                             </td>
                             <td style={{ padding: "0.4rem 1rem", textAlign: "center" }}>
                               <span style={{

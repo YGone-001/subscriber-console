@@ -95,15 +95,19 @@ export default function SubscriberTraceModal({ imsi, onClose, t }: SubscriberTra
   const rules = Array.isArray(tariffPlan.rules) ? tariffPlan.rules : [];
   const dataRules = rules.filter((rule: any) => rule.charging_type === "data_volume").length;
   const voiceRules = rules.filter((rule: any) => rule.charging_type === "voice_time").length;
+  const smsRules = rules.filter((rule: any) => rule.charging_type === "sms_event" || rule.unit === "events").length;
   const auditLogs: AuditLog[] = auditData?.logs || [];
   const trafficTotal = Number(ocsTraffic.traffic_total || 0);
   const trafficBalance = Number(ocsTraffic.traffic_balance || 0);
   const voiceTotal = Number(ocsTraffic.voice_total || 0);
   const voiceBalance = Number(ocsTraffic.voice_balance || 0);
+  const smsTotal = Number(ocsTraffic.sms_total || 0);
+  const smsBalance = Number(ocsTraffic.sms_balance || 0);
   const trafficRemaining = trafficTotal > 0 ? (trafficBalance / trafficTotal) * 100 : 0;
   const voiceRemaining = voiceTotal > 0 ? (voiceBalance / voiceTotal) * 100 : 0;
-  const hasRatingGap = dataRules === 0 || voiceRules === 0;
-  const hasBalanceRisk = (trafficTotal > 0 && trafficRemaining < 20) || (voiceTotal > 0 && voiceRemaining < 20);
+  const smsRemaining = smsTotal > 0 ? (smsBalance / smsTotal) * 100 : 0;
+  const hasRatingGap = dataRules === 0 || voiceRules === 0 || smsRules === 0;
+  const hasBalanceRisk = (trafficTotal > 0 && trafficRemaining < 20) || (voiceTotal > 0 && voiceRemaining < 20) || (smsTotal > 0 && smsRemaining < 20);
   const currentEvents: TimelineEvent[] = [
     {
       id: "current-subscription",
@@ -120,7 +124,7 @@ export default function SubscriberTraceModal({ imsi, onClose, t }: SubscriberTra
       kind: "rating",
       tone: hasRatingGap || !ocsImsi.plan_id ? "warn" : "ok",
       title: t("trace_timeline_rating_title"),
-      detail: t("trace_timeline_rating_detail", { plan: ocsImsi.plan_id || t("no_policy"), data: dataRules, voice: voiceRules }),
+      detail: t("trace_timeline_rating_detail", { plan: ocsImsi.plan_id || t("no_policy"), data: dataRules, voice: voiceRules, sms: smsRules }),
       meta: t("trace_timeline_rating_meta", { rules: rules.length }),
     },
     {
@@ -129,8 +133,8 @@ export default function SubscriberTraceModal({ imsi, onClose, t }: SubscriberTra
       kind: "balance",
       tone: hasBalanceRisk ? "warn" : "ok",
       title: t("trace_timeline_balance_title"),
-      detail: t("trace_timeline_balance_detail", { data: formatPercent(trafficRemaining), voice: formatPercent(voiceRemaining) }),
-      meta: `${formatBytes(trafficBalance)} / ${formatSeconds(voiceBalance)}`,
+      detail: t("trace_timeline_balance_detail", { data: formatPercent(trafficRemaining), voice: formatPercent(voiceRemaining), sms: formatPercent(smsRemaining) }),
+      meta: `${formatBytes(trafficBalance)} / ${formatSeconds(voiceBalance)} / ${smsBalance} SMS`,
     },
     {
       id: "current-session",
@@ -175,8 +179,8 @@ export default function SubscriberTraceModal({ imsi, onClose, t }: SubscriberTra
     {
       key: "rating",
       label: t("trace_step_rating"),
-      value: t("trace_rating_summary", { data: dataRules, voice: voiceRules }),
-      state: dataRules > 0 && voiceRules > 0 ? "ok" : "warn",
+      value: t("trace_rating_summary", { data: dataRules, voice: voiceRules, sms: smsRules }),
+      state: dataRules > 0 && voiceRules > 0 && smsRules > 0 ? "ok" : "warn",
     },
   ];
 
@@ -235,6 +239,8 @@ export default function SubscriberTraceModal({ imsi, onClose, t }: SubscriberTra
                   [t("traffic_balance"), formatBytes(ocsTraffic.traffic_balance)],
                   [t("trace_voice_total"), formatSeconds(ocsTraffic.voice_total)],
                   [t("trace_voice_balance"), formatSeconds(ocsTraffic.voice_balance)],
+                  [t("trace_sms_total"), `${Number(ocsTraffic.sms_total || 0)} SMS`],
+                  [t("trace_sms_balance"), `${Number(ocsTraffic.sms_balance || 0)} SMS`],
                 ].map(([label, value]) => (
                   <div key={label} style={{ background: "var(--surface-hover)", borderRadius: 8, padding: "0.75rem" }}>
                     <div style={{ color: "var(--text-muted)", fontSize: "0.72rem" }}>{label}</div>

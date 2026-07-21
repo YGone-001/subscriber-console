@@ -36,6 +36,11 @@ export type SubscriberRow = {
     used: number;
     balance: number;
   };
+  sms: {
+    total: number;
+    used: number;
+    balance: number;
+  };
   lastActive: string;
 };
 
@@ -56,6 +61,8 @@ type BatchCreateOptions = {
   count: number;
   trafficTotal?: unknown;
   trafficBalance?: unknown;
+  smsTotal?: unknown;
+  smsBalance?: unknown;
   profileName?: string;
   strategy?: 'skip' | 'overwrite';
 };
@@ -78,6 +85,8 @@ type ImportRecord = Record<string, unknown> & {
   amf?: unknown;
   traffic_total?: unknown;
   traffic_balance?: unknown;
+  sms_total?: unknown;
+  sms_balance?: unknown;
   access_restriction_data?: unknown;
 };
 
@@ -138,6 +147,21 @@ function normalizedTraffic(balanceDoc?: { data_total?: unknown; data_used?: unkn
   const balance = numericValue(balanceDoc?.data_available);
   let total = numericValue(balanceDoc?.data_total, balance);
   const used = numericValue(balanceDoc?.data_used);
+
+  if (!Number.isFinite(total)) total = balance;
+  if (total < balance) total = balance;
+
+  return {
+    total,
+    balance,
+    used: Math.max(0, used || total - balance),
+  };
+}
+
+function normalizedSms(balanceDoc?: { sms_total?: unknown; sms_used?: unknown; sms_available?: unknown } | null) {
+  const balance = numericValue(balanceDoc?.sms_available);
+  let total = numericValue(balanceDoc?.sms_total, balance);
+  const used = numericValue(balanceDoc?.sms_used);
 
   if (!Number.isFinite(total)) total = balance;
   if (total < balance) total = balance;
@@ -300,12 +324,14 @@ function toSubscriberRow(
   doc: Open5gsSubscriberDocument,
   ocsSubscriber: { plan_id?: string; updated_at?: unknown; created_at?: unknown } | null | undefined,
   balance: { data_total?: unknown; data_used?: unknown; data_available?: unknown; updated_at?: unknown } | null | undefined,
+  smsBalance: { sms_total?: unknown; sms_used?: unknown; sms_available?: unknown } | null | undefined,
   rating: RatingDoc | null
 ): SubscriberRow {
   const policy = rating
     ? `${rating.currency || 'USD'} ${rating.rates || '0'} (${ratingTypeLabel(rating.rates_type)})`
     : '';
   const traffic = normalizedTraffic(balance);
+  const sms = normalizedSms(smsBalance);
   const ard = Number(doc.access_restriction_data ?? 32);
 
   return {
@@ -316,6 +342,7 @@ function toSubscriberRow(
     profile: doc.webui_meta?.profile_name || '',
     policy,
     traffic,
+    sms,
     lastActive: lastActive(balance, ocsSubscriber),
   };
 }
@@ -379,7 +406,7 @@ export async function listSubscriberRows(
 
   return {
     subscribers: docs.map((doc) =>
-      toSubscriberRow(doc, ocs.subscribers.get(doc.imsi), ocs.balances.get(doc.imsi), ocs.policy)
+      toSubscriberRow(doc, ocs.subscribers.get(doc.imsi), ocs.balances.get(doc.imsi), ocs.balances.get(doc.imsi), ocs.policy)
     ),
     total,
     page: pageValue,
@@ -482,6 +509,8 @@ export async function updateSubscriberFromLegacy(
     available: (payload.ocsTraffic as Record<string, unknown> | undefined)?.traffic_balance,
     voiceTotal: (payload.ocsTraffic as Record<string, unknown> | undefined)?.voice_total,
     voiceAvailable: (payload.ocsTraffic as Record<string, unknown> | undefined)?.voice_balance,
+    smsTotal: (payload.ocsTraffic as Record<string, unknown> | undefined)?.sms_total,
+    smsAvailable: (payload.ocsTraffic as Record<string, unknown> | undefined)?.sms_balance,
   });
 
   return next;
@@ -528,6 +557,14 @@ export async function createSubscribersBatch(options: BatchCreateOptions): Promi
     options.trafficBalance ?? ocs.trafficBalance ?? ocs.traffic_balance,
     initialTotal
   );
+  const initialSmsTotal = asNumber(
+    options.smsTotal ?? ocs.smsTotal ?? ocs.sms_total ?? options.smsBalance ?? ocs.smsBalance ?? ocs.sms_balance,
+    100
+  );
+  const initialSmsBalance = asNumber(
+    options.smsBalance ?? ocs.smsBalance ?? ocs.sms_balance,
+    initialSmsTotal
+  );
 
   const imsis = generateImsiRange(options.startImsi, options.count);
   ensureImsiRange(imsis);
@@ -560,6 +597,8 @@ export async function createSubscribersBatch(options: BatchCreateOptions): Promi
       imsi,
       total: initialTotal,
       available: initialBalance,
+      smsTotal: initialSmsTotal,
+      smsAvailable: initialSmsBalance,
     })
   ));
 
@@ -582,7 +621,7 @@ export async function importSubscribersFromRecords(records: ImportRecord[], over
   const existing = await existingImsiSet(imsis);
   const operations: AnyBulkWriteOperation<SubscriberDoc>[] = [];
   const pendingImsis: string[] = [];
-  const provisioningByImsi = new Map<string, { total: number; available: number }>();
+  const provisioningByImsi = new Map<string, { total: number; available: number; smsTotal: number; smsAvailable: number }>();
   let skipped = records.length - normalized.length;
 
   for (const { record, doc } of normalized) {
@@ -601,7 +640,9 @@ export async function importSubscribersFromRecords(records: ImportRecord[], over
     });
     const available = asNumber(record.traffic_balance, 10737418240);
     const total = asNumber(record.traffic_total, available);
-    provisioningByImsi.set(doc.imsi, { total, available });
+    const smsAvailable = asNumber(record.sms_balance, 100);
+    const smsTotal = asNumber(record.sms_total, smsAvailable);
+    provisioningByImsi.set(doc.imsi, { total, available, smsTotal, smsAvailable });
     pendingImsis.push(doc.imsi);
   }
 
@@ -612,6 +653,8 @@ export async function importSubscribersFromRecords(records: ImportRecord[], over
       imsi,
       total: provisioning?.total,
       available: provisioning?.available,
+      smsTotal: provisioning?.smsTotal,
+      smsAvailable: provisioning?.smsAvailable,
     });
   }));
 

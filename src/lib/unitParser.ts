@@ -162,3 +162,14 @@ export function formatSeconds(seconds: number): string {
   if (seconds % 60 === 0) return `${seconds / 60}m`;
   return `${seconds}s`;
 }
+
+export function parseEvents(input: string | number): number {
+  if (typeof input === 'number') return Number.isFinite(input) ? Math.floor(Math.max(0, input)) : 0;
+  const parsed = Number(String(input).trim().replace(/,/g, ''));
+  return Number.isFinite(parsed) ? Math.floor(Math.max(0, parsed)) : 0;
+}
+
+export function formatEvents(events: number): string {
+  const safeEvents = Number.isFinite(events) ? Math.max(0, Math.floor(events)) : 0;
+  return `${safeEvents}`;
+}

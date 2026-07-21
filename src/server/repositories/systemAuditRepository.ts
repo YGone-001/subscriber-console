@@ -32,6 +32,9 @@ function ocsBalancesCollection() {
     voice_used?: Long | number;
     voice_reserved?: Long | number;
     voice_available?: Long | number;
+    sms_total?: Long | number;
+    sms_used?: Long | number;
+    sms_available?: Long | number;
   }>(mongoCollections.ocsBalances);
 }
 
@@ -117,6 +120,22 @@ export async function scanSubscriberDocuments(cursor: unknown, phase: unknown) {
       if (voiceTotal !== voiceUsed + voiceReserved + voiceAvailable) {
         anomalies.push({ imsi: row.imsi, type: 'balance_mismatch', details: 'OCS voice balance invariant mismatch' });
       }
+
+      if (
+        balance.sms_total === undefined ||
+        balance.sms_used === undefined ||
+        balance.sms_available === undefined
+      ) {
+        anomalies.push({ imsi: row.imsi, type: 'balance_mismatch', details: 'OCS SMS balance fields missing' });
+        continue;
+      }
+
+      const smsTotal = numericValue(balance.sms_total);
+      const smsUsed = numericValue(balance.sms_used);
+      const smsAvailable = numericValue(balance.sms_available);
+      if (smsTotal !== smsUsed + smsAvailable) {
+        anomalies.push({ imsi: row.imsi, type: 'balance_mismatch', details: 'OCS SMS balance invariant mismatch' });
+      }
     }
 
     return {
@@ -152,6 +171,8 @@ export async function healSubscriberDocument(imsi: string, type: string, profile
   if (type === 'missing_config' || type === 'balance_mismatch') {
     const total = Number(profile?.ocsDefaults?.trafficTotal ?? profile?.ocsDefaults?.traffic_total ?? 10737418240);
     const available = Number(profile?.ocsDefaults?.trafficBalance ?? profile?.ocsDefaults?.traffic_balance ?? total);
-    await provisionOcsSubscriber({ imsi, total, available });
+    const smsTotal = Number(profile?.ocsDefaults?.smsTotal ?? profile?.ocsDefaults?.sms_total ?? 100);
+    const smsAvailable = Number(profile?.ocsDefaults?.smsBalance ?? profile?.ocsDefaults?.sms_balance ?? smsTotal);
+    await provisionOcsSubscriber({ imsi, total, available, smsTotal, smsAvailable });
   }
 }

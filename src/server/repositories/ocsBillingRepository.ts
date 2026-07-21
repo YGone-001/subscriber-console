@@ -9,13 +9,15 @@ const DEFAULT_VALIDITY_TIME = 300;
 const DEFAULT_TOTAL_BALANCE = 10 * 1024 * 1024 * 1024;
 const DEFAULT_VOICE_TOTAL = 60 * 60;
 const DEFAULT_VOICE_QUOTA_PER_GRANT = 60;
+const DEFAULT_SMS_TOTAL = 100;
+const DEFAULT_SMS_QUOTA_PER_GRANT = 1;
 
 export type OcsTariffRule = {
   rule_id: string;
   apn: string;
   rating_group: Long | number;
   service_identifier: Long | number;
-  charging_type: 'data_volume' | 'free' | 'voice_time' | string;
+  charging_type: 'data_volume' | 'free' | 'voice_time' | 'sms_event' | string;
   unit: string;
   quota_per_grant: Long | number;
   validity_time: number;
@@ -57,6 +59,9 @@ type OcsBalance = Document & {
   voice_used?: Long | number;
   voice_reserved?: Long | number;
   voice_available?: Long | number;
+  sms_total?: Long | number;
+  sms_used?: Long | number;
+  sms_available?: Long | number;
   version?: Long | number;
   created_at?: Date | string;
   updated_at?: Date | string;
@@ -100,6 +105,8 @@ export type OcsProvisioningInput = {
   available?: unknown;
   voiceTotal?: unknown;
   voiceAvailable?: unknown;
+  smsTotal?: unknown;
+  smsAvailable?: unknown;
   status?: unknown;
 };
 
@@ -113,6 +120,9 @@ export type OcsTrafficSnapshot = {
   voice_balance: number;
   voice_used: number;
   voice_reserved: number;
+  sms_total: number;
+  sms_balance: number;
+  sms_used: number;
   version: number;
 };
 
@@ -177,28 +187,30 @@ function ratesTypeToChargingType(value: unknown): string {
   if (type === 2) return 'data_volume';
   if (type === 4) return 'data_volume';
   if (type === 1) return 'voice_time';
-  if (type === 3) return 'event';
+  if (type === 3) return 'sms_event';
   return 'data_volume';
 }
 
 function defaultGrantForChargingType(chargingType: string): number {
   if (chargingType === 'voice_time') return DEFAULT_VOICE_QUOTA_PER_GRANT;
+  if (chargingType === 'sms_event') return DEFAULT_SMS_QUOTA_PER_GRANT;
   if (chargingType === 'free') return 0;
   return DEFAULT_QUOTA_PER_GRANT;
 }
 
 function defaultThresholdForChargingType(chargingType: string): number {
-  if (chargingType === 'voice_time' || chargingType === 'free') return 0;
+  if (chargingType === 'voice_time' || chargingType === 'sms_event' || chargingType === 'free') return 0;
   return DEFAULT_VOLUME_THRESHOLD;
 }
 
 function defaultValidityForChargingType(chargingType: string): number {
-  if (chargingType === 'free') return 0;
+  if (chargingType === 'free' || chargingType === 'sms_event') return 0;
   return DEFAULT_VALIDITY_TIME;
 }
 
 function unitForChargingType(chargingType: string): string {
   if (chargingType === 'voice_time') return 'seconds';
+  if (chargingType === 'sms_event') return 'events';
   return 'bytes';
 }
 
@@ -250,6 +262,22 @@ function defaultVoiceRule(): OcsTariffRule {
   };
 }
 
+function defaultSmsRule(): OcsTariffRule {
+  return {
+    rule_id: 'sms_rg4001_si1',
+    apn: 'ims',
+    rating_group: Long.fromNumber(4001),
+    service_identifier: Long.fromNumber(1),
+    charging_type: 'sms_event',
+    unit: 'events',
+    quota_per_grant: Long.fromNumber(DEFAULT_SMS_QUOTA_PER_GRANT),
+    validity_time: 0,
+    volume_threshold: Long.ZERO,
+    priority: 100,
+    status: 'active',
+  };
+}
+
 function defaultPlan(now = new Date()): OcsTariffPlan {
   return {
     plan_id: DEFAULT_OCS_PLAN_ID,
@@ -259,7 +287,7 @@ function defaultPlan(now = new Date()): OcsTariffPlan {
     validity_time: DEFAULT_VALIDITY_TIME,
     volume_threshold: Long.fromNumber(DEFAULT_VOLUME_THRESHOLD),
     unit: 'bytes',
-    rules: [defaultInternetRule(), defaultImsRule(), defaultVoiceRule()],
+    rules: [defaultInternetRule(), defaultImsRule(), defaultVoiceRule(), defaultSmsRule()],
     created_at: now,
     updated_at: now,
   };
@@ -296,7 +324,7 @@ function tariffPlanSnapshot(plan: OcsTariffPlan | null) {
 
 function trafficSnapshot(
   imsi: string,
-  balance: Pick<OcsBalance, 'data_total' | 'data_used' | 'data_reserved' | 'data_available' | 'voice_total' | 'voice_used' | 'voice_reserved' | 'voice_available' | 'version'>
+  balance: Pick<OcsBalance, 'data_total' | 'data_used' | 'data_reserved' | 'data_available' | 'voice_total' | 'voice_used' | 'voice_reserved' | 'voice_available' | 'sms_total' | 'sms_used' | 'sms_available' | 'version'>
 ): OcsTrafficSnapshot {
   const dataUsed = Math.max(0, toNumber(balance.data_used));
   const dataReserved = Math.max(0, toNumber(balance.data_reserved));
@@ -306,6 +334,9 @@ function trafficSnapshot(
   const voiceReserved = Math.max(0, toNumber(balance.voice_reserved));
   const voiceAvailable = Math.max(0, toNumber(balance.voice_available));
   const voiceTotal = Math.max(toNumber(balance.voice_total), voiceUsed + voiceReserved + voiceAvailable);
+  const smsUsed = Math.max(0, toNumber(balance.sms_used));
+  const smsAvailable = Math.max(0, toNumber(balance.sms_available));
+  const smsTotal = Math.max(toNumber(balance.sms_total), smsUsed + smsAvailable);
 
   return {
     imsi,
@@ -317,6 +348,9 @@ function trafficSnapshot(
     voice_balance: voiceAvailable,
     voice_used: voiceUsed,
     voice_reserved: voiceReserved,
+    sms_total: smsTotal,
+    sms_balance: smsAvailable,
+    sms_used: smsUsed,
     version: toNumber(balance.version, 0),
   };
 }
@@ -391,6 +425,11 @@ async function attachLegacyRatingRules(collection: Awaited<ReturnType<typeof tar
 
   if (!rules.some((rule) => rule.rule_id === 'voice_rg3001_si1')) {
     rules.push(defaultVoiceRule());
+    changed = true;
+  }
+
+  if (!rules.some((rule) => rule.rule_id === 'sms_rg4001_si1')) {
+    rules.push(defaultSmsRule());
     changed = true;
   }
 
@@ -545,6 +584,17 @@ export async function provisionOcsSubscriber(input: OcsProvisioningInput): Promi
     ? toNumber(existingBalance.voice_used)
     : Math.max(0, voiceTotal - voiceReserved - voiceAvailable);
   const nextVoiceTotal = Math.max(voiceTotal, voiceUsed + voiceReserved + voiceAvailable);
+  const smsTotalInput = input.smsTotal ?? existingBalance?.sms_total ?? DEFAULT_SMS_TOTAL;
+  const smsTotal = toNumber(smsTotalInput, DEFAULT_SMS_TOTAL);
+  const hasSmsAvailableInput = input.smsAvailable !== undefined && input.smsAvailable !== null && input.smsAvailable !== '';
+  const requestedSmsAvailable = toNumber(input.smsAvailable ?? existingBalance?.sms_available, smsTotal);
+  const smsAvailable = Math.min(Math.max(0, requestedSmsAvailable), smsTotal);
+  const smsUsed = hasSmsAvailableInput
+    ? Math.max(0, smsTotal - smsAvailable)
+    : existingBalance
+    ? toNumber(existingBalance.sms_used)
+    : Math.max(0, smsTotal - smsAvailable);
+  const nextSmsTotal = Math.max(smsTotal, smsUsed + smsAvailable);
   const version = existingBalance ? toNumber(existingBalance.version, 0) + 1 : 1;
 
   await getOrCreateDefaultPlan();
@@ -573,6 +623,9 @@ export async function provisionOcsSubscriber(input: OcsProvisioningInput): Promi
         voice_used: Long.fromNumber(voiceUsed),
         voice_reserved: Long.fromNumber(voiceReserved),
         voice_available: Long.fromNumber(voiceAvailable),
+        sms_total: Long.fromNumber(nextSmsTotal),
+        sms_used: Long.fromNumber(smsUsed),
+        sms_available: Long.fromNumber(smsAvailable),
         money_balance: Long.ZERO,
         plan_id: planId,
         status: asString(input.status, 'active'),
@@ -660,6 +713,9 @@ export async function adjustOcsTrafficBalance(
       voice_balance: before.voice_balance,
       voice_used: before.voice_used,
       voice_reserved: before.voice_reserved,
+      sms_total: before.sms_total,
+      sms_balance: before.sms_balance,
+      sms_used: before.sms_used,
       version: nextVersion,
     },
   };
@@ -714,6 +770,7 @@ export async function changeOcsPolicyForSubscribers(input: OcsPolicyChangeInput)
       const existing = balanceByImsi.get(imsi);
       const dataTotal = Math.max(toNumber(existing?.data_total, DEFAULT_TOTAL_BALANCE), 0);
       const voiceTotal = Math.max(toNumber(existing?.voice_total, DEFAULT_VOICE_TOTAL), 0);
+      const smsTotal = Math.max(toNumber(existing?.sms_total, DEFAULT_SMS_TOTAL), 0);
       const version = toNumber(existing?.version, 0) + 1;
       const setPayload: Record<string, unknown> = {
         plan_id: planId,
@@ -731,6 +788,9 @@ export async function changeOcsPolicyForSubscribers(input: OcsPolicyChangeInput)
         setPayload.voice_used = Long.ZERO;
         setPayload.voice_reserved = Long.ZERO;
         setPayload.voice_available = Long.fromNumber(voiceTotal);
+        setPayload.sms_total = Long.fromNumber(smsTotal);
+        setPayload.sms_used = Long.ZERO;
+        setPayload.sms_available = Long.fromNumber(smsTotal);
         setPayload.money_balance = Long.ZERO;
         setPayload.cycle_start_at = now;
         setPayload.cycle_reset_at = now;
@@ -821,6 +881,9 @@ export async function cloneOcsProvisioningFromReference(targetImsi: string, sour
         voice_used: sourceBalance.voice_used ?? Long.ZERO,
         voice_reserved: sourceBalance.voice_reserved ?? Long.ZERO,
         voice_available: sourceBalance.voice_available ?? sourceBalance.voice_total ?? Long.fromNumber(DEFAULT_VOICE_TOTAL),
+        sms_total: sourceBalance.sms_total ?? Long.fromNumber(DEFAULT_SMS_TOTAL),
+        sms_used: sourceBalance.sms_used ?? Long.ZERO,
+        sms_available: sourceBalance.sms_available ?? sourceBalance.sms_total ?? Long.fromNumber(DEFAULT_SMS_TOTAL),
         money_balance: sourceBalance.money_balance ?? Long.ZERO,
         plan_id: sourceBalance.plan_id || sourceSubscriber.plan_id || DEFAULT_OCS_PLAN_ID,
         status: sourceBalance.status || sourceSubscriber.status || 'active',
@@ -865,6 +928,9 @@ export async function readOcsProvisioning(imsi: string) {
           voice_balance: toNumber(balance.voice_available, DEFAULT_VOICE_TOTAL),
           voice_used: toNumber(balance.voice_used),
           voice_reserved: toNumber(balance.voice_reserved),
+          sms_total: toNumber(balance.sms_total, DEFAULT_SMS_TOTAL),
+          sms_balance: toNumber(balance.sms_available, DEFAULT_SMS_TOTAL),
+          sms_used: toNumber(balance.sms_used),
           imsi,
           plmn: imsi.slice(0, 5),
         }

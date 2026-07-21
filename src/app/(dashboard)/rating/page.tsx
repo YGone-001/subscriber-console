@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type React from "react";
-import { CheckCircle2, Database, DollarSign, Hash, Mic2, Pencil, Plus, Save, Search, ShieldCheck, Tag, Trash2, X } from "lucide-react";
+import { CheckCircle2, Database, DollarSign, Hash, MessageSquare, Mic2, Pencil, Plus, Save, Search, ShieldCheck, Tag, Trash2, X } from "lucide-react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
 import { useI18n } from "@/components/I18nProvider";
@@ -13,9 +13,10 @@ const CURRENCIES = ["USD", "EUR", "GBP", "CNY", "HKD", "JPY", "KRW", "SGD", "AUD
 const DATA_GRANT = "10485760";
 const DATA_THRESHOLD = "8388608";
 const VOICE_GRANT = "60";
+const SMS_GRANT = "1";
 
-type ChargingType = "data_volume" | "voice_time" | "free" | "event";
-type ServiceKey = "all" | "data" | "voice" | "ims";
+type ChargingType = "data_volume" | "voice_time" | "free" | "sms_event" | "event";
+type ServiceKey = "all" | "data" | "voice" | "sms" | "ims";
 
 type RatingPolicy = {
   rating_group_id: number;
@@ -52,7 +53,7 @@ type Notice = {
   text: string;
 };
 
-const SERVICE_FILTERS: ServiceKey[] = ["all", "data", "voice", "ims"];
+const SERVICE_FILTERS: ServiceKey[] = ["all", "data", "voice", "sms", "ims"];
 
 function defaultsFor(type: ChargingType): Omit<RatingForm, "rating_group_id" | "currency" | "rates"> {
   if (type === "voice_time") {
@@ -77,8 +78,19 @@ function defaultsFor(type: ChargingType): Omit<RatingForm, "rating_group_id" | "
       volume_threshold: "0",
     };
   }
+  if (type === "sms_event" || type === "event") {
+    return {
+      rates_type: 3,
+      charging_type: "sms_event",
+      apn: "ims",
+      service_identifier: "1",
+      quota_per_grant: SMS_GRANT,
+      validity_time: "0",
+      volume_threshold: "0",
+    };
+  }
   return {
-    rates_type: type === "event" ? 3 : 2,
+    rates_type: 2,
     charging_type: type,
     apn: "internet",
     service_identifier: "1",
@@ -99,6 +111,7 @@ function makeDefaultForm(type: ChargingType = "data_volume"): RatingForm {
 
 function classifyPolicy(rating: RatingPolicy): Exclude<ServiceKey, "all"> {
   if (rating.charging_type === "voice_time") return "voice";
+  if (rating.charging_type === "sms_event" || rating.unit === "events") return "sms";
   if ((rating.apn || "").toLowerCase() === "ims") return "ims";
   return "data";
 }
@@ -111,6 +124,7 @@ function formatGrant(value: unknown, unit?: string, chargingType?: string) {
     if (amount >= 60) return `${Math.round(amount / 60)} min`;
     return `${amount} s`;
   }
+  if (chargingType === "sms_event" || unit === "events") return `${amount} SMS`;
   if (amount >= 1024 ** 3) return `${(amount / 1024 ** 3).toFixed(1)} GB`;
   if (amount >= 1024 ** 2) return `${Math.round(amount / 1024 ** 2)} MB`;
   if (amount >= 1024) return `${Math.round(amount / 1024)} KB`;
@@ -166,6 +180,7 @@ export default function RatingPage() {
 
   const serviceMeta = (key: ServiceKey | Exclude<ServiceKey, "all">) => {
     if (key === "voice") return { label: t("rating_service_voice"), icon: <Mic2 size={16} />, color: "var(--warning, #f59e0b)" };
+    if (key === "sms") return { label: t("rating_service_sms"), icon: <MessageSquare size={16} />, color: "#8b5cf6" };
     if (key === "ims") return { label: t("rating_service_ims"), icon: <ShieldCheck size={16} />, color: "var(--success)" };
     if (key === "data") return { label: t("rating_service_data"), icon: <Database size={16} />, color: "var(--primary)" };
     return { label: t("rating_service_all"), icon: <Tag size={16} />, color: "var(--text-main)" };
@@ -195,6 +210,7 @@ export default function RatingPage() {
     all: enrichedRatings.length,
     data: enrichedRatings.filter((rating) => rating.serviceKey === "data").length,
     voice: enrichedRatings.filter((rating) => rating.serviceKey === "voice").length,
+    sms: enrichedRatings.filter((rating) => rating.serviceKey === "sms").length,
     ims: enrichedRatings.filter((rating) => rating.serviceKey === "ims").length,
   }), [enrichedRatings]);
 
@@ -343,8 +359,8 @@ export default function RatingPage() {
             <select className="form-input" value={form.charging_type} onChange={(event) => setForm((current) => applyChargingType(current, event.target.value as ChargingType))}>
               <option value="data_volume">{t("rating_service_data")}</option>
               <option value="voice_time">{t("rating_service_voice")}</option>
+              <option value="sms_event">{t("rating_service_sms")}</option>
               <option value="free">{t("rating_service_ims")}</option>
-              <option value="event">{t("rating_type_event")}</option>
             </select>
           </Field>
           <Field label={t("rating_col_type")}>
@@ -429,8 +445,8 @@ export default function RatingPage() {
         />
       )}
 
-      <section style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(220px, 1fr))", gap: "1rem", marginBottom: "1.5rem" }}>
-        {(["data", "voice", "ims"] as const).map((key) => {
+      <section style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(190px, 1fr))", gap: "1rem", marginBottom: "1.5rem" }}>
+        {(["data", "voice", "sms", "ims"] as const).map((key) => {
           const meta = serviceMeta(key);
           return (
             <button

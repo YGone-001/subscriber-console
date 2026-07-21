@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useI18n } from "./I18nProvider";
 import { Save, Trash2, X, Pencil, History, RotateCcw, GitCompareArrows } from "lucide-react";
-import { parseBytes, formatBytes } from "@/lib/unitParser";
+import { parseBytes, formatBytes, parseEvents, formatEvents } from "@/lib/unitParser";
 import ProfileViewMode from "./profile/ProfileViewMode";
 import ProfileEditMode from "./profile/ProfileEditMode";
 import { useAuth } from "@/hooks/useAuth";
@@ -80,6 +80,8 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
   const [ocsDefaults, setOcsDefaults] = useState<any>({
     trafficTotal: "10 GB",
     trafficBalance: "10 GB",
+    smsTotal: "100",
+    smsBalance: "100",
   });
 
   const applyProfileData = useCallback((p: any) => {
@@ -97,11 +99,15 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
     }
 
     if (p.ocsDefaults) {
+      const smsTotalDefault = p.ocsDefaults.smsTotal ?? p.ocsDefaults.sms_total;
+      const smsBalanceDefault = p.ocsDefaults.smsBalance ?? p.ocsDefaults.sms_balance;
       setOcsDefaults((prev: any) => ({
         ...prev,
         ...p.ocsDefaults,
         trafficTotal: p.ocsDefaults.trafficTotal !== undefined ? formatBytes(p.ocsDefaults.trafficTotal) : (p.ocsDefaults.trafficBalance !== undefined ? formatBytes(p.ocsDefaults.trafficBalance) : prev.trafficTotal),
         trafficBalance: p.ocsDefaults.trafficBalance !== undefined ? formatBytes(p.ocsDefaults.trafficBalance) : prev.trafficBalance,
+        smsTotal: smsTotalDefault !== undefined ? formatEvents(Number(smsTotalDefault)) : (smsBalanceDefault !== undefined ? formatEvents(Number(smsBalanceDefault)) : prev.smsTotal),
+        smsBalance: smsBalanceDefault !== undefined ? formatEvents(Number(smsBalanceDefault)) : prev.smsBalance,
       }));
     }
   }, [profileName]);
@@ -123,6 +129,8 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
       ocsDefaults: {
         trafficTotal: parseBytes(ocsDefaults.trafficTotal || ocsDefaults.trafficBalance),
         trafficBalance: parseBytes(ocsDefaults.trafficBalance),
+        smsTotal: parseEvents(ocsDefaults.smsTotal || ocsDefaults.smsBalance),
+        smsBalance: parseEvents(ocsDefaults.smsBalance),
       }
     };
   };

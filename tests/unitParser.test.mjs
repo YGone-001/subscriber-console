@@ -6,8 +6,10 @@ import {
   composeSecondsInput,
   formatBytes,
   formatBytesAligned,
+  formatEvents,
   formatSeconds,
   parseBytes,
+  parseEvents,
   parseSeconds,
   splitByteInput,
   splitSecondsInput,
@@ -50,4 +52,12 @@ test("parseSeconds and formatSeconds round-trip common operator inputs", () => {
   assert.deepEqual(splitSecondsInput("1.5h"), { value: "1.5", unit: "h" });
   assert.deepEqual(splitSecondsInput(3600), { value: "1", unit: "h" });
   assert.equal(composeSecondsInput("30", "m"), "30m");
+});
+
+test("parseEvents and formatEvents handle SMS event counts", () => {
+  assert.equal(parseEvents("100"), 100);
+  assert.equal(parseEvents("1,200"), 1200);
+  assert.equal(parseEvents("1.9"), 1);
+  assert.equal(parseEvents("bad"), 0);
+  assert.equal(formatEvents(25.9), "25");
 });

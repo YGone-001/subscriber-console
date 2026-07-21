@@ -1,8 +1,8 @@
-import { AlertTriangle, BadgeCheck, CheckCircle2, Gauge, KeyRound, ListChecks, Network, PhoneCall, Route, Server, ShieldCheck, Signal, Wifi, ChevronDown, ChevronUp } from "lucide-react";
+import { AlertTriangle, BadgeCheck, CheckCircle2, Gauge, KeyRound, ListChecks, MessageSquare, Network, PhoneCall, Route, Server, ShieldCheck, Signal, Wifi, ChevronDown, ChevronUp } from "lucide-react";
 import RatingRuleLinkPanel from "./RatingRuleLinkPanel";
 import { Pill, MaskedValue, AMBR_UNITS, getAmbrString, typeLabel } from "./utils";
 import type { Ambr, Auth4GData, Slice } from "@/types/subscriber";
-import { parseBytes, parseSeconds } from "@/lib/unitParser";
+import { parseBytes, parseSeconds, parseEvents } from "@/lib/unitParser";
 
 interface SubscriberViewModeProps {
   t: any;
@@ -16,6 +16,8 @@ interface SubscriberViewModeProps {
   ocsTrafficBalanceStr: string;
   ocsVoiceTotalStr: string;
   ocsVoiceBalanceStr: string;
+  ocsSmsTotalStr: string;
+  ocsSmsBalanceStr: string;
   ocsPlmn: string;
   ocsPlanId: string;
   ocsPlanStatus: string;
@@ -131,6 +133,8 @@ export default function SubscriberViewMode({
   ocsTrafficBalanceStr,
   ocsVoiceTotalStr,
   ocsVoiceBalanceStr,
+  ocsSmsTotalStr,
+  ocsSmsBalanceStr,
   ocsPlmn,
   ocsPlanId,
   ocsPlanStatus,
@@ -142,7 +146,8 @@ export default function SubscriberViewMode({
 }: SubscriberViewModeProps) {
   const hasDataRule = ocsRules.some((rule: any) => rule?.charging_type === "data_volume");
   const hasVoiceRule = ocsRules.some((rule: any) => rule?.charging_type === "voice_time");
-  const hasImsRule = ocsRules.some((rule: any) => rule?.apn === "ims" && (rule?.charging_type === "free" || rule?.charging_type === "voice_time"));
+  const hasSmsRule = ocsRules.some((rule: any) => rule?.charging_type === "sms_event" || rule?.unit === "events");
+  const hasImsRule = ocsRules.some((rule: any) => rule?.apn === "ims" && (rule?.charging_type === "free" || rule?.charging_type === "voice_time" || rule?.charging_type === "sms_event"));
   const sliceCount = Array.isArray(slices) ? slices.length : 0;
   const sessionCount = Array.isArray(slices)
     ? slices.reduce((total, slice) => total + (Array.isArray(slice.session_list) ? slice.session_list.length : 0), 0)
@@ -156,8 +161,11 @@ export default function SubscriberViewMode({
   const trafficBalance = parseBytes(ocsTrafficBalanceStr);
   const voiceTotal = parseSeconds(ocsVoiceTotalStr);
   const voiceBalance = parseSeconds(ocsVoiceBalanceStr);
+  const smsTotal = parseEvents(ocsSmsTotalStr);
+  const smsBalance = parseEvents(ocsSmsBalanceStr);
   const trafficPercent = trafficTotal > 0 ? Math.max(0, Math.min(100, (trafficBalance / trafficTotal) * 100)) : 0;
   const voicePercent = voiceTotal > 0 ? Math.max(0, Math.min(100, (voiceBalance / voiceTotal) * 100)) : 0;
+  const smsPercent = smsTotal > 0 ? Math.max(0, Math.min(100, (smsBalance / smsTotal) * 100)) : 0;
   const hasPlan = Boolean(ocsPlanId);
   const isSuspended = ocsPlanStatus && ocsPlanStatus !== "active";
   const hasRestriction = Number(accessRestriction || 0) !== 0 && Number(accessRestriction || 0) !== 32;
@@ -166,10 +174,12 @@ export default function SubscriberViewMode({
     - (hasPlan ? 0 : 18)
     - (hasDataRule ? 0 : 14)
     - (hasVoiceRule ? 0 : 12)
+    - (hasSmsRule ? 0 : 10)
     - (hasImsRule ? 0 : 10)
     - (sliceCount > 0 ? 0 : 12)
     - (trafficPercent < 15 ? 16 : trafficPercent < 30 ? 8 : 0)
     - (voicePercent < 15 ? 10 : voicePercent < 30 ? 5 : 0)
+    - (smsPercent < 15 ? 8 : smsPercent < 30 ? 4 : 0)
     - (isSuspended ? 14 : 0)
     - (hasRestriction ? 8 : 0)
   ));
@@ -178,10 +188,12 @@ export default function SubscriberViewMode({
     !hasPlan ? t("sub_360_focus_plan") : "",
     !hasDataRule ? t("sub_360_focus_data_rule") : "",
     !hasVoiceRule ? t("sub_360_focus_voice_rule") : "",
+    !hasSmsRule ? t("sub_360_focus_sms_rule") : "",
     !hasImsRule ? t("sub_360_focus_ims_rule") : "",
     sliceCount === 0 ? t("sub_360_focus_slice") : "",
     trafficPercent < 30 ? t("sub_360_focus_traffic") : "",
     voicePercent < 30 ? t("sub_360_focus_voice") : "",
+    smsPercent < 30 ? t("sub_360_focus_sms") : "",
     isSuspended ? t("sub_360_focus_status") : "",
     hasRestriction ? t("sub_360_focus_access") : "",
   ].filter(Boolean).slice(0, 4);
@@ -236,7 +248,8 @@ export default function SubscriberViewMode({
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "0.65rem", paddingTop: "0.65rem", borderTop: "1px solid var(--surface-border)" }}>
                 <SummaryMetric label={t("sub_360_data_remaining")} value={`${trafficPercent.toFixed(0)}%`} accent={trafficPercent >= 30} />
                 <SummaryMetric label={t("sub_360_voice_remaining")} value={`${voicePercent.toFixed(0)}%`} accent={voicePercent >= 30} />
-                <SummaryMetric label={t("sub_360_rule_coverage")} value={`${[hasDataRule, hasVoiceRule, hasImsRule].filter(Boolean).length}/3`} accent={hasDataRule && hasVoiceRule && hasImsRule} />
+                <SummaryMetric label={t("sub_360_sms_remaining")} value={`${smsPercent.toFixed(0)}%`} accent={smsPercent >= 30} />
+                <SummaryMetric label={t("sub_360_rule_coverage")} value={`${[hasDataRule, hasVoiceRule, hasSmsRule, hasImsRule].filter(Boolean).length}/4`} accent={hasDataRule && hasVoiceRule && hasSmsRule && hasImsRule} />
               </div>
             </div>
           </div>
@@ -278,6 +291,17 @@ export default function SubscriberViewMode({
 
             <div style={{ border: "1px solid var(--surface-border)", borderRadius: "8px", padding: "1rem", background: "var(--header-bg)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "0.55rem", marginBottom: "0.9rem", color: "var(--text-main)", fontWeight: 800 }}>
+                <MessageSquare size={18} color="var(--primary)" />
+                {t("sub_360_ims_sms")}
+              </div>
+              <div style={{ display: "grid", gap: "0.85rem" }}>
+                <SummaryMetric label={t("sub_360_sms_quota")} value={ocsSmsTotalStr} />
+                <SummaryMetric label={t("sub_360_available")} value={ocsSmsBalanceStr} accent />
+              </div>
+            </div>
+
+            <div style={{ border: "1px solid var(--surface-border)", borderRadius: "8px", padding: "1rem", background: "var(--header-bg)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.55rem", marginBottom: "0.9rem", color: "var(--text-main)", fontWeight: 800 }}>
                 <Signal size={18} color="var(--primary)" />
                 {t("sub_360_network_entitlement")}
               </div>
@@ -292,6 +316,7 @@ export default function SubscriberViewMode({
             <ServicePill enabled={hasDataRule}>{t("sub_360_packet_data")}</ServicePill>
             <ServicePill enabled={hasImsRule}>{t("sub_360_ims_service")}</ServicePill>
             <ServicePill enabled={hasVoiceRule}>{t("sub_360_voice_time")}</ServicePill>
+            <ServicePill enabled={hasSmsRule}>{t("sub_360_sms_event")}</ServicePill>
             <ServicePill enabled={sliceCount > 0}>{t("sub_360_slice_profile")}</ServicePill>
           </div>
         </div>
@@ -347,6 +372,8 @@ export default function SubscriberViewMode({
             <SummaryMetric label={t("sub_traffic_balance")} value={ocsTrafficBalanceStr} accent />
             <SummaryMetric label={t("sub_360_voice_quota")} value={ocsVoiceTotalStr} />
             <SummaryMetric label={t("sub_360_voice_balance")} value={ocsVoiceBalanceStr} accent />
+            <SummaryMetric label={t("sub_360_sms_quota")} value={ocsSmsTotalStr} />
+            <SummaryMetric label={t("sub_360_sms_balance")} value={ocsSmsBalanceStr} accent />
             <SummaryMetric label="PLMN" value={ocsPlmn} />
             <SummaryMetric label={t("sub_360_tariff_plan")} value={ocsPlanId || t("none")} accent />
             <SummaryMetric label={t("sub_360_plan_status")} value={ocsPlanStatus || "unknown"} />

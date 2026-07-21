@@ -35,7 +35,7 @@ type BulkPolicyModalProps = {
 const PLAN_OPTIONS = [
   {
     id: "plan_default_10gb",
-    label: "Default 10GB Data + IMS Voice",
+    label: "Default 10GB Data + IMS Voice + SMS",
     descriptionKey: "policy_change_default_plan_desc",
   },
 ];

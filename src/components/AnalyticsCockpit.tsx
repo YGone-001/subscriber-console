@@ -40,7 +40,7 @@ import {
 } from "lucide-react";
 import { useTheme } from "./ThemeProvider";
 import { fetcher } from "@/lib/fetcher";
-import { formatSeconds } from "@/lib/unitParser";
+import { formatEvents, formatSeconds } from "@/lib/unitParser";
 import { useI18n } from "./I18nProvider";
 
 const COLORS = ["#4e73df", "#1cc88a", "#36b9cc", "#f6c23e", "#e74a3b", "#858796"];
@@ -55,6 +55,7 @@ type TopConsumer = {
   imsi: string;
   balance: number;
   voiceBalance: number;
+  smsBalance: number;
 };
 
 type MetricsData = {
@@ -190,6 +191,10 @@ function TopConsumerTooltip({
         <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem" }}>
           <span>{t("dash_chart_top5_voice_tooltip")}</span>
           <strong>{formatSeconds(consumer.voiceBalance)}</strong>
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem" }}>
+          <span>{t("dash_chart_top5_sms_tooltip")}</span>
+          <strong>{formatEvents(consumer.smsBalance)} SMS</strong>
         </div>
       </div>
     </div>

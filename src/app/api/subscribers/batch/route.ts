@@ -42,6 +42,8 @@ export async function POST(request: Request) {
       count: payload.count,
       trafficTotal: payload.trafficTotal,
       trafficBalance: payload.trafficBalance,
+      smsTotal: payload.smsTotal,
+      smsBalance: payload.smsBalance,
       profileName: payload.profileName,
       strategy: payload.strategy,
     });

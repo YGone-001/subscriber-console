@@ -40,7 +40,9 @@ test("validateSubscriberUpdatePayload rejects malformed auth and slice fields", 
   assert.equal(validateSubscriberUpdatePayload({ sub4G: { sliceList: [{ sst: 999 }] } }).ok, false);
   assert.equal(validateSubscriberUpdatePayload({ sub4G: { sliceList: [{ sd: "000001", session_list: [{ name: "internet" }] }] } }).ok, true);
   assert.equal(validateSubscriberUpdatePayload({ ocsTraffic: { voice_total: 3600, voice_balance: 1800 } }).ok, true);
+  assert.equal(validateSubscriberUpdatePayload({ ocsTraffic: { sms_total: 100, sms_balance: 80 } }).ok, true);
   assert.equal(validateSubscriberUpdatePayload({ ocsTraffic: { voice_balance: -1 } }).ok, false);
+  assert.equal(validateSubscriberUpdatePayload({ ocsTraffic: { sms_balance: -1 } }).ok, false);
 });
 
 test("validateTrafficAdjustmentPayload normalizes supported balance actions", () => {

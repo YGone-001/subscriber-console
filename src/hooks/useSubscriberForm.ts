@@ -1,5 +1,5 @@
 import { useCallback, useState, useEffect } from "react";
-import { parseBytes, formatBytes, parseSeconds, formatSeconds } from "@/lib/unitParser";
+import { parseBytes, formatBytes, parseSeconds, formatSeconds, parseEvents, formatEvents } from "@/lib/unitParser";
 
 const resolvePlmnFromRecords = (records: any[], value: string) => {
   if (!value || value.length < 5) return null;
@@ -45,6 +45,8 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
   const [ocsTrafficBalanceStr, setOcsTrafficBalanceStr] = useState("10 GB");
   const [ocsVoiceTotalStr, setOcsVoiceTotalStr] = useState("1h");
   const [ocsVoiceBalanceStr, setOcsVoiceBalanceStr] = useState("1h");
+  const [ocsSmsTotalStr, setOcsSmsTotalStr] = useState("100");
+  const [ocsSmsBalanceStr, setOcsSmsBalanceStr] = useState("100");
 
   const [plmnDb, setPlmnDb] = useState<any[]>([]);
 
@@ -137,6 +139,11 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
           if (p.ocsDefaults.voiceTotal !== undefined) setOcsVoiceTotalStr(formatSeconds(Number(p.ocsDefaults.voiceTotal)));
           else if (p.ocsDefaults.voiceBalance !== undefined) setOcsVoiceTotalStr(formatSeconds(Number(p.ocsDefaults.voiceBalance)));
           if (p.ocsDefaults.voiceBalance !== undefined) setOcsVoiceBalanceStr(formatSeconds(Number(p.ocsDefaults.voiceBalance)));
+          const smsTotalDefault = p.ocsDefaults.smsTotal ?? p.ocsDefaults.sms_total;
+          const smsBalanceDefault = p.ocsDefaults.smsBalance ?? p.ocsDefaults.sms_balance;
+          if (smsTotalDefault !== undefined) setOcsSmsTotalStr(formatEvents(Number(smsTotalDefault)));
+          else if (smsBalanceDefault !== undefined) setOcsSmsTotalStr(formatEvents(Number(smsBalanceDefault)));
+          if (smsBalanceDefault !== undefined) setOcsSmsBalanceStr(formatEvents(Number(smsBalanceDefault)));
         }
         const targetImsi = imsi || inputImsi;
         updatePlmnByImsi(targetImsi);
@@ -191,6 +198,8 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
           if (data.ocsTraffic.traffic_balance !== undefined) setOcsTrafficBalanceStr(formatBytes(data.ocsTraffic.traffic_balance));
           if (data.ocsTraffic.voice_total !== undefined) setOcsVoiceTotalStr(formatSeconds(Number(data.ocsTraffic.voice_total)));
           if (data.ocsTraffic.voice_balance !== undefined) setOcsVoiceBalanceStr(formatSeconds(Number(data.ocsTraffic.voice_balance)));
+          if (data.ocsTraffic.sms_total !== undefined) setOcsSmsTotalStr(formatEvents(Number(data.ocsTraffic.sms_total)));
+          if (data.ocsTraffic.sms_balance !== undefined) setOcsSmsBalanceStr(formatEvents(Number(data.ocsTraffic.sms_balance)));
         }
         if (data.ocsImsi) {
           if (data.ocsImsi.msisdn) setMsisdn(String(data.ocsImsi.msisdn));
@@ -270,7 +279,9 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
         traffic_total: parseBytes(ocsTrafficTotalStr),
         traffic_balance: parseBytes(ocsTrafficBalanceStr),
         voice_total: parseSeconds(ocsVoiceTotalStr),
-        voice_balance: parseSeconds(ocsVoiceBalanceStr)
+        voice_balance: parseSeconds(ocsVoiceBalanceStr),
+        sms_total: parseEvents(ocsSmsTotalStr),
+        sms_balance: parseEvents(ocsSmsBalanceStr)
       };
 
       const payload: any = {
@@ -336,12 +347,13 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
       isEditing, isLoading, isSaving, error, newlyAddedSliceIndex, inputImsi, toastMessage,
       expandedSlices, isAccessRestrictionsExpanded, auth4GData, usimType, msisdn, ueAmbr, slices,
       accessRestriction, profileList, ratingList, ocsPlanId, ocsPlanStatus, ocsRules, ocsPlmn,
-      ocsTrafficTotalStr, ocsTrafficBalanceStr, ocsVoiceTotalStr, ocsVoiceBalanceStr
+      ocsTrafficTotalStr, ocsTrafficBalanceStr, ocsVoiceTotalStr, ocsVoiceBalanceStr,
+      ocsSmsTotalStr, ocsSmsBalanceStr
     },
     actions: {
       setIsEditing, setInputImsi: handleInputImsiChange, setMsisdn, loadFromProfile, setAuth4GData,
       setUsimType, setUeAmbr, setIsAccessRestrictionsExpanded, setAccessRestriction, setOcsTrafficTotalStr,
-      setOcsTrafficBalanceStr, setOcsVoiceTotalStr, setOcsVoiceBalanceStr, addSlice, handleSliceChange, removeSlice, setExpandedSlices, handleDelete,
+      setOcsTrafficBalanceStr, setOcsVoiceTotalStr, setOcsVoiceBalanceStr, setOcsSmsTotalStr, setOcsSmsBalanceStr, addSlice, handleSliceChange, removeSlice, setExpandedSlices, handleDelete,
       handleSave, scrollTo
     }
   };

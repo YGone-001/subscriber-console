@@ -41,6 +41,8 @@ export default function SubscriberModal({ imsi, onClose, onRefresh }: Subscriber
       ocsTrafficBalanceStr={state.ocsTrafficBalanceStr}
       ocsVoiceTotalStr={state.ocsVoiceTotalStr}
       ocsVoiceBalanceStr={state.ocsVoiceBalanceStr}
+      ocsSmsTotalStr={state.ocsSmsTotalStr}
+      ocsSmsBalanceStr={state.ocsSmsBalanceStr}
       ocsPlmn={state.ocsPlmn}
       ocsPlanId={state.ocsPlanId}
       ocsPlanStatus={state.ocsPlanStatus}
