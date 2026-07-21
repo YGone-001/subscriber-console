@@ -23,38 +23,40 @@ type ScenarioKey = "data" | "ims" | "voice" | "sms";
 
 type Scenario = {
   key: ScenarioKey;
-  label: string;
-  description: string;
+  labelKey: string;
+  descriptionKey: string;
   icon: React.ReactNode;
   match: (rule: RatingRule) => boolean;
 };
 
+type Translator = (key: string, params?: Record<string, string | number>) => string;
+
 const scenarios: Scenario[] = [
   {
     key: "data",
-    label: "Data Volume",
-    description: "Internet/APN data quota",
+    labelKey: "rating_service_data",
+    descriptionKey: "rating_service_data_desc",
     icon: <Database size={16} />,
     match: (rule) => rule.charging_type === "data_volume" && (rule.apn || "internet") !== "ims",
   },
   {
     key: "ims",
-    label: "IMS Signaling",
-    description: "IMS registration and signaling",
+    labelKey: "rating_service_ims",
+    descriptionKey: "rating_service_ims_desc",
     icon: <ShieldCheck size={16} />,
     match: (rule) => (rule.apn || "").toLowerCase() === "ims" && rule.charging_type === "free",
   },
   {
     key: "voice",
-    label: "IMS Voice",
-    description: "Voice duration charging",
+    labelKey: "rating_service_voice",
+    descriptionKey: "rating_service_voice_desc",
     icon: <Mic2 size={16} />,
     match: (rule) => rule.charging_type === "voice_time",
   },
   {
     key: "sms",
-    label: "IMS SMS",
-    description: "SMS event charging",
+    labelKey: "rating_service_sms",
+    descriptionKey: "rating_service_sms_desc",
     icon: <MessageSquare size={16} />,
     match: (rule) => rule.charging_type === "sms_event" || rule.unit === "events",
   },
@@ -64,19 +66,19 @@ function ratingGroup(rule: RatingRule) {
   return Number(rule.rating_group_id ?? rule.rating_group ?? 0);
 }
 
-function formatGrant(rule?: RatingRule) {
+function formatGrant(rule: RatingRule | undefined, t: Translator) {
   if (!rule) return "-";
   const grant = Number(rule.quota_per_grant ?? 0);
-  if (rule.charging_type === "free" || grant <= 0) return "Included";
+  if (rule.charging_type === "free" || grant <= 0) return t("rating_grant_included");
   if (rule.charging_type === "voice_time" || rule.unit === "seconds") return formatSeconds(grant);
   if (rule.charging_type === "sms_event" || rule.unit === "events") return formatEvents(grant);
   return formatBytes(grant);
 }
 
-function statusText(found: boolean, inCatalog: boolean | null) {
-  if (!found) return "Missing";
-  if (inCatalog === false) return "Plan only";
-  return "Linked";
+function statusText(found: boolean, inCatalog: boolean | null, t: Translator) {
+  if (!found) return t("rating_link_status_missing");
+  if (inCatalog === false) return t("rating_link_status_plan_only");
+  return t("rating_link_status_linked");
 }
 
 function statusColor(found: boolean, inCatalog: boolean | null) {
@@ -90,12 +92,14 @@ export default function RatingRuleLinkPanel({
   planStatus,
   ocsRules,
   ratingList,
+  t,
   compact = false,
 }: {
   planId: string;
   planStatus: string;
   ocsRules: RatingRule[];
   ratingList?: RatingRule[];
+  t: Translator;
   compact?: boolean;
 }) {
   const planRules = Array.isArray(ocsRules) && ocsRules.length > 0 ? ocsRules : [];
@@ -128,12 +132,12 @@ export default function RatingRuleLinkPanel({
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "var(--text-main)", fontWeight: 800 }}>
             {hasWarning ? <AlertTriangle size={17} color="var(--warning, #f59e0b)" /> : <CheckCircle2 size={17} color="var(--success)" />}
-            Tariff Linkage
+            {t("rating_linkage_title")}
           </div>
           <div style={{ color: "var(--text-muted)", fontSize: "0.82rem", marginTop: "0.25rem" }}>
-            Subscriber plan <span style={{ fontFamily: "monospace", color: "var(--text-main)" }}>{planId || "plan_default_10gb"}</span>
-            <span style={{ margin: "0 0.35rem" }}>·</span>
-            Status <span style={{ fontFamily: "monospace", color: "var(--text-main)" }}>{planStatus || "unknown"}</span>
+            {t("rating_linkage_plan")} <span style={{ fontFamily: "monospace", color: "var(--text-main)" }}>{planId || "plan_default_10gb"}</span>
+            <span style={{ margin: "0 0.35rem" }}>/</span>
+            {t("status")} <span style={{ fontFamily: "monospace", color: "var(--text-main)" }}>{planStatus || t("unknown")}</span>
           </div>
         </div>
         <a
@@ -144,7 +148,7 @@ export default function RatingRuleLinkPanel({
           style={{ minHeight: 34, padding: "0.35rem 0.7rem", display: "inline-flex", alignItems: "center", gap: "0.4rem", fontSize: "0.82rem" }}
         >
           <ExternalLink size={14} />
-          Rating Management
+          {t("rating_management")}
         </a>
       </div>
 
@@ -157,23 +161,23 @@ export default function RatingRuleLinkPanel({
               <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "center" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "0.45rem", color: found ? "var(--text-main)" : "var(--text-muted)", fontWeight: 800 }}>
                   {row.icon}
-                  {row.label}
+                  {t(row.labelKey)}
                 </div>
                 <span style={{ color, border: `1px solid ${color}`, borderRadius: "999px", padding: "0.18rem 0.48rem", fontSize: "0.72rem", fontWeight: 800 }}>
-                  {statusText(found, row.inCatalog)}
+                  {statusText(found, row.inCatalog, t)}
                 </span>
               </div>
-              <div style={{ color: "var(--text-muted)", fontSize: "0.78rem", marginTop: "0.35rem" }}>{row.description}</div>
+              <div style={{ color: "var(--text-muted)", fontSize: "0.78rem", marginTop: "0.35rem" }}>{t(row.descriptionKey)}</div>
               {row.planRule ? (
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.45rem 0.8rem", marginTop: "0.75rem", fontSize: "0.8rem" }}>
                   <span style={{ color: "var(--text-muted)" }}>RG <strong style={{ color: "var(--text-main)", fontFamily: "monospace" }}>{row.group || "-"}</strong></span>
                   <span style={{ color: "var(--text-muted)" }}>SI <strong style={{ color: "var(--text-main)", fontFamily: "monospace" }}>{row.planRule.service_identifier ?? "-"}</strong></span>
                   <span style={{ color: "var(--text-muted)" }}>APN <strong style={{ color: "var(--text-main)", fontFamily: "monospace" }}>{row.planRule.apn || "-"}</strong></span>
-                  <span style={{ color: "var(--text-muted)" }}>Grant <strong style={{ color: "var(--text-main)", fontFamily: "monospace" }}>{formatGrant(row.planRule)}</strong></span>
+                  <span style={{ color: "var(--text-muted)" }}>{t("rating_grant")} <strong style={{ color: "var(--text-main)", fontFamily: "monospace" }}>{formatGrant(row.planRule, t)}</strong></span>
                 </div>
               ) : (
                 <div style={{ marginTop: "0.75rem", color: "var(--danger)", fontSize: "0.8rem", fontWeight: 700 }}>
-                  No mapped rule found in this plan.
+                  {t("rating_link_no_mapped_rule")}
                 </div>
               )}
             </div>
@@ -184,11 +188,11 @@ export default function RatingRuleLinkPanel({
       {(missingCatalogGroups.length > 0 || missingScenarioCount > 0) && (
         <div style={{ marginTop: "0.85rem", color: "var(--text-secondary)", fontSize: "0.82rem", lineHeight: 1.5 }}>
           {missingCatalogGroups.length > 0
-            ? `Plan rule RG ${Array.from(new Set(missingCatalogGroups)).join(", ")} is not present in the rating catalog. `
+            ? `${t("rating_link_catalog_missing", { groups: Array.from(new Set(missingCatalogGroups)).join(", ") })} `
             : ""}
           {missingScenarioCount > 0
-            ? "Review the linked rating rules before saving this subscriber."
-            : "Open Rating Management to reconcile catalog and plan rules."}
+            ? t("rating_link_review_before_save")
+            : t("rating_link_open_management")}
         </div>
       )}
     </div>

@@ -148,6 +148,21 @@ function AuthValueCard({ label, value, copyable = false, singleLine = false }: {
   );
 }
 
+function ratingTypeLabel(t: any, value?: string) {
+  if (value === "data_volume") return t("rating_service_data");
+  if (value === "voice_time") return t("rating_service_voice");
+  if (value === "sms_event" || value === "event") return t("rating_service_sms");
+  if (value === "free") return t("rating_service_ims");
+  return value || "-";
+}
+
+function ratingUnitLabel(t: any, value?: string) {
+  if (value === "bytes" || value === "octets") return t("rating_unit_bytes");
+  if (value === "seconds") return t("rating_unit_seconds");
+  if (value === "events") return t("rating_unit_events");
+  return value || "-";
+}
+
 export default function SubscriberViewMode({
   t,
   auth4GData,
@@ -289,7 +304,7 @@ export default function SubscriberViewMode({
               </div>
               <div style={{ display: "grid", gap: "0.85rem" }}>
                 <SummaryMetric label={t("sub_360_tariff_plan")} value={ocsPlanId || t("none")} accent />
-                <SummaryMetric label={t("sub_360_plan_status")} value={ocsPlanStatus || "unknown"} />
+                <SummaryMetric label={t("sub_360_plan_status")} value={ocsPlanStatus || t("unknown")} />
                 <SummaryMetric label="PLMN" value={ocsPlmn || "N/A"} />
               </div>
             </div>
@@ -397,7 +412,7 @@ export default function SubscriberViewMode({
             <SummaryMetric label={t("sub_360_sms_balance")} value={ocsSmsBalanceStr} accent />
             <SummaryMetric label="PLMN" value={ocsPlmn} />
             <SummaryMetric label={t("sub_360_tariff_plan")} value={ocsPlanId || t("none")} accent />
-            <SummaryMetric label={t("sub_360_plan_status")} value={ocsPlanStatus || "unknown"} />
+            <SummaryMetric label={t("sub_360_plan_status")} value={ocsPlanStatus || t("unknown")} />
           </div>
           <div style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "0.75rem", fontWeight: 700 }}>{t("sub_360_apn_rules")}</div>
           <RatingRuleLinkPanel
@@ -405,6 +420,7 @@ export default function SubscriberViewMode({
             planStatus={ocsPlanStatus}
             ocsRules={ocsRules}
             ratingList={ratingList}
+            t={t}
             compact
           />
           <div style={{ color: "var(--text-muted)", fontSize: "0.85rem", margin: "1rem 0 0.75rem", fontWeight: 700 }}>{t("sub_360_raw_mapping")}</div>
@@ -414,8 +430,8 @@ export default function SubscriberViewMode({
                 <span>{rule.apn}</span>
                 <span>RG {rule.rating_group_id}</span>
                 <span>SI {rule.service_identifier}</span>
-                <span>{rule.charging_type}</span>
-                <span>{rule.unit}</span>
+                <span>{ratingTypeLabel(t, rule.charging_type)}</span>
+                <span>{ratingUnitLabel(t, rule.unit)}</span>
               </div>
             )) : <span style={{ color: "var(--text-muted)" }}>{t("sub_360_no_tariff_rules")}</span>}
           </div>
@@ -481,7 +497,7 @@ export default function SubscriberViewMode({
                                   ))}
                                 </div>
                               ) : (
-                                <span style={{ color: 'var(--text-muted)' }}>None</span>
+                                <span style={{ color: 'var(--text-muted)' }}>{t("none")}</span>
                               )}
                             </td>
                           </tr>

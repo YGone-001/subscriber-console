@@ -92,7 +92,7 @@ export default function SubscriberModal({ imsi, onClose, onRefresh }: Subscriber
               {imsi ? (
                 <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
                   <h2 style={{ margin: 0, fontSize: "1.5rem", fontWeight: 600, color: "var(--text-main)", fontFamily: "monospace" }}>{imsi}</h2>
-                  <button className="copy-btn" onClick={handleCopyImsi} title="Copy IMSI" style={{ padding: "6px" }}>
+                  <button className="copy-btn" onClick={handleCopyImsi} title={t("sub_copy_imsi")} style={{ padding: "6px" }}>
                     {isImsiCopied ? <Check size={20} color="var(--success)" /> : <Copy size={20} />}
                   </button>
                 </div>

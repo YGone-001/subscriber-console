@@ -38,6 +38,21 @@ interface SubscriberEditModeProps {
   actions: any;
 }
 
+function ratingTypeLabel(t: any, value?: string) {
+  if (value === "data_volume") return t("rating_service_data");
+  if (value === "voice_time") return t("rating_service_voice");
+  if (value === "sms_event" || value === "event") return t("rating_service_sms");
+  if (value === "free") return t("rating_service_ims");
+  return value || "-";
+}
+
+function ratingUnitLabel(t: any, value?: string) {
+  if (value === "bytes" || value === "octets") return t("rating_unit_bytes");
+  if (value === "seconds") return t("rating_unit_seconds");
+  if (value === "events") return t("rating_unit_events");
+  return value || "-";
+}
+
 export default function SubscriberEditMode({ t, imsi, state, actions }: SubscriberEditModeProps) {
   const { lang } = useI18n();
   const {
@@ -124,7 +139,7 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
               />
             </div>
             <div>
-              <label className="form-label">Profile Template</label>
+              <label className="form-label">{t("profile_template")}</label>
               <select
                 className="form-input"
                 defaultValue=""
@@ -141,7 +156,7 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
         </div>
       </div>
 
-      <div className="section-divider">Advanced Configuration</div>
+      <div className="section-divider">{t("sub_advanced_config")}</div>
 
       {/* Security & Authentication Configure */}
       <div className="dash-card animate-fade-in" id="sec-security">
@@ -339,11 +354,11 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
             </div>
           </div>
           <div>
-            <label className="form-label">Tariff Plan</label>
+            <label className="form-label">{t("sub_360_tariff_plan")}</label>
             <input type="text" className="form-input" value={ocsPlanId} readOnly style={{ background: "var(--surface-hover)", fontFamily: "monospace" }} />
           </div>
           <div>
-            <label className="form-label">Plan Status</label>
+            <label className="form-label">{t("sub_360_plan_status")}</label>
             <input type="text" className="form-input" value={ocsPlanStatus} readOnly style={{ background: "var(--surface-hover)", fontFamily: "monospace" }} />
           </div>
           <RatingRuleLinkPanel
@@ -351,9 +366,10 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
             planStatus={ocsPlanStatus}
             ocsRules={ocsRules}
             ratingList={ratingList}
+            t={t}
           />
           <div>
-            <label className="form-label">IMS Voice Quota</label>
+            <label className="form-label">{t("sub_360_voice_quota")}</label>
             <div className="input-composite">
               <input
                 type="number"
@@ -372,7 +388,7 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
             </div>
           </div>
           <div>
-            <label className="form-label">IMS Voice Balance</label>
+            <label className="form-label">{t("sub_360_voice_balance")}</label>
             <div className="input-composite">
               <input
                 type="number"
@@ -391,7 +407,7 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
             </div>
           </div>
           <div>
-            <label className="form-label">IMS SMS Quota</label>
+            <label className="form-label">{t("sub_360_sms_quota")}</label>
             <input
               type="number"
               className="form-input"
@@ -403,7 +419,7 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
             />
           </div>
           <div>
-            <label className="form-label">IMS SMS Balance</label>
+            <label className="form-label">{t("sub_360_sms_balance")}</label>
             <input
               type="number"
               className="form-input"
@@ -415,17 +431,17 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
             />
           </div>
           <div style={{ gridColumn: "1 / -1" }}>
-            <label className="form-label">APN Rating Rules</label>
+            <label className="form-label">{t("sub_360_apn_rules")}</label>
             <div style={{ display: "grid", gap: "0.5rem" }}>
               {ocsRules.length > 0 ? ocsRules.map((rule: any) => (
                 <div key={rule.rule_id || `${rule.apn}-${rule.rating_group_id}`} style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr 1fr 1fr", gap: "1rem", padding: "0.75rem 1rem", border: "1px solid var(--surface-border)", borderRadius: "6px", background: "var(--surface-hover)", fontFamily: "monospace", fontSize: "0.9rem" }}>
                   <span>{rule.apn}</span>
                   <span>RG {rule.rating_group_id}</span>
                   <span>SI {rule.service_identifier}</span>
-                  <span>{rule.charging_type}</span>
-                  <span>{rule.unit}</span>
+                  <span>{ratingTypeLabel(t, rule.charging_type)}</span>
+                  <span>{ratingUnitLabel(t, rule.unit)}</span>
                 </div>
-              )) : <span style={{ color: "var(--text-muted)" }}>No tariff rules</span>}
+              )) : <span style={{ color: "var(--text-muted)" }}>{t("sub_360_no_tariff_rules")}</span>}
             </div>
           </div>
         </div>
