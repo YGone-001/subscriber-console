@@ -45,6 +45,12 @@ type ApprovalRequest = {
   error?: string;
 };
 
+type ApprovalSlaTone = "ok" | "warning" | "danger";
+
+type ApprovalSlaSummary = Record<ApprovalSlaTone, number> & {
+  oldestHours: number;
+};
+
 const USERNAME_PATTERN = /^[A-Za-z0-9_.-]{3,32}$/;
 const VALID_ROLES: string[] = ["root", "operator", "viewer"];
 const VALID_STATUS = ["active", "disabled"];
@@ -77,13 +83,28 @@ const APPROVAL_STATUS_STYLE: Record<ApprovalStatus, { color: string; bg: string 
   failed: { color: "var(--danger)", bg: "rgba(239, 68, 68, 0.1)" },
 };
 
-const APPROVAL_SLA_STYLE: Record<"ok" | "warning" | "danger", { color: string; bg: string }> = {
+const APPROVAL_SLA_STYLE: Record<ApprovalSlaTone, { color: string; bg: string }> = {
   ok: { color: "var(--success)", bg: "rgba(16, 185, 129, 0.1)" },
   warning: { color: "#d97706", bg: "rgba(245, 158, 11, 0.12)" },
   danger: { color: "var(--danger)", bg: "rgba(239, 68, 68, 0.1)" },
 };
 
 const APPROVAL_FILTERS: Array<ApprovalStatus | "all"> = ["pending", "failed", "executed", "approved", "rejected", "all"];
+
+const DEFAULT_APPROVAL_SLA: ApprovalSlaSummary = { ok: 0, warning: 0, danger: 0, oldestHours: 0 };
+
+function getApprovalAgeHours(createdAt: string) {
+  const created = new Date(createdAt).getTime();
+  if (!Number.isFinite(created)) return 0;
+  return Math.max(0, Math.floor((Date.now() - created) / 3600000));
+}
+
+function getApprovalSlaTone(createdAt: string): ApprovalSlaTone {
+  const hours = getApprovalAgeHours(createdAt);
+  if (hours >= 48) return "danger";
+  if (hours >= 24) return "warning";
+  return "ok";
+}
 
 const PERMISSION_MODULES: Array<{
   key: string;
@@ -121,10 +142,11 @@ export default function UsersPage() {
   const { t } = useI18n();
   const { data, isLoading, mutate } = useSWR<{ users: SysUser[] }>("/api/auth/users", fetcher);
   const [approvalStatusFilter, setApprovalStatusFilter] = useState<ApprovalStatus | "all">("pending");
+  const [approvalSlaFilter, setApprovalSlaFilter] = useState<ApprovalSlaTone | "all">("all");
   const [approvalSearchQuery, setApprovalSearchQuery] = useState("");
   const [selectedApprovalId, setSelectedApprovalId] = useState<string | null>(null);
   const [approvalNote, setApprovalNote] = useState("");
-  const { data: approvalData, isLoading: isApprovalLoading, mutate: mutateApprovals } = useSWR<{ approvals: ApprovalRequest[]; pending: number }>(
+  const { data: approvalData, isLoading: isApprovalLoading, mutate: mutateApprovals } = useSWR<{ approvals: ApprovalRequest[]; pending: number; sla?: ApprovalSlaSummary }>(
     isRoot ? `/api/approvals?limit=30&status=${approvalStatusFilter}` : null,
     fetcher,
     { refreshInterval: 30000 }
@@ -144,8 +166,11 @@ export default function UsersPage() {
 
   const filteredApprovals = useMemo(() => {
     const keyword = approvalSearchQuery.trim().toLowerCase();
-    if (!keyword) return approvals;
     return approvals.filter((approval) => {
+      if (approvalSlaFilter !== "all" && (approval.status !== "pending" || getApprovalSlaTone(approval.createdAt) !== approvalSlaFilter)) {
+        return false;
+      }
+      if (!keyword) return true;
       const haystack = [
         approval.id,
         approval.action,
@@ -157,7 +182,7 @@ export default function UsersPage() {
       ].join(" ").toLowerCase();
       return haystack.includes(keyword);
     });
-  }, [approvalSearchQuery, approvals]);
+  }, [approvalSearchQuery, approvalSlaFilter, approvals]);
 
   const selectedApproval = selectedApprovalId
     ? filteredApprovals.find((approval) => approval.id === selectedApprovalId) || null
@@ -194,6 +219,13 @@ export default function UsersPage() {
   }, { root: 0, operator: 0, viewer: 0 });
 
   const approvalPendingCount = approvalData?.pending || approvals.filter((item) => item.status === "pending").length;
+  const approvalSla = approvalData?.sla || approvals.reduce<ApprovalSlaSummary>((acc, approval) => {
+    if (approval.status !== "pending") return acc;
+    const hours = getApprovalAgeHours(approval.createdAt);
+    acc[getApprovalSlaTone(approval.createdAt)] += 1;
+    acc.oldestHours = Math.max(acc.oldestHours, hours);
+    return acc;
+  }, { ...DEFAULT_APPROVAL_SLA });
 
   const renderPermissionBadge = (level: PermissionLevel) => {
     const style = PERMISSION_STYLE[level];
@@ -276,15 +308,9 @@ export default function UsersPage() {
     return <SlidersHorizontal size={15} color="var(--primary)" />;
   };
 
-  const getApprovalAgeHours = (createdAt: string) => {
-    const created = new Date(createdAt).getTime();
-    if (!Number.isFinite(created)) return 0;
-    return Math.max(0, Math.floor((Date.now() - created) / 3600000));
-  };
-
   const renderApprovalSla = (approval: ApprovalRequest) => {
     const hours = getApprovalAgeHours(approval.createdAt);
-    const tone = hours >= 48 ? "danger" : hours >= 24 ? "warning" : "ok";
+    const tone = getApprovalSlaTone(approval.createdAt);
     const style = APPROVAL_SLA_STYLE[tone];
     return (
       <span
@@ -672,6 +698,54 @@ export default function UsersPage() {
           </div>
         </div>
 
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: "0.75rem" }}>
+          {(["ok", "warning", "danger"] as ApprovalSlaTone[]).map((tone) => {
+            const style = APPROVAL_SLA_STYLE[tone];
+            const isActive = approvalSlaFilter === tone;
+            return (
+              <button
+                key={tone}
+                type="button"
+                onClick={() => {
+                  setApprovalStatusFilter("pending");
+                  setApprovalSlaFilter(isActive ? "all" : tone);
+                  setSelectedApprovalId(null);
+                  setApprovalNote("");
+                }}
+                style={{
+                  minHeight: 86,
+                  border: `1px solid ${isActive ? style.color : "var(--surface-border)"}`,
+                  borderRadius: "8px",
+                  background: isActive ? style.bg : "var(--header-bg)",
+                  padding: "0.85rem",
+                  display: "grid",
+                  gap: "0.45rem",
+                  textAlign: "left",
+                  cursor: "pointer",
+                  boxShadow: isActive ? `0 0 0 3px ${style.bg}` : "none",
+                }}
+              >
+                <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem" }}>
+                  <strong style={{ color: "var(--text-main)", fontSize: "0.86rem" }}>{t(`approval_sla_bucket_${tone}`)}</strong>
+                  <span style={{ color: style.color, fontSize: "1.25rem", fontWeight: 900 }}>{approvalSla[tone]}</span>
+                </span>
+                <span style={{ color: "var(--text-muted)", fontSize: "0.76rem", lineHeight: 1.35 }}>
+                  {t(`approval_sla_bucket_${tone}_desc`)}
+                </span>
+              </button>
+            );
+          })}
+          <div style={{ minHeight: 86, border: "1px solid var(--surface-border)", borderRadius: "8px", background: "var(--header-bg)", padding: "0.85rem", display: "grid", gap: "0.45rem" }}>
+            <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem" }}>
+              <strong style={{ color: "var(--text-main)", fontSize: "0.86rem" }}>{t("approval_sla_oldest")}</strong>
+              <span style={{ color: approvalSla.danger > 0 ? "var(--danger)" : "var(--text-main)", fontSize: "1.25rem", fontWeight: 900 }}>{approvalSla.oldestHours}h</span>
+            </span>
+            <span style={{ color: "var(--text-muted)", fontSize: "0.76rem", lineHeight: 1.35 }}>
+              {approvalSlaFilter === "all" ? t("approval_sla_queue_all") : t("approval_sla_queue_filtered", { bucket: t(`approval_sla_bucket_${approvalSlaFilter}`) })}
+            </span>
+          </div>
+        </div>
+
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "0.75rem", alignItems: "center" }}>
           <label style={{ position: "relative", minWidth: 0 }}>
             <Search size={16} color="var(--text-muted)" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)" }} />
@@ -693,6 +767,7 @@ export default function UsersPage() {
                   className={isActive ? "btn btn-primary" : "btn btn-outline"}
                   onClick={() => {
                     setApprovalStatusFilter(status);
+                    setApprovalSlaFilter("all");
                     setSelectedApprovalId(null);
                     setApprovalNote("");
                   }}
@@ -835,6 +910,27 @@ export default function UsersPage() {
                   <strong style={{ color: "var(--text-main)", fontSize: "0.82rem" }}>{t("approval_detail_summary")}</strong>
                   <div style={{ color: "var(--text-secondary)", fontSize: "0.82rem", lineHeight: 1.45 }}>{selectedApproval.summary}</div>
                 </div>
+
+                {selectedApproval.status === "pending" ? (
+                  <div
+                    style={{
+                      border: `1px solid ${APPROVAL_SLA_STYLE[getApprovalSlaTone(selectedApproval.createdAt)].color}`,
+                      borderRadius: "8px",
+                      background: APPROVAL_SLA_STYLE[getApprovalSlaTone(selectedApproval.createdAt)].bg,
+                      padding: "0.75rem",
+                      display: "grid",
+                      gap: "0.4rem",
+                    }}
+                  >
+                    <strong style={{ color: APPROVAL_SLA_STYLE[getApprovalSlaTone(selectedApproval.createdAt)].color, fontSize: "0.82rem", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                      {getApprovalSlaTone(selectedApproval.createdAt) === "danger" ? <AlertTriangle size={14} /> : <Clock size={14} />}
+                      {t("approval_sla_detail_title", { hours: getApprovalAgeHours(selectedApproval.createdAt) })}
+                    </strong>
+                    <span style={{ color: "var(--text-secondary)", fontSize: "0.8rem", lineHeight: 1.45 }}>
+                      {t(`approval_sla_detail_${getApprovalSlaTone(selectedApproval.createdAt)}`)}
+                    </span>
+                  </div>
+                ) : null}
 
                 <div style={{ display: "grid", gap: "0.55rem" }}>
                   <strong style={{ color: "var(--text-main)", fontSize: "0.82rem", display: "flex", alignItems: "center", gap: "0.4rem" }}>

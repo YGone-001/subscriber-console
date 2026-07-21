@@ -46,6 +46,21 @@ type ListApprovalOptions = {
   requester?: string;
 };
 
+type ApprovalSlaTone = 'ok' | 'warning' | 'danger';
+
+function getApprovalAgeHours(createdAt: string, now = Date.now()) {
+  const created = new Date(createdAt).getTime();
+  if (!Number.isFinite(created)) return 0;
+  return Math.max(0, Math.floor((now - created) / 3600000));
+}
+
+function getApprovalSlaTone(createdAt: string, now = Date.now()): ApprovalSlaTone {
+  const hours = getApprovalAgeHours(createdAt, now);
+  if (hours >= 48) return 'danger';
+  if (hours >= 24) return 'warning';
+  return 'ok';
+}
+
 function collection() {
   return getAppCollection<ApprovalDocument & Document>(mongoCollections.approvals);
 }
@@ -91,16 +106,28 @@ export async function listApprovals(options: ListApprovalOptions = {}) {
   const pendingFilter: Filter<ApprovalDocument> = { status: 'pending' };
   if (options.requester) pendingFilter.requester = options.requester;
 
-  const [approvals, total, pending] = await Promise.all([
+  const [approvals, total, pendingApprovals] = await Promise.all([
     docs.find(filter).sort({ createdAt: -1 }).limit(limit).toArray(),
     docs.countDocuments(filter),
-    docs.countDocuments(pendingFilter),
+    docs.find(pendingFilter).project<Pick<ApprovalDocument, 'createdAt'>>({ createdAt: 1, _id: 0 }).toArray(),
   ]);
+  const now = Date.now();
+  const sla = pendingApprovals.reduce(
+    (acc, item) => {
+      const hours = getApprovalAgeHours(item.createdAt, now);
+      const tone = getApprovalSlaTone(item.createdAt, now);
+      acc[tone] += 1;
+      acc.oldestHours = Math.max(acc.oldestHours, hours);
+      return acc;
+    },
+    { ok: 0, warning: 0, danger: 0, oldestHours: 0 }
+  );
 
   return {
     approvals: approvals.map((item) => stripMongoId(item)) as ApprovalDocument[],
     total,
-    pending,
+    pending: pendingApprovals.length,
+    sla,
   };
 }
 
