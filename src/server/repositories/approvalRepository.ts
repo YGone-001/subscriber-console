@@ -42,8 +42,11 @@ type CreateApprovalInput = {
 
 type ListApprovalOptions = {
   limit?: number;
+  maxLimit?: number;
   status?: ApprovalStatus | 'all';
   requester?: string;
+  fromTime?: number | null;
+  toTime?: number | null;
 };
 
 type ApprovalSlaTone = 'ok' | 'warning' | 'danger';
@@ -97,11 +100,21 @@ export async function createApprovalRequest(input: CreateApprovalInput): Promise
 
 export async function listApprovals(options: ListApprovalOptions = {}) {
   const docs = await collection();
-  const limit = Math.max(1, Math.min(Number(options.limit || 100), 200));
+  const maxLimit = Math.max(1, Math.min(Number(options.maxLimit || 200), 1000));
+  const limit = Math.max(1, Math.min(Number(options.limit || 100), maxLimit));
   const filter: Filter<ApprovalDocument> = {};
 
   if (options.status && options.status !== 'all') filter.status = options.status;
   if (options.requester) filter.requester = options.requester;
+  if (options.fromTime !== null || options.toTime !== null) {
+    filter.createdAt = {};
+    if (options.fromTime !== null && options.fromTime !== undefined) {
+      filter.createdAt.$gte = new Date(options.fromTime).toISOString();
+    }
+    if (options.toTime !== null && options.toTime !== undefined) {
+      filter.createdAt.$lte = new Date(options.toTime).toISOString();
+    }
+  }
 
   const pendingFilter: Filter<ApprovalDocument> = { status: 'pending' };
   if (options.requester) pendingFilter.requester = options.requester;

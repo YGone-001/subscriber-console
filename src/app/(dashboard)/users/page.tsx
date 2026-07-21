@@ -167,6 +167,11 @@ export default function UsersPage() {
   const [selectedApprovalId, setSelectedApprovalId] = useState<string | null>(null);
   const [approvalNote, setApprovalNote] = useState("");
   const [selectedAuditLog, setSelectedAuditLog] = useState<AuditLog | null>(null);
+  const [approvalExportFormat, setApprovalExportFormat] = useState<"json" | "csv">("json");
+  const [approvalExportRequester, setApprovalExportRequester] = useState("");
+  const [approvalExportFrom, setApprovalExportFrom] = useState("");
+  const [approvalExportTo, setApprovalExportTo] = useState("");
+  const [exportingApprovalScope, setExportingApprovalScope] = useState<string | null>(null);
   const { data: approvalData, isLoading: isApprovalLoading, mutate: mutateApprovals } = useSWR<{ approvals: ApprovalRequest[]; pending: number; sla?: ApprovalSlaSummary }>(
     isRoot ? `/api/approvals?limit=30&status=${approvalStatusFilter}` : null,
     fetcher,
@@ -529,6 +534,49 @@ export default function UsersPage() {
     }
   };
 
+  const handleApprovalExport = async (approvalId?: string) => {
+    const scope = approvalId ? `approval:${approvalId}` : "queue";
+    setExportingApprovalScope(scope);
+    setNotice(null);
+    try {
+      const params = new URLSearchParams({
+        format: approvalExportFormat,
+        limit: "500",
+      });
+      if (approvalId) {
+        params.set("approvalId", approvalId);
+      } else {
+        params.set("status", approvalStatusFilter);
+        if (approvalExportRequester.trim()) params.set("requester", approvalExportRequester.trim());
+        if (approvalExportFrom) params.set("from", approvalExportFrom);
+        if (approvalExportTo) params.set("to", approvalExportTo);
+      }
+
+      const res = await fetch(`/api/approvals/export?${params.toString()}`);
+      if (!res.ok) {
+        setNotice({ type: "error", text: await readError(res, t("approval_export_err")) });
+        return;
+      }
+
+      const blob = await res.blob();
+      const disposition = res.headers.get("content-disposition") || "";
+      const filenameMatch = /filename="([^"]+)"/.exec(disposition);
+      const filename = filenameMatch?.[1] || `xcloud_approvals_${new Date().toISOString().slice(0, 10)}.${approvalExportFormat}`;
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      link.click();
+      URL.revokeObjectURL(url);
+      setNotice({ type: "success", text: t("approval_export_msg_ready") });
+    } catch (e) {
+      console.error(e);
+      setNotice({ type: "error", text: t("approval_export_err") });
+    } finally {
+      setExportingApprovalScope(null);
+    }
+  };
+
   return (
     <>
     <div className="container animate-fade-in" style={{ padding: "3rem", paddingBottom: "100px" }}>
@@ -739,6 +787,32 @@ export default function UsersPage() {
           </div>
         </div>
 
+        <div style={{ border: "1px solid var(--surface-border)", borderRadius: "8px", background: "var(--header-bg)", padding: "0.85rem", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr)) auto", gap: "0.75rem", alignItems: "end" }}>
+          <label style={{ display: "grid", gap: "0.35rem" }}>
+            <span style={{ color: "var(--text-muted)", fontSize: "0.72rem", fontWeight: 800 }}>{t("approval_export_requester")}</span>
+            <input className="form-input" value={approvalExportRequester} onChange={(event) => setApprovalExportRequester(event.target.value)} placeholder={t("approval_export_requester_ph")} style={{ minHeight: 36 }} />
+          </label>
+          <label style={{ display: "grid", gap: "0.35rem" }}>
+            <span style={{ color: "var(--text-muted)", fontSize: "0.72rem", fontWeight: 800 }}>{t("approval_export_from")}</span>
+            <input type="date" className="form-input" value={approvalExportFrom} onChange={(event) => setApprovalExportFrom(event.target.value)} style={{ minHeight: 36 }} />
+          </label>
+          <label style={{ display: "grid", gap: "0.35rem" }}>
+            <span style={{ color: "var(--text-muted)", fontSize: "0.72rem", fontWeight: 800 }}>{t("approval_export_to")}</span>
+            <input type="date" className="form-input" value={approvalExportTo} onChange={(event) => setApprovalExportTo(event.target.value)} style={{ minHeight: 36 }} />
+          </label>
+          <label style={{ display: "grid", gap: "0.35rem" }}>
+            <span style={{ color: "var(--text-muted)", fontSize: "0.72rem", fontWeight: 800 }}>{t("approval_export_format")}</span>
+            <select className="form-input" value={approvalExportFormat} onChange={(event) => setApprovalExportFormat(event.target.value as "json" | "csv")} style={{ minHeight: 36 }}>
+              <option value="json">JSON</option>
+              <option value="csv">CSV</option>
+            </select>
+          </label>
+          <button className="btn btn-outline" onClick={() => handleApprovalExport()} disabled={Boolean(exportingApprovalScope)} style={{ minHeight: 36, padding: "0.45rem 0.75rem", alignSelf: "end" }}>
+            {exportingApprovalScope === "queue" ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> : <Download size={14} />}
+            {t("approval_export_queue")}
+          </button>
+        </div>
+
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: "0.75rem" }}>
           {(["ok", "warning", "danger"] as ApprovalSlaTone[]).map((tone) => {
             const style = APPROVAL_SLA_STYLE[tone];
@@ -928,7 +1002,13 @@ export default function UsersPage() {
                       {selectedApproval.id}
                     </p>
                   </div>
-                  {renderApprovalStatus(selectedApproval.status)}
+                  <div style={{ display: "flex", gap: "0.45rem", alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                    {renderApprovalStatus(selectedApproval.status)}
+                    <button className="btn btn-outline" onClick={() => handleApprovalExport(selectedApproval.id)} disabled={Boolean(exportingApprovalScope)} style={{ minHeight: 32, padding: "0.35rem 0.6rem", fontSize: "0.74rem" }}>
+                      {exportingApprovalScope === `approval:${selectedApproval.id}` ? <span className="spinner" style={{ width: 13, height: 13, borderWidth: 2 }} /> : <Download size={13} />}
+                      {t("approval_export_selected")}
+                    </button>
+                  </div>
                 </div>
 
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "0.65rem" }}>
