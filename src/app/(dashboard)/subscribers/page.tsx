@@ -461,16 +461,27 @@ export default function SubscriberPage() {
                btn.classList.add('radar-animating');
                btn.innerHTML = `<span style="opacity: 0.5;">Scanning...</span>`;
                try {
-                 await fetch('/api/analytics/init', { method: 'POST' });
+                 const res = await fetch('/api/analytics/init', { method: 'POST' });
+                 if (!res.ok) throw new Error(t("sync_error"));
                  await mutateSubscribers();
                  btn.innerHTML = `<span style="color:var(--success)">OK</span>`;
+                 setFeedback({
+                   tone: "success",
+                   title: t("success"),
+                   message: `${t("sync_telemetry")} ${t("sync_ok")}`,
+                 });
                  setTimeout(() => {
                    btn.innerHTML = originalHTML;
                    btn.classList.remove('radar-animating');
                    btn.disabled = false;
                  }, 2000);
-               } catch {
+               } catch (error) {
                  btn.innerHTML = `Error`;
+                 setFeedback({
+                   tone: "danger",
+                   title: t("error"),
+                   message: error instanceof Error ? error.message : t("sync_error"),
+                 });
                  setTimeout(() => {
                    btn.innerHTML = originalHTML;
                    btn.classList.remove('radar-animating');
@@ -791,6 +802,11 @@ export default function SubscriberPage() {
               return;
             }
             mutateSubscribers();
+            setFeedback({
+              tone: "success",
+              title: t("success"),
+              message: t("traffic_adjust_title"),
+            });
           }}
         />
       )}
@@ -811,6 +827,11 @@ export default function SubscriberPage() {
             return;
           }
           mutateSubscribers();
+          setFeedback({
+            tone: "success",
+            title: t("success"),
+            message: t("policy_change_title"),
+          });
         }}
       />
 
@@ -826,7 +847,15 @@ export default function SubscriberPage() {
       <DataHub
         isOpen={isDataHubOpen}
         onClose={() => setIsDataHubOpen(false)}
-        onComplete={() => mutateSubscribers()}
+        onOperation={setFeedback}
+        onComplete={() => {
+          mutateSubscribers();
+          setFeedback({
+            tone: "success",
+            title: t("success"),
+            message: t("dh_import_complete"),
+          });
+        }}
         subscribers={sortedSubscribers}
         selectedImsis={selectedImsis}
       />

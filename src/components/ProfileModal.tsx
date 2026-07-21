@@ -38,6 +38,22 @@ type DraftDiffRow = {
   changed: boolean;
 };
 
+function buildProfileKeyFromTitle(title: string) {
+  const trimmed = title.trim();
+  const asciiKey = trimmed
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9_\s-]/g, " ")
+    .trim()
+    .replace(/\s+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 48);
+
+  if (/^[a-zA-Z0-9_\s-]+$/.test(trimmed) && trimmed.length <= 64) return trimmed;
+  return `${asciiKey || "profile"}_${Date.now().toString(36)}`;
+}
+
 export default function ProfileModal({ profileName, onClose, onRefresh, onOperation, impactedSubscribers = 0 }: ProfileModalProps) {
   const { t } = useI18n();
   const { isRoot, isOperator } = useAuth();
@@ -114,6 +130,8 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
 
   const readError = async (res: Response, fallback: string) => {
     const data = await res.json().catch(() => ({}));
+    if (data.error === "Invalid profile name format") return t("prof_err_name_invalid");
+    if (data.error === "Profile with this name already exists") return t("prof_err_exists");
     return data.error || fallback;
   };
 
@@ -233,7 +251,6 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
     } catch (err: any) {
       const message = err.message || t("prof_err_delete");
       setError(message);
-      onOperation?.({ type: "error", text: message });
     } finally {
       setIsDeleting(false);
     }
@@ -281,7 +298,6 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
     } catch (err: any) {
       const message = err.message || t("prof_version_err_restore");
       setError(message);
-      onOperation?.({ type: "error", text: message });
     } finally {
       setIsRestoring(false);
     }
@@ -333,8 +349,7 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
           body: JSON.stringify({ name: targetName }),
         });
         if (!createRes.ok) {
-          const errData = await createRes.json();
-          throw new Error(errData.error || t("prof_err_create"));
+          throw new Error(await readError(createRes, t("prof_err_create")));
         }
       }
 
@@ -352,7 +367,6 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
     } catch (err: any) {
       const message = err.message || t("sub_err_save");
       setError(message);
-      onOperation?.({ type: "error", text: message });
     } finally {
       setIsSaving(false);
     }
@@ -361,7 +375,7 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
   const handleSave = async () => {
     setError(null);
     try {
-      const targetName = (profileName || inputName).trim();
+      const targetName = profileName || buildProfileKeyFromTitle(inputName || profileTitle);
       validateProfileDraft(targetName);
       const payload = buildProfilePayload(targetName);
       const changedRows = profileName ? getProfileDraftDiffRows(payload).filter(row => row.changed) : [];
@@ -375,20 +389,18 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
     } catch (err: any) {
       const message = err.message || t("sub_err_save");
       setError(message);
-      onOperation?.({ type: "error", text: message });
     }
   };
 
   const handleConfirmSave = async () => {
     setError(null);
     try {
-      const targetName = (profileName || inputName).trim();
+      const targetName = profileName || buildProfileKeyFromTitle(inputName || profileTitle);
       validateProfileDraft(targetName);
       await submitProfile(targetName, buildProfilePayload(targetName));
     } catch (err: any) {
       const message = err.message || t("sub_err_save");
       setError(message);
-      onOperation?.({ type: "error", text: message });
     }
   };
 
@@ -555,7 +567,7 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
     />;
   };
 
-  const draftTargetName = (profileName || inputName).trim();
+  const draftTargetName = (profileName || inputName || profileTitle).trim();
   const draftPayload = profileName && draftTargetName ? buildProfilePayload(draftTargetName) : null;
   const draftDiffRows = draftPayload ? getProfileDraftDiffRows(draftPayload) : [];
   const changedDraftRows = draftDiffRows.filter(row => row.changed);
@@ -587,6 +599,7 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
         {isDeleteConfirmOpen && (
           <div style={{ padding: "0 1.5rem" }}>
             <ConfirmActionPanel
+              presentation="modal"
               title={t("prof_del_confirm", { name: profileName || "" })}
               message={t("prof_del_desc")}
               confirmLabel={t("delete")}
@@ -601,6 +614,7 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
         {isSaveConfirmOpen && (
           <div style={{ padding: "0 1.5rem" }}>
             <ConfirmActionPanel
+              presentation="modal"
               tone={impactedSubscribers > 0 ? "warning" : "info"}
               title={t("prof_change_confirm_title")}
               message={t("prof_change_confirm_desc", { count: impactedSubscribers, sections: changedSectionText })}
@@ -693,6 +707,7 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
           <div className="workflow-content">
             {error && (
               <OperationNotice
+                presentation="modal"
                 tone="danger"
                 title={t("error")}
                 message={error}
@@ -716,7 +731,7 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
           <div className="workflow-footer-actions">
             <button className="btn btn-outline" onClick={onClose}>{t("cancel")}</button>
             {isEditing ? (
-              <button className="btn btn-primary" onClick={handleSave} disabled={isSaving || (!profileName && !inputName)}>
+              <button className="btn btn-primary" onClick={handleSave} disabled={isSaving || (!profileName && !(inputName || profileTitle).trim())}>
                 <Save size={16}/> {isSaving ? t("sub_btn_saving") : (profileName ? t("prof_btn_save") : t("prof_btn_create"))}
               </button>
             ) : isRoot ? (

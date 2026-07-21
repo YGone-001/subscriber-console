@@ -3,6 +3,7 @@
 import { BatteryCharging, RotateCcw, Save, SlidersHorizontal, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { BYTE_INPUT_UNITS, composeByteInput, formatBytes, parseBytes, splitByteInput } from "@/lib/unitParser";
+import { OperationNotice } from "./OperationFeedback";
 
 type TrafficAdjustmentMode = "recharge" | "set_available" | "set_total" | "reset";
 
@@ -196,7 +197,15 @@ export default function TrafficAdjustmentModal({
             </div>
           </div>
 
-          {error && <div style={{ color: "var(--danger)", fontWeight: 600 }}>{error}</div>}
+          {error && (
+            <OperationNotice
+              presentation="modal"
+              tone="danger"
+              title={t("error")}
+              message={error}
+              onClose={() => setError(null)}
+            />
+          )}
         </div>
 
         <div className="workflow-footer" style={{ padding: "1rem 1.5rem", borderTop: "1px solid var(--surface-border)" }}>

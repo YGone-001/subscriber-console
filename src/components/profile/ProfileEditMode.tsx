@@ -5,7 +5,7 @@ import { AMBR_UNITS } from "../subscriber/utils";
 
 export default function ProfileEditMode({ t, profileName, state, actions }: any) {
   const {
-    inputName, profileTitle, authData, usimType, ueAmbr, isAccessRestrictionsExpanded, accessRestriction,
+    profileTitle, authData, usimType, ueAmbr, isAccessRestrictionsExpanded, accessRestriction,
     ocsDefaults, ratingList, slices, newlyAddedSliceIndex
   } = state;
 
@@ -15,6 +15,10 @@ export default function ProfileEditMode({ t, profileName, state, actions }: any)
   } = actions;
   const totalTrafficInput = splitByteInput(ocsDefaults.trafficTotal);
   const balanceTrafficInput = splitByteInput(ocsDefaults.trafficBalance, totalTrafficInput.unit);
+  const handleTitleChange = (value: string) => {
+    setProfileTitle(value);
+    if (!profileName) setInputName(value);
+  };
 
   return (
     <div style={{ paddingBottom: '2rem' }}>
@@ -26,15 +30,9 @@ export default function ProfileEditMode({ t, profileName, state, actions }: any)
         </div>
         <div className="dash-card-body">
           <div className="quick-grid">
-            {!profileName && (
-              <div>
-                <label className="form-label"><span style={{ color: "var(--danger)", marginRight: "0.25rem" }}>*</span>{t("prof_key")}</label>
-                <input type="text" className="form-input" value={inputName} onChange={e => setInputName(e.target.value)} placeholder={t("prof_key_ph")} autoFocus />
-              </div>
-            )}
             <div>
-              <label className="form-label">{t("prof_title")}</label>
-              <input type="text" className="form-input" value={profileTitle} onChange={(e) => setProfileTitle(e.target.value)} placeholder={t("prof_title_ph")} />
+              <label className="form-label">{!profileName && <span style={{ color: "var(--danger)", marginRight: "0.25rem" }}>*</span>}{t("prof_title")}</label>
+              <input type="text" className="form-input" value={profileTitle} onChange={(e) => handleTitleChange(e.target.value)} placeholder={t("prof_title_ph")} autoFocus={!profileName} />
             </div>
           </div>
         </div>

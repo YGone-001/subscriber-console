@@ -2,6 +2,7 @@
 
 import { CheckCircle2, type LucideIcon, RotateCcw, Save, Settings2, ShieldOff, X } from "lucide-react";
 import { useMemo, useState } from "react";
+import { OperationNotice } from "./OperationFeedback";
 
 type PolicyStatus = "active" | "suspended";
 
@@ -184,7 +185,15 @@ export default function BulkPolicyModal({ isOpen, selectedImsis, onClose, onSucc
             </div>
           </div>
 
-          {error && <div style={{ color: "var(--danger)", fontWeight: 600 }}>{error}</div>}
+          {error && (
+            <OperationNotice
+              presentation="modal"
+              tone="danger"
+              title={t("error")}
+              message={error}
+              onClose={() => setError(null)}
+            />
+          )}
         </div>
 
         <div className="workflow-footer" style={{ padding: "1rem 1.5rem", borderTop: "1px solid var(--surface-border)" }}>

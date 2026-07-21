@@ -1,9 +1,10 @@
 ﻿"use client";
 
 import { useState, useRef } from "react";
-import { Upload, Download, FileText, X, AlertTriangle, Check, FileUp, Loader2 } from "lucide-react";
+import { Upload, Download, FileText, X, Check, FileUp, Loader2 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { parseCsv, toCsvRow } from "@/lib/csv";
+import { OperationNotice, type FeedbackTone } from "@/components/OperationFeedback";
 
 /**
  * DataHub -- CSV Import/Export Hub
@@ -31,6 +32,7 @@ interface DataHubProps {
   isOpen: boolean;
   onClose: () => void;
   onComplete: () => void;
+  onOperation?: (feedback: { tone: FeedbackTone; title: string; message: string }) => void;
   subscribers?: any[];
   selectedImsis?: string[];
 }
@@ -69,7 +71,7 @@ const EXPORT_FIELDS = [
   { key: "last_active", labelKey: "dh_field_last_active", header: "Last_Active", getValue: (s: any) => s.lastActive || "" },
 ] as const;
 
-export default function DataHub({ isOpen, onClose, onComplete, subscribers, selectedImsis }: DataHubProps) {
+export default function DataHub({ isOpen, onClose, onComplete, onOperation, subscribers, selectedImsis }: DataHubProps) {
   const { t } = useI18n();
   const [activeTab, setActiveTab] = useState<"import" | "export">("export");
   const [importStage, setImportStage] = useState<ImportStage>("upload");
@@ -127,6 +129,7 @@ export default function DataHub({ isOpen, onClose, onComplete, subscribers, sele
     link.download = filename;
     link.click();
     URL.revokeObjectURL(url);
+    onOperation?.({ tone: "success", title: t("success"), message: t(exportFormat === "json" ? "dh_btn_download_json" : "dh_btn_download_csv") });
   };
 
   const toggleExportField = (fieldKey: string) => {
@@ -457,14 +460,13 @@ export default function DataHub({ isOpen, onClose, onComplete, subscribers, sele
           {activeTab === "import" && (
             <div>
               {error && (
-                <div style={{
-                  padding: "0.75rem 1rem", marginBottom: "1rem",
-                  background: "rgba(239, 68, 68, 0.1)", border: "1px solid rgba(239, 68, 68, 0.3)",
-                  borderRadius: "8px", color: "var(--danger)",
-                  fontSize: "0.85rem", display: "flex", alignItems: "center", gap: "0.5rem"
-                }}>
-                  <AlertTriangle size={16} /> {error}
-                </div>
+                <OperationNotice
+                  presentation="modal"
+                  tone="danger"
+                  title={t("error")}
+                  message={error}
+                  onClose={() => setError(null)}
+                />
               )}
 
               {/* Stage: Upload */}

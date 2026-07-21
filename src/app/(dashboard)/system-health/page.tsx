@@ -173,6 +173,7 @@ export default function SystemHealthPage() {
 
       {notice && (
         <OperationNotice
+          presentation="modal"
           tone={notice.type === "success" ? "success" : notice.type === "warning" ? "warning" : "danger"}
           title={notice.type === "success" ? t("success") : notice.type === "warning" ? t("status") : t("error")}
           message={notice.text}
@@ -382,15 +383,6 @@ export default function SystemHealthPage() {
             </div>
 
             <div style={{ padding: "2rem" }}>
-              {notice?.type === "error" && (
-                <OperationNotice
-                  tone="danger"
-                  title={t("error")}
-                  message={notice.text}
-                  onClose={() => setNotice(null)}
-                />
-              )}
-
               <div style={{ marginBottom: "1.5rem" }}>
                 <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "0.25rem" }}>{t("health_modal_target")}</div>
                 <div style={{ fontWeight: 600, fontSize: "1.1rem" }}>{targetAnomaly.imsi}</div>

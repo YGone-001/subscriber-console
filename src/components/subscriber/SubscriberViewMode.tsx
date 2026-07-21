@@ -121,6 +121,33 @@ function HealthPill({ tone, children }: { tone: "ok" | "warn" | "danger"; childr
   );
 }
 
+function AuthValueCard({ label, value, copyable = false, singleLine = false }: { label: string; value: string; copyable?: boolean; singleLine?: boolean }) {
+  return (
+    <div
+      style={{
+        minWidth: 0,
+        display: "grid",
+        gap: "0.45rem",
+        padding: "0.85rem",
+        border: "1px solid var(--surface-border)",
+        borderRadius: "8px",
+        background: "var(--surface-hover)",
+      }}
+    >
+      <div style={{ color: "var(--text-muted)", fontSize: "0.76rem", fontWeight: 800, textTransform: "uppercase", letterSpacing: 0 }}>
+        {label}
+      </div>
+      {copyable ? (
+        <MaskedValue label={label} value={value} singleLine={singleLine} />
+      ) : (
+        <div style={{ minWidth: 0, color: "var(--text-main)", fontSize: "1rem", fontWeight: 700, fontFamily: "monospace", lineHeight: 1.45, overflowWrap: "anywhere", wordBreak: "break-all" }}>
+          {value || "N/A"}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function SubscriberViewMode({
   t,
   auth4GData,
@@ -329,17 +356,11 @@ export default function SubscriberViewMode({
         </div>
 
         <DetailPanel id="sec-security" title={t("sec_security_auth")} icon={<KeyRound size={18} color="var(--primary)" />} defaultOpen>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "1.25rem" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-              <span style={{ color: "var(--text-muted)", fontSize: "0.9rem", minWidth: "40px" }}>K</span>
-              <MaskedValue label={t("sub_key_k")} value={auth4GData.k} />
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-              <span style={{ color: "var(--text-muted)", fontSize: "0.9rem", minWidth: "40px" }}>{usimType === "op" ? "OP" : "OPc"}</span>
-              <MaskedValue label={`${t("sub_key_op")} (${usimType.toUpperCase()})`} value={auth4GData.opValue} />
-            </div>
-            <SummaryMetric label="AMF" value={auth4GData.amf || "N/A"} />
-            <SummaryMetric label="SQN" value={String(auth4GData.sqn || 0)} />
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 390px), 1fr))", gap: "0.85rem" }}>
+            <AuthValueCard label={t("sub_key_k")} value={auth4GData.k} copyable singleLine />
+            <AuthValueCard label={`${t("sub_key_op")} (${usimType.toUpperCase()})`} value={auth4GData.opValue} copyable singleLine />
+            <AuthValueCard label="AMF" value={auth4GData.amf || "N/A"} />
+            <AuthValueCard label="SQN" value={String(auth4GData.sqn || 0)} />
           </div>
         </DetailPanel>
 

@@ -158,6 +158,7 @@ export default function ProfilePage() {
 
         {notice && (
           <OperationNotice
+            presentation="modal"
             tone={notice.type === "error" ? "danger" : "success"}
             title={notice.type === "error" ? t("error") : t("success")}
             message={notice.text}

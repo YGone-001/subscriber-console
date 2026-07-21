@@ -8,6 +8,7 @@ import SubscriberEditMode from "./subscriber/SubscriberEditMode";
 import TrafficAdjustmentModal from "./TrafficAdjustmentModal";
 import { useSubscriberForm } from "@/hooks/useSubscriberForm";
 import { formatBytes, parseBytes } from "@/lib/unitParser";
+import { OperationNotice } from "./OperationFeedback";
 
 interface SubscriberModalProps {
   imsi: string | null;
@@ -23,7 +24,7 @@ export default function SubscriberModal({ imsi, onClose, onRefresh }: Subscriber
     isEditing, isLoading, isSaving, error, inputImsi, toastMessage,
     slices, ocsPlanId, ocsTrafficTotalStr, ocsTrafficBalanceStr
   } = state;
-  const { handleDelete, handleSave, setIsEditing, scrollTo } = actions;
+  const { handleDelete, handleSave, setIsEditing, scrollTo, clearError, clearToastMessage } = actions;
   const trafficTotal = parseBytes(ocsTrafficTotalStr);
   const trafficBalance = parseBytes(ocsTrafficBalanceStr);
   const trafficUsed = Math.max(0, trafficTotal - trafficBalance);
@@ -68,9 +69,13 @@ export default function SubscriberModal({ imsi, onClose, onRefresh }: Subscriber
       <div className="modal-content workflow-modal animate-modal-enter" onClick={e => e.stopPropagation()}>
 
         {toastMessage && (
-          <div className="toast-container">
-            <div className="toast">{toastMessage}</div>
-          </div>
+          <OperationNotice
+            presentation="modal"
+            tone="success"
+            title={t("success")}
+            message={toastMessage}
+            onClose={clearToastMessage}
+          />
         )}
 
         <div className="workflow-header">
@@ -161,9 +166,13 @@ export default function SubscriberModal({ imsi, onClose, onRefresh }: Subscriber
 
           <div className="workflow-content">
             {error && (
-              <div className="dash-card" style={{ borderLeft: '4px solid var(--danger)', marginBottom: '1.5rem', padding: "1rem 1.5rem", background: "var(--surface)" }}>
-                <p style={{ color: 'var(--danger)', margin: 0, fontWeight: 600 }}>{error}</p>
-              </div>
+              <OperationNotice
+                presentation="modal"
+                tone="danger"
+                title={t("error")}
+                message={error}
+                onClose={clearError}
+              />
             )}
 
             {isLoading ? (

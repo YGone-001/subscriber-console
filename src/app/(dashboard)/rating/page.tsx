@@ -383,7 +383,7 @@ export default function RatingPage() {
           </Field>
         </div>
         <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
-          <button className="btn-icon" onClick={isNew ? handleCreate : () => ratingGroupId && handleUpdate(ratingGroupId)} title={t("save")} disabled={!!validationMessage || isSaving}><Save size={18} color={validationMessage ? "var(--text-muted)" : "var(--success)"} /></button>
+          <button className="btn-icon" onClick={isNew ? handleCreate : () => ratingGroupId && handleUpdate(ratingGroupId)} title={t("save")} disabled={isSaving}><Save size={18} color={validationMessage ? "var(--warning)" : "var(--success)"} /></button>
           <button className="btn-icon" onClick={() => isNew ? setIsAdding(false) : setEditingId(null)} title={t("cancel")} disabled={isSaving}><X size={18} color="var(--text-muted)" /></button>
         </div>
       </div>
@@ -426,6 +426,7 @@ export default function RatingPage() {
 
       {notice && (
         <OperationNotice
+          presentation="modal"
           tone={notice.type === "error" ? "danger" : "success"}
           title={notice.type === "error" ? t("error") : t("success")}
           message={notice.text}
@@ -435,6 +436,7 @@ export default function RatingPage() {
 
       {pendingDeleteId != null && (
         <ConfirmActionPanel
+          presentation="modal"
           title={t("rating_del_confirm", { id: pendingDeleteId })}
           message={t("rating_del_desc")}
           confirmLabel={t("delete")}

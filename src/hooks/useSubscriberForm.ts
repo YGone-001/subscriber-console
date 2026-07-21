@@ -354,7 +354,7 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
       setIsEditing, setInputImsi: handleInputImsiChange, setMsisdn, loadFromProfile, setAuth4GData,
       setUsimType, setUeAmbr, setIsAccessRestrictionsExpanded, setAccessRestriction, setOcsTrafficTotalStr,
       setOcsTrafficBalanceStr, setOcsVoiceTotalStr, setOcsVoiceBalanceStr, setOcsSmsTotalStr, setOcsSmsBalanceStr, addSlice, handleSliceChange, removeSlice, setExpandedSlices, handleDelete,
-      handleSave, scrollTo
+      handleSave, scrollTo, clearError: () => setError(null), clearToastMessage: () => setToastMessage(null)
     }
   };
 }

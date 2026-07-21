@@ -599,6 +599,7 @@ export default function UsersPage() {
 
       {notice && (
         <OperationNotice
+          presentation="modal"
           tone={notice.type === "success" ? "success" : "danger"}
           title={notice.type === "success" ? t("success") : t("error")}
           message={notice.text}
@@ -608,6 +609,7 @@ export default function UsersPage() {
 
       {pendingDeleteUsername && (
         <ConfirmActionPanel
+          presentation="modal"
           title={t("users_delete_confirm", { username: pendingDeleteUsername })}
           message={t("users_delete_desc")}
           confirmLabel={t("delete")}
@@ -1229,7 +1231,7 @@ export default function UsersPage() {
                 </td>
                 <td style={{ padding: "1rem 1.5rem", textAlign: "right" }}>
                   <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
-                    <button className="btn-icon" onClick={handleCreate} title={t("save")} disabled={Boolean(newFormError) || savingAction === "create"}><Save size={18} color="var(--success)" /></button>
+                    <button className="btn-icon" onClick={handleCreate} title={t("save")} disabled={savingAction === "create"}><Save size={18} color={newFormError ? "var(--warning)" : "var(--success)"} /></button>
                     <button className="btn-icon" onClick={() => setIsAdding(false)} title={t("cancel")} disabled={savingAction === "create"}><X size={18} color="var(--text-muted)" /></button>
                   </div>
                 </td>
@@ -1290,7 +1292,7 @@ export default function UsersPage() {
                       </td>
                       <td style={{ padding: "1rem 1.5rem", textAlign: "right" }}>
                         <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
-                          <button className="btn-icon" onClick={() => handleUpdate(u.username)} title={t("save")} disabled={Boolean(editFormError) || savingAction === `update:${u.username}`}><Save size={18} color="var(--success)" /></button>
+                          <button className="btn-icon" onClick={() => handleUpdate(u.username)} title={t("save")} disabled={savingAction === `update:${u.username}`}><Save size={18} color={editFormError ? "var(--warning)" : "var(--success)"} /></button>
                           <button className="btn-icon" onClick={() => setEditingUser(null)} title={t("cancel")} disabled={savingAction === `update:${u.username}`}><X size={18} color="var(--text-muted)" /></button>
                         </div>
                       </td>

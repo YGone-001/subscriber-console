@@ -11,7 +11,7 @@ export const Pill = ({ enabled, children }: { enabled: boolean, children: React.
   </span>
 );
 
-export const MaskedValue = ({ label, value }: { label: string, value: string }) => {
+export const MaskedValue = ({ label, value, singleLine = false }: { label: string, value: string, singleLine?: boolean }) => {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
@@ -24,9 +24,23 @@ export const MaskedValue = ({ label, value }: { label: string, value: string }) 
   if (!value) return <span style={{ color: "var(--text-muted)", fontSize: "0.95rem" }}>N/A</span>;
 
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-      <span style={{ fontFamily: "monospace", color: "var(--text-main)", fontSize: "1.05rem" }}>{value}</span>
-      <button className="copy-btn" onClick={handleCopy} title={`Copy full ${label}`}>
+    <div style={{ width: "100%", minWidth: 0, display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", alignItems: "start", gap: "0.5rem" }}>
+      <span
+        style={{
+          minWidth: 0,
+          fontFamily: "monospace",
+          color: "var(--text-main)",
+          fontSize: "1rem",
+          lineHeight: 1.45,
+          overflowX: singleLine ? "auto" : undefined,
+          overflowWrap: singleLine ? "normal" : "anywhere",
+          whiteSpace: singleLine ? "nowrap" : undefined,
+          wordBreak: singleLine ? "normal" : "break-all",
+        }}
+      >
+        {value}
+      </span>
+      <button className="copy-btn" onClick={handleCopy} title={`Copy full ${label}`} style={{ flexShrink: 0 }}>
         {copied ? <Check size={16} color="var(--success)" /> : <Copy size={16} />}
       </button>
     </div>

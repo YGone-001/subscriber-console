@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Layers, X, Download } from "lucide-react";
 import { useI18n } from "./I18nProvider";
+import { OperationNotice } from "./OperationFeedback";
 
 interface BatchCreateModalProps {
   isOpen: boolean;
@@ -158,18 +159,23 @@ export default function BatchCreateModal({ isOpen, onClose, onSuccess, profileLi
           {batchResult && (
             <div style={{ padding: "0 2rem 1rem 2rem" }}>
               {batchResult.error ? (
-                <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "8px", padding: "1rem", color: "#dc2626", fontWeight: 500 }}>{batchResult.error}</div>
+                <OperationNotice
+                  presentation="modal"
+                  tone="danger"
+                  title={t("error")}
+                  message={batchResult.error}
+                  onClose={() => setBatchResult(null)}
+                />
               ) : (
-                <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "8px", padding: "1rem", color: "#15803d", fontWeight: 500 }}>
-                  {batchResult.approval?.id
+                <OperationNotice
+                  presentation="modal"
+                  tone={batchResult.failedCount > 0 ? "warning" : "success"}
+                  title={batchResult.failedCount > 0 ? t("status") : t("success")}
+                  message={`${batchResult.approval?.id
                     ? t("approval_msg_submitted", { id: batchResult.approval.id })
-                    : t("created_subscribers", { count: batchResult.count, start: batchResult.range?.from, end: batchResult.range?.to })}
-                  {batchResult.failedCount > 0 && (
-                    <div style={{ marginTop: "0.5rem", color: "#b45309" }}>
-                      Failed: {batchResult.failedCount}
-                    </div>
-                  )}
-                </div>
+                    : t("created_subscribers", { count: batchResult.count, start: batchResult.range?.from, end: batchResult.range?.to })}${batchResult.failedCount > 0 ? ` Failed: ${batchResult.failedCount}` : ""}`}
+                  onClose={() => setBatchResult(null)}
+                />
               )}
             </div>
           )}
