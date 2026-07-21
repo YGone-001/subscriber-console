@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import type React from "react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
-import { Plus, Trash2, Shield, User, Clock, Settings, Save, X, Activity, CheckCircle2, Eye, LockKeyhole, SlidersHorizontal, Download, RotateCcw, GitBranch, RefreshCw, Search, FileJson, MessageSquare, AlertTriangle } from "lucide-react";
+import { Plus, Trash2, Shield, User, Clock, Settings, Save, X, Activity, CheckCircle2, Eye, LockKeyhole, SlidersHorizontal, Download, RotateCcw, GitBranch, RefreshCw, Search, FileJson, MessageSquare, AlertTriangle, History, Braces, ChevronRight } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useI18n } from "@/components/I18nProvider";
 import { ConfirmActionPanel, EmptyState, LoadingRows, OperationNotice } from "@/components/OperationFeedback";
@@ -49,6 +49,26 @@ type ApprovalSlaTone = "ok" | "warning" | "danger";
 
 type ApprovalSlaSummary = Record<ApprovalSlaTone, number> & {
   oldestHours: number;
+};
+
+type AuditLog = {
+  id: string;
+  timestamp: string;
+  level: "info" | "warning";
+  action: string;
+  targetId: string;
+  operatorIp: string;
+  oldData: unknown;
+  newData: unknown;
+};
+
+type ApprovalAuditTrail = {
+  logs: AuditLog[];
+  summary: {
+    total: number;
+    lifecycle: number;
+    execution: number;
+  };
 };
 
 const USERNAME_PATTERN = /^[A-Za-z0-9_.-]{3,32}$/;
@@ -146,13 +166,20 @@ export default function UsersPage() {
   const [approvalSearchQuery, setApprovalSearchQuery] = useState("");
   const [selectedApprovalId, setSelectedApprovalId] = useState<string | null>(null);
   const [approvalNote, setApprovalNote] = useState("");
+  const [selectedAuditLog, setSelectedAuditLog] = useState<AuditLog | null>(null);
   const { data: approvalData, isLoading: isApprovalLoading, mutate: mutateApprovals } = useSWR<{ approvals: ApprovalRequest[]; pending: number; sla?: ApprovalSlaSummary }>(
     isRoot ? `/api/approvals?limit=30&status=${approvalStatusFilter}` : null,
     fetcher,
     { refreshInterval: 30000 }
   );
+  const { data: approvalAuditData, isLoading: isApprovalAuditLoading } = useSWR<ApprovalAuditTrail>(
+    isRoot && selectedApprovalId ? `/api/approvals/${selectedApprovalId}/audit` : null,
+    fetcher,
+    { refreshInterval: 30000 }
+  );
   const users = data?.users || [];
   const approvals = useMemo(() => approvalData?.approvals || [], [approvalData?.approvals]);
+  const approvalAuditLogs = useMemo(() => approvalAuditData?.logs || [], [approvalAuditData?.logs]);
 
   const [isAdding, setIsAdding] = useState(false);
   const [newForm, setNewForm] = useState({ username: "", password: "", role: "operator" });
@@ -343,6 +370,19 @@ export default function UsersPage() {
     }
   };
 
+  const formatAuditActionLabel = (action: string) => {
+    const key = `audit_action_${action}`;
+    const label = t(key);
+    return label !== key ? label : action;
+  };
+
+  const isApprovalLifecycleLog = (log: AuditLog, approvalId: string) => log.targetId === `approval:${approvalId}`;
+
+  const renderAuditStepLabel = (log: AuditLog, approvalId: string) => {
+    if (isApprovalLifecycleLog(log, approvalId)) return t("approval_audit_step_lifecycle");
+    return t("approval_audit_step_execution");
+  };
+
   if (!isRoot) {
     return (
       <div className="container animate-fade-in" style={{ padding: "3rem" }}>
@@ -490,6 +530,7 @@ export default function UsersPage() {
   };
 
   return (
+    <>
     <div className="container animate-fade-in" style={{ padding: "3rem", paddingBottom: "100px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "2rem" }}>
         <div>
@@ -952,6 +993,76 @@ export default function UsersPage() {
                   </pre>
                 </div>
 
+                <div style={{ display: "grid", gap: "0.65rem", borderTop: "1px solid var(--surface-border)", paddingTop: "0.85rem" }}>
+                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap" }}>
+                    <div>
+                      <strong style={{ color: "var(--text-main)", fontSize: "0.82rem", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                        <History size={14} />
+                        {t("approval_audit_title")}
+                      </strong>
+                      <div style={{ marginTop: "0.25rem", color: "var(--text-muted)", fontSize: "0.74rem", lineHeight: 1.35 }}>
+                        {t("approval_audit_desc")}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: "0.45rem", flexWrap: "wrap" }}>
+                      <span style={{ padding: "0.25rem 0.5rem", borderRadius: "999px", background: "var(--surface-hover)", color: "var(--text-secondary)", fontSize: "0.7rem", fontWeight: 800 }}>
+                        {t("approval_audit_lifecycle_count", { count: approvalAuditData?.summary.lifecycle || 0 })}
+                      </span>
+                      <span style={{ padding: "0.25rem 0.5rem", borderRadius: "999px", background: "var(--surface-hover)", color: "var(--text-secondary)", fontSize: "0.7rem", fontWeight: 800 }}>
+                        {t("approval_audit_execution_count", { count: approvalAuditData?.summary.execution || 0 })}
+                      </span>
+                    </div>
+                  </div>
+
+                  {isApprovalAuditLoading ? (
+                    <div style={{ border: "1px solid var(--surface-border)", borderRadius: "8px", overflow: "hidden" }}>
+                      <LoadingRows columns={3} rows={2} />
+                    </div>
+                  ) : approvalAuditLogs.length === 0 ? (
+                    <div style={{ border: "1px solid var(--surface-border)", borderRadius: "8px", padding: "0.85rem", color: "var(--text-muted)", fontSize: "0.8rem", lineHeight: 1.45 }}>
+                      {t("approval_audit_empty")}
+                    </div>
+                  ) : (
+                    <div style={{ display: "grid", gap: "0.5rem" }}>
+                      {approvalAuditLogs.map((log, index) => (
+                        <div
+                          key={log.id}
+                          style={{
+                            border: "1px solid var(--surface-border)",
+                            borderRadius: "8px",
+                            background: isApprovalLifecycleLog(log, selectedApproval.id) ? "var(--surface-hover)" : "var(--header-bg)",
+                            padding: "0.7rem",
+                            display: "grid",
+                            gap: "0.45rem",
+                          }}
+                        >
+                          <div style={{ display: "flex", justifyContent: "space-between", gap: "0.65rem", alignItems: "center" }}>
+                            <span style={{ display: "flex", alignItems: "center", gap: "0.45rem", minWidth: 0 }}>
+                              <strong style={{ width: 22, height: 22, borderRadius: "999px", background: "rgba(59, 130, 246, 0.12)", color: "var(--primary)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "0.7rem", flex: "0 0 auto" }}>{index + 1}</strong>
+                              <span style={{ color: "var(--text-main)", fontSize: "0.8rem", fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {renderAuditStepLabel(log, selectedApproval.id)}
+                              </span>
+                            </span>
+                            <span style={{ color: log.level === "warning" ? "var(--danger)" : "var(--primary)", background: log.level === "warning" ? "rgba(239, 68, 68, 0.1)" : "rgba(59, 130, 246, 0.1)", padding: "0.2rem 0.45rem", borderRadius: "999px", fontSize: "0.68rem", fontWeight: 800 }}>
+                              {formatAuditActionLabel(log.action)}
+                            </span>
+                          </div>
+                          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: "0.65rem", alignItems: "center" }}>
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ color: "var(--text-muted)", fontSize: "0.72rem", lineHeight: 1.35 }}>{new Date(log.timestamp).toLocaleString()}</div>
+                              <div style={{ marginTop: "0.2rem", color: "var(--text-secondary)", fontSize: "0.74rem", fontFamily: "monospace", overflowWrap: "anywhere" }}>{log.targetId}</div>
+                            </div>
+                            <button className="btn btn-outline" onClick={() => setSelectedAuditLog(log)} style={{ minHeight: 32, padding: "0.35rem 0.6rem", fontSize: "0.74rem" }}>
+                              <Braces size={13} />
+                              {t("approval_audit_diff")}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 {selectedApproval.status === "pending" ? (
                   <div style={{ display: "grid", gap: "0.65rem", borderTop: "1px solid var(--surface-border)", paddingTop: "0.85rem" }}>
                     <label style={{ display: "grid", gap: "0.4rem" }}>
@@ -1148,5 +1259,55 @@ export default function UsersPage() {
         </table>
       </div>
     </div>
+
+    {selectedAuditLog && (
+      <div className="modal-overlay" style={{ zIndex: 9999 }}>
+        <div className="modal-content animate-fade-in" style={{ width: "900px", maxWidth: "95vw", borderRadius: "12px", overflow: "hidden", maxHeight: "90vh", display: "flex", flexDirection: "column" }}>
+          <div style={{ padding: "1.35rem 1.75rem", borderBottom: "1px solid var(--surface-border)", background: "var(--surface-hover)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem" }}>
+            <div style={{ minWidth: 0 }}>
+              <h2 style={{ margin: 0, fontSize: "1.12rem", fontWeight: 700, color: "var(--text-main)", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <Braces size={18} color="var(--primary)" />
+                {t("approval_audit_diff_title")}
+              </h2>
+              <div style={{ color: "var(--text-muted)", fontSize: "0.8rem", marginTop: "0.35rem", display: "flex", gap: "0.65rem", flexWrap: "wrap" }}>
+                <span>{t("audit_modal_ref")} <span style={{ fontFamily: "monospace" }}>{selectedAuditLog.id}</span></span>
+                <span>{formatAuditActionLabel(selectedAuditLog.action)}</span>
+                <span>{selectedAuditLog.targetId}</span>
+              </div>
+            </div>
+            <button className="btn btn-outline" onClick={() => setSelectedAuditLog(null)}>{t("audit_modal_close")}</button>
+          </div>
+
+          <div style={{ padding: "1.5rem 1.75rem", flex: 1, overflowY: "auto", display: "flex", gap: "1rem" }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ marginBottom: "0.5rem", fontWeight: 700, color: "var(--danger)", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <div style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--danger)" }} /> {t("audit_modal_old")}
+              </div>
+              <div style={{ background: "#1e1e1e", borderRadius: "8px", padding: "1rem", overflowX: "auto", minHeight: 260 }}>
+                <pre style={{ margin: 0, color: "#d4d4d4", fontFamily: "monospace", fontSize: "0.8rem", lineHeight: 1.5 }}>
+                  {selectedAuditLog.oldData ? JSON.stringify(selectedAuditLog.oldData, null, 2) : t("audit_modal_null_old")}
+                </pre>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", color: "var(--surface-border)" }}>
+              <ChevronRight size={30} />
+            </div>
+
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ marginBottom: "0.5rem", fontWeight: 700, color: "var(--success)", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <div style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--success)" }} /> {t("audit_modal_new")}
+              </div>
+              <div style={{ background: "#1e1e1e", borderRadius: "8px", padding: "1rem", overflowX: "auto", minHeight: 260 }}>
+                <pre style={{ margin: 0, color: "#d4d4d4", fontFamily: "monospace", fontSize: "0.8rem", lineHeight: 1.5 }}>
+                  {selectedAuditLog.newData ? JSON.stringify(selectedAuditLog.newData, null, 2) : t("audit_modal_null_new")}
+                </pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }

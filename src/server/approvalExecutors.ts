@@ -37,7 +37,7 @@ export async function executeApproval(approval: ApprovalDocument, request: Reque
     logAudit(
       'UPDATE',
       `policy:${result.planId}`,
-      { approvalId: approval.id, status: 'approved' },
+      { status: 'approved' },
       {
         approvalId: approval.id,
         imsiList: validation.value.imsiList,
@@ -93,7 +93,7 @@ export async function executeApproval(approval: ApprovalDocument, request: Reque
     if (!/^\d+$/.test(id)) throw new Error('Invalid rating ID format');
 
     const result = await updateRating(id, asRecord(payload.changes));
-    logAudit('UPDATE', `rating:${id}`, { approvalId: approval.id }, { ...result, approvalId: approval.id }, request);
+    logAudit('UPDATE', `rating:${id}`, null, { ...result, approvalId: approval.id }, request);
     return result;
   }
 
@@ -142,7 +142,7 @@ export async function executeApproval(approval: ApprovalDocument, request: Reque
 
     await healSubscriberDocument(imsi, type, profileName);
     const result = { imsi, type, profileName };
-    logAudit('HEAL', imsi, { approvalId: approval.id }, { ...result, approvalId: approval.id }, request);
+    logAudit('HEAL', imsi, null, { ...result, approvalId: approval.id }, request);
     return result;
   }
 
@@ -216,7 +216,7 @@ export async function executeApproval(approval: ApprovalDocument, request: Reque
     logAudit(
       'BATCH_DELETE',
       deletedImsis.length > 0 ? `${deletedImsis[0]} ~ ${deletedImsis[deletedImsis.length - 1]}` : 'subscriber:bulk-delete',
-      { approvalId: approval.id, requested: imsiList },
+      { requested: imsiList },
       { approvalId: approval.id, deleted: deletedImsis.length, deletedImsis },
       request
     );

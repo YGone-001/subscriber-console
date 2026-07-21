@@ -103,3 +103,17 @@ export async function listAuditLogs(query: AuditQuery) {
     totalScanned: Math.min(totalScanned, AUDIT_LIMIT),
   };
 }
+
+export async function listAuditLogsForApproval(approvalId: string) {
+  const docs = await collection();
+  const filter = {
+    $or: [
+      { targetId: `approval:${approvalId}` },
+      { 'oldData.approvalId': approvalId },
+      { 'newData.approvalId': approvalId },
+    ],
+  } as Filter<AuditLogRecord>;
+
+  const logs = await docs.find(filter).sort({ timestamp: 1 }).limit(100).toArray();
+  return logs.map(stripMongoId);
+}
