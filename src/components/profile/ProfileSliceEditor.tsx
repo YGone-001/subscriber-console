@@ -115,12 +115,12 @@ export default function ProfileSliceEditor({
           </div>
           <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer" }}>
             <input type="checkbox" checked={!!slice.default_indicator} onChange={(e) => updateSlice('default_indicator', e.target.checked)} style={{ width: '1.2rem', height: '1.2rem' }} />
-            <span style={{ fontWeight: 500, fontSize: "0.95rem", color: "var(--text-main)" }}>Default S-NSSAI</span>
+            <span style={{ fontWeight: 500, fontSize: "0.95rem", color: "var(--text-main)" }}>{t("sub_default_nssai")}</span>
           </label>
         </div>
 
         <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-          <button className="btn-icon text-danger" onClick={(e) => { e.stopPropagation(); onDelete(); }} title="Delete Slice">
+          <button className="btn-icon text-danger" onClick={(e) => { e.stopPropagation(); onDelete(); }} title={t("slice_delete")}>
             <Trash2 size={20}/>
           </button>
           {onToggleExpand && (
@@ -138,7 +138,7 @@ export default function ProfileSliceEditor({
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", padding: "0 0.5rem" }}>
             <h4 style={{ fontSize: '1rem', fontWeight: 600, color: "var(--text-secondary)", margin: 0 }}>{t("slice_sessions_in", { idx: sliceIndex + 1 })}</h4>
             <button className="btn btn-outline" onClick={handleAddSession} style={{ padding: "0.4rem 0.8rem", fontSize: "0.85rem", display: "flex", alignItems: "center", gap: "0.3rem" }}>
-              <Plus size={16}/> Add Session
+              <Plus size={16}/> {t("slice_add_session")}
             </button>
           </div>
 
@@ -155,7 +155,7 @@ export default function ProfileSliceEditor({
             </div>
           ) : (
             <div style={{ textAlign: "center", padding: "2rem", color: "var(--text-muted)", border: '1px dashed var(--surface-border)', borderRadius: '6px' }}>
-              No sessions. Click + Add Session to begin.
+              {t("slice_no_sessions_hint")}
             </div>
           )}
         </div>

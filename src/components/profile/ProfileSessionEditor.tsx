@@ -57,7 +57,7 @@ export default function ProfileSessionEditor({ session, onChange, onDelete }: Pr
     });
   };
 
-  // Generic field updater
+  // Updates nested fields in a cloned session object.
   const updateField = (path: string[], value: unknown) => {
     const newSession = JSON.parse(JSON.stringify(session));
     let current = newSession;
@@ -69,7 +69,7 @@ export default function ProfileSessionEditor({ session, onChange, onDelete }: Pr
     onChange(newSession);
   };
 
-  // 中文注释: 5QI 到 ARP 的建议映射，仅在 5 或 9 时自动赋值
+  // Applies a small 5QI-to-ARP preset while keeping manual edits possible.
   const applyQosPreset = (rawValue: string) => {
     const newSession = JSON.parse(JSON.stringify(session));
     if (!newSession.qos) newSession.qos = {};
@@ -91,7 +91,6 @@ export default function ProfileSessionEditor({ session, onChange, onDelete }: Pr
     onChange(newSession);
   };
 
-  // PCC Rule Handlers
   const handleAddPccRule = () => {
     const newSession = JSON.parse(JSON.stringify(session));
     if (!newSession.pcc_rule) newSession.pcc_rule = [];
@@ -126,7 +125,7 @@ export default function ProfileSessionEditor({ session, onChange, onDelete }: Pr
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "1.5rem" }}>
             <div>
               <label className="form-label" style={{ fontSize: "0.85rem", fontWeight: 600 }}>{t("sess_name")}</label>
-              <input type="text" className="form-input" value={session.name || ""} onChange={e => updateField(["name"], e.target.value)} placeholder="e.g. internet" />
+              <input type="text" className="form-input" value={session.name || ""} onChange={e => updateField(["name"], e.target.value)} placeholder={t("sess_name_ph")} />
             </div>
             <div>
               <label className="form-label" style={{ fontSize: "0.85rem", fontWeight: 600 }}>{t("sess_type")}</label>
@@ -206,7 +205,7 @@ export default function ProfileSessionEditor({ session, onChange, onDelete }: Pr
             </div>
           </div>
         </div>
-        <button className="btn-icon text-danger" onClick={onDelete} style={{ padding: '0.4rem', background: "transparent", borderRadius: "8px", marginLeft: "1rem" }} title="Remove Session">
+        <button className="btn-icon text-danger" onClick={onDelete} style={{ padding: '0.4rem', background: "transparent", borderRadius: "8px", marginLeft: "1rem" }} title={t("sess_remove")}>
           <Trash2 size={20}/>
         </button>
       </div>
@@ -218,7 +217,7 @@ export default function ProfileSessionEditor({ session, onChange, onDelete }: Pr
             <Network size={16}/> {t("sess_pcc_rules")}
           </h5>
           <button className="btn-icon" onClick={handleAddPccRule} style={{ color: "var(--primary)", fontSize: "0.9rem", fontWeight: 600 }}>
-            <Plus size={16}/> Add PCC Rule
+            <Plus size={16}/> {t("sess_add_pcc")}
           </button>
         </div>
 

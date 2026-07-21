@@ -25,9 +25,8 @@ interface ProfilePccRuleEditorProps {
 export default function ProfilePccRuleEditor({ rule, ruleIndex, onChange, onDelete }: ProfilePccRuleEditorProps) {
   const { t } = useI18n();
 
-  // Helper to update deeply nested fields cleanly
+  // Updates nested fields in a cloned PCC rule object.
   const updateField = (path: string[], value: number | undefined) => {
-    // Deep clone the rule
     const newRule = JSON.parse(JSON.stringify(rule));
     let current = newRule;
     for (let i = 0; i < path.length - 1; i++) {
@@ -43,7 +42,7 @@ export default function ProfilePccRuleEditor({ rule, ruleIndex, onChange, onDele
     if (!newRule.qos) newRule.qos = {};
     newRule.qos._5qi = value;
 
-    // 中文注释: 根据 QCI 自动填充建议速率，允许用户后续手工覆盖
+    // Applies suggested bitrates for common QCI values; users can still override them.
     if (value === 1) {
       newRule.qos.mbr = {
         downlink: { value: 128, unit: 1 },
@@ -73,7 +72,7 @@ export default function ProfilePccRuleEditor({ rule, ruleIndex, onChange, onDele
         <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--text-secondary)", textTransform: 'uppercase', letterSpacing: '0.5px' }}>
           {t("slice_rule_idx", { idx: ruleIndex + 1 })}
         </span>
-        <button className="btn-icon text-danger" onClick={onDelete} style={{ padding: "2px" }} title="Delete PCC Rule">
+        <button className="btn-icon text-danger" onClick={onDelete} style={{ padding: "2px" }} title={t("pcc_delete_rule")}>
           <X size={16}/>
         </button>
       </div>

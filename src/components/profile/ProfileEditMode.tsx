@@ -3,6 +3,21 @@ import ProfileSliceEditor from "./ProfileSliceEditor";
 import { BYTE_INPUT_UNITS, composeByteInput, splitByteInput } from "@/lib/unitParser";
 import { AMBR_UNITS } from "../subscriber/utils";
 
+function ratingTypeLabel(t: (key: string) => string, value?: string) {
+  if (value === "data_volume") return t("rating_service_data");
+  if (value === "voice_time") return t("rating_service_voice");
+  if (value === "sms_event" || value === "event") return t("rating_service_sms");
+  if (value === "free") return t("rating_service_ims");
+  return value || "-";
+}
+
+function ratingUnitLabel(t: (key: string) => string, value?: string) {
+  if (value === "bytes" || value === "octets") return t("rating_unit_bytes");
+  if (value === "seconds") return t("rating_unit_seconds");
+  if (value === "events") return t("rating_unit_events");
+  return value || "-";
+}
+
 export default function ProfileEditMode({ t, profileName, state, actions }: any) {
   const {
     profileTitle, authData, usimType, ueAmbr, isAccessRestrictionsExpanded, accessRestriction,
@@ -112,7 +127,7 @@ export default function ProfileEditMode({ t, profileName, state, actions }: any)
             </div>
           </div>
           <div>
-            <label className="form-label">SMS Quota Template</label>
+            <label className="form-label">{t("prof_sms_quota_tpl")}</label>
             <input
               type="number"
               className="form-input"
@@ -124,7 +139,7 @@ export default function ProfileEditMode({ t, profileName, state, actions }: any)
             />
           </div>
           <div>
-            <label className="form-label">SMS Balance Template</label>
+            <label className="form-label">{t("prof_sms_balance_tpl")}</label>
             <input
               type="number"
               className="form-input"
@@ -136,17 +151,17 @@ export default function ProfileEditMode({ t, profileName, state, actions }: any)
             />
           </div>
           <div style={{ gridColumn: "1 / -1" }}>
-            <label className="form-label">Tariff Plan Rules</label>
+            <label className="form-label">{t("prof_tariff_rules")}</label>
             <div style={{ display: "grid", gap: "0.5rem" }}>
               {ratingList.length > 0 ? ratingList.map((rule: any) => (
                 <div key={rule.rule_id || `${rule.apn}-${rule.rating_group_id}`} style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr 1fr 1fr", gap: "1rem", padding: "0.75rem 1rem", border: "1px solid var(--surface-border)", borderRadius: "6px", background: "var(--surface-hover)", fontFamily: "monospace", fontSize: "0.9rem" }}>
                   <span>{rule.apn}</span>
                   <span>RG {rule.rating_group_id}</span>
                   <span>SI {rule.service_identifier}</span>
-                  <span>{rule.charging_type}</span>
-                  <span>{rule.unit}</span>
+                  <span>{ratingTypeLabel(t, rule.charging_type)}</span>
+                  <span>{ratingUnitLabel(t, rule.unit)}</span>
                 </div>
-              )) : <span style={{ color: "var(--text-muted)" }}>No tariff rules</span>}
+              )) : <span style={{ color: "var(--text-muted)" }}>{t("prof_no_tariff_rules")}</span>}
             </div>
           </div>
         </div>

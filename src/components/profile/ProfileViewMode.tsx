@@ -1,6 +1,21 @@
 import { Shield, Signal, Gauge, Server, Lock, ChevronDown, ChevronUp } from "lucide-react";
 import { AMBR_UNITS, getAmbrString, typeLabel } from "../subscriber/utils";
 
+function ratingTypeLabel(t: (key: string) => string, value?: string) {
+  if (value === "data_volume") return t("rating_service_data");
+  if (value === "voice_time") return t("rating_service_voice");
+  if (value === "sms_event" || value === "event") return t("rating_service_sms");
+  if (value === "free") return t("rating_service_ims");
+  return value || "-";
+}
+
+function ratingUnitLabel(t: (key: string) => string, value?: string) {
+  if (value === "bytes" || value === "octets") return t("rating_unit_bytes");
+  if (value === "seconds") return t("rating_unit_seconds");
+  if (value === "events") return t("rating_unit_events");
+  return value || "-";
+}
+
 export default function ProfileViewMode({ t, authData, usimType, ocsDefaults, ratingList, ueAmbr, isAccessRestrictionsExpanded, setIsAccessRestrictionsExpanded, accessRestriction, slices }: any) {
   return (
     <div className="animate-fade-in" style={{ paddingBottom: '2rem' }}>
@@ -35,20 +50,20 @@ export default function ProfileViewMode({ t, authData, usimType, ocsDefaults, ra
         <div className="dash-card-body" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2rem" }}>
            <div><div style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "0.25rem" }}>{t("prof_lbl_quota")}</div><div style={{ fontFamily: "monospace", color: "var(--text-main)", fontSize: "1rem" }}>{ocsDefaults.trafficTotal}</div></div>
            <div><div style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "0.25rem" }}>{t("prof_lbl_balance")}</div><div style={{ fontFamily: "monospace", color: "var(--text-main)", fontSize: "1rem" }}>{ocsDefaults.trafficBalance}</div></div>
-           <div><div style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "0.25rem" }}>SMS Quota</div><div style={{ fontFamily: "monospace", color: "var(--text-main)", fontSize: "1rem" }}>{ocsDefaults.smsTotal || "0"}</div></div>
-           <div><div style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "0.25rem" }}>SMS Balance</div><div style={{ fontFamily: "monospace", color: "var(--text-main)", fontSize: "1rem" }}>{ocsDefaults.smsBalance || "0"}</div></div>
+           <div><div style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "0.25rem" }}>{t("prof_sms_quota")}</div><div style={{ fontFamily: "monospace", color: "var(--text-main)", fontSize: "1rem" }}>{ocsDefaults.smsTotal || "0"}</div></div>
+           <div><div style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "0.25rem" }}>{t("prof_sms_balance")}</div><div style={{ fontFamily: "monospace", color: "var(--text-main)", fontSize: "1rem" }}>{ocsDefaults.smsBalance || "0"}</div></div>
            <div style={{ gridColumn: "1 / -1" }}>
-             <div style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "0.75rem" }}>Tariff Plan Rules</div>
+             <div style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "0.75rem" }}>{t("prof_tariff_rules")}</div>
              <div style={{ display: "grid", gap: "0.5rem" }}>
                {ratingList.length > 0 ? ratingList.map((rule: any) => (
                  <div key={rule.rule_id || `${rule.apn}-${rule.rating_group_id}`} style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr 1fr 1fr", gap: "1rem", padding: "0.75rem 1rem", border: "1px solid var(--surface-border)", borderRadius: "6px", fontFamily: "monospace", fontSize: "0.9rem" }}>
                    <span>{rule.apn}</span>
                    <span>RG {rule.rating_group_id}</span>
                    <span>SI {rule.service_identifier}</span>
-                   <span>{rule.charging_type}</span>
-                   <span>{rule.unit}</span>
+                   <span>{ratingTypeLabel(t, rule.charging_type)}</span>
+                   <span>{ratingUnitLabel(t, rule.unit)}</span>
                  </div>
-               )) : <span style={{ color: "var(--text-muted)" }}>No tariff rules</span>}
+               )) : <span style={{ color: "var(--text-muted)" }}>{t("prof_no_tariff_rules")}</span>}
              </div>
            </div>
         </div>
