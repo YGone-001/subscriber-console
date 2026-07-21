@@ -22,6 +22,8 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
 
   const [newlyAddedSliceIndex, setNewlyAddedSliceIndex] = useState<number | null>(null);
   const [inputImsi, setInputImsi] = useState(imsi || "");
+  const [inputImsiExists, setInputImsiExists] = useState(false);
+  const [isCheckingInputImsi, setIsCheckingInputImsi] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [expandedSlices, setExpandedSlices] = useState<number[]>([0]);
   const [isAccessRestrictionsExpanded, setIsAccessRestrictionsExpanded] = useState(false);
@@ -70,8 +72,40 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
   const handleInputImsiChange = useCallback((value: string) => {
     const nextImsi = value.replace(/\D/g, "");
     setInputImsi(nextImsi);
+    setInputImsiExists(false);
     updatePlmnByImsi(nextImsi);
   }, [updatePlmnByImsi]);
+
+  useEffect(() => {
+    if (imsi) return;
+    if (!/^\d{15}$/.test(inputImsi)) {
+      setInputImsiExists(false);
+      setIsCheckingInputImsi(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    setIsCheckingInputImsi(true);
+
+    const timer = window.setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/subscribers/${inputImsi}?t=${new Date().getTime()}`, {
+          signal: controller.signal,
+        });
+        if (controller.signal.aborted) return;
+        setInputImsiExists(res.ok);
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+      } finally {
+        if (!controller.signal.aborted) setIsCheckingInputImsi(false);
+      }
+    }, 250);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [imsi, inputImsi]);
 
   useEffect(() => {
     const fetchProfileList = async () => {
@@ -126,9 +160,6 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
           }));
         }
         if (p.ambr) setUeAmbr(p.ambr);
-        if (Array.isArray(p.msisdnList) && p.msisdnList[0]?.msisdn !== undefined) {
-          setMsisdn(String(p.msisdnList[0].msisdn));
-        }
         if (Array.isArray(p.sliceList)) setSlices(JSON.parse(JSON.stringify(p.sliceList)));
         if (p.ocsDefaults) {
           const hasImsi = !!(imsi || inputImsi);
@@ -239,6 +270,7 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
       const targetImsi = imsi || inputImsi;
       if (!targetImsi) throw new Error(t("sub_err_imsi_req"));
       if (!/^\d{15}$/.test(targetImsi)) throw new Error(t("sub_err_imsi_15"));
+      if (!imsi && inputImsiExists) throw new Error(t("sub_err_imsi_exists"));
       if (!/^\d+$/.test(msisdn)) throw new Error(t("sub_err_msisdn"));
 
       const sanitizedSlices = (Array.isArray(slices) ? slices : []).map((slice) => ({
@@ -257,11 +289,19 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
       }));
 
       if (!imsi) {
-        await fetch("/api/subscribers", {
+        const createRes = await fetch("/api/subscribers", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ imsi: targetImsi }),
         });
+        const createData = await createRes.json().catch(() => ({}));
+        if (!createRes.ok) {
+          if (createRes.status === 409 || createData?.error === "Subscriber already exists") {
+            setInputImsiExists(true);
+            throw new Error(t("sub_err_imsi_exists"));
+          }
+          throw new Error(createData?.error || t("sub_err_save"));
+        }
       }
 
       const finalSub4G = {
@@ -345,6 +385,7 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
   return {
     state: {
       isEditing, isLoading, isSaving, error, newlyAddedSliceIndex, inputImsi, toastMessage,
+      inputImsiExists, isCheckingInputImsi,
       expandedSlices, isAccessRestrictionsExpanded, auth4GData, usimType, msisdn, ueAmbr, slices,
       accessRestriction, profileList, ratingList, ocsPlanId, ocsPlanStatus, ocsRules, ocsPlmn,
       ocsTrafficTotalStr, ocsTrafficBalanceStr, ocsVoiceTotalStr, ocsVoiceBalanceStr,

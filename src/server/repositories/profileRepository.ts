@@ -70,7 +70,6 @@ export function defaultProfile(name: string, user: string): ProfileDocument {
       downlink: { unit: 2, value: 10 },
       uplink: { unit: 2, value: 10 },
     },
-    msisdnList: [{ msisdn: '8529000006' }],
     sliceList: [
       {
         default_indicator: true,
@@ -123,11 +122,19 @@ export function defaultProfile(name: string, user: string): ProfileDocument {
   };
 }
 
+function stripSubscriberIdentityFields<T extends Record<string, unknown>>(profile: T): T {
+  const rest = { ...profile };
+  delete rest.msisdnList;
+  delete rest.msisdn;
+  delete rest.imsi;
+  return rest as T;
+}
+
 function stripMongoId<T extends Record<string, unknown>>(doc: T | null): T | null {
   if (!doc) return null;
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { _id, ...rest } = doc;
-  return rest as T;
+  return stripSubscriberIdentityFields(rest) as T;
 }
 
 export async function listProfiles() {
@@ -180,9 +187,10 @@ export async function updateProfile(name: string, body: Record<string, unknown>,
     updatedAt: nowIso(),
     updatedBy: user,
   };
+  const sanitized = stripSubscriberIdentityFields(updated) as ProfileDocument;
 
-  await collection.replaceOne({ name }, updated, { upsert: true });
-  return { existing, updated };
+  await collection.replaceOne({ name }, sanitized, { upsert: true });
+  return { existing, updated: sanitized };
 }
 
 export async function deleteProfile(name: string, user: string) {
@@ -201,15 +209,16 @@ export function buildProfileVersion(
   savedBy: string,
   action: ProfileVersionAction
 ): ProfileVersionRecord {
+  const sanitizedProfile = stripSubscriberIdentityFields(profile) as ProfileDocument;
   return {
     versionId: crypto.randomUUID(),
     profileName,
     savedAt: nowIso(),
     savedBy,
     action,
-    title: profile?.title || profileName,
-    sliceCount: Array.isArray(profile?.sliceList) ? profile.sliceList.length : 0,
-    profile,
+    title: sanitizedProfile?.title || profileName,
+    sliceCount: Array.isArray(sanitizedProfile?.sliceList) ? sanitizedProfile.sliceList.length : 0,
+    profile: sanitizedProfile,
   };
 }
 
@@ -271,7 +280,7 @@ export async function restoreProfileVersion(name: string, versionId: string, use
     await saveProfileVersion(name, current, user, 'RESTORE');
   }
 
-  const restored: ProfileDocument = {
+  const restored: ProfileDocument = stripSubscriberIdentityFields({
     ...version.profile,
     name,
     title: version.profile?.title || name,
@@ -281,7 +290,7 @@ export async function restoreProfileVersion(name: string, versionId: string, use
     updatedBy: user,
     restoredFromVersionId: version.versionId,
     restoredFromSavedAt: version.savedAt,
-  };
+  }) as ProfileDocument;
 
   await collection.replaceOne({ name }, restored, { upsert: true });
   return { version, current, restored };

@@ -84,6 +84,9 @@ export async function PUT(request: Request, { params }: RouteContext) {
     const validation = validateSubscriberUpdatePayload(body);
     if (!validation.ok) return NextResponse.json({ error: validation.error }, { status: 400 });
     const oldState = await findSubscriberLegacyState(imsi);
+    if (!oldState) {
+      return NextResponse.json({ error: 'Subscriber not found' }, { status: 404 });
+    }
     const updated = await updateSubscriberFromLegacy(imsi, {
       sub4G: body.sub4G,
       auth4G: body.auth4G,

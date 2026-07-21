@@ -289,7 +289,6 @@ function batchDocForImsi(
     : { k: '00000000000000000000000000000000', opc: '00000000000000000000000000000000', sqn: 1, amf: '8000' };
   const sub4G = {
     ambr: profileData?.ambr,
-    msisdnList: profileData?.msisdnList,
     sliceList: profileData?.sliceList,
     access_restriction_data: 32,
     network_access_mode: 0,

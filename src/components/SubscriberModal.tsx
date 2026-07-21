@@ -19,15 +19,23 @@ interface SubscriberModalProps {
 export default function SubscriberModal({ imsi, onClose, onRefresh }: SubscriberModalProps) {
   const { t } = useI18n();
   const [isTrafficModalOpen, setIsTrafficModalOpen] = useState(false);
+  const [isImsiCopied, setIsImsiCopied] = useState(false);
   const { state, actions } = useSubscriberForm(imsi, t, onClose, onRefresh);
   const {
     isEditing, isLoading, isSaving, error, inputImsi, toastMessage,
-    slices, ocsPlanId, ocsTrafficTotalStr, ocsTrafficBalanceStr
+    slices, ocsPlanId, ocsTrafficTotalStr, ocsTrafficBalanceStr,
+    inputImsiExists, isCheckingInputImsi
   } = state;
   const { handleDelete, handleSave, setIsEditing, scrollTo, clearError, clearToastMessage } = actions;
   const trafficTotal = parseBytes(ocsTrafficTotalStr);
   const trafficBalance = parseBytes(ocsTrafficBalanceStr);
   const trafficUsed = Math.max(0, trafficTotal - trafficBalance);
+  const handleCopyImsi = () => {
+    if (!imsi) return;
+    navigator.clipboard.writeText(imsi);
+    setIsImsiCopied(true);
+    setTimeout(() => setIsImsiCopied(false), 2000);
+  };
 
   const renderViewMode = () => {
     return <SubscriberViewMode
@@ -84,8 +92,8 @@ export default function SubscriberModal({ imsi, onClose, onRefresh }: Subscriber
               {imsi ? (
                 <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
                   <h2 style={{ margin: 0, fontSize: "1.5rem", fontWeight: 600, color: "var(--text-main)", fontFamily: "monospace" }}>{imsi}</h2>
-                  <button className="copy-btn" onClick={() => navigator.clipboard.writeText(imsi)} title="Copy IMSI" style={{ padding: "6px" }}>
-                    <Copy size={20} />
+                  <button className="copy-btn" onClick={handleCopyImsi} title="Copy IMSI" style={{ padding: "6px" }}>
+                    {isImsiCopied ? <Check size={20} color="var(--success)" /> : <Copy size={20} />}
                   </button>
                 </div>
               ) : (
@@ -192,7 +200,7 @@ export default function SubscriberModal({ imsi, onClose, onRefresh }: Subscriber
           <div className="workflow-footer-actions">
             <button className="btn btn-outline" onClick={onClose}>{t("cancel")}</button>
             {isEditing ? (
-              <button className="btn btn-primary" onClick={handleSave} disabled={isSaving || (!imsi && !inputImsi)}>
+              <button className="btn btn-primary" onClick={handleSave} disabled={isSaving || (!imsi && (!inputImsi || inputImsiExists || isCheckingInputImsi))}>
                 <Save size={16}/> {isSaving ? t("sub_btn_saving") : (imsi ? t("sub_btn_save") : t("sub_btn_create"))}
               </button>
             ) : (

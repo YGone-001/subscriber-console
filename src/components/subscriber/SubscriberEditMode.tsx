@@ -4,6 +4,7 @@ import RatingRuleLinkPanel from "./RatingRuleLinkPanel";
 import { BYTE_INPUT_UNITS, TIME_INPUT_UNITS, composeByteInput, composeSecondsInput, splitByteInput, splitSecondsInput } from "@/lib/unitParser";
 import { AMBR_UNITS } from "./utils";
 import type { Ambr, Auth4GData, Rating, Slice } from "@/types/subscriber";
+import { useI18n } from "../I18nProvider";
 
 interface SubscriberEditModeProps {
   t: any;
@@ -31,16 +32,19 @@ interface SubscriberEditModeProps {
     slices: Slice[];
     newlyAddedSliceIndex: number | null;
     expandedSlices: number[];
+    inputImsiExists: boolean;
+    isCheckingInputImsi: boolean;
   };
   actions: any;
 }
 
 export default function SubscriberEditMode({ t, imsi, state, actions }: SubscriberEditModeProps) {
+  const { lang } = useI18n();
   const {
     inputImsi, msisdn, profileList,
     auth4GData, usimType, ueAmbr, isAccessRestrictionsExpanded, accessRestriction,
     ocsPlmn, ocsTrafficTotalStr, ocsTrafficBalanceStr, ocsVoiceTotalStr, ocsVoiceBalanceStr, ocsSmsTotalStr, ocsSmsBalanceStr, ocsPlanId, ocsPlanStatus, ocsRules, ratingList,
-    slices, newlyAddedSliceIndex, expandedSlices
+    slices, newlyAddedSliceIndex, expandedSlices, inputImsiExists, isCheckingInputImsi
   } = state;
 
   const {
@@ -53,6 +57,18 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
   const balanceTrafficInput = splitByteInput(ocsTrafficBalanceStr, totalTrafficInput.unit);
   const totalVoiceInput = splitSecondsInput(ocsVoiceTotalStr);
   const balanceVoiceInput = splitSecondsInput(ocsVoiceBalanceStr, totalVoiceInput.unit);
+  const duplicateImsiWarning = lang === "zh"
+    ? "\u8be5 IMSI \u5df2\u5b58\u5728\u3002\u5df2\u963b\u6b62\u521b\u5efa\uff0c\u907f\u514d\u8986\u76d6\u5df2\u6709\u7b7e\u7ea6\u7528\u6237\u3002"
+    : t("sub_imsi_exists_warning");
+  const checkingImsiText = lang === "zh"
+    ? "\u6b63\u5728\u68c0\u67e5\u8be5 IMSI \u662f\u5426\u5df2\u5b58\u5728..."
+    : t("sub_imsi_checking");
+  const imsiWarningStyle = {
+    color: "var(--danger)",
+    fontSize: "0.85rem",
+    marginTop: "0.4rem",
+    fontWeight: 650,
+  };
 
   return (
     <div style={{ paddingBottom: '2rem', display: "flex", flexDirection: "column" }}>
@@ -71,8 +87,8 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
                 <>
                   <input
                     type="text"
-                    className={`form-input hover-glass ${inputImsi && !/^\d{15}$/.test(inputImsi) ? 'border-danger error-shake' : ''}`}
-                    style={{ fontFamily: "monospace", fontWeight: 650, borderColor: inputImsi && !/^\d{15}$/.test(inputImsi) ? "var(--danger)" : undefined }}
+                    className={`form-input hover-glass ${(inputImsi && !/^\d{15}$/.test(inputImsi)) || inputImsiExists ? 'border-danger error-shake' : ''}`}
+                    style={{ fontFamily: "monospace", fontWeight: 650, borderColor: (inputImsi && !/^\d{15}$/.test(inputImsi)) || inputImsiExists ? "var(--danger)" : undefined }}
                     placeholder="460020000000001"
                     value={inputImsi}
                     onChange={e => setInputImsi(e.target.value.replace(/\D/g, ''))}
@@ -80,8 +96,18 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
                     autoFocus
                   />
                   {inputImsi && !/^\d{15}$/.test(inputImsi) && (
-                    <div style={{ color: "var(--danger)", fontSize: "0.85rem", marginTop: "0.4rem", fontWeight: 500 }}>
-                      IMSI must be exactly 15 digits.
+                    <div style={imsiWarningStyle}>
+                      {t("sub_err_imsi_15")}
+                    </div>
+                  )}
+                  {inputImsiExists && (
+                    <div style={imsiWarningStyle}>
+                      {duplicateImsiWarning}
+                    </div>
+                  )}
+                  {!inputImsiExists && isCheckingInputImsi && (
+                    <div style={{ color: "var(--text-muted)", fontSize: "0.82rem", marginTop: "0.4rem", fontWeight: 500 }}>
+                      {checkingImsiText}
                     </div>
                   )}
                 </>

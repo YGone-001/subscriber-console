@@ -111,7 +111,6 @@ export function normalizeSliceList(sliceList: any): any[] {
 }
 
 export function buildDefaultSub4G(msisdn = "", profileData?: any) {
-  const resolvedMsisdn = msisdn || profileData?.msisdnList?.[0]?.msisdn || "";
   return {
     access_restriction_data: 0,
     allowedVisitedPlmns: "all",
@@ -127,7 +126,7 @@ export function buildDefaultSub4G(msisdn = "", profileData?: any) {
           },
         }
       : DEFAULT_AMBR,
-    msisdnList: resolvedMsisdn ? [{ msisdn: String(resolvedMsisdn) }] : [],
+    msisdnList: msisdn ? [{ msisdn: String(msisdn) }] : [],
     network_access_mode: 0,
     sliceList: normalizeSliceList(profileData?.sliceList),
   };

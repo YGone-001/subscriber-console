@@ -24,7 +24,7 @@ test("normalizeSliceList creates Open5GS-ready default sessions without an SD ov
   );
 });
 
-test("buildDefaultSub4G applies profile AMBR, MSISDN fallback, and slice defaults", () => {
+test("buildDefaultSub4G applies profile AMBR and slice defaults without copying profile MSISDN", () => {
   const sub4g = buildDefaultSub4G("", {
     msisdnList: [{ msisdn: "13900000000" }],
     ambr: {
@@ -33,10 +33,18 @@ test("buildDefaultSub4G applies profile AMBR, MSISDN fallback, and slice default
     },
   });
 
-  assert.equal(sub4g.msisdnList[0].msisdn, "13900000000");
+  assert.deepEqual(sub4g.msisdnList, []);
   assert.deepEqual(sub4g.ambr.downlink, { unit: 3, value: 1 });
   assert.deepEqual(sub4g.ambr.uplink, { unit: 3, value: 2 });
   assert.equal(sub4g.sliceList[0].session_list.length, 3);
+});
+
+test("buildDefaultSub4G preserves explicitly supplied subscriber MSISDN", () => {
+  const sub4g = buildDefaultSub4G("13900000000", {
+    msisdnList: [{ msisdn: "8529000006" }],
+  });
+
+  assert.equal(sub4g.msisdnList[0].msisdn, "13900000000");
 });
 
 test("normalizeSub4G preserves existing access settings and normalizes nested sessions", () => {
