@@ -3,12 +3,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Image from "next/image";
+import useSWR from "swr";
 import {
   Activity,
+  AlertTriangle,
+  Bell,
   ChevronRight,
   Command,
   CreditCard,
   Gauge,
+  GitBranch,
   HelpCircle,
   History,
   LayoutDashboard,
@@ -26,6 +30,7 @@ import ThemeSwitcher from "@/components/ThemeSwitcher";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { useI18n } from "@/components/I18nProvider";
 import { useAuth } from "@/hooks/useAuth";
+import { fetcher } from "@/lib/fetcher";
 
 type NavItem = {
   key: string;
@@ -34,14 +39,39 @@ type NavItem = {
   icon: React.ReactNode;
 };
 
+type ApprovalStatus = "pending" | "approved" | "rejected" | "executed" | "failed";
+
+type ApprovalDigest = {
+  id: string;
+  action: string;
+  status: ApprovalStatus;
+  requester: string;
+  targetId: string;
+  summary: string;
+  createdAt: string;
+  updatedAt?: string;
+  error?: string;
+};
+
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { user, isRoot } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [approvalOpen, setApprovalOpen] = useState(false);
   const [cmdPaletteOpen, setCmdPaletteOpen] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
   const { t } = useI18n();
+  const approvalUrl = user ? `/api/approvals?limit=5&status=${isRoot ? "pending" : "all"}` : null;
+  const { data: approvalDigestData } = useSWR<{ approvals: ApprovalDigest[]; pending: number }>(approvalUrl, fetcher, {
+    refreshInterval: 30000,
+    revalidateOnFocus: true,
+  });
+  const approvalDigests = approvalDigestData?.approvals || [];
+  const approvalPendingCount = approvalDigestData?.pending || 0;
+  const approvalAttentionCount = isRoot
+    ? approvalPendingCount
+    : approvalDigests.filter((approval) => approval.status === "pending" || approval.status === "failed").length;
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -51,6 +81,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       }
       if (e.key === "Escape") {
         setDropdownOpen(false);
+        setApprovalOpen(false);
         setCmdPaletteOpen(false);
       }
     };
@@ -87,6 +118,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const handleProfileSettings = () => {
     setDropdownOpen(false);
+    setApprovalOpen(false);
     if (isRoot) {
       router.push("/users");
     }
@@ -94,7 +126,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const handleHelp = () => {
     setDropdownOpen(false);
+    setApprovalOpen(false);
     router.push("/system-health");
+  };
+
+  const handleApprovalCenter = () => {
+    setApprovalOpen(false);
+    if (isRoot) {
+      router.push("/users");
+    }
+  };
+
+  const renderApprovalStatus = (status: ApprovalStatus) => {
+    const className = status === "pending" ? "pending" : status === "failed" || status === "rejected" ? "danger" : "success";
+    return <span className={`approval-status ${className}`}>{t(`approval_status_${status}`)}</span>;
   };
 
   return (
@@ -125,6 +170,57 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         <div className="header-right">
           <NocSentinel />
+          <div className="approval-menu">
+            <button className="approval-button" onClick={() => setApprovalOpen((open) => !open)} aria-expanded={approvalOpen} title={t("approval_digest_title")}>
+              <Bell size={17} />
+              <span>{isRoot ? t("approval_digest_root") : t("approval_digest_mine")}</span>
+              {approvalAttentionCount > 0 ? <strong>{approvalAttentionCount > 99 ? "99+" : approvalAttentionCount}</strong> : null}
+            </button>
+
+            {approvalOpen && (
+              <>
+                <div className="dropdown-backdrop" onClick={() => setApprovalOpen(false)} />
+                <div className="approval-dropdown">
+                  <div className="approval-dropdown-head">
+                    <div>
+                      <strong>{t("approval_digest_title")}</strong>
+                      <span>{isRoot ? t("approval_digest_root_desc", { count: approvalPendingCount }) : t("approval_digest_mine_desc", { count: approvalPendingCount })}</span>
+                    </div>
+                    <GitBranch size={18} />
+                  </div>
+
+                  <div className="approval-list">
+                    {approvalDigests.length === 0 ? (
+                      <div className="approval-empty">
+                        <AlertTriangle size={18} />
+                        {t("approval_digest_empty")}
+                      </div>
+                    ) : approvalDigests.map((approval) => (
+                      <div key={approval.id} className="approval-row">
+                        <div className="approval-row-top">
+                          <strong>{t(`approval_action_${approval.action}`)}</strong>
+                          {renderApprovalStatus(approval.status)}
+                        </div>
+                        <span className="approval-row-summary">{approval.summary}</span>
+                        {approval.error ? <span className="approval-row-error">{approval.error}</span> : null}
+                        <div className="approval-row-meta">
+                          <span>{approval.targetId}</span>
+                          <time>{new Date(approval.updatedAt || approval.createdAt).toLocaleString()}</time>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {isRoot ? (
+                    <button className="approval-footer" onClick={handleApprovalCenter}>
+                      {t("approval_digest_open_center")}
+                      <ChevronRight size={15} />
+                    </button>
+                  ) : null}
+                </div>
+              </>
+            )}
+          </div>
           <LanguageSwitcher />
           <ThemeSwitcher />
           <div className="header-divider" />
@@ -343,6 +439,206 @@ const layoutStyles = `
 
   .user-menu {
     position: relative;
+  }
+
+  .approval-menu {
+    position: relative;
+  }
+
+  .approval-button {
+    min-height: 38px;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    border: 1px solid var(--surface-border);
+    border-radius: 999px;
+    background: var(--surface-hover);
+    color: var(--text-secondary);
+    padding: 0.35rem 0.45rem 0.35rem 0.7rem;
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-weight: 800;
+    transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .approval-button:hover {
+    color: var(--text-main);
+    border-color: color-mix(in srgb, var(--primary) 34%, var(--surface-border));
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 10%, transparent);
+  }
+
+  .approval-button strong {
+    min-width: 22px;
+    height: 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 0.35rem;
+    border-radius: 999px;
+    background: var(--danger);
+    color: white;
+    font-size: 0.68rem;
+    line-height: 1;
+  }
+
+  .approval-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 0.75rem;
+    width: min(390px, calc(100vw - 2rem));
+    background: var(--surface);
+    color: var(--text-main);
+    border-radius: 8px;
+    border: 1px solid var(--surface-border);
+    box-shadow: 0 18px 44px -24px rgba(0,0,0,0.45);
+    overflow: hidden;
+    z-index: 50;
+    animation: dropdownFade 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .approval-dropdown-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.95rem 1rem;
+    border-bottom: 1px solid var(--surface-border);
+    background: var(--header-bg);
+    color: var(--primary);
+  }
+
+  .approval-dropdown-head div {
+    min-width: 0;
+    display: grid;
+    gap: 0.25rem;
+  }
+
+  .approval-dropdown-head strong {
+    color: var(--text-main);
+    font-size: 0.9rem;
+  }
+
+  .approval-dropdown-head span {
+    color: var(--text-muted);
+    font-size: 0.76rem;
+    line-height: 1.35;
+  }
+
+  .approval-list {
+    max-height: 360px;
+    overflow-y: auto;
+    padding: 0.35rem;
+  }
+
+  .approval-row {
+    display: grid;
+    gap: 0.4rem;
+    padding: 0.75rem;
+    border-radius: 8px;
+  }
+
+  .approval-row + .approval-row {
+    border-top: 1px solid var(--surface-border);
+    border-radius: 0;
+  }
+
+  .approval-row-top,
+  .approval-row-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+    min-width: 0;
+  }
+
+  .approval-row-top strong {
+    color: var(--text-main);
+    font-size: 0.82rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .approval-row-summary {
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+  }
+
+  .approval-row-error {
+    color: var(--danger);
+    font-size: 0.75rem;
+    line-height: 1.35;
+  }
+
+  .approval-row-meta {
+    color: var(--text-muted);
+    font-size: 0.7rem;
+  }
+
+  .approval-row-meta span {
+    font-family: monospace;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .approval-status {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 58px;
+    padding: 0.18rem 0.45rem;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 800;
+  }
+
+  .approval-status.pending {
+    background: rgba(245, 158, 11, 0.12);
+    color: #d97706;
+  }
+
+  .approval-status.success {
+    background: rgba(16, 185, 129, 0.1);
+    color: var(--success);
+  }
+
+  .approval-status.danger {
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--danger);
+  }
+
+  .approval-empty {
+    min-height: 118px;
+    display: grid;
+    place-items: center;
+    gap: 0.45rem;
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    text-align: center;
+  }
+
+  .approval-footer {
+    width: 100%;
+    min-height: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    border: none;
+    border-top: 1px solid var(--surface-border);
+    background: transparent;
+    color: var(--primary);
+    font-weight: 800;
+    cursor: pointer;
+  }
+
+  .approval-footer:hover {
+    background: var(--surface-hover);
   }
 
   .avatar-button {

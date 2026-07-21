@@ -631,6 +631,13 @@ export const en: Record<string, string> = {
     search_placeholder: "Search...",
     cmd_palette_title: "Command Palette (Ctrl+K)",
     language_switch_title: "Switch Language",
+    approval_digest_title: "Approval Tasks",
+    approval_digest_root: "Approvals",
+    approval_digest_mine: "My Requests",
+    approval_digest_root_desc: "{count} pending request(s) need root review.",
+    approval_digest_mine_desc: "{count} of your request(s) are still pending.",
+    approval_digest_empty: "No approval updates",
+    approval_digest_open_center: "Open approval center",
 
     // -- Dashboard --
     dashboard_title: "Analytics Dashboard",

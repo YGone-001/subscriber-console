@@ -631,6 +631,13 @@ export const zh: Record<string, string> = {
     search_placeholder: "\u641c\u7d22...",
     cmd_palette_title: "\u6307\u63a7\u9762\u677f (Ctrl+K)",
     language_switch_title: "\u5207\u6362\u8bed\u8a00",
+    approval_digest_title: "\u5ba1\u6279\u5f85\u529e",
+    approval_digest_root: "\u5ba1\u6279",
+    approval_digest_mine: "\u6211\u7684\u7533\u8bf7",
+    approval_digest_root_desc: "{count} \u4e2a\u5f85\u5ba1\u6279\u7533\u8bf7\u9700\u8981 Root \u590d\u6838\u3002",
+    approval_digest_mine_desc: "\u4f60\u63d0\u4ea4\u7684\u7533\u8bf7\u4e2d\u8fd8\u6709 {count} \u4e2a\u5f85\u5ba1\u6279\u3002",
+    approval_digest_empty: "\u6682\u65e0\u5ba1\u6279\u66f4\u65b0",
+    approval_digest_open_center: "\u6253\u5f00\u5ba1\u6279\u4e2d\u5fc3",
 
     // -- Dashboard --
     dashboard_title: "\u5206\u6790\u4eea\u8868\u76d8",

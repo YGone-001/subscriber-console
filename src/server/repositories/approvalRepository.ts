@@ -88,10 +88,13 @@ export async function listApprovals(options: ListApprovalOptions = {}) {
   if (options.status && options.status !== 'all') filter.status = options.status;
   if (options.requester) filter.requester = options.requester;
 
+  const pendingFilter: Filter<ApprovalDocument> = { status: 'pending' };
+  if (options.requester) pendingFilter.requester = options.requester;
+
   const [approvals, total, pending] = await Promise.all([
     docs.find(filter).sort({ createdAt: -1 }).limit(limit).toArray(),
     docs.countDocuments(filter),
-    docs.countDocuments({ status: 'pending' }),
+    docs.countDocuments(pendingFilter),
   ]);
 
   return {
