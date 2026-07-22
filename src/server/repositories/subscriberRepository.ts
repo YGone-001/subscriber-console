@@ -162,8 +162,34 @@ function normalizedSms(balanceDoc?: { sms_total?: unknown; sms_used?: unknown; s
   };
 }
 
-function lastActive(balanceDoc?: { updated_at?: unknown } | null, subscriberDoc?: { updated_at?: unknown; created_at?: unknown } | null): string {
-  const raw = balanceDoc?.updated_at || subscriberDoc?.updated_at || subscriberDoc?.created_at;
+type TimestampDoc = {
+  _id?: ObjectId;
+  updated_at?: unknown;
+  created_at?: unknown;
+  webui_meta?: {
+    updated_at?: unknown;
+    created_at?: unknown;
+  };
+};
+
+function objectIdTimestamp(doc?: TimestampDoc | null): Date | undefined {
+  return doc?._id instanceof ObjectId ? doc._id.getTimestamp() : undefined;
+}
+
+function lastActive(
+  open5gsDoc?: TimestampDoc | null,
+  subscriberDoc?: TimestampDoc | null,
+  balanceDoc?: { updated_at?: unknown } | null
+): string {
+  const raw =
+    subscriberDoc?.updated_at ||
+    open5gsDoc?.webui_meta?.updated_at ||
+    open5gsDoc?.updated_at ||
+    subscriberDoc?.created_at ||
+    open5gsDoc?.webui_meta?.created_at ||
+    open5gsDoc?.created_at ||
+    objectIdTimestamp(open5gsDoc) ||
+    balanceDoc?.updated_at;
   const date = raw instanceof Date || typeof raw === 'string' || typeof raw === 'number'
     ? new Date(raw)
     : new Date();
@@ -327,7 +353,7 @@ function toSubscriberRow(
     policy: ocsSubscriber?.plan_id || '',
     traffic,
     sms,
-    lastActive: lastActive(balance, ocsSubscriber),
+    lastActive: lastActive(doc, ocsSubscriber, balance),
   };
 }
 
