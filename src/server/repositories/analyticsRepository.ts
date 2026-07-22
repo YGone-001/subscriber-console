@@ -1,7 +1,7 @@
 import { Document, Long } from 'mongodb';
 import { getOpen5gsCollection, mongoCollections } from '@/lib/mongo';
 import { firstActiveRatingPolicy } from '@/server/repositories/ocsBillingRepository';
-import type { Open5gsSubscriberDocument } from '@/types/open5gs';
+import type { Open5gsSubscriberDocument } from '@/types/xcloud';
 
 type SubscriberDoc = Open5gsSubscriberDocument & Document;
 

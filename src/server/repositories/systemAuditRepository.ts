@@ -1,9 +1,9 @@
 import { Document, Long } from 'mongodb';
 import { getOpen5gsCollection, mongoCollections } from '@/lib/mongo';
-import { buildDefaultOpen5gsSubscriber } from '@/lib/open5gsSubscriber';
+import { buildDefaultOpen5gsSubscriber } from '@/lib/xcloudSubscriber';
 import { provisionOcsSubscriber } from '@/server/repositories/ocsBillingRepository';
 import { getProfile } from '@/server/repositories/profileRepository';
-import type { Open5gsSubscriberDocument } from '@/types/open5gs';
+import type { Open5gsSubscriberDocument } from '@/types/xcloud';
 
 type SubscriberDoc = Open5gsSubscriberDocument & Document;
 

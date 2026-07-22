@@ -10,7 +10,7 @@ import type {
   Open5gsSession,
   Open5gsSlice,
   Open5gsSubscriberDocument,
-} from '@/types/open5gs';
+} from '@/types/xcloud';
 
 type UnknownRecord = Record<string, unknown>;
 

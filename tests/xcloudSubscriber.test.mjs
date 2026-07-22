@@ -2,8 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const source = readFileSync(new URL("../src/lib/open5gsSubscriber.ts", import.meta.url), "utf8");
-const types = readFileSync(new URL("../src/types/open5gs.ts", import.meta.url), "utf8");
+const source = readFileSync(new URL("../src/lib/xcloudSubscriber.ts", import.meta.url), "utf8");
+const types = readFileSync(new URL("../src/types/xcloud.ts", import.meta.url), "utf8");
 
 test("Open5GS subscriber generator emits current collection fields", () => {
   assert.match(source, /__v:\s*0/);

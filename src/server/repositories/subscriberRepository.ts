@@ -4,7 +4,7 @@ import {
   buildDefaultOpen5gsSubscriber,
   buildOpen5gsSubscriberFromLegacy,
   open5gsToLegacyState,
-} from '@/lib/open5gsSubscriber';
+} from '@/lib/xcloudSubscriber';
 import {
   cloneOcsProvisioningFromReference,
   deleteOcsProvisioning,
@@ -13,7 +13,7 @@ import {
   readOcsProvisioning,
   readOcsProvisioningForImsis,
 } from '@/server/repositories/ocsBillingRepository';
-import type { LegacySubscriberState, Open5gsSubscriberDocument } from '@/types/open5gs';
+import type { LegacySubscriberState, Open5gsSubscriberDocument } from '@/types/xcloud';
 
 type SubscriberDoc = Open5gsSubscriberDocument & Document;
 

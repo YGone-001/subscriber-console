@@ -7,7 +7,7 @@ import {
   findSubscriberLegacyState,
   updateSubscriberFromLegacy,
 } from '@/server/repositories/subscriberRepository';
-import { open5gsToLegacyState } from '@/lib/open5gsSubscriber';
+import { open5gsToLegacyState } from '@/lib/xcloudSubscriber';
 import { validateImsi, validateSubscriberUpdatePayload } from '@/lib/subscriberValidation';
 
 export const dynamic = 'force-dynamic';
