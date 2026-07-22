@@ -24,7 +24,7 @@ export default function SubscriberModal({ imsi, onClose, onRefresh }: Subscriber
   const {
     isEditing, isLoading, isSaving, error, inputImsi, toastMessage,
     slices, ocsPlanId, ocsTrafficTotalStr, ocsTrafficBalanceStr,
-    inputImsiExists, isCheckingInputImsi
+    inputImsiExists, isCheckingInputImsi, inputMsisdnExists, isCheckingInputMsisdn
   } = state;
   const { handleDelete, handleSave, setIsEditing, scrollTo, clearError, clearToastMessage } = actions;
   const trafficTotal = parseBytes(ocsTrafficTotalStr);
@@ -200,7 +200,7 @@ export default function SubscriberModal({ imsi, onClose, onRefresh }: Subscriber
           <div className="workflow-footer-actions">
             <button className="btn btn-outline" onClick={onClose}>{t("cancel")}</button>
             {isEditing ? (
-              <button className="btn btn-primary" onClick={handleSave} disabled={isSaving || (!imsi && (!inputImsi || inputImsiExists || isCheckingInputImsi))}>
+              <button className="btn btn-primary" onClick={handleSave} disabled={isSaving || inputMsisdnExists || isCheckingInputMsisdn || (!imsi && (!inputImsi || inputImsiExists || isCheckingInputImsi))}>
                 <Save size={16}/> {isSaving ? t("sub_btn_saving") : (imsi ? t("sub_btn_save") : t("sub_btn_create"))}
               </button>
             ) : (

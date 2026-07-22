@@ -216,8 +216,8 @@ export function validateSubscriberUpdatePayload(body: unknown): ValidationResult
       if (!Array.isArray(sub4G.msisdnList)) return { ok: false, error: 'sub4G.msisdnList must be an array' };
       for (const [index, rawMsisdn] of sub4G.msisdnList.entries()) {
         const msisdn = asRecord(rawMsisdn).msisdn;
-        if (!isBlank(msisdn) && !/^\d{1,20}$/.test(String(msisdn))) {
-          return { ok: false, error: `sub4G.msisdnList[${index}].msisdn must contain 1 to 20 digits` };
+        if (!isBlank(msisdn) && !/^\d+$/.test(String(msisdn))) {
+          return { ok: false, error: `sub4G.msisdnList[${index}].msisdn must contain digits only` };
         }
       }
     }

@@ -16,6 +16,10 @@ import {
 import type { LegacySubscriberState, Open5gsSubscriberDocument } from '@/types/xcloud';
 
 type SubscriberDoc = Open5gsSubscriberDocument & Document;
+type OcsSubscriberLookupDoc = Document & {
+  imsi: string;
+  msisdn?: string;
+};
 
 export type SubscriberListResult<T> = {
   subscribers: T[];
@@ -212,6 +216,10 @@ async function subscribersCollection() {
   return getOpen5gsCollection<SubscriberDoc>(mongoCollections.subscribers);
 }
 
+async function ocsSubscribersCollection() {
+  return getOpen5gsCollection<OcsSubscriberLookupDoc>(mongoCollections.ocsSubscribers);
+}
+
 async function profilesCollection() {
   return getAppCollection<ProfileDoc>(mongoCollections.profiles);
 }
@@ -270,6 +278,36 @@ async function existingImsiSet(imsis: string[]): Promise<Set<string>> {
     .find({ imsi: { $in: imsis } }, { projection: { imsi: 1 } })
     .toArray();
   return new Set(docs.map((doc) => doc.imsi));
+}
+
+export async function findSubscriberByMsisdn(
+  msisdn: string,
+  excludeImsi?: string
+): Promise<{ imsi: string; source: 'open5gs' | 'ocs' } | null> {
+  const normalizedMsisdn = String(msisdn || '').trim();
+  if (!normalizedMsisdn || !/^\d+$/.test(normalizedMsisdn)) return null;
+
+  const [subscriberCollection, ocsSubscriberCollection] = await Promise.all([
+    subscribersCollection(),
+    ocsSubscribersCollection(),
+  ]);
+  const [subscriberDoc, ocsSubscriberDoc] = await Promise.all([
+    subscriberCollection.findOne({ msisdn: normalizedMsisdn }, { projection: { imsi: 1 } }),
+    ocsSubscriberCollection.findOne({ msisdn: normalizedMsisdn }, { projection: { imsi: 1 } }),
+  ]);
+  const match = subscriberDoc?.imsi
+    ? { imsi: subscriberDoc.imsi, source: 'open5gs' as const }
+    : ocsSubscriberDoc?.imsi
+      ? { imsi: ocsSubscriberDoc.imsi, source: 'ocs' as const }
+      : null;
+
+  if (!match) return null;
+  return excludeImsi && match.imsi === excludeImsi ? null : match;
+}
+
+async function assertMsisdnAvailable(msisdn: string, ownerImsi: string) {
+  const duplicate = await findSubscriberByMsisdn(msisdn, ownerImsi);
+  if (duplicate) throw new Error('MSISDN_EXISTS');
 }
 
 function bulkWriteErrorIndexes(error: unknown): Set<number> {
@@ -474,14 +512,19 @@ export async function findSubscriberLegacyState(imsi: string): Promise<LegacySub
   };
 }
 
-export async function createDefaultSubscriber(imsi: string, planId?: unknown): Promise<Open5gsSubscriberDocument> {
+export async function createDefaultSubscriber(imsi: string, planId?: unknown, msisdn?: unknown): Promise<Open5gsSubscriberDocument> {
   const collection = await subscribersCollection();
   const doc = buildDefaultOpen5gsSubscriber(imsi);
+  const normalizedMsisdn = asString(msisdn).trim();
   await assertTariffPlanAssignable(planId);
+  if (normalizedMsisdn) {
+    await assertMsisdnAvailable(normalizedMsisdn, imsi);
+    doc.msisdn = [normalizedMsisdn];
+  }
 
   try {
     await collection.insertOne(doc as SubscriberDoc);
-    await provisionOcsSubscriber({ imsi, planId });
+    await provisionOcsSubscriber({ imsi, planId, msisdn: normalizedMsisdn });
     return doc;
   } catch (error) {
     if (isDuplicateKey(error)) {
@@ -532,6 +575,11 @@ export async function updateSubscriberFromLegacy(
   const next = buildOpen5gsSubscriberFromLegacy(imsi, payload, existing);
   const ocsTraffic = payload.ocsTraffic as Record<string, unknown> | undefined;
   const requestedPlanId = ocsTraffic?.planId ?? ocsTraffic?.plan_id;
+  const requestedMsisdn = msisdnFromLegacyPayload(payload);
+
+  if (requestedMsisdn) {
+    await assertMsisdnAvailable(requestedMsisdn, imsi);
+  }
 
   if (requestedPlanId !== undefined && requestedPlanId !== null && requestedPlanId !== '') {
     const current = await readOcsProvisioning(imsi);
@@ -549,7 +597,7 @@ export async function updateSubscriberFromLegacy(
   await provisionOcsSubscriber({
     imsi,
     planId: ocsTraffic?.planId ?? ocsTraffic?.plan_id,
-    msisdn: msisdnFromLegacyPayload(payload),
+    msisdn: requestedMsisdn,
     total: ocsTraffic?.traffic_total,
     available: ocsTraffic?.traffic_balance,
     voiceTotal: ocsTraffic?.voice_total,

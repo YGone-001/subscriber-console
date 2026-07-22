@@ -107,6 +107,9 @@ export async function PUT(request: Request, { params }: RouteContext) {
     if (error instanceof Error && error.message === 'OCS_PLAN_DISABLED') {
       return NextResponse.json({ error: 'Tariff plan is disabled' }, { status: 409 });
     }
+    if (error instanceof Error && error.message === 'MSISDN_EXISTS') {
+      return NextResponse.json({ error: 'MSISDN already exists' }, { status: 409 });
+    }
 
     console.error('Error updating subscriber:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });

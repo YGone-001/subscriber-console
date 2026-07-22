@@ -4,6 +4,7 @@ import { logAudit } from '@/lib/audit';
 import { requireAuth, requireCapability } from '@/lib/authz';
 import {
   createDefaultSubscriber,
+  findSubscriberByMsisdn,
   listSubscriberImsis,
   listSubscriberRows,
 } from '@/server/repositories/subscriberRepository';
@@ -25,6 +26,20 @@ export async function GET(request: Request) {
     const page = parseInt(searchParams.get('page') || '1', 10);
     const limit = parseInt(searchParams.get('limit') || '50', 10);
     const query = searchParams.get('q') || '';
+    const msisdn = searchParams.get('msisdn') || '';
+    const excludeImsi = searchParams.get('excludeImsi') || undefined;
+
+    if (msisdn) {
+      if (!/^\d+$/.test(msisdn)) {
+        return NextResponse.json({ error: 'MSISDN must contain digits only' }, { status: 400 });
+      }
+      const existing = await findSubscriberByMsisdn(msisdn, excludeImsi);
+      return NextResponse.json({
+        exists: !!existing,
+        imsi: existing?.imsi || null,
+        source: existing?.source || null,
+      });
+    }
 
     const result = detail
       ? await listSubscriberRows(page, limit, query)
@@ -50,7 +65,12 @@ export async function POST(request: Request) {
     if (!imsiResult.ok) return NextResponse.json({ error: imsiResult.error }, { status: 400 });
     const imsi = imsiResult.value;
 
-    const created = await createDefaultSubscriber(imsi, data?.planId || data?.plan_id);
+    const msisdn = data?.msisdn === undefined || data?.msisdn === null ? '' : String(data.msisdn).trim();
+    if (msisdn && !/^\d+$/.test(msisdn)) {
+      return NextResponse.json({ error: 'MSISDN must contain digits only' }, { status: 400 });
+    }
+
+    const created = await createDefaultSubscriber(imsi, data?.planId || data?.plan_id, msisdn);
     const legacyState = open5gsToLegacyState(created);
 
     logAudit('CREATE', imsi, null, legacyState, request);
@@ -59,6 +79,9 @@ export async function POST(request: Request) {
   } catch (error) {
     if (error instanceof Error && error.message === 'SUBSCRIBER_EXISTS') {
       return NextResponse.json({ error: 'Subscriber already exists' }, { status: 409 });
+    }
+    if (error instanceof Error && error.message === 'MSISDN_EXISTS') {
+      return NextResponse.json({ error: 'MSISDN already exists' }, { status: 409 });
     }
     if (error instanceof Error && error.message === 'INVALID_PLAN_ID') {
       return NextResponse.json({ error: 'Invalid plan_id format' }, { status: 400 });

@@ -35,6 +35,8 @@ interface SubscriberEditModeProps {
     expandedSlices: number[];
     inputImsiExists: boolean;
     isCheckingInputImsi: boolean;
+    inputMsisdnExists: boolean;
+    isCheckingInputMsisdn: boolean;
   };
   actions: any;
 }
@@ -60,7 +62,7 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
     inputImsi, msisdn, profileList,
     auth4GData, usimType, ueAmbr, isAccessRestrictionsExpanded, accessRestriction,
     ocsPlmn, ocsTrafficTotalStr, ocsTrafficBalanceStr, ocsVoiceTotalStr, ocsVoiceBalanceStr, ocsSmsTotalStr, ocsSmsBalanceStr, ocsPlanId, ocsPlanStatus, ocsRules, ratingList, tariffPlanList,
-    slices, newlyAddedSliceIndex, expandedSlices, inputImsiExists, isCheckingInputImsi
+    slices, newlyAddedSliceIndex, expandedSlices, inputImsiExists, isCheckingInputImsi, inputMsisdnExists, isCheckingInputMsisdn
   } = state;
 
   const {
@@ -79,6 +81,8 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
   const checkingImsiText = lang === "zh"
     ? "\u6b63\u5728\u68c0\u67e5\u8be5 IMSI \u662f\u5426\u5df2\u5b58\u5728..."
     : t("sub_imsi_checking");
+  const duplicateMsisdnWarning = t("sub_msisdn_exists_warning");
+  const checkingMsisdnText = t("sub_msisdn_checking");
   const imsiWarningStyle = {
     color: "var(--danger)",
     fontSize: "0.85rem",
@@ -136,11 +140,22 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
             <label className="form-label"><span style={{ color: "var(--danger)", marginRight: "0.25rem" }}>*</span>MSISDN</label>
               <input
                 type="text"
-                className={`form-input ${msisdn && !/^\d+$/.test(msisdn) ? 'border-danger error-shake' : ''}`}
+                className={`form-input ${inputMsisdnExists || (msisdn && !/^\d+$/.test(msisdn)) ? 'border-danger error-shake' : ''}`}
+                style={{ borderColor: inputMsisdnExists || (msisdn && !/^\d+$/.test(msisdn)) ? "var(--danger)" : undefined }}
                 value={msisdn}
                 onChange={(e) => setMsisdn(e.target.value.replace(/\D/g, ""))}
                 placeholder={t("sub_ph_msisdn")}
               />
+              {inputMsisdnExists && (
+                <div style={imsiWarningStyle}>
+                  {duplicateMsisdnWarning}
+                </div>
+              )}
+              {!inputMsisdnExists && isCheckingInputMsisdn && (
+                <div style={{ color: "var(--text-muted)", fontSize: "0.82rem", marginTop: "0.4rem", fontWeight: 500 }}>
+                  {checkingMsisdnText}
+                </div>
+              )}
             </div>
             <div>
               <label className="form-label">{t("profile_template")}</label>

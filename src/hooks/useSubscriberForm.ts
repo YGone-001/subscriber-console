@@ -32,6 +32,8 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
   const [inputImsi, setInputImsi] = useState(imsi || "");
   const [inputImsiExists, setInputImsiExists] = useState(false);
   const [isCheckingInputImsi, setIsCheckingInputImsi] = useState(false);
+  const [inputMsisdnExists, setInputMsisdnExists] = useState(false);
+  const [isCheckingInputMsisdn, setIsCheckingInputMsisdn] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [expandedSlices, setExpandedSlices] = useState<number[]>([0]);
   const [isAccessRestrictionsExpanded, setIsAccessRestrictionsExpanded] = useState(false);
@@ -85,6 +87,11 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
     updatePlmnByImsi(nextImsi);
   }, [updatePlmnByImsi]);
 
+  const handleMsisdnChange = useCallback((value: string) => {
+    setMsisdn(value.replace(/\D/g, ""));
+    setInputMsisdnExists(false);
+  }, []);
+
   useEffect(() => {
     if (imsi) return;
     if (!/^\d{15}$/.test(inputImsi)) {
@@ -115,6 +122,46 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
       window.clearTimeout(timer);
     };
   }, [imsi, inputImsi]);
+
+  useEffect(() => {
+    if (!msisdn || !/^\d+$/.test(msisdn)) {
+      setInputMsisdnExists(false);
+      setIsCheckingInputMsisdn(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    setIsCheckingInputMsisdn(true);
+
+    const timer = window.setTimeout(async () => {
+      try {
+        const params = new URLSearchParams({
+          msisdn,
+          t: String(new Date().getTime()),
+        });
+        if (imsi) params.set("excludeImsi", imsi);
+        const res = await fetch(`/api/subscribers?${params.toString()}`, {
+          signal: controller.signal,
+        });
+        if (controller.signal.aborted) return;
+        if (!res.ok) {
+          setInputMsisdnExists(false);
+          return;
+        }
+        const data = await res.json().catch(() => ({}));
+        setInputMsisdnExists(!!data.exists);
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+      } finally {
+        if (!controller.signal.aborted) setIsCheckingInputMsisdn(false);
+      }
+    }, 250);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [imsi, msisdn]);
 
   useEffect(() => {
     const fetchProfileList = async () => {
@@ -322,6 +369,18 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
       if (!/^\d{15}$/.test(targetImsi)) throw new Error(t("sub_err_imsi_15"));
       if (!imsi && inputImsiExists) throw new Error(t("sub_err_imsi_exists"));
       if (!/^\d+$/.test(msisdn)) throw new Error(t("sub_err_msisdn"));
+      if (inputMsisdnExists) throw new Error(t("sub_err_msisdn_exists"));
+
+      const duplicateParams = new URLSearchParams({ msisdn });
+      if (imsi) duplicateParams.set("excludeImsi", imsi);
+      const duplicateRes = await fetch(`/api/subscribers?${duplicateParams.toString()}`);
+      if (duplicateRes.ok) {
+        const duplicateData = await duplicateRes.json().catch(() => ({}));
+        if (duplicateData.exists) {
+          setInputMsisdnExists(true);
+          throw new Error(t("sub_err_msisdn_exists"));
+        }
+      }
 
       const sanitizedSlices = (Array.isArray(slices) ? slices : []).map((slice) => ({
         ...slice,
@@ -349,6 +408,10 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
           if (createRes.status === 409 || createData?.error === "Subscriber already exists") {
             setInputImsiExists(true);
             throw new Error(t("sub_err_imsi_exists"));
+          }
+          if (createData?.error === "MSISDN already exists") {
+            setInputMsisdnExists(true);
+            throw new Error(t("sub_err_msisdn_exists"));
           }
           if (createData?.error === "Tariff plan not found") throw new Error(t("tariff_plan_err_not_found"));
           if (createData?.error === "Invalid plan_id format") throw new Error(t("tariff_plan_err_id"));
@@ -395,6 +458,10 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
         if (data?.error === "Tariff plan not found") throw new Error(t("tariff_plan_err_not_found"));
         if (data?.error === "Invalid plan_id format") throw new Error(t("tariff_plan_err_id"));
         if (data?.error === "Tariff plan is disabled") throw new Error(t("tariff_plan_err_disabled"));
+        if (data?.error === "MSISDN already exists") {
+          setInputMsisdnExists(true);
+          throw new Error(t("sub_err_msisdn_exists"));
+        }
         throw new Error(data?.error || t("sub_err_save"));
       }
 
@@ -445,14 +512,14 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
   return {
     state: {
       isEditing, isLoading, isSaving, error, newlyAddedSliceIndex, inputImsi, toastMessage,
-      inputImsiExists, isCheckingInputImsi,
+      inputImsiExists, isCheckingInputImsi, inputMsisdnExists, isCheckingInputMsisdn,
       expandedSlices, isAccessRestrictionsExpanded, auth4GData, usimType, msisdn, ueAmbr, slices,
       accessRestriction, profileList, ratingList, tariffPlanList, ocsPlanId, ocsPlanStatus, ocsRules, ocsPlmn,
       ocsTrafficTotalStr, ocsTrafficBalanceStr, ocsVoiceTotalStr, ocsVoiceBalanceStr,
       ocsSmsTotalStr, ocsSmsBalanceStr
     },
     actions: {
-      setIsEditing, setInputImsi: handleInputImsiChange, setMsisdn, loadFromProfile, setAuth4GData,
+      setIsEditing, setInputImsi: handleInputImsiChange, setMsisdn: handleMsisdnChange, loadFromProfile, setAuth4GData,
       setUsimType, setUeAmbr, setIsAccessRestrictionsExpanded, setAccessRestriction, setOcsTrafficTotalStr,
       setOcsTrafficBalanceStr, setOcsVoiceTotalStr, setOcsVoiceBalanceStr, setOcsSmsTotalStr, setOcsSmsBalanceStr, setOcsPlanId, addSlice, handleSliceChange, removeSlice, setExpandedSlices, handleDelete,
       handleSave, scrollTo, clearError: () => setError(null), clearToastMessage: () => setToastMessage(null)

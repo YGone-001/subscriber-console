@@ -43,6 +43,8 @@ test("validateSubscriberUpdatePayload rejects malformed auth and slice fields", 
   assert.equal(validateSubscriberUpdatePayload({ ocsTraffic: { sms_total: 100, sms_balance: 80 } }).ok, true);
   assert.equal(validateSubscriberUpdatePayload({ ocsTraffic: { voice_balance: -1 } }).ok, false);
   assert.equal(validateSubscriberUpdatePayload({ ocsTraffic: { sms_balance: -1 } }).ok, false);
+  assert.equal(validateSubscriberUpdatePayload({ sub4G: { msisdnList: [{ msisdn: "123456789012345678901" }] } }).ok, true);
+  assert.equal(validateSubscriberUpdatePayload({ sub4G: { msisdnList: [{ msisdn: "123abc" }] } }).ok, false);
 });
 
 test("validateTrafficAdjustmentPayload normalizes supported balance actions", () => {
