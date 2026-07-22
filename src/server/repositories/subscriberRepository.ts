@@ -11,7 +11,6 @@ import {
   provisionOcsSubscriber,
   readOcsProvisioning,
   readOcsProvisioningForImsis,
-  type RatingPolicy,
 } from '@/server/repositories/ocsBillingRepository';
 import type { LegacySubscriberState, Open5gsSubscriberDocument } from '@/types/open5gs';
 
@@ -43,8 +42,6 @@ export type SubscriberRow = {
   };
   lastActive: string;
 };
-
-type RatingDoc = RatingPolicy;
 
 type ProfileDoc = Document & {
   name?: string;
@@ -115,14 +112,6 @@ function subscriberFilter(query = ''): Filter<SubscriberDoc> | null {
   if (!trimmed) return {};
   if (!/^\d{1,15}$/.test(trimmed)) return null;
   return { imsi: { $regex: `^${trimmed}` } };
-}
-
-function ratingTypeLabel(type: unknown): string {
-  const value = Number(type);
-  if (value === 1) return 'Time';
-  if (value === 2) return 'Vol';
-  if (value === 3) return 'Event';
-  return 'Flat';
 }
 
 function numericValue(value: unknown, fallback = 0): number {
@@ -323,12 +312,8 @@ function toSubscriberRow(
   doc: Open5gsSubscriberDocument,
   ocsSubscriber: { plan_id?: string; updated_at?: unknown; created_at?: unknown } | null | undefined,
   balance: { data_total?: unknown; data_used?: unknown; data_available?: unknown; updated_at?: unknown } | null | undefined,
-  smsBalance: { sms_total?: unknown; sms_used?: unknown; sms_available?: unknown } | null | undefined,
-  rating: RatingDoc | null
+  smsBalance: { sms_total?: unknown; sms_used?: unknown; sms_available?: unknown } | null | undefined
 ): SubscriberRow {
-  const policy = rating
-    ? `${rating.currency || 'USD'} ${rating.rates || '0'} (${ratingTypeLabel(rating.rates_type)})`
-    : '';
   const traffic = normalizedTraffic(balance);
   const sms = normalizedSms(smsBalance);
   const ard = Number(doc.access_restriction_data ?? 32);
@@ -339,7 +324,7 @@ function toSubscriberRow(
     ard,
     plmn: doc.imsi.slice(0, 5) || '45400',
     profile: doc.webui_meta?.profile_name || '',
-    policy,
+    policy: ocsSubscriber?.plan_id || '',
     traffic,
     sms,
     lastActive: lastActive(balance, ocsSubscriber),
@@ -405,7 +390,7 @@ export async function listSubscriberRows(
 
   return {
     subscribers: docs.map((doc) =>
-      toSubscriberRow(doc, ocs.subscribers.get(doc.imsi), ocs.balances.get(doc.imsi), ocs.balances.get(doc.imsi), ocs.policy)
+      toSubscriberRow(doc, ocs.subscribers.get(doc.imsi), ocs.balances.get(doc.imsi), ocs.balances.get(doc.imsi))
     ),
     total,
     page: pageValue,

@@ -944,14 +944,12 @@ export async function readOcsProvisioningForImsis(imsis: string[]) {
     return {
       subscribers: new Map<string, OcsSubscriber>(),
       balances: new Map<string, OcsBalance>(),
-      policy: null as RatingPolicy | null,
     };
   }
 
-  const [subscriberCollection, balanceCollection, policy] = await Promise.all([
+  const [subscriberCollection, balanceCollection] = await Promise.all([
     ocsSubscribersCollection(),
     ocsBalancesCollection(),
-    firstActiveRatingPolicy(),
   ]);
   const [subscribers, balances] = await Promise.all([
     subscriberCollection.find({ imsi: { $in: imsis } }).toArray(),
@@ -961,6 +959,5 @@ export async function readOcsProvisioningForImsis(imsis: string[]) {
   return {
     subscribers: new Map(subscribers.map((subscriber) => [subscriber.imsi, subscriber])),
     balances: new Map(balances.map((balance) => [balance.imsi, balance])),
-    policy,
   };
 }

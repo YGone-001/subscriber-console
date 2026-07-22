@@ -62,13 +62,13 @@ const EXPORT_FIELDS = [
   { key: "imsi", labelKey: "dh_field_imsi", header: "IMSI", getValue: (s: any) => s.imsi || "" },
   { key: "status", labelKey: "dh_field_status", header: "Status", getValue: (s: any) => s.status || "" },
   { key: "plmn", labelKey: "dh_field_plmn", header: "PLMN", getValue: (s: any) => s.plmn || "" },
-  { key: "policy", labelKey: "dh_field_policy", header: "Policy", getValue: (s: any) => s.policy || "" },
+  { key: "policy", labelKey: "dh_field_policy", header: "Plan", getValue: (s: any) => s.policy || "" },
   { key: "traffic_used", labelKey: "dh_field_traffic_used", header: "Traffic_Used_Bytes", getValue: (s: any) => s.traffic?.used || 0 },
   { key: "traffic_total", labelKey: "dh_field_traffic_total", header: "Traffic_Total_Bytes", getValue: (s: any) => s.traffic?.total || 0 },
   { key: "sms_used", labelKey: "dh_field_sms_used", header: "SMS_Used_Events", getValue: (s: any) => s.sms?.used || 0 },
   { key: "sms_total", labelKey: "dh_field_sms_total", header: "SMS_Total_Events", getValue: (s: any) => s.sms?.total || 0 },
   { key: "sms_balance", labelKey: "dh_field_sms_balance", header: "SMS_Balance_Events", getValue: (s: any) => s.sms?.balance || 0 },
-  { key: "last_active", labelKey: "dh_field_last_active", header: "Last_Active", getValue: (s: any) => s.lastActive || "" },
+  { key: "last_active", labelKey: "dh_field_last_active", header: "Last_Updated", getValue: (s: any) => s.lastActive || "" },
 ] as const;
 
 export default function DataHub({ isOpen, onClose, onComplete, onOperation, subscribers, selectedImsis }: DataHubProps) {

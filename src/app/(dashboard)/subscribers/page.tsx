@@ -646,15 +646,11 @@ export default function SubscriberPage() {
                          })()}
                        </td>
                        <td style={{ padding: "1rem" }}>
-                         {sub.policy ? (
-                           (() => {
-                             const TM: Record<string, string> = { Time: t("policy_type_time"), Volume: t("policy_type_vol"), Event: t("policy_type_event"), Flat: t("policy_type_flat") };
-                             const display = sub.policy.replace(/\((Time|Volume|Event|Flat)\)/g, (_: string, m: string) => `(${TM[m] || m})`);
-                             return <span style={{ color: "var(--text-main)", fontWeight: 500 }}>{display}</span>;
-                           })()
-                         ) : (
-                           <span style={{ color: "#94a3b8", fontSize: "0.85rem", fontStyle: "italic" }}>{t("no_policy")}</span>
-                         )}
+                          {sub.policy ? (
+                            <span style={{ color: "var(--text-main)", fontWeight: 500, fontFamily: "monospace" }}>{sub.policy}</span>
+                          ) : (
+                            <span style={{ color: "#94a3b8", fontSize: "0.85rem", fontStyle: "italic" }}>{t("no_policy")}</span>
+                          )}
                        </td>
                        <td style={{ padding: "1rem" }}>
                          <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
