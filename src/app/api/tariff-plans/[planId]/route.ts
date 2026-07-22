@@ -56,6 +56,12 @@ export async function PUT(request: Request, { params }: RouteContext) {
     if (error instanceof Error && error.message === 'INVALID_PLAN_ID') {
       return NextResponse.json({ error: 'Invalid plan_id format' }, { status: 400 });
     }
+    if (error instanceof Error && error.message === 'TARIFF_PLAN_DISABLE_IN_USE') {
+      return NextResponse.json(
+        { error: 'Cannot disable: tariff plan is currently used by subscribers' },
+        { status: 409 }
+      );
+    }
 
     console.error('Error updating tariff plan:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });

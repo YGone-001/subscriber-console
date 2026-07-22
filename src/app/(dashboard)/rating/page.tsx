@@ -209,6 +209,12 @@ export default function RatingPage() {
   );
   const selectedPlanSubscribers = planSubscribersData?.subscribers || [];
   const selectedPlanSubscriberTotal = planSubscribersData?.total ?? selectedPlan?.subscriberCount ?? 0;
+  const isDisablingPlanWithSubscribers =
+    !isCreatingPlan &&
+    !!selectedPlan &&
+    (selectedPlan.status || "active") !== "disabled" &&
+    planForm.status === "disabled" &&
+    selectedPlanSubscriberTotal > 0;
 
   useEffect(() => {
     if (plans.length > 0 && !plans.some((plan) => plan.plan_id === selectedPlanId)) {
@@ -344,6 +350,10 @@ export default function RatingPage() {
 
   const handleUpdatePlan = async () => {
     if (!selectedPlan) return;
+    if (isDisablingPlanWithSubscribers) {
+      setNotice({ type: "error", text: t("tariff_plan_disable_in_use") });
+      return;
+    }
     setSavingKey("plan:update");
     setNotice(null);
     try {
@@ -353,7 +363,7 @@ export default function RatingPage() {
         body: JSON.stringify(planForm),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || t("tariff_plan_err_update"));
+      if (!res.ok) throw new Error(messageForPlanResponse(data, t("tariff_plan_err_update")));
       await mutatePlans();
       setNotice({ type: "success", text: t("tariff_plan_msg_updated") });
     } catch (error: any) {
@@ -385,6 +395,7 @@ export default function RatingPage() {
     if (data?.error === "Tariff plan not found") return t("tariff_plan_err_not_found");
     if (data?.error === "Invalid plan_id format") return t("tariff_plan_err_id");
     if (data?.error === "Tariff plan is disabled") return t("tariff_plan_err_disabled");
+    if (data?.error === "Cannot disable: tariff plan is currently used by subscribers") return t("tariff_plan_disable_in_use");
     if (data?.error === "Source and target tariff plan must be different") return t("tariff_plan_migrate_err_same");
     if (data?.approval?.id) return t("approval_msg_submitted", { id: data.approval.id });
     return data?.error || fallback;
@@ -644,12 +655,12 @@ export default function RatingPage() {
                 <Plus size={15} /> {t("tariff_plan_new")}
               </button>
               {!isCreatingPlan && (
-                <button type="button" className="btn btn-primary" onClick={handleUpdatePlan} disabled={!selectedPlan || savingKey !== null}>
+                <button type="button" className="btn btn-primary" onClick={handleUpdatePlan} disabled={!selectedPlan || savingKey !== null || isDisablingPlanWithSubscribers}>
                   <Save size={15} /> {t("tariff_plan_save")}
                 </button>
               )}
               {!isCreatingPlan && selectedPlan && !selectedPlan.isDefault && (
-                <button type="button" className="btn btn-outline" onClick={handleDeletePlan} disabled={savingKey !== null || selectedPlan.subscriberCount > 0} style={{ color: "var(--danger)", borderColor: "var(--danger)" }}>
+                <button type="button" className="btn btn-outline" onClick={handleDeletePlan} disabled={savingKey !== null || selectedPlanSubscriberTotal > 0} style={{ color: "var(--danger)", borderColor: "var(--danger)" }}>
                   <Trash2 size={15} /> {t("tariff_plan_delete")}
                 </button>
               )}
@@ -694,6 +705,11 @@ export default function RatingPage() {
               <span>{t("tariff_plan_rules")}: <strong style={{ color: "var(--text-main)" }}>{selectedPlan?.rulesCount ?? ratings.length}</strong></span>
               <span>{t("tariff_plan_subscribers")}: <strong style={{ color: "var(--text-main)" }}>{selectedPlan?.subscriberCount ?? 0}</strong></span>
             </div>
+            {isDisablingPlanWithSubscribers && (
+              <div style={{ color: "var(--danger)", fontSize: "0.78rem", fontWeight: 800 }}>
+                {t("tariff_plan_disable_in_use")}
+              </div>
+            )}
             {isCreatingPlan && (
               <div style={{ display: "flex", gap: "0.6rem" }}>
                 <button type="button" className="btn btn-primary" onClick={handleCreatePlan} disabled={savingKey !== null}>

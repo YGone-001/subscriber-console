@@ -407,6 +407,7 @@ export const en: Record<string, string> = {
     tariff_plan_err_delete: "Failed to delete tariff plan.",
     tariff_plan_err_not_found: "Tariff plan not found.",
     tariff_plan_err_disabled: "This tariff plan is disabled and cannot be assigned to subscribers.",
+    tariff_plan_disable_in_use: "This plan still has linked subscribers. Migrate them to another active plan before disabling it.",
     tariff_plan_migrate_title: "Migrate Linked Subscribers",
     tariff_plan_migrate_desc: "{count} linked subscribers still use this plan. Move them to another active plan before retiring or deleting it.",
     tariff_plan_migrate_target: "Target Plan",

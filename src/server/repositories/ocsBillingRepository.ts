@@ -514,18 +514,21 @@ export async function updateTariffPlan(planIdInput: unknown, input: {
   const collection = await tariffPlansCollection();
   const plan = await getTariffPlanDocument(planId);
   if (!plan) return null;
+  const subscribersCollection = await ocsSubscribersCollection();
+  const subscriberCount = await subscribersCollection.countDocuments({ plan_id: planId });
+  const nextStatus = input.status === undefined ? plan.status : asString(input.status, 'active');
+  const isDisablingPlan = (plan.status || 'active') !== 'disabled' && nextStatus === 'disabled';
+  if (isDisablingPlan && subscriberCount > 0) throw new Error('TARIFF_PLAN_DISABLE_IN_USE');
 
   const next: OcsTariffPlan = {
     ...plan,
     name: input.name === undefined ? plan.name : asString(input.name, plan.plan_id),
     description: input.description === undefined ? plan.description : asString(input.description),
-    status: input.status === undefined ? plan.status : asString(input.status, 'active'),
+    status: nextStatus,
     updated_at: new Date(),
   };
 
   await collection.replaceOne({ plan_id: planId }, next);
-  const subscribersCollection = await ocsSubscribersCollection();
-  const subscriberCount = await subscribersCollection.countDocuments({ plan_id: planId });
   return summarizePlan(next, subscriberCount);
 }
 
