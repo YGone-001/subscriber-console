@@ -1,8 +1,21 @@
 import { Document, Long } from 'mongodb';
 import { getAppCollection, getOpen5gsCollection, mongoCollections } from '@/lib/mongo';
 import type { TrafficAdjustmentPayload } from '@/lib/subscriberValidation';
+import {
+  DEFAULT_OCS_PLAN_ID,
+  buildTariffPlanOperationsSummary,
+  isDefaultTariffPlan,
+  isValidTariffPlanId,
+  shouldBlockTariffPlanDisable,
+} from '@/lib/tariffPlanOperations';
 
-export const DEFAULT_OCS_PLAN_ID = 'plan_default_10gb';
+export {
+  DEFAULT_OCS_PLAN_ID,
+  buildTariffPlanOperationsSummary,
+  isDefaultTariffPlan,
+  isValidTariffPlanId,
+  shouldBlockTariffPlanDisable,
+};
 const DEFAULT_QUOTA_PER_GRANT = 10 * 1024 * 1024;
 const DEFAULT_VOLUME_THRESHOLD = 8 * 1024 * 1024;
 const DEFAULT_VALIDITY_TIME = 300;
@@ -220,7 +233,7 @@ function asString(value: unknown, fallback = ''): string {
 
 function normalizePlanId(value: unknown, fallback = DEFAULT_OCS_PLAN_ID): string {
   const planId = asString(value, fallback).trim();
-  if (!/^[A-Za-z0-9_.-]{1,64}$/.test(planId)) {
+  if (!isValidTariffPlanId(planId)) {
     throw new Error('INVALID_PLAN_ID');
   }
   return planId;
@@ -517,8 +530,9 @@ export async function updateTariffPlan(planIdInput: unknown, input: {
   const subscribersCollection = await ocsSubscribersCollection();
   const subscriberCount = await subscribersCollection.countDocuments({ plan_id: planId });
   const nextStatus = input.status === undefined ? plan.status : asString(input.status, 'active');
-  const isDisablingPlan = (plan.status || 'active') !== 'disabled' && nextStatus === 'disabled';
-  if (isDisablingPlan && subscriberCount > 0) throw new Error('TARIFF_PLAN_DISABLE_IN_USE');
+  if (shouldBlockTariffPlanDisable(plan.status, nextStatus, subscriberCount)) {
+    throw new Error('TARIFF_PLAN_DISABLE_IN_USE');
+  }
 
   const next: OcsTariffPlan = {
     ...plan,
@@ -534,7 +548,7 @@ export async function updateTariffPlan(planIdInput: unknown, input: {
 
 export async function deleteTariffPlan(planIdInput: unknown) {
   const planId = normalizePlanId(planIdInput);
-  if (planId === DEFAULT_OCS_PLAN_ID) throw new Error('DEFAULT_TARIFF_PLAN_PROTECTED');
+  if (isDefaultTariffPlan(planId)) throw new Error('DEFAULT_TARIFF_PLAN_PROTECTED');
 
   const [collection, subscribersCollection] = await Promise.all([
     tariffPlansCollection(),

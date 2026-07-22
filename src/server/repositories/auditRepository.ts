@@ -1,6 +1,7 @@
 import { Filter } from 'mongodb';
 import { getAppCollection, mongoCollections } from '@/lib/mongo';
 import type { AuditAction } from '@/lib/audit';
+import { buildTariffPlanAuditFilter as buildTariffPlanAuditFilterBase } from '@/lib/tariffPlanOperations';
 
 export type AuditLogRecord = {
   id: string;
@@ -73,6 +74,10 @@ function queryFilter(input: AuditQuery): Filter<AuditLogRecord> {
   return filter;
 }
 
+export function buildTariffPlanAuditFilter(planId: string): Filter<AuditLogRecord> {
+  return buildTariffPlanAuditFilterBase(planId) as Filter<AuditLogRecord>;
+}
+
 export async function appendAuditLog(log: AuditLogRecord) {
   const docs = await collection();
   await docs.insertOne(log);
@@ -121,20 +126,7 @@ export async function listAuditLogsForApproval(approvalId: string) {
 export async function listAuditLogsForTariffPlan(planId: string, limitInput = 12) {
   const docs = await collection();
   const limit = Math.min(Math.max(Number(limitInput) || 12, 1), 50);
-  const escapedPlanId = escapeRegex(planId);
-  const targetRegex = { $regex: `tariff-plan:.*${escapedPlanId}`, $options: 'i' };
-  const filter = {
-    $or: [
-      { targetId: targetRegex },
-      { 'oldData.plan_id': planId },
-      { 'newData.plan_id': planId },
-      { 'oldData.sourcePlanId': planId },
-      { 'newData.sourcePlanId': planId },
-      { 'oldData.targetPlanId': planId },
-      { 'newData.targetPlanId': planId },
-    ],
-  } as Filter<AuditLogRecord>;
-
+  const filter = buildTariffPlanAuditFilter(planId);
   const logs = await docs.find(filter).sort({ timestamp: -1 }).limit(limit).toArray();
   return logs.map(stripMongoId);
 }

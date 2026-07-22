@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/authz';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import { listAuditLogsForTariffPlan } from '@/server/repositories/auditRepository';
-import { getTariffPlan, listTariffPlans } from '@/server/repositories/ocsBillingRepository';
+import { buildTariffPlanOperationsSummary, getTariffPlan, listTariffPlans } from '@/server/repositories/ocsBillingRepository';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,24 +28,8 @@ export async function GET(request: Request, { params }: RouteContext) {
     ]);
     if (!plan) return NextResponse.json({ error: 'Tariff plan not found' }, { status: 404 });
 
-    const activePlans = plans.filter((item) => (item.status || 'active') === 'active').length;
-    const disabledPlans = plans.filter((item) => item.status === 'disabled').length;
-    const totalLinkedSubscribers = plans.reduce((sum, item) => sum + (item.subscriberCount || 0), 0);
-    const selectedSharePct = totalLinkedSubscribers > 0
-      ? Math.round((plan.subscriberCount / totalLinkedSubscribers) * 1000) / 10
-      : 0;
-
     return NextResponse.json({
-      summary: {
-        totalPlans: plans.length,
-        activePlans,
-        disabledPlans,
-        totalLinkedSubscribers,
-        selectedLinkedSubscribers: plan.subscriberCount,
-        selectedSharePct,
-        recentActivityCount: history.length,
-        lastChangedAt: plan.updated_at || history[0]?.timestamp || null,
-      },
+      summary: buildTariffPlanOperationsSummary(plans, plan, history),
       history,
     });
   } catch (error) {
