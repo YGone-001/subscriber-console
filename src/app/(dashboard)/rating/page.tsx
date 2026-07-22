@@ -116,9 +116,9 @@ function classifyPolicy(rating: RatingPolicy): Exclude<ServiceKey, "all"> {
   return "data";
 }
 
-function formatGrant(value: unknown, unit?: string, chargingType?: string) {
+function formatGrant(t: (key: string) => string, value: unknown, unit?: string, chargingType?: string) {
   const amount = Number(value ?? 0);
-  if (!Number.isFinite(amount) || amount <= 0 || chargingType === "free") return "Included";
+  if (!Number.isFinite(amount) || amount <= 0 || chargingType === "free") return t("rating_grant_included");
   if (chargingType === "voice_time" || unit === "seconds") {
     if (amount >= 3600) return `${Math.round(amount / 3600)} h`;
     if (amount >= 60) return `${Math.round(amount / 60)} min`;
@@ -570,12 +570,12 @@ export default function RatingPage() {
                         <td style={{ padding: "1.15rem 1.5rem" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontWeight: 800 }}>
                             <CheckCircle2 size={15} color="var(--success)" />
-                            {formatGrant(rating.quota_per_grant, rating.unit, rating.charging_type)}
+                            {formatGrant(t, rating.quota_per_grant, rating.unit, rating.charging_type)}
                           </div>
                           <div style={{ color: "var(--text-muted)", fontSize: "0.8rem", marginTop: "0.3rem" }}>
                             {t("rating_validity")}: {rating.validity_time ?? 0}s
                             <span style={{ margin: "0 0.45rem" }}>·</span>
-                            {t("rating_threshold")}: {formatGrant(rating.volume_threshold, rating.unit, rating.charging_type)}
+                            {t("rating_threshold")}: {formatGrant(t, rating.volume_threshold, rating.unit, rating.charging_type)}
                           </div>
                         </td>
                         <td style={{ padding: "1.15rem 1.5rem" }}>
