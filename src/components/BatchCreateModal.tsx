@@ -1,7 +1,9 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Layers, X, Download } from "lucide-react";
+import useSWR from "swr";
 import { useI18n } from "./I18nProvider";
 import { OperationNotice } from "./OperationFeedback";
+import { fetcher } from "@/lib/fetcher";
 
 interface BatchCreateModalProps {
   isOpen: boolean;
@@ -10,15 +12,32 @@ interface BatchCreateModalProps {
   profileList: any[];
 }
 
+type TariffPlan = {
+  plan_id: string;
+  name?: string;
+  description?: string;
+  status?: string;
+};
+
 export default function BatchCreateModal({ isOpen, onClose, onSuccess, profileList }: BatchCreateModalProps) {
   const { t } = useI18n();
-  const [batchForm, setBatchForm] = useState({ startImsi: "", count: "10", profileName: "" });
+  const { data: plansData } = useSWR(isOpen ? "/api/tariff-plans" : null, fetcher);
+  const planOptions: TariffPlan[] = useMemo(
+    () => (plansData?.plans || []).filter((plan: TariffPlan) => (plan.status || "active") === "active"),
+    [plansData?.plans]
+  );
+  const [batchForm, setBatchForm] = useState({ startImsi: "", count: "10", profileName: "", planId: "plan_default_10gb" });
   const [batchLoading, setBatchLoading] = useState(false);
   const [batchResult, setBatchResult] = useState<any>(null);
 
   // Pre-flight check state
   const [precheckResult, setPrecheckResult] = useState<any>(null);
   const [isPrecheckModalOpen, setIsPrecheckModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen || planOptions.length === 0 || planOptions.some((plan) => plan.plan_id === batchForm.planId)) return;
+    setBatchForm((current) => ({ ...current, planId: planOptions[0].plan_id }));
+  }, [batchForm.planId, isOpen, planOptions]);
 
   if (!isOpen) return null;
 
@@ -84,6 +103,7 @@ export default function BatchCreateModal({ isOpen, onClose, onSuccess, profileLi
           startImsi: batchForm.startImsi,
           count: Number(batchForm.count),
           profileName: batchForm.profileName || undefined,
+          planId: batchForm.planId,
           strategy: strategy
         })
       });
@@ -147,6 +167,22 @@ export default function BatchCreateModal({ isOpen, onClose, onSuccess, profileLi
               }}>
                 <option value="">{t("none_use_defaults")}</option>
                 {profileList.map((p: any) => <option key={p.name} value={p.name}>{p.title || p.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="form-label">{t("sub_360_tariff_plan")}</label>
+              <select
+                className="form-input"
+                value={batchForm.planId}
+                onChange={e => setBatchForm({ ...batchForm, planId: e.target.value })}
+              >
+                {planOptions.length === 0 ? (
+                  <option value="plan_default_10gb">plan_default_10gb</option>
+                ) : planOptions.map((plan) => (
+                  <option key={plan.plan_id} value={plan.plan_id}>
+                    {plan.name && plan.name !== plan.plan_id ? `${plan.name} (${plan.plan_id})` : plan.plan_id}
+                  </option>
+                ))}
               </select>
             </div>
           </div>

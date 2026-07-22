@@ -50,7 +50,7 @@ export async function POST(request: Request) {
     if (!imsiResult.ok) return NextResponse.json({ error: imsiResult.error }, { status: 400 });
     const imsi = imsiResult.value;
 
-    const created = await createDefaultSubscriber(imsi);
+    const created = await createDefaultSubscriber(imsi, data?.planId || data?.plan_id);
     const legacyState = open5gsToLegacyState(created);
 
     logAudit('CREATE', imsi, null, legacyState, request);

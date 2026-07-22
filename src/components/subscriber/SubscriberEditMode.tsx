@@ -14,6 +14,7 @@ interface SubscriberEditModeProps {
     msisdn: string;
     profileList: any[];
     ratingList: Rating[];
+    tariffPlanList: Array<{ plan_id: string; name?: string; status?: string }>;
     auth4GData: Auth4GData;
     usimType: "opc" | "op";
     ueAmbr: Ambr;
@@ -58,7 +59,7 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
   const {
     inputImsi, msisdn, profileList,
     auth4GData, usimType, ueAmbr, isAccessRestrictionsExpanded, accessRestriction,
-    ocsPlmn, ocsTrafficTotalStr, ocsTrafficBalanceStr, ocsVoiceTotalStr, ocsVoiceBalanceStr, ocsSmsTotalStr, ocsSmsBalanceStr, ocsPlanId, ocsPlanStatus, ocsRules, ratingList,
+    ocsPlmn, ocsTrafficTotalStr, ocsTrafficBalanceStr, ocsVoiceTotalStr, ocsVoiceBalanceStr, ocsSmsTotalStr, ocsSmsBalanceStr, ocsPlanId, ocsPlanStatus, ocsRules, ratingList, tariffPlanList,
     slices, newlyAddedSliceIndex, expandedSlices, inputImsiExists, isCheckingInputImsi
   } = state;
 
@@ -66,7 +67,7 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
     setInputImsi, setMsisdn, loadFromProfile,
     setAuth4GData, setUsimType, setUeAmbr, setIsAccessRestrictionsExpanded, setAccessRestriction,
     setOcsTrafficTotalStr, setOcsTrafficBalanceStr, setOcsVoiceTotalStr, setOcsVoiceBalanceStr, setOcsSmsTotalStr, setOcsSmsBalanceStr,
-    addSlice, handleSliceChange, removeSlice, setExpandedSlices
+    setOcsPlanId, addSlice, handleSliceChange, removeSlice, setExpandedSlices
   } = actions;
   const totalTrafficInput = splitByteInput(ocsTrafficTotalStr);
   const balanceTrafficInput = splitByteInput(ocsTrafficBalanceStr, totalTrafficInput.unit);
@@ -84,6 +85,9 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
     marginTop: "0.4rem",
     fontWeight: 650,
   };
+  const tariffPlanOptions = tariffPlanList.length > 0
+    ? tariffPlanList
+    : (ocsPlanId ? [{ plan_id: ocsPlanId, name: ocsPlanId, status: ocsPlanStatus }] : []);
 
   return (
     <div style={{ paddingBottom: '2rem', display: "flex", flexDirection: "column" }}>
@@ -355,7 +359,19 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
           </div>
           <div>
             <label className="form-label">{t("sub_360_tariff_plan")}</label>
-            <input type="text" className="form-input" value={ocsPlanId} readOnly style={{ background: "var(--surface-hover)", fontFamily: "monospace" }} />
+            <select
+              className="form-input"
+              value={ocsPlanId}
+              onChange={(e) => setOcsPlanId(e.target.value)}
+              disabled={tariffPlanOptions.length === 0}
+              style={{ fontFamily: "monospace" }}
+            >
+              {tariffPlanOptions.map((plan) => (
+                <option key={plan.plan_id} value={plan.plan_id}>
+                  {plan.name && plan.name !== plan.plan_id ? `${plan.name} (${plan.plan_id})` : plan.plan_id}
+                </option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="form-label">{t("sub_360_plan_status")}</label>

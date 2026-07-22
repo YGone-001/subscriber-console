@@ -1,6 +1,14 @@
 import { useCallback, useState, useEffect } from "react";
 import { parseBytes, formatBytes, parseSeconds, formatSeconds, parseEvents, formatEvents } from "@/lib/unitParser";
 
+type TariffPlanOption = {
+  plan_id: string;
+  name?: string;
+  description?: string;
+  status?: string;
+  rules?: any[];
+};
+
 const resolvePlmnFromRecords = (records: any[], value: string) => {
   if (!value || value.length < 5) return null;
   const prefix6 = value.substring(0, 6);
@@ -38,6 +46,7 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
   const [accessRestriction, setAccessRestriction] = useState<number>(0);
   const [profileList, setProfileList] = useState<any[]>([]);
   const [ratingList, setRatingList] = useState<any[]>([]);
+  const [tariffPlanList, setTariffPlanList] = useState<TariffPlanOption[]>([]);
   const [ocsPlanId, setOcsPlanId] = useState("plan_default_10gb");
   const [ocsPlanStatus, setOcsPlanStatus] = useState("active");
   const [ocsRules, setOcsRules] = useState<any[]>([]);
@@ -115,11 +124,18 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
         setProfileList(data.profiles || []);
       } catch {}
     };
-    const fetchRatingList = async () => {
+    const fetchTariffPlanList = async () => {
       try {
-        const res = await fetch('/api/ratings');
+        const res = await fetch('/api/tariff-plans');
         const data = await res.json();
-        setRatingList(data.ratings || []);
+        const plans = Array.isArray(data.plans) ? data.plans : [];
+        setTariffPlanList(plans);
+        setOcsPlanId((current) => {
+          if (plans.some((plan: TariffPlanOption) => plan.plan_id === current)) return current;
+          return plans.find((plan: TariffPlanOption) => (plan.status || "active") === "active")?.plan_id
+            || plans[0]?.plan_id
+            || current;
+        });
       } catch {}
     };
     const fetchPlmnDb = async () => {
@@ -131,9 +147,41 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
       } catch {}
     };
     fetchProfileList();
-    fetchRatingList();
+    fetchTariffPlanList();
     fetchPlmnDb();
   }, []);
+
+  useEffect(() => {
+    if (!ocsPlanId) return;
+    const controller = new AbortController();
+
+    const fetchPlanContext = async () => {
+      try {
+        const [planRes, ratingsRes] = await Promise.all([
+          fetch(`/api/tariff-plans/${encodeURIComponent(ocsPlanId)}`, { signal: controller.signal }),
+          fetch(`/api/ratings?planId=${encodeURIComponent(ocsPlanId)}`, { signal: controller.signal }),
+        ]);
+        if (controller.signal.aborted) return;
+
+        if (planRes.ok) {
+          const planData = await planRes.json();
+          const plan = planData.plan;
+          if (plan?.status) setOcsPlanStatus(String(plan.status));
+          if (Array.isArray(plan?.rules)) setOcsRules(plan.rules);
+        }
+
+        if (ratingsRes.ok) {
+          const ratingsData = await ratingsRes.json();
+          setRatingList(ratingsData.ratings || []);
+        }
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+      }
+    };
+
+    fetchPlanContext();
+    return () => controller.abort();
+  }, [ocsPlanId]);
 
   useEffect(() => {
     const targetImsi = imsi || inputImsi;
@@ -172,6 +220,8 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
           if (p.ocsDefaults.voiceBalance !== undefined) setOcsVoiceBalanceStr(formatSeconds(Number(p.ocsDefaults.voiceBalance)));
           const smsTotalDefault = p.ocsDefaults.smsTotal ?? p.ocsDefaults.sms_total;
           const smsBalanceDefault = p.ocsDefaults.smsBalance ?? p.ocsDefaults.sms_balance;
+          const planDefault = p.ocsDefaults.planId ?? p.ocsDefaults.plan_id;
+          if (planDefault !== undefined) setOcsPlanId(String(planDefault));
           if (smsTotalDefault !== undefined) setOcsSmsTotalStr(formatEvents(Number(smsTotalDefault)));
           else if (smsBalanceDefault !== undefined) setOcsSmsTotalStr(formatEvents(Number(smsBalanceDefault)));
           if (smsBalanceDefault !== undefined) setOcsSmsBalanceStr(formatEvents(Number(smsBalanceDefault)));
@@ -292,7 +342,7 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
         const createRes = await fetch("/api/subscribers", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ imsi: targetImsi }),
+          body: JSON.stringify({ imsi: targetImsi, planId: ocsPlanId }),
         });
         const createData = await createRes.json().catch(() => ({}));
         if (!createRes.ok) {
@@ -321,7 +371,8 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
         voice_total: parseSeconds(ocsVoiceTotalStr),
         voice_balance: parseSeconds(ocsVoiceBalanceStr),
         sms_total: parseEvents(ocsSmsTotalStr),
-        sms_balance: parseEvents(ocsSmsBalanceStr)
+        sms_balance: parseEvents(ocsSmsBalanceStr),
+        planId: ocsPlanId
       };
 
       const payload: any = {
@@ -387,14 +438,14 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
       isEditing, isLoading, isSaving, error, newlyAddedSliceIndex, inputImsi, toastMessage,
       inputImsiExists, isCheckingInputImsi,
       expandedSlices, isAccessRestrictionsExpanded, auth4GData, usimType, msisdn, ueAmbr, slices,
-      accessRestriction, profileList, ratingList, ocsPlanId, ocsPlanStatus, ocsRules, ocsPlmn,
+      accessRestriction, profileList, ratingList, tariffPlanList, ocsPlanId, ocsPlanStatus, ocsRules, ocsPlmn,
       ocsTrafficTotalStr, ocsTrafficBalanceStr, ocsVoiceTotalStr, ocsVoiceBalanceStr,
       ocsSmsTotalStr, ocsSmsBalanceStr
     },
     actions: {
       setIsEditing, setInputImsi: handleInputImsiChange, setMsisdn, loadFromProfile, setAuth4GData,
       setUsimType, setUeAmbr, setIsAccessRestrictionsExpanded, setAccessRestriction, setOcsTrafficTotalStr,
-      setOcsTrafficBalanceStr, setOcsVoiceTotalStr, setOcsVoiceBalanceStr, setOcsSmsTotalStr, setOcsSmsBalanceStr, addSlice, handleSliceChange, removeSlice, setExpandedSlices, handleDelete,
+      setOcsTrafficBalanceStr, setOcsVoiceTotalStr, setOcsVoiceBalanceStr, setOcsSmsTotalStr, setOcsSmsBalanceStr, setOcsPlanId, addSlice, handleSliceChange, removeSlice, setExpandedSlices, handleDelete,
       handleSave, scrollTo, clearError: () => setError(null), clearToastMessage: () => setToastMessage(null)
     }
   };

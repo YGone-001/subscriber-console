@@ -20,7 +20,8 @@ export async function GET(request: Request) {
     const rateLimit = await enforceRateLimit(`ratings:list:${auth.auth.user}`, 90, 60);
     if (!rateLimit.ok) return rateLimit.response;
 
-    const ratings = await listRatings();
+    const planId = new URL(request.url).searchParams.get('planId') || undefined;
+    const ratings = await listRatings(planId);
     return NextResponse.json({ ratings });
   } catch (error) {
     console.error('Error fetching ratings:', error);
@@ -38,6 +39,7 @@ export async function POST(request: Request) {
 
     const data = await request.json();
     const { rating_group_id } = data;
+    const planId = data?.planId || data?.plan_id;
 
     if (rating_group_id === undefined || rating_group_id === null || rating_group_id === '') {
       return NextResponse.json({ error: 'rating_group_id is required' }, { status: 400 });
@@ -47,7 +49,7 @@ export async function POST(request: Request) {
     }
 
     if (capabilityDecision(auth.auth.role, 'rating_publish') === 'approval') {
-      const existing = await getRating(String(rating_group_id));
+      const existing = await getRating(String(rating_group_id), planId);
       if (existing) {
         return NextResponse.json({ error: 'Rating Group ID already exists' }, { status: 409 });
       }
@@ -55,9 +57,9 @@ export async function POST(request: Request) {
       const approval = await createApprovalRequest({
         action: 'RATING_CREATE',
         requester: auth.auth.user,
-        targetId: `rating:${rating_group_id}`,
-        summary: `Create rating group ${rating_group_id}`,
-        payload: data,
+        targetId: `rating:${planId || 'plan_default_10gb'}:${rating_group_id}`,
+        summary: `Create rating group ${rating_group_id} in ${planId || 'plan_default_10gb'}`,
+        payload: { ...data, planId },
       });
 
       logAudit('UPDATE', `approval:${approval.id}`, null, approval, request);
@@ -67,7 +69,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const rating = await createRating(data);
+    const rating = await createRating(data, planId);
 
     return NextResponse.json({ message: 'Rating created successfully', rating_group_id: rating.rating_group_id }, { status: 201 });
   } catch (error) {

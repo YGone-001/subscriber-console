@@ -11,12 +11,12 @@ export type RatingReferenceScan = {
   examples: string[];
 };
 
-export async function listRatings() {
-  return listRatingPolicies();
+export async function listRatings(planId?: unknown) {
+  return listRatingPolicies(planId);
 }
 
-export async function getRating(id: string | number) {
-  return getRatingPolicy(id);
+export async function getRating(id: string | number, planId?: unknown) {
+  return getRatingPolicy(id, planId);
 }
 
 export async function createRating(input: {
@@ -32,8 +32,8 @@ export async function createRating(input: {
   volume_threshold?: unknown;
   priority?: unknown;
   status?: unknown;
-}) {
-  return createRatingPolicy(input);
+}, planId?: unknown) {
+  return createRatingPolicy(input, planId);
 }
 
 export async function updateRating(id: string, input: {
@@ -48,8 +48,8 @@ export async function updateRating(id: string, input: {
   volume_threshold?: unknown;
   priority?: unknown;
   status?: unknown;
-}) {
-  return updateRatingPolicy(id, input);
+}, planId?: unknown) {
+  return updateRatingPolicy(id, input, planId);
 }
 
 export async function scanRatingReferences(_id: string): Promise<RatingReferenceScan> {
@@ -57,6 +57,6 @@ export async function scanRatingReferences(_id: string): Promise<RatingReference
   return { count: 0, examples: [] };
 }
 
-export async function deleteRating(id: string) {
-  return deleteRatingPolicy(id);
+export async function deleteRating(id: string, planId?: unknown) {
+  return deleteRatingPolicy(id, planId);
 }

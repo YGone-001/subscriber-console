@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type React from "react";
 import { CheckCircle2, Database, DollarSign, Hash, MessageSquare, Mic2, Pencil, Plus, Save, Search, ShieldCheck, Tag, Trash2, X } from "lucide-react";
 import useSWR from "swr";
@@ -33,6 +33,23 @@ type RatingPolicy = {
   volume_threshold?: number;
   priority?: number;
   status?: string;
+};
+
+type TariffPlan = {
+  plan_id: string;
+  name: string;
+  description?: string;
+  status: string;
+  rulesCount: number;
+  subscriberCount: number;
+  isDefault?: boolean;
+};
+
+type PlanForm = {
+  plan_id: string;
+  name: string;
+  description: string;
+  status: string;
 };
 
 type RatingForm = {
@@ -153,7 +170,11 @@ function isWholeNumber(value: string): boolean {
 
 export default function RatingPage() {
   const { t } = useI18n();
-  const { data, isLoading, mutate } = useSWR("/api/ratings", fetcher);
+  const { data: plansData, mutate: mutatePlans } = useSWR("/api/tariff-plans", fetcher);
+  const plans: TariffPlan[] = useMemo(() => plansData?.plans || [], [plansData?.plans]);
+  const [selectedPlanId, setSelectedPlanId] = useState("plan_default_10gb");
+  const ratingsUrl = `/api/ratings?planId=${encodeURIComponent(selectedPlanId)}`;
+  const { data, isLoading, mutate } = useSWR(ratingsUrl, fetcher);
   const ratings: RatingPolicy[] = useMemo(() => data?.ratings || [], [data?.ratings]);
   const { canEditTemplates } = useAuth();
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -165,6 +186,29 @@ export default function RatingPage() {
   const [notice, setNotice] = useState<Notice | null>(null);
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
+  const [isCreatingPlan, setIsCreatingPlan] = useState(false);
+  const [planForm, setPlanForm] = useState<PlanForm>({ plan_id: "", name: "", description: "", status: "active" });
+
+  const selectedPlan = useMemo(
+    () => plans.find((plan) => plan.plan_id === selectedPlanId),
+    [plans, selectedPlanId]
+  );
+
+  useEffect(() => {
+    if (plans.length > 0 && !plans.some((plan) => plan.plan_id === selectedPlanId)) {
+      setSelectedPlanId(plans[0].plan_id);
+    }
+  }, [plans, selectedPlanId]);
+
+  useEffect(() => {
+    if (!selectedPlan || isCreatingPlan) return;
+    setPlanForm({
+      plan_id: selectedPlan.plan_id,
+      name: selectedPlan.name || selectedPlan.plan_id,
+      description: selectedPlan.description || "",
+      status: selectedPlan.status || "active",
+    });
+  }, [isCreatingPlan, selectedPlan]);
 
   const rateTypes = useMemo(() => [
     { label: t("rating_type_time"), val: 1 },
@@ -230,6 +274,85 @@ export default function RatingPage() {
     return fallback;
   };
 
+  const beginCreatePlan = () => {
+    setIsCreatingPlan(true);
+    setPlanForm({
+      plan_id: `${selectedPlanId}_copy`,
+      name: selectedPlan ? `${selectedPlan.name || selectedPlan.plan_id} Copy` : "",
+      description: selectedPlan?.description || "",
+      status: "active",
+    });
+  };
+
+  const handleCreatePlan = async () => {
+    if (!/^[A-Za-z0-9_.-]{1,64}$/.test(planForm.plan_id.trim())) {
+      setNotice({ type: "error", text: t("tariff_plan_err_id") });
+      return;
+    }
+    setSavingKey("plan:create");
+    setNotice(null);
+    try {
+      const res = await fetch("/api/tariff-plans", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...planForm,
+          plan_id: planForm.plan_id.trim(),
+          cloneFromPlanId: selectedPlanId,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || t("tariff_plan_err_create"));
+      await mutatePlans();
+      setSelectedPlanId(data.plan?.plan_id || planForm.plan_id.trim());
+      setIsCreatingPlan(false);
+      setNotice({ type: "success", text: t("tariff_plan_msg_created") });
+    } catch (error: any) {
+      setNotice({ type: "error", text: error.message || t("tariff_plan_err_create") });
+    } finally {
+      setSavingKey(null);
+    }
+  };
+
+  const handleUpdatePlan = async () => {
+    if (!selectedPlan) return;
+    setSavingKey("plan:update");
+    setNotice(null);
+    try {
+      const res = await fetch(`/api/tariff-plans/${encodeURIComponent(selectedPlan.plan_id)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(planForm),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || t("tariff_plan_err_update"));
+      await mutatePlans();
+      setNotice({ type: "success", text: t("tariff_plan_msg_updated") });
+    } catch (error: any) {
+      setNotice({ type: "error", text: error.message || t("tariff_plan_err_update") });
+    } finally {
+      setSavingKey(null);
+    }
+  };
+
+  const handleDeletePlan = async () => {
+    if (!selectedPlan || selectedPlan.isDefault) return;
+    setSavingKey("plan:delete");
+    setNotice(null);
+    try {
+      const res = await fetch(`/api/tariff-plans/${encodeURIComponent(selectedPlan.plan_id)}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || t("tariff_plan_err_delete"));
+      await mutatePlans();
+      setSelectedPlanId("plan_default_10gb");
+      setNotice({ type: "success", text: t("tariff_plan_msg_deleted") });
+    } catch (error: any) {
+      setNotice({ type: "error", text: error.message || t("tariff_plan_err_delete") });
+    } finally {
+      setSavingKey(null);
+    }
+  };
+
   const handleCreate = async () => {
     const validationError = validateRatingForm(newForm, true);
     if (validationError) {
@@ -242,12 +365,12 @@ export default function RatingPage() {
       const res = await fetch("/api/ratings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newForm),
+        body: JSON.stringify({ ...newForm, planId: selectedPlanId }),
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
         setIsAdding(false);
-        setNewForm(makeDefaultForm());
+          setNewForm(makeDefaultForm());
         if (!data?.approval?.id) mutate();
         setNotice({ type: "success", text: noticeForRatingResponse(data, t("rating_msg_created")) });
       } else {
@@ -273,7 +396,7 @@ export default function RatingPage() {
       const res = await fetch(`/api/ratings/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(editForm),
+        body: JSON.stringify({ ...editForm, planId: selectedPlanId }),
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
@@ -302,7 +425,7 @@ export default function RatingPage() {
     setSavingKey(`delete:${id}`);
     setNotice(null);
     try {
-      const res = await fetch(`/api/ratings/${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/ratings/${id}?planId=${encodeURIComponent(selectedPlanId)}`, { method: "DELETE" });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
         setPendingDeleteId(null);
@@ -446,6 +569,82 @@ export default function RatingPage() {
           onCancel={() => setPendingDeleteId(null)}
         />
       )}
+
+      <section className="dash-card" style={{ marginBottom: "1.5rem" }}>
+        <div className="dash-card-header" style={{ display: "flex", justifyContent: "space-between", gap: "1rem", alignItems: "center", flexWrap: "wrap" }}>
+          <div>
+            <h3 style={{ margin: 0, color: "var(--text-main)", fontSize: "1rem", fontWeight: 800 }}>{t("tariff_plan_current")}</h3>
+            <p style={{ margin: "0.25rem 0 0", color: "var(--text-muted)", fontSize: "0.84rem" }}>{t("tariff_plan_current_desc")}</p>
+          </div>
+          {canEditTemplates && (
+            <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
+              <button type="button" className="btn btn-outline" onClick={beginCreatePlan} disabled={savingKey !== null}>
+                <Plus size={15} /> {t("tariff_plan_new")}
+              </button>
+              {!isCreatingPlan && (
+                <button type="button" className="btn btn-primary" onClick={handleUpdatePlan} disabled={!selectedPlan || savingKey !== null}>
+                  <Save size={15} /> {t("tariff_plan_save")}
+                </button>
+              )}
+              {!isCreatingPlan && selectedPlan && !selectedPlan.isDefault && (
+                <button type="button" className="btn btn-outline" onClick={handleDeletePlan} disabled={savingKey !== null || selectedPlan.subscriberCount > 0} style={{ color: "var(--danger)", borderColor: "var(--danger)" }}>
+                  <Trash2 size={15} /> {t("tariff_plan_delete")}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+        <div className="dash-card-body" style={{ display: "grid", gridTemplateColumns: "minmax(220px, 0.85fr) minmax(260px, 1fr) minmax(260px, 1.2fr) minmax(150px, 0.55fr)", gap: "1rem", alignItems: "end" }}>
+          <Field label={t("tariff_plan_id")}>
+            {isCreatingPlan ? (
+              <input className="form-input" value={planForm.plan_id} onChange={(event) => setPlanForm((current) => ({ ...current, plan_id: event.target.value }))} />
+            ) : (
+              <select
+                className="form-input"
+                value={selectedPlanId}
+                onChange={(event) => {
+                  setSelectedPlanId(event.target.value);
+                  setEditingId(null);
+                  setIsAdding(false);
+                  setQuery("");
+                }}
+              >
+                {plans.map((plan) => (
+                  <option key={plan.plan_id} value={plan.plan_id}>{plan.plan_id}</option>
+                ))}
+              </select>
+            )}
+          </Field>
+          <Field label={t("tariff_plan_name")}>
+            <input className="form-input" value={planForm.name} onChange={(event) => setPlanForm((current) => ({ ...current, name: event.target.value }))} disabled={!canEditTemplates} />
+          </Field>
+          <Field label={t("tariff_plan_desc")}>
+            <input className="form-input" value={planForm.description} onChange={(event) => setPlanForm((current) => ({ ...current, description: event.target.value }))} disabled={!canEditTemplates} />
+          </Field>
+          <Field label={t("tariff_plan_status")}>
+            <select className="form-input" value={planForm.status} onChange={(event) => setPlanForm((current) => ({ ...current, status: event.target.value }))} disabled={!canEditTemplates}>
+              <option value="active">{t("policy_status_active")}</option>
+              <option value="disabled">{t("users_disabled")}</option>
+            </select>
+          </Field>
+          <div style={{ gridColumn: "1 / -1", display: "flex", justifyContent: "space-between", gap: "1rem", alignItems: "center", flexWrap: "wrap", borderTop: "1px solid var(--surface-border)", paddingTop: "0.85rem" }}>
+            <div style={{ display: "flex", gap: "1rem", color: "var(--text-muted)", fontSize: "0.82rem", flexWrap: "wrap" }}>
+              <span>{t("tariff_plan_rules")}: <strong style={{ color: "var(--text-main)" }}>{selectedPlan?.rulesCount ?? ratings.length}</strong></span>
+              <span>{t("tariff_plan_subscribers")}: <strong style={{ color: "var(--text-main)" }}>{selectedPlan?.subscriberCount ?? 0}</strong></span>
+            </div>
+            {isCreatingPlan && (
+              <div style={{ display: "flex", gap: "0.6rem" }}>
+                <button type="button" className="btn btn-primary" onClick={handleCreatePlan} disabled={savingKey !== null}>
+                  <Save size={15} /> {t("tariff_plan_create_from_current")}
+                </button>
+                <button type="button" className="btn btn-outline" onClick={() => setIsCreatingPlan(false)} disabled={savingKey !== null}>
+                  <X size={15} /> {t("cancel")}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
 
       <section style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(190px, 1fr))", gap: "1rem", marginBottom: "1.5rem" }}>
         {(["data", "voice", "sms", "ims"] as const).map((key) => {

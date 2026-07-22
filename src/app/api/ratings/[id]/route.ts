@@ -31,7 +31,8 @@ export async function GET(request: Request, { params }: RouteContext) {
   if (!isValidRatingId(id)) return NextResponse.json({ error: 'Invalid rating ID format' }, { status: 400 });
 
   try {
-    const rating = await getRating(id);
+    const planId = new URL(request.url).searchParams.get('planId') || undefined;
+    const rating = await getRating(id, planId);
     if (!rating) {
       return NextResponse.json({ error: 'Rating not found' }, { status: 404 });
     }
@@ -55,14 +56,16 @@ export async function PUT(request: Request, { params }: RouteContext) {
 
   try {
     const body = await request.json();
+    const planId = body?.planId || body?.plan_id || new URL(request.url).searchParams.get('planId') || undefined;
     if (capabilityDecision(auth.auth.role, 'rating_publish') === 'approval') {
       const approval = await createApprovalRequest({
         action: 'RATING_UPDATE',
         requester: auth.auth.user,
-        targetId: `rating:${id}`,
-        summary: `Update rating group ${id}`,
+        targetId: `rating:${planId || 'plan_default_10gb'}:${id}`,
+        summary: `Update rating group ${id} in ${planId || 'plan_default_10gb'}`,
         payload: {
           id,
+          planId,
           changes: body,
         },
       });
@@ -74,7 +77,7 @@ export async function PUT(request: Request, { params }: RouteContext) {
       );
     }
 
-    await updateRating(id, body);
+    await updateRating(id, body, planId);
     return NextResponse.json({ message: 'Rating updated successfully' });
   } catch (error) {
     console.error('Error updating rating:', error);
@@ -93,13 +96,14 @@ export async function DELETE(request: Request, { params }: RouteContext) {
   if (!isValidRatingId(id)) return NextResponse.json({ error: 'Invalid rating ID format' }, { status: 400 });
 
   try {
+    const planId = new URL(request.url).searchParams.get('planId') || undefined;
     if (capabilityDecision(auth.auth.role, 'rating_publish') === 'approval') {
       const approval = await createApprovalRequest({
         action: 'RATING_DELETE',
         requester: auth.auth.user,
-        targetId: `rating:${id}`,
-        summary: `Delete rating group ${id}`,
-        payload: { id },
+        targetId: `rating:${planId || 'plan_default_10gb'}:${id}`,
+        summary: `Delete rating group ${id} from ${planId || 'plan_default_10gb'}`,
+        payload: { id, planId },
       });
 
       logAudit('UPDATE', `approval:${approval.id}`, null, approval, request);
@@ -109,7 +113,7 @@ export async function DELETE(request: Request, { params }: RouteContext) {
       );
     }
 
-    const result = await deleteRating(id);
+    const result = await deleteRating(id, planId);
     if (!result.deleted) {
       return NextResponse.json(
         {

@@ -45,6 +45,7 @@ export async function POST(request: Request) {
       smsTotal: payload.smsTotal,
       smsBalance: payload.smsBalance,
       profileName: payload.profileName,
+      planId: payload.planId,
       strategy: payload.strategy,
     });
     const { createdImsis, skippedImsis, failedImsis, metrics } = result;

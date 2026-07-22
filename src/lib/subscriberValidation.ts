@@ -10,6 +10,7 @@ type BatchCreatePayload = {
   smsTotal?: unknown;
   smsBalance?: unknown;
   profileName?: string;
+  planId?: string;
   strategy: 'skip' | 'overwrite';
 };
 
@@ -170,6 +171,9 @@ export function validateBatchCreatePayload(body: unknown): ValidationResult<Batc
     const error = validateOptionalNonNegativeNumber(payload[field], field);
     if (error) return { ok: false, error };
   }
+  if (!isBlank(payload.planId) && !/^[A-Za-z0-9_.-]{1,64}$/.test(String(payload.planId).trim())) {
+    return { ok: false, error: 'planId contains invalid characters' };
+  }
 
   return {
     ok: true,
@@ -178,6 +182,7 @@ export function validateBatchCreatePayload(body: unknown): ValidationResult<Batc
       startImsi: imsi.value,
       count: count.value,
       profileName: isBlank(payload.profileName) ? undefined : String(payload.profileName),
+      planId: isBlank(payload.planId) ? undefined : String(payload.planId).trim(),
       strategy: payload.strategy === 'skip' ? 'skip' : 'overwrite',
     },
   };

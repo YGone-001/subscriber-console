@@ -61,6 +61,7 @@ type BatchCreateOptions = {
   smsTotal?: unknown;
   smsBalance?: unknown;
   profileName?: string;
+  planId?: unknown;
   strategy?: 'skip' | 'overwrite';
 };
 
@@ -84,6 +85,7 @@ type ImportRecord = Record<string, unknown> & {
   traffic_balance?: unknown;
   sms_total?: unknown;
   sms_balance?: unknown;
+  plan_id?: unknown;
   access_restriction_data?: unknown;
 };
 
@@ -451,13 +453,13 @@ export async function findSubscriberLegacyState(imsi: string): Promise<LegacySub
   };
 }
 
-export async function createDefaultSubscriber(imsi: string): Promise<Open5gsSubscriberDocument> {
+export async function createDefaultSubscriber(imsi: string, planId?: unknown): Promise<Open5gsSubscriberDocument> {
   const collection = await subscribersCollection();
   const doc = buildDefaultOpen5gsSubscriber(imsi);
 
   try {
     await collection.insertOne(doc as SubscriberDoc);
-    await provisionOcsSubscriber({ imsi });
+    await provisionOcsSubscriber({ imsi, planId });
     return doc;
   } catch (error) {
     if (isDuplicateKey(error)) {
@@ -512,15 +514,17 @@ export async function updateSubscriberFromLegacy(
     next as SubscriberDoc,
     { upsert: true }
   );
+  const ocsTraffic = payload.ocsTraffic as Record<string, unknown> | undefined;
   await provisionOcsSubscriber({
     imsi,
+    planId: ocsTraffic?.planId ?? ocsTraffic?.plan_id,
     msisdn: msisdnFromLegacyPayload(payload),
-    total: (payload.ocsTraffic as Record<string, unknown> | undefined)?.traffic_total,
-    available: (payload.ocsTraffic as Record<string, unknown> | undefined)?.traffic_balance,
-    voiceTotal: (payload.ocsTraffic as Record<string, unknown> | undefined)?.voice_total,
-    voiceAvailable: (payload.ocsTraffic as Record<string, unknown> | undefined)?.voice_balance,
-    smsTotal: (payload.ocsTraffic as Record<string, unknown> | undefined)?.sms_total,
-    smsAvailable: (payload.ocsTraffic as Record<string, unknown> | undefined)?.sms_balance,
+    total: ocsTraffic?.traffic_total,
+    available: ocsTraffic?.traffic_balance,
+    voiceTotal: ocsTraffic?.voice_total,
+    voiceAvailable: ocsTraffic?.voice_balance,
+    smsTotal: ocsTraffic?.sms_total,
+    smsAvailable: ocsTraffic?.sms_balance,
   });
 
   return next;
@@ -605,6 +609,7 @@ export async function createSubscribersBatch(options: BatchCreateOptions): Promi
   await Promise.all(successfulImsis.map((imsi) =>
     provisionOcsSubscriber({
       imsi,
+      planId: options.planId ?? ocs.planId ?? ocs.plan_id,
       total: initialTotal,
       available: initialBalance,
       smsTotal: initialSmsTotal,
@@ -631,7 +636,7 @@ export async function importSubscribersFromRecords(records: ImportRecord[], over
   const existing = await existingImsiSet(imsis);
   const operations: AnyBulkWriteOperation<SubscriberDoc>[] = [];
   const pendingImsis: string[] = [];
-  const provisioningByImsi = new Map<string, { total: number; available: number; smsTotal: number; smsAvailable: number }>();
+  const provisioningByImsi = new Map<string, { total: number; available: number; smsTotal: number; smsAvailable: number; planId?: unknown }>();
   let skipped = records.length - normalized.length;
 
   for (const { record, doc } of normalized) {
@@ -652,7 +657,7 @@ export async function importSubscribersFromRecords(records: ImportRecord[], over
     const total = asNumber(record.traffic_total, available);
     const smsAvailable = asNumber(record.sms_balance, 100);
     const smsTotal = asNumber(record.sms_total, smsAvailable);
-    provisioningByImsi.set(doc.imsi, { total, available, smsTotal, smsAvailable });
+    provisioningByImsi.set(doc.imsi, { total, available, smsTotal, smsAvailable, planId: record.plan_id });
     pendingImsis.push(doc.imsi);
   }
 
@@ -661,6 +666,7 @@ export async function importSubscribersFromRecords(records: ImportRecord[], over
     const provisioning = provisioningByImsi.get(imsi);
     return provisionOcsSubscriber({
       imsi,
+      planId: provisioning?.planId,
       total: provisioning?.total,
       available: provisioning?.available,
       smsTotal: provisioning?.smsTotal,

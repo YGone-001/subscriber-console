@@ -31,6 +31,8 @@ export type OcsTariffRule = {
 
 type OcsTariffPlan = Document & {
   plan_id: string;
+  name?: string;
+  description?: string;
   status: 'active' | 'disabled' | string;
   quota_per_grant: Long | number;
   validity_time: number;
@@ -95,6 +97,18 @@ export type RatingPolicy = {
   volume_threshold: number;
   priority: number;
   status: string;
+};
+
+export type TariffPlanSummary = {
+  plan_id: string;
+  name: string;
+  description: string;
+  status: string;
+  rulesCount: number;
+  subscriberCount: number;
+  isDefault: boolean;
+  created_at?: Date | string;
+  updated_at?: Date | string;
 };
 
 export type OcsProvisioningInput = {
@@ -180,6 +194,14 @@ function toNumber(value: unknown, fallback = 0): number {
 function asString(value: unknown, fallback = ''): string {
   if (value === undefined || value === null || value === '') return fallback;
   return String(value);
+}
+
+function normalizePlanId(value: unknown, fallback = DEFAULT_OCS_PLAN_ID): string {
+  const planId = asString(value, fallback).trim();
+  if (!/^[A-Za-z0-9_.-]{1,64}$/.test(planId)) {
+    throw new Error('INVALID_PLAN_ID');
+  }
+  return planId;
 }
 
 function ratesTypeToChargingType(value: unknown): string {
@@ -278,10 +300,16 @@ function defaultSmsRule(): OcsTariffRule {
   };
 }
 
-function defaultPlan(now = new Date()): OcsTariffPlan {
+function defaultPlan(
+  now = new Date(),
+  planId = DEFAULT_OCS_PLAN_ID,
+  name = 'Default 10GB Data Plan',
+  description = ''
+): OcsTariffPlan {
   return {
-    plan_id: DEFAULT_OCS_PLAN_ID,
-    name: 'Default 10GB Data Plan',
+    plan_id: planId,
+    name,
+    description,
     status: 'active',
     quota_per_grant: Long.fromNumber(DEFAULT_QUOTA_PER_GRANT),
     validity_time: DEFAULT_VALIDITY_TIME,
@@ -317,6 +345,8 @@ function tariffPlanSnapshot(plan: OcsTariffPlan | null) {
   if (!plan) return null;
   return {
     plan_id: plan.plan_id,
+    name: asString(plan.name, plan.plan_id),
+    description: asString(plan.description),
     status: plan.status,
     rules: (plan.rules || []).map((rule) => normalizePolicy(rule, plan.plan_id)),
   };
@@ -365,6 +395,147 @@ async function getOrCreateDefaultPlan(): Promise<OcsTariffPlan> {
   }
 
   return attachLegacyRatingRules(collection, existing);
+}
+
+async function getTariffPlanDocument(planIdInput?: unknown): Promise<OcsTariffPlan | null> {
+  const planId = normalizePlanId(planIdInput);
+  if (planId === DEFAULT_OCS_PLAN_ID) return getOrCreateDefaultPlan();
+  const collection = await tariffPlansCollection();
+  return collection.findOne({ plan_id: planId });
+}
+
+function summarizePlan(plan: OcsTariffPlan, subscriberCount: number): TariffPlanSummary {
+  return {
+    plan_id: plan.plan_id,
+    name: asString(plan.name, plan.plan_id),
+    description: asString(plan.description),
+    status: plan.status || 'active',
+    rulesCount: (plan.rules || []).length,
+    subscriberCount,
+    isDefault: plan.plan_id === DEFAULT_OCS_PLAN_ID,
+    created_at: plan.created_at,
+    updated_at: plan.updated_at,
+  };
+}
+
+export async function listTariffPlans(): Promise<TariffPlanSummary[]> {
+  await getOrCreateDefaultPlan();
+  const [plansCollection, subscribersCollection] = await Promise.all([
+    tariffPlansCollection(),
+    ocsSubscribersCollection(),
+  ]);
+  const plans = await plansCollection.find({}).sort({ plan_id: 1 }).toArray();
+  const subscriberCounts = await Promise.all(
+    plans.map((plan) => subscribersCollection.countDocuments({ plan_id: plan.plan_id }))
+  );
+
+  return plans.map((plan, index) => summarizePlan(plan, subscriberCounts[index] || 0));
+}
+
+export async function getTariffPlan(planIdInput?: unknown) {
+  const plan = await getTariffPlanDocument(planIdInput);
+  if (!plan) return null;
+  const subscribersCollection = await ocsSubscribersCollection();
+  const subscriberCount = await subscribersCollection.countDocuments({ plan_id: plan.plan_id });
+  return {
+    ...summarizePlan(plan, subscriberCount),
+    rules: (plan.rules || []).map((rule) => normalizePolicy(rule, plan.plan_id)),
+  };
+}
+
+export async function createTariffPlan(input: {
+  plan_id?: unknown;
+  name?: unknown;
+  description?: unknown;
+  status?: unknown;
+  cloneFromPlanId?: unknown;
+}): Promise<TariffPlanSummary> {
+  const planId = normalizePlanId(input.plan_id);
+  const collection = await tariffPlansCollection();
+  const existing = await collection.findOne({ plan_id: planId });
+  if (existing) throw new Error('TARIFF_PLAN_EXISTS');
+
+  const now = new Date();
+  const sourcePlan = input.cloneFromPlanId ? await getTariffPlanDocument(input.cloneFromPlanId) : null;
+  if (input.cloneFromPlanId && !sourcePlan) throw new Error('SOURCE_TARIFF_PLAN_NOT_FOUND');
+
+  const plan: OcsTariffPlan = sourcePlan
+    ? {
+        ...sourcePlan,
+        _id: undefined,
+        plan_id: planId,
+        name: asString(input.name, `${asString(sourcePlan.name, sourcePlan.plan_id)} Copy`),
+        description: asString(input.description, asString(sourcePlan.description)),
+        status: asString(input.status, 'active'),
+        created_at: now,
+        updated_at: now,
+      }
+    : defaultPlan(
+        now,
+        planId,
+        asString(input.name, planId),
+        asString(input.description)
+      );
+  plan.status = asString(input.status, plan.status || 'active');
+  delete (plan as { _id?: unknown })._id;
+
+  await collection.insertOne(plan);
+  return summarizePlan(plan, 0);
+}
+
+export async function updateTariffPlan(planIdInput: unknown, input: {
+  name?: unknown;
+  description?: unknown;
+  status?: unknown;
+}): Promise<TariffPlanSummary | null> {
+  const planId = normalizePlanId(planIdInput);
+  const collection = await tariffPlansCollection();
+  const plan = await getTariffPlanDocument(planId);
+  if (!plan) return null;
+
+  const next: OcsTariffPlan = {
+    ...plan,
+    name: input.name === undefined ? plan.name : asString(input.name, plan.plan_id),
+    description: input.description === undefined ? plan.description : asString(input.description),
+    status: input.status === undefined ? plan.status : asString(input.status, 'active'),
+    updated_at: new Date(),
+  };
+
+  await collection.replaceOne({ plan_id: planId }, next);
+  const subscribersCollection = await ocsSubscribersCollection();
+  const subscriberCount = await subscribersCollection.countDocuments({ plan_id: planId });
+  return summarizePlan(next, subscriberCount);
+}
+
+export async function deleteTariffPlan(planIdInput: unknown) {
+  const planId = normalizePlanId(planIdInput);
+  if (planId === DEFAULT_OCS_PLAN_ID) throw new Error('DEFAULT_TARIFF_PLAN_PROTECTED');
+
+  const [collection, subscribersCollection] = await Promise.all([
+    tariffPlansCollection(),
+    ocsSubscribersCollection(),
+  ]);
+  const subscriberExamples = await subscribersCollection
+    .find({ plan_id: planId })
+    .project<{ imsi: string }>({ imsi: 1, _id: 0 })
+    .limit(5)
+    .toArray();
+  const subscriberCount = await subscribersCollection.countDocuments({ plan_id: planId });
+  if (subscriberCount > 0) {
+    return {
+      deleted: false,
+      references: {
+        count: subscriberCount,
+        examples: subscriberExamples.map((item) => item.imsi),
+      },
+    };
+  }
+
+  const result = await collection.deleteOne({ plan_id: planId });
+  return {
+    deleted: result.deletedCount > 0,
+    references: { count: 0, examples: [] as string[] },
+  };
 }
 
 function makeRule(input: {
@@ -462,22 +633,25 @@ async function attachLegacyRatingRules(collection: Awaited<ReturnType<typeof tar
   return next;
 }
 
-export async function listRatingPolicies(): Promise<RatingPolicy[]> {
-  const plan = await getOrCreateDefaultPlan();
+export async function listRatingPolicies(planId?: unknown): Promise<RatingPolicy[]> {
+  const plan = await getTariffPlanDocument(planId);
+  if (!plan) return [];
   return nonSystemRules(plan)
     .map((rule) => normalizePolicy(rule, plan.plan_id))
     .sort((a, b) => a.rating_group_id - b.rating_group_id);
 }
 
-export async function getRatingPolicy(id: string | number): Promise<RatingPolicy | null> {
-  const plan = await getOrCreateDefaultPlan();
+export async function getRatingPolicy(id: string | number, planId?: unknown): Promise<RatingPolicy | null> {
+  const plan = await getTariffPlanDocument(planId);
+  if (!plan) return null;
   const rule = nonSystemRules(plan).find((item) => String(toNumber(item.rating_group)) === String(id));
   return rule ? normalizePolicy(rule, plan.plan_id) : null;
 }
 
-export async function createRatingPolicy(input: Parameters<typeof makeRule>[0]): Promise<RatingPolicy> {
+export async function createRatingPolicy(input: Parameters<typeof makeRule>[0], planIdInput?: unknown): Promise<RatingPolicy> {
   const collection = await tariffPlansCollection();
-  const plan = await getOrCreateDefaultPlan();
+  const plan = await getTariffPlanDocument(planIdInput);
+  if (!plan) throw new Error('OCS_PLAN_NOT_FOUND');
   const rule = makeRule(input);
   const ratingGroupId = toNumber(rule.rating_group);
 
@@ -490,13 +664,14 @@ export async function createRatingPolicy(input: Parameters<typeof makeRule>[0]):
     rules: [...(plan.rules || []), rule],
     updated_at: new Date(),
   };
-  await collection.replaceOne({ plan_id: DEFAULT_OCS_PLAN_ID }, next);
+  await collection.replaceOne({ plan_id: plan.plan_id }, next);
   return normalizePolicy(rule, plan.plan_id);
 }
 
-export async function updateRatingPolicy(id: string | number, input: Partial<Parameters<typeof makeRule>[0]>): Promise<RatingPolicy> {
+export async function updateRatingPolicy(id: string | number, input: Partial<Parameters<typeof makeRule>[0]>, planIdInput?: unknown): Promise<RatingPolicy> {
   const collection = await tariffPlansCollection();
-  const plan = await getOrCreateDefaultPlan();
+  const plan = await getTariffPlanDocument(planIdInput);
+  if (!plan) throw new Error('OCS_PLAN_NOT_FOUND');
   const ratingGroupId = Number(id);
   const existing = (plan.rules || []).find((rule) => toNumber(rule.rating_group) === ratingGroupId);
   const replacement = makeRule({
@@ -511,13 +686,14 @@ export async function updateRatingPolicy(id: string | number, input: Partial<Par
     updated_at: new Date(),
   };
 
-  await collection.replaceOne({ plan_id: DEFAULT_OCS_PLAN_ID }, next);
+  await collection.replaceOne({ plan_id: plan.plan_id }, next);
   return normalizePolicy(replacement, plan.plan_id);
 }
 
-export async function deleteRatingPolicy(id: string | number) {
+export async function deleteRatingPolicy(id: string | number, planIdInput?: unknown) {
   const collection = await tariffPlansCollection();
-  const plan = await getOrCreateDefaultPlan();
+  const plan = await getTariffPlanDocument(planIdInput);
+  if (!plan) throw new Error('OCS_PLAN_NOT_FOUND');
   const ratingGroupId = Number(id);
   const before = plan.rules || [];
   const next = {
@@ -526,7 +702,7 @@ export async function deleteRatingPolicy(id: string | number) {
     updated_at: new Date(),
   };
 
-  await collection.replaceOne({ plan_id: DEFAULT_OCS_PLAN_ID }, next);
+  await collection.replaceOne({ plan_id: plan.plan_id }, next);
   return { deleted: before.length !== next.rules.length, references: { count: 0, examples: [] as string[] } };
 }
 
@@ -597,7 +773,8 @@ export async function provisionOcsSubscriber(input: OcsProvisioningInput): Promi
   const nextSmsTotal = Math.max(smsTotal, smsUsed + smsAvailable);
   const version = existingBalance ? toNumber(existingBalance.version, 0) + 1 : 1;
 
-  await getOrCreateDefaultPlan();
+  const plan = await getTariffPlanDocument(planId);
+  if (!plan) throw new Error('OCS_PLAN_NOT_FOUND');
   await subscriberCollection.updateOne(
     { imsi: input.imsi },
     {

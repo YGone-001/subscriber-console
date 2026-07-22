@@ -1,8 +1,10 @@
 "use client";
 
 import { CheckCircle2, type LucideIcon, RotateCcw, Save, Settings2, ShieldOff, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import useSWR from "swr";
 import { OperationNotice } from "./OperationFeedback";
+import { fetcher } from "@/lib/fetcher";
 
 type PolicyStatus = "active" | "suspended";
 
@@ -33,26 +35,36 @@ type BulkPolicyModalProps = {
   t: (key: string, params?: Record<string, string | number>) => string;
 };
 
-const PLAN_OPTIONS = [
-  {
-    id: "plan_default_10gb",
-    label: "Default 10GB Data + IMS Voice + SMS",
-    descriptionKey: "policy_change_default_plan_desc",
-  },
-];
+type TariffPlan = {
+  plan_id: string;
+  name: string;
+  description?: string;
+  status: string;
+};
 
 export default function BulkPolicyModal({ isOpen, selectedImsis, onClose, onSuccess, t }: BulkPolicyModalProps) {
-  const [planId, setPlanId] = useState(PLAN_OPTIONS[0].id);
+  const { data: plansData } = useSWR(isOpen ? "/api/tariff-plans" : null, fetcher);
+  const planOptions: TariffPlan[] = useMemo(
+    () => (plansData?.plans || []).filter((plan: TariffPlan) => (plan.status || "active") === "active"),
+    [plansData?.plans]
+  );
+  const [planId, setPlanId] = useState("plan_default_10gb");
   const [status, setStatus] = useState<PolicyStatus>("active");
   const [resetBalances, setResetBalances] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const selectedPreview = useMemo(() => selectedImsis.slice(0, 3), [selectedImsis]);
+  const selectedPlan = planOptions.find((plan) => plan.plan_id === planId);
   const statusOptions: Array<{ value: PolicyStatus; labelKey: string; icon: LucideIcon }> = [
     { value: "active", labelKey: "policy_status_active", icon: CheckCircle2 },
     { value: "suspended", labelKey: "policy_status_suspended", icon: ShieldOff },
   ];
+
+  useEffect(() => {
+    if (!isOpen || planOptions.length === 0 || planOptions.some((plan) => plan.plan_id === planId)) return;
+    setPlanId(planOptions[0].plan_id);
+  }, [isOpen, planId, planOptions]);
 
   if (!isOpen) return null;
 
@@ -106,12 +118,14 @@ export default function BulkPolicyModal({ isOpen, selectedImsis, onClose, onSucc
             <div>
               <label className="form-label">{t("policy_change_plan")}</label>
               <select className="form-input" value={planId} onChange={(event) => setPlanId(event.target.value)}>
-                {PLAN_OPTIONS.map((plan) => (
-                  <option key={plan.id} value={plan.id}>{plan.label}</option>
+                {planOptions.length === 0 ? (
+                  <option value="plan_default_10gb">plan_default_10gb</option>
+                ) : planOptions.map((plan) => (
+                  <option key={plan.plan_id} value={plan.plan_id}>{plan.name || plan.plan_id}</option>
                 ))}
               </select>
               <div style={{ marginTop: "0.5rem", color: "var(--text-muted)", fontSize: "0.82rem", lineHeight: 1.5 }}>
-                {t(PLAN_OPTIONS.find((plan) => plan.id === planId)?.descriptionKey || "policy_change_default_plan_desc")}
+                {selectedPlan?.description || t("policy_change_default_plan_desc")}
               </div>
             </div>
 

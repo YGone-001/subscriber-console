@@ -82,7 +82,8 @@ export async function executeApproval(approval: ApprovalDocument, request: Reque
     if (approval.payload.rating_group_id === undefined || approval.payload.rating_group_id === null || approval.payload.rating_group_id === '') {
       throw new Error('rating_group_id is required');
     }
-    const result = await createRating(approval.payload as { rating_group_id: unknown } & Record<string, unknown>);
+    const payload = approval.payload as { rating_group_id: unknown; planId?: unknown; plan_id?: unknown } & Record<string, unknown>;
+    const result = await createRating(payload, payload.planId || payload.plan_id);
     logAudit('CREATE', `rating:${result.rating_group_id}`, null, { ...result, approvalId: approval.id }, request);
     return result;
   }
@@ -92,7 +93,7 @@ export async function executeApproval(approval: ApprovalDocument, request: Reque
     const id = String(payload.id || '');
     if (!/^\d+$/.test(id)) throw new Error('Invalid rating ID format');
 
-    const result = await updateRating(id, asRecord(payload.changes));
+    const result = await updateRating(id, asRecord(payload.changes), payload.planId || asRecord(payload.changes).planId || asRecord(payload.changes).plan_id);
     logAudit('UPDATE', `rating:${id}`, null, { ...result, approvalId: approval.id }, request);
     return result;
   }
@@ -102,7 +103,7 @@ export async function executeApproval(approval: ApprovalDocument, request: Reque
     const id = String(payload.id || '');
     if (!/^\d+$/.test(id)) throw new Error('Invalid rating ID format');
 
-    const result = await deleteRating(id);
+    const result = await deleteRating(id, payload.planId || payload.plan_id);
     if (!result.deleted) {
       throw new Error(`Cannot delete: Rating group is currently used by ${result.references.count} subscribers`);
     }
@@ -156,7 +157,10 @@ export async function executeApproval(approval: ApprovalDocument, request: Reque
       count: payload.count,
       trafficTotal: payload.trafficTotal,
       trafficBalance: payload.trafficBalance,
+      smsTotal: payload.smsTotal,
+      smsBalance: payload.smsBalance,
       profileName: payload.profileName,
+      planId: payload.planId,
       strategy: payload.strategy,
     });
     const { createdImsis, skippedImsis, failedImsis, metrics } = result;
