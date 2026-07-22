@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type React from "react";
-import { ArrowRightLeft, BarChart3, CheckCircle2, Database, DollarSign, Hash, History, MessageSquare, Mic2, Pencil, Plus, Save, Search, ShieldCheck, Tag, Trash2, X } from "lucide-react";
+import { ArrowRightLeft, CheckCircle2, Database, DollarSign, Hash, History, MessageSquare, Mic2, Pencil, Plus, Save, Search, ShieldCheck, Tag, Trash2, X } from "lucide-react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
 import { useI18n } from "@/components/I18nProvider";
@@ -703,135 +703,206 @@ export default function RatingManagementPage({ view }: { view: RatingManagementV
       )}
 
       {view === "plans" && (
-      <section className="dash-card" style={{ marginBottom: "1.25rem" }}>
-        <div className="dash-card-header" style={{ display: "flex", justifyContent: "space-between", gap: "1rem", alignItems: "center", flexWrap: "wrap" }}>
-          <div style={{ display: "grid", gap: "0.35rem" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.65rem", flexWrap: "wrap" }}>
-              <h3 style={{ margin: 0, color: "var(--text-main)", fontSize: "1.05rem", fontWeight: 850 }}>{t("tariff_plan_current")}</h3>
-              {selectedPlan && (
-                <>
-                  <StatusBadge tone={(selectedPlan.status || "active") === "active" ? "success" : "muted"}>
-                    {(selectedPlan.status || "active") === "active" ? t("policy_status_active") : t("users_disabled")}
-                  </StatusBadge>
-                  {selectedPlan.isDefault && <StatusBadge tone="warning">{DEFAULT_OCS_PLAN_ID}</StatusBadge>}
-                </>
-              )}
-            </div>
-            <p style={{ margin: 0, color: "var(--text-muted)", fontSize: "0.84rem" }}>{t("tariff_plan_current_desc")}</p>
-          </div>
-          {canEditTemplates && (
-            <div style={{ display: "flex", gap: "0.55rem", flexWrap: "wrap" }}>
-              <button type="button" className="btn btn-outline" onClick={beginCreatePlan} disabled={savingKey !== null}>
-                <Plus size={15} /> {t("tariff_plan_new")}
-              </button>
-              {!isCreatingPlan && (
-                <button type="button" className="btn btn-primary" onClick={handleUpdatePlan} disabled={!selectedPlan || savingKey !== null || isDisablingPlanWithSubscribers}>
-                  <Save size={15} /> {t("tariff_plan_save")}
-                </button>
-              )}
-              {!isCreatingPlan && selectedPlan && !selectedPlan.isDefault && (
-                <button type="button" className="btn btn-outline" onClick={handleDeletePlan} disabled={savingKey !== null || selectedPlanSubscriberTotal > 0} style={{ color: "var(--danger)", borderColor: "var(--danger)" }}>
-                  <Trash2 size={15} /> {t("tariff_plan_delete")}
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-        <div className="dash-card-body" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "1.25rem", alignItems: "start" }}>
-          <div style={{ display: "grid", gap: "1rem" }}>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "0.9rem", alignItems: "end" }}>
-              <Field label={t("tariff_plan_id")}>
-                {isCreatingPlan ? (
-                  <input className="form-input" value={planForm.plan_id} onChange={(event) => setPlanForm((current) => ({ ...current, plan_id: event.target.value }))} />
-                ) : (
-                  <select
-                    className="form-input"
-                    value={selectedPlanId}
-                    onChange={(event) => {
-                      setSelectedPlanId(event.target.value);
-                      setEditingId(null);
-                      setIsAdding(false);
-                      setQuery("");
-                    }}
-                  >
-                    {plans.map((plan) => (
-                      <option key={plan.plan_id} value={plan.plan_id}>{plan.name && plan.name !== plan.plan_id ? `${plan.name} (${plan.plan_id})` : plan.plan_id}</option>
-                    ))}
-                  </select>
-                )}
-              </Field>
-              <Field label={t("tariff_plan_name")}>
-                <input className="form-input" value={planForm.name} onChange={(event) => setPlanForm((current) => ({ ...current, name: event.target.value }))} disabled={!canEditTemplates} />
-              </Field>
-              <Field label={t("tariff_plan_desc")}>
-                <input className="form-input" value={planForm.description} onChange={(event) => setPlanForm((current) => ({ ...current, description: event.target.value }))} disabled={!canEditTemplates} />
-              </Field>
-              <Field label={t("tariff_plan_status")}>
-                <select className="form-input" value={planForm.status} onChange={(event) => setPlanForm((current) => ({ ...current, status: event.target.value }))} disabled={!canEditTemplates}>
-                  <option value="active">{t("policy_status_active")}</option>
-                  <option value="disabled">{t("users_disabled")}</option>
-                </select>
-              </Field>
-            </div>
-
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.7rem" }}>
-              {[
-                { label: t("tariff_plan_rules"), value: selectedPlan?.rulesCount ?? ratings.length },
-                { label: t("tariff_plan_subscribers"), value: selectedPlanSubscriberTotal },
-                { label: t("tariff_plan_ops_selected_share"), value: `${planOperationSummary?.selectedSharePct ?? 0}%` },
-                { label: t("tariff_plan_ops_last_change"), value: formatDateTime(planOperationSummary?.lastChangedAt) },
-              ].map((item) => (
-                <div key={item.label} style={{ borderTop: "1px solid var(--surface-border)", paddingTop: "0.65rem", minWidth: 0 }}>
-                  <div style={{ color: "var(--text-muted)", fontSize: "0.72rem", fontWeight: 800, textTransform: "uppercase" }}>{item.label}</div>
-                  <div style={{ color: "var(--text-main)", fontSize: "1rem", fontWeight: 850, marginTop: "0.25rem", overflowWrap: "anywhere" }}>{item.value}</div>
+        <div style={{ display: "grid", gap: "1.25rem" }}>
+          <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 190px), 1fr))", gap: "0.9rem" }}>
+            {[
+              { icon: <Tag size={18} color="var(--primary)" />, label: t("tariff_plan_ops_total_plans"), value: planOperationSummary?.totalPlans ?? plans.length },
+              { icon: <CheckCircle2 size={18} color="var(--success)" />, label: t("tariff_plan_ops_active_plans"), value: planOperationSummary?.activePlans ?? plans.filter((plan) => (plan.status || "active") === "active").length },
+              { icon: <ShieldCheck size={18} color="var(--warning)" />, label: t("tariff_plan_ops_disabled_plans"), value: planOperationSummary?.disabledPlans ?? plans.filter((plan) => plan.status === "disabled").length },
+              { icon: <Database size={18} color="var(--primary)" />, label: t("tariff_plan_ops_linked_total"), value: planOperationSummary?.totalLinkedSubscribers ?? plans.reduce((sum, plan) => sum + (plan.subscriberCount || 0), 0) },
+            ].map((item) => (
+              <div key={item.label} className="dash-card" style={{ minHeight: 104, padding: "1rem 1.1rem", display: "grid", alignContent: "space-between", gap: "0.8rem" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.55rem", color: "var(--text-muted)", fontSize: "0.76rem", fontWeight: 850, textTransform: "uppercase" }}>
+                  {item.icon} {item.label}
                 </div>
-              ))}
-            </div>
-
-            {isDisablingPlanWithSubscribers && (
-              <div style={{ color: "var(--danger)", fontSize: "0.8rem", fontWeight: 800, borderTop: "1px solid var(--surface-border)", paddingTop: "0.85rem" }}>
-                {t("tariff_plan_disable_in_use")}
+                <div style={{ color: "var(--text-main)", fontSize: "1.7rem", lineHeight: 1, fontWeight: 900 }}>{item.value}</div>
               </div>
-            )}
+            ))}
+          </section>
 
-            {isCreatingPlan && (
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.6rem", borderTop: "1px solid var(--surface-border)", paddingTop: "0.85rem", flexWrap: "wrap" }}>
-                <button type="button" className="btn btn-primary" onClick={handleCreatePlan} disabled={savingKey !== null}>
-                  <Save size={15} /> {t("tariff_plan_create_from_current")}
-                </button>
-                <button type="button" className="btn btn-outline" onClick={() => setIsCreatingPlan(false)} disabled={savingKey !== null}>
-                  <X size={15} /> {t("cancel")}
-                </button>
+          <section style={{ display: "grid", gap: "1.25rem" }}>
+            <section className="dash-card" style={{ overflow: "hidden" }}>
+              <div className="dash-card-header" style={{ display: "flex", justifyContent: "space-between", gap: "1rem", alignItems: "center" }}>
+                <div>
+                  <h3 style={{ margin: 0, color: "var(--text-main)", fontSize: "1rem", fontWeight: 850 }}>{t("tariff_plan_catalog")}</h3>
+                  <p style={{ margin: "0.25rem 0 0", color: "var(--text-muted)", fontSize: "0.8rem" }}>{t("tariff_plan_catalog_desc")}</p>
+                </div>
+                {canEditTemplates && (
+                  <button type="button" className="btn-icon" onClick={beginCreatePlan} disabled={savingKey !== null} title={t("tariff_plan_new")}>
+                    <Plus size={18} color="var(--primary)" />
+                  </button>
+                )}
               </div>
-            )}
+              <div className="dash-card-body" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 260px), 1fr))", gap: "0.75rem" }}>
+                {plans.map((plan) => {
+                  const active = !isCreatingPlan && plan.plan_id === selectedPlanId;
+                  const planStatus = plan.status || "active";
+                  return (
+                    <button
+                      key={plan.plan_id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedPlanId(plan.plan_id);
+                        setEditingId(null);
+                        setIsAdding(false);
+                        setQuery("");
+                        setIsCreatingPlan(false);
+                      }}
+                      style={{
+                        width: "100%",
+                        textAlign: "left",
+                        border: `1px solid ${active ? "var(--primary)" : "var(--surface-border)"}`,
+                        borderRadius: 6,
+                        background: active ? "color-mix(in srgb, var(--primary) 7%, var(--surface))" : "var(--surface)",
+                        padding: "0.9rem",
+                        cursor: "pointer",
+                        display: "grid",
+                        gap: "0.65rem",
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "flex-start" }}>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ color: "var(--text-main)", fontWeight: 850, fontSize: "0.9rem", overflowWrap: "anywhere" }}>{plan.name || plan.plan_id}</div>
+                          <div style={{ color: "var(--text-muted)", fontFamily: "monospace", fontSize: "0.74rem", marginTop: "0.2rem", overflowWrap: "anywhere" }}>{plan.plan_id}</div>
+                        </div>
+                        <StatusBadge tone={planStatus === "active" ? "success" : "muted"}>
+                          {planStatus === "active" ? t("policy_status_active") : t("users_disabled")}
+                        </StatusBadge>
+                      </div>
+                      <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap", color: "var(--text-muted)", fontSize: "0.76rem", fontWeight: 750 }}>
+                        <span>{t("tariff_plan_rules")}: <strong style={{ color: "var(--text-main)" }}>{plan.rulesCount}</strong></span>
+                        <span>{t("tariff_plan_subscribers")}: <strong style={{ color: "var(--text-main)" }}>{plan.subscriberCount}</strong></span>
+                        {plan.isDefault && <StatusBadge tone="warning">{DEFAULT_OCS_PLAN_ID}</StatusBadge>}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
 
-            {!isCreatingPlan && selectedPlan && selectedPlanSubscriberTotal > 0 && (
-              <div style={{ borderTop: "1px solid var(--surface-border)", paddingTop: "0.95rem", display: "grid", gap: "0.85rem" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", alignItems: "flex-start", flexWrap: "wrap" }}>
-                  <div>
-                    <h4 style={{ margin: 0, color: "var(--text-main)", fontSize: "0.92rem", fontWeight: 850, display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                      <ArrowRightLeft size={16} color="var(--primary)" /> {t("tariff_plan_migrate_title")}
-                    </h4>
-                    <p style={{ margin: "0.25rem 0 0", color: "var(--text-muted)", fontSize: "0.8rem", lineHeight: 1.45 }}>
-                      {t("tariff_plan_migrate_desc", { count: selectedPlanSubscriberTotal })}
-                    </p>
+            <section className="dash-card" style={{ overflow: "hidden" }}>
+              <div className="dash-card-header" style={{ display: "flex", justifyContent: "space-between", gap: "1rem", alignItems: "flex-start", flexWrap: "wrap" }}>
+                <div style={{ display: "grid", gap: "0.35rem" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.65rem", flexWrap: "wrap" }}>
+                    <h3 style={{ margin: 0, color: "var(--text-main)", fontSize: "1.05rem", fontWeight: 850 }}>{isCreatingPlan ? t("tariff_plan_new") : t("tariff_plan_details")}</h3>
+                    {selectedPlan && !isCreatingPlan && (
+                      <>
+                        <StatusBadge tone={(selectedPlan.status || "active") === "active" ? "success" : "muted"}>
+                          {(selectedPlan.status || "active") === "active" ? t("policy_status_active") : t("users_disabled")}
+                        </StatusBadge>
+                        {selectedPlan.isDefault && <StatusBadge tone="warning">{DEFAULT_OCS_PLAN_ID}</StatusBadge>}
+                      </>
+                    )}
                   </div>
-                  <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                  <p style={{ margin: 0, color: "var(--text-muted)", fontSize: "0.84rem" }}>{t("tariff_plan_current_desc")}</p>
+                </div>
+                {canEditTemplates && (
+                  <div style={{ display: "flex", gap: "0.55rem", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                    {isCreatingPlan ? (
+                      <>
+                        <button type="button" className="btn btn-primary" onClick={handleCreatePlan} disabled={savingKey !== null}>
+                          <Save size={15} /> {t("tariff_plan_create_from_current")}
+                        </button>
+                        <button type="button" className="btn btn-outline" onClick={() => setIsCreatingPlan(false)} disabled={savingKey !== null}>
+                          <X size={15} /> {t("cancel")}
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button type="button" className="btn btn-primary" onClick={handleUpdatePlan} disabled={!selectedPlan || savingKey !== null || isDisablingPlanWithSubscribers}>
+                          <Save size={15} /> {t("tariff_plan_save")}
+                        </button>
+                        {selectedPlan && !selectedPlan.isDefault && (
+                          <button type="button" className="btn btn-outline" onClick={handleDeletePlan} disabled={savingKey !== null || selectedPlanSubscriberTotal > 0} style={{ color: "var(--danger)", borderColor: "var(--danger)" }}>
+                            <Trash2 size={15} /> {t("tariff_plan_delete")}
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div className="dash-card-body" style={{ display: "grid", gap: "1.25rem" }}>
+                <div style={{ display: "grid", gap: "0.85rem" }}>
+                  <h4 style={{ margin: 0, color: "var(--text-main)", fontSize: "0.92rem", fontWeight: 850 }}>{t("tariff_plan_basic_info")}</h4>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))", gap: "1rem", alignItems: "end" }}>
+                    <Field label={t("tariff_plan_id")}>
+                      {isCreatingPlan ? (
+                        <input className="form-input" value={planForm.plan_id} onChange={(event) => setPlanForm((current) => ({ ...current, plan_id: event.target.value }))} />
+                      ) : (
+                        <input className="form-input" value={selectedPlan?.plan_id || selectedPlanId} readOnly style={{ fontFamily: "monospace", color: "var(--text-secondary)" }} />
+                      )}
+                    </Field>
+                    <Field label={t("tariff_plan_name")}>
+                      <input className="form-input" value={planForm.name} onChange={(event) => setPlanForm((current) => ({ ...current, name: event.target.value }))} disabled={!canEditTemplates} />
+                    </Field>
+                    <Field label={t("tariff_plan_status")}>
+                      <select className="form-input" value={planForm.status} onChange={(event) => setPlanForm((current) => ({ ...current, status: event.target.value }))} disabled={!canEditTemplates}>
+                        <option value="active">{t("policy_status_active")}</option>
+                        <option value="disabled">{t("users_disabled")}</option>
+                      </select>
+                    </Field>
+                    <div style={{ gridColumn: "1 / -1" }}>
+                      <Field label={t("tariff_plan_desc")}>
+                        <input className="form-input" value={planForm.description} onChange={(event) => setPlanForm((current) => ({ ...current, description: event.target.value }))} disabled={!canEditTemplates} />
+                      </Field>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ borderTop: "1px solid var(--surface-border)", paddingTop: "1rem", display: "grid", gap: "0.85rem" }}>
+                  <h4 style={{ margin: 0, color: "var(--text-main)", fontSize: "0.92rem", fontWeight: 850 }}>{t("tariff_plan_usage_overview")}</h4>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 150px), 1fr))", gap: "0.8rem" }}>
+                    {[
+                      { label: t("tariff_plan_rules"), value: selectedPlan?.rulesCount ?? ratings.length },
+                      { label: t("tariff_plan_subscribers"), value: selectedPlanSubscriberTotal },
+                      { label: t("tariff_plan_ops_selected_share"), value: `${planOperationSummary?.selectedSharePct ?? 0}%` },
+                      { label: t("tariff_plan_ops_last_change"), value: formatDateTime(planOperationSummary?.lastChangedAt) },
+                    ].map((item) => (
+                      <div key={item.label} style={{ border: "1px solid var(--surface-border)", borderRadius: 6, padding: "0.85rem", minWidth: 0 }}>
+                        <div style={{ color: "var(--text-muted)", fontSize: "0.72rem", fontWeight: 800, textTransform: "uppercase" }}>{item.label}</div>
+                        <div style={{ color: "var(--text-main)", fontSize: "1rem", fontWeight: 850, marginTop: "0.35rem", overflowWrap: "anywhere" }}>{item.value}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {isDisablingPlanWithSubscribers && (
+                  <div style={{ color: "var(--danger)", fontSize: "0.82rem", fontWeight: 800, border: "1px solid color-mix(in srgb, var(--danger) 36%, var(--surface-border))", borderRadius: 6, padding: "0.85rem", background: "color-mix(in srgb, var(--danger) 7%, var(--surface))" }}>
+                    {t("tariff_plan_disable_in_use")}
+                  </div>
+                )}
+              </div>
+            </section>
+          </section>
+
+          <section style={{ display: "grid", gap: "1.25rem" }}>
+            <section className="dash-card" style={{ overflow: "hidden" }}>
+              <div className="dash-card-header">
+                <h3 style={{ margin: 0, color: "var(--text-main)", fontSize: "1rem", fontWeight: 850, display: "flex", alignItems: "center", gap: "0.55rem" }}>
+                  <ArrowRightLeft size={17} color="var(--primary)" /> {t("tariff_plan_migrate_title")}
+                </h3>
+                <p style={{ margin: "0.35rem 0 0", color: "var(--text-muted)", fontSize: "0.82rem", lineHeight: 1.5 }}>
+                  {selectedPlanSubscriberTotal > 0 ? t("tariff_plan_migrate_desc", { count: selectedPlanSubscriberTotal }) : t("tariff_plan_migrate_empty")}
+                </p>
+              </div>
+              <div className="dash-card-body" style={{ display: "grid", gap: "1rem" }}>
+                {selectedPlanSubscribers.length > 0 && (
+                  <div style={{ display: "flex", gap: "0.45rem", flexWrap: "wrap" }}>
                     {selectedPlanSubscribers.map((subscriber) => (
-                      <span key={subscriber.imsi} style={{ border: "1px solid var(--surface-border)", borderRadius: 6, padding: "0.25rem 0.42rem", fontFamily: "monospace", fontSize: "0.7rem", color: "var(--text-main)", background: "var(--surface-hover)" }}>
+                      <span key={subscriber.imsi} style={{ border: "1px solid var(--surface-border)", borderRadius: 6, padding: "0.28rem 0.5rem", fontFamily: "monospace", fontSize: "0.72rem", color: "var(--text-main)", background: "var(--surface-hover)" }}>
                         {subscriber.imsi}
                       </span>
                     ))}
                     {planSubscribersData?.hasMore && (
-                      <span style={{ border: "1px solid var(--surface-border)", borderRadius: 6, padding: "0.25rem 0.42rem", fontSize: "0.7rem", color: "var(--text-muted)", background: "var(--surface-hover)" }}>
+                      <span style={{ border: "1px solid var(--surface-border)", borderRadius: 6, padding: "0.28rem 0.5rem", fontSize: "0.72rem", color: "var(--text-muted)", background: "var(--surface-hover)" }}>
                         +{selectedPlanSubscriberTotal - selectedPlanSubscribers.length}
                       </span>
                     )}
                   </div>
-                </div>
-
+                )}
                 {canEditTemplates && (
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: "0.75rem", alignItems: "end" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))", gap: "0.85rem", alignItems: "end" }}>
                     <Field label={t("tariff_plan_migrate_target")}>
                       <select
                         className="form-input"
@@ -870,67 +941,47 @@ export default function RatingManagementPage({ view }: { view: RatingManagementV
                   </div>
                 )}
               </div>
-            )}
-          </div>
+            </section>
 
-          <aside style={{ borderLeft: "1px solid var(--surface-border)", paddingLeft: "1.25rem", display: "grid", gap: "1rem", minWidth: 0 }}>
-            <div>
-              <h4 style={{ margin: 0, color: "var(--text-main)", fontSize: "0.92rem", fontWeight: 850, display: "flex", alignItems: "center", gap: "0.45rem" }}>
-                <BarChart3 size={16} color="var(--primary)" /> {t("tariff_plan_ops_title")}
-              </h4>
-              <p style={{ margin: "0.25rem 0 0", color: "var(--text-muted)", fontSize: "0.78rem", lineHeight: 1.45 }}>{t("tariff_plan_ops_desc")}</p>
-            </div>
-
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "0.65rem" }}>
-              {[
-                { icon: <Tag size={15} color="var(--primary)" />, label: t("tariff_plan_ops_total_plans"), value: planOperationSummary?.totalPlans ?? plans.length },
-                { icon: <CheckCircle2 size={15} color="var(--success)" />, label: t("tariff_plan_ops_active_plans"), value: planOperationSummary?.activePlans ?? plans.filter((plan) => (plan.status || "active") === "active").length },
-                { icon: <ShieldCheck size={15} color="var(--warning)" />, label: t("tariff_plan_ops_disabled_plans"), value: planOperationSummary?.disabledPlans ?? plans.filter((plan) => plan.status === "disabled").length },
-                { icon: <Database size={15} color="var(--primary)" />, label: t("tariff_plan_ops_linked_total"), value: planOperationSummary?.totalLinkedSubscribers ?? plans.reduce((sum, plan) => sum + (plan.subscriberCount || 0), 0) },
-              ].map((item) => (
-                <div key={item.label} style={{ display: "grid", gap: "0.3rem", minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", color: "var(--text-muted)", fontSize: "0.7rem", fontWeight: 800, textTransform: "uppercase" }}>
-                    {item.icon} {item.label}
-                  </div>
-                  <div style={{ color: "var(--text-main)", fontSize: "1.08rem", fontWeight: 850 }}>{item.value}</div>
+            <section className="dash-card" style={{ overflow: "hidden" }}>
+              <div className="dash-card-header" style={{ display: "flex", justifyContent: "space-between", gap: "1rem", alignItems: "center" }}>
+                <div>
+                  <h3 style={{ margin: 0, color: "var(--text-main)", fontSize: "1rem", fontWeight: 850, display: "flex", alignItems: "center", gap: "0.55rem" }}>
+                    <History size={17} color="var(--primary)" /> {t("tariff_plan_ops_history")}
+                  </h3>
+                  <p style={{ margin: "0.35rem 0 0", color: "var(--text-muted)", fontSize: "0.82rem" }}>{t("tariff_plan_ops_desc")}</p>
                 </div>
-              ))}
-            </div>
-
-            <div style={{ display: "grid", gap: "0.65rem", borderTop: "1px solid var(--surface-border)", paddingTop: "0.85rem" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "center" }}>
-                <h4 style={{ margin: 0, color: "var(--text-main)", fontSize: "0.86rem", fontWeight: 850, display: "flex", alignItems: "center", gap: "0.45rem" }}>
-                  <History size={15} color="var(--primary)" /> {t("tariff_plan_ops_history")}
-                </h4>
-                <span style={{ color: "var(--text-muted)", fontSize: "0.72rem", fontWeight: 700 }}>
+                <span style={{ color: "var(--text-muted)", fontSize: "0.76rem", fontWeight: 750, whiteSpace: "nowrap" }}>
                   {t("tariff_plan_ops_recent_count", { count: planOperationSummary?.recentActivityCount ?? planOperationHistory.length })}
                 </span>
               </div>
-              {planOperationHistory.length === 0 ? (
-                <div style={{ border: "1px dashed var(--surface-border)", borderRadius: 6, padding: "0.8rem", color: "var(--text-muted)", fontSize: "0.8rem" }}>
-                  {t("tariff_plan_ops_no_history")}
-                </div>
-              ) : (
-                <div style={{ display: "grid", gap: "0.5rem", maxHeight: 320, overflow: "auto", paddingRight: "0.15rem" }}>
-                  {planOperationHistory.map((item) => (
-                    <div key={item.id} style={{ borderTop: "1px solid var(--surface-border)", paddingTop: "0.55rem", display: "grid", gap: "0.3rem" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", gap: "0.65rem", alignItems: "center", flexWrap: "wrap" }}>
-                        <span style={{ color: item.level === "warning" ? "var(--danger)" : "var(--text-main)", fontWeight: 850, fontSize: "0.8rem" }}>
-                          {formatPlanOperationAction(item.action)}
-                        </span>
-                        <span style={{ color: "var(--text-muted)", fontSize: "0.7rem" }}>{formatDateTime(item.timestamp)}</span>
+              <div className="dash-card-body">
+                {planOperationHistory.length === 0 ? (
+                  <div style={{ border: "1px dashed var(--surface-border)", borderRadius: 6, padding: "1rem", color: "var(--text-muted)", fontSize: "0.83rem" }}>
+                    {t("tariff_plan_ops_no_history")}
+                  </div>
+                ) : (
+                  <div style={{ display: "grid", gap: "0.7rem", maxHeight: 360, overflow: "auto", paddingRight: "0.2rem" }}>
+                    {planOperationHistory.map((item) => (
+                      <div key={item.id} style={{ borderLeft: `3px solid ${item.level === "warning" ? "var(--danger)" : "var(--primary)"}`, padding: "0.2rem 0 0.2rem 0.75rem", display: "grid", gap: "0.35rem" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
+                          <span style={{ color: item.level === "warning" ? "var(--danger)" : "var(--text-main)", fontWeight: 850, fontSize: "0.84rem" }}>
+                            {formatPlanOperationAction(item.action)}
+                          </span>
+                          <span style={{ color: "var(--text-muted)", fontSize: "0.72rem" }}>{formatDateTime(item.timestamp)}</span>
+                        </div>
+                        <div style={{ display: "flex", gap: "0.8rem", flexWrap: "wrap", color: "var(--text-muted)", fontSize: "0.74rem" }}>
+                          <span>{t("tariff_plan_ops_target")}: <span style={{ fontFamily: "monospace", color: "var(--text-secondary)" }}>{item.targetId}</span></span>
+                          <span>{t("tariff_plan_ops_operator")}: {item.operatorIp}</span>
+                        </div>
                       </div>
-                      <div style={{ color: "var(--text-muted)", fontSize: "0.72rem", overflowWrap: "anywhere" }}>
-                        {t("tariff_plan_ops_target")}: <span style={{ fontFamily: "monospace", color: "var(--text-secondary)" }}>{item.targetId}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </aside>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </section>
+          </section>
         </div>
-      </section>
       )}
 
       {view === "rules" && (
