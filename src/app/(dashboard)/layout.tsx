@@ -59,6 +59,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [approvalOpen, setApprovalOpen] = useState(false);
   const [cmdPaletteOpen, setCmdPaletteOpen] = useState(false);
+  const [ratingNavOpen, setRatingNavOpen] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
   const { t } = useI18n();
@@ -106,9 +107,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return items;
   }, [isRoot]);
 
+  const ratingSubItems: NavItem[] = [
+    { key: "nav_rating_plans", path: "/rating/plans", match: "/rating/plans", icon: <Gauge size={18} /> },
+    { key: "nav_rating_rules", path: "/rating/rules", match: "/rating/rules", icon: <GitBranch size={18} /> },
+  ];
+
   const displayName = user?.username || "xCloud";
   const roleLabel = user?.role || "viewer";
   const sidebarWidth = sidebarOpen ? 264 : 72;
+  const ratingNavExpanded = ratingNavOpen || pathname.startsWith("/rating");
 
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -278,14 +285,53 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <nav className="sidebar-nav" aria-label="Primary navigation">
             {navItems.map((item) => {
               const isActive = pathname === item.match || (item.match !== "/" && pathname.startsWith(item.match));
+              const isRatingParent = item.key === "nav_rating";
               return (
-                <Link key={item.key} href={item.path} className={isActive ? "sidebar-link active" : "sidebar-link"} aria-current={isActive ? "page" : undefined}>
-                  <span className="sidebar-active-bar" />
-                  <span className="sidebar-icon">{item.icon}</span>
-                  <span className="sidebar-label">{t(item.key)}</span>
-                  <span className="sidebar-tooltip" role="tooltip">{t(item.key)}</span>
-                  {isActive && sidebarOpen ? <ChevronRight size={16} className="sidebar-chevron" /> : null}
-                </Link>
+                <div key={item.key} className="sidebar-item-wrap">
+                  {isRatingParent ? (
+                    <>
+                      <button
+                        type="button"
+                        className={isActive ? "sidebar-link active sidebar-parent-button" : "sidebar-link sidebar-parent-button"}
+                        onClick={() => {
+                          if (!sidebarOpen) setSidebarOpen(true);
+                          setRatingNavOpen((open) => !open);
+                        }}
+                        aria-expanded={ratingNavExpanded}
+                      >
+                        <span className="sidebar-active-bar" />
+                        <span className="sidebar-icon">{item.icon}</span>
+                        <span className="sidebar-label">{t(item.key)}</span>
+                        <span className="sidebar-tooltip" role="tooltip">{t(item.key)}</span>
+                        {sidebarOpen ? <ChevronRight size={16} className={ratingNavExpanded ? "sidebar-chevron open" : "sidebar-chevron"} /> : null}
+                      </button>
+                      {sidebarOpen && ratingNavExpanded ? (
+                        <div className="sidebar-subnav">
+                          {ratingSubItems.map((child) => {
+                            const childActive = pathname === child.match || pathname.startsWith(child.match);
+                            return (
+                              <Link key={child.key} href={child.path} className={`${childActive ? "sidebar-link active" : "sidebar-link"} child`} aria-current={childActive ? "page" : undefined}>
+                                <span className="sidebar-active-bar" />
+                                <span className="sidebar-icon">{child.icon}</span>
+                                <span className="sidebar-label">{t(child.key)}</span>
+                                <span className="sidebar-tooltip" role="tooltip">{t(child.key)}</span>
+                                {childActive ? <ChevronRight size={15} className="sidebar-chevron" /> : null}
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      ) : null}
+                    </>
+                  ) : (
+                    <Link href={item.path} className={isActive ? "sidebar-link active" : "sidebar-link"} aria-current={isActive ? "page" : undefined}>
+                      <span className="sidebar-active-bar" />
+                      <span className="sidebar-icon">{item.icon}</span>
+                      <span className="sidebar-label">{t(item.key)}</span>
+                      <span className="sidebar-tooltip" role="tooltip">{t(item.key)}</span>
+                      {isActive && sidebarOpen ? <ChevronRight size={16} className="sidebar-chevron" /> : null}
+                    </Link>
+                  )}
+                </div>
               );
             })}
           </nav>
@@ -776,7 +822,7 @@ const layoutStyles = `
   .sidebar-nav {
     flex: 1;
     overflow-y: auto;
-    overflow-x: visible;
+    overflow-x: hidden;
     padding: 1rem 0.65rem;
     display: flex;
     flex-direction: column;
@@ -797,6 +843,40 @@ const layoutStyles = `
     position: relative;
     white-space: nowrap;
     transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease;
+  }
+
+  .sidebar-parent-button {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    font-family: inherit;
+  }
+
+  .sidebar-item-wrap {
+    display: grid;
+    gap: 0.25rem;
+  }
+
+  .sidebar-subnav {
+    display: grid;
+    gap: 0.2rem;
+    padding-left: 0.7rem;
+  }
+
+  .sidebar-link.child {
+    min-height: 38px;
+    font-size: 0.84rem;
+    color: var(--text-muted);
+  }
+
+  .sidebar-link.child .sidebar-icon {
+    width: 26px;
+    height: 26px;
+  }
+
+  .sidebar-link.child .sidebar-active-bar {
+    left: -1.35rem;
   }
 
   .sidebar-link:hover {
@@ -854,6 +934,11 @@ const layoutStyles = `
   .sidebar-chevron {
     margin-left: auto;
     opacity: 0.55;
+    transition: transform 0.18s ease;
+  }
+
+  .sidebar-chevron.open {
+    transform: rotate(90deg);
   }
 
   .app-sidebar.collapsed .sidebar-link {

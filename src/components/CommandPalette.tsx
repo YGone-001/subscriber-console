@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import type { ElementType, KeyboardEvent } from "react";
 import {
   Search, Users, CreditCard, Gauge, Activity, History, Key,
-  LayoutDashboard, Plus, Download, FileUp, Zap, Command
+  LayoutDashboard, Plus, Download, FileUp, Zap, Command, GitBranch
 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 
@@ -57,7 +57,8 @@ export default function CommandPalette({ isOpen, onClose, onAction }: CommandPal
     { id: "nav-dashboard", label: t("cp_nav_dashboard"), desc: t("cp_nav_dashboard_desc"), icon: LayoutDashboard, path: "/", type: "navigation" },
     { id: "nav-subscribers", label: t("cp_nav_subscribers"), desc: t("cp_nav_subscribers_desc"), icon: Users, path: "/subscribers", type: "navigation" },
     { id: "nav-profile", label: t("cp_nav_profiles"), desc: t("cp_nav_profiles_desc"), icon: CreditCard, path: "/profile", type: "navigation" },
-    { id: "nav-rating", label: t("cp_nav_rating"), desc: t("cp_nav_rating_desc"), icon: Gauge, path: "/rating", type: "navigation" },
+    { id: "nav-rating-plans", label: t("cp_nav_rating_plans"), desc: t("cp_nav_rating_plans_desc"), icon: Gauge, path: "/rating/plans", type: "navigation" },
+    { id: "nav-rating-rules", label: t("cp_nav_rating_rules"), desc: t("cp_nav_rating_rules_desc"), icon: GitBranch, path: "/rating/rules", type: "navigation" },
     { id: "nav-account", label: t("cp_nav_account"), desc: t("cp_nav_account_desc"), icon: Key, path: "/account", type: "navigation" },
     { id: "nav-health", label: t("cp_nav_health"), desc: t("cp_nav_health_desc"), icon: Activity, path: "/system-health", type: "navigation" },
     { id: "nav-audit", label: t("cp_nav_audit"), desc: t("cp_nav_audit_desc"), icon: History, path: "/audit-logs", type: "navigation" },
