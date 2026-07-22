@@ -112,7 +112,12 @@ export default function BatchCreateModal({ isOpen, onClose, onSuccess, profileLi
         setBatchResult(data);
         if (!data?.approval?.id) onSuccess();
       } else {
-        setBatchResult({ error: data.error || t("err_batch_failed") });
+        const message = data.error === "Tariff plan not found"
+          ? t("tariff_plan_err_not_found")
+          : data.error === "Invalid plan_id format"
+          ? t("tariff_plan_err_id")
+          : data.error || t("err_batch_failed");
+        setBatchResult({ error: message });
       }
     } catch {
       setBatchResult({ error: t("err_network_batch") });

@@ -98,6 +98,13 @@ export async function PUT(request: Request, { params }: RouteContext) {
 
     return NextResponse.json({ message: 'Subscriber updated successfully' });
   } catch (error) {
+    if (error instanceof Error && error.message === 'INVALID_PLAN_ID') {
+      return NextResponse.json({ error: 'Invalid plan_id format' }, { status: 400 });
+    }
+    if (error instanceof Error && error.message === 'OCS_PLAN_NOT_FOUND') {
+      return NextResponse.json({ error: 'Tariff plan not found' }, { status: 404 });
+    }
+
     console.error('Error updating subscriber:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }

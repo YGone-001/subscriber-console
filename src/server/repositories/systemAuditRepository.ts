@@ -173,6 +173,7 @@ export async function healSubscriberDocument(imsi: string, type: string, profile
     const available = Number(profile?.ocsDefaults?.trafficBalance ?? profile?.ocsDefaults?.traffic_balance ?? total);
     const smsTotal = Number(profile?.ocsDefaults?.smsTotal ?? profile?.ocsDefaults?.sms_total ?? 100);
     const smsAvailable = Number(profile?.ocsDefaults?.smsBalance ?? profile?.ocsDefaults?.sms_balance ?? smsTotal);
-    await provisionOcsSubscriber({ imsi, total, available, smsTotal, smsAvailable });
+    const planId = profile?.ocsDefaults?.planId ?? profile?.ocsDefaults?.plan_id;
+    await provisionOcsSubscriber({ imsi, planId, total, available, smsTotal, smsAvailable });
   }
 }

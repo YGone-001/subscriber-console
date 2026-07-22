@@ -119,6 +119,13 @@ export function defaultProfile(name: string, user: string): ProfileDocument {
         ],
       },
     ],
+    ocsDefaults: {
+      planId: 'plan_default_10gb',
+      trafficTotal: 10737418240,
+      trafficBalance: 10737418240,
+      smsTotal: 100,
+      smsBalance: 100,
+    },
   };
 }
 

@@ -405,6 +405,7 @@ export const zh: Record<string, string> = {
     tariff_plan_err_create: "\u521b\u5efa\u8d44\u8d39\u5957\u9910\u5931\u8d25\u3002",
     tariff_plan_err_update: "\u66f4\u65b0\u8d44\u8d39\u5957\u9910\u5931\u8d25\u3002",
     tariff_plan_err_delete: "\u5220\u9664\u8d44\u8d39\u5957\u9910\u5931\u8d25\u3002",
+    tariff_plan_err_not_found: "\u8d44\u8d39\u5957\u9910\u4e0d\u5b58\u5728\u3002",
     currency_USD: "美元",
     currency_EUR: "欧元",
     currency_GBP: "英镑",

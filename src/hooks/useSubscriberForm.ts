@@ -350,6 +350,8 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
             setInputImsiExists(true);
             throw new Error(t("sub_err_imsi_exists"));
           }
+          if (createData?.error === "Tariff plan not found") throw new Error(t("tariff_plan_err_not_found"));
+          if (createData?.error === "Invalid plan_id format") throw new Error(t("tariff_plan_err_id"));
           throw new Error(createData?.error || t("sub_err_save"));
         }
       }
@@ -387,7 +389,12 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
         body: JSON.stringify(payload),
       });
 
-      if (!res.ok) throw new Error("Failed to save");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (data?.error === "Tariff plan not found") throw new Error(t("tariff_plan_err_not_found"));
+        if (data?.error === "Invalid plan_id format") throw new Error(t("tariff_plan_err_id"));
+        throw new Error(data?.error || t("sub_err_save"));
+      }
 
       onRefresh();
       onClose();

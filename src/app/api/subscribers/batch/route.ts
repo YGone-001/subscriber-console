@@ -4,6 +4,7 @@ import { requireCapability } from '@/lib/authz';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import { createApprovalRequest } from '@/server/repositories/approvalRepository';
 import { createSubscribersBatch } from '@/server/repositories/subscriberRepository';
+import { getTariffPlan } from '@/server/repositories/ocsBillingRepository';
 import { validateBatchCreatePayload } from '@/lib/subscriberValidation';
 
 export const dynamic = 'force-dynamic';
@@ -20,6 +21,8 @@ export async function POST(request: Request) {
     const validation = validateBatchCreatePayload(body);
     if (!validation.ok) return NextResponse.json({ error: validation.error }, { status: 400 });
     const payload = validation.value;
+    const plan = await getTariffPlan(payload.planId);
+    if (!plan) return NextResponse.json({ error: 'Tariff plan not found' }, { status: 404 });
 
     if (auth.auth.role !== 'root') {
       const approval = await createApprovalRequest({
@@ -79,6 +82,12 @@ export async function POST(request: Request) {
   } catch (error) {
     if (error instanceof Error && error.message === 'IMSI_RANGE_OVERFLOW') {
       return NextResponse.json({ error: 'Generated IMSI range exceeds 15 digits' }, { status: 400 });
+    }
+    if (error instanceof Error && error.message === 'INVALID_PLAN_ID') {
+      return NextResponse.json({ error: 'Invalid plan_id format' }, { status: 400 });
+    }
+    if (error instanceof Error && error.message === 'OCS_PLAN_NOT_FOUND') {
+      return NextResponse.json({ error: 'Tariff plan not found' }, { status: 404 });
     }
 
     console.error('Error in batch creation:', error);

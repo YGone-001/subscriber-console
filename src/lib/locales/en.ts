@@ -405,6 +405,7 @@ export const en: Record<string, string> = {
     tariff_plan_err_create: "Failed to create tariff plan.",
     tariff_plan_err_update: "Failed to update tariff plan.",
     tariff_plan_err_delete: "Failed to delete tariff plan.",
+    tariff_plan_err_not_found: "Tariff plan not found.",
     currency_USD: "USD",
     currency_EUR: "EUR",
     currency_GBP: "GBP",

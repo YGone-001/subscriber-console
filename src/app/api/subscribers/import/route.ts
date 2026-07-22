@@ -7,9 +7,21 @@ import {
   importSubscribersFromRecords,
   precheckSubscriberImsis,
 } from '@/server/repositories/subscriberRepository';
+import { getTariffPlan } from '@/server/repositories/ocsBillingRepository';
 import { validateImportRecords, validateImsiList } from '@/lib/subscriberValidation';
 
 export const dynamic = 'force-dynamic';
+
+async function validateImportPlanIds(records: Record<string, unknown>[]) {
+  const planIds = Array.from(new Set(
+    records.map((record) => String(record.plan_id || 'plan_default_10gb').trim() || 'plan_default_10gb')
+  ));
+
+  for (const planId of planIds) {
+    const plan = await getTariffPlan(planId);
+    if (!plan) throw new Error('OCS_PLAN_NOT_FOUND');
+  }
+}
 
 export async function POST(request: Request) {
   try {
@@ -42,6 +54,7 @@ export async function POST(request: Request) {
       const { records, overwrite } = body;
       const validation = validateImportRecords(records);
       if (!validation.ok) return NextResponse.json({ error: validation.error }, { status: 400 });
+      await validateImportPlanIds(validation.value);
 
       if (auth.auth.role !== 'root') {
         const approval = await createApprovalRequest({
@@ -88,6 +101,13 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ error: 'Invalid mode parameter' }, { status: 400 });
   } catch (error) {
+    if (error instanceof Error && error.message === 'INVALID_PLAN_ID') {
+      return NextResponse.json({ error: 'Invalid plan_id format' }, { status: 400 });
+    }
+    if (error instanceof Error && error.message === 'OCS_PLAN_NOT_FOUND') {
+      return NextResponse.json({ error: 'Tariff plan not found' }, { status: 404 });
+    }
+
     console.error('Import Error:', error);
     return NextResponse.json({ error: 'Internal server error during import' }, { status: 500 });
   }

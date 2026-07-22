@@ -93,7 +93,9 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
 
   // ======== OCS preset parameter template ========
   const [ratingList, setRatingList] = useState<any[]>([]);
+  const [tariffPlanList, setTariffPlanList] = useState<Array<{ plan_id: string; name?: string; status?: string }>>([]);
   const [ocsDefaults, setOcsDefaults] = useState<any>({
+    planId: "plan_default_10gb",
     trafficTotal: "10 GB",
     trafficBalance: "10 GB",
     smsTotal: "100",
@@ -117,9 +119,11 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
     if (p.ocsDefaults) {
       const smsTotalDefault = p.ocsDefaults.smsTotal ?? p.ocsDefaults.sms_total;
       const smsBalanceDefault = p.ocsDefaults.smsBalance ?? p.ocsDefaults.sms_balance;
+      const planDefault = p.ocsDefaults.planId ?? p.ocsDefaults.plan_id ?? p.ocsDefaults.planID;
       setOcsDefaults((prev: any) => ({
         ...prev,
         ...p.ocsDefaults,
+        planId: planDefault !== undefined ? String(planDefault) : (prev.planId || "plan_default_10gb"),
         trafficTotal: p.ocsDefaults.trafficTotal !== undefined ? formatBytes(p.ocsDefaults.trafficTotal) : (p.ocsDefaults.trafficBalance !== undefined ? formatBytes(p.ocsDefaults.trafficBalance) : prev.trafficTotal),
         trafficBalance: p.ocsDefaults.trafficBalance !== undefined ? formatBytes(p.ocsDefaults.trafficBalance) : prev.trafficBalance,
         smsTotal: smsTotalDefault !== undefined ? formatEvents(Number(smsTotalDefault)) : (smsBalanceDefault !== undefined ? formatEvents(Number(smsBalanceDefault)) : prev.smsTotal),
@@ -145,6 +149,7 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
       access_restriction_data: accessRestriction,
       sliceList: slices,
       ocsDefaults: {
+        planId: ocsDefaults.planId || "plan_default_10gb",
         trafficTotal: parseBytes(ocsDefaults.trafficTotal || ocsDefaults.trafficBalance),
         trafficBalance: parseBytes(ocsDefaults.trafficBalance),
         smsTotal: parseEvents(ocsDefaults.smsTotal || ocsDefaults.smsBalance),
@@ -213,10 +218,26 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
     }
   }, [profileName]);
 
-  // Load available Rating Group list
+  // Load available tariff plans
   useEffect(() => {
-    fetch('/api/ratings').then(r => r.json()).then(d => setRatingList(d.ratings || [])).catch(() => {});
+    fetch('/api/tariff-plans').then(r => r.json()).then(d => {
+      const plans = Array.isArray(d.plans) ? d.plans : [];
+      setTariffPlanList(plans);
+      setOcsDefaults((current: any) => {
+        if (plans.some((plan: any) => plan.plan_id === current.planId)) return current;
+        return {
+          ...current,
+          planId: plans.find((plan: any) => (plan.status || "active") === "active")?.plan_id || plans[0]?.plan_id || current.planId || "plan_default_10gb",
+        };
+      });
+    }).catch(() => {});
   }, []);
+
+  // Load Rating Group list for the selected profile default plan
+  useEffect(() => {
+    const planId = ocsDefaults.planId || "plan_default_10gb";
+    fetch(`/api/ratings?planId=${encodeURIComponent(planId)}`).then(r => r.json()).then(d => setRatingList(d.ratings || [])).catch(() => {});
+  }, [ocsDefaults.planId]);
 
   /**
    * Load full Profile data from MongoDB.
@@ -542,6 +563,7 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
       authData={authData}
       usimType={usimType}
       ocsDefaults={ocsDefaults}
+      tariffPlanList={tariffPlanList}
       ratingList={ratingList}
       ueAmbr={ueAmbr}
       isAccessRestrictionsExpanded={isAccessRestrictionsExpanded}
@@ -558,7 +580,7 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
       profileName={profileName}
       state={{
         inputName, profileTitle, authData, usimType, ueAmbr, isAccessRestrictionsExpanded, accessRestriction,
-        ocsDefaults, ratingList, slices, newlyAddedSliceIndex
+        ocsDefaults, tariffPlanList, ratingList, slices, newlyAddedSliceIndex
       }}
       actions={{
         setInputName, setProfileTitle, setAuthData, setUsimType, setUeAmbr, setIsAccessRestrictionsExpanded, setAccessRestriction,

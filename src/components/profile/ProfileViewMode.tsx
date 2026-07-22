@@ -16,7 +16,12 @@ function ratingUnitLabel(t: (key: string) => string, value?: string) {
   return value || "-";
 }
 
-export default function ProfileViewMode({ t, authData, usimType, ocsDefaults, ratingList, ueAmbr, isAccessRestrictionsExpanded, setIsAccessRestrictionsExpanded, accessRestriction, slices }: any) {
+export default function ProfileViewMode({ t, authData, usimType, ocsDefaults, tariffPlanList, ratingList, ueAmbr, isAccessRestrictionsExpanded, setIsAccessRestrictionsExpanded, accessRestriction, slices }: any) {
+  const planId = ocsDefaults.planId || ocsDefaults.plan_id || "plan_default_10gb";
+  const selectedPlan = Array.isArray(tariffPlanList)
+    ? tariffPlanList.find((plan: any) => plan.plan_id === planId)
+    : null;
+
   return (
     <div className="animate-fade-in" style={{ paddingBottom: '2rem' }}>
       {/* Security Template Card */}
@@ -48,6 +53,12 @@ export default function ProfileViewMode({ t, authData, usimType, ocsDefaults, ra
           <h3 style={{ fontSize: "1.1rem", margin: 0, color: "var(--text-main)", fontWeight: 600 }}>{t("sec_billing_config")}</h3>
         </div>
         <div className="dash-card-body" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2rem" }}>
+           <div style={{ gridColumn: "1 / -1" }}>
+             <div style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "0.25rem" }}>{t("sub_360_tariff_plan")}</div>
+             <div style={{ fontFamily: "monospace", color: "var(--text-main)", fontSize: "1rem" }}>
+               {selectedPlan?.name && selectedPlan.name !== planId ? `${selectedPlan.name} (${planId})` : planId}
+             </div>
+           </div>
            <div><div style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "0.25rem" }}>{t("prof_lbl_quota")}</div><div style={{ fontFamily: "monospace", color: "var(--text-main)", fontSize: "1rem" }}>{ocsDefaults.trafficTotal}</div></div>
            <div><div style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "0.25rem" }}>{t("prof_lbl_balance")}</div><div style={{ fontFamily: "monospace", color: "var(--text-main)", fontSize: "1rem" }}>{ocsDefaults.trafficBalance}</div></div>
            <div><div style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "0.25rem" }}>{t("prof_sms_quota")}</div><div style={{ fontFamily: "monospace", color: "var(--text-main)", fontSize: "1rem" }}>{ocsDefaults.smsTotal || "0"}</div></div>

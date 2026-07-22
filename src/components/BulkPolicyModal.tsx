@@ -86,7 +86,12 @@ export default function BulkPolicyModal({ isOpen, selectedImsis, onClose, onSucc
       const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        throw new Error(data.error || t("policy_change_err_save"));
+        const message = data.error === "Tariff plan not found"
+          ? t("tariff_plan_err_not_found")
+          : data.error === "Invalid plan_id format"
+          ? t("tariff_plan_err_id")
+          : data.error || t("policy_change_err_save");
+        throw new Error(message);
       }
 
       onSuccess(data);

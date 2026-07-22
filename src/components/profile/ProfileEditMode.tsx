@@ -21,7 +21,7 @@ function ratingUnitLabel(t: (key: string) => string, value?: string) {
 export default function ProfileEditMode({ t, profileName, state, actions }: any) {
   const {
     profileTitle, authData, usimType, ueAmbr, isAccessRestrictionsExpanded, accessRestriction,
-    ocsDefaults, ratingList, slices, newlyAddedSliceIndex
+    ocsDefaults, tariffPlanList, ratingList, slices, newlyAddedSliceIndex
   } = state;
 
   const {
@@ -30,6 +30,9 @@ export default function ProfileEditMode({ t, profileName, state, actions }: any)
   } = actions;
   const totalTrafficInput = splitByteInput(ocsDefaults.trafficTotal);
   const balanceTrafficInput = splitByteInput(ocsDefaults.trafficBalance, totalTrafficInput.unit);
+  const tariffPlanOptions = Array.isArray(tariffPlanList) && tariffPlanList.length > 0
+    ? tariffPlanList
+    : [{ plan_id: ocsDefaults.planId || "plan_default_10gb", name: ocsDefaults.planId || "plan_default_10gb", status: "active" }];
   const handleTitleChange = (value: string) => {
     setProfileTitle(value);
     if (!profileName) setInputName(value);
@@ -88,6 +91,21 @@ export default function ProfileEditMode({ t, profileName, state, actions }: any)
           <h3 style={{ fontSize: "1.1rem", margin: 0, color: "var(--text-main)", fontWeight: 600 }}>{t("sec_billing_config")}</h3>
         </div>
         <div className="dash-card-body" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem" }}>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label className="form-label">{t("sub_360_tariff_plan")}</label>
+            <select
+              className="form-input"
+              value={ocsDefaults.planId || "plan_default_10gb"}
+              onChange={(e) => setOcsDefaults({ ...ocsDefaults, planId: e.target.value })}
+              style={{ fontFamily: "monospace" }}
+            >
+              {tariffPlanOptions.map((plan: any) => (
+                <option key={plan.plan_id} value={plan.plan_id}>
+                  {plan.name && plan.name !== plan.plan_id ? `${plan.name} (${plan.plan_id})` : plan.plan_id}
+                </option>
+              ))}
+            </select>
+          </div>
           <div>
             <label className="form-label">{t("prof_quota_tpl")}</label>
             <div className="input-composite">

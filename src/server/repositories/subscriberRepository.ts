@@ -8,6 +8,7 @@ import {
 import {
   cloneOcsProvisioningFromReference,
   deleteOcsProvisioning,
+  getTariffPlan,
   provisionOcsSubscriber,
   readOcsProvisioning,
   readOcsProvisioningForImsis,
@@ -252,6 +253,11 @@ async function findProfile(profileName?: string): Promise<ProfileDoc | null> {
 
 function profileOcs(profile: ProfileDoc | null | undefined): Record<string, unknown> {
   return profile?.ocsDefaults || profile?.ocs_defaults || {};
+}
+
+async function assertTariffPlanExists(planId: unknown) {
+  const plan = await getTariffPlan(planId);
+  if (!plan) throw new Error('OCS_PLAN_NOT_FOUND');
 }
 
 async function existingImsiSet(imsis: string[]): Promise<Set<string>> {
@@ -579,6 +585,8 @@ export async function createSubscribersBatch(options: BatchCreateOptions): Promi
     options.smsBalance ?? ocs.smsBalance ?? ocs.sms_balance,
     initialSmsTotal
   );
+  const targetPlanId = options.planId ?? ocs.planId ?? ocs.plan_id;
+  await assertTariffPlanExists(targetPlanId);
 
   const imsis = generateImsiRange(options.startImsi, options.count);
   ensureImsiRange(imsis);
@@ -609,7 +617,7 @@ export async function createSubscribersBatch(options: BatchCreateOptions): Promi
   await Promise.all(successfulImsis.map((imsi) =>
     provisionOcsSubscriber({
       imsi,
-      planId: options.planId ?? ocs.planId ?? ocs.plan_id,
+      planId: targetPlanId,
       total: initialTotal,
       available: initialBalance,
       smsTotal: initialSmsTotal,
@@ -632,6 +640,11 @@ export async function importSubscribersFromRecords(records: ImportRecord[], over
   const normalized = records
     .map((record) => ({ record, doc: csvDocForRecord(record) }))
     .filter((item): item is { record: ImportRecord; doc: Open5gsSubscriberDocument } => item.doc !== null);
+  const planIds = Array.from(new Set(
+    normalized
+      .map(({ record }) => asString(record.plan_id, 'plan_default_10gb').trim() || 'plan_default_10gb')
+  ));
+  await Promise.all(planIds.map((planId) => assertTariffPlanExists(planId)));
   const imsis = normalized.map((item) => item.doc.imsi);
   const existing = await existingImsiSet(imsis);
   const operations: AnyBulkWriteOperation<SubscriberDoc>[] = [];
