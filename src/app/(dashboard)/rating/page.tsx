@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type React from "react";
-import { ArrowRightLeft, CheckCircle2, Database, DollarSign, Hash, MessageSquare, Mic2, Pencil, Plus, Save, Search, ShieldCheck, Tag, Trash2, X } from "lucide-react";
+import { ArrowRightLeft, BarChart3, CheckCircle2, Database, DollarSign, Hash, History, MessageSquare, Mic2, Pencil, Plus, Save, Search, ShieldCheck, Tag, Trash2, X } from "lucide-react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
 import { useI18n } from "@/components/I18nProvider";
@@ -49,6 +49,29 @@ type PlanSubscriberPreview = {
   total: number;
   subscribers: Array<{ imsi: string; msisdn?: string; status?: string }>;
   hasMore: boolean;
+};
+
+type PlanOperationLog = {
+  id: string;
+  timestamp: string;
+  level: "info" | "warning";
+  action: string;
+  targetId: string;
+  operatorIp: string;
+};
+
+type PlanOperationsData = {
+  summary: {
+    totalPlans: number;
+    activePlans: number;
+    disabledPlans: number;
+    totalLinkedSubscribers: number;
+    selectedLinkedSubscribers: number;
+    selectedSharePct: number;
+    recentActivityCount: number;
+    lastChangedAt?: string | null;
+  };
+  history: PlanOperationLog[];
 };
 
 type PlanForm = {
@@ -170,6 +193,13 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
+function formatDateTime(value?: string | null): string {
+  if (!value) return "--";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "--";
+  return date.toLocaleString();
+}
+
 function isWholeNumber(value: string): boolean {
   return /^\d+$/.test(String(value || "").trim());
 }
@@ -181,8 +211,10 @@ export default function RatingPage() {
   const [selectedPlanId, setSelectedPlanId] = useState("plan_default_10gb");
   const ratingsUrl = `/api/ratings?planId=${encodeURIComponent(selectedPlanId)}`;
   const planSubscribersUrl = selectedPlanId ? `/api/tariff-plans/${encodeURIComponent(selectedPlanId)}/subscribers?limit=5` : null;
+  const planOperationsUrl = selectedPlanId ? `/api/tariff-plans/${encodeURIComponent(selectedPlanId)}/operations?limit=8` : null;
   const { data, isLoading, mutate } = useSWR(ratingsUrl, fetcher);
   const { data: planSubscribersData, mutate: mutatePlanSubscribers } = useSWR<PlanSubscriberPreview>(planSubscribersUrl, fetcher);
+  const { data: planOperationsData, mutate: mutatePlanOperations } = useSWR<PlanOperationsData>(planOperationsUrl, fetcher);
   const ratings: RatingPolicy[] = useMemo(() => data?.ratings || [], [data?.ratings]);
   const { canEditTemplates } = useAuth();
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -209,6 +241,8 @@ export default function RatingPage() {
   );
   const selectedPlanSubscribers = planSubscribersData?.subscribers || [];
   const selectedPlanSubscriberTotal = planSubscribersData?.total ?? selectedPlan?.subscriberCount ?? 0;
+  const planOperationSummary = planOperationsData?.summary;
+  const planOperationHistory = planOperationsData?.history || [];
   const isDisablingPlanWithSubscribers =
     !isCreatingPlan &&
     !!selectedPlan &&
@@ -338,6 +372,7 @@ export default function RatingPage() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || t("tariff_plan_err_create"));
       await mutatePlans();
+      await mutatePlanOperations();
       setSelectedPlanId(data.plan?.plan_id || planForm.plan_id.trim());
       setIsCreatingPlan(false);
       setNotice({ type: "success", text: t("tariff_plan_msg_created") });
@@ -365,6 +400,7 @@ export default function RatingPage() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(messageForPlanResponse(data, t("tariff_plan_err_update")));
       await mutatePlans();
+      await mutatePlanOperations();
       setNotice({ type: "success", text: t("tariff_plan_msg_updated") });
     } catch (error: any) {
       setNotice({ type: "error", text: error.message || t("tariff_plan_err_update") });
@@ -389,6 +425,12 @@ export default function RatingPage() {
     } finally {
       setSavingKey(null);
     }
+  };
+
+  const formatPlanOperationAction = (action: string) => {
+    const key = `audit_action_${action}`;
+    const label = t(key);
+    return label === key ? action : label;
   };
 
   const messageForPlanResponse = (data: any, fallback: string) => {
@@ -418,6 +460,7 @@ export default function RatingPage() {
       if (!res.ok) throw new Error(messageForPlanResponse(data, t("tariff_plan_migrate_err")));
       await mutatePlans();
       await mutatePlanSubscribers();
+      await mutatePlanOperations();
       setNotice({ type: "success", text: messageForPlanResponse(data, t("tariff_plan_migrate_msg")) });
     } catch (error: any) {
       setNotice({ type: "error", text: error.message || t("tariff_plan_migrate_err") });
@@ -788,6 +831,81 @@ export default function RatingPage() {
             )}
           </div>
         )}
+      </section>
+
+      <section className="dash-card" style={{ marginBottom: "1.5rem" }}>
+        <div className="dash-card-header" style={{ display: "flex", justifyContent: "space-between", gap: "1rem", alignItems: "center", flexWrap: "wrap" }}>
+          <div>
+            <h3 style={{ margin: 0, color: "var(--text-main)", fontSize: "1rem", fontWeight: 800, display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <BarChart3 size={17} color="var(--primary)" /> {t("tariff_plan_ops_title")}
+            </h3>
+            <p style={{ margin: "0.25rem 0 0", color: "var(--text-muted)", fontSize: "0.84rem" }}>{t("tariff_plan_ops_desc")}</p>
+          </div>
+          <span style={{ color: "var(--text-muted)", fontSize: "0.78rem", fontWeight: 700 }}>
+            {t("tariff_plan_ops_last_change")}: {formatDateTime(planOperationSummary?.lastChangedAt)}
+          </span>
+        </div>
+        <div className="dash-card-body" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1.25rem", alignItems: "start" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(120px, 1fr))", gap: "0.75rem" }}>
+            {[
+              { icon: <Tag size={16} color="var(--primary)" />, label: t("tariff_plan_ops_total_plans"), value: planOperationSummary?.totalPlans ?? plans.length },
+              { icon: <CheckCircle2 size={16} color="var(--success)" />, label: t("tariff_plan_ops_active_plans"), value: planOperationSummary?.activePlans ?? plans.filter((plan) => (plan.status || "active") === "active").length },
+              { icon: <ShieldCheck size={16} color="var(--warning)" />, label: t("tariff_plan_ops_disabled_plans"), value: planOperationSummary?.disabledPlans ?? plans.filter((plan) => plan.status === "disabled").length },
+              { icon: <Database size={16} color="var(--primary)" />, label: t("tariff_plan_ops_linked_total"), value: planOperationSummary?.totalLinkedSubscribers ?? plans.reduce((sum, plan) => sum + (plan.subscriberCount || 0), 0) },
+            ].map((item) => (
+              <div key={item.label} style={{ border: "1px solid var(--surface-border)", borderRadius: 6, padding: "0.8rem", display: "grid", gap: "0.45rem", minHeight: 88 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.45rem", color: "var(--text-muted)", fontSize: "0.72rem", fontWeight: 800, textTransform: "uppercase" }}>
+                  {item.icon} {item.label}
+                </div>
+                <div style={{ color: "var(--text-main)", fontSize: "1.3rem", fontWeight: 850 }}>{item.value}</div>
+              </div>
+            ))}
+            <div style={{ gridColumn: "1 / -1", border: "1px solid var(--surface-border)", borderRadius: 6, padding: "0.85rem", display: "flex", justifyContent: "space-between", gap: "1rem", alignItems: "center", flexWrap: "wrap" }}>
+              <div>
+                <div style={{ color: "var(--text-main)", fontWeight: 850, fontSize: "0.9rem" }}>{t("tariff_plan_ops_selected_share")}</div>
+                <div style={{ color: "var(--text-muted)", fontSize: "0.78rem", marginTop: "0.2rem" }}>
+                  {selectedPlan?.plan_id || selectedPlanId}
+                </div>
+              </div>
+              <div style={{ color: "var(--primary)", fontWeight: 900, fontSize: "1.35rem" }}>
+                {planOperationSummary?.selectedSharePct ?? 0}%
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gap: "0.75rem" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "center" }}>
+              <h4 style={{ margin: 0, color: "var(--text-main)", fontSize: "0.9rem", fontWeight: 850, display: "flex", alignItems: "center", gap: "0.45rem" }}>
+                <History size={16} color="var(--primary)" /> {t("tariff_plan_ops_history")}
+              </h4>
+              <span style={{ color: "var(--text-muted)", fontSize: "0.76rem", fontWeight: 700 }}>
+                {t("tariff_plan_ops_recent_count", { count: planOperationSummary?.recentActivityCount ?? planOperationHistory.length })}
+              </span>
+            </div>
+            {planOperationHistory.length === 0 ? (
+              <div style={{ border: "1px dashed var(--surface-border)", borderRadius: 6, padding: "1rem", color: "var(--text-muted)", fontSize: "0.83rem" }}>
+                {t("tariff_plan_ops_no_history")}
+              </div>
+            ) : (
+              <div style={{ display: "grid", gap: "0.55rem" }}>
+                {planOperationHistory.map((item) => (
+                  <div key={item.id} style={{ border: "1px solid var(--surface-border)", borderRadius: 6, padding: "0.75rem", display: "grid", gap: "0.45rem" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
+                      <span style={{ color: item.level === "warning" ? "var(--danger)" : "var(--text-main)", fontWeight: 850, fontSize: "0.84rem" }}>
+                        {formatPlanOperationAction(item.action)}
+                      </span>
+                      <span style={{ color: "var(--text-muted)", fontSize: "0.74rem" }}>{formatDateTime(item.timestamp)}</span>
+                    </div>
+                    <div style={{ display: "flex", gap: "0.8rem", flexWrap: "wrap", color: "var(--text-muted)", fontSize: "0.76rem" }}>
+                      <span>{t("tariff_plan_ops_target")}: <span style={{ fontFamily: "monospace", color: "var(--text-secondary)" }}>{item.targetId}</span></span>
+                      <span>{t("tariff_plan_ops_operator")}: {item.operatorIp}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </section>
 
       <section style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(190px, 1fr))", gap: "1rem", marginBottom: "1.5rem" }}>

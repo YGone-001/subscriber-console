@@ -117,3 +117,24 @@ export async function listAuditLogsForApproval(approvalId: string) {
   const logs = await docs.find(filter).sort({ timestamp: 1 }).limit(100).toArray();
   return logs.map(stripMongoId);
 }
+
+export async function listAuditLogsForTariffPlan(planId: string, limitInput = 12) {
+  const docs = await collection();
+  const limit = Math.min(Math.max(Number(limitInput) || 12, 1), 50);
+  const escapedPlanId = escapeRegex(planId);
+  const targetRegex = { $regex: `tariff-plan:.*${escapedPlanId}`, $options: 'i' };
+  const filter = {
+    $or: [
+      { targetId: targetRegex },
+      { 'oldData.plan_id': planId },
+      { 'newData.plan_id': planId },
+      { 'oldData.sourcePlanId': planId },
+      { 'newData.sourcePlanId': planId },
+      { 'oldData.targetPlanId': planId },
+      { 'newData.targetPlanId': planId },
+    ],
+  } as Filter<AuditLogRecord>;
+
+  const logs = await docs.find(filter).sort({ timestamp: -1 }).limit(limit).toArray();
+  return logs.map(stripMongoId);
+}
