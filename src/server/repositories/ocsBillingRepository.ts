@@ -163,6 +163,28 @@ export type OcsPolicyChangeResult = {
   resetBalances: boolean;
 };
 
+export type TariffPlanSubscriberSummary = {
+  imsi: string;
+  msisdn?: string;
+  status?: string;
+  updated_at?: Date | string;
+};
+
+export type TariffPlanMigrationInput = {
+  sourcePlanId: unknown;
+  targetPlanId: unknown;
+  resetBalances?: boolean;
+};
+
+export type TariffPlanMigrationResult = {
+  requested: number;
+  subscriberModified: number;
+  balanceModified: number;
+  sourcePlanId: string;
+  targetPlanId: string;
+  resetBalances: boolean;
+};
+
 function tariffPlansCollection() {
   return getOpen5gsCollection<OcsTariffPlan>(mongoCollections.ocsTariffPlans);
 }
@@ -535,6 +557,121 @@ export async function deleteTariffPlan(planIdInput: unknown) {
   return {
     deleted: result.deletedCount > 0,
     references: { count: 0, examples: [] as string[] },
+  };
+}
+
+export async function listTariffPlanSubscribers(planIdInput: unknown, limitInput = 20) {
+  const planId = normalizePlanId(planIdInput);
+  const subscribersCollection = await ocsSubscribersCollection();
+  const limit = Math.min(Math.max(Number(limitInput) || 20, 1), 100);
+  const [total, subscribers] = await Promise.all([
+    subscribersCollection.countDocuments({ plan_id: planId }),
+    subscribersCollection
+      .find({ plan_id: planId })
+      .project<TariffPlanSubscriberSummary>({ imsi: 1, msisdn: 1, status: 1, updated_at: 1, _id: 0 })
+      .sort({ imsi: 1 })
+      .limit(limit)
+      .toArray(),
+  ]);
+
+  return {
+    total,
+    subscribers,
+    hasMore: total > subscribers.length,
+  };
+}
+
+export async function migrateTariffPlanSubscribers(input: TariffPlanMigrationInput): Promise<TariffPlanMigrationResult> {
+  const sourcePlanId = normalizePlanId(input.sourcePlanId);
+  const targetPlanId = normalizePlanId(input.targetPlanId);
+  if (sourcePlanId === targetPlanId) throw new Error('TARIFF_PLAN_MIGRATE_SAME');
+
+  const [subscriberCollection, balanceCollection] = await Promise.all([
+    ocsSubscribersCollection(),
+    ocsBalancesCollection(),
+  ]);
+  const [sourcePlan, targetPlan] = await Promise.all([
+    getTariffPlanDocument(sourcePlanId),
+    getTariffPlanDocument(targetPlanId),
+  ]);
+  if (!sourcePlan || !targetPlan) throw new Error('OCS_PLAN_NOT_FOUND');
+  if (targetPlan.status === 'disabled') throw new Error('OCS_PLAN_DISABLED');
+
+  const subscribers = await subscriberCollection.find({ plan_id: sourcePlanId }).toArray();
+  const imsis = subscribers.map((subscriber) => subscriber.imsi);
+  if (imsis.length === 0) {
+    return {
+      requested: 0,
+      subscriberModified: 0,
+      balanceModified: 0,
+      sourcePlanId,
+      targetPlanId,
+      resetBalances: input.resetBalances === true,
+    };
+  }
+
+  const now = new Date();
+  const subscriberResult = await subscriberCollection.updateMany(
+    { plan_id: sourcePlanId },
+    { $set: { plan_id: targetPlanId, updated_at: now } }
+  );
+
+  let balanceModified = 0;
+  if (input.resetBalances === true) {
+    const balances = await balanceCollection.find({ imsi: { $in: imsis } }).toArray();
+    if (balances.length > 0) {
+      const balanceResult = await balanceCollection.bulkWrite(
+        balances.map((balance) => {
+          const dataTotal = Math.max(toNumber(balance.data_total, DEFAULT_TOTAL_BALANCE), 0);
+          const voiceTotal = Math.max(toNumber(balance.voice_total, DEFAULT_VOICE_TOTAL), 0);
+          const smsTotal = Math.max(toNumber(balance.sms_total, DEFAULT_SMS_TOTAL), 0);
+          const version = toNumber(balance.version, 0) + 1;
+
+          return {
+            updateOne: {
+              filter: { imsi: balance.imsi },
+              update: {
+                $set: {
+                  plan_id: targetPlanId,
+                  data_total: Long.fromNumber(dataTotal),
+                  data_used: Long.ZERO,
+                  data_reserved: Long.ZERO,
+                  data_available: Long.fromNumber(dataTotal),
+                  voice_total: Long.fromNumber(voiceTotal),
+                  voice_used: Long.ZERO,
+                  voice_reserved: Long.ZERO,
+                  voice_available: Long.fromNumber(voiceTotal),
+                  sms_total: Long.fromNumber(smsTotal),
+                  sms_used: Long.ZERO,
+                  sms_available: Long.fromNumber(smsTotal),
+                  version: Long.fromNumber(version),
+                  updated_at: now,
+                  cycle_start_at: now,
+                  cycle_reset_at: now,
+                },
+              },
+            },
+          };
+        }),
+        { ordered: false }
+      );
+      balanceModified = balanceResult.modifiedCount + balanceResult.upsertedCount;
+    }
+  } else {
+    const balanceResult = await balanceCollection.updateMany(
+      { imsi: { $in: imsis } },
+      { $set: { plan_id: targetPlanId, updated_at: now } }
+    );
+    balanceModified = balanceResult.modifiedCount;
+  }
+
+  return {
+    requested: imsis.length,
+    subscriberModified: subscriberResult.modifiedCount,
+    balanceModified,
+    sourcePlanId,
+    targetPlanId,
+    resetBalances: input.resetBalances === true,
   };
 }
 

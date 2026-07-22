@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type React from "react";
-import { CheckCircle2, Database, DollarSign, Hash, MessageSquare, Mic2, Pencil, Plus, Save, Search, ShieldCheck, Tag, Trash2, X } from "lucide-react";
+import { ArrowRightLeft, CheckCircle2, Database, DollarSign, Hash, MessageSquare, Mic2, Pencil, Plus, Save, Search, ShieldCheck, Tag, Trash2, X } from "lucide-react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
 import { useI18n } from "@/components/I18nProvider";
@@ -43,6 +43,12 @@ type TariffPlan = {
   rulesCount: number;
   subscriberCount: number;
   isDefault?: boolean;
+};
+
+type PlanSubscriberPreview = {
+  total: number;
+  subscribers: Array<{ imsi: string; msisdn?: string; status?: string }>;
+  hasMore: boolean;
 };
 
 type PlanForm = {
@@ -174,7 +180,9 @@ export default function RatingPage() {
   const plans: TariffPlan[] = useMemo(() => plansData?.plans || [], [plansData?.plans]);
   const [selectedPlanId, setSelectedPlanId] = useState("plan_default_10gb");
   const ratingsUrl = `/api/ratings?planId=${encodeURIComponent(selectedPlanId)}`;
+  const planSubscribersUrl = selectedPlanId ? `/api/tariff-plans/${encodeURIComponent(selectedPlanId)}/subscribers?limit=5` : null;
   const { data, isLoading, mutate } = useSWR(ratingsUrl, fetcher);
+  const { data: planSubscribersData, mutate: mutatePlanSubscribers } = useSWR<PlanSubscriberPreview>(planSubscribersUrl, fetcher);
   const ratings: RatingPolicy[] = useMemo(() => data?.ratings || [], [data?.ratings]);
   const { canEditTemplates } = useAuth();
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -188,11 +196,19 @@ export default function RatingPage() {
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
   const [isCreatingPlan, setIsCreatingPlan] = useState(false);
   const [planForm, setPlanForm] = useState<PlanForm>({ plan_id: "", name: "", description: "", status: "active" });
+  const [migrationTargetPlanId, setMigrationTargetPlanId] = useState("");
+  const [migrationResetBalances, setMigrationResetBalances] = useState(false);
 
   const selectedPlan = useMemo(
     () => plans.find((plan) => plan.plan_id === selectedPlanId),
     [plans, selectedPlanId]
   );
+  const migrationTargetOptions = useMemo(
+    () => plans.filter((plan) => plan.plan_id !== selectedPlanId && (plan.status || "active") === "active"),
+    [plans, selectedPlanId]
+  );
+  const selectedPlanSubscribers = planSubscribersData?.subscribers || [];
+  const selectedPlanSubscriberTotal = planSubscribersData?.total ?? selectedPlan?.subscriberCount ?? 0;
 
   useEffect(() => {
     if (plans.length > 0 && !plans.some((plan) => plan.plan_id === selectedPlanId)) {
@@ -209,6 +225,18 @@ export default function RatingPage() {
       status: selectedPlan.status || "active",
     });
   }, [isCreatingPlan, selectedPlan]);
+
+  useEffect(() => {
+    if (migrationTargetOptions.length === 0) {
+      setMigrationTargetPlanId("");
+      return;
+    }
+    setMigrationTargetPlanId((current) =>
+      migrationTargetOptions.some((plan) => plan.plan_id === current)
+        ? current
+        : migrationTargetOptions[0].plan_id
+    );
+  }, [migrationTargetOptions]);
 
   const rateTypes = useMemo(() => [
     { label: t("rating_type_time"), val: 1 },
@@ -348,6 +376,40 @@ export default function RatingPage() {
       setNotice({ type: "success", text: t("tariff_plan_msg_deleted") });
     } catch (error: any) {
       setNotice({ type: "error", text: error.message || t("tariff_plan_err_delete") });
+    } finally {
+      setSavingKey(null);
+    }
+  };
+
+  const messageForPlanResponse = (data: any, fallback: string) => {
+    if (data?.error === "Tariff plan not found") return t("tariff_plan_err_not_found");
+    if (data?.error === "Invalid plan_id format") return t("tariff_plan_err_id");
+    if (data?.error === "Tariff plan is disabled") return t("tariff_plan_err_disabled");
+    if (data?.error === "Source and target tariff plan must be different") return t("tariff_plan_migrate_err_same");
+    if (data?.approval?.id) return t("approval_msg_submitted", { id: data.approval.id });
+    return data?.error || fallback;
+  };
+
+  const handleMigratePlanSubscribers = async () => {
+    if (!selectedPlan || !migrationTargetPlanId) return;
+    setSavingKey("plan:migrate");
+    setNotice(null);
+    try {
+      const res = await fetch(`/api/tariff-plans/${encodeURIComponent(selectedPlan.plan_id)}/migrate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          targetPlanId: migrationTargetPlanId,
+          resetBalances: migrationResetBalances,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(messageForPlanResponse(data, t("tariff_plan_migrate_err")));
+      await mutatePlans();
+      await mutatePlanSubscribers();
+      setNotice({ type: "success", text: messageForPlanResponse(data, t("tariff_plan_migrate_msg")) });
+    } catch (error: any) {
+      setNotice({ type: "error", text: error.message || t("tariff_plan_migrate_err") });
     } finally {
       setSavingKey(null);
     }
@@ -644,6 +706,72 @@ export default function RatingPage() {
             )}
           </div>
         </div>
+        {!isCreatingPlan && selectedPlan && selectedPlanSubscriberTotal > 0 && (
+          <div style={{ borderTop: "1px solid var(--surface-border)", padding: "1rem 1.5rem 1.25rem", display: "grid", gap: "1rem" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", alignItems: "flex-start", flexWrap: "wrap" }}>
+              <div>
+                <h4 style={{ margin: 0, color: "var(--text-main)", fontSize: "0.95rem", fontWeight: 800, display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <ArrowRightLeft size={16} color="var(--primary)" /> {t("tariff_plan_migrate_title")}
+                </h4>
+                <p style={{ margin: "0.3rem 0 0", color: "var(--text-muted)", fontSize: "0.82rem", lineHeight: 1.5 }}>
+                  {t("tariff_plan_migrate_desc", { count: selectedPlanSubscriberTotal })}
+                </p>
+              </div>
+              <div style={{ display: "flex", gap: "0.45rem", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                {selectedPlanSubscribers.map((subscriber) => (
+                  <span key={subscriber.imsi} style={{ border: "1px solid var(--surface-border)", borderRadius: 6, padding: "0.28rem 0.45rem", fontFamily: "monospace", fontSize: "0.72rem", color: "var(--text-main)", background: "var(--surface-hover)" }}>
+                    {subscriber.imsi}
+                  </span>
+                ))}
+                {planSubscribersData?.hasMore && (
+                  <span style={{ border: "1px solid var(--surface-border)", borderRadius: 6, padding: "0.28rem 0.45rem", fontSize: "0.72rem", color: "var(--text-muted)", background: "var(--surface-hover)" }}>
+                    +{selectedPlanSubscriberTotal - selectedPlanSubscribers.length}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {canEditTemplates && (
+              <div style={{ display: "grid", gridTemplateColumns: "minmax(260px, 1fr) minmax(220px, 0.8fr) auto", gap: "0.8rem", alignItems: "end" }}>
+                <Field label={t("tariff_plan_migrate_target")}>
+                  <select
+                    className="form-input"
+                    value={migrationTargetPlanId}
+                    onChange={(event) => setMigrationTargetPlanId(event.target.value)}
+                    disabled={migrationTargetOptions.length === 0 || savingKey !== null}
+                  >
+                    {migrationTargetOptions.length === 0 ? (
+                      <option value="">{t("tariff_plan_migrate_no_target")}</option>
+                    ) : migrationTargetOptions.map((plan) => (
+                      <option key={plan.plan_id} value={plan.plan_id}>
+                        {plan.name && plan.name !== plan.plan_id ? `${plan.name} (${plan.plan_id})` : plan.plan_id}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <label style={{ display: "flex", alignItems: "center", gap: "0.6rem", minHeight: 42, color: "var(--text-secondary)", fontSize: "0.82rem", fontWeight: 700 }}>
+                  <input
+                    type="checkbox"
+                    className="checkbox-custom"
+                    checked={migrationResetBalances}
+                    onChange={(event) => setMigrationResetBalances(event.target.checked)}
+                    disabled={savingKey !== null}
+                  />
+                  {t("tariff_plan_migrate_reset")}
+                </label>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={handleMigratePlanSubscribers}
+                  disabled={savingKey !== null || !migrationTargetPlanId || selectedPlanSubscriberTotal === 0}
+                  style={{ minHeight: 42, whiteSpace: "nowrap" }}
+                >
+                  <ArrowRightLeft size={15} /> {savingKey === "plan:migrate" ? t("policy_change_applying") : t("tariff_plan_migrate_apply")}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </section>
 
       <section style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(190px, 1fr))", gap: "1rem", marginBottom: "1.5rem" }}>

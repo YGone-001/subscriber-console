@@ -8,7 +8,7 @@ import {
   validateTrafficAdjustmentPayload,
 } from '@/lib/subscriberValidation';
 import type { ApprovalDocument } from '@/server/repositories/approvalRepository';
-import { adjustOcsTrafficBalance, changeOcsPolicyForSubscribers } from '@/server/repositories/ocsBillingRepository';
+import { adjustOcsTrafficBalance, changeOcsPolicyForSubscribers, migrateTariffPlanSubscribers } from '@/server/repositories/ocsBillingRepository';
 import { restoreProfileVersion } from '@/server/repositories/profileRepository';
 import { createRating, deleteRating, updateRating } from '@/server/repositories/ratingRepository';
 import {
@@ -47,6 +47,24 @@ export async function executeApproval(approval: ApprovalDocument, request: Reque
         status: result.status,
         resetBalances: result.resetBalances,
       },
+      request
+    );
+
+    return result;
+  }
+
+  if (approval.action === 'TARIFF_PLAN_MIGRATE') {
+    const payload = asRecord(approval.payload);
+    const result = await migrateTariffPlanSubscribers({
+      sourcePlanId: payload.sourcePlanId || payload.source_plan_id,
+      targetPlanId: payload.targetPlanId || payload.target_plan_id,
+      resetBalances: payload.resetBalances === true,
+    });
+    logAudit(
+      'UPDATE',
+      `tariff-plan:${result.sourcePlanId}`,
+      { status: 'approved' },
+      { ...result, approvalId: approval.id },
       request
     );
 

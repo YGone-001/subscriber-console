@@ -26,7 +26,7 @@ type RoleKey = "root" | "operator" | "viewer";
 type PermissionLevel = "manage" | "write" | "read" | "none";
 type CapabilityLevel = "allow" | "approval" | "export" | "deny";
 type ApprovalStatus = "pending" | "approved" | "rejected" | "executed" | "failed";
-type ApprovalAction = "POLICY_CHANGE" | "TRAFFIC_ADJUSTMENT" | "RATING_CREATE" | "RATING_UPDATE" | "RATING_DELETE" | "PROFILE_RESTORE" | "SYSTEM_HEAL" | "SUBSCRIBER_BATCH_CREATE" | "SUBSCRIBER_IMPORT" | "SUBSCRIBER_BULK_DELETE";
+type ApprovalAction = "POLICY_CHANGE" | "TRAFFIC_ADJUSTMENT" | "RATING_CREATE" | "RATING_UPDATE" | "RATING_DELETE" | "TARIFF_PLAN_MIGRATE" | "PROFILE_RESTORE" | "SYSTEM_HEAL" | "SUBSCRIBER_BATCH_CREATE" | "SUBSCRIBER_IMPORT" | "SUBSCRIBER_BULK_DELETE";
 
 type ApprovalRequest = {
   id: string;
@@ -334,6 +334,7 @@ export default function UsersPage() {
   const getApprovalIcon = (action: ApprovalAction) => {
     if (action.startsWith("SUBSCRIBER")) return <User size={15} color="var(--primary)" />;
     if (action.startsWith("RATING")) return <CheckCircle2 size={15} color="var(--primary)" />;
+    if (action === "TARIFF_PLAN_MIGRATE") return <GitBranch size={15} color="var(--primary)" />;
     if (action === "PROFILE_RESTORE") return <RotateCcw size={15} color="var(--primary)" />;
     if (action === "SYSTEM_HEAL") return <Activity size={15} color="var(--primary)" />;
     if (action === "POLICY_CHANGE") return <GitBranch size={15} color="var(--primary)" />;

@@ -7,6 +7,7 @@ export type ApprovalAction =
   | 'RATING_CREATE'
   | 'RATING_UPDATE'
   | 'RATING_DELETE'
+  | 'TARIFF_PLAN_MIGRATE'
   | 'PROFILE_RESTORE'
   | 'SYSTEM_HEAL'
   | 'SUBSCRIBER_BATCH_CREATE'
