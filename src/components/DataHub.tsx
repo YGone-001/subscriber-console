@@ -63,7 +63,9 @@ const EXPORT_FIELDS = [
   { key: "imsi", labelKey: "dh_field_imsi", header: "IMSI", getValue: (s: any) => s.imsi || "" },
   { key: "status", labelKey: "dh_field_status", header: "Status", getValue: (s: any) => s.status || "" },
   { key: "plmn", labelKey: "dh_field_plmn", header: "PLMN", getValue: (s: any) => s.plmn || "" },
-  { key: "policy", labelKey: "dh_field_policy", header: "Plan", getValue: (s: any) => s.policy || "" },
+  { key: "policy", labelKey: "dh_field_policy", header: "Plan_ID", getValue: (s: any) => s.policy || "" },
+  { key: "policy_name", labelKey: "dh_field_policy_name", header: "Plan_Name", getValue: (s: any) => s.policyName || s.policy || "" },
+  { key: "policy_status", labelKey: "dh_field_policy_status", header: "Plan_Status", getValue: (s: any) => s.policyStatus || "" },
   { key: "traffic_used", labelKey: "dh_field_traffic_used", header: "Traffic_Used_Bytes", getValue: (s: any) => s.traffic?.used || 0 },
   { key: "traffic_total", labelKey: "dh_field_traffic_total", header: "Traffic_Total_Bytes", getValue: (s: any) => s.traffic?.total || 0 },
   { key: "sms_used", labelKey: "dh_field_sms_used", header: "SMS_Used_Events", getValue: (s: any) => s.sms?.used || 0 },
@@ -262,6 +264,8 @@ export default function DataHub({ isOpen, onClose, onComplete, onOperation, subs
           ? t("tariff_plan_err_not_found")
           : data.error === "Invalid plan_id format"
           ? t("tariff_plan_err_id")
+          : data.error === "Tariff plan is disabled"
+          ? t("tariff_plan_err_disabled")
           : data.error);
         setImportStage("confirm");
       } else {

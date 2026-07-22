@@ -31,6 +31,8 @@ export type SubscriberRow = {
   plmn: string;
   profile: string;
   policy: string;
+  policyName?: string;
+  policyStatus?: string;
   traffic: {
     total: number;
     used: number;
@@ -255,9 +257,11 @@ function profileOcs(profile: ProfileDoc | null | undefined): Record<string, unkn
   return profile?.ocsDefaults || profile?.ocs_defaults || {};
 }
 
-async function assertTariffPlanExists(planId: unknown) {
+async function assertTariffPlanAssignable(planId: unknown) {
   const plan = await getTariffPlan(planId);
   if (!plan) throw new Error('OCS_PLAN_NOT_FOUND');
+  if (plan.status === 'disabled') throw new Error('OCS_PLAN_DISABLED');
+  return plan;
 }
 
 async function existingImsiSet(imsis: string[]): Promise<Set<string>> {
@@ -346,7 +350,8 @@ function toSubscriberRow(
   doc: Open5gsSubscriberDocument,
   ocsSubscriber: { plan_id?: string; updated_at?: unknown; created_at?: unknown } | null | undefined,
   balance: { data_total?: unknown; data_used?: unknown; data_available?: unknown; updated_at?: unknown } | null | undefined,
-  smsBalance: { sms_total?: unknown; sms_used?: unknown; sms_available?: unknown } | null | undefined
+  smsBalance: { sms_total?: unknown; sms_used?: unknown; sms_available?: unknown } | null | undefined,
+  tariffPlan?: { name?: string; status?: string } | null
 ): SubscriberRow {
   const traffic = normalizedTraffic(balance);
   const sms = normalizedSms(smsBalance);
@@ -359,6 +364,8 @@ function toSubscriberRow(
     plmn: doc.imsi.slice(0, 5) || '45400',
     profile: doc.webui_meta?.profile_name || '',
     policy: ocsSubscriber?.plan_id || '',
+    policyName: tariffPlan?.name || ocsSubscriber?.plan_id || '',
+    policyStatus: tariffPlan?.status || '',
     traffic,
     sms,
     lastActive: lastActive(doc, ocsSubscriber, balance),
@@ -423,9 +430,17 @@ export async function listSubscriberRows(
   const ocs = await readOcsProvisioningForImsis(docs.map((doc) => doc.imsi));
 
   return {
-    subscribers: docs.map((doc) =>
-      toSubscriberRow(doc, ocs.subscribers.get(doc.imsi), ocs.balances.get(doc.imsi), ocs.balances.get(doc.imsi))
-    ),
+    subscribers: docs.map((doc) => {
+      const ocsSubscriber = ocs.subscribers.get(doc.imsi);
+      const planId = ocsSubscriber?.plan_id || 'plan_default_10gb';
+      return toSubscriberRow(
+        doc,
+        ocsSubscriber,
+        ocs.balances.get(doc.imsi),
+        ocs.balances.get(doc.imsi),
+        ocs.tariffPlans.get(planId)
+      );
+    }),
     total,
     page: pageValue,
     limit: limitValue,
@@ -462,6 +477,7 @@ export async function findSubscriberLegacyState(imsi: string): Promise<LegacySub
 export async function createDefaultSubscriber(imsi: string, planId?: unknown): Promise<Open5gsSubscriberDocument> {
   const collection = await subscribersCollection();
   const doc = buildDefaultOpen5gsSubscriber(imsi);
+  await assertTariffPlanAssignable(planId);
 
   try {
     await collection.insertOne(doc as SubscriberDoc);
@@ -514,13 +530,22 @@ export async function updateSubscriberFromLegacy(
   const collection = await subscribersCollection();
   const existing = await collection.findOne({ imsi });
   const next = buildOpen5gsSubscriberFromLegacy(imsi, payload, existing);
+  const ocsTraffic = payload.ocsTraffic as Record<string, unknown> | undefined;
+  const requestedPlanId = ocsTraffic?.planId ?? ocsTraffic?.plan_id;
+
+  if (requestedPlanId !== undefined && requestedPlanId !== null && requestedPlanId !== '') {
+    const current = await readOcsProvisioning(imsi);
+    const currentPlanId = current.subscriber?.plan_id || 'plan_default_10gb';
+    if (String(requestedPlanId) !== currentPlanId) {
+      await assertTariffPlanAssignable(requestedPlanId);
+    }
+  }
 
   await collection.replaceOne(
     { imsi },
     next as SubscriberDoc,
     { upsert: true }
   );
-  const ocsTraffic = payload.ocsTraffic as Record<string, unknown> | undefined;
   await provisionOcsSubscriber({
     imsi,
     planId: ocsTraffic?.planId ?? ocsTraffic?.plan_id,
@@ -586,7 +611,7 @@ export async function createSubscribersBatch(options: BatchCreateOptions): Promi
     initialSmsTotal
   );
   const targetPlanId = options.planId ?? ocs.planId ?? ocs.plan_id;
-  await assertTariffPlanExists(targetPlanId);
+  await assertTariffPlanAssignable(targetPlanId);
 
   const imsis = generateImsiRange(options.startImsi, options.count);
   ensureImsiRange(imsis);
@@ -644,7 +669,7 @@ export async function importSubscribersFromRecords(records: ImportRecord[], over
     normalized
       .map(({ record }) => asString(record.plan_id, 'plan_default_10gb').trim() || 'plan_default_10gb')
   ));
-  await Promise.all(planIds.map((planId) => assertTariffPlanExists(planId)));
+  await Promise.all(planIds.map((planId) => assertTariffPlanAssignable(planId)));
   const imsis = normalized.map((item) => item.doc.imsi);
   const existing = await existingImsiSet(imsis);
   const operations: AnyBulkWriteOperation<SubscriberDoc>[] = [];

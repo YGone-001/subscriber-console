@@ -913,6 +913,9 @@ export async function changeOcsPolicyForSubscribers(input: OcsPolicyChangeInput)
   if (!plan) {
     throw new Error('OCS_PLAN_NOT_FOUND');
   }
+  if (plan.status === 'disabled') {
+    throw new Error('OCS_PLAN_DISABLED');
+  }
 
   const uniqueImsis = Array.from(new Set(input.imsiList));
   const existingBalances = await balanceCollection
@@ -1121,20 +1124,28 @@ export async function readOcsProvisioningForImsis(imsis: string[]) {
     return {
       subscribers: new Map<string, OcsSubscriber>(),
       balances: new Map<string, OcsBalance>(),
+      tariffPlans: new Map<string, ReturnType<typeof tariffPlanSnapshot>>(),
     };
   }
 
-  const [subscriberCollection, balanceCollection] = await Promise.all([
+  const [subscriberCollection, balanceCollection, planCollection] = await Promise.all([
     ocsSubscribersCollection(),
     ocsBalancesCollection(),
+    tariffPlansCollection(),
   ]);
   const [subscribers, balances] = await Promise.all([
     subscriberCollection.find({ imsi: { $in: imsis } }).toArray(),
     balanceCollection.find({ imsi: { $in: imsis } }).toArray(),
   ]);
+  const planIds = Array.from(new Set(subscribers.map((subscriber) => subscriber.plan_id || DEFAULT_OCS_PLAN_ID)));
+  if (planIds.includes(DEFAULT_OCS_PLAN_ID)) await getOrCreateDefaultPlan();
+  const plans = planIds.length > 0
+    ? await planCollection.find({ plan_id: { $in: planIds } }).toArray()
+    : [];
 
   return {
     subscribers: new Map(subscribers.map((subscriber) => [subscriber.imsi, subscriber])),
     balances: new Map(balances.map((balance) => [balance.imsi, balance])),
+    tariffPlans: new Map(plans.map((plan) => [plan.plan_id, tariffPlanSnapshot(plan)])),
   };
 }

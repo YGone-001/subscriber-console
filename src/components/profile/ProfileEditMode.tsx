@@ -31,7 +31,7 @@ export default function ProfileEditMode({ t, profileName, state, actions }: any)
   const totalTrafficInput = splitByteInput(ocsDefaults.trafficTotal);
   const balanceTrafficInput = splitByteInput(ocsDefaults.trafficBalance, totalTrafficInput.unit);
   const tariffPlanOptions = Array.isArray(tariffPlanList) && tariffPlanList.length > 0
-    ? tariffPlanList
+    ? tariffPlanList.filter((plan: any) => (plan.status || "active") === "active" || plan.plan_id === ocsDefaults.planId)
     : [{ plan_id: ocsDefaults.planId || "plan_default_10gb", name: ocsDefaults.planId || "plan_default_10gb", status: "active" }];
   const handleTitleChange = (value: string) => {
     setProfileTitle(value);
@@ -101,7 +101,7 @@ export default function ProfileEditMode({ t, profileName, state, actions }: any)
             >
               {tariffPlanOptions.map((plan: any) => (
                 <option key={plan.plan_id} value={plan.plan_id}>
-                  {plan.name && plan.name !== plan.plan_id ? `${plan.name} (${plan.plan_id})` : plan.plan_id}
+                  {plan.name && plan.name !== plan.plan_id ? `${plan.name} (${plan.plan_id})` : plan.plan_id}{plan.status === "disabled" ? ` - ${t("users_disabled")}` : ""}
                 </option>
               ))}
             </select>

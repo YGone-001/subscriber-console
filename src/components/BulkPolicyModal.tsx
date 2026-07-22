@@ -90,6 +90,8 @@ export default function BulkPolicyModal({ isOpen, selectedImsis, onClose, onSucc
           ? t("tariff_plan_err_not_found")
           : data.error === "Invalid plan_id format"
           ? t("tariff_plan_err_id")
+          : data.error === "Tariff plan is disabled"
+          ? t("tariff_plan_err_disabled")
           : data.error || t("policy_change_err_save");
         throw new Error(message);
       }

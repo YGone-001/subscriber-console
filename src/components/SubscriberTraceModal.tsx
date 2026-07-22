@@ -89,6 +89,9 @@ export default function SubscriberTraceModal({ imsi, onClose, t }: SubscriberTra
   const ocsImsi = asRecord(detail?.ocsImsi);
   const ocsTraffic = asRecord(detail?.ocsTraffic);
   const tariffPlan = asRecord(detail?.ocsTariffPlan);
+  const planId = String(ocsImsi.plan_id || tariffPlan.plan_id || "");
+  const planName = String(tariffPlan.name || planId || "");
+  const planLabel = planName && planId && planName !== planId ? `${planName} (${planId})` : (planId || t("no_policy"));
   const slices = Array.isArray(sub4G.sliceList) ? sub4G.sliceList : [];
   const sessions = slices.flatMap((slice: any) => Array.isArray(slice.session_list) ? slice.session_list : []);
   const pccRuleCount = sessions.reduce((total: number, session: any) => total + (Array.isArray(session.pcc_rule) ? session.pcc_rule.length : 0), 0);
@@ -124,7 +127,7 @@ export default function SubscriberTraceModal({ imsi, onClose, t }: SubscriberTra
       kind: "rating",
       tone: hasRatingGap || !ocsImsi.plan_id ? "warn" : "ok",
       title: t("trace_timeline_rating_title"),
-      detail: t("trace_timeline_rating_detail", { plan: ocsImsi.plan_id || t("no_policy"), data: dataRules, voice: voiceRules, sms: smsRules }),
+      detail: t("trace_timeline_rating_detail", { plan: planLabel, data: dataRules, voice: voiceRules, sms: smsRules }),
       meta: t("trace_timeline_rating_meta", { rules: rules.length }),
     },
     {
@@ -167,7 +170,7 @@ export default function SubscriberTraceModal({ imsi, onClose, t }: SubscriberTra
     {
       key: "ocs",
       label: t("trace_step_ocs"),
-      value: ocsImsi.plan_id || t("no_policy"),
+      value: planLabel,
       state: ocsImsi.plan_id ? "ok" : "warn",
     },
     {

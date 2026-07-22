@@ -20,6 +20,7 @@ async function validateImportPlanIds(records: Record<string, unknown>[]) {
   for (const planId of planIds) {
     const plan = await getTariffPlan(planId);
     if (!plan) throw new Error('OCS_PLAN_NOT_FOUND');
+    if (plan.status === 'disabled') throw new Error('OCS_PLAN_DISABLED');
   }
 }
 
@@ -106,6 +107,9 @@ export async function POST(request: Request) {
     }
     if (error instanceof Error && error.message === 'OCS_PLAN_NOT_FOUND') {
       return NextResponse.json({ error: 'Tariff plan not found' }, { status: 404 });
+    }
+    if (error instanceof Error && error.message === 'OCS_PLAN_DISABLED') {
+      return NextResponse.json({ error: 'Tariff plan is disabled' }, { status: 409 });
     }
 
     console.error('Import Error:', error);

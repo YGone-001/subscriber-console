@@ -26,6 +26,8 @@ interface SubscriberRow {
   imsi: string;
   status: string;
   policy?: string;
+  policyName?: string;
+  policyStatus?: string;
   lastActive: string;
   ard?: number;
   traffic?: {
@@ -303,6 +305,9 @@ export default function SubscriberPage() {
     } else if (sortField === "plmn") {
        valA = resolveNetwork(a.imsi).plmn;
        valB = resolveNetwork(b.imsi).plmn;
+    } else if (sortField === "policy") {
+       valA = a.policyName || a.policy || "";
+       valB = b.policyName || b.policy || "";
     }
 
     if (valA < valB) return sortDirection === "asc" ? -1 : 1;
@@ -645,12 +650,24 @@ export default function SubscriberPage() {
                             );
                          })()}
                        </td>
-                       <td style={{ padding: "1rem" }}>
-                          {sub.policy ? (
-                            <span style={{ color: "var(--text-main)", fontWeight: 500, fontFamily: "monospace" }}>{sub.policy}</span>
-                          ) : (
-                            <span style={{ color: "#94a3b8", fontSize: "0.85rem", fontStyle: "italic" }}>{t("no_policy")}</span>
-                          )}
+                        <td style={{ padding: "1rem" }}>
+                           {sub.policy ? (
+                             <div style={{ display: "grid", gap: "0.25rem" }}>
+                               <span title={sub.policy} style={{ color: "var(--text-main)", fontWeight: 700, fontSize: "0.86rem" }}>
+                                 {sub.policyName || sub.policy}
+                               </span>
+                               <span style={{ display: "flex", alignItems: "center", gap: "0.4rem", color: "var(--text-muted)", fontSize: "0.74rem", fontFamily: "monospace" }}>
+                                 {sub.policy}
+                                 {sub.policyStatus === "disabled" && (
+                                   <span style={{ color: "var(--warning)", fontFamily: "inherit", fontWeight: 800 }}>
+                                     {t("users_disabled")}
+                                   </span>
+                                 )}
+                               </span>
+                             </div>
+                           ) : (
+                             <span style={{ color: "#94a3b8", fontSize: "0.85rem", fontStyle: "italic" }}>{t("no_policy")}</span>
+                           )}
                        </td>
                        <td style={{ padding: "1rem" }}>
                          <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>

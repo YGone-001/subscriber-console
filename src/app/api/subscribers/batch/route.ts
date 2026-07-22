@@ -23,6 +23,7 @@ export async function POST(request: Request) {
     const payload = validation.value;
     const plan = await getTariffPlan(payload.planId);
     if (!plan) return NextResponse.json({ error: 'Tariff plan not found' }, { status: 404 });
+    if (plan.status === 'disabled') return NextResponse.json({ error: 'Tariff plan is disabled' }, { status: 409 });
 
     if (auth.auth.role !== 'root') {
       const approval = await createApprovalRequest({
@@ -88,6 +89,9 @@ export async function POST(request: Request) {
     }
     if (error instanceof Error && error.message === 'OCS_PLAN_NOT_FOUND') {
       return NextResponse.json({ error: 'Tariff plan not found' }, { status: 404 });
+    }
+    if (error instanceof Error && error.message === 'OCS_PLAN_DISABLED') {
+      return NextResponse.json({ error: 'Tariff plan is disabled' }, { status: 409 });
     }
 
     console.error('Error in batch creation:', error);

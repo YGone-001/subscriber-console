@@ -116,6 +116,8 @@ export default function BatchCreateModal({ isOpen, onClose, onSuccess, profileLi
           ? t("tariff_plan_err_not_found")
           : data.error === "Invalid plan_id format"
           ? t("tariff_plan_err_id")
+          : data.error === "Tariff plan is disabled"
+          ? t("tariff_plan_err_disabled")
           : data.error || t("err_batch_failed");
         setBatchResult({ error: message });
       }

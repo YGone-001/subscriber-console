@@ -5,7 +5,7 @@ import { capabilityDecision } from '@/lib/permissions';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import { validatePolicyChangePayload } from '@/lib/subscriberValidation';
 import { createApprovalRequest } from '@/server/repositories/approvalRepository';
-import { changeOcsPolicyForSubscribers } from '@/server/repositories/ocsBillingRepository';
+import { changeOcsPolicyForSubscribers, getTariffPlan } from '@/server/repositories/ocsBillingRepository';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,6 +20,9 @@ export async function POST(request: Request) {
     const body = await request.json();
     const validation = validatePolicyChangePayload(body);
     if (!validation.ok) return NextResponse.json({ error: validation.error }, { status: 400 });
+    const plan = await getTariffPlan(validation.value.planId);
+    if (!plan) return NextResponse.json({ error: 'Tariff plan not found' }, { status: 404 });
+    if (plan.status === 'disabled') return NextResponse.json({ error: 'Tariff plan is disabled' }, { status: 409 });
 
     if (capabilityDecision(auth.auth.role, 'policy_approve') === 'approval') {
       const uniqueImsis = Array.from(new Set(validation.value.imsiList));
@@ -58,6 +61,9 @@ export async function POST(request: Request) {
   } catch (error) {
     if (error instanceof Error && error.message === 'OCS_PLAN_NOT_FOUND') {
       return NextResponse.json({ error: 'Tariff plan not found' }, { status: 404 });
+    }
+    if (error instanceof Error && error.message === 'OCS_PLAN_DISABLED') {
+      return NextResponse.json({ error: 'Tariff plan is disabled' }, { status: 409 });
     }
 
     console.error('Error changing subscriber policy:', error);

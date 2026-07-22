@@ -86,7 +86,7 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
     fontWeight: 650,
   };
   const tariffPlanOptions = tariffPlanList.length > 0
-    ? tariffPlanList
+    ? tariffPlanList.filter((plan) => (plan.status || "active") === "active" || plan.plan_id === ocsPlanId)
     : (ocsPlanId ? [{ plan_id: ocsPlanId, name: ocsPlanId, status: ocsPlanStatus }] : []);
 
   return (
@@ -368,7 +368,7 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
             >
               {tariffPlanOptions.map((plan) => (
                 <option key={plan.plan_id} value={plan.plan_id}>
-                  {plan.name && plan.name !== plan.plan_id ? `${plan.name} (${plan.plan_id})` : plan.plan_id}
+                  {plan.name && plan.name !== plan.plan_id ? `${plan.name} (${plan.plan_id})` : plan.plan_id}{plan.status === "disabled" ? ` - ${t("users_disabled")}` : ""}
                 </option>
               ))}
             </select>

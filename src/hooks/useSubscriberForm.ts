@@ -352,6 +352,7 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
           }
           if (createData?.error === "Tariff plan not found") throw new Error(t("tariff_plan_err_not_found"));
           if (createData?.error === "Invalid plan_id format") throw new Error(t("tariff_plan_err_id"));
+          if (createData?.error === "Tariff plan is disabled") throw new Error(t("tariff_plan_err_disabled"));
           throw new Error(createData?.error || t("sub_err_save"));
         }
       }
@@ -393,6 +394,7 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
         const data = await res.json().catch(() => ({}));
         if (data?.error === "Tariff plan not found") throw new Error(t("tariff_plan_err_not_found"));
         if (data?.error === "Invalid plan_id format") throw new Error(t("tariff_plan_err_id"));
+        if (data?.error === "Tariff plan is disabled") throw new Error(t("tariff_plan_err_disabled"));
         throw new Error(data?.error || t("sub_err_save"));
       }
 
