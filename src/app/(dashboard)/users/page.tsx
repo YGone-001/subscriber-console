@@ -32,6 +32,12 @@ import {
 import { fetcher } from "@/lib/fetcher";
 import { toCsvRow } from "@/lib/csv";
 import { ROLE_CAPABILITIES, type Capability, type CapabilityDecision } from "@/lib/permissions";
+import {
+  buildUserQueryString,
+  getUserAccessStatusMeta,
+  isBulkMutableUser,
+  isProtectedSystemUser,
+} from "@/lib/userAccessManagement";
 import { useAuth } from "@/hooks/useAuth";
 import { useI18n } from "@/components/I18nProvider";
 import { ConfirmActionPanel, EmptyState, LoadingRows, OperationNotice } from "@/components/OperationFeedback";
@@ -156,15 +162,15 @@ const DEFAULT_EDIT_FORM: EditUserForm = {
 };
 
 const ROLE_STYLE: Record<RoleKey, { color: string; bg: string }> = {
-  root: { color: "var(--danger)", bg: "rgba(231, 74, 59, 0.12)" },
-  operator: { color: "#d97706", bg: "rgba(245, 158, 11, 0.14)" },
+  root: { color: "var(--danger)", bg: "var(--danger-soft)" },
+  operator: { color: "var(--warning)", bg: "var(--warning-soft)" },
   viewer: { color: "var(--primary)", bg: "rgba(78, 115, 223, 0.12)" },
 };
 
-const STATUS_META: Record<DisplayUserStatus, { labelKey: string; color: string; bg: string }> = {
-  active: { labelKey: "users_status_enabled", color: "var(--success)", bg: "rgba(28, 200, 138, 0.12)" },
-  disabled: { labelKey: "users_status_disabled", color: "var(--text-muted)", bg: "rgba(100, 116, 139, 0.12)" },
-  locked: { labelKey: "users_status_locked", color: "var(--danger)", bg: "rgba(231, 74, 59, 0.12)" },
+const STATUS_TONE_STYLE: Record<DisplayUserStatus, { color: string; bg: string }> = {
+  active: { color: "var(--success)", bg: "var(--success-soft)" },
+  disabled: { color: "var(--text-muted)", bg: "var(--neutral-soft)" },
+  locked: { color: "var(--danger)", bg: "var(--danger-soft)" },
 };
 
 function isRoleKey(value: string): value is RoleKey {
@@ -208,9 +214,8 @@ function normalizeStatus(value: string | undefined): UserStatus {
 }
 
 function getUserStatusMeta(value: string | undefined, locked?: boolean) {
-  if (locked) return { status: "locked" as const, ...STATUS_META.locked };
-  const status = normalizeStatus(value);
-  return { status, ...STATUS_META[status] };
+  const meta = getUserAccessStatusMeta(value, locked);
+  return { ...meta, ...STATUS_TONE_STYLE[meta.status] };
 }
 
 function normalizePageSize(value: string | null): number {
@@ -358,24 +363,23 @@ export default function UsersPage() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const params = new URLSearchParams();
-    if (searchQuery.trim()) params.set("q", searchQuery.trim());
-    if (roleFilter !== "all") params.set("role", roleFilter);
-    if (statusFilter !== "all") params.set("status", statusFilter);
-    if (createdFilter !== "all") params.set("created", createdFilter);
-    if (createdFrom) params.set("createdFrom", createdFrom);
-    if (createdTo) params.set("createdTo", createdTo);
-    if (loginFrom) params.set("loginFrom", loginFrom);
-    if (loginTo) params.set("loginTo", loginTo);
-    if (creatorFilter.trim()) params.set("createdBy", creatorFilter.trim());
-    if (lockedFilter !== "all") params.set("locked", lockedFilter);
-    if (neverLoginFilter !== "all") params.set("neverLogin", neverLoginFilter);
-    if (sortKey !== "createdAt") params.set("sort", sortKey);
-    if (sortDirection !== "desc") params.set("dir", sortDirection);
-    if (page > 1) params.set("page", String(page));
-    if (pageSize !== 10) params.set("pageSize", String(pageSize));
-
-    const query = params.toString();
+    const query = buildUserQueryString({
+      q: searchQuery,
+      role: roleFilter,
+      status: statusFilter,
+      created: createdFilter,
+      createdFrom,
+      createdTo,
+      loginFrom,
+      loginTo,
+      createdBy: creatorFilter,
+      locked: lockedFilter,
+      neverLogin: neverLoginFilter,
+      sort: sortKey,
+      dir: sortDirection,
+      page,
+      pageSize,
+    });
     const nextUrl = query ? `${window.location.pathname}?${query}` : window.location.pathname;
     window.history.replaceState(null, "", nextUrl);
   }, [createdFilter, createdFrom, createdTo, creatorFilter, lockedFilter, loginFrom, loginTo, neverLoginFilter, page, pageSize, roleFilter, searchQuery, sortDirection, sortKey, statusFilter]);
@@ -398,7 +402,7 @@ export default function UsersPage() {
   }, [drawerMode]);
 
   const isProtectedUser = (targetUser: SysUser) => {
-    return targetUser.username === "admin" || targetUser.username === currentUser?.username;
+    return isProtectedSystemUser(targetUser, currentUser?.username);
   };
 
   const rememberFocus = () => {
@@ -470,7 +474,7 @@ export default function UsersPage() {
   const safePage = Math.min(page, pageCount);
   const pagedUsers = filteredUsers.slice((safePage - 1) * pageSize, safePage * pageSize);
   const selectedUsers = users.filter((item) => selectedUsernames.includes(item.username));
-  const mutableSelectedUsers = selectedUsers.filter((item) => !isProtectedUser(item) && normalizeRole(item.role) !== "root");
+  const mutableSelectedUsers = selectedUsers.filter((item) => isBulkMutableUser(item, currentUser?.username));
   const allPageSelected = pagedUsers.length > 0 && pagedUsers.every((item) => selectedUsernames.includes(item.username));
   const activeFilterCount = [
     searchQuery.trim() ? 1 : 0,
@@ -1898,7 +1902,7 @@ export default function UsersPage() {
 const usersPageStyles = `
   .users-page {
     min-height: 100%;
-    padding: 24px;
+    padding: var(--space-page);
     background: var(--background);
     max-width: 1880px;
     margin: 0 auto;
@@ -1909,7 +1913,7 @@ const usersPageStyles = `
   .users-summary {
     background: var(--surface);
     border: 1px solid var(--surface-border);
-    border-radius: 8px;
+    border-radius: var(--radius-panel);
   }
 
   .users-page-header {
@@ -1917,7 +1921,7 @@ const usersPageStyles = `
     align-items: flex-start;
     justify-content: space-between;
     gap: 1rem;
-    margin-bottom: 20px;
+    margin-bottom: var(--space-section);
   }
 
   .users-page-header h1 {
@@ -1950,19 +1954,19 @@ const usersPageStyles = `
   .users-filter-group .btn,
   .users-pagination .btn,
   .users-row-actions .btn {
-    min-height: 36px;
-    border-radius: 7px;
+    min-height: var(--control-height);
+    border-radius: var(--radius-control);
   }
 
   .users-summary {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     overflow: hidden;
-    margin-bottom: 20px;
+    margin-bottom: var(--space-section);
   }
 
   .users-metric {
-    min-height: 72px;
+    min-height: calc(var(--table-row-height) + 18px);
     display: grid;
     gap: 0.25rem;
     align-content: center;
@@ -1987,7 +1991,7 @@ const usersPageStyles = `
   }
 
   .users-metric.warning strong {
-    color: #d97706;
+    color: var(--warning);
   }
 
   .users-metric.muted strong {
@@ -2029,10 +2033,10 @@ const usersPageStyles = `
     display: flex;
     align-items: center;
     gap: 0.55rem;
-    min-height: 36px;
+    min-height: var(--control-height);
     padding: 0 0.85rem;
     border: 1px solid var(--surface-border);
-    border-radius: 7px;
+    border-radius: var(--radius-control);
     background: var(--surface-hover);
     color: var(--text-muted);
   }
@@ -2056,10 +2060,10 @@ const usersPageStyles = `
   .users-advanced-row .form-input {
     width: auto;
     min-width: 132px;
-    min-height: 36px;
+    min-height: var(--control-height);
     padding: 0.45rem 0.7rem;
     font-size: 0.86rem;
-    border-radius: 7px;
+    border-radius: var(--radius-control);
   }
 
   .users-filter-group .btn.active {
@@ -2198,7 +2202,7 @@ const usersPageStyles = `
 
   .users-table th,
   .users-table td {
-    height: 54px;
+    height: var(--table-row-height);
     padding: 0.65rem 0.85rem;
     border-bottom: 1px solid var(--surface-border);
     text-align: left;
@@ -2384,9 +2388,9 @@ const usersPageStyles = `
     display: grid;
     padding: 0.35rem;
     border: 1px solid var(--surface-border);
-    border-radius: 8px;
+    border-radius: var(--radius-panel);
     background: var(--surface);
-    box-shadow: 0 16px 36px -24px rgba(15, 23, 42, 0.7);
+    box-shadow: var(--shadow-popover);
   }
 
   .users-more-menu button {
@@ -2439,7 +2443,7 @@ const usersPageStyles = `
     resize: vertical;
     min-height: 76px;
     border: 1px solid var(--surface-border);
-    border-radius: 7px;
+    border-radius: var(--radius-control);
     background: var(--surface-hover);
     color: var(--text-main);
     padding: 0.55rem 0.65rem;
@@ -2452,7 +2456,7 @@ const usersPageStyles = `
     gap: 0.45rem;
     padding: 0.75rem;
     border: 1px solid var(--surface-border);
-    border-radius: 8px;
+    border-radius: var(--radius-panel);
     background: var(--surface-hover);
   }
 
@@ -2474,7 +2478,7 @@ const usersPageStyles = `
     gap: 0.2rem;
     padding: 0.75rem;
     border: 1px solid var(--surface-border);
-    border-radius: 8px;
+    border-radius: var(--radius-panel);
     background: var(--surface);
   }
 
@@ -2496,17 +2500,17 @@ const usersPageStyles = `
 
   .users-permission-decision.allow {
     color: var(--success);
-    background: rgba(28, 200, 138, 0.12);
+    background: var(--success-soft);
   }
 
   .users-permission-decision.approval {
-    color: #d97706;
-    background: rgba(245, 158, 11, 0.14);
+    color: var(--warning);
+    background: var(--warning-soft);
   }
 
   .users-permission-decision.deny {
     color: var(--danger);
-    background: rgba(231, 74, 59, 0.12);
+    background: var(--danger-soft);
   }
 
   .users-record-list span {
@@ -2550,7 +2554,7 @@ const usersPageStyles = `
     position: absolute;
     inset: 0;
     border: 0;
-    background: rgba(15, 23, 42, 0.32);
+    background: var(--drawer-backdrop);
     cursor: pointer;
   }
 
@@ -2562,7 +2566,7 @@ const usersPageStyles = `
     flex-direction: column;
     background: var(--surface);
     border-left: 1px solid var(--surface-border);
-    box-shadow: -24px 0 48px -32px rgba(0, 0, 0, 0.45);
+    box-shadow: var(--shadow-drawer);
   }
 
   .users-drawer-header {

@@ -9,10 +9,27 @@
   --danger: #e74a3b;
   --danger-hover: #be2617;
   --success: #1cc88a;
+  --warning: #d97706;
+  --success-soft: rgba(28, 200, 138, 0.12);
+  --warning-soft: rgba(245, 158, 11, 0.14);
+  --danger-soft: rgba(231, 74, 59, 0.12);
+  --neutral-soft: rgba(100, 116, 139, 0.12);
   --text-main: #334155;
   --text-secondary: #475569;
   --text-muted: #64748B;
   --header-bg: #F1F5F9;
+  --radius-panel: 8px;
+  --radius-control: 7px;
+  --radius-small: 6px;
+  --radius-pill: 999px;
+  --shadow-panel: none;
+  --shadow-popover: 0 16px 36px -24px rgba(15, 23, 42, 0.7);
+  --shadow-drawer: -24px 0 48px -32px rgba(0, 0, 0, 0.45);
+  --space-page: 24px;
+  --space-section: 20px;
+  --control-height: 36px;
+  --table-row-height: 54px;
+  --drawer-backdrop: rgba(15, 23, 42, 0.32);
 }
 
 
@@ -28,9 +45,18 @@
   --danger: #ef4444;
   --danger-hover: #f87171;
   --success: #10b981;
+  --warning: #f59e0b;
+  --success-soft: rgba(16, 185, 129, 0.16);
+  --warning-soft: rgba(245, 158, 11, 0.16);
+  --danger-soft: rgba(239, 68, 68, 0.16);
+  --neutral-soft: rgba(148, 163, 184, 0.14);
   --text-main: #F8FAFC;
   --text-secondary: #CBD5E1;
   --text-muted: #CBD5E1;
+  --shadow-panel: none;
+  --shadow-popover: 0 16px 36px -24px rgba(0, 0, 0, 0.9);
+  --shadow-drawer: -24px 0 48px -32px rgba(0, 0, 0, 0.75);
+  --drawer-backdrop: rgba(0, 0, 0, 0.48);
 
   /* Ant Design Global Dark Overrides */
   --ant-color-bg-container: var(--surface);

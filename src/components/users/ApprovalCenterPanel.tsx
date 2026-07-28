@@ -387,7 +387,7 @@ export default function ApprovalCenterPanel() {
 const approvalStyles = `
   .approvals-page {
     min-height: 100%;
-    padding: 24px;
+    padding: var(--space-page);
     background: var(--background);
     max-width: 1880px;
     margin: 0 auto;
@@ -397,7 +397,7 @@ const approvalStyles = `
     display: flex;
     justify-content: space-between;
     gap: 1rem;
-    margin-bottom: 20px;
+    margin-bottom: var(--space-section);
   }
 
   .approvals-header h1 {
@@ -415,19 +415,19 @@ const approvalStyles = `
   .approvals-metrics,
   .approvals-panel {
     border: 1px solid var(--surface-border);
-    border-radius: 8px;
+    border-radius: var(--radius-panel);
     background: var(--surface);
   }
 
   .approvals-metrics {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    margin-bottom: 20px;
+    margin-bottom: var(--space-section);
     overflow: hidden;
   }
 
   .approvals-metrics div {
-    min-height: 72px;
+    min-height: calc(var(--table-row-height) + 18px);
     display: grid;
     align-content: center;
     gap: 0.25rem;
@@ -462,7 +462,7 @@ const approvalStyles = `
   .approvals-tabs button {
     min-height: 34px;
     border: 1px solid var(--surface-border);
-    border-radius: 7px;
+    border-radius: var(--radius-control);
     background: var(--surface);
     color: var(--text-secondary);
     cursor: pointer;
@@ -479,10 +479,10 @@ const approvalStyles = `
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    min-height: 36px;
+    min-height: var(--control-height);
     padding: 0 0.75rem;
     border: 1px solid var(--surface-border);
-    border-radius: 7px;
+    border-radius: var(--radius-control);
     background: var(--surface-hover);
     color: var(--text-muted);
   }
@@ -498,7 +498,7 @@ const approvalStyles = `
   .approvals-filters .form-input {
     width: auto;
     min-width: 132px;
-    min-height: 36px;
+    min-height: var(--control-height);
   }
 
   .approvals-table-scroll {
@@ -552,22 +552,22 @@ const approvalStyles = `
 
   .approval-chip.pending,
   .risk-chip.medium {
-    color: #d97706;
-    background: rgba(245, 158, 11, 0.14);
+    color: var(--warning);
+    background: var(--warning-soft);
   }
 
   .approval-chip.executed,
   .approval-chip.approved,
   .risk-chip.low {
     color: var(--success);
-    background: rgba(28, 200, 138, 0.12);
+    background: var(--success-soft);
   }
 
   .approval-chip.rejected,
   .approval-chip.failed,
   .risk-chip.high {
     color: var(--danger);
-    background: rgba(231, 74, 59, 0.12);
+    background: var(--danger-soft);
   }
 
   .approval-drawer-layer {
@@ -582,7 +582,7 @@ const approvalStyles = `
     position: absolute;
     inset: 0;
     border: 0;
-    background: rgba(15, 23, 42, 0.32);
+    background: var(--drawer-backdrop);
   }
 
   .approval-drawer {
@@ -613,7 +613,7 @@ const approvalStyles = `
   .approval-drawer footer textarea {
     width: 100%;
     border: 1px solid var(--surface-border);
-    border-radius: 7px;
+    border-radius: var(--radius-control);
     background: var(--surface-hover);
     color: var(--text-main);
     padding: 0.55rem;
@@ -659,7 +659,7 @@ const approvalStyles = `
     gap: 0.18rem;
     padding: 0.65rem;
     border: 1px solid var(--surface-border);
-    border-radius: 8px;
+    border-radius: var(--radius-panel);
     background: var(--surface);
   }
 
@@ -689,7 +689,7 @@ const approvalStyles = `
     max-height: 260px;
     overflow: auto;
     padding: 0.85rem;
-    border-radius: 8px;
+    border-radius: var(--radius-panel);
     background: var(--surface-hover);
     color: var(--text-secondary);
   }

@@ -4,7 +4,13 @@ import { Fragment, useMemo, useState } from "react";
 import useSWR from "swr";
 import { Copy, Eye, Save, Shield, Trash2, X } from "lucide-react";
 import { fetcher } from "@/lib/fetcher";
-import { ROLE_CAPABILITIES, type Capability, type CapabilityDecision } from "@/lib/permissions";
+import { ROLE_CAPABILITIES, type Capability } from "@/lib/permissions";
+import {
+  buildPermissionDiff,
+  normalizePermissionEffect,
+  permissionEffectToDecisionKey,
+  type PermissionEffect,
+} from "@/lib/userAccessManagement";
 import { useAuth } from "@/hooks/useAuth";
 import { useI18n } from "@/components/I18nProvider";
 import { EmptyState, LoadingRows, OperationNotice } from "@/components/OperationFeedback";
@@ -14,7 +20,6 @@ type SysUser = {
   role: string;
 };
 
-type PermissionEffect = "allow" | "approval_required" | "deny";
 type RoleKey = keyof typeof ROLE_CAPABILITIES;
 type DraftMatrix = Record<Capability, PermissionEffect>;
 
@@ -40,22 +45,14 @@ const CAPABILITY_DIMENSION_KEYS: Record<Capability, string> = {
   user_admin: "role_perm_dimension_system",
 };
 
-function normalizeEffect(decision: CapabilityDecision): PermissionEffect {
-  if (decision === "approval") return "approval_required";
-  if (decision === "deny") return "deny";
-  return "allow";
-}
-
 function effectTone(effect: PermissionEffect) {
-  if (effect === "allow") return "allow";
-  if (effect === "approval_required") return "approval";
-  return "deny";
+  return permissionEffectToDecisionKey(effect);
 }
 
 function buildDraft(role: RoleKey): DraftMatrix {
   const entries = Object.entries(ROLE_CAPABILITIES[role]).map(([capability, decision]) => [
     capability,
-    normalizeEffect(decision),
+    normalizePermissionEffect(decision),
   ]);
   return Object.fromEntries(entries) as DraftMatrix;
 }
@@ -75,7 +72,7 @@ export default function RoleManagementPanel() {
   const roleCards = useMemo(() => {
     return (Object.keys(ROLE_CAPABILITIES) as RoleKey[]).map((role) => {
       const capabilities = ROLE_CAPABILITIES[role];
-      const effects = Object.values(capabilities).map(normalizeEffect);
+      const effects = Object.values(capabilities).map(normalizePermissionEffect);
       return {
         role,
         users: users.filter((item) => item.role === role).length,
@@ -88,17 +85,15 @@ export default function RoleManagementPanel() {
   const activeRole = selectedRole || roleCards[0]?.role || "viewer";
   const baseline = buildDraft(activeRole);
   const activeDraft = draft || baseline;
-  const changes = (Object.keys(activeDraft) as Capability[]).filter((capability) => activeDraft[capability] !== baseline[capability]);
+  const changes = buildPermissionDiff(baseline, activeDraft);
   const affectedUsers = users.filter((item) => item.role === activeRole).length;
-  const groupedCapabilities = useMemo(() => {
-    const groups = new Map<string, Capability[]>();
-    (Object.keys(ROLE_CAPABILITIES[activeRole]) as Capability[]).forEach((capability) => {
-      if (onlyConfigured && baseline[capability] === "deny") return;
-      const group = CAPABILITY_DIMENSION_KEYS[capability];
-      groups.set(group, [...(groups.get(group) || []), capability]);
-    });
-    return Array.from(groups.entries());
-  }, [activeRole, baseline, onlyConfigured]);
+  const groups = new Map<string, Capability[]>();
+  (Object.keys(ROLE_CAPABILITIES[activeRole]) as Capability[]).forEach((capability) => {
+    if (onlyConfigured && baseline[capability] === "deny") return;
+    const group = CAPABILITY_DIMENSION_KEYS[capability];
+    groups.set(group, [...(groups.get(group) || []), capability]);
+  });
+  const groupedCapabilities = Array.from(groups.entries());
 
   if (!isRoot) {
     return (
@@ -261,12 +256,15 @@ export default function RoleManagementPanel() {
                 ) : (
                   <>
                     <p>{t("roles_diff_affected", { count: affectedUsers })}</p>
-                    {changes.map((capability) => (
-                      <div key={capability}>
-                        <span>{t(CAPABILITY_LABEL_KEYS[capability])}</span>
-                        <strong>{t(`users_perm_decision_${effectTone(baseline[capability])}`)} → {t(`users_perm_decision_${effectTone(activeDraft[capability])}`)}</strong>
+                    {changes.map((change) => {
+                      const capability = change.key as Capability;
+                      return (
+                      <div key={change.key}>
+                        <span>{t(CAPABILITY_LABEL_KEYS[capability])} · {t(`roles_diff_category_${change.category}`)}</span>
+                        <strong>{t(`users_perm_decision_${effectTone(change.before)}`)} → {t(`users_perm_decision_${effectTone(change.after)}`)}</strong>
                       </div>
-                    ))}
+                      );
+                    })}
                   </>
                 )}
               </section>
@@ -296,14 +294,14 @@ export default function RoleManagementPanel() {
 const roleStyles = `
   .roles-page {
     min-height: 100%;
-    padding: 24px;
+    padding: var(--space-page);
     background: var(--background);
     max-width: 1880px;
     margin: 0 auto;
   }
 
   .roles-header {
-    margin-bottom: 20px;
+    margin-bottom: var(--space-section);
   }
 
   .roles-header h1 {
@@ -329,7 +327,7 @@ const roleStyles = `
     gap: 1rem;
     padding: 1rem;
     border: 1px solid var(--surface-border);
-    border-radius: 8px;
+    border-radius: var(--radius-panel);
     background: var(--surface);
   }
 
@@ -402,7 +400,7 @@ const roleStyles = `
     position: absolute;
     inset: 0;
     border: 0;
-    background: rgba(15, 23, 42, 0.32);
+    background: var(--drawer-backdrop);
   }
 
   .role-drawer {
@@ -486,17 +484,17 @@ const roleStyles = `
 
   .permission-effect.allow {
     color: var(--success);
-    background: rgba(28, 200, 138, 0.12);
+    background: var(--success-soft);
   }
 
   .permission-effect.approval {
-    color: #d97706;
-    background: rgba(245, 158, 11, 0.14);
+    color: var(--warning);
+    background: var(--warning-soft);
   }
 
   .permission-effect.deny {
     color: var(--danger);
-    background: rgba(231, 74, 59, 0.12);
+    background: var(--danger-soft);
   }
 
   .role-diff {
