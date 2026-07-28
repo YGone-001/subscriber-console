@@ -1,3 +1,5 @@
+import { IMS_SESSION_AMBR, pccQosPreset, sessionQosPreset } from './imsQosPresets.js';
+
 type Ambr = { downlink: { unit: number; value: number }; uplink: { unit: number; value: number } };
 
 const DEFAULT_AMBR: Ambr = {
@@ -36,17 +38,19 @@ function mapArp(arp: any, fallbackPriorityLevel: number) {
 
 function normalizePccRule(rule: any) {
   const qos = rule?.qos || {};
+  const qosIndex = Number(qos?._5qi ?? qos?.index ?? 1);
+  const preset = pccQosPreset(qosIndex);
 
   return {
     ...rule,
     flow: Array.isArray(rule?.flow) ? rule.flow : [],
     qos: {
       ...qos,
-      _5qi: Number(qos?._5qi ?? qos?.index ?? 1),
+      _5qi: qosIndex,
       index: Number(qos?.index ?? qos?._5qi ?? 1),
-      arp: mapArp(qos?.arp, 2),
-      mbr: normalizeAmbr(qos?.mbr, DEFAULT_PCC_AMBR),
-      gbr: normalizeAmbr(qos?.gbr, DEFAULT_PCC_AMBR),
+      arp: mapArp(qos?.arp, preset?.arpPriorityLevel ?? 2),
+      mbr: normalizeAmbr(qos?.mbr, preset?.mbr || DEFAULT_PCC_AMBR),
+      gbr: normalizeAmbr(qos?.gbr, preset?.gbr || DEFAULT_PCC_AMBR),
     },
   };
 }
@@ -56,8 +60,9 @@ function normalizeSession(session: any, idx: number) {
   const isIms = name === "ims";
   const qosIndex = Number(session?.qos?.index ?? 0);
   const fiveQi = Number(session?.qos?._5qi ?? (qosIndex > 0 ? qosIndex : isIms ? 5 : 9));
+  const preset = sessionQosPreset(fiveQi);
 
-  const arp = mapArp(session?.qos?.arp, isIms ? 1 : 8);
+  const arp = mapArp(session?.qos?.arp, isIms ? 1 : (preset?.arpPriorityLevel ?? 8));
 
   return {
     name,
@@ -69,7 +74,7 @@ function normalizeSession(session: any, idx: number) {
       index: 0,
       arp,
     },
-    ambr: normalizeAmbr(session?.ambr),
+    ambr: normalizeAmbr(session?.ambr, isIms ? IMS_SESSION_AMBR : (preset?.sessionAmbr ?? DEFAULT_AMBR)),
     pcc_rule: Array.isArray(session?.pcc_rule) ? session.pcc_rule.map(normalizePccRule) : [],
   };
 }
@@ -80,8 +85,8 @@ export function normalizeSliceList(sliceList: any): any[] {
       default_indicator: true,
       sst: 1,
       session_list: [
-        normalizeSession({ name: "internet", type: 1, qos: { _5qi: 9, arp: { priorityLevel: 8 } } }, 0),
-        normalizeSession({ name: "mobile", type: 1, qos: { _5qi: 9, arp: { priorityLevel: 8 } } }, 1),
+        normalizeSession({ name: "internet", type: 1, qos: { _5qi: 9, arp: { priorityLevel: 9 } } }, 0),
+        normalizeSession({ name: "mobile", type: 1, qos: { _5qi: 9, arp: { priorityLevel: 9 } } }, 1),
         {
           ...normalizeSession({ name: "ims", type: 3, qos: { _5qi: 5, arp: { priorityLevel: 1 } } }, 2),
           pcc_rule: [{

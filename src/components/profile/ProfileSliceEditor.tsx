@@ -2,6 +2,7 @@ import React from "react";
 import { useI18n } from "../I18nProvider";
 import { Plus, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 import ProfileSessionEditor from "./ProfileSessionEditor";
+import { sessionQosPreset } from "@/lib/imsQosPresets";
 
 interface ProfileSliceEditorProps {
   slice: SliceForm;
@@ -55,13 +56,14 @@ export default function ProfileSliceEditor({
   const handleAddSession = () => {
     const newSlice = JSON.parse(JSON.stringify(slice));
     if (!newSlice.session_list) newSlice.session_list = [];
+    const preset = sessionQosPreset(9);
     newSlice.session_list.push({
       name: "internet",
       type: 1,
       pgwIpv4: "",
       pgwIpv6: "",
-      qos: { _5qi: 9, index: 0, arp: { priorityLevel: 8, preemptCap: "NOT_PREEMPT", preemptVuln: "NOT_PREEMPTABLE" } },
-      ambr: { downlink: { value: 10, unit: 2 }, uplink: { value: 10, unit: 2 } },
+      qos: { _5qi: 9, index: 0, arp: { priorityLevel: preset?.arpPriorityLevel ?? 9, preemptCap: "NOT_PREEMPT", preemptVuln: "NOT_PREEMPTABLE" } },
+      ambr: preset?.sessionAmbr ?? { downlink: { value: 1, unit: 3 }, uplink: { value: 1, unit: 3 } },
       pcc_rule: []
     });
     onChange(newSlice);

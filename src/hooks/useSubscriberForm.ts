@@ -1,5 +1,6 @@
 import { useCallback, useState, useEffect } from "react";
 import { parseBytes, formatBytes, parseSeconds, formatSeconds, parseEvents, formatEvents } from "@/lib/unitParser";
+import { sessionQosPreset } from "@/lib/imsQosPresets";
 
 type TariffPlanOption = {
   plan_id: string;
@@ -486,10 +487,11 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
     }, 0);
     const nextSd = String(Math.max(1, currentMaxSd + 1)).padStart(6, "0");
     const newIdx = slices.length;
+    const preset = sessionQosPreset(9);
     setSlices([...slices, { default_indicator: slices.length === 0, sd: nextSd, sst: 1, session_list: [{
-      ambr: { downlink: { unit: 1, value: 100 }, uplink: { unit: 1, value: 100 } },
+      ambr: preset?.sessionAmbr ?? { downlink: { unit: 3, value: 1 }, uplink: { unit: 3, value: 1 } },
       name: "internet", pcc_rule: [], pgwIpv4: "", pgwIpv6: "",
-      qos: { _5qi: 9, index: 0, arp: { preemptCap: "NOT_PREEMPT", preemptVuln: "NOT_PREEMPTABLE", priorityLevel: 8 } },
+      qos: { _5qi: 9, index: 0, arp: { preemptCap: "NOT_PREEMPT", preemptVuln: "NOT_PREEMPTABLE", priorityLevel: preset?.arpPriorityLevel ?? 9 } },
       type: 1
     }] }]);
     setNewlyAddedSliceIndex(newIdx);

@@ -1,5 +1,6 @@
 import { Document, MongoServerError } from 'mongodb';
 import { getAppCollection, mongoCollections } from '@/lib/mongo';
+import { sessionQosPreset } from '@/lib/imsQosPresets';
 
 export const PROFILE_VERSION_LIMIT = 50;
 
@@ -53,6 +54,8 @@ function versionsCollection() {
 
 export function defaultProfile(name: string, user: string): ProfileDocument {
   const timestamp = nowIso();
+  const defaultSessionPreset = sessionQosPreset(9);
+  const imsSessionPreset = sessionQosPreset(5);
 
   return {
     name,
@@ -83,14 +86,14 @@ export function defaultProfile(name: string, user: string): ProfileDocument {
               _5qi: 9,
               index: 0,
               arp: {
-                priorityLevel: 8,
+                priorityLevel: defaultSessionPreset?.arpPriorityLevel ?? 9,
                 preemptCap: 'NOT_PREEMPT',
                 preemptVuln: 'NOT_PREEMPTABLE',
               },
             },
-            ambr: {
-              downlink: { unit: 2, value: 10 },
-              uplink: { unit: 2, value: 10 },
+            ambr: defaultSessionPreset?.sessionAmbr || {
+              downlink: { unit: 3, value: 1 },
+              uplink: { unit: 3, value: 1 },
             },
             pcc_rule: [],
             pgwIpv4: '127.0.0.4',
@@ -108,9 +111,9 @@ export function defaultProfile(name: string, user: string): ProfileDocument {
                 preemptVuln: 'NOT_PREEMPTABLE',
               },
             },
-            ambr: {
-              downlink: { unit: 2, value: 10 },
-              uplink: { unit: 2, value: 10 },
+            ambr: imsSessionPreset?.sessionAmbr || {
+              downlink: { unit: 3, value: 1 },
+              uplink: { unit: 3, value: 1 },
             },
             pcc_rule: [],
             pgwIpv4: '127.0.0.4',

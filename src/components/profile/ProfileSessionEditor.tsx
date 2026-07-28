@@ -2,6 +2,7 @@ import React from "react";
 import { useI18n } from "../I18nProvider";
 import { Trash2, Network, Plus } from "lucide-react";
 import ProfilePccRuleEditor from "./ProfilePccRuleEditor";
+import { imsSessionPreset, isImsDnn, pccQosPreset, sessionQosPreset, STANDARD_QOS_INDEX_OPTIONS } from "@/lib/imsQosPresets";
 
 const AMBR_UNITS = [
   { label: 'bps', val: 0 }, { label: 'Kbps', val: 1 }, { label: 'Mbps', val: 2 }, { label: 'Gbps', val: 3 }, { label: 'Tbps', val: 4 }
@@ -10,7 +11,6 @@ const AMBR_UNITS = [
 const SESSION_TYPES = [
   { label: 'IPv4', val: 1 }, { label: 'IPv6', val: 2 }, { label: 'IPv4v6', val: 3 }
 ];
-const QOS_QCI_OPTIONS = [1,2,3,4,5,6,7,8,9,65,66,67,69,70,82,83,84,85];
 const ARP_PRIORITY_OPTIONS = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15];
 
 interface ProfileSessionEditorProps {
@@ -69,7 +69,15 @@ export default function ProfileSessionEditor({ session, onChange, onDelete }: Pr
     onChange(newSession);
   };
 
-  // Applies a small 5QI-to-ARP preset while keeping manual edits possible.
+  const handleNameChange = (value: string) => {
+    if (isImsDnn(value)) {
+      onChange(imsSessionPreset(session));
+      return;
+    }
+    updateField(["name"], value);
+  };
+
+  // Applies standardized priority mapping plus recommended rate presets.
   const applyQosPreset = (rawValue: string) => {
     const newSession = JSON.parse(JSON.stringify(session));
     if (!newSession.qos) newSession.qos = {};
@@ -83,10 +91,10 @@ export default function ProfileSessionEditor({ session, onChange, onDelete }: Pr
 
     const qci = Number(rawValue);
     newSession.qos._5qi = Number.isFinite(qci) ? qci : undefined;
-    if (qci === 9) {
-      newSession.qos.arp.priorityLevel = 9;
-    } else if (qci === 5) {
-      newSession.qos.arp.priorityLevel = 1;
+    const preset = sessionQosPreset(qci);
+    if (preset) {
+      newSession.qos.arp.priorityLevel = preset.arpPriorityLevel;
+      newSession.ambr = preset.sessionAmbr;
     }
     onChange(newSession);
   };
@@ -94,13 +102,14 @@ export default function ProfileSessionEditor({ session, onChange, onDelete }: Pr
   const handleAddPccRule = () => {
     const newSession = JSON.parse(JSON.stringify(session));
     if (!newSession.pcc_rule) newSession.pcc_rule = [];
+    const preset = pccQosPreset(1);
     newSession.pcc_rule.push({
       qos: {
-        index: 0,
+        index: 1,
         _5qi: 1,
-        arp: { priorityLevel: 2, preemptCap: "NOT_PREEMPT", preemptVuln: "NOT_PREEMPTABLE" },
-        mbr: { downlink: { value: 0, unit: 1 }, uplink: { value: 0, unit: 1 } },
-        gbr: { downlink: { value: 0, unit: 1 }, uplink: { value: 0, unit: 1 } }
+        arp: { priorityLevel: preset?.arpPriorityLevel ?? 2, preemptCap: "NOT_PREEMPT", preemptVuln: "NOT_PREEMPTABLE" },
+        mbr: preset?.mbr ?? { downlink: { value: 0, unit: 1 }, uplink: { value: 0, unit: 1 } },
+        gbr: preset?.gbr ?? { downlink: { value: 0, unit: 1 }, uplink: { value: 0, unit: 1 } }
       }
     });
     onChange(newSession);
@@ -125,7 +134,7 @@ export default function ProfileSessionEditor({ session, onChange, onDelete }: Pr
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "1.5rem" }}>
             <div>
               <label className="form-label" style={{ fontSize: "0.85rem", fontWeight: 600 }}>{t("sess_name")}</label>
-              <input type="text" className="form-input" value={session.name || ""} onChange={e => updateField(["name"], e.target.value)} placeholder={t("sess_name_ph")} />
+              <input type="text" className="form-input" value={session.name || ""} onChange={e => handleNameChange(e.target.value)} placeholder={t("sess_name_ph")} />
             </div>
             <div>
               <label className="form-label" style={{ fontSize: "0.85rem", fontWeight: 600 }}>{t("sess_type")}</label>
@@ -141,7 +150,7 @@ export default function ProfileSessionEditor({ session, onChange, onDelete }: Pr
                 onChange={e => applyQosPreset(e.target.value)}
               >
                 <option value="">{t("sess_select_qos")}</option>
-                {QOS_QCI_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
+                {STANDARD_QOS_INDEX_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
               </select>
             </div>
             <div>

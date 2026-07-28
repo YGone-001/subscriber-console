@@ -1,4 +1,5 @@
 import { Long, ObjectId } from 'mongodb';
+import { IMS_SESSION_AMBR, isImsDnn, pccQosPreset, sessionQosPreset } from '@/lib/imsQosPresets';
 import { buildDefaultSub4G, normalizeSub4G } from '@/lib/subscriberDefaults';
 import type {
   LegacySubscriberState,
@@ -108,15 +109,20 @@ function toLegacyArp(value: unknown, fallbackPriorityLevel: number) {
 
 function toOpen5gsQos(value: unknown, fallbackIndex: number, fallbackPriorityLevel: number): Open5gsQos {
   const qos = asRecord(value);
+  const qosIndex = asNumber(qos._5qi ?? qos.index, fallbackIndex);
+  const preset = sessionQosPreset(qosIndex);
+
   return {
-    index: asNumber(qos._5qi ?? qos.index, fallbackIndex),
-    arp: toOpen5gsArp(qos.arp, fallbackPriorityLevel),
+    index: qosIndex,
+    arp: toOpen5gsArp(qos.arp, preset?.arpPriorityLevel ?? fallbackPriorityLevel),
   };
 }
 
 function toOpen5gsPccRule(rule: unknown): Open5gsPccRule {
   const source = asRecord(rule);
   const qos = source.qos ? asRecord(source.qos) : null;
+  const qosIndex = asNumber(qos?._5qi ?? qos?.index, 9);
+  const preset = pccQosPreset(qosIndex);
 
   return {
     flow: asArray(source.flow).map((flow) => {
@@ -128,10 +134,10 @@ function toOpen5gsPccRule(rule: unknown): Open5gsPccRule {
     }),
     qos: qos
       ? {
-          index: asNumber(qos._5qi ?? qos.index, 9),
-          arp: toOpen5gsArp(qos.arp, 8),
-          mbr: qos.mbr ? normalizeAmbr(qos.mbr) : undefined,
-          gbr: qos.gbr ? normalizeAmbr(qos.gbr) : undefined,
+          index: qosIndex,
+          arp: toOpen5gsArp(qos.arp, preset?.arpPriorityLevel ?? 8),
+          mbr: qos.mbr || preset?.mbr ? normalizeAmbr(qos.mbr, preset?.mbr) : undefined,
+          gbr: qos.gbr || preset?.gbr ? normalizeAmbr(qos.gbr, preset?.gbr) : undefined,
         }
       : undefined,
   };
@@ -140,7 +146,10 @@ function toOpen5gsPccRule(rule: unknown): Open5gsPccRule {
 function toOpen5gsSession(session: unknown, index: number): Open5gsSession {
   const source = asRecord(session);
   const name = asString(source.name, index === 0 ? 'internet' : 'ims');
-  const isIms = name === 'ims';
+  const isIms = isImsDnn(name);
+  const qosSource = asRecord(source.qos);
+  const qosIndex = asNumber(qosSource._5qi ?? qosSource.index, isIms ? 5 : 9);
+  const preset = sessionQosPreset(qosIndex);
   const smfIpv4 = asString(source.pgwIpv4 ?? asRecord(source.smf).ipv4, '');
   const smfIpv6 = asString(source.pgwIpv6 ?? asRecord(source.smf).ipv6, '');
 
@@ -149,7 +158,7 @@ function toOpen5gsSession(session: unknown, index: number): Open5gsSession {
     name,
     type: asNumber(source.type, isIms ? 3 : 1),
     qos: toOpen5gsQos(source.qos, isIms ? 5 : 9, isIms ? 1 : 8),
-    ambr: normalizeAmbr(source.ambr),
+    ambr: normalizeAmbr(source.ambr, isIms ? IMS_SESSION_AMBR : (preset?.sessionAmbr ?? defaultAmbr())),
     pcc_rule: asArray(source.pcc_rule).map(toOpen5gsPccRule),
   };
   if (source.lbo_roaming_allowed !== undefined) output.lbo_roaming_allowed = !!source.lbo_roaming_allowed;

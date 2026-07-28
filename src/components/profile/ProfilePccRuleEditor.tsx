@@ -1,6 +1,7 @@
 import React from "react";
 import { useI18n } from "../I18nProvider";
 import { X } from "lucide-react";
+import { pccQosPreset } from "@/lib/imsQosPresets";
 
 const AMBR_UNITS = [
   { label: 'bps', val: 0 }, { label: 'Kbps', val: 1 }, { label: 'Mbps', val: 2 }, { label: 'Gbps', val: 3 }, { label: 'Tbps', val: 4 }
@@ -41,26 +42,14 @@ export default function ProfilePccRuleEditor({ rule, ruleIndex, onChange, onDele
     const newRule = JSON.parse(JSON.stringify(rule));
     if (!newRule.qos) newRule.qos = {};
     newRule.qos._5qi = value;
+    newRule.qos.index = value;
 
-    // Applies suggested bitrates for common QCI values; users can still override them.
-    if (value === 1) {
-      newRule.qos.mbr = {
-        downlink: { value: 128, unit: 1 },
-        uplink: { value: 128, unit: 1 },
-      };
-      newRule.qos.gbr = {
-        downlink: { value: 128, unit: 1 },
-        uplink: { value: 128, unit: 1 },
-      };
-    } else if (value === 2) {
-      newRule.qos.mbr = {
-        downlink: { value: 4, unit: 2 },
-        uplink: { value: 4, unit: 2 },
-      };
-      newRule.qos.gbr = {
-        downlink: { value: 2, unit: 2 },
-        uplink: { value: 2, unit: 2 },
-      };
+    const preset = pccQosPreset(value);
+    if (preset) {
+      if (!newRule.qos.arp) newRule.qos.arp = {};
+      newRule.qos.arp.priorityLevel = preset.arpPriorityLevel;
+      if (preset.mbr) newRule.qos.mbr = preset.mbr;
+      if (preset.gbr) newRule.qos.gbr = preset.gbr;
     }
 
     onChange(newRule);

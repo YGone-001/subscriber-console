@@ -17,11 +17,119 @@ test("normalizeSliceList creates Open5GS-ready default sessions without an SD ov
   assert.deepEqual(
     slices[0].session_list.map((session) => [session.name, session.type, session.qos._5qi, session.qos.arp.priorityLevel]),
     [
-      ["internet", 1, 9, 8],
-      ["mobile", 1, 9, 8],
+      ["internet", 1, 9, 9],
+      ["mobile", 1, 9, 9],
       ["ims", 3, 5, 1],
     ]
   );
+  assert.deepEqual(slices[0].session_list[0].ambr, {
+    downlink: { unit: 3, value: 1 },
+    uplink: { unit: 3, value: 1 },
+  });
+  assert.deepEqual(slices[0].session_list[2].ambr, {
+    downlink: { unit: 3, value: 1 },
+    uplink: { unit: 3, value: 1 },
+  });
+});
+
+test("normalizeSliceList applies IMS and PCC bitrate presets", () => {
+  const normalized = normalizeSliceList([
+    {
+      sst: 1,
+      session_list: [
+        {
+          name: "ims",
+          pcc_rule: [
+            { qos: { _5qi: 1 } },
+            { qos: { _5qi: 2 } },
+            { qos: { _5qi: 5 } },
+            { qos: { _5qi: 9 } },
+          ],
+        },
+      ],
+    },
+  ]);
+
+  const session = normalized[0].session_list[0];
+  assert.equal(session.type, 3);
+  assert.equal(session.qos._5qi, 5);
+  assert.equal(session.qos.arp.priorityLevel, 1);
+  assert.deepEqual(session.ambr, {
+    downlink: { unit: 3, value: 1 },
+    uplink: { unit: 3, value: 1 },
+  });
+  assert.deepEqual(session.pcc_rule[0].qos.mbr, {
+    downlink: { unit: 1, value: 128 },
+    uplink: { unit: 1, value: 128 },
+  });
+  assert.equal(session.pcc_rule[0].qos.arp.priorityLevel, 2);
+  assert.deepEqual(session.pcc_rule[0].qos.gbr, {
+    downlink: { unit: 1, value: 128 },
+    uplink: { unit: 1, value: 128 },
+  });
+  assert.deepEqual(session.pcc_rule[1].qos.mbr, {
+    downlink: { unit: 2, value: 4 },
+    uplink: { unit: 2, value: 4 },
+  });
+  assert.equal(session.pcc_rule[1].qos.arp.priorityLevel, 4);
+  assert.deepEqual(session.pcc_rule[1].qos.gbr, {
+    downlink: { unit: 2, value: 2 },
+    uplink: { unit: 2, value: 2 },
+  });
+  assert.deepEqual(session.pcc_rule[2].qos.mbr, {
+    downlink: { unit: 3, value: 1 },
+    uplink: { unit: 3, value: 1 },
+  });
+  assert.deepEqual(session.pcc_rule[2].qos.gbr, {
+    downlink: { unit: 3, value: 1 },
+    uplink: { unit: 3, value: 1 },
+  });
+  assert.equal(session.pcc_rule[2].qos.arp.priorityLevel, 1);
+  assert.deepEqual(session.pcc_rule[3].qos.mbr, {
+    downlink: { unit: 3, value: 1 },
+    uplink: { unit: 3, value: 1 },
+  });
+  assert.deepEqual(session.pcc_rule[3].qos.gbr, {
+    downlink: { unit: 3, value: 1 },
+    uplink: { unit: 3, value: 1 },
+  });
+  assert.equal(session.pcc_rule[3].qos.arp.priorityLevel, 9);
+});
+
+test("normalizeSliceList applies standard QCI and 5QI session defaults", () => {
+  const normalized = normalizeSliceList([
+    {
+      sst: 1,
+      session_list: [
+        { name: "voice", qos: { _5qi: 1 } },
+        { name: "video", qos: { _5qi: 2 } },
+        { name: "signalling", qos: { _5qi: 5 } },
+        { name: "internet", qos: { _5qi: 9 } },
+      ],
+    },
+  ]);
+
+  const [voice, video, signalling, internet] = normalized[0].session_list;
+  assert.equal(voice.qos.arp.priorityLevel, 2);
+  assert.deepEqual(voice.ambr, {
+    downlink: { unit: 1, value: 128 },
+    uplink: { unit: 1, value: 128 },
+  });
+  assert.equal(video.qos.arp.priorityLevel, 4);
+  assert.deepEqual(video.ambr, {
+    downlink: { unit: 2, value: 4 },
+    uplink: { unit: 2, value: 4 },
+  });
+  assert.equal(signalling.qos.arp.priorityLevel, 1);
+  assert.deepEqual(signalling.ambr, {
+    downlink: { unit: 3, value: 1 },
+    uplink: { unit: 3, value: 1 },
+  });
+  assert.equal(internet.qos.arp.priorityLevel, 9);
+  assert.deepEqual(internet.ambr, {
+    downlink: { unit: 3, value: 1 },
+    uplink: { unit: 3, value: 1 },
+  });
 });
 
 test("buildDefaultSub4G applies profile AMBR and slice defaults without copying profile MSISDN", () => {
