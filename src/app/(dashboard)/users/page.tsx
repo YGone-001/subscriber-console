@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 import {
   CalendarDays,
@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { fetcher } from "@/lib/fetcher";
 import { toCsvRow } from "@/lib/csv";
+import { ROLE_CAPABILITIES, type Capability, type CapabilityDecision } from "@/lib/permissions";
 import { useAuth } from "@/hooks/useAuth";
 import { useI18n } from "@/components/I18nProvider";
 import { ConfirmActionPanel, EmptyState, LoadingRows, OperationNotice } from "@/components/OperationFeedback";
@@ -46,10 +47,29 @@ interface SysUser {
   description?: string;
   lastLoginAt?: string;
   lastLoginIp?: string;
+  locked?: boolean;
+  userAgent?: string;
 }
 
 type ApprovalMetricResponse = {
   pending?: number;
+};
+
+type AuditLogRecord = {
+  id: string;
+  timestamp: string;
+  level: "info" | "warning";
+  action: string;
+  targetId: string;
+  operatorIp: string;
+  oldData?: unknown;
+  newData?: unknown;
+};
+
+type AuditLogResponse = {
+  logs: AuditLogRecord[];
+  filteredTotal: number;
+  totalScanned: number;
 };
 
 type Notice = {
@@ -61,9 +81,14 @@ type RoleKey = "root" | "operator" | "viewer";
 type UserStatus = "active" | "disabled";
 type RoleFilter = RoleKey | "all";
 type StatusFilter = UserStatus | "all";
+type DisplayUserStatus = UserStatus | "locked";
 type CreatedFilter = "all" | "today" | "7d" | "30d";
+type BinaryFilter = "all" | "yes" | "no";
+type SortKey = "username" | "status" | "createdAt" | "lastLoginAt";
+type SortDirection = "asc" | "desc";
 type DrawerMode = "closed" | "view" | "create" | "edit";
 type DetailTab = "basic" | "permissions" | "login" | "activity";
+type BulkAction = "enable" | "disable" | "assignRole" | "delete";
 
 type NewUserForm = {
   username: string;
@@ -83,10 +108,39 @@ type PendingStatusChange = {
   status: UserStatus;
 };
 
+type PendingBulkAction = {
+  action: BulkAction;
+  usernames: string[];
+  role?: RoleKey;
+};
+
+type PendingUpdate = {
+  username: string;
+  payload: {
+    role?: RoleKey;
+    status?: UserStatus;
+    password?: string;
+  };
+  impact: string;
+};
+
 const USERNAME_PATTERN = /^[A-Za-z0-9_.-]{3,32}$/;
 const VALID_ROLES: readonly RoleKey[] = ["root", "operator", "viewer"];
 const VALID_STATUS: readonly UserStatus[] = ["active", "disabled"];
 const PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
+const SORT_KEYS: readonly SortKey[] = ["username", "status", "createdAt", "lastLoginAt"];
+const SORT_DIRECTIONS: readonly SortDirection[] = ["asc", "desc"];
+
+const CAPABILITY_LABEL_KEYS: Record<Capability, string> = {
+  subscriber_write: "users_cap_action_subscriber_write",
+  policy_approve: "users_cap_action_policy_approve",
+  balance_adjust: "users_cap_action_balance_adjust",
+  profile_rollback: "users_cap_action_profile_rollback",
+  rating_publish: "users_cap_action_rating_publish",
+  audit_export: "users_cap_action_audit_export",
+  system_heal: "users_cap_action_system_heal",
+  user_admin: "users_cap_action_user_admin",
+};
 
 const DEFAULT_NEW_FORM: NewUserForm = {
   username: "",
@@ -107,9 +161,10 @@ const ROLE_STYLE: Record<RoleKey, { color: string; bg: string }> = {
   viewer: { color: "var(--primary)", bg: "rgba(78, 115, 223, 0.12)" },
 };
 
-const STATUS_STYLE: Record<UserStatus, { color: string; bg: string }> = {
-  active: { color: "var(--success)", bg: "rgba(28, 200, 138, 0.12)" },
-  disabled: { color: "var(--text-muted)", bg: "rgba(100, 116, 139, 0.12)" },
+const STATUS_META: Record<DisplayUserStatus, { labelKey: string; color: string; bg: string }> = {
+  active: { labelKey: "users_status_enabled", color: "var(--success)", bg: "rgba(28, 200, 138, 0.12)" },
+  disabled: { labelKey: "users_status_disabled", color: "var(--text-muted)", bg: "rgba(100, 116, 139, 0.12)" },
+  locked: { labelKey: "users_status_locked", color: "var(--danger)", bg: "rgba(231, 74, 59, 0.12)" },
 };
 
 function isRoleKey(value: string): value is RoleKey {
@@ -132,12 +187,30 @@ function isCreatedFilter(value: string | null): value is CreatedFilter {
   return value === "all" || value === "today" || value === "7d" || value === "30d";
 }
 
+function isBinaryFilter(value: string | null): value is BinaryFilter {
+  return value === "all" || value === "yes" || value === "no";
+}
+
+function isSortKey(value: string | null): value is SortKey {
+  return typeof value === "string" && SORT_KEYS.includes(value as SortKey);
+}
+
+function isSortDirection(value: string | null): value is SortDirection {
+  return typeof value === "string" && SORT_DIRECTIONS.includes(value as SortDirection);
+}
+
 function normalizeRole(value: string): RoleKey {
   return isRoleKey(value) ? value : "viewer";
 }
 
 function normalizeStatus(value: string | undefined): UserStatus {
   return value && isUserStatus(value) ? value : "active";
+}
+
+function getUserStatusMeta(value: string | undefined, locked?: boolean) {
+  if (locked) return { status: "locked" as const, ...STATUS_META.locked };
+  const status = normalizeStatus(value);
+  return { status, ...STATUS_META[status] };
 }
 
 function normalizePageSize(value: string | null): number {
@@ -171,6 +244,43 @@ function matchesCreatedFilter(createdAt: string, filter: CreatedFilter) {
   return date.getTime() >= since;
 }
 
+function matchesDateRange(value: string | undefined, from: string, to: string) {
+  if (!from && !to) return true;
+  if (!value) return false;
+  const time = new Date(value).getTime();
+  if (!Number.isFinite(time)) return false;
+  if (from) {
+    const fromTime = new Date(`${from}T00:00:00.000`).getTime();
+    if (Number.isFinite(fromTime) && time < fromTime) return false;
+  }
+  if (to) {
+    const toTime = new Date(`${to}T23:59:59.999`).getTime();
+    if (Number.isFinite(toTime) && time > toTime) return false;
+  }
+  return true;
+}
+
+function sortUsers(items: SysUser[], sortKey: SortKey, sortDirection: SortDirection) {
+  const direction = sortDirection === "asc" ? 1 : -1;
+  return [...items].sort((left, right) => {
+    if (sortKey === "createdAt" || sortKey === "lastLoginAt") {
+      const leftTime = left[sortKey] ? new Date(left[sortKey]).getTime() : 0;
+      const rightTime = right[sortKey] ? new Date(right[sortKey]).getTime() : 0;
+      return (leftTime - rightTime) * direction;
+    }
+    if (sortKey === "status") {
+      return normalizeStatus(left.status).localeCompare(normalizeStatus(right.status)) * direction;
+    }
+    return left.username.localeCompare(right.username) * direction;
+  });
+}
+
+function mapCapabilityDecision(decision: CapabilityDecision) {
+  if (decision === "approval") return "approval";
+  if (decision === "deny") return "deny";
+  return "allow";
+}
+
 function getInitialQuery() {
   if (typeof window === "undefined") return new URLSearchParams();
   return new URLSearchParams(window.location.search);
@@ -187,11 +297,17 @@ export default function UsersPage() {
 
   const initialQuery = useMemo(getInitialQuery, []);
   const users = useMemo(() => data?.users || [], [data?.users]);
+  const drawerRef = useRef<HTMLElement | null>(null);
+  const lastFocusRef = useRef<HTMLElement | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [savingAction, setSavingAction] = useState<string | null>(null);
   const [pendingDeleteUsername, setPendingDeleteUsername] = useState<string | null>(null);
   const [pendingStatusChange, setPendingStatusChange] = useState<PendingStatusChange | null>(null);
+  const [pendingBulkAction, setPendingBulkAction] = useState<PendingBulkAction | null>(null);
+  const [pendingUpdate, setPendingUpdate] = useState<PendingUpdate | null>(null);
+  const [confirmReason, setConfirmReason] = useState("");
 
+  const [searchInput, setSearchInput] = useState(initialQuery.get("q") || "");
   const [searchQuery, setSearchQuery] = useState(initialQuery.get("q") || "");
   const [roleFilter, setRoleFilter] = useState<RoleFilter>(
     isRoleFilter(initialQuery.get("role")) ? initialQuery.get("role") as RoleFilter : "all",
@@ -201,6 +317,23 @@ export default function UsersPage() {
   );
   const [createdFilter, setCreatedFilter] = useState<CreatedFilter>(
     isCreatedFilter(initialQuery.get("created")) ? initialQuery.get("created") as CreatedFilter : "all",
+  );
+  const [createdFrom, setCreatedFrom] = useState(initialQuery.get("createdFrom") || "");
+  const [createdTo, setCreatedTo] = useState(initialQuery.get("createdTo") || "");
+  const [loginFrom, setLoginFrom] = useState(initialQuery.get("loginFrom") || "");
+  const [loginTo, setLoginTo] = useState(initialQuery.get("loginTo") || "");
+  const [creatorFilter, setCreatorFilter] = useState(initialQuery.get("createdBy") || "");
+  const [lockedFilter, setLockedFilter] = useState<BinaryFilter>(
+    isBinaryFilter(initialQuery.get("locked")) ? initialQuery.get("locked") as BinaryFilter : "all",
+  );
+  const [neverLoginFilter, setNeverLoginFilter] = useState<BinaryFilter>(
+    isBinaryFilter(initialQuery.get("neverLogin")) ? initialQuery.get("neverLogin") as BinaryFilter : "all",
+  );
+  const [sortKey, setSortKey] = useState<SortKey>(
+    isSortKey(initialQuery.get("sort")) ? initialQuery.get("sort") as SortKey : "createdAt",
+  );
+  const [sortDirection, setSortDirection] = useState<SortDirection>(
+    isSortDirection(initialQuery.get("dir")) ? initialQuery.get("dir") as SortDirection : "desc",
   );
   const [page, setPage] = useState(() => Math.max(1, Number(initialQuery.get("page")) || 1));
   const [pageSize, setPageSize] = useState(() => normalizePageSize(initialQuery.get("pageSize")));
@@ -216,6 +349,12 @@ export default function UsersPage() {
   const [selectedUsername, setSelectedUsername] = useState<string | null>(null);
   const [selectedUsernames, setSelectedUsernames] = useState<string[]>([]);
   const [openMenuUsername, setOpenMenuUsername] = useState<string | null>(null);
+  const [bulkRole, setBulkRole] = useState<RoleKey>("operator");
+  const selectedUser = selectedUsername ? users.find((item) => item.username === selectedUsername) || null : null;
+  const auditUrl = drawerMode === "view" && detailTab === "activity" && selectedUser
+    ? `/api/audit?target=${encodeURIComponent(selectedUser.username)}&limit=50`
+    : null;
+  const { data: auditData, error: auditError, isLoading: isAuditLoading, mutate: mutateAudit } = useSWR<AuditLogResponse>(auditUrl, fetcher);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -224,13 +363,65 @@ export default function UsersPage() {
     if (roleFilter !== "all") params.set("role", roleFilter);
     if (statusFilter !== "all") params.set("status", statusFilter);
     if (createdFilter !== "all") params.set("created", createdFilter);
+    if (createdFrom) params.set("createdFrom", createdFrom);
+    if (createdTo) params.set("createdTo", createdTo);
+    if (loginFrom) params.set("loginFrom", loginFrom);
+    if (loginTo) params.set("loginTo", loginTo);
+    if (creatorFilter.trim()) params.set("createdBy", creatorFilter.trim());
+    if (lockedFilter !== "all") params.set("locked", lockedFilter);
+    if (neverLoginFilter !== "all") params.set("neverLogin", neverLoginFilter);
+    if (sortKey !== "createdAt") params.set("sort", sortKey);
+    if (sortDirection !== "desc") params.set("dir", sortDirection);
     if (page > 1) params.set("page", String(page));
     if (pageSize !== 10) params.set("pageSize", String(pageSize));
 
     const query = params.toString();
     const nextUrl = query ? `${window.location.pathname}?${query}` : window.location.pathname;
     window.history.replaceState(null, "", nextUrl);
-  }, [createdFilter, page, pageSize, roleFilter, searchQuery, statusFilter]);
+  }, [createdFilter, createdFrom, createdTo, creatorFilter, lockedFilter, loginFrom, loginTo, neverLoginFilter, page, pageSize, roleFilter, searchQuery, sortDirection, sortKey, statusFilter]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setSearchQuery(searchInput);
+      setPage(1);
+    }, 260);
+    return () => window.clearTimeout(timer);
+  }, [searchInput]);
+
+  useEffect(() => {
+    if (drawerMode === "closed") {
+      lastFocusRef.current?.focus();
+      return;
+    }
+    const firstFocusable = drawerRef.current?.querySelector<HTMLElement>("button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])");
+    firstFocusable?.focus();
+  }, [drawerMode]);
+
+  const isProtectedUser = (targetUser: SysUser) => {
+    return targetUser.username === "admin" || targetUser.username === currentUser?.username;
+  };
+
+  const rememberFocus = () => {
+    lastFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  };
+
+  const resetConfirmState = () => {
+    setConfirmReason("");
+    setPendingDeleteUsername(null);
+    setPendingStatusChange(null);
+    setPendingBulkAction(null);
+    setPendingUpdate(null);
+  };
+
+  const toggleSort = (nextKey: SortKey) => {
+    if (sortKey === nextKey) {
+      setSortDirection((current) => current === "asc" ? "desc" : "asc");
+    } else {
+      setSortKey(nextKey);
+      setSortDirection(nextKey === "username" || nextKey === "status" ? "asc" : "desc");
+    }
+    setPage(1);
+  };
 
   const statusCounts = useMemo(() => {
     return users.reduce<Record<UserStatus, number>>((acc, item) => {
@@ -242,12 +433,25 @@ export default function UsersPage() {
 
   const filteredUsers = useMemo(() => {
     const keyword = searchQuery.trim().toLowerCase();
-    return users.filter((item) => {
+    const filtered = users.filter((item) => {
       const role = normalizeRole(item.role);
       const status = normalizeStatus(item.status);
       if (roleFilter !== "all" && role !== roleFilter) return false;
       if (statusFilter !== "all" && status !== statusFilter) return false;
       if (!matchesCreatedFilter(item.createdAt, createdFilter)) return false;
+      if (!matchesDateRange(item.createdAt, createdFrom, createdTo)) return false;
+      if (!matchesDateRange(item.lastLoginAt, loginFrom, loginTo)) return false;
+      if (creatorFilter.trim() && !item.createdBy?.toLowerCase().includes(creatorFilter.trim().toLowerCase())) return false;
+      if (lockedFilter !== "all") {
+        const isLocked = item.locked === true;
+        if (lockedFilter === "yes" && !isLocked) return false;
+        if (lockedFilter === "no" && isLocked) return false;
+      }
+      if (neverLoginFilter !== "all") {
+        const neverLoggedIn = !item.lastLoginAt;
+        if (neverLoginFilter === "yes" && !neverLoggedIn) return false;
+        if (neverLoginFilter === "no" && neverLoggedIn) return false;
+      }
       if (!keyword) return true;
       return [
         item.username,
@@ -259,18 +463,25 @@ export default function UsersPage() {
         status,
       ].filter(Boolean).join(" ").toLowerCase().includes(keyword);
     });
-  }, [createdFilter, roleFilter, searchQuery, statusFilter, users]);
+    return sortUsers(filtered, sortKey, sortDirection);
+  }, [createdFilter, createdFrom, createdTo, creatorFilter, lockedFilter, loginFrom, loginTo, neverLoginFilter, roleFilter, searchQuery, sortDirection, sortKey, statusFilter, users]);
 
   const pageCount = Math.max(1, Math.ceil(filteredUsers.length / pageSize));
   const safePage = Math.min(page, pageCount);
   const pagedUsers = filteredUsers.slice((safePage - 1) * pageSize, safePage * pageSize);
-  const selectedUser = selectedUsername ? users.find((item) => item.username === selectedUsername) || null : null;
+  const selectedUsers = users.filter((item) => selectedUsernames.includes(item.username));
+  const mutableSelectedUsers = selectedUsers.filter((item) => !isProtectedUser(item) && normalizeRole(item.role) !== "root");
   const allPageSelected = pagedUsers.length > 0 && pagedUsers.every((item) => selectedUsernames.includes(item.username));
   const activeFilterCount = [
     searchQuery.trim() ? 1 : 0,
     roleFilter !== "all" ? 1 : 0,
     statusFilter !== "all" ? 1 : 0,
     createdFilter !== "all" ? 1 : 0,
+    createdFrom || createdTo ? 1 : 0,
+    loginFrom || loginTo ? 1 : 0,
+    creatorFilter.trim() ? 1 : 0,
+    lockedFilter !== "all" ? 1 : 0,
+    neverLoginFilter !== "all" ? 1 : 0,
   ].reduce((sum, item) => sum + item, 0);
 
   useEffect(() => {
@@ -317,6 +528,7 @@ export default function UsersPage() {
   };
 
   const openCreateDrawer = () => {
+    rememberFocus();
     resetNewForm();
     setSelectedUsername(null);
     setDrawerMode("create");
@@ -325,6 +537,7 @@ export default function UsersPage() {
   };
 
   const openDetails = (targetUser: SysUser) => {
+    rememberFocus();
     setSelectedUsername(targetUser.username);
     setDrawerMode("view");
     setDetailTab("basic");
@@ -337,6 +550,7 @@ export default function UsersPage() {
   };
 
   const startEdit = (targetUser: SysUser) => {
+    rememberFocus();
     setSelectedUsername(targetUser.username);
     setDrawerMode("edit");
     setDetailTab("basic");
@@ -357,10 +571,18 @@ export default function UsersPage() {
   };
 
   const clearFilters = () => {
+    setSearchInput("");
     setSearchQuery("");
     setRoleFilter("all");
     setStatusFilter("all");
     setCreatedFilter("all");
+    setCreatedFrom("");
+    setCreatedTo("");
+    setLoginFrom("");
+    setLoginTo("");
+    setCreatorFilter("");
+    setLockedFilter("all");
+    setNeverLoginFilter("all");
     setPage(1);
   };
 
@@ -380,12 +602,7 @@ export default function UsersPage() {
   };
 
   const updateSearchQuery = (value: string) => {
-    setSearchQuery(value);
-    setPage(1);
-  };
-
-  const isProtectedUser = (targetUser: SysUser) => {
-    return targetUser.username === "admin" || targetUser.username === currentUser?.username;
+    setSearchInput(value);
   };
 
   const handleCreate = async () => {
@@ -423,6 +640,40 @@ export default function UsersPage() {
     }
   };
 
+  const submitUpdate = async (
+    targetUser: SysUser,
+    payload: { role?: RoleKey; status?: UserStatus; password?: string },
+    reason: string,
+  ) => {
+    setSavingAction(`update:${targetUser.username}`);
+    try {
+      const res = await fetch(`/api/auth/users/${targetUser.username}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Operation-Reason": reason,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        setDrawerMode("view");
+        setEditForm((current) => ({ ...current, password: "" }));
+        setPendingUpdate(null);
+        setConfirmReason("");
+        setNotice({ type: "success", text: t("users_msg_updated") });
+        await mutate();
+      } else {
+        setNotice({ type: "error", text: await readError(res, t("users_err_update")) });
+      }
+    } catch (requestError) {
+      console.error(requestError);
+      setNotice({ type: "error", text: t("users_err_update") });
+    } finally {
+      setSavingAction(null);
+    }
+  };
+
   const handleUpdate = async () => {
     if (!selectedUser) return;
 
@@ -440,34 +691,27 @@ export default function UsersPage() {
       return;
     }
 
-    setSavingAction(`update:${selectedUser.username}`);
-    try {
-      const payload: { role?: RoleKey; status?: UserStatus; password?: string } = {
-        role: editForm.role,
-        status: editForm.status,
-      };
-      if (editForm.password) payload.password = editForm.password;
+    const payload: { role?: RoleKey; status?: UserStatus; password?: string } = {
+      role: editForm.role,
+      status: editForm.status,
+    };
+    if (editForm.password) payload.password = editForm.password;
 
-      const res = await fetch(`/api/auth/users/${selectedUser.username}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+    const isDangerous = roleChanged || statusChanged || Boolean(editForm.password);
+    if (isDangerous) {
+      setPendingUpdate({
+        username: selectedUser.username,
+        payload,
+        impact: t("users_update_impact", {
+          role: roleChanged ? t(`users_${editForm.role}`) : t("users_no_change"),
+          status: statusChanged ? t(`users_${editForm.status}`) : t("users_no_change"),
+        }),
       });
-
-      if (res.ok) {
-        setDrawerMode("view");
-        setEditForm((current) => ({ ...current, password: "" }));
-        setNotice({ type: "success", text: t("users_msg_updated") });
-        await mutate();
-      } else {
-        setNotice({ type: "error", text: await readError(res, t("users_err_update")) });
-      }
-    } catch (requestError) {
-      console.error(requestError);
-      setNotice({ type: "error", text: t("users_err_update") });
-    } finally {
-      setSavingAction(null);
+      setConfirmReason("");
+      return;
     }
+
+    await submitUpdate(selectedUser, payload, "");
   };
 
   const executeStatusChange = async () => {
@@ -484,7 +728,10 @@ export default function UsersPage() {
     try {
       const res = await fetch(`/api/auth/users/${targetUser.username}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-Operation-Reason": confirmReason.trim(),
+        },
         body: JSON.stringify({
           role: normalizeRole(targetUser.role),
           status: pendingStatusChange.status,
@@ -493,6 +740,7 @@ export default function UsersPage() {
 
       if (res.ok) {
         setPendingStatusChange(null);
+        setConfirmReason("");
         setNotice({ type: "success", text: t("users_msg_updated") });
         await mutate();
       } else {
@@ -514,6 +762,7 @@ export default function UsersPage() {
     }
     setNotice(null);
     setPendingDeleteUsername(username);
+    setConfirmReason("");
     setOpenMenuUsername(null);
   };
 
@@ -522,9 +771,13 @@ export default function UsersPage() {
     const username = pendingDeleteUsername;
     setSavingAction(`delete:${username}`);
     try {
-      const res = await fetch(`/api/auth/users/${username}`, { method: "DELETE" });
+      const res = await fetch(`/api/auth/users/${username}`, {
+        method: "DELETE",
+        headers: { "X-Operation-Reason": confirmReason.trim() },
+      });
       if (res.ok) {
         setPendingDeleteUsername(null);
+        setConfirmReason("");
         if (selectedUsername === username) closeDrawer();
         setNotice({ type: "success", text: t("users_msg_deleted") });
         await mutate();
@@ -539,7 +792,7 @@ export default function UsersPage() {
     }
   };
 
-  const exportFilteredUsers = () => {
+  const exportUsers = (items: SysUser[], filePrefix: string) => {
     const header = [
       "username",
       "displayName",
@@ -554,7 +807,7 @@ export default function UsersPage() {
     ];
     const csv = [
       toCsvRow(header),
-      ...filteredUsers.map((item) => toCsvRow([
+      ...items.map((item) => toCsvRow([
         item.username,
         item.displayName,
         item.email,
@@ -572,10 +825,100 @@ export default function UsersPage() {
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `system-users-${new Date().toISOString().slice(0, 10)}.csv`;
+    anchor.download = `${filePrefix}-${new Date().toISOString().slice(0, 10)}.csv`;
     anchor.click();
     URL.revokeObjectURL(url);
-    setNotice({ type: "success", text: t("users_export_ready", { count: filteredUsers.length }) });
+    setNotice({ type: "success", text: t("users_export_ready", { count: items.length }) });
+  };
+
+  const exportFilteredUsers = () => {
+    exportUsers(filteredUsers, "system-users");
+  };
+
+  const exportSelectedUsers = () => {
+    exportUsers(selectedUsers, "system-users-selected");
+  };
+
+  const requestBulkAction = (action: BulkAction) => {
+    const usernames = mutableSelectedUsers.map((item) => item.username);
+    if (usernames.length === 0) {
+      setNotice({ type: "error", text: t("users_bulk_no_eligible") });
+      return;
+    }
+    setPendingBulkAction({
+      action,
+      usernames,
+      role: action === "assignRole" ? bulkRole : undefined,
+    });
+    setConfirmReason("");
+  };
+
+  const executeBulkAction = async () => {
+    if (!pendingBulkAction) return;
+
+    const failures: Array<{ username: string; reason: string }> = [];
+    let successCount = 0;
+    setSavingAction(`bulk:${pendingBulkAction.action}`);
+
+    for (const username of pendingBulkAction.usernames) {
+      const targetUser = users.find((item) => item.username === username);
+      if (!targetUser) {
+        failures.push({ username, reason: t("users_bulk_missing_user") });
+        continue;
+      }
+
+      try {
+        let res: Response;
+        if (pendingBulkAction.action === "delete") {
+          res = await fetch(`/api/auth/users/${username}`, {
+            method: "DELETE",
+            headers: { "X-Operation-Reason": confirmReason.trim() },
+          });
+        } else {
+          const nextRole = pendingBulkAction.action === "assignRole"
+            ? pendingBulkAction.role || normalizeRole(targetUser.role)
+            : normalizeRole(targetUser.role);
+          const nextStatus = pendingBulkAction.action === "enable"
+            ? "active"
+            : pendingBulkAction.action === "disable"
+              ? "disabled"
+              : normalizeStatus(targetUser.status);
+          res = await fetch(`/api/auth/users/${username}`, {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Operation-Reason": confirmReason.trim(),
+            },
+            body: JSON.stringify({ role: nextRole, status: nextStatus }),
+          });
+        }
+
+        if (res.ok) {
+          successCount += 1;
+        } else {
+          failures.push({ username, reason: await readError(res, t("users_bulk_default_failure")) });
+        }
+      } catch (requestError) {
+        console.error(requestError);
+        failures.push({ username, reason: t("users_bulk_network_failure") });
+      }
+    }
+
+    setPendingBulkAction(null);
+    setConfirmReason("");
+    setSelectedUsernames([]);
+    setSavingAction(null);
+    await mutate();
+
+    const failureText = failures.slice(0, 3).map((item) => `${item.username}: ${item.reason}`).join("; ");
+    setNotice({
+      type: failures.length > 0 ? "info" : "success",
+      text: t("users_bulk_result", {
+        success: successCount,
+        failed: failures.length,
+        reasons: failureText || t("users_bulk_no_failures"),
+      }),
+    });
   };
 
   const togglePageSelection = () => {
@@ -605,12 +948,11 @@ export default function UsersPage() {
     );
   };
 
-  const renderStatusBadge = (statusValue: string | undefined) => {
-    const status = normalizeStatus(statusValue);
-    const style = STATUS_STYLE[status];
+  const renderStatusBadge = (statusValue: string | undefined, locked?: boolean) => {
+    const meta = getUserStatusMeta(statusValue, locked);
     return (
-      <span className="users-badge" style={{ background: style.bg, color: style.color }}>
-        {t(`users_${status}`)}
+      <span className="users-badge" style={{ background: meta.bg, color: meta.color }}>
+        {t(meta.labelKey)}
       </span>
     );
   };
@@ -659,6 +1001,37 @@ export default function UsersPage() {
     }
     if (createdFilter !== "all") {
       tags.push({ key: "created", label: `${t("users_created")}: ${t(`users_created_${createdFilter}`)}`, onRemove: () => updateCreatedFilter("all") });
+    }
+    if (createdFrom || createdTo) {
+      tags.push({
+        key: "createdRange",
+        label: `${t("users_created_range")}: ${createdFrom || "--"} - ${createdTo || "--"}`,
+        onRemove: () => {
+          setCreatedFrom("");
+          setCreatedTo("");
+          setPage(1);
+        },
+      });
+    }
+    if (loginFrom || loginTo) {
+      tags.push({
+        key: "loginRange",
+        label: `${t("users_last_login_range")}: ${loginFrom || "--"} - ${loginTo || "--"}`,
+        onRemove: () => {
+          setLoginFrom("");
+          setLoginTo("");
+          setPage(1);
+        },
+      });
+    }
+    if (creatorFilter.trim()) {
+      tags.push({ key: "creator", label: `${t("users_detail_created_by")}: ${creatorFilter.trim()}`, onRemove: () => { setCreatorFilter(""); setPage(1); } });
+    }
+    if (lockedFilter !== "all") {
+      tags.push({ key: "locked", label: `${t("users_locked_filter")}: ${t(`users_binary_${lockedFilter}`)}`, onRemove: () => { setLockedFilter("all"); setPage(1); } });
+    }
+    if (neverLoginFilter !== "all") {
+      tags.push({ key: "neverLogin", label: `${t("users_never_login_filter")}: ${t(`users_binary_${neverLoginFilter}`)}`, onRemove: () => { setNeverLoginFilter("all"); setPage(1); } });
     }
 
     if (tags.length === 0) return null;
@@ -750,7 +1123,7 @@ export default function UsersPage() {
             <div className="users-search">
               <Search size={16} />
               <input
-                value={searchQuery}
+                value={searchInput}
                 onChange={(event) => updateSearchQuery(event.target.value)}
                 placeholder={t("users_search_ph")}
                 aria-label={t("users_search_ph")}
@@ -798,11 +1171,81 @@ export default function UsersPage() {
                   <option value="30d">{t("users_created_30d")}</option>
                 </select>
               </label>
-              <span>{t("users_more_filters_hint")}</span>
+              <label>
+                <span>{t("users_created_range")}</span>
+                <input type="date" className="form-input" value={createdFrom} onChange={(event) => { setCreatedFrom(event.target.value); setPage(1); }} />
+                <input type="date" className="form-input" value={createdTo} onChange={(event) => { setCreatedTo(event.target.value); setPage(1); }} />
+              </label>
+              <label>
+                <span>{t("users_last_login_range")}</span>
+                <input type="date" className="form-input" value={loginFrom} onChange={(event) => { setLoginFrom(event.target.value); setPage(1); }} />
+                <input type="date" className="form-input" value={loginTo} onChange={(event) => { setLoginTo(event.target.value); setPage(1); }} />
+              </label>
+              <label>
+                <span>{t("users_detail_created_by")}</span>
+                <input className="form-input" value={creatorFilter} onChange={(event) => { setCreatorFilter(event.target.value); setPage(1); }} placeholder={t("users_creator_ph")} />
+              </label>
+              <label>
+                <span>{t("users_locked_filter")}</span>
+                <select className="form-input" value={lockedFilter} onChange={(event) => { setLockedFilter(event.target.value as BinaryFilter); setPage(1); }}>
+                  <option value="all">{t("users_binary_all")}</option>
+                  <option value="yes">{t("users_binary_yes")}</option>
+                  <option value="no">{t("users_binary_no")}</option>
+                </select>
+              </label>
+              <label>
+                <span>{t("users_never_login_filter")}</span>
+                <select className="form-input" value={neverLoginFilter} onChange={(event) => { setNeverLoginFilter(event.target.value as BinaryFilter); setPage(1); }}>
+                  <option value="all">{t("users_binary_all")}</option>
+                  <option value="yes">{t("users_binary_yes")}</option>
+                  <option value="no">{t("users_binary_no")}</option>
+                </select>
+              </label>
             </div>
           ) : null}
 
           {renderFilterTags()}
+
+          {selectedUsernames.length > 0 ? (
+            <div className="users-bulk-bar" role="region" aria-label={t("users_bulk_actions")}>
+              <div>
+                <strong>{t("users_selected_count", { count: selectedUsernames.length })}</strong>
+                <span>{t("users_bulk_eligible", { count: mutableSelectedUsers.length })}</span>
+              </div>
+              <div className="users-bulk-actions">
+                <button type="button" className="btn btn-outline" onClick={() => requestBulkAction("enable")} disabled={mutableSelectedUsers.length === 0}>
+                  <UserCheck size={15} />
+                  {t("users_bulk_enable")}
+                </button>
+                <button type="button" className="btn btn-outline" onClick={() => requestBulkAction("disable")} disabled={mutableSelectedUsers.length === 0}>
+                  <UserX size={15} />
+                  {t("users_bulk_disable")}
+                </button>
+                <label>
+                  <span>{t("users_bulk_role")}</span>
+                  <select className="form-input" value={bulkRole} onChange={(event) => setBulkRole(event.target.value as RoleKey)} disabled={mutableSelectedUsers.length === 0}>
+                    {VALID_ROLES.map((role) => <option key={role} value={role}>{t(`users_${role}`)}</option>)}
+                  </select>
+                </label>
+                <button type="button" className="btn btn-outline" onClick={() => requestBulkAction("assignRole")} disabled={mutableSelectedUsers.length === 0}>
+                  <Shield size={15} />
+                  {t("users_bulk_assign_role")}
+                </button>
+                <button type="button" className="btn btn-outline" onClick={exportSelectedUsers}>
+                  <Download size={15} />
+                  {t("users_bulk_export")}
+                </button>
+                <button type="button" className="btn btn-outline users-danger-action" onClick={() => requestBulkAction("delete")} disabled={mutableSelectedUsers.length === 0}>
+                  <Trash2 size={15} />
+                  {t("users_bulk_delete")}
+                </button>
+                <button type="button" className="btn btn-outline" onClick={() => setSelectedUsernames([])}>
+                  <X size={15} />
+                  {t("users_clear_selection")}
+                </button>
+              </div>
+            </div>
+          ) : null}
 
           <div className="users-table-meta">
             <span>{t("users_count_filtered", { count: filteredUsers.length, total: users.length })}</span>
@@ -822,12 +1265,28 @@ export default function UsersPage() {
                       disabled={pagedUsers.length === 0}
                     />
                   </th>
-                  <th className="users-user-col"><span><User size={15} /> {t("users_col_user")}</span></th>
+                  <th className="users-user-col">
+                    <button type="button" className="users-sort-btn" onClick={() => toggleSort("username")}>
+                      <User size={15} /> {t("users_col_user")} {sortKey === "username" ? t(`users_sort_${sortDirection}`) : null}
+                    </button>
+                  </th>
                   <th>{t("users_contact")}</th>
                   <th>{t("users_role")}</th>
-                  <th>{t("users_status")}</th>
-                  <th>{t("users_last_login")}</th>
-                  <th>{t("users_created")}</th>
+                  <th>
+                    <button type="button" className="users-sort-btn" onClick={() => toggleSort("status")}>
+                      {t("users_status")} {sortKey === "status" ? t(`users_sort_${sortDirection}`) : null}
+                    </button>
+                  </th>
+                  <th>
+                    <button type="button" className="users-sort-btn" onClick={() => toggleSort("lastLoginAt")}>
+                      {t("users_last_login")} {sortKey === "lastLoginAt" ? t(`users_sort_${sortDirection}`) : null}
+                    </button>
+                  </th>
+                  <th>
+                    <button type="button" className="users-sort-btn" onClick={() => toggleSort("createdAt")}>
+                      {t("users_created")} {sortKey === "createdAt" ? t(`users_sort_${sortDirection}`) : null}
+                    </button>
+                  </th>
                   <th>{t("users_detail_created_by")}</th>
                   <th className="users-actions-col">{t("users_actions")}</th>
                 </tr>
@@ -914,7 +1373,7 @@ export default function UsersPage() {
                         </span>
                       </td>
                       <td>{renderRoleBadge(item.role)}</td>
-                      <td>{renderStatusBadge(item.status)}</td>
+                      <td>{renderStatusBadge(item.status, item.locked)}</td>
                       <td className="users-date-cell">
                         <span>{formatDateTime(item.lastLoginAt)}</span>
                         <small>{displayValue(item.lastLoginIp)}</small>
@@ -943,7 +1402,7 @@ export default function UsersPage() {
                               <MoreHorizontal size={17} />
                             </button>
                             {openMenuUsername === item.username ? (
-                              <div className="users-more-menu">
+                              <div className="users-more-menu" onKeyDown={(event) => { if (event.key === "Escape") setOpenMenuUsername(null); }}>
                                 <button type="button" onClick={() => { startEdit(item); setOpenMenuUsername(null); }}>
                                   <KeyRound size={15} />
                                   {t("users_reset_password")}
@@ -955,7 +1414,7 @@ export default function UsersPage() {
                                 <button
                                   type="button"
                                   disabled={isProtected || itemStatus === "active"}
-                                  onClick={() => { setPendingStatusChange({ username: item.username, status: "active" }); setOpenMenuUsername(null); }}
+                                  onClick={() => { setPendingStatusChange({ username: item.username, status: "active" }); setConfirmReason(""); setOpenMenuUsername(null); }}
                                 >
                                   <UserCheck size={15} />
                                   {t("users_enable_account")}
@@ -963,7 +1422,7 @@ export default function UsersPage() {
                                 <button
                                   type="button"
                                   disabled={isProtected || itemStatus === "disabled"}
-                                  onClick={() => { setPendingStatusChange({ username: item.username, status: "disabled" }); setOpenMenuUsername(null); }}
+                                  onClick={() => { setPendingStatusChange({ username: item.username, status: "disabled" }); setConfirmReason(""); setOpenMenuUsername(null); }}
                                 >
                                   <UserX size={15} />
                                   {t("users_disable_account")}
@@ -1037,9 +1496,20 @@ export default function UsersPage() {
           confirmLabel={t("delete")}
           cancelLabel={t("cancel")}
           isWorking={savingAction === `delete:${pendingDeleteUsername}`}
+          confirmDisabled={confirmReason.trim().length < 3}
           onConfirm={executeDelete}
-          onCancel={() => setPendingDeleteUsername(null)}
-        />
+          onCancel={resetConfirmState}
+        >
+          <div className="users-confirm-details">
+            <span>{t("users_confirm_object", { target: pendingDeleteUsername })}</span>
+            <span>{t("users_confirm_approval_none")}</span>
+            <span>{t("users_confirm_irreversible_yes")}</span>
+            <label>
+              {t("users_confirm_reason")}
+              <textarea value={confirmReason} onChange={(event) => setConfirmReason(event.target.value)} rows={3} />
+            </label>
+          </div>
+        </ConfirmActionPanel>
       ) : null}
 
       {pendingStatusChange ? (
@@ -1051,15 +1521,76 @@ export default function UsersPage() {
           confirmLabel={pendingStatusChange.status === "disabled" ? t("users_disable_account") : t("users_enable_account")}
           cancelLabel={t("cancel")}
           isWorking={savingAction === `status:${pendingStatusChange.username}`}
+          confirmDisabled={confirmReason.trim().length < 3}
           onConfirm={executeStatusChange}
-          onCancel={() => setPendingStatusChange(null)}
-        />
+          onCancel={resetConfirmState}
+        >
+          <div className="users-confirm-details">
+            <span>{t("users_confirm_object", { target: pendingStatusChange.username })}</span>
+            <span>{t("users_confirm_approval_none")}</span>
+            <span>{t("users_confirm_irreversible_no")}</span>
+            <label>
+              {t("users_confirm_reason")}
+              <textarea value={confirmReason} onChange={(event) => setConfirmReason(event.target.value)} rows={3} />
+            </label>
+          </div>
+        </ConfirmActionPanel>
+      ) : null}
+
+      {pendingBulkAction ? (
+        <ConfirmActionPanel
+          presentation="modal"
+          tone={pendingBulkAction.action === "delete" || pendingBulkAction.action === "disable" ? "warning" : "info"}
+          title={t(`users_bulk_confirm_${pendingBulkAction.action}`)}
+          message={t("users_bulk_confirm_desc", { count: pendingBulkAction.usernames.length })}
+          confirmLabel={t("confirm")}
+          cancelLabel={t("cancel")}
+          isWorking={savingAction === `bulk:${pendingBulkAction.action}`}
+          confirmDisabled={confirmReason.trim().length < 3}
+          onConfirm={executeBulkAction}
+          onCancel={resetConfirmState}
+        >
+          <div className="users-confirm-details">
+            <span>{t("users_confirm_object", { target: pendingBulkAction.usernames.join(", ") })}</span>
+            <span>{pendingBulkAction.action === "assignRole" && pendingBulkAction.role === "root" ? t("users_confirm_root_role") : t("users_confirm_approval_none")}</span>
+            <span>{pendingBulkAction.action === "delete" ? t("users_confirm_irreversible_yes") : t("users_confirm_irreversible_no")}</span>
+            <label>
+              {t("users_confirm_reason")}
+              <textarea value={confirmReason} onChange={(event) => setConfirmReason(event.target.value)} rows={3} />
+            </label>
+          </div>
+        </ConfirmActionPanel>
+      ) : null}
+
+      {pendingUpdate && selectedUser ? (
+        <ConfirmActionPanel
+          presentation="modal"
+          tone={pendingUpdate.payload.role === "root" || pendingUpdate.payload.status === "disabled" ? "warning" : "info"}
+          title={t("users_update_confirm", { username: pendingUpdate.username })}
+          message={pendingUpdate.impact}
+          confirmLabel={t("confirm")}
+          cancelLabel={t("cancel")}
+          isWorking={savingAction === `update:${pendingUpdate.username}`}
+          confirmDisabled={confirmReason.trim().length < 3}
+          onConfirm={() => void submitUpdate(selectedUser, pendingUpdate.payload, confirmReason.trim())}
+          onCancel={resetConfirmState}
+        >
+          <div className="users-confirm-details">
+            <span>{t("users_confirm_object", { target: pendingUpdate.username })}</span>
+            <span>{pendingUpdate.payload.role === "root" ? t("users_confirm_root_role") : t("users_confirm_approval_none")}</span>
+            <span>{t("users_confirm_irreversible_no")}</span>
+            <label>
+              {t("users_confirm_reason")}
+              <textarea value={confirmReason} onChange={(event) => setConfirmReason(event.target.value)} rows={3} />
+            </label>
+          </div>
+        </ConfirmActionPanel>
       ) : null}
 
       {drawerMode !== "closed" ? (
         <div className="users-drawer-layer" role="dialog" aria-modal="true" aria-label={t("users_drawer_title")}>
           <button type="button" className="users-drawer-backdrop" aria-label={t("cancel")} onClick={closeDrawer} />
-          <aside className="users-drawer">
+          <aside className="users-drawer" ref={drawerRef}>
             <header className="users-drawer-header">
               <div>
                 <span className="users-avatar large">
@@ -1221,7 +1752,7 @@ export default function UsersPage() {
                         </div>
                         <div>
                           <dt>{t("users_status")}</dt>
-                          <dd>{renderStatusBadge(selectedUser.status)}</dd>
+                          <dd>{renderStatusBadge(selectedUser.status, selectedUser.locked)}</dd>
                         </div>
                         <div>
                           <dt>{t("users_detail_created_at")}</dt>
@@ -1245,12 +1776,70 @@ export default function UsersPage() {
                         </div>
                       </dl>
                     </section>
-                  ) : (
+                  ) : detailTab === "permissions" ? (
+                    <section className="users-detail-section">
+                      <h3>{t("users_detail_tab_permissions")}</h3>
+                      <div className="users-permission-summary">
+                        <span>{t("users_effective_role")}</span>
+                        {renderRoleBadge(selectedUser.role)}
+                        <small>{t("users_no_user_overrides")}</small>
+                      </div>
+                      <div className="users-permission-list">
+                        {(Object.keys(ROLE_CAPABILITIES[normalizeRole(selectedUser.role)]) as Capability[]).map((capability) => {
+                          const decision = mapCapabilityDecision(ROLE_CAPABILITIES[normalizeRole(selectedUser.role)][capability]);
+                          return (
+                            <div key={capability}>
+                              <span>{t(CAPABILITY_LABEL_KEYS[capability])}</span>
+                              <span className={`users-permission-decision ${decision}`}>{t(`users_perm_decision_${decision}`)}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  ) : detailTab === "login" ? (
+                    selectedUser.lastLoginAt ? (
+                      <section className="users-detail-section">
+                        <h3>{t("users_detail_tab_login")}</h3>
+                        <div className="users-record-list">
+                          <div>
+                            <span>{formatDateTime(selectedUser.lastLoginAt)}</span>
+                            <small>{displayValue(selectedUser.lastLoginIp)} · {displayValue(selectedUser.userAgent)}</small>
+                            <strong>{t("users_login_success")}</strong>
+                          </div>
+                        </div>
+                      </section>
+                    ) : (
+                      <EmptyState icon={<Clock size={42} />} title={t("users_no_data_title")} description={t("users_no_login_data_desc")} />
+                    )
+                  ) : isAuditLoading ? (
+                    <LoadingRows columns={5} rows={4} />
+                  ) : auditError ? (
                     <EmptyState
-                      icon={detailTab === "permissions" ? <Shield size={42} /> : detailTab === "login" ? <Clock size={42} /> : <CheckCircle2 size={42} />}
-                      title={t("users_no_data_title")}
-                      description={t("users_no_data_desc")}
+                      icon={<Shield size={42} />}
+                      title={t("users_audit_error_title")}
+                      description={t("users_audit_error_desc")}
+                      action={
+                        <button type="button" className="btn btn-outline" onClick={() => void mutateAudit()}>
+                          <RefreshCw size={15} />
+                          {t("refresh")}
+                        </button>
+                      }
                     />
+                  ) : auditData?.logs.length ? (
+                    <section className="users-detail-section">
+                      <h3>{t("users_detail_tab_activity")}</h3>
+                      <div className="users-record-list">
+                        {auditData.logs.map((log) => (
+                          <div key={log.id}>
+                            <span>{formatDateTime(log.timestamp)}</span>
+                            <small>{log.action} · {log.targetId}</small>
+                            <strong>{log.level} · {displayValue(log.operatorIp)} · {log.id}</strong>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  ) : (
+                    <EmptyState icon={<CheckCircle2 size={42} />} title={t("users_no_data_title")} description={t("users_no_activity_data_desc")} />
                   )}
                 </div>
               </>
@@ -1493,9 +2082,8 @@ const usersPageStyles = `
   }
 
   .users-advanced-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(220px, 1fr));
     gap: 1rem;
     padding: 0.75rem 1rem;
     border-bottom: 1px solid var(--surface-border);
@@ -1503,17 +2091,61 @@ const usersPageStyles = `
   }
 
   .users-advanced-row label {
-    display: flex;
-    align-items: center;
+    display: grid;
     gap: 0.5rem;
     color: var(--text-muted);
     font-size: 0.82rem;
     font-weight: 800;
   }
 
-  .users-advanced-row > span {
+  .users-advanced-row label:first-child {
+    grid-template-columns: auto minmax(78px, auto) minmax(132px, 1fr);
+    align-items: center;
+  }
+
+  .users-advanced-row label:not(:first-child) {
+    align-content: start;
+  }
+
+  .users-bulk-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.85rem 1rem;
+    border-top: 1px solid var(--surface-border);
+    border-bottom: 1px solid var(--surface-border);
+    background: color-mix(in srgb, var(--primary) 5%, var(--surface));
+  }
+
+  .users-bulk-bar > div:first-child {
+    display: grid;
+    gap: 0.12rem;
+    min-width: 170px;
+  }
+
+  .users-bulk-bar strong {
+    color: var(--text-main);
+  }
+
+  .users-bulk-bar span,
+  .users-bulk-actions label span {
     color: var(--text-muted);
-    font-size: 0.8rem;
+    font-size: 0.78rem;
+  }
+
+  .users-bulk-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .users-bulk-actions label {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
   }
 
   .users-filter-tags {
@@ -1593,6 +2225,19 @@ const usersPageStyles = `
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
+  }
+
+  .users-sort-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    font: inherit;
+    font-weight: 800;
+    text-transform: uppercase;
   }
 
   .users-select-col {
@@ -1772,6 +2417,108 @@ const usersPageStyles = `
 
   .users-more-menu button.danger {
     color: var(--danger);
+  }
+
+  .users-confirm-details {
+    display: grid;
+    gap: 0.45rem;
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+  }
+
+  .users-confirm-details label {
+    display: grid;
+    gap: 0.35rem;
+    margin-top: 0.2rem;
+    color: var(--text-main);
+    font-weight: 800;
+  }
+
+  .users-confirm-details textarea {
+    width: 100%;
+    resize: vertical;
+    min-height: 76px;
+    border: 1px solid var(--surface-border);
+    border-radius: 7px;
+    background: var(--surface-hover);
+    color: var(--text-main);
+    padding: 0.55rem 0.65rem;
+    font: inherit;
+    font-weight: 500;
+  }
+
+  .users-permission-summary {
+    display: grid;
+    gap: 0.45rem;
+    padding: 0.75rem;
+    border: 1px solid var(--surface-border);
+    border-radius: 8px;
+    background: var(--surface-hover);
+  }
+
+  .users-permission-summary span:first-child,
+  .users-permission-summary small {
+    color: var(--text-muted);
+    font-size: 0.78rem;
+  }
+
+  .users-permission-list,
+  .users-record-list {
+    display: grid;
+    gap: 0.55rem;
+  }
+
+  .users-permission-list > div,
+  .users-record-list > div {
+    display: grid;
+    gap: 0.2rem;
+    padding: 0.75rem;
+    border: 1px solid var(--surface-border);
+    border-radius: 8px;
+    background: var(--surface);
+  }
+
+  .users-permission-list > div {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+
+  .users-permission-decision {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 72px;
+    border-radius: 999px;
+    padding: 0.24rem 0.55rem;
+    font-size: 0.76rem;
+    font-weight: 900;
+  }
+
+  .users-permission-decision.allow {
+    color: var(--success);
+    background: rgba(28, 200, 138, 0.12);
+  }
+
+  .users-permission-decision.approval {
+    color: #d97706;
+    background: rgba(245, 158, 11, 0.14);
+  }
+
+  .users-permission-decision.deny {
+    color: var(--danger);
+    background: rgba(231, 74, 59, 0.12);
+  }
+
+  .users-record-list span {
+    color: var(--text-main);
+    font-weight: 800;
+  }
+
+  .users-record-list small,
+  .users-record-list strong {
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    font-weight: 600;
   }
 
   .users-pagination {
@@ -1975,6 +2722,10 @@ const usersPageStyles = `
       align-items: stretch;
       flex-direction: column;
     }
+
+    .users-advanced-row {
+      grid-template-columns: repeat(2, minmax(220px, 1fr));
+    }
   }
 
   @media (max-width: 860px) {
@@ -1983,14 +2734,19 @@ const usersPageStyles = `
     }
 
     .users-page-header,
-    .users-advanced-row,
+    .users-bulk-bar,
     .users-pagination {
       align-items: stretch;
       flex-direction: column;
     }
 
+    .users-advanced-row {
+      grid-template-columns: 1fr;
+    }
+
     .users-header-actions,
-    .users-filter-group {
+    .users-filter-group,
+    .users-bulk-actions {
       justify-content: flex-start;
       flex-wrap: wrap;
     }

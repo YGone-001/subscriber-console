@@ -142,9 +142,11 @@ export function ConfirmActionPanel({
   presentation = "inline",
   title,
   message,
+  children,
   confirmLabel,
   cancelLabel,
   isWorking,
+  confirmDisabled,
   onConfirm,
   onCancel,
 }: {
@@ -152,9 +154,11 @@ export function ConfirmActionPanel({
   presentation?: "inline" | "modal";
   title: string;
   message: string;
+  children?: React.ReactNode;
   confirmLabel: string;
   cancelLabel: string;
   isWorking?: boolean;
+  confirmDisabled?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
@@ -196,6 +200,7 @@ export function ConfirmActionPanel({
       <div style={{ flex: "1 1 260px", minWidth: 0 }}>
         <div style={{ fontWeight: 800, color: "var(--text-main)", marginBottom: "0.2rem" }}>{title}</div>
         <div style={{ color: "var(--text-secondary)", fontSize: "0.86rem", lineHeight: 1.5 }}>{message}</div>
+        {children && <div style={{ marginTop: "0.8rem" }}>{children}</div>}
       </div>
       <div style={{ display: "flex", gap: "0.6rem", alignItems: "center", flexWrap: "wrap", marginLeft: "auto" }}>
         <button type="button" className="btn btn-outline" onClick={onCancel} disabled={isWorking}>
@@ -205,7 +210,7 @@ export function ConfirmActionPanel({
           type="button"
           className="btn"
           onClick={onConfirm}
-          disabled={isWorking}
+          disabled={isWorking || confirmDisabled}
           autoFocus={presentation === "modal"}
           style={{ background: tone === "danger" ? "var(--danger)" : style.color, minWidth: 96 }}
         >
