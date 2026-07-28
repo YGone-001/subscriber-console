@@ -19,6 +19,7 @@ import {
   LogOut,
   Menu,
   Settings,
+  ShieldCheck,
   User,
   UserCog,
   Users,
@@ -37,6 +38,7 @@ type NavItem = {
   path: string;
   match: string;
   icon: React.ReactNode;
+  children?: NavItem[];
 };
 
 type ApprovalStatus = "pending" | "approved" | "rejected" | "executed" | "failed";
@@ -60,6 +62,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [approvalOpen, setApprovalOpen] = useState(false);
   const [cmdPaletteOpen, setCmdPaletteOpen] = useState(false);
   const [ratingNavOpen, setRatingNavOpen] = useState(true);
+  const [identityNavOpen, setIdentityNavOpen] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
   const { t } = useI18n();
@@ -91,18 +94,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, []);
 
   const navItems = useMemo<NavItem[]>(() => {
+    const identityChildren: NavItem[] = [
+      ...(isRoot ? [
+        { key: "nav_system_users", path: "/users", match: "/users", icon: <UserCog size={18} /> },
+        { key: "nav_roles", path: "/roles", match: "/roles", icon: <ShieldCheck size={18} /> },
+      ] : []),
+      { key: "nav_approvals", path: "/approvals", match: "/approvals", icon: <GitBranch size={18} /> },
+      { key: "nav_audit_logs", path: "/audit-logs", match: "/audit-logs", icon: <History size={18} /> },
+    ];
     const items: NavItem[] = [
       { key: "nav_dashboard", path: "/", match: "/", icon: <LayoutDashboard size={20} /> },
       { key: "nav_subscriber", path: "/subscribers", match: "/subscribers", icon: <Users size={20} /> },
       { key: "nav_profile", path: "/profile", match: "/profile", icon: <CreditCard size={20} /> },
       { key: "nav_rating", path: "/rating", match: "/rating", icon: <Gauge size={20} /> },
+      { key: "nav_user_permissions", path: "/users", match: "/users", icon: <UserCog size={20} />, children: identityChildren },
       { key: "nav_system_health", path: "/system-health", match: "/system-health", icon: <Activity size={20} /> },
-      { key: "nav_audit_logs", path: "/audit-logs", match: "/audit-logs", icon: <History size={20} /> },
     ];
-
-    if (isRoot) {
-      items.splice(4, 0, { key: "nav_users", path: "/users", match: "/users", icon: <UserCog size={20} /> });
-    }
 
     return items;
   }, [isRoot]);
@@ -116,6 +123,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const roleLabel = user?.role || "viewer";
   const sidebarWidth = sidebarOpen ? 264 : 72;
   const ratingNavExpanded = ratingNavOpen || pathname.startsWith("/rating");
+  const identityNavExpanded = identityNavOpen || pathname.startsWith("/users") || pathname.startsWith("/roles") || pathname.startsWith("/approvals") || pathname.startsWith("/audit-logs");
 
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -139,9 +147,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const handleApprovalCenter = () => {
     setApprovalOpen(false);
-    if (isRoot) {
-      router.push("/users");
-    }
+    router.push("/approvals");
   };
 
   const renderApprovalStatus = (status: ApprovalStatus) => {
@@ -284,30 +290,37 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <aside className={sidebarOpen ? "app-sidebar expanded" : "app-sidebar collapsed"} style={{ width: sidebarWidth }}>
           <nav className="sidebar-nav" aria-label="Primary navigation">
             {navItems.map((item) => {
-              const isActive = pathname === item.match || (item.match !== "/" && pathname.startsWith(item.match));
+              const childActive = item.children?.some((child) => pathname === child.match || pathname.startsWith(child.match)) || false;
+              const isActive = childActive || pathname === item.match || (item.match !== "/" && pathname.startsWith(item.match));
               const isRatingParent = item.key === "nav_rating";
+              const isIdentityParent = item.key === "nav_user_permissions";
+              const parentExpanded = isRatingParent ? ratingNavExpanded : identityNavExpanded;
               return (
                 <div key={item.key} className="sidebar-item-wrap">
-                  {isRatingParent ? (
+                  {isRatingParent || isIdentityParent ? (
                     <>
                       <button
                         type="button"
                         className={isActive ? "sidebar-link active sidebar-parent-button" : "sidebar-link sidebar-parent-button"}
                         onClick={() => {
                           if (!sidebarOpen) setSidebarOpen(true);
-                          setRatingNavOpen((open) => !open);
+                          if (isRatingParent) {
+                            setRatingNavOpen((open) => !open);
+                          } else {
+                            setIdentityNavOpen((open) => !open);
+                          }
                         }}
-                        aria-expanded={ratingNavExpanded}
+                        aria-expanded={parentExpanded}
                       >
                         <span className="sidebar-active-bar" />
                         <span className="sidebar-icon">{item.icon}</span>
                         <span className="sidebar-label">{t(item.key)}</span>
                         <span className="sidebar-tooltip" role="tooltip">{t(item.key)}</span>
-                        {sidebarOpen ? <ChevronRight size={16} className={ratingNavExpanded ? "sidebar-chevron open" : "sidebar-chevron"} /> : null}
+                        {sidebarOpen ? <ChevronRight size={16} className={parentExpanded ? "sidebar-chevron open" : "sidebar-chevron"} /> : null}
                       </button>
-                      {sidebarOpen && ratingNavExpanded ? (
+                      {sidebarOpen && parentExpanded ? (
                         <div className="sidebar-subnav">
-                          {ratingSubItems.map((child) => {
+                          {(isRatingParent ? ratingSubItems : item.children || []).map((child) => {
                             const childActive = pathname === child.match || pathname.startsWith(child.match);
                             return (
                               <Link key={child.key} href={child.path} className={`${childActive ? "sidebar-link active" : "sidebar-link"} child`} aria-current={childActive ? "page" : undefined}>
