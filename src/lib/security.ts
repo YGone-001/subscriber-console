@@ -26,14 +26,8 @@ export function getJwtSecretKey(): Uint8Array {
 }
 
 export function isPasswordStrong(password: string): boolean {
-  return (
-    password.length >= 10 &&
-    /[a-z]/.test(password) &&
-    /[A-Z]/.test(password) &&
-    /\d/.test(password) &&
-    /[^A-Za-z0-9]/.test(password)
-  );
+  return password.length >= 8;
 }
 
 export const PASSWORD_POLICY_MESSAGE =
-  'Password must be at least 10 characters and include uppercase, lowercase, number, and symbol';
+  'Password must be at least 8 characters';
