@@ -21,11 +21,23 @@ type OcsSubscriberLookupDoc = Document & {
   msisdn?: string;
 };
 
+const LOW_TRAFFIC_BALANCE_THRESHOLD_BYTES = 1;
+
 export type SubscriberListResult<T> = {
   subscribers: T[];
   total: number;
   page: number;
   limit: number;
+  summary?: SubscriberSummary;
+};
+
+export type SubscriberStatusFilter = 'all' | 'active' | 'restricted' | 'lowTraffic';
+
+export type SubscriberSummary = {
+  total: number;
+  active: number;
+  restricted: number;
+  lowTraffic: number;
 };
 
 export type SubscriberRow = {
@@ -210,6 +222,33 @@ function statusFromAccessRestriction(accessRestriction: unknown): string {
   if (ard === 255) return 'Suspended';
   if (ard > 0 && ard !== 32) return 'Partial Restricted';
   return 'Active';
+}
+
+function isLowTraffic(row: SubscriberRow): boolean {
+  const balance = Math.max(0, Number(row.traffic?.balance || 0));
+  return balance < LOW_TRAFFIC_BALANCE_THRESHOLD_BYTES;
+}
+
+function matchesSubscriberStatusFilter(row: SubscriberRow, statusFilter: SubscriberStatusFilter): boolean {
+  if (statusFilter === 'active') return row.status === 'Active';
+  if (statusFilter === 'restricted') return row.status === 'Suspended' || row.status === 'Partial Restricted';
+  if (statusFilter === 'lowTraffic') return isLowTraffic(row);
+  return true;
+}
+
+function subscriberSummary(rows: SubscriberRow[]): SubscriberSummary {
+  return rows.reduce<SubscriberSummary>((summary, row) => {
+    summary.total += 1;
+    if (row.status === 'Active') summary.active += 1;
+    if (row.status === 'Suspended' || row.status === 'Partial Restricted') summary.restricted += 1;
+    if (isLowTraffic(row)) summary.lowTraffic += 1;
+    return summary;
+  }, {
+    total: 0,
+    active: 0,
+    restricted: 0,
+    lowTraffic: 0,
+  });
 }
 
 async function subscribersCollection() {
@@ -445,43 +484,49 @@ export async function listSubscriberImsis(
 export async function listSubscriberRows(
   page: number,
   limit: number,
-  query = ''
+  query = '',
+  statusFilter: SubscriberStatusFilter = 'all'
 ): Promise<SubscriberListResult<SubscriberRow>> {
   const filter = subscriberFilter(query);
   const pageValue = safePage(page);
   const limitValue = safeLimit(limit);
 
   if (!filter) {
-    return { subscribers: [], total: 0, page: pageValue, limit: limitValue };
+    return {
+      subscribers: [],
+      total: 0,
+      page: pageValue,
+      limit: limitValue,
+      summary: { total: 0, active: 0, restricted: 0, lowTraffic: 0 },
+    };
   }
 
   const collection = await subscribersCollection();
-  const [total, docs] = await Promise.all([
-    collection.countDocuments(filter),
-    collection
-      .find(filter)
-      .sort({ imsi: 1 })
-      .skip((pageValue - 1) * limitValue)
-      .limit(limitValue)
-      .toArray(),
-  ]);
+  const docs = await collection
+    .find(filter)
+    .sort({ imsi: 1 })
+    .toArray();
   const ocs = await readOcsProvisioningForImsis(docs.map((doc) => doc.imsi));
+  const rows = docs.map((doc) => {
+    const ocsSubscriber = ocs.subscribers.get(doc.imsi);
+    const planId = ocsSubscriber?.plan_id || 'plan_default_10gb';
+    return toSubscriberRow(
+      doc,
+      ocsSubscriber,
+      ocs.balances.get(doc.imsi),
+      ocs.balances.get(doc.imsi),
+      ocs.tariffPlans.get(planId)
+    );
+  });
+  const summary = subscriberSummary(rows);
+  const filteredRows = rows.filter((row) => matchesSubscriberStatusFilter(row, statusFilter));
 
   return {
-    subscribers: docs.map((doc) => {
-      const ocsSubscriber = ocs.subscribers.get(doc.imsi);
-      const planId = ocsSubscriber?.plan_id || 'plan_default_10gb';
-      return toSubscriberRow(
-        doc,
-        ocsSubscriber,
-        ocs.balances.get(doc.imsi),
-        ocs.balances.get(doc.imsi),
-        ocs.tariffPlans.get(planId)
-      );
-    }),
-    total,
+    subscribers: filteredRows.slice((pageValue - 1) * limitValue, pageValue * limitValue),
+    total: filteredRows.length,
     page: pageValue,
     limit: limitValue,
+    summary,
   };
 }
 

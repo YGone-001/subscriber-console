@@ -284,6 +284,69 @@ code {
   color: var(--primary);
 }
 
+.subscriber-summary-panel {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(160px, 1fr));
+  gap: 0;
+  margin-bottom: 1.25rem;
+  overflow: hidden;
+  border: 1px solid var(--surface-border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.12);
+}
+
+.subscriber-summary-card {
+  min-height: 92px;
+  display: grid;
+  align-content: center;
+  gap: 0.45rem;
+  padding: 1rem 1.25rem;
+  border: 0;
+  border-right: 1px solid var(--surface-border);
+  background: transparent;
+  color: var(--text-main);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.18s ease, box-shadow 0.18s ease, color 0.18s ease;
+}
+
+.subscriber-summary-card:last-child {
+  border-right: 0;
+}
+
+.subscriber-summary-card:hover,
+.subscriber-summary-card.active {
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+  box-shadow: inset 0 -3px 0 var(--primary);
+}
+
+.subscriber-summary-card span {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.subscriber-summary-card strong {
+  color: currentColor;
+  font-size: 1.9rem;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.subscriber-summary-success strong {
+  color: var(--success);
+}
+
+.subscriber-summary-danger strong {
+  color: var(--danger);
+}
+
+.subscriber-summary-warning strong {
+  color: var(--warning);
+}
+
 .table-pagination {
   padding: 1rem 2rem;
   border-top: 1px solid var(--surface-border);
@@ -346,6 +409,19 @@ code {
 }
 
 @media (max-width: 780px) {
+  .subscriber-summary-panel {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .subscriber-summary-card {
+    border-right: 0;
+    border-bottom: 1px solid var(--surface-border);
+  }
+
+  .subscriber-summary-card:nth-last-child(-n + 2) {
+    border-bottom: 0;
+  }
+
   .table-pagination {
     align-items: flex-start;
     flex-direction: column;

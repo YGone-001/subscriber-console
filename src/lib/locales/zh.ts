@@ -1054,6 +1054,11 @@ export const zh: Record<string, string> = {
     // -- Subscriber Page --
     subscriber_title: "\u7528\u6237\u7ba1\u7406",
     subscriber_subtitle: "\u7ba1\u7406 IMSI \u914d\u7f6e\u3001\u6d41\u91cf\u5206\u914d\u4e0e\u7528\u6237\u751f\u547d\u5468\u671f\u3002",
+    subscriber_summary_label: "\u7528\u6237\u72b6\u6001\u6982\u89c8",
+    subscriber_summary_total: "\u5f53\u524d\u7528\u6237\u603b\u6570",
+    subscriber_summary_active: "\u6d3b\u8dc3",
+    subscriber_summary_restricted: "\u505c\u673a / \u53d7\u9650",
+    subscriber_summary_low_traffic: "\u6d41\u91cf\u4e0d\u8db3",
     search_imsi: "\u6309 IMSI \u524d\u7f00\u641c\u7d22...",
     change_policy: "\u4fee\u6539\u7b56\u7565",
     policy_change_title: "\u4fee\u6539\u7528\u6237\u7b56\u7565",

@@ -1054,6 +1054,11 @@ export const en: Record<string, string> = {
     // -- Subscriber Page --
     subscriber_title: "Subscriber Management",
     subscriber_subtitle: "Manage IMSI provisioning, traffic allocation and subscriber lifecycle.",
+    subscriber_summary_label: "Subscriber status summary",
+    subscriber_summary_total: "Current Users",
+    subscriber_summary_active: "Active",
+    subscriber_summary_restricted: "Suspended / Restricted",
+    subscriber_summary_low_traffic: "Low Traffic",
     search_imsi: "Search by IMSI prefix...",
     change_policy: "Change Policy",
     policy_change_title: "Change Subscriber Policy",

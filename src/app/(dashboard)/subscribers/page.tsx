@@ -61,6 +61,15 @@ type PendingDelete = {
   imsis: string[];
 };
 
+type SubscriberStatusFilter = "all" | "active" | "restricted" | "lowTraffic";
+
+type SubscriberSummary = {
+  total: number;
+  active: number;
+  restricted: number;
+  lowTraffic: number;
+};
+
 interface ProfilesResponse {
   profiles: Array<{ name: string; title?: string }>;
 }
@@ -70,6 +79,7 @@ interface SubscribersResponse {
   total: number;
   page: number;
   limit: number;
+  summary?: SubscriberSummary;
 }
 
 /**
@@ -131,14 +141,21 @@ export default function SubscriberPage() {
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [statusFilter, setStatusFilter] = useState<SubscriberStatusFilter>("all");
 
   const subscriberQuery = searchQuery.trim();
-  const subscribersUrl = `/api/subscribers?detail=true&page=${currentPage}&limit=${pageSize}${subscriberQuery ? `&q=${encodeURIComponent(subscriberQuery)}` : ""}`;
+  const subscribersUrl = `/api/subscribers?detail=true&page=${currentPage}&limit=${pageSize}${subscriberQuery ? `&q=${encodeURIComponent(subscriberQuery)}` : ""}${statusFilter !== "all" ? `&status=${statusFilter}` : ""}`;
   const { data: subscribersData, isLoading, mutate: mutateSubscribers } = useSWR<SubscribersResponse>(subscribersUrl, fetcher, {
     keepPreviousData: true,
   });
   const subscribers = subscribersData?.subscribers || [];
   const totalSubscribers = subscribersData?.total || 0;
+  const subscriberSummary = subscribersData?.summary || {
+    total: totalSubscribers,
+    active: 0,
+    restricted: 0,
+    lowTraffic: 0,
+  };
 
   // General modal state
   const [modalImsi, setModalImsi] = useState<string | null>(null);
@@ -292,6 +309,19 @@ export default function SubscriberPage() {
     }
   };
 
+  const applyStatusFilter = (nextFilter: SubscriberStatusFilter) => {
+    setStatusFilter(nextFilter);
+    setCurrentPage(1);
+    setSelectedImsis([]);
+  };
+
+  const summaryCards = [
+    { key: "all" as const, label: t("subscriber_summary_total"), value: subscriberSummary.total, tone: "primary" },
+    { key: "active" as const, label: t("subscriber_summary_active"), value: subscriberSummary.active, tone: "success" },
+    { key: "restricted" as const, label: t("subscriber_summary_restricted"), value: subscriberSummary.restricted, tone: "danger" },
+    { key: "lowTraffic" as const, label: t("subscriber_summary_low_traffic"), value: subscriberSummary.lowTraffic, tone: "warning" },
+  ];
+
   const sortedSubscribers = [...subscribers].sort((a, b) => {
     let valA = a[sortField] as any;
     let valB = b[sortField] as any;
@@ -376,6 +406,27 @@ export default function SubscriberPage() {
         </div>
       </div>
 
+      <section className="subscriber-summary-panel" aria-label={t("subscriber_summary_label")}>
+        {summaryCards.map((item) => {
+          const isActive = statusFilter === item.key;
+          return (
+            <button
+              key={item.key}
+              type="button"
+              className={`subscriber-summary-card subscriber-summary-${item.tone}${isActive ? " active" : ""}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                applyStatusFilter(item.key);
+              }}
+              aria-pressed={isActive}
+            >
+              <span>{item.label}</span>
+              <strong>{item.value}</strong>
+            </button>
+          );
+        })}
+      </section>
+
       {feedback && (
         <OperationNotice
           presentation="modal"
@@ -412,7 +463,7 @@ export default function SubscriberPage() {
             style={{ width: "350px", borderRadius: "20px", padding: "0.6rem 1.2rem" }}
             placeholder={t("search_imsi")}
             value={searchQuery}
-            onChange={e => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+            onChange={e => { setSearchQuery(e.target.value); setCurrentPage(1); setSelectedImsis([]); }}
           />
           {selectedImsis.length > 0 && (
             <div className="animate-fade-in" style={{ display: "flex", alignItems: "center", gap: "1.5rem", background: "rgba(59, 130, 246, 0.1)", borderRadius: "8px", padding: "0.4rem 1.2rem", border: "1px solid rgba(59, 130, 246, 0.2)" }}>
@@ -516,10 +567,10 @@ export default function SubscriberPage() {
         ) : totalSubscribers === 0 ? (
           <EmptyState
             icon={<Users size={48} />}
-            title={searchQuery ? t("no_subscribers_search") : t("no_subscribers_empty")}
-            description={searchQuery ? t("sub_empty_search_desc") : t("sub_empty_create_desc")}
+            title={searchQuery || statusFilter !== "all" ? t("no_subscribers_search") : t("no_subscribers_empty")}
+            description={searchQuery || statusFilter !== "all" ? t("sub_empty_search_desc") : t("sub_empty_create_desc")}
             action={
-              canEditSubscribers && !searchQuery ? (
+              canEditSubscribers && !searchQuery && statusFilter === "all" ? (
                 <button type="button" className="btn btn-primary" onClick={handleOpenNew}>
                   <Plus size={16} /> {t("add_subscriber")}
                 </button>

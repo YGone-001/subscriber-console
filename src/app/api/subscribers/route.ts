@@ -7,6 +7,7 @@ import {
   findSubscriberByMsisdn,
   listSubscriberImsis,
   listSubscriberRows,
+  type SubscriberStatusFilter,
 } from '@/server/repositories/subscriberRepository';
 import { open5gsToLegacyState } from '@/lib/xcloudSubscriber';
 import { validateImsi } from '@/lib/subscriberValidation';
@@ -26,8 +27,14 @@ export async function GET(request: Request) {
     const page = parseInt(searchParams.get('page') || '1', 10);
     const limit = parseInt(searchParams.get('limit') || '50', 10);
     const query = searchParams.get('q') || '';
+    const status = searchParams.get('status') || 'all';
     const msisdn = searchParams.get('msisdn') || '';
     const excludeImsi = searchParams.get('excludeImsi') || undefined;
+    const statusFilter: SubscriberStatusFilter = (
+      status === 'active' ||
+      status === 'restricted' ||
+      status === 'lowTraffic'
+    ) ? status : 'all';
 
     if (msisdn) {
       if (!/^\d+$/.test(msisdn)) {
@@ -42,7 +49,7 @@ export async function GET(request: Request) {
     }
 
     const result = detail
-      ? await listSubscriberRows(page, limit, query)
+      ? await listSubscriberRows(page, limit, query, statusFilter)
       : await listSubscriberImsis(page, limit, query);
 
     return NextResponse.json(result);
