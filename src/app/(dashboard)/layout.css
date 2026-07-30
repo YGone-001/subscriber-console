@@ -676,3 +676,26 @@
       width: 64px !important;
     }
   }
+
+  .layout-root {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+    background: var(--background);
+  }
+
+  .layout-body {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .layout-main {
+    flex: 1;
+    overflow-y: auto;
+    position: relative;
+    min-height: 100%;
+    background: var(--background);
+  }
