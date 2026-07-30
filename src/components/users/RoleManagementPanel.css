@@ -1,0 +1,233 @@
+
+  .roles-page {
+    min-height: 100%;
+    padding: var(--space-page);
+    background: var(--background);
+    max-width: 1880px;
+    margin: 0 auto;
+  }
+
+  .roles-header {
+    margin-bottom: var(--space-section);
+  }
+
+  .roles-header h1 {
+    margin: 0;
+    color: var(--text-main);
+    font-size: 1.65rem;
+    letter-spacing: 0;
+  }
+
+  .roles-header p {
+    margin: 0.35rem 0 0;
+    color: var(--text-muted);
+  }
+
+  .roles-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(260px, 1fr));
+    gap: 20px;
+  }
+
+  .role-card {
+    display: grid;
+    gap: 1rem;
+    padding: 1rem;
+    border: 1px solid var(--surface-border);
+    border-radius: var(--radius-panel);
+    background: var(--surface);
+  }
+
+  .role-card > div:first-child {
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .role-card strong {
+    color: var(--text-main);
+  }
+
+  .role-badge,
+  .permission-effect {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: max-content;
+    min-width: 72px;
+    padding: 0.25rem 0.6rem;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--primary) 9%, transparent);
+    color: var(--primary);
+    font-weight: 900;
+    font-size: 0.78rem;
+  }
+
+  .role-card dl {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.7rem;
+    margin: 0;
+  }
+
+  .role-card dl div {
+    display: grid;
+    gap: 0.12rem;
+  }
+
+  .role-card dt {
+    color: var(--text-muted);
+    font-size: 0.74rem;
+  }
+
+  .role-card dd {
+    margin: 0;
+    color: var(--text-main);
+    font-weight: 900;
+  }
+
+  .role-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .role-actions .danger {
+    color: var(--danger);
+  }
+
+  .role-drawer-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 2100;
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .role-drawer-backdrop {
+    position: absolute;
+    inset: 0;
+    border: 0;
+    background: var(--drawer-backdrop);
+  }
+
+  .role-drawer {
+    position: relative;
+    width: min(760px, 100vw);
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: var(--surface);
+    border-left: 1px solid var(--surface-border);
+  }
+
+  .role-drawer header,
+  .role-drawer footer,
+  .role-drawer-tools {
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--surface-border);
+  }
+
+  .role-drawer header,
+  .role-drawer footer {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .role-drawer h2,
+  .role-drawer h3 {
+    margin: 0;
+    color: var(--text-main);
+  }
+
+  .role-drawer p {
+    margin: 0.25rem 0 0;
+    color: var(--text-muted);
+  }
+
+  .role-matrix-scroll {
+    flex: 1;
+    overflow: auto;
+  }
+
+  .role-matrix {
+    width: 100%;
+    min-width: 680px;
+    border-collapse: collapse;
+  }
+
+  .role-matrix th,
+  .role-matrix td {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--surface-border);
+    text-align: left;
+    background: var(--surface);
+  }
+
+  .role-matrix th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--surface-hover);
+    color: var(--text-muted);
+    font-size: 0.76rem;
+    text-transform: uppercase;
+  }
+
+  .role-matrix th:first-child,
+  .role-matrix td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 3;
+  }
+
+  .role-group-row button {
+    border: 0;
+    background: transparent;
+    color: var(--primary);
+    cursor: pointer;
+    font-weight: 900;
+  }
+
+  .permission-effect.allow {
+    color: var(--success);
+    background: var(--success-soft);
+  }
+
+  .permission-effect.approval {
+    color: var(--warning);
+    background: var(--warning-soft);
+  }
+
+  .permission-effect.deny {
+    color: var(--danger);
+    background: var(--danger-soft);
+  }
+
+  .role-diff {
+    display: grid;
+    gap: 0.5rem;
+    padding: 1rem 1.25rem;
+    border-top: 1px solid var(--surface-border);
+    background: var(--surface-hover);
+  }
+
+  .role-diff > div {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.55rem 0;
+    border-top: 1px solid var(--surface-border);
+  }
+
+  @media (max-width: 1180px) {
+    .roles-grid {
+      grid-template-columns: repeat(2, minmax(260px, 1fr));
+    }
+  }
+
+  @media (max-width: 760px) {
+    .roles-grid {
+      grid-template-columns: 1fr;
+    }
+  }
