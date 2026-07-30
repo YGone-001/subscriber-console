@@ -9,192 +9,8 @@ import { useI18n } from "@/components/I18nProvider";
 import { useAuth } from "@/hooks/useAuth";
 import { ConfirmActionPanel, EmptyState, LoadingRows, OperationNotice } from "@/components/OperationFeedback";
 
-const CURRENCIES = ["USD", "EUR", "GBP", "CNY", "HKD", "JPY", "KRW", "SGD", "AUD", "CAD"];
-const DEFAULT_OCS_PLAN_ID = "plan_default_10gb";
-const DATA_GRANT = "10485760";
-const DATA_THRESHOLD = "8388608";
-const VOICE_GRANT = "60";
-const SMS_GRANT = "1";
-
-type ChargingType = "data_volume" | "voice_time" | "free" | "sms_event" | "event";
-type ServiceKey = "all" | "data" | "voice" | "sms" | "ims";
-
-type RatingPolicy = {
-  rating_group_id: number;
-  currency: string;
-  rates: string;
-  rates_type: number;
-  rule_id?: string;
-  apn?: string;
-  service_identifier?: number;
-  charging_type?: ChargingType | string;
-  unit?: string;
-  quota_per_grant?: number;
-  validity_time?: number;
-  volume_threshold?: number;
-  priority?: number;
-  status?: string;
-};
-
-type TariffPlan = {
-  plan_id: string;
-  name: string;
-  description?: string;
-  status: string;
-  rulesCount: number;
-  subscriberCount: number;
-  isDefault?: boolean;
-};
-
-type PlanSubscriberPreview = {
-  total: number;
-  subscribers: Array<{ imsi: string; msisdn?: string; status?: string }>;
-  hasMore: boolean;
-};
-
-type PlanOperationLog = {
-  id: string;
-  timestamp: string;
-  level: "info" | "warning";
-  action: string;
-  targetId: string;
-  operatorIp: string;
-};
-
-type PlanOperationsData = {
-  summary: {
-    totalPlans: number;
-    activePlans: number;
-    disabledPlans: number;
-    totalLinkedSubscribers: number;
-    selectedLinkedSubscribers: number;
-    selectedSharePct: number;
-    recentActivityCount: number;
-    lastChangedAt?: string | null;
-  };
-  history: PlanOperationLog[];
-};
-
-type PlanForm = {
-  plan_id: string;
-  name: string;
-  description: string;
-  status: string;
-};
-
-type RatingForm = {
-  rating_group_id: string;
-  currency: string;
-  rates: string;
-  rates_type: number;
-  charging_type: ChargingType;
-  apn: string;
-  service_identifier: string;
-  quota_per_grant: string;
-  validity_time: string;
-  volume_threshold: string;
-};
-
-type Notice = {
-  type: "error" | "success";
-  text: string;
-};
-
-type RatingManagementView = "plans" | "rules";
-
-const SERVICE_FILTERS: ServiceKey[] = ["all", "data", "voice", "sms", "ims"];
-
-function defaultsFor(type: ChargingType): Omit<RatingForm, "rating_group_id" | "currency" | "rates"> {
-  if (type === "voice_time") {
-    return {
-      rates_type: 1,
-      charging_type: "voice_time",
-      apn: "ims",
-      service_identifier: "1",
-      quota_per_grant: VOICE_GRANT,
-      validity_time: "300",
-      volume_threshold: "0",
-    };
-  }
-  if (type === "free") {
-    return {
-      rates_type: 4,
-      charging_type: "free",
-      apn: "ims",
-      service_identifier: "0",
-      quota_per_grant: "0",
-      validity_time: "0",
-      volume_threshold: "0",
-    };
-  }
-  if (type === "sms_event" || type === "event") {
-    return {
-      rates_type: 3,
-      charging_type: "sms_event",
-      apn: "ims",
-      service_identifier: "1",
-      quota_per_grant: SMS_GRANT,
-      validity_time: "0",
-      volume_threshold: "0",
-    };
-  }
-  return {
-    rates_type: 2,
-    charging_type: type,
-    apn: "internet",
-    service_identifier: "1",
-    quota_per_grant: DATA_GRANT,
-    validity_time: "300",
-    volume_threshold: DATA_THRESHOLD,
-  };
-}
-
-function makeDefaultForm(type: ChargingType = "data_volume"): RatingForm {
-  return {
-    rating_group_id: "",
-    currency: "USD",
-    rates: "0",
-    ...defaultsFor(type),
-  };
-}
-
-function classifyPolicy(rating: RatingPolicy): Exclude<ServiceKey, "all"> {
-  if (rating.charging_type === "voice_time") return "voice";
-  if (rating.charging_type === "sms_event" || rating.unit === "events") return "sms";
-  if ((rating.apn || "").toLowerCase() === "ims") return "ims";
-  return "data";
-}
-
-function formatGrant(t: (key: string) => string, value: unknown, unit?: string, chargingType?: string) {
-  const amount = Number(value ?? 0);
-  if (!Number.isFinite(amount) || amount <= 0 || chargingType === "free") return t("rating_grant_included");
-  if (chargingType === "voice_time" || unit === "seconds") {
-    if (amount >= 3600) return `${Math.round(amount / 3600)} h`;
-    if (amount >= 60) return `${Math.round(amount / 60)} min`;
-    return `${amount} s`;
-  }
-  if (chargingType === "sms_event" || unit === "events") return `${amount} SMS`;
-  if (amount >= 1024 ** 3) return `${(amount / 1024 ** 3).toFixed(1)} GB`;
-  if (amount >= 1024 ** 2) return `${Math.round(amount / 1024 ** 2)} MB`;
-  if (amount >= 1024) return `${Math.round(amount / 1024)} KB`;
-  return `${amount} B`;
-}
-
-function applyChargingType(form: RatingForm, chargingType: ChargingType): RatingForm {
-  return {
-    ...form,
-    ...defaultsFor(chargingType),
-  };
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label style={{ display: "grid", gap: "0.4rem", minWidth: 0 }}>
-      <span className="table-header-cap" style={{ color: "var(--text-muted)", fontSize: "0.72rem" }}>{label}</span>
-      {children}
-    </label>
-  );
-}
+import * as T from "./rating/types";
+import { classifyPolicy, applyChargingType, formatGrant, makeDefaultForm, defaultsFor, CURRENCIES, DEFAULT_OCS_PLAN_ID, DATA_GRANT, DATA_THRESHOLD, VOICE_GRANT, SMS_GRANT, SERVICE_FILTERS, Field } from "./rating/types";
 
 function formatDateTime(value?: string | null): string {
   if (!value) return "--";
@@ -221,30 +37,30 @@ function isWholeNumber(value: string): boolean {
   return /^\d+$/.test(String(value || "").trim());
 }
 
-export default function RatingManagementPage({ view }: { view: RatingManagementView }) {
+export default function RatingManagementPage({ view }: { view: T.RatingManagementView }) {
   const { t } = useI18n();
   const { data: plansData, mutate: mutatePlans } = useSWR("/api/tariff-plans", fetcher);
-  const plans: TariffPlan[] = useMemo(() => plansData?.plans || [], [plansData?.plans]);
+  const plans: T.TariffPlan[] = useMemo(() => plansData?.plans || [], [plansData?.plans]);
   const [selectedPlanId, setSelectedPlanId] = useState("plan_default_10gb");
   const ratingsUrl = `/api/ratings?planId=${encodeURIComponent(selectedPlanId)}`;
   const planSubscribersUrl = selectedPlanId ? `/api/tariff-plans/${encodeURIComponent(selectedPlanId)}/subscribers?limit=5` : null;
   const planOperationsUrl = selectedPlanId ? `/api/tariff-plans/${encodeURIComponent(selectedPlanId)}/operations?limit=8` : null;
   const { data, isLoading, mutate } = useSWR(ratingsUrl, fetcher);
-  const { data: planSubscribersData, mutate: mutatePlanSubscribers } = useSWR<PlanSubscriberPreview>(planSubscribersUrl, fetcher);
-  const { data: planOperationsData, mutate: mutatePlanOperations } = useSWR<PlanOperationsData>(planOperationsUrl, fetcher);
-  const ratings: RatingPolicy[] = useMemo(() => data?.ratings || [], [data?.ratings]);
+  const { data: planSubscribersData, mutate: mutatePlanSubscribers } = useSWR<T.PlanSubscriberPreview>(planSubscribersUrl, fetcher);
+  const { data: planOperationsData, mutate: mutatePlanOperations } = useSWR<T.PlanOperationsData>(planOperationsUrl, fetcher);
+  const ratings: T.RatingPolicy[] = useMemo(() => data?.ratings || [], [data?.ratings]);
   const { canEditTemplates } = useAuth();
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [editForm, setEditForm] = useState<RatingForm>(makeDefaultForm());
+  const [editForm, setEditForm] = useState<T.RatingForm>(makeDefaultForm());
   const [isAdding, setIsAdding] = useState(false);
-  const [newForm, setNewForm] = useState<RatingForm>(makeDefaultForm());
-  const [filter, setFilter] = useState<ServiceKey>("all");
+  const [newForm, setNewForm] = useState<T.RatingForm>(makeDefaultForm());
+  const [filter, setFilter] = useState<T.ServiceKey>("all");
   const [query, setQuery] = useState("");
-  const [notice, setNotice] = useState<Notice | null>(null);
+  const [notice, setNotice] = useState<T.Notice | null>(null);
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
   const [isCreatingPlan, setIsCreatingPlan] = useState(false);
-  const [planForm, setPlanForm] = useState<PlanForm>({ plan_id: "", name: "", description: "", status: "active" });
+  const [planForm, setPlanForm] = useState<T.PlanForm>({ plan_id: "", name: "", description: "", status: "active" });
   const [migrationTargetPlanId, setMigrationTargetPlanId] = useState("");
   const [migrationResetBalances, setMigrationResetBalances] = useState(false);
 
@@ -288,7 +104,7 @@ export default function RatingManagementPage({ view }: { view: RatingManagementV
       setMigrationTargetPlanId("");
       return;
     }
-    setMigrationTargetPlanId((current) =>
+    setMigrationTargetPlanId((current: any) =>
       migrationTargetOptions.some((plan) => plan.plan_id === current)
         ? current
         : migrationTargetOptions[0].plan_id
@@ -307,7 +123,7 @@ export default function RatingManagementPage({ view }: { view: RatingManagementV
     return translated && translated !== `currency_${currency}` ? `${currency} (${translated})` : currency;
   };
 
-  const serviceMeta = (key: ServiceKey | Exclude<ServiceKey, "all">) => {
+  const serviceMeta = (key: T.ServiceKey | Exclude<T.ServiceKey, "all">) => {
     if (key === "voice") return { label: t("rating_service_voice"), icon: <Mic2 size={16} />, color: "var(--warning, #f59e0b)" };
     if (key === "sms") return { label: t("rating_service_sms"), icon: <MessageSquare size={16} />, color: "#8b5cf6" };
     if (key === "ims") return { label: t("rating_service_ims"), icon: <ShieldCheck size={16} />, color: "var(--success)" };
@@ -343,7 +159,7 @@ export default function RatingManagementPage({ view }: { view: RatingManagementV
     ims: enrichedRatings.filter((rating) => rating.serviceKey === "ims").length,
   }), [enrichedRatings]);
 
-  const validateRatingForm = (form: RatingForm, isNew: boolean): string | null => {
+  const validateRatingForm = (form: T.RatingForm, isNew: boolean): string | null => {
     if (isNew && !isWholeNumber(form.rating_group_id)) return t("rating_err_id_required");
     if (!/^[A-Za-z0-9_.-]{1,63}$/.test(form.apn.trim())) return t("rating_err_apn");
     if (!isWholeNumber(form.service_identifier)) return t("rating_err_si");
@@ -575,9 +391,9 @@ export default function RatingManagementPage({ view }: { view: RatingManagementV
     }
   };
 
-  const startEdit = (rating: RatingPolicy) => {
+  const startEdit = (rating: T.RatingPolicy) => {
     setNotice(null);
-    const chargingType = (rating.charging_type || "data_volume") as ChargingType;
+    const chargingType = (rating.charging_type || "data_volume") as T.ChargingType;
     setEditingId(rating.rating_group_id);
     setEditForm({
       rating_group_id: String(rating.rating_group_id),
@@ -593,7 +409,7 @@ export default function RatingManagementPage({ view }: { view: RatingManagementV
     });
   };
 
-  const renderFormCells = (form: RatingForm, setForm: React.Dispatch<React.SetStateAction<RatingForm>>, isNew: boolean, ratingGroupId?: number) => {
+  const renderFormCells = (form: T.RatingForm, setForm: React.Dispatch<React.SetStateAction<T.RatingForm>>, isNew: boolean, ratingGroupId?: number) => {
     const validationMessage = validateRatingForm(form, isNew);
     const formKey = isNew ? "new" : String(ratingGroupId || "");
     const isSaving = savingKey === formKey;
@@ -604,7 +420,7 @@ export default function RatingManagementPage({ view }: { view: RatingManagementV
         <div style={{ display: "grid", gridTemplateColumns: isNew ? "1fr" : "auto", gap: "0.7rem" }}>
           {isNew ? (
             <Field label={t("rating_col_id")}>
-              <input type="number" className="form-input" placeholder={t("rating_ph_id")} value={form.rating_group_id} onChange={(event) => setForm((current) => ({ ...current, rating_group_id: event.target.value }))} autoFocus />
+              <input type="number" className="form-input" placeholder={t("rating_ph_id")} value={form.rating_group_id} onChange={(event) => setForm((current: any) => ({ ...current, rating_group_id: event.target.value }))} autoFocus />
             </Field>
           ) : (
             <span style={{ fontFamily: "monospace", fontWeight: 700, color: "var(--primary)", fontSize: "1.1rem" }}>#{ratingGroupId}</span>
@@ -612,7 +428,7 @@ export default function RatingManagementPage({ view }: { view: RatingManagementV
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.7rem" }}>
           <Field label={t("rating_charging_scenario")}>
-            <select className="form-input" value={form.charging_type} onChange={(event) => setForm((current) => applyChargingType(current, event.target.value as ChargingType))}>
+            <select className="form-input" value={form.charging_type} onChange={(event) => setForm((current: any) => applyChargingType(current, event.target.value as T.ChargingType))}>
               <option value="data_volume">{t("rating_service_data")}</option>
               <option value="voice_time">{t("rating_service_voice")}</option>
               <option value="sms_event">{t("rating_service_sms")}</option>
@@ -620,20 +436,20 @@ export default function RatingManagementPage({ view }: { view: RatingManagementV
             </select>
           </Field>
           <Field label={t("rating_col_type")}>
-            <select className="form-input" value={form.rates_type} onChange={(event) => setForm((current) => ({ ...current, rates_type: Number(event.target.value) }))}>
+            <select className="form-input" value={form.rates_type} onChange={(event) => setForm((current: any) => ({ ...current, rates_type: Number(event.target.value) }))}>
               {rateTypes.map((type) => <option key={type.val} value={type.val}>{type.label}</option>)}
             </select>
           </Field>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 0.75fr 1fr", gap: "0.7rem" }}>
           <Field label="APN">
-            <input type="text" className="form-input" value={form.apn} onChange={(event) => setForm((current) => ({ ...current, apn: event.target.value }))} />
+            <input type="text" className="form-input" value={form.apn} onChange={(event) => setForm((current: any) => ({ ...current, apn: event.target.value }))} />
           </Field>
           <Field label="SI">
-            <input type="number" className="form-input" value={form.service_identifier} onChange={(event) => setForm((current) => ({ ...current, service_identifier: event.target.value }))} />
+            <input type="number" className="form-input" value={form.service_identifier} onChange={(event) => setForm((current: any) => ({ ...current, service_identifier: event.target.value }))} />
           </Field>
           <Field label={t("rating_col_currency")}>
-            <select className="form-input" value={form.currency} onChange={(event) => setForm((current) => ({ ...current, currency: event.target.value }))}>
+            <select className="form-input" value={form.currency} onChange={(event) => setForm((current: any) => ({ ...current, currency: event.target.value }))}>
               {CURRENCIES.map((currency) => <option key={currency} value={currency}>{formatCurrency(currency)}</option>)}
             </select>
           </Field>
@@ -645,16 +461,16 @@ export default function RatingManagementPage({ view }: { view: RatingManagementV
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(130px, 1fr))", gap: "0.8rem", marginTop: "0.9rem" }}>
         <Field label={t("rating_col_rates")}>
-          <input type="text" className="form-input" value={form.rates} onChange={(event) => setForm((current) => ({ ...current, rates: event.target.value }))} placeholder={t("rating_ph_rates")} />
+          <input type="text" className="form-input" value={form.rates} onChange={(event) => setForm((current: any) => ({ ...current, rates: event.target.value }))} placeholder={t("rating_ph_rates")} />
         </Field>
         <Field label={t("rating_grant")}>
-          <input type="number" className="form-input" value={form.quota_per_grant} onChange={(event) => setForm((current) => ({ ...current, quota_per_grant: event.target.value }))} />
+          <input type="number" className="form-input" value={form.quota_per_grant} onChange={(event) => setForm((current: any) => ({ ...current, quota_per_grant: event.target.value }))} />
         </Field>
         <Field label={t("rating_validity")}>
-          <input type="number" className="form-input" value={form.validity_time} onChange={(event) => setForm((current) => ({ ...current, validity_time: event.target.value }))} />
+          <input type="number" className="form-input" value={form.validity_time} onChange={(event) => setForm((current: any) => ({ ...current, validity_time: event.target.value }))} />
         </Field>
         <Field label={t("rating_threshold")}>
-          <input type="number" className="form-input" value={form.volume_threshold} onChange={(event) => setForm((current) => ({ ...current, volume_threshold: event.target.value }))} />
+          <input type="number" className="form-input" value={form.volume_threshold} onChange={(event) => setForm((current: any) => ({ ...current, volume_threshold: event.target.value }))} />
         </Field>
       </div>
       {validationMessage && (
@@ -828,23 +644,23 @@ export default function RatingManagementPage({ view }: { view: RatingManagementV
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))", gap: "1rem", alignItems: "end" }}>
                     <Field label={t("tariff_plan_id")}>
                       {isCreatingPlan ? (
-                        <input className="form-input" value={planForm.plan_id} onChange={(event) => setPlanForm((current) => ({ ...current, plan_id: event.target.value }))} />
+                        <input className="form-input" value={planForm.plan_id} onChange={(event) => setPlanForm((current: any) => ({ ...current, plan_id: event.target.value }))} />
                       ) : (
                         <input className="form-input" value={selectedPlan?.plan_id || selectedPlanId} readOnly style={{ fontFamily: "monospace", color: "var(--text-secondary)" }} />
                       )}
                     </Field>
                     <Field label={t("tariff_plan_name")}>
-                      <input className="form-input" value={planForm.name} onChange={(event) => setPlanForm((current) => ({ ...current, name: event.target.value }))} disabled={!canEditTemplates} />
+                      <input className="form-input" value={planForm.name} onChange={(event) => setPlanForm((current: any) => ({ ...current, name: event.target.value }))} disabled={!canEditTemplates} />
                     </Field>
                     <Field label={t("tariff_plan_status")}>
-                      <select className="form-input" value={planForm.status} onChange={(event) => setPlanForm((current) => ({ ...current, status: event.target.value }))} disabled={!canEditTemplates}>
+                      <select className="form-input" value={planForm.status} onChange={(event) => setPlanForm((current: any) => ({ ...current, status: event.target.value }))} disabled={!canEditTemplates}>
                         <option value="active">{t("policy_status_active")}</option>
                         <option value="disabled">{t("users_disabled")}</option>
                       </select>
                     </Field>
                     <div style={{ gridColumn: "1 / -1" }}>
                       <Field label={t("tariff_plan_desc")}>
-                        <input className="form-input" value={planForm.description} onChange={(event) => setPlanForm((current) => ({ ...current, description: event.target.value }))} disabled={!canEditTemplates} />
+                        <input className="form-input" value={planForm.description} onChange={(event) => setPlanForm((current: any) => ({ ...current, description: event.target.value }))} disabled={!canEditTemplates} />
                       </Field>
                     </div>
                   </div>
