@@ -13,6 +13,9 @@ import { fetcher } from "@/lib/fetcher";
 import { useAuth } from "@/hooks/useAuth";
 import TrafficAdjustmentModal from "@/components/TrafficAdjustmentModal";
 import SubscriberTraceModal from "@/components/SubscriberTraceModal";
+import SubscriberSummaryPanel from "./components/SubscriberSummaryPanel";
+import SubscriberPagination from "./components/SubscriberPagination";
+import "./subscribers.css";
 
 interface PlmnRecord {
   mcc: string;
@@ -392,40 +395,25 @@ export default function SubscriberPage() {
 
   return (
     <>
-    <div className="container animate-fade-in" style={{ padding: "3rem" }} onClick={() => setActiveDropdown(null)}>
+    <div className="subscribers-page-container animate-fade-in" onClick={() => setActiveDropdown(null)}>
 
       {/* Page Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "2rem" }}>
+      <div className="subscribers-page-header">
         <div>
-          <h2 style={{ margin: 0, fontSize: "1.5rem", fontWeight: 700, color: "var(--text-main)" }}>
+          <h2 className="subscribers-page-title">
             {t("subscriber_title")}
           </h2>
-          <p style={{ margin: "0.25rem 0 0 0", fontSize: "0.9rem", color: "var(--text-secondary)" }}>
+          <p className="subscribers-page-subtitle">
             {t("subscriber_subtitle")}
           </p>
         </div>
       </div>
 
-      <section className="subscriber-summary-panel" aria-label={t("subscriber_summary_label")}>
-        {summaryCards.map((item) => {
-          const isActive = statusFilter === item.key;
-          return (
-            <button
-              key={item.key}
-              type="button"
-              className={`subscriber-summary-card subscriber-summary-${item.tone}${isActive ? " active" : ""}`}
-              onClick={(event) => {
-                event.stopPropagation();
-                applyStatusFilter(item.key);
-              }}
-              aria-pressed={isActive}
-            >
-              <span>{item.label}</span>
-              <strong>{item.value}</strong>
-            </button>
-          );
-        })}
-      </section>
+      <SubscriberSummaryPanel 
+        summaryCards={summaryCards as any} 
+        statusFilter={statusFilter} 
+        applyStatusFilter={applyStatusFilter} 
+      />
 
       {feedback && (
         <OperationNotice
@@ -456,29 +444,28 @@ export default function SubscriberPage() {
 
       {/* Search, Bulk Action & Data Sync Bar */}
       <div className="page-action-bar">
-        <div style={{ display: "flex", alignItems: "center", gap: "1.5rem" }}>
+        <div className="action-bar-left">
           <input
             type="search"
-            className="form-input hover-glass"
-            style={{ width: "350px", borderRadius: "20px", padding: "0.6rem 1.2rem" }}
+            className="form-input hover-glass search-input"
             placeholder={t("search_imsi")}
             value={searchQuery}
             onChange={e => { setSearchQuery(e.target.value); setCurrentPage(1); setSelectedImsis([]); }}
           />
           {selectedImsis.length > 0 && (
-            <div className="animate-fade-in" style={{ display: "flex", alignItems: "center", gap: "1.5rem", background: "rgba(59, 130, 246, 0.1)", borderRadius: "8px", padding: "0.4rem 1.2rem", border: "1px solid rgba(59, 130, 246, 0.2)" }}>
-              <span style={{ fontWeight: 600, color: "var(--primary)", fontSize: "0.9rem" }}>{selectedImsis.length} {t("selected")}</span>
-              <div style={{ paddingLeft: "1.5rem", borderLeft: "1px solid rgba(59, 130, 246, 0.2)", display: "flex", gap: "0.75rem" }}>
+            <div className="bulk-actions-container animate-fade-in">
+              <span className="bulk-actions-count">{selectedImsis.length} {t("selected")}</span>
+              <div className="bulk-actions-buttons">
                 {canEditSubscribers && (
-                  <button className="btn btn-outline" style={{ display: "flex", alignItems: "center", gap: "0.4rem", padding: "0.4rem 1rem", fontSize: "0.85rem", borderColor: "var(--primary)", color: "var(--primary)", background: "var(--surface)" }} onClick={() => setIsPolicyModalOpen(true)}>
+                  <button className="btn btn-bulk-outline" onClick={() => setIsPolicyModalOpen(true)}>
                     <Settings2 size={14}/> {t("change_policy")}
                   </button>
                 )}
-                <button className="btn btn-outline" style={{ display: "flex", alignItems: "center", gap: "0.4rem", padding: "0.4rem 1rem", fontSize: "0.85rem", borderColor: "var(--primary)", color: "var(--primary)", background: "var(--surface)" }} onClick={() => setIsDataHubOpen(true)}>
+                <button className="btn btn-bulk-outline" onClick={() => setIsDataHubOpen(true)}>
                   <Download size={14}/> {t("export_csv")}
                 </button>
                 {canEditSubscribers && (
-                  <button className="btn" style={{ background: "var(--danger)", padding: "0.4rem 1rem", display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.85rem" }} onClick={handleBulkDelete} disabled={isDeletingBulk || Boolean(pendingDelete)}>
+                  <button className="btn-bulk-danger" onClick={handleBulkDelete} disabled={isDeletingBulk || Boolean(pendingDelete)}>
                     {isDeletingBulk ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }}/> : <Trash2 size={14}/>}
                     {t("delete")}
                   </button>
@@ -491,18 +478,16 @@ export default function SubscriberPage() {
            {canEditSubscribers && (
              <>
                <button
-                 className="btn btn-primary"
+                 className="btn btn-primary btn-primary-padded"
                  onClick={handleOpenNew}
                  title={t("add_subscriber")}
-                 style={{ padding: "0.55rem 1rem" }}
                >
                  <Plus size={16} /> {t("add_subscriber")}
                </button>
                <button
-                 className="btn btn-outline"
+                 className="btn btn-outline btn-primary-padded"
                  onClick={() => setIsBatchOpen(true)}
                  title={t("batch_create")}
-                 style={{ padding: "0.55rem 1rem" }}
                >
                  <Layers size={16} /> {t("batch_create")}
                </button>
@@ -546,14 +531,14 @@ export default function SubscriberPage() {
                }
              }}
              title={t("sync_tooltip")}
-             style={{ display: "flex", alignItems: "center", gap: "0.5rem", border: "1px solid var(--surface-border)", background: "var(--surface)", padding: "0.5rem 1rem", borderRadius: "20px", fontSize: "0.85rem", fontWeight: 600, color: "var(--text-secondary)", cursor: "pointer", transition: "all 0.2s" }}
+             className="btn-sync-telemetry"
            >
              <DatabaseZap size={14} color="var(--primary)" /> {t("sync_telemetry")}
            </button>
            <button
              onClick={() => setIsDataHubOpen(true)}
              title={t("datahub_tooltip")}
-             style={{ display: "flex", alignItems: "center", gap: "0.5rem", border: "1px solid var(--surface-border)", background: "var(--surface)", padding: "0.5rem 1rem", borderRadius: "20px", fontSize: "0.85rem", fontWeight: 600, color: "var(--text-secondary)", cursor: "pointer", transition: "all 0.2s" }}
+             className="btn-sync-telemetry"
            >
              <FileUp size={14} color="var(--primary)" /> {t("data_hub")}
            </button>
@@ -561,7 +546,7 @@ export default function SubscriberPage() {
       </div>
 
       {/* Main Data Table */}
-      <div className="dash-card shadow" style={{ borderRadius: "12px", overflow: "hidden", padding: 0 }}>
+      <div className="dash-card shadow table-card">
         {isLoading ? (
           <LoadingRows columns={canEditSubscribers ? 8 : 7} rows={5} />
         ) : totalSubscribers === 0 ? (
@@ -578,11 +563,11 @@ export default function SubscriberPage() {
             }
           />
         ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "0.9rem" }}>
-              <thead style={{ background: "var(--surface-hover)", borderBottom: "2px solid var(--surface-border)" }}>
+          <div className="table-wrapper">
+            <table className="subscribers-table">
+              <thead>
                 <tr>
-                  <th style={{ padding: "1rem" }}>
+                  <th>
                     <input
                       type="checkbox"
                       className="checkbox-custom"
@@ -617,11 +602,11 @@ export default function SubscriberPage() {
                    const uRatio = sub.traffic?.total ? (sub.traffic.used / sub.traffic.total) * 100 : 0;
                    const isSelected = selectedImsis.includes(sub.imsi);
                    return (
-                     <tr key={sub.imsi} style={{ borderBottom: "1px solid var(--surface-border)", background: isSelected ? "rgba(59, 130, 246, 0.1)" : (index % 2 === 0 ? "transparent" : "rgba(0,0,0,0.015)"), transition: "background 0.2s" }} onMouseEnter={(e) => { if(!isSelected) e.currentTarget.style.background = "var(--surface-hover)" }} onMouseLeave={(e) => { if(!isSelected) e.currentTarget.style.background = index % 2 === 0 ? "transparent" : "rgba(0,0,0,0.015)" }}>
-                       <td style={{ padding: "1rem" }}>
+                     <tr key={sub.imsi} className={isSelected ? "selected-row" : ""}>
+                       <td>
                          <input type="checkbox" className="checkbox-custom" checked={isSelected} onChange={() => setSelectedImsis(prev => prev.includes(sub.imsi) ? prev.filter(i => i !== sub.imsi) : [...prev, sub.imsi])} />
                        </td>
-                       <td style={{ padding: "1rem" }}>
+                       <td>
                          {(() => {
                            const isSuspended = sub.status === 'Suspended';
                            const isActive = sub.status === 'Active';
@@ -645,28 +630,15 @@ export default function SubscriberPage() {
                            }
 
                            return (
-                             <span
-                               className={isActive ? "pill-active-pulse" : ""}
-                               title={tooltip || undefined}
-                               style={{
-                                 background: isActive ? "rgba(16, 185, 129, 0.15)" : (isSuspended ? "rgba(239, 68, 68, 0.15)" : "rgba(245, 158, 11, 0.15)"),
-                                 color: isActive ? "#4ade80" : (isSuspended ? "#f87171" : "#fbbf24"),
-                                 padding: "0.25rem 0.5rem",
-                                 borderRadius: "20px",
-                                 fontSize: "0.75rem",
-                                 fontWeight: 700,
-                                 whiteSpace: "nowrap",
-                                 cursor: tooltip ? "help" : "default",
-                                 display: "inline-block"
-                               }}>
+                             <span className={`status-badge ${isActive ? "active pill-active-pulse" : isSuspended ? "suspended" : "partial"} ${tooltip ? "has-tooltip" : ""}`} title={tooltip || undefined}>
                                {isActive ? t("status_active") : isSuspended ? t("status_suspended") : isPartial ? t("status_partial") : sub.status}
                              </span>
                            );
                          })()}
                        </td>
-                       <td style={{ padding: "1rem" }}>
-                         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                           <span style={{ fontWeight: 600, fontFamily: "monospace", fontSize: "0.95rem" }}>{sub.imsi}</span>
+                       <td>
+                         <div className="imsi-text-container">
+                           <span className="imsi-text">{sub.imsi}</span>
                            <button
                              className={copiedImsi === sub.imsi ? "copy-btn copied" : "copy-btn"}
                              onClick={(event) => handleCopyImsi(sub.imsi, event)}
@@ -676,88 +648,69 @@ export default function SubscriberPage() {
                            </button>
                          </div>
                        </td>
-                       <td style={{ padding: "1rem" }}>
+                       <td>
                          {(() => {
                             const net = resolveNetwork(sub.imsi);
                             const tooltipText = net.network !== 'Unknown'
                               ? `${net.network} - ${net.country}${net.country_code ? ' (+' + net.country_code + ')' : ''}`
                               : t("unknown_network");
                             return (
-                              <span
-                                title={tooltipText}
-                                style={{
-                                  color: "var(--primary)",
-                                  padding: "0.2rem 0.6rem",
-                                  borderRadius: "4px",
-                                  fontSize: "0.85rem",
-                                  fontWeight: 800,
-                                  border: "1px solid rgba(78, 115, 233, 0.2)",
-                                  background: "rgba(78, 115, 233, 0.03)",
-                                  cursor: "default",
-                                  fontFamily: "monospace"
-                                }}>
-                                {net.plmn}
-                              </span>
+                              <span title={tooltipText} className="plmn-badge">{net.plmn}</span>
                             );
                          })()}
                        </td>
-                        <td style={{ padding: "1rem" }}>
+                        <td>
                            {sub.policy ? (
-                             <div style={{ display: "grid", gap: "0.25rem" }}>
-                               <span title={sub.policy} style={{ color: "var(--text-main)", fontWeight: 700, fontSize: "0.86rem" }}>
+                             <div className="policy-container">
+                               <span title={sub.policy} className="policy-text">
                                  {sub.policyName || sub.policy}
                                </span>
-                               <span style={{ display: "flex", alignItems: "center", gap: "0.4rem", color: "var(--text-muted)", fontSize: "0.74rem", fontFamily: "monospace" }}>
+                               <span className="policy-subtext">
                                  {sub.policy}
                                  {sub.policyStatus === "disabled" && (
-                                   <span style={{ color: "var(--warning)", fontFamily: "inherit", fontWeight: 800 }}>
+                                   <span className="policy-disabled">
                                      {t("users_disabled")}
                                    </span>
                                  )}
                                </span>
                              </div>
                            ) : (
-                             <span style={{ color: "#94a3b8", fontSize: "0.85rem", fontStyle: "italic" }}>{t("no_policy")}</span>
+                             <span className="no-policy">{t("no_policy")}</span>
                            )}
                        </td>
-                       <td style={{ padding: "1rem" }}>
-                         <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                       <td>
+                         <div className="traffic-container">
+                            <div className="traffic-stats">
                               <span>{formatBytes(sub.traffic?.used || 0)}</span>
                               <span>{formatBytes(sub.traffic?.total || 1)}</span>
                             </div>
-                            <div style={{ height: "6px", background: "var(--surface-border)", borderRadius: "3px", overflow: "hidden" }}>
-                              <div style={{ height: "100%", width: `${Math.min(uRatio, 100)}%`, background: uRatio > 90 ? "linear-gradient(90deg, #f59e0b 0%, #ef4444 100%)" : uRatio > 70 ? "linear-gradient(90deg, #10b981 0%, #f59e0b 100%)" : "linear-gradient(90deg, #3b82f6 0%, #10b981 100%)", transition: "width 0.5s ease" }} />
+                            <div className="traffic-bar-container">
+                              <div className={`traffic-bar ${uRatio > 90 ? "high" : uRatio > 70 ? "medium" : "low"}`} style={{ width: `${Math.min(uRatio, 100)}%` }} />
                             </div>
                           </div>
                         </td>
-                        <td style={{ padding: "1rem", color: "var(--text-secondary)", fontSize: "0.85rem" }}>
-                          <span title={formatFullDate(sub.lastActive)} style={{ cursor: "help", borderBottom: "1px dotted var(--surface-border)" }}>
+                        <td className="last-active-cell">
+                          <span title={formatFullDate(sub.lastActive)} className="last-active-text">
                             {timeAgo(sub.lastActive)}
                           </span>
                         </td>
                         {canEditSubscribers && (
-                          <td style={{ padding: "1rem", display: "flex", gap: "0.75rem", justifyContent: "center", alignItems: "center", position: "relative" }}>
-                             <button onClick={() => handleOpenEdit(sub.imsi)} title={t("action_edit")} style={{ background: "transparent", border: "none", color: "var(--primary)", cursor: "pointer", display: "flex" }}>
+                          <td className="actions-cell">
+                             <button className="action-btn action-btn-primary" onClick={() => handleOpenEdit(sub.imsi)} title={t("action_edit")}>
                                <PenLine size={18} />
                              </button>
-                             <button
-                               onClick={(e) => handleDelete(sub.imsi, e)}
-                               title={t("action_delete")}
-                               disabled={isDeletingSingle === sub.imsi || Boolean(pendingDelete)}
-                               style={{ background: "transparent", border: "none", color: "var(--danger)", cursor: pendingDelete ? "not-allowed" : "pointer", display: "flex", opacity: isDeletingSingle === sub.imsi ? 0.6 : 1 }}
-                             >
+                             <button className="action-btn action-btn-danger" onClick={(e) => handleDelete(sub.imsi, e)} title={t("action_delete")} disabled={isDeletingSingle === sub.imsi || Boolean(pendingDelete)}>
                                {isDeletingSingle === sub.imsi ? <span className="spinner" style={{ width: 18, height: 18, borderWidth: 2 }} /> : <Trash2 size={18} />}
                              </button>
-                             <div style={{ position: "static" }}>
-                               <button title={t("action_more")} onClick={(e) => { e.stopPropagation(); setActiveDropdown(activeDropdown === sub.imsi ? null : sub.imsi); }} style={{ background: "transparent", border: "none", color: "var(--text-muted)", cursor: "pointer", display: "flex", padding: "0.2rem" }}>
+                             <div className="dropdown-container">
+                               <button className="action-btn action-btn-muted" title={t("action_more")} onClick={(e) => { e.stopPropagation(); setActiveDropdown(activeDropdown === sub.imsi ? null : sub.imsi); }}>
                                  <MoreHorizontal size={18} />
                                </button>
                                {activeDropdown === sub.imsi && (
-                                 <div style={{ position: "absolute", right: "2rem", top: "70%", background: "var(--surface)", backdropFilter: "blur(12px)", boxShadow: "0 4px 12px rgba(0,0,0,0.3)", borderRadius: "6px", width: "180px", zIndex: 50, border: "1px solid var(--surface-border)", overflow: "hidden" }}>
-                                   <button style={{ width: "100%", padding: "0.6rem 1rem", textAlign: "left", background: "transparent", border: "none", borderBottom: "1px solid var(--surface-border)", fontSize: "0.85rem", cursor: "pointer", color: "var(--text-main)" }} onClick={(e) => {e.stopPropagation(); setActiveDropdown(null); setTraceImsi(sub.imsi);}}>{t("action_trace")}</button>
-                                   <button style={{ width: "100%", padding: "0.6rem 1rem", textAlign: "left", background: "transparent", border: "none", borderBottom: "1px solid var(--surface-border)", fontSize: "0.85rem", cursor: "pointer", color: "var(--text-main)" }} onClick={(e) => handleOpenTrafficAdjustment(sub, "recharge", e)}>{t("traffic_adjust")}</button>
-                                   <button style={{ width: "100%", padding: "0.6rem 1rem", textAlign: "left", background: "transparent", border: "none", fontSize: "0.85rem", cursor: "pointer", color: "var(--text-main)" }} onClick={(e) => handleOpenTrafficAdjustment(sub, "reset", e)}>{t("action_reset")}</button>
+                                 <div className="dropdown-menu">
+                                   <button className="dropdown-menu-item" onClick={(e) => {e.stopPropagation(); setActiveDropdown(null); setTraceImsi(sub.imsi);}}>{t("action_trace")}</button>
+                                   <button className="dropdown-menu-item" onClick={(e) => handleOpenTrafficAdjustment(sub, "recharge", e)}>{t("traffic_adjust")}</button>
+                                   <button className="dropdown-menu-item" onClick={(e) => handleOpenTrafficAdjustment(sub, "reset", e)}>{t("action_reset")}</button>
                                  </div>
                                )}
                              </div>
@@ -770,48 +723,20 @@ export default function SubscriberPage() {
             </table>
           </div>
         )}
-
-        {/* Pagination Controls */}
-        {!isLoading && totalSubscribers > 0 && (
-          <div className="table-pagination">
-             <div style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
-               {t("showing")} {((displayPage - 1) * pageSize) + 1} {t("to")} {Math.min(displayPage * pageSize, totalSubscribers)} {t("of")} {totalSubscribers} {t("entries")}
-             </div>
-             <div className="pagination-controls">
-               <select className="page-size-select" value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}>
-                 <option value={10}>10 {t("per_page")}</option>
-                 <option value={20}>20 {t("per_page")}</option>
-                 <option value={50}>50 {t("per_page")}</option>
-               </select>
-               <div className="page-buttons" aria-label="Subscriber pagination">
-                 <button className="page-button icon" onClick={() => setCurrentPage(1)} disabled={displayPage === 1} title="First page">
-                   <ChevronsLeft size={15} />
-                 </button>
-                 <button className="page-button icon" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={displayPage === 1} title={t("prev")}>
-                   <ChevronLeft size={15} />
-                 </button>
-                 {getPageNumbers().map((page) => (
-                   <button
-                     key={page}
-                     className={page === displayPage ? "page-button active" : "page-button"}
-                     onClick={() => setCurrentPage(page)}
-                     aria-current={page === displayPage ? "page" : undefined}
-                   >
-                     {page}
-                   </button>
-                 ))}
-                 <button className="page-button icon" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={displayPage === totalPages} title={t("next")}>
-                   <ChevronRight size={15} />
-                 </button>
-                 <button className="page-button icon" onClick={() => setCurrentPage(totalPages)} disabled={displayPage === totalPages} title="Last page">
-                   <ChevronsRight size={15} />
-                 </button>
-               </div>
-             </div>
-          </div>
+        {!isLoading && (
+          <SubscriberPagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            displayPage={displayPage}
+            pageSize={pageSize}
+            totalSubscribers={totalSubscribers}
+            getPageNumbers={getPageNumbers}
+            setPageSize={setPageSize}
+            setCurrentPage={setCurrentPage}
+          />
         )}
       </div>
-      </div>
+    </div>
 
       {/* FAB: Single Add */}
       <button

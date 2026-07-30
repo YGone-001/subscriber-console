@@ -1372,11 +1372,11 @@ body.global-emergency-flash {
  * =================================================================== */
 
 [data-theme="dark"] .modal-overlay {
-  background-color: rgba(0, 0, 0, 0.6);
+  background-color: rgba(0, 0, 0, 0.75);
 }
 
 [data-theme="dark"] .modal-content {
-  background: #1E293B;
+  background: var(--surface);
   border: 1px solid var(--surface-border);
   box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.5);
 }
@@ -1391,8 +1391,13 @@ body.global-emergency-flash {
 /* Dark mode select/option elements */
 [data-theme="dark"] select,
 [data-theme="dark"] select option {
-  background-color: #1E293B;
+  background-color: var(--surface);
   color: var(--text-main);
+}
+
+/* Add global transitions for dark mode switching */
+body, .modal-content, .dash-card, .app-sidebar, .app-header {
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
 }
 
 /* Dark mode hover for table rows using inline JS onMouseEnter */
@@ -1403,61 +1408,4 @@ body.global-emergency-flash {
   border-color: rgba(59, 130, 246, 0.4) !important;
 }
 
-/* ===================================================================
- * DARK MODE: Nuclear safety-net for subscriber/table containers
- * -------------------------------------------------------------------
- * Highest-specificity overrides to eliminate any remaining white
- * backgrounds from inline styles or dynamic JS mutations.
- * =================================================================== */
 
-/* Force all table elements to inherit dark backgrounds */
-[data-theme="dark"] table,
-[data-theme="dark"] table thead,
-[data-theme="dark"] table tbody,
-[data-theme="dark"] table tr,
-[data-theme="dark"] table th,
-[data-theme="dark"] table td {
-  background-color: transparent !important;
-  color: var(--text-main) !important;
-  border-color: var(--surface-border) !important;
-}
-
-/* Re-apply thead distinction after transparent reset */
-[data-theme="dark"] table thead {
-  background-color: rgba(255, 255, 255, 0.04) !important;
-}
-
-/* Dark mode table row hover */
-[data-theme="dark"] table tbody tr:hover {
-  background-color: var(--surface-hover) !important;
-}
-
-/* Force dash-card and shadow containers dark */
-[data-theme="dark"] .dash-card,
-[data-theme="dark"] .dash-card.shadow {
-  background: var(--surface) !important;
-  border-color: var(--surface-border) !important;
-}
-
-/* Dark mode form inputs, selects, textareas */
-[data-theme="dark"] input,
-[data-theme="dark"] textarea {
-  background-color: var(--surface) !important;
-  color: var(--text-main) !important;
-  border-color: var(--surface-border) !important;
-}
-
-[data-theme="dark"] input::placeholder,
-[data-theme="dark"] textarea::placeholder {
-  color: var(--text-muted) !important;
-  opacity: 0.7;
-}
-
-/* Dark mode button outlines */
-[data-theme="dark"] .btn-outline {
-  border-color: var(--surface-border);
-  color: var(--text-main);
-}
-[data-theme="dark"] .btn-outline:hover {
-  background: var(--surface-hover);
-}
