@@ -445,33 +445,6 @@ export default function LoginForm() {
         </div>
       </div>
 
-      <style
-        dangerouslySetInnerHTML={{
-          __html: `
-            #xcloud-login-form [hidden] {
-              display: none !important;
-            }
-            @keyframes float {
-              0% { transform: translate(0, 0) scale(1); }
-              50% { transform: translate(5%, 5%) scale(1.05); }
-              100% { transform: translate(-5%, -5%) scale(0.95); }
-            }
-            @keyframes slideUpFade {
-              0% { opacity: 0; transform: translateY(20px) scale(0.98); }
-              100% { opacity: 1; transform: translateY(0) scale(1); }
-            }
-            @keyframes spin {
-              100% { transform: rotate(360deg); }
-            }
-            @keyframes shake {
-              10%, 90% { transform: translate3d(-1px, 0, 0); }
-              20%, 80% { transform: translate3d(2px, 0, 0); }
-              30%, 50%, 70% { transform: translate3d(-3px, 0, 0); }
-              40%, 60% { transform: translate3d(3px, 0, 0); }
-            }
-          `,
-        }}
-      />
     </div>
   );
 }

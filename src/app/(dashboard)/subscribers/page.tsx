@@ -6,7 +6,7 @@ import SubscriberModal from "@/components/SubscriberModal";
 import BatchCreateModal from "@/components/BatchCreateModal";
 import BulkPolicyModal from "@/components/BulkPolicyModal";
 import DataHub from "@/components/DataHub";
-import { ConfirmActionPanel, EmptyState, LoadingRows, OperationNotice, type FeedbackTone } from "@/components/OperationFeedback";
+import { ConfirmActionPanel, EmptyState, LoadingRows, OperationNotice } from "@/components/OperationFeedback";
 import { useI18n } from "@/components/I18nProvider";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
@@ -16,74 +16,10 @@ import SubscriberTraceModal from "@/components/SubscriberTraceModal";
 import SubscriberSummaryPanel from "./components/SubscriberSummaryPanel";
 import SubscriberPagination from "./components/SubscriberPagination";
 import "./subscribers.css";
+import { SubscriberToolbar } from "./components/SubscriberToolbar";
+import { SubscriberTable } from "./components/SubscriberTable";
 
-interface PlmnRecord {
-  mcc: string;
-  mnc: string;
-  network?: string;
-  country?: string;
-  country_code?: string;
-}
-
-interface SubscriberRow {
-  imsi: string;
-  status: string;
-  policy?: string;
-  policyName?: string;
-  policyStatus?: string;
-  lastActive: string;
-  ard?: number;
-  traffic?: {
-    used: number;
-    total: number;
-    balance?: number;
-  };
-  [key: string]: unknown;
-}
-
-type TrafficAdjustmentMode = "recharge" | "set_available" | "set_total" | "reset";
-
-type TrafficAdjustmentTarget = {
-  imsi: string;
-  traffic: {
-    used: number;
-    total: number;
-    balance: number;
-  };
-  mode: TrafficAdjustmentMode;
-};
-
-type FeedbackState = {
-  tone: FeedbackTone;
-  title?: string;
-  message: string;
-};
-
-type PendingDelete = {
-  mode: "single" | "bulk";
-  imsis: string[];
-};
-
-type SubscriberStatusFilter = "all" | "active" | "restricted" | "lowTraffic";
-
-type SubscriberSummary = {
-  total: number;
-  active: number;
-  restricted: number;
-  lowTraffic: number;
-};
-
-interface ProfilesResponse {
-  profiles: Array<{ name: string; title?: string }>;
-}
-
-interface SubscribersResponse {
-  subscribers: SubscriberRow[];
-  total: number;
-  page: number;
-  limit: number;
-  summary?: SubscriberSummary;
-}
+import { PlmnRecord, SubscriberRow, TrafficAdjustmentMode, TrafficAdjustmentTarget, FeedbackTone, FeedbackState, PendingDelete, SubscriberStatusFilter, SubscriberSummary, ProfilesResponse, SubscribersResponse } from "./types";
 
 /**
  * Subscriber Management Page
@@ -442,287 +378,57 @@ export default function SubscriberPage() {
         />
       )}
 
-      {/* Search, Bulk Action & Data Sync Bar */}
-      <div className="page-action-bar">
-        <div className="action-bar-left">
-          <input
-            type="search"
-            className="form-input hover-glass search-input"
-            placeholder={t("search_imsi")}
-            value={searchQuery}
-            onChange={e => { setSearchQuery(e.target.value); setCurrentPage(1); setSelectedImsis([]); }}
-          />
-          {selectedImsis.length > 0 && (
-            <div className="bulk-actions-container animate-fade-in">
-              <span className="bulk-actions-count">{selectedImsis.length} {t("selected")}</span>
-              <div className="bulk-actions-buttons">
-                {canEditSubscribers && (
-                  <button className="btn btn-bulk-outline" onClick={() => setIsPolicyModalOpen(true)}>
-                    <Settings2 size={14}/> {t("change_policy")}
-                  </button>
-                )}
-                <button className="btn btn-bulk-outline" onClick={() => setIsDataHubOpen(true)}>
-                  <Download size={14}/> {t("export_csv")}
-                </button>
-                {canEditSubscribers && (
-                  <button className="btn-bulk-danger" onClick={handleBulkDelete} disabled={isDeletingBulk || Boolean(pendingDelete)}>
-                    {isDeletingBulk ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }}/> : <Trash2 size={14}/>}
-                    {t("delete")}
-                  </button>
-                )}
-              </div>
-            </div>
-            )}
-        </div>
-        <div className="page-action-buttons">
-           {canEditSubscribers && (
-             <>
-               <button
-                 className="btn btn-primary btn-primary-padded"
-                 onClick={handleOpenNew}
-                 title={t("add_subscriber")}
-               >
-                 <Plus size={16} /> {t("add_subscriber")}
-               </button>
-               <button
-                 className="btn btn-outline btn-primary-padded"
-                 onClick={() => setIsBatchOpen(true)}
-                 title={t("batch_create")}
-               >
-                 <Layers size={16} /> {t("batch_create")}
-               </button>
-             </>
-           )}
-           {/* Mini Sync Button replaces the giant banner */}
-           <button
-             onClick={async (e) => {
-               const btn = e.currentTarget;
-               const originalHTML = btn.innerHTML;
-               btn.disabled = true;
-               btn.classList.add('radar-animating');
-               btn.innerHTML = `<span style="opacity: 0.5;">Scanning...</span>`;
-               try {
-                 const res = await fetch('/api/analytics/init', { method: 'POST' });
-                 if (!res.ok) throw new Error(t("sync_error"));
-                 await mutateSubscribers();
-                 btn.innerHTML = `<span style="color:var(--success)">OK</span>`;
-                 setFeedback({
-                   tone: "success",
-                   title: t("success"),
-                   message: `${t("sync_telemetry")} ${t("sync_ok")}`,
-                 });
-                 setTimeout(() => {
-                   btn.innerHTML = originalHTML;
-                   btn.classList.remove('radar-animating');
-                   btn.disabled = false;
-                 }, 2000);
-               } catch (error) {
-                 btn.innerHTML = `Error`;
-                 setFeedback({
-                   tone: "danger",
-                   title: t("error"),
-                   message: error instanceof Error ? error.message : t("sync_error"),
-                 });
-                 setTimeout(() => {
-                   btn.innerHTML = originalHTML;
-                   btn.classList.remove('radar-animating');
-                   btn.disabled = false;
-                 }, 2000);
-               }
-             }}
-             title={t("sync_tooltip")}
-             className="btn-sync-telemetry"
-           >
-             <DatabaseZap size={14} color="var(--primary)" /> {t("sync_telemetry")}
-           </button>
-           <button
-             onClick={() => setIsDataHubOpen(true)}
-             title={t("datahub_tooltip")}
-             className="btn-sync-telemetry"
-           >
-             <FileUp size={14} color="var(--primary)" /> {t("data_hub")}
-           </button>
-        </div>
-      </div>
+      <SubscriberToolbar
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        setCurrentPage={setCurrentPage}
+        setSelectedImsis={setSelectedImsis}
+        selectedImsis={selectedImsis}
+        canEditSubscribers={canEditSubscribers}
+        setIsPolicyModalOpen={setIsPolicyModalOpen}
+        setIsDataHubOpen={setIsDataHubOpen}
+        handleBulkDelete={handleBulkDelete}
+        isDeletingBulk={isDeletingBulk}
+        pendingDelete={pendingDelete}
+        handleOpenNew={handleOpenNew}
+        setIsBatchOpen={setIsBatchOpen}
+        mutateSubscribers={mutateSubscribers}
+        setFeedback={setFeedback}
+      />
 
-      {/* Main Data Table */}
       <div className="dash-card shadow table-card">
-        {isLoading ? (
-          <LoadingRows columns={canEditSubscribers ? 8 : 7} rows={5} />
-        ) : totalSubscribers === 0 ? (
-          <EmptyState
-            icon={<Users size={48} />}
-            title={searchQuery || statusFilter !== "all" ? t("no_subscribers_search") : t("no_subscribers_empty")}
-            description={searchQuery || statusFilter !== "all" ? t("sub_empty_search_desc") : t("sub_empty_create_desc")}
-            action={
-              canEditSubscribers && !searchQuery && statusFilter === "all" ? (
-                <button type="button" className="btn btn-primary" onClick={handleOpenNew}>
-                  <Plus size={16} /> {t("add_subscriber")}
-                </button>
-              ) : undefined
-            }
-          />
-        ) : (
-          <div className="table-wrapper">
-            <table className="subscribers-table">
-              <thead>
-                <tr>
-                  <th>
-                    <input
-                      type="checkbox"
-                      className="checkbox-custom"
-                      checked={isAllPageSelected}
-                      ref={input => { if (input) input.indeterminate = selectedOnPageCount > 0 && selectedOnPageCount < pageImsis.length }}
-                      onChange={toggleSelectAll}
-                    />
-                  </th>
-                  <th className={sortField === "status" ? "sortable-th active" : "sortable-th"} onClick={() => handleSort("status")}>
-                    <span>{t("col_status")}</span> {renderSortIcon("status")}
-                  </th>
-                  <th className={sortField === "imsi" ? "sortable-th active" : "sortable-th"} onClick={() => handleSort("imsi")}>
-                    <span>{t("col_imsi")}</span> {renderSortIcon("imsi")}
-                  </th>
-                  <th className={sortField === "plmn" ? "sortable-th active" : "sortable-th"} onClick={() => handleSort("plmn")}>
-                    <span>{t("col_plmn")}</span> {renderSortIcon("plmn")}
-                  </th>
-                  <th className={sortField === "policy" ? "sortable-th active" : "sortable-th"} onClick={() => handleSort("policy")}>
-                    <span>{t("col_policy")}</span> {renderSortIcon("policy")}
-                  </th>
-                  <th className={sortField === "usage" ? "sortable-th active" : "sortable-th"} style={{ minWidth: "150px" }} onClick={() => handleSort("usage")}>
-                    <span>{t("col_traffic")}</span> {renderSortIcon("usage")}
-                  </th>
-                  <th className={sortField === "lastActive" ? "sortable-th active" : "sortable-th"} onClick={() => handleSort("lastActive")}>
-                    <span>{t("col_last_active")}</span> {renderSortIcon("lastActive")}
-                  </th>
-                  {canEditSubscribers && <th style={{ padding: "1rem", color: "var(--text-secondary)", fontWeight: 600, textAlign: "center" }}>{t("col_actions")}</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedSubscribers.map((sub, index) => {
-                   const uRatio = sub.traffic?.total ? (sub.traffic.used / sub.traffic.total) * 100 : 0;
-                   const isSelected = selectedImsis.includes(sub.imsi);
-                   return (
-                     <tr key={sub.imsi} className={isSelected ? "selected-row" : ""}>
-                       <td>
-                         <input type="checkbox" className="checkbox-custom" checked={isSelected} onChange={() => setSelectedImsis(prev => prev.includes(sub.imsi) ? prev.filter(i => i !== sub.imsi) : [...prev, sub.imsi])} />
-                       </td>
-                       <td>
-                         {(() => {
-                           const isSuspended = sub.status === 'Suspended';
-                           const isActive = sub.status === 'Active';
-                           const isPartial = sub.status === 'Partial Restricted';
-
-                           const MAPPING = [
-                             { bit: 128, label: "5G" },
-                             { bit: 64, label: "NB" },
-                             { bit: 32, label: "Non-3GPP" },
-                             { bit: 16, label: "4G" },
-                             { bit: 8, label: "HSPA" },
-                             { bit: 4, label: "GAN" },
-                             { bit: 2, label: "2G" },
-                             { bit: 1, label: "3G" }
-                           ];
-
-                           let tooltip = "";
-                           if (isPartial && sub.ard != null) {
-                             const ard = sub.ard;
-                             tooltip = MAPPING.filter(item => (ard & item.bit)).map(item => item.label).join(', ');
-                           }
-
-                           return (
-                             <span className={`status-badge ${isActive ? "active pill-active-pulse" : isSuspended ? "suspended" : "partial"} ${tooltip ? "has-tooltip" : ""}`} title={tooltip || undefined}>
-                               {isActive ? t("status_active") : isSuspended ? t("status_suspended") : isPartial ? t("status_partial") : sub.status}
-                             </span>
-                           );
-                         })()}
-                       </td>
-                       <td>
-                         <div className="imsi-text-container">
-                           <span className="imsi-text">{sub.imsi}</span>
-                           <button
-                             className={copiedImsi === sub.imsi ? "copy-btn copied" : "copy-btn"}
-                             onClick={(event) => handleCopyImsi(sub.imsi, event)}
-                             title={copiedImsi === sub.imsi ? "Copied" : "Copy IMSI"}
-                           >
-                             {copiedImsi === sub.imsi ? <CheckCircle2 size={14} /> : <Copy size={14} />}
-                           </button>
-                         </div>
-                       </td>
-                       <td>
-                         {(() => {
-                            const net = resolveNetwork(sub.imsi);
-                            const tooltipText = net.network !== 'Unknown'
-                              ? `${net.network} - ${net.country}${net.country_code ? ' (+' + net.country_code + ')' : ''}`
-                              : t("unknown_network");
-                            return (
-                              <span title={tooltipText} className="plmn-badge">{net.plmn}</span>
-                            );
-                         })()}
-                       </td>
-                        <td>
-                           {sub.policy ? (
-                             <div className="policy-container">
-                               <span title={sub.policy} className="policy-text">
-                                 {sub.policyName || sub.policy}
-                               </span>
-                               <span className="policy-subtext">
-                                 {sub.policy}
-                                 {sub.policyStatus === "disabled" && (
-                                   <span className="policy-disabled">
-                                     {t("users_disabled")}
-                                   </span>
-                                 )}
-                               </span>
-                             </div>
-                           ) : (
-                             <span className="no-policy">{t("no_policy")}</span>
-                           )}
-                       </td>
-                       <td>
-                         <div className="traffic-container">
-                            <div className="traffic-stats">
-                              <span>{formatBytes(sub.traffic?.used || 0)}</span>
-                              <span>{formatBytes(sub.traffic?.total || 1)}</span>
-                            </div>
-                            <div className="traffic-bar-container">
-                              <div className={`traffic-bar ${uRatio > 90 ? "high" : uRatio > 70 ? "medium" : "low"}`} style={{ width: `${Math.min(uRatio, 100)}%` }} />
-                            </div>
-                          </div>
-                        </td>
-                        <td className="last-active-cell">
-                          <span title={formatFullDate(sub.lastActive)} className="last-active-text">
-                            {timeAgo(sub.lastActive)}
-                          </span>
-                        </td>
-                        {canEditSubscribers && (
-                          <td className="actions-cell">
-                             <button className="action-btn action-btn-primary" onClick={() => handleOpenEdit(sub.imsi)} title={t("action_edit")}>
-                               <PenLine size={18} />
-                             </button>
-                             <button className="action-btn action-btn-danger" onClick={(e) => handleDelete(sub.imsi, e)} title={t("action_delete")} disabled={isDeletingSingle === sub.imsi || Boolean(pendingDelete)}>
-                               {isDeletingSingle === sub.imsi ? <span className="spinner" style={{ width: 18, height: 18, borderWidth: 2 }} /> : <Trash2 size={18} />}
-                             </button>
-                             <div className="dropdown-container">
-                               <button className="action-btn action-btn-muted" title={t("action_more")} onClick={(e) => { e.stopPropagation(); setActiveDropdown(activeDropdown === sub.imsi ? null : sub.imsi); }}>
-                                 <MoreHorizontal size={18} />
-                               </button>
-                               {activeDropdown === sub.imsi && (
-                                 <div className="dropdown-menu">
-                                   <button className="dropdown-menu-item" onClick={(e) => {e.stopPropagation(); setActiveDropdown(null); setTraceImsi(sub.imsi);}}>{t("action_trace")}</button>
-                                   <button className="dropdown-menu-item" onClick={(e) => handleOpenTrafficAdjustment(sub, "recharge", e)}>{t("traffic_adjust")}</button>
-                                   <button className="dropdown-menu-item" onClick={(e) => handleOpenTrafficAdjustment(sub, "reset", e)}>{t("action_reset")}</button>
-                                 </div>
-                               )}
-                             </div>
-                          </td>
-                        )}
-                     </tr>
-                   );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <SubscriberTable
+          isLoading={isLoading}
+          totalSubscribers={totalSubscribers}
+          searchQuery={searchQuery}
+          statusFilter={statusFilter}
+          canEditSubscribers={canEditSubscribers}
+          handleOpenNew={handleOpenNew}
+          isAllPageSelected={isAllPageSelected}
+          selectedOnPageCount={selectedOnPageCount}
+          pageImsis={pageImsis}
+          toggleSelectAll={toggleSelectAll}
+          sortField={sortField}
+          handleSort={handleSort}
+          renderSortIcon={renderSortIcon}
+          paginatedSubscribers={paginatedSubscribers}
+          selectedImsis={selectedImsis}
+          setSelectedImsis={setSelectedImsis}
+          copiedImsi={copiedImsi}
+          handleCopyImsi={handleCopyImsi}
+          resolveNetwork={resolveNetwork}
+          formatBytes={formatBytes}
+          formatFullDate={formatFullDate}
+          timeAgo={timeAgo}
+          handleOpenEdit={handleOpenEdit}
+          handleDelete={handleDelete}
+          isDeletingSingle={isDeletingSingle}
+          pendingDelete={pendingDelete}
+          activeDropdown={activeDropdown}
+          setActiveDropdown={setActiveDropdown}
+          setTraceImsi={setTraceImsi}
+          handleOpenTrafficAdjustment={handleOpenTrafficAdjustment}
+        />
         {!isLoading && (
           <SubscriberPagination
             currentPage={currentPage}
