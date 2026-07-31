@@ -418,3 +418,13 @@
 .rule-actions-flex { display: flex; gap: 0.5rem; justify-content: flex-end; }
 .btn-danger-outline { color: var(--danger); border-color: var(--danger); }
 .col-span-all { grid-column: 1 / -1; }
+
+
+@media (max-width: 640px) {
+  .rating-page { padding: 1rem; }
+  .rating-page-header { flex-direction: column; align-items: stretch; gap: 0.5rem; }
+  .rating-management-grid { grid-template-columns: 1fr !important; }
+  .rating-table-scroll { overflow-x: auto; }
+  .rating-table { min-width: 100%; width: max-content; }
+}
+

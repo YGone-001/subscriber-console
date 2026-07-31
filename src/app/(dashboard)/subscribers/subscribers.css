@@ -389,3 +389,14 @@
   font-size: 0.85rem;
   color: var(--text-muted);
 }
+
+
+@media (max-width: 640px) {
+  .subscribers-page { padding: 1rem; }
+  .subscribers-header { flex-direction: column; align-items: stretch; gap: 0.5rem; }
+  .subscribers-toolbar { flex-direction: column; align-items: stretch; }
+  .subscribers-table { min-width: 100%; width: max-content; }
+  .subscribers-table-container { overflow-x: auto; }
+  .subscribers-summary-panel { grid-template-columns: 1fr 1fr; }
+}
+
