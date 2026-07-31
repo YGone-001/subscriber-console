@@ -182,11 +182,14 @@ export function SubscriberTable(props: any) {
                            <MoreHorizontal size={18} />
                          </button>
                          {activeDropdown === sub.imsi && (
-                           <div className="dropdown-menu">
-                             <button className="dropdown-menu-item" onClick={(e) => {e.stopPropagation(); setActiveDropdown(null); setTraceImsi(sub.imsi);}}>{t("action_trace")}</button>
-                             <button className="dropdown-menu-item" onClick={(e) => handleOpenTrafficAdjustment(sub, "recharge", e)}>{t("traffic_adjust")}</button>
-                             <button className="dropdown-menu-item" onClick={(e) => handleOpenTrafficAdjustment(sub, "reset", e)}>{t("action_reset")}</button>
-                           </div>
+                           <>
+                             <div className="dropdown-backdrop" onClick={(e) => { e.stopPropagation(); setActiveDropdown(null); }} />
+                             <div className="dropdown-menu">
+                               <button className="dropdown-menu-item" onClick={(e) => {e.stopPropagation(); setActiveDropdown(null); setTraceImsi(sub.imsi);}}>{t("action_trace")}</button>
+                               <button className="dropdown-menu-item" onClick={(e) => handleOpenTrafficAdjustment(sub, "recharge", e)}>{t("traffic_adjust")}</button>
+                               <button className="dropdown-menu-item" onClick={(e) => handleOpenTrafficAdjustment(sub, "reset", e)}>{t("action_reset")}</button>
+                             </div>
+                           </>
                          )}
                        </div>
                     </td>

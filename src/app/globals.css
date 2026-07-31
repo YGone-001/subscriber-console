@@ -71,23 +71,23 @@
 /* Deep override for AntD specific components */
 [data-theme="dark"] .ant-table-thead > tr > th,
 [data-theme="dark"] .ant-table-cell {
-  background: transparent !important;
-  color: var(--text-main) !important;
-  border-bottom: 1px solid var(--surface-border) !important;
+  background: transparent;
+  color: var(--text-main);
+  border-bottom: 1px solid var(--surface-border);
 }
 
 [data-theme="dark"] .ant-table-row:hover > .ant-table-cell {
-  background: var(--surface-hover) !important;
+  background: var(--surface-hover);
 }
 
 /* Audit Logs Specific: Inspect Diff Button & Tags */
 [data-theme="dark"] .inspect-diff-btn {
-  background: rgba(59, 130, 246, 0.1) !important;
-  border-color: rgba(59, 130, 246, 0.3) !important;
-  color: #60a5fa !important;
+  background: rgba(59, 130, 246, 0.1);
+  border-color: rgba(59, 130, 246, 0.3);
+  color: #60a5fa;
 }
 [data-theme="dark"] .inspect-diff-btn:hover {
-  background: rgba(59, 130, 246, 0.2) !important;
+  background: rgba(59, 130, 246, 0.2);
 }
 
 * {
@@ -1403,9 +1403,9 @@ body, .modal-content, .dash-card, .app-sidebar, .app-header {
 /* Dark mode hover for table rows using inline JS onMouseEnter */
 [data-theme="dark"] .hover-glass:focus,
 [data-theme="dark"] .hover-glass:hover {
-  background: rgba(59, 130, 246, 0.1) !important;
+  background: rgba(59, 130, 246, 0.1);
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
-  border-color: rgba(59, 130, 246, 0.4) !important;
+  border-color: rgba(59, 130, 246, 0.4);
 }
 
 
