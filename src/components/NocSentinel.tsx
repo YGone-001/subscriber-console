@@ -34,6 +34,14 @@ type AlertWorkflowStatus = "triage" | "acknowledged" | "assigned" | "recovering"
 
 const ASSIGNEE_OPTIONS = ["NOC L1", "Packet Core L2", "Billing/OCS", "Security", "Platform SRE"];
 
+const deptKeyMap: Record<string, string> = {
+  "NOC L1": "dept_noc_l1",
+  "Packet Core L2": "dept_core_l2",
+  "Billing/OCS": "dept_bss_ocs",
+  "Security": "dept_security",
+  "Platform SRE": "dept_sre",
+};
+
 const WORKFLOW_CLASS: Record<AlertWorkflowStatus, string> = {
   triage: "triage",
   acknowledged: "acknowledged",
@@ -164,7 +172,7 @@ export default function NocSentinel() {
   };
 
   const statusClass = hasCritical ? "critical" : hasWarning ? "warning" : needsActivation ? "muted" : "healthy";
-  const statusLabel = hasCritical ? "Critical" : hasWarning ? "Warning" : needsActivation ? "NOC setup" : "NOC online";
+  const statusLabel = hasCritical ? t("noc_status_critical") : hasWarning ? t("noc_status_warning") : needsActivation ? t("noc_status_setup") : t("noc_status_online");
 
   return (
     <div className="noc-sentinel">
@@ -188,7 +196,7 @@ export default function NocSentinel() {
         className={`noc-header-button ${statusClass}`}
         onClick={() => setExpanded((open) => !open)}
         aria-expanded={expanded}
-        title="NOC Sentinel Alerts"
+        title={t("noc_alerts_title")}
       >
         <span className="noc-button-icon">
           {hasCritical || hasWarning ? <AlertTriangle size={18} /> : <ShieldCheck size={18} />}
@@ -285,7 +293,7 @@ export default function NocSentinel() {
                           >
                             {ASSIGNEE_OPTIONS.map((item) => (
                               <option value={item} key={item}>
-                                {item}
+                                {deptKeyMap[item] ? t(deptKeyMap[item]) : item}
                               </option>
                             ))}
                           </select>

@@ -136,7 +136,7 @@ export default function AnalyticsCockpit() {
       scope: t("dash_change_alert_scope", { count: activeAlertCount }),
       phase: activeAlertCount > 0 ? t("dash_change_phase_review") : t("dash_change_phase_ready"),
       canary: activeAlertCount > 0 ? 0 : 100,
-      owner: "NOC",
+      owner: t("dept_noc"),
       href: "/system-health",
       rollbackHref: "/audit-logs",
     },
@@ -147,7 +147,7 @@ export default function AnalyticsCockpit() {
       scope: t("dash_change_rating_scope", { count: ratingGroupCount }),
       phase: ratingGroupCount === 0 ? t("dash_change_phase_draft") : t("dash_change_phase_canary"),
       canary: ratingGroupCount === 0 ? 0 : 25,
-      owner: "BSS/OCS",
+      owner: t("dept_bss_ocs"),
       href: "/rating",
       rollbackHref: "/profile",
     },
@@ -158,7 +158,7 @@ export default function AnalyticsCockpit() {
       scope: t("dash_change_policy_scope", { imsi: topImsi, hours: theoreticalLifeHr > 0 ? theoreticalLifeHr.toFixed(1) : "--" }),
       phase: exhaustionTone === "normal" ? t("dash_change_phase_ready") : t("dash_change_phase_canary"),
       canary: exhaustionTone === "danger" ? 5 : exhaustionTone === "warning" ? 10 : 50,
-      owner: "Provisioning",
+      owner: t("dept_provisioning"),
       href: "/subscribers",
       rollbackHref: "/audit-logs",
     },
@@ -177,7 +177,7 @@ export default function AnalyticsCockpit() {
               <span>GB</span>
             </>
           }
-          detail={burnRateGbHr > 0 ? `${burnRateGbHr.toFixed(2)} GB/hr 24h trend` : "No active burn trend"}
+          detail={burnRateGbHr > 0 ? t("dash_kpi_detail_burn_trend", { rate: burnRateGbHr.toFixed(2) }) : t("dash_kpi_detail_burn_none")}
           sparkline={trafficSparkline}
           ringValue={topConsumerShare}
         />
@@ -187,7 +187,7 @@ export default function AnalyticsCockpit() {
           icon={<Activity size={20} />}
           label={t("dash_kpi_active_subs")}
           value={<CountUpNumber value={subscriberCount} />}
-          detail={subscriberSparkline.length > 1 ? "Subscriber trend online" : "Waiting for subscriber history"}
+          detail={subscriberSparkline.length > 1 ? t("dash_kpi_detail_sub_trend") : t("dash_kpi_detail_sub_wait")}
           sparkline={subscriberSparkline}
           ringValue={subscriberCount > 0 ? 100 : 0}
         />
@@ -197,7 +197,7 @@ export default function AnalyticsCockpit() {
           icon={<Globe size={20} />}
           label={t("dash_kpi_plmn_active")}
           value={<CountUpNumber value={plmnCount} />}
-          detail={ratingGroupCount > 0 ? `${ratingGroupCount} rating groups mapped` : "No rating spread yet"}
+          detail={ratingGroupCount > 0 ? t("dash_kpi_detail_rating_mapped", { count: ratingGroupCount }) : t("dash_kpi_detail_rating_none")}
           sparkline={plmnSparkline}
           ringValue={plmnCoverage}
           tone="warning"
@@ -217,7 +217,7 @@ export default function AnalyticsCockpit() {
               <>--</>
             )
           }
-          detail={theoreticalLifeHr > 0 ? "Based on observed 24h burn" : "Stable until trend data accumulates"}
+          detail={theoreticalLifeHr > 0 ? t("dash_kpi_detail_exhaust_based") : t("dash_kpi_detail_exhaust_stable")}
           sparkline={ratingSparkline.length ? ratingSparkline : trafficSparkline}
           ringValue={ratingCoverage}
           tone={exhaustionTone}

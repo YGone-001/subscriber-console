@@ -1345,5 +1345,32 @@ export const zh: Record<string, string> = {
     login_button: "\u767b\u5f55",
     login_loading: "...",
     login_failed: "\u767b\u5f55\u5931\u8d25",
-    login_network_error: "\u7f51\u7edc\u9519\u8bef"
+    login_network_error: "\u7f51\u7edc\u9519\u8bef",
+
+    // -- Option B: Analytics & Dashboard i18n --
+    dash_kpi_detail_burn_trend: "{rate} GB/小时 24小时趋势",
+    dash_kpi_detail_burn_none: "暂无活跃消耗趋势",
+    dash_kpi_detail_sub_trend: "在线用户趋势",
+    dash_kpi_detail_sub_wait: "等待用户历史数据",
+    dash_kpi_detail_rating_mapped: "已映射 {count} 个资费组",
+    dash_kpi_detail_rating_none: "暂无资费分布",
+    dash_kpi_detail_exhaust_based: "基于观察到的 24 小时消耗",
+    dash_kpi_detail_exhaust_stable: "目前稳定，等待趋势数据积累",
+
+    dept_noc: "网络运维中心",
+    dept_bss_ocs: "计费系统",
+    dept_provisioning: "开通系统",
+    dept_noc_l1: "一线运维",
+    dept_core_l2: "核心网二线",
+    dept_security: "安全团队",
+    dept_sre: "平台 SRE",
+
+    noc_status_critical: "紧急",
+    noc_status_warning: "警告",
+    noc_status_setup: "NOC 配置中",
+    noc_status_online: "NOC 正常运行",
+    noc_alerts_title: "NOC Sentinel 监控告警",
+
+    dash_unit_plmn: "PLMN",
 };
+

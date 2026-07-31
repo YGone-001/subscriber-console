@@ -1347,4 +1347,30 @@ export const en: Record<string, string> = {
     login_loading: "...",
     login_failed: "Login failed",
     login_network_error: "Network error",
+
+    // -- Option B: Analytics & Dashboard i18n --
+    dash_kpi_detail_burn_trend: "{rate} GB/hr 24h trend",
+    dash_kpi_detail_burn_none: "No active burn trend",
+    dash_kpi_detail_sub_trend: "Subscriber trend online",
+    dash_kpi_detail_sub_wait: "Waiting for subscriber history",
+    dash_kpi_detail_rating_mapped: "{count} rating groups mapped",
+    dash_kpi_detail_rating_none: "No rating spread yet",
+    dash_kpi_detail_exhaust_based: "Based on observed 24h burn",
+    dash_kpi_detail_exhaust_stable: "Stable until trend data accumulates",
+
+    dept_noc: "NOC",
+    dept_bss_ocs: "BSS/OCS",
+    dept_provisioning: "Provisioning",
+    dept_noc_l1: "NOC L1",
+    dept_core_l2: "Packet Core L2",
+    dept_security: "Security",
+    dept_sre: "Platform SRE",
+
+    noc_status_critical: "Critical",
+    noc_status_warning: "Warning",
+    noc_status_setup: "NOC setup",
+    noc_status_online: "NOC online",
+    noc_alerts_title: "NOC Sentinel Alerts",
+
+    dash_unit_plmn: "PLMN",
   };
