@@ -2,6 +2,7 @@ import React from "react";
 import { useI18n } from "../I18nProvider";
 import { X } from "lucide-react";
 import { pccQosPreset } from "@/lib/imsQosPresets";
+import "./profile.css";
 
 const AMBR_UNITS = [
   { label: 'bps', val: 0 }, { label: 'Kbps', val: 1 }, { label: 'Mbps', val: 2 }, { label: 'Gbps', val: 3 }, { label: 'Tbps', val: 4 }
@@ -57,28 +58,28 @@ export default function ProfilePccRuleEditor({ rule, ruleIndex, onChange, onDele
 
   return (
     <div className="pcc-rule-box">
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
-        <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--text-secondary)", textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+      <div className="pcc-rule-header">
+        <span className="pcc-rule-idx-title">
           {t("slice_rule_idx", { idx: ruleIndex + 1 })}
         </span>
-        <button className="btn-icon text-danger" onClick={onDelete} style={{ padding: "2px" }} title={t("pcc_delete_rule")}>
+        <button className="btn-icon text-danger pcc-rule-delete-btn" onClick={onDelete} title={t("pcc_delete_rule")}>
           <X size={16}/>
         </button>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "1rem" }}>
+      <div className="pcc-rule-form-grid">
         <div>
-          <label className="form-label" style={{ fontSize: "0.8rem" }}>{t("pcc_qos_idx")}</label>
+          <label className="form-label pcc-rule-label">{t("pcc_qos_idx")}</label>
           <input type="number" className="form-input" value={rule.qos?._5qi ?? ""} onFocus={(e) => e.target.select()} onChange={(e) => e.target.value === "" ? updateField(["qos", "_5qi"], undefined) : handleQciChange(Number(e.target.value))} />
         </div>
         <div>
-          <label className="form-label" style={{ fontSize: "0.8rem" }}>{t("pcc_arp")}</label>
+          <label className="form-label pcc-rule-label">{t("pcc_arp")}</label>
           <input type="number" className="form-input" value={rule.qos?.arp?.priorityLevel ?? ""} onFocus={(e) => e.target.select()} onChange={(e) => updateField(["qos", "arp", "priorityLevel"], e.target.value === "" ? undefined : Number(e.target.value))} />
         </div>
         <div/>
 
         <div>
-          <label className="form-label" style={{ fontSize: "0.8rem" }}>{t("pcc_mbr_dl")}</label>
+          <label className="form-label pcc-rule-label">{t("pcc_mbr_dl")}</label>
           <div className="input-composite">
             <input type="number" value={rule.qos?.mbr?.downlink?.value ?? ""} onFocus={(e) => e.target.select()} onChange={(e) => updateField(["qos", "mbr", "downlink", "value"], e.target.value === "" ? undefined : Number(e.target.value))} />
             <select value={rule.qos?.mbr?.downlink?.unit || 1} onChange={(e) => updateField(["qos", "mbr", "downlink", "unit"], Number(e.target.value))}>
@@ -87,7 +88,7 @@ export default function ProfilePccRuleEditor({ rule, ruleIndex, onChange, onDele
           </div>
         </div>
         <div>
-          <label className="form-label" style={{ fontSize: "0.8rem" }}>{t("pcc_mbr_ul")}</label>
+          <label className="form-label pcc-rule-label">{t("pcc_mbr_ul")}</label>
           <div className="input-composite">
             <input type="number" value={rule.qos?.mbr?.uplink?.value ?? ""} onFocus={(e) => e.target.select()} onChange={(e) => updateField(["qos", "mbr", "uplink", "value"], e.target.value === "" ? undefined : Number(e.target.value))} />
             <select value={rule.qos?.mbr?.uplink?.unit || 1} onChange={(e) => updateField(["qos", "mbr", "uplink", "unit"], Number(e.target.value))}>
@@ -98,7 +99,7 @@ export default function ProfilePccRuleEditor({ rule, ruleIndex, onChange, onDele
         <div/>
 
         <div>
-          <label className="form-label" style={{ fontSize: "0.8rem" }}>{t("pcc_gbr_dl")}</label>
+          <label className="form-label pcc-rule-label">{t("pcc_gbr_dl")}</label>
           <div className="input-composite">
             <input type="number" value={rule.qos?.gbr?.downlink?.value ?? ""} onFocus={(e) => e.target.select()} onChange={(e) => updateField(["qos", "gbr", "downlink", "value"], e.target.value === "" ? undefined : Number(e.target.value))} />
             <select value={rule.qos?.gbr?.downlink?.unit || 1} onChange={(e) => updateField(["qos", "gbr", "downlink", "unit"], Number(e.target.value))}>
@@ -107,7 +108,7 @@ export default function ProfilePccRuleEditor({ rule, ruleIndex, onChange, onDele
           </div>
         </div>
         <div>
-          <label className="form-label" style={{ fontSize: "0.8rem" }}>{t("pcc_gbr_ul")}</label>
+          <label className="form-label pcc-rule-label">{t("pcc_gbr_ul")}</label>
           <div className="input-composite">
             <input type="number" value={rule.qos?.gbr?.uplink?.value ?? ""} onFocus={(e) => e.target.select()} onChange={(e) => updateField(["qos", "gbr", "uplink", "value"], e.target.value === "" ? undefined : Number(e.target.value))} />
             <select value={rule.qos?.gbr?.uplink?.unit || 1} onChange={(e) => updateField(["qos", "gbr", "uplink", "unit"], Number(e.target.value))}>

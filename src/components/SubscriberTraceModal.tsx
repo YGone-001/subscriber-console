@@ -3,6 +3,7 @@
 import { Activity, AlertTriangle, Clock3, DatabaseZap, History, RefreshCw, Route, ShieldCheck, Signal, X } from "lucide-react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
+import "./subscriber-trace-modal.css";
 
 type SubscriberTraceModalProps = {
   imsi: string;
@@ -194,49 +195,49 @@ export default function SubscriberTraceModal({ imsi, onClose, t }: SubscriberTra
 
   return (
     <div className="modal-overlay" onClick={(event) => { event.stopPropagation(); onClose(); }}>
-      <div className="modal-content animate-modal-enter" style={{ width: "980px", maxWidth: "96vw", padding: 0, maxHeight: "90vh", overflow: "hidden", display: "flex", flexDirection: "column" }} onClick={(event) => event.stopPropagation()}>
-        <div className="workflow-header" style={{ padding: "1.25rem 1.5rem", borderBottom: "1px solid var(--surface-border)" }}>
+      <div className="modal-content animate-modal-enter trace-modal-container" onClick={(event) => event.stopPropagation()}>
+        <div className="workflow-header trace-modal-header">
           <div>
-            <h2 style={{ margin: 0, fontSize: "1.2rem", color: "var(--text-main)", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <h2 className="trace-modal-title">
               <Signal size={18} /> {t("trace_title")}
             </h2>
-            <p style={{ margin: "0.25rem 0 0", color: "var(--text-muted)", fontFamily: "monospace", fontSize: "0.9rem" }}>{imsi}</p>
+            <p className="trace-modal-subtitle">{imsi}</p>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            <button className="btn btn-outline" onClick={refresh} disabled={detailLoading || auditLoading} style={{ padding: "0.45rem 0.75rem" }}>
+          <div className="trace-modal-actions">
+            <button className="btn btn-outline trace-btn-refresh" onClick={refresh} disabled={detailLoading || auditLoading}>
               <RefreshCw size={15} /> {t("trace_refresh")}
             </button>
             <button className="btn-icon" onClick={onClose} title={t("close")}><X size={22} /></button>
           </div>
         </div>
 
-        <div style={{ padding: "1.5rem", overflowY: "auto", display: "grid", gap: "1.25rem" }}>
+        <div className="trace-modal-body">
           {detailError && (
-            <div style={{ border: "1px solid rgba(239, 68, 68, 0.35)", borderRadius: 8, padding: "0.9rem", color: "var(--danger)", background: "rgba(239, 68, 68, 0.08)", fontWeight: 600 }}>
+            <div className="trace-error">
               {detailError.message || t("trace_err_load")}
             </div>
           )}
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: "0.75rem" }}>
+          <div className="trace-steps-grid">
             {traceSteps.map((step) => (
-              <div key={step.key} style={{ border: "1px solid var(--surface-border)", borderRadius: 8, padding: "0.9rem", background: "var(--surface-hover)", minHeight: 92 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: "0.5rem", alignItems: "center", color: "var(--text-muted)", fontSize: "0.75rem" }}>
+              <div key={step.key} className="trace-step-card">
+                <div className="trace-step-header">
                   <span>{step.label}</span>
                   {step.state === "ok" ? <ShieldCheck size={15} color="var(--success)" /> : <AlertTriangle size={15} color="var(--warning)" />}
                 </div>
-                <div style={{ marginTop: "0.65rem", color: "var(--text-main)", fontWeight: 800, lineHeight: 1.35, wordBreak: "break-word" }}>
+                <div className="trace-step-value">
                   {detailLoading ? t("loading") : step.value}
                 </div>
               </div>
             ))}
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: "1rem" }}>
-            <section style={{ border: "1px solid var(--surface-border)", borderRadius: 8, overflow: "hidden" }}>
-              <div style={{ padding: "0.85rem 1rem", borderBottom: "1px solid var(--surface-border)", display: "flex", alignItems: "center", gap: "0.5rem", color: "var(--text-main)", fontWeight: 800 }}>
+          <div className="trace-middle-grid">
+            <section className="trace-section-card">
+              <div className="trace-section-header">
                 <DatabaseZap size={16} color="var(--primary)" /> {t("trace_balance_title")}
               </div>
-              <div style={{ padding: "1rem", display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "0.75rem" }}>
+              <div className="trace-balance-grid">
                 {[
                   [t("traffic_total"), formatBytes(ocsTraffic.traffic_total)],
                   [t("traffic_balance"), formatBytes(ocsTraffic.traffic_balance)],
@@ -245,30 +246,30 @@ export default function SubscriberTraceModal({ imsi, onClose, t }: SubscriberTra
                   [t("trace_sms_total"), `${Number(ocsTraffic.sms_total || 0)} SMS`],
                   [t("trace_sms_balance"), `${Number(ocsTraffic.sms_balance || 0)} SMS`],
                 ].map(([label, value]) => (
-                  <div key={label} style={{ background: "var(--surface-hover)", borderRadius: 8, padding: "0.75rem" }}>
-                    <div style={{ color: "var(--text-muted)", fontSize: "0.72rem" }}>{label}</div>
-                    <div style={{ marginTop: "0.3rem", color: "var(--text-main)", fontWeight: 800 }}>{detailLoading ? t("loading") : value}</div>
+                  <div key={label} className="trace-balance-item">
+                    <div className="trace-balance-label">{label}</div>
+                    <div className="trace-balance-value">{detailLoading ? t("loading") : value}</div>
                   </div>
                 ))}
               </div>
             </section>
 
-            <section style={{ border: "1px solid var(--surface-border)", borderRadius: 8, overflow: "hidden" }}>
-              <div style={{ padding: "0.85rem 1rem", borderBottom: "1px solid var(--surface-border)", display: "flex", alignItems: "center", gap: "0.5rem", color: "var(--text-main)", fontWeight: 800 }}>
+            <section className="trace-section-card">
+              <div className="trace-section-header">
                 <Route size={16} color="var(--primary)" /> {t("trace_session_title")}
               </div>
-              <div style={{ padding: "1rem", display: "grid", gap: "0.6rem" }}>
+              <div className="trace-session-body">
                 {(detailLoading ? [] : sessions.slice(0, 4)).map((session: any, index: number) => (
-                  <div key={`${session.name || "session"}-${index}`} style={{ display: "grid", gridTemplateColumns: "minmax(90px, 0.8fr) minmax(0, 1fr) 72px", gap: "0.75rem", alignItems: "center", color: "var(--text-main)", fontSize: "0.86rem" }}>
+                  <div key={`${session.name || "session"}-${index}`} className="trace-session-item">
                     <strong>{session.name || "-"}</strong>
-                    <span style={{ color: "var(--text-muted)" }}>5QI {asRecord(session.qos)._5qi || asRecord(session.qos).index || "-"}</span>
-                    <span style={{ color: "var(--primary)", fontWeight: 700, textAlign: "right" }}>{Array.isArray(session.pcc_rule) ? session.pcc_rule.length : 0} PCC</span>
+                    <span className="trace-session-5qi">5QI {asRecord(session.qos)._5qi || asRecord(session.qos).index || "-"}</span>
+                    <span className="trace-session-pcc">{Array.isArray(session.pcc_rule) ? session.pcc_rule.length : 0} PCC</span>
                   </div>
                 ))}
-                {!detailLoading && sessions.length === 0 && <div style={{ color: "var(--text-muted)" }}>{t("trace_no_sessions")}</div>}
-                {!detailLoading && sessions.length > 4 && <div style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>+{sessions.length - 4}</div>}
+                {!detailLoading && sessions.length === 0 && <div className="trace-text-muted">{t("trace_no_sessions")}</div>}
+                {!detailLoading && sessions.length > 4 && <div className="trace-text-muted trace-text-sm">+{sessions.length - 4}</div>}
                 {!detailLoading && sessions.length > 0 && (
-                  <div style={{ marginTop: "0.3rem", color: "var(--text-muted)", fontSize: "0.82rem" }}>
+                  <div className="trace-text-muted trace-text-sm trace-mt-sm">
                     {t("trace_pcc_summary", { count: pccRuleCount })}
                   </div>
                 )}
@@ -276,32 +277,32 @@ export default function SubscriberTraceModal({ imsi, onClose, t }: SubscriberTra
             </section>
           </div>
 
-          <section style={{ border: "1px solid var(--surface-border)", borderRadius: 8, overflow: "hidden" }}>
-            <div style={{ padding: "0.85rem 1rem", borderBottom: "1px solid var(--surface-border)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem", color: "var(--text-main)", fontWeight: 800 }}>
-              <span style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem" }}>
+          <section className="trace-section-card">
+            <div className="trace-section-header trace-section-header-flex">
+              <span className="trace-section-header-left">
                 <History size={16} color="var(--primary)" /> {t("trace_timeline_title")}
               </span>
-              <span style={{ color: "var(--text-muted)", fontSize: "0.76rem", fontWeight: 700 }}>{t("trace_timeline_subtitle")}</span>
+              <span className="trace-section-subtitle">{t("trace_timeline_subtitle")}</span>
             </div>
-            <div style={{ padding: "1rem", display: "grid", gap: "0.75rem" }}>
+            <div className="trace-timeline-body">
               {detailLoading ? (
-                <div style={{ padding: "1rem 0", color: "var(--text-muted)" }}>{t("loading")}</div>
+                <div className="trace-timeline-loading">{t("loading")}</div>
               ) : (
                 timelineEvents.map((event, index) => (
-                  <div key={event.id} style={{ display: "grid", gridTemplateColumns: "28px minmax(0, 1fr)", gap: "0.75rem" }}>
-                    <div style={{ display: "grid", justifyItems: "center" }}>
-                      <span style={{ width: 22, height: 22, borderRadius: "999px", display: "grid", placeItems: "center", background: event.tone === "ok" ? "color-mix(in srgb, var(--success) 12%, var(--surface))" : "rgba(245, 158, 11, 0.12)", border: `1px solid ${event.tone === "ok" ? "color-mix(in srgb, var(--success) 38%, var(--surface-border))" : "rgba(245, 158, 11, 0.38)"}` }}>
+                  <div key={event.id} className="trace-timeline-item">
+                    <div className="trace-timeline-icon-col">
+                      <span className={`trace-timeline-icon ${event.tone}`}>
                         {event.tone === "ok" ? <ShieldCheck size={13} color="var(--success)" /> : <AlertTriangle size={13} color="var(--warning)" />}
                       </span>
-                      {index < timelineEvents.length - 1 ? <span style={{ width: 1, minHeight: 48, background: "var(--surface-border)" }} /> : null}
+                      {index < timelineEvents.length - 1 ? <span className="trace-timeline-line" /> : null}
                     </div>
-                    <div style={{ border: "1px solid var(--surface-border)", borderRadius: 8, padding: "0.8rem", background: event.kind === "audit" ? "var(--surface)" : "var(--surface-hover)" }}>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", marginBottom: "0.4rem" }}>
-                        <strong style={{ color: "var(--text-main)", fontSize: "0.9rem" }}>{event.title}</strong>
-                        <span style={{ color: "var(--text-muted)", fontSize: "0.76rem", fontWeight: 700, whiteSpace: "nowrap" }}>{event.time}</span>
+                    <div className={`trace-timeline-content ${event.kind === "audit" ? "audit" : "normal"}`}>
+                      <div className="trace-timeline-header">
+                        <strong className="trace-timeline-title">{event.title}</strong>
+                        <span className="trace-timeline-time">{event.time}</span>
                       </div>
-                      <div style={{ color: "var(--text-secondary)", fontSize: "0.84rem", lineHeight: 1.45 }}>{event.detail}</div>
-                      <div style={{ marginTop: "0.45rem", color: "var(--primary)", fontSize: "0.76rem", fontWeight: 800, overflowWrap: "anywhere" }}>{event.meta}</div>
+                      <div className="trace-timeline-detail">{event.detail}</div>
+                      <div className="trace-timeline-meta">{event.meta}</div>
                     </div>
                   </div>
                 ))
@@ -309,22 +310,22 @@ export default function SubscriberTraceModal({ imsi, onClose, t }: SubscriberTra
             </div>
           </section>
 
-          <section style={{ border: "1px solid var(--surface-border)", borderRadius: 8, overflow: "hidden" }}>
-            <div style={{ padding: "0.85rem 1rem", borderBottom: "1px solid var(--surface-border)", display: "flex", alignItems: "center", gap: "0.5rem", color: "var(--text-main)", fontWeight: 800 }}>
+          <section className="trace-section-card">
+            <div className="trace-section-header">
               <Clock3 size={16} color="var(--primary)" /> {t("trace_audit_title")}
             </div>
-            <div style={{ padding: "0.25rem 1rem 1rem" }}>
+            <div className="trace-audit-body">
               {auditLoading ? (
-                <div style={{ padding: "1rem 0", color: "var(--text-muted)" }}>{t("loading")}</div>
+                <div className="trace-timeline-loading">{t("loading")}</div>
               ) : auditLogs.length === 0 ? (
-                <div style={{ padding: "1rem 0", color: "var(--text-muted)" }}>{t("trace_no_audit")}</div>
+                <div className="trace-timeline-loading">{t("trace_no_audit")}</div>
               ) : (
                 auditLogs.map((log) => (
-                  <div key={log.id} style={{ display: "grid", gridTemplateColumns: "160px 140px minmax(0, 1fr)", gap: "1rem", padding: "0.75rem 0", borderBottom: "1px solid var(--surface-border)", alignItems: "center" }}>
-                    <span style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>{formatDate(log.timestamp)}</span>
-                    <span style={{ color: log.level === "warning" ? "var(--danger)" : "var(--primary)", fontWeight: 800, fontSize: "0.82rem" }}>{log.action}</span>
-                    <span style={{ color: "var(--text-main)", fontSize: "0.85rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      <Activity size={13} style={{ verticalAlign: "-2px", marginRight: 6 }} />{log.targetId} · {log.operatorIp}
+                  <div key={log.id} className="trace-audit-item">
+                    <span className="trace-audit-time">{formatDate(log.timestamp)}</span>
+                    <span className={`trace-audit-action ${log.level === "warning" ? "danger" : "primary"}`}>{log.action}</span>
+                    <span className="trace-audit-target">
+                      <Activity size={13} className="trace-audit-target-icon" />{log.targetId} · {log.operatorIp}
                     </span>
                   </div>
                 ))

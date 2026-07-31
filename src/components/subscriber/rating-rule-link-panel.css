@@ -1,0 +1,115 @@
+.rating-panel-container {
+  grid-column: 1 / -1;
+  border-radius: 8px;
+  padding: 1rem;
+}
+.rating-panel-compact {
+  padding: 0.85rem;
+}
+.rating-panel-normal {
+  border: 1px solid var(--surface-border);
+  background: var(--surface);
+}
+.rating-panel-warning {
+  border: 1px solid color-mix(in srgb, var(--warning, #f59e0b) 45%, var(--surface-border));
+  background: color-mix(in srgb, var(--warning, #f59e0b) 7%, var(--surface));
+}
+
+.rating-panel-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  margin-bottom: 0.9rem;
+}
+.rating-panel-title-box {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-main);
+  font-weight: 800;
+}
+.rating-panel-subtitle {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  margin-top: 0.25rem;
+}
+.rating-panel-mono {
+  font-family: monospace;
+  color: var(--text-main);
+}
+.rating-panel-sep {
+  margin: 0 0.35rem;
+}
+.rating-panel-btn {
+  min-height: 34px;
+  padding: 0.35rem 0.7rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+}
+
+.rating-panel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 0.7rem;
+}
+.rating-scenario-card {
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  padding: 0.85rem;
+  background: var(--header-bg);
+}
+.rating-scenario-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: center;
+}
+.rating-scenario-title {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-weight: 800;
+}
+.rating-scenario-title-found {
+  color: var(--text-main);
+}
+.rating-scenario-title-missing {
+  color: var(--text-muted);
+}
+.rating-scenario-badge {
+  border-radius: 999px;
+  padding: 0.18rem 0.48rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+.rating-scenario-desc {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  margin-top: 0.35rem;
+}
+.rating-scenario-details {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.45rem 0.8rem;
+  margin-top: 0.75rem;
+  font-size: 0.8rem;
+}
+.rating-scenario-detail-item {
+  color: var(--text-muted);
+}
+.rating-scenario-missing-rule {
+  margin-top: 0.75rem;
+  color: var(--danger);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.rating-panel-footer {
+  margin-top: 0.85rem;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}

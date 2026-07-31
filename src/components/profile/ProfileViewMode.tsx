@@ -1,5 +1,6 @@
 import { Shield, Signal, Gauge, Server, Lock, ChevronDown, ChevronUp } from "lucide-react";
 import { AMBR_UNITS, getAmbrString, typeLabel } from "../subscriber/utils";
+import "./profile.css";
 
 function ratingTypeLabel(t: (key: string) => string, value?: string) {
   if (value === "data_volume") return t("rating_service_data");
@@ -23,58 +24,58 @@ export default function ProfileViewMode({ t, authData, usimType, ocsDefaults, ta
     : null;
 
   return (
-    <div className="animate-fade-in" style={{ paddingBottom: '2rem' }}>
+    <div className="animate-fade-in profile-container">
       {/* Security Template Card */}
       <div className="dash-card" id="psec-security">
         <div className="dash-card-header">
           <Shield size={20} color="var(--primary)" />
-          <h3 style={{ fontSize: "1.1rem", margin: 0, color: "var(--text-main)", fontWeight: 600 }}>{t("sec_security_auth")}</h3>
+          <h3 className="card-title">{t("sec_security_auth")}</h3>
         </div>
-        <div className="dash-card-body" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "2rem" }}>
+        <div className="dash-card-body grid-3-col">
           <div>
-            <div style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "0.25rem" }}>K</div>
-            <div style={{ fontFamily: "monospace", color: "var(--text-main)", fontSize: "1rem" }}>{authData.k || "N/A"}</div>
+            <div className="label-muted">K</div>
+            <div className="value-mono">{authData.k || "N/A"}</div>
           </div>
           <div>
-            <div style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "0.25rem" }}>{usimType === "op" ? "OP" : "OPc"}</div>
-            <div style={{ fontFamily: "monospace", color: "var(--text-main)", fontSize: "1rem" }}>{authData.opValue || "N/A"}</div>
+            <div className="label-muted">{usimType === "op" ? "OP" : "OPc"}</div>
+            <div className="value-mono">{authData.opValue || "N/A"}</div>
           </div>
           <div>
-            <div style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "0.25rem" }}>AMF</div>
-            <div style={{ fontFamily: "monospace", color: "var(--text-main)", fontSize: "1rem" }}>{authData.amf || "N/A"}</div>
+            <div className="label-muted">AMF</div>
+            <div className="value-mono">{authData.amf || "N/A"}</div>
           </div>
         </div>
       </div>
 
       {/* View Mode: Billing Predefined Settings */}
-      <div className="dash-card" id="psec-ocs-view" style={{ marginTop: "1.5rem", marginBottom: "1.5rem" }}>
+      <div className="dash-card card-margin" id="psec-ocs-view">
         <div className="dash-card-header">
           <Gauge size={20} color="var(--primary)" />
-          <h3 style={{ fontSize: "1.1rem", margin: 0, color: "var(--text-main)", fontWeight: 600 }}>{t("sec_billing_config")}</h3>
+          <h3 className="card-title">{t("sec_billing_config")}</h3>
         </div>
-        <div className="dash-card-body" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2rem" }}>
-           <div style={{ gridColumn: "1 / -1" }}>
-             <div style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "0.25rem" }}>{t("sub_360_tariff_plan")}</div>
-             <div style={{ fontFamily: "monospace", color: "var(--text-main)", fontSize: "1rem" }}>
+        <div className="dash-card-body grid-2-col">
+           <div className="col-span-all">
+             <div className="label-muted">{t("sub_360_tariff_plan")}</div>
+             <div className="value-mono">
                {selectedPlan?.name && selectedPlan.name !== planId ? `${selectedPlan.name} (${planId})` : planId}
              </div>
            </div>
-           <div><div style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "0.25rem" }}>{t("prof_lbl_quota")}</div><div style={{ fontFamily: "monospace", color: "var(--text-main)", fontSize: "1rem" }}>{ocsDefaults.trafficTotal}</div></div>
-           <div><div style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "0.25rem" }}>{t("prof_lbl_balance")}</div><div style={{ fontFamily: "monospace", color: "var(--text-main)", fontSize: "1rem" }}>{ocsDefaults.trafficBalance}</div></div>
-           <div><div style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "0.25rem" }}>{t("prof_sms_quota")}</div><div style={{ fontFamily: "monospace", color: "var(--text-main)", fontSize: "1rem" }}>{ocsDefaults.smsTotal || "0"}</div></div>
-           <div><div style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "0.25rem" }}>{t("prof_sms_balance")}</div><div style={{ fontFamily: "monospace", color: "var(--text-main)", fontSize: "1rem" }}>{ocsDefaults.smsBalance || "0"}</div></div>
-           <div style={{ gridColumn: "1 / -1" }}>
-             <div style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "0.75rem" }}>{t("prof_tariff_rules")}</div>
-             <div style={{ display: "grid", gap: "0.5rem" }}>
+           <div><div className="label-muted">{t("prof_lbl_quota")}</div><div className="value-mono">{ocsDefaults.trafficTotal}</div></div>
+           <div><div className="label-muted">{t("prof_lbl_balance")}</div><div className="value-mono">{ocsDefaults.trafficBalance}</div></div>
+           <div><div className="label-muted">{t("prof_sms_quota")}</div><div className="value-mono">{ocsDefaults.smsTotal || "0"}</div></div>
+           <div><div className="label-muted">{t("prof_sms_balance")}</div><div className="value-mono">{ocsDefaults.smsBalance || "0"}</div></div>
+           <div className="col-span-all">
+             <div className="label-muted mb-3">{t("prof_tariff_rules")}</div>
+             <div className="grid-gap-small">
                {ratingList.length > 0 ? ratingList.map((rule: any) => (
-                 <div key={rule.rule_id || `${rule.apn}-${rule.rating_group_id}`} style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr 1fr 1fr", gap: "1rem", padding: "0.75rem 1rem", border: "1px solid var(--surface-border)", borderRadius: "6px", fontFamily: "monospace", fontSize: "0.9rem" }}>
+                 <div key={rule.rule_id || `${rule.apn}-${rule.rating_group_id}`} className="tariff-rule-row">
                    <span>{rule.apn}</span>
                    <span>RG {rule.rating_group_id}</span>
                    <span>SI {rule.service_identifier}</span>
                    <span>{ratingTypeLabel(t, rule.charging_type)}</span>
                    <span>{ratingUnitLabel(t, rule.unit)}</span>
                  </div>
-               )) : <span style={{ color: "var(--text-muted)" }}>{t("prof_no_tariff_rules")}</span>}
+               )) : <span className="text-muted-label">{t("prof_no_tariff_rules")}</span>}
              </div>
            </div>
         </div>
@@ -84,109 +85,108 @@ export default function ProfileViewMode({ t, authData, usimType, ocsDefaults, ta
       <div className="dash-card" id="psec-network">
         <div className="dash-card-header">
           <Signal size={20} color="var(--primary)" />
-          <h3 style={{ fontSize: "1.1rem", margin: 0, color: "var(--text-main)", fontWeight: 600 }}>{t("sec_global_network")}</h3>
+          <h3 className="card-title">{t("sec_global_network")}</h3>
         </div>
-        <div className="dash-card-body" style={{ display: "flex", gap: "3rem" }}>
-          <div style={{ flex: 1, padding: "1rem", border: "1px solid var(--surface-border)", borderRadius: "8px" }}>
-            <div style={{ color: "var(--text-secondary)", fontSize: "0.85rem", textTransform: 'uppercase', fontWeight: 600 }}>{t("sub_dl")}</div>
-            <div style={{ color: "var(--text-main)", fontSize: "1.5rem", fontWeight: 600 }}>
-              {ueAmbr.downlink?.value || 0} <span style={{ fontSize: "1rem", color: "var(--text-muted)" }}>{AMBR_UNITS.find(u => u.val === (ueAmbr.downlink?.unit || 1))?.label || ''}</span>
+        <div className="dash-card-body flex-gap-large">
+          <div className="ambr-card">
+            <div className="ambr-label">{t("sub_dl")}</div>
+            <div className="ambr-value">
+              {ueAmbr.downlink?.value || 0} <span className="ambr-unit">{AMBR_UNITS.find(u => u.val === (ueAmbr.downlink?.unit || 1))?.label || ''}</span>
             </div>
           </div>
-          <div style={{ flex: 1, padding: "1rem", border: "1px solid var(--surface-border)", borderRadius: "8px" }}>
-            <div style={{ color: "var(--text-secondary)", fontSize: "0.85rem", textTransform: 'uppercase', fontWeight: 600 }}>{t("sub_ul")}</div>
-            <div style={{ color: "var(--text-main)", fontSize: "1.5rem", fontWeight: 600 }}>
-              {ueAmbr.uplink?.value || 0} <span style={{ fontSize: "1rem", color: "var(--text-muted)" }}>{AMBR_UNITS.find(u => u.val === (ueAmbr.uplink?.unit || 1))?.label || ''}</span>
+          <div className="ambr-card">
+            <div className="ambr-label">{t("sub_ul")}</div>
+            <div className="ambr-value">
+              {ueAmbr.uplink?.value || 0} <span className="ambr-unit">{AMBR_UNITS.find(u => u.val === (ueAmbr.uplink?.unit || 1))?.label || ''}</span>
             </div>
           </div>
         </div>
       </div>
 
       {/* Access Restrictions */}
-      <div className="dash-card" id="psec-access-restrictions" style={{ marginTop: "1.5rem" }}>
-        <div className="dash-card-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+      <div className="dash-card card-margin-top" id="psec-access-restrictions">
+        <div className="dash-card-header flex-between-center">
+          <div className="flex-center-gap">
             <Lock size={20} color="var(--primary)" />
-            <h3 style={{ fontSize: "1.1rem", margin: 0, color: "var(--text-main)", fontWeight: 600 }}>{t("sec_access_restrict")}</h3>
+            <h3 className="card-title">{t("sec_access_restrict")}</h3>
           </div>
           <button
             type="button"
-            className="btn-icon"
+            className="btn-icon btn-transparent"
             onClick={() => setIsAccessRestrictionsExpanded((prev: boolean) => !prev)}
             title={isAccessRestrictionsExpanded ? t("collapse") : t("expand")}
-            style={{ background: "transparent", border: "none", cursor: "pointer" }}
           >
             {isAccessRestrictionsExpanded ? <ChevronUp size={18} color="var(--text-muted)" /> : <ChevronDown size={18} color="var(--text-muted)" />}
           </button>
         </div>
         {isAccessRestrictionsExpanded && (
           <div className="dash-card-body">
-            <div style={{ fontFamily: "monospace", color: "var(--text-main)", fontSize: "1rem" }}>{accessRestriction}</div>
+            <div className="value-mono">{accessRestriction}</div>
           </div>
         )}
       </div>
 
       {/* Slices Overview */}
-      <div id="psec-slices" style={{ paddingTop: "1rem" }}>
-        <h3 style={{ fontSize: "1.25rem", marginBottom: "1.5rem", color: "var(--text-main)", fontWeight: 600, display: "flex", alignItems: "center", gap: "0.5rem" }}><Server size={22}/> {t("sub_slices_core")}</h3>
+      <div id="psec-slices" className="pt-1">
+        <h3 className="section-title"><Server size={22}/> {t("sub_slices_core")}</h3>
         {Array.isArray(slices) && slices.length > 0 ? slices.map((slice: any, sIdx: number) => (
           <div key={sIdx} className="slice-strip-card">
-            <div style={{ padding: "1.5rem 2rem", borderBottom: "1px solid var(--surface-border)", display: "flex", alignItems: "center", gap: "1.5rem" }}>
-              <span style={{ fontSize: "1.1rem", fontWeight: 600, color: "var(--primary)" }}>{t("slice_idx", { idx: sIdx + 1 })}</span>
-              <div style={{ display: "flex", gap: "1rem", background: "var(--surface-hover)", padding: "0.5rem 1rem", borderRadius: "6px" }}>
-                <span style={{ fontWeight: 600 }}>SST: {slice.sst}</span>
-                {slice.sd && slice.sd !== "000000" && <span style={{ color: "var(--text-secondary)" }}>SD: {slice.sd}</span>}
+            <div className="slice-header">
+              <span className="slice-idx">{t("slice_idx", { idx: sIdx + 1 })}</span>
+              <div className="slice-tags">
+                <span className="slice-tag-sst">SST: {slice.sst}</span>
+                {slice.sd && slice.sd !== "000000" && <span className="slice-tag-sd">SD: {slice.sd}</span>}
               </div>
               {slice.default_indicator && <span className="pill pill-enabled">{t("sub_default_nssai")}</span>}
             </div>
-            <div style={{ padding: "1rem" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.95rem" }}>
+            <div className="p-1">
+              <table className="table-default">
                 <thead>
-                  <tr style={{ textAlign: "left", borderBottom: "1px solid var(--surface-border)" }}>
-                    <th className="table-header-cap" style={{ padding: "1rem" }}>{t("slice_col_dnn")}</th>
-                    <th className="table-header-cap" style={{ padding: "1rem" }}>{t("slice_col_type")}</th>
-                    <th className="table-header-cap" style={{ padding: "1rem" }}>{t("slice_col_qci")}</th>
-                    <th className="table-header-cap" style={{ padding: "1rem" }}>{t("slice_col_arp")}</th>
-                    <th className="table-header-cap" style={{ padding: "1rem" }}>{t("slice_col_ambr")}</th>
-                    <th className="table-header-cap" style={{ padding: "1rem" }}>{t("slice_col_pcc")}</th>
+                  <tr className="table-header-row">
+                    <th className="table-header-cap table-cell-pad">{t("slice_col_dnn")}</th>
+                    <th className="table-header-cap table-cell-pad">{t("slice_col_type")}</th>
+                    <th className="table-header-cap table-cell-pad">{t("slice_col_qci")}</th>
+                    <th className="table-header-cap table-cell-pad">{t("slice_col_arp")}</th>
+                    <th className="table-header-cap table-cell-pad">{t("slice_col_ambr")}</th>
+                    <th className="table-header-cap table-cell-pad">{t("slice_col_pcc")}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {slice.session_list?.length > 0 ? slice.session_list.map((sess: any, sessIdx: number) => (
-                    <tr key={sessIdx} style={{ borderBottom: "1px solid transparent" }}>
-                      <td style={{ padding: "1rem", fontWeight: 600, color: "var(--text-main)" }}>{sess.name}</td>
-                      <td style={{ padding: "1rem", color: "var(--text-secondary)" }}>{typeLabel(sess.type)}</td>
-                      <td style={{ padding: "1rem", color: "var(--text-secondary)" }}>{sess.qos?._5qi || "-"}</td>
-                      <td style={{ padding: "1rem", color: "var(--text-secondary)" }}>{sess.qos?.arp?.priorityLevel || "-"}</td>
-                      <td style={{ padding: "1rem", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{getAmbrString(sess.ambr)}</td>
-                      <td style={{ padding: "1rem" }}>
+                    <tr key={sessIdx} className="table-row-border">
+                      <td className="table-cell-main">{sess.name}</td>
+                      <td className="table-cell-sec">{typeLabel(sess.type)}</td>
+                      <td className="table-cell-sec">{sess.qos?._5qi || "-"}</td>
+                      <td className="table-cell-sec">{sess.qos?.arp?.priorityLevel || "-"}</td>
+                      <td className="table-cell-nowrap">{getAmbrString(sess.ambr)}</td>
+                      <td className="table-cell-pad">
                         {sess.pcc_rule?.length > 0 ? (
-                            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                            <div className="flex-col-gap">
                               {sess.pcc_rule.map((rule: any, pccIdx: number) => (
-                                <div key={pccIdx} style={{ background: 'var(--surface-hover)', padding: '0.5rem 0.75rem', borderRadius: '6px', fontSize: '0.85em', border: '1px solid var(--surface-border)' }}>
-                                  <div style={{ fontWeight: 600, color: 'var(--primary)', marginBottom: '0.2rem' }}>{t("slice_rule_idx", { idx: pccIdx + 1 })}</div>
-                                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
-                                    <div><span style={{ color: 'var(--text-muted)' }}>5QI:</span> {rule.qos?.index || 1}</div>
-                                    <div><span style={{ color: 'var(--text-muted)' }}>ARP:</span> {rule.qos?.arp?.priority_level || 2}</div>
-                                    <div style={{ gridColumn: 'span 2' }}>
-                                      <span style={{ color: 'var(--text-muted)' }}>MBR:</span> {rule.qos?.mbr?.downlink?.value || 0} {AMBR_UNITS.find(u => u.val === (rule.qos?.mbr?.downlink?.unit || 1))?.label} (DL) / {rule.qos?.mbr?.uplink?.value || 0} {AMBR_UNITS.find(u => u.val === (rule.qos?.mbr?.uplink?.unit || 1))?.label} (UL)
+                                <div key={pccIdx} className="pcc-rule-card">
+                                  <div className="pcc-rule-title">{t("slice_rule_idx", { idx: pccIdx + 1 })}</div>
+                                  <div className="pcc-rule-grid">
+                                    <div><span className="text-muted-label">5QI:</span> {rule.qos?.index || 1}</div>
+                                    <div><span className="text-muted-label">ARP:</span> {rule.qos?.arp?.priority_level || 2}</div>
+                                    <div className="col-span-2">
+                                      <span className="text-muted-label">MBR:</span> {rule.qos?.mbr?.downlink?.value || 0} {AMBR_UNITS.find(u => u.val === (rule.qos?.mbr?.downlink?.unit || 1))?.label} (DL) / {rule.qos?.mbr?.uplink?.value || 0} {AMBR_UNITS.find(u => u.val === (rule.qos?.mbr?.uplink?.unit || 1))?.label} (UL)
                                     </div>
                                   </div>
                                 </div>
                               ))}
                             </div>
-                        ) : <span style={{ color: 'var(--text-muted)' }}>{t("none")}</span>}
+                        ) : <span className="text-muted-label">{t("none")}</span>}
                       </td>
                     </tr>
                   )) : (
-                    <tr><td colSpan={6} style={{ padding: "2rem", textAlign: "center", color: "var(--text-muted)" }}>{t("prof_no_sessions")}</td></tr>
+                    <tr><td colSpan={6} className="empty-state-no-border">{t("prof_no_sessions")}</td></tr>
                   )}
                 </tbody>
               </table>
             </div>
           </div>
         )) : (
-          <div style={{ textAlign: "center", color: "var(--text-muted)", padding: "3rem", border: "1px dashed var(--surface-border)", borderRadius: "6px" }}>{t("prof_no_slices")}</div>
+          <div className="empty-state">{t("prof_no_slices")}</div>
         )}
       </div>
     </div>

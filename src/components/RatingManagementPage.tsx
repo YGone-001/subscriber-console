@@ -401,18 +401,18 @@ export default function RatingManagementPage({ view }: { view: T.RatingManagemen
     const isSaving = savingKey === formKey;
 
     return (
-    <td colSpan={canEditTemplates ? 6 : 5} style={{ padding: "1rem 1.5rem" }}>
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(180px, 0.7fr) minmax(220px, 1fr) minmax(260px, 1.25fr) auto", gap: "1rem", alignItems: "end" }}>
-        <div style={{ display: "grid", gridTemplateColumns: isNew ? "1fr" : "auto", gap: "0.7rem" }}>
+    <td colSpan={canEditTemplates ? 6 : 5} className="rating-form-cell">
+      <div className="rating-form-grid">
+        <div className={`rating-form-id-col ${isNew ? 'rating-form-id-col-new' : 'rating-form-id-col-edit'}`}>
           {isNew ? (
             <Field label={t("rating_col_id")}>
               <input type="number" className="form-input" placeholder={t("rating_ph_id")} value={form.rating_group_id} onChange={(event) => setForm((current: any) => ({ ...current, rating_group_id: event.target.value }))} autoFocus />
             </Field>
           ) : (
-            <span style={{ fontFamily: "monospace", fontWeight: 700, color: "var(--primary)", fontSize: "1.1rem" }}>#{ratingGroupId}</span>
+            <span className="rating-form-id-display">#{ratingGroupId}</span>
           )}
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.7rem" }}>
+        <div className="rating-form-type-col">
           <Field label={t("rating_charging_scenario")}>
             <select className="form-input" value={form.charging_type} onChange={(event) => setForm((current: any) => applyChargingType(current, event.target.value as T.ChargingType))}>
               <option value="data_volume">{t("rating_service_data")}</option>
@@ -427,7 +427,7 @@ export default function RatingManagementPage({ view }: { view: T.RatingManagemen
             </select>
           </Field>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 0.75fr 1fr", gap: "0.7rem" }}>
+        <div className="rating-form-details-col">
           <Field label="APN">
             <input type="text" className="form-input" value={form.apn} onChange={(event) => setForm((current: any) => ({ ...current, apn: event.target.value }))} />
           </Field>
@@ -440,12 +440,12 @@ export default function RatingManagementPage({ view }: { view: T.RatingManagemen
             </select>
           </Field>
         </div>
-        <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
+        <div className="rating-form-actions">
           <button className="btn-icon" onClick={isNew ? handleCreate : () => ratingGroupId && handleUpdate(ratingGroupId)} title={t("save")} disabled={isSaving}><Save size={18} color={validationMessage ? "var(--warning)" : "var(--success)"} /></button>
           <button className="btn-icon" onClick={() => isNew ? setIsAdding(false) : setEditingId(null)} title={t("cancel")} disabled={isSaving}><X size={18} color="var(--text-muted)" /></button>
         </div>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(130px, 1fr))", gap: "0.8rem", marginTop: "0.9rem" }}>
+      <div className="rating-form-limits-grid">
         <Field label={t("rating_col_rates")}>
           <input type="text" className="form-input" value={form.rates} onChange={(event) => setForm((current: any) => ({ ...current, rates: event.target.value }))} placeholder={t("rating_ph_rates")} />
         </Field>
@@ -460,7 +460,7 @@ export default function RatingManagementPage({ view }: { view: T.RatingManagemen
         </Field>
       </div>
       {validationMessage && (
-        <div style={{ marginTop: "0.8rem", color: "var(--danger)", fontSize: "0.82rem", fontWeight: 700 }}>
+        <div className="rating-form-validation">
           {validationMessage}
         </div>
       )}
@@ -483,13 +483,13 @@ export default function RatingManagementPage({ view }: { view: T.RatingManagemen
   serviceMeta, rateTypes, executeDelete, notice, setNotice, ratings
 };
   return (
-    <div className="container animate-fade-in" style={{ padding: "3rem", paddingBottom: "100px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem", marginBottom: "1.25rem" }}>
+    <div className="container animate-fade-in rating-page-container">
+      <div className="rating-page-header">
         <div>
-          <h1 style={{ margin: 0, fontSize: "1.75rem", fontWeight: 700, color: "var(--text-main)" }}>
+          <h1 className="rating-page-title">
             {view === "plans" ? t("tariff_plan_current") : t("rating_rule_catalog_title")}
           </h1>
-          <p style={{ margin: "0.5rem 0 0 0", color: "var(--text-muted)", fontSize: "0.95rem" }}>
+          <p className="rating-page-desc">
             {view === "plans" ? t("tariff_plan_current_desc") : t("rating_rule_catalog_desc")}
           </p>
         </div>

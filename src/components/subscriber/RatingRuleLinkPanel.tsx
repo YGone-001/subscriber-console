@@ -1,6 +1,7 @@
 import { AlertTriangle, CheckCircle2, Database, ExternalLink, MessageSquare, Mic2, ShieldCheck } from "lucide-react";
 import type React from "react";
 import { formatBytes, formatEvents, formatSeconds } from "@/lib/unitParser";
+import "./rating-rule-link-panel.css";
 
 type RatingRule = {
   rating_group_id?: number;
@@ -119,64 +120,58 @@ export default function RatingRuleLinkPanel({
   const hasWarning = missingScenarioCount > 0 || missingCatalogGroups.length > 0;
 
   return (
-    <div
-      style={{
-        gridColumn: "1 / -1",
-        border: `1px solid ${hasWarning ? "color-mix(in srgb, var(--warning, #f59e0b) 45%, var(--surface-border))" : "var(--surface-border)"}`,
-        borderRadius: "8px",
-        background: hasWarning ? "color-mix(in srgb, var(--warning, #f59e0b) 7%, var(--surface))" : "var(--surface)",
-        padding: compact ? "0.85rem" : "1rem",
-      }}
-    >
-      <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", alignItems: "flex-start", flexWrap: "wrap", marginBottom: "0.9rem" }}>
+    <div className={`rating-panel-container ${compact ? "rating-panel-compact" : ""} ${hasWarning ? "rating-panel-warning" : "rating-panel-normal"}`}>
+      <div className="rating-panel-header">
         <div>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "var(--text-main)", fontWeight: 800 }}>
+          <div className="rating-panel-title-box">
             {hasWarning ? <AlertTriangle size={17} color="var(--warning, #f59e0b)" /> : <CheckCircle2 size={17} color="var(--success)" />}
             {t("rating_linkage_title")}
           </div>
-          <div style={{ color: "var(--text-muted)", fontSize: "0.82rem", marginTop: "0.25rem" }}>
-            {t("rating_linkage_plan")} <span style={{ fontFamily: "monospace", color: "var(--text-main)" }}>{planId || "plan_default_10gb"}</span>
-            <span style={{ margin: "0 0.35rem" }}>/</span>
-            {t("status")} <span style={{ fontFamily: "monospace", color: "var(--text-main)" }}>{planStatus || t("unknown")}</span>
+          <div className="rating-panel-subtitle">
+            {t("rating_linkage_plan")} <span className="rating-panel-mono">{planId || "plan_default_10gb"}</span>
+            <span className="rating-panel-sep">/</span>
+            {t("status")} <span className="rating-panel-mono">{planStatus || t("unknown")}</span>
           </div>
         </div>
         <a
           href="/rating"
           target="_blank"
           rel="noreferrer"
-          className="btn btn-outline"
-          style={{ minHeight: 34, padding: "0.35rem 0.7rem", display: "inline-flex", alignItems: "center", gap: "0.4rem", fontSize: "0.82rem" }}
+          className="btn btn-outline rating-panel-btn"
         >
           <ExternalLink size={14} />
           {t("rating_management")}
         </a>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: "0.7rem" }}>
+      <div className="rating-panel-grid">
         {scenarioRows.map((row) => {
           const found = !!row.planRule;
           const color = statusColor(found, row.inCatalog);
           return (
-            <div key={row.key} style={{ border: "1px solid var(--surface-border)", borderRadius: "8px", padding: "0.85rem", background: "var(--header-bg)" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "center" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "0.45rem", color: found ? "var(--text-main)" : "var(--text-muted)", fontWeight: 800 }}>
+            <div key={row.key} className="rating-scenario-card">
+              <div className="rating-scenario-header">
+                <div className={`rating-scenario-title ${found ? "rating-scenario-title-found" : "rating-scenario-title-missing"}`}>
                   {row.icon}
                   {t(row.labelKey)}
                 </div>
-                <span style={{ color, border: `1px solid ${color}`, borderRadius: "999px", padding: "0.18rem 0.48rem", fontSize: "0.72rem", fontWeight: 800 }}>
+                <span
+                  className="rating-scenario-badge"
+                  style={{ color, border: `1px solid ${color}` }}
+                >
                   {statusText(found, row.inCatalog, t)}
                 </span>
               </div>
-              <div style={{ color: "var(--text-muted)", fontSize: "0.78rem", marginTop: "0.35rem" }}>{t(row.descriptionKey)}</div>
+              <div className="rating-scenario-desc">{t(row.descriptionKey)}</div>
               {row.planRule ? (
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.45rem 0.8rem", marginTop: "0.75rem", fontSize: "0.8rem" }}>
-                  <span style={{ color: "var(--text-muted)" }}>RG <strong style={{ color: "var(--text-main)", fontFamily: "monospace" }}>{row.group || "-"}</strong></span>
-                  <span style={{ color: "var(--text-muted)" }}>SI <strong style={{ color: "var(--text-main)", fontFamily: "monospace" }}>{row.planRule.service_identifier ?? "-"}</strong></span>
-                  <span style={{ color: "var(--text-muted)" }}>APN <strong style={{ color: "var(--text-main)", fontFamily: "monospace" }}>{row.planRule.apn || "-"}</strong></span>
-                  <span style={{ color: "var(--text-muted)" }}>{t("rating_grant")} <strong style={{ color: "var(--text-main)", fontFamily: "monospace" }}>{formatGrant(row.planRule, t)}</strong></span>
+                <div className="rating-scenario-details">
+                  <span className="rating-scenario-detail-item">RG <strong className="rating-panel-mono">{row.group || "-"}</strong></span>
+                  <span className="rating-scenario-detail-item">SI <strong className="rating-panel-mono">{row.planRule.service_identifier ?? "-"}</strong></span>
+                  <span className="rating-scenario-detail-item">APN <strong className="rating-panel-mono">{row.planRule.apn || "-"}</strong></span>
+                  <span className="rating-scenario-detail-item">{t("rating_grant")} <strong className="rating-panel-mono">{formatGrant(row.planRule, t)}</strong></span>
                 </div>
               ) : (
-                <div style={{ marginTop: "0.75rem", color: "var(--danger)", fontSize: "0.8rem", fontWeight: 700 }}>
+                <div className="rating-scenario-missing-rule">
                   {t("rating_link_no_mapped_rule")}
                 </div>
               )}
@@ -186,7 +181,7 @@ export default function RatingRuleLinkPanel({
       </div>
 
       {(missingCatalogGroups.length > 0 || missingScenarioCount > 0) && (
-        <div style={{ marginTop: "0.85rem", color: "var(--text-secondary)", fontSize: "0.82rem", lineHeight: 1.5 }}>
+        <div className="rating-panel-footer">
           {missingCatalogGroups.length > 0
             ? `${t("rating_link_catalog_missing", { groups: Array.from(new Set(missingCatalogGroups)).join(", ") })} `
             : ""}

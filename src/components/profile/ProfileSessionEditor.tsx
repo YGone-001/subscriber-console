@@ -128,22 +128,22 @@ export default function ProfileSessionEditor({ session, onChange, onDelete }: Pr
   };
 
   return (
-    <div style={{ marginTop: "1rem", padding: "1.5rem", border: "1px solid var(--surface-border)", borderRadius: "8px", background: "var(--surface)" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-        <div style={{ flex: 1 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "1.5rem" }}>
+    <div className="session-editor-card">
+      <div className="session-editor-header">
+        <div className="session-editor-content">
+          <div className="session-grid-4">
             <div>
-              <label className="form-label" style={{ fontSize: "0.85rem", fontWeight: 600 }}>{t("sess_name")}</label>
+              <label className="form-label session-label">{t("sess_name")}</label>
               <input type="text" className="form-input" value={session.name || ""} onChange={e => handleNameChange(e.target.value)} placeholder={t("sess_name_ph")} />
             </div>
             <div>
-              <label className="form-label" style={{ fontSize: "0.85rem", fontWeight: 600 }}>{t("sess_type")}</label>
+              <label className="form-label session-label">{t("sess_type")}</label>
               <select className="form-input" value={session.type || 3} onChange={e => updateField(["type"], Number(e.target.value))}>
                 {SESSION_TYPES.map(t => <option key={t.val} value={t.val}>{t.label}</option>)}
               </select>
             </div>
             <div>
-              <label className="form-label" style={{ fontSize: "0.85rem", fontWeight: 600 }}>{t("sess_qos")}</label>
+              <label className="form-label session-label">{t("sess_qos")}</label>
               <select
                 className="form-input"
                 value={session.qos?._5qi ?? ""}
@@ -154,7 +154,7 @@ export default function ProfileSessionEditor({ session, onChange, onDelete }: Pr
               </select>
             </div>
             <div>
-              <label className="form-label" style={{ fontSize: "0.85rem", fontWeight: 600 }}>{t("sess_arp_level")}</label>
+              <label className="form-label session-label">{t("sess_arp_level")}</label>
               <select
                 className="form-input"
                 value={session.qos?.arp?.priorityLevel ?? ""}
@@ -166,9 +166,9 @@ export default function ProfileSessionEditor({ session, onChange, onDelete }: Pr
             </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem", marginTop: "1rem" }}>
+          <div className="session-grid-2">
             <div>
-              <label className="form-label" style={{ fontSize: "0.85rem", fontWeight: 600 }}>{t("sess_ambr_dl")}</label>
+              <label className="form-label session-label">{t("sess_ambr_dl")}</label>
               <div className="input-composite">
                 <input type="number" value={session.ambr?.downlink?.value ?? ""} onFocus={(e) => e.target.select()} onChange={e => updateField(["ambr", "downlink", "value"], e.target.value === "" ? undefined : Number(e.target.value))} />
                 <select value={session.ambr?.downlink?.unit || 2} onChange={e => updateField(["ambr", "downlink", "unit"], Number(e.target.value))}>
@@ -177,7 +177,7 @@ export default function ProfileSessionEditor({ session, onChange, onDelete }: Pr
               </div>
             </div>
             <div>
-              <label className="form-label" style={{ fontSize: "0.85rem", fontWeight: 600 }}>{t("sess_ambr_ul")}</label>
+              <label className="form-label session-label">{t("sess_ambr_ul")}</label>
               <div className="input-composite">
                 <input type="number" value={session.ambr?.uplink?.value ?? ""} onFocus={(e) => e.target.select()} onChange={e => updateField(["ambr", "uplink", "value"], e.target.value === "" ? undefined : Number(e.target.value))} />
                 <select value={session.ambr?.uplink?.unit || 2} onChange={e => updateField(["ambr", "uplink", "unit"], Number(e.target.value))}>
@@ -186,7 +186,7 @@ export default function ProfileSessionEditor({ session, onChange, onDelete }: Pr
               </div>
             </div>
             <div>
-              <label className="form-label" style={{ fontSize: "0.85rem", fontWeight: 600 }}>{t("sess_ipv4")}</label>
+              <label className="form-label session-label">{t("sess_ipv4")}</label>
               <input
                 type="text"
                 className="form-input"
@@ -203,7 +203,7 @@ export default function ProfileSessionEditor({ session, onChange, onDelete }: Pr
               />
             </div>
             <div>
-              <label className="form-label" style={{ fontSize: "0.85rem", fontWeight: 600 }}>{t("sess_ipv6")}</label>
+              <label className="form-label session-label">{t("sess_ipv6")}</label>
               <input
                 type="text"
                 className="form-input"
@@ -214,24 +214,24 @@ export default function ProfileSessionEditor({ session, onChange, onDelete }: Pr
             </div>
           </div>
         </div>
-        <button className="btn-icon text-danger" onClick={onDelete} style={{ padding: '0.4rem', background: "transparent", borderRadius: "8px", marginLeft: "1rem" }} title={t("sess_remove")}>
+        <button className="btn-icon text-danger session-del-btn" onClick={onDelete} title={t("sess_remove")}>
           <Trash2 size={20}/>
         </button>
       </div>
 
       {/* Level 3: PCC Rules */}
-      <div style={{ marginTop: "1.5rem", borderTop: "1px solid var(--surface-border)" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: "1rem" }}>
-          <h5 style={{ fontSize: '0.9rem', color: "var(--text-main)", fontWeight: 600, display: "flex", alignItems: "center", gap: "0.5rem" }}>
+      <div className="session-pcc-section">
+        <div className="session-pcc-header">
+          <h5 className="session-pcc-title">
             <Network size={16}/> {t("sess_pcc_rules")}
           </h5>
-          <button className="btn-icon" onClick={handleAddPccRule} style={{ color: "var(--primary)", fontSize: "0.9rem", fontWeight: 600 }}>
+          <button className="btn-icon session-add-pcc-btn" onClick={handleAddPccRule}>
             <Plus size={16}/> {t("sess_add_pcc")}
           </button>
         </div>
 
         {(session.pcc_rule?.length ?? 0) > 0 ? (
-          <div style={{ paddingLeft: "1rem" }}>
+          <div className="session-pcc-list">
             {session.pcc_rule?.map((rule: PccRuleForm, pccIdx: number) => (
               <ProfilePccRuleEditor
                 key={pccIdx}
@@ -243,7 +243,7 @@ export default function ProfileSessionEditor({ session, onChange, onDelete }: Pr
             ))}
           </div>
         ) : (
-          <div style={{ padding: "1.5rem", border: "1px dashed var(--surface-border)", borderRadius: "6px", textAlign: "center", color: "var(--text-muted)", fontSize: "0.9rem", marginTop: "1rem", background: "transparent" }}>
+          <div className="session-pcc-empty">
             {t("sess_no_pcc")}
           </div>
         )}

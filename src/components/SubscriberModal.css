@@ -1,0 +1,57 @@
+/* SubscriberModal specific styles */
+.sub-modal-imsi-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.sub-modal-imsi-group {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.sub-modal-imsi-title {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--text-main);
+  font-family: monospace;
+}
+.sub-modal-imsi-copy-btn {
+  padding: 6px;
+}
+.sub-modal-new-title {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--text-main);
+}
+.sub-modal-new-desc {
+  margin: 0.25rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+.sub-modal-header-divider {
+  width: 1px;
+  height: 30px;
+  background: var(--surface-border);
+  margin: 0 0.5rem;
+}
+.sub-modal-sidebar-title {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 1rem;
+  padding-left: 0.5rem;
+}
+.sub-modal-loading {
+  text-align: center;
+  margin-top: 4rem;
+  color: var(--text-muted);
+  font-size: 1.1rem;
+}
+.sub-modal-footer-msg {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}

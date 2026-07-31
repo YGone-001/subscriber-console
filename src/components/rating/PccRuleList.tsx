@@ -4,6 +4,7 @@ import { Plus, Search, Hash, DollarSign, CheckCircle2, Pencil, Trash2, Tag } fro
 import { EmptyState, LoadingRows } from "@/components/OperationFeedback";
 import * as T from "./types";
 import { SERVICE_FILTERS, Field, formatGrant } from "./types";
+import "./rating.css";
 
 export function PccRuleList(props: any) {
   const {
@@ -15,18 +16,18 @@ export function PccRuleList(props: any) {
 
   return (
     <>
-      <div className="dash-card" style={{ overflow: "hidden" }}>
-        <div className="dash-card-header" style={{ display: "grid", gridTemplateColumns: "minmax(240px, 1fr) auto", gap: "1rem", alignItems: "center" }}>
-          <div style={{ display: "grid", gap: "0.3rem" }}>
-            <h3 style={{ margin: 0, color: "var(--text-main)", fontSize: "1rem", fontWeight: 850 }}>{t("rating_rule_catalog_title")}</h3>
-            <p style={{ margin: 0, color: "var(--text-muted)", fontSize: "0.82rem" }}>{t("rating_rule_catalog_desc")}</p>
+      <div className="dash-card card-overflow-hidden">
+        <div className="dash-card-header card-header-grid">
+          <div className="grid-gap-0-35">
+            <h3 className="card-title-lg">{t("rating_rule_catalog_title")}</h3>
+            <p className="card-desc-mt">{t("rating_rule_catalog_desc")}</p>
           </div>
           {canEditTemplates && (
-            <button className="btn btn-primary" onClick={() => setIsAdding(true)} disabled={savingKey !== null || isAdding} style={{ minHeight: 38, whiteSpace: "nowrap" }}>
+            <button className="btn btn-primary btn-new-rate" onClick={() => setIsAdding(true)} disabled={savingKey !== null || isAdding}>
               <Plus size={16} /> {t("rating_new_rate")}
             </button>
           )}
-          <div style={{ gridColumn: "1 / -1", display: "grid", gridTemplateColumns: "minmax(220px, 0.85fr) minmax(300px, 1.25fr) minmax(260px, 0.9fr)", alignItems: "end", gap: "0.85rem", borderTop: "1px solid var(--surface-border)", paddingTop: "0.85rem" }}>
+          <div className="filters-grid">
             <Field label={t("tariff_plan_id")}>
               <select
                 className="form-input"
@@ -43,44 +44,43 @@ export function PccRuleList(props: any) {
                 ))}
               </select>
             </Field>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+            <div className="filters-flex">
               {SERVICE_FILTERS.map((key) => {
                 const meta = serviceMeta(key);
                 const active = filter === key;
                 return (
                   <button
                     key={key}
-                    className={active ? "btn btn-primary" : "btn btn-outline"}
+                    className={`${active ? "btn btn-primary" : "btn btn-outline"} filter-btn`}
                     onClick={() => setFilter(key)}
-                    style={{ height: 34, padding: "0 0.75rem", display: "inline-flex", alignItems: "center", gap: "0.4rem", borderRadius: 6 }}
                   >
-                    {meta.icon}{meta.label} <span style={{ opacity: 0.75 }}>{counts[key]}</span>
+                    {meta.icon}{meta.label} <span className="filter-count">{counts[key]}</span>
                   </button>
                 );
               })}
             </div>
-            <label style={{ position: "relative", minWidth: 0 }}>
-              <Search size={16} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
-              <input className="form-input" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("rating_search_ph")} style={{ paddingLeft: 36, height: 38 }} />
+            <label className="search-wrapper">
+              <Search size={16} className="search-icon" />
+              <input className="form-input search-input" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("rating_search_ph")} />
             </label>
           </div>
         </div>
 
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.95rem", minWidth: "980px" }}>
+        <div className="table-container">
+          <table className="rule-table">
             <thead>
-              <tr style={{ background: "var(--surface-hover)", borderBottom: "2px solid var(--surface-border)" }}>
-                <th className="table-header-cap" style={{ padding: "1rem 1.5rem", textAlign: "left", width: "190px" }}><span style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}><Hash size={16} /> {t("rating_col_id")}</span></th>
-                <th className="table-header-cap" style={{ padding: "1rem 1.5rem", textAlign: "left" }}>{t("rating_charging_scenario")}</th>
-                <th className="table-header-cap" style={{ padding: "1rem 1.5rem", textAlign: "left" }}><span style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}><DollarSign size={16} /> {t("rating_commercial_rate")}</span></th>
-                <th className="table-header-cap" style={{ padding: "1rem 1.5rem", textAlign: "left" }}>{t("rating_grant_policy")}</th>
-                <th className="table-header-cap" style={{ padding: "1rem 1.5rem", textAlign: "left" }}>{t("status")}</th>
-                {canEditTemplates && <th className="table-header-cap" style={{ padding: "1rem 1.5rem", textAlign: "right", width: "120px" }}>{t("rating_col_actions")}</th>}
+              <tr className="rule-table-thead">
+                <th className="table-header-cap rule-th rule-th-id"><span className="flex-center-gap-0-55"><Hash size={16} /> {t("rating_col_id")}</span></th>
+                <th className="table-header-cap rule-th">{t("rating_charging_scenario")}</th>
+                <th className="table-header-cap rule-th"><span className="flex-center-gap-0-55"><DollarSign size={16} /> {t("rating_commercial_rate")}</span></th>
+                <th className="table-header-cap rule-th">{t("rating_grant_policy")}</th>
+                <th className="table-header-cap rule-th">{t("status")}</th>
+                {canEditTemplates && <th className="table-header-cap rule-th rule-th-actions">{t("rating_col_actions")}</th>}
               </tr>
             </thead>
             <tbody>
               {isAdding && (
-                <tr style={{ background: "rgba(59, 130, 246, 0.08)", borderBottom: "1px solid var(--surface-border)" }}>
+                <tr className="rule-tr-adding">
                   {renderFormCells(newForm, setNewForm, true)}
                 </tr>
               )}
@@ -112,48 +112,48 @@ export function PccRuleList(props: any) {
                 const meta = serviceMeta(rating.serviceKey);
                 const rateType = rateTypes.find((type: any) => type.val === rating.rates_type)?.label || rating.rates_type;
                 return (
-                  <tr key={rating.rating_group_id} style={{ borderBottom: "1px solid var(--surface-border)" }}>
+                  <tr key={rating.rating_group_id} className="rule-tr">
                     {editingId === rating.rating_group_id ? renderFormCells(editForm, setEditForm, false, rating.rating_group_id) : (
                       <>
-                        <td style={{ padding: "1.15rem 1.5rem" }}>
-                          <div style={{ fontFamily: "monospace", fontWeight: 800, color: "var(--primary)", fontSize: "1.05rem" }}>#{rating.rating_group_id}</div>
-                          <div style={{ color: "var(--text-muted)", fontSize: "0.76rem", marginTop: "0.25rem", overflowWrap: "anywhere" }}>{rating.rule_id || "-"}</div>
+                        <td className="rule-td">
+                          <div className="rule-id">#{rating.rating_group_id}</div>
+                          <div className="rule-subid">{rating.rule_id || "-"}</div>
                         </td>
-                        <td style={{ padding: "1.15rem 1.5rem" }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: "0.55rem", color: meta.color, fontWeight: 800 }}>
+                        <td className="rule-td">
+                          <div className="rule-scenario" style={{ color: meta.color }}>
                             {meta.icon}{meta.label}
                           </div>
-                          <div style={{ color: "var(--text-muted)", fontSize: "0.8rem", marginTop: "0.3rem" }}>
-                            APN <span style={{ fontFamily: "monospace", color: "var(--text-main)" }}>{rating.apn || "internet"}</span>
-                            <span style={{ margin: "0 0.45rem" }}>·</span>
-                            SI <span style={{ fontFamily: "monospace", color: "var(--text-main)" }}>{rating.service_identifier ?? 1}</span>
-                            <span style={{ margin: "0 0.45rem" }}>·</span>
-                            <span style={{ fontFamily: "monospace", color: "var(--text-main)" }}>{rating.charging_type || "data_volume"}</span>
+                          <div className="rule-scenario-desc">
+                            APN <span className="rule-font-mono-main">{rating.apn || "internet"}</span>
+                            <span className="rule-dot">·</span>
+                            SI <span className="rule-font-mono-main">{rating.service_identifier ?? 1}</span>
+                            <span className="rule-dot">·</span>
+                            <span className="rule-font-mono-main">{rating.charging_type || "data_volume"}</span>
                           </div>
                         </td>
-                        <td style={{ padding: "1.15rem 1.5rem" }}>
-                          <div style={{ fontFamily: "monospace", fontWeight: 800, color: "var(--text-main)" }}>{rating.rates || "0"} {rating.currency || "USD"}</div>
-                          <div style={{ color: "var(--text-muted)", fontSize: "0.8rem", marginTop: "0.3rem" }}>{rateType}</div>
+                        <td className="rule-td">
+                          <div className="rule-rate">{rating.rates || "0"} {rating.currency || "USD"}</div>
+                          <div className="rule-rate-type">{rateType}</div>
                         </td>
-                        <td style={{ padding: "1.15rem 1.5rem" }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontWeight: 800 }}>
+                        <td className="rule-td">
+                          <div className="rule-grant">
                             <CheckCircle2 size={15} color="var(--success)" />
                             {formatGrant(t, rating.quota_per_grant, rating.unit, rating.charging_type)}
                           </div>
-                          <div style={{ color: "var(--text-muted)", fontSize: "0.8rem", marginTop: "0.3rem" }}>
+                          <div className="rule-grant-desc">
                             {t("rating_validity")}: {rating.validity_time ?? 0}s
-                            <span style={{ margin: "0 0.45rem" }}>·</span>
+                            <span className="rule-dot">·</span>
                             {t("rating_threshold")}: {formatGrant(t, rating.volume_threshold, rating.unit, rating.charging_type)}
                           </div>
                         </td>
-                        <td style={{ padding: "1.15rem 1.5rem" }}>
-                          <span style={{ background: "rgba(16, 185, 129, 0.12)", color: "var(--success)", padding: "4px 10px", borderRadius: "999px", fontSize: "0.78rem", fontWeight: 800 }}>
+                        <td className="rule-td">
+                          <span className="rule-status">
                             {rating.status || "active"}
                           </span>
                         </td>
                         {canEditTemplates && (
-                          <td style={{ padding: "1.15rem 1.5rem", textAlign: "right" }}>
-                            <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
+                          <td className="rule-actions">
+                            <div className="rule-actions-flex">
                               <button className="btn-icon" onClick={() => startEdit(rating)} title={t("edit")}><Pencil size={16} color="var(--primary)" /></button>
                               <button className="btn-icon" onClick={() => handleDelete(rating.rating_group_id)} title={t("delete")} disabled={savingKey === `delete:${rating.rating_group_id}` || pendingDeleteId != null}><Trash2 size={16} color="var(--danger)" /></button>
                             </div>

@@ -5,6 +5,7 @@ import { BYTE_INPUT_UNITS, TIME_INPUT_UNITS, composeByteInput, composeSecondsInp
 import { AMBR_UNITS } from "./utils";
 import type { Ambr, Auth4GData, Rating, Slice } from "@/types/subscriber";
 import { useI18n } from "../I18nProvider";
+import "./subscriber.css";
 
 interface SubscriberEditModeProps {
   t: any;
@@ -83,35 +84,29 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
     : t("sub_imsi_checking");
   const duplicateMsisdnWarning = t("sub_msisdn_exists_warning");
   const checkingMsisdnText = t("sub_msisdn_checking");
-  const imsiWarningStyle = {
-    color: "var(--danger)",
-    fontSize: "0.85rem",
-    marginTop: "0.4rem",
-    fontWeight: 650,
-  };
+  
   const tariffPlanOptions = tariffPlanList.length > 0
     ? tariffPlanList.filter((plan) => (plan.status || "active") === "active" || plan.plan_id === ocsPlanId)
     : (ocsPlanId ? [{ plan_id: ocsPlanId, name: ocsPlanId, status: ocsPlanStatus }] : []);
 
   return (
-    <div style={{ paddingBottom: '2rem', display: "flex", flexDirection: "column" }}>
+    <div className="edit-mode-container">
       <div className="dash-card animate-fade-in" id="sec-identity">
         <div className="dash-card-header">
           <Users size={20} color="var(--primary)" />
-          <h3 style={{ fontSize: "1.1rem", margin: 0, color: "var(--text-main)", fontWeight: 600 }}>{t("sub_identity_tmpl")}</h3>
+          <h3 className="edit-header-title">{t("sub_identity_tmpl")}</h3>
         </div>
         <div className="dash-card-body">
           <div className="quick-grid">
             <div>
-              <label className="form-label"><span style={{ color: "var(--danger)", marginRight: "0.25rem" }}>*</span>IMSI</label>
+              <label className="form-label"><span className="form-asterisk">*</span>IMSI</label>
               {imsi ? (
-                <input type="text" className="form-input" value={imsi} readOnly style={{ fontFamily: "monospace", fontWeight: 700, color: "var(--primary)", background: "var(--surface-hover)" }} />
+                <input type="text" className="form-input input-imsi-readonly" value={imsi} readOnly />
               ) : (
                 <>
                   <input
                     type="text"
-                    className={`form-input hover-glass ${(inputImsi && !/^\d{15}$/.test(inputImsi)) || inputImsiExists ? 'border-danger error-shake' : ''}`}
-                    style={{ fontFamily: "monospace", fontWeight: 650, borderColor: (inputImsi && !/^\d{15}$/.test(inputImsi)) || inputImsiExists ? "var(--danger)" : undefined }}
+                    className={`form-input hover-glass input-imsi-edit ${(inputImsi && !/^\d{15}$/.test(inputImsi)) || inputImsiExists ? 'border-danger error-shake' : ''}`}
                     placeholder="460020000000001"
                     value={inputImsi}
                     onChange={e => setInputImsi(e.target.value.replace(/\D/g, ''))}
@@ -119,17 +114,17 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
                     autoFocus
                   />
                   {inputImsi && !/^\d{15}$/.test(inputImsi) && (
-                    <div style={imsiWarningStyle}>
+                    <div className="warning-text">
                       {t("sub_err_imsi_15")}
                     </div>
                   )}
                   {inputImsiExists && (
-                    <div style={imsiWarningStyle}>
+                    <div className="warning-text">
                       {duplicateImsiWarning}
                     </div>
                   )}
                   {!inputImsiExists && isCheckingInputImsi && (
-                    <div style={{ color: "var(--text-muted)", fontSize: "0.82rem", marginTop: "0.4rem", fontWeight: 500 }}>
+                    <div className="checking-text">
                       {checkingImsiText}
                     </div>
                   )}
@@ -137,22 +132,21 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
               )}
             </div>
             <div>
-            <label className="form-label"><span style={{ color: "var(--danger)", marginRight: "0.25rem" }}>*</span>MSISDN</label>
+            <label className="form-label"><span className="form-asterisk">*</span>MSISDN</label>
               <input
                 type="text"
-                className={`form-input ${inputMsisdnExists || (msisdn && !/^\d+$/.test(msisdn)) ? 'border-danger error-shake' : ''}`}
-                style={{ borderColor: inputMsisdnExists || (msisdn && !/^\d+$/.test(msisdn)) ? "var(--danger)" : undefined }}
+                className={`form-input input-msisdn ${inputMsisdnExists || (msisdn && !/^\d+$/.test(msisdn)) ? 'border-danger error-shake' : ''}`}
                 value={msisdn}
                 onChange={(e) => setMsisdn(e.target.value.replace(/\D/g, ""))}
                 placeholder={t("sub_ph_msisdn")}
               />
               {inputMsisdnExists && (
-                <div style={imsiWarningStyle}>
+                <div className="warning-text">
                   {duplicateMsisdnWarning}
                 </div>
               )}
               {!inputMsisdnExists && isCheckingInputMsisdn && (
-                <div style={{ color: "var(--text-muted)", fontSize: "0.82rem", marginTop: "0.4rem", fontWeight: 500 }}>
+                <div className="checking-text">
                   {checkingMsisdnText}
                 </div>
               )}
@@ -181,21 +175,21 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
       <div className="dash-card animate-fade-in" id="sec-security">
         <div className="dash-card-header">
           <Shield size={20} color="var(--primary)" />
-          <h3 style={{ fontSize: "1.1rem", margin: 0, color: "var(--text-main)", fontWeight: 600 }}>{t("sec_security_auth")}</h3>
+          <h3 className="edit-header-title">{t("sec_security_auth")}</h3>
         </div>
-        <div className="dash-card-body" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2rem" }}>
-          <div style={{ gridColumn: "1 / -1" }}>
-            <label className="form-label"><span style={{ color: "var(--danger)", marginRight: "0.25rem" }}>*</span>{t("sub_key_k")}</label>
-            <input type="text" className="form-input" style={{ fontFamily: "monospace", fontSize: "1.05rem" }} value={auth4GData.k} onChange={(e) => setAuth4GData({...auth4GData, k: e.target.value})} placeholder={t("sub_ph_hex")} />
+        <div className="dash-card-body auth-edit-grid">
+          <div className="auth-edit-full">
+            <label className="form-label"><span className="form-asterisk">*</span>{t("sub_key_k")}</label>
+            <input type="text" className="form-input auth-input-large" value={auth4GData.k} onChange={(e) => setAuth4GData({...auth4GData, k: e.target.value})} placeholder={t("sub_ph_hex")} />
           </div>
-          <div style={{ gridColumn: "1 / -1" }}>
-            <label className="form-label"><span style={{ color: "var(--danger)", marginRight: "0.25rem" }}>*</span>{t("sub_key_op")} ({usimType === "op" ? "OP" : "OPc"})</label>
-            <div style={{ display: "flex", gap: "0.75rem" }}>
-              <select className="form-input" style={{ width: "120px", flexShrink: 0 }} value={usimType} onChange={(e) => setUsimType(e.target.value as "opc" | "op")}>
+          <div className="auth-edit-full">
+            <label className="form-label"><span className="form-asterisk">*</span>{t("sub_key_op")} ({usimType === "op" ? "OP" : "OPc"})</label>
+            <div className="auth-op-container">
+              <select className="form-input auth-op-select" value={usimType} onChange={(e) => setUsimType(e.target.value as "opc" | "op")}>
                 <option value="opc">OPc</option>
                 <option value="op">OP</option>
               </select>
-              <input type="text" className="form-input" style={{ fontFamily: "monospace", fontSize: "1.05rem", flex: 1 }} value={auth4GData.opValue} onChange={(e) => setAuth4GData({...auth4GData, opValue: e.target.value})} placeholder={t("sub_ph_hex")} />
+              <input type="text" className="form-input auth-input-large auth-op-input" value={auth4GData.opValue} onChange={(e) => setAuth4GData({...auth4GData, opValue: e.target.value})} placeholder={t("sub_ph_hex")} />
             </div>
           </div>
           <div>
@@ -209,22 +203,21 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
             />
           </div>
           <div>
-            <label className="form-label"><span style={{ color: "var(--danger)", marginRight: "0.25rem" }}>*</span>{t("sub_amf")}</label>
-            <input type="text" className="form-input" value={auth4GData.amf} onChange={(e) => setAuth4GData({...auth4GData, amf: e.target.value})} placeholder={t("sub_ph_amf")} />
+            <label className="form-label"><span className="form-asterisk">*</span>{t("sub_amf")}</label>
+            <input type="text" className="form-input input-auth" value={auth4GData.amf} onChange={(e) => setAuth4GData({...auth4GData, amf: e.target.value})} placeholder={t("sub_ph_amf")} />
           </div>
         </div>
       </div>
 
       {/* Global Network Configure */}
-      <div className="dash-card animate-fade-in" id="sec-network" style={{ order: 4 }}>
+      <div className="dash-card animate-fade-in network-edit-card" id="sec-network">
         <div className="dash-card-header">
           <Signal size={20} color="var(--primary)" />
-          <h3 style={{ fontSize: "1.1rem", margin: 0, color: "var(--text-main)", fontWeight: 600 }}>{t("sec_global_network")}</h3>
+          <h3 className="edit-header-title">{t("sec_global_network")}</h3>
         </div>
-        <div className="dash-card-body">
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2rem" }}>
+        <div className="dash-card-body network-edit-grid">
             <div>
-              <label className="form-label" style={{ color: "var(--text-secondary)" }}><span style={{ color: "var(--danger)", marginRight: "0.25rem" }}>*</span>{t("sub_lbl_ambr_dl")}</label>
+              <label className="form-label network-label"><span className="form-asterisk">*</span>{t("sub_lbl_ambr_dl")}</label>
               <div className="input-composite">
                 <input
                   type="number"
@@ -238,7 +231,7 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
               </div>
             </div>
             <div>
-              <label className="form-label" style={{ color: "var(--text-secondary)" }}><span style={{ color: "var(--danger)", marginRight: "0.25rem" }}>*</span>{t("sub_lbl_ambr_ul")}</label>
+              <label className="form-label network-label"><span className="form-asterisk">*</span>{t("sub_lbl_ambr_ul")}</label>
               <div className="input-composite">
                 <input
                   type="number"
@@ -251,29 +244,27 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
                 </select>
               </div>
             </div>
-          </div>
         </div>
       </div>
 
       {/* Access Restrictions (3GPP TS 29.272 Bitmask) */}
-      <div className="dash-card animate-fade-in" id="sec-access-restrictions" style={{ marginTop: "1.5rem", order: 5 }}>
-        <div className="dash-card-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+      <div className="dash-card animate-fade-in access-rest-card" id="sec-access-restrictions">
+        <div className="dash-card-header access-rest-header">
+          <div className="access-rest-title-container">
             <Lock size={20} color="var(--primary)" />
-            <h3 style={{ fontSize: "1.1rem", margin: 0, color: "var(--text-main)", fontWeight: 600 }}>{t("sec_access_restrict")}</h3>
+            <h3 className="edit-header-title">{t("sec_access_restrict")}</h3>
           </div>
           <button
             type="button"
-            className="btn-icon"
+            className="btn-icon btn-collapse"
             onClick={() => setIsAccessRestrictionsExpanded((prev: boolean) => !prev)}
             title={isAccessRestrictionsExpanded ? t("collapse") : t("expand")}
-            style={{ background: "transparent", border: "none", cursor: "pointer" }}
           >
             {isAccessRestrictionsExpanded ? <ChevronUp size={18} color="var(--text-muted)" /> : <ChevronDown size={18} color="var(--text-muted)" />}
           </button>
         </div>
         {isAccessRestrictionsExpanded && <div className="dash-card-body">
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: "1rem" }}>
+          <div className="access-rest-grid">
             {[
               { val: 128, label: t("sub_acc_nr") },
               { val: 16, label: t("sub_acc_eutran") },
@@ -287,7 +278,7 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
                const isLegacySuspended = accessRestriction === 255;
                const isChecked = (accessRestriction & opt.val) !== 0 || isLegacySuspended;
                return (
-                 <label key={opt.val} style={{ display: "flex", alignItems: "center", gap: "0.75rem", padding: "0.75rem 1rem", border: "1px solid " + (isChecked ? "var(--primary)" : "var(--surface-border)"), borderRadius: "8px", background: isChecked ? "rgba(59, 130, 246, 0.05)" : "var(--surface)", cursor: "pointer", transition: "all 0.2s" }}>
+                 <label key={opt.val} className={`access-rest-label ${isChecked ? "checked" : "unchecked"}`}>
                    <input
                      type="checkbox"
                      className="checkbox-custom"
@@ -303,17 +294,17 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
                        setAccessRestriction(next);
                      }}
                    />
-                   <span style={{ fontSize: "0.9rem", fontWeight: isChecked ? 600 : 500, color: isChecked ? "var(--primary)" : "var(--text-secondary)" }}>{opt.label}</span>
+                   <span className={`access-rest-text ${isChecked ? "checked" : "unchecked"}`}>{opt.label}</span>
                  </label>
                );
             })}
           </div>
 
-          <div style={{ marginTop: "1.5rem", display: "flex", gap: "1rem", borderTop: "1px solid var(--surface-border)", paddingTop: "1.5rem" }}>
-             <button className="btn btn-outline" style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.4rem 1rem", fontSize: "0.85rem", color: "var(--success)", borderColor: "var(--success)", background: "transparent" }} onClick={() => setAccessRestriction(0)}>
+          <div className="access-rest-actions">
+             <button className="btn btn-outline btn-access-action btn-access-clear" onClick={() => setAccessRestriction(0)}>
                {t("sub_btn_clear_restrictions")}
              </button>
-             <button className="btn btn-outline" style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.4rem 1rem", fontSize: "0.85rem", color: "var(--danger)", borderColor: "var(--danger)", background: "transparent" }} onClick={() => setAccessRestriction(255)}>
+             <button className="btn btn-outline btn-access-action btn-access-suspend" onClick={() => setAccessRestriction(255)}>
                {t("sub_btn_suspend_restrictions")}
              </button>
           </div>
@@ -321,18 +312,18 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
       </div>
 
       {/* Billing Configuration (4-table) */}
-      <div className="dash-card animate-fade-in" id="sec-rating" style={{ order: 3 }}>
+      <div className="dash-card animate-fade-in billing-edit-card" id="sec-rating">
         <div className="dash-card-header">
           <Gauge size={20} color="var(--primary)" />
-          <h3 style={{ fontSize: "1.1rem", margin: 0, color: "var(--text-main)", fontWeight: 600 }}>{t("sec_billing_config")}</h3>
+          <h3 className="edit-header-title">{t("sec_billing_config")}</h3>
         </div>
-        <div className="dash-card-body" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "1.5rem" }}>
+        <div className="dash-card-body billing-edit-grid">
           <div>
-            <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span><span style={{ color: "var(--danger)", marginRight: "0.25rem" }}>*</span>PLMN</span>
-              <span style={{ fontSize: '0.75rem', color: 'var(--success)' }}>{t("sub_auto_linked")}</span>
+            <label className="form-label form-label-flex">
+              <span><span className="form-asterisk">*</span>PLMN</span>
+              <span className="auto-linked-text">{t("sub_auto_linked")}</span>
             </label>
-            <input type="text" className="form-input" value={ocsPlmn} readOnly style={{ background: "var(--surface-hover)", color: "var(--primary)", fontWeight: 600, border: '1px solid var(--surface-border)' }} placeholder="e.g. 45400" />
+            <input type="text" className="form-input plmn-readonly" value={ocsPlmn} readOnly placeholder="e.g. 45400" />
           </div>
           <div>
             <label className="form-label">{t("sub_traffic_total_quota")}</label>
@@ -375,11 +366,10 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
           <div>
             <label className="form-label">{t("sub_360_tariff_plan")}</label>
             <select
-              className="form-input"
+              className="form-input plan-id-select"
               value={ocsPlanId}
               onChange={(e) => setOcsPlanId(e.target.value)}
               disabled={tariffPlanOptions.length === 0}
-              style={{ fontFamily: "monospace" }}
             >
               {tariffPlanOptions.map((plan) => (
                 <option key={plan.plan_id} value={plan.plan_id}>
@@ -390,7 +380,7 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
           </div>
           <div>
             <label className="form-label">{t("sub_360_plan_status")}</label>
-            <input type="text" className="form-input" value={ocsPlanStatus} readOnly style={{ background: "var(--surface-hover)", fontFamily: "monospace" }} />
+            <input type="text" className="form-input plan-status-readonly" value={ocsPlanStatus} readOnly />
           </div>
           <RatingRuleLinkPanel
             planId={ocsPlanId}
@@ -461,28 +451,28 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
               onChange={(e) => setOcsSmsBalanceStr(e.target.value.replace(/\D/g, ""))}
             />
           </div>
-          <div style={{ gridColumn: "1 / -1" }}>
+          <div className="auth-edit-full">
             <label className="form-label">{t("sub_360_apn_rules")}</label>
-            <div style={{ display: "grid", gap: "0.5rem" }}>
+            <div className="rules-list">
               {ocsRules.length > 0 ? ocsRules.map((rule: any) => (
-                <div key={rule.rule_id || `${rule.apn}-${rule.rating_group_id}`} style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr 1fr 1fr", gap: "1rem", padding: "0.75rem 1rem", border: "1px solid var(--surface-border)", borderRadius: "6px", background: "var(--surface-hover)", fontFamily: "monospace", fontSize: "0.9rem" }}>
+                <div key={rule.rule_id || `${rule.apn}-${rule.rating_group_id}`} className="rule-item bg-hover">
                   <span>{rule.apn}</span>
                   <span>RG {rule.rating_group_id}</span>
                   <span>SI {rule.service_identifier}</span>
                   <span>{ratingTypeLabel(t, rule.charging_type)}</span>
                   <span>{ratingUnitLabel(t, rule.unit)}</span>
                 </div>
-              )) : <span style={{ color: "var(--text-muted)" }}>{t("sub_360_no_tariff_rules")}</span>}
+              )) : <span className="no-rules">{t("sub_360_no_tariff_rules")}</span>}
             </div>
           </div>
         </div>
       </div>
 
       {/* Level 1: Slices Configure */}
-      <div id="sec-slices" style={{ paddingTop: "1rem", order: 6 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
-          <h3 style={{ fontSize: "1.25rem", margin: 0, color: "var(--text-main)", fontWeight: 600, display: "flex", alignItems: "center", gap: "0.5rem" }}><Server size={22}/> {t("sub_slices_core")}</h3>
-          <button className="btn btn-primary" onClick={addSlice} style={{ padding: '0.5rem 1rem', display: "flex", alignItems: "center", gap: "0.4rem", borderRadius: "24px" }}>
+      <div id="sec-slices" className="slices-edit-section">
+        <div className="slices-edit-header">
+          <h3 className="slices-edit-title"><Server size={22}/> {t("sub_slices_core")}</h3>
+          <button className="btn btn-primary btn-add-slice" onClick={addSlice}>
             <Plus size={18}/> {t("sub_add_slice")}
           </button>
         </div>
@@ -501,7 +491,7 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
             />
           ))
         ) : (
-          <div style={{ textAlign: "center", padding: "4rem", color: "var(--text-muted)", backgroundColor: "var(--surface)", border: "1px dashed var(--surface-border)", borderRadius: "8px" }}>
+          <div className="no-slices-edit">
             {t("sub_no_slices_start")} <strong>{t("sub_add_slice")}</strong> {t("sub_to_start")}
           </div>
         )}

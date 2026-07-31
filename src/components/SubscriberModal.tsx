@@ -9,6 +9,7 @@ import TrafficAdjustmentModal from "./TrafficAdjustmentModal";
 import { useSubscriberForm } from "@/hooks/useSubscriberForm";
 import { formatBytes, parseBytes } from "@/lib/unitParser";
 import { OperationNotice } from "./OperationFeedback";
+import "./SubscriberModal.css";
 
 interface SubscriberModalProps {
   imsi: string | null;
@@ -88,18 +89,18 @@ export default function SubscriberModal({ imsi, onClose, onRefresh }: Subscriber
 
         <div className="workflow-header">
           <div className="workflow-title-group">
-            <div style={{ display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
+            <div className="sub-modal-imsi-row">
               {imsi ? (
-                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                  <h2 style={{ margin: 0, fontSize: "1.5rem", fontWeight: 600, color: "var(--text-main)", fontFamily: "monospace" }}>{imsi}</h2>
-                  <button className="copy-btn" onClick={handleCopyImsi} title={t("sub_copy_imsi")} style={{ padding: "6px" }}>
+                <div className="sub-modal-imsi-group">
+                  <h2 className="sub-modal-imsi-title">{imsi}</h2>
+                  <button className="copy-btn sub-modal-imsi-copy-btn" onClick={handleCopyImsi} title={t("sub_copy_imsi")}>
                     {isImsiCopied ? <Check size={20} color="var(--success)" /> : <Copy size={20} />}
                   </button>
                 </div>
               ) : (
                 <div>
-                  <h2 style={{ margin: 0, fontSize: "1.5rem", fontWeight: 600, color: "var(--text-main)" }}>{t("sub_new_title")}</h2>
-                  <p style={{ margin: "0.25rem 0 0", color: "var(--text-muted)", fontSize: "0.9rem" }}>{t("sub_new_desc")}</p>
+                  <h2 className="sub-modal-new-title">{t("sub_new_title")}</h2>
+                  <p className="sub-modal-new-desc">{t("sub_new_desc")}</p>
                 </div>
               )}
               {ocsPlanId && <span className="badge-active"><Check size={12}/> {t("sub_billing_active")}</span>}
@@ -121,14 +122,14 @@ export default function SubscriberModal({ imsi, onClose, onRefresh }: Subscriber
 
             {imsi && <button className="btn-icon" onClick={handleDelete} title={t("sub_btn_delete")}><Trash2 size={24} color="var(--danger)" /></button>}
 
-            <div style={{ width: "1px", height: "30px", background: "var(--surface-border)", margin: "0 0.5rem" }} />
+            <div className="sub-modal-header-divider" />
             <button className="btn-icon" onClick={onClose} title={t("close")}><X size={26} color="var(--text-muted)" /></button>
           </div>
         </div>
 
         <div className="workflow-body">
           <div className="workflow-sidebar">
-            <h4 style={{ fontSize: "0.85rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "1rem", paddingLeft: "0.5rem" }}>{t("sub_overview")}</h4>
+            <h4 className="sub-modal-sidebar-title">{t("sub_overview")}</h4>
             {isEditing && (
               <button className="workflow-step" onClick={() => scrollTo('sec-identity')}>
                 <span className="workflow-step-index">1</span>
@@ -184,7 +185,7 @@ export default function SubscriberModal({ imsi, onClose, onRefresh }: Subscriber
             )}
 
             {isLoading ? (
-              <div style={{ textAlign: "center", marginTop: "4rem", color: "var(--text-muted)", fontSize: "1.1rem" }}>{t("sub_loading_data")}</div>
+              <div className="sub-modal-loading">{t("sub_loading_data")}</div>
             ) : (
               <div className="workflow-content-inner">
                 {isEditing ? renderEditMode() : renderViewMode()}
@@ -194,38 +195,33 @@ export default function SubscriberModal({ imsi, onClose, onRefresh }: Subscriber
         </div>
 
         <div className="workflow-footer">
-          <div style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>
+          <div className="sub-modal-footer-msg">
             {isEditing ? t("sub_msg_edit") : t("sub_msg_view")}
           </div>
           <div className="workflow-footer-actions">
-            <button className="btn btn-outline" onClick={onClose}>{t("cancel")}</button>
-            {isEditing ? (
-              <button className="btn btn-primary" onClick={handleSave} disabled={isSaving || inputMsisdnExists || isCheckingInputMsisdn || (!imsi && (!inputImsi || inputImsiExists || isCheckingInputImsi))}>
-                <Save size={16}/> {isSaving ? t("sub_btn_saving") : (imsi ? t("sub_btn_save") : t("sub_btn_create"))}
-              </button>
-            ) : (
-              <button className="btn btn-primary" onClick={() => setIsEditing(true)}>
-                <Pencil size={16}/> {t("sub_btn_edit")}
+            <button className="btn btn-outline" onClick={onClose} disabled={isSaving}>{t("cancel")}</button>
+            {isEditing && (
+              <button 
+                className={`btn btn-primary ${isSaving ? 'btn-loading' : ''}`} 
+                onClick={handleSave}
+                disabled={isSaving || isCheckingInputImsi || isCheckingInputMsisdn || inputImsiExists || inputMsisdnExists || (imsi === null && !inputImsi)}
+              >
+                <Save size={18}/> {isSaving ? t("saving") : t("save")}
               </button>
             )}
           </div>
         </div>
-
       </div>
-
-      {imsi && isTrafficModalOpen && (
+      {isTrafficModalOpen && imsi && (
         <TrafficAdjustmentModal
           imsi={imsi}
-          t={t}
-          currentTraffic={{ total: trafficTotal, balance: trafficBalance, used: trafficUsed }}
+          currentTraffic={{ total: trafficTotal, used: trafficUsed, balance: trafficBalance }}
           onClose={() => setIsTrafficModalOpen(false)}
-          onSuccess={(adjustment) => {
-            if (adjustment?.after) {
-              actions.setOcsTrafficTotalStr(formatBytes(adjustment.after.traffic_total));
-              actions.setOcsTrafficBalanceStr(formatBytes(adjustment.after.traffic_balance));
-            }
+          onSuccess={() => {
+            setIsTrafficModalOpen(false);
             onRefresh();
           }}
+          t={t}
         />
       )}
     </div>

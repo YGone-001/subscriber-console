@@ -1,0 +1,67 @@
+.health-container { padding: 3rem; padding-bottom: 100px; }
+.health-mongo-card { background: var(--surface); backdrop-filter: blur(12px); border-radius: 12px; border: 1px solid var(--surface-border); box-shadow: 0 4px 20px rgba(0,0,0,0.2); padding: 1.5rem 2rem; margin-bottom: 2rem; }
+.health-mongo-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; margin-bottom: 1.25rem; }
+.health-mongo-title-group { display: flex; align-items: center; gap: 0.85rem; }
+.health-mongo-title { margin: 0; font-size: 1.15rem; font-weight: 600; color: var(--text-main); }
+.health-mongo-subtitle { color: var(--text-secondary); font-size: 0.85rem; margin-top: 0.25rem; }
+.health-mongo-refresh { display: flex; align-items: center; gap: 0.5rem; padding: 0.45rem 0.9rem; border-radius: 20px; }
+.health-mongo-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; }
+.health-mongo-stat { border: 1px solid var(--surface-border); border-radius: 8px; padding: 1rem; }
+.health-mongo-stat-label { color: var(--text-secondary); font-size: 0.75rem; text-transform: uppercase; font-weight: 600; }
+.health-mongo-stat-value { margin-top: 0.5rem; font-size: 1.05rem; font-weight: 700; color: var(--text-main); }
+.health-mongo-stat-success { margin-top: 0.5rem; font-size: 1.05rem; font-weight: 700; color: var(--success); }
+.health-mongo-stat-danger { margin-top: 0.5rem; font-size: 1.05rem; font-weight: 700; color: var(--danger); }
+.health-mongo-error { margin-top: 1rem; border-top: 1px solid var(--surface-border); padding-top: 1rem; color: var(--text-secondary); font-size: 0.9rem; }
+.health-kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; margin-bottom: 2.5rem; }
+.health-kpi-card { padding: 1.5rem 2rem; border-radius: 12px; }
+.health-kpi-card-success { border-left: 4px solid var(--success); }
+.health-kpi-card-danger { border-left: 4px solid var(--danger); }
+.health-kpi-card-primary { border-left: 4px solid var(--primary); }
+.health-kpi-card-warning { border-left: 4px solid #f6c23e; }
+.health-kpi-inner { display: flex; justify-content: space-between; align-items: center; }
+.health-kpi-label { color: var(--text-secondary); font-size: 0.85rem; font-weight: 600; text-transform: uppercase; }
+.health-kpi-value { font-size: 2rem; font-weight: 700; color: var(--text-main); margin-top: 0.5rem; }
+.health-kpi-value-danger { font-size: 2rem; font-weight: 700; color: var(--danger); margin-top: 0.5rem; }
+.health-kpi-value-small { font-size: 1.1rem; font-weight: 600; color: var(--text-main); margin-top: 0.8rem; white-space: nowrap; }
+.health-control-strip { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; background: var(--surface); backdrop-filter: blur(12px); padding: 1rem 2rem; border-radius: 12px; border: 1px solid var(--surface-border); box-shadow: 0 4px 20px rgba(0,0,0,0.2); }
+.health-control-status { flex: 1; }
+.health-control-text { display: flex; align-items: center; gap: 1rem; }
+.health-control-msg { font-weight: 500; }
+.health-control-msg-active { color: var(--primary); }
+.health-control-msg-idle { color: var(--text-secondary); }
+.health-progress-bar { margin-top: 1rem; border-radius: 4px; }
+.health-control-actions { margin-left: 2rem; }
+.health-btn-run { padding: 0.6rem 1.5rem; border-radius: 20px; display: flex; align-items: center; gap: 0.5rem; }
+.health-spinner { width: 14px; height: 14px; border-width: 2px; }
+.health-anomalies-card { background: var(--surface); backdrop-filter: blur(12px); border-radius: 12px; border: 1px solid var(--surface-border); box-shadow: 0 4px 20px rgba(0,0,0,0.2); overflow: hidden; }
+.health-anomalies-header { padding: 1.5rem 2rem; border-bottom: 1px solid var(--surface-border); display: flex; justify-content: space-between; align-items: center; }
+.health-anomalies-title { margin: 0; font-size: 1.25rem; font-weight: 600; color: var(--text-main); }
+.health-table-wrap { overflow-x: auto; }
+.health-table { width: 100%; border-collapse: collapse; }
+.health-table-thead { background: var(--background); border-bottom: 2px solid var(--surface-border); }
+.health-table-th { padding: 1rem 2rem; text-align: left; font-size: 0.85rem; color: var(--text-secondary); }
+.health-table-th-right { padding: 1rem 2rem; text-align: right; font-size: 0.85rem; color: var(--text-secondary); }
+.health-table-tr { border-bottom: 1px solid var(--surface-border); }
+.health-table-td { padding: 1rem 2rem; }
+.health-table-td-imsi { padding: 1rem 2rem; font-weight: 600; }
+.health-badge { color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.1); }
+.health-table-td-details { padding: 1rem 2rem; color: var(--text-secondary); font-size: 0.9rem; }
+.health-table-td-actions { padding: 1rem 2rem; text-align: right; }
+.health-btn-heal { padding: 0.4rem 1rem; font-size: 0.85rem; border-radius: 20px; }
+.health-modal-overlay { z-index: 9999; }
+.health-modal-content { width: 500px; max-width: 95%; border-radius: 12px; overflow: hidden; }
+.health-modal-header { padding: 1.5rem 2rem; border-bottom: 1px solid var(--surface-border); background: var(--surface-hover); }
+.health-modal-title { margin: 0; font-size: 1.35rem; font-weight: 600; color: var(--text-main); }
+.health-modal-body { padding: 2rem; }
+.health-modal-group { margin-bottom: 1.5rem; }
+.health-modal-label { font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.25rem; }
+.health-modal-target { font-weight: 600; font-size: 1.1rem; }
+.health-modal-group-lg { margin-bottom: 2rem; }
+.health-modal-form-label { display: flex; align-items: center; gap: 0.4rem; }
+.health-modal-desc { font-size: 0.8rem; color: var(--text-muted); margin-top: 0.5rem; }
+.health-modal-confirm-box { background: var(--surface-hover); padding: 1rem; border-radius: 8px; border: 1px solid var(--surface-border); }
+.health-modal-checkbox-label { display: flex; align-items: flex-start; gap: 0.75rem; cursor: pointer; margin: 0; }
+.health-modal-checkbox { margin-top: 0.15rem; }
+.health-modal-confirm-text { font-size: 0.9rem; color: var(--text-main); line-height: 1.5; font-weight: 500; }
+.health-modal-actions { display: flex; justify-content: flex-end; gap: 1rem; margin-top: 2rem; }
+.health-modal-btn { display: flex; align-items: center; gap: 0.5rem; }

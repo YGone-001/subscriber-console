@@ -8,6 +8,7 @@ import ProfileViewMode from "./profile/ProfileViewMode";
 import ProfileEditMode from "./profile/ProfileEditMode";
 import { useAuth } from "@/hooks/useAuth";
 import { ConfirmActionPanel, LoadingRows, OperationNotice } from "./OperationFeedback";
+import "./modals.css";
 
 // Session type mapping (IPv4/IPv6/IPv4v6)
 interface ProfileModalProps {
@@ -458,25 +459,25 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
     const diffRows = getVersionDiffRows();
 
     return (
-      <div className="dash-card animate-fade-in" id="psec-versions" style={{ marginBottom: "1.5rem" }}>
-        <div className="dash-card-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+      <div className="dash-card animate-fade-in pm-card" id="psec-versions">
+        <div className="dash-card-header pm-card-header">
+          <div className="pm-card-header-left">
             <History size={20} color="var(--primary)" />
             <div>
-              <h3 style={{ margin: 0, fontSize: "1rem" }}>{t("prof_version_title")}</h3>
-              <p style={{ margin: "0.25rem 0 0", color: "var(--text-muted)", fontSize: "0.82rem" }}>
+              <h3 className="pm-card-header-title">{t("prof_version_title")}</h3>
+              <p className="pm-card-header-desc">
                 {t("prof_version_desc")}
               </p>
             </div>
           </div>
-          <button className="btn btn-outline" onClick={loadVersions} disabled={isVersionsLoading} style={{ padding: "0.45rem 0.8rem", fontSize: "0.82rem" }}>
+          <button className="btn btn-outline pm-refresh-btn" onClick={loadVersions} disabled={isVersionsLoading}>
             {isVersionsLoading ? t("prof_version_loading") : t("audit_refresh")}
           </button>
         </div>
-        <div className="dash-card-body" style={{ display: "grid", gridTemplateColumns: "minmax(260px, 0.9fr) minmax(320px, 1.1fr)", gap: "1rem" }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.65rem", maxHeight: "360px", overflowY: "auto", paddingRight: "0.25rem" }}>
+        <div className="dash-card-body pm-card-body">
+          <div className="pm-versions-list">
             {versions.length === 0 ? (
-              <div style={{ padding: "1rem", color: "var(--text-muted)", border: "1px dashed var(--surface-border)", borderRadius: "8px" }}>
+              <div className="pm-versions-empty">
                 {isVersionsLoading ? t("prof_version_loading") : t("prof_version_empty")}
               </div>
             ) : versions.map(version => (
@@ -484,64 +485,56 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
                 key={version.versionId}
                 type="button"
                 onClick={() => openVersion(version.versionId)}
-                style={{
-                  textAlign: "left",
-                  border: selectedVersion?.versionId === version.versionId ? "1px solid var(--primary)" : "1px solid var(--surface-border)",
-                  background: selectedVersion?.versionId === version.versionId ? "rgba(59, 130, 246, 0.08)" : "var(--surface)",
-                  borderRadius: "8px",
-                  padding: "0.8rem",
-                  cursor: "pointer",
-                  color: "var(--text-main)",
-                }}
+                className={`pm-version-btn ${selectedVersion?.versionId === version.versionId ? "selected" : ""}`}
               >
-                <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "center" }}>
-                  <strong style={{ fontSize: "0.9rem" }}>{t(`prof_version_action_${version.action}` as any)}</strong>
-                  <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>{version.sliceCount} {t("prof_version_slices")}</span>
+                <div className="pm-version-btn-top">
+                  <strong className="pm-version-btn-title">{t(`prof_version_action_${version.action}` as any)}</strong>
+                  <span className="pm-version-btn-slices">{version.sliceCount} {t("prof_version_slices")}</span>
                 </div>
-                <div style={{ marginTop: "0.4rem", color: "var(--text-muted)", fontSize: "0.78rem" }}>
+                <div className="pm-version-btn-time">
                   {formatVersionTime(version.savedAt)}
                 </div>
-                <div style={{ marginTop: "0.25rem", color: "var(--text-secondary)", fontSize: "0.78rem" }}>
+                <div className="pm-version-btn-by">
                   {t("prof_version_by")} {version.savedBy}
                 </div>
               </button>
             ))}
           </div>
 
-          <div style={{ border: "1px solid var(--surface-border)", borderRadius: "8px", padding: "1rem", minHeight: "220px", background: "var(--surface)" }}>
+          <div className="pm-version-diff">
             {!selectedVersion ? (
-              <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)", textAlign: "center" }}>
+              <div className="pm-version-diff-empty">
                 {t("prof_version_select")}
               </div>
             ) : (
               <div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem", marginBottom: "1rem" }}>
+                <div className="pm-version-diff-header">
                   <div>
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontWeight: 700 }}>
+                    <div className="pm-version-diff-title">
                       <GitCompareArrows size={16} color="var(--primary)" />
                       {t("prof_version_diff")}
                     </div>
-                    <div style={{ marginTop: "0.35rem", color: "var(--text-muted)", fontSize: "0.8rem" }}>
+                    <div className="pm-version-diff-meta">
                       {formatVersionTime(selectedVersion.savedAt)} · {selectedVersion.savedBy}
                     </div>
                   </div>
                   {(isRoot || isOperator) && (
-                    <button className="btn btn-primary" onClick={handleRestoreVersion} disabled={isRestoring} style={{ padding: "0.55rem 0.85rem", fontSize: "0.82rem", whiteSpace: "nowrap" }}>
+                    <button className="btn btn-primary pm-restore-btn" onClick={handleRestoreVersion} disabled={isRestoring}>
                       <RotateCcw size={14} /> {isRestoring ? t("prof_version_restoring") : (restoreConfirmVersionId === selectedVersion.versionId ? t("prof_version_restore_confirm_btn") : t("prof_version_restore"))}
                     </button>
                   )}
                 </div>
-                <div style={{ display: "grid", gap: "0.5rem" }}>
+                <div className="pm-diff-rows">
                   {diffRows.map(row => (
-                    <div key={row.key} style={{ display: "flex", justifyContent: "space-between", gap: "1rem", borderBottom: "1px solid var(--surface-border)", padding: "0.55rem 0" }}>
-                      <span style={{ color: "var(--text-secondary)" }}>{row.label}</span>
-                      <span style={{ color: row.changed ? "var(--warning)" : "var(--success)", fontWeight: 700 }}>
+                    <div key={row.key} className="pm-diff-row">
+                      <span className="pm-diff-label">{row.label}</span>
+                      <span className={row.changed ? "pm-diff-changed" : "pm-diff-unchanged"}>
                         {row.changed ? t("prof_version_changed") : t("prof_version_unchanged")}
                       </span>
                     </div>
                   ))}
                 </div>
-                <pre style={{ marginTop: "1rem", maxHeight: "140px", overflow: "auto", background: "rgba(0,0,0,0.05)", borderRadius: "8px", padding: "0.75rem", fontSize: "0.75rem", color: "var(--text-secondary)" }}>
+                <pre className="pm-diff-pre">
                   {JSON.stringify({
                     title: selectedVersion.profile?.title,
                     updatedAt: selectedVersion.profile?.updatedAt || selectedVersion.profile?.createdAt,
@@ -604,8 +597,8 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
         <div className="workflow-header">
           <div className="workflow-title-group">
             <div>
-              <h2 style={{ margin: 0, fontSize: "1.5rem", fontWeight: 600, color: "var(--text-main)" }}>{profileName ? (profileTitle || profileName) : t("prof_new_profile")}</h2>
-              {!profileName && <p style={{ margin: "0.25rem 0 0", color: "var(--text-muted)", fontSize: "0.9rem" }}>{t("prof_new_desc")}</p>}
+              <h2 className="pm-wf-header-title">{profileName ? (profileTitle || profileName) : t("prof_new_profile")}</h2>
+              {!profileName && <p className="pm-wf-header-desc">{t("prof_new_desc")}</p>}
             </div>
           </div>
           <div className="workflow-header-actions">
@@ -613,13 +606,13 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
               <button className="btn-icon" onClick={() => { setIsEditing(true); setIsSaveConfirmOpen(false); }} title={t("prof_btn_edit")}><Pencil size={24} color="var(--primary)" /></button>
             )}
             {isRoot && profileName && <button className="btn-icon" onClick={handleDelete} title={t("prof_btn_delete")} disabled={isDeleting || isDeleteConfirmOpen}><Trash2 size={24} color="var(--danger)" /></button>}
-            <div style={{ width: "1px", height: "30px", background: "var(--surface-border)", margin: "0 0.5rem" }} />
+            <div className="pm-wf-header-divider" />
             <button className="btn-icon" onClick={onClose} title={t("close")}><X size={26} color="var(--text-muted)" /></button>
           </div>
         </div>
 
         {isDeleteConfirmOpen && (
-          <div style={{ padding: "0 1.5rem" }}>
+          <div className="pm-confirm-panel">
             <ConfirmActionPanel
               presentation="modal"
               title={t("prof_del_confirm", { name: profileName || "" })}
@@ -634,7 +627,7 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
         )}
 
         {isSaveConfirmOpen && (
-          <div style={{ padding: "0 1.5rem" }}>
+          <div className="pm-confirm-panel">
             <ConfirmActionPanel
               presentation="modal"
               tone={impactedSubscribers > 0 ? "warning" : "info"}
@@ -647,41 +640,33 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
               onCancel={() => setIsSaveConfirmOpen(false)}
             />
             <div
-              style={{
-                marginBottom: "1rem",
-                border: "1px solid var(--surface-border)",
-                borderRadius: "8px",
-                background: "var(--surface)",
-                padding: "1rem",
-                display: "grid",
-                gap: "0.85rem",
-              }}
+              className="pm-confirm-stats"
             >
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "0.75rem" }}>
-                <div style={{ border: "1px solid var(--surface-border)", borderRadius: "8px", padding: "0.75rem" }}>
-                  <div className="table-header-cap" style={{ color: "var(--text-muted)", fontSize: "0.72rem" }}>{t("prof_change_impacted")}</div>
-                  <div style={{ marginTop: "0.35rem", fontSize: "1.25rem", fontWeight: 800, color: impactedSubscribers > 0 ? "var(--warning)" : "var(--success)" }}>
+              <div className="pm-confirm-stats-grid">
+                <div className="pm-confirm-stat-card">
+                  <div className="table-header-cap pm-confirm-stat-label">{t("prof_change_impacted")}</div>
+                  <div className={`pm-confirm-stat-value ${impactedSubscribers > 0 ? "warning" : "success"}`}>
                     {impactedSubscribers}
                   </div>
                 </div>
-                <div style={{ border: "1px solid var(--surface-border)", borderRadius: "8px", padding: "0.75rem" }}>
-                  <div className="table-header-cap" style={{ color: "var(--text-muted)", fontSize: "0.72rem" }}>{t("prof_change_sections")}</div>
-                  <div style={{ marginTop: "0.35rem", fontWeight: 800, color: "var(--text-main)" }}>
+                <div className="pm-confirm-stat-card">
+                  <div className="table-header-cap pm-confirm-stat-label">{t("prof_change_sections")}</div>
+                  <div className="pm-confirm-stat-value main">
                     {changedDraftRows.length}
                   </div>
                 </div>
               </div>
-              <div style={{ display: "grid", gap: "0.45rem" }}>
+              <div className="pm-confirm-diff-rows">
                 {draftDiffRows.map(row => (
-                  <div key={row.key} style={{ display: "flex", justifyContent: "space-between", gap: "1rem", padding: "0.45rem 0", borderBottom: "1px solid var(--surface-border)" }}>
-                    <span style={{ color: "var(--text-secondary)" }}>{row.label}</span>
-                    <strong style={{ color: row.changed ? "var(--warning)" : "var(--success)" }}>
+                  <div key={row.key} className="pm-confirm-diff-row">
+                    <span className="pm-diff-label">{row.label}</span>
+                    <strong className={row.changed ? "pm-confirm-diff-changed" : "pm-confirm-diff-unchanged"}>
                       {row.changed ? t("prof_version_changed") : t("prof_version_unchanged")}
                     </strong>
                   </div>
                 ))}
               </div>
-              <div style={{ color: "var(--text-muted)", fontSize: "0.82rem", lineHeight: 1.5 }}>
+              <div className="pm-confirm-note">
                 {t("prof_change_confirm_note")}
               </div>
             </div>
@@ -691,7 +676,7 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
         {/* Body: Left TOC + Right Content */}
         <div className="workflow-body">
           <div className="workflow-sidebar">
-            <h4 style={{ fontSize: "0.85rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "1rem", paddingLeft: "0.5rem" }}>{t("sections")}</h4>
+            <h4 className="pm-toc-title">{t("sections")}</h4>
             {isEditing && (
               <button className="workflow-step" onClick={() => scrollTo('psec-info')}>
                 <span className="workflow-step-index">1</span>
@@ -747,7 +732,7 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
           </div>
         </div>
         <div className="workflow-footer">
-          <div style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>
+          <div className="pm-wf-footer-text">
             {isEditing ? t("prof_msg_edit") : t("prof_msg_view")}
           </div>
           <div className="workflow-footer-actions">

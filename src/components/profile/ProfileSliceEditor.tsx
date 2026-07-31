@@ -90,44 +90,37 @@ export default function ProfileSliceEditor({
     <div className={`slice-strip-card ${newlyAdded ? 'flash-animate' : ''}`}>
       {/* Slice Header: SST, SD, Default */}
       <div
-        className={onToggleExpand ? "slice-card-header" : ""}
+        className={`slice-editor-header ${onToggleExpand ? "slice-card-header" : ""} ${isExpanded ? "slice-editor-header-expanded" : ""}`}
         onClick={handleHeaderClick}
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "flex-start",
-          padding: "1.5rem 2rem",
-          borderBottom: isExpanded ? '1px solid var(--surface-border)' : 'none',
-          cursor: onToggleExpand ? "pointer" : "default"
-        }}
+        style={{ cursor: onToggleExpand ? "pointer" : "default" }}
       >
-        <div style={{ display: "flex", gap: "2.5rem", flex: 1, alignItems: "center", flexWrap: "wrap" }}>
-          <div style={{ fontSize: "1.1rem", fontWeight: 600, color: "var(--primary)" }}>{t("slice_idx", { idx: sliceIndex + 1 })}</div>
-          <div style={{ display: "flex", gap: "1.5rem", background: "var(--surface-hover)", padding: "0.5rem 1rem", borderRadius: "6px" }}>
+        <div className="slice-editor-header-content">
+          <div className="slice-editor-idx">{t("slice_idx", { idx: sliceIndex + 1 })}</div>
+          <div className="slice-editor-sst-group">
             {[1,2,3,4].map(val => (
-              <label key={val} style={{ display: "flex", alignItems: "center", gap: "0.4rem", cursor: "pointer" }}>
+              <label key={val} className="slice-editor-sst-label">
                 <input type="radio" name={`psst-${sliceIndex}`} checked={slice.sst === val} onChange={() => updateSlice('sst', val)} />
-                <span style={{ fontSize: "1rem", fontWeight: 500, color: "var(--text-main)" }}>SST {val}</span>
+                <span className="slice-editor-sst-text">SST {val}</span>
               </label>
             ))}
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            <span className="form-label" style={{ margin: 0 }}>SD:</span>
-            <input type="text" className="form-input" style={{ width: "120px", padding: "0.4rem 0.6rem" }} value={slice.sd || ""} onChange={(e) => updateSlice('sd', e.target.value)} placeholder="000000" />
+          <div className="slice-editor-sd-group">
+            <span className="form-label slice-editor-sd-label">SD:</span>
+            <input type="text" className="form-input slice-editor-sd-input" value={slice.sd || ""} onChange={(e) => updateSlice('sd', e.target.value)} placeholder="000000" />
           </div>
-          <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer" }}>
-            <input type="checkbox" checked={!!slice.default_indicator} onChange={(e) => updateSlice('default_indicator', e.target.checked)} style={{ width: '1.2rem', height: '1.2rem' }} />
-            <span style={{ fontWeight: 500, fontSize: "0.95rem", color: "var(--text-main)" }}>{t("sub_default_nssai")}</span>
+          <label className="slice-editor-default-label">
+            <input type="checkbox" className="slice-editor-default-checkbox" checked={!!slice.default_indicator} onChange={(e) => updateSlice('default_indicator', e.target.checked)} />
+            <span className="slice-editor-default-text">{t("sub_default_nssai")}</span>
           </label>
         </div>
 
-        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+        <div className="slice-editor-actions">
           <button className="btn-icon text-danger" onClick={(e) => { e.stopPropagation(); onDelete(); }} title={t("slice_delete")}>
             <Trash2 size={20}/>
           </button>
           {onToggleExpand && (
             <>
-              <div style={{ width: "1px", height: "20px", background: "var(--surface-border)", margin: "0 0.5rem" }} />
+              <div className="slice-editor-divider" />
               {isExpanded ? <ChevronUp size={20} color="var(--text-muted)" /> : <ChevronDown size={20} color="var(--text-muted)" />}
             </>
           )}
@@ -136,10 +129,10 @@ export default function ProfileSliceEditor({
 
       {/* Level 2: Sessions inside Slice */}
       <div className={onToggleExpand ? `accordion-content ${isExpanded ? 'expanded' : 'collapsed'}` : ""}>
-        <div style={{ padding: "1.5rem 2rem" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", padding: "0 0.5rem" }}>
-            <h4 style={{ fontSize: '1rem', fontWeight: 600, color: "var(--text-secondary)", margin: 0 }}>{t("slice_sessions_in", { idx: sliceIndex + 1 })}</h4>
-            <button className="btn btn-outline" onClick={handleAddSession} style={{ padding: "0.4rem 0.8rem", fontSize: "0.85rem", display: "flex", alignItems: "center", gap: "0.3rem" }}>
+        <div className="slice-editor-sessions-container">
+          <div className="slice-editor-sessions-header">
+            <h4 className="slice-editor-sessions-title">{t("slice_sessions_in", { idx: sliceIndex + 1 })}</h4>
+            <button className="btn btn-outline slice-editor-add-session-btn" onClick={handleAddSession}>
               <Plus size={16}/> {t("slice_add_session")}
             </button>
           </div>
@@ -156,7 +149,7 @@ export default function ProfileSliceEditor({
               ))}
             </div>
           ) : (
-            <div style={{ textAlign: "center", padding: "2rem", color: "var(--text-muted)", border: '1px dashed var(--surface-border)', borderRadius: '6px' }}>
+            <div className="slice-editor-empty-sessions">
               {t("slice_no_sessions_hint")}
             </div>
           )}

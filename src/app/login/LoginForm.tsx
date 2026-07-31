@@ -46,113 +46,37 @@ export default function LoginForm() {
   };
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        backgroundColor: "#0f172a",
-        backgroundImage: `
-          radial-gradient(at 0% 0%, hsla(253,16%,7%,1) 0, transparent 50%),
-          radial-gradient(at 50% 0%, hsla(225,39%,30%,1) 0, transparent 50%),
-          radial-gradient(at 100% 0%, hsla(339,49%,30%,1) 0, transparent 50%)
-        `,
-        position: "relative",
-        overflow: "hidden",
-      }}
-    >
-      <div
-        style={{
-          position: "absolute",
-          top: "-10%",
-          left: "-10%",
-          width: "40vw",
-          height: "40vw",
-          background: "radial-gradient(circle, rgba(78, 115, 223, 0.4) 0%, transparent 70%)",
-          filter: "blur(60px)",
-          animation: "float 10s infinite ease-in-out alternate",
-        }}
-      />
-      <div
-        style={{
-          position: "absolute",
-          bottom: "-10%",
-          right: "-10%",
-          width: "50vw",
-          height: "50vw",
-          background: "radial-gradient(circle, rgba(28, 200, 138, 0.25) 0%, transparent 70%)",
-          filter: "blur(80px)",
-          animation: "float 14s infinite ease-in-out alternate-reverse",
-        }}
-      />
+    <div className="login-container">
+      <div className="login-bg-blob-1" />
+      <div className="login-bg-blob-2" />
 
-      <div
-        style={{
-          position: "relative",
-          zIndex: 10,
-          width: "100%",
-          maxWidth: "420px",
-          padding: "3rem 2.5rem",
-          background: "rgba(15, 23, 42, 0.6)",
-          backdropFilter: "blur(24px)",
-          WebkitBackdropFilter: "blur(24px)",
-          border: "1px solid rgba(255, 255, 255, 0.1)",
-          borderRadius: "24px",
-          boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
-          animation: "slideUpFade 0.6s cubic-bezier(0.16, 1, 0.3, 1)",
-        }}
-      >
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: "2.5rem" }}>
-          <div
-            style={{
-              height: "64px",
-              borderRadius: "16px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              marginBottom: "1.25rem",
-              overflow: "hidden",
-            }}
-          >
+      <div className="login-card">
+        <div className="login-header">
+          <div className="login-logo-container">
             <Image
               src="/images/xCloud_picture.png"
               alt="xCloud Trademark"
               width={1254}
               height={1254}
-              style={{ height: "100%", width: "auto", objectFit: "contain" }}
+              className="login-logo"
             />
           </div>
-          <h1 style={{ margin: 0, fontSize: "1.75rem", fontWeight: 700, color: "#f8fafc" }}>xCloud Platform</h1>
-          <p style={{ margin: "0.5rem 0 0", color: "#94a3b8", fontSize: "0.95rem" }}>
+          <h1 className="login-title">xCloud Platform</h1>
+          <p className="login-subtitle">
             Core Network Management System
           </p>
         </div>
 
-        <form id="xcloud-login-form" onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+        <form id="xcloud-login-form" onSubmit={handleSubmit} className="login-form">
           {error && (
-            <div
-              id="xcloud-login-error"
-              style={{
-                background: "rgba(220, 38, 38, 0.15)",
-                border: "1px solid rgba(220, 38, 38, 0.3)",
-                color: "#fca5a5",
-                padding: "0.75rem 1rem",
-                borderRadius: "12px",
-                fontSize: "0.85rem",
-                display: "flex",
-                alignItems: "center",
-                gap: "0.5rem",
-                animation: "shake 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) both",
-              }}
-            >
-              <div style={{ width: "4px", height: "16px", background: "#ef4444", borderRadius: "2px" }} />
+            <div id="xcloud-login-error" className="login-error-container">
+              <div className="login-error-indicator" />
               <span id="xcloud-login-error-text">{error}</span>
             </div>
           )}
 
-          <div style={{ position: "relative" }}>
-            <div style={{ position: "absolute", left: "1rem", top: "50%", transform: "translateY(-50%)", color: "#64748b" }}>
+          <div className="input-container">
+            <div className="input-icon">
               <User size={18} />
             </div>
             <input
@@ -161,21 +85,12 @@ export default function LoginForm() {
               type="text"
               placeholder="Username"
               required
-              style={{
-                width: "100%",
-                padding: "1rem 1rem 1rem 2.75rem",
-                background: "rgba(255, 255, 255, 0.03)",
-                border: "1px solid rgba(255, 255, 255, 0.1)",
-                color: "#f8fafc",
-                fontSize: "0.95rem",
-                borderRadius: "12px",
-                outline: "none",
-              }}
+              className="login-input"
             />
           </div>
 
-          <div style={{ position: "relative" }}>
-            <div style={{ position: "absolute", left: "1rem", top: "50%", transform: "translateY(-50%)", color: "#64748b" }}>
+          <div className="input-container">
+            <div className="input-icon">
               <Lock size={18} />
             </div>
             <input
@@ -184,36 +99,14 @@ export default function LoginForm() {
               type={passwordVisible ? "text" : "password"}
               placeholder="Password"
               required
-              style={{
-                width: "100%",
-                padding: "1rem 2.75rem",
-                background: "rgba(255, 255, 255, 0.03)",
-                border: "1px solid rgba(255, 255, 255, 0.1)",
-                color: "#f8fafc",
-                fontSize: "0.95rem",
-                borderRadius: "12px",
-                outline: "none",
-              }}
+              className="login-input login-input-password"
             />
             <button
               id="xcloud-password-toggle"
               type="button"
               title={passwordVisible ? "Hide password" : "Show password"}
               onClick={() => setPasswordVisible((visible) => !visible)}
-              style={{
-                position: "absolute",
-                right: "1rem",
-                top: "50%",
-                transform: "translateY(-50%)",
-                background: "none",
-                border: "none",
-                color: "#64748b",
-                cursor: "pointer",
-                padding: 0,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
+              className="password-toggle"
             >
               <span id="xcloud-eye" hidden={passwordVisible}>
                 <Eye size={18} />
@@ -228,223 +121,19 @@ export default function LoginForm() {
             id="xcloud-login-submit"
             type="submit"
             disabled={isLoading}
-            style={{
-              marginTop: "0.5rem",
-              width: "100%",
-              padding: "1rem",
-              background: "linear-gradient(to right, #4e73df, #224abe)",
-              border: "none",
-              borderRadius: "12px",
-              color: "white",
-              fontSize: "1rem",
-              fontWeight: 600,
-              cursor: isLoading ? "not-allowed" : "pointer",
-              opacity: isLoading ? "0.8" : "1",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "0.5rem",
-              boxShadow: "0 10px 20px -5px rgba(78, 115, 223, 0.4)",
-            }}
+            className="login-submit-btn"
           >
             <span id="xcloud-login-spinner" hidden={!isLoading}>
-              <Loader2 size={20} style={{ animation: "spin 1s linear infinite" }} />
+              <Loader2 size={20} className="login-spinner" />
             </span>
             <span id="xcloud-login-submit-text" hidden={isLoading}>Login</span>
           </button>
         </form>
 
-        <div style={{ marginTop: "2rem", textAlign: "center", fontSize: "0.8rem", color: "#64748b" }}>
+        <div className="login-footer">
           Protected by xCloud Secure Access
         </div>
       </div>
-
-      
-      <div
-        style={{
-          position: "absolute",
-          bottom: "-10%",
-          right: "-10%",
-          width: "50vw",
-          height: "50vw",
-          background: "radial-gradient(circle, rgba(28, 200, 138, 0.25) 0%, transparent 70%)",
-          filter: "blur(80px)",
-          animation: "float 14s infinite ease-in-out alternate-reverse",
-        }}
-      />
-
-      <div
-        style={{
-          position: "relative",
-          zIndex: 10,
-          width: "100%",
-          maxWidth: "420px",
-          padding: "3rem 2.5rem",
-          background: "rgba(15, 23, 42, 0.6)",
-          backdropFilter: "blur(24px)",
-          WebkitBackdropFilter: "blur(24px)",
-          border: "1px solid rgba(255, 255, 255, 0.1)",
-          borderRadius: "24px",
-          boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
-          animation: "slideUpFade 0.6s cubic-bezier(0.16, 1, 0.3, 1)",
-        }}
-      >
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: "2.5rem" }}>
-          <div
-            style={{
-              height: "64px",
-              borderRadius: "16px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              marginBottom: "1.25rem",
-              overflow: "hidden",
-            }}
-          >
-            <Image
-              src="/images/xCloud_picture.png"
-              alt="xCloud Trademark"
-              width={1254}
-              height={1254}
-              style={{ height: "100%", width: "auto", objectFit: "contain" }}
-            />
-          </div>
-          <h1 style={{ margin: 0, fontSize: "1.75rem", fontWeight: 700, color: "#f8fafc" }}>xCloud Platform</h1>
-          <p style={{ margin: "0.5rem 0 0", color: "#94a3b8", fontSize: "0.95rem" }}>
-            Core Network Management System
-          </p>
-        </div>
-
-        <form id="xcloud-login-form" onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-          {error && (
-            <div
-              id="xcloud-login-error"
-              style={{
-                background: "rgba(220, 38, 38, 0.15)",
-                border: "1px solid rgba(220, 38, 38, 0.3)",
-                color: "#fca5a5",
-                padding: "0.75rem 1rem",
-                borderRadius: "12px",
-                fontSize: "0.85rem",
-                display: "flex",
-                alignItems: "center",
-                gap: "0.5rem",
-                animation: "shake 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) both",
-              }}
-            >
-              <div style={{ width: "4px", height: "16px", background: "#ef4444", borderRadius: "2px" }} />
-              <span id="xcloud-login-error-text">{error}</span>
-            </div>
-          )}
-
-          <div style={{ position: "relative" }}>
-            <div style={{ position: "absolute", left: "1rem", top: "50%", transform: "translateY(-50%)", color: "#64748b" }}>
-              <User size={18} />
-            </div>
-            <input
-              id="xcloud-login-username"
-              name="username"
-              type="text"
-              placeholder="Username"
-              required
-              style={{
-                width: "100%",
-                padding: "1rem 1rem 1rem 2.75rem",
-                background: "rgba(255, 255, 255, 0.03)",
-                border: "1px solid rgba(255, 255, 255, 0.1)",
-                color: "#f8fafc",
-                fontSize: "0.95rem",
-                borderRadius: "12px",
-                outline: "none",
-              }}
-            />
-          </div>
-
-          <div style={{ position: "relative" }}>
-            <div style={{ position: "absolute", left: "1rem", top: "50%", transform: "translateY(-50%)", color: "#64748b" }}>
-              <Lock size={18} />
-            </div>
-            <input
-              id="xcloud-login-password"
-              name="password"
-              type={passwordVisible ? "text" : "password"}
-              placeholder="Password"
-              required
-              style={{
-                width: "100%",
-                padding: "1rem 2.75rem",
-                background: "rgba(255, 255, 255, 0.03)",
-                border: "1px solid rgba(255, 255, 255, 0.1)",
-                color: "#f8fafc",
-                fontSize: "0.95rem",
-                borderRadius: "12px",
-                outline: "none",
-              }}
-            />
-            <button
-              id="xcloud-password-toggle"
-              type="button"
-              title={passwordVisible ? "Hide password" : "Show password"}
-              onClick={() => setPasswordVisible((visible) => !visible)}
-              style={{
-                position: "absolute",
-                right: "1rem",
-                top: "50%",
-                transform: "translateY(-50%)",
-                background: "none",
-                border: "none",
-                color: "#64748b",
-                cursor: "pointer",
-                padding: 0,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <span id="xcloud-eye" hidden={passwordVisible}>
-                <Eye size={18} />
-              </span>
-              <span id="xcloud-eye-off" hidden={!passwordVisible}>
-                <EyeOff size={18} />
-              </span>
-            </button>
-          </div>
-
-          <button
-            id="xcloud-login-submit"
-            type="submit"
-            disabled={isLoading}
-            style={{
-              marginTop: "0.5rem",
-              width: "100%",
-              padding: "1rem",
-              background: "linear-gradient(to right, #4e73df, #224abe)",
-              border: "none",
-              borderRadius: "12px",
-              color: "white",
-              fontSize: "1rem",
-              fontWeight: 600,
-              cursor: isLoading ? "not-allowed" : "pointer",
-              opacity: isLoading ? "0.8" : "1",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "0.5rem",
-              boxShadow: "0 10px 20px -5px rgba(78, 115, 223, 0.4)",
-            }}
-          >
-            <span id="xcloud-login-spinner" hidden={!isLoading}>
-              <Loader2 size={20} style={{ animation: "spin 1s linear infinite" }} />
-            </span>
-            <span id="xcloud-login-submit-text" hidden={isLoading}>Login</span>
-          </button>
-        </form>
-
-        <div style={{ marginTop: "2rem", textAlign: "center", fontSize: "0.8rem", color: "#64748b" }}>
-          Protected by xCloud Secure Access
-        </div>
-      </div>
-
     </div>
   );
 }

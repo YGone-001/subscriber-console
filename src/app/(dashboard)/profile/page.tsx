@@ -8,6 +8,7 @@ import { EmptyState, LoadingRows, OperationNotice } from "@/components/Operation
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
 import { useAuth } from "@/hooks/useAuth";
+import "./profile-page.css";
 
 interface ProfileSummary {
   name: string;
@@ -150,10 +151,10 @@ export default function ProfilePage() {
 
   return (
     <>
-      <div className="container animate-fade-in" style={{ padding: "3rem", paddingBottom: "100px" }}>
-        <div style={{ marginBottom: "1.5rem" }}>
-          <h1 style={{ margin: 0, fontSize: "1.75rem", fontWeight: 700, color: "var(--text-main)" }}>{t("prof_governance_title")}</h1>
-          <p style={{ margin: "0.5rem 0 0", color: "var(--text-muted)", fontSize: "0.95rem" }}>{t("prof_governance_subtitle")}</p>
+      <div className="container animate-fade-in profile-page-container">
+        <div className="profile-page-header">
+          <h1 className="profile-page-title">{t("prof_governance_title")}</h1>
+          <p className="profile-page-subtitle">{t("prof_governance_subtitle")}</p>
         </div>
 
         {notice && (
@@ -166,20 +167,20 @@ export default function ProfilePage() {
           />
         )}
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: "1rem", marginBottom: "1.5rem" }}>
+        <div className="profile-metrics-grid">
           {[
             { icon: <Boxes size={18} color="var(--primary)" />, label: t("prof_governance_total"), value: governanceSummary.total },
             { icon: <Users size={18} color="var(--primary)" />, label: t("prof_governance_impacted"), value: governanceSummary.impacted },
             { icon: <AlertTriangle size={18} color="var(--danger)" />, label: t("prof_governance_high_risk"), value: governanceSummary.highRisk },
             { icon: <Clock size={18} color="var(--primary)" />, label: t("prof_governance_recent"), value: governanceSummary.recentlyChanged },
           ].map(metric => (
-            <div key={metric.label} className="dash-card" style={{ padding: "1rem", display: "flex", gap: "0.75rem", alignItems: "center", minHeight: "86px" }}>
-              <div style={{ width: 38, height: 38, borderRadius: "8px", display: "grid", placeItems: "center", background: "var(--surface-hover)", flex: "0 0 auto" }}>
+            <div key={metric.label} className="dash-card profile-metric-card">
+              <div className="profile-metric-icon-box">
                 {metric.icon}
               </div>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ color: "var(--text-muted)", fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: 0 }}>{metric.label}</div>
-                <div style={{ color: "var(--text-main)", fontSize: "1.35rem", fontWeight: 800, marginTop: "0.15rem" }}>{metric.value}</div>
+              <div className="profile-metric-content">
+                <div className="profile-metric-label">{metric.label}</div>
+                <div className="profile-metric-value">{metric.value}</div>
               </div>
             </div>
           ))}
@@ -188,20 +189,18 @@ export default function ProfilePage() {
         <div className="page-action-bar">
           <input
             type="search"
-            className="form-input hover-glass"
-            style={{ width: "min(520px, 100%)", borderRadius: "20px", padding: "0.7rem 1.2rem" }}
+            className="form-input hover-glass profile-search-input"
             placeholder={t("prof_search_ph")}
             value={searchQuery}
             onChange={event => setSearchQuery(event.target.value)}
           />
-          <div style={{ display: "flex", gap: "0.45rem", flexWrap: "wrap" }}>
+          <div className="profile-domain-filters">
             {DOMAIN_OPTIONS.map(domain => (
               <button
                 key={domain}
                 type="button"
-                className={domainFilter === domain ? "btn btn-primary" : "btn btn-outline"}
+                className={`${domainFilter === domain ? "btn btn-primary" : "btn btn-outline"} profile-domain-btn`}
                 onClick={() => setDomainFilter(domain)}
-                style={{ padding: "0.55rem 0.85rem", fontSize: "0.82rem" }}
               >
                 {t(`prof_domain_${domain}`)}
               </button>
@@ -217,11 +216,11 @@ export default function ProfilePage() {
         </div>
 
         {isLoading ? (
-          <div className="dash-card" style={{ padding: 0, overflow: "hidden" }}>
+          <div className="dash-card profile-empty-card">
             <LoadingRows columns={4} rows={4} />
           </div>
         ) : filteredProfiles.length === 0 ? (
-          <div className="dash-card" style={{ padding: 0, overflow: "hidden" }}>
+          <div className="dash-card profile-empty-card">
             <EmptyState
               icon={<Boxes size={48} />}
               title={searchQuery || domainFilter !== "all" ? t("prof_no_match") : t("prof_empty_list")}
@@ -240,64 +239,59 @@ export default function ProfilePage() {
             {filteredProfiles.map(profile => (
               <div
                 key={profile.name}
-                className="imsi-card"
+                className="dash-card profile-imsi-card"
                 onClick={() => handleOpenEdit(profile.name)}
-                style={{ cursor: "pointer", display: "flex", flexDirection: "column", gap: "0.9rem", padding: "1.5rem" }}
               >
-                <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", alignItems: "flex-start" }}>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: "1.2rem", fontWeight: 700, color: "var(--text-main)", overflowWrap: "anywhere" }}>
+                <div className="profile-card-header">
+                  <div className="profile-card-title-box">
+                    <div className="profile-card-title">
                       {profile.title || profile.name}
                     </div>
-                    <div style={{ marginTop: "0.3rem", color: "var(--text-muted)", fontSize: "0.78rem", fontFamily: "monospace", overflowWrap: "anywhere" }}>
+                    <div className="profile-card-subtitle">
                       {profile.name}
                     </div>
                   </div>
                   <span
+                    className="profile-risk-badge"
                     style={{
                       border: `1px solid ${RISK_STYLE[profile.risk].border}`,
                       background: RISK_STYLE[profile.risk].background,
                       color: RISK_STYLE[profile.risk].color,
-                      borderRadius: "999px",
-                      padding: "0.28rem 0.6rem",
-                      fontSize: "0.75rem",
-                      fontWeight: 800,
-                      whiteSpace: "nowrap",
                     }}
                   >
                     {t(`prof_risk_${profile.risk}`)}
                   </span>
                 </div>
 
-                <div style={{ display: "flex", gap: "0.55rem", flexWrap: "wrap", fontSize: "0.82rem", color: "var(--text-secondary)" }}>
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", padding: "0.35rem 0.55rem", border: "1px solid var(--surface-border)", borderRadius: "999px", color: "var(--text-secondary)", fontSize: "0.78rem", fontWeight: 700 }}>
+                <div className="profile-tags-row">
+                  <span className="profile-tag-bordered">
                     <Gauge size={14} /> {t(`prof_domain_${profile.domain}`)}
                   </span>
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", padding: "0.35rem 0.55rem" }}>
+                  <span className="profile-tag">
                     <Layers size={16} /> {t("prof_slices_count", { count: profile.sliceCount || 0 })}
                   </span>
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", padding: "0.35rem 0.55rem" }}>
+                  <span className="profile-tag">
                     <Users size={16} /> {t("prof_governance_subscribers", { count: profile.impactedSubscribers })}
                   </span>
                 </div>
 
-                <div style={{ border: "1px solid var(--surface-border)", borderRadius: "8px", padding: "0.85rem", background: "var(--header-bg)", display: "grid", gap: "0.55rem" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.45rem", color: "var(--text-main)", fontWeight: 800, fontSize: "0.85rem" }}>
+                <div className="profile-preview-box">
+                  <div className="profile-preview-header">
                     <ShieldCheck size={15} color="var(--primary)" /> {t("prof_governance_change_preview")}
                   </div>
-                  <div style={{ display: "grid", gap: "0.45rem", color: "var(--text-secondary)", fontSize: "0.8rem" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: "0.8rem" }}>
+                  <div className="profile-preview-content">
+                    <div className="profile-preview-row">
                       <span>{t("prof_governance_scope")}</span>
-                      <strong style={{ color: "var(--text-main)" }}>{t("prof_governance_scope_value", { count: profile.impactedSubscribers })}</strong>
+                      <strong className="profile-preview-value">{t("prof_governance_scope_value", { count: profile.impactedSubscribers })}</strong>
                     </div>
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: "0.8rem" }}>
+                    <div className="profile-preview-row">
                       <span>{t("prof_governance_next_change")}</span>
-                      <strong style={{ color: "var(--text-main)" }}>{t(`prof_preview_${profile.domain}`)}</strong>
+                      <strong className="profile-preview-value">{t(`prof_preview_${profile.domain}`)}</strong>
                     </div>
                   </div>
                 </div>
 
-                <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", flexWrap: "wrap", fontSize: "0.82rem", color: "var(--text-muted)" }}>
+                <div className="profile-meta-row">
                   <UserRound size={14} /> {profile.updatedBy ? `${t("prof_modified_by")} ${profile.updatedBy}` : t("prof_governance_no_owner")}
                   <ArrowRight size={13} />
                   <Clock size={14} /> {formatDate(profile.updatedAt || profile.createdAt)}

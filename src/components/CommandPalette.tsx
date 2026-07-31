@@ -8,6 +8,7 @@ import {
   LayoutDashboard, Plus, Download, FileUp, Zap, Command, GitBranch
 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
+import "./CommandPalette.css";
 
 type PaletteItem = {
   id: string;
@@ -188,42 +189,17 @@ export default function CommandPalette({ isOpen, onClose, onAction }: CommandPal
         key={item.id}
         onClick={() => handleSelect(item)}
         onMouseEnter={() => setSelectedIndex(idx)}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "0.75rem",
-          padding: "0.65rem 1.25rem",
-          cursor: "pointer",
-          background: selected ? "rgba(78, 115, 223, 0.1)" : "transparent",
-          borderLeft: selected ? "2px solid #4e73df" : "2px solid transparent",
-          transition: "all 0.1s"
-        }}
+        className={`cp-item-row ${selected ? "cp-item-row-selected" : ""}`}
       >
-        <div style={{
-          width: "32px",
-          height: "32px",
-          borderRadius: "8px",
-          background: selected ? accent : "#f1f5f9",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          transition: "all 0.15s"
-        }}>
+        <div className="cp-item-icon-box" style={{ background: selected ? accent : "#f1f5f9" }}>
           <Icon size={16} color={selected ? "white" : "var(--text-muted)"} />
         </div>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: "0.9rem", fontWeight: 600, color: "var(--text-main)", fontFamily: item.type === "imsi" ? "monospace" : undefined }}>{item.label}</div>
-          <div style={{ fontSize: "0.75rem", color: "#94a3b8" }}>{item.desc}</div>
+        <div className="cp-item-content">
+          <div className={`cp-item-label ${item.type === "imsi" ? "cp-item-label-mono" : ""}`}>{item.label}</div>
+          <div className="cp-item-desc">{item.desc}</div>
         </div>
         {badge && (
-          <span style={{
-            fontSize: item.type === "navigation" ? "0.7rem" : "0.65rem",
-            padding: item.type === "navigation" ? undefined : "0.15rem 0.4rem",
-            background: item.type === "imsi" ? "#dbeafe" : item.type === "profile" ? "#fef3c7" : undefined,
-            color: item.type === "imsi" ? "#3b82f6" : item.type === "profile" ? "#d97706" : "#cbd5e1",
-            borderRadius: "4px",
-            fontWeight: item.type === "navigation" ? undefined : 600
-          }}>
+          <span className={`cp-item-badge cp-badge-${item.type === "navigation" ? "nav" : item.type}`}>
             {badge}
           </span>
         )}
@@ -232,47 +208,9 @@ export default function CommandPalette({ isOpen, onClose, onAction }: CommandPal
   };
 
   return (
-    <div
-      onClick={onClose}
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 9999,
-        display: "flex",
-        alignItems: "flex-start",
-        justifyContent: "center",
-        paddingTop: "15vh",
-        background: "rgba(0, 0, 0, 0.4)",
-        backdropFilter: "blur(8px)",
-        WebkitBackdropFilter: "blur(8px)",
-        animation: "fadeIn 0.15s ease-out"
-      }}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={handleKeyDown}
-        style={{
-          width: "620px",
-          maxHeight: "480px",
-          background: "rgba(255, 255, 255, 0.85)",
-          backdropFilter: "blur(20px)",
-          WebkitBackdropFilter: "blur(20px)",
-          borderRadius: "16px",
-          border: "1px solid rgba(255, 255, 255, 0.3)",
-          boxShadow: "0 25px 50px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255,255,255,0.1) inset",
-          overflow: "hidden",
-          display: "flex",
-          flexDirection: "column",
-          animation: "slideDown 0.2s ease-out"
-        }}
-      >
-        <div style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "0.75rem",
-          padding: "1rem 1.25rem",
-          borderBottom: "1px solid rgba(0,0,0,0.06)"
-        }}>
+    <div onClick={onClose} className="cp-overlay">
+      <div onClick={(e) => e.stopPropagation()} onKeyDown={handleKeyDown} className="cp-modal">
+        <div className="cp-search-header">
           <Search size={20} color="#94a3b8" />
           <input
             ref={inputRef}
@@ -288,81 +226,57 @@ export default function CommandPalette({ isOpen, onClose, onAction }: CommandPal
               }
             }}
             placeholder={t("cp_placeholder")}
-            style={{
-              flex: 1,
-              border: "none",
-              outline: "none",
-              background: "transparent",
-              fontSize: "1.05rem",
-              color: "var(--text-main)",
-              fontWeight: 500
-            }}
+            className="cp-search-input"
           />
-          <kbd style={{
-            padding: "0.15rem 0.5rem",
-            background: "rgba(0,0,0,0.05)",
-            borderRadius: "4px",
-            fontSize: "0.75rem",
-            color: "#94a3b8",
-            fontFamily: "monospace",
-            border: "1px solid rgba(0,0,0,0.08)"
-          }}>ESC</kbd>
+          <kbd className="cp-kbd-shortcut">ESC</kbd>
         </div>
 
-        <div style={{ overflowY: "auto", flex: 1, padding: "0.5rem 0" }}>
+        <div className="cp-results-container">
           {actionResults.length > 0 && (
             <div>
-              <div style={{ padding: "0.4rem 1.25rem", fontSize: "0.7rem", fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em" }}>{t("cp_group_actions")}</div>
+              <div className="cp-group-header">{t("cp_group_actions")}</div>
               {actionResults.map((item) => renderRow(item, getGlobalIndex(), "#4e73df"))}
             </div>
           )}
 
           {navResults.length > 0 && (
             <div>
-              <div style={{ padding: "0.6rem 1.25rem 0.4rem", fontSize: "0.7rem", fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em" }}>{t("cp_group_nav")}</div>
+              <div className="cp-group-header-mt">{t("cp_group_nav")}</div>
               {navResults.map((item) => renderRow(item, getGlobalIndex(), "#4e73df", t("cp_badge_navigate")))}
             </div>
           )}
 
           {searchResults.length > 0 && (
             <div>
-              <div style={{ padding: "0.6rem 1.25rem 0.4rem", fontSize: "0.7rem", fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em" }}>{t("cp_group_search")}</div>
+              <div className="cp-group-header-mt">{t("cp_group_search")}</div>
               {searchResults.map((item) => renderRow(item, getGlobalIndex(), "#1cc88a", item.type === "imsi" ? "IMSI" : "Profile"))}
             </div>
           )}
 
           {isSearching && searchResults.length === 0 && (
-            <div style={{ padding: "1rem 1.25rem", color: "#94a3b8", fontSize: "0.85rem" }}>
+            <div className="cp-status-msg">
               {t("cp_searching")}
             </div>
           )}
 
           {!isSearching && filteredItems.length === 0 && (
-            <div style={{ padding: "2rem", textAlign: "center", color: "#94a3b8", fontSize: "0.9rem" }}>
+            <div className="cp-no-results">
               {t("cp_no_results").replace("{query}", query)}
             </div>
           )}
         </div>
 
-        <div style={{
-          padding: "0.6rem 1.25rem",
-          borderTop: "1px solid rgba(0,0,0,0.06)",
-          display: "flex",
-          alignItems: "center",
-          gap: "1rem",
-          fontSize: "0.7rem",
-          color: "#94a3b8"
-        }}>
-          <span style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}>
-            <kbd style={{ padding: "0.1rem 0.35rem", background: "rgba(0,0,0,0.05)", borderRadius: "3px", fontSize: "0.65rem", fontFamily: "monospace" }}>Up</kbd>
-            <kbd style={{ padding: "0.1rem 0.35rem", background: "rgba(0,0,0,0.05)", borderRadius: "3px", fontSize: "0.65rem", fontFamily: "monospace" }}>Down</kbd>
+        <div className="cp-footer">
+          <span className="cp-footer-hint">
+            <kbd className="cp-kbd-small">Up</kbd>
+            <kbd className="cp-kbd-small">Down</kbd>
             {t("cp_hint_navigate")}
           </span>
-          <span style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}>
-            <kbd style={{ padding: "0.1rem 0.35rem", background: "rgba(0,0,0,0.05)", borderRadius: "3px", fontSize: "0.65rem", fontFamily: "monospace" }}>Enter</kbd>
+          <span className="cp-footer-hint">
+            <kbd className="cp-kbd-small">Enter</kbd>
             {t("cp_hint_select")}
           </span>
-          <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "0.3rem" }}>
+          <span className="cp-footer-branding">
             <Command size={11} /> Powered by xCloud
           </span>
         </div>

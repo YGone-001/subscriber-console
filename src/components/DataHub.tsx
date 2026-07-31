@@ -1,10 +1,11 @@
-﻿"use client";
+"use client";
 
 import { useState, useRef } from "react";
 import { Upload, Download, FileText, X, Check, FileUp, Loader2 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { parseCsv, toCsvRow } from "@/lib/csv";
 import { OperationNotice, type FeedbackTone } from "@/components/OperationFeedback";
+import "./datahub.css";
 
 /**
  * DataHub -- CSV Import/Export Hub
@@ -19,7 +20,7 @@ import { OperationNotice, type FeedbackTone } from "@/components/OperationFeedba
  *    d. 鍐茬獊纭鍚庢墽琛屽鍏?(/api/subscribers/import?mode=import)
  *
  * 瑙ｆ瀽娴佺▼:
- *   鐢ㄦ埛閫夋枃浠?-> 瀹㈡埛绔?CSV 瑙ｆ瀽 -> 鍙戦€?IMSI 鍒楄〃棰勬
+ *   鐢ㄦ埛閫夋枃浠?-> 瀹㈡埛绔?CSV 瑙ｆ瀽 -> 鍙发閫?IMSI 鍒楄〃棰勬
  *   -> 灞曠ず鍐茬獊琛ㄦ牸 -> 鐢ㄦ埛纭璺宠繃/瑕嗙洊 -> 鎵ц瀵煎叆
  * ---------------------------------------------------------
  */
@@ -199,7 +200,8 @@ export default function DataHub({ isOpen, onClose, onComplete, onOperation, subs
             record[h] = (values[idx] || "").trim();
           });
 
-          // IMSI 鏍煎紡鏍￠獙: 蹇呴』涓?15 浣嶆暟瀛?          if (!/^\d{15}$/.test(record.imsi)) continue;
+          // IMSI 鏍煎格式鏍￠獙: 蹇呴』涓?15 浣嶆暟瀛?
+          if (!/^\d{15}$/.test(record.imsi)) continue;
           records.push(record as ParsedRecord);
         }
 
@@ -295,43 +297,21 @@ export default function DataHub({ isOpen, onClose, onComplete, onOperation, subs
   const newCount = conflicts.filter(c => !c.exists).length;
 
   return (
-    <div
-      onClick={onClose}
-      style={{
-        position: "fixed", inset: 0, zIndex: 9998,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        background: "rgba(0,0,0,0.5)",
-        backdropFilter: "blur(4px)"
-      }}
-    >
-      <div
-        onClick={e => e.stopPropagation()}
-        style={{
-          width: "700px", maxHeight: "600px",
-          background: "var(--surface)", backdropFilter: "blur(16px)", borderRadius: "16px",
-          border: "1px solid var(--surface-border)",
-          boxShadow: "0 25px 50px rgba(0,0,0,0.4)",
-          display: "flex", flexDirection: "column",
-          overflow: "hidden"
-        }}
-      >
+    <div className="dh-overlay" onClick={onClose}>
+      <div className="dh-modal" onClick={e => e.stopPropagation()}>
         {/* Header */}
-        <div style={{
-          padding: "1.25rem 1.5rem",
-          borderBottom: "1px solid var(--surface-border)",
-          display: "flex", justifyContent: "space-between", alignItems: "center"
-        }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+        <div className="dh-header">
+          <div className="dh-title-group">
             <FileText size={22} color="var(--primary)" />
-            <h3 style={{ margin: 0, fontSize: "1.15rem", fontWeight: 700, color: "var(--text-main)" }}>{t("dh_title")}</h3>
+            <h3 className="dh-title">{t("dh_title")}</h3>
           </div>
-          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "#94a3b8" }}>
+          <button onClick={onClose} className="dh-close-btn">
             <X size={20} />
           </button>
         </div>
 
         {/* Tab Bar */}
-        <div style={{ display: "flex", borderBottom: "1px solid var(--surface-border)" }}>
+        <div className="dh-tabs">
           {[
             { key: "export" as const, label: t("dh_tab_export"), icon: Download },
             { key: "import" as const, label: t("dh_tab_import"), icon: Upload }
@@ -339,17 +319,7 @@ export default function DataHub({ isOpen, onClose, onComplete, onOperation, subs
             <button
               key={tab.key}
               onClick={() => { setActiveTab(tab.key); if (tab.key === "import") resetImport(); }}
-              style={{
-                flex: 1, padding: "0.75rem",
-                display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem",
-                border: "none", cursor: "pointer",
-                background: activeTab === tab.key ? "rgba(59, 130, 246, 0.1)" : "transparent",
-                color: activeTab === tab.key ? "var(--primary)" : "#94a3b8",
-                fontWeight: activeTab === tab.key ? 700 : 500,
-                fontSize: "0.9rem",
-                borderBottom: activeTab === tab.key ? "2px solid var(--primary)" : "2px solid transparent",
-                transition: "all 0.2s"
-              }}
+              className={`dh-tab ${activeTab === tab.key ? 'dh-tab-active' : 'dh-tab-inactive'}`}
             >
               <tab.icon size={16} />
               {tab.label}
@@ -358,49 +328,32 @@ export default function DataHub({ isOpen, onClose, onComplete, onOperation, subs
         </div>
 
         {/* Content */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "1.5rem" }}>
+        <div className="dh-content">
 
           {/* ===== EXPORT TAB ===== */}
           {activeTab === "export" && (
-            <div style={{ textAlign: "center", padding: "2rem 1rem" }}>
-              <Download size={48} color="#4e73df" style={{ margin: "0 auto 1rem", opacity: 0.6 }} />
-              <h4 style={{ margin: "0 0 0.5rem", color: "var(--text-main)", fontWeight: 600 }}>{t("dh_export_title")}</h4>
-              <p style={{ color: "#94a3b8", fontSize: "0.9rem", marginBottom: "1.5rem" }}>
+            <div className="dh-export-view">
+              <Download size={48} color="#4e73df" className="dh-export-icon" />
+              <h4 className="dh-export-title">{t("dh_export_title")}</h4>
+              <p className="dh-export-desc">
                 {selectedImsis && selectedImsis.length > 0
                   ? t("dh_export_desc_selected").replace("{count}", selectedImsis.length.toString())
                   : t("dh_export_desc_all").replace("{count}", (subscribers?.length || 0).toString())
                 }
               </p>
-              <div style={{
-                textAlign: "left",
-                border: "1px solid var(--surface-border)",
-                borderRadius: "12px",
-                padding: "1rem",
-                marginBottom: "1.5rem",
-                background: "var(--surface-hover)"
-              }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", marginBottom: "1rem" }}>
+              <div className="dh-export-options">
+                <div className="dh-export-format-row">
                   <div>
-                    <div style={{ color: "var(--text-main)", fontWeight: 700, fontSize: "0.9rem" }}>{t("dh_export_format")}</div>
-                    <div style={{ color: "#94a3b8", fontSize: "0.78rem", marginTop: "0.15rem" }}>{t("dh_export_fields")}</div>
+                    <div className="dh-export-format-label">{t("dh_export_format")}</div>
+                    <div className="dh-export-format-sub">{t("dh_export_fields")}</div>
                   </div>
-                  <div style={{ display: "inline-flex", padding: "0.2rem", border: "1px solid var(--surface-border)", borderRadius: "8px", background: "var(--surface)" }}>
+                  <div className="dh-format-group">
                     {(["csv", "json"] as ExportFormat[]).map((format) => (
                       <button
                         key={format}
                         type="button"
                         onClick={() => setExportFormat(format)}
-                        style={{
-                          border: "none",
-                          borderRadius: "6px",
-                          padding: "0.4rem 0.75rem",
-                          background: exportFormat === format ? "var(--primary)" : "transparent",
-                          color: exportFormat === format ? "#fff" : "var(--text-secondary)",
-                          cursor: "pointer",
-                          fontSize: "0.78rem",
-                          fontWeight: 800,
-                          textTransform: "uppercase"
-                        }}
+                        className={`dh-format-btn ${exportFormat === format ? 'dh-format-btn-active' : 'dh-format-btn-inactive'}`}
                       >
                         {format}
                       </button>
@@ -408,35 +361,22 @@ export default function DataHub({ isOpen, onClose, onComplete, onOperation, subs
                   </div>
                 </div>
 
-                <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5rem", marginBottom: "0.75rem" }}>
-                  <button type="button" onClick={() => setAllExportFields(true)} style={{ border: "none", background: "transparent", color: "var(--primary)", cursor: "pointer", fontSize: "0.78rem", fontWeight: 700 }}>
+                <div className="dh-export-actions">
+                  <button type="button" onClick={() => setAllExportFields(true)} className="dh-select-btn dh-select-all">
                     {t("dh_select_all")}
                   </button>
-                  <button type="button" onClick={() => setAllExportFields(false)} style={{ border: "none", background: "transparent", color: "#94a3b8", cursor: "pointer", fontSize: "0.78rem", fontWeight: 700 }}>
+                  <button type="button" onClick={() => setAllExportFields(false)} className="dh-select-btn dh-select-clear">
                     {t("dh_clear_all")}
                   </button>
                 </div>
 
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "0.55rem" }}>
+                <div className="dh-fields-grid">
                   {EXPORT_FIELDS.map((field) => {
                     const checked = selectedExportFields.includes(field.key);
                     return (
                       <label
                         key={field.key}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "0.55rem",
-                          minHeight: "38px",
-                          padding: "0.5rem 0.65rem",
-                          borderRadius: "8px",
-                          border: checked ? "1px solid color-mix(in srgb, var(--primary) 45%, var(--surface-border))" : "1px solid var(--surface-border)",
-                          background: checked ? "color-mix(in srgb, var(--primary) 8%, var(--surface))" : "var(--surface)",
-                          color: "var(--text-main)",
-                          cursor: "pointer",
-                          fontSize: "0.82rem",
-                          fontWeight: 650
-                        }}
+                        className={`dh-field-label ${checked ? 'dh-field-label-active' : 'dh-field-label-inactive'}`}
                       >
                         <input
                           type="checkbox"
@@ -453,12 +393,7 @@ export default function DataHub({ isOpen, onClose, onComplete, onOperation, subs
               <button
                 onClick={() => { handleExport(); onClose(); }}
                 disabled={!subscribers || subscribers.length === 0 || selectedExportFields.length === 0}
-                className="btn"
-                style={{
-                  background: "var(--primary)", color: "white",
-                  padding: "0.75rem 2rem", fontSize: "0.95rem",
-                  display: "inline-flex", alignItems: "center", gap: "0.5rem"
-                }}
+                className="btn dh-download-btn"
               >
                 <Download size={18} /> {t(exportFormat === "json" ? "dh_btn_download_json" : "dh_btn_download_csv")}
               </button>
@@ -483,15 +418,7 @@ export default function DataHub({ isOpen, onClose, onComplete, onOperation, subs
                 <div>
                   <div
                     onClick={() => fileInputRef.current?.click()}
-                    style={{
-                      border: "2px dashed #cbd5e1",
-                      borderRadius: "12px",
-                      padding: "3rem 2rem",
-                      textAlign: "center",
-                      cursor: "pointer",
-                      transition: "all 0.2s",
-                      background: "var(--surface-hover)"
-                    }}
+                    className="dh-upload-area"
                     onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = "#4e73df"; }}
                     onDragLeave={e => { e.currentTarget.style.borderColor = "#cbd5e1"; }}
                     onDrop={e => {
@@ -506,11 +433,11 @@ export default function DataHub({ isOpen, onClose, onComplete, onOperation, subs
                       }
                     }}
                   >
-                    <FileUp size={40} color="#94a3b8" style={{ margin: "0 auto 1rem" }} />
-                    <p style={{ margin: "0 0 0.25rem", fontWeight: 600, color: "var(--text-main)" }}>
+                    <FileUp size={40} color="#94a3b8" className="dh-upload-icon" />
+                    <p className="dh-upload-title">
                       {t("dh_upload_drag")}
                     </p>
-                    <p style={{ margin: 0, color: "#94a3b8", fontSize: "0.85rem" }}>
+                    <p className="dh-upload-desc">
                       {t("dh_upload_desc")}
                     </p>
                   </div>
@@ -519,19 +446,10 @@ export default function DataHub({ isOpen, onClose, onComplete, onOperation, subs
                     type="file"
                     accept=".csv"
                     onChange={handleFileUpload}
-                    style={{ display: "none" }}
+                    className="dh-file-input"
                   />
-                  <div style={{ marginTop: "1.25rem", textAlign: "center" }}>
-                    <button
-                      onClick={downloadTemplate}
-                      style={{
-                        background: "none", border: "1px solid var(--surface-border)",
-                        padding: "0.5rem 1rem", borderRadius: "8px",
-                        color: "var(--primary)", cursor: "pointer",
-                        fontSize: "0.85rem", fontWeight: 600,
-                        display: "inline-flex", alignItems: "center", gap: "0.4rem"
-                      }}
-                    >
+                  <div className="dh-template-wrap">
+                    <button onClick={downloadTemplate} className="dh-template-btn">
                       <Download size={14} /> {t("dh_download_template")}
                     </button>
                   </div>
@@ -540,40 +458,33 @@ export default function DataHub({ isOpen, onClose, onComplete, onOperation, subs
 
               {/* Stage: Precheck Loading */}
               {importStage === "precheck" && (
-                <div style={{ textAlign: "center", padding: "3rem" }}>
-                  <Loader2 size={32} color="var(--primary)" style={{ animation: "spin 1s linear infinite", margin: "0 auto 1rem" }} />
-                  <p style={{ color: "#64748b", fontWeight: 500 }}>{t("dh_precheck_running")}</p>
+                <div className="dh-loading-view">
+                  <Loader2 size={32} color="var(--primary)" className="dh-spinner" />
+                  <p className="dh-loading-text">{t("dh_precheck_running")}</p>
                 </div>
               )}
 
               {/* Stage: Confirm */}
               {importStage === "confirm" && (
                 <div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "1rem", marginBottom: "1.5rem" }}>
-                    <div style={{ padding: "1rem", background: "rgba(16, 185, 129, 0.1)", borderRadius: "8px", textAlign: "center" }}>
-                      <div style={{ fontSize: "1.5rem", fontWeight: 700, color: "var(--success)" }}>{newCount}</div>
-                      <div style={{ fontSize: "0.8rem", color: "var(--success)", fontWeight: 600 }}>{t("dh_stat_new")}</div>
+                  <div className="dh-stats-grid">
+                    <div className="dh-stat-box dh-stat-new">
+                      <div className="dh-stat-new-val">{newCount}</div>
+                      <div className="dh-stat-new-label">{t("dh_stat_new")}</div>
                     </div>
-                    <div style={{ padding: "1rem", background: "rgba(245, 158, 11, 0.1)", borderRadius: "8px", textAlign: "center" }}>
-                      <div style={{ fontSize: "1.5rem", fontWeight: 700, color: "#f59e0b" }}>{existingCount}</div>
-                      <div style={{ fontSize: "0.8rem", color: "#f59e0b", fontWeight: 600 }}>{t("dh_stat_conflict")}</div>
+                    <div className="dh-stat-box dh-stat-conflict">
+                      <div className="dh-stat-conflict-val">{existingCount}</div>
+                      <div className="dh-stat-conflict-label">{t("dh_stat_conflict")}</div>
                     </div>
-                    <div style={{ padding: "1rem", background: "rgba(59, 130, 246, 0.1)", borderRadius: "8px", textAlign: "center" }}>
-                      <div style={{ fontSize: "1.5rem", fontWeight: 700, color: "var(--primary)" }}>{parsedRecords.length}</div>
-                      <div style={{ fontSize: "0.8rem", color: "var(--primary)", fontWeight: 600 }}>{t("dh_stat_total")}</div>
+                    <div className="dh-stat-box dh-stat-total">
+                      <div className="dh-stat-total-val">{parsedRecords.length}</div>
+                      <div className="dh-stat-total-label">{t("dh_stat_total")}</div>
                     </div>
                   </div>
 
                   {existingCount > 0 && (
-                    <div style={{ marginBottom: "1rem" }}>
-                      <label style={{
-                        display: "flex", alignItems: "center", gap: "0.75rem",
-                        padding: "0.75rem 1rem",
-                        border: overwriteExisting ? "1px solid var(--primary)" : "1px solid var(--surface-border)",
-                        borderRadius: "8px",
-                        background: overwriteExisting ? "rgba(59, 130, 246, 0.1)" : "transparent",
-                        cursor: "pointer", transition: "all 0.2s"
-                      }}>
+                    <div className="dh-overwrite-wrap">
+                      <label className={`dh-overwrite-label ${overwriteExisting ? 'dh-overwrite-active' : 'dh-overwrite-inactive'}`}>
                         <input
                           type="checkbox"
                           checked={overwriteExisting}
@@ -581,44 +492,40 @@ export default function DataHub({ isOpen, onClose, onComplete, onOperation, subs
                           className="checkbox-custom"
                         />
                         <div>
-                          <div style={{ fontWeight: 600, fontSize: "0.9rem", color: "var(--text-main)" }}>{t("dh_overwrite")}</div>
-                          <div style={{ fontSize: "0.8rem", color: "#94a3b8" }}>{t("dh_overwrite_desc").replace("{count}", existingCount.toString())}</div>
+                          <div className="dh-overwrite-title">{t("dh_overwrite")}</div>
+                          <div className="dh-overwrite-desc">{t("dh_overwrite_desc").replace("{count}", existingCount.toString())}</div>
                         </div>
                       </label>
                     </div>
                   )}
 
                   {/* Conflict Preview Table */}
-                  <div style={{ maxHeight: "180px", overflowY: "auto", border: "1px solid var(--surface-border)", borderRadius: "8px" }}>
-                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem" }}>
+                  <div className="dh-table-wrap">
+                    <table className="dh-table">
                       <thead>
-                        <tr style={{ background: "var(--surface-hover)", position: "sticky", top: 0 }}>
-                          <th style={{ padding: "0.5rem 1rem", textAlign: "left", fontWeight: 600, color: "var(--text-muted)" }}>{t("dh_col_imsi")}</th>
-                          <th style={{ padding: "0.5rem 1rem", textAlign: "left", fontWeight: 600, color: "var(--text-muted)" }}>{t("sub_360_tariff_plan")}</th>
-                          <th style={{ padding: "0.5rem 1rem", textAlign: "left", fontWeight: 600, color: "var(--text-muted)" }}>{t("sub_traffic_balance")}</th>
-                          <th style={{ padding: "0.5rem 1rem", textAlign: "left", fontWeight: 600, color: "var(--text-muted)" }}>{t("prof_sms_balance")}</th>
-                          <th style={{ padding: "0.5rem 1rem", textAlign: "center", fontWeight: 600, color: "var(--text-muted)" }}>{t("dh_col_status")}</th>
+                        <tr className="dh-table-tr-head">
+                          <th className="dh-table-th">{t("dh_col_imsi")}</th>
+                          <th className="dh-table-th">{t("sub_360_tariff_plan")}</th>
+                          <th className="dh-table-th">{t("sub_traffic_balance")}</th>
+                          <th className="dh-table-th">{t("prof_sms_balance")}</th>
+                          <th className="dh-table-th-center">{t("dh_col_status")}</th>
                         </tr>
                       </thead>
                       <tbody>
                         {conflicts.map(c => (
-                          <tr key={c.imsi} style={{ borderTop: "1px solid var(--surface-border)" }}>
-                            <td style={{ padding: "0.4rem 1rem", fontFamily: "monospace", fontWeight: 600 }}>{c.imsi}</td>
-                            <td style={{ padding: "0.4rem 1rem", color: "#64748b", fontFamily: "monospace" }}>
+                          <tr key={c.imsi} className="dh-table-tr">
+                            <td className="dh-table-td-imsi">{c.imsi}</td>
+                            <td className="dh-table-td">
                               {parsedRecords.find(r => r.imsi === c.imsi)?.plan_id || "plan_default_10gb"}
                             </td>
-                            <td style={{ padding: "0.4rem 1rem", color: "#64748b" }}>
+                            <td className="dh-table-td">
                               {parsedRecords.find(r => r.imsi === c.imsi)?.traffic_balance || "-"}
                             </td>
-                            <td style={{ padding: "0.4rem 1rem", color: "#64748b" }}>
+                            <td className="dh-table-td">
                               {parsedRecords.find(r => r.imsi === c.imsi)?.sms_balance || "-"}
                             </td>
-                            <td style={{ padding: "0.4rem 1rem", textAlign: "center" }}>
-                              <span style={{
-                                padding: "0.15rem 0.5rem", borderRadius: "12px", fontSize: "0.7rem", fontWeight: 700,
-                                background: c.exists ? "rgba(245, 158, 11, 0.15)" : "rgba(16, 185, 129, 0.15)",
-                                color: c.exists ? "#f59e0b" : "var(--success)"
-                              }}>
+                            <td className="dh-table-td-center">
+                              <span className={`dh-badge ${c.exists ? 'dh-badge-conflict' : 'dh-badge-new'}`}>
                                 {c.exists ? t("dh_badge_exists") : t("dh_badge_new")}
                               </span>
                             </td>
@@ -628,19 +535,11 @@ export default function DataHub({ isOpen, onClose, onComplete, onOperation, subs
                     </table>
                   </div>
 
-                  <div style={{ display: "flex", gap: "0.75rem", marginTop: "1.5rem" }}>
-                    <button onClick={resetImport} style={{
-                      flex: 1, padding: "0.75rem", border: "1px solid var(--surface-border)",
-                      borderRadius: "8px", background: "transparent", cursor: "pointer",
-                      fontWeight: 600, color: "var(--text-muted)"
-                    }}>
+                  <div className="dh-actions">
+                    <button onClick={resetImport} className="dh-btn-cancel">
                       {t("dh_btn_cancel")}
                     </button>
-                    <button onClick={executeImport} className="btn" style={{
-                      flex: 1, padding: "0.75rem", background: "var(--primary)",
-                      color: "white", display: "flex", alignItems: "center",
-                      justifyContent: "center", gap: "0.5rem"
-                    }}>
+                    <button onClick={executeImport} className="btn dh-btn-import">
                       <Upload size={16} />
                       {t("dh_btn_import").replace("{count}", (overwriteExisting ? parsedRecords.length : newCount).toString())}
                     </button>
@@ -650,24 +549,20 @@ export default function DataHub({ isOpen, onClose, onComplete, onOperation, subs
 
               {/* Stage: Importing */}
               {importStage === "importing" && (
-                <div style={{ textAlign: "center", padding: "3rem" }}>
-                  <Loader2 size={32} color="var(--primary)" style={{ animation: "spin 1s linear infinite", margin: "0 auto 1rem" }} />
-                  <p style={{ color: "#64748b", fontWeight: 500 }}>{t("dh_importing")}</p>
+                <div className="dh-loading-view">
+                  <Loader2 size={32} color="var(--primary)" className="dh-spinner" />
+                  <p className="dh-loading-text">{t("dh_importing")}</p>
                 </div>
               )}
 
               {/* Stage: Done */}
               {importStage === "done" && importResult && (
-                <div style={{ textAlign: "center", padding: "2rem" }}>
-                  <div style={{
-                    width: "56px", height: "56px", borderRadius: "50%",
-                    background: "#dcfce7", display: "flex", alignItems: "center",
-                    justifyContent: "center", margin: "0 auto 1rem"
-                  }}>
+                <div className="dh-done-view">
+                  <div className="dh-done-icon-wrap">
                     <Check size={28} color="#16a34a" />
                   </div>
-                  <h4 style={{ margin: "0 0 0.5rem", color: "var(--text-main)" }}>{importResult.approval?.id ? t("approval_status_pending") : t("dh_import_complete")}</h4>
-                  <p style={{ color: "#64748b", fontSize: "0.9rem" }}>
+                  <h4 className="dh-done-title">{importResult.approval?.id ? t("approval_status_pending") : t("dh_import_complete")}</h4>
+                  <p className="dh-done-desc">
                     {importResult.approval?.id
                       ? t("approval_msg_submitted", { id: importResult.approval.id })
                       : (
@@ -681,12 +576,7 @@ export default function DataHub({ isOpen, onClose, onComplete, onOperation, subs
                   </p>
                   <button
                     onClick={() => { if (!importResult.approval?.id) onComplete(); onClose(); }}
-                    className="btn"
-                    style={{
-                      marginTop: "1rem",
-                      background: "var(--primary)", color: "white",
-                      padding: "0.65rem 2rem"
-                    }}
+                    className="btn dh-btn-done"
                   >
                     {t("dh_btn_done")}
                   </button>

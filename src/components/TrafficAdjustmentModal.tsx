@@ -4,6 +4,7 @@ import { BatteryCharging, RotateCcw, Save, SlidersHorizontal, X } from "lucide-r
 import { useMemo, useState } from "react";
 import { BYTE_INPUT_UNITS, composeByteInput, formatBytes, parseBytes, splitByteInput } from "@/lib/unitParser";
 import { OperationNotice } from "./OperationFeedback";
+import "./modals.css";
 
 type TrafficAdjustmentMode = "recharge" | "set_available" | "set_total" | "reset";
 
@@ -43,7 +44,7 @@ function ByteInput({
   return (
     <div>
       <label className="form-label">{label}</label>
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 96px", gap: "0.5rem" }}>
+      <div className="ta-byte-input-grid">
         <input
           className="form-input"
           inputMode="decimal"
@@ -133,17 +134,17 @@ export default function TrafficAdjustmentModal({
 
   return (
     <div className="modal-overlay" onClick={(event) => { event.stopPropagation(); onClose(); }}>
-      <div className="modal-content animate-modal-enter" style={{ maxWidth: "620px", padding: 0 }} onClick={(event) => event.stopPropagation()}>
-        <div className="workflow-header" style={{ padding: "1.25rem 1.5rem", borderBottom: "1px solid var(--surface-border)" }}>
+      <div className="modal-content animate-modal-enter ta-modal-content" onClick={(event) => event.stopPropagation()}>
+        <div className="workflow-header ta-header">
           <div>
-            <h2 style={{ margin: 0, fontSize: "1.2rem", color: "var(--text-main)" }}>{t("traffic_adjust_title")}</h2>
-            <p style={{ margin: "0.25rem 0 0", color: "var(--text-muted)", fontFamily: "monospace", fontSize: "0.9rem" }}>{imsi}</p>
+            <h2 className="ta-header-title">{t("traffic_adjust_title")}</h2>
+            <p className="ta-header-desc">{imsi}</p>
           </div>
           <button className="btn-icon" onClick={onClose} title={t("close")}><X size={22} /></button>
         </div>
 
-        <div style={{ padding: "1.5rem", display: "grid", gap: "1.25rem" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: "0.5rem" }}>
+        <div className="ta-body">
+          <div className="ta-mode-grid">
             {MODE_OPTIONS.map((option) => {
               const Icon = option.icon;
               const active = option.mode === mode;
@@ -152,8 +153,7 @@ export default function TrafficAdjustmentModal({
                   key={option.mode}
                   type="button"
                   onClick={() => handleModeChange(option.mode)}
-                  className={active ? "btn btn-primary" : "btn btn-outline"}
-                  style={{ justifyContent: "center", padding: "0.65rem 0.5rem", minHeight: "42px" }}
+                  className={active ? "btn btn-primary ta-mode-btn" : "btn btn-outline ta-mode-btn"}
                 >
                   <Icon size={15} /> {t(option.labelKey)}
                 </button>
@@ -161,15 +161,15 @@ export default function TrafficAdjustmentModal({
             })}
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "0.75rem" }}>
+          <div className="ta-stats-grid">
             {[
               [t("traffic_total"), total],
               [t("traffic_used"), used],
               [t("traffic_balance"), balance],
             ].map(([label, value]) => (
-              <div key={String(label)} style={{ border: "1px solid var(--surface-border)", borderRadius: 8, padding: "0.8rem", background: "var(--surface-hover)" }}>
-                <div style={{ color: "var(--text-muted)", fontSize: "0.75rem", marginBottom: "0.25rem" }}>{label}</div>
-                <div style={{ fontFamily: "monospace", color: "var(--text-main)", fontWeight: 700 }}>{formatBytes(Number(value))}</div>
+              <div key={String(label)} className="ta-stat-card">
+                <div className="ta-stat-label">{label}</div>
+                <div className="ta-stat-value">{formatBytes(Number(value))}</div>
               </div>
             ))}
           </div>
@@ -188,9 +188,9 @@ export default function TrafficAdjustmentModal({
             />
           </div>
 
-          <div style={{ border: "1px solid var(--surface-border)", borderRadius: 8, padding: "0.9rem", background: "rgba(59, 130, 246, 0.08)" }}>
-            <div style={{ color: "var(--text-muted)", fontSize: "0.75rem", marginBottom: "0.4rem" }}>{t("traffic_preview")}</div>
-            <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", fontFamily: "monospace", color: "var(--text-main)", fontWeight: 700 }}>
+          <div className="ta-preview">
+            <div className="ta-preview-title">{t("traffic_preview")}</div>
+            <div className="ta-preview-values">
               <span>{t("traffic_total")}: {formatBytes(preview.total)}</span>
               <span>{t("traffic_used")}: {formatBytes(preview.used)}</span>
               <span>{t("traffic_balance")}: {formatBytes(preview.balance)}</span>
@@ -208,8 +208,8 @@ export default function TrafficAdjustmentModal({
           )}
         </div>
 
-        <div className="workflow-footer" style={{ padding: "1rem 1.5rem", borderTop: "1px solid var(--surface-border)" }}>
-          <span style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>{t("traffic_current")}: {formatBytes(balance)}</span>
+        <div className="workflow-footer ta-footer">
+          <span className="ta-footer-text">{t("traffic_current")}: {formatBytes(balance)}</span>
           <div className="workflow-footer-actions">
             <button className="btn btn-outline" onClick={onClose}>{t("cancel")}</button>
             <button className="btn btn-primary" onClick={handleSubmit} disabled={isSaving}>
