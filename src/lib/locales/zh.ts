@@ -1340,12 +1340,17 @@ export const zh: Record<string, string> = {
     never: "\u4ece\u672a",
 
     // -- Login Page --
+    login_title: "xCloud Platform",
+    login_subtitle: "核心网管理系统",
     login_username: "\u7528\u6237\u540d",
     login_password: "\u5bc6\u7801",
     login_button: "\u767b\u5f55",
     login_loading: "...",
     login_failed: "\u767b\u5f55\u5931\u8d25",
     login_network_error: "\u7f51\u7edc\u9519\u8bef",
+    login_protected: "由 xCloud Secure Access 提供安全保护",
+    login_hide_password: "隐藏密码",
+    login_show_password: "显示密码",
 
     // -- Option B: Analytics & Dashboard i18n --
     dash_kpi_detail_burn_trend: "{rate} GB/小时 24小时趋势",

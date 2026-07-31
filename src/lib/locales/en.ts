@@ -1341,12 +1341,17 @@ export const en: Record<string, string> = {
     never: "Never",
 
     // -- Login Page --
+    login_title: "xCloud Platform",
+    login_subtitle: "Core Network Management System",
     login_username: "Username",
     login_password: "Password",
     login_button: "Login",
     login_loading: "...",
     login_failed: "Login failed",
     login_network_error: "Network error",
+    login_protected: "Protected by xCloud Secure Access",
+    login_hide_password: "Hide password",
+    login_show_password: "Show password",
 
     // -- Option B: Analytics & Dashboard i18n --
     dash_kpi_detail_burn_trend: "{rate} GB/hr 24h trend",

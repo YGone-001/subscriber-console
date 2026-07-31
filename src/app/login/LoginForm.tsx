@@ -4,8 +4,10 @@ import "./LoginForm.css";
 import { useState } from "react";
 import { Eye, EyeOff, Loader2, Lock, User } from "lucide-react";
 import Image from "next/image";
+import { useI18n } from "@/components/I18nProvider";
 
 export default function LoginForm() {
+  const { t } = useI18n();
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -37,9 +39,9 @@ export default function LoginForm() {
       } catch {
         // Keep the generic fallback below
       }
-      setError(data.error || "Login failed");
+      setError(data.error || t("login_failed"));
     } catch {
-      setError("Network error");
+      setError(t("login_network_error"));
     } finally {
       setIsLoading(false);
     }
@@ -61,9 +63,9 @@ export default function LoginForm() {
               className="login-logo"
             />
           </div>
-          <h1 className="login-title">xCloud Platform</h1>
+          <h1 className="login-title">{t("login_title")}</h1>
           <p className="login-subtitle">
-            Core Network Management System
+            {t("login_subtitle")}
           </p>
         </div>
 
@@ -83,7 +85,7 @@ export default function LoginForm() {
               id="xcloud-login-username"
               name="username"
               type="text"
-              placeholder="Username"
+              placeholder={t("login_username")}
               required
               className="login-input"
             />
@@ -97,14 +99,14 @@ export default function LoginForm() {
               id="xcloud-login-password"
               name="password"
               type={passwordVisible ? "text" : "password"}
-              placeholder="Password"
+              placeholder={t("login_password")}
               required
               className="login-input login-input-password"
             />
             <button
               id="xcloud-password-toggle"
               type="button"
-              title={passwordVisible ? "Hide password" : "Show password"}
+              title={passwordVisible ? t("login_hide_password") : t("login_show_password")}
               onClick={() => setPasswordVisible((visible) => !visible)}
               className="password-toggle"
             >
@@ -126,12 +128,12 @@ export default function LoginForm() {
             <span id="xcloud-login-spinner" hidden={!isLoading}>
               <Loader2 size={20} className="login-spinner" />
             </span>
-            <span id="xcloud-login-submit-text" hidden={isLoading}>Login</span>
+            <span id="xcloud-login-submit-text" hidden={isLoading}>{t("login_button")}</span>
           </button>
         </form>
 
         <div className="login-footer">
-          Protected by xCloud Secure Access
+          {t("login_protected")}
         </div>
       </div>
     </div>
