@@ -59,7 +59,11 @@ function defaultAssignee(alert: AlertItem) {
 
 export default function NocSentinel() {
   const { t } = useI18n();
-  const { data, mutate } = useSWR<AlertResponse>("/api/alerts", fetcher, { refreshInterval: 2000 });
+  const { data, mutate } = useSWR<AlertResponse>("/api/alerts", fetcher, { 
+    refreshInterval: 15000,
+    revalidateOnFocus: true,
+    errorRetryInterval: 30000 
+  });
   const [, forceMonitorRefresh] = useState(0);
   const monitorActive = useSyncExternalStore(
     () => () => {},

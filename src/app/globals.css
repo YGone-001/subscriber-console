@@ -1409,3 +1409,4 @@ body, .modal-content, .dash-card, .app-sidebar, .app-header {
 }
 
 
+.analytics-sync-btn { display: flex; align-items: center; gap: 0.5rem; border: 1px solid var(--surface-border); background: var(--surface); padding: 0.5rem 1rem; border-radius: 20px; font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); cursor: pointer; transition: all 0.2s; }

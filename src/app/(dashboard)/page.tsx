@@ -25,6 +25,24 @@ type FeedbackState = {
 export default function DashboardPage() {
   const { t } = useI18n();
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
+  const [syncState, setSyncState] = useState<"idle" | "syncing" | "success" | "error">("idle");
+
+  const handleSync = async () => {
+    if (syncState === "syncing") return;
+    setSyncState("syncing");
+    try {
+      const res = await fetch("/api/analytics/init", { method: "POST" });
+      if (!res.ok) throw new Error(t("sync_error"));
+      
+      setSyncState("success");
+      setFeedback({ tone: "success", title: t("success"), message: `${t("sync_telemetry")} ${t("sync_ok")}` });
+      setTimeout(() => setSyncState("idle"), 2000);
+    } catch (error) {
+      setSyncState("error");
+      setFeedback({ tone: "danger", title: t("error"), message: error instanceof Error ? error.message : t("sync_error") });
+      setTimeout(() => setSyncState("idle"), 2000);
+    }
+  };
 
   return (
     <div className="container animate-fade-in p-12">
@@ -50,43 +68,22 @@ export default function DashboardPage() {
         </div>
         {/* Sync Telemetry Button */}
         <button
-          onClick={async (e) => {
-            const btn = e.currentTarget;
-            const originalHTML = btn.innerHTML;
-            btn.disabled = true;
-            btn.classList.add('radar-animating');
-            btn.innerHTML = `<span style="opacity: 0.5;">${t("sync_scanning")}</span>`;
-            try {
-              const res = await fetch('/api/analytics/init', { method: 'POST' });
-              if (!res.ok) throw new Error(t("sync_error"));
-              btn.innerHTML = `<span style="color:var(--success)">${t("sync_ok")}</span>`;
-              setFeedback({ tone: "success", title: t("success"), message: `${t("sync_telemetry")} ${t("sync_ok")}` });
-              setTimeout(() => {
-                btn.innerHTML = originalHTML;
-                btn.classList.remove('radar-animating');
-                btn.disabled = false;
-              }, 2000);
-            } catch (error) {
-              btn.innerHTML = t("sync_error");
-              setFeedback({ tone: "danger", title: t("error"), message: error instanceof Error ? error.message : t("sync_error") });
-              setTimeout(() => {
-                btn.innerHTML = originalHTML;
-                btn.classList.remove('radar-animating');
-                btn.disabled = false;
-              }, 2000);
-            }
-          }}
+          onClick={handleSync}
+          disabled={syncState === "syncing"}
+          className={`btn btn-outline analytics-sync-btn ${syncState === "syncing" ? "radar-animating" : ""}`}
           title={t("sync_tooltip")}
-          style={{
-            display: "flex", alignItems: "center", gap: "0.5rem",
-            border: "1px solid var(--surface-border)", background: "var(--surface)",
-            padding: "0.5rem 1rem", borderRadius: "20px",
-            fontSize: "0.85rem", fontWeight: 600,
-            color: "var(--text-secondary)", cursor: "pointer",
-            transition: "all 0.2s"
-          }}
         >
-          <DatabaseZap size={14} color="var(--primary)" /> {t("sync_telemetry")}
+          {syncState === "syncing" ? (
+            <span style={{ opacity: 0.5 }}>{t("sync_scanning")}</span>
+          ) : syncState === "success" ? (
+            <span className="text-success">{t("sync_ok")}</span>
+          ) : syncState === "error" ? (
+            <span className="text-danger">{t("sync_error")}</span>
+          ) : (
+            <>
+              <DatabaseZap size={14} className="text-primary" /> {t("sync_telemetry")}
+            </>
+          )}
         </button>
       </div>
 
