@@ -12,6 +12,64 @@ export type TopConsumer = {
   smsBalance: number;
 };
 
+export type OcsBalanceMetrics = {
+  totalSubscribers: number;
+  totalDataAllocated: number;
+  totalDataUsed: number;
+  totalDataReserved: number;
+  totalDataAvailable: number;
+  dataUtilizationRate: number;
+  totalVoiceAllocated: number;
+  totalVoiceUsed: number;
+  totalVoiceReserved: number;
+  totalVoiceAvailable: number;
+  totalSmsAllocated: number;
+  totalSmsUsed: number;
+  totalSmsAvailable: number;
+  validInvariantCount: number;
+  brokenInvariantCount: number;
+  allInvariantsOk: boolean;
+};
+
+export type OcsSessionMetrics = {
+  totalSessions: number;
+  activeSessions: number;
+  closingSessions: number;
+  closedSessions: number;
+  totalGrantedOctets: number;
+  totalUsedOctets: number;
+  interfaceGyCount: number;
+  interfaceRoCount: number;
+  apnDistribution: Array<{ apn: string; count: number }>;
+};
+
+export type OcsReservationMetrics = {
+  totalReservations: number;
+  activeReservations: number;
+  settledReservations: number;
+  releasedReservations: number;
+  orphanedReservations: number;
+  totalReservedOctets: number;
+  totalReleasedOctets: number;
+  totalUsedOctets: number;
+};
+
+export type TariffPlanDistItem = {
+  planId: string;
+  name: string;
+  subscriberCount: number;
+  percentage: number;
+  status: string;
+};
+
+export type OcsUsageMetrics = {
+  totalRecords: number;
+  chargedRecords: number;
+  totalInputOctets: number;
+  totalOutputOctets: number;
+  totalOctets: number;
+};
+
 export type MetricsData = {
   totalTraffic: number;
   plmnDist?: DistributionPoint[];
@@ -19,6 +77,11 @@ export type MetricsData = {
   top5?: TopConsumer[];
   timestamp?: number;
   error?: string;
+  ocsBalances?: OcsBalanceMetrics;
+  ocsSessions?: OcsSessionMetrics;
+  ocsReservations?: OcsReservationMetrics;
+  tariffPlanDist?: TariffPlanDistItem[];
+  ocsUsage?: OcsUsageMetrics;
 };
 
 export type SparklineData = {
@@ -53,6 +116,8 @@ export type KpiCardProps = {
   sparkline?: number[];
   ringValue?: number;
   tone?: "normal" | "warning" | "danger";
+  badge?: React.ReactNode;
+  onClick?: () => void;
 };
 
 export type WorkItem = {

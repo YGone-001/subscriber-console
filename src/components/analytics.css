@@ -688,3 +688,660 @@
       grid-column: 2;
     }
   }
+
+  /* --- OCS Metrics & Telemetry Modern Aesthetics --- */
+  .analytics-view-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+    padding-bottom: 0.25rem;
+  }
+
+  .analytics-view-tabs {
+    display: inline-flex;
+    background: var(--header-bg);
+    border: 1px solid var(--surface-border);
+    border-radius: 999px;
+    padding: 3px;
+    gap: 3px;
+  }
+
+  .analytics-view-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.4rem 0.85rem;
+    border: none;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    font-weight: 750;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .analytics-view-tab:hover {
+    color: var(--text-main);
+    background: var(--surface-hover);
+  }
+
+  .analytics-view-tab.active {
+    background: var(--primary);
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(78, 115, 223, 0.35);
+  }
+
+  .analytics-view-tab-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.1rem 0.4rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    background: rgba(255, 255, 255, 0.2);
+  }
+
+  .analytics-view-tab:not(.active) .analytics-view-tab-count {
+    background: var(--surface-border);
+    color: var(--text-muted);
+  }
+
+  .analytics-ocs-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .analytics-ocs-subtitle {
+    margin: 0.2rem 0 0;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+  }
+
+  .analytics-ocs-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+
+  .analytics-ocs-badge-success,
+  .analytics-ocs-badge-danger {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.25rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 800;
+    text-decoration: none;
+  }
+
+  .analytics-ocs-badge-success {
+    background: rgba(28, 200, 138, 0.12);
+    border: 1px solid rgba(28, 200, 138, 0.3);
+    color: #1cc88a;
+  }
+
+  .analytics-ocs-badge-danger {
+    background: rgba(231, 74, 59, 0.14);
+    border: 1px solid rgba(231, 74, 59, 0.36);
+    color: #e74a3b;
+    animation: pulse-border 2s infinite;
+  }
+
+  .analytics-ocs-link-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.25rem 0.6rem;
+    border: 1px solid var(--surface-border);
+    border-radius: 6px;
+    font-size: 0.74rem;
+    font-weight: 800;
+    color: var(--text-secondary);
+    text-decoration: none;
+    transition: all 0.18s ease;
+  }
+
+  .analytics-ocs-link-btn:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+    background: var(--surface-hover);
+  }
+
+  .analytics-live-pulse-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.22rem 0.55rem;
+    border-radius: 999px;
+    background: rgba(28, 200, 138, 0.1);
+    border: 1px solid rgba(28, 200, 138, 0.25);
+    color: #1cc88a;
+    font-size: 0.72rem;
+    font-weight: 800;
+  }
+
+  .live-pulse-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #1cc88a;
+    box-shadow: 0 0 8px #1cc88a;
+    animation: live-pulse 1.8s infinite;
+  }
+
+  @keyframes live-pulse {
+    0% { transform: scale(0.9); opacity: 0.7; }
+    50% { transform: scale(1.3); opacity: 1; box-shadow: 0 0 12px #1cc88a; }
+    100% { transform: scale(0.9); opacity: 0.7; }
+  }
+
+  .analytics-ocs-body {
+    padding: 1.15rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.15rem;
+  }
+
+  .analytics-ocs-capacity-summary {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+
+  .analytics-ocs-metric-item {
+    background: var(--header-bg);
+    border: 1px solid var(--surface-border);
+    border-radius: 8px;
+    padding: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .analytics-ocs-metric-label {
+    font-size: 0.74rem;
+    color: var(--text-muted);
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+
+  .analytics-ocs-metric-val {
+    font-size: 1.25rem;
+    font-weight: 850;
+    color: var(--text-main);
+  }
+
+  .analytics-ocs-metric-val.text-used { color: #e74a3b; }
+  .analytics-ocs-metric-val.text-reserved { color: #f6c23e; }
+  .analytics-ocs-metric-val.text-available { color: #1cc88a; }
+
+  .analytics-ocs-subtext {
+    font-size: 0.74rem;
+    color: var(--text-secondary);
+    font-weight: 600;
+  }
+
+  .analytics-ocs-bar-container {
+    background: var(--header-bg);
+    border: 1px solid var(--surface-border);
+    border-radius: 8px;
+    padding: 0.85rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+
+  .analytics-ocs-bar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    font-weight: 700;
+  }
+
+  .analytics-ocs-utilization-badge {
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.74rem;
+    font-weight: 800;
+  }
+
+  .analytics-ocs-utilization-badge.tone-normal {
+    background: rgba(28, 200, 138, 0.15);
+    color: #1cc88a;
+  }
+
+  .analytics-ocs-utilization-badge.tone-warning {
+    background: rgba(246, 194, 62, 0.15);
+    color: #f6c23e;
+  }
+
+  .analytics-ocs-utilization-badge.tone-danger {
+    background: rgba(231, 74, 59, 0.15);
+    color: #e74a3b;
+  }
+
+  .analytics-ocs-multi-bar {
+    height: 12px;
+    width: 100%;
+    display: flex;
+    border-radius: 999px;
+    overflow: hidden;
+    background: var(--surface-border);
+  }
+
+  .analytics-ocs-bar-seg {
+    height: 100%;
+    transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .seg-used { background: linear-gradient(90deg, #e74a3b, #f06a5b); }
+  .seg-reserved { background: linear-gradient(90deg, #f6c23e, #f8d068); }
+  .seg-available { background: linear-gradient(90deg, #1cc88a, #38dfa5); }
+
+  .analytics-ocs-bar-legend {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    flex-wrap: wrap;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    font-weight: 650;
+  }
+
+  .legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+
+  .legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .dot-used { background: #e74a3b; }
+  .dot-reserved { background: #f6c23e; }
+  .dot-available { background: #1cc88a; }
+
+  .analytics-ocs-secondary-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+
+  .analytics-ocs-secondary-card {
+    background: var(--header-bg);
+    border: 1px solid var(--surface-border);
+    border-radius: 8px;
+    padding: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .analytics-ocs-sec-header {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-size: 0.76rem;
+    color: var(--text-muted);
+    font-weight: 750;
+  }
+
+  .analytics-ocs-sec-content {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .analytics-ocs-sec-content strong {
+    font-size: 1.15rem;
+    color: var(--text-main);
+    font-weight: 850;
+  }
+
+  .analytics-ocs-sec-sub {
+    font-size: 0.74rem;
+    color: var(--text-muted);
+    font-weight: 600;
+  }
+
+  /* Session Telemetry Styles */
+  .analytics-ocs-session-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+
+  .analytics-ocs-session-stat-card {
+    background: var(--header-bg);
+    border: 1px solid var(--surface-border);
+    border-radius: 8px;
+    padding: 0.8rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .stat-label-wrap {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-size: 0.74rem;
+    color: var(--text-muted);
+    font-weight: 750;
+  }
+
+  .stat-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+
+  .dot-active { background: #1cc88a; box-shadow: 0 0 6px #1cc88a; }
+  .dot-closing { background: #f6c23e; }
+  .dot-closed { background: #858796; }
+
+  .analytics-ocs-session-stat-card strong {
+    font-size: 1.45rem;
+    font-weight: 850;
+    color: var(--text-main);
+  }
+
+  .stat-sub {
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+  }
+
+  .analytics-ocs-telemetry-middle {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+
+  .analytics-ocs-interface-card,
+  .analytics-ocs-reservations-card {
+    background: var(--header-bg);
+    border: 1px solid var(--surface-border);
+    border-radius: 8px;
+    padding: 0.85rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+  }
+
+  .interface-card-header,
+  .res-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+
+  .interface-title,
+  .res-title {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-size: 0.8rem;
+    font-weight: 750;
+    color: var(--text-main);
+  }
+
+  .interface-count-text {
+    font-size: 0.74rem;
+    color: var(--text-muted);
+    font-weight: 650;
+  }
+
+  .analytics-ocs-split-bar {
+    height: 10px;
+    width: 100%;
+    display: flex;
+    border-radius: 999px;
+    overflow: hidden;
+    background: var(--surface-border);
+  }
+
+  .split-gy { background: #4e73df; }
+  .split-ro { background: #36b9cc; }
+
+  .split-legend {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+    font-weight: 650;
+  }
+
+  .dot-gy { background: #4e73df; }
+  .dot-ro { background: #36b9cc; }
+
+  .orphaned-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.15rem 0.45rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 800;
+    background: rgba(231, 74, 59, 0.15);
+    color: #e74a3b;
+  }
+
+  .res-ok-badge {
+    font-size: 0.7rem;
+    font-weight: 750;
+    color: #1cc88a;
+  }
+
+  .res-metrics-row {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  .res-sublabel {
+    display: block;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    font-weight: 700;
+  }
+
+  .res-metrics-row strong {
+    font-size: 0.95rem;
+    color: var(--text-main);
+    font-weight: 850;
+  }
+
+  .analytics-ocs-apn-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    padding-top: 0.3rem;
+  }
+
+  .apn-row-label {
+    font-size: 0.74rem;
+    color: var(--text-muted);
+    font-weight: 750;
+  }
+
+  .apn-pills-wrap {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+  }
+
+  .apn-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    background: var(--header-bg);
+    border: 1px solid var(--surface-border);
+    font-size: 0.72rem;
+    font-weight: 750;
+  }
+
+  .apn-name { color: var(--text-main); }
+  .apn-count {
+    color: var(--primary);
+    background: var(--surface-hover);
+    padding: 0 0.35rem;
+    border-radius: 999px;
+    font-size: 0.68rem;
+  }
+
+  /* Plan distribution chart styles */
+  .analytics-plan-body {
+    height: auto;
+    min-height: 280px;
+  }
+
+  .analytics-plan-grid {
+    display: grid;
+    grid-template-columns: 200px minmax(0, 1fr);
+    gap: 1rem;
+    align-items: center;
+  }
+
+  .analytics-plan-chart-container {
+    height: 220px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .analytics-plan-legend-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    max-height: 240px;
+    overflow-y: auto;
+    padding-right: 0.25rem;
+  }
+
+  .analytics-plan-legend-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.45rem 0.65rem;
+    border: 1px solid var(--surface-border);
+    border-radius: 6px;
+    background: var(--header-bg);
+    transition: background 0.15s ease;
+  }
+
+  .analytics-plan-legend-row:hover {
+    background: var(--surface-hover);
+  }
+
+  .legend-row-left {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    min-width: 0;
+  }
+
+  .plan-color-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .plan-info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .plan-name {
+    font-size: 0.8rem;
+    font-weight: 750;
+    color: var(--text-main);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .plan-id-code {
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    font-family: "JetBrains Mono", Consolas, monospace;
+  }
+
+  .legend-row-right {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-shrink: 0;
+  }
+
+  .plan-sub-count {
+    font-size: 0.88rem;
+    font-weight: 850;
+    color: var(--text-main);
+  }
+
+  .plan-pct-badge {
+    font-size: 0.7rem;
+    font-weight: 800;
+    padding: 0.1rem 0.35rem;
+    border-radius: 4px;
+    background: var(--surface-border);
+    color: var(--text-secondary);
+  }
+
+  @media (max-width: 980px) {
+    .analytics-ocs-capacity-summary {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .analytics-ocs-telemetry-middle {
+      grid-template-columns: 1fr;
+    }
+
+    .analytics-plan-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .analytics-plan-chart-container {
+      height: 180px;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .analytics-ocs-capacity-summary {
+      grid-template-columns: 1fr;
+    }
+
+    .analytics-ocs-session-stats-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .analytics-ocs-secondary-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
