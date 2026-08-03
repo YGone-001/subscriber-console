@@ -88,7 +88,11 @@ export const mongoCollections = {
   ocsTariffPlans: 'ocs_tariff_plans',
   ocsSubscribers: 'ocs_subscribers',
   ocsBalances: 'ocs_balances',
+  ocsSessions: 'ocs_sessions',
+  ocsReservations: 'ocs_reservations',
+  ocsUsageRecords: 'ocs_usage_records',
   ocsEvents: 'ocs_events',
+  ocsConfig: 'ocs_config',
   profiles: 'app_profiles',
   profileVersions: 'app_profile_versions',
   ratings: 'app_ratings',
@@ -99,3 +103,4 @@ export const mongoCollections = {
   rateLimits: 'app_rate_limits',
   metrics: 'app_metrics',
 } as const;
+

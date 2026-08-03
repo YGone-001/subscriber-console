@@ -11,9 +11,13 @@ import {
   GitBranch,
   History,
   LayoutDashboard,
+  Radio,
+  Receipt,
   ShieldCheck,
   UserCog,
   Users,
+  Wallet,
+  Zap,
 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { useAuth } from "@/hooks/useAuth";
@@ -32,6 +36,7 @@ interface AppSidebarProps {
 }
 
 export default function AppSidebar({ sidebarOpen, setSidebarOpen }: AppSidebarProps) {
+  const [ocsNavOpen, setOcsNavOpen] = useState(true);
   const [ratingNavOpen, setRatingNavOpen] = useState(true);
   const [identityNavOpen, setIdentityNavOpen] = useState(true);
   const pathname = usePathname();
@@ -39,6 +44,11 @@ export default function AppSidebar({ sidebarOpen, setSidebarOpen }: AppSidebarPr
   const { isRoot } = useAuth();
 
   const navItems = useMemo<NavItem[]>(() => {
+    const ocsChildren: NavItem[] = [
+      { key: "nav_ocs_balances", path: "/ocs/balances", match: "/ocs/balances", icon: <Wallet size={18} /> },
+      { key: "nav_ocs_sessions", path: "/ocs/sessions", match: "/ocs/sessions", icon: <Radio size={18} /> },
+      { key: "nav_ocs_usage", path: "/ocs/usage", match: "/ocs/usage", icon: <Receipt size={18} /> },
+    ];
     const identityChildren: NavItem[] = [
       ...(isRoot ? [
         { key: "nav_system_users", path: "/users", match: "/users", icon: <UserCog size={18} /> },
@@ -50,6 +60,7 @@ export default function AppSidebar({ sidebarOpen, setSidebarOpen }: AppSidebarPr
     const items: NavItem[] = [
       { key: "nav_dashboard", path: "/", match: "/", icon: <LayoutDashboard size={20} /> },
       { key: "nav_subscriber", path: "/subscribers", match: "/subscribers", icon: <Users size={20} /> },
+      { key: "nav_ocs", path: "/ocs/balances", match: "/ocs", icon: <Zap size={20} />, children: ocsChildren },
       { key: "nav_profile", path: "/profile", match: "/profile", icon: <CreditCard size={20} /> },
       { key: "nav_rating", path: "/rating", match: "/rating", icon: <Gauge size={20} /> },
       { key: "nav_user_permissions", path: "/users", match: "/users", icon: <UserCog size={20} />, children: identityChildren },
@@ -65,6 +76,7 @@ export default function AppSidebar({ sidebarOpen, setSidebarOpen }: AppSidebarPr
   ];
 
   const sidebarWidth = sidebarOpen ? 264 : 72;
+  const ocsNavExpanded = ocsNavOpen || pathname.startsWith("/ocs");
   const ratingNavExpanded = ratingNavOpen || pathname.startsWith("/rating");
   const identityNavExpanded = identityNavOpen || pathname.startsWith("/users") || pathname.startsWith("/roles") || pathname.startsWith("/approvals") || pathname.startsWith("/audit-logs");
 
@@ -74,19 +86,23 @@ export default function AppSidebar({ sidebarOpen, setSidebarOpen }: AppSidebarPr
         {navItems.map((item) => {
           const childActive = item.children?.some((child) => pathname === child.match || pathname.startsWith(child.match)) || false;
           const isActive = childActive || pathname === item.match || (item.match !== "/" && pathname.startsWith(item.match));
+          const isOcsParent = item.key === "nav_ocs";
           const isRatingParent = item.key === "nav_rating";
           const isIdentityParent = item.key === "nav_user_permissions";
-          const parentExpanded = isRatingParent ? ratingNavExpanded : identityNavExpanded;
+          const isExpandable = isOcsParent || isRatingParent || isIdentityParent;
+          const parentExpanded = isOcsParent ? ocsNavExpanded : isRatingParent ? ratingNavExpanded : identityNavExpanded;
           return (
             <div key={item.key} className="sidebar-item-wrap">
-              {isRatingParent || isIdentityParent ? (
+              {isExpandable ? (
                 <>
                   <button
                     type="button"
                     className={isActive ? "sidebar-link active sidebar-parent-button" : "sidebar-link sidebar-parent-button"}
                     onClick={() => {
                       if (!sidebarOpen) setSidebarOpen(true);
-                      if (isRatingParent) {
+                      if (isOcsParent) {
+                        setOcsNavOpen((open) => !open);
+                      } else if (isRatingParent) {
                         setRatingNavOpen((open) => !open);
                       } else {
                         setIdentityNavOpen((open) => !open);
@@ -133,3 +149,4 @@ export default function AppSidebar({ sidebarOpen, setSidebarOpen }: AppSidebarPr
     </aside>
   );
 }
+
