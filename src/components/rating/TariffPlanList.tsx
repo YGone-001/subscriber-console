@@ -1,292 +1,960 @@
 "use client";
-import React from "react";
-import { ArrowRightLeft, CheckCircle2, Database, History, Plus, Save, ShieldCheck, Tag, Trash2, X } from "lucide-react";
-import { StatusBadge } from "./RatingManagementShared";
+import React, { useState, useEffect, useMemo } from "react";
+import {
+  ArrowRightLeft,
+  CheckCircle2,
+  Database,
+  History,
+  Plus,
+  Save,
+  ShieldCheck,
+  Tag,
+  Trash2,
+  X,
+  Copy,
+  Upload,
+  Download,
+  Layers,
+  Sliders,
+  AlertTriangle,
+  Pencil,
+  Power,
+  RefreshCw,
+  Search,
+} from "lucide-react";
+import { StatusBadge, formatDateTime } from "./RatingManagementShared";
 import * as T from "./types";
-import { DEFAULT_OCS_PLAN_ID, Field } from "./types";
+import { DEFAULT_OCS_PLAN_ID, Field, formatGrant } from "./types";
+import { TariffPlanCloneModal } from "./TariffPlanCloneModal";
+import { TariffPlanImportModal } from "./TariffPlanImportModal";
+import { TariffRuleModal } from "./TariffRuleModal";
+import { detectRuleConflicts } from "@/lib/tariffPlanOperations";
 import "./rating.css";
 
 export function TariffPlanList(props: any) {
   const {
-    t, plans, selectedPlanId, setSelectedPlanId, isCreatingPlan, setIsCreatingPlan,
-    planForm, setPlanForm, planOperationSummary, planOperationHistory,
-    selectedPlanSubscriberTotal, selectedPlanSubscribers, canEditTemplates, savingKey,
-    migrationTargetOptions, migrationTargetPlanId, setMigrationTargetPlanId,
-    migrationResetBalances, setMigrationResetBalances, handleCreatePlan, handleUpdatePlan,
-    handleDeletePlan, handleMigratePlanSubscribers, beginCreatePlan, formatDateTime,
-    formatPlanOperationAction, selectedPlan, isDisablingPlanWithSubscribers, planSubscribersData, setEditingId, setIsAdding, setQuery, ratings
+    t,
+    plans,
+    selectedPlanId,
+    setSelectedPlanId,
+    isCreatingPlan,
+    setIsCreatingPlan,
+    planForm,
+    setPlanForm,
+    planOperationSummary,
+    planOperationHistory,
+    selectedPlanSubscriberTotal,
+    selectedPlanSubscribers,
+    canEditTemplates,
+    savingKey,
+    migrationTargetOptions,
+    migrationTargetPlanId,
+    setMigrationTargetPlanId,
+    migrationResetBalances,
+    setMigrationResetBalances,
+    handleCreatePlan,
+    handleUpdatePlan,
+    handleDeletePlan,
+    handleMigratePlanSubscribers,
+    beginCreatePlan,
+    formatPlanOperationAction,
+    selectedPlan,
+    isDisablingPlanWithSubscribers,
+    planSubscribersData,
+    setEditingId,
+    setIsAdding,
+    setQuery,
+    ratings,
+    mutatePlans,
+    mutatePlanOperations,
+    mutatePlanSubscribers,
   } = props;
+
+  // Active tab inside selected plan
+  const [activeTab, setActiveTab] = useState<"overview" | "rules" | "migration" | "history">("overview");
+
+  // Modals state
+  const [isCloneOpen, setIsCloneOpen] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
+  const [isRuleModalOpen, setIsRuleModalOpen] = useState(false);
+  const [editingRule, setEditingRule] = useState<T.RatingPolicy | null>(null);
+
+  // Search filter for rules matrix
+  const [ruleSearchQuery, setRuleSearchQuery] = useState("");
+
+  // Dry-run migration preview state
+  const [dryRunPreview, setDryRunPreview] = useState<{
+    subscribersCount: number;
+    activeCount: number;
+    suspendedCount: number;
+    sourcePlan: { plan_id: string; name: string };
+    targetPlan: { plan_id: string; name: string; status: string };
+    isTargetActive: boolean;
+  } | null>(null);
+  const [dryRunLoading, setDryRunLoading] = useState(false);
+  const [dryRunError, setDryRunError] = useState<string | null>(null);
+
+  // Trigger dry-run migration preview when target changes
+  useEffect(() => {
+    if (activeTab !== "migration" || !selectedPlanId || !migrationTargetPlanId) {
+      setDryRunPreview(null);
+      setDryRunError(null);
+      return;
+    }
+
+    let isMounted = true;
+    const fetchDryRun = async () => {
+      setDryRunLoading(true);
+      setDryRunError(null);
+      try {
+        const res = await fetch(
+          `/api/tariff-plans/${encodeURIComponent(selectedPlanId)}/migrate?targetPlanId=${encodeURIComponent(migrationTargetPlanId)}`
+        );
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data.error || "Failed to preview migration");
+        }
+        if (isMounted) {
+          setDryRunPreview(data.preview);
+        }
+      } catch (err: any) {
+        if (isMounted) {
+          setDryRunError(err.message || "Failed to load migration preview");
+          setDryRunPreview(null);
+        }
+      } finally {
+        if (isMounted) {
+          setDryRunLoading(false);
+        }
+      }
+    };
+
+    fetchDryRun();
+    return () => {
+      isMounted = false;
+    };
+  }, [activeTab, selectedPlanId, migrationTargetPlanId]);
+
+  // Combined rules from plan and ratings
+  const currentPlanRules: T.RatingPolicy[] = useMemo(() => {
+    if (selectedPlan?.rules && selectedPlan.rules.length > 0) {
+      return selectedPlan.rules;
+    }
+    return ratings || [];
+  }, [selectedPlan, ratings]);
+
+  // Conflict detection
+  const conflicts = useMemo(() => {
+    return detectRuleConflicts(currentPlanRules);
+  }, [currentPlanRules]);
+
+  const conflictingRuleIds = useMemo(() => {
+    const ids = new Set<string>();
+    conflicts.forEach((c) => {
+      c.rule_ids.forEach((id) => ids.add(id));
+    });
+    return ids;
+  }, [conflicts]);
+
+  // Filtered and sorted rules for matrix view (sorted by priority descending)
+  const visiblePlanRules = useMemo(() => {
+    const query = ruleSearchQuery.trim().toLowerCase();
+    const sorted = [...currentPlanRules].sort((a, b) => (Number(b.priority ?? 0) - Number(a.priority ?? 0)));
+    if (!query) return sorted;
+    return sorted.filter((r) => {
+      return (
+        (r.rule_id || "").toLowerCase().includes(query) ||
+        (r.apn || "").toLowerCase().includes(query) ||
+        String(r.rating_group_id ?? "").includes(query) ||
+        String(r.service_identifier ?? "").includes(query) ||
+        (r.charging_type || "").toLowerCase().includes(query)
+      );
+    });
+  }, [currentPlanRules, ruleSearchQuery]);
+
+  // Export handler
+  const handleExportPlan = () => {
+    if (!selectedPlanId) return;
+    window.open(`/api/tariff-plans/${encodeURIComponent(selectedPlanId)}/export`, "_blank");
+  };
+
+  // Rule action handlers
+  const handleOpenAddRule = () => {
+    setEditingRule(null);
+    setIsRuleModalOpen(true);
+  };
+
+  const handleOpenEditRule = (rule: T.RatingPolicy) => {
+    setEditingRule(rule);
+    setIsRuleModalOpen(true);
+  };
+
+  const handleToggleRuleStatus = async (rule: T.RatingPolicy) => {
+    const ruleKey = rule.rule_id || String(rule.rating_group_id);
+    try {
+      const res = await fetch(
+        `/api/tariff-plans/${encodeURIComponent(selectedPlanId)}/rules/${encodeURIComponent(ruleKey)}`,
+        { method: "PATCH" }
+      );
+      if (res.ok) {
+        await mutatePlans();
+      }
+    } catch (e) {
+      console.error("Toggle rule status failed", e);
+    }
+  };
+
+  const handleDeleteRule = async (rule: T.RatingPolicy) => {
+    const ruleKey = rule.rule_id || String(rule.rating_group_id);
+    if (!window.confirm(`Delete rule ${ruleKey}?`)) return;
+    try {
+      const res = await fetch(
+        `/api/tariff-plans/${encodeURIComponent(selectedPlanId)}/rules/${encodeURIComponent(ruleKey)}`,
+        { method: "DELETE" }
+      );
+      if (res.ok) {
+        await mutatePlans();
+      }
+    } catch (e) {
+      console.error("Delete rule failed", e);
+    }
+  };
 
   return (
     <>
       <div className="grid-gap-1-25">
-          <section className="stats-grid">
-            {[
-              { icon: <Tag size={18} color="var(--primary)" />, label: t("tariff_plan_ops_total_plans"), value: planOperationSummary?.totalPlans ?? plans.length },
-              { icon: <CheckCircle2 size={18} color="var(--success)" />, label: t("tariff_plan_ops_active_plans"), value: planOperationSummary?.activePlans ?? plans.filter((plan: any) => (plan.status || "active") === "active").length },
-              { icon: <ShieldCheck size={18} color="var(--warning)" />, label: t("tariff_plan_ops_disabled_plans"), value: planOperationSummary?.disabledPlans ?? plans.filter((plan: any) => plan.status === "disabled").length },
-              { icon: <Database size={18} color="var(--primary)" />, label: t("tariff_plan_ops_linked_total"), value: planOperationSummary?.totalLinkedSubscribers ?? plans.reduce((sum: any, plan: any) => sum + (plan.subscriberCount || 0), 0) },
-            ].map((item: any) => (
-              <div key={item.label} className="dash-card stat-card">
-                <div className="stat-card-header">
-                  {item.icon} {item.label}
-                </div>
-                <div className="stat-card-value">{item.value}</div>
+        {/* Top Summary Stats */}
+        <section className="stats-grid">
+          {[
+            {
+              icon: <Tag size={18} color="var(--primary)" />,
+              label: t("tariff_plan_ops_total_plans"),
+              value: planOperationSummary?.totalPlans ?? plans.length,
+            },
+            {
+              icon: <CheckCircle2 size={18} color="var(--success)" />,
+              label: t("tariff_plan_ops_active_plans"),
+              value:
+                planOperationSummary?.activePlans ??
+                plans.filter((plan: any) => (plan.status || "active") === "active").length,
+            },
+            {
+              icon: <ShieldCheck size={18} color="var(--warning)" />,
+              label: t("tariff_plan_ops_disabled_plans"),
+              value:
+                planOperationSummary?.disabledPlans ??
+                plans.filter((plan: any) => plan.status === "disabled").length,
+            },
+            {
+              icon: <Database size={18} color="var(--primary)" />,
+              label: t("tariff_plan_ops_linked_total"),
+              value:
+                planOperationSummary?.totalLinkedSubscribers ??
+                plans.reduce((sum: any, plan: any) => sum + (plan.subscriberCount || 0), 0),
+            },
+          ].map((item: any) => (
+            <div key={item.label} className="dash-card stat-card">
+              <div className="stat-card-header">
+                {item.icon} {item.label}
               </div>
-            ))}
-          </section>
+              <div className="stat-card-value">{item.value}</div>
+            </div>
+          ))}
+        </section>
 
-          <section className="grid-gap-1-25">
-            <section className="dash-card card-overflow-hidden">
-              <div className="dash-card-header card-header-flex">
-                <div>
-                  <h3 className="card-title-lg">{t("tariff_plan_catalog")}</h3>
-                  <p className="card-desc">{t("tariff_plan_catalog_desc")}</p>
-                </div>
-                {canEditTemplates && (
-                  <button type="button" className="btn-icon" onClick={beginCreatePlan} disabled={savingKey !== null} title={t("tariff_plan_new")}>
-                    <Plus size={18} color="var(--primary)" />
+        {/* Plan Catalog Grid & Action Toolbar */}
+        <section className="dash-card card-overflow-hidden">
+          <div className="dash-card-header card-header-flex-wrap">
+            <div>
+              <h3 className="card-title-lg">{t("tariff_plan_catalog")}</h3>
+              <p className="card-desc">{t("tariff_plan_catalog_desc")}</p>
+            </div>
+            {canEditTemplates && (
+              <div className="tariff-toolbar">
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={beginCreatePlan}
+                  disabled={savingKey !== null}
+                  title={t("tariff_plan_new")}
+                >
+                  <Plus size={15} color="var(--primary)" /> {t("tariff_plan_new")}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={() => setIsCloneOpen(true)}
+                  disabled={!selectedPlan || savingKey !== null}
+                  title={t("tariff_plan_clone")}
+                >
+                  <Copy size={15} color="var(--primary)" /> {t("tariff_plan_clone")}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={() => setIsImportOpen(true)}
+                  title={t("tariff_plan_import")}
+                >
+                  <Upload size={15} /> {t("tariff_plan_import")}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={handleExportPlan}
+                  disabled={!selectedPlan}
+                  title={t("tariff_plan_export")}
+                >
+                  <Download size={15} /> {t("tariff_plan_export")}
+                </button>
+              </div>
+            )}
+          </div>
+          <div className="dash-card-body plans-grid">
+            {plans.map((plan: any) => {
+              const active = !isCreatingPlan && plan.plan_id === selectedPlanId;
+              const planStatus = plan.status || "active";
+              return (
+                <button
+                  key={plan.plan_id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedPlanId(plan.plan_id);
+                    setEditingId(null);
+                    setIsAdding(false);
+                    setQuery("");
+                    setIsCreatingPlan(false);
+                  }}
+                  className={`plan-button ${active ? "plan-button-active" : "plan-button-inactive"}`}
+                >
+                  <div className="plan-header">
+                    <div className="plan-title-wrapper">
+                      <div className="plan-title">{plan.name || plan.plan_id}</div>
+                      <div className="plan-id">{plan.plan_id}</div>
+                    </div>
+                    <StatusBadge tone={planStatus === "active" ? "success" : "muted"}>
+                      {planStatus === "active" ? t("policy_status_active") : t("users_disabled")}
+                    </StatusBadge>
+                  </div>
+                  <div className="plan-stats">
+                    <span>
+                      {t("tariff_plan_rules")}: <strong className="plan-stat-val">{plan.rulesCount}</strong>
+                    </span>
+                    <span>
+                      {t("tariff_plan_subscribers")}:{" "}
+                      <strong className="plan-stat-val">{plan.subscriberCount}</strong>
+                    </span>
+                    {plan.isDefault && <StatusBadge tone="warning">{DEFAULT_OCS_PLAN_ID}</StatusBadge>}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* Selected Plan Multi-Tab Container */}
+        <section className="dash-card card-overflow-hidden">
+          <div className="dash-card-header card-header-flex-wrap">
+            <div className="grid-gap-0-35">
+              <div className="flex-center-gap-0-65">
+                <h3 className="card-title-xl">
+                  {isCreatingPlan ? t("tariff_plan_new") : selectedPlan?.name || selectedPlan?.plan_id}
+                </h3>
+                {selectedPlan && !isCreatingPlan && (
+                  <>
+                    <StatusBadge tone={(selectedPlan.status || "active") === "active" ? "success" : "muted"}>
+                      {(selectedPlan.status || "active") === "active"
+                        ? t("policy_status_active")
+                        : t("users_disabled")}
+                    </StatusBadge>
+                    {selectedPlan.isDefault && <StatusBadge tone="warning">{DEFAULT_OCS_PLAN_ID}</StatusBadge>}
+                  </>
+                )}
+              </div>
+              <p className="card-desc-mt">{t("tariff_plan_current_desc")}</p>
+            </div>
+
+            {canEditTemplates && !isCreatingPlan && (
+              <div className="flex-end-gap-0-55">
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={handleUpdatePlan}
+                  disabled={!selectedPlan || savingKey !== null || isDisablingPlanWithSubscribers}
+                >
+                  <Save size={15} /> {t("tariff_plan_save")}
+                </button>
+                {selectedPlan && !selectedPlan.isDefault && (
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-danger-outline"
+                    onClick={handleDeletePlan}
+                    disabled={savingKey !== null || selectedPlanSubscriberTotal > 0}
+                  >
+                    <Trash2 size={15} /> {t("tariff_plan_delete")}
                   </button>
                 )}
               </div>
-              <div className="dash-card-body plans-grid">
-                {plans.map((plan: any) => {
-                  const active = !isCreatingPlan && plan.plan_id === selectedPlanId;
-                  const planStatus = plan.status || "active";
-                  return (
-                    <button
-                      key={plan.plan_id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedPlanId(plan.plan_id);
-                        setEditingId(null);
-                        setIsAdding(false);
-                        setQuery("");
-                        setIsCreatingPlan(false);
-                      }}
-                      className={`plan-button ${active ? "plan-button-active" : "plan-button-inactive"}`}
-                    >
-                      <div className="plan-header">
-                        <div className="plan-title-wrapper">
-                          <div className="plan-title">{plan.name || plan.plan_id}</div>
-                          <div className="plan-id">{plan.plan_id}</div>
-                        </div>
-                        <StatusBadge tone={planStatus === "active" ? "success" : "muted"}>
-                          {planStatus === "active" ? t("policy_status_active") : t("users_disabled")}
-                        </StatusBadge>
-                      </div>
-                      <div className="plan-stats">
-                        <span>{t("tariff_plan_rules")}: <strong className="plan-stat-val">{plan.rulesCount}</strong></span>
-                        <span>{t("tariff_plan_subscribers")}: <strong className="plan-stat-val">{plan.subscriberCount}</strong></span>
-                        {plan.isDefault && <StatusBadge tone="warning">{DEFAULT_OCS_PLAN_ID}</StatusBadge>}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
+            )}
 
-            <section className="dash-card card-overflow-hidden">
-              <div className="dash-card-header card-header-flex-wrap">
-                <div className="grid-gap-0-35">
-                  <div className="flex-center-gap-0-65">
-                    <h3 className="card-title-xl">{isCreatingPlan ? t("tariff_plan_new") : t("tariff_plan_details")}</h3>
-                    {selectedPlan && !isCreatingPlan && (
-                      <>
-                        <StatusBadge tone={(selectedPlan.status || "active") === "active" ? "success" : "muted"}>
-                          {(selectedPlan.status || "active") === "active" ? t("policy_status_active") : t("users_disabled")}
-                        </StatusBadge>
-                        {selectedPlan.isDefault && <StatusBadge tone="warning">{DEFAULT_OCS_PLAN_ID}</StatusBadge>}
-                      </>
-                    )}
-                  </div>
-                  <p className="card-desc-mt">{t("tariff_plan_current_desc")}</p>
-                </div>
-                {canEditTemplates && (
-                  <div className="flex-end-gap-0-55">
+            {isCreatingPlan && (
+              <div className="flex-end-gap-0-55">
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={handleCreatePlan}
+                  disabled={savingKey !== null}
+                >
+                  <Save size={15} /> {t("tariff_plan_create_from_current")}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={() => setIsCreatingPlan(false)}
+                  disabled={savingKey !== null}
+                >
+                  <X size={15} /> {t("cancel")}
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Tab Navigation */}
+          {!isCreatingPlan && (
+            <div className="tariff-tabs">
+              <button
+                type="button"
+                className={`tariff-tab-btn ${activeTab === "overview" ? "active" : ""}`}
+                onClick={() => setActiveTab("overview")}
+              >
+                <Sliders size={15} /> {t("tariff_plan_tab_overview")}
+              </button>
+              <button
+                type="button"
+                className={`tariff-tab-btn ${activeTab === "rules" ? "active" : ""}`}
+                onClick={() => setActiveTab("rules")}
+              >
+                <Layers size={15} /> {t("tariff_plan_tab_rules")}
+                <span className="tariff-tab-count">{currentPlanRules.length}</span>
+                {conflicts.length > 0 && <AlertTriangle size={14} color="var(--danger)" />}
+              </button>
+              <button
+                type="button"
+                className={`tariff-tab-btn ${activeTab === "migration" ? "active" : ""}`}
+                onClick={() => setActiveTab("migration")}
+              >
+                <ArrowRightLeft size={15} /> {t("tariff_plan_tab_migration")}
+                <span className="tariff-tab-count">{selectedPlanSubscriberTotal}</span>
+              </button>
+              <button
+                type="button"
+                className={`tariff-tab-btn ${activeTab === "history" ? "active" : ""}`}
+                onClick={() => setActiveTab("history")}
+              >
+                <History size={15} /> {t("tariff_plan_tab_history")}
+              </button>
+            </div>
+          )}
+
+          {/* TAB 1: OVERVIEW & LIMITS */}
+          {(activeTab === "overview" || isCreatingPlan) && (
+            <div className="dash-card-body grid-gap-1-25">
+              <div className="grid-gap-0-85">
+                <h4 className="section-subtitle">{t("tariff_plan_basic_info")}</h4>
+                <div className="fields-grid">
+                  <Field label={t("tariff_plan_id")}>
                     {isCreatingPlan ? (
-                      <>
-                        <button type="button" className="btn btn-primary" onClick={handleCreatePlan} disabled={savingKey !== null}>
-                          <Save size={15} /> {t("tariff_plan_create_from_current")}
-                        </button>
-                        <button type="button" className="btn btn-outline" onClick={() => setIsCreatingPlan(false)} disabled={savingKey !== null}>
-                          <X size={15} /> {t("cancel")}
-                        </button>
-                      </>
+                      <input
+                        className="form-input"
+                        value={planForm.plan_id}
+                        onChange={(event) =>
+                          setPlanForm((current: any) => ({ ...current, plan_id: event.target.value }))
+                        }
+                      />
                     ) : (
-                      <>
-                        <button type="button" className="btn btn-primary" onClick={handleUpdatePlan} disabled={!selectedPlan || savingKey !== null || isDisablingPlanWithSubscribers}>
-                          <Save size={15} /> {t("tariff_plan_save")}
-                        </button>
-                        {selectedPlan && !selectedPlan.isDefault && (
-                          <button type="button" className="btn btn-outline btn-danger-outline" onClick={handleDeletePlan} disabled={savingKey !== null || selectedPlanSubscriberTotal > 0}>
-                            <Trash2 size={15} /> {t("tariff_plan_delete")}
-                          </button>
-                        )}
-                      </>
+                      <input className="form-input input-readonly" value={selectedPlan?.plan_id || selectedPlanId} readOnly />
                     )}
+                  </Field>
+                  <Field label={t("tariff_plan_name")}>
+                    <input
+                      className="form-input"
+                      value={planForm.name}
+                      onChange={(event) =>
+                        setPlanForm((current: any) => ({ ...current, name: event.target.value }))
+                      }
+                      disabled={!canEditTemplates}
+                    />
+                  </Field>
+                  <Field label={t("tariff_plan_status")}>
+                    <select
+                      className="form-input"
+                      value={planForm.status}
+                      onChange={(event) =>
+                        setPlanForm((current: any) => ({ ...current, status: event.target.value }))
+                      }
+                      disabled={!canEditTemplates}
+                    >
+                      <option value="active">{t("policy_status_active")}</option>
+                      <option value="disabled">{t("users_disabled")}</option>
+                    </select>
+                  </Field>
+                  <div className="col-span-all">
+                    <Field label={t("tariff_plan_desc")}>
+                      <input
+                        className="form-input"
+                        value={planForm.description}
+                        onChange={(event) =>
+                          setPlanForm((current: any) => ({ ...current, description: event.target.value }))
+                        }
+                        disabled={!canEditTemplates}
+                      />
+                    </Field>
                   </div>
+                </div>
+              </div>
+
+              {/* Default Grant & Quota Limits */}
+              <div className="grid-gap-0-85">
+                <h4 className="section-subtitle">{t("tariff_plan_grant_limits")}</h4>
+                <div className="fields-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
+                  <Field label={t("tariff_plan_quota_grant")}>
+                    <input
+                      type="number"
+                      className="form-input"
+                      value={planForm.quota_per_grant ?? "10485760"}
+                      onChange={(e) =>
+                        setPlanForm((current: any) => ({ ...current, quota_per_grant: e.target.value }))
+                      }
+                      disabled={!canEditTemplates}
+                    />
+                  </Field>
+                  <Field label={t("tariff_plan_validity_time")}>
+                    <input
+                      type="number"
+                      className="form-input"
+                      value={planForm.validity_time ?? "300"}
+                      onChange={(e) =>
+                        setPlanForm((current: any) => ({ ...current, validity_time: e.target.value }))
+                      }
+                      disabled={!canEditTemplates}
+                    />
+                  </Field>
+                  <Field label={t("tariff_plan_vol_threshold")}>
+                    <input
+                      type="number"
+                      className="form-input"
+                      value={planForm.volume_threshold ?? "8388608"}
+                      onChange={(e) =>
+                        setPlanForm((current: any) => ({ ...current, volume_threshold: e.target.value }))
+                      }
+                      disabled={!canEditTemplates}
+                    />
+                  </Field>
+                </div>
+              </div>
+
+              <div className="usage-overview">
+                <h4 className="section-subtitle">{t("tariff_plan_usage_overview")}</h4>
+                <div className="usage-grid">
+                  {[
+                    { label: t("tariff_plan_rules"), value: selectedPlan?.rulesCount ?? ratings.length },
+                    { label: t("tariff_plan_subscribers"), value: selectedPlanSubscriberTotal },
+                    {
+                      label: t("tariff_plan_ops_selected_share"),
+                      value: `${planOperationSummary?.selectedSharePct ?? 0}%`,
+                    },
+                    {
+                      label: t("tariff_plan_ops_last_change"),
+                      value: formatDateTime(planOperationSummary?.lastChangedAt),
+                    },
+                  ].map((item: any) => (
+                    <div key={item.label} className="usage-card">
+                      <div className="usage-label">{item.label}</div>
+                      <div className="usage-val">{item.value}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {isDisablingPlanWithSubscribers && (
+                <div className="disable-warning">{t("tariff_plan_disable_in_use")}</div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 2: RULES MATRIX & PRIORITY ENGINE */}
+          {!isCreatingPlan && activeTab === "rules" && (
+            <div className="dash-card-body grid-gap-1">
+              {/* Conflict Alert Banner */}
+              {conflicts.length > 0 && (
+                <div
+                  className="alert-banner alert-banner-danger"
+                  style={{
+                    padding: "0.85rem 1rem",
+                    borderRadius: "8px",
+                    border: "1px solid rgba(239, 68, 68, 0.3)",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontWeight: 700, marginBottom: "0.4rem" }}>
+                    <AlertTriangle size={18} color="var(--danger)" />
+                    <span>{t("tariff_rule_conflict_warning")} ({conflicts.length})</span>
+                  </div>
+                  <p style={{ margin: "0 0 0.5rem 0", fontSize: "0.84rem", opacity: 0.9 }}>
+                    {t("tariff_rule_conflict_desc")}
+                  </p>
+                  <ul style={{ margin: 0, paddingLeft: "1.25rem", fontSize: "0.82rem" }}>
+                    {conflicts.map((c, i) => (
+                      <li key={i}>
+                        APN: <code>{c.signature.apn}</code>, RG: <code>{c.signature.rating_group_id}</code>, SI: <code>{c.signature.service_identifier}</code> — Overlapping Rules: <strong>{c.rule_ids.join(", ")}</strong>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Rules Toolbar */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
+                <div className="search-wrapper" style={{ flex: 1, maxWidth: 360 }}>
+                  <Search size={16} className="search-icon" />
+                  <input
+                    type="text"
+                    className="form-input search-input"
+                    placeholder="Filter rules by ID, APN, RG, SI..."
+                    value={ruleSearchQuery}
+                    onChange={(e) => setRuleSearchQuery(e.target.value)}
+                  />
+                </div>
+
+                {canEditTemplates && (
+                  <button type="button" className="btn btn-primary" onClick={handleOpenAddRule}>
+                    <Plus size={15} /> {t("tariff_rule_add")}
+                  </button>
                 )}
               </div>
-              <div className="dash-card-body grid-gap-1-25">
-                <div className="grid-gap-0-85">
-                  <h4 className="section-subtitle">{t("tariff_plan_basic_info")}</h4>
-                  <div className="fields-grid">
-                    <Field label={t("tariff_plan_id")}>
-                      {isCreatingPlan ? (
-                        <input className="form-input" value={planForm.plan_id} onChange={(event) => setPlanForm((current: any) => ({ ...current, plan_id: event.target.value }))} />
-                      ) : (
-                        <input className="form-input input-readonly" value={selectedPlan?.plan_id || selectedPlanId} readOnly />
-                      )}
-                    </Field>
-                    <Field label={t("tariff_plan_name")}>
-                      <input className="form-input" value={planForm.name} onChange={(event) => setPlanForm((current: any) => ({ ...current, name: event.target.value }))} disabled={!canEditTemplates} />
-                    </Field>
-                    <Field label={t("tariff_plan_status")}>
-                      <select className="form-input" value={planForm.status} onChange={(event) => setPlanForm((current: any) => ({ ...current, status: event.target.value }))} disabled={!canEditTemplates}>
-                        <option value="active">{t("policy_status_active")}</option>
-                        <option value="disabled">{t("users_disabled")}</option>
-                      </select>
-                    </Field>
-                    <div className="col-span-all">
-                      <Field label={t("tariff_plan_desc")}>
-                        <input className="form-input" value={planForm.description} onChange={(event) => setPlanForm((current: any) => ({ ...current, description: event.target.value }))} disabled={!canEditTemplates} />
-                      </Field>
+
+              {/* Rules Matrix Table */}
+              <div className="table-container" style={{ border: "1px solid var(--surface-border)", borderRadius: "8px", overflow: "hidden" }}>
+                <table className="rules-matrix-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: 60 }}>Priority</th>
+                      <th>Rule ID</th>
+                      <th>Scenario</th>
+                      <th>APN / DNN</th>
+                      <th>RG / SI</th>
+                      <th>Rate</th>
+                      <th>Grant Quota</th>
+                      <th>Validity</th>
+                      <th>Status</th>
+                      {canEditTemplates && <th style={{ textAlign: "right", width: 120 }}>Actions</th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visiblePlanRules.length === 0 ? (
+                      <tr>
+                        <td colSpan={canEditTemplates ? 10 : 9} style={{ textAlign: "center", padding: "2rem", color: "var(--text-muted)" }}>
+                          No rating rules found for this plan.
+                        </td>
+                      </tr>
+                    ) : (
+                      visiblePlanRules.map((rule) => {
+                        const ruleKey = rule.rule_id || `rg_${rule.rating_group_id}`;
+                        const isConflicted = conflictingRuleIds.has(rule.rule_id || "");
+                        const isRuleActive = (rule.status || "active") === "active";
+
+                        return (
+                          <tr key={ruleKey} className={isConflicted ? "rule-conflict-row" : ""}>
+                            <td>
+                              <span className="rule-priority-badge">{rule.priority ?? 0}</span>
+                            </td>
+                            <td>
+                              <div style={{ fontWeight: 700, color: "var(--text-main)", fontFamily: "monospace" }}>
+                                {rule.rule_id || `Rule #${rule.rating_group_id}`}
+                              </div>
+                              {isConflicted && (
+                                <span className="rule-conflict-badge" style={{ marginTop: "0.2rem" }}>
+                                  <AlertTriangle size={11} /> Overlap
+                                </span>
+                              )}
+                            </td>
+                            <td>
+                              <span style={{ textTransform: "capitalize", fontWeight: 600, fontSize: "0.82rem" }}>
+                                {(rule.charging_type || "data_volume").replace("_", " ")}
+                              </span>
+                            </td>
+                            <td>
+                              <code style={{ fontSize: "0.84rem", color: "var(--primary)" }}>{rule.apn || "internet"}</code>
+                            </td>
+                            <td>
+                              <span style={{ fontFamily: "monospace", fontSize: "0.84rem" }}>
+                                RG:{rule.rating_group_id} / SI:{rule.service_identifier ?? 1}
+                              </span>
+                            </td>
+                            <td>
+                              <span style={{ fontWeight: 700, fontFamily: "monospace" }}>
+                                {rule.rates || "0"} {rule.currency || "USD"}
+                              </span>
+                            </td>
+                            <td style={{ fontSize: "0.82rem" }}>
+                              {formatGrant(t, rule.quota_per_grant, rule.unit, rule.charging_type)}
+                            </td>
+                            <td style={{ fontSize: "0.82rem" }}>
+                              {rule.validity_time ? `${rule.validity_time}s` : "Default"}
+                            </td>
+                            <td>
+                              <StatusBadge tone={isRuleActive ? "success" : "muted"}>
+                                {isRuleActive ? t("policy_status_active") : t("users_disabled")}
+                              </StatusBadge>
+                            </td>
+                            {canEditTemplates && (
+                              <td style={{ textAlign: "right" }}>
+                                <div style={{ display: "inline-flex", gap: "0.35rem" }}>
+                                  <button
+                                    type="button"
+                                    className="btn-icon"
+                                    title={t("tariff_rule_toggle")}
+                                    onClick={() => handleToggleRuleStatus(rule)}
+                                  >
+                                    <Power size={14} color={isRuleActive ? "var(--success)" : "var(--text-muted)"} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn-icon"
+                                    title={t("tariff_rule_edit")}
+                                    onClick={() => handleOpenEditRule(rule)}
+                                  >
+                                    <Pencil size={14} color="var(--primary)" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn-icon"
+                                    title={t("tariff_rule_delete")}
+                                    onClick={() => handleDeleteRule(rule)}
+                                  >
+                                    <Trash2 size={14} color="var(--danger)" />
+                                  </button>
+                                </div>
+                              </td>
+                            )}
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: SUBSCRIBER MIGRATION */}
+          {!isCreatingPlan && activeTab === "migration" && (
+            <div className="dash-card-body grid-gap-1-25">
+              <div>
+                <h4 className="section-subtitle flex-center-gap-0-55">
+                  <ArrowRightLeft size={17} color="var(--primary)" /> {t("tariff_plan_migrate_title")}
+                </h4>
+                <p className="card-desc-mt desc-line-1-5">
+                  {selectedPlanSubscriberTotal > 0
+                    ? t("tariff_plan_migrate_desc", { count: selectedPlanSubscriberTotal })
+                    : t("tariff_plan_migrate_empty")}
+                </p>
+              </div>
+
+              {selectedPlanSubscribers.length > 0 && (
+                <div className="subs-list">
+                  {selectedPlanSubscribers.map((subscriber: any) => (
+                    <span key={subscriber.imsi} className="sub-tag">
+                      {subscriber.imsi}
+                    </span>
+                  ))}
+                  {planSubscribersData?.hasMore && (
+                    <span className="sub-tag-more">
+                      +{selectedPlanSubscriberTotal - selectedPlanSubscribers.length}
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* Dry-Run Analysis Panel */}
+              {dryRunLoading && (
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "var(--text-muted)", fontSize: "0.85rem" }}>
+                  <RefreshCw size={15} className="animate-spin" /> Calculating migration impact...
+                </div>
+              )}
+
+              {dryRunPreview && !dryRunLoading && (
+                <div className="dryrun-panel">
+                  <div>
+                    <div className="dryrun-stat-label">{t("tariff_plan_dryrun_active")}</div>
+                    <div className="dryrun-stat-value" style={{ color: "var(--success)" }}>
+                      {dryRunPreview.activeCount}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="dryrun-stat-label">{t("tariff_plan_dryrun_suspended")}</div>
+                    <div className="dryrun-stat-value" style={{ color: "var(--warning)" }}>
+                      {dryRunPreview.suspendedCount}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="dryrun-stat-label">Target Plan Status</div>
+                    <div className="dryrun-stat-value" style={{ fontSize: "1rem" }}>
+                      <StatusBadge tone={dryRunPreview.isTargetActive ? "success" : "muted"}>
+                        {dryRunPreview.targetPlan.status}
+                      </StatusBadge>
                     </div>
                   </div>
                 </div>
+              )}
 
-                <div className="usage-overview">
-                  <h4 className="section-subtitle">{t("tariff_plan_usage_overview")}</h4>
-                  <div className="usage-grid">
-                    {[
-                      { label: t("tariff_plan_rules"), value: selectedPlan?.rulesCount ?? ratings.length },
-                      { label: t("tariff_plan_subscribers"), value: selectedPlanSubscriberTotal },
-                      { label: t("tariff_plan_ops_selected_share"), value: `${planOperationSummary?.selectedSharePct ?? 0}%` },
-                      { label: t("tariff_plan_ops_last_change"), value: formatDateTime(planOperationSummary?.lastChangedAt) },
-                    ].map((item: any) => (
-                      <div key={item.label} className="usage-card">
-                        <div className="usage-label">{item.label}</div>
-                        <div className="usage-val">{item.value}</div>
-                      </div>
-                    ))}
-                  </div>
+              {dryRunError && (
+                <div className="alert-banner alert-banner-danger" style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.6rem 0.8rem", borderRadius: "6px", fontSize: "0.85rem" }}>
+                  <AlertTriangle size={16} />
+                  <span>{dryRunError}</span>
                 </div>
+              )}
 
-                {isDisablingPlanWithSubscribers && (
-                  <div className="disable-warning">
-                    {t("tariff_plan_disable_in_use")}
-                  </div>
-                )}
-              </div>
-            </section>
-          </section>
-
-          <section className="grid-gap-1-25">
-            <section className="dash-card card-overflow-hidden">
-              <div className="dash-card-header">
-                <h3 className="card-title-lg flex-center-gap-0-55">
-                  <ArrowRightLeft size={17} color="var(--primary)" /> {t("tariff_plan_migrate_title")}
-                </h3>
-                <p className="card-desc-mt desc-line-1-5">
-                  {selectedPlanSubscriberTotal > 0 ? t("tariff_plan_migrate_desc", { count: selectedPlanSubscriberTotal }) : t("tariff_plan_migrate_empty")}
-                </p>
-              </div>
-              <div className="dash-card-body grid-gap-1">
-                {selectedPlanSubscribers.length > 0 && (
-                  <div className="subs-list">
-                    {selectedPlanSubscribers.map((subscriber: any) => (
-                      <span key={subscriber.imsi} className="sub-tag">
-                        {subscriber.imsi}
-                      </span>
-                    ))}
-                    {planSubscribersData?.hasMore && (
-                      <span className="sub-tag-more">
-                        +{selectedPlanSubscriberTotal - selectedPlanSubscribers.length}
-                      </span>
-                    )}
-                  </div>
-                )}
-                {canEditTemplates && (
-                  <div className="fields-grid">
-                    <Field label={t("tariff_plan_migrate_target")}>
-                      <select
-                        className="form-input"
-                        value={migrationTargetPlanId}
-                        onChange={(event) => setMigrationTargetPlanId(event.target.value)}
-                        disabled={migrationTargetOptions.length === 0 || savingKey !== null}
-                      >
-                        {migrationTargetOptions.length === 0 ? (
-                          <option value="">{t("tariff_plan_migrate_no_target")}</option>
-                        ) : migrationTargetOptions.map((plan: any) => (
-                          <option key={plan.plan_id} value={plan.plan_id}>
-                            {plan.name && plan.name !== plan.plan_id ? `${plan.name} (${plan.plan_id})` : plan.plan_id}
-                          </option>
-                        ))}
-                      </select>
-                    </Field>
-                    <label className="migrate-checkbox-label">
-                      <input
-                        type="checkbox"
-                        className="checkbox-custom"
-                        checked={migrationResetBalances}
-                        onChange={(event) => setMigrationResetBalances(event.target.checked)}
-                        disabled={savingKey !== null}
-                      />
-                      {t("tariff_plan_migrate_reset")}
-                    </label>
-                    <button
-                      type="button"
-                      className="btn btn-primary btn-min-height"
-                      onClick={handleMigratePlanSubscribers}
-                      disabled={savingKey !== null || !migrationTargetPlanId || selectedPlanSubscriberTotal === 0}
+              {canEditTemplates && (
+                <div className="fields-grid">
+                  <Field label={t("tariff_plan_migrate_target")}>
+                    <select
+                      className="form-input"
+                      value={migrationTargetPlanId}
+                      onChange={(event) => setMigrationTargetPlanId(event.target.value)}
+                      disabled={migrationTargetOptions.length === 0 || savingKey !== null}
                     >
-                      <ArrowRightLeft size={15} /> {savingKey === "plan:migrate" ? t("policy_change_applying") : t("tariff_plan_migrate_apply")}
-                    </button>
-                  </div>
-                )}
-              </div>
-            </section>
+                      {migrationTargetOptions.length === 0 ? (
+                        <option value="">{t("tariff_plan_migrate_no_target")}</option>
+                      ) : (
+                        migrationTargetOptions.map((plan: any) => (
+                          <option key={plan.plan_id} value={plan.plan_id}>
+                            {plan.name && plan.name !== plan.plan_id
+                              ? `${plan.name} (${plan.plan_id})`
+                              : plan.plan_id}
+                          </option>
+                        ))
+                      )}
+                    </select>
+                  </Field>
+                  <label className="migrate-checkbox-label">
+                    <input
+                      type="checkbox"
+                      className="checkbox-custom"
+                      checked={migrationResetBalances}
+                      onChange={(event) => setMigrationResetBalances(event.target.checked)}
+                      disabled={savingKey !== null}
+                    />
+                    {t("tariff_plan_migrate_reset")}
+                  </label>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-min-height"
+                    onClick={handleMigratePlanSubscribers}
+                    disabled={
+                      savingKey !== null ||
+                      !migrationTargetPlanId ||
+                      selectedPlanSubscriberTotal === 0 ||
+                      (dryRunPreview ? !dryRunPreview.isTargetActive : false)
+                    }
+                  >
+                    <ArrowRightLeft size={15} />{" "}
+                    {savingKey === "plan:migrate"
+                      ? t("policy_change_applying")
+                      : t("tariff_plan_migrate_apply")}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
-            <section className="dash-card card-overflow-hidden">
-              <div className="dash-card-header card-header-flex">
+          {/* TAB 4: AUDIT & OPERATIONS HISTORY */}
+          {!isCreatingPlan && activeTab === "history" && (
+            <div className="dash-card-body grid-gap-1">
+              <div className="card-header-flex">
                 <div>
-                  <h3 className="card-title-lg flex-center-gap-0-55">
+                  <h4 className="section-subtitle flex-center-gap-0-55">
                     <History size={17} color="var(--primary)" /> {t("tariff_plan_ops_history")}
-                  </h3>
+                  </h4>
                   <p className="card-desc-mt">{t("tariff_plan_ops_desc")}</p>
                 </div>
                 <span className="history-count">
-                  {t("tariff_plan_ops_recent_count", { count: planOperationSummary?.recentActivityCount ?? planOperationHistory.length })}
+                  {t("tariff_plan_ops_recent_count", {
+                    count:
+                      planOperationSummary?.recentActivityCount ?? planOperationHistory.length,
+                  })}
                 </span>
               </div>
-              <div className="dash-card-body">
-                {planOperationHistory.length === 0 ? (
-                  <div className="history-empty">
-                    {t("tariff_plan_ops_no_history")}
-                  </div>
-                ) : (
-                  <div className="history-list">
-                    {planOperationHistory.map((item: any) => (
-                      <div key={item.id} className={`history-item ${item.level === "warning" ? "history-item-warning" : "history-item-primary"}`}>
-                        <div className="history-item-header">
-                          <span className={item.level === "warning" ? "history-action-warning" : "history-action-primary"}>
-                            {formatPlanOperationAction(item.action)}
-                          </span>
-                          <span className="history-time">{formatDateTime(item.timestamp)}</span>
-                        </div>
-                        <div className="history-details">
-                          <span>{t("tariff_plan_ops_target")}: <span className="history-target">{item.targetId}</span></span>
-                          <span>{t("tariff_plan_ops_operator")}: {item.operatorIp}</span>
-                        </div>
+
+              {planOperationHistory.length === 0 ? (
+                <div className="history-empty">{t("tariff_plan_ops_no_history")}</div>
+              ) : (
+                <div className="history-list">
+                  {planOperationHistory.map((item: any) => (
+                    <div
+                      key={item.id}
+                      className={`history-item ${
+                        item.level === "warning" ? "history-item-warning" : "history-item-primary"
+                      }`}
+                    >
+                      <div className="history-item-header">
+                        <span
+                          className={
+                            item.level === "warning" ? "history-action-warning" : "history-action-primary"
+                          }
+                        >
+                          {formatPlanOperationAction(item.action)}
+                        </span>
+                        <span className="history-time">{formatDateTime(item.timestamp)}</span>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </section>
-          </section>
-        </div>
+                      <div className="history-details">
+                        <span>
+                          {t("tariff_plan_ops_target")}:{" "}
+                          <span className="history-target">{item.targetId}</span>
+                        </span>
+                        <span>
+                          {t("tariff_plan_ops_operator")}: {item.operatorIp}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </section>
+      </div>
+
+      {/* Modals */}
+      <TariffPlanCloneModal
+        isOpen={isCloneOpen}
+        onClose={() => setIsCloneOpen(false)}
+        sourcePlan={selectedPlan || null}
+        onSuccess={async (newPlanId) => {
+          await mutatePlans();
+          await mutatePlanOperations();
+          setSelectedPlanId(newPlanId);
+        }}
+      />
+
+      <TariffPlanImportModal
+        isOpen={isImportOpen}
+        onClose={() => setIsImportOpen(false)}
+        onSuccess={async (importedPlanId) => {
+          await mutatePlans();
+          await mutatePlanOperations();
+          setSelectedPlanId(importedPlanId);
+        }}
+      />
+
+      <TariffRuleModal
+        isOpen={isRuleModalOpen}
+        onClose={() => setIsRuleModalOpen(false)}
+        planId={selectedPlanId}
+        existingRules={currentPlanRules}
+        initialRule={editingRule}
+        onSuccess={async () => {
+          await mutatePlans();
+        }}
+      />
     </>
   );
 }

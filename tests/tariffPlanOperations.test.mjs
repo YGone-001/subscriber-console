@@ -8,6 +8,10 @@ import {
   isDefaultTariffPlan,
   isValidTariffPlanId,
   shouldBlockTariffPlanDisable,
+  validateTariffRule,
+  detectRuleConflicts,
+  normalizeImportedPlan,
+  exportTariffPlanJson,
 } from '../src/lib/tariffPlanOperations.ts';
 import {
   validateBatchCreatePayload,
@@ -130,3 +134,79 @@ test('tariff management six-stage upgrades stay wired together', () => {
     lastChangedAt: '2026-07-22T09:00:00.000Z',
   });
 });
+
+test('validateTariffRule validates required fields and number constraints', () => {
+  const valid = validateTariffRule({
+    rule_id: 'rule_vol_5g',
+    apn: 'internet',
+    rating_group_id: 100,
+    service_identifier: 1,
+    charging_type: 'data_volume',
+    rates: '0.05',
+    currency: 'USD',
+    quota_per_grant: 10485760,
+    validity_time: 300,
+    volume_threshold: 8388608,
+    priority: 10,
+    status: 'active',
+  });
+  assert.equal(valid.isValid, true);
+  assert.equal(valid.errors.length, 0);
+
+  const invalid = validateTariffRule({
+    rule_id: '',
+    apn: 'invalid APN with spaces!',
+    rating_group_id: -5,
+    service_identifier: 'abc',
+    rates: '-10',
+  });
+  assert.equal(invalid.isValid, false);
+  assert.ok(invalid.errors.length >= 3);
+});
+
+test('detectRuleConflicts identifies overlapping APN, RG, SI rules', () => {
+  const rules = [
+    { rule_id: 'rule_1', apn: 'internet', rating_group_id: 100, service_identifier: 1, priority: 5 },
+    { rule_id: 'rule_2', apn: 'internet', rating_group_id: 100, service_identifier: 1, priority: 10 },
+    { rule_id: 'rule_3', apn: 'ims', rating_group_id: 200, service_identifier: 1, priority: 1 },
+  ];
+
+  const conflicts = detectRuleConflicts(rules);
+  assert.equal(conflicts.length, 1);
+  assert.deepEqual(conflicts[0].rule_ids, ['rule_1', 'rule_2']);
+  assert.equal(conflicts[0].signature.apn, 'internet');
+  assert.equal(conflicts[0].signature.rating_group_id, 100);
+});
+
+test('normalizeImportedPlan validates and cleans imported tariff JSON', () => {
+  const rawJson = {
+    plan_id: 'plan_imported_50gb',
+    name: 'Imported 50GB',
+    description: 'Imported test plan',
+    status: 'active',
+    quota_per_grant: 52428800,
+    validity_time: 600,
+    volume_threshold: 41943040,
+    rules: [
+      {
+        rule_id: 'r_data',
+        apn: 'internet',
+        rating_group_id: 100,
+        service_identifier: 1,
+        charging_type: 'data_volume',
+        rates: '0.01',
+      },
+    ],
+  };
+
+  const normalized = normalizeImportedPlan(rawJson);
+  assert.equal(normalized.isValid, true);
+  assert.equal(normalized.plan.plan_id, 'plan_imported_50gb');
+  assert.equal(normalized.plan.rules.length, 1);
+  assert.equal(normalized.plan.rules[0].rule_id, 'r_data');
+
+  const exported = exportTariffPlanJson(normalized.plan);
+  assert.equal(exported.plan_id, 'plan_imported_50gb');
+  assert.equal(exported.rules.length, 1);
+});
+

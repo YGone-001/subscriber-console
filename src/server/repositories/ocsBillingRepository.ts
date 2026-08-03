@@ -117,6 +117,9 @@ export type TariffPlanSummary = {
   name: string;
   description: string;
   status: string;
+  quota_per_grant?: number;
+  validity_time?: number;
+  volume_threshold?: number;
   rulesCount: number;
   subscriberCount: number;
   isDefault: boolean;
@@ -445,6 +448,9 @@ function summarizePlan(plan: OcsTariffPlan, subscriberCount: number): TariffPlan
     name: asString(plan.name, plan.plan_id),
     description: asString(plan.description),
     status: plan.status || 'active',
+    quota_per_grant: toNumber(plan.quota_per_grant, DEFAULT_QUOTA_PER_GRANT),
+    validity_time: toNumber(plan.validity_time, DEFAULT_VALIDITY_TIME),
+    volume_threshold: toNumber(plan.volume_threshold, DEFAULT_VOLUME_THRESHOLD),
     rulesCount: (plan.rules || []).length,
     subscriberCount,
     isDefault: plan.plan_id === DEFAULT_OCS_PLAN_ID,
@@ -483,6 +489,10 @@ export async function createTariffPlan(input: {
   name?: unknown;
   description?: unknown;
   status?: unknown;
+  quota_per_grant?: unknown;
+  validity_time?: unknown;
+  volume_threshold?: unknown;
+  rules?: unknown[];
   cloneFromPlanId?: unknown;
 }): Promise<TariffPlanSummary> {
   const planId = normalizePlanId(input.plan_id);
@@ -494,34 +504,99 @@ export async function createTariffPlan(input: {
   const sourcePlan = input.cloneFromPlanId ? await getTariffPlanDocument(input.cloneFromPlanId) : null;
   if (input.cloneFromPlanId && !sourcePlan) throw new Error('SOURCE_TARIFF_PLAN_NOT_FOUND');
 
-  const plan: OcsTariffPlan = sourcePlan
-    ? {
-        ...sourcePlan,
-        _id: undefined,
-        plan_id: planId,
-        name: asString(input.name, `${asString(sourcePlan.name, sourcePlan.plan_id)} Copy`),
-        description: asString(input.description, asString(sourcePlan.description)),
-        status: asString(input.status, 'active'),
-        created_at: now,
-        updated_at: now,
-      }
-    : defaultPlan(
-        now,
-        planId,
-        asString(input.name, planId),
-        asString(input.description)
-      );
-  plan.status = asString(input.status, plan.status || 'active');
-  delete (plan as { _id?: unknown })._id;
+  let initialRules: OcsTariffRule[];
+  if (sourcePlan) {
+    initialRules = (sourcePlan.rules || []).map((r) => ({ ...r }));
+  } else if (Array.isArray(input.rules) && input.rules.length > 0) {
+    initialRules = input.rules.map((r: any) => ({
+      rule_id: asString(r.rule_id),
+      apn: asString(r.apn, 'internet'),
+      rating_group: toLong(r.rating_group, 0),
+      service_identifier: toLong(r.service_identifier, 0),
+      charging_type: asString(r.charging_type, 'data_volume'),
+      unit: asString(r.unit, 'bytes'),
+      quota_per_grant: toLong(r.quota_per_grant, DEFAULT_QUOTA_PER_GRANT),
+      validity_time: Number(r.validity_time) || 0,
+      volume_threshold: toLong(r.volume_threshold, DEFAULT_VOLUME_THRESHOLD),
+      priority: Number(r.priority) || 100,
+      status: asString(r.status, 'active'),
+      currency: asString(r.currency, 'USD'),
+      rates: asString(r.rates, '0'),
+      rates_type: Number(r.rates_type) || 2,
+    }));
+  } else {
+    initialRules = [defaultInternetRule(), defaultImsRule(), defaultVoiceRule(), defaultSmsRule()];
+  }
 
+  const plan: OcsTariffPlan = {
+    plan_id: planId,
+    name: asString(input.name, sourcePlan ? `${asString(sourcePlan.name, sourcePlan.plan_id)} Copy` : planId),
+    description: asString(input.description, sourcePlan ? asString(sourcePlan.description) : ''),
+    status: asString(input.status, 'active'),
+    quota_per_grant: input.quota_per_grant !== undefined
+      ? toLong(input.quota_per_grant, DEFAULT_QUOTA_PER_GRANT)
+      : (sourcePlan?.quota_per_grant ?? Long.fromNumber(DEFAULT_QUOTA_PER_GRANT)),
+    validity_time: input.validity_time !== undefined
+      ? Number(input.validity_time) || 0
+      : (sourcePlan?.validity_time ?? DEFAULT_VALIDITY_TIME),
+    volume_threshold: input.volume_threshold !== undefined
+      ? toLong(input.volume_threshold, DEFAULT_VOLUME_THRESHOLD)
+      : (sourcePlan?.volume_threshold ?? Long.fromNumber(DEFAULT_VOLUME_THRESHOLD)),
+    rules: initialRules,
+    created_at: now,
+    updated_at: now,
+  };
+
+  delete (plan as { _id?: unknown })._id;
   await collection.insertOne(plan);
   return summarizePlan(plan, 0);
+}
+
+export async function cloneTariffPlan(
+  sourcePlanIdInput: unknown,
+  newPlanIdInput: unknown,
+  newNameInput?: unknown,
+  newDescriptionInput?: unknown
+): Promise<TariffPlanSummary> {
+  const sourcePlanId = normalizePlanId(sourcePlanIdInput);
+  const newPlanId = normalizePlanId(newPlanIdInput);
+  if (sourcePlanId === newPlanId) throw new Error('SOURCE_AND_TARGET_SAME');
+
+  const collection = await tariffPlansCollection();
+  const existing = await collection.findOne({ plan_id: newPlanId });
+  if (existing) throw new Error('TARIFF_PLAN_EXISTS');
+
+  const sourcePlan = await getTariffPlanDocument(sourcePlanId);
+  if (!sourcePlan) throw new Error('SOURCE_TARIFF_PLAN_NOT_FOUND');
+
+  const now = new Date();
+  const clonedRules = (sourcePlan.rules || []).map((r) => ({ ...r }));
+
+  const cloned: OcsTariffPlan = {
+    plan_id: newPlanId,
+    name: asString(newNameInput, `${asString(sourcePlan.name, sourcePlan.plan_id)} Copy`),
+    description: asString(newDescriptionInput, asString(sourcePlan.description)),
+    status: 'active',
+    quota_per_grant: sourcePlan.quota_per_grant ?? Long.fromNumber(DEFAULT_QUOTA_PER_GRANT),
+    validity_time: sourcePlan.validity_time ?? DEFAULT_VALIDITY_TIME,
+    volume_threshold: sourcePlan.volume_threshold ?? Long.fromNumber(DEFAULT_VOLUME_THRESHOLD),
+    rules: clonedRules,
+    created_at: now,
+    updated_at: now,
+  };
+
+  await collection.insertOne(cloned);
+  return summarizePlan(cloned, 0);
 }
 
 export async function updateTariffPlan(planIdInput: unknown, input: {
   name?: unknown;
   description?: unknown;
   status?: unknown;
+  quota_per_grant?: unknown;
+  validity_time?: unknown;
+  volume_threshold?: unknown;
+  rules?: unknown[];
 }): Promise<TariffPlanSummary | null> {
   const planId = normalizePlanId(planIdInput);
   const collection = await tariffPlansCollection();
@@ -534,16 +609,86 @@ export async function updateTariffPlan(planIdInput: unknown, input: {
     throw new Error('TARIFF_PLAN_DISABLE_IN_USE');
   }
 
+  let nextRules = plan.rules || [];
+  if (Array.isArray(input.rules)) {
+    nextRules = input.rules.map((r: any) => {
+      const ratingGroupId = Number(r.rating_group_id ?? r.rating_group ?? 0);
+      const serviceIdentifier = Number(r.service_identifier ?? 1);
+      const apn = asString(r.apn, 'internet');
+      const ruleId = asString(r.rule_id, `${apn}_rg${ratingGroupId}_si${serviceIdentifier}`);
+      const chargingType = asString(r.charging_type, ratesTypeToChargingType(r.rates_type));
+      const unit = asString(r.unit, unitForChargingType(chargingType));
+
+      return {
+        rule_id: ruleId,
+        apn,
+        rating_group: toLong(ratingGroupId, 0),
+        service_identifier: toLong(serviceIdentifier, 0),
+        charging_type: chargingType,
+        unit,
+        quota_per_grant: toLong(r.quota_per_grant, defaultGrantForChargingType(chargingType)),
+        validity_time: Number(r.validity_time ?? defaultValidityForChargingType(chargingType)),
+        volume_threshold: toLong(r.volume_threshold, defaultThresholdForChargingType(chargingType)),
+        priority: Number(r.priority ?? 100),
+        status: asString(r.status, 'active'),
+        currency: asString(r.currency, 'USD'),
+        rates: asString(r.rates, '0'),
+        rates_type: Number(r.rates_type) || 2,
+      };
+    });
+  }
+
   const next: OcsTariffPlan = {
     ...plan,
     name: input.name === undefined ? plan.name : asString(input.name, plan.plan_id),
     description: input.description === undefined ? plan.description : asString(input.description),
     status: nextStatus,
+    quota_per_grant: input.quota_per_grant !== undefined
+      ? toLong(input.quota_per_grant, DEFAULT_QUOTA_PER_GRANT)
+      : (plan.quota_per_grant ?? Long.fromNumber(DEFAULT_QUOTA_PER_GRANT)),
+    validity_time: input.validity_time !== undefined
+      ? Number(input.validity_time) || 0
+      : (plan.validity_time ?? DEFAULT_VALIDITY_TIME),
+    volume_threshold: input.volume_threshold !== undefined
+      ? toLong(input.volume_threshold, DEFAULT_VOLUME_THRESHOLD)
+      : (plan.volume_threshold ?? Long.fromNumber(DEFAULT_VOLUME_THRESHOLD)),
+    rules: nextRules,
     updated_at: new Date(),
   };
 
   await collection.replaceOne({ plan_id: planId }, next);
   return summarizePlan(next, subscriberCount);
+}
+
+export async function dryRunMigrateTariffPlanSubscribers(sourcePlanIdInput: unknown, targetPlanIdInput: unknown) {
+  const sourcePlanId = normalizePlanId(sourcePlanIdInput);
+  const targetPlanId = normalizePlanId(targetPlanIdInput);
+  if (sourcePlanId === targetPlanId) throw new Error('TARIFF_PLAN_MIGRATE_SAME');
+
+  const [subscriberCollection, sourcePlan, targetPlan] = await Promise.all([
+    ocsSubscribersCollection(),
+    getTariffPlanDocument(sourcePlanId),
+    getTariffPlanDocument(targetPlanId),
+  ]);
+
+  if (!sourcePlan) throw new Error('SOURCE_PLAN_NOT_FOUND');
+  if (!targetPlan) throw new Error('TARGET_PLAN_NOT_FOUND');
+
+  const total = await subscriberCollection.countDocuments({ plan_id: sourcePlanId });
+  const activeCount = await subscriberCollection.countDocuments({ plan_id: sourcePlanId, status: 'active' });
+  const suspendedCount = total - activeCount;
+
+  return {
+    sourcePlanId,
+    sourcePlanName: sourcePlan.name || sourcePlanId,
+    targetPlanId,
+    targetPlanName: targetPlan.name || targetPlanId,
+    targetPlanStatus: targetPlan.status || 'active',
+    totalSubscribers: total,
+    activeSubscribers: activeCount,
+    suspendedSubscribers: suspendedCount,
+    canMigrate: total > 0 && targetPlan.status !== 'disabled',
+  };
 }
 
 export async function deleteTariffPlan(planIdInput: unknown) {
@@ -858,6 +1003,143 @@ export async function deleteRatingPolicy(id: string | number, planIdInput?: unkn
 
   await collection.replaceOne({ plan_id: plan.plan_id }, next);
   return { deleted: before.length !== next.rules.length, references: { count: 0, examples: [] as string[] } };
+}
+
+export async function addTariffPlanRule(planIdInput: unknown, ruleInput: any) {
+  const collection = await tariffPlansCollection();
+  const plan = await getTariffPlanDocument(planIdInput);
+  if (!plan) throw new Error('OCS_PLAN_NOT_FOUND');
+
+  const ratingGroupId = Number(ruleInput.rating_group_id ?? ruleInput.rating_group ?? 0);
+  const serviceIdentifier = Number(ruleInput.service_identifier ?? 1);
+  const apn = asString(ruleInput.apn, 'internet');
+  const ruleId = asString(ruleInput.rule_id, `${apn}_rg${ratingGroupId}_si${serviceIdentifier}`);
+
+  if ((plan.rules || []).some((r) => r.rule_id === ruleId)) {
+    throw new Error('RULE_ID_EXISTS');
+  }
+
+  const chargingType = asString(ruleInput.charging_type, ratesTypeToChargingType(ruleInput.rates_type));
+  const unit = asString(ruleInput.unit, unitForChargingType(chargingType));
+
+  const newRule: OcsTariffRule = {
+    rule_id: ruleId,
+    apn,
+    rating_group: toLong(ratingGroupId, 0),
+    service_identifier: toLong(serviceIdentifier, 0),
+    charging_type: chargingType,
+    unit,
+    quota_per_grant: toLong(ruleInput.quota_per_grant, defaultGrantForChargingType(chargingType)),
+    validity_time: Number(ruleInput.validity_time ?? defaultValidityForChargingType(chargingType)),
+    volume_threshold: toLong(ruleInput.volume_threshold, defaultThresholdForChargingType(chargingType)),
+    priority: Number(ruleInput.priority ?? 100),
+    status: asString(ruleInput.status, 'active'),
+    currency: asString(ruleInput.currency, 'USD'),
+    rates: asString(ruleInput.rates, '0'),
+    rates_type: Number(ruleInput.rates_type) || 2,
+  };
+
+  const next = {
+    ...plan,
+    rules: [...(plan.rules || []), newRule],
+    updated_at: new Date(),
+  };
+
+  await collection.replaceOne({ plan_id: plan.plan_id }, next);
+  return normalizePolicy(newRule, plan.plan_id);
+}
+
+export async function updateTariffPlanRule(planIdInput: unknown, ruleIdInput: unknown, ruleInput: any) {
+  const collection = await tariffPlansCollection();
+  const plan = await getTariffPlanDocument(planIdInput);
+  if (!plan) throw new Error('OCS_PLAN_NOT_FOUND');
+
+  const targetRuleId = asString(ruleIdInput);
+  const existing = (plan.rules || []).find((r) => r.rule_id === targetRuleId);
+  if (!existing) throw new Error('RULE_NOT_FOUND');
+
+  const ratingGroupId = Number(ruleInput.rating_group_id ?? ruleInput.rating_group ?? existing.rating_group);
+  const serviceIdentifier = Number(ruleInput.service_identifier ?? existing.service_identifier);
+  const apn = asString(ruleInput.apn, existing.apn);
+  const ruleId = asString(ruleInput.rule_id, targetRuleId);
+  const chargingType = asString(ruleInput.charging_type, existing.charging_type);
+  const unit = asString(ruleInput.unit, existing.unit || unitForChargingType(chargingType));
+
+  const updatedRule: OcsTariffRule = {
+    rule_id: ruleId,
+    apn,
+    rating_group: toLong(ratingGroupId, 0),
+    service_identifier: toLong(serviceIdentifier, 0),
+    charging_type: chargingType,
+    unit,
+    quota_per_grant: ruleInput.quota_per_grant !== undefined
+      ? toLong(ruleInput.quota_per_grant, defaultGrantForChargingType(chargingType))
+      : (existing.quota_per_grant ?? toLong(defaultGrantForChargingType(chargingType))),
+    validity_time: ruleInput.validity_time !== undefined
+      ? Number(ruleInput.validity_time) || 0
+      : (existing.validity_time ?? defaultValidityForChargingType(chargingType)),
+    volume_threshold: ruleInput.volume_threshold !== undefined
+      ? toLong(ruleInput.volume_threshold, defaultThresholdForChargingType(chargingType))
+      : (existing.volume_threshold ?? toLong(defaultThresholdForChargingType(chargingType))),
+    priority: ruleInput.priority !== undefined ? Number(ruleInput.priority) || 100 : (existing.priority ?? 100),
+    status: asString(ruleInput.status, existing.status || 'active'),
+    currency: asString(ruleInput.currency, existing.currency || 'USD'),
+    rates: asString(ruleInput.rates, existing.rates || '0'),
+    rates_type: Number(ruleInput.rates_type) || existing.rates_type || 2,
+  };
+
+  const nextRules = (plan.rules || []).map((r) => (r.rule_id === targetRuleId ? updatedRule : r));
+  const next = {
+    ...plan,
+    rules: nextRules,
+    updated_at: new Date(),
+  };
+
+  await collection.replaceOne({ plan_id: plan.plan_id }, next);
+  return normalizePolicy(updatedRule, plan.plan_id);
+}
+
+export async function deleteTariffPlanRule(planIdInput: unknown, ruleIdInput: unknown) {
+  const collection = await tariffPlansCollection();
+  const plan = await getTariffPlanDocument(planIdInput);
+  if (!plan) throw new Error('OCS_PLAN_NOT_FOUND');
+
+  const targetRuleId = asString(ruleIdInput);
+  const before = plan.rules || [];
+  const nextRules = before.filter((r) => r.rule_id !== targetRuleId);
+
+  const next = {
+    ...plan,
+    rules: nextRules,
+    updated_at: new Date(),
+  };
+
+  await collection.replaceOne({ plan_id: plan.plan_id }, next);
+  return { deleted: before.length !== nextRules.length };
+}
+
+export async function toggleTariffPlanRuleStatus(planIdInput: unknown, ruleIdInput: unknown) {
+  const collection = await tariffPlansCollection();
+  const plan = await getTariffPlanDocument(planIdInput);
+  if (!plan) throw new Error('OCS_PLAN_NOT_FOUND');
+
+  const targetRuleId = asString(ruleIdInput);
+  const existing = (plan.rules || []).find((r) => r.rule_id === targetRuleId);
+  if (!existing) throw new Error('RULE_NOT_FOUND');
+
+  const nextStatus = (existing.status || 'active') === 'active' ? 'disabled' : 'active';
+  const nextRules = (plan.rules || []).map((r) =>
+    r.rule_id === targetRuleId ? { ...r, status: nextStatus } : r
+  );
+
+  const next = {
+    ...plan,
+    rules: nextRules,
+    updated_at: new Date(),
+  };
+
+  await collection.replaceOne({ plan_id: plan.plan_id }, next);
+  return { rule_id: targetRuleId, status: nextStatus };
 }
 
 export async function findRatingPolicy(id: unknown): Promise<RatingPolicy | null> {

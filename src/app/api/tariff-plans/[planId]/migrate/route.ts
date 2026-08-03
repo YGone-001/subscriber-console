@@ -1,10 +1,14 @@
 import { NextResponse } from 'next/server';
 import { logAudit } from '@/lib/audit';
-import { requireCapability } from '@/lib/authz';
+import { requireAuth, requireCapability } from '@/lib/authz';
 import { capabilityDecision } from '@/lib/permissions';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import { createApprovalRequest } from '@/server/repositories/approvalRepository';
-import { getTariffPlan, migrateTariffPlanSubscribers } from '@/server/repositories/ocsBillingRepository';
+import {
+  dryRunMigrateTariffPlanSubscribers,
+  getTariffPlan,
+  migrateTariffPlanSubscribers,
+} from '@/server/repositories/ocsBillingRepository';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,16 +20,47 @@ function errorResponse(error: unknown) {
   if (error instanceof Error && error.message === 'INVALID_PLAN_ID') {
     return NextResponse.json({ error: 'Invalid plan_id format' }, { status: 400 });
   }
-  if (error instanceof Error && error.message === 'OCS_PLAN_NOT_FOUND') {
+  if (
+    error instanceof Error &&
+    (error.message === 'OCS_PLAN_NOT_FOUND' ||
+      error.message === 'SOURCE_PLAN_NOT_FOUND' ||
+      error.message === 'TARGET_PLAN_NOT_FOUND')
+  ) {
     return NextResponse.json({ error: 'Tariff plan not found' }, { status: 404 });
   }
-  if (error instanceof Error && error.message === 'OCS_PLAN_DISABLED') {
+  if (
+    error instanceof Error &&
+    (error.message === 'OCS_PLAN_DISABLED' || error.message === 'TARGET_PLAN_DISABLED')
+  ) {
     return NextResponse.json({ error: 'Tariff plan is disabled' }, { status: 409 });
   }
   if (error instanceof Error && error.message === 'TARIFF_PLAN_MIGRATE_SAME') {
     return NextResponse.json({ error: 'Source and target tariff plan must be different' }, { status: 400 });
   }
   return null;
+}
+
+export async function GET(request: Request, { params }: RouteContext) {
+  const { planId } = await params;
+  const auth = requireAuth(request);
+  if (!auth.ok) return auth.response;
+
+  const url = new URL(request.url);
+  const targetPlanId = url.searchParams.get('targetPlanId') || url.searchParams.get('target_plan_id');
+  if (!targetPlanId) {
+    return NextResponse.json({ error: 'targetPlanId query parameter is required' }, { status: 400 });
+  }
+
+  try {
+    const preview = await dryRunMigrateTariffPlanSubscribers(planId, targetPlanId);
+    return NextResponse.json({ preview });
+  } catch (error) {
+    const response = errorResponse(error);
+    if (response) return response;
+
+    console.error('Error in migration dry-run:', error);
+    return NextResponse.json({ error: 'Failed to preview migration' }, { status: 500 });
+  }
 }
 
 export async function POST(request: Request, { params }: RouteContext) {

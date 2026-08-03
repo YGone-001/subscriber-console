@@ -40,7 +40,15 @@ export function useRatingManagement(view: T.RatingManagementView) {
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
   const [isCreatingPlan, setIsCreatingPlan] = useState(false);
-  const [planForm, setPlanForm] = useState<T.PlanForm>({ plan_id: "", name: "", description: "", status: "active" });
+  const [planForm, setPlanForm] = useState<T.PlanForm>({
+    plan_id: "",
+    name: "",
+    description: "",
+    status: "active",
+    quota_per_grant: "10485760",
+    validity_time: "300",
+    volume_threshold: "8388608",
+  });
   const [migrationTargetPlanId, setMigrationTargetPlanId] = useState("");
   const [migrationResetBalances, setMigrationResetBalances] = useState(false);
 
@@ -76,6 +84,9 @@ export function useRatingManagement(view: T.RatingManagementView) {
       name: selectedPlan.name || selectedPlan.plan_id,
       description: selectedPlan.description || "",
       status: selectedPlan.status || "active",
+      quota_per_grant: selectedPlan.quota_per_grant != null ? String(selectedPlan.quota_per_grant) : "10485760",
+      validity_time: selectedPlan.validity_time != null ? String(selectedPlan.validity_time) : "300",
+      volume_threshold: selectedPlan.volume_threshold != null ? String(selectedPlan.volume_threshold) : "8388608",
     });
   }, [isCreatingPlan, selectedPlan]);
 
@@ -162,6 +173,9 @@ export function useRatingManagement(view: T.RatingManagementView) {
       name: selectedPlan ? `${selectedPlan.name || selectedPlan.plan_id} Copy` : "",
       description: selectedPlan?.description || "",
       status: "active",
+      quota_per_grant: selectedPlan?.quota_per_grant != null ? String(selectedPlan.quota_per_grant) : "10485760",
+      validity_time: selectedPlan?.validity_time != null ? String(selectedPlan.validity_time) : "300",
+      volume_threshold: selectedPlan?.volume_threshold != null ? String(selectedPlan.volume_threshold) : "8388608",
     });
   };
 

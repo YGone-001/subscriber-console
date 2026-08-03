@@ -34,12 +34,18 @@ export type TariffPlan = {
   rulesCount: number;
   subscriberCount: number;
   isDefault?: boolean;
+  quota_per_grant?: number;
+  validity_time?: number;
+  volume_threshold?: number;
+  rules?: RatingPolicy[];
 };
 
 export type PlanSubscriberPreview = {
   total: number;
   subscribers: Array<{ imsi: string; msisdn?: string; status?: string }>;
   hasMore: boolean;
+  activeCount?: number;
+  suspendedCount?: number;
 };
 
 export type PlanOperationLog = {
@@ -70,6 +76,9 @@ export type PlanForm = {
   name: string;
   description: string;
   status: string;
+  quota_per_grant?: string | number;
+  validity_time?: string | number;
+  volume_threshold?: string | number;
 };
 
 export type RatingForm = {
