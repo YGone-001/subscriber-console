@@ -25,6 +25,29 @@ export const zh: Record<string, string> = {
     success: "成功",
     info: "提示",
     yes: "是",
+    export: "导出",
+    saving: "保存中...",
+    profiles_title: "模板配置",
+    noc_alerts_title: "告警与网络事件",
+    unit_mins: "分钟",
+    unit_msgs: "条",
+
+    // -- Time & Relative Dates --
+    time_just_now: "刚刚",
+    time_sec_ago: "{count} 秒前",
+    time_mins_ago: "{count} 分钟前",
+    time_hours_ago: "{count} 小时前",
+    time_yesterday: "昨天",
+    time_days_ago: "{count} 天前",
+
+    // -- Language & Command Palette --
+    lang_switch: "语言",
+    lang_en: "英文 (English)",
+    lang_zh: "简体中文",
+    cp_lang_en: "切换为英文 (English)",
+    cp_lang_en_desc: "将系统界面语言设置为英文",
+    cp_lang_zh: "切换为简体中文",
+    cp_lang_zh_desc: "将系统界面语言设置为简体中文",
 
     sub_identity_tmpl: "身份信息与模板",
     sub_security_auth: "安全与鉴权",

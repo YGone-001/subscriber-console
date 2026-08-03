@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import type { ElementType, KeyboardEvent } from "react";
 import {
   Search, Users, CreditCard, Gauge, Activity, History, Key,
-  LayoutDashboard, Plus, Download, FileUp, Zap, Command, GitBranch
+  LayoutDashboard, Plus, Download, FileUp, Zap, Command, GitBranch, Languages
 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import "./CommandPalette.css";
@@ -37,7 +37,7 @@ interface CommandPaletteProps {
 const REMOTE_SEARCH_DELAY_MS = 250;
 
 export default function CommandPalette({ isOpen, onClose, onAction }: CommandPaletteProps) {
-  const { t } = useI18n();
+  const { t, lang, setLang } = useI18n();
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
@@ -70,6 +70,14 @@ export default function CommandPalette({ isOpen, onClose, onAction }: CommandPal
     { id: "act-import", label: t("cp_act_import"), desc: t("cp_act_import_desc"), icon: FileUp, type: "action", actionKey: "import-csv" },
     { id: "act-export", label: t("cp_act_export"), desc: t("cp_act_export_desc"), icon: Download, type: "action", actionKey: "export-csv" },
     { id: "act-sync", label: t("cp_act_sync"), desc: t("cp_act_sync_desc"), icon: Zap, type: "action", actionKey: "sync-telemetry" },
+    {
+      id: "act-switch-lang",
+      label: lang === "en" ? t("cp_lang_zh") : t("cp_lang_en"),
+      desc: lang === "en" ? t("cp_lang_zh_desc") : t("cp_lang_en_desc"),
+      icon: Languages,
+      type: "action",
+      actionKey: "toggle-language",
+    },
   ];
 
   useEffect(() => {
@@ -144,7 +152,9 @@ export default function CommandPalette({ isOpen, onClose, onAction }: CommandPal
     if (item.type === "navigation" || item.type === "imsi" || item.type === "profile") {
       router.push(item.path || "/");
     } else if (item.type === "action" && item.actionKey) {
-      if (onAction) {
+      if (item.actionKey === "toggle-language") {
+        setLang(lang === "en" ? "zh" : "en");
+      } else if (onAction) {
         onAction(item.actionKey);
       } else if (item.actionKey === "sync-telemetry") {
         fetch("/api/analytics/init", { method: "POST" }).catch(() => {});
@@ -152,7 +162,7 @@ export default function CommandPalette({ isOpen, onClose, onAction }: CommandPal
         router.push("/subscribers");
       }
     }
-  }, [onAction, onClose, router]);
+  }, [onAction, onClose, router, lang, setLang]);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key === "ArrowDown") {

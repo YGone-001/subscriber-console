@@ -25,6 +25,29 @@ export const en: Record<string, string> = {
     success: "Success",
     info: "Info",
     yes: "Yes",
+    export: "Export",
+    saving: "Saving...",
+    profiles_title: "Profiles",
+    noc_alerts_title: "Active Alerts & Incidents",
+    unit_mins: "mins",
+    unit_msgs: "msgs",
+
+    // -- Time & Relative Dates --
+    time_just_now: "Just now",
+    time_sec_ago: "{count}s ago",
+    time_mins_ago: "{count}m ago",
+    time_hours_ago: "{count}h ago",
+    time_yesterday: "Yesterday",
+    time_days_ago: "{count}d ago",
+
+    // -- Language & Command Palette --
+    lang_switch: "Language",
+    lang_en: "English",
+    lang_zh: "Simplified Chinese",
+    cp_lang_en: "Switch to English",
+    cp_lang_en_desc: "Set interface language to English",
+    cp_lang_zh: "Switch to Chinese (简体中文)",
+    cp_lang_zh_desc: "Set interface language to Simplified Chinese",
 
     sub_identity_tmpl: "Identity & Template",
     sub_security_auth: "Security & Authentication",
@@ -447,6 +470,7 @@ export const en: Record<string, string> = {
     tariff_plan_ops_selected_share: "Current Plan Share",
     tariff_plan_ops_history: "Recent Changes",
     tariff_plan_ops_recent_count: "{count} recent",
+    tariff_plan_ops_no_history: "No operation history for this plan.",
     tariff_plan_ops_target: "Target",
     tariff_plan_ops_operator: "Operator",
     tariff_plan_clone: "Clone Plan",
