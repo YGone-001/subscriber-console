@@ -1,4 +1,4 @@
-import { Shield, Signal, Gauge, Server, Lock, ChevronDown, ChevronUp } from "lucide-react";
+import { Users, Shield, Signal, Gauge, Server, Lock, ChevronDown, ChevronUp } from "lucide-react";
 import { AMBR_UNITS, getAmbrString, typeLabel } from "../subscriber/utils";
 import "./profile.css";
 
@@ -17,7 +17,7 @@ function ratingUnitLabel(t: (key: string) => string, value?: string) {
   return value || "-";
 }
 
-export default function ProfileViewMode({ t, authData, usimType, ocsDefaults, tariffPlanList, ratingList, ueAmbr, isAccessRestrictionsExpanded, setIsAccessRestrictionsExpanded, accessRestriction, slices }: any) {
+export default function ProfileViewMode({ t, authData, usimType, ocsDefaults, tariffPlanList, ratingList, ueAmbr, isAccessRestrictionsExpanded, setIsAccessRestrictionsExpanded, accessRestriction, slices, backendStats }: any) {
   const planId = ocsDefaults.planId || ocsDefaults.plan_id || "plan_default_10gb";
   const selectedPlan = Array.isArray(tariffPlanList)
     ? tariffPlanList.find((plan: any) => plan.plan_id === planId)
@@ -25,6 +25,35 @@ export default function ProfileViewMode({ t, authData, usimType, ocsDefaults, ta
 
   return (
     <div className="animate-fade-in profile-container">
+      {backendStats && (
+        <div className="dash-card" id="psec-stats" style={{ marginBottom: "1.5rem" }}>
+          <div className="dash-card-header">
+            <Users size={20} color="var(--primary)" />
+            <h3 className="card-title">{t("prof_change_impacted")} ({backendStats.totalSubscribers})</h3>
+          </div>
+          <div className="dash-card-body grid-3-col">
+            <div>
+              <div className="label-muted">{t("prof_change_impacted")}</div>
+              <div className="value-mono" style={{ fontWeight: 600, color: "var(--primary)" }}>{backendStats.totalSubscribers}</div>
+            </div>
+            <div>
+              <div className="label-muted">{t("prof_stat_active")}</div>
+              <div className="value-mono" style={{ color: "var(--success)" }}>{backendStats.activeSubscribers}</div>
+            </div>
+            <div>
+              <div className="label-muted">{t("prof_stat_suspended")}</div>
+              <div className="value-mono" style={{ color: backendStats.suspendedSubscribers > 0 ? "var(--danger)" : "var(--text-muted)" }}>{backendStats.suspendedSubscribers}</div>
+            </div>
+          </div>
+          {Array.isArray(backendStats.sampleImsis) && backendStats.sampleImsis.length > 0 && (
+            <div style={{ marginTop: "0.75rem", paddingTop: "0.75rem", borderTop: "1px solid var(--border-color)", fontSize: "0.82rem" }}>
+              <span className="label-muted" style={{ marginRight: "0.5rem" }}>{t("prof_stat_samples")}:</span>
+              <span className="value-mono" style={{ opacity: 0.85 }}>{backendStats.sampleImsis.join(", ")}</span>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Security Template Card */}
       <div className="dash-card" id="psec-security">
         <div className="dash-card-header">

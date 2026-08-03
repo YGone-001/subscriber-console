@@ -5,6 +5,7 @@ import { enforceRateLimit } from '@/lib/rateLimit';
 import {
   deleteProfile,
   getProfile,
+  getProfileStats,
   updateProfile,
 } from '@/server/repositories/profileRepository';
 
@@ -36,7 +37,8 @@ export async function GET(request: Request, { params }: RouteContext) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
-    return NextResponse.json({ profile });
+    const stats = await getProfileStats(name);
+    return NextResponse.json({ profile, stats });
   } catch (error) {
     console.error('Error fetching profile:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
@@ -80,13 +82,25 @@ export async function DELETE(request: Request, { params }: RouteContext) {
     return NextResponse.json({ error: 'Invalid profile name format' }, { status: 400 });
   }
 
+  const { searchParams } = new URL(request.url);
+  const force = searchParams.get('force') === 'true';
+
   try {
-    const existing = await deleteProfile(name, auth.auth.user);
+    const existing = await deleteProfile(name, auth.auth.user, force);
 
     logAudit('PROFILE_DELETE', name, existing, null, request);
 
     return NextResponse.json({ message: 'Profile deleted successfully' });
   } catch (error) {
+    if (error instanceof Error && error.message.startsWith('PROFILE_IN_USE')) {
+      const subscriberCount = (error as unknown as { subscriberCount?: number }).subscriberCount || 0;
+      return NextResponse.json({
+        error: 'PROFILE_IN_USE',
+        message: `Cannot delete profile in use by ${subscriberCount} subscriber(s). Provide force=true to proceed.`,
+        subscriberCount,
+      }, { status: 409 });
+    }
+
     console.error('Error deleting profile:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }

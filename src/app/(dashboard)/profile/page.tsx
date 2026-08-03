@@ -17,20 +17,25 @@ interface ProfileSummary {
   createdAt?: string;
   updatedAt?: string;
   updatedBy?: string;
+  subscriberCount?: number;
+  impactedSubscribers?: number;
+  activeSubscribers?: number;
+  suspendedSubscribers?: number;
+  restrictedSubscribers?: number;
+}
+
+interface ProfileGlobalSummary {
+  totalProfiles: number;
+  totalGovernedSubscribers: number;
+  activeSubscribers: number;
+  suspendedSubscribers: number;
+  restrictedSubscribers: number;
+  unassignedProfiles: number;
 }
 
 interface ProfilesResponse {
   profiles: ProfileSummary[];
-}
-
-interface SubscriberRow {
-  imsi: string;
-  profile?: string;
-}
-
-interface SubscribersResponse {
-  subscribers: SubscriberRow[];
-  total: number;
+  summary?: ProfileGlobalSummary;
 }
 
 type GovernanceDomain = "all" | "billing" | "network" | "slice" | "access";
@@ -76,11 +81,9 @@ function getRiskLevel(sliceCount: number, impactedSubscribers: number): RiskLeve
 export default function ProfilePage() {
   const { t } = useI18n();
   const { data, isLoading, mutate } = useSWR<ProfilesResponse>("/api/profiles", fetcher);
-  const { data: subscriberData } = useSWR<SubscribersResponse>("/api/subscribers?detail=true&page=1&limit=500", fetcher);
   const profileRows = data?.profiles;
-  const subscriberRows = subscriberData?.subscribers;
+  const backendSummary = data?.summary;
   const profiles = useMemo(() => profileRows || [], [profileRows]);
-  const subscribers = useMemo(() => subscriberRows || [], [subscriberRows]);
   const [searchQuery, setSearchQuery] = useState("");
   const [domainFilter, setDomainFilter] = useState<GovernanceDomain>("all");
   const [modalProfileName, setModalProfileName] = useState<string | null>(null);
@@ -89,18 +92,8 @@ export default function ProfilePage() {
   const [currentTime] = useState(() => Date.now());
   const { canEditTemplates } = useAuth();
 
-  const profileImpactCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    subscribers.forEach(subscriber => {
-      const profileName = String(subscriber.profile || "");
-      if (!profileName) return;
-      counts.set(profileName, (counts.get(profileName) || 0) + 1);
-    });
-    return counts;
-  }, [subscribers]);
-
   const governedProfiles = useMemo(() => profiles.map(profile => {
-    const impactedSubscribers = profileImpactCounts.get(profile.name) || 0;
+    const impactedSubscribers = profile.subscriberCount ?? profile.impactedSubscribers ?? 0;
     const sliceCount = profile.sliceCount || 0;
     return {
       ...profile,
@@ -108,7 +101,7 @@ export default function ProfilePage() {
       impactedSubscribers,
       risk: getRiskLevel(sliceCount, impactedSubscribers),
     };
-  }), [profileImpactCounts, profiles]);
+  }), [profiles]);
 
   const filteredProfiles = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
@@ -122,15 +115,15 @@ export default function ProfilePage() {
   }, [domainFilter, governedProfiles, searchQuery]);
 
   const governanceSummary = useMemo(() => ({
-    total: governedProfiles.length,
-    impacted: governedProfiles.reduce((sum, profile) => sum + profile.impactedSubscribers, 0),
+    total: backendSummary?.totalProfiles ?? governedProfiles.length,
+    impacted: backendSummary?.totalGovernedSubscribers ?? governedProfiles.reduce((sum, profile) => sum + profile.impactedSubscribers, 0),
     highRisk: governedProfiles.filter(profile => profile.risk === "high").length,
     recentlyChanged: governedProfiles.filter(profile => {
       const changedAt = profile.updatedAt || profile.createdAt;
       if (!changedAt) return false;
       return currentTime - new Date(changedAt).getTime() <= 1000 * 60 * 60 * 24 * 14;
     }).length,
-  }), [currentTime, governedProfiles]);
+  }), [backendSummary, currentTime, governedProfiles]);
 
   const handleOpenNew = () => {
     setNotice(null);
@@ -319,7 +312,7 @@ export default function ProfilePage() {
           onClose={() => setIsModalOpen(false)}
           onRefresh={() => mutate()}
           onOperation={setNotice}
-          impactedSubscribers={modalProfileName ? profileImpactCounts.get(modalProfileName) || 0 : 0}
+          impactedSubscribers={modalProfileName ? (governedProfiles.find(p => p.name === modalProfileName)?.impactedSubscribers || 0) : 0}
         />
       )}
     </>

@@ -65,9 +65,11 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
   const [isRestoring, setIsRestoring] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [forceDeleteCount, setForceDeleteCount] = useState<number | null>(null);
   const [isSaveConfirmOpen, setIsSaveConfirmOpen] = useState(false);
   const [isAccessRestrictionsExpanded, setIsAccessRestrictionsExpanded] = useState(false);
   const [profileSnapshot, setProfileSnapshot] = useState<any>(null);
+  const [backendStats, setBackendStats] = useState<{ totalSubscribers: number; activeSubscribers: number; suspendedSubscribers: number; restrictedSubscribers: number } | null>(null);
   const [versions, setVersions] = useState<ProfileVersionSummary[]>([]);
   const [selectedVersion, setSelectedVersion] = useState<ProfileVersionDetail | null>(null);
   const [isVersionsLoading, setIsVersionsLoading] = useState(false);
@@ -197,6 +199,9 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
       if (!res.ok) throw new Error("Failed to fetch");
       const data = await res.json();
       if (data.profile) applyProfileData(data.profile);
+      if (data.stats && typeof data.stats.totalSubscribers === 'number') {
+        setBackendStats(data.stats);
+      }
     } catch {
       setError(t("prof_err_load"));
     } finally {
@@ -255,16 +260,26 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
   const handleDelete = () => {
     if (!profileName) return;
     setError(null);
+    setForceDeleteCount(null);
     setIsDeleteConfirmOpen(true);
   };
 
-  const executeDelete = async () => {
+  const executeDelete = async (force = false) => {
     if (!profileName) return;
     setIsDeleting(true);
     setError(null);
     try {
-      const res = await fetch(`/api/profiles/${profileName}`, { method: "DELETE" });
+      const url = force ? `/api/profiles/${profileName}?force=true` : `/api/profiles/${profileName}`;
+      const res = await fetch(url, { method: "DELETE" });
       if (!res.ok) {
+        if (res.status === 409) {
+          const body = await res.json().catch(() => ({}));
+          if (body.error === 'PROFILE_IN_USE') {
+            setIsDeleteConfirmOpen(false);
+            setForceDeleteCount(Number(body.subscriberCount || backendStats?.totalSubscribers || impactedSubscribers || 1));
+            return;
+          }
+        }
         throw new Error(await readError(res, t("prof_err_delete")));
       }
       onRefresh();
@@ -563,6 +578,7 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
       setIsAccessRestrictionsExpanded={setIsAccessRestrictionsExpanded}
       accessRestriction={accessRestriction}
       slices={slices}
+      backendStats={backendStats}
     />;
   };
 
@@ -582,6 +598,7 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
     />;
   };
 
+  const effectiveImpactedSubscribers = backendStats?.totalSubscribers ?? impactedSubscribers;
   const draftTargetName = (profileName || inputName || profileTitle).trim();
   const draftPayload = profileName && draftTargetName ? buildProfilePayload(draftTargetName) : null;
   const draftDiffRows = draftPayload ? getProfileDraftDiffRows(draftPayload) : [];
@@ -605,7 +622,7 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
             {isRoot && !isEditing && (
               <button className="btn-icon" onClick={() => { setIsEditing(true); setIsSaveConfirmOpen(false); }} title={t("prof_btn_edit")}><Pencil size={24} color="var(--primary)" /></button>
             )}
-            {isRoot && profileName && <button className="btn-icon" onClick={handleDelete} title={t("prof_btn_delete")} disabled={isDeleting || isDeleteConfirmOpen}><Trash2 size={24} color="var(--danger)" /></button>}
+            {isRoot && profileName && <button className="btn-icon" onClick={handleDelete} title={t("prof_btn_delete")} disabled={isDeleting || isDeleteConfirmOpen || forceDeleteCount !== null}><Trash2 size={24} color="var(--danger)" /></button>}
             <div className="pm-wf-header-divider" />
             <button className="btn-icon" onClick={onClose} title={t("close")}><X size={26} color="var(--text-muted)" /></button>
           </div>
@@ -620,8 +637,24 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
               confirmLabel={t("delete")}
               cancelLabel={t("cancel")}
               isWorking={isDeleting}
-              onConfirm={executeDelete}
+              onConfirm={() => executeDelete(false)}
               onCancel={() => setIsDeleteConfirmOpen(false)}
+            />
+          </div>
+        )}
+
+        {forceDeleteCount !== null && (
+          <div className="pm-confirm-panel">
+            <ConfirmActionPanel
+              presentation="modal"
+              tone="danger"
+              title={t("prof_del_in_use_title", { name: profileName || "" })}
+              message={t("prof_del_in_use_desc", { count: forceDeleteCount, name: profileName || "" })}
+              confirmLabel={t("prof_btn_force_delete")}
+              cancelLabel={t("cancel")}
+              isWorking={isDeleting}
+              onConfirm={() => executeDelete(true)}
+              onCancel={() => setForceDeleteCount(null)}
             />
           </div>
         )}
@@ -630,9 +663,9 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
           <div className="pm-confirm-panel">
             <ConfirmActionPanel
               presentation="modal"
-              tone={impactedSubscribers > 0 ? "warning" : "info"}
+              tone={effectiveImpactedSubscribers > 0 ? "warning" : "info"}
               title={t("prof_change_confirm_title")}
-              message={t("prof_change_confirm_desc", { count: impactedSubscribers, sections: changedSectionText })}
+              message={t("prof_change_confirm_desc", { count: effectiveImpactedSubscribers, sections: changedSectionText })}
               confirmLabel={t("prof_change_confirm_btn")}
               cancelLabel={t("cancel")}
               isWorking={isSaving}
@@ -645,8 +678,8 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
               <div className="pm-confirm-stats-grid">
                 <div className="pm-confirm-stat-card">
                   <div className="table-header-cap pm-confirm-stat-label">{t("prof_change_impacted")}</div>
-                  <div className={`pm-confirm-stat-value ${impactedSubscribers > 0 ? "warning" : "success"}`}>
-                    {impactedSubscribers}
+                  <div className={`pm-confirm-stat-value ${effectiveImpactedSubscribers > 0 ? "warning" : "success"}`}>
+                    {effectiveImpactedSubscribers}
                   </div>
                 </div>
                 <div className="pm-confirm-stat-card">

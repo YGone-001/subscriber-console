@@ -4,6 +4,7 @@ import { enforceRateLimit } from '@/lib/rateLimit';
 import { requireAuth, requireRole } from '@/lib/authz';
 import {
   createProfile,
+  getProfilesGlobalSummary,
   listProfiles,
 } from '@/server/repositories/profileRepository';
 
@@ -17,8 +18,12 @@ export async function GET(request: Request) {
     const rateLimit = await enforceRateLimit(`profiles:list:${auth.auth.user}`, 90, 60);
     if (!rateLimit.ok) return rateLimit.response;
 
-    const profiles = await listProfiles();
-    return NextResponse.json({ profiles });
+    const [profiles, summary] = await Promise.all([
+      listProfiles(),
+      getProfilesGlobalSummary(),
+    ]);
+
+    return NextResponse.json({ profiles, summary });
   } catch (error) {
     console.error('Error fetching profiles:', error);
     return NextResponse.json({ error: 'Failed to fetch profiles' }, { status: 500 });
