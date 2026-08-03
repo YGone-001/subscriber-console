@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { logAudit } from '@/lib/audit';
 import { requireCapability } from '@/lib/authz';
 import { enforceRateLimit } from '@/lib/rateLimit';
+import { isPasswordStrong, PASSWORD_POLICY_MESSAGE } from '@/lib/security';
 import { deleteUser, safeUser, updateUser } from '@/server/repositories/userRepository';
 import type { UserRole } from '@/lib/authz';
 
@@ -41,6 +42,9 @@ export async function PUT(request: Request, { params }: RouteContext) {
     }
 
     if (body.password) {
+      if (!isPasswordStrong(body.password)) {
+        return NextResponse.json({ error: PASSWORD_POLICY_MESSAGE }, { status: 400 });
+      }
       updates.passwordHash = await bcrypt.hash(body.password, 10);
     }
 

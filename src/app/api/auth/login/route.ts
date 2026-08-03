@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { SignJWT } from 'jose';
-import { getJwtSecretKey, isPasswordStrong, PASSWORD_POLICY_MESSAGE } from '@/lib/security';
+import { getJwtSecretKey } from '@/lib/security';
 import { getRateLimit } from '@/lib/rateLimit';
-import { createUser, getUser } from '@/server/repositories/userRepository';
+import { getUser } from '@/server/repositories/userRepository';
 import type { UserDocument } from '@/server/repositories/userRepository';
 
 const JWT_SECRET = getJwtSecretKey();
@@ -35,28 +35,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Username and password required' }, { status: 400 });
     }
 
-    let storedUser: UserDocument | null = await getUser(username);
-    if (!storedUser && username === 'admin') {
-      const initialPassword = process.env.INITIAL_ADMIN_PASSWORD;
-      if (initialPassword) {
-        if (!isPasswordStrong(initialPassword)) {
-          console.warn(`[SECURITY] INITIAL_ADMIN_PASSWORD is too weak (${PASSWORD_POLICY_MESSAGE}). Admin account NOT auto-provisioned.`);
-        } else {
-          const hash = await bcrypt.hash(initialPassword, 10);
-          storedUser = await createUser({
-            username: 'admin',
-            passwordHash: hash,
-            role: 'root',
-            status: 'active',
-            createdAt: new Date().toISOString(),
-            createdBy: 'system',
-          });
-        }
-      } else {
-        console.warn('Admin account does not exist and INITIAL_ADMIN_PASSWORD is not set in .env');
-      }
-    }
-
+    const storedUser: UserDocument | null = await getUser(username);
     if (!storedUser || storedUser.status !== 'active') {
       return NextResponse.json({ error: 'Invalid credentials or account disabled' }, { status: 401 });
     }

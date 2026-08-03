@@ -1,4 +1,5 @@
 import { Long, MongoClient } from 'mongodb';
+import bcrypt from 'bcryptjs';
 import nextEnv from '@next/env';
 import { errorSummary, writeOpsReport } from './lib/ops-report.mjs';
 
@@ -371,8 +372,52 @@ async function ensureIndexes() {
     { key: { updated_at: -1 }, name: 'metrics_updated_at_desc' },
   ])).map((name) => ({ database: appDbName, collection: 'app_metrics', name })));
 
+async function seedRootAdminUser(appDb) {
+  const users = appDb.collection('app_users');
+  const existingAdmin = await users.findOne({ username: 'admin' });
+  if (existingAdmin) {
+    return;
+  }
+
+  const initialPassword = process.env.INITIAL_ADMIN_PASSWORD;
+  if (!initialPassword) {
+    console.log('[SECURITY] INITIAL_ADMIN_PASSWORD is not set. Admin bootstrap skipped.');
+    return;
+  }
+
+  if (initialPassword.length < 8) {
+    console.warn('[SECURITY] INITIAL_ADMIN_PASSWORD is too weak (must be at least 8 characters). Admin account NOT provisioned.');
+    return;
+  }
+
+  const hash = await bcrypt.hash(initialPassword, 10);
+  const now = new Date().toISOString();
+  await users.updateOne(
+    { username: 'admin' },
+    {
+      $setOnInsert: {
+        username: 'admin',
+        passwordHash: hash,
+        role: 'root',
+        status: 'active',
+        createdAt: now,
+        createdBy: 'system:bootstrap',
+      },
+    },
+    { upsert: true }
+  );
+
+  maintenanceActions.push({
+    database: appDbName,
+    collection: 'app_users',
+    action: 'bootstrap_root_admin',
+    username: 'admin',
+  });
+}
+
   await seedOcsTariffPlan(open5gsDb, appDb);
   await provisionExistingOcsSubscribers(open5gsDb);
+  await seedRootAdminUser(appDb);
 }
 
 ensureIndexes()

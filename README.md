@@ -39,7 +39,7 @@ npm run dev
 
 Open `http://localhost:3000`.
 
-Set a strong `INITIAL_ADMIN_PASSWORD` in `.env` before first login. The app creates the `admin` account on first successful bootstrap login when it does not already exist.
+Set a strong `INITIAL_ADMIN_PASSWORD` in `.env` before running `npm run mongo:init`. The initialization script creates the initial `admin` account when it does not already exist.
 
 ## Environment
 

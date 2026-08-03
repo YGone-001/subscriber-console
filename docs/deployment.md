@@ -72,7 +72,7 @@ Check that `JWT_SECRET` exists, is not a placeholder, and is at least 32 bytes.
 
 ### Admin account is not created
 
-Ensure `INITIAL_ADMIN_PASSWORD` is set and satisfies the password policy: at least 10 characters with uppercase, lowercase, number, and symbol.
+Ensure `INITIAL_ADMIN_PASSWORD` is set in `.env` (at least 8 characters) and run `npm run mongo:init` to bootstrap the root `admin` user.
 
 ### Dashboard or API data is empty
 
