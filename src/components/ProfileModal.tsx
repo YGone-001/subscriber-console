@@ -8,6 +8,7 @@ import ProfileViewMode from "./profile/ProfileViewMode";
 import ProfileEditMode from "./profile/ProfileEditMode";
 import { useAuth } from "@/hooks/useAuth";
 import { ConfirmActionPanel, LoadingRows, OperationNotice } from "./OperationFeedback";
+import VisualDiffViewer from "./VisualDiffViewer";
 import "./modals.css";
 
 // Session type mapping (IPv4/IPv6/IPv4v6)
@@ -340,30 +341,6 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
     }
   };
 
-  const getVersionDiffRows = () => {
-    if (!selectedVersion) return [];
-    const current = profileSnapshot || {};
-    const previous = selectedVersion.profile || {};
-    const fields = [
-      { key: "title", label: t("prof_title") },
-      { key: "auth", label: t("sec_security_auth") },
-      { key: "ambr", label: t("sec_global_network") },
-      { key: "ocsDefaults", label: t("sec_billing_config") },
-      { key: "access_restriction_data", label: t("sec_access_restrict") },
-      { key: "sliceList", label: t("prof_sec_slices") },
-    ];
-
-    return fields.map(field => {
-      const oldValue = previous[field.key];
-      const newValue = current[field.key];
-      return {
-        key: field.key,
-        label: field.label,
-        changed: JSON.stringify(oldValue) !== JSON.stringify(newValue),
-      };
-    });
-  };
-
   const formatVersionTime = (value: string) => {
     try {
       return new Date(value).toLocaleString();
@@ -471,7 +448,6 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
 
   const renderVersionHistory = () => {
     if (!profileName) return null;
-    const diffRows = getVersionDiffRows();
 
     return (
       <div className="dash-card animate-fade-in pm-card" id="psec-versions">
@@ -522,7 +498,7 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
                 {t("prof_version_select")}
               </div>
             ) : (
-              <div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                 <div className="pm-version-diff-header">
                   <div>
                     <div className="pm-version-diff-title">
@@ -539,23 +515,13 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
                     </button>
                   )}
                 </div>
-                <div className="pm-diff-rows">
-                  {diffRows.map(row => (
-                    <div key={row.key} className="pm-diff-row">
-                      <span className="pm-diff-label">{row.label}</span>
-                      <span className={row.changed ? "pm-diff-changed" : "pm-diff-unchanged"}>
-                        {row.changed ? t("prof_version_changed") : t("prof_version_unchanged")}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-                <pre className="pm-diff-pre">
-                  {JSON.stringify({
-                    title: selectedVersion.profile?.title,
-                    updatedAt: selectedVersion.profile?.updatedAt || selectedVersion.profile?.createdAt,
-                    restoredFromVersionId: selectedVersion.profile?.restoredFromVersionId || null,
-                  }, null, 2)}
-                </pre>
+                <VisualDiffViewer
+                  oldData={selectedVersion.profile}
+                  newData={profileSnapshot}
+                  title={`${selectedVersion.profile?.title || selectedVersion.profileName} (v)`}
+                  defaultMode="semantic"
+                  compact
+                />
               </div>
             )}
           </div>

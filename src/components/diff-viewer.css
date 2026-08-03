@@ -1,0 +1,383 @@
+/* Visual Diff Viewer Design System */
+
+.diff-viewer-container {
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--surface-border);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
+  width: 100%;
+}
+
+/* Header & Controls */
+.diff-viewer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+  padding: 0.85rem 1.25rem;
+  background: var(--surface-hover);
+  border-bottom: 1px solid var(--surface-border);
+}
+
+.diff-viewer-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.diff-viewer-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-main);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.diff-stat-pill {
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.2rem 0.55rem;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.diff-stat-pill.add {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.diff-stat-pill.del {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.diff-stat-pill.mod {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.diff-stat-pill.clean {
+  background: var(--surface);
+  color: var(--text-secondary);
+  border: 1px solid var(--surface-border);
+}
+
+.diff-viewer-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.diff-mode-tabs {
+  display: flex;
+  background: var(--background);
+  padding: 3px;
+  border-radius: 8px;
+  border: 1px solid var(--surface-border);
+}
+
+.diff-mode-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.35rem 0.75rem;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.diff-mode-btn:hover {
+  color: var(--text-main);
+}
+
+.diff-mode-btn.active {
+  background: var(--primary);
+  color: #ffffff;
+}
+
+.diff-search-input {
+  background: var(--background);
+  border: 1px solid var(--surface-border);
+  color: var(--text-main);
+  padding: 0.35rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  width: 160px;
+}
+
+.diff-search-input:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.diff-filter-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.diff-btn-action {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.78rem;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+/* 1. Semantic Field View */
+.diff-semantic-body {
+  padding: 1.25rem;
+  max-height: 480px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.diff-field-card {
+  background: var(--surface);
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  padding: 0.9rem 1.15rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1.5rem;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.diff-field-card:hover {
+  background: var(--surface-hover);
+}
+
+.diff-field-card.added {
+  border-left: 3px solid #10b981;
+}
+
+.diff-field-card.removed {
+  border-left: 3px solid #ef4444;
+}
+
+.diff-field-card.modified {
+  border-left: 3px solid #f59e0b;
+}
+
+.diff-field-card.unchanged {
+  border-left: 3px solid var(--surface-border);
+  opacity: 0.8;
+}
+
+.diff-field-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 200px;
+}
+
+.diff-field-label-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.diff-field-label {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.diff-field-path {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-family: monospace;
+}
+
+.diff-category-badge {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  font-weight: 700;
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+  background: var(--surface-hover);
+  border: 1px solid var(--surface-border);
+  color: var(--text-secondary);
+}
+
+.diff-field-values {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex: 1;
+  justify-content: flex-end;
+}
+
+.diff-val-box {
+  padding: 0.45rem 0.85rem;
+  border-radius: 6px;
+  font-size: 0.84rem;
+  font-family: monospace;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diff-val-old {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  text-decoration: line-through;
+}
+
+.diff-val-new {
+  background: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  font-weight: 600;
+}
+
+.diff-val-unchanged {
+  background: var(--surface-hover);
+  color: var(--text-secondary);
+  border: 1px solid var(--surface-border);
+}
+
+.diff-arrow-icon {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+/* 2. Side-by-Side Split View */
+.diff-split-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  max-height: 480px;
+  overflow-y: auto;
+  background: var(--background);
+}
+
+.diff-split-pane {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--surface-border);
+}
+
+.diff-split-pane:last-child {
+  border-right: none;
+}
+
+.diff-split-pane-header {
+  padding: 0.5rem 1rem;
+  background: var(--surface-hover);
+  border-bottom: 1px solid var(--surface-border);
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.diff-split-pre {
+  margin: 0;
+  padding: 1rem;
+  font-size: 0.82rem;
+  font-family: "JetBrains Mono", Consolas, Menlo, monospace;
+  line-height: 1.6;
+  color: var(--text-main);
+  overflow-x: auto;
+}
+
+/* 3. Unified Patch View */
+.diff-unified-body {
+  max-height: 480px;
+  overflow-y: auto;
+  background: var(--background);
+  padding: 0.5rem 0;
+}
+
+.diff-line-row {
+  display: flex;
+  align-items: flex-start;
+  font-family: "JetBrains Mono", Consolas, Menlo, monospace;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  padding: 0.15rem 1rem;
+}
+
+.diff-line-row.add {
+  background: rgba(16, 185, 129, 0.12);
+  color: #10b981;
+}
+
+.diff-line-row.del {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+}
+
+.diff-line-row.normal {
+  color: var(--text-secondary);
+}
+
+.diff-line-nums {
+  display: flex;
+  gap: 0.5rem;
+  width: 60px;
+  flex-shrink: 0;
+  color: var(--text-muted);
+  user-select: none;
+  font-size: 0.75rem;
+}
+
+.diff-line-prefix {
+  width: 20px;
+  font-weight: 700;
+  user-select: none;
+}
+
+.diff-line-text {
+  flex: 1;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* Empty State in Diff */
+.diff-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 1.5rem;
+  color: var(--text-secondary);
+  gap: 0.5rem;
+  text-align: center;
+}
+
+.diff-empty-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-main);
+}

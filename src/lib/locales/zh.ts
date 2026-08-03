@@ -1615,6 +1615,25 @@ export const zh: Record<string, string> = {
     ocs_modal_copy_json: "复制原始 JSON",
     ocs_modal_copied: "已复制到剪贴板",
     ocs_inspect: "查看明细",
+
+    // -- Visual Diff Inspector --
+    diff_viewer_title: "可视差异检查器 (Diff)",
+    diff_stat_added: "项新增",
+    diff_stat_modified: "项修改",
+    diff_stat_removed: "项移除",
+    diff_no_changes: "未检测到任何变更",
+    diff_mode_semantic: "业务字段 (Semantic)",
+    diff_mode_split: "分屏对比 (Split)",
+    diff_mode_unified: "补丁格式 (Unified)",
+    diff_search_ph: "搜索字段或数值...",
+    diff_changes_only: "仅显示变更字段",
+    diff_copy_patch: "复制 Unified 补丁",
+    diff_copy_old: "复制变更前 JSON",
+    diff_copy_new: "复制变更后 JSON",
+    diff_no_differences_found: "未发现数据差异",
+    diff_no_differences_desc: "对比的两份配置或版本内容完全一致。",
+    diff_pane_previous: "变更前 (Previous)",
+    diff_pane_current: "变更后 (Current)",
 };
 
 

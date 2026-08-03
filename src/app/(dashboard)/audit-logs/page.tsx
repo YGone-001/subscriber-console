@@ -6,6 +6,7 @@ import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
 import { useI18n } from "@/components/I18nProvider";
 import { toCsvRow } from "@/lib/csv";
+import VisualDiffViewer from "@/components/VisualDiffViewer";
 import './audit-logs.css';
 
 interface AuditLog {
@@ -492,38 +493,19 @@ export default function AuditLogsPage() {
               <div>
                 <h2 className="audit-modal-title">{t("audit_modal_title")}</h2>
                 <div className="audit-modal-ref">
-                  {t("audit_modal_ref")} <span className="audit-modal-ref-id">{selectedLog.id}</span>
+                  {t("audit_modal_ref")} <span className="audit-modal-ref-id">{selectedLog.id}</span> · <span className="audit-modal-ref-action">{formatActionLabel(selectedLog.action)}</span> ({selectedLog.targetId})
                 </div>
               </div>
               <button className="btn btn-outline" onClick={() => setSelectedLog(null)}>{t("audit_modal_close")}</button>
             </div>
 
-            <div className="audit-modal-body">
-              <div className="audit-modal-col">
-                <div className="audit-modal-label-old">
-                  <div className="audit-modal-label-old-dot" /> {t("audit_modal_old")}
-                </div>
-                <div className="audit-modal-pre-wrap">
-                  <pre className="audit-modal-pre">
-                    {selectedLog.oldData ? JSON.stringify(selectedLog.oldData, null, 2) : t("audit_modal_null_old")}
-                  </pre>
-                </div>
-              </div>
-
-              <div className="audit-modal-arrow">
-                <ChevronRight size={32} />
-              </div>
-
-              <div className="audit-modal-col">
-                <div className="audit-modal-label-new">
-                  <div className="audit-modal-label-new-dot" /> {t("audit_modal_new")}
-                </div>
-                <div className="audit-modal-pre-wrap">
-                  <pre className="audit-modal-pre">
-                    {selectedLog.newData ? JSON.stringify(selectedLog.newData, null, 2) : t("audit_modal_null_new")}
-                  </pre>
-                </div>
-              </div>
+            <div className="audit-modal-body" style={{ padding: '1rem 1.5rem', display: 'block' }}>
+              <VisualDiffViewer
+                oldData={selectedLog.oldData}
+                newData={selectedLog.newData}
+                title={`${formatActionLabel(selectedLog.action)} · ${selectedLog.targetId}`}
+                defaultMode="semantic"
+              />
             </div>
           </div>
         </div>

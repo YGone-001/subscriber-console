@@ -8,6 +8,7 @@ import { fetcher } from "@/lib/fetcher";
 import { useAuth } from "@/hooks/useAuth";
 import { useI18n } from "@/components/I18nProvider";
 import { EmptyState, LoadingRows, OperationNotice } from "@/components/OperationFeedback";
+import VisualDiffViewer from "@/components/VisualDiffViewer";
 
 type ApprovalStatus = "pending" | "approved" | "rejected" | "executed" | "failed";
 type ApprovalAction =
@@ -325,10 +326,14 @@ export default function ApprovalCenterPanel() {
 
               <section>
                 <h3>{t("approvals_business_diff")}</h3>
-                <div className="approval-diff-grid">
-                  {Object.entries(selectedApproval.payload).slice(0, 8).map(([key, value]) => (
-                    <div key={key}><span>{key}</span><strong>{typeof value === "object" ? jsonPreview(value).slice(0, 120) : String(value)}</strong></div>
-                  ))}
+                <div style={{ marginTop: '0.5rem' }}>
+                  <VisualDiffViewer
+                    oldData={(selectedApproval.payload as any)?.previous || (selectedApproval.payload as any)?.current || null}
+                    newData={(selectedApproval.payload as any)?.changes || selectedApproval.payload}
+                    title={`${selectedApproval.action} · ${selectedApproval.targetId}`}
+                    defaultMode="semantic"
+                    compact
+                  />
                 </div>
               </section>
 

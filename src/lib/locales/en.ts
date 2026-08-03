@@ -1615,5 +1615,24 @@ export const en: Record<string, string> = {
     ocs_modal_copy_json: "Copy Raw JSON",
     ocs_modal_copied: "Copied to clipboard",
     ocs_inspect: "Inspect Details",
+
+    // -- Visual Diff Inspector --
+    diff_viewer_title: "Visual Diff Inspector",
+    diff_stat_added: "added",
+    diff_stat_modified: "modified",
+    diff_stat_removed: "removed",
+    diff_no_changes: "No Changes Detected",
+    diff_mode_semantic: "Semantic Fields",
+    diff_mode_split: "Side-by-Side",
+    diff_mode_unified: "Unified Patch",
+    diff_search_ph: "Search field / value...",
+    diff_changes_only: "Changes Only",
+    diff_copy_patch: "Copy Unified Patch",
+    diff_copy_old: "Copy Old JSON",
+    diff_copy_new: "Copy New JSON",
+    diff_no_differences_found: "No Differences Found",
+    diff_no_differences_desc: "The compared payloads or versions are identical.",
+    diff_pane_previous: "Previous (Old)",
+    diff_pane_current: "Current (New)",
   };
 
