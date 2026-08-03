@@ -28,6 +28,8 @@ export async function GET(request: Request) {
     const limit = parseInt(searchParams.get('limit') || '50', 10);
     const query = searchParams.get('q') || '';
     const status = searchParams.get('status') || 'all';
+    const sortField = searchParams.get('sortField') || searchParams.get('sort') || 'imsi';
+    const sortDirection = (searchParams.get('sortDirection') || searchParams.get('sortDir') || searchParams.get('order') || 'asc') === 'desc' ? 'desc' : 'asc';
     const msisdn = searchParams.get('msisdn') || '';
     const excludeImsi = searchParams.get('excludeImsi') || undefined;
     const statusFilter: SubscriberStatusFilter = (
@@ -49,8 +51,8 @@ export async function GET(request: Request) {
     }
 
     const result = detail
-      ? await listSubscriberRows(page, limit, query, statusFilter)
-      : await listSubscriberImsis(page, limit, query);
+      ? await listSubscriberRows(page, limit, query, statusFilter, sortField, sortDirection)
+      : await listSubscriberImsis(page, limit, query, sortDirection);
 
     return NextResponse.json(result);
   } catch (error) {

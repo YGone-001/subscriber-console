@@ -32,6 +32,8 @@ export type SubscriberListResult<T> = {
 };
 
 export type SubscriberStatusFilter = 'all' | 'active' | 'restricted' | 'lowTraffic';
+export type SubscriberSortField = 'imsi' | 'status' | 'plmn' | 'policy' | 'usage' | 'lastActive';
+export type SubscriberSortDirection = 'asc' | 'desc';
 
 export type SubscriberSummary = {
   total: number;
@@ -452,11 +454,13 @@ function toSubscriberRow(
 export async function listSubscriberImsis(
   page: number,
   limit: number,
-  query = ''
+  query = '',
+  sortDirection: string = 'asc'
 ): Promise<SubscriberListResult<string>> {
   const filter = subscriberFilter(query);
   const pageValue = safePage(page);
   const limitValue = safeLimit(limit);
+  const sortDir = sortDirection === 'desc' ? -1 : 1;
 
   if (!filter) {
     return { subscribers: [], total: 0, page: pageValue, limit: limitValue };
@@ -467,7 +471,7 @@ export async function listSubscriberImsis(
     collection.countDocuments(filter),
     collection
       .find(filter, { projection: { imsi: 1 } })
-      .sort({ imsi: 1 })
+      .sort({ imsi: sortDir })
       .skip((pageValue - 1) * limitValue)
       .limit(limitValue)
       .toArray(),
@@ -485,7 +489,9 @@ export async function listSubscriberRows(
   page: number,
   limit: number,
   query = '',
-  statusFilter: SubscriberStatusFilter = 'all'
+  statusFilter: SubscriberStatusFilter = 'all',
+  sortField: string = 'imsi',
+  sortDirection: string = 'asc'
 ): Promise<SubscriberListResult<SubscriberRow>> {
   const filter = subscriberFilter(query);
   const pageValue = safePage(page);
@@ -520,6 +526,41 @@ export async function listSubscriberRows(
   });
   const summary = subscriberSummary(rows);
   const filteredRows = rows.filter((row) => matchesSubscriberStatusFilter(row, statusFilter));
+
+  const validSortFields = new Set(['imsi', 'status', 'plmn', 'policy', 'usage', 'lastActive']);
+  const normalizedSortField = validSortFields.has(sortField) ? (sortField as SubscriberSortField) : 'imsi';
+  const normalizedSortDir: SubscriberSortDirection = sortDirection === 'desc' ? 'desc' : 'asc';
+
+  filteredRows.sort((a, b) => {
+    let cmp = 0;
+    if (normalizedSortField === 'usage') {
+      const valA = Number(a.traffic?.used || 0);
+      const valB = Number(b.traffic?.used || 0);
+      cmp = valA - valB;
+    } else if (normalizedSortField === 'lastActive') {
+      const timeA = new Date(a.lastActive).getTime();
+      const timeB = new Date(b.lastActive).getTime();
+      cmp = (Number.isNaN(timeA) ? 0 : timeA) - (Number.isNaN(timeB) ? 0 : timeB);
+    } else if (normalizedSortField === 'plmn') {
+      const valA = a.plmn || a.imsi.slice(0, 5);
+      const valB = b.plmn || b.imsi.slice(0, 5);
+      cmp = valA.localeCompare(valB);
+    } else if (normalizedSortField === 'policy') {
+      const valA = a.policyName || a.policy || '';
+      const valB = b.policyName || b.policy || '';
+      cmp = valA.localeCompare(valB);
+    } else if (normalizedSortField === 'status') {
+      cmp = (a.status || '').localeCompare(b.status || '');
+    } else {
+      // default: imsi
+      cmp = a.imsi.localeCompare(b.imsi);
+    }
+
+    if (cmp !== 0) {
+      return normalizedSortDir === 'desc' ? -cmp : cmp;
+    }
+    return a.imsi.localeCompare(b.imsi);
+  });
 
   return {
     subscribers: filteredRows.slice((pageValue - 1) * limitValue, pageValue * limitValue),

@@ -83,7 +83,7 @@ export default function SubscriberPage() {
   const [statusFilter, setStatusFilter] = useState<SubscriberStatusFilter>("all");
 
   const subscriberQuery = searchQuery.trim();
-  const subscribersUrl = `/api/subscribers?detail=true&page=${currentPage}&limit=${pageSize}${subscriberQuery ? `&q=${encodeURIComponent(subscriberQuery)}` : ""}${statusFilter !== "all" ? `&status=${statusFilter}` : ""}`;
+  const subscribersUrl = `/api/subscribers?detail=true&page=${currentPage}&limit=${pageSize}${subscriberQuery ? `&q=${encodeURIComponent(subscriberQuery)}` : ""}${statusFilter !== "all" ? `&status=${statusFilter}` : ""}&sortField=${sortField}&sortDirection=${sortDirection}`;
   const { data: subscribersData, isLoading, mutate: mutateSubscribers } = useSWR<SubscribersResponse>(subscribersUrl, fetcher, {
     keepPreviousData: true,
   });
@@ -208,14 +208,14 @@ export default function SubscriberPage() {
   const plmnMap = useMemo(() => {
     const map = new Map<string, PlmnRecord>();
     mccMncDb.forEach((item) => {
-      // 瀛樺偍鏍煎紡: "MCCMNC" -> Record
+      // 存储格式: "MCCMNC" -> Record
       map.set(`${item.mcc}${item.mnc}`, item);
     });
     return map;
   }, [mccMncDb]);
 
   /**
-   * 鏍稿績瑙ｆ瀽绠楁硶 (Longest Prefix Match)
+   * 核心解析算法 (Longest Prefix Match)
    * Supports global 2-digit and 3-digit MNC identification.
    */
   const resolveNetwork = (imsi: string) => {
@@ -261,32 +261,9 @@ export default function SubscriberPage() {
     { key: "lowTraffic" as const, label: t("subscriber_summary_low_traffic"), value: subscriberSummary.lowTraffic, tone: "warning" },
   ];
 
-  const sortedSubscribers = [...subscribers].sort((a, b) => {
-    let valA = a[sortField] as any;
-    let valB = b[sortField] as any;
-
-    if (sortField === "usage") {
-       valA = a.traffic?.used || 0;
-       valB = b.traffic?.used || 0;
-    } else if (sortField === "lastActive") {
-       valA = new Date(a.lastActive).getTime();
-       valB = new Date(b.lastActive).getTime();
-    } else if (sortField === "plmn") {
-       valA = resolveNetwork(a.imsi).plmn;
-       valB = resolveNetwork(b.imsi).plmn;
-    } else if (sortField === "policy") {
-       valA = a.policyName || a.policy || "";
-       valB = b.policyName || b.policy || "";
-    }
-
-    if (valA < valB) return sortDirection === "asc" ? -1 : 1;
-    if (valA > valB) return sortDirection === "asc" ? 1 : -1;
-    return 0;
-  });
-
   const totalPages = Math.max(1, Math.ceil(totalSubscribers / pageSize));
   const displayPage = Math.min(currentPage, totalPages);
-  const paginatedSubscribers = sortedSubscribers;
+  const paginatedSubscribers = subscribers;
   const pageImsis = paginatedSubscribers.map((s) => s.imsi);
   const selectedOnPageCount = pageImsis.filter((imsi) => selectedImsis.includes(imsi)).length;
   const isAllPageSelected = pageImsis.length > 0 && selectedOnPageCount === pageImsis.length;
@@ -551,7 +528,7 @@ export default function SubscriberPage() {
             message: t("dh_import_complete"),
           });
         }}
-        subscribers={sortedSubscribers}
+        subscribers={subscribers}
         selectedImsis={selectedImsis}
       />
     </>
