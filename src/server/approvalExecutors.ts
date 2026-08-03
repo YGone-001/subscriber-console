@@ -16,7 +16,7 @@ import {
   deleteSubscriber,
   importSubscribersFromRecords,
 } from '@/server/repositories/subscriberRepository';
-import { healSubscriberDocument } from '@/server/repositories/systemAuditRepository';
+import { batchHealSubscriberDocuments, healSubscriberDocument } from '@/server/repositories/systemAuditRepository';
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -153,10 +153,20 @@ export async function executeApproval(approval: ApprovalDocument, request: Reque
 
   if (approval.action === 'SYSTEM_HEAL') {
     const payload = asRecord(approval.payload);
+    const profileName = payload.profileName ? String(payload.profileName) : undefined;
+
+    if (Array.isArray(payload.anomalies) && payload.anomalies.length > 0) {
+      const result = await batchHealSubscriberDocuments(
+        payload.anomalies as Array<{ imsi: string; type: string }>,
+        profileName
+      );
+      logAudit('HEAL', `batch:${payload.anomalies.length}`, null, { ...result, approvalId: approval.id }, request);
+      return result;
+    }
+
     const imsi = String(payload.imsi || '');
     const type = String(payload.type || '');
-    const profileName = payload.profileName ? String(payload.profileName) : undefined;
-    if (!/^\d{15}$/.test(imsi)) throw new Error('IMSI must be exactly 15 digits');
+    if (!/^\d{15}$|^UNKNOWN$/.test(imsi)) throw new Error('IMSI must be exactly 15 digits or UNKNOWN');
     if (!type) throw new Error('type is required');
 
     await healSubscriberDocument(imsi, type, profileName);

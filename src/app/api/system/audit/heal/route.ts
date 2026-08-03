@@ -19,8 +19,8 @@ export async function POST(request: Request) {
     if (!imsi || !type) {
       return NextResponse.json({ error: 'imsi and type are required' }, { status: 400 });
     }
-    if (!/^\d{15}$/.test(String(imsi))) {
-      return NextResponse.json({ error: 'IMSI must be exactly 15 digits' }, { status: 400 });
+    if (!/^\d{15}$|^UNKNOWN$/.test(String(imsi))) {
+      return NextResponse.json({ error: 'IMSI must be exactly 15 digits or UNKNOWN' }, { status: 400 });
     }
 
     if (capabilityDecision(auth.auth.role, 'system_heal') === 'approval') {
