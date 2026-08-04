@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 
 const analyticsCockpitSource = readFileSync(new URL('../src/components/AnalyticsCockpit.tsx', import.meta.url), 'utf8');
+const workbenchPanelSource = readFileSync(new URL('../src/components/analytics/WorkbenchPanel.tsx', import.meta.url), 'utf8');
 const analyticsRepoSource = readFileSync(new URL('../src/server/repositories/analyticsRepository.ts', import.meta.url), 'utf8');
 const zhLocale = readFileSync(new URL('../src/lib/locales/zh.ts', import.meta.url), 'utf8');
 const enLocale = readFileSync(new URL('../src/lib/locales/en.ts', import.meta.url), 'utf8');
@@ -11,15 +12,24 @@ test('Dashboard OCS components exist', () => {
   assert.equal(existsSync(new URL('../src/components/analytics/OcsBalanceCapacityCard.tsx', import.meta.url)), true);
   assert.equal(existsSync(new URL('../src/components/analytics/OcsSessionTelemetryCard.tsx', import.meta.url)), true);
   assert.equal(existsSync(new URL('../src/components/analytics/TariffPlanDistributionChart.tsx', import.meta.url)), true);
+  assert.equal(existsSync(new URL('../src/components/analytics/WorkbenchPanel.tsx', import.meta.url)), true);
 });
 
-test('AnalyticsCockpit integrates OCS telemetry and view switchers', () => {
+test('AnalyticsCockpit integrates OCS telemetry and elevated workbench layout', () => {
   assert.match(analyticsCockpitSource, /OcsBalanceCapacityCard/);
   assert.match(analyticsCockpitSource, /OcsSessionTelemetryCard/);
   assert.match(analyticsCockpitSource, /TariffPlanDistributionChart/);
-  assert.match(analyticsCockpitSource, /dash_view_all/);
-  assert.match(analyticsCockpitSource, /dash_view_ocs/);
-  assert.match(analyticsCockpitSource, /dash_view_network/);
+  assert.match(analyticsCockpitSource, /WorkbenchPanel/);
+  assert.match(analyticsCockpitSource, /analytics-kpi-grid/);
+  assert.match(analyticsCockpitSource, /analytics-ocs-grid/);
+  assert.match(analyticsCockpitSource, /analytics-chart-grid/);
+});
+
+test('WorkbenchPanel incorporates both Action Items and Change Queue subtabs', () => {
+  assert.match(workbenchPanelSource, /dash_workbench_tab_tasks/);
+  assert.match(workbenchPanelSource, /dash_workbench_tab_changes/);
+  assert.match(workbenchPanelSource, /analytics-workqueue/);
+  assert.match(workbenchPanelSource, /analytics-change-grid/);
 });
 
 test('Analytics repository performs robust concurrent OCS aggregations', () => {
@@ -34,11 +44,11 @@ test('Analytics repository performs robust concurrent OCS aggregations', () => {
   assert.match(analyticsRepoSource, /orphanedReservations/);
 });
 
-test('Dashboard OCS i18n keys are fully aligned across zh and en', () => {
+test('Dashboard OCS and Workbench i18n keys are fully aligned across zh and en', () => {
   const ocsKeys = [
-    'dash_view_all',
-    'dash_view_ocs',
-    'dash_view_network',
+    'dash_workbench_tab_tasks',
+    'dash_workbench_tab_changes',
+    'dash_kpi_detail_burn_exhaust',
     'dash_ocs_kpi_active_sessions',
     'dash_ocs_kpi_reservations',
     'dash_ocs_kpi_utilization',

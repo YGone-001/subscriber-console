@@ -1,20 +1,17 @@
 "use client";
 import './analytics.css';
 
-import React, { useState } from "react";
+import React from "react";
 import useSWR from "swr";
 import {
   Activity,
   AlertCircle,
-  Clock,
   Globe,
   TrendingUp,
   Radio,
-  Layers,
   Database,
   ShieldCheck,
   AlertTriangle,
-  LayoutGrid,
 } from "lucide-react";
 import { useTheme } from "./ThemeProvider";
 import { fetcher } from "@/lib/fetcher";
@@ -28,17 +25,13 @@ import SkeletonDashboard from "./analytics/SkeletonDashboard";
 import TopConsumerChart from "./analytics/TopConsumerChart";
 import PlmnDistributionChart from "./analytics/PlmnDistributionChart";
 import WorkbenchPanel from "./analytics/WorkbenchPanel";
-import ChangeQueuePanel from "./analytics/ChangeQueuePanel";
 import OcsBalanceCapacityCard from "./analytics/OcsBalanceCapacityCard";
 import OcsSessionTelemetryCard from "./analytics/OcsSessionTelemetryCard";
 import TariffPlanDistributionChart from "./analytics/TariffPlanDistributionChart";
 
-type DashboardTab = "all" | "ocs" | "network";
-
 export default function AnalyticsCockpit() {
   const { theme } = useTheme();
   const { t } = useI18n();
-  const [activeTab, setActiveTab] = useState<DashboardTab>("all");
 
   const { data, error, isLoading } = useSWR<MetricsData>("/api/analytics/metrics", fetcher, { refreshInterval: 5000 });
   const { data: sparkData } = useSWR<SparklineData>("/api/analytics/sparkline", fetcher, { refreshInterval: 30000 });
@@ -70,7 +63,6 @@ export default function AnalyticsCockpit() {
   const trafficSparkline = sparkData?.traffic || [];
   const subscriberSparkline = sparkData?.subscribers || [];
   const plmnSparkline = createDistributionSparkline(plmnDist);
-  const ratingSparkline = createDistributionSparkline(ratesDist);
 
   const gbTraffic = totalTraffic / BYTES_IN_GB;
   const burnRateGbHr = computeHourlyBurnGb(trafficSparkline);
@@ -80,7 +72,6 @@ export default function AnalyticsCockpit() {
   const ratingGroupCount = ratesDist.length;
   const topConsumerShare = totalTraffic > 0 && top5[0]?.balance ? (top5[0].balance / totalTraffic) * 100 : 0;
   const plmnCoverage = normalizeRingValue((plmnCount / 8) * 100);
-  const ratingCoverage = normalizeRingValue((ratingGroupCount / 12) * 100);
   const exhaustionTone = theoreticalLifeHr > 0 && theoreticalLifeHr < 24 ? "danger" : theoreticalLifeHr > 0 && theoreticalLifeHr < 72 ? "warning" : "normal";
   const activeAlerts = (alertData?.alerts || []).filter((alert) => !alert.is_acknowledged);
   const activeCriticalCount = alertData?.activeCriticalCount || activeAlerts.filter((alert) => alert.level === "CRITICAL").length;
@@ -224,189 +215,107 @@ export default function AnalyticsCockpit() {
 
   return (
     <div className="analytics-root">
-      {/* Dashboard View Switcher */}
-      <div className="analytics-view-header">
-        <div className="analytics-view-tabs" role="tablist">
-          <button
-            type="button"
-            className={`analytics-view-tab ${activeTab === "all" ? "active" : ""}`}
-            onClick={() => setActiveTab("all")}
-            role="tab"
-            aria-selected={activeTab === "all"}
-          >
-            <LayoutGrid size={15} />
-            <span>{t("dash_view_all")}</span>
-          </button>
-          <button
-            type="button"
-            className={`analytics-view-tab ${activeTab === "ocs" ? "active" : ""}`}
-            onClick={() => setActiveTab("ocs")}
-            role="tab"
-            aria-selected={activeTab === "ocs"}
-          >
-            <Database size={15} />
-            <span>{t("dash_view_ocs")}</span>
-            {ocsSessions?.activeSessions !== undefined && (
-              <span className="analytics-view-tab-count">{ocsSessions.activeSessions}</span>
-            )}
-          </button>
-          <button
-            type="button"
-            className={`analytics-view-tab ${activeTab === "network" ? "active" : ""}`}
-            onClick={() => setActiveTab("network")}
-            role="tab"
-            aria-selected={activeTab === "network"}
-          >
-            <Globe size={15} />
-            <span>{t("dash_view_network")}</span>
-            <span className="analytics-view-tab-count">{subscriberCount}</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Primary KPI Grid (Network & Core) */}
-      {(activeTab === "all" || activeTab === "network") && (
-        <div className="analytics-kpi-grid">
-          <KpiCard
-            color="#4e73df"
-            icon={<TrendingUp size={20} />}
-            label={t("dash_kpi_total_traffic")}
-            value={
-              <>
-                <CountUpNumber value={gbTraffic} decimals={2} />
-                <span>GB</span>
-              </>
-            }
-            detail={burnRateGbHr > 0 ? t("dash_kpi_detail_burn_trend", { rate: burnRateGbHr.toFixed(2) }) : t("dash_kpi_detail_burn_none")}
-            sparkline={trafficSparkline}
-            ringValue={topConsumerShare}
-          />
-
-          <KpiCard
-            color="#1cc88a"
-            icon={<Activity size={20} />}
-            label={t("dash_kpi_active_subs")}
-            value={<CountUpNumber value={subscriberCount} />}
-            detail={subscriberSparkline.length > 1 ? t("dash_kpi_detail_sub_trend") : t("dash_kpi_detail_sub_wait")}
-            sparkline={subscriberSparkline}
-            ringValue={subscriberCount > 0 ? 100 : 0}
-          />
-
-          <KpiCard
-            color="#f6c23e"
-            icon={<Globe size={20} />}
-            label={t("dash_kpi_plmn_active")}
-            value={<CountUpNumber value={plmnCount} />}
-            detail={ratingGroupCount > 0 ? t("dash_kpi_detail_rating_mapped", { count: ratingGroupCount }) : t("dash_kpi_detail_rating_none")}
-            sparkline={plmnSparkline}
-            ringValue={plmnCoverage}
-            tone="warning"
-          />
-
-          <KpiCard
-            color="#e74a3b"
-            icon={<Clock size={20} />}
-            label={t("dash_kpi_exhaustion")}
-            value={
-              theoreticalLifeHr > 0 ? (
-                <>
-                  <CountUpNumber value={theoreticalLifeHr} decimals={1} />
-                  <span>{t("dash_unit_hours")}</span>
-                </>
-              ) : (
-                <>--</>
-              )
-            }
-            detail={theoreticalLifeHr > 0 ? t("dash_kpi_detail_exhaust_based") : t("dash_kpi_detail_exhaust_stable")}
-            sparkline={ratingSparkline.length ? ratingSparkline : trafficSparkline}
-            ringValue={ratingCoverage}
-            tone={exhaustionTone}
-          />
-        </div>
-      )}
-
-      {/* OCS Dedicated KPI Deck */}
-      {(activeTab === "all" || activeTab === "ocs") && (
-        <div className="analytics-kpi-grid">
-          <KpiCard
-            color="#1cc88a"
-            icon={<Radio size={20} />}
-            label={t("dash_ocs_kpi_active_sessions")}
-            value={<CountUpNumber value={ocsSessions?.activeSessions || 0} />}
-            detail={t("dash_ocs_kpi_active_sessions_detail")}
-            ringValue={ocsSessions?.totalSessions ? normalizeRingValue(((ocsSessions.activeSessions || 0) / ocsSessions.totalSessions) * 100) : 0}
-            tone="normal"
-          />
-
-          <KpiCard
-            color="#36b9cc"
-            icon={<Layers size={20} />}
-            label={t("dash_ocs_kpi_reservations")}
-            value={<CountUpNumber value={ocsReservations?.activeReservations || 0} />}
-            detail={t("dash_ocs_kpi_reservations_detail", { count: ocsReservations?.activeReservations || 0 })}
-            ringValue={ocsReservations?.totalReservations ? normalizeRingValue(((ocsReservations.activeReservations || 0) / ocsReservations.totalReservations) * 100) : 0}
-          />
-
-          <KpiCard
-            color="#4e73df"
-            icon={<Database size={20} />}
-            label={t("dash_ocs_kpi_utilization")}
-            value={
-              <>
-                <CountUpNumber value={utilizationRate} decimals={1} />
-                <span>%</span>
-              </>
-            }
-            detail={t("dash_ocs_kpi_utilization_detail", { rate: utilizationRate.toFixed(1) })}
-            ringValue={utilizationRate}
-            tone={utilizationRate >= 85 ? "danger" : utilizationRate >= 65 ? "warning" : "normal"}
-          />
-
-          <KpiCard
-            color={brokenInvariants === 0 ? "#1cc88a" : "#e74a3b"}
-            icon={brokenInvariants === 0 ? <ShieldCheck size={20} /> : <AlertTriangle size={20} />}
-            label={t("dash_ocs_kpi_invariants")}
-            value={brokenInvariants === 0 ? "100%" : `${brokenInvariants} !`}
-            detail={brokenInvariants === 0 ? t("dash_ocs_kpi_invariants_ok") : t("dash_ocs_kpi_invariants_broken", { count: brokenInvariants })}
-            ringValue={brokenInvariants === 0 ? 100 : Math.max(0, 100 - brokenInvariants * 10)}
-            tone={brokenInvariants === 0 ? "normal" : "danger"}
-          />
-        </div>
-      )}
-
-      {/* OCS Telemetry Panels (Capacity Pool & Real-time Sessions) */}
-      {(activeTab === "all" || activeTab === "ocs") && (
-        <div className="analytics-chart-grid">
-          <OcsBalanceCapacityCard metrics={ocsBalances} t={t} />
-          <OcsSessionTelemetryCard sessions={ocsSessions} reservations={ocsReservations} t={t} />
-        </div>
-      )}
-
-      {/* Charts (Tariff Plan, Top Consumers & PLMN Distribution) */}
-      <div className="analytics-chart-grid">
-        {(activeTab === "all" || activeTab === "ocs") && (
-          <TariffPlanDistributionChart tariffPlanDist={tariffPlanDist} theme={theme} t={t} />
-        )}
-        {(activeTab === "all" || activeTab === "network") && (
-          <TopConsumerChart top5={top5} theme={theme} t={t} />
-        )}
-        {(activeTab === "all" || activeTab === "network") && (
-          <PlmnDistributionChart plmnDist={plmnDist} theme={theme} t={t} />
-        )}
-      </div>
-
-      {/* Operational Workbench & Change Release Queue */}
+      {/* 1. Operational Workbench & Change Release Queue (Elevated to top) */}
       <WorkbenchPanel
         visibleWorkItems={visibleWorkItems}
+        changeQueue={changeQueue}
         operationsScore={operationsScore}
         activeAlertCount={activeAlertCount}
-        subscriberCount={subscriberCount}
-        plmnCount={plmnCount}
-        topImsi={topImsi}
         t={t}
       />
 
-      <ChangeQueuePanel changeQueue={changeQueue} t={t} />
+      {/* 2. Consolidated Primary KPI Grid (6 High-impact cards) */}
+      <div className="analytics-kpi-grid">
+        <KpiCard
+          color="#4e73df"
+          icon={<TrendingUp size={20} />}
+          label={t("dash_kpi_total_traffic")}
+          value={
+            <>
+              <CountUpNumber value={gbTraffic} decimals={2} />
+              <span>GB</span>
+            </>
+          }
+          detail={
+            burnRateGbHr > 0
+              ? (theoreticalLifeHr > 0
+                  ? t("dash_kpi_detail_burn_exhaust", { rate: burnRateGbHr.toFixed(2), hours: theoreticalLifeHr.toFixed(1) })
+                  : t("dash_kpi_detail_burn_trend", { rate: burnRateGbHr.toFixed(2) }))
+              : t("dash_kpi_detail_burn_none")
+          }
+          sparkline={trafficSparkline}
+          ringValue={topConsumerShare}
+        />
+
+        <KpiCard
+          color="#1cc88a"
+          icon={<Activity size={20} />}
+          label={t("dash_kpi_active_subs")}
+          value={<CountUpNumber value={subscriberCount} />}
+          detail={subscriberSparkline.length > 1 ? t("dash_kpi_detail_sub_trend") : t("dash_kpi_detail_sub_wait")}
+          sparkline={subscriberSparkline}
+          ringValue={subscriberCount > 0 ? 100 : 0}
+        />
+
+        <KpiCard
+          color="#f6c23e"
+          icon={<Globe size={20} />}
+          label={t("dash_kpi_plmn_active")}
+          value={<CountUpNumber value={plmnCount} />}
+          detail={ratingGroupCount > 0 ? t("dash_kpi_detail_rating_mapped", { count: ratingGroupCount }) : t("dash_kpi_detail_rating_none")}
+          sparkline={plmnSparkline}
+          ringValue={plmnCoverage}
+          tone="warning"
+        />
+
+        <KpiCard
+          color="#1cc88a"
+          icon={<Radio size={20} />}
+          label={t("dash_ocs_kpi_active_sessions")}
+          value={<CountUpNumber value={ocsSessions?.activeSessions || 0} />}
+          detail={t("dash_ocs_kpi_active_sessions_detail")}
+          ringValue={ocsSessions?.totalSessions ? normalizeRingValue(((ocsSessions.activeSessions || 0) / ocsSessions.totalSessions) * 100) : 0}
+          tone="normal"
+        />
+
+        <KpiCard
+          color="#4e73df"
+          icon={<Database size={20} />}
+          label={t("dash_ocs_kpi_utilization")}
+          value={
+            <>
+              <CountUpNumber value={utilizationRate} decimals={1} />
+              <span>%</span>
+            </>
+          }
+          detail={t("dash_ocs_kpi_utilization_detail", { rate: utilizationRate.toFixed(1) })}
+          ringValue={utilizationRate}
+          tone={utilizationRate >= 85 ? "danger" : utilizationRate >= 65 ? "warning" : "normal"}
+        />
+
+        <KpiCard
+          color={brokenInvariants === 0 ? "#1cc88a" : "#e74a3b"}
+          icon={brokenInvariants === 0 ? <ShieldCheck size={20} /> : <AlertTriangle size={20} />}
+          label={t("dash_ocs_kpi_invariants")}
+          value={brokenInvariants === 0 ? "100%" : `${brokenInvariants} !`}
+          detail={brokenInvariants === 0 ? t("dash_ocs_kpi_invariants_ok") : t("dash_ocs_kpi_invariants_broken", { count: brokenInvariants })}
+          ringValue={brokenInvariants === 0 ? 100 : Math.max(0, 100 - brokenInvariants * 10)}
+          tone={brokenInvariants === 0 ? "normal" : "danger"}
+        />
+      </div>
+
+      {/* 3. OCS Telemetry Panels (Capacity Pool & Real-time Sessions) */}
+      <div className="analytics-ocs-grid">
+        <OcsBalanceCapacityCard metrics={ocsBalances} t={t} />
+        <OcsSessionTelemetryCard sessions={ocsSessions} reservations={ocsReservations} t={t} />
+      </div>
+
+      {/* 4. Telemetry Charts (Tariff Plan, Top Consumers & PLMN Distribution) */}
+      <div className="analytics-chart-grid">
+        <TariffPlanDistributionChart tariffPlanDist={tariffPlanDist} theme={theme} t={t} />
+        <TopConsumerChart top5={top5} theme={theme} t={t} />
+        <PlmnDistributionChart plmnDist={plmnDist} theme={theme} t={t} />
+      </div>
     </div>
   );
 }

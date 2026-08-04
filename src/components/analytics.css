@@ -27,6 +27,14 @@
 
   .analytics-workbench-title {
     display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .analytics-workbench-heading {
+    display: flex;
     align-items: flex-start;
     gap: 0.7rem;
   }
@@ -43,6 +51,64 @@
     color: var(--text-muted);
     font-size: 0.82rem;
     line-height: 1.4;
+  }
+
+  .analytics-subtabs-nav {
+    display: inline-flex;
+    align-items: center;
+    background: var(--header-bg);
+    border: 1px solid var(--surface-border);
+    border-radius: 999px;
+    padding: 3px;
+    gap: 3px;
+  }
+
+  .analytics-subtab-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem 0.75rem;
+    border: none;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    font-weight: 750;
+    cursor: pointer;
+    transition: all 0.18s ease;
+  }
+
+  .analytics-subtab-btn:hover {
+    color: var(--text-main);
+    background: var(--surface-hover);
+  }
+
+  .analytics-subtab-btn.active {
+    background: var(--primary);
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(78, 115, 223, 0.35);
+  }
+
+  .analytics-subtab-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 0.35rem;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 800;
+  }
+
+  .analytics-subtab-btn.active .analytics-subtab-badge {
+    background: rgba(255, 255, 255, 0.25);
+    color: #fff;
+  }
+
+  .analytics-subtab-btn:not(.active) .analytics-subtab-badge {
+    background: var(--surface-border);
+    color: var(--text-muted);
   }
 
   .analytics-workqueue {
@@ -358,7 +424,7 @@
 
   .analytics-kpi-grid {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 1rem;
   }
 
@@ -487,9 +553,15 @@
     opacity: 0.65;
   }
 
-  .analytics-chart-grid {
+  .analytics-ocs-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+  }
+
+  .analytics-chart-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 1rem;
   }
 
@@ -645,10 +717,18 @@
     .analytics-kpi-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
+
+    .analytics-chart-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
   }
 
   @media (max-width: 980px) {
     .analytics-workqueue {
+      grid-template-columns: 1fr;
+    }
+
+    .analytics-ocs-grid {
       grid-template-columns: 1fr;
     }
 
@@ -690,64 +770,6 @@
   }
 
   /* --- OCS Metrics & Telemetry Modern Aesthetics --- */
-  .analytics-view-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    flex-wrap: wrap;
-    padding-bottom: 0.25rem;
-  }
-
-  .analytics-view-tabs {
-    display: inline-flex;
-    background: var(--header-bg);
-    border: 1px solid var(--surface-border);
-    border-radius: 999px;
-    padding: 3px;
-    gap: 3px;
-  }
-
-  .analytics-view-tab {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.45rem;
-    padding: 0.4rem 0.85rem;
-    border: none;
-    border-radius: 999px;
-    background: transparent;
-    color: var(--text-secondary);
-    font-size: 0.82rem;
-    font-weight: 750;
-    cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-
-  .analytics-view-tab:hover {
-    color: var(--text-main);
-    background: var(--surface-hover);
-  }
-
-  .analytics-view-tab.active {
-    background: var(--primary);
-    color: #fff;
-    box-shadow: 0 4px 12px rgba(78, 115, 223, 0.35);
-  }
-
-  .analytics-view-tab-count {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0.1rem 0.4rem;
-    border-radius: 999px;
-    font-size: 0.7rem;
-    background: rgba(255, 255, 255, 0.2);
-  }
-
-  .analytics-view-tab:not(.active) .analytics-view-tab-count {
-    background: var(--surface-border);
-    color: var(--text-muted);
-  }
 
   .analytics-ocs-icon {
     width: 36px;
