@@ -5,22 +5,27 @@
  * Automatically handles throwing standard HTTP errors (like 404, 500)
  * so that SWR's `error` state is properly triggered.
  */
-export const fetcher = async (url: string) => {
+export interface FetchError extends Error {
+  status?: number;
+  info?: any;
+}
+
+export const fetcher = async (url: string): Promise<any> => {
   const res = await fetch(url);
 
   if (!res.ok) {
-    // Attempt to extract server error message if present
     let errorMsg = 'An error occurred while fetching the data.';
+    let errorInfo: any = null;
     try {
-      const errorData = await res.json();
-      errorMsg = errorData.error || errorMsg;
+      errorInfo = await res.json();
+      errorMsg = errorInfo.error || errorInfo.message || errorMsg;
     } catch {
-      // Fallback to HTTP status text
       errorMsg = res.statusText || errorMsg;
     }
 
-    const error = new Error(errorMsg) as Error & { status: number };
+    const error = new Error(errorMsg) as FetchError;
     error.status = res.status;
+    error.info = errorInfo;
     throw error;
   }
 

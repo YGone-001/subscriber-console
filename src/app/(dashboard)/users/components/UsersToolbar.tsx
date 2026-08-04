@@ -1,9 +1,8 @@
 import { useI18n } from "@/components/I18nProvider";
 import { 
   Search, SlidersHorizontal, RefreshCw, Download, 
-  CalendarDays, Trash2, KeyRound, Lock, Shield, UserCheck, X
+  CalendarDays, X
 } from "lucide-react";
-import * as T from "../types";
 import { VALID_ROLES, VALID_STATUS, RoleFilter, StatusFilter, CreatedFilter, BinaryFilter } from "../types";
 
 export function UsersToolbar(props: any) {

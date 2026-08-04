@@ -1,12 +1,12 @@
 "use client";
 
 import React, { useEffect, useState, useMemo } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Plus, Layers, Download, Users, Trash2, DatabaseZap, PenLine, MoreHorizontal, Settings2, FileUp, Copy, CheckCircle2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Plus, Layers } from "lucide-react";
 import SubscriberModal from "@/components/SubscriberModal";
 import BatchCreateModal from "@/components/BatchCreateModal";
 import BulkPolicyModal from "@/components/BulkPolicyModal";
 import DataHub from "@/components/DataHub";
-import { ConfirmActionPanel, EmptyState, LoadingRows, OperationNotice } from "@/components/OperationFeedback";
+import { ConfirmActionPanel, OperationNotice } from "@/components/OperationFeedback";
 import { useI18n } from "@/components/I18nProvider";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
@@ -19,7 +19,7 @@ import "./subscribers.css";
 import { SubscriberToolbar } from "./components/SubscriberToolbar";
 import { SubscriberTable } from "./components/SubscriberTable";
 
-import { PlmnRecord, SubscriberRow, TrafficAdjustmentMode, TrafficAdjustmentTarget, FeedbackTone, FeedbackState, PendingDelete, SubscriberStatusFilter, SubscriberSummary, ProfilesResponse, SubscribersResponse } from "./types";
+import { PlmnRecord, SubscriberRow, TrafficAdjustmentMode, TrafficAdjustmentTarget, FeedbackState, PendingDelete, SubscriberStatusFilter, ProfilesResponse, SubscribersResponse } from "./types";
 
 /**
  * Subscriber Management Page

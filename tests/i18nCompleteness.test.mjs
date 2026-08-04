@@ -6,7 +6,6 @@ import { en } from '../src/lib/locales/en.ts';
 import { zh } from '../src/lib/locales/zh.ts';
 
 const LOCALES = { en, zh };
-const DEFAULT_LOCALE = 'en';
 
 test('i18n: en and zh dictionaries have strict 1:1 key parity', () => {
   const enKeys = Object.keys(en).sort();

@@ -83,10 +83,10 @@ export default function AppSidebar({ sidebarOpen, setSidebarOpen }: AppSidebarPr
     return items;
   }, [isRoot]);
 
-  const ratingSubItems: NavItem[] = [
+  const ratingSubItems: NavItem[] = useMemo(() => [
     { key: "nav_rating_plans", path: "/rating/plans", match: "/rating/plans", icon: <Gauge size={18} /> },
     { key: "nav_rating_rules", path: "/rating/rules", match: "/rating/rules", icon: <GitBranch size={18} /> },
-  ];
+  ], []);
 
   const sidebarWidth = sidebarOpen ? 264 : 72;
   const ocsNavExpanded = ocsNavOpen || pathname.startsWith("/ocs");

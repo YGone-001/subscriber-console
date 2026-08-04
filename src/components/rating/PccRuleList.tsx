@@ -2,7 +2,6 @@
 import React from "react";
 import { Plus, Search, Hash, DollarSign, CheckCircle2, Pencil, Trash2, Tag } from "lucide-react";
 import { EmptyState, LoadingRows } from "@/components/OperationFeedback";
-import * as T from "./types";
 import { SERVICE_FILTERS, Field, formatGrant } from "./types";
 import "./rating.css";
 
@@ -11,7 +10,7 @@ export function PccRuleList(props: any) {
     t, plans, selectedPlanId, setSelectedPlanId, filter, setFilter, query, setQuery,
     counts, visibleRatings, isAdding, setIsAdding, newForm, setNewForm, editingId,
     setEditingId, editForm, setEditForm, canEditTemplates, isLoading, savingKey,
-    pendingDeleteId, startEdit, handleDelete, renderFormCells, serviceMeta, rateTypes, ratings
+    pendingDeleteId, startEdit, handleDelete, renderFormCells, serviceMeta, rateTypes
   } = props;
 
   return (

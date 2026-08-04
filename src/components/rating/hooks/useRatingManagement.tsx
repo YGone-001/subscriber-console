@@ -9,15 +9,13 @@ import { useAuth } from "@/hooks/useAuth";
 
 
 import * as T from "../types";
-import { classifyPolicy, applyChargingType, formatGrant, makeDefaultForm, defaultsFor, CURRENCIES, DEFAULT_OCS_PLAN_ID, DATA_GRANT, DATA_THRESHOLD, VOICE_GRANT, SMS_GRANT, SERVICE_FILTERS, Field } from "../types";
-
-
+import { classifyPolicy, applyChargingType, makeDefaultForm, defaultsFor, CURRENCIES } from "../types";
 
 function isWholeNumber(value: string): boolean {
   return /^\d+$/.test(String(value || "").trim());
 }
 
-export function useRatingManagement(view: T.RatingManagementView) {
+export function useRatingManagement() {
   const { t } = useI18n();
   const { data: plansData, mutate: mutatePlans } = useSWR("/api/tariff-plans", fetcher);
   const plans: T.TariffPlan[] = useMemo(() => plansData?.plans || [], [plansData?.plans]);

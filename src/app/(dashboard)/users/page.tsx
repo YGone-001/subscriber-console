@@ -16,7 +16,7 @@ export default function UsersPage() {
     users,
     statusCounts,
     approvalMetrics,
-    notice, setNotice,
+    setNotice,
     openCreateDrawer,
     t,
     toolbarProps,

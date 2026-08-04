@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import { OperationNotice, ConfirmActionPanel, LoadingRows, EmptyState } from "@/components/OperationFeedback";
 import * as T from "../types";
-import { VALID_ROLES, VALID_STATUS, RoleKey, UserStatus } from "../types";
+import { VALID_ROLES, VALID_STATUS } from "../types";
 import { displayValue, formatDateTime, normalizeRole } from "../utils";
 
 export function UserDrawer(props: any) {

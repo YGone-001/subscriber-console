@@ -92,10 +92,6 @@ export default function VisualDiffViewer({
     copyToClipboard(newJson, 'new');
   };
 
-  const handleCopyOld = () => {
-    copyToClipboard(oldJson, 'old');
-  };
-
   return (
     <div className={`diff-viewer-container ${compact ? 'compact' : ''}`}>
       {/* Header & Controls Toolbar */}

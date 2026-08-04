@@ -2,7 +2,6 @@ import React from "react";
 import { Plus, Users, CheckCircle2, Copy, PenLine, Trash2, MoreHorizontal } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { EmptyState, LoadingRows } from "@/components/OperationFeedback";
-import * as T from "../types";
 
 export function SubscriberTable(props: any) {
   const { t } = useI18n();

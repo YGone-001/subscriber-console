@@ -43,7 +43,6 @@ export default function SystemHealthPage() {
   // Comprehensive Multi-Subsystem Health
   const {
     data: systemHealth,
-    error: healthError,
     mutate: refreshSystemHealth,
     isLoading: isHealthLoading,
   } = useSWR<ComprehensiveSystemHealth>("/api/system/health", fetcher, { refreshInterval: 30000 });

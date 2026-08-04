@@ -1,37 +1,9 @@
-import React from 'react';
-
 import { useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
-import {
-  CalendarDays,
-  CheckCircle2,
-  ChevronDown,
-  Clock,
-  Download,
-  Eye,
-  EyeOff,
-  KeyRound,
-  Lock,
-  LogOut,
-  Mail,
-  MoreHorizontal,
-  Plus,
-  RefreshCw,
-  Save,
-  Search,
-  Settings,
-  Shield,
-  SlidersHorizontal,
-  Trash2,
-  Upload,
-  User,
-  UserCheck,
-  UserX,
-  X,
-} from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 import { fetcher } from "@/lib/fetcher";
 import { toCsvRow } from "@/lib/csv";
-import { ROLE_CAPABILITIES, type Capability, type CapabilityDecision } from "@/lib/permissions";
+import { ROLE_CAPABILITIES, type CapabilityDecision } from "@/lib/permissions";
 import {
   buildUserQueryString,
   getUserAccessStatusMeta,
@@ -40,7 +12,6 @@ import {
 } from "@/lib/userAccessManagement";
 import { useAuth } from "@/hooks/useAuth";
 import { useI18n } from "@/components/I18nProvider";
-import { ConfirmActionPanel, EmptyState, LoadingRows, OperationNotice } from "@/components/OperationFeedback";
 
 import {
   SysUser, RoleKey, UserStatus, RoleFilter, StatusFilter, CreatedFilter, BinaryFilter,
@@ -48,11 +19,12 @@ import {
   Notice, PendingStatusChange, PendingBulkAction, PendingUpdate, ApprovalMetricResponse,
   AuditLogResponse, BulkAction, VALID_ROLES, VALID_STATUS, PAGE_SIZE_OPTIONS,
   DEFAULT_NEW_FORM, DEFAULT_EDIT_FORM, USERNAME_PATTERN, ROLE_STYLE,
-  
 } from "../types";
 
-
-import { normalizeRole, normalizeStatus, normalizePageSize, formatDateTime, displayValue, matchesCreatedFilter, isRoleFilter, isStatusFilter, isCreatedFilter, isBinaryFilter, isSortKey, isSortDirection } from "../utils";
+import {
+  normalizeRole, normalizeStatus, normalizePageSize, matchesCreatedFilter,
+  isRoleFilter, isStatusFilter, isCreatedFilter, isBinaryFilter, isSortKey, isSortDirection,
+} from "../utils";
 
 
 

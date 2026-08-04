@@ -1,25 +1,24 @@
 "use client";
 import React from "react";
-import { ArrowRightLeft, CheckCircle2, Database, DollarSign, Hash, History, MessageSquare, Mic2, Pencil, Plus, Save, Search, ShieldCheck, Tag, Trash2, X } from "lucide-react";
-import { ConfirmActionPanel, EmptyState, LoadingRows, OperationNotice } from "@/components/OperationFeedback";
+import { Save, X } from "lucide-react";
 import { TariffPlanList } from "./rating/TariffPlanList";
 import { PccRuleList } from "./rating/PccRuleList";
 import { RatingModals } from "./rating/RatingModals";
-import { StatusBadge, formatDateTime } from "./rating/RatingManagementShared";
+import { formatDateTime } from "./rating/RatingManagementShared";
 import * as T from "./rating/types";
 import { Field, applyChargingType, CURRENCIES } from "./rating/types";
 import { useRatingManagement } from "./rating/hooks/useRatingManagement";
 
 export default function RatingManagementPage({ view }: { view: T.RatingManagementView }) {
-  const state = useRatingManagement(view);
+  const state = useRatingManagement();
   const {
     t, canEditTemplates, plans, selectedPlanId, setSelectedPlanId, selectedPlan, isCreatingPlan, setIsCreatingPlan,
-    planForm, setPlanForm, beginCreatePlan, handleCreatePlan, handleUpdatePlan, cancelPlanEdit,
+    planForm, setPlanForm, beginCreatePlan, handleCreatePlan, handleUpdatePlan,
     handleDeletePlan, handleMigratePlanSubscribers, formatPlanOperationAction,
     migrationTargetPlanId, setMigrationTargetPlanId, migrationTargetOptions,
     migrationResetBalances, setMigrationResetBalances, selectedPlanSubscribers, selectedPlanSubscriberTotal,
     planOperationSummary, planOperationHistory, isDisablingPlanWithSubscribers,
-    ratings, enrichedRatings, visibleRatings, counts, filter, setFilter, query, setQuery,
+    ratings, visibleRatings, counts, filter, setFilter, query, setQuery,
     notice, setNotice, savingKey, pendingDeleteId, setPendingDeleteId, editingId, setEditingId,
     editForm, setEditForm, isAdding, setIsAdding, newForm, setNewForm,
     validateRatingForm, handleCreate, handleUpdate, handleDelete, executeDelete,

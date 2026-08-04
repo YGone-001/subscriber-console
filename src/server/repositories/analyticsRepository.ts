@@ -269,6 +269,17 @@ export async function computeAnalyticsMetrics(): Promise<AnalyticsMetrics> {
   ]);
 
   const sSum = sessionAgg[0] || {};
+  const apnMap = new Map<string, number>();
+  for (const a of apnAgg) {
+    const rawApn = typeof a._id === 'string' ? a._id.trim() : '';
+    const apn = rawApn || 'internet';
+    apnMap.set(apn, (apnMap.get(apn) || 0) + numericValue(a.count));
+  }
+  const apnDistribution = Array.from(apnMap.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([apn, count]) => ({ apn, count }));
+
   const ocsSessions: OcsSessionMetrics = {
     totalSessions: numericValue(sSum.total),
     activeSessions: numericValue(sSum.active),
@@ -278,7 +289,7 @@ export async function computeAnalyticsMetrics(): Promise<AnalyticsMetrics> {
     totalUsedOctets: numericValue(sSum.used),
     interfaceGyCount: numericValue(sSum.gy),
     interfaceRoCount: numericValue(sSum.ro),
-    apnDistribution: apnAgg.map((a) => ({ apn: String(a._id || 'internet'), count: numericValue(a.count) })),
+    apnDistribution,
   };
 
   // 3. OCS Reservations Aggregation

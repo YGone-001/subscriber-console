@@ -89,7 +89,7 @@ export default function TariffPlanDistributionChart({
               {tariffPlanDist.map((plan, index) => {
                 const color = PLAN_COLORS[index % PLAN_COLORS.length];
                 return (
-                  <div key={plan.planId} className="analytics-plan-legend-row">
+                  <div key={`${plan.planId}-${index}`} className="analytics-plan-legend-row">
                     <div className="legend-row-left">
                       <span className="plan-color-dot" style={{ backgroundColor: color }} />
                       <div className="plan-info">

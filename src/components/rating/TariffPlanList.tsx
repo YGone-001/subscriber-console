@@ -67,7 +67,6 @@ export function TariffPlanList(props: any) {
     ratings,
     mutatePlans,
     mutatePlanOperations,
-    mutatePlanSubscribers,
   } = props;
 
   // Active tab inside selected plan

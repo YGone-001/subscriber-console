@@ -5,9 +5,7 @@ import {
   MoreHorizontal, Shield, X, Download
 } from "lucide-react";
 import { LoadingRows, EmptyState } from "@/components/OperationFeedback";
-import * as T from "../types";
-import { type RoleKey } from "../types";
-import { VALID_ROLES } from "../types";
+import { type RoleKey, VALID_ROLES } from "../types";
 import { displayValue, formatDateTime } from "../utils";
 
 export function UsersTable(props: any) {

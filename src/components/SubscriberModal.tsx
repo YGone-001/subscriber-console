@@ -7,7 +7,7 @@ import SubscriberViewMode from "./subscriber/SubscriberViewMode";
 import SubscriberEditMode from "./subscriber/SubscriberEditMode";
 import TrafficAdjustmentModal from "./TrafficAdjustmentModal";
 import { useSubscriberForm } from "@/hooks/useSubscriberForm";
-import { formatBytes, parseBytes } from "@/lib/unitParser";
+import { parseBytes } from "@/lib/unitParser";
 import { OperationNotice } from "./OperationFeedback";
 import "./SubscriberModal.css";
 

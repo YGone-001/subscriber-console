@@ -1,4 +1,4 @@
-import { type Capability, type CapabilityDecision } from "@/lib/permissions";
+import { type Capability } from "@/lib/permissions";
 export interface SysUser {
   username: string;
   role: string;

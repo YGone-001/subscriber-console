@@ -151,8 +151,8 @@ export default function OcsSessionTelemetryCard({
           <div className="analytics-ocs-apn-row">
             <span className="apn-row-label">{t("dash_ocs_apn_distribution")}:</span>
             <div className="apn-pills-wrap">
-              {sessions.apnDistribution.map((item) => (
-                <div key={item.apn} className="apn-pill">
+              {sessions.apnDistribution.map((item, index) => (
+                <div key={`${item.apn}-${index}`} className="apn-pill">
                   <span className="apn-name">{item.apn}</span>
                   <span className="apn-count">{item.count}</span>
                 </div>

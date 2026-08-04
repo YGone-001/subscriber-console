@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from 'react';
-import { ShieldAlert, History, Activity, ChevronRight, Braces, X, Download, RefreshCw, AlertTriangle, DatabaseZap, Gauge, Target, UserRound } from 'lucide-react';
+import { ShieldAlert, History, Activity, Braces, X, Download, RefreshCw, AlertTriangle, DatabaseZap, Gauge, Target, UserRound } from 'lucide-react';
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
 import { useI18n } from "@/components/I18nProvider";
