@@ -729,11 +729,20 @@
     overflow: hidden;
   }
 
+  .layout-content-area {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    background: var(--background);
+  }
+
   .layout-main {
     flex: 1;
     overflow-y: auto;
     position: relative;
-    min-height: 100%;
+    min-height: 0;
     background: var(--background);
   }
 
@@ -1088,4 +1097,482 @@
   .notif-clear-btn:hover {
     color: var(--danger);
     background: color-mix(in srgb, var(--danger) 10%, transparent);
+  }
+
+  /* =========================================================
+     Sidebar Filter & Footer Shortcut Toggle
+     ========================================================= */
+  .sidebar-filter-wrap {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.5rem 0.65rem 0.35rem;
+    margin: 0.5rem 0.65rem 0.25rem;
+    background: var(--surface-hover);
+    border: 1px solid var(--surface-border);
+    border-radius: 8px;
+    transition: border-color var(--duration-fast);
+  }
+
+  .sidebar-filter-wrap:focus-within {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 15%, transparent);
+  }
+
+  .sidebar-filter-icon {
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+
+  .sidebar-filter-input {
+    flex: 1;
+    min-width: 0;
+    border: none;
+    outline: none;
+    background: transparent;
+    font-size: 0.8rem;
+    color: var(--text-main);
+  }
+
+  .sidebar-filter-input::placeholder {
+    color: var(--text-muted);
+  }
+
+  .sidebar-filter-clear {
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 2px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .sidebar-filter-clear:hover {
+    color: var(--text-main);
+  }
+
+  .sidebar-footer-wrap {
+    padding: 0.5rem 0.65rem;
+    border-top: 1px solid var(--surface-border);
+    background: var(--surface);
+  }
+
+  .sidebar-toggle-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    padding: 0.45rem 0.6rem;
+    border-radius: 8px;
+    border: 1px solid var(--surface-border);
+    background: var(--surface-hover);
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--duration-fast) var(--ease-spring);
+  }
+
+  .sidebar-toggle-btn:hover {
+    color: var(--text-main);
+    border-color: color-mix(in srgb, var(--primary) 30%, var(--surface-border));
+    background: color-mix(in srgb, var(--primary) 8%, var(--surface-hover));
+  }
+
+  .sidebar-toggle-label {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .sidebar-kbd {
+    font-size: 0.68rem;
+    padding: 0.1rem 0.35rem;
+    background: var(--surface-border);
+    color: var(--text-muted);
+    border-radius: 4px;
+    font-family: monospace;
+  }
+
+  /* =========================================================
+     Multi-Tab Navigation Bar (NavigationTabBar)
+     ========================================================= */
+  .nav-tab-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.35rem 0.75rem 0.25rem;
+    background: var(--surface);
+    border-bottom: 1px solid var(--surface-border);
+    user-select: none;
+    z-index: 20;
+    flex-shrink: 0;
+  }
+
+  .nav-tab-scroll-btn {
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text-muted);
+    padding: 0.25rem;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--duration-fast);
+  }
+
+  .nav-tab-scroll-btn:hover {
+    color: var(--text-main);
+    background: var(--surface-hover);
+    border-color: var(--surface-border);
+  }
+
+  .nav-tab-track {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    overflow-x: auto;
+    scrollbar-width: none;
+    flex: 1;
+  }
+
+  .nav-tab-track::-webkit-scrollbar {
+    display: none;
+  }
+
+  .nav-tab-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.35rem 0.65rem;
+    border-radius: 7px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-decoration: none;
+    border: 1px solid var(--surface-border);
+    background: var(--surface-hover);
+    transition: all var(--duration-fast) var(--ease-spring);
+    white-space: nowrap;
+    position: relative;
+  }
+
+  .nav-tab-item:hover {
+    color: var(--text-main);
+    border-color: color-mix(in srgb, var(--primary) 30%, var(--surface-border));
+  }
+
+  .nav-tab-item.active {
+    color: var(--primary);
+    background: color-mix(in srgb, var(--primary) 12%, transparent);
+    border-color: color-mix(in srgb, var(--primary) 30%, transparent);
+    font-weight: 700;
+  }
+
+  .nav-tab-icon {
+    display: flex;
+    align-items: center;
+    color: inherit;
+  }
+
+  .nav-tab-label {
+    font-size: 0.8rem;
+  }
+
+  .nav-tab-pin-icon {
+    opacity: 0.5;
+    margin-left: 0.15rem;
+  }
+
+  .nav-tab-close {
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 2px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 0.15rem;
+    transition: all var(--duration-fast);
+  }
+
+  .nav-tab-close:hover {
+    color: var(--danger);
+    background: color-mix(in srgb, var(--danger) 15%, transparent);
+  }
+
+  .nav-tab-actions-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  .nav-tab-menu-btn {
+    border: 1px solid var(--surface-border);
+    background: var(--surface-hover);
+    color: var(--text-secondary);
+    padding: 0.3rem 0.45rem;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--duration-fast);
+  }
+
+  .nav-tab-menu-btn:hover {
+    color: var(--text-main);
+    border-color: var(--primary);
+  }
+
+  .nav-tab-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 0.4rem;
+    min-width: 160px;
+    background: var(--surface);
+    border: 1px solid var(--surface-border);
+    border-radius: 8px;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+    padding: 0.35rem;
+    z-index: 50;
+    animation: dropdownFade 0.15s ease-out;
+  }
+
+  .nav-tab-dropdown-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.45rem 0.65rem;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    font-weight: 600;
+    border-radius: 6px;
+    cursor: pointer;
+    text-align: left;
+    transition: background var(--duration-fast);
+  }
+
+  .nav-tab-dropdown-item:hover {
+    color: var(--text-main);
+    background: var(--surface-hover);
+  }
+
+  /* =========================================================
+     Dynamic Breadcrumbs & Quick-Jump Bar (NavigationBreadcrumbs)
+     ========================================================= */
+  .nav-breadcrumbs-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.4rem 1.25rem;
+    background: var(--background);
+    border-bottom: 1px solid color-mix(in srgb, var(--surface-border) 60%, transparent);
+    font-size: 0.78rem;
+    flex-shrink: 0;
+    z-index: 15;
+  }
+
+  .nav-breadcrumbs-left {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .nav-breadcrumbs-left::-webkit-scrollbar {
+    display: none;
+  }
+
+  .nav-breadcrumb-home {
+    display: flex;
+    align-items: center;
+    color: var(--text-muted);
+    padding: 0.2rem;
+    border-radius: 4px;
+    transition: color var(--duration-fast);
+  }
+
+  .nav-breadcrumb-home:hover {
+    color: var(--primary);
+  }
+
+  .nav-breadcrumb-segment {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+
+  .nav-breadcrumb-separator {
+    color: var(--text-muted);
+    opacity: 0.6;
+    flex-shrink: 0;
+  }
+
+  .nav-breadcrumb-link {
+    color: var(--text-muted);
+    text-decoration: none;
+    font-weight: 500;
+    transition: color var(--duration-fast);
+    white-space: nowrap;
+  }
+
+  .nav-breadcrumb-link:hover {
+    color: var(--primary);
+  }
+
+  .nav-breadcrumb-current {
+    color: var(--text-main);
+    font-weight: 600;
+    background: color-mix(in srgb, var(--surface-hover) 80%, transparent);
+    padding: 0.15rem 0.5rem;
+    border-radius: 5px;
+    border: 1px solid var(--surface-border);
+    white-space: nowrap;
+  }
+
+  .nav-breadcrumbs-right {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-shrink: 0;
+  }
+
+  .nav-recent-wrap {
+    position: relative;
+  }
+
+  .nav-crumb-tool-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.22rem 0.55rem;
+    border-radius: 6px;
+    border: 1px solid var(--surface-border);
+    background: var(--surface);
+    color: var(--text-secondary);
+    font-size: 0.74rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--duration-fast);
+  }
+
+  .nav-crumb-tool-btn:hover {
+    color: var(--text-main);
+    border-color: var(--primary);
+    background: var(--surface-hover);
+  }
+
+  .nav-crumb-tool-btn.icon-only {
+    padding: 0.25rem 0.35rem;
+  }
+
+  .nav-crumb-tool-btn.spin svg {
+    animation: spin 0.6s linear infinite;
+  }
+
+  .nav-recent-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 0.4rem;
+    width: 240px;
+    background: var(--surface);
+    border: 1px solid var(--surface-border);
+    border-radius: 8px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
+    overflow: hidden;
+    z-index: 50;
+    animation: dropdownFade 0.15s ease-out;
+  }
+
+  .nav-recent-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.55rem 0.75rem;
+    border-bottom: 1px solid var(--surface-border);
+    background: var(--header-bg);
+    font-size: 0.75rem;
+  }
+
+  .nav-recent-header strong {
+    color: var(--text-main);
+  }
+
+  .nav-recent-clear {
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 0.7rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.15rem 0.3rem;
+    border-radius: 4px;
+  }
+
+  .nav-recent-clear:hover {
+    color: var(--danger);
+    background: color-mix(in srgb, var(--danger) 10%, transparent);
+  }
+
+  .nav-recent-list {
+    max-height: 220px;
+    overflow-y: auto;
+    padding: 0.25rem;
+  }
+
+  .nav-recent-empty {
+    padding: 1.25rem;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+  }
+
+  .nav-recent-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.45rem 0.65rem;
+    border-radius: 6px;
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-size: 0.76rem;
+    font-weight: 500;
+    transition: background var(--duration-fast);
+  }
+
+  .nav-recent-item:hover {
+    color: var(--text-main);
+    background: var(--surface-hover);
+  }
+
+  .nav-recent-item.active {
+    color: var(--primary);
+    font-weight: 600;
+  }
+
+  .nav-recent-link-icon {
+    opacity: 0.4;
+  }
+
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
   }
