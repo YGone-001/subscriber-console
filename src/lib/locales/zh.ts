@@ -1678,6 +1678,24 @@ export const zh: Record<string, string> = {
     diff_no_differences_desc: "对比的两份配置或版本内容完全一致。",
     diff_pane_previous: "变更前 (Previous)",
     diff_pane_current: "变更后 (Current)",
+
+    // -- Real-Time Notifications --
+    notif_center_title: "实时通知中心",
+    notif_live_stream: "实时数据流",
+    notif_stream_live: "实时连接",
+    notif_stream_reconnecting: "重连中...",
+    notif_settings: "声音与通知偏好设置",
+    notif_mark_all_read: "全部标记为已读",
+    notif_sound_alerts: "声音提示",
+    notif_volume: "音量",
+    notif_enable_desktop: "开启系统桌面通知",
+    notif_tab_all: "全部",
+    notif_tab_alerts: "故障告警",
+    notif_tab_approvals: "待审批",
+    notif_tab_system: "系统事件",
+    notif_empty: "暂无新通知",
+    notif_view_details: "查看详情",
+    notif_clear_all: "清空全部",
 };
 
 

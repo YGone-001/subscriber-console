@@ -1679,5 +1679,23 @@ export const en: Record<string, string> = {
     diff_no_differences_desc: "The compared payloads or versions are identical.",
     diff_pane_previous: "Previous (Old)",
     diff_pane_current: "Current (New)",
+
+    // -- Real-Time Notifications --
+    notif_center_title: "Notification Center",
+    notif_live_stream: "Real-Time Stream",
+    notif_stream_live: "Live SSE",
+    notif_stream_reconnecting: "Reconnecting...",
+    notif_settings: "Sound & Notification Settings",
+    notif_mark_all_read: "Mark all as read",
+    notif_sound_alerts: "Sound Alerts",
+    notif_volume: "Volume",
+    notif_enable_desktop: "Enable Desktop Notifications",
+    notif_tab_all: "All",
+    notif_tab_alerts: "Alerts",
+    notif_tab_approvals: "Approvals",
+    notif_tab_system: "System",
+    notif_empty: "No new notifications",
+    notif_view_details: "View Details",
+    notif_clear_all: "Clear All",
   };
 

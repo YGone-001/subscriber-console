@@ -6,6 +6,9 @@ import { I18nProvider } from "@/components/I18nProvider";
 import { SWRProvider } from "@/components/SWRProvider";
 import { GlobalErrorBoundary } from "@/components/GlobalErrorBoundary";
 
+import { NotificationProvider } from "@/components/NotificationProvider";
+import ToastContainer from "@/components/ToastContainer";
+
 export const metadata: Metadata = {
   title: "4G Core Subscriber Management",
   description: "Web UI for managing xCloud-style user subscription data",
@@ -43,7 +46,10 @@ export default function RootLayout({
           <SWRProvider>
             <ThemeProvider>
               <I18nProvider>
-                {children}
+                <NotificationProvider>
+                  {children}
+                  <ToastContainer />
+                </NotificationProvider>
               </I18nProvider>
             </ThemeProvider>
           </SWRProvider>
