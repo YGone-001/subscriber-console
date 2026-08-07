@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Script from "next/script";
 import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { I18nProvider } from "@/components/I18nProvider";
@@ -21,27 +20,32 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          id="xcloud-init-preferences"
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  var theme = localStorage.getItem('XCLOUD_THEME_PREFERENCE');
+                  if (theme !== 'light' && theme !== 'dark') {
+                    theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+                  }
+                  document.documentElement.setAttribute('data-theme', theme);
+                  document.documentElement.style.colorScheme = theme;
+                } catch (e) {}
+                try {
+                  var lang = localStorage.getItem('XCLOUD_LANGUAGE_PREFERENCE');
+                  if (lang === 'zh') {
+                    document.documentElement.setAttribute('lang', 'zh-CN');
+                  }
+                } catch (e) {}
+              })();
+            `,
+          }}
+        />
+      </head>
       <body>
-        <Script id="xcloud-init-preferences" strategy="beforeInteractive">
-          {`
-            (function() {
-              try {
-                var theme = localStorage.getItem('XCLOUD_THEME_PREFERENCE');
-                if (theme !== 'light' && theme !== 'dark') {
-                  theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-                }
-                document.documentElement.setAttribute('data-theme', theme);
-                document.documentElement.style.colorScheme = theme;
-              } catch (e) {}
-              try {
-                var lang = localStorage.getItem('XCLOUD_LANGUAGE_PREFERENCE');
-                if (lang === 'zh') {
-                  document.documentElement.setAttribute('lang', 'zh-CN');
-                }
-              } catch (e) {}
-            })();
-          `}
-        </Script>
         <GlobalErrorBoundary>
           <SWRProvider>
             <ThemeProvider>

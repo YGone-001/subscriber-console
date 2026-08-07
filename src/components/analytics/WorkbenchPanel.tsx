@@ -89,12 +89,35 @@ export default function WorkbenchPanel({
         {activeSubTab === "tasks" ? (
           <div className="analytics-workqueue">
             {visibleWorkItems.map((item) => (
-              <a key={item.id} href={item.href} className={`analytics-workitem analytics-workitem-${item.tone}`}>
+              <a
+                key={item.id}
+                href={item.href}
+                className={`analytics-workitem analytics-workitem-${item.tone}`}
+              >
                 <div className="analytics-workitem-icon">
-                  {item.tone === "danger" ? <AlertTriangle size={17} /> : item.tone === "warning" ? <AlertCircle size={17} /> : <CheckCircle2 size={17} />}
+                  {item.tone === "danger" ? (
+                    <AlertTriangle size={17} />
+                  ) : item.tone === "warning" ? (
+                    <AlertCircle size={17} />
+                  ) : (
+                    <CheckCircle2 size={17} />
+                  )}
                 </div>
                 <div className="analytics-workitem-copy">
-                  <strong>{item.title}</strong>
+                  <div className="analytics-workitem-headline">
+                    <strong>{item.title}</strong>
+                    {item.tone === "danger" && (
+                      <span className="analytics-semantic-badge badge-danger">
+                        <span className="live-pulse-dot" />
+                        P0
+                      </span>
+                    )}
+                    {item.tone === "warning" && (
+                      <span className="analytics-semantic-badge badge-warning">
+                        P1
+                      </span>
+                    )}
+                  </div>
                   <span>{item.detail}</span>
                 </div>
                 <div className="analytics-workitem-action">
@@ -107,10 +130,15 @@ export default function WorkbenchPanel({
         ) : (
           <div className="analytics-change-grid">
             {changeQueue.map((task) => (
-              <article className={`analytics-change-card analytics-change-${task.tone}`} key={task.id}>
+              <article
+                className={`analytics-change-card analytics-change-${task.tone}`}
+                key={task.id}
+              >
                 <div className="analytics-change-top">
                   <span className="analytics-change-id">{task.id}</span>
-                  <span className="analytics-change-phase">{task.phase}</span>
+                  <span className={`analytics-change-phase phase-${task.tone}`}>
+                    {task.phase}
+                  </span>
                 </div>
                 <div className="analytics-change-title">{task.title}</div>
                 <div className="analytics-change-scope">{task.scope}</div>
@@ -139,7 +167,16 @@ export default function WorkbenchPanel({
 
       <div className="analytics-readiness">
         <div className="analytics-readiness-score">
-          <MiniRing value={operationsScore} color={operationsScore < 70 ? "#e74a3b" : operationsScore < 88 ? "#f6c23e" : "#1cc88a"} />
+          <MiniRing
+            value={operationsScore}
+            color={
+              operationsScore < 70
+                ? "#e74a3b"
+                : operationsScore < 88
+                ? "#f6c23e"
+                : "#1cc88a"
+            }
+          />
           <div>
             <span>{t("dash_ops_score")}</span>
             <strong>{Math.round(operationsScore)}</strong>

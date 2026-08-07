@@ -33,6 +33,7 @@ export default function OcsSessionTelemetryCard({
 
   const grantedGb = (sessions.totalGrantedOctets || 0) / BYTES_IN_GB;
   const usedGb = (sessions.totalUsedOctets || 0) / BYTES_IN_GB;
+  const volumeUsedPct = grantedGb > 0 ? Math.min(100, (usedGb / grantedGb) * 100) : 0;
 
   const activeReservations = reservations?.activeReservations || 0;
   const reservedOctetsMb = ((reservations?.totalReservedOctets || 0) / (1024 * 1024)).toFixed(1);
@@ -142,6 +143,9 @@ export default function OcsSessionTelemetryCard({
                 <span className="res-sublabel">{t("dash_ocs_granted_used_volume")}</span>
                 <strong>{grantedGb.toFixed(2)} / {usedGb.toFixed(2)} <small>GB</small></strong>
               </div>
+            </div>
+            <div className="analytics-ocs-mini-bar-track" style={{ marginTop: "0.5rem" }}>
+              <div className="analytics-ocs-mini-bar-fill quota-fill" style={{ width: `${volumeUsedPct}%` }} />
             </div>
           </div>
         </div>

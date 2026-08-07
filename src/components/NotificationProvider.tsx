@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useRef, useState, useCallback, useMemo } from "react";
+import React, { createContext, useContext, useEffect, useRef, useState, useCallback, useMemo, useSyncExternalStore } from "react";
 import { playNotificationSound, NotificationSoundType } from "@/lib/soundEffects";
 
 export type NotificationCategory = "alert" | "approval" | "system" | "task";
@@ -61,46 +61,107 @@ const STORAGE_KEYS = {
   SOUND_VOLUME: "xcloud_notify_sound_vol",
 };
 
-export function NotificationProvider({ children }: { children: React.ReactNode }) {
-  const [notifications, setNotifications] = useState<NotificationItem[]>(() => {
-    if (typeof window === "undefined") return [];
-    try {
-      const stored = localStorage.getItem(STORAGE_KEYS.NOTIFICATIONS);
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
+const EMPTY_NOTIFICATIONS: NotificationItem[] = [];
+let cachedRawNotifs: string | null = null;
+let cachedNotifs: NotificationItem[] = EMPTY_NOTIFICATIONS;
+
+function getStoredNotifsSnapshot(): NotificationItem[] {
+  if (typeof window === "undefined") return EMPTY_NOTIFICATIONS;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.NOTIFICATIONS);
+    if (raw === cachedRawNotifs && cachedNotifs) return cachedNotifs;
+    cachedRawNotifs = raw;
+    if (raw) {
+      cachedNotifs = JSON.parse(raw);
+      return cachedNotifs;
     }
-  });
+  } catch {}
+  cachedNotifs = EMPTY_NOTIFICATIONS;
+  return EMPTY_NOTIFICATIONS;
+}
+
+let cachedSoundEnabled = true;
+function getSoundEnabledSnapshot(): boolean {
+  if (typeof window === "undefined") return true;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.SOUND_ENABLED);
+    if (raw !== null) {
+      cachedSoundEnabled = raw === "true";
+      return cachedSoundEnabled;
+    }
+  } catch {}
+  return true;
+}
+
+let cachedSoundVolume = 0.6;
+function getSoundVolumeSnapshot(): number {
+  if (typeof window === "undefined") return 0.6;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.SOUND_VOLUME);
+    if (raw !== null) {
+      cachedSoundVolume = Number(raw);
+      return cachedSoundVolume;
+    }
+  } catch {}
+  return 0.6;
+}
+
+function getDesktopPermissionSnapshot(): NotificationPermission | "unsupported" {
+  if (typeof window !== "undefined" && "Notification" in window) {
+    return Notification.permission;
+  }
+  return "unsupported";
+}
+
+const notifyStoreListeners = new Set<() => void>();
+function subscribeNotifyStore(onStoreChange: () => void) {
+  notifyStoreListeners.add(onStoreChange);
+  const handleStorage = (e: StorageEvent) => {
+    if (
+      e.key === STORAGE_KEYS.NOTIFICATIONS ||
+      e.key === STORAGE_KEYS.SOUND_ENABLED ||
+      e.key === STORAGE_KEYS.SOUND_VOLUME
+    ) {
+      onStoreChange();
+    }
+  };
+  window.addEventListener("storage", handleStorage);
+  return () => {
+    notifyStoreListeners.delete(onStoreChange);
+    window.removeEventListener("storage", handleStorage);
+  };
+}
+
+function emitNotifyStore() {
+  for (const listener of notifyStoreListeners) {
+    listener();
+  }
+}
+
+export function NotificationProvider({ children }: { children: React.ReactNode }) {
+  const notifications = useSyncExternalStore(
+    subscribeNotifyStore,
+    getStoredNotifsSnapshot,
+    () => EMPTY_NOTIFICATIONS
+  );
+  const soundEnabled = useSyncExternalStore(
+    subscribeNotifyStore,
+    getSoundEnabledSnapshot,
+    () => true
+  );
+  const soundVolume = useSyncExternalStore(
+    subscribeNotifyStore,
+    getSoundVolumeSnapshot,
+    () => 0.6
+  );
+  const desktopPermission = useSyncExternalStore<NotificationPermission | "unsupported">(
+    subscribeNotifyStore,
+    getDesktopPermissionSnapshot,
+    (): NotificationPermission | "unsupported" => "unsupported"
+  );
 
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("connecting");
-
-  const [soundEnabled, setSoundEnabledState] = useState<boolean>(() => {
-    if (typeof window === "undefined") return true;
-    try {
-      const stored = localStorage.getItem(STORAGE_KEYS.SOUND_ENABLED);
-      return stored !== null ? stored === "true" : true;
-    } catch {
-      return true;
-    }
-  });
-
-  const [soundVolume, setSoundVolumeState] = useState<number>(() => {
-    if (typeof window === "undefined") return 0.6;
-    try {
-      const stored = localStorage.getItem(STORAGE_KEYS.SOUND_VOLUME);
-      return stored !== null ? Number(stored) : 0.6;
-    } catch {
-      return 0.6;
-    }
-  });
-
-  const [desktopPermission, setDesktopPermission] = useState<NotificationPermission | "unsupported">(() => {
-    if (typeof window !== "undefined" && "Notification" in window) {
-      return Notification.permission;
-    }
-    return "unsupported";
-  });
 
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -109,38 +170,39 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   // Sync notifications to localStorage (keep latest 60)
   const saveNotifications = useCallback((newNotifs: NotificationItem[]) => {
     const trimmed = newNotifs.slice(0, 60);
-    setNotifications(trimmed);
+    cachedNotifs = trimmed;
     try {
-      localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(trimmed));
+      cachedRawNotifs = JSON.stringify(trimmed);
+      localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, cachedRawNotifs);
     } catch {}
+    emitNotifyStore();
   }, []);
 
   const setSoundEnabled = useCallback((val: boolean) => {
-    setSoundEnabledState(val);
+    cachedSoundEnabled = val;
     try {
       localStorage.setItem(STORAGE_KEYS.SOUND_ENABLED, String(val));
     } catch {}
+    emitNotifyStore();
   }, []);
 
   const setSoundVolume = useCallback((val: number) => {
     const clamped = Math.max(0, Math.min(1, val));
-    setSoundVolumeState(clamped);
+    cachedSoundVolume = clamped;
     try {
       localStorage.setItem(STORAGE_KEYS.SOUND_VOLUME, String(clamped));
     } catch {}
+    emitNotifyStore();
   }, []);
 
   const requestDesktopPermission = useCallback(async () => {
     if (typeof window === "undefined" || !("Notification" in window)) {
-      setDesktopPermission("unsupported");
       return;
     }
     try {
-      const permission = await Notification.requestPermission();
-      setDesktopPermission(permission);
-    } catch {
-      setDesktopPermission("denied");
-    }
+      await Notification.requestPermission();
+      emitNotifyStore();
+    } catch {}
   }, []);
 
   // Remove toast
@@ -205,11 +267,8 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         meta: item.meta,
       };
 
-      setNotifications((prev) => {
-        const next = [newNotif, ...prev];
-        saveNotifications(next);
-        return next;
-      });
+      const current = getStoredNotifsSnapshot();
+      saveNotifications([newNotif, ...current]);
 
       if (item.toast !== false) {
         showToast({
@@ -227,21 +286,15 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
   const markAsRead = useCallback(
     (id: string) => {
-      setNotifications((prev) => {
-        const next = prev.map((n) => (n.id === id ? { ...n, read: true } : n));
-        saveNotifications(next);
-        return next;
-      });
+      const current = getStoredNotifsSnapshot();
+      saveNotifications(current.map((n) => (n.id === id ? { ...n, read: true } : n)));
     },
     [saveNotifications]
   );
 
   const markAllAsRead = useCallback(() => {
-    setNotifications((prev) => {
-      const next = prev.map((n) => ({ ...n, read: true }));
-      saveNotifications(next);
-      return next;
-    });
+    const current = getStoredNotifsSnapshot();
+    saveNotifications(current.map((n) => ({ ...n, read: true })));
   }, [saveNotifications]);
 
   const clearAllNotifications = useCallback(() => {

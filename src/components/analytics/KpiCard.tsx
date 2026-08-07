@@ -5,7 +5,7 @@ import { Area, AreaChart, ResponsiveContainer } from "recharts";
 import { KpiCardProps } from "./types";
 import { normalizeRingValue } from "./utils";
 
-function TrendSparkline({ data, color, height = 42 }: { data?: number[]; color: string; height?: number }) {
+function TrendSparkline({ data, color, height = 26 }: { data?: number[]; color: string; height?: number }) {
   const reactId = React.useId();
   const chartData = useMemo(() => {
     if (!data?.length) return [];
@@ -21,7 +21,7 @@ function TrendSparkline({ data, color, height = 42 }: { data?: number[]; color: 
   return (
     <div className="analytics-sparkline" style={{ height }}>
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={chartData} margin={{ top: 3, right: 0, bottom: 0, left: 0 }}>
+        <AreaChart data={chartData} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
           <defs>
             <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor={color} stopOpacity={0.34} />
@@ -32,11 +32,11 @@ function TrendSparkline({ data, color, height = 42 }: { data?: number[]; color: 
             type="monotone"
             dataKey="value"
             stroke={color}
-            strokeWidth={2}
+            strokeWidth={1.8}
             fill={`url(#${gradientId})`}
             dot={false}
             isAnimationActive
-            animationDuration={700}
+            animationDuration={600}
           />
         </AreaChart>
       </ResponsiveContainer>
@@ -55,24 +55,52 @@ function MiniRing({ value, color }: { value: number; color: string }) {
       }}
       aria-hidden="true"
     >
-      <div className="analytics-ring-inner">{Math.round(safeValue)}</div>
+      <div className="analytics-ring-inner">{Math.round(safeValue)}%</div>
     </div>
   );
 }
 
-export default function KpiCard({ color, icon, label, value, detail, sparkline, ringValue, tone = "normal" }: KpiCardProps) {
+export default function KpiCard({
+  color,
+  icon,
+  label,
+  value,
+  detail,
+  sparkline,
+  ringValue,
+  tone = "normal",
+}: KpiCardProps) {
   return (
     <section className={`analytics-kpi-card analytics-kpi-${tone}`}>
       <div className="analytics-kpi-top">
-        <div className="analytics-kpi-icon" style={{ color, background: `${color}18`, borderColor: `${color}33` }}>
-          {icon}
+        <div className="analytics-kpi-meta">
+          <div
+            className="analytics-kpi-icon"
+            style={{ color, background: `${color}16`, borderColor: `${color}30` }}
+          >
+            {icon}
+          </div>
+          <span className="analytics-kpi-label" title={label}>
+            {label}
+          </span>
         </div>
-        {ringValue !== undefined ? <MiniRing value={ringValue} color={color} /> : null}
+        {ringValue !== undefined ? (
+          <MiniRing value={ringValue} color={color} />
+        ) : sparkline && sparkline.length > 0 ? (
+          <div className="analytics-kpi-mini-sparkline">
+            <TrendSparkline data={sparkline} color={color} height={24} />
+          </div>
+        ) : null}
       </div>
-      <div className="analytics-kpi-label">{label}</div>
-      <div className="analytics-kpi-value">{value}</div>
-      <div className="analytics-kpi-detail">{detail}</div>
-      <TrendSparkline data={sparkline} color={color} />
+
+      <div className="analytics-kpi-body">
+        <div className="analytics-kpi-value">{value}</div>
+        {detail && (
+          <div className="analytics-kpi-detail" title={detail}>
+            {detail}
+          </div>
+        )}
+      </div>
     </section>
   );
 }

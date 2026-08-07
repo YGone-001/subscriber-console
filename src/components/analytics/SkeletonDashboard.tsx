@@ -22,11 +22,17 @@ export default function SkeletonDashboard() {
       <div className="analytics-kpi-grid">
         {Array.from({ length: 6 }).map((_, index) => (
           <div className="analytics-kpi-card analytics-skeleton-card" key={index}>
-            <div className="skeleton-loader analytics-skeleton-icon" />
-            <div className="skeleton-loader analytics-skeleton-label" />
-            <div className="skeleton-loader analytics-skeleton-value" />
-            <div className="skeleton-loader analytics-skeleton-line" />
-            <div className="skeleton-loader analytics-skeleton-chart" />
+            <div className="analytics-kpi-top">
+              <div className="analytics-kpi-meta">
+                <div className="skeleton-loader analytics-skeleton-icon" />
+                <div className="skeleton-loader analytics-skeleton-label" />
+              </div>
+              <div className="skeleton-loader analytics-skeleton-spark" />
+            </div>
+            <div className="analytics-kpi-body">
+              <div className="skeleton-loader analytics-skeleton-value" />
+              <div className="skeleton-loader analytics-skeleton-line" />
+            </div>
           </div>
         ))}
       </div>

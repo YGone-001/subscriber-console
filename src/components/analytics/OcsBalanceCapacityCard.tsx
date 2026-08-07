@@ -27,6 +27,11 @@ export default function OcsBalanceCapacityCard({ metrics, t }: OcsBalanceCapacit
   const voiceTotalMin = Math.round(metrics.totalVoiceAllocated / 60);
   const voiceUsedMin = Math.round(metrics.totalVoiceUsed / 60);
   const voiceAvailableMin = Math.round(metrics.totalVoiceAvailable / 60);
+  const voiceUsedPct = voiceTotalMin > 0 ? Math.min(100, (voiceUsedMin / voiceTotalMin) * 100) : 0;
+
+  const smsTotal = metrics.totalSmsAllocated || 0;
+  const smsUsed = metrics.totalSmsUsed || 0;
+  const smsUsedPct = smsTotal > 0 ? Math.min(100, (smsUsed / smsTotal) * 100) : 0;
 
   const utilizationRate = metrics.dataUtilizationRate;
   const utilizationTone = utilizationRate >= 85 ? "danger" : utilizationRate >= 65 ? "warning" : "normal";
@@ -130,12 +135,13 @@ export default function OcsBalanceCapacityCard({ metrics, t }: OcsBalanceCapacit
           </div>
         </div>
 
-        {/* Secondary Telemetry: Voice & SMS */}
+        {/* Secondary Telemetry: Voice & SMS with gradient progress bars */}
         <div className="analytics-ocs-secondary-grid">
           <div className="analytics-ocs-secondary-card">
             <div className="analytics-ocs-sec-header">
               <Phone size={16} className="text-secondary-icon" />
               <span>{t("dash_ocs_voice_pool")}</span>
+              <span className="analytics-ocs-sec-pct">{voiceUsedPct.toFixed(0)}%</span>
             </div>
             <div className="analytics-ocs-sec-content">
               <strong>{voiceAvailableMin} <small>{t("unit_mins")}</small></strong>
@@ -143,18 +149,25 @@ export default function OcsBalanceCapacityCard({ metrics, t }: OcsBalanceCapacit
                 {t("dash_ocs_voice_used_ratio", { used: voiceUsedMin, total: voiceTotalMin })}
               </span>
             </div>
+            <div className="analytics-ocs-mini-bar-track">
+              <div className="analytics-ocs-mini-bar-fill voice-fill" style={{ width: `${voiceUsedPct}%` }} />
+            </div>
           </div>
 
           <div className="analytics-ocs-secondary-card">
             <div className="analytics-ocs-sec-header">
               <MessageSquare size={16} className="text-secondary-icon" />
               <span>{t("dash_ocs_sms_pool")}</span>
+              <span className="analytics-ocs-sec-pct">{smsUsedPct.toFixed(0)}%</span>
             </div>
             <div className="analytics-ocs-sec-content">
               <strong>{metrics.totalSmsAvailable} <small>{t("unit_msgs")}</small></strong>
               <span className="analytics-ocs-sec-sub">
                 {t("dash_ocs_sms_used_ratio", { used: metrics.totalSmsUsed, total: metrics.totalSmsAllocated })}
               </span>
+            </div>
+            <div className="analytics-ocs-mini-bar-track">
+              <div className="analytics-ocs-mini-bar-fill sms-fill" style={{ width: `${smsUsedPct}%` }} />
             </div>
           </div>
         </div>

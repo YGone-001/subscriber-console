@@ -62,9 +62,6 @@ export default function DashboardPage() {
           <h2 className="m-0 text-2xl font-bold text-[var(--text-main)]">
             {t("dashboard_title")}
           </h2>
-          <p className="mt-1 text-sm text-[var(--text-secondary)]">
-            {t("dashboard_subtitle")}
-          </p>
         </div>
         {/* Sync Telemetry Button */}
         <button

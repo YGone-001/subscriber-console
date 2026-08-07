@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useMemo, useCallback, useSyncExternalStore } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -46,6 +46,49 @@ const ROUTE_HIERARCHY: Record<string, { groupKey?: string; groupPath?: string; l
   "/system-health": { labelKey: "nav_system_health" },
 };
 
+const EMPTY_RECENT: RecentPageItem[] = [];
+let cachedRawRecent: string | null = null;
+let cachedRecent: RecentPageItem[] = EMPTY_RECENT;
+
+function getRecentPagesSnapshot(): RecentPageItem[] {
+  if (typeof window === "undefined") return EMPTY_RECENT;
+  try {
+    const raw = localStorage.getItem(RECENT_PAGES_STORAGE_KEY);
+    if (raw === cachedRawRecent && cachedRecent) return cachedRecent;
+    cachedRawRecent = raw;
+    if (raw) {
+      cachedRecent = JSON.parse(raw);
+      return cachedRecent;
+    }
+  } catch {}
+  cachedRecent = EMPTY_RECENT;
+  return EMPTY_RECENT;
+}
+
+const recentListeners = new Set<() => void>();
+function subscribeRecent(onStoreChange: () => void) {
+  recentListeners.add(onStoreChange);
+  const handleStorage = (e: StorageEvent) => {
+    if (e.key === RECENT_PAGES_STORAGE_KEY) onStoreChange();
+  };
+  window.addEventListener("storage", handleStorage);
+  return () => {
+    recentListeners.delete(onStoreChange);
+    window.removeEventListener("storage", handleStorage);
+  };
+}
+
+function writeRecentPages(next: RecentPageItem[]) {
+  cachedRecent = next;
+  try {
+    cachedRawRecent = JSON.stringify(next);
+    localStorage.setItem(RECENT_PAGES_STORAGE_KEY, cachedRawRecent);
+  } catch {}
+  for (const listener of recentListeners) {
+    listener();
+  }
+}
+
 export default function NavigationBreadcrumbs() {
   const pathname = usePathname();
   const router = useRouter();
@@ -55,15 +98,7 @@ export default function NavigationBreadcrumbs() {
   const [copied, setCopied] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const [recentPages, setRecentPages] = useState<RecentPageItem[]>(() => {
-    if (typeof window === "undefined") return [];
-    try {
-      const stored = localStorage.getItem(RECENT_PAGES_STORAGE_KEY);
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
-  });
+  const recentPages = useSyncExternalStore(subscribeRecent, getRecentPagesSnapshot, () => EMPTY_RECENT);
 
   // Track recent pages when pathname changes
   useEffect(() => {
@@ -75,20 +110,13 @@ export default function NavigationBreadcrumbs() {
 
     if (matchedKey && ROUTE_HIERARCHY[matchedKey]) {
       const labelKey = ROUTE_HIERARCHY[matchedKey].labelKey;
-      const timer = setTimeout(() => {
-        setRecentPages((prev) => {
-          const filtered = prev.filter((item) => item.path !== matchedKey);
-          const next: RecentPageItem[] = [
-            { path: matchedKey, labelKey, timestamp: Date.now() },
-            ...filtered,
-          ].slice(0, 8);
-          try {
-            localStorage.setItem(RECENT_PAGES_STORAGE_KEY, JSON.stringify(next));
-          } catch {}
-          return next;
-        });
-      }, 0);
-      return () => clearTimeout(timer);
+      const current = getRecentPagesSnapshot();
+      const filtered = current.filter((item) => item.path !== matchedKey);
+      const next: RecentPageItem[] = [
+        { path: matchedKey, labelKey, timestamp: Date.now() },
+        ...filtered,
+      ].slice(0, 8);
+      writeRecentPages(next);
     }
   }, [pathname]);
 
@@ -137,10 +165,7 @@ export default function NavigationBreadcrumbs() {
   }, [router]);
 
   const handleClearRecent = useCallback(() => {
-    setRecentPages([]);
-    try {
-      localStorage.removeItem(RECENT_PAGES_STORAGE_KEY);
-    } catch {}
+    writeRecentPages([]);
     setRecentDropdownOpen(false);
   }, []);
 

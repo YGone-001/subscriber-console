@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo, useRef, useCallback } from "react";
+import { useEffect, useState, useMemo, useRef, useCallback, useSyncExternalStore } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -54,6 +54,63 @@ const DEFAULT_TABS: TabDefinition[] = [
   { path: "/", labelKey: "nav_dashboard", icon: <LayoutDashboard size={14} />, isPinned: true },
 ];
 
+let cachedRawTabs: string | null = null;
+let cachedTabs: TabDefinition[] = DEFAULT_TABS;
+
+function getStoredTabsSnapshot(): TabDefinition[] {
+  if (typeof window === "undefined") return DEFAULT_TABS;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw === cachedRawTabs && cachedTabs) {
+      return cachedTabs;
+    }
+    cachedRawTabs = raw;
+    if (raw) {
+      const parsed: Array<{ path: string; isPinned?: boolean }> = JSON.parse(raw);
+      const reconstructed: TabDefinition[] = parsed
+        .filter((p) => Boolean(ROUTE_DEFINITIONS[p.path]))
+        .map((p) => ({
+          path: p.path,
+          labelKey: ROUTE_DEFINITIONS[p.path].labelKey,
+          icon: ROUTE_DEFINITIONS[p.path].icon,
+          isPinned: p.path === "/" ? true : (p.isPinned ?? false),
+        }));
+      if (!reconstructed.some((t) => t.path === "/")) {
+        reconstructed.unshift(DEFAULT_TABS[0]);
+      }
+      cachedTabs = reconstructed;
+      return reconstructed;
+    }
+  } catch {}
+  cachedTabs = DEFAULT_TABS;
+  return DEFAULT_TABS;
+}
+
+const tabListeners = new Set<() => void>();
+function subscribeTabs(onStoreChange: () => void) {
+  tabListeners.add(onStoreChange);
+  const handleStorage = (e: StorageEvent) => {
+    if (e.key === STORAGE_KEY) onStoreChange();
+  };
+  window.addEventListener("storage", handleStorage);
+  return () => {
+    tabListeners.delete(onStoreChange);
+    window.removeEventListener("storage", handleStorage);
+  };
+}
+
+function writeTabs(newTabs: TabDefinition[]) {
+  cachedTabs = newTabs;
+  try {
+    const serialized = newTabs.map((tab) => ({ path: tab.path, isPinned: tab.isPinned }));
+    cachedRawTabs = JSON.stringify(serialized);
+    localStorage.setItem(STORAGE_KEY, cachedRawTabs);
+  } catch {}
+  for (const listener of tabListeners) {
+    listener();
+  }
+}
+
 export default function NavigationTabBar() {
   const pathname = usePathname();
   const router = useRouter();
@@ -61,38 +118,13 @@ export default function NavigationTabBar() {
   const tabsScrollRef = useRef<HTMLDivElement>(null);
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
 
-  const [tabs, setTabs] = useState<TabDefinition[]>(() => {
-    if (typeof window === "undefined") return DEFAULT_TABS;
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed: Array<{ path: string; isPinned?: boolean }> = JSON.parse(stored);
-        const reconstructed: TabDefinition[] = parsed
-          .filter((p) => Boolean(ROUTE_DEFINITIONS[p.path]))
-          .map((p) => ({
-            path: p.path,
-            labelKey: ROUTE_DEFINITIONS[p.path].labelKey,
-            icon: ROUTE_DEFINITIONS[p.path].icon,
-            isPinned: p.path === "/" ? true : (p.isPinned ?? false),
-          }));
-        if (!reconstructed.some((t) => t.path === "/")) {
-          reconstructed.unshift(DEFAULT_TABS[0]);
-        }
-        return reconstructed;
-      }
-    } catch {}
-    return DEFAULT_TABS;
-  });
+  const tabs = useSyncExternalStore(subscribeTabs, getStoredTabsSnapshot, () => DEFAULT_TABS);
 
   const saveTabs = useCallback((newTabs: TabDefinition[]) => {
-    setTabs(newTabs);
-    try {
-      const serialized = newTabs.map((tab) => ({ path: tab.path, isPinned: tab.isPinned }));
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(serialized));
-    } catch {}
+    writeTabs(newTabs);
   }, []);
 
-  // When pathname changes, ensure tab is opened
+  // When pathname changes, ensure tab is opened in store
   useEffect(() => {
     if (!pathname) return;
 
@@ -102,28 +134,16 @@ export default function NavigationTabBar() {
     );
 
     if (matchedKey && ROUTE_DEFINITIONS[matchedKey]) {
-      const timer = setTimeout(() => {
-        setTabs((prev) => {
-          if (prev.some((tab) => tab.path === matchedKey)) {
-            return prev;
-          }
-          const newTab: TabDefinition = {
-            path: matchedKey,
-            labelKey: ROUTE_DEFINITIONS[matchedKey].labelKey,
-            icon: ROUTE_DEFINITIONS[matchedKey].icon,
-            isPinned: matchedKey === "/",
-          };
-          const next = [...prev, newTab];
-          try {
-            localStorage.setItem(
-              STORAGE_KEY,
-              JSON.stringify(next.map((tab) => ({ path: tab.path, isPinned: tab.isPinned })))
-            );
-          } catch {}
-          return next;
-        });
-      }, 0);
-      return () => clearTimeout(timer);
+      const currentTabs = getStoredTabsSnapshot();
+      if (!currentTabs.some((tab) => tab.path === matchedKey)) {
+        const newTab: TabDefinition = {
+          path: matchedKey,
+          labelKey: ROUTE_DEFINITIONS[matchedKey].labelKey,
+          icon: ROUTE_DEFINITIONS[matchedKey].icon,
+          isPinned: matchedKey === "/",
+        };
+        writeTabs([...currentTabs, newTab]);
+      }
     }
   }, [pathname]);
 
