@@ -45,7 +45,7 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="container animate-fade-in p-12">
+    <div className="container animate-fade-in">
       {feedback && (
         <OperationNotice
           presentation="modal"

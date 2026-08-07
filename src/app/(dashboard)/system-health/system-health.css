@@ -1,4 +1,16 @@
-.health-container { padding: 2.5rem 3rem; padding-bottom: 120px; }
+.health-container {
+  width: 100%;
+  padding: 1.5rem;
+  padding-bottom: 120px;
+  box-sizing: border-box;
+}
+
+@media (max-width: 768px) {
+  .health-container {
+    padding: 1rem;
+    padding-bottom: 120px;
+  }
+}
 
 /* Subsystems Matrix */
 .health-subsystems-section { margin-bottom: 2.5rem; }

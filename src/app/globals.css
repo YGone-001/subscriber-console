@@ -792,7 +792,14 @@ h2 {
 /* Layout Utilities */
 .container {
   width: 100%;
-  padding: 2rem;
+  padding: 1.5rem;
+  box-sizing: border-box;
+}
+
+@media (max-width: 768px) {
+  .container {
+    padding: 1rem;
+  }
 }
 
 .grid {

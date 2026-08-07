@@ -1,12 +1,22 @@
 .subscribers-page-container {
-  padding: 3rem;
+  width: 100%;
+  padding: 1.5rem;
+  box-sizing: border-box;
+}
+
+@media (max-width: 768px) {
+  .subscribers-page-container {
+    padding: 1rem;
+  }
 }
 
 .subscribers-page-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 2rem;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
 }
 
 .subscribers-page-title {
@@ -25,11 +35,13 @@
 .action-bar-left {
   display: flex;
   align-items: center;
-  gap: 1.5rem;
+  gap: 1rem;
+  flex-wrap: wrap;
+  flex: 1 1 auto;
 }
 
 .search-input {
-  width: 350px;
+  width: min(350px, 100%);
   border-radius: 20px;
   padding: 0.6rem 1.2rem;
 }
@@ -37,7 +49,8 @@
 .bulk-actions-container {
   display: flex;
   align-items: center;
-  gap: 1.5rem;
+  gap: 1rem;
+  flex-wrap: wrap;
   background: rgba(59, 130, 246, 0.1);
   border-radius: 8px;
   padding: 0.4rem 1.2rem;

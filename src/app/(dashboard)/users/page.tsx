@@ -26,7 +26,7 @@ export default function UsersPage() {
 
     if (!isRoot) {
     return (
-      <div className="container animate-fade-in" style={{ padding: "3rem" }}>
+      <div className="container animate-fade-in">
         <div className="users-access-panel">
           <EmptyState
             icon={<Shield size={48} />}

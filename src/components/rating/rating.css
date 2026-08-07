@@ -551,6 +551,18 @@
   margin-top: 0.2rem;
 }
 
+.rating-page-container {
+  width: 100%;
+  padding: 1.5rem;
+  box-sizing: border-box;
+}
+
+@media (max-width: 768px) {
+  .rating-page-container {
+    padding: 1rem;
+  }
+}
+
 @media (max-width: 640px) {
   .rating-page { padding: 1rem; }
   .rating-page-header { flex-direction: column; align-items: stretch; gap: 0.5rem; }

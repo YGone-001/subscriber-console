@@ -1,5 +1,23 @@
-.audit-container { padding: 3rem; }
-.audit-header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 2.5rem; }
+.audit-container {
+  width: 100%;
+  padding: 1.5rem;
+  box-sizing: border-box;
+}
+
+@media (max-width: 768px) {
+  .audit-container {
+    padding: 1rem;
+  }
+}
+
+.audit-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+}
 .audit-title { margin: 0; font-size: 2rem; color: var(--text-main); display: flex; align-items: center; gap: 0.75rem; }
 .audit-subtitle { color: var(--text-muted); margin-top: 0.5rem; font-size: 0.95rem; }
 .audit-tracking { background: rgba(59, 130, 246, 0.12); color: var(--primary); padding: 0.5rem 1rem; border-radius: 20px; font-size: 0.85rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem; }
@@ -9,7 +27,7 @@
 .audit-metric-content { min-width: 0; }
 .audit-metric-label { color: var(--text-muted); font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0; }
 .audit-metric-value { color: var(--text-main); font-size: 1.35rem; font-weight: 800; margin-top: 0.15rem; }
-.audit-hot-actions-grid { margin-bottom: 1.25rem; padding: 1rem 1.25rem; display: grid; grid-template-columns: minmax(260px, 0.9fr) minmax(260px, 0.9fr) minmax(280px, 1fr); gap: 1rem; }
+.audit-hot-actions-grid { margin-bottom: 1.25rem; padding: 1.25rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; }
 .audit-hot-header { display: flex; align-items: center; gap: 0.5rem; color: var(--text-main); font-weight: 800; margin-bottom: 0.75rem; }
 .audit-hot-list { display: grid; gap: 0.5rem; }
 .audit-hot-empty { color: var(--text-muted); font-size: 0.85rem; }
@@ -24,21 +42,21 @@
 .audit-targets-container { margin-top: 1rem; padding-top: 0.85rem; border-top: 1px solid var(--surface-border); }
 .audit-targets-title { color: var(--text-main); font-weight: 800; font-size: 0.86rem; margin-bottom: 0.65rem; }
 .audit-filters-card { margin-bottom: 2rem; padding: 1.5rem; }
-.audit-filters-row1 { display: grid; grid-template-columns: 180px 160px minmax(180px, 1fr) minmax(180px, 1fr) auto; gap: 16px; align-items: flex-end; }
+.audit-filters-row1 { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; align-items: flex-end; }
 .audit-filter-label { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 6px; }
 .audit-filter-input { height: 40px; padding: 0 0.75rem; font-size: 0.9rem; width: 100%; }
 .audit-filter-input-wrap { position: relative; }
 .audit-filter-input-icon { height: 40px; width: 100%; padding: 0 2.25rem 0 0.75rem; font-size: 0.9rem; }
 .audit-filter-clear { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; }
-.audit-filter-btns { display: flex; gap: 12px; }
+.audit-filter-btns { display: flex; gap: 12px; align-items: flex-end; }
 .audit-filter-btn { height: 40px; padding: 0 1.5rem; font-size: 0.9rem; }
-.audit-filters-row2 { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)) auto; gap: 16px; align-items: flex-end; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--surface-border); }
-.audit-action-btns { display: flex; gap: 10px; }
+.audit-filters-row2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; align-items: flex-end; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--surface-border); }
+.audit-action-btns { display: flex; gap: 10px; align-items: flex-end; }
 .audit-refresh-btn { height: 40px; padding: 0 0.85rem; font-size: 0.9rem; }
 .audit-export-btn { height: 40px; padding: 0 1rem; font-size: 0.9rem; display: inline-flex; align-items: center; gap: 0.45rem; }
 .audit-summary { display: flex; justify-content: space-between; align-items: center; margin: -0.75rem 0 1rem; color: var(--text-muted); font-size: 0.85rem; gap: 1rem; flex-wrap: wrap; }
 .audit-summary-highlight { color: var(--text-main); }
-.audit-table-card { padding: 0; overflow: hidden; }
+.audit-table-card { padding: 0; overflow-x: auto; border-radius: 12px; }
 .audit-table-msg { padding: 4rem; text-align: center; color: var(--text-muted); }
 .audit-table-err { padding: 2rem; color: var(--danger); text-align: center; }
 .audit-table { width: 100%; border-collapse: collapse; }

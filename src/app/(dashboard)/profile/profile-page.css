@@ -1,7 +1,17 @@
 .profile-page-container {
-  padding: 3rem;
+  width: 100%;
+  padding: 1.5rem;
   padding-bottom: 100px;
+  box-sizing: border-box;
 }
+
+@media (max-width: 768px) {
+  .profile-page-container {
+    padding: 1rem;
+    padding-bottom: 100px;
+  }
+}
+
 .profile-page-header {
   margin-bottom: 1.5rem;
 }
@@ -18,7 +28,7 @@
 }
 .profile-metrics-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 1rem;
   margin-bottom: 1.5rem;
 }
