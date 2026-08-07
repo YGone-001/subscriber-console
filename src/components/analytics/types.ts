@@ -117,12 +117,14 @@ export type KpiCardProps = {
   ringValue?: number;
   tone?: "normal" | "warning" | "danger";
   badge?: React.ReactNode;
+  tag?: React.ReactNode;
   onClick?: () => void;
 };
 
 export type WorkItem = {
   id: string;
   tone: "danger" | "warning" | "normal";
+  priority?: "P0" | "P1" | "P2";
   title: string;
   detail: string;
   href: string;

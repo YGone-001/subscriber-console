@@ -23,7 +23,6 @@ import CountUpNumber from "./analytics/CountUpNumber";
 import KpiCard from "./analytics/KpiCard";
 import SkeletonDashboard from "./analytics/SkeletonDashboard";
 import TopConsumerChart from "./analytics/TopConsumerChart";
-import PlmnDistributionChart from "./analytics/PlmnDistributionChart";
 import WorkbenchPanel from "./analytics/WorkbenchPanel";
 import OcsBalanceCapacityCard from "./analytics/OcsBalanceCapacityCard";
 import OcsSessionTelemetryCard from "./analytics/OcsSessionTelemetryCard";
@@ -93,12 +92,13 @@ export default function AnalyticsCockpit() {
 
   const topImsi = top5[0]?.imsi || "--";
 
-  // Work Items generation with OCS telemetry awareness
+  // Work Items generation with P0/P1 semantic risk awareness
   const workItems: WorkItem[] = [];
   if (activeCriticalCount > 0) {
     workItems.push({
       id: "critical-alerts",
       tone: "danger",
+      priority: "P0",
       title: t("dash_work_critical_title", { count: activeCriticalCount }),
       detail: t("dash_work_critical_detail"),
       href: "/system-health",
@@ -109,16 +109,40 @@ export default function AnalyticsCockpit() {
     workItems.push({
       id: "broken-invariants",
       tone: "danger",
+      priority: "P0",
       title: t("dash_work_invariant_title", { count: brokenInvariants }),
       detail: t("dash_work_invariant_detail"),
       href: "/ocs/balances",
       action: t("dash_work_open_ocs"),
     });
   }
+  if (exhaustionTone === "danger") {
+    workItems.push({
+      id: "exhaustion",
+      tone: "danger",
+      priority: "P0",
+      title: t("dash_work_exhaustion_title"),
+      detail: theoreticalLifeHr > 0 ? t("dash_work_exhaustion_detail", { hours: theoreticalLifeHr.toFixed(1) }) : t("dash_work_exhaustion_unknown"),
+      href: "/subscribers",
+      action: t("dash_work_open_subscribers"),
+    });
+  }
+  if (topConsumerShare >= 50 && topImsi !== "--") {
+    workItems.push({
+      id: "top-consumer-danger",
+      tone: "danger",
+      priority: "P0",
+      title: t("dash_work_top_consumer_title"),
+      detail: t("dash_work_top_consumer_detail", { imsi: topImsi, share: topConsumerShare.toFixed(0) }),
+      href: "/subscribers",
+      action: t("dash_work_open_subscribers"),
+    });
+  }
   if (orphanedReservations > 0) {
     workItems.push({
       id: "orphaned-reservations",
       tone: "warning",
+      priority: "P1",
       title: t("dash_work_orphaned_title", { count: orphanedReservations }),
       detail: t("dash_work_orphaned_detail"),
       href: "/ocs/usage",
@@ -129,26 +153,29 @@ export default function AnalyticsCockpit() {
     workItems.push({
       id: "warning-alerts",
       tone: "warning",
+      priority: "P1",
       title: t("dash_work_warning_title", { count: activeWarningCount }),
       detail: t("dash_work_warning_detail"),
       href: "/system-health",
       action: t("dash_work_open_health"),
     });
   }
-  if (exhaustionTone !== "normal") {
+  if (exhaustionTone === "warning") {
     workItems.push({
       id: "exhaustion",
-      tone: exhaustionTone,
+      tone: "warning",
+      priority: "P1",
       title: t("dash_work_exhaustion_title"),
       detail: theoreticalLifeHr > 0 ? t("dash_work_exhaustion_detail", { hours: theoreticalLifeHr.toFixed(1) }) : t("dash_work_exhaustion_unknown"),
       href: "/subscribers",
       action: t("dash_work_open_subscribers"),
     });
   }
-  if (topConsumerShare >= 35 && topImsi !== "--") {
+  if (topConsumerShare >= 35 && topConsumerShare < 50 && topImsi !== "--") {
     workItems.push({
       id: "top-consumer",
       tone: "warning",
+      priority: "P1",
       title: t("dash_work_top_consumer_title"),
       detail: t("dash_work_top_consumer_detail", { imsi: topImsi, share: topConsumerShare.toFixed(0) }),
       href: "/subscribers",
@@ -159,6 +186,7 @@ export default function AnalyticsCockpit() {
     workItems.push({
       id: "rating",
       tone: "warning",
+      priority: "P1",
       title: t("dash_work_rating_title"),
       detail: t("dash_work_rating_detail"),
       href: "/rating",
@@ -262,6 +290,7 @@ export default function AnalyticsCockpit() {
           icon={<Globe size={20} />}
           label={t("dash_kpi_plmn_active")}
           value={<CountUpNumber value={plmnCount} />}
+          tag={plmnDist.length > 0 ? (plmnDist.length === 1 ? `${plmnDist[0].name} (100%)` : `${plmnDist[0]?.name || "41701"} (+${plmnDist.length - 1})`) : undefined}
           detail={ratingGroupCount > 0 ? t("dash_kpi_detail_rating_mapped", { count: ratingGroupCount }) : t("dash_kpi_detail_rating_none")}
           sparkline={plmnSparkline}
           ringValue={plmnCoverage}
@@ -310,11 +339,10 @@ export default function AnalyticsCockpit() {
         <OcsSessionTelemetryCard sessions={ocsSessions} reservations={ocsReservations} t={t} />
       </div>
 
-      {/* 4. Telemetry Charts (Tariff Plan, Top Consumers & PLMN Distribution) */}
+      {/* 4. Expanded Telemetry Charts (Wider Top 5 Consumers & Tariff Plan Distribution) */}
       <div className="analytics-chart-grid">
-        <TariffPlanDistributionChart tariffPlanDist={tariffPlanDist} theme={theme} t={t} />
         <TopConsumerChart top5={top5} theme={theme} t={t} />
-        <PlmnDistributionChart plmnDist={plmnDist} theme={theme} t={t} />
+        <TariffPlanDistributionChart tariffPlanDist={tariffPlanDist} theme={theme} t={t} />
       </div>
     </div>
   );

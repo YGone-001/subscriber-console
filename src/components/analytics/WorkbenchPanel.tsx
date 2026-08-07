@@ -109,12 +109,12 @@ export default function WorkbenchPanel({
                     {item.tone === "danger" && (
                       <span className="analytics-semantic-badge badge-danger">
                         <span className="live-pulse-dot" />
-                        P0
+                        {item.priority || "P0"}
                       </span>
                     )}
                     {item.tone === "warning" && (
                       <span className="analytics-semantic-badge badge-warning">
-                        P1
+                        {item.priority || "P1"}
                       </span>
                     )}
                   </div>
@@ -171,23 +171,42 @@ export default function WorkbenchPanel({
             value={operationsScore}
             color={
               operationsScore < 70
-                ? "#e74a3b"
+                ? "#ef4444"
                 : operationsScore < 88
-                ? "#f6c23e"
+                ? "#f59e0b"
                 : "#1cc88a"
             }
           />
           <div>
             <span>{t("dash_ops_score")}</span>
-            <strong>{Math.round(operationsScore)}</strong>
+            <strong
+              style={{
+                color:
+                  operationsScore < 70
+                    ? "#ef4444"
+                    : operationsScore < 88
+                    ? "#f59e0b"
+                    : "var(--text-main)",
+              }}
+            >
+              {Math.round(operationsScore)}
+            </strong>
           </div>
         </div>
         <div className="analytics-readiness-list">
-          <div>
+          <div
+            style={{
+              color:
+                activeAlertCount > 0
+                  ? "#ef4444"
+                  : "var(--text-secondary)",
+              fontWeight: activeAlertCount > 0 ? 700 : 500,
+            }}
+          >
             {activeAlertCount > 0 ? (
-              <ShieldAlert size={15} color="var(--danger)" />
+              <ShieldAlert size={15} color="#ef4444" />
             ) : (
-              <ShieldCheck size={15} color="var(--success)" />
+              <ShieldCheck size={15} color="#1cc88a" />
             )}
             {t("dash_ops_alerts", { count: activeAlertCount })}
           </div>

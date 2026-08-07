@@ -83,26 +83,26 @@ export default function TopConsumerChart({
       <div className="analytics-panel-body">
         {top5.length > 0 ? (
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={top5} layout="vertical" margin={{ top: 4, right: 18, left: 0, bottom: 4 }}>
+            <BarChart data={top5} layout="vertical" margin={{ top: 8, right: 28, left: 8, bottom: 8 }}>
               <CartesianGrid strokeDasharray="4 4" horizontal={false} stroke={chartStroke} />
               <XAxis
                 type="number"
                 stroke={tickColor}
-                tick={{ fill: tickColor, fontSize: 11 }}
-                tickFormatter={(value: number) => `${(value / BYTES_IN_GB).toFixed(1)}G`}
+                tick={{ fill: tickColor, fontSize: 11, fontWeight: 500 }}
+                tickFormatter={(value: number) => `${(value / BYTES_IN_GB).toFixed(1)} GB`}
               />
               <YAxis
                 type="category"
                 dataKey="imsi"
-                width={118}
+                width={142}
                 stroke={tickColor}
-                tick={{ fontSize: 11, fill: tickColor }}
+                tick={{ fontSize: 11.5, fill: tickColor, fontFamily: "monospace", fontWeight: 600 }}
               />
               <Tooltip
-                cursor={{ fill: theme === "dark" ? "rgba(255,255,255,0.04)" : "rgba(15,23,42,0.04)" }}
+                cursor={{ fill: theme === "dark" ? "rgba(255,255,255,0.05)" : "rgba(15,23,42,0.04)" }}
                 content={<TopConsumerTooltip contentStyle={tooltipStyle} t={t} />}
               />
-              <Bar dataKey="balance" radius={[0, 6, 6, 0]} barSize={18}>
+              <Bar dataKey="balance" radius={[0, 6, 6, 0]} barSize={22}>
                 {top5.map((entry, index) => (
                   <Cell key={`${entry.imsi}-${index}`} fill={COLORS[index % COLORS.length]} />
                 ))}

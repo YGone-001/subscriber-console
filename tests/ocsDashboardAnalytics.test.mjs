@@ -65,3 +65,29 @@ test('Dashboard OCS and Workbench i18n keys are fully aligned across zh and en',
     assert.match(enLocale, new RegExp(key), `Missing ${key} in en.ts`);
   }
 });
+
+test('Option A: Semantic risk perception enforces P0/P1 priority tones and readiness linkage', () => {
+  assert.match(analyticsCockpitSource, /priority:\s*"P0"/);
+  assert.match(analyticsCockpitSource, /priority:\s*"P1"/);
+  assert.match(analyticsCockpitSource, /exhaustionTone === "danger"/);
+  assert.match(workbenchPanelSource, /analytics-semantic-badge badge-danger/);
+  assert.match(workbenchPanelSource, /live-pulse-dot/);
+  assert.match(workbenchPanelSource, /operationsScore < 70/);
+});
+
+test('Option B: Spatial dimensionality reduction integrates PLMN tag and expands Top 5 chart', () => {
+  const topConsumerSource = readFileSync(new URL('../src/components/analytics/TopConsumerChart.tsx', import.meta.url), 'utf8');
+  const analyticsCssSource = readFileSync(new URL('../src/components/analytics.css', import.meta.url), 'utf8');
+
+  // PLMN is reduced to a Tag in KpiCard rather than a separate heavy chart in the main grid
+  assert.match(analyticsCockpitSource, /tag=\{plmnDist\.length > 0/);
+  // Bottom grid is 2-column asymmetric (Top 5 + Tariff Plan)
+  assert.match(analyticsCockpitSource, /<TopConsumerChart/);
+  assert.match(analyticsCockpitSource, /<TariffPlanDistributionChart/);
+  assert.doesNotMatch(analyticsCockpitSource, /PlmnDistributionChart/);
+
+  // TopConsumerChart width and formatting is expanded for long IMSI strings
+  assert.match(topConsumerSource, /width=\{142\}/);
+  assert.match(topConsumerSource, /fontFamily:\s*"monospace"/);
+  assert.match(analyticsCssSource, /\.analytics-chart-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1\.65fr\)\s*minmax\(0,\s*1fr\)/);
+});

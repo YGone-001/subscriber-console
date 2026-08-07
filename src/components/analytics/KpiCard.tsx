@@ -69,6 +69,7 @@ export default function KpiCard({
   sparkline,
   ringValue,
   tone = "normal",
+  tag,
 }: KpiCardProps) {
   return (
     <section className={`analytics-kpi-card analytics-kpi-${tone}`}>
@@ -94,7 +95,10 @@ export default function KpiCard({
       </div>
 
       <div className="analytics-kpi-body">
-        <div className="analytics-kpi-value">{value}</div>
+        <div className="analytics-kpi-value">
+          {value}
+          {tag && <span className="analytics-kpi-badge-tag">{tag}</span>}
+        </div>
         {detail && (
           <div className="analytics-kpi-detail" title={detail}>
             {detail}
