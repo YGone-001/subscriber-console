@@ -1,5 +1,6 @@
 import { useI18n } from "@/components/I18nProvider";
 import * as T from "../types";
+import MetricStrip from "@/components/ui/MetricStrip";
 
 export function UsersSummaryPanel({ 
   usersCount, 
@@ -14,27 +15,20 @@ export function UsersSummaryPanel({
 }) {
   const { t } = useI18n();
   return (
-    <section className="users-summary" aria-label={t("users_summary")}>
-      <div className="users-metric">
-        <span>{t("users_count_total")}</span>
-        <strong>{usersCount}</strong>
-      </div>
-      <div className="users-metric success">
-        <span>{t("users_enabled")}</span>
-        <strong>{statusCounts.active}</strong>
-      </div>
-      <div className="users-metric muted">
-        <span>{t("users_disabled_locked")}</span>
-        <strong>{statusCounts.disabled}</strong>
-      </div>
-      <button
-        type="button"
-        className="users-metric warning"
-        onClick={() => setNotice({ type: "info", text: t("users_approval_center_reserved") })}
-      >
-        <span>{t("users_pending_approval")}</span>
-        <strong>{approvalMetrics?.pending ?? 0}</strong>
-      </button>
-    </section>
+    <MetricStrip
+      ariaLabel={t("users_summary")}
+      items={[
+        { key: "total", label: t("users_count_total"), value: usersCount },
+        { key: "active", label: t("users_enabled"), value: statusCounts.active, tone: "success" },
+        { key: "disabled", label: t("users_disabled_locked"), value: statusCounts.disabled, tone: "muted" },
+        {
+          key: "approval",
+          label: t("users_pending_approval"),
+          value: approvalMetrics?.pending ?? 0,
+          tone: "warning",
+          onClick: () => setNotice({ type: "info", text: t("users_approval_center_reserved") }),
+        },
+      ]}
+    />
   );
 }

@@ -48,7 +48,7 @@ export default function LoginForm() {
   };
 
   return (
-    <div className="login-container">
+    <main className="login-container">
       <div className="login-bg-blob-1" />
       <div className="login-bg-blob-2" />
 
@@ -71,14 +71,17 @@ export default function LoginForm() {
 
         <form id="xcloud-login-form" onSubmit={handleSubmit} className="login-form">
           {error && (
-            <div id="xcloud-login-error" className="login-error-container">
-              <div className="login-error-indicator" />
+            <div id="xcloud-login-error" className="login-error-container" role="alert" aria-live="assertive">
+              <div className="login-error-indicator" aria-hidden="true" />
               <span id="xcloud-login-error-text">{error}</span>
             </div>
           )}
 
           <div className="input-container">
-            <div className="input-icon">
+            <label className="login-field-label" htmlFor="xcloud-login-username">
+              {t("login_username")}
+            </label>
+            <div className="input-icon" aria-hidden="true">
               <User size={18} />
             </div>
             <input
@@ -86,13 +89,19 @@ export default function LoginForm() {
               name="username"
               type="text"
               placeholder={t("login_username")}
+              autoComplete="username"
+              aria-invalid={Boolean(error)}
+              aria-describedby={error ? "xcloud-login-error-text" : undefined}
               required
               className="login-input"
             />
           </div>
 
           <div className="input-container">
-            <div className="input-icon">
+            <label className="login-field-label" htmlFor="xcloud-login-password">
+              {t("login_password")}
+            </label>
+            <div className="input-icon" aria-hidden="true">
               <Lock size={18} />
             </div>
             <input
@@ -100,6 +109,9 @@ export default function LoginForm() {
               name="password"
               type={passwordVisible ? "text" : "password"}
               placeholder={t("login_password")}
+              autoComplete="current-password"
+              aria-invalid={Boolean(error)}
+              aria-describedby={error ? "xcloud-login-error-text" : undefined}
               required
               className="login-input login-input-password"
             />
@@ -107,6 +119,8 @@ export default function LoginForm() {
               id="xcloud-password-toggle"
               type="button"
               title={passwordVisible ? t("login_hide_password") : t("login_show_password")}
+              aria-label={passwordVisible ? t("login_hide_password") : t("login_show_password")}
+              aria-pressed={passwordVisible}
               onClick={() => setPasswordVisible((visible) => !visible)}
               className="password-toggle"
             >
@@ -136,6 +150,6 @@ export default function LoginForm() {
           {t("login_protected")}
         </div>
       </div>
-    </div>
+    </main>
   );
 }

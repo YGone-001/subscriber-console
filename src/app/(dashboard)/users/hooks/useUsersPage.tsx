@@ -79,7 +79,7 @@ export function useUsersPage() {
     fetcher,
   );
 
-  const initialQuery = useMemo(getInitialQuery, []);
+  const initialQuery = useMemo(() => getInitialQuery(), []);
   const users = useMemo(() => data?.users || [], [data?.users]);
   const drawerRef = useRef<HTMLElement | null>(null);
   const lastFocusRef = useRef<HTMLElement | null>(null);

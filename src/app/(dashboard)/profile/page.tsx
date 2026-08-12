@@ -9,6 +9,8 @@ import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
 import { useAuth } from "@/hooks/useAuth";
 import "./profile-page.css";
+import PageHeader from "@/components/ui/PageHeader";
+import MetricStrip from "@/components/ui/MetricStrip";
 
 interface ProfileSummary {
   name: string;
@@ -145,10 +147,12 @@ export default function ProfilePage() {
   return (
     <>
       <div className="container animate-fade-in profile-page-container">
-        <div className="profile-page-header">
-          <h1 className="profile-page-title">{t("prof_governance_title")}</h1>
-          <p className="profile-page-subtitle">{t("prof_governance_subtitle")}</p>
-        </div>
+        <PageHeader
+          eyebrow="POLICY / TEMPLATE"
+          icon={<Boxes size={23} />}
+          title={t("prof_governance_title")}
+          description={t("prof_governance_subtitle")}
+        />
 
         {notice && (
           <OperationNotice
@@ -160,24 +164,15 @@ export default function ProfilePage() {
           />
         )}
 
-        <div className="profile-metrics-grid">
-          {[
-            { icon: <Boxes size={18} color="var(--primary)" />, label: t("prof_governance_total"), value: governanceSummary.total },
-            { icon: <Users size={18} color="var(--primary)" />, label: t("prof_governance_impacted"), value: governanceSummary.impacted },
-            { icon: <AlertTriangle size={18} color="var(--danger)" />, label: t("prof_governance_high_risk"), value: governanceSummary.highRisk },
-            { icon: <Clock size={18} color="var(--primary)" />, label: t("prof_governance_recent"), value: governanceSummary.recentlyChanged },
-          ].map(metric => (
-            <div key={metric.label} className="dash-card profile-metric-card">
-              <div className="profile-metric-icon-box">
-                {metric.icon}
-              </div>
-              <div className="profile-metric-content">
-                <div className="profile-metric-label">{metric.label}</div>
-                <div className="profile-metric-value">{metric.value}</div>
-              </div>
-            </div>
-          ))}
-        </div>
+        <MetricStrip
+          ariaLabel={t("prof_governance_title")}
+          items={[
+            { key: "total", icon: <Boxes size={17} />, label: t("prof_governance_total"), value: governanceSummary.total },
+            { key: "impacted", icon: <Users size={17} />, label: t("prof_governance_impacted"), value: governanceSummary.impacted },
+            { key: "risk", icon: <AlertTriangle size={17} />, label: t("prof_governance_high_risk"), value: governanceSummary.highRisk, tone: "danger" },
+            { key: "recent", icon: <Clock size={17} />, label: t("prof_governance_recent"), value: governanceSummary.recentlyChanged },
+          ]}
+        />
 
         <div className="page-action-bar">
           <input

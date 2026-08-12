@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { useTheme } from "@/components/ThemeProvider";
+import { useDialogFocus } from "@/components/ui/useDialogFocus";
 import "./CommandPalette.css";
 
 type PaletteItem = {
@@ -62,6 +63,7 @@ export default function CommandPalette({ isOpen, onClose, onAction }: CommandPal
   const { theme, toggleTheme } = useTheme();
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useDialogFocus({ open: isOpen, onClose, initialFocusRef: inputRef });
 
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState<"all" | "pages" | "actions" | "data">("all");
@@ -128,11 +130,6 @@ export default function CommandPalette({ isOpen, onClose, onAction }: CommandPal
       actionKey: "clear-recent-history",
     },
   ];
-
-  useEffect(() => {
-    if (!isOpen) return;
-    setTimeout(() => inputRef.current?.focus(), 50);
-  }, [isOpen]);
 
   useEffect(() => {
     const trimmed = query.trim();
@@ -243,8 +240,6 @@ export default function CommandPalette({ isOpen, onClose, onAction }: CommandPal
       if (filteredItems[activeSelectedIndex]) {
         handleSelect(filteredItems[activeSelectedIndex]);
       }
-    } else if (e.key === "Escape") {
-      onClose();
     }
   };
 
@@ -286,7 +281,16 @@ export default function CommandPalette({ isOpen, onClose, onAction }: CommandPal
 
   return (
     <div onClick={onClose} className="cp-overlay">
-      <div onClick={(e) => e.stopPropagation()} onKeyDown={handleKeyDown} className="cp-modal">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("cp_title")}
+        ref={dialogRef}
+        tabIndex={-1}
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={handleKeyDown}
+        className="cp-modal"
+      >
         <div className="cp-search-header">
           <Search size={20} color="#94a3b8" />
           <input
@@ -303,6 +307,7 @@ export default function CommandPalette({ isOpen, onClose, onAction }: CommandPal
               }
             }}
             placeholder={t("cp_placeholder")}
+            aria-label={t("cp_placeholder")}
             className="cp-search-input"
           />
           <kbd className="cp-kbd-shortcut">ESC</kbd>

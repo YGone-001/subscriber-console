@@ -15,6 +15,7 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { useI18n } from "@/components/I18nProvider";
 import { EmptyState, LoadingRows, OperationNotice } from "@/components/OperationFeedback";
+import PageHeader from "@/components/ui/PageHeader";
 
 type SysUser = {
   username: string;
@@ -120,12 +121,12 @@ export default function RoleManagementPanel() {
   return (
     <>
       <div className="roles-page">
-        <header className="roles-header">
-          <div>
-            <h1>{t("roles_title")}</h1>
-            <p>{t("roles_subtitle")}</p>
-          </div>
-        </header>
+        <PageHeader
+          eyebrow="RBAC / MATRIX"
+          icon={<Shield size={23} />}
+          title={t("roles_title")}
+          description={t("roles_subtitle")}
+        />
 
         <section className="roles-grid">
           {isLoading ? (
@@ -291,5 +292,4 @@ export default function RoleManagementPanel() {
     </>
   );
 }
-
 

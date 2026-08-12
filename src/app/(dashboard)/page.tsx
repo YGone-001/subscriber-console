@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import AnalyticsCockpit from "@/components/AnalyticsCockpit";
-import { DatabaseZap } from "lucide-react";
+import { DatabaseZap, RadioTower } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { OperationNotice, type FeedbackTone } from "@/components/OperationFeedback";
+import PageHeader from "@/components/ui/PageHeader";
 
 type FeedbackState = {
   tone: FeedbackTone;
@@ -56,33 +57,32 @@ export default function DashboardPage() {
         />
       )}
 
-      {/* Page Header */}
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <h2 className="m-0 text-2xl font-bold text-[var(--text-main)]">
-            {t("dashboard_title")}
-          </h2>
-        </div>
-        {/* Sync Telemetry Button */}
-        <button
-          onClick={handleSync}
-          disabled={syncState === "syncing"}
-          className={`btn btn-outline analytics-sync-btn ${syncState === "syncing" ? "radar-animating" : ""}`}
-          title={t("sync_tooltip")}
-        >
-          {syncState === "syncing" ? (
-            <span style={{ opacity: 0.5 }}>{t("sync_scanning")}</span>
-          ) : syncState === "success" ? (
-            <span className="text-success">{t("sync_ok")}</span>
-          ) : syncState === "error" ? (
-            <span className="text-danger">{t("sync_error")}</span>
-          ) : (
-            <>
-              <DatabaseZap size={14} className="text-primary" /> {t("sync_telemetry")}
-            </>
-          )}
-        </button>
-      </div>
+      <PageHeader
+        eyebrow={t("dash_live")}
+        icon={<RadioTower size={24} />}
+        title={t("dashboard_title")}
+        description={t("dash_workbench_subtitle")}
+        actions={(
+          <button
+            onClick={handleSync}
+            disabled={syncState === "syncing"}
+            className={`btn btn-outline analytics-sync-btn ${syncState === "syncing" ? "radar-animating" : ""}`}
+            title={t("sync_tooltip")}
+          >
+            {syncState === "syncing" ? (
+              <span>{t("sync_scanning")}</span>
+            ) : syncState === "success" ? (
+              <span className="text-success">{t("sync_ok")}</span>
+            ) : syncState === "error" ? (
+              <span className="text-danger">{t("sync_error")}</span>
+            ) : (
+              <>
+                <DatabaseZap size={15} /> {t("sync_telemetry")}
+              </>
+            )}
+          </button>
+        )}
+      />
 
       {/* Analytics Cockpit - Charts and Metric Cards */}
       <AnalyticsCockpit />

@@ -10,6 +10,8 @@ export const zh: Record<string, string> = {
     edit: "编辑",
     close: "关闭",
     actions: "操作",
+    table_select_all_subscribers: "选择本页全部订阅者",
+    table_select_subscriber: "选择订阅者 {imsi}",
     status: "状态",
     logout: "退出登录",
     prev: "上一页",
@@ -970,6 +972,7 @@ export const zh: Record<string, string> = {
     health_btn_batch_heal: "一键批量修复",
     health_btn_export_report: "导出诊断报告",
     health_batch_modal_title: "批量智能自愈确认",
+    health_items_to_remediate: "待修复 {count} 项",
     health_batch_modal_desc: "即将对选中的 {count} 个异常项执行批量智能修复，将自动补齐缺失配置、校准余额数学不变量、重绑默认资费方案并释放孤儿预留。",
     health_batch_modal_confirm: "我确认对当前筛选的所有异常项执行批量修复。",
     health_msg_batch_heal_success: "已成功修复 {count} 个系统异常项。",
@@ -1088,6 +1091,7 @@ export const zh: Record<string, string> = {
 
     // -- Dashboard --
     dashboard_title: "\u5206\u6790\u4eea\u8868\u76d8",
+    dash_live: "\u5b9e\u65f6\u8fd0\u884c",
     dashboard_subtitle: "\u5b9e\u65f6\u7f51\u7edc\u9065\u6d4b\u4e0e\u7528\u6237\u6982\u89c8\u3002",
     sync_telemetry: "\u540c\u6b65\u6570\u636e",
     sync_scanning: "\u626b\u63cf\u4e2d...",
@@ -1440,6 +1444,7 @@ export const zh: Record<string, string> = {
     dh_err_import: "导入失败。请重试。",
 
     // -- Command Palette --
+    cp_title: "命令面板",
     cp_placeholder: "搜索或输入命令...",
     cp_group_actions: "快捷操作",
     cp_group_nav: "页面导航",
@@ -1708,6 +1713,7 @@ export const zh: Record<string, string> = {
     nav_tab_scroll_left: "向左滚动标签",
     nav_tab_scroll_right: "向右滚动标签",
     nav_tab_close: "关闭标签页",
+    nav_tab_workspace: "已打开的工作区页面",
     nav_tab_options: "标签页操作",
     nav_tab_close_others: "关闭其他标签页",
     nav_tab_close_all: "关闭所有标签页",
@@ -1731,5 +1737,3 @@ export const zh: Record<string, string> = {
     theme_switch_light: "浅色模式",
     theme_switch_dark: "深色模式",
 };
-
-

@@ -1,7 +1,7 @@
   .analytics-root {
     display: flex;
     flex-direction: column;
-    gap: 1.5rem;
+    gap: 1.25rem;
     margin-bottom: 2.5rem;
     width: 100%;
   }
@@ -16,12 +16,12 @@
   .analytics-readiness {
     background: var(--surface);
     border: 1px solid var(--surface-border);
-    border-radius: 8px;
-    box-shadow: 0 14px 32px -24px rgba(15, 23, 42, 0.55);
+    border-radius: var(--radius-panel);
+    box-shadow: var(--shadow-panel);
   }
 
   .analytics-workbench-main {
-    padding: 1rem;
+    padding: 1.1rem;
     display: grid;
     gap: 0.95rem;
   }
@@ -59,7 +59,7 @@
     align-items: center;
     background: var(--header-bg);
     border: 1px solid var(--surface-border);
-    border-radius: 999px;
+    border-radius: var(--radius-control);
     padding: 3px;
     gap: 3px;
   }
@@ -70,7 +70,7 @@
     gap: 0.4rem;
     padding: 0.35rem 0.75rem;
     border: none;
-    border-radius: 999px;
+    border-radius: calc(var(--radius-control) - 2px);
     background: transparent;
     color: var(--text-secondary);
     font-size: 0.78rem;
@@ -87,7 +87,7 @@
   .analytics-subtab-btn.active {
     background: var(--primary);
     color: #fff;
-    box-shadow: 0 4px 12px rgba(78, 115, 223, 0.35);
+    box-shadow: 0 8px 16px -14px var(--primary);
   }
 
   .analytics-subtab-badge {
@@ -161,11 +161,11 @@
     border-left: 4px solid #ef4444 !important;
     background: var(--surface) !important;
     border-color: color-mix(in srgb, #ef4444 38%, var(--surface-border));
-    box-shadow: 0 0 16px -4px rgba(239, 68, 68, 0.35);
+    box-shadow: none;
   }
 
   .analytics-workitem-danger:hover {
-    box-shadow: 0 0 20px -2px rgba(239, 68, 68, 0.45);
+    box-shadow: var(--shadow-panel);
     border-color: #ef4444;
   }
 
@@ -173,11 +173,11 @@
     border-left: 3.5px solid #f59e0b !important;
     background: var(--surface) !important;
     border-color: color-mix(in srgb, #f59e0b 35%, var(--surface-border));
-    box-shadow: 0 0 14px -4px rgba(245, 158, 11, 0.25);
+    box-shadow: none;
   }
 
   .analytics-workitem-warning:hover {
-    box-shadow: 0 0 18px -2px rgba(245, 158, 11, 0.35);
+    box-shadow: var(--shadow-panel);
     border-color: #f59e0b;
   }
 
@@ -511,32 +511,38 @@
 
   .analytics-kpi-grid {
     display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-    gap: 0.75rem;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1px;
+    overflow: hidden;
+    border: 1px solid var(--surface-border);
+    border-radius: var(--radius-panel);
+    background: var(--surface-border);
   }
 
   .analytics-kpi-card,
   .analytics-panel {
     background: var(--surface);
     border: 1px solid var(--surface-border);
-    border-radius: 8px;
-    box-shadow: 0 14px 32px -24px rgba(15, 23, 42, 0.55);
+    border-radius: var(--radius-panel);
+    box-shadow: var(--shadow-panel);
   }
 
   .analytics-kpi-card {
-    min-height: 92px;
-    padding: 0.75rem 0.85rem;
+    min-height: 112px;
+    padding: 0.9rem 1rem;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
     overflow: hidden;
-    transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    transition: background var(--duration-fast) ease;
   }
 
   .analytics-kpi-card:hover {
-    transform: translateY(-2px);
-    border-color: color-mix(in srgb, var(--primary) 34%, var(--surface-border));
-    box-shadow: 0 16px 32px -20px rgba(15, 23, 42, 0.65);
+    background: color-mix(in srgb, var(--primary) 4%, var(--surface));
+    box-shadow: none;
   }
 
   .analytics-kpi-warning {
@@ -635,8 +641,9 @@
     align-items: baseline;
     gap: 0.3rem;
     color: var(--text-main);
-    font-size: 1.45rem;
-    font-weight: 800;
+    font-family: var(--font-display);
+    font-size: 1.55rem;
+    font-weight: 650;
     line-height: 1.15;
     white-space: nowrap;
     overflow: hidden;
@@ -681,6 +688,31 @@
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 1rem;
+  }
+
+  .analytics-observability-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.55fr) minmax(320px, 0.75fr);
+    gap: 1rem;
+    align-items: start;
+  }
+
+  .analytics-observability-main,
+  .analytics-observability-side {
+    min-width: 0;
+  }
+
+  .analytics-observability-side {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .analytics-observability-side .analytics-panel {
+    min-height: 300px;
+  }
+
+  .analytics-observability-side .analytics-panel-body {
+    height: 238px;
   }
 
   .analytics-chart-grid {
@@ -879,12 +911,12 @@
   }
 
   @media (max-width: 1440px) {
-    .analytics-kpi-grid {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
+    .analytics-observability-grid { grid-template-columns: 1fr; }
+
+    .analytics-observability-side { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
 
-  @media (max-width: 1280px) {
+  @media (max-width: 1180px) {
     .analytics-workbench {
       grid-template-columns: 1fr;
     }
@@ -908,6 +940,10 @@
     }
 
     .analytics-chart-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .analytics-observability-side {
       grid-template-columns: 1fr;
     }
   }
@@ -1549,4 +1585,3 @@
       grid-template-columns: 1fr;
     }
   }
-

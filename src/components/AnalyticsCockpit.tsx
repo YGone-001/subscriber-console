@@ -252,7 +252,7 @@ export default function AnalyticsCockpit() {
         t={t}
       />
 
-      {/* 2. Consolidated Primary KPI Grid (6 High-impact cards) */}
+      {/* 2. Primary operating indicators */}
       <div className="analytics-kpi-grid">
         <KpiCard
           color="#4e73df"
@@ -333,16 +333,18 @@ export default function AnalyticsCockpit() {
         />
       </div>
 
-      {/* 3. OCS Telemetry Panels (Capacity Pool & Real-time Sessions) */}
-      <div className="analytics-ocs-grid">
-        <OcsBalanceCapacityCard metrics={ocsBalances} t={t} />
-        <OcsSessionTelemetryCard sessions={ocsSessions} reservations={ocsReservations} t={t} />
-      </div>
-
-      {/* 4. Expanded Telemetry Charts (Wider Top 5 Consumers & Tariff Plan Distribution) */}
-      <div className="analytics-chart-grid">
-        <TopConsumerChart top5={top5} theme={theme} t={t} />
-        <TariffPlanDistributionChart tariffPlanDist={tariffPlanDist} theme={theme} t={t} />
+      {/* 3. Capacity and distribution readouts */}
+      <div className="analytics-observability-grid">
+        <div className="analytics-observability-main">
+          <div className="analytics-ocs-grid">
+            <OcsBalanceCapacityCard metrics={ocsBalances} t={t} />
+            <OcsSessionTelemetryCard sessions={ocsSessions} reservations={ocsReservations} t={t} />
+          </div>
+        </div>
+        <div className="analytics-chart-grid analytics-observability-side">
+          <TopConsumerChart top5={top5} theme={theme} t={t} />
+          <TariffPlanDistributionChart tariffPlanDist={tariffPlanDist} theme={theme} t={t} />
+        </div>
       </div>
     </div>
   );

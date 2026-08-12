@@ -139,6 +139,18 @@
   position: relative;
 }
 
+.login-field-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .input-icon {
   position: absolute;
   left: 1rem;
@@ -158,23 +170,41 @@
   outline: none;
 }
 
+.login-input:focus-visible {
+  outline: 2px solid #5eead4;
+  outline-offset: 2px;
+}
+
 .login-input-password {
   padding: 1rem 2.75rem;
 }
 
 .password-toggle {
   position: absolute;
-  right: 1rem;
+  right: 0.25rem;
   top: 50%;
   transform: translateY(-50%);
   background: none;
   border: none;
   color: #64748b;
   cursor: pointer;
+  width: 44px;
+  height: 44px;
   padding: 0;
   display: flex;
   align-items: center;
   justify-content: center;
+  border-radius: 10px;
+}
+
+.password-toggle:hover {
+  color: #cbd5e1;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.password-toggle:focus-visible {
+  outline: 2px solid #5eead4;
+  outline-offset: -3px;
 }
 
 .login-submit-btn {
@@ -209,4 +239,14 @@
   text-align: center;
   font-size: 0.8rem;
   color: #64748b;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-bg-blob-1,
+  .login-bg-blob-2,
+  .login-card,
+  .login-error-container,
+  .login-spinner {
+    animation: none;
+  }
 }

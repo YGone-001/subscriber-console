@@ -14,6 +14,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
+import PageHeader from "@/components/ui/PageHeader";
 import { formatBytes } from "@/lib/unitParser";
 import OcsDetailDrawer from "./OcsDetailDrawer";
 import type { OcsSessionRecord } from "@/server/repositories/ocsOperationsRepository";
@@ -78,18 +79,12 @@ export default function OcsSessionsPanel() {
 
   return (
     <div className="ocs-container">
-      {/* Header */}
-      <div className="ocs-header">
-        <div className="ocs-header-title-area">
-          <div className="ocs-header-title-row">
-            <h1 className="ocs-header-title">{t("ocs_sessions_title")}</h1>
-            <span className="ocs-badge status-active">
-              <Lock size={12} /> {t("ocs_readonly_badge")}
-            </span>
-          </div>
-          <p className="ocs-header-desc">{t("ocs_sessions_desc")}</p>
-        </div>
-        <div className="ocs-header-actions">
+      <PageHeader
+        eyebrow="OCS / DIAMETER"
+        title={t("ocs_sessions_title")}
+        description={t("ocs_sessions_desc")}
+        status={<><Lock size={12} /> {t("ocs_readonly_badge")}</>}
+        actions={<div className="ocs-header-actions">
           <button
             type="button"
             className="ocs-btn"
@@ -99,8 +94,8 @@ export default function OcsSessionsPanel() {
             <RefreshCw size={14} className={loading ? "spin" : ""} />
             <span>{t("refresh")}</span>
           </button>
-        </div>
-      </div>
+        </div>}
+      />
 
       {/* Safety Notice */}
       <div className="ocs-readonly-banner">

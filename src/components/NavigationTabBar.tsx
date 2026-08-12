@@ -196,13 +196,13 @@ export default function NavigationTabBar() {
   };
 
   return (
-    <div className="nav-tab-bar" role="tablist" aria-label="Open Workspace Pages">
+    <nav className="nav-tab-bar" aria-label={t("nav_tab_workspace")}>
       <button
         type="button"
         className="nav-tab-scroll-btn left"
         onClick={() => scrollTabs("left")}
         title={t("nav_tab_scroll_left")}
-        aria-label="Scroll tabs left"
+        aria-label={t("nav_tab_scroll_left")}
       >
         <ChevronLeft size={14} />
       </button>
@@ -211,30 +211,29 @@ export default function NavigationTabBar() {
         {tabs.map((tab) => {
           const isActive = tab.path === activeTabPath;
           return (
-            <Link
-              key={tab.path}
-              href={tab.path}
-              className={`nav-tab-item ${isActive ? "active" : ""}`}
-              role="tab"
-              aria-selected={isActive}
-              title={t(tab.labelKey)}
-            >
-              <span className="nav-tab-icon">{tab.icon}</span>
-              <span className="nav-tab-label">{t(tab.labelKey)}</span>
-              {tab.isPinned ? (
-                <Pin size={11} className="nav-tab-pin-icon" />
-              ) : (
+            <div key={tab.path} className={`nav-tab-item ${isActive ? "active" : ""}`}>
+              <Link
+                href={tab.path}
+                className={`nav-tab-link ${tab.isPinned ? "pinned" : ""}`}
+                aria-current={isActive ? "page" : undefined}
+                title={t(tab.labelKey)}
+              >
+                <span className="nav-tab-icon" aria-hidden="true">{tab.icon}</span>
+                <span className="nav-tab-label">{t(tab.labelKey)}</span>
+                {tab.isPinned ? <Pin size={11} className="nav-tab-pin-icon" aria-hidden="true" /> : null}
+              </Link>
+              {!tab.isPinned ? (
                 <button
                   type="button"
                   className="nav-tab-close"
                   onClick={(e) => handleCloseTab(e, tab.path)}
                   title={t("nav_tab_close")}
-                  aria-label={`Close ${t(tab.labelKey)}`}
+                  aria-label={`${t("nav_tab_close")}: ${t(tab.labelKey)}`}
                 >
                   <X size={12} />
                 </button>
-              )}
-            </Link>
+              ) : null}
+            </div>
           );
         })}
       </div>
@@ -244,7 +243,7 @@ export default function NavigationTabBar() {
         className="nav-tab-scroll-btn right"
         onClick={() => scrollTabs("right")}
         title={t("nav_tab_scroll_right")}
-        aria-label="Scroll tabs right"
+        aria-label={t("nav_tab_scroll_right")}
       >
         <ChevronRight size={14} />
       </button>
@@ -256,6 +255,8 @@ export default function NavigationTabBar() {
           onClick={() => setActionsMenuOpen((prev) => !prev)}
           title={t("nav_tab_options")}
           aria-expanded={actionsMenuOpen}
+          aria-haspopup="menu"
+          aria-controls="workspace-tab-actions"
         >
           <MoreHorizontal size={14} />
         </button>
@@ -263,12 +264,12 @@ export default function NavigationTabBar() {
         {actionsMenuOpen ? (
           <>
             <div className="dropdown-backdrop" onClick={() => setActionsMenuOpen(false)} />
-            <div className="nav-tab-dropdown">
-              <button type="button" className="nav-tab-dropdown-item" onClick={handleCloseOthers}>
+            <div id="workspace-tab-actions" className="nav-tab-dropdown" role="menu">
+              <button type="button" className="nav-tab-dropdown-item" role="menuitem" onClick={handleCloseOthers}>
                 <X size={13} />
                 <span>{t("nav_tab_close_others")}</span>
               </button>
-              <button type="button" className="nav-tab-dropdown-item" onClick={handleCloseAll}>
+              <button type="button" className="nav-tab-dropdown-item" role="menuitem" onClick={handleCloseAll}>
                 <X size={13} />
                 <span>{t("nav_tab_close_all")}</span>
               </button>
@@ -276,6 +277,6 @@ export default function NavigationTabBar() {
           </>
         ) : null}
       </div>
-    </div>
+    </nav>
   );
 }

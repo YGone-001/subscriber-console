@@ -24,6 +24,9 @@ import { EmptyState, LoadingRows, OperationNotice } from "@/components/Operation
 import type { ComprehensiveSystemHealth, SubsystemStatus } from "@/server/repositories/systemHealthRepository";
 import type { SystemAnomaly, AnomalyCategory, AnomalySeverity } from "@/server/repositories/systemAuditRepository";
 import "./system-health.css";
+import PageHeader, { type PageHeaderTone } from "@/components/ui/PageHeader";
+import SectionHeader from "@/components/ui/SectionHeader";
+import { useDialogFocus } from "@/components/ui/useDialogFocus";
 
 type HealthNotice = {
   type: "success" | "error" | "warning";
@@ -70,6 +73,8 @@ export default function SystemHealthPage() {
   const [batchHealProfile, setBatchHealProfile] = useState("");
   const [isBatchConfirmed, setIsBatchConfirmed] = useState(false);
   const [isBatchHealing, setIsBatchHealing] = useState(false);
+  const healDialogRef = useDialogFocus({ open: healModalOpen, onClose: () => setHealModalOpen(false) });
+  const batchDialogRef = useDialogFocus({ open: batchModalOpen, onClose: () => setBatchModalOpen(false) });
 
   // Use refs for aggressive recursion logic without stale states
   const scanMetrics = useRef({ total: 0, anomaliesList: [] as SystemAnomaly[] });
@@ -322,22 +327,26 @@ export default function SystemHealthPage() {
           />
         )}
 
+        <PageHeader
+          eyebrow="NOC / DIAGNOSTICS"
+          icon={<HeartPulse size={23} />}
+          title={t("nav_system_health")}
+          description={t("health_subsystems_title")}
+          tone={(systemHealth?.status === "critical" ? "danger" : systemHealth?.status === "degraded" ? "warning" : "healthy") as PageHeaderTone}
+          status={getStatusBadge(systemHealth?.status)}
+          actions={<button
+            className="btn btn-outline health-mongo-refresh"
+            onClick={() => refreshSystemHealth()}
+            disabled={isHealthLoading}
+          >
+            <RefreshCw size={14} className={isHealthLoading ? "spin" : ""} />
+            {t("refresh")}
+          </button>}
+        />
+
         {/* Subsystems Matrix Section */}
         <section className="health-subsystems-section">
-          <div className="health-section-title-row">
-            <h2 className="health-section-title">
-              <Layers size={20} color="var(--primary)" />
-              {t("health_subsystems_title")}
-            </h2>
-            <button
-              className="btn btn-outline health-mongo-refresh"
-              onClick={() => refreshSystemHealth()}
-              disabled={isHealthLoading}
-            >
-              <RefreshCw size={14} className={isHealthLoading ? "spin" : ""} />
-              {t("refresh")}
-            </button>
-          </div>
+          <SectionHeader title={t("health_subsystems_title")} />
 
           <div className="health-subsystems-grid">
             {/* 1. Database Subsystem */}
@@ -776,9 +785,9 @@ export default function SystemHealthPage() {
       {/* Single Item Heal Modal */}
       {healModalOpen && targetAnomaly && (
         <div className="modal-overlay health-modal-overlay">
-          <div className="modal-content animate-fade-in health-modal-content">
+          <div ref={healDialogRef} tabIndex={-1} className="modal-content animate-fade-in health-modal-content" role="dialog" aria-modal="true" aria-labelledby="health-heal-modal-title">
             <div className="health-modal-header">
-              <h2 className="health-modal-title">{t("health_modal_title")}</h2>
+              <h2 id="health-heal-modal-title" className="health-modal-title">{t("health_modal_title")}</h2>
             </div>
 
             <div className="health-modal-body">
@@ -788,8 +797,8 @@ export default function SystemHealthPage() {
               </div>
 
               <div className="health-modal-group-lg">
-                <label className="form-label health-modal-form-label">{t("health_modal_restore")}</label>
-                <select className="form-input" value={healProfile} onChange={e => setHealProfile(e.target.value)}>
+                <label className="form-label health-modal-form-label" htmlFor="health-heal-profile">{t("health_modal_restore")}</label>
+                <select id="health-heal-profile" className="form-input" value={healProfile} onChange={e => setHealProfile(e.target.value)}>
                   <option value="">{t("health_modal_default")}</option>
                   {profileList.map((p: any) => <option key={p.name} value={p.name}>{p.title || p.name}</option>)}
                 </select>
@@ -837,15 +846,15 @@ export default function SystemHealthPage() {
       {/* Batch Auto-Heal Modal */}
       {batchModalOpen && (
         <div className="modal-overlay health-modal-overlay">
-          <div className="modal-content animate-fade-in health-modal-content">
+          <div ref={batchDialogRef} tabIndex={-1} className="modal-content animate-fade-in health-modal-content" role="dialog" aria-modal="true" aria-labelledby="health-batch-modal-title">
             <div className="health-modal-header">
-              <h2 className="health-modal-title">{t("health_batch_modal_title")}</h2>
+              <h2 id="health-batch-modal-title" className="health-modal-title">{t("health_batch_modal_title")}</h2>
             </div>
 
             <div className="health-modal-body">
               <div className="health-modal-group">
                 <div className="health-modal-label">{t("health_anomalies_detected")}</div>
-                <div className="health-modal-target">{filteredAnomalies.length} items to remediate</div>
+                <div className="health-modal-target">{t("health_items_to_remediate", { count: filteredAnomalies.length })}</div>
               </div>
 
               <p className="health-modal-desc">
@@ -853,8 +862,8 @@ export default function SystemHealthPage() {
               </p>
 
               <div className="health-modal-group-lg">
-                <label className="form-label health-modal-form-label">{t("health_modal_restore")}</label>
-                <select className="form-input" value={batchHealProfile} onChange={e => setBatchHealProfile(e.target.value)}>
+                <label className="form-label health-modal-form-label" htmlFor="health-batch-profile">{t("health_modal_restore")}</label>
+                <select id="health-batch-profile" className="form-input" value={batchHealProfile} onChange={e => setBatchHealProfile(e.target.value)}>
                   <option value="">{t("health_modal_default")}</option>
                   {profileList.map((p: any) => <option key={p.name} value={p.name}>{p.title || p.name}</option>)}
                 </select>

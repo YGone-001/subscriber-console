@@ -8,6 +8,7 @@ import { UserDrawer } from "./components/UserDrawer";
 import { Shield, Upload, Plus } from "lucide-react";
 import { EmptyState } from "@/components/OperationFeedback";
 import { useUsersPage } from "./hooks/useUsersPage";
+import PageHeader from "@/components/ui/PageHeader";
 
 export default function UsersPage() {
   // users_detail_tab_permissions
@@ -41,12 +42,12 @@ export default function UsersPage() {
   return (
     <>
       <div className="users-page animate-fade-in">
-        <header className="users-page-header">
-          <div>
-            <h1>{t("users_title")}</h1>
-            <p>{t("users_subtitle")}</p>
-          </div>
-          <div className="users-header-actions">
+        <PageHeader
+          eyebrow="RBAC / IAM"
+          icon={<Shield size={23} />}
+          title={t("users_title")}
+          description={t("users_subtitle")}
+          actions={<div className="users-header-actions">
             <button
               type="button"
               className="btn btn-outline"
@@ -59,8 +60,8 @@ export default function UsersPage() {
               <Plus size={17} />
               {t("users_new")}
             </button>
-          </div>
-        </header>
+          </div>}
+        />
 
         <UsersSummaryPanel
           usersCount={users.length}
@@ -82,5 +83,4 @@ export default function UsersPage() {
           </>
   );
 }
-
 

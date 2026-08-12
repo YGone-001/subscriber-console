@@ -2,13 +2,14 @@ import React from "react";
 import { Plus, Users, CheckCircle2, Copy, PenLine, Trash2, MoreHorizontal } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { EmptyState, LoadingRows } from "@/components/OperationFeedback";
+import { SortableTableHeader } from "@/components/ui/SortableTableHeader";
 
 export function SubscriberTable(props: any) {
   const { t } = useI18n();
   const {
     isLoading, totalSubscribers, searchQuery, statusFilter, canEditSubscribers,
     handleOpenNew, isAllPageSelected, selectedOnPageCount, pageImsis,
-    toggleSelectAll, sortField, handleSort, renderSortIcon, paginatedSubscribers,
+    toggleSelectAll, sortField, sortDirection, handleSort, renderSortIcon, paginatedSubscribers,
     selectedImsis, setSelectedImsis, copiedImsi, handleCopyImsi, resolveNetwork,
     formatBytes, formatFullDate, timeAgo, handleOpenEdit, handleDelete,
     isDeletingSingle, pendingDelete, activeDropdown, setActiveDropdown,
@@ -45,30 +46,19 @@ export function SubscriberTable(props: any) {
               <input
                 type="checkbox"
                 className="checkbox-custom"
+                aria-label={t("table_select_all_subscribers")}
                 checked={isAllPageSelected}
                 ref={input => { if (input) input.indeterminate = selectedOnPageCount > 0 && selectedOnPageCount < pageImsis.length }}
                 onChange={toggleSelectAll}
               />
             </th>
-            <th className={sortField === "status" ? "sortable-th active" : "sortable-th"} onClick={() => handleSort("status")}>
-              <span>{t("col_status")}</span> {renderSortIcon("status")}
-            </th>
-            <th className={sortField === "imsi" ? "sortable-th active" : "sortable-th"} onClick={() => handleSort("imsi")}>
-              <span>{t("col_imsi")}</span> {renderSortIcon("imsi")}
-            </th>
-            <th className={sortField === "plmn" ? "sortable-th active" : "sortable-th"} onClick={() => handleSort("plmn")}>
-              <span>{t("col_plmn")}</span> {renderSortIcon("plmn")}
-            </th>
-            <th className={sortField === "policy" ? "sortable-th active" : "sortable-th"} onClick={() => handleSort("policy")}>
-              <span>{t("col_policy")}</span> {renderSortIcon("policy")}
-            </th>
-            <th className={sortField === "usage" ? "sortable-th active" : "sortable-th"} style={{ minWidth: "150px" }} onClick={() => handleSort("usage")}>
-              <span>{t("col_traffic")}</span> {renderSortIcon("usage")}
-            </th>
-            <th className={sortField === "lastActive" ? "sortable-th active" : "sortable-th"} onClick={() => handleSort("lastActive")}>
-              <span>{t("col_last_active")}</span> {renderSortIcon("lastActive")}
-            </th>
-            {canEditSubscribers && <th style={{ padding: "1rem", color: "var(--text-secondary)", fontWeight: 600, textAlign: "center" }}>{t("col_actions")}</th>}
+            <SortableTableHeader label={t("col_status")} active={sortField === "status"} direction={sortDirection} icon={renderSortIcon("status")} onSort={() => handleSort("status")} />
+            <SortableTableHeader label={t("col_imsi")} active={sortField === "imsi"} direction={sortDirection} icon={renderSortIcon("imsi")} onSort={() => handleSort("imsi")} />
+            <SortableTableHeader label={t("col_plmn")} active={sortField === "plmn"} direction={sortDirection} icon={renderSortIcon("plmn")} onSort={() => handleSort("plmn")} />
+            <SortableTableHeader label={t("col_policy")} active={sortField === "policy"} direction={sortDirection} icon={renderSortIcon("policy")} onSort={() => handleSort("policy")} />
+            <SortableTableHeader label={t("col_traffic")} active={sortField === "usage"} direction={sortDirection} icon={renderSortIcon("usage")} onSort={() => handleSort("usage")} style={{ minWidth: "150px" }} />
+            <SortableTableHeader label={t("col_last_active")} active={sortField === "lastActive"} direction={sortDirection} icon={renderSortIcon("lastActive")} onSort={() => handleSort("lastActive")} />
+            {canEditSubscribers && <th className="actions-col">{t("col_actions")}</th>}
           </tr>
         </thead>
         <tbody>
@@ -78,7 +68,7 @@ export function SubscriberTable(props: any) {
              return (
                <tr key={sub.imsi} className={isSelected ? "selected-row" : ""}>
                  <td>
-                   <input type="checkbox" className="checkbox-custom" checked={isSelected} onChange={() => setSelectedImsis((prev: string[]) => prev.includes(sub.imsi) ? prev.filter(i => i !== sub.imsi) : [...prev, sub.imsi])} />
+                   <input type="checkbox" className="checkbox-custom" aria-label={t("table_select_subscriber", { imsi: sub.imsi })} checked={isSelected} onChange={() => setSelectedImsis((prev: string[]) => prev.includes(sub.imsi) ? prev.filter(i => i !== sub.imsi) : [...prev, sub.imsi])} />
                  </td>
                  <td>
                    {(() => {

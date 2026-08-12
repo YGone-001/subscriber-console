@@ -6,9 +6,23 @@ import AppHeader from "./components/AppHeader";
 import AppSidebar from "./components/AppSidebar";
 import NavigationTabBar from "@/components/NavigationTabBar";
 import NavigationBreadcrumbs from "@/components/NavigationBreadcrumbs";
+import { useI18n } from "@/components/I18nProvider";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { t } = useI18n();
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(min-width: 981px)");
+    const syncSidebar = (matches: boolean) => setSidebarOpen(matches);
+    const animationFrame = window.requestAnimationFrame(() => syncSidebar(mediaQuery.matches));
+    const handleChange = (event: MediaQueryListEvent) => syncSidebar(event.matches);
+    mediaQuery.addEventListener("change", handleChange);
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      mediaQuery.removeEventListener("change", handleChange);
+    };
+  }, []);
 
   // Global Ctrl+B shortcut to toggle sidebar
   useEffect(() => {
@@ -30,6 +44,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <div className="layout-root">
       <AppHeader sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
       <div className="layout-body">
+        {sidebarOpen ? (
+          <button
+            type="button"
+            className="sidebar-mobile-backdrop"
+            onClick={() => setSidebarOpen(false)}
+            aria-label={t("sidebar_collapse")}
+          />
+        ) : null}
         <AppSidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
         <div className="layout-content-area">
           <NavigationTabBar />

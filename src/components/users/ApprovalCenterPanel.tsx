@@ -9,6 +9,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { useI18n } from "@/components/I18nProvider";
 import { EmptyState, LoadingRows, OperationNotice } from "@/components/OperationFeedback";
 import VisualDiffViewer from "@/components/VisualDiffViewer";
+import PageHeader from "@/components/ui/PageHeader";
+import MetricStrip from "@/components/ui/MetricStrip";
 
 type ApprovalStatus = "pending" | "approved" | "rejected" | "executed" | "failed";
 type ApprovalAction =
@@ -198,23 +200,26 @@ export default function ApprovalCenterPanel() {
   return (
     <>
       <div className="approvals-page">
-        <header className="approvals-header">
-          <div>
-            <h1>{t("approvals_title")}</h1>
-            <p>{t("approvals_subtitle")}</p>
-          </div>
-          <button type="button" className="btn btn-outline" onClick={() => void mutate()} disabled={isValidating}>
+        <PageHeader
+          eyebrow="CHANGE / GATE"
+          icon={<GitBranch size={23} />}
+          title={t("approvals_title")}
+          description={t("approvals_subtitle")}
+          actions={<button type="button" className="btn btn-outline" onClick={() => void mutate()} disabled={isValidating}>
             <RefreshCw size={15} className={isValidating ? "approvals-spin" : undefined} />
             {t("refresh")}
-          </button>
-        </header>
+          </button>}
+        />
 
-        <section className="approvals-metrics">
-          <div><span>{t("approval_filter_pending")}</span><strong>{data?.pending ?? 0}</strong></div>
-          <div><span>{t("approvals_sla_ok")}</span><strong>{data?.sla?.ok ?? 0}</strong></div>
-          <div><span>{t("approvals_sla_warning")}</span><strong>{data?.sla?.warning ?? 0}</strong></div>
-          <div><span>{t("approvals_sla_danger")}</span><strong>{data?.sla?.danger ?? 0}</strong></div>
-        </section>
+        <MetricStrip
+          ariaLabel={t("approvals_title")}
+          items={[
+            { key: "pending", label: t("approval_filter_pending"), value: data?.pending ?? 0, tone: "primary" },
+            { key: "ok", label: t("approvals_sla_ok"), value: data?.sla?.ok ?? 0, tone: "success" },
+            { key: "warning", label: t("approvals_sla_warning"), value: data?.sla?.warning ?? 0, tone: "warning" },
+            { key: "danger", label: t("approvals_sla_danger"), value: data?.sla?.danger ?? 0, tone: "danger" },
+          ]}
+        />
 
         <section className="approvals-panel">
           <nav className="approvals-tabs">
@@ -389,5 +394,4 @@ export default function ApprovalCenterPanel() {
     </>
   );
 }
-
 

@@ -10,6 +10,8 @@ export const en: Record<string, string> = {
     edit: "Edit",
     close: "Close",
     actions: "Actions",
+    table_select_all_subscribers: "Select all subscribers on this page",
+    table_select_subscriber: "Select subscriber {imsi}",
     status: "Status",
     logout: "Logout",
     prev: "Prev",
@@ -970,6 +972,7 @@ export const en: Record<string, string> = {
     health_btn_batch_heal: "Batch Auto-Heal",
     health_btn_export_report: "Export Report",
     health_batch_modal_title: "Batch Auto-Healing Execution",
+    health_items_to_remediate: "{count} items to remediate",
     health_batch_modal_desc: "Applying auto-repair to {count} detected anomalies will reconcile missing schemas, fix broken mathematical invariants, rebind default tariff plans, and clean up stale reservations.",
     health_batch_modal_confirm: "I confirm applying batch remediation to all filtered anomalies.",
     health_msg_batch_heal_success: "Successfully remediated {count} system anomalies.",
@@ -1088,6 +1091,7 @@ export const en: Record<string, string> = {
 
     // -- Dashboard --
     dashboard_title: "Analytics Dashboard",
+    dash_live: "Live operations",
     dashboard_subtitle: "Real-time network telemetry and subscriber overview.",
     sync_telemetry: "Sync Telemetry",
     sync_scanning: "Scanning...",
@@ -1440,6 +1444,7 @@ export const en: Record<string, string> = {
     dh_err_import: "Import failed. Please try again.",
 
     // -- Command Palette --
+    cp_title: "Command palette",
     cp_placeholder: "Search or type a command...",
     cp_group_actions: "Quick Actions",
     cp_group_nav: "Navigation",
@@ -1709,6 +1714,7 @@ export const en: Record<string, string> = {
     nav_tab_scroll_left: "Scroll tabs left",
     nav_tab_scroll_right: "Scroll tabs right",
     nav_tab_close: "Close Tab",
+    nav_tab_workspace: "Open workspace pages",
     nav_tab_options: "Tab Options",
     nav_tab_close_others: "Close other tabs",
     nav_tab_close_all: "Close all tabs",
@@ -1732,4 +1738,3 @@ export const en: Record<string, string> = {
     theme_switch_light: "Light Mode",
     theme_switch_dark: "Dark Mode",
   };
-

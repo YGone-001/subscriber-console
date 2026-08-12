@@ -1,6 +1,6 @@
 "use client";
 import React from "react";
-import { Save, X } from "lucide-react";
+import { Gauge, GitBranch, Save, X } from "lucide-react";
 import { TariffPlanList } from "./rating/TariffPlanList";
 import { PccRuleList } from "./rating/PccRuleList";
 import { RatingModals } from "./rating/RatingModals";
@@ -8,6 +8,7 @@ import { formatDateTime } from "./rating/RatingManagementShared";
 import * as T from "./rating/types";
 import { Field, applyChargingType, CURRENCIES } from "./rating/types";
 import { useRatingManagement } from "./rating/hooks/useRatingManagement";
+import PageHeader from "@/components/ui/PageHeader";
 
 export default function RatingManagementPage({ view }: { view: T.RatingManagementView }) {
   const state = useRatingManagement();
@@ -116,16 +117,12 @@ export default function RatingManagementPage({ view }: { view: T.RatingManagemen
 };
   return (
     <div className="container animate-fade-in rating-page-container">
-      <div className="rating-page-header">
-        <div>
-          <h1 className="rating-page-title">
-            {view === "plans" ? t("tariff_plan_current") : t("rating_rule_catalog_title")}
-          </h1>
-          <p className="rating-page-desc">
-            {view === "plans" ? t("tariff_plan_current_desc") : t("rating_rule_catalog_desc")}
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow={view === "plans" ? "TARIFF / CATALOG" : "PCC / RULES"}
+        icon={view === "plans" ? <Gauge size={23} /> : <GitBranch size={23} />}
+        title={view === "plans" ? t("tariff_plan_current") : t("rating_rule_catalog_title")}
+        description={view === "plans" ? t("tariff_plan_current_desc") : t("rating_rule_catalog_desc")}
+      />
 
       <RatingModals {...propsObj} />
 
@@ -135,4 +132,3 @@ export default function RatingManagementPage({ view }: { view: T.RatingManagemen
     </div>
   );
 }
-

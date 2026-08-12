@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Noto_Sans_SC, Sora } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { I18nProvider } from "@/components/I18nProvider";
@@ -7,6 +8,18 @@ import { GlobalErrorBoundary } from "@/components/GlobalErrorBoundary";
 
 import { NotificationProvider } from "@/components/NotificationProvider";
 import ToastContainer from "@/components/ToastContainer";
+
+const displayFont = Sora({
+  variable: "--font-display-loaded",
+  subsets: ["latin"],
+  display: "swap",
+});
+
+const interfaceFont = Noto_Sans_SC({
+  variable: "--font-interface-loaded",
+  subsets: ["latin"],
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "4G Core Subscriber Management",
@@ -45,7 +58,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body>
+      <body className={`${displayFont.variable} ${interfaceFont.variable}`}>
         <GlobalErrorBoundary>
           <SWRProvider>
             <ThemeProvider>

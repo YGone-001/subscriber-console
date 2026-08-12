@@ -18,6 +18,7 @@ import SubscriberPagination from "./components/SubscriberPagination";
 import "./subscribers.css";
 import { SubscriberToolbar } from "./components/SubscriberToolbar";
 import { SubscriberTable } from "./components/SubscriberTable";
+import PageHeader from "@/components/ui/PageHeader";
 
 import { PlmnRecord, SubscriberRow, TrafficAdjustmentMode, TrafficAdjustmentTarget, FeedbackState, PendingDelete, SubscriberStatusFilter, ProfilesResponse, SubscribersResponse } from "./types";
 
@@ -259,7 +260,7 @@ export default function SubscriberPage() {
     { key: "active" as const, label: t("subscriber_summary_active"), value: subscriberSummary.active, tone: "success" },
     { key: "restricted" as const, label: t("subscriber_summary_restricted"), value: subscriberSummary.restricted, tone: "danger" },
     { key: "lowTraffic" as const, label: t("subscriber_summary_low_traffic"), value: subscriberSummary.lowTraffic, tone: "warning" },
-  ];
+  ] as const;
 
   const totalPages = Math.max(1, Math.ceil(totalSubscribers / pageSize));
   const displayPage = Math.min(currentPage, totalPages);
@@ -310,20 +311,15 @@ export default function SubscriberPage() {
     <>
     <div className="subscribers-page-container animate-fade-in" onClick={() => setActiveDropdown(null)}>
 
-      {/* Page Header */}
-      <div className="subscribers-page-header">
-        <div>
-          <h2 className="subscribers-page-title">
-            {t("subscriber_title")}
-          </h2>
-          <p className="subscribers-page-subtitle">
-            {t("subscriber_subtitle")}
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="IMSI / HSS"
+        icon={<Layers size={23} />}
+        title={t("subscriber_title")}
+        description={t("subscriber_subtitle")}
+      />
 
-      <SubscriberSummaryPanel 
-        summaryCards={summaryCards as any} 
+      <SubscriberSummaryPanel
+        summaryCards={summaryCards}
         statusFilter={statusFilter} 
         applyStatusFilter={applyStatusFilter} 
       />
@@ -386,6 +382,7 @@ export default function SubscriberPage() {
           pageImsis={pageImsis}
           toggleSelectAll={toggleSelectAll}
           sortField={sortField}
+          sortDirection={sortDirection}
           handleSort={handleSort}
           renderSortIcon={renderSortIcon}
           paginatedSubscribers={paginatedSubscribers}

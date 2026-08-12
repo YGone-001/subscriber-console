@@ -8,6 +8,8 @@ import { useI18n } from "@/components/I18nProvider";
 import { toCsvRow } from "@/lib/csv";
 import VisualDiffViewer from "@/components/VisualDiffViewer";
 import './audit-logs.css';
+import PageHeader from '@/components/ui/PageHeader';
+import MetricStrip from '@/components/ui/MetricStrip';
 
 interface AuditLog {
   id: string;
@@ -199,38 +201,23 @@ export default function AuditLogsPage() {
   return (
     <>
       <div className="container animate-fade-in audit-container">
-        <div className="audit-header">
-          <div>
-            <h1 className="audit-title">
-              <History size={32} color="var(--primary)" /> {t("audit_title")}
-            </h1>
-            <p className="audit-subtitle">
-              {t("audit_subtitle")}
-            </p>
-          </div>
-          <div className="audit-tracking">
-            <Activity size={16} /> {t("audit_tracking")}
-          </div>
-        </div>
+        <PageHeader
+          eyebrow="TRACE / EVIDENCE"
+          icon={<History size={23} />}
+          title={t("audit_title")}
+          description={t("audit_subtitle")}
+          status={<><Activity size={15} /> {t("audit_tracking")}</>}
+        />
 
-        <div className="audit-metrics-grid">
-          {[
-            { icon: <Gauge size={18} color="var(--primary)" />, label: t("audit_ops_matched"), value: filteredTotal },
-            { icon: <ShieldAlert size={18} color="var(--danger)" />, label: t("audit_ops_warnings"), value: auditSummary.warningCount },
-            { icon: <AlertTriangle size={18} color="var(--danger)" />, label: t("audit_ops_destructive"), value: auditSummary.destructiveCount },
-            { icon: <Target size={18} color="var(--primary)" />, label: t("audit_ops_targets"), value: auditSummary.uniqueTargets },
-          ].map(metric => (
-            <div key={metric.label} className="dash-card audit-metric-card">
-              <div className="audit-metric-icon">
-                {metric.icon}
-              </div>
-              <div className="audit-metric-content">
-                <div className="audit-metric-label">{metric.label}</div>
-                <div className="audit-metric-value">{metric.value}</div>
-              </div>
-            </div>
-          ))}
-        </div>
+        <MetricStrip
+          ariaLabel={t("audit_title")}
+          items={[
+            { key: "matched", icon: <Gauge size={17} />, label: t("audit_ops_matched"), value: filteredTotal },
+            { key: "warnings", icon: <ShieldAlert size={17} />, label: t("audit_ops_warnings"), value: auditSummary.warningCount, tone: "warning" },
+            { key: "destructive", icon: <AlertTriangle size={17} />, label: t("audit_ops_destructive"), value: auditSummary.destructiveCount, tone: "danger" },
+            { key: "targets", icon: <Target size={17} />, label: t("audit_ops_targets"), value: auditSummary.uniqueTargets },
+          ]}
+        />
 
         <div className="glass-card audit-hot-actions-grid">
           <div>

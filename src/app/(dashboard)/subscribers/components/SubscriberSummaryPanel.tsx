@@ -1,5 +1,6 @@
 import React from "react";
 import { useI18n } from "@/components/I18nProvider";
+import MetricStrip from "@/components/ui/MetricStrip";
 
 interface SummaryItem {
   key: "all" | "active" | "restricted" | "lowTraffic";
@@ -9,7 +10,7 @@ interface SummaryItem {
 }
 
 interface SubscriberSummaryPanelProps {
-  summaryCards: SummaryItem[];
+  summaryCards: readonly SummaryItem[];
   statusFilter: string;
   applyStatusFilter: (filter: "all" | "active" | "restricted" | "lowTraffic") => void;
 }
@@ -21,25 +22,16 @@ export default function SubscriberSummaryPanel({
 }: SubscriberSummaryPanelProps) {
   const { t } = useI18n();
   return (
-    <section className="subscriber-summary-panel" aria-label={t("subscriber_summary_label")}>
-      {summaryCards.map((item) => {
-        const isActive = statusFilter === item.key;
-        return (
-          <button
-            key={item.key}
-            type="button"
-            className={`subscriber-summary-card subscriber-summary-${item.tone}${isActive ? " active" : ""}`}
-            onClick={(event) => {
-              event.stopPropagation();
-              applyStatusFilter(item.key);
-            }}
-            aria-pressed={isActive}
-          >
-            <span>{item.label}</span>
-            <strong>{item.value}</strong>
-          </button>
-        );
-      })}
-    </section>
+    <MetricStrip
+      ariaLabel={t("subscriber_summary_label")}
+      items={summaryCards.map((item) => ({
+        key: item.key,
+        label: item.label,
+        value: item.value,
+        tone: item.tone,
+        active: statusFilter === item.key,
+        onClick: () => applyStatusFilter(item.key),
+      }))}
+    />
   );
 }
