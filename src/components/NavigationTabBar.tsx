@@ -1,28 +1,16 @@
 "use client";
 
-import { useEffect, useState, useMemo, useRef, useCallback, useSyncExternalStore } from "react";
+import { createElement, useEffect, useState, useMemo, useRef, useCallback, useSyncExternalStore } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
-import {
-  LayoutDashboard,
-  Users,
-  CreditCard,
-  Gauge,
-  UserCog,
-  ShieldCheck,
-  GitBranch,
-  History,
-  Activity,
-  Wallet,
-  Radio,
-  Receipt,
-  X,
-  Pin,
-  MoreHorizontal,
-  ChevronLeft,
-  ChevronRight,
-} from "lucide-react";
+import { X, Pin, MoreHorizontal, ChevronLeft, ChevronRight } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
+import { useAuth } from "@/hooks/useAuth";
+import {
+  canAccessNavigationRoute,
+  getNavigationRoute,
+  resolveNavigationRoute,
+} from "@/lib/navigationRoutes";
 
 const STORAGE_KEY = "XCLOUD_OPEN_TABS";
 
@@ -33,25 +21,8 @@ interface TabDefinition {
   isPinned?: boolean;
 }
 
-const ROUTE_DEFINITIONS: Record<string, { labelKey: string; icon: React.ReactNode }> = {
-  "/": { labelKey: "nav_dashboard", icon: <LayoutDashboard size={14} /> },
-  "/subscribers": { labelKey: "nav_subscriber", icon: <Users size={14} /> },
-  "/ocs/balances": { labelKey: "nav_ocs_balances", icon: <Wallet size={14} /> },
-  "/ocs/sessions": { labelKey: "nav_ocs_sessions", icon: <Radio size={14} /> },
-  "/ocs/usage": { labelKey: "nav_ocs_usage", icon: <Receipt size={14} /> },
-  "/profile": { labelKey: "nav_profile", icon: <CreditCard size={14} /> },
-  "/rating": { labelKey: "nav_rating", icon: <Gauge size={14} /> },
-  "/rating/plans": { labelKey: "nav_rating_plans", icon: <Gauge size={14} /> },
-  "/rating/rules": { labelKey: "nav_rating_rules", icon: <GitBranch size={14} /> },
-  "/users": { labelKey: "nav_system_users", icon: <UserCog size={14} /> },
-  "/roles": { labelKey: "nav_roles", icon: <ShieldCheck size={14} /> },
-  "/approvals": { labelKey: "nav_approvals", icon: <GitBranch size={14} /> },
-  "/audit-logs": { labelKey: "nav_audit_logs", icon: <History size={14} /> },
-  "/system-health": { labelKey: "nav_system_health", icon: <Activity size={14} /> },
-};
-
 const DEFAULT_TABS: TabDefinition[] = [
-  { path: "/", labelKey: "nav_dashboard", icon: <LayoutDashboard size={14} />, isPinned: true },
+  { path: "/", labelKey: "nav_dashboard", icon: createElement(getNavigationRoute("/")!.icon, { size: 14 }), isPinned: true },
 ];
 
 let cachedRawTabs: string | null = null;
@@ -68,11 +39,11 @@ function getStoredTabsSnapshot(): TabDefinition[] {
     if (raw) {
       const parsed: Array<{ path: string; isPinned?: boolean }> = JSON.parse(raw);
       const reconstructed: TabDefinition[] = parsed
-        .filter((p) => Boolean(ROUTE_DEFINITIONS[p.path]))
+        .filter((p) => Boolean(getNavigationRoute(p.path)))
         .map((p) => ({
           path: p.path,
-          labelKey: ROUTE_DEFINITIONS[p.path].labelKey,
-          icon: ROUTE_DEFINITIONS[p.path].icon,
+          labelKey: getNavigationRoute(p.path)!.labelKey,
+          icon: createElement(getNavigationRoute(p.path)!.icon, { size: 14 }),
           isPinned: p.path === "/" ? true : (p.isPinned ?? false),
         }));
       if (!reconstructed.some((t) => t.path === "/")) {
@@ -90,7 +61,10 @@ const tabListeners = new Set<() => void>();
 function subscribeTabs(onStoreChange: () => void) {
   tabListeners.add(onStoreChange);
   const handleStorage = (e: StorageEvent) => {
-    if (e.key === STORAGE_KEY) onStoreChange();
+    if (e.key === STORAGE_KEY) {
+      cachedRawTabs = null;
+      onStoreChange();
+    }
   };
   window.addEventListener("storage", handleStorage);
   return () => {
@@ -115,10 +89,19 @@ export default function NavigationTabBar() {
   const pathname = usePathname();
   const router = useRouter();
   const { t } = useI18n();
+  const { user, isLoading: isAuthLoading } = useAuth();
   const tabsScrollRef = useRef<HTMLDivElement>(null);
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
+  const [permissionNotice, setPermissionNotice] = useState("");
 
-  const tabs = useSyncExternalStore(subscribeTabs, getStoredTabsSnapshot, () => DEFAULT_TABS);
+  const storedTabs = useSyncExternalStore(subscribeTabs, getStoredTabsSnapshot, () => DEFAULT_TABS);
+  const tabs = useMemo(
+    () => storedTabs.filter((tab) => {
+      const route = getNavigationRoute(tab.path);
+      return route && canAccessNavigationRoute(route, user?.role);
+    }),
+    [storedTabs, user?.role]
+  );
 
   const saveTabs = useCallback((newTabs: TabDefinition[]) => {
     writeTabs(newTabs);
@@ -128,30 +111,41 @@ export default function NavigationTabBar() {
   useEffect(() => {
     if (!pathname) return;
 
-    // Match exact or prefix route from definitions
-    const matchedKey = Object.keys(ROUTE_DEFINITIONS).find(
-      (route) => route === pathname || (route !== "/" && pathname.startsWith(route))
-    );
-
-    if (matchedKey && ROUTE_DEFINITIONS[matchedKey]) {
+    const matchedRoute = resolveNavigationRoute(pathname);
+    if (matchedRoute && canAccessNavigationRoute(matchedRoute, user?.role)) {
       const currentTabs = getStoredTabsSnapshot();
-      if (!currentTabs.some((tab) => tab.path === matchedKey)) {
+      if (!currentTabs.some((tab) => tab.path === matchedRoute.path)) {
         const newTab: TabDefinition = {
-          path: matchedKey,
-          labelKey: ROUTE_DEFINITIONS[matchedKey].labelKey,
-          icon: ROUTE_DEFINITIONS[matchedKey].icon,
-          isPinned: matchedKey === "/",
+          path: matchedRoute.path,
+          labelKey: matchedRoute.labelKey,
+          icon: createElement(matchedRoute.icon, { size: 14 }),
+          isPinned: matchedRoute.path === "/",
         };
         writeTabs([...currentTabs, newTab]);
       }
     }
-  }, [pathname]);
+  }, [pathname, user?.role]);
+
+  useEffect(() => {
+    if (isAuthLoading || !user) return;
+    const currentTabs = getStoredTabsSnapshot();
+    const accessibleTabs = currentTabs.filter((tab) => {
+      const route = getNavigationRoute(tab.path);
+      return route && canAccessNavigationRoute(route, user.role);
+    });
+    let noticeTimer: number | undefined;
+    if (accessibleTabs.length !== currentTabs.length) {
+      writeTabs(accessibleTabs);
+      noticeTimer = window.setTimeout(() => setPermissionNotice(t("nav_tab_permissions_cleaned")), 0);
+    }
+    return () => {
+      if (noticeTimer !== undefined) window.clearTimeout(noticeTimer);
+    };
+  }, [isAuthLoading, t, user]);
 
   const activeTabPath = useMemo(() => {
     return (
-      Object.keys(ROUTE_DEFINITIONS).find(
-        (route) => route === pathname || (route !== "/" && pathname.startsWith(route))
-      ) || "/"
+      resolveNavigationRoute(pathname)?.path || "/"
     );
   }, [pathname]);
 
@@ -197,6 +191,9 @@ export default function NavigationTabBar() {
 
   return (
     <nav className="nav-tab-bar" aria-label={t("nav_tab_workspace")}>
+      <span className="visually-hidden" role="status" aria-live="polite">
+        {permissionNotice}
+      </span>
       <button
         type="button"
         className="nav-tab-scroll-btn left"
@@ -207,11 +204,11 @@ export default function NavigationTabBar() {
         <ChevronLeft size={14} />
       </button>
 
-      <div className="nav-tab-track" ref={tabsScrollRef}>
+      <div className="nav-tab-track" ref={tabsScrollRef} role="list">
         {tabs.map((tab) => {
           const isActive = tab.path === activeTabPath;
           return (
-            <div key={tab.path} className={`nav-tab-item ${isActive ? "active" : ""}`}>
+            <div key={tab.path} className={`nav-tab-item ${isActive ? "active" : ""}`} role="listitem">
               <Link
                 href={tab.path}
                 className={`nav-tab-link ${tab.isPinned ? "pinned" : ""}`}

@@ -25,9 +25,10 @@ test('OCS operational pages and components exist', () => {
 
 test('OCS navigation group is wired in AppSidebar with i18n support', () => {
   assert.match(sidebarSource, /nav_ocs/);
-  assert.match(sidebarSource, /nav_ocs_balances/);
-  assert.match(sidebarSource, /nav_ocs_sessions/);
-  assert.match(sidebarSource, /nav_ocs_usage/);
+  const routeRegistry = readFileSync(new URL('../src/lib/navigationRoutes.ts', import.meta.url), 'utf8');
+  assert.match(routeRegistry, /nav_ocs_balances/);
+  assert.match(routeRegistry, /nav_ocs_sessions/);
+  assert.match(routeRegistry, /nav_ocs_usage/);
   assert.match(zhLocale, /nav_ocs_balances/);
   assert.match(enLocale, /nav_ocs_balances/);
   assert.match(zhLocale, /ocs_balances_title/);

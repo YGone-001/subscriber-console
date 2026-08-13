@@ -2,15 +2,27 @@
 import "./layout.css";
 
 import { useState, useEffect } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import AppHeader from "./components/AppHeader";
 import AppSidebar from "./components/AppSidebar";
 import NavigationTabBar from "@/components/NavigationTabBar";
 import NavigationBreadcrumbs from "@/components/NavigationBreadcrumbs";
 import { useI18n } from "@/components/I18nProvider";
+import { useAuth } from "@/hooks/useAuth";
+import { canAccessNavigationRoute, resolveNavigationRoute } from "@/lib/navigationRoutes";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { t } = useI18n();
+  const pathname = usePathname();
+  const router = useRouter();
+  const { user, isLoading: isAuthLoading } = useAuth();
+
+  useEffect(() => {
+    if (isAuthLoading || !user || !pathname) return;
+    const route = resolveNavigationRoute(pathname);
+    if (route && !canAccessNavigationRoute(route, user.role)) router.replace("/");
+  }, [isAuthLoading, pathname, router, user]);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(min-width: 981px)");

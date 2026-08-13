@@ -8,6 +8,7 @@ const sidebarPath = new URL('../src/app/(dashboard)/components/AppSidebar.tsx', 
 const layoutPath = new URL('../src/app/(dashboard)/layout.tsx', import.meta.url);
 const commandPalettePath = new URL('../src/components/CommandPalette.tsx', import.meta.url);
 const layoutCssPath = new URL('../src/app/(dashboard)/layout.css', import.meta.url);
+const routeRegistryPath = new URL('../src/lib/navigationRoutes.ts', import.meta.url);
 const zhLocaleSource = readFileSync(new URL('../src/lib/locales/zh.ts', import.meta.url), 'utf8');
 const enLocaleSource = readFileSync(new URL('../src/lib/locales/en.ts', import.meta.url), 'utf8');
 
@@ -27,6 +28,24 @@ test('NavigationTabBar manages tabs and default pinned home', () => {
   assert.match(tabBarContent, /nav_tab_close_others/);
   assert.match(tabBarContent, /nav_tab_close_all/);
   assert.match(tabBarContent, /isPinned:\s*true/);
+  assert.match(tabBarContent, /canAccessNavigationRoute/);
+  assert.doesNotMatch(tabBarContent, /role="tab"/);
+});
+
+test('navigation uses one permission-aware registry with longest-prefix matching', () => {
+  const registryContent = readFileSync(routeRegistryPath, 'utf8');
+  const tabBarContent = readFileSync(tabBarPath, 'utf8');
+  const crumbsContent = readFileSync(breadcrumbsPath, 'utf8');
+  const sidebarContent = readFileSync(sidebarPath, 'utf8');
+  const commandContent = readFileSync(commandPalettePath, 'utf8');
+
+  assert.match(registryContent, /allowedRoles:\s*\["root"\]/);
+  assert.match(registryContent, /sort\(\(left, right\) => right\.path\.length - left\.path\.length\)/);
+  assert.match(registryContent, /pathname\.startsWith\(`\$\{routePath\}\/`\)/);
+  assert.match(tabBarContent, /resolveNavigationRoute/);
+  assert.match(crumbsContent, /resolveNavigationRoute/);
+  assert.match(sidebarContent, /getAccessibleNavigationRoutes/);
+  assert.match(commandContent, /getAccessibleNavigationRoutes/);
 });
 
 test('NavigationBreadcrumbs tracks route hierarchy and recent history', () => {
@@ -47,20 +66,14 @@ test('AppSidebar supports instant menu filtering and keyboard shortcut toggle', 
 
 test('CommandPalette contains all routes, categories, and quick actions', () => {
   const cpContent = readFileSync(commandPalettePath, 'utf8');
+  const registryContent = readFileSync(routeRegistryPath, 'utf8');
   assert.match(cpContent, /cp_cat_all/);
   assert.match(cpContent, /cp_cat_pages/);
   assert.match(cpContent, /cp_cat_actions/);
   assert.match(cpContent, /cp_cat_data/);
-  assert.match(cpContent, /\/ocs\/balances/);
-  assert.match(cpContent, /\/ocs\/sessions/);
-  assert.match(cpContent, /\/ocs\/usage/);
-  assert.match(cpContent, /\/rating\/plans/);
-  assert.match(cpContent, /\/rating\/rules/);
-  assert.match(cpContent, /\/users/);
-  assert.match(cpContent, /\/roles/);
-  assert.match(cpContent, /\/approvals/);
-  assert.match(cpContent, /\/audit-logs/);
-  assert.match(cpContent, /\/system-health/);
+  for (const route of ['/ocs/balances', '/ocs/sessions', '/ocs/usage', '/rating/plans', '/rating/rules', '/users', '/roles', '/approvals', '/audit-logs', '/system-health']) {
+    assert.match(registryContent, new RegExp(route.replaceAll('/', '\\/')));
+  }
   assert.match(cpContent, /toggle-theme/);
   assert.match(cpContent, /clear-recent-history/);
 });
@@ -86,6 +99,7 @@ test('navigation i18n keys are 100% matched between en.ts and zh.ts', () => {
     'nav_tab_options',
     'nav_tab_close_others',
     'nav_tab_close_all',
+    'nav_tab_permissions_cleaned',
     'nav_crumb_recent_title',
     'nav_crumb_recent_btn',
     'nav_crumb_clear_recent',

@@ -1,30 +1,19 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { createElement, useState, useMemo } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import {
-  Activity,
   ChevronRight,
-  CreditCard,
-  Gauge,
-  GitBranch,
-  History,
-  LayoutDashboard,
-  Radio,
-  Receipt,
   Search,
-  ShieldCheck,
   SidebarClose,
   SidebarOpen,
-  UserCog,
-  Users,
-  Wallet,
   X,
   Zap,
 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { useAuth } from "@/hooks/useAuth";
+import { getAccessibleNavigationRoutes, routeMatchesPath, type NavigationGroup } from "@/lib/navigationRoutes";
 
 type NavItem = {
   key: string;
@@ -46,47 +35,41 @@ export default function AppSidebar({ sidebarOpen, setSidebarOpen }: AppSidebarPr
   const [filterQuery, setFilterQuery] = useState("");
   const pathname = usePathname();
   const { t } = useI18n();
-  const { isRoot } = useAuth();
+  const { user } = useAuth();
 
   const navItems = useMemo<NavItem[]>(() => {
-    const ocsChildren: NavItem[] = [
-      { key: "nav_ocs_balances", path: "/ocs/balances", match: "/ocs/balances", icon: <Wallet size={18} /> },
-      { key: "nav_ocs_sessions", path: "/ocs/sessions", match: "/ocs/sessions", icon: <Radio size={18} /> },
-      { key: "nav_ocs_usage", path: "/ocs/usage", match: "/ocs/usage", icon: <Receipt size={18} /> },
-    ];
-    const identityChildren: NavItem[] = [
-      ...(isRoot
-        ? [
-            { key: "nav_system_users", path: "/users", match: "/users", icon: <UserCog size={18} /> },
-            { key: "nav_roles", path: "/roles", match: "/roles", icon: <ShieldCheck size={18} /> },
-          ]
-        : []),
-      { key: "nav_approvals", path: "/approvals", match: "/approvals", icon: <GitBranch size={18} /> },
-      { key: "nav_audit_logs", path: "/audit-logs", match: "/audit-logs", icon: <History size={18} /> },
-    ];
+    const routes = getAccessibleNavigationRoutes(user?.role);
+    const routeItem = (path: string, size = 20): NavItem => {
+      const route = routes.find((candidate) => candidate.path === path)!;
+      return { key: route.labelKey, path: route.path, match: route.path, icon: createElement(route.icon, { size }) };
+    };
+    const groupChildren = (group: NavigationGroup) => routes
+      .filter((route) => route.group === group)
+      .map((route) => ({ key: route.labelKey, path: route.path, match: route.path, icon: createElement(route.icon, { size: 18 }) }));
+    const ocsChildren = groupChildren("ocs");
+    const identityChildren = groupChildren("identity");
     const items: NavItem[] = [
-      { key: "nav_dashboard", path: "/", match: "/", icon: <LayoutDashboard size={20} /> },
-      { key: "nav_subscriber", path: "/subscribers", match: "/subscribers", icon: <Users size={20} /> },
+      routeItem("/"),
+      routeItem("/subscribers"),
       { key: "nav_ocs", path: "/ocs/balances", match: "/ocs", icon: <Zap size={20} />, children: ocsChildren },
-      { key: "nav_profile", path: "/profile", match: "/profile", icon: <CreditCard size={20} /> },
-      { key: "nav_rating", path: "/rating", match: "/rating", icon: <Gauge size={20} /> },
+      routeItem("/profile"),
+      routeItem("/rating"),
       {
         key: "nav_user_permissions",
         path: "/users",
         match: "/users",
-        icon: <UserCog size={20} />,
+        icon: identityChildren[0]?.icon,
         children: identityChildren,
       },
-      { key: "nav_system_health", path: "/system-health", match: "/system-health", icon: <Activity size={20} /> },
+      routeItem("/system-health"),
     ];
 
     return items;
-  }, [isRoot]);
+  }, [user?.role]);
 
-  const ratingSubItems: NavItem[] = useMemo(() => [
-    { key: "nav_rating_plans", path: "/rating/plans", match: "/rating/plans", icon: <Gauge size={18} /> },
-    { key: "nav_rating_rules", path: "/rating/rules", match: "/rating/rules", icon: <GitBranch size={18} /> },
-  ], []);
+  const ratingSubItems: NavItem[] = useMemo(() => getAccessibleNavigationRoutes(user?.role)
+    .filter((route) => route.group === "rating")
+    .map((route) => ({ key: route.labelKey, path: route.path, match: route.path, icon: createElement(route.icon, { size: 18 }) })), [user?.role]);
 
   const sidebarWidth = sidebarOpen ? 264 : 72;
   const ocsNavExpanded = ocsNavOpen || pathname.startsWith("/ocs");
@@ -155,10 +138,10 @@ export default function AppSidebar({ sidebarOpen, setSidebarOpen }: AppSidebarPr
           const isRatingParent = item.key === "nav_rating";
           const subItems = isRatingParent ? ratingSubItems : item.children || [];
           const childActive =
-            subItems.some((child) => pathname === child.match || pathname.startsWith(child.match)) ||
+            subItems.some((child) => routeMatchesPath(pathname, child.match)) ||
             false;
           const isActive =
-            childActive || pathname === item.match || (item.match !== "/" && pathname.startsWith(item.match));
+            childActive || routeMatchesPath(pathname, item.match);
           const isOcsParent = item.key === "nav_ocs";
           const isIdentityParent = item.key === "nav_user_permissions";
           const isExpandable = isOcsParent || isRatingParent || isIdentityParent;
@@ -207,7 +190,7 @@ export default function AppSidebar({ sidebarOpen, setSidebarOpen }: AppSidebarPr
                   {sidebarOpen && parentExpanded ? (
                     <div className="sidebar-subnav">
                       {subItems.map((child) => {
-                        const isChildActive = pathname === child.match || pathname.startsWith(child.match);
+                        const isChildActive = routeMatchesPath(pathname, child.match);
                         return (
                           <Link
                             key={child.key}

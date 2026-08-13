@@ -14,6 +14,12 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
+import { useAuth } from "@/hooks/useAuth";
+import {
+  canAccessNavigationRoute,
+  getNavigationRoute,
+  resolveNavigationRoute,
+} from "@/lib/navigationRoutes";
 
 const RECENT_PAGES_STORAGE_KEY = "XCLOUD_RECENT_PAGES";
 
@@ -29,23 +35,6 @@ interface RecentPageItem {
   timestamp: number;
 }
 
-const ROUTE_HIERARCHY: Record<string, { groupKey?: string; groupPath?: string; labelKey: string }> = {
-  "/": { labelKey: "nav_dashboard" },
-  "/subscribers": { labelKey: "nav_subscriber" },
-  "/ocs/balances": { groupKey: "nav_ocs", groupPath: "/ocs/balances", labelKey: "nav_ocs_balances" },
-  "/ocs/sessions": { groupKey: "nav_ocs", groupPath: "/ocs/balances", labelKey: "nav_ocs_sessions" },
-  "/ocs/usage": { groupKey: "nav_ocs", groupPath: "/ocs/balances", labelKey: "nav_ocs_usage" },
-  "/profile": { labelKey: "nav_profile" },
-  "/rating": { labelKey: "nav_rating" },
-  "/rating/plans": { groupKey: "nav_rating", groupPath: "/rating/plans", labelKey: "nav_rating_plans" },
-  "/rating/rules": { groupKey: "nav_rating", groupPath: "/rating/rules", labelKey: "nav_rating_rules" },
-  "/users": { groupKey: "nav_user_permissions", groupPath: "/users", labelKey: "nav_system_users" },
-  "/roles": { groupKey: "nav_user_permissions", groupPath: "/roles", labelKey: "nav_roles" },
-  "/approvals": { groupKey: "nav_user_permissions", groupPath: "/approvals", labelKey: "nav_approvals" },
-  "/audit-logs": { groupKey: "nav_user_permissions", groupPath: "/audit-logs", labelKey: "nav_audit_logs" },
-  "/system-health": { labelKey: "nav_system_health" },
-};
-
 const EMPTY_RECENT: RecentPageItem[] = [];
 let cachedRawRecent: string | null = null;
 let cachedRecent: RecentPageItem[] = EMPTY_RECENT;
@@ -57,7 +46,16 @@ function getRecentPagesSnapshot(): RecentPageItem[] {
     if (raw === cachedRawRecent && cachedRecent) return cachedRecent;
     cachedRawRecent = raw;
     if (raw) {
-      cachedRecent = JSON.parse(raw);
+      const parsed: unknown = JSON.parse(raw);
+      if (!Array.isArray(parsed)) throw new Error("Invalid recent page storage");
+      cachedRecent = parsed.filter((item): item is RecentPageItem => (
+        typeof item === "object" &&
+        item !== null &&
+        typeof item.path === "string" &&
+        typeof item.labelKey === "string" &&
+        typeof item.timestamp === "number" &&
+        Boolean(getNavigationRoute(item.path))
+      ));
       return cachedRecent;
     }
   } catch {}
@@ -69,7 +67,10 @@ const recentListeners = new Set<() => void>();
 function subscribeRecent(onStoreChange: () => void) {
   recentListeners.add(onStoreChange);
   const handleStorage = (e: StorageEvent) => {
-    if (e.key === RECENT_PAGES_STORAGE_KEY) onStoreChange();
+    if (e.key === RECENT_PAGES_STORAGE_KEY) {
+      cachedRawRecent = null;
+      onStoreChange();
+    }
   };
   window.addEventListener("storage", handleStorage);
   return () => {
@@ -93,57 +94,67 @@ export default function NavigationBreadcrumbs() {
   const pathname = usePathname();
   const router = useRouter();
   const { t } = useI18n();
+  const { user, isLoading: isAuthLoading } = useAuth();
 
   const [recentDropdownOpen, setRecentDropdownOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const recentPages = useSyncExternalStore(subscribeRecent, getRecentPagesSnapshot, () => EMPTY_RECENT);
+  const storedRecentPages = useSyncExternalStore(subscribeRecent, getRecentPagesSnapshot, () => EMPTY_RECENT);
+  const recentPages = useMemo(
+    () => storedRecentPages.filter((item) => {
+      const route = getNavigationRoute(item.path);
+      return route && canAccessNavigationRoute(route, user?.role);
+    }),
+    [storedRecentPages, user?.role]
+  );
 
   // Track recent pages when pathname changes
   useEffect(() => {
     if (!pathname) return;
 
-    const matchedKey = Object.keys(ROUTE_HIERARCHY).find(
-      (route) => route === pathname || (route !== "/" && pathname.startsWith(route))
-    );
-
-    if (matchedKey && ROUTE_HIERARCHY[matchedKey]) {
-      const labelKey = ROUTE_HIERARCHY[matchedKey].labelKey;
+    const matchedRoute = resolveNavigationRoute(pathname);
+    if (matchedRoute && canAccessNavigationRoute(matchedRoute, user?.role)) {
       const current = getRecentPagesSnapshot();
-      const filtered = current.filter((item) => item.path !== matchedKey);
+      const filtered = current.filter((item) => item.path !== matchedRoute.path);
       const next: RecentPageItem[] = [
-        { path: matchedKey, labelKey, timestamp: Date.now() },
+        { path: matchedRoute.path, labelKey: matchedRoute.labelKey, timestamp: Date.now() },
         ...filtered,
       ].slice(0, 8);
       writeRecentPages(next);
     }
-  }, [pathname]);
+  }, [pathname, user?.role]);
+
+  useEffect(() => {
+    if (isAuthLoading || !user) return;
+    const current = getRecentPagesSnapshot();
+    const accessible = current.filter((item) => {
+      const route = getNavigationRoute(item.path);
+      return route && canAccessNavigationRoute(route, user.role);
+    });
+    if (accessible.length !== current.length) writeRecentPages(accessible);
+  }, [isAuthLoading, user]);
 
   const breadcrumbs = useMemo<BreadcrumbCrumb[]>(() => {
-    const matchedKey = Object.keys(ROUTE_HIERARCHY).find(
-      (route) => route === pathname || (route !== "/" && pathname.startsWith(route))
-    );
-
-    if (!matchedKey || matchedKey === "/") {
+    const matchedRoute = resolveNavigationRoute(pathname);
+    if (!matchedRoute || matchedRoute.path === "/") {
       return [{ labelKey: "nav_dashboard", path: "/", isCurrent: true }];
     }
 
-    const info = ROUTE_HIERARCHY[matchedKey];
     const crumbs: BreadcrumbCrumb[] = [
       { labelKey: "nav_dashboard", path: "/" },
     ];
 
-    if (info.groupKey) {
+    if (matchedRoute.groupLabelKey) {
       crumbs.push({
-        labelKey: info.groupKey,
-        path: info.groupPath,
+        labelKey: matchedRoute.groupLabelKey,
+        path: matchedRoute.groupPath,
       });
     }
 
     crumbs.push({
-      labelKey: info.labelKey,
-      path: matchedKey,
+      labelKey: matchedRoute.labelKey,
+      path: matchedRoute.path,
       isCurrent: true,
     });
 

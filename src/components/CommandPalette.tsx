@@ -1,34 +1,26 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ElementType, KeyboardEvent } from "react";
 import {
   Search,
   Users,
   CreditCard,
-  Gauge,
-  Activity,
-  History,
-  LayoutDashboard,
   Plus,
   Download,
   FileUp,
   Zap,
   Command,
-  GitBranch,
   Languages,
-  UserCog,
-  ShieldCheck,
-  Wallet,
-  Radio,
-  Receipt,
   SunMoon,
   Trash2,
 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { useTheme } from "@/components/ThemeProvider";
-import { useDialogFocus } from "@/components/ui/useDialogFocus";
+import { Dialog } from "@/components/ui/Dialog";
+import { useAuth } from "@/hooks/useAuth";
+import { getAccessibleNavigationRoutes } from "@/lib/navigationRoutes";
 import "./CommandPalette.css";
 
 type PaletteItem = {
@@ -61,9 +53,9 @@ const REMOTE_SEARCH_DELAY_MS = 250;
 export default function CommandPalette({ isOpen, onClose, onAction }: CommandPaletteProps) {
   const { t, lang, setLang } = useI18n();
   const { theme, toggleTheme } = useTheme();
+  const { user } = useAuth();
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
-  const dialogRef = useDialogFocus({ open: isOpen, onClose, initialFocusRef: inputRef });
 
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState<"all" | "pages" | "actions" | "data">("all");
@@ -81,21 +73,19 @@ export default function CommandPalette({ isOpen, onClose, onAction }: CommandPal
     if (activeCategory !== "all") setActiveCategory("all");
   }
 
-  const navItems: PaletteItem[] = [
-    { id: "nav-dashboard", label: t("cp_nav_dashboard"), desc: t("cp_nav_dashboard_desc"), icon: LayoutDashboard, path: "/", type: "navigation", category: "pages" },
-    { id: "nav-subscribers", label: t("cp_nav_subscribers"), desc: t("cp_nav_subscribers_desc"), icon: Users, path: "/subscribers", type: "navigation", category: "pages" },
-    { id: "nav-ocs-balances", label: t("nav_ocs_balances"), desc: t("ocs_balances_desc") || t("cp_nav_dashboard_desc"), icon: Wallet, path: "/ocs/balances", type: "navigation", category: "pages" },
-    { id: "nav-ocs-sessions", label: t("nav_ocs_sessions"), desc: t("ocs_sessions_desc") || t("cp_nav_dashboard_desc"), icon: Radio, path: "/ocs/sessions", type: "navigation", category: "pages" },
-    { id: "nav-ocs-usage", label: t("nav_ocs_usage"), desc: t("ocs_usage_desc") || t("cp_nav_dashboard_desc"), icon: Receipt, path: "/ocs/usage", type: "navigation", category: "pages" },
-    { id: "nav-profile", label: t("cp_nav_profiles"), desc: t("cp_nav_profiles_desc"), icon: CreditCard, path: "/profile", type: "navigation", category: "pages" },
-    { id: "nav-rating-plans", label: t("cp_nav_rating_plans"), desc: t("cp_nav_rating_plans_desc"), icon: Gauge, path: "/rating/plans", type: "navigation", category: "pages" },
-    { id: "nav-rating-rules", label: t("cp_nav_rating_rules"), desc: t("cp_nav_rating_rules_desc"), icon: GitBranch, path: "/rating/rules", type: "navigation", category: "pages" },
-    { id: "nav-users", label: t("nav_system_users"), desc: t("users_mgmt_desc") || t("cp_nav_account_desc"), icon: UserCog, path: "/users", type: "navigation", category: "pages" },
-    { id: "nav-roles", label: t("nav_roles"), desc: t("roles_matrix_desc") || t("cp_nav_account_desc"), icon: ShieldCheck, path: "/roles", type: "navigation", category: "pages" },
-    { id: "nav-approvals", label: t("nav_approvals"), desc: t("approvals_center_desc") || t("cp_nav_account_desc"), icon: GitBranch, path: "/approvals", type: "navigation", category: "pages" },
-    { id: "nav-audit", label: t("cp_nav_audit"), desc: t("cp_nav_audit_desc"), icon: History, path: "/audit-logs", type: "navigation", category: "pages" },
-    { id: "nav-health", label: t("cp_nav_health"), desc: t("cp_nav_health_desc"), icon: Activity, path: "/system-health", type: "navigation", category: "pages" },
-  ];
+  const navItems = useMemo<PaletteItem[]>(() => (
+    getAccessibleNavigationRoutes(user?.role)
+      .filter((route) => route.showInCommandPalette !== false)
+      .map((route) => ({
+        id: `nav-${route.path === "/" ? "dashboard" : route.path.slice(1).replaceAll("/", "-")}`,
+        label: t(route.commandLabelKey || route.labelKey),
+        desc: t(route.commandDescriptionKey),
+        icon: route.icon,
+        path: route.path,
+        type: "navigation",
+        category: "pages",
+      }))
+  ), [t, user?.role]);
 
   const actionItems: PaletteItem[] = [
     { id: "act-new-sub", label: t("cp_act_new_sub"), desc: t("cp_act_new_sub_desc"), icon: Plus, type: "action", category: "actions", actionKey: "new-subscriber" },
@@ -280,17 +270,15 @@ export default function CommandPalette({ isOpen, onClose, onAction }: CommandPal
   };
 
   return (
-    <div onClick={onClose} className="cp-overlay">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={t("cp_title")}
-        ref={dialogRef}
-        tabIndex={-1}
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={handleKeyDown}
-        className="cp-modal"
-      >
+    <Dialog
+      open={isOpen}
+      onClose={onClose}
+      ariaLabel={t("cp_title")}
+      initialFocusRef={inputRef}
+      overlayClassName="cp-overlay"
+      className="cp-modal"
+      onKeyDown={handleKeyDown}
+    >
         <div className="cp-search-header">
           <Search size={20} color="#94a3b8" />
           <input
@@ -392,7 +380,6 @@ export default function CommandPalette({ isOpen, onClose, onAction }: CommandPal
             <Command size={11} /> Powered by xCloud
           </span>
         </div>
-      </div>
-    </div>
+    </Dialog>
   );
 }

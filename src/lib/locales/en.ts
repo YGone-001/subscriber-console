@@ -1718,6 +1718,7 @@ export const en: Record<string, string> = {
     nav_tab_options: "Tab Options",
     nav_tab_close_others: "Close other tabs",
     nav_tab_close_all: "Close all tabs",
+    nav_tab_permissions_cleaned: "Pages you no longer have permission to access were removed from the workspace.",
     nav_crumb_recent_title: "Recent History",
     nav_crumb_recent_btn: "Recent",
     nav_crumb_clear_recent: "Clear History",

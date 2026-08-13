@@ -30,9 +30,30 @@ export function useDialogFocus({ open, onClose, initialFocusRef }: UseDialogFocu
 
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const previousOverflow = document.body.style.overflow;
+    const backgroundStates: Array<{ element: HTMLElement; inert: boolean; ariaHidden: string | null }> = [];
     document.body.style.overflow = "hidden";
 
     const focusFrame = window.requestAnimationFrame(() => {
+      const dialog = dialogRef.current;
+      if (!dialog) return;
+
+      let activeBranch: HTMLElement = dialog;
+      while (activeBranch.parentElement) {
+        const parent = activeBranch.parentElement;
+        for (const sibling of Array.from(parent.children)) {
+          if (!(sibling instanceof HTMLElement) || sibling === activeBranch) continue;
+          backgroundStates.push({
+            element: sibling,
+            inert: sibling.inert,
+            ariaHidden: sibling.getAttribute("aria-hidden"),
+          });
+          sibling.inert = true;
+          sibling.setAttribute("aria-hidden", "true");
+        }
+        if (parent === document.body) break;
+        activeBranch = parent;
+      }
+
       const firstFocusable = dialogRef.current?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR);
       (initialFocusRef?.current || firstFocusable || dialogRef.current)?.focus();
     });
@@ -71,6 +92,11 @@ export function useDialogFocus({ open, onClose, initialFocusRef }: UseDialogFocu
       window.cancelAnimationFrame(focusFrame);
       document.removeEventListener("keydown", handleKeyDown, true);
       document.body.style.overflow = previousOverflow;
+      for (const { element, inert, ariaHidden } of backgroundStates) {
+        element.inert = inert;
+        if (ariaHidden === null) element.removeAttribute("aria-hidden");
+        else element.setAttribute("aria-hidden", ariaHidden);
+      }
       previousFocus?.focus();
     };
   }, [initialFocusRef, open]);

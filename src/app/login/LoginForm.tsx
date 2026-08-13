@@ -5,6 +5,8 @@ import { useState } from "react";
 import { Eye, EyeOff, Loader2, Lock, User } from "lucide-react";
 import Image from "next/image";
 import { useI18n } from "@/components/I18nProvider";
+import { Field } from "@/components/ui/Field";
+import { IconButton } from "@/components/ui/IconButton";
 
 export default function LoginForm() {
   const { t } = useI18n();
@@ -77,10 +79,7 @@ export default function LoginForm() {
             </div>
           )}
 
-          <div className="input-container">
-            <label className="login-field-label" htmlFor="xcloud-login-username">
-              {t("login_username")}
-            </label>
+          <Field className="input-container" labelClassName="login-field-label" htmlFor="xcloud-login-username" label={t("login_username")}>
             <div className="input-icon" aria-hidden="true">
               <User size={18} />
             </div>
@@ -95,12 +94,9 @@ export default function LoginForm() {
               required
               className="login-input"
             />
-          </div>
+          </Field>
 
-          <div className="input-container">
-            <label className="login-field-label" htmlFor="xcloud-login-password">
-              {t("login_password")}
-            </label>
+          <Field className="input-container" labelClassName="login-field-label" htmlFor="xcloud-login-password" label={t("login_password")}>
             <div className="input-icon" aria-hidden="true">
               <Lock size={18} />
             </div>
@@ -115,11 +111,9 @@ export default function LoginForm() {
               required
               className="login-input login-input-password"
             />
-            <button
+            <IconButton
               id="xcloud-password-toggle"
-              type="button"
-              title={passwordVisible ? t("login_hide_password") : t("login_show_password")}
-              aria-label={passwordVisible ? t("login_hide_password") : t("login_show_password")}
+              label={passwordVisible ? t("login_hide_password") : t("login_show_password")}
               aria-pressed={passwordVisible}
               onClick={() => setPasswordVisible((visible) => !visible)}
               className="password-toggle"
@@ -130,8 +124,8 @@ export default function LoginForm() {
               <span id="xcloud-eye-off" hidden={!passwordVisible}>
                 <EyeOff size={18} />
               </span>
-            </button>
-          </div>
+            </IconButton>
+          </Field>
 
           <button
             id="xcloud-login-submit"

@@ -26,7 +26,7 @@ import type { SystemAnomaly, AnomalyCategory, AnomalySeverity } from "@/server/r
 import "./system-health.css";
 import PageHeader, { type PageHeaderTone } from "@/components/ui/PageHeader";
 import SectionHeader from "@/components/ui/SectionHeader";
-import { useDialogFocus } from "@/components/ui/useDialogFocus";
+import { Dialog } from "@/components/ui/Dialog";
 
 type HealthNotice = {
   type: "success" | "error" | "warning";
@@ -73,8 +73,6 @@ export default function SystemHealthPage() {
   const [batchHealProfile, setBatchHealProfile] = useState("");
   const [isBatchConfirmed, setIsBatchConfirmed] = useState(false);
   const [isBatchHealing, setIsBatchHealing] = useState(false);
-  const healDialogRef = useDialogFocus({ open: healModalOpen, onClose: () => setHealModalOpen(false) });
-  const batchDialogRef = useDialogFocus({ open: batchModalOpen, onClose: () => setBatchModalOpen(false) });
 
   // Use refs for aggressive recursion logic without stale states
   const scanMetrics = useRef({ total: 0, anomaliesList: [] as SystemAnomaly[] });
@@ -783,9 +781,8 @@ export default function SystemHealthPage() {
       </div>
 
       {/* Single Item Heal Modal */}
-      {healModalOpen && targetAnomaly && (
-        <div className="modal-overlay health-modal-overlay">
-          <div ref={healDialogRef} tabIndex={-1} className="modal-content animate-fade-in health-modal-content" role="dialog" aria-modal="true" aria-labelledby="health-heal-modal-title">
+      {targetAnomaly && (
+        <Dialog open={healModalOpen} onClose={() => setHealModalOpen(false)} overlayClassName="modal-overlay health-modal-overlay" className="modal-content animate-fade-in health-modal-content" labelledBy="health-heal-modal-title" describedBy="health-heal-modal-description">
             <div className="health-modal-header">
               <h2 id="health-heal-modal-title" className="health-modal-title">{t("health_modal_title")}</h2>
             </div>
@@ -802,7 +799,7 @@ export default function SystemHealthPage() {
                   <option value="">{t("health_modal_default")}</option>
                   {profileList.map((p: any) => <option key={p.name} value={p.name}>{p.title || p.name}</option>)}
                 </select>
-                <div className="health-modal-desc">
+                <div id="health-heal-modal-description" className="health-modal-desc">
                   {t("health_modal_desc")}
                 </div>
               </div>
@@ -839,14 +836,11 @@ export default function SystemHealthPage() {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
+        </Dialog>
       )}
 
       {/* Batch Auto-Heal Modal */}
-      {batchModalOpen && (
-        <div className="modal-overlay health-modal-overlay">
-          <div ref={batchDialogRef} tabIndex={-1} className="modal-content animate-fade-in health-modal-content" role="dialog" aria-modal="true" aria-labelledby="health-batch-modal-title">
+      <Dialog open={batchModalOpen} onClose={() => setBatchModalOpen(false)} overlayClassName="modal-overlay health-modal-overlay" className="modal-content animate-fade-in health-modal-content" labelledBy="health-batch-modal-title" describedBy="health-batch-modal-description">
             <div className="health-modal-header">
               <h2 id="health-batch-modal-title" className="health-modal-title">{t("health_batch_modal_title")}</h2>
             </div>
@@ -857,7 +851,7 @@ export default function SystemHealthPage() {
                 <div className="health-modal-target">{t("health_items_to_remediate", { count: filteredAnomalies.length })}</div>
               </div>
 
-              <p className="health-modal-desc">
+              <p id="health-batch-modal-description" className="health-modal-desc">
                 {t("health_batch_modal_desc", { count: String(filteredAnomalies.length) })}
               </p>
 
@@ -901,9 +895,7 @@ export default function SystemHealthPage() {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
-      )}
+      </Dialog>
     </>
   );
 }

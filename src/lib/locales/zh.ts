@@ -1717,6 +1717,7 @@ export const zh: Record<string, string> = {
     nav_tab_options: "标签页操作",
     nav_tab_close_others: "关闭其他标签页",
     nav_tab_close_all: "关闭所有标签页",
+    nav_tab_permissions_cleaned: "已从工作区移除当前无权访问的页面。",
     nav_crumb_recent_title: "最近访问足迹",
     nav_crumb_recent_btn: "最近访问",
     nav_crumb_clear_recent: "清空足迹",
