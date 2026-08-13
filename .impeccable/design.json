@@ -1,0 +1,237 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-13T06:16:35.965Z",
+  "title": "Design System: xCloud",
+  "extensions": {
+    "colorMeta": {
+      "signal-teal-day": {
+        "role": "primary",
+        "displayName": "日间信号青",
+        "canonical": "#087f8c",
+        "tonalRamp": ["#04272b", "#06434a", "#07616b", "#087f8c", "#21a0aa", "#55bcc3", "#9adadd", "#e2f4f5"]
+      },
+      "signal-teal-day-hover": {
+        "role": "primary",
+        "displayName": "日间信号青深态",
+        "canonical": "#046670",
+        "tonalRamp": ["#031f22", "#04373c", "#05505a", "#046670", "#238993", "#59adb4", "#9bd1d4", "#e3f1f2"]
+      },
+      "signal-cyan-night": {
+        "role": "primary",
+        "displayName": "夜间信号青光",
+        "canonical": "#42c3c9",
+        "tonalRamp": ["#073238", "#0d5359", "#18777d", "#279ba1", "#42c3c9", "#73d4d8", "#afe7e9", "#e8f8f8"]
+      },
+      "signal-cyan-night-hover": {
+        "role": "primary",
+        "displayName": "夜间信号青亮态",
+        "canonical": "#68d8dc",
+        "tonalRamp": ["#0a3438", "#11575c", "#207b80", "#3ba5aa", "#68d8dc", "#8fe3e6", "#bbeff0", "#ecfbfb"]
+      },
+      "healthy-green-day": {
+        "role": "secondary",
+        "displayName": "健康链路绿",
+        "canonical": "#16856b",
+        "tonalRamp": ["#062b23", "#0a493b", "#106850", "#16856b", "#38a38b", "#6fc1ad", "#acdcd0", "#e7f5f1"]
+      },
+      "caution-amber-day": {
+        "role": "tertiary",
+        "displayName": "处置警戒琥珀",
+        "canonical": "#b96c16",
+        "tonalRamp": ["#382006", "#5d3509", "#884e0e", "#b96c16", "#d58c36", "#e7ae70", "#f3d2ad", "#fbf1df"]
+      },
+      "critical-red-day": {
+        "role": "tertiary",
+        "displayName": "严重故障红",
+        "canonical": "#c83d4c",
+        "tonalRamp": ["#3b1017", "#641b26", "#942b39", "#c83d4c", "#dd6470", "#ea929a", "#f3c0c4", "#fbe9ea"]
+      },
+      "command-canvas-day": {
+        "role": "neutral",
+        "displayName": "日间指挥画布",
+        "canonical": "#f3f6f7",
+        "tonalRamp": ["#20282a", "#3c474a", "#5b686b", "#7c898c", "#a1abad", "#c4cbcd", "#dfe4e5", "#f3f6f7"]
+      },
+      "panel-white-day": {
+        "role": "neutral",
+        "displayName": "日间面板白",
+        "canonical": "#ffffff",
+        "tonalRamp": ["#262626", "#454545", "#666666", "#888888", "#aaaaaa", "#cccccc", "#e8e8e8", "#ffffff"]
+      },
+      "panel-hover-day": {
+        "role": "neutral",
+        "displayName": "日间悬停雾面",
+        "canonical": "#edf3f4",
+        "tonalRamp": ["#20292b", "#3c484b", "#5a696c", "#798a8d", "#9eadaf", "#c0cbcd", "#dce4e5", "#edf3f4"]
+      },
+      "divider-day": {
+        "role": "neutral",
+        "displayName": "日间结构分隔",
+        "canonical": "#d8e1e3",
+        "tonalRamp": ["#22292b", "#3f494b", "#5f6a6c", "#808b8e", "#a3adaf", "#c2cacc", "#d8e1e3", "#f1f5f6"]
+      },
+      "command-ink-day": {
+        "role": "neutral",
+        "displayName": "日间指挥墨色",
+        "canonical": "#102b34",
+        "tonalRamp": ["#07161b", "#102b34", "#27454e", "#49636a", "#70868b", "#9babad", "#c7d1d3", "#eef3f4"]
+      },
+      "secondary-ink-day": {
+        "role": "neutral",
+        "displayName": "日间次级墨色",
+        "canonical": "#36545d",
+        "tonalRamp": ["#0c1c21", "#1d363e", "#36545d", "#57747b", "#7c979c", "#a3b7ba", "#cad6d8", "#eef3f4"]
+      },
+      "muted-ink-day": {
+        "role": "neutral",
+        "displayName": "日间弱化墨色",
+        "canonical": "#61777e",
+        "tonalRamp": ["#172125", "#303f44", "#4a5d63", "#61777e", "#82969b", "#a7b6b9", "#ccd5d7", "#eff3f4"]
+      },
+      "command-canvas-night": {
+        "role": "neutral",
+        "displayName": "夜间指挥画布",
+        "canonical": "#09191f",
+        "tonalRamp": ["#051015", "#09191f", "#17313a", "#304c55", "#526d74", "#7d9499", "#adbdc0", "#e4ebec"]
+      },
+      "panel-deep-night": {
+        "role": "neutral",
+        "displayName": "夜间深层面板",
+        "canonical": "#10262d",
+        "tonalRamp": ["#071318", "#10262d", "#234049", "#3e5d65", "#627d83", "#8ba1a5", "#b8c7c9", "#e7edef"]
+      },
+      "panel-hover-night": {
+        "role": "neutral",
+        "displayName": "夜间悬停面板",
+        "canonical": "#17323a",
+        "tonalRamp": ["#09181c", "#17323a", "#2c4d55", "#496a71", "#6d898e", "#96aaae", "#becacc", "#eaf0f1"]
+      },
+      "command-ink-night": {
+        "role": "neutral",
+        "displayName": "夜间主文字",
+        "canonical": "#eef7f7",
+        "tonalRamp": ["#1d292a", "#354445", "#526163", "#718183", "#95a4a6", "#bac6c8", "#d9e2e3", "#eef7f7"]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "指挥标题", "purpose": "页面主标题、品牌名称、关键数值和主要对象名称。" },
+      "body": { "displayName": "运营界面正文", "purpose": "中英文说明、表单、表格和任务文案。" },
+      "label": { "displayName": "紧凑状态标签", "purpose": "指标标签、状态、工具提示与短操作。" },
+      "data": { "displayName": "网络数据", "purpose": "IMSI、协议字段、代码、数值与单位。" }
+    },
+    "shadows": [
+      { "name": "panel-low", "value": "0 14px 36px -32px rgba(15, 43, 52, 0.7)", "purpose": "浅色模式中指标条与主要面板的轻微分离。" },
+      { "name": "popover-structural", "value": "0 20px 44px -28px rgba(15, 43, 52, 0.72)", "purpose": "菜单、popover 与临时工具浮层。" },
+      { "name": "drawer-directional", "value": "-24px 0 48px -32px rgba(15, 43, 52, 0.48)", "purpose": "从右侧进入的详情与操作抽屉。" },
+      { "name": "popover-night", "value": "0 20px 44px -24px rgba(0, 0, 0, 0.9)", "purpose": "深色模式中保持浮层与深色画布分离。" }
+    ],
+    "motion": [
+      { "name": "ease-decelerate", "value": "cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "弹层、抽屉和主要状态进入。" },
+      { "name": "ease-smooth", "value": "cubic-bezier(0.4, 0, 0.2, 1)", "purpose": "普通颜色、边界和位置反馈。" },
+      { "name": "duration-fast", "value": "0.15s", "purpose": "hover、focus 和按压反馈。" },
+      { "name": "duration-normal", "value": "0.2s", "purpose": "控件与导航状态变化。" },
+      { "name": "duration-slow", "value": "0.35s", "purpose": "较大层级变化；减少运动时移除位移和缩放。" }
+    ],
+    "breakpoints": [
+      { "name": "shell-drawer", "value": "980px" },
+      { "name": "content-stack", "value": "900px" },
+      { "name": "compact-tablet", "value": "768px" },
+      { "name": "phone", "value": "640px" },
+      { "name": "metric-single-column", "value": "560px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "页面或弹层中的唯一主要提交动作。",
+      "html": "<button class=\"ds-btn-primary\">执行变更</button>",
+      "css": ".ds-btn-primary { min-height: var(--control-height, 36px); display: inline-flex; align-items: center; justify-content: center; padding: 8px 14px; border: 1px solid var(--primary, #087f8c); border-radius: var(--radius-control, 8px); background: var(--primary, #087f8c); color: #fff; font: 750 .78rem/1.25 var(--font-interface, sans-serif); cursor: pointer; transition: background .15s ease, box-shadow .15s ease, transform .15s ease; } .ds-btn-primary:hover { background: var(--primary-hover, #046670); border-color: var(--primary-hover, #046670); } .ds-btn-primary:focus-visible { outline: none; box-shadow: var(--focus-ring, 0 0 0 3px rgba(8,127,140,.24)); } .ds-btn-primary:active { transform: scale(.97); }"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "取消、导出和次级工具动作。",
+      "html": "<button class=\"ds-btn-outline\">查看影响</button>",
+      "css": ".ds-btn-outline { min-height: var(--control-height, 36px); display: inline-flex; align-items: center; justify-content: center; padding: 8px 14px; border: 1px solid var(--surface-border, #d8e1e3); border-radius: var(--radius-control, 8px); background: transparent; color: var(--text-main, #102b34); font: 750 .78rem/1.25 var(--font-interface, sans-serif); cursor: pointer; transition: background .15s ease, border-color .15s ease, color .15s ease; } .ds-btn-outline:hover { background: var(--surface-hover, #edf3f4); border-color: var(--primary, #087f8c); color: var(--primary, #087f8c); } .ds-btn-outline:focus-visible { outline: none; box-shadow: var(--focus-ring, 0 0 0 3px rgba(8,127,140,.24)); }"
+    },
+    {
+      "name": "Operational Field",
+      "kind": "input",
+      "refersTo": "field",
+      "description": "搜索、筛选和结构化配置输入。",
+      "html": "<label class=\"ds-field-label\" for=\"ds-imsi\">IMSI</label><input class=\"ds-field\" id=\"ds-imsi\" value=\"460001234567890\" />",
+      "css": ".ds-field-label { display: block; margin: 0 0 8px; color: var(--text-muted, #61777e); font: 500 .82rem/1.3 var(--font-interface, sans-serif); } .ds-field { width: 100%; min-height: var(--control-height, 36px); padding: 8px 12px; border: 1px solid var(--surface-border, #d8e1e3); border-radius: var(--radius-control, 8px); background: var(--surface, #fff); color: var(--text-main, #102b34); font: 600 .9rem/1.4 var(--font-data, monospace); transition: border-color .2s cubic-bezier(.16,1,.3,1), box-shadow .2s cubic-bezier(.16,1,.3,1); } .ds-field:focus { outline: none; border-color: var(--primary, #087f8c); box-shadow: var(--focus-ring, 0 0 0 3px rgba(8,127,140,.24)); }"
+    },
+    {
+      "name": "Health Status Chip",
+      "kind": "chip",
+      "refersTo": "status-chip",
+      "description": "用文字与语义色共同表示健康状态。",
+      "html": "<span class=\"ds-status-chip\"><span class=\"ds-status-dot\"></span>系统健康</span>",
+      "css": ".ds-status-chip { min-height: var(--control-height, 36px); display: inline-flex; align-items: center; gap: 7px; padding: 7px 11px; border: 1px solid color-mix(in srgb, var(--success, #16856b) 30%, var(--surface-border, #d8e1e3)); border-radius: var(--radius-control, 8px); background: color-mix(in srgb, var(--success, #16856b) 7%, var(--surface, #fff)); color: var(--success, #16856b); font: 750 .78rem/1.25 var(--font-interface, sans-serif); } .ds-status-dot { width: 7px; height: 7px; border-radius: 999px; background: currentColor; }"
+    },
+    {
+      "name": "Operational Panel",
+      "kind": "card",
+      "refersTo": "panel",
+      "description": "工具区、表格或任务内容的结构容器。",
+      "html": "<section class=\"ds-panel\"><h3>变更影响</h3><p>3 个用户将迁移到新的资费套餐。</p></section>",
+      "css": ".ds-panel { padding: 20px; border: 1px solid var(--surface-border, #d8e1e3); border-radius: var(--radius-panel, 10px); background: var(--surface, #fff); color: var(--text-main, #102b34); box-shadow: var(--shadow-panel, 0 14px 36px -32px rgba(15,43,52,.7)); font-family: var(--font-interface, sans-serif); } .ds-panel h3 { margin: 0 0 8px; font: 650 1rem/1.2 var(--font-display, sans-serif); letter-spacing: -.015em; } .ds-panel p { margin: 0; color: var(--text-secondary, #36545d); font-size: .9rem; line-height: 1.55; }"
+    },
+    {
+      "name": "Active Navigation Item",
+      "kind": "nav",
+      "refersTo": "navigation-active",
+      "description": "侧栏中的当前模块，使用主色、弱 tint 和位置标记。",
+      "html": "<a class=\"ds-nav-active\" href=\"#\"><span class=\"ds-nav-rail\"></span><svg aria-hidden=\"true\" width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M3 12h18M12 3v18\" /></svg><span>用户管理</span></a>",
+      "css": ".ds-nav-active { position: relative; min-height: 42px; display: inline-flex; align-items: center; gap: 12px; padding: 0 12px; border-radius: var(--radius-control, 8px); background: color-mix(in srgb, var(--primary, #087f8c) 9%, transparent); color: var(--primary, #087f8c); text-decoration: none; font: 650 .9rem/1.2 var(--font-interface, sans-serif); } .ds-nav-active:hover { background: color-mix(in srgb, var(--primary, #087f8c) 13%, transparent); } .ds-nav-active:focus-visible { outline: none; box-shadow: var(--focus-ring, 0 0 0 3px rgba(8,127,140,.24)); } .ds-nav-rail { width: 3px; height: 22px; border-radius: 999px; background: currentColor; }"
+    },
+    {
+      "name": "Metric Strip",
+      "kind": "custom",
+      "refersTo": "metric-strip",
+      "description": "连续面板中的多项网络态势，不拆成漂浮卡片。",
+      "html": "<div class=\"ds-metric-strip\"><button class=\"ds-metric ds-metric-active\"><small>活跃用户</small><strong>12,480</strong></button><button class=\"ds-metric\"><small>待处理告警</small><strong>7</strong></button></div>",
+      "css": ".ds-metric-strip { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); overflow: hidden; border: 1px solid var(--surface-border, #d8e1e3); border-radius: var(--radius-panel, 10px); background: var(--surface, #fff); box-shadow: var(--shadow-panel, 0 14px 36px -32px rgba(15,43,52,.7)); } .ds-metric { min-height: 88px; display: grid; gap: 6px; align-content: center; padding: 14px 16px; border: 0; border-right: 1px solid var(--surface-border, #d8e1e3); background: transparent; color: var(--text-main, #102b34); text-align: left; cursor: pointer; } .ds-metric:last-child { border-right: 0; } .ds-metric small { color: var(--text-muted, #61777e); font: 750 .72rem/1.25 var(--font-interface, sans-serif); letter-spacing: .035em; text-transform: uppercase; } .ds-metric strong { color: var(--primary, #087f8c); font: 650 1.65rem/1 var(--font-display, sans-serif); font-variant-numeric: tabular-nums; letter-spacing: -.025em; } .ds-metric:hover, .ds-metric-active { background: color-mix(in srgb, var(--primary, #087f8c) 6%, var(--surface, #fff)); box-shadow: inset 0 -3px 0 var(--primary, #087f8c); } .ds-metric:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--primary, #087f8c), var(--focus-ring, 0 0 0 3px rgba(8,127,140,.24)); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "电信运营舰桥",
+    "overview": "xCloud 的界面像一座持续运行的电信运营舰桥：冷静、结构化、面向态势与处置。它不追求消费级产品的轻松感，也不以炫技表达技术复杂度；视觉系统首先帮助专业用户判断网络与业务状态、定位风险、执行受控变更并确认结果。\n\n整体采用高信息密度但清楚分层的操作界面。冷调青绿是交互与系统信号的共同主色，浅色模式适合日间办公与长时间阅读，深色模式适合 NOC 与低照度值守环境。品牌通过精确的字体、状态语义、数据排版和边界反馈出现，而不是通过大面积装饰。",
+    "keyCharacteristics": [
+      "冷静的青绿信号色与蓝灰中性表面",
+      "适合持续值守和高密度数据操作的明暗双主题",
+      "清晰区分交互选中、健康、警告和严重故障",
+      "用紧凑控件、表格和指标条服务专家效率",
+      "用焦点、审批、恢复和审计反馈建立操作可信度"
+    ],
+    "rules": [
+      { "name": "The Operational Truth Rule", "body": "视觉优先级必须反映真实运营优先级：当前态势、风险、影响和结果高于装饰与模块数量。", "section": "overview" },
+      { "name": "The Signal Rarity Rule", "body": "青绿主色只用于交互、当前状态和关键系统信号；大面积背景保持中性，稀缺性让信号色有意义。", "section": "colors" },
+      { "name": "The Semantic Separation Rule", "body": "选择态使用主色，健康使用绿，警告使用琥珀，故障与破坏性动作使用红；不要用同一种彩色侧边条表达所有含义。", "section": "colors" },
+      { "name": "The Data Earns Mono Rule", "body": "只有机器标识、代码、协议、测量和对齐数字使用等宽字体；导航、标题与普通说明始终使用界面字体。", "section": "typography" },
+      { "name": "The One Operational Spine Rule", "body": "每个页面必须有一条可快速扫描的主任务轴；附加导航和工具不得与页面态势、主要任务争夺首屏中心。", "section": "layout" },
+      { "name": "The Structural Depth Rule", "body": "默认面板以色面、边界和间距分层；只有真实覆盖、浮起或方向移动的界面才获得更明显阴影。", "section": "elevation" },
+      { "name": "The Compact Geometry Rule", "body": "圆角表达可操作性和层级，不表达可爱；组件越大，越应避免胶囊和夸张曲面。", "section": "shapes" }
+    ],
+    "dos": [
+      "Do 让首屏先呈现网络与业务态势，再呈现模块入口和次要工具。",
+      "Do 使用统一语义 token 表达选择、健康、警告、故障和不可逆动作。",
+      "Do 为 IMSI、时间、流量、余额和协议字段使用表格数字或等宽字体。",
+      "Do 保持 36px 控件、54px 表格行和 20–24px 页面节奏，除非移动适配有明确证据需要改变。",
+      "Do 让每次高风险操作都呈现影响、权限、恢复与审计结果。",
+      "Do 同时验证明暗主题、中英文、键盘操作和 980px 以下的 off-canvas 壳层。"
+    ],
+    "donts": [
+      "Don't 把 Open5GS 的视觉或名称置于 xCloud 产品身份之前；集成参考不是品牌主体。",
+      "Don't 扩散登录页遗留的旧蓝色渐变、彩色环境光和大面积 glass/blur；它们不是 xCloud 主控制台的规范语言。",
+      "Don't 用同一种彩色侧边条同时表达选中、严重性、类型和变更。",
+      "Don't 把等宽字体、网格背景、辉光或玻璃效果当作通用“技术感”装饰。",
+      "Don't 在桌面侧栏、工作区页面和面包屑之间重复同等权重的当前位置表达。",
+      "Don't 以静默失败处理权限清理、持久化失败或关键操作错误。"
+    ]
+  }
+}
