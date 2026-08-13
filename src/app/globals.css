@@ -259,11 +259,9 @@ textarea {
   background: rgba(148, 163, 184, 0.5);
 }
 
-/* Glassmorphism Utilities */
+/* Elevated panel utility */
 .glass-panel {
   background: var(--surface);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--surface-border);
   max-width: 90%;
   max-height: 90vh;
@@ -273,8 +271,6 @@ textarea {
 /* Card Wrappers for Dashboard Modal */
 .dash-card {
   background: var(--surface);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--surface-border);
   border-radius: 12px;
   overflow: hidden;
@@ -586,8 +582,6 @@ textarea {
 /* Slice Border Card */
 .slice-strip-card {
   background: var(--surface);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
   border: 1px solid var(--surface-border);
   border-color: var(--selection-border);
   border-radius: 6px;
@@ -1225,7 +1219,6 @@ body.global-emergency-flash {
   gap: 1rem;
   margin-bottom: 2rem;
   background: var(--surface);
-  backdrop-filter: blur(12px);
   padding: 1rem 1.5rem;
   border-radius: 8px;
   border: 1px solid var(--surface-border);
@@ -1471,7 +1464,6 @@ body.global-emergency-flash {
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
   position: relative;
   overflow: hidden;
-  backdrop-filter: blur(12px);
   animation: toastSlideIn 0.32s var(--ease-spring) forwards;
   transition: transform var(--duration-fast) var(--ease-spring), box-shadow var(--duration-fast) var(--ease-spring);
 }
@@ -1612,17 +1604,18 @@ body.global-emergency-flash {
 
 /* Accordion */
 .accordion-content {
-  overflow: hidden;
-  transition: max-height 0.4s ease, opacity 0.4s ease, padding 0.4s ease;
+  animation: accordionReveal var(--duration-normal) var(--ease-smooth);
 }
 .accordion-content.collapsed {
-  max-height: 0;
-  opacity: 0;
-  pointer-events: none;
+  display: none;
 }
 .accordion-content.expanded {
-  max-height: 3000px;
   opacity: 1;
+}
+
+@keyframes accordionReveal {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .slice-card-header {
@@ -1758,7 +1751,6 @@ body.global-emergency-flash {
 
 [data-theme="dark"] .glass-card {
   background: var(--surface);
-  backdrop-filter: blur(12px);
   border: 1px solid var(--surface-border);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
 }

@@ -487,7 +487,6 @@
     background: color-mix(in srgb, var(--surface) 92%, var(--background));
     border-right: 1px solid var(--surface-border);
     color: var(--text-main);
-    transition: width 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
     overflow: visible;
     flex-shrink: 0;
     z-index: 40;
@@ -617,7 +616,7 @@
   .sidebar-label {
     overflow: hidden;
     text-overflow: ellipsis;
-    transition: opacity 0.18s ease, transform 0.18s ease, width 0.18s ease;
+    transition: opacity 0.18s ease, transform 0.18s ease;
   }
 
   .sidebar-chevron {
@@ -731,7 +730,7 @@
       left: 0;
       z-index: 65;
       box-shadow: 18px 0 46px -28px rgba(0, 0, 0, 0.65);
-      transition: transform var(--duration-normal) var(--ease-smooth), width var(--duration-normal) var(--ease-smooth);
+      transition: transform var(--duration-normal) var(--ease-smooth);
     }
 
     .app-sidebar.expanded {

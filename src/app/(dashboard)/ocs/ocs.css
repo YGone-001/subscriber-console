@@ -19,7 +19,6 @@
   background: var(--card-bg, rgba(255, 255, 255, 0.04));
   border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
   border-radius: 1rem;
-  backdrop-filter: blur(12px);
 }
 
 .ocs-header-title-area {

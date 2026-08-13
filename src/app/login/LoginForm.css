@@ -2,11 +2,6 @@
 #xcloud-login-form [hidden] {
   display: none !important;
 }
-@keyframes float {
-  0% { transform: translate(0, 0) scale(1); }
-  50% { transform: translate(5%, 5%) scale(1.05); }
-  100% { transform: translate(-5%, -5%) scale(0.95); }
-}
 @keyframes slideUpFade {
   0% { opacity: 0; transform: translateY(20px) scale(0.98); }
   100% { opacity: 1; transform: translateY(0) scale(1); }
@@ -27,31 +22,20 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--login-canvas);
+  background:
+    radial-gradient(circle at 12% 16%, color-mix(in srgb, var(--login-primary) 8%, transparent) 0, transparent 32%),
+    radial-gradient(circle at 88% 82%, color-mix(in srgb, var(--status-success) 6%, transparent) 0, transparent 36%),
+    var(--login-canvas);
   position: relative;
   overflow: hidden;
 }
 
 .login-bg-blob-1 {
-  position: absolute;
-  top: -10%;
-  left: -10%;
-  width: 40vw;
-  height: 40vw;
-  background: color-mix(in srgb, var(--login-primary) 10%, transparent);
-  filter: blur(36px);
-  animation: float 10s infinite ease-in-out alternate;
+  display: none;
 }
 
 .login-bg-blob-2 {
-  position: absolute;
-  bottom: -10%;
-  right: -10%;
-  width: 50vw;
-  height: 50vw;
-  background: color-mix(in srgb, var(--status-success) 7%, transparent);
-  filter: blur(40px);
-  animation: float 14s infinite ease-in-out alternate-reverse;
+  display: none;
 }
 
 .login-card {
@@ -60,9 +44,7 @@
   width: 100%;
   max-width: 420px;
   padding: 3rem 2.5rem;
-  background: color-mix(in srgb, var(--login-surface) 96%, transparent);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: var(--login-surface);
   border: 1px solid var(--login-border);
   border-radius: var(--radius-soft-panel, 12px);
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);

@@ -150,7 +150,10 @@ export default function OcsBalanceCapacityCard({ metrics, t }: OcsBalanceCapacit
               </span>
             </div>
             <div className="analytics-ocs-mini-bar-track">
-              <div className="analytics-ocs-mini-bar-fill voice-fill" style={{ width: `${voiceUsedPct}%` }} />
+              <div
+                className="analytics-ocs-mini-bar-fill voice-fill"
+                style={{ "--bar-scale": voiceUsedPct / 100 } as React.CSSProperties}
+              />
             </div>
           </div>
 
@@ -167,7 +170,10 @@ export default function OcsBalanceCapacityCard({ metrics, t }: OcsBalanceCapacit
               </span>
             </div>
             <div className="analytics-ocs-mini-bar-track">
-              <div className="analytics-ocs-mini-bar-fill sms-fill" style={{ width: `${smsUsedPct}%` }} />
+              <div
+                className="analytics-ocs-mini-bar-fill sms-fill"
+                style={{ "--bar-scale": smsUsedPct / 100 } as React.CSSProperties}
+              />
             </div>
           </div>
         </div>

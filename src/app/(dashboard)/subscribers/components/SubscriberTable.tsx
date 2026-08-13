@@ -181,7 +181,10 @@ export function SubscriberTable(props: any) {
                         <span>{formatBytes(sub.traffic?.total || 1)}</span>
                       </div>
                       <div className="traffic-bar-container">
-                        <div className={`traffic-bar ${uRatio > 90 ? "high" : uRatio > 70 ? "medium" : "low"}`} style={{ width: `${Math.min(uRatio, 100)}%` }} />
+                        <div
+                          className={`traffic-bar ${uRatio > 90 ? "high" : uRatio > 70 ? "medium" : "low"}`}
+                          style={{ "--traffic-scale": Math.min(uRatio, 100) / 100 } as React.CSSProperties}
+                        />
                       </div>
                     </div>
                   </td>

@@ -145,7 +145,10 @@ export default function OcsSessionTelemetryCard({
               </div>
             </div>
             <div className="analytics-ocs-mini-bar-track" style={{ marginTop: "0.5rem" }}>
-              <div className="analytics-ocs-mini-bar-fill quota-fill" style={{ width: `${volumeUsedPct}%` }} />
+              <div
+                className="analytics-ocs-mini-bar-fill quota-fill"
+                style={{ "--bar-scale": volumeUsedPct / 100 } as React.CSSProperties}
+              />
             </div>
           </div>
         </div>
