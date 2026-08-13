@@ -750,20 +750,20 @@ export default function SystemHealthPage() {
                 <tbody>
                   {filteredAnomalies.map((a, idx) => (
                     <tr key={`${a.imsi}-${a.type}-${idx}`} className="health-table-tr">
-                      <td className="health-table-td-imsi">{a.imsi}</td>
-                      <td className="health-table-td">
+                      <td className="health-table-td-imsi" data-label={t("health_col_imsi")}>{a.imsi}</td>
+                      <td className="health-table-td" data-label={t("health_filter_severity")}>
                         <span className={`health-severity-tag ${a.severity || 'warning'}`}>
                           {a.severity === 'critical' ? <ShieldAlert size={12} /> : a.severity === 'info' ? <Info size={12} /> : <AlertTriangle size={12} />}
                           {t(`health_severity_${a.severity || 'warning'}`)}
                         </span>
                       </td>
-                      <td className="health-table-td">
+                      <td className="health-table-td" data-label={t("health_col_type")}>
                         <span className="health-category-pill">
                           {a.type}
                         </span>
                       </td>
-                      <td className="health-table-td-details">{renderDetails(a.details, a.type)}</td>
-                      <td className="health-table-td-actions">
+                      <td className="health-table-td-details" data-label={t("health_col_details")}>{renderDetails(a.details, a.type)}</td>
+                      <td className="health-table-td-actions" data-label={t("health_col_action")}>
                         <button
                           className="btn btn-outline health-btn-heal"
                           onClick={() => handleOpenHealModal(a)}

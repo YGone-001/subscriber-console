@@ -148,6 +148,7 @@ export default function NavigationTabBar() {
       resolveNavigationRoute(pathname)?.path || "/"
     );
   }, [pathname]);
+  const currentRoute = useMemo(() => resolveNavigationRoute(pathname), [pathname]);
 
   const handleCloseTab = (e: React.MouseEvent, targetPath: string) => {
     e.preventDefault();
@@ -194,6 +195,12 @@ export default function NavigationTabBar() {
       <span className="visually-hidden" role="status" aria-live="polite">
         {permissionNotice}
       </span>
+      {currentRoute ? (
+        <div className="nav-mobile-current" aria-current="page">
+          <span aria-hidden="true">{createElement(currentRoute.icon, { size: 16 })}</span>
+          <strong>{t(currentRoute.labelKey)}</strong>
+        </div>
+      ) : null}
       <button
         type="button"
         className="nav-tab-scroll-btn left"

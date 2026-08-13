@@ -258,6 +258,90 @@
 .health-table-td-actions { padding: 0.9rem 1.75rem; text-align: right; }
 .health-btn-heal { padding: 0.35rem 0.9rem; font-size: 0.8rem; border-radius: 20px; font-weight: 600; }
 
+@media (max-width: 760px) {
+  .health-filter-tabs,
+  .health-anomalies-toolbar {
+    width: 100%;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+  }
+
+  .health-tab-btn,
+  .health-severity-select,
+  .health-btn-batch,
+  .health-btn-export,
+  .health-btn-heal {
+    min-height: 44px;
+    flex: 0 0 auto;
+  }
+
+  .health-table-wrap {
+    overflow: visible;
+    padding: 0.75rem;
+  }
+
+  .health-table,
+  .health-table tbody {
+    display: grid;
+    width: 100%;
+  }
+
+  .health-table {
+    gap: 0.75rem;
+  }
+
+  .health-table thead {
+    display: none;
+  }
+
+  .health-table tbody {
+    gap: 0.75rem;
+  }
+
+  .health-table-tr {
+    display: grid;
+    padding: 0.85rem;
+    border: 1px solid var(--surface-border);
+    border-radius: var(--radius-panel);
+    background: var(--surface);
+  }
+
+  .health-table-tr > td {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: minmax(88px, 32%) minmax(0, 1fr);
+    align-items: center;
+    gap: 0.75rem;
+    max-width: none;
+    padding: 0.65rem 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--surface-border) 72%, transparent);
+    text-align: left;
+  }
+
+  .health-table-tr > td[data-label]::before {
+    content: attr(data-label);
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    font-weight: 750;
+  }
+
+  .health-table-tr > .health-table-td-actions {
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
+
+  .health-modal-content {
+    width: calc(100vw - 1rem);
+    max-width: calc(100vw - 1rem);
+    max-height: calc(100dvh - 1rem);
+  }
+
+  .health-modal-header,
+  .health-modal-body {
+    padding: 1rem;
+  }
+}
+
 /* Modals */
 .health-modal-overlay { z-index: 9999; }
 .health-modal-content { width: 540px; max-width: 95%; border-radius: 16px; overflow: hidden; }

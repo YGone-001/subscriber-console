@@ -403,8 +403,9 @@
     }
 
     .noc-header-button {
-      min-width: 38px;
-      width: 38px;
+      min-width: 44px;
+      width: 44px;
+      height: 44px;
       padding: 0;
     }
 

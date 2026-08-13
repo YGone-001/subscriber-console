@@ -26,9 +26,10 @@ type NavItem = {
 interface AppSidebarProps {
   sidebarOpen: boolean;
   setSidebarOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  isMobileShell: boolean;
 }
 
-export default function AppSidebar({ sidebarOpen, setSidebarOpen }: AppSidebarProps) {
+export default function AppSidebar({ sidebarOpen, setSidebarOpen, isMobileShell }: AppSidebarProps) {
   const [ocsNavOpen, setOcsNavOpen] = useState(true);
   const [ratingNavOpen, setRatingNavOpen] = useState(true);
   const [identityNavOpen, setIdentityNavOpen] = useState(true);
@@ -104,10 +105,17 @@ export default function AppSidebar({ sidebarOpen, setSidebarOpen }: AppSidebarPr
       .filter(Boolean) as NavItem[];
   }, [navItems, filterQuery, t, ratingSubItems]);
 
+  const handleNavigate = () => {
+    if (isMobileShell) setSidebarOpen(false);
+  };
+
   return (
     <aside
+      id="xcloud-primary-sidebar"
       className={sidebarOpen ? "app-sidebar expanded" : "app-sidebar collapsed"}
       style={{ width: sidebarWidth }}
+      aria-hidden={isMobileShell && !sidebarOpen ? true : undefined}
+      inert={isMobileShell && !sidebarOpen ? true : undefined}
     >
       {/* Sidebar Quick Filter Input (when expanded) */}
       {sidebarOpen ? (
@@ -197,6 +205,7 @@ export default function AppSidebar({ sidebarOpen, setSidebarOpen }: AppSidebarPr
                             href={child.path}
                             className={`${isChildActive ? "sidebar-link active" : "sidebar-link"} child`}
                             aria-current={isChildActive ? "page" : undefined}
+                            onClick={handleNavigate}
                           >
                             <span className="sidebar-active-bar" />
                             <span className="sidebar-icon">{child.icon}</span>
@@ -216,6 +225,7 @@ export default function AppSidebar({ sidebarOpen, setSidebarOpen }: AppSidebarPr
                   href={item.path}
                   className={isActive ? "sidebar-link active" : "sidebar-link"}
                   aria-current={isActive ? "page" : undefined}
+                  onClick={handleNavigate}
                 >
                   <span className="sidebar-active-bar" />
                   <span className="sidebar-icon">{item.icon}</span>

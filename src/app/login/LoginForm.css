@@ -184,6 +184,8 @@
   right: 0.25rem;
   top: 50%;
   transform: translateY(-50%);
+  width: 44px;
+  height: 44px;
   background: none;
   border: none;
   color: #64748b;

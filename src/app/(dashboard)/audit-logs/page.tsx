@@ -441,22 +441,22 @@ export default function AuditLogsPage() {
               <tbody>
                 {logs.map(log => (
                   <tr key={log.id} className={log.level === 'warning' ? 'audit-table-tr-warning' : 'audit-table-tr'}>
-                    <td className="audit-table-td-time">
+                    <td className="audit-table-td-time" data-label={t("audit_col_time")}>
                       {new Date(log.timestamp).toLocaleString()}
                     </td>
-                    <td className="audit-table-td">
+                    <td className="audit-table-td" data-label={t("audit_col_action")}>
                       <span className={`pill ${log.level === 'warning' ? 'audit-pill-warning' : 'audit-pill-primary'}`}>
                         {log.level === 'warning' && <ShieldAlert size={12} className="audit-pill-icon" />}
                         {formatActionLabel(log.action)}
                       </span>
                     </td>
-                    <td className="audit-table-td-target">
+                    <td className="audit-table-td-target" data-label={t("audit_col_target")}>
                       {log.targetId}
                     </td>
-                    <td className="audit-table-td-operator">
+                    <td className="audit-table-td-operator" data-label={t("audit_col_operator")}>
                       {log.operatorIp}
                     </td>
-                    <td className="audit-table-td-delta">
+                    <td className="audit-table-td-delta" data-label={t("audit_col_delta")}>
                       <button
                          className="btn btn-outline audit-inspect-btn"
                          onClick={() => setSelectedLog(log)}

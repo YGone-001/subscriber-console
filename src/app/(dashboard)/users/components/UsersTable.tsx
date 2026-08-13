@@ -73,6 +73,36 @@ export function UsersTable(props: any) {
           </div>
 
           <div className="users-table-scroll">
+            <div className="users-mobile-table-controls">
+              <label className="users-mobile-select-all">
+                <input
+                  type="checkbox"
+                  aria-label={t("users_select_page")}
+                  checked={allPageSelected}
+                  onChange={togglePageSelection}
+                  disabled={pagedUsers.length === 0}
+                />
+                <span>{t("users_select_page")}</span>
+              </label>
+              <div className="mobile-sort-strip">
+                {[
+                  ["username", t("users_col_user")],
+                  ["status", t("users_status")],
+                  ["lastLoginAt", t("users_last_login")],
+                  ["createdAt", t("users_created")],
+                ].map(([key, label]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    className={sortKey === key ? "mobile-sort-button active" : "mobile-sort-button"}
+                    aria-pressed={sortKey === key}
+                    onClick={() => toggleSort(key)}
+                  >
+                    {label}{sortKey === key ? ` · ${t(`users_sort_${sortDirection}`)}` : ""}
+                  </button>
+                ))}
+              </div>
+            </div>
             <table className="users-table">
               <thead>
                 <tr>
@@ -113,11 +143,11 @@ export function UsersTable(props: any) {
               </thead>
               <tbody>
                 {isLoading ? (
-                  <tr>
+                  <tr className="users-table-state-row">
                     <td colSpan={9}><LoadingRows columns={9} rows={6} /></td>
                   </tr>
                 ) : error ? (
-                  <tr>
+                  <tr className="users-table-state-row">
                     <td colSpan={9}>
                       <EmptyState
                         icon={<Shield size={44} />}
@@ -133,7 +163,7 @@ export function UsersTable(props: any) {
                     </td>
                   </tr>
                 ) : users.length === 0 ? (
-                  <tr>
+                  <tr className="users-table-state-row">
                     <td colSpan={9}>
                       <EmptyState
                         icon={<UserCheck size={44} />}
@@ -149,7 +179,7 @@ export function UsersTable(props: any) {
                     </td>
                   </tr>
                 ) : filteredUsers.length === 0 ? (
-                  <tr>
+                  <tr className="users-table-state-row">
                     <td colSpan={9}>
                       <EmptyState
                         icon={<Search size={44} />}
@@ -169,7 +199,7 @@ export function UsersTable(props: any) {
                   const itemStatus = normalizeStatus(item.status);
                   return (
                     <tr key={item.username}>
-                      <td className="users-select-col">
+                      <td className="users-select-col users-mobile-select-cell">
                         <input
                           type="checkbox"
                           aria-label={t("users_select_user", { username: item.username })}
@@ -177,7 +207,7 @@ export function UsersTable(props: any) {
                           onChange={() => toggleUserSelection(item.username)}
                         />
                       </td>
-                      <td className="users-user-col">
+                      <td className="users-user-col" data-label={t("users_col_user")}>
                         <button type="button" className="users-identity-btn" onClick={() => openDetails(item)}>
                           <span className="users-avatar">{item.username.slice(0, 1).toUpperCase()}</span>
                           <span>
@@ -186,21 +216,21 @@ export function UsersTable(props: any) {
                           </span>
                         </button>
                       </td>
-                      <td>
+                      <td data-label={t("users_contact")}>
                         <span className="users-contact-cell">
                           <Mail size={14} />
                           {displayValue(item.email)}
                         </span>
                       </td>
-                      <td>{renderRoleBadge(item.role)}</td>
-                      <td>{renderStatusBadge(item.status, item.locked)}</td>
-                      <td className="users-date-cell">
+                      <td data-label={t("users_role")}>{renderRoleBadge(item.role)}</td>
+                      <td data-label={t("users_status")}>{renderStatusBadge(item.status, item.locked)}</td>
+                      <td className="users-date-cell" data-label={t("users_last_login")}>
                         <span>{formatDateTime(item.lastLoginAt)}</span>
                         <small>{displayValue(item.lastLoginIp)}</small>
                       </td>
-                      <td className="users-date-cell">{formatDateTime(item.createdAt)}</td>
-                      <td>{displayValue(item.createdBy)}</td>
-                      <td className="users-actions-col">
+                      <td className="users-date-cell" data-label={t("users_created")}>{formatDateTime(item.createdAt)}</td>
+                      <td data-label={t("users_detail_created_by")}>{displayValue(item.createdBy)}</td>
+                      <td className="users-actions-col" data-label={t("users_actions")}>
                         <div className="users-row-actions">
                           <button type="button" className="btn btn-ghost" onClick={() => openDetails(item)}>
                             <Eye size={15} />

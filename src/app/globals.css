@@ -1161,7 +1161,9 @@ body.global-emergency-flash {
   background: transparent;
   border: none;
   cursor: pointer;
-  padding: 0.5rem;
+  width: 44px;
+  height: 44px;
+  padding: 0;
   color: var(--text-muted);
   border-radius: 4px;
   display: flex;
@@ -1552,6 +1554,41 @@ body.global-emergency-flash {
   cursor: pointer;
   accent-color: var(--primary);
   border-radius: 4px;
+}
+
+.mobile-sort-strip {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.mobile-sort-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.mobile-sort-button {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 0 0 auto;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.mobile-sort-button.active {
+  border-color: color-mix(in srgb, var(--primary) 36%, var(--surface-border));
+  background: color-mix(in srgb, var(--primary) 8%, var(--surface));
+  color: var(--primary);
 }
 
 /* Status Badges */

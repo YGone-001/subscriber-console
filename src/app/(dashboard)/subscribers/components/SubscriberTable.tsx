@@ -39,6 +39,36 @@ export function SubscriberTable(props: any) {
 
   return (
     <div className="table-wrapper">
+      <div className="mobile-table-controls" aria-label={t("nav_tab_options")}>
+        <label className="mobile-select-all">
+          <input
+            type="checkbox"
+            className="checkbox-custom"
+            checked={isAllPageSelected}
+            ref={input => { if (input) input.indeterminate = selectedOnPageCount > 0 && selectedOnPageCount < pageImsis.length }}
+            onChange={toggleSelectAll}
+          />
+          <span>{t("table_select_all_subscribers")}</span>
+        </label>
+        <div className="mobile-sort-strip" aria-label={t("nav_tab_options")}>
+          {[
+            ["status", t("col_status")],
+            ["imsi", t("col_imsi")],
+            ["usage", t("col_traffic")],
+            ["lastActive", t("col_last_active")],
+          ].map(([field, label]) => (
+            <button
+              key={field}
+              type="button"
+              className={sortField === field ? "mobile-sort-button active" : "mobile-sort-button"}
+              aria-pressed={sortField === field}
+              onClick={() => handleSort(field)}
+            >
+              {label}{sortField === field ? renderSortIcon(field) : null}
+            </button>
+          ))}
+        </div>
+      </div>
       <table className="subscribers-table">
         <thead>
           <tr>
@@ -67,10 +97,10 @@ export function SubscriberTable(props: any) {
              const isSelected = selectedImsis.includes(sub.imsi);
              return (
                <tr key={sub.imsi} className={isSelected ? "selected-row" : ""}>
-                 <td>
+                 <td className="mobile-select-cell">
                    <input type="checkbox" className="checkbox-custom" aria-label={t("table_select_subscriber", { imsi: sub.imsi })} checked={isSelected} onChange={() => setSelectedImsis((prev: string[]) => prev.includes(sub.imsi) ? prev.filter(i => i !== sub.imsi) : [...prev, sub.imsi])} />
                  </td>
-                 <td>
+                 <td data-label={t("col_status")}>
                    {(() => {
                      const isSuspended = sub.status === 'Suspended';
                      const isActive = sub.status === 'Active';
@@ -100,19 +130,21 @@ export function SubscriberTable(props: any) {
                      );
                    })()}
                  </td>
-                 <td>
+                 <td data-label={t("col_imsi")}>
                    <div className="imsi-text-container">
                      <span className="imsi-text">{sub.imsi}</span>
                      <button
+                       type="button"
                        className={copiedImsi === sub.imsi ? "copy-btn copied" : "copy-btn"}
                        onClick={(event) => handleCopyImsi(sub.imsi, event)}
-                       title={copiedImsi === sub.imsi ? "Copied" : "Copy IMSI"}
+                       title={t("sub_copy_imsi")}
+                       aria-label={`${t("sub_copy_imsi")}: ${sub.imsi}`}
                      >
                        {copiedImsi === sub.imsi ? <CheckCircle2 size={14} /> : <Copy size={14} />}
                      </button>
                    </div>
                  </td>
-                 <td>
+                 <td data-label={t("col_plmn")}>
                    {(() => {
                       const net = resolveNetwork(sub.imsi);
                       const tooltipText = net.network !== 'Unknown'
@@ -123,7 +155,7 @@ export function SubscriberTable(props: any) {
                       );
                    })()}
                  </td>
-                  <td>
+                  <td data-label={t("col_policy")}>
                      {sub.policy ? (
                        <div className="policy-container">
                          <span title={sub.policy} className="policy-text">
@@ -142,7 +174,7 @@ export function SubscriberTable(props: any) {
                        <span className="no-policy">{t("no_policy")}</span>
                      )}
                  </td>
-                 <td>
+                 <td data-label={t("col_traffic")}>
                    <div className="traffic-container">
                       <div className="traffic-stats">
                         <span>{formatBytes(sub.traffic?.used || 0)}</span>
@@ -153,21 +185,22 @@ export function SubscriberTable(props: any) {
                       </div>
                     </div>
                   </td>
-                  <td className="last-active-cell">
+                  <td className="last-active-cell" data-label={t("col_last_active")}>
                     <span title={formatFullDate(sub.lastActive)} className="last-active-text">
                       {timeAgo(sub.lastActive)}
                     </span>
                   </td>
                   {canEditSubscribers && (
-                    <td className="actions-cell">
-                       <button className="action-btn action-btn-primary" onClick={(e) => { e.stopPropagation(); handleOpenEdit(sub.imsi); }} title={t("action_edit")}>
+                    <td className="actions-cell" data-label={t("col_actions")}>
+                      <div className="actions-group">
+                       <button type="button" className="action-btn action-btn-primary" onClick={(e) => { e.stopPropagation(); handleOpenEdit(sub.imsi); }} title={t("action_edit")} aria-label={`${t("action_edit")}: ${sub.imsi}`}>
                          <PenLine size={18} />
                        </button>
-                       <button className="action-btn action-btn-danger" onClick={(e) => handleDelete(sub.imsi, e)} title={t("action_delete")} disabled={isDeletingSingle === sub.imsi || Boolean(pendingDelete)}>
+                       <button type="button" className="action-btn action-btn-danger" onClick={(e) => handleDelete(sub.imsi, e)} title={t("action_delete")} aria-label={`${t("action_delete")}: ${sub.imsi}`} disabled={isDeletingSingle === sub.imsi || Boolean(pendingDelete)}>
                          {isDeletingSingle === sub.imsi ? <span className="spinner" style={{ width: 18, height: 18, borderWidth: 2 }} /> : <Trash2 size={18} />}
                        </button>
                        <div className="dropdown-container">
-                         <button className="action-btn action-btn-muted" title={t("action_more")} onClick={(e) => { e.stopPropagation(); setActiveDropdown(activeDropdown === sub.imsi ? null : sub.imsi); }}>
+                         <button type="button" className="action-btn action-btn-muted" title={t("action_more")} aria-label={`${t("action_more")}: ${sub.imsi}`} aria-expanded={activeDropdown === sub.imsi} onClick={(e) => { e.stopPropagation(); setActiveDropdown(activeDropdown === sub.imsi ? null : sub.imsi); }}>
                            <MoreHorizontal size={18} />
                          </button>
                          {activeDropdown === sub.imsi && (
@@ -181,6 +214,7 @@ export function SubscriberTable(props: any) {
                            </>
                          )}
                        </div>
+                      </div>
                     </td>
                   )}
                </tr>

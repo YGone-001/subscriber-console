@@ -49,11 +49,19 @@ export default function AppHeader({ sidebarOpen, setSidebarOpen }: AppHeaderProp
 
           <div className="header-divider" />
 
-          <button className="icon-button" onClick={() => setSidebarOpen((open) => !open)} title={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}>
+          <button
+            type="button"
+            className="icon-button"
+            onClick={() => setSidebarOpen((open) => !open)}
+            title={sidebarOpen ? t("sidebar_collapse_hint") : t("sidebar_expand_hint")}
+            aria-label={sidebarOpen ? t("sidebar_collapse") : t("sidebar_expand_hint")}
+            aria-controls="xcloud-primary-sidebar"
+            aria-expanded={sidebarOpen}
+          >
             <Menu size={22} />
           </button>
 
-          <button className="command-button" onClick={() => setCmdPaletteOpen(true)} title={t("cmd_palette_title")}>
+          <button type="button" className="command-button" onClick={() => setCmdPaletteOpen(true)} title={t("cmd_palette_title")}>
             <Command size={14} />
             <span>{t("search_placeholder")}</span>
             <kbd>Ctrl K</kbd>

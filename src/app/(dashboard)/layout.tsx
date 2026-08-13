@@ -1,7 +1,7 @@
 "use client";
 import "./layout.css";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useSyncExternalStore } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import AppHeader from "./components/AppHeader";
 import AppSidebar from "./components/AppSidebar";
@@ -11,8 +11,21 @@ import { useI18n } from "@/components/I18nProvider";
 import { useAuth } from "@/hooks/useAuth";
 import { canAccessNavigationRoute, resolveNavigationRoute } from "@/lib/navigationRoutes";
 
+const DESKTOP_SHELL_QUERY = "(min-width: 981px)";
+
+function subscribeToShellBreakpoint(onStoreChange: () => void) {
+  const mediaQuery = window.matchMedia(DESKTOP_SHELL_QUERY);
+  mediaQuery.addEventListener("change", onStoreChange);
+  return () => mediaQuery.removeEventListener("change", onStoreChange);
+}
+
+function getMobileShellSnapshot() {
+  return !window.matchMedia(DESKTOP_SHELL_QUERY).matches;
+}
+
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const isMobileShell = useSyncExternalStore(subscribeToShellBreakpoint, getMobileShellSnapshot, () => false);
   const { t } = useI18n();
   const pathname = usePathname();
   const router = useRouter();
@@ -25,16 +38,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, [isAuthLoading, pathname, router, user]);
 
   useEffect(() => {
-    const mediaQuery = window.matchMedia("(min-width: 981px)");
-    const syncSidebar = (matches: boolean) => setSidebarOpen(matches);
-    const animationFrame = window.requestAnimationFrame(() => syncSidebar(mediaQuery.matches));
-    const handleChange = (event: MediaQueryListEvent) => syncSidebar(event.matches);
-    mediaQuery.addEventListener("change", handleChange);
-    return () => {
-      window.cancelAnimationFrame(animationFrame);
-      mediaQuery.removeEventListener("change", handleChange);
+    const animationFrame = window.requestAnimationFrame(() => setSidebarOpen(!isMobileShell));
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [isMobileShell]);
+
+  useEffect(() => {
+    if (!isMobileShell || !sidebarOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSidebarOpen(false);
     };
-  }, []);
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [isMobileShell, sidebarOpen]);
 
   // Global Ctrl+B shortcut to toggle sidebar
   useEffect(() => {
@@ -64,7 +84,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             aria-label={t("sidebar_collapse")}
           />
         ) : null}
-        <AppSidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
+        <AppSidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} isMobileShell={isMobileShell} />
         <div className="layout-content-area">
           <NavigationTabBar />
           <NavigationBreadcrumbs />
