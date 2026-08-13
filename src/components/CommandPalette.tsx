@@ -337,14 +337,14 @@ export default function CommandPalette({ isOpen, onClose, onAction }: CommandPal
           {actionResults.length > 0 && (
             <div>
               <div className="cp-group-header">{t("cp_group_actions")}</div>
-              {actionResults.map((item) => renderRow(item, getGlobalIndex(), "#4e73df"))}
+              {actionResults.map((item) => renderRow(item, getGlobalIndex(), "var(--chart-1)"))}
             </div>
           )}
 
           {navResults.length > 0 && (
             <div>
               <div className="cp-group-header-mt">{t("cp_group_nav")}</div>
-              {navResults.map((item) => renderRow(item, getGlobalIndex(), "#4e73df", t("cp_badge_navigate")))}
+              {navResults.map((item) => renderRow(item, getGlobalIndex(), "var(--chart-1)", t("cp_badge_navigate")))}
             </div>
           )}
 
@@ -352,7 +352,7 @@ export default function CommandPalette({ isOpen, onClose, onAction }: CommandPal
             <div>
               <div className="cp-group-header-mt">{t("cp_group_search")}</div>
               {searchResults.map((item) =>
-                renderRow(item, getGlobalIndex(), "#1cc88a", item.type === "imsi" ? "IMSI" : "Profile")
+                renderRow(item, getGlobalIndex(), "var(--chart-3)", item.type === "imsi" ? "IMSI" : "Profile")
               )}
             </div>
           )}

@@ -216,8 +216,8 @@
   display: grid;
   gap: 0.35rem;
 }
-.history-item-warning { border-left: 3px solid var(--danger); }
-.history-item-primary { border-left: 3px solid var(--primary); }
+.history-item-warning { color: var(--status-danger); background: var(--status-danger-soft); border-radius: var(--radius-small); }
+.history-item-primary { color: var(--primary); background: var(--selection-soft); border-radius: var(--radius-small); }
 .history-item-header {
   display: flex;
   justify-content: space-between;
@@ -225,7 +225,7 @@
   align-items: center;
   flex-wrap: wrap;
 }
-.history-action-warning { color: var(--danger); font-weight: 850; font-size: 0.84rem; }
+.history-action-warning { color: var(--status-danger); font-weight: 850; font-size: 0.84rem; }
 .history-action-primary { color: var(--text-main); font-weight: 850; font-size: 0.84rem; }
 .history-time { color: var(--text-muted); font-size: 0.72rem; }
 .history-details {
@@ -393,7 +393,7 @@
 .rule-th { padding: 1rem 1.5rem; text-align: left; }
 .rule-th-id { width: 190px; }
 .rule-th-actions { text-align: right; width: 120px; }
-.rule-tr-adding { background: rgba(59, 130, 246, 0.08); border-bottom: 1px solid var(--surface-border); }
+.rule-tr-adding { background: var(--selection-soft); border-bottom: 1px solid var(--surface-border); }
 .rule-tr { border-bottom: 1px solid var(--surface-border); }
 .rule-td { padding: 1.15rem 1.5rem; }
 .rule-id { font-family: monospace; font-weight: 800; color: var(--primary); font-size: 1.05rem; }
@@ -407,8 +407,8 @@
 .rule-grant { display: flex; align-items: center; gap: 0.5rem; font-weight: 800; }
 .rule-grant-desc { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.3rem; }
 .rule-status {
-  background: rgba(16, 185, 129, 0.12);
-  color: var(--success);
+  background: var(--status-success-soft);
+  color: var(--status-success);
   padding: 4px 10px;
   border-radius: 999px;
   font-size: 0.78rem;
@@ -471,7 +471,7 @@
   border-radius: 999px;
   font-size: 0.7rem;
   font-weight: 800;
-  background: rgba(59, 130, 246, 0.15);
+  background: var(--selection-soft);
   color: var(--primary);
 }
 
@@ -507,12 +507,12 @@
   font-size: 0.75rem;
   font-weight: 800;
   font-family: monospace;
-  background: rgba(245, 158, 11, 0.15);
-  color: #f59e0b;
+  background: var(--status-warning-soft);
+  color: var(--status-warning);
 }
 
 .rule-conflict-row {
-  background: rgba(239, 68, 68, 0.06) !important;
+  background: var(--status-danger-soft) !important;
 }
 
 .rule-conflict-badge {
@@ -523,8 +523,8 @@
   border-radius: 4px;
   font-size: 0.72rem;
   font-weight: 800;
-  background: rgba(239, 68, 68, 0.15);
-  color: var(--danger);
+  background: var(--status-danger-soft);
+  color: var(--status-danger);
 }
 
 .dryrun-panel {
@@ -656,4 +656,3 @@
     grid-template-columns: 1fr;
   }
 }
-

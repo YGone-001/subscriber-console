@@ -255,7 +255,7 @@ export default function AnalyticsCockpit() {
       {/* 2. Primary operating indicators */}
       <div className="analytics-kpi-grid">
         <KpiCard
-          color="#4e73df"
+          color="var(--chart-1)"
           icon={<TrendingUp size={20} />}
           label={t("dash_kpi_total_traffic")}
           value={
@@ -276,7 +276,7 @@ export default function AnalyticsCockpit() {
         />
 
         <KpiCard
-          color="#1cc88a"
+          color="var(--status-success)"
           icon={<Activity size={20} />}
           label={t("dash_kpi_active_subs")}
           value={<CountUpNumber value={subscriberCount} />}
@@ -286,7 +286,7 @@ export default function AnalyticsCockpit() {
         />
 
         <KpiCard
-          color="#f6c23e"
+          color="var(--chart-4)"
           icon={<Globe size={20} />}
           label={t("dash_kpi_plmn_active")}
           value={<CountUpNumber value={plmnCount} />}
@@ -298,7 +298,7 @@ export default function AnalyticsCockpit() {
         />
 
         <KpiCard
-          color="#1cc88a"
+          color="var(--status-success)"
           icon={<Radio size={20} />}
           label={t("dash_ocs_kpi_active_sessions")}
           value={<CountUpNumber value={ocsSessions?.activeSessions || 0} />}
@@ -308,7 +308,7 @@ export default function AnalyticsCockpit() {
         />
 
         <KpiCard
-          color="#4e73df"
+          color="var(--chart-2)"
           icon={<Database size={20} />}
           label={t("dash_ocs_kpi_utilization")}
           value={
@@ -323,7 +323,7 @@ export default function AnalyticsCockpit() {
         />
 
         <KpiCard
-          color={brokenInvariants === 0 ? "#1cc88a" : "#e74a3b"}
+          color={brokenInvariants === 0 ? "var(--status-success)" : "var(--status-danger)"}
           icon={brokenInvariants === 0 ? <ShieldCheck size={20} /> : <AlertTriangle size={20} />}
           label={t("dash_ocs_kpi_invariants")}
           value={brokenInvariants === 0 ? "100%" : `${brokenInvariants} !`}

@@ -19,23 +19,23 @@
   animation: feedbackModalPop var(--duration-normal) var(--ease-spring) forwards;
 }
 
-.op-notice-info { border: 1px solid rgba(59, 130, 246, 0.25); background: rgba(59, 130, 246, 0.1); }
-.op-notice-info-modal { border: 1px solid rgba(59, 130, 246, 0.25); }
-.op-notice-success { border: 1px solid rgba(16, 185, 129, 0.26); background: rgba(16, 185, 129, 0.1); }
-.op-notice-success-modal { border: 1px solid rgba(16, 185, 129, 0.26); }
-.op-notice-warning { border: 1px solid rgba(245, 158, 11, 0.28); background: rgba(245, 158, 11, 0.12); }
-.op-notice-warning-modal { border: 1px solid rgba(245, 158, 11, 0.28); }
-.op-notice-danger { border: 1px solid rgba(239, 68, 68, 0.28); background: rgba(239, 68, 68, 0.12); }
-.op-notice-danger-modal { border: 1px solid rgba(239, 68, 68, 0.28); }
+.op-notice-info { border: 1px solid var(--status-info-border); background: var(--status-info-soft); }
+.op-notice-info-modal { border: 1px solid var(--status-info-border); }
+.op-notice-success { border: 1px solid var(--status-success-border); background: var(--status-success-soft); }
+.op-notice-success-modal { border: 1px solid var(--status-success-border); }
+.op-notice-warning { border: 1px solid var(--status-warning-border); background: var(--status-warning-soft); }
+.op-notice-warning-modal { border: 1px solid var(--status-warning-border); }
+.op-notice-danger { border: 1px solid var(--status-danger-border); background: var(--status-danger-soft); }
+.op-notice-danger-modal { border: 1px solid var(--status-danger-border); }
 
 .op-notice-icon-box {
   display: flex;
   padding-top: 0.1rem;
 }
-.op-notice-icon-info { color: #60a5fa; }
-.op-notice-icon-success { color: #34d399; }
-.op-notice-icon-warning { color: #fbbf24; }
-.op-notice-icon-danger { color: #f87171; }
+.op-notice-icon-info { color: var(--status-info); }
+.op-notice-icon-success { color: var(--status-success); }
+.op-notice-icon-warning { color: var(--status-warning); }
+.op-notice-icon-danger { color: var(--status-danger); }
 
 .op-notice-content {
   flex: 1;
@@ -138,14 +138,14 @@
   width: min(560px, calc(100vw - 32px));
 }
 
-.op-confirm-info { border: 1px solid rgba(59, 130, 246, 0.25); background: rgba(59, 130, 246, 0.1); }
-.op-confirm-info-modal { border: 1px solid rgba(59, 130, 246, 0.25); }
-.op-confirm-success { border: 1px solid rgba(16, 185, 129, 0.26); background: rgba(16, 185, 129, 0.1); }
-.op-confirm-success-modal { border: 1px solid rgba(16, 185, 129, 0.26); }
-.op-confirm-warning { border: 1px solid rgba(245, 158, 11, 0.28); background: rgba(245, 158, 11, 0.12); }
-.op-confirm-warning-modal { border: 1px solid rgba(245, 158, 11, 0.28); }
-.op-confirm-danger { border: 1px solid rgba(239, 68, 68, 0.28); background: rgba(239, 68, 68, 0.12); }
-.op-confirm-danger-modal { border: 1px solid rgba(239, 68, 68, 0.28); }
+.op-confirm-info { border: 1px solid var(--status-info-border); background: var(--status-info-soft); }
+.op-confirm-info-modal { border: 1px solid var(--status-info-border); }
+.op-confirm-success { border: 1px solid var(--status-success-border); background: var(--status-success-soft); }
+.op-confirm-success-modal { border: 1px solid var(--status-success-border); }
+.op-confirm-warning { border: 1px solid var(--status-warning-border); background: var(--status-warning-soft); }
+.op-confirm-warning-modal { border: 1px solid var(--status-warning-border); }
+.op-confirm-danger { border: 1px solid var(--status-danger-border); background: var(--status-danger-soft); }
+.op-confirm-danger-modal { border: 1px solid var(--status-danger-border); }
 
 
 .op-confirm-icon-box {
@@ -157,10 +157,10 @@
   flex-shrink: 0;
 }
 
-.op-confirm-icon-info { background: rgba(59, 130, 246, 0.16); color: #60a5fa; }
-.op-confirm-icon-success { background: rgba(16, 185, 129, 0.16); color: #34d399; }
-.op-confirm-icon-warning { background: rgba(245, 158, 11, 0.16); color: #fbbf24; }
-.op-confirm-icon-danger { background: rgba(239, 68, 68, 0.16); color: #f87171; }
+.op-confirm-icon-info { background: var(--status-info-soft); color: var(--status-info); }
+.op-confirm-icon-success { background: var(--status-success-soft); color: var(--status-success); }
+.op-confirm-icon-warning { background: var(--status-warning-soft); color: var(--status-warning); }
+.op-confirm-icon-danger { background: var(--status-danger-soft); color: var(--status-danger); }
 
 .op-confirm-content {
   flex: 1 1 260px;
@@ -189,9 +189,9 @@
 .op-confirm-btn {
   min-width: 96px;
 }
-.op-confirm-btn-info { background: #60a5fa; }
-.op-confirm-btn-success { background: #34d399; }
-.op-confirm-btn-warning { background: #fbbf24; }
+.op-confirm-btn-info { background: var(--status-info); }
+.op-confirm-btn-success { background: var(--status-success); }
+.op-confirm-btn-warning { background: var(--status-warning); }
 .op-confirm-btn-danger { background: var(--danger); }
 
 .op-spinner {

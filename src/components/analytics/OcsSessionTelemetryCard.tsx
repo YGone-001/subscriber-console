@@ -43,7 +43,7 @@ export default function OcsSessionTelemetryCard({
     <div className="analytics-ocs-card analytics-panel">
       <div className="analytics-panel-header">
         <div className="analytics-panel-title">
-          <div className="analytics-ocs-icon" style={{ color: "#1cc88a", background: "rgba(28, 200, 138, 0.12)" }}>
+          <div className="analytics-ocs-icon" style={{ color: "var(--status-success)", background: "var(--status-success-soft)" }}>
             <Radio size={20} />
           </div>
           <div>

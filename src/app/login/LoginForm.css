@@ -27,11 +27,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: #0f172a;
-  background-image: 
-    radial-gradient(at 0% 0%, hsla(253,16%,7%,1) 0, transparent 50%),
-    radial-gradient(at 50% 0%, hsla(225,39%,30%,1) 0, transparent 50%),
-    radial-gradient(at 100% 0%, hsla(339,49%,30%,1) 0, transparent 50%);
+  background: var(--login-canvas);
   position: relative;
   overflow: hidden;
 }
@@ -42,8 +38,8 @@
   left: -10%;
   width: 40vw;
   height: 40vw;
-  background: radial-gradient(circle, rgba(78, 115, 223, 0.4) 0%, transparent 70%);
-  filter: blur(60px);
+  background: color-mix(in srgb, var(--login-primary) 10%, transparent);
+  filter: blur(36px);
   animation: float 10s infinite ease-in-out alternate;
 }
 
@@ -53,8 +49,8 @@
   right: -10%;
   width: 50vw;
   height: 50vw;
-  background: radial-gradient(circle, rgba(28, 200, 138, 0.25) 0%, transparent 70%);
-  filter: blur(80px);
+  background: color-mix(in srgb, var(--status-success) 7%, transparent);
+  filter: blur(40px);
   animation: float 14s infinite ease-in-out alternate-reverse;
 }
 
@@ -64,11 +60,11 @@
   width: 100%;
   max-width: 420px;
   padding: 3rem 2.5rem;
-  background: rgba(15, 23, 42, 0.6);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 24px;
+  background: color-mix(in srgb, var(--login-surface) 96%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--login-border);
+  border-radius: var(--radius-soft-panel, 12px);
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
   animation: slideUpFade 0.6s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -100,12 +96,12 @@
   margin: 0;
   font-size: 1.75rem;
   font-weight: 700;
-  color: #f8fafc;
+  color: var(--login-text);
 }
 
 .login-subtitle {
   margin: 0.5rem 0 0;
-  color: #94a3b8;
+  color: var(--login-text-muted);
   font-size: 0.95rem;
 }
 
@@ -116,9 +112,9 @@
 }
 
 .login-error-container {
-  background: rgba(220, 38, 38, 0.15);
-  border: 1px solid rgba(220, 38, 38, 0.3);
-  color: #fca5a5;
+  background: var(--status-danger-soft);
+  border: 1px solid var(--status-danger-border);
+  color: var(--status-danger);
   padding: 0.75rem 1rem;
   border-radius: 12px;
   font-size: 0.85rem;
@@ -131,7 +127,7 @@
 .login-error-indicator {
   width: 4px;
   height: 16px;
-  background: #ef4444;
+  background: var(--status-danger);
   border-radius: 2px;
 }
 
@@ -156,22 +152,22 @@
   left: 1rem;
   top: 50%;
   transform: translateY(-50%);
-  color: #64748b;
+  color: var(--login-text-muted);
 }
 
 .login-input {
   width: 100%;
   padding: 1rem 1rem 1rem 2.75rem;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #f8fafc;
+  background: var(--login-surface-raised);
+  border: 1px solid var(--login-border);
+  color: var(--login-text);
   font-size: 0.95rem;
   border-radius: 12px;
   outline: none;
 }
 
 .login-input:focus-visible {
-  outline: 2px solid #5eead4;
+  outline: 2px solid var(--login-primary);
   outline-offset: 2px;
 }
 
@@ -188,7 +184,7 @@
   height: 44px;
   background: none;
   border: none;
-  color: #64748b;
+  color: var(--login-text-muted);
   cursor: pointer;
   width: 44px;
   height: 44px;
@@ -200,12 +196,12 @@
 }
 
 .password-toggle:hover {
-  color: #cbd5e1;
-  background: rgba(255, 255, 255, 0.06);
+  color: var(--login-text);
+  background: color-mix(in srgb, var(--login-text) 7%, transparent);
 }
 
 .password-toggle:focus-visible {
-  outline: 2px solid #5eead4;
+  outline: 2px solid var(--login-primary);
   outline-offset: -3px;
 }
 
@@ -213,10 +209,10 @@
   margin-top: 0.5rem;
   width: 100%;
   padding: 1rem;
-  background: linear-gradient(to right, #4e73df, #224abe);
+  background: var(--login-primary);
   border: none;
   border-radius: 12px;
-  color: white;
+  color: var(--login-on-primary);
   font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
@@ -224,7 +220,7 @@
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  box-shadow: 0 10px 20px -5px rgba(78, 115, 223, 0.4);
+  box-shadow: 0 10px 20px -12px color-mix(in srgb, var(--login-primary) 62%, transparent);
 }
 
 .login-submit-btn:disabled {
@@ -240,7 +236,7 @@
   margin-top: 2rem;
   text-align: center;
   font-size: 0.8rem;
-  color: #64748b;
+  color: var(--login-text-muted);
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -173,8 +173,8 @@ export default function WorkbenchPanel({
               operationsScore < 70
                 ? "#ef4444"
                 : operationsScore < 88
-                ? "#f59e0b"
-                : "#1cc88a"
+                ? "var(--status-warning)"
+                : "var(--status-success)"
             }
           />
           <div>
@@ -206,7 +206,7 @@ export default function WorkbenchPanel({
             {activeAlertCount > 0 ? (
               <ShieldAlert size={15} color="#ef4444" />
             ) : (
-              <ShieldCheck size={15} color="#1cc88a" />
+              <ShieldCheck size={15} color="var(--status-success)" />
             )}
             {t("dash_ops_alerts", { count: activeAlertCount })}
           </div>

@@ -7,7 +7,7 @@ import { Layers, ArrowUpRight, Tag } from "lucide-react";
 import { TariffPlanDistItem } from "./types";
 import EmptyChartState from "./EmptyChartState";
 
-const PLAN_COLORS = ["#36b9cc", "#4e73df", "#1cc88a", "#f6c23e", "#e74a3b", "#6f42c1", "#fd7e14"];
+const PLAN_COLORS = ["var(--chart-2)", "var(--chart-1)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)", "var(--status-info)", "var(--status-warning)"];
 
 interface TariffPlanDistributionChartProps {
   tariffPlanDist?: TariffPlanDistItem[];

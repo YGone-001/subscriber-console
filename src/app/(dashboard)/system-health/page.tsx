@@ -400,7 +400,7 @@ export default function SystemHealthPage() {
                 <div className="subsystem-header">
                   <div className="subsystem-title-box">
                     <div className="subsystem-icon-wrap">
-                      <Zap size={20} color="#f59e0b" />
+                      <Zap size={20} color="var(--chart-4)" />
                     </div>
                     <div>
                       <h3 className="subsystem-name">{t("health_subsystem_ocs")}</h3>
@@ -445,7 +445,7 @@ export default function SystemHealthPage() {
                 <div className="subsystem-header">
                   <div className="subsystem-title-box">
                     <div className="subsystem-icon-wrap">
-                      <Layers size={20} color="#10b981" />
+                      <Layers size={20} color="var(--chart-3)" />
                     </div>
                     <div>
                       <h3 className="subsystem-name">{t("health_subsystem_hss")}</h3>
@@ -490,7 +490,7 @@ export default function SystemHealthPage() {
                 <div className="subsystem-header">
                   <div className="subsystem-title-box">
                     <div className="subsystem-icon-wrap">
-                      <ShieldCheck size={20} color="#8b5cf6" />
+                      <ShieldCheck size={20} color="var(--chart-5)" />
                     </div>
                     <div>
                       <h3 className="subsystem-name">{t("health_subsystem_security")}</h3>
@@ -556,7 +556,7 @@ export default function SystemHealthPage() {
                   {auditPhase === 'INIT' ? '--' : `${displayScore}%`}
                 </div>
               </div>
-              <HeartPulse size={32} color="#dddfeb" />
+              <HeartPulse size={32} color="var(--icon-muted)" />
             </div>
           </div>
 
@@ -566,7 +566,7 @@ export default function SystemHealthPage() {
                 <div className="health-kpi-label">{t("health_active_anomalies")}</div>
                 <div className="health-kpi-value">{anomalies.length}</div>
               </div>
-              <ShieldAlert size={32} color="#dddfeb" />
+              <ShieldAlert size={32} color="var(--icon-muted)" />
             </div>
           </div>
 
@@ -578,7 +578,7 @@ export default function SystemHealthPage() {
                   {lastSaveTime ? new Date(lastSaveTime * 1000).toLocaleString() : t("health_loading")}
                 </div>
               </div>
-              <HardDrive size={32} color="#dddfeb" />
+              <HardDrive size={32} color="var(--icon-muted)" />
             </div>
           </div>
 
@@ -590,7 +590,7 @@ export default function SystemHealthPage() {
                   {systemHealth?.subsystems?.database?.latencyMs !== undefined ? `${systemHealth.subsystems.database.latencyMs} ms` : '--'}
                 </div>
               </div>
-              <Activity size={32} color="#dddfeb" />
+              <Activity size={32} color="var(--icon-muted)" />
             </div>
           </div>
         </div>

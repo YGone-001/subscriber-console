@@ -7,7 +7,7 @@ import { DistributionPoint } from "./types";
 import { formatGb } from "./utils";
 import EmptyChartState from "./EmptyChartState";
 
-const COLORS = ["#4e73df", "#1cc88a", "#36b9cc", "#f6c23e", "#e74a3b", "#858796"];
+const COLORS = ["var(--chart-1)", "var(--chart-3)", "var(--chart-2)", "var(--chart-4)", "var(--chart-5)", "var(--chart-6)"];
 
 export default function PlmnDistributionChart({
   plmnDist,
@@ -30,7 +30,7 @@ export default function PlmnDistributionChart({
     <section className="analytics-panel">
       <div className="analytics-panel-header">
         <div className="analytics-panel-title">
-          <Server size={18} color="#1cc88a" />
+          <Server size={18} color="var(--chart-3)" />
           <h3>{t("dash_chart_plmn_title")}</h3>
         </div>
         <span className="analytics-panel-badge">{plmnDist.length} {t("dash_unit_plmn")}</span>

@@ -8,7 +8,7 @@ import { BYTES_IN_GB, formatGb } from "./utils";
 import EmptyChartState from "./EmptyChartState";
 import { formatEvents, formatSeconds } from "@/lib/unitParser";
 
-const COLORS = ["#4e73df", "#1cc88a", "#36b9cc", "#f6c23e", "#e74a3b", "#858796"];
+const COLORS = ["var(--chart-1)", "var(--chart-3)", "var(--chart-2)", "var(--chart-4)", "var(--chart-5)", "var(--chart-6)"];
 
 type TopConsumerTooltipPayload = {
   payload?: TopConsumer;
