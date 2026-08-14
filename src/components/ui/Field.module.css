@@ -6,7 +6,7 @@
 
 .label {
   color: var(--text-muted);
-  font-size: 0.78rem;
+  font-size: var(--ref-font-size-label-strong);
   font-weight: 750;
   letter-spacing: 0.035em;
   line-height: 1.25;
@@ -15,7 +15,7 @@
 .description,
 .error {
   margin: 0;
-  font-size: 0.78rem;
+  font-size: var(--ref-font-size-label-strong);
   line-height: 1.4;
 }
 

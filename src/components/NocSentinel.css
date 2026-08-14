@@ -14,11 +14,11 @@
     justify-content: center;
     gap: 0.4rem;
     border: 1px solid var(--surface-border);
-    border-radius: 8px;
+    border-radius: var(--ref-radius-control);
     background: var(--surface-hover);
     color: var(--text-secondary);
     cursor: pointer;
-    font-size: 0.78rem;
+    font-size: var(--ref-font-size-label-strong);
     font-weight: 800;
     transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
   }
@@ -60,13 +60,13 @@
     min-width: 19px;
     height: 19px;
     padding: 0 0.35rem;
-    border-radius: 999px;
+    border-radius: var(--ref-radius-pill);
     display: inline-flex;
     align-items: center;
     justify-content: center;
     background: var(--on-accent);
     color: var(--status-danger);
-    font-size: 0.68rem;
+    font-size: var(--ref-font-size-caption);
     font-weight: 900;
   }
 
@@ -88,7 +88,7 @@
     overflow: hidden;
     background: var(--surface);
     border: 1px solid var(--surface-border);
-    border-radius: 8px;
+    border-radius: var(--ref-radius-control);
     box-shadow: var(--shadow-popover);
     animation: nocPanelIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
   }
@@ -110,7 +110,7 @@
     align-items: center;
     gap: 0.5rem;
     color: var(--text-main);
-    font-size: 0.98rem;
+    font-size: var(--ref-font-size-body);
     font-weight: 800;
   }
 
@@ -118,7 +118,7 @@
     display: block;
     margin-top: 0.25rem;
     color: var(--text-muted);
-    font-size: 0.72rem;
+    font-size: var(--ref-font-size-label);
     font-weight: 700;
   }
 
@@ -127,7 +127,7 @@
     background: transparent;
     color: var(--primary);
     cursor: pointer;
-    font-size: 0.78rem;
+    font-size: var(--ref-font-size-label-strong);
     font-weight: 800;
   }
 
@@ -135,7 +135,7 @@
     margin: 0.85rem;
     padding: 0.9rem;
     border: 1px solid var(--surface-border);
-    border-radius: 8px;
+    border-radius: var(--ref-radius-control);
     background: var(--header-bg);
   }
 
@@ -144,14 +144,14 @@
     align-items: center;
     gap: 0.5rem;
     color: var(--text-main);
-    font-size: 0.84rem;
+    font-size: var(--ref-font-size-body-compact);
     font-weight: 800;
   }
 
   .noc-activation-card p {
     margin: 0.65rem 0 0.85rem;
     color: var(--text-secondary);
-    font-size: 0.76rem;
+    font-size: var(--ref-font-size-label);
     line-height: 1.45;
   }
 
@@ -159,8 +159,8 @@
     width: 100%;
     min-height: 34px;
     padding: 0.45rem 0.65rem;
-    border-radius: 6px;
-    font-size: 0.78rem;
+    border-radius: var(--ref-radius-compact);
+    font-size: var(--ref-font-size-label-strong);
   }
 
   .noc-monitor-row {
@@ -183,10 +183,10 @@
     align-items: center;
     justify-content: center;
     border: 1px solid var(--surface-border);
-    border-radius: 6px;
+    border-radius: var(--ref-radius-compact);
     color: var(--text-secondary);
     background: var(--surface);
-    font-size: 0.68rem;
+    font-size: var(--ref-font-size-caption);
     font-weight: 800;
     white-space: nowrap;
   }
@@ -197,7 +197,7 @@
     gap: 0.45rem;
     color: var(--text-muted);
     cursor: pointer;
-    font-size: 0.75rem;
+    font-size: var(--ref-font-size-label);
     font-weight: 700;
   }
 
@@ -231,11 +231,11 @@
 
   .noc-empty strong {
     color: var(--text-main);
-    font-size: 0.92rem;
+    font-size: var(--ref-font-size-body-emphasis);
   }
 
   .noc-empty span {
-    font-size: 0.78rem;
+    font-size: var(--ref-font-size-label-strong);
   }
 
   .noc-alert {
@@ -259,7 +259,7 @@
 
   .noc-alert-meta {
     color: var(--text-muted);
-    font-size: 0.7rem;
+    font-size: var(--ref-font-size-caption);
     font-weight: 700;
     margin-bottom: 0.25rem;
   }
@@ -270,7 +270,7 @@
 
   .noc-alert-reason {
     color: var(--text-main);
-    font-size: 0.86rem;
+    font-size: var(--ref-font-size-body-compact);
     font-weight: 650;
     line-height: 1.42;
   }
@@ -281,7 +281,7 @@
     gap: 0.45rem;
     margin-top: 0.55rem;
     color: var(--text-muted);
-    font-size: 0.7rem;
+    font-size: var(--ref-font-size-caption);
     font-weight: 750;
   }
 
@@ -290,11 +290,11 @@
     display: inline-flex;
     align-items: center;
     padding: 0 0.5rem;
-    border-radius: 999px;
+    border-radius: var(--ref-radius-pill);
     border: 1px solid var(--surface-border);
     background: var(--surface-hover);
     color: var(--text-secondary);
-    font-size: 0.68rem;
+    font-size: var(--ref-font-size-caption);
     font-weight: 900;
   }
 
@@ -319,7 +319,7 @@
   .noc-alert-note {
     margin-top: 0.45rem;
     color: var(--text-secondary);
-    font-size: 0.73rem;
+    font-size: var(--ref-font-size-label);
     line-height: 1.4;
   }
 
@@ -333,7 +333,7 @@
 
   .noc-assignee-row label {
     color: var(--text-muted);
-    font-size: 0.7rem;
+    font-size: var(--ref-font-size-caption);
     font-weight: 800;
   }
 
@@ -341,11 +341,11 @@
     width: 100%;
     min-height: 32px;
     border: 1px solid var(--surface-border);
-    border-radius: 6px;
+    border-radius: var(--ref-radius-compact);
     background: var(--surface);
     color: var(--text-main);
     padding: 0 0.45rem;
-    font-size: 0.74rem;
+    font-size: var(--ref-font-size-label);
     font-weight: 750;
   }
 
@@ -359,8 +359,8 @@
   .noc-action-button {
     min-height: 30px;
     padding: 0.3rem 0.55rem;
-    border-radius: 6px;
-    font-size: 0.74rem;
+    border-radius: var(--ref-radius-compact);
+    font-size: var(--ref-font-size-label);
     justify-content: center;
   }
 
@@ -383,7 +383,7 @@
     padding: 0.4rem 1rem;
     background: var(--status-danger);
     color: var(--on-accent);
-    font-size: 0.84rem;
+    font-size: var(--ref-font-size-body-compact);
     font-weight: 800;
   }
 

@@ -36,7 +36,7 @@ function TopConsumerTooltip({
   return (
     <div style={{ ...CHART_TOOLTIP_STYLE, padding: "0.75rem 0.85rem", minWidth: 210 }}>
       <div style={{ fontFamily: "monospace", fontWeight: 700, marginBottom: "0.55rem" }}>{consumer.imsi}</div>
-      <div style={{ display: "grid", gap: "0.35rem", fontSize: "0.82rem" }}>
+      <div style={{ display: "grid", gap: "0.35rem", fontSize: "var(--ref-font-size-data-relaxed)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem" }}>
           <span>{t("dash_chart_top5_tooltip")}</span>
           <strong>{formatGb(consumer.balance)} GB</strong>
@@ -99,7 +99,7 @@ export default function TopConsumerChart({
               <XAxis
                 type="number"
                 stroke={CHART_TICK_COLOR}
-                tick={{ fill: CHART_TICK_COLOR, fontSize: 11, fontWeight: 500 }}
+                tick={{ fill: CHART_TICK_COLOR, fontSize: "var(--ref-font-size-caption)", fontWeight: 500 }}
                 tickFormatter={(value: number) => `${(value / BYTES_IN_GB).toFixed(1)} GB`}
               />
               <YAxis
@@ -107,7 +107,7 @@ export default function TopConsumerChart({
                 dataKey="imsi"
                 width={142}
                 stroke={CHART_TICK_COLOR}
-                tick={{ fontSize: 11.5, fill: CHART_TICK_COLOR, fontFamily: "monospace", fontWeight: 600 }}
+                tick={{ fontSize: "var(--ref-font-size-label)", fill: CHART_TICK_COLOR, fontFamily: "monospace", fontWeight: 600 }}
               />
               <Tooltip
                 cursor={{ fill: CHART_CURSOR_COLOR }}

@@ -24,7 +24,7 @@ export const CHART_TICK_COLOR = "var(--text-secondary)";
 export const CHART_CURSOR_COLOR = "var(--surface-hover)";
 
 export const CHART_TOOLTIP_STYLE: CSSProperties = {
-  borderRadius: 8,
+  borderRadius: "var(--ref-radius-control)",
   backgroundColor: "var(--surface)",
   borderColor: "var(--surface-border)",
   color: "var(--text-main)",

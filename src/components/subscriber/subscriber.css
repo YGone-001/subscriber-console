@@ -4,14 +4,14 @@
 }
 .summary-metric-label {
   color: var(--text-muted);
-  font-size: 0.76rem;
+  font-size: var(--ref-font-size-label);
   margin-bottom: 0.35rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0;
 }
 .summary-metric-value {
-  font-size: 1rem;
+  font-size: var(--ref-font-size-body);
   font-weight: 700;
   font-family: monospace;
   overflow-wrap: anywhere;
@@ -29,8 +29,8 @@
   align-items: center;
   gap: 0.4rem;
   padding: 0.35rem 0.6rem;
-  border-radius: 999px;
-  font-size: 0.78rem;
+  border-radius: var(--ref-radius-pill);
+  font-size: var(--ref-font-size-label-strong);
   font-weight: 800;
   white-space: nowrap;
 }
@@ -47,7 +47,7 @@
 
 .detail-panel {
   border: 1px solid var(--surface-border);
-  border-radius: 8px;
+  border-radius: var(--ref-radius-control);
   background: var(--surface);
   overflow: hidden;
 }
@@ -74,8 +74,8 @@
   gap: 0.35rem;
   min-height: 28px;
   padding: 0.3rem 0.55rem;
-  border-radius: 999px;
-  font-size: 0.76rem;
+  border-radius: var(--ref-radius-pill);
+  font-size: var(--ref-font-size-label);
   font-weight: 800;
   white-space: nowrap;
 }
@@ -101,12 +101,12 @@
   gap: 0.45rem;
   padding: 0.85rem;
   border: 1px solid var(--surface-border);
-  border-radius: 8px;
+  border-radius: var(--ref-radius-control);
   background: var(--surface-hover);
 }
 .auth-value-label {
   color: var(--text-muted);
-  font-size: 0.76rem;
+  font-size: var(--ref-font-size-label);
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0;
@@ -114,7 +114,7 @@
 .auth-value-text {
   min-width: 0;
   color: var(--text-main);
-  font-size: 1rem;
+  font-size: var(--ref-font-size-body);
   font-weight: 700;
   font-family: monospace;
   line-height: 1.45;
@@ -126,7 +126,7 @@
   padding-bottom: 2rem;
 }
 .section-header-title {
-  font-size: 1.1rem;
+  font-size: var(--ref-font-size-heading);
   margin: 0;
   color: var(--text-main);
   font-weight: 700;
@@ -142,7 +142,7 @@
 }
 .overview-box {
   border: 1px solid var(--surface-border);
-  border-radius: 8px;
+  border-radius: var(--ref-radius-control);
   padding: 1rem;
   background: var(--header-bg);
   display: grid;
@@ -158,20 +158,20 @@
 }
 .health-score-label {
   color: var(--text-muted);
-  font-size: 0.76rem;
+  font-size: var(--ref-font-size-label);
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0;
 }
 .health-score-value {
   color: var(--text-main);
-  font-size: 2rem;
+  font-size: var(--ref-font-size-display-lg);
   font-weight: 900;
   line-height: 1;
 }
 .health-bar-bg {
   height: 8px;
-  border-radius: 999px;
+  border-radius: var(--ref-radius-pill);
   background: var(--surface-border);
   overflow: hidden;
 }
@@ -186,7 +186,7 @@
   display: grid;
   gap: 0.45rem;
   color: var(--text-secondary);
-  font-size: 0.82rem;
+  font-size: var(--ref-font-size-data-relaxed);
 }
 .identity-info-row {
   display: flex;
@@ -225,18 +225,18 @@
   gap: 0.55rem;
   align-items: center;
   color: var(--text-secondary);
-  font-size: 0.86rem;
+  font-size: var(--ref-font-size-body-compact);
 }
 .next-action-index {
   width: 24px;
   height: 24px;
-  border-radius: 999px;
+  border-radius: var(--ref-radius-pill);
   display: grid;
   place-items: center;
   background: var(--surface-hover);
   color: var(--primary);
   font-weight: 900;
-  font-size: 0.75rem;
+  font-size: var(--ref-font-size-label);
 }
 .overview-metrics-grid {
   display: grid;
@@ -253,7 +253,7 @@
 }
 .details-box {
   border: 1px solid var(--surface-border);
-  border-radius: 8px;
+  border-radius: var(--ref-radius-control);
   padding: 1rem;
   background: var(--header-bg);
 }
@@ -287,7 +287,7 @@
   gap: 0.6rem;
   color: var(--text-main);
   font-weight: 800;
-  font-size: 1.15rem;
+  font-size: var(--ref-font-size-heading);
 }
 
 .auth-grid {
@@ -306,7 +306,7 @@
   gap: 1rem;
   align-items: center;
   padding: 1.25rem;
-  border-radius: 8px;
+  border-radius: var(--ref-radius-control);
   border: 1px solid var(--surface-border);
   background: var(--surface-hover);
 }
@@ -315,18 +315,18 @@
 }
 .ambr-label {
   color: var(--text-secondary);
-  font-size: 0.85rem;
+  font-size: var(--ref-font-size-body-compact);
   margin-bottom: 0.25rem;
   font-weight: 600;
   text-transform: uppercase;
 }
 .ambr-value {
   color: var(--text-main);
-  font-size: 1.5rem;
+  font-size: var(--ref-font-size-title);
   font-weight: 600;
 }
 .ambr-unit {
-  font-size: 1rem;
+  font-size: var(--ref-font-size-body);
   color: var(--text-muted);
 }
 
@@ -338,7 +338,7 @@
 }
 .apn-rules-title, .raw-mapping-title {
   color: var(--text-muted);
-  font-size: 0.85rem;
+  font-size: var(--ref-font-size-body-compact);
   font-weight: 700;
 }
 .apn-rules-title { margin-bottom: 0.75rem; }
@@ -353,9 +353,9 @@
   gap: 1rem;
   padding: 0.75rem 1rem;
   border: 1px solid var(--surface-border);
-  border-radius: 6px;
+  border-radius: var(--ref-radius-compact);
   font-family: monospace;
-  font-size: 0.9rem;
+  font-size: var(--ref-font-size-body-support);
   overflow-x: auto;
 }
 .rule-item.bg-hover {
@@ -373,7 +373,7 @@
   flex-wrap: wrap;
 }
 .slice-idx {
-  font-size: 1.1rem;
+  font-size: var(--ref-font-size-heading);
   font-weight: 600;
   color: var(--primary);
 }
@@ -382,7 +382,7 @@
   gap: 1rem;
   background: var(--surface-hover);
   padding: 0.5rem 1rem;
-  border-radius: 6px;
+  border-radius: var(--ref-radius-compact);
 }
 .slice-sst { font-weight: 600; color: var(--text-main); }
 .slice-sd { color: var(--text-secondary); }
@@ -405,7 +405,7 @@
 .slice-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.95rem;
+  font-size: var(--ref-font-size-body-emphasis);
 }
 .slice-table-th {
   text-align: left;
@@ -435,8 +435,8 @@
 .pcc-rule-item {
   background: var(--surface-hover);
   padding: 0.5rem 0.75rem;
-  border-radius: 6px;
-  font-size: 0.85em;
+  border-radius: var(--ref-radius-compact);
+  font-size: var(--ref-font-size-relative-compact);
   border: 1px solid var(--surface-border);
 }
 .pcc-rule-idx {
@@ -462,7 +462,7 @@
   color: var(--text-muted);
   padding: 3rem;
   border: 1px dashed var(--surface-border);
-  border-radius: 6px;
+  border-radius: var(--ref-radius-compact);
 }
 .hover-session {
   border-bottom: 1px solid transparent;
@@ -475,7 +475,7 @@
   flex-direction: column;
 }
 .edit-header-title {
-  font-size: 1.1rem;
+  font-size: var(--ref-font-size-heading);
   margin: 0;
   color: var(--text-main);
   font-weight: 600;
@@ -496,13 +496,13 @@
 }
 .warning-text {
   color: var(--danger);
-  font-size: 0.85rem;
+  font-size: var(--ref-font-size-body-compact);
   margin-top: 0.4rem;
   font-weight: 650;
 }
 .checking-text {
   color: var(--text-muted);
-  font-size: 0.82rem;
+  font-size: var(--ref-font-size-data-relaxed);
   margin-top: 0.4rem;
   font-weight: 500;
 }
@@ -515,7 +515,7 @@
 .auth-edit-full { grid-column: 1 / -1; }
 .auth-input-large {
   font-family: monospace;
-  font-size: 1.05rem;
+  font-size: var(--ref-font-size-heading-sm);
 }
 .auth-op-container {
   display: flex;
@@ -567,7 +567,7 @@
   align-items: center;
   gap: 0.75rem;
   padding: 0.75rem 1rem;
-  border-radius: 8px;
+  border-radius: var(--ref-radius-control);
   cursor: pointer;
   transition: all 0.2s;
 }
@@ -580,7 +580,7 @@
   background: var(--surface);
 }
 .access-rest-text {
-  font-size: 0.9rem;
+  font-size: var(--ref-font-size-body-support);
 }
 .access-rest-text.checked {
   font-weight: 600;
@@ -602,7 +602,7 @@
   align-items: center;
   gap: 0.5rem;
   padding: 0.4rem 1rem;
-  font-size: 0.85rem;
+  font-size: var(--ref-font-size-body-compact);
   background: transparent;
 }
 .btn-access-clear {
@@ -625,7 +625,7 @@
   justify-content: space-between;
 }
 .auto-linked-text {
-  font-size: 0.75rem;
+  font-size: var(--ref-font-size-label);
   color: var(--success);
 }
 .plmn-readonly {
@@ -651,7 +651,7 @@
   margin-bottom: 1.5rem;
 }
 .slices-edit-title {
-  font-size: 1.25rem;
+  font-size: var(--ref-font-size-title-sm);
   margin: 0;
   color: var(--text-main);
   font-weight: 600;
@@ -664,7 +664,7 @@
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  border-radius: 24px;
+  border-radius: var(--ref-radius-pill);
 }
 .no-slices-edit {
   text-align: center;
@@ -672,7 +672,7 @@
   color: var(--text-muted);
   background-color: var(--surface);
   border: 1px dashed var(--surface-border);
-  border-radius: 8px;
+  border-radius: var(--ref-radius-control);
 }
 
 .network-edit-card { order: 4; }

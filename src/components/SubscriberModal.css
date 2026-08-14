@@ -12,7 +12,7 @@
 }
 .sub-modal-imsi-title {
   margin: 0;
-  font-size: 1.5rem;
+  font-size: var(--ref-font-size-title);
   font-weight: 600;
   color: var(--text-main);
   font-family: monospace;
@@ -22,14 +22,14 @@
 }
 .sub-modal-new-title {
   margin: 0;
-  font-size: 1.5rem;
+  font-size: var(--ref-font-size-title);
   font-weight: 600;
   color: var(--text-main);
 }
 .sub-modal-new-desc {
   margin: 0.25rem 0 0;
   color: var(--text-muted);
-  font-size: 0.9rem;
+  font-size: var(--ref-font-size-body-support);
 }
 .sub-modal-header-divider {
   width: 1px;
@@ -38,7 +38,7 @@
   margin: 0 0.5rem;
 }
 .sub-modal-sidebar-title {
-  font-size: 0.85rem;
+  font-size: var(--ref-font-size-body-compact);
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -49,9 +49,9 @@
   text-align: center;
   margin-top: 4rem;
   color: var(--text-muted);
-  font-size: 1.1rem;
+  font-size: var(--ref-font-size-heading);
 }
 .sub-modal-footer-msg {
   color: var(--text-muted);
-  font-size: 0.9rem;
+  font-size: var(--ref-font-size-body-support);
 }

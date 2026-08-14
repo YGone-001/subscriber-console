@@ -407,7 +407,7 @@ export default function OcsUsagePanel() {
                 ) : (
                   usageRecords.map((r) => (
                     <tr key={r.id}>
-                      <td className="ocs-mono" style={{ fontSize: "0.8rem", color: "var(--status-info)", maxWidth: "180px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.session_id} data-column-priority="essential">
+                      <td className="ocs-mono" style={{ fontSize: "var(--ref-font-size-data)", color: "var(--status-info)", maxWidth: "180px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.session_id} data-column-priority="essential">
                         {r.session_id}
                       </td>
                       <td className="ocs-mono" style={{ fontWeight: 600, color: "var(--status-info)" }} data-column-priority="essential">
@@ -438,14 +438,14 @@ export default function OcsUsagePanel() {
                           {r.result_code || 2001}
                         </span>
                       </td>
-                      <td className="ocs-mono" style={{ fontSize: "0.775rem", color: "var(--text-muted)" }} data-column-priority="supplementary">
+                      <td className="ocs-mono" style={{ fontSize: "var(--ref-font-size-label-strong)", color: "var(--text-muted)" }} data-column-priority="supplementary">
                         {r.created_at ? new Date(r.created_at).toLocaleString() : "-"}
                       </td>
                       <td data-column-priority="essential">
                         <button
                           type="button"
                           className="ocs-btn"
-                          style={{ padding: "0.35rem 0.65rem", fontSize: "0.775rem" }}
+                          style={{ padding: "0.35rem 0.65rem", fontSize: "var(--ref-font-size-label-strong)" }}
                           onClick={() => {
                             setSelectedRecord(r as unknown as Record<string, unknown>);
                             setDetailTitle(`CDR Usage Record: ${r.session_id} (#${r.cc_request_number})`);
@@ -498,7 +498,7 @@ export default function OcsUsagePanel() {
 
                     return (
                       <tr key={r.id}>
-                        <td className="ocs-mono" style={{ fontSize: "0.8rem", color: "var(--status-info)", maxWidth: "180px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.session_id} data-column-priority="essential">
+                        <td className="ocs-mono" style={{ fontSize: "var(--ref-font-size-data)", color: "var(--status-info)", maxWidth: "180px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.session_id} data-column-priority="essential">
                           {r.session_id}
                         </td>
                         <td className="ocs-mono" style={{ fontWeight: 600, color: "var(--status-info)" }} data-column-priority="essential">
@@ -531,14 +531,14 @@ export default function OcsUsagePanel() {
                             {r.result_code}
                           </span>
                         </td>
-                        <td className="ocs-mono" style={{ fontSize: "0.775rem", color: "var(--text-muted)" }} data-column-priority="supplementary">
+                        <td className="ocs-mono" style={{ fontSize: "var(--ref-font-size-label-strong)", color: "var(--text-muted)" }} data-column-priority="supplementary">
                           {r.updated_at ? new Date(r.updated_at).toLocaleString() : "-"}
                         </td>
                         <td data-column-priority="essential">
                           <button
                             type="button"
                             className="ocs-btn"
-                            style={{ padding: "0.35rem 0.65rem", fontSize: "0.775rem" }}
+                            style={{ padding: "0.35rem 0.65rem", fontSize: "var(--ref-font-size-label-strong)" }}
                             onClick={() => {
                               setSelectedRecord(r as unknown as Record<string, unknown>);
                               setDetailTitle(`Quota Reservation: ${r.session_id} (#${r.grant_cc_request_number})`);

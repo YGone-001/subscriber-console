@@ -590,10 +590,10 @@ export function TariffPlanList(props: any) {
               {conflicts.length > 0 && (
                 <ErrorNotice icon={<AlertTriangle size={18} />}>
                   <strong>{t("tariff_rule_conflict_warning")} ({conflicts.length})</strong>
-                  <p style={{ margin: "0 0 0.5rem 0", fontSize: "0.84rem", opacity: 0.9 }}>
+                  <p style={{ margin: "0 0 0.5rem 0", fontSize: "var(--ref-font-size-body-compact)", opacity: 0.9 }}>
                     {t("tariff_rule_conflict_desc")}
                   </p>
-                  <ul style={{ margin: 0, paddingLeft: "1.25rem", fontSize: "0.82rem" }}>
+                  <ul style={{ margin: 0, paddingLeft: "1.25rem", fontSize: "var(--ref-font-size-data-relaxed)" }}>
                     {conflicts.map((c, i) => (
                       <li key={i}>
                         APN: <code>{c.signature.apn}</code>, RG: <code>{c.signature.rating_group_id}</code>, SI: <code>{c.signature.service_identifier}</code> — Overlapping Rules: <strong>{c.rule_ids.join(", ")}</strong>
@@ -624,7 +624,7 @@ export function TariffPlanList(props: any) {
               </div>
 
               {/* Rules Matrix Table */}
-              <div className="table-container" style={{ border: "1px solid var(--surface-border)", borderRadius: "8px", overflow: "hidden" }}>
+              <div className="table-container" style={{ border: "1px solid var(--surface-border)", borderRadius: "var(--ref-radius-control)", overflow: "hidden" }}>
                 <table className="rules-matrix-table">
                   <caption className="sr-only">{selectedPlan?.name || selectedPlanId} · {t("tariff_plan_rules")}</caption>
                   <thead>
@@ -668,15 +668,15 @@ export function TariffPlanList(props: any) {
                               )}
                             </td>
                             <td data-label="Scenario" data-column-priority="essential">
-                              <span style={{ textTransform: "capitalize", fontWeight: 600, fontSize: "0.82rem" }}>
+                              <span style={{ textTransform: "capitalize", fontWeight: 600, fontSize: "var(--ref-font-size-data-relaxed)" }}>
                                 {(rule.charging_type || "data_volume").replace("_", " ")}
                               </span>
                             </td>
                             <td data-label="APN / DNN" data-column-priority="important">
-                              <code style={{ fontSize: "0.84rem", color: "var(--primary)" }}>{rule.apn || "internet"}</code>
+                              <code style={{ fontSize: "var(--ref-font-size-body-compact)", color: "var(--primary)" }}>{rule.apn || "internet"}</code>
                             </td>
                             <td data-label="RG / SI" data-column-priority="supplementary">
-                              <span style={{ fontFamily: "monospace", fontSize: "0.84rem" }}>
+                              <span style={{ fontFamily: "monospace", fontSize: "var(--ref-font-size-body-compact)" }}>
                                 RG:{rule.rating_group_id} / SI:{rule.service_identifier ?? 1}
                               </span>
                             </td>
@@ -685,10 +685,10 @@ export function TariffPlanList(props: any) {
                                 {rule.rates || "0"} {rule.currency || "USD"}
                               </span>
                             </td>
-                            <td style={{ fontSize: "0.82rem" }} data-label="Grant Quota" data-column-priority="important">
+                            <td style={{ fontSize: "var(--ref-font-size-data-relaxed)" }} data-label="Grant Quota" data-column-priority="important">
                               {formatGrant(t, rule.quota_per_grant, rule.unit, rule.charging_type)}
                             </td>
-                            <td style={{ fontSize: "0.82rem" }} data-label="Validity" data-column-priority="supplementary">
+                            <td style={{ fontSize: "var(--ref-font-size-data-relaxed)" }} data-label="Validity" data-column-priority="supplementary">
                               {rule.validity_time ? `${rule.validity_time}s` : "Default"}
                             </td>
                             <td data-label="Status" data-column-priority="essential">
@@ -767,7 +767,7 @@ export function TariffPlanList(props: any) {
 
               {/* Dry-Run Analysis Panel */}
               {dryRunLoading && (
-                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "var(--text-muted)", fontSize: "0.85rem" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "var(--text-muted)", fontSize: "var(--ref-font-size-body-compact)" }}>
                   <RefreshCw size={15} className="animate-spin" /> Calculating migration impact...
                 </div>
               )}
@@ -788,7 +788,7 @@ export function TariffPlanList(props: any) {
                   </div>
                   <div>
                     <div className="dryrun-stat-label">Target Plan Status</div>
-                    <div className="dryrun-stat-value" style={{ fontSize: "1rem" }}>
+                    <div className="dryrun-stat-value" style={{ fontSize: "var(--ref-font-size-body)" }}>
                       <StatusBadge tone={dryRunPreview.isTargetActive ? "success" : "muted"}>
                         {dryRunPreview.targetPlan.status}
                       </StatusBadge>

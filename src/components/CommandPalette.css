@@ -17,7 +17,7 @@
   max-height: 520px;
   background: var(--surface);
   color: var(--text-main);
-  border-radius: 14px;
+  border-radius: var(--ref-radius-soft-panel);
   border: 1px solid var(--surface-border);
   box-shadow: var(--shadow-popover);
   overflow: hidden;
@@ -40,7 +40,7 @@
   border: none;
   outline: none;
   background: transparent;
-  font-size: 1.05rem;
+  font-size: var(--ref-font-size-heading-sm);
   color: var(--text-main);
   font-weight: 500;
 }
@@ -48,8 +48,8 @@
 .cp-kbd-shortcut {
   padding: 0.15rem 0.5rem;
   background: var(--surface-hover);
-  border-radius: 4px;
-  font-size: 0.75rem;
+  border-radius: var(--ref-radius-micro);
+  font-size: var(--ref-font-size-label);
   color: var(--text-muted);
   font-family: monospace;
   border: 1px solid var(--surface-border);
@@ -58,8 +58,8 @@
 .cp-kbd-small {
   padding: 0.1rem 0.35rem;
   background: var(--surface-hover);
-  border-radius: 3px;
-  font-size: 0.65rem;
+  border-radius: var(--ref-radius-micro);
+  font-size: var(--ref-font-size-micro);
   font-family: monospace;
   border: 1px solid var(--surface-border);
   color: var(--text-secondary);
@@ -76,11 +76,11 @@
 
 .cp-category-tab {
   padding: 0.25rem 0.65rem;
-  border-radius: 999px;
+  border-radius: var(--ref-radius-pill);
   border: 1px solid transparent;
   background: transparent;
   color: var(--text-muted);
-  font-size: 0.78rem;
+  font-size: var(--ref-font-size-label-strong);
   font-weight: 600;
   cursor: pointer;
   transition: all var(--duration-fast) var(--ease-decelerate);
@@ -106,7 +106,7 @@
 
 .cp-group-header {
   padding: 0.4rem 1.25rem;
-  font-size: 0.7rem;
+  font-size: var(--ref-font-size-caption);
   font-weight: 700;
   color: var(--text-muted);
   text-transform: uppercase;
@@ -115,7 +115,7 @@
 
 .cp-group-header-mt {
   padding: 0.6rem 1.25rem 0.4rem;
-  font-size: 0.7rem;
+  font-size: var(--ref-font-size-caption);
   font-weight: 700;
   color: var(--text-muted);
   text-transform: uppercase;
@@ -143,7 +143,7 @@
 .cp-item-icon-box {
   width: 32px;
   height: 32px;
-  border-radius: 8px;
+  border-radius: var(--ref-radius-control);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -157,7 +157,7 @@
 }
 
 .cp-item-label {
-  font-size: 0.88rem;
+  font-size: var(--ref-font-size-body-small);
   font-weight: 600;
   color: var(--text-main);
 }
@@ -167,7 +167,7 @@
 }
 
 .cp-item-desc {
-  font-size: 0.75rem;
+  font-size: var(--ref-font-size-label);
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -175,44 +175,44 @@
 }
 
 .cp-item-badge {
-  border-radius: 4px;
+  border-radius: var(--ref-radius-micro);
   flex-shrink: 0;
 }
 
 .cp-badge-nav {
-  font-size: 0.7rem;
+  font-size: var(--ref-font-size-caption);
   color: var(--text-muted);
 }
 
 .cp-badge-action {
-  font-size: 0.65rem;
+  font-size: var(--ref-font-size-micro);
   padding: 0.15rem 0.4rem;
   font-weight: 600;
   color: var(--text-muted);
 }
 
 .cp-badge-imsi {
-  font-size: 0.65rem;
+  font-size: var(--ref-font-size-micro);
   padding: 0.15rem 0.4rem;
   background: var(--selection-soft);
   color: var(--primary);
   font-weight: 600;
-  border-radius: var(--radius-small);
+  border-radius: var(--ref-radius-small);
 }
 
 .cp-badge-profile {
-  font-size: 0.65rem;
+  font-size: var(--ref-font-size-micro);
   padding: 0.15rem 0.4rem;
   background: var(--status-warning-soft);
   color: var(--status-warning);
   font-weight: 600;
-  border-radius: var(--radius-small);
+  border-radius: var(--ref-radius-small);
 }
 
 .cp-status-msg {
   padding: 1.5rem 1.25rem;
   color: var(--text-muted);
-  font-size: 0.85rem;
+  font-size: var(--ref-font-size-body-compact);
   text-align: center;
 }
 
@@ -220,7 +220,7 @@
   padding: 2rem;
   text-align: center;
   color: var(--text-muted);
-  font-size: 0.88rem;
+  font-size: var(--ref-font-size-body-small);
 }
 
 .cp-footer {
@@ -229,7 +229,7 @@
   display: flex;
   align-items: center;
   gap: 1rem;
-  font-size: 0.72rem;
+  font-size: var(--ref-font-size-label);
   color: var(--text-muted);
   background: var(--header-bg);
 }
@@ -258,7 +258,7 @@
   display: flex;
   align-items: center;
   gap: 0.3rem;
-  font-size: 0.7rem;
+  font-size: var(--ref-font-size-caption);
 }
 
 @keyframes fadeIn {

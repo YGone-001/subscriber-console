@@ -1,8 +1,8 @@
 .profile-container { padding-bottom: 2rem; }
-.card-title { font-size: 1.1rem; margin: 0; color: var(--text-main); font-weight: 600; }
+.card-title { font-size: var(--ref-font-size-heading); margin: 0; color: var(--text-main); font-weight: 600; }
 .grid-3-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2rem; }
-.label-muted { color: var(--text-muted); font-size: 0.85rem; margin-bottom: 0.25rem; }
-.value-mono { font-family: monospace; color: var(--text-main); font-size: 1rem; }
+.label-muted { color: var(--text-muted); font-size: var(--ref-font-size-body-compact); margin-bottom: 0.25rem; }
+.value-mono { font-family: monospace; color: var(--text-main); font-size: var(--ref-font-size-body); }
 .card-margin { margin-top: 1.5rem; margin-bottom: 1.5rem; }
 .card-margin-top { margin-top: 1.5rem; }
 .grid-2-col { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
@@ -15,30 +15,30 @@
   gap: 1rem;
   padding: 0.75rem 1rem;
   border: 1px solid var(--surface-border);
-  border-radius: 6px;
+  border-radius: var(--ref-radius-compact);
   font-family: monospace;
-  font-size: 0.9rem;
+  font-size: var(--ref-font-size-body-support);
 }
 .flex-gap-large { display: flex; gap: 3rem; }
 .ambr-card {
   flex: 1;
   padding: 1rem;
   border: 1px solid var(--surface-border);
-  border-radius: 8px;
+  border-radius: var(--ref-radius-control);
 }
 .ambr-label {
   color: var(--text-secondary);
-  font-size: 0.85rem;
+  font-size: var(--ref-font-size-body-compact);
   text-transform: uppercase;
   font-weight: 600;
 }
 .ambr-value {
   color: var(--text-main);
-  font-size: 1.5rem;
+  font-size: var(--ref-font-size-title);
   font-weight: 600;
 }
 .ambr-unit {
-  font-size: 1rem;
+  font-size: var(--ref-font-size-body);
   color: var(--text-muted);
 }
 .flex-between-center { display: flex; justify-content: space-between; align-items: center; }
@@ -46,7 +46,7 @@
 .btn-transparent { background: transparent; border: none; cursor: pointer; }
 .pt-1 { padding-top: 1rem; }
 .section-title {
-  font-size: 1.25rem;
+  font-size: var(--ref-font-size-title-sm);
   margin-bottom: 1.5rem;
   color: var(--text-main);
   font-weight: 600;
@@ -64,18 +64,18 @@
   align-items: center;
   gap: 1.5rem;
 }
-.slice-idx { font-size: 1.1rem; font-weight: 600; color: var(--primary); }
+.slice-idx { font-size: var(--ref-font-size-heading); font-weight: 600; color: var(--primary); }
 .slice-tags {
   display: flex;
   gap: 1rem;
   background: var(--surface-hover);
   padding: 0.5rem 1rem;
-  border-radius: 6px;
+  border-radius: var(--ref-radius-compact);
 }
 .slice-tag-sst { font-weight: 600; }
 .slice-tag-sd { color: var(--text-secondary); }
 .p-1 { padding: 1rem; }
-.table-default { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+.table-default { width: 100%; border-collapse: collapse; font-size: var(--ref-font-size-body-emphasis); }
 .table-header-row { text-align: left; border-bottom: 1px solid var(--surface-border); }
 .table-cell-pad { padding: 1rem; }
 .table-row-border { border-bottom: 1px solid transparent; }
@@ -86,8 +86,8 @@
 .pcc-rule-card {
   background: var(--surface-hover);
   padding: 0.5rem 0.75rem;
-  border-radius: 6px;
-  font-size: 0.85em;
+  border-radius: var(--ref-radius-compact);
+  font-size: var(--ref-font-size-relative-compact);
   border: 1px solid var(--surface-border);
 }
 .pcc-rule-title { font-weight: 600; color: var(--primary); margin-bottom: 0.2rem; }
@@ -99,7 +99,7 @@
   color: var(--text-muted);
   padding: 3rem;
   border: 1px dashed var(--surface-border);
-  border-radius: 6px;
+  border-radius: var(--ref-radius-compact);
 }
 .empty-state-no-border {
   text-align: center;
@@ -116,16 +116,16 @@
   gap: 1rem;
   padding: 0.75rem 1rem;
   border: 1px solid var(--surface-border);
-  border-radius: 6px;
+  border-radius: var(--ref-radius-compact);
   background: var(--surface-hover);
   font-family: monospace;
-  font-size: 0.9rem;
+  font-size: var(--ref-font-size-body-support);
 }
 .flex-gap-0-75 { display: flex; gap: 0.75rem; }
 .w-120 { width: 120px; flex-shrink: 0; }
 .flex-1 { flex: 1; }
 .font-mono { font-family: monospace; }
-.font-mono-lg { font-family: monospace; font-size: 1.05rem; }
+.font-mono-lg { font-family: monospace; font-size: var(--ref-font-size-heading-sm); }
 .danger-asterisk { color: var(--danger); margin-right: 0.25rem; }
 .access-grid {
   display: grid;
@@ -138,7 +138,7 @@
   gap: 0.75rem;
   padding: 0.75rem 1rem;
   border: 1px solid var(--surface-border);
-  border-radius: 8px;
+  border-radius: var(--ref-radius-control);
   background: var(--surface);
   cursor: pointer;
   transition: all 0.2s;
@@ -148,7 +148,7 @@
   background: var(--selection-soft);
 }
 .access-text {
-  font-size: 0.9rem;
+  font-size: var(--ref-font-size-body-support);
   font-weight: 500;
   color: var(--text-secondary);
 }
@@ -168,7 +168,7 @@
   align-items: center;
   gap: 0.5rem;
   padding: 0.4rem 1rem;
-  font-size: 0.85rem;
+  font-size: var(--ref-font-size-body-compact);
   color: var(--success);
   border-color: var(--success);
   background: transparent;
@@ -178,7 +178,7 @@
   align-items: center;
   gap: 0.5rem;
   padding: 0.4rem 1rem;
-  font-size: 0.85rem;
+  font-size: var(--ref-font-size-body-compact);
   color: var(--danger);
   border-color: var(--danger);
   background: transparent;
@@ -194,7 +194,7 @@
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  border-radius: 24px;
+  border-radius: var(--ref-radius-pill);
 }
 .empty-state-edit {
   text-align: center;
@@ -202,12 +202,12 @@
   color: var(--text-muted);
   background-color: var(--surface-hover);
   border: 1px dashed var(--surface-border);
-  border-radius: 8px;
+  border-radius: var(--ref-radius-control);
 }
 
 /* ProfileEditMode refactored classes */
 .form-asterisk { color: var(--danger); margin-right: 0.25rem; }
-.input-mono-large { font-family: monospace; font-size: 1.05rem; }
+.input-mono-large { font-family: monospace; font-size: var(--ref-font-size-heading-sm); }
 .input-mono { font-family: monospace; }
 .op-type-container { display: flex; gap: 0.75rem; }
 .op-type-select { width: 120px; flex-shrink: 0; }
@@ -223,13 +223,13 @@
   align-items: center;
   gap: 0.75rem;
   padding: 0.75rem 1rem;
-  border-radius: 8px;
+  border-radius: var(--ref-radius-control);
   cursor: pointer;
   transition: all 0.2s;
 }
 .access-restriction-label.checked { border: 1px solid var(--primary); background: var(--selection-soft); }
 .access-restriction-label.unchecked { border: 1px solid var(--surface-border); background: var(--surface); }
-.access-restriction-text { font-size: 0.9rem; }
+.access-restriction-text { font-size: var(--ref-font-size-body-support); }
 .access-restriction-text.checked { font-weight: 600; color: var(--primary); }
 .access-restriction-text.unchecked { font-weight: 500; color: var(--text-secondary); }
 .access-restriction-actions {
@@ -241,11 +241,11 @@
 }
 .btn-access-clear {
   display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 1rem;
-  font-size: 0.85rem; color: var(--success); border-color: var(--success); background: transparent;
+  font-size: var(--ref-font-size-body-compact); color: var(--success); border-color: var(--success); background: transparent;
 }
 .btn-access-suspend {
   display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 1rem;
-  font-size: 0.85rem; color: var(--danger); border-color: var(--danger); background: transparent;
+  font-size: var(--ref-font-size-body-compact); color: var(--danger); border-color: var(--danger); background: transparent;
 }
 .section-title-margin { margin-bottom: 1.5rem; }
 .empty-slices-placeholder {
@@ -254,7 +254,7 @@
   color: var(--text-muted);
   background-color: var(--surface-hover);
   border: 1px dashed var(--surface-border);
-  border-radius: 8px;
+  border-radius: var(--ref-radius-control);
 }
 .tariff-rule-row.bg-hover { background: var(--surface-hover); }
 
@@ -263,7 +263,7 @@
   margin-top: 1rem;
   padding: 1.5rem;
   border: 1px solid var(--surface-border);
-  border-radius: 8px;
+  border-radius: var(--ref-radius-control);
   background: var(--surface);
 }
 .session-editor-header {
@@ -286,13 +286,13 @@
   margin-top: 1rem;
 }
 .session-label {
-  font-size: 0.85rem;
+  font-size: var(--ref-font-size-body-compact);
   font-weight: 600;
 }
 .session-del-btn {
   padding: 0.4rem;
   background: transparent;
-  border-radius: 8px;
+  border-radius: var(--ref-radius-control);
   margin-left: 1rem;
 }
 .session-pcc-section {
@@ -306,7 +306,7 @@
   padding-top: 1rem;
 }
 .session-pcc-title {
-  font-size: 0.9rem;
+  font-size: var(--ref-font-size-body-support);
   color: var(--text-main);
   font-weight: 600;
   display: flex;
@@ -315,7 +315,7 @@
 }
 .session-add-pcc-btn {
   color: var(--primary);
-  font-size: 0.9rem;
+  font-size: var(--ref-font-size-body-support);
   font-weight: 600;
 }
 .session-pcc-list {
@@ -324,10 +324,10 @@
 .session-pcc-empty {
   padding: 1.5rem;
   border: 1px dashed var(--surface-border);
-  border-radius: 6px;
+  border-radius: var(--ref-radius-compact);
   text-align: center;
   color: var(--text-muted);
-  font-size: 0.9rem;
+  font-size: var(--ref-font-size-body-support);
   margin-top: 1rem;
   background: transparent;
 }
@@ -351,7 +351,7 @@
   flex-wrap: wrap;
 }
 .slice-editor-idx {
-  font-size: 1.1rem;
+  font-size: var(--ref-font-size-heading);
   font-weight: 600;
   color: var(--primary);
 }
@@ -360,7 +360,7 @@
   gap: 1.5rem;
   background: var(--surface-hover);
   padding: 0.5rem 1rem;
-  border-radius: 6px;
+  border-radius: var(--ref-radius-compact);
 }
 .slice-editor-sst-label {
   display: flex;
@@ -369,7 +369,7 @@
   cursor: pointer;
 }
 .slice-editor-sst-text {
-  font-size: 1rem;
+  font-size: var(--ref-font-size-body);
   font-weight: 500;
   color: var(--text-main);
 }
@@ -397,7 +397,7 @@
 }
 .slice-editor-default-text {
   font-weight: 500;
-  font-size: 0.95rem;
+  font-size: var(--ref-font-size-body-emphasis);
   color: var(--text-main);
 }
 .slice-editor-actions {
@@ -422,14 +422,14 @@
   padding: 0 0.5rem;
 }
 .slice-editor-sessions-title {
-  font-size: 1rem;
+  font-size: var(--ref-font-size-body);
   font-weight: 600;
   color: var(--text-secondary);
   margin: 0;
 }
 .slice-editor-add-session-btn {
   padding: 0.4rem 0.8rem;
-  font-size: 0.85rem;
+  font-size: var(--ref-font-size-body-compact);
   display: flex;
   align-items: center;
   gap: 0.3rem;
@@ -439,7 +439,7 @@
   padding: 2rem;
   color: var(--text-muted);
   border: 1px dashed var(--surface-border);
-  border-radius: 6px;
+  border-radius: var(--ref-radius-compact);
 }
 
 /* ProfilePccRuleEditor classes */
@@ -450,7 +450,7 @@
   margin-bottom: 1rem;
 }
 .pcc-rule-idx-title {
-  font-size: 0.85rem;
+  font-size: var(--ref-font-size-body-compact);
   font-weight: 600;
   color: var(--text-secondary);
   text-transform: uppercase;
@@ -465,5 +465,5 @@
   gap: 1rem;
 }
 .pcc-rule-label {
-  font-size: 0.8rem;
+  font-size: var(--ref-font-size-data);
 }

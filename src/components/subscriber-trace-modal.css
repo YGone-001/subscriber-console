@@ -14,7 +14,7 @@
 }
 .trace-modal-title {
   margin: 0;
-  font-size: 1.2rem;
+  font-size: var(--ref-font-size-heading);
   color: var(--text-main);
   display: flex;
   align-items: center;
@@ -24,7 +24,7 @@
   margin: 0.25rem 0 0;
   color: var(--text-muted);
   font-family: monospace;
-  font-size: 0.9rem;
+  font-size: var(--ref-font-size-body-support);
 }
 .trace-modal-actions {
   display: flex;
@@ -43,7 +43,7 @@
 }
 .trace-error {
   border: 1px solid var(--status-danger-border);
-  border-radius: 8px;
+  border-radius: var(--ref-radius-control);
   padding: 0.9rem;
   color: var(--danger);
   background: var(--status-danger-soft);
@@ -57,7 +57,7 @@
 }
 .trace-step-card {
   border: 1px solid var(--surface-border);
-  border-radius: 8px;
+  border-radius: var(--ref-radius-control);
   padding: 0.9rem;
   background: var(--surface-hover);
   min-height: 92px;
@@ -68,7 +68,7 @@
   gap: 0.5rem;
   align-items: center;
   color: var(--text-muted);
-  font-size: 0.75rem;
+  font-size: var(--ref-font-size-label);
 }
 .trace-step-value {
   margin-top: 0.65rem;
@@ -85,7 +85,7 @@
 }
 .trace-section-card {
   border: 1px solid var(--surface-border);
-  border-radius: 8px;
+  border-radius: var(--ref-radius-control);
   overflow: hidden;
 }
 .trace-section-header {
@@ -108,7 +108,7 @@
 }
 .trace-section-subtitle {
   color: var(--text-muted);
-  font-size: 0.76rem;
+  font-size: var(--ref-font-size-label);
   font-weight: 700;
 }
 .trace-balance-grid {
@@ -119,12 +119,12 @@
 }
 .trace-balance-item {
   background: var(--surface-hover);
-  border-radius: 8px;
+  border-radius: var(--ref-radius-control);
   padding: 0.75rem;
 }
 .trace-balance-label {
   color: var(--text-muted);
-  font-size: 0.72rem;
+  font-size: var(--ref-font-size-label);
 }
 .trace-balance-value {
   margin-top: 0.3rem;
@@ -143,7 +143,7 @@
   gap: 0.75rem;
   align-items: center;
   color: var(--text-main);
-  font-size: 0.86rem;
+  font-size: var(--ref-font-size-body-compact);
 }
 .trace-session-5qi { color: var(--text-muted); }
 .trace-session-pcc {
@@ -152,7 +152,7 @@
   text-align: right;
 }
 .trace-text-muted { color: var(--text-muted); }
-.trace-text-sm { font-size: 0.82rem; }
+.trace-text-sm { font-size: var(--ref-font-size-data-relaxed); }
 .trace-mt-sm { margin-top: 0.3rem; }
 
 .trace-timeline-body {
@@ -176,7 +176,7 @@
 .trace-timeline-icon {
   width: 22px;
   height: 22px;
-  border-radius: 999px;
+  border-radius: var(--ref-radius-pill);
   display: grid;
   place-items: center;
 }
@@ -195,7 +195,7 @@
 }
 .trace-timeline-content {
   border: 1px solid var(--surface-border);
-  border-radius: 8px;
+  border-radius: var(--ref-radius-control);
   padding: 0.8rem;
 }
 .trace-timeline-content.audit { background: var(--surface); }
@@ -209,23 +209,23 @@
 }
 .trace-timeline-title {
   color: var(--text-main);
-  font-size: 0.9rem;
+  font-size: var(--ref-font-size-body-support);
 }
 .trace-timeline-time {
   color: var(--text-muted);
-  font-size: 0.76rem;
+  font-size: var(--ref-font-size-label);
   font-weight: 700;
   white-space: nowrap;
 }
 .trace-timeline-detail {
   color: var(--text-secondary);
-  font-size: 0.84rem;
+  font-size: var(--ref-font-size-body-compact);
   line-height: 1.45;
 }
 .trace-timeline-meta {
   margin-top: 0.45rem;
   color: var(--primary);
-  font-size: 0.76rem;
+  font-size: var(--ref-font-size-label);
   font-weight: 800;
   overflow-wrap: anywhere;
 }
@@ -243,17 +243,17 @@
 }
 .trace-audit-time {
   color: var(--text-muted);
-  font-size: 0.82rem;
+  font-size: var(--ref-font-size-data-relaxed);
 }
 .trace-audit-action {
   font-weight: 800;
-  font-size: 0.82rem;
+  font-size: var(--ref-font-size-data-relaxed);
 }
 .trace-audit-action.danger { color: var(--danger); }
 .trace-audit-action.primary { color: var(--primary); }
 .trace-audit-target {
   color: var(--text-main);
-  font-size: 0.85rem;
+  font-size: var(--ref-font-size-body-compact);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

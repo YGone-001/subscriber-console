@@ -11,7 +11,7 @@
   .users-summary {
     background: var(--surface);
     border: 1px solid var(--surface-border);
-    border-radius: var(--radius-panel);
+    border-radius: var(--ref-radius-panel);
   }
 
   .users-page-header {
@@ -27,7 +27,7 @@
     background: none;
     -webkit-text-fill-color: currentColor;
     color: var(--text-main);
-    font-size: 1.65rem;
+    font-size: var(--ref-font-size-display-sm);
     line-height: 1.2;
     letter-spacing: 0;
   }
@@ -35,7 +35,7 @@
   .users-page-header p {
     margin: 0.35rem 0 0;
     color: var(--text-muted);
-    font-size: 0.92rem;
+    font-size: var(--ref-font-size-body-emphasis);
   }
 
   .users-header-actions,
@@ -53,7 +53,7 @@
   .users-pagination .btn,
   .users-row-actions .btn {
     min-height: var(--control-height);
-    border-radius: var(--radius-control);
+    border-radius: var(--ref-radius-control);
   }
 
   .users-summary {
@@ -102,13 +102,13 @@
 
   .users-metric span {
     color: var(--text-muted);
-    font-size: 0.78rem;
+    font-size: var(--ref-font-size-label-strong);
     font-weight: 800;
   }
 
   .users-metric strong {
     color: currentColor;
-    font-size: 1.35rem;
+    font-size: var(--ref-font-size-heading-lg);
     line-height: 1;
   }
 
@@ -134,7 +134,7 @@
     min-height: var(--control-height);
     padding: 0 0.85rem;
     border: 1px solid var(--surface-border);
-    border-radius: var(--radius-control);
+    border-radius: var(--ref-radius-control);
     background: var(--surface-hover);
     color: var(--text-muted);
   }
@@ -145,7 +145,7 @@
     outline: 0;
     background: transparent;
     color: var(--text-main);
-    font-size: 0.9rem;
+    font-size: var(--ref-font-size-body-support);
   }
 
   .users-filter-group {
@@ -160,8 +160,8 @@
     min-width: 132px;
     min-height: var(--control-height);
     padding: 0.45rem 0.7rem;
-    font-size: 0.86rem;
-    border-radius: var(--radius-control);
+    font-size: var(--ref-font-size-body-compact);
+    border-radius: var(--ref-radius-control);
   }
 
   .users-filter-group .btn.active {
@@ -174,12 +174,12 @@
     min-width: 18px;
     height: 18px;
     padding: 0 5px;
-    border-radius: 999px;
+    border-radius: var(--ref-radius-pill);
     display: inline-grid;
     place-items: center;
     background: var(--primary);
     color: var(--on-accent);
-    font-size: 0.72rem;
+    font-size: var(--ref-font-size-label);
     font-weight: 800;
   }
 
@@ -196,7 +196,7 @@
     display: grid;
     gap: 0.5rem;
     color: var(--text-muted);
-    font-size: 0.82rem;
+    font-size: var(--ref-font-size-data-relaxed);
     font-weight: 800;
   }
 
@@ -233,7 +233,7 @@
   .users-bulk-bar span,
   .users-bulk-actions label span {
     color: var(--text-muted);
-    font-size: 0.78rem;
+    font-size: var(--ref-font-size-label-strong);
   }
 
   .users-bulk-actions {
@@ -263,10 +263,10 @@
     align-items: center;
     gap: 0.35rem;
     border: 1px solid var(--surface-border);
-    border-radius: 999px;
+    border-radius: var(--ref-radius-pill);
     background: var(--surface-hover);
     color: var(--text-secondary);
-    font-size: 0.78rem;
+    font-size: var(--ref-font-size-label-strong);
     cursor: pointer;
   }
 
@@ -281,7 +281,7 @@
     gap: 0.75rem;
     padding: 0.75rem 1rem;
     color: var(--text-muted);
-    font-size: 0.8rem;
+    font-size: var(--ref-font-size-data);
   }
 
   .users-table-scroll {
@@ -299,7 +299,7 @@
     min-width: 1180px;
     border-collapse: separate;
     border-spacing: 0;
-    font-size: 0.9rem;
+    font-size: var(--ref-font-size-body-support);
   }
 
   .users-table th,
@@ -318,7 +318,7 @@
     z-index: 3;
     background: var(--surface-hover);
     color: var(--text-muted);
-    font-size: 0.74rem;
+    font-size: var(--ref-font-size-label);
     font-weight: 800;
     text-transform: uppercase;
   }
@@ -411,14 +411,14 @@
   }
 
   .users-identity-btn strong {
-    font-size: 0.92rem;
+    font-size: var(--ref-font-size-body-emphasis);
     font-weight: 800;
   }
 
   .users-identity-btn small,
   .users-date-cell small {
     color: var(--text-muted);
-    font-size: 0.74rem;
+    font-size: var(--ref-font-size-label);
   }
 
   .users-avatar {
@@ -427,7 +427,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border-radius: 50%;
+    border-radius: var(--ref-radius-circle);
     background: color-mix(in srgb, var(--primary) 10%, transparent);
     color: var(--primary);
     font-weight: 900;
@@ -444,7 +444,7 @@
     display: grid;
     gap: 0.16rem;
     color: var(--text-muted);
-    font-size: 0.82rem;
+    font-size: var(--ref-font-size-data-relaxed);
   }
 
   .users-contact-cell {
@@ -459,8 +459,8 @@
     justify-content: center;
     min-width: 76px;
     padding: 0.28rem 0.65rem;
-    border-radius: 999px;
-    font-size: 0.78rem;
+    border-radius: var(--ref-radius-pill);
+    font-size: var(--ref-font-size-label-strong);
     font-weight: 800;
   }
 
@@ -493,7 +493,7 @@
     display: grid;
     padding: 0.35rem;
     border: 1px solid var(--surface-border);
-    border-radius: var(--radius-panel);
+    border-radius: var(--ref-radius-panel);
     background: var(--surface);
     box-shadow: var(--shadow-popover);
   }
@@ -504,14 +504,14 @@
     gap: 0.5rem;
     width: 100%;
     border: 0;
-    border-radius: 6px;
+    border-radius: var(--ref-radius-compact);
     min-height: 44px;
     padding: 0.55rem;
     background: transparent;
     color: var(--text-secondary);
     cursor: pointer;
     text-align: left;
-    font-size: 0.84rem;
+    font-size: var(--ref-font-size-body-compact);
   }
 
   .users-more-menu button:hover:not(:disabled) {
@@ -533,7 +533,7 @@
     display: grid;
     gap: 0.45rem;
     color: var(--text-secondary);
-    font-size: 0.82rem;
+    font-size: var(--ref-font-size-data-relaxed);
   }
 
   .users-confirm-details label {
@@ -549,7 +549,7 @@
     resize: vertical;
     min-height: 76px;
     border: 1px solid var(--surface-border);
-    border-radius: var(--radius-control);
+    border-radius: var(--ref-radius-control);
     background: var(--surface-hover);
     color: var(--text-main);
     padding: 0.55rem 0.65rem;
@@ -562,14 +562,14 @@
     gap: 0.45rem;
     padding: 0.75rem;
     border: 1px solid var(--surface-border);
-    border-radius: var(--radius-panel);
+    border-radius: var(--ref-radius-panel);
     background: var(--surface-hover);
   }
 
   .users-permission-summary span:first-child,
   .users-permission-summary small {
     color: var(--text-muted);
-    font-size: 0.78rem;
+    font-size: var(--ref-font-size-label-strong);
   }
 
   .users-permission-list,
@@ -584,7 +584,7 @@
     gap: 0.2rem;
     padding: 0.75rem;
     border: 1px solid var(--surface-border);
-    border-radius: var(--radius-panel);
+    border-radius: var(--ref-radius-panel);
     background: var(--surface);
   }
 
@@ -598,9 +598,9 @@
     align-items: center;
     justify-content: center;
     min-width: 72px;
-    border-radius: 999px;
+    border-radius: var(--ref-radius-pill);
     padding: 0.24rem 0.55rem;
-    font-size: 0.76rem;
+    font-size: var(--ref-font-size-label);
     font-weight: 900;
   }
 
@@ -627,7 +627,7 @@
   .users-record-list small,
   .users-record-list strong {
     color: var(--text-muted);
-    font-size: 0.78rem;
+    font-size: var(--ref-font-size-label-strong);
     font-weight: 600;
   }
 
@@ -639,7 +639,7 @@
     padding: 0.85rem 1rem;
     border-top: 1px solid var(--surface-border);
     color: var(--text-muted);
-    font-size: 0.84rem;
+    font-size: var(--ref-font-size-body-compact);
   }
 
   .users-pagination label {
@@ -694,14 +694,14 @@
   .users-drawer-header h2 {
     margin: 0;
     color: var(--text-main);
-    font-size: 1.08rem;
+    font-size: var(--ref-font-size-heading-sm);
     line-height: 1.25;
   }
 
   .users-drawer-header p {
     margin: 0.2rem 0 0;
     color: var(--text-muted);
-    font-size: 0.8rem;
+    font-size: var(--ref-font-size-data);
   }
 
   .users-drawer-tabs {
@@ -721,7 +721,7 @@
     cursor: pointer;
     white-space: nowrap;
     font-weight: 800;
-    font-size: 0.82rem;
+    font-size: var(--ref-font-size-data-relaxed);
   }
 
   .users-drawer-tabs button.active {
@@ -755,7 +755,7 @@
   .users-form-section h3 {
     margin: 0;
     color: var(--text-main);
-    font-size: 0.9rem;
+    font-size: var(--ref-font-size-body-support);
   }
 
   .users-detail-section dl {
@@ -774,7 +774,7 @@
   .users-detail-section dt,
   .users-form-section label > span {
     color: var(--text-muted);
-    font-size: 0.72rem;
+    font-size: var(--ref-font-size-label);
     font-weight: 800;
     text-transform: uppercase;
   }
@@ -917,7 +917,7 @@
     align-items: center;
     gap: 0.65rem;
     color: var(--text-secondary);
-    font-size: 0.82rem;
+    font-size: var(--ref-font-size-data-relaxed);
     font-weight: 700;
   }
 
@@ -945,7 +945,7 @@
     display: grid;
     padding: 0.85rem;
     border: 1px solid var(--surface-border);
-    border-radius: var(--radius-panel);
+    border-radius: var(--ref-radius-panel);
     background: var(--surface);
   }
 
@@ -968,7 +968,7 @@
   .users-table tbody tr:not(.users-table-state-row) > td[data-label]::before {
     content: attr(data-label);
     color: var(--text-muted);
-    font-size: 0.72rem;
+    font-size: var(--ref-font-size-label);
     font-weight: 750;
   }
 

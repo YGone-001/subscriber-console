@@ -31,6 +31,39 @@ test('application UI colors are sourced from the global semantic token contract'
   }
 });
 
+test('application typography and corner radii use the global reference tokens', () => {
+  const uiFiles = collectFiles(sourceRoot, new Set(['.css', '.ts', '.tsx']));
+
+  for (const file of uiFiles) {
+    const projectPath = relative(projectRoot, file).replaceAll('\\', '/');
+    const source = readFileSync(file, 'utf8');
+
+    if (extname(file) === '.css') {
+      assert.doesNotMatch(
+        source,
+        /font-size\s*:(?!\s*var\()[^;]+;/i,
+        `${projectPath} contains a font-size literal`,
+      );
+      assert.doesNotMatch(
+        source,
+        /border(?:-(?:top|bottom)-(?:left|right))?-radius\s*:(?!\s*(?:var\(|inherit\b|0(?:\s|;)))[^;]+;/i,
+        `${projectPath} contains a border-radius literal`,
+      );
+    }
+
+    assert.doesNotMatch(
+      source,
+      /(?:fontSize|borderRadius)\s*:\s*(?:["'](?!var\()[^"']+["']|\d+(?:\.\d+)?)/,
+      `${projectPath} contains an inline typography or radius literal`,
+    );
+    assert.doesNotMatch(
+      source,
+      /var\(--radius-/,
+      `${projectPath} references a retired radius alias`,
+    );
+  }
+});
+
 test('responsive width queries stay inside the documented breakpoint vocabulary', () => {
   const designRules = readFileSync(join(projectRoot, 'docs/design-system-rules.md'), 'utf8');
   const approvedBreakpoints = new Set([560, 640, 760, 768, 900, 980, 1180, 1440]);

@@ -18,7 +18,7 @@
   padding: 1.25rem 1.5rem;
   background: var(--surface);
   border: 1px solid var(--surface-border);
-  border-radius: 1rem;
+  border-radius: var(--ref-radius-soft-panel);
 }
 
 .ocs-header-title-area {
@@ -34,7 +34,7 @@
 }
 
 .ocs-header-title {
-  font-size: 1.5rem;
+  font-size: var(--ref-font-size-title);
   font-weight: 700;
   letter-spacing: -0.02em;
   color: var(--text-main);
@@ -42,7 +42,7 @@
 }
 
 .ocs-header-desc {
-  font-size: 0.875rem;
+  font-size: var(--ref-font-size-body-small);
   color: var(--text-muted);
   margin: 0;
 }
@@ -60,8 +60,8 @@
   padding: 0.85rem 1.25rem;
   background: var(--status-info-soft);
   border: 1px solid var(--status-info-border);
-  border-radius: 0.75rem;
-  font-size: 0.85rem;
+  border-radius: var(--ref-radius-soft-panel);
+  font-size: var(--ref-font-size-body-compact);
   color: var(--status-info);
 }
 
@@ -80,7 +80,7 @@
   padding: 1.25rem;
   background: var(--surface);
   border: 1px solid var(--surface-border);
-  border-radius: 0.875rem;
+  border-radius: var(--ref-radius-soft-panel);
   transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -111,7 +111,7 @@
 }
 
 .ocs-kpi-label {
-  font-size: 0.825rem;
+  font-size: var(--ref-font-size-data-relaxed);
   font-weight: 500;
   color: var(--text-muted);
   text-transform: uppercase;
@@ -124,7 +124,7 @@
   justify-content: center;
   width: 36px;
   height: 36px;
-  border-radius: 0.5rem;
+  border-radius: var(--ref-radius-control);
   background: var(--selection-soft);
   color: var(--primary);
 }
@@ -150,14 +150,14 @@
 }
 
 .ocs-kpi-value {
-  font-size: 1.625rem;
+  font-size: var(--ref-font-size-display-sm);
   font-weight: 700;
   color: var(--text-main);
   letter-spacing: -0.02em;
 }
 
 .ocs-kpi-sub {
-  font-size: 0.775rem;
+  font-size: var(--ref-font-size-label-strong);
   color: var(--text-muted);
 }
 
@@ -170,7 +170,7 @@
   padding: 1rem 1.25rem;
   background: var(--surface);
   border: 1px solid var(--surface-border);
-  border-radius: 0.75rem;
+  border-radius: var(--ref-radius-soft-panel);
 }
 
 .ocs-search-group {
@@ -188,9 +188,9 @@
   padding: 0.6rem 0.75rem 0.6rem 2.25rem;
   background: var(--surface);
   border: 1px solid var(--surface-border);
-  border-radius: 0.5rem;
+  border-radius: var(--ref-radius-control);
   color: var(--text-main);
-  font-size: 0.875rem;
+  font-size: var(--ref-font-size-body-small);
   outline: none;
   transition: border-color 0.15s ease;
 }
@@ -217,9 +217,9 @@
   padding: 0.6rem 2rem 0.6rem 0.75rem;
   background: var(--surface);
   border: 1px solid var(--surface-border);
-  border-radius: 0.5rem;
+  border-radius: var(--ref-radius-control);
   color: var(--text-secondary);
-  font-size: 0.85rem;
+  font-size: var(--ref-font-size-body-compact);
   outline: none;
   cursor: pointer;
 }
@@ -229,9 +229,9 @@
   align-items: center;
   gap: 0.4rem;
   padding: 0.6rem 1rem;
-  font-size: 0.85rem;
+  font-size: var(--ref-font-size-body-compact);
   font-weight: 500;
-  border-radius: 0.5rem;
+  border-radius: var(--ref-radius-control);
   border: 1px solid var(--surface-border);
   background: var(--surface-hover);
   color: var(--text-secondary);
@@ -267,7 +267,7 @@
   align-items: center;
   gap: 0.5rem;
   padding: 0.65rem 1.15rem;
-  font-size: 0.875rem;
+  font-size: var(--ref-font-size-body-small);
   font-weight: 600;
   color: var(--text-muted);
   background: transparent;
@@ -289,7 +289,7 @@
 .ocs-table-card {
   background: var(--surface);
   border: 1px solid var(--surface-border);
-  border-radius: 0.875rem;
+  border-radius: var(--ref-radius-soft-panel);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -304,13 +304,13 @@
   width: 100%;
   border-collapse: collapse;
   text-align: left;
-  font-size: 0.875rem;
+  font-size: var(--ref-font-size-body-small);
 }
 
 .ocs-table th {
   padding: 0.85rem 1rem;
   font-weight: 600;
-  font-size: 0.775rem;
+  font-size: var(--ref-font-size-label-strong);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--text-muted);
@@ -343,8 +343,8 @@
   align-items: center;
   gap: 0.35rem;
   padding: 0.25rem 0.55rem;
-  border-radius: 0.375rem;
-  font-size: 0.75rem;
+  border-radius: var(--ref-radius-compact);
+  font-size: var(--ref-font-size-label);
   font-weight: 600;
   line-height: 1;
 }
@@ -432,7 +432,7 @@
 .ocs-quota-track {
   height: 6px;
   background: var(--surface-border);
-  border-radius: 999px;
+  border-radius: var(--ref-radius-pill);
   overflow: hidden;
   display: flex;
 }
@@ -452,7 +452,7 @@
 .ocs-quota-labels {
   display: flex;
   justify-content: space-between;
-  font-size: 0.725rem;
+  font-size: var(--ref-font-size-label);
   color: var(--text-muted);
 }
 
@@ -509,7 +509,7 @@
 }
 
 .ocs-drawer-title {
-  font-size: 1.15rem;
+  font-size: var(--ref-font-size-heading);
   font-weight: 700;
   color: var(--text-main);
   margin: 0;
@@ -531,7 +531,7 @@
 }
 
 .ocs-drawer-section-title {
-  font-size: 0.8rem;
+  font-size: var(--ref-font-size-data);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -548,19 +548,19 @@
   padding: 0.75rem;
   background: var(--surface-hover);
   border: 1px solid var(--surface-border);
-  border-radius: 0.5rem;
+  border-radius: var(--ref-radius-control);
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
 }
 
 .ocs-detail-item-label {
-  font-size: 0.75rem;
+  font-size: var(--ref-font-size-label);
   color: var(--text-muted);
 }
 
 .ocs-detail-item-value {
-  font-size: 0.875rem;
+  font-size: var(--ref-font-size-body-small);
   font-weight: 600;
   color: var(--text-secondary);
 }
@@ -568,10 +568,10 @@
 .ocs-json-view {
   background: var(--background);
   border: 1px solid var(--surface-border);
-  border-radius: 0.5rem;
+  border-radius: var(--ref-radius-control);
   padding: 1rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.8rem;
+  font-size: var(--ref-font-size-data);
   color: var(--status-info);
   overflow-x: auto;
   max-height: 280px;

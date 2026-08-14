@@ -2,7 +2,7 @@
   display: flex;
   align-items: flex-start;
   gap: 0.75rem;
-  border-radius: 8px;
+  border-radius: var(--ref-radius-control);
   color: var(--text-main);
 }
 .op-notice-inline {
@@ -43,12 +43,12 @@
 }
 .op-notice-title {
   font-weight: 800;
-  font-size: 0.92rem;
+  font-size: var(--ref-font-size-body-emphasis);
   margin-bottom: 0.15rem;
 }
 .op-notice-message {
   color: var(--text-secondary);
-  font-size: 0.86rem;
+  font-size: var(--ref-font-size-body-compact);
   line-height: 1.5;
 }
 .op-notice-ok-btn {
@@ -59,7 +59,7 @@
 .op-notice-close-btn {
   width: 28px;
   height: 28px;
-  border-radius: 6px;
+  border-radius: var(--ref-radius-compact);
   border: none;
   background: transparent;
   color: var(--text-muted);
@@ -123,7 +123,7 @@
   flex-wrap: wrap;
   gap: 0.85rem;
   align-items: center;
-  border-radius: 8px;
+  border-radius: var(--ref-radius-control);
 }
 .op-confirm-inline {
   padding: 1rem;
@@ -151,7 +151,7 @@
 .op-confirm-icon-box {
   width: 36px;
   height: 36px;
-  border-radius: 8px;
+  border-radius: var(--ref-radius-control);
   display: grid;
   place-items: center;
   flex-shrink: 0;
@@ -173,7 +173,7 @@
 }
 .op-confirm-message {
   color: var(--text-secondary);
-  font-size: 0.86rem;
+  font-size: var(--ref-font-size-body-compact);
   line-height: 1.5;
 }
 .op-confirm-children {
@@ -238,7 +238,7 @@
 }
 .op-empty-desc {
   max-width: 420px;
-  font-size: 0.9rem;
+  font-size: var(--ref-font-size-body-support);
   line-height: 1.55;
 }
 .op-empty-action {
@@ -254,7 +254,7 @@
   margin-bottom: 1rem;
   padding: 1rem;
   background: var(--surface-hover);
-  border-radius: 6px;
+  border-radius: var(--ref-radius-compact);
 }
 .op-loading-cell {
   height: 20px;

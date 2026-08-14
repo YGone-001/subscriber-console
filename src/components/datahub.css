@@ -17,7 +17,7 @@
   max-width: 95vw;
   max-height: 88vh;
   background: var(--surface);
-  border-radius: 16px;
+  border-radius: var(--ref-radius-soft-panel);
   border: 1px solid var(--surface-border);
   box-shadow: var(--shadow-popover);
   display: flex;
@@ -79,7 +79,7 @@
 .dh-icon-box {
   width: 38px;
   height: 38px;
-  border-radius: 10px;
+  border-radius: var(--ref-radius-panel);
   background: color-mix(in srgb, var(--primary) 12%, transparent);
   border: 1px solid color-mix(in srgb, var(--primary) 25%, transparent);
   display: flex;
@@ -93,7 +93,7 @@
 
 .dh-title {
   margin: 0;
-  font-size: 1.15rem;
+  font-size: var(--ref-font-size-heading);
   font-weight: 700;
   color: var(--text-main);
   letter-spacing: -0.01em;
@@ -101,7 +101,7 @@
 
 .dh-subtitle {
   margin: 0.15rem 0 0;
-  font-size: 0.8rem;
+  font-size: var(--ref-font-size-data);
   color: var(--text-muted);
 }
 
@@ -112,7 +112,7 @@
   color: var(--text-muted);
   width: 32px;
   height: 32px;
-  border-radius: 8px;
+  border-radius: var(--ref-radius-control);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -140,7 +140,7 @@
   gap: 0.55rem;
   border: none;
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: var(--ref-font-size-body-support);
   font-weight: 600;
   transition: all 0.2s ease;
 }
@@ -172,7 +172,7 @@
 /* Section Cards */
 .dh-section-card {
   border: 1px solid var(--surface-border);
-  border-radius: 12px;
+  border-radius: var(--ref-radius-soft-panel);
   padding: 1.15rem;
   margin-bottom: 1.15rem;
   background: color-mix(in srgb, var(--surface) 60%, var(--surface-hover));
@@ -193,7 +193,7 @@
 }
 
 .dh-section-title {
-  font-size: 0.88rem;
+  font-size: var(--ref-font-size-body-small);
   font-weight: 700;
   color: var(--text-main);
 }
@@ -204,7 +204,7 @@
   gap: 0.4rem;
   background: var(--surface);
   padding: 0.2rem;
-  border-radius: 8px;
+  border-radius: var(--ref-radius-control);
   border: 1px solid var(--surface-border);
 }
 
@@ -212,10 +212,10 @@
   border: none;
   background: transparent;
   color: var(--text-muted);
-  font-size: 0.78rem;
+  font-size: var(--ref-font-size-label-strong);
   font-weight: 600;
   padding: 0.35rem 0.75rem;
-  border-radius: 6px;
+  border-radius: var(--ref-radius-compact);
   cursor: pointer;
   transition: all 0.15s ease;
 }
@@ -241,12 +241,12 @@
 .dh-export-format-label {
   color: var(--text-main);
   font-weight: 700;
-  font-size: 0.88rem;
+  font-size: var(--ref-font-size-body-small);
 }
 
 .dh-export-format-sub {
   color: var(--text-muted);
-  font-size: 0.78rem;
+  font-size: var(--ref-font-size-label-strong);
   margin-top: 0.15rem;
 }
 
@@ -255,16 +255,16 @@
   gap: 0.35rem;
   padding: 0.25rem;
   border: 1px solid var(--surface-border);
-  border-radius: 8px;
+  border-radius: var(--ref-radius-control);
   background: var(--surface);
 }
 
 .dh-format-btn {
   border: none;
-  border-radius: 6px;
+  border-radius: var(--ref-radius-compact);
   padding: 0.45rem 0.85rem;
   cursor: pointer;
-  font-size: 0.8rem;
+  font-size: var(--ref-font-size-data);
   font-weight: 700;
   display: inline-flex;
   align-items: center;
@@ -298,12 +298,12 @@
 .dh-preset-link {
   background: none;
   border: none;
-  font-size: 0.78rem;
+  font-size: var(--ref-font-size-label-strong);
   font-weight: 600;
   color: var(--primary);
   cursor: pointer;
   padding: 0.15rem 0.35rem;
-  border-radius: 4px;
+  border-radius: var(--ref-radius-micro);
 }
 
 .dh-preset-link:hover {
@@ -316,7 +316,7 @@
 
 .dh-preset-sep {
   color: var(--surface-border);
-  font-size: 0.75rem;
+  font-size: var(--ref-font-size-label);
 }
 
 /* Fields Grid */
@@ -332,10 +332,10 @@
   gap: 0.55rem;
   min-height: 40px;
   padding: 0.45rem 0.75rem;
-  border-radius: 8px;
+  border-radius: var(--ref-radius-control);
   color: var(--text-main);
   cursor: pointer;
-  font-size: 0.82rem;
+  font-size: var(--ref-font-size-data-relaxed);
   font-weight: 600;
   transition: all 0.15s ease;
 }
@@ -360,12 +360,12 @@
 }
 
 .dh-field-code {
-  font-size: 0.72rem;
+  font-size: var(--ref-font-size-label);
   color: var(--text-muted);
   font-family: monospace;
   background: var(--surface-hover);
   padding: 0.1rem 0.35rem;
-  border-radius: 4px;
+  border-radius: var(--ref-radius-micro);
 }
 
 /* Upload Stage */
@@ -377,7 +377,7 @@
 
 .dh-upload-area {
   border: 2px dashed color-mix(in srgb, var(--primary) 35%, var(--surface-border));
-  border-radius: 14px;
+  border-radius: var(--ref-radius-soft-panel);
   padding: 2.75rem 2rem;
   text-align: center;
   cursor: pointer;
@@ -395,7 +395,7 @@
 .dh-upload-icon-circle {
   width: 60px;
   height: 60px;
-  border-radius: 50%;
+  border-radius: var(--ref-radius-circle);
   background: color-mix(in srgb, var(--primary) 12%, transparent);
   display: flex;
   align-items: center;
@@ -407,14 +407,14 @@
 .dh-upload-title {
   margin: 0 0 0.35rem;
   font-weight: 700;
-  font-size: 1rem;
+  font-size: var(--ref-font-size-body);
   color: var(--text-main);
 }
 
 .dh-upload-desc {
   margin: 0 0 1.15rem;
   color: var(--text-muted);
-  font-size: 0.85rem;
+  font-size: var(--ref-font-size-body-compact);
 }
 
 .dh-upload-badges {
@@ -424,10 +424,10 @@
 }
 
 .dh-file-badge {
-  font-size: 0.72rem;
+  font-size: var(--ref-font-size-label);
   font-weight: 800;
   padding: 0.25rem 0.6rem;
-  border-radius: 6px;
+  border-radius: var(--ref-radius-compact);
   background: var(--surface);
   border: 1px solid var(--surface-border);
   color: var(--primary);
@@ -443,7 +443,7 @@
   justify-content: space-between;
   align-items: center;
   padding: 0.85rem 1.15rem;
-  border-radius: 10px;
+  border-radius: var(--ref-radius-panel);
   border: 1px solid var(--surface-border);
   background: var(--surface);
 }
@@ -452,7 +452,7 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  font-size: 0.84rem;
+  font-size: var(--ref-font-size-body-compact);
   font-weight: 600;
   color: var(--text-main);
 }
@@ -470,10 +470,10 @@
   background: transparent;
   border: 1px solid var(--surface-border);
   padding: 0.4rem 0.85rem;
-  border-radius: 7px;
+  border-radius: var(--ref-radius-small);
   color: var(--text-main);
   cursor: pointer;
-  font-size: 0.78rem;
+  font-size: var(--ref-font-size-label-strong);
   font-weight: 600;
   display: inline-flex;
   align-items: center;
@@ -496,7 +496,7 @@
 .dh-spinner-wrap {
   width: 58px;
   height: 58px;
-  border-radius: 50%;
+  border-radius: var(--ref-radius-circle);
   background: color-mix(in srgb, var(--primary) 12%, transparent);
   display: flex;
   align-items: center;
@@ -519,19 +519,19 @@
   margin: 0 0 0.35rem;
   color: var(--text-main);
   font-weight: 700;
-  font-size: 1.05rem;
+  font-size: var(--ref-font-size-heading-sm);
 }
 
 .dh-loading-text {
   color: var(--text-muted);
-  font-size: 0.85rem;
+  font-size: var(--ref-font-size-body-compact);
   margin: 0;
 }
 
 .dh-progress-bar-bg {
   width: 220px;
   height: 6px;
-  border-radius: 999px;
+  border-radius: var(--ref-radius-pill);
   background: var(--surface-border);
   margin: 1.5rem auto 0;
   overflow: hidden;
@@ -541,7 +541,7 @@
   height: 100%;
   width: 50%;
   background: var(--primary);
-  border-radius: 999px;
+  border-radius: var(--ref-radius-pill);
   animation: dhProgress 1.4s ease-in-out infinite;
 }
 
@@ -569,7 +569,7 @@
 
 .dh-stat-box {
   padding: 0.85rem 1rem;
-  border-radius: 10px;
+  border-radius: var(--ref-radius-panel);
   text-align: center;
   border: 1px solid transparent;
 }
@@ -611,13 +611,13 @@
 }
 
 .dh-stat-val {
-  font-size: 1.45rem;
+  font-size: var(--ref-font-size-title);
   font-weight: 800;
   line-height: 1.2;
 }
 
 .dh-stat-label {
-  font-size: 0.76rem;
+  font-size: var(--ref-font-size-label);
   font-weight: 700;
   margin-top: 0.15rem;
   color: var(--text-main);
@@ -629,7 +629,7 @@
   justify-content: space-between;
   align-items: center;
   padding: 0.95rem 1.15rem;
-  border-radius: 10px;
+  border-radius: var(--ref-radius-panel);
   border: 1px solid var(--status-warning-border);
   background: var(--status-warning-soft);
 }
@@ -647,12 +647,12 @@
 
 .dh-strategy-title {
   font-weight: 700;
-  font-size: 0.88rem;
+  font-size: var(--ref-font-size-body-small);
   color: var(--text-main);
 }
 
 .dh-strategy-desc {
-  font-size: 0.78rem;
+  font-size: var(--ref-font-size-label-strong);
   color: var(--text-muted);
   margin-top: 0.1rem;
 }
@@ -661,7 +661,7 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  font-size: 0.82rem;
+  font-size: var(--ref-font-size-data-relaxed);
   font-weight: 700;
   color: var(--text-main);
   cursor: pointer;
@@ -685,10 +685,10 @@
   border: 1px solid var(--surface-border);
   background: var(--surface);
   color: var(--text-muted);
-  font-size: 0.78rem;
+  font-size: var(--ref-font-size-label-strong);
   font-weight: 600;
   padding: 0.35rem 0.65rem;
-  border-radius: 6px;
+  border-radius: var(--ref-radius-compact);
   cursor: pointer;
   transition: all 0.15s ease;
 }
@@ -724,11 +724,11 @@
 .dh-search-input {
   width: 100%;
   padding: 0.35rem 0.65rem 0.35rem 2rem;
-  border-radius: 6px;
+  border-radius: var(--ref-radius-compact);
   border: 1px solid var(--surface-border);
   background: var(--surface);
   color: var(--text-main);
-  font-size: 0.78rem;
+  font-size: var(--ref-font-size-label-strong);
   outline: none;
 }
 
@@ -741,14 +741,14 @@
   max-height: 220px;
   overflow-y: auto;
   border: 1px solid var(--surface-border);
-  border-radius: 10px;
+  border-radius: var(--ref-radius-panel);
   background: var(--surface);
 }
 
 .dh-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.8rem;
+  font-size: var(--ref-font-size-data);
 }
 
 .dh-table-tr-head {
@@ -786,7 +786,7 @@
 .dh-table-td-num {
   padding: 0.45rem 0.85rem;
   color: var(--text-muted);
-  font-size: 0.74rem;
+  font-size: var(--ref-font-size-label);
 }
 
 .dh-table-td-imsi {
@@ -801,7 +801,7 @@
   align-items: center;
   gap: 0.25rem;
   color: var(--status-danger);
-  font-size: 0.72rem;
+  font-size: var(--ref-font-size-label);
   font-weight: 600;
   margin-top: 0.1rem;
 }
@@ -810,7 +810,7 @@
   padding: 0.45rem 0.85rem;
   color: var(--text-secondary);
   font-family: monospace;
-  font-size: 0.76rem;
+  font-size: var(--ref-font-size-label);
 }
 
 .dh-table-td-center {
@@ -827,8 +827,8 @@
 /* Badges */
 .dh-badge {
   padding: 0.2rem 0.6rem;
-  border-radius: 999px;
-  font-size: 0.7rem;
+  border-radius: var(--ref-radius-pill);
+  font-size: var(--ref-font-size-caption);
   font-weight: 700;
   display: inline-block;
 }
@@ -864,11 +864,11 @@
 .dh-btn-secondary {
   padding: 0.65rem 1.25rem;
   border: 1px solid var(--surface-border);
-  border-radius: 8px;
+  border-radius: var(--ref-radius-control);
   background: transparent;
   cursor: pointer;
   font-weight: 600;
-  font-size: 0.88rem;
+  font-size: var(--ref-font-size-body-small);
   color: var(--text-secondary);
   transition: all 0.15s ease;
 }
@@ -883,9 +883,9 @@
   background: var(--primary);
   color: var(--on-accent);
   padding: 0.65rem 1.5rem;
-  font-size: 0.88rem;
+  font-size: var(--ref-font-size-body-small);
   font-weight: 700;
-  border-radius: 8px;
+  border-radius: var(--ref-radius-control);
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
@@ -909,7 +909,7 @@
 .dh-done-icon-wrap {
   width: 64px;
   height: 64px;
-  border-radius: 50%;
+  border-radius: var(--ref-radius-circle);
   background: var(--status-success-soft);
   display: flex;
   align-items: center;
@@ -924,13 +924,13 @@
 .dh-done-title {
   margin: 0 0 0.35rem;
   font-weight: 700;
-  font-size: 1.15rem;
+  font-size: var(--ref-font-size-heading);
   color: var(--text-main);
 }
 
 .dh-done-desc {
   color: var(--text-secondary);
-  font-size: 0.88rem;
+  font-size: var(--ref-font-size-body-small);
   margin: 0 0 1.25rem;
 }
 
@@ -940,11 +940,11 @@
   justify-content: center;
   gap: 0.5rem;
   padding: 0.65rem 1rem;
-  border-radius: 8px;
+  border-radius: var(--ref-radius-control);
   background: var(--status-danger-soft);
   border: 1px solid var(--status-danger-border);
   color: var(--status-danger);
-  font-size: 0.82rem;
+  font-size: var(--ref-font-size-data-relaxed);
   font-weight: 600;
   margin-bottom: 1.25rem;
 }
@@ -954,8 +954,8 @@
   border: 1px solid var(--status-danger-border);
   color: var(--status-danger);
   padding: 0.2rem 0.55rem;
-  border-radius: 5px;
-  font-size: 0.74rem;
+  border-radius: var(--ref-radius-compact);
+  font-size: var(--ref-font-size-label);
   font-weight: 700;
   cursor: pointer;
   display: inline-flex;
@@ -977,9 +977,9 @@
   background: var(--status-success);
   color: var(--on-accent);
   padding: 0.65rem 1.75rem;
-  font-size: 0.88rem;
+  font-size: var(--ref-font-size-body-small);
   font-weight: 700;
-  border-radius: 8px;
+  border-radius: var(--ref-radius-control);
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;

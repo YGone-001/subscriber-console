@@ -15,7 +15,7 @@
   gap: 1rem;
   padding: 1.25rem;
   border: 1px solid var(--surface-border);
-  border-radius: var(--radius-panel);
+  border-radius: var(--ref-radius-panel);
   background: var(--surface);
   box-shadow: var(--shadow-popover);
 }
@@ -25,7 +25,7 @@
   width: 44px;
   height: 44px;
   place-items: center;
-  border-radius: var(--radius-control);
+  border-radius: var(--ref-radius-control);
   background: var(--status-warning-soft);
   color: var(--status-warning);
 }
@@ -41,14 +41,14 @@
 
 .content h2 {
   color: var(--text-main);
-  font-size: 1rem;
+  font-size: var(--ref-font-size-body);
   line-height: 1.25;
 }
 
 .content p {
   margin-top: 0.4rem;
   color: var(--text-secondary);
-  font-size: 0.8rem;
+  font-size: var(--ref-font-size-data);
   line-height: 1.5;
 }
 

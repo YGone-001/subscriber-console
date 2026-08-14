@@ -5,7 +5,7 @@
   flex-direction: column;
   background: var(--surface);
   border: 1px solid var(--surface-border);
-  border-radius: 12px;
+  border-radius: var(--ref-radius-soft-panel);
   overflow: hidden;
   box-shadow: var(--shadow-panel);
   width: 100%;
@@ -30,7 +30,7 @@
 }
 
 .diff-viewer-title {
-  font-size: 1rem;
+  font-size: var(--ref-font-size-body);
   font-weight: 700;
   color: var(--text-main);
   margin: 0;
@@ -40,10 +40,10 @@
 }
 
 .diff-stat-pill {
-  font-size: 0.75rem;
+  font-size: var(--ref-font-size-label);
   font-weight: 700;
   padding: 0.2rem 0.55rem;
-  border-radius: 12px;
+  border-radius: var(--ref-radius-soft-panel);
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
@@ -84,7 +84,7 @@
   display: flex;
   background: var(--background);
   padding: 3px;
-  border-radius: 8px;
+  border-radius: var(--ref-radius-control);
   border: 1px solid var(--surface-border);
 }
 
@@ -92,10 +92,10 @@
   background: transparent;
   border: none;
   color: var(--text-secondary);
-  font-size: 0.78rem;
+  font-size: var(--ref-font-size-label-strong);
   font-weight: 600;
   padding: 0.35rem 0.75rem;
-  border-radius: 6px;
+  border-radius: var(--ref-radius-compact);
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
@@ -117,8 +117,8 @@
   border: 1px solid var(--surface-border);
   color: var(--text-main);
   padding: 0.35rem 0.75rem;
-  border-radius: 6px;
-  font-size: 0.8rem;
+  border-radius: var(--ref-radius-compact);
+  font-size: var(--ref-font-size-data);
   width: 160px;
 }
 
@@ -131,7 +131,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  font-size: 0.78rem;
+  font-size: var(--ref-font-size-label-strong);
   color: var(--text-secondary);
   cursor: pointer;
   user-select: none;
@@ -139,8 +139,8 @@
 
 .diff-btn-action {
   padding: 0.35rem 0.75rem;
-  font-size: 0.78rem;
-  border-radius: 6px;
+  font-size: var(--ref-font-size-label-strong);
+  border-radius: var(--ref-radius-compact);
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
@@ -159,7 +159,7 @@
 .diff-field-card {
   background: var(--surface);
   border: 1px solid var(--surface-border);
-  border-radius: 8px;
+  border-radius: var(--ref-radius-control);
   padding: 0.9rem 1.15rem;
   display: flex;
   justify-content: space-between;
@@ -197,23 +197,23 @@
 }
 
 .diff-field-label {
-  font-size: 0.9rem;
+  font-size: var(--ref-font-size-body-support);
   font-weight: 700;
   color: var(--text-main);
 }
 
 .diff-field-path {
-  font-size: 0.75rem;
+  font-size: var(--ref-font-size-label);
   color: var(--text-secondary);
   font-family: monospace;
 }
 
 .diff-category-badge {
-  font-size: 0.68rem;
+  font-size: var(--ref-font-size-caption);
   text-transform: uppercase;
   font-weight: 700;
   padding: 0.15rem 0.45rem;
-  border-radius: 4px;
+  border-radius: var(--ref-radius-micro);
   background: var(--surface-hover);
   border: 1px solid var(--surface-border);
   color: var(--text-secondary);
@@ -229,8 +229,8 @@
 
 .diff-val-box {
   padding: 0.45rem 0.85rem;
-  border-radius: 6px;
-  font-size: 0.84rem;
+  border-radius: var(--ref-radius-compact);
+  font-size: var(--ref-font-size-body-compact);
   font-family: monospace;
   max-width: 320px;
   overflow: hidden;
@@ -286,7 +286,7 @@
   padding: 0.5rem 1rem;
   background: var(--surface-hover);
   border-bottom: 1px solid var(--surface-border);
-  font-size: 0.78rem;
+  font-size: var(--ref-font-size-label-strong);
   font-weight: 700;
   color: var(--text-secondary);
   text-transform: uppercase;
@@ -298,7 +298,7 @@
 .diff-split-pre {
   margin: 0;
   padding: 1rem;
-  font-size: 0.82rem;
+  font-size: var(--ref-font-size-data-relaxed);
   font-family: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
   line-height: 1.6;
   color: var(--text-main);
@@ -317,7 +317,7 @@
   display: flex;
   align-items: flex-start;
   font-family: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
-  font-size: 0.82rem;
+  font-size: var(--ref-font-size-data-relaxed);
   line-height: 1.5;
   padding: 0.15rem 1rem;
 }
@@ -343,7 +343,7 @@
   flex-shrink: 0;
   color: var(--text-muted);
   user-select: none;
-  font-size: 0.75rem;
+  font-size: var(--ref-font-size-label);
 }
 
 .diff-line-prefix {
@@ -371,7 +371,7 @@
 }
 
 .diff-empty-title {
-  font-size: 1rem;
+  font-size: var(--ref-font-size-body);
   font-weight: 600;
   color: var(--text-main);
 }

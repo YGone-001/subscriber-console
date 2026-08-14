@@ -21,7 +21,7 @@ export const MaskedValue = ({ label, value, singleLine = false }: { label: strin
     setTimeout(() => setCopied(false), 2000);
   };
 
-  if (!value) return <span style={{ color: "var(--text-muted)", fontSize: "0.95rem" }}>N/A</span>;
+  if (!value) return <span style={{ color: "var(--text-muted)", fontSize: "var(--ref-font-size-body-emphasis)" }}>N/A</span>;
 
   return (
     <div style={{ width: "100%", minWidth: 0, display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", alignItems: "start", gap: "0.5rem" }}>
@@ -30,7 +30,7 @@ export const MaskedValue = ({ label, value, singleLine = false }: { label: strin
           minWidth: 0,
           fontFamily: "monospace",
           color: "var(--text-main)",
-          fontSize: "1rem",
+          fontSize: "var(--ref-font-size-body)",
           lineHeight: 1.45,
           overflowX: singleLine ? "auto" : undefined,
           overflowWrap: singleLine ? "normal" : "anywhere",

@@ -9,7 +9,7 @@ export function StatusBadge({ tone, children }: { tone: "success" | "warning" | 
       ? "var(--status-warning-soft)"
       : "var(--surface-hover)";
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", minHeight: 26, padding: "0 0.55rem", borderRadius: 6, background, color, fontSize: "0.74rem", fontWeight: 850 }}>
+    <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", minHeight: 26, padding: "0 0.55rem", borderRadius: "var(--ref-radius-compact)", background, color, fontSize: "var(--ref-font-size-label)", fontWeight: 850 }}>
       {children}
     </span>
   );

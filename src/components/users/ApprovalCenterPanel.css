@@ -17,7 +17,7 @@
   .approvals-header h1 {
     margin: 0;
     color: var(--text-main);
-    font-size: 1.65rem;
+    font-size: var(--ref-font-size-display-sm);
     letter-spacing: 0;
   }
 
@@ -29,7 +29,7 @@
   .approvals-metrics,
   .approvals-panel {
     border: 1px solid var(--surface-border);
-    border-radius: var(--radius-panel);
+    border-radius: var(--ref-radius-panel);
     background: var(--surface);
   }
 
@@ -55,13 +55,13 @@
 
   .approvals-metrics span {
     color: var(--text-muted);
-    font-size: 0.78rem;
+    font-size: var(--ref-font-size-label-strong);
     font-weight: 800;
   }
 
   .approvals-metrics strong {
     color: var(--text-main);
-    font-size: 1.35rem;
+    font-size: var(--ref-font-size-heading-lg);
   }
 
   .approvals-tabs,
@@ -76,7 +76,7 @@
   .approvals-tabs button {
     min-height: 34px;
     border: 1px solid var(--surface-border);
-    border-radius: var(--radius-control);
+    border-radius: var(--ref-radius-control);
     background: var(--surface);
     color: var(--text-secondary);
     cursor: pointer;
@@ -96,7 +96,7 @@
     min-height: var(--control-height);
     padding: 0 0.75rem;
     border: 1px solid var(--surface-border);
-    border-radius: var(--radius-control);
+    border-radius: var(--ref-radius-control);
     background: var(--surface-hover);
     color: var(--text-muted);
   }
@@ -139,7 +139,7 @@
     top: 0;
     background: var(--surface-hover);
     color: var(--text-muted);
-    font-size: 0.74rem;
+    font-size: var(--ref-font-size-label);
     text-transform: uppercase;
   }
 
@@ -156,9 +156,9 @@
     display: inline-flex;
     min-width: 72px;
     justify-content: center;
-    border-radius: 999px;
+    border-radius: var(--ref-radius-pill);
     padding: 0.25rem 0.55rem;
-    font-size: 0.76rem;
+    font-size: var(--ref-font-size-label);
     font-weight: 900;
     background: var(--surface-hover);
     color: var(--text-muted);
@@ -227,7 +227,7 @@
   .approval-drawer footer textarea {
     width: 100%;
     border: 1px solid var(--surface-border);
-    border-radius: var(--radius-control);
+    border-radius: var(--ref-radius-control);
     background: var(--surface-hover);
     color: var(--text-main);
     padding: 0.55rem;
@@ -273,7 +273,7 @@
     gap: 0.18rem;
     padding: 0.65rem;
     border: 1px solid var(--surface-border);
-    border-radius: var(--radius-panel);
+    border-radius: var(--ref-radius-panel);
     background: var(--surface);
   }
 
@@ -281,7 +281,7 @@
   .approval-diff-grid span,
   .approval-history span {
     color: var(--text-muted);
-    font-size: 0.76rem;
+    font-size: var(--ref-font-size-label);
     font-weight: 800;
   }
 
@@ -303,7 +303,7 @@
     max-height: 260px;
     overflow: auto;
     padding: 0.85rem;
-    border-radius: var(--radius-panel);
+    border-radius: var(--ref-radius-panel);
     background: var(--surface-hover);
     color: var(--text-secondary);
   }
@@ -364,7 +364,7 @@
       display: grid;
       padding: 0.85rem;
       border: 1px solid var(--surface-border);
-      border-radius: var(--radius-panel);
+      border-radius: var(--ref-radius-panel);
       background: var(--surface);
     }
 
@@ -383,7 +383,7 @@
     .approvals-table tbody tr:not(.approvals-state-row) > td[data-label]::before {
       content: attr(data-label);
       color: var(--text-muted);
-      font-size: 0.72rem;
+      font-size: var(--ref-font-size-label);
       font-weight: 750;
     }
 

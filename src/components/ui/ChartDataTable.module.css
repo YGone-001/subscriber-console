@@ -8,7 +8,7 @@
   padding: 0.7rem 1rem;
   color: var(--primary);
   cursor: pointer;
-  font-size: 0.78rem;
+  font-size: var(--ref-font-size-label-strong);
   font-weight: 750;
   letter-spacing: 0.035em;
   list-style-position: inside;
@@ -32,7 +32,7 @@
 .table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.8rem;
+  font-size: var(--ref-font-size-data);
 }
 
 .table th,
@@ -45,7 +45,7 @@
 
 .table th {
   color: var(--text-muted);
-  font-size: 0.78rem;
+  font-size: var(--ref-font-size-label-strong);
   font-weight: 750;
 }
 

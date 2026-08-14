@@ -86,10 +86,10 @@ export function TariffPlanCloneModal({ isOpen, onClose, sourcePlan, onSuccess }:
               {t("tariff_plan_clone_desc")}
             </p>
 
-            <div className="stat-card" style={{ padding: "0.75rem 1rem", background: "var(--bg-secondary)", borderRadius: "8px" }}>
-              <span className="text-muted" style={{ fontSize: "0.85rem" }}>Source: </span>
+            <div className="stat-card" style={{ padding: "0.75rem 1rem", background: "var(--bg-secondary)", borderRadius: "var(--ref-radius-control)" }}>
+              <span className="text-muted" style={{ fontSize: "var(--ref-font-size-body-compact)" }}>Source: </span>
               <strong>{sourcePlan.name || sourcePlan.plan_id}</strong>
-              <span className="text-muted" style={{ marginLeft: "0.5rem", fontSize: "0.8rem" }}>({sourcePlan.plan_id})</span>
+              <span className="text-muted" style={{ marginLeft: "0.5rem", fontSize: "var(--ref-font-size-data)" }}>({sourcePlan.plan_id})</span>
             </div>
 
             {error && (

@@ -5,17 +5,17 @@ export default function SkeletonDashboard() {
     <div className="analytics-root">
       <div className="analytics-workbench">
         <div className="analytics-workbench-main">
-          <div className="skeleton-loader" style={{ width: "40%", height: "24px", borderRadius: "6px" }} />
+          <div className="skeleton-loader" style={{ width: "40%", height: "24px", borderRadius: "var(--ref-radius-compact)" }} />
           <div className="analytics-workqueue">
             {Array.from({ length: 3 }).map((_, index) => (
-              <div key={index} className="skeleton-loader" style={{ height: "64px", borderRadius: "8px" }} />
+              <div key={index} className="skeleton-loader" style={{ height: "64px", borderRadius: "var(--ref-radius-control)" }} />
             ))}
           </div>
         </div>
         <div className="analytics-readiness">
-          <div className="skeleton-loader" style={{ width: "70px", height: "70px", borderRadius: "50%", margin: "0 auto" }} />
-          <div className="skeleton-loader" style={{ width: "80%", height: "18px", borderRadius: "4px", margin: "0.5rem auto" }} />
-          <div className="skeleton-loader" style={{ width: "100%", height: "32px", borderRadius: "6px" }} />
+          <div className="skeleton-loader" style={{ width: "70px", height: "70px", borderRadius: "var(--ref-radius-circle)", margin: "0 auto" }} />
+          <div className="skeleton-loader" style={{ width: "80%", height: "18px", borderRadius: "var(--ref-radius-micro)", margin: "0.5rem auto" }} />
+          <div className="skeleton-loader" style={{ width: "100%", height: "32px", borderRadius: "var(--ref-radius-compact)" }} />
         </div>
       </div>
 

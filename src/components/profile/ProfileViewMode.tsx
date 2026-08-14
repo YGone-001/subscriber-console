@@ -46,7 +46,7 @@ export default function ProfileViewMode({ t, authData, usimType, ocsDefaults, ta
             </div>
           </div>
           {Array.isArray(backendStats.sampleImsis) && backendStats.sampleImsis.length > 0 && (
-            <div style={{ marginTop: "0.75rem", paddingTop: "0.75rem", borderTop: "1px solid var(--border-color)", fontSize: "0.82rem" }}>
+            <div style={{ marginTop: "0.75rem", paddingTop: "0.75rem", borderTop: "1px solid var(--border-color)", fontSize: "var(--ref-font-size-data-relaxed)" }}>
               <span className="label-muted" style={{ marginRight: "0.5rem" }}>{t("prof_stat_samples")}:</span>
               <span className="value-mono" style={{ opacity: 0.85 }}>{backendStats.sampleImsis.join(", ")}</span>
             </div>

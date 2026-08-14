@@ -24,7 +24,7 @@ export default function ThemeSwitcher() {
     justifyContent: 'center',
     background: 'var(--surface-hover)',
     border: '1px solid var(--surface-border)',
-    borderRadius: '50%',
+    borderRadius: 'var(--ref-radius-circle)',
     width: '36px',
     height: '36px',
     color: 'var(--text-secondary)',

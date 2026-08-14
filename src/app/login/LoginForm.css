@@ -46,7 +46,7 @@
   padding: 3rem 2.5rem;
   background: var(--login-surface);
   border: 1px solid var(--login-border);
-  border-radius: var(--radius-soft-panel, 12px);
+  border-radius: var(--ref-radius-soft-panel);
   box-shadow: var(--shadow-popover);
   animation: slideUpFade 0.6s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -60,7 +60,7 @@
 
 .login-logo-container {
   height: 64px;
-  border-radius: 16px;
+  border-radius: var(--ref-radius-soft-panel);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -76,7 +76,7 @@
 
 .login-title {
   margin: 0;
-  font-size: 1.75rem;
+  font-size: var(--ref-font-size-display);
   font-weight: 700;
   color: var(--login-text);
 }
@@ -84,7 +84,7 @@
 .login-subtitle {
   margin: 0.5rem 0 0;
   color: var(--login-text-muted);
-  font-size: 0.95rem;
+  font-size: var(--ref-font-size-body-emphasis);
 }
 
 .login-form {
@@ -98,8 +98,8 @@
   border: 1px solid var(--status-danger-border);
   color: var(--status-danger);
   padding: 0.75rem 1rem;
-  border-radius: 12px;
-  font-size: 0.85rem;
+  border-radius: var(--ref-radius-soft-panel);
+  font-size: var(--ref-font-size-body-compact);
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -110,7 +110,7 @@
   width: 4px;
   height: 16px;
   background: var(--status-danger);
-  border-radius: 2px;
+  border-radius: var(--ref-radius-micro);
 }
 
 .input-container {
@@ -143,8 +143,8 @@
   background: var(--login-surface-raised);
   border: 1px solid var(--login-border);
   color: var(--login-text);
-  font-size: 0.95rem;
-  border-radius: 12px;
+  font-size: var(--ref-font-size-body-emphasis);
+  border-radius: var(--ref-radius-soft-panel);
   outline: none;
 }
 
@@ -174,7 +174,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 10px;
+  border-radius: var(--ref-radius-panel);
 }
 
 .password-toggle:hover {
@@ -193,9 +193,9 @@
   padding: 1rem;
   background: var(--login-primary);
   border: none;
-  border-radius: 12px;
+  border-radius: var(--ref-radius-soft-panel);
   color: var(--login-on-primary);
-  font-size: 1rem;
+  font-size: var(--ref-font-size-body);
   font-weight: 600;
   cursor: pointer;
   display: flex;
@@ -217,7 +217,7 @@
 .login-footer {
   margin-top: 2rem;
   text-align: center;
-  font-size: 0.8rem;
+  font-size: var(--ref-font-size-data);
   color: var(--login-text-muted);
 }
 

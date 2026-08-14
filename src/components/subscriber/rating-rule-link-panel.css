@@ -1,6 +1,6 @@
 .rating-panel-container {
   grid-column: 1 / -1;
-  border-radius: 8px;
+  border-radius: var(--ref-radius-control);
   padding: 1rem;
 }
 .rating-panel-compact {
@@ -32,7 +32,7 @@
 }
 .rating-panel-subtitle {
   color: var(--text-muted);
-  font-size: 0.82rem;
+  font-size: var(--ref-font-size-data-relaxed);
   margin-top: 0.25rem;
 }
 .rating-panel-mono {
@@ -48,7 +48,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  font-size: 0.82rem;
+  font-size: var(--ref-font-size-data-relaxed);
 }
 
 .rating-panel-grid {
@@ -58,7 +58,7 @@
 }
 .rating-scenario-card {
   border: 1px solid var(--surface-border);
-  border-radius: 8px;
+  border-radius: var(--ref-radius-control);
   padding: 0.85rem;
   background: var(--header-bg);
 }
@@ -81,14 +81,14 @@
   color: var(--text-muted);
 }
 .rating-scenario-badge {
-  border-radius: 999px;
+  border-radius: var(--ref-radius-pill);
   padding: 0.18rem 0.48rem;
-  font-size: 0.72rem;
+  font-size: var(--ref-font-size-label);
   font-weight: 800;
 }
 .rating-scenario-desc {
   color: var(--text-muted);
-  font-size: 0.78rem;
+  font-size: var(--ref-font-size-label-strong);
   margin-top: 0.35rem;
 }
 .rating-scenario-details {
@@ -96,7 +96,7 @@
   grid-template-columns: 1fr 1fr;
   gap: 0.45rem 0.8rem;
   margin-top: 0.75rem;
-  font-size: 0.8rem;
+  font-size: var(--ref-font-size-data);
 }
 .rating-scenario-detail-item {
   color: var(--text-muted);
@@ -104,12 +104,12 @@
 .rating-scenario-missing-rule {
   margin-top: 0.75rem;
   color: var(--danger);
-  font-size: 0.8rem;
+  font-size: var(--ref-font-size-data);
   font-weight: 700;
 }
 .rating-panel-footer {
   margin-top: 0.85rem;
   color: var(--text-secondary);
-  font-size: 0.82rem;
+  font-size: var(--ref-font-size-data-relaxed);
   line-height: 1.5;
 }

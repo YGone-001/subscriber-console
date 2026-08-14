@@ -278,7 +278,7 @@ export default function OcsSessionsPanel() {
 
                   return (
                     <tr key={r.id}>
-                      <td className="ocs-mono" style={{ fontSize: "0.8rem", color: "var(--status-info)", maxWidth: "200px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.session_id} data-column-priority="essential">
+                      <td className="ocs-mono" style={{ fontSize: "var(--ref-font-size-data)", color: "var(--status-info)", maxWidth: "200px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.session_id} data-column-priority="essential">
                         {r.session_id}
                       </td>
                       <td className="ocs-mono" style={{ fontWeight: 600, color: "var(--status-info)" }} data-column-priority="essential">
@@ -301,21 +301,21 @@ export default function OcsSessionsPanel() {
                         <span style={{ color: "var(--text-muted)" }}> / </span>
                         <span style={{ color: "var(--status-warning)" }}>{formatBytes(r.used_total)}</span>
                       </td>
-                      <td className="ocs-mono" style={{ fontSize: "0.8rem" }} data-column-priority="important">
+                      <td className="ocs-mono" style={{ fontSize: "var(--ref-font-size-data)" }} data-column-priority="important">
                         {r.rating_group !== undefined ? `RG:${r.rating_group}` : "-"}
                         {r.service_identifier !== undefined ? ` / SI:${r.service_identifier}` : ""}
                       </td>
-                      <td className="ocs-mono" style={{ fontSize: "0.775rem", color: "var(--text-muted)" }} data-column-priority="supplementary">
+                      <td className="ocs-mono" style={{ fontSize: "var(--ref-font-size-label-strong)", color: "var(--text-muted)" }} data-column-priority="supplementary">
                         {r.started_at ? new Date(r.started_at).toLocaleTimeString() : "-"}
                       </td>
-                      <td className="ocs-mono" style={{ fontSize: "0.775rem", color: "var(--text-muted)" }} data-column-priority="important">
+                      <td className="ocs-mono" style={{ fontSize: "var(--ref-font-size-label-strong)", color: "var(--text-muted)" }} data-column-priority="important">
                         {r.last_update_at ? new Date(r.last_update_at).toLocaleTimeString() : "-"}
                       </td>
                       <td data-column-priority="essential">
                         <button
                           type="button"
                           className="ocs-btn"
-                          style={{ padding: "0.35rem 0.65rem", fontSize: "0.775rem" }}
+                          style={{ padding: "0.35rem 0.65rem", fontSize: "var(--ref-font-size-label-strong)" }}
                           onClick={() => setSelectedRecord(r)}
                         >
                           <Eye size={13} />

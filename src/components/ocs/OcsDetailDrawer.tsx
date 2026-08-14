@@ -38,7 +38,7 @@ export default function OcsDetailDrawer({
         <div className="ocs-drawer-header">
           <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
             <h3 className="ocs-drawer-title">{title}</h3>
-            <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+            <span style={{ fontSize: "var(--ref-font-size-label)", color: "var(--text-muted)" }}>
               {t("ocs_modal_detail_title")}
             </span>
           </div>

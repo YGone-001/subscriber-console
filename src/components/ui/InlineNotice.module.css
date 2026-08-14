@@ -4,8 +4,8 @@
   gap: 0.5rem;
   padding: 0.65rem 0.8rem;
   border: 1px solid var(--surface-border);
-  border-radius: var(--radius-control);
-  font-size: 0.8rem;
+  border-radius: var(--ref-radius-control);
+  font-size: var(--ref-font-size-data);
   line-height: 1.45;
 }
 

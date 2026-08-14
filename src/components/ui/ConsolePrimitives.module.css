@@ -15,7 +15,7 @@
   position: absolute;
   inset: 0 auto 1.15rem 0;
   width: 3px;
-  border-radius: 999px;
+  border-radius: var(--ref-radius-pill);
   background:
     linear-gradient(
       to bottom,
@@ -58,7 +58,7 @@
   margin-bottom: 0.5rem;
   color: var(--header-tone);
   font-family: var(--font-data);
-  font-size: 0.7rem;
+  font-size: var(--ref-font-size-caption);
   font-weight: 800;
   letter-spacing: 0.12em;
   line-height: 1;
@@ -69,7 +69,7 @@
   content: "";
   width: 5px;
   height: 5px;
-  border-radius: 50%;
+  border-radius: var(--ref-radius-circle);
   background: currentColor;
   box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 12%, transparent);
 }
@@ -90,7 +90,7 @@
   margin: 0;
   color: var(--text-main);
   font-family: var(--font-display);
-  font-size: clamp(1.65rem, 2vw, 2.2rem);
+  font-size: var(--ref-font-size-display-fluid);
   font-weight: 650;
   letter-spacing: -0.035em;
   line-height: 1.05;
@@ -100,7 +100,7 @@
   max-width: 760px;
   margin: 0.55rem 0 0;
   color: var(--text-secondary);
-  font-size: 0.9rem;
+  font-size: var(--ref-font-size-body-support);
   line-height: 1.55;
 }
 
@@ -119,10 +119,10 @@
   min-height: var(--control-height);
   padding: 0.45rem 0.7rem;
   border: 1px solid color-mix(in srgb, var(--header-tone) 30%, var(--surface-border));
-  border-radius: var(--radius-control);
+  border-radius: var(--ref-radius-control);
   background: color-mix(in srgb, var(--header-tone) 7%, var(--surface));
   color: var(--header-tone);
-  font-size: 0.78rem;
+  font-size: var(--ref-font-size-label-strong);
   font-weight: 750;
 }
 
@@ -132,7 +132,7 @@
   overflow: hidden;
   margin: 0 0 var(--space-section);
   border: 1px solid var(--surface-border);
-  border-radius: var(--radius-panel);
+  border-radius: var(--ref-radius-panel);
   background: var(--surface);
   box-shadow: var(--shadow-panel);
 }
@@ -201,7 +201,7 @@ button.metricItem:focus-visible {
 .metricLabel {
   overflow: hidden;
   color: var(--text-muted);
-  font-size: 0.72rem;
+  font-size: var(--ref-font-size-label);
   font-weight: 750;
   letter-spacing: 0.035em;
   line-height: 1.25;
@@ -213,7 +213,7 @@ button.metricItem:focus-visible {
 .metricValue {
   color: var(--metric-tone);
   font-family: var(--font-display);
-  font-size: clamp(1.35rem, 2vw, 1.75rem);
+  font-size: var(--ref-font-size-title-fluid);
   font-variant-numeric: tabular-nums;
   font-weight: 650;
   letter-spacing: -0.025em;
@@ -226,7 +226,7 @@ button.metricItem:focus-visible {
   display: inline-grid;
   place-items: center;
   border: 1px solid color-mix(in srgb, var(--metric-tone) 24%, var(--surface-border));
-  border-radius: var(--radius-control);
+  border-radius: var(--ref-radius-control);
   background: color-mix(in srgb, var(--metric-tone) 8%, var(--surface));
   color: var(--metric-tone);
 }
@@ -246,7 +246,7 @@ button.metricItem:focus-visible {
   margin: 0;
   color: var(--text-main);
   font-family: var(--font-display);
-  font-size: 1rem;
+  font-size: var(--ref-font-size-body);
   font-weight: 650;
   letter-spacing: -0.015em;
   line-height: 1.2;
@@ -263,7 +263,7 @@ button.metricItem:focus-visible {
   max-width: 720px;
   margin: 0.3rem 0 0 1.45rem;
   color: var(--text-muted);
-  font-size: 0.8rem;
+  font-size: var(--ref-font-size-data);
   line-height: 1.45;
 }
 

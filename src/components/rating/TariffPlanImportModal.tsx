@@ -113,7 +113,7 @@ export function TariffPlanImportModal({ isOpen, onClose, onSuccess }: Props) {
           <Field label={t("tariff_plan_import_paste")}>
             <textarea
               className="form-input"
-              style={{ fontFamily: "monospace", fontSize: "0.82rem", minHeight: 140 }}
+              style={{ fontFamily: "monospace", fontSize: "var(--ref-font-size-data-relaxed)", minHeight: 140 }}
               value={jsonText}
               onChange={(e) => handleJsonChange(e.target.value)}
               placeholder='{\n  "plan_id": "plan_enterprise_unlimited",\n  "name": "Enterprise Unlimited",\n  "rules": [...]\n}'
@@ -148,11 +148,11 @@ export function TariffPlanImportModal({ isOpen, onClose, onSuccess }: Props) {
           )}
 
           {parsedPreview && validationErrors.length === 0 && (
-            <div className="stat-card" style={{ padding: "0.75rem 1rem", background: "var(--bg-secondary)", borderRadius: "8px", border: "1px solid var(--border-color)" }}>
+            <div className="stat-card" style={{ padding: "0.75rem 1rem", background: "var(--bg-secondary)", borderRadius: "var(--ref-radius-control)", border: "1px solid var(--border-color)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", color: "var(--success)", fontWeight: 600, marginBottom: "0.4rem" }}>
                 <CheckCircle2 size={16} /> Ready to Import
               </div>
-              <div style={{ fontSize: "0.85rem", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.4rem" }}>
+              <div style={{ fontSize: "var(--ref-font-size-body-compact)", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.4rem" }}>
                 <div><strong>Plan ID:</strong> {parsedPreview.plan_id}</div>
                 <div><strong>Name:</strong> {parsedPreview.name || parsedPreview.plan_id}</div>
                 <div><strong>Rules:</strong> {parsedPreview.rules?.length || 0} rules included</div>

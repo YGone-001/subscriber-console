@@ -21,14 +21,14 @@
 
 .subscribers-page-title {
   margin: 0;
-  font-size: 1.5rem;
+  font-size: var(--ref-font-size-title);
   font-weight: 700;
   color: var(--text-main);
 }
 
 .subscribers-page-subtitle {
   margin: 0.25rem 0 0 0;
-  font-size: 0.9rem;
+  font-size: var(--ref-font-size-body-support);
   color: var(--text-secondary);
 }
 
@@ -42,7 +42,7 @@
 
 .search-input {
   width: min(350px, 100%);
-  border-radius: 20px;
+  border-radius: var(--ref-radius-pill);
   padding: 0.6rem 1.2rem;
 }
 
@@ -52,7 +52,7 @@
   gap: 1rem;
   flex-wrap: wrap;
   background: var(--selection-soft);
-  border-radius: 8px;
+  border-radius: var(--ref-radius-control);
   padding: 0.4rem 1.2rem;
   border: 1px solid var(--selection-border);
 }
@@ -60,7 +60,7 @@
 .bulk-actions-count {
   font-weight: 600;
   color: var(--primary);
-  font-size: 0.9rem;
+  font-size: var(--ref-font-size-body-support);
 }
 
 .bulk-actions-buttons {
@@ -75,7 +75,7 @@
   align-items: center;
   gap: 0.4rem;
   padding: 0.4rem 1rem;
-  font-size: 0.85rem;
+  font-size: var(--ref-font-size-body-compact);
   border-color: var(--primary);
   color: var(--primary);
   background: var(--surface);
@@ -87,10 +87,10 @@
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  font-size: 0.85rem;
+  font-size: var(--ref-font-size-body-compact);
   color: var(--on-accent);
   border: none;
-  border-radius: 4px;
+  border-radius: var(--ref-radius-micro);
   cursor: pointer;
 }
 .btn-bulk-danger:disabled {
@@ -109,8 +109,8 @@
   border: 1px solid var(--surface-border);
   background: var(--surface);
   padding: 0.5rem 1rem;
-  border-radius: 20px;
-  font-size: 0.85rem;
+  border-radius: var(--ref-radius-pill);
+  font-size: var(--ref-font-size-body-compact);
   font-weight: 600;
   color: var(--text-secondary);
   cursor: pointer;
@@ -124,7 +124,7 @@
 
 /* Table styles */
 .table-card {
-  border-radius: 12px;
+  border-radius: var(--ref-radius-soft-panel);
   overflow: hidden;
   padding: 0;
 }
@@ -141,7 +141,7 @@
   width: 100%;
   border-collapse: collapse;
   text-align: left;
-  font-size: 0.9rem;
+  font-size: var(--ref-font-size-body-support);
 }
 
 .subscribers-table thead {
@@ -185,8 +185,8 @@
 
 .status-badge {
   padding: 0.25rem 0.5rem;
-  border-radius: 20px;
-  font-size: 0.75rem;
+  border-radius: var(--ref-radius-pill);
+  font-size: var(--ref-font-size-label);
   font-weight: 700;
   white-space: nowrap;
   display: inline-block;
@@ -220,14 +220,14 @@
 .imsi-text {
   font-weight: 600;
   font-family: monospace;
-  font-size: 0.95rem;
+  font-size: var(--ref-font-size-body-emphasis);
 }
 
 .plmn-badge {
   color: var(--primary);
   padding: 0.2rem 0.6rem;
-  border-radius: 4px;
-  font-size: 0.85rem;
+  border-radius: var(--ref-radius-micro);
+  font-size: var(--ref-font-size-body-compact);
   font-weight: 800;
   border: 1px solid var(--selection-border);
   background: var(--selection-soft);
@@ -243,7 +243,7 @@
 .policy-text {
   color: var(--text-main);
   font-weight: 700;
-  font-size: 0.86rem;
+  font-size: var(--ref-font-size-body-compact);
 }
 
 .policy-subtext {
@@ -251,7 +251,7 @@
   align-items: center;
   gap: 0.4rem;
   color: var(--text-muted);
-  font-size: 0.74rem;
+  font-size: var(--ref-font-size-label);
   font-family: monospace;
 }
 
@@ -263,7 +263,7 @@
 
 .no-policy {
   color: var(--text-muted);
-  font-size: 0.85rem;
+  font-size: var(--ref-font-size-body-compact);
   font-style: italic;
 }
 
@@ -276,14 +276,14 @@
 .traffic-stats {
   display: flex;
   justify-content: space-between;
-  font-size: 0.75rem;
+  font-size: var(--ref-font-size-label);
   color: var(--text-muted);
 }
 
 .traffic-bar-container {
   height: 6px;
   background: var(--surface-border);
-  border-radius: 3px;
+  border-radius: var(--ref-radius-micro);
   overflow: hidden;
 }
 
@@ -309,7 +309,7 @@
 
 .last-active-cell {
   color: var(--text-secondary);
-  font-size: 0.85rem;
+  font-size: var(--ref-font-size-body-compact);
 }
 
 .last-active-text {
@@ -338,7 +338,7 @@
   width: 44px;
   height: 44px;
   padding: 0;
-  border-radius: var(--radius-control);
+  border-radius: var(--ref-radius-control);
 }
 
 .action-btn-primary {
@@ -374,7 +374,7 @@
   top: calc(100% + 4px);
   background: var(--surface);
   box-shadow: var(--shadow-panel);
-  border-radius: 6px;
+  border-radius: var(--ref-radius-compact);
   width: 180px;
   z-index: 50;
   border: 1px solid var(--surface-border);
@@ -412,7 +412,7 @@
   background: transparent;
   border: none;
   border-bottom: 1px solid var(--surface-border);
-  font-size: 0.85rem;
+  font-size: var(--ref-font-size-body-compact);
   cursor: pointer;
   color: var(--text-main);
 }
@@ -424,7 +424,7 @@
 }
 
 .pagination-info {
-  font-size: 0.85rem;
+  font-size: var(--ref-font-size-body-compact);
   color: var(--text-muted);
 }
 
@@ -498,7 +498,7 @@
     align-items: center;
     gap: 0.65rem;
     color: var(--text-secondary);
-    font-size: 0.82rem;
+    font-size: var(--ref-font-size-data-relaxed);
     font-weight: 700;
   }
 
@@ -526,7 +526,7 @@
     gap: 0;
     padding: 0.85rem;
     border: 1px solid var(--surface-border);
-    border-radius: var(--radius-panel);
+    border-radius: var(--ref-radius-panel);
     background: var(--surface);
   }
 
@@ -552,7 +552,7 @@
   .subscribers-table td[data-label]::before {
     content: attr(data-label);
     color: var(--text-muted);
-    font-size: 0.72rem;
+    font-size: var(--ref-font-size-label);
     font-weight: 750;
   }
 

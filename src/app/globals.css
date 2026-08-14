@@ -59,10 +59,6 @@
   --text-secondary: #36545d;
   --text-muted: #61777e;
   --header-bg: #eaf0f1;
-  --radius-panel: 10px;
-  --radius-control: 8px;
-  --radius-small: 7px;
-  --radius-pill: 999px;
   --shadow-panel: 0 14px 36px -32px rgba(15, 43, 52, 0.7);
   --shadow-popover: 0 20px 44px -28px rgba(15, 43, 52, 0.72);
   --shadow-drawer: -24px 0 48px -32px rgba(15, 43, 52, 0.48);
@@ -207,6 +203,37 @@
   --font-display: var(--font-display-loaded), "Aptos Display", "Segoe UI", sans-serif;
   --font-interface: var(--font-interface-loaded), "Microsoft YaHei UI", "PingFang SC", "Segoe UI", sans-serif;
   --font-data: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
+  --ref-font-size-micro: 0.625rem;
+  --ref-font-size-caption: 0.7rem;
+  --ref-font-size-label: 0.75rem;
+  --ref-font-size-label-strong: 0.78rem;
+  --ref-font-size-data: 0.8rem;
+  --ref-font-size-data-relaxed: 0.82rem;
+  --ref-font-size-body-compact: 0.85rem;
+  --ref-font-size-body-small: 0.875rem;
+  --ref-font-size-body-support: 0.9rem;
+  --ref-font-size-body-emphasis: 0.95rem;
+  --ref-font-size-body: 1rem;
+  --ref-font-size-heading-sm: 1.05rem;
+  --ref-font-size-heading: 1.125rem;
+  --ref-font-size-title-sm: 1.25rem;
+  --ref-font-size-heading-lg: 1.35rem;
+  --ref-font-size-title: 1.5rem;
+  --ref-font-size-display-sm: 1.65rem;
+  --ref-font-size-display: 1.75rem;
+  --ref-font-size-display-lg: 2rem;
+  --ref-font-size-display-xl: 2.5rem;
+  --ref-font-size-title-fluid: clamp(1.35rem, 2vw, 1.75rem);
+  --ref-font-size-display-fluid: clamp(1.65rem, 2vw, 2.2rem);
+  --ref-font-size-relative-compact: 0.85em;
+  --ref-radius-micro: 4px;
+  --ref-radius-compact: 6px;
+  --ref-radius-small: 7px;
+  --ref-radius-control: 8px;
+  --ref-radius-panel: 10px;
+  --ref-radius-soft-panel: 12px;
+  --ref-radius-pill: 999px;
+  --ref-radius-circle: 50%;
 }
 
 html {
@@ -258,7 +285,7 @@ textarea {
 }
 ::-webkit-scrollbar-thumb {
   background: rgba(100, 116, 139, 0.4);
-  border-radius: 4px;
+  border-radius: var(--ref-radius-micro);
 }
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(100, 116, 139, 0.6);
@@ -283,7 +310,7 @@ textarea {
 .dash-card {
   background: var(--surface);
   border: 1px solid var(--surface-border);
-  border-radius: 12px;
+  border-radius: var(--ref-radius-soft-panel);
   overflow: hidden;
   margin-bottom: 24px;
   box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.1), 0 4px 10px -2px rgba(0, 0, 0, 0.05);
@@ -314,8 +341,8 @@ textarea {
   align-items: center;
   justify-content: center;
   padding: 4px 10px;
-  border-radius: 12px;
-  font-size: 0.85rem;
+  border-radius: var(--ref-radius-soft-panel);
+  font-size: var(--ref-font-size-body-compact);
   font-weight: 600;
   line-height: 1;
 }
@@ -357,7 +384,7 @@ textarea {
   color: var(--text-muted);
   cursor: pointer;
   padding: 4px;
-  border-radius: 4px;
+  border-radius: var(--ref-radius-micro);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -418,7 +445,7 @@ textarea {
   margin-bottom: 1.25rem;
   overflow: hidden;
   border: 1px solid var(--surface-border);
-  border-radius: 12px;
+  border-radius: var(--ref-radius-soft-panel);
   background: var(--surface);
   box-shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.12);
 }
@@ -450,14 +477,14 @@ textarea {
 
 .subscriber-summary-card span {
   color: var(--text-muted);
-  font-size: 0.8rem;
+  font-size: var(--ref-font-size-data);
   font-weight: 800;
   line-height: 1.25;
 }
 
 .subscriber-summary-card strong {
   color: currentColor;
-  font-size: 1.9rem;
+  font-size: var(--ref-font-size-display-lg);
   line-height: 1;
   font-variant-numeric: tabular-nums;
 }
@@ -494,9 +521,9 @@ textarea {
 .page-size-select {
   min-height: 34px;
   padding: 0.35rem 0.5rem;
-  border-radius: 6px;
+  border-radius: var(--ref-radius-compact);
   border: 1px solid var(--surface-border);
-  font-size: 0.85rem;
+  font-size: var(--ref-font-size-body-compact);
   background: var(--surface);
   color: var(--text-main);
 }
@@ -508,11 +535,11 @@ textarea {
   align-items: center;
   justify-content: center;
   border: 1px solid var(--surface-border);
-  border-radius: 7px;
+  border-radius: var(--ref-radius-small);
   background: var(--surface);
   color: var(--text-secondary);
   cursor: pointer;
-  font-size: 0.82rem;
+  font-size: var(--ref-font-size-data-relaxed);
   font-weight: 800;
   transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
 }
@@ -566,7 +593,7 @@ textarea {
   display: flex;
   align-items: center;
   border: 1px solid var(--surface-border);
-  border-radius: 6px;
+  border-radius: var(--ref-radius-compact);
   overflow: hidden;
   transition: border-color 0.2s;
 }
@@ -595,7 +622,7 @@ textarea {
   background: var(--surface);
   border: 1px solid var(--surface-border);
   border-color: var(--selection-border);
-  border-radius: 6px;
+  border-radius: var(--ref-radius-compact);
   margin-bottom: 2rem;
   box-shadow: 0 2px 4px rgba(0,0,0,0.02);
   transition: all 0.2s;
@@ -605,7 +632,7 @@ textarea {
 .hover-session {
   border: 1px solid transparent;
   padding: 1.5rem;
-  border-radius: 6px;
+  border-radius: var(--ref-radius-compact);
   transition: all 0.2s;
   margin-bottom: 1rem;
 }
@@ -629,7 +656,7 @@ textarea {
 .pcc-rule-box {
   border: 1px dashed var(--surface-border);
   padding: 1.25rem;
-  border-radius: 6px;
+  border-radius: var(--ref-radius-compact);
   background: var(--header-bg);
   margin-top: 1rem;
 }
@@ -654,7 +681,7 @@ textarea {
   height: 100%;
   background: radial-gradient(circle, rgba(59, 130, 246, 0.6) 0%, transparent 70%);
   transform: translate(-50%, -50%) scale(1);
-  border-radius: 50%;
+  border-radius: var(--ref-radius-circle);
   animation: radar-scan 1s cubic-bezier(0.1, 0.8, 0.3, 1) infinite;
   pointer-events: none;
 }
@@ -663,14 +690,14 @@ textarea {
   font-weight: 600 !important;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  font-size: 0.85rem;
+  font-size: var(--ref-font-size-body-compact);
   color: var(--text-muted) !important;
 }
 
 .glass-card {
   background: var(--surface);
   border: 1px solid var(--surface-border);
-  border-radius: var(--radius-panel);
+  border-radius: var(--ref-radius-panel);
   padding: 1.5rem;
   box-shadow: var(--shadow-panel);
   transition: border-color var(--duration-fast) ease, box-shadow var(--duration-fast) ease;
@@ -683,7 +710,7 @@ textarea {
 
 /* Typography Utilities */
 h1 {
-  font-size: 2.5rem;
+  font-size: var(--ref-font-size-display-xl);
   font-family: var(--font-display);
   font-weight: 650;
   letter-spacing: -0.035em;
@@ -692,7 +719,7 @@ h1 {
 }
 
 h2 {
-  font-size: 1.5rem;
+  font-size: var(--ref-font-size-title);
   font-family: var(--font-display);
   font-weight: 650;
   margin-bottom: 1rem;
@@ -707,9 +734,9 @@ h2 {
   gap: 0.5rem;
   min-height: var(--control-height);
   padding: 0.5rem 0.85rem;
-  font-size: 0.875rem;
+  font-size: var(--ref-font-size-body-small);
   font-weight: 600;
-  border-radius: var(--radius-control);
+  border-radius: var(--ref-radius-control);
   border: 1px solid transparent;
   cursor: pointer;
   transition: background var(--duration-fast) ease, border-color var(--duration-fast) ease, color var(--duration-fast) ease, box-shadow var(--duration-fast) ease, transform var(--duration-fast) ease;
@@ -796,7 +823,7 @@ h2 {
   color: var(--text-muted);
   cursor: pointer;
   padding: 0.35rem;
-  border-radius: 6px;
+  border-radius: var(--ref-radius-compact);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -825,7 +852,7 @@ h2 {
 
 .form-label {
   display: block;
-  font-size: 1rem;
+  font-size: var(--ref-font-size-body);
   font-weight: 500;
   color: var(--text-muted);
   margin-bottom: 0.5rem;
@@ -837,9 +864,9 @@ h2 {
   padding: 0.5rem 0.75rem;
   background: var(--surface);
   border: 1px solid var(--surface-border);
-  border-radius: var(--radius-control);
+  border-radius: var(--ref-radius-control);
   color: var(--text-main);
-  font-size: 1rem;
+  font-size: var(--ref-font-size-body);
   transition: background-color var(--duration-normal) var(--ease-decelerate), color var(--duration-normal) var(--ease-decelerate), border-color var(--duration-normal) var(--ease-decelerate), box-shadow var(--duration-normal) var(--ease-decelerate);
 }
 .form-input::placeholder {
@@ -874,7 +901,7 @@ h2 {
   );
   background-size: 200% 100%;
   animation: shimmerWave 1.8s infinite linear;
-  border-radius: 6px;
+  border-radius: var(--ref-radius-compact);
 }
 
 /* Live Breathing Status Pulse */
@@ -898,7 +925,7 @@ h2 {
   display: inline-block;
   width: 8px;
   height: 8px;
-  border-radius: 50%;
+  border-radius: var(--ref-radius-circle);
   background: #10b981;
   animation: livePulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
@@ -941,7 +968,7 @@ h2 {
 /* Table Micro-Interactions */
 .table-container {
   overflow-x: auto;
-  border-radius: 8px;
+  border-radius: var(--ref-radius-control);
 }
 
 .data-table {
@@ -958,7 +985,7 @@ h2 {
 }
 
 .data-table th {
-  font-size: 0.75rem;
+  font-size: var(--ref-font-size-label);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -1054,7 +1081,7 @@ body.global-emergency-flash {
 
 .modal-content {
   background: var(--surface);
-  border-radius: 6px;
+  border-radius: var(--ref-radius-compact);
   box-shadow: 0 1rem 3rem rgba(0,0,0,0.15);
   margin: auto;
   display: flex;
@@ -1066,7 +1093,7 @@ body.global-emergency-flash {
   max-height: 90vh;
   display: flex;
   flex-direction: column;
-  border-radius: 12px;
+  border-radius: var(--ref-radius-soft-panel);
   overflow: hidden;
 }
 
@@ -1119,7 +1146,7 @@ body.global-emergency-flash {
   gap: 0.75rem;
   padding: 0.8rem 0.9rem;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--ref-radius-control);
   background: transparent;
   color: var(--text-main);
   cursor: pointer;
@@ -1135,13 +1162,13 @@ body.global-emergency-flash {
 .workflow-step-index {
   width: 1.6rem;
   height: 1.6rem;
-  border-radius: 999px;
+  border-radius: var(--ref-radius-pill);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   background: var(--selection-soft);
   color: var(--primary);
-  font-size: 0.78rem;
+  font-size: var(--ref-font-size-label-strong);
   font-weight: 700;
   flex-shrink: 0;
 }
@@ -1154,13 +1181,13 @@ body.global-emergency-flash {
 }
 
 .workflow-step-label strong {
-  font-size: 0.94rem;
+  font-size: var(--ref-font-size-body-emphasis);
   font-weight: 650;
 }
 
 .workflow-step-label span {
   color: var(--text-muted);
-  font-size: 0.78rem;
+  font-size: var(--ref-font-size-label-strong);
   line-height: 1.3;
 }
 
@@ -1210,7 +1237,7 @@ body.global-emergency-flash {
   gap: 0.75rem;
   margin: 1.75rem 0 1.25rem;
   color: var(--text-muted);
-  font-size: 0.8rem;
+  font-size: var(--ref-font-size-data);
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -1231,7 +1258,7 @@ body.global-emergency-flash {
   margin-bottom: 2rem;
   background: var(--surface);
   padding: 1rem 1.5rem;
-  border-radius: 8px;
+  border-radius: var(--ref-radius-control);
   border: 1px solid var(--surface-border);
   box-shadow: 0 4px 20px rgba(0,0,0,0.14);
 }
@@ -1251,7 +1278,7 @@ body.global-emergency-flash {
   height: 44px;
   padding: 0;
   color: var(--text-muted);
-  border-radius: 4px;
+  border-radius: var(--ref-radius-micro);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1282,9 +1309,9 @@ body.global-emergency-flash {
   min-width: 400px;
   max-width: 800px;
   padding: 1.25rem 1.5rem 1.25rem 3.5rem;
-  font-size: 1.25rem;
+  font-size: var(--ref-font-size-title-sm);
   border: 1px solid var(--surface-border);
-  border-radius: 6px;
+  border-radius: var(--ref-radius-compact);
   background: var(--surface) url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="%23858796" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>') no-repeat 1.25rem center;
   color: var(--text-main);
   box-shadow: 0 2px 8px rgba(0,0,0,0.05);
@@ -1331,7 +1358,7 @@ body.global-emergency-flash {
   height: 56px;
   background-color: var(--primary);
   color: var(--on-accent);
-  border-radius: 50%;
+  border-radius: var(--ref-radius-circle);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1440,7 +1467,7 @@ body.global-emergency-flash {
   background: var(--surface);
   color: var(--text-main);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--ref-radius-panel);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
   position: relative;
   overflow: hidden;
@@ -1511,14 +1538,14 @@ body.global-emergency-flash {
 }
 
 .toast-title {
-  font-size: 0.92rem;
+  font-size: var(--ref-font-size-body-emphasis);
   font-weight: 600;
   color: var(--text-main);
   line-height: 1.3;
 }
 
 .toast-message {
-  font-size: 0.84rem;
+  font-size: var(--ref-font-size-body-compact);
   color: var(--text-secondary);
   line-height: 1.4;
   margin: 0;
@@ -1529,9 +1556,9 @@ body.global-emergency-flash {
   align-self: flex-start;
   margin-top: 0.35rem;
   padding: 0.25rem 0.65rem;
-  font-size: 0.78rem;
+  font-size: var(--ref-font-size-label-strong);
   font-weight: 600;
-  border-radius: 5px;
+  border-radius: var(--ref-radius-compact);
   background: color-mix(in srgb, var(--primary) 15%, transparent);
   color: var(--primary);
   border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent);
@@ -1551,7 +1578,7 @@ body.global-emergency-flash {
   color: var(--text-muted);
   cursor: pointer;
   padding: 0.2rem;
-  border-radius: 4px;
+  border-radius: var(--ref-radius-micro);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1612,7 +1639,7 @@ body.global-emergency-flash {
   height: 1.15rem;
   cursor: pointer;
   accent-color: var(--primary);
-  border-radius: 4px;
+  border-radius: var(--ref-radius-micro);
 }
 
 .mobile-sort-strip {
@@ -1635,11 +1662,11 @@ body.global-emergency-flash {
   flex: 0 0 auto;
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--surface-border);
-  border-radius: var(--radius-control);
+  border-radius: var(--ref-radius-control);
   background: var(--surface);
   color: var(--text-secondary);
   font: inherit;
-  font-size: 0.78rem;
+  font-size: var(--ref-font-size-label-strong);
   font-weight: 700;
   cursor: pointer;
 }
@@ -1655,8 +1682,8 @@ body.global-emergency-flash {
   background: #dcfce7;
   color: #166534;
   padding: 0.25rem 0.65rem;
-  border-radius: 999px;
-  font-size: 0.75rem;
+  border-radius: var(--ref-radius-pill);
+  font-size: var(--ref-font-size-label);
   font-weight: 600;
   border: 1px solid #bbf7d0;
   display: inline-flex;
@@ -1667,8 +1694,8 @@ body.global-emergency-flash {
   background: #f1f5f9;
   color: #475569;
   padding: 0.25rem 0.65rem;
-  border-radius: 999px;
-  font-size: 0.75rem;
+  border-radius: var(--ref-radius-pill);
+  font-size: var(--ref-font-size-label);
   font-weight: 600;
   border: 1px solid #e2e8f0;
   display: inline-flex;
@@ -1756,7 +1783,7 @@ body, .modal-content, .dash-card, .app-sidebar, .app-header {
 }
 
 
-.analytics-sync-btn { display: flex; align-items: center; gap: 0.5rem; border: 1px solid var(--surface-border); background: var(--surface); padding: 0.5rem 1rem; border-radius: 20px; font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); cursor: pointer; transition: background-color var(--duration-normal) var(--ease-decelerate), color var(--duration-normal) var(--ease-decelerate), border-color var(--duration-normal) var(--ease-decelerate), transform var(--duration-normal) var(--ease-decelerate); }
+.analytics-sync-btn { display: flex; align-items: center; gap: 0.5rem; border: 1px solid var(--surface-border); background: var(--surface); padding: 0.5rem 1rem; border-radius: var(--ref-radius-pill); font-size: var(--ref-font-size-body-compact); font-weight: 600; color: var(--text-secondary); cursor: pointer; transition: background-color var(--duration-normal) var(--ease-decelerate), color var(--duration-normal) var(--ease-decelerate), border-color var(--duration-normal) var(--ease-decelerate), transform var(--duration-normal) var(--ease-decelerate); }
 .analytics-sync-btn:hover { background: var(--surface-hover); color: var(--primary); transform: translateY(-1px); }
 .analytics-sync-btn:active { transform: scale(0.96); }
 

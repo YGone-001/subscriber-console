@@ -14,7 +14,7 @@
   .roles-header h1 {
     margin: 0;
     color: var(--text-main);
-    font-size: 1.65rem;
+    font-size: var(--ref-font-size-display-sm);
     letter-spacing: 0;
   }
 
@@ -34,7 +34,7 @@
     gap: 1rem;
     padding: 1rem;
     border: 1px solid var(--surface-border);
-    border-radius: var(--radius-panel);
+    border-radius: var(--ref-radius-panel);
     background: var(--surface);
   }
 
@@ -55,11 +55,11 @@
     width: max-content;
     min-width: 72px;
     padding: 0.25rem 0.6rem;
-    border-radius: 999px;
+    border-radius: var(--ref-radius-pill);
     background: color-mix(in srgb, var(--primary) 9%, transparent);
     color: var(--primary);
     font-weight: 900;
-    font-size: 0.78rem;
+    font-size: var(--ref-font-size-label-strong);
   }
 
   .role-card dl {
@@ -76,7 +76,7 @@
 
   .role-card dt {
     color: var(--text-muted);
-    font-size: 0.74rem;
+    font-size: var(--ref-font-size-label);
   }
 
   .role-card dd {
@@ -170,7 +170,7 @@
     z-index: 2;
     background: var(--surface-hover);
     color: var(--text-muted);
-    font-size: 0.76rem;
+    font-size: var(--ref-font-size-label);
     text-transform: uppercase;
   }
 

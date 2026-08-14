@@ -325,14 +325,14 @@ export default function OcsBalancesPanel() {
                         )}
                       </td>
                       <td className="ocs-mono" style={{ color: "var(--text-muted)" }} data-column-priority="supplementary">v{r.version}</td>
-                      <td className="ocs-mono" style={{ fontSize: "0.8rem", color: "var(--text-muted)" }} data-column-priority="supplementary">
+                      <td className="ocs-mono" style={{ fontSize: "var(--ref-font-size-data)", color: "var(--text-muted)" }} data-column-priority="supplementary">
                         {r.updated_at ? new Date(r.updated_at).toLocaleString() : "-"}
                       </td>
                       <td data-column-priority="essential">
                         <button
                           type="button"
                           className="ocs-btn"
-                          style={{ padding: "0.35rem 0.65rem", fontSize: "0.775rem" }}
+                          style={{ padding: "0.35rem 0.65rem", fontSize: "var(--ref-font-size-label-strong)" }}
                           onClick={() => setSelectedRecord(r)}
                         >
                           <Eye size={13} />

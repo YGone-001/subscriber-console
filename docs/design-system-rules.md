@@ -22,7 +22,8 @@
   --ref-color-canvas-light: #f3f6f7;
   --ref-color-panel-light: #ffffff;
   --ref-space-4: 16px;
-  --ref-radius-md: 8px;
+  --ref-font-size-body: 1rem;
+  --ref-radius-control: 8px;
 }
 
 [data-theme="light"] {
@@ -44,14 +45,14 @@
 | 类别 | 允许值 / 规则 |
 | --- | --- |
 | 间距 | `0, 4, 8, 12, 16, 20, 24, 32, 40, 48, 64px`；默认 4px 基准 |
-| 字号 / 行高 | `12/16, 14/20, 16/24, 18/26, 24/32, 32/40px` |
+| 字号 / 行高 | 统一引用 `--ref-font-size-*`；标签、数据、正文、标题依次使用 `label / data / body / heading / title / display` 档位，禁止组件内写字号字面量 |
 | 字重 | 正文使用 `400/500`，界面强调使用 `600/650`，标签和紧凑状态使用 `700/750`；`800` 只保留给短小运营标记和存量兼容，不使用 `900` |
-| 圆角 | 微型元素 `4/6px`、小型导航和标签 `7px`、控件 `8px`、主要面板 `10px`、柔和内容卡 `12px`、胶囊 `999px` |
+| 圆角 | 统一引用 `--ref-radius-*`；微型元素 `micro/compact`、小型导航和标签 `small`、控件 `control`、主要面板 `panel`、柔和内容卡 `soft-panel`、胶囊 `pill`、正圆 `circle` |
 | 控件高度 | 紧凑 `32px`、默认 `36px`、触控/大型 `44px` |
 | 动效时长 | 快 `150ms`、常规 `200ms`、慢 `350ms` |
 | 层级 | 基础 `0`、吸顶 `10`、下拉 `20`、遮罩 `30`、弹窗 `40`、通知 `50` |
 
-文本、表格数字、图表刻度采用相同的排版 token。IMSI、金额、流量、日期和计数必须使用 `font-variant-numeric: tabular-nums`；标识符可使用等宽字体，但正文不得使用等宽字体。
+字号和圆角的原始 token 只在 `src/app/globals.css` 的 `:root` 声明，不随主题重复定义。文本、表格数字、图表刻度采用相同的排版 token。IMSI、金额、流量、日期和计数必须使用 `font-variant-numeric: tabular-nums`；标识符可使用等宽字体，但正文不得使用等宽字体。
 
 ### 1.3 颜色与主题
 

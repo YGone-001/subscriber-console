@@ -44,7 +44,7 @@
     align-items: center;
     justify-content: center;
     height: 32px;
-    border-radius: 7px;
+    border-radius: var(--ref-radius-small);
     overflow: hidden;
     flex-shrink: 0;
   }
@@ -60,7 +60,7 @@
     white-space: nowrap;
     color: var(--text-main);
     font-family: var(--font-display);
-    font-size: 1.18rem;
+    font-size: var(--ref-font-size-heading);
     font-weight: 650;
     letter-spacing: -0.035em;
   }
@@ -86,7 +86,7 @@
     width: 44px;
     height: 44px;
     padding: 0;
-    border-radius: 8px;
+    border-radius: var(--ref-radius-control);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -119,11 +119,11 @@
     min-width: 220px;
     background: var(--surface-hover);
     border: 1px solid var(--surface-border);
-    border-radius: 8px;
+    border-radius: var(--ref-radius-control);
     padding: 0.4rem 0.75rem 0.4rem 1rem;
     color: var(--text-muted);
     cursor: pointer;
-    font-size: 0.85rem;
+    font-size: var(--ref-font-size-body-compact);
     min-height: 44px;
     flex-shrink: 0;
     transition: all var(--duration-normal) var(--ease-decelerate);
@@ -145,11 +145,11 @@
   }
 
   .command-button kbd {
-    font-size: 0.7rem;
+    font-size: var(--ref-font-size-caption);
     padding: 0.15rem 0.4rem;
     background: var(--surface-border);
     color: var(--text-main);
-    border-radius: 4px;
+    border-radius: var(--ref-radius-micro);
     font-weight: 600;
     border: 1px solid var(--surface-border);
   }
@@ -168,12 +168,12 @@
     align-items: center;
     gap: 0.45rem;
     border: 1px solid var(--surface-border);
-    border-radius: 999px;
+    border-radius: var(--ref-radius-pill);
     background: var(--surface-hover);
     color: var(--text-secondary);
     padding: 0.35rem 0.45rem 0.35rem 0.7rem;
     cursor: pointer;
-    font-size: 0.8rem;
+    font-size: var(--ref-font-size-data);
     font-weight: 800;
     transition: all var(--duration-normal) var(--ease-decelerate);
   }
@@ -196,10 +196,10 @@
     align-items: center;
     justify-content: center;
     padding: 0 0.35rem;
-    border-radius: 999px;
+    border-radius: var(--ref-radius-pill);
     background: var(--danger);
     color: var(--on-accent);
-    font-size: 0.68rem;
+    font-size: var(--ref-font-size-caption);
     line-height: 1;
   }
 
@@ -211,7 +211,7 @@
     width: min(390px, calc(100vw - 2rem));
     background: var(--surface);
     color: var(--text-main);
-    border-radius: 8px;
+    border-radius: var(--ref-radius-control);
     border: 1px solid var(--surface-border);
     box-shadow: var(--shadow-popover);
     overflow: hidden;
@@ -238,12 +238,12 @@
 
   .approval-dropdown-head strong {
     color: var(--text-main);
-    font-size: 0.9rem;
+    font-size: var(--ref-font-size-body-support);
   }
 
   .approval-dropdown-head span {
     color: var(--text-muted);
-    font-size: 0.76rem;
+    font-size: var(--ref-font-size-label);
     line-height: 1.35;
   }
 
@@ -257,7 +257,7 @@
     display: grid;
     gap: 0.4rem;
     padding: 0.75rem;
-    border-radius: 8px;
+    border-radius: var(--ref-radius-control);
   }
 
   .approval-row + .approval-row {
@@ -276,7 +276,7 @@
 
   .approval-row-top strong {
     color: var(--text-main);
-    font-size: 0.82rem;
+    font-size: var(--ref-font-size-data-relaxed);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -284,20 +284,20 @@
 
   .approval-row-summary {
     color: var(--text-secondary);
-    font-size: 0.78rem;
+    font-size: var(--ref-font-size-label-strong);
     line-height: 1.35;
     overflow-wrap: anywhere;
   }
 
   .approval-row-error {
     color: var(--danger);
-    font-size: 0.75rem;
+    font-size: var(--ref-font-size-label);
     line-height: 1.35;
   }
 
   .approval-row-meta {
     color: var(--text-muted);
-    font-size: 0.7rem;
+    font-size: var(--ref-font-size-caption);
   }
 
   .approval-row-meta span {
@@ -314,8 +314,8 @@
     justify-content: center;
     min-width: 58px;
     padding: 0.18rem 0.45rem;
-    border-radius: 999px;
-    font-size: 0.68rem;
+    border-radius: var(--ref-radius-pill);
+    font-size: var(--ref-font-size-caption);
     font-weight: 800;
   }
 
@@ -340,7 +340,7 @@
     place-items: center;
     gap: 0.45rem;
     color: var(--text-muted);
-    font-size: 0.82rem;
+    font-size: var(--ref-font-size-data-relaxed);
     text-align: center;
   }
 
@@ -366,7 +366,7 @@
   .avatar-button {
     gap: 0.55rem;
     padding: 0.25rem 0.35rem;
-    border-radius: 999px;
+    border-radius: var(--ref-radius-pill);
     background: transparent;
     color: var(--text-main);
   }
@@ -374,7 +374,7 @@
   .avatar-circle {
     width: 36px;
     height: 36px;
-    border-radius: 50%;
+    border-radius: var(--ref-radius-circle);
     background: var(--surface-hover);
     border: 1px solid var(--surface-border);
     color: var(--text-secondary);
@@ -400,7 +400,7 @@
   .avatar-meta strong,
   .dropdown-profile strong {
     color: var(--text-main);
-    font-size: 0.84rem;
+    font-size: var(--ref-font-size-body-compact);
     font-weight: 700;
     line-height: 1.2;
   }
@@ -408,7 +408,7 @@
   .avatar-meta span,
   .dropdown-profile span {
     color: var(--text-muted);
-    font-size: 0.72rem;
+    font-size: var(--ref-font-size-label);
     line-height: 1.2;
     text-transform: capitalize;
   }
@@ -437,7 +437,7 @@
     min-width: 230px;
     background: var(--surface);
     color: var(--text-main);
-    border-radius: 8px;
+    border-radius: var(--ref-radius-control);
     border: 1px solid var(--surface-border);
     box-shadow: var(--shadow-popover);
     overflow: hidden;
@@ -468,8 +468,8 @@
     color: var(--text-secondary);
     text-align: left;
     font-weight: 600;
-    font-size: 0.85rem;
-    border-radius: 6px;
+    font-size: var(--ref-font-size-body-compact);
+    border-radius: var(--ref-radius-compact);
   }
 
   .dropdown-item.text-danger:hover {
@@ -510,10 +510,10 @@
     align-items: center;
     gap: 0.85rem;
     padding: 0 0.72rem;
-    border-radius: var(--radius-control);
+    border-radius: var(--ref-radius-control);
     color: var(--text-secondary);
     text-decoration: none;
-    font-size: 0.92rem;
+    font-size: var(--ref-font-size-body-emphasis);
     font-weight: 600;
     position: relative;
     white-space: nowrap;
@@ -554,7 +554,7 @@
 
   .sidebar-link.child {
     min-height: 44px;
-    font-size: 0.84rem;
+    font-size: var(--ref-font-size-body-compact);
     color: var(--text-muted);
   }
 
@@ -589,7 +589,7 @@
     top: 8px;
     bottom: 8px;
     width: 3px;
-    border-radius: 0 999px 999px 0;
+    border-radius: 0 var(--ref-radius-pill) var(--ref-radius-pill) 0;
     background: var(--primary);
     opacity: 0;
     transform: scaleY(0.5);
@@ -605,7 +605,7 @@
     width: 30px;
     height: 30px;
     border: 1px solid transparent;
-    border-radius: 7px;
+    border-radius: var(--ref-radius-small);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -655,12 +655,12 @@
     display: inline-flex;
     align-items: center;
     padding: 0.35rem 0.6rem;
-    border-radius: 6px;
+    border-radius: var(--ref-radius-compact);
     background: var(--surface);
     color: var(--text-main);
     border: 1px solid var(--surface-border);
     box-shadow: var(--shadow-popover);
-    font-size: 0.78rem;
+    font-size: var(--ref-font-size-label-strong);
     font-weight: 700;
     opacity: 0;
     pointer-events: none;
@@ -815,10 +815,10 @@
     min-width: 17px;
     height: 17px;
     padding: 0 4px;
-    border-radius: var(--radius-pill);
+    border-radius: var(--ref-radius-pill);
     background: var(--status-danger);
     color: var(--on-accent);
-    font-size: 0.68rem;
+    font-size: var(--ref-font-size-caption);
     font-weight: 800;
     display: flex;
     align-items: center;
@@ -834,7 +834,7 @@
     right: 2px;
     width: 6px;
     height: 6px;
-    border-radius: 50%;
+    border-radius: var(--ref-radius-circle);
     border: 1.5px solid var(--surface);
   }
 
@@ -861,7 +861,7 @@
     max-width: calc(100vw - 2rem);
     background: var(--surface);
     color: var(--text-main);
-    border-radius: 12px;
+    border-radius: var(--ref-radius-soft-panel);
     border: 1px solid var(--surface-border);
     box-shadow: var(--shadow-popover);
     overflow: hidden;
@@ -887,7 +887,7 @@
   }
 
   .notif-header-title strong {
-    font-size: 0.92rem;
+    font-size: var(--ref-font-size-body-emphasis);
     font-weight: 700;
   }
 
@@ -895,12 +895,12 @@
     display: inline-flex;
     align-items: center;
     gap: 0.3rem;
-    font-size: 0.72rem;
+    font-size: var(--ref-font-size-label);
     font-weight: 600;
     color: var(--status-success);
     background: var(--status-success-soft);
     padding: 0.15rem 0.45rem;
-    border-radius: 999px;
+    border-radius: var(--ref-radius-pill);
   }
 
   .stream-pulse {
@@ -918,7 +918,7 @@
     border: 0;
     color: var(--text-muted);
     padding: 0.3rem;
-    border-radius: 6px;
+    border-radius: var(--ref-radius-compact);
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -938,7 +938,7 @@
     display: flex;
     flex-direction: column;
     gap: 0.6rem;
-    font-size: 0.82rem;
+    font-size: var(--ref-font-size-data-relaxed);
   }
 
   .notif-setting-row {
@@ -957,7 +957,7 @@
 
   .notif-desktop-btn {
     width: 100%;
-    font-size: 0.78rem;
+    font-size: var(--ref-font-size-label-strong);
     padding: 0.35rem 0.6rem;
     display: flex;
     align-items: center;
@@ -974,7 +974,7 @@
   .notif-tab {
     flex: 1;
     padding: 0.55rem 0.2rem;
-    font-size: 0.78rem;
+    font-size: var(--ref-font-size-label-strong);
     font-weight: 600;
     color: var(--text-muted);
     background: transparent;
@@ -999,10 +999,10 @@
   }
 
   .notif-tab-count {
-    font-size: 0.68rem;
+    font-size: var(--ref-font-size-caption);
     background: var(--surface-subtle);
     padding: 0 0.35rem;
-    border-radius: 999px;
+    border-radius: var(--ref-radius-pill);
     border: 1px solid var(--surface-border);
   }
 
@@ -1020,7 +1020,7 @@
     padding: 2.5rem 1rem;
     color: var(--text-muted);
     gap: 0.6rem;
-    font-size: 0.84rem;
+    font-size: var(--ref-font-size-body-compact);
   }
 
   .notif-empty-icon {
@@ -1076,7 +1076,7 @@
   }
 
   .notif-card-title {
-    font-size: 0.84rem;
+    font-size: var(--ref-font-size-body-compact);
     font-weight: 600;
     color: var(--text-main);
     white-space: nowrap;
@@ -1085,13 +1085,13 @@
   }
 
   .notif-card-time {
-    font-size: 0.72rem;
+    font-size: var(--ref-font-size-label);
     color: var(--text-muted);
     flex-shrink: 0;
   }
 
   .notif-card-msg {
-    font-size: 0.78rem;
+    font-size: var(--ref-font-size-label-strong);
     color: var(--text-secondary);
     line-height: 1.35;
     margin: 0;
@@ -1105,7 +1105,7 @@
     display: flex;
     align-items: center;
     gap: 0.25rem;
-    font-size: 0.72rem;
+    font-size: var(--ref-font-size-label);
     color: var(--primary);
     font-weight: 600;
     margin-top: 0.25rem;
@@ -1114,7 +1114,7 @@
   .notif-unread-dot {
     width: 6px;
     height: 6px;
-    border-radius: 50%;
+    border-radius: var(--ref-radius-circle);
     background: var(--primary);
     flex-shrink: 0;
     align-self: center;
@@ -1132,14 +1132,14 @@
     background: transparent;
     border: 0;
     color: var(--text-muted);
-    font-size: 0.75rem;
+    font-size: var(--ref-font-size-label);
     font-weight: 600;
     cursor: pointer;
     display: flex;
     align-items: center;
     gap: 0.35rem;
     padding: 0.2rem 0.4rem;
-    border-radius: 4px;
+    border-radius: var(--ref-radius-micro);
     transition: all var(--duration-fast);
   }
 
@@ -1159,7 +1159,7 @@
     margin: 0.5rem 0.65rem 0.25rem;
     background: var(--surface-hover);
     border: 1px solid var(--surface-border);
-    border-radius: 8px;
+    border-radius: var(--ref-radius-control);
     transition: border-color var(--duration-fast);
   }
 
@@ -1179,7 +1179,7 @@
     border: none;
     outline: none;
     background: transparent;
-    font-size: 0.8rem;
+    font-size: var(--ref-font-size-data);
     color: var(--text-main);
   }
 
@@ -1195,7 +1195,7 @@
     width: 44px;
     height: 44px;
     padding: 0;
-    border-radius: 4px;
+    border-radius: var(--ref-radius-micro);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1218,11 +1218,11 @@
     justify-content: center;
     gap: 0.6rem;
     padding: 0.45rem 0.6rem;
-    border-radius: 8px;
+    border-radius: var(--ref-radius-control);
     border: 1px solid var(--surface-border);
     background: var(--surface-hover);
     color: var(--text-secondary);
-    font-size: 0.8rem;
+    font-size: var(--ref-font-size-data);
     font-weight: 600;
     cursor: pointer;
     min-height: 44px;
@@ -1243,11 +1243,11 @@
   }
 
   .sidebar-kbd {
-    font-size: 0.68rem;
+    font-size: var(--ref-font-size-caption);
     padding: 0.1rem 0.35rem;
     background: var(--surface-border);
     color: var(--text-muted);
-    border-radius: 4px;
+    border-radius: var(--ref-radius-micro);
     font-family: monospace;
   }
 
@@ -1277,7 +1277,7 @@
     width: 44px;
     height: 44px;
     padding: 0;
-    border-radius: 6px;
+    border-radius: var(--ref-radius-compact);
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -1309,8 +1309,8 @@
     align-items: center;
     gap: 0;
     padding: 0;
-    border-radius: var(--radius-small);
-    font-size: 0.8rem;
+    border-radius: var(--ref-radius-small);
+    font-size: var(--ref-font-size-data);
     font-weight: 600;
     color: var(--text-secondary);
     text-decoration: none;
@@ -1355,7 +1355,7 @@
   }
 
   .nav-tab-label {
-    font-size: 0.8rem;
+    font-size: var(--ref-font-size-data);
   }
 
   .nav-tab-pin-icon {
@@ -1371,7 +1371,7 @@
     width: 44px;
     height: 44px;
     padding: 0;
-    border-radius: 4px;
+    border-radius: var(--ref-radius-micro);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1397,7 +1397,7 @@
     width: 44px;
     height: 44px;
     padding: 0;
-    border-radius: 6px;
+    border-radius: var(--ref-radius-compact);
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -1418,7 +1418,7 @@
     min-width: 160px;
     background: var(--surface);
     border: 1px solid var(--surface-border);
-    border-radius: 8px;
+    border-radius: var(--ref-radius-control);
     box-shadow: var(--shadow-popover);
     padding: 0.35rem;
     z-index: 50;
@@ -1435,9 +1435,9 @@
     border: none;
     background: transparent;
     color: var(--text-secondary);
-    font-size: 0.78rem;
+    font-size: var(--ref-font-size-label-strong);
     font-weight: 600;
-    border-radius: 6px;
+    border-radius: var(--ref-radius-compact);
     cursor: pointer;
     text-align: left;
     transition: background var(--duration-fast);
@@ -1458,7 +1458,7 @@
     padding: 0.34rem 1.25rem;
     background: var(--background);
     border-bottom: 1px solid color-mix(in srgb, var(--surface-border) 70%, transparent);
-    font-size: 0.78rem;
+    font-size: var(--ref-font-size-label-strong);
     flex-shrink: 0;
     z-index: 15;
   }
@@ -1485,7 +1485,7 @@
     padding: 0;
     align-items: center;
     justify-content: center;
-    border-radius: 4px;
+    border-radius: var(--ref-radius-micro);
     transition: color var(--duration-fast);
   }
 
@@ -1522,7 +1522,7 @@
     font-weight: 600;
     background: color-mix(in srgb, var(--surface-hover) 80%, transparent);
     padding: 0.15rem 0.5rem;
-    border-radius: 5px;
+    border-radius: var(--ref-radius-compact);
     border: 1px solid var(--surface-border);
     white-space: nowrap;
   }
@@ -1544,11 +1544,11 @@
     gap: 0.35rem;
     min-height: 44px;
     padding: 0.45rem 0.65rem;
-    border-radius: 6px;
+    border-radius: var(--ref-radius-compact);
     border: 1px solid var(--surface-border);
     background: var(--surface);
     color: var(--text-secondary);
-    font-size: 0.74rem;
+    font-size: var(--ref-font-size-label);
     font-weight: 600;
     cursor: pointer;
     transition: all var(--duration-fast);
@@ -1577,7 +1577,7 @@
     width: 240px;
     background: var(--surface);
     border: 1px solid var(--surface-border);
-    border-radius: 8px;
+    border-radius: var(--ref-radius-control);
     box-shadow: var(--shadow-popover);
     overflow: hidden;
     z-index: 50;
@@ -1591,7 +1591,7 @@
     padding: 0.55rem 0.75rem;
     border-bottom: 1px solid var(--surface-border);
     background: var(--header-bg);
-    font-size: 0.75rem;
+    font-size: var(--ref-font-size-label);
   }
 
   .nav-recent-header strong {
@@ -1636,14 +1636,14 @@
     border: none;
     background: transparent;
     color: var(--text-muted);
-    font-size: 0.7rem;
+    font-size: var(--ref-font-size-caption);
     cursor: pointer;
     display: flex;
     align-items: center;
     gap: 0.25rem;
     min-height: 44px;
     padding: 0.35rem 0.45rem;
-    border-radius: 4px;
+    border-radius: var(--ref-radius-micro);
   }
 
   .nav-recent-clear:hover {
@@ -1661,7 +1661,7 @@
     padding: 1.25rem;
     text-align: center;
     color: var(--text-muted);
-    font-size: 0.75rem;
+    font-size: var(--ref-font-size-label);
   }
 
   .nav-recent-item {
@@ -1670,10 +1670,10 @@
     justify-content: space-between;
     min-height: 44px;
     padding: 0.55rem 0.65rem;
-    border-radius: 6px;
+    border-radius: var(--ref-radius-compact);
     color: var(--text-secondary);
     text-decoration: none;
-    font-size: 0.76rem;
+    font-size: var(--ref-font-size-label);
     font-weight: 500;
     transition: background var(--duration-fast);
   }
@@ -1737,7 +1737,7 @@
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-      font-size: 0.86rem;
+      font-size: var(--ref-font-size-body-compact);
     }
 
     .nav-breadcrumbs-bar {
