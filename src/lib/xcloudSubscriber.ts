@@ -1,6 +1,6 @@
 import { Long, ObjectId } from 'mongodb';
 import { IMS_SESSION_AMBR, isImsDnn, pccQosPreset, sessionQosPreset } from '@/lib/imsQosPresets';
-import { buildDefaultSub4G, normalizeSub4G } from '@/lib/subscriberDefaults';
+import { buildDefaultSub4G, getPrimaryMsisdn, normalizeSub4G } from '@/lib/subscriberDefaults';
 import type {
   LegacySubscriberState,
   Open5gsAmbr,
@@ -247,6 +247,7 @@ export function buildOpen5gsSubscriberFromLegacy(
   existing?: Open5gsSubscriberDocument | null
 ): Open5gsSubscriberDocument {
   const normalizedSub4G = input.sub4G ? normalizeSub4G(input.sub4G) : null;
+  const requestedMsisdn = normalizedSub4G ? getPrimaryMsisdn(input.sub4G) : '';
   const base = existing || buildDefaultOpen5gsSubscriber(imsi);
   const realm = epcRealm(imsi);
 
@@ -254,7 +255,7 @@ export function buildOpen5gsSubscriberFromLegacy(
     ...base,
     schema_version: 1,
     imsi,
-    msisdn: [],
+    msisdn: normalizedSub4G ? (requestedMsisdn ? [requestedMsisdn] : []) : base.msisdn,
     security: input.auth4G ? toOpen5gsSecurity(input.auth4G, base.security) : base.security,
     ambr: normalizedSub4G ? normalizeAmbr(normalizedSub4G.ambr, base.ambr) : base.ambr,
     slice: normalizedSub4G ? asArray(normalizedSub4G.sliceList).map(toOpen5gsSlice) : base.slice,

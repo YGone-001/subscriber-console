@@ -137,10 +137,21 @@ export function buildDefaultSub4G(msisdn = "", profileData?: any) {
   };
 }
 
+export function getPrimaryMsisdn(sub4G: unknown): string {
+  if (!sub4G || typeof sub4G !== "object") return "";
+
+  const msisdnList = (sub4G as { msisdnList?: unknown }).msisdnList;
+  if (!Array.isArray(msisdnList)) return "";
+
+  const first = msisdnList[0];
+  if (!first || typeof first !== "object") return "";
+
+  const msisdn = (first as { msisdn?: unknown }).msisdn;
+  return msisdn === undefined || msisdn === null ? "" : String(msisdn);
+}
+
 export function normalizeSub4G(input: any) {
-  const msisdn = Array.isArray(input?.msisdnList) && input.msisdnList[0]?.msisdn !== undefined
-    ? String(input.msisdnList[0].msisdn)
-    : "";
+  const msisdn = getPrimaryMsisdn(input);
 
   const normalized = buildDefaultSub4G(msisdn, { ambr: input?.ambr, sliceList: input?.sliceList });
 

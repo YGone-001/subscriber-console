@@ -5,6 +5,7 @@ import {
   buildOpen5gsSubscriberFromLegacy,
   open5gsToLegacyState,
 } from '@/lib/xcloudSubscriber';
+import { getPrimaryMsisdn } from '@/lib/subscriberDefaults';
 import {
   cloneOcsProvisioningFromReference,
   deleteOcsProvisioning,
@@ -273,13 +274,6 @@ function asNumber(value: unknown, fallback: number): number {
 function asString(value: unknown, fallback = ''): string {
   if (value === undefined || value === null || value === '') return fallback;
   return String(value);
-}
-
-function msisdnFromLegacyPayload(payload: { sub4G?: unknown }): string {
-  const sub4G = payload.sub4G && typeof payload.sub4G === 'object' ? payload.sub4G as Record<string, unknown> : {};
-  const msisdnList = Array.isArray(sub4G.msisdnList) ? sub4G.msisdnList : [];
-  const first = msisdnList[0] && typeof msisdnList[0] === 'object' ? msisdnList[0] as Record<string, unknown> : {};
-  return asString(first.msisdn);
 }
 
 function isValidImsi(imsi: string): boolean {
@@ -648,20 +642,38 @@ export async function createSubscriberFromReference(
   }
 }
 
-export async function updateSubscriberFromLegacy(
+export type LegacySubscriberUpdatePayload = {
+  sub4G?: unknown;
+  auth4G?: unknown;
+  ocsTraffic?: unknown;
+};
+
+export function prepareSubscriberLegacyUpdate(
   imsi: string,
-  payload: {
-    sub4G?: unknown;
-    auth4G?: unknown;
-    ocsTraffic?: unknown;
-  }
-): Promise<Open5gsSubscriberDocument> {
-  const collection = await subscribersCollection();
-  const existing = await collection.findOne({ imsi });
+  payload: LegacySubscriberUpdatePayload,
+  existing?: Open5gsSubscriberDocument | null
+) {
   const next = buildOpen5gsSubscriberFromLegacy(imsi, payload, existing);
   const ocsTraffic = payload.ocsTraffic as Record<string, unknown> | undefined;
   const requestedPlanId = ocsTraffic?.planId ?? ocsTraffic?.plan_id;
-  const requestedMsisdn = msisdnFromLegacyPayload(payload);
+  const requestedMsisdn = payload.sub4G
+    ? getPrimaryMsisdn(payload.sub4G)
+    : next.msisdn[0] || '';
+
+  return { next, ocsTraffic, requestedPlanId, requestedMsisdn };
+}
+
+export async function updateSubscriberFromLegacy(
+  imsi: string,
+  payload: LegacySubscriberUpdatePayload
+): Promise<Open5gsSubscriberDocument> {
+  const collection = await subscribersCollection();
+  const existing = await collection.findOne({ imsi });
+  const { next, ocsTraffic, requestedPlanId, requestedMsisdn } = prepareSubscriberLegacyUpdate(
+    imsi,
+    payload,
+    existing
+  );
 
   if (requestedMsisdn) {
     await assertMsisdnAvailable(requestedMsisdn, imsi);
