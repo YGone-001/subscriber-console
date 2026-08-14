@@ -11,13 +11,11 @@ const PLAN_COLORS = ["var(--chart-2)", "var(--chart-1)", "var(--chart-3)", "var(
 
 interface TariffPlanDistributionChartProps {
   tariffPlanDist?: TariffPlanDistItem[];
-  theme: string;
   t: (key: string, params?: Record<string, string | number>) => string;
 }
 
 export default function TariffPlanDistributionChart({
   tariffPlanDist = [],
-  theme,
   t,
 }: TariffPlanDistributionChartProps) {
   const titleId = React.useId();
@@ -47,17 +45,17 @@ export default function TariffPlanDistributionChart({
 
   const tooltipStyle = {
     borderRadius: 8,
-    backgroundColor: theme === "dark" ? "#1e293b" : "#fff",
-    borderColor: theme === "dark" ? "#334155" : "#e2e8f0",
-    color: theme === "dark" ? "#f8fafc" : "#334155",
-    boxShadow: "0 14px 30px -18px rgba(15,23,42,0.45)",
+    backgroundColor: "var(--surface)",
+    borderColor: "var(--surface-border)",
+    color: "var(--text-main)",
+    boxShadow: "var(--shadow-popover)",
   };
 
   return (
     <section className="analytics-panel">
       <div className="analytics-panel-header">
         <div className="analytics-panel-title">
-          <Layers size={18} color="#36b9cc" />
+          <Layers size={18} color="var(--status-info)" />
           <h3 id={titleId}>{t("dash_chart_tariff_plan_title")}</h3>
         </div>
         <div className="analytics-ocs-header-actions">

@@ -67,3 +67,34 @@ test('legacy dashboard palette is absent from application source', () => {
     assert.doesNotMatch(sources, new RegExp(legacyColor), `legacy color remains: ${legacyColor}`);
   }
 });
+
+test('migrated analytics and OCS data views contain no component-local color literals', () => {
+  const migratedSources = [
+    '../src/components/AnalyticsCockpit.tsx',
+    '../src/components/analytics/KpiCard.tsx',
+    '../src/components/analytics/PlmnDistributionChart.tsx',
+    '../src/components/analytics/TariffPlanDistributionChart.tsx',
+    '../src/components/analytics/TopConsumerChart.tsx',
+    '../src/components/analytics/WorkbenchPanel.tsx',
+    '../src/components/ocs/OcsBalancesPanel.tsx',
+    '../src/components/ocs/OcsDetailDrawer.tsx',
+    '../src/components/ocs/OcsSessionsPanel.tsx',
+    '../src/components/ocs/OcsUsagePanel.tsx',
+  ].map(read).join('\n');
+
+  assert.doesNotMatch(migratedSources, /#[\da-f]{3,8}\b|rgba?\s*\(/i);
+  assert.doesNotMatch(migratedSources, /\$\{color\}(?:16|30)/);
+});
+
+test('analytics charts resolve theme colors through CSS tokens', () => {
+  const chartSources = [
+    '../src/components/analytics/PlmnDistributionChart.tsx',
+    '../src/components/analytics/TariffPlanDistributionChart.tsx',
+    '../src/components/analytics/TopConsumerChart.tsx',
+  ].map(read).join('\n');
+
+  assert.doesNotMatch(chartSources, /\btheme\b/);
+  assert.match(chartSources, /var\(--surface\)/);
+  assert.match(chartSources, /var\(--text-main\)/);
+  assert.match(chartSources, /var\(--shadow-popover\)/);
+});

@@ -38,7 +38,7 @@ export default function OcsDetailDrawer({
         <div className="ocs-drawer-header">
           <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
             <h3 className="ocs-drawer-title">{title}</h3>
-            <span style={{ fontSize: "0.75rem", color: "#64748b" }}>
+            <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
               {t("ocs_modal_detail_title")}
             </span>
           </div>
@@ -49,7 +49,7 @@ export default function OcsDetailDrawer({
               onClick={handleCopy}
               title={t("ocs_modal_copy_json")}
             >
-              {copied ? <Check size={14} color="#34d399" /> : <Copy size={14} />}
+              {copied ? <Check size={14} color="var(--status-success)" /> : <Copy size={14} />}
               <span>{copied ? t("ocs_modal_copied") : t("ocs_modal_copy_json")}</span>
             </button>
             <button

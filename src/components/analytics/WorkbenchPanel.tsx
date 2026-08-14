@@ -171,7 +171,7 @@ export default function WorkbenchPanel({
             value={operationsScore}
             color={
               operationsScore < 70
-                ? "#ef4444"
+                ? "var(--status-danger)"
                 : operationsScore < 88
                 ? "var(--status-warning)"
                 : "var(--status-success)"
@@ -183,9 +183,9 @@ export default function WorkbenchPanel({
               style={{
                 color:
                   operationsScore < 70
-                    ? "#ef4444"
+                    ? "var(--status-danger)"
                     : operationsScore < 88
-                    ? "#f59e0b"
+                    ? "var(--status-warning)"
                     : "var(--text-main)",
               }}
             >
@@ -198,13 +198,13 @@ export default function WorkbenchPanel({
             style={{
               color:
                 activeAlertCount > 0
-                  ? "#ef4444"
+                  ? "var(--status-danger)"
                   : "var(--text-secondary)",
               fontWeight: activeAlertCount > 0 ? 700 : 500,
             }}
           >
             {activeAlertCount > 0 ? (
-              <ShieldAlert size={15} color="#ef4444" />
+              <ShieldAlert size={15} color="var(--status-danger)" />
             ) : (
               <ShieldCheck size={15} color="var(--status-success)" />
             )}

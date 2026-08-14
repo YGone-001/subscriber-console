@@ -117,7 +117,7 @@ export default function OcsSessionsPanel() {
               <Activity size={18} />
             </div>
           </div>
-          <div className="ocs-kpi-value" style={{ color: "#34d399" }}>
+          <div className="ocs-kpi-value" style={{ color: "var(--status-success)" }}>
             {summary.activeSessions.toLocaleString()}
           </div>
           <div className="ocs-kpi-sub">Currently handling Gy/Ro traffic</div>
@@ -130,7 +130,7 @@ export default function OcsSessionsPanel() {
               <Clock size={18} />
             </div>
           </div>
-          <div className="ocs-kpi-value" style={{ color: "#fbbf24" }}>
+          <div className="ocs-kpi-value" style={{ color: "var(--status-warning)" }}>
             {summary.closingSessions.toLocaleString()}
           </div>
           <div className="ocs-kpi-sub">Lifecycle cleanup scanner in progress</div>
@@ -260,7 +260,7 @@ export default function OcsSessionsPanel() {
             <tbody>
               {records.length === 0 ? (
                 <tr>
-                  <td colSpan={11} style={{ textAlign: "center", padding: "3rem 1rem", color: "#64748b" }}>
+                  <td colSpan={11} style={{ textAlign: "center", padding: "3rem 1rem", color: "var(--text-muted)" }}>
                     {loading ? t("loading") : t("no_data")}
                   </td>
                 </tr>
@@ -278,10 +278,10 @@ export default function OcsSessionsPanel() {
 
                   return (
                     <tr key={r.id}>
-                      <td className="ocs-mono" style={{ fontSize: "0.8rem", color: "#38bdf8", maxWidth: "200px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.session_id}>
+                      <td className="ocs-mono" style={{ fontSize: "0.8rem", color: "var(--status-info)", maxWidth: "200px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.session_id}>
                         {r.session_id}
                       </td>
-                      <td className="ocs-mono" style={{ fontWeight: 600, color: "#93c5fd" }}>
+                      <td className="ocs-mono" style={{ fontWeight: 600, color: "var(--status-info)" }}>
                         {r.imsi}
                       </td>
                       <td className="ocs-mono">{r.apn}</td>
@@ -297,18 +297,18 @@ export default function OcsSessionsPanel() {
                       </td>
                       <td className="ocs-mono">#{r.cc_request_number}</td>
                       <td className="ocs-mono">
-                        <span style={{ color: "#34d399" }}>{formatBytes(r.granted_total)}</span>
-                        <span style={{ color: "#64748b" }}> / </span>
-                        <span style={{ color: "#fbbf24" }}>{formatBytes(r.used_total)}</span>
+                        <span style={{ color: "var(--status-success)" }}>{formatBytes(r.granted_total)}</span>
+                        <span style={{ color: "var(--text-muted)" }}> / </span>
+                        <span style={{ color: "var(--status-warning)" }}>{formatBytes(r.used_total)}</span>
                       </td>
                       <td className="ocs-mono" style={{ fontSize: "0.8rem" }}>
                         {r.rating_group !== undefined ? `RG:${r.rating_group}` : "-"}
                         {r.service_identifier !== undefined ? ` / SI:${r.service_identifier}` : ""}
                       </td>
-                      <td className="ocs-mono" style={{ fontSize: "0.775rem", color: "#64748b" }}>
+                      <td className="ocs-mono" style={{ fontSize: "0.775rem", color: "var(--text-muted)" }}>
                         {r.started_at ? new Date(r.started_at).toLocaleTimeString() : "-"}
                       </td>
-                      <td className="ocs-mono" style={{ fontSize: "0.775rem", color: "#94a3b8" }}>
+                      <td className="ocs-mono" style={{ fontSize: "0.775rem", color: "var(--text-muted)" }}>
                         {r.last_update_at ? new Date(r.last_update_at).toLocaleTimeString() : "-"}
                       </td>
                       <td>
@@ -359,7 +359,7 @@ export default function OcsSessionsPanel() {
             >
               {t("prev")}
             </button>
-            <span className="ocs-mono" style={{ fontSize: "0.85rem", padding: "0 0.5rem" }}>
+            <span className="ocs-mono" style={{ fontSize: "0.8rem", padding: "0 0.5rem" }}>
               {page} / {totalPages}
             </span>
             <button

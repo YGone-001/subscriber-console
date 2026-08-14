@@ -51,23 +51,21 @@ function TopConsumerTooltip({
 
 export default function TopConsumerChart({
   top5,
-  theme,
   t,
 }: {
   top5: TopConsumer[];
-  theme: string;
   t: (key: string, params?: Record<string, string | number>) => string;
 }) {
   const titleId = React.useId();
   const summaryId = React.useId();
-  const chartStroke = theme === "dark" ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.08)";
-  const tickColor = theme === "dark" ? "#CBD5E1" : "#475569";
+  const chartStroke = "var(--surface-border)";
+  const tickColor = "var(--text-secondary)";
   const tooltipStyle = {
     borderRadius: 8,
-    backgroundColor: theme === "dark" ? "#1e293b" : "#fff",
-    borderColor: theme === "dark" ? "#334155" : "#e2e8f0",
-    color: theme === "dark" ? "#f8fafc" : "#334155",
-    boxShadow: "0 14px 30px -18px rgba(15,23,42,0.45)",
+    backgroundColor: "var(--surface)",
+    borderColor: "var(--surface-border)",
+    color: "var(--text-main)",
+    boxShadow: "var(--shadow-popover)",
   };
   const leadingConsumer = top5[0];
   const chartSummary = leadingConsumer
@@ -116,7 +114,7 @@ export default function TopConsumerChart({
                 tick={{ fontSize: 11.5, fill: tickColor, fontFamily: "monospace", fontWeight: 600 }}
               />
               <Tooltip
-                cursor={{ fill: theme === "dark" ? "rgba(255,255,255,0.05)" : "rgba(15,23,42,0.04)" }}
+                cursor={{ fill: "var(--surface-hover)" }}
                 content={<TopConsumerTooltip contentStyle={tooltipStyle} t={t} />}
               />
               <Bar dataKey="balance" radius={[0, 6, 6, 0]} barSize={22}>

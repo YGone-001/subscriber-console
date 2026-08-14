@@ -13,7 +13,6 @@ import {
   ShieldCheck,
   AlertTriangle,
 } from "lucide-react";
-import { useTheme } from "./ThemeProvider";
 import { fetcher } from "@/lib/fetcher";
 import { useI18n } from "./I18nProvider";
 
@@ -29,7 +28,6 @@ import OcsSessionTelemetryCard from "./analytics/OcsSessionTelemetryCard";
 import TariffPlanDistributionChart from "./analytics/TariffPlanDistributionChart";
 
 export default function AnalyticsCockpit() {
-  const { theme } = useTheme();
   const { t } = useI18n();
 
   const { data, error, isLoading } = useSWR<MetricsData>("/api/analytics/metrics", fetcher, { refreshInterval: 5000 });
@@ -342,8 +340,8 @@ export default function AnalyticsCockpit() {
           </div>
         </div>
         <div className="analytics-chart-grid analytics-observability-side">
-          <TopConsumerChart top5={top5} theme={theme} t={t} />
-          <TariffPlanDistributionChart tariffPlanDist={tariffPlanDist} theme={theme} t={t} />
+          <TopConsumerChart top5={top5} t={t} />
+          <TariffPlanDistributionChart tariffPlanDist={tariffPlanDist} t={t} />
         </div>
       </div>
     </div>

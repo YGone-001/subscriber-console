@@ -202,7 +202,7 @@ export default function OcsUsagePanel() {
                 <CheckCircle size={18} />
               </div>
             </div>
-            <div className="ocs-kpi-value" style={{ color: "#34d399" }}>
+            <div className="ocs-kpi-value" style={{ color: "var(--status-success)" }}>
               {usageSummary.totalChargedRecords.toLocaleString()}
             </div>
             <div className="ocs-kpi-sub">Successfully billed against balances</div>
@@ -237,7 +237,7 @@ export default function OcsUsagePanel() {
                 <BarChart3 size={18} />
               </div>
             </div>
-            <div className="ocs-kpi-value" style={{ color: "#fbbf24" }}>
+            <div className="ocs-kpi-value" style={{ color: "var(--status-warning)" }}>
               {formatBytes(usageSummary.totalOctets)}
             </div>
             <div className="ocs-kpi-sub">Cumulative combined volume</div>
@@ -263,7 +263,7 @@ export default function OcsUsagePanel() {
                 <Clock size={18} />
               </div>
             </div>
-            <div className="ocs-kpi-value" style={{ color: "#34d399" }}>
+            <div className="ocs-kpi-value" style={{ color: "var(--status-success)" }}>
               {reservationSummary.activeReservations.toLocaleString()}
             </div>
             <div className="ocs-kpi-sub">Currently holding active balance quota</div>
@@ -400,17 +400,17 @@ export default function OcsUsagePanel() {
               <tbody>
                 {usageRecords.length === 0 ? (
                   <tr>
-                    <td colSpan={11} style={{ textAlign: "center", padding: "3rem 1rem", color: "#64748b" }}>
+                    <td colSpan={11} style={{ textAlign: "center", padding: "3rem 1rem", color: "var(--text-muted)" }}>
                       {loading ? t("loading") : t("no_data")}
                     </td>
                   </tr>
                 ) : (
                   usageRecords.map((r) => (
                     <tr key={r.id}>
-                      <td className="ocs-mono" style={{ fontSize: "0.8rem", color: "#38bdf8", maxWidth: "180px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.session_id}>
+                      <td className="ocs-mono" style={{ fontSize: "0.8rem", color: "var(--status-info)", maxWidth: "180px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.session_id}>
                         {r.session_id}
                       </td>
-                      <td className="ocs-mono" style={{ fontWeight: 600, color: "#93c5fd" }}>
+                      <td className="ocs-mono" style={{ fontWeight: 600, color: "var(--status-info)" }}>
                         {r.imsi}
                       </td>
                       <td className="ocs-mono">{r.apn}</td>
@@ -421,11 +421,11 @@ export default function OcsUsagePanel() {
                       </td>
                       <td className="ocs-mono">#{r.cc_request_number}</td>
                       <td className="ocs-mono">
-                        <span style={{ color: "#38bdf8" }}>{formatBytes(r.input_octets)}</span>
-                        <span style={{ color: "#64748b" }}> / </span>
-                        <span style={{ color: "#a855f7" }}>{formatBytes(r.output_octets)}</span>
+                        <span style={{ color: "var(--chart-2)" }}>{formatBytes(r.input_octets)}</span>
+                        <span style={{ color: "var(--text-muted)" }}> / </span>
+                        <span style={{ color: "var(--chart-5)" }}>{formatBytes(r.output_octets)}</span>
                       </td>
-                      <td className="ocs-mono" style={{ fontWeight: 700, color: "#f8fafc" }}>
+                      <td className="ocs-mono" style={{ fontWeight: 700, color: "var(--text-main)" }}>
                         {formatBytes(r.total_octets)}
                       </td>
                       <td>
@@ -438,7 +438,7 @@ export default function OcsUsagePanel() {
                           {r.result_code || 2001}
                         </span>
                       </td>
-                      <td className="ocs-mono" style={{ fontSize: "0.775rem", color: "#94a3b8" }}>
+                      <td className="ocs-mono" style={{ fontSize: "0.775rem", color: "var(--text-muted)" }}>
                         {r.created_at ? new Date(r.created_at).toLocaleString() : "-"}
                       </td>
                       <td>
@@ -481,7 +481,7 @@ export default function OcsUsagePanel() {
               <tbody>
                 {reservationRecords.length === 0 ? (
                   <tr>
-                    <td colSpan={11} style={{ textAlign: "center", padding: "3rem 1rem", color: "#64748b" }}>
+                    <td colSpan={11} style={{ textAlign: "center", padding: "3rem 1rem", color: "var(--text-muted)" }}>
                       {loading ? t("loading") : t("no_data")}
                     </td>
                   </tr>
@@ -500,15 +500,15 @@ export default function OcsUsagePanel() {
 
                     return (
                       <tr key={r.id}>
-                        <td className="ocs-mono" style={{ fontSize: "0.8rem", color: "#38bdf8", maxWidth: "180px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.session_id}>
+                        <td className="ocs-mono" style={{ fontSize: "0.8rem", color: "var(--status-info)", maxWidth: "180px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.session_id}>
                           {r.session_id}
                         </td>
-                        <td className="ocs-mono" style={{ fontWeight: 600, color: "#93c5fd" }}>
+                        <td className="ocs-mono" style={{ fontWeight: 600, color: "var(--status-info)" }}>
                           {r.imsi}
                         </td>
                         <td className="ocs-mono">{r.apn}</td>
                         <td>
-                          <span className="ocs-badge" style={{ background: "rgba(255,255,255,0.06)", color: "#e2e8f0" }}>
+                          <span className="ocs-badge" style={{ background: "var(--neutral-soft)", color: "var(--text-secondary)" }}>
                             {r.charging_type}
                           </span>
                         </td>
@@ -518,14 +518,14 @@ export default function OcsUsagePanel() {
                           </span>
                         </td>
                         <td className="ocs-mono">
-                          <span style={{ color: "#818cf8" }}>{formatBytes(r.reserved_octets)}</span>
-                          <span style={{ color: "#64748b" }}> / </span>
-                          <span style={{ color: "#fbbf24" }}>{formatBytes(r.used_octets)}</span>
+                          <span style={{ color: "var(--chart-5)" }}>{formatBytes(r.reserved_octets)}</span>
+                          <span style={{ color: "var(--text-muted)" }}> / </span>
+                          <span style={{ color: "var(--status-warning)" }}>{formatBytes(r.used_octets)}</span>
                         </td>
-                        <td className="ocs-mono" style={{ color: "#34d399" }}>
+                        <td className="ocs-mono" style={{ color: "var(--status-success)" }}>
                           {formatBytes(r.released_octets)}
                         </td>
-                        <td className="ocs-mono" style={{ color: r.overuse_octets > 0 ? "#f87171" : "#64748b" }}>
+                        <td className="ocs-mono" style={{ color: r.overuse_octets > 0 ? "var(--status-danger)" : "var(--text-muted)" }}>
                           {formatBytes(r.overuse_octets)}
                         </td>
                         <td>
@@ -533,7 +533,7 @@ export default function OcsUsagePanel() {
                             {r.result_code}
                           </span>
                         </td>
-                        <td className="ocs-mono" style={{ fontSize: "0.775rem", color: "#94a3b8" }}>
+                        <td className="ocs-mono" style={{ fontSize: "0.775rem", color: "var(--text-muted)" }}>
                           {r.updated_at ? new Date(r.updated_at).toLocaleString() : "-"}
                         </td>
                         <td>
@@ -604,7 +604,7 @@ export default function OcsUsagePanel() {
             >
               {t("prev")}
             </button>
-            <span className="ocs-mono" style={{ fontSize: "0.85rem", padding: "0 0.5rem" }}>
+            <span className="ocs-mono" style={{ fontSize: "0.8rem", padding: "0 0.5rem" }}>
               {activeTab === "usage" ? usagePage : reservationPage} /{" "}
               {activeTab === "usage" ? usageTotalPages : reservationTotalPages}
             </span>

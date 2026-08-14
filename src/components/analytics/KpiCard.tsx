@@ -77,7 +77,11 @@ export default function KpiCard({
         <div className="analytics-kpi-meta">
           <div
             className="analytics-kpi-icon"
-            style={{ color, background: `${color}16`, borderColor: `${color}30` }}
+            style={{
+              color,
+              background: `color-mix(in srgb, ${color} 9%, transparent)`,
+              borderColor: `color-mix(in srgb, ${color} 19%, transparent)`,
+            }}
           >
             {icon}
           </div>

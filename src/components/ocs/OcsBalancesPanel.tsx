@@ -167,7 +167,7 @@ export default function OcsBalancesPanel() {
               {brokenCount > 0 ? <AlertTriangle size={18} /> : <CheckCircle2 size={18} />}
             </div>
           </div>
-          <div className="ocs-kpi-value" style={{ color: brokenCount > 0 ? "#f87171" : "#34d399" }}>
+          <div className="ocs-kpi-value" style={{ color: brokenCount > 0 ? "var(--status-danger)" : "var(--status-success)" }}>
             {brokenCount}
           </div>
           <div className="ocs-kpi-sub">
@@ -265,7 +265,7 @@ export default function OcsBalancesPanel() {
             <tbody>
               {records.length === 0 ? (
                 <tr>
-                  <td colSpan={11} style={{ textAlign: "center", padding: "3rem 1rem", color: "#64748b" }}>
+                  <td colSpan={11} style={{ textAlign: "center", padding: "3rem 1rem", color: "var(--text-muted)" }}>
                     {loading ? t("loading") : t("no_data")}
                   </td>
                 </tr>
@@ -277,11 +277,11 @@ export default function OcsBalancesPanel() {
 
                   return (
                     <tr key={r.id}>
-                      <td className="ocs-mono" style={{ fontWeight: 600, color: "#93c5fd" }}>
+                      <td className="ocs-mono" style={{ fontWeight: 600, color: "var(--status-info)" }}>
                         {r.imsi}
                       </td>
                       <td>
-                        <span className="ocs-badge" style={{ background: "rgba(255,255,255,0.06)", color: "#e2e8f0" }}>
+                        <span className="ocs-badge" style={{ background: "var(--neutral-soft)", color: "var(--text-secondary)" }}>
                           {r.plan_id}
                         </span>
                       </td>
@@ -304,7 +304,7 @@ export default function OcsBalancesPanel() {
                           </div>
                         </div>
                       </td>
-                      <td className="ocs-mono" style={{ fontWeight: 700, color: r.data_available > 0 ? "#34d399" : "#f87171" }}>
+                      <td className="ocs-mono" style={{ fontWeight: 700, color: r.data_available > 0 ? "var(--status-success)" : "var(--status-danger)" }}>
                         {formatBytes(r.data_available)}
                       </td>
                       <td className="ocs-mono">
@@ -324,8 +324,8 @@ export default function OcsBalancesPanel() {
                           </span>
                         )}
                       </td>
-                      <td className="ocs-mono" style={{ color: "#94a3b8" }}>v{r.version}</td>
-                      <td className="ocs-mono" style={{ fontSize: "0.8rem", color: "#64748b" }}>
+                      <td className="ocs-mono" style={{ color: "var(--text-muted)" }}>v{r.version}</td>
+                      <td className="ocs-mono" style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
                         {r.updated_at ? new Date(r.updated_at).toLocaleString() : "-"}
                       </td>
                       <td>
@@ -376,7 +376,7 @@ export default function OcsBalancesPanel() {
             >
               {t("prev")}
             </button>
-            <span className="ocs-mono" style={{ fontSize: "0.85rem", padding: "0 0.5rem" }}>
+            <span className="ocs-mono" style={{ fontSize: "0.8rem", padding: "0 0.5rem" }}>
               {page} / {totalPages}
             </span>
             <button
