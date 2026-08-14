@@ -47,13 +47,19 @@ test("dense tables declare responsive column priorities", () => {
   }
 });
 
-test("long forms protect unsaved edits before modal and browser exit", () => {
+test("long forms protect unsaved edits across dialogs and navigation", () => {
   const guard = read("src/components/ui/UnsavedChangesGuard.tsx");
+  const dialogFocus = read("src/components/ui/useDialogFocus.ts");
   assert.match(guard, /beforeunload/);
   assert.match(guard, /role="alertdialog"/);
   assert.match(guard, /aria-modal="true"/);
-  assert.match(guard, /event\.key === "Escape"/);
-  assert.match(guard, /event\.key === "Tab"/);
+  assert.match(guard, /useDialogFocus/);
+  assert.match(guard, /document\.addEventListener\("click", handleNavigationClick, true\)/);
+  assert.match(guard, /router\.push\(pendingNavigation\)/);
+  assert.match(dialogFocus, /sibling\.inert = true/);
+  assert.match(dialogFocus, /event\.key === "Escape"/);
+  assert.match(dialogFocus, /event\.key !== "Tab"/);
+  assert.match(dialogFocus, /previousFocus\?\.focus\(\)/);
 
   for (const file of ["src/components/SubscriberModal.tsx", "src/components/ProfileModal.tsx"]) {
     const source = read(file);

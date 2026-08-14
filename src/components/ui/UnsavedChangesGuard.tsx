@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { AlertTriangle } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useDialogFocus } from "./useDialogFocus";
 import styles from "./UnsavedChangesGuard.module.css";
 
 interface UnsavedChangesDialogProps {
@@ -26,37 +28,25 @@ export function UnsavedChangesDialog({
   const titleId = useId();
   const descriptionId = useId();
   const keepEditingRef = useRef<HTMLButtonElement>(null);
-  const discardRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    keepEditingRef.current?.focus();
-  }, [open]);
+  const dialogRef = useDialogFocus({ open, onClose: onKeepEditing, initialFocusRef: keepEditingRef });
 
   if (!open) return null;
 
   return (
-    <div className={styles.backdrop} onMouseDown={onKeepEditing} onClick={(event) => event.stopPropagation()}>
+    <div
+      className={styles.backdrop}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onKeepEditing();
+      }}
+    >
       <div
+        ref={dialogRef}
         className={styles.dialog}
         role="alertdialog"
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={descriptionId}
-        onMouseDown={(event) => event.stopPropagation()}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") onKeepEditing();
-          if (event.key === "Tab") {
-            const movingBackward = event.shiftKey;
-            if (movingBackward && document.activeElement === keepEditingRef.current) {
-              event.preventDefault();
-              discardRef.current?.focus();
-            } else if (!movingBackward && document.activeElement === discardRef.current) {
-              event.preventDefault();
-              keepEditingRef.current?.focus();
-            }
-          }
-        }}
+        tabIndex={-1}
       >
         <span className={styles.icon} aria-hidden="true"><AlertTriangle size={22} /></span>
         <div className={styles.content}>
@@ -67,7 +57,7 @@ export function UnsavedChangesDialog({
           <button ref={keepEditingRef} type="button" className="btn btn-outline" onClick={onKeepEditing}>
             {keepEditingLabel}
           </button>
-          <button ref={discardRef} type="button" className="btn btn-danger" onClick={onDiscard}>
+          <button type="button" className="btn btn-danger" onClick={onDiscard}>
             {discardLabel}
           </button>
         </div>
@@ -77,7 +67,9 @@ export function UnsavedChangesDialog({
 }
 
 export function useUnsavedChangesGuard(isDirty: boolean | (() => boolean), onDiscard: () => void) {
+  const router = useRouter();
   const [isPromptOpen, setIsPromptOpen] = useState(false);
+  const pendingNavigationRef = useRef<string | null>(null);
   const checkDirty = useCallback(
     () => typeof isDirty === "function" ? isDirty() : isDirty,
     [isDirty],
@@ -93,19 +85,59 @@ export function useUnsavedChangesGuard(isDirty: boolean | (() => boolean), onDis
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [checkDirty]);
 
+  useEffect(() => {
+    const handleNavigationClick = (event: MouseEvent) => {
+      if (
+        !checkDirty()
+        || event.defaultPrevented
+        || event.button !== 0
+        || event.metaKey
+        || event.ctrlKey
+        || event.shiftKey
+        || event.altKey
+        || !(event.target instanceof Element)
+      ) return;
+
+      const anchor = event.target.closest<HTMLAnchorElement>("a[href]");
+      if (!anchor || anchor.download || (anchor.target && anchor.target !== "_self")) return;
+
+      const destination = new URL(anchor.href, window.location.href);
+      if (destination.origin !== window.location.origin) return;
+
+      const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      const destinationPath = `${destination.pathname}${destination.search}${destination.hash}`;
+      if (destinationPath === currentPath) return;
+
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      pendingNavigationRef.current = destinationPath;
+      setIsPromptOpen(true);
+    };
+
+    document.addEventListener("click", handleNavigationClick, true);
+    return () => document.removeEventListener("click", handleNavigationClick, true);
+  }, [checkDirty]);
+
   const requestClose = useCallback(() => {
     if (checkDirty()) {
+      pendingNavigationRef.current = null;
       setIsPromptOpen(true);
       return;
     }
     onDiscard();
   }, [checkDirty, onDiscard]);
 
-  const keepEditing = useCallback(() => setIsPromptOpen(false), []);
+  const keepEditing = useCallback(() => {
+    pendingNavigationRef.current = null;
+    setIsPromptOpen(false);
+  }, []);
   const discardChanges = useCallback(() => {
+    const pendingNavigation = pendingNavigationRef.current;
+    pendingNavigationRef.current = null;
     setIsPromptOpen(false);
     onDiscard();
-  }, [onDiscard]);
+    if (pendingNavigation) router.push(pendingNavigation);
+  }, [onDiscard, router]);
 
   return { isPromptOpen, requestClose, keepEditing, discardChanges };
 }
