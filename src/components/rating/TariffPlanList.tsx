@@ -629,16 +629,16 @@ export function TariffPlanList(props: any) {
                   <caption className="sr-only">{selectedPlan?.name || selectedPlanId} · {t("tariff_plan_rules")}</caption>
                   <thead>
                     <tr>
-                      <th style={{ width: 60 }}>Priority</th>
-                      <th>Rule ID</th>
-                      <th>Scenario</th>
-                      <th>APN / DNN</th>
-                      <th>RG / SI</th>
-                      <th>Rate</th>
-                      <th>Grant Quota</th>
-                      <th>Validity</th>
-                      <th>Status</th>
-                      {canEditTemplates && <th style={{ textAlign: "right", width: 120 }}>Actions</th>}
+                      <th style={{ width: 60 }} data-column-priority="important">Priority</th>
+                      <th data-column-priority="essential">Rule ID</th>
+                      <th data-column-priority="essential">Scenario</th>
+                      <th data-column-priority="important">APN / DNN</th>
+                      <th data-column-priority="supplementary">RG / SI</th>
+                      <th data-column-priority="essential">Rate</th>
+                      <th data-column-priority="important">Grant Quota</th>
+                      <th data-column-priority="supplementary">Validity</th>
+                      <th data-column-priority="essential">Status</th>
+                      {canEditTemplates && <th style={{ textAlign: "right", width: 120 }} data-column-priority="essential">Actions</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -654,10 +654,10 @@ export function TariffPlanList(props: any) {
 
                         return (
                           <tr key={ruleKey} className={isConflicted ? "rule-conflict-row" : ""}>
-                            <td>
+                            <td data-label="Priority" data-column-priority="important">
                               <span className="rule-priority-badge">{rule.priority ?? 0}</span>
                             </td>
-                            <td>
+                            <td data-label="Rule ID" data-column-priority="essential">
                               <div style={{ fontWeight: 700, color: "var(--text-main)", fontFamily: "monospace" }}>
                                 {rule.rule_id || `Rule #${rule.rating_group_id}`}
                               </div>
@@ -667,37 +667,37 @@ export function TariffPlanList(props: any) {
                                 </span>
                               )}
                             </td>
-                            <td>
+                            <td data-label="Scenario" data-column-priority="essential">
                               <span style={{ textTransform: "capitalize", fontWeight: 600, fontSize: "0.82rem" }}>
                                 {(rule.charging_type || "data_volume").replace("_", " ")}
                               </span>
                             </td>
-                            <td>
+                            <td data-label="APN / DNN" data-column-priority="important">
                               <code style={{ fontSize: "0.84rem", color: "var(--primary)" }}>{rule.apn || "internet"}</code>
                             </td>
-                            <td>
+                            <td data-label="RG / SI" data-column-priority="supplementary">
                               <span style={{ fontFamily: "monospace", fontSize: "0.84rem" }}>
                                 RG:{rule.rating_group_id} / SI:{rule.service_identifier ?? 1}
                               </span>
                             </td>
-                            <td>
+                            <td data-label="Rate" data-column-priority="essential">
                               <span style={{ fontWeight: 700, fontFamily: "monospace" }}>
                                 {rule.rates || "0"} {rule.currency || "USD"}
                               </span>
                             </td>
-                            <td style={{ fontSize: "0.82rem" }}>
+                            <td style={{ fontSize: "0.82rem" }} data-label="Grant Quota" data-column-priority="important">
                               {formatGrant(t, rule.quota_per_grant, rule.unit, rule.charging_type)}
                             </td>
-                            <td style={{ fontSize: "0.82rem" }}>
+                            <td style={{ fontSize: "0.82rem" }} data-label="Validity" data-column-priority="supplementary">
                               {rule.validity_time ? `${rule.validity_time}s` : "Default"}
                             </td>
-                            <td>
+                            <td data-label="Status" data-column-priority="essential">
                               <StatusBadge tone={isRuleActive ? "success" : "muted"}>
                                 {isRuleActive ? t("policy_status_active") : t("users_disabled")}
                               </StatusBadge>
                             </td>
                             {canEditTemplates && (
-                              <td style={{ textAlign: "right" }}>
+                              <td style={{ textAlign: "right" }} data-label="Actions" data-column-priority="essential">
                                 <div style={{ display: "inline-flex", gap: "0.35rem" }}>
                                   <button
                                     type="button"

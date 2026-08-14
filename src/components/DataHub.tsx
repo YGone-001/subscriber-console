@@ -792,12 +792,12 @@ export default function DataHub({
                       <caption className="sr-only">{t("dh_tab_import")}</caption>
                       <thead>
                         <tr className="dh-table-tr-head">
-                          <th className="dh-table-th">#</th>
-                          <th className="dh-table-th">{t("dh_col_imsi")}</th>
-                          <th className="dh-table-th">{t("sub_360_tariff_plan")}</th>
-                          <th className="dh-table-th">{t("sub_traffic_balance")}</th>
-                          <th className="dh-table-th">{t("prof_sms_balance")}</th>
-                          <th className="dh-table-th-center">{t("dh_col_status")}</th>
+                          <th className="dh-table-th" data-column-priority="supplementary">#</th>
+                          <th className="dh-table-th" data-column-priority="essential">{t("dh_col_imsi")}</th>
+                          <th className="dh-table-th" data-column-priority="important">{t("sub_360_tariff_plan")}</th>
+                          <th className="dh-table-th" data-column-priority="important">{t("sub_traffic_balance")}</th>
+                          <th className="dh-table-th" data-column-priority="supplementary">{t("prof_sms_balance")}</th>
+                          <th className="dh-table-th-center" data-column-priority="essential">{t("dh_col_status")}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -815,8 +815,8 @@ export default function DataHub({
 
                             return (
                               <tr key={`${row._row}-${row.imsi}`} className="dh-table-tr">
-                                <td className="dh-table-td-num">{row._row}</td>
-                                <td className="dh-table-td-imsi">
+                                <td className="dh-table-td-num" data-label="#" data-column-priority="supplementary">{row._row}</td>
+                                <td className="dh-table-td-imsi" data-label={t("dh_col_imsi")} data-column-priority="essential">
                                   <span>{row.imsi || "(empty)"}</span>
                                   {isInvalid && row._error && (
                                     <span className="dh-row-error" title={row._error}>
@@ -824,10 +824,10 @@ export default function DataHub({
                                     </span>
                                   )}
                                 </td>
-                                <td className="dh-table-td">{row.plan_id || "plan_default_10gb"}</td>
-                                <td className="dh-table-td">{row.traffic_balance || "-"}</td>
-                                <td className="dh-table-td">{row.sms_balance || "-"}</td>
-                                <td className="dh-table-td-center">
+                                <td className="dh-table-td" data-label={t("sub_360_tariff_plan")} data-column-priority="important">{row.plan_id || "plan_default_10gb"}</td>
+                                <td className="dh-table-td" data-label={t("sub_traffic_balance")} data-column-priority="important">{row.traffic_balance || "-"}</td>
+                                <td className="dh-table-td" data-label={t("prof_sms_balance")} data-column-priority="supplementary">{row.sms_balance || "-"}</td>
+                                <td className="dh-table-td-center" data-label={t("dh_col_status")} data-column-priority="essential">
                                   {isDuplicate ? (
                                     <span className="dh-badge dh-badge-duplicate">
                                       {t("dh_badge_duplicate")}

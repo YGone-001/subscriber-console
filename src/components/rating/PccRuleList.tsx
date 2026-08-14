@@ -71,12 +71,12 @@ export function PccRuleList(props: any) {
             <caption className="sr-only">{t("rating_rule_catalog_title")}</caption>
             <thead>
               <tr className="rule-table-thead">
-                <th className="table-header-cap rule-th rule-th-id"><span className="flex-center-gap-0-55"><Hash size={16} /> {t("rating_col_id")}</span></th>
-                <th className="table-header-cap rule-th">{t("rating_charging_scenario")}</th>
-                <th className="table-header-cap rule-th"><span className="flex-center-gap-0-55"><DollarSign size={16} /> {t("rating_commercial_rate")}</span></th>
-                <th className="table-header-cap rule-th">{t("rating_grant_policy")}</th>
-                <th className="table-header-cap rule-th">{t("status")}</th>
-                {canEditTemplates && <th className="table-header-cap rule-th rule-th-actions">{t("rating_col_actions")}</th>}
+                <th className="table-header-cap rule-th rule-th-id" data-column-priority="essential"><span className="flex-center-gap-0-55"><Hash size={16} /> {t("rating_col_id")}</span></th>
+                <th className="table-header-cap rule-th" data-column-priority="essential">{t("rating_charging_scenario")}</th>
+                <th className="table-header-cap rule-th" data-column-priority="essential"><span className="flex-center-gap-0-55"><DollarSign size={16} /> {t("rating_commercial_rate")}</span></th>
+                <th className="table-header-cap rule-th" data-column-priority="supplementary">{t("rating_grant_policy")}</th>
+                <th className="table-header-cap rule-th" data-column-priority="important">{t("status")}</th>
+                {canEditTemplates && <th className="table-header-cap rule-th rule-th-actions" data-column-priority="essential">{t("rating_col_actions")}</th>}
               </tr>
             </thead>
             <tbody>
@@ -116,11 +116,11 @@ export function PccRuleList(props: any) {
                   <tr key={rating.rating_group_id} className="rule-tr">
                     {editingId === rating.rating_group_id ? renderFormCells(editForm, setEditForm, false, rating.rating_group_id) : (
                       <>
-                        <td className="rule-td" data-label={t("rating_col_id")}>
+                        <td className="rule-td" data-label={t("rating_col_id")} data-column-priority="essential">
                           <div className="rule-id">#{rating.rating_group_id}</div>
                           <div className="rule-subid">{rating.rule_id || "-"}</div>
                         </td>
-                        <td className="rule-td" data-label={t("rating_charging_scenario")}>
+                        <td className="rule-td" data-label={t("rating_charging_scenario")} data-column-priority="essential">
                           <div className="rule-scenario" style={{ color: meta.color }}>
                             {meta.icon}{meta.label}
                           </div>
@@ -132,11 +132,11 @@ export function PccRuleList(props: any) {
                             <span className="rule-font-mono-main">{rating.charging_type || "data_volume"}</span>
                           </div>
                         </td>
-                        <td className="rule-td" data-label={t("rating_commercial_rate")}>
+                        <td className="rule-td" data-label={t("rating_commercial_rate")} data-column-priority="essential">
                           <div className="rule-rate">{rating.rates || "0"} {rating.currency || "USD"}</div>
                           <div className="rule-rate-type">{rateType}</div>
                         </td>
-                        <td className="rule-td" data-label={t("rating_grant_policy")}>
+                        <td className="rule-td" data-label={t("rating_grant_policy")} data-column-priority="supplementary">
                           <div className="rule-grant">
                             <CheckCircle2 size={15} color="var(--success)" />
                             {formatGrant(t, rating.quota_per_grant, rating.unit, rating.charging_type)}
@@ -147,13 +147,13 @@ export function PccRuleList(props: any) {
                             {t("rating_threshold")}: {formatGrant(t, rating.volume_threshold, rating.unit, rating.charging_type)}
                           </div>
                         </td>
-                        <td className="rule-td" data-label={t("status")}>
+                        <td className="rule-td" data-label={t("status")} data-column-priority="important">
                           <span className="rule-status">
                             {rating.status || "active"}
                           </span>
                         </td>
                         {canEditTemplates && (
-                          <td className="rule-actions" data-label={t("rating_col_actions")}>
+                          <td className="rule-actions" data-label={t("rating_col_actions")} data-column-priority="essential">
                             <div className="rule-actions-flex">
                               <button type="button" className="btn-icon" onClick={() => startEdit(rating)} title={t("edit")} aria-label={`${t("edit")}: ${rating.rating_group_id}`}><Pencil size={16} color="var(--primary)" /></button>
                               <button type="button" className="btn-icon" onClick={() => handleDelete(rating.rating_group_id)} title={t("delete")} aria-label={`${t("delete")}: ${rating.rating_group_id}`} disabled={savingKey === `delete:${rating.rating_group_id}` || pendingDeleteId != null}><Trash2 size={16} color="var(--danger)" /></button>

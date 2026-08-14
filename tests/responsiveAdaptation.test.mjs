@@ -28,13 +28,20 @@ test('high-density data tables switch to labelled record cards on narrow screens
   const usersTable = read('../src/app/(dashboard)/users/components/UsersTable.tsx');
   const usersCss = read('../src/app/(dashboard)/users/users.css');
   const ratingTable = read('../src/components/rating/PccRuleList.tsx');
+  const tariffPlanTable = read('../src/components/rating/TariffPlanList.tsx');
   const ratingCss = read('../src/components/rating/rating.css');
+  const approvalsTable = read('../src/components/users/ApprovalCenterPanel.tsx');
+  const approvalsCss = read('../src/components/users/ApprovalCenterPanel.css');
+  const healthTable = read('../src/app/(dashboard)/system-health/page.tsx');
+  const healthCss = read('../src/app/(dashboard)/system-health/system-health.css');
+  const auditTable = read('../src/app/(dashboard)/audit-logs/page.tsx');
+  const auditCss = read('../src/app/(dashboard)/audit-logs/audit-logs.css');
 
-  for (const source of [subscriberTable, usersTable, ratingTable]) {
+  for (const source of [subscriberTable, usersTable, ratingTable, tariffPlanTable, approvalsTable, healthTable, auditTable]) {
     assert.match(source, /data-label=/);
   }
 
-  for (const source of [subscriberCss, usersCss, ratingCss]) {
+  for (const source of [subscriberCss, usersCss, ratingCss, approvalsCss, healthCss, auditCss]) {
     assert.match(source, /display:\s*grid/);
     assert.match(source, /content:\s*attr\(data-label\)/);
   }

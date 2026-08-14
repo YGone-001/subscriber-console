@@ -263,35 +263,35 @@ export default function ApprovalCenterPanel() {
               <caption className="sr-only">{t("approvals_title")}</caption>
               <thead>
                 <tr>
-                  <th>{t("approvals_id")}</th>
-                  <th>{t("approvals_action")}</th>
-                  <th>{t("approvals_target")}</th>
-                  <th>{t("approval_export_requester")}</th>
-                  <th>{t("users_status")}</th>
-                  <th>{t("approvals_risk")}</th>
-                  <th>{t("users_created")}</th>
-                  <th>{t("approvals_waiting")}</th>
-                  <th>{t("users_actions")}</th>
+                  <th data-column-priority="essential">{t("approvals_id")}</th>
+                  <th data-column-priority="essential">{t("approvals_action")}</th>
+                  <th data-column-priority="essential">{t("approvals_target")}</th>
+                  <th data-column-priority="supplementary">{t("approval_export_requester")}</th>
+                  <th data-column-priority="essential">{t("users_status")}</th>
+                  <th data-column-priority="essential">{t("approvals_risk")}</th>
+                  <th data-column-priority="supplementary">{t("users_created")}</th>
+                  <th data-column-priority="important">{t("approvals_waiting")}</th>
+                  <th data-column-priority="essential">{t("users_actions")}</th>
                 </tr>
               </thead>
               <tbody>
                 {isLoading ? (
-                  <tr><td colSpan={9}><LoadingRows columns={9} rows={6} /></td></tr>
+                  <tr className="approvals-state-row"><td colSpan={9}><LoadingRows columns={9} rows={6} /></td></tr>
                 ) : error ? (
-                  <tr><td colSpan={9}><EmptyState icon={<AlertTriangle size={42} />} title={t("approvals_error_title")} description={t("approvals_error_desc")} action={<button type="button" className="btn btn-outline" onClick={() => void mutate()}>{t("refresh")}</button>} /></td></tr>
+                  <tr className="approvals-state-row"><td colSpan={9}><EmptyState icon={<AlertTriangle size={42} />} title={t("approvals_error_title")} description={t("approvals_error_desc")} action={<button type="button" className="btn btn-outline" onClick={() => void mutate()}>{t("refresh")}</button>} /></td></tr>
                 ) : approvals.length === 0 ? (
-                  <tr><td colSpan={9}><EmptyState icon={<CheckCircle2 size={42} />} title={t("approvals_empty_title")} description={t("approvals_empty_desc")} /></td></tr>
+                  <tr className="approvals-state-row"><td colSpan={9}><EmptyState icon={<CheckCircle2 size={42} />} title={t("approvals_empty_title")} description={t("approvals_empty_desc")} /></td></tr>
                 ) : approvals.map((approval) => (
                   <tr key={approval.id}>
-                    <td><button type="button" className="approvals-link" onClick={() => setSelectedId(approval.id)}>{approval.id.slice(0, 8)}</button></td>
-                    <td>{t(`approval_action_${approval.action}`)}</td>
-                    <td>{approval.targetId}</td>
-                    <td>{approval.requester}</td>
-                    <td><span className={`approval-chip ${approval.status}`}>{t(`approval_status_${approval.status}`)}</span></td>
-                    <td><span className={`risk-chip ${riskLevel(approval)}`}>{t(`approvals_risk_${riskLevel(approval)}`)}</span></td>
-                    <td>{formatDateTime(approval.createdAt)}</td>
-                    <td>{t("approvals_waiting_hours", { hours: waitingHours(approval.createdAt) })}</td>
-                    <td><button type="button" className="btn btn-outline" onClick={() => setSelectedId(approval.id)}><Eye size={15} />{t("users_view")}</button></td>
+                    <td data-label={t("approvals_id")} data-column-priority="essential"><button type="button" className="approvals-link" onClick={() => setSelectedId(approval.id)}>{approval.id.slice(0, 8)}</button></td>
+                    <td data-label={t("approvals_action")} data-column-priority="essential">{t(`approval_action_${approval.action}`)}</td>
+                    <td data-label={t("approvals_target")} data-column-priority="essential">{approval.targetId}</td>
+                    <td data-label={t("approval_export_requester")} data-column-priority="supplementary">{approval.requester}</td>
+                    <td data-label={t("users_status")} data-column-priority="essential"><span className={`approval-chip ${approval.status}`}>{t(`approval_status_${approval.status}`)}</span></td>
+                    <td data-label={t("approvals_risk")} data-column-priority="essential"><span className={`risk-chip ${riskLevel(approval)}`}>{t(`approvals_risk_${riskLevel(approval)}`)}</span></td>
+                    <td data-label={t("users_created")} data-column-priority="supplementary">{formatDateTime(approval.createdAt)}</td>
+                    <td data-label={t("approvals_waiting")} data-column-priority="important">{t("approvals_waiting_hours", { hours: waitingHours(approval.createdAt) })}</td>
+                    <td data-label={t("users_actions")} data-column-priority="essential"><button type="button" className="btn btn-outline" onClick={() => setSelectedId(approval.id)}><Eye size={15} />{t("users_view")}</button></td>
                   </tr>
                 ))}
               </tbody>

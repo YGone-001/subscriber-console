@@ -1896,14 +1896,14 @@ body, .modal-content, .dash-card, .app-sidebar, .app-header {
   border: 0 !important;
 }
 @media (max-width: 980px) {
-  table :is(th, td)[data-column-priority="supplementary"] {
+  table[class] :is(th, td)[data-column-priority="supplementary"] {
     display: none;
   }
 }
 
 @media (max-width: 760px) {
-  table :is(th, td)[data-column-priority="important"],
-  table :is(th, td)[data-column-priority="supplementary"] {
+  table[class] :is(th, td)[data-column-priority="important"],
+  table[class] :is(th, td)[data-column-priority="supplementary"] {
     display: none;
   }
 }

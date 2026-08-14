@@ -741,30 +741,30 @@ export default function SystemHealthPage() {
                 <caption className="sr-only">{t("health_anomalies_detected")}</caption>
                 <thead className="health-table-thead">
                   <tr>
-                    <th className="health-table-th">{t("health_col_imsi")}</th>
-                    <th className="health-table-th">{t("health_filter_severity")}</th>
-                    <th className="health-table-th">{t("health_col_type")}</th>
-                    <th className="health-table-th">{t("health_col_details")}</th>
-                    <th className="health-table-th-right">{t("health_col_action")}</th>
+                    <th className="health-table-th" data-column-priority="essential">{t("health_col_imsi")}</th>
+                    <th className="health-table-th" data-column-priority="essential">{t("health_filter_severity")}</th>
+                    <th className="health-table-th" data-column-priority="supplementary">{t("health_col_type")}</th>
+                    <th className="health-table-th" data-column-priority="essential">{t("health_col_details")}</th>
+                    <th className="health-table-th-right" data-column-priority="essential">{t("health_col_action")}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredAnomalies.map((a, idx) => (
                     <tr key={`${a.imsi}-${a.type}-${idx}`} className="health-table-tr">
-                      <td className="health-table-td-imsi" data-label={t("health_col_imsi")}>{a.imsi}</td>
-                      <td className="health-table-td" data-label={t("health_filter_severity")}>
+                      <td className="health-table-td-imsi" data-label={t("health_col_imsi")} data-column-priority="essential">{a.imsi}</td>
+                      <td className="health-table-td" data-label={t("health_filter_severity")} data-column-priority="essential">
                         <span className={`health-severity-tag ${a.severity || 'warning'}`}>
                           {a.severity === 'critical' ? <ShieldAlert size={12} /> : a.severity === 'info' ? <Info size={12} /> : <AlertTriangle size={12} />}
                           {t(`health_severity_${a.severity || 'warning'}`)}
                         </span>
                       </td>
-                      <td className="health-table-td" data-label={t("health_col_type")}>
+                      <td className="health-table-td" data-label={t("health_col_type")} data-column-priority="supplementary">
                         <span className="health-category-pill">
                           {a.type}
                         </span>
                       </td>
-                      <td className="health-table-td-details" data-label={t("health_col_details")}>{renderDetails(a.details, a.type)}</td>
-                      <td className="health-table-td-actions" data-label={t("health_col_action")}>
+                      <td className="health-table-td-details" data-label={t("health_col_details")} data-column-priority="essential">{renderDetails(a.details, a.type)}</td>
+                      <td className="health-table-td-actions" data-label={t("health_col_action")} data-column-priority="essential">
                         <button
                           className="btn btn-outline health-btn-heal"
                           onClick={() => handleOpenHealModal(a)}

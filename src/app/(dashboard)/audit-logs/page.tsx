@@ -432,32 +432,32 @@ export default function AuditLogsPage() {
               <caption className="sr-only">{t("audit_title")}</caption>
               <thead className="audit-table-thead">
                 <tr>
-                   <th className="audit-table-th audit-table-th-time">{t("audit_col_time")}</th>
-                   <th className="audit-table-th">{t("audit_col_action")}</th>
-                   <th className="audit-table-th">{t("audit_col_target")}</th>
-                   <th className="audit-table-th">{t("audit_col_operator")}</th>
-                   <th className="audit-table-th audit-table-th-delta">{t("audit_col_delta")}</th>
+                   <th className="audit-table-th audit-table-th-time" data-column-priority="important">{t("audit_col_time")}</th>
+                   <th className="audit-table-th" data-column-priority="essential">{t("audit_col_action")}</th>
+                   <th className="audit-table-th" data-column-priority="essential">{t("audit_col_target")}</th>
+                   <th className="audit-table-th" data-column-priority="supplementary">{t("audit_col_operator")}</th>
+                   <th className="audit-table-th audit-table-th-delta" data-column-priority="essential">{t("audit_col_delta")}</th>
                 </tr>
               </thead>
               <tbody>
                 {logs.map(log => (
                   <tr key={log.id} className={log.level === 'warning' ? 'audit-table-tr-warning' : 'audit-table-tr'}>
-                    <td className="audit-table-td-time" data-label={t("audit_col_time")}>
+                    <td className="audit-table-td-time" data-label={t("audit_col_time")} data-column-priority="important">
                       {new Date(log.timestamp).toLocaleString()}
                     </td>
-                    <td className="audit-table-td" data-label={t("audit_col_action")}>
+                    <td className="audit-table-td" data-label={t("audit_col_action")} data-column-priority="essential">
                       <span className={`pill ${log.level === 'warning' ? 'audit-pill-warning' : 'audit-pill-primary'}`}>
                         {log.level === 'warning' && <ShieldAlert size={12} className="audit-pill-icon" />}
                         {formatActionLabel(log.action)}
                       </span>
                     </td>
-                    <td className="audit-table-td-target" data-label={t("audit_col_target")}>
+                    <td className="audit-table-td-target" data-label={t("audit_col_target")} data-column-priority="essential">
                       {log.targetId}
                     </td>
-                    <td className="audit-table-td-operator" data-label={t("audit_col_operator")}>
+                    <td className="audit-table-td-operator" data-label={t("audit_col_operator")} data-column-priority="supplementary">
                       {log.operatorIp}
                     </td>
-                    <td className="audit-table-td-delta" data-label={t("audit_col_delta")}>
+                    <td className="audit-table-td-delta" data-label={t("audit_col_delta")} data-column-priority="essential">
                       <button
                          className="btn btn-outline audit-inspect-btn"
                          onClick={() => setSelectedLog(log)}

@@ -45,6 +45,23 @@ test("dense tables declare responsive column priorities", () => {
     assert.match(source, /data-column-priority="important"/);
     assert.match(source, /data-column-priority="supplementary"/);
   }
+
+  for (const file of [
+    "src/components/DataHub.tsx",
+    "src/components/users/ApprovalCenterPanel.tsx",
+    "src/components/rating/PccRuleList.tsx",
+    "src/components/rating/TariffPlanList.tsx",
+    "src/app/(dashboard)/system-health/page.tsx",
+    "src/app/(dashboard)/audit-logs/page.tsx",
+  ]) {
+    const source = read(file);
+    const table = source.match(/<table[\s\S]*?<\/table>/)?.[0] ?? "";
+    assert.ok(table, `${file} should contain a table`);
+    assert.match(table, /data-column-priority="essential"/);
+    assert.match(table, /data-column-priority="(?:important|supplementary)"/);
+    assert.doesNotMatch(table, /<th(?=\s|>)(?![^>]*data-column-priority)[^>]*>/);
+    assert.doesNotMatch(table, /<td(?=\s|>)(?![^>]*(?:data-column-priority|colSpan))[^>]*>/);
+  }
 });
 
 test("long forms protect unsaved edits across dialogs and navigation", () => {
