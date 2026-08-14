@@ -1,10 +1,12 @@
 # Development
 
-## Environment Setup
+This guide defines the local setup, source layout, quality checks, and commit requirements for `subscriber-console`.
+
+## Environment setup
 
 Install:
 
-- Node.js 20+
+- Node.js 20.9 or later
 - npm
 - MongoDB, preferably the same database used by a local Open5GS setup
 
@@ -22,7 +24,7 @@ cp .env.example .env
 
 Update `.env` with local values. Never commit `.env`.
 
-## Local Startup
+## Local startup
 
 Start MongoDB, initialize indexes, then run:
 
@@ -33,15 +35,19 @@ npm run dev
 
 Open `http://localhost:3000`.
 
-## Code Standards
+## Code standards
 
-- Use TypeScript.
+- Use TypeScript for new source files.
+- Read the relevant guide under `node_modules/next/dist/docs/` before changing Next.js APIs, file conventions, or routing behavior. Follow `AGENTS.md` and heed deprecation notices.
 - Keep route handlers under `src/app/api`.
-- Keep shared server logic in `src/lib`.
+- Treat every route handler as a public endpoint. Validate authentication, authorization, input, and business conflicts on the server. Do not expose internal errors or sensitive data.
+- Keep cross-layer pure utilities in `src/lib`.
+- Keep server-only orchestration in `src/server`.
 - Keep MongoDB access in `src/server/repositories`.
 - Keep reusable UI in `src/components`.
+- Follow [UI Design System Rules](design-system-rules.md) for tokens, tables, forms, charts, and responsive behavior.
 - Follow the existing role authorization pattern in API handlers.
-- Keep user-facing text aligned with the i18n provider when practical.
+- Add new user-facing text to both locale files and access it through the i18n provider. Product names, protocol identifiers, and data values may remain untranslated.
 
 ## Testing
 
@@ -60,7 +66,14 @@ MongoDB core integration smoke test:
 npm run mongo:test-core
 ```
 
-This command creates temporary databases based on `MONGODB_DB` and `MONGODB_APP_DB`, verifies required indexes, exercises core subscriber/profile/rating/user/audit/alert/rate-limit/metric writes, and drops the temporary databases when it finishes. Set `MONGODB_TEST_DB` and `MONGODB_TEST_APP_DB` to choose the temporary database names. Use `-- --keep-db` only when you intentionally want to inspect the generated test databases.
+This command:
+
+- Creates temporary databases based on `MONGODB_DB` and `MONGODB_APP_DB`
+- Verifies required indexes
+- Exercises core subscriber, profile, rating, user, audit, alert, rate-limit, and metric writes
+- Drops the temporary databases when it finishes
+
+Set `MONGODB_TEST_DB` and `MONGODB_TEST_APP_DB` to choose the temporary database names. Use `-- --keep-db` only when you intend to inspect the generated databases.
 
 MongoDB query performance smoke test:
 
@@ -68,7 +81,14 @@ MongoDB query performance smoke test:
 npm run mongo:perf
 ```
 
-This command is read-only against the configured `MONGODB_DB` and `MONGODB_APP_DB`. It runs `explain("executionStats")` for key subscriber, audit, alert, profile, rating, and analytics queries, then flags collection scans, high scan ratios, and queries slower than the threshold. Use `-- --json` for machine-readable output, `-- --imsi-prefix=460020` to force the subscriber search prefix, `-- --slow-ms=500` to tune the slow-query threshold, and `-- --allow-collscan` when full-collection analytics scans are acceptable for the current dataset.
+This command reads the configured `MONGODB_DB` and `MONGODB_APP_DB` without modifying them. It runs `explain("executionStats")` for key queries and reports collection scans, high scan ratios, and queries slower than the threshold.
+
+Use these options when needed:
+
+- `-- --json`: Write machine-readable output
+- `-- --imsi-prefix=460020`: Set the subscriber search prefix
+- `-- --slow-ms=500`: Set the slow-query threshold
+- `-- --allow-collscan`: Allow full-collection analytics scans for the current dataset
 
 Operational scripts write JSON reports under `reports/ops/` by default:
 
@@ -85,14 +105,15 @@ For the full local quality gate, run:
 npm run check
 ```
 
-Recommended future tests:
+Prioritize tests for gaps that do not already have automated coverage:
 
-- API authorization tests
-- Subscriber import/export tests
-- Batch creation conflict tests
-- Audit and analytics side-effect tests
+- Route-level authentication, authorization, validation, and error sanitization
+- Subscriber import and export integration flows
+- Batch creation conflicts across concurrent requests
+- Audit and analytics side effects against a temporary MongoDB database
+- Keyboard, focus, and accessible-name behavior for tables, forms, dialogs, and charts
 
-## Git Commit Convention
+## Git commit convention
 
 Use Conventional Commits:
 
