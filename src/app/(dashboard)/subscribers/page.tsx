@@ -430,11 +430,11 @@ export default function SubscriberPage() {
 
       {/* FAB: Batch Create (positioned above single FAB) */}
       <button
-        className="fab"
+        className="fab fab-secondary"
         onClick={() => setIsBatchOpen(true)}
         title={t("batch_create")}
         aria-label={t("batch_create")}
-        style={{ bottom: "120px", background: "#6366f1" }}
+        style={{ bottom: "120px" }}
       >
         <Layers size={24} />
       </button>

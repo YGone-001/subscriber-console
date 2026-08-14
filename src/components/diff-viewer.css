@@ -299,7 +299,7 @@
   margin: 0;
   padding: 1rem;
   font-size: 0.82rem;
-  font-family: "JetBrains Mono", Consolas, Menlo, monospace;
+  font-family: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
   line-height: 1.6;
   color: var(--text-main);
   overflow-x: auto;
@@ -316,7 +316,7 @@
 .diff-line-row {
   display: flex;
   align-items: flex-start;
-  font-family: "JetBrains Mono", Consolas, Menlo, monospace;
+  font-family: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
   font-size: 0.82rem;
   line-height: 1.5;
   padding: 0.15rem 1rem;

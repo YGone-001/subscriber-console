@@ -10,8 +10,8 @@ const rootDir = path.resolve(__dirname, "..");
 
 test("globals.css defines micro-interaction tokens and easing curves", () => {
   const globalsCss = fs.readFileSync(path.join(rootDir, "src", "app", "globals.css"), "utf8");
-  assert.match(globalsCss, /--ease-spring:\s*cubic-bezier\(/);
-  assert.match(globalsCss, /--ease-bounce:\s*cubic-bezier\(/);
+  assert.match(globalsCss, /--ease-decelerate:\s*cubic-bezier\(0\.16, 1, 0\.3, 1\)/);
+  assert.doesNotMatch(globalsCss, /--ease-(?:spring|bounce):/);
   assert.match(globalsCss, /--duration-fast:/);
   assert.match(globalsCss, /--focus-ring:/);
 });
@@ -41,7 +41,7 @@ test("globals.css provides accessible prefers-reduced-motion overrides", () => {
   assert.match(globalsCss, /\.progress-bar-value,[\s\S]*?animation:\s*none\s*!important/);
 });
 
-test("layout.css and OperationFeedback.css support micro-physics and spring transitions", () => {
+test("layout.css and OperationFeedback.css support restrained micro-interactions", () => {
   const layoutCss = fs.readFileSync(path.join(rootDir, "src", "app", "(dashboard)", "layout.css"), "utf8");
   const opCss = fs.readFileSync(path.join(rootDir, "src", "components", "OperationFeedback.css"), "utf8");
 

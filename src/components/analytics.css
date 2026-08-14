@@ -427,7 +427,7 @@
 
   .analytics-change-id {
     color: var(--primary);
-    font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+    font-family: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
     font-size: 0.76rem;
     font-weight: 900;
   }
@@ -1543,7 +1543,7 @@
   .plan-id-code {
     font-size: 0.68rem;
     color: var(--text-muted);
-    font-family: "JetBrains Mono", Consolas, monospace;
+    font-family: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
   }
 
   .legend-row-right {

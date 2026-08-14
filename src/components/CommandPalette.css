@@ -83,7 +83,7 @@
   font-size: 0.78rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all var(--duration-fast) var(--ease-spring);
+  transition: all var(--duration-fast) var(--ease-decelerate);
 }
 
 .cp-category-tab:hover {
@@ -129,13 +129,15 @@
   padding: 0.6rem 1.25rem;
   cursor: pointer;
   background: transparent;
-  border-left: 3px solid transparent;
-  transition: background var(--duration-fast) var(--ease-spring);
+  transition: background var(--duration-fast) var(--ease-decelerate), color var(--duration-fast) var(--ease-decelerate);
 }
 
 .cp-item-row-selected {
-  background: color-mix(in srgb, var(--primary) 10%, transparent);
-  border-left-color: var(--primary);
+  background: var(--selection-soft);
+}
+
+.cp-item-row-selected .cp-item-label {
+  color: var(--primary);
 }
 
 .cp-item-icon-box {
@@ -192,19 +194,19 @@
 .cp-badge-imsi {
   font-size: 0.65rem;
   padding: 0.15rem 0.4rem;
-  background: color-mix(in srgb, #3b82f6 15%, transparent);
-  color: #3b82f6;
+  background: var(--selection-soft);
+  color: var(--primary);
   font-weight: 600;
-  border-radius: 4px;
+  border-radius: var(--radius-small);
 }
 
 .cp-badge-profile {
   font-size: 0.65rem;
   padding: 0.15rem 0.4rem;
-  background: color-mix(in srgb, #f59e0b 15%, transparent);
-  color: #f59e0b;
+  background: var(--status-warning-soft);
+  color: var(--status-warning);
   font-weight: 600;
-  border-radius: 4px;
+  border-radius: var(--radius-small);
 }
 
 .cp-status-msg {

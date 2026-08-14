@@ -77,7 +77,7 @@
   .dropdown-item {
     border: none;
     cursor: pointer;
-    transition: background var(--duration-normal) var(--ease-spring), color var(--duration-normal) var(--ease-spring), border-color var(--duration-normal) var(--ease-spring), transform var(--duration-fast) var(--ease-spring);
+    transition: background var(--duration-normal) var(--ease-decelerate), color var(--duration-normal) var(--ease-decelerate), border-color var(--duration-normal) var(--ease-decelerate), transform var(--duration-fast) var(--ease-decelerate);
   }
 
   .icon-button {
@@ -126,7 +126,7 @@
     font-size: 0.85rem;
     min-height: 44px;
     flex-shrink: 0;
-    transition: all var(--duration-normal) var(--ease-spring);
+    transition: all var(--duration-normal) var(--ease-decelerate);
   }
 
   .command-button:hover {
@@ -175,7 +175,7 @@
     cursor: pointer;
     font-size: 0.8rem;
     font-weight: 800;
-    transition: all var(--duration-normal) var(--ease-spring);
+    transition: all var(--duration-normal) var(--ease-decelerate);
   }
 
   .approval-button:hover {
@@ -517,7 +517,7 @@
     font-weight: 600;
     position: relative;
     white-space: nowrap;
-    transition: background var(--duration-normal) var(--ease-spring), color var(--duration-normal) var(--ease-spring), transform var(--duration-fast) var(--ease-spring);
+    transition: background var(--duration-normal) var(--ease-decelerate), color var(--duration-normal) var(--ease-decelerate), transform var(--duration-fast) var(--ease-decelerate);
   }
 
   .sidebar-link:focus-visible {
@@ -593,7 +593,7 @@
     background: var(--primary);
     opacity: 0;
     transform: scaleY(0.5);
-    transition: opacity var(--duration-normal) var(--ease-spring), transform var(--duration-normal) var(--ease-spring);
+    transition: opacity var(--duration-normal) var(--ease-decelerate), transform var(--duration-normal) var(--ease-decelerate);
   }
 
   .sidebar-link.active .sidebar-active-bar {
@@ -793,9 +793,7 @@
     overflow-y: auto;
     position: relative;
     min-height: 0;
-    background:
-      linear-gradient(90deg, color-mix(in srgb, var(--surface-border) 24%, transparent) 1px, transparent 1px) 0 0 / 48px 48px,
-      var(--background);
+    background: var(--background);
   }
 
   /* Notification Center */
@@ -817,9 +815,9 @@
     min-width: 17px;
     height: 17px;
     padding: 0 4px;
-    border-radius: 999px;
-    background: #ef4444;
-    color: #ffffff;
+    border-radius: var(--radius-pill);
+    background: var(--status-danger);
+    color: var(--on-accent);
     font-size: 0.68rem;
     font-weight: 800;
     display: flex;
@@ -827,7 +825,7 @@
     justify-content: center;
     border: 2px solid var(--surface);
     line-height: 1;
-    animation: bounceIn 0.3s var(--ease-bounce);
+    animation: reducedFade 160ms var(--ease-decelerate) both;
   }
 
   .notif-status-dot {
@@ -841,18 +839,17 @@
   }
 
   .notif-status-dot.connected {
-    background: #10b981;
-    box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
+    background: var(--status-success);
   }
 
   .notif-status-dot.connecting {
-    background: #f59e0b;
+    background: var(--status-warning);
     animation: livePulse 1.5s infinite;
   }
 
   .notif-status-dot.error,
   .notif-status-dot.disconnected {
-    background: #94a3b8;
+    background: var(--text-muted);
   }
 
   .notif-dropdown-panel {
@@ -926,7 +923,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all var(--duration-fast) var(--ease-spring);
+    transition: all var(--duration-fast) var(--ease-decelerate);
   }
 
   .notif-tool-btn:hover {
@@ -988,7 +985,7 @@
     align-items: center;
     justify-content: center;
     gap: 0.3rem;
-    transition: all var(--duration-fast) var(--ease-spring);
+    transition: all var(--duration-fast) var(--ease-decelerate);
   }
 
   .notif-tab:hover {
@@ -1038,7 +1035,7 @@
     border-bottom: 1px solid color-mix(in srgb, var(--surface-border) 60%, transparent);
     cursor: pointer;
     position: relative;
-    transition: background var(--duration-fast) var(--ease-spring);
+    transition: background var(--duration-fast) var(--ease-decelerate);
   }
 
   .notif-card:hover {
@@ -1229,7 +1226,7 @@
     font-weight: 600;
     cursor: pointer;
     min-height: 44px;
-    transition: all var(--duration-fast) var(--ease-spring);
+    transition: all var(--duration-fast) var(--ease-decelerate);
   }
 
   .sidebar-toggle-btn:hover {
@@ -1319,7 +1316,7 @@
     text-decoration: none;
     border: 1px solid var(--surface-border);
     background: transparent;
-    transition: all var(--duration-fast) var(--ease-spring);
+    transition: all var(--duration-fast) var(--ease-decelerate);
     white-space: nowrap;
     position: relative;
   }
@@ -1606,11 +1603,14 @@
       transition: none !important;
     }
 
-    .notif-badge,
     .notif-status-dot.connecting,
     .stream-pulse,
     .nav-crumb-tool-btn.spin svg {
       animation: none !important;
+    }
+
+    .notif-badge {
+      animation: reducedFade 120ms ease-out both !important;
     }
 
     .approval-dropdown,

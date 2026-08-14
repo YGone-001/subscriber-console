@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback, useMemo, useSyncExternalStore } from "react";
+import { usePathname } from "next/navigation";
 import { playNotificationSound, NotificationSoundType } from "@/lib/soundEffects";
 
 export type NotificationCategory = "alert" | "approval" | "system" | "task";
@@ -139,6 +140,7 @@ function emitNotifyStore() {
 }
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
   const notifications = useSyncExternalStore(
     subscribeNotifyStore,
     getStoredNotifsSnapshot,
@@ -162,6 +164,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("connecting");
+  const visibleConnectionStatus: ConnectionStatus = pathname === "/login" ? "disconnected" : connectionStatus;
 
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -303,6 +306,11 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
   // Connect to SSE stream
   useEffect(() => {
+    if (pathname === "/login") {
+      eventSourceRef.current = null;
+      return;
+    }
+
     let unmounted = false;
 
     const connectSSE = () => {
@@ -399,7 +407,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         clearTimeout(reconnectTimeoutRef.current);
       }
     };
-  }, [addNotification, showToast]);
+  }, [pathname, addNotification, showToast]);
 
   const unreadCount = useMemo(() => notifications.filter((n) => !n.read).length, [notifications]);
 
@@ -408,7 +416,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       notifications,
       toasts,
       unreadCount,
-      connectionStatus,
+      connectionStatus: visibleConnectionStatus,
       soundEnabled,
       setSoundEnabled,
       soundVolume,
@@ -426,7 +434,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       notifications,
       toasts,
       unreadCount,
-      connectionStatus,
+      visibleConnectionStatus,
       soundEnabled,
       setSoundEnabled,
       soundVolume,

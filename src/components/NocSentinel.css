@@ -265,7 +265,7 @@
   }
 
   .noc-alert-meta span {
-    font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+    font-family: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
   }
 
   .noc-alert-reason {
