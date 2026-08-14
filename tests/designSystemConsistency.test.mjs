@@ -31,6 +31,44 @@ test('application UI colors are sourced from the global semantic token contract'
   }
 });
 
+test('global color literals are confined to centralized token declarations', () => {
+  const globalStylesPath = join(sourceRoot, 'app', 'globals.css');
+  const globalStyles = readFileSync(globalStylesPath, 'utf8');
+  const lines = globalStyles.split(/\r?\n/);
+  const colorLiteral = /#[\da-f]{3,8}\b|rgba?\s*\(|(?:color|background|border(?:-color)?|fill|stroke)\s*:\s*(?:white|black|red|blue|green|orange|purple)\b/i;
+  const allowedScopes = new Set([':root', '[data-theme="light"]', '[data-theme="dark"]']);
+  let activeScope = '';
+  let depth = 0;
+
+  for (const [index, line] of lines.entries()) {
+    if (depth === 0 && line.includes('{')) activeScope = line.slice(0, line.indexOf('{')).trim();
+
+    if (colorLiteral.test(line)) {
+      assert.match(
+        line,
+        /^\s*--[\w-]+\s*:/,
+        `src/app/globals.css:${index + 1} contains a color literal outside a token declaration`,
+      );
+      assert.equal(
+        allowedScopes.has(activeScope),
+        true,
+        `src/app/globals.css:${index + 1} declares a color literal in unsupported scope ${activeScope}`,
+      );
+    }
+
+    depth += (line.match(/{/g) ?? []).length - (line.match(/}/g) ?? []).length;
+    if (depth === 0) activeScope = '';
+  }
+
+  for (const token of ['--scrollbar-thumb', '--scrollbar-thumb-hover', '--search-icon']) {
+    assert.equal(
+      globalStyles.match(new RegExp(`${token}:`, 'g'))?.length,
+      2,
+      `${token} must define matching light and dark theme values`,
+    );
+  }
+});
+
 test('application typography and corner radii use the global reference tokens', () => {
   const uiFiles = collectFiles(sourceRoot, new Set(['.css', '.ts', '.tsx']));
 
