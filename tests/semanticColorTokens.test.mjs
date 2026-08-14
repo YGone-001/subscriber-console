@@ -91,6 +91,7 @@ test('analytics charts resolve theme colors through CSS tokens', () => {
     '../src/components/analytics/PlmnDistributionChart.tsx',
     '../src/components/analytics/TariffPlanDistributionChart.tsx',
     '../src/components/analytics/TopConsumerChart.tsx',
+    '../src/components/ui/chartPrimitives.tsx',
   ].map(read).join('\n');
 
   assert.doesNotMatch(chartSources, /\btheme\b/);

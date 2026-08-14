@@ -2,8 +2,10 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Plus, Pencil, Save, X, AlertTriangle, AlertCircle } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
+import { Field } from "@/components/ui/Field";
+import { ErrorNotice, InlineNotice } from "@/components/ui/InlineNotice";
 import * as T from "./types";
-import { Field, CURRENCIES, defaultsFor } from "./types";
+import { CURRENCIES, defaultsFor } from "./types";
 
 type Props = {
   isOpen: boolean;
@@ -182,19 +184,15 @@ export function TariffRuleModal({
         <form onSubmit={handleSubmit}>
           <div className="modal-body grid-gap-1">
             {error && (
-              <div className="alert-banner alert-banner-danger" style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.6rem 0.8rem", borderRadius: "6px", fontSize: "0.85rem" }}>
-                <AlertCircle size={16} />
-                <span>{error}</span>
-              </div>
+              <ErrorNotice icon={<AlertCircle size={16} />}>{error}</ErrorNotice>
             )}
 
             {conflictWith && (
-              <div className="alert-banner alert-banner-warning" style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.6rem 0.8rem", borderRadius: "6px", fontSize: "0.85rem" }}>
-                <AlertTriangle size={18} color="var(--warning)" />
+              <InlineNotice tone="warning" icon={<AlertTriangle size={18} />}>
                 <div>
                   <strong>{t("tariff_rule_conflict_warning")}</strong>: Matches existing rule (<code>{conflictWith.rule_id || `RG ${conflictWith.rating_group_id}`}</code>). Open5GS OCS will evaluate based on rule priority.
                 </div>
-              </div>
+              </InlineNotice>
             )}
 
             <div className="fields-grid" style={{ gridTemplateColumns: "1fr 1fr" }}>

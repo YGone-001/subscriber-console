@@ -2,7 +2,8 @@
 import React from "react";
 import { Plus, Search, Hash, DollarSign, CheckCircle2, Pencil, Trash2, Tag } from "lucide-react";
 import { EmptyState, LoadingRows } from "@/components/OperationFeedback";
-import { SERVICE_FILTERS, Field, formatGrant } from "./types";
+import { Field } from "@/components/ui/Field";
+import { SERVICE_FILTERS, formatGrant } from "./types";
 import "./rating.css";
 
 export function PccRuleList(props: any) {

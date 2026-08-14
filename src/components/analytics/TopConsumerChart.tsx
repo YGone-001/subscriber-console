@@ -7,8 +7,14 @@ import { TopConsumer } from "./types";
 import { BYTES_IN_GB, formatGb } from "./utils";
 import EmptyChartState from "./EmptyChartState";
 import { formatEvents, formatSeconds } from "@/lib/unitParser";
-
-const COLORS = ["var(--chart-1)", "var(--chart-3)", "var(--chart-2)", "var(--chart-4)", "var(--chart-5)", "var(--chart-6)"];
+import {
+  CHART_CURSOR_COLOR,
+  CHART_GRID_COLOR,
+  CHART_SERIES_COLORS,
+  CHART_TICK_COLOR,
+  CHART_TOOLTIP_STYLE,
+  ChartSummary,
+} from "@/components/ui/chartPrimitives";
 
 type TopConsumerTooltipPayload = {
   payload?: TopConsumer;
@@ -17,19 +23,17 @@ type TopConsumerTooltipPayload = {
 function TopConsumerTooltip({
   active,
   payload,
-  contentStyle,
   t,
 }: {
   active?: boolean;
   payload?: TopConsumerTooltipPayload[];
-  contentStyle: React.CSSProperties;
   t: (key: string, params?: Record<string, string | number>) => string;
 }) {
   const consumer = payload?.[0]?.payload;
   if (!active || !consumer) return null;
 
   return (
-    <div style={{ ...contentStyle, padding: "0.75rem 0.85rem", minWidth: 210 }}>
+    <div style={{ ...CHART_TOOLTIP_STYLE, padding: "0.75rem 0.85rem", minWidth: 210 }}>
       <div style={{ fontFamily: "monospace", fontWeight: 700, marginBottom: "0.55rem" }}>{consumer.imsi}</div>
       <div style={{ display: "grid", gap: "0.35rem", fontSize: "0.82rem" }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem" }}>
@@ -58,15 +62,6 @@ export default function TopConsumerChart({
 }) {
   const titleId = React.useId();
   const summaryId = React.useId();
-  const chartStroke = "var(--surface-border)";
-  const tickColor = "var(--text-secondary)";
-  const tooltipStyle = {
-    borderRadius: 8,
-    backgroundColor: "var(--surface)",
-    borderColor: "var(--surface-border)",
-    color: "var(--text-main)",
-    boxShadow: "var(--shadow-popover)",
-  };
   const leadingConsumer = top5[0];
   const chartSummary = leadingConsumer
     ? t("dash_chart_top5_summary", {
@@ -96,30 +91,30 @@ export default function TopConsumerChart({
       >
         {top5.length > 0 ? (
           <>
-            <p id={summaryId} className="sr-only">{chartSummary}</p>
+            <ChartSummary id={summaryId}>{chartSummary}</ChartSummary>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={top5} layout="vertical" margin={{ top: 8, right: 28, left: 8, bottom: 8 }}>
-              <CartesianGrid strokeDasharray="4 4" horizontal={false} stroke={chartStroke} />
+              <CartesianGrid strokeDasharray="4 4" horizontal={false} stroke={CHART_GRID_COLOR} />
               <XAxis
                 type="number"
-                stroke={tickColor}
-                tick={{ fill: tickColor, fontSize: 11, fontWeight: 500 }}
+                stroke={CHART_TICK_COLOR}
+                tick={{ fill: CHART_TICK_COLOR, fontSize: 11, fontWeight: 500 }}
                 tickFormatter={(value: number) => `${(value / BYTES_IN_GB).toFixed(1)} GB`}
               />
               <YAxis
                 type="category"
                 dataKey="imsi"
                 width={142}
-                stroke={tickColor}
-                tick={{ fontSize: 11.5, fill: tickColor, fontFamily: "monospace", fontWeight: 600 }}
+                stroke={CHART_TICK_COLOR}
+                tick={{ fontSize: 11.5, fill: CHART_TICK_COLOR, fontFamily: "monospace", fontWeight: 600 }}
               />
               <Tooltip
-                cursor={{ fill: "var(--surface-hover)" }}
-                content={<TopConsumerTooltip contentStyle={tooltipStyle} t={t} />}
+                cursor={{ fill: CHART_CURSOR_COLOR }}
+                content={<TopConsumerTooltip t={t} />}
               />
               <Bar dataKey="balance" radius={[0, 6, 6, 0]} barSize={22}>
                 {top5.map((entry, index) => (
-                  <Cell key={`${entry.imsi}-${index}`} fill={COLORS[index % COLORS.length]} />
+                  <Cell key={`${entry.imsi}-${index}`} fill={CHART_SERIES_COLORS[index % CHART_SERIES_COLORS.length]} />
                 ))}
               </Bar>
               </BarChart>

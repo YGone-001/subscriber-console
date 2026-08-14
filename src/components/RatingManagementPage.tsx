@@ -6,8 +6,9 @@ import { PccRuleList } from "./rating/PccRuleList";
 import { RatingModals } from "./rating/RatingModals";
 import { formatDateTime } from "./rating/RatingManagementShared";
 import * as T from "./rating/types";
-import { Field, applyChargingType, CURRENCIES } from "./rating/types";
+import { applyChargingType, CURRENCIES } from "./rating/types";
 import { useRatingManagement } from "./rating/hooks/useRatingManagement";
+import { Field } from "@/components/ui/Field";
 import PageHeader from "@/components/ui/PageHeader";
 
 export default function RatingManagementPage({ view }: { view: T.RatingManagementView }) {

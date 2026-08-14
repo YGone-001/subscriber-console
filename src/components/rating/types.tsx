@@ -1,4 +1,3 @@
-import React from "react";
 export const CURRENCIES = ["USD", "EUR", "GBP", "CNY", "HKD", "JPY", "KRW", "SGD", "AUD", "CAD"];
 export const DEFAULT_OCS_PLAN_ID = "plan_default_10gb";
 export const DATA_GRANT = "10485760";
@@ -185,13 +184,3 @@ export function applyChargingType(form: RatingForm, chargingType: ChargingType):
     ...defaultsFor(chargingType),
   };
 }
-
-export function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label style={{ display: "grid", gap: "0.4rem", minWidth: 0 }}>
-      <span className="table-header-cap" style={{ color: "var(--text-muted)", fontSize: "0.72rem" }}>{label}</span>
-      {children}
-    </label>
-  );
-}
-

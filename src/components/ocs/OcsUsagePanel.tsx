@@ -17,6 +17,8 @@ import {
 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import PageHeader from "@/components/ui/PageHeader";
+import { DataTablePagination } from "@/components/ui/DataTablePagination";
+import { DataTableStateRow } from "@/components/ui/DataTableState";
 import { formatBytes } from "@/lib/unitParser";
 import OcsDetailDrawer from "./OcsDetailDrawer";
 import type {
@@ -399,11 +401,9 @@ export default function OcsUsagePanel() {
               </thead>
               <tbody>
                 {usageRecords.length === 0 ? (
-                  <tr>
-                    <td colSpan={11} style={{ textAlign: "center", padding: "3rem 1rem", color: "var(--text-muted)" }}>
-                      {loading ? t("loading") : t("no_data")}
-                    </td>
-                  </tr>
+                  <DataTableStateRow colSpan={11} state={loading ? "loading" : "empty"}>
+                    {loading ? t("loading") : t("no_data")}
+                  </DataTableStateRow>
                 ) : (
                   usageRecords.map((r) => (
                     <tr key={r.id}>
@@ -480,11 +480,9 @@ export default function OcsUsagePanel() {
               </thead>
               <tbody>
                 {reservationRecords.length === 0 ? (
-                  <tr>
-                    <td colSpan={11} style={{ textAlign: "center", padding: "3rem 1rem", color: "var(--text-muted)" }}>
-                      {loading ? t("loading") : t("no_data")}
-                    </td>
-                  </tr>
+                  <DataTableStateRow colSpan={11} state={loading ? "loading" : "empty"}>
+                    {loading ? t("loading") : t("no_data")}
+                  </DataTableStateRow>
                 ) : (
                   reservationRecords.map((r) => {
                     const stateClass =
@@ -559,68 +557,32 @@ export default function OcsUsagePanel() {
           )}
         </div>
 
-        {/* Pagination */}
-        <div className="ocs-pagination">
-          <div>
-            {t("showing")}{" "}
-            {activeTab === "usage"
-              ? usageRecords.length > 0 ? (usagePage - 1) * usageLimit + 1 : 0
-              : reservationRecords.length > 0 ? (reservationPage - 1) * reservationLimit + 1 : 0}{" "}
-            {t("to")}{" "}
-            {activeTab === "usage"
-              ? Math.min(usagePage * usageLimit, usageTotal)
-              : Math.min(reservationPage * reservationLimit, reservationTotal)}{" "}
-            {t("of")} {activeTab === "usage" ? usageTotal : reservationTotal} {t("entries")}
-          </div>
-          <div className="ocs-pagination-btns">
-            <select
-              className="ocs-select"
-              value={activeTab === "usage" ? usageLimit : reservationLimit}
-              onChange={(e) => {
-                const val = Number(e.target.value);
-                if (activeTab === "usage") {
-                  setUsageLimit(val);
-                  setUsagePage(1);
-                } else {
-                  setReservationLimit(val);
-                  setReservationPage(1);
-                }
-              }}
-              style={{ padding: "0.35rem 1.5rem 0.35rem 0.5rem", fontSize: "0.8rem" }}
-            >
-              <option value="10">10 / page</option>
-              <option value="20">20 / page</option>
-              <option value="50">50 / page</option>
-              <option value="100">100 / page</option>
-            </select>
-            <button
-              type="button"
-              className="ocs-btn"
-              disabled={activeTab === "usage" ? usagePage <= 1 : reservationPage <= 1}
-              onClick={() => {
-                if (activeTab === "usage") setUsagePage((p) => Math.max(1, p - 1));
-                else setReservationPage((p) => Math.max(1, p - 1));
-              }}
-            >
-              {t("prev")}
-            </button>
-            <span className="ocs-mono" style={{ fontSize: "0.8rem", padding: "0 0.5rem" }}>
-              {activeTab === "usage" ? usagePage : reservationPage} /{" "}
-              {activeTab === "usage" ? usageTotalPages : reservationTotalPages}
-            </span>
-            <button
-              type="button"
-              className="ocs-btn"
-              disabled={activeTab === "usage" ? usagePage >= usageTotalPages : reservationPage >= reservationTotalPages}
-              onClick={() => {
-                if (activeTab === "usage") setUsagePage((p) => Math.min(usageTotalPages, p + 1));
-                else setReservationPage((p) => Math.min(reservationTotalPages, p + 1));
-              }}
-            >
-              {t("next")}
-            </button>
-          </div>
-        </div>
+        <DataTablePagination
+          page={activeTab === "usage" ? usagePage : reservationPage}
+          pageSize={activeTab === "usage" ? usageLimit : reservationLimit}
+          total={activeTab === "usage" ? usageTotal : reservationTotal}
+          visibleCount={activeTab === "usage" ? usageRecords.length : reservationRecords.length}
+          totalPages={activeTab === "usage" ? usageTotalPages : reservationTotalPages}
+          labels={{
+            showing: t("showing"),
+            to: t("to"),
+            of: t("of"),
+            entries: t("entries"),
+            previous: t("prev"),
+            next: t("next"),
+            perPage: t("per_page"),
+          }}
+          onPageChange={activeTab === "usage" ? setUsagePage : setReservationPage}
+          onPageSizeChange={(nextLimit) => {
+            if (activeTab === "usage") {
+              setUsageLimit(nextLimit);
+              setUsagePage(1);
+            } else {
+              setReservationLimit(nextLimit);
+              setReservationPage(1);
+            }
+          }}
+        />
       </div>
 
       {/* Detail Drawer */}

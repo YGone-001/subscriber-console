@@ -24,10 +24,13 @@ import {
 } from "lucide-react";
 import { StatusBadge, formatDateTime } from "./RatingManagementShared";
 import * as T from "./types";
-import { DEFAULT_OCS_PLAN_ID, Field, formatGrant } from "./types";
+import { DEFAULT_OCS_PLAN_ID, formatGrant } from "./types";
 import { TariffPlanCloneModal } from "./TariffPlanCloneModal";
 import { TariffPlanImportModal } from "./TariffPlanImportModal";
 import { TariffRuleModal } from "./TariffRuleModal";
+import { DataTableStateRow } from "@/components/ui/DataTableState";
+import { Field } from "@/components/ui/Field";
+import { ErrorNotice } from "@/components/ui/InlineNotice";
 import { detectRuleConflicts } from "@/lib/tariffPlanOperations";
 import "./rating.css";
 
@@ -585,18 +588,8 @@ export function TariffPlanList(props: any) {
             <div className="dash-card-body grid-gap-1">
               {/* Conflict Alert Banner */}
               {conflicts.length > 0 && (
-                <div
-                  className="alert-banner alert-banner-danger"
-                  style={{
-                    padding: "0.85rem 1rem",
-                    borderRadius: "8px",
-                    border: "1px solid var(--status-danger-border)",
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontWeight: 700, marginBottom: "0.4rem" }}>
-                    <AlertTriangle size={18} color="var(--danger)" />
-                    <span>{t("tariff_rule_conflict_warning")} ({conflicts.length})</span>
-                  </div>
+                <ErrorNotice icon={<AlertTriangle size={18} />}>
+                  <strong>{t("tariff_rule_conflict_warning")} ({conflicts.length})</strong>
                   <p style={{ margin: "0 0 0.5rem 0", fontSize: "0.84rem", opacity: 0.9 }}>
                     {t("tariff_rule_conflict_desc")}
                   </p>
@@ -607,7 +600,7 @@ export function TariffPlanList(props: any) {
                       </li>
                     ))}
                   </ul>
-                </div>
+                </ErrorNotice>
               )}
 
               {/* Rules Toolbar */}
@@ -650,11 +643,9 @@ export function TariffPlanList(props: any) {
                   </thead>
                   <tbody>
                     {visiblePlanRules.length === 0 ? (
-                      <tr>
-                        <td colSpan={canEditTemplates ? 10 : 9} style={{ textAlign: "center", padding: "2rem", color: "var(--text-muted)" }}>
-                          No rating rules found for this plan.
-                        </td>
-                      </tr>
+                      <DataTableStateRow colSpan={canEditTemplates ? 10 : 9} state="empty">
+                        No rating rules found for this plan.
+                      </DataTableStateRow>
                     ) : (
                       visiblePlanRules.map((rule) => {
                         const ruleKey = rule.rule_id || `rg_${rule.rating_group_id}`;
@@ -807,10 +798,7 @@ export function TariffPlanList(props: any) {
               )}
 
               {dryRunError && (
-                <div className="alert-banner alert-banner-danger" style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.6rem 0.8rem", borderRadius: "6px", fontSize: "0.85rem" }}>
-                  <AlertTriangle size={16} />
-                  <span>{dryRunError}</span>
-                </div>
+                <ErrorNotice icon={<AlertTriangle size={16} />}>{dryRunError}</ErrorNotice>
               )}
 
               {canEditTemplates && (

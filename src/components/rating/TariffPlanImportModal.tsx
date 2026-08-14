@@ -2,8 +2,9 @@
 import React, { useState } from "react";
 import { Upload, FileCode, CheckCircle2, AlertTriangle, AlertCircle, X } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
+import { Field } from "@/components/ui/Field";
+import { ErrorNotice, InlineNotice } from "@/components/ui/InlineNotice";
 import { normalizeImportedPlan } from "@/lib/tariffPlanOperations";
-import { Field } from "./types";
 
 type Props = {
   isOpen: boolean;
@@ -121,36 +122,29 @@ export function TariffPlanImportModal({ isOpen, onClose, onSuccess }: Props) {
           </Field>
 
           {apiError && (
-            <div className="alert-banner alert-banner-danger" style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.6rem 0.8rem", borderRadius: "6px", fontSize: "0.85rem" }}>
-              <AlertCircle size={16} />
-              <span>{apiError}</span>
-            </div>
+            <ErrorNotice icon={<AlertCircle size={16} />}>{apiError}</ErrorNotice>
           )}
 
           {validationErrors.length > 0 && (
-            <div className="alert-banner alert-banner-danger" style={{ padding: "0.6rem 0.8rem", borderRadius: "6px", fontSize: "0.85rem" }}>
-              <div style={{ fontWeight: 600, marginBottom: "0.25rem", display: "flex", alignItems: "center", gap: "0.4rem" }}>
-                <AlertCircle size={15} /> Validation Errors:
-              </div>
+            <ErrorNotice icon={<AlertCircle size={15} />}>
+              <strong>Validation Errors:</strong>
               <ul style={{ margin: 0, paddingLeft: "1.2rem" }}>
                 {validationErrors.map((err, i) => (
                   <li key={i}>{err}</li>
                 ))}
               </ul>
-            </div>
+            </ErrorNotice>
           )}
 
           {validationWarnings.length > 0 && (
-            <div className="alert-banner alert-banner-warning" style={{ padding: "0.6rem 0.8rem", borderRadius: "6px", fontSize: "0.85rem" }}>
-              <div style={{ fontWeight: 600, marginBottom: "0.25rem", display: "flex", alignItems: "center", gap: "0.4rem" }}>
-                <AlertTriangle size={15} /> Warnings:
-              </div>
+            <InlineNotice tone="warning" icon={<AlertTriangle size={15} />}>
+              <strong>Warnings:</strong>
               <ul style={{ margin: 0, paddingLeft: "1.2rem" }}>
                 {validationWarnings.map((warn, i) => (
                   <li key={i}>{warn}</li>
                 ))}
               </ul>
-            </div>
+            </InlineNotice>
           )}
 
           {parsedPreview && validationErrors.length === 0 && (

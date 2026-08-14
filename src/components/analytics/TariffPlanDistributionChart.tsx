@@ -6,8 +6,7 @@ import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { Layers, ArrowUpRight, Tag } from "lucide-react";
 import { TariffPlanDistItem } from "./types";
 import EmptyChartState from "./EmptyChartState";
-
-const PLAN_COLORS = ["var(--chart-2)", "var(--chart-1)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)", "var(--status-info)", "var(--status-warning)"];
+import { CHART_TOOLTIP_STYLE, ChartSummary, PLAN_CHART_COLORS } from "@/components/ui/chartPrimitives";
 
 interface TariffPlanDistributionChartProps {
   tariffPlanDist?: TariffPlanDistItem[];
@@ -43,14 +42,6 @@ export default function TariffPlanDistributionChart({
       })
     : "";
 
-  const tooltipStyle = {
-    borderRadius: 8,
-    backgroundColor: "var(--surface)",
-    borderColor: "var(--surface-border)",
-    color: "var(--text-main)",
-    boxShadow: "var(--shadow-popover)",
-  };
-
   return (
     <section className="analytics-panel">
       <div className="analytics-panel-header">
@@ -71,7 +62,7 @@ export default function TariffPlanDistributionChart({
         {hasData ? (
           <div className="analytics-plan-grid">
             <div className="analytics-plan-chart-container" role="img" aria-labelledby={titleId} aria-describedby={summaryId}>
-              <p id={summaryId} className="sr-only">{chartSummary}</p>
+              <ChartSummary id={summaryId}>{chartSummary}</ChartSummary>
               <ResponsiveContainer width="100%" height={220}>
                 <PieChart>
                   <Pie
@@ -85,11 +76,11 @@ export default function TariffPlanDistributionChart({
                     stroke="none"
                   >
                     {chartData.map((entry, index) => (
-                      <Cell key={`${entry.planId}-${index}`} fill={PLAN_COLORS[index % PLAN_COLORS.length]} />
+                      <Cell key={`${entry.planId}-${index}`} fill={PLAN_CHART_COLORS[index % PLAN_CHART_COLORS.length]} />
                     ))}
                   </Pie>
                   <Tooltip
-                    contentStyle={tooltipStyle}
+                    contentStyle={CHART_TOOLTIP_STYLE}
                     formatter={(value: number, name: string) => [
                       `${value} ${t("dash_ops_subscribers", { count: "" }).trim()}`,
                       name,
@@ -101,7 +92,7 @@ export default function TariffPlanDistributionChart({
 
             <div className="analytics-plan-legend-list">
               {tariffPlanDist.map((plan, index) => {
-                const color = PLAN_COLORS[index % PLAN_COLORS.length];
+                const color = PLAN_CHART_COLORS[index % PLAN_CHART_COLORS.length];
                 return (
                   <div key={`${plan.planId}-${index}`} className="analytics-plan-legend-row">
                     <div className="legend-row-left">

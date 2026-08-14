@@ -59,8 +59,10 @@ test("data charts expose summaries and decorative KPI charts stay hidden", () =>
     assert.match(source, /role=.*"img"/);
     assert.match(source, /aria-labelledby=/);
     assert.match(source, /aria-describedby=/);
-    assert.match(source, /className="sr-only"/);
+    assert.match(source, /ChartSummary/);
   }
+
+  assert.match(read("src/components/ui/chartPrimitives.tsx"), /className="sr-only"/);
 
   assert.match(read("src/components/analytics/KpiCard.tsx"), /className="analytics-sparkline"[^>]*aria-hidden="true"/);
 

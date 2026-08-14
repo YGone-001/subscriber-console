@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import PageHeader from "@/components/ui/PageHeader";
+import { DataTablePagination } from "@/components/ui/DataTablePagination";
+import { DataTableStateRow } from "@/components/ui/DataTableState";
 import { formatBytes } from "@/lib/unitParser";
 import OcsDetailDrawer from "./OcsDetailDrawer";
 import type { OcsSessionRecord } from "@/server/repositories/ocsOperationsRepository";
@@ -259,11 +261,9 @@ export default function OcsSessionsPanel() {
             </thead>
             <tbody>
               {records.length === 0 ? (
-                <tr>
-                  <td colSpan={11} style={{ textAlign: "center", padding: "3rem 1rem", color: "var(--text-muted)" }}>
-                    {loading ? t("loading") : t("no_data")}
-                  </td>
-                </tr>
+                <DataTableStateRow colSpan={11} state={loading ? "loading" : "empty"}>
+                  {loading ? t("loading") : t("no_data")}
+                </DataTableStateRow>
               ) : (
                 records.map((r) => {
                   const stateClass =
@@ -330,48 +330,27 @@ export default function OcsSessionsPanel() {
           </table>
         </div>
 
-        {/* Pagination */}
-        <div className="ocs-pagination">
-          <div>
-            {t("showing")} {records.length > 0 ? (page - 1) * limit + 1 : 0} {t("to")}{" "}
-            {Math.min(page * limit, total)} {t("of")} {total} {t("entries")}
-          </div>
-          <div className="ocs-pagination-btns">
-            <select
-              className="ocs-select"
-              value={limit}
-              onChange={(e) => {
-                setLimit(Number(e.target.value));
-                setPage(1);
-              }}
-              style={{ padding: "0.35rem 1.5rem 0.35rem 0.5rem", fontSize: "0.8rem" }}
-            >
-              <option value="10">10 / page</option>
-              <option value="20">20 / page</option>
-              <option value="50">50 / page</option>
-              <option value="100">100 / page</option>
-            </select>
-            <button
-              type="button"
-              className="ocs-btn"
-              disabled={page <= 1}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-            >
-              {t("prev")}
-            </button>
-            <span className="ocs-mono" style={{ fontSize: "0.8rem", padding: "0 0.5rem" }}>
-              {page} / {totalPages}
-            </span>
-            <button
-              type="button"
-              className="ocs-btn"
-              disabled={page >= totalPages}
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            >
-              {t("next")}
-            </button>
-          </div>
-        </div>
+        <DataTablePagination
+          page={page}
+          pageSize={limit}
+          total={total}
+          visibleCount={records.length}
+          totalPages={totalPages}
+          labels={{
+            showing: t("showing"),
+            to: t("to"),
+            of: t("of"),
+            entries: t("entries"),
+            previous: t("prev"),
+            next: t("next"),
+            perPage: t("per_page"),
+          }}
+          onPageChange={setPage}
+          onPageSizeChange={(nextLimit) => {
+            setLimit(nextLimit);
+            setPage(1);
+          }}
+        />
       </div>
 
       {/* Detail Drawer */}

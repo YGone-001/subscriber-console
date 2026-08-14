@@ -2,8 +2,9 @@
 import React, { useState, useEffect } from "react";
 import { Copy, X, AlertCircle } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
+import { Field } from "@/components/ui/Field";
+import { ErrorNotice } from "@/components/ui/InlineNotice";
 import * as T from "./types";
-import { Field } from "./types";
 
 type Props = {
   isOpen: boolean;
@@ -92,10 +93,7 @@ export function TariffPlanCloneModal({ isOpen, onClose, sourcePlan, onSuccess }:
             </div>
 
             {error && (
-              <div className="alert-banner alert-banner-danger" style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.6rem 0.8rem", borderRadius: "6px", fontSize: "0.85rem" }}>
-                <AlertCircle size={16} />
-                <span>{error}</span>
-              </div>
+              <ErrorNotice icon={<AlertCircle size={16} />}>{error}</ErrorNotice>
             )}
 
             <Field label={t("tariff_plan_clone_target_id")}>

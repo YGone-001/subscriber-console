@@ -1,0 +1,28 @@
+.field {
+  display: grid;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.label {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 750;
+  letter-spacing: 0.035em;
+  line-height: 1.25;
+}
+
+.description,
+.error {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.description {
+  color: var(--text-muted);
+}
+
+.error {
+  color: var(--status-danger);
+}

@@ -456,22 +456,6 @@
   color: var(--text-muted);
 }
 
-.ocs-pagination {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.85rem 1.25rem;
-  border-top: 1px solid var(--surface-border);
-  font-size: 0.85rem;
-  color: var(--text-muted);
-}
-
-.ocs-pagination-btns {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
 /* Audit Detail Drawer */
 .ocs-drawer-backdrop {
   position: fixed;

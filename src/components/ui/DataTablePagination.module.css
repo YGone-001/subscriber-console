@@ -1,0 +1,75 @@
+.root {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 1.25rem;
+  border-top: 1px solid var(--surface-border);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.summary {
+  min-width: 0;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.controls select,
+.controls button {
+  min-height: 36px;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--text-secondary);
+  font: inherit;
+}
+
+.controls select {
+  padding: 0.35rem 1.5rem 0.35rem 0.5rem;
+}
+
+.controls button {
+  padding: 0.4rem 0.7rem;
+  cursor: pointer;
+}
+
+.controls button:hover:not(:disabled) {
+  border-color: var(--selection-border);
+  background: var(--surface-hover);
+  color: var(--primary);
+}
+
+.controls button:focus-visible,
+.controls select:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.controls button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.pageNumber {
+  min-width: 4.5rem;
+  padding: 0 0.5rem;
+  color: var(--text-main);
+  font-family: var(--font-data);
+  text-align: center;
+}
+
+@media (max-width: 640px) {
+  .root {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .controls {
+    justify-content: space-between;
+  }
+}

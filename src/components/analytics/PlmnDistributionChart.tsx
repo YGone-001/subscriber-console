@@ -6,8 +6,7 @@ import { DatabaseZap, PieChart as PieChartIcon, Server } from "lucide-react";
 import { DistributionPoint } from "./types";
 import { formatGb } from "./utils";
 import EmptyChartState from "./EmptyChartState";
-
-const COLORS = ["var(--chart-1)", "var(--chart-3)", "var(--chart-2)", "var(--chart-4)", "var(--chart-5)", "var(--chart-6)"];
+import { CHART_SERIES_COLORS, CHART_TOOLTIP_STYLE, ChartSummary } from "@/components/ui/chartPrimitives";
 
 export default function PlmnDistributionChart({
   plmnDist,
@@ -18,13 +17,6 @@ export default function PlmnDistributionChart({
 }) {
   const titleId = React.useId();
   const summaryId = React.useId();
-  const tooltipStyle = {
-    borderRadius: 8,
-    backgroundColor: "var(--surface)",
-    borderColor: "var(--surface-border)",
-    color: "var(--text-main)",
-    boxShadow: "var(--shadow-popover)",
-  };
   const leadingNetwork = plmnDist.reduce<DistributionPoint | undefined>(
     (largest, item) => (!largest || item.value > largest.value ? item : largest),
     undefined,
@@ -54,7 +46,7 @@ export default function PlmnDistributionChart({
       >
         {plmnDist.length > 0 ? (
           <>
-            <p id={summaryId} className="sr-only">{chartSummary}</p>
+            <ChartSummary id={summaryId}>{chartSummary}</ChartSummary>
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
               <Pie
@@ -69,10 +61,10 @@ export default function PlmnDistributionChart({
                 label={({ name, percent }: { name: string; percent: number }) => `${name} ${(percent * 100).toFixed(0)}%`}
               >
                 {plmnDist.map((entry, index) => (
-                  <Cell key={`${entry.name}-${index}`} fill={COLORS[index % COLORS.length]} />
+                  <Cell key={`${entry.name}-${index}`} fill={CHART_SERIES_COLORS[index % CHART_SERIES_COLORS.length]} />
                 ))}
               </Pie>
-              <Tooltip contentStyle={tooltipStyle} formatter={(value: number) => [`${formatGb(value)} GB`, t("dash_chart_plmn_tooltip")]} />
+              <Tooltip contentStyle={CHART_TOOLTIP_STYLE} formatter={(value: number) => [`${formatGb(value)} GB`, t("dash_chart_plmn_tooltip")]} />
               </PieChart>
             </ResponsiveContainer>
           </>
