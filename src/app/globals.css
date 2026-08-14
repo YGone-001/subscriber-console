@@ -190,6 +190,19 @@
   padding: 0;
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
 :root {
   --font-display: var(--font-display-loaded), "Aptos Display", "Segoe UI", sans-serif;
   --font-interface: var(--font-interface-loaded), "Microsoft YaHei UI", "PingFang SC", "Segoe UI", sans-serif;

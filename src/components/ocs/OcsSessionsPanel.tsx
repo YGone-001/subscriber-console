@@ -33,6 +33,11 @@ export default function OcsSessionsPanel() {
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [selectedRecord, setSelectedRecord] = useState<OcsSessionRecord | null>(null);
 
+  const getAriaSort = (fields: string | string[]): "ascending" | "descending" | undefined => {
+    const activeFields = Array.isArray(fields) ? fields : [fields];
+    return activeFields.includes(sortField) ? (sortOrder === "asc" ? "ascending" : "descending") : undefined;
+  };
+
   const [summary, setSummary] = useState({
     activeSessions: 0,
     closingSessions: 0,
@@ -236,18 +241,19 @@ export default function OcsSessionsPanel() {
       <div className="ocs-table-card">
         <div className="ocs-table-wrapper">
           <table className="ocs-table">
+            <caption className="sr-only">{t("ocs_sessions_title")}</caption>
             <thead>
               <tr>
                 <th>{t("ocs_col_session_id")}</th>
-                <th>{t("ocs_col_imsi")}</th>
+                <th aria-sort={getAriaSort("imsi")}>{t("ocs_col_imsi")}</th>
                 <th>{t("ocs_col_apn")}</th>
                 <th>{t("ocs_col_interface")}</th>
                 <th>{t("ocs_col_state")}</th>
                 <th>{t("ocs_col_cc_num")}</th>
-                <th>{t("ocs_col_granted")} / {t("ocs_kpi_consumed_octets")}</th>
+                <th aria-sort={getAriaSort(["granted_total", "used_total"])}>{t("ocs_col_granted")} / {t("ocs_kpi_consumed_octets")}</th>
                 <th>{t("ocs_col_rg_si")}</th>
-                <th>{t("ocs_col_started_at")}</th>
-                <th>{t("ocs_col_last_update")}</th>
+                <th aria-sort={getAriaSort("started_at")}>{t("ocs_col_started_at")}</th>
+                <th aria-sort={getAriaSort("last_update_at")}>{t("ocs_col_last_update")}</th>
                 <th>{t("actions")}</th>
               </tr>
             </thead>

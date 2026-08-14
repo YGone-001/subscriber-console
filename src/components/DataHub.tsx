@@ -789,6 +789,7 @@ export default function DataHub({
                   {/* Conflict Preview Table */}
                   <div className="dh-table-wrap">
                     <table className="dh-table">
+                      <caption className="sr-only">{t("dh_tab_import")}</caption>
                       <thead>
                         <tr className="dh-table-tr-head">
                           <th className="dh-table-th">#</th>

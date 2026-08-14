@@ -67,6 +67,7 @@ export function PccRuleList(props: any) {
 
         <div className="table-container">
           <table className="rule-table">
+            <caption className="sr-only">{t("rating_rule_catalog_title")}</caption>
             <thead>
               <tr className="rule-table-thead">
                 <th className="table-header-cap rule-th rule-th-id"><span className="flex-center-gap-0-55"><Hash size={16} /> {t("rating_col_id")}</span></th>

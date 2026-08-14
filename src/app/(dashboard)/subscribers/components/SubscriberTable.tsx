@@ -70,6 +70,7 @@ export function SubscriberTable(props: any) {
         </div>
       </div>
       <table className="subscribers-table">
+        <caption className="sr-only">{t("subscriber_title")}</caption>
         <thead>
           <tr>
             <th>

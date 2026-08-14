@@ -403,6 +403,7 @@ export default function SubscriberViewMode({
                 <div className={`accordion-content ${expandedSlices.includes(sIdx) ? 'expanded' : 'collapsed'}`}>
                   <div className="slice-table-container">
                     <table className="slice-table">
+                      <caption className="sr-only">{t("sub_slices_arch")} · {t("slice_idx", { idx: sIdx + 1 })}</caption>
                       <thead>
                         <tr>
                           <th className="table-header-cap slice-table-th">{t("slice_col_dnn")}</th>

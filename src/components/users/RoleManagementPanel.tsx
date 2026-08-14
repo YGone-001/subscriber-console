@@ -195,6 +195,7 @@ export default function RoleManagementPanel() {
 
             <div className="role-matrix-scroll">
               <table className="role-matrix">
+                <caption className="sr-only">{t("roles_matrix_title")}</caption>
                 <thead>
                   <tr>
                     <th>{t("roles_matrix_module")}</th>
@@ -292,4 +293,3 @@ export default function RoleManagementPanel() {
     </>
   );
 }
-

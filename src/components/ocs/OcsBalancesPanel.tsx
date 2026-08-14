@@ -34,6 +34,11 @@ export default function OcsBalancesPanel() {
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [selectedRecord, setSelectedRecord] = useState<OcsBalanceRecord | null>(null);
 
+  const getAriaSort = (fields: string | string[]): "ascending" | "descending" | undefined => {
+    const activeFields = Array.isArray(fields) ? fields : [fields];
+    return activeFields.includes(sortField) ? (sortOrder === "asc" ? "ascending" : "descending") : undefined;
+  };
+
   const [summary, setSummary] = useState({
     totalSubscribers: 0,
     totalDataAllocated: 0,
@@ -241,18 +246,19 @@ export default function OcsBalancesPanel() {
       <div className="ocs-table-card">
         <div className="ocs-table-wrapper">
           <table className="ocs-table">
+            <caption className="sr-only">{t("ocs_balances_title")}</caption>
             <thead>
               <tr>
-                <th>{t("ocs_col_imsi")}</th>
+                <th aria-sort={getAriaSort("imsi")}>{t("ocs_col_imsi")}</th>
                 <th>{t("ocs_col_plan")}</th>
                 <th>{t("ocs_col_status")}</th>
-                <th>{t("ocs_col_data_alloc")} / {t("ocs_col_data_used")} / {t("ocs_col_data_reserved")}</th>
-                <th>{t("ocs_col_data_available")}</th>
+                <th aria-sort={getAriaSort(["data_total", "data_used"])}>{t("ocs_col_data_alloc")} / {t("ocs_col_data_used")} / {t("ocs_col_data_reserved")}</th>
+                <th aria-sort={getAriaSort("data_available")}>{t("ocs_col_data_available")}</th>
                 <th>{t("ocs_col_voice_avail")}</th>
                 <th>{t("ocs_col_sms_avail")}</th>
                 <th>{t("ocs_col_invariant")}</th>
                 <th>{t("ocs_col_version")}</th>
-                <th>{t("ocs_col_updated_at")}</th>
+                <th aria-sort={getAriaSort("updated_at")}>{t("ocs_col_updated_at")}</th>
                 <th>{t("actions")}</th>
               </tr>
             </thead>

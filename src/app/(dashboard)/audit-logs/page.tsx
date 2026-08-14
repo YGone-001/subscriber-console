@@ -429,6 +429,7 @@ export default function AuditLogsPage() {
              <div className="audit-table-msg">{t("audit_no_data")}</div>
           ) : (
             <table className="data-table audit-table">
+              <caption className="sr-only">{t("audit_title")}</caption>
               <thead className="audit-table-thead">
                 <tr>
                    <th className="audit-table-th audit-table-th-time">{t("audit_col_time")}</th>

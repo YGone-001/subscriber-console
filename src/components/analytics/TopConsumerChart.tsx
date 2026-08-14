@@ -58,6 +58,8 @@ export default function TopConsumerChart({
   theme: string;
   t: (key: string, params?: Record<string, string | number>) => string;
 }) {
+  const titleId = React.useId();
+  const summaryId = React.useId();
   const chartStroke = theme === "dark" ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.08)";
   const tickColor = theme === "dark" ? "#CBD5E1" : "#475569";
   const tooltipStyle = {
@@ -67,23 +69,38 @@ export default function TopConsumerChart({
     color: theme === "dark" ? "#f8fafc" : "#334155",
     boxShadow: "0 14px 30px -18px rgba(15,23,42,0.45)",
   };
+  const leadingConsumer = top5[0];
+  const chartSummary = leadingConsumer
+    ? t("dash_chart_top5_summary", {
+        count: top5.length,
+        imsi: leadingConsumer.imsi,
+        value: formatGb(leadingConsumer.balance),
+      })
+    : "";
 
   return (
     <section className="analytics-panel">
       <div className="analytics-panel-header">
         <div className="analytics-panel-title">
           <Zap size={18} color="var(--primary)" />
-          <h3>{t("dash_chart_top5_title")}</h3>
+          <h3 id={titleId}>{t("dash_chart_top5_title")}</h3>
         </div>
         <span className="analytics-panel-badge">
           <Signal size={13} />
           Live
         </span>
       </div>
-      <div className="analytics-panel-body">
+      <div
+        className="analytics-panel-body"
+        role={top5.length > 0 ? "img" : undefined}
+        aria-labelledby={top5.length > 0 ? titleId : undefined}
+        aria-describedby={top5.length > 0 ? summaryId : undefined}
+      >
         {top5.length > 0 ? (
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={top5} layout="vertical" margin={{ top: 8, right: 28, left: 8, bottom: 8 }}>
+          <>
+            <p id={summaryId} className="sr-only">{chartSummary}</p>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={top5} layout="vertical" margin={{ top: 8, right: 28, left: 8, bottom: 8 }}>
               <CartesianGrid strokeDasharray="4 4" horizontal={false} stroke={chartStroke} />
               <XAxis
                 type="number"
@@ -107,8 +124,9 @@ export default function TopConsumerChart({
                   <Cell key={`${entry.imsi}-${index}`} fill={COLORS[index % COLORS.length]} />
                 ))}
               </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+              </BarChart>
+            </ResponsiveContainer>
+          </>
         ) : (
           <EmptyChartState
             icon={<BarChart3 size={42} />}

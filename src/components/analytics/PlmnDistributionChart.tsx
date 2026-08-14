@@ -18,6 +18,8 @@ export default function PlmnDistributionChart({
   theme: string;
   t: (key: string, params?: Record<string, string | number>) => string;
 }) {
+  const titleId = React.useId();
+  const summaryId = React.useId();
   const tooltipStyle = {
     borderRadius: 8,
     backgroundColor: theme === "dark" ? "#1e293b" : "#fff",
@@ -25,20 +27,38 @@ export default function PlmnDistributionChart({
     color: theme === "dark" ? "#f8fafc" : "#334155",
     boxShadow: "0 14px 30px -18px rgba(15,23,42,0.45)",
   };
+  const leadingNetwork = plmnDist.reduce<DistributionPoint | undefined>(
+    (largest, item) => (!largest || item.value > largest.value ? item : largest),
+    undefined,
+  );
+  const chartSummary = leadingNetwork
+    ? t("dash_chart_plmn_summary", {
+        count: plmnDist.length,
+        name: leadingNetwork.name,
+        value: formatGb(leadingNetwork.value),
+      })
+    : "";
 
   return (
     <section className="analytics-panel">
       <div className="analytics-panel-header">
         <div className="analytics-panel-title">
           <Server size={18} color="var(--chart-3)" />
-          <h3>{t("dash_chart_plmn_title")}</h3>
+          <h3 id={titleId}>{t("dash_chart_plmn_title")}</h3>
         </div>
         <span className="analytics-panel-badge">{plmnDist.length} {t("dash_unit_plmn")}</span>
       </div>
-      <div className="analytics-panel-body">
+      <div
+        className="analytics-panel-body"
+        role={plmnDist.length > 0 ? "img" : undefined}
+        aria-labelledby={plmnDist.length > 0 ? titleId : undefined}
+        aria-describedby={plmnDist.length > 0 ? summaryId : undefined}
+      >
         {plmnDist.length > 0 ? (
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
+          <>
+            <p id={summaryId} className="sr-only">{chartSummary}</p>
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
               <Pie
                 data={plmnDist}
                 cx="50%"
@@ -55,8 +75,9 @@ export default function PlmnDistributionChart({
                 ))}
               </Pie>
               <Tooltip contentStyle={tooltipStyle} formatter={(value: number) => [`${formatGb(value)} GB`, t("dash_chart_plmn_tooltip")]} />
-            </PieChart>
-          </ResponsiveContainer>
+              </PieChart>
+            </ResponsiveContainer>
+          </>
         ) : (
           <EmptyChartState
             icon={<PieChartIcon size={42} />}

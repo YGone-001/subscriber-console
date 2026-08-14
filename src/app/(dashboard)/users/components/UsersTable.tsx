@@ -24,6 +24,9 @@ export function UsersTable(props: any) {
     safePage, pageCount, normalizePageSize
   } = props;
 
+  const getAriaSort = (key: string): "ascending" | "descending" | "none" =>
+    sortKey === key ? (sortDirection === "asc" ? "ascending" : "descending") : "none";
+
   return (
     <>
           {selectedUsernames.length > 0 ? (
@@ -104,6 +107,7 @@ export function UsersTable(props: any) {
               </div>
             </div>
             <table className="users-table">
+              <caption className="sr-only">{t("users_title")}</caption>
               <thead>
                 <tr>
                   <th className="users-select-col">
@@ -115,24 +119,24 @@ export function UsersTable(props: any) {
                       disabled={pagedUsers.length === 0}
                     />
                   </th>
-                  <th className="users-user-col">
+                  <th className="users-user-col" aria-sort={getAriaSort("username")}>
                     <button type="button" className="users-sort-btn" onClick={() => toggleSort("username")}>
                       <User size={15} /> {t("users_col_user")} {sortKey === "username" ? t(`users_sort_${sortDirection}`) : null}
                     </button>
                   </th>
                   <th>{t("users_contact")}</th>
                   <th>{t("users_role")}</th>
-                  <th>
+                  <th aria-sort={getAriaSort("status")}>
                     <button type="button" className="users-sort-btn" onClick={() => toggleSort("status")}>
                       {t("users_status")} {sortKey === "status" ? t(`users_sort_${sortDirection}`) : null}
                     </button>
                   </th>
-                  <th>
+                  <th aria-sort={getAriaSort("lastLoginAt")}>
                     <button type="button" className="users-sort-btn" onClick={() => toggleSort("lastLoginAt")}>
                       {t("users_last_login")} {sortKey === "lastLoginAt" ? t(`users_sort_${sortDirection}`) : null}
                     </button>
                   </th>
-                  <th>
+                  <th aria-sort={getAriaSort("createdAt")}>
                     <button type="button" className="users-sort-btn" onClick={() => toggleSort("createdAt")}>
                       {t("users_created")} {sortKey === "createdAt" ? t(`users_sort_${sortDirection}`) : null}
                     </button>

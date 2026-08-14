@@ -20,6 +20,8 @@ export default function TariffPlanDistributionChart({
   theme,
   t,
 }: TariffPlanDistributionChartProps) {
+  const titleId = React.useId();
+  const summaryId = React.useId();
   const chartData = tariffPlanDist.map((p) => ({
     name: p.name || p.planId,
     value: p.subscriberCount,
@@ -29,6 +31,19 @@ export default function TariffPlanDistributionChart({
   }));
 
   const hasData = chartData.some((d) => d.value > 0);
+  const totalSubscribers = chartData.reduce((sum, item) => sum + item.value, 0);
+  const largestPlan = chartData.reduce<(typeof chartData)[number] | undefined>(
+    (largest, item) => (!largest || item.value > largest.value ? item : largest),
+    undefined,
+  );
+  const chartSummary = largestPlan
+    ? t("dash_chart_tariff_plan_summary", {
+        count: chartData.length,
+        subscribers: totalSubscribers,
+        name: largestPlan.name,
+        percentage: largestPlan.percentage,
+      })
+    : "";
 
   const tooltipStyle = {
     borderRadius: 8,
@@ -43,7 +58,7 @@ export default function TariffPlanDistributionChart({
       <div className="analytics-panel-header">
         <div className="analytics-panel-title">
           <Layers size={18} color="#36b9cc" />
-          <h3>{t("dash_chart_tariff_plan_title")}</h3>
+          <h3 id={titleId}>{t("dash_chart_tariff_plan_title")}</h3>
         </div>
         <div className="analytics-ocs-header-actions">
           <span className="analytics-panel-badge">{tariffPlanDist.length} {t("dash_unit_plans")}</span>
@@ -57,7 +72,8 @@ export default function TariffPlanDistributionChart({
       <div className="analytics-panel-body analytics-plan-body">
         {hasData ? (
           <div className="analytics-plan-grid">
-            <div className="analytics-plan-chart-container">
+            <div className="analytics-plan-chart-container" role="img" aria-labelledby={titleId} aria-describedby={summaryId}>
+              <p id={summaryId} className="sr-only">{chartSummary}</p>
               <ResponsiveContainer width="100%" height={220}>
                 <PieChart>
                   <Pie

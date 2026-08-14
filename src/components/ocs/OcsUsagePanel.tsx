@@ -381,6 +381,7 @@ export default function OcsUsagePanel() {
         <div className="ocs-table-wrapper">
           {activeTab === "usage" ? (
             <table className="ocs-table">
+              <caption className="sr-only">{t("ocs_tab_usage_records")}</caption>
               <thead>
                 <tr>
                   <th>{t("ocs_col_session_id")}</th>
@@ -461,6 +462,7 @@ export default function OcsUsagePanel() {
             </table>
           ) : (
             <table className="ocs-table">
+              <caption className="sr-only">{t("ocs_tab_reservations")}</caption>
               <thead>
                 <tr>
                   <th>{t("ocs_col_session_id")}</th>

@@ -170,6 +170,7 @@ export default function ProfileViewMode({ t, authData, usimType, ocsDefaults, ta
             </div>
             <div className="p-1">
               <table className="table-default">
+                <caption className="sr-only">{t("sub_slices_core")} · {t("slice_idx", { idx: sIdx + 1 })}</caption>
                 <thead>
                   <tr className="table-header-row">
                     <th className="table-header-cap table-cell-pad">{t("slice_col_dnn")}</th>

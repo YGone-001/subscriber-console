@@ -633,6 +633,7 @@ export function TariffPlanList(props: any) {
               {/* Rules Matrix Table */}
               <div className="table-container" style={{ border: "1px solid var(--surface-border)", borderRadius: "8px", overflow: "hidden" }}>
                 <table className="rules-matrix-table">
+                  <caption className="sr-only">{selectedPlan?.name || selectedPlanId} · {t("tariff_plan_rules")}</caption>
                   <thead>
                     <tr>
                       <th style={{ width: 60 }}>Priority</th>

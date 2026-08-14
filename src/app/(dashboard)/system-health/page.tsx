@@ -738,6 +738,7 @@ export default function SystemHealthPage() {
           ) : (
             <div className="health-table-wrap">
               <table className="health-table">
+                <caption className="sr-only">{t("health_anomalies_detected")}</caption>
                 <thead className="health-table-thead">
                   <tr>
                     <th className="health-table-th">{t("health_col_imsi")}</th>

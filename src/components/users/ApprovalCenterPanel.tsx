@@ -260,6 +260,7 @@ export default function ApprovalCenterPanel() {
 
           <div className="approvals-table-scroll">
             <table className="approvals-table">
+              <caption className="sr-only">{t("approvals_title")}</caption>
               <thead>
                 <tr>
                   <th>{t("approvals_id")}</th>
@@ -394,4 +395,3 @@ export default function ApprovalCenterPanel() {
     </>
   );
 }
-
