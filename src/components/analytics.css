@@ -1367,6 +1367,24 @@
     font-weight: 650;
   }
 
+  @media (prefers-reduced-motion: reduce) {
+    .analytics-ocs-mini-bar-fill,
+    .traffic-bar {
+      transition: none;
+    }
+
+    .analytics-ocs-badge-danger,
+    .live-pulse-dot {
+      animation: none !important;
+    }
+
+    .analytics-card:hover,
+    .analytics-action:hover,
+    .analytics-action:active {
+      transform: none !important;
+    }
+  }
+
   .dot-gy { background: var(--chart-1); }
   .dot-ro { background: var(--chart-2); }
 

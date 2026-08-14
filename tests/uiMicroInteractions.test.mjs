@@ -34,7 +34,11 @@ test("globals.css implements smooth shimmer wave and live breathing pulse", () =
 test("globals.css provides accessible prefers-reduced-motion overrides", () => {
   const globalsCss = fs.readFileSync(path.join(rootDir, "src", "app", "globals.css"), "utf8");
   assert.match(globalsCss, /@media\s*\(\s*prefers-reduced-motion:\s*reduce\s*\)/);
-  assert.match(globalsCss, /animation-duration:\s*0\.01ms\s*!important/);
+  assert.doesNotMatch(globalsCss, /animation-duration:\s*0\.01ms/);
+  assert.doesNotMatch(globalsCss, /transition-duration:\s*0\.01ms/);
+  assert.match(globalsCss, /animation:\s*reducedFade 120ms/);
+  assert.match(globalsCss, /transition-property:\s*background-color, color, border-color, box-shadow, opacity/);
+  assert.match(globalsCss, /\.progress-bar-value,[\s\S]*?animation:\s*none\s*!important/);
 });
 
 test("layout.css and OperationFeedback.css support micro-physics and spring transitions", () => {

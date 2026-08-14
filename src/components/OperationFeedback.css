@@ -211,6 +211,27 @@
   color: var(--text-muted);
   display: flex;
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .op-notice-modal {
+    animation: reducedFade 120ms ease-out both;
+  }
+
+  .op-notice-backdrop,
+  .op-confirm-backdrop {
+    animation: feedbackBackdropFade 120ms ease-out both;
+  }
+
+  .op-spinner {
+    animation: none;
+  }
+
+  .op-confirm-btn,
+  .op-empty-action .btn {
+    transition-property: background-color, color, border-color, box-shadow, opacity;
+    transition-duration: 120ms;
+  }
+}
 .op-empty-title {
   color: var(--text-main);
   font-weight: 800;

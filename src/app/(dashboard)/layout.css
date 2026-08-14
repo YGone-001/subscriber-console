@@ -1601,6 +1601,37 @@
     color: var(--text-main);
   }
 
+  @media (prefers-reduced-motion: reduce) {
+    .app-sidebar {
+      transition: none !important;
+    }
+
+    .notif-badge,
+    .notif-status-dot.connecting,
+    .stream-pulse,
+    .nav-crumb-tool-btn.spin svg {
+      animation: none !important;
+    }
+
+    .approval-dropdown,
+    .user-dropdown,
+    .nav-tab-context-menu,
+    .nav-recent-dropdown,
+    .command-dropdown {
+      animation: reducedFade 120ms ease-out both !important;
+    }
+
+    .icon-button:active,
+    .avatar-button:active,
+    .dropdown-item:active,
+    .sidebar-link:hover,
+    .nav-tab-link:hover,
+    .nav-tab-close:hover,
+    .nav-crumb-tool-btn:hover {
+      transform: none !important;
+    }
+  }
+
   .nav-recent-clear {
     border: none;
     background: transparent;

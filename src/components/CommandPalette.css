@@ -232,6 +232,19 @@
   background: var(--header-bg);
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .cp-overlay,
+  .cp-modal {
+    animation: reducedFade 120ms ease-out both;
+  }
+
+  .cp-item,
+  .cp-close {
+    transition-property: background-color, color, border-color, box-shadow, opacity;
+    transition-duration: 120ms;
+  }
+}
+
 .cp-footer-hint {
   display: flex;
   align-items: center;

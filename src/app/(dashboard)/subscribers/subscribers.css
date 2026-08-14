@@ -394,6 +394,16 @@
   }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .traffic-bar {
+    transition: none;
+  }
+
+  .dropdown-menu {
+    animation: reducedFade 120ms ease-out both;
+  }
+}
+
 .dropdown-menu-item {
   width: 100%;
   min-height: 44px;

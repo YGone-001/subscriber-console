@@ -324,6 +324,9 @@ button.metricItem:focus-visible {
 
 @media (prefers-reduced-motion: reduce) {
   button.metricItem {
-    transition: none;
+    transition-property: background-color, color, box-shadow, opacity;
+    transition-duration: 120ms;
+    transition-timing-function: ease-out;
+    transform: none;
   }
 }

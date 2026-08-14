@@ -504,6 +504,18 @@
   }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .ocs-drawer-content {
+    animation: reducedFade 120ms ease-out both;
+  }
+
+  .ocs-stat-card:hover,
+  .ocs-action-btn:hover,
+  .ocs-action-btn:active {
+    transform: none;
+  }
+}
+
 .ocs-drawer-header {
   display: flex;
   align-items: center;

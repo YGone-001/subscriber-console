@@ -823,6 +823,12 @@
     animation: spin 0.9s linear infinite;
   }
 
+  @media (prefers-reduced-motion: reduce) {
+    .users-spin {
+      animation: none;
+    }
+  }
+
   @media (max-width: 1180px) {
     .users-summary {
       grid-template-columns: repeat(2, minmax(0, 1fr));

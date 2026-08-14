@@ -45,6 +45,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .header {
-    transition: none;
+    transition-property: color, background-color;
+    transition-duration: 120ms;
+    transition-timing-function: ease-out;
   }
 }

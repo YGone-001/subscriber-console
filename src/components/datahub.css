@@ -26,6 +26,29 @@
   animation: dhModalPop 0.22s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .dh-modal {
+    animation: reducedFade 120ms ease-out both;
+  }
+
+  .dh-spinner,
+  .dh-progress-bar-fill {
+    animation: none;
+  }
+
+  .dh-progress-bar-fill {
+    transform: none;
+    width: 100%;
+    opacity: 0.72;
+  }
+
+  .dh-btn:hover,
+  .dh-btn:active,
+  .dh-drop-zone:hover {
+    transform: none;
+  }
+}
+
 @keyframes dhModalPop {
   0% {
     opacity: 0;

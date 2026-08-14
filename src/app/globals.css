@@ -1835,19 +1835,39 @@ body, .modal-content, .dash-card, .app-sidebar, .app-header {
   transform: translateY(-1px);
 }
 
-/* Reduced Motion Accessibility */
+@keyframes reducedFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Reduced motion keeps state feedback while removing spatial and looping motion. */
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+  html:focus-within {
     scroll-behavior: auto !important;
   }
 
+  .animate-fade-in,
+  .animate-modal-enter,
+  .animate-pop-in,
+  .animate-drawer-in,
+  .toast-card,
+  .accordion-content,
+  .flash-animate {
+    animation: reducedFade 120ms ease-out both !important;
+  }
+
   .pulse-live,
-  .status-live-dot {
+  .status-live-dot,
+  .pill-active-pulse,
+  .radar-animating::after,
+  body.global-emergency-flash,
+  .progress-bar-value,
+  .spinner,
+  .op-spinner,
+  .health-spinner,
+  .nav-crumb-tool-btn.spin svg,
+  .notif-status-dot.connecting,
+  .stream-pulse {
     animation: none !important;
   }
 
@@ -1856,6 +1876,31 @@ body, .modal-content, .dash-card, .app-sidebar, .app-header {
   .loading-row {
     animation: none !important;
     background: var(--surface-border) !important;
+  }
+
+  .btn:hover,
+  .btn:active,
+  .icon-button:active,
+  .copy-btn:hover,
+  .copy-btn:active,
+  .dash-card:hover,
+  .toast-card:hover,
+  .badge-active:hover,
+  .badge-secondary:hover,
+  .pill:hover {
+    transform: none !important;
+  }
+
+  .btn,
+  .icon-button,
+  .copy-btn,
+  .form-input,
+  .badge-active,
+  .badge-secondary,
+  .pill {
+    transition-property: background-color, color, border-color, box-shadow, opacity !important;
+    transition-duration: 120ms !important;
+    transition-timing-function: ease-out !important;
   }
 }
 /* Shared utility for accessible names and non-visual status announcements. */

@@ -222,11 +222,19 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .login-bg-blob-1,
-  .login-bg-blob-2,
   .login-card,
-  .login-error-container,
+  .login-error-container {
+    animation: reducedFade 120ms ease-out both;
+  }
+
   .login-spinner {
     animation: none;
+  }
+
+  .login-submit-btn,
+  .login-input,
+  .password-toggle {
+    transition-property: background-color, color, border-color, box-shadow, opacity;
+    transition-duration: 120ms;
   }
 }

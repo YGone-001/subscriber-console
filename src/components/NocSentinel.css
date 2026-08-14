@@ -397,6 +397,22 @@
     100% { opacity: 1; transform: translateY(0) scale(1); }
   }
 
+  @media (prefers-reduced-motion: reduce) {
+    .noc-panel {
+      animation: reducedFade 120ms ease-out both;
+    }
+
+    .noc-critical-ticker > div {
+      animation: none;
+      white-space: normal;
+    }
+
+    .noc-header-button:hover,
+    .noc-header-button:active {
+      transform: none;
+    }
+  }
+
   @media (max-width: 760px) {
     .noc-button-label {
       display: none;
