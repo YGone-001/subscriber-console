@@ -50,18 +50,18 @@ const DOMAIN_OPTIONS: GovernanceDomain[] = ["all", "billing", "network", "slice"
 const RISK_STYLE: Record<RiskLevel, { color: string; background: string; border: string }> = {
   low: {
     color: "var(--success)",
-    background: "rgba(16, 185, 129, 0.1)",
-    border: "rgba(16, 185, 129, 0.24)",
+    background: "var(--status-success-soft)",
+    border: "var(--status-success-border)",
   },
   medium: {
     color: "var(--warning)",
-    background: "rgba(245, 158, 11, 0.1)",
-    border: "rgba(245, 158, 11, 0.24)",
+    background: "var(--status-warning-soft)",
+    border: "var(--status-warning-border)",
   },
   high: {
     color: "var(--danger)",
-    background: "rgba(239, 68, 68, 0.1)",
-    border: "rgba(239, 68, 68, 0.24)",
+    background: "var(--status-danger-soft)",
+    border: "var(--status-danger-border)",
   },
 };
 

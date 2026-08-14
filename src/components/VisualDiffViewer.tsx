@@ -111,7 +111,7 @@ export default function VisualDiffViewer({
               </>
             ) : (
               <span className="diff-stat-pill clean">
-                <CheckCircle2 size={12} color="#10b981" /> {t("diff_no_changes")}
+                <CheckCircle2 size={12} color="var(--status-success)" /> {t("diff_no_changes")}
               </span>
             )}
           </div>
@@ -179,7 +179,7 @@ export default function VisualDiffViewer({
               onClick={handleCopyPatch}
               title={t("diff_copy_patch")}
             >
-              {copiedKey === 'patch' ? <Check size={13} color="#10b981" /> : <Copy size={13} />}
+              {copiedKey === 'patch' ? <Check size={13} color="var(--status-success)" /> : <Copy size={13} />}
               {t("diff_copy_patch")}
             </button>
             <button
@@ -188,7 +188,7 @@ export default function VisualDiffViewer({
               onClick={handleCopyNew}
               title={t("diff_copy_new")}
             >
-              {copiedKey === 'new' ? <Check size={13} color="#10b981" /> : <Copy size={13} />}
+              {copiedKey === 'new' ? <Check size={13} color="var(--status-success)" /> : <Copy size={13} />}
               {t("diff_copy_new")}
             </button>
           </div>

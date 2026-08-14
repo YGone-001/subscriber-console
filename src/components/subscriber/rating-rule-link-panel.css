@@ -11,8 +11,8 @@
   background: var(--surface);
 }
 .rating-panel-warning {
-  border: 1px solid color-mix(in srgb, var(--warning, #f59e0b) 45%, var(--surface-border));
-  background: color-mix(in srgb, var(--warning, #f59e0b) 7%, var(--surface));
+  border: 1px solid var(--status-warning-border);
+  background: var(--status-warning-soft);
 }
 
 .rating-panel-header {

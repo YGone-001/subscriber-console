@@ -42,11 +42,11 @@ export class GlobalErrorBoundary extends React.Component<Props, State> {
       }
 
       return (
-        <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "var(--background, #0f172a)", color: "var(--text-main, #f8fafc)", padding: "1.5rem" }}>
-          <div style={{ padding: "2.5rem", background: "var(--surface, #1e293b)", border: "1px solid var(--surface-border, #334155)", borderRadius: "16px", boxShadow: "0 10px 40px rgba(0,0,0,0.3)", display: "flex", flexDirection: "column", alignItems: "center", maxWidth: "520px", width: "100%", textAlign: "center" }}>
-            <AlertTriangle size={52} color="var(--danger, #ef4444)" style={{ marginBottom: "1.25rem", opacity: 0.95 }} />
+        <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "var(--background)", color: "var(--text-main)", padding: "1.5rem" }}>
+          <div style={{ padding: "2.5rem", background: "var(--surface)", border: "1px solid var(--surface-border)", borderRadius: "var(--radius-panel)", boxShadow: "var(--shadow-panel)", display: "flex", flexDirection: "column", alignItems: "center", maxWidth: "520px", width: "100%", textAlign: "center" }}>
+            <AlertTriangle size={52} color="var(--status-danger)" style={{ marginBottom: "1.25rem", opacity: 0.95 }} />
             <h2 style={{ margin: "0 0 0.75rem", fontSize: "1.5rem", fontWeight: 700, letterSpacing: "-0.02em" }}>System Error Encountered</h2>
-            <p style={{ color: "var(--text-muted, #94a3b8)", marginBottom: "1.75rem", fontSize: "0.95rem", lineHeight: 1.55 }}>
+            <p style={{ color: "var(--text-muted)", marginBottom: "1.75rem", fontSize: "0.95rem", lineHeight: 1.55 }}>
               {this.state.error.message || "An unexpected error occurred while rendering the page. This may be due to a temporary service disruption."}
             </p>
 
@@ -54,14 +54,14 @@ export class GlobalErrorBoundary extends React.Component<Props, State> {
               <button
                 type="button"
                 onClick={this.resetError}
-                style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", padding: "0.65rem 1.25rem", background: "var(--primary, #3b82f6)", color: "#ffffff", border: "none", borderRadius: "8px", fontWeight: 600, fontSize: "0.9rem", cursor: "pointer", transition: "all 0.2s ease" }}
+                style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", padding: "0.65rem 1.25rem", background: "var(--primary)", color: "var(--on-accent)", border: "none", borderRadius: "var(--radius-control)", fontWeight: 600, fontSize: "0.9rem", cursor: "pointer" }}
               >
                 <RotateCcw size={16} /> Try Again
               </button>
               <button
                 type="button"
                 onClick={() => window.location.reload()}
-                style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", padding: "0.65rem 1.25rem", background: "transparent", color: "var(--text-main, #f8fafc)", border: "1px solid var(--surface-border, #475569)", borderRadius: "8px", fontWeight: 500, fontSize: "0.9rem", cursor: "pointer", transition: "all 0.2s ease" }}
+                style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", padding: "0.65rem 1.25rem", background: "transparent", color: "var(--text-main)", border: "1px solid var(--surface-border)", borderRadius: "var(--radius-control)", fontWeight: 500, fontSize: "0.9rem", cursor: "pointer" }}
               >
                 <RefreshCw size={16} /> Reload Page
               </button>
@@ -72,12 +72,12 @@ export class GlobalErrorBoundary extends React.Component<Props, State> {
                 <button
                   type="button"
                   onClick={() => this.setState((prev) => ({ showDetails: !prev.showDetails }))}
-                  style={{ background: "none", border: "none", color: "var(--text-muted, #94a3b8)", fontSize: "0.8rem", cursor: "pointer", padding: "0.25rem 0", textDecoration: "underline" }}
+                  style={{ background: "none", border: "none", color: "var(--text-muted)", fontSize: "0.8rem", cursor: "pointer", padding: "0.25rem 0", textDecoration: "underline" }}
                 >
                   {this.state.showDetails ? "Hide Technical Details" : "Show Technical Details"}
                 </button>
                 {this.state.showDetails && (
-                  <pre style={{ marginTop: "0.5rem", padding: "0.75rem", background: "rgba(0,0,0,0.3)", borderRadius: "6px", fontSize: "0.75rem", overflowX: "auto", color: "var(--danger, #f87171)", whiteSpace: "pre-wrap", wordBreak: "break-all", maxHeight: "160px" }}>
+                  <pre style={{ marginTop: "0.5rem", padding: "0.75rem", background: "var(--background)", borderRadius: "var(--radius-small)", fontSize: "0.75rem", overflowX: "auto", color: "var(--status-danger)", whiteSpace: "pre-wrap", wordBreak: "break-all", maxHeight: "160px" }}>
                     {this.state.error.stack}
                   </pre>
                 )}

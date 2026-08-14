@@ -254,7 +254,7 @@ export default function CommandPalette({ isOpen, onClose, onAction }: CommandPal
         className={`cp-item-row ${selected ? "cp-item-row-selected" : ""}`}
       >
         <div className="cp-item-icon-box" style={{ background: selected ? accent : "var(--surface-hover)" }}>
-          <Icon size={16} color={selected ? "white" : "var(--text-muted)"} />
+          <Icon size={16} color={selected ? "var(--on-accent)" : "var(--text-muted)"} />
         </div>
         <div className="cp-item-content">
           <div className={`cp-item-label ${item.type === "imsi" ? "cp-item-label-mono" : ""}`}>{item.label}</div>
@@ -280,7 +280,7 @@ export default function CommandPalette({ isOpen, onClose, onAction }: CommandPal
       onKeyDown={handleKeyDown}
     >
         <div className="cp-search-header">
-          <Search size={20} color="#94a3b8" />
+          <Search size={20} color="var(--text-muted)" />
           <input
             ref={inputRef}
             type="text"

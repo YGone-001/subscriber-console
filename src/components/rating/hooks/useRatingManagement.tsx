@@ -113,8 +113,8 @@ export function useRatingManagement() {
   };
 
   const serviceMeta = (key: T.ServiceKey | Exclude<T.ServiceKey, "all">) => {
-    if (key === "voice") return { label: t("rating_service_voice"), icon: <Mic2 size={16} />, color: "var(--warning, #f59e0b)" };
-    if (key === "sms") return { label: t("rating_service_sms"), icon: <MessageSquare size={16} />, color: "#8b5cf6" };
+    if (key === "voice") return { label: t("rating_service_voice"), icon: <Mic2 size={16} />, color: "var(--status-warning)" };
+    if (key === "sms") return { label: t("rating_service_sms"), icon: <MessageSquare size={16} />, color: "var(--chart-5)" };
     if (key === "ims") return { label: t("rating_service_ims"), icon: <ShieldCheck size={16} />, color: "var(--success)" };
     if (key === "data") return { label: t("rating_service_data"), icon: <Database size={16} />, color: "var(--primary)" };
     return { label: t("rating_service_all"), icon: <Tag size={16} />, color: "var(--text-main)" };

@@ -453,7 +453,7 @@
 
 .tariff-tab-btn:hover {
   color: var(--text-main);
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--surface-hover);
 }
 
 .tariff-tab-btn.active {

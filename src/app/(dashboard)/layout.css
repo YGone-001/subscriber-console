@@ -10,7 +10,7 @@
     flex-shrink: 0;
     z-index: 50;
     border-bottom: 1px solid var(--surface-border);
-    box-shadow: 0 10px 30px -28px rgba(15, 43, 52, 0.75);
+    box-shadow: var(--shadow-panel);
   }
 
   .header-left,
@@ -151,7 +151,7 @@
     color: var(--text-main);
     border-radius: 4px;
     font-weight: 600;
-    border: 1px solid rgba(0,0,0,0.05);
+    border: 1px solid var(--surface-border);
   }
 
   .user-menu {
@@ -198,7 +198,7 @@
     padding: 0 0.35rem;
     border-radius: 999px;
     background: var(--danger);
-    color: white;
+    color: var(--on-accent);
     font-size: 0.68rem;
     line-height: 1;
   }
@@ -213,7 +213,7 @@
     color: var(--text-main);
     border-radius: 8px;
     border: 1px solid var(--surface-border);
-    box-shadow: 0 18px 44px -24px rgba(0,0,0,0.45);
+    box-shadow: var(--shadow-popover);
     overflow: hidden;
     z-index: 50;
     animation: dropdownFade 0.2s cubic-bezier(0.16, 1, 0.3, 1);
@@ -320,17 +320,17 @@
   }
 
   .approval-status.pending {
-    background: rgba(245, 158, 11, 0.12);
-    color: #d97706;
+    background: var(--status-warning-soft);
+    color: var(--status-warning);
   }
 
   .approval-status.success {
-    background: rgba(16, 185, 129, 0.1);
+    background: var(--status-success-soft);
     color: var(--success);
   }
 
   .approval-status.danger {
-    background: rgba(239, 68, 68, 0.1);
+    background: var(--status-danger-soft);
     color: var(--danger);
   }
 
@@ -439,7 +439,7 @@
     color: var(--text-main);
     border-radius: 8px;
     border: 1px solid var(--surface-border);
-    box-shadow: 0 18px 44px -24px rgba(0,0,0,0.45);
+    box-shadow: var(--shadow-popover);
     overflow: hidden;
     z-index: 50;
     animation: dropdownFade 0.2s cubic-bezier(0.16, 1, 0.3, 1);
@@ -659,7 +659,7 @@
     background: var(--surface);
     color: var(--text-main);
     border: 1px solid var(--surface-border);
-    box-shadow: 0 14px 30px -18px rgba(0,0,0,0.55);
+    box-shadow: var(--shadow-popover);
     font-size: 0.78rem;
     font-weight: 700;
     opacity: 0;
@@ -729,7 +729,7 @@
       bottom: 0;
       left: 0;
       z-index: 65;
-      box-shadow: 18px 0 46px -28px rgba(0, 0, 0, 0.65);
+      box-shadow: 18px 0 46px -28px var(--overlay-scrim);
       transition: transform var(--duration-normal) var(--ease-smooth);
     }
 
@@ -863,7 +863,7 @@
     color: var(--text-main);
     border-radius: 12px;
     border: 1px solid var(--surface-border);
-    box-shadow: 0 20px 48px -12px rgba(0, 0, 0, 0.32);
+    box-shadow: var(--shadow-popover);
     overflow: hidden;
     z-index: 55;
     display: flex;
@@ -897,8 +897,8 @@
     gap: 0.3rem;
     font-size: 0.72rem;
     font-weight: 600;
-    color: #10b981;
-    background: color-mix(in srgb, #10b981 12%, transparent);
+    color: var(--status-success);
+    background: var(--status-success-soft);
     padding: 0.15rem 0.45rem;
     border-radius: 999px;
   }
@@ -1055,10 +1055,10 @@
     flex-shrink: 0;
   }
 
-  .notif-type-icon.critical { color: #ef4444; }
-  .notif-type-icon.warning { color: #f59e0b; }
-  .notif-type-icon.success { color: #10b981; }
-  .notif-type-icon.info { color: #3b82f6; }
+  .notif-type-icon.critical { color: var(--status-danger); }
+  .notif-type-icon.warning { color: var(--status-warning); }
+  .notif-type-icon.success { color: var(--status-success); }
+  .notif-type-icon.info { color: var(--status-info); }
 
   .notif-card-body {
     flex: 1;
@@ -1344,7 +1344,7 @@
     color: var(--primary);
     background: var(--surface);
     border-color: color-mix(in srgb, var(--primary) 26%, var(--surface-border));
-    box-shadow: 0 8px 16px -16px rgba(15, 43, 52, 0.7);
+    box-shadow: var(--shadow-panel);
     font-weight: 700;
   }
 
@@ -1419,7 +1419,7 @@
     background: var(--surface);
     border: 1px solid var(--surface-border);
     border-radius: 8px;
-    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+    box-shadow: var(--shadow-popover);
     padding: 0.35rem;
     z-index: 50;
     animation: dropdownFade 0.15s ease-out;
@@ -1578,7 +1578,7 @@
     background: var(--surface);
     border: 1px solid var(--surface-border);
     border-radius: 8px;
-    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
+    box-shadow: var(--shadow-popover);
     overflow: hidden;
     z-index: 50;
     animation: dropdownFade 0.15s ease-out;

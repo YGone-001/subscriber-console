@@ -51,10 +51,10 @@
   align-items: center;
   gap: 1rem;
   flex-wrap: wrap;
-  background: rgba(59, 130, 246, 0.1);
+  background: var(--selection-soft);
   border-radius: 8px;
   padding: 0.4rem 1.2rem;
-  border: 1px solid rgba(59, 130, 246, 0.2);
+  border: 1px solid var(--selection-border);
 }
 
 .bulk-actions-count {
@@ -65,7 +65,7 @@
 
 .bulk-actions-buttons {
   padding-left: 1.5rem;
-  border-left: 1px solid rgba(59, 130, 246, 0.2);
+  border-left: 1px solid var(--selection-border);
   display: flex;
   gap: 0.75rem;
 }
@@ -88,7 +88,7 @@
   align-items: center;
   gap: 0.4rem;
   font-size: 0.85rem;
-  color: white;
+  color: var(--on-accent);
   border: none;
   border-radius: 4px;
   cursor: pointer;
@@ -169,14 +169,14 @@
   background: transparent;
 }
 .subscribers-table tbody tr:nth-child(odd):not(.selected-row) {
-  background: rgba(0, 0, 0, 0.015);
+  background: color-mix(in srgb, var(--text-main) 1.5%, transparent);
 }
 .subscribers-table tbody tr:hover:not(.selected-row) {
   background: var(--surface-hover);
 }
 
 .subscribers-table tr.selected-row {
-  background: rgba(59, 130, 246, 0.1);
+  background: var(--selection-soft);
 }
 
 .subscribers-table td {
@@ -197,18 +197,18 @@
 }
 
 .status-badge.active {
-  background: rgba(16, 185, 129, 0.15);
-  color: #4ade80;
+  background: var(--status-success-soft);
+  color: var(--status-success);
 }
 
 .status-badge.suspended {
-  background: rgba(239, 68, 68, 0.15);
-  color: #f87171;
+  background: var(--status-danger-soft);
+  color: var(--status-danger);
 }
 
 .status-badge.partial {
-  background: rgba(245, 158, 11, 0.15);
-  color: #fbbf24;
+  background: var(--status-warning-soft);
+  color: var(--status-warning);
 }
 
 .imsi-text-container {
@@ -229,8 +229,8 @@
   border-radius: 4px;
   font-size: 0.85rem;
   font-weight: 800;
-  border: 1px solid rgba(78, 115, 233, 0.2);
-  background: rgba(78, 115, 233, 0.03);
+  border: 1px solid var(--selection-border);
+  background: var(--selection-soft);
   cursor: default;
   font-family: monospace;
 }
@@ -262,7 +262,7 @@
 }
 
 .no-policy {
-  color: #94a3b8;
+  color: var(--text-muted);
   font-size: 0.85rem;
   font-style: italic;
 }
@@ -296,15 +296,15 @@
 }
 
 .traffic-bar.low {
-  background: linear-gradient(90deg, #3b82f6 0%, #10b981 100%);
+  background: linear-gradient(90deg, var(--status-info) 0%, var(--status-success) 100%);
 }
 
 .traffic-bar.medium {
-  background: linear-gradient(90deg, #10b981 0%, #f59e0b 100%);
+  background: linear-gradient(90deg, var(--status-success) 0%, var(--status-warning) 100%);
 }
 
 .traffic-bar.high {
-  background: linear-gradient(90deg, #f59e0b 0%, #ef4444 100%);
+  background: linear-gradient(90deg, var(--status-warning) 0%, var(--status-danger) 100%);
 }
 
 .last-active-cell {
@@ -373,7 +373,7 @@
   right: 0;
   top: calc(100% + 4px);
   background: var(--surface);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  box-shadow: var(--shadow-panel);
   border-radius: 6px;
   width: 180px;
   z-index: 50;

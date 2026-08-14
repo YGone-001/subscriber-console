@@ -13,7 +13,7 @@
   padding: 1.05rem;
   margin-bottom: 0;
   background: var(--surface);
-  box-shadow: 0 22px 54px -24px rgba(15, 23, 42, 0.72);
+  box-shadow: var(--shadow-popover);
   max-width: 520px;
   width: min(520px, calc(100vw - 32px));
   animation: feedbackModalPop var(--duration-normal) var(--ease-decelerate) forwards;
@@ -86,7 +86,7 @@
   display: grid;
   place-items: center;
   padding: 1rem;
-  background: rgba(15, 23, 42, 0.38);
+  background: var(--overlay-scrim);
   backdrop-filter: blur(4px);
   animation: feedbackBackdropFade var(--duration-normal) ease forwards;
 }
@@ -97,7 +97,7 @@
   display: grid;
   place-items: center;
   padding: 1rem;
-  background: rgba(15, 23, 42, 0.48);
+  background: var(--overlay-scrim);
   backdrop-filter: blur(4px);
   animation: feedbackBackdropFade var(--duration-normal) ease forwards;
 }
@@ -133,7 +133,7 @@
   padding: 1.1rem;
   margin-bottom: 0;
   background: var(--surface);
-  box-shadow: 0 22px 54px -24px rgba(15, 23, 42, 0.72);
+  box-shadow: var(--shadow-popover);
   max-width: 560px;
   width: min(560px, calc(100vw - 32px));
 }

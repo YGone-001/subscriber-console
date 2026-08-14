@@ -84,7 +84,7 @@ function statusText(found: boolean, inCatalog: boolean | null, t: Translator) {
 
 function statusColor(found: boolean, inCatalog: boolean | null) {
   if (!found) return "var(--danger)";
-  if (inCatalog === false) return "var(--warning, #f59e0b)";
+  if (inCatalog === false) return "var(--status-warning)";
   return "var(--success)";
 }
 
@@ -124,7 +124,7 @@ export default function RatingRuleLinkPanel({
       <div className="rating-panel-header">
         <div>
           <div className="rating-panel-title-box">
-            {hasWarning ? <AlertTriangle size={17} color="var(--warning, #f59e0b)" /> : <CheckCircle2 size={17} color="var(--success)" />}
+            {hasWarning ? <AlertTriangle size={17} color="var(--status-warning)" /> : <CheckCircle2 size={17} color="var(--status-success)" />}
             {t("rating_linkage_title")}
           </div>
           <div className="rating-panel-subtitle">

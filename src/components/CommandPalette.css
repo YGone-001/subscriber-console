@@ -6,7 +6,7 @@
   align-items: flex-start;
   justify-content: center;
   padding-top: 12vh;
-  background: rgba(0, 0, 0, 0.45);
+  background: var(--overlay-scrim);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
   animation: fadeIn 0.15s ease-out;
@@ -19,7 +19,7 @@
   color: var(--text-main);
   border-radius: 14px;
   border: 1px solid var(--surface-border);
-  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--shadow-popover);
   overflow: hidden;
   display: flex;
   flex-direction: column;

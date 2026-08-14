@@ -145,7 +145,7 @@
 }
 .access-label-checked {
   border-color: var(--primary);
-  background: rgba(59, 130, 246, 0.05);
+  background: var(--selection-soft);
 }
 .access-text {
   font-size: 0.9rem;
@@ -227,7 +227,7 @@
   cursor: pointer;
   transition: all 0.2s;
 }
-.access-restriction-label.checked { border: 1px solid var(--primary); background: rgba(59, 130, 246, 0.05); }
+.access-restriction-label.checked { border: 1px solid var(--primary); background: var(--selection-soft); }
 .access-restriction-label.unchecked { border: 1px solid var(--surface-border); background: var(--surface); }
 .access-restriction-text { font-size: 0.9rem; }
 .access-restriction-text.checked { font-weight: 600; color: var(--primary); }

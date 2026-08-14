@@ -573,7 +573,7 @@
 }
 .access-rest-label.checked {
   border: 1px solid var(--primary);
-  background: rgba(59, 130, 246, 0.05);
+  background: var(--selection-soft);
 }
 .access-rest-label.unchecked {
   border: 1px solid var(--surface-border);

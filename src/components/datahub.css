@@ -7,7 +7,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(15, 23, 42, 0.65);
+  background: var(--overlay-scrim);
   backdrop-filter: blur(6px);
   padding: 1rem;
 }
@@ -19,7 +19,7 @@
   background: var(--surface);
   border-radius: 16px;
   border: 1px solid var(--surface-border);
-  box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--shadow-popover);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -102,14 +102,14 @@
 .dh-subtitle {
   margin: 0.15rem 0 0;
   font-size: 0.8rem;
-  color: var(--text-muted, #94a3b8);
+  color: var(--text-muted);
 }
 
 .dh-close-btn {
   background: transparent;
   border: none;
   cursor: pointer;
-  color: var(--text-muted, #94a3b8);
+  color: var(--text-muted);
   width: 32px;
   height: 32px;
   border-radius: 8px;
@@ -153,7 +153,7 @@
 
 .dh-tab-inactive {
   background: transparent;
-  color: var(--text-muted, #94a3b8);
+  color: var(--text-muted);
   border-bottom: 2px solid transparent;
 }
 
@@ -211,7 +211,7 @@
 .dh-pill-btn {
   border: none;
   background: transparent;
-  color: var(--text-muted, #94a3b8);
+  color: var(--text-muted);
   font-size: 0.78rem;
   font-weight: 600;
   padding: 0.35rem 0.75rem;
@@ -245,7 +245,7 @@
 }
 
 .dh-export-format-sub {
-  color: var(--text-muted, #94a3b8);
+  color: var(--text-muted);
   font-size: 0.78rem;
   margin-top: 0.15rem;
 }
@@ -274,13 +274,13 @@
 
 .dh-format-btn-active {
   background: var(--primary);
-  color: #fff;
-  box-shadow: 0 2px 6px rgba(59, 130, 246, 0.3);
+  color: var(--on-accent);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--primary) 30%, transparent);
 }
 
 .dh-format-btn-inactive {
   background: transparent;
-  color: var(--text-secondary, #64748b);
+  color: var(--text-secondary);
 }
 
 .dh-format-btn-inactive:hover {
@@ -311,7 +311,7 @@
 }
 
 .dh-preset-clear {
-  color: var(--text-muted, #94a3b8);
+  color: var(--text-muted);
 }
 
 .dh-preset-sep {
@@ -361,7 +361,7 @@
 
 .dh-field-code {
   font-size: 0.72rem;
-  color: var(--text-muted, #94a3b8);
+  color: var(--text-muted);
   font-family: monospace;
   background: var(--surface-hover);
   padding: 0.1rem 0.35rem;
@@ -413,7 +413,7 @@
 
 .dh-upload-desc {
   margin: 0 0 1.15rem;
-  color: var(--text-muted, #94a3b8);
+  color: var(--text-muted);
   font-size: 0.85rem;
 }
 
@@ -523,7 +523,7 @@
 }
 
 .dh-loading-text {
-  color: var(--text-muted, #94a3b8);
+  color: var(--text-muted);
   font-size: 0.85rem;
   margin: 0;
 }
@@ -575,35 +575,35 @@
 }
 
 .dh-stat-new {
-  background: rgba(16, 185, 129, 0.08);
-  border-color: rgba(16, 185, 129, 0.25);
+  background: var(--status-success-soft);
+  border-color: var(--status-success-border);
 }
 
 .dh-stat-new .dh-stat-val {
-  color: #10b981;
+  color: var(--status-success);
 }
 
 .dh-stat-conflict {
-  background: rgba(245, 158, 11, 0.08);
-  border-color: rgba(245, 158, 11, 0.25);
+  background: var(--status-warning-soft);
+  border-color: var(--status-warning-border);
 }
 
 .dh-stat-conflict .dh-stat-val {
-  color: #f59e0b;
+  color: var(--status-warning);
 }
 
 .dh-stat-invalid {
-  background: rgba(239, 68, 68, 0.08);
-  border-color: rgba(239, 68, 68, 0.25);
+  background: var(--status-danger-soft);
+  border-color: var(--status-danger-border);
 }
 
 .dh-stat-invalid .dh-stat-val {
-  color: #ef4444;
+  color: var(--status-danger);
 }
 
 .dh-stat-total {
-  background: rgba(59, 130, 246, 0.08);
-  border-color: rgba(59, 130, 246, 0.25);
+  background: var(--status-info-soft);
+  border-color: var(--status-info-border);
 }
 
 .dh-stat-total .dh-stat-val {
@@ -630,8 +630,8 @@
   align-items: center;
   padding: 0.95rem 1.15rem;
   border-radius: 10px;
-  border: 1px solid rgba(245, 158, 11, 0.3);
-  background: rgba(245, 158, 11, 0.06);
+  border: 1px solid var(--status-warning-border);
+  background: var(--status-warning-soft);
 }
 
 .dh-strategy-header {
@@ -641,7 +641,7 @@
 }
 
 .dh-strategy-icon {
-  color: #f59e0b;
+  color: var(--status-warning);
   flex-shrink: 0;
 }
 
@@ -653,7 +653,7 @@
 
 .dh-strategy-desc {
   font-size: 0.78rem;
-  color: var(--text-muted, #94a3b8);
+  color: var(--text-muted);
   margin-top: 0.1rem;
 }
 
@@ -684,7 +684,7 @@
 .dh-filter-btn {
   border: 1px solid var(--surface-border);
   background: var(--surface);
-  color: var(--text-muted, #94a3b8);
+  color: var(--text-muted);
   font-size: 0.78rem;
   font-weight: 600;
   padding: 0.35rem 0.65rem;
@@ -700,12 +700,12 @@
 
 .dh-filter-btn-active {
   background: var(--primary);
-  color: #fff !important;
+  color: var(--on-accent) !important;
   border-color: var(--primary);
 }
 
 .dh-filter-btn-err {
-  color: #ef4444;
+  color: var(--status-danger);
 }
 
 .dh-search-wrap {
@@ -718,7 +718,7 @@
   left: 0.65rem;
   top: 50%;
   transform: translateY(-50%);
-  color: var(--text-muted, #94a3b8);
+  color: var(--text-muted);
 }
 
 .dh-search-input {
@@ -762,7 +762,7 @@
   padding: 0.55rem 0.85rem;
   text-align: left;
   font-weight: 700;
-  color: var(--text-secondary, #64748b);
+  color: var(--text-secondary);
   border-bottom: 1px solid var(--surface-border);
 }
 
@@ -770,7 +770,7 @@
   padding: 0.55rem 0.85rem;
   text-align: center;
   font-weight: 700;
-  color: var(--text-secondary, #64748b);
+  color: var(--text-secondary);
   border-bottom: 1px solid var(--surface-border);
 }
 
@@ -785,7 +785,7 @@
 
 .dh-table-td-num {
   padding: 0.45rem 0.85rem;
-  color: var(--text-muted, #94a3b8);
+  color: var(--text-muted);
   font-size: 0.74rem;
 }
 
@@ -800,7 +800,7 @@
   display: flex;
   align-items: center;
   gap: 0.25rem;
-  color: #ef4444;
+  color: var(--status-danger);
   font-size: 0.72rem;
   font-weight: 600;
   margin-top: 0.1rem;
@@ -808,7 +808,7 @@
 
 .dh-table-td {
   padding: 0.45rem 0.85rem;
-  color: var(--text-secondary, #64748b);
+  color: var(--text-secondary);
   font-family: monospace;
   font-size: 0.76rem;
 }
@@ -821,7 +821,7 @@
 .dh-table-empty {
   padding: 2rem;
   text-align: center;
-  color: var(--text-muted, #94a3b8);
+  color: var(--text-muted);
 }
 
 /* Badges */
@@ -834,23 +834,23 @@
 }
 
 .dh-badge-new {
-  background: rgba(16, 185, 129, 0.15);
-  color: #10b981;
+  background: var(--status-success-soft);
+  color: var(--status-success);
 }
 
 .dh-badge-conflict {
-  background: rgba(245, 158, 11, 0.15);
-  color: #f59e0b;
+  background: var(--status-warning-soft);
+  color: var(--status-warning);
 }
 
 .dh-badge-invalid {
-  background: rgba(239, 68, 68, 0.15);
-  color: #ef4444;
+  background: var(--status-danger-soft);
+  color: var(--status-danger);
 }
 
 .dh-badge-duplicate {
-  background: rgba(168, 85, 247, 0.15);
-  color: #a855f7;
+  background: color-mix(in srgb, var(--chart-5) 15%, transparent);
+  color: var(--chart-5);
 }
 
 /* Footer Actions */
@@ -869,7 +869,7 @@
   cursor: pointer;
   font-weight: 600;
   font-size: 0.88rem;
-  color: var(--text-secondary, #64748b);
+  color: var(--text-secondary);
   transition: all 0.15s ease;
 }
 
@@ -881,7 +881,7 @@
 .dh-download-btn,
 .dh-btn-import {
   background: var(--primary);
-  color: white;
+  color: var(--on-accent);
   padding: 0.65rem 1.5rem;
   font-size: 0.88rem;
   font-weight: 700;
@@ -910,7 +910,7 @@
   width: 64px;
   height: 64px;
   border-radius: 50%;
-  background: rgba(16, 185, 129, 0.12);
+  background: var(--status-success-soft);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -918,7 +918,7 @@
 }
 
 .dh-done-icon {
-  color: #10b981;
+  color: var(--status-success);
 }
 
 .dh-done-title {
@@ -929,7 +929,7 @@
 }
 
 .dh-done-desc {
-  color: var(--text-secondary, #64748b);
+  color: var(--text-secondary);
   font-size: 0.88rem;
   margin: 0 0 1.25rem;
 }
@@ -941,9 +941,9 @@
   gap: 0.5rem;
   padding: 0.65rem 1rem;
   border-radius: 8px;
-  background: rgba(239, 68, 68, 0.08);
-  border: 1px solid rgba(239, 68, 68, 0.25);
-  color: #ef4444;
+  background: var(--status-danger-soft);
+  border: 1px solid var(--status-danger-border);
+  color: var(--status-danger);
   font-size: 0.82rem;
   font-weight: 600;
   margin-bottom: 1.25rem;
@@ -951,8 +951,8 @@
 
 .dh-error-report-btn {
   background: none;
-  border: 1px solid rgba(239, 68, 68, 0.4);
-  color: #ef4444;
+  border: 1px solid var(--status-danger-border);
+  color: var(--status-danger);
   padding: 0.2rem 0.55rem;
   border-radius: 5px;
   font-size: 0.74rem;
@@ -964,7 +964,7 @@
 }
 
 .dh-error-report-btn:hover {
-  background: rgba(239, 68, 68, 0.12);
+  background: var(--status-danger-soft);
 }
 
 .dh-done-actions {
@@ -974,8 +974,8 @@
 }
 
 .dh-btn-done {
-  background: #10b981;
-  color: white;
+  background: var(--status-success);
+  color: var(--on-accent);
   padding: 0.65rem 1.75rem;
   font-size: 0.88rem;
   font-weight: 700;

@@ -121,7 +121,7 @@ export const DEFAULT_EDIT_FORM: EditUserForm = {
 export const ROLE_STYLE: Record<RoleKey, { color: string; bg: string }> = {
   root: { color: "var(--danger)", bg: "var(--danger-soft)" },
   operator: { color: "var(--warning)", bg: "var(--warning-soft)" },
-  viewer: { color: "var(--primary)", bg: "rgba(78, 115, 223, 0.12)" },
+  viewer: { color: "var(--primary)", bg: "var(--selection-soft)" },
 };
 
 export const STATUS_TONE_STYLE: Record<DisplayUserStatus, { color: string; bg: string }> = {
@@ -129,4 +129,3 @@ export const STATUS_TONE_STYLE: Record<DisplayUserStatus, { color: string; bg: s
   disabled: { color: "var(--text-muted)", bg: "var(--neutral-soft)" },
   locked: { color: "var(--danger)", bg: "var(--danger-soft)" },
 };
-

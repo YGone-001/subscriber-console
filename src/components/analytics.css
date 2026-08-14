@@ -86,7 +86,7 @@
 
   .analytics-subtab-btn.active {
     background: var(--primary);
-    color: #fff;
+    color: var(--on-accent);
     box-shadow: 0 8px 16px -14px var(--primary);
   }
 
@@ -103,8 +103,8 @@
   }
 
   .analytics-subtab-btn.active .analytics-subtab-badge {
-    background: rgba(255, 255, 255, 0.25);
-    color: #fff;
+    background: color-mix(in srgb, var(--on-accent) 25%, transparent);
+    color: var(--on-accent);
   }
 
   .analytics-subtab-btn:not(.active) .analytics-subtab-badge {
@@ -154,7 +154,7 @@
 
   .analytics-workitem:hover {
     transform: translateY(-1px);
-    box-shadow: 0 8px 20px -12px rgba(15, 23, 42, 0.4);
+    box-shadow: var(--shadow-panel);
   }
 
   .analytics-workitem-danger {
@@ -248,8 +248,8 @@
   .analytics-semantic-badge.badge-danger .live-pulse-dot {
     width: 6px;
     height: 6px;
-    background: #ffffff;
-    box-shadow: 0 0 6px rgba(255, 255, 255, 0.9);
+    background: var(--on-accent);
+    box-shadow: 0 0 6px color-mix(in srgb, var(--on-accent) 90%, transparent);
   }
 
   .analytics-semantic-badge.badge-warning {
@@ -351,7 +351,7 @@
     background: var(--surface);
     border: 1px solid var(--surface-border);
     border-radius: 8px;
-    box-shadow: 0 14px 32px -24px rgba(15, 23, 42, 0.55);
+    box-shadow: var(--shadow-panel);
   }
 
   .analytics-change-header {

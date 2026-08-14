@@ -89,7 +89,7 @@
     background: var(--surface);
     border: 1px solid var(--surface-border);
     border-radius: 8px;
-    box-shadow: 0 20px 54px -26px rgba(0, 0, 0, 0.55);
+    box-shadow: var(--shadow-popover);
     animation: nocPanelIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
   }
 

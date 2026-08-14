@@ -22,7 +22,7 @@
   background: var(--surface);
   border-radius: 14px;
   border: 1px solid var(--surface-border);
-  box-shadow: 0 4px 24px rgba(0,0,0,0.15);
+  box-shadow: var(--shadow-panel);
   padding: 1.5rem;
   display: flex;
   flex-direction: column;
@@ -33,7 +33,7 @@
 }
 .subsystem-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 30px rgba(0,0,0,0.22);
+  box-shadow: var(--shadow-popover);
 }
 .subsystem-card.healthy { border-color: var(--status-success-border); }
 .subsystem-card.degraded { border-color: var(--status-warning-border); }
@@ -81,7 +81,7 @@
   background: var(--surface-hover);
   padding: 0.6rem 0.85rem;
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--surface-border);
 }
 .subsystem-metric-label { font-size: 0.72rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600; }
 .subsystem-metric-val { font-size: 0.95rem; font-weight: 700; color: var(--text-main); margin-top: 0.2rem; }
@@ -128,7 +128,7 @@
   padding: 1.2rem 2rem;
   border-radius: 14px;
   border: 1px solid var(--surface-border);
-  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+  box-shadow: var(--shadow-panel);
 }
 .health-control-status { flex: 1; }
 .health-control-text { display: flex; align-items: center; gap: 1rem; }
@@ -145,7 +145,7 @@
   background: var(--surface);
   border-radius: 14px;
   border: 1px solid var(--surface-border);
-  box-shadow: 0 4px 24px rgba(0,0,0,0.15);
+  box-shadow: var(--shadow-panel);
   overflow: hidden;
 }
 .health-anomalies-header {

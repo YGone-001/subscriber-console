@@ -590,7 +590,7 @@ export function TariffPlanList(props: any) {
                   style={{
                     padding: "0.85rem 1rem",
                     borderRadius: "8px",
-                    border: "1px solid rgba(239, 68, 68, 0.3)",
+                    border: "1px solid var(--status-danger-border)",
                   }}
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontWeight: 700, marginBottom: "0.4rem" }}>

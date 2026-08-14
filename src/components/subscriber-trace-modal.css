@@ -42,11 +42,11 @@
   gap: 1.25rem;
 }
 .trace-error {
-  border: 1px solid rgba(239, 68, 68, 0.35);
+  border: 1px solid var(--status-danger-border);
   border-radius: 8px;
   padding: 0.9rem;
   color: var(--danger);
-  background: rgba(239, 68, 68, 0.08);
+  background: var(--status-danger-soft);
   font-weight: 600;
 }
 
@@ -185,8 +185,8 @@
   border: 1px solid color-mix(in srgb, var(--success) 38%, var(--surface-border));
 }
 .trace-timeline-icon.warn {
-  background: rgba(245, 158, 11, 0.12);
-  border: 1px solid rgba(245, 158, 11, 0.38);
+  background: var(--status-warning-soft);
+  border: 1px solid var(--status-warning-border);
 }
 .trace-timeline-line {
   width: 1px;
