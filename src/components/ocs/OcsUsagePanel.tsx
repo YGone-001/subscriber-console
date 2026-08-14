@@ -386,17 +386,17 @@ export default function OcsUsagePanel() {
               <caption className="sr-only">{t("ocs_tab_usage_records")}</caption>
               <thead>
                 <tr>
-                  <th>{t("ocs_col_session_id")}</th>
-                  <th>{t("ocs_col_imsi")}</th>
-                  <th>{t("ocs_col_apn")}</th>
-                  <th>{t("ocs_col_cc_type")}</th>
-                  <th>{t("ocs_col_cc_num")}</th>
-                  <th>{t("ocs_col_input")} / {t("ocs_col_output")}</th>
-                  <th>{t("ocs_col_total_octets")}</th>
-                  <th>{t("ocs_col_charged")}</th>
-                  <th>{t("ocs_col_result_code")}</th>
-                  <th>{t("ocs_col_created_at")}</th>
-                  <th>{t("actions")}</th>
+                  <th data-column-priority="essential">{t("ocs_col_session_id")}</th>
+                  <th data-column-priority="essential">{t("ocs_col_imsi")}</th>
+                  <th data-column-priority="important">{t("ocs_col_apn")}</th>
+                  <th data-column-priority="essential">{t("ocs_col_cc_type")}</th>
+                  <th data-column-priority="supplementary">{t("ocs_col_cc_num")}</th>
+                  <th data-column-priority="supplementary">{t("ocs_col_input")} / {t("ocs_col_output")}</th>
+                  <th data-column-priority="essential">{t("ocs_col_total_octets")}</th>
+                  <th data-column-priority="important">{t("ocs_col_charged")}</th>
+                  <th data-column-priority="essential">{t("ocs_col_result_code")}</th>
+                  <th data-column-priority="supplementary">{t("ocs_col_created_at")}</th>
+                  <th data-column-priority="essential">{t("actions")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -407,41 +407,41 @@ export default function OcsUsagePanel() {
                 ) : (
                   usageRecords.map((r) => (
                     <tr key={r.id}>
-                      <td className="ocs-mono" style={{ fontSize: "0.8rem", color: "var(--status-info)", maxWidth: "180px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.session_id}>
+                      <td className="ocs-mono" style={{ fontSize: "0.8rem", color: "var(--status-info)", maxWidth: "180px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.session_id} data-column-priority="essential">
                         {r.session_id}
                       </td>
-                      <td className="ocs-mono" style={{ fontWeight: 600, color: "var(--status-info)" }}>
+                      <td className="ocs-mono" style={{ fontWeight: 600, color: "var(--status-info)" }} data-column-priority="essential">
                         {r.imsi}
                       </td>
-                      <td className="ocs-mono">{r.apn}</td>
-                      <td>
+                      <td className="ocs-mono" data-column-priority="important">{r.apn}</td>
+                      <td data-column-priority="essential">
                         <span className={`ocs-badge ${r.cc_request_type === "TERMINATION" ? "status-closed" : "status-active"}`}>
                           {r.cc_request_type}
                         </span>
                       </td>
-                      <td className="ocs-mono">#{r.cc_request_number}</td>
-                      <td className="ocs-mono">
+                      <td className="ocs-mono" data-column-priority="supplementary">#{r.cc_request_number}</td>
+                      <td className="ocs-mono" data-column-priority="supplementary">
                         <span style={{ color: "var(--chart-2)" }}>{formatBytes(r.input_octets)}</span>
                         <span style={{ color: "var(--text-muted)" }}> / </span>
                         <span style={{ color: "var(--chart-5)" }}>{formatBytes(r.output_octets)}</span>
                       </td>
-                      <td className="ocs-mono" style={{ fontWeight: 700, color: "var(--text-main)" }}>
+                      <td className="ocs-mono" style={{ fontWeight: 700, color: "var(--text-main)" }} data-column-priority="essential">
                         {formatBytes(r.total_octets)}
                       </td>
-                      <td>
+                      <td data-column-priority="important">
                         <span className={`ocs-badge ${r.charged ? "status-active" : "status-closed"}`}>
                           {r.charged ? "CHARGED" : "ZERO / FREE"}
                         </span>
                       </td>
-                      <td>
+                      <td data-column-priority="essential">
                         <span className={`ocs-badge ${r.result_code === 2001 ? "result-2001" : "result-error"}`}>
                           {r.result_code || 2001}
                         </span>
                       </td>
-                      <td className="ocs-mono" style={{ fontSize: "0.775rem", color: "var(--text-muted)" }}>
+                      <td className="ocs-mono" style={{ fontSize: "0.775rem", color: "var(--text-muted)" }} data-column-priority="supplementary">
                         {r.created_at ? new Date(r.created_at).toLocaleString() : "-"}
                       </td>
-                      <td>
+                      <td data-column-priority="essential">
                         <button
                           type="button"
                           className="ocs-btn"
@@ -465,17 +465,17 @@ export default function OcsUsagePanel() {
               <caption className="sr-only">{t("ocs_tab_reservations")}</caption>
               <thead>
                 <tr>
-                  <th>{t("ocs_col_session_id")}</th>
-                  <th>{t("ocs_col_imsi")}</th>
-                  <th>{t("ocs_col_apn")}</th>
-                  <th>Charging Type</th>
-                  <th>State</th>
-                  <th>Reserved / Used</th>
-                  <th>{t("ocs_col_released")}</th>
-                  <th>{t("ocs_col_overuse")}</th>
-                  <th>{t("ocs_col_result_code")}</th>
-                  <th>{t("ocs_col_updated_at")}</th>
-                  <th>{t("actions")}</th>
+                  <th data-column-priority="essential">{t("ocs_col_session_id")}</th>
+                  <th data-column-priority="essential">{t("ocs_col_imsi")}</th>
+                  <th data-column-priority="important">{t("ocs_col_apn")}</th>
+                  <th data-column-priority="essential">Charging Type</th>
+                  <th data-column-priority="essential">State</th>
+                  <th data-column-priority="important">Reserved / Used</th>
+                  <th data-column-priority="supplementary">{t("ocs_col_released")}</th>
+                  <th data-column-priority="important">{t("ocs_col_overuse")}</th>
+                  <th data-column-priority="essential">{t("ocs_col_result_code")}</th>
+                  <th data-column-priority="supplementary">{t("ocs_col_updated_at")}</th>
+                  <th data-column-priority="essential">{t("actions")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -498,43 +498,43 @@ export default function OcsUsagePanel() {
 
                     return (
                       <tr key={r.id}>
-                        <td className="ocs-mono" style={{ fontSize: "0.8rem", color: "var(--status-info)", maxWidth: "180px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.session_id}>
+                        <td className="ocs-mono" style={{ fontSize: "0.8rem", color: "var(--status-info)", maxWidth: "180px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.session_id} data-column-priority="essential">
                           {r.session_id}
                         </td>
-                        <td className="ocs-mono" style={{ fontWeight: 600, color: "var(--status-info)" }}>
+                        <td className="ocs-mono" style={{ fontWeight: 600, color: "var(--status-info)" }} data-column-priority="essential">
                           {r.imsi}
                         </td>
-                        <td className="ocs-mono">{r.apn}</td>
-                        <td>
+                        <td className="ocs-mono" data-column-priority="important">{r.apn}</td>
+                        <td data-column-priority="essential">
                           <span className="ocs-badge" style={{ background: "var(--neutral-soft)", color: "var(--text-secondary)" }}>
                             {r.charging_type}
                           </span>
                         </td>
-                        <td>
+                        <td data-column-priority="essential">
                           <span className={`ocs-badge ${stateClass}`}>
                             {r.state}
                           </span>
                         </td>
-                        <td className="ocs-mono">
+                        <td className="ocs-mono" data-column-priority="important">
                           <span style={{ color: "var(--chart-5)" }}>{formatBytes(r.reserved_octets)}</span>
                           <span style={{ color: "var(--text-muted)" }}> / </span>
                           <span style={{ color: "var(--status-warning)" }}>{formatBytes(r.used_octets)}</span>
                         </td>
-                        <td className="ocs-mono" style={{ color: "var(--status-success)" }}>
+                        <td className="ocs-mono" style={{ color: "var(--status-success)" }} data-column-priority="supplementary">
                           {formatBytes(r.released_octets)}
                         </td>
-                        <td className="ocs-mono" style={{ color: r.overuse_octets > 0 ? "var(--status-danger)" : "var(--text-muted)" }}>
+                        <td className="ocs-mono" style={{ color: r.overuse_octets > 0 ? "var(--status-danger)" : "var(--text-muted)" }} data-column-priority="important">
                           {formatBytes(r.overuse_octets)}
                         </td>
-                        <td>
+                        <td data-column-priority="essential">
                           <span className={`ocs-badge ${r.result_code === 2001 ? "result-2001" : "result-error"}`}>
                             {r.result_code}
                           </span>
                         </td>
-                        <td className="ocs-mono" style={{ fontSize: "0.775rem", color: "var(--text-muted)" }}>
+                        <td className="ocs-mono" style={{ fontSize: "0.775rem", color: "var(--text-muted)" }} data-column-priority="supplementary">
                           {r.updated_at ? new Date(r.updated_at).toLocaleString() : "-"}
                         </td>
-                        <td>
+                        <td data-column-priority="essential">
                           <button
                             type="button"
                             className="ocs-btn"

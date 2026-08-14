@@ -110,7 +110,7 @@ export function UsersTable(props: any) {
               <caption className="sr-only">{t("users_title")}</caption>
               <thead>
                 <tr>
-                  <th className="users-select-col">
+                  <th className="users-select-col" data-column-priority="essential">
                     <input
                       type="checkbox"
                       aria-label={t("users_select_page")}
@@ -119,30 +119,30 @@ export function UsersTable(props: any) {
                       disabled={pagedUsers.length === 0}
                     />
                   </th>
-                  <th className="users-user-col" aria-sort={getAriaSort("username")}>
+                  <th className="users-user-col" aria-sort={getAriaSort("username")} data-column-priority="essential">
                     <button type="button" className="users-sort-btn" onClick={() => toggleSort("username")}>
                       <User size={15} /> {t("users_col_user")} {sortKey === "username" ? t(`users_sort_${sortDirection}`) : null}
                     </button>
                   </th>
-                  <th>{t("users_contact")}</th>
-                  <th>{t("users_role")}</th>
-                  <th aria-sort={getAriaSort("status")}>
+                  <th data-column-priority="important">{t("users_contact")}</th>
+                  <th data-column-priority="essential">{t("users_role")}</th>
+                  <th aria-sort={getAriaSort("status")} data-column-priority="essential">
                     <button type="button" className="users-sort-btn" onClick={() => toggleSort("status")}>
                       {t("users_status")} {sortKey === "status" ? t(`users_sort_${sortDirection}`) : null}
                     </button>
                   </th>
-                  <th aria-sort={getAriaSort("lastLoginAt")}>
+                  <th aria-sort={getAriaSort("lastLoginAt")} data-column-priority="important">
                     <button type="button" className="users-sort-btn" onClick={() => toggleSort("lastLoginAt")}>
                       {t("users_last_login")} {sortKey === "lastLoginAt" ? t(`users_sort_${sortDirection}`) : null}
                     </button>
                   </th>
-                  <th aria-sort={getAriaSort("createdAt")}>
+                  <th aria-sort={getAriaSort("createdAt")} data-column-priority="supplementary">
                     <button type="button" className="users-sort-btn" onClick={() => toggleSort("createdAt")}>
                       {t("users_created")} {sortKey === "createdAt" ? t(`users_sort_${sortDirection}`) : null}
                     </button>
                   </th>
-                  <th>{t("users_detail_created_by")}</th>
-                  <th className="users-actions-col">{t("users_actions")}</th>
+                  <th data-column-priority="supplementary">{t("users_detail_created_by")}</th>
+                  <th className="users-actions-col" data-column-priority="essential">{t("users_actions")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -203,7 +203,7 @@ export function UsersTable(props: any) {
                   const itemStatus = normalizeStatus(item.status);
                   return (
                     <tr key={item.username}>
-                      <td className="users-select-col users-mobile-select-cell">
+                      <td className="users-select-col users-mobile-select-cell" data-column-priority="essential">
                         <input
                           type="checkbox"
                           aria-label={t("users_select_user", { username: item.username })}
@@ -211,7 +211,7 @@ export function UsersTable(props: any) {
                           onChange={() => toggleUserSelection(item.username)}
                         />
                       </td>
-                      <td className="users-user-col" data-label={t("users_col_user")}>
+                      <td className="users-user-col" data-label={t("users_col_user")} data-column-priority="essential">
                         <button type="button" className="users-identity-btn" onClick={() => openDetails(item)}>
                           <span className="users-avatar">{item.username.slice(0, 1).toUpperCase()}</span>
                           <span>
@@ -220,21 +220,21 @@ export function UsersTable(props: any) {
                           </span>
                         </button>
                       </td>
-                      <td data-label={t("users_contact")}>
+                      <td data-label={t("users_contact")} data-column-priority="important">
                         <span className="users-contact-cell">
                           <Mail size={14} />
                           {displayValue(item.email)}
                         </span>
                       </td>
-                      <td data-label={t("users_role")}>{renderRoleBadge(item.role)}</td>
-                      <td data-label={t("users_status")}>{renderStatusBadge(item.status, item.locked)}</td>
-                      <td className="users-date-cell" data-label={t("users_last_login")}>
+                      <td data-label={t("users_role")} data-column-priority="essential">{renderRoleBadge(item.role)}</td>
+                      <td data-label={t("users_status")} data-column-priority="essential">{renderStatusBadge(item.status, item.locked)}</td>
+                      <td className="users-date-cell" data-label={t("users_last_login")} data-column-priority="important">
                         <span>{formatDateTime(item.lastLoginAt)}</span>
                         <small>{displayValue(item.lastLoginIp)}</small>
                       </td>
-                      <td className="users-date-cell" data-label={t("users_created")}>{formatDateTime(item.createdAt)}</td>
-                      <td data-label={t("users_detail_created_by")}>{displayValue(item.createdBy)}</td>
-                      <td className="users-actions-col" data-label={t("users_actions")}>
+                      <td className="users-date-cell" data-label={t("users_created")} data-column-priority="supplementary">{formatDateTime(item.createdAt)}</td>
+                      <td data-label={t("users_detail_created_by")} data-column-priority="supplementary">{displayValue(item.createdBy)}</td>
+                      <td className="users-actions-col" data-label={t("users_actions")} data-column-priority="essential">
                         <div className="users-row-actions">
                           <button type="button" className="btn btn-ghost" onClick={() => openDetails(item)}>
                             <Eye size={15} />

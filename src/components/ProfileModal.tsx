@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "./I18nProvider";
 import { Save, Trash2, X, Pencil, History, RotateCcw, GitCompareArrows } from "lucide-react";
 import { parseBytes, formatBytes, parseEvents, formatEvents } from "@/lib/unitParser";
@@ -9,6 +9,7 @@ import ProfileEditMode from "./profile/ProfileEditMode";
 import { useAuth } from "@/hooks/useAuth";
 import { ConfirmActionPanel, LoadingRows, OperationNotice } from "./OperationFeedback";
 import VisualDiffViewer from "./VisualDiffViewer";
+import { UnsavedChangesDialog, useUnsavedChangesGuard } from "@/components/ui/UnsavedChangesGuard";
 import "./modals.css";
 
 // Session type mapping (IPv4/IPv6/IPv4v6)
@@ -105,6 +106,26 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
     smsTotal: "100",
     smsBalance: "100",
   });
+  const draftSignature = useMemo(() => JSON.stringify({
+    inputName,
+    profileTitle,
+    authData,
+    usimType,
+    ueAmbr,
+    slices,
+    accessRestriction,
+    ocsDefaults,
+  }), [inputName, profileTitle, authData, usimType, ueAmbr, slices, accessRestriction, ocsDefaults]);
+  const initialDraftRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!isLoading && initialDraftRef.current === null) initialDraftRef.current = draftSignature;
+  }, [draftSignature, isLoading]);
+
+  const checkUnsavedChanges = useCallback(() => isEditing
+    && initialDraftRef.current !== null
+    && initialDraftRef.current !== draftSignature, [draftSignature, isEditing]);
+  const unsavedGuard = useUnsavedChangesGuard(checkUnsavedChanges, onClose);
 
   const applyProfileData = useCallback((p: any) => {
     setProfileSnapshot(p);
@@ -573,7 +594,7 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
 
   // --- Root Return: Modal skeleton & sidebar ---
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay" onClick={unsavedGuard.requestClose}>
       <div className="modal-content workflow-modal animate-modal-enter" onClick={e => e.stopPropagation()}>
 
         {/* Header */}
@@ -590,7 +611,7 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
             )}
             {isRoot && profileName && <button className="btn-icon" onClick={handleDelete} title={t("prof_btn_delete")} disabled={isDeleting || isDeleteConfirmOpen || forceDeleteCount !== null}><Trash2 size={24} color="var(--danger)" /></button>}
             <div className="pm-wf-header-divider" />
-            <button className="btn-icon" onClick={onClose} title={t("close")}><X size={26} color="var(--text-muted)" /></button>
+            <button className="btn-icon" onClick={unsavedGuard.requestClose} title={t("close")}><X size={26} color="var(--text-muted)" /></button>
           </div>
         </div>
 
@@ -735,7 +756,7 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
             {isEditing ? t("prof_msg_edit") : t("prof_msg_view")}
           </div>
           <div className="workflow-footer-actions">
-            <button className="btn btn-outline" onClick={onClose}>{t("cancel")}</button>
+            <button className="btn btn-outline" onClick={unsavedGuard.requestClose}>{t("cancel")}</button>
             {isEditing ? (
               <button className="btn btn-primary" onClick={handleSave} disabled={isSaving || (!profileName && !(inputName || profileTitle).trim())}>
                 <Save size={16}/> {isSaving ? t("sub_btn_saving") : (profileName ? t("prof_btn_save") : t("prof_btn_create"))}
@@ -748,6 +769,15 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
           </div>
         </div>
       </div>
+      <UnsavedChangesDialog
+        open={unsavedGuard.isPromptOpen}
+        title={t("unsaved_changes_title")}
+        description={t("unsaved_changes_description")}
+        keepEditingLabel={t("unsaved_changes_keep_editing")}
+        discardLabel={t("unsaved_changes_discard")}
+        onKeepEditing={unsavedGuard.keepEditing}
+        onDiscard={unsavedGuard.discardChanges}
+      />
     </div>
   );
 }

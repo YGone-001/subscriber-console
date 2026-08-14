@@ -6,6 +6,7 @@ import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { Layers, ArrowUpRight, Tag } from "lucide-react";
 import { TariffPlanDistItem } from "./types";
 import EmptyChartState from "./EmptyChartState";
+import { ChartDataTable } from "@/components/ui/ChartDataTable";
 import { CHART_TOOLTIP_STYLE, ChartSummary, PLAN_CHART_COLORS } from "@/components/ui/chartPrimitives";
 
 interface TariffPlanDistributionChartProps {
@@ -123,6 +124,21 @@ export default function TariffPlanDistributionChart({
           />
         )}
       </div>
+      {hasData ? (
+        <ChartDataTable
+          label={t("chart_data_table")}
+          caption={t("dash_chart_tariff_plan_title")}
+          columns={[
+            { key: "plan", label: t("chart_col_plan") },
+            { key: "subscribers", label: t("chart_col_subscribers"), numeric: true },
+            { key: "share", label: t("chart_col_share"), numeric: true },
+          ]}
+          rows={chartData.map((plan) => ({
+            key: plan.planId,
+            cells: [plan.name, plan.value, `${plan.percentage}%`],
+          }))}
+        />
+      ) : null}
     </section>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { Save, Trash2, X, Pencil, Check, Layers, Copy, BatteryCharging } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "./I18nProvider";
 import SubscriberViewMode from "./subscriber/SubscriberViewMode";
 import SubscriberEditMode from "./subscriber/SubscriberEditMode";
@@ -9,6 +9,7 @@ import TrafficAdjustmentModal from "./TrafficAdjustmentModal";
 import { useSubscriberForm } from "@/hooks/useSubscriberForm";
 import { parseBytes } from "@/lib/unitParser";
 import { OperationNotice } from "./OperationFeedback";
+import { UnsavedChangesDialog, useUnsavedChangesGuard } from "@/components/ui/UnsavedChangesGuard";
 import "./SubscriberModal.css";
 
 interface SubscriberModalProps {
@@ -31,6 +32,37 @@ export default function SubscriberModal({ imsi, onClose, onRefresh }: Subscriber
   const trafficTotal = parseBytes(ocsTrafficTotalStr);
   const trafficBalance = parseBytes(ocsTrafficBalanceStr);
   const trafficUsed = Math.max(0, trafficTotal - trafficBalance);
+  const draftSignature = useMemo(() => JSON.stringify({
+    inputImsi: state.inputImsi,
+    msisdn: state.msisdn,
+    auth4GData: state.auth4GData,
+    usimType: state.usimType,
+    ueAmbr: state.ueAmbr,
+    slices: state.slices,
+    accessRestriction: state.accessRestriction,
+    ocsPlanId: state.ocsPlanId,
+    ocsTrafficTotalStr: state.ocsTrafficTotalStr,
+    ocsTrafficBalanceStr: state.ocsTrafficBalanceStr,
+    ocsVoiceTotalStr: state.ocsVoiceTotalStr,
+    ocsVoiceBalanceStr: state.ocsVoiceBalanceStr,
+    ocsSmsTotalStr: state.ocsSmsTotalStr,
+    ocsSmsBalanceStr: state.ocsSmsBalanceStr,
+  }), [
+    state.inputImsi, state.msisdn, state.auth4GData, state.usimType, state.ueAmbr,
+    state.slices, state.accessRestriction, state.ocsPlanId, state.ocsTrafficTotalStr,
+    state.ocsTrafficBalanceStr, state.ocsVoiceTotalStr, state.ocsVoiceBalanceStr,
+    state.ocsSmsTotalStr, state.ocsSmsBalanceStr,
+  ]);
+  const initialDraftRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!isLoading && initialDraftRef.current === null) initialDraftRef.current = draftSignature;
+  }, [draftSignature, isLoading]);
+
+  const checkUnsavedChanges = useCallback(() => isEditing
+    && initialDraftRef.current !== null
+    && initialDraftRef.current !== draftSignature, [draftSignature, isEditing]);
+  const unsavedGuard = useUnsavedChangesGuard(checkUnsavedChanges, onClose);
   const handleCopyImsi = () => {
     if (!imsi) return;
     navigator.clipboard.writeText(imsi);
@@ -74,7 +106,7 @@ export default function SubscriberModal({ imsi, onClose, onRefresh }: Subscriber
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay" onClick={unsavedGuard.requestClose}>
       <div className="modal-content workflow-modal animate-modal-enter" onClick={e => e.stopPropagation()}>
 
         {toastMessage && (
@@ -123,7 +155,7 @@ export default function SubscriberModal({ imsi, onClose, onRefresh }: Subscriber
             {imsi && <button className="btn-icon" onClick={handleDelete} title={t("sub_btn_delete")}><Trash2 size={24} color="var(--danger)" /></button>}
 
             <div className="sub-modal-header-divider" />
-            <button className="btn-icon" onClick={onClose} title={t("close")}><X size={26} color="var(--text-muted)" /></button>
+            <button className="btn-icon" onClick={unsavedGuard.requestClose} title={t("close")}><X size={26} color="var(--text-muted)" /></button>
           </div>
         </div>
 
@@ -199,7 +231,7 @@ export default function SubscriberModal({ imsi, onClose, onRefresh }: Subscriber
             {isEditing ? t("sub_msg_edit") : t("sub_msg_view")}
           </div>
           <div className="workflow-footer-actions">
-            <button className="btn btn-outline" onClick={onClose} disabled={isSaving}>{t("cancel")}</button>
+            <button className="btn btn-outline" onClick={unsavedGuard.requestClose} disabled={isSaving}>{t("cancel")}</button>
             {isEditing && (
               <button 
                 className={`btn btn-primary ${isSaving ? 'btn-loading' : ''}`} 
@@ -224,6 +256,15 @@ export default function SubscriberModal({ imsi, onClose, onRefresh }: Subscriber
           t={t}
         />
       )}
+      <UnsavedChangesDialog
+        open={unsavedGuard.isPromptOpen}
+        title={t("unsaved_changes_title")}
+        description={t("unsaved_changes_description")}
+        keepEditingLabel={t("unsaved_changes_keep_editing")}
+        discardLabel={t("unsaved_changes_discard")}
+        onKeepEditing={unsavedGuard.keepEditing}
+        onDiscard={unsavedGuard.discardChanges}
+      />
     </div>
   );
 }

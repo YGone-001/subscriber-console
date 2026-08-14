@@ -7,6 +7,7 @@ import { TopConsumer } from "./types";
 import { BYTES_IN_GB, formatGb } from "./utils";
 import EmptyChartState from "./EmptyChartState";
 import { formatEvents, formatSeconds } from "@/lib/unitParser";
+import { ChartDataTable } from "@/components/ui/ChartDataTable";
 import {
   CHART_CURSOR_COLOR,
   CHART_GRID_COLOR,
@@ -133,6 +134,27 @@ export default function TopConsumerChart({
           />
         )}
       </div>
+      {top5.length > 0 ? (
+        <ChartDataTable
+          label={t("chart_data_table")}
+          caption={t("dash_chart_top5_title")}
+          columns={[
+            { key: "imsi", label: t("chart_col_subscriber") },
+            { key: "data", label: t("chart_col_data_balance"), numeric: true },
+            { key: "voice", label: t("dash_chart_top5_voice_tooltip"), numeric: true },
+            { key: "sms", label: t("dash_chart_top5_sms_tooltip"), numeric: true },
+          ]}
+          rows={top5.map((consumer) => ({
+            key: consumer.imsi,
+            cells: [
+              <code key="imsi">{consumer.imsi}</code>,
+              `${formatGb(consumer.balance)} GB`,
+              formatSeconds(consumer.voiceBalance),
+              formatEvents(consumer.smsBalance),
+            ],
+          }))}
+        />
+      ) : null}
     </section>
   );
 }

@@ -73,7 +73,7 @@ export function SubscriberTable(props: any) {
         <caption className="sr-only">{t("subscriber_title")}</caption>
         <thead>
           <tr>
-            <th>
+            <th data-column-priority="essential">
               <input
                 type="checkbox"
                 className="checkbox-custom"
@@ -85,11 +85,11 @@ export function SubscriberTable(props: any) {
             </th>
             <SortableTableHeader label={t("col_status")} active={sortField === "status"} direction={sortDirection} icon={renderSortIcon("status")} onSort={() => handleSort("status")} />
             <SortableTableHeader label={t("col_imsi")} active={sortField === "imsi"} direction={sortDirection} icon={renderSortIcon("imsi")} onSort={() => handleSort("imsi")} />
-            <SortableTableHeader label={t("col_plmn")} active={sortField === "plmn"} direction={sortDirection} icon={renderSortIcon("plmn")} onSort={() => handleSort("plmn")} />
-            <SortableTableHeader label={t("col_policy")} active={sortField === "policy"} direction={sortDirection} icon={renderSortIcon("policy")} onSort={() => handleSort("policy")} />
+            <SortableTableHeader priority="supplementary" label={t("col_plmn")} active={sortField === "plmn"} direction={sortDirection} icon={renderSortIcon("plmn")} onSort={() => handleSort("plmn")} />
+            <SortableTableHeader priority="important" label={t("col_policy")} active={sortField === "policy"} direction={sortDirection} icon={renderSortIcon("policy")} onSort={() => handleSort("policy")} />
             <SortableTableHeader label={t("col_traffic")} active={sortField === "usage"} direction={sortDirection} icon={renderSortIcon("usage")} onSort={() => handleSort("usage")} style={{ minWidth: "150px" }} />
-            <SortableTableHeader label={t("col_last_active")} active={sortField === "lastActive"} direction={sortDirection} icon={renderSortIcon("lastActive")} onSort={() => handleSort("lastActive")} />
-            {canEditSubscribers && <th className="actions-col">{t("col_actions")}</th>}
+            <SortableTableHeader priority="important" label={t("col_last_active")} active={sortField === "lastActive"} direction={sortDirection} icon={renderSortIcon("lastActive")} onSort={() => handleSort("lastActive")} />
+            {canEditSubscribers && <th className="actions-col" data-column-priority="essential">{t("col_actions")}</th>}
           </tr>
         </thead>
         <tbody>
@@ -98,10 +98,10 @@ export function SubscriberTable(props: any) {
              const isSelected = selectedImsis.includes(sub.imsi);
              return (
                <tr key={sub.imsi} className={isSelected ? "selected-row" : ""}>
-                 <td className="mobile-select-cell">
+                 <td className="mobile-select-cell" data-column-priority="essential">
                    <input type="checkbox" className="checkbox-custom" aria-label={t("table_select_subscriber", { imsi: sub.imsi })} checked={isSelected} onChange={() => setSelectedImsis((prev: string[]) => prev.includes(sub.imsi) ? prev.filter(i => i !== sub.imsi) : [...prev, sub.imsi])} />
                  </td>
-                 <td data-label={t("col_status")}>
+                 <td data-label={t("col_status")} data-column-priority="essential">
                    {(() => {
                      const isSuspended = sub.status === 'Suspended';
                      const isActive = sub.status === 'Active';
@@ -131,7 +131,7 @@ export function SubscriberTable(props: any) {
                      );
                    })()}
                  </td>
-                 <td data-label={t("col_imsi")}>
+                 <td data-label={t("col_imsi")} data-column-priority="essential">
                    <div className="imsi-text-container">
                      <span className="imsi-text">{sub.imsi}</span>
                      <button
@@ -145,7 +145,7 @@ export function SubscriberTable(props: any) {
                      </button>
                    </div>
                  </td>
-                 <td data-label={t("col_plmn")}>
+                 <td data-label={t("col_plmn")} data-column-priority="supplementary">
                    {(() => {
                       const net = resolveNetwork(sub.imsi);
                       const tooltipText = net.network !== 'Unknown'
@@ -156,7 +156,7 @@ export function SubscriberTable(props: any) {
                       );
                    })()}
                  </td>
-                  <td data-label={t("col_policy")}>
+                  <td data-label={t("col_policy")} data-column-priority="important">
                      {sub.policy ? (
                        <div className="policy-container">
                          <span title={sub.policy} className="policy-text">
@@ -175,7 +175,7 @@ export function SubscriberTable(props: any) {
                        <span className="no-policy">{t("no_policy")}</span>
                      )}
                  </td>
-                 <td data-label={t("col_traffic")}>
+                 <td data-label={t("col_traffic")} data-column-priority="essential">
                    <div className="traffic-container">
                       <div className="traffic-stats">
                         <span>{formatBytes(sub.traffic?.used || 0)}</span>
@@ -189,13 +189,13 @@ export function SubscriberTable(props: any) {
                       </div>
                     </div>
                   </td>
-                  <td className="last-active-cell" data-label={t("col_last_active")}>
+                  <td className="last-active-cell" data-label={t("col_last_active")} data-column-priority="important">
                     <span title={formatFullDate(sub.lastActive)} className="last-active-text">
                       {timeAgo(sub.lastActive)}
                     </span>
                   </td>
                   {canEditSubscribers && (
-                    <td className="actions-cell" data-label={t("col_actions")}>
+                    <td className="actions-cell" data-label={t("col_actions")} data-column-priority="essential">
                       <div className="actions-group">
                        <button type="button" className="action-btn action-btn-primary" onClick={(e) => { e.stopPropagation(); handleOpenEdit(sub.imsi); }} title={t("action_edit")} aria-label={`${t("action_edit")}: ${sub.imsi}`}>
                          <PenLine size={18} />

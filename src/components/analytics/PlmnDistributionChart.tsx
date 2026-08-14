@@ -6,6 +6,7 @@ import { DatabaseZap, PieChart as PieChartIcon, Server } from "lucide-react";
 import { DistributionPoint } from "./types";
 import { formatGb } from "./utils";
 import EmptyChartState from "./EmptyChartState";
+import { ChartDataTable } from "@/components/ui/ChartDataTable";
 import { CHART_SERIES_COLORS, CHART_TOOLTIP_STYLE, ChartSummary } from "@/components/ui/chartPrimitives";
 
 export default function PlmnDistributionChart({
@@ -81,6 +82,20 @@ export default function PlmnDistributionChart({
           />
         )}
       </div>
+      {plmnDist.length > 0 ? (
+        <ChartDataTable
+          label={t("chart_data_table")}
+          caption={t("dash_chart_plmn_title")}
+          columns={[
+            { key: "network", label: t("chart_col_network") },
+            { key: "traffic", label: t("chart_col_traffic"), numeric: true },
+          ]}
+          rows={plmnDist.map((network) => ({
+            key: network.name,
+            cells: [network.name, `${formatGb(network.value)} GB`],
+          }))}
+        />
+      ) : null}
     </section>
   );
 }

@@ -251,17 +251,17 @@ export default function OcsBalancesPanel() {
             <caption className="sr-only">{t("ocs_balances_title")}</caption>
             <thead>
               <tr>
-                <th aria-sort={getAriaSort("imsi")}>{t("ocs_col_imsi")}</th>
-                <th>{t("ocs_col_plan")}</th>
-                <th>{t("ocs_col_status")}</th>
-                <th aria-sort={getAriaSort(["data_total", "data_used"])}>{t("ocs_col_data_alloc")} / {t("ocs_col_data_used")} / {t("ocs_col_data_reserved")}</th>
-                <th aria-sort={getAriaSort("data_available")}>{t("ocs_col_data_available")}</th>
-                <th>{t("ocs_col_voice_avail")}</th>
-                <th>{t("ocs_col_sms_avail")}</th>
-                <th>{t("ocs_col_invariant")}</th>
-                <th>{t("ocs_col_version")}</th>
-                <th aria-sort={getAriaSort("updated_at")}>{t("ocs_col_updated_at")}</th>
-                <th>{t("actions")}</th>
+                <th aria-sort={getAriaSort("imsi")} data-column-priority="essential">{t("ocs_col_imsi")}</th>
+                <th data-column-priority="important">{t("ocs_col_plan")}</th>
+                <th data-column-priority="essential">{t("ocs_col_status")}</th>
+                <th aria-sort={getAriaSort(["data_total", "data_used"])} data-column-priority="important">{t("ocs_col_data_alloc")} / {t("ocs_col_data_used")} / {t("ocs_col_data_reserved")}</th>
+                <th aria-sort={getAriaSort("data_available")} data-column-priority="essential">{t("ocs_col_data_available")}</th>
+                <th data-column-priority="important">{t("ocs_col_voice_avail")}</th>
+                <th data-column-priority="important">{t("ocs_col_sms_avail")}</th>
+                <th data-column-priority="essential">{t("ocs_col_invariant")}</th>
+                <th data-column-priority="supplementary">{t("ocs_col_version")}</th>
+                <th aria-sort={getAriaSort("updated_at")} data-column-priority="supplementary">{t("ocs_col_updated_at")}</th>
+                <th data-column-priority="essential">{t("actions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -277,20 +277,20 @@ export default function OcsBalancesPanel() {
 
                   return (
                     <tr key={r.id}>
-                      <td className="ocs-mono" style={{ fontWeight: 600, color: "var(--status-info)" }}>
+                      <td className="ocs-mono" style={{ fontWeight: 600, color: "var(--status-info)" }} data-column-priority="essential">
                         {r.imsi}
                       </td>
-                      <td>
+                      <td data-column-priority="important">
                         <span className="ocs-badge" style={{ background: "var(--neutral-soft)", color: "var(--text-secondary)" }}>
                           {r.plan_id}
                         </span>
                       </td>
-                      <td>
+                      <td data-column-priority="essential">
                         <span className={`ocs-badge status-${r.status}`}>
                           {r.status}
                         </span>
                       </td>
-                      <td>
+                      <td data-column-priority="important">
                         <div className="ocs-quota-bar-wrap">
                           <div className="ocs-quota-track">
                             <div className="ocs-quota-seg-used" style={{ width: `${usedPct}%` }} title={`Used: ${formatBytes(r.data_used)}`} />
@@ -304,16 +304,16 @@ export default function OcsBalancesPanel() {
                           </div>
                         </div>
                       </td>
-                      <td className="ocs-mono" style={{ fontWeight: 700, color: r.data_available > 0 ? "var(--status-success)" : "var(--status-danger)" }}>
+                      <td className="ocs-mono" style={{ fontWeight: 700, color: r.data_available > 0 ? "var(--status-success)" : "var(--status-danger)" }} data-column-priority="essential">
                         {formatBytes(r.data_available)}
                       </td>
-                      <td className="ocs-mono">
+                      <td className="ocs-mono" data-column-priority="important">
                         {r.voice_available}s / {r.voice_total}s
                       </td>
-                      <td className="ocs-mono">
+                      <td className="ocs-mono" data-column-priority="important">
                         {r.sms_available} / {r.sms_total}
                       </td>
-                      <td>
+                      <td data-column-priority="essential">
                         {r.invariant_ok ? (
                           <span className="ocs-badge invariant-valid">
                             <CheckCircle2 size={12} /> {t("ocs_invariant_valid_badge")}
@@ -324,11 +324,11 @@ export default function OcsBalancesPanel() {
                           </span>
                         )}
                       </td>
-                      <td className="ocs-mono" style={{ color: "var(--text-muted)" }}>v{r.version}</td>
-                      <td className="ocs-mono" style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                      <td className="ocs-mono" style={{ color: "var(--text-muted)" }} data-column-priority="supplementary">v{r.version}</td>
+                      <td className="ocs-mono" style={{ fontSize: "0.8rem", color: "var(--text-muted)" }} data-column-priority="supplementary">
                         {r.updated_at ? new Date(r.updated_at).toLocaleString() : "-"}
                       </td>
-                      <td>
+                      <td data-column-priority="essential">
                         <button
                           type="button"
                           className="ocs-btn"

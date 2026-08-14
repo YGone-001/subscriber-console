@@ -246,17 +246,17 @@ export default function OcsSessionsPanel() {
             <caption className="sr-only">{t("ocs_sessions_title")}</caption>
             <thead>
               <tr>
-                <th>{t("ocs_col_session_id")}</th>
-                <th aria-sort={getAriaSort("imsi")}>{t("ocs_col_imsi")}</th>
-                <th>{t("ocs_col_apn")}</th>
-                <th>{t("ocs_col_interface")}</th>
-                <th>{t("ocs_col_state")}</th>
-                <th>{t("ocs_col_cc_num")}</th>
-                <th aria-sort={getAriaSort(["granted_total", "used_total"])}>{t("ocs_col_granted")} / {t("ocs_kpi_consumed_octets")}</th>
-                <th>{t("ocs_col_rg_si")}</th>
-                <th aria-sort={getAriaSort("started_at")}>{t("ocs_col_started_at")}</th>
-                <th aria-sort={getAriaSort("last_update_at")}>{t("ocs_col_last_update")}</th>
-                <th>{t("actions")}</th>
+                <th data-column-priority="essential">{t("ocs_col_session_id")}</th>
+                <th aria-sort={getAriaSort("imsi")} data-column-priority="essential">{t("ocs_col_imsi")}</th>
+                <th data-column-priority="important">{t("ocs_col_apn")}</th>
+                <th data-column-priority="essential">{t("ocs_col_interface")}</th>
+                <th data-column-priority="essential">{t("ocs_col_state")}</th>
+                <th data-column-priority="supplementary">{t("ocs_col_cc_num")}</th>
+                <th aria-sort={getAriaSort(["granted_total", "used_total"])} data-column-priority="essential">{t("ocs_col_granted")} / {t("ocs_kpi_consumed_octets")}</th>
+                <th data-column-priority="important">{t("ocs_col_rg_si")}</th>
+                <th aria-sort={getAriaSort("started_at")} data-column-priority="supplementary">{t("ocs_col_started_at")}</th>
+                <th aria-sort={getAriaSort("last_update_at")} data-column-priority="important">{t("ocs_col_last_update")}</th>
+                <th data-column-priority="essential">{t("actions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -278,40 +278,40 @@ export default function OcsSessionsPanel() {
 
                   return (
                     <tr key={r.id}>
-                      <td className="ocs-mono" style={{ fontSize: "0.8rem", color: "var(--status-info)", maxWidth: "200px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.session_id}>
+                      <td className="ocs-mono" style={{ fontSize: "0.8rem", color: "var(--status-info)", maxWidth: "200px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.session_id} data-column-priority="essential">
                         {r.session_id}
                       </td>
-                      <td className="ocs-mono" style={{ fontWeight: 600, color: "var(--status-info)" }}>
+                      <td className="ocs-mono" style={{ fontWeight: 600, color: "var(--status-info)" }} data-column-priority="essential">
                         {r.imsi}
                       </td>
-                      <td className="ocs-mono">{r.apn}</td>
-                      <td>
+                      <td className="ocs-mono" data-column-priority="important">{r.apn}</td>
+                      <td data-column-priority="essential">
                         <span className={`ocs-badge ${ifClass}`}>
                           {r.interface_type.toUpperCase()}
                         </span>
                       </td>
-                      <td>
+                      <td data-column-priority="essential">
                         <span className={`ocs-badge ${stateClass}`}>
                           {r.state}
                         </span>
                       </td>
-                      <td className="ocs-mono">#{r.cc_request_number}</td>
-                      <td className="ocs-mono">
+                      <td className="ocs-mono" data-column-priority="supplementary">#{r.cc_request_number}</td>
+                      <td className="ocs-mono" data-column-priority="essential">
                         <span style={{ color: "var(--status-success)" }}>{formatBytes(r.granted_total)}</span>
                         <span style={{ color: "var(--text-muted)" }}> / </span>
                         <span style={{ color: "var(--status-warning)" }}>{formatBytes(r.used_total)}</span>
                       </td>
-                      <td className="ocs-mono" style={{ fontSize: "0.8rem" }}>
+                      <td className="ocs-mono" style={{ fontSize: "0.8rem" }} data-column-priority="important">
                         {r.rating_group !== undefined ? `RG:${r.rating_group}` : "-"}
                         {r.service_identifier !== undefined ? ` / SI:${r.service_identifier}` : ""}
                       </td>
-                      <td className="ocs-mono" style={{ fontSize: "0.775rem", color: "var(--text-muted)" }}>
+                      <td className="ocs-mono" style={{ fontSize: "0.775rem", color: "var(--text-muted)" }} data-column-priority="supplementary">
                         {r.started_at ? new Date(r.started_at).toLocaleTimeString() : "-"}
                       </td>
-                      <td className="ocs-mono" style={{ fontSize: "0.775rem", color: "var(--text-muted)" }}>
+                      <td className="ocs-mono" style={{ fontSize: "0.775rem", color: "var(--text-muted)" }} data-column-priority="important">
                         {r.last_update_at ? new Date(r.last_update_at).toLocaleTimeString() : "-"}
                       </td>
-                      <td>
+                      <td data-column-priority="essential">
                         <button
                           type="button"
                           className="ocs-btn"
