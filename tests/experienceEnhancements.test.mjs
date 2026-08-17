@@ -77,6 +77,8 @@ test("long forms protect unsaved edits across dialogs and navigation", () => {
   assert.match(dialogFocus, /event\.key === "Escape"/);
   assert.match(dialogFocus, /event\.key !== "Tab"/);
   assert.match(dialogFocus, /previousFocus\?\.focus\(\)/);
+  assert.match(dialogFocus, /dialogStack\.at\(-1\) !== dialog/);
+  assert.match(dialogFocus, /event\.stopImmediatePropagation\(\)/);
 
   for (const file of ["src/components/SubscriberModal.tsx", "src/components/ProfileModal.tsx"]) {
     const source = read(file);
@@ -84,5 +86,39 @@ test("long forms protect unsaved edits across dialogs and navigation", () => {
     assert.match(source, /<UnsavedChangesDialog/);
     assert.match(source, /draftSignature/);
     assert.match(source, /unsavedGuard\.requestClose/);
+  }
+});
+
+test("high-risk dialogs and drawers share the production focus contract", () => {
+  const dialog = read("src/components/ui/Dialog.tsx");
+  const feedback = read("src/components/OperationFeedback.tsx");
+
+  assert.match(dialog, /useDialogFocus/);
+  assert.match(dialog, /aria-modal="true"/);
+  assert.match(dialog, /closeOnOverlay/);
+  assert.match(feedback, /role="alertdialog"/);
+  assert.match(feedback, /initialFocusRef=\{cancelRef\}/);
+  assert.doesNotMatch(feedback, /autoFocus/);
+
+  for (const file of [
+    "src/components/ocs/OcsDetailDrawer.tsx",
+    "src/app/(dashboard)/users/components/UserDrawer.tsx",
+    "src/components/users/RoleManagementPanel.tsx",
+    "src/components/users/ApprovalCenterPanel.tsx",
+    "src/components/SubscriberModal.tsx",
+    "src/components/ProfileModal.tsx",
+    "src/components/TrafficAdjustmentModal.tsx",
+    "src/components/BulkPolicyModal.tsx",
+    "src/components/BatchCreateModal.tsx",
+    "src/components/SubscriberTraceModal.tsx",
+    "src/components/rating/TariffRuleModal.tsx",
+    "src/components/rating/TariffPlanImportModal.tsx",
+    "src/components/rating/TariffPlanCloneModal.tsx",
+    "src/app/(dashboard)/audit-logs/page.tsx",
+  ]) {
+    const source = read(file);
+    assert.match(source, /<Dialog/);
+    assert.doesNotMatch(source, /<div className="modal-overlay/);
+    assert.doesNotMatch(source, /role="dialog" aria-modal="true"/);
   }
 });

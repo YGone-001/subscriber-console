@@ -10,6 +10,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { ConfirmActionPanel, LoadingRows, OperationNotice } from "./OperationFeedback";
 import VisualDiffViewer from "./VisualDiffViewer";
 import { UnsavedChangesDialog, useUnsavedChangesGuard } from "@/components/ui/UnsavedChangesGuard";
+import { Dialog } from "@/components/ui/Dialog";
 import "./modals.css";
 
 // Session type mapping (IPv4/IPv6/IPv4v6)
@@ -76,6 +77,7 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
   const [selectedVersion, setSelectedVersion] = useState<ProfileVersionDetail | null>(null);
   const [isVersionsLoading, setIsVersionsLoading] = useState(false);
   const [restoreConfirmVersionId, setRestoreConfirmVersionId] = useState<string | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   // Blinking animation state flag
   const [newlyAddedSliceIndex, setNewlyAddedSliceIndex] = useState<number | null>(null);
@@ -594,14 +596,21 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
 
   // --- Root Return: Modal skeleton & sidebar ---
   return (
-    <div className="modal-overlay" onClick={unsavedGuard.requestClose}>
-      <div className="modal-content workflow-modal animate-modal-enter" onClick={e => e.stopPropagation()}>
+    <>
+      <Dialog
+        open
+        onClose={unsavedGuard.requestClose}
+        overlayClassName="modal-overlay"
+        className="modal-content workflow-modal animate-modal-enter"
+        labelledBy="profile-modal-title"
+        initialFocusRef={closeButtonRef}
+      >
 
         {/* Header */}
         <div className="workflow-header">
           <div className="workflow-title-group">
             <div>
-              <h2 className="pm-wf-header-title">{profileName ? (profileTitle || profileName) : t("prof_new_profile")}</h2>
+              <h2 id="profile-modal-title" className="pm-wf-header-title">{profileName ? (profileTitle || profileName) : t("prof_new_profile")}</h2>
               {!profileName && <p className="pm-wf-header-desc">{t("prof_new_desc")}</p>}
             </div>
           </div>
@@ -611,7 +620,7 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
             )}
             {isRoot && profileName && <button className="btn-icon" onClick={handleDelete} title={t("prof_btn_delete")} disabled={isDeleting || isDeleteConfirmOpen || forceDeleteCount !== null}><Trash2 size={24} color="var(--danger)" /></button>}
             <div className="pm-wf-header-divider" />
-            <button className="btn-icon" onClick={unsavedGuard.requestClose} title={t("close")}><X size={26} color="var(--text-muted)" /></button>
+            <button ref={closeButtonRef} className="btn-icon" onClick={unsavedGuard.requestClose} title={t("close")} aria-label={t("close")}><X size={26} color="var(--text-muted)" /></button>
           </div>
         </div>
 
@@ -768,7 +777,7 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
             ) : null}
           </div>
         </div>
-      </div>
+      </Dialog>
       <UnsavedChangesDialog
         open={unsavedGuard.isPromptOpen}
         title={t("unsaved_changes_title")}
@@ -778,6 +787,6 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
         onKeepEditing={unsavedGuard.keepEditing}
         onDiscard={unsavedGuard.discardChanges}
       />
-    </div>
+    </>
   );
 }

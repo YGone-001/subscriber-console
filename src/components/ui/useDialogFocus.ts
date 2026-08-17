@@ -11,6 +11,8 @@ const FOCUSABLE_SELECTOR = [
   "[tabindex]:not([tabindex='-1'])",
 ].join(",");
 
+const dialogStack: HTMLDivElement[] = [];
+
 interface UseDialogFocusOptions {
   open: boolean;
   onClose: () => void;
@@ -28,15 +30,16 @@ export function useDialogFocus({ open, onClose, initialFocusRef }: UseDialogFocu
   useEffect(() => {
     if (!open) return;
 
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+
+    dialogStack.push(dialog);
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const previousOverflow = document.body.style.overflow;
     const backgroundStates: Array<{ element: HTMLElement; inert: boolean; ariaHidden: string | null }> = [];
     document.body.style.overflow = "hidden";
 
     const focusFrame = window.requestAnimationFrame(() => {
-      const dialog = dialogRef.current;
-      if (!dialog) return;
-
       let activeBranch: HTMLElement = dialog;
       while (activeBranch.parentElement) {
         const parent = activeBranch.parentElement;
@@ -59,8 +62,11 @@ export function useDialogFocus({ open, onClose, initialFocusRef }: UseDialogFocu
     });
 
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (dialogStack.at(-1) !== dialog) return;
+
       if (event.key === "Escape") {
         event.preventDefault();
+        event.stopImmediatePropagation();
         onCloseRef.current();
         return;
       }
@@ -89,6 +95,8 @@ export function useDialogFocus({ open, onClose, initialFocusRef }: UseDialogFocu
 
     document.addEventListener("keydown", handleKeyDown, true);
     return () => {
+      const stackIndex = dialogStack.lastIndexOf(dialog);
+      if (stackIndex >= 0) dialogStack.splice(stackIndex, 1);
       window.cancelAnimationFrame(focusFrame);
       document.removeEventListener("keydown", handleKeyDown, true);
       document.body.style.overflow = previousOverflow;

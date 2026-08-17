@@ -3,6 +3,8 @@
 import { Activity, AlertTriangle, Clock3, DatabaseZap, History, RefreshCw, Route, ShieldCheck, Signal, X } from "lucide-react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
+import { Dialog } from "@/components/ui/Dialog";
+import { useRef } from "react";
 import "./subscriber-trace-modal.css";
 
 type SubscriberTraceModalProps = {
@@ -81,6 +83,7 @@ function actionLabel(action: string, t: SubscriberTraceModalProps["t"]) {
 }
 
 export default function SubscriberTraceModal({ imsi, onClose, t }: SubscriberTraceModalProps) {
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
   const detailUrl = imsi ? `/api/subscribers/${imsi}` : null;
   const auditUrl = imsi ? `/api/audit?target=${encodeURIComponent(imsi)}&limit=12` : null;
   const { data: detail, error: detailError, isLoading: detailLoading, mutate: mutateDetail } = useSWR(detailUrl, fetcher);
@@ -194,11 +197,17 @@ export default function SubscriberTraceModal({ imsi, onClose, t }: SubscriberTra
   };
 
   return (
-    <div className="modal-overlay" onClick={(event) => { event.stopPropagation(); onClose(); }}>
-      <div className="modal-content animate-modal-enter trace-modal-container" onClick={(event) => event.stopPropagation()}>
+    <Dialog
+      open
+      onClose={onClose}
+      overlayClassName="modal-overlay"
+      className="modal-content animate-modal-enter trace-modal-container"
+      labelledBy="subscriber-trace-modal-title"
+      initialFocusRef={closeButtonRef}
+    >
         <div className="workflow-header trace-modal-header">
           <div>
-            <h2 className="trace-modal-title">
+            <h2 id="subscriber-trace-modal-title" className="trace-modal-title">
               <Signal size={18} /> {t("trace_title")}
             </h2>
             <p className="trace-modal-subtitle">{imsi}</p>
@@ -207,7 +216,7 @@ export default function SubscriberTraceModal({ imsi, onClose, t }: SubscriberTra
             <button className="btn btn-outline trace-btn-refresh" onClick={refresh} disabled={detailLoading || auditLoading}>
               <RefreshCw size={15} /> {t("trace_refresh")}
             </button>
-            <button className="btn-icon" onClick={onClose} title={t("close")}><X size={22} /></button>
+            <button ref={closeButtonRef} className="btn-icon" onClick={onClose} title={t("close")} aria-label={t("close")}><X size={22} /></button>
           </div>
         </div>
 
@@ -333,7 +342,6 @@ export default function SubscriberTraceModal({ imsi, onClose, t }: SubscriberTra
             </div>
           </section>
         </div>
-      </div>
-    </div>
+    </Dialog>
   );
 }

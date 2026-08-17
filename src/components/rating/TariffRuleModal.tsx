@@ -1,11 +1,12 @@
 "use client";
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Plus, Pencil, Save, X, AlertTriangle, AlertCircle } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { Field } from "@/components/ui/Field";
 import { ErrorNotice, InlineNotice } from "@/components/ui/InlineNotice";
 import * as T from "./types";
 import { CURRENCIES, defaultsFor } from "./types";
+import { Dialog } from "@/components/ui/Dialog";
 
 type Props = {
   isOpen: boolean;
@@ -43,6 +44,7 @@ export function TariffRuleModal({
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const cancelButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (initialRule) {
@@ -169,14 +171,23 @@ export function TariffRuleModal({
   };
 
   return (
-    <div className="modal-overlay animate-fade-in" style={{ zIndex: 1050 }}>
-      <div className="modal-content" style={{ maxWidth: 640 }}>
+    <Dialog
+      open={isOpen}
+      onClose={() => { if (!loading) onClose(); }}
+      overlayClassName="modal-overlay animate-fade-in"
+      className="modal-content"
+      overlayStyle={{ zIndex: 1050 }}
+      style={{ maxWidth: 640 }}
+      labelledBy="tariff-rule-modal-title"
+      initialFocusRef={cancelButtonRef}
+      closeOnOverlay={!loading}
+    >
         <div className="modal-header">
           <div className="flex-center-gap-0-55">
             {isEdit ? <Pencil size={20} color="var(--primary)" /> : <Plus size={20} color="var(--primary)" />}
-            <h3 className="modal-title">{isEdit ? t("tariff_rule_edit") : t("tariff_rule_add")}</h3>
+            <h2 id="tariff-rule-modal-title" className="modal-title">{isEdit ? t("tariff_rule_edit") : t("tariff_rule_add")}</h2>
           </div>
-          <button type="button" className="btn-icon" onClick={onClose} disabled={loading}>
+          <button type="button" className="btn-icon" onClick={onClose} disabled={loading} aria-label={t("close")}>
             <X size={18} />
           </button>
         </div>
@@ -345,7 +356,7 @@ export function TariffRuleModal({
           </div>
 
           <div className="modal-footer" style={{ display: "flex", justifyContent: "flex-end", gap: "0.75rem", padding: "1rem 1.5rem" }}>
-            <button type="button" className="btn btn-outline" onClick={onClose} disabled={loading}>
+            <button ref={cancelButtonRef} type="button" className="btn btn-outline" onClick={onClose} disabled={loading}>
               {t("cancel")}
             </button>
             <button type="submit" className="btn btn-primary" disabled={loading}>
@@ -353,7 +364,6 @@ export function TariffRuleModal({
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </Dialog>
   );
 }

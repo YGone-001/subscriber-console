@@ -654,6 +654,7 @@
     z-index: 2000;
     display: flex;
     justify-content: flex-end;
+    background: var(--drawer-backdrop);
   }
 
   .users-drawer-backdrop {

@@ -101,6 +101,7 @@
     z-index: 2100;
     display: flex;
     justify-content: flex-end;
+    background: var(--drawer-backdrop);
   }
 
   .role-drawer-backdrop {

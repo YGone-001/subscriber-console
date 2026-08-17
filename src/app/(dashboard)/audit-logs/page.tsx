@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { ShieldAlert, History, Activity, Braces, X, Download, RefreshCw, AlertTriangle, DatabaseZap, Gauge, Target, UserRound } from 'lucide-react';
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
@@ -10,6 +10,7 @@ import VisualDiffViewer from "@/components/VisualDiffViewer";
 import './audit-logs.css';
 import PageHeader from '@/components/ui/PageHeader';
 import MetricStrip from '@/components/ui/MetricStrip';
+import { Dialog } from '@/components/ui/Dialog';
 
 interface AuditLog {
   id: string;
@@ -70,6 +71,7 @@ export default function AuditLogsPage() {
   const error = fetchError ? fetchError.message : '';
 
   const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
+  const closeDialogRef = useRef<HTMLButtonElement>(null);
 
   const formatActionLabel = (action: string) => {
     const key = `audit_action_${action}`;
@@ -475,16 +477,22 @@ export default function AuditLogsPage() {
 
       {/* JSON Diff Inspector Modal */}
       {selectedLog && (
-        <div className="modal-overlay audit-modal-overlay">
-          <div className="modal-content animate-fade-in audit-modal-content">
+        <Dialog
+          open
+          onClose={() => setSelectedLog(null)}
+          overlayClassName="modal-overlay audit-modal-overlay"
+          className="modal-content animate-fade-in audit-modal-content"
+          labelledBy="audit-diff-modal-title"
+          initialFocusRef={closeDialogRef}
+        >
             <div className="audit-modal-header">
               <div>
-                <h2 className="audit-modal-title">{t("audit_modal_title")}</h2>
+                <h2 id="audit-diff-modal-title" className="audit-modal-title">{t("audit_modal_title")}</h2>
                 <div className="audit-modal-ref">
                   {t("audit_modal_ref")} <span className="audit-modal-ref-id">{selectedLog.id}</span> · <span className="audit-modal-ref-action">{formatActionLabel(selectedLog.action)}</span> ({selectedLog.targetId})
                 </div>
               </div>
-              <button className="btn btn-outline" onClick={() => setSelectedLog(null)}>{t("audit_modal_close")}</button>
+              <button ref={closeDialogRef} className="btn btn-outline" onClick={() => setSelectedLog(null)}>{t("audit_modal_close")}</button>
             </div>
 
             <div className="audit-modal-body" style={{ padding: '1rem 1.5rem', display: 'block' }}>
@@ -495,8 +503,7 @@ export default function AuditLogsPage() {
                 defaultMode="semantic"
               />
             </div>
-          </div>
-        </div>
+        </Dialog>
       )}
     </>
   );

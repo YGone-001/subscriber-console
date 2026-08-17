@@ -1,7 +1,7 @@
 "use client";
 import "./RoleManagementPanel.css";
 
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useId, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 import { Copy, Eye, Save, Shield, Trash2, X } from "lucide-react";
 import { fetcher } from "@/lib/fetcher";
@@ -16,6 +16,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useI18n } from "@/components/I18nProvider";
 import { EmptyState, LoadingRows, OperationNotice } from "@/components/OperationFeedback";
 import PageHeader from "@/components/ui/PageHeader";
+import { Dialog } from "@/components/ui/Dialog";
 
 type SysUser = {
   username: string;
@@ -69,6 +70,9 @@ export default function RoleManagementPanel() {
   const [onlyConfigured, setOnlyConfigured] = useState(false);
   const [collapsed, setCollapsed] = useState<string[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
+  const dialogTitleId = useId();
+  const dialogDescriptionId = useId();
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   const users = useMemo(() => data?.users || [], [data?.users]);
   const roleCards = useMemo(() => {
@@ -175,15 +179,21 @@ export default function RoleManagementPanel() {
       </div>
 
       {selectedRole ? (
-        <div className="role-drawer-layer" role="dialog" aria-modal="true" aria-label={t("roles_matrix_title")}>
-          <button type="button" className="role-drawer-backdrop" aria-label={t("close")} onClick={closeDetail} />
-          <aside className="role-drawer">
+        <Dialog
+          open
+          onClose={closeDetail}
+          overlayClassName="role-drawer-layer"
+          className="role-drawer"
+          labelledBy={dialogTitleId}
+          describedBy={dialogDescriptionId}
+          initialFocusRef={closeButtonRef}
+        >
             <header>
               <div>
-                <h2>{t(`users_${activeRole}`)}</h2>
-                <p>{editingRole ? t("roles_edit_readonly_hint") : t("roles_matrix_subtitle")}</p>
+                <h2 id={dialogTitleId}>{t(`users_${activeRole}`)}</h2>
+                <p id={dialogDescriptionId}>{editingRole ? t("roles_edit_readonly_hint") : t("roles_matrix_subtitle")}</p>
               </div>
-              <button type="button" className="btn-icon" onClick={closeDetail} aria-label={t("close")}><X size={18} /></button>
+              <button ref={closeButtonRef} type="button" className="btn-icon" onClick={closeDetail} aria-label={t("close")}><X size={18} /></button>
             </header>
 
             <div className="role-drawer-tools">
@@ -284,8 +294,7 @@ export default function RoleManagementPanel() {
                 {t("save")}
               </button>
             </footer>
-          </aside>
-        </div>
+        </Dialog>
       ) : null}
 
       {notice ? <OperationNotice presentation="modal" tone="info" title={t("info")} message={notice} onClose={() => setNotice(null)} /> : null}

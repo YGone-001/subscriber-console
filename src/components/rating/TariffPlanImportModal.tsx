@@ -1,10 +1,11 @@
 "use client";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { Upload, FileCode, CheckCircle2, AlertTriangle, AlertCircle, X } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { Field } from "@/components/ui/Field";
 import { ErrorNotice, InlineNotice } from "@/components/ui/InlineNotice";
 import { normalizeImportedPlan } from "@/lib/tariffPlanOperations";
+import { Dialog } from "@/components/ui/Dialog";
 
 type Props = {
   isOpen: boolean;
@@ -20,6 +21,7 @@ export function TariffPlanImportModal({ isOpen, onClose, onSuccess }: Props) {
   const [validationWarnings, setValidationWarnings] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
+  const cancelButtonRef = useRef<HTMLButtonElement>(null);
 
   if (!isOpen) return null;
 
@@ -85,14 +87,23 @@ export function TariffPlanImportModal({ isOpen, onClose, onSuccess }: Props) {
   };
 
   return (
-    <div className="modal-overlay animate-fade-in" style={{ zIndex: 1050 }}>
-      <div className="modal-content" style={{ maxWidth: 640 }}>
+    <Dialog
+      open={isOpen}
+      onClose={() => { if (!loading) onClose(); }}
+      overlayClassName="modal-overlay animate-fade-in"
+      className="modal-content"
+      overlayStyle={{ zIndex: 1050 }}
+      style={{ maxWidth: 640 }}
+      labelledBy="tariff-plan-import-modal-title"
+      initialFocusRef={cancelButtonRef}
+      closeOnOverlay={!loading}
+    >
         <div className="modal-header">
           <div className="flex-center-gap-0-55">
             <Upload size={20} color="var(--primary)" />
-            <h3 className="modal-title">{t("tariff_plan_import_title")}</h3>
+            <h2 id="tariff-plan-import-modal-title" className="modal-title">{t("tariff_plan_import_title")}</h2>
           </div>
-          <button type="button" className="btn-icon" onClick={onClose} disabled={loading}>
+          <button type="button" className="btn-icon" onClick={onClose} disabled={loading} aria-label={t("close")}>
             <X size={18} />
           </button>
         </div>
@@ -163,7 +174,7 @@ export function TariffPlanImportModal({ isOpen, onClose, onSuccess }: Props) {
         </div>
 
         <div className="modal-footer" style={{ display: "flex", justifyContent: "flex-end", gap: "0.75rem", padding: "1rem 1.5rem" }}>
-          <button type="button" className="btn btn-outline" onClick={onClose} disabled={loading}>
+          <button ref={cancelButtonRef} type="button" className="btn btn-outline" onClick={onClose} disabled={loading}>
             {t("cancel")}
           </button>
           <button
@@ -175,7 +186,6 @@ export function TariffPlanImportModal({ isOpen, onClose, onSuccess }: Props) {
             <Upload size={15} /> {loading ? t("saving") : t("tariff_plan_import_btn")}
           </button>
         </div>
-      </div>
-    </div>
+    </Dialog>
   );
 }

@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Layers, X, Download } from "lucide-react";
 import useSWR from "swr";
 import { useI18n } from "./I18nProvider";
 import { OperationNotice } from "./OperationFeedback";
 import { fetcher } from "@/lib/fetcher";
+import { Dialog } from "@/components/ui/Dialog";
 import "./modals.css";
 
 interface BatchCreateModalProps {
@@ -34,6 +35,8 @@ export default function BatchCreateModal({ isOpen, onClose, onSuccess, profileLi
   // Pre-flight check state
   const [precheckResult, setPrecheckResult] = useState<any>(null);
   const [isPrecheckModalOpen, setIsPrecheckModalOpen] = useState(false);
+  const cancelButtonRef = useRef<HTMLButtonElement>(null);
+  const abortButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!isOpen || planOptions.length === 0 || planOptions.some((plan) => plan.plan_id === batchForm.planId)) return;
@@ -131,11 +134,18 @@ export default function BatchCreateModal({ isOpen, onClose, onSuccess, profileLi
 
   return (
     <>
-      <div className="modal-overlay" onClick={onClose}>
-        <div className="modal-content animate-fade-in bc-modal-content" onClick={e => e.stopPropagation()}>
+      <Dialog
+        open={isOpen}
+        onClose={() => { if (!batchLoading) onClose(); }}
+        overlayClassName="modal-overlay"
+        className="modal-content animate-fade-in bc-modal-content"
+        labelledBy="batch-create-modal-title"
+        initialFocusRef={cancelButtonRef}
+        closeOnOverlay={!batchLoading}
+      >
           <div className="bc-header">
-            <h2 className="bc-header-title">{t("batch_create")}</h2>
-            <button className="btn-icon" onClick={onClose}><X size={24} color="var(--text-muted)" /></button>
+            <h2 id="batch-create-modal-title" className="bc-header-title">{t("batch_create")}</h2>
+            <button className="btn-icon" onClick={onClose} aria-label={t("close")} disabled={batchLoading}><X size={24} color="var(--text-muted)" /></button>
           </div>
 
           {batchLoading && (
@@ -224,20 +234,26 @@ export default function BatchCreateModal({ isOpen, onClose, onSuccess, profileLi
           )}
 
           <div className="bc-footer">
-            <button className="btn btn-outline bc-btn" onClick={onClose} disabled={batchLoading}>{t("cancel")}</button>
+            <button ref={cancelButtonRef} className="btn btn-outline bc-btn" onClick={onClose} disabled={batchLoading}>{t("cancel")}</button>
             <button className="btn btn-primary bc-btn-primary" onClick={handleBatchCreate} disabled={batchLoading || !batchForm.startImsi || !/^\d{15}$/.test(batchForm.startImsi)}>
               {batchLoading ? <span className="bc-processing">{t("batch_processing")}</span> : <><Layers size={16} /> {t("batch_create_btn")}</>}
             </button>
           </div>
-        </div>
-      </div>
+      </Dialog>
 
       {/* Pre-check Conflict Modal */}
       {isPrecheckModalOpen && precheckResult && (
-        <div className="modal-overlay bc-conflict-overlay">
-          <div className="modal-content animate-fade-in bc-conflict-content">
+        <Dialog
+          open
+          onClose={() => { setIsPrecheckModalOpen(false); setBatchLoading(false); setBatchResult({ error: t("batch_aborted") }); }}
+          overlayClassName="modal-overlay bc-conflict-overlay"
+          className="modal-content animate-fade-in bc-conflict-content"
+          labelledBy="batch-conflict-modal-title"
+          initialFocusRef={abortButtonRef}
+          role="alertdialog"
+        >
             <div className="bc-conflict-header">
-              <h2 className="bc-conflict-title">{t("conflict_title")}</h2>
+              <h2 id="batch-conflict-modal-title" className="bc-conflict-title">{t("conflict_title")}</h2>
             </div>
             <div className="bc-conflict-body">
               <div className="bc-conflict-alert">
@@ -263,6 +279,7 @@ export default function BatchCreateModal({ isOpen, onClose, onSuccess, profileLi
                   <span className="bc-conflict-btn-desc">{t("conflict_overwrite_desc")}</span>
                 </button>
                 <button
+                  ref={abortButtonRef}
                   className="btn btn-outline bc-conflict-btn-abort"
                   onClick={() => { setIsPrecheckModalOpen(false); setBatchLoading(false); setBatchResult({error: t("batch_aborted")}); }}
                 >
@@ -270,8 +287,7 @@ export default function BatchCreateModal({ isOpen, onClose, onSuccess, profileLi
                 </button>
               </div>
             </div>
-          </div>
-        </div>
+        </Dialog>
       )}
     </>
   );

@@ -1,10 +1,11 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Copy, X, AlertCircle } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { Field } from "@/components/ui/Field";
 import { ErrorNotice } from "@/components/ui/InlineNotice";
 import * as T from "./types";
+import { Dialog } from "@/components/ui/Dialog";
 
 type Props = {
   isOpen: boolean;
@@ -20,6 +21,7 @@ export function TariffPlanCloneModal({ isOpen, onClose, sourcePlan, onSuccess }:
   const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const cancelButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (sourcePlan) {
@@ -68,14 +70,23 @@ export function TariffPlanCloneModal({ isOpen, onClose, sourcePlan, onSuccess }:
   };
 
   return (
-    <div className="modal-overlay animate-fade-in" style={{ zIndex: 1050 }}>
-      <div className="modal-content" style={{ maxWidth: 520 }}>
+    <Dialog
+      open={isOpen && Boolean(sourcePlan)}
+      onClose={() => { if (!loading) onClose(); }}
+      overlayClassName="modal-overlay animate-fade-in"
+      className="modal-content"
+      overlayStyle={{ zIndex: 1050 }}
+      style={{ maxWidth: 520 }}
+      labelledBy="tariff-plan-clone-modal-title"
+      initialFocusRef={cancelButtonRef}
+      closeOnOverlay={!loading}
+    >
         <div className="modal-header">
           <div className="flex-center-gap-0-55">
             <Copy size={20} color="var(--primary)" />
-            <h3 className="modal-title">{t("tariff_plan_clone_title")}</h3>
+            <h2 id="tariff-plan-clone-modal-title" className="modal-title">{t("tariff_plan_clone_title")}</h2>
           </div>
-          <button type="button" className="btn-icon" onClick={onClose} disabled={loading}>
+          <button type="button" className="btn-icon" onClick={onClose} disabled={loading} aria-label={t("close")}>
             <X size={18} />
           </button>
         </div>
@@ -133,7 +144,7 @@ export function TariffPlanCloneModal({ isOpen, onClose, sourcePlan, onSuccess }:
           </div>
 
           <div className="modal-footer" style={{ display: "flex", justifyContent: "flex-end", gap: "0.75rem", padding: "1rem 1.5rem" }}>
-            <button type="button" className="btn btn-outline" onClick={onClose} disabled={loading}>
+            <button ref={cancelButtonRef} type="button" className="btn btn-outline" onClick={onClose} disabled={loading}>
               {t("cancel")}
             </button>
             <button type="submit" className="btn btn-primary" disabled={loading || !targetPlanId.trim()}>
@@ -141,7 +152,6 @@ export function TariffPlanCloneModal({ isOpen, onClose, sourcePlan, onSuccess }:
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </Dialog>
   );
 }

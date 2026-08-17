@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useRef, useState } from "react";
 import { Check, Copy, X } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
+import { Dialog } from "@/components/ui/Dialog";
 
 interface OcsDetailDrawerProps {
   title: string;
@@ -19,6 +20,9 @@ export default function OcsDetailDrawer({
 }: OcsDetailDrawerProps) {
   const [copied, setCopied] = useState(false);
   const { t } = useI18n();
+  const titleId = useId();
+  const descriptionId = useId();
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   if (!data) return null;
 
@@ -33,17 +37,25 @@ export default function OcsDetailDrawer({
   };
 
   return (
-    <div className="ocs-drawer-backdrop" onClick={onClose} role="dialog" aria-modal="true">
-      <div className="ocs-drawer-content" onClick={(e) => e.stopPropagation()}>
+    <Dialog
+      open={Boolean(data)}
+      onClose={onClose}
+      overlayClassName="ocs-drawer-backdrop"
+      className="ocs-drawer-content"
+      labelledBy={titleId}
+      describedBy={descriptionId}
+      initialFocusRef={closeButtonRef}
+    >
         <div className="ocs-drawer-header">
           <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-            <h3 className="ocs-drawer-title">{title}</h3>
-            <span style={{ fontSize: "var(--ref-font-size-label)", color: "var(--text-muted)" }}>
+            <h2 id={titleId} className="ocs-drawer-title">{title}</h2>
+            <span id={descriptionId} style={{ fontSize: "var(--ref-font-size-label)", color: "var(--text-muted)" }}>
               {t("ocs_modal_detail_title")}
             </span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
             <button
+              ref={closeButtonRef}
               type="button"
               className="ocs-btn"
               onClick={handleCopy}
@@ -83,7 +95,6 @@ export default function OcsDetailDrawer({
             <pre className="ocs-json-view">{JSON.stringify(data, null, 2)}</pre>
           </div>
         </div>
-      </div>
-    </div>
+    </Dialog>
   );
 }

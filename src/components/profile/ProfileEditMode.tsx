@@ -51,7 +51,7 @@ export default function ProfileEditMode({ t, profileName, state, actions }: any)
           <div className="quick-grid">
             <div>
               <label className="form-label">{!profileName && <span className="form-asterisk">*</span>}{t("prof_title")}</label>
-              <input type="text" className="form-input" value={profileTitle} onChange={(e) => handleTitleChange(e.target.value)} placeholder={t("prof_title_ph")} autoFocus={!profileName} />
+              <input type="text" className="form-input" value={profileTitle} onChange={(e) => handleTitleChange(e.target.value)} placeholder={t("prof_title_ph")} />
             </div>
           </div>
         </div>

@@ -42,9 +42,9 @@
   min-width: 0;
 }
 .op-notice-title {
+  margin: 0 0 0.15rem;
   font-weight: 800;
   font-size: var(--ref-font-size-body-emphasis);
-  margin-bottom: 0.15rem;
 }
 .op-notice-message {
   color: var(--text-secondary);
@@ -100,6 +100,10 @@
   background: var(--overlay-scrim);
   backdrop-filter: blur(4px);
   animation: feedbackBackdropFade var(--duration-normal) ease forwards;
+}
+
+.op-modal-dialog-shell {
+  outline: none;
 }
 
 @keyframes feedbackBackdropFade {
@@ -167,9 +171,9 @@
   min-width: 0;
 }
 .op-confirm-title {
+  margin: 0 0 0.2rem;
   font-weight: 800;
   color: var(--text-main);
-  margin-bottom: 0.2rem;
 }
 .op-confirm-message {
   color: var(--text-secondary);

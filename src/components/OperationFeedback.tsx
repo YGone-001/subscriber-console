@@ -1,7 +1,8 @@
 "use client";
 
-import React from "react";
+import React, { useId, useRef } from "react";
 import { AlertTriangle, CheckCircle2, Info, Loader2, X } from "lucide-react";
+import { Dialog } from "./ui/Dialog";
 import "./OperationFeedback.css";
 
 export type FeedbackTone = "info" | "success" | "warning" | "danger";
@@ -26,22 +27,25 @@ export function OperationNotice({
   onClose?: () => void;
 }) {
   const isModal = presentation === "modal";
+  const titleId = useId();
+  const messageId = useId();
+  const acknowledgeRef = useRef<HTMLButtonElement>(null);
   const containerClass = `op-notice-container ${isModal ? "op-notice-modal" : "op-notice-inline"} op-notice-${tone}${isModal ? "-modal" : ""}`;
 
   const notice = (
-    <div role={tone === "danger" ? "alert" : "status"} className={containerClass}>
-      <div className={`op-notice-icon-box op-notice-icon-${tone}`}>
+    <div role={isModal ? undefined : tone === "danger" ? "alert" : "status"} className={containerClass}>
+      <div className={`op-notice-icon-box op-notice-icon-${tone}`} aria-hidden="true">
         <ToneIcon tone={tone} />
       </div>
       <div className="op-notice-content">
-        {title && <div className="op-notice-title">{title}</div>}
-        <div className="op-notice-message">{message}</div>
+        {title && <h2 id={titleId} className="op-notice-title">{title}</h2>}
+        <div id={messageId} className="op-notice-message">{message}</div>
         {isModal && onClose && (
           <button
+            ref={acknowledgeRef}
             type="button"
             className="btn btn-primary op-notice-ok-btn"
             onClick={onClose}
-            autoFocus
           >
             OK
           </button>
@@ -62,15 +66,18 @@ export function OperationNotice({
 
   if (isModal) {
     return (
-      <div
-        role="presentation"
-        onClick={onClose}
-        className="op-modal-backdrop"
+      <Dialog
+        open
+        onClose={onClose || (() => undefined)}
+        overlayClassName="op-modal-backdrop"
+        className="op-modal-dialog-shell"
+        labelledBy={title ? titleId : undefined}
+        describedBy={messageId}
+        ariaLabel={title || message}
+        initialFocusRef={acknowledgeRef}
       >
-        <div onClick={(event) => event.stopPropagation()}>
-          {notice}
-        </div>
-      </div>
+        {notice}
+      </Dialog>
     );
   }
 
@@ -103,25 +110,25 @@ export function ConfirmActionPanel({
   onCancel: () => void;
 }) {
   const isModal = presentation === "modal";
+  const titleId = useId();
+  const messageId = useId();
+  const cancelRef = useRef<HTMLButtonElement>(null);
   const containerClass = `op-confirm-panel ${isModal ? "op-confirm-modal" : "op-confirm-inline"} op-confirm-${tone}${isModal ? "-modal" : ""}`;
 
   const panel = (
     <div
-      role="dialog"
-      aria-modal={isModal}
-      aria-label={title}
       className={containerClass}
     >
-      <div className={`op-confirm-icon-box op-confirm-icon-${tone}`}>
+      <div className={`op-confirm-icon-box op-confirm-icon-${tone}`} aria-hidden="true">
         <ToneIcon tone={tone} size={19} />
       </div>
       <div className="op-confirm-content">
-        <div className="op-confirm-title">{title}</div>
-        <div className="op-confirm-message">{message}</div>
+        <h2 id={titleId} className="op-confirm-title">{title}</h2>
+        <div id={messageId} className="op-confirm-message">{message}</div>
         {children && <div className="op-confirm-children">{children}</div>}
       </div>
       <div className="op-confirm-actions">
-        <button type="button" className="btn btn-outline" onClick={onCancel} disabled={isWorking}>
+        <button ref={cancelRef} type="button" className="btn btn-outline" onClick={onCancel} disabled={isWorking}>
           {cancelLabel}
         </button>
         <button
@@ -129,7 +136,6 @@ export function ConfirmActionPanel({
           className={`btn op-confirm-btn op-confirm-btn-${tone}`}
           onClick={onConfirm}
           disabled={isWorking || confirmDisabled}
-          autoFocus={isModal}
         >
           {isWorking ? <Loader2 size={16} className="op-spinner" /> : confirmLabel}
         </button>
@@ -139,15 +145,19 @@ export function ConfirmActionPanel({
 
   if (isModal) {
     return (
-      <div
-        role="presentation"
-        onClick={onCancel}
-        className="op-modal-backdrop-darker"
+      <Dialog
+        open
+        onClose={() => { if (!isWorking) onCancel(); }}
+        overlayClassName="op-modal-backdrop-darker"
+        className="op-modal-dialog-shell"
+        labelledBy={titleId}
+        describedBy={messageId}
+        initialFocusRef={cancelRef}
+        role="alertdialog"
+        closeOnOverlay={!isWorking}
       >
-        <div onClick={(event) => event.stopPropagation()}>
-          {panel}
-        </div>
-      </div>
+        {panel}
+      </Dialog>
     );
   }
 

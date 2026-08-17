@@ -111,7 +111,6 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
                     value={inputImsi}
                     onChange={e => setInputImsi(e.target.value.replace(/\D/g, ''))}
                     maxLength={15}
-                    autoFocus
                   />
                   {inputImsi && !/^\d{15}$/.test(inputImsi) && (
                     <div className="warning-text">

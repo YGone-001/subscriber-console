@@ -1,3 +1,4 @@
+import { useId, useRef } from "react";
 import { useI18n } from "@/components/I18nProvider";
 import { type Capability } from "@/lib/permissions";
 import { 
@@ -7,14 +8,18 @@ import { OperationNotice, ConfirmActionPanel, LoadingRows, EmptyState } from "@/
 import * as T from "../types";
 import { VALID_ROLES, VALID_STATUS } from "../types";
 import { displayValue, formatDateTime, normalizeRole } from "../utils";
+import { Dialog } from "@/components/ui/Dialog";
 
 export function UserDrawer(props: any) {
   const { t } = useI18n();
+  const titleId = useId();
+  const descriptionId = useId();
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
   const {
     notice, setNotice, pendingDeleteUsername, savingAction, confirmReason,
     executeDelete, resetConfirmState, setConfirmReason, pendingStatusChange,
     executeStatusChange, pendingBulkAction, executeBulkAction, pendingUpdate,
-    selectedUser, submitUpdate, drawerMode, closeDrawer, drawerRef,
+    selectedUser, submitUpdate, drawerMode, closeDrawer,
     newForm, setNewForm, newPasswordVisible, setNewPasswordVisible,
     newConfirmPasswordVisible, setNewConfirmPasswordVisible, handleCreate,
     detailTabs, detailTab, setDetailTab, editForm, setEditForm,
@@ -136,20 +141,26 @@ export function UserDrawer(props: any) {
       ) : null}
 
       {drawerMode !== "closed" ? (
-        <div className="users-drawer-layer" role="dialog" aria-modal="true" aria-label={t("users_drawer_title")}>
-          <button type="button" className="users-drawer-backdrop" aria-label={t("cancel")} onClick={closeDrawer} />
-          <aside className="users-drawer" ref={drawerRef}>
+        <Dialog
+          open
+          onClose={closeDrawer}
+          overlayClassName="users-drawer-layer"
+          className="users-drawer"
+          labelledBy={titleId}
+          describedBy={descriptionId}
+          initialFocusRef={closeButtonRef}
+        >
             <header className="users-drawer-header">
               <div>
                 <span className="users-avatar large">
                   {drawerMode === "create" ? <Plus size={20} /> : selectedUser?.username.slice(0, 1).toUpperCase()}
                 </span>
                 <div>
-                  <h2>{drawerMode === "create" ? t("users_drawer_create_title") : selectedUser?.username}</h2>
-                  <p>{drawerMode === "create" ? t("users_create_panel_desc") : t("users_drawer_subtitle")}</p>
+                  <h2 id={titleId}>{drawerMode === "create" ? t("users_drawer_create_title") : selectedUser?.username}</h2>
+                  <p id={descriptionId}>{drawerMode === "create" ? t("users_create_panel_desc") : t("users_drawer_subtitle")}</p>
                 </div>
               </div>
-              <button type="button" className="btn-icon" onClick={closeDrawer} aria-label={t("cancel")} title={t("cancel")}>
+              <button ref={closeButtonRef} type="button" className="btn-icon" onClick={closeDrawer} aria-label={t("cancel")} title={t("cancel")}>
                 <X size={18} />
               </button>
             </header>
@@ -165,7 +176,6 @@ export function UserDrawer(props: any) {
                       className="form-input"
                       value={newForm.username}
                       onChange={(event) => setNewForm((current: any) => ({ ...current, username: event.target.value }))}
-                      autoFocus
                     />
                   </label>
                 </section>
@@ -434,8 +444,7 @@ export function UserDrawer(props: any) {
                 </>
               ) : null}
             </footer>
-          </aside>
-        </div>
+        </Dialog>
       ) : null}
 
 

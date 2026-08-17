@@ -1,7 +1,7 @@
 "use client";
 import "./ApprovalCenterPanel.css";
 
-import { useMemo, useState } from "react";
+import { useId, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 import { AlertTriangle, CheckCircle2, Copy, Eye, GitBranch, RefreshCw, Search, X } from "lucide-react";
 import { fetcher } from "@/lib/fetcher";
@@ -11,6 +11,7 @@ import { EmptyState, LoadingRows, OperationNotice } from "@/components/Operation
 import VisualDiffViewer from "@/components/VisualDiffViewer";
 import PageHeader from "@/components/ui/PageHeader";
 import MetricStrip from "@/components/ui/MetricStrip";
+import { Dialog } from "@/components/ui/Dialog";
 
 type ApprovalStatus = "pending" | "approved" | "rejected" | "executed" | "failed";
 type ApprovalAction =
@@ -127,6 +128,9 @@ export default function ApprovalCenterPanel() {
   const [reviewNote, setReviewNote] = useState("");
   const [saving, setSaving] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ tone: "success" | "danger" | "info"; text: string } | null>(null);
+  const dialogTitleId = useId();
+  const dialogDescriptionId = useId();
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   const apiStatus = tab === "pending" ? "pending" : tab === "exceptions" ? "failed" : "all";
   const approvalUrl = user ? `/api/approvals?limit=300&status=${apiStatus}${isRoot && requester.trim() ? `&requester=${encodeURIComponent(requester.trim())}` : ""}` : null;
@@ -301,15 +305,21 @@ export default function ApprovalCenterPanel() {
       </div>
 
       {selectedApproval ? (
-        <div className="approval-drawer-layer" role="dialog" aria-modal="true" aria-label={t("approvals_detail_title")}>
-          <button type="button" className="approval-drawer-backdrop" aria-label={t("close")} onClick={() => setSelectedId(null)} />
-          <aside className="approval-drawer">
+        <Dialog
+          open
+          onClose={() => setSelectedId(null)}
+          overlayClassName="approval-drawer-layer"
+          className="approval-drawer"
+          labelledBy={dialogTitleId}
+          describedBy={dialogDescriptionId}
+          initialFocusRef={closeButtonRef}
+        >
             <header>
               <div>
-                <h2>{selectedApproval.id}</h2>
-                <p>{selectedApproval.summary}</p>
+                <h2 id={dialogTitleId}>{selectedApproval.id}</h2>
+                <p id={dialogDescriptionId}>{selectedApproval.summary}</p>
               </div>
-              <button type="button" className="btn-icon" onClick={() => setSelectedId(null)} aria-label={t("close")}><X size={18} /></button>
+              <button ref={closeButtonRef} type="button" className="btn-icon" onClick={() => setSelectedId(null)} aria-label={t("close")}><X size={18} /></button>
             </header>
 
             <div className="approval-detail">
@@ -386,8 +396,7 @@ export default function ApprovalCenterPanel() {
                 </>
               ) : <span>{t("approvals_no_actions")}</span>}
             </footer>
-          </aside>
-        </div>
+        </Dialog>
       ) : null}
 
       {notice ? <OperationNotice presentation="modal" tone={notice.tone} title={notice.tone === "danger" ? t("error") : notice.tone === "success" ? t("success") : t("info")} message={notice.text} onClose={() => setNotice(null)} /> : null}

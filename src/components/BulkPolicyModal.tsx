@@ -1,10 +1,11 @@
 "use client";
 
 import { CheckCircle2, type LucideIcon, RotateCcw, Save, Settings2, ShieldOff, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 import { OperationNotice } from "./OperationFeedback";
 import { fetcher } from "@/lib/fetcher";
+import { Dialog } from "./ui/Dialog";
 import "./modals.css";
 
 type PolicyStatus = "active" | "suspended";
@@ -54,6 +55,7 @@ export default function BulkPolicyModal({ isOpen, selectedImsis, onClose, onSucc
   const [resetBalances, setResetBalances] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const cancelButtonRef = useRef<HTMLButtonElement>(null);
 
   const selectedPreview = useMemo(() => selectedImsis.slice(0, 3), [selectedImsis]);
   const selectedPlan = planOptions.find((plan) => plan.plan_id === planId);
@@ -107,18 +109,25 @@ export default function BulkPolicyModal({ isOpen, selectedImsis, onClose, onSucc
   };
 
   return (
-    <div className="modal-overlay" onClick={(event) => { event.stopPropagation(); onClose(); }}>
-      <div className="modal-content animate-modal-enter bp-modal-content" onClick={(event) => event.stopPropagation()}>
+    <Dialog
+      open={isOpen}
+      onClose={() => { if (!isSaving) onClose(); }}
+      overlayClassName="modal-overlay"
+      className="modal-content animate-modal-enter bp-modal-content"
+      labelledBy="bulk-policy-modal-title"
+      initialFocusRef={cancelButtonRef}
+      closeOnOverlay={!isSaving}
+    >
         <div className="workflow-header bp-header">
           <div>
-            <h2 className="bp-header-title">
+            <h2 id="bulk-policy-modal-title" className="bp-header-title">
               <Settings2 size={18} /> {t("policy_change_title")}
             </h2>
             <p className="bp-header-desc">
               {t("policy_selected_count", { count: selectedImsis.length })}
             </p>
           </div>
-          <button className="btn-icon" onClick={onClose} title={t("close")}><X size={22} /></button>
+          <button className="btn-icon" onClick={onClose} title={t("close")} aria-label={t("close")} disabled={isSaving}><X size={22} /></button>
         </div>
 
         <div className="bp-body">
@@ -209,13 +218,12 @@ export default function BulkPolicyModal({ isOpen, selectedImsis, onClose, onSucc
         <div className="workflow-footer bp-footer">
           <span className="bp-footer-text">{t("policy_change_subtitle")}</span>
           <div className="workflow-footer-actions">
-            <button className="btn btn-outline" onClick={onClose} disabled={isSaving}>{t("cancel")}</button>
+            <button ref={cancelButtonRef} className="btn btn-outline" onClick={onClose} disabled={isSaving}>{t("cancel")}</button>
             <button className="btn btn-primary" onClick={handleSubmit} disabled={isSaving || selectedImsis.length === 0}>
               <Save size={16} /> {isSaving ? t("policy_change_applying") : t("policy_change_apply")}
             </button>
           </div>
         </div>
-      </div>
-    </div>
+    </Dialog>
   );
 }

@@ -10,6 +10,7 @@ import { useSubscriberForm } from "@/hooks/useSubscriberForm";
 import { parseBytes } from "@/lib/unitParser";
 import { OperationNotice } from "./OperationFeedback";
 import { UnsavedChangesDialog, useUnsavedChangesGuard } from "@/components/ui/UnsavedChangesGuard";
+import { Dialog } from "@/components/ui/Dialog";
 import "./SubscriberModal.css";
 
 interface SubscriberModalProps {
@@ -54,6 +55,7 @@ export default function SubscriberModal({ imsi, onClose, onRefresh }: Subscriber
     state.ocsSmsTotalStr, state.ocsSmsBalanceStr,
   ]);
   const initialDraftRef = useRef<string | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!isLoading && initialDraftRef.current === null) initialDraftRef.current = draftSignature;
@@ -106,8 +108,15 @@ export default function SubscriberModal({ imsi, onClose, onRefresh }: Subscriber
   };
 
   return (
-    <div className="modal-overlay" onClick={unsavedGuard.requestClose}>
-      <div className="modal-content workflow-modal animate-modal-enter" onClick={e => e.stopPropagation()}>
+    <>
+      <Dialog
+        open
+        onClose={unsavedGuard.requestClose}
+        overlayClassName="modal-overlay"
+        className="modal-content workflow-modal animate-modal-enter"
+        labelledBy="subscriber-modal-title"
+        initialFocusRef={closeButtonRef}
+      >
 
         {toastMessage && (
           <OperationNotice
@@ -124,14 +133,14 @@ export default function SubscriberModal({ imsi, onClose, onRefresh }: Subscriber
             <div className="sub-modal-imsi-row">
               {imsi ? (
                 <div className="sub-modal-imsi-group">
-                  <h2 className="sub-modal-imsi-title">{imsi}</h2>
+                  <h2 id="subscriber-modal-title" className="sub-modal-imsi-title">{imsi}</h2>
                   <button className="copy-btn sub-modal-imsi-copy-btn" onClick={handleCopyImsi} title={t("sub_copy_imsi")}>
                     {isImsiCopied ? <Check size={20} color="var(--success)" /> : <Copy size={20} />}
                   </button>
                 </div>
               ) : (
                 <div>
-                  <h2 className="sub-modal-new-title">{t("sub_new_title")}</h2>
+                  <h2 id="subscriber-modal-title" className="sub-modal-new-title">{t("sub_new_title")}</h2>
                   <p className="sub-modal-new-desc">{t("sub_new_desc")}</p>
                 </div>
               )}
@@ -155,7 +164,7 @@ export default function SubscriberModal({ imsi, onClose, onRefresh }: Subscriber
             {imsi && <button className="btn-icon" onClick={handleDelete} title={t("sub_btn_delete")}><Trash2 size={24} color="var(--danger)" /></button>}
 
             <div className="sub-modal-header-divider" />
-            <button className="btn-icon" onClick={unsavedGuard.requestClose} title={t("close")}><X size={26} color="var(--text-muted)" /></button>
+            <button ref={closeButtonRef} className="btn-icon" onClick={unsavedGuard.requestClose} title={t("close")} aria-label={t("close")}><X size={26} color="var(--text-muted)" /></button>
           </div>
         </div>
 
@@ -243,7 +252,7 @@ export default function SubscriberModal({ imsi, onClose, onRefresh }: Subscriber
             )}
           </div>
         </div>
-      </div>
+      </Dialog>
       {isTrafficModalOpen && imsi && (
         <TrafficAdjustmentModal
           imsi={imsi}
@@ -265,6 +274,6 @@ export default function SubscriberModal({ imsi, onClose, onRefresh }: Subscriber
         onKeepEditing={unsavedGuard.keepEditing}
         onDiscard={unsavedGuard.discardChanges}
       />
-    </div>
+    </>
   );
 }

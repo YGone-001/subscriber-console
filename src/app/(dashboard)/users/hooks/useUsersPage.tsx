@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
 import { Eye, EyeOff } from "lucide-react";
 import { fetcher } from "@/lib/fetcher";
@@ -81,8 +81,6 @@ export function useUsersPage() {
 
   const initialQuery = useMemo(() => getInitialQuery(), []);
   const users = useMemo(() => data?.users || [], [data?.users]);
-  const drawerRef = useRef<HTMLElement | null>(null);
-  const lastFocusRef = useRef<HTMLElement | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [savingAction, setSavingAction] = useState<string | null>(null);
   const [pendingDeleteUsername, setPendingDeleteUsername] = useState<string | null>(null);
@@ -171,21 +169,8 @@ export function useUsersPage() {
     return () => window.clearTimeout(timer);
   }, [searchInput]);
 
-  useEffect(() => {
-    if (drawerMode === "closed") {
-      lastFocusRef.current?.focus();
-      return;
-    }
-    const firstFocusable = drawerRef.current?.querySelector<HTMLElement>("button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])");
-    firstFocusable?.focus();
-  }, [drawerMode]);
-
   const isProtectedUser = (targetUser: SysUser) => {
     return isProtectedSystemUser(targetUser, currentUser?.username);
-  };
-
-  const rememberFocus = () => {
-    lastFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   };
 
   const resetConfirmState = () => {
@@ -311,7 +296,6 @@ export function useUsersPage() {
   };
 
   const openCreateDrawer = () => {
-    rememberFocus();
     resetNewForm();
     setSelectedUsername(null);
     setDrawerMode("create");
@@ -320,7 +304,6 @@ export function useUsersPage() {
   };
 
   const openDetails = (targetUser: SysUser) => {
-    rememberFocus();
     setSelectedUsername(targetUser.username);
     setDrawerMode("view");
     setDetailTab("basic");
@@ -333,7 +316,6 @@ export function useUsersPage() {
   };
 
   const startEdit = (targetUser: SysUser) => {
-    rememberFocus();
     setSelectedUsername(targetUser.username);
     setDrawerMode("edit");
     setDetailTab("basic");
@@ -797,7 +779,7 @@ export function useUsersPage() {
     notice, setNotice, pendingDeleteUsername, savingAction, confirmReason,
     executeDelete, resetConfirmState, setConfirmReason, pendingStatusChange,
     executeStatusChange, pendingBulkAction, executeBulkAction, pendingUpdate,
-    selectedUser, submitUpdate, drawerMode, closeDrawer, drawerRef,
+    selectedUser, submitUpdate, drawerMode, closeDrawer,
     newForm, setNewForm, newPasswordVisible, setNewPasswordVisible,
     newConfirmPasswordVisible, setNewConfirmPasswordVisible, handleCreate,
     detailTabs, detailTab, setDetailTab, editForm, setEditForm,

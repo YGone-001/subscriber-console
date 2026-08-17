@@ -190,6 +190,7 @@
     z-index: 2200;
     display: flex;
     justify-content: flex-end;
+    background: var(--drawer-backdrop);
   }
 
   .approval-drawer-backdrop {

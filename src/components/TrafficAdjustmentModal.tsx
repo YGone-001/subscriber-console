@@ -1,9 +1,10 @@
 "use client";
 
 import { BatteryCharging, RotateCcw, Save, SlidersHorizontal, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { BYTE_INPUT_UNITS, composeByteInput, formatBytes, parseBytes, splitByteInput } from "@/lib/unitParser";
 import { OperationNotice } from "./OperationFeedback";
+import { Dialog } from "./ui/Dialog";
 import "./modals.css";
 
 type TrafficAdjustmentMode = "recharge" | "set_available" | "set_total" | "reset";
@@ -82,6 +83,7 @@ export default function TrafficAdjustmentModal({
   const [reason, setReason] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const cancelButtonRef = useRef<HTMLButtonElement>(null);
 
   const preview = useMemo(() => {
     const amount = parseBytes(amountStr);
@@ -133,14 +135,21 @@ export default function TrafficAdjustmentModal({
   };
 
   return (
-    <div className="modal-overlay" onClick={(event) => { event.stopPropagation(); onClose(); }}>
-      <div className="modal-content animate-modal-enter ta-modal-content" onClick={(event) => event.stopPropagation()}>
+    <Dialog
+      open
+      onClose={() => { if (!isSaving) onClose(); }}
+      overlayClassName="modal-overlay"
+      className="modal-content animate-modal-enter ta-modal-content"
+      labelledBy="traffic-adjustment-modal-title"
+      initialFocusRef={cancelButtonRef}
+      closeOnOverlay={!isSaving}
+    >
         <div className="workflow-header ta-header">
           <div>
-            <h2 className="ta-header-title">{t("traffic_adjust_title")}</h2>
+            <h2 id="traffic-adjustment-modal-title" className="ta-header-title">{t("traffic_adjust_title")}</h2>
             <p className="ta-header-desc">{imsi}</p>
           </div>
-          <button className="btn-icon" onClick={onClose} title={t("close")}><X size={22} /></button>
+          <button className="btn-icon" onClick={onClose} title={t("close")} aria-label={t("close")} disabled={isSaving}><X size={22} /></button>
         </div>
 
         <div className="ta-body">
@@ -211,13 +220,12 @@ export default function TrafficAdjustmentModal({
         <div className="workflow-footer ta-footer">
           <span className="ta-footer-text">{t("traffic_current")}: {formatBytes(balance)}</span>
           <div className="workflow-footer-actions">
-            <button className="btn btn-outline" onClick={onClose}>{t("cancel")}</button>
+            <button ref={cancelButtonRef} className="btn btn-outline" onClick={onClose} disabled={isSaving}>{t("cancel")}</button>
             <button className="btn btn-primary" onClick={handleSubmit} disabled={isSaving}>
               <Save size={16} /> {isSaving ? t("traffic_saving") : t("traffic_submit")}
             </button>
           </div>
         </div>
-      </div>
-    </div>
+    </Dialog>
   );
 }
