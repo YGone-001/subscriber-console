@@ -22,6 +22,8 @@ next-env.d.ts
 coverage/
 .nyc_output/
 playwright-report/
+.playwright-cli/
+output/
 test-results/
 reports/ops/
 *.lcov
