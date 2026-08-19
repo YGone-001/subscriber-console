@@ -78,6 +78,11 @@ function summarizeExplain(explain) {
   };
 }
 
+// Analytical queries that are acceptable with COLLSCAN (computed fields, $group, small collections)
+const ANALYTICAL_QUERIES = new Set([
+  'ocs_balances.analytics.plmn_group',
+]);
+
 function assess(result) {
   const stages = new Set(result.stages || []);
   const collectionScan = stages.has('COLLSCAN');
@@ -87,6 +92,7 @@ function assess(result) {
     && result.returned > 0
     && result.documentsExamined > Math.max(1000, result.returned * 50);
 
+  if (collectionScan && ANALYTICAL_QUERIES.has(result.name)) return 'COLLSCAN_ANALYTICAL';
   if (collectionScan) return 'COLLSCAN';
   if (slow) return 'SLOW';
   if (highScan) return 'HIGH_SCAN_RATIO';
@@ -95,6 +101,12 @@ function assess(result) {
 
 function recommendationsFor(result) {
   if (result.status === 'OK') return [];
+  if (result.status === 'COLLSCAN_ANALYTICAL') {
+    return [
+      'Analytical aggregation with computed fields — COLLSCAN is expected.',
+      'If collection grows significantly, consider precomputed metrics or a materialized view.',
+    ];
+  }
   if (result.status === 'COLLSCAN') {
     return [
       'Check whether this query is intentionally analytical and allowed to scan the collection.',
@@ -177,6 +189,28 @@ async function main() {
         ])
         .explain('executionStats')
     ),
+    timedExplain('subscribers.lookup.msisdn', () =>
+      db.collection('subscribers')
+        .findOne({ msisdn: { $exists: true } })
+        .then(() => db.collection('subscribers')
+          .find({ msisdn: { $type: 'string' } }, { projection: { imsi: 1, msisdn: 1 } })
+          .limit(1)
+          .explain('executionStats'))
+    ),
+    timedExplain('ocs_sessions.filter.state', () =>
+      db.collection('ocs_sessions')
+        .find({ state: 'active' })
+        .sort({ last_update_at: -1 })
+        .limit(50)
+        .explain('executionStats')
+    ),
+    timedExplain('ocs_usage.sort.created_at', () =>
+      db.collection('ocs_usage_records')
+        .find({})
+        .sort({ created_at: -1 })
+        .limit(50)
+        .explain('executionStats')
+    ),
     timedExplain('audit.recent.timestamp', () =>
       appDb.collection('app_audit_logs')
         .find({ timestamp: { $gte: since } })
@@ -215,8 +249,8 @@ async function main() {
   ];
 
   const results = await Promise.all(checks);
-  const reportOk = results.every((result) => result.status === 'OK')
-    || (allowCollscan && results.every((result) => result.status === 'OK' || result.status === 'COLLSCAN'));
+  const reportOk = results.every((result) => result.status === 'OK' || result.status === 'COLLSCAN_ANALYTICAL')
+    || (allowCollscan && results.every((result) => result.status === 'OK' || result.status === 'COLLSCAN' || result.status === 'COLLSCAN_ANALYTICAL'));
   const report = {
     ok: reportOk,
     command: 'mongo:perf',
@@ -250,7 +284,7 @@ async function main() {
   console.log(`Ops report written to ${outputPath}`);
 
   await client.close();
-  if (!report.ok && !(allowCollscan && report.results.every((result) => result.status === 'OK' || result.status === 'COLLSCAN'))) {
+  if (!report.ok && !(allowCollscan && report.results.every((result) => result.status === 'OK' || result.status === 'COLLSCAN' || result.status === 'COLLSCAN_ANALYTICAL'))) {
     process.exitCode = 1;
   }
 }

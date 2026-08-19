@@ -52,9 +52,13 @@ export async function POST(req: Request) {
       .sign(JWT_SECRET);
 
     const response = NextResponse.json({ success: true, username });
+    // Only set Secure flag when actually serving over HTTPS (proxied or direct)
+    const isSecure = req.headers.get('x-forwarded-proto') === 'https' ||
+                     req.url.startsWith('https');
+
     response.cookies.set('auth_token', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: isSecure,
       sameSite: 'lax',
       path: '/',
       maxAge: 60 * 60 * 24,
