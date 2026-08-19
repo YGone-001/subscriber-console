@@ -277,20 +277,20 @@ export default function OcsBalancesPanel() {
 
                   return (
                     <tr key={r.id}>
-                      <td className="ocs-mono" style={{ fontWeight: 600, color: "var(--status-info)" }} data-column-priority="essential">
+                      <td className="ocs-mono" style={{ fontWeight: 600, color: "var(--status-info)" }} data-column-priority="essential" data-label={t("ocs_col_imsi")}>
                         {r.imsi}
                       </td>
-                      <td data-column-priority="important">
+                      <td data-column-priority="important" data-label={t("ocs_col_plan")}>
                         <span className="ocs-badge" style={{ background: "var(--neutral-soft)", color: "var(--text-secondary)" }}>
                           {r.plan_id}
                         </span>
                       </td>
-                      <td data-column-priority="essential">
+                      <td data-column-priority="essential" data-label={t("ocs_col_status")}>
                         <span className={`ocs-badge status-${r.status}`}>
                           {r.status}
                         </span>
                       </td>
-                      <td data-column-priority="important">
+                      <td data-column-priority="important" data-label={t("ocs_col_data_alloc")}>
                         <div className="ocs-quota-bar-wrap">
                           <div className="ocs-quota-track">
                             <div className="ocs-quota-seg-used" style={{ width: `${usedPct}%` }} title={`Used: ${formatBytes(r.data_used)}`} />
@@ -304,16 +304,16 @@ export default function OcsBalancesPanel() {
                           </div>
                         </div>
                       </td>
-                      <td className="ocs-mono" style={{ fontWeight: 700, color: r.data_available > 0 ? "var(--status-success)" : "var(--status-danger)" }} data-column-priority="essential">
+                      <td className="ocs-mono" style={{ fontWeight: 700, color: r.data_available > 0 ? "var(--status-success)" : "var(--status-danger)" }} data-column-priority="essential" data-label={t("ocs_col_data_available")}>
                         {formatBytes(r.data_available)}
                       </td>
-                      <td className="ocs-mono" data-column-priority="important">
+                      <td className="ocs-mono" data-column-priority="important" data-label={t("ocs_col_voice_avail")}>
                         {r.voice_available}s / {r.voice_total}s
                       </td>
-                      <td className="ocs-mono" data-column-priority="important">
+                      <td className="ocs-mono" data-column-priority="important" data-label={t("ocs_col_sms_avail")}>
                         {r.sms_available} / {r.sms_total}
                       </td>
-                      <td data-column-priority="essential">
+                      <td data-column-priority="essential" data-label={t("ocs_col_invariant")}>
                         {r.invariant_ok ? (
                           <span className="ocs-badge invariant-valid">
                             <CheckCircle2 size={12} /> {t("ocs_invariant_valid_badge")}
@@ -324,8 +324,8 @@ export default function OcsBalancesPanel() {
                           </span>
                         )}
                       </td>
-                      <td className="ocs-mono" style={{ color: "var(--text-muted)" }} data-column-priority="supplementary">v{r.version}</td>
-                      <td className="ocs-mono" style={{ fontSize: "var(--ref-font-size-data)", color: "var(--text-muted)" }} data-column-priority="supplementary">
+                      <td className="ocs-mono" style={{ color: "var(--text-muted)" }} data-column-priority="supplementary" data-label={t("ocs_col_version")}>v{r.version}</td>
+                      <td className="ocs-mono" style={{ fontSize: "var(--ref-font-size-data)", color: "var(--text-muted)" }} data-column-priority="supplementary" data-label={t("ocs_col_updated_at")}>
                         {r.updated_at ? new Date(r.updated_at).toLocaleString() : "-"}
                       </td>
                       <td data-column-priority="essential">

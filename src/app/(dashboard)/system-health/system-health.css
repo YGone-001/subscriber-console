@@ -91,6 +91,14 @@
 
 /* KPI Grid */
 .health-kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.25rem; margin-bottom: 2rem; }
+
+@media (max-width: 980px) {
+  .health-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 560px) {
+  .health-kpi-grid { grid-template-columns: 1fr; }
+}
 .health-kpi-card { padding: 1.35rem 1.75rem; border-radius: var(--ref-radius-soft-panel); }
 .health-kpi-card-success { border-color: var(--status-success-border); }
 .health-kpi-card-danger { border-color: var(--status-danger-border); }
