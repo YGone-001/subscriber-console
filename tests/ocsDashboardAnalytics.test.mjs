@@ -20,16 +20,16 @@ test('AnalyticsCockpit integrates OCS telemetry and elevated workbench layout', 
   assert.match(analyticsCockpitSource, /OcsSessionTelemetryCard/);
   assert.match(analyticsCockpitSource, /TariffPlanDistributionChart/);
   assert.match(analyticsCockpitSource, /WorkbenchPanel/);
-  assert.match(analyticsCockpitSource, /analytics-kpi-grid/);
+  assert.match(analyticsCockpitSource, /KpiStrip/);
   assert.match(analyticsCockpitSource, /analytics-ocs-grid/);
   assert.match(analyticsCockpitSource, /analytics-chart-grid/);
 });
 
-test('WorkbenchPanel incorporates both Action Items and Change Queue subtabs', () => {
-  assert.match(workbenchPanelSource, /dash_workbench_tab_tasks/);
-  assert.match(workbenchPanelSource, /dash_workbench_tab_changes/);
-  assert.match(workbenchPanelSource, /analytics-workqueue/);
-  assert.match(workbenchPanelSource, /analytics-change-grid/);
+test('WorkbenchPanel renders action items with score summary', () => {
+  assert.match(workbenchPanelSource, /dash_workbench_title/);
+  assert.match(workbenchPanelSource, /analytics-alerts-items/);
+  assert.match(workbenchPanelSource, /analytics-readiness-score/);
+  assert.match(workbenchPanelSource, /operationsScore/);
 });
 
 test('Analytics repository performs robust concurrent OCS aggregations', () => {
@@ -79,8 +79,8 @@ test('Option B: Spatial dimensionality reduction integrates PLMN tag and expands
   const topConsumerSource = readFileSync(new URL('../src/components/analytics/TopConsumerChart.tsx', import.meta.url), 'utf8');
   const analyticsCssSource = readFileSync(new URL('../src/components/analytics.css', import.meta.url), 'utf8');
 
-  // PLMN is reduced to a Tag in KpiCard rather than a separate heavy chart in the main grid
-  assert.match(analyticsCockpitSource, /tag=\{plmnDist\.length > 0/);
+  // PLMN detail is shown in KpiStrip rather than a separate heavy chart
+  assert.match(analyticsCockpitSource, /plmnDist\.length > 0/);
   // Bottom grid is 2-column asymmetric (Top 5 + Tariff Plan)
   assert.match(analyticsCockpitSource, /<TopConsumerChart/);
   assert.match(analyticsCockpitSource, /<TariffPlanDistributionChart/);
