@@ -1,5 +1,6 @@
 "use client";
 import './analytics.css';
+import './analytics/KpiStrip.css';
 
 import React from "react";
 import useSWR from "swr";
@@ -16,10 +17,11 @@ import {
 import { fetcher } from "@/lib/fetcher";
 import { useI18n } from "./I18nProvider";
 
-import { MetricsData, SparklineData, AlertResponse, WorkItem, ChangeTask } from "./analytics/types";
+import { MetricsData, SparklineData, AlertResponse, WorkItem } from "./analytics/types";
 import { BYTES_IN_GB, computeHourlyBurnGb, createDistributionSparkline, normalizeRingValue } from "./analytics/utils";
 import CountUpNumber from "./analytics/CountUpNumber";
-import KpiCard from "./analytics/KpiCard";
+import KpiStrip from "./analytics/KpiStrip";
+import type { KpiStripItem } from "./analytics/KpiStrip";
 import SkeletonDashboard from "./analytics/SkeletonDashboard";
 import TopConsumerChart from "./analytics/TopConsumerChart";
 import WorkbenchPanel from "./analytics/WorkbenchPanel";
@@ -73,7 +75,6 @@ export default function AnalyticsCockpit() {
   const activeAlerts = (alertData?.alerts || []).filter((alert) => !alert.is_acknowledged);
   const activeCriticalCount = alertData?.activeCriticalCount || activeAlerts.filter((alert) => alert.level === "CRITICAL").length;
   const activeWarningCount = alertData?.activeWarningCount || activeAlerts.filter((alert) => alert.level === "WARNING").length;
-  const activeAlertCount = alertData?.activeCount || activeAlerts.length;
 
   const brokenInvariants = ocsBalances?.brokenInvariantCount || 0;
   const orphanedReservations = ocsReservations?.orphanedReservations || 0;
@@ -90,7 +91,13 @@ export default function AnalyticsCockpit() {
 
   const topImsi = top5[0]?.imsi || "--";
 
-  // Work Items generation with P0/P1 semantic risk awareness
+  // Health indicator for KPI strip rightmost column
+  const healthTone = brokenInvariants > 0 ? "danger" : activeCriticalCount > 0 ? "warning" : "normal";
+  const healthValue = brokenInvariants === 0 ? "100%" : `${brokenInvariants}!`;
+  const healthDetail = brokenInvariants === 0 ? t("dash_ocs_kpi_invariants_ok") : t("dash_ocs_kpi_invariants_broken", { count: brokenInvariants });
+  const healthRingValue = brokenInvariants === 0 ? 100 : Math.max(0, 100 - brokenInvariants * 10);
+
+  // Work Items generation
   const workItems: WorkItem[] = [];
   if (activeCriticalCount > 0) {
     workItems.push({
@@ -203,146 +210,101 @@ export default function AnalyticsCockpit() {
   }
 
   const visibleWorkItems = workItems.slice(0, 4);
-  const changeQueue: ChangeTask[] = [
+
+  // KPI Strip items
+  const kpiItems: KpiStripItem[] = [
     {
-      id: "CHG-NOC-001",
-      tone: activeAlertCount > 0 ? "danger" : "normal",
-      title: activeAlertCount > 0 ? t("dash_change_alert_title") : t("dash_change_health_title"),
-      scope: t("dash_change_alert_scope", { count: activeAlertCount }),
-      phase: activeAlertCount > 0 ? t("dash_change_phase_review") : t("dash_change_phase_ready"),
-      canary: activeAlertCount > 0 ? 0 : 100,
-      owner: t("dept_noc"),
-      href: "/system-health",
-      rollbackHref: "/audit-logs",
+      color: "var(--chart-1)",
+      icon: <TrendingUp size={16} />,
+      label: t("dash_kpi_total_traffic"),
+      value: (
+        <>
+          <CountUpNumber value={gbTraffic} decimals={2} />
+          <span>GB</span>
+        </>
+      ),
+      detail: burnRateGbHr > 0
+        ? (theoreticalLifeHr > 0
+            ? `${burnRateGbHr.toFixed(2)} GB/hr · ~${theoreticalLifeHr.toFixed(0)}h`
+            : `${burnRateGbHr.toFixed(2)} GB/hr`)
+        : undefined,
+      sparkline: trafficSparkline,
+      tone: exhaustionTone,
     },
     {
-      id: "CHG-RATE-002",
-      tone: ratingGroupCount === 0 ? "warning" : "normal",
-      title: ratingGroupCount === 0 ? t("dash_change_rating_title") : t("dash_change_rating_ready_title"),
-      scope: t("dash_change_rating_scope", { count: ratingGroupCount }),
-      phase: ratingGroupCount === 0 ? t("dash_change_phase_draft") : t("dash_change_phase_canary"),
-      canary: ratingGroupCount === 0 ? 0 : 25,
-      owner: t("dept_bss_ocs"),
-      href: "/rating",
-      rollbackHref: "/profile",
+      color: "var(--status-success)",
+      icon: <Activity size={16} />,
+      label: t("dash_kpi_active_subs"),
+      value: <CountUpNumber value={subscriberCount} />,
+      sparkline: subscriberSparkline,
+      ringValue: subscriberCount > 0 ? 100 : 0,
+      tone: "normal" as const,
     },
     {
-      id: "CHG-POL-003",
-      tone: exhaustionTone === "danger" ? "danger" : exhaustionTone === "warning" || topConsumerShare >= 35 ? "warning" : "normal",
-      title: t("dash_change_policy_title"),
-      scope: t("dash_change_policy_scope", { imsi: topImsi, hours: theoreticalLifeHr > 0 ? theoreticalLifeHr.toFixed(1) : "--" }),
-      phase: exhaustionTone === "normal" ? t("dash_change_phase_ready") : t("dash_change_phase_canary"),
-      canary: exhaustionTone === "danger" ? 5 : exhaustionTone === "warning" ? 10 : 50,
-      owner: t("dept_provisioning"),
-      href: "/subscribers",
-      rollbackHref: "/audit-logs",
+      color: "var(--chart-4)",
+      icon: <Globe size={16} />,
+      label: t("dash_kpi_plmn_active"),
+      value: <CountUpNumber value={plmnCount} />,
+      detail: plmnDist.length > 0 ? `${plmnDist[0]?.name || "—"}${plmnDist.length > 1 ? ` +${plmnDist.length - 1}` : ""}` : undefined,
+      sparkline: plmnSparkline,
+      ringValue: plmnCoverage,
+      tone: "normal" as const,
+    },
+    {
+      color: "var(--status-success)",
+      icon: <Radio size={16} />,
+      label: t("dash_ocs_kpi_active_sessions"),
+      value: <CountUpNumber value={ocsSessions?.activeSessions || 0} />,
+      ringValue: ocsSessions?.totalSessions ? normalizeRingValue(((ocsSessions.activeSessions || 0) / ocsSessions.totalSessions) * 100) : 0,
+      tone: "normal" as const,
+    },
+    {
+      color: "var(--chart-2)",
+      icon: <Database size={16} />,
+      label: t("dash_ocs_kpi_utilization"),
+      value: (
+        <>
+          <CountUpNumber value={utilizationRate} decimals={1} />
+          <span>%</span>
+        </>
+      ),
+      ringValue: utilizationRate,
+      tone: (utilizationRate >= 85 ? "danger" : utilizationRate >= 65 ? "warning" : "normal") as "normal" | "warning" | "danger",
+    },
+    {
+      color: brokenInvariants === 0 ? "var(--status-success)" : "var(--status-danger)",
+      icon: brokenInvariants === 0 ? <ShieldCheck size={16} /> : <AlertTriangle size={16} />,
+      label: t("dash_ocs_kpi_invariants"),
+      value: healthValue,
+      detail: healthDetail,
+      ringValue: healthRingValue,
+      tone: healthTone,
     },
   ];
 
   return (
     <div className="analytics-root">
-      {/* 1. Operational Workbench & Change Release Queue (Elevated to top) */}
+      {/* 1. KPI Strip — core metrics at a glance */}
+      <KpiStrip items={kpiItems} />
+
+      {/* 2. Alerts & Score — only visible when issues exist, otherwise compact */}
       <WorkbenchPanel
         visibleWorkItems={visibleWorkItems}
-        changeQueue={changeQueue}
         operationsScore={operationsScore}
-        activeAlertCount={activeAlertCount}
+        activeAlertCount={activeAlerts.length}
         t={t}
       />
 
-      {/* 2. Primary operating indicators */}
-      <div className="analytics-kpi-grid">
-        <KpiCard
-          color="var(--chart-1)"
-          icon={<TrendingUp size={20} />}
-          label={t("dash_kpi_total_traffic")}
-          value={
-            <>
-              <CountUpNumber value={gbTraffic} decimals={2} />
-              <span>GB</span>
-            </>
-          }
-          detail={
-            burnRateGbHr > 0
-              ? (theoreticalLifeHr > 0
-                  ? t("dash_kpi_detail_burn_exhaust", { rate: burnRateGbHr.toFixed(2), hours: theoreticalLifeHr.toFixed(1) })
-                  : t("dash_kpi_detail_burn_trend", { rate: burnRateGbHr.toFixed(2) }))
-              : t("dash_kpi_detail_burn_none")
-          }
-          sparkline={trafficSparkline}
-          ringValue={topConsumerShare}
-        />
-
-        <KpiCard
-          color="var(--status-success)"
-          icon={<Activity size={20} />}
-          label={t("dash_kpi_active_subs")}
-          value={<CountUpNumber value={subscriberCount} />}
-          detail={subscriberSparkline.length > 1 ? t("dash_kpi_detail_sub_trend") : t("dash_kpi_detail_sub_wait")}
-          sparkline={subscriberSparkline}
-          ringValue={subscriberCount > 0 ? 100 : 0}
-        />
-
-        <KpiCard
-          color="var(--chart-4)"
-          icon={<Globe size={20} />}
-          label={t("dash_kpi_plmn_active")}
-          value={<CountUpNumber value={plmnCount} />}
-          tag={plmnDist.length > 0 ? (plmnDist.length === 1 ? `${plmnDist[0].name} (100%)` : `${plmnDist[0]?.name || "41701"} (+${plmnDist.length - 1})`) : undefined}
-          detail={ratingGroupCount > 0 ? t("dash_kpi_detail_rating_mapped", { count: ratingGroupCount }) : t("dash_kpi_detail_rating_none")}
-          sparkline={plmnSparkline}
-          ringValue={plmnCoverage}
-          tone="warning"
-        />
-
-        <KpiCard
-          color="var(--status-success)"
-          icon={<Radio size={20} />}
-          label={t("dash_ocs_kpi_active_sessions")}
-          value={<CountUpNumber value={ocsSessions?.activeSessions || 0} />}
-          detail={t("dash_ocs_kpi_active_sessions_detail")}
-          ringValue={ocsSessions?.totalSessions ? normalizeRingValue(((ocsSessions.activeSessions || 0) / ocsSessions.totalSessions) * 100) : 0}
-          tone="normal"
-        />
-
-        <KpiCard
-          color="var(--chart-2)"
-          icon={<Database size={20} />}
-          label={t("dash_ocs_kpi_utilization")}
-          value={
-            <>
-              <CountUpNumber value={utilizationRate} decimals={1} />
-              <span>%</span>
-            </>
-          }
-          detail={t("dash_ocs_kpi_utilization_detail", { rate: utilizationRate.toFixed(1) })}
-          ringValue={utilizationRate}
-          tone={utilizationRate >= 85 ? "danger" : utilizationRate >= 65 ? "warning" : "normal"}
-        />
-
-        <KpiCard
-          color={brokenInvariants === 0 ? "var(--status-success)" : "var(--status-danger)"}
-          icon={brokenInvariants === 0 ? <ShieldCheck size={20} /> : <AlertTriangle size={20} />}
-          label={t("dash_ocs_kpi_invariants")}
-          value={brokenInvariants === 0 ? "100%" : `${brokenInvariants} !`}
-          detail={brokenInvariants === 0 ? t("dash_ocs_kpi_invariants_ok") : t("dash_ocs_kpi_invariants_broken", { count: brokenInvariants })}
-          ringValue={brokenInvariants === 0 ? 100 : Math.max(0, 100 - brokenInvariants * 10)}
-          tone={brokenInvariants === 0 ? "normal" : "danger"}
-        />
+      {/* 3. OCS Overview — capacity and session telemetry */}
+      <div className="analytics-ocs-grid">
+        <OcsBalanceCapacityCard metrics={ocsBalances} t={t} />
+        <OcsSessionTelemetryCard sessions={ocsSessions} reservations={ocsReservations} t={t} />
       </div>
 
-      {/* 3. Capacity and distribution readouts */}
-      <div className="analytics-observability-grid">
-        <div className="analytics-observability-main">
-          <div className="analytics-ocs-grid">
-            <OcsBalanceCapacityCard metrics={ocsBalances} t={t} />
-            <OcsSessionTelemetryCard sessions={ocsSessions} reservations={ocsReservations} t={t} />
-          </div>
-        </div>
-        <div className="analytics-chart-grid analytics-observability-side">
-          <TopConsumerChart top5={top5} t={t} />
-          <TariffPlanDistributionChart tariffPlanDist={tariffPlanDist} t={t} />
-        </div>
+      {/* 4. Charts — distribution and top consumers */}
+      <div className="analytics-chart-grid">
+        <TopConsumerChart top5={top5} t={t} />
+        <TariffPlanDistributionChart tariffPlanDist={tariffPlanDist} t={t} />
       </div>
     </div>
   );
