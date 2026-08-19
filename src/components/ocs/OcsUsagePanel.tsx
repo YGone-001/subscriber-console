@@ -407,38 +407,38 @@ export default function OcsUsagePanel() {
                 ) : (
                   usageRecords.map((r) => (
                     <tr key={r.id}>
-                      <td className="ocs-mono" style={{ fontSize: "var(--ref-font-size-data)", color: "var(--status-info)", maxWidth: "180px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.session_id} data-column-priority="essential">
+                      <td className="ocs-mono" style={{ fontSize: "var(--ref-font-size-data)", color: "var(--status-info)", maxWidth: "180px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.session_id} data-column-priority="essential" data-label={t("ocs_col_session_id")}>
                         {r.session_id}
                       </td>
-                      <td className="ocs-mono" style={{ fontWeight: 600, color: "var(--status-info)" }} data-column-priority="essential">
+                      <td className="ocs-mono" style={{ fontWeight: 600, color: "var(--status-info)" }} data-column-priority="essential" data-label={t("ocs_col_imsi")}>
                         {r.imsi}
                       </td>
-                      <td className="ocs-mono" data-column-priority="important">{r.apn}</td>
-                      <td data-column-priority="essential">
+                      <td className="ocs-mono" data-column-priority="important" data-label={t("ocs_col_apn")}>{r.apn}</td>
+                      <td data-column-priority="essential" data-label={t("ocs_col_cc_type")}>
                         <span className={`ocs-badge ${r.cc_request_type === "TERMINATION" ? "status-closed" : "status-active"}`}>
                           {r.cc_request_type}
                         </span>
                       </td>
-                      <td className="ocs-mono" data-column-priority="supplementary">#{r.cc_request_number}</td>
-                      <td className="ocs-mono" data-column-priority="supplementary">
+                      <td className="ocs-mono" data-column-priority="supplementary" data-label={t("ocs_col_cc_num")}>#{r.cc_request_number}</td>
+                      <td className="ocs-mono" data-column-priority="supplementary" data-label={t("ocs_col_input")}>
                         <span style={{ color: "var(--chart-2)" }}>{formatBytes(r.input_octets)}</span>
                         <span style={{ color: "var(--text-muted)" }}> / </span>
                         <span style={{ color: "var(--chart-5)" }}>{formatBytes(r.output_octets)}</span>
                       </td>
-                      <td className="ocs-mono" style={{ fontWeight: 700, color: "var(--text-main)" }} data-column-priority="essential">
+                      <td className="ocs-mono" style={{ fontWeight: 700, color: "var(--text-main)" }} data-column-priority="essential" data-label={t("ocs_col_total_octets")}>
                         {formatBytes(r.total_octets)}
                       </td>
-                      <td data-column-priority="important">
+                      <td data-column-priority="important" data-label={t("ocs_col_charged")}>
                         <span className={`ocs-badge ${r.charged ? "status-active" : "status-closed"}`}>
                           {r.charged ? "CHARGED" : "ZERO / FREE"}
                         </span>
                       </td>
-                      <td data-column-priority="essential">
+                      <td data-column-priority="essential" data-label={t("ocs_col_result_code")}>
                         <span className={`ocs-badge ${r.result_code === 2001 ? "result-2001" : "result-error"}`}>
                           {r.result_code || 2001}
                         </span>
                       </td>
-                      <td className="ocs-mono" style={{ fontSize: "var(--ref-font-size-label-strong)", color: "var(--text-muted)" }} data-column-priority="supplementary">
+                      <td className="ocs-mono" style={{ fontSize: "var(--ref-font-size-label-strong)", color: "var(--text-muted)" }} data-column-priority="supplementary" data-label={t("ocs_col_created_at")}>
                         {r.created_at ? new Date(r.created_at).toLocaleString() : "-"}
                       </td>
                       <td data-column-priority="essential">

@@ -340,6 +340,20 @@
       padding: 1rem;
     }
 
+    .approvals-filters {
+      flex-direction: column;
+    }
+
+    .approvals-search {
+      min-width: 0;
+      width: 100%;
+    }
+
+    .approvals-filters .form-input {
+      width: 100%;
+      min-width: 0;
+    }
+
     .approvals-table-scroll {
       max-height: none;
       overflow: visible;
