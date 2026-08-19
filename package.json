@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit --incremental false --pretty false",
     "lint": "eslint",
     "check": "npm run lint && npm run typecheck && npm test && npm run build",
+    "check:full": "npm run lint && npm run typecheck && npm test && npm run test:component && npm run test:e2e && npm run mongo:test-core && npm run build",
     "mongo:init": "node scripts/init-mongo-indexes.mjs",
     "mongo:migrate-app-db": "node scripts/migrate-app-collections-to-app-db.mjs",
     "mongo:test-core": "node scripts/test-mongo-core.mjs",

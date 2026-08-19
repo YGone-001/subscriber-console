@@ -306,30 +306,81 @@ async function provisionExistingOcsSubscribers(open5gsDb) {
   });
 }
 
+/**
+ * Drop existing indexes whose key pattern conflicts with the desired index.
+ * This handles legacy indexes created with auto-generated names (e.g. "plan_id_1")
+ * that collide when we try to create a named index on the same key.
+ */
+async function dropConflictingIndexes(collection, desiredIndexes) {
+  const existing = await collection.listIndexes().toArray();
+  for (const desired of desiredIndexes) {
+    const desiredKey = JSON.stringify(desired.key);
+    for (const existingIdx of existing) {
+      if (existingIdx.name === '_id_') continue;
+      if (JSON.stringify(existingIdx.key) === desiredKey && existingIdx.name !== desired.name) {
+        await collection.dropIndex(existingIdx.name);
+        maintenanceActions.push({
+          database: collection.dbName,
+          collection: collection.collectionName,
+          action: 'drop_conflicting_index',
+          droppedName: existingIdx.name,
+          replacingWith: desired.name,
+        });
+      }
+    }
+  }
+}
+
 async function ensureIndexes() {
   await client.connect();
   const open5gsDb = client.db(open5gsDbName);
   const appDb = client.db(appDbName);
 
+  // ── open5gs.subscribers ──
   createdIndexes.push(...(await open5gsDb.collection('subscribers').createIndexes([
     { key: { imsi: 1 }, unique: true, name: 'uniq_imsi' },
+    { key: { msisdn: 1 }, name: 'subscriber_msisdn' },
   ])).map((name) => ({ database: open5gsDbName, collection: 'subscribers', name })));
 
-  createdIndexes.push(...(await open5gsDb.collection('ocs_tariff_plans').createIndexes([
+  // ── open5gs.ocs_tariff_plans ──
+  const tariffDesired = [
     { key: { plan_id: 1 }, unique: true, name: 'uniq_plan_id' },
     { key: { 'rules.rating_group': 1 }, name: 'rules_rating_group' },
-  ])).map((name) => ({ database: open5gsDbName, collection: 'ocs_tariff_plans', name })));
+  ];
+  await dropConflictingIndexes(open5gsDb.collection('ocs_tariff_plans'), tariffDesired);
+  createdIndexes.push(...(await open5gsDb.collection('ocs_tariff_plans').createIndexes(tariffDesired))
+    .map((name) => ({ database: open5gsDbName, collection: 'ocs_tariff_plans', name })));
 
-  createdIndexes.push(...(await open5gsDb.collection('ocs_subscribers').createIndexes([
+  // ── open5gs.ocs_subscribers ──
+  const ocsSubDesired = [
     { key: { imsi: 1 }, unique: true, name: 'uniq_ocs_subscriber_imsi' },
     { key: { plan_id: 1 }, name: 'ocs_subscriber_plan_id' },
-  ])).map((name) => ({ database: open5gsDbName, collection: 'ocs_subscribers', name })));
+    { key: { msisdn: 1 }, name: 'ocs_subscriber_msisdn' },
+  ];
+  await dropConflictingIndexes(open5gsDb.collection('ocs_subscribers'), ocsSubDesired);
+  createdIndexes.push(...(await open5gsDb.collection('ocs_subscribers').createIndexes(ocsSubDesired))
+    .map((name) => ({ database: open5gsDbName, collection: 'ocs_subscribers', name })));
 
-  createdIndexes.push(...(await open5gsDb.collection('ocs_balances').createIndexes([
+  // ── open5gs.ocs_balances ──
+  const balanceDesired = [
     { key: { imsi: 1 }, unique: true, name: 'uniq_ocs_balance_imsi' },
     { key: { updated_at: -1 }, name: 'ocs_balance_updated_at_desc' },
-  ])).map((name) => ({ database: open5gsDbName, collection: 'ocs_balances', name })));
+  ];
+  await dropConflictingIndexes(open5gsDb.collection('ocs_balances'), balanceDesired);
+  createdIndexes.push(...(await open5gsDb.collection('ocs_balances').createIndexes(balanceDesired))
+    .map((name) => ({ database: open5gsDbName, collection: 'ocs_balances', name })));
 
+  // ── open5gs.ocs_sessions ──
+  createdIndexes.push(...(await open5gsDb.collection('ocs_sessions').createIndexes([
+    { key: { state: 1, last_update_at: -1 }, name: 'ocs_session_state_updated' },
+  ])).map((name) => ({ database: open5gsDbName, collection: 'ocs_sessions', name })));
+
+  // ── open5gs.ocs_usage_records ──
+  createdIndexes.push(...(await open5gsDb.collection('ocs_usage_records').createIndexes([
+    { key: { created_at: -1 }, name: 'ocs_usage_created_at_desc' },
+  ])).map((name) => ({ database: open5gsDbName, collection: 'ocs_usage_records', name })));
+
+  // ── xcloud_ops collections ──
   createdIndexes.push(...(await appDb.collection('app_profiles').createIndexes([
     { key: { name: 1 }, unique: true, name: 'uniq_profile_name' },
     { key: { updated_at: -1 }, name: 'profile_updated_at_desc' },
