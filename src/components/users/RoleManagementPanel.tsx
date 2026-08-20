@@ -126,7 +126,7 @@ export default function RoleManagementPanel() {
     <>
       <div className="roles-page">
         <PageHeader
-          eyebrow="RBAC / MATRIX"
+          eyebrow={t("eyebrow_rbac_matrix")}
           icon={<Shield size={23} />}
           title={t("roles_title")}
           description={t("roles_subtitle")}

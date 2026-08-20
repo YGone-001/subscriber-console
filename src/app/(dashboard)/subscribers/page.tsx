@@ -306,7 +306,7 @@ export default function SubscriberPage() {
     <div className="subscribers-page-container animate-fade-in" onClick={() => setActiveDropdown(null)}>
 
       <PageHeader
-        eyebrow="IMSI / HSS"
+        eyebrow={t("eyebrow_imsi_hss")}
         icon={<Layers size={23} />}
         title={t("subscriber_title")}
         description={t("subscriber_subtitle")}

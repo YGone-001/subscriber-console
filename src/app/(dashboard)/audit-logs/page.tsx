@@ -204,7 +204,7 @@ export default function AuditLogsPage() {
     <>
       <div className="container animate-fade-in audit-container">
         <PageHeader
-          eyebrow="TRACE / EVIDENCE"
+          eyebrow={t("eyebrow_trace_evidence")}
           icon={<History size={23} />}
           title={t("audit_title")}
           description={t("audit_subtitle")}

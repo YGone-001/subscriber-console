@@ -205,7 +205,7 @@ export default function ApprovalCenterPanel() {
     <>
       <div className="approvals-page">
         <PageHeader
-          eyebrow="CHANGE / GATE"
+          eyebrow={t("eyebrow_change_gate")}
           icon={<GitBranch size={23} />}
           title={t("approvals_title")}
           description={t("approvals_subtitle")}

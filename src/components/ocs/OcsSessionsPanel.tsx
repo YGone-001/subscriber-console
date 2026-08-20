@@ -87,7 +87,7 @@ export default function OcsSessionsPanel() {
   return (
     <div className="ocs-container">
       <PageHeader
-        eyebrow="OCS / DIAMETER"
+        eyebrow={t("eyebrow_ocs_diameter")}
         title={t("ocs_sessions_title")}
         description={t("ocs_sessions_desc")}
         status={<><Lock size={12} /> {t("ocs_readonly_badge")}</>}

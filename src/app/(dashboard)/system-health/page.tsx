@@ -327,7 +327,7 @@ export default function SystemHealthPage() {
         )}
 
         <PageHeader
-          eyebrow="NOC / DIAGNOSTICS"
+          eyebrow={t("eyebrow_noc_diagnostics")}
           icon={<HeartPulse size={23} />}
           title={t("nav_system_health")}
           description={t("health_subsystems_title")}

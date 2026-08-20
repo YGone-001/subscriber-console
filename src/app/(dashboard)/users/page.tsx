@@ -43,7 +43,7 @@ export default function UsersPage() {
     <>
       <div className="users-page animate-fade-in">
         <PageHeader
-          eyebrow="RBAC / IAM"
+          eyebrow={t("eyebrow_rbac_iam")}
           icon={<Shield size={23} />}
           title={t("users_title")}
           description={t("users_subtitle")}

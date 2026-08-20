@@ -140,7 +140,7 @@ export default function OcsUsagePanel() {
   return (
     <div className="ocs-container">
       <PageHeader
-        eyebrow="OCS / USAGE"
+        eyebrow={t("eyebrow_ocs_usage")}
         title={t("ocs_usage_title")}
         description={t("ocs_usage_desc")}
         status={<><Lock size={12} /> {t("ocs_readonly_badge")}</>}
