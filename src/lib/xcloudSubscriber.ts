@@ -14,8 +14,6 @@ import type {
   Open5gsSubscriberDocument,
 } from '@/types/xcloud';
 
-type UnknownRecord = Record<string, unknown>;
-
 const ZERO_128 = '00000000000000000000000000000000';
 const DEFAULT_AUTH_KEY = '000102030405060708090A0B0C0D0E0F';
 const DEFAULT_IMEISV = '8672710677532401';

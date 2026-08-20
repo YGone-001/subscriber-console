@@ -4,7 +4,6 @@ import { useI18n } from "@/components/I18nProvider";
 import { EmptyState, LoadingRows } from "@/components/OperationFeedback";
 import { SortableTableHeader } from "@/components/ui/SortableTableHeader";
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
 export interface SubscriberTableProps {
   isLoading: boolean;
   totalSubscribers: number;
