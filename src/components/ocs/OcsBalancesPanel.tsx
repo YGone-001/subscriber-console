@@ -9,7 +9,6 @@ import {
   Database,
   Eye,
   Lock,
-  RefreshCw,
   Search,
   ShieldAlert,
   Users,
@@ -18,6 +17,7 @@ import {
 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import PageHeader from "@/components/ui/PageHeader";
+import RefreshButton from "@/components/ui/RefreshButton";
 import { DataTablePagination } from "@/components/ui/DataTablePagination";
 import { DataTableStateRow } from "@/components/ui/DataTableState";
 import { formatBytes } from "@/lib/unitParser";
@@ -78,15 +78,12 @@ export default function OcsBalancesPanel() {
         description={t("ocs_balances_desc")}
         status={<><Lock size={12} /> {t("ocs_readonly_badge")}</>}
         actions={<div className="ocs-header-actions">
-          <button
-            type="button"
-            className="ocs-btn"
+          <RefreshButton
+            loading={loading}
             onClick={() => refreshBalances()}
-            disabled={loading}
-          >
-            <RefreshCw size={14} className={loading ? "spin" : ""} />
-            <span>{t("refresh")}</span>
-          </button>
+            label={t("refresh")}
+            className="ocs-btn"
+          />
         </div>}
       />
 
