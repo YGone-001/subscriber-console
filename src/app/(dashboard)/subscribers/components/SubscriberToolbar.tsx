@@ -2,7 +2,26 @@ import React from "react";
 import { Download, Trash2, Settings2, Plus, Layers, DatabaseZap, FileUp } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 
-export function SubscriberToolbar(props: any) {
+/* eslint-disable @typescript-eslint/no-explicit-any */
+export interface SubscriberToolbarProps {
+  searchQuery: string;
+  setSearchQuery: any;
+  setCurrentPage: any;
+  setSelectedImsis: React.Dispatch<React.SetStateAction<string[]>>;
+  selectedImsis: string[];
+  canEditSubscribers: boolean;
+  setIsPolicyModalOpen: any;
+  setIsDataHubOpen: any;
+  handleBulkDelete: () => void;
+  isDeletingBulk: boolean;
+  pendingDelete: any;
+  handleOpenNew: () => void;
+  setIsBatchOpen: any;
+  mutateSubscribers: () => void;
+  setFeedback: any;
+}
+
+export function SubscriberToolbar(props: SubscriberToolbarProps) {
   const { t } = useI18n();
   const {
     searchQuery, setSearchQuery, setCurrentPage, setSelectedImsis,

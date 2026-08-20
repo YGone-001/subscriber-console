@@ -27,6 +27,7 @@ import "./system-health.css";
 import PageHeader, { type PageHeaderTone } from "@/components/ui/PageHeader";
 import SectionHeader from "@/components/ui/SectionHeader";
 import { Dialog } from "@/components/ui/Dialog";
+import SubsystemCard from "@/components/health/SubsystemCard";
 
 type HealthNotice = {
   type: "success" | "error" | "warning";
@@ -348,186 +349,64 @@ export default function SystemHealthPage() {
 
           <div className="health-subsystems-grid">
             {/* 1. Database Subsystem */}
-            <div className={`subsystem-card ${systemHealth?.subsystems?.database?.status || 'healthy'}`}>
-              <div>
-                <div className="subsystem-header">
-                  <div className="subsystem-title-box">
-                    <div className="subsystem-icon-wrap">
-                      <Database size={20} color="var(--primary)" />
-                    </div>
-                    <div>
-                      <h3 className="subsystem-name">{t("health_subsystem_db")}</h3>
-                      <div className="subsystem-desc">
-                        {systemHealth?.subsystems?.database?.open5gsDb || 'open5gs'} / {systemHealth?.subsystems?.database?.appDb || 'app'}
-                      </div>
-                    </div>
-                  </div>
-                  {getStatusBadge(systemHealth?.subsystems?.database?.status)}
-                </div>
-
-                <div className="subsystem-metrics-grid">
-                  <div className="subsystem-metric-item">
-                    <div className="subsystem-metric-label">{t("health_db_latency")}</div>
-                    <div className="subsystem-metric-val">
-                      {systemHealth?.subsystems?.database?.latencyMs !== undefined ? `${systemHealth.subsystems.database.latencyMs} ms` : '--'}
-                    </div>
-                  </div>
-                  <div className="subsystem-metric-item">
-                    <div className="subsystem-metric-label">{t("health_db_collections")}</div>
-                    <div className="subsystem-metric-val">
-                      {systemHealth?.subsystems?.database ? `${systemHealth.subsystems.database.existingCollections} / ${systemHealth.subsystems.database.totalCollections}` : '--'}
-                    </div>
-                  </div>
-                  <div className="subsystem-metric-item">
-                    <div className="subsystem-metric-label">{t("health_db_indexes")}</div>
-                    <div className={`subsystem-metric-val ${(systemHealth?.subsystems?.database?.missingIndexesCount || 0) > 0 ? 'danger' : 'success'}`}>
-                      {systemHealth?.subsystems?.database?.missingIndexesCount ?? '--'}
-                    </div>
-                  </div>
-                  <div className="subsystem-metric-item">
-                    <div className="subsystem-metric-label">{t("status")}</div>
-                    <div className={`subsystem-metric-val ${systemHealth?.subsystems?.database?.ready ? 'success' : 'danger'}`}>
-                      {systemHealth?.subsystems?.database?.ready ? 'Ready' : 'Attention'}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <SubsystemCard
+              status={systemHealth?.subsystems?.database?.status || 'healthy'}
+              icon={<Database size={20} color="var(--primary)" />}
+              name={t("health_subsystem_db")}
+              description={`${systemHealth?.subsystems?.database?.open5gsDb || 'open5gs'} / ${systemHealth?.subsystems?.database?.appDb || 'app'}`}
+              statusBadge={getStatusBadge(systemHealth?.subsystems?.database?.status)}
+              metrics={[
+                { label: t("health_db_latency"), value: systemHealth?.subsystems?.database?.latencyMs !== undefined ? `${systemHealth.subsystems.database.latencyMs} ms` : '--' },
+                { label: t("health_db_collections"), value: systemHealth?.subsystems?.database ? `${systemHealth.subsystems.database.existingCollections} / ${systemHealth.subsystems.database.totalCollections}` : '--' },
+                { label: t("health_db_indexes"), value: systemHealth?.subsystems?.database?.missingIndexesCount ?? '--', tone: (systemHealth?.subsystems?.database?.missingIndexesCount || 0) > 0 ? 'danger' : 'success' },
+                { label: t("status"), value: systemHealth?.subsystems?.database?.ready ? 'Ready' : 'Attention', tone: systemHealth?.subsystems?.database?.ready ? 'success' : 'danger' },
+              ]}
+            />
 
             {/* 2. OCS Engine Subsystem */}
-            <div className={`subsystem-card ${systemHealth?.subsystems?.ocsEngine?.status || 'healthy'}`}>
-              <div>
-                <div className="subsystem-header">
-                  <div className="subsystem-title-box">
-                    <div className="subsystem-icon-wrap">
-                      <Zap size={20} color="var(--chart-4)" />
-                    </div>
-                    <div>
-                      <h3 className="subsystem-name">{t("health_subsystem_ocs")}</h3>
-                      <div className="subsystem-desc">Online Charging & Balances</div>
-                    </div>
-                  </div>
-                  {getStatusBadge(systemHealth?.subsystems?.ocsEngine?.status)}
-                </div>
-
-                <div className="subsystem-metrics-grid">
-                  <div className="subsystem-metric-item">
-                    <div className="subsystem-metric-label">{t("health_ocs_invariants")}</div>
-                    <div className={`subsystem-metric-val ${systemHealth?.subsystems?.ocsEngine?.invariantsOk ? 'success' : 'danger'}`}>
-                      {systemHealth?.subsystems?.ocsEngine?.invariantsOk ? '100% OK' : `${systemHealth?.subsystems?.ocsEngine?.brokenInvariantsCount || 0} Broken`}
-                    </div>
-                  </div>
-                  <div className="subsystem-metric-item">
-                    <div className="subsystem-metric-label">{t("health_ocs_sessions")}</div>
-                    <div className="subsystem-metric-val">
-                      {systemHealth?.subsystems?.ocsEngine?.activeSessions ?? '--'}
-                    </div>
-                  </div>
-                  <div className="subsystem-metric-item">
-                    <div className="subsystem-metric-label">{t("health_ocs_reservations")}</div>
-                    <div className="subsystem-metric-val">
-                      {systemHealth?.subsystems?.ocsEngine?.activeReservations ?? '--'}
-                    </div>
-                  </div>
-                  <div className="subsystem-metric-item">
-                    <div className="subsystem-metric-label">{t("health_ocs_tariff_plans")}</div>
-                    <div className="subsystem-metric-val">
-                      {systemHealth?.subsystems?.ocsEngine?.activeTariffPlans ?? '--'}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <SubsystemCard
+              status={systemHealth?.subsystems?.ocsEngine?.status || 'healthy'}
+              icon={<Zap size={20} color="var(--chart-4)" />}
+              name={t("health_subsystem_ocs")}
+              description="Online Charging & Balances"
+              statusBadge={getStatusBadge(systemHealth?.subsystems?.ocsEngine?.status)}
+              metrics={[
+                { label: t("health_ocs_invariants"), value: systemHealth?.subsystems?.ocsEngine?.invariantsOk ? '100% OK' : `${systemHealth?.subsystems?.ocsEngine?.brokenInvariantsCount || 0} Broken`, tone: systemHealth?.subsystems?.ocsEngine?.invariantsOk ? 'success' : 'danger' },
+                { label: t("health_ocs_sessions"), value: systemHealth?.subsystems?.ocsEngine?.activeSessions ?? '--' },
+                { label: t("health_ocs_reservations"), value: systemHealth?.subsystems?.ocsEngine?.activeReservations ?? '--' },
+                { label: t("health_ocs_tariff_plans"), value: systemHealth?.subsystems?.ocsEngine?.activeTariffPlans ?? '--' },
+              ]}
+            />
 
             {/* 3. HSS Core Subsystem */}
-            <div className={`subsystem-card ${systemHealth?.subsystems?.hssCore?.status || 'healthy'}`}>
-              <div>
-                <div className="subsystem-header">
-                  <div className="subsystem-title-box">
-                    <div className="subsystem-icon-wrap">
-                      <Layers size={20} color="var(--chart-3)" />
-                    </div>
-                    <div>
-                      <h3 className="subsystem-name">{t("health_subsystem_hss")}</h3>
-                      <div className="subsystem-desc">Subscriber Schemas & Slices</div>
-                    </div>
-                  </div>
-                  {getStatusBadge(systemHealth?.subsystems?.hssCore?.status)}
-                </div>
-
-                <div className="subsystem-metrics-grid">
-                  <div className="subsystem-metric-item">
-                    <div className="subsystem-metric-label">{t("health_hss_auth_credentials")}</div>
-                    <div className={`subsystem-metric-val ${(systemHealth?.subsystems?.hssCore?.missingCredentialsCount || 0) > 0 ? 'danger' : 'success'}`}>
-                      {(systemHealth?.subsystems?.hssCore?.missingCredentialsCount || 0) > 0 ? `${systemHealth?.subsystems?.hssCore?.missingCredentialsCount} Invalid` : '100% OK'}
-                    </div>
-                  </div>
-                  <div className="subsystem-metric-item">
-                    <div className="subsystem-metric-label">{t("health_hss_slice_routing")}</div>
-                    <div className={`subsystem-metric-val ${(systemHealth?.subsystems?.hssCore?.missingSlicesCount || 0) > 0 ? 'danger' : 'success'}`}>
-                      {(systemHealth?.subsystems?.hssCore?.missingSlicesCount || 0) > 0 ? `${systemHealth?.subsystems?.hssCore?.missingSlicesCount} Missing` : 'Optimal'}
-                    </div>
-                  </div>
-                  <div className="subsystem-metric-item">
-                    <div className="subsystem-metric-label">{t("health_hss_dangling_profiles")}</div>
-                    <div className={`subsystem-metric-val ${(systemHealth?.subsystems?.hssCore?.danglingProfilesCount || 0) > 0 ? 'warning' : 'success'}`}>
-                      {systemHealth?.subsystems?.hssCore?.danglingProfilesCount ?? '--'}
-                    </div>
-                  </div>
-                  <div className="subsystem-metric-item">
-                    <div className="subsystem-metric-label">{t("profiles_title")}</div>
-                    <div className="subsystem-metric-val">
-                      {systemHealth?.subsystems?.hssCore?.activeProfilesCount ?? '--'}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <SubsystemCard
+              status={systemHealth?.subsystems?.hssCore?.status || 'healthy'}
+              icon={<Layers size={20} color="var(--chart-3)" />}
+              name={t("health_subsystem_hss")}
+              description="Subscriber Schemas & Slices"
+              statusBadge={getStatusBadge(systemHealth?.subsystems?.hssCore?.status)}
+              metrics={[
+                { label: t("health_hss_auth_credentials"), value: (systemHealth?.subsystems?.hssCore?.missingCredentialsCount || 0) > 0 ? `${systemHealth?.subsystems?.hssCore?.missingCredentialsCount} Invalid` : '100% OK', tone: (systemHealth?.subsystems?.hssCore?.missingCredentialsCount || 0) > 0 ? 'danger' : 'success' },
+                { label: t("health_hss_slice_routing"), value: (systemHealth?.subsystems?.hssCore?.missingSlicesCount || 0) > 0 ? `${systemHealth?.subsystems?.hssCore?.missingSlicesCount} Missing` : 'Optimal', tone: (systemHealth?.subsystems?.hssCore?.missingSlicesCount || 0) > 0 ? 'danger' : 'success' },
+                { label: t("health_hss_dangling_profiles"), value: systemHealth?.subsystems?.hssCore?.danglingProfilesCount ?? '--', tone: (systemHealth?.subsystems?.hssCore?.danglingProfilesCount || 0) > 0 ? 'warning' : 'success' },
+                { label: t("profiles_title"), value: systemHealth?.subsystems?.hssCore?.activeProfilesCount ?? '--' },
+              ]}
+            />
 
             {/* 4. Security Subsystem */}
-            <div className={`subsystem-card ${systemHealth?.subsystems?.security?.status || 'healthy'}`}>
-              <div>
-                <div className="subsystem-header">
-                  <div className="subsystem-title-box">
-                    <div className="subsystem-icon-wrap">
-                      <ShieldCheck size={20} color="var(--chart-5)" />
-                    </div>
-                    <div>
-                      <h3 className="subsystem-name">{t("health_subsystem_security")}</h3>
-                      <div className="subsystem-desc">RBAC & Operational Alarms</div>
-                    </div>
-                  </div>
-                  {getStatusBadge(systemHealth?.subsystems?.security?.status)}
-                </div>
-
-                <div className="subsystem-metrics-grid">
-                  <div className="subsystem-metric-item">
-                    <div className="subsystem-metric-label">{t("health_sec_root")}</div>
-                    <div className={`subsystem-metric-val ${systemHealth?.subsystems?.security?.rootUserConfigured ? 'success' : 'danger'}`}>
-                      {systemHealth?.subsystems?.security?.rootUserConfigured ? 'Active' : 'Missing'}
-                    </div>
-                  </div>
-                  <div className="subsystem-metric-item">
-                    <div className="subsystem-metric-label">{t("health_sec_alerts")}</div>
-                    <div className={`subsystem-metric-val ${(systemHealth?.subsystems?.security?.criticalAlertsCount || 0) > 0 ? 'danger' : 'success'}`}>
-                      {systemHealth?.subsystems?.security?.unacknowledgedAlertsCount ?? '--'}
-                    </div>
-                  </div>
-                  <div className="subsystem-metric-item">
-                    <div className="subsystem-metric-label">{t("health_sec_approvals")}</div>
-                    <div className="subsystem-metric-val">
-                      {systemHealth?.subsystems?.security?.pendingApprovalsCount ?? '--'}
-                    </div>
-                  </div>
-                  <div className="subsystem-metric-item">
-                    <div className="subsystem-metric-label">{t("users_title")}</div>
-                    <div className="subsystem-metric-val">
-                      {systemHealth?.subsystems?.security?.activeUsersCount ?? '--'}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <SubsystemCard
+              status={systemHealth?.subsystems?.security?.status || 'healthy'}
+              icon={<ShieldCheck size={20} color="var(--chart-5)" />}
+              name={t("health_subsystem_security")}
+              description="RBAC & Operational Alarms"
+              statusBadge={getStatusBadge(systemHealth?.subsystems?.security?.status)}
+              metrics={[
+                { label: t("health_sec_root"), value: systemHealth?.subsystems?.security?.rootUserConfigured ? 'Active' : 'Missing', tone: systemHealth?.subsystems?.security?.rootUserConfigured ? 'success' : 'danger' },
+                { label: t("health_sec_alerts"), value: systemHealth?.subsystems?.security?.unacknowledgedAlertsCount ?? '--', tone: (systemHealth?.subsystems?.security?.criticalAlertsCount || 0) > 0 ? 'danger' : 'success' },
+                { label: t("health_sec_approvals"), value: systemHealth?.subsystems?.security?.pendingApprovalsCount ?? '--' },
+                { label: t("users_title"), value: systemHealth?.subsystems?.security?.activeUsersCount ?? '--' },
+              ]}
+            />
           </div>
         </section>
 

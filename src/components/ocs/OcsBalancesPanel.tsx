@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useMemo } from "react";
+import useSWR from "swr";
+import { fetcher } from "@/lib/fetcher";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -24,9 +26,6 @@ import type { OcsBalanceRecord } from "@/server/repositories/ocsOperationsReposi
 
 export default function OcsBalancesPanel() {
   const { t } = useI18n();
-  const [loading, setLoading] = useState(false);
-  const [records, setRecords] = useState<OcsBalanceRecord[]>([]);
-  const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
   const [search, setSearch] = useState("");
@@ -41,47 +40,32 @@ export default function OcsBalancesPanel() {
     return activeFields.includes(sortField) ? (sortOrder === "asc" ? "ascending" : "descending") : undefined;
   };
 
-  const [summary, setSummary] = useState({
+  const balancesUrl = useMemo(() => {
+    const params = new URLSearchParams({
+      page: String(page),
+      limit: String(limit),
+      imsi: search.trim(),
+      invariant: invariantFilter,
+      status: statusFilter,
+      sortField,
+      sortOrder,
+    });
+    return `/api/ocs/balances?${params.toString()}`;
+  }, [page, limit, search, invariantFilter, statusFilter, sortField, sortOrder]);
+
+  const { data, isLoading: loading, mutate: refreshBalances } = useSWR(balancesUrl, fetcher, {
+    keepPreviousData: true,
+  });
+
+  const records: OcsBalanceRecord[] = data?.records || [];
+  const total: number = data?.total || 0;
+  const summary = data?.summary || {
     totalSubscribers: 0,
     totalDataAllocated: 0,
     totalDataUsed: 0,
     totalDataReserved: 0,
     totalDataAvailable: 0,
-  });
-
-  const fetchBalances = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({
-        page: String(page),
-        limit: String(limit),
-        imsi: search.trim(),
-        invariant: invariantFilter,
-        status: statusFilter,
-        sortField,
-        sortOrder,
-      });
-      const res = await fetch(`/api/ocs/balances?${params.toString()}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.ok) {
-          setRecords(data.records || []);
-          setTotal(data.total || 0);
-          if (data.summary) {
-            setSummary(data.summary);
-          }
-        }
-      }
-    } catch (e) {
-      console.error("Failed to fetch OCS balances:", e);
-    } finally {
-      setLoading(false);
-    }
-  }, [page, limit, search, invariantFilter, statusFilter, sortField, sortOrder]);
-
-  useEffect(() => {
-    fetchBalances();
-  }, [fetchBalances]);
+  };
 
   const totalPages = Math.ceil(total / limit) || 1;
   const brokenCount = records.filter((r) => !r.invariant_ok).length;
@@ -97,7 +81,7 @@ export default function OcsBalancesPanel() {
           <button
             type="button"
             className="ocs-btn"
-            onClick={fetchBalances}
+            onClick={() => refreshBalances()}
             disabled={loading}
           >
             <RefreshCw size={14} className={loading ? "spin" : ""} />
