@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useMemo } from "react";
+import useSWR from "swr";
+import { fetcher } from "@/lib/fetcher";
 import {
   ArrowDownCircle,
   ArrowUpCircle,
@@ -29,110 +31,77 @@ import type {
 export default function OcsUsagePanel() {
   const { t } = useI18n();
   const [activeTab, setActiveTab] = useState<"usage" | "reservations">("usage");
-  const [loading, setLoading] = useState(false);
 
   // Tab 1: Usage Records state
-  const [usageRecords, setUsageRecords] = useState<OcsUsageRecord[]>([]);
-  const [usageTotal, setUsageTotal] = useState(0);
   const [usagePage, setUsagePage] = useState(1);
   const [usageLimit, setUsageLimit] = useState(20);
   const [usageSearch, setUsageSearch] = useState("");
   const [ccTypeFilter, setCcTypeFilter] = useState("all");
   const [chargedFilter, setChargedFilter] = useState("all");
 
-  const [usageSummary, setUsageSummary] = useState({
-    totalRecords: 0,
-    totalChargedRecords: 0,
-    totalInputOctets: 0,
-    totalOutputOctets: 0,
-    totalOctets: 0,
-  });
-
   // Tab 2: Reservations state
-  const [reservationRecords, setReservationRecords] = useState<OcsReservationRecord[]>([]);
-  const [reservationTotal, setReservationTotal] = useState(0);
   const [reservationPage, setReservationPage] = useState(1);
   const [reservationLimit, setReservationLimit] = useState(20);
   const [reservationSearch, setReservationSearch] = useState("");
   const [stateFilter, setStateFilter] = useState("all");
   const [chargingTypeFilter, setChargingTypeFilter] = useState("all");
 
-  const [reservationSummary, setReservationSummary] = useState({
+  // Selected item for detail drawer
+  const [selectedRecord, setSelectedRecord] = useState<Record<string, unknown> | null>(null);
+  const [detailTitle, setDetailTitle] = useState("");
+
+  const usageUrl = useMemo(() => {
+    const params = new URLSearchParams({
+      page: String(usagePage),
+      limit: String(usageLimit),
+      imsi: usageSearch.trim(),
+      ccRequestType: ccTypeFilter,
+      charged: chargedFilter,
+    });
+    return `/api/ocs/usage?${params.toString()}`;
+  }, [usagePage, usageLimit, usageSearch, ccTypeFilter, chargedFilter]);
+
+  const reservationsUrl = useMemo(() => {
+    const params = new URLSearchParams({
+      page: String(reservationPage),
+      limit: String(reservationLimit),
+      imsi: reservationSearch.trim(),
+      state: stateFilter,
+      chargingType: chargingTypeFilter,
+    });
+    return `/api/ocs/reservations?${params.toString()}`;
+  }, [reservationPage, reservationLimit, reservationSearch, stateFilter, chargingTypeFilter]);
+
+  const { data: usageData, isLoading: usageLoading, mutate: refreshUsage } = useSWR(usageUrl, fetcher, {
+    keepPreviousData: true,
+  });
+
+  const { data: reservationData, isLoading: reservationLoading, mutate: refreshReservations } = useSWR(reservationsUrl, fetcher, {
+    keepPreviousData: true,
+  });
+
+  const loading = activeTab === "usage" ? usageLoading : reservationLoading;
+
+  const usageRecords: OcsUsageRecord[] = usageData?.records || [];
+  const usageTotal: number = usageData?.total || 0;
+  const usageSummary = usageData?.summary || {
+    totalRecords: 0,
+    totalChargedRecords: 0,
+    totalInputOctets: 0,
+    totalOutputOctets: 0,
+    totalOctets: 0,
+  };
+
+  const reservationRecords: OcsReservationRecord[] = reservationData?.records || [];
+  const reservationTotal: number = reservationData?.total || 0;
+  const reservationSummary = reservationData?.summary || {
     totalReservations: 0,
     activeReservations: 0,
     settledReservations: 0,
     orphanedReservations: 0,
     totalReservedOctets: 0,
     totalReleasedOctets: 0,
-  });
-
-  // Selected item for detail drawer
-  const [selectedRecord, setSelectedRecord] = useState<Record<string, unknown> | null>(null);
-  const [detailTitle, setDetailTitle] = useState("");
-
-  const fetchUsage = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({
-        page: String(usagePage),
-        limit: String(usageLimit),
-        imsi: usageSearch.trim(),
-        ccRequestType: ccTypeFilter,
-        charged: chargedFilter,
-      });
-      const res = await fetch(`/api/ocs/usage?${params.toString()}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.ok) {
-          setUsageRecords(data.records || []);
-          setUsageTotal(data.total || 0);
-          if (data.summary) {
-            setUsageSummary(data.summary);
-          }
-        }
-      }
-    } catch (e) {
-      console.error("Failed to fetch OCS usage:", e);
-    } finally {
-      setLoading(false);
-    }
-  }, [usagePage, usageLimit, usageSearch, ccTypeFilter, chargedFilter]);
-
-  const fetchReservations = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({
-        page: String(reservationPage),
-        limit: String(reservationLimit),
-        imsi: reservationSearch.trim(),
-        state: stateFilter,
-        chargingType: chargingTypeFilter,
-      });
-      const res = await fetch(`/api/ocs/reservations?${params.toString()}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.ok) {
-          setReservationRecords(data.records || []);
-          setReservationTotal(data.total || 0);
-          if (data.summary) {
-            setReservationSummary(data.summary);
-          }
-        }
-      }
-    } catch (e) {
-      console.error("Failed to fetch OCS reservations:", e);
-    } finally {
-      setLoading(false);
-    }
-  }, [reservationPage, reservationLimit, reservationSearch, stateFilter, chargingTypeFilter]);
-
-  useEffect(() => {
-    if (activeTab === "usage") {
-      fetchUsage();
-    } else {
-      fetchReservations();
-    }
-  }, [activeTab, fetchUsage, fetchReservations]);
+  };
 
   const usageTotalPages = Math.ceil(usageTotal / usageLimit) || 1;
   const reservationTotalPages = Math.ceil(reservationTotal / reservationLimit) || 1;
@@ -147,7 +116,7 @@ export default function OcsUsagePanel() {
         actions={<div className="ocs-header-actions">
           <RefreshButton
             loading={loading}
-            onClick={activeTab === "usage" ? fetchUsage : fetchReservations}
+            onClick={() => activeTab === "usage" ? refreshUsage() : refreshReservations()}
             label={t("refresh")}
             className="ocs-btn"
           />
