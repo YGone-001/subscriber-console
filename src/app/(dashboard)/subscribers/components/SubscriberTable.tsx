@@ -4,7 +4,42 @@ import { useI18n } from "@/components/I18nProvider";
 import { EmptyState, LoadingRows } from "@/components/OperationFeedback";
 import { SortableTableHeader } from "@/components/ui/SortableTableHeader";
 
-export function SubscriberTable(props: any) {
+/* eslint-disable @typescript-eslint/no-explicit-any */
+export interface SubscriberTableProps {
+  isLoading: boolean;
+  totalSubscribers: number;
+  searchQuery: string;
+  statusFilter: string;
+  canEditSubscribers: boolean;
+  handleOpenNew: () => void;
+  isAllPageSelected: boolean;
+  selectedOnPageCount: number;
+  pageImsis: string[];
+  toggleSelectAll: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  sortField: string;
+  sortDirection: "asc" | "desc";
+  handleSort: (field: string) => void;
+  renderSortIcon: (field: string) => React.ReactNode;
+  paginatedSubscribers: any[];
+  selectedImsis: string[];
+  setSelectedImsis: React.Dispatch<React.SetStateAction<string[]>>;
+  copiedImsi: string | null;
+  handleCopyImsi: (imsi: string, e?: any) => void;
+  resolveNetwork: any;
+  formatBytes: any;
+  formatFullDate: any;
+  timeAgo: any;
+  handleOpenEdit: any;
+  handleDelete: any;
+  isDeletingSingle: any;
+  pendingDelete: any;
+  activeDropdown: string | null;
+  setActiveDropdown: React.Dispatch<React.SetStateAction<string | null>>;
+  setTraceImsi: (imsi: string) => void;
+  handleOpenTrafficAdjustment: any;
+}
+
+export function SubscriberTable(props: SubscriberTableProps) {
   const { t } = useI18n();
   const {
     isLoading, totalSubscribers, searchQuery, statusFilter, canEditSubscribers,
