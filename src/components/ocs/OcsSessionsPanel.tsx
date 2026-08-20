@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useMemo } from "react";
+import useSWR from "swr";
+import { fetcher } from "@/lib/fetcher";
 import {
   Activity,
   CheckCircle,
@@ -23,9 +25,6 @@ import type { OcsSessionRecord } from "@/server/repositories/ocsOperationsReposi
 
 export default function OcsSessionsPanel() {
   const { t } = useI18n();
-  const [loading, setLoading] = useState(false);
-  const [records, setRecords] = useState<OcsSessionRecord[]>([]);
-  const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
   const [search, setSearch] = useState("");
@@ -40,47 +39,32 @@ export default function OcsSessionsPanel() {
     return activeFields.includes(sortField) ? (sortOrder === "asc" ? "ascending" : "descending") : undefined;
   };
 
-  const [summary, setSummary] = useState({
+  const sessionsUrl = useMemo(() => {
+    const params = new URLSearchParams({
+      page: String(page),
+      limit: String(limit),
+      imsi: search.trim(),
+      state: stateFilter,
+      interfaceType: interfaceFilter,
+      sortField,
+      sortOrder,
+    });
+    return `/api/ocs/sessions?${params.toString()}`;
+  }, [page, limit, search, stateFilter, interfaceFilter, sortField, sortOrder]);
+
+  const { data, isLoading: loading, mutate: refreshSessions } = useSWR(sessionsUrl, fetcher, {
+    keepPreviousData: true,
+  });
+
+  const records: OcsSessionRecord[] = data?.records || [];
+  const total: number = data?.total || 0;
+  const summary = data?.summary || {
     activeSessions: 0,
     closingSessions: 0,
     closedSessions: 0,
     totalGrantedOctets: 0,
     totalUsedOctets: 0,
-  });
-
-  const fetchSessions = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({
-        page: String(page),
-        limit: String(limit),
-        imsi: search.trim(),
-        state: stateFilter,
-        interfaceType: interfaceFilter,
-        sortField,
-        sortOrder,
-      });
-      const res = await fetch(`/api/ocs/sessions?${params.toString()}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.ok) {
-          setRecords(data.records || []);
-          setTotal(data.total || 0);
-          if (data.summary) {
-            setSummary(data.summary);
-          }
-        }
-      }
-    } catch (e) {
-      console.error("Failed to fetch OCS sessions:", e);
-    } finally {
-      setLoading(false);
-    }
-  }, [page, limit, search, stateFilter, interfaceFilter, sortField, sortOrder]);
-
-  useEffect(() => {
-    fetchSessions();
-  }, [fetchSessions]);
+  };
 
   const totalPages = Math.ceil(total / limit) || 1;
 
@@ -94,7 +78,7 @@ export default function OcsSessionsPanel() {
         actions={<div className="ocs-header-actions">
           <RefreshButton
             loading={loading}
-            onClick={fetchSessions}
+            onClick={() => refreshSessions()}
             label={t("refresh")}
             className="ocs-btn"
           />
