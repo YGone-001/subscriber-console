@@ -407,10 +407,10 @@ export default function OcsUsagePanel() {
                 ) : (
                   usageRecords.map((r) => (
                     <tr key={r.id}>
-                      <td className="ocs-mono" style={{ fontSize: "var(--ref-font-size-data)", color: "var(--status-info)", maxWidth: "180px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.session_id} data-column-priority="essential" data-label={t("ocs_col_session_id")}>
+                      <td className="ocs-mono ocs-cell-session-id" title={r.session_id} data-column-priority="essential" data-label={t("ocs_col_session_id")}>
                         {r.session_id}
                       </td>
-                      <td className="ocs-mono" style={{ fontWeight: 600, color: "var(--status-info)" }} data-column-priority="essential" data-label={t("ocs_col_imsi")}>
+                      <td className="ocs-mono ocs-cell-imsi" data-column-priority="essential" data-label={t("ocs_col_imsi")}>
                         {r.imsi}
                       </td>
                       <td className="ocs-mono" data-column-priority="important" data-label={t("ocs_col_apn")}>{r.apn}</td>
@@ -438,14 +438,13 @@ export default function OcsUsagePanel() {
                           {r.result_code || 2001}
                         </span>
                       </td>
-                      <td className="ocs-mono" style={{ fontSize: "var(--ref-font-size-label-strong)", color: "var(--text-muted)" }} data-column-priority="supplementary" data-label={t("ocs_col_created_at")}>
+                      <td className="ocs-mono ocs-cell-timestamp" data-column-priority="supplementary" data-label={t("ocs_col_created_at")}>
                         {r.created_at ? new Date(r.created_at).toLocaleString() : "-"}
                       </td>
                       <td data-column-priority="essential">
                         <button
                           type="button"
-                          className="ocs-btn"
-                          style={{ padding: "0.35rem 0.65rem", fontSize: "var(--ref-font-size-label-strong)" }}
+                          className="ocs-btn ocs-action-btn"
                           onClick={() => {
                             setSelectedRecord(r as unknown as Record<string, unknown>);
                             setDetailTitle(`CDR Usage Record: ${r.session_id} (#${r.cc_request_number})`);
@@ -498,15 +497,15 @@ export default function OcsUsagePanel() {
 
                     return (
                       <tr key={r.id}>
-                        <td className="ocs-mono" style={{ fontSize: "var(--ref-font-size-data)", color: "var(--status-info)", maxWidth: "180px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.session_id} data-column-priority="essential">
+                        <td className="ocs-mono ocs-cell-session-id" title={r.session_id} data-column-priority="essential">
                           {r.session_id}
                         </td>
-                        <td className="ocs-mono" style={{ fontWeight: 600, color: "var(--status-info)" }} data-column-priority="essential">
+                        <td className="ocs-mono ocs-cell-imsi" data-column-priority="essential">
                           {r.imsi}
                         </td>
                         <td className="ocs-mono" data-column-priority="important">{r.apn}</td>
                         <td data-column-priority="essential">
-                          <span className="ocs-badge" style={{ background: "var(--neutral-soft)", color: "var(--text-secondary)" }}>
+                          <span className="ocs-badge ocs-badge--neutral">
                             {r.charging_type}
                           </span>
                         </td>
@@ -531,14 +530,13 @@ export default function OcsUsagePanel() {
                             {r.result_code}
                           </span>
                         </td>
-                        <td className="ocs-mono" style={{ fontSize: "var(--ref-font-size-label-strong)", color: "var(--text-muted)" }} data-column-priority="supplementary">
+                        <td className="ocs-mono ocs-cell-timestamp" data-column-priority="supplementary">
                           {r.updated_at ? new Date(r.updated_at).toLocaleString() : "-"}
                         </td>
                         <td data-column-priority="essential">
                           <button
                             type="button"
-                            className="ocs-btn"
-                            style={{ padding: "0.35rem 0.65rem", fontSize: "var(--ref-font-size-label-strong)" }}
+                            className="ocs-btn ocs-action-btn"
                             onClick={() => {
                               setSelectedRecord(r as unknown as Record<string, unknown>);
                               setDetailTitle(`Quota Reservation: ${r.session_id} (#${r.grant_cc_request_number})`);
