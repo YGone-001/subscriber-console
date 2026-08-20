@@ -5,7 +5,7 @@ import { UsersSummaryPanel } from "./components/UsersSummaryPanel";
 import { UsersToolbar } from "./components/UsersToolbar";
 import { UsersTable } from "./components/UsersTable";
 import { UserDrawer } from "./components/UserDrawer";
-import { Shield, Upload, Plus } from "lucide-react";
+import { Shield, Plus } from "lucide-react";
 import { EmptyState } from "@/components/OperationFeedback";
 import { useUsersPage } from "./hooks/useUsersPage";
 import PageHeader from "@/components/ui/PageHeader";
@@ -47,20 +47,10 @@ export default function UsersPage() {
           icon={<Shield size={23} />}
           title={t("users_title")}
           description={t("users_subtitle")}
-          actions={<div className="users-header-actions">
-            <button
-              type="button"
-              className="btn btn-outline"
-              onClick={() => setNotice({ type: "info", text: t("users_import_unavailable") })}
-            >
-              <Upload size={16} />
-              {t("users_bulk_import")}
-            </button>
-            <button type="button" className="btn btn-primary" onClick={openCreateDrawer}>
-              <Plus size={17} />
-              {t("users_new")}
-            </button>
-          </div>}
+          actions={<button type="button" className="btn btn-primary" onClick={openCreateDrawer}>
+            <Plus size={17} />
+            {t("users_new")}
+          </button>}
         />
 
         <UsersSummaryPanel
