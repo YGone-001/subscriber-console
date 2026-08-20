@@ -105,7 +105,7 @@ export default function SystemHealthPage() {
         body: JSON.stringify({ cursor, phase })
       });
 
-      if (!res.ok) throw new Error("Scan API failure");
+      if (!res.ok) throw new Error(t("health_err_scan_api"));
       const data = await res.json();
 
       scanMetrics.current.total += data.scannedCount;
@@ -359,7 +359,7 @@ export default function SystemHealthPage() {
                 { label: t("health_db_latency"), value: systemHealth?.subsystems?.database?.latencyMs !== undefined ? `${systemHealth.subsystems.database.latencyMs} ms` : '--' },
                 { label: t("health_db_collections"), value: systemHealth?.subsystems?.database ? `${systemHealth.subsystems.database.existingCollections} / ${systemHealth.subsystems.database.totalCollections}` : '--' },
                 { label: t("health_db_indexes"), value: systemHealth?.subsystems?.database?.missingIndexesCount ?? '--', tone: (systemHealth?.subsystems?.database?.missingIndexesCount || 0) > 0 ? 'danger' : 'success' },
-                { label: t("status"), value: systemHealth?.subsystems?.database?.ready ? 'Ready' : 'Attention', tone: systemHealth?.subsystems?.database?.ready ? 'success' : 'danger' },
+                { label: t("status"), value: systemHealth?.subsystems?.database?.ready ? t("health_status_ready") : t("health_status_attention"), tone: systemHealth?.subsystems?.database?.ready ? 'success' : 'danger' },
               ]}
             />
 
@@ -368,10 +368,10 @@ export default function SystemHealthPage() {
               status={systemHealth?.subsystems?.ocsEngine?.status || 'healthy'}
               icon={<Zap size={20} color="var(--chart-4)" />}
               name={t("health_subsystem_ocs")}
-              description="Online Charging & Balances"
+              description={t("health_desc_ocs")}
               statusBadge={getStatusBadge(systemHealth?.subsystems?.ocsEngine?.status)}
               metrics={[
-                { label: t("health_ocs_invariants"), value: systemHealth?.subsystems?.ocsEngine?.invariantsOk ? '100% OK' : `${systemHealth?.subsystems?.ocsEngine?.brokenInvariantsCount || 0} Broken`, tone: systemHealth?.subsystems?.ocsEngine?.invariantsOk ? 'success' : 'danger' },
+                { label: t("health_ocs_invariants"), value: systemHealth?.subsystems?.ocsEngine?.invariantsOk ? t("health_status_ok") : t("health_status_broken", { count: systemHealth?.subsystems?.ocsEngine?.brokenInvariantsCount || 0 }), tone: systemHealth?.subsystems?.ocsEngine?.invariantsOk ? 'success' : 'danger' },
                 { label: t("health_ocs_sessions"), value: systemHealth?.subsystems?.ocsEngine?.activeSessions ?? '--' },
                 { label: t("health_ocs_reservations"), value: systemHealth?.subsystems?.ocsEngine?.activeReservations ?? '--' },
                 { label: t("health_ocs_tariff_plans"), value: systemHealth?.subsystems?.ocsEngine?.activeTariffPlans ?? '--' },
@@ -383,11 +383,11 @@ export default function SystemHealthPage() {
               status={systemHealth?.subsystems?.hssCore?.status || 'healthy'}
               icon={<Layers size={20} color="var(--chart-3)" />}
               name={t("health_subsystem_hss")}
-              description="Subscriber Schemas & Slices"
+              description={t("health_desc_hss")}
               statusBadge={getStatusBadge(systemHealth?.subsystems?.hssCore?.status)}
               metrics={[
-                { label: t("health_hss_auth_credentials"), value: (systemHealth?.subsystems?.hssCore?.missingCredentialsCount || 0) > 0 ? `${systemHealth?.subsystems?.hssCore?.missingCredentialsCount} Invalid` : '100% OK', tone: (systemHealth?.subsystems?.hssCore?.missingCredentialsCount || 0) > 0 ? 'danger' : 'success' },
-                { label: t("health_hss_slice_routing"), value: (systemHealth?.subsystems?.hssCore?.missingSlicesCount || 0) > 0 ? `${systemHealth?.subsystems?.hssCore?.missingSlicesCount} Missing` : 'Optimal', tone: (systemHealth?.subsystems?.hssCore?.missingSlicesCount || 0) > 0 ? 'danger' : 'success' },
+                { label: t("health_hss_auth_credentials"), value: (systemHealth?.subsystems?.hssCore?.missingCredentialsCount || 0) > 0 ? t("health_status_invalid", { count: systemHealth?.subsystems?.hssCore?.missingCredentialsCount || 0 }) : t("health_status_ok"), tone: (systemHealth?.subsystems?.hssCore?.missingCredentialsCount || 0) > 0 ? 'danger' : 'success' },
+                { label: t("health_hss_slice_routing"), value: (systemHealth?.subsystems?.hssCore?.missingSlicesCount || 0) > 0 ? t("health_status_missing", { count: systemHealth?.subsystems?.hssCore?.missingSlicesCount || 0 }) : t("health_status_optimal"), tone: (systemHealth?.subsystems?.hssCore?.missingSlicesCount || 0) > 0 ? 'danger' : 'success' },
                 { label: t("health_hss_dangling_profiles"), value: systemHealth?.subsystems?.hssCore?.danglingProfilesCount ?? '--', tone: (systemHealth?.subsystems?.hssCore?.danglingProfilesCount || 0) > 0 ? 'warning' : 'success' },
                 { label: t("profiles_title"), value: systemHealth?.subsystems?.hssCore?.activeProfilesCount ?? '--' },
               ]}
@@ -398,10 +398,10 @@ export default function SystemHealthPage() {
               status={systemHealth?.subsystems?.security?.status || 'healthy'}
               icon={<ShieldCheck size={20} color="var(--chart-5)" />}
               name={t("health_subsystem_security")}
-              description="RBAC & Operational Alarms"
+              description={t("health_desc_sec")}
               statusBadge={getStatusBadge(systemHealth?.subsystems?.security?.status)}
               metrics={[
-                { label: t("health_sec_root"), value: systemHealth?.subsystems?.security?.rootUserConfigured ? 'Active' : 'Missing', tone: systemHealth?.subsystems?.security?.rootUserConfigured ? 'success' : 'danger' },
+                { label: t("health_sec_root"), value: systemHealth?.subsystems?.security?.rootUserConfigured ? t("health_status_active") : t("health_status_missing", { count: 1 }), tone: systemHealth?.subsystems?.security?.rootUserConfigured ? 'success' : 'danger' },
                 { label: t("health_sec_alerts"), value: systemHealth?.subsystems?.security?.unacknowledgedAlertsCount ?? '--', tone: (systemHealth?.subsystems?.security?.criticalAlertsCount || 0) > 0 ? 'danger' : 'success' },
                 { label: t("health_sec_approvals"), value: systemHealth?.subsystems?.security?.pendingApprovalsCount ?? '--' },
                 { label: t("users_title"), value: systemHealth?.subsystems?.security?.activeUsersCount ?? '--' },

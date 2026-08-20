@@ -91,7 +91,6 @@ export default function ProfilePage() {
   const [modalProfileName, setModalProfileName] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [notice, setNotice] = useState<ProfileNotice | null>(null);
-  const [currentTime] = useState(() => Date.now());
   const { canEditTemplates } = useAuth();
 
   const governedProfiles = useMemo(() => profiles.map(profile => {
@@ -123,9 +122,9 @@ export default function ProfilePage() {
     recentlyChanged: governedProfiles.filter(profile => {
       const changedAt = profile.updatedAt || profile.createdAt;
       if (!changedAt) return false;
-      return currentTime - new Date(changedAt).getTime() <= 1000 * 60 * 60 * 24 * 14;
+      return Date.now() - new Date(changedAt).getTime() <= 1000 * 60 * 60 * 24 * 14;
     }).length,
-  }), [backendSummary, currentTime, governedProfiles]);
+  }), [backendSummary, governedProfiles]);
 
   const handleOpenNew = () => {
     setNotice(null);
