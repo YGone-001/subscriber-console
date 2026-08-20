@@ -8,19 +8,16 @@ import {
   CheckCircle,
   Clock,
   Eye,
-  Lock,
   Radio,
   Search,
-  ShieldAlert,
   Zap,
 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
-import PageHeader from "@/components/ui/PageHeader";
-import RefreshButton from "@/components/ui/RefreshButton";
 import { DataTablePagination } from "@/components/ui/DataTablePagination";
 import { DataTableStateRow } from "@/components/ui/DataTableState";
 import { formatBytes } from "@/lib/unitParser";
 import OcsDetailDrawer from "./OcsDetailDrawer";
+import OcsPageShell from "./OcsPageShell";
 import type { OcsSessionRecord } from "@/server/repositories/ocsOperationsRepository";
 
 export default function OcsSessionsPanel() {
@@ -68,272 +65,261 @@ export default function OcsSessionsPanel() {
 
   const totalPages = Math.ceil(total / limit) || 1;
 
-  return (
-    <div className="ocs-container">
-      <PageHeader
-        eyebrow={t("eyebrow_ocs_diameter")}
-        title={t("ocs_sessions_title")}
-        description={t("ocs_sessions_desc")}
-        status={<><Lock size={12} /> {t("ocs_readonly_badge")}</>}
-        actions={<div className="ocs-header-actions">
-          <RefreshButton
-            loading={loading}
-            onClick={() => refreshSessions()}
-            label={t("refresh")}
-            className="ocs-btn"
-          />
-        </div>}
-      />
-
-      {/* Safety Notice */}
-      <div className="ocs-readonly-banner">
-        <ShieldAlert size={18} />
-        <span>{t("ocs_readonly_notice")}</span>
+  const kpiGrid = (
+    <div className="ocs-kpi-grid">
+      <div className="ocs-kpi-card">
+        <div className="ocs-kpi-top">
+          <span className="ocs-kpi-label">{t("ocs_kpi_active_sessions")}</span>
+          <div className="ocs-kpi-icon-wrap emerald">
+            <Activity size={18} />
+          </div>
+        </div>
+        <div className="ocs-kpi-value" style={{ color: "var(--status-success)" }}>
+          {summary.activeSessions.toLocaleString()}
+        </div>
+        <div className="ocs-kpi-sub">Currently handling Gy/Ro traffic</div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="ocs-kpi-grid">
-        <div className="ocs-kpi-card">
-          <div className="ocs-kpi-top">
-            <span className="ocs-kpi-label">{t("ocs_kpi_active_sessions")}</span>
-            <div className="ocs-kpi-icon-wrap emerald">
-              <Activity size={18} />
-            </div>
+      <div className="ocs-kpi-card">
+        <div className="ocs-kpi-top">
+          <span className="ocs-kpi-label">{t("ocs_kpi_closing_sessions")}</span>
+          <div className="ocs-kpi-icon-wrap amber">
+            <Clock size={18} />
           </div>
-          <div className="ocs-kpi-value" style={{ color: "var(--status-success)" }}>
-            {summary.activeSessions.toLocaleString()}
-          </div>
-          <div className="ocs-kpi-sub">Currently handling Gy/Ro traffic</div>
         </div>
-
-        <div className="ocs-kpi-card">
-          <div className="ocs-kpi-top">
-            <span className="ocs-kpi-label">{t("ocs_kpi_closing_sessions")}</span>
-            <div className="ocs-kpi-icon-wrap amber">
-              <Clock size={18} />
-            </div>
-          </div>
-          <div className="ocs-kpi-value" style={{ color: "var(--status-warning)" }}>
-            {summary.closingSessions.toLocaleString()}
-          </div>
-          <div className="ocs-kpi-sub">Lifecycle cleanup scanner in progress</div>
+        <div className="ocs-kpi-value" style={{ color: "var(--status-warning)" }}>
+          {summary.closingSessions.toLocaleString()}
         </div>
-
-        <div className="ocs-kpi-card">
-          <div className="ocs-kpi-top">
-            <span className="ocs-kpi-label">{t("ocs_kpi_closed_sessions")}</span>
-            <div className="ocs-kpi-icon-wrap">
-              <CheckCircle size={18} />
-            </div>
-          </div>
-          <div className="ocs-kpi-value">{summary.closedSessions.toLocaleString()}</div>
-          <div className="ocs-kpi-sub">Settled and archived sessions</div>
-        </div>
-
-        <div className="ocs-kpi-card">
-          <div className="ocs-kpi-top">
-            <span className="ocs-kpi-label">{t("ocs_kpi_granted_octets")}</span>
-            <div className="ocs-kpi-icon-wrap cyan">
-              <Zap size={18} />
-            </div>
-          </div>
-          <div className="ocs-kpi-value">{formatBytes(summary.totalGrantedOctets)}</div>
-          <div className="ocs-kpi-sub">Total CCA-I / CCA-U quota grants</div>
-        </div>
-
-        <div className="ocs-kpi-card">
-          <div className="ocs-kpi-top">
-            <span className="ocs-kpi-label">{t("ocs_kpi_consumed_octets")}</span>
-            <div className="ocs-kpi-icon-wrap">
-              <Radio size={18} />
-            </div>
-          </div>
-          <div className="ocs-kpi-value">{formatBytes(summary.totalUsedOctets)}</div>
-          <div className="ocs-kpi-sub">Total volume reported by SMF/P-GW</div>
-        </div>
+        <div className="ocs-kpi-sub">Lifecycle cleanup scanner in progress</div>
       </div>
 
-      {/* Filters Bar */}
-      <div className="ocs-controls-bar">
-        <div className="ocs-search-group">
-          <Search size={16} className="ocs-search-icon" />
-          <input
-            type="text"
-            className="ocs-search-input"
-            placeholder={t("search_placeholder") + " (IMSI / Session-ID)"}
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
-          />
+      <div className="ocs-kpi-card">
+        <div className="ocs-kpi-top">
+          <span className="ocs-kpi-label">{t("ocs_kpi_closed_sessions")}</span>
+          <div className="ocs-kpi-icon-wrap">
+            <CheckCircle size={18} />
+          </div>
         </div>
-
-        <div className="ocs-filters-group">
-          <select
-            className="ocs-select"
-            value={stateFilter}
-            onChange={(e) => {
-              setStateFilter(e.target.value);
-              setPage(1);
-            }}
-          >
-            <option value="all">{t("ocs_filter_all_states")}</option>
-            <option value="active">{t("ocs_filter_active")}</option>
-            <option value="closing">{t("ocs_filter_closing")}</option>
-            <option value="closed">{t("ocs_filter_closed")}</option>
-          </select>
-
-          <select
-            className="ocs-select"
-            value={interfaceFilter}
-            onChange={(e) => {
-              setInterfaceFilter(e.target.value);
-              setPage(1);
-            }}
-          >
-            <option value="all">{t("ocs_filter_all_interfaces")}</option>
-            <option value="gy">{t("ocs_filter_gy")}</option>
-            <option value="ro">{t("ocs_filter_ro")}</option>
-          </select>
-
-          <select
-            className="ocs-select"
-            value={sortField}
-            onChange={(e) => setSortField(e.target.value)}
-          >
-            <option value="last_update_at">{t("ocs_col_last_update")}</option>
-            <option value="started_at">{t("ocs_col_started_at")}</option>
-            <option value="used_total">{t("ocs_kpi_consumed_octets")}</option>
-            <option value="granted_total">{t("ocs_kpi_granted_octets")}</option>
-            <option value="imsi">{t("ocs_col_imsi")}</option>
-          </select>
-
-          <button
-            type="button"
-            className="ocs-btn"
-            onClick={() => setSortOrder((o) => (o === "asc" ? "desc" : "asc"))}
-            title="Toggle sort order"
-          >
-            {sortOrder.toUpperCase()}
-          </button>
-        </div>
+        <div className="ocs-kpi-value">{summary.closedSessions.toLocaleString()}</div>
+        <div className="ocs-kpi-sub">Settled and archived sessions</div>
       </div>
 
-      {/* Main Table */}
-      <div className="ocs-table-card">
-        <div className="ocs-table-wrapper">
-          <table className="ocs-table">
-            <caption className="sr-only">{t("ocs_sessions_title")}</caption>
-            <thead>
-              <tr>
-                <th data-column-priority="essential">{t("ocs_col_session_id")}</th>
-                <th aria-sort={getAriaSort("imsi")} data-column-priority="essential">{t("ocs_col_imsi")}</th>
-                <th data-column-priority="important">{t("ocs_col_apn")}</th>
-                <th data-column-priority="essential">{t("ocs_col_interface")}</th>
-                <th data-column-priority="essential">{t("ocs_col_state")}</th>
-                <th data-column-priority="supplementary">{t("ocs_col_cc_num")}</th>
-                <th aria-sort={getAriaSort(["granted_total", "used_total"])} data-column-priority="essential">{t("ocs_col_granted")} / {t("ocs_kpi_consumed_octets")}</th>
-                <th data-column-priority="important">{t("ocs_col_rg_si")}</th>
-                <th aria-sort={getAriaSort("started_at")} data-column-priority="supplementary">{t("ocs_col_started_at")}</th>
-                <th aria-sort={getAriaSort("last_update_at")} data-column-priority="important">{t("ocs_col_last_update")}</th>
-                <th data-column-priority="essential">{t("actions")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {records.length === 0 ? (
-                <DataTableStateRow colSpan={11} state={loading ? "loading" : "empty"}>
-                  {loading ? t("loading") : t("no_data")}
-                </DataTableStateRow>
-              ) : (
-                records.map((r) => {
-                  const stateClass =
-                    r.state === "active"
-                      ? "status-active"
-                      : r.state === "closing"
-                      ? "status-closing"
-                      : "status-closed";
-
-                  const ifClass =
-                    r.interface_type === "ro" ? "interface-ro" : "interface-gy";
-
-                  return (
-                    <tr key={r.id}>
-                      <td className="ocs-mono ocs-cell-session-id" style={{ maxWidth: "200px" }} title={r.session_id} data-column-priority="essential" data-label={t("ocs_col_session_id")}>
-                        {r.session_id}
-                      </td>
-                      <td className="ocs-mono ocs-cell-imsi" data-column-priority="essential" data-label={t("ocs_col_imsi")}>
-                        {r.imsi}
-                      </td>
-                      <td className="ocs-mono" data-column-priority="important" data-label={t("ocs_col_apn")}>{r.apn}</td>
-                      <td data-column-priority="essential" data-label={t("ocs_col_interface")}>
-                        <span className={`ocs-badge ${ifClass}`}>
-                          {r.interface_type.toUpperCase()}
-                        </span>
-                      </td>
-                      <td data-column-priority="essential" data-label={t("ocs_col_state")}>
-                        <span className={`ocs-badge ${stateClass}`}>
-                          {r.state}
-                        </span>
-                      </td>
-                      <td className="ocs-mono" data-column-priority="supplementary" data-label={t("ocs_col_cc_num")}>#{r.cc_request_number}</td>
-                      <td className="ocs-mono" data-column-priority="essential" data-label={t("ocs_col_granted")}>
-                        <span style={{ color: "var(--status-success)" }}>{formatBytes(r.granted_total)}</span>
-                        <span style={{ color: "var(--text-muted)" }}> / </span>
-                        <span style={{ color: "var(--status-warning)" }}>{formatBytes(r.used_total)}</span>
-                      </td>
-                      <td className="ocs-mono" style={{ fontSize: "var(--ref-font-size-data)" }} data-column-priority="important" data-label={t("ocs_col_rg_si")}>
-                        {r.rating_group !== undefined ? `RG:${r.rating_group}` : "-"}
-                        {r.service_identifier !== undefined ? ` / SI:${r.service_identifier}` : ""}
-                      </td>
-                      <td className="ocs-mono ocs-cell-timestamp" data-column-priority="supplementary" data-label={t("ocs_col_started_at")}>
-                        {r.started_at ? new Date(r.started_at).toLocaleTimeString() : "-"}
-                      </td>
-                      <td className="ocs-mono" style={{ fontSize: "var(--ref-font-size-label-strong)", color: "var(--text-muted)" }} data-column-priority="important" data-label={t("ocs_col_last_update")}>
-                        {r.last_update_at ? new Date(r.last_update_at).toLocaleTimeString() : "-"}
-                      </td>
-                      <td data-column-priority="essential">
-                        <button
-                          type="button"
-                          className="ocs-btn ocs-action-btn"
-                          onClick={() => setSelectedRecord(r)}
-                        >
-                          <Eye size={13} />
-                          <span>{t("ocs_inspect")}</span>
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+      <div className="ocs-kpi-card">
+        <div className="ocs-kpi-top">
+          <span className="ocs-kpi-label">{t("ocs_kpi_granted_octets")}</span>
+          <div className="ocs-kpi-icon-wrap cyan">
+            <Zap size={18} />
+          </div>
         </div>
+        <div className="ocs-kpi-value">{formatBytes(summary.totalGrantedOctets)}</div>
+        <div className="ocs-kpi-sub">Total CCA-I / CCA-U quota grants</div>
+      </div>
 
-        <DataTablePagination
-          page={page}
-          pageSize={limit}
-          total={total}
-          visibleCount={records.length}
-          totalPages={totalPages}
-          labels={{
-            showing: t("showing"),
-            to: t("to"),
-            of: t("of"),
-            entries: t("entries"),
-            previous: t("prev"),
-            next: t("next"),
-            perPage: t("per_page"),
-          }}
-          onPageChange={setPage}
-          onPageSizeChange={(nextLimit) => {
-            setLimit(nextLimit);
+      <div className="ocs-kpi-card">
+        <div className="ocs-kpi-top">
+          <span className="ocs-kpi-label">{t("ocs_kpi_consumed_octets")}</span>
+          <div className="ocs-kpi-icon-wrap">
+            <Radio size={18} />
+          </div>
+        </div>
+        <div className="ocs-kpi-value">{formatBytes(summary.totalUsedOctets)}</div>
+        <div className="ocs-kpi-sub">Total volume reported by SMF/P-GW</div>
+      </div>
+    </div>
+  );
+
+  const controls = (
+    <div className="ocs-controls-bar">
+      <div className="ocs-search-group">
+        <Search size={16} className="ocs-search-icon" />
+        <input
+          type="text"
+          className="ocs-search-input"
+          placeholder={t("search_placeholder") + " (IMSI / Session-ID)"}
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
             setPage(1);
           }}
         />
       </div>
 
-      {/* Detail Drawer */}
+      <div className="ocs-filters-group">
+        <select
+          className="ocs-select"
+          value={stateFilter}
+          onChange={(e) => {
+            setStateFilter(e.target.value);
+            setPage(1);
+          }}
+        >
+          <option value="all">{t("ocs_filter_all_states")}</option>
+          <option value="active">{t("ocs_filter_active")}</option>
+          <option value="closing">{t("ocs_filter_closing")}</option>
+          <option value="closed">{t("ocs_filter_closed")}</option>
+        </select>
+
+        <select
+          className="ocs-select"
+          value={interfaceFilter}
+          onChange={(e) => {
+            setInterfaceFilter(e.target.value);
+            setPage(1);
+          }}
+        >
+          <option value="all">{t("ocs_filter_all_interfaces")}</option>
+          <option value="gy">{t("ocs_filter_gy")}</option>
+          <option value="ro">{t("ocs_filter_ro")}</option>
+        </select>
+
+        <select
+          className="ocs-select"
+          value={sortField}
+          onChange={(e) => setSortField(e.target.value)}
+        >
+          <option value="last_update_at">{t("ocs_col_last_update")}</option>
+          <option value="started_at">{t("ocs_col_started_at")}</option>
+          <option value="used_total">{t("ocs_kpi_consumed_octets")}</option>
+          <option value="granted_total">{t("ocs_kpi_granted_octets")}</option>
+          <option value="imsi">{t("ocs_col_imsi")}</option>
+        </select>
+
+        <button
+          type="button"
+          className="ocs-btn"
+          onClick={() => setSortOrder((o) => (o === "asc" ? "desc" : "asc"))}
+          title="Toggle sort order"
+        >
+          {sortOrder.toUpperCase()}
+        </button>
+      </div>
+    </div>
+  );
+
+  const tableContent = (
+    <table className="ocs-table">
+      <caption className="sr-only">{t("ocs_sessions_title")}</caption>
+      <thead>
+        <tr>
+          <th data-column-priority="essential">{t("ocs_col_session_id")}</th>
+          <th aria-sort={getAriaSort("imsi")} data-column-priority="essential">{t("ocs_col_imsi")}</th>
+          <th data-column-priority="important">{t("ocs_col_apn")}</th>
+          <th data-column-priority="essential">{t("ocs_col_interface")}</th>
+          <th data-column-priority="essential">{t("ocs_col_state")}</th>
+          <th data-column-priority="supplementary">{t("ocs_col_cc_num")}</th>
+          <th aria-sort={getAriaSort(["granted_total", "used_total"])} data-column-priority="essential">{t("ocs_col_granted")} / {t("ocs_kpi_consumed_octets")}</th>
+          <th data-column-priority="important">{t("ocs_col_rg_si")}</th>
+          <th aria-sort={getAriaSort("started_at")} data-column-priority="supplementary">{t("ocs_col_started_at")}</th>
+          <th aria-sort={getAriaSort("last_update_at")} data-column-priority="important">{t("ocs_col_last_update")}</th>
+          <th data-column-priority="essential">{t("actions")}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {records.length === 0 ? (
+          <DataTableStateRow colSpan={11} state={loading ? "loading" : "empty"}>
+            {loading ? t("loading") : t("no_data")}
+          </DataTableStateRow>
+        ) : (
+          records.map((r) => {
+            const stateClass =
+              r.state === "active"
+                ? "status-active"
+                : r.state === "closing"
+                ? "status-closing"
+                : "status-closed";
+
+            const ifClass =
+              r.interface_type === "ro" ? "interface-ro" : "interface-gy";
+
+            return (
+              <tr key={r.id}>
+                <td className="ocs-mono ocs-cell-session-id" style={{ maxWidth: "200px" }} title={r.session_id} data-column-priority="essential" data-label={t("ocs_col_session_id")}>
+                  {r.session_id}
+                </td>
+                <td className="ocs-mono ocs-cell-imsi" data-column-priority="essential" data-label={t("ocs_col_imsi")}>
+                  {r.imsi}
+                </td>
+                <td className="ocs-mono" data-column-priority="important" data-label={t("ocs_col_apn")}>{r.apn}</td>
+                <td data-column-priority="essential" data-label={t("ocs_col_interface")}>
+                  <span className={`ocs-badge ${ifClass}`}>
+                    {r.interface_type.toUpperCase()}
+                  </span>
+                </td>
+                <td data-column-priority="essential" data-label={t("ocs_col_state")}>
+                  <span className={`ocs-badge ${stateClass}`}>
+                    {r.state}
+                  </span>
+                </td>
+                <td className="ocs-mono" data-column-priority="supplementary" data-label={t("ocs_col_cc_num")}>#{r.cc_request_number}</td>
+                <td className="ocs-mono" data-column-priority="essential" data-label={t("ocs_col_granted")}>
+                  <span style={{ color: "var(--status-success)" }}>{formatBytes(r.granted_total)}</span>
+                  <span style={{ color: "var(--text-muted)" }}> / </span>
+                  <span style={{ color: "var(--status-warning)" }}>{formatBytes(r.used_total)}</span>
+                </td>
+                <td className="ocs-mono" style={{ fontSize: "var(--ref-font-size-data)" }} data-column-priority="important" data-label={t("ocs_col_rg_si")}>
+                  {r.rating_group !== undefined ? `RG:${r.rating_group}` : "-"}
+                  {r.service_identifier !== undefined ? ` / SI:${r.service_identifier}` : ""}
+                </td>
+                <td className="ocs-mono ocs-cell-timestamp" data-column-priority="supplementary" data-label={t("ocs_col_started_at")}>
+                  {r.started_at ? new Date(r.started_at).toLocaleTimeString() : "-"}
+                </td>
+                <td className="ocs-mono" style={{ fontSize: "var(--ref-font-size-label-strong)", color: "var(--text-muted)" }} data-column-priority="important" data-label={t("ocs_col_last_update")}>
+                  {r.last_update_at ? new Date(r.last_update_at).toLocaleTimeString() : "-"}
+                </td>
+                <td data-column-priority="essential">
+                  <button
+                    type="button"
+                    className="ocs-btn ocs-action-btn"
+                    onClick={() => setSelectedRecord(r)}
+                  >
+                    <Eye size={13} />
+                    <span>{t("ocs_inspect")}</span>
+                  </button>
+                </td>
+              </tr>
+            );
+          })
+        )}
+      </tbody>
+    </table>
+  );
+
+  const pagination = (
+    <DataTablePagination
+      page={page}
+      pageSize={limit}
+      total={total}
+      visibleCount={records.length}
+      totalPages={totalPages}
+      labels={{
+        showing: t("showing"),
+        to: t("to"),
+        of: t("of"),
+        entries: t("entries"),
+        previous: t("prev"),
+        next: t("next"),
+        perPage: t("per_page"),
+      }}
+      onPageChange={setPage}
+      onPageSizeChange={(nextLimit) => {
+        setLimit(nextLimit);
+        setPage(1);
+      }}
+    />
+  );
+
+  return (
+    <OcsPageShell
+      eyebrow={t("eyebrow_ocs_diameter")}
+      title={t("ocs_sessions_title")}
+      description={t("ocs_sessions_desc")}
+      loading={loading}
+      onRefresh={() => refreshSessions()}
+      kpiGrid={kpiGrid}
+      controls={controls}
+      tableContent={tableContent}
+      pagination={pagination}
+    >
       {selectedRecord && (
         <OcsDetailDrawer
           title={`Diameter Session: ${selectedRecord.session_id}`}
@@ -360,6 +346,6 @@ export default function OcsSessionsPanel() {
           ]}
         />
       )}
-    </div>
+    </OcsPageShell>
   );
 }

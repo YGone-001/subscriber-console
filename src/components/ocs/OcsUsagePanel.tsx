@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, Fragment } from "react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
 import {
@@ -11,18 +11,15 @@ import {
   Clock,
   Eye,
   FileSpreadsheet,
-  Lock,
   Search,
-  ShieldAlert,
   Zap,
 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
-import PageHeader from "@/components/ui/PageHeader";
-import RefreshButton from "@/components/ui/RefreshButton";
 import { DataTablePagination } from "@/components/ui/DataTablePagination";
 import { DataTableStateRow } from "@/components/ui/DataTableState";
 import { formatBytes } from "@/lib/unitParser";
 import OcsDetailDrawer from "./OcsDetailDrawer";
+import OcsPageShell from "./OcsPageShell";
 import type {
   OcsReservationRecord,
   OcsUsageRecord,
@@ -106,30 +103,8 @@ export default function OcsUsagePanel() {
   const usageTotalPages = Math.ceil(usageTotal / usageLimit) || 1;
   const reservationTotalPages = Math.ceil(reservationTotal / reservationLimit) || 1;
 
-  return (
-    <div className="ocs-container">
-      <PageHeader
-        eyebrow={t("eyebrow_ocs_usage")}
-        title={t("ocs_usage_title")}
-        description={t("ocs_usage_desc")}
-        status={<><Lock size={12} /> {t("ocs_readonly_badge")}</>}
-        actions={<div className="ocs-header-actions">
-          <RefreshButton
-            loading={loading}
-            onClick={() => activeTab === "usage" ? refreshUsage() : refreshReservations()}
-            label={t("refresh")}
-            className="ocs-btn"
-          />
-        </div>}
-      />
-
-      {/* Safety Notice */}
-      <div className="ocs-readonly-banner">
-        <ShieldAlert size={18} />
-        <span>{t("ocs_readonly_notice")}</span>
-      </div>
-
-      {/* Tabs */}
+  const tabsAndKpi = (
+    <Fragment>
       <div className="ocs-tabs-wrap">
         <button
           type="button"
@@ -149,7 +124,6 @@ export default function OcsUsagePanel() {
         </button>
       </div>
 
-      {/* KPI Cards based on active tab */}
       {activeTab === "usage" ? (
         <div className="ocs-kpi-grid">
           <div className="ocs-kpi-card">
@@ -260,296 +234,307 @@ export default function OcsUsagePanel() {
           </div>
         </div>
       )}
+    </Fragment>
+  );
 
-      {/* Filter and Control Bar */}
-      <div className="ocs-controls-bar">
-        <div className="ocs-search-group">
-          <Search size={16} className="ocs-search-icon" />
-          <input
-            type="text"
-            className="ocs-search-input"
-            placeholder={t("search_placeholder") + " (IMSI / Session-ID)"}
-            value={activeTab === "usage" ? usageSearch : reservationSearch}
-            onChange={(e) => {
-              if (activeTab === "usage") {
-                setUsageSearch(e.target.value);
-                setUsagePage(1);
-              } else {
-                setReservationSearch(e.target.value);
-                setReservationPage(1);
-              }
-            }}
-          />
-        </div>
-
-        {activeTab === "usage" ? (
-          <div className="ocs-filters-group">
-            <select
-              className="ocs-select"
-              value={ccTypeFilter}
-              onChange={(e) => {
-                setCcTypeFilter(e.target.value);
-                setUsagePage(1);
-              }}
-            >
-              <option value="all">{t("ocs_filter_all_cc_types")}</option>
-              <option value="UPDATE">{t("ocs_filter_cc_update")}</option>
-              <option value="TERMINATION">{t("ocs_filter_cc_terminate")}</option>
-            </select>
-
-            <select
-              className="ocs-select"
-              value={chargedFilter}
-              onChange={(e) => {
-                setChargedFilter(e.target.value);
-                setUsagePage(1);
-              }}
-            >
-              <option value="all">{t("ocs_filter_all_charged")}</option>
-              <option value="true">{t("ocs_filter_charged_true")}</option>
-              <option value="false">{t("ocs_filter_charged_false")}</option>
-            </select>
-          </div>
-        ) : (
-          <div className="ocs-filters-group">
-            <select
-              className="ocs-select"
-              value={stateFilter}
-              onChange={(e) => {
-                setStateFilter(e.target.value);
-                setReservationPage(1);
-              }}
-            >
-              <option value="all">{t("ocs_filter_all_states")}</option>
-              <option value="active">{t("ocs_filter_active")}</option>
-              <option value="settled">{t("ocs_filter_settled")}</option>
-              <option value="released">{t("ocs_filter_released")}</option>
-              <option value="orphaned">{t("ocs_filter_orphaned")}</option>
-            </select>
-
-            <select
-              className="ocs-select"
-              value={chargingTypeFilter}
-              onChange={(e) => {
-                setChargingTypeFilter(e.target.value);
-                setReservationPage(1);
-              }}
-            >
-              <option value="all">All Charging Types</option>
-              <option value="data_volume">Data Volume</option>
-              <option value="voice_time">Voice Time</option>
-              <option value="sms_count">SMS Count</option>
-            </select>
-          </div>
-        )}
-      </div>
-
-      {/* Main Table */}
-      <div className="ocs-table-card">
-        <div className="ocs-table-wrapper">
-          {activeTab === "usage" ? (
-            <table className="ocs-table">
-              <caption className="sr-only">{t("ocs_tab_usage_records")}</caption>
-              <thead>
-                <tr>
-                  <th data-column-priority="essential">{t("ocs_col_session_id")}</th>
-                  <th data-column-priority="essential">{t("ocs_col_imsi")}</th>
-                  <th data-column-priority="important">{t("ocs_col_apn")}</th>
-                  <th data-column-priority="essential">{t("ocs_col_cc_type")}</th>
-                  <th data-column-priority="supplementary">{t("ocs_col_cc_num")}</th>
-                  <th data-column-priority="supplementary">{t("ocs_col_input")} / {t("ocs_col_output")}</th>
-                  <th data-column-priority="essential">{t("ocs_col_total_octets")}</th>
-                  <th data-column-priority="important">{t("ocs_col_charged")}</th>
-                  <th data-column-priority="essential">{t("ocs_col_result_code")}</th>
-                  <th data-column-priority="supplementary">{t("ocs_col_created_at")}</th>
-                  <th data-column-priority="essential">{t("actions")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {usageRecords.length === 0 ? (
-                  <DataTableStateRow colSpan={11} state={loading ? "loading" : "empty"}>
-                    {loading ? t("loading") : t("no_data")}
-                  </DataTableStateRow>
-                ) : (
-                  usageRecords.map((r) => (
-                    <tr key={r.id}>
-                      <td className="ocs-mono ocs-cell-session-id" title={r.session_id} data-column-priority="essential" data-label={t("ocs_col_session_id")}>
-                        {r.session_id}
-                      </td>
-                      <td className="ocs-mono ocs-cell-imsi" data-column-priority="essential" data-label={t("ocs_col_imsi")}>
-                        {r.imsi}
-                      </td>
-                      <td className="ocs-mono" data-column-priority="important" data-label={t("ocs_col_apn")}>{r.apn}</td>
-                      <td data-column-priority="essential" data-label={t("ocs_col_cc_type")}>
-                        <span className={`ocs-badge ${r.cc_request_type === "TERMINATION" ? "status-closed" : "status-active"}`}>
-                          {r.cc_request_type}
-                        </span>
-                      </td>
-                      <td className="ocs-mono" data-column-priority="supplementary" data-label={t("ocs_col_cc_num")}>#{r.cc_request_number}</td>
-                      <td className="ocs-mono" data-column-priority="supplementary" data-label={t("ocs_col_input")}>
-                        <span style={{ color: "var(--chart-2)" }}>{formatBytes(r.input_octets)}</span>
-                        <span style={{ color: "var(--text-muted)" }}> / </span>
-                        <span style={{ color: "var(--chart-5)" }}>{formatBytes(r.output_octets)}</span>
-                      </td>
-                      <td className="ocs-mono" style={{ fontWeight: 700, color: "var(--text-main)" }} data-column-priority="essential" data-label={t("ocs_col_total_octets")}>
-                        {formatBytes(r.total_octets)}
-                      </td>
-                      <td data-column-priority="important" data-label={t("ocs_col_charged")}>
-                        <span className={`ocs-badge ${r.charged ? "status-active" : "status-closed"}`}>
-                          {r.charged ? "CHARGED" : "ZERO / FREE"}
-                        </span>
-                      </td>
-                      <td data-column-priority="essential" data-label={t("ocs_col_result_code")}>
-                        <span className={`ocs-badge ${r.result_code === 2001 ? "result-2001" : "result-error"}`}>
-                          {r.result_code || 2001}
-                        </span>
-                      </td>
-                      <td className="ocs-mono ocs-cell-timestamp" data-column-priority="supplementary" data-label={t("ocs_col_created_at")}>
-                        {r.created_at ? new Date(r.created_at).toLocaleString() : "-"}
-                      </td>
-                      <td data-column-priority="essential">
-                        <button
-                          type="button"
-                          className="ocs-btn ocs-action-btn"
-                          onClick={() => {
-                            setSelectedRecord(r as unknown as Record<string, unknown>);
-                            setDetailTitle(`CDR Usage Record: ${r.session_id} (#${r.cc_request_number})`);
-                          }}
-                        >
-                          <Eye size={13} />
-                          <span>{t("ocs_inspect")}</span>
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          ) : (
-            <table className="ocs-table">
-              <caption className="sr-only">{t("ocs_tab_reservations")}</caption>
-              <thead>
-                <tr>
-                  <th data-column-priority="essential">{t("ocs_col_session_id")}</th>
-                  <th data-column-priority="essential">{t("ocs_col_imsi")}</th>
-                  <th data-column-priority="important">{t("ocs_col_apn")}</th>
-                  <th data-column-priority="essential">Charging Type</th>
-                  <th data-column-priority="essential">State</th>
-                  <th data-column-priority="important">Reserved / Used</th>
-                  <th data-column-priority="supplementary">{t("ocs_col_released")}</th>
-                  <th data-column-priority="important">{t("ocs_col_overuse")}</th>
-                  <th data-column-priority="essential">{t("ocs_col_result_code")}</th>
-                  <th data-column-priority="supplementary">{t("ocs_col_updated_at")}</th>
-                  <th data-column-priority="essential">{t("actions")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {reservationRecords.length === 0 ? (
-                  <DataTableStateRow colSpan={11} state={loading ? "loading" : "empty"}>
-                    {loading ? t("loading") : t("no_data")}
-                  </DataTableStateRow>
-                ) : (
-                  reservationRecords.map((r) => {
-                    const stateClass =
-                      r.state === "active"
-                        ? "status-active"
-                        : r.state === "settled"
-                        ? "status-settled"
-                        : r.state === "released"
-                        ? "status-released"
-                        : r.state === "orphaned"
-                        ? "status-orphaned"
-                        : "status-closed";
-
-                    return (
-                      <tr key={r.id}>
-                        <td className="ocs-mono ocs-cell-session-id" title={r.session_id} data-column-priority="essential">
-                          {r.session_id}
-                        </td>
-                        <td className="ocs-mono ocs-cell-imsi" data-column-priority="essential">
-                          {r.imsi}
-                        </td>
-                        <td className="ocs-mono" data-column-priority="important">{r.apn}</td>
-                        <td data-column-priority="essential">
-                          <span className="ocs-badge ocs-badge--neutral">
-                            {r.charging_type}
-                          </span>
-                        </td>
-                        <td data-column-priority="essential">
-                          <span className={`ocs-badge ${stateClass}`}>
-                            {r.state}
-                          </span>
-                        </td>
-                        <td className="ocs-mono" data-column-priority="important">
-                          <span style={{ color: "var(--chart-5)" }}>{formatBytes(r.reserved_octets)}</span>
-                          <span style={{ color: "var(--text-muted)" }}> / </span>
-                          <span style={{ color: "var(--status-warning)" }}>{formatBytes(r.used_octets)}</span>
-                        </td>
-                        <td className="ocs-mono" style={{ color: "var(--status-success)" }} data-column-priority="supplementary">
-                          {formatBytes(r.released_octets)}
-                        </td>
-                        <td className="ocs-mono" style={{ color: r.overuse_octets > 0 ? "var(--status-danger)" : "var(--text-muted)" }} data-column-priority="important">
-                          {formatBytes(r.overuse_octets)}
-                        </td>
-                        <td data-column-priority="essential">
-                          <span className={`ocs-badge ${r.result_code === 2001 ? "result-2001" : "result-error"}`}>
-                            {r.result_code}
-                          </span>
-                        </td>
-                        <td className="ocs-mono ocs-cell-timestamp" data-column-priority="supplementary">
-                          {r.updated_at ? new Date(r.updated_at).toLocaleString() : "-"}
-                        </td>
-                        <td data-column-priority="essential">
-                          <button
-                            type="button"
-                            className="ocs-btn ocs-action-btn"
-                            onClick={() => {
-                              setSelectedRecord(r as unknown as Record<string, unknown>);
-                              setDetailTitle(`Quota Reservation: ${r.session_id} (#${r.grant_cc_request_number})`);
-                            }}
-                          >
-                            <Eye size={13} />
-                            <span>{t("ocs_inspect")}</span>
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          )}
-        </div>
-
-        <DataTablePagination
-          page={activeTab === "usage" ? usagePage : reservationPage}
-          pageSize={activeTab === "usage" ? usageLimit : reservationLimit}
-          total={activeTab === "usage" ? usageTotal : reservationTotal}
-          visibleCount={activeTab === "usage" ? usageRecords.length : reservationRecords.length}
-          totalPages={activeTab === "usage" ? usageTotalPages : reservationTotalPages}
-          labels={{
-            showing: t("showing"),
-            to: t("to"),
-            of: t("of"),
-            entries: t("entries"),
-            previous: t("prev"),
-            next: t("next"),
-            perPage: t("per_page"),
-          }}
-          onPageChange={activeTab === "usage" ? setUsagePage : setReservationPage}
-          onPageSizeChange={(nextLimit) => {
+  const controls = (
+    <div className="ocs-controls-bar">
+      <div className="ocs-search-group">
+        <Search size={16} className="ocs-search-icon" />
+        <input
+          type="text"
+          className="ocs-search-input"
+          placeholder={t("search_placeholder") + " (IMSI / Session-ID)"}
+          value={activeTab === "usage" ? usageSearch : reservationSearch}
+          onChange={(e) => {
             if (activeTab === "usage") {
-              setUsageLimit(nextLimit);
+              setUsageSearch(e.target.value);
               setUsagePage(1);
             } else {
-              setReservationLimit(nextLimit);
+              setReservationSearch(e.target.value);
               setReservationPage(1);
             }
           }}
         />
       </div>
 
-      {/* Detail Drawer */}
+      {activeTab === "usage" ? (
+        <div className="ocs-filters-group">
+          <select
+            className="ocs-select"
+            value={ccTypeFilter}
+            onChange={(e) => {
+              setCcTypeFilter(e.target.value);
+              setUsagePage(1);
+            }}
+          >
+            <option value="all">{t("ocs_filter_all_cc_types")}</option>
+            <option value="UPDATE">{t("ocs_filter_cc_update")}</option>
+            <option value="TERMINATION">{t("ocs_filter_cc_terminate")}</option>
+          </select>
+
+          <select
+            className="ocs-select"
+            value={chargedFilter}
+            onChange={(e) => {
+              setChargedFilter(e.target.value);
+              setUsagePage(1);
+            }}
+          >
+            <option value="all">{t("ocs_filter_all_charged")}</option>
+            <option value="true">{t("ocs_filter_charged_true")}</option>
+            <option value="false">{t("ocs_filter_charged_false")}</option>
+          </select>
+        </div>
+      ) : (
+        <div className="ocs-filters-group">
+          <select
+            className="ocs-select"
+            value={stateFilter}
+            onChange={(e) => {
+              setStateFilter(e.target.value);
+              setReservationPage(1);
+            }}
+          >
+            <option value="all">{t("ocs_filter_all_states")}</option>
+            <option value="active">{t("ocs_filter_active")}</option>
+            <option value="settled">{t("ocs_filter_settled")}</option>
+            <option value="released">{t("ocs_filter_released")}</option>
+            <option value="orphaned">{t("ocs_filter_orphaned")}</option>
+          </select>
+
+          <select
+            className="ocs-select"
+            value={chargingTypeFilter}
+            onChange={(e) => {
+              setChargingTypeFilter(e.target.value);
+              setReservationPage(1);
+            }}
+          >
+            <option value="all">All Charging Types</option>
+            <option value="data_volume">Data Volume</option>
+            <option value="voice_time">Voice Time</option>
+            <option value="sms_count">SMS Count</option>
+          </select>
+        </div>
+      )}
+    </div>
+  );
+
+  const tableContent = activeTab === "usage" ? (
+    <table className="ocs-table">
+      <caption className="sr-only">{t("ocs_tab_usage_records")}</caption>
+      <thead>
+        <tr>
+          <th data-column-priority="essential">{t("ocs_col_session_id")}</th>
+          <th data-column-priority="essential">{t("ocs_col_imsi")}</th>
+          <th data-column-priority="important">{t("ocs_col_apn")}</th>
+          <th data-column-priority="essential">{t("ocs_col_cc_type")}</th>
+          <th data-column-priority="supplementary">{t("ocs_col_cc_num")}</th>
+          <th data-column-priority="supplementary">{t("ocs_col_input")} / {t("ocs_col_output")}</th>
+          <th data-column-priority="essential">{t("ocs_col_total_octets")}</th>
+          <th data-column-priority="important">{t("ocs_col_charged")}</th>
+          <th data-column-priority="essential">{t("ocs_col_result_code")}</th>
+          <th data-column-priority="supplementary">{t("ocs_col_created_at")}</th>
+          <th data-column-priority="essential">{t("actions")}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {usageRecords.length === 0 ? (
+          <DataTableStateRow colSpan={11} state={loading ? "loading" : "empty"}>
+            {loading ? t("loading") : t("no_data")}
+          </DataTableStateRow>
+        ) : (
+          usageRecords.map((r) => (
+            <tr key={r.id}>
+              <td className="ocs-mono ocs-cell-session-id" title={r.session_id} data-column-priority="essential" data-label={t("ocs_col_session_id")}>
+                {r.session_id}
+              </td>
+              <td className="ocs-mono ocs-cell-imsi" data-column-priority="essential" data-label={t("ocs_col_imsi")}>
+                {r.imsi}
+              </td>
+              <td className="ocs-mono" data-column-priority="important" data-label={t("ocs_col_apn")}>{r.apn}</td>
+              <td data-column-priority="essential" data-label={t("ocs_col_cc_type")}>
+                <span className={`ocs-badge ${r.cc_request_type === "TERMINATION" ? "status-closed" : "status-active"}`}>
+                  {r.cc_request_type}
+                </span>
+              </td>
+              <td className="ocs-mono" data-column-priority="supplementary" data-label={t("ocs_col_cc_num")}>#{r.cc_request_number}</td>
+              <td className="ocs-mono" data-column-priority="supplementary" data-label={t("ocs_col_input")}>
+                <span style={{ color: "var(--chart-2)" }}>{formatBytes(r.input_octets)}</span>
+                <span style={{ color: "var(--text-muted)" }}> / </span>
+                <span style={{ color: "var(--chart-5)" }}>{formatBytes(r.output_octets)}</span>
+              </td>
+              <td className="ocs-mono" style={{ fontWeight: 700, color: "var(--text-main)" }} data-column-priority="essential" data-label={t("ocs_col_total_octets")}>
+                {formatBytes(r.total_octets)}
+              </td>
+              <td data-column-priority="important" data-label={t("ocs_col_charged")}>
+                <span className={`ocs-badge ${r.charged ? "status-active" : "status-closed"}`}>
+                  {r.charged ? "CHARGED" : "ZERO / FREE"}
+                </span>
+              </td>
+              <td data-column-priority="essential" data-label={t("ocs_col_result_code")}>
+                <span className={`ocs-badge ${r.result_code === 2001 ? "result-2001" : "result-error"}`}>
+                  {r.result_code || 2001}
+                </span>
+              </td>
+              <td className="ocs-mono ocs-cell-timestamp" data-column-priority="supplementary" data-label={t("ocs_col_created_at")}>
+                {r.created_at ? new Date(r.created_at).toLocaleString() : "-"}
+              </td>
+              <td data-column-priority="essential">
+                <button
+                  type="button"
+                  className="ocs-btn ocs-action-btn"
+                  onClick={() => {
+                    setSelectedRecord(r as unknown as Record<string, unknown>);
+                    setDetailTitle(`CDR Usage Record: ${r.session_id} (#${r.cc_request_number})`);
+                  }}
+                >
+                  <Eye size={13} />
+                  <span>{t("ocs_inspect")}</span>
+                </button>
+              </td>
+            </tr>
+          ))
+        )}
+      </tbody>
+    </table>
+  ) : (
+    <table className="ocs-table">
+      <caption className="sr-only">{t("ocs_tab_reservations")}</caption>
+      <thead>
+        <tr>
+          <th data-column-priority="essential">{t("ocs_col_session_id")}</th>
+          <th data-column-priority="essential">{t("ocs_col_imsi")}</th>
+          <th data-column-priority="important">{t("ocs_col_apn")}</th>
+          <th data-column-priority="essential">Charging Type</th>
+          <th data-column-priority="essential">State</th>
+          <th data-column-priority="important">Reserved / Used</th>
+          <th data-column-priority="supplementary">{t("ocs_col_released")}</th>
+          <th data-column-priority="important">{t("ocs_col_overuse")}</th>
+          <th data-column-priority="essential">{t("ocs_col_result_code")}</th>
+          <th data-column-priority="supplementary">{t("ocs_col_updated_at")}</th>
+          <th data-column-priority="essential">{t("actions")}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {reservationRecords.length === 0 ? (
+          <DataTableStateRow colSpan={11} state={loading ? "loading" : "empty"}>
+            {loading ? t("loading") : t("no_data")}
+          </DataTableStateRow>
+        ) : (
+          reservationRecords.map((r) => {
+            const stateClass =
+              r.state === "active"
+                ? "status-active"
+                : r.state === "settled"
+                ? "status-settled"
+                : r.state === "released"
+                ? "status-released"
+                : r.state === "orphaned"
+                ? "status-orphaned"
+                : "status-closed";
+
+            return (
+              <tr key={r.id}>
+                <td className="ocs-mono ocs-cell-session-id" title={r.session_id} data-column-priority="essential">
+                  {r.session_id}
+                </td>
+                <td className="ocs-mono ocs-cell-imsi" data-column-priority="essential">
+                  {r.imsi}
+                </td>
+                <td className="ocs-mono" data-column-priority="important">{r.apn}</td>
+                <td data-column-priority="essential">
+                  <span className="ocs-badge ocs-badge--neutral">
+                    {r.charging_type}
+                  </span>
+                </td>
+                <td data-column-priority="essential">
+                  <span className={`ocs-badge ${stateClass}`}>
+                    {r.state}
+                  </span>
+                </td>
+                <td className="ocs-mono" data-column-priority="important">
+                  <span style={{ color: "var(--chart-5)" }}>{formatBytes(r.reserved_octets)}</span>
+                  <span style={{ color: "var(--text-muted)" }}> / </span>
+                  <span style={{ color: "var(--status-warning)" }}>{formatBytes(r.used_octets)}</span>
+                </td>
+                <td className="ocs-mono" style={{ color: "var(--status-success)" }} data-column-priority="supplementary">
+                  {formatBytes(r.released_octets)}
+                </td>
+                <td className="ocs-mono" style={{ color: r.overuse_octets > 0 ? "var(--status-danger)" : "var(--text-muted)" }} data-column-priority="important">
+                  {formatBytes(r.overuse_octets)}
+                </td>
+                <td data-column-priority="essential">
+                  <span className={`ocs-badge ${r.result_code === 2001 ? "result-2001" : "result-error"}`}>
+                    {r.result_code}
+                  </span>
+                </td>
+                <td className="ocs-mono ocs-cell-timestamp" data-column-priority="supplementary">
+                  {r.updated_at ? new Date(r.updated_at).toLocaleString() : "-"}
+                </td>
+                <td data-column-priority="essential">
+                  <button
+                    type="button"
+                    className="ocs-btn ocs-action-btn"
+                    onClick={() => {
+                      setSelectedRecord(r as unknown as Record<string, unknown>);
+                      setDetailTitle(`Quota Reservation: ${r.session_id} (#${r.grant_cc_request_number})`);
+                    }}
+                  >
+                    <Eye size={13} />
+                    <span>{t("ocs_inspect")}</span>
+                  </button>
+                </td>
+              </tr>
+            );
+          })
+        )}
+      </tbody>
+    </table>
+  );
+
+  const pagination = (
+    <DataTablePagination
+      page={activeTab === "usage" ? usagePage : reservationPage}
+      pageSize={activeTab === "usage" ? usageLimit : reservationLimit}
+      total={activeTab === "usage" ? usageTotal : reservationTotal}
+      visibleCount={activeTab === "usage" ? usageRecords.length : reservationRecords.length}
+      totalPages={activeTab === "usage" ? usageTotalPages : reservationTotalPages}
+      labels={{
+        showing: t("showing"),
+        to: t("to"),
+        of: t("of"),
+        entries: t("entries"),
+        previous: t("prev"),
+        next: t("next"),
+        perPage: t("per_page"),
+      }}
+      onPageChange={activeTab === "usage" ? setUsagePage : setReservationPage}
+      onPageSizeChange={(nextLimit) => {
+        if (activeTab === "usage") {
+          setUsageLimit(nextLimit);
+          setUsagePage(1);
+        } else {
+          setReservationLimit(nextLimit);
+          setReservationPage(1);
+        }
+      }}
+    />
+  );
+
+  return (
+    <OcsPageShell
+      eyebrow={t("eyebrow_ocs_usage")}
+      title={t("ocs_usage_title")}
+      description={t("ocs_usage_desc")}
+      loading={loading}
+      onRefresh={() => activeTab === "usage" ? refreshUsage() : refreshReservations()}
+      kpiGrid={tabsAndKpi}
+      controls={controls}
+      tableContent={tableContent}
+      pagination={pagination}
+    >
       {selectedRecord && (
         <OcsDetailDrawer
           title={detailTitle}
@@ -557,6 +542,6 @@ export default function OcsUsagePanel() {
           onClose={() => setSelectedRecord(null)}
         />
       )}
-    </div>
+    </OcsPageShell>
   );
 }
