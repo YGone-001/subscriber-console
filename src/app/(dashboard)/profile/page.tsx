@@ -8,7 +8,7 @@ import { EmptyState, LoadingRows, OperationNotice } from "@/components/Operation
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
 import { useAuth } from "@/hooks/useAuth";
-import "./profile-page.css";
+
 import PageHeader from "@/components/ui/PageHeader";
 import MetricStrip from "@/components/ui/MetricStrip";
 

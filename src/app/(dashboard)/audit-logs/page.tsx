@@ -7,7 +7,7 @@ import { fetcher } from "@/lib/fetcher";
 import { useI18n } from "@/components/I18nProvider";
 import { toCsvRow } from "@/lib/csv";
 import VisualDiffViewer from "@/components/VisualDiffViewer";
-import './audit-logs.css';
+
 import PageHeader from '@/components/ui/PageHeader';
 import MetricStrip from '@/components/ui/MetricStrip';
 import { Dialog } from '@/components/ui/Dialog';

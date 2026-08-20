@@ -19,6 +19,7 @@ import "./subscribers.css";
 import { SubscriberToolbar } from "./components/SubscriberToolbar";
 import { SubscriberTable } from "./components/SubscriberTable";
 import PageHeader from "@/components/ui/PageHeader";
+import { formatBytes } from "@/lib/unitParser";
 
 import { PlmnRecord, SubscriberRow, TrafficAdjustmentMode, TrafficAdjustmentTarget, FeedbackState, PendingDelete, SubscriberStatusFilter, ProfilesResponse, SubscribersResponse } from "./types";
 
@@ -276,13 +277,6 @@ export default function SubscriberPage() {
       setCurrentPage(totalPages);
     }
   }, [currentPage, subscribersData, totalPages]);
-
-  const formatBytes = (bytes: number) => {
-    if (bytes === 0) return '0 B';
-    const k = 1024, sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-  };
 
   const handleCopyImsi = async (imsi: string, e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();

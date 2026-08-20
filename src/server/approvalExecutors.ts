@@ -7,6 +7,7 @@ import {
   validatePolicyChangePayload,
   validateTrafficAdjustmentPayload,
 } from '@/lib/subscriberValidation';
+import { asRecord } from '@/lib/typeGuards';
 import type { ApprovalDocument } from '@/server/repositories/approvalRepository';
 import { adjustOcsTrafficBalance, changeOcsPolicyForSubscribers, migrateTariffPlanSubscribers } from '@/server/repositories/ocsBillingRepository';
 import { restoreProfileVersion } from '@/server/repositories/profileRepository';
@@ -17,10 +18,6 @@ import {
   importSubscribersFromRecords,
 } from '@/server/repositories/subscriberRepository';
 import { batchHealSubscriberDocuments, healSubscriberDocument } from '@/server/repositories/systemAuditRepository';
-
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
-}
 
 function auditActionForMode(mode: string) {
   if (mode === 'recharge') return 'TRAFFIC_RECHARGE';

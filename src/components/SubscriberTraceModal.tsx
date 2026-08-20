@@ -3,6 +3,8 @@
 import { Activity, AlertTriangle, Clock3, DatabaseZap, History, RefreshCw, Route, ShieldCheck, Signal, X } from "lucide-react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
+import { formatBytes } from "@/lib/unitParser";
+import { asRecord } from "@/lib/typeGuards";
 import { Dialog } from "@/components/ui/Dialog";
 import { useRef } from "react";
 import "./subscriber-trace-modal.css";
@@ -40,18 +42,6 @@ type TimelineEvent = {
   detail: string;
   meta: string;
 };
-
-function asRecord(value: unknown): Record<string, any> {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, any> : {};
-}
-
-function formatBytes(value: unknown): string {
-  const bytes = Number(value || 0);
-  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-  return `${Number((bytes / Math.pow(1024, index)).toFixed(2))} ${units[index]}`;
-}
 
 function formatSeconds(value: unknown): string {
   const total = Math.max(0, Math.floor(Number(value || 0)));
@@ -248,8 +238,8 @@ export default function SubscriberTraceModal({ imsi, onClose, t }: SubscriberTra
               </div>
               <div className="trace-balance-grid">
                 {[
-                  [t("traffic_total"), formatBytes(ocsTraffic.traffic_total)],
-                  [t("traffic_balance"), formatBytes(ocsTraffic.traffic_balance)],
+                  [t("traffic_total"), formatBytes(Number(ocsTraffic.traffic_total || 0))],
+                  [t("traffic_balance"), formatBytes(Number(ocsTraffic.traffic_balance || 0))],
                   [t("trace_voice_total"), formatSeconds(ocsTraffic.voice_total)],
                   [t("trace_voice_balance"), formatSeconds(ocsTraffic.voice_balance)],
                   [t("trace_sms_total"), `${Number(ocsTraffic.sms_total || 0)} SMS`],
@@ -271,7 +261,7 @@ export default function SubscriberTraceModal({ imsi, onClose, t }: SubscriberTra
                 {(detailLoading ? [] : sessions.slice(0, 4)).map((session: any, index: number) => (
                   <div key={`${session.name || "session"}-${index}`} className="trace-session-item">
                     <strong>{session.name || "-"}</strong>
-                    <span className="trace-session-5qi">5QI {asRecord(session.qos)._5qi || asRecord(session.qos).index || "-"}</span>
+                    <span className="trace-session-5qi">5QI {String(asRecord(session.qos)._5qi || asRecord(session.qos).index || "-")}</span>
                     <span className="trace-session-pcc">{Array.isArray(session.pcc_rule) ? session.pcc_rule.length : 0} PCC</span>
                   </div>
                 ))}
