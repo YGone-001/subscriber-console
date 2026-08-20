@@ -148,7 +148,7 @@ export default function ProfilePage() {
     <>
       <div className="container animate-fade-in profile-page-container">
         <PageHeader
-          eyebrow="POLICY / TEMPLATE"
+          eyebrow={t("eyebrow_policy_template")}
           icon={<Boxes size={23} />}
           title={t("prof_governance_title")}
           description={t("prof_governance_subtitle")}

@@ -119,7 +119,7 @@ export default function RatingManagementPage({ view }: { view: T.RatingManagemen
   return (
     <div className="container animate-fade-in rating-page-container">
       <PageHeader
-        eyebrow={view === "plans" ? "TARIFF / CATALOG" : "PCC / RULES"}
+        eyebrow={view === "plans" ? t("eyebrow_tariff_catalog") : t("eyebrow_pcc_rules")}
         icon={view === "plans" ? <Gauge size={23} /> : <GitBranch size={23} />}
         title={view === "plans" ? t("tariff_plan_current") : t("rating_rule_catalog_title")}
         description={view === "plans" ? t("tariff_plan_current_desc") : t("rating_rule_catalog_desc")}

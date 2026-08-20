@@ -73,7 +73,7 @@ export default function OcsBalancesPanel() {
   return (
     <div className="ocs-container">
       <PageHeader
-        eyebrow="OCS / BALANCE"
+        eyebrow={t("eyebrow_ocs_balance")}
         title={t("ocs_balances_title")}
         description={t("ocs_balances_desc")}
         status={<><Lock size={12} /> {t("ocs_readonly_badge")}</>}
@@ -361,17 +361,17 @@ export default function OcsBalancesPanel() {
           onClose={() => setSelectedRecord(null)}
           fields={[
             { label: "IMSI", value: selectedRecord.imsi },
-            { label: "Plan ID", value: selectedRecord.plan_id },
-            { label: "Status", value: selectedRecord.status },
-            { label: "Data Total", value: `${formatBytes(selectedRecord.data_total)} (${selectedRecord.data_total} B)` },
-            { label: "Data Used", value: `${formatBytes(selectedRecord.data_used)} (${selectedRecord.data_used} B)` },
-            { label: "Data Reserved", value: `${formatBytes(selectedRecord.data_reserved)} (${selectedRecord.data_reserved} B)` },
-            { label: "Data Available", value: `${formatBytes(selectedRecord.data_available)} (${selectedRecord.data_available} B)` },
-            { label: "Data Invariant OK", value: selectedRecord.data_invariant_ok ? "TRUE" : "FALSE (Mismatch)" },
-            { label: "Voice Invariant OK", value: selectedRecord.voice_invariant_ok ? "TRUE" : "FALSE" },
-            { label: "SMS Invariant OK", value: selectedRecord.sms_invariant_ok ? "TRUE" : "FALSE" },
-            { label: "Version Counter", value: selectedRecord.version },
-            { label: "Updated Timestamp", value: selectedRecord.updated_at || "-" },
+            { label: t("ocs_detail_plan_id"), value: selectedRecord.plan_id },
+            { label: t("ocs_detail_status"), value: selectedRecord.status },
+            { label: t("ocs_detail_data_total"), value: `${formatBytes(selectedRecord.data_total)} (${selectedRecord.data_total} B)` },
+            { label: t("ocs_detail_data_used"), value: `${formatBytes(selectedRecord.data_used)} (${selectedRecord.data_used} B)` },
+            { label: t("ocs_detail_data_reserved"), value: `${formatBytes(selectedRecord.data_reserved)} (${selectedRecord.data_reserved} B)` },
+            { label: t("ocs_detail_data_available"), value: `${formatBytes(selectedRecord.data_available)} (${selectedRecord.data_available} B)` },
+            { label: t("ocs_detail_data_invariant"), value: selectedRecord.data_invariant_ok ? t("ocs_detail_true") : t("ocs_detail_false_mismatch") },
+            { label: t("ocs_detail_voice_invariant"), value: selectedRecord.voice_invariant_ok ? t("ocs_detail_true") : t("ocs_detail_false_mismatch") },
+            { label: t("ocs_detail_sms_invariant"), value: selectedRecord.sms_invariant_ok ? t("ocs_detail_true") : t("ocs_detail_false_mismatch") },
+            { label: t("ocs_detail_version"), value: selectedRecord.version },
+            { label: t("ocs_detail_updated"), value: selectedRecord.updated_at || "-" },
           ]}
         />
       )}
