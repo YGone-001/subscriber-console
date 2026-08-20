@@ -2,7 +2,6 @@ import React from "react";
 import { Download, Trash2, Settings2, Plus, Layers, DatabaseZap, FileUp } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
 export interface SubscriberToolbarProps {
   searchQuery: string;
   setSearchQuery: any;

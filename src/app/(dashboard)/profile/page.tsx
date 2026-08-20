@@ -93,6 +93,9 @@ export default function ProfilePage() {
   const [notice, setNotice] = useState<ProfileNotice | null>(null);
   const { canEditTemplates } = useAuth();
 
+  // eslint-disable-next-line -- Date.now() is intentionally read once per render for the 14-day window check
+  const now = Date.now();
+
   const governedProfiles = useMemo(() => profiles.map(profile => {
     const impactedSubscribers = profile.subscriberCount ?? profile.impactedSubscribers ?? 0;
     const sliceCount = profile.sliceCount || 0;
@@ -122,9 +125,9 @@ export default function ProfilePage() {
     recentlyChanged: governedProfiles.filter(profile => {
       const changedAt = profile.updatedAt || profile.createdAt;
       if (!changedAt) return false;
-      return Date.now() - new Date(changedAt).getTime() <= 1000 * 60 * 60 * 24 * 14;
+      return now - new Date(changedAt).getTime() <= 1000 * 60 * 60 * 24 * 14;
     }).length,
-  }), [backendSummary, governedProfiles]);
+  }), [backendSummary, governedProfiles, now]);
 
   const handleOpenNew = () => {
     setNotice(null);
