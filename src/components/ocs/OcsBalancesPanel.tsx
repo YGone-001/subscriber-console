@@ -261,11 +261,11 @@ export default function OcsBalancesPanel() {
 
                   return (
                     <tr key={r.id}>
-                      <td className="ocs-mono" style={{ fontWeight: 600, color: "var(--status-info)" }} data-column-priority="essential" data-label={t("ocs_col_imsi")}>
+                      <td className="ocs-mono ocs-cell-imsi" data-column-priority="essential" data-label={t("ocs_col_imsi")}>
                         {r.imsi}
                       </td>
                       <td data-column-priority="important" data-label={t("ocs_col_plan")}>
-                        <span className="ocs-badge" style={{ background: "var(--neutral-soft)", color: "var(--text-secondary)" }}>
+                        <span className="ocs-badge ocs-badge--neutral">
                           {r.plan_id}
                         </span>
                       </td>
@@ -309,14 +309,13 @@ export default function OcsBalancesPanel() {
                         )}
                       </td>
                       <td className="ocs-mono" style={{ color: "var(--text-muted)" }} data-column-priority="supplementary" data-label={t("ocs_col_version")}>v{r.version}</td>
-                      <td className="ocs-mono" style={{ fontSize: "var(--ref-font-size-data)", color: "var(--text-muted)" }} data-column-priority="supplementary" data-label={t("ocs_col_updated_at")}>
+                      <td className="ocs-mono ocs-cell-timestamp" data-column-priority="supplementary" data-label={t("ocs_col_updated_at")}>
                         {r.updated_at ? new Date(r.updated_at).toLocaleString() : "-"}
                       </td>
                       <td data-column-priority="essential">
                         <button
                           type="button"
-                          className="ocs-btn"
-                          style={{ padding: "0.35rem 0.65rem", fontSize: "var(--ref-font-size-label-strong)" }}
+                          className="ocs-btn ocs-action-btn"
                           onClick={() => setSelectedRecord(r)}
                         >
                           <Eye size={13} />

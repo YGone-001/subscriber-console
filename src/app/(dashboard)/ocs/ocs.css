@@ -577,6 +577,37 @@
   max-height: 280px;
 }
 
+/* ── Shared cell utility classes ── */
+
+.ocs-cell-imsi {
+  font-weight: 600;
+  color: var(--status-info);
+}
+
+.ocs-cell-timestamp {
+  font-size: var(--ref-font-size-label-strong);
+  color: var(--text-muted);
+}
+
+.ocs-cell-session-id {
+  font-size: var(--ref-font-size-data);
+  color: var(--status-info);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ocs-action-btn {
+  padding: 0.35rem 0.65rem;
+  font-size: var(--ref-font-size-label-strong);
+}
+
+.ocs-badge--neutral {
+  background: var(--neutral-soft);
+  color: var(--text-secondary);
+}
+
 /* ── Mobile table transforms ── */
 
 @media (max-width: 760px) {

@@ -278,10 +278,10 @@ export default function OcsSessionsPanel() {
 
                   return (
                     <tr key={r.id}>
-                      <td className="ocs-mono" style={{ fontSize: "var(--ref-font-size-data)", color: "var(--status-info)", maxWidth: "200px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.session_id} data-column-priority="essential" data-label={t("ocs_col_session_id")}>
+                      <td className="ocs-mono ocs-cell-session-id" style={{ maxWidth: "200px" }} title={r.session_id} data-column-priority="essential" data-label={t("ocs_col_session_id")}>
                         {r.session_id}
                       </td>
-                      <td className="ocs-mono" style={{ fontWeight: 600, color: "var(--status-info)" }} data-column-priority="essential" data-label={t("ocs_col_imsi")}>
+                      <td className="ocs-mono ocs-cell-imsi" data-column-priority="essential" data-label={t("ocs_col_imsi")}>
                         {r.imsi}
                       </td>
                       <td className="ocs-mono" data-column-priority="important" data-label={t("ocs_col_apn")}>{r.apn}</td>
@@ -305,7 +305,7 @@ export default function OcsSessionsPanel() {
                         {r.rating_group !== undefined ? `RG:${r.rating_group}` : "-"}
                         {r.service_identifier !== undefined ? ` / SI:${r.service_identifier}` : ""}
                       </td>
-                      <td className="ocs-mono" style={{ fontSize: "var(--ref-font-size-label-strong)", color: "var(--text-muted)" }} data-column-priority="supplementary" data-label={t("ocs_col_started_at")}>
+                      <td className="ocs-mono ocs-cell-timestamp" data-column-priority="supplementary" data-label={t("ocs_col_started_at")}>
                         {r.started_at ? new Date(r.started_at).toLocaleTimeString() : "-"}
                       </td>
                       <td className="ocs-mono" style={{ fontSize: "var(--ref-font-size-label-strong)", color: "var(--text-muted)" }} data-column-priority="important" data-label={t("ocs_col_last_update")}>
@@ -314,8 +314,7 @@ export default function OcsSessionsPanel() {
                       <td data-column-priority="essential">
                         <button
                           type="button"
-                          className="ocs-btn"
-                          style={{ padding: "0.35rem 0.65rem", fontSize: "var(--ref-font-size-label-strong)" }}
+                          className="ocs-btn ocs-action-btn"
                           onClick={() => setSelectedRecord(r)}
                         >
                           <Eye size={13} />
