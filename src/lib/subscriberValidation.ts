@@ -1,3 +1,7 @@
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
 type ValidationResult<T> =
   | { ok: true; value: T }
   | { ok: false; error: string };
@@ -34,10 +38,6 @@ const HEX_32 = /^[0-9a-fA-F]{32}$/;
 const HEX_4 = /^[0-9a-fA-F]{4}$/;
 const HEX_1_TO_6 = /^[0-9a-fA-F]{1,6}$/;
 const SESSION_NAME = /^[A-Za-z0-9_.-]{1,63}$/;
-
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
-}
 
 function isBlank(value: unknown): boolean {
   return value === undefined || value === null || value === '';

@@ -1,6 +1,7 @@
 import { Long, ObjectId } from 'mongodb';
 import { IMS_SESSION_AMBR, isImsDnn, pccQosPreset, sessionQosPreset } from '@/lib/imsQosPresets';
 import { buildDefaultSub4G, getPrimaryMsisdn, normalizeSub4G } from '@/lib/subscriberDefaults';
+import { asRecord, asString, asNumber, asArray } from '@/lib/typeGuards';
 import type {
   LegacySubscriberState,
   Open5gsAmbr,
@@ -18,24 +19,6 @@ type UnknownRecord = Record<string, unknown>;
 const ZERO_128 = '00000000000000000000000000000000';
 const DEFAULT_AUTH_KEY = '000102030405060708090A0B0C0D0E0F';
 const DEFAULT_IMEISV = '8672710677532401';
-
-function asRecord(value: unknown): UnknownRecord {
-  return value && typeof value === 'object' && !Array.isArray(value) ? value as UnknownRecord : {};
-}
-
-function asString(value: unknown, fallback = ''): string {
-  if (value === undefined || value === null) return fallback;
-  return String(value);
-}
-
-function asNumber(value: unknown, fallback = 0): number {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
-}
-
-function asArray<T = unknown>(value: unknown): T[] {
-  return Array.isArray(value) ? value as T[] : [];
-}
 
 function longToNumber(value: unknown): number {
   if (Long.isLong(value)) return value.toNumber();
