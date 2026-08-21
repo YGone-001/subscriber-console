@@ -7,6 +7,7 @@ import {
   HeartPulse,
   HardDrive,
   Database,
+  DatabaseZap,
   Check,
   RefreshCw,
   Zap,
@@ -61,6 +62,25 @@ export default function SystemHealthPage() {
   // Filtering states
   const [activeCategoryTab, setActiveCategoryTab] = useState<AnomalyCategory | 'all'>('all');
   const [selectedSeverity, setSelectedSeverity] = useState<AnomalySeverity | 'all'>('all');
+
+  // Telemetry sync state
+  const [syncState, setSyncState] = useState<"idle" | "syncing" | "success" | "error">("idle");
+
+  const handleSync = async () => {
+    if (syncState === "syncing") return;
+    setSyncState("syncing");
+    try {
+      const res = await fetch("/api/analytics/init", { method: "POST" });
+      if (!res.ok) throw new Error(t("sync_error"));
+      setSyncState("success");
+      setNotice({ type: "success", text: `${t("sync_telemetry")} ${t("sync_ok")}` });
+      setTimeout(() => setSyncState("idle"), 2000);
+    } catch (error) {
+      setSyncState("error");
+      setNotice({ type: "error", text: error instanceof Error ? error.message : t("sync_error") });
+      setTimeout(() => setSyncState("idle"), 2000);
+    }
+  };
 
   // Single Heal Modal states
   const [healModalOpen, setHealModalOpen] = useState(false);
@@ -333,14 +353,34 @@ export default function SystemHealthPage() {
           description={t("health_subsystems_title")}
           tone={(systemHealth?.status === "critical" ? "danger" : systemHealth?.status === "degraded" ? "warning" : "healthy") as PageHeaderTone}
           status={getStatusBadge(systemHealth?.status)}
-          actions={<button
-            className="btn btn-outline health-mongo-refresh"
-            onClick={() => refreshSystemHealth()}
-            disabled={isHealthLoading}
-          >
-            <RefreshCw size={14} className={isHealthLoading ? "spin" : ""} />
-            {t("refresh")}
-          </button>}
+          actions={<div className="health-header-actions">
+            <button
+              onClick={handleSync}
+              disabled={syncState === "syncing"}
+              className={`btn btn-outline analytics-sync-btn ${syncState === "syncing" ? "radar-animating" : ""}`}
+              title={t("sync_tooltip")}
+            >
+              {syncState === "syncing" ? (
+                <span>{t("sync_scanning")}</span>
+              ) : syncState === "success" ? (
+                <span className="text-success">{t("sync_ok")}</span>
+              ) : syncState === "error" ? (
+                <span className="text-danger">{t("sync_error")}</span>
+              ) : (
+                <>
+                  <DatabaseZap size={15} /> {t("sync_telemetry")}
+                </>
+              )}
+            </button>
+            <button
+              className="btn btn-outline health-mongo-refresh"
+              onClick={() => refreshSystemHealth()}
+              disabled={isHealthLoading}
+            >
+              <RefreshCw size={14} className={isHealthLoading ? "spin" : ""} />
+              {t("refresh")}
+            </button>
+          </div>}
         />
 
         {/* Subsystems Matrix Section */}

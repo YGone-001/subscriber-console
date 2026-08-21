@@ -12,6 +12,13 @@
   }
 }
 
+/* Header Actions */
+.health-header-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
 /* Subsystems Matrix */
 .health-subsystems-section { margin-bottom: 2.5rem; }
 .health-section-title-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; }
