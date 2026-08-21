@@ -9,6 +9,8 @@ const usersSummarySource = readFileSync(new URL('../src/app/(dashboard)/users/co
 const usersTableSource = readFileSync(new URL('../src/app/(dashboard)/users/components/UsersTable.tsx', import.meta.url), 'utf8');
 const rolesSource = readFileSync(new URL('../src/components/users/RoleManagementPanel.tsx', import.meta.url), 'utf8');
 const approvalsSource = readFileSync(new URL('../src/components/users/ApprovalCenterPanel.tsx', import.meta.url), 'utf8');
+const approvalsRouteSource = readFileSync(new URL('../src/app/api/approvals/route.ts', import.meta.url), 'utf8');
+const approvalExecutorSource = readFileSync(new URL('../src/server/approvalExecutors.ts', import.meta.url), 'utf8');
 
 test('user access management routes are present as independent pages', () => {
   assert.equal(existsSync(new URL('../src/app/(dashboard)/users/page.tsx', import.meta.url)), true);
@@ -60,7 +62,21 @@ test('system user table keeps scan-critical columns and hides secondary actions 
   assert.match(usersTableSource, /colSpan=\{6\}/);
 });
 
-test('approval center remains backed by its dedicated API', () => {
+test('approval center keeps the review queue focused and supports safe self-service access requests', () => {
   assert.match(approvalsSource, /\/api\/approvals/);
-  assert.match(approvalsSource, /approvals_approve_only_unavailable/);
+  assert.match(approvalsSource, /access_request_submit/);
+  assert.match(approvalsSource, /access_request_pending/);
+  assert.doesNotMatch(approvalsSource, /approvals_approve_only_unavailable/);
+  assert.doesNotMatch(approvalsSource, /setRequester|setAction|setStatus|setRisk|setFrom|setTo/);
+});
+
+test('self-service access requests are viewer-only, deduplicated, approved by Root, and audited', () => {
+  assert.match(approvalsRouteSource, /export async function POST/);
+  assert.match(approvalsRouteSource, /user\.role !== 'viewer'/);
+  assert.match(approvalsRouteSource, /getPendingAccessRequest/);
+  assert.match(approvalsRouteSource, /requestedRole: 'operator'/);
+  assert.match(approvalExecutorSource, /approval\.action === 'ACCESS_REQUEST'/);
+  assert.match(approvalExecutorSource, /currentUser\.role !== 'viewer'/);
+  assert.match(approvalExecutorSource, /updateUser\(currentUser\.username, \{ role: 'operator' \}\)/);
+  assert.match(approvalExecutorSource, /logAudit/);
 });
