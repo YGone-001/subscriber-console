@@ -40,10 +40,10 @@
   flex: 1 1 auto;
 }
 
-.search-input {
+.action-bar-left .search-input {
   width: min(350px, 100%);
   border-radius: var(--ref-radius-pill);
-  padding: 0.6rem 1.2rem;
+  padding: 0.6rem 1.2rem 0.6rem 3.5rem;
 }
 
 .bulk-actions-container {
