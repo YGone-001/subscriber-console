@@ -38,7 +38,7 @@ test("sortable data tables expose their active sort direction", () => {
 
   assert.match(subscriberTable, /SortableTableHeader/);
   assert.match(read("src/components/ui/SortableTableHeader.tsx"), /aria-sort=/);
-  for (const key of ["username", "status", "lastLoginAt", "createdAt"]) {
+  for (const key of ["username", "status", "lastLoginAt"]) {
     assert.match(usersTable, new RegExp(`aria-sort=\\{getAriaSort\\("${key}"\\)\\}`));
   }
   assert.match(sessionsTable, /aria-sort=\{getAriaSort\("last_update_at"\)\}/);

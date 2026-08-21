@@ -6,6 +6,7 @@ const layoutSource = readFileSync(new URL('../src/app/(dashboard)/components/App
 const usersSource = readFileSync(new URL('../src/app/(dashboard)/users/page.tsx', import.meta.url), 'utf8');
 const usersToolbarSource = readFileSync(new URL('../src/app/(dashboard)/users/components/UsersToolbar.tsx', import.meta.url), 'utf8');
 const usersSummarySource = readFileSync(new URL('../src/app/(dashboard)/users/components/UsersSummaryPanel.tsx', import.meta.url), 'utf8');
+const usersTableSource = readFileSync(new URL('../src/app/(dashboard)/users/components/UsersTable.tsx', import.meta.url), 'utf8');
 const rolesSource = readFileSync(new URL('../src/components/users/RoleManagementPanel.tsx', import.meta.url), 'utf8');
 const approvalsSource = readFileSync(new URL('../src/components/users/ApprovalCenterPanel.tsx', import.meta.url), 'utf8');
 
@@ -43,6 +44,17 @@ test('system user directory keeps only high-frequency filters visible', () => {
   assert.match(usersToolbarSource, /users_filter_all_statuses/);
   assert.doesNotMatch(usersToolbarSource, /users_more_filters|users_export|RefreshCw|SlidersHorizontal/);
   assert.doesNotMatch(usersSummarySource, /users_pending_approval/);
+});
+
+test('system user table keeps scan-critical columns and hides secondary actions in overflow', () => {
+  assert.match(usersTableSource, /users_col_user/);
+  assert.match(usersTableSource, /users_role/);
+  assert.match(usersTableSource, /users_status/);
+  assert.match(usersTableSource, /users_last_login/);
+  assert.doesNotMatch(usersTableSource, /users_contact|users_detail_created_by|users_force_logout|users_unlock_account|users_copy_user/);
+  assert.match(usersTableSource, /users_bulk_export/);
+  assert.match(usersTableSource, /users_more_actions/);
+  assert.match(usersTableSource, /colSpan=\{6\}/);
 });
 
 test('approval center remains backed by its dedicated API', () => {
