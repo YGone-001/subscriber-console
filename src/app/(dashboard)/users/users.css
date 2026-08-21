@@ -226,7 +226,7 @@
 
   .users-table {
     width: 100%;
-    min-width: 1180px;
+    min-width: 880px;
     border-collapse: separate;
     border-spacing: 0;
     font-size: var(--ref-font-size-body-support);
@@ -369,18 +369,11 @@
     height: 42px;
   }
 
-  .users-contact-cell,
   .users-date-cell {
     display: grid;
     gap: 0.16rem;
     color: var(--text-muted);
     font-size: var(--ref-font-size-data-relaxed);
-  }
-
-  .users-contact-cell {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
   }
 
   .users-badge {

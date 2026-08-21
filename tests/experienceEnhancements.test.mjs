@@ -35,7 +35,6 @@ test("dense tables declare responsive column priorities", () => {
 
   for (const file of [
     "src/app/(dashboard)/subscribers/components/SubscriberTable.tsx",
-    "src/app/(dashboard)/users/components/UsersTable.tsx",
     "src/components/ocs/OcsBalancesPanel.tsx",
     "src/components/ocs/OcsSessionsPanel.tsx",
     "src/components/ocs/OcsUsagePanel.tsx",
@@ -45,6 +44,11 @@ test("dense tables declare responsive column priorities", () => {
     assert.match(source, /data-column-priority="important"/);
     assert.match(source, /data-column-priority="supplementary"/);
   }
+
+  const usersTable = read("src/app/(dashboard)/users/components/UsersTable.tsx");
+  assert.match(usersTable, /data-column-priority="essential"/);
+  assert.match(usersTable, /data-column-priority="important"/);
+  assert.doesNotMatch(usersTable, /data-column-priority="supplementary"/);
 
   for (const file of [
     "src/components/DataHub.tsx",

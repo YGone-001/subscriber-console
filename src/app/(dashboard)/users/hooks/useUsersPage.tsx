@@ -94,6 +94,7 @@ export function useUsersPage() {
   const [selectedUsername, setSelectedUsername] = useState<string | null>(null);
   const [selectedUsernames, setSelectedUsernames] = useState<string[]>([]);
   const [openMenuUsername, setOpenMenuUsername] = useState<string | null>(null);
+  const [bulkMenuOpen, setBulkMenuOpen] = useState(false);
   const [bulkRole, setBulkRole] = useState<RoleKey>("operator");
   const selectedUser = selectedUsername ? users.find((item) => item.username === selectedUsername) || null : null;
   const auditUrl = drawerMode === "view" && detailTab === "activity" && selectedUser
@@ -188,6 +189,10 @@ export function useUsersPage() {
   useEffect(() => {
     setSelectedUsernames((current: any) => current.filter((username: string) => users.some((item) => item.username === username)));
   }, [users]);
+
+  useEffect(() => {
+    if (selectedUsernames.length === 0) setBulkMenuOpen(false);
+  }, [selectedUsernames.length]);
 
   const readError = async (res: Response, fallback: string) => {
     try {
@@ -697,6 +702,7 @@ export function useUsersPage() {
   const tableProps = {
     selectedUsernames, mutableSelectedUsers, requestBulkAction,
     bulkRole, setBulkRole, exportSelectedUsers, setSelectedUsernames,
+    bulkMenuOpen, setBulkMenuOpen,
     filteredUsers, users, allPageSelected, togglePageSelection,
     pagedUsers, toggleSort, sortKey, sortDirection,
     isLoading, error, mutate, openCreateDrawer, clearFilters,

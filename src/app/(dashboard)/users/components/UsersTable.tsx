@@ -1,7 +1,7 @@
 import { useI18n } from "@/components/I18nProvider";
 import { 
-  User, Mail, Search, RefreshCw, Plus, KeyRound, LogOut, 
-  UserCheck, UserX, Lock, ChevronDown, Trash2, Eye, Settings,
+  User, Search, RefreshCw, Plus, KeyRound,
+  UserCheck, UserX, Trash2, Eye, Settings,
   MoreHorizontal, Shield, X, Download
 } from "lucide-react";
 import { LoadingRows, EmptyState } from "@/components/OperationFeedback";
@@ -13,6 +13,7 @@ export function UsersTable(props: any) {
   const {
     selectedUsernames, mutableSelectedUsers, requestBulkAction,
     bulkRole, setBulkRole, exportSelectedUsers, setSelectedUsernames,
+    bulkMenuOpen, setBulkMenuOpen,
     filteredUsers, users, allPageSelected, togglePageSelection,
     pagedUsers, toggleSort, sortKey, sortDirection,
     isLoading, error, mutate, openCreateDrawer, clearFilters,
@@ -54,14 +55,30 @@ export function UsersTable(props: any) {
                   <Shield size={15} />
                   {t("users_bulk_assign_role")}
                 </button>
-                <button type="button" className="btn btn-outline" onClick={exportSelectedUsers}>
-                  <Download size={15} />
-                  {t("users_bulk_export")}
-                </button>
                 <button type="button" className="btn btn-outline users-danger-action" onClick={() => requestBulkAction("delete")} disabled={mutableSelectedUsers.length === 0}>
                   <Trash2 size={15} />
                   {t("users_bulk_delete")}
                 </button>
+                <div className="users-more users-bulk-more">
+                  <button
+                    type="button"
+                    className="btn btn-outline"
+                    onClick={() => setBulkMenuOpen((current: boolean) => !current)}
+                    aria-expanded={bulkMenuOpen}
+                    aria-label={t("users_more_actions")}
+                  >
+                    <MoreHorizontal size={15} />
+                    {t("users_more_actions")}
+                  </button>
+                  {bulkMenuOpen ? (
+                    <div className="users-more-menu" onKeyDown={(event) => { if (event.key === "Escape") setBulkMenuOpen(false); }}>
+                      <button type="button" onClick={() => { exportSelectedUsers(); setBulkMenuOpen(false); }}>
+                        <Download size={15} />
+                        {t("users_bulk_export")}
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
                 <button type="button" className="btn btn-outline" onClick={() => setSelectedUsernames([])}>
                   <X size={15} />
                   {t("users_clear_selection")}
@@ -92,7 +109,6 @@ export function UsersTable(props: any) {
                   ["username", t("users_col_user")],
                   ["status", t("users_status")],
                   ["lastLoginAt", t("users_last_login")],
-                  ["createdAt", t("users_created")],
                 ].map(([key, label]) => (
                   <button
                     key={key}
@@ -124,7 +140,6 @@ export function UsersTable(props: any) {
                       <User size={15} /> {t("users_col_user")} {sortKey === "username" ? t(`users_sort_${sortDirection}`) : null}
                     </button>
                   </th>
-                  <th data-column-priority="important">{t("users_contact")}</th>
                   <th data-column-priority="essential">{t("users_role")}</th>
                   <th aria-sort={getAriaSort("status")} data-column-priority="essential">
                     <button type="button" className="users-sort-btn" onClick={() => toggleSort("status")}>
@@ -136,23 +151,17 @@ export function UsersTable(props: any) {
                       {t("users_last_login")} {sortKey === "lastLoginAt" ? t(`users_sort_${sortDirection}`) : null}
                     </button>
                   </th>
-                  <th aria-sort={getAriaSort("createdAt")} data-column-priority="supplementary">
-                    <button type="button" className="users-sort-btn" onClick={() => toggleSort("createdAt")}>
-                      {t("users_created")} {sortKey === "createdAt" ? t(`users_sort_${sortDirection}`) : null}
-                    </button>
-                  </th>
-                  <th data-column-priority="supplementary">{t("users_detail_created_by")}</th>
                   <th className="users-actions-col" data-column-priority="essential">{t("users_actions")}</th>
                 </tr>
               </thead>
               <tbody>
                 {isLoading ? (
                   <tr className="users-table-state-row">
-                    <td colSpan={9}><LoadingRows columns={9} rows={6} /></td>
+                    <td colSpan={6}><LoadingRows columns={6} rows={6} /></td>
                   </tr>
                 ) : error ? (
                   <tr className="users-table-state-row">
-                    <td colSpan={9}>
+                    <td colSpan={6}>
                       <EmptyState
                         icon={<Shield size={44} />}
                         title={t("users_error_title")}
@@ -168,7 +177,7 @@ export function UsersTable(props: any) {
                   </tr>
                 ) : users.length === 0 ? (
                   <tr className="users-table-state-row">
-                    <td colSpan={9}>
+                    <td colSpan={6}>
                       <EmptyState
                         icon={<UserCheck size={44} />}
                         title={t("users_empty")}
@@ -184,7 +193,7 @@ export function UsersTable(props: any) {
                   </tr>
                 ) : filteredUsers.length === 0 ? (
                   <tr className="users-table-state-row">
-                    <td colSpan={9}>
+                    <td colSpan={6}>
                       <EmptyState
                         icon={<Search size={44} />}
                         title={t("users_no_match")}
@@ -220,20 +229,12 @@ export function UsersTable(props: any) {
                           </span>
                         </button>
                       </td>
-                      <td data-label={t("users_contact")} data-column-priority="important">
-                        <span className="users-contact-cell">
-                          <Mail size={14} />
-                          {displayValue(item.email)}
-                        </span>
-                      </td>
                       <td data-label={t("users_role")} data-column-priority="essential">{renderRoleBadge(item.role)}</td>
                       <td data-label={t("users_status")} data-column-priority="essential">{renderStatusBadge(item.status, item.locked)}</td>
-                      <td className="users-date-cell" data-label={t("users_last_login")} data-column-priority="important">
+                      <td className="users-date-cell" data-label={t("users_last_login")} data-column-priority="essential">
                         <span>{formatDateTime(item.lastLoginAt)}</span>
                         <small>{displayValue(item.lastLoginIp)}</small>
                       </td>
-                      <td className="users-date-cell" data-label={t("users_created")} data-column-priority="supplementary">{formatDateTime(item.createdAt)}</td>
-                      <td data-label={t("users_detail_created_by")} data-column-priority="supplementary">{displayValue(item.createdBy)}</td>
                       <td className="users-actions-col" data-label={t("users_actions")} data-column-priority="essential">
                         <div className="users-row-actions">
                           <button type="button" className="btn btn-ghost" onClick={() => openDetails(item)}>
@@ -261,10 +262,6 @@ export function UsersTable(props: any) {
                                   <KeyRound size={15} />
                                   {t("users_reset_password")}
                                 </button>
-                                <button type="button" disabled title={t("users_not_available_stage")}>
-                                  <LogOut size={15} />
-                                  {t("users_force_logout")}
-                                </button>
                                 <button
                                   type="button"
                                   disabled={isProtected || itemStatus === "active"}
@@ -280,14 +277,6 @@ export function UsersTable(props: any) {
                                 >
                                   <UserX size={15} />
                                   {t("users_disable_account")}
-                                </button>
-                                <button type="button" disabled title={t("users_not_available_stage")}>
-                                  <Lock size={15} />
-                                  {t("users_unlock_account")}
-                                </button>
-                                <button type="button" disabled title={t("users_not_available_stage")}>
-                                  <ChevronDown size={15} />
-                                  {t("users_copy_user")}
                                 </button>
                                 <button type="button" className="danger" disabled={isProtected} onClick={() => handleDelete(item.username)}>
                                   <Trash2 size={15} />
