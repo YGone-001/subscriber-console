@@ -16,8 +16,6 @@ export default function UsersPage() {
     isRoot,
     users,
     statusCounts,
-    approvalMetrics,
-    setNotice,
     openCreateDrawer,
     t,
     toolbarProps,
@@ -56,8 +54,6 @@ export default function UsersPage() {
         <UsersSummaryPanel
           usersCount={users.length}
           statusCounts={statusCounts as { active: number; disabled: number; }}
-          approvalMetrics={approvalMetrics}
-          setNotice={setNotice}
         />
 
         <section className="users-table-panel">
@@ -73,4 +69,3 @@ export default function UsersPage() {
           </>
   );
 }
-

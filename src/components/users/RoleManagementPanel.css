@@ -91,10 +91,6 @@
     flex-wrap: wrap;
   }
 
-  .role-actions .danger {
-    color: var(--danger);
-  }
-
   .role-drawer-layer {
     position: fixed;
     inset: 0;
@@ -203,22 +199,6 @@
   .permission-effect.deny {
     color: var(--danger);
     background: var(--danger-soft);
-  }
-
-  .role-diff {
-    display: grid;
-    gap: 0.5rem;
-    padding: 1rem 1.25rem;
-    border-top: 1px solid var(--surface-border);
-    background: var(--surface-hover);
-  }
-
-  .role-diff > div {
-    display: flex;
-    justify-content: space-between;
-    gap: 1rem;
-    padding: 0.55rem 0;
-    border-top: 1px solid var(--surface-border);
   }
 
   @media (max-width: 1180px) {

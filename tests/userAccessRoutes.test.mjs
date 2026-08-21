@@ -4,6 +4,8 @@ import { readFileSync, existsSync } from 'node:fs';
 
 const layoutSource = readFileSync(new URL('../src/app/(dashboard)/components/AppSidebar.tsx', import.meta.url), 'utf8');
 const usersSource = readFileSync(new URL('../src/app/(dashboard)/users/page.tsx', import.meta.url), 'utf8');
+const usersToolbarSource = readFileSync(new URL('../src/app/(dashboard)/users/components/UsersToolbar.tsx', import.meta.url), 'utf8');
+const usersSummarySource = readFileSync(new URL('../src/app/(dashboard)/users/components/UsersSummaryPanel.tsx', import.meta.url), 'utf8');
 const rolesSource = readFileSync(new URL('../src/components/users/RoleManagementPanel.tsx', import.meta.url), 'utf8');
 const approvalsSource = readFileSync(new URL('../src/components/users/ApprovalCenterPanel.tsx', import.meta.url), 'utf8');
 
@@ -29,9 +31,21 @@ test('system users page no longer renders role matrix or approval center bodies'
   assert.match(usersSource, /users_detail_tab_permissions/);
 });
 
-test('role management and approval center keep backend compatibility boundaries explicit', () => {
+test('role management presents the built-in policy without inactive mutation controls', () => {
   assert.match(rolesSource, /ROLE_CAPABILITIES/);
-  assert.match(rolesSource, /roles_no_api/);
+  assert.match(rolesSource, /roles_view_permissions/);
+  assert.doesNotMatch(rolesSource, /roles_no_api|roles_copy|roles_builtin_protected|editingRole|buildPermissionDiff/);
+});
+
+test('system user directory keeps only high-frequency filters visible', () => {
+  assert.match(usersToolbarSource, /users_search_ph/);
+  assert.match(usersToolbarSource, /users_filter_all_roles/);
+  assert.match(usersToolbarSource, /users_filter_all_statuses/);
+  assert.doesNotMatch(usersToolbarSource, /users_more_filters|users_export|RefreshCw|SlidersHorizontal/);
+  assert.doesNotMatch(usersSummarySource, /users_pending_approval/);
+});
+
+test('approval center remains backed by its dedicated API', () => {
   assert.match(approvalsSource, /\/api\/approvals/);
   assert.match(approvalsSource, /approvals_approve_only_unavailable/);
 });

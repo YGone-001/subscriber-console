@@ -14,35 +14,17 @@ import { useAuth } from "@/hooks/useAuth";
 import { useI18n } from "@/components/I18nProvider";
 
 import {
-  SysUser, RoleKey, UserStatus, RoleFilter, StatusFilter, CreatedFilter, BinaryFilter,
+  SysUser, RoleKey, UserStatus, RoleFilter, StatusFilter,
   SortKey, SortDirection, DrawerMode, DetailTab, NewUserForm, EditUserForm,
-  Notice, PendingStatusChange, PendingBulkAction, PendingUpdate, ApprovalMetricResponse,
+  Notice, PendingStatusChange, PendingBulkAction, PendingUpdate,
   AuditLogResponse, BulkAction, VALID_ROLES, VALID_STATUS, PAGE_SIZE_OPTIONS,
   DEFAULT_NEW_FORM, DEFAULT_EDIT_FORM, USERNAME_PATTERN, ROLE_STYLE,
 } from "../types";
 
 import {
-  normalizeRole, normalizeStatus, normalizePageSize, matchesCreatedFilter,
-  isRoleFilter, isStatusFilter, isCreatedFilter, isBinaryFilter, isSortKey, isSortDirection,
+  normalizeRole, normalizeStatus, normalizePageSize,
+  isRoleFilter, isStatusFilter, isSortKey, isSortDirection,
 } from "../utils";
-
-
-
-function matchesDateRange(value: string | undefined, from: string, to: string) {
-  if (!from && !to) return true;
-  if (!value) return false;
-  const time = new Date(value).getTime();
-  if (!Number.isFinite(time)) return false;
-  if (from) {
-    const fromTime = new Date(`${from}T00:00:00.000`).getTime();
-    if (Number.isFinite(fromTime) && time < fromTime) return false;
-  }
-  if (to) {
-    const toTime = new Date(`${to}T23:59:59.999`).getTime();
-    if (Number.isFinite(toTime) && time > toTime) return false;
-  }
-  return true;
-}
 
 function sortUsers(items: SysUser[], sortKey: SortKey, sortDirection: SortDirection) {
   const direction = sortDirection === "asc" ? 1 : -1;
@@ -73,11 +55,7 @@ function getInitialQuery() {
 export function useUsersPage() {
   const { user: currentUser, isRoot } = useAuth();
   const { t } = useI18n();
-  const { data, error, isLoading, mutate, isValidating } = useSWR<{ users: SysUser[] }>("/api/auth/users", fetcher);
-  const { data: approvalMetrics } = useSWR<ApprovalMetricResponse>(
-    isRoot ? "/api/approvals?limit=1&status=pending" : null,
-    fetcher,
-  );
+  const { data, error, isLoading, mutate } = useSWR<{ users: SysUser[] }>("/api/auth/users", fetcher);
 
   const initialQuery = useMemo(() => getInitialQuery(), []);
   const users = useMemo(() => data?.users || [], [data?.users]);
@@ -97,20 +75,6 @@ export function useUsersPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(
     isStatusFilter(initialQuery.get("status")) ? initialQuery.get("status") as StatusFilter : "all",
   );
-  const [createdFilter, setCreatedFilter] = useState<CreatedFilter>(
-    isCreatedFilter(initialQuery.get("created")) ? initialQuery.get("created") as CreatedFilter : "all",
-  );
-  const [createdFrom, setCreatedFrom] = useState(initialQuery.get("createdFrom") || "");
-  const [createdTo, setCreatedTo] = useState(initialQuery.get("createdTo") || "");
-  const [loginFrom, setLoginFrom] = useState(initialQuery.get("loginFrom") || "");
-  const [loginTo, setLoginTo] = useState(initialQuery.get("loginTo") || "");
-  const [creatorFilter, setCreatorFilter] = useState(initialQuery.get("createdBy") || "");
-  const [lockedFilter, setLockedFilter] = useState<BinaryFilter>(
-    isBinaryFilter(initialQuery.get("locked")) ? initialQuery.get("locked") as BinaryFilter : "all",
-  );
-  const [neverLoginFilter, setNeverLoginFilter] = useState<BinaryFilter>(
-    isBinaryFilter(initialQuery.get("neverLogin")) ? initialQuery.get("neverLogin") as BinaryFilter : "all",
-  );
   const [sortKey, setSortKey] = useState<SortKey>(
     isSortKey(initialQuery.get("sort")) ? initialQuery.get("sort") as SortKey : "createdAt",
   );
@@ -119,7 +83,6 @@ export function useUsersPage() {
   );
   const [page, setPage] = useState(() => Math.max(1, Number(initialQuery.get("page")) || 1));
   const [pageSize, setPageSize] = useState(() => normalizePageSize(initialQuery.get("pageSize")));
-  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   const [drawerMode, setDrawerMode] = useState<DrawerMode>("closed");
   const [detailTab, setDetailTab] = useState<DetailTab>("basic");
@@ -144,14 +107,6 @@ export function useUsersPage() {
       q: searchQuery,
       role: roleFilter,
       status: statusFilter,
-      created: createdFilter,
-      createdFrom,
-      createdTo,
-      loginFrom,
-      loginTo,
-      createdBy: creatorFilter,
-      locked: lockedFilter,
-      neverLogin: neverLoginFilter,
       sort: sortKey,
       dir: sortDirection,
       page,
@@ -159,7 +114,7 @@ export function useUsersPage() {
     });
     const nextUrl = query ? `${window.location.pathname}?${query}` : window.location.pathname;
     window.history.replaceState(null, "", nextUrl);
-  }, [createdFilter, createdFrom, createdTo, creatorFilter, lockedFilter, loginFrom, loginTo, neverLoginFilter, page, pageSize, roleFilter, searchQuery, sortDirection, sortKey, statusFilter]);
+  }, [page, pageSize, roleFilter, searchQuery, sortDirection, sortKey, statusFilter]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -206,20 +161,6 @@ export function useUsersPage() {
       const status = normalizeStatus(item.status);
       if (roleFilter !== "all" && role !== roleFilter) return false;
       if (statusFilter !== "all" && status !== statusFilter) return false;
-      if (!matchesCreatedFilter(item.createdAt, createdFilter)) return false;
-      if (!matchesDateRange(item.createdAt, createdFrom, createdTo)) return false;
-      if (!matchesDateRange(item.lastLoginAt, loginFrom, loginTo)) return false;
-      if (creatorFilter.trim() && !item.createdBy?.toLowerCase().includes(creatorFilter.trim().toLowerCase())) return false;
-      if (lockedFilter !== "all") {
-        const isLocked = item.locked === true;
-        if (lockedFilter === "yes" && !isLocked) return false;
-        if (lockedFilter === "no" && isLocked) return false;
-      }
-      if (neverLoginFilter !== "all") {
-        const neverLoggedIn = !item.lastLoginAt;
-        if (neverLoginFilter === "yes" && !neverLoggedIn) return false;
-        if (neverLoginFilter === "no" && neverLoggedIn) return false;
-      }
       if (!keyword) return true;
       return [
         item.username,
@@ -232,7 +173,7 @@ export function useUsersPage() {
       ].filter(Boolean).join(" ").toLowerCase().includes(keyword);
     });
     return sortUsers(filtered, sortKey, sortDirection);
-  }, [createdFilter, createdFrom, createdTo, creatorFilter, lockedFilter, loginFrom, loginTo, neverLoginFilter, roleFilter, searchQuery, sortDirection, sortKey, statusFilter, users]);
+  }, [roleFilter, searchQuery, sortDirection, sortKey, statusFilter, users]);
 
   const pageCount = Math.max(1, Math.ceil(filteredUsers.length / pageSize));
   const safePage = Math.min(page, pageCount);
@@ -240,18 +181,6 @@ export function useUsersPage() {
   const selectedUsers = users.filter((item) => selectedUsernames.includes(item.username));
   const mutableSelectedUsers = selectedUsers.filter((item) => isBulkMutableUser(item, currentUser?.username));
   const allPageSelected = pagedUsers.length > 0 && pagedUsers.every((item) => selectedUsernames.includes(item.username));
-  const activeFilterCount = [
-    searchQuery.trim() ? 1 : 0,
-    roleFilter !== "all" ? 1 : 0,
-    statusFilter !== "all" ? 1 : 0,
-    createdFilter !== "all" ? 1 : 0,
-    createdFrom || createdTo ? 1 : 0,
-    loginFrom || loginTo ? 1 : 0,
-    creatorFilter.trim() ? 1 : 0,
-    lockedFilter !== "all" ? 1 : 0,
-    neverLoginFilter !== "all" ? 1 : 0,
-  ].reduce((sum, item) => sum + item, 0);
-
   useEffect(() => {
     if (page > pageCount) setPage(pageCount);
   }, [page, pageCount]);
@@ -340,14 +269,6 @@ export function useUsersPage() {
     setSearchQuery("");
     setRoleFilter("all");
     setStatusFilter("all");
-    setCreatedFilter("all");
-    setCreatedFrom("");
-    setCreatedTo("");
-    setLoginFrom("");
-    setLoginTo("");
-    setCreatorFilter("");
-    setLockedFilter("all");
-    setNeverLoginFilter("all");
     setPage(1);
   };
 
@@ -358,11 +279,6 @@ export function useUsersPage() {
 
   const updateStatusFilter = (value: StatusFilter) => {
     setStatusFilter(value);
-    setPage(1);
-  };
-
-  const updateCreatedFilter = (value: CreatedFilter) => {
-    setCreatedFilter(value);
     setPage(1);
   };
 
@@ -596,10 +512,6 @@ export function useUsersPage() {
     setNotice({ type: "success", text: t("users_export_ready", { count: items.length }) });
   };
 
-  const exportFilteredUsers = () => {
-    exportUsers(filteredUsers, "system-users");
-  };
-
   const exportSelectedUsers = () => {
     exportUsers(selectedUsers, "system-users-selected");
   };
@@ -764,13 +676,7 @@ export function useUsersPage() {
 
   const toolbarProps = {
     searchInput, updateSearchQuery, roleFilter, updateRoleFilter,
-    statusFilter, updateStatusFilter, advancedOpen, setAdvancedOpen,
-    activeFilterCount, mutate, isValidating, exportFilteredUsers,
-    filteredUsers, createdFilter, updateCreatedFilter, createdFrom,
-    setCreatedFrom, setPage, createdTo, setCreatedTo, loginFrom,
-    setLoginFrom, loginTo, setLoginTo, creatorFilter, setCreatorFilter,
-    lockedFilter, setLockedFilter, neverLoginFilter, setNeverLoginFilter,
-    clearFilters
+    statusFilter, updateStatusFilter,
   };
 
 
@@ -805,7 +711,6 @@ export function useUsersPage() {
     isRoot,
     users,
     statusCounts,
-    approvalMetrics,
     notice, setNotice,
     openCreateDrawer,
     t,
