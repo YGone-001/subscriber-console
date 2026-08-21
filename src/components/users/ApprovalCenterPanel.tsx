@@ -5,6 +5,8 @@ import { useId, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 import { AlertTriangle, CheckCircle2, Copy, Eye, GitBranch, RefreshCw, Search, X } from "lucide-react";
 import { fetcher } from "@/lib/fetcher";
+import { ROLE_CAPABILITIES } from "@/lib/permissions";
+import { normalizePermissionEffect } from "@/lib/userAccessManagement";
 import { useAuth } from "@/hooks/useAuth";
 import { useI18n } from "@/components/I18nProvider";
 import { EmptyState, LoadingRows, OperationNotice } from "@/components/OperationFeedback";
@@ -25,7 +27,8 @@ type ApprovalAction =
   | "SYSTEM_HEAL"
   | "SUBSCRIBER_BATCH_CREATE"
   | "SUBSCRIBER_IMPORT"
-  | "SUBSCRIBER_BULK_DELETE";
+  | "SUBSCRIBER_BULK_DELETE"
+  | "ACCESS_REQUEST";
 
 type ApprovalDocument = {
   id: string;
@@ -96,15 +99,6 @@ function riskLevel(approval: ApprovalDocument): Exclude<RiskFilter, "all"> {
   return "low";
 }
 
-function includesDateRange(value: string, from: string, to: string) {
-  if (!from && !to) return true;
-  const time = new Date(value).getTime();
-  if (!Number.isFinite(time)) return false;
-  if (from && time < new Date(`${from}T00:00:00.000`).getTime()) return false;
-  if (to && time > new Date(`${to}T23:59:59.999`).getTime()) return false;
-  return true;
-}
-
 function jsonPreview(value: unknown) {
   try {
     return JSON.stringify(value, null, 2);
@@ -118,12 +112,8 @@ export default function ApprovalCenterPanel() {
   const { t } = useI18n();
   const [tab, setTab] = useState<ApprovalTab>("pending");
   const [query, setQuery] = useState("");
-  const [requester, setRequester] = useState("");
-  const [action, setAction] = useState("all");
-  const [status, setStatus] = useState<ApprovalStatus | "all">("all");
-  const [risk, setRisk] = useState<RiskFilter>("all");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
+  const [accessReason, setAccessReason] = useState("");
+  const [requestingAccess, setRequestingAccess] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [reviewNote, setReviewNote] = useState("");
   const [saving, setSaving] = useState<string | null>(null);
@@ -133,10 +123,12 @@ export default function ApprovalCenterPanel() {
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   const apiStatus = tab === "pending" ? "pending" : tab === "exceptions" ? "failed" : "all";
-  const approvalUrl = user ? `/api/approvals?limit=300&status=${apiStatus}${isRoot && requester.trim() ? `&requester=${encodeURIComponent(requester.trim())}` : ""}` : null;
+  const approvalUrl = user ? `/api/approvals?limit=300&status=${apiStatus}` : null;
   const { data, error, isLoading, mutate, isValidating } = useSWR<ApprovalListResponse>(approvalUrl, fetcher, {
     refreshInterval: 30000,
   });
+  const accessRequestUrl = user?.role === "viewer" ? "/api/approvals?limit=20&status=pending" : null;
+  const { data: pendingAccessData, mutate: mutatePendingAccess } = useSWR<ApprovalListResponse>(accessRequestUrl, fetcher);
   const selectedApproval = selectedId ? data?.approvals.find((item) => item.id === selectedId) || null : null;
   const auditUrl = selectedApproval ? `/api/approvals/${selectedApproval.id}/audit` : null;
   const { data: auditData, error: auditError, isLoading: auditLoading, mutate: mutateAudit } = useSWR<ApprovalAuditResponse>(auditUrl, fetcher);
@@ -146,14 +138,21 @@ export default function ApprovalCenterPanel() {
     return (data?.approvals || []).filter((item) => {
       if (tab === "mine" && user && item.requester !== user.username) return false;
       if (tab === "completed" && !["approved", "rejected", "executed"].includes(item.status)) return false;
-      if (status !== "all" && item.status !== status) return false;
-      if (action !== "all" && item.action !== action) return false;
-      if (risk !== "all" && riskLevel(item) !== risk) return false;
-      if (!includesDateRange(item.createdAt, from, to)) return false;
       if (!keyword) return true;
       return [item.id, item.action, item.targetId, item.requester, item.status, item.summary].join(" ").toLowerCase().includes(keyword);
     });
-  }, [action, data?.approvals, from, query, risk, status, tab, to, user]);
+  }, [data?.approvals, query, tab, user]);
+
+  const accessSummary = useMemo(() => {
+    if (!user) return { allowed: 0, approvals: 0, denied: 0 };
+    const effects = Object.values(ROLE_CAPABILITIES[user.role]).map(normalizePermissionEffect);
+    return {
+      allowed: effects.filter((effect) => effect === "allow").length,
+      approvals: effects.filter((effect) => effect === "approval_required").length,
+      denied: effects.filter((effect) => effect === "deny").length,
+    };
+  }, [user]);
+  const hasPendingAccessRequest = pendingAccessData?.approvals.some((item) => item.action === "ACCESS_REQUEST") ?? false;
 
   if (!user) {
     return (
@@ -193,6 +192,34 @@ export default function ApprovalCenterPanel() {
     }
   };
 
+  const submitAccessRequest = async () => {
+    if (accessReason.trim().length < 8) {
+      setNotice({ tone: "danger", text: t("access_request_reason_required") });
+      return;
+    }
+    setRequestingAccess(true);
+    try {
+      const response = await fetch("/api/approvals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: accessReason.trim() }),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({})) as { error?: string };
+        setNotice({ tone: "danger", text: body.error || t("access_request_failed") });
+        return;
+      }
+      setAccessReason("");
+      setNotice({ tone: "success", text: t("access_request_submitted") });
+      await Promise.all([mutate(), mutatePendingAccess()]);
+    } catch (requestError) {
+      console.error(requestError);
+      setNotice({ tone: "danger", text: t("access_request_failed") });
+    } finally {
+      setRequestingAccess(false);
+    }
+  };
+
   const copyPayload = async () => {
     if (!selectedApproval) return;
     await navigator.clipboard.writeText(jsonPreview(selectedApproval.payload));
@@ -215,7 +242,29 @@ export default function ApprovalCenterPanel() {
           </button>}
         />
 
-        <MetricStrip
+        <section className="self-access-panel" aria-labelledby="self-access-title">
+          <div>
+            <p className="self-access-label">{t("access_request_current_access")}</p>
+            <h2 id="self-access-title">{t(`users_${user.role}`)}</h2>
+            <p>{t("access_request_scope")}</p>
+          </div>
+          <dl>
+            <div><dt>{t("roles_allow_count")}</dt><dd>{accessSummary.allowed}</dd></div>
+            <div><dt>{t("roles_approval_count")}</dt><dd>{accessSummary.approvals}</dd></div>
+            <div><dt>{t("roles_deny_count")}</dt><dd>{accessSummary.denied}</dd></div>
+          </dl>
+          {user.role === "viewer" ? (
+            <form className="access-request-form" onSubmit={(event) => { event.preventDefault(); void submitAccessRequest(); }}>
+              <label htmlFor="access-request-reason">{t("access_request_reason")}</label>
+              <textarea id="access-request-reason" value={accessReason} onChange={(event) => setAccessReason(event.target.value)} placeholder={t("access_request_reason_ph")} rows={2} disabled={hasPendingAccessRequest || requestingAccess} />
+              <button type="submit" className="btn btn-primary" disabled={hasPendingAccessRequest || requestingAccess}>
+                {hasPendingAccessRequest ? t("access_request_pending") : requestingAccess ? t("access_request_submitting") : t("access_request_submit")}
+              </button>
+            </form>
+          ) : <p className="self-access-state">{t("access_request_not_needed")}</p>}
+        </section>
+
+        {isRoot ? <MetricStrip
           ariaLabel={t("approvals_title")}
           items={[
             { key: "pending", label: t("approval_filter_pending"), value: data?.pending ?? 0, tone: "primary" },
@@ -223,7 +272,7 @@ export default function ApprovalCenterPanel() {
             { key: "warning", label: t("approvals_sla_warning"), value: data?.sla?.warning ?? 0, tone: "warning" },
             { key: "danger", label: t("approvals_sla_danger"), value: data?.sla?.danger ?? 0, tone: "danger" },
           ]}
-        />
+        /> : null}
 
         <section className="approvals-panel">
           <nav className="approvals-tabs">
@@ -239,27 +288,6 @@ export default function ApprovalCenterPanel() {
               <Search size={15} />
               <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("approvals_search_ph")} />
             </label>
-            <input className="form-input" value={requester} onChange={(event) => setRequester(event.target.value)} placeholder={t("approval_export_requester")} disabled={!isRoot} />
-            <select className="form-input" value={action} onChange={(event) => setAction(event.target.value)}>
-              <option value="all">{t("approval_filter_all")}</option>
-              {(["POLICY_CHANGE", "TRAFFIC_ADJUSTMENT", "RATING_CREATE", "RATING_UPDATE", "RATING_DELETE", "TARIFF_PLAN_MIGRATE", "PROFILE_RESTORE", "SYSTEM_HEAL", "SUBSCRIBER_BATCH_CREATE", "SUBSCRIBER_IMPORT", "SUBSCRIBER_BULK_DELETE"] as ApprovalAction[]).map((item) => (
-                <option key={item} value={item}>{t(`approval_action_${item}`)}</option>
-              ))}
-            </select>
-            <select className="form-input" value={status} onChange={(event) => setStatus(event.target.value as ApprovalStatus | "all")}>
-              <option value="all">{t("approval_filter_all")}</option>
-              {(["pending", "approved", "rejected", "executed", "failed"] as ApprovalStatus[]).map((item) => (
-                <option key={item} value={item}>{t(`approval_status_${item}`)}</option>
-              ))}
-            </select>
-            <select className="form-input" value={risk} onChange={(event) => setRisk(event.target.value as RiskFilter)}>
-              <option value="all">{t("approvals_risk_all")}</option>
-              <option value="low">{t("approvals_risk_low")}</option>
-              <option value="medium">{t("approvals_risk_medium")}</option>
-              <option value="high">{t("approvals_risk_high")}</option>
-            </select>
-            <input type="date" className="form-input" value={from} onChange={(event) => setFrom(event.target.value)} />
-            <input type="date" className="form-input" value={to} onChange={(event) => setTo(event.target.value)} />
           </div>
 
           <div className="approvals-table-scroll">
@@ -272,19 +300,17 @@ export default function ApprovalCenterPanel() {
                   <th data-column-priority="essential">{t("approvals_target")}</th>
                   <th data-column-priority="supplementary">{t("approval_export_requester")}</th>
                   <th data-column-priority="essential">{t("users_status")}</th>
-                  <th data-column-priority="essential">{t("approvals_risk")}</th>
                   <th data-column-priority="supplementary">{t("users_created")}</th>
-                  <th data-column-priority="important">{t("approvals_waiting")}</th>
                   <th data-column-priority="essential">{t("users_actions")}</th>
                 </tr>
               </thead>
               <tbody>
                 {isLoading ? (
-                  <tr className="approvals-state-row"><td colSpan={9}><LoadingRows columns={9} rows={6} /></td></tr>
+                  <tr className="approvals-state-row"><td colSpan={7}><LoadingRows columns={7} rows={6} /></td></tr>
                 ) : error ? (
-                  <tr className="approvals-state-row"><td colSpan={9}><EmptyState icon={<AlertTriangle size={42} />} title={t("approvals_error_title")} description={t("approvals_error_desc")} action={<button type="button" className="btn btn-outline" onClick={() => void mutate()}>{t("refresh")}</button>} /></td></tr>
+                  <tr className="approvals-state-row"><td colSpan={7}><EmptyState icon={<AlertTriangle size={42} />} title={t("approvals_error_title")} description={t("approvals_error_desc")} action={<button type="button" className="btn btn-outline" onClick={() => void mutate()}>{t("refresh")}</button>} /></td></tr>
                 ) : approvals.length === 0 ? (
-                  <tr className="approvals-state-row"><td colSpan={9}><EmptyState icon={<CheckCircle2 size={42} />} title={t("approvals_empty_title")} description={t("approvals_empty_desc")} /></td></tr>
+                  <tr className="approvals-state-row"><td colSpan={7}><EmptyState icon={<CheckCircle2 size={42} />} title={t("approvals_empty_title")} description={t("approvals_empty_desc")} /></td></tr>
                 ) : approvals.map((approval) => (
                   <tr key={approval.id}>
                     <td data-label={t("approvals_id")} data-column-priority="essential"><button type="button" className="approvals-link" onClick={() => setSelectedId(approval.id)}>{approval.id.slice(0, 8)}</button></td>
@@ -292,9 +318,7 @@ export default function ApprovalCenterPanel() {
                     <td data-label={t("approvals_target")} data-column-priority="essential">{approval.targetId}</td>
                     <td data-label={t("approval_export_requester")} data-column-priority="supplementary">{approval.requester}</td>
                     <td data-label={t("users_status")} data-column-priority="essential"><span className={`approval-chip ${approval.status}`}>{t(`approval_status_${approval.status}`)}</span></td>
-                    <td data-label={t("approvals_risk")} data-column-priority="essential"><span className={`risk-chip ${riskLevel(approval)}`}>{t(`approvals_risk_${riskLevel(approval)}`)}</span></td>
                     <td data-label={t("users_created")} data-column-priority="supplementary">{formatDateTime(approval.createdAt)}</td>
-                    <td data-label={t("approvals_waiting")} data-column-priority="important">{t("approvals_waiting_hours", { hours: waitingHours(approval.createdAt) })}</td>
                     <td data-label={t("users_actions")} data-column-priority="essential"><button type="button" className="btn btn-outline" onClick={() => setSelectedId(approval.id)}><Eye size={15} />{t("users_view")}</button></td>
                   </tr>
                 ))}
@@ -390,7 +414,6 @@ export default function ApprovalCenterPanel() {
                   <textarea value={reviewNote} onChange={(event) => setReviewNote(event.target.value)} placeholder={t("approvals_review_note_ph")} rows={3} />
                   <div>
                     <button type="button" className="btn btn-outline danger" disabled={saving != null} onClick={() => void submitDecision("reject")}>{t("approvals_reject")}</button>
-                    <button type="button" className="btn btn-outline" disabled title={t("approvals_approve_only_unavailable")}>{t("approvals_approve_only")}</button>
                     <button type="button" className="btn btn-primary" disabled={saving != null} onClick={() => void submitDecision("approve")}>{t("approvals_approve_execute")}</button>
                   </div>
                 </>

@@ -12,7 +12,8 @@ export type ApprovalAction =
   | 'SYSTEM_HEAL'
   | 'SUBSCRIBER_BATCH_CREATE'
   | 'SUBSCRIBER_IMPORT'
-  | 'SUBSCRIBER_BULK_DELETE';
+  | 'SUBSCRIBER_BULK_DELETE'
+  | 'ACCESS_REQUEST';
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'executed' | 'failed';
 
 export type ApprovalDocument = {
@@ -97,6 +98,12 @@ export async function createApprovalRequest(input: CreateApprovalInput): Promise
 
   await docs.insertOne(approval);
   return approval;
+}
+
+export async function getPendingAccessRequest(requester: string): Promise<ApprovalDocument | null> {
+  const docs = await collection();
+  const approval = await docs.findOne({ requester, action: 'ACCESS_REQUEST', status: 'pending' });
+  return stripMongoId(approval) as ApprovalDocument | null;
 }
 
 export async function listApprovals(options: ListApprovalOptions = {}) {

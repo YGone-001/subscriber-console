@@ -18,6 +18,7 @@ import {
   importSubscribersFromRecords,
 } from '@/server/repositories/subscriberRepository';
 import { batchHealSubscriberDocuments, healSubscriberDocument } from '@/server/repositories/systemAuditRepository';
+import { getUser, safeUser, updateUser } from '@/server/repositories/userRepository';
 
 function auditActionForMode(mode: string) {
   if (mode === 'recharge') return 'TRAFFIC_RECHARGE';
@@ -26,6 +27,29 @@ function auditActionForMode(mode: string) {
 }
 
 export async function executeApproval(approval: ApprovalDocument, request: Request) {
+  if (approval.action === 'ACCESS_REQUEST') {
+    const payload = asRecord(approval.payload);
+    const requestedRole = String(payload.requestedRole || '');
+    if (approval.targetId !== approval.requester || requestedRole !== 'operator') {
+      throw new Error('Invalid access request payload');
+    }
+
+    const currentUser = await getUser(approval.targetId);
+    if (!currentUser || currentUser.status !== 'active') throw new Error('Access request target is unavailable');
+    if (currentUser.role !== 'viewer') throw new Error('Access request is no longer applicable');
+
+    const updated = await updateUser(currentUser.username, { role: 'operator' });
+    if (!updated) throw new Error('Access request target is unavailable');
+    logAudit(
+      'UPDATE',
+      `SYS_USER:${currentUser.username}`,
+      safeUser(updated.existing),
+      { ...safeUser(updated.next), approvalId: approval.id },
+      request
+    );
+    return { username: currentUser.username, previousRole: 'viewer', role: 'operator' };
+  }
+
   if (approval.action === 'POLICY_CHANGE') {
     const validation = validatePolicyChangePayload(approval.payload);
     if (!validation.ok) throw new Error(validation.error);
