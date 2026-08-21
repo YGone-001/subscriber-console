@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { requireCapability } from '@/lib/authz';
+import { requireAuth } from '@/lib/authz';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import { listAuditLogsForApproval } from '@/server/repositories/auditRepository';
 import { getApproval } from '@/server/repositories/approvalRepository';
@@ -15,15 +15,18 @@ function hasApprovalId(value: unknown, approvalId: string) {
 }
 
 export async function GET(request: Request, { params }: RouteContext) {
-  const auth = requireCapability(request, 'user_admin');
+  const auth = requireAuth(request);
   if (!auth.ok) return auth.response;
 
   const { id } = await params;
-  const rateLimit = await enforceRateLimit(`approvals:audit:${auth.auth.user}:${id}`, 80, 60);
-  if (!rateLimit.ok) return rateLimit.response;
-
   const approval = await getApproval(id);
   if (!approval) return NextResponse.json({ error: 'Approval request not found' }, { status: 404 });
+  if (auth.auth.role !== 'root' && approval.requester !== auth.auth.user) {
+    return NextResponse.json({ error: 'Forbidden: Approval audit trail is limited to the requester' }, { status: 403 });
+  }
+
+  const rateLimit = await enforceRateLimit(`approvals:audit:${auth.auth.user}:${id}`, 80, 60);
+  if (!rateLimit.ok) return rateLimit.response;
 
   try {
     const logs = await listAuditLogsForApproval(id);

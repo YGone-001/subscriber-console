@@ -10,6 +10,7 @@ const usersTableSource = readFileSync(new URL('../src/app/(dashboard)/users/comp
 const rolesSource = readFileSync(new URL('../src/components/users/RoleManagementPanel.tsx', import.meta.url), 'utf8');
 const approvalsSource = readFileSync(new URL('../src/components/users/ApprovalCenterPanel.tsx', import.meta.url), 'utf8');
 const approvalsRouteSource = readFileSync(new URL('../src/app/api/approvals/route.ts', import.meta.url), 'utf8');
+const approvalAuditRouteSource = readFileSync(new URL('../src/app/api/approvals/[id]/audit/route.ts', import.meta.url), 'utf8');
 const approvalExecutorSource = readFileSync(new URL('../src/server/approvalExecutors.ts', import.meta.url), 'utf8');
 
 test('user access management routes are present as independent pages', () => {
@@ -79,4 +80,11 @@ test('self-service access requests are viewer-only, deduplicated, approved by Ro
   assert.match(approvalExecutorSource, /currentUser\.role !== 'viewer'/);
   assert.match(approvalExecutorSource, /updateUser\(currentUser\.username, \{ role: 'operator' \}\)/);
   assert.match(approvalExecutorSource, /logAudit/);
+});
+
+test('approval audit trails are available to the requester without widening the audit log boundary', () => {
+  assert.match(approvalAuditRouteSource, /requireAuth/);
+  assert.match(approvalAuditRouteSource, /auth\.auth\.role !== 'root' && approval\.requester !== auth\.auth\.user/);
+  assert.doesNotMatch(approvalAuditRouteSource, /requireCapability\(request, 'user_admin'\)/);
+  assert.match(approvalAuditRouteSource, /listAuditLogsForApproval/);
 });
