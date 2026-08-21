@@ -107,7 +107,6 @@ test("high-risk dialogs and drawers share the production focus contract", () => 
   for (const file of [
     "src/components/ocs/OcsDetailDrawer.tsx",
     "src/app/(dashboard)/users/components/UserDrawer.tsx",
-    "src/components/users/RoleManagementPanel.tsx",
     "src/components/users/ApprovalCenterPanel.tsx",
     "src/components/SubscriberModal.tsx",
     "src/components/ProfileModal.tsx",
@@ -125,4 +124,10 @@ test("high-risk dialogs and drawers share the production focus contract", () => 
     assert.doesNotMatch(source, /<div className="modal-overlay/);
     assert.doesNotMatch(source, /role="dialog" aria-modal="true"/);
   }
+
+  const rolesPanel = read("src/components/users/RoleManagementPanel.tsx");
+  assert.match(rolesPanel, /role="tablist"/);
+  assert.match(rolesPanel, /role="tabpanel"/);
+  assert.match(rolesPanel, /aria-selected/);
+  assert.match(rolesPanel, /aria-controls/);
 });

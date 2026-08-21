@@ -32,10 +32,13 @@ test('system users page no longer renders role matrix or approval center bodies'
   assert.match(usersSource, /users_detail_tab_permissions/);
 });
 
-test('role management presents the built-in policy without inactive mutation controls', () => {
+test('role management presents the built-in policy inline without inactive mutation controls', () => {
   assert.match(rolesSource, /ROLE_CAPABILITIES/);
-  assert.match(rolesSource, /roles_view_permissions/);
-  assert.doesNotMatch(rolesSource, /roles_no_api|roles_copy|roles_builtin_protected|editingRole|buildPermissionDiff/);
+  assert.match(rolesSource, /role="tablist"/);
+  assert.match(rolesSource, /role="tabpanel"/);
+  assert.match(rolesSource, /roles_allow_count/);
+  assert.match(rolesSource, /roles_deny_count/);
+  assert.doesNotMatch(rolesSource, /roles_no_api|roles_copy|roles_builtin_protected|editingRole|buildPermissionDiff|Dialog|role-drawer/);
 });
 
 test('system user directory keeps only high-frequency filters visible', () => {
