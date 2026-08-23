@@ -1,453 +1,127 @@
 import { useId, useRef } from "react";
+import { KeyRound, Plus, Save, Settings, Trash2, UserPlus, X } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
-import { type Capability } from "@/lib/permissions";
-import { 
-  Plus, X, Save, Shield, RefreshCw, CheckCircle2, Clock, Trash2, Settings
-} from "lucide-react";
-import { OperationNotice, ConfirmActionPanel, LoadingRows, EmptyState } from "@/components/OperationFeedback";
-import * as T from "../types";
-import { VALID_ROLES, VALID_STATUS } from "../types";
-import { displayValue, formatDateTime, normalizeRole } from "../utils";
+import iamStyles from "@/components/iam/iam.module.css";
+import { OperationNotice } from "@/components/OperationFeedback";
 import { Dialog } from "@/components/ui/Dialog";
+import type { DetailTab } from "../types";
+import { UserActivityLog } from "./UserActivityLog";
+import { BulkProgressModal } from "./BulkProgressModal";
+import { UserBasicInfo } from "./UserBasicInfo";
+import { UserConfirmDialogs } from "./UserConfirmDialogs";
+import { UserCreateForm } from "./UserCreateForm";
+import { UserEditForm } from "./UserEditForm";
+import { UserLoginHistory } from "./UserLoginHistory";
+import { UserPermissions } from "./UserPermissions";
+import { UserPasswordResetForm } from "./UserPasswordResetForm";
+import type { UserDrawerProps } from "./types";
+import styles from "./UserDrawer.module.css";
 
-export function UserDrawer(props: any) {
+const DETAIL_TABS: Array<{ key: DetailTab; labelKey: string }> = [
+  { key: "basic", labelKey: "users_detail_tab_basic" },
+  { key: "permissions", labelKey: "users_detail_tab_permissions" },
+  { key: "login", labelKey: "users_detail_tab_login" },
+  { key: "activity", labelKey: "users_detail_tab_activity" },
+];
+
+export function UserDrawer(props: UserDrawerProps) {
   const { t } = useI18n();
   const titleId = useId();
   const descriptionId = useId();
   const closeButtonRef = useRef<HTMLButtonElement>(null);
-  const {
-    notice, setNotice, pendingDeleteUsername, savingAction, confirmReason,
-    executeDelete, resetConfirmState, setConfirmReason, pendingStatusChange,
-    executeStatusChange, pendingBulkAction, executeBulkAction, pendingUpdate,
-    selectedUser, submitUpdate, drawerMode, closeDrawer,
-    newForm, setNewForm, newPasswordVisible, setNewPasswordVisible,
-    newConfirmPasswordVisible, setNewConfirmPasswordVisible, handleCreate,
-    detailTabs, detailTab, setDetailTab, editForm, setEditForm,
-    isProtectedUser, editPasswordVisible, setEditPasswordVisible,
-    handleUpdate, openDetails, startEdit, handleDelete, renderPasswordInput,
-    renderRoleBadge, renderStatusBadge, ROLE_CAPABILITIES, CAPABILITY_LABEL_KEYS,
-    mapCapabilityDecision, isAuditLoading, auditError, mutateAudit, auditData
-  } = props;
+  const selectedUser = props.selectedUser;
+  const shouldOpen = props.drawerMode === "create" || (props.drawerMode !== "closed" && selectedUser != null);
+  const isPasswordReset = props.drawerMode === "resetPassword";
 
   return (
     <>
-      {notice ? (
+      {props.notice ? (
         <OperationNotice
           presentation="modal"
-          tone={notice.type === "success" ? "success" : notice.type === "info" ? "info" : "danger"}
-          title={notice.type === "success" ? t("success") : notice.type === "info" ? t("info") : t("error")}
-          message={notice.text}
-          onClose={() => setNotice(null)}
+          tone={props.notice.type === "success" ? "success" : props.notice.type === "info" ? "info" : "danger"}
+          title={props.notice.type === "success" ? t("success") : props.notice.type === "info" ? t("info") : t("error")}
+          message={props.notice.text}
+          onClose={() => props.setNotice(null)}
         />
       ) : null}
+      <UserConfirmDialogs {...props} />
+      {props.bulkProgress ? <BulkProgressModal progress={props.bulkProgress} onCancel={props.cancelBulkAction} onClose={props.closeBulkProgress} /> : null}
 
-      {pendingDeleteUsername ? (
-        <ConfirmActionPanel
-          presentation="modal"
-          title={t("users_delete_confirm", { username: pendingDeleteUsername })}
-          message={t("users_delete_desc")}
-          confirmLabel={t("delete")}
-          cancelLabel={t("cancel")}
-          isWorking={savingAction === `delete:${pendingDeleteUsername}`}
-          confirmDisabled={confirmReason.trim().length < 3}
-          onConfirm={executeDelete}
-          onCancel={resetConfirmState}
-        >
-          <div className="users-confirm-details">
-            <span>{t("users_confirm_object", { target: pendingDeleteUsername })}</span>
-            <span>{t("users_confirm_approval_none")}</span>
-            <span>{t("users_confirm_irreversible_yes")}</span>
-            <label>
-              {t("users_confirm_reason")}
-              <textarea value={confirmReason} onChange={(event) => setConfirmReason(event.target.value)} rows={3} />
-            </label>
-          </div>
-        </ConfirmActionPanel>
-      ) : null}
-
-      {pendingStatusChange ? (
-        <ConfirmActionPanel
-          presentation="modal"
-          tone={pendingStatusChange.status === "disabled" ? "warning" : "info"}
-          title={t("users_status_confirm", { username: pendingStatusChange.username })}
-          message={t(pendingStatusChange.status === "disabled" ? "users_status_disable_desc" : "users_status_enable_desc")}
-          confirmLabel={pendingStatusChange.status === "disabled" ? t("users_disable_account") : t("users_enable_account")}
-          cancelLabel={t("cancel")}
-          isWorking={savingAction === `status:${pendingStatusChange.username}`}
-          confirmDisabled={confirmReason.trim().length < 3}
-          onConfirm={executeStatusChange}
-          onCancel={resetConfirmState}
-        >
-          <div className="users-confirm-details">
-            <span>{t("users_confirm_object", { target: pendingStatusChange.username })}</span>
-            <span>{t("users_confirm_approval_none")}</span>
-            <span>{t("users_confirm_irreversible_no")}</span>
-            <label>
-              {t("users_confirm_reason")}
-              <textarea value={confirmReason} onChange={(event) => setConfirmReason(event.target.value)} rows={3} />
-            </label>
-          </div>
-        </ConfirmActionPanel>
-      ) : null}
-
-      {pendingBulkAction ? (
-        <ConfirmActionPanel
-          presentation="modal"
-          tone={pendingBulkAction.action === "delete" || pendingBulkAction.action === "disable" ? "warning" : "info"}
-          title={t(`users_bulk_confirm_${pendingBulkAction.action}`)}
-          message={t("users_bulk_confirm_desc", { count: pendingBulkAction.usernames.length })}
-          confirmLabel={t("confirm")}
-          cancelLabel={t("cancel")}
-          isWorking={savingAction === `bulk:${pendingBulkAction.action}`}
-          confirmDisabled={confirmReason.trim().length < 3}
-          onConfirm={executeBulkAction}
-          onCancel={resetConfirmState}
-        >
-          <div className="users-confirm-details">
-            <span>{t("users_confirm_object", { target: pendingBulkAction.usernames.join(", ") })}</span>
-            <span>{pendingBulkAction.action === "assignRole" && pendingBulkAction.role === "root" ? t("users_confirm_root_role") : t("users_confirm_approval_none")}</span>
-            <span>{pendingBulkAction.action === "delete" ? t("users_confirm_irreversible_yes") : t("users_confirm_irreversible_no")}</span>
-            <label>
-              {t("users_confirm_reason")}
-              <textarea value={confirmReason} onChange={(event) => setConfirmReason(event.target.value)} rows={3} />
-            </label>
-          </div>
-        </ConfirmActionPanel>
-      ) : null}
-
-      {pendingUpdate && selectedUser ? (
-        <ConfirmActionPanel
-          presentation="modal"
-          tone={pendingUpdate.payload.role === "root" || pendingUpdate.payload.status === "disabled" ? "warning" : "info"}
-          title={t("users_update_confirm", { username: pendingUpdate.username })}
-          message={pendingUpdate.impact}
-          confirmLabel={t("confirm")}
-          cancelLabel={t("cancel")}
-          isWorking={savingAction === `update:${pendingUpdate.username}`}
-          confirmDisabled={confirmReason.trim().length < 3}
-          onConfirm={() => void submitUpdate(selectedUser, pendingUpdate.payload, confirmReason.trim())}
-          onCancel={resetConfirmState}
-        >
-          <div className="users-confirm-details">
-            <span>{t("users_confirm_object", { target: pendingUpdate.username })}</span>
-            <span>{pendingUpdate.payload.role === "root" ? t("users_confirm_root_role") : t("users_confirm_approval_none")}</span>
-            <span>{t("users_confirm_irreversible_no")}</span>
-            <label>
-              {t("users_confirm_reason")}
-              <textarea value={confirmReason} onChange={(event) => setConfirmReason(event.target.value)} rows={3} />
-            </label>
-          </div>
-        </ConfirmActionPanel>
-      ) : null}
-
-      {drawerMode !== "closed" ? (
+      {shouldOpen ? (
         <Dialog
           open
-          onClose={closeDrawer}
-          overlayClassName="users-drawer-layer"
-          className="users-drawer"
+          onClose={props.closeDrawer}
+          overlayClassName={styles.drawerLayer}
+          className={styles.drawer}
           labelledBy={titleId}
           describedBy={descriptionId}
           initialFocusRef={closeButtonRef}
         >
-            <header className="users-drawer-header">
+          <header className={styles.drawerHeader}>
+            <div>
+              <span className={`${iamStyles.avatar} ${iamStyles.avatarLarge}`}>
+                {props.drawerMode === "create" ? <Plus size={20} /> : selectedUser?.username.slice(0, 1).toUpperCase()}
+              </span>
               <div>
-                <span className="users-avatar large">
-                  {drawerMode === "create" ? <Plus size={20} /> : selectedUser?.username.slice(0, 1).toUpperCase()}
-                </span>
-                <div>
-                  <h2 id={titleId}>{drawerMode === "create" ? t("users_drawer_create_title") : selectedUser?.username}</h2>
-                  <p id={descriptionId}>{drawerMode === "create" ? t("users_create_panel_desc") : t("users_drawer_subtitle")}</p>
-                </div>
+                <h2 id={titleId}>{props.drawerMode === "create" ? t("users_drawer_create_title") : isPasswordReset ? t("users_reset_password") : selectedUser?.username}</h2>
+                <p id={descriptionId}>{props.drawerMode === "create" ? t("users_create_panel_desc") : isPasswordReset ? t("users_reset_password_desc", { username: selectedUser?.username || "" }) : t("users_drawer_subtitle")}</p>
               </div>
-              <button ref={closeButtonRef} type="button" className="btn-icon" onClick={closeDrawer} aria-label={t("cancel")} title={t("cancel")}>
-                <X size={18} />
-              </button>
-            </header>
+            </div>
+            <button ref={closeButtonRef} type="button" className="btn-icon" onClick={props.closeDrawer} aria-label={t("cancel")} title={t("cancel")}><X size={18} /></button>
+          </header>
 
-            {drawerMode === "create" ? (
-              <div className="users-drawer-body">
-                <section className="users-form-section">
-                  <h3>{t("users_form_basic")}</h3>
-                  <label>
-                    <span>{t("users_username")}</span>
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={newForm.username}
-                      onChange={(event) => setNewForm((current: any) => ({ ...current, username: event.target.value }))}
-                    />
-                  </label>
-                </section>
-                <section className="users-form-section">
-                  <h3>{t("users_form_role")}</h3>
-                  <label>
-                    <span>{t("users_role")}</span>
-                    <select
-                      className="form-input"
-                      value={newForm.role}
-                      onChange={(event) => setNewForm((current: any) => ({ ...current, role: event.target.value as T.RoleKey }))}
-                    >
-                      {VALID_ROLES.map((role) => <option key={role} value={role}>{t(`users_${role}`)}</option>)}
-                    </select>
-                  </label>
-                </section>
-                <section className="users-form-section">
-                  <h3>{t("users_form_security")}</h3>
-                  <label>
-                    <span>{t("users_password_new")}</span>
-                    {renderPasswordInput(
-                      newForm.password,
-                      (password: string) => setNewForm((current: any) => ({ ...current, password })),
-                      newPasswordVisible,
-                      setNewPasswordVisible,
-                      t("users_password_new"),
-                    )}
-                  </label>
-                  <label>
-                    <span>{t("users_password_confirm")}</span>
-                    {renderPasswordInput(
-                      newForm.confirmPassword,
-                      (confirmPassword: string) => setNewForm((current: any) => ({ ...current, confirmPassword })),
-                      newConfirmPasswordVisible,
-                      setNewConfirmPasswordVisible,
-                      t("users_password_confirm"),
-                      () => {
-                        if (savingAction !== "create") void handleCreate();
-                      },
-                    )}
-                  </label>
-                </section>
+          {props.drawerMode === "create" ? (
+            <UserCreateForm {...props} />
+          ) : selectedUser ? (
+            <>
+              {props.drawerMode === "view" ? (
+                <nav className={styles.drawerTabs} aria-label={t("users_drawer_tabs")}>
+                  {DETAIL_TABS.map((tab) => <button key={tab.key} type="button" className={props.detailTab === tab.key ? styles.activeTab : undefined} onClick={() => props.setDetailTab(tab.key)}>{t(tab.labelKey)}</button>)}
+                </nav>
+              ) : null}
+              <div className={styles.drawerBody}>
+                {props.drawerMode === "edit" ? (
+                  <UserEditForm {...props} />
+                ) : props.drawerMode === "resetPassword" ? (
+                  <UserPasswordResetForm {...props} />
+                ) : props.detailTab === "basic" ? (
+                  <UserBasicInfo user={selectedUser} />
+                ) : props.detailTab === "permissions" ? (
+                  <UserPermissions user={selectedUser} />
+                ) : props.detailTab === "login" ? (
+                  <UserLoginHistory user={selectedUser} />
+                ) : (
+                  <UserActivityLog {...props} />
+                )}
               </div>
+            </>
+          ) : null}
+
+          <footer className={styles.drawerFooter}>
+            {props.drawerMode === "create" ? (
+              <>
+                <button type="button" className="btn btn-outline" onClick={props.closeDrawer} disabled={props.savingAction === "create"}><X size={15} />{t("cancel")}</button>
+                <button type="button" className="btn btn-primary" onClick={() => void props.handleCreate()} disabled={props.savingAction === "create"}>{props.savingAction === "create" ? <span className="spinner" /> : <UserPlus size={15} />}{t("users_create_action")}</button>
+              </>
+            ) : props.drawerMode === "resetPassword" && selectedUser ? (
+              <>
+                <button type="button" className="btn btn-outline" onClick={() => props.openDetails(selectedUser)} disabled={props.savingAction === `update:${selectedUser.username}`}><X size={15} />{t("cancel")}</button>
+                <button type="button" className="btn btn-primary" onClick={() => void props.handlePasswordReset()} disabled={props.savingAction === `update:${selectedUser.username}`}><KeyRound size={15} />{t("users_reset_password")}</button>
+              </>
+            ) : props.drawerMode === "edit" && selectedUser ? (
+              <>
+                <button type="button" className="btn btn-outline" onClick={() => props.openDetails(selectedUser)} disabled={props.savingAction === `update:${selectedUser.username}`}><X size={15} />{t("cancel")}</button>
+                <button type="button" className="btn btn-primary" onClick={() => void props.handleUpdate()} disabled={props.savingAction === `update:${selectedUser.username}`}>{props.savingAction === `update:${selectedUser.username}` ? <span className="spinner" /> : <Save size={15} />}{t("save")}</button>
+              </>
             ) : selectedUser ? (
               <>
-                {drawerMode === "view" ? (
-                  <nav className="users-drawer-tabs" aria-label={t("users_drawer_tabs")}>
-                    {detailTabs.map((tab: any) => (
-                      <button
-                        key={tab.key}
-                        type="button"
-                        className={detailTab === tab.key ? "active" : undefined}
-                        onClick={() => setDetailTab(tab.key)}
-                      >
-                        {tab.label}
-                      </button>
-                    ))}
-                  </nav>
-                ) : null}
-
-                <div className="users-drawer-body">
-                  {drawerMode === "edit" ? (
-                    <>
-                      <section className="users-form-section">
-                        <h3>{t("users_form_basic")}</h3>
-                        <label>
-                          <span>{t("users_username")}</span>
-                          <input type="text" className="form-input" value={selectedUser.username} disabled />
-                        </label>
-                      </section>
-                      <section className="users-form-section">
-                        <h3>{t("users_form_role")}</h3>
-                        <label>
-                          <span>{t("users_role")}</span>
-                          <select
-                            className="form-input"
-                            value={editForm.role}
-                            onChange={(event) => setEditForm((current: any) => ({ ...current, role: event.target.value as T.RoleKey }))}
-                            disabled={isProtectedUser(selectedUser)}
-                          >
-                            {VALID_ROLES.map((role) => <option key={role} value={role}>{t(`users_${role}`)}</option>)}
-                          </select>
-                        </label>
-                        <label>
-                          <span>{t("users_status")}</span>
-                          <select
-                            className="form-input"
-                            value={editForm.status}
-                            onChange={(event) => setEditForm((current: any) => ({ ...current, status: event.target.value as T.UserStatus }))}
-                            disabled={isProtectedUser(selectedUser)}
-                          >
-                            {VALID_STATUS.map((status) => <option key={status} value={status}>{t(`users_${status}`)}</option>)}
-                          </select>
-                        </label>
-                      </section>
-                      <section className="users-form-section">
-                        <h3>{t("users_form_security")}</h3>
-                        <label>
-                          <span>{t("users_password_optional")}</span>
-                          {renderPasswordInput(
-                            editForm.password,
-                            (password: string) => setEditForm((current: any) => ({ ...current, password })),
-                            editPasswordVisible,
-                            setEditPasswordVisible,
-                            t("users_password_optional"),
-                            () => {
-                              if (savingAction !== `update:${selectedUser.username}`) void handleUpdate();
-                            },
-                          )}
-                        </label>
-                      </section>
-                    </>
-                  ) : detailTab === "basic" ? (
-                    <section className="users-detail-section">
-                      <h3>{t("users_detail_tab_basic")}</h3>
-                      <dl>
-                        <div>
-                          <dt>{t("users_username")}</dt>
-                          <dd>{selectedUser.username}</dd>
-                        </div>
-                        <div>
-                          <dt>{t("users_display_name")}</dt>
-                          <dd>{displayValue(selectedUser.displayName)}</dd>
-                        </div>
-                        <div>
-                          <dt>{t("users_email")}</dt>
-                          <dd>{displayValue(selectedUser.email)}</dd>
-                        </div>
-                        <div>
-                          <dt>{t("users_role")}</dt>
-                          <dd>{renderRoleBadge(selectedUser.role)}</dd>
-                        </div>
-                        <div>
-                          <dt>{t("users_status")}</dt>
-                          <dd>{renderStatusBadge(selectedUser.status, selectedUser.locked)}</dd>
-                        </div>
-                        <div>
-                          <dt>{t("users_detail_created_at")}</dt>
-                          <dd>{formatDateTime(selectedUser.createdAt)}</dd>
-                        </div>
-                        <div>
-                          <dt>{t("users_detail_created_by")}</dt>
-                          <dd>{displayValue(selectedUser.createdBy)}</dd>
-                        </div>
-                        <div>
-                          <dt>{t("users_last_login")}</dt>
-                          <dd>{formatDateTime(selectedUser.lastLoginAt)}</dd>
-                        </div>
-                        <div>
-                          <dt>{t("users_last_login_ip")}</dt>
-                          <dd>{displayValue(selectedUser.lastLoginIp)}</dd>
-                        </div>
-                        <div>
-                          <dt>{t("users_account_note")}</dt>
-                          <dd>{displayValue(selectedUser.description)}</dd>
-                        </div>
-                      </dl>
-                    </section>
-                  ) : detailTab === "permissions" ? (
-                    <section className="users-detail-section">
-                      <h3>{t("users_detail_tab_permissions")}</h3>
-                      <div className="users-permission-summary">
-                        <span>{t("users_effective_role")}</span>
-                        {renderRoleBadge(selectedUser.role)}
-                        <small>{t("users_no_user_overrides")}</small>
-                      </div>
-                      <div className="users-permission-list">
-                        {(Object.keys(ROLE_CAPABILITIES[normalizeRole(selectedUser.role)]) as Capability[]).map((capability) => {
-                          const decision = mapCapabilityDecision(ROLE_CAPABILITIES[normalizeRole(selectedUser.role)][capability]);
-                          return (
-                            <div key={capability}>
-                              <span>{t(CAPABILITY_LABEL_KEYS[capability])}</span>
-                              <span className={`users-permission-decision ${decision}`}>{t(`users_perm_decision_${decision}`)}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </section>
-                  ) : detailTab === "login" ? (
-                    selectedUser.lastLoginAt ? (
-                      <section className="users-detail-section">
-                        <h3>{t("users_detail_tab_login")}</h3>
-                        <div className="users-record-list">
-                          <div>
-                            <span>{formatDateTime(selectedUser.lastLoginAt)}</span>
-                            <small>{displayValue(selectedUser.lastLoginIp)} · {displayValue(selectedUser.userAgent)}</small>
-                            <strong>{t("users_login_success")}</strong>
-                          </div>
-                        </div>
-                      </section>
-                    ) : (
-                      <EmptyState icon={<Clock size={42} />} title={t("users_no_data_title")} description={t("users_no_login_data_desc")} />
-                    )
-                  ) : isAuditLoading ? (
-                    <LoadingRows columns={5} rows={4} />
-                  ) : auditError ? (
-                    <EmptyState
-                      icon={<Shield size={42} />}
-                      title={t("users_audit_error_title")}
-                      description={t("users_audit_error_desc")}
-                      action={
-                        <button type="button" className="btn btn-outline" onClick={() => void mutateAudit()}>
-                          <RefreshCw size={15} />
-                          {t("refresh")}
-                        </button>
-                      }
-                    />
-                  ) : auditData?.logs.length ? (
-                    <section className="users-detail-section">
-                      <h3>{t("users_detail_tab_activity")}</h3>
-                      <div className="users-record-list">
-                        {auditData.logs.map((log: any) => (
-                          <div key={log.id}>
-                            <span>{formatDateTime(log.timestamp)}</span>
-                            <small>{log.action} · {log.targetId}</small>
-                            <strong>{log.level} · {displayValue(log.operatorIp)} · {log.id}</strong>
-                          </div>
-                        ))}
-                      </div>
-                    </section>
-                  ) : (
-                    <EmptyState icon={<CheckCircle2 size={42} />} title={t("users_no_data_title")} description={t("users_no_activity_data_desc")} />
-                  )}
-                </div>
+                <button type="button" className={`btn btn-outline ${styles.dangerAction}`} onClick={() => props.handleDelete(selectedUser.username)} disabled={props.isProtectedUser(selectedUser) || props.pendingDeleteUsername != null}><Trash2 size={15} />{t("delete")}</button>
+                <button type="button" className="btn btn-primary" onClick={() => props.startEdit(selectedUser)}><Settings size={15} />{t("edit")}</button>
               </>
             ) : null}
-
-            <footer className="users-drawer-footer">
-              {drawerMode === "create" ? (
-                <>
-                  <button type="button" className="btn btn-outline" onClick={closeDrawer} disabled={savingAction === "create"}>
-                    <X size={15} />
-                    {t("cancel")}
-                  </button>
-                  <button type="button" className="btn btn-primary" onClick={handleCreate} disabled={savingAction === "create"}>
-                    {savingAction === "create" ? <span className="spinner" /> : <Save size={15} />}
-                    {t("save")}
-                  </button>
-                </>
-              ) : drawerMode === "edit" && selectedUser ? (
-                <>
-                  <button type="button" className="btn btn-outline" onClick={() => openDetails(selectedUser)} disabled={savingAction === `update:${selectedUser.username}`}>
-                    <X size={15} />
-                    {t("cancel")}
-                  </button>
-                  <button type="button" className="btn btn-primary" onClick={handleUpdate} disabled={savingAction === `update:${selectedUser.username}`}>
-                    {savingAction === `update:${selectedUser.username}` ? <span className="spinner" /> : <Save size={15} />}
-                    {t("save")}
-                  </button>
-                </>
-              ) : selectedUser ? (
-                <>
-                  <button
-                    type="button"
-                    className="btn btn-outline users-danger-action"
-                    onClick={() => handleDelete(selectedUser.username)}
-                    disabled={isProtectedUser(selectedUser) || pendingDeleteUsername != null}
-                  >
-                    <Trash2 size={15} />
-                    {t("delete")}
-                  </button>
-                  <button type="button" className="btn btn-primary" onClick={() => startEdit(selectedUser)}>
-                    <Settings size={15} />
-                    {t("edit")}
-                  </button>
-                </>
-              ) : null}
-            </footer>
+          </footer>
         </Dialog>
       ) : null}
-
-
     </>
   );
 }

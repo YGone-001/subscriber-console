@@ -1,14 +1,9 @@
 import { Document, MongoServerError } from 'mongodb';
 import { getAppCollection, mongoCollections } from '@/lib/mongo';
-import type { UserRole } from '@/lib/authz';
+import type { SysUser } from '@/types/iam';
 
-export type UserDocument = {
-  username: string;
+export type UserDocument = Pick<SysUser, 'username' | 'role' | 'status' | 'createdAt' | 'createdBy' | 'displayName' | 'email'> & {
   passwordHash: string;
-  role: UserRole;
-  status: 'active' | 'disabled';
-  createdAt: string;
-  createdBy: string;
 };
 
 export type SafeUserDocument = Omit<UserDocument, 'passwordHash'>;

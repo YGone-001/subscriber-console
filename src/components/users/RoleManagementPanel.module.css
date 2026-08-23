@@ -1,0 +1,125 @@
+.accessPanel,
+.compareSection {
+  overflow: hidden;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-panel);
+  background: var(--surface);
+  box-shadow: var(--shadow-panel);
+}
+
+.roleGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+  margin-bottom: var(--space-section);
+}
+
+.roleCard {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-panel);
+  background: var(--surface);
+  box-shadow: var(--shadow-panel);
+}
+
+.roleCardHeader { display: grid; gap: 0.55rem; }
+.roleCardHeader strong { color: var(--text-main); line-height: 1.55; }
+.roleCard dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem; margin: 0; }
+.roleCard dl div { display: grid; gap: 0.12rem; }
+.roleCard dt { color: var(--text-muted); font-size: var(--ref-font-size-label); }
+.roleCard dd { margin: 0; color: var(--text-main); font-weight: 900; }
+.roleUserLink { display: inline-flex; align-items: baseline; gap: 0.55rem; color: var(--text-main); text-decoration: none; }
+.roleUserLink span { display: inline-flex; align-items: center; gap: 0.2rem; color: var(--primary); font-size: var(--ref-font-size-label); font-weight: 800; }
+.roleUserLink:hover span { text-decoration: underline; }
+.roleActions,
+.exportActions,
+.drawerFooter { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+
+.compareHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--surface-border);
+}
+
+.compareHeader span { color: var(--primary); font-size: var(--ref-font-size-label-strong); font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; }
+.compareHeader h2 { margin: 0.25rem 0 0; color: var(--text-main); font-size: var(--ref-font-size-title); }
+.compareHeader p { margin: 0.3rem 0 0; max-width: 720px; color: var(--text-muted); }
+
+.matrixTools {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--surface-border);
+  background: var(--surface-hover);
+}
+
+.matrixTools > label:not(.search) { display: flex; align-items: center; gap: 0.5rem; color: var(--text-muted); font-size: var(--ref-font-size-body-compact); font-weight: 800; }
+.search { flex: 1; display: flex; align-items: center; gap: 0.5rem; min-height: var(--control-height); padding: 0 0.75rem; border: 1px solid var(--surface-border); border-radius: var(--ref-radius-control); background: var(--surface); color: var(--text-muted); }
+.search input { width: 100%; border: 0; outline: 0; background: transparent; color: var(--text-main); font: inherit; }
+.matrixScroll,
+.drawerMatrixScroll { overflow: auto; }
+
+.compareMatrix,
+.drawerMatrix { width: 100%; min-width: 780px; border-collapse: collapse; }
+.compareMatrix th,
+.compareMatrix td,
+.drawerMatrix th,
+.drawerMatrix td { padding: 0.75rem 1rem; border-bottom: 1px solid var(--surface-border); text-align: left; vertical-align: middle; background: var(--surface); }
+.compareMatrix th,
+.drawerMatrix th { position: sticky; top: 0; z-index: 2; background: var(--surface-hover); color: var(--text-muted); font-size: var(--ref-font-size-label); text-transform: uppercase; }
+.compareMatrix th:first-child,
+.compareMatrix td:first-child,
+.drawerMatrix th:first-child,
+.drawerMatrix td:first-child { position: sticky; left: 0; z-index: 3; }
+.compareMatrix td:nth-child(n + 3),
+.compareMatrix th:nth-child(n + 3) { text-align: center; }
+.compareMatrix td strong { display: block; color: var(--text-main); }
+.compareMatrix td small { display: block; margin-top: 0.2rem; color: var(--text-muted); font-family: "Cascadia Mono", "SFMono-Regular", Consolas, monospace; font-size: var(--ref-font-size-label); }
+.compareMatrix tbody tr:hover td { background: color-mix(in srgb, var(--primary) 6%, var(--surface)); }
+
+.drawerLayer { position: fixed; inset: 0; z-index: 2100; display: flex; justify-content: flex-end; background: var(--drawer-backdrop); }
+.drawer { position: relative; width: min(820px, 100vw); height: 100%; display: flex; flex-direction: column; background: var(--surface); border-left: 1px solid var(--surface-border); box-shadow: var(--shadow-popover); }
+.drawerHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: 1rem 1.25rem; border-bottom: 1px solid var(--surface-border); }
+.drawerHeader > div { display: flex; align-items: center; gap: 0.75rem; }
+.drawerHeader h2,
+.diff h3 { margin: 0; color: var(--text-main); }
+.drawerHeader p,
+.diff p { margin: 0.25rem 0 0; color: var(--text-muted); }
+
+.roleUsers { display: grid; gap: 0.65rem; padding: 0.85rem 1.25rem; border-bottom: 1px solid var(--surface-border); }
+.roleUsers > div { display: flex; align-items: center; gap: 0.5rem; color: var(--text-main); }
+.roleUsers ul { display: flex; gap: 0.5rem; flex-wrap: wrap; max-height: 124px; overflow: auto; margin: 0; padding: 0; list-style: none; }
+.roleUsers li { display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0.55rem; border: 1px solid var(--surface-border); border-radius: var(--ref-radius-control); background: var(--surface-hover); color: var(--text-main); }
+.roleUsers li a { display: inline-flex; align-items: center; gap: 0.25rem; color: var(--text-main); font-weight: 800; text-decoration: none; }
+.roleUsers li a:hover { color: var(--primary); text-decoration: underline; }
+.roleUsers p { margin: 0; color: var(--text-muted); }
+.drawerTools { padding: 0.75rem 1.25rem; border-bottom: 1px solid var(--surface-border); }
+.drawerTools label { display: flex; align-items: center; gap: 0.5rem; color: var(--text-secondary); font-weight: 800; }
+.drawerMatrixScroll { flex: 1; min-height: 0; }
+.groupRow button { border: 0; background: transparent; color: var(--primary); cursor: pointer; font-weight: 900; }
+
+.diff { display: grid; gap: 0.5rem; max-height: 240px; overflow: auto; padding: 1rem 1.25rem; border-top: 1px solid var(--surface-border); background: var(--surface-hover); }
+.diffHeader { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.diff > div:not(.diffHeader) { display: flex; justify-content: space-between; gap: 1rem; padding: 0.55rem 0; border-top: 1px solid var(--surface-border); }
+.drawerFooter { justify-content: flex-end; padding: 1rem 1.25rem; border-top: 1px solid var(--surface-border); }
+
+@media (max-width: 1180px) {
+  .roleGrid { grid-template-columns: repeat(2, minmax(260px, 1fr)); }
+}
+
+@media (max-width: 760px) {
+  .roleGrid { grid-template-columns: 1fr; }
+  .compareHeader,
+  .matrixTools { align-items: stretch; flex-direction: column; }
+  .exportActions { justify-content: flex-start; }
+  .drawer { width: 100vw; }
+  .diffHeader,
+  .diff > div:not(.diffHeader) { align-items: stretch; flex-direction: column; }
+}

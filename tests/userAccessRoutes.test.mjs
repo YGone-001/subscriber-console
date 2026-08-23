@@ -4,6 +4,7 @@ import { readFileSync, existsSync } from 'node:fs';
 
 const layoutSource = readFileSync(new URL('../src/app/(dashboard)/components/AppSidebar.tsx', import.meta.url), 'utf8');
 const usersSource = readFileSync(new URL('../src/app/(dashboard)/users/page.tsx', import.meta.url), 'utf8');
+const userDrawerSource = readFileSync(new URL('../src/app/(dashboard)/users/components/UserDrawer.tsx', import.meta.url), 'utf8');
 const rolesSource = readFileSync(new URL('../src/components/users/RoleManagementPanel.tsx', import.meta.url), 'utf8');
 const approvalsSource = readFileSync(new URL('../src/components/users/ApprovalCenterPanel.tsx', import.meta.url), 'utf8');
 
@@ -26,7 +27,7 @@ test('sidebar exposes users and permissions group without replacing subscribers'
 test('system users page no longer renders role matrix or approval center bodies', () => {
   assert.doesNotMatch(usersSource, /users_perm_title/);
   assert.doesNotMatch(usersSource, /approval_center_title/);
-  assert.match(usersSource, /users_detail_tab_permissions/);
+  assert.match(userDrawerSource, /UserPermissions/);
 });
 
 test('role management and approval center keep backend compatibility boundaries explicit', () => {

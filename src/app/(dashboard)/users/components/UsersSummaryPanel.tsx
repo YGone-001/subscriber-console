@@ -1,3 +1,5 @@
+import { ArrowRight } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useI18n } from "@/components/I18nProvider";
 import * as T from "../types";
 import MetricStrip from "@/components/ui/MetricStrip";
@@ -5,15 +7,14 @@ import MetricStrip from "@/components/ui/MetricStrip";
 export function UsersSummaryPanel({ 
   usersCount, 
   statusCounts, 
-  approvalMetrics, 
-  setNotice 
+  approvalMetrics,
 }: { 
   usersCount: number;
   statusCounts: { active: number; disabled: number };
   approvalMetrics?: T.ApprovalMetricResponse;
-  setNotice: (notice: T.Notice | null) => void;
 }) {
   const { t } = useI18n();
+  const router = useRouter();
   return (
     <MetricStrip
       ariaLabel={t("users_summary")}
@@ -26,7 +27,9 @@ export function UsersSummaryPanel({
           label: t("users_pending_approval"),
           value: approvalMetrics?.pending ?? 0,
           tone: "warning",
-          onClick: () => setNotice({ type: "info", text: t("users_approval_center_reserved") }),
+          icon: <ArrowRight size={18} />,
+          ariaLabel: t("users_open_pending_approvals"),
+          onClick: () => router.push("/approvals?status=pending"),
         },
       ]}
     />

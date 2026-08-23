@@ -1,0 +1,180 @@
+.confirmDetails { display: grid; gap: 0.45rem; }
+.confirmDetails label { display: grid; gap: 0.4rem; margin-top: 0.25rem; color: var(--text-muted); font-size: var(--ref-font-size-body-compact); font-weight: 800; }
+.confirmDetails textarea { width: 100%; resize: vertical; padding: 0.65rem; border: 1px solid var(--surface-border); border-radius: var(--ref-radius-control); background: var(--surface-hover); color: var(--text-main); font: inherit; }
+
+.drawerLayer {
+  position: fixed;
+  inset: 0;
+  z-index: 2100;
+  display: flex;
+  justify-content: flex-end;
+  background: var(--drawer-backdrop);
+}
+
+.drawer {
+  position: relative;
+  width: min(600px, 100vw);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--surface-border);
+  background: var(--surface);
+  box-shadow: var(--shadow-popover);
+}
+
+.drawerHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--surface-border);
+}
+
+.drawerHeader > div { display: flex; align-items: center; gap: 0.85rem; }
+.drawerHeader h2 { margin: 0; color: var(--text-main); font-size: var(--ref-font-size-title); }
+.drawerHeader p { margin: 0.25rem 0 0; color: var(--text-muted); }
+
+.drawerTabs {
+  display: flex;
+  gap: 0.25rem;
+  overflow-x: auto;
+  padding: 0 1rem;
+  border-bottom: 1px solid var(--surface-border);
+}
+
+.drawerTabs button {
+  min-height: 44px;
+  padding: 0 0.75rem;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.drawerTabs .activeTab { color: var(--primary); border-bottom-color: var(--primary); }
+
+.drawerBody { flex: 1; min-height: 0; overflow: auto; padding: 0 1.25rem; }
+.detailSection,
+.formSection { display: grid; gap: 1rem; padding: 1.25rem 0; border-bottom: 1px solid var(--surface-border); }
+.detailSection:last-child,
+.formSection:last-child { border-bottom: 0; }
+.detailSection h3,
+.formSection h3 { margin: 0; color: var(--text-main); font-size: var(--ref-font-size-heading-sm); }
+.detailSection dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0; margin: 0; border: 1px solid var(--surface-border); border-radius: var(--ref-radius-panel); overflow: hidden; }
+.detailSection dl > div { display: grid; gap: 0.25rem; min-width: 0; padding: 0.85rem; border-right: 1px solid var(--surface-border); border-bottom: 1px solid var(--surface-border); }
+.detailSection dt,
+.formSection label > span { color: var(--text-muted); font-size: var(--ref-font-size-label); font-weight: 800; }
+.detailSection dd { min-width: 0; margin: 0; color: var(--text-main); overflow-wrap: anywhere; }
+.formSection label { display: grid; gap: 0.45rem; }
+.formSection label > span small { margin-left: 0.25rem; color: var(--text-muted); font-weight: 600; }
+.sectionDescription { margin: -0.35rem 0 0; color: var(--text-muted); line-height: 1.6; }
+
+.fieldControl { position: relative; display: block; }
+.fieldControl :global(.form-input) { width: 100%; padding-right: 2.8rem; }
+.fieldControl > svg { position: absolute; right: 0.8rem; top: 50%; transform: translateY(-50%); }
+.fieldSpinner { color: var(--primary); animation: fieldSpin 0.85s linear infinite; }
+.fieldSuccess,
+.successText { color: var(--success); }
+.fieldError,
+.errorText { color: var(--danger); }
+.usernameField > small { font-size: var(--ref-font-size-label); font-weight: 650; line-height: 1.45; }
+
+.roleHint { display: flex; align-items: flex-start; gap: 0.55rem; margin: 0; padding: 0.75rem; border: 1px solid color-mix(in srgb, var(--primary) 22%, var(--surface-border)); border-radius: var(--ref-radius-control); background: color-mix(in srgb, var(--primary) 5%, var(--surface)); color: var(--text-muted); line-height: 1.55; }
+.roleHint svg { flex: 0 0 auto; margin-top: 0.15rem; color: var(--primary); }
+.roleHint span { display: grid; gap: 0.12rem; }
+.roleHint strong { color: var(--text-main); }
+
+.passwordStrength { display: grid; gap: 0.4rem; margin-top: -0.35rem; }
+.strengthTrack { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.35rem; }
+.strengthTrack span { height: 5px; border-radius: var(--ref-radius-pill); background: var(--surface-border); }
+.strengthTrack span[data-active="true"][data-level="weak"] { background: var(--danger); }
+.strengthTrack span[data-active="true"][data-level="fair"] { background: var(--warning); }
+.strengthTrack span[data-active="true"][data-level="good"],
+.strengthTrack span[data-active="true"][data-level="strong"] { background: var(--success); }
+.passwordStrength > span { color: var(--text-muted); font-size: var(--ref-font-size-label); }
+.passwordStrength strong { color: var(--text-main); }
+
+.permissionSummary { display: grid; grid-template-columns: auto auto 1fr; align-items: center; gap: 0.75rem; padding: 0.85rem; border: 1px solid var(--surface-border); border-radius: var(--ref-radius-panel); background: var(--surface-hover); }
+.permissionSummary span:first-child,
+.permissionSummary small { color: var(--text-muted); }
+.permissionSummary small { display: inline-flex; align-items: center; gap: 0.35rem; }
+.permissionList,
+.recordList { display: grid; gap: 0.55rem; }
+.permissionList > div,
+.recordList > div { display: grid; gap: 0.3rem; padding: 0.75rem 0.85rem; border: 1px solid var(--surface-border); border-radius: var(--ref-radius-control); background: var(--surface); }
+.permissionList > div { grid-template-columns: 1fr auto; align-items: center; }
+.recordList span { color: var(--text-main); font-weight: 800; }
+.recordList small,
+.recordList strong { color: var(--text-muted); font-size: var(--ref-font-size-label-strong); font-weight: 700; }
+
+.drawerFooter { display: flex; align-items: center; justify-content: flex-end; gap: 0.5rem; padding: 1rem 1.25rem; border-top: 1px solid var(--surface-border); background: var(--surface); }
+.dangerAction { color: var(--danger); }
+
+.permissionMatrixScroll { overflow: auto; border: 1px solid var(--surface-border); border-radius: var(--ref-radius-panel); }
+.permissionMatrix { width: 100%; min-width: 560px; border-collapse: collapse; }
+.permissionMatrix th,
+.permissionMatrix td { padding: 0.75rem 0.85rem; border-bottom: 1px solid var(--surface-border); text-align: left; }
+.permissionMatrix th { background: var(--surface-hover); color: var(--text-muted); font-size: var(--ref-font-size-label); text-transform: uppercase; }
+.permissionMatrix th:not(:first-child),
+.permissionMatrix td:not(:first-child) { text-align: center; }
+.permissionMatrix tr:last-child td { border-bottom: 0; }
+.permissionDenied td:first-child { color: var(--text-muted); }
+.permissionDenied { opacity: 0.72; }
+.permissionLink { width: fit-content; display: inline-flex; align-items: center; gap: 0.4rem; color: var(--primary); font-weight: 800; text-decoration: none; }
+.permissionLink:hover { text-decoration: underline; }
+
+.progressLayer { position: fixed; inset: 0; z-index: 2400; display: grid; place-items: center; padding: 1rem; background: var(--modal-backdrop, var(--drawer-backdrop)); }
+.progressDialog { width: min(640px, 100%); max-height: min(760px, calc(100vh - 2rem)); display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--surface-border); border-radius: var(--ref-radius-panel); background: var(--surface); box-shadow: var(--shadow-popover); }
+.progressHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: 1rem 1.15rem; border-bottom: 1px solid var(--surface-border); }
+.progressHeader > div { display: flex; align-items: center; gap: 0.75rem; }
+.progressHeader h2 { margin: 0; color: var(--text-main); font-size: var(--ref-font-size-title); }
+.progressHeader p { margin: 0.2rem 0 0; color: var(--text-muted); }
+.progressIcon { width: 38px; height: 38px; display: grid; place-items: center; border-radius: var(--ref-radius-control); background: var(--selection-soft); color: var(--primary); }
+.progressIcon[data-running="true"] svg { animation: drawerSpin 0.85s linear infinite; }
+.progressSummary { display: grid; gap: 0.55rem; padding: 0.9rem 1.15rem; border-bottom: 1px solid var(--surface-border); background: var(--surface-hover); }
+.progressSummary > div:first-child { display: flex; justify-content: space-between; color: var(--text-muted); }
+.progressSummary strong { color: var(--text-main); }
+.progressSummary p { margin: 0; color: var(--text-secondary); font-weight: 750; }
+.progressTrack { height: 8px; overflow: hidden; border-radius: var(--ref-radius-pill); background: var(--surface-border); }
+.progressTrack span { display: block; height: 100%; border-radius: inherit; background: var(--primary); transition: width 180ms ease; }
+.progressList { flex: 1; min-height: 180px; overflow: auto; margin: 0; padding: 0.65rem 1.15rem; list-style: none; }
+.progressList li { display: grid; grid-template-columns: auto minmax(120px, 0.7fr) minmax(140px, 1fr); align-items: center; gap: 0.65rem; min-height: 44px; padding: 0.5rem 0; border-bottom: 1px solid var(--surface-border); }
+.progressList li:last-child { border-bottom: 0; }
+.progressList li > span { color: var(--text-muted); }
+.progressList li[data-status="running"] > span { color: var(--primary); animation: drawerSpin 0.85s linear infinite; }
+.progressList li[data-status="success"] > span { color: var(--success); }
+.progressList li[data-status="failed"] > span { color: var(--danger); }
+.progressList li[data-status="cancelled"] { opacity: 0.65; }
+.progressList strong { color: var(--text-main); overflow-wrap: anywhere; }
+.progressList small { color: var(--text-muted); }
+.progressFooter { display: flex; justify-content: flex-end; padding: 0.9rem 1.15rem; border-top: 1px solid var(--surface-border); }
+
+@keyframes drawerSpin { to { transform: rotate(360deg); } }
+@keyframes fieldSpin {
+  from { transform: translateY(-50%) rotate(0deg); }
+  to { transform: translateY(-50%) rotate(360deg); }
+}
+
+@media (min-width: 1440px) {
+  .drawer { width: min(640px, 100vw); }
+}
+
+@media (max-width: 760px) {
+  .drawer { width: 100vw; }
+  .detailSection dl { grid-template-columns: 1fr; }
+  .detailSection dl > div { border-right: 0; }
+  .permissionSummary { grid-template-columns: 1fr; }
+  .progressList li { grid-template-columns: auto minmax(0, 1fr); }
+  .progressList li small { grid-column: 2; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fieldSpinner,
+  .progressIcon[data-running="true"] svg,
+  .progressList li[data-status="running"] > span { animation: none; }
+  .progressTrack span { transition: none; }
+}
