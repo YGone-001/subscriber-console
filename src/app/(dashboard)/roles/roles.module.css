@@ -1,0 +1,11 @@
+.page {
+  min-height: 100%;
+  width: 100%;
+  box-sizing: border-box;
+  padding: var(--space-page);
+  background: var(--background);
+}
+
+@media (max-width: 760px) {
+  .page { padding: 1rem; }
+}

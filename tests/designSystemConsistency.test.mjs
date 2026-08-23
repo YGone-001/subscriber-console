@@ -107,7 +107,6 @@ test('responsive width queries stay inside the documented breakpoint vocabulary'
   const approvedBreakpoints = new Set([560, 640, 760, 768, 900, 980, 1180, 1440]);
   const grandfatheredBreakpoints = new Map([
     ['src/app/globals.css', new Set([780, 1100, 1400])],
-    ['src/app/(dashboard)/users/users.css', new Set([700, 860])],
     ['src/components/analytics.css', new Set([480])],
   ]);
 

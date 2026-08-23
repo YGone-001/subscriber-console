@@ -33,7 +33,7 @@ test('component motion policies cover overlays, tickers, loaders, and live indic
     read('../src/components/datahub.css'),
     read('../src/components/analytics.css'),
     read('../src/components/users/ApprovalCenterPanel.css'),
-    read('../src/app/(dashboard)/users/users.css'),
+    read('../src/app/(dashboard)/users/components/UsersToolbar.module.css'),
   ].join('\n');
 
   assert.doesNotMatch(sources, /0\.01ms/);
@@ -43,5 +43,5 @@ test('component motion policies cover overlays, tickers, loaders, and live indic
   assert.match(sources, /\.analytics-ocs-badge-danger,[\s\S]*?\.live-pulse-dot\s*\{[\s\S]*?animation:\s*none/);
   assert.match(sources, /\.ocs-drawer-content\s*\{[\s\S]*?animation:\s*reducedFade 120ms/);
   assert.match(sources, /\.approvals-spin\s*\{[\s\S]*?animation:\s*none/);
-  assert.match(sources, /\.users-spin\s*\{[\s\S]*?animation:\s*none/);
+  assert.match(sources, /\.spin\s*\{[\s\S]*?animation:\s*none/);
 });
