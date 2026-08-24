@@ -226,7 +226,7 @@ export default function ApprovalCenterPanel() {
     setNotice({ tone: "info", text: t("approvals_payload_copied") });
   };
 
-  const canReview = isRoot && selectedApproval?.status === "pending";
+  const canReview = isRoot && selectedApproval?.status === "pending" && selectedApproval.requester !== user.username;
 
   return (
     <>

@@ -71,9 +71,10 @@ test('CommandPalette contains all routes, categories, and quick actions', () => 
   assert.match(cpContent, /cp_cat_pages/);
   assert.match(cpContent, /cp_cat_actions/);
   assert.match(cpContent, /cp_cat_data/);
-  for (const route of ['/ocs/balances', '/ocs/sessions', '/ocs/usage', '/rating/plans', '/rating/rules', '/users', '/roles', '/approvals', '/audit-logs', '/system-health']) {
+  for (const route of ['/ocs/balances', '/ocs/sessions', '/ocs/usage', '/rating/plans', '/rating/rules', '/users', '/approvals', '/audit-logs', '/system-health']) {
     assert.match(registryContent, new RegExp(route.replaceAll('/', '\\/')));
   }
+  assert.doesNotMatch(registryContent, /path:\s*["']\/roles["']/);
   assert.match(cpContent, /toggle-theme/);
   assert.match(cpContent, /clear-recent-history/);
 });

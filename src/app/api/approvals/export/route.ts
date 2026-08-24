@@ -89,7 +89,7 @@ function csvResponse(evidence: Array<{ approval: ApprovalDocument; auditLogs: Au
 }
 
 export async function GET(request: Request) {
-  const auth = requireCapability(request, 'user_admin');
+  const auth = requireCapability(request, 'audit_export', { allowExport: true });
   if (!auth.ok) return auth.response;
 
   const rateLimit = await enforceRateLimit(`approvals:export:${auth.auth.user}`, 20, 60);

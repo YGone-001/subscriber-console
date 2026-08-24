@@ -1562,7 +1562,9 @@
 
   .nav-crumb-tool-btn.icon-only {
     width: 44px;
+    height: 44px;
     padding: 0;
+    justify-content: center;
   }
 
   .nav-crumb-tool-btn.spin svg {

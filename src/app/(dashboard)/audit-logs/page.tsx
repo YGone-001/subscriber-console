@@ -5,6 +5,8 @@ import { ShieldAlert, History, Activity, Braces, X, Download, RefreshCw, AlertTr
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
 import { useI18n } from "@/components/I18nProvider";
+import { useAuth } from "@/hooks/useAuth";
+import { capabilityAllowed, capabilityDecision } from "@/lib/permissions";
 import { toCsvRow } from "@/lib/csv";
 import VisualDiffViewer from "@/components/VisualDiffViewer";
 
@@ -18,7 +20,11 @@ interface AuditLog {
   level: string;
   action: string;
   targetId: string;
+  actor?: string;
   operatorIp: string;
+  correlationId?: string;
+  approvalId?: string;
+  reason?: string;
   oldData: any;
   newData: any;
 }
@@ -29,6 +35,10 @@ const DESTRUCTIVE_ACTIONS = new Set(['DELETE', 'PROFILE_DELETE', 'TRAFFIC_RESET'
 
 export default function AuditLogsPage() {
   const { t } = useI18n();
+  const { user } = useAuth();
+  const canExport = user
+    ? capabilityAllowed(capabilityDecision(user.role, 'audit_export'), { allowExport: true })
+    : false;
   const [inputAction, setInputAction] = useState('ALL');
   const [inputLevel, setInputLevel] = useState('ALL');
   const [inputImsi, setInputImsi] = useState('');
@@ -58,7 +68,7 @@ export default function AuditLogsPage() {
       q: queryPayload.q,
       from: queryPayload.from,
       to: queryPayload.to,
-      limit: '1000',
+      limit: '500',
     });
     return `/api/audit?${params.toString()}`;
   })();
@@ -90,7 +100,8 @@ export default function AuditLogsPage() {
 
     logs.forEach(log => {
       actionCounts.set(log.action, (actionCounts.get(log.action) || 0) + 1);
-      operatorCounts.set(log.operatorIp || 'unknown', (operatorCounts.get(log.operatorIp || 'unknown') || 0) + 1);
+      const operator = log.actor || log.operatorIp || 'unknown';
+      operatorCounts.set(operator, (operatorCounts.get(operator) || 0) + 1);
       targetCounts.set(log.targetId || 'unknown', (targetCounts.get(log.targetId || 'unknown') || 0) + 1);
       if (log.level === 'warning') warningCount += 1;
       if (DESTRUCTIVE_ACTIONS.has(log.action)) destructiveCount += 1;
@@ -178,13 +189,17 @@ export default function AuditLogsPage() {
       blob = new Blob([JSON.stringify(logs, null, 2)], { type: 'application/json;charset=utf-8;' });
       filename = `${basename}.json`;
     } else {
-      const header = toCsvRow(['Timestamp', 'Level', 'Action', 'Target', 'Operator IP', 'Old Data', 'New Data']);
+      const header = toCsvRow(['Timestamp', 'Level', 'Action', 'Target', 'Actor', 'Operator IP', 'Correlation ID', 'Approval ID', 'Reason', 'Old Data', 'New Data']);
       const rows = logs.map(log => toCsvRow([
         log.timestamp,
         log.level,
         log.action,
         log.targetId,
+        log.actor,
         log.operatorIp,
+        log.correlationId,
+        log.approvalId,
+        log.reason,
         log.oldData ? JSON.stringify(log.oldData) : '',
         log.newData ? JSON.stringify(log.newData) : '',
       ]));
@@ -403,9 +418,11 @@ export default function AuditLogsPage() {
               <button className="btn btn-outline audit-refresh-btn" onClick={() => mutate()} title={t("audit_refresh")}>
                 <RefreshCw size={15} />
               </button>
-              <button className="btn btn-outline audit-export-btn" onClick={exportLogs} disabled={logs.length === 0}>
-                <Download size={15} /> {t("audit_export")}
-              </button>
+              {canExport ? (
+                <button className="btn btn-outline audit-export-btn" onClick={exportLogs} disabled={logs.length === 0}>
+                  <Download size={15} /> {t("audit_export")}
+                </button>
+              ) : null}
             </div>
           </div>
         </div>
@@ -457,7 +474,10 @@ export default function AuditLogsPage() {
                       {log.targetId}
                     </td>
                     <td className="audit-table-td-operator" data-label={t("audit_col_operator")} data-column-priority="supplementary">
-                      {log.operatorIp}
+                      <div>
+                        <strong>{log.actor || 'system'}</strong><br />
+                        <small>{log.operatorIp}</small>
+                      </div>
                     </td>
                     <td className="audit-table-td-delta" data-label={t("audit_col_delta")} data-column-priority="essential">
                       <button
@@ -489,7 +509,7 @@ export default function AuditLogsPage() {
               <div>
                 <h2 id="audit-diff-modal-title" className="audit-modal-title">{t("audit_modal_title")}</h2>
                 <div className="audit-modal-ref">
-                  {t("audit_modal_ref")} <span className="audit-modal-ref-id">{selectedLog.id}</span> · <span className="audit-modal-ref-action">{formatActionLabel(selectedLog.action)}</span> ({selectedLog.targetId})
+                  {t("audit_modal_ref")} <span className="audit-modal-ref-id">{selectedLog.id}</span> · <span className="audit-modal-ref-action">{formatActionLabel(selectedLog.action)}</span> ({selectedLog.targetId}) · {selectedLog.actor || 'system'} · {selectedLog.correlationId || '--'}
                 </div>
               </div>
               <button ref={closeDialogRef} className="btn btn-outline" onClick={() => setSelectedLog(null)}>{t("audit_modal_close")}</button>

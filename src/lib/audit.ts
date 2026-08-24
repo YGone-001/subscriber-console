@@ -1,3 +1,4 @@
+import { after } from 'next/server';
 import { updateAnalytics } from './analytics';
 import { appendAuditLog } from '@/server/repositories/auditRepository';
 
@@ -46,34 +47,46 @@ function extractDeltas(oldObj: any, newObj: any) {
 }
 
 export function logAudit(action: AuditAction, targetId: string, oldVal: any, newVal: any, req?: Request) {
-  setTimeout(async () => {
-    try {
-      const rawIp = req
-        ? req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || '127.0.0.1'
-        : '127.0.0.1';
-      const operatorIp = maskIp(rawIp);
-      const timestamp = new Date().toISOString();
-      const level = (action.includes('DELETE') || action === 'HEAL') ? 'warning' : 'info';
-      const { oldData, newData } = extractDeltas(oldVal, newVal);
+  const rawIp = req
+    ? req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || '127.0.0.1'
+    : '127.0.0.1';
+  const operatorIp = maskIp(rawIp.split(',')[0]?.trim() || rawIp);
+  const actor = req?.headers.get('x-user')?.trim() || 'system';
+  const correlationId = req?.headers.get('x-request-id')?.trim() || crypto.randomUUID();
+  const reason = req?.headers.get('x-operation-reason')?.trim() || undefined;
+  const timestamp = new Date().toISOString();
+  const level = (action.includes('DELETE') || action === 'HEAL') ? 'warning' : 'info';
+  const { oldData, newData } = extractDeltas(oldVal, newVal);
+  const approvalId = [newVal?.approvalId, oldVal?.approvalId, targetId.startsWith('approval:') ? targetId.slice(9) : undefined]
+    .find((value) => typeof value === 'string' && value.trim()) as string | undefined;
 
-      await updateAnalytics(action, oldVal, newVal);
+  if (!oldData && !newData && action !== 'HEAL' && !action.includes('DELETE')) return;
 
-      if (!oldData && !newData && action !== 'HEAL' && !action.includes('DELETE')) {
+  after(async () => {
+    await updateAnalytics(action, oldVal, newVal);
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        await appendAuditLog({
+          id: crypto.randomUUID(),
+          timestamp,
+          level,
+          action,
+          targetId,
+          actor,
+          operatorIp,
+          correlationId,
+          approvalId,
+          reason,
+          oldData,
+          newData,
+        });
         return;
+      } catch (error) {
+        lastError = error;
+        if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, attempt * 100));
       }
-
-      await appendAuditLog({
-        id: crypto.randomUUID(),
-        timestamp,
-        level,
-        action,
-        targetId,
-        operatorIp,
-        oldData,
-        newData,
-      });
-    } catch (error) {
-      console.error('Audit logging failed:', error);
     }
-  }, 0);
+    console.error('Audit logging failed after retries:', lastError);
+  });
 }

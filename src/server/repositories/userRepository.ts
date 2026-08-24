@@ -71,15 +71,6 @@ export async function updateUser(username: string, updates: Partial<UserDocument
   return { existing, next };
 }
 
-export async function deleteUser(username: string) {
-  const docs = await collection();
-  const existing = await docs.findOne({ username });
-  if (!existing) return null;
-
-  await docs.deleteOne({ username });
-  return existing;
-}
-
 export function safeUser(user: UserDocument & Record<string, unknown>): SafeUserDocument {
   return stripPassword(user);
 }

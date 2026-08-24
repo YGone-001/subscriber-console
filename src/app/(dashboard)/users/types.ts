@@ -24,7 +24,10 @@ export type AuditLogRecord = {
   level: "info" | "warning";
   action: string;
   targetId: string;
+  actor?: string;
   operatorIp: string;
+  correlationId?: string;
+  approvalId?: string;
   oldData?: unknown;
   newData?: unknown;
 };
@@ -51,7 +54,7 @@ export type SortKey = "username" | "status" | "createdAt" | "lastLoginAt";
 export type SortDirection = "asc" | "desc";
 export type DrawerMode = "closed" | "view" | "create" | "edit";
 export type DetailTab = "basic" | "permissions" | "login" | "activity";
-export type BulkAction = "enable" | "disable" | "assignRole" | "delete";
+export type BulkAction = "enable" | "disable" | "assignRole";
 
 export type NewUserForm = {
   username: string;
@@ -100,6 +103,9 @@ export const CAPABILITY_LABEL_KEYS: Record<Capability, string> = {
   balance_adjust: "users_cap_action_balance_adjust",
   profile_rollback: "users_cap_action_profile_rollback",
   rating_publish: "users_cap_action_rating_publish",
+  approval_review: "users_cap_action_approval_review",
+  approval_execute: "users_cap_action_approval_execute",
+  audit_view: "users_cap_action_audit_view",
   audit_export: "users_cap_action_audit_export",
   system_heal: "users_cap_action_system_heal",
   user_admin: "users_cap_action_user_admin",

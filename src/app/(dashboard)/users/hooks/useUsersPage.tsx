@@ -61,7 +61,6 @@ export function useUsersPage() {
   const users = useMemo(() => data?.users || [], [data?.users]);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [savingAction, setSavingAction] = useState<string | null>(null);
-  const [pendingDeleteUsername, setPendingDeleteUsername] = useState<string | null>(null);
   const [pendingStatusChange, setPendingStatusChange] = useState<PendingStatusChange | null>(null);
   const [pendingBulkAction, setPendingBulkAction] = useState<PendingBulkAction | null>(null);
   const [pendingUpdate, setPendingUpdate] = useState<PendingUpdate | null>(null);
@@ -131,7 +130,6 @@ export function useUsersPage() {
 
   const resetConfirmState = () => {
     setConfirmReason("");
-    setPendingDeleteUsername(null);
     setPendingStatusChange(null);
     setPendingBulkAction(null);
     setPendingUpdate(null);
@@ -440,44 +438,6 @@ export function useUsersPage() {
     }
   };
 
-  const handleDelete = (username: string) => {
-    const targetUser = users.find((item) => item.username === username);
-    if (!targetUser || isProtectedUser(targetUser)) {
-      setNotice({ type: "error", text: t("users_err_protected") });
-      return;
-    }
-    setNotice(null);
-    setPendingDeleteUsername(username);
-    setConfirmReason("");
-    setOpenMenuUsername(null);
-  };
-
-  const executeDelete = async () => {
-    if (!pendingDeleteUsername) return;
-    const username = pendingDeleteUsername;
-    setSavingAction(`delete:${username}`);
-    try {
-      const res = await fetch(`/api/auth/users/${username}`, {
-        method: "DELETE",
-        headers: { "X-Operation-Reason": confirmReason.trim() },
-      });
-      if (res.ok) {
-        setPendingDeleteUsername(null);
-        setConfirmReason("");
-        if (selectedUsername === username) closeDrawer();
-        setNotice({ type: "success", text: t("users_msg_deleted") });
-        await mutate();
-      } else {
-        setNotice({ type: "error", text: await readError(res, t("users_err_delete")) });
-      }
-    } catch (requestError) {
-      console.error(requestError);
-      setNotice({ type: "error", text: t("users_err_delete") });
-    } finally {
-      setSavingAction(null);
-    }
-  };
-
   const exportUsers = (items: SysUser[], filePrefix: string) => {
     const header = [
       "username",
@@ -550,30 +510,22 @@ export function useUsersPage() {
       }
 
       try {
-        let res: Response;
-        if (pendingBulkAction.action === "delete") {
-          res = await fetch(`/api/auth/users/${username}`, {
-            method: "DELETE",
-            headers: { "X-Operation-Reason": confirmReason.trim() },
-          });
-        } else {
-          const nextRole = pendingBulkAction.action === "assignRole"
-            ? pendingBulkAction.role || normalizeRole(targetUser.role)
-            : normalizeRole(targetUser.role);
-          const nextStatus = pendingBulkAction.action === "enable"
-            ? "active"
-            : pendingBulkAction.action === "disable"
-              ? "disabled"
-              : normalizeStatus(targetUser.status);
-          res = await fetch(`/api/auth/users/${username}`, {
-            method: "PUT",
-            headers: {
-              "Content-Type": "application/json",
-              "X-Operation-Reason": confirmReason.trim(),
-            },
-            body: JSON.stringify({ role: nextRole, status: nextStatus }),
-          });
-        }
+        const nextRole = pendingBulkAction.action === "assignRole"
+          ? pendingBulkAction.role || normalizeRole(targetUser.role)
+          : normalizeRole(targetUser.role);
+        const nextStatus = pendingBulkAction.action === "enable"
+          ? "active"
+          : pendingBulkAction.action === "disable"
+            ? "disabled"
+            : normalizeStatus(targetUser.status);
+        const res = await fetch(`/api/auth/users/${username}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Operation-Reason": confirmReason.trim(),
+          },
+          body: JSON.stringify({ role: nextRole, status: nextStatus }),
+        });
 
         if (res.ok) {
           successCount += 1;
@@ -687,15 +639,15 @@ export function useUsersPage() {
 
 
   const drawerProps = {
-    notice, setNotice, pendingDeleteUsername, savingAction, confirmReason,
-    executeDelete, resetConfirmState, setConfirmReason, pendingStatusChange,
+    notice, setNotice, savingAction, confirmReason,
+    resetConfirmState, setConfirmReason, pendingStatusChange,
     executeStatusChange, pendingBulkAction, executeBulkAction, pendingUpdate,
     selectedUser, submitUpdate, drawerMode, closeDrawer,
     newForm, setNewForm, newPasswordVisible, setNewPasswordVisible,
     newConfirmPasswordVisible, setNewConfirmPasswordVisible, handleCreate,
     detailTabs, detailTab, setDetailTab, editForm, setEditForm,
     isProtectedUser, editPasswordVisible, setEditPasswordVisible,
-    handleUpdate, openDetails, startEdit, handleDelete, renderPasswordInput,
+    handleUpdate, openDetails, startEdit, renderPasswordInput,
     renderRoleBadge, renderStatusBadge, ROLE_CAPABILITIES, 
     mapCapabilityDecision, isAuditLoading, auditError, mutateAudit, auditData
   };
@@ -709,7 +661,7 @@ export function useUsersPage() {
     isProtectedUser, normalizeStatus, toggleUserSelection,
     openDetails, renderRoleBadge, renderStatusBadge,
     startEdit, openMenuUsername, setOpenMenuUsername,
-    setPendingStatusChange, setConfirmReason, handleDelete,
+    setPendingStatusChange, setConfirmReason,
     pageSize, setPageSize, setPage, PAGE_SIZE_OPTIONS,
     safePage, pageCount, normalizePageSize
   };

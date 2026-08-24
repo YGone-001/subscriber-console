@@ -4,7 +4,7 @@ import { logAudit } from '@/lib/audit';
 import { requireCapability } from '@/lib/authz';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import { isPasswordStrong, PASSWORD_POLICY_MESSAGE } from '@/lib/security';
-import { deleteUser, safeUser, updateUser } from '@/server/repositories/userRepository';
+import { safeUser, updateUser } from '@/server/repositories/userRepository';
 import type { UserRole } from '@/lib/authz';
 
 export const dynamic = 'force-dynamic';
@@ -66,22 +66,22 @@ export async function DELETE(request: Request, { params }: RouteContext) {
   try {
     const auth = requireCapability(request, 'user_admin');
     if (!auth.ok) return auth.response;
-    const rateLimit = await enforceRateLimit(`users:delete:${auth.auth.user}`, 10, 60);
+    const rateLimit = await enforceRateLimit(`users:disable:${auth.auth.user}`, 10, 60);
     if (!rateLimit.ok) return rateLimit.response;
 
     if (username === 'admin' || auth.auth.user === username) {
-      return NextResponse.json({ error: 'Cannot delete the admin or yourself' }, { status: 403 });
+      return NextResponse.json({ error: 'Cannot disable the admin or yourself' }, { status: 403 });
     }
 
-    const existing = await deleteUser(username);
-    if (!existing) {
+    const result = await updateUser(username, { status: 'disabled' });
+    if (!result) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    logAudit('DELETE', `SYS_USER:${username}`, safeUser(existing), null, request);
-    return NextResponse.json({ message: 'User deleted successfully' });
+    logAudit('UPDATE', `SYS_USER:${username}`, safeUser(result.existing), safeUser(result.next), request);
+    return NextResponse.json({ message: 'User disabled; account history was preserved' });
   } catch (error) {
-    console.error('Error deleting user:', error);
+    console.error('Error disabling user:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
