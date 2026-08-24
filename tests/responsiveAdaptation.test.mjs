@@ -26,7 +26,7 @@ test('high-density data tables switch to labelled record cards on narrow screens
   const subscriberTable = read('../src/app/(dashboard)/subscribers/components/SubscriberTable.tsx');
   const subscriberCss = read('../src/app/(dashboard)/subscribers/subscribers.css');
   const usersTable = read('../src/app/(dashboard)/users/components/UsersTable.tsx');
-  const usersCss = read('../src/app/(dashboard)/users/users.css');
+  const usersCss = read('../src/app/(dashboard)/users/components/UsersTable.module.css');
   const ratingTable = read('../src/components/rating/PccRuleList.tsx');
   const tariffPlanTable = read('../src/components/rating/TariffPlanList.tsx');
   const ratingCss = read('../src/components/rating/rating.css');
@@ -53,10 +53,10 @@ test('critical shell and row actions share the 44px touch-target floor', () => {
   const layoutCss = read('../src/app/(dashboard)/layout.css');
   const globalCss = read('../src/app/globals.css');
   const subscriberCss = read('../src/app/(dashboard)/subscribers/subscribers.css');
-  const usersCss = read('../src/app/(dashboard)/users/users.css');
+  const usersCss = read('../src/app/(dashboard)/users/components/UsersTable.module.css');
 
   assert.match(globalCss, /\.btn-icon\s*\{[\s\S]*?width:\s*44px;[\s\S]*?height:\s*44px/);
   assert.match(layoutCss, /\.icon-button\s*\{[\s\S]*?width:\s*44px;[\s\S]*?height:\s*44px/);
   assert.match(subscriberCss, /\.action-btn\s*\{[\s\S]*?width:\s*44px;[\s\S]*?height:\s*44px/);
-  assert.match(usersCss, /\.users-row-actions \.btn\s*\{[\s\S]*?min-height:\s*44px/);
+  assert.match(usersCss, /\.rowActions :global\(\.btn\)\s*\{[\s\S]*?min-height:\s*44px/);
 });

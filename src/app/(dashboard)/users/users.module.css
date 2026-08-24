@@ -1,0 +1,22 @@
+.page {
+  min-height: 100%;
+  width: 100%;
+  box-sizing: border-box;
+  padding: var(--space-page);
+  background: var(--background);
+}
+
+.accessPanel,
+.tablePanel {
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-panel);
+  background: var(--surface);
+  box-shadow: var(--shadow-panel);
+}
+
+.accessPanel { overflow: hidden; }
+.tablePanel { overflow: hidden; }
+
+@media (max-width: 760px) {
+  .page { padding: 1rem; }
+}

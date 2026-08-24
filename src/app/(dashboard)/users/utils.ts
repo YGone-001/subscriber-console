@@ -42,7 +42,7 @@ export function normalizeStatus(value: string | undefined): UserStatus {
 
 export function normalizePageSize(value: string | null): number {
   const parsed = Number(value);
-  return PAGE_SIZE_OPTIONS.includes(parsed as any) ? parsed : 10;
+  return PAGE_SIZE_OPTIONS.includes(parsed as (typeof PAGE_SIZE_OPTIONS)[number]) ? parsed : 10;
 }
 
 export function formatDateTime(value?: string) {

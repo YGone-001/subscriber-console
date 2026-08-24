@@ -1,9 +1,15 @@
-import type { CapabilityDecision } from "@/lib/permissions";
+import type {
+  CapabilityDecision,
+  DisplayUserStatus,
+  PermissionEffect,
+  RoleKey,
+  UserStatus,
+} from "@/types/iam";
 
-export type UserAccessRole = "root" | "operator" | "viewer";
-export type UserAccessStatus = "active" | "disabled";
-export type UserAccessDisplayStatus = UserAccessStatus | "locked";
-export type PermissionEffect = "allow" | "approval_required" | "deny";
+export type UserAccessRole = RoleKey;
+export type UserAccessStatus = UserStatus;
+export type UserAccessDisplayStatus = DisplayUserStatus;
+export type { PermissionEffect } from "@/types/iam";
 export type SortDirection = "asc" | "desc";
 
 export type UserAccessRecord = {
