@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { capabilityAllowed, capabilityDecision, type Capability, type CapabilityGuardOptions } from '@/lib/permissions';
+import type { RoleKey } from '@/types/iam';
 
-export type UserRole = 'root' | 'operator' | 'viewer';
+export type UserRole = RoleKey;
 
 export type AuthContext = {
   user: string;

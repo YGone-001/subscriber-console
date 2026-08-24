@@ -1,6 +1,4 @@
 "use client";
-import React from "react";
-import "./users.css";
 import { UsersSummaryPanel } from "./components/UsersSummaryPanel";
 import { UsersToolbar } from "./components/UsersToolbar";
 import { UsersTable } from "./components/UsersTable";
@@ -9,9 +7,9 @@ import { Shield, Plus } from "lucide-react";
 import { EmptyState } from "@/components/OperationFeedback";
 import { useUsersPage } from "./hooks/useUsersPage";
 import PageHeader from "@/components/ui/PageHeader";
+import styles from "./users.module.css";
 
 export default function UsersPage() {
-  // users_detail_tab_permissions
   const {
     isRoot,
     users,
@@ -26,7 +24,7 @@ export default function UsersPage() {
     if (!isRoot) {
     return (
       <div className="container animate-fade-in">
-        <div className="users-access-panel">
+        <div className={styles.accessPanel}>
           <EmptyState
             icon={<Shield size={48} />}
             title={t("users_access_denied")}
@@ -39,7 +37,7 @@ export default function UsersPage() {
 
   return (
     <>
-      <div className="users-page animate-fade-in">
+      <div className={`${styles.page} animate-fade-in`}>
         <PageHeader
           eyebrow={t("eyebrow_rbac_iam")}
           icon={<Shield size={23} />}
@@ -56,7 +54,7 @@ export default function UsersPage() {
           statusCounts={statusCounts as { active: number; disabled: number; }}
         />
 
-        <section className="users-table-panel">
+        <section className={styles.tablePanel}>
           <UsersToolbar {...toolbarProps} />
 
 

@@ -1,26 +1,13 @@
-import type { UserRole } from '@/lib/authz';
+import type { Capability, CapabilityDecision, RoleKey } from '@/types/iam';
 
-export type Capability =
-  | 'subscriber_write'
-  | 'policy_approve'
-  | 'balance_adjust'
-  | 'profile_rollback'
-  | 'rating_publish'
-  | 'approval_review'
-  | 'approval_execute'
-  | 'audit_view'
-  | 'audit_export'
-  | 'system_heal'
-  | 'user_admin';
-
-export type CapabilityDecision = 'allow' | 'approval' | 'export' | 'deny';
+export type { Capability, CapabilityDecision } from '@/types/iam';
 
 export type CapabilityGuardOptions = {
   allowApproval?: boolean;
   allowExport?: boolean;
 };
 
-export const ROLE_CAPABILITIES: Record<UserRole, Record<Capability, CapabilityDecision>> = {
+export const ROLE_CAPABILITIES: Record<RoleKey, Record<Capability, CapabilityDecision>> = {
   root: {
     subscriber_write: 'allow',
     policy_approve: 'allow',
@@ -62,7 +49,7 @@ export const ROLE_CAPABILITIES: Record<UserRole, Record<Capability, CapabilityDe
   },
 };
 
-export function capabilityDecision(role: UserRole, capability: Capability): CapabilityDecision {
+export function capabilityDecision(role: RoleKey, capability: Capability): CapabilityDecision {
   return ROLE_CAPABILITIES[role]?.[capability] || 'deny';
 }
 

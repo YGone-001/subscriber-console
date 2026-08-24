@@ -7,11 +7,13 @@ interface FieldProps {
   className?: string;
   labelClassName?: string;
   description?: ReactNode;
+  descriptionId?: string;
   error?: ReactNode;
+  errorId?: string;
   children: ReactNode;
 }
 
-export function Field({ htmlFor, label, className, labelClassName, description, error, children }: FieldProps) {
+export function Field({ htmlFor, label, className, labelClassName, description, descriptionId, error, errorId, children }: FieldProps) {
   const fieldClassName = className ?? styles.field;
   const resolvedLabelClassName = labelClassName ?? styles.label;
 
@@ -20,8 +22,8 @@ export function Field({ htmlFor, label, className, labelClassName, description, 
       <label className={fieldClassName} data-invalid={error ? "true" : undefined}>
         <span className={resolvedLabelClassName}>{label}</span>
         {children}
-        {description ? <p className={styles.description}>{description}</p> : null}
-        {error ? <p className={styles.error} role="alert">{error}</p> : null}
+        {description ? <p id={descriptionId} className={styles.description}>{description}</p> : null}
+        {error ? <p id={errorId} className={styles.error} role="alert">{error}</p> : null}
       </label>
     );
   }
@@ -30,8 +32,8 @@ export function Field({ htmlFor, label, className, labelClassName, description, 
     <div className={fieldClassName} data-invalid={error ? "true" : undefined}>
       <label className={resolvedLabelClassName} htmlFor={htmlFor}>{label}</label>
       {children}
-      {description ? <p className={styles.description}>{description}</p> : null}
-      {error ? <p className={styles.error} role="alert">{error}</p> : null}
+      {description ? <p id={descriptionId} className={styles.description}>{description}</p> : null}
+      {error ? <p id={errorId} className={styles.error} role="alert">{error}</p> : null}
     </div>
   );
 }

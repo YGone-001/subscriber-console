@@ -34,7 +34,7 @@ export async function POST(request: Request) {
     const rateLimit = await enforceRateLimit(`users:create:${auth.auth.user}`, 15, 60);
     if (!rateLimit.ok) return rateLimit.response;
 
-    const { username, password, role } = await request.json();
+    const { username, password, role, displayName, email } = await request.json();
     if (!username || !password || !role) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
@@ -47,6 +47,12 @@ export async function POST(request: Request) {
     if (!isValidRole(role)) {
       return NextResponse.json({ error: 'Invalid role' }, { status: 400 });
     }
+    if (displayName != null && (typeof displayName !== 'string' || displayName.trim().length > 100)) {
+      return NextResponse.json({ error: 'Invalid display name' }, { status: 400 });
+    }
+    if (email != null && (typeof email !== 'string' || email.trim().length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()))) {
+      return NextResponse.json({ error: 'Invalid email' }, { status: 400 });
+    }
 
     const hash = await bcrypt.hash(password, 10);
     const newUser = await createUser({
@@ -54,6 +60,8 @@ export async function POST(request: Request) {
       passwordHash: hash,
       role,
       status: 'active',
+      displayName: typeof displayName === 'string' && displayName.trim() ? displayName.trim() : undefined,
+      email: typeof email === 'string' && email.trim() ? email.trim() : undefined,
       createdAt: new Date().toISOString(),
       createdBy: auth.auth.user,
     });
