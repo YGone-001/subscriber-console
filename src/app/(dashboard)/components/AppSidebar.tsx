@@ -6,6 +6,8 @@ import Link from "next/link";
 import {
   ChevronRight,
   Search,
+  Settings,
+  ShieldCheck,
   SidebarClose,
   SidebarOpen,
   X,
@@ -32,7 +34,8 @@ interface AppSidebarProps {
 export default function AppSidebar({ sidebarOpen, setSidebarOpen, isMobileShell }: AppSidebarProps) {
   const [ocsNavOpen, setOcsNavOpen] = useState(true);
   const [ratingNavOpen, setRatingNavOpen] = useState(true);
-  const [identityNavOpen, setIdentityNavOpen] = useState(true);
+  const [governanceNavOpen, setGovernanceNavOpen] = useState(true);
+  const [systemNavOpen, setSystemNavOpen] = useState(true);
   const [filterQuery, setFilterQuery] = useState("");
   const pathname = usePathname();
   const { t } = useI18n();
@@ -48,20 +51,16 @@ export default function AppSidebar({ sidebarOpen, setSidebarOpen, isMobileShell 
       .filter((route) => route.group === group)
       .map((route) => ({ key: route.labelKey, path: route.path, match: route.path, icon: createElement(route.icon, { size: 18 }) }));
     const ocsChildren = groupChildren("ocs");
-    const identityChildren = groupChildren("identity");
+    const governanceChildren = groupChildren("governance");
+    const systemChildren = groupChildren("system");
     const items: NavItem[] = [
       routeItem("/"),
       routeItem("/subscribers"),
       { key: "nav_ocs", path: "/ocs/balances", match: "/ocs", icon: <Zap size={20} />, children: ocsChildren },
       routeItem("/profile"),
       routeItem("/rating"),
-      {
-        key: "nav_user_permissions",
-        path: "/users",
-        match: "/users",
-        icon: identityChildren[0]?.icon,
-        children: identityChildren,
-      },
+      { key: "nav_operations_governance", path: "/approvals", match: "/approvals", icon: <ShieldCheck size={20} />, children: governanceChildren },
+      ...(systemChildren.length > 0 ? [{ key: "nav_system_settings", path: "/users", match: "/users", icon: <Settings size={20} />, children: systemChildren }] : []),
       routeItem("/system-health"),
     ];
 
@@ -75,12 +74,8 @@ export default function AppSidebar({ sidebarOpen, setSidebarOpen, isMobileShell 
   const sidebarWidth = sidebarOpen ? 264 : 72;
   const ocsNavExpanded = ocsNavOpen || pathname.startsWith("/ocs");
   const ratingNavExpanded = ratingNavOpen || pathname.startsWith("/rating");
-  const identityNavExpanded =
-    identityNavOpen ||
-    pathname.startsWith("/users") ||
-    pathname.startsWith("/roles") ||
-    pathname.startsWith("/approvals") ||
-    pathname.startsWith("/audit-logs");
+  const governanceNavExpanded = governanceNavOpen || pathname.startsWith("/approvals") || pathname.startsWith("/audit-logs");
+  const systemNavExpanded = systemNavOpen || pathname.startsWith("/users");
 
   const filteredNavItems = useMemo(() => {
     const q = filterQuery.trim().toLowerCase();
@@ -151,13 +146,16 @@ export default function AppSidebar({ sidebarOpen, setSidebarOpen, isMobileShell 
           const isActive =
             childActive || routeMatchesPath(pathname, item.match);
           const isOcsParent = item.key === "nav_ocs";
-          const isIdentityParent = item.key === "nav_user_permissions";
-          const isExpandable = isOcsParent || isRatingParent || isIdentityParent;
+          const isGovernanceParent = item.key === "nav_operations_governance";
+          const isSystemParent = item.key === "nav_system_settings";
+          const isExpandable = isOcsParent || isRatingParent || isGovernanceParent || isSystemParent;
           const parentExpanded = isOcsParent
             ? ocsNavExpanded
             : isRatingParent
             ? ratingNavExpanded
-            : identityNavExpanded;
+            : isGovernanceParent
+            ? governanceNavExpanded
+            : systemNavExpanded;
 
           return (
             <div key={item.key} className="sidebar-item-wrap">
@@ -176,8 +174,10 @@ export default function AppSidebar({ sidebarOpen, setSidebarOpen, isMobileShell 
                         setOcsNavOpen((open) => !open);
                       } else if (isRatingParent) {
                         setRatingNavOpen((open) => !open);
+                      } else if (isGovernanceParent) {
+                        setGovernanceNavOpen((open) => !open);
                       } else {
-                        setIdentityNavOpen((open) => !open);
+                        setSystemNavOpen((open) => !open);
                       }
                     }}
                     aria-expanded={parentExpanded}

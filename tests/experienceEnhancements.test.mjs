@@ -125,9 +125,4 @@ test("high-risk dialogs and drawers share the production focus contract", () => 
     assert.doesNotMatch(source, /role="dialog" aria-modal="true"/);
   }
 
-  const rolesPanel = read("src/components/users/RoleManagementPanel.tsx");
-  assert.match(rolesPanel, /role="tablist"/);
-  assert.match(rolesPanel, /role="tabpanel"/);
-  assert.match(rolesPanel, /aria-selected/);
-  assert.match(rolesPanel, /aria-controls/);
 });

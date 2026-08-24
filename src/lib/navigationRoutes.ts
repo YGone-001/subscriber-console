@@ -7,7 +7,6 @@ import {
   LayoutDashboard,
   Radio,
   Receipt,
-  ShieldCheck,
   UserCog,
   Users,
   Wallet,
@@ -15,7 +14,7 @@ import {
 } from "lucide-react";
 import type { UserRole } from "@/lib/authz";
 
-export type NavigationGroup = "ocs" | "rating" | "identity";
+export type NavigationGroup = "ocs" | "rating" | "governance" | "system";
 
 export interface NavigationRoute {
   path: string;
@@ -40,10 +39,9 @@ export const NAVIGATION_ROUTES: readonly NavigationRoute[] = [
   { path: "/rating", labelKey: "nav_rating", commandLabelKey: "nav_rating", commandDescriptionKey: "cp_nav_rating_plans_desc", icon: Gauge, showInCommandPalette: false },
   { path: "/rating/plans", labelKey: "nav_rating_plans", commandLabelKey: "cp_nav_rating_plans", commandDescriptionKey: "cp_nav_rating_plans_desc", icon: Gauge, group: "rating", groupLabelKey: "nav_rating", groupPath: "/rating" },
   { path: "/rating/rules", labelKey: "nav_rating_rules", commandLabelKey: "cp_nav_rating_rules", commandDescriptionKey: "cp_nav_rating_rules_desc", icon: GitBranch, group: "rating", groupLabelKey: "nav_rating", groupPath: "/rating" },
-  { path: "/users", labelKey: "nav_system_users", commandDescriptionKey: "users_mgmt_desc", icon: UserCog, group: "identity", groupLabelKey: "nav_user_permissions", groupPath: "/users", allowedRoles: ["root"] },
-  { path: "/roles", labelKey: "nav_roles", commandDescriptionKey: "roles_matrix_desc", icon: ShieldCheck, group: "identity", groupLabelKey: "nav_user_permissions", groupPath: "/users", allowedRoles: ["root"] },
-  { path: "/approvals", labelKey: "nav_approvals", commandDescriptionKey: "approvals_center_desc", icon: GitBranch, group: "identity", groupLabelKey: "nav_user_permissions", groupPath: "/approvals" },
-  { path: "/audit-logs", labelKey: "nav_audit_logs", commandLabelKey: "cp_nav_audit", commandDescriptionKey: "cp_nav_audit_desc", icon: History, group: "identity", groupLabelKey: "nav_user_permissions", groupPath: "/audit-logs" },
+  { path: "/approvals", labelKey: "nav_approvals", commandDescriptionKey: "approvals_center_desc", icon: GitBranch, group: "governance", groupLabelKey: "nav_operations_governance", groupPath: "/approvals" },
+  { path: "/audit-logs", labelKey: "nav_audit_logs", commandLabelKey: "cp_nav_audit", commandDescriptionKey: "cp_nav_audit_desc", icon: History, group: "governance", groupLabelKey: "nav_operations_governance", groupPath: "/approvals" },
+  { path: "/users", labelKey: "nav_system_users", commandDescriptionKey: "users_mgmt_desc", icon: UserCog, group: "system", groupLabelKey: "nav_system_settings", groupPath: "/users", allowedRoles: ["root"] },
   { path: "/system-health", labelKey: "nav_system_health", commandLabelKey: "cp_nav_health", commandDescriptionKey: "cp_nav_health_desc", icon: Activity },
 ] as const;
 

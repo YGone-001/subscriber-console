@@ -6,6 +6,9 @@ export type Capability =
   | 'balance_adjust'
   | 'profile_rollback'
   | 'rating_publish'
+  | 'approval_review'
+  | 'approval_execute'
+  | 'audit_view'
   | 'audit_export'
   | 'system_heal'
   | 'user_admin';
@@ -24,6 +27,9 @@ export const ROLE_CAPABILITIES: Record<UserRole, Record<Capability, CapabilityDe
     balance_adjust: 'allow',
     profile_rollback: 'allow',
     rating_publish: 'allow',
+    approval_review: 'allow',
+    approval_execute: 'allow',
+    audit_view: 'allow',
     audit_export: 'export',
     system_heal: 'allow',
     user_admin: 'allow',
@@ -34,7 +40,10 @@ export const ROLE_CAPABILITIES: Record<UserRole, Record<Capability, CapabilityDe
     balance_adjust: 'approval',
     profile_rollback: 'approval',
     rating_publish: 'approval',
-    audit_export: 'export',
+    approval_review: 'deny',
+    approval_execute: 'deny',
+    audit_view: 'allow',
+    audit_export: 'deny',
     system_heal: 'approval',
     user_admin: 'deny',
   },
@@ -44,7 +53,10 @@ export const ROLE_CAPABILITIES: Record<UserRole, Record<Capability, CapabilityDe
     balance_adjust: 'deny',
     profile_rollback: 'deny',
     rating_publish: 'deny',
-    audit_export: 'export',
+    approval_review: 'deny',
+    approval_execute: 'deny',
+    audit_view: 'allow',
+    audit_export: 'deny',
     system_heal: 'deny',
     user_admin: 'deny',
   },

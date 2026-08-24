@@ -1,9 +1,7 @@
 import { useId, useRef } from "react";
 import { useI18n } from "@/components/I18nProvider";
 import { type Capability } from "@/lib/permissions";
-import { 
-  Plus, X, Save, Shield, RefreshCw, CheckCircle2, Clock, Trash2, Settings
-} from "lucide-react";
+import { Plus, X, Save, Shield, RefreshCw, CheckCircle2, Clock, Settings } from "lucide-react";
 import { OperationNotice, ConfirmActionPanel, LoadingRows, EmptyState } from "@/components/OperationFeedback";
 import * as T from "../types";
 import { VALID_ROLES, VALID_STATUS } from "../types";
@@ -16,15 +14,15 @@ export function UserDrawer(props: any) {
   const descriptionId = useId();
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const {
-    notice, setNotice, pendingDeleteUsername, savingAction, confirmReason,
-    executeDelete, resetConfirmState, setConfirmReason, pendingStatusChange,
+    notice, setNotice, savingAction, confirmReason,
+    resetConfirmState, setConfirmReason, pendingStatusChange,
     executeStatusChange, pendingBulkAction, executeBulkAction, pendingUpdate,
     selectedUser, submitUpdate, drawerMode, closeDrawer,
     newForm, setNewForm, newPasswordVisible, setNewPasswordVisible,
     newConfirmPasswordVisible, setNewConfirmPasswordVisible, handleCreate,
     detailTabs, detailTab, setDetailTab, editForm, setEditForm,
     isProtectedUser, editPasswordVisible, setEditPasswordVisible,
-    handleUpdate, openDetails, startEdit, handleDelete, renderPasswordInput,
+    handleUpdate, openDetails, startEdit, renderPasswordInput,
     renderRoleBadge, renderStatusBadge, ROLE_CAPABILITIES, CAPABILITY_LABEL_KEYS,
     mapCapabilityDecision, isAuditLoading, auditError, mutateAudit, auditData
   } = props;
@@ -39,30 +37,6 @@ export function UserDrawer(props: any) {
           message={notice.text}
           onClose={() => setNotice(null)}
         />
-      ) : null}
-
-      {pendingDeleteUsername ? (
-        <ConfirmActionPanel
-          presentation="modal"
-          title={t("users_delete_confirm", { username: pendingDeleteUsername })}
-          message={t("users_delete_desc")}
-          confirmLabel={t("delete")}
-          cancelLabel={t("cancel")}
-          isWorking={savingAction === `delete:${pendingDeleteUsername}`}
-          confirmDisabled={confirmReason.trim().length < 3}
-          onConfirm={executeDelete}
-          onCancel={resetConfirmState}
-        >
-          <div className="users-confirm-details">
-            <span>{t("users_confirm_object", { target: pendingDeleteUsername })}</span>
-            <span>{t("users_confirm_approval_none")}</span>
-            <span>{t("users_confirm_irreversible_yes")}</span>
-            <label>
-              {t("users_confirm_reason")}
-              <textarea value={confirmReason} onChange={(event) => setConfirmReason(event.target.value)} rows={3} />
-            </label>
-          </div>
-        </ConfirmActionPanel>
       ) : null}
 
       {pendingStatusChange ? (
@@ -93,7 +67,7 @@ export function UserDrawer(props: any) {
       {pendingBulkAction ? (
         <ConfirmActionPanel
           presentation="modal"
-          tone={pendingBulkAction.action === "delete" || pendingBulkAction.action === "disable" ? "warning" : "info"}
+          tone={pendingBulkAction.action === "disable" ? "warning" : "info"}
           title={t(`users_bulk_confirm_${pendingBulkAction.action}`)}
           message={t("users_bulk_confirm_desc", { count: pendingBulkAction.usernames.length })}
           confirmLabel={t("confirm")}
@@ -106,7 +80,7 @@ export function UserDrawer(props: any) {
           <div className="users-confirm-details">
             <span>{t("users_confirm_object", { target: pendingBulkAction.usernames.join(", ") })}</span>
             <span>{pendingBulkAction.action === "assignRole" && pendingBulkAction.role === "root" ? t("users_confirm_root_role") : t("users_confirm_approval_none")}</span>
-            <span>{pendingBulkAction.action === "delete" ? t("users_confirm_irreversible_yes") : t("users_confirm_irreversible_no")}</span>
+            <span>{t("users_confirm_irreversible_no")}</span>
             <label>
               {t("users_confirm_reason")}
               <textarea value={confirmReason} onChange={(event) => setConfirmReason(event.target.value)} rows={3} />
@@ -391,7 +365,7 @@ export function UserDrawer(props: any) {
                           <div key={log.id}>
                             <span>{formatDateTime(log.timestamp)}</span>
                             <small>{log.action} · {log.targetId}</small>
-                            <strong>{log.level} · {displayValue(log.operatorIp)} · {log.id}</strong>
+                            <strong>{log.level} · {displayValue(log.actor)} · {displayValue(log.operatorIp)} · {log.id}</strong>
                           </div>
                         ))}
                       </div>
@@ -427,21 +401,10 @@ export function UserDrawer(props: any) {
                   </button>
                 </>
               ) : selectedUser ? (
-                <>
-                  <button
-                    type="button"
-                    className="btn btn-outline users-danger-action"
-                    onClick={() => handleDelete(selectedUser.username)}
-                    disabled={isProtectedUser(selectedUser) || pendingDeleteUsername != null}
-                  >
-                    <Trash2 size={15} />
-                    {t("delete")}
-                  </button>
                   <button type="button" className="btn btn-primary" onClick={() => startEdit(selectedUser)}>
                     <Settings size={15} />
                     {t("edit")}
                   </button>
-                </>
               ) : null}
             </footer>
         </Dialog>

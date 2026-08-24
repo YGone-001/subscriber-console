@@ -16,14 +16,14 @@ function parseDateParam(value: string | null, endOfDay = false): number | null {
 
 export async function GET(request: Request) {
   try {
-    const auth = requireCapability(request, 'audit_export', { allowExport: true });
+    const auth = requireCapability(request, 'audit_view');
     if (!auth.ok) return auth.response;
     const rateLimit = await enforceRateLimit(`audit:list:${auth.auth.user}`, 60, 60);
     if (!rateLimit.ok) return rateLimit.response;
 
     const { searchParams } = new URL(request.url);
     const requestedLimit = parseInt(searchParams.get('limit') || '500', 10);
-    const limit = Math.min(Math.max(Number.isFinite(requestedLimit) ? requestedLimit : 500, 1), 5000);
+    const limit = Math.min(Math.max(Number.isFinite(requestedLimit) ? requestedLimit : 500, 1), 500);
     const result = await listAuditLogs({
       action: searchParams.get('action') || '',
       target: searchParams.get('target') || '',

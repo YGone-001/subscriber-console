@@ -1,7 +1,7 @@
 import { useI18n } from "@/components/I18nProvider";
 import { 
   User, Search, RefreshCw, Plus, KeyRound,
-  UserCheck, UserX, Trash2, Eye, Settings,
+  UserCheck, UserX, Eye, Settings,
   MoreHorizontal, Shield, X, Download
 } from "lucide-react";
 import { LoadingRows, EmptyState } from "@/components/OperationFeedback";
@@ -20,7 +20,7 @@ export function UsersTable(props: any) {
     isProtectedUser, normalizeStatus, toggleUserSelection,
     openDetails, renderRoleBadge, renderStatusBadge,
     startEdit, openMenuUsername, setOpenMenuUsername,
-    setPendingStatusChange, setConfirmReason, handleDelete,
+    setPendingStatusChange, setConfirmReason,
     pageSize, setPageSize, setPage, PAGE_SIZE_OPTIONS,
     safePage, pageCount, normalizePageSize
   } = props;
@@ -54,10 +54,6 @@ export function UsersTable(props: any) {
                 <button type="button" className="btn btn-outline" onClick={() => requestBulkAction("assignRole")} disabled={mutableSelectedUsers.length === 0}>
                   <Shield size={15} />
                   {t("users_bulk_assign_role")}
-                </button>
-                <button type="button" className="btn btn-outline users-danger-action" onClick={() => requestBulkAction("delete")} disabled={mutableSelectedUsers.length === 0}>
-                  <Trash2 size={15} />
-                  {t("users_bulk_delete")}
                 </button>
                 <div className="users-more users-bulk-more">
                   <button
@@ -277,10 +273,6 @@ export function UsersTable(props: any) {
                                 >
                                   <UserX size={15} />
                                   {t("users_disable_account")}
-                                </button>
-                                <button type="button" className="danger" disabled={isProtected} onClick={() => handleDelete(item.username)}>
-                                  <Trash2 size={15} />
-                                  {t("delete")}
                                 </button>
                               </div>
                             ) : null}

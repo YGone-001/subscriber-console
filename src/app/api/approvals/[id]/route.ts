@@ -38,7 +38,7 @@ function approvalErrorResponse(error: unknown) {
 }
 
 export async function POST(request: Request, { params }: RouteContext) {
-  const auth = requireCapability(request, 'user_admin');
+  const auth = requireCapability(request, 'approval_review');
   if (!auth.ok) return auth.response;
 
   const rateLimit = await enforceRateLimit(`approvals:review:${auth.auth.user}`, 40, 60);
@@ -51,6 +51,9 @@ export async function POST(request: Request, { params }: RouteContext) {
 
   const approval = await getApproval(id);
   if (!approval) return NextResponse.json({ error: 'Approval request not found' }, { status: 404 });
+  if (approval.requester === auth.auth.user) {
+    return NextResponse.json({ error: 'Requester cannot review their own change' }, { status: 403 });
+  }
   if (approval.status !== 'pending') {
     return NextResponse.json({ error: 'Approval request is no longer pending', approval }, { status: 409 });
   }
@@ -60,6 +63,9 @@ export async function POST(request: Request, { params }: RouteContext) {
     logAudit('UPDATE', `approval:${id}`, approval, rejected, request);
     return NextResponse.json({ message: 'Approval request rejected', approval: rejected });
   }
+
+  const executionAuth = requireCapability(request, 'approval_execute');
+  if (!executionAuth.ok) return executionAuth.response;
 
   const approved = await transitionApproval(id, 'approved', auth.auth.user, { note });
   if (!approved) return NextResponse.json({ error: 'Approval request not found' }, { status: 404 });

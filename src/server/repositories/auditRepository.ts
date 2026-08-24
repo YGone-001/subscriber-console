@@ -9,7 +9,11 @@ export type AuditLogRecord = {
   level: 'info' | 'warning';
   action: AuditAction;
   targetId: string;
+  actor?: string;
   operatorIp: string;
+  correlationId?: string;
+  approvalId?: string;
+  reason?: string;
   oldData: unknown;
   newData: unknown;
 };
@@ -47,7 +51,10 @@ function queryFilter(input: AuditQuery): Filter<AuditLogRecord> {
   if (input.action && input.action !== 'ALL') filter.action = input.action as AuditAction;
   if (input.level && input.level !== 'ALL') filter.level = input.level as 'info' | 'warning';
   if (input.target) filter.targetId = { $regex: escapeRegex(input.target) };
-  if (input.operator) filter.operatorIp = { $regex: escapeRegex(input.operator) };
+  if (input.operator) {
+    const operatorRegex = { $regex: escapeRegex(input.operator), $options: 'i' };
+    filter.$or = [{ actor: operatorRegex }, { operatorIp: operatorRegex }];
+  }
 
   if (input.fromTime !== null || input.toTime !== null) {
     filter.timestamp = {};
@@ -61,14 +68,23 @@ function queryFilter(input: AuditQuery): Filter<AuditLogRecord> {
 
   if (input.query) {
     const regex = { $regex: escapeRegex(input.query), $options: 'i' };
-    filter.$or = [
+    const queryMatches: Filter<AuditLogRecord>[] = [
       { id: regex },
       { action: regex },
       { level: regex },
       { targetId: regex },
+      { actor: regex },
       { operatorIp: regex },
+      { correlationId: regex },
+      { approvalId: regex },
       { timestamp: regex },
     ];
+    if (filter.$or) {
+      filter.$and = [{ $or: filter.$or }, { $or: queryMatches }];
+      delete filter.$or;
+    } else {
+      filter.$or = queryMatches;
+    }
   }
 
   return filter;
@@ -114,6 +130,7 @@ export async function listAuditLogsForApproval(approvalId: string) {
   const filter = {
     $or: [
       { targetId: `approval:${approvalId}` },
+      { approvalId },
       { 'oldData.approvalId': approvalId },
       { 'newData.approvalId': approvalId },
     ],
