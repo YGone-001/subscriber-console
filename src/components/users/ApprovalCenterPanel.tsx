@@ -10,7 +10,11 @@ import { normalizePermissionEffect } from "@/lib/userAccessManagement";
 import { useAuth } from "@/hooks/useAuth";
 import { useI18n } from "@/components/I18nProvider";
 import { EmptyState, LoadingRows, OperationNotice } from "@/components/OperationFeedback";
-import VisualDiffViewer from "@/components/VisualDiffViewer";
+import { ChangeDiff } from "@/components/governance/ChangeDiff";
+import { ApprovalStatusBadge, RiskBadge } from "@/components/governance/GovernanceBadges";
+import { EventTimeline } from "@/components/governance/EventTimeline";
+import { sanitizeAuditPayload } from "@/lib/audit/sanitize";
+import type { RiskLevel } from "@/types/governance";
 import PageHeader from "@/components/ui/PageHeader";
 import MetricStrip from "@/components/ui/MetricStrip";
 import { Dialog } from "@/components/ui/Dialog";
@@ -34,6 +38,7 @@ type ApprovalDocument = {
   id: string;
   action: ApprovalAction;
   status: ApprovalStatus;
+  riskLevel?: RiskLevel;
   requester: string;
   reviewer?: string;
   targetId: string;
@@ -66,6 +71,7 @@ type AuditRecord = {
   action: string;
   targetId: string;
   level: string;
+  actor?: string;
 };
 
 type ApprovalAuditResponse = {
@@ -78,7 +84,6 @@ type ApprovalAuditResponse = {
 };
 
 type ApprovalTab = "pending" | "mine" | "completed" | "exceptions";
-type RiskFilter = "all" | "low" | "medium" | "high";
 
 function formatDateTime(value?: string) {
   if (!value) return "--";
@@ -86,22 +91,9 @@ function formatDateTime(value?: string) {
   return Number.isNaN(date.getTime()) ? "--" : date.toLocaleString();
 }
 
-function waitingHours(createdAt: string) {
-  const created = new Date(createdAt).getTime();
-  if (!Number.isFinite(created)) return 0;
-  return Math.max(0, Math.floor((Date.now() - created) / 3600000));
-}
-
-function riskLevel(approval: ApprovalDocument): Exclude<RiskFilter, "all"> {
-  if (approval.status === "failed") return "high";
-  if (approval.action === "SYSTEM_HEAL" || approval.action.includes("DELETE") || waitingHours(approval.createdAt) >= 48) return "high";
-  if (waitingHours(approval.createdAt) >= 24 || approval.action.includes("IMPORT") || approval.action.includes("MIGRATE")) return "medium";
-  return "low";
-}
-
 function jsonPreview(value: unknown) {
   try {
-    return JSON.stringify(value, null, 2);
+    return JSON.stringify(sanitizeAuditPayload(value), null, 2);
   } catch {
     return String(value);
   }
@@ -317,7 +309,7 @@ export default function ApprovalCenterPanel() {
                     <td data-label={t("approvals_action")} data-column-priority="essential">{t(`approval_action_${approval.action}`)}</td>
                     <td data-label={t("approvals_target")} data-column-priority="essential">{approval.targetId}</td>
                     <td data-label={t("approval_export_requester")} data-column-priority="supplementary">{approval.requester}</td>
-                    <td data-label={t("users_status")} data-column-priority="essential"><span className={`approval-chip ${approval.status}`}>{t(`approval_status_${approval.status}`)}</span></td>
+                    <td data-label={t("users_status")} data-column-priority="essential"><ApprovalStatusBadge status={approval.status} /></td>
                     <td data-label={t("users_created")} data-column-priority="supplementary">{formatDateTime(approval.createdAt)}</td>
                     <td data-label={t("users_actions")} data-column-priority="essential"><button type="button" className="btn btn-outline" onClick={() => setSelectedId(approval.id)}><Eye size={15} />{t("users_view")}</button></td>
                   </tr>
@@ -353,8 +345,8 @@ export default function ApprovalCenterPanel() {
                   <div><dt>{t("approvals_action")}</dt><dd>{t(`approval_action_${selectedApproval.action}`)}</dd></div>
                   <div><dt>{t("approvals_target")}</dt><dd>{selectedApproval.targetId}</dd></div>
                   <div><dt>{t("approval_export_requester")}</dt><dd>{selectedApproval.requester}</dd></div>
-                  <div><dt>{t("users_status")}</dt><dd>{t(`approval_status_${selectedApproval.status}`)}</dd></div>
-                  <div><dt>{t("approvals_risk")}</dt><dd>{t(`approvals_risk_${riskLevel(selectedApproval)}`)}</dd></div>
+                  <div><dt>{t("users_status")}</dt><dd><ApprovalStatusBadge status={selectedApproval.status} /></dd></div>
+                  <div><dt>{t("approvals_risk")}</dt><dd><RiskBadge risk={selectedApproval.riskLevel} /></dd></div>
                   <div><dt>{t("users_created")}</dt><dd>{formatDateTime(selectedApproval.createdAt)}</dd></div>
                 </dl>
               </section>
@@ -367,11 +359,10 @@ export default function ApprovalCenterPanel() {
               <section>
                 <h3>{t("approvals_business_diff")}</h3>
                 <div style={{ marginTop: '0.5rem' }}>
-                  <VisualDiffViewer
-                    oldData={(selectedApproval.payload as any)?.previous || (selectedApproval.payload as any)?.current || null}
-                    newData={(selectedApproval.payload as any)?.changes || selectedApproval.payload}
+                  <ChangeDiff
+                    before={selectedApproval.payload.previous ?? selectedApproval.payload.current}
+                    after={selectedApproval.payload.changes ?? selectedApproval.payload}
                     title={`${selectedApproval.action} · ${selectedApproval.targetId}`}
-                    defaultMode="semantic"
                     compact
                   />
                 </div>
@@ -401,9 +392,10 @@ export default function ApprovalCenterPanel() {
                 {auditLoading ? <LoadingRows columns={4} rows={3} /> : auditError ? (
                   <EmptyState icon={<AlertTriangle size={36} />} title={t("users_audit_error_title")} description={t("users_audit_error_desc")} />
                 ) : auditData?.logs.length ? (
-                  <div className="approval-history">
-                    {auditData.logs.map((log) => <div key={log.id}><span>{formatDateTime(log.timestamp)}</span><strong>{log.action} · {log.targetId} · {log.level}</strong></div>)}
-                  </div>
+                  <EventTimeline events={auditData.logs.map((log) => ({
+                    id: log.id, timestamp: log.timestamp, type: log.action,
+                    actor: log.actor, message: `${log.action} · ${log.targetId} · ${log.level}`,
+                  }))} />
                 ) : <p>{t("users_no_activity_data_desc")}</p>}
               </section>
             </div>

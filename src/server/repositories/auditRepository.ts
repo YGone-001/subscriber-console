@@ -1,22 +1,12 @@
-import { Filter } from 'mongodb';
+import { Filter, MongoServerError, ObjectId } from 'mongodb';
 import { getAppCollection, mongoCollections } from '@/lib/mongo';
-import type { AuditAction } from '@/lib/audit';
+import type { AuditAction, AuditLogRecord } from '@/types/audit';
+import { sanitizeAuditRecord } from '@/lib/audit/record';
 import { buildTariffPlanAuditFilter as buildTariffPlanAuditFilterBase } from '@/lib/tariffPlanOperations';
 
-export type AuditLogRecord = {
-  id: string;
-  timestamp: string;
-  level: 'info' | 'warning';
-  action: AuditAction;
-  targetId: string;
-  actor?: string;
-  operatorIp: string;
-  correlationId?: string;
-  approvalId?: string;
-  reason?: string;
-  oldData: unknown;
-  newData: unknown;
-};
+export type { AuditLogRecord } from '@/types/audit';
+
+type StoredAuditLog = AuditLogRecord & { _id: ObjectId | string };
 
 type AuditQuery = {
   action?: string;
@@ -29,24 +19,16 @@ type AuditQuery = {
   limit: number;
 };
 
-const AUDIT_LIMIT = 50000;
-
 function collection() {
-  return getAppCollection<AuditLogRecord>(mongoCollections.auditLogs);
-}
-
-function stripMongoId<T extends Record<string, unknown>>(doc: T): T {
-  const output = { ...doc };
-  delete output._id;
-  return output;
+  return getAppCollection<StoredAuditLog>(mongoCollections.auditLogs);
 }
 
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function queryFilter(input: AuditQuery): Filter<AuditLogRecord> {
-  const filter: Filter<AuditLogRecord> = {};
+function queryFilter(input: AuditQuery): Filter<StoredAuditLog> {
+  const filter: Filter<StoredAuditLog> = {};
 
   if (input.action && input.action !== 'ALL') filter.action = input.action as AuditAction;
   if (input.level && input.level !== 'ALL') filter.level = input.level as 'info' | 'warning';
@@ -68,7 +50,7 @@ function queryFilter(input: AuditQuery): Filter<AuditLogRecord> {
 
   if (input.query) {
     const regex = { $regex: escapeRegex(input.query), $options: 'i' };
-    const queryMatches: Filter<AuditLogRecord>[] = [
+    const queryMatches: Filter<StoredAuditLog>[] = [
       { id: regex },
       { action: regex },
       { level: regex },
@@ -90,22 +72,20 @@ function queryFilter(input: AuditQuery): Filter<AuditLogRecord> {
   return filter;
 }
 
-export function buildTariffPlanAuditFilter(planId: string): Filter<AuditLogRecord> {
-  return buildTariffPlanAuditFilterBase(planId) as Filter<AuditLogRecord>;
+export function buildTariffPlanAuditFilter(planId: string): Filter<StoredAuditLog> {
+  return buildTariffPlanAuditFilterBase(planId) as Filter<StoredAuditLog>;
 }
 
 export async function appendAuditLog(log: AuditLogRecord) {
   const docs = await collection();
-  await docs.insertOne(log);
-
-  const stale = await docs
-    .find({}, { projection: { id: 1 } })
-    .sort({ timestamp: -1 })
-    .skip(AUDIT_LIMIT)
-    .toArray();
-
-  if (stale.length > 0) {
-    await docs.deleteMany({ id: { $in: stale.map((item) => item.id) } });
+  // Stable _id makes retries idempotent without an update/upsert of audit evidence.
+  // Historical ObjectId records remain readable; retention is an independent policy.
+  try {
+    await docs.insertOne({ ...sanitizeAuditRecord(log), _id: log.id });
+  } catch (error) {
+    if (error instanceof MongoServerError && error.code === 11000
+      && error.keyPattern?._id === 1 && error.keyValue?._id === log.id) return;
+    throw error;
   }
 }
 
@@ -119,9 +99,9 @@ export async function listAuditLogs(query: AuditQuery) {
   ]);
 
   return {
-    logs: logs.map(stripMongoId),
+    logs: logs.map(sanitizeAuditRecord),
     filteredTotal,
-    totalScanned: Math.min(totalScanned, AUDIT_LIMIT),
+    totalScanned,
   };
 }
 
@@ -134,10 +114,10 @@ export async function listAuditLogsForApproval(approvalId: string) {
       { 'oldData.approvalId': approvalId },
       { 'newData.approvalId': approvalId },
     ],
-  } as Filter<AuditLogRecord>;
+  } as Filter<StoredAuditLog>;
 
   const logs = await docs.find(filter).sort({ timestamp: 1 }).limit(100).toArray();
-  return logs.map(stripMongoId);
+  return logs.map(sanitizeAuditRecord);
 }
 
 export async function listAuditLogsForTariffPlan(planId: string, limitInput = 12) {
@@ -145,5 +125,5 @@ export async function listAuditLogsForTariffPlan(planId: string, limitInput = 12
   const limit = Math.min(Math.max(Number(limitInput) || 12, 1), 50);
   const filter = buildTariffPlanAuditFilter(planId);
   const logs = await docs.find(filter).sort({ timestamp: -1 }).limit(limit).toArray();
-  return logs.map(stripMongoId);
+  return logs.map(sanitizeAuditRecord);
 }

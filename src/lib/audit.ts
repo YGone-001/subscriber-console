@@ -1,92 +1,110 @@
 import { after } from 'next/server';
 import { updateAnalytics } from './analytics';
 import { appendAuditLog } from '@/server/repositories/auditRepository';
+import { auditRequestContext, createAuditRecord } from './audit/record';
+import type { AuditLogRecord, LegacyAuditAction, WriteAuditInput } from '@/types/audit';
 
-export type AuditAction =
-  | 'CREATE'
-  | 'UPDATE'
-  | 'DELETE'
-  | 'BATCH_CREATE'
-  | 'BATCH_DELETE'
-  | 'HEAL'
-  | 'PROFILE_CREATE'
-  | 'PROFILE_UPDATE'
-  | 'PROFILE_DELETE'
-  | 'CSV_IMPORT'
-  | 'TRAFFIC_RECHARGE'
-  | 'TRAFFIC_ADJUST'
-  | 'TRAFFIC_RESET';
+export type { WriteAuditInput } from '@/types/audit';
+// Keep the established import narrow for existing analytics and business routes.
+export type AuditAction = LegacyAuditAction;
 
-function maskIp(ip: string): string {
-  if (!ip || ip.includes('::1') || ip === '127.0.0.1') return '127.0.0.***';
-  return ip.replace(/(\d+)$/, '***');
-}
+export type AuditWriteOptions = { failureMode?: 'best-effort' | 'strict' };
 
-function extractDeltas(oldObj: any, newObj: any) {
-  if (!oldObj) return { oldData: null, newData: newObj };
-  if (!newObj) return { oldData: oldObj, newData: null };
-
-  if (typeof oldObj !== 'object' || typeof newObj !== 'object') {
-    return oldObj !== newObj ? { oldData: oldObj, newData: newObj } : { oldData: null, newData: null };
+export class AuditWriteError extends Error {
+  constructor(public readonly eventId: string) {
+    super('Audit evidence could not be persisted');
+    this.name = 'AuditWriteError';
   }
-
-  const oldDelta: any = {};
-  const newDelta: any = {};
-
-  const keys = new Set([...Object.keys(oldObj || {}), ...Object.keys(newObj || {})]);
-  keys.forEach((key) => {
-    const oldValue = JSON.stringify(oldObj[key]);
-    const newValue = JSON.stringify(newObj[key]);
-    if (oldValue !== newValue) {
-      oldDelta[key] = oldObj[key];
-      newDelta[key] = newObj[key];
-    }
-  });
-
-  return { oldData: oldDelta, newData: newDelta };
 }
 
-export function logAudit(action: AuditAction, targetId: string, oldVal: any, newVal: any, req?: Request) {
-  const rawIp = req
-    ? req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || '127.0.0.1'
-    : '127.0.0.1';
-  const operatorIp = maskIp(rawIp.split(',')[0]?.trim() || rawIp);
-  const actor = req?.headers.get('x-user')?.trim() || 'system';
-  const correlationId = req?.headers.get('x-request-id')?.trim() || crypto.randomUUID();
-  const reason = req?.headers.get('x-operation-reason')?.trim() || undefined;
-  const timestamp = new Date().toISOString();
-  const level = (action.includes('DELETE') || action === 'HEAL') ? 'warning' : 'info';
-  const { oldData, newData } = extractDeltas(oldVal, newVal);
-  const approvalId = [newVal?.approvalId, oldVal?.approvalId, targetId.startsWith('approval:') ? targetId.slice(9) : undefined]
-    .find((value) => typeof value === 'string' && value.trim()) as string | undefined;
-
-  if (!oldData && !newData && action !== 'HEAL' && !action.includes('DELETE')) return;
-
-  after(async () => {
-    await updateAnalytics(action, oldVal, newVal);
-    let lastError: unknown;
-    for (let attempt = 1; attempt <= 3; attempt += 1) {
-      try {
-        await appendAuditLog({
-          id: crypto.randomUUID(),
-          timestamp,
-          level,
-          action,
-          targetId,
-          actor,
-          operatorIp,
-          correlationId,
-          approvalId,
-          reason,
-          oldData,
-          newData,
-        });
-        return;
-      } catch (error) {
-        lastError = error;
-        if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, attempt * 100));
-      }
+async function persistAuditRecord(record: AuditLogRecord, options: AuditWriteOptions = {}): Promise<boolean> {
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      await appendAuditLog(record);
+      return true;
+    } catch {
+      if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, attempt * 100));
     }
-    console.error('Audit logging failed after retries:', lastError);
+  }
+  // Driver errors can embed credentials or rejected documents. Log safe context only.
+  console.error('Audit logging failed after retries', { eventId: record.eventId, action: record.action });
+  if (options.failureMode === 'strict') throw new AuditWriteError(record.eventId || record.id);
+  return false;
+}
+
+/** Await this for security gates; a strict failure is explicit, not a silent success. */
+export async function writeAuditLog(input: WriteAuditInput, options: AuditWriteOptions = {}): Promise<boolean> {
+  return persistAuditRecord(createAuditRecord(input), options);
+}
+
+/** Request-scoped best effort. after() is not a durable queue across process crashes. */
+export function scheduleAuditLog(input: WriteAuditInput): void {
+  const record = createAuditRecord(input);
+  try {
+    after(async () => { await persistAuditRecord(record); });
+  } catch {
+    console.error('Audit scheduling failed', { eventId: record.eventId, action: record.action });
+  }
+}
+
+function asObject(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown> : null;
+}
+
+function extractDeltas(oldValue: unknown, newValue: unknown) {
+  const before = asObject(oldValue);
+  const next = asObject(newValue);
+  if (!before || !next) return { oldData: oldValue ?? null, newData: newValue ?? null };
+  const oldData: Record<string, unknown> = {};
+  const newData: Record<string, unknown> = {};
+  for (const key of new Set([...Object.keys(before), ...Object.keys(next)])) {
+    if (JSON.stringify(before[key]) !== JSON.stringify(next[key])) {
+      oldData[key] = before[key] ?? null;
+      newData[key] = next[key] ?? null;
+    }
+  }
+  return { oldData, newData };
+}
+
+/** Compatibility adapter for existing routes. New integrations use writeAuditLog. */
+export function logAudit(action: LegacyAuditAction, targetId: string, oldVal: unknown, newVal: unknown, req?: Request): void {
+  const actor = req?.headers.get('x-user')?.trim();
+  const source = auditRequestContext(req);
+  const oldObject = asObject(oldVal);
+  const newObject = asObject(newVal);
+  const approvalId = [newObject?.approvalId, oldObject?.approvalId, targetId.startsWith('approval:') ? targetId.slice(9) : undefined]
+    .find((value): value is string => typeof value === 'string' && value.trim().length > 0);
+  const auditModule = targetId.startsWith('SYS_USER:') ? 'users'
+    : targetId.startsWith('approval:') ? 'approvals'
+    : action.startsWith('PROFILE_') ? 'profiles'
+    : action.startsWith('TRAFFIC_') ? 'ocs'
+    : action === 'HEAL' ? 'system' : 'legacy';
+  const record = createAuditRecord({
+    actor: { type: actor ? 'user' : 'system', username: actor || 'system', role: req?.headers.get('x-user-role') || undefined },
+    module: auditModule,
+    action,
+    targetId,
+    resource: { type: auditModule, id: targetId },
+    result: newObject?.status === 'failed' || newObject?.success === false ? 'failed' : 'success',
+    approvalId,
+    before: oldVal,
+    after: newVal,
+    level: action.includes('DELETE') || action === 'HEAL' ? 'warning' : 'info',
+    ...source,
   });
+  // Compute deltas only after sanitizing; passwords and cyclic values never reach JSON.stringify.
+  const delta = extractDeltas(record.oldData, record.newData);
+  record.oldData = delta.oldData;
+  record.newData = delta.newData;
+  try {
+    after(async () => {
+      // Analytics must not prevent evidence persistence (or vice versa).
+      await persistAuditRecord(record);
+      try { await updateAnalytics(action, oldVal, newVal); }
+      catch { console.error('Audit analytics hook failed', { eventId: record.eventId }); }
+    });
+  } catch {
+    console.error('Audit scheduling failed', { eventId: record.eventId, action });
+  }
 }

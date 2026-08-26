@@ -68,6 +68,23 @@ test('diffEngine formats telecom bitrates and data byte amounts', () => {
   assert.equal(humanizePath('slice[0].session[0].ambr.downlink'), 'Downlink');
 });
 
+test('diffEngine combines AMBR value and unit instead of presenting unit codes as bps', () => {
+  const result = computeObjectDiff(
+    { ambr: { downlink: { value: 128, unit: 1 }, uplink: { value: 100, unit: 2 } } },
+    { ambr: { downlink: { value: 1, unit: 3 }, uplink: { value: 500, unit: 2 } } },
+  );
+  assert.equal(result.fields.length, 2);
+  assert.equal(result.fields[0].formattedOld, '128 Kbps');
+  assert.equal(result.fields[0].formattedNew, '1 Gbps');
+  assert.equal(result.fields[1].formattedOld, '100 Mbps');
+  assert.equal(result.fields[1].formattedNew, '500 Mbps');
+  assert.equal(formatDiffValue(3, 'ambr.downlink.unit'), '3');
+  assert.equal(formatDiffValue(128, 'ambr.downlink.value'), '128');
+  const same = computeObjectDiff({ ambr: { uplink: { value: 1, unit: 3 } } }, { ambr: { uplink: { value: 1, unit: 3 } } });
+  assert.equal(same.summary.hasChanges, false);
+  assert.equal(formatDiffValue({ value: 1, unit: 99 }, 'ambr.downlink'), '{"value":1,"unit":99}');
+});
+
 test('diffEngine calculates line diffs and unified patch', () => {
   const oldText = '{\n  "imsi": "001",\n  "status": "ACTIVE"\n}';
   const newText = '{\n  "imsi": "001",\n  "status": "SUSPENDED"\n}';
