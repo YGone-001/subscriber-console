@@ -26,6 +26,22 @@
   background: var(--danger-soft);
 }
 
+.warning {
+  color: var(--status-warning);
+  background: var(--status-warning-soft);
+}
+
+.info {
+  color: var(--status-info);
+  background: var(--status-info-soft);
+}
+
+.critical {
+  color: var(--status-danger);
+  background: var(--status-danger-soft);
+  box-shadow: inset 0 0 0 1px var(--status-danger-border);
+}
+
 .avatar {
   display: inline-flex;
   align-items: center;

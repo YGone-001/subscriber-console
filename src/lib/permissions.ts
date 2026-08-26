@@ -1,4 +1,5 @@
 import type { Capability, CapabilityDecision, RoleKey } from '@/types/iam';
+import type { GovernanceRole } from '@/types/governance';
 
 export type { Capability, CapabilityDecision } from '@/types/iam';
 
@@ -58,4 +59,60 @@ export function capabilityAllowed(decision: CapabilityDecision, options: Capabil
   if (decision === 'approval') return options.allowApproval === true;
   if (decision === 'export') return options.allowExport === true;
   return false;
+}
+
+/** Built-in catalog; keep the legacy capability matrix intact during rollout. */
+export const PERMISSION_CATALOG = [
+  'users.read', 'users.create', 'users.update', 'users.disable', 'users.delete',
+  'users.role.change', 'users.reset-password', 'users.unlock',
+  'approvals.read', 'approvals.create', 'approvals.approve', 'approvals.reject',
+  'approvals.cancel', 'approvals.execute',
+  'audit.read', 'audit.export',
+  'subscribers.read', 'subscribers.write', 'subscribers.delete',
+  'profiles.read', 'profiles.write',
+  'core.read', 'core.operate', 'core.configure',
+] as const;
+
+export type Permission = (typeof PERMISSION_CATALOG)[number];
+
+const READ_PERMISSIONS = PERMISSION_CATALOG.filter((permission) => permission.endsWith('.read'));
+
+export const ROLE_PERMISSIONS: Readonly<Record<GovernanceRole, readonly Permission[]>> = {
+  super_admin: [...PERMISSION_CATALOG],
+  ops_admin: [
+    ...READ_PERMISSIONS, 'approvals.create', 'approvals.approve', 'approvals.reject',
+    'approvals.cancel', 'approvals.execute', 'audit.export',
+    'subscribers.write', 'subscribers.delete', 'profiles.write', 'core.operate', 'core.configure',
+  ],
+  operator: [
+    'subscribers.read', 'subscribers.write', 'subscribers.delete',
+    'profiles.read', 'core.read', 'core.operate', 'audit.read',
+    'approvals.read', 'approvals.create', 'approvals.cancel',
+  ],
+  auditor: ['users.read', 'approvals.read', 'audit.read', 'audit.export'],
+  viewer: ['subscribers.read', 'profiles.read', 'core.read', 'approvals.read', 'audit.read'],
+};
+
+export function normalizeGovernanceRole(role: unknown): GovernanceRole | null {
+  // Existing JWTs and app_users keep root. This is an authorization alias only.
+  if (role === 'root') return 'super_admin';
+  switch (role) {
+    case 'super_admin': case 'ops_admin': case 'operator': case 'auditor': case 'viewer':
+      return role;
+    default:
+      return null;
+  }
+}
+
+export type PermissionSubject = { role?: string; status?: string; locked?: boolean };
+
+export function hasPermission(user: PermissionSubject | null | undefined, permission: Permission): boolean {
+  if (!user || user.locked || (user.status !== undefined && user.status !== 'active')) return false;
+  const role = normalizeGovernanceRole(user.role);
+  return role !== null && ROLE_PERMISSIONS[role].includes(permission);
+}
+
+/** Permission grants do not bypass resource checks, approval, or Maker-Checker. */
+export function permissionsFor(user: PermissionSubject | null | undefined): Permission[] {
+  return PERMISSION_CATALOG.filter((permission) => hasPermission(user, permission));
 }

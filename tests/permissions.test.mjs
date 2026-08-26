@@ -4,6 +4,11 @@ import {
   capabilityAllowed,
   capabilityDecision,
   ROLE_CAPABILITIES,
+  hasPermission,
+  permissionsFor,
+  normalizeGovernanceRole,
+  PERMISSION_CATALOG,
+  ROLE_PERMISSIONS,
 } from '../src/lib/permissions.ts';
 
 test('role capability matrix matches operator guardrails', () => {
@@ -35,4 +40,31 @@ test('all roles expose the same capability keys', () => {
   const rootKeys = Object.keys(ROLE_CAPABILITIES.root).sort();
   assert.deepEqual(Object.keys(ROLE_CAPABILITIES.operator).sort(), rootKeys);
   assert.deepEqual(Object.keys(ROLE_CAPABILITIES.viewer).sort(), rootKeys);
+});
+
+test('governance permissions preserve root and separate operation, review and audit duties', () => {
+  assert.equal(normalizeGovernanceRole('root'), 'super_admin');
+  assert.deepEqual(permissionsFor({ role: 'root' }), permissionsFor({ role: 'super_admin' }));
+  assert.equal(hasPermission({ role: 'viewer' }, 'users.update'), false);
+  assert.equal(hasPermission({ role: 'viewer' }, 'audit.export'), false);
+  assert.equal(hasPermission({ role: 'auditor' }, 'core.operate'), false);
+  assert.equal(hasPermission({ role: 'auditor' }, 'audit.export'), true);
+  assert.equal(hasPermission({ role: 'operator' }, 'approvals.create'), true);
+  assert.equal(hasPermission({ role: 'operator' }, 'approvals.approve'), false);
+  assert.equal(hasPermission({ role: 'ops_admin' }, 'approvals.approve'), true);
+  assert.equal(hasPermission({ role: 'ops_admin' }, 'users.role.change'), false);
+});
+
+test('permission evaluation fails closed for missing, unknown and inactive identities', () => {
+  for (const user of [null, undefined, {}, { role: 'admin' }, { role: '__proto__' },
+    { role: 'root', status: 'disabled' }, { role: 'root', status: 'locked' },
+    { role: 'root', status: 'unknown' }, { role: 'root', locked: true }]) {
+    assert.equal(hasPermission(user, 'audit.read'), false);
+  }
+  assert.equal(hasPermission({ role: 'root' }, 'not.a.permission'), false);
+  assert.equal(hasPermission({ role: 'root', status: 'active' }, 'users.create'), true);
+  for (const permissions of Object.values(ROLE_PERMISSIONS)) {
+    assert.equal(new Set(permissions).size, permissions.length);
+    assert.ok(permissions.every((permission) => PERMISSION_CATALOG.includes(permission)));
+  }
 });

@@ -49,6 +49,20 @@ function isObject(val: unknown): val is Record<string, unknown> {
   return typeof val === 'object' && val !== null && !Array.isArray(val);
 }
 
+// Same unit encoding as the existing Subscriber AMBR editor (0..4).
+const BANDWIDTH_UNITS = ['bps', 'Kbps', 'Mbps', 'Gbps', 'Tbps'] as const;
+
+function isBandwidthValue(value: unknown): value is { value: number; unit: number } {
+  return isObject(value) && Object.keys(value).length === 2
+    && typeof value.value === 'number' && Number.isFinite(value.value)
+    && typeof value.unit === 'number' && Number.isInteger(value.unit)
+    && value.unit >= 0 && value.unit < BANDWIDTH_UNITS.length;
+}
+
+function isAmbrDirection(path: string): boolean {
+  return /(?:^|\.)ambr\.(?:downlink|uplink)$/i.test(path);
+}
+
 /**
  * Format individual values for telecom and general display
  */
@@ -61,8 +75,17 @@ export function formatDiffValue(val: unknown, keyHint?: string): string {
     return val ? 'true' : 'false';
   }
 
+  if (isAmbrDirection(keyHint || '') && isBandwidthValue(val)) {
+    return `${val.value} ${BANDWIDTH_UNITS[val.unit]}`;
+  }
+
   if (typeof val === 'number') {
     const lowerKey = (keyHint || '').toLowerCase();
+    // Incomplete legacy snapshots may contain only value/unit. Never label a
+    // unit code or a quantity with unknown units as a bitrate in bps.
+    if (/ambr\.(?:downlink|uplink)\.(?:value|unit)$/.test(lowerKey)) {
+      return String(val);
+    }
     if (lowerKey.includes('bytes') || lowerKey.includes('traffic') || lowerKey.includes('balance') || lowerKey.includes('quota')) {
       try {
         return `${val} (${formatBytesInternal(val)})`;
@@ -154,6 +177,17 @@ export function computeObjectDiff(
 
   function traverse(oldVal: unknown, newVal: unknown, currentPath: string) {
     if (ignoreSet.has(currentPath)) return;
+
+    if (isAmbrDirection(currentPath) && isBandwidthValue(oldVal) && isBandwidthValue(newVal)) {
+      const unchanged = oldVal.value === newVal.value && oldVal.unit === newVal.unit;
+      if (!unchanged || options.includeUnchanged) fields.push({
+        path: currentPath, key: currentPath, label: humanizePath(currentPath),
+        type: unchanged ? 'unchanged' : 'modified', oldValue: oldVal, newValue: newVal,
+        formattedOld: formatDiffValue(oldVal, currentPath), formattedNew: formatDiffValue(newVal, currentPath),
+        category: 'ambr',
+      });
+      return;
+    }
 
     // Case 1: Both are identical primitives
     if (oldVal === newVal) {

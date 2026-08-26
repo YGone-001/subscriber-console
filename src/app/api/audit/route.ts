@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { requireCapability } from '@/lib/authz';
+import { requireCapability, requirePermission } from '@/lib/authz';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import { listAuditLogs } from '@/server/repositories/auditRepository';
 
@@ -18,6 +18,8 @@ export async function GET(request: Request) {
   try {
     const auth = requireCapability(request, 'audit_view');
     if (!auth.ok) return auth.response;
+    const permission = requirePermission(request, 'audit.read');
+    if (!permission.ok) return permission.response;
     const rateLimit = await enforceRateLimit(`audit:list:${auth.auth.user}`, 60, 60);
     if (!rateLimit.ok) return rateLimit.response;
 

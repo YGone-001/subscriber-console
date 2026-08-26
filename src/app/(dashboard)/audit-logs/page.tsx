@@ -8,26 +8,15 @@ import { useI18n } from "@/components/I18nProvider";
 import { useAuth } from "@/hooks/useAuth";
 import { capabilityAllowed, capabilityDecision } from "@/lib/permissions";
 import { toCsvRow } from "@/lib/csv";
-import VisualDiffViewer from "@/components/VisualDiffViewer";
+import { ChangeDiff } from "@/components/governance/ChangeDiff";
+import { AuditResultBadge } from "@/components/governance/GovernanceBadges";
+import type { AuditLogRecord } from "@/types/audit";
 
 import PageHeader from '@/components/ui/PageHeader';
 import MetricStrip from '@/components/ui/MetricStrip';
 import { Dialog } from '@/components/ui/Dialog';
 
-interface AuditLog {
-  id: string;
-  timestamp: string;
-  level: string;
-  action: string;
-  targetId: string;
-  actor?: string;
-  operatorIp: string;
-  correlationId?: string;
-  approvalId?: string;
-  reason?: string;
-  oldData: any;
-  newData: any;
-}
+type AuditLog = AuditLogRecord;
 
 type AuditQuickFilter = 'warnings' | 'profile' | 'traffic' | 'destructive';
 
@@ -73,8 +62,8 @@ export default function AuditLogsPage() {
     return `/api/audit?${params.toString()}`;
   })();
 
-  const { data, error: fetchError, isLoading: loading, mutate } = useSWR(auditUrl, fetcher);
-  const logRows = data?.logs as AuditLog[] | undefined;
+  const { data, error: fetchError, isLoading: loading, mutate } = useSWR<{ logs: AuditLog[]; filteredTotal: number; totalScanned: number }>(auditUrl, fetcher);
+  const logRows = data?.logs;
   const logs = useMemo(() => logRows || [], [logRows]);
   const filteredTotal = data?.filteredTotal ?? logs.length;
   const totalScanned = data?.totalScanned ?? 0;
@@ -85,7 +74,7 @@ export default function AuditLogsPage() {
 
   const formatActionLabel = (action: string) => {
     const key = `audit_action_${action}`;
-    const label = t(key as any);
+    const label = t(key);
     return label !== key ? label : action;
   };
 
@@ -469,13 +458,14 @@ export default function AuditLogsPage() {
                         {log.level === 'warning' && <ShieldAlert size={12} className="audit-pill-icon" />}
                         {formatActionLabel(log.action)}
                       </span>
+                      {' '}<AuditResultBadge result={log.result} />
                     </td>
                     <td className="audit-table-td-target" data-label={t("audit_col_target")} data-column-priority="essential">
                       {log.targetId}
                     </td>
                     <td className="audit-table-td-operator" data-label={t("audit_col_operator")} data-column-priority="supplementary">
                       <div>
-                        <strong>{log.actor || 'system'}</strong><br />
+                        <strong>{log.actor || t('governance_actor_unknown')}</strong><br />
                         <small>{log.operatorIp}</small>
                       </div>
                     </td>
@@ -509,18 +499,17 @@ export default function AuditLogsPage() {
               <div>
                 <h2 id="audit-diff-modal-title" className="audit-modal-title">{t("audit_modal_title")}</h2>
                 <div className="audit-modal-ref">
-                  {t("audit_modal_ref")} <span className="audit-modal-ref-id">{selectedLog.id}</span> · <span className="audit-modal-ref-action">{formatActionLabel(selectedLog.action)}</span> ({selectedLog.targetId}) · {selectedLog.actor || 'system'} · {selectedLog.correlationId || '--'}
+                  {t("audit_modal_ref")} <span className="audit-modal-ref-id">{selectedLog.id}</span> · <span className="audit-modal-ref-action">{formatActionLabel(selectedLog.action)}</span> ({selectedLog.targetId}) · {selectedLog.actor || t('governance_actor_unknown')} · {selectedLog.correlationId || '--'}
                 </div>
               </div>
               <button ref={closeDialogRef} className="btn btn-outline" onClick={() => setSelectedLog(null)}>{t("audit_modal_close")}</button>
             </div>
 
             <div className="audit-modal-body" style={{ padding: '1rem 1.5rem', display: 'block' }}>
-              <VisualDiffViewer
-                oldData={selectedLog.oldData}
-                newData={selectedLog.newData}
+              <ChangeDiff
+                before={selectedLog.oldData}
+                after={selectedLog.newData}
                 title={`${formatActionLabel(selectedLog.action)} · ${selectedLog.targetId}`}
-                defaultMode="semantic"
               />
             </div>
         </Dialog>
