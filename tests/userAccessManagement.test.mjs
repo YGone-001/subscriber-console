@@ -1,5 +1,78 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { loadModule } from './helpers/loadModule.mjs';
+import * as permissions from '../src/lib/permissions.ts';
+import { MongoServerError } from 'mongodb';
+import { randomUUID } from 'node:crypto';
+
+const policy = loadModule('src/lib/userManagementPolicy.ts', { '@/lib/permissions': permissions });
+
+test('user management policy protects self and privileged targets and restricts assignable roles', () => {
+  const root = { username: 'admin', role: 'root', status: 'active' };
+  for (const [operation, code] of [['disable', 'SELF_DISABLE_FORBIDDEN'], ['delete', 'SELF_DELETE_FORBIDDEN'], ['role.change', 'SELF_ROLE_CHANGE_FORBIDDEN']]) {
+    assert.throws(() => policy.checkUserManagementPolicy(root, root, operation, 'viewer'), new RegExp(code));
+  }
+  const ops = { username: 'ops', role: 'ops_admin', status: 'active' };
+  for (const operation of ['update', 'password.reset', 'disable', 'delete', 'lock', 'role.change']) {
+    assert.throws(() => policy.checkUserManagementPolicy(ops, root, operation, 'viewer'), /TARGET_ROLE_PROTECTED/);
+  }
+  for (const role of ['root', 'super_admin', 'ops_admin']) assert.throws(() => policy.checkUserManagementPolicy(ops, null, 'create', role), /ROLE_ASSIGNMENT_FORBIDDEN/);
+  assert.deepEqual(Array.from(policy.assignableRoles(ops)), ['operator', 'auditor', 'viewer']);
+  for (const role of ['viewer', 'auditor']) assert.throws(() => policy.checkUserManagementPolicy({ ...ops, role }, root, 'update'), /PERMISSION_DENIED/);
+  policy.checkUserManagementPolicy(root, { username: 'other', role: 'root' }, 'update');
+});
+
+function lifecycleHarness() {
+  let held = null;
+  const locks = {
+    async insertOne(doc) { if (held) throw new MongoServerError({ code: 11000, message: 'duplicate' }); held = doc; },
+    async deleteOne(filter) { if (held?.owner === filter.owner) held = null; },
+  };
+  const lock = loadModule('src/server/userManagementLock.ts', {
+    'node:crypto': { randomUUID }, mongodb: { MongoServerError }, '@/lib/mongo': { getAppCollection: async () => locks }, '@/lib/userManagementPolicy': policy,
+  });
+  const users = new Map(['a', 'b'].map((username) => [username, { username, role: 'root', status: 'active', security: { sessionVersion: 0 } }]));
+  const docs = {
+    async findOne({ username }) { return structuredClone(users.get(username) ?? null); },
+    async countDocuments() { return [...users.values()].filter((u) => permissions.isSuperAdmin(u.role) && u.status === 'active' && !u.locked).length; },
+    async findOneAndUpdate({ username }, update) {
+      const user = users.get(username);
+      for (const [key, value] of Object.entries(update.$set)) {
+        if (key.startsWith('security.')) user.security[key.slice(9)] = value;
+        else user[key] = value;
+      }
+      if (update.$inc) user.security.sessionVersion += update.$inc['security.sessionVersion'];
+      return structuredClone(user);
+    },
+  };
+  const repo = loadModule('src/server/repositories/userRepository.ts', {
+    mongodb: { MongoServerError }, '@/lib/mongo': { getAppCollection: async () => docs, mongoCollections: { users: 'users' } },
+    '@/lib/permissions': permissions, '@/lib/userManagementPolicy': policy, '@/server/userManagementLock': lock,
+  });
+  return { repo, docs, lock, held: () => held, users };
+}
+
+test('concurrent administrator demotion/disable serializes through a database lock and preserves one active admin', async () => {
+  const h = lifecycleHarness();
+  const attempts = await Promise.allSettled([h.repo.updateUser('a', { role: 'viewer' }), h.repo.updateUser('b', { status: 'disabled' })]);
+  assert.equal(attempts.filter((result) => result.status === 'fulfilled').length, 1);
+  assert.equal(await h.docs.countDocuments(), 1);
+  assert.equal(h.held(), null);
+  const remaining = [...h.users.values()].find((u) => u.role === 'root' && u.status === 'active');
+  await assert.rejects(h.repo.updateUser(remaining.username, { status: 'locked' }), /LAST_ACTIVE_ADMIN/);
+  assert.equal(await h.docs.countDocuments(), 1);
+  const changed = [...h.users.values()].find((u) => u.security.sessionVersion === 1);
+  assert.ok(changed);
+});
+
+test('ambiguous write outcomes retain the DB lock; business denials safely release it', async () => {
+  const h = lifecycleHarness();
+  await assert.rejects(h.lock.withUserManagementLock(async () => { throw new policy.UserManagementError('DENIED'); }), /DENIED/);
+  assert.equal(h.held(), null);
+  await assert.rejects(h.lock.withUserManagementLock(async () => { throw new Error('network failure'); }), /network failure/);
+  assert.ok(h.held());
+  await assert.rejects(h.repo.updateUser('a', { role: 'viewer' }), /USER_MANAGEMENT_BUSY/);
+});
 
 import {
   buildPermissionDiff,

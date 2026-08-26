@@ -52,7 +52,7 @@ test('governance permissions preserve root and separate operation, review and au
   assert.equal(hasPermission({ role: 'operator' }, 'approvals.create'), true);
   assert.equal(hasPermission({ role: 'operator' }, 'approvals.approve'), false);
   assert.equal(hasPermission({ role: 'ops_admin' }, 'approvals.approve'), true);
-  assert.equal(hasPermission({ role: 'ops_admin' }, 'users.role.change'), false);
+  assert.equal(hasPermission({ role: 'ops_admin' }, 'users.role.change'), true); // resource policy restricts targets/assignments
 });
 
 test('permission evaluation fails closed for missing, unknown and inactive identities', () => {

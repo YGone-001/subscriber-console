@@ -1,6 +1,9 @@
 import { Document, MongoServerError } from 'mongodb';
 import { getAppCollection, mongoCollections } from '@/lib/mongo';
 import type { SysUser } from '@/types/iam';
+import { isSuperAdmin } from '@/lib/permissions';
+import { UserManagementError } from '@/lib/userManagementPolicy';
+import { withUserManagementLock } from '@/server/userManagementLock';
 
 export type UserDocument = Pick<SysUser, 'username' | 'role' | 'status' | 'createdAt' | 'createdBy' | 'displayName' | 'email' | 'security' | 'updatedAt' | 'locked'> & {
   passwordHash: string;
@@ -56,10 +59,19 @@ export async function ensureUser(user: UserDocument) {
   return user;
 }
 
-export async function updateUser(username: string, updates: Partial<UserDocument>) {
+export async function updateUser(username: string, updates: Partial<UserDocument>, authorize?: (existing: UserDocument) => Promise<void>) {
+  return withUserManagementLock(async () => {
   const docs = await collection();
   const existing = await docs.findOne({ username });
   if (!existing) return null;
+  if (authorize) await authorize(existing);
+
+  const nextState = { ...existing, ...updates };
+  if (isSuperAdmin(existing.role) && existing.status === 'active' && !existing.locked &&
+      (!isSuperAdmin(nextState.role) || nextState.status !== 'active' || nextState.locked)) {
+    const activeAdmins = await docs.countDocuments({ role: { $in: ['root', 'super_admin'] }, status: 'active', locked: { $ne: true } });
+    if (activeAdmins <= 1) throw new UserManagementError('LAST_ACTIVE_ADMIN', 409);
+  }
 
   const { security, ...fields } = updates;
   const changes: Record<string, unknown> = { ...fields, username, updatedAt: new Date().toISOString() };
@@ -70,9 +82,10 @@ export async function updateUser(username: string, updates: Partial<UserDocument
   const next = await docs.findOneAndUpdate({ username }, {
     $set: changes,
     ...(revoke ? { $inc: { 'security.sessionVersion': 1 } } : {}),
-  }, { returnDocument: 'after' });
+  }, { returnDocument: 'after', writeConcern: { w: 'majority' } });
   if (!next) return null;
   return { existing, next };
+  });
 }
 
 export async function recordFailedLogin(username: string) {

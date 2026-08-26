@@ -87,6 +87,7 @@ const READ_PERMISSIONS = PERMISSION_CATALOG.filter((permission) => permission.en
 export const ROLE_PERMISSIONS: Readonly<Record<GovernanceRole, readonly Permission[]>> = {
   super_admin: [...PERMISSION_CATALOG],
   ops_admin: [
+    'users.create', 'users.update', 'users.disable', 'users.delete', 'users.role.change', 'users.reset-password', 'users.unlock',
     ...READ_PERMISSIONS, 'approvals.create', 'approvals.approve', 'approvals.reject',
     'approvals.cancel', 'approvals.execute', 'audit.export',
     'subscribers.write', 'subscribers.delete', 'profiles.write', 'core.operate', 'core.configure',
