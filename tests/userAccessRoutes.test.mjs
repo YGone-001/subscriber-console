@@ -1,6 +1,69 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
+import { loadModule } from './helpers/loadModule.mjs';
+import * as permissions from '../src/lib/permissions.ts';
+import * as security from '../src/lib/security.ts';
+import * as iam from '../src/types/iam.ts';
+import bcrypt from 'bcryptjs';
+
+function routeHarness() {
+  const records = [];
+  const users = new Map([['admin', { username: 'admin', role: 'root', status: 'active' }]]);
+  const response = { NextResponse: { json: (body, init) => Response.json(body, init) } };
+  const policy = loadModule('src/lib/userManagementPolicy.ts', { '@/lib/permissions': permissions });
+  const query = loadModule('src/lib/userQuery.ts', { '@/lib/permissions': permissions, '@/lib/userManagementPolicy': policy });
+  const guards = loadModule('src/lib/authz.ts', { 'next/server': response, '@/lib/permissions': permissions, '@/lib/audit': { scheduleAuditLog: (event) => records.push(event) }, '@/lib/audit/record': { auditRequestContext: () => ({}) } });
+  const repo = {
+    getUser: async (username) => users.get(username) ?? null,
+    getSafeUser: async (username) => users.get(username) ?? null,
+    safeUser: ({ passwordHash, ...user }) => user,
+    async createUser(user, authorize) { await authorize(); users.set(user.username, user); return user; },
+    async updateUser(username, updates, authorize) {
+      const existing = users.get(username);
+      if (!existing) return null;
+      await authorize(existing);
+      const next = { ...existing, ...updates };
+      users.set(username, next);
+      return { existing, next };
+    },
+  };
+  const account = loadModule('src/lib/accountSession.ts', { '@/lib/permissions': permissions, '@/server/repositories/userRepository': repo });
+  const service = loadModule('src/server/userManagement.ts', { 'next/server': response, '@/lib/audit': { writeAuditLog: async (event) => records.push(event) }, '@/lib/audit/record': { auditRequestContext: () => ({}) }, '@/lib/authz': guards, '@/lib/accountSession': account, '@/lib/userManagementPolicy': policy });
+  const dependencies = { 'next/server': response, bcryptjs: bcrypt, '@/lib/authz': guards, '@/lib/rateLimit': { enforceRateLimit: async () => ({ ok: true }) }, '@/lib/security': security, '@/lib/permissions': permissions, '@/lib/userManagementPolicy': policy, '@/lib/userQuery': query, '@/server/repositories/userRepository': repo, '@/server/userManagement': service, '@/types/iam': iam, '@/server/repositories/auditRepository': { listAuditLogsForUser: async () => [] } };
+  return { records, users, create: loadModule('src/app/api/auth/users/route.ts', dependencies), target: loadModule('src/app/api/auth/users/[username]/route.ts', dependencies) };
+}
+
+test('user route handlers enforce policy and emit create, role, disable, password and denial audit evidence', async () => {
+  const h = routeHarness();
+  const request = (body, role = 'root') => new Request('http://test/api/users/phase2_test', { method: 'POST', headers: { 'x-user': role === 'root' ? 'admin' : 'readonly', 'x-user-role': role, 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const context = { params: Promise.resolve({ username: 'phase2_test' }) };
+  const create = await h.create.POST(request({ username: 'phase2_test', displayName: 'Phase 2 test', password: 'Strong-Sample!2026', role: 'operator', email: '' }));
+  assert.equal(create.status, 201);
+  assert.equal((await h.target.PATCH(request({ role: 'auditor' }), context)).status, 200);
+  assert.equal((await h.target.PATCH(request({ status: 'disabled' }), context)).status, 200);
+  assert.equal((await h.target.PATCH(request({ password: 'Rotated-Sample!2026' }), context)).status, 200);
+  assert.equal((await h.target.PATCH(request({ role: 'root' }, 'viewer'), context)).status, 403);
+  const own = await h.target.PATCH(request({ role: 'viewer' }), { params: Promise.resolve({ username: 'admin' }) });
+  assert.equal((await own.json()).code, 'SELF_ROLE_CHANGE_FORBIDDEN');
+  for (const action of ['user.create', 'user.role.change', 'user.disable', 'user.password.reset']) assert.ok(h.records.some((record) => record.action === action && record.result === 'success'));
+  assert.ok(h.records.some((record) => record.result === 'denied'));
+  const password = h.records.find((record) => record.action === 'user.password.reset');
+  assert.equal(password.before, undefined);
+  assert.equal(password.after, undefined);
+  assert.equal(password.metadata.passwordReset, true);
+  assert.doesNotMatch(JSON.stringify(h.records), /Strong-Sample|Rotated-Sample|passwordHash|\$2[aby]\$/);
+});
+
+test('legacy DELETE remains a policy-protected soft disable and forbidden fields are explicit', async () => {
+  const h = routeHarness();
+  h.users.set('target', { username: 'target', role: 'operator', status: 'active' });
+  const req = (body) => new Request('http://test/api/auth/users/target', { method: 'DELETE', headers: { 'x-user': 'admin', 'x-user-role': 'root' }, ...(body ? { body: JSON.stringify(body) } : {}) });
+  const context = { params: Promise.resolve({ username: 'target' }) };
+  assert.equal((await h.target.DELETE(req(), context)).status, 200);
+  assert.equal(h.users.get('target').status, 'disabled');
+  assert.equal((await h.target.PATCH(req({ security: { sessionVersion: 0 } }), context)).status, 400);
+});
 
 const layoutSource = readFileSync(new URL('../src/app/(dashboard)/components/AppSidebar.tsx', import.meta.url), 'utf8');
 const usersSource = readFileSync(new URL('../src/app/(dashboard)/users/page.tsx', import.meta.url), 'utf8');
@@ -67,7 +130,8 @@ test('system user table keeps scan-critical columns and hides secondary actions 
 
 test('system user deletion is retired and the compatibility endpoint preserves identity history', () => {
   assert.doesNotMatch(userRouteSource, /deleteUser|deleteOne|logAudit\('DELETE'/);
-  assert.match(userRouteSource, /updateUser\(username, \{ status: 'disabled' \}\)/);
+  assert.match(userRouteSource, /deletion \? \{ status: 'disabled' \}/);
+  assert.match(userRouteSource, /recheckUserPolicy/);
   assert.match(userRouteSource, /account history was preserved/);
 });
 

@@ -393,6 +393,8 @@ async function ensureIndexes() {
 
   createdIndexes.push(...(await appDb.collection('app_users').createIndexes([
     { key: { username: 1 }, unique: true, name: 'uniq_username' },
+    { key: { status: 1, createdAt: -1 }, name: 'users_status_created' },
+    { key: { role: 1, status: 1 }, name: 'users_role_status' },
   ])).map((name) => ({ database: appDbName, collection: 'app_users', name })));
 
   createdIndexes.push(...(await appDb.collection('app_approvals').createIndexes([
