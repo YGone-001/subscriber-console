@@ -10,10 +10,19 @@ export interface FetchError extends Error {
   info?: any;
 }
 
+let redirecting = false;
+export function handleSessionExpiry(status: number) {
+  if (status !== 401 || typeof window === 'undefined' || redirecting || window.location.pathname === '/login') return;
+  redirecting = true;
+  // Full navigation also discards the in-memory SWR/auth cache. Do not retry a revoked session.
+  window.location.replace('/login?reason=session-expired');
+}
+
 export const fetcher = async (url: string): Promise<any> => {
   const res = await fetch(url);
 
   if (!res.ok) {
+    handleSessionExpiry(res.status);
     let errorMsg = 'An error occurred while fetching the data.';
     let errorInfo: any = null;
     try {

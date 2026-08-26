@@ -1,5 +1,5 @@
-export type RoleKey = "root" | "operator" | "viewer";
-export type UserStatus = "active" | "disabled";
+export type RoleKey = "root" | "super_admin" | "ops_admin" | "operator" | "auditor" | "viewer";
+export type UserStatus = "active" | "disabled" | "locked";
 export type DisplayUserStatus = UserStatus | "locked";
 
 export type Capability =
@@ -31,6 +31,16 @@ export interface SysUser {
   lastLoginIp?: string;
   locked?: boolean;
   userAgent?: string;
+  updatedAt?: string;
+  security?: {
+    sessionVersion?: number;
+    failedLoginAttempts?: number;
+    lastLoginAt?: string;
+    lastLoginIp?: string;
+    passwordChangedAt?: string;
+    lockedAt?: string;
+    lockReason?: string;
+  };
 }
 
 export type NewUserForm = {
@@ -52,8 +62,8 @@ export type DrawerMode = "closed" | "view" | "create" | "edit" | "resetPassword"
 export type DetailTab = "basic" | "permissions" | "login" | "activity";
 export type BulkAction = "enable" | "disable" | "assignRole";
 
-export const VALID_ROLES = ["root", "operator", "viewer"] as const satisfies readonly RoleKey[];
-export const VALID_STATUS = ["active", "disabled"] as const satisfies readonly UserStatus[];
+export const VALID_ROLES: readonly RoleKey[] = ["root", "ops_admin", "operator", "auditor", "viewer"];
+export const VALID_STATUS = ["active", "disabled", "locked"] as const satisfies readonly UserStatus[];
 export const USERNAME_PATTERN = /^[a-zA-Z0-9_]{3,20}$/;
 export const PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
 
@@ -102,6 +112,9 @@ export const DEFAULT_EDIT_FORM: EditUserForm = {
 
 export const ROLE_STYLE: Record<RoleKey, { color: string; bg: string }> = {
   root: { color: "var(--danger)", bg: "var(--danger-soft)" },
+  super_admin: { color: "var(--danger)", bg: "var(--danger-soft)" },
+  ops_admin: { color: "var(--warning)", bg: "var(--warning-soft)" },
+  auditor: { color: "var(--success)", bg: "var(--success-soft)" },
   operator: { color: "var(--warning)", bg: "var(--warning-soft)" },
   viewer: { color: "var(--primary)", bg: "var(--selection-soft)" },
 };

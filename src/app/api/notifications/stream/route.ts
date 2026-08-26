@@ -1,4 +1,6 @@
 import { requireAuth } from '@/lib/authz';
+import { validateCurrentAccount } from '@/lib/accountSession';
+import { isSuperAdmin } from '@/lib/permissions';
 import { listAlerts } from '@/server/repositories/alertRepository';
 import { listApprovals } from '@/server/repositories/approvalRepository';
 
@@ -8,7 +10,7 @@ export async function GET(request: Request) {
   const auth = requireAuth(request);
   if (!auth.ok) return auth.response;
 
-  const isRoot = auth.auth.role === 'root';
+  const isRoot = isSuperAdmin(auth.auth.role);
   const user = auth.auth.user;
   const encoder = new TextEncoder();
 
@@ -82,6 +84,14 @@ export async function GET(request: Request) {
       // Periodic check every 4 seconds
       intervalId = setInterval(async () => {
         if (isClosed) return;
+
+        try {
+          await validateCurrentAccount({ username: user, role: auth.auth.role, sv: auth.auth.sessionVersion });
+        } catch {
+          sendEvent('session_expired', {});
+          cleanup();
+          return;
+        }
 
         try {
           const [alertData, approvalData] = await Promise.all([

@@ -2,6 +2,7 @@
 
 import { SWRConfig } from "swr";
 import React from "react";
+import { handleSessionExpiry } from '@/lib/fetcher';
 
 export function SWRProvider({ children }: { children: React.ReactNode }) {
   return (
@@ -10,6 +11,7 @@ export function SWRProvider({ children }: { children: React.ReactNode }) {
         revalidateOnFocus: false,
         revalidateOnReconnect: true,
         errorRetryCount: 3,
+        onError: (error) => handleSessionExpiry(error.status),
         onErrorRetry: (error, key, config, revalidate, { retryCount }) => {
           // Never retry on 404 (Not Found)
           if (error.status === 404) return;

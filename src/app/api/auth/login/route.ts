@@ -3,8 +3,11 @@ import bcrypt from 'bcryptjs';
 import { SignJWT } from 'jose';
 import { getJwtSecretKey } from '@/lib/security';
 import { getRateLimit } from '@/lib/rateLimit';
-import { getUser } from '@/server/repositories/userRepository';
+import { getUser, recordFailedLogin, recordSuccessfulLogin } from '@/server/repositories/userRepository';
 import type { UserDocument } from '@/server/repositories/userRepository';
+import { normalizeGovernanceRole } from '@/lib/permissions';
+import { scheduleAuditLog } from '@/lib/audit';
+import { auditRequestContext } from '@/lib/audit/record';
 
 const JWT_SECRET = getJwtSecretKey();
 const RATE_LIMIT_MAX = 5;
@@ -31,22 +34,22 @@ export async function POST(req: Request) {
     }
 
     const { username, password } = await req.json();
-    if (!username || !password) {
+    if (typeof username !== 'string' || username.length > 100 || typeof password !== 'string' || !username || !password || new TextEncoder().encode(password).length > 72) {
       return NextResponse.json({ error: 'Username and password required' }, { status: 400 });
     }
 
     const storedUser: UserDocument | null = await getUser(username);
-    if (!storedUser || storedUser.status !== 'active') {
-      return NextResponse.json({ error: 'Invalid credentials or account disabled' }, { status: 401 });
-    }
-
-    const isValid = await bcrypt.compare(password, storedUser.passwordHash);
-    if (!isValid) {
+    const isValid = await bcrypt.compare(password, storedUser?.passwordHash ?? '$2b$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy');
+    if (!storedUser || !isValid || storedUser.status !== 'active' || storedUser.locked || !normalizeGovernanceRole(storedUser.role)) {
+      if (storedUser) await recordFailedLogin(username);
+      scheduleAuditLog({ actor: { type: 'user', username }, module: 'security', action: 'auth.login', result: 'failed', resource: { type: 'user', id: username }, ...auditRequestContext(req) });
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
     }
 
-    const role = storedUser.role;
-    const token = await new SignJWT({ username, role })
+    const current = await recordSuccessfulLogin(storedUser, ip);
+    if (!current) return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
+    const role = current.role;
+    const token = await new SignJWT({ username, role, sv: current.security?.sessionVersion ?? 0 })
       .setProtectedHeader({ alg: 'HS256' })
       .setExpirationTime('24h')
       .sign(JWT_SECRET);
@@ -66,6 +69,7 @@ export async function POST(req: Request) {
 
     response.headers.set('X-RateLimit-Limit', String(RATE_LIMIT_MAX));
     response.headers.set('X-RateLimit-Remaining', String(rateCheck.remaining));
+    scheduleAuditLog({ actor: { type: 'user', username, role }, module: 'security', action: 'auth.login', result: 'success', resource: { type: 'user', id: username }, ...auditRequestContext(req) });
     return response;
   } catch (error) {
     console.error('Login error:', error);

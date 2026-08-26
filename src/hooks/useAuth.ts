@@ -1,19 +1,22 @@
 'use client';
 
 import useSWR from 'swr';
+import { fetcher } from '@/lib/fetcher';
+import { hasPermission, isSuperAdmin } from '@/lib/permissions';
+import type { RoleKey } from '@/types/iam';
+import type { GovernanceRole } from '@/types/governance';
 
 export interface User {
   username: string;
-  role: 'root' | 'operator' | 'viewer';
+  role: RoleKey;
+  normalizedRole?: GovernanceRole;
   status?: string;
   createdAt?: string;
 }
 
-const fetcher = (url: string) => fetch(url).then(r => r.json());
-
 export function useAuth() {
   const { data, error, isLoading, mutate } = useSWR<User>('/api/auth/me', fetcher, {
-    revalidateOnFocus: false,
+    revalidateOnFocus: true,
     shouldRetryOnError: false
   });
 
@@ -21,11 +24,11 @@ export function useAuth() {
     user: data,
     isLoading,
     isError: !!error,
-    isRoot: data?.role === 'root',
+    isRoot: isSuperAdmin(data?.role),
     isOperator: data?.role === 'operator',
     isViewer: data?.role === 'viewer',
-    canEditSubscribers: data?.role === 'root' || data?.role === 'operator',
-    canEditTemplates: data?.role === 'root',
+    canEditSubscribers: hasPermission(data, 'subscribers.write'),
+    canEditTemplates: hasPermission(data, 'profiles.write'),
     mutate
   };
 }

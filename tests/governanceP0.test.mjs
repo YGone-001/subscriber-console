@@ -197,9 +197,9 @@ test('requirePermission enforces server identity and denied capabilities produce
   assert.equal(guards.requirePermission(new Request('https://ops.test/api/users'), 'users.create').response.status, 401);
   assert.equal(guards.requirePermission(request('viewer'), 'users.create').response.status, 403);
   assert.equal(guards.requirePermission(request('root'), 'users.create').ok, true);
-  assert.equal(guards.requirePermission(request('unknown'), 'audit.read').response.status, 403);
+  assert.equal(guards.requirePermission(request('unknown'), 'audit.read').response.status, 401);
   assert.equal(guards.requireCapability(request('operator'), 'approval_review').response.status, 403);
-  assert.equal(events.length, 3);
+  assert.equal(events.length, 2);
   assert.ok(events.every((entry) => entry.actor.username === 'alice' && entry.result === 'denied'));
 });
 
