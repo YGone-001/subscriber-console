@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 export function loadModule(path, dependencies, globals = {}) {
   const module = { exports: {} };
   const source = readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8');
-  const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+  const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
   vm.runInNewContext(compiled, { module, exports: module.exports, require(name) {
     assert.ok(Object.hasOwn(dependencies, name), `Unmocked dependency: ${name}`);
     return dependencies[name];

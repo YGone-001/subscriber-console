@@ -120,6 +120,14 @@ export async function listAuditLogsForApproval(approvalId: string) {
   return logs.map(sanitizeAuditRecord);
 }
 
+export async function listAuditLogsForUser(username: string) {
+  const docs = await collection();
+  const logs = await docs.find({ $or: [{ actor: username }, { 'actorContext.username': username }, { 'resource.type': 'user', 'resource.id': username }, { targetId: `SYS_USER:${username}` }] })
+    .sort({ timestamp: -1 }).limit(10).toArray();
+  // Activity needs only presentation fields, never unrelated resource snapshots.
+  return logs.map(sanitizeAuditRecord).map(({ id, timestamp, action, result, actor, targetId }) => ({ id, timestamp, action, result, actor, targetId }));
+}
+
 export async function listAuditLogsForTariffPlan(planId: string, limitInput = 12) {
   const docs = await collection();
   const limit = Math.min(Math.max(Number(limitInput) || 12, 1), 50);

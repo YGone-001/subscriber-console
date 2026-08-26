@@ -36,6 +36,10 @@ test('isPasswordStrong rejects passwords shorter than 8 characters', () => {
   assert.equal(isPasswordStrong(''), false);
   assert.equal(isPasswordStrong('12345678'), true);
   assert.equal(isPasswordStrong('ComplexP@ssw0rd!'), true);
+  assert.equal(isPasswordStrong({ length: 20 }), false);
+  assert.equal(isPasswordStrong(' '.repeat(20)), false);
+  assert.equal(isPasswordStrong('x'.repeat(73)), false);
+  assert.equal(isPasswordStrong('ALICE-Secret!2026', 'alice'), false);
   assert.equal(typeof PASSWORD_POLICY_MESSAGE, 'string');
 });
 

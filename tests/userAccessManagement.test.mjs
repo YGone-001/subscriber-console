@@ -6,6 +6,19 @@ import { MongoServerError } from 'mongodb';
 import { randomUUID } from 'node:crypto';
 
 const policy = loadModule('src/lib/userManagementPolicy.ts', { '@/lib/permissions': permissions });
+const queryHelpers = loadModule('src/lib/userQuery.ts', { '@/lib/permissions': permissions, '@/lib/userManagementPolicy': policy });
+
+test('user pagination validates bounds, whitelists query fields, and escapes regex search', () => {
+  for (const query of ['page=0', 'page=-1', 'page=1.5', 'pageSize=no', 'pageSize=101', 'role=god', 'status=unknown', 'sort=$where', 'order=bad', 'page=1&page=2', '$where=x']) {
+    assert.throws(() => queryHelpers.parseUserQuery(new URLSearchParams(query)), /INVALID_QUERY/);
+  }
+  const query = queryHelpers.parseUserQuery(new URLSearchParams('q=.*(?=a)&role=ops_admin&status=locked&pageSize=10'));
+  assert.equal(query.pageSize, 10);
+  assert.equal(queryHelpers.escapeUserSearch(query.search), '\\.\\*\\(\\?=a\\)');
+  const literal = new RegExp(queryHelpers.escapeUserSearch(query.search));
+  assert.equal(literal.test('anything'), false);
+  assert.equal(literal.test('.*(?=a)'), true);
+});
 
 test('user management policy protects self and privileged targets and restricts assignable roles', () => {
   const root = { username: 'admin', role: 'root', status: 'active' };
@@ -48,6 +61,7 @@ function lifecycleHarness() {
   const repo = loadModule('src/server/repositories/userRepository.ts', {
     mongodb: { MongoServerError }, '@/lib/mongo': { getAppCollection: async () => docs, mongoCollections: { users: 'users' } },
     '@/lib/permissions': permissions, '@/lib/userManagementPolicy': policy, '@/server/userManagementLock': lock,
+    '@/lib/userQuery': queryHelpers,
   });
   return { repo, docs, lock, held: () => held, users };
 }
