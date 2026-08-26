@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/authz';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import { getSafeUser } from '@/server/repositories/userRepository';
+import { normalizeGovernanceRole, permissionsFor } from '@/lib/permissions';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,12 +15,15 @@ export async function GET(request: Request) {
 
     const user = await getSafeUser(auth.auth.user);
     if (!user) {
-      return NextResponse.json({ username: auth.auth.user, role: auth.auth.role }, { status: 200 });
+      return NextResponse.json({ error: 'Unauthorized', code: 'ACCOUNT_NOT_FOUND' }, { status: 401 });
     }
 
     return NextResponse.json({
       username: user.username,
       role: user.role,
+      databaseRole: user.role,
+      normalizedRole: normalizeGovernanceRole(user.role),
+      permissions: permissionsFor(user),
       createdAt: user.createdAt,
       status: user.status,
     }, { status: 200 });

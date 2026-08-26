@@ -2,7 +2,7 @@ import { Document, MongoServerError } from 'mongodb';
 import { getAppCollection, mongoCollections } from '@/lib/mongo';
 import type { SysUser } from '@/types/iam';
 
-export type UserDocument = Pick<SysUser, 'username' | 'role' | 'status' | 'createdAt' | 'createdBy' | 'displayName' | 'email'> & {
+export type UserDocument = Pick<SysUser, 'username' | 'role' | 'status' | 'createdAt' | 'createdBy' | 'displayName' | 'email' | 'security' | 'updatedAt' | 'locked'> & {
   passwordHash: string;
 };
 
@@ -61,9 +61,32 @@ export async function updateUser(username: string, updates: Partial<UserDocument
   const existing = await docs.findOne({ username });
   if (!existing) return null;
 
-  const next = { ...existing, ...updates, username };
-  await docs.replaceOne({ username }, next);
+  const { security, ...fields } = updates;
+  const changes: Record<string, unknown> = { ...fields, username, updatedAt: new Date().toISOString() };
+  for (const [key, value] of Object.entries(security || {})) {
+    if (key !== 'sessionVersion') changes[`security.${key}`] = value;
+  }
+  const revoke = updates.role !== undefined || updates.status !== undefined || updates.passwordHash !== undefined || security !== undefined || updates.locked !== undefined;
+  const next = await docs.findOneAndUpdate({ username }, {
+    $set: changes,
+    ...(revoke ? { $inc: { 'security.sessionVersion': 1 } } : {}),
+  }, { returnDocument: 'after' });
+  if (!next) return null;
   return { existing, next };
+}
+
+export async function recordFailedLogin(username: string) {
+  const docs = await collection();
+  await docs.updateOne({ username }, { $inc: { 'security.failedLoginAttempts': 1 } });
+}
+
+export async function recordSuccessfulLogin(user: UserDocument, ip: string) {
+  const docs = await collection();
+  // Do not issue a fresh session if the account changed during bcrypt verification.
+  return docs.findOneAndUpdate({
+    username: user.username, passwordHash: user.passwordHash, role: user.role, status: 'active', locked: { $ne: true },
+    $expr: { $eq: [{ $ifNull: ['$security.sessionVersion', 0] }, user.security?.sessionVersion ?? 0] },
+  }, { $set: { 'security.lastLoginAt': new Date().toISOString(), 'security.lastLoginIp': ip, 'security.failedLoginAttempts': 0 } }, { returnDocument: 'after' });
 }
 
 export function safeUser(user: UserDocument & Record<string, unknown>): SafeUserDocument {

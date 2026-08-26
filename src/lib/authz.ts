@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { capabilityAllowed, capabilityDecision, hasPermission, type Capability, type CapabilityGuardOptions, type Permission } from '@/lib/permissions';
+import { capabilityAllowed, capabilityDecision, hasPermission, normalizeGovernanceRole, type Capability, type CapabilityGuardOptions, type Permission } from '@/lib/permissions';
 import { scheduleAuditLog } from '@/lib/audit';
 import { auditRequestContext } from '@/lib/audit/record';
 import type { RoleKey } from '@/types/iam';
@@ -9,23 +9,20 @@ export type UserRole = RoleKey;
 export type AuthContext = {
   user: string;
   role: UserRole;
+  sessionVersion: number;
 };
 
 type AuthResult =
   | { ok: true; auth: AuthContext }
   | { ok: false; response: NextResponse };
 
-function normalizeRole(role: string | null): UserRole {
-  if (role === 'root' || role === 'operator' || role === 'viewer') return role;
-  return 'viewer';
-}
-
 export function requireAuth(request: Request): AuthResult {
   const user = request.headers.get('x-user');
-  if (!user) {
+  const role = request.headers.get('x-user-role');
+  if (!user || !normalizeGovernanceRole(role)) {
     return {
       ok: false,
-      response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
+      response: NextResponse.json({ error: 'Unauthorized', code: 'AUTH_INVALID_TOKEN' }, { status: 401 }),
     };
   }
 
@@ -33,7 +30,8 @@ export function requireAuth(request: Request): AuthResult {
     ok: true,
     auth: {
       user,
-      role: normalizeRole(request.headers.get('x-user-role')),
+      role: role as UserRole,
+      sessionVersion: Number(request.headers.get('x-user-session-version') ?? 0),
     },
   };
 }
@@ -42,11 +40,11 @@ export function requireAnyRole(request: Request, allowedRoles: UserRole[]): Auth
   const authResult = requireAuth(request);
   if (!authResult.ok) return authResult;
 
-  if (!allowedRoles.includes(authResult.auth.role)) {
+  if (!allowedRoles.some((role) => normalizeGovernanceRole(role) === normalizeGovernanceRole(authResult.auth.role))) {
     recordPermissionDenied(request, authResult.auth, { allowedRoles });
     return {
       ok: false,
-      response: NextResponse.json({ error: 'Forbidden: Insufficient permissions' }, { status: 403 }),
+      response: NextResponse.json({ error: 'Forbidden: Insufficient permissions', code: 'PERMISSION_DENIED' }, { status: 403 }),
     };
   }
 
@@ -69,6 +67,7 @@ export function requireCapability(request: Request, capability: Capability, opti
       response: NextResponse.json(
         {
           error: 'Forbidden: Insufficient permissions',
+          code: 'PERMISSION_DENIED',
           capability,
           decision,
           requiresApproval: decision === 'approval',
@@ -103,7 +102,7 @@ export function requirePermission(request: Request, permission: Permission): Aut
     recordPermissionDenied(request, auth.auth, { permission });
     return {
       ok: false,
-      response: NextResponse.json({ error: 'Forbidden: Insufficient permissions', permission }, { status: 403 }),
+      response: NextResponse.json({ error: 'Forbidden: Insufficient permissions', code: 'PERMISSION_DENIED', permission }, { status: 403 }),
     };
   }
   return auth;

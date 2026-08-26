@@ -80,7 +80,7 @@ export function useUsersPage() {
   const statusCounts = useMemo(() => users.reduce<Record<UserStatus, number>>((counts, item) => {
     counts[normalizeStatus(item.status)] += 1;
     return counts;
-  }, { active: 0, disabled: 0 }), [users]);
+  }, { active: 0, disabled: 0, locked: 0 }), [users]);
 
   const openCreateDrawer = () => {
     crud.setNotice(null);

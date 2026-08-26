@@ -11,6 +11,8 @@ export async function GET(request: Request) {
   return NextResponse.json({
     username: auth.auth.user,
     role: auth.auth.role,
+    databaseRole: auth.auth.role,
+    normalizedRole: normalizeGovernanceRole(auth.auth.role),
     capabilities: ROLE_CAPABILITIES[auth.auth.role],
     // Additive catalog information. Legacy endpoints still enforce capabilities.
     governanceRole: normalizeGovernanceRole(auth.auth.role),

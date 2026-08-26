@@ -8,7 +8,7 @@ export type CapabilityGuardOptions = {
   allowExport?: boolean;
 };
 
-export const ROLE_CAPABILITIES: Record<RoleKey, Record<Capability, CapabilityDecision>> = {
+const LEGACY_CAPABILITIES = {
   root: {
     subscriber_write: 'allow',
     policy_approve: 'allow',
@@ -48,6 +48,13 @@ export const ROLE_CAPABILITIES: Record<RoleKey, Record<Capability, CapabilityDec
     system_heal: 'deny',
     user_admin: 'deny',
   },
+} as const;
+
+export const ROLE_CAPABILITIES: Record<RoleKey, Record<Capability, CapabilityDecision>> = {
+  ...LEGACY_CAPABILITIES,
+  super_admin: LEGACY_CAPABILITIES.root,
+  ops_admin: { ...LEGACY_CAPABILITIES.root, user_admin: 'deny' },
+  auditor: { ...LEGACY_CAPABILITIES.viewer, audit_export: 'export' },
 };
 
 export function capabilityDecision(role: RoleKey, capability: Capability): CapabilityDecision {
@@ -102,6 +109,10 @@ export function normalizeGovernanceRole(role: unknown): GovernanceRole | null {
     default:
       return null;
   }
+}
+
+export function isSuperAdmin(role: unknown): boolean {
+  return normalizeGovernanceRole(role) === 'super_admin';
 }
 
 export type PermissionSubject = { role?: string; status?: string; locked?: boolean };
