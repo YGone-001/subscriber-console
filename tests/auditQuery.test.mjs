@@ -1,8 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { loadModule } from './helpers/loadModule.mjs';
+import * as auditQueryModule from '../src/lib/auditQuery.ts';
+import * as auditSanitize from '../src/lib/audit/sanitize.ts';
+import { MongoServerError } from 'mongodb';
 
 const auditQuery = loadModule('src/lib/auditQuery.ts', {});
+const recordHelpers = loadModule('src/lib/audit/record.ts', { './sanitize': auditSanitize });
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
 test('audit query defaults to the shared server pagination contract and supports legacy aliases', () => {
@@ -47,4 +51,65 @@ test('audit q searches identifier fields only and escapes client regex input', (
   }
   for (const forbidden of ['oldData', 'newData', 'metadata', 'error']) assert.doesNotMatch(serialized, new RegExp(forbidden));
   assert.equal(auditQuery.escapeAuditRegex('admin.*(test)'), 'admin\\.\\*\\(test\\)');
+});
+
+test('audit repository returns first and last server pages with whole-filter summary and a lightweight projection', async () => {
+  const pipelines = [];
+  const sample = {
+    id: 'evt-1', eventId: 'EVT-evt-1', timestamp: '2026-08-27T01:00:00.000Z',
+    level: 'warning', action: 'user.role.change', targetId: 'phase3_test', actor: 'admin',
+    operatorIp: '10.0.0.***', oldData: { role: 'viewer' }, newData: { role: 'auditor' },
+    metadata: { reason: 'test' }, result: 'success', riskLevel: 'high', module: 'users',
+  };
+  const repository = loadModule('src/server/repositories/auditRepository.ts', {
+    mongodb: { MongoServerError },
+    '@/lib/mongo': { mongoCollections: { auditLogs: 'app_audit_logs' }, getAppCollection: async () => ({
+      aggregate: (pipeline) => ({ toArray: async () => {
+        pipelines.push(pipeline);
+        return [{ logs: [sample], summary: [{ matched: 41, failed: 3, denied: 2, highRisk: 4 }] }];
+      } }),
+    }) },
+    '@/lib/audit/record': recordHelpers,
+    '@/lib/auditQuery': auditQueryModule,
+    '@/lib/tariffPlanOperations': { buildTariffPlanAuditFilter: () => ({}) },
+  });
+  const first = await repository.listAuditLogs({ page: 1, pageSize: 20 });
+  const last = await repository.listAuditLogs({ page: 3, pageSize: 20 });
+  assert.deepEqual(plain(first.pagination), { page: 1, pageSize: 20, total: 41, totalPages: 3 });
+  assert.deepEqual(plain(last.pagination), { page: 3, pageSize: 20, total: 41, totalPages: 3 });
+  assert.deepEqual(plain(first.summary), { matched: 41, failed: 3, denied: 2, highRisk: 4 });
+  assert.equal(first.logs[0].oldData, undefined);
+  assert.equal(first.logs[0].metadata, undefined);
+  assert.equal(pipelines[0][1].$facet.logs[1].$skip, 0);
+  assert.equal(pipelines[1][1].$facet.logs[1].$skip, 40);
+  assert.equal(pipelines[0][1].$facet.logs.at(-1).$project.oldData, undefined);
+});
+
+test('audit detail route validates canonical ids, returns sanitized legacy/new events and enforces permission', async () => {
+  const legacy = {
+    id: 'legacy-1', timestamp: '2026-08-20T00:00:00.000Z', level: 'info', action: 'UPDATE',
+    targetId: 'SYS_USER:alice', actor: 'admin', operatorIp: '10.0.0.***', correlationId: 'corr-1',
+    oldData: { password: 'unsafe' }, newData: { role: 'viewer' },
+  };
+  const response = { NextResponse: { json: (body, init) => Response.json(body, init) } };
+  const makeRoute = (allowed, log = legacy) => loadModule('src/app/api/audit/[id]/route.ts', {
+    'next/server': response,
+    '@/lib/authz': {
+      requireCapability: () => allowed ? { ok: true, auth: { user: 'admin' } } : { ok: false, response: Response.json({}, { status: 403 }) },
+      requirePermission: () => allowed ? { ok: true, auth: { user: 'admin' } } : { ok: false, response: Response.json({}, { status: 403 }) },
+    },
+    '@/lib/auditQuery': auditQueryModule,
+    '@/lib/rateLimit': { enforceRateLimit: async () => ({ ok: true }) },
+    '@/server/repositories/auditRepository': { getAuditLog: async () => log ? recordHelpers.sanitizeAuditRecord(log) : null },
+  });
+  const request = new Request('https://ops.test/api/audit/legacy-1');
+  const denied = await makeRoute(false).GET(request, { params: Promise.resolve({ id: 'legacy-1' }) });
+  assert.equal(denied.status, 403);
+  const invalid = await makeRoute(true).GET(request, { params: Promise.resolve({ id: '../bad' }) });
+  assert.equal(invalid.status, 400);
+  const missing = await makeRoute(true, null).GET(request, { params: Promise.resolve({ id: 'missing' }) });
+  assert.equal(missing.status, 404);
+  const found = await makeRoute(true).GET(request, { params: Promise.resolve({ id: 'legacy-1' }) });
+  assert.equal(found.status, 200);
+  assert.doesNotMatch(await found.text(), /unsafe/);
 });
