@@ -113,3 +113,29 @@ test('audit detail route validates canonical ids, returns sanitized legacy/new e
   assert.equal(found.status, 200);
   assert.doesNotMatch(await found.text(), /unsafe/);
 });
+
+test('audit repository export queries the complete filter, rejects oversized results and sanitizes every row', async () => {
+  let matched = 50001;
+  const filters = [];
+  const raw = {
+    id: 'export-1', timestamp: '2026-08-27T00:00:00.000Z', level: 'info', action: 'UPDATE',
+    targetId: 'legacy-target', actor: 'admin', operatorIp: '10.0.0.***',
+    oldData: { password: 'unsafe' }, newData: { note: '=formula' },
+  };
+  const repository = loadModule('src/server/repositories/auditRepository.ts', {
+    mongodb: { MongoServerError },
+    '@/lib/mongo': { mongoCollections: { auditLogs: 'app_audit_logs' }, getAppCollection: async () => ({
+      countDocuments: async (filter) => { filters.push(filter); return matched; },
+      find: (filter) => { filters.push(filter); return { sort: () => ({ limit: () => ({ toArray: async () => [raw] }) }) }; },
+    }) },
+    '@/lib/audit/record': recordHelpers,
+    '@/lib/auditQuery': auditQueryModule,
+    '@/lib/tariffPlanOperations': { buildTariffPlanAuditFilter: () => ({}) },
+  });
+  await assert.rejects(() => repository.exportAuditLogs({ page: 1, pageSize: 20, actor: 'admin' }, 50000), (error) => error.name === 'AuditExportTooLargeError' && error.matched === 50001);
+  matched = 1;
+  const exported = await repository.exportAuditLogs({ page: 1, pageSize: 20, actor: 'admin' }, 50000);
+  assert.equal(exported.matched, 1);
+  assert.doesNotMatch(JSON.stringify(exported.logs), /unsafe/);
+  assert.match(JSON.stringify(filters[0]), /actorContext\.username/);
+});
