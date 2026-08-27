@@ -112,6 +112,14 @@ export function parseAuditQuery(params: URLSearchParams): AuditQuery {
   };
 }
 
+export function parseAuditId(value: string): string {
+  const id = value.trim();
+  if (!id || id.length > 128 || !/^[A-Za-z0-9_.:-]+$/.test(id)) {
+    throw new AuditQueryError('audit id has an invalid format');
+  }
+  return id;
+}
+
 function contains(value: string) {
   return { $regex: escapeAuditRegex(value), $options: 'i' };
 }

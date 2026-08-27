@@ -33,10 +33,35 @@ export async function appendAuditLog(log: AuditLogRecord) {
 export async function listAuditLogs(query: AuditQuery): Promise<AuditListResponse> {
   const docs = await collection();
   const filter = buildAuditFilter(query) as Filter<StoredAuditLog>;
-  const [logs, total] = await Promise.all([
-    docs.find(filter).sort({ timestamp: -1 }).skip((query.page - 1) * query.pageSize).limit(query.pageSize).toArray(),
-    docs.countDocuments(filter),
-  ]);
+  const [facet] = await docs.aggregate<{
+    logs: StoredAuditLog[];
+    summary: Array<{ matched: number; failed: number; denied: number; highRisk: number }>;
+  }>([
+    { $match: filter },
+    { $facet: {
+      logs: [
+        { $sort: { timestamp: -1 } },
+        { $skip: (query.page - 1) * query.pageSize },
+        { $limit: query.pageSize },
+        { $project: {
+          _id: 0, id: 1, eventId: 1, timestamp: 1, level: 1, action: 1,
+          targetId: 1, actor: 1, operatorIp: 1, correlationId: 1, approvalId: 1,
+          reason: 1, actorContext: 1, module: 1, resource: 1, riskLevel: 1,
+          result: 1, 'source.ip': 1, request: 1,
+        } },
+      ],
+      summary: [{ $group: {
+        _id: null,
+        matched: { $sum: 1 },
+        failed: { $sum: { $cond: [{ $eq: ['$result', 'failed'] }, 1, 0] } },
+        denied: { $sum: { $cond: [{ $eq: ['$result', 'denied'] }, 1, 0] } },
+        highRisk: { $sum: { $cond: [{ $in: ['$riskLevel', ['high', 'critical']] }, 1, 0] } },
+      } }],
+    } },
+  ]).toArray();
+  const metrics = facet?.summary[0] ?? { matched: 0, failed: 0, denied: 0, highRisk: 0 };
+  const logs = facet?.logs ?? [];
+  const total = metrics.matched;
   const totalPages = Math.max(1, Math.ceil(total / query.pageSize));
   return {
     logs: logs.map(sanitizeAuditRecord).map(({ oldData, newData, metadata, error, ...summary }) => {
@@ -44,7 +69,14 @@ export async function listAuditLogs(query: AuditQuery): Promise<AuditListRespons
       return summary;
     }),
     pagination: { page: Math.min(query.page, totalPages), pageSize: query.pageSize, total, totalPages },
+    summary: metrics,
   };
+}
+
+export async function getAuditLog(id: string): Promise<AuditLogRecord | null> {
+  const docs = await collection();
+  const log = await docs.findOne({ id });
+  return log ? sanitizeAuditRecord(log) : null;
 }
 
 export async function listAuditLogsForApproval(approvalId: string) {

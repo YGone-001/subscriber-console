@@ -406,6 +406,15 @@ async function ensureIndexes() {
     { key: { timestamp: -1 }, name: 'audit_timestamp_desc' },
     { key: { targetId: 1, timestamp: -1 }, name: 'audit_target_timestamp' },
     { key: { action: 1, timestamp: -1 }, name: 'audit_action_timestamp' },
+    { key: { module: 1, timestamp: -1 }, name: 'audit_module_timestamp' },
+    { key: { result: 1, timestamp: -1 }, name: 'audit_result_timestamp' },
+    { key: { riskLevel: 1, timestamp: -1 }, name: 'audit_risk_timestamp' },
+    { key: { actor: 1, timestamp: -1 }, name: 'audit_actor_timestamp' },
+    { key: { 'actorContext.username': 1, timestamp: -1 }, name: 'audit_actor_username_timestamp' },
+    { key: { 'resource.type': 1, 'resource.id': 1, timestamp: -1 }, name: 'audit_resource_timestamp' },
+    { key: { 'request.requestId': 1 }, name: 'audit_request_id' },
+    { key: { 'request.correlationId': 1 }, name: 'audit_request_correlation_id' },
+    { key: { approvalId: 1, timestamp: -1 }, name: 'audit_approval_timestamp' },
   ])).map((name) => ({ database: appDbName, collection: 'app_audit_logs', name })));
 
   createdIndexes.push(...(await appDb.collection('app_alerts').createIndexes([
