@@ -56,7 +56,7 @@ test("dense tables declare responsive column priorities", () => {
     "src/components/rating/PccRuleList.tsx",
     "src/components/rating/TariffPlanList.tsx",
     "src/app/(dashboard)/system-health/page.tsx",
-    "src/app/(dashboard)/audit-logs/page.tsx",
+    "src/app/(dashboard)/audit-logs/AuditConsole.tsx",
   ]) {
     const source = read(file);
     const table = source.match(/<table[\s\S]*?<\/table>/)?.[0] ?? "";
@@ -117,7 +117,7 @@ test("high-risk dialogs and drawers share the production focus contract", () => 
     "src/components/rating/TariffRuleModal.tsx",
     "src/components/rating/TariffPlanImportModal.tsx",
     "src/components/rating/TariffPlanCloneModal.tsx",
-    "src/app/(dashboard)/audit-logs/page.tsx",
+    "src/app/(dashboard)/audit-logs/AuditConsole.tsx",
   ]) {
     const source = read(file);
     assert.match(source, /<Dialog/);
