@@ -14,7 +14,9 @@ test('user row actions expose only implemented contextual operations', () => {
   assert.match(tableSource, /startPasswordReset/);
   assert.match(tableSource, /itemStatus === "active" \? "disabled" : "active"/);
   assert.match(tableSource, /document\.addEventListener\("pointerdown"/);
-  assert.doesNotMatch(tableSource, /users_force_logout|users_unlock_account|users_copy_user/);
+  assert.doesNotMatch(tableSource, /users_force_logout|users_copy_user/);
+  assert.match(tableSource, /users_unlock_account/);
+  assert.match(tableSource, /canManage/);
 });
 
 test('user creation includes availability, identity, role guidance, and strength feedback', () => {
@@ -34,7 +36,8 @@ test('bulk operations expose per-user progress and cancellation', () => {
 });
 
 test('role details stay within the user drawer and the legacy role page redirects', () => {
-  assert.match(permissionsSource, /ROLE_CAPABILITIES/);
+  assert.match(permissionsSource, /PERMISSION_CATALOG/);
+  assert.match(permissionsSource, /hasPermission/);
   assert.doesNotMatch(permissionsSource, /href="\/roles"/);
   assert.match(rolePageSource, /redirect\("\/users"\)/);
 });

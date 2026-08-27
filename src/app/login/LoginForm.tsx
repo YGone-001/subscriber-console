@@ -8,7 +8,7 @@ import { useI18n } from "@/components/I18nProvider";
 import { Field } from "@/components/ui/Field";
 import { IconButton } from "@/components/ui/IconButton";
 
-export default function LoginForm() {
+export default function LoginForm({ sessionExpired = false }: { sessionExpired?: boolean }) {
   const { t } = useI18n();
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [error, setError] = useState("");
@@ -72,6 +72,7 @@ export default function LoginForm() {
         </div>
 
         <form id="xcloud-login-form" onSubmit={handleSubmit} className="login-form">
+          {sessionExpired && !error ? <p role="status">{t('users_session_expired')}</p> : null}
           {error && (
             <div id="xcloud-login-error" className="login-error-container" role="alert" aria-live="assertive">
               <div className="login-error-indicator" aria-hidden="true" />

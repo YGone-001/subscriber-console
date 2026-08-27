@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import {
   Eye,
   KeyRound,
+  LockKeyhole,
   MoreHorizontal,
   Plus,
   RefreshCw,
@@ -56,7 +57,7 @@ export function UsersTable(props: UsersTableProps) {
     <>
       <BulkActionBar {...props} />
       <div className={styles.tableMeta}>
-        <span>{t("users_count_filtered", { count: props.filteredUsers.length, total: props.users.length })}</span>
+        <span>{t("users_count_filtered", { count: props.total, total: props.totalUsers })}</span>
         <span>{t("users_selected_count", { count: props.selectedUsernames.length })}</span>
       </div>
       <div className={styles.tableScroll}>
@@ -97,18 +98,19 @@ export function UsersTable(props: UsersTableProps) {
               <th aria-sort={getAriaSort("lastLoginAt")} data-column-priority="important">
                 <button type="button" className={styles.sortButton} onClick={() => props.toggleSort("lastLoginAt")}>{t("users_last_login")} {props.sortKey === "lastLoginAt" ? t(`users_sort_${props.sortDirection}`) : null}</button>
               </th>
+              <th aria-sort={getAriaSort('createdAt')} data-column-priority="important"><button type="button" className={styles.sortButton} onClick={() => props.toggleSort('createdAt')}>{t('users_detail_created_at')}</button></th>
               <th className={styles.actionsCol} data-column-priority="essential">{t("users_actions")}</th>
             </tr>
           </thead>
           <tbody>
             {props.isLoading ? (
-              <tr className={styles.tableStateRow}><td colSpan={6}><LoadingRows columns={6} rows={6} /></td></tr>
+              <tr className={styles.tableStateRow}><td colSpan={7}><LoadingRows columns={7} rows={6} /></td></tr>
             ) : props.error ? (
-              <tr className={styles.tableStateRow}><td colSpan={6}><EmptyState icon={<Shield size={44} />} title={t("users_error_title")} description={t("users_error_desc")} action={<button type="button" className="btn btn-outline" onClick={props.refresh}><RefreshCw size={15} />{t("refresh")}</button>} /></td></tr>
-            ) : props.users.length === 0 ? (
-              <tr className={styles.tableStateRow}><td colSpan={6}><EmptyState icon={<UserCheck size={44} />} title={t("users_empty")} description={t("users_empty_desc")} action={<button type="button" className="btn btn-primary" onClick={props.openCreateDrawer}><Plus size={16} />{t("users_new")}</button>} /></td></tr>
+              <tr className={styles.tableStateRow}><td colSpan={7}><EmptyState icon={<Shield size={44} />} title={t("users_error_title")} description={t("users_error_desc")} action={<button type="button" className="btn btn-outline" onClick={props.refresh}><RefreshCw size={15} />{t("refresh")}</button>} /></td></tr>
+            ) : props.totalUsers === 0 ? (
+              <tr className={styles.tableStateRow}><td colSpan={7}><EmptyState icon={<UserCheck size={44} />} title={t("users_empty")} description={t("users_empty_desc")} action={props.canCreate ? <button type="button" className="btn btn-primary" onClick={props.openCreateDrawer}><Plus size={16} />{t("users_new")}</button> : undefined} /></td></tr>
             ) : props.filteredUsers.length === 0 ? (
-              <tr className={styles.tableStateRow}><td colSpan={6}><EmptyState icon={<Search size={44} />} title={t("users_no_match")} description={t("users_no_match_desc")} action={<button type="button" className="btn btn-outline" onClick={props.clearFilters}><X size={15} />{t("users_clear_filters")}</button>} /></td></tr>
+              <tr className={styles.tableStateRow}><td colSpan={7}><EmptyState icon={<Search size={44} />} title={t("users_no_match")} description={t("users_no_match_desc")} action={<button type="button" className="btn btn-outline" onClick={props.clearFilters}><X size={15} />{t("users_clear_filters")}</button>} /></td></tr>
             ) : props.pagedUsers.map((item) => {
               const isProtected = props.isProtectedUser(item);
               const itemStatus = normalizeStatus(item.status);
@@ -120,7 +122,7 @@ export function UsersTable(props: UsersTableProps) {
                   <td className={`${styles.userCol} ${styles.userIdentityCell}`} data-label={t("users_col_user")} data-column-priority="essential">
                     <button type="button" className={styles.identityButton} onClick={() => props.openDetails(item)}>
                       <span className={iamStyles.avatar}>{item.username.slice(0, 1).toUpperCase()}</span>
-                      <span><strong>{item.username}</strong><small>{displayValue(item.displayName || item.description)}</small></span>
+                      <span><strong>{displayValue(item.displayName || item.username)}</strong><small>{item.username}</small></span>
                     </button>
                     <span className={styles.userPreview} aria-hidden="true">
                       <span className={`${iamStyles.avatar} ${iamStyles.avatarLarge}`}>{item.username.slice(0, 1).toUpperCase()}</span>
@@ -129,23 +131,27 @@ export function UsersTable(props: UsersTableProps) {
                   </td>
                   <td data-label={t("users_role")} data-column-priority="essential"><RoleBadge role={item.role} /></td>
                   <td data-label={t("users_status")} data-column-priority="essential"><StatusBadge status={item.status} locked={item.locked} /></td>
-                  <td className={styles.dateCell} data-label={t("users_last_login")} data-column-priority="important"><span>{formatDateTime(item.lastLoginAt)}</span><small>{displayValue(item.lastLoginIp)}</small></td>
+                  <td className={styles.dateCell} data-label={t("users_last_login")} data-column-priority="important"><span>{formatDateTime(item.security?.lastLoginAt || item.lastLoginAt)}</span></td>
+                  <td className={styles.dateCell} data-label={t('users_detail_created_at')} data-column-priority="important">{formatDateTime(item.createdAt)}</td>
                   <td className={styles.actionsCol} data-label={t("users_actions")} data-column-priority="essential">
                     <div className={styles.rowActions}>
                       <button type="button" className="btn btn-ghost" onClick={() => props.openDetails(item)}><Eye size={15} />{t("users_view")}</button>
-                      <button type="button" className="btn btn-ghost" onClick={() => props.startEdit(item)}><Settings size={15} />{t("edit")}</button>
+                      {props.canManage(item, 'update') ? <button type="button" className="btn btn-ghost" onClick={() => props.startEdit(item)}><Settings size={15} />{t("edit")}</button> : null}
+                      {props.canManage(item, 'password.reset') || props.canManage(item, 'disable') ? (
                       <div className={styles.more} ref={props.openMenuUsername === item.username ? openMenuRef : undefined}>
                         <button type="button" className="btn-icon" onClick={() => props.setOpenMenuUsername((current) => current === item.username ? null : item.username)} aria-expanded={props.openMenuUsername === item.username} aria-haspopup="menu" title={t("users_more_actions")} aria-label={t("users_more_actions")}><MoreHorizontal size={17} /></button>
                         {props.openMenuUsername === item.username ? (
                           <div className={styles.moreMenu} role="menu" aria-label={t("users_more_actions")}>
-                            <button type="button" role="menuitem" onClick={() => { props.startPasswordReset(item); props.setOpenMenuUsername(null); }}><KeyRound size={15} />{t("users_reset_password")}</button>
+                            {props.canManage(item, 'password.reset') ? <button type="button" role="menuitem" onClick={() => { props.startPasswordReset(item); props.setOpenMenuUsername(null); }}><KeyRound size={15} />{t("users_reset_password")}</button> : null}
                             <button type="button" role="menuitem" disabled={isProtected} onClick={() => { props.setPendingStatusChange({ username: item.username, status: itemStatus === "active" ? "disabled" : "active" }); props.setConfirmReason(""); props.setOpenMenuUsername(null); }}>
                               {itemStatus === "active" ? <UserX size={15} /> : <UserCheck size={15} />}
-                              {t(itemStatus === "active" ? "users_disable_account" : "users_enable_account")}
+                              {t(itemStatus === 'locked' ? 'users_unlock_account' : itemStatus === "active" ? "users_disable_account" : "users_enable_account")}
                             </button>
+                            {itemStatus === 'active' && props.canManage(item, 'lock') ? <button type="button" role="menuitem" onClick={() => { props.setPendingStatusChange({ username: item.username, status: 'locked' }); props.setConfirmReason(''); props.setOpenMenuUsername(null); }}><LockKeyhole size={15} />{t('users_lock_account')}</button> : null}
                           </div>
                         ) : null}
                       </div>
+                      ) : null}
                     </div>
                   </td>
                 </tr>

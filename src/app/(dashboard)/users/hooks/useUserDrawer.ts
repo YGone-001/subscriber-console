@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
 import {
@@ -12,30 +12,26 @@ import {
   type SysUser,
 } from "../types";
 import { normalizeRole, normalizeStatus } from "../utils";
+import type { UserOperation } from '@/lib/userManagementPolicy';
+import type { RoleKey } from '@/types/iam';
 
-export function useUserDrawer(users: SysUser[], initialUsername: string | null = null) {
-  const [drawerMode, setDrawerMode] = useState<DrawerMode>(initialUsername ? "view" : "closed");
+export function useUserDrawer(users: SysUser[], selectedUsername: string | null, drawerMode: DrawerMode, navigate: (username: string | null, mode: DrawerMode) => void) {
+  const setDrawerMode = (mode: DrawerMode) => navigate(selectedUsername, mode);
   const [detailTab, setDetailTab] = useState<DetailTab>("basic");
   const [newForm, setNewForm] = useState<NewUserForm>(DEFAULT_NEW_FORM);
   const [editForm, setEditForm] = useState<EditUserForm>(DEFAULT_EDIT_FORM);
   const [newPasswordVisible, setNewPasswordVisible] = useState(false);
   const [newConfirmPasswordVisible, setNewConfirmPasswordVisible] = useState(false);
   const [editPasswordVisible, setEditPasswordVisible] = useState(false);
-  const [selectedUsername, setSelectedUsername] = useState<string | null>(initialUsername);
   const [openMenuUsername, setOpenMenuUsername] = useState<string | null>(null);
-  const selectedUser = useMemo(
-    () => selectedUsername ? users.find((item) => item.username === selectedUsername) || null : null,
-    [selectedUsername, users],
-  );
-  const auditUrl = drawerMode === "view" && detailTab === "activity" && selectedUser
-    ? `/api/audit?target=${encodeURIComponent(selectedUser.username)}&limit=50`
-    : null;
   const {
-    data: auditData,
+    data: detail,
     error: auditError,
     isLoading: isAuditLoading,
     mutate: mutateAudit,
-  } = useSWR<AuditLogResponse>(auditUrl, fetcher);
+  } = useSWR<{ user: SysUser; actions: UserOperation[]; assignableRoles: RoleKey[]; activity: AuditLogResponse['logs'] }>(selectedUsername ? `/api/users/${encodeURIComponent(selectedUsername)}` : null, fetcher);
+  const selectedUser = detail?.user ?? users.find((item) => item.username === selectedUsername) ?? null;
+  const auditData = detail ? { logs: detail.activity, filteredTotal: detail.activity.length, totalScanned: detail.activity.length } : undefined;
 
   const resetNewForm = () => {
     setNewForm(DEFAULT_NEW_FORM);
@@ -50,6 +46,8 @@ export function useUserDrawer(users: SysUser[], initialUsername: string | null =
 
   const fillEditForm = (targetUser: SysUser) => {
     setEditForm({
+      displayName: targetUser.displayName || '',
+      email: targetUser.email || '',
       role: normalizeRole(targetUser.role),
       status: normalizeStatus(targetUser.status),
       password: "",
@@ -59,35 +57,30 @@ export function useUserDrawer(users: SysUser[], initialUsername: string | null =
 
   const openCreateDrawer = () => {
     resetNewForm();
-    setSelectedUsername(null);
-    setDrawerMode("create");
+    navigate(null, 'create');
     setDetailTab("basic");
   };
 
   const openDetails = (targetUser: SysUser) => {
-    setSelectedUsername(targetUser.username);
-    setDrawerMode("view");
+    navigate(targetUser.username, 'view');
     setDetailTab("basic");
     fillEditForm(targetUser);
   };
 
   const startEdit = (targetUser: SysUser) => {
-    setSelectedUsername(targetUser.username);
-    setDrawerMode("edit");
+    navigate(targetUser.username, 'edit');
     setDetailTab("basic");
     fillEditForm(targetUser);
   };
 
   const startPasswordReset = (targetUser: SysUser) => {
-    setSelectedUsername(targetUser.username);
-    setDrawerMode("resetPassword");
+    navigate(targetUser.username, 'resetPassword');
     setDetailTab("basic");
     fillEditForm(targetUser);
   };
 
   const closeDrawer = () => {
-    setSelectedUsername(null);
-    setDrawerMode("closed");
+    navigate(null, 'closed');
     setDetailTab("basic");
     resetEditForm();
   };

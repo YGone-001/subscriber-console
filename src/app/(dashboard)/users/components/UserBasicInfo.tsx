@@ -14,9 +14,8 @@ export function UserBasicInfo({ user }: { user: SysUser }) {
     [t("users_role"), <RoleBadge key="role" role={user.role} />],
     [t("users_status"), <StatusBadge key="status" status={user.status} locked={user.locked} />],
     [t("users_detail_created_at"), formatDateTime(user.createdAt)],
+    [t('users_updated_at'), formatDateTime(user.updatedAt)],
     [t("users_detail_created_by"), displayValue(user.createdBy)],
-    [t("users_last_login"), formatDateTime(user.lastLoginAt)],
-    [t("users_last_login_ip"), displayValue(user.lastLoginIp)],
     [t("users_account_note"), displayValue(user.description)],
   ] as const;
   return (

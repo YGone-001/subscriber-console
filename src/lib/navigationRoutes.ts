@@ -13,6 +13,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { UserRole } from "@/lib/authz";
+import { hasPermission, type Permission } from '@/lib/permissions';
 
 export type NavigationGroup = "ocs" | "rating" | "governance" | "system";
 
@@ -26,6 +27,7 @@ export interface NavigationRoute {
   groupLabelKey?: string;
   groupPath?: string;
   allowedRoles?: readonly UserRole[];
+  permission?: Permission;
   showInCommandPalette?: boolean;
 }
 
@@ -41,7 +43,7 @@ export const NAVIGATION_ROUTES: readonly NavigationRoute[] = [
   { path: "/rating/rules", labelKey: "nav_rating_rules", commandLabelKey: "cp_nav_rating_rules", commandDescriptionKey: "cp_nav_rating_rules_desc", icon: GitBranch, group: "rating", groupLabelKey: "nav_rating", groupPath: "/rating" },
   { path: "/approvals", labelKey: "nav_approvals", commandDescriptionKey: "approvals_center_desc", icon: GitBranch, group: "governance", groupLabelKey: "nav_operations_governance", groupPath: "/approvals" },
   { path: "/audit-logs", labelKey: "nav_audit_logs", commandLabelKey: "cp_nav_audit", commandDescriptionKey: "cp_nav_audit_desc", icon: History, group: "governance", groupLabelKey: "nav_operations_governance", groupPath: "/approvals" },
-  { path: "/users", labelKey: "nav_system_users", commandDescriptionKey: "users_mgmt_desc", icon: UserCog, group: "system", groupLabelKey: "nav_system_settings", groupPath: "/users", allowedRoles: ["root"] },
+  { path: "/users", labelKey: "nav_system_users", commandDescriptionKey: "users_mgmt_desc", icon: UserCog, group: "system", groupLabelKey: "nav_system_settings", groupPath: "/users", permission: 'users.read' },
   { path: "/system-health", labelKey: "nav_system_health", commandLabelKey: "cp_nav_health", commandDescriptionKey: "cp_nav_health_desc", icon: Activity },
 ] as const;
 
@@ -63,6 +65,7 @@ export function resolveNavigationRoute(pathname: string) {
 }
 
 export function canAccessNavigationRoute(route: NavigationRoute, role?: UserRole) {
+  if (route.permission) return hasPermission({ role }, route.permission);
   return !route.allowedRoles || (role ? route.allowedRoles.includes(role) : false);
 }
 

@@ -1,4 +1,5 @@
 .confirmDetails { display: grid; gap: 0.45rem; }
+.permissionKey { display: block; color: var(--text-muted); font-size: var(--ref-font-size-label); margin-top: 0.2rem; }
 .confirmDetails label { display: grid; gap: 0.4rem; margin-top: 0.25rem; color: var(--text-muted); font-size: var(--ref-font-size-body-compact); font-weight: 800; }
 .confirmDetails textarea { width: 100%; resize: vertical; padding: 0.65rem; border: 1px solid var(--surface-border); border-radius: var(--ref-radius-control); background: var(--surface-hover); color: var(--text-main); font: inherit; }
 
@@ -13,7 +14,7 @@
 
 .drawer {
   position: relative;
-  width: min(600px, 100vw);
+  width: min(820px, 100vw);
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -160,7 +161,7 @@
 }
 
 @media (min-width: 1440px) {
-  .drawer { width: min(640px, 100vw); }
+  .drawer { width: min(820px, 100vw); }
 }
 
 @media (max-width: 760px) {

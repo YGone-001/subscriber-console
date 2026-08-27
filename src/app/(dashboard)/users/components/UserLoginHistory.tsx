@@ -1,17 +1,23 @@
-import { Clock } from "lucide-react";
-import { useI18n } from "@/components/I18nProvider";
-import { EmptyState } from "@/components/OperationFeedback";
-import type { SysUser } from "../types";
-import { displayValue, formatDateTime } from "../utils";
-import styles from "./UserDrawer.module.css";
+import { useI18n } from '@/components/I18nProvider';
+import type { SysUser } from '../types';
+import { displayValue, formatDateTime } from '../utils';
+import styles from './UserDrawer.module.css';
 
 export function UserLoginHistory({ user }: { user: SysUser }) {
   const { t } = useI18n();
-  if (!user.lastLoginAt) return <EmptyState icon={<Clock size={42} />} title={t("users_no_data_title")} description={t("users_no_login_data_desc")} />;
-  return (
-    <section className={styles.detailSection}>
-      <h3>{t("users_detail_tab_login")}</h3>
-      <div className={styles.recordList}><div><span>{formatDateTime(user.lastLoginAt)}</span><small>{displayValue(user.lastLoginIp)} · {displayValue(user.userAgent)}</small><strong>{t("users_login_success")}</strong></div></div>
-    </section>
-  );
+  const security = user.security;
+  const rows = [
+    [t('users_last_login'), formatDateTime(security?.lastLoginAt || user.lastLoginAt)],
+    [t('users_last_login_ip'), displayValue(security?.lastLoginIp || user.lastLoginIp)],
+    [t('users_password_changed_at'), formatDateTime(security?.passwordChangedAt)],
+    [t('users_failed_logins'), security?.failedLoginAttempts ?? '—'],
+    [t('users_locked_at'), formatDateTime(security?.lockedAt)],
+    [t('users_lock_reason'), displayValue(security?.lockReason)],
+    [t('users_session_version'), security?.sessionVersion ?? 0],
+  ];
+  return <section className={styles.detailSection}>
+    <h3>{t('users_security_state')}</h3>
+    <p className={styles.sectionDescription}>{t('users_security_snapshot_note')}</p>
+    <dl>{rows.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
+  </section>;
 }

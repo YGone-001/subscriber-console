@@ -17,7 +17,7 @@ function routeHarness() {
   const repo = {
     getUser: async (username) => users.get(username) ?? null,
     getSafeUser: async (username) => users.get(username) ?? null,
-    safeUser: ({ passwordHash, ...user }) => user,
+    safeUser: ({ passwordHash, ...user }) => { void passwordHash; return user; },
     async createUser(user, authorize) { await authorize(); users.set(user.username, user); return user; },
     async updateUser(username, updates, authorize) {
       const existing = users.get(username);
@@ -121,11 +121,13 @@ test('system user table keeps scan-critical columns and hides secondary actions 
   assert.match(usersTableSource, /users_role/);
   assert.match(usersTableSource, /users_status/);
   assert.match(usersTableSource, /users_last_login/);
-  assert.doesNotMatch(usersTableSource, /users_contact|users_detail_created_by|users_force_logout|users_unlock_account|users_copy_user/);
+  assert.doesNotMatch(usersTableSource, /users_contact|users_detail_created_by|users_force_logout|users_copy_user/);
+  assert.match(usersTableSource, /users_unlock_account/);
+  assert.match(usersTableSource, /users_detail_created_at/);
   assert.match(usersBulkActionSource, /users_bulk_export/);
   assert.match(usersTableSource, /users_more_actions/);
   assert.doesNotMatch(`${usersTableSource}\n${usersBulkActionSource}`, /users_bulk_delete|Trash2|handleDelete/);
-  assert.match(usersTableSource, /colSpan=\{6\}/);
+  assert.match(usersTableSource, /colSpan=\{7\}/);
 });
 
 test('system user deletion is retired and the compatibility endpoint preserves identity history', () => {
@@ -156,7 +158,7 @@ test('self-service access requests are viewer-only, deduplicated, approved by Ro
 
 test('approval audit trails are available to the requester without widening the audit log boundary', () => {
   assert.match(approvalAuditRouteSource, /requireAuth/);
-  assert.match(approvalAuditRouteSource, /auth\.auth\.role !== 'root' && approval\.requester !== auth\.auth\.user/);
+  assert.match(approvalAuditRouteSource, /!isSuperAdmin\(auth\.auth\.role\) && approval\.requester !== auth\.auth\.user/);
   assert.doesNotMatch(approvalAuditRouteSource, /requireCapability\(request, 'user_admin'\)/);
   assert.match(approvalAuditRouteSource, /listAuditLogsForApproval/);
 });

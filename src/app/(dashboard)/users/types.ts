@@ -33,11 +33,12 @@ export type ApprovalMetricResponse = {
 export type AuditLogRecord = {
   id: string;
   timestamp: string;
-  level: "info" | "warning";
+  level?: "info" | "warning";
+  result?: 'success' | 'failed' | 'denied';
   action: string;
   targetId: string;
   actor?: string;
-  operatorIp: string;
+  operatorIp?: string;
   correlationId?: string;
   approvalId?: string;
   oldData?: unknown;
@@ -93,6 +94,8 @@ export type BulkProgressState = {
 export type PendingUpdate = {
   username: string;
   payload: {
+    displayName?: string;
+    email?: string;
     role?: import("@/types/iam").RoleKey;
     status?: import("@/types/iam").UserStatus;
     password?: string;

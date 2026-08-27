@@ -108,6 +108,8 @@ test('sanitizer bounds hostile metadata, avoids getters and handles circular and
   assert.ok(JSON.stringify(sanitizeAuditPayload(Array.from({ length: 1000 }, () => 'x'.repeat(10000)))).length < 68000);
   assert.doesNotThrow(() => sanitizeAuditPayload(new Proxy({}, { ownKeys() { throw new Error('secret'); } })));
   assert.equal(sanitizeAuditText('Bearer abc.def.ghi'), REDACTED);
+  assert.equal(sanitizeAuditText(null), '');
+  assert.doesNotThrow(() => recordHelpers.sanitizeAuditRecord({ id: 'historic', timestamp: '', level: 'info', action: 'UPDATE', targetId: 'x', actor: null, operatorIp: null, reason: null }));
   assert.equal(sanitizeAuditText('eyJhbGciOiJIUzI1NiJ9.eyJ1c2VyIjoiYWRtaW4ifQ.signature'), REDACTED);
   assert.equal(sanitizeAuditText('mongodb://admin:db-secret@localhost/test'), `mongodb://${REDACTED}@localhost/test`);
   assert.equal(sanitizeAuditText('password="do not log me"'), `password=${REDACTED}`);

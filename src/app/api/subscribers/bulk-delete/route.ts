@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { logAudit } from '@/lib/audit';
 import { requireCapability } from '@/lib/authz';
 import { enforceRateLimit } from '@/lib/rateLimit';
+import { isSuperAdmin } from '@/lib/permissions';
 import { validateImsiList } from '@/lib/subscriberValidation';
 import { createApprovalRequest } from '@/server/repositories/approvalRepository';
 import { deleteSubscriber } from '@/server/repositories/subscriberRepository';
@@ -21,7 +22,7 @@ export async function POST(request: Request) {
     if (!validation.ok) return NextResponse.json({ error: validation.error }, { status: 400 });
     if (validation.value.length === 0) return NextResponse.json({ error: 'imsiList cannot be empty' }, { status: 400 });
 
-    if (auth.auth.role !== 'root') {
+    if (!isSuperAdmin(auth.auth.role)) {
       const approval = await createApprovalRequest({
         action: 'SUBSCRIBER_BULK_DELETE',
         requester: auth.auth.user,
