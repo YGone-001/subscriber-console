@@ -77,7 +77,8 @@ async function mutate(request: Request, context: RouteContext, deletion = false)
     });
     if (!result) throw new UserManagementError('USER_NOT_FOUND', 404);
     committed = true;
-    for (const operation of operations.filter((op) => op !== 'delete')) await userAudit(request, operation, username, 'success', result.existing, result.next);
+    const operationReason = typeof body.reason === 'string' ? body.reason : undefined;
+    for (const operation of operations.filter((op) => op !== 'delete')) await userAudit(request, operation, username, 'success', result.existing, result.next, undefined, operationReason);
     return NextResponse.json({ message: deletion ? 'User disabled; account history was preserved' : 'User updated successfully', user: safeUser(result.next), sessionRevoked: updates.role !== undefined || updates.status !== undefined || updates.passwordHash !== undefined });
   } catch (error) { return userOperationError(error, request, operations[0] || 'update', username, committed); }
 }

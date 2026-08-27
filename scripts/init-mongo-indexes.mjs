@@ -400,6 +400,11 @@ async function ensureIndexes() {
   createdIndexes.push(...(await appDb.collection('app_approvals').createIndexes([
     { key: { status: 1, createdAt: -1 }, name: 'approvals_status_created' },
     { key: { id: 1 }, unique: true, name: 'uniq_approval_id' },
+    { key: { changeId: 1 }, unique: true, partialFilterExpression: { changeId: { $type: 'string' } }, name: 'uniq_approval_change_id' },
+    { key: { riskLevel: 1, status: 1, createdAt: -1 }, name: 'approvals_risk_status_created' },
+    { key: { requester: 1, createdAt: -1 }, name: 'approvals_requester_created' },
+    { key: { reviewer: 1, createdAt: -1 }, name: 'approvals_reviewer_created' },
+    { key: { 'operation.resourceType': 1, 'operation.resourceId': 1, createdAt: -1 }, name: 'approvals_resource_created' },
   ])).map((name) => ({ database: appDbName, collection: 'app_approvals', name })));
 
   createdIndexes.push(...(await appDb.collection('app_audit_logs').createIndexes([
