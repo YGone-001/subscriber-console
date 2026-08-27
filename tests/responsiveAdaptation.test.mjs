@@ -34,7 +34,7 @@ test('high-density data tables switch to labelled record cards on narrow screens
   const approvalsCss = read('../src/components/users/ApprovalCenterPanel.css');
   const healthTable = read('../src/app/(dashboard)/system-health/page.tsx');
   const healthCss = read('../src/app/(dashboard)/system-health/system-health.css');
-  const auditTable = read('../src/app/(dashboard)/audit-logs/page.tsx');
+  const auditTable = read('../src/app/(dashboard)/audit-logs/AuditConsole.tsx');
 
   for (const source of [subscriberTable, usersTable, ratingTable, tariffPlanTable, approvalsTable, healthTable, auditTable]) {
     assert.match(source, /data-label=/);
