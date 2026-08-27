@@ -270,19 +270,55 @@ export async function getApproval(id: string): Promise<ApprovalDocument | null> 
   return normalizeApproval(await docs.findOne({ id }));
 }
 
-/** Compatibility helper removed by the atomic transition service in the next rollout step. */
-export async function transitionApproval(
-  id: string,
-  status: ApprovalStatus | 'executed',
-  reviewer: string,
-  patch: Partial<Pick<ApprovalDocument, 'note' | 'result' | 'error'>> = {}
-): Promise<ApprovalDocument | null> {
+const ALLOWED_TRANSITIONS: Readonly<Record<ApprovalStatus, readonly ApprovalStatus[]>> = {
+  pending: ['approved', 'rejected', 'cancelled', 'expired'],
+  approved: ['executing', 'cancelled'],
+  executing: ['completed', 'failed'],
+  rejected: [], cancelled: [], expired: [], completed: [], failed: [],
+};
+
+export type ApprovalTransitionPatch = Pick<ApprovalDocument, never> & {
+  reviewer?: string;
+  reviewerContext?: GovernanceActor;
+  note?: string;
+  decision?: ApprovalDecision;
+  execution?: ApprovalExecution;
+  result?: unknown;
+  error?: string;
+  reviewedAt?: string;
+  executedAt?: string;
+};
+
+export type ApprovalTransitionResult =
+  | { ok: true; approval: ApprovalDocument }
+  | { ok: false; reason: 'not_found' }
+  | { ok: false; reason: 'conflict'; approval: ApprovalDocument };
+
+/** The only approval status writer. Status and its evidence event share one CAS update. */
+export async function transitionApproval(input: {
+  id: string;
+  expectedStatus: ApprovalStatus;
+  nextStatus: ApprovalStatus;
+  actor: string;
+  eventType: string;
+  eventMessage: string;
+  patch?: ApprovalTransitionPatch;
+}): Promise<ApprovalTransitionResult> {
+  if (!ALLOWED_TRANSITIONS[input.expectedStatus].includes(input.nextStatus)) {
+    throw new Error(`APPROVAL_TRANSITION_NOT_ALLOWED:${input.expectedStatus}:${input.nextStatus}`);
+  }
   const docs = await collection();
   const now = new Date().toISOString();
   const result = await docs.findOneAndUpdate(
-    { id },
-    { $set: { status, reviewer, updatedAt: now, ...patch } },
+    { id: input.id, status: input.expectedStatus },
+    ({
+      $set: { status: input.nextStatus, updatedAt: now, ...input.patch },
+      $push: { events: { id: crypto.randomUUID(), timestamp: now, type: input.eventType, actor: input.actor, message: input.eventMessage } },
+    }) as Document,
     { returnDocument: 'after' }
   );
-  return normalizeApproval(result);
+  if (result) return { ok: true, approval: normalizeApproval(result) as ApprovalDocument };
+  const current = await docs.findOne({ id: input.id });
+  if (!current) return { ok: false, reason: 'not_found' };
+  return { ok: false, reason: 'conflict', approval: normalizeApproval(current) as ApprovalDocument };
 }
