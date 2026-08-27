@@ -45,6 +45,24 @@ export interface AuditLogRecord {
   error?: { code?: string; message?: string };
 }
 
+export type AuditListItem = Omit<AuditLogRecord, 'oldData' | 'newData' | 'metadata' | 'error'>;
+
+export interface AuditListResponse {
+  logs: AuditListItem[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  };
+  summary?: {
+    matched: number;
+    failed: number;
+    denied: number;
+    highRisk: number;
+  };
+}
+
 export interface WriteAuditInput {
   actor: GovernanceActor;
   module: string;
