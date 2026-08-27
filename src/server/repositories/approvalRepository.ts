@@ -102,10 +102,19 @@ export type CreateApprovalInput = {
 export type ListApprovalOptions = {
   limit?: number;
   maxLimit?: number;
+  page?: number;
+  pageSize?: number;
+  q?: string;
   status?: ApprovalStatus | 'all';
+  risk?: RiskLevel;
+  action?: ApprovalAction;
+  resourceType?: string;
+  resourceId?: string;
   requester?: string;
+  reviewer?: string;
   fromTime?: number | null;
   toTime?: number | null;
+  actor?: { user: string; canApprove: boolean };
 };
 
 type ApprovalSlaTone = 'ok' | 'warning' | 'danger';
@@ -233,13 +242,28 @@ export async function getPendingAccessRequest(requester: string): Promise<Approv
 export async function listApprovals(options: ListApprovalOptions = {}) {
   const docs = await collection();
   const maxLimit = Math.max(1, Math.min(Number(options.maxLimit || 200), 1000));
-  const limit = Math.max(1, Math.min(Number(options.limit || 100), maxLimit));
+  const requestedPageSize = options.pageSize ?? options.limit ?? 20;
+  const pageSize = Math.max(1, Math.min(Number(requestedPageSize), maxLimit));
+  const requestedPage = Math.max(1, Number(options.page || 1));
   const filter: Filter<StoredApprovalDocument> = {};
 
   if (options.status && options.status !== 'all') {
     filter.status = options.status === 'completed' ? { $in: ['completed', 'executed'] } : options.status;
   }
+  if (options.risk) filter.riskLevel = options.risk;
+  if (options.action) filter.action = options.action;
   if (options.requester) filter.requester = options.requester;
+  if (options.reviewer) filter.reviewer = options.reviewer;
+  if (options.resourceType) filter['operation.resourceType'] = options.resourceType;
+  if (options.resourceId) filter['operation.resourceId'] = options.resourceId;
+  if (options.q) {
+    const escaped = options.q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pattern = { $regex: escaped, $options: 'i' };
+    filter.$or = [
+      { changeId: pattern }, { id: pattern }, { title: pattern }, { summary: pattern },
+      { targetId: pattern }, { requester: pattern }, { reviewer: pattern }, { action: pattern },
+    ];
+  }
   if (options.fromTime !== null || options.toTime !== null) {
     filter.createdAt = {};
     if (options.fromTime !== null && options.fromTime !== undefined) filter.createdAt.$gte = new Date(options.fromTime).toISOString();
@@ -248,10 +272,27 @@ export async function listApprovals(options: ListApprovalOptions = {}) {
 
   const pendingFilter: Filter<StoredApprovalDocument> = { status: 'pending' };
   if (options.requester) pendingFilter.requester = options.requester;
-  const [approvals, total, pendingApprovals] = await Promise.all([
-    docs.find(filter).sort({ createdAt: -1 }).limit(limit).toArray(),
-    docs.countDocuments(filter),
+  const total = await docs.countDocuments(filter);
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const page = Math.min(requestedPage, totalPages);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const withFilter = (extra: Filter<StoredApprovalDocument>): Filter<StoredApprovalDocument> => ({ $and: [filter, extra] });
+  const canReviewFilter: Filter<StoredApprovalDocument> = withFilter({
+    status: 'pending',
+    $or: [
+      { riskLevel: { $in: ['low', 'medium'] } },
+      { riskLevel: { $in: ['high', 'critical'] }, requester: { $ne: options.actor?.user } },
+      { riskLevel: { $exists: false }, requester: { $ne: options.actor?.user } },
+    ],
+  });
+  const [approvals, pendingApprovals, awaiting, todayApproved, highRiskPending, canReview] = await Promise.all([
+    docs.find(filter).sort({ createdAt: -1 }).skip((page - 1) * pageSize).limit(pageSize).toArray(),
     docs.find(pendingFilter).project<Pick<StoredApprovalDocument, 'createdAt'>>({ createdAt: 1, _id: 0 }).toArray(),
+    docs.countDocuments(withFilter({ status: 'pending' })),
+    docs.countDocuments(withFilter({ 'decision.outcome': 'approved', 'decision.decidedAt': { $gte: today.toISOString() } })),
+    docs.countDocuments(withFilter({ status: 'pending', riskLevel: { $in: ['high', 'critical'] } })),
+    options.actor?.canApprove ? docs.countDocuments(canReviewFilter) : Promise.resolve(0),
   ]);
   const now = Date.now();
   const sla = pendingApprovals.reduce((acc, item) => {
@@ -262,7 +303,12 @@ export async function listApprovals(options: ListApprovalOptions = {}) {
     return acc;
   }, { ok: 0, warning: 0, danger: 0, oldestHours: 0 });
 
-  return { approvals: approvals.map((item) => normalizeApproval(item) as ApprovalDocument), total, pending: pendingApprovals.length, sla };
+  return {
+    approvals: approvals.map((item) => normalizeApproval(item) as ApprovalDocument),
+    pagination: { page, pageSize, total, totalPages },
+    summary: { canReview, awaiting, todayApproved, highRiskPending },
+    total, pending: pendingApprovals.length, sla,
+  };
 }
 
 export async function getApproval(id: string): Promise<ApprovalDocument | null> {
