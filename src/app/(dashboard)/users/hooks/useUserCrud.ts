@@ -179,8 +179,8 @@ export function useUserCrud(options: UseUserCrudOptions) {
     try {
       const response = await fetch(`/api/auth/users/${targetUser.username}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json", "X-Operation-Reason": reason },
-        body: JSON.stringify(payload),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...payload, reason }),
       });
       if (!response.ok) {
         setNotice({ type: "error", text: await readError(response, t("users_err_update")) });
@@ -262,7 +262,7 @@ export function useUserCrud(options: UseUserCrudOptions) {
     try {
       const response = await fetch(`/api/auth/users/${targetUser.username}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json", "X-Operation-Reason": confirmReason.trim() },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: pendingStatusChange.status, reason: confirmReason.trim() }),
       });
       if (!response.ok) {
@@ -352,8 +352,10 @@ export function useUserCrud(options: UseUserCrudOptions) {
       try {
         const response = await fetch(`/api/auth/users/${username}`, {
           method: "PUT",
-          headers: { "Content-Type": "application/json", "X-Operation-Reason": confirmReason.trim() },
-          body: JSON.stringify(action.action === 'assignRole' ? { role: action.role } : { status: action.action === 'enable' ? 'active' : 'disabled' }),
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(action.action === 'assignRole'
+            ? { role: action.role, reason: confirmReason.trim() }
+            : { status: action.action === 'enable' ? 'active' : 'disabled', reason: confirmReason.trim() }),
         });
         const reason = response.ok ? undefined : await readError(response, t("users_bulk_default_failure"));
         setBulkProgress((current) => current ? {

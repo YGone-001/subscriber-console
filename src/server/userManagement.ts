@@ -27,7 +27,8 @@ function snapshot(user?: UserDocument) {
 }
 
 /** Never pass a password/hash to audit, even before sanitization. */
-export async function userAudit(request: Request, operation: UserOperation, username: string, result: 'success' | 'failed' | 'denied', before?: UserDocument, after?: UserDocument, code?: string) {
+export async function userAudit(request: Request, operation: UserOperation, username: string, result: 'success' | 'failed' | 'denied', before?: UserDocument, after?: UserDocument, code?: string, bodyReason?: string) {
+  const context = auditRequestContext(request);
   return writeAuditLog({
     actor: { type: 'user', username: request.headers.get('x-user') || 'unknown', role: request.headers.get('x-user-role') || undefined },
     module: 'users', action: `user.${operation}`, result, resource: { type: 'user', id: username },
@@ -35,7 +36,8 @@ export async function userAudit(request: Request, operation: UserOperation, user
       before: operation === 'role.change' && before ? { role: before.role } : snapshot(before),
       after: operation === 'role.change' && after ? { role: after.role } : snapshot(after), metadata: code ? { code } : undefined,
     }),
-    ...auditRequestContext(request),
+    ...context,
+    reason: bodyReason?.trim().slice(0, 1000) || context.reason,
   }, { failureMode: result === 'success' ? 'strict' : 'best-effort' });
 }
 
