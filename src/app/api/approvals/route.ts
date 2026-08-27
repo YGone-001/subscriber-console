@@ -61,6 +61,11 @@ export async function POST(request: Request) {
       requester: user.username,
       targetId: user.username,
       summary: 'Request viewer to operator access',
+      title: 'Request viewer to operator access',
+      operation: { resourceType: 'user', resourceId: user.username },
+      reason,
+      before: { role: 'viewer', status: user.status },
+      after: { role: 'operator', status: user.status },
       payload: {
         currentRole: 'viewer',
         requestedRole: 'operator',

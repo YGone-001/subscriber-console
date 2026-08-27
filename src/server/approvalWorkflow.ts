@@ -66,6 +66,7 @@ async function currentActor(auth: AuthContext): Promise<GovernanceActor> {
 }
 
 async function auditTransition(request: Request, action: string, before: ApprovalDocument, after: ApprovalDocument, actor: GovernanceActor, reason?: string) {
+  const context = auditRequestContext(request);
   try {
     await writeAuditLog({
       actor,
@@ -76,10 +77,10 @@ async function auditTransition(request: Request, action: string, before: Approva
       approvalId: after.id,
       riskLevel: after.riskLevel,
       result: 'success',
-      reason,
       before: { status: before.status },
       after: { status: after.status, event: after.events.at(-1) },
-      ...auditRequestContext(request),
+      ...context,
+      reason: reason || context.reason,
     }, { failureMode: 'strict' });
   } catch {
     // The in-document event is already durable. Never attempt an unsafe cross-collection rollback.
