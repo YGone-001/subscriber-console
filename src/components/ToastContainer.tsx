@@ -19,7 +19,6 @@ function ToastCard({ toast, onDismiss }: { toast: ToastItem; onDismiss: () => vo
         setProgress((prev) => {
           if (prev <= step) {
             clearInterval(timer);
-            onDismiss();
             return 0;
           }
           return prev - step;
@@ -29,6 +28,10 @@ function ToastCard({ toast, onDismiss }: { toast: ToastItem; onDismiss: () => vo
 
     return () => clearInterval(timer);
   }, [toast.duration, paused, onDismiss]);
+
+  useEffect(() => {
+    if (progress <= 0) onDismiss();
+  }, [progress, onDismiss]);
 
   const iconMap = {
     critical: <AlertOctagon size={19} className="toast-icon critical" />,

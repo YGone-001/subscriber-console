@@ -1,0 +1,63 @@
+.console { display: grid; gap: 20px; padding-bottom: 32px; }
+.notice { padding: 12px 14px; border: 1px solid var(--surface-border); border-radius: var(--ref-radius-control); background: var(--surface); }
+.notice[data-tone="success"] { border-color: var(--success); color: var(--success); }
+.notice[data-tone="error"], .error { color: var(--danger); }
+.filters { padding: 16px; display: grid; grid-template-columns: minmax(280px, 2fr) repeat(3, minmax(140px, 1fr)) auto; gap: 8px; align-items: center; }
+.filters select, .filters input, .search { min-height: 42px; border: 1px solid var(--surface-border); border-radius: var(--ref-radius-control); background: var(--surface); color: var(--text-main); }
+.filters select, .filters input { padding: 0 12px; width: 100%; }
+.search { display: flex; align-items: center; gap: 8px; padding: 0 12px; }
+.search input { min-width: 0; border: 0; padding: 0; outline: 0; background: transparent; }
+.search:focus-within { box-shadow: var(--focus-ring); }
+.more { grid-column: 1 / -1; }
+.more > summary { min-height: 38px; display: flex; align-items: center; cursor: pointer; color: var(--text-secondary); font-weight: 700; }
+.more > div { padding-top: 10px; display: grid; grid-template-columns: repeat(6, minmax(140px, 1fr)); gap: 10px; }
+.more label { display: grid; gap: 5px; color: var(--text-secondary); font-size: var(--ref-font-size-label); font-weight: 700; }
+.tableCard { overflow: hidden; }
+.tableScroll { overflow-x: auto; }
+.table { width: 100%; }
+.table tbody tr { cursor: pointer; }
+.table tbody tr:focus-visible { box-shadow: inset var(--focus-ring); }
+.table td { vertical-align: middle; }
+.table td > strong, .table td > small { display: block; }
+.table td small { margin-top: 4px; color: var(--text-muted); }
+.table code, .detailSection code { font-family: var(--font-data); overflow-wrap: anywhere; }
+.loading { min-height: 180px; display: grid; place-items: center; color: var(--text-muted); }
+.rowActions, .drawerActions > div { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.rowActions :global(.btn) { min-height: 36px; padding: 6px 10px; }
+.drawerLayer, .modalLayer { position: fixed; inset: 0; z-index: 1200; display: flex; justify-content: flex-end; background: var(--overlay-scrim); }
+.drawer { width: min(880px, 100vw); height: 100%; display: flex; flex-direction: column; background: var(--surface); border-left: 1px solid var(--surface-border); box-shadow: var(--shadow-drawer); }
+.drawerHeader, .modalHeader { min-height: 84px; padding: 16px 20px; border-bottom: 1px solid var(--surface-border); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.drawerHeader span, .modalHeader span { color: var(--text-muted); font-size: var(--ref-font-size-label); font-weight: 800; letter-spacing: .12em; }
+.drawerHeader h2, .modalHeader h2 { margin: 4px 0 0; font-family: var(--font-data); }
+.drawerHeader button, .modalHeader button { min-width: 44px; min-height: 44px; border: 0; border-radius: var(--ref-radius-control); display: grid; place-items: center; color: var(--text-secondary); background: transparent; }
+.drawerBody { flex: 1; overflow-y: auto; padding: 20px; display: grid; align-content: start; gap: 16px; }
+.detailSection { padding: 16px; border: 1px solid var(--surface-border); border-radius: var(--ref-radius-soft-panel); background: var(--surface); }
+.detailSection h3 { margin: 0 0 12px; font-size: var(--ref-font-size-body-small); color: var(--text-secondary); }
+.lead > div { display: flex; gap: 8px; flex-wrap: wrap; }
+.lead h3 { margin: 12px 0 6px; color: var(--text-main); font-size: var(--ref-font-size-heading); }
+.lead p, .detailSection p { color: var(--text-secondary); }
+.detailGrid { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.detailGrid dt { margin-bottom: 4px; color: var(--text-muted); font-size: var(--ref-font-size-label); }
+.detailGrid dd { margin: 0; overflow-wrap: anywhere; }
+.sectionHeading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.sectionHeading h3 { margin: 0; }
+.modalLayer { z-index: 1300; justify-content: center; align-items: center; padding: 20px; }
+.modal { width: min(560px, 100%); max-height: calc(100vh - 40px); overflow-y: auto; border: 1px solid var(--surface-border); border-radius: var(--ref-radius-soft-panel); background: var(--surface); box-shadow: var(--shadow-drawer); }
+.modalBody { padding: 20px; display: grid; gap: 14px; }
+.modalBody label { display: grid; gap: 8px; font-weight: 700; }
+.modalBody textarea { width: 100%; resize: vertical; padding: 12px; border: 1px solid var(--surface-border); border-radius: var(--ref-radius-control); color: var(--text-main); background: var(--background); }
+.critical { display: flex; align-items: flex-start; gap: 10px; padding: 12px; border-radius: var(--ref-radius-control); border: 1px solid var(--warning); color: var(--text-main); background: color-mix(in srgb, var(--warning) 10%, transparent); }
+.modalFooter { padding: 14px 20px 20px; display: flex; justify-content: flex-end; gap: 8px; }
+@media (max-width: 1180px) { .filters { grid-template-columns: minmax(240px, 2fr) repeat(2, minmax(140px, 1fr)); } .more > div { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 760px) {
+  .filters, .more > div { grid-template-columns: 1fr; }
+  .search, .more { grid-column: auto; }
+  .table thead { display: none; }
+  .table tbody, .table tr, .table td { display: block; width: 100%; }
+  .table tr { padding: 12px; border-bottom: 1px solid var(--surface-border); }
+  .table td { display: grid; grid-template-columns: minmax(110px, 36%) 1fr; gap: 10px; padding: 7px 0; border: 0; }
+  .table td::before { content: attr(data-label); color: var(--text-muted); font-weight: 700; }
+  .detailGrid { grid-template-columns: 1fr; }
+  .drawerBody { padding: 12px; }
+}
+@media (prefers-reduced-motion: reduce) { .drawer, .modal { animation: none; } }

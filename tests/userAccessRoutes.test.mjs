@@ -77,6 +77,8 @@ const approvalsRouteSource = readFileSync(new URL('../src/app/api/approvals/rout
 const approvalAuditRouteSource = readFileSync(new URL('../src/app/api/approvals/[id]/audit/route.ts', import.meta.url), 'utf8');
 const approvalExecutorSource = readFileSync(new URL('../src/server/approvalExecutors.ts', import.meta.url), 'utf8');
 const approvalReviewRouteSource = readFileSync(new URL('../src/app/api/approvals/[id]/route.ts', import.meta.url), 'utf8');
+const approvalWorkflowSource = readFileSync(new URL('../src/server/approvalWorkflow.ts', import.meta.url), 'utf8');
+const approvalExecutionSource = readFileSync(new URL('../src/server/approvalExecution.ts', import.meta.url), 'utf8');
 const rolePageSource = readFileSync(new URL('../src/app/(dashboard)/roles/page.tsx', import.meta.url), 'utf8');
 const userRouteSource = readFileSync(new URL('../src/app/api/auth/users/[username]/route.ts', import.meta.url), 'utf8');
 
@@ -156,16 +158,17 @@ test('self-service access requests are viewer-only, deduplicated, approved by Ro
   assert.match(approvalExecutorSource, /logAudit/);
 });
 
-test('approval audit trails are available to the requester without widening the audit log boundary', () => {
-  assert.match(approvalAuditRouteSource, /requireAuth/);
-  assert.match(approvalAuditRouteSource, /!isSuperAdmin\(auth\.auth\.role\) && approval\.requester !== auth\.auth\.user/);
+test('approval audit trails use the dedicated approval read boundary', () => {
+  assert.match(approvalAuditRouteSource, /requirePermission\(request, 'approvals\.read'\)/);
   assert.doesNotMatch(approvalAuditRouteSource, /requireCapability\(request, 'user_admin'\)/);
   assert.match(approvalAuditRouteSource, /listAuditLogsForApproval/);
 });
 
-test('change review uses independent capabilities and explicitly blocks self-review', () => {
-  assert.match(approvalReviewRouteSource, /requireCapability\(request, 'approval_review'\)/);
-  assert.match(approvalReviewRouteSource, /requireCapability\(request, 'approval_execute'\)/);
-  assert.match(approvalReviewRouteSource, /approval\.requester === auth\.auth\.user/);
+test('change review and execution use independent permissions and maker-checker policy', () => {
+  assert.match(approvalReviewRouteSource, /approvals\.approve/);
+  assert.match(approvalWorkflowSource, /requiresIndependentReviewer/);
+  assert.match(approvalWorkflowSource, /approval\.requester === actor\.user/);
+  assert.match(approvalExecutionSource, /approvalActionEligibility/);
+  assert.match(approvalExecutionSource, /nextStatus: 'executing'/);
   assert.doesNotMatch(approvalReviewRouteSource, /requireCapability\(request, 'user_admin'\)/);
 });

@@ -7,7 +7,6 @@ import {
   getApproval,
   transitionApproval,
   type ApprovalDocument,
-  type ApprovalStatus,
 } from '@/server/repositories/approvalRepository';
 import type { AuthContext } from '@/lib/authz';
 import type { GovernanceActor } from '@/types/governance';
@@ -57,7 +56,9 @@ export function approvalActionEligibility(approval: ApprovalDocument, actor: { u
 }
 
 function cleanOptionalText(value: unknown, max = 1000): string | undefined {
-  return typeof value === 'string' && value.trim() ? value.trim().slice(0, max) : undefined;
+  const text = typeof value === 'string' ? value.trim() : '';
+  if (text.length > max) throw new ApprovalWorkflowError('APPROVAL_TEXT_TOO_LONG', 400);
+  return text || undefined;
 }
 
 async function currentActor(auth: AuthContext): Promise<GovernanceActor> {

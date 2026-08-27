@@ -1,5 +1,6 @@
-import ApprovalCenterPanel from "@/components/users/ApprovalCenterPanel";
+import { Suspense } from 'react';
+import { ApprovalConsole } from './ApprovalConsole';
 
 export default function ApprovalsPage() {
-  return <ApprovalCenterPanel />;
+  return <Suspense fallback={<div className="container">Loading approvals…</div>}><ApprovalConsole /></Suspense>;
 }

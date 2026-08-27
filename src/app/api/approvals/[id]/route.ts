@@ -1,9 +1,20 @@
 import { requirePermission } from '@/lib/authz';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import { approveChange, rejectChange, workflowErrorResponse } from '@/server/approvalWorkflow';
+import { approvalActionEligibility } from '@/server/approvalWorkflow';
+import { getApproval } from '@/server/repositories/approvalRepository';
 
 export const dynamic = 'force-dynamic';
 type RouteContext = { params: Promise<{ id: string }> };
+
+export async function GET(request: Request, { params }: RouteContext) {
+  const auth = requirePermission(request, 'approvals.read');
+  if (!auth.ok) return auth.response;
+  const { id } = await params;
+  const approval = await getApproval(id);
+  if (!approval) return Response.json({ error: 'APPROVAL_NOT_FOUND', code: 'APPROVAL_NOT_FOUND' }, { status: 404 });
+  return Response.json({ approval: { ...approval, actions: approvalActionEligibility(approval, auth.auth) } });
+}
 
 /** Compatibility wrapper. New clients use the explicit approve/reject endpoints. */
 export async function POST(request: Request, { params }: RouteContext) {
