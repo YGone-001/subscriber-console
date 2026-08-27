@@ -302,6 +302,7 @@ export async function transitionApproval(input: {
   actor: string;
   eventType: string;
   eventMessage: string;
+  expectedExecutionId?: string;
   patch?: ApprovalTransitionPatch;
 }): Promise<ApprovalTransitionResult> {
   if (!ALLOWED_TRANSITIONS[input.expectedStatus].includes(input.nextStatus)) {
@@ -310,7 +311,7 @@ export async function transitionApproval(input: {
   const docs = await collection();
   const now = new Date().toISOString();
   const result = await docs.findOneAndUpdate(
-    { id: input.id, status: input.expectedStatus },
+    { id: input.id, status: input.expectedStatus, ...(input.expectedExecutionId ? { 'execution.id': input.expectedExecutionId } : {}) },
     ({
       $set: { status: input.nextStatus, updatedAt: now, ...input.patch },
       $push: { events: { id: crypto.randomUUID(), timestamp: now, type: input.eventType, actor: input.actor, message: input.eventMessage } },

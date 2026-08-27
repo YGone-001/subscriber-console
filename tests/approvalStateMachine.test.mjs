@@ -83,3 +83,59 @@ test('state machine rejects unlisted transitions before storage', async () => {
   const { repository } = repositoryWith([item]);
   await assert.rejects(transition(repository, item, 'completed'), /APPROVAL_TRANSITION_NOT_ALLOWED/);
 });
+
+function executionService(state, accountRole = 'viewer') {
+  const repository = {
+    async getApproval(id) { return state.approval.id === id ? structuredClone(state.approval) : null; },
+    async transitionApproval(input) {
+      if (state.approval.id !== input.id) return { ok: false, reason: 'not_found' };
+      if (state.approval.status !== input.expectedStatus || (input.expectedExecutionId && state.approval.execution?.id !== input.expectedExecutionId)) {
+        return { ok: false, reason: 'conflict', approval: structuredClone(state.approval) };
+      }
+      state.approval = {
+        ...state.approval, ...input.patch, status: input.nextStatus,
+        events: [...state.approval.events, { id: crypto.randomUUID(), timestamp: new Date().toISOString(), type: input.eventType, actor: input.actor, message: input.eventMessage }],
+      };
+      return { ok: true, approval: structuredClone(state.approval) };
+    },
+  };
+  return loadModule('src/server/approvalExecution.ts', {
+    '@/lib/audit': { writeAuditLog: async () => true },
+    '@/lib/audit/record': { auditRequestContext: () => ({}) },
+    '@/lib/accountSession': { validateCurrentAccount: async ({ username, role }) => ({ userId: username, username, role }) },
+    '@/server/approvalExecutors': { executeApproval: async () => ({}) },
+    '@/server/approvalWorkflow': {
+      ApprovalWorkflowError: class extends Error {},
+      approvalActionEligibility: (item) => ({ canExecute: item.status === 'approved' }),
+    },
+    '@/server/repositories/approvalRepository': repository,
+    '@/server/repositories/userRepository': { getUser: async () => ({ role: accountRole, status: 'active' }) },
+  });
+}
+
+test('two execute requests claim once and invoke the executor exactly once', async () => {
+  const state = { approval: approval('approved') };
+  const service = executionService(state);
+  let invocations = 0;
+  const executor = { async execute() { invocations += 1; return { safe: true }; } };
+  const request = new Request('https://ops.test/api/approvals/a/execute');
+  const auth = { user: 'reviewer', role: 'root', sessionVersion: 0 };
+  const outcomes = await Promise.allSettled([
+    service.executeApprovedChange(request, state.approval.id, auth, executor),
+    service.executeApprovedChange(request, state.approval.id, auth, executor),
+  ]);
+  assert.equal(invocations, 1);
+  assert.equal(outcomes.filter((item) => item.status === 'fulfilled').length, 1);
+  assert.equal(outcomes.filter((item) => item.status === 'rejected' && item.reason.code === 'APPROVAL_STATE_CONFLICT').length, 1);
+  assert.equal(state.approval.status, 'completed');
+});
+
+test('execution preconditions detect live-state drift and configured maintenance windows', async () => {
+  const changedState = { approval: { ...approval('approved'), before: { role: 'viewer' } } };
+  const changedService = executionService(changedState, 'operator');
+  await assert.rejects(changedService.validateExecutionPrecondition(changedState.approval), { code: 'APPROVAL_PRECONDITION_CHANGED' });
+
+  const outside = { ...approval('approved'), maintenanceWindow: { start: '2026-08-27T01:00:00.000Z', end: '2026-08-27T02:00:00.000Z' } };
+  const windowService = executionService({ approval: outside });
+  await assert.rejects(windowService.validateExecutionPrecondition(outside, new Date('2026-08-27T03:00:00.000Z')), { code: 'OUTSIDE_MAINTENANCE_WINDOW' });
+});
