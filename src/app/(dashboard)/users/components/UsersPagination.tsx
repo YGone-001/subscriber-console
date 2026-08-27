@@ -14,7 +14,7 @@ export function UsersPagination({ pageSize, setPageSize, setPage, safePage, page
         <select
           className="form-input"
           value={pageSize}
-          onChange={(event) => { setPageSize(Number(event.target.value)); setPage(1); }}
+          onChange={(event) => setPageSize(Number(event.target.value))}
         >
           {PAGE_SIZE_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
         </select>

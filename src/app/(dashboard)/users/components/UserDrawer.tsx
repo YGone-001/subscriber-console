@@ -20,7 +20,7 @@ import styles from "./UserDrawer.module.css";
 const DETAIL_TABS: Array<{ key: DetailTab; labelKey: string }> = [
   { key: "basic", labelKey: "users_detail_tab_basic" },
   { key: "permissions", labelKey: "users_detail_tab_permissions" },
-  { key: "login", labelKey: "users_detail_tab_login" },
+  { key: "login", labelKey: "users_security_state" },
   { key: "activity", labelKey: "users_detail_tab_activity" },
 ];
 
@@ -113,7 +113,7 @@ export function UserDrawer(props: UserDrawerProps) {
                 <button type="button" className="btn btn-outline" onClick={() => props.openDetails(selectedUser)} disabled={props.savingAction === `update:${selectedUser.username}`}><X size={15} />{t("cancel")}</button>
                 <button type="button" className="btn btn-primary" onClick={() => void props.handleUpdate()} disabled={props.savingAction === `update:${selectedUser.username}`}>{props.savingAction === `update:${selectedUser.username}` ? <span className="spinner" /> : <Save size={15} />}{t("save")}</button>
               </>
-            ) : selectedUser ? (
+            ) : selectedUser && props.canManage(selectedUser, 'update') ? (
               <button type="button" className="btn btn-primary" onClick={() => props.startEdit(selectedUser)}><Settings size={15} />{t("edit")}</button>
             ) : null}
           </footer>

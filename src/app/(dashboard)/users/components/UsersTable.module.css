@@ -49,7 +49,7 @@
 
 .table {
   width: 100%;
-  min-width: 1180px;
+  min-width: 960px;
   border-collapse: separate;
   border-spacing: 0;
   font-size: var(--ref-font-size-body-support);

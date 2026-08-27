@@ -53,6 +53,8 @@ export type NewUserForm = {
 };
 
 export type EditUserForm = {
+  displayName: string;
+  email: string;
   role: RoleKey;
   status: UserStatus;
   password: string;
@@ -105,6 +107,8 @@ export const DEFAULT_NEW_FORM: NewUserForm = {
 };
 
 export const DEFAULT_EDIT_FORM: EditUserForm = {
+  displayName: "",
+  email: "",
   role: "operator",
   status: "active",
   password: "",

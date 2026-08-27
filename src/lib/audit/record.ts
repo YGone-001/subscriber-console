@@ -1,8 +1,8 @@
 import type { AuditLogRecord, WriteAuditInput } from '@/types/audit';
 import { sanitizeAuditPayload, sanitizeAuditText } from './sanitize';
 
-function optionalText(value: string | undefined): string | undefined {
-  return value === undefined ? undefined : sanitizeAuditText(value);
+function optionalText(value: unknown): string | undefined {
+  return typeof value === 'string' ? sanitizeAuditText(value) : undefined;
 }
 
 function safeObject(value: unknown): Record<string, unknown> | undefined {

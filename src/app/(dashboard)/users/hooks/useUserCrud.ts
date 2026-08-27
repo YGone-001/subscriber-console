@@ -1,8 +1,9 @@
 import { useRef, useState, type Dispatch, type SetStateAction } from "react";
-import type { KeyedMutator } from "swr";
 import type { I18nContextType } from "@/components/I18nProvider";
 import { toCsvRow } from "@/lib/csv";
-import { isProtectedSystemUser } from "@/lib/userAccessManagement";
+import { handleSessionExpiry } from '@/lib/fetcher';
+import { isPasswordStrong } from '@/lib/security';
+import type { UserOperation } from '@/lib/userManagementPolicy';
 import {
   USERNAME_PATTERN,
   VALID_ROLES,
@@ -22,8 +23,7 @@ import {
 } from "../types";
 import { normalizeRole, normalizeStatus } from "../utils";
 
-type UsersResponse = { users: SysUser[] };
-type UpdatePayload = { role?: RoleKey; status?: UserStatus; password?: string };
+type UpdatePayload = { displayName?: string; email?: string; role?: RoleKey; status?: UserStatus; password?: string };
 
 interface UseUserCrudOptions {
   users: SysUser[];
@@ -40,11 +40,13 @@ interface UseUserCrudOptions {
   resetNewForm: () => void;
   setSelectedUsernames: Dispatch<SetStateAction<string[]>>;
   bulkRole: RoleKey;
-  mutate: KeyedMutator<UsersResponse>;
+  mutate: () => Promise<unknown>;
+  canManage: (user: SysUser, operation: UserOperation) => boolean;
   t: I18nContextType["t"];
 }
 
 async function readError(response: Response, fallback: string) {
+  handleSessionExpiry(response.status);
   try {
     const body = await response.json() as { error?: string };
     return body.error || fallback;
@@ -59,7 +61,6 @@ export function useUserCrud(options: UseUserCrudOptions) {
     filteredUsers,
     selectedUsers,
     mutableSelectedUsers,
-    currentUsername,
     selectedUser,
     newForm,
     editForm,
@@ -83,7 +84,7 @@ export function useUserCrud(options: UseUserCrudOptions) {
   const usernameCheckRequestRef = useRef(0);
   const bulkCancelRef = useRef(false);
 
-  const isProtectedUser = (targetUser: SysUser) => isProtectedSystemUser(targetUser, currentUsername);
+  const isProtectedUser = (targetUser: SysUser) => !options.canManage(targetUser, 'disable');
 
   const resetConfirmState = () => {
     setConfirmReason("");
@@ -94,9 +95,10 @@ export function useUserCrud(options: UseUserCrudOptions) {
 
   const getCreateError = () => {
     if (!USERNAME_PATTERN.test(newForm.username.trim())) return t("users_err_username");
+    if (!newForm.displayName.trim()) return t('users_err_display_name');
     if (users.some((item) => item.username.toLowerCase() === newForm.username.trim().toLowerCase())) return t("users_username_taken");
     if (newForm.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newForm.email.trim())) return t("users_err_email");
-    if (newForm.password.length < 8) return t("users_err_password");
+    if (!isPasswordStrong(newForm.password, newForm.username.trim())) return t("users_err_password");
     if (newForm.confirmPassword !== newForm.password) return t("users_err_password_match");
     if (!VALID_ROLES.includes(newForm.role)) return t("users_err_role");
     return "";
@@ -117,12 +119,11 @@ export function useUserCrud(options: UseUserCrudOptions) {
     usernameCheckRequestRef.current = requestId;
     setUsernameAvailability("checking");
     try {
-      const response = await fetch("/api/auth/users", { cache: "no-store" });
+      const response = await fetch(`/api/users/${encodeURIComponent(normalizedUsername)}`, { cache: "no-store" });
+      if (response.status === 404) { if (usernameCheckRequestRef.current === requestId) setUsernameAvailability('available'); return; }
       if (!response.ok) throw new Error(await readError(response, t("users_username_check_error")));
-      const body = await response.json() as UsersResponse;
       if (usernameCheckRequestRef.current !== requestId) return;
-      const taken = body.users.some((item) => item.username.toLowerCase() === normalizedUsername.toLowerCase());
-      setUsernameAvailability(taken ? "taken" : "available");
+      setUsernameAvailability('taken');
     } catch (requestError) {
       console.error(requestError);
       if (usernameCheckRequestRef.current === requestId) setUsernameAvailability("error");
@@ -132,7 +133,7 @@ export function useUserCrud(options: UseUserCrudOptions) {
   const getEditError = () => {
     if (!VALID_ROLES.includes(editForm.role)) return t("users_err_role");
     if (!VALID_STATUS.includes(editForm.status)) return t("users_err_status");
-    if (editForm.password && editForm.password.length < 8) return t("users_err_password");
+    if (editForm.password && !isPasswordStrong(editForm.password, selectedUser?.username)) return t("users_err_password");
     return "";
   };
 
@@ -212,7 +213,12 @@ export function useUserCrud(options: UseUserCrudOptions) {
       setNotice({ type: "error", text: t("users_err_protected_status") });
       return;
     }
-    const payload: UpdatePayload = { role: editForm.role, status: editForm.status };
+    const payload: UpdatePayload = {};
+    if (roleChanged) payload.role = editForm.role;
+    if (statusChanged) payload.status = editForm.status;
+    if (editForm.displayName !== (selectedUser.displayName || '')) payload.displayName = editForm.displayName;
+    if (editForm.email !== (selectedUser.email || '')) payload.email = editForm.email;
+    if (!Object.keys(payload).length && !editForm.password) return;
     if (editForm.password) payload.password = editForm.password;
     if (roleChanged || statusChanged || editForm.password) {
       setPendingUpdate({
@@ -231,7 +237,7 @@ export function useUserCrud(options: UseUserCrudOptions) {
 
   const handlePasswordReset = async () => {
     if (!selectedUser) return;
-    if (editForm.password.length < 8) {
+    if (!isPasswordStrong(editForm.password, selectedUser.username)) {
       setNotice({ type: "error", text: t("users_err_password") });
       return;
     }
@@ -257,7 +263,7 @@ export function useUserCrud(options: UseUserCrudOptions) {
       const response = await fetch(`/api/auth/users/${targetUser.username}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json", "X-Operation-Reason": confirmReason.trim() },
-        body: JSON.stringify({ role: normalizeRole(targetUser.role), status: pendingStatusChange.status }),
+        body: JSON.stringify({ status: pendingStatusChange.status, reason: confirmReason.trim() }),
       });
       if (!response.ok) {
         setNotice({ type: "error", text: await readError(response, t("users_err_update")) });
@@ -347,10 +353,7 @@ export function useUserCrud(options: UseUserCrudOptions) {
         const response = await fetch(`/api/auth/users/${username}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json", "X-Operation-Reason": confirmReason.trim() },
-          body: JSON.stringify({
-            role: action.action === "assignRole" ? action.role || normalizeRole(targetUser.role) : normalizeRole(targetUser.role),
-            status: action.action === "enable" ? "active" : action.action === "disable" ? "disabled" : normalizeStatus(targetUser.status),
-          }),
+          body: JSON.stringify(action.action === 'assignRole' ? { role: action.role } : { status: action.action === 'enable' ? 'active' : 'disabled' }),
         });
         const reason = response.ok ? undefined : await readError(response, t("users_bulk_default_failure"));
         setBulkProgress((current) => current ? {

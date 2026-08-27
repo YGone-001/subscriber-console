@@ -1,13 +1,13 @@
 import { useI18n } from "@/components/I18nProvider";
 import { PasswordField } from "@/components/iam/PasswordField";
 import { Info } from "lucide-react";
-import { VALID_ROLES, type RoleKey } from "../types";
+import { type RoleKey } from "../types";
 import { PasswordStrengthBar } from "./PasswordStrengthBar";
 import { UsernameField } from "./UsernameField";
 import type { UserDrawerProps } from "./types";
 import styles from "./UserDrawer.module.css";
 
-type UserCreateFormProps = Pick<UserDrawerProps, "newForm" | "setNewForm" | "newPasswordVisible" | "setNewPasswordVisible" | "newConfirmPasswordVisible" | "setNewConfirmPasswordVisible" | "handleCreate" | "savingAction" | "usernameAvailability" | "checkUsernameAvailability" | "resetUsernameAvailability">;
+type UserCreateFormProps = Pick<UserDrawerProps, "newForm" | "setNewForm" | "newPasswordVisible" | "setNewPasswordVisible" | "newConfirmPasswordVisible" | "setNewConfirmPasswordVisible" | "handleCreate" | "savingAction" | "usernameAvailability" | "checkUsernameAvailability" | "resetUsernameAvailability" | "assignableRoles">;
 
 export function UserCreateForm(props: UserCreateFormProps) {
   const { t } = useI18n();
@@ -22,12 +22,12 @@ export function UserCreateForm(props: UserCreateFormProps) {
           onCheck={props.checkUsernameAvailability}
           onResetAvailability={props.resetUsernameAvailability}
         />
-        <label><span>{t("users_display_name")} <small>{t("users_optional")}</small></span><input type="text" className="form-input" value={props.newForm.displayName} onChange={(event) => props.setNewForm((current) => ({ ...current, displayName: event.target.value }))} autoComplete="name" /></label>
+        <label><span>{t("users_display_name")} *</span><input type="text" required maxLength={100} className="form-input" value={props.newForm.displayName} onChange={(event) => props.setNewForm((current) => ({ ...current, displayName: event.target.value }))} autoComplete="name" /></label>
         <label><span>{t("users_email")} <small>{t("users_optional")}</small></span><input type="email" className="form-input" value={props.newForm.email} onChange={(event) => props.setNewForm((current) => ({ ...current, email: event.target.value }))} autoComplete="email" /></label>
       </section>
       <section className={styles.formSection}>
         <h3>{t("users_form_role")}</h3>
-        <label><span>{t("users_role")}</span><select className="form-input" value={props.newForm.role} onChange={(event) => props.setNewForm((current) => ({ ...current, role: event.target.value as RoleKey }))}>{VALID_ROLES.map((role) => <option key={role} value={role}>{t(`users_${role}`)}</option>)}</select></label>
+        <label><span>{t("users_role")} *</span><select className="form-input" value={props.newForm.role} onChange={(event) => props.setNewForm((current) => ({ ...current, role: event.target.value as RoleKey }))}>{props.assignableRoles.map((role) => <option key={role} value={role}>{t(`users_${role}`)}</option>)}</select></label>
         <p className={styles.roleHint}><Info size={16} /><span><strong>{t(`users_${props.newForm.role}`)}</strong>{t(`roles_desc_${props.newForm.role}`)}</span></p>
       </section>
       <section className={styles.formSection}>

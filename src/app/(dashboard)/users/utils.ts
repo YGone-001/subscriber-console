@@ -1,4 +1,6 @@
 import { type CreatedFilter, type RoleFilter, type StatusFilter, type BinaryFilter, type RoleKey, type UserStatus, VALID_ROLES, VALID_STATUS, PAGE_SIZE_OPTIONS, SORT_KEYS, type SortKey, type SortDirection, SORT_DIRECTIONS } from "./types";
+import { normalizeGovernanceRole } from '@/lib/permissions';
+import { formatGovernanceTime } from '@/lib/governance/display';
 
 export function isRoleKey(value: string): value is RoleKey {
   return VALID_ROLES.includes(value as RoleKey);
@@ -33,7 +35,9 @@ export function isSortDirection(value: string | null): value is SortDirection {
 }
 
 export function normalizeRole(value: string): RoleKey {
-  return isRoleKey(value) ? value : "viewer";
+  const role = normalizeGovernanceRole(value);
+  if (!role) throw new Error('UNKNOWN_ROLE');
+  return role === 'super_admin' ? 'root' : role;
 }
 
 export function normalizeStatus(value: string | undefined): UserStatus {
@@ -46,14 +50,11 @@ export function normalizePageSize(value: string | null): number {
 }
 
 export function formatDateTime(value?: string) {
-  if (!value) return "--";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "--";
-  return date.toLocaleString();
+  return formatGovernanceTime(value || '');
 }
 
 export function displayValue(value?: string) {
-  return value?.trim() || "--";
+  return value?.trim() || "—";
 }
 
 export function matchesCreatedFilter(createdAt: string, filter: CreatedFilter) {

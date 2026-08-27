@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/authz';
 import { enforceRateLimit } from '@/lib/rateLimit';
+import { isSuperAdmin } from '@/lib/permissions';
 import { listAuditLogsForApproval } from '@/server/repositories/auditRepository';
 import { getApproval } from '@/server/repositories/approvalRepository';
 
@@ -21,7 +22,7 @@ export async function GET(request: Request, { params }: RouteContext) {
   const { id } = await params;
   const approval = await getApproval(id);
   if (!approval) return NextResponse.json({ error: 'Approval request not found' }, { status: 404 });
-  if (auth.auth.role !== 'root' && approval.requester !== auth.auth.user) {
+  if (!isSuperAdmin(auth.auth.role) && approval.requester !== auth.auth.user) {
     return NextResponse.json({ error: 'Forbidden: Approval audit trail is limited to the requester' }, { status: 403 });
   }
 

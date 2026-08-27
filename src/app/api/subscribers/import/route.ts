@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { logAudit } from '@/lib/audit';
 import { requireCapability } from '@/lib/authz';
 import { enforceRateLimit } from '@/lib/rateLimit';
+import { isSuperAdmin } from '@/lib/permissions';
 import { createApprovalRequest } from '@/server/repositories/approvalRepository';
 import {
   importSubscribersFromRecords,
@@ -57,7 +58,7 @@ export async function POST(request: Request) {
       if (!validation.ok) return NextResponse.json({ error: validation.error }, { status: 400 });
       await validateImportPlanIds(validation.value);
 
-      if (auth.auth.role !== 'root') {
+      if (!isSuperAdmin(auth.auth.role)) {
         const approval = await createApprovalRequest({
           action: 'SUBSCRIBER_IMPORT',
           requester: auth.auth.user,

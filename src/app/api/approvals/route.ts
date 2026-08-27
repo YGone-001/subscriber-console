@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { logAudit } from '@/lib/audit';
 import { requireAuth } from '@/lib/authz';
 import { enforceRateLimit } from '@/lib/rateLimit';
+import { isSuperAdmin } from '@/lib/permissions';
 import { getUser } from '@/server/repositories/userRepository';
 import { createApprovalRequest, getPendingAccessRequest, isApprovalStatus, listApprovals } from '@/server/repositories/approvalRepository';
 
@@ -18,7 +19,7 @@ export async function GET(request: Request) {
   const rawStatus = searchParams.get('status') || 'all';
   const status = rawStatus === 'all' || isApprovalStatus(rawStatus) ? rawStatus : 'all';
   const limit = Number(searchParams.get('limit') || 100);
-  const requester = auth.auth.role === 'root' ? searchParams.get('requester') || undefined : auth.auth.user;
+  const requester = isSuperAdmin(auth.auth.role) ? searchParams.get('requester') || undefined : auth.auth.user;
 
   try {
     return NextResponse.json(await listApprovals({ status, limit, requester }));

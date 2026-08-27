@@ -1,4 +1,5 @@
 import type { Dispatch, SetStateAction } from "react";
+import type { UserOperation } from '@/lib/userManagementPolicy';
 import type {
   AuditLogResponse,
   BulkAction,
@@ -21,6 +22,7 @@ import type {
 } from "../types";
 
 export interface UsersToolbarProps {
+  clearFilters: () => void;
   searchInput: string;
   updateSearchQuery: (value: string) => void;
   roleFilter: RoleFilter;
@@ -30,6 +32,11 @@ export interface UsersToolbarProps {
 }
 
 export interface UsersTableProps {
+  total: number;
+  totalUsers: number;
+  canCreate: boolean;
+  assignableRoles: RoleKey[];
+  canManage: (user: SysUser, operation: UserOperation) => boolean;
   selectedUsernames: string[];
   mutableSelectedCount: number;
   requestBulkAction: (action: BulkAction) => void;
@@ -67,6 +74,8 @@ export interface UsersTableProps {
 }
 
 export interface UserDrawerProps {
+  assignableRoles: RoleKey[];
+  canManage: (user: SysUser, operation: UserOperation) => boolean;
   notice: Notice | null;
   setNotice: Dispatch<SetStateAction<Notice | null>>;
   savingAction: string | null;

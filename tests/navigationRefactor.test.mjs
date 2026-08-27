@@ -39,7 +39,8 @@ test('navigation uses one permission-aware registry with longest-prefix matching
   const sidebarContent = readFileSync(sidebarPath, 'utf8');
   const commandContent = readFileSync(commandPalettePath, 'utf8');
 
-  assert.match(registryContent, /allowedRoles:\s*\["root"\]/);
+  assert.match(registryContent, /permission: 'users.read'/);
+  assert.match(registryContent, /hasPermission/);
   assert.match(registryContent, /sort\(\(left, right\) => right\.path\.length - left\.path\.length\)/);
   assert.match(registryContent, /pathname\.startsWith\(`\$\{routePath\}\/`\)/);
   assert.match(tabBarContent, /resolveNavigationRoute/);

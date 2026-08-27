@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { logAudit } from '@/lib/audit';
 import { requireCapability } from '@/lib/authz';
 import { enforceRateLimit } from '@/lib/rateLimit';
+import { isSuperAdmin } from '@/lib/permissions';
 import { createApprovalRequest } from '@/server/repositories/approvalRepository';
 import { createSubscribersBatch } from '@/server/repositories/subscriberRepository';
 import { getTariffPlan } from '@/server/repositories/ocsBillingRepository';
@@ -25,7 +26,7 @@ export async function POST(request: Request) {
     if (!plan) return NextResponse.json({ error: 'Tariff plan not found' }, { status: 404 });
     if (plan.status === 'disabled') return NextResponse.json({ error: 'Tariff plan is disabled' }, { status: 409 });
 
-    if (auth.auth.role !== 'root') {
+    if (!isSuperAdmin(auth.auth.role)) {
       const approval = await createApprovalRequest({
         action: 'SUBSCRIBER_BATCH_CREATE',
         requester: auth.auth.user,

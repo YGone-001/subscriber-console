@@ -1,4 +1,5 @@
 "use client";
+import { Suspense } from 'react';
 import { UsersSummaryPanel } from "./components/UsersSummaryPanel";
 import { UsersToolbar } from "./components/UsersToolbar";
 import { UsersTable } from "./components/UsersTable";
@@ -9,11 +10,12 @@ import { useUsersPage } from "./hooks/useUsersPage";
 import PageHeader from "@/components/ui/PageHeader";
 import styles from "./users.module.css";
 
-export default function UsersPage() {
+function UsersConsole() {
   const {
-    isRoot,
-    users,
-    statusCounts,
+    canRead,
+    canCreate,
+    authLoading,
+    stats,
     openCreateDrawer,
     t,
     toolbarProps,
@@ -21,7 +23,8 @@ export default function UsersPage() {
     tableProps
   } = useUsersPage();
 
-    if (!isRoot) {
+    if (authLoading) return <div className="container" aria-busy="true">{t('loading')}</div>;
+    if (!canRead) {
     return (
       <div className="container animate-fade-in">
         <div className={styles.accessPanel}>
@@ -43,16 +46,13 @@ export default function UsersPage() {
           icon={<Shield size={23} />}
           title={t("users_title")}
           description={t("users_subtitle")}
-          actions={<button type="button" className="btn btn-primary" onClick={openCreateDrawer}>
+          actions={canCreate ? <button type="button" className="btn btn-primary" onClick={openCreateDrawer}>
             <Plus size={17} />
             {t("users_new")}
-          </button>}
+          </button> : null}
         />
 
-        <UsersSummaryPanel
-          usersCount={users.length}
-          statusCounts={statusCounts as { active: number; disabled: number; }}
-        />
+        <UsersSummaryPanel stats={stats} />
 
         <section className={styles.tablePanel}>
           <UsersToolbar {...toolbarProps} />
@@ -66,4 +66,8 @@ export default function UsersPage() {
       <UserDrawer {...drawerProps} />
           </>
   );
+}
+
+export default function UsersPage() {
+  return <Suspense><UsersConsole /></Suspense>;
 }

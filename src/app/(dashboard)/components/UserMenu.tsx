@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { User, ChevronRight, Settings, HelpCircle, LogOut } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { useAuth } from "@/hooks/useAuth";
+import { normalizeGovernanceRole } from '@/lib/permissions';
 
 export default function UserMenu() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -13,7 +14,8 @@ export default function UserMenu() {
   const { user, isRoot } = useAuth();
 
   const displayName = user?.username || "xCloud";
-  const roleLabel = user?.role || "viewer";
+  const normalizedRole = normalizeGovernanceRole(user?.role);
+  const roleLabel = normalizedRole ? t(`users_${normalizedRole}`) : '—';
 
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });

@@ -49,8 +49,8 @@ export function UserConfirmDialogs(props: UserConfirmDialogsProps) {
           presentation="modal"
           tone={props.pendingStatusChange.status === "disabled" ? "warning" : "info"}
           title={t("users_status_confirm", { username: props.pendingStatusChange.username })}
-          message={t(props.pendingStatusChange.status === "disabled" ? "users_status_disable_desc" : "users_status_enable_desc")}
-          confirmLabel={props.pendingStatusChange.status === "disabled" ? t("users_disable_account") : t("users_enable_account")}
+          message={t(props.pendingStatusChange.status === 'locked' ? 'users_lock_desc' : props.pendingStatusChange.status === "disabled" ? "users_status_disable_desc" : "users_status_enable_desc")}
+          confirmLabel={props.pendingStatusChange.status === 'locked' ? t('users_lock_account') : props.pendingStatusChange.status === "disabled" ? t("users_disable_account") : t("users_enable_account")}
           cancelLabel={t("cancel")}
           isWorking={props.savingAction === `status:${props.pendingStatusChange.username}`}
           confirmDisabled={props.confirmReason.trim().length < 3}

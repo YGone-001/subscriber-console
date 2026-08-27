@@ -22,7 +22,8 @@ function sensitiveKey(key: string): boolean {
 }
 
 /** Scrub recognizable credentials in free text; arbitrary prose is not a secret detector. */
-export function sanitizeAuditText(value: string): string {
+export function sanitizeAuditText(value: unknown): string {
+  if (typeof value !== 'string') return '';
   return value.slice(0, MAX_STRING * 2)
     .replace(/-----BEGIN [^-]*PRIVATE KEY-----[\s\S]*?(?:-----END [^-]*PRIVATE KEY-----|$)/g, REDACTED)
     .replace(/\b(?:Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+/gi, REDACTED)
