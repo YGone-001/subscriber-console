@@ -228,7 +228,7 @@ test('audit repository is append-only, scrubs at the storage boundary and makes 
   assert.doesNotMatch(read('src/server/repositories/auditRepository.ts'), /deleteOne|deleteMany|updateOne|updateMany|replaceOne/);
 });
 
-test('audit viewing, bulk export, change review, and execution use separate capabilities', () => {
+test('audit viewing, bulk export, change review, and execution use separate permissions and endpoints', () => {
   const viewRoute = read('src/app/api/audit/route.ts');
   const auditExportRoute = read('src/app/api/audit/export/route.ts');
   const exportRoute = read('src/app/api/approvals/export/route.ts');
@@ -238,6 +238,10 @@ test('audit viewing, bulk export, change review, and execution use separate capa
   assert.match(auditExportRoute, /requireCapability\(request, 'audit_export'/);
   assert.match(auditExportRoute, /requirePermission\(request, 'audit\.export'\)/);
   assert.match(exportRoute, /requireCapability\(request, 'audit_export'/);
-  assert.match(reviewRoute, /requireCapability\(request, 'approval_review'\)/);
-  assert.match(reviewRoute, /requireCapability\(request, 'approval_execute'\)/);
+  const approveRoute = read('src/app/api/approvals/[id]/approve/route.ts');
+  const executePath = read('src/server/approvalWorkflow.ts');
+  assert.match(reviewRoute, /INVALID_DECISION/);
+  assert.match(approveRoute, /requirePermission\(request, 'approvals\.approve'\)/);
+  assert.doesNotMatch(approveRoute, /executeApproval/);
+  assert.match(executePath, /approvals\.execute/);
 });
