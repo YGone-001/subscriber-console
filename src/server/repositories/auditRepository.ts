@@ -79,6 +79,23 @@ export async function getAuditLog(id: string): Promise<AuditLogRecord | null> {
   return log ? sanitizeAuditRecord(log) : null;
 }
 
+export class AuditExportTooLargeError extends Error {
+  constructor(public readonly matched: number, public readonly limit: number) {
+    super(`Audit export matched ${matched} rows, exceeding the ${limit} row limit`);
+    this.name = 'AuditExportTooLargeError';
+  }
+}
+
+export async function exportAuditLogs(query: AuditQuery, maxRows: number): Promise<{ logs: AuditLogRecord[]; matched: number }> {
+  const docs = await collection();
+  const filter = buildAuditFilter(query) as Filter<StoredAuditLog>;
+  const matched = await docs.countDocuments(filter);
+  if (matched > maxRows) throw new AuditExportTooLargeError(matched, maxRows);
+  const logs = await docs.find(filter).sort({ timestamp: -1 }).limit(maxRows + 1).toArray();
+  if (logs.length > maxRows) throw new AuditExportTooLargeError(logs.length, maxRows);
+  return { logs: logs.map(sanitizeAuditRecord), matched };
+}
+
 export async function listAuditLogsForApproval(approvalId: string) {
   const docs = await collection();
   const filter = {

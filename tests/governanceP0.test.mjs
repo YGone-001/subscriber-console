@@ -230,10 +230,13 @@ test('audit repository is append-only, scrubs at the storage boundary and makes 
 
 test('audit viewing, bulk export, change review, and execution use separate capabilities', () => {
   const viewRoute = read('src/app/api/audit/route.ts');
+  const auditExportRoute = read('src/app/api/audit/export/route.ts');
   const exportRoute = read('src/app/api/approvals/export/route.ts');
   const reviewRoute = read('src/app/api/approvals/[id]/route.ts');
 
   assert.match(viewRoute, /requireCapability\(request, 'audit_view'\)/);
+  assert.match(auditExportRoute, /requireCapability\(request, 'audit_export'/);
+  assert.match(auditExportRoute, /requirePermission\(request, 'audit\.export'\)/);
   assert.match(exportRoute, /requireCapability\(request, 'audit_export'/);
   assert.match(reviewRoute, /requireCapability\(request, 'approval_review'\)/);
   assert.match(reviewRoute, /requireCapability\(request, 'approval_execute'\)/);
