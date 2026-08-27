@@ -216,6 +216,7 @@ test('audit repository is append-only, scrubs at the storage boundary and makes 
       },
     }) },
     '@/lib/audit/record': recordHelpers,
+    '@/lib/auditQuery': { buildAuditFilter: () => ({}) },
     '@/lib/tariffPlanOperations': { buildTariffPlanAuditFilter: () => ({}) },
   });
   const record = recordHelpers.createAuditRecord(event());

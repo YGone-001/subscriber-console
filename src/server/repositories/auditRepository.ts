@@ -1,75 +1,16 @@
 import { Filter, MongoServerError, ObjectId } from 'mongodb';
 import { getAppCollection, mongoCollections } from '@/lib/mongo';
-import type { AuditAction, AuditLogRecord } from '@/types/audit';
+import type { AuditLogRecord, AuditListResponse } from '@/types/audit';
 import { sanitizeAuditRecord } from '@/lib/audit/record';
 import { buildTariffPlanAuditFilter as buildTariffPlanAuditFilterBase } from '@/lib/tariffPlanOperations';
+import { buildAuditFilter, type AuditQuery } from '@/lib/auditQuery';
 
 export type { AuditLogRecord } from '@/types/audit';
 
 type StoredAuditLog = AuditLogRecord & { _id: ObjectId | string };
 
-type AuditQuery = {
-  action?: string;
-  target?: string;
-  operator?: string;
-  level?: string;
-  query?: string;
-  fromTime?: number | null;
-  toTime?: number | null;
-  limit: number;
-};
-
 function collection() {
   return getAppCollection<StoredAuditLog>(mongoCollections.auditLogs);
-}
-
-function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function queryFilter(input: AuditQuery): Filter<StoredAuditLog> {
-  const filter: Filter<StoredAuditLog> = {};
-
-  if (input.action && input.action !== 'ALL') filter.action = input.action as AuditAction;
-  if (input.level && input.level !== 'ALL') filter.level = input.level as 'info' | 'warning';
-  if (input.target) filter.targetId = { $regex: escapeRegex(input.target) };
-  if (input.operator) {
-    const operatorRegex = { $regex: escapeRegex(input.operator), $options: 'i' };
-    filter.$or = [{ actor: operatorRegex }, { operatorIp: operatorRegex }];
-  }
-
-  if (input.fromTime !== null || input.toTime !== null) {
-    filter.timestamp = {};
-    if (input.fromTime !== null && input.fromTime !== undefined) {
-      filter.timestamp.$gte = new Date(input.fromTime).toISOString();
-    }
-    if (input.toTime !== null && input.toTime !== undefined) {
-      filter.timestamp.$lte = new Date(input.toTime).toISOString();
-    }
-  }
-
-  if (input.query) {
-    const regex = { $regex: escapeRegex(input.query), $options: 'i' };
-    const queryMatches: Filter<StoredAuditLog>[] = [
-      { id: regex },
-      { action: regex },
-      { level: regex },
-      { targetId: regex },
-      { actor: regex },
-      { operatorIp: regex },
-      { correlationId: regex },
-      { approvalId: regex },
-      { timestamp: regex },
-    ];
-    if (filter.$or) {
-      filter.$and = [{ $or: filter.$or }, { $or: queryMatches }];
-      delete filter.$or;
-    } else {
-      filter.$or = queryMatches;
-    }
-  }
-
-  return filter;
 }
 
 export function buildTariffPlanAuditFilter(planId: string): Filter<StoredAuditLog> {
@@ -89,19 +30,20 @@ export async function appendAuditLog(log: AuditLogRecord) {
   }
 }
 
-export async function listAuditLogs(query: AuditQuery) {
+export async function listAuditLogs(query: AuditQuery): Promise<AuditListResponse> {
   const docs = await collection();
-  const filter = queryFilter(query);
-  const [logs, filteredTotal, totalScanned] = await Promise.all([
-    docs.find(filter).sort({ timestamp: -1 }).limit(query.limit).toArray(),
+  const filter = buildAuditFilter(query) as Filter<StoredAuditLog>;
+  const [logs, total] = await Promise.all([
+    docs.find(filter).sort({ timestamp: -1 }).skip((query.page - 1) * query.pageSize).limit(query.pageSize).toArray(),
     docs.countDocuments(filter),
-    docs.countDocuments({}),
   ]);
-
+  const totalPages = Math.max(1, Math.ceil(total / query.pageSize));
   return {
-    logs: logs.map(sanitizeAuditRecord),
-    filteredTotal,
-    totalScanned,
+    logs: logs.map(sanitizeAuditRecord).map(({ oldData, newData, metadata, error, ...summary }) => {
+      void oldData; void newData; void metadata; void error;
+      return summary;
+    }),
+    pagination: { page: Math.min(query.page, totalPages), pageSize: query.pageSize, total, totalPages },
   };
 }
 
