@@ -3,6 +3,8 @@ import { auditRequestContext } from '@/lib/audit/record';
 import { validateCurrentAccount } from '@/lib/accountSession';
 import { executeApproval } from '@/server/approvalExecutors';
 import { executeFrozenSubscriberBatchChange, SubscriberBatchGovernanceError } from '@/server/subscriberOperationPolicy';
+import { executeFrozenSubscriberDelete, executeFrozenSubscriberUpdate, SubscriberGovernanceError } from '@/server/subscriberSingleGovernance';
+import { assertGovernedOperationCoverage } from '@/server/subscriberGovernanceRegistry';
 import { approvalActionEligibility, ApprovalWorkflowError } from '@/server/approvalWorkflow';
 import { getApproval, transitionApproval, type ApprovalDocument } from '@/server/repositories/approvalRepository';
 import { getUser } from '@/server/repositories/userRepository';
@@ -39,9 +41,43 @@ const defaultExecutor: GovernedApprovalExecutor = {
       }
       return result;
     }
-    throw new ApprovalExecutionError('APPROVAL_EXECUTOR_NOT_ENABLED', 409);
+    if (approval.action === 'SUBSCRIBER_UPDATE' || approval.action === 'SUBSCRIBER_DELETE') {
+      const result = approval.action === 'SUBSCRIBER_UPDATE'
+        ? await executeFrozenSubscriberUpdate(approval.payload)
+        : await executeFrozenSubscriberDelete(approval.payload);
+      const action = approval.action === 'SUBSCRIBER_UPDATE' ? 'subscriber.update' : 'subscriber.delete';
+      try {
+        await writeAuditLog({
+          actor: actor || { type: 'system', userId: 'system', username: 'system' }, module: 'subscribers', action,
+          resource: { type: 'subscriber', id: approval.targetId, name: approval.targetId }, targetId: approval.targetId,
+          approvalId: approval.id, riskLevel: approval.riskLevel, result: 'success', reason: approval.reason,
+          before: approval.before, after: approval.action === 'SUBSCRIBER_UPDATE' ? approval.after : null,
+          metadata: { executionId: approval.execution?.id, operationFingerprint: approval.operationFingerprint }, ...auditRequestContext(request),
+        }, { failureMode: 'strict' });
+      } catch {
+        throw new ApprovalExecutionError('AUDIT_UNAVAILABLE', 503, approval, false, { mutationCommitted: true });
+      }
+      return result;
+    }
+    // Legacy subscriber provisioning, import and bulk-delete actions remain
+    // executable while their routes are migrated to frozen payloads.  A CHG
+    // must never be creatable merely because this switch forgot its executor.
+    return executeApproval(approval, request);
   },
 };
+
+/** Exported for architecture tests and invoked at module load: every automatic
+ * subscriber approval action is backed by this production executor. */
+export const automaticSubscriberExecutorActions = [
+  'SUBSCRIBER_UPDATE', 'SUBSCRIBER_DELETE', 'SUBSCRIBER_BATCH_CREATE',
+  'SUBSCRIBER_BATCH_UPDATE', 'SUBSCRIBER_IMPORT', 'SUBSCRIBER_IMPORT_OVERWRITE',
+  'SUBSCRIBER_BULK_DELETE',
+] as const;
+
+export function assertSubscriberApprovalExecutorCoverage() {
+  assertGovernedOperationCoverage(automaticSubscriberExecutorActions);
+}
+assertSubscriberApprovalExecutorCoverage();
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};

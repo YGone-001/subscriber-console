@@ -201,6 +201,17 @@ export async function executeApproval(approval: ApprovalDocument, request: Reque
     if (!validation.ok) throw new Error(validation.error);
     const payload = validation.value;
 
+    const frozen = asRecord(approval.payload);
+    const expectedAbsentImsis = Array.isArray(frozen.expectedAbsentImsis)
+      ? frozen.expectedAbsentImsis.map((imsi) => String(imsi))
+      : [];
+    if (frozen.version === 'subscriber-batch-create-v1') {
+      if (expectedAbsentImsis.length !== payload.count) throw new Error('INVALID_SUBSCRIBER_BATCH_CREATE_PAYLOAD');
+      const { precheckSubscriberImsis } = await import('@/server/repositories/subscriberRepository');
+      const precheck = await precheckSubscriberImsis(expectedAbsentImsis);
+      if (precheck.some((item) => item.exists)) throw new Error('SUBSCRIBER_CREATE_PRECONDITION_CHANGED');
+    }
+
     const result = await createSubscribersBatch({
       startImsi: payload.startImsi,
       count: payload.count,
@@ -210,7 +221,7 @@ export async function executeApproval(approval: ApprovalDocument, request: Reque
       smsBalance: payload.smsBalance,
       profileName: payload.profileName,
       planId: payload.planId,
-      strategy: payload.strategy,
+      strategy: 'skip',
     });
     const { createdImsis, skippedImsis, failedImsis, metrics } = result;
 
@@ -231,10 +242,13 @@ export async function executeApproval(approval: ApprovalDocument, request: Reque
       );
     }
 
+    if (frozen.version === 'subscriber-batch-create-v1' && (result.createdImsis.length !== payload.count || result.skippedImsis.length > 0 || result.failedImsis.length > 0)) {
+      throw new Error('SUBSCRIBER_BATCH_CREATE_PARTIAL_WRITE');
+    }
     return result;
   }
 
-  if (approval.action === 'SUBSCRIBER_IMPORT') {
+  if (approval.action === 'SUBSCRIBER_IMPORT' || approval.action === 'SUBSCRIBER_IMPORT_OVERWRITE') {
     const payload = asRecord(approval.payload);
     const validation = validateImportRecords(payload.records);
     if (!validation.ok) throw new Error(validation.error);

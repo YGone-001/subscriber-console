@@ -5,6 +5,9 @@ import { enforceRateLimit } from '@/lib/rateLimit';
 import { createApprovalRequest } from '@/server/repositories/approvalRepository';
 import { getTariffPlan } from '@/server/repositories/ocsBillingRepository';
 import { validateBatchCreatePayload } from '@/lib/subscriberValidation';
+import { precheckSubscriberRange } from '@/server/repositories/subscriberRepository';
+import { createHash } from 'node:crypto';
+import { evaluateSubscriberOperation, SUBSCRIBER_OPERATIONS } from '@/server/subscriberGovernanceRegistry';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,18 +27,36 @@ export async function POST(request: Request) {
     if (!plan) return NextResponse.json({ error: 'Tariff plan not found' }, { status: 404 });
     if (plan.status === 'disabled') return NextResponse.json({ error: 'Tariff plan is disabled' }, { status: 409 });
 
+    const policy = evaluateSubscriberOperation(SUBSCRIBER_OPERATIONS.BATCH_CREATE);
+    if (!policy.executable) return NextResponse.json({ error: 'OPERATION_NOT_EXECUTABLE' }, { status: 409 });
+    const precheck = await precheckSubscriberRange(payload.startImsi, payload.count);
+    if (precheck.conflictCount > 0) {
+      return NextResponse.json({ error: 'SUBSCRIBER_CREATE_PRECONDITION_CHANGED', conflictCount: precheck.conflictCount, conflictImsis: precheck.conflictImsis.slice(0, 20) }, { status: 409 });
+    }
+    const frozenPayload = {
+      version: 'subscriber-batch-create-v1' as const,
+      ...payload,
+      // Approval execution is create-only regardless of a legacy UI's
+      // overwrite selection. Existing subscriptions are never replaced.
+      strategy: 'skip' as const,
+      expectedAbsentImsis: Array.from({ length: payload.count }, (_, index) => (BigInt(payload.startImsi) + BigInt(index)).toString()),
+    };
+    const operationFingerprint = createHash('sha256').update(JSON.stringify({ action: 'SUBSCRIBER_BATCH_CREATE', targets: frozenPayload.expectedAbsentImsis, payload: { ...payload, strategy: 'create-only' } })).digest('hex');
+
     // High-risk batch writes never have a root/super-admin direct-execution path.
     const approval = await createApprovalRequest({
       action: 'SUBSCRIBER_BATCH_CREATE',
       requester: auth.auth.user,
       targetId: `subscriber:batch:${payload.startImsi}`,
       summary: `Batch create ${payload.count} subscriber(s) from ${payload.startImsi}`,
-      payload,
+      payload: frozenPayload,
+      operation: { resourceType: 'subscriber_batch', resourceId: payload.startImsi },
+      operationFingerprint,
     });
 
     logAudit('UPDATE', `approval:${approval.id}`, null, approval, request);
     return NextResponse.json(
-      { message: 'Approval required before batch subscriber creation', approval, requiresApproval: true },
+      { outcome: 'approval_required', message: 'Approval required before batch subscriber creation', approval, requiresApproval: true },
       { status: 202 }
     );
   } catch (error) {

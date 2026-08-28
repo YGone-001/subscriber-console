@@ -695,10 +695,11 @@ export function prepareSubscriberLegacyUpdate(
 
 export async function updateSubscriberFromLegacy(
   imsi: string,
-  payload: LegacySubscriberUpdatePayload
+  payload: LegacySubscriberUpdatePayload,
+  expectedDocument?: Open5gsSubscriberDocument
 ): Promise<Open5gsSubscriberDocument> {
   const collection = await subscribersCollection();
-  const existing = await collection.findOne({ imsi });
+  const existing = expectedDocument || await collection.findOne({ imsi });
   const { next, ocsTraffic, requestedPlanId, requestedMsisdn } = prepareSubscriberLegacyUpdate(
     imsi,
     payload,
@@ -717,11 +718,19 @@ export async function updateSubscriberFromLegacy(
     }
   }
 
-  await collection.replaceOne(
-    { imsi },
+  const expectedFilter = expectedDocument
+    ? (() => {
+        const filter = { ...expectedDocument } as Record<string, unknown>;
+        delete filter._id;
+        return filter;
+      })()
+    : { imsi };
+  const replacement = await collection.replaceOne(
+    expectedFilter,
     next as SubscriberDoc,
     { upsert: true }
   );
+  if (expectedDocument && replacement.matchedCount !== 1) throw new Error('SUBSCRIBER_UPDATE_PRECONDITION_CHANGED');
   await provisionOcsSubscriber({
     imsi,
     planId: ocsTraffic?.planId ?? ocsTraffic?.plan_id,
@@ -737,9 +746,16 @@ export async function updateSubscriberFromLegacy(
   return next;
 }
 
-export async function deleteSubscriber(imsi: string): Promise<boolean> {
+export async function deleteSubscriber(imsi: string, expectedDocument?: Open5gsSubscriberDocument): Promise<boolean> {
   const collection = await subscribersCollection();
-  const result = await collection.deleteOne({ imsi });
+  const filter = expectedDocument
+    ? (() => {
+        const value = { ...expectedDocument } as Record<string, unknown>;
+        delete value._id;
+        return value;
+      })()
+    : { imsi };
+  const result = await collection.deleteOne(filter);
   if (result.deletedCount > 0) await deleteOcsProvisioning(imsi);
   return result.deletedCount > 0;
 }

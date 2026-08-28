@@ -25,8 +25,13 @@ const RISK_CATALOG: Readonly<Record<ApprovalAction, RiskRule>> = {
   SYSTEM_HEAL: { level: 'high', reasons: ['Writes corrective state to a managed resource'] },
   SUBSCRIBER_BATCH_CREATE: { level: 'high', reasons: ['Creates multiple subscriber records'] },
   SUBSCRIBER_BATCH_UPDATE: { level: 'high', reasons: ['Changes live core subscriber access or AMBR settings in bulk'] },
-  SUBSCRIBER_IMPORT: { level: 'critical', reasons: ['Imports or overwrites multiple subscriber records'] },
+  SUBSCRIBER_CREATE: { level: 'medium', reasons: ['Creates a new subscriber record'] },
+  SUBSCRIBER_UPDATE: { level: 'high', reasons: ['Changes governed core subscriber configuration'] },
+  SUBSCRIBER_DELETE: { level: 'high', reasons: ['Physically deletes subscriber provisioning'] },
+  SUBSCRIBER_IMPORT: { level: 'high', reasons: ['Imports new subscriber records only'] },
+  SUBSCRIBER_IMPORT_OVERWRITE: { level: 'critical', reasons: ['Imports records that overwrite existing subscribers'] },
   SUBSCRIBER_BULK_DELETE: { level: 'critical', reasons: ['Deletes multiple subscriber records'] },
+  SUBSCRIBER_PROFILE_APPLY: { level: 'high', reasons: ['Applies a profile to live subscriber configuration'] },
 };
 
 export const APPROVAL_RISK_POLICY_ID = 'approval-risk-v1';

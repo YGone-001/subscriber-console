@@ -3,12 +3,12 @@ import { logAudit } from '@/lib/audit';
 import { requireAuth, requireCapability } from '@/lib/authz';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import {
-  deleteSubscriber,
   findSubscriberLegacyState,
-  updateSubscriberFromLegacy,
 } from '@/server/repositories/subscriberRepository';
-import { open5gsToLegacyState } from '@/lib/xcloudSubscriber';
 import { validateImsi, validateSubscriberUpdatePayload } from '@/lib/subscriberValidation';
+import { createApprovalRequest } from '@/server/repositories/approvalRepository';
+import { prepareFrozenSubscriberDelete, prepareFrozenSubscriberUpdate, SubscriberGovernanceError } from '@/server/subscriberSingleGovernance';
+import { evaluateSubscriberOperation, SUBSCRIBER_OPERATIONS } from '@/server/subscriberGovernanceRegistry';
 
 export const dynamic = 'force-dynamic';
 
@@ -52,17 +52,19 @@ export async function DELETE(request: Request, { params }: RouteContext) {
   if (!imsiResult.ok) return NextResponse.json({ error: imsiResult.error }, { status: 400 });
 
   try {
-    const oldState = await findSubscriberLegacyState(imsi);
-    const deleted = await deleteSubscriber(imsi);
-
-    if (!deleted) {
-      return NextResponse.json({ error: 'Subscriber not found' }, { status: 404 });
-    }
-
-    logAudit('DELETE', imsi, oldState, null, request);
-
-    return NextResponse.json({ message: 'Subscriber deleted successfully' });
+    const policy = evaluateSubscriberOperation(SUBSCRIBER_OPERATIONS.DELETE);
+    if (!policy.executable) return NextResponse.json({ error: 'OPERATION_NOT_EXECUTABLE' }, { status: 409 });
+    const frozen = await prepareFrozenSubscriberDelete(imsi);
+    const approval = await createApprovalRequest({
+      action: 'SUBSCRIBER_DELETE', requester: auth.auth.user, targetId: imsi,
+      summary: `Delete subscriber ${imsi}`, operation: { resourceType: 'subscriber', resourceId: imsi },
+      operationFingerprint: frozen.operationFingerprint, before: frozen.before,
+      payload: frozen as unknown as Record<string, unknown>,
+    });
+    logAudit('UPDATE', `approval:${approval.id}`, null, approval, request);
+    return NextResponse.json({ outcome: 'approval_required', message: 'Approval required before subscriber deletion', approval }, { status: 202 });
   } catch (error) {
+    if (error instanceof SubscriberGovernanceError && error.code === 'SUBSCRIBER_NOT_FOUND') return NextResponse.json({ error: 'Subscriber not found' }, { status: 404 });
     console.error('Error deleting subscriber:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
@@ -83,21 +85,26 @@ export async function PUT(request: Request, { params }: RouteContext) {
     const body = await request.json();
     const validation = validateSubscriberUpdatePayload(body);
     if (!validation.ok) return NextResponse.json({ error: validation.error }, { status: 400 });
-    const oldState = await findSubscriberLegacyState(imsi);
-    if (!oldState) {
-      return NextResponse.json({ error: 'Subscriber not found' }, { status: 404 });
-    }
-    const updated = await updateSubscriberFromLegacy(imsi, {
+    const policy = evaluateSubscriberOperation(SUBSCRIBER_OPERATIONS.UPDATE);
+    if (!policy.executable) return NextResponse.json({ error: 'OPERATION_NOT_EXECUTABLE' }, { status: 409 });
+    const frozen = await prepareFrozenSubscriberUpdate(imsi, {
       sub4G: body.sub4G,
       auth4G: body.auth4G,
       ocsTraffic: body.ocsTraffic,
     });
-    const newState = open5gsToLegacyState(updated);
-
-    logAudit('UPDATE', imsi, oldState, newState, request);
-
-    return NextResponse.json({ message: 'Subscriber updated successfully' });
+    const approval = await createApprovalRequest({
+      action: 'SUBSCRIBER_UPDATE', requester: auth.auth.user, targetId: imsi,
+      summary: `Update governed subscriber configuration for ${imsi}`,
+      operation: { resourceType: 'subscriber', resourceId: imsi }, operationFingerprint: frozen.operationFingerprint,
+      before: frozen.before, after: frozen.after, payload: frozen as unknown as Record<string, unknown>,
+    });
+    logAudit('UPDATE', `approval:${approval.id}`, null, approval, request);
+    return NextResponse.json({ outcome: 'approval_required', message: 'Approval required before subscriber update', approval }, { status: 202 });
   } catch (error) {
+    if (error instanceof SubscriberGovernanceError) {
+      const status = error.code === 'SUBSCRIBER_NOT_FOUND' ? 404 : error.code === 'SENSITIVE_SUBSCRIBER_CHANGE_NOT_SUPPORTED' ? 422 : 409;
+      return NextResponse.json({ error: error.code }, { status });
+    }
     if (error instanceof Error && error.message === 'INVALID_PLAN_ID') {
       return NextResponse.json({ error: 'Invalid plan_id format' }, { status: 400 });
     }
