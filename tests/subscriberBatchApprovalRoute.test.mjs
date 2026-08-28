@@ -60,3 +60,13 @@ test('legacy high-risk batch-create route no longer contains a super-admin direc
   assert.doesNotMatch(source, /isSuperAdmin|createSubscribersBatch/);
   assert.match(source, /requiresApproval:\s*true/);
 });
+
+test('subscriber batch UI previews a governed request and does not optimistically mutate the list', () => {
+  const modal = readFileSync(new URL('../src/components/SubscriberBatchUpdateModal.tsx', import.meta.url), 'utf8');
+  const page = readFileSync(new URL('../src/app/(dashboard)/subscribers/page.tsx', import.meta.url), 'utf8');
+  assert.match(modal, /\/api\/subscribers\/batch-update/);
+  assert.match(modal, /提交审批/);
+  assert.match(modal, /变更原因/);
+  assert.match(page, /订阅用户数据尚未修改/);
+  assert.doesNotMatch(modal, /mutateSubscribers|onRefresh/);
+});
