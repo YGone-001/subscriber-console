@@ -16,7 +16,7 @@ test('every subscriber mutation endpoint is classified by the canonical governan
     'POST /api/subscribers/policy': ['src/app/api/subscribers/policy/route.ts', 'APPROVAL_GOVERNED', "action: 'POLICY_CHANGE'"],
     'POST /api/subscribers/:imsi/traffic-adjustments': ['src/app/api/subscribers/[imsi]/traffic-adjustments/route.ts', 'APPROVAL_GOVERNED', 'OCS_OPERATIONS.BALANCE_ADJUST'],
   };
-  for (const [route, [path, _status, marker]] of Object.entries(routes)) {
+  for (const [route, [path, , marker]] of Object.entries(routes)) {
     assert.match(read(path), new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), route);
   }
 });

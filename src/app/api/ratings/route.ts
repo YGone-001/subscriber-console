@@ -33,6 +33,7 @@ export async function POST(request: Request) {
     const definition = evaluateOcsOperation(OCS_OPERATIONS.RATING_CREATE);
     const auth = requirePermission(request, definition.permission);
     if (!auth.ok) return auth.response;
+    if (!definition.executable) return NextResponse.json({ error: definition.disabledCode || 'OCS_RATING_CREATE_NOT_SUPPORTED', code: definition.disabledCode || 'OCS_RATING_CREATE_NOT_SUPPORTED' }, { status: 409 });
 
     const rateLimit = await enforceRateLimit(`ratings:create:${auth.auth.user}`, 20, 60);
     if (!rateLimit.ok) return rateLimit.response;

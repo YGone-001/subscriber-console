@@ -41,6 +41,7 @@ export async function PUT(request: Request, { params }: RouteContext) {
   const definition = evaluateOcsOperation(OCS_OPERATIONS.TARIFF_PLAN_UPDATE);
   const auth = requirePermission(request, definition.permission);
   if (!auth.ok) return auth.response;
+  if (!definition.executable) return NextResponse.json({ error: definition.disabledCode || 'OCS_OPERATION_NOT_SUPPORTED', code: definition.disabledCode || 'OCS_OPERATION_NOT_SUPPORTED' }, { status: 409 });
 
   const rateLimit = await enforceRateLimit(`tariff-plans:update:${auth.auth.user}`, 30, 60);
   if (!rateLimit.ok) return rateLimit.response;
@@ -77,6 +78,7 @@ export async function DELETE(request: Request, { params }: RouteContext) {
   const definition = evaluateOcsOperation(OCS_OPERATIONS.TARIFF_PLAN_DELETE);
   const auth = requirePermission(request, definition.permission);
   if (!auth.ok) return auth.response;
+  if (!definition.executable) return NextResponse.json({ error: definition.disabledCode || 'OCS_OPERATION_NOT_SUPPORTED', code: definition.disabledCode || 'OCS_OPERATION_NOT_SUPPORTED' }, { status: 409 });
 
   const rateLimit = await enforceRateLimit(`tariff-plans:delete:${auth.auth.user}`, 20, 60);
   if (!rateLimit.ok) return rateLimit.response;

@@ -20,6 +20,7 @@ export async function PUT(request: Request, { params }: RouteContext) {
   const definition = evaluateOcsOperation(OCS_OPERATIONS.TARIFF_RULE_UPDATE);
   const auth = requirePermission(request, definition.permission);
   if (!auth.ok) return auth.response;
+  if (!definition.executable) return NextResponse.json({ error: definition.disabledCode || 'OCS_OPERATION_NOT_SUPPORTED', code: definition.disabledCode || 'OCS_OPERATION_NOT_SUPPORTED' }, { status: 409 });
 
   const rateLimit = await enforceRateLimit(`tariff-plans:rules:update:${auth.auth.user}`, 30, 60);
   if (!rateLimit.ok) return rateLimit.response;
@@ -59,6 +60,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
   const definition = evaluateOcsOperation(OCS_OPERATIONS.TARIFF_RULE_TOGGLE);
   const auth = requirePermission(request, definition.permission);
   if (!auth.ok) return auth.response;
+  if (!definition.executable) return NextResponse.json({ error: definition.disabledCode || 'OCS_OPERATION_NOT_SUPPORTED', code: definition.disabledCode || 'OCS_OPERATION_NOT_SUPPORTED' }, { status: 409 });
 
   const rateLimit = await enforceRateLimit(`tariff-plans:rules:toggle:${auth.auth.user}`, 30, 60);
   if (!rateLimit.ok) return rateLimit.response;
@@ -92,6 +94,7 @@ export async function DELETE(request: Request, { params }: RouteContext) {
   const definition = evaluateOcsOperation(OCS_OPERATIONS.TARIFF_RULE_DELETE);
   const auth = requirePermission(request, definition.permission);
   if (!auth.ok) return auth.response;
+  if (!definition.executable) return NextResponse.json({ error: definition.disabledCode || 'OCS_OPERATION_NOT_SUPPORTED', code: definition.disabledCode || 'OCS_OPERATION_NOT_SUPPORTED' }, { status: 409 });
 
   const rateLimit = await enforceRateLimit(`tariff-plans:rules:delete:${auth.auth.user}`, 20, 60);
   if (!rateLimit.ok) return rateLimit.response;

@@ -194,7 +194,10 @@ export async function executeFrozenOcsBalanceAdjustment(input: unknown, context:
   }
 
   try {
-    await ledger.updateOne({ adjustmentId: frozen.adjustmentId, status: 'claimed' }, { $set: { status: 'completed', completedAt: new Date().toISOString(), after } });
+    const evidence = await ledger.updateOne({ adjustmentId: frozen.adjustmentId, status: 'claimed' }, { $set: { status: 'completed', completedAt: new Date().toISOString(), after } });
+    if (evidence.matchedCount !== 1 || evidence.modifiedCount !== 1) {
+      throw new Error('OCS_BALANCE_LEDGER_COMPLETION_CONFLICT');
+    }
   } catch {
     throw new OcsBalanceGovernanceError('OCS_BALANCE_EVIDENCE_PERSISTENCE_FAILURE', true, { adjustmentId: frozen.adjustmentId, before: frozen.before, after });
   }

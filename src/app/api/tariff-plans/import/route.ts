@@ -10,8 +10,10 @@ import { getTariffPlan } from '@/server/repositories/ocsBillingRepository';
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
-  const auth = requirePermission(request, evaluateOcsOperation(OCS_OPERATIONS.TARIFF_PLAN_CREATE).permission);
+  const definition = evaluateOcsOperation(OCS_OPERATIONS.TARIFF_PLAN_CREATE);
+  const auth = requirePermission(request, definition.permission);
   if (!auth.ok) return auth.response;
+  if (!definition.executable) return NextResponse.json({ error: definition.disabledCode || 'OCS_TARIFF_CREATE_NOT_SUPPORTED', code: definition.disabledCode || 'OCS_TARIFF_CREATE_NOT_SUPPORTED' }, { status: 409 });
   const rateLimit = await enforceRateLimit(`tariff-plans:import:${auth.auth.user}`, 15, 60);
   if (!rateLimit.ok) return rateLimit.response;
   try {

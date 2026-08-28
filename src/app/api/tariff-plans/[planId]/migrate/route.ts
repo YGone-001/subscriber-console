@@ -67,6 +67,7 @@ export async function POST(request: Request, { params }: RouteContext) {
   const definition = evaluateOcsOperation(OCS_OPERATIONS.PLAN_MIGRATE);
   const auth = requirePermission(request, definition.permission);
   if (!auth.ok) return auth.response;
+  if (!definition.executable) return NextResponse.json({ error: definition.disabledCode || 'OCS_PLAN_MIGRATION_NOT_SUPPORTED', code: definition.disabledCode || 'OCS_PLAN_MIGRATION_NOT_SUPPORTED' }, { status: 409 });
 
   const rateLimit = await enforceRateLimit(`tariff-plans:migrate:${auth.auth.user}`, 12, 60);
   if (!rateLimit.ok) return rateLimit.response;
