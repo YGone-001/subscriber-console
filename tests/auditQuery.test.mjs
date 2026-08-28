@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { loadModule } from './helpers/loadModule.mjs';
 import * as auditQueryModule from '../src/lib/auditQuery.ts';
 import * as auditSanitize from '../src/lib/audit/sanitize.ts';
+import * as permissions from '../src/lib/permissions.ts';
 import { MongoServerError } from 'mongodb';
 
 const auditQuery = loadModule('src/lib/auditQuery.ts', {});
@@ -71,6 +72,7 @@ test('audit repository returns first and last server pages with whole-filter sum
     }) },
     '@/lib/audit/record': recordHelpers,
     '@/lib/auditQuery': auditQueryModule,
+    '@/lib/permissions': permissions,
     '@/lib/tariffPlanOperations': { buildTariffPlanAuditFilter: () => ({}) },
   });
   const first = await repository.listAuditLogs({ page: 1, pageSize: 20 });
@@ -99,6 +101,7 @@ test('audit detail route validates canonical ids, returns sanitized legacy/new e
       requirePermission: () => allowed ? { ok: true, auth: { user: 'admin' } } : { ok: false, response: Response.json({}, { status: 403 }) },
     },
     '@/lib/auditQuery': auditQueryModule,
+    '@/lib/permissions': permissions,
     '@/lib/rateLimit': { enforceRateLimit: async () => ({ ok: true }) },
     '@/server/repositories/auditRepository': { getAuditLog: async () => log ? recordHelpers.sanitizeAuditRecord(log) : null },
   });

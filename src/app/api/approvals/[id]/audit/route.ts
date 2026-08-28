@@ -3,6 +3,7 @@ import { requirePermission } from '@/lib/authz';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import { listAuditLogsForApproval } from '@/server/repositories/auditRepository';
 import { getApproval } from '@/server/repositories/approvalRepository';
+import { hasPermission } from '@/lib/permissions';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,7 +26,9 @@ export async function GET(request: Request, { params }: RouteContext) {
   if (!rateLimit.ok) return rateLimit.response;
 
   try {
-    const logs = await listAuditLogsForApproval(id);
+    const logs = await listAuditLogsForApproval(id, {
+      revealSourceIp: hasPermission({ role: auth.auth.role }, 'audit.source-ip.read-full'),
+    });
     const lifecycle = logs.filter((log) => log.targetId === `approval:${id}`).length;
     const execution = logs.filter((log) => hasApprovalId(log.oldData, id) || hasApprovalId(log.newData, id)).length;
 

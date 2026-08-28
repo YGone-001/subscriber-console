@@ -6,6 +6,7 @@ import { AuditQueryError, parseAuditQuery, type AuditQuery } from '@/lib/auditQu
 import { requireCapability, requirePermission, type AuthContext } from '@/lib/authz';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import { AuditExportTooLargeError, exportAuditLogs } from '@/server/repositories/auditRepository';
+import { hasPermission } from '@/lib/permissions';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,8 +50,13 @@ export async function GET(request: Request) {
   try {
     format = formatParam(format);
     query = parseAuditQuery(searchParams);
+    const revealSourceIp = hasPermission({ role: permission.auth.role }, 'audit.source-ip.read-full');
+    if (query.sourceIp && !revealSourceIp) {
+      const sourceIpPermission = requirePermission(request, 'audit.source-ip.read-full');
+      if (!sourceIpPermission.ok) return sourceIpPermission.response;
+    }
     const maxRows = auditExportMaxRows();
-    const exported = await exportAuditLogs(query, maxRows);
+    const exported = await exportAuditLogs(query, maxRows, { revealSourceIp });
     const generatedAt = new Date().toISOString();
     await recordExport(request, legacy.auth, format, query, 'success', {
       matchedCount: exported.matched,

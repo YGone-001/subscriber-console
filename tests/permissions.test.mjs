@@ -49,6 +49,12 @@ test('governance permissions preserve root and separate operation, review and au
   assert.equal(hasPermission({ role: 'viewer' }, 'audit.export'), false);
   assert.equal(hasPermission({ role: 'auditor' }, 'core.operate'), false);
   assert.equal(hasPermission({ role: 'auditor' }, 'audit.export'), true);
+  assert.equal(hasPermission({ role: 'auditor' }, 'audit.source-ip.read-full'), true);
+  assert.equal(hasPermission({ role: 'root' }, 'audit.source-ip.read-full'), true);
+  assert.equal(hasPermission({ role: 'super_admin' }, 'audit.source-ip.read-full'), true);
+  assert.equal(hasPermission({ role: 'ops_admin' }, 'audit.source-ip.read-full'), false);
+  assert.equal(hasPermission({ role: 'operator' }, 'audit.source-ip.read-full'), false);
+  assert.equal(hasPermission({ role: 'viewer' }, 'audit.source-ip.read-full'), false);
   assert.equal(hasPermission({ role: 'operator' }, 'approvals.create'), true);
   assert.equal(hasPermission({ role: 'operator' }, 'approvals.approve'), false);
   assert.equal(hasPermission({ role: 'ops_admin' }, 'approvals.approve'), true);

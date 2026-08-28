@@ -69,6 +69,7 @@ test('audit export route records strict success/failure evidence and does not du
       AuditQueryError: class AuditQueryError extends Error {},
       parseAuditQuery: (params) => ({ page: 1, pageSize: 20, actor: params.get('actor') || undefined }),
     },
+    '@/lib/permissions': permissions,
     '@/lib/authz': {
       requireCapability: (request) => { guardCalls.push('capability'); const role = request.headers.get('x-user-role'); return role === 'auditor' ? { ok: true, auth: { user: 'audit_user', role, sessionVersion: 0 } } : { ok: false, response: Response.json({}, { status: 403 }) }; },
       requirePermission: () => { guardCalls.push('permission'); return { ok: true, auth: { user: 'audit_user', role: 'auditor', sessionVersion: 0 } }; },

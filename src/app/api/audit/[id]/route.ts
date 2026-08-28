@@ -3,6 +3,7 @@ import { requireCapability, requirePermission } from '@/lib/authz';
 import { AuditQueryError, parseAuditId } from '@/lib/auditQuery';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import { getAuditLog } from '@/server/repositories/auditRepository';
+import { hasPermission } from '@/lib/permissions';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,7 +19,9 @@ export async function GET(request: Request, { params }: RouteContext) {
 
   try {
     const id = parseAuditId((await params).id);
-    const log = await getAuditLog(id);
+    const log = await getAuditLog(id, {
+      revealSourceIp: hasPermission({ role: permission.auth.role }, 'audit.source-ip.read-full'),
+    });
     return log
       ? NextResponse.json({ log })
       : NextResponse.json({ error: 'Audit event not found', code: 'AUDIT_NOT_FOUND' }, { status: 404 });

@@ -122,6 +122,7 @@ export function AuditConsole() {
   const logs = data?.logs ?? [];
   const selectedAction = params.get('action') || '';
   const canExport = can('audit.export');
+  const canViewFullSourceIp = can('audit.source-ip.read-full');
 
   return (
     <div className={`container animate-fade-in ${styles.console}`}>
@@ -183,7 +184,7 @@ export function AuditConsole() {
               <label>{t('audit_filter_request_id')}<input value={params.get('requestId') || ''} onChange={(e) => setFilter('requestId', e.target.value, true)} /></label>
               <label>{t('audit_filter_correlation_id')}<input value={params.get('correlationId') || ''} onChange={(e) => setFilter('correlationId', e.target.value, true)} /></label>
               <label>{t('audit_filter_approval_id')}<input value={params.get('approvalId') || ''} onChange={(e) => setFilter('approvalId', e.target.value, true)} /></label>
-              <label>{t('audit_filter_source_ip')}<input value={params.get('sourceIp') || ''} onChange={(e) => setFilter('sourceIp', e.target.value, true)} /></label>
+              {canViewFullSourceIp ? <label>{t('audit_filter_source_ip')}<input value={params.get('sourceIp') || ''} onChange={(e) => setFilter('sourceIp', e.target.value, true)} /></label> : null}
               <label>{t('audit_filter_level')}<select value={params.get('level') || ''} onChange={(e) => setFilter('level', e.target.value)}><option value="">{t('audit_level_all')}</option><option value="info">INFO</option><option value="warning">WARNING</option></select></label>
               <label>{t('audit_filter_from')}<input type="date" value={(params.get('from') || '').slice(0, 10)} onChange={(e) => navigate({ range: 'custom', from: e.target.value, page: 1 }, true)} /></label>
               <label>{t('audit_filter_to')}<input type="date" value={(params.get('to') || '').slice(0, 10)} onChange={(e) => navigate({ range: 'custom', to: e.target.value, page: 1 }, true)} /></label>

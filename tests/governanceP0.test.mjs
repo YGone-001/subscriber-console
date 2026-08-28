@@ -139,7 +139,7 @@ test('structured audit records preserve results, before/after and legacy compati
       'x-forwarded-for': '10.20.30.40, 192.168.1.1', Authorization: 'Bearer never-log' },
   }));
   assert.equal(context.request.path, '/api/subscribers');
-  assert.equal(context.source.ip, '10.20.30.***');
+  assert.equal(context.source.ip, '10.20.30.40');
   assert.equal(context.request.requestId, 'req-123');
   assert.equal(JSON.stringify(context).includes('never-log'), false);
   const truncated = recordHelpers.createAuditRecord({ ...event(), before: Array.from({ length: 100 }, () => 'a'.repeat(4000)) });

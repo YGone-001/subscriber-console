@@ -74,7 +74,7 @@ export const PERMISSION_CATALOG = [
   'users.role.change', 'users.reset-password', 'users.unlock',
   'approvals.read', 'approvals.create', 'approvals.approve', 'approvals.reject',
   'approvals.cancel', 'approvals.execute',
-  'audit.read', 'audit.export',
+  'audit.read', 'audit.export', 'audit.source-ip.read-full',
   'subscribers.read', 'subscribers.write', 'subscribers.delete',
   'profiles.read', 'profiles.write',
   'core.read', 'core.operate', 'core.configure',
@@ -97,7 +97,7 @@ export const ROLE_PERMISSIONS: Readonly<Record<GovernanceRole, readonly Permissi
     'profiles.read', 'core.read', 'core.operate', 'audit.read',
     'approvals.read', 'approvals.create', 'approvals.cancel',
   ],
-  auditor: ['users.read', 'approvals.read', 'audit.read', 'audit.export'],
+  auditor: ['users.read', 'approvals.read', 'audit.read', 'audit.export', 'audit.source-ip.read-full'],
   viewer: ['subscribers.read', 'profiles.read', 'core.read', 'approvals.read', 'audit.read'],
 };
 

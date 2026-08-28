@@ -3,6 +3,7 @@ import { requireCapability, requirePermission } from '@/lib/authz';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import { listAuditLogs } from '@/server/repositories/auditRepository';
 import { AuditQueryError, parseAuditQuery } from '@/lib/auditQuery';
+import { hasPermission } from '@/lib/permissions';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,7 +16,13 @@ export async function GET(request: Request) {
     const rateLimit = await enforceRateLimit(`audit:list:${auth.auth.user}`, 60, 60);
     if (!rateLimit.ok) return rateLimit.response;
 
-    const result = await listAuditLogs(parseAuditQuery(new URL(request.url).searchParams));
+    const query = parseAuditQuery(new URL(request.url).searchParams);
+    const revealSourceIp = hasPermission({ role: permission.auth.role }, 'audit.source-ip.read-full');
+    if (query.sourceIp && !revealSourceIp) {
+      const sourceIpPermission = requirePermission(request, 'audit.source-ip.read-full');
+      if (!sourceIpPermission.ok) return sourceIpPermission.response;
+    }
+    const result = await listAuditLogs(query, { revealSourceIp });
 
     return NextResponse.json(result);
   } catch (error) {
