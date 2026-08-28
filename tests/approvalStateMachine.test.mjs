@@ -116,12 +116,19 @@ function executionService(state, accountRole = 'viewer') {
     '@/server/subscriberGovernanceRegistry': {
       assertGovernedOperationCoverage: () => {},
     },
+    '@/server/ocsGovernanceRegistry': { assertOcsApprovalExecutorCoverage: () => {} },
+    '@/server/ocsBalanceGovernance': {
+      executeFrozenOcsBalanceAdjustment: async () => ({}),
+      OcsBalanceGovernanceError: class extends Error {},
+    },
     '@/server/approvalWorkflow': {
       ApprovalWorkflowError: class extends Error {},
       approvalActionEligibility: (item) => ({ canExecute: item.status === 'approved' }),
     },
     '@/server/repositories/approvalRepository': repository,
     '@/server/repositories/userRepository': { getUser: async () => ({ role: accountRole, status: 'active' }) },
+    '@/server/repositories/ocsBillingRepository': { getTariffPlan: async () => null },
+    '@/server/repositories/ratingRepository': { getRating: async () => null },
   });
 }
 

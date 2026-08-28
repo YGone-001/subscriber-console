@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
 import { logAudit } from '@/lib/audit';
-import { requireAuth, requireCapability } from '@/lib/authz';
+import { requireAuth, requirePermission } from '@/lib/authz';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import {
-  deleteTariffPlan,
   getTariffPlan,
-  updateTariffPlan,
 } from '@/server/repositories/ocsBillingRepository';
+import { OCS_OPERATIONS, evaluateOcsOperation } from '@/server/ocsGovernanceRegistry';
+import { createApprovalRequest } from '@/server/repositories/approvalRepository';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,20 +38,24 @@ export async function GET(request: Request, { params }: RouteContext) {
 
 export async function PUT(request: Request, { params }: RouteContext) {
   const { planId } = await params;
-  const auth = requireCapability(request, 'rating_publish');
+  const definition = evaluateOcsOperation(OCS_OPERATIONS.TARIFF_PLAN_UPDATE);
+  const auth = requirePermission(request, definition.permission);
   if (!auth.ok) return auth.response;
 
   const rateLimit = await enforceRateLimit(`tariff-plans:update:${auth.auth.user}`, 30, 60);
   if (!rateLimit.ok) return rateLimit.response;
 
   try {
-    const body = await request.json();
+    const changes = await request.json();
     const before = await getTariffPlan(planId);
-    const plan = await updateTariffPlan(planId, body);
-    if (!plan) return NextResponse.json({ error: 'Tariff plan not found' }, { status: 404 });
-
-    logAudit('UPDATE', `tariff-plan:${plan.plan_id}`, before, plan, request);
-    return NextResponse.json({ message: 'Tariff plan updated successfully', plan });
+    if (!before) return NextResponse.json({ error: 'Tariff plan not found' }, { status: 404 });
+    const approval = await createApprovalRequest({
+      action: 'TARIFF_PLAN_UPDATE', requester: auth.auth.user, targetId: `tariff-plan:${planId}`,
+      summary: `Update tariff plan ${planId}`, operation: { resourceType: 'ocs_tariff_plan', resourceId: planId }, before,
+      payload: { schema: 'ocs-tariff-plan-v1', planId, changes },
+    });
+    logAudit('UPDATE', `approval:${approval.id}`, null, approval, request);
+    return NextResponse.json({ outcome: 'approval_required', message: 'Approval required before tariff plan update', approval }, { status: 202 });
   } catch (error) {
     if (error instanceof Error && error.message === 'INVALID_PLAN_ID') {
       return NextResponse.json({ error: 'Invalid plan_id format' }, { status: 400 });
@@ -70,7 +74,8 @@ export async function PUT(request: Request, { params }: RouteContext) {
 
 export async function DELETE(request: Request, { params }: RouteContext) {
   const { planId } = await params;
-  const auth = requireCapability(request, 'rating_publish');
+  const definition = evaluateOcsOperation(OCS_OPERATIONS.TARIFF_PLAN_DELETE);
+  const auth = requirePermission(request, definition.permission);
   if (!auth.ok) return auth.response;
 
   const rateLimit = await enforceRateLimit(`tariff-plans:delete:${auth.auth.user}`, 20, 60);
@@ -80,19 +85,13 @@ export async function DELETE(request: Request, { params }: RouteContext) {
     const before = await getTariffPlan(planId);
     if (!before) return NextResponse.json({ error: 'Tariff plan not found' }, { status: 404 });
 
-    const result = await deleteTariffPlan(planId);
-    if (!result.deleted) {
-      return NextResponse.json(
-        {
-          error: `Cannot delete: tariff plan is currently used by ${result.references.count} subscribers`,
-          examples: result.references.examples,
-        },
-        { status: 409 }
-      );
-    }
-
-    logAudit('DELETE', `tariff-plan:${planId}`, before || { plan_id: planId }, null, request);
-    return NextResponse.json({ message: 'Tariff plan deleted successfully' });
+    const approval = await createApprovalRequest({
+      action: 'TARIFF_PLAN_DELETE', requester: auth.auth.user, targetId: `tariff-plan:${planId}`,
+      summary: `Delete tariff plan ${planId}`, operation: { resourceType: 'ocs_tariff_plan', resourceId: planId }, before,
+      payload: { schema: 'ocs-tariff-plan-v1', planId },
+    });
+    logAudit('UPDATE', `approval:${approval.id}`, null, approval, request);
+    return NextResponse.json({ outcome: 'approval_required', message: 'Approval required before tariff plan deletion', approval }, { status: 202 });
   } catch (error) {
     if (error instanceof Error && error.message === 'INVALID_PLAN_ID') {
       return NextResponse.json({ error: 'Invalid plan_id format' }, { status: 400 });

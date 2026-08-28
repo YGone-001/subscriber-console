@@ -1,14 +1,13 @@
 import { NextResponse } from 'next/server';
 import { logAudit } from '@/lib/audit';
-import { requireAuth, requireCapability } from '@/lib/authz';
-import { capabilityDecision } from '@/lib/permissions';
+import { requireAuth, requirePermission } from '@/lib/authz';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import { createApprovalRequest } from '@/server/repositories/approvalRepository';
 import {
   dryRunMigrateTariffPlanSubscribers,
   getTariffPlan,
-  migrateTariffPlanSubscribers,
 } from '@/server/repositories/ocsBillingRepository';
+import { OCS_OPERATIONS, evaluateOcsOperation } from '@/server/ocsGovernanceRegistry';
 
 export const dynamic = 'force-dynamic';
 
@@ -65,7 +64,8 @@ export async function GET(request: Request, { params }: RouteContext) {
 
 export async function POST(request: Request, { params }: RouteContext) {
   const { planId } = await params;
-  const auth = requireCapability(request, 'policy_approve', { allowApproval: true });
+  const definition = evaluateOcsOperation(OCS_OPERATIONS.PLAN_MIGRATE);
+  const auth = requirePermission(request, definition.permission);
   if (!auth.ok) return auth.response;
 
   const rateLimit = await enforceRateLimit(`tariff-plans:migrate:${auth.auth.user}`, 12, 60);
@@ -75,6 +75,7 @@ export async function POST(request: Request, { params }: RouteContext) {
     const body = await request.json();
     const targetPlanId = body?.targetPlanId || body?.target_plan_id;
     const resetBalances = body?.resetBalances === true;
+    if (resetBalances) return NextResponse.json({ error: 'Balance reset during tariff migration is disabled', code: 'OCS_BALANCE_RESET_DISABLED' }, { status: 409 });
     const [sourcePlan, targetPlan] = await Promise.all([
       getTariffPlan(planId),
       getTariffPlan(targetPlanId),
@@ -94,26 +95,15 @@ export async function POST(request: Request, { params }: RouteContext) {
       resetBalances,
     };
 
-    if (capabilityDecision(auth.auth.role, 'policy_approve') === 'approval') {
-      const approval = await createApprovalRequest({
-        action: 'TARIFF_PLAN_MIGRATE',
-        requester: auth.auth.user,
-        targetId: `tariff-plan:${sourcePlan.plan_id}->${targetPlan.plan_id}`,
-        summary: `Migrate subscribers from ${sourcePlan.plan_id} to ${targetPlan.plan_id}`,
-        payload,
-      });
-
-      logAudit('UPDATE', `approval:${approval.id}`, null, approval, request);
-      return NextResponse.json(
-        { message: 'Approval required before tariff plan migration', approval },
-        { status: 202 }
-      );
-    }
-
-    const result = await migrateTariffPlanSubscribers(payload);
-    logAudit('UPDATE', `tariff-plan:${sourcePlan.plan_id}`, sourcePlan, { ...result, targetPlan }, request);
-
-    return NextResponse.json({ message: 'Tariff plan subscribers migrated successfully', result });
+    const approval = await createApprovalRequest({
+      action: 'TARIFF_PLAN_MIGRATE', requester: auth.auth.user,
+      targetId: `tariff-plan:${sourcePlan.plan_id}->${targetPlan.plan_id}`,
+      summary: `Migrate subscribers from ${sourcePlan.plan_id} to ${targetPlan.plan_id}`,
+      operation: { resourceType: 'ocs_tariff_plan_migration', resourceId: `${sourcePlan.plan_id}->${targetPlan.plan_id}` },
+      before: { sourcePlan, targetPlan }, payload,
+    });
+    logAudit('UPDATE', `approval:${approval.id}`, null, approval, request);
+    return NextResponse.json({ outcome: 'approval_required', message: 'Approval required before tariff plan migration', approval }, { status: 202 });
   } catch (error) {
     const response = errorResponse(error);
     if (response) return response;

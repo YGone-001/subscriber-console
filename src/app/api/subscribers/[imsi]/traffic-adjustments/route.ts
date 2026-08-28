@@ -1,58 +1,60 @@
 import { NextResponse } from 'next/server';
 import { logAudit } from '@/lib/audit';
-import { requireCapability } from '@/lib/authz';
+import { requirePermission } from '@/lib/authz';
 import { enforceRateLimit } from '@/lib/rateLimit';
-import { validateImsi, validateTrafficAdjustmentPayload } from '@/lib/subscriberValidation';
+import { freezeOcsBalanceAdjustment, OcsBalanceGovernanceError } from '@/server/ocsBalanceGovernance';
+import { OCS_OPERATIONS, evaluateOcsOperation } from '@/server/ocsGovernanceRegistry';
 import { createApprovalRequest } from '@/server/repositories/approvalRepository';
 
 export const dynamic = 'force-dynamic';
 
-type RouteContext = {
-  params: Promise<{ imsi: string }>;
-};
+type RouteContext = { params: Promise<{ imsi: string }> };
 
 function errorResponse(error: unknown) {
-  const message = error instanceof Error ? error.message : '';
-  if (message === 'OCS_BALANCE_NOT_FOUND') {
-    return NextResponse.json({ error: 'OCS balance not found' }, { status: 404 });
+  if (error instanceof OcsBalanceGovernanceError) {
+    const status = error.code === 'OCS_BALANCE_NOT_FOUND' ? 404
+      : error.code === 'OCS_BALANCE_RESERVATION_CONFLICT' ? 409
+        : 400;
+    return NextResponse.json({ error: error.code, code: error.code, details: error.details }, { status });
   }
-  if (message === 'OCS_BALANCE_CONFLICT') {
-    return NextResponse.json({ error: 'Traffic balance changed, please refresh and retry' }, { status: 409 });
-  }
-  if (message === 'OCS_TOTAL_BELOW_COMMITTED') {
-    return NextResponse.json({ error: 'Total quota cannot be lower than used plus reserved traffic' }, { status: 400 });
-  }
-  console.error('Error adjusting traffic balance:', error);
+  console.error('Error creating governed traffic adjustment:', error);
   return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
 }
 
+/** Administrative credit/debit only. Runtime reservations and consumption have
+ * no HTTP approval route and continue to belong to the charging runtime. */
 export async function POST(request: Request, { params }: RouteContext) {
   const { imsi } = await params;
-  const auth = requireCapability(request, 'balance_adjust', { allowApproval: true });
+  const definition = evaluateOcsOperation(OCS_OPERATIONS.BALANCE_ADJUST);
+  const auth = requirePermission(request, definition.permission);
   if (!auth.ok) return auth.response;
 
   const rateLimit = await enforceRateLimit(`traffic-adjustments:${auth.auth.user}`, 30, 60);
   if (!rateLimit.ok) return rateLimit.response;
 
-  const imsiResult = validateImsi(imsi);
-  if (!imsiResult.ok) return NextResponse.json({ error: imsiResult.error }, { status: 400 });
-
   try {
-    const body = await request.json();
-    const validation = validateTrafficAdjustmentPayload(body);
-    if (!validation.ok) return NextResponse.json({ error: validation.error }, { status: 400 });
-
+    const frozen = await freezeOcsBalanceAdjustment(imsi, await request.json());
+    if (!definition.executable || !definition.requiresApproval || definition.approvalAction !== 'TRAFFIC_ADJUSTMENT') {
+      return NextResponse.json({ error: 'OCS balance adjustment is disabled', code: 'OCS_OPERATION_DISABLED' }, { status: 409 });
+    }
     const approval = await createApprovalRequest({
-      action: 'TRAFFIC_ADJUSTMENT', requester: auth.auth.user, targetId: imsi,
-      summary: `${imsi} traffic ${validation.value.mode}`,
-      payload: { imsi, adjustment: validation.value },
+      action: definition.approvalAction,
+      requester: auth.auth.user,
+      targetId: frozen.imsi,
+      summary: `${frozen.intent.operation} ${frozen.intent.bucket} balance for subscriber ${frozen.imsi}`,
+      reason: frozen.intent.reason,
+      ticketId: frozen.intent.ticketId,
+      maintenanceWindow: frozen.intent.maintenanceWindow,
+      operation: { resourceType: 'ocs_balance', resourceId: `${frozen.imsi}:${frozen.intent.bucket}` },
+      before: frozen.before,
+      after: frozen.expectedAfter,
+      payload: frozen,
     });
     logAudit('UPDATE', `approval:${approval.id}`, null, approval, request);
     return NextResponse.json(
       { outcome: 'approval_required', message: 'Approval required before traffic adjustment', approval },
       { status: 202 }
     );
-
   } catch (error) {
     return errorResponse(error);
   }

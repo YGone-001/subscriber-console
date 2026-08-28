@@ -5,9 +5,13 @@ import { executeApproval } from '@/server/approvalExecutors';
 import { executeFrozenSubscriberBatchChange, SubscriberBatchGovernanceError } from '@/server/subscriberOperationPolicy';
 import { executeFrozenSubscriberBulkDelete, executeFrozenSubscriberDelete, executeFrozenSubscriberUpdate, SubscriberGovernanceError } from '@/server/subscriberSingleGovernance';
 import { assertGovernedOperationCoverage } from '@/server/subscriberGovernanceRegistry';
+import { executeFrozenOcsBalanceAdjustment, OcsBalanceGovernanceError } from '@/server/ocsBalanceGovernance';
+import { assertOcsApprovalExecutorCoverage } from '@/server/ocsGovernanceRegistry';
 import { approvalActionEligibility, ApprovalWorkflowError } from '@/server/approvalWorkflow';
 import { getApproval, transitionApproval, type ApprovalDocument } from '@/server/repositories/approvalRepository';
 import { getUser } from '@/server/repositories/userRepository';
+import { getTariffPlan } from '@/server/repositories/ocsBillingRepository';
+import { getRating } from '@/server/repositories/ratingRepository';
 import type { AuthContext } from '@/lib/authz';
 import type { GovernanceActor } from '@/types/governance';
 
@@ -24,6 +28,34 @@ export class ApprovalExecutionError extends Error {
 const defaultExecutor: GovernedApprovalExecutor = {
   async execute(approval, request, actor) {
     if (approval.action === 'ACCESS_REQUEST') return executeApproval(approval, request);
+    if (approval.action === 'TRAFFIC_ADJUSTMENT' && approval.payload.schema === 'ocs-balance-adjustment-v1') {
+      let result: Awaited<ReturnType<typeof executeFrozenOcsBalanceAdjustment>>;
+      try {
+        result = await executeFrozenOcsBalanceAdjustment(approval.payload, {
+          approvalId: approval.id,
+          executionId: approval.execution?.id || 'missing-execution-id',
+          actor: actor?.username || 'system',
+        });
+      } catch (error) {
+        if (error instanceof OcsBalanceGovernanceError) {
+          throw new ApprovalExecutionError(error.code, error.committed ? 503 : 409, approval, error.committed, error.details);
+        }
+        throw error;
+      }
+      try {
+        await writeAuditLog({
+          actor: actor || { type: 'system', userId: 'system', username: 'system' }, module: 'ocs', action: 'ocs.balance.adjust',
+          resource: { type: 'ocs_balance', id: `${approval.targetId}:${approval.payload.intent && typeof approval.payload.intent === 'object' && 'bucket' in approval.payload.intent ? approval.payload.intent.bucket : 'unknown'}` },
+          targetId: approval.targetId, approvalId: approval.id, riskLevel: approval.riskLevel, result: 'success', reason: approval.reason,
+          before: result.before, after: result.after,
+          metadata: { adjustmentId: result.adjustmentId, executionId: approval.execution?.id, operationFingerprint: approval.operationFingerprint, idempotent: result.idempotent },
+          ...auditRequestContext(request),
+        }, { failureMode: 'strict' });
+      } catch {
+        throw new ApprovalExecutionError('AUDIT_UNAVAILABLE', 503, approval, true, { ...result, mutationCommitted: true });
+      }
+      return result;
+    }
     if (approval.action === 'SUBSCRIBER_BATCH_UPDATE') {
       const result = await executeFrozenSubscriberBatchChange(approval.payload);
       try {
@@ -81,6 +113,16 @@ export function assertSubscriberApprovalExecutorCoverage() {
 }
 assertSubscriberApprovalExecutorCoverage();
 
+/** OCS administrative actions use the same default executor. The legacy
+ * compatibility executor remains only for approvals created before Phase 7. */
+export const automaticOcsExecutorActions = [
+  'TRAFFIC_ADJUSTMENT', 'TARIFF_PLAN_CREATE', 'TARIFF_PLAN_UPDATE', 'TARIFF_PLAN_DELETE',
+  'TARIFF_PLAN_RULE_CREATE', 'TARIFF_PLAN_RULE_UPDATE', 'TARIFF_PLAN_RULE_DELETE', 'TARIFF_PLAN_RULE_TOGGLE',
+  'POLICY_CHANGE', 'TARIFF_PLAN_MIGRATE', 'RATING_CREATE', 'RATING_UPDATE', 'RATING_DELETE',
+] as const;
+export function assertOcsExecutorCoverage() { assertOcsApprovalExecutorCoverage(automaticOcsExecutorActions); }
+assertOcsExecutorCoverage();
+
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
@@ -102,6 +144,19 @@ export async function validateExecutionPrecondition(approval: ApprovalDocument, 
     if (!account || account.role !== expectedRole || account.status !== 'active') {
       throw new ApprovalExecutionError('APPROVAL_PRECONDITION_CHANGED', 409, approval);
     }
+  }
+  // These configuration resources have no database version field. Compare the
+  // normalized resource snapshot immediately after the execution claim so an
+  // approved change cannot overwrite an intervening operator/runtime update.
+  if (approval.before && ['TARIFF_PLAN_UPDATE', 'TARIFF_PLAN_DELETE', 'TARIFF_PLAN_RULE_CREATE', 'TARIFF_PLAN_RULE_UPDATE', 'TARIFF_PLAN_RULE_DELETE', 'TARIFF_PLAN_RULE_TOGGLE'].includes(approval.action)) {
+    const payload = asRecord(approval.payload);
+    const live = await getTariffPlan(String(payload.planId || ''));
+    if (!live || JSON.stringify(live) !== JSON.stringify(approval.before)) throw new ApprovalExecutionError('OCS_RESOURCE_PRECONDITION_CHANGED', 409, approval);
+  }
+  if (approval.before && ['RATING_UPDATE', 'RATING_DELETE'].includes(approval.action)) {
+    const payload = asRecord(approval.payload);
+    const live = await getRating(String(payload.id || ''), payload.planId || undefined);
+    if (!live || JSON.stringify(live) !== JSON.stringify(approval.before)) throw new ApprovalExecutionError('OCS_RESOURCE_PRECONDITION_CHANGED', 409, approval);
   }
 }
 
@@ -194,7 +249,10 @@ export async function executeApprovedChange(request: Request, id: string, auth: 
     if (error instanceof SubscriberBatchGovernanceError) {
       return finishExecution({ request, approval: claimed.approval, actor, executionId, error });
     }
-    if (error instanceof ApprovalExecutionError && error.code === 'AUDIT_UNAVAILABLE' && error.committed) throw error;
+    // A post-mutation evidence failure must not be converted into a retryable
+    // failed approval. The balance CAS already committed, so keep execution
+    // evidence in the claimed state for operator investigation.
+    if (error instanceof ApprovalExecutionError && error.committed) throw error;
     return finishExecution({ request, approval: claimed.approval, actor, executionId, error: error instanceof Error ? error : new Error('APPROVAL_EXECUTION_FAILED') });
   }
 }

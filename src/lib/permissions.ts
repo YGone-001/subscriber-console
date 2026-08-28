@@ -76,6 +76,7 @@ export const PERMISSION_CATALOG = [
   'approvals.cancel', 'approvals.execute',
   'audit.read', 'audit.export', 'audit.source-ip.read-full',
   'subscribers.read', 'subscribers.write', 'subscribers.delete',
+  'ocs.read', 'ocs.balance.adjust', 'ocs.balance.reset', 'ocs.tariff.write', 'ocs.plan.assign', 'ocs.rating.write', 'ocs.runtime.execute',
   'profiles.read', 'profiles.write',
   'core.read', 'core.operate', 'core.configure',
 ] as const;
@@ -91,14 +92,16 @@ export const ROLE_PERMISSIONS: Readonly<Record<GovernanceRole, readonly Permissi
     ...READ_PERMISSIONS, 'approvals.create', 'approvals.approve', 'approvals.reject',
     'approvals.cancel', 'approvals.execute', 'audit.export',
     'subscribers.write', 'subscribers.delete', 'profiles.write', 'core.operate', 'core.configure',
+    'ocs.balance.adjust', 'ocs.tariff.write', 'ocs.plan.assign', 'ocs.rating.write',
   ],
   operator: [
     'subscribers.read', 'subscribers.write', 'subscribers.delete',
     'profiles.read', 'core.read', 'core.operate', 'audit.read',
+    'ocs.read', 'ocs.balance.adjust', 'ocs.tariff.write', 'ocs.plan.assign', 'ocs.rating.write',
     'approvals.read', 'approvals.create', 'approvals.cancel',
   ],
   auditor: ['users.read', 'approvals.read', 'audit.read', 'audit.export', 'audit.source-ip.read-full'],
-  viewer: ['subscribers.read', 'profiles.read', 'core.read', 'approvals.read', 'audit.read'],
+  viewer: ['subscribers.read', 'profiles.read', 'ocs.read', 'core.read', 'approvals.read', 'audit.read'],
 };
 
 export function normalizeGovernanceRole(role: unknown): GovernanceRole | null {
