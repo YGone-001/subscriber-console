@@ -1552,6 +1552,7 @@ export const en: Record<string, string> = {
     traffic_adjust: "Adjust Traffic",
     traffic_adjust_title: "Traffic Recharge / Adjustment",
     traffic_recharge: "Recharge",
+    traffic_debit: "Debit",
     traffic_set_available: "Set Balance",
     traffic_set_total: "Set Quota",
     traffic_reset: "Reset",

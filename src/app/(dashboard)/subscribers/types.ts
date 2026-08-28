@@ -22,7 +22,7 @@ export interface SubscriberRow {
   [key: string]: unknown;
 }
 
-export type TrafficAdjustmentMode = "recharge" | "set_available" | "set_total" | "reset";
+export type TrafficAdjustmentMode = "credit" | "debit";
 
 export type TrafficAdjustmentTarget = {
   imsi: string;

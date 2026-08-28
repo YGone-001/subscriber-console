@@ -7,6 +7,13 @@ import type { GovernanceActor, GovernanceEvent, RiskLevel, ApprovalStatus } from
 export type ApprovalAction =
   | 'POLICY_CHANGE'
   | 'TRAFFIC_ADJUSTMENT'
+  | 'TARIFF_PLAN_CREATE'
+  | 'TARIFF_PLAN_UPDATE'
+  | 'TARIFF_PLAN_DELETE'
+  | 'TARIFF_PLAN_RULE_CREATE'
+  | 'TARIFF_PLAN_RULE_UPDATE'
+  | 'TARIFF_PLAN_RULE_DELETE'
+  | 'TARIFF_PLAN_RULE_TOGGLE'
   | 'RATING_CREATE'
   | 'RATING_UPDATE'
   | 'RATING_DELETE'

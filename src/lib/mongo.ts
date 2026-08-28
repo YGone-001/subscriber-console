@@ -93,6 +93,7 @@ export const mongoCollections = {
   ocsUsageRecords: 'ocs_usage_records',
   ocsEvents: 'ocs_events',
   ocsConfig: 'ocs_config',
+  ocsBalanceAdjustments: 'ocs_balance_adjustments',
   profiles: 'app_profiles',
   profileVersions: 'app_profile_versions',
   ratings: 'app_ratings',

@@ -1,14 +1,13 @@
 import { NextResponse } from 'next/server';
 import { logAudit } from '@/lib/audit';
-import { requireCapability } from '@/lib/authz';
+import { requirePermission } from '@/lib/authz';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import { validateTariffRule } from '@/lib/tariffPlanOperations';
 import {
-  deleteTariffPlanRule,
   getTariffPlan,
-  toggleTariffPlanRuleStatus,
-  updateTariffPlanRule,
 } from '@/server/repositories/ocsBillingRepository';
+import { OCS_OPERATIONS, evaluateOcsOperation } from '@/server/ocsGovernanceRegistry';
+import { createApprovalRequest } from '@/server/repositories/approvalRepository';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,7 +17,8 @@ type RouteContext = {
 
 export async function PUT(request: Request, { params }: RouteContext) {
   const { planId, ruleId } = await params;
-  const auth = requireCapability(request, 'rating_publish');
+  const definition = evaluateOcsOperation(OCS_OPERATIONS.TARIFF_RULE_UPDATE);
+  const auth = requirePermission(request, definition.permission);
   if (!auth.ok) return auth.response;
 
   const rateLimit = await enforceRateLimit(`tariff-plans:rules:update:${auth.auth.user}`, 30, 60);
@@ -36,12 +36,9 @@ export async function PUT(request: Request, { params }: RouteContext) {
       return NextResponse.json({ error: 'Tariff plan not found' }, { status: 404 });
     }
 
-    const rule = await updateTariffPlanRule(planId, ruleId, body);
-    const after = await getTariffPlan(planId);
-
-    logAudit('UPDATE', `tariff-plan:${planId}:rule:${ruleId}`, { before: before.rules?.find(r => r.rule_id === ruleId) }, rule, request);
-
-    return NextResponse.json({ message: 'Rule updated successfully', rule, plan: after });
+    const approval = await createApprovalRequest({ action: 'TARIFF_PLAN_RULE_UPDATE', requester: auth.auth.user, targetId: `tariff-plan:${planId}:rule:${ruleId}`, summary: `Update tariff rule ${ruleId}`, operation: { resourceType: 'ocs_tariff_plan', resourceId: planId }, before, payload: { schema: 'ocs-tariff-rule-v1', planId, ruleId, rule: body } });
+    logAudit('UPDATE', `approval:${approval.id}`, null, approval, request);
+    return NextResponse.json({ outcome: 'approval_required', message: 'Approval required before tariff rule update', approval }, { status: 202 });
   } catch (error) {
     if (error instanceof Error) {
       if (error.message === 'RULE_NOT_FOUND') {
@@ -59,7 +56,8 @@ export async function PUT(request: Request, { params }: RouteContext) {
 
 export async function PATCH(request: Request, { params }: RouteContext) {
   const { planId, ruleId } = await params;
-  const auth = requireCapability(request, 'rating_publish');
+  const definition = evaluateOcsOperation(OCS_OPERATIONS.TARIFF_RULE_TOGGLE);
+  const auth = requirePermission(request, definition.permission);
   if (!auth.ok) return auth.response;
 
   const rateLimit = await enforceRateLimit(`tariff-plans:rules:toggle:${auth.auth.user}`, 30, 60);
@@ -71,12 +69,9 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       return NextResponse.json({ error: 'Tariff plan not found' }, { status: 404 });
     }
 
-    const result = await toggleTariffPlanRuleStatus(planId, ruleId);
-    const after = await getTariffPlan(planId);
-
-    logAudit('UPDATE', `tariff-plan:${planId}:rule:${ruleId}:status`, { rule_id: ruleId }, result, request);
-
-    return NextResponse.json({ message: `Rule status updated to ${result.status}`, result, plan: after });
+    const approval = await createApprovalRequest({ action: 'TARIFF_PLAN_RULE_TOGGLE', requester: auth.auth.user, targetId: `tariff-plan:${planId}:rule:${ruleId}`, summary: `Toggle tariff rule ${ruleId}`, operation: { resourceType: 'ocs_tariff_plan', resourceId: planId }, before, payload: { schema: 'ocs-tariff-rule-v1', planId, ruleId } });
+    logAudit('UPDATE', `approval:${approval.id}`, null, approval, request);
+    return NextResponse.json({ outcome: 'approval_required', message: 'Approval required before tariff rule state change', approval }, { status: 202 });
   } catch (error) {
     if (error instanceof Error) {
       if (error.message === 'RULE_NOT_FOUND') {
@@ -94,7 +89,8 @@ export async function PATCH(request: Request, { params }: RouteContext) {
 
 export async function DELETE(request: Request, { params }: RouteContext) {
   const { planId, ruleId } = await params;
-  const auth = requireCapability(request, 'rating_publish');
+  const definition = evaluateOcsOperation(OCS_OPERATIONS.TARIFF_RULE_DELETE);
+  const auth = requirePermission(request, definition.permission);
   if (!auth.ok) return auth.response;
 
   const rateLimit = await enforceRateLimit(`tariff-plans:rules:delete:${auth.auth.user}`, 20, 60);
@@ -106,13 +102,9 @@ export async function DELETE(request: Request, { params }: RouteContext) {
       return NextResponse.json({ error: 'Tariff plan not found' }, { status: 404 });
     }
 
-    const existingRule = before.rules?.find(r => r.rule_id === ruleId);
-    const result = await deleteTariffPlanRule(planId, ruleId);
-    const after = await getTariffPlan(planId);
-
-    logAudit('DELETE', `tariff-plan:${planId}:rule:${ruleId}`, existingRule, null, request);
-
-    return NextResponse.json({ message: 'Rule deleted successfully', result, plan: after });
+    const approval = await createApprovalRequest({ action: 'TARIFF_PLAN_RULE_DELETE', requester: auth.auth.user, targetId: `tariff-plan:${planId}:rule:${ruleId}`, summary: `Delete tariff rule ${ruleId}`, operation: { resourceType: 'ocs_tariff_plan', resourceId: planId }, before, payload: { schema: 'ocs-tariff-rule-v1', planId, ruleId } });
+    logAudit('UPDATE', `approval:${approval.id}`, null, approval, request);
+    return NextResponse.json({ outcome: 'approval_required', message: 'Approval required before tariff rule deletion', approval }, { status: 202 });
   } catch (error) {
     if (error instanceof Error && error.message === 'OCS_PLAN_NOT_FOUND') {
       return NextResponse.json({ error: 'Tariff plan not found' }, { status: 404 });

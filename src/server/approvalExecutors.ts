@@ -9,7 +9,7 @@ import {
 } from '@/lib/subscriberValidation';
 import { asRecord } from '@/lib/typeGuards';
 import type { ApprovalDocument } from '@/server/repositories/approvalRepository';
-import { adjustOcsTrafficBalance, changeOcsPolicyForSubscribers, migrateTariffPlanSubscribers } from '@/server/repositories/ocsBillingRepository';
+import { addTariffPlanRule, adjustOcsTrafficBalance, changeOcsPolicyForSubscribers, createTariffPlan, deleteTariffPlan, deleteTariffPlanRule, migrateTariffPlanSubscribers, toggleTariffPlanRuleStatus, updateTariffPlan, updateTariffPlanRule } from '@/server/repositories/ocsBillingRepository';
 import { restoreProfileVersion } from '@/server/repositories/profileRepository';
 import { createRating, deleteRating, updateRating } from '@/server/repositories/ratingRepository';
 import {
@@ -114,6 +114,46 @@ export async function executeApproval(approval: ApprovalDocument, request: Reque
       request
     );
 
+    return result;
+  }
+
+  if (approval.action === 'TARIFF_PLAN_CREATE') {
+    const payload = asRecord(approval.payload);
+    const plan = await createTariffPlan(asRecord(payload.plan));
+    logAudit('CREATE', `tariff-plan:${plan.plan_id}`, null, { ...plan, approvalId: approval.id }, request);
+    return plan;
+  }
+
+  if (approval.action === 'TARIFF_PLAN_UPDATE') {
+    const payload = asRecord(approval.payload);
+    const planId = String(payload.planId || '');
+    const plan = await updateTariffPlan(planId, asRecord(payload.changes));
+    if (!plan) throw new Error('OCS_PLAN_NOT_FOUND');
+    logAudit('UPDATE', `tariff-plan:${planId}`, approval.before || null, { ...plan, approvalId: approval.id }, request);
+    return plan;
+  }
+
+  if (approval.action === 'TARIFF_PLAN_DELETE') {
+    const payload = asRecord(approval.payload);
+    const planId = String(payload.planId || '');
+    const result = await deleteTariffPlan(planId);
+    if (!result.deleted) throw new Error(`Cannot delete: tariff plan is currently used by ${result.references.count} subscribers`);
+    logAudit('DELETE', `tariff-plan:${planId}`, approval.before || { plan_id: planId }, null, request);
+    return result;
+  }
+
+  if (approval.action === 'TARIFF_PLAN_RULE_CREATE' || approval.action === 'TARIFF_PLAN_RULE_UPDATE' || approval.action === 'TARIFF_PLAN_RULE_DELETE' || approval.action === 'TARIFF_PLAN_RULE_TOGGLE') {
+    const payload = asRecord(approval.payload);
+    const planId = String(payload.planId || '');
+    const ruleId = String(payload.ruleId || '');
+    const result = approval.action === 'TARIFF_PLAN_RULE_CREATE'
+      ? await addTariffPlanRule(planId, asRecord(payload.rule))
+      : approval.action === 'TARIFF_PLAN_RULE_UPDATE'
+        ? await updateTariffPlanRule(planId, ruleId, asRecord(payload.rule))
+        : approval.action === 'TARIFF_PLAN_RULE_DELETE'
+          ? await deleteTariffPlanRule(planId, ruleId)
+          : await toggleTariffPlanRuleStatus(planId, ruleId);
+    logAudit(approval.action === 'TARIFF_PLAN_RULE_DELETE' ? 'DELETE' : approval.action === 'TARIFF_PLAN_RULE_CREATE' ? 'CREATE' : 'UPDATE', `tariff-plan:${planId}:rule:${ruleId || (result as { rule_id?: string }).rule_id || ''}`, approval.before || null, { ...result, approvalId: approval.id }, request);
     return result;
   }
 

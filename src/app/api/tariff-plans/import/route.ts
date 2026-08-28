@@ -1,86 +1,35 @@
 import { NextResponse } from 'next/server';
 import { logAudit } from '@/lib/audit';
-import { requireCapability } from '@/lib/authz';
+import { requirePermission } from '@/lib/authz';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import { normalizeImportedPlan } from '@/lib/tariffPlanOperations';
-import {
-  createTariffPlan,
-  getTariffPlan,
-  updateTariffPlan,
-} from '@/server/repositories/ocsBillingRepository';
+import { OCS_OPERATIONS, evaluateOcsOperation } from '@/server/ocsGovernanceRegistry';
+import { createApprovalRequest } from '@/server/repositories/approvalRepository';
+import { getTariffPlan } from '@/server/repositories/ocsBillingRepository';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
-  const auth = requireCapability(request, 'rating_publish');
+  const auth = requirePermission(request, evaluateOcsOperation(OCS_OPERATIONS.TARIFF_PLAN_CREATE).permission);
   if (!auth.ok) return auth.response;
-
   const rateLimit = await enforceRateLimit(`tariff-plans:import:${auth.auth.user}`, 15, 60);
   if (!rateLimit.ok) return rateLimit.response;
-
   try {
-    const rawData = await request.json();
-    const normalized = normalizeImportedPlan(rawData);
-
-    if (!normalized.isValid || !normalized.plan) {
-      return NextResponse.json(
-        { error: 'Import validation failed', details: normalized.errors },
-        { status: 400 }
-      );
-    }
-
-    const { plan: planData, warnings } = normalized;
-    const existing = await getTariffPlan(planData.plan_id);
-
-    let plan;
-    let action: 'CREATE' | 'UPDATE';
-
-    if (existing) {
-      // Update existing plan
-      action = 'UPDATE';
-      plan = await updateTariffPlan(planData.plan_id, {
-        name: planData.name,
-        description: planData.description,
-        status: planData.status,
-        quota_per_grant: planData.quota_per_grant,
-        validity_time: planData.validity_time,
-        volume_threshold: planData.volume_threshold,
-        rules: planData.rules,
-      });
-      logAudit('UPDATE', `tariff-plan:${planData.plan_id}`, existing, plan, request);
-    } else {
-      // Create new plan
-      action = 'CREATE';
-      plan = await createTariffPlan({
-        plan_id: planData.plan_id,
-        name: planData.name,
-        description: planData.description,
-        status: planData.status,
-        quota_per_grant: planData.quota_per_grant,
-        validity_time: planData.validity_time,
-        volume_threshold: planData.volume_threshold,
-        rules: planData.rules,
-      });
-      logAudit('CREATE', `tariff-plan:${planData.plan_id}`, null, plan, request);
-    }
-
-    return NextResponse.json({
-      message: `Tariff plan ${action === 'CREATE' ? 'imported' : 'updated from import'} successfully`,
-      action,
-      plan,
-      warnings,
-    }, { status: action === 'CREATE' ? 201 : 200 });
+    const normalized = normalizeImportedPlan(await request.json());
+    if (!normalized.isValid || !normalized.plan) return NextResponse.json({ error: 'Import validation failed', details: normalized.errors }, { status: 400 });
+    const plan = normalized.plan;
+    const before = await getTariffPlan(plan.plan_id);
+    const action = before ? 'TARIFF_PLAN_UPDATE' : 'TARIFF_PLAN_CREATE';
+    const approval = await createApprovalRequest({
+      action, requester: auth.auth.user, targetId: `tariff-plan:${plan.plan_id}`,
+      summary: `${before ? 'Update' : 'Create'} tariff plan ${plan.plan_id} from validated import`,
+      operation: { resourceType: 'ocs_tariff_plan', resourceId: plan.plan_id }, before: before || undefined,
+      payload: before ? { schema: 'ocs-tariff-plan-v1', planId: plan.plan_id, changes: plan } : { schema: 'ocs-tariff-plan-v1', plan },
+    });
+    logAudit('UPDATE', `approval:${approval.id}`, null, approval, request);
+    return NextResponse.json({ outcome: 'approval_required', message: 'Approval required before tariff plan import', warnings: normalized.warnings, approval }, { status: 202 });
   } catch (error) {
-    if (error instanceof Error) {
-      if (error.message === 'INVALID_PLAN_ID') {
-        return NextResponse.json({ error: 'Invalid plan_id in imported data' }, { status: 400 });
-      }
-      if (error.message === 'TARIFF_PLAN_DISABLE_IN_USE') {
-        return NextResponse.json({ error: 'Cannot disable plan: in use by active subscribers' }, { status: 409 });
-      }
-    }
-
-    console.error('Error importing tariff plan:', error);
-    return NextResponse.json({ error: 'Failed to import tariff plan' }, { status: 500 });
+    console.error('Error importing tariff plan approval:', error);
+    return NextResponse.json({ error: 'Failed to create tariff plan import approval' }, { status: 500 });
   }
 }

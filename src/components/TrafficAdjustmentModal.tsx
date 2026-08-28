@@ -1,13 +1,13 @@
 "use client";
 
-import { BatteryCharging, RotateCcw, Save, SlidersHorizontal, X } from "lucide-react";
+import { BatteryCharging, Save, X } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { BYTE_INPUT_UNITS, composeByteInput, formatBytes, parseBytes, splitByteInput } from "@/lib/unitParser";
 import { OperationNotice } from "./OperationFeedback";
 import { Dialog } from "./ui/Dialog";
 import "./modals.css";
 
-type TrafficAdjustmentMode = "recharge" | "set_available" | "set_total" | "reset";
+type TrafficAdjustmentMode = "credit" | "debit";
 
 type TrafficInfo = {
   total?: number;
@@ -25,10 +25,8 @@ type TrafficAdjustmentModalProps = {
 };
 
 const MODE_OPTIONS: Array<{ mode: TrafficAdjustmentMode; icon: typeof BatteryCharging; labelKey: string }> = [
-  { mode: "recharge", icon: BatteryCharging, labelKey: "traffic_recharge" },
-  { mode: "set_available", icon: SlidersHorizontal, labelKey: "traffic_set_available" },
-  { mode: "set_total", icon: SlidersHorizontal, labelKey: "traffic_set_total" },
-  { mode: "reset", icon: RotateCcw, labelKey: "traffic_reset" },
+  { mode: "credit", icon: BatteryCharging, labelKey: "traffic_recharge" },
+  { mode: "debit", icon: BatteryCharging, labelKey: "traffic_debit" },
 ];
 
 function ByteInput({
@@ -69,7 +67,7 @@ function ByteInput({
 export default function TrafficAdjustmentModal({
   imsi,
   currentTraffic,
-  defaultMode = "recharge",
+  defaultMode = "credit",
   onClose,
   onSuccess,
   t,
@@ -79,7 +77,6 @@ export default function TrafficAdjustmentModal({
   const balance = Math.max(0, Number(currentTraffic.balance ?? Math.max(0, total - used)));
   const [mode, setMode] = useState<TrafficAdjustmentMode>(defaultMode);
   const [amountStr, setAmountStr] = useState("1 GB");
-  const [valueStr, setValueStr] = useState(formatBytes(mode === "set_total" ? total : balance));
   const [reason, setReason] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -87,18 +84,13 @@ export default function TrafficAdjustmentModal({
 
   const preview = useMemo(() => {
     const amount = parseBytes(amountStr);
-    const value = parseBytes(valueStr);
-    if (mode === "recharge") return { total: total + amount, balance: balance + amount, used };
-    if (mode === "set_available") return { total: Math.max(total, used + value), balance: value, used };
-    if (mode === "set_total") return { total: value, balance: Math.min(balance, Math.max(0, value - used)), used };
-    return { total, balance: total, used: 0 };
-  }, [amountStr, balance, mode, total, used, valueStr]);
+    const delta = mode === "credit" ? amount : -amount;
+    return { total: Math.max(0, total + delta), balance: Math.max(0, balance + delta), used };
+  }, [amountStr, balance, mode, total, used]);
 
   const handleModeChange = (nextMode: TrafficAdjustmentMode) => {
     setMode(nextMode);
     setError(null);
-    if (nextMode === "set_total") setValueStr(formatBytes(total));
-    if (nextMode === "set_available") setValueStr(formatBytes(balance));
   };
 
   const handleSubmit = async () => {
@@ -107,12 +99,11 @@ export default function TrafficAdjustmentModal({
 
     try {
       const payload: any = {
-        mode,
-        reason: reason.trim() || undefined,
+        bucket: "data",
+        operation: mode,
+        reason: reason.trim(),
       };
-
-      if (mode === "recharge") payload.amount = parseBytes(amountStr);
-      if (mode === "set_available" || mode === "set_total") payload.value = parseBytes(valueStr);
+      payload.amount = parseBytes(amountStr);
 
       const response = await fetch(`/api/subscribers/${imsi}/traffic-adjustments`, {
         method: "POST",
@@ -183,8 +174,7 @@ export default function TrafficAdjustmentModal({
             ))}
           </div>
 
-          {mode === "recharge" && <ByteInput label={t("traffic_amount")} value={amountStr} onChange={setAmountStr} />}
-          {(mode === "set_available" || mode === "set_total") && <ByteInput label={t("traffic_value")} value={valueStr} onChange={setValueStr} />}
+          <ByteInput label={t("traffic_amount")} value={amountStr} onChange={setAmountStr} />
 
           <div>
             <label className="form-label">{t("traffic_reason")}</label>

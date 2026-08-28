@@ -1,15 +1,14 @@
 import { NextResponse } from 'next/server';
 import { logAudit } from '@/lib/audit';
-import { requireAuth, requireCapability } from '@/lib/authz';
+import { requireAuth, requirePermission } from '@/lib/authz';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import {
   detectRuleConflicts,
   validateTariffRule,
 } from '@/lib/tariffPlanOperations';
-import {
-  addTariffPlanRule,
-  getTariffPlan,
-} from '@/server/repositories/ocsBillingRepository';
+import { getTariffPlan } from '@/server/repositories/ocsBillingRepository';
+import { OCS_OPERATIONS, evaluateOcsOperation } from '@/server/ocsGovernanceRegistry';
+import { createApprovalRequest } from '@/server/repositories/approvalRepository';
 
 export const dynamic = 'force-dynamic';
 
@@ -48,7 +47,8 @@ export async function GET(request: Request, { params }: RouteContext) {
 
 export async function POST(request: Request, { params }: RouteContext) {
   const { planId } = await params;
-  const auth = requireCapability(request, 'rating_publish');
+  const definition = evaluateOcsOperation(OCS_OPERATIONS.TARIFF_RULE_CREATE);
+  const auth = requirePermission(request, definition.permission);
   if (!auth.ok) return auth.response;
 
   const rateLimit = await enforceRateLimit(`tariff-plans:rules:create:${auth.auth.user}`, 30, 60);
@@ -66,15 +66,13 @@ export async function POST(request: Request, { params }: RouteContext) {
       return NextResponse.json({ error: 'Tariff plan not found' }, { status: 404 });
     }
 
-    const rule = await addTariffPlanRule(planId, body);
-    const after = await getTariffPlan(planId);
-
-    logAudit('CREATE', `tariff-plan:${planId}:rule:${rule.rule_id}`, null, rule, request);
-
-    return NextResponse.json(
-      { message: 'Rule added successfully', rule, plan: after },
-      { status: 201 }
-    );
+    const approval = await createApprovalRequest({
+      action: 'TARIFF_PLAN_RULE_CREATE', requester: auth.auth.user, targetId: `tariff-plan:${planId}`,
+      summary: `Add tariff rule to ${planId}`, operation: { resourceType: 'ocs_tariff_plan', resourceId: planId }, before,
+      payload: { schema: 'ocs-tariff-rule-v1', planId, rule: body },
+    });
+    logAudit('UPDATE', `approval:${approval.id}`, null, approval, request);
+    return NextResponse.json({ outcome: 'approval_required', message: 'Approval required before tariff rule creation', approval }, { status: 202 });
   } catch (error) {
     if (error instanceof Error) {
       if (error.message === 'RULE_ID_EXISTS') {

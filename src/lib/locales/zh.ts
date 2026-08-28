@@ -1552,6 +1552,7 @@ export const zh: Record<string, string> = {
     traffic_adjust: "流量调整",
     traffic_adjust_title: "流量充值 / 调整",
     traffic_recharge: "充值",
+    traffic_debit: "扣减",
     traffic_set_available: "设余额",
     traffic_set_total: "设配额",
     traffic_reset: "重置",

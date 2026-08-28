@@ -14,7 +14,7 @@ test('every subscriber mutation endpoint is classified by the canonical governan
     'POST /api/subscribers/bulk-delete': ['src/app/api/subscribers/bulk-delete/route.ts', 'APPROVAL_GOVERNED', 'SUBSCRIBER_OPERATIONS.BULK_DELETE'],
     'POST /api/subscribers/import': ['src/app/api/subscribers/import/route.ts', 'APPROVAL_GOVERNED', 'SUBSCRIBER_OPERATIONS.IMPORT'],
     'POST /api/subscribers/policy': ['src/app/api/subscribers/policy/route.ts', 'APPROVAL_GOVERNED', "action: 'POLICY_CHANGE'"],
-    'POST /api/subscribers/:imsi/traffic-adjustments': ['src/app/api/subscribers/[imsi]/traffic-adjustments/route.ts', 'APPROVAL_GOVERNED', "action: 'TRAFFIC_ADJUSTMENT'"],
+    'POST /api/subscribers/:imsi/traffic-adjustments': ['src/app/api/subscribers/[imsi]/traffic-adjustments/route.ts', 'APPROVAL_GOVERNED', 'OCS_OPERATIONS.BALANCE_ADJUST'],
   };
   for (const [route, [path, _status, marker]] of Object.entries(routes)) {
     assert.match(read(path), new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), route);

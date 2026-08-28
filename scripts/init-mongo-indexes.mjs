@@ -408,6 +408,13 @@ async function ensureIndexes() {
     { key: { operationFingerprint: 1 }, unique: true, partialFilterExpression: { action: { $in: ['SUBSCRIBER_UPDATE', 'SUBSCRIBER_DELETE', 'SUBSCRIBER_BATCH_CREATE', 'SUBSCRIBER_BATCH_UPDATE', 'SUBSCRIBER_IMPORT', 'SUBSCRIBER_IMPORT_OVERWRITE', 'SUBSCRIBER_BULK_DELETE'] }, status: { $in: ['pending', 'approved', 'executing'] }, operationFingerprint: { $type: 'string' } }, name: 'uniq_active_subscriber_governed_fingerprint' },
   ])).map((name) => ({ database: appDbName, collection: 'app_approvals', name })));
 
+  createdIndexes.push(...(await appDb.collection('ocs_balance_adjustments').createIndexes([
+    { key: { adjustmentId: 1 }, unique: true, name: 'uniq_ocs_balance_adjustment_id' },
+    { key: { executionId: 1 }, unique: true, name: 'uniq_ocs_balance_execution_id' },
+    { key: { approvalId: 1, completedAt: -1 }, name: 'ocs_balance_adjustment_approval_completed' },
+    { key: { imsi: 1, claimedAt: -1 }, name: 'ocs_balance_adjustment_imsi_claimed' },
+  ])).map((name) => ({ database: appDbName, collection: 'ocs_balance_adjustments', name })));
+
   createdIndexes.push(...(await appDb.collection('app_audit_logs').createIndexes([
     { key: { timestamp: -1 }, name: 'audit_timestamp_desc' },
     { key: { targetId: 1, timestamp: -1 }, name: 'audit_target_timestamp' },
