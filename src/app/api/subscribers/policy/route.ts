@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server';
 import { logAudit } from '@/lib/audit';
 import { requireCapability } from '@/lib/authz';
-import { capabilityDecision } from '@/lib/permissions';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import { validatePolicyChangePayload } from '@/lib/subscriberValidation';
 import { createApprovalRequest } from '@/server/repositories/approvalRepository';
-import { changeOcsPolicyForSubscribers, getTariffPlan } from '@/server/repositories/ocsBillingRepository';
+import { getTariffPlan } from '@/server/repositories/ocsBillingRepository';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,40 +23,20 @@ export async function POST(request: Request) {
     if (!plan) return NextResponse.json({ error: 'Tariff plan not found' }, { status: 404 });
     if (plan.status === 'disabled') return NextResponse.json({ error: 'Tariff plan is disabled' }, { status: 409 });
 
-    if (capabilityDecision(auth.auth.role, 'policy_approve') === 'approval') {
-      const uniqueImsis = Array.from(new Set(validation.value.imsiList));
-      const approval = await createApprovalRequest({
-        action: 'POLICY_CHANGE',
-        requester: auth.auth.user,
-        targetId: `policy:${validation.value.planId}`,
-        summary: `${uniqueImsis.length} subscriber(s) -> ${validation.value.planId} (${validation.value.status})`,
-        payload: validation.value,
-      });
-
-      logAudit('UPDATE', `approval:${approval.id}`, null, approval, request);
-      return NextResponse.json(
-        { message: 'Approval required before policy update', approval },
-        { status: 202 }
-      );
-    }
-
-    const result = await changeOcsPolicyForSubscribers(validation.value);
-    logAudit(
-      'UPDATE',
-      `policy:${result.planId}`,
-      null,
-      {
-        imsiList: validation.value.imsiList,
-        requested: result.requested,
-        subscriberModified: result.subscriberModified,
-        balanceModified: result.balanceModified,
-        status: result.status,
-        resetBalances: result.resetBalances,
-      },
-      request
+    const uniqueImsis = Array.from(new Set(validation.value.imsiList));
+    const approval = await createApprovalRequest({
+      action: 'POLICY_CHANGE',
+      requester: auth.auth.user,
+      targetId: `policy:${validation.value.planId}`,
+      summary: `${uniqueImsis.length} subscriber(s) -> ${validation.value.planId} (${validation.value.status})`,
+      payload: validation.value,
+    });
+    logAudit('UPDATE', `approval:${approval.id}`, null, approval, request);
+    return NextResponse.json(
+      { outcome: 'approval_required', message: 'Approval required before policy update', approval },
+      { status: 202 }
     );
 
-    return NextResponse.json({ message: 'Policy updated successfully', result });
   } catch (error) {
     if (error instanceof Error && error.message === 'OCS_PLAN_NOT_FOUND') {
       return NextResponse.json({ error: 'Tariff plan not found' }, { status: 404 });

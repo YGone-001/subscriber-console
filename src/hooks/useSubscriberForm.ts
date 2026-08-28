@@ -353,8 +353,16 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
     try {
       const res = await fetch(`/api/subscribers/${imsi}`, { method: "DELETE" });
       if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (data?.outcome === 'approval_required') {
+          setToastMessage(`Change request ${data?.approval?.changeId || ''} submitted. The subscriber remains unchanged until approval is executed.`);
+          return;
+        }
         onRefresh();
         onClose();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setError(data?.error || t("sub_err_delete"));
       }
     } catch {
       setError(t("sub_err_delete"));
@@ -454,8 +462,9 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
         body: JSON.stringify(payload),
       });
 
+      const responseData = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
+        const data = responseData;
         if (data?.error === "Tariff plan not found") throw new Error(t("tariff_plan_err_not_found"));
         if (data?.error === "Invalid plan_id format") throw new Error(t("tariff_plan_err_id"));
         if (data?.error === "Tariff plan is disabled") throw new Error(t("tariff_plan_err_disabled"));
@@ -464,6 +473,12 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
           throw new Error(t("sub_err_msisdn_exists"));
         }
         throw new Error(data?.error || t("sub_err_save"));
+      }
+
+      if (responseData?.outcome === 'approval_required') {
+        setToastMessage(`Change request ${responseData?.approval?.changeId || ''} submitted. The subscriber remains unchanged until approval is executed.`);
+        setIsEditing(false);
+        return;
       }
 
       onRefresh();

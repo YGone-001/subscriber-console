@@ -247,7 +247,7 @@ export default function SubscriberModal({ imsi, onClose, onRefresh }: Subscriber
                 onClick={handleSave}
                 disabled={isSaving || isCheckingInputImsi || isCheckingInputMsisdn || inputImsiExists || inputMsisdnExists || (imsi === null && !inputImsi)}
               >
-                <Save size={18}/> {isSaving ? t("saving") : t("save")}
+                <Save size={18}/> {isSaving ? t("saving") : (imsi ? "提交审批" : t("save"))}
               </button>
             )}
           </div>

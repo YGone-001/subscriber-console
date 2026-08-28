@@ -1,23 +1,15 @@
 import { NextResponse } from 'next/server';
-import { logAudit, type AuditAction } from '@/lib/audit';
+import { logAudit } from '@/lib/audit';
 import { requireCapability } from '@/lib/authz';
-import { capabilityDecision } from '@/lib/permissions';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import { validateImsi, validateTrafficAdjustmentPayload } from '@/lib/subscriberValidation';
 import { createApprovalRequest } from '@/server/repositories/approvalRepository';
-import { adjustOcsTrafficBalance } from '@/server/repositories/ocsBillingRepository';
 
 export const dynamic = 'force-dynamic';
 
 type RouteContext = {
   params: Promise<{ imsi: string }>;
 };
-
-function auditActionForMode(mode: string): AuditAction {
-  if (mode === 'recharge') return 'TRAFFIC_RECHARGE';
-  if (mode === 'reset') return 'TRAFFIC_RESET';
-  return 'TRAFFIC_ADJUST';
-}
 
 function errorResponse(error: unknown) {
   const message = error instanceof Error ? error.message : '';
@@ -50,42 +42,17 @@ export async function POST(request: Request, { params }: RouteContext) {
     const validation = validateTrafficAdjustmentPayload(body);
     if (!validation.ok) return NextResponse.json({ error: validation.error }, { status: 400 });
 
-    if (capabilityDecision(auth.auth.role, 'balance_adjust') === 'approval') {
-      const approval = await createApprovalRequest({
-        action: 'TRAFFIC_ADJUSTMENT',
-        requester: auth.auth.user,
-        targetId: imsi,
-        summary: `${imsi} traffic ${validation.value.mode}`,
-        payload: {
-          imsi,
-          adjustment: validation.value,
-        },
-      });
-
-      logAudit('UPDATE', `approval:${approval.id}`, null, approval, request);
-      return NextResponse.json(
-        { message: 'Approval required before traffic adjustment', approval },
-        { status: 202 }
-      );
-    }
-
-    const result = await adjustOcsTrafficBalance(imsi, validation.value);
-    logAudit(
-      auditActionForMode(result.mode),
-      imsi,
-      result.before,
-      {
-        ...result.after,
-        mode: result.mode,
-        reason: result.reason,
-      },
-      request
+    const approval = await createApprovalRequest({
+      action: 'TRAFFIC_ADJUSTMENT', requester: auth.auth.user, targetId: imsi,
+      summary: `${imsi} traffic ${validation.value.mode}`,
+      payload: { imsi, adjustment: validation.value },
+    });
+    logAudit('UPDATE', `approval:${approval.id}`, null, approval, request);
+    return NextResponse.json(
+      { outcome: 'approval_required', message: 'Approval required before traffic adjustment', approval },
+      { status: 202 }
     );
 
-    return NextResponse.json({
-      message: 'Traffic balance adjusted successfully',
-      adjustment: result,
-    });
   } catch (error) {
     return errorResponse(error);
   }

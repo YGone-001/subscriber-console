@@ -108,6 +108,14 @@ function executionService(state, accountRole = 'viewer') {
       executeFrozenSubscriberBatchChange: async () => ({}),
       SubscriberBatchGovernanceError: class extends Error {},
     },
+    '@/server/subscriberSingleGovernance': {
+      executeFrozenSubscriberUpdate: async () => ({}),
+      executeFrozenSubscriberDelete: async () => ({}),
+      SubscriberGovernanceError: class extends Error {},
+    },
+    '@/server/subscriberGovernanceRegistry': {
+      assertGovernedOperationCoverage: () => {},
+    },
     '@/server/approvalWorkflow': {
       ApprovalWorkflowError: class extends Error {},
       approvalActionEligibility: (item) => ({ canExecute: item.status === 'approved' }),

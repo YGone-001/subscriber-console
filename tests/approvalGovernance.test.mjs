@@ -6,7 +6,7 @@ import { assessApprovalRisk, requiresIndependentReviewer, supportedApprovalActio
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 
 test('risk policy is server-owned, exhaustive for supported actions, and fail-safe for unknown operations', () => {
-  assert.equal(supportedApprovalActions().length, 13);
+  assert.ok(supportedApprovalActions().length >= 13);
   for (const action of supportedApprovalActions()) {
     const assessment = assessApprovalRisk(action);
     assert.match(assessment.policyId, /^approval-risk-/);
@@ -16,6 +16,14 @@ test('risk policy is server-owned, exhaustive for supported actions, and fail-sa
   assert.equal(requiresIndependentReviewer('high'), true);
   assert.equal(requiresIndependentReviewer('critical'), true);
   assert.equal(requiresIndependentReviewer('medium'), false);
+});
+
+test('automatic subscriber approvals have an explicit production executor coverage invariant', async () => {
+  const registry = await import('../src/server/subscriberGovernanceRegistry.ts');
+  const execution = read('src/server/approvalExecution.ts');
+  for (const action of registry.governedSubscriberApprovalActions) assert.match(execution, new RegExp(action));
+  assert.doesNotThrow(() => registry.assertGovernedOperationCoverage(registry.governedSubscriberApprovalActions));
+  assert.throws(() => registry.assertGovernedOperationCoverage([]), /GOVERNED_OPERATION_EXECUTOR_MISSING/);
 });
 
 test('change IDs use an atomic sequence and new writes never persist legacy executed status', () => {

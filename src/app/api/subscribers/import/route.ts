@@ -2,14 +2,12 @@ import { NextResponse } from 'next/server';
 import { logAudit } from '@/lib/audit';
 import { requireCapability } from '@/lib/authz';
 import { enforceRateLimit } from '@/lib/rateLimit';
-import { isSuperAdmin } from '@/lib/permissions';
 import { createApprovalRequest } from '@/server/repositories/approvalRepository';
-import {
-  importSubscribersFromRecords,
-  precheckSubscriberImsis,
-} from '@/server/repositories/subscriberRepository';
+import { precheckSubscriberImsis } from '@/server/repositories/subscriberRepository';
 import { getTariffPlan } from '@/server/repositories/ocsBillingRepository';
 import { validateImportRecords, validateImsiList } from '@/lib/subscriberValidation';
+import { createHash } from 'node:crypto';
+import { evaluateSubscriberOperation, SUBSCRIBER_OPERATIONS } from '@/server/subscriberGovernanceRegistry';
 
 export const dynamic = 'force-dynamic';
 
@@ -57,48 +55,25 @@ export async function POST(request: Request) {
       const validation = validateImportRecords(records);
       if (!validation.ok) return NextResponse.json({ error: validation.error }, { status: 400 });
       await validateImportPlanIds(validation.value);
+      const secretBearing = validation.value.some((record) => ['k', 'op', 'opc', 'amf', 'sqn'].some((key) => record[key] !== undefined && String(record[key]).trim() !== ''));
+      if (secretBearing) return NextResponse.json({ error: 'SENSITIVE_SUBSCRIBER_CHANGE_NOT_SUPPORTED' }, { status: 422 });
+      const imsis = validation.value.map((record) => String(record.imsi || '').trim()).filter(Boolean);
+      const precheck = await precheckSubscriberImsis(imsis);
+      const existing = precheck.filter((item) => item.exists).map((item) => item.imsi);
+      const operation = overwrite ? SUBSCRIBER_OPERATIONS.IMPORT_OVERWRITE : SUBSCRIBER_OPERATIONS.IMPORT;
+      const policy = evaluateSubscriberOperation(operation);
+      if (!policy.executable) return NextResponse.json({ error: 'OPERATION_NOT_EXECUTABLE' }, { status: 409 });
+      const normalizedPayload = { version: 'subscriber-import-v1', records: validation.value, overwrite: !!overwrite, summary: { rowCount: validation.value.length, createCount: imsis.length - existing.length, updateCount: overwrite ? existing.length : 0, conflictCount: existing.length, fieldNames: Array.from(new Set(validation.value.flatMap((record) => Object.keys(record))).values()).sort(), fileHash: createHash('sha256').update(JSON.stringify(validation.value)).digest('hex') } };
 
-      if (!isSuperAdmin(auth.auth.role)) {
-        const approval = await createApprovalRequest({
-          action: 'SUBSCRIBER_IMPORT',
-          requester: auth.auth.user,
-          targetId: 'subscriber:csv-import',
-          summary: `Import ${validation.value.length} subscriber record(s)${overwrite ? ' with overwrite' : ''}`,
-          payload: {
-            records: validation.value,
-            overwrite: !!overwrite,
-          },
-        });
-
-        logAudit('UPDATE', `approval:${approval.id}`, null, approval, request);
-        return NextResponse.json(
-          { message: 'Approval required before subscriber import', approval },
-          { status: 202 }
-        );
-      }
-
-      const result = await importSubscribersFromRecords(validation.value, !!overwrite);
-
-      if (result.importedImsis.length > 0) {
-        logAudit(
-          'CSV_IMPORT',
-          result.importedImsis.join(','),
-          null,
-          {
-            count: result.imported,
-            overwrite: !!overwrite,
-          },
-          request
-        );
-      }
-
-      return NextResponse.json({
-        message: `Import completed: ${result.imported} imported, ${result.skipped} skipped${result.failed > 0 ? `, ${result.failed} failed` : ''}`,
-        imported: result.imported,
-        skipped: result.skipped,
-        failed: result.failed,
-        failedImsis: result.failedImsis,
-      }, { status: result.failed > 0 ? 207 : 200 });
+      const approval = await createApprovalRequest({
+        action: overwrite ? 'SUBSCRIBER_IMPORT_OVERWRITE' : 'SUBSCRIBER_IMPORT', requester: auth.auth.user,
+        targetId: 'subscriber:csv-import', summary: `Import ${validation.value.length} subscriber record(s)${overwrite ? ' with overwrite' : ''}`,
+        operation: { resourceType: 'subscriber_import', resourceId: normalizedPayload.summary.fileHash },
+        operationFingerprint: createHash('sha256').update(JSON.stringify({ action: operation, targets: imsis.sort(), fileHash: normalizedPayload.summary.fileHash })).digest('hex'),
+        payload: normalizedPayload,
+      });
+      logAudit('UPDATE', `approval:${approval.id}`, null, approval, request);
+      return NextResponse.json({ outcome: 'approval_required', message: 'Approval required before subscriber import', approval }, { status: 202 });
     }
 
     return NextResponse.json({ error: 'Invalid mode parameter' }, { status: 400 });

@@ -11,6 +11,7 @@ import {
 } from '@/server/repositories/subscriberRepository';
 import { open5gsToLegacyState } from '@/lib/xcloudSubscriber';
 import { validateImsi } from '@/lib/subscriberValidation';
+import { evaluateSubscriberOperation, SUBSCRIBER_OPERATIONS } from '@/server/subscriberGovernanceRegistry';
 
 export const dynamic = 'force-dynamic';
 
@@ -70,6 +71,10 @@ export async function POST(request: Request) {
     if (!rateLimit.ok) return rateLimit.response;
 
     const data = await request.json();
+    const policy = evaluateSubscriberOperation(SUBSCRIBER_OPERATIONS.CREATE);
+    if (!policy.allowed || policy.requiresApproval || !policy.executable) {
+      return NextResponse.json({ error: 'OPERATION_NOT_EXECUTABLE' }, { status: 409 });
+    }
     const imsiResult = validateImsi(data?.imsi);
     if (!imsiResult.ok) return NextResponse.json({ error: imsiResult.error }, { status: 400 });
     const imsi = imsiResult.value;
@@ -84,7 +89,7 @@ export async function POST(request: Request) {
 
     logAudit('CREATE', imsi, null, legacyState, request);
 
-    return NextResponse.json({ message: 'Subscriber created successfully', imsi }, { status: 201 });
+    return NextResponse.json({ outcome: 'executed', message: 'Subscriber created successfully', imsi }, { status: 201 });
   } catch (error) {
     if (error instanceof Error && error.message === 'SUBSCRIBER_EXISTS') {
       return NextResponse.json({ error: 'Subscriber already exists' }, { status: 409 });
