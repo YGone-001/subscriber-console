@@ -254,6 +254,11 @@ export async function executeApproval(approval: ApprovalDocument, request: Reque
     if (!validation.ok) throw new Error(validation.error);
 
     const result = await importSubscribersFromRecords(validation.value, payload.overwrite === true);
+    if (result.failed > 0) {
+      const error = new Error('SUBSCRIBER_IMPORT_PARTIAL_WRITE') as Error & { details?: unknown };
+      error.details = { ...result, partialMutation: result.imported > 0 };
+      throw error;
+    }
     if (result.importedImsis.length > 0) {
       logAudit(
         'CSV_IMPORT',
