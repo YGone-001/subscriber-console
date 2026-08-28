@@ -41,4 +41,5 @@ test('approval and audit snapshots never transport subscriber authentication mat
   assert.match(governance, /Never include security, K, OP\/OPc, AMF or SQN/);
   assert.match(governance, /SENSITIVE_SUBSCRIBER_CHANGE_NOT_SUPPORTED/);
   assert.match(importer, /SENSITIVE_SUBSCRIBER_CHANGE_NOT_SUPPORTED/);
+  assert.match(importer, /SUBSCRIBER_IMPORT_OVERWRITE_NOT_SUPPORTED/);
 });

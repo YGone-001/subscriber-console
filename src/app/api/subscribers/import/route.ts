@@ -60,13 +60,17 @@ export async function POST(request: Request) {
       const imsis = validation.value.map((record) => String(record.imsi || '').trim()).filter(Boolean);
       const precheck = await precheckSubscriberImsis(imsis);
       const existing = precheck.filter((item) => item.exists).map((item) => item.imsi);
-      const operation = overwrite ? SUBSCRIBER_OPERATIONS.IMPORT_OVERWRITE : SUBSCRIBER_OPERATIONS.IMPORT;
+      // Replace-based CSV import would rebuild Open5GS security from the row.
+      // Until a dedicated encrypted staged-secret facility exists it is disabled
+      // rather than creating an approval that cannot safely execute.
+      if (overwrite) return NextResponse.json({ error: 'SUBSCRIBER_IMPORT_OVERWRITE_NOT_SUPPORTED' }, { status: 422 });
+      const operation = SUBSCRIBER_OPERATIONS.IMPORT;
       const policy = evaluateSubscriberOperation(operation);
       if (!policy.executable) return NextResponse.json({ error: 'OPERATION_NOT_EXECUTABLE' }, { status: 409 });
       const normalizedPayload = { version: 'subscriber-import-v1', records: validation.value, overwrite: !!overwrite, summary: { rowCount: validation.value.length, createCount: imsis.length - existing.length, updateCount: overwrite ? existing.length : 0, conflictCount: existing.length, fieldNames: Array.from(new Set(validation.value.flatMap((record) => Object.keys(record))).values()).sort(), fileHash: createHash('sha256').update(JSON.stringify(validation.value)).digest('hex') } };
 
       const approval = await createApprovalRequest({
-        action: overwrite ? 'SUBSCRIBER_IMPORT_OVERWRITE' : 'SUBSCRIBER_IMPORT', requester: auth.auth.user,
+        action: 'SUBSCRIBER_IMPORT', requester: auth.auth.user,
         targetId: 'subscriber:csv-import', summary: `Import ${validation.value.length} subscriber record(s)${overwrite ? ' with overwrite' : ''}`,
         operation: { resourceType: 'subscriber_import', resourceId: normalizedPayload.summary.fileHash },
         operationFingerprint: createHash('sha256').update(JSON.stringify({ action: operation, targets: imsis.sort(), fileHash: normalizedPayload.summary.fileHash })).digest('hex'),
