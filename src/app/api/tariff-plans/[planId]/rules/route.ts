@@ -50,6 +50,7 @@ export async function POST(request: Request, { params }: RouteContext) {
   const definition = evaluateOcsOperation(OCS_OPERATIONS.TARIFF_RULE_CREATE);
   const auth = requirePermission(request, definition.permission);
   if (!auth.ok) return auth.response;
+  if (!definition.executable) return NextResponse.json({ error: definition.disabledCode || 'OCS_OPERATION_NOT_SUPPORTED', code: definition.disabledCode || 'OCS_OPERATION_NOT_SUPPORTED' }, { status: 409 });
 
   const rateLimit = await enforceRateLimit(`tariff-plans:rules:create:${auth.auth.user}`, 30, 60);
   if (!rateLimit.ok) return rateLimit.response;

@@ -3,10 +3,10 @@ import { auditRequestContext } from '@/lib/audit/record';
 import { validateCurrentAccount } from '@/lib/accountSession';
 import { executeApproval } from '@/server/approvalExecutors';
 import { executeFrozenSubscriberBatchChange, SubscriberBatchGovernanceError } from '@/server/subscriberOperationPolicy';
-import { executeFrozenSubscriberBulkDelete, executeFrozenSubscriberDelete, executeFrozenSubscriberUpdate, SubscriberGovernanceError } from '@/server/subscriberSingleGovernance';
+import { executeFrozenSubscriberBulkDelete, executeFrozenSubscriberDelete, executeFrozenSubscriberUpdate } from '@/server/subscriberSingleGovernance';
 import { assertGovernedOperationCoverage } from '@/server/subscriberGovernanceRegistry';
 import { executeFrozenOcsBalanceAdjustment, OcsBalanceGovernanceError } from '@/server/ocsBalanceGovernance';
-import { assertOcsApprovalExecutorCoverage } from '@/server/ocsGovernanceRegistry';
+import { assertOcsGovernedOperationCoverage } from '@/server/ocsGovernanceRegistry';
 import { approvalActionEligibility, ApprovalWorkflowError } from '@/server/approvalWorkflow';
 import { getApproval, transitionApproval, type ApprovalDocument } from '@/server/repositories/approvalRepository';
 import { getUser } from '@/server/repositories/userRepository';
@@ -115,12 +115,8 @@ assertSubscriberApprovalExecutorCoverage();
 
 /** OCS administrative actions use the same default executor. The legacy
  * compatibility executor remains only for approvals created before Phase 7. */
-export const automaticOcsExecutorActions = [
-  'TRAFFIC_ADJUSTMENT', 'TARIFF_PLAN_CREATE', 'TARIFF_PLAN_UPDATE', 'TARIFF_PLAN_DELETE',
-  'TARIFF_PLAN_RULE_CREATE', 'TARIFF_PLAN_RULE_UPDATE', 'TARIFF_PLAN_RULE_DELETE', 'TARIFF_PLAN_RULE_TOGGLE',
-  'POLICY_CHANGE', 'TARIFF_PLAN_MIGRATE', 'RATING_CREATE', 'RATING_UPDATE', 'RATING_DELETE',
-] as const;
-export function assertOcsExecutorCoverage() { assertOcsApprovalExecutorCoverage(automaticOcsExecutorActions); }
+export const automaticOcsExecutorActions = ['TRAFFIC_ADJUSTMENT'] as const;
+export function assertOcsExecutorCoverage() { assertOcsGovernedOperationCoverage(automaticOcsExecutorActions); }
 assertOcsExecutorCoverage();
 
 function asRecord(value: unknown): Record<string, unknown> {
