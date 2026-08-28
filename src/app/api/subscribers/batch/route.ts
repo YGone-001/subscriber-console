@@ -2,9 +2,7 @@ import { NextResponse } from 'next/server';
 import { logAudit } from '@/lib/audit';
 import { requireCapability } from '@/lib/authz';
 import { enforceRateLimit } from '@/lib/rateLimit';
-import { isSuperAdmin } from '@/lib/permissions';
 import { createApprovalRequest } from '@/server/repositories/approvalRepository';
-import { createSubscribersBatch } from '@/server/repositories/subscriberRepository';
 import { getTariffPlan } from '@/server/repositories/ocsBillingRepository';
 import { validateBatchCreatePayload } from '@/lib/subscriberValidation';
 
@@ -26,60 +24,19 @@ export async function POST(request: Request) {
     if (!plan) return NextResponse.json({ error: 'Tariff plan not found' }, { status: 404 });
     if (plan.status === 'disabled') return NextResponse.json({ error: 'Tariff plan is disabled' }, { status: 409 });
 
-    if (!isSuperAdmin(auth.auth.role)) {
-      const approval = await createApprovalRequest({
-        action: 'SUBSCRIBER_BATCH_CREATE',
-        requester: auth.auth.user,
-        targetId: `subscriber:batch:${payload.startImsi}`,
-        summary: `Batch create ${payload.count} subscriber(s) from ${payload.startImsi}`,
-        payload,
-      });
-
-      logAudit('UPDATE', `approval:${approval.id}`, null, approval, request);
-      return NextResponse.json(
-        { message: 'Approval required before batch subscriber creation', approval },
-        { status: 202 }
-      );
-    }
-
-    const result = await createSubscribersBatch({
-      startImsi: payload.startImsi,
-      count: payload.count,
-      trafficTotal: payload.trafficTotal,
-      trafficBalance: payload.trafficBalance,
-      smsTotal: payload.smsTotal,
-      smsBalance: payload.smsBalance,
-      profileName: payload.profileName,
-      planId: payload.planId,
-      strategy: payload.strategy,
+    // High-risk batch writes never have a root/super-admin direct-execution path.
+    const approval = await createApprovalRequest({
+      action: 'SUBSCRIBER_BATCH_CREATE',
+      requester: auth.auth.user,
+      targetId: `subscriber:batch:${payload.startImsi}`,
+      summary: `Batch create ${payload.count} subscriber(s) from ${payload.startImsi}`,
+      payload,
     });
-    const { createdImsis, skippedImsis, failedImsis, metrics } = result;
 
-    if (createdImsis.length > 0) {
-      logAudit(
-        'BATCH_CREATE',
-        `${createdImsis[0]} ~ ${createdImsis[createdImsis.length - 1]}`,
-        null,
-        {
-          batchSize: createdImsis.length,
-          skipped: skippedImsis.length,
-          profileTemplate: payload.profileName,
-          batchMetrics: metrics,
-        },
-        request
-      );
-    }
-
+    logAudit('UPDATE', `approval:${approval.id}`, null, approval, request);
     return NextResponse.json(
-      {
-        message: `Successfully created ${createdImsis.length} subscribers${skippedImsis.length > 0 ? ` (Skipped ${skippedImsis.length})` : ''}${failedImsis.length > 0 ? ` (Failed ${failedImsis.length})` : ''}`,
-        count: createdImsis.length,
-        skippedCount: skippedImsis.length,
-        failedCount: failedImsis.length,
-        failedImsis,
-        range: createdImsis.length > 0 ? { from: createdImsis[0], to: createdImsis[createdImsis.length - 1] } : null,
-      },
-      { status: failedImsis.length > 0 ? 207 : 201 }
+      { message: 'Approval required before batch subscriber creation', approval, requiresApproval: true },
+      { status: 202 }
     );
   } catch (error) {
     if (error instanceof Error && error.message === 'IMSI_RANGE_OVERFLOW') {
