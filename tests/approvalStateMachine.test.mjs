@@ -104,6 +104,10 @@ function executionService(state, accountRole = 'viewer') {
     '@/lib/audit/record': { auditRequestContext: () => ({}) },
     '@/lib/accountSession': { validateCurrentAccount: async ({ username, role }) => ({ userId: username, username, role }) },
     '@/server/approvalExecutors': { executeApproval: async () => ({}) },
+    '@/server/subscriberOperationPolicy': {
+      executeFrozenSubscriberBatchChange: async () => ({}),
+      SubscriberBatchGovernanceError: class extends Error {},
+    },
     '@/server/approvalWorkflow': {
       ApprovalWorkflowError: class extends Error {},
       approvalActionEligibility: (item) => ({ canExecute: item.status === 'approved' }),

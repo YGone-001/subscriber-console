@@ -2,6 +2,7 @@ import { writeAuditLog } from '@/lib/audit';
 import { auditRequestContext } from '@/lib/audit/record';
 import { validateCurrentAccount } from '@/lib/accountSession';
 import { executeApproval } from '@/server/approvalExecutors';
+import { executeFrozenSubscriberBatchChange, SubscriberBatchGovernanceError } from '@/server/subscriberOperationPolicy';
 import { approvalActionEligibility, ApprovalWorkflowError } from '@/server/approvalWorkflow';
 import { getApproval, transitionApproval, type ApprovalDocument } from '@/server/repositories/approvalRepository';
 import { getUser } from '@/server/repositories/userRepository';
@@ -9,21 +10,36 @@ import type { AuthContext } from '@/lib/authz';
 import type { GovernanceActor } from '@/types/governance';
 
 export interface GovernedApprovalExecutor {
-  execute(approval: ApprovalDocument, request: Request): Promise<unknown>;
+  execute(approval: ApprovalDocument, request: Request, actor?: GovernanceActor): Promise<unknown>;
 }
 
 export class ApprovalExecutionError extends Error {
-  constructor(public readonly code: string, public readonly status = 409, public readonly approval?: ApprovalDocument, public readonly committed = false) {
+  constructor(public readonly code: string, public readonly status = 409, public readonly approval?: ApprovalDocument, public readonly committed = false, public readonly details?: unknown) {
     super(code);
   }
 }
 
 const defaultExecutor: GovernedApprovalExecutor = {
-  async execute(approval, request) {
-    // Phase 4 deliberately governs only the safe access-request path. Production
-    // Subscriber/OCS/NF executors remain outside this rollout until Phase 5.
-    if (approval.action !== 'ACCESS_REQUEST') throw new ApprovalExecutionError('APPROVAL_EXECUTOR_NOT_ENABLED', 409);
-    return executeApproval(approval, request);
+  async execute(approval, request, actor) {
+    if (approval.action === 'ACCESS_REQUEST') return executeApproval(approval, request);
+    if (approval.action === 'SUBSCRIBER_BATCH_UPDATE') {
+      const result = await executeFrozenSubscriberBatchChange(approval.payload);
+      try {
+        await writeAuditLog({
+          actor: actor || { type: 'system', userId: 'system', username: 'system' }, module: 'subscribers', action: 'subscriber.batch.update',
+          resource: { type: 'subscriber_batch', id: approval.operation.resourceId, name: approval.changeId || approval.id },
+          targetId: `subscriber-batch:${approval.operation.resourceId}`, approvalId: approval.id, riskLevel: approval.riskLevel,
+          result: 'success', reason: approval.reason, before: approval.before, after: approval.after,
+          metadata: { executionId: approval.execution?.id, operationFingerprint: approval.operationFingerprint, requested: result.requested, matched: result.matched, modified: result.modified, fieldNames: result.fieldNames },
+          ...auditRequestContext(request),
+        }, { failureMode: 'strict' });
+      } catch {
+        console.error('SUBSCRIBER_BATCH_AUDIT_PERSISTENCE_ALERT', { approvalId: approval.id, executionId: approval.execution?.id });
+        throw new ApprovalExecutionError('AUDIT_UNAVAILABLE', 503, approval, false, { ...result, mutationCommitted: true });
+      }
+      return result;
+    }
+    throw new ApprovalExecutionError('APPROVAL_EXECUTOR_NOT_ENABLED', 409);
   },
 };
 
@@ -83,13 +99,18 @@ async function finishExecution(input: {
   const completedAt = new Date().toISOString();
   const failed = Boolean(input.error);
   const code = input.error instanceof ApprovalExecutionError ? input.error.code : input.error instanceof Error ? input.error.message : 'APPROVAL_EXECUTION_FAILED';
+  const failureDetails = input.error instanceof ApprovalExecutionError
+    ? input.error.details
+    : input.error && typeof input.error === 'object' && 'details' in input.error
+      ? (input.error as { details?: unknown }).details
+      : undefined;
   const next = await transitionApproval({
     id: input.approval.id, expectedStatus: 'executing', expectedExecutionId: input.executionId,
     nextStatus: failed ? 'failed' : 'completed', actor: input.actor.username || 'system',
     eventType: failed ? 'execution_failed' : 'execution_completed',
     eventMessage: failed ? `Execution failed: ${code}` : 'Execution completed',
     patch: {
-      result: input.result,
+      result: input.result ?? failureDetails,
       error: failed ? code : undefined,
       executedAt: completedAt,
       execution: {
@@ -129,9 +150,12 @@ export async function executeApprovedChange(request: Request, id: string, auth: 
   await writeExecutionAudit(request, 'approval.execute.start', claimed.approval, actor, 'success');
   try {
     await validateExecutionPrecondition(claimed.approval);
-    const result = await executor.execute(claimed.approval, request);
+    const result = await executor.execute(claimed.approval, request, actor);
     return await finishExecution({ request, approval: claimed.approval, actor, executionId, result });
   } catch (error) {
+    if (error instanceof SubscriberBatchGovernanceError) {
+      return finishExecution({ request, approval: claimed.approval, actor, executionId, error });
+    }
     if (error instanceof ApprovalExecutionError && error.code === 'AUDIT_UNAVAILABLE' && error.committed) throw error;
     return finishExecution({ request, approval: claimed.approval, actor, executionId, error: error instanceof Error ? error : new Error('APPROVAL_EXECUTION_FAILED') });
   }
