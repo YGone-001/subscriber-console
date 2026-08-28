@@ -570,6 +570,36 @@ export async function findSubscriberDocument(imsi: string): Promise<Open5gsSubsc
   return collection.findOne({ imsi });
 }
 
+/** Narrow repository seam for governed bulk mutations. It intentionally exposes
+ * only the core-subscriber collection; OCS and authentication material remain
+ * outside the Phase 5 batch-update allowlist. */
+export async function findSubscriberDocuments(imsis: string[]): Promise<Open5gsSubscriberDocument[]> {
+  const collection = await subscribersCollection();
+  return collection.find({ imsi: { $in: imsis } }).toArray();
+}
+
+export type GovernedSubscriberConditionalUpdate = {
+  imsi: string;
+  expected: Record<string, number>;
+  next: Record<string, number>;
+};
+
+/** Each update carries the frozen before values in its filter. MongoDB applies
+ * an individual document update atomically, so a concurrent change cannot be
+ * overwritten by a stale approval snapshot. */
+export async function applyGovernedSubscriberConditionalUpdates(updates: GovernedSubscriberConditionalUpdate[]) {
+  const collection = await subscribersCollection();
+  if (updates.length === 0) return { matchedCount: 0, modifiedCount: 0 };
+  const result = await collection.bulkWrite(updates.map((item) => ({
+    updateOne: {
+      filter: { imsi: item.imsi, ...item.expected },
+      update: { $set: item.next },
+      upsert: false,
+    },
+  })), { ordered: true });
+  return { matchedCount: result.matchedCount, modifiedCount: result.modifiedCount };
+}
+
 export async function findSubscriberLegacyState(imsi: string): Promise<LegacySubscriberState | null> {
   const doc = await findSubscriberDocument(imsi);
   const state = open5gsToLegacyState(doc);

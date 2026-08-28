@@ -24,6 +24,7 @@ const RISK_CATALOG: Readonly<Record<ApprovalAction, RiskRule>> = {
   PROFILE_RESTORE: { level: 'high', reasons: ['Restores a previous configuration snapshot'] },
   SYSTEM_HEAL: { level: 'high', reasons: ['Writes corrective state to a managed resource'] },
   SUBSCRIBER_BATCH_CREATE: { level: 'high', reasons: ['Creates multiple subscriber records'] },
+  SUBSCRIBER_BATCH_UPDATE: { level: 'high', reasons: ['Changes live core subscriber access or AMBR settings in bulk'] },
   SUBSCRIBER_IMPORT: { level: 'critical', reasons: ['Imports or overwrites multiple subscriber records'] },
   SUBSCRIBER_BULK_DELETE: { level: 'critical', reasons: ['Deletes multiple subscriber records'] },
 };

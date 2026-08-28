@@ -14,6 +14,7 @@ export type ApprovalAction =
   | 'PROFILE_RESTORE'
   | 'SYSTEM_HEAL'
   | 'SUBSCRIBER_BATCH_CREATE'
+  | 'SUBSCRIBER_BATCH_UPDATE'
   | 'SUBSCRIBER_IMPORT'
   | 'SUBSCRIBER_BULK_DELETE'
   | 'ACCESS_REQUEST';
@@ -53,6 +54,7 @@ export type ApprovalDocument = {
   action: ApprovalAction;
   status: ApprovalStatus;
   operation: ApprovalOperation;
+  operationFingerprint?: string;
   riskLevel: RiskLevel;
   riskAssessment: ApprovalRiskAssessment;
   requester: string;
@@ -90,6 +92,7 @@ export type CreateApprovalInput = {
   title?: string;
   description?: string;
   operation?: ApprovalOperation;
+  operationFingerprint?: string;
   reason?: string;
   ticketId?: string;
   maintenanceWindow?: ApprovalMaintenanceWindow;
@@ -212,6 +215,7 @@ export async function createApprovalRequest(input: CreateApprovalInput): Promise
     action: input.action,
     status: 'pending',
     operation: { resourceType: sanitizeAuditText(operation.resourceType), resourceId: sanitizeAuditText(operation.resourceId) },
+    operationFingerprint: input.operationFingerprint ? sanitizeAuditText(input.operationFingerprint) : undefined,
     riskLevel: riskAssessment.level,
     riskAssessment,
     requester: sanitizeAuditText(input.requester),
@@ -314,6 +318,18 @@ export async function listApprovals(options: ListApprovalOptions = {}) {
 export async function getApproval(id: string): Promise<ApprovalDocument | null> {
   const docs = await collection();
   return normalizeApproval(await docs.findOne({ id }));
+}
+
+/** Active governed subscriber changes are intentionally small (the batch target
+ * cap is 100), so the route can compare their frozen target/field summaries
+ * without introducing a separate lock service. */
+export async function listActiveSubscriberBatchApprovals() {
+  const docs = await collection();
+  const values = await docs.find({
+    action: 'SUBSCRIBER_BATCH_UPDATE',
+    status: { $in: ['pending', 'approved', 'executing'] },
+  }).project<StoredApprovalDocument>({ _id: 0 }).toArray();
+  return values.map((item) => normalizeApproval(item as StoredApprovalDocument & Document) as ApprovalDocument);
 }
 
 const ALLOWED_TRANSITIONS: Readonly<Record<ApprovalStatus, readonly ApprovalStatus[]>> = {

@@ -6,7 +6,7 @@ import { assessApprovalRisk, requiresIndependentReviewer, supportedApprovalActio
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 
 test('risk policy is server-owned, exhaustive for supported actions, and fail-safe for unknown operations', () => {
-  assert.equal(supportedApprovalActions().length, 12);
+  assert.equal(supportedApprovalActions().length, 13);
   for (const action of supportedApprovalActions()) {
     const assessment = assessApprovalRisk(action);
     assert.match(assessment.policyId, /^approval-risk-/);
