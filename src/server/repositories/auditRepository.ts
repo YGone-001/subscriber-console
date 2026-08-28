@@ -1,13 +1,18 @@
 import { Filter, MongoServerError, ObjectId } from 'mongodb';
 import { getAppCollection, mongoCollections } from '@/lib/mongo';
 import type { AuditLogRecord, AuditListResponse } from '@/types/audit';
-import { sanitizeAuditRecord } from '@/lib/audit/record';
+import { applyAuditSourceIpAccess, sanitizeAuditRecord } from '@/lib/audit/record';
 import { buildTariffPlanAuditFilter as buildTariffPlanAuditFilterBase } from '@/lib/tariffPlanOperations';
 import { buildAuditFilter, type AuditQuery } from '@/lib/auditQuery';
 
 export type { AuditLogRecord } from '@/types/audit';
 
 type StoredAuditLog = AuditLogRecord & { _id: ObjectId | string };
+export type AuditReadOptions = { revealSourceIp?: boolean };
+
+function present(log: AuditLogRecord, options: AuditReadOptions = {}) {
+  return applyAuditSourceIpAccess(log, options.revealSourceIp === true);
+}
 
 function collection() {
   return getAppCollection<StoredAuditLog>(mongoCollections.auditLogs);
@@ -30,7 +35,7 @@ export async function appendAuditLog(log: AuditLogRecord) {
   }
 }
 
-export async function listAuditLogs(query: AuditQuery): Promise<AuditListResponse> {
+export async function listAuditLogs(query: AuditQuery, options: AuditReadOptions = {}): Promise<AuditListResponse> {
   const docs = await collection();
   const filter = buildAuditFilter(query) as Filter<StoredAuditLog>;
   const [facet] = await docs.aggregate<{
@@ -64,7 +69,7 @@ export async function listAuditLogs(query: AuditQuery): Promise<AuditListRespons
   const total = metrics.matched;
   const totalPages = Math.max(1, Math.ceil(total / query.pageSize));
   return {
-    logs: logs.map(sanitizeAuditRecord).map(({ oldData, newData, metadata, error, ...summary }) => {
+    logs: logs.map((log) => present(log, options)).map(({ oldData, newData, metadata, error, ...summary }) => {
       void oldData; void newData; void metadata; void error;
       return summary;
     }),
@@ -73,10 +78,10 @@ export async function listAuditLogs(query: AuditQuery): Promise<AuditListRespons
   };
 }
 
-export async function getAuditLog(id: string): Promise<AuditLogRecord | null> {
+export async function getAuditLog(id: string, options: AuditReadOptions = {}): Promise<AuditLogRecord | null> {
   const docs = await collection();
   const log = await docs.findOne({ id });
-  return log ? sanitizeAuditRecord(log) : null;
+  return log ? present(log, options) : null;
 }
 
 export class AuditExportTooLargeError extends Error {
@@ -86,17 +91,17 @@ export class AuditExportTooLargeError extends Error {
   }
 }
 
-export async function exportAuditLogs(query: AuditQuery, maxRows: number): Promise<{ logs: AuditLogRecord[]; matched: number }> {
+export async function exportAuditLogs(query: AuditQuery, maxRows: number, options: AuditReadOptions = {}): Promise<{ logs: AuditLogRecord[]; matched: number }> {
   const docs = await collection();
   const filter = buildAuditFilter(query) as Filter<StoredAuditLog>;
   const matched = await docs.countDocuments(filter);
   if (matched > maxRows) throw new AuditExportTooLargeError(matched, maxRows);
   const logs = await docs.find(filter).sort({ timestamp: -1 }).limit(maxRows + 1).toArray();
   if (logs.length > maxRows) throw new AuditExportTooLargeError(logs.length, maxRows);
-  return { logs: logs.map(sanitizeAuditRecord), matched };
+  return { logs: logs.map((log) => present(log, options)), matched };
 }
 
-export async function listAuditLogsForApproval(approvalId: string) {
+export async function listAuditLogsForApproval(approvalId: string, options: AuditReadOptions = {}) {
   const docs = await collection();
   const filter = {
     $or: [
@@ -108,7 +113,7 @@ export async function listAuditLogsForApproval(approvalId: string) {
   } as Filter<StoredAuditLog>;
 
   const logs = await docs.find(filter).sort({ timestamp: 1 }).limit(100).toArray();
-  return logs.map(sanitizeAuditRecord);
+  return logs.map((log) => present(log, options));
 }
 
 export async function listAuditLogsForUser(username: string) {
@@ -119,10 +124,10 @@ export async function listAuditLogsForUser(username: string) {
   return logs.map(sanitizeAuditRecord).map(({ id, timestamp, action, result, actor, targetId }) => ({ id, timestamp, action, result, actor, targetId }));
 }
 
-export async function listAuditLogsForTariffPlan(planId: string, limitInput = 12) {
+export async function listAuditLogsForTariffPlan(planId: string, limitInput = 12, options: AuditReadOptions = {}) {
   const docs = await collection();
   const limit = Math.min(Math.max(Number(limitInput) || 12, 1), 50);
   const filter = buildTariffPlanAuditFilter(planId);
   const logs = await docs.find(filter).sort({ timestamp: -1 }).limit(limit).toArray();
-  return logs.map(sanitizeAuditRecord);
+  return logs.map((log) => present(log, options));
 }

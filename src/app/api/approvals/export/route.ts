@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireCapability } from '@/lib/authz';
 import { toCsvRow } from '@/lib/csv';
+import { hasPermission } from '@/lib/permissions';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import { listAuditLogsForApproval, type AuditLogRecord } from '@/server/repositories/auditRepository';
 import { getApproval, isApprovalStatus, listApprovals, type ApprovalDocument } from '@/server/repositories/approvalRepository';
@@ -115,7 +116,8 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Approval request not found' }, { status: 404 });
     }
 
-    const auditChains = await Promise.all(approvals.map((approval) => listAuditLogsForApproval(approval.id)));
+    const revealSourceIp = hasPermission({ role: auth.auth.role }, 'audit.source-ip.read-full');
+    const auditChains = await Promise.all(approvals.map((approval) => listAuditLogsForApproval(approval.id, { revealSourceIp })));
     const evidence = approvals.map((approval, index) => ({ approval, auditLogs: auditChains[index] }));
     const generatedAt = new Date().toISOString();
     const basename = approvalId
