@@ -3,7 +3,7 @@ import { auditRequestContext } from '@/lib/audit/record';
 import { validateCurrentAccount } from '@/lib/accountSession';
 import { executeApproval } from '@/server/approvalExecutors';
 import { executeFrozenSubscriberBatchChange, SubscriberBatchGovernanceError } from '@/server/subscriberOperationPolicy';
-import { executeFrozenSubscriberDelete, executeFrozenSubscriberUpdate, SubscriberGovernanceError } from '@/server/subscriberSingleGovernance';
+import { executeFrozenSubscriberBulkDelete, executeFrozenSubscriberDelete, executeFrozenSubscriberUpdate, SubscriberGovernanceError } from '@/server/subscriberSingleGovernance';
 import { assertGovernedOperationCoverage } from '@/server/subscriberGovernanceRegistry';
 import { approvalActionEligibility, ApprovalWorkflowError } from '@/server/approvalWorkflow';
 import { getApproval, transitionApproval, type ApprovalDocument } from '@/server/repositories/approvalRepository';
@@ -41,11 +41,13 @@ const defaultExecutor: GovernedApprovalExecutor = {
       }
       return result;
     }
-    if (approval.action === 'SUBSCRIBER_UPDATE' || approval.action === 'SUBSCRIBER_DELETE') {
+    if (approval.action === 'SUBSCRIBER_UPDATE' || approval.action === 'SUBSCRIBER_DELETE' || approval.action === 'SUBSCRIBER_BULK_DELETE') {
       const result = approval.action === 'SUBSCRIBER_UPDATE'
         ? await executeFrozenSubscriberUpdate(approval.payload)
-        : await executeFrozenSubscriberDelete(approval.payload);
-      const action = approval.action === 'SUBSCRIBER_UPDATE' ? 'subscriber.update' : 'subscriber.delete';
+        : approval.action === 'SUBSCRIBER_DELETE'
+          ? await executeFrozenSubscriberDelete(approval.payload)
+          : await executeFrozenSubscriberBulkDelete(approval.payload);
+      const action = approval.action === 'SUBSCRIBER_UPDATE' ? 'subscriber.update' : approval.action === 'SUBSCRIBER_DELETE' ? 'subscriber.delete' : 'subscriber.batch.delete';
       try {
         await writeAuditLog({
           actor: actor || { type: 'system', userId: 'system', username: 'system' }, module: 'subscribers', action,
@@ -70,7 +72,7 @@ const defaultExecutor: GovernedApprovalExecutor = {
  * subscriber approval action is backed by this production executor. */
 export const automaticSubscriberExecutorActions = [
   'SUBSCRIBER_UPDATE', 'SUBSCRIBER_DELETE', 'SUBSCRIBER_BATCH_CREATE',
-  'SUBSCRIBER_BATCH_UPDATE', 'SUBSCRIBER_IMPORT', 'SUBSCRIBER_IMPORT_OVERWRITE',
+  'SUBSCRIBER_BATCH_UPDATE', 'SUBSCRIBER_IMPORT',
   'SUBSCRIBER_BULK_DELETE',
 ] as const;
 

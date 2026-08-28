@@ -39,6 +39,13 @@ export type FrozenSubscriberDelete = {
   operationFingerprint: string;
 };
 
+export type FrozenSubscriberBulkDelete = {
+  version: 'subscriber-bulk-delete-v1';
+  targets: Array<{ imsi: string; before: SafeSnapshot }>;
+  targetCount: number;
+  operationFingerprint: string;
+};
+
 function stable(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
   if (value && typeof value === 'object') return `{${Object.keys(value as Record<string, unknown>).sort().map((key) => `${JSON.stringify(key)}:${stable((value as Record<string, unknown>)[key])}`).join(',')}}`;
@@ -116,4 +123,30 @@ export async function executeFrozenSubscriberDelete(payload: unknown) {
   const deleted = await deleteSubscriber(frozen.imsi, current);
   if (!deleted) throw new SubscriberGovernanceError('SUBSCRIBER_DELETE_PRECONDITION_CHANGED');
   return { imsi: frozen.imsi, deleted: true, before: frozen.before, operationFingerprint: frozen.operationFingerprint };
+}
+
+export async function prepareFrozenSubscriberBulkDelete(imsis: string[]): Promise<FrozenSubscriberBulkDelete> {
+  const unique = [...new Set(imsis)].sort();
+  const targets = await Promise.all(unique.map(async (imsi) => {
+    const existing = await findSubscriberDocument(imsi);
+    if (!existing) throw new SubscriberGovernanceError('SUBSCRIBER_NOT_FOUND', { imsi });
+    return { imsi, before: subscriberSafeSnapshot(existing) };
+  }));
+  return { version: 'subscriber-bulk-delete-v1', targets, targetCount: targets.length, operationFingerprint: hash({ operation: 'SUBSCRIBER_BULK_DELETE', targets }) };
+}
+
+export async function executeFrozenSubscriberBulkDelete(payload: unknown) {
+  const frozen = payload as FrozenSubscriberBulkDelete;
+  if (!frozen || frozen.version !== 'subscriber-bulk-delete-v1' || !Array.isArray(frozen.targets) || frozen.targets.length === 0) throw new SubscriberGovernanceError('INVALID_SUBSCRIBER_BULK_DELETE_PAYLOAD');
+  const loaded = await Promise.all(frozen.targets.map(async (target) => ({ target, current: await findSubscriberDocument(target.imsi) })));
+  if (loaded.some(({ target, current }) => !current || stable(subscriberSafeSnapshot(current)) !== stable(target.before))) {
+    throw new SubscriberGovernanceError('SUBSCRIBER_DELETE_PRECONDITION_CHANGED');
+  }
+  let deleted = 0;
+  for (const { target, current } of loaded) {
+    const ok = await deleteSubscriber(target.imsi, current as Open5gsSubscriberDocument);
+    if (!ok) throw new SubscriberGovernanceError('SUBSCRIBER_BULK_DELETE_PARTIAL_WRITE', { deleted, expected: frozen.targetCount, partialMutation: deleted > 0 });
+    deleted += 1;
+  }
+  return { requested: frozen.targetCount, deleted, targets: frozen.targets.map((target) => target.imsi), operationFingerprint: frozen.operationFingerprint };
 }
