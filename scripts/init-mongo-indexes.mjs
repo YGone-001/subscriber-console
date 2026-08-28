@@ -405,6 +405,7 @@ async function ensureIndexes() {
     { key: { requester: 1, createdAt: -1 }, name: 'approvals_requester_created' },
     { key: { reviewer: 1, createdAt: -1 }, name: 'approvals_reviewer_created' },
     { key: { 'operation.resourceType': 1, 'operation.resourceId': 1, createdAt: -1 }, name: 'approvals_resource_created' },
+    { key: { operationFingerprint: 1 }, unique: true, partialFilterExpression: { action: 'SUBSCRIBER_BATCH_UPDATE', status: { $in: ['pending', 'approved', 'executing'] }, operationFingerprint: { $type: 'string' } }, name: 'uniq_active_subscriber_batch_fingerprint' },
   ])).map((name) => ({ database: appDbName, collection: 'app_approvals', name })));
 
   createdIndexes.push(...(await appDb.collection('app_audit_logs').createIndexes([
