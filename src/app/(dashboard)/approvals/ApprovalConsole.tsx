@@ -37,7 +37,7 @@ type PendingAction = { type: 'approve' | 'reject' | 'cancel' | 'execute'; approv
 
 const QUERY_KEYS = ['page', 'pageSize', 'q', 'status', 'risk', 'action', 'resourceType', 'resourceId', 'requester', 'reviewer', 'from', 'to'] as const;
 const STATUSES = ['pending', 'approved', 'executing', 'completed', 'rejected', 'cancelled', 'expired', 'failed'] as const;
-const ACTIONS = ['ACCESS_REQUEST', 'POLICY_CHANGE', 'TRAFFIC_ADJUSTMENT', 'RATING_CREATE', 'RATING_UPDATE', 'RATING_DELETE', 'TARIFF_PLAN_MIGRATE', 'PROFILE_RESTORE', 'SYSTEM_HEAL', 'SUBSCRIBER_BATCH_CREATE', 'SUBSCRIBER_IMPORT', 'SUBSCRIBER_BULK_DELETE'] as const;
+const ACTIONS = ['ACCESS_REQUEST', 'POLICY_CHANGE', 'TRAFFIC_ADJUSTMENT', 'RATING_CREATE', 'RATING_UPDATE', 'RATING_DELETE', 'TARIFF_PLAN_MIGRATE', 'PROFILE_RESTORE', 'SYSTEM_HEAL', 'SUBSCRIBER_BATCH_CREATE', 'SUBSCRIBER_BATCH_UPDATE', 'SUBSCRIBER_IMPORT', 'SUBSCRIBER_BULK_DELETE'] as const;
 
 function actionLabel(action: string, zh: boolean) {
   const labels: Record<string, [string, string]> = {
@@ -46,6 +46,7 @@ function actionLabel(action: string, zh: boolean) {
     TARIFF_PLAN_MIGRATE: ['资费计划迁移', 'Tariff migration'], PROFILE_RESTORE: ['配置恢复', 'Profile restore'], SYSTEM_HEAL: ['系统修复', 'System heal'],
     SUBSCRIBER_BATCH_CREATE: ['批量开户', 'Batch provision'], SUBSCRIBER_IMPORT: ['用户导入', 'Subscriber import'], SUBSCRIBER_BULK_DELETE: ['批量删除用户', 'Bulk subscriber delete'],
   };
+  if (action === 'SUBSCRIBER_BATCH_UPDATE') return zh ? '批量修改订阅用户' : 'Subscriber batch update';
   return labels[action]?.[zh ? 0 : 1] || action;
 }
 

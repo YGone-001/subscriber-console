@@ -1,5 +1,5 @@
 import React from "react";
-import { Download, Trash2, Settings2, Plus, Layers, DatabaseZap, FileUp } from "lucide-react";
+import { Download, Trash2, Settings2, Plus, Layers, DatabaseZap, FileUp, ClipboardPenLine } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 
 export interface SubscriberToolbarProps {
@@ -10,6 +10,7 @@ export interface SubscriberToolbarProps {
   selectedImsis: string[];
   canEditSubscribers: boolean;
   setIsPolicyModalOpen: any;
+  setIsBatchUpdateModalOpen: any;
   setIsDataHubOpen: any;
   handleBulkDelete: () => void;
   isDeletingBulk: boolean;
@@ -24,7 +25,7 @@ export function SubscriberToolbar(props: SubscriberToolbarProps) {
   const { t } = useI18n();
   const {
     searchQuery, setSearchQuery, setCurrentPage, setSelectedImsis,
-    selectedImsis, canEditSubscribers, setIsPolicyModalOpen,
+    selectedImsis, canEditSubscribers, setIsPolicyModalOpen, setIsBatchUpdateModalOpen,
     setIsDataHubOpen, handleBulkDelete, isDeletingBulk, pendingDelete,
     handleOpenNew, setIsBatchOpen, mutateSubscribers, setFeedback
   } = props;
@@ -46,6 +47,11 @@ export function SubscriberToolbar(props: SubscriberToolbarProps) {
               {canEditSubscribers && (
                 <button className="btn btn-bulk-outline" onClick={() => setIsPolicyModalOpen(true)}>
                   <Settings2 size={14}/> {t("change_policy")}
+                </button>
+              )}
+              {canEditSubscribers && (
+                <button className="btn btn-bulk-outline" onClick={() => setIsBatchUpdateModalOpen(true)}>
+                  <ClipboardPenLine size={14}/> 批量修改
                 </button>
               )}
               <button className="btn btn-bulk-outline" onClick={() => setIsDataHubOpen(true)}>

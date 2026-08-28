@@ -17,6 +17,7 @@
     "mongo:init": "node scripts/init-mongo-indexes.mjs",
     "mongo:migrate-app-db": "node scripts/migrate-app-collections-to-app-db.mjs",
     "mongo:test-core": "node scripts/test-mongo-core.mjs",
+    "mongo:test-subscriber-governance": "node scripts/test-subscriber-governance.mjs",
     "mongo:perf": "node scripts/check-mongo-query-performance.mjs",
     "clean": "rimraf .next/dev .next/cache .next/types",
     "clean:all": "rimraf .next node_modules/.cache",

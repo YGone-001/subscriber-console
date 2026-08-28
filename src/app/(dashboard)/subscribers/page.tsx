@@ -5,6 +5,7 @@ import { ArrowDown, ArrowUp, ArrowUpDown, Plus, Layers } from "lucide-react";
 import SubscriberModal from "@/components/SubscriberModal";
 import BatchCreateModal from "@/components/BatchCreateModal";
 import BulkPolicyModal from "@/components/BulkPolicyModal";
+import SubscriberBatchUpdateModal from "@/components/SubscriberBatchUpdateModal";
 import DataHub from "@/components/DataHub";
 import { ConfirmActionPanel, OperationNotice } from "@/components/OperationFeedback";
 import { useI18n } from "@/components/I18nProvider";
@@ -36,6 +37,7 @@ export default function SubscriberPage() {
   const [selectedImsis, setSelectedImsis] = useState<string[]>([]);
   const [isDeletingBulk, setIsDeletingBulk] = useState(false);
   const [isPolicyModalOpen, setIsPolicyModalOpen] = useState(false);
+  const [isBatchUpdateModalOpen, setIsBatchUpdateModalOpen] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
   const [isDataHubOpen, setIsDataHubOpen] = useState(false);
   const [copiedImsi, setCopiedImsi] = useState<string | null>(null);
@@ -353,6 +355,7 @@ export default function SubscriberPage() {
         selectedImsis={selectedImsis}
         canEditSubscribers={canEditSubscribers}
         setIsPolicyModalOpen={setIsPolicyModalOpen}
+        setIsBatchUpdateModalOpen={setIsBatchUpdateModalOpen}
         setIsDataHubOpen={setIsDataHubOpen}
         handleBulkDelete={handleBulkDelete}
         isDeletingBulk={isDeletingBulk}
@@ -494,6 +497,20 @@ export default function SubscriberPage() {
             tone: "success",
             title: t("success"),
             message: t("policy_change_title"),
+          });
+        }}
+      />
+
+      <SubscriberBatchUpdateModal
+        isOpen={isBatchUpdateModalOpen}
+        selectedImsis={selectedImsis}
+        onClose={() => setIsBatchUpdateModalOpen(false)}
+        onSuccess={(response) => {
+          setSelectedImsis([]);
+          setFeedback({
+            tone: "success",
+            title: "变更申请已创建",
+            message: `CHG ${response.approval?.changeId || response.approval?.id || ""} 已提交，等待独立审批。订阅用户数据尚未修改。`,
           });
         }}
       />

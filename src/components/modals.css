@@ -105,6 +105,25 @@
 .bp-footer { padding: 1rem 1.5rem; border-top: 1px solid var(--surface-border); }
 .bp-footer-text { color: var(--text-muted); font-size: var(--ref-font-size-body-compact); }
 
+/* SubscriberBatchUpdateModal */
+.bu-modal-content { max-width: 680px; padding: 0; }
+.bu-header { padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--surface-border); display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+.bu-title { margin: 0; display: flex; align-items: center; gap: .5rem; color: var(--text-main); font-size: var(--ref-font-size-heading); }
+.bu-header p { margin: .35rem 0 0; color: var(--text-muted); font-size: var(--ref-font-size-body-support); line-height: 1.45; }
+.bu-body { padding: 1.5rem; display: grid; gap: 1rem; }
+.bu-warning { display: flex; align-items: flex-start; gap: .55rem; padding: .75rem .85rem; border: 1px solid var(--status-warning); border-radius: var(--ref-radius-control); background: var(--status-warning-soft); color: var(--text-main); font-size: var(--ref-font-size-data-relaxed); line-height: 1.45; }
+.bu-warning svg { flex: 0 0 auto; color: var(--status-warning); margin-top: .1rem; }
+.bu-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .85rem; align-items: end; }
+.bu-check { min-height: 42px; display: flex; align-items: center; gap: .55rem; color: var(--text-main); font-size: var(--ref-font-size-body-support); }
+.bu-preview { border: 1px solid var(--surface-border); border-radius: var(--ref-radius-control); padding: .9rem; background: var(--selection-soft); }
+.bu-preview > div { display: flex; gap: .45rem; align-items: center; font-weight: 700; color: var(--text-main); }
+.bu-preview dl { display: grid; grid-template-columns: 120px 1fr; gap: .35rem .8rem; margin: .8rem 0; }
+.bu-preview dt { color: var(--text-muted); font-size: var(--ref-font-size-label); }
+.bu-preview dd { margin: 0; color: var(--text-main); font-weight: 700; }
+.bu-preview code { display: block; color: var(--text-secondary); overflow-wrap: anywhere; }
+.bu-footer { padding: 1rem 1.5rem; border-top: 1px solid var(--surface-border); display: flex; align-items: center; justify-content: space-between; gap: 1rem; color: var(--text-muted); font-size: var(--ref-font-size-body-compact); }
+@media (max-width: 640px) { .bu-grid { grid-template-columns: 1fr; } .bu-footer { align-items: stretch; flex-direction: column; } }
+
 /* TrafficAdjustmentModal */
 .ta-modal-content { max-width: 620px; padding: 0; }
 .ta-header { padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--surface-border); }
