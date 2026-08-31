@@ -1,0 +1,532 @@
+[
+  {
+    "path": "/api/alerts",
+    "domain": "alerts",
+    "methods": [
+      "GET"
+    ],
+    "file": "src/app/api/alerts/route.ts"
+  },
+  {
+    "path": "/api/alerts/acknowledge",
+    "domain": "alerts",
+    "methods": [
+      "POST"
+    ],
+    "file": "src/app/api/alerts/acknowledge/route.ts"
+  },
+  {
+    "path": "/api/alerts/workflow",
+    "domain": "alerts",
+    "methods": [
+      "POST"
+    ],
+    "file": "src/app/api/alerts/workflow/route.ts"
+  },
+  {
+    "path": "/api/analytics/init",
+    "domain": "analytics",
+    "methods": [
+      "POST"
+    ],
+    "file": "src/app/api/analytics/init/route.ts"
+  },
+  {
+    "path": "/api/analytics/metrics",
+    "domain": "analytics",
+    "methods": [
+      "GET"
+    ],
+    "file": "src/app/api/analytics/metrics/route.ts"
+  },
+  {
+    "path": "/api/analytics/sparkline",
+    "domain": "analytics",
+    "methods": [
+      "GET"
+    ],
+    "file": "src/app/api/analytics/sparkline/route.ts"
+  },
+  {
+    "path": "/api/approvals",
+    "domain": "approvals",
+    "methods": [
+      "GET",
+      "POST"
+    ],
+    "file": "src/app/api/approvals/route.ts"
+  },
+  {
+    "path": "/api/approvals/:id",
+    "domain": "approvals",
+    "methods": [
+      "GET",
+      "POST"
+    ],
+    "file": "src/app/api/approvals/[id]/route.ts"
+  },
+  {
+    "path": "/api/approvals/:id/approve",
+    "domain": "approvals",
+    "methods": [
+      "POST"
+    ],
+    "file": "src/app/api/approvals/[id]/approve/route.ts"
+  },
+  {
+    "path": "/api/approvals/:id/audit",
+    "domain": "approvals",
+    "methods": [
+      "GET"
+    ],
+    "file": "src/app/api/approvals/[id]/audit/route.ts"
+  },
+  {
+    "path": "/api/approvals/:id/cancel",
+    "domain": "approvals",
+    "methods": [
+      "POST"
+    ],
+    "file": "src/app/api/approvals/[id]/cancel/route.ts"
+  },
+  {
+    "path": "/api/approvals/:id/execute",
+    "domain": "approvals",
+    "methods": [
+      "POST"
+    ],
+    "file": "src/app/api/approvals/[id]/execute/route.ts"
+  },
+  {
+    "path": "/api/approvals/:id/reject",
+    "domain": "approvals",
+    "methods": [
+      "POST"
+    ],
+    "file": "src/app/api/approvals/[id]/reject/route.ts"
+  },
+  {
+    "path": "/api/approvals/export",
+    "domain": "approvals",
+    "methods": [
+      "GET"
+    ],
+    "file": "src/app/api/approvals/export/route.ts"
+  },
+  {
+    "path": "/api/audit",
+    "domain": "audit",
+    "methods": [
+      "GET"
+    ],
+    "file": "src/app/api/audit/route.ts"
+  },
+  {
+    "path": "/api/audit/:id",
+    "domain": "audit",
+    "methods": [
+      "GET"
+    ],
+    "file": "src/app/api/audit/[id]/route.ts"
+  },
+  {
+    "path": "/api/audit/export",
+    "domain": "audit",
+    "methods": [
+      "GET"
+    ],
+    "file": "src/app/api/audit/export/route.ts"
+  },
+  {
+    "path": "/api/auth/login",
+    "domain": "auth",
+    "methods": [
+      "POST"
+    ],
+    "file": "src/app/api/auth/login/route.ts"
+  },
+  {
+    "path": "/api/auth/logout",
+    "domain": "auth",
+    "methods": [
+      "POST"
+    ],
+    "file": "src/app/api/auth/logout/route.ts"
+  },
+  {
+    "path": "/api/auth/me",
+    "domain": "auth",
+    "methods": [
+      "GET"
+    ],
+    "file": "src/app/api/auth/me/route.ts"
+  },
+  {
+    "path": "/api/auth/permissions",
+    "domain": "auth",
+    "methods": [
+      "GET"
+    ],
+    "file": "src/app/api/auth/permissions/route.ts"
+  },
+  {
+    "path": "/api/auth/users",
+    "domain": "auth",
+    "methods": [
+      "GET",
+      "POST"
+    ],
+    "file": "src/app/api/auth/users/route.ts"
+  },
+  {
+    "path": "/api/auth/users/:username",
+    "domain": "auth",
+    "methods": [
+      "DELETE",
+      "GET",
+      "PATCH",
+      "PUT"
+    ],
+    "file": "src/app/api/auth/users/[username]/route.ts"
+  },
+  {
+    "path": "/api/notifications/stream",
+    "domain": "notifications",
+    "methods": [
+      "GET"
+    ],
+    "file": "src/app/api/notifications/stream/route.ts"
+  },
+  {
+    "path": "/api/ocs/balances",
+    "domain": "ocs",
+    "methods": [
+      "GET"
+    ],
+    "file": "src/app/api/ocs/balances/route.ts"
+  },
+  {
+    "path": "/api/ocs/reservations",
+    "domain": "ocs",
+    "methods": [
+      "GET"
+    ],
+    "file": "src/app/api/ocs/reservations/route.ts"
+  },
+  {
+    "path": "/api/ocs/sessions",
+    "domain": "ocs",
+    "methods": [
+      "GET"
+    ],
+    "file": "src/app/api/ocs/sessions/route.ts"
+  },
+  {
+    "path": "/api/ocs/usage",
+    "domain": "ocs",
+    "methods": [
+      "GET"
+    ],
+    "file": "src/app/api/ocs/usage/route.ts"
+  },
+  {
+    "path": "/api/profiles",
+    "domain": "profiles",
+    "methods": [
+      "GET",
+      "POST"
+    ],
+    "file": "src/app/api/profiles/route.ts"
+  },
+  {
+    "path": "/api/profiles/:name",
+    "domain": "profiles",
+    "methods": [
+      "DELETE",
+      "GET",
+      "PUT"
+    ],
+    "file": "src/app/api/profiles/[name]/route.ts"
+  },
+  {
+    "path": "/api/profiles/:name/stats",
+    "domain": "profiles",
+    "methods": [
+      "GET"
+    ],
+    "file": "src/app/api/profiles/[name]/stats/route.ts"
+  },
+  {
+    "path": "/api/profiles/:name/versions",
+    "domain": "profiles",
+    "methods": [
+      "GET"
+    ],
+    "file": "src/app/api/profiles/[name]/versions/route.ts"
+  },
+  {
+    "path": "/api/profiles/:name/versions/:versionId/restore",
+    "domain": "profiles",
+    "methods": [
+      "POST"
+    ],
+    "file": "src/app/api/profiles/[name]/versions/[versionId]/restore/route.ts"
+  },
+  {
+    "path": "/api/ratings",
+    "domain": "ratings",
+    "methods": [
+      "GET",
+      "POST"
+    ],
+    "file": "src/app/api/ratings/route.ts"
+  },
+  {
+    "path": "/api/ratings/:id",
+    "domain": "ratings",
+    "methods": [
+      "DELETE",
+      "GET",
+      "PUT"
+    ],
+    "file": "src/app/api/ratings/[id]/route.ts"
+  },
+  {
+    "path": "/api/search",
+    "domain": "search",
+    "methods": [
+      "GET"
+    ],
+    "file": "src/app/api/search/route.ts"
+  },
+  {
+    "path": "/api/subscribers",
+    "domain": "subscribers",
+    "methods": [
+      "GET",
+      "POST"
+    ],
+    "file": "src/app/api/subscribers/route.ts"
+  },
+  {
+    "path": "/api/subscribers/:imsi",
+    "domain": "subscribers",
+    "methods": [
+      "DELETE",
+      "GET",
+      "PUT"
+    ],
+    "file": "src/app/api/subscribers/[imsi]/route.ts"
+  },
+  {
+    "path": "/api/subscribers/:imsi/traffic-adjustments",
+    "domain": "subscribers",
+    "methods": [
+      "POST"
+    ],
+    "file": "src/app/api/subscribers/[imsi]/traffic-adjustments/route.ts"
+  },
+  {
+    "path": "/api/subscribers/batch",
+    "domain": "subscribers",
+    "methods": [
+      "POST"
+    ],
+    "file": "src/app/api/subscribers/batch/route.ts"
+  },
+  {
+    "path": "/api/subscribers/batch-update",
+    "domain": "subscribers",
+    "methods": [
+      "POST"
+    ],
+    "file": "src/app/api/subscribers/batch-update/route.ts"
+  },
+  {
+    "path": "/api/subscribers/batch/precheck",
+    "domain": "subscribers",
+    "methods": [
+      "POST"
+    ],
+    "file": "src/app/api/subscribers/batch/precheck/route.ts"
+  },
+  {
+    "path": "/api/subscribers/bulk-delete",
+    "domain": "subscribers",
+    "methods": [
+      "POST"
+    ],
+    "file": "src/app/api/subscribers/bulk-delete/route.ts"
+  },
+  {
+    "path": "/api/subscribers/import",
+    "domain": "subscribers",
+    "methods": [
+      "POST"
+    ],
+    "file": "src/app/api/subscribers/import/route.ts"
+  },
+  {
+    "path": "/api/subscribers/policy",
+    "domain": "subscribers",
+    "methods": [
+      "POST"
+    ],
+    "file": "src/app/api/subscribers/policy/route.ts"
+  },
+  {
+    "path": "/api/system/audit/batch-heal",
+    "domain": "system",
+    "methods": [
+      "POST"
+    ],
+    "file": "src/app/api/system/audit/batch-heal/route.ts"
+  },
+  {
+    "path": "/api/system/audit/heal",
+    "domain": "system",
+    "methods": [
+      "POST"
+    ],
+    "file": "src/app/api/system/audit/heal/route.ts"
+  },
+  {
+    "path": "/api/system/audit/scan",
+    "domain": "system",
+    "methods": [
+      "POST"
+    ],
+    "file": "src/app/api/system/audit/scan/route.ts"
+  },
+  {
+    "path": "/api/system/audit/status",
+    "domain": "system",
+    "methods": [
+      "GET"
+    ],
+    "file": "src/app/api/system/audit/status/route.ts"
+  },
+  {
+    "path": "/api/system/health",
+    "domain": "system",
+    "methods": [
+      "GET"
+    ],
+    "file": "src/app/api/system/health/route.ts"
+  },
+  {
+    "path": "/api/system/mongo/health",
+    "domain": "system",
+    "methods": [
+      "GET"
+    ],
+    "file": "src/app/api/system/mongo/health/route.ts"
+  },
+  {
+    "path": "/api/tariff-plans",
+    "domain": "tariff-plans",
+    "methods": [
+      "GET",
+      "POST"
+    ],
+    "file": "src/app/api/tariff-plans/route.ts"
+  },
+  {
+    "path": "/api/tariff-plans/:planId",
+    "domain": "tariff-plans",
+    "methods": [
+      "DELETE",
+      "GET",
+      "PUT"
+    ],
+    "file": "src/app/api/tariff-plans/[planId]/route.ts"
+  },
+  {
+    "path": "/api/tariff-plans/:planId/clone",
+    "domain": "tariff-plans",
+    "methods": [
+      "POST"
+    ],
+    "file": "src/app/api/tariff-plans/[planId]/clone/route.ts"
+  },
+  {
+    "path": "/api/tariff-plans/:planId/export",
+    "domain": "tariff-plans",
+    "methods": [
+      "GET"
+    ],
+    "file": "src/app/api/tariff-plans/[planId]/export/route.ts"
+  },
+  {
+    "path": "/api/tariff-plans/:planId/migrate",
+    "domain": "tariff-plans",
+    "methods": [
+      "GET",
+      "POST"
+    ],
+    "file": "src/app/api/tariff-plans/[planId]/migrate/route.ts"
+  },
+  {
+    "path": "/api/tariff-plans/:planId/operations",
+    "domain": "tariff-plans",
+    "methods": [
+      "GET"
+    ],
+    "file": "src/app/api/tariff-plans/[planId]/operations/route.ts"
+  },
+  {
+    "path": "/api/tariff-plans/:planId/rules",
+    "domain": "tariff-plans",
+    "methods": [
+      "GET",
+      "POST"
+    ],
+    "file": "src/app/api/tariff-plans/[planId]/rules/route.ts"
+  },
+  {
+    "path": "/api/tariff-plans/:planId/rules/:ruleId",
+    "domain": "tariff-plans",
+    "methods": [
+      "DELETE",
+      "PATCH",
+      "PUT"
+    ],
+    "file": "src/app/api/tariff-plans/[planId]/rules/[ruleId]/route.ts"
+  },
+  {
+    "path": "/api/tariff-plans/:planId/subscribers",
+    "domain": "tariff-plans",
+    "methods": [
+      "GET"
+    ],
+    "file": "src/app/api/tariff-plans/[planId]/subscribers/route.ts"
+  },
+  {
+    "path": "/api/tariff-plans/import",
+    "domain": "tariff-plans",
+    "methods": [
+      "POST"
+    ],
+    "file": "src/app/api/tariff-plans/import/route.ts"
+  },
+  {
+    "path": "/api/users",
+    "domain": "users",
+    "methods": [
+      "GET",
+      "POST"
+    ],
+    "file": "src/app/api/users/route.ts"
+  },
+  {
+    "path": "/api/users/:username",
+    "domain": "users",
+    "methods": [
+      "DELETE",
+      "GET",
+      "PATCH",
+      "PUT"
+    ],
+    "file": "src/app/api/users/[username]/route.ts"
+  }
+]
