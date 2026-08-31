@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - develop
       - "feat/**"
       - "fix/**"
       - "chore/**"
@@ -45,3 +46,32 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  go-backend:
+    name: Go backend lint, test, and build
+    runs-on: ubuntu-latest
+    if: contains(github.event.head_commit.modified, 'backend/') || github.ref == 'refs/heads/develop'
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: Lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          working-directory: backend
+
+      - name: Test
+        run: go test -race -count=1 ./...
+
+      - name: Build
+        run: go build -o /dev/null ./...

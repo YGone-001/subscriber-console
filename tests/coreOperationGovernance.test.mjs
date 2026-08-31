@@ -2,9 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import * as coreOperations from '../src/server/coreOperationRegistry.ts';
 
-const root = new URL('..', import.meta.url).pathname.replace(/^\//, '').replaceAll('/', '\\');
+const root = join(fileURLToPath(new URL('..', import.meta.url)));
 const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
 
 function sourceFiles(directory) {
