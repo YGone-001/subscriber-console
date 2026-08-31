@@ -4,6 +4,9 @@ import { readFileSync } from 'node:fs';
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
 const tableSource = read('../src/app/(dashboard)/users/components/UsersTable.tsx');
+const tableStyles = read('../src/app/(dashboard)/users/components/UsersTable.module.css');
+const toolbarStyles = read('../src/app/(dashboard)/users/components/UsersToolbar.module.css');
+const userUtilsSource = read('../src/app/(dashboard)/users/utils.ts');
 const createSource = read('../src/app/(dashboard)/users/components/UserCreateForm.tsx');
 const progressSource = read('../src/app/(dashboard)/users/components/BulkProgressModal.tsx');
 const permissionsSource = read('../src/app/(dashboard)/users/components/UserPermissions.tsx');
@@ -17,6 +20,26 @@ test('user row actions expose only implemented contextual operations', () => {
   assert.doesNotMatch(tableSource, /users_force_logout|users_copy_user/);
   assert.match(tableSource, /users_unlock_account/);
   assert.match(tableSource, /canManage/);
+});
+
+test('system-user table keeps actions visible and maps every desktop column', () => {
+  assert.match(tableSource, /createPortal/);
+  assert.match(tableSource, /openMoreMenu/);
+  assert.match(tableSource, /document\.body/);
+  assert.match(tableSource, /position: "fixed"/);
+  assert.match(tableSource, /styles\.lastLoginCol/);
+  assert.doesNotMatch(tableSource, /styles\.createdAtCol/);
+  assert.doesNotMatch(tableSource, /users_detail_created_at/);
+  assert.match(tableSource, /formatLatestLoginTime\(item\.security\?\.lastLoginAt, item\.lastLoginAt\)/);
+  assert.match(userUtilsSource, /export function getLatestLoginAt/);
+  assert.match(userUtilsSource, /time > new Date\(latest\)\.getTime\(\)/);
+  assert.match(userUtilsSource, /formatDateTime\(latest\)\.slice\(0, 16\)/);
+  assert.match(tableStyles, /min-width: 1050px/);
+  assert.match(tableStyles, /table-layout: fixed/);
+  assert.match(tableStyles, /\.userCol[\s\S]*width: 260px/);
+  assert.match(tableStyles, /\.moreMenu[\s\S]*z-index: 100/);
+  assert.match(toolbarStyles, /text-overflow: ellipsis/);
+  assert.doesNotMatch(toolbarStyles, /min-width: 320px/);
 });
 
 test('user creation includes availability, identity, role guidance, and strength feedback', () => {

@@ -49,7 +49,8 @@
 
 .table {
   width: 100%;
-  min-width: 960px;
+  min-width: 1050px;
+  table-layout: fixed;
   border-collapse: separate;
   border-spacing: 0;
   font-size: var(--ref-font-size-body-support);
@@ -106,9 +107,14 @@
   position: sticky;
   left: 48px;
   z-index: 4;
+  width: 260px;
   min-width: 260px;
   box-shadow: 1px 0 0 var(--surface-border);
 }
+
+.roleCol { width: 124px; }
+.statusCol { width: 118px; }
+.lastLoginCol { width: 180px; }
 
 .table tbody .selectCol,
 .table tbody .userCol { z-index: 2; }
@@ -117,7 +123,8 @@
   position: sticky;
   right: 0;
   z-index: 4;
-  min-width: 210px;
+  width: 246px;
+  min-width: 246px;
   text-align: right !important;
   box-shadow: -1px 0 0 var(--surface-border);
 }
@@ -147,11 +154,11 @@
 
 .contactCell,
 .dateCell {
-  display: grid;
-  gap: 0.16rem;
   color: var(--text-muted);
   font-size: var(--ref-font-size-data-relaxed);
 }
+
+.dateCell { white-space: nowrap; }
 
 .contactCell { display: inline-flex; align-items: center; gap: 0.4rem; }
 .rowActions { justify-content: flex-end; }
@@ -163,8 +170,8 @@
   position: absolute;
   right: 0;
   top: calc(100% + 6px);
-  z-index: 20;
-  min-width: 176px;
+  z-index: 100;
+  min-width: 188px;
   display: grid;
   padding: 0.35rem;
   border: 1px solid var(--surface-border);
@@ -261,7 +268,7 @@
   .rowActions :global(.btn) { min-height: 44px; }
   .tableStateRow,
   .tableStateRow td { display: block; width: 100%; }
-  .moreMenu { position: fixed; left: max(0.75rem, env(safe-area-inset-left)); right: max(0.75rem, env(safe-area-inset-right)); top: auto; bottom: max(0.75rem, env(safe-area-inset-bottom)); }
+  .moreMenu { position: fixed !important; left: max(0.75rem, env(safe-area-inset-left)) !important; right: max(0.75rem, env(safe-area-inset-right)) !important; top: auto !important; bottom: max(0.75rem, env(safe-area-inset-bottom)); }
   .userPreview { display: none; }
 }
 

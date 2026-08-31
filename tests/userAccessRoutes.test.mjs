@@ -72,6 +72,7 @@ const usersSummarySource = readFileSync(new URL('../src/app/(dashboard)/users/co
 const usersTableSource = readFileSync(new URL('../src/app/(dashboard)/users/components/UsersTable.tsx', import.meta.url), 'utf8');
 const usersBulkActionSource = readFileSync(new URL('../src/app/(dashboard)/users/components/BulkActionBar.tsx', import.meta.url), 'utf8');
 const userDrawerSource = readFileSync(new URL('../src/app/(dashboard)/users/components/UserDrawer.tsx', import.meta.url), 'utf8');
+const userBasicInfoSource = readFileSync(new URL('../src/app/(dashboard)/users/components/UserBasicInfo.tsx', import.meta.url), 'utf8');
 const approvalsSource = readFileSync(new URL('../src/components/users/ApprovalCenterPanel.tsx', import.meta.url), 'utf8');
 const approvalsRouteSource = readFileSync(new URL('../src/app/api/approvals/route.ts', import.meta.url), 'utf8');
 const approvalAuditRouteSource = readFileSync(new URL('../src/app/api/approvals/[id]/audit/route.ts', import.meta.url), 'utf8');
@@ -118,18 +119,19 @@ test('system user directory keeps only high-frequency filters visible', () => {
   assert.doesNotMatch(usersSummarySource, /users_pending_approval/);
 });
 
-test('system user table keeps scan-critical columns and hides secondary actions in overflow', () => {
+test('system user table keeps scan-critical columns and leaves creation time in user details', () => {
   assert.match(usersTableSource, /users_col_user/);
   assert.match(usersTableSource, /users_role/);
   assert.match(usersTableSource, /users_status/);
   assert.match(usersTableSource, /users_last_login/);
   assert.doesNotMatch(usersTableSource, /users_contact|users_detail_created_by|users_force_logout|users_copy_user/);
   assert.match(usersTableSource, /users_unlock_account/);
-  assert.match(usersTableSource, /users_detail_created_at/);
+  assert.doesNotMatch(usersTableSource, /users_detail_created_at/);
+  assert.match(userBasicInfoSource, /users_detail_created_at/);
   assert.match(usersBulkActionSource, /users_bulk_export/);
   assert.match(usersTableSource, /users_more_actions/);
   assert.doesNotMatch(`${usersTableSource}\n${usersBulkActionSource}`, /users_bulk_delete|Trash2|handleDelete/);
-  assert.match(usersTableSource, /colSpan=\{7\}/);
+  assert.match(usersTableSource, /colSpan=\{6\}/);
 });
 
 test('system user deletion is retired and the compatibility endpoint preserves identity history', () => {

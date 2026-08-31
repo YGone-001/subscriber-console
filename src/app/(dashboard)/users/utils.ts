@@ -53,6 +53,21 @@ export function formatDateTime(value?: string) {
   return formatGovernanceTime(value || '');
 }
 
+/** The list has two compatibility fields; show only the newest valid login instant. */
+export function getLatestLoginAt(...values: Array<string | undefined>) {
+  return values.reduce<string | undefined>((latest, value) => {
+    const time = value ? new Date(value).getTime() : Number.NaN;
+    if (Number.isNaN(time)) return latest;
+    if (!latest || time > new Date(latest).getTime()) return value;
+    return latest;
+  }, undefined);
+}
+
+export function formatLatestLoginTime(...values: Array<string | undefined>) {
+  const latest = getLatestLoginAt(...values);
+  return latest ? formatDateTime(latest).slice(0, 16) : "—";
+}
+
 export function displayValue(value?: string) {
   return value?.trim() || "—";
 }
