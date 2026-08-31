@@ -1,6 +1,6 @@
 // Package main is the entry point for the subscriber-console Go backend.
 //
-// Phase 1: Foundation — health endpoints, MongoDB client, middleware, graceful shutdown.
+// Phase 2: Read-only API migration — auth compatibility, audit, analytics, ratings.
 package main
 
 import (
@@ -13,10 +13,15 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/YGone-001/subscriber-console/backend/internal/analytics"
+	"github.com/YGone-001/subscriber-console/backend/internal/auth"
+	"github.com/YGone-001/subscriber-console/backend/internal/audit"
 	"github.com/YGone-001/subscriber-console/backend/internal/config"
 	"github.com/YGone-001/subscriber-console/backend/internal/handler"
 	mongoClient "github.com/YGone-001/subscriber-console/backend/internal/mongo"
 	"github.com/YGone-001/subscriber-console/backend/internal/middleware"
+	"github.com/YGone-001/subscriber-console/backend/internal/ratelimit"
+	"github.com/YGone-001/subscriber-console/backend/internal/rating"
 	"github.com/YGone-001/subscriber-console/backend/internal/response"
 )
 
@@ -29,6 +34,14 @@ func main() {
 		logger.Error("failed to load config", "error", err)
 		os.Exit(1)
 	}
+
+	// JWT secret
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		logger.Error("JWT_SECRET is required")
+		os.Exit(1)
+	}
+	jwtSecretBytes := []byte(jwtSecret)
 
 	// Connect to MongoDB
 	ctx := context.Background()
@@ -44,19 +57,59 @@ func main() {
 	}()
 	logger.Info("mongodb connected", "uri", cfg.MongoURI, "open5gs_db", cfg.MongoDBOpen5GS, "ops_db", cfg.MongoDBOps)
 
+	// Initialize components
+	sessionValidator := auth.NewSessionValidator(mc.Ops.Collection("app_users"))
+	limiter := ratelimit.NewLimiter(mc.Ops.Collection("app_rate_limits"))
+
+	// Audit
+	auditRepo := audit.NewRepository(mc.Ops.Collection("app_audit_logs"))
+	auditHandler := audit.NewHandler(auditRepo, limiter)
+
+	// Analytics
+	analyticsRepo := analytics.NewRepository(
+		mc.Open5GS.Collection("subscribers"),
+		mc.Open5GS.Collection("ocs_balances"),
+		mc.Open5GS.Collection("ocs_sessions"),
+		mc.Open5GS.Collection("ocs_reservations"),
+		mc.Open5GS.Collection("ocs_usage_records"),
+		mc.Open5GS.Collection("ocs_subscribers"),
+		mc.Open5GS.Collection("ocs_tariff_plans"),
+	)
+	analyticsHandler := analytics.NewHandler(analyticsRepo, limiter)
+
+	// Ratings
+	ratingRepo := rating.NewRepository(mc.Open5GS.Collection("ocs_rating_policies"))
+	ratingHandler := rating.NewHandler(ratingRepo, limiter)
+
 	// Build handler
 	mux := http.NewServeMux()
 
-	// Health endpoints (no auth, no middleware)
+	// Health endpoints (no auth)
 	mux.HandleFunc("GET /healthz", handler.Health)
 	mux.HandleFunc("GET /readyz", handler.Ready(mc))
 
-	// API routes (future phases will add business handlers here)
+	// Auth-protected read endpoints
+	authMiddleware := auth.Middleware(jwtSecretBytes, sessionValidator, logger)
+
+	// Phase 2A: Audit
+	mux.Handle("GET /api/audit", authMiddleware(http.HandlerFunc(auditHandler.List)))
+	mux.Handle("GET /api/audit/export", authMiddleware(http.HandlerFunc(auditHandler.Export)))
+	mux.Handle("GET /api/audit/{id}", authMiddleware(http.HandlerFunc(auditHandler.Get)))
+
+	// Phase 2A: Analytics
+	mux.Handle("GET /api/analytics/metrics", authMiddleware(http.HandlerFunc(analyticsHandler.Metrics)))
+	mux.Handle("GET /api/analytics/sparkline", authMiddleware(http.HandlerFunc(analyticsHandler.Sparkline)))
+
+	// Phase 2A: Ratings
+	mux.Handle("GET /api/ratings", authMiddleware(http.HandlerFunc(ratingHandler.List)))
+	mux.Handle("GET /api/ratings/{id}", authMiddleware(http.HandlerFunc(ratingHandler.Get)))
+
+	// Catch-all for unmigrated routes
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		response.NotFound(w)
 	})
 
-	// Apply middleware chain
+	// Apply middleware chain (without auth — auth is applied per-route)
 	finalHandler := middleware.Chain(
 		mux,
 		middleware.RequestID,
@@ -91,7 +144,7 @@ func main() {
 		close(done)
 	}()
 
-	logger.Info("server starting", "addr", cfg.HTTPAddr)
+	logger.Info("server starting", "addr", cfg.HTTPAddr, "phase", "2")
 	if err := srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 		logger.Error("server error", "error", err)
 		os.Exit(1)
@@ -99,7 +152,5 @@ func main() {
 
 	<-done
 	logger.Info("server stopped")
-
-	// Allow MongoDB connection to drain
 	time.Sleep(100 * time.Millisecond)
 }

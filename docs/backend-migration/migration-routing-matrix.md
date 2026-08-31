@@ -45,18 +45,18 @@
 | Tariff plan migrate (dry-run) | GET | `/api/tariff-plans/:planId/migrate` | Next.js | Go | YES | Dry-run preview, no data mutation |
 | Tariff plan rules | GET | `/api/tariff-plans/:planId/rules` | Next.js | Go | YES | open5gs only |
 | Tariff plan subscribers | GET | `/api/tariff-plans/:planId/subscribers` | Next.js | Go | YES | open5gs only |
-| Ratings list | GET | `/api/ratings` | Next.js | Go | YES | xcloud_ops only |
-| Rating detail | GET | `/api/ratings/:id` | Next.js | Go | YES | xcloud_ops only |
+| Ratings list | GET | `/api/ratings` | **Go** | Go | YES | Phase 2A — migrated |
+| Rating detail | GET | `/api/ratings/:id` | **Go** | Go | YES | Phase 2A — migrated |
 | Approvals list | GET | `/api/approvals` | Next.js | Go | YES | xcloud_ops only |
 | Approval detail | GET | `/api/approvals/:id` | Next.js | Go | YES | xcloud_ops only |
 | Approval audit | GET | `/api/approvals/:id/audit` | Next.js | Go | YES | xcloud_ops only |
 | Approvals export | GET | `/api/approvals/export` | Next.js | Go | YES | xcloud_ops only |
-| Audit logs | GET | `/api/audit` | Next.js | Go | YES | xcloud_ops only |
-| Audit detail | GET | `/api/audit/:id` | Next.js | Go | YES | xcloud_ops only |
-| Audit export | GET | `/api/audit/export` | Next.js | Go | YES | xcloud_ops only |
+| Audit logs | GET | `/api/audit` | **Go** | Go | YES | Phase 2A — migrated |
+| Audit detail | GET | `/api/audit/:id` | **Go** | Go | YES | Phase 2A — migrated |
+| Audit export | GET | `/api/audit/export` | **Go** | Go | YES | Phase 2A — 501 (not yet implemented) |
 | Alerts list | GET | `/api/alerts` | Next.js | Go | YES | xcloud_ops only |
-| Analytics metrics | GET | `/api/analytics/metrics` | Next.js | Go | YES | xcloud_ops only |
-| Analytics sparkline | GET | `/api/analytics/sparkline` | Next.js | Go | YES | xcloud_ops only |
+| Analytics metrics | GET | `/api/analytics/metrics` | **Go** | Go | YES | Phase 2A — migrated |
+| Analytics sparkline | GET | `/api/analytics/sparkline` | **Go** | Go | YES | Phase 2A — migrated |
 | System health | GET | `/api/system/health` | Next.js | Go | YES | Joins both DBs |
 | Mongo health | GET | `/api/system/mongo/health` | Next.js | Go | YES | Joins both DBs |
 | System audit status | GET | `/api/system/audit/status` | Next.js | Go | YES | open5gs only |
