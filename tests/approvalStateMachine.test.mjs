@@ -117,6 +117,7 @@ function executionService(state, accountRole = 'viewer') {
       assertGovernedOperationCoverage: () => {},
     },
     '@/server/ocsGovernanceRegistry': { assertOcsGovernedOperationCoverage: () => {} },
+    '@/server/coreOperationRegistry': { assertCoreOperationExecutorCoverage: () => {} },
     '@/server/ocsBalanceGovernance': {
       executeFrozenOcsBalanceAdjustment: async () => ({}),
       OcsBalanceGovernanceError: class extends Error {},

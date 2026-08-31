@@ -7,6 +7,7 @@ import { executeFrozenSubscriberBulkDelete, executeFrozenSubscriberDelete, execu
 import { assertGovernedOperationCoverage } from '@/server/subscriberGovernanceRegistry';
 import { executeFrozenOcsBalanceAdjustment, OcsBalanceGovernanceError } from '@/server/ocsBalanceGovernance';
 import { assertOcsGovernedOperationCoverage } from '@/server/ocsGovernanceRegistry';
+import { assertCoreOperationExecutorCoverage } from '@/server/coreOperationRegistry';
 import { approvalActionEligibility, ApprovalWorkflowError } from '@/server/approvalWorkflow';
 import { getApproval, transitionApproval, type ApprovalDocument } from '@/server/repositories/approvalRepository';
 import { getUser } from '@/server/repositories/userRepository';
@@ -118,6 +119,10 @@ assertSubscriberApprovalExecutorCoverage();
 export const automaticOcsExecutorActions = ['TRAFFIC_ADJUSTMENT'] as const;
 export function assertOcsExecutorCoverage() { assertOcsGovernedOperationCoverage(automaticOcsExecutorActions); }
 assertOcsExecutorCoverage();
+
+/** Phase 8 readiness invariant: no automatic core operation may exist without
+ * a production executor, even when the current registry is intentionally empty. */
+assertCoreOperationExecutorCoverage();
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
