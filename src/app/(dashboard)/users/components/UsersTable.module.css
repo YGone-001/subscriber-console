@@ -132,7 +132,7 @@
   z-index: 4;
   width: 210px;
   min-width: 210px;
-  text-align: right !important;
+  text-align: left !important;
   box-shadow: -1px 0 0 var(--surface-border);
 }
 
@@ -168,7 +168,7 @@
 .dateCell { white-space: nowrap; }
 
 .contactCell { display: inline-flex; align-items: center; gap: 0.4rem; }
-.rowActions { justify-content: flex-end; }
+.rowActions { justify-content: flex-start; }
 .rowActions :global(.btn-ghost) { border: 0; background: transparent; color: var(--text-secondary); padding: 0.45rem 0.55rem; }
 .rowActions :global(.btn-ghost:hover) { color: var(--primary); background: color-mix(in srgb, var(--primary) 8%, transparent); }
 .more { position: relative; }

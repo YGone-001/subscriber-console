@@ -39,6 +39,8 @@ test('system-user table keeps actions visible and maps every desktop column', ()
   assert.match(tableStyles, /min-width: 1050px/);
   assert.match(tableStyles, /table-layout: fixed/);
   assert.match(tableStyles, /\.actionsColumn \{ width: 210px; \}/);
+  assert.match(tableStyles, /\.actionsCol[\s\S]*text-align: left !important/);
+  assert.match(tableStyles, /\.rowActions \{ justify-content: flex-start; \}/);
   assert.match(tableStyles, /\.userPreview \{ display: none; \}/);
   assert.match(tableStyles, /\.userCol[\s\S]*width: 260px/);
   assert.match(tableStyles, /\.moreMenu[\s\S]*z-index: 100/);
