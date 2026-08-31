@@ -103,6 +103,13 @@
   text-align: center !important;
 }
 
+.selectColumn { width: 48px; }
+.userColumn { width: auto; }
+.roleColumn { width: 124px; }
+.statusColumn { width: 118px; }
+.lastLoginColumn { width: 180px; }
+.actionsColumn { width: 210px; }
+
 .userCol {
   position: sticky;
   left: 48px;
@@ -123,8 +130,8 @@
   position: sticky;
   right: 0;
   z-index: 4;
-  width: 246px;
-  min-width: 246px;
+  width: 210px;
+  min-width: 210px;
   text-align: right !important;
   box-shadow: -1px 0 0 var(--surface-border);
 }
@@ -201,34 +208,8 @@
 .moreMenu .dangerMenuItem { color: var(--danger); }
 .menuSeparator { height: 1px; margin: 0.3rem 0.45rem; background: var(--surface-border); }
 
-.userIdentityCell { overflow: visible; }
-.userPreview {
-  position: absolute;
-  left: calc(100% - 10px);
-  top: 50%;
-  z-index: 18;
-  width: 250px;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.8rem;
-  border: 1px solid var(--surface-border);
-  border-radius: var(--ref-radius-panel);
-  background: var(--surface);
-  box-shadow: var(--shadow-popover);
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  transform: translate(0, -44%);
-  transition: opacity 140ms ease, transform 140ms ease, visibility 140ms ease;
-}
-.userPreview > span:last-child { min-width: 0; display: grid; gap: 0.25rem; }
-.userPreview strong,
-.userPreview small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.userPreview small { color: var(--text-muted); }
-.userPreview > span:last-child > span { display: flex; align-items: center; gap: 0.4rem; margin-top: 0.2rem; }
-.table tbody tr:hover .userPreview,
-.identityButton:focus-visible + .userPreview { opacity: 1; visibility: visible; transform: translate(0.35rem, -50%); }
+.userIdentityCell { overflow: hidden; }
+.userPreview { display: none; }
 
 .pagination {
   display: flex;
@@ -269,9 +250,4 @@
   .tableStateRow,
   .tableStateRow td { display: block; width: 100%; }
   .moreMenu { position: fixed !important; left: max(0.75rem, env(safe-area-inset-left)) !important; right: max(0.75rem, env(safe-area-inset-right)) !important; top: auto !important; bottom: max(0.75rem, env(safe-area-inset-bottom)); }
-  .userPreview { display: none; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .userPreview { transition: none; }
 }
