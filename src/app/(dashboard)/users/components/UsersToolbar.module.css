@@ -34,6 +34,11 @@
   font-size: var(--ref-font-size-body-support);
 }
 
+.search :global(.btn) {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 .filterGroup {
   display: flex;
   align-items: center;

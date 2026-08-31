@@ -27,6 +27,8 @@ test('system-user table keeps actions visible and maps every desktop column', ()
   assert.match(tableSource, /openMoreMenu/);
   assert.match(tableSource, /document\.body/);
   assert.match(tableSource, /position: "fixed"/);
+  assert.match(tableSource, /<colgroup>/);
+  assert.match(tableSource, /styles\.actionsColumn/);
   assert.match(tableSource, /styles\.lastLoginCol/);
   assert.doesNotMatch(tableSource, /styles\.createdAtCol/);
   assert.doesNotMatch(tableSource, /users_detail_created_at/);
@@ -36,9 +38,12 @@ test('system-user table keeps actions visible and maps every desktop column', ()
   assert.match(userUtilsSource, /formatDateTime\(latest\)\.slice\(0, 16\)/);
   assert.match(tableStyles, /min-width: 1050px/);
   assert.match(tableStyles, /table-layout: fixed/);
+  assert.match(tableStyles, /\.actionsColumn \{ width: 210px; \}/);
+  assert.match(tableStyles, /\.userPreview \{ display: none; \}/);
   assert.match(tableStyles, /\.userCol[\s\S]*width: 260px/);
   assert.match(tableStyles, /\.moreMenu[\s\S]*z-index: 100/);
   assert.match(toolbarStyles, /text-overflow: ellipsis/);
+  assert.match(toolbarStyles, /\.search :global\(\.btn\)[\s\S]*white-space: nowrap/);
   assert.doesNotMatch(toolbarStyles, /min-width: 320px/);
 });
 

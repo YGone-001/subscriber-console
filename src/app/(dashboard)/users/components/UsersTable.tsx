@@ -102,6 +102,14 @@ export function UsersTable(props: UsersTableProps) {
         </div>
         <table className={styles.table}>
           <caption className="sr-only">{t("users_title")}</caption>
+          <colgroup>
+            <col className={styles.selectColumn} />
+            <col className={styles.userColumn} />
+            <col className={styles.roleColumn} />
+            <col className={styles.statusColumn} />
+            <col className={styles.lastLoginColumn} />
+            <col className={styles.actionsColumn} />
+          </colgroup>
           <thead>
             <tr>
               <th className={styles.selectCol} data-column-priority="essential">
