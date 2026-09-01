@@ -88,6 +88,10 @@
 | `/api/tariff-plans/:planId/rules` | GET | Tariff | 120/60s per user | ✅ Phase 2B |
 | `/api/tariff-plans/:planId/subscribers` | GET | Tariff | 120/60s per user | ✅ Phase 2B |
 | `/api/tariff-plans/:planId/migrate` | GET | Tariff | 120/60s per user | ✅ Phase 2B |
+| `/api/subscribers` | GET | Subscriber | 120/60s per user | ✅ Phase 2C |
+| `/api/subscribers/:imsi` | GET | Subscriber | 180/60s per user | ✅ Phase 2C |
+| `/api/search` | GET | Search | 60/60s per user | ✅ Phase 2C |
+| `/api/subscribers/batch/precheck` | POST | Subscriber | 30/60s per user | ✅ Phase 2C |
 
 ### 3.1 Deferred: /api/audit/export
 
@@ -103,12 +107,14 @@
 
 **Current owner:** Next.js (`src/app/api/audit/export/route.ts`)
 
-### Endpoints NOT Migrated (Phase 2C-D)
+### Endpoints NOT Migrated (Phase 2D+)
 
 | Endpoint | Reason |
 |----------|--------|
-| `/api/subscribers/*` | Phase 2C (complex joins) |
-| `/api/search` | Phase 2C |
+| `/api/subscribers` (POST) | Phase 4 (write) |
+| `/api/subscribers/:imsi` (PUT/DELETE) | Phase 4 (write) |
+| `/api/subscribers/batch` | Phase 4 (write) |
+| `/api/subscribers/import` | Phase 4 (write) |
 | `/api/auth/*` | Phase 2D |
 | `/api/users/*` | Phase 2D |
 | `/api/approvals/*` | Phase 2D |
@@ -254,6 +260,9 @@ ok  github.com/YGone-001/subscriber-console/backend/internal/response     1.016s
 | Profile reads | **Go** |
 | OCS reads | **Go** |
 | Tariff reads | **Go** |
+| Subscriber reads | **Go** |
+| Search reads | **Go** |
+| Batch precheck (semantic read) | **Go** |
 
 ### 8.1 Mongo Write Invariant
 
@@ -299,8 +308,12 @@ Not all GET endpoints are pure reads. Classification:
 | `GET /api/tariff-plans/:planId/rules` | READ | NO | YES (`app_rate_limits`) | Read + conflict detection |
 | `GET /api/tariff-plans/:planId/subscribers` | READ | NO | YES (`app_rate_limits`) | Pure read + rate limit |
 | `GET /api/tariff-plans/:planId/migrate` | READ | NO | YES (`app_rate_limits`) | Dry-run computation only |
+| `GET /api/subscribers` | READ | NO | YES (`app_rate_limits`) | Pure read + rate limit |
+| `GET /api/subscribers/:imsi` | READ | NO | YES (`app_rate_limits`) | Pure read + rate limit |
+| `GET /api/search` | READ | NO | YES (`app_rate_limits`) | Pure read + rate limit |
+| `POST /api/subscribers/batch/precheck` | SEMANTIC_READ | NO | YES (`app_rate_limits`) | POST body but no writes |
 
-**Key insight:** `app_rate_limits` writes are infrastructure (rate limiting), not business mutations. Only `GET /api/audit/export` has genuine business write side effects. All Phase 2B endpoints are pure reads.
+**Key insight:** `app_rate_limits` writes are infrastructure (rate limiting), not business mutations. Only `GET /api/audit/export` has genuine business write side effects. All Phase 2A+2B+2C endpoints are pure reads or semantic reads.
 
 ---
 
@@ -349,7 +362,12 @@ Not all GET endpoints are pure reads. Classification:
 | `backend/internal/ocs/numeric_test.go` | BSON Long / Decimal128 numeric conversion tests |
 | `backend/internal/tariff/numeric_test.go` | Tariff numeric conversion + rule normalization tests |
 | `backend/internal/ratelimit/ratelimit.go` | MongoDB-backed rate limiter |
-| `backend/cmd/server/main.go` | Updated with Phase 2A+2B wiring |
+| `backend/internal/subscriber/handler.go` | Subscriber API handlers (list, detail, search, batch precheck) |
+| `backend/internal/subscriber/model.go` | Subscriber response DTOs |
+| `backend/internal/subscriber/repository.go` | Subscriber MongoDB queries (cross-DB joins) |
+| `backend/internal/subscriber/handler_test.go` | Subscriber unit tests |
+| `backend/internal/auth/capability_test.go` | Capability check tests |
+| `backend/cmd/server/main.go` | Updated with Phase 2A+2B+2C wiring |
 
 ---
 
@@ -369,7 +387,7 @@ Not all GET endpoints are pure reads. Classification:
 |-------|-----------|--------|
 | 2A | audit, analytics, ratings (6 endpoints) | ✅ Complete (audit/export deferred) |
 | 2B | profiles, OCS, tariff-plans (15 endpoints) | ✅ Complete |
-| 2C | subscribers, search | Not started |
+| 2C | subscribers list/detail, search, batch precheck (4 endpoints) | ✅ Complete |
 | 2D | auth/me, auth/permissions, users | Not started |
 
 ---
@@ -433,13 +451,17 @@ Not all GET endpoints are pure reads. Classification:
 | `GET /api/tariff-plans/:planId/rules` | PARITY_PASS | ✅ | ✅ | |
 | `GET /api/tariff-plans/:planId/subscribers` | PARITY_PASS | ✅ | ✅ | |
 | `GET /api/tariff-plans/:planId/migrate` | PARITY_PASS | ✅ | ✅ | |
+| `GET /api/subscribers` | PARITY_PASS | ✅ | ✅ | detail=false/true, msisdn lookup |
+| `GET /api/subscribers/:imsi` | PARITY_PASS | ✅ | ✅ | Legacy state mapping |
+| `GET /api/search` | PARITY_PASS | ✅ | ✅ | subscriber/profile split |
+| `POST /api/subscribers/batch/precheck` | PARITY_PASS | ✅ | ✅ | Semantic read, requires write cap |
 
 ### Routing Status
 
 | Status | Value |
 |--------|-------|
-| Implemented in Go | 21 |
-| Parity passed | 21 |
+| Implemented in Go | 25 |
+| Parity passed | 25 |
 | Actually routed to Go (Nginx) | NO — Nginx not yet modified |
 | Still routed to Node | YES — all /api/* still go to Next.js |
 | Rollback | Not required — production routing unchanged |
@@ -448,13 +470,18 @@ Not all GET endpoints are pure reads. Classification:
 
 ## 16. Phase 2 Status
 
-**PARTIAL** — Phase 2A + 2B complete, 2C-D remaining.
+**PARTIAL** — Phase 2A + 2B + 2C complete, 2D remaining.
 
-Phase 2A+2B provides:
+Phase 2A+2B+2C provides:
 - Auth compatibility layer (JWT + session validation)
-- 21 read-only endpoints migrated (audit/export deferred)
+- 25 read-only endpoints migrated (audit/export deferred)
 - MongoDB-backed rate limiting
 - Node → Go JWT interoperability proven (real Node jose fixture)
 - Profile reads with cross-DB subscriber stats
 - OCS reads with BSON Long → int64 conversion
 - Tariff reads with rule normalization and conflict detection
+- Subscriber list with detail=false/true modes, MSISDN lookup
+- Subscriber detail with legacy state mapping (sub4G, pcrf4G, auth4G, OCS)
+- Global search with subscriber/profile split
+- Batch precheck (semantic read with subscriber_write capability)
+- Capability-based authorization matching Node ROLE_CAPABILITIES exactly

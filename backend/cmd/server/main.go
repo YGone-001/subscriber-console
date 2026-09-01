@@ -25,6 +25,7 @@ import (
 	"github.com/YGone-001/subscriber-console/backend/internal/ratelimit"
 	"github.com/YGone-001/subscriber-console/backend/internal/rating"
 	"github.com/YGone-001/subscriber-console/backend/internal/response"
+	"github.com/YGone-001/subscriber-console/backend/internal/subscriber"
 	"github.com/YGone-001/subscriber-console/backend/internal/tariff"
 )
 
@@ -109,6 +110,16 @@ func main() {
 	)
 	tariffHandler := tariff.NewHandler(tariffRepo, limiter)
 
+	// Subscribers (Phase 2C)
+	subscriberRepo := subscriber.NewRepository(
+		mc.Open5GS.Collection("subscribers"),
+		mc.Open5GS.Collection("ocs_subscribers"),
+		mc.Open5GS.Collection("ocs_balances"),
+		mc.Open5GS.Collection("ocs_tariff_plans"),
+		mc.Ops.Collection("app_profiles"),
+	)
+	subscriberHandler := subscriber.NewHandler(subscriberRepo, limiter)
+
 	// Build handler
 	mux := http.NewServeMux()
 
@@ -151,6 +162,12 @@ func main() {
 	mux.Handle("GET /api/tariff-plans/{planId}/rules", authMiddleware(http.HandlerFunc(tariffHandler.Rules)))
 	mux.Handle("GET /api/tariff-plans/{planId}/subscribers", authMiddleware(http.HandlerFunc(tariffHandler.Subscribers)))
 	mux.Handle("GET /api/tariff-plans/{planId}/migrate", authMiddleware(http.HandlerFunc(tariffHandler.Migrate)))
+
+	// Phase 2C: Subscribers (list, detail, search, batch precheck)
+	mux.Handle("GET /api/subscribers", authMiddleware(http.HandlerFunc(subscriberHandler.List)))
+	mux.Handle("GET /api/subscribers/{imsi}", authMiddleware(http.HandlerFunc(subscriberHandler.Detail)))
+	mux.Handle("GET /api/search", authMiddleware(http.HandlerFunc(subscriberHandler.Search)))
+	mux.Handle("POST /api/subscribers/batch/precheck", authMiddleware(http.HandlerFunc(subscriberHandler.BatchPrecheck)))
 
 	// Catch-all for unmigrated routes
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {

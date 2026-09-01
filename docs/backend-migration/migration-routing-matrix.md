@@ -27,9 +27,9 @@
 
 | API | Method | Path | Current Owner | Future Owner | Shadow Allowed | Notes |
 |-----|--------|------|---------------|--------------|----------------|-------|
-| Subscribers list | GET | `/api/subscribers` | Next.js | Go | YES | Joins open5gs + xcloud_ops |
-| Subscriber detail | GET | `/api/subscribers/:imsi` | Next.js | Go | YES | Joins open5gs + xcloud_ops |
-| Subscriber batch precheck | POST | `/api/subscribers/batch/precheck` | Next.js | Go | YES | Read-only despite POST |
+| Subscribers list | GET | `/api/subscribers` | **Go** | Go | YES | Phase 2C — migrated, joins open5gs + xcloud_ops |
+| Subscriber detail | GET | `/api/subscribers/:imsi` | **Go** | Go | YES | Phase 2C — migrated, joins open5gs + xcloud_ops |
+| Subscriber batch precheck | POST | `/api/subscribers/batch/precheck` | **Go** | Go | YES | Phase 2C — migrated, read-only despite POST |
 | Profiles list | GET | `/api/profiles` | **Go** | Go | YES | Phase 2B — migrated |
 | Profile detail | GET | `/api/profiles/:name` | **Go** | Go | YES | Phase 2B — migrated |
 | Profile stats | GET | `/api/profiles/:name/stats` | **Go** | Go | YES | Phase 2B — migrated |
@@ -66,7 +66,7 @@
 | Auth user detail | GET | `/api/auth/users/:username` | Next.js | Go | YES | xcloud_ops only |
 | Users list | GET | `/api/users` | Next.js | Go | YES | xcloud_ops only |
 | User detail | GET | `/api/users/:username` | Next.js | Go | YES | xcloud_ops only |
-| Search | GET | `/api/search` | Next.js | Go | YES | Joins both DBs |
+| Search | GET | `/api/search` | **Go** | Go | YES | Phase 2C — migrated, joins both DBs |
 | Notifications stream | GET | `/api/notifications/stream` | Next.js | Go | YES | SSE |
 
 ### Phase 3 — Governance + Approval
