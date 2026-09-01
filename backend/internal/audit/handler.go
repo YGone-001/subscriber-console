@@ -13,7 +13,7 @@ import (
 
 // Handler provides HTTP handlers for audit log endpoints.
 type Handler struct {
-	repo   *Repository
+	repo    *Repository
 	limiter *ratelimit.Limiter
 }
 
@@ -94,22 +94,10 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 
 var validIDPattern = regexp.MustCompile(`^[A-Za-z0-9_.:-]+$`)
 
-// Export handles GET /api/audit/export
-func (h *Handler) Export(w http.ResponseWriter, r *http.Request) {
-	p := auth.PrincipalFromContext(r.Context())
-	if p == nil {
-		response.Error(w, http.StatusUnauthorized, "Unauthorized", "AUTH_INVALID_TOKEN")
-		return
-	}
-
-	// Rate limit
-	if !h.limiter.Enforce(w, r, "audit:export:"+p.Username, 10, 60) {
-		return
-	}
-
-	// For now, return 501 — export is complex and can be added later
-	response.Error(w, http.StatusNotImplemented, "Export not yet implemented in Go backend", "NOT_IMPLEMENTED")
-}
+// NOTE: GET /api/audit/export remains with Next.js.
+// It performs stateful audit evidence persistence (writeAuditLog with
+// action=audit.export) on both success and failure paths, which requires
+// Go Audit Writer — deferred to Phase 3+.
 
 func hasPermission(role, permission string) bool {
 	// Simplified permission check matching the Node.js permission matrix

@@ -27,7 +27,7 @@
 | locked | ✅ | Rejects locked accounts (`status=locked` or `locked=true`) |
 | disabled | ✅ | Rejects non-active accounts |
 | role consistency | ✅ | Normalizes `root` → `super_admin`, compares with DB |
-| Node → Go interoperability | ✅ | JWT verifier test creates Node-style tokens and verifies in Go |
+| Node → Go interoperability | ✅ | Real Node jose fixture verified by Go — see Section 2.1 |
 | x-user headers | ✅ | **NOT trusted** — identity comes from JWT + MongoDB only |
 
 ### Error Codes Preserved
@@ -41,6 +41,23 @@
 | `SESSION_REVOKED` | sessionVersion or role mismatch |
 | `AUTH_UNAVAILABLE` | MongoDB connection error |
 
+### 2.1 Cross-Language JWT Verification
+
+| Property | Value |
+|----------|-------|
+| Fixture generator | `scripts/migration/generate-auth-fixture.mjs` |
+| Node library | `jose ^6.2.2` |
+| Algorithm | HS256 |
+| Go verifier | `internal/auth/verifier.go` |
+| Go test file | `internal/auth/verifier_cross_lang_test.go` |
+| Fixture location | `backend/testdata/auth/node-jose-token.json` |
+| Test secret | `phase2-test-secret-only-not-for-production-xcloud` |
+
+**Verified scenarios:**
+- Valid token → claims extracted correctly (username, role, sv)
+- Expired token → rejected with "expired" error
+- alg=none → rejected with "algorithm" error
+
 ---
 
 ## 3. Read Migration — Phase 2A
@@ -51,11 +68,25 @@
 |----------|--------|--------|------------|--------|
 | `/api/audit` | GET | Audit | 60/60s per user | ✅ Migrated |
 | `/api/audit/:id` | GET | Audit | 60/60s per user | ✅ Migrated |
-| `/api/audit/export` | GET | Audit | 10/60s per user | ⚠️ 501 (not yet implemented) |
+| `/api/audit/export` | GET | Audit | 10/60s per user | ❌ DEFERRED — see Section 3.1 |
 | `/api/analytics/metrics` | GET | Analytics | 120/60s per user | ✅ Migrated |
 | `/api/analytics/sparkline` | GET | Analytics | 120/60s per user | ✅ Migrated |
 | `/api/ratings` | GET | Ratings | 90/60s per user | ✅ Migrated |
 | `/api/ratings/:id` | GET | Ratings | 90/60s per user | ✅ Migrated |
+
+### 3.1 Deferred: /api/audit/export
+
+`GET /api/audit/export` was briefly registered as a Go 501 stub. This has been **removed** — it was not contract compatible.
+
+**Why it cannot migrate in Phase 2:**
+- Node implementation calls `writeAuditLog({ action: 'audit.export' })` on both success and failure paths
+- This is a **stateful read with business write side effect** (`app_audit_logs` write)
+- Go does not yet own the Audit Writer
+- Returning 501 is not contract compatible — clients expect real CSV/JSON export
+
+**Migration target:** Phase 3+ after Go Audit Writer exists.
+
+**Current owner:** Next.js (`src/app/api/audit/export/route.ts`)
 
 ### Endpoints NOT Migrated (Phase 2B-D)
 
@@ -169,6 +200,9 @@ ok  github.com/YGone-001/subscriber-console/backend/internal/response     1.016s
 | `TestVerifyJWT_MissingExp` | Missing exp rejected |
 | `TestVerifyJWT_InvalidFormat` | Malformed token rejected |
 | `TestVerifyJWT_LegacySVZero` | Legacy tokens with `sv=0` accepted |
+| `TestNodeJoseInterop_ValidToken` | Node jose → Go verification (real fixture) |
+| `TestNodeJoseInterop_ExpiredToken` | Node jose expired → Go rejects |
+| `TestNodeJoseInterop_AlgNone` | Node jose alg=none → Go rejects |
 
 ### Node.js Tests
 
@@ -190,8 +224,41 @@ ok  github.com/YGone-001/subscriber-console/backend/internal/response     1.016s
 | Approval writes | Node |
 | Auth Login | Node |
 | Audit reads | **Go** |
+| Audit export | Node (DEFERRED — requires audit evidence persistence) |
 | Analytics reads | **Go** |
 | Rating reads | **Go** |
+
+### 8.1 Mongo Write Invariant
+
+**Phase 2 strict rule:** Go MUST NOT write to business-domain collections.
+
+| Collection | Go Write | Reason |
+|-----------|----------|--------|
+| `xcloud_ops.app_rate_limits` | ✅ ALLOWED | Infrastructure — rate limiting |
+| `open5gs.subscribers` | ❌ FORBIDDEN | Business domain |
+| `open5gs.ocs_*` | ❌ FORBIDDEN | Business domain |
+| `xcloud_ops.app_profiles` | ❌ FORBIDDEN | Business domain |
+| `xcloud_ops.app_users` | ❌ FORBIDDEN | Business domain (read-only in Phase 2 auth) |
+| `xcloud_ops.app_approvals` | ❌ FORBIDDEN | Business domain |
+| `xcloud_ops.app_audit_logs` | ❌ FORBIDDEN | Business domain (audit evidence) |
+
+Phase 2 auth middleware: **read-only** on `app_users` (no `last_login` update, no session state mutation).
+
+### 8.2 Semantic Classification of Phase 2A GET Endpoints
+
+Not all GET endpoints are pure reads. Classification:
+
+| Endpoint | HTTP Semantic | Business Write | Infrastructure Write | Notes |
+|----------|--------------|----------------|---------------------|-------|
+| `GET /api/audit` | READ | NO | YES (`app_rate_limits`) | Pure read + rate limit |
+| `GET /api/audit/:id` | READ | NO | YES (`app_rate_limits`) | Pure read + rate limit |
+| `GET /api/audit/export` | STATEFUL_READ | YES (`app_audit_logs`) | YES (`app_rate_limits`) | **DEFERRED** — writes audit evidence |
+| `GET /api/analytics/metrics` | READ | NO | YES (`app_rate_limits`) | Pure read + rate limit |
+| `GET /api/analytics/sparkline` | READ | NO | YES (`app_rate_limits`) | Pure read + rate limit |
+| `GET /api/ratings` | READ | NO | YES (`app_rate_limits`) | Pure read + rate limit |
+| `GET /api/ratings/:id` | READ | NO | YES (`app_rate_limits`) | Pure read + rate limit |
+
+**Key insight:** `app_rate_limits` writes are infrastructure (rate limiting), not business mutations. Only `GET /api/audit/export` has genuine business write side effects.
 
 ---
 
@@ -216,6 +283,9 @@ ok  github.com/YGone-001/subscriber-console/backend/internal/response     1.016s
 | `backend/internal/auth/session.go` | Session validation against app_users |
 | `backend/internal/auth/verifier.go` | HS256 JWT verification |
 | `backend/internal/auth/verifier_test.go` | JWT interoperability tests |
+| `backend/internal/auth/verifier_cross_lang_test.go` | Node jose → Go cross-language verification |
+| `backend/testdata/auth/node-jose-token.json` | JWT fixture generated by Node jose |
+| `scripts/migration/generate-auth-fixture.mjs` | Node jose fixture generator |
 | `backend/internal/analytics/handler.go` | Analytics API handlers |
 | `backend/internal/analytics/model.go` | Analytics response DTOs |
 | `backend/internal/analytics/repository.go` | Analytics MongoDB queries |
@@ -244,7 +314,7 @@ ok  github.com/YGone-001/subscriber-console/backend/internal/response     1.016s
 
 | Phase | Endpoints | Status |
 |-------|-----------|--------|
-| 2A | audit, analytics, ratings | ✅ Complete |
+| 2A | audit, analytics, ratings (6 endpoints) | ✅ Complete (audit/export deferred) |
 | 2B | profiles, OCS, tariff-plans | Not started |
 | 2C | subscribers, search, profile stats | Not started |
 | 2D | auth/me, auth/permissions, users | Not started |
@@ -280,6 +350,6 @@ ok  github.com/YGone-001/subscriber-console/backend/internal/response     1.016s
 
 Phase 2A provides:
 - Auth compatibility layer (JWT + session validation)
-- 7 read-only endpoints migrated
+- 6 read-only endpoints migrated (audit/export deferred)
 - MongoDB-backed rate limiting
-- Node → Go JWT interoperability proven
+- Node → Go JWT interoperability proven (real Node jose fixture)

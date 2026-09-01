@@ -10,16 +10,16 @@ import (
 // Config holds all application configuration.
 type Config struct {
 	// HTTP server
-	HTTPAddr         string        // listen address, e.g. ":8080"
-	ReadTimeout      time.Duration
-	WriteTimeout     time.Duration
-	IdleTimeout      time.Duration
-	ShutdownTimeout  time.Duration
+	HTTPAddr        string // listen address, e.g. ":8080"
+	ReadTimeout     time.Duration
+	WriteTimeout    time.Duration
+	IdleTimeout     time.Duration
+	ShutdownTimeout time.Duration
 
 	// MongoDB
-	MongoURI        string // connection URI
-	MongoDBOpen5GS  string // database name for HSS/OCS data
-	MongoDBOps      string // database name for xcloud_ops data
+	MongoURI       string // connection URI
+	MongoDBOpen5GS string // database name for HSS/OCS data
+	MongoDBOps     string // database name for xcloud_ops data
 }
 
 // Load reads configuration from environment variables with sensible defaults.

@@ -19,19 +19,19 @@ import (
 
 // RateLimitDocument matches the existing MongoDB document structure.
 type RateLimitDocument struct {
-	Key      string    `bson:"key"`
-	Count    int       `bson:"count"`
-	ResetAt  time.Time `bson:"reset_at"`
+	Key       string    `bson:"key"`
+	Count     int       `bson:"count"`
+	ResetAt   time.Time `bson:"reset_at"`
 	UpdatedAt time.Time `bson:"updated_at"`
 }
 
 // Result holds the rate limit check outcome.
 type Result struct {
-	Allowed   bool
-	Limit     int
-	Remaining int
+	Allowed    bool
+	Limit      int
+	Remaining  int
 	RetryAfter int
-	ResetAt   int64
+	ResetAt    int64
 }
 
 // Limiter provides MongoDB-backed fixed-window rate limiting.
@@ -71,11 +71,11 @@ func (l *Limiter) Check(ctx context.Context, identifier string, limit int, windo
 	if err != nil {
 		// Fail open — same as Node behavior
 		return &Result{
-			Allowed:   true,
-			Limit:     limit,
-			Remaining: limit,
+			Allowed:    true,
+			Limit:      limit,
+			Remaining:  limit,
 			RetryAfter: 0,
-			ResetAt:   resetAt,
+			ResetAt:    resetAt,
 		}, nil
 	}
 

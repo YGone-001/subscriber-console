@@ -34,30 +34,30 @@ func (r *Repository) ListAuditLogs(ctx context.Context, query AuditQuery, reveal
 				{{Key: "$skip", Value: (query.Page - 1) * query.PageSize}},
 				{{Key: "$limit", Value: query.PageSize}},
 				{{Key: "$project", Value: bson.M{
-					"_id":            0,
-					"id":             1,
-					"eventId":        1,
-					"timestamp":      1,
-					"level":          1,
-					"action":         1,
-					"targetId":       1,
-					"actor":          1,
-					"operatorIp":     1,
-					"correlationId":  1,
-					"approvalId":     1,
-					"reason":         1,
-					"actorContext":   1,
-					"module":         1,
-					"resource":       1,
-					"riskLevel":      1,
-					"result":         1,
-					"source.ip":      1,
-					"request":        1,
+					"_id":           0,
+					"id":            1,
+					"eventId":       1,
+					"timestamp":     1,
+					"level":         1,
+					"action":        1,
+					"targetId":      1,
+					"actor":         1,
+					"operatorIp":    1,
+					"correlationId": 1,
+					"approvalId":    1,
+					"reason":        1,
+					"actorContext":  1,
+					"module":        1,
+					"resource":      1,
+					"riskLevel":     1,
+					"result":        1,
+					"source.ip":     1,
+					"request":       1,
 				}}},
 			},
 			"summary": mongo.Pipeline{
 				{{Key: "$group", Value: bson.M{
-					"_id": nil,
+					"_id":      nil,
 					"matched":  bson.M{"$sum": 1},
 					"failed":   bson.M{"$sum": bson.M{"$cond": bson.A{bson.M{"$eq": bson.A{"$result", "failed"}}, 1, 0}}},
 					"denied":   bson.M{"$sum": bson.M{"$cond": bson.A{bson.M{"$eq": bson.A{"$result", "denied"}}, 1, 0}}},
@@ -209,7 +209,9 @@ func mapBSONToRecord(doc bson.M) AuditLogRecord {
 	}
 	if src, ok := doc["source"].(bson.M); ok {
 		if ip, ok := src["ip"].(string); ok {
-			rec.Source = &struct{ IP string `json:"ip,omitempty"` }{IP: ip}
+			rec.Source = &struct {
+				IP string `json:"ip,omitempty"`
+			}{IP: ip}
 		}
 	}
 	rec.Request = doc["request"]

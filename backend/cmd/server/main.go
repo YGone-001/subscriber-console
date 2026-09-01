@@ -14,12 +14,12 @@ import (
 	"time"
 
 	"github.com/YGone-001/subscriber-console/backend/internal/analytics"
-	"github.com/YGone-001/subscriber-console/backend/internal/auth"
 	"github.com/YGone-001/subscriber-console/backend/internal/audit"
+	"github.com/YGone-001/subscriber-console/backend/internal/auth"
 	"github.com/YGone-001/subscriber-console/backend/internal/config"
 	"github.com/YGone-001/subscriber-console/backend/internal/handler"
-	mongoClient "github.com/YGone-001/subscriber-console/backend/internal/mongo"
 	"github.com/YGone-001/subscriber-console/backend/internal/middleware"
+	mongoClient "github.com/YGone-001/subscriber-console/backend/internal/mongo"
 	"github.com/YGone-001/subscriber-console/backend/internal/ratelimit"
 	"github.com/YGone-001/subscriber-console/backend/internal/rating"
 	"github.com/YGone-001/subscriber-console/backend/internal/response"
@@ -91,9 +91,8 @@ func main() {
 	// Auth-protected read endpoints
 	authMiddleware := auth.Middleware(jwtSecretBytes, sessionValidator, logger)
 
-	// Phase 2A: Audit
+	// Phase 2A: Audit (export remains with Next.js — requires stateful audit evidence persistence)
 	mux.Handle("GET /api/audit", authMiddleware(http.HandlerFunc(auditHandler.List)))
-	mux.Handle("GET /api/audit/export", authMiddleware(http.HandlerFunc(auditHandler.Export)))
 	mux.Handle("GET /api/audit/{id}", authMiddleware(http.HandlerFunc(auditHandler.Get)))
 
 	// Phase 2A: Analytics

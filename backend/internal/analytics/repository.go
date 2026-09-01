@@ -138,7 +138,7 @@ func (r *Repository) ComputeSparkline(ctx context.Context) (*SparklineResponse, 
 	// Get total data available for traffic
 	pipeline := mongo.Pipeline{
 		{{Key: "$group", Value: bson.M{
-			"_id":           nil,
+			"_id":            nil,
 			"totalDataAvail": bson.M{"$sum": "$data_available"},
 		}}},
 	}
@@ -285,7 +285,7 @@ func (r *Repository) computeBalanceMetrics(ctx context.Context) (*OcsBalanceMetr
 	plmnPipeline := mongo.Pipeline{
 		{{Key: "$match", Value: bson.M{"data_available": bson.M{"$gt": 0}}}},
 		{{Key: "$project", Value: bson.M{
-			"plmn": bson.M{"$substrCP": bson.A{bson.M{"$ifNull": bson.A{"$imsi", "45400"}}, 0, 5}},
+			"plmn":           bson.M{"$substrCP": bson.A{bson.M{"$ifNull": bson.A{"$imsi", "45400"}}, 0, 5}},
 			"data_available": 1,
 		}}},
 		{{Key: "$group", Value: bson.M{"_id": "$plmn", "value": bson.M{"$sum": "$data_available"}}}},
@@ -391,12 +391,12 @@ func (r *Repository) computeSessionMetrics(ctx context.Context) (*OcsSessionMetr
 func (r *Repository) computeReservationMetrics(ctx context.Context) (*OcsReservationMetrics, error) {
 	pipeline := mongo.Pipeline{
 		{{Key: "$group", Value: bson.M{
-			"_id":          nil,
-			"total":        bson.M{"$sum": 1},
-			"active":       bson.M{"$sum": bson.M{"$cond": bson.A{bson.M{"$eq": bson.A{"$state", "active"}}, 1, 0}}},
-			"settled":      bson.M{"$sum": bson.M{"$cond": bson.A{bson.M{"$eq": bson.A{"$state", "settled"}}, 1, 0}}},
-			"released":     bson.M{"$sum": bson.M{"$cond": bson.A{bson.M{"$eq": bson.A{"$state", "released"}}, 1, 0}}},
-			"orphaned":     bson.M{"$sum": bson.M{"$cond": bson.A{bson.M{"$eq": bson.A{"$state", "orphaned"}}, 1, 0}}},
+			"_id":           nil,
+			"total":         bson.M{"$sum": 1},
+			"active":        bson.M{"$sum": bson.M{"$cond": bson.A{bson.M{"$eq": bson.A{"$state", "active"}}, 1, 0}}},
+			"settled":       bson.M{"$sum": bson.M{"$cond": bson.A{bson.M{"$eq": bson.A{"$state", "settled"}}, 1, 0}}},
+			"released":      bson.M{"$sum": bson.M{"$cond": bson.A{bson.M{"$eq": bson.A{"$state", "released"}}, 1, 0}}},
+			"orphaned":      bson.M{"$sum": bson.M{"$cond": bson.A{bson.M{"$eq": bson.A{"$state", "orphaned"}}, 1, 0}}},
 			"totalReserved": bson.M{"$sum": "$reserved_octets"},
 			"totalReleased": bson.M{"$sum": "$released_octets"},
 			"totalUsed":     bson.M{"$sum": "$used_octets"},
@@ -434,9 +434,9 @@ func (r *Repository) computeReservationMetrics(ctx context.Context) (*OcsReserva
 func (r *Repository) computeUsageMetrics(ctx context.Context) (*OcsUsageMetrics, error) {
 	pipeline := mongo.Pipeline{
 		{{Key: "$group", Value: bson.M{
-			"_id":             nil,
-			"totalRecords":    bson.M{"$sum": 1},
-			"chargedRecords":  bson.M{"$sum": bson.M{"$cond": bson.A{bson.M{"$eq": bson.A{"$charged", true}}, 1, 0}}},
+			"_id":               nil,
+			"totalRecords":      bson.M{"$sum": 1},
+			"chargedRecords":    bson.M{"$sum": bson.M{"$cond": bson.A{bson.M{"$eq": bson.A{"$charged", true}}, 1, 0}}},
 			"totalInputOctets":  bson.M{"$sum": "$input_octets"},
 			"totalOutputOctets": bson.M{"$sum": "$output_octets"},
 			"totalOctets":       bson.M{"$sum": "$total_octets"},

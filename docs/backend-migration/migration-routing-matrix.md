@@ -53,7 +53,7 @@
 | Approvals export | GET | `/api/approvals/export` | Next.js | Go | YES | xcloud_ops only |
 | Audit logs | GET | `/api/audit` | **Go** | Go | YES | Phase 2A — migrated |
 | Audit detail | GET | `/api/audit/:id` | **Go** | Go | YES | Phase 2A — migrated |
-| Audit export | GET | `/api/audit/export` | **Go** | Go | YES | Phase 2A — 501 (not yet implemented) |
+| Audit export | GET | `/api/audit/export` | Next.js | Go | YES | DEFERRED — requires stateful audit evidence persistence |
 | Alerts list | GET | `/api/alerts` | Next.js | Go | YES | xcloud_ops only |
 | Analytics metrics | GET | `/api/analytics/metrics` | **Go** | Go | YES | Phase 2A — migrated |
 | Analytics sparkline | GET | `/api/analytics/sparkline` | **Go** | Go | YES | Phase 2A — migrated |

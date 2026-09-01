@@ -17,7 +17,7 @@ import (
 
 // Client wraps a MongoDB connection with two database handles.
 type Client struct {
-	cli    *mongo.Client
+	cli     *mongo.Client
 	Open5GS *mongo.Database // HSS/OCS data
 	Ops     *mongo.Database // xcloud_ops data
 }

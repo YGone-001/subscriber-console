@@ -3,16 +3,16 @@ package analytics
 
 // AnalyticsMetrics matches the existing API response shape exactly.
 type AnalyticsMetrics struct {
-	TotalTraffic int              `json:"totalTraffic"`
-	PlmnDist     []NameValue      `json:"plmnDist"`
-	RatesDist    []NameValue      `json:"ratesDist"`
-	Top5         []Top5Entry      `json:"top5"`
-	Timestamp    int64            `json:"timestamp"`
-	OcsBalances  OcsBalanceMetrics  `json:"ocsBalances"`
-	OcsSessions  OcsSessionMetrics  `json:"ocsSessions"`
+	TotalTraffic    int                   `json:"totalTraffic"`
+	PlmnDist        []NameValue           `json:"plmnDist"`
+	RatesDist       []NameValue           `json:"ratesDist"`
+	Top5            []Top5Entry           `json:"top5"`
+	Timestamp       int64                 `json:"timestamp"`
+	OcsBalances     OcsBalanceMetrics     `json:"ocsBalances"`
+	OcsSessions     OcsSessionMetrics     `json:"ocsSessions"`
 	OcsReservations OcsReservationMetrics `json:"ocsReservations"`
 	TariffPlanDist  []TariffPlanDistItem  `json:"tariffPlanDist"`
-	OcsUsage       OcsUsageMetrics       `json:"ocsUsage"`
+	OcsUsage        OcsUsageMetrics       `json:"ocsUsage"`
 }
 
 type NameValue struct {
@@ -42,20 +42,20 @@ type OcsBalanceMetrics struct {
 	TotalSmsUsed         int64   `json:"totalSmsUsed"`
 	TotalSmsAvailable    int64   `json:"totalSmsAvailable"`
 	ValidInvariantCount  int     `json:"validInvariantCount"`
-	BrokenInvariantCount int    `json:"brokenInvariantCount"`
+	BrokenInvariantCount int     `json:"brokenInvariantCount"`
 	AllInvariantsOk      bool    `json:"allInvariantsOk"`
 }
 
 type OcsSessionMetrics struct {
-	TotalSessions       int           `json:"totalSessions"`
-	ActiveSessions      int           `json:"activeSessions"`
-	ClosingSessions     int           `json:"closingSessions"`
-	ClosedSessions      int           `json:"closedSessions"`
-	TotalGrantedOctets  int64         `json:"totalGrantedOctets"`
-	TotalUsedOctets     int64         `json:"totalUsedOctets"`
-	InterfaceGyCount    int           `json:"interfaceGyCount"`
-	InterfaceRoCount    int           `json:"interfaceRoCount"`
-	ApnDistribution     []ApnCount    `json:"apnDistribution"`
+	TotalSessions      int        `json:"totalSessions"`
+	ActiveSessions     int        `json:"activeSessions"`
+	ClosingSessions    int        `json:"closingSessions"`
+	ClosedSessions     int        `json:"closedSessions"`
+	TotalGrantedOctets int64      `json:"totalGrantedOctets"`
+	TotalUsedOctets    int64      `json:"totalUsedOctets"`
+	InterfaceGyCount   int        `json:"interfaceGyCount"`
+	InterfaceRoCount   int        `json:"interfaceRoCount"`
+	ApnDistribution    []ApnCount `json:"apnDistribution"`
 }
 
 type ApnCount struct {
@@ -75,16 +75,16 @@ type OcsReservationMetrics struct {
 }
 
 type TariffPlanDistItem struct {
-	PlanID         string  `json:"planId"`
-	Name           string  `json:"name"`
-	SubscriberCount int    `json:"subscriberCount"`
-	Percentage     float64 `json:"percentage"`
-	Status         string  `json:"status"`
+	PlanID          string  `json:"planId"`
+	Name            string  `json:"name"`
+	SubscriberCount int     `json:"subscriberCount"`
+	Percentage      float64 `json:"percentage"`
+	Status          string  `json:"status"`
 }
 
 type OcsUsageMetrics struct {
-	TotalRecords    int   `json:"totalRecords"`
-	ChargedRecords  int   `json:"chargedRecords"`
+	TotalRecords      int   `json:"totalRecords"`
+	ChargedRecords    int   `json:"chargedRecords"`
 	TotalInputOctets  int64 `json:"totalInputOctets"`
 	TotalOutputOctets int64 `json:"totalOutputOctets"`
 	TotalOctets       int64 `json:"totalOctets"`

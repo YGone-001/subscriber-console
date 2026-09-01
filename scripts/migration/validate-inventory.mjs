@@ -256,6 +256,62 @@ if (existsSync(MATRIX_PATH)) {
   }
 }
 
+// ── Check 5: Phase 2 migration quality ──────────────────────────────────────
+
+console.log('\n── Check 5: Phase 2 migration quality ──');
+
+if (existsSync(MATRIX_PATH)) {
+  const matrix = readFileSync(MATRIX_PATH, 'utf-8');
+
+  // Check: no 501 stubs counted as migrated
+  const stub501Pattern = /\*\*Go\*\*.*501/gi;
+  const stubMatches = matrix.match(stub501Pattern) || [];
+  if (stubMatches.length > 0) {
+    for (const m of stubMatches) {
+      error(`501 stub marked as Go-owned: ${m.trim()}`);
+    }
+  } else {
+    ok('No 501 stubs counted as migrated');
+  }
+
+  // Check: audit/export is deferred, not migrated
+  if (matrix.includes('audit/export') && matrix.includes('DEFERRED')) {
+    ok('audit/export correctly marked as DEFERRED');
+  } else if (matrix.includes('audit/export') && matrix.includes('**Go**')) {
+    error('audit/export still marked as Go-owned — should be DEFERRED');
+  } else {
+    warn('audit/export not found in matrix');
+  }
+
+  // Count migrated Phase 2 endpoints (marked as **Go**)
+  const migratedPattern = /\|\s*[^|]+\s*\|\s*GET\s*\|\s*`[^`]+`\s*\|\s*\*\*Go\*\*/g;
+  let migratedMatch;
+  let migratedCount = 0;
+  const migratedEndpoints = [];
+  while ((migratedMatch = migratedPattern.exec(matrix)) !== null) {
+    migratedCount++;
+    migratedEndpoints.push(migratedMatch[0].trim());
+  }
+
+  console.log(`   Migrated Phase 2 endpoints (marked **Go**): ${migratedCount}`);
+
+  // Check: expected count is 6 for Phase 2A
+  if (migratedCount === 6) {
+    ok('Phase 2A migrated count = 6 (correct)');
+  } else if (migratedCount < 6) {
+    warn(`Phase 2A migrated count = ${migratedCount} (expected 6)`);
+  }
+
+  // MANUAL_SEMANTIC_REVIEW note
+  console.log('\n   ⚠️  MANUAL_SEMANTIC_REVIEW required for:');
+  console.log('   - GET endpoints with writeAuditLog/logAudit side effects');
+  console.log('   - GET endpoints with insertOne/updateOne/replaceOne/deleteOne');
+  console.log('   - GET endpoints with createApprovalRequest or state transitions');
+  console.log('   - app_rate_limits writes are infrastructure (allowed)');
+} else {
+  warn(`Migration routing matrix not found: ${MATRIX_PATH}`);
+}
+
 // ── Summary ──────────────────────────────────────────────────────────────────
 
 console.log(`\n${'─'.repeat(60)}`);
