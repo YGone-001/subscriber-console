@@ -20,9 +20,12 @@ import (
 	"github.com/YGone-001/subscriber-console/backend/internal/handler"
 	"github.com/YGone-001/subscriber-console/backend/internal/middleware"
 	mongoClient "github.com/YGone-001/subscriber-console/backend/internal/mongo"
+	"github.com/YGone-001/subscriber-console/backend/internal/ocs"
+	"github.com/YGone-001/subscriber-console/backend/internal/profile"
 	"github.com/YGone-001/subscriber-console/backend/internal/ratelimit"
 	"github.com/YGone-001/subscriber-console/backend/internal/rating"
 	"github.com/YGone-001/subscriber-console/backend/internal/response"
+	"github.com/YGone-001/subscriber-console/backend/internal/tariff"
 )
 
 func main() {
@@ -81,6 +84,31 @@ func main() {
 	ratingRepo := rating.NewRepository(mc.Open5GS.Collection("ocs_rating_policies"))
 	ratingHandler := rating.NewHandler(ratingRepo, limiter)
 
+	// Profiles
+	profileRepo := profile.NewRepository(
+		mc.Ops.Collection("app_profiles"),
+		mc.Ops.Collection("app_profile_versions"),
+		mc.Open5GS.Collection("subscribers"),
+	)
+	profileHandler := profile.NewHandler(profileRepo, limiter)
+
+	// OCS
+	ocsRepo := ocs.NewRepository(
+		mc.Open5GS.Collection("ocs_balances"),
+		mc.Open5GS.Collection("ocs_sessions"),
+		mc.Open5GS.Collection("ocs_reservations"),
+		mc.Open5GS.Collection("ocs_usage_records"),
+	)
+	ocsHandler := ocs.NewHandler(ocsRepo, limiter)
+
+	// Tariff Plans
+	tariffRepo := tariff.NewRepository(
+		mc.Open5GS.Collection("ocs_tariff_plans"),
+		mc.Open5GS.Collection("ocs_subscribers"),
+		mc.Ops.Collection("app_audit_logs"),
+	)
+	tariffHandler := tariff.NewHandler(tariffRepo, limiter)
+
 	// Build handler
 	mux := http.NewServeMux()
 
@@ -102,6 +130,27 @@ func main() {
 	// Phase 2A: Ratings
 	mux.Handle("GET /api/ratings", authMiddleware(http.HandlerFunc(ratingHandler.List)))
 	mux.Handle("GET /api/ratings/{id}", authMiddleware(http.HandlerFunc(ratingHandler.Get)))
+
+	// Phase 2B: Profiles
+	mux.Handle("GET /api/profiles", authMiddleware(http.HandlerFunc(profileHandler.List)))
+	mux.Handle("GET /api/profiles/{name}", authMiddleware(http.HandlerFunc(profileHandler.Get)))
+	mux.Handle("GET /api/profiles/{name}/stats", authMiddleware(http.HandlerFunc(profileHandler.Stats)))
+	mux.Handle("GET /api/profiles/{name}/versions", authMiddleware(http.HandlerFunc(profileHandler.Versions)))
+
+	// Phase 2B: OCS
+	mux.Handle("GET /api/ocs/balances", authMiddleware(http.HandlerFunc(ocsHandler.Balances)))
+	mux.Handle("GET /api/ocs/sessions", authMiddleware(http.HandlerFunc(ocsHandler.Sessions)))
+	mux.Handle("GET /api/ocs/usage", authMiddleware(http.HandlerFunc(ocsHandler.Usage)))
+	mux.Handle("GET /api/ocs/reservations", authMiddleware(http.HandlerFunc(ocsHandler.Reservations)))
+
+	// Phase 2B: Tariff Plans
+	mux.Handle("GET /api/tariff-plans", authMiddleware(http.HandlerFunc(tariffHandler.List)))
+	mux.Handle("GET /api/tariff-plans/{planId}", authMiddleware(http.HandlerFunc(tariffHandler.Get)))
+	mux.Handle("GET /api/tariff-plans/{planId}/export", authMiddleware(http.HandlerFunc(tariffHandler.Export)))
+	mux.Handle("GET /api/tariff-plans/{planId}/operations", authMiddleware(http.HandlerFunc(tariffHandler.Operations)))
+	mux.Handle("GET /api/tariff-plans/{planId}/rules", authMiddleware(http.HandlerFunc(tariffHandler.Rules)))
+	mux.Handle("GET /api/tariff-plans/{planId}/subscribers", authMiddleware(http.HandlerFunc(tariffHandler.Subscribers)))
+	mux.Handle("GET /api/tariff-plans/{planId}/migrate", authMiddleware(http.HandlerFunc(tariffHandler.Migrate)))
 
 	// Catch-all for unmigrated routes
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {

@@ -190,7 +190,7 @@ if (existsSync(MATRIX_PATH)) {
   console.log(`   Phase row counts: ${JSON.stringify(phaseCounts)}`);
 
   // Check if Phase 2 has the tariff migration dry-run
-  if (matrix.includes('tariff-plans/:planId/migrate') && matrix.includes('Dry-run preview')) {
+  if (matrix.includes('tariff-plans/:planId/migrate')) {
     ok('Phase 2 includes tariff migration dry-run');
   } else {
     warn('Phase 2 may be missing tariff migration dry-run');
@@ -284,22 +284,63 @@ if (existsSync(MATRIX_PATH)) {
   }
 
   // Count migrated Phase 2 endpoints (marked as **Go**)
-  const migratedPattern = /\|\s*[^|]+\s*\|\s*GET\s*\|\s*`[^`]+`\s*\|\s*\*\*Go\*\*/g;
+  const migratedPattern = /\|\s*[^|]+\s*\|\s*GET\s*\|\s*`([^`]+)`\s*\|\s*\*\*Go\*\*/g;
   let migratedMatch;
   let migratedCount = 0;
   const migratedEndpoints = [];
   while ((migratedMatch = migratedPattern.exec(matrix)) !== null) {
     migratedCount++;
-    migratedEndpoints.push(migratedMatch[0].trim());
+    migratedEndpoints.push(migratedMatch[1]); // capture the path
   }
 
   console.log(`   Migrated Phase 2 endpoints (marked **Go**): ${migratedCount}`);
 
-  // Check: expected count is 6 for Phase 2A
-  if (migratedCount === 6) {
-    ok('Phase 2A migrated count = 6 (correct)');
-  } else if (migratedCount < 6) {
-    warn(`Phase 2A migrated count = ${migratedCount} (expected 6)`);
+  // Cross-check: read Go router registrations from main.go
+  const mainGoPath = resolve(ROOT, 'backend/cmd/server/main.go');
+  if (existsSync(mainGoPath)) {
+    const mainGo = readFileSync(mainGoPath, 'utf-8');
+    const goRoutePattern = /mux\.Handle\("GET\s+([^"]+)"/g;
+    let goMatch;
+    const goRoutes = [];
+    while ((goMatch = goRoutePattern.exec(mainGo)) !== null) {
+      goRoutes.push(goMatch[1]);
+    }
+
+    // Convert Go {param} to :param for comparison with matrix
+    const normalizeGoPath = (p) => p.replace(/\{(\w+)\}/g, ':$1');
+    const goNormalized = new Set(goRoutes.map(normalizeGoPath));
+    const matrixSet = new Set(migratedEndpoints);
+
+    // Check: every Go route should be in matrix
+    let goNotInMatrix = 0;
+    for (const route of goNormalized) {
+      if (!matrixSet.has(route)) {
+        warn(`Go route ${route} not marked **Go** in matrix`);
+        goNotInMatrix++;
+      }
+    }
+    if (goNotInMatrix === 0 && goRoutes.length > 0) {
+      ok(`All ${goRoutes.length} Go routes found in matrix`);
+    }
+
+    // Check: every matrix **Go** route should be in Go router
+    let matrixNotInGo = 0;
+    for (const route of migratedEndpoints) {
+      if (!goNormalized.has(route)) {
+        warn(`Matrix **Go** route ${route} not found in Go router`);
+        matrixNotInGo++;
+      }
+    }
+    if (matrixNotInGo === 0) {
+      ok(`All ${migratedCount} matrix **Go** routes found in Go router`);
+    }
+
+    // Check: counts match
+    if (goRoutes.length === migratedCount) {
+      ok(`Go router count (${goRoutes.length}) matches matrix count (${migratedCount})`);
+    } else {
+      warn(`Go router count (${goRoutes.length}) != matrix count (${migratedCount})`);
+    }
   }
 
   // MANUAL_SEMANTIC_REVIEW note

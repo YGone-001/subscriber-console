@@ -60,19 +60,34 @@
 
 ---
 
-## 3. Read Migration — Phase 2A
+## 3. Read Migration — Phase 2A + 2B
 
 ### Migrated Endpoints
 
 | Endpoint | Method | Domain | Rate Limit | Status |
 |----------|--------|--------|------------|--------|
-| `/api/audit` | GET | Audit | 60/60s per user | ✅ Migrated |
-| `/api/audit/:id` | GET | Audit | 60/60s per user | ✅ Migrated |
+| `/api/audit` | GET | Audit | 60/60s per user | ✅ Phase 2A |
+| `/api/audit/:id` | GET | Audit | 60/60s per user | ✅ Phase 2A |
 | `/api/audit/export` | GET | Audit | 10/60s per user | ❌ DEFERRED — see Section 3.1 |
-| `/api/analytics/metrics` | GET | Analytics | 120/60s per user | ✅ Migrated |
-| `/api/analytics/sparkline` | GET | Analytics | 120/60s per user | ✅ Migrated |
-| `/api/ratings` | GET | Ratings | 90/60s per user | ✅ Migrated |
-| `/api/ratings/:id` | GET | Ratings | 90/60s per user | ✅ Migrated |
+| `/api/analytics/metrics` | GET | Analytics | 120/60s per user | ✅ Phase 2A |
+| `/api/analytics/sparkline` | GET | Analytics | 120/60s per user | ✅ Phase 2A |
+| `/api/ratings` | GET | Ratings | 90/60s per user | ✅ Phase 2A |
+| `/api/ratings/:id` | GET | Ratings | 90/60s per user | ✅ Phase 2A |
+| `/api/profiles` | GET | Profiles | 90/60s per user | ✅ Phase 2B |
+| `/api/profiles/:name` | GET | Profiles | 120/60s per user | ✅ Phase 2B |
+| `/api/profiles/:name/stats` | GET | Profiles | 120/60s per user | ✅ Phase 2B |
+| `/api/profiles/:name/versions` | GET | Profiles | 120/60s per user | ✅ Phase 2B |
+| `/api/ocs/balances` | GET | OCS | 120/60s per user | ✅ Phase 2B |
+| `/api/ocs/sessions` | GET | OCS | 120/60s per user | ✅ Phase 2B |
+| `/api/ocs/reservations` | GET | OCS | 120/60s per user | ✅ Phase 2B |
+| `/api/ocs/usage` | GET | OCS | 120/60s per user | ✅ Phase 2B |
+| `/api/tariff-plans` | GET | Tariff | 90/60s per user | ✅ Phase 2B |
+| `/api/tariff-plans/:planId` | GET | Tariff | 120/60s per user | ✅ Phase 2B |
+| `/api/tariff-plans/:planId/export` | GET | Tariff | 120/60s per user | ✅ Phase 2B |
+| `/api/tariff-plans/:planId/operations` | GET | Tariff | 120/60s per user | ✅ Phase 2B |
+| `/api/tariff-plans/:planId/rules` | GET | Tariff | 120/60s per user | ✅ Phase 2B |
+| `/api/tariff-plans/:planId/subscribers` | GET | Tariff | 120/60s per user | ✅ Phase 2B |
+| `/api/tariff-plans/:planId/migrate` | GET | Tariff | 120/60s per user | ✅ Phase 2B |
 
 ### 3.1 Deferred: /api/audit/export
 
@@ -88,13 +103,10 @@
 
 **Current owner:** Next.js (`src/app/api/audit/export/route.ts`)
 
-### Endpoints NOT Migrated (Phase 2B-D)
+### Endpoints NOT Migrated (Phase 2C-D)
 
 | Endpoint | Reason |
 |----------|--------|
-| `/api/profiles/*` | Phase 2B |
-| `/api/ocs/*` | Phase 2B |
-| `/api/tariff-plans/*` | Phase 2B |
 | `/api/subscribers/*` | Phase 2C (complex joins) |
 | `/api/search` | Phase 2C |
 | `/api/auth/*` | Phase 2D |
@@ -136,8 +148,8 @@
                     │                 │
               UI + Writes        READ APIs
               Auth Login         Auth Validate
-              Governance         (Phase 2A: audit, analytics, ratings)
-              Approval                │
+              Governance         (Phase 2A+2B: audit, analytics, ratings,
+              Approval            profiles, ocs, tariff-plans)
                     │                 │
                     └───────┬─────────┘
                             ▼
@@ -162,13 +174,25 @@ backend/internal/
 │   ├── model.go            # Response DTOs
 │   └── repository.go       # MongoDB aggregation pipelines
 ├── audit/
-│   ├── handler.go          # GET /api/audit, /api/audit/:id, /api/audit/export
+│   ├── handler.go          # GET /api/audit, /api/audit/:id
 │   ├── model.go            # Response DTOs
 │   └── repository.go       # MongoDB aggregation pipelines
 ├── rating/
 │   ├── handler.go          # GET /api/ratings, /api/ratings/:id
 │   ├── model.go            # Response DTOs
 │   └── repository.go       # MongoDB queries
+├── profile/
+│   ├── handler.go          # GET /api/profiles, /:name, /:name/stats, /:name/versions
+│   ├── model.go            # Response DTOs
+│   └── repository.go       # MongoDB queries (cross-DB join for stats)
+├── ocs/
+│   ├── handler.go          # GET /api/ocs/balances, sessions, usage, reservations
+│   ├── model.go            # Response DTOs with BSON Long handling
+│   └── repository.go       # MongoDB queries with numeric conversion
+├── tariff/
+│   ├── handler.go          # GET /api/tariff-plans, /:planId, export, operations, rules, subscribers, migrate
+│   ├── model.go            # Response DTOs
+│   └── repository.go       # MongoDB queries, rule normalization, conflict detection
 └── ratelimit/
     └── ratelimit.go        # MongoDB-backed fixed-window rate limiter
 ```
@@ -227,6 +251,9 @@ ok  github.com/YGone-001/subscriber-console/backend/internal/response     1.016s
 | Audit export | Node (DEFERRED — requires audit evidence persistence) |
 | Analytics reads | **Go** |
 | Rating reads | **Go** |
+| Profile reads | **Go** |
+| OCS reads | **Go** |
+| Tariff reads | **Go** |
 
 ### 8.1 Mongo Write Invariant
 
@@ -244,7 +271,7 @@ ok  github.com/YGone-001/subscriber-console/backend/internal/response     1.016s
 
 Phase 2 auth middleware: **read-only** on `app_users` (no `last_login` update, no session state mutation).
 
-### 8.2 Semantic Classification of Phase 2A GET Endpoints
+### 8.2 Semantic Classification of Phase 2A+2B GET Endpoints
 
 Not all GET endpoints are pure reads. Classification:
 
@@ -257,8 +284,23 @@ Not all GET endpoints are pure reads. Classification:
 | `GET /api/analytics/sparkline` | READ | NO | YES (`app_rate_limits`) | Pure read + rate limit |
 | `GET /api/ratings` | READ | NO | YES (`app_rate_limits`) | Pure read + rate limit |
 | `GET /api/ratings/:id` | READ | NO | YES (`app_rate_limits`) | Pure read + rate limit |
+| `GET /api/profiles` | READ | NO | YES (`app_rate_limits`) | Pure read + rate limit |
+| `GET /api/profiles/:name` | READ | NO | YES (`app_rate_limits`) | Pure read + rate limit |
+| `GET /api/profiles/:name/stats` | READ | NO | YES (`app_rate_limits`) | Cross-DB read + rate limit |
+| `GET /api/profiles/:name/versions` | READ | NO | YES (`app_rate_limits`) | Pure read + rate limit |
+| `GET /api/ocs/balances` | READ | NO | YES (`app_rate_limits`) | Pure read + rate limit |
+| `GET /api/ocs/sessions` | READ | NO | YES (`app_rate_limits`) | Pure read + rate limit |
+| `GET /api/ocs/reservations` | READ | NO | YES (`app_rate_limits`) | Pure read + rate limit |
+| `GET /api/ocs/usage` | READ | NO | YES (`app_rate_limits`) | Pure read + rate limit |
+| `GET /api/tariff-plans` | READ | NO | YES (`app_rate_limits`) | Pure read + rate limit |
+| `GET /api/tariff-plans/:planId` | READ | NO | YES (`app_rate_limits`) | Pure read + rate limit |
+| `GET /api/tariff-plans/:planId/export` | READ | NO | YES (`app_rate_limits`) | Pure serialization |
+| `GET /api/tariff-plans/:planId/operations` | READ | NO | YES (`app_rate_limits`) | Read + computed summary |
+| `GET /api/tariff-plans/:planId/rules` | READ | NO | YES (`app_rate_limits`) | Read + conflict detection |
+| `GET /api/tariff-plans/:planId/subscribers` | READ | NO | YES (`app_rate_limits`) | Pure read + rate limit |
+| `GET /api/tariff-plans/:planId/migrate` | READ | NO | YES (`app_rate_limits`) | Dry-run computation only |
 
-**Key insight:** `app_rate_limits` writes are infrastructure (rate limiting), not business mutations. Only `GET /api/audit/export` has genuine business write side effects.
+**Key insight:** `app_rate_limits` writes are infrastructure (rate limiting), not business mutations. Only `GET /api/audit/export` has genuine business write side effects. All Phase 2B endpoints are pure reads.
 
 ---
 
@@ -295,8 +337,19 @@ Not all GET endpoints are pure reads. Classification:
 | `backend/internal/rating/handler.go` | Rating API handlers |
 | `backend/internal/rating/model.go` | Rating response DTOs |
 | `backend/internal/rating/repository.go` | Rating MongoDB queries |
+| `backend/internal/profile/handler.go` | Profile API handlers |
+| `backend/internal/profile/model.go` | Profile response DTOs |
+| `backend/internal/profile/repository.go` | Profile MongoDB queries (cross-DB join) |
+| `backend/internal/ocs/handler.go` | OCS API handlers |
+| `backend/internal/ocs/model.go` | OCS response DTOs with BSON Long handling |
+| `backend/internal/ocs/repository.go` | OCS MongoDB queries with numeric conversion |
+| `backend/internal/tariff/handler.go` | Tariff API handlers |
+| `backend/internal/tariff/model.go` | Tariff response DTOs |
+| `backend/internal/tariff/repository.go` | Tariff MongoDB queries, rule normalization |
+| `backend/internal/ocs/numeric_test.go` | BSON Long / Decimal128 numeric conversion tests |
+| `backend/internal/tariff/numeric_test.go` | Tariff numeric conversion + rule normalization tests |
 | `backend/internal/ratelimit/ratelimit.go` | MongoDB-backed rate limiter |
-| `backend/cmd/server/main.go` | Updated with Phase 2 wiring |
+| `backend/cmd/server/main.go` | Updated with Phase 2A+2B wiring |
 
 ---
 
@@ -315,8 +368,8 @@ Not all GET endpoints are pure reads. Classification:
 | Phase | Endpoints | Status |
 |-------|-----------|--------|
 | 2A | audit, analytics, ratings (6 endpoints) | ✅ Complete (audit/export deferred) |
-| 2B | profiles, OCS, tariff-plans | Not started |
-| 2C | subscribers, search, profile stats | Not started |
+| 2B | profiles, OCS, tariff-plans (15 endpoints) | ✅ Complete |
+| 2C | subscribers, search | Not started |
 | 2D | auth/me, auth/permissions, users | Not started |
 
 ---
@@ -340,16 +393,68 @@ Not all GET endpoints are pure reads. Classification:
 | npm lint | ✅ |
 | npm typecheck | ✅ |
 | npm test | ✅ (237/237) |
+| business write guard | ✅ (0 business writes in profile/ocs/tariff) |
 | inventory validator | ✅ |
 
 ---
 
-## 15. Phase 2 Ready
+## 15. Phase 2B.1 Verification Findings
 
-**NO** — Phase 2A complete, but 2B-D remaining.
+### Contract Corrections Applied
 
-Phase 2A provides:
+| # | Finding | Severity | Fix |
+|---|---------|----------|-----|
+| 1 | Tariff export missing `Content-Disposition` header | VALUE_MISMATCH | Added `attachment; filename="tariff-plan-{id}.json"` |
+| 2 | Tariff export missing `version`, `exported_at` fields | SHAPE_MISMATCH | Added `version: "1.0"`, `exported_at: ISO timestamp` |
+| 3 | Tariff export rate limit 120/60s (Node: 30/60s) | VALUE_MISMATCH | Corrected to 30/60s |
+| 4 | Tariff operations rate limit 120/60s (Node: 90/60s) | VALUE_MISMATCH | Corrected to 90/60s |
+| 5 | Tariff migrate rate limit 120/60s (Node: 12/60s) | VALUE_MISMATCH | Corrected to 12/60s |
+| 6 | Tariff detail returned `{...plan}` instead of `{plan: {...}}` | SHAPE_MISMATCH | Wrapped in `map[string]any{"plan": plan}` |
+| 7 | Tariff operations summary had wrong shape | SHAPE_MISMATCH | Rewrote to match `buildTariffPlanOperationsSummary` |
+| 8 | Decimal128 parsing broken for scientific notation | VALUE_MISMATCH | Fixed using `BigInt()` method |
+| 9 | Validator hardcoded `migratedCount === 21` | DESIGN | Replaced with Go router ↔ matrix cross-check |
+
+### Parity Status
+
+| Endpoint | Status | Body | Headers | Notes |
+|----------|--------|------|---------|-------|
+| `GET /api/profiles` | PARITY_PASS | ✅ | ✅ | |
+| `GET /api/profiles/:name` | PARITY_PASS | ✅ | ✅ | |
+| `GET /api/profiles/:name/stats` | PARITY_PASS | ✅ | ✅ | Cross-DB read |
+| `GET /api/profiles/:name/versions` | PARITY_PASS | ✅ | ✅ | |
+| `GET /api/ocs/balances` | PARITY_PASS | ✅ | ✅ | |
+| `GET /api/ocs/sessions` | PARITY_PASS | ✅ | ✅ | |
+| `GET /api/ocs/usage` | PARITY_PASS | ✅ | ✅ | |
+| `GET /api/ocs/reservations` | PARITY_PASS | ✅ | ✅ | |
+| `GET /api/tariff-plans` | PARITY_PASS | ✅ | ✅ | |
+| `GET /api/tariff-plans/:planId` | PARITY_PASS | ✅ | ✅ | |
+| `GET /api/tariff-plans/:planId/export` | PARITY_PASS | ✅ | ✅ | Content-Disposition added |
+| `GET /api/tariff-plans/:planId/operations` | PARITY_PASS | ✅ | ✅ | Summary shape corrected |
+| `GET /api/tariff-plans/:planId/rules` | PARITY_PASS | ✅ | ✅ | |
+| `GET /api/tariff-plans/:planId/subscribers` | PARITY_PASS | ✅ | ✅ | |
+| `GET /api/tariff-plans/:planId/migrate` | PARITY_PASS | ✅ | ✅ | |
+
+### Routing Status
+
+| Status | Value |
+|--------|-------|
+| Implemented in Go | 21 |
+| Parity passed | 21 |
+| Actually routed to Go (Nginx) | NO — Nginx not yet modified |
+| Still routed to Node | YES — all /api/* still go to Next.js |
+| Rollback | Not required — production routing unchanged |
+
+---
+
+## 16. Phase 2 Status
+
+**PARTIAL** — Phase 2A + 2B complete, 2C-D remaining.
+
+Phase 2A+2B provides:
 - Auth compatibility layer (JWT + session validation)
-- 6 read-only endpoints migrated (audit/export deferred)
+- 21 read-only endpoints migrated (audit/export deferred)
 - MongoDB-backed rate limiting
 - Node → Go JWT interoperability proven (real Node jose fixture)
+- Profile reads with cross-DB subscriber stats
+- OCS reads with BSON Long → int64 conversion
+- Tariff reads with rule normalization and conflict detection

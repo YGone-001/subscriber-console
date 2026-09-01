@@ -30,21 +30,21 @@
 | Subscribers list | GET | `/api/subscribers` | Next.js | Go | YES | Joins open5gs + xcloud_ops |
 | Subscriber detail | GET | `/api/subscribers/:imsi` | Next.js | Go | YES | Joins open5gs + xcloud_ops |
 | Subscriber batch precheck | POST | `/api/subscribers/batch/precheck` | Next.js | Go | YES | Read-only despite POST |
-| Profiles list | GET | `/api/profiles` | Next.js | Go | YES | xcloud_ops only |
-| Profile detail | GET | `/api/profiles/:name` | Next.js | Go | YES | xcloud_ops only |
-| Profile stats | GET | `/api/profiles/:name/stats` | Next.js | Go | YES | Joins open5gs + xcloud_ops |
-| Profile versions | GET | `/api/profiles/:name/versions` | Next.js | Go | YES | xcloud_ops only |
-| OCS balances | GET | `/api/ocs/balances` | Next.js | Go | YES | open5gs only |
-| OCS sessions | GET | `/api/ocs/sessions` | Next.js | Go | YES | open5gs only |
-| OCS reservations | GET | `/api/ocs/reservations` | Next.js | Go | YES | open5gs only |
-| OCS usage | GET | `/api/ocs/usage` | Next.js | Go | YES | open5gs only |
-| Tariff plans list | GET | `/api/tariff-plans` | Next.js | Go | YES | open5gs only |
-| Tariff plan detail | GET | `/api/tariff-plans/:planId` | Next.js | Go | YES | open5gs only |
-| Tariff plan export | GET | `/api/tariff-plans/:planId/export` | Next.js | Go | YES | open5gs only |
-| Tariff plan operations | GET | `/api/tariff-plans/:planId/operations` | Next.js | Go | YES | open5gs only |
-| Tariff plan migrate (dry-run) | GET | `/api/tariff-plans/:planId/migrate` | Next.js | Go | YES | Dry-run preview, no data mutation |
-| Tariff plan rules | GET | `/api/tariff-plans/:planId/rules` | Next.js | Go | YES | open5gs only |
-| Tariff plan subscribers | GET | `/api/tariff-plans/:planId/subscribers` | Next.js | Go | YES | open5gs only |
+| Profiles list | GET | `/api/profiles` | **Go** | Go | YES | Phase 2B — migrated |
+| Profile detail | GET | `/api/profiles/:name` | **Go** | Go | YES | Phase 2B — migrated |
+| Profile stats | GET | `/api/profiles/:name/stats` | **Go** | Go | YES | Phase 2B — migrated |
+| Profile versions | GET | `/api/profiles/:name/versions` | **Go** | Go | YES | Phase 2B — migrated |
+| OCS balances | GET | `/api/ocs/balances` | **Go** | Go | YES | Phase 2B — migrated |
+| OCS sessions | GET | `/api/ocs/sessions` | **Go** | Go | YES | Phase 2B — migrated |
+| OCS reservations | GET | `/api/ocs/reservations` | **Go** | Go | YES | Phase 2B — migrated |
+| OCS usage | GET | `/api/ocs/usage` | **Go** | Go | YES | Phase 2B — migrated |
+| Tariff plans list | GET | `/api/tariff-plans` | **Go** | Go | YES | Phase 2B — migrated |
+| Tariff plan detail | GET | `/api/tariff-plans/:planId` | **Go** | Go | YES | Phase 2B — migrated |
+| Tariff plan export | GET | `/api/tariff-plans/:planId/export` | **Go** | Go | YES | Phase 2B — migrated |
+| Tariff plan operations | GET | `/api/tariff-plans/:planId/operations` | **Go** | Go | YES | Phase 2B — migrated |
+| Tariff plan migrate (dry-run) | GET | `/api/tariff-plans/:planId/migrate` | **Go** | Go | YES | Phase 2B — migrated |
+| Tariff plan rules | GET | `/api/tariff-plans/:planId/rules` | **Go** | Go | YES | Phase 2B — migrated |
+| Tariff plan subscribers | GET | `/api/tariff-plans/:planId/subscribers` | **Go** | Go | YES | Phase 2B — migrated |
 | Ratings list | GET | `/api/ratings` | **Go** | Go | YES | Phase 2A — migrated |
 | Rating detail | GET | `/api/ratings/:id` | **Go** | Go | YES | Phase 2A — migrated |
 | Approvals list | GET | `/api/approvals` | Next.js | Go | YES | xcloud_ops only |
