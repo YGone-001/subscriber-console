@@ -22,11 +22,11 @@ const (
 
 // Repository provides subscriber data access.
 type Repository struct {
-	subscribers  *mongo.Collection // open5gs.subscribers
-	ocsSubs      *mongo.Collection // open5gs.ocs_subscribers
-	ocsBalances  *mongo.Collection // open5gs.ocs_balances
-	tariffPlans  *mongo.Collection // open5gs.ocs_tariff_plans
-	profiles     *mongo.Collection // xcloud_ops.app_profiles
+	subscribers *mongo.Collection // open5gs.subscribers
+	ocsSubs     *mongo.Collection // open5gs.ocs_subscribers
+	ocsBalances *mongo.Collection // open5gs.ocs_balances
+	tariffPlans *mongo.Collection // open5gs.ocs_tariff_plans
+	profiles    *mongo.Collection // xcloud_ops.app_profiles
 }
 
 // NewRepository creates a new subscriber Repository.
@@ -38,11 +38,11 @@ func NewRepository(
 	profiles *mongo.Collection,
 ) *Repository {
 	return &Repository{
-		subscribers:  subscribers,
-		ocsSubs:      ocsSubs,
-		ocsBalances:  ocsBalances,
-		tariffPlans:  tariffPlans,
-		profiles:     profiles,
+		subscribers: subscribers,
+		ocsSubs:     ocsSubs,
+		ocsBalances: ocsBalances,
+		tariffPlans: tariffPlans,
+		profiles:    profiles,
 	}
 }
 
@@ -847,7 +847,7 @@ func open5gsToLegacyState(doc bson.M) *LegacySubscriberState {
 
 	// Build pcrf4G
 	pcrf4G := map[string]any{
-		"name":             doc["imsi"],
+		"name":                    doc["imsi"],
 		"access_restriction_data": doc["access_restriction_data"],
 		"subscriber_status":       doc["subscriber_status"],
 	}

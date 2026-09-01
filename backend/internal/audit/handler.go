@@ -30,6 +30,28 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check audit_view capability (matching Node requireCapability('audit_view'))
+	if !auth.HasCapability(p, "audit_view") {
+		response.JSON(w, http.StatusForbidden, map[string]any{
+			"error":            "Forbidden: Insufficient permissions",
+			"code":             "PERMISSION_DENIED",
+			"capability":       "audit_view",
+			"decision":         "deny",
+			"requiresApproval": false,
+		})
+		return
+	}
+
+	// Check audit.read permission (matching Node requirePermission('audit.read'))
+	if !auth.HasPermission(p, "audit.read") {
+		response.JSON(w, http.StatusForbidden, map[string]any{
+			"error":      "Forbidden: Insufficient permissions",
+			"code":       "PERMISSION_DENIED",
+			"permission": "audit.read",
+		})
+		return
+	}
+
 	// Rate limit: 60 req/60s per user (same as Node)
 	if !h.limiter.Enforce(w, r, "audit:list:"+p.Username, 60, 60) {
 		return
@@ -41,10 +63,14 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check source IP permission
-	revealSourceIP := hasPermission(p.NormalizedRole, "audit.source-ip.read-full")
+	// Check source IP permission (matching Node requirePermission('audit.source-ip.read-full'))
+	revealSourceIP := auth.HasPermission(p, "audit.source-ip.read-full")
 	if query.SourceIP != "" && !revealSourceIP {
-		response.Forbidden(w, "Forbidden: Insufficient permissions")
+		response.JSON(w, http.StatusForbidden, map[string]any{
+			"error":      "Forbidden: Insufficient permissions",
+			"code":       "PERMISSION_DENIED",
+			"permission": "audit.source-ip.read-full",
+		})
 		return
 	}
 
@@ -65,8 +91,30 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Rate limit
-	if !h.limiter.Enforce(w, r, "audit:get:"+p.Username, 60, 60) {
+	// Check audit_view capability (matching Node requireCapability('audit_view'))
+	if !auth.HasCapability(p, "audit_view") {
+		response.JSON(w, http.StatusForbidden, map[string]any{
+			"error":            "Forbidden: Insufficient permissions",
+			"code":             "PERMISSION_DENIED",
+			"capability":       "audit_view",
+			"decision":         "deny",
+			"requiresApproval": false,
+		})
+		return
+	}
+
+	// Check audit.read permission (matching Node requirePermission('audit.read'))
+	if !auth.HasPermission(p, "audit.read") {
+		response.JSON(w, http.StatusForbidden, map[string]any{
+			"error":      "Forbidden: Insufficient permissions",
+			"code":       "PERMISSION_DENIED",
+			"permission": "audit.read",
+		})
+		return
+	}
+
+	// Rate limit (Node uses 120/60s for audit detail)
+	if !h.limiter.Enforce(w, r, "audit:detail:"+p.Username, 120, 60) {
 		return
 	}
 
@@ -77,7 +125,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	revealSourceIP := hasPermission(p.NormalizedRole, "audit.source-ip.read-full")
+	revealSourceIP := auth.HasPermission(p, "audit.source-ip.read-full")
 
 	rec, err := h.repo.GetAuditLog(r.Context(), id, revealSourceIP)
 	if err != nil {
@@ -99,26 +147,7 @@ var validIDPattern = regexp.MustCompile(`^[A-Za-z0-9_.:-]+$`)
 // action=audit.export) on both success and failure paths, which requires
 // Go Audit Writer — deferred to Phase 3+.
 
-func hasPermission(role, permission string) bool {
-	// Simplified permission check matching the Node.js permission matrix
-	permissions := map[string][]string{
-		"super_admin": {"audit.read", "audit.export", "audit.source-ip.read-full"},
-		"ops_admin":   {"audit.read", "audit.export"},
-		"operator":    {"audit.read"},
-		"auditor":     {"audit.read", "audit.export", "audit.source-ip.read-full"},
-		"viewer":      {"audit.read"},
-	}
-	allowed, ok := permissions[role]
-	if !ok {
-		return false
-	}
-	for _, p := range allowed {
-		if p == permission {
-			return true
-		}
-	}
-	return false
-}
+// hasPermission is removed — use auth.HasPermission() instead.
 
 func parseAuditQuery(params map[string][]string) (AuditQuery, error) {
 	q := AuditQuery{

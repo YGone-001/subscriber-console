@@ -32,6 +32,81 @@ func HasCapability(p *Principal, capability string) bool {
 	return decision == "allow"
 }
 
+// HasPermission checks if the principal's normalized role has the given permission.
+// Must match the TypeScript hasPermission() exactly.
+func HasPermission(p *Principal, permission string) bool {
+	if p == nil {
+		return false
+	}
+	perms := rolePermissions(p.NormalizedRole)
+	for _, perm := range perms {
+		if perm == permission {
+			return true
+		}
+	}
+	return false
+}
+
+// PermissionsFor returns all permissions for the principal's normalized role.
+// Must match the TypeScript permissionsFor() exactly.
+func PermissionsFor(p *Principal) []string {
+	if p == nil {
+		return nil
+	}
+	return rolePermissions(p.NormalizedRole)
+}
+
+// rolePermissions returns the permission list for a governance role.
+// Matches TypeScript ROLE_PERMISSIONS exactly.
+func rolePermissions(role string) []string {
+	// All permissions in the catalog
+	allPerms := []string{
+		"users.read", "users.create", "users.update", "users.disable", "users.delete",
+		"users.role.change", "users.reset-password", "users.unlock",
+		"approvals.read", "approvals.create", "approvals.approve", "approvals.reject",
+		"approvals.cancel", "approvals.execute",
+		"audit.read", "audit.export", "audit.source-ip.read-full",
+		"subscribers.read", "subscribers.write", "subscribers.delete",
+		"ocs.read", "ocs.balance.adjust", "ocs.balance.reset", "ocs.tariff.write", "ocs.plan.assign", "ocs.rating.write", "ocs.runtime.execute",
+		"profiles.read", "profiles.write",
+		"core.read", "core.operate", "core.configure",
+	}
+
+	// Read permissions (end with .read)
+	readPerms := []string{
+		"users.read", "approvals.read", "audit.read",
+		"subscribers.read", "ocs.read", "profiles.read", "core.read",
+	}
+
+	matrix := map[string][]string{
+		"super_admin": allPerms,
+		"ops_admin": {
+			"users.create", "users.update", "users.disable", "users.delete", "users.role.change", "users.reset-password", "users.unlock",
+			"users.read", "approvals.read", "audit.read",
+			"subscribers.read", "ocs.read", "profiles.read", "core.read",
+			"approvals.create", "approvals.approve", "approvals.reject",
+			"approvals.cancel", "approvals.execute", "audit.export",
+			"subscribers.write", "subscribers.delete", "profiles.write", "core.operate", "core.configure",
+			"ocs.balance.adjust", "ocs.tariff.write", "ocs.plan.assign", "ocs.rating.write",
+		},
+		"operator": {
+			"subscribers.read", "subscribers.write", "subscribers.delete",
+			"profiles.read", "core.read", "core.operate", "audit.read",
+			"ocs.read", "ocs.balance.adjust", "ocs.tariff.write", "ocs.plan.assign", "ocs.rating.write",
+			"approvals.read", "approvals.create", "approvals.cancel",
+		},
+		"auditor": {"users.read", "approvals.read", "audit.read", "audit.export", "audit.source-ip.read-full"},
+		"viewer":  {"subscribers.read", "profiles.read", "ocs.read", "core.read", "approvals.read", "audit.read"},
+	}
+
+	if perms, ok := matrix[role]; ok {
+		return perms
+	}
+	// Suppress unused variable warning
+	_ = readPerms
+	return nil
+}
+
 // capabilityDecision returns the capability decision for a role.
 // Matches TypeScript ROLE_CAPABILITIES exactly.
 func capabilityDecision(role, capability string) string {

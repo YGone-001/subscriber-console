@@ -474,7 +474,7 @@ Not all GET endpoints are pure reads. Classification:
 
 Phase 2A+2B+2C provides:
 - Auth compatibility layer (JWT + session validation)
-- 25 read-only endpoints migrated (audit/export deferred)
+- 25 semantic-read implementations (24 GET + 1 POST semantic read)
 - MongoDB-backed rate limiting
 - Node → Go JWT interoperability proven (real Node jose fixture)
 - Profile reads with cross-DB subscriber stats
@@ -485,3 +485,79 @@ Phase 2A+2B+2C provides:
 - Global search with subscriber/profile split
 - Batch precheck (semantic read with subscriber_write capability)
 - Capability-based authorization matching Node ROLE_CAPABILITIES exactly
+
+### 16.1 Authorization Side-effect Audit
+
+| Category | Count | Routes |
+|----------|-------|--------|
+| requireAuth only | 22 | analytics/*, ratings GET, profiles/*, ocs/*, tariff-plans/* GET, subscribers GET/Detail, search |
+| requireCapability | 3 | audit list/detail (audit_view), batch/precheck (subscriber_write) |
+| requirePermission | 2 | audit list/detail (audit.read) |
+| authorization.denied audit required | 3 | audit list, audit detail, batch/precheck |
+| Go security audit writer | NO | Not implemented (Phase 2 restriction) |
+
+**Node denial path:** `requireCapability` and `requirePermission` both call `recordPermissionDenied` → `scheduleAuditLog({module: 'security', action: 'authorization.denied', ...})`.
+
+**Go current behavior:** Returns 403 with `PERMISSION_DENIED` code but does NOT write security audit log.
+
+**Impact:** None — production routing is still Node. When cutover is planned, the security audit writer must be implemented first.
+
+### 16.2 Status Accounting
+
+| Route | IMPLEMENTED | RESPONSE_PARITY | CUTOVER_READY | ACTUALLY_ROUTED | BLOCKER |
+|-------|-------------|-----------------|---------------|-----------------|---------|
+| GET /api/audit | YES | PASS | NO | NO | SECURITY_AUDIT_PARITY |
+| GET /api/audit/:id | YES | PASS | NO | NO | SECURITY_AUDIT_PARITY |
+| GET /api/analytics/metrics | YES | PASS | YES | NO | — |
+| GET /api/analytics/sparkline | YES | PASS | YES | NO | — |
+| GET /api/ratings | YES | PASS | YES | NO | — |
+| GET /api/ratings/:id | YES | PASS | YES | NO | — |
+| GET /api/profiles | YES | PASS | YES | NO | — |
+| GET /api/profiles/:name | YES | PASS | YES | NO | — |
+| GET /api/profiles/:name/stats | YES | PASS | YES | NO | — |
+| GET /api/profiles/:name/versions | YES | PASS | YES | NO | — |
+| GET /api/ocs/balances | YES | PASS | YES | NO | — |
+| GET /api/ocs/sessions | YES | PASS | YES | NO | — |
+| GET /api/ocs/usage | YES | PASS | YES | NO | — |
+| GET /api/ocs/reservations | YES | PASS | YES | NO | — |
+| GET /api/tariff-plans | YES | PASS | YES | NO | — |
+| GET /api/tariff-plans/:planId | YES | PASS | YES | NO | — |
+| GET /api/tariff-plans/:planId/export | YES | PASS | YES | NO | — |
+| GET /api/tariff-plans/:planId/operations | YES | PASS | YES | NO | — |
+| GET /api/tariff-plans/:planId/rules | YES | PASS | YES | NO | — |
+| GET /api/tariff-plans/:planId/subscribers | YES | PASS | YES | NO | — |
+| GET /api/tariff-plans/:planId/migrate | YES | PASS | YES | NO | — |
+| GET /api/subscribers | YES | PASS | YES | NO | — |
+| GET /api/subscribers/:imsi | YES | PASS | YES | NO | — |
+| GET /api/search | YES | PASS | YES | NO | — |
+| POST /api/subscribers/batch/precheck | YES | PASS | NO | NO | SECURITY_AUDIT_PARITY |
+
+**Summary:**
+- IMPLEMENTED: 25
+- RESPONSE_PARITY_PASS: 25
+- CUTOVER_READY: 23
+- CUTOVER_BLOCKED: 3 (audit list, audit detail, batch/precheck — missing authorization.denied audit)
+- ACTUALLY_ROUTED: 0 (Nginx not modified)
+
+### 16.3 Future Security Audit Contract
+
+When the security audit writer is implemented (Phase 3+), it must match:
+
+```
+module = security
+action = authorization.denied
+resource.type = api
+resource.id = request pathname
+result = denied
+metadata = { capability, decision } or { permission }
+```
+
+Plus: actor, role, request_id, correlation_id, source_ip, user_agent, timestamp, event_id.
+
+### 16.4 Phase 2 Write Invariant
+
+| Category | Status |
+|----------|--------|
+| Business-domain writes by Go | NONE |
+| Infrastructure writes | app_rate_limits (allowed) |
+| Security audit writes | NONE (not yet implemented) |

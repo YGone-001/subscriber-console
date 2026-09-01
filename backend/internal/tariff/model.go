@@ -89,14 +89,14 @@ type OperationsResponse struct {
 
 // OperationsSummary matches Node buildTariffPlanOperationsSummary shape.
 type OperationsSummary struct {
-	TotalPlans              int     `json:"totalPlans"`
-	ActivePlans             int     `json:"activePlans"`
-	DisabledPlans           int     `json:"disabledPlans"`
-	TotalLinkedSubscribers  int     `json:"totalLinkedSubscribers"`
-	SelectedLinkedSubscribers int   `json:"selectedLinkedSubscribers"`
-	SelectedSharePct        float64 `json:"selectedSharePct"`
-	RecentActivityCount     int     `json:"recentActivityCount"`
-	LastChangedAt           *string `json:"lastChangedAt"`
+	TotalPlans                int     `json:"totalPlans"`
+	ActivePlans               int     `json:"activePlans"`
+	DisabledPlans             int     `json:"disabledPlans"`
+	TotalLinkedSubscribers    int     `json:"totalLinkedSubscribers"`
+	SelectedLinkedSubscribers int     `json:"selectedLinkedSubscribers"`
+	SelectedSharePct          float64 `json:"selectedSharePct"`
+	RecentActivityCount       int     `json:"recentActivityCount"`
+	LastChangedAt             *string `json:"lastChangedAt"`
 }
 
 // AuditLogEntry represents an audit log record.

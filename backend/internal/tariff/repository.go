@@ -234,8 +234,8 @@ func (r *Repository) GetPlanOperations(ctx context.Context, planID string, limit
 
 	// Compute subscriber counts per plan
 	type planWithCount struct {
-		doc         bson.M
-		subCount    int
+		doc      bson.M
+		subCount int
 	}
 	plansWithCounts := make([]planWithCount, 0, len(allPlans))
 	for _, p := range allPlans {

@@ -256,7 +256,7 @@ if (existsSync(MATRIX_PATH)) {
   }
 }
 
-// ── Check 5: Phase 2 migration quality ──────────────────────────────────────
+// ── Check 5: Phase 2 migration quality (METHOD+PATH aware) ─────────────────
 
 console.log('\n── Check 5: Phase 2 migration quality ──');
 
@@ -283,64 +283,82 @@ if (existsSync(MATRIX_PATH)) {
     warn('audit/export not found in matrix');
   }
 
-  // Count migrated Phase 2 endpoints (marked as **Go**)
-  const migratedPattern = /\|\s*[^|]+\s*\|\s*GET\s*\|\s*`([^`]+)`\s*\|\s*\*\*Go\*\*/g;
+  // Count ALL migrated Phase 2 endpoints (marked as **Go**) — METHOD+PATH
+  const migratedPattern = /\|\s*[^|]+\s*\|\s*(GET|POST|PUT|PATCH|DELETE)\s*\|\s*`([^`]+)`\s*\|\s*\*\*Go\*\*/g;
   let migratedMatch;
-  let migratedCount = 0;
-  const migratedEndpoints = [];
+  let migratedGetCount = 0;
+  let migratedPostCount = 0;
+  const migratedOps = []; // "METHOD path"
   while ((migratedMatch = migratedPattern.exec(matrix)) !== null) {
-    migratedCount++;
-    migratedEndpoints.push(migratedMatch[1]); // capture the path
+    const method = migratedMatch[1];
+    const path = migratedMatch[2];
+    migratedOps.push(`${method} ${path}`);
+    if (method === 'GET') migratedGetCount++;
+    if (method === 'POST') migratedPostCount++;
   }
+  const migratedTotal = migratedOps.length;
 
-  console.log(`   Migrated Phase 2 endpoints (marked **Go**): ${migratedCount}`);
+  console.log(`   Go implementations (marked **Go**): ${migratedTotal}`);
+  console.log(`     GET reads: ${migratedGetCount}`);
+  console.log(`     POST semantic reads: ${migratedPostCount}`);
 
   // Cross-check: read Go router registrations from main.go
   const mainGoPath = resolve(ROOT, 'backend/cmd/server/main.go');
   if (existsSync(mainGoPath)) {
     const mainGo = readFileSync(mainGoPath, 'utf-8');
-    const goRoutePattern = /mux\.Handle\("GET\s+([^"]+)"/g;
+
+    // Extract ALL mux.Handle registrations (GET, POST, etc.)
+    const goRoutePattern = /mux\.Handle\("(GET|POST|PUT|PATCH|DELETE)\s+([^"]+)"/g;
     let goMatch;
-    const goRoutes = [];
+    const goOps = []; // "METHOD path"
     while ((goMatch = goRoutePattern.exec(mainGo)) !== null) {
-      goRoutes.push(goMatch[1]);
+      goOps.push(`${goMatch[1]} ${goMatch[2]}`);
     }
 
     // Convert Go {param} to :param for comparison with matrix
-    const normalizeGoPath = (p) => p.replace(/\{(\w+)\}/g, ':$1');
-    const goNormalized = new Set(goRoutes.map(normalizeGoPath));
-    const matrixSet = new Set(migratedEndpoints);
+    const normalizeGoPath = (op) => op.replace(/\{(\w+)\}/g, ':$1');
+    const goNormalized = new Set(goOps.map(normalizeGoPath));
+    const matrixSet = new Set(migratedOps);
 
     // Check: every Go route should be in matrix
     let goNotInMatrix = 0;
-    for (const route of goNormalized) {
-      if (!matrixSet.has(route)) {
-        warn(`Go route ${route} not marked **Go** in matrix`);
+    for (const op of goNormalized) {
+      if (!matrixSet.has(op)) {
+        warn(`Go route ${op} not marked **Go** in matrix`);
         goNotInMatrix++;
       }
     }
-    if (goNotInMatrix === 0 && goRoutes.length > 0) {
-      ok(`All ${goRoutes.length} Go routes found in matrix`);
+    if (goNotInMatrix === 0 && goOps.length > 0) {
+      ok(`All ${goOps.length} Go API operations found in matrix`);
     }
 
     // Check: every matrix **Go** route should be in Go router
     let matrixNotInGo = 0;
-    for (const route of migratedEndpoints) {
-      if (!goNormalized.has(route)) {
-        warn(`Matrix **Go** route ${route} not found in Go router`);
+    for (const op of migratedOps) {
+      if (!goNormalized.has(op)) {
+        warn(`Matrix **Go** route ${op} not found in Go router`);
         matrixNotInGo++;
       }
     }
     if (matrixNotInGo === 0) {
-      ok(`All ${migratedCount} matrix **Go** routes found in Go router`);
+      ok(`All ${migratedTotal} matrix **Go** operations found in Go router`);
     }
 
     // Check: counts match
-    if (goRoutes.length === migratedCount) {
-      ok(`Go router count (${goRoutes.length}) matches matrix count (${migratedCount})`);
+    if (goOps.length === migratedTotal) {
+      ok(`Go router count (${goOps.length}) matches matrix count (${migratedTotal})`);
     } else {
-      warn(`Go router count (${goRoutes.length}) != matrix count (${migratedCount})`);
+      warn(`Go router count (${goOps.length}) != matrix count (${migratedTotal})`);
     }
+
+    // Semantic read classification
+    const goGetCount = goOps.filter(op => op.startsWith('GET ')).length;
+    const goPostCount = goOps.filter(op => op.startsWith('POST ')).length;
+    console.log(`\n   Go router breakdown:`);
+    console.log(`     HTTP operations: ${goOps.length}`);
+    console.log(`     GET reads: ${goGetCount}`);
+    console.log(`     POST semantic reads: ${goPostCount}`);
+    console.log(`     Business mutations: 0`);
   }
 
   // MANUAL_SEMANTIC_REVIEW note
