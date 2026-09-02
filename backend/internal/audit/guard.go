@@ -61,7 +61,7 @@ func RecordPermissionDenied(w *Writer, r *http.Request, p *auth.Principal, meta 
 	}
 
 	// BestEffort: failure must not alter the 403 response.
-	w.Write(input, BestEffort)
+	w.WriteBestEffort(input)
 }
 
 // RequireCapabilityWithAudit checks capability and schedules denial audit if denied.

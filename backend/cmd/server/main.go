@@ -66,7 +66,7 @@ func main() {
 
 	// Audit Writer — bounded async writer for authorization.denied evidence
 	auditCollection := mc.Ops.Collection("app_audit_logs")
-	auditWriter := audit.NewWriter(auditCollection, audit.WriterConfig{
+	auditWriter := audit.NewWriterLegacy(auditCollection, audit.WriterConfig{
 		QueueSize:   256,
 		WorkerCount: 2,
 		Logger:      logger,

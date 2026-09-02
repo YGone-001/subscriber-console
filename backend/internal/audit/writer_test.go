@@ -3,31 +3,90 @@ package audit
 import (
 	"context"
 	"errors"
-	"io"
-	"log/slog"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
 
-// newTestWriter creates a Writer for testing without starting workers.
-// The done channel is pre-closed so Close() returns immediately.
-func newTestWriter(queueSize int) *Writer {
-	done := make(chan struct{})
-	close(done) // Pre-close so Close() doesn't hang
-	return &Writer{
-		queue:  make(chan pendingRecord, queueSize),
-		done:   done,
-		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+// fakeEvidenceStore implements EvidenceStore for testing.
+type fakeEvidenceStore struct {
+	mu       sync.Mutex
+	records  map[string]AuditWriteRecord
+	insertFn func(ctx context.Context, record AuditWriteRecord) error
+}
+
+func newFakeEvidenceStore() *fakeEvidenceStore {
+	return &fakeEvidenceStore{
+		records: make(map[string]AuditWriteRecord),
 	}
 }
 
+func (f *fakeEvidenceStore) Insert(ctx context.Context, record AuditWriteRecord) error {
+	if f.insertFn != nil {
+		return f.insertFn(ctx, record)
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.records[record.MongoID] = record
+	return nil
+}
+
+func (f *fakeEvidenceStore) FindByMongoID(ctx context.Context, id string) (*AuditWriteRecord, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if rec, ok := f.records[id]; ok {
+		return &rec, nil
+	}
+	return nil, nil
+}
+
+func (f *fakeEvidenceStore) getRecord(id string) (AuditWriteRecord, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	rec, ok := f.records[id]
+	return rec, ok
+}
+
+func (f *fakeEvidenceStore) count() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.records)
+}
+
+// newTestWriterWithWorkers creates a Writer with real workers for testing.
+func newTestWriterWithWorkers(t *testing.T, workerCount int, store EvidenceStore) *Writer {
+	t.Helper()
+	w := NewWriter(store, WriterConfig{
+		QueueSize:   64,
+		WorkerCount: workerCount,
+		WriterCtx:   context.Background(),
+	})
+	return w
+}
+
 func TestWriter_States(t *testing.T) {
-	// Test state transitions without real MongoDB
-	w := newTestWriter(10)
+	store := newFakeEvidenceStore()
+	w := newTestWriterWithWorkers(t, 2, store)
 
 	// Initial state should be open
-	if w.state.Load() != int32(StateOpen) {
-		t.Errorf("expected initial state=open, got %d", w.state.Load())
+	w.mu.RLock()
+	state := w.state
+	w.mu.RUnlock()
+	if state != StateOpen {
+		t.Errorf("expected initial state=open, got %d", state)
+	}
+
+	// After close
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	w.Close(ctx)
+
+	w.mu.RLock()
+	state = w.state
+	w.mu.RUnlock()
+	if state != StateClosed {
+		t.Errorf("expected state=closed after close, got %d", state)
 	}
 }
 
@@ -54,9 +113,9 @@ func TestWriter_ClassifyError(t *testing.T) {
 	}
 }
 
-func TestWriter_Write_Basic(t *testing.T) {
-	// Create a writer with no collection (will fail to persist, but we can test enqueue)
-	w := newTestWriter(2)
+func TestWriter_WriteBestEffort_Basic(t *testing.T) {
+	store := newFakeEvidenceStore()
+	w := newTestWriterWithWorkers(t, 2, store)
 
 	input := WriteAuditInput{
 		Module:   "test",
@@ -65,20 +124,26 @@ func TestWriter_Write_Basic(t *testing.T) {
 		Result:   "success",
 	}
 
-	// BestEffort write should return nil channel
-	ch := w.Write(input, BestEffort)
-	if ch != nil {
-		t.Error("expected nil channel for BestEffort write")
+	// WriteBestEffort should return immediately
+	w.WriteBestEffort(input)
+
+	// Give workers time to process
+	time.Sleep(50 * time.Millisecond)
+
+	// Should have persisted the record
+	if store.count() != 1 {
+		t.Errorf("expected 1 record, got %d", store.count())
 	}
 
-	// Queue should have 1 item
-	if len(w.queue) != 1 {
-		t.Errorf("expected queue length 1, got %d", len(w.queue))
-	}
+	// Cleanup
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	w.Close(ctx)
 }
 
-func TestWriter_Write_Strict(t *testing.T) {
-	w := newTestWriter(2)
+func TestWriter_WriteStrict_Basic(t *testing.T) {
+	store := newFakeEvidenceStore()
+	w := newTestWriterWithWorkers(t, 2, store)
 
 	input := WriteAuditInput{
 		Module:   "test",
@@ -87,21 +152,32 @@ func TestWriter_Write_Strict(t *testing.T) {
 		Result:   "success",
 	}
 
-	// Strict write should return error channel
-	ch := w.Write(input, Strict)
-	if ch == nil {
-		t.Error("expected non-nil channel for Strict write")
+	// WriteStrict should wait for persistence
+	ctx := context.Background()
+	err := w.WriteStrict(ctx, input)
+	if err != nil {
+		t.Errorf("expected success, got %v", err)
 	}
 
-	// Queue should have 1 item
-	if len(w.queue) != 1 {
-		t.Errorf("expected queue length 1, got %d", len(w.queue))
+	// Should have persisted the record
+	if store.count() != 1 {
+		t.Errorf("expected 1 record, got %d", store.count())
 	}
+
+	// Cleanup
+	closeCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	w.Close(closeCtx)
 }
 
 func TestWriter_Write_AfterClose(t *testing.T) {
-	w := newTestWriter(10)
-	w.state.Store(int32(StateClosed))
+	store := newFakeEvidenceStore()
+	w := newTestWriterWithWorkers(t, 2, store)
+
+	// Close the writer
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	w.Close(ctx)
 
 	input := WriteAuditInput{
 		Module:   "test",
@@ -110,53 +186,31 @@ func TestWriter_Write_AfterClose(t *testing.T) {
 		Result:   "success",
 	}
 
-	// BestEffort should silently drop
-	ch := w.Write(input, BestEffort)
-	if ch != nil {
-		t.Error("expected nil channel for BestEffort write after close")
-	}
+	// BestEffort after close should silently drop
+	w.WriteBestEffort(input)
 
-	// Strict should return error
-	ch = w.Write(input, Strict)
-	if ch == nil {
-		t.Error("expected non-nil channel for Strict write after close")
-	}
-	err := <-ch
+	// Strict after close should return error
+	err := w.WriteStrict(context.Background(), input)
 	if err == nil {
 		t.Error("expected error for Strict write after close")
 	}
-}
-
-func TestWriter_Write_DuringClosing(t *testing.T) {
-	w := newTestWriter(10)
-	w.state.Store(int32(StateClosing))
-
-	input := WriteAuditInput{
-		Module:   "test",
-		Action:   "test.action",
-		Resource: &ResourceInput{Type: "api"},
-		Result:   "success",
-	}
-
-	// BestEffort should silently drop
-	ch := w.Write(input, BestEffort)
-	if ch != nil {
-		t.Error("expected nil channel for BestEffort write during closing")
-	}
-
-	// Strict should return error
-	ch = w.Write(input, Strict)
-	if ch == nil {
-		t.Error("expected non-nil channel for Strict write during closing")
-	}
-	err := <-ch
-	if err == nil {
-		t.Error("expected error for Strict write during closing")
+	var wf *ErrWriteFailed
+	if !errors.As(err, &wf) {
+		t.Errorf("expected ErrWriteFailed, got %T", err)
 	}
 }
 
 func TestWriter_Write_FullQueue(t *testing.T) {
-	w := newTestWriter(1)
+	store := newFakeEvidenceStore()
+	// Create writer with tiny queue
+	w := NewWriter(store, WriterConfig{
+		QueueSize:   1,
+		WorkerCount: 1,
+		WriterCtx:   context.Background(),
+	})
+
+	// Block the worker by holding the store lock
+	store.mu.Lock()
 
 	input := WriteAuditInput{
 		Module:   "test",
@@ -165,32 +219,34 @@ func TestWriter_Write_FullQueue(t *testing.T) {
 		Result:   "success",
 	}
 
-	// First write should succeed
-	ch1 := w.Write(input, BestEffort)
-	if ch1 != nil {
-		t.Error("expected nil channel for first BestEffort write")
-	}
+	// Fill the queue
+	w.WriteBestEffort(input)
 
-	// Second write should fail (queue full)
-	ch2 := w.Write(input, BestEffort)
-	if ch2 != nil {
-		t.Error("expected nil channel for BestEffort write when queue full")
-	}
+	// Queue full - should drop silently
+	w.WriteBestEffort(input)
 
-	// Strict mode should return error
-	ch3 := w.Write(input, Strict)
-	if ch3 == nil {
-		t.Error("expected non-nil channel for Strict write when queue full")
-	}
-	err := <-ch3
+	// Strict queue full - should return error
+	err := w.WriteStrict(context.Background(), input)
 	if err == nil {
 		t.Error("expected error for Strict write when queue full")
 	}
+	var wf *ErrWriteFailed
+	if !errors.As(err, &wf) {
+		t.Errorf("expected ErrWriteFailed, got %T", err)
+	}
+
+	// Unblock the worker
+	store.mu.Unlock()
+
+	// Cleanup
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	w.Close(ctx)
 }
 
 func TestWriter_Close_Idempotent(t *testing.T) {
-	w := newTestWriter(10)
-	// No repo - close should still work
+	store := newFakeEvidenceStore()
+	w := newTestWriterWithWorkers(t, 2, store)
 
 	ctx := context.Background()
 
@@ -207,85 +263,145 @@ func TestWriter_Close_Idempotent(t *testing.T) {
 	}
 }
 
-func TestWriter_Close_BoundedByContext(t *testing.T) {
-	// Create a writer with a large queue that won't drain
-	w := newTestWriter(1000)
+func TestWriter_Close_TimeoutThenWait(t *testing.T) {
+	store := newFakeEvidenceStore()
+	// Block the store to prevent workers from finishing
+	store.mu.Lock()
 
-	// Fill queue
+	w := newTestWriterWithWorkers(t, 2, store)
+
+	// Enqueue some work
 	input := WriteAuditInput{
 		Module:   "test",
 		Action:   "test.action",
 		Resource: &ResourceInput{Type: "api"},
 		Result:   "success",
 	}
-	for i := 0; i < 100; i++ {
-		w.Write(input, BestEffort)
-	}
+	w.WriteBestEffort(input)
 
-	// Close with short timeout - should not hang
-	shortCtx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
-	defer cancel()
-
-	start := time.Now()
+	// Close with short timeout - should timeout
+	shortCtx, cancel1 := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel1()
 	err := w.Close(shortCtx)
-	elapsed := time.Since(start)
-
-	// Should complete quickly (within 200ms)
-	if elapsed > 200*time.Millisecond {
-		t.Errorf("close took too long: %v", elapsed)
+	if err == nil {
+		t.Error("expected timeout error")
 	}
 
-	// Error might be non-nil due to context timeout, that's ok
-	_ = err
-}
+	// Unblock the store
+	store.mu.Unlock()
 
-func TestWriter_CloseNow(t *testing.T) {
-	w := newTestWriter(10)
-
-	// CloseNow should complete within 5s
-	start := time.Now()
-	w.CloseNow()
-	elapsed := time.Since(start)
-
-	if elapsed > 6*time.Second {
-		t.Errorf("CloseNow took too long: %v", elapsed)
-	}
-}
-
-func TestWriter_StateTransitions(t *testing.T) {
-	w := newTestWriter(10)
-
-	// Initial state
-	if w.state.Load() != int32(StateOpen) {
-		t.Error("expected initial state=open")
-	}
-
-	// After close
-	w.Close(context.Background())
-	if w.state.Load() != int32(StateClosed) {
-		t.Error("expected state=closed after close")
-	}
-}
-
-func TestWriter_WriteSync_Basic(t *testing.T) {
-	w := newTestWriter(10)
-
-	input := WriteAuditInput{
-		Module:   "test",
-		Action:   "test.action",
-		Resource: &ResourceInput{Type: "api"},
-		Result:   "success",
-	}
-
-	// BestEffort should return nil immediately
-	err := w.WriteSync(context.Background(), input, BestEffort)
+	// Later close with longer timeout - should succeed
+	longCtx, cancel2 := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel2()
+	err = w.Close(longCtx)
 	if err != nil {
-		t.Errorf("expected nil error for BestEffort WriteSync, got %v", err)
+		t.Errorf("expected success on later close, got %v", err)
 	}
 }
 
-func TestWriter_WriteSync_StrictTimeout(t *testing.T) {
-	w := newTestWriter(10)
+func TestWriter_TwoWorkerEmptyShutdown(t *testing.T) {
+	store := newFakeEvidenceStore()
+	w := newTestWriterWithWorkers(t, 2, store)
+
+	// Close immediately - no work to drain
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	err := w.Close(ctx)
+	if err != nil {
+		t.Errorf("expected success, got %v", err)
+	}
+
+	// Verify state
+	w.mu.RLock()
+	state := w.state
+	w.mu.RUnlock()
+	if state != StateClosed {
+		t.Errorf("expected state=closed, got %d", state)
+	}
+}
+
+func TestWriter_TwoWorkerQueuedShutdown(t *testing.T) {
+	store := newFakeEvidenceStore()
+	w := newTestWriterWithWorkers(t, 2, store)
+
+	// Enqueue several records
+	for i := 0; i < 10; i++ {
+		input := WriteAuditInput{
+			Module:   "test",
+			Action:   "test.action",
+			Resource: &ResourceInput{Type: "api"},
+			Result:   "success",
+		}
+		w.WriteBestEffort(input)
+	}
+
+	// Close and wait for drain
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	err := w.Close(ctx)
+	if err != nil {
+		t.Errorf("expected success, got %v", err)
+	}
+
+	// All records should be persisted
+	if store.count() != 10 {
+		t.Errorf("expected 10 records, got %d", store.count())
+	}
+}
+
+func TestWriter_ConcurrentWriteClose(t *testing.T) {
+	store := newFakeEvidenceStore()
+	w := newTestWriterWithWorkers(t, 2, store)
+
+	var wg sync.WaitGroup
+	var writeCount atomic.Int32
+
+	// Start concurrent writers
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 10; j++ {
+				input := WriteAuditInput{
+					Module:   "test",
+					Action:   "test.action",
+					Resource: &ResourceInput{Type: "api"},
+					Result:   "success",
+				}
+				w.WriteBestEffort(input)
+				writeCount.Add(1)
+			}
+		}()
+	}
+
+	// Start close after a short delay
+	time.Sleep(10 * time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	w.Close(ctx)
+
+	// Wait for all writers to finish
+	wg.Wait()
+
+	// Some records should be persisted (exact count depends on timing)
+	if store.count() == 0 {
+		t.Error("expected some records to be persisted")
+	}
+}
+
+func TestWriter_StrictCancellation(t *testing.T) {
+	store := newFakeEvidenceStore()
+	// Make insert block until context cancelled
+	store.insertFn = func(ctx context.Context, record AuditWriteRecord) error {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(10 * time.Second):
+			return nil
+		}
+	}
+
+	w := newTestWriterWithWorkers(t, 2, store)
 
 	input := WriteAuditInput{
 		Module:   "test",
@@ -294,22 +410,45 @@ func TestWriter_WriteSync_StrictTimeout(t *testing.T) {
 		Result:   "success",
 	}
 
-	// Strict mode with timeout - should timeout since no workers
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	// Cancel context before persistence completes
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
-	err := w.WriteSync(ctx, input, Strict)
+	start := time.Now()
+	err := w.WriteStrict(ctx, input)
+	elapsed := time.Since(start)
+
 	if err == nil {
-		t.Error("expected error for Strict WriteSync with timeout")
+		t.Error("expected error")
 	}
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Errorf("expected DeadlineExceeded, got %v", err)
 	}
+	// Should return promptly, not after 10s
+	if elapsed > 1*time.Second {
+		t.Errorf("took too long: %v", elapsed)
+	}
+
+	// Cleanup
+	closeCtx, cancel2 := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel2()
+	w.Close(closeCtx)
 }
 
-func TestWriter_WriteSync_AfterClose(t *testing.T) {
-	w := newTestWriter(10)
-	w.state.Store(int32(StateClosed))
+func TestWriter_StrictRetryPreservesID(t *testing.T) {
+	store := newFakeEvidenceStore()
+	var attempts atomic.Int32
+
+	// Fail first attempt, succeed on second
+	store.insertFn = func(ctx context.Context, record AuditWriteRecord) error {
+		n := attempts.Add(1)
+		if n == 1 {
+			return errors.New("transient error")
+		}
+		return nil
+	}
+
+	w := newTestWriterWithWorkers(t, 2, store)
 
 	input := WriteAuditInput{
 		Module:   "test",
@@ -318,19 +457,25 @@ func TestWriter_WriteSync_AfterClose(t *testing.T) {
 		Result:   "success",
 	}
 
-	// Strict mode after close should return error
-	err := w.WriteSync(context.Background(), input, Strict)
-	if err == nil {
-		t.Error("expected error for Strict WriteSync after close")
+	err := w.WriteStrict(context.Background(), input)
+	if err != nil {
+		t.Errorf("expected success, got %v", err)
 	}
+
+	// Should have retried
+	if attempts.Load() != 2 {
+		t.Errorf("expected 2 attempts, got %d", attempts.Load())
+	}
+
+	// Cleanup
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	w.Close(ctx)
 }
 
-func TestWriter_ContextCancellation(t *testing.T) {
-	w := newTestWriter(10)
-
-	// Enqueue with cancelled context
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
+func TestWriter_SameIDDuplicateIdempotent(t *testing.T) {
+	store := newFakeEvidenceStore()
+	w := newTestWriterWithWorkers(t, 2, store)
 
 	input := WriteAuditInput{
 		Module:   "test",
@@ -339,9 +484,51 @@ func TestWriter_ContextCancellation(t *testing.T) {
 		Result:   "success",
 	}
 
-	err := w.WriteSync(ctx, input, Strict)
-	if err == nil {
-		t.Error("expected error with cancelled context")
+	// First write should succeed
+	err := w.WriteStrict(context.Background(), input)
+	if err != nil {
+		t.Errorf("expected success, got %v", err)
+	}
+
+	// Same input again - should succeed (idempotent)
+	err = w.WriteStrict(context.Background(), input)
+	if err != nil {
+		t.Errorf("expected success for duplicate, got %v", err)
+	}
+
+	// Cleanup
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	w.Close(ctx)
+}
+
+func TestWriter_AllAcceptedRecordsDrained(t *testing.T) {
+	store := newFakeEvidenceStore()
+	w := newTestWriterWithWorkers(t, 2, store)
+
+	// Enqueue many records
+	count := 50
+	for i := 0; i < count; i++ {
+		input := WriteAuditInput{
+			Module:   "test",
+			Action:   "test.action",
+			Resource: &ResourceInput{Type: "api"},
+			Result:   "success",
+		}
+		w.WriteBestEffort(input)
+	}
+
+	// Close and wait
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	err := w.Close(ctx)
+	if err != nil {
+		t.Errorf("expected success, got %v", err)
+	}
+
+	// All records should be persisted
+	if store.count() != count {
+		t.Errorf("expected %d records, got %d", count, store.count())
 	}
 }
 

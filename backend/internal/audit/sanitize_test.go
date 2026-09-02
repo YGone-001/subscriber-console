@@ -1,6 +1,7 @@
 package audit
 
 import (
+	"fmt"
 	"math"
 	"testing"
 	"time"
@@ -353,5 +354,229 @@ func TestSanitizeAuditPayload_StringWithSecrets(t *testing.T) {
 	str := result.(string)
 	if str != "password=[REDACTED]" {
 		t.Errorf("expected top-level string secret redaction, got: %s", str)
+	}
+}
+
+// Test typed struct sanitization (section 27-28)
+func TestSanitizeAuditPayload_TypedStruct(t *testing.T) {
+	type SubscriberChange struct {
+		IMSI string `json:"imsi"`
+		K    string `json:"k"`
+		Plan string `json:"plan"`
+	}
+
+	input := SubscriberChange{
+		IMSI: "123456789012345",
+		K:    "secret_key_value",
+		Plan: "premium",
+	}
+
+	result := sanitizeAuditPayload(input)
+	m, ok := result.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected map, got %T: %v", result, result)
+	}
+
+	if m["imsi"] != "123456789012345" {
+		t.Errorf("expected imsi visible, got %v", m["imsi"])
+	}
+	if m["k"] != "[REDACTED]" {
+		t.Errorf("expected k redacted, got %v", m["k"])
+	}
+	if m["plan"] != "premium" {
+		t.Errorf("expected plan visible, got %v", m["plan"])
+	}
+}
+
+func TestSanitizeAuditPayload_StructWithJsonTags(t *testing.T) {
+	type TestStruct struct {
+		FirstName string `json:"first_name"`
+		LastName  string `json:"last_name,omitempty"`
+		Internal  string `json:"-"`
+		Secret    string `json:"my_secret"`
+	}
+
+	input := TestStruct{
+		FirstName: "John",
+		LastName:  "", // omitempty should skip this
+		Internal:  "hidden",
+		Secret:    "sensitive",
+	}
+
+	result := sanitizeAuditPayload(input)
+	m, ok := result.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected map, got %T: %v", result, result)
+	}
+
+	if m["first_name"] != "John" {
+		t.Errorf("expected first_name=John, got %v", m["first_name"])
+	}
+	if _, exists := m["last_name"]; exists {
+		t.Error("expected last_name to be omitted (omitempty)")
+	}
+	if _, exists := m["Internal"]; exists {
+		t.Error("expected Internal to be omitted (json:\"-\")")
+	}
+	if m["my_secret"] != "[REDACTED]" {
+		t.Errorf("expected my_secret redacted, got %v", m["my_secret"])
+	}
+}
+
+func TestSanitizeAuditPayload_StructWithNestedSecrets(t *testing.T) {
+	type Credentials struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+
+	type Request struct {
+		Method string      `json:"method"`
+		Auth   Credentials `json:"auth"`
+	}
+
+	input := Request{
+		Method: "POST",
+		Auth: Credentials{
+			Username: "admin",
+			Password: "secret123",
+		},
+	}
+
+	result := sanitizeAuditPayload(input)
+	m, ok := result.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected map, got %T: %v", result, result)
+	}
+
+	if m["method"] != "POST" {
+		t.Errorf("expected method=POST, got %v", m["method"])
+	}
+
+	auth, ok := m["auth"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected auth to be map, got %T", m["auth"])
+	}
+	if auth["username"] != "admin" {
+		t.Errorf("expected username=admin, got %v", auth["username"])
+	}
+	if auth["password"] != "[REDACTED]" {
+		t.Errorf("expected password redacted, got %v", auth["password"])
+	}
+}
+
+// Test pointer circular detection (section 29)
+func TestSanitizeAuditPayload_PointerCircular(t *testing.T) {
+	type Node struct {
+		Value string `json:"value"`
+		Next  *Node  `json:"next"`
+	}
+
+	// Create circular pointer chain
+	n1 := &Node{Value: "first"}
+	n2 := &Node{Value: "second"}
+	n1.Next = n2
+	n2.Next = n1 // circular
+
+	result := sanitizeAuditPayload(n1)
+	m, ok := result.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected map, got %T: %v", result, result)
+	}
+
+	if m["value"] != "first" {
+		t.Errorf("expected value=first, got %v", m["value"])
+	}
+
+	next, ok := m["next"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected next to be map, got %T", m["next"])
+	}
+	if next["value"] != "second" {
+		t.Errorf("expected next.value=second, got %v", next["value"])
+	}
+
+	// The circular reference should be detected
+	nextNext := next["next"]
+	if nextNext != "[CIRCULAR]" {
+		t.Errorf("expected [CIRCULAR], got %v", nextNext)
+	}
+}
+
+// Test slice circular detection (section 30)
+func TestSanitizeAuditPayload_SliceCircular(t *testing.T) {
+	// Create a slice that references itself
+	type Container struct {
+		Items []interface{} `json:"items"`
+	}
+
+	c := &Container{}
+	c.Items = []interface{}{c} // circular
+
+	result := sanitizeAuditPayload(c)
+	m, ok := result.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected map, got %T: %v", result, result)
+	}
+
+	items, ok := m["items"].([]interface{})
+	if !ok {
+		t.Fatalf("expected items to be slice, got %T", m["items"])
+	}
+
+	if len(items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(items))
+	}
+
+	if items[0] != "[CIRCULAR]" {
+		t.Errorf("expected [CIRCULAR], got %v", items[0])
+	}
+}
+
+// Test generic map circular detection (section 31)
+func TestSanitizeAuditPayload_GenericMapCircular(t *testing.T) {
+	// Create a generic map with circular reference
+	type GenericMap map[string]interface{}
+
+	m1 := GenericMap{"key": "value"}
+	m1["self"] = m1 // circular
+
+	result := sanitizeAuditPayload(m1)
+	m, ok := result.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected map, got %T: %v", result, result)
+	}
+
+	if m["key"] != "value" {
+		t.Errorf("expected key=value, got %v", m["key"])
+	}
+
+	if m["self"] != "[CIRCULAR]" {
+		t.Errorf("expected [CIRCULAR], got %v", m["self"])
+	}
+}
+
+// Test that shared non-cyclic references are NOT falsely marked circular
+func TestSanitizeAuditPayload_SharedReference(t *testing.T) {
+	shared := map[string]any{"value": "shared"}
+	input := map[string]any{
+		"a": shared,
+		"b": shared, // same reference, but not circular
+	}
+
+	result := sanitizeAuditPayload(input)
+	m := result.(map[string]any)
+
+	a := m["a"].(map[string]any)
+	b := m["b"].(map[string]any)
+
+	if a["value"] != "shared" {
+		t.Errorf("expected a.value=shared, got %v", a["value"])
+	}
+	if b["value"] != "shared" {
+		t.Errorf("expected b.value=shared, got %v", b["value"])
+	}
+	// Neither should be [CIRCULAR]
+	if fmt.Sprintf("%v", a) == "[CIRCULAR]" || fmt.Sprintf("%v", b) == "[CIRCULAR]" {
+		t.Error("shared reference should NOT be marked circular")
 	}
 }

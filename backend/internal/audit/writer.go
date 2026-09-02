@@ -6,12 +6,9 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
-	"sync/atomic"
 	"time"
 
-	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 const (
@@ -44,11 +41,50 @@ func (e *ErrWriteFailed) Error() string {
 
 func (e *ErrWriteFailed) Unwrap() error { return e.Err }
 
+// EvidenceStore abstracts audit record persistence for testability.
+type EvidenceStore interface {
+	Insert(ctx context.Context, record AuditWriteRecord) error
+	FindByMongoID(ctx context.Context, id string) (*AuditWriteRecord, error)
+}
+
+// MongoEvidenceStore implements EvidenceStore using MongoDB.
+type MongoEvidenceStore struct {
+	collection *mongo.Collection
+}
+
+// NewMongoEvidenceStore creates a new MongoEvidenceStore.
+func NewMongoEvidenceStore(collection *mongo.Collection) *MongoEvidenceStore {
+	return &MongoEvidenceStore{collection: collection}
+}
+
+// Insert persists an audit record to MongoDB.
+func (s *MongoEvidenceStore) Insert(ctx context.Context, record AuditWriteRecord) error {
+	_, err := s.collection.InsertOne(ctx, record)
+	return err
+}
+
+// FindByMongoID looks up an audit record by its _id field.
+func (s *MongoEvidenceStore) FindByMongoID(ctx context.Context, id string) (*AuditWriteRecord, error) {
+	var doc struct {
+		ID      string `bson:"id"`
+		EventID string `bson:"eventId"`
+	}
+	err := s.collection.FindOne(ctx, map[string]string{"_id": id}).Decode(&doc)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &AuditWriteRecord{ID: doc.ID, EventID: doc.EventID}, nil
+}
+
 // pendingRecord wraps a pre-built sanitized record with its write mode.
 type pendingRecord struct {
 	record AuditWriteRecord
 	mode   WriteMode
-	doneCh chan<- error // nil for BestEffort (fire-and-forget)
+	ctx    context.Context // request context for Strict; writer context for BestEffort
+	doneCh chan<- error    // nil for BestEffort (fire-and-forget)
 }
 
 // Writer is a bounded, asynchronous audit record writer.
@@ -56,12 +92,13 @@ type pendingRecord struct {
 // with a small pool of workers. Supports BestEffort (silent drop)
 // and Strict (typed error on failure) write modes.
 type Writer struct {
-	collection *mongo.Collection
-	queue      chan pendingRecord
-	logger     *slog.Logger
-	state      atomic.Int32 // WriterState
-	closeOnce  sync.Once
-	done       chan struct{}
+	store     EvidenceStore
+	queue     chan pendingRecord
+	logger    *slog.Logger
+	wg        sync.WaitGroup
+	mu        sync.RWMutex
+	state     WriterState
+	closeOnce sync.Once
 }
 
 // WriterConfig configures the audit writer.
@@ -69,11 +106,12 @@ type WriterConfig struct {
 	QueueSize   int
 	WorkerCount int
 	Logger      *slog.Logger
+	WriterCtx   context.Context // lifecycle context for BestEffort; nil = context.Background()
 }
 
 // NewWriter creates and starts an audit Writer.
 // Call Close() for graceful shutdown.
-func NewWriter(collection *mongo.Collection, cfg WriterConfig) *Writer {
+func NewWriter(store EvidenceStore, cfg WriterConfig) *Writer {
 	if cfg.QueueSize <= 0 {
 		cfg.QueueSize = defaultQueueSize
 	}
@@ -83,87 +121,120 @@ func NewWriter(collection *mongo.Collection, cfg WriterConfig) *Writer {
 	if cfg.Logger == nil {
 		cfg.Logger = slog.Default()
 	}
+	if cfg.WriterCtx == nil {
+		cfg.WriterCtx = context.Background()
+	}
 
 	w := &Writer{
-		collection: collection,
-		queue:      make(chan pendingRecord, cfg.QueueSize),
-		logger:     cfg.Logger,
-		done:       make(chan struct{}),
+		store:  store,
+		queue:  make(chan pendingRecord, cfg.QueueSize),
+		logger: cfg.Logger,
+		state:  StateOpen,
 	}
-	w.state.Store(int32(StateOpen))
 
+	// Start workers
+	w.wg.Add(cfg.WorkerCount)
 	for i := 0; i < cfg.WorkerCount; i++ {
-		go w.worker(i)
+		go w.worker(i, cfg.WriterCtx)
 	}
 	return w
 }
 
-// Write builds and enqueues an audit record for persistence.
-// The record is sanitized and given a stable ID before entering the queue.
-// Returns immediately. For BestEffort mode, errors are logged but not returned.
-// For Strict mode, the returned error channel receives nil on success or
-// ErrWriteFailed on failure (after retries).
-func (w *Writer) Write(input WriteAuditInput, mode WriteMode) <-chan error {
-	// Build and sanitize the record BEFORE enqueue.
-	// This ensures: stable id/eventId, no raw secrets in queue, queue-full error has real eventId.
+// NewWriterLegacy creates a Writer with a mongo.Collection (backwards compatible).
+func NewWriterLegacy(collection *mongo.Collection, cfg WriterConfig) *Writer {
+	return NewWriter(NewMongoEvidenceStore(collection), cfg)
+}
+
+// WriteBestEffort enqueues an audit record for asynchronous persistence.
+// Errors are logged but not returned. Returns immediately.
+func (w *Writer) WriteBestEffort(input WriteAuditInput) {
 	record := BuildRecord(input)
 
-	state := WriterState(w.state.Load())
+	w.mu.RLock()
+	state := w.state
+	w.mu.RUnlock()
+
 	if state != StateOpen {
-		// Writer is closing or closed — reject immediately
-		if mode == Strict {
-			ch := make(chan error, 1)
-			ch <- &ErrWriteFailed{
-				EventID: record.EventID,
-				Err:     errors.New("audit writer " + stateString(state)),
-			}
-			close(ch)
-			return ch
-		}
-		// BestEffort: silently drop
 		w.logger.Warn("audit writer not open, dropping record",
 			"eventId", record.EventID,
-			"action", record.Action)
-		return nil
-	}
-
-	var ch chan error
-	if mode == Strict {
-		ch = make(chan error, 1)
+			"action", record.Action,
+			"classification", "writer_"+stateString(state))
+		return
 	}
 
 	p := pendingRecord{
 		record: record,
-		mode:   mode,
-		doneCh: ch,
+		mode:   BestEffort,
 	}
 
-	// Non-blocking enqueue
+	// Non-blocking enqueue under read lock
+	w.mu.RLock()
+	if w.state != StateOpen {
+		w.mu.RUnlock()
+		w.logger.Warn("audit writer not open, dropping record",
+			"eventId", record.EventID,
+			"action", record.Action,
+			"classification", "writer_closing")
+		return
+	}
 	select {
 	case w.queue <- p:
+		w.mu.RUnlock()
 	default:
+		w.mu.RUnlock()
 		w.logger.Warn("audit queue full, dropping record",
 			"eventId", record.EventID,
-			"action", record.Action)
-		if ch != nil {
-			ch <- &ErrWriteFailed{
-				EventID: record.EventID,
-				Err:     errors.New("audit queue full"),
-			}
-			close(ch)
+			"action", record.Action,
+			"classification", "queue_full")
+	}
+}
+
+// WriteStrict enqueues an audit record and waits for persistence.
+// Returns nil on success or ErrWriteFailed on failure.
+// The provided context controls cancellation and timeout.
+func (w *Writer) WriteStrict(ctx context.Context, input WriteAuditInput) error {
+	record := BuildRecord(input)
+
+	w.mu.RLock()
+	state := w.state
+	w.mu.RUnlock()
+
+	if state != StateOpen {
+		return &ErrWriteFailed{
+			EventID: record.EventID,
+			Err:     errors.New("audit writer " + stateString(state)),
 		}
 	}
 
-	return ch
-}
-
-// WriteSync enqueues a record and waits for the result.
-// Only meaningful with Strict mode; BestEffort returns nil immediately.
-func (w *Writer) WriteSync(ctx context.Context, input WriteAuditInput, mode WriteMode) error {
-	ch := w.Write(input, mode)
-	if ch == nil {
-		return nil
+	ch := make(chan error, 1)
+	p := pendingRecord{
+		record: record,
+		mode:   Strict,
+		ctx:    ctx,
+		doneCh: ch,
 	}
+
+	// Non-blocking enqueue under read lock
+	w.mu.RLock()
+	if w.state != StateOpen {
+		w.mu.RUnlock()
+		return &ErrWriteFailed{
+			EventID: record.EventID,
+			Err:     errors.New("audit writer closing"),
+		}
+	}
+	select {
+	case w.queue <- p:
+		w.mu.RUnlock()
+	default:
+		w.mu.RUnlock()
+		return &ErrWriteFailed{
+			EventID: record.EventID,
+			Err:     errors.New("audit queue full"),
+		}
+	}
+
+	// Wait for result or context cancellation
 	select {
 	case err := <-ch:
 		return err
@@ -173,22 +244,33 @@ func (w *Writer) WriteSync(ctx context.Context, input WriteAuditInput, mode Writ
 }
 
 // Close signals all workers to stop and waits for the queue to drain.
-// Idempotent — safe to call multiple times.
-// Bounded by context — if ctx expires, returns ctx.Err().
+// Safe to call multiple times and concurrently.
+// If ctx expires before workers finish, returns ctx.Err()
+// but workers continue until they complete.
 func (w *Writer) Close(ctx context.Context) error {
-	var closeErr error
 	w.closeOnce.Do(func() {
-		w.state.Store(int32(StateClosing))
-		// Don't close the channel — workers read from it via select
-		// Wait for workers to finish
-		select {
-		case <-w.done:
-		case <-ctx.Done():
-			closeErr = ctx.Err()
-		}
-		w.state.Store(int32(StateClosed))
+		w.mu.Lock()
+		w.state = StateClosing
+		w.mu.Unlock()
+		close(w.queue) // Signal workers to drain and exit
 	})
-	return closeErr
+
+	// Wait for workers with context timeout
+	done := make(chan struct{})
+	go func() {
+		w.wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		w.mu.Lock()
+		w.state = StateClosed
+		w.mu.Unlock()
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // CloseNow is a convenience for backwards compatibility — closes with 5s timeout.
@@ -198,59 +280,27 @@ func (w *Writer) CloseNow() {
 	w.Close(ctx)
 }
 
-func (w *Writer) worker(id int) {
-	defer func() {
-		// Signal completion when worker exits
-		// Only the last worker closing will matter due to channel semantics
-	}()
+func (w *Writer) worker(id int, writerCtx context.Context) {
+	defer w.wg.Done()
 
-	for {
-		// Check if we should stop
-		state := WriterState(w.state.Load())
-		if state == StateClosing || state == StateClosed {
-			// Drain remaining items
-			w.drainRemaining()
-			close(w.done)
-			return
-		}
-
-		select {
-		case p := <-w.queue:
-			w.processRecord(p)
-		default:
-			// Queue empty, check state again before blocking
-			if WriterState(w.state.Load()) != StateOpen {
-				w.drainRemaining()
-				close(w.done)
-				return
-			}
-			// Block waiting for work
-			p, ok := <-w.queue
-			if !ok {
-				return
-			}
-			w.processRecord(p)
-		}
+	// for range queue: drains remaining items then exits when channel closes
+	for p := range w.queue {
+		w.processRecord(p, writerCtx)
 	}
 }
 
-func (w *Writer) drainRemaining() {
-	for {
-		select {
-		case p := <-w.queue:
-			w.processRecord(p)
-		default:
-			return
-		}
-	}
-}
-
-func (w *Writer) processRecord(p pendingRecord) {
+func (w *Writer) processRecord(p pendingRecord, writerCtx context.Context) {
 	record := p.record // already sanitized, stable ID
+
+	// Determine context for this operation
+	ctx := p.ctx
+	if ctx == nil {
+		ctx = writerCtx
+	}
 
 	var err error
 	for attempt := 0; attempt < maxRetryAttempts; attempt++ {
-		err = w.insertRecord(record)
+		err = w.storeInsert(ctx, record)
 		if err == nil {
 			if p.doneCh != nil {
 				p.doneCh <- nil
@@ -262,9 +312,14 @@ func (w *Writer) processRecord(p pendingRecord) {
 		// Safe error classification — no raw Mongo errors logged
 		classification := classifyError(err)
 
+		// Check for context cancellation
+		if classification == "cancelled" || classification == "timeout" {
+			break
+		}
+
 		// Check if this is an idempotent duplicate (same _id)
 		if classification == "duplicate_conflict" {
-			existing, findErr := w.findByID(record.ID)
+			existing, findErr := w.storeFindByID(ctx, record.ID)
 			if findErr == nil && existing != nil &&
 				existing.ID == record.ID && existing.EventID == record.EventID {
 				// Idempotent retry — same logical record already persisted
@@ -279,13 +334,19 @@ func (w *Writer) processRecord(p pendingRecord) {
 			break
 		}
 
-		// Context-aware backoff for strict writes
+		// Context-aware backoff for retries
 		if attempt < maxRetryAttempts-1 {
 			delay := retryDelay1
 			if attempt == 1 {
 				delay = retryDelay2
 			}
-			time.Sleep(delay)
+			select {
+			case <-time.After(delay):
+				// Continue to next attempt
+			case <-ctx.Done():
+				err = ctx.Err()
+				break
+			}
 		}
 	}
 
@@ -306,36 +367,18 @@ func (w *Writer) processRecord(p pendingRecord) {
 	// BestEffort: silently drop (already logged with safe classification)
 }
 
-func (w *Writer) insertRecord(record AuditWriteRecord) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+func (w *Writer) storeInsert(ctx context.Context, record AuditWriteRecord) error {
+	// Add per-attempt timeout
+	attemptCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-
-	// _id = record.MongoID makes this idempotent
-	_, err := w.collection.InsertOne(ctx, record,
-		options.InsertOne().SetBypassDocumentValidation(true))
-	return err
+	return w.store.Insert(attemptCtx, record)
 }
 
-func (w *Writer) findByID(id string) (*AuditWriteRecord, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+func (w *Writer) storeFindByID(ctx context.Context, id string) (*AuditWriteRecord, error) {
+	// Add per-attempt timeout
+	attemptCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-
-	var doc bson.M
-	err := w.collection.FindOne(ctx, bson.M{"_id": id}).Decode(&doc)
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
-			return nil, nil
-		}
-		return nil, err
-	}
-	rec := &AuditWriteRecord{}
-	if v, ok := doc["id"].(string); ok {
-		rec.ID = v
-	}
-	if v, ok := doc["eventId"].(string); ok {
-		rec.EventID = v
-	}
-	return rec, nil
+	return w.store.FindByMongoID(attemptCtx, id)
 }
 
 // classifyError returns a safe error classification without exposing raw details.
@@ -343,16 +386,38 @@ func classifyError(err error) string {
 	if err == nil {
 		return "none"
 	}
-	if mongo.IsDuplicateKeyError(err) {
-		return "duplicate_conflict"
-	}
 	if errors.Is(err, context.DeadlineExceeded) {
 		return "timeout"
 	}
 	if errors.Is(err, context.Canceled) {
 		return "cancelled"
 	}
+	// Check for MongoDB duplicate key error by string matching
+	// (mongo.IsDuplicateKeyError may not work with all error types)
+	errStr := err.Error()
+	if len(errStr) > 0 {
+		// Check for common duplicate key error patterns
+		for _, pattern := range []string{"E11000", "duplicate key", "duplicate_key"} {
+			if contains(errStr, pattern) {
+				return "duplicate_conflict"
+			}
+		}
+	}
 	return "mongo_write_failed"
+}
+
+// contains checks if s contains substr (case-insensitive).
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsSubstr(s, substr))
+}
+
+func containsSubstr(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
 }
 
 func stateString(s WriterState) string {

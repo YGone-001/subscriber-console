@@ -272,16 +272,34 @@ func (s *sanitizeState) visitSlice(arr []interface{}, depth int) interface{} {
 	return result
 }
 
-// visitReflect handles pointer wrappers and other Go types via reflection.
+// visitReflect handles pointer wrappers, structs, and other Go types via reflection.
 func (s *sanitizeState) visitReflect(current interface{}, depth int) interface{} {
 	rv := reflect.ValueOf(current)
-	switch rv.Kind() {
-	case reflect.Ptr, reflect.Interface:
+
+	// Track pointers for circular detection
+	if rv.Kind() == reflect.Ptr || rv.Kind() == reflect.Interface {
 		if rv.IsNil() {
 			return nil
 		}
+		ptr := rv.Pointer()
+		if s.ancestors[ptr] {
+			return circular
+		}
+		s.ancestors[ptr] = true
+		defer delete(s.ancestors, ptr)
 		return s.visit(rv.Elem().Interface(), depth+1)
+	}
+
+	switch rv.Kind() {
 	case reflect.Map:
+		// Track map for circular detection
+		ptr := rv.Pointer()
+		if s.ancestors[ptr] {
+			return circular
+		}
+		s.ancestors[ptr] = true
+		defer delete(s.ancestors, ptr)
+
 		// Generic map[K]V — convert keys to string
 		result := make(map[string]interface{})
 		iter := rv.MapRange()
@@ -312,6 +330,15 @@ func (s *sanitizeState) visitReflect(current interface{}, depth int) interface{}
 		if rv.IsNil() {
 			return nil
 		}
+		// Track slice pointer for circular detection
+		if rv.Kind() == reflect.Slice && !rv.IsNil() {
+			ptr := rv.Pointer()
+			if s.ancestors[ptr] {
+				return circular
+			}
+			s.ancestors[ptr] = true
+			defer delete(s.ancestors, ptr)
+		}
 		result := make([]interface{}, 0, rv.Len())
 		limit := rv.Len()
 		if limit > maxItems {
@@ -327,9 +354,72 @@ func (s *sanitizeState) visitReflect(current interface{}, depth int) interface{}
 			result = append(result, truncated)
 		}
 		return result
+	case reflect.Struct:
+		return s.visitStruct(rv, depth)
 	default:
 		return unsupported
 	}
+}
+
+// visitStruct handles Go structs via reflection, respecting json tags.
+func (s *sanitizeState) visitStruct(rv reflect.Value, depth int) interface{} {
+	rt := rv.Type()
+	result := make(map[string]interface{})
+	count := 0
+
+	for i := 0; i < rt.NumField(); i++ {
+		s.nodes++
+		if s.nodes > maxNodes || s.textBudget <= 0 || count >= maxItems {
+			break
+		}
+
+		field := rt.Field(i)
+		fieldVal := rv.Field(i)
+
+		// Skip unexported fields
+		if !field.IsExported() {
+			continue
+		}
+
+		// Get json tag
+		jsonTag := field.Tag.Get("json")
+		if jsonTag == "-" {
+			continue
+		}
+
+		// Parse json tag for field name
+		key := field.Name
+		if jsonTag != "" {
+			parts := strings.Split(jsonTag, ",")
+			if parts[0] != "" {
+				key = parts[0]
+			}
+		}
+
+		// Check for omitempty (skip zero values)
+		if strings.Contains(jsonTag, "omitempty") && fieldVal.IsZero() {
+			continue
+		}
+
+		safeKey := sanitizeAuditText(key)
+		if len(safeKey) > 200 {
+			safeKey = safeKey[:200]
+		}
+		s.textBudget -= len(safeKey)
+
+		// Check if field name is sensitive
+		if sensitiveKey(key) {
+			result[safeKey] = redacted
+		} else {
+			result[safeKey] = s.visit(fieldVal.Interface(), depth+1)
+		}
+		count++
+	}
+
+	if rt.NumField() > maxItems || s.nodes > maxNodes || s.textBudget <= 0 {
+		result["_truncated"] = true
+	}
+	return result
 }
 
 // mapPointer returns a stable pointer identity for a map.
