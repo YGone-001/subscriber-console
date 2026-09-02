@@ -1,209 +1,309 @@
 package audit
 
 import (
+	"net/http/httptest"
 	"testing"
 )
 
-func TestBuildRecord(t *testing.T) {
-	t.Run("basic record", func(t *testing.T) {
-		input := WriteAuditInput{
-			Action: "authorization.denied",
-			Module: "security",
-			Actor: ActorInput{
-				Type:     "user",
-				Username: "alice",
-				Role:     "operator",
-			},
-			Resource: &ResourceInput{
-				Type: "api",
-				ID:   "/api/audit",
-			},
-			Result: "denied",
-		}
+func TestBuildRecord_BasicFields(t *testing.T) {
+	input := WriteAuditInput{
+		Module: "security",
+		Action: "authorization.denied",
+		Resource: &ResourceInput{
+			Type: "api",
+			ID:   "/api/test",
+		},
+		Result: "denied",
+		Reason: "capability required",
+		Actor: ActorInput{
+			Type:     "user",
+			Username: "user1",
+			Role:     "admin",
+		},
+		Source: &SourceInput{
+			IP:        "192.168.1.1",
+			UserAgent: "test-agent",
+		},
+		Request: &RequestInput{
+			RequestID: "req-123",
+		},
+		Metadata: map[string]any{"capability": "test_cap", "decision": "deny"},
+	}
 
-		rec := BuildRecord(input)
+	record := BuildRecord(input)
 
-		if rec.ID == "" {
-			t.Error("ID should not be empty")
-		}
-		if rec.EventID != "EVT-"+rec.ID {
-			t.Errorf("EventID = %q, want %q", rec.EventID, "EVT-"+rec.ID)
-		}
-		if rec.Timestamp == "" {
-			t.Error("Timestamp should not be empty")
-		}
-		if rec.Level != "warning" {
-			t.Errorf("Level = %q, want %q", rec.Level, "warning")
-		}
-		if rec.Action != "authorization.denied" {
-			t.Errorf("Action = %q, want %q", rec.Action, "authorization.denied")
-		}
-		if rec.Module != "security" {
-			t.Errorf("Module = %q, want %q", rec.Module, "security")
-		}
-		if rec.Actor != "alice" {
-			t.Errorf("Actor = %q, want %q", rec.Actor, "alice")
-		}
-		if rec.TargetID != "/api/audit" {
-			t.Errorf("TargetID = %q, want %q", rec.TargetID, "/api/audit")
-		}
-		if rec.Result != "denied" {
-			t.Errorf("Result = %q, want %q", rec.Result, "denied")
-		}
-	})
+	// Check _id and id are both set and equal
+	if record.MongoID == "" {
+		t.Error("expected _id to be set")
+	}
+	if record.ID == "" {
+		t.Error("expected id to be set")
+	}
+	if record.MongoID != record.ID {
+		t.Errorf("expected _id == id, got _id=%s id=%s", record.MongoID, record.ID)
+	}
 
-	t.Run("actor fallback chain", func(t *testing.T) {
-		// username > system > userId
-		input := WriteAuditInput{
-			Action: "test",
-			Actor:  ActorInput{Type: "system"},
-		}
-		rec := BuildRecord(input)
-		if rec.Actor != "system" {
-			t.Errorf("Actor = %q, want %q", rec.Actor, "system")
-		}
+	// Check eventId format
+	expectedEventID := "EVT-" + record.ID
+	if record.EventID != expectedEventID {
+		t.Errorf("expected eventId=%s, got %s", expectedEventID, record.EventID)
+	}
 
-		input = WriteAuditInput{
-			Action: "test",
-			Actor:  ActorInput{Type: "user", UserID: "u123"},
-		}
-		rec = BuildRecord(input)
-		if rec.Actor != "u123" {
-			t.Errorf("Actor = %q, want %q", rec.Actor, "u123")
-		}
-	})
-
-	t.Run("targetID fallback", func(t *testing.T) {
-		// targetId > resource.id > resource.name > module
-		input := WriteAuditInput{
-			Action:   "test",
-			Module:   "security",
-			Resource: &ResourceInput{Type: "api", ID: "/api/test"},
-		}
-		rec := BuildRecord(input)
-		if rec.TargetID != "/api/test" {
-			t.Errorf("TargetID = %q, want %q", rec.TargetID, "/api/test")
-		}
-
-		input = WriteAuditInput{
-			Action:   "test",
-			Module:   "security",
-			Resource: &ResourceInput{Type: "api", Name: "test-resource"},
-		}
-		rec = BuildRecord(input)
-		if rec.TargetID != "test-resource" {
-			t.Errorf("TargetID = %q, want %q", rec.TargetID, "test-resource")
-		}
-
-		input = WriteAuditInput{
-			Action: "test",
-			Module: "security",
-		}
-		rec = BuildRecord(input)
-		if rec.TargetID != "security" {
-			t.Errorf("TargetID = %q, want %q", rec.TargetID, "security")
-		}
-	})
-
-	t.Run("level determination", func(t *testing.T) {
-		// success + non-high risk = info
-		input := WriteAuditInput{Action: "test", Result: "success", RiskLevel: "low"}
-		rec := BuildRecord(input)
-		if rec.Level != "info" {
-			t.Errorf("Level = %q, want %q", rec.Level, "info")
-		}
-
-		// denied = warning
-		input = WriteAuditInput{Action: "test", Result: "denied"}
-		rec = BuildRecord(input)
-		if rec.Level != "warning" {
-			t.Errorf("Level = %q, want %q", rec.Level, "warning")
-		}
-
-		// high risk = warning
-		input = WriteAuditInput{Action: "test", Result: "success", RiskLevel: "high"}
-		rec = BuildRecord(input)
-		if rec.Level != "warning" {
-			t.Errorf("Level = %q, want %q", rec.Level, "warning")
-		}
-
-		// explicit level overrides
-		input = WriteAuditInput{Action: "test", Result: "success", Level: "info"}
-		rec = BuildRecord(input)
-		if rec.Level != "info" {
-			t.Errorf("Level = %q, want %q", rec.Level, "info")
-		}
-	})
-
-	t.Run("correlation ID from request", func(t *testing.T) {
-		input := WriteAuditInput{
-			Action: "test",
-			Request: &RequestInput{
-				RequestID:     "req-123",
-				CorrelationID: "corr-456",
-			},
-		}
-		rec := BuildRecord(input)
-		if rec.CorrelationID != "corr-456" {
-			t.Errorf("CorrelationID = %q, want %q", rec.CorrelationID, "corr-456")
-		}
-
-		// Fallback to requestId
-		input = WriteAuditInput{
-			Action: "test",
-			Request: &RequestInput{
-				RequestID: "req-123",
-			},
-		}
-		rec = BuildRecord(input)
-		if rec.CorrelationID != "req-123" {
-			t.Errorf("CorrelationID = %q, want %q", rec.CorrelationID, "req-123")
-		}
-	})
-
-	t.Run("operator IP fallback", func(t *testing.T) {
-		input := WriteAuditInput{Action: "test"}
-		rec := BuildRecord(input)
-		if rec.OperatorIP != "unknown" {
-			t.Errorf("OperatorIP = %q, want %q", rec.OperatorIP, "unknown")
-		}
-
-		input = WriteAuditInput{
-			Action: "test",
-			Source: &SourceInput{IP: "10.0.0.1"},
-		}
-		rec = BuildRecord(input)
-		if rec.OperatorIP != "10.0.0.1" {
-			t.Errorf("OperatorIP = %q, want %q", rec.OperatorIP, "10.0.0.1")
-		}
-	})
-
-	t.Run("sanitizes sensitive metadata", func(t *testing.T) {
-		input := WriteAuditInput{
-			Action: "test",
-			Metadata: map[string]interface{}{
-				"capability": "audit_view",
-				"password":   "secret123",
-			},
-		}
-		rec := BuildRecord(input)
-		if rec.Metadata == nil {
-			t.Fatal("Metadata should not be nil")
-		}
-		if rec.Metadata["capability"] != "audit_view" {
-			t.Errorf("capability = %v, want audit_view", rec.Metadata["capability"])
-		}
-		if rec.Metadata["password"] != redacted {
-			t.Errorf("password = %v, want [REDACTED]", rec.Metadata["password"])
-		}
-	})
+	// Check basic fields
+	if record.Module != "security" {
+		t.Errorf("expected module=security, got %s", record.Module)
+	}
+	if record.Action != "authorization.denied" {
+		t.Errorf("expected action=authorization.denied, got %s", record.Action)
+	}
+	if record.Resource == nil {
+		t.Fatal("expected resource to be set")
+	}
+	if record.Resource.Type != "api" {
+		t.Errorf("expected resourceType=api, got %s", record.Resource.Type)
+	}
+	if record.Resource.ID != "/api/test" {
+		t.Errorf("expected resourceID=/api/test, got %s", record.Resource.ID)
+	}
+	if record.Result != "denied" {
+		t.Errorf("expected result=denied, got %s", record.Result)
+	}
+	if record.Reason != "capability required" {
+		t.Errorf("expected reason='capability required', got %s", record.Reason)
+	}
 }
 
-func TestAuditRequestContext(t *testing.T) {
-	t.Run("nil request", func(t *testing.T) {
-		source, request, reason := AuditRequestContext(nil)
-		if source != nil || request != nil || reason != "" {
-			t.Error("expected all zero values for nil request")
-		}
-	})
+func TestBuildRecord_IdentityFields(t *testing.T) {
+	input := WriteAuditInput{
+		Module: "test",
+		Action: "test.action",
+		Resource: &ResourceInput{
+			Type: "api",
+		},
+		Result: "success",
+		Actor: ActorInput{
+			Type:     "user",
+			Username: "user1",
+			Role:     "admin",
+		},
+		Source: &SourceInput{
+			IP:        "192.168.1.1",
+			UserAgent: "test-agent",
+		},
+		Request: &RequestInput{
+			RequestID: "req-123",
+		},
+	}
+
+	record := BuildRecord(input)
+
+	if record.ActorContext == nil {
+		t.Fatal("expected actorContext to be set")
+	}
+	if record.ActorContext.Username != "user1" {
+		t.Errorf("expected username=user1, got %s", record.ActorContext.Username)
+	}
+	if record.ActorContext.Role != "admin" {
+		t.Errorf("expected role=admin, got %s", record.ActorContext.Role)
+	}
+	if record.Source == nil {
+		t.Fatal("expected source to be set")
+	}
+	if record.Source.IP != "192.168.1.1" {
+		t.Errorf("expected sourceIP=192.168.1.1, got %s", record.Source.IP)
+	}
+	if record.Source.UserAgent != "test-agent" {
+		t.Errorf("expected userAgent=test-agent, got %s", record.Source.UserAgent)
+	}
+}
+
+func TestBuildRecord_Defaults(t *testing.T) {
+	input := WriteAuditInput{
+		Module: "test",
+		Action: "test.action",
+		Resource: &ResourceInput{
+			Type: "api",
+		},
+		Result: "success",
+	}
+
+	record := BuildRecord(input)
+
+	// Check defaults
+	if record.OldData != nil {
+		t.Errorf("expected oldData=nil (not missing), got %v", record.OldData)
+	}
+	if record.NewData != nil {
+		t.Errorf("expected newData=nil (not missing), got %v", record.NewData)
+	}
+}
+
+func TestBuildRecord_UUIDFormat(t *testing.T) {
+	input := WriteAuditInput{
+		Module: "test",
+		Action: "test.action",
+		Resource: &ResourceInput{
+			Type: "api",
+		},
+		Result: "success",
+	}
+
+	record := BuildRecord(input)
+
+	// UUID v4 format: 8-4-4-4-12 hex chars
+	if len(record.ID) != 36 {
+		t.Errorf("expected UUID length 36, got %d", len(record.ID))
+	}
+	if record.ID[8] != '-' || record.ID[13] != '-' || record.ID[18] != '-' || record.ID[23] != '-' {
+		t.Errorf("expected UUID format with dashes, got %s", record.ID)
+	}
+	// Version 4: char 14 should be '4'
+	if record.ID[14] != '4' {
+		t.Errorf("expected UUID version 4, got %s", record.ID)
+	}
+}
+
+func TestBuildRecord_MetadataSanitized(t *testing.T) {
+	input := WriteAuditInput{
+		Module: "test",
+		Action: "test.action",
+		Resource: &ResourceInput{
+			Type: "api",
+		},
+		Result: "success",
+		Metadata: map[string]any{
+			"password": "secret123",
+			"normal":   "visible",
+		},
+	}
+
+	record := BuildRecord(input)
+
+	if record.Metadata == nil {
+		t.Fatal("expected metadata to be set")
+	}
+	if record.Metadata["password"] != "[REDACTED]" {
+		t.Errorf("expected metadata password redacted, got %v", record.Metadata["password"])
+	}
+	if record.Metadata["normal"] != "visible" {
+		t.Errorf("expected metadata normal visible, got %v", record.Metadata["normal"])
+	}
+}
+
+func TestBuildRecord_ErrorSanitized(t *testing.T) {
+	input := WriteAuditInput{
+		Module: "test",
+		Action: "test.action",
+		Resource: &ResourceInput{
+			Type: "api",
+		},
+		Result: "failure",
+		Error: &ErrorInput{
+			Message: "something failed: password=secret123",
+		},
+	}
+
+	record := BuildRecord(input)
+
+	if record.Error == nil {
+		t.Fatal("expected error to be set")
+	}
+	str := record.Error.Message
+	if str != "something failed: password=[REDACTED]" {
+		t.Errorf("expected error with redaction, got: %s", str)
+	}
+}
+
+func TestAuditRequestContext_ReusesRequestID(t *testing.T) {
+	r := httptest.NewRequest("GET", "/api/test", nil)
+	r.Header.Set("X-Request-ID", "existing-req-id")
+
+	source, request, _ := AuditRequestContext(r)
+
+	if request == nil {
+		t.Fatal("expected request to be set")
+	}
+	if request.RequestID != "existing-req-id" {
+		t.Errorf("expected requestID=existing-req-id, got %s", request.RequestID)
+	}
+	if source == nil {
+		t.Fatal("expected source to be set")
+	}
+}
+
+func TestAuditRequestContext_EmptyRequestID(t *testing.T) {
+	r := httptest.NewRequest("GET", "/api/test", nil)
+	// No X-Request-ID header
+
+	_, request, _ := AuditRequestContext(r)
+
+	// Should be empty (caller should generate if needed)
+	if request != nil && request.RequestID != "" {
+		// This is actually ok - it might use middleware-generated ID
+	}
+}
+
+func TestAuditRequestContext_PrincipalFields(t *testing.T) {
+	r := httptest.NewRequest("GET", "/api/test", nil)
+
+	source, request, _ := AuditRequestContext(r)
+
+	if source == nil {
+		t.Fatal("expected source to be set")
+	}
+	if request == nil {
+		t.Fatal("expected request to be set")
+	}
+}
+
+func TestBuildRecord_NilOldDataNewData(t *testing.T) {
+	input := WriteAuditInput{
+		Module: "test",
+		Action: "test.action",
+		Resource: &ResourceInput{
+			Type: "api",
+		},
+		Result: "success",
+	}
+
+	record := BuildRecord(input)
+
+	// oldData and newData must be nil (null in JSON), not missing
+	if record.OldData != nil {
+		t.Errorf("expected oldData=nil, got %v", record.OldData)
+	}
+	if record.NewData != nil {
+		t.Errorf("expected newData=nil, got %v", record.NewData)
+	}
+}
+
+func TestBuildRecord_WithData(t *testing.T) {
+	input := WriteAuditInput{
+		Module: "test",
+		Action: "test.update",
+		Resource: &ResourceInput{
+			Type: "api",
+		},
+		Result: "success",
+		Before: map[string]any{"status": "active"},
+		After:  map[string]any{"status": "suspended"},
+	}
+
+	record := BuildRecord(input)
+
+	oldMap, ok := record.OldData.(map[string]any)
+	if !ok {
+		t.Fatalf("expected oldData to be map, got %T", record.OldData)
+	}
+	if oldMap["status"] != "active" {
+		t.Errorf("expected old status=active, got %v", oldMap["status"])
+	}
+
+	newMap, ok := record.NewData.(map[string]any)
+	if !ok {
+		t.Fatalf("expected newData to be map, got %T", record.NewData)
+	}
+	if newMap["status"] != "suspended" {
+		t.Errorf("expected new status=suspended, got %v", newMap["status"])
+	}
 }

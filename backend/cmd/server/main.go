@@ -71,7 +71,6 @@ func main() {
 		WorkerCount: 2,
 		Logger:      logger,
 	})
-	defer auditWriter.Close()
 
 	// Audit (read-side repository + handler with denial audit)
 	auditRepo := audit.NewRepository(auditCollection)
@@ -126,7 +125,7 @@ func main() {
 		mc.XCloud.Collection("ocs_tariff_plans"),
 		mc.Ops.Collection("app_profiles"),
 	)
-	subscriberHandler := subscriber.NewHandler(subscriberRepo, limiter)
+	subscriberHandler := subscriber.NewHandler(subscriberRepo, limiter, auditWriter)
 
 	// Auth/User reads (with audit writer for denial evidence)
 	userRepo := user.NewRepository(mc.Ops)
@@ -223,11 +222,16 @@ func main() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 		defer cancel()
 
-		// Close audit writer first (drain queue)
-		auditWriter.Close()
-
+		// 1. Stop accepting new requests, drain in-flight handlers
 		if err := srv.Shutdown(shutdownCtx); err != nil {
 			logger.Error("server shutdown error", "error", err)
+		}
+
+		// 2. Now safe to close audit writer — no more handlers can enqueue
+		writerCtx, writerCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer writerCancel()
+		if err := auditWriter.Close(writerCtx); err != nil {
+			logger.Error("audit writer close timeout", "error", err)
 		}
 		close(done)
 	}()

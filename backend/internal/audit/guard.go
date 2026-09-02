@@ -9,11 +9,11 @@ import (
 )
 
 // DenialMetadata holds additional context for an authorization denial audit record.
+// Matches Node metadata shape: capability+decision OR permission only.
 type DenialMetadata struct {
-	Capability       string `json:"capability,omitempty"`
-	Decision         string `json:"decision,omitempty"`
-	Permission       string `json:"permission,omitempty"`
-	RequiresApproval bool   `json:"requiresApproval,omitempty"`
+	Capability string `json:"capability,omitempty"`
+	Decision   string `json:"decision,omitempty"`
+	Permission string `json:"permission,omitempty"`
 }
 
 // RecordPermissionDenied schedules an authorization.denied audit record
@@ -28,6 +28,8 @@ func RecordPermissionDenied(w *Writer, r *http.Request, p *auth.Principal, meta 
 
 	source, request, reason := AuditRequestContext(r)
 
+	// Build metadata — matches Node: capability+decision OR permission only.
+	// Node does NOT include requiresApproval in audit metadata.
 	metadata := make(map[string]interface{})
 	if meta.Capability != "" {
 		metadata["capability"] = meta.Capability
@@ -37,9 +39,6 @@ func RecordPermissionDenied(w *Writer, r *http.Request, p *auth.Principal, meta 
 	}
 	if meta.Permission != "" {
 		metadata["permission"] = meta.Permission
-	}
-	if meta.RequiresApproval {
-		metadata["requiresApproval"] = true
 	}
 
 	input := WriteAuditInput{
@@ -54,12 +53,11 @@ func RecordPermissionDenied(w *Writer, r *http.Request, p *auth.Principal, meta 
 			Type: "api",
 			ID:   r.URL.Path,
 		},
-		Result:    "denied",
-		RiskLevel: "medium",
-		Source:    source,
-		Request:   request,
-		Reason:    reason,
-		Metadata:  metadata,
+		Result:   "denied",
+		Source:   source,
+		Request:  request,
+		Reason:   reason,
+		Metadata: metadata,
 	}
 
 	// BestEffort: failure must not alter the 403 response.
@@ -79,30 +77,23 @@ func RequireCapabilityWithAudit(w http.ResponseWriter, r *http.Request, p *auth.
 		return true
 	}
 
-	// Determine if this capability requires approval (for the metadata)
 	requiresApproval := decision == "approval"
 
-	// Schedule audit evidence
+	// Schedule audit evidence (no requiresApproval in metadata — Node does not include it)
 	RecordPermissionDenied(writer, r, p, DenialMetadata{
-		Capability:       capability,
-		Decision:         decision,
-		RequiresApproval: requiresApproval,
+		Capability: capability,
+		Decision:   decision,
 	})
 
-	// Write 403 response matching Node shape
-	resp := map[string]interface{}{
+	// Write 403 response — requiresApproval ALWAYS present (true or false)
+	// Node: requiresApproval: decision === 'approval'
+	writeDenialJSON(w, http.StatusForbidden, map[string]interface{}{
 		"error":            "Forbidden: Insufficient permissions",
 		"code":             "PERMISSION_DENIED",
 		"capability":       capability,
 		"decision":         decision,
 		"requiresApproval": requiresApproval,
-	}
-	// Suppress requiresApproval=false in response to match Node behavior
-	if !requiresApproval {
-		delete(resp, "requiresApproval")
-	}
-
-	writeDenialJSON(w, http.StatusForbidden, resp)
+	})
 	return false
 }
 

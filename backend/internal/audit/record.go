@@ -1,13 +1,31 @@
 package audit
 
 import (
+	"crypto/rand"
+	"fmt"
 	"net"
 	"net/http"
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/YGone-001/subscriber-console/backend/internal/middleware"
 )
+
+// generateUUID creates a UUID v4 using crypto/rand.
+// Format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+func generateUUID() string {
+	var buf [16]byte
+	if _, err := rand.Read(buf[:]); err != nil {
+		// Fallback: should never happen with crypto/rand
+		panic("audit: crypto/rand failed: " + err.Error())
+	}
+	// Set version = 4
+	buf[6] = (buf[6] & 0x0f) | 0x40
+	// Set variant = RFC4122
+	buf[8] = (buf[8] & 0x3f) | 0x80
+	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
+		buf[0:4], buf[4:6], buf[6:8], buf[8:10], buf[10:16])
+}
 
 // WriteMode controls how the audit writer handles persistence failures.
 type WriteMode int
@@ -79,9 +97,10 @@ type ErrorInput struct {
 }
 
 // AuditWriteRecord is the complete record persisted to MongoDB.
-// Uses the same _id = id convention as Node for idempotent inserts.
+// Uses both _id and id fields matching Node convention.
 type AuditWriteRecord struct {
-	ID            string                 `bson:"_id" json:"id"`
+	MongoID       string                 `bson:"_id" json:"-"`
+	ID            string                 `bson:"id" json:"id"`
 	EventID       string                 `bson:"eventId" json:"eventId"`
 	Timestamp     string                 `bson:"timestamp" json:"timestamp"`
 	Level         string                 `bson:"level" json:"level"`
@@ -97,8 +116,8 @@ type AuditWriteRecord struct {
 	CorrelationID string                 `bson:"correlationId,omitempty" json:"correlationId,omitempty"`
 	ApprovalID    string                 `bson:"approvalId,omitempty" json:"approvalId,omitempty"`
 	Reason        string                 `bson:"reason,omitempty" json:"reason,omitempty"`
-	OldData       interface{}            `bson:"oldData,omitempty" json:"oldData,omitempty"`
-	NewData       interface{}            `bson:"newData,omitempty" json:"newData,omitempty"`
+	OldData       interface{}            `bson:"oldData" json:"oldData"`
+	NewData       interface{}            `bson:"newData" json:"newData"`
 	RiskLevel     string                 `bson:"riskLevel,omitempty" json:"riskLevel,omitempty"`
 	Result        string                 `bson:"result,omitempty" json:"result,omitempty"`
 	Metadata      map[string]interface{} `bson:"metadata,omitempty" json:"metadata,omitempty"`
@@ -108,7 +127,7 @@ type AuditWriteRecord struct {
 // BuildRecord converts a WriteAuditInput into a sanitized, complete
 // AuditWriteRecord ready for MongoDB insertion.
 func BuildRecord(input WriteAuditInput) AuditWriteRecord {
-	id := uuid.New().String()
+	id := generateUUID()
 	now := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
 
 	level := input.Level
@@ -166,22 +185,13 @@ func BuildRecord(input WriteAuditInput) AuditWriteRecord {
 		}
 	}
 
-	// Sanitize old/new data
-	var oldData, newData interface{}
+	// oldData/newData: always present as null when not provided (Node default)
+	var oldData, newData interface{} = nil, nil
 	if input.Before != nil {
 		oldData = sanitizeAuditPayload(input.Before)
 	}
 	if input.After != nil {
 		newData = sanitizeAuditPayload(input.After)
-	}
-
-	// Sanitize text fields
-	sanitizedActor := sanitizeAuditText(actor)
-	sanitizedTargetID := sanitizeAuditText(targetID)
-	sanitizedOperatorIP := sanitizeAuditText(operatorIP)
-	sanitizedReason := ""
-	if input.Reason != "" {
-		sanitizedReason = sanitizeAuditText(input.Reason)
 	}
 
 	// Sanitize actor context
@@ -226,30 +236,45 @@ func BuildRecord(input WriteAuditInput) AuditWriteRecord {
 		}
 	}
 
+	// Sanitize error
+	var errInput *ErrorInput
+	if input.Error != nil {
+		errInput = &ErrorInput{
+			Code:    sanitizeAuditText(input.Error.Code),
+			Message: sanitizeAuditText(input.Error.Message),
+		}
+	}
+
 	return AuditWriteRecord{
+		MongoID:       id,
 		ID:            id,
 		EventID:       "EVT-" + id,
 		Timestamp:     now,
 		Level:         level,
 		Action:        sanitizeAuditText(input.Action),
 		Module:        sanitizeAuditText(input.Module),
-		Actor:         sanitizedActor,
+		Actor:         sanitizeAuditText(actor),
 		ActorContext:  actorCtx,
-		TargetID:      sanitizedTargetID,
+		TargetID:      sanitizeAuditText(targetID),
 		Resource:      resource,
-		OperatorIP:    sanitizedOperatorIP,
+		OperatorIP:    sanitizeAuditText(operatorIP),
 		Source:        source,
 		Request:       request,
-		CorrelationID: correlationID,
+		CorrelationID: sanitizeAuditText(correlationID),
 		ApprovalID:    sanitizeAuditText(input.ApprovalID),
-		Reason:        sanitizedReason,
+		Reason:        sanitizeAuditText(input.Reason),
 		OldData:       oldData,
 		NewData:       newData,
 		RiskLevel:     input.RiskLevel,
 		Result:        input.Result,
 		Metadata:      sanitizedMeta,
-		Error:         input.Error,
+		Error:         errInput,
 	}
+}
+
+// requestIDFromContext retrieves the middleware-generated request ID.
+func requestIDFromContext(r *http.Request) string {
+	return middleware.RequestIDFromContext(r.Context())
 }
 
 // NormalizeIP validates and normalizes an IP address string.
@@ -306,6 +331,8 @@ func NormalizeIP(value string) string {
 // AuditRequestContext extracts safe request context from an HTTP request.
 // Matches Node auditRequestContext() semantics: source IP from proxy headers,
 // correlation/request IDs, method, path (no query), user-agent.
+//
+// Request ID precedence: middleware context > x-request-id header > generate.
 func AuditRequestContext(r *http.Request) (source *SourceInput, request *RequestInput, reason string) {
 	if r == nil {
 		return nil, nil, ""
@@ -334,10 +361,13 @@ func AuditRequestContext(r *http.Request) (source *SourceInput, request *Request
 		source.UserAgent = ua
 	}
 
-	// Request ID: x-request-id or generate UUID
-	requestID := strings.TrimSpace(r.Header.Get("x-request-id"))
+	// Request ID: prefer middleware-generated ID, then header, then generate
+	requestID := requestIDFromContext(r)
 	if requestID == "" {
-		requestID = uuid.New().String()
+		requestID = strings.TrimSpace(r.Header.Get("x-request-id"))
+	}
+	if requestID == "" {
+		requestID = generateUUID()
 	} else if len(requestID) > 128 {
 		requestID = requestID[:128]
 	}
@@ -349,6 +379,8 @@ func AuditRequestContext(r *http.Request) (source *SourceInput, request *Request
 	} else if len(correlationID) > 128 {
 		correlationID = correlationID[:128]
 	}
+	// Sanitize correlation ID
+	correlationID = sanitizeAuditText(correlationID)
 
 	// Path: use URL path only, no query string
 	path := ""

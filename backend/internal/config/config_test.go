@@ -18,8 +18,8 @@ func TestLoadDefaults(t *testing.T) {
 		t.Fatalf("Load() error: %v", err)
 	}
 
-	if cfg.HTTPAddr != ":8080" {
-		t.Errorf("HTTPAddr = %q, want %q", cfg.HTTPAddr, ":8080")
+	if cfg.HTTPAddr != ":18888" {
+		t.Errorf("HTTPAddr = %q, want %q", cfg.HTTPAddr, ":18888")
 	}
 	if cfg.MongoURI != "mongodb://127.0.0.1:27017" {
 		t.Errorf("MongoURI = %q, want %q", cfg.MongoURI, "mongodb://127.0.0.1:27017")

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/YGone-001/subscriber-console/backend/internal/audit"
 	"github.com/YGone-001/subscriber-console/backend/internal/auth"
 	"github.com/YGone-001/subscriber-console/backend/internal/ratelimit"
 	"github.com/YGone-001/subscriber-console/backend/internal/response"
@@ -13,13 +14,14 @@ import (
 
 // Handler provides HTTP handlers for subscriber read endpoints.
 type Handler struct {
-	repo    *Repository
-	limiter *ratelimit.Limiter
+	repo        *Repository
+	limiter     *ratelimit.Limiter
+	auditWriter *audit.Writer
 }
 
 // NewHandler creates a new subscriber Handler.
-func NewHandler(repo *Repository, limiter *ratelimit.Limiter) *Handler {
-	return &Handler{repo: repo, limiter: limiter}
+func NewHandler(repo *Repository, limiter *ratelimit.Limiter, auditWriter *audit.Writer) *Handler {
+	return &Handler{repo: repo, limiter: limiter, auditWriter: auditWriter}
 }
 
 // List handles GET /api/subscribers
@@ -190,8 +192,7 @@ func (h *Handler) BatchPrecheck(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Requires subscriber_write capability (matching Node requireCapability)
-	if !auth.HasCapability(p, "subscriber_write") {
-		response.Forbidden(w, "Subscriber write capability required")
+	if !audit.RequireCapabilityWithAudit(w, r, p, "subscriber_write", h.auditWriter) {
 		return
 	}
 

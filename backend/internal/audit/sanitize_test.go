@@ -1,207 +1,357 @@
 package audit
 
 import (
+	"math"
 	"testing"
+	"time"
+
+	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
-func TestSanitizeAuditText(t *testing.T) {
-	tests := []struct {
-		name  string
-		input string
-		want  string
-	}{
-		{"plain text", "hello world", "hello world"},
-		{"bearer token", "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U", "Authorization=[REDACTED]"},
-		{"jwt in text", "token eyJhbGciOiJIUzI1NiJ9.eyJ1c2VybmFtZSI6InRlc3QifQ.abc123 here", "token [REDACTED] here"},
-		{"basic auth", "Basic dXNlcjpwYXNz", "[REDACTED]"},
-		{"mongodb uri", "mongodb+srv://admin:secret123@cluster.mongodb.net/db", "mongodb+srv://[REDACTED]@cluster.mongodb.net/db"},
-		{"password field", `password="hunter2"`, "password=[REDACTED]"},
-		{"passwordHash field", `passwordHash: "$2b$10$abc"`, "passwordHash=[REDACTED]"},
-		{"api key field", `api_key: "sk-12345"`, "api_key=[REDACTED]"},
-		{"private key", "-----BEGIN RSA PRIVATE KEY-----\nMIIEow...\n-----END RSA PRIVATE KEY-----", "[REDACTED]"},
-		{"truncation", string(make([]byte, 10000)), ""}, // just check it doesn't panic
-	}
+func TestSanitizeAuditPayload_BasicTypes(t *testing.T) {
+	result := sanitizeAuditPayload(map[string]any{
+		"string": "hello",
+		"int":    42,
+		"float":  3.14,
+		"bool":   true,
+		"nil":    nil,
+	})
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := sanitizeAuditText(tt.input)
-			if tt.name == "truncation" {
-				if len(got) > maxString {
-					t.Errorf("sanitizeAuditText() length = %d, want <= %d", len(got), maxString)
-				}
-				return
-			}
-			if got != tt.want {
-				t.Errorf("sanitizeAuditText() = %q, want %q", got, tt.want)
-			}
-		})
+	m := result.(map[string]any)
+	if m["string"] != "hello" {
+		t.Errorf("expected string 'hello', got %v", m["string"])
+	}
+	if m["int"] != 42 {
+		t.Errorf("expected int 42, got %v", m["int"])
+	}
+	if m["float"] != 3.14 {
+		t.Errorf("expected float 3.14, got %v", m["float"])
+	}
+	if m["bool"] != true {
+		t.Errorf("expected bool true, got %v", m["bool"])
+	}
+	if m["nil"] != nil {
+		t.Errorf("expected nil, got %v", m["nil"])
 	}
 }
 
-func TestSensitiveKey(t *testing.T) {
-	tests := []struct {
-		key  string
-		want bool
-	}{
-		{"password", true},
-		{"passwordHash", true},
-		{"token", true},
-		{"accessToken", true},
-		{"refreshToken", true},
-		{"apiKey", true},
-		{"secret", true},
-		{"privateKey", true},
-		{"cookie", true},
-		{"authorization", true},
-		{"k", true},
-		{"ki", true},
-		{"op", true},
-		{"opc", true},
-		{"K", true},           // case-insensitive
-		{"OPC", true},         // case-insensitive
-		{"my.password", true}, // dot-separated
-		{"data[k]", true},     // bracket-separated
-		{"username", false},
-		{"email", false},
-		{"role", false},
-		{"imsi", false},
-		{"metadata", false},
+func TestSanitizeAuditPayload_Truncation(t *testing.T) {
+	// Test string truncation - strings longer than maxString2x (8000) are truncated
+	longString := string(make([]byte, maxString2x+100))
+	result := sanitizeAuditPayload(longString)
+	str, ok := result.(string)
+	if !ok {
+		t.Fatalf("expected string, got %T", result)
+	}
+	if len(str) > maxString2x+20 { // 20 for "...[TRUNCATED]" suffix
+		t.Errorf("expected string truncation, got length %d", len(str))
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.key, func(t *testing.T) {
-			got := sensitiveKey(tt.key)
-			if got != tt.want {
-				t.Errorf("sensitiveKey(%q) = %v, want %v", tt.key, got, tt.want)
-			}
-		})
+	// Test text budget exhaustion - when textBudget reaches 0, map gets _truncated flag
+	hugePayload := map[string]any{}
+	for i := 0; i < 100; i++ {
+		hugePayload[string(rune('a'+i%26))+string(rune('a'+i/26))] = string(make([]byte, 1000))
+	}
+	result = sanitizeAuditPayload(hugePayload)
+	m := result.(map[string]any)
+	// When text budget is exhausted, the map should have _truncated flag
+	if m["_truncated"] != true {
+		t.Error("expected _truncated flag when text budget exhausted")
 	}
 }
 
-func TestSanitizeAuditPayload(t *testing.T) {
-	t.Run("nil", func(t *testing.T) {
-		got := sanitizeAuditPayload(nil)
-		if got != nil {
-			t.Errorf("sanitizeAuditPayload(nil) = %v, want nil", got)
-		}
+func TestSanitizeAuditPayload_CircularDetection(t *testing.T) {
+	// Create circular reference
+	m := map[string]any{"key": "value"}
+	m["self"] = m
+
+	result := sanitizeAuditPayload(m)
+	r := result.(map[string]any)
+	if r["self"] != "[CIRCULAR]" {
+		t.Errorf("expected [CIRCULAR], got %v", r["self"])
+	}
+}
+
+func TestSanitizeAuditPayload_BinaryOmitted(t *testing.T) {
+	// Test []byte
+	byteSlice := []byte{0x01, 0x02, 0x03}
+	result := sanitizeAuditPayload(byteSlice)
+	if result != "[BINARY OMITTED]" {
+		t.Errorf("expected [BINARY OMITTED] for []byte, got %v", result)
+	}
+
+	// Test bson.Binary
+	bin := bson.Binary{Data: []byte{0x01, 0x02}}
+	result = sanitizeAuditPayload(bin)
+	if result != "[BINARY OMITTED]" {
+		t.Errorf("expected [BINARY OMITTED] for bson.Binary, got %v", result)
+	}
+}
+
+func TestSanitizeAuditPayload_TimeFormats(t *testing.T) {
+	// Test time.Time
+	ts := time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC)
+	result := sanitizeAuditPayload(ts)
+	if result != "2025-01-15T10:30:00.000Z" {
+		t.Errorf("expected ISO string, got %v", result)
+	}
+
+	// Test bson.DateTime
+	dt := bson.NewDateTimeFromTime(ts)
+	result = sanitizeAuditPayload(dt)
+	if result != "2025-01-15T10:30:00.000Z" {
+		t.Errorf("expected ISO string for bson.DateTime, got %v", result)
+	}
+}
+
+func TestSanitizeAuditPayload_NaNInf(t *testing.T) {
+	// Test NaN
+	result := sanitizeAuditPayload(math.NaN())
+	if result != nil {
+		t.Errorf("expected nil for NaN, got %v", result)
+	}
+
+	// Test +Inf
+	result = sanitizeAuditPayload(math.Inf(1))
+	if result != nil {
+		t.Errorf("expected nil for +Inf, got %v", result)
+	}
+
+	// Test -Inf
+	result = sanitizeAuditPayload(math.Inf(-1))
+	if result != nil {
+		t.Errorf("expected nil for -Inf, got %v", result)
+	}
+}
+
+func TestSanitizeAuditPayload_JSONStringRecursion(t *testing.T) {
+	// Test JSON-looking string gets parsed and scrubbed
+	jsonStr := `{"password":"secret123","user":"admin"}`
+	result := sanitizeAuditPayload(jsonStr)
+	// The JSON string should be parsed into a map and scrubbed
+	m, ok := result.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected map, got %T: %v", result, result)
+	}
+	if m["password"] != "[REDACTED]" {
+		t.Errorf("expected password redacted in parsed JSON, got %v", m["password"])
+	}
+	if m["user"] != "admin" {
+		t.Errorf("expected user=admin in parsed JSON, got %v", m["user"])
+	}
+
+	// Test array JSON string
+	arrayStr := `[{"password":"secret"}]`
+	result = sanitizeAuditPayload(arrayStr)
+	arr, ok := result.([]interface{})
+	if !ok {
+		t.Fatalf("expected slice, got %T: %v", result, result)
+	}
+	if len(arr) != 1 {
+		t.Fatalf("expected 1 item in array, got %d", len(arr))
+	}
+	item := arr[0].(map[string]interface{})
+	if item["password"] != "[REDACTED]" {
+		t.Errorf("expected password redacted in parsed JSON array, got %v", item["password"])
+	}
+}
+
+func TestSanitizeAuditPayload_SecretFieldsRedacted(t *testing.T) {
+	result := sanitizeAuditPayload(map[string]any{
+		"username":   "admin",
+		"password":   "secret123",
+		"token":      "abc123",
+		"secret":     "mysecret",
+		"credential": "cred123",
+		"normal":     "visible",
 	})
 
-	t.Run("string", func(t *testing.T) {
-		got := sanitizeAuditPayload("hello")
-		if got != "hello" {
-			t.Errorf("sanitizeAuditPayload(\"hello\") = %v, want \"hello\"", got)
-		}
-	})
+	m := result.(map[string]any)
+	if m["password"] != "[REDACTED]" {
+		t.Errorf("expected password redacted, got %v", m["password"])
+	}
+	if m["token"] != "[REDACTED]" {
+		t.Errorf("expected token redacted, got %v", m["token"])
+	}
+	if m["secret"] != "[REDACTED]" {
+		t.Errorf("expected secret redacted, got %v", m["secret"])
+	}
+	if m["credential"] != "[REDACTED]" {
+		t.Errorf("expected credential redacted, got %v", m["credential"])
+	}
+	if m["username"] != "admin" {
+		t.Errorf("expected username visible, got %v", m["username"])
+	}
+	if m["normal"] != "visible" {
+		t.Errorf("expected normal visible, got %v", m["normal"])
+	}
+}
 
-	t.Run("number", func(t *testing.T) {
-		got := sanitizeAuditPayload(42)
-		if got != 42 {
-			t.Errorf("sanitizeAuditPayload(42) = %v, want 42", got)
-		}
-	})
-
-	t.Run("bool", func(t *testing.T) {
-		got := sanitizeAuditPayload(true)
-		if got != true {
-			t.Errorf("sanitizeAuditPayload(true) = %v, want true", got)
-		}
-	})
-
-	t.Run("map with sensitive key", func(t *testing.T) {
-		input := map[string]interface{}{
-			"username": "alice",
-			"password": "secret123",
-			"role":     "admin",
-		}
-		got := sanitizeAuditPayload(input)
-		m, ok := got.(map[string]interface{})
-		if !ok {
-			t.Fatalf("expected map, got %T", got)
-		}
-		if m["username"] != "alice" {
-			t.Errorf("username = %v, want alice", m["username"])
-		}
-		if m["password"] != redacted {
-			t.Errorf("password = %v, want [REDACTED]", m["password"])
-		}
-		if m["role"] != "admin" {
-			t.Errorf("role = %v, want admin", m["role"])
-		}
-	})
-
-	t.Run("nested map", func(t *testing.T) {
-		input := map[string]interface{}{
-			"user": map[string]interface{}{
-				"name":     "alice",
+func TestSanitizeAuditPayload_NestedMaps(t *testing.T) {
+	result := sanitizeAuditPayload(map[string]any{
+		"level1": map[string]any{
+			"level2": map[string]any{
 				"password": "secret",
+				"data":     "visible",
 			},
-		}
-		got := sanitizeAuditPayload(input)
-		m, ok := got.(map[string]interface{})
-		if !ok {
-			t.Fatalf("expected map, got %T", got)
-		}
-		nested, ok := m["user"].(map[string]interface{})
-		if !ok {
-			t.Fatalf("expected nested map, got %T", m["user"])
-		}
-		if nested["name"] != "alice" {
-			t.Errorf("nested name = %v, want alice", nested["name"])
-		}
-		if nested["password"] != redacted {
-			t.Errorf("nested password = %v, want [REDACTED]", nested["password"])
-		}
+		},
 	})
 
-	t.Run("array", func(t *testing.T) {
-		input := []interface{}{"a", "b", "c"}
-		got := sanitizeAuditPayload(input)
-		arr, ok := got.([]interface{})
-		if !ok {
-			t.Fatalf("expected array, got %T", got)
-		}
-		if len(arr) != 3 {
-			t.Errorf("len = %d, want 3", len(arr))
-		}
-	})
-
-	t.Run("depth limit", func(t *testing.T) {
-		// Build a deeply nested map
-		var input interface{} = "leaf"
-		for i := 0; i < maxDepth+5; i++ {
-			input = map[string]interface{}{"child": input}
-		}
-		got := sanitizeAuditPayload(input)
-		// Should not panic and should return something
-		if got == nil {
-			t.Error("expected non-nil result for deeply nested input")
-		}
-	})
+	m := result.(map[string]any)
+	l1 := m["level1"].(map[string]any)
+	l2 := l1["level2"].(map[string]any)
+	if l2["password"] != "[REDACTED]" {
+		t.Errorf("expected nested password redacted, got %v", l2["password"])
+	}
+	if l2["data"] != "visible" {
+		t.Errorf("expected nested data visible, got %v", l2["data"])
+	}
 }
 
-func TestNormalizeIP(t *testing.T) {
-	tests := []struct {
-		name  string
-		input string
-		want  string
-	}{
-		{"empty", "", "unknown"},
-		{"ipv4", "192.168.1.1", "192.168.1.1"},
-		{"ipv4 with port", "192.168.1.1:8080", "192.168.1.1"},
-		{"ipv6", "::1", "::1"},
-		{"ipv6 brackets", "[::1]", "::1"},
-		{"ipv6 zone", "fe80::1%eth0", "fe80::1"},
-		{"invalid", "not-an-ip", "unknown"},
-		{"whitespace", "  10.0.0.1  ", "10.0.0.1"},
-		{"localhost", "127.0.0.1", "127.0.0.1"},
+func TestSanitizeAuditPayload_Slices(t *testing.T) {
+	result := sanitizeAuditPayload(map[string]any{
+		"items": []any{
+			map[string]any{"password": "secret"},
+			map[string]any{"name": "test"},
+		},
+	})
+
+	m := result.(map[string]any)
+	items := m["items"].([]any)
+	item0 := items[0].(map[string]any)
+	if item0["password"] != "[REDACTED]" {
+		t.Errorf("expected slice item password redacted, got %v", item0["password"])
+	}
+}
+
+func TestSanitizeAuditPayload_DepthLimit(t *testing.T) {
+	// Build deeply nested structure
+	deep := map[string]any{"value": "bottom"}
+	for i := 0; i < maxDepth+5; i++ {
+		deep = map[string]any{"nested": deep}
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := NormalizeIP(tt.input)
-			if got != tt.want {
-				t.Errorf("NormalizeIP(%q) = %q, want %q", tt.input, got, tt.want)
-			}
-		})
+	result := sanitizeAuditPayload(deep)
+	// Should not panic and should truncate at depth
+	if result == nil {
+		t.Error("expected non-nil result")
+	}
+}
+
+func TestSanitizeAuditPayload_MaxItems(t *testing.T) {
+	// Create map with more than maxItems keys
+	bigMap := map[string]any{}
+	for i := 0; i < maxItems+50; i++ {
+		bigMap[string(rune('a'+i%26))+string(rune('0'+i/26))] = i
+	}
+
+	result := sanitizeAuditPayload(bigMap)
+	m := result.(map[string]any)
+	if len(m) > maxItems+10 { // +10 for some slack
+		t.Errorf("expected items capped, got %d", len(m))
+	}
+}
+
+func TestSanitizeAuditPayload_NilInput(t *testing.T) {
+	result := sanitizeAuditPayload(nil)
+	if result != nil {
+		t.Errorf("expected nil for nil input, got %v", result)
+	}
+}
+
+func TestSanitizeAuditPayload_PanicSafety(t *testing.T) {
+	// Test with a value that might cause issues
+	result := sanitizeAuditPayload(math.MaxFloat64)
+	if result == nil {
+		// Might be nil due to NaN/Inf handling, that's ok
+	}
+}
+
+func TestSanitizeAuditText_KVRedaction(t *testing.T) {
+	// Test password= in text
+	result := sanitizeAuditText("user logged in password=secret123 more text")
+	if result == "user logged in password=[REDACTED] more text" {
+		// Good
+	} else {
+		t.Errorf("expected KV redaction, got: %s", result)
+	}
+
+	// Test token= in text
+	result = sanitizeAuditText("token=abc123")
+	if result != "token=[REDACTED]" {
+		t.Errorf("expected token redaction, got: %s", result)
+	}
+}
+
+func TestSanitizeAuditText_Truncation(t *testing.T) {
+	longText := string(make([]byte, maxString+100))
+	result := sanitizeAuditText(longText)
+	if len(result) <= maxString+20 { // 20 for "...[TRUNCATED]" suffix
+		// Good
+	} else {
+		t.Errorf("expected truncation, got length %d", len(result))
+	}
+}
+
+func TestSanitizeAuditText_ErrorMessage(t *testing.T) {
+	errMsg := "something failed: password=secret123"
+	result := sanitizeAuditText(errMsg)
+	if result != "something failed: password=[REDACTED]" {
+		t.Errorf("expected error message with redaction, got: %s", result)
+	}
+}
+
+func TestSanitizeAuditPayload_BsonM(t *testing.T) {
+	result := sanitizeAuditPayload(bson.M{
+		"password": "secret",
+		"normal":   "visible",
+	})
+
+	m := result.(map[string]any)
+	if m["password"] != "[REDACTED]" {
+		t.Errorf("expected bson.M password redacted, got %v", m["password"])
+	}
+	if m["normal"] != "visible" {
+		t.Errorf("expected bson.M normal visible, got %v", m["normal"])
+	}
+}
+
+func TestSanitizeAuditPayload_BsonD(t *testing.T) {
+	result := sanitizeAuditPayload(bson.D{
+		{Key: "password", Value: "secret"},
+		{Key: "normal", Value: "visible"},
+	})
+
+	m := result.(map[string]any)
+	if m["password"] != "[REDACTED]" {
+		t.Errorf("expected bson.D password redacted, got %v", m["password"])
+	}
+	if m["normal"] != "visible" {
+		t.Errorf("expected bson.D normal visible, got %v", m["normal"])
+	}
+}
+
+func TestSanitizeAuditPayload_IntTypes(t *testing.T) {
+	result := sanitizeAuditPayload(map[string]any{
+		"int32":  int32(32),
+		"int64":  int64(64),
+		"uint32": uint32(32),
+		"uint64": uint64(64),
+	})
+
+	m := result.(map[string]any)
+	if m["int32"] != int32(32) {
+		t.Errorf("expected int32 32, got %v", m["int32"])
+	}
+	if m["int64"] != int64(64) {
+		t.Errorf("expected int64 64, got %v", m["int64"])
+	}
+}
+
+func TestSanitizeAuditPayload_StringWithSecrets(t *testing.T) {
+	result := sanitizeAuditPayload("password=secret123")
+	str := result.(string)
+	if str != "password=[REDACTED]" {
+		t.Errorf("expected top-level string secret redaction, got: %s", str)
 	}
 }

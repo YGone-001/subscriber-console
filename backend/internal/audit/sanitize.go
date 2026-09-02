@@ -1,18 +1,30 @@
 package audit
 
 import (
+	"encoding/json"
+	"fmt"
+	"math"
+	"reflect"
 	"regexp"
 	"strings"
+	"time"
+
+	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 const (
-	redacted    = "[REDACTED]"
-	maxDepth    = 12
-	maxItems    = 200
-	maxNodes    = 3000
-	maxText     = 64000
-	maxString   = 4000
-	maxString2x = maxString * 2
+	redacted       = "[REDACTED]"
+	truncated      = "[TRUNCATED]"
+	circular       = "[CIRCULAR]"
+	binaryOmit     = "[BINARY OMITTED]"
+	unsupported    = "[UNSUPPORTED]"
+	unserializable = "[UNSERIALIZABLE]"
+	maxDepth       = 12
+	maxItems       = 200
+	maxNodes       = 3000
+	maxText        = 64000
+	maxString      = 4000
+	maxString2x    = maxString * 2
 )
 
 // secretKeys contains normalized (lowercase, alphanumeric-only) key names
@@ -23,6 +35,7 @@ var secretKeys = map[string]bool{
 	"idtoken": true, "jwt": true, "authorization": true, "proxyauthorization": true,
 	"secret": true, "privatekey": true, "apikey": true,
 	"cookie": true, "setcookie": true, "sessionid": true, "sessiontoken": true,
+	"credential": true, "credentials": true,
 	// Subscriber authentication material
 	"k": true, "ki": true, "op": true, "opc": true,
 	"kasme": true, "kamf": true, "xres": true, "ck": true, "ik": true,
@@ -92,29 +105,31 @@ func sanitizeAuditText(value string) string {
 // sanitizeAuditPayload produces a non-mutating, bounded JSON snapshot.
 // Matches Node sanitizeAuditPayload() semantics: depth limit, node limit,
 // text budget, sensitive key redaction, circular/truncation markers.
-func sanitizeAuditPayload(value interface{}) interface{} {
+func sanitizeAuditPayload(value interface{}) (result interface{}) {
+	// Panic-safe: any unexpected structure → [UNSERIALIZABLE]
+	defer func() {
+		if r := recover(); r != nil {
+			result = unserializable
+		}
+	}()
+
 	state := &sanitizeState{
 		textBudget: maxText,
 		ancestors:  make(map[uintptr]bool),
 	}
-	result := state.visit(value, 0)
-	if state.err {
-		return "[UNSERIALIZABLE]"
-	}
-	return result
+	return state.visit(value, 0)
 }
 
 type sanitizeState struct {
 	nodes      int
 	textBudget int
-	err        bool
-	ancestors  map[uintptr]bool
+	ancestors  map[uintptr]bool // path-scoped: add before descend, delete after return
 }
 
 func (s *sanitizeState) visit(current interface{}, depth int) interface{} {
 	s.nodes++
 	if s.nodes > maxNodes || s.textBudget <= 0 || depth > maxDepth {
-		return "[TRUNCATED]"
+		return truncated
 	}
 	if current == nil {
 		return nil
@@ -130,29 +145,83 @@ func (s *sanitizeState) visit(current interface{}, depth int) interface{} {
 	case int64:
 		return v
 	case float32:
-		return v
+		return sanitizeFloat64(float64(v))
 	case float64:
-		if v != v { // NaN
+		return sanitizeFloat64(v)
+	case string:
+		return s.visitString(v, depth)
+	case time.Time:
+		if v.IsZero() {
 			return nil
 		}
-		return v
-	case string:
-		safe := sanitizeAuditText(v)
-		if len(safe) > s.textBudget {
-			safe = safe[:s.textBudget]
+		return v.UTC().Format("2006-01-02T15:04:05.000Z")
+	case bson.DateTime:
+		if v == 0 {
+			return nil
 		}
-		s.textBudget -= len(safe)
-		return safe
+		return v.Time().UTC().Format("2006-01-02T15:04:05.000Z")
+	case []byte:
+		return binaryOmit
+	case bson.Binary:
+		return binaryOmit
+	case bson.M:
+		return s.visitMap(map[string]interface{}(v), depth)
+	case bson.D:
+		// Convert bson.D to map for uniform processing
+		m := make(map[string]interface{}, len(v))
+		for _, elem := range v {
+			m[elem.Key] = elem.Value
+		}
+		return s.visitMap(m, depth)
 	case map[string]interface{}:
 		return s.visitMap(v, depth)
 	case []interface{}:
 		return s.visitSlice(v, depth)
 	default:
-		return "[UNSUPPORTED]"
+		// Use reflection for pointer wrappers, struct types, etc.
+		return s.visitReflect(current, depth)
 	}
 }
 
+func (s *sanitizeState) visitString(v string, depth int) interface{} {
+	// JSON-looking strings: attempt recursive sanitization (Node behavior)
+	if len(v) > 0 && (v[0] == '{' || v[0] == '[') {
+		if len(v) > maxString {
+			return truncated
+		}
+		var parsed interface{}
+		if err := json.Unmarshal([]byte(v), &parsed); err == nil {
+			// Valid JSON — sanitize recursively
+			return s.visit(parsed, depth+1)
+		}
+		// Invalid JSON — treat as ordinary text below
+	}
+
+	safe := sanitizeAuditText(v)
+	if len(safe) > s.textBudget {
+		safe = safe[:s.textBudget]
+	}
+	s.textBudget -= len(safe)
+	return safe
+}
+
+// sanitizeFloat64 handles NaN, +Inf, -Inf → null (Node behavior).
+func sanitizeFloat64(v float64) interface{} {
+	if math.IsNaN(v) || math.IsInf(v, 0) {
+		return nil
+	}
+	return v
+}
+
 func (s *sanitizeState) visitMap(m map[string]interface{}, depth int) interface{} {
+	// Track this map for circular detection
+	ptr := mapPointer(m)
+	if s.ancestors[ptr] {
+		return circular
+	}
+	s.ancestors[ptr] = true
+	defer delete(s.ancestors, ptr)
+
 	result := make(map[string]interface{})
 	count := 0
 	for key, val := range m {
@@ -198,7 +267,73 @@ func (s *sanitizeState) visitSlice(arr []interface{}, depth int) interface{} {
 		}
 	}
 	if limit < len(arr) {
-		result = append(result, "[TRUNCATED]")
+		result = append(result, truncated)
 	}
 	return result
+}
+
+// visitReflect handles pointer wrappers and other Go types via reflection.
+func (s *sanitizeState) visitReflect(current interface{}, depth int) interface{} {
+	rv := reflect.ValueOf(current)
+	switch rv.Kind() {
+	case reflect.Ptr, reflect.Interface:
+		if rv.IsNil() {
+			return nil
+		}
+		return s.visit(rv.Elem().Interface(), depth+1)
+	case reflect.Map:
+		// Generic map[K]V — convert keys to string
+		result := make(map[string]interface{})
+		iter := rv.MapRange()
+		count := 0
+		for iter.Next() {
+			s.nodes++
+			if s.nodes > maxNodes || s.textBudget <= 0 || count >= maxItems {
+				break
+			}
+			key := fmt.Sprintf("%v", iter.Key().Interface())
+			safeKey := sanitizeAuditText(key)
+			if len(safeKey) > 200 {
+				safeKey = safeKey[:200]
+			}
+			s.textBudget -= len(safeKey)
+			if sensitiveKey(key) {
+				result[safeKey] = redacted
+			} else {
+				result[safeKey] = s.visit(iter.Value().Interface(), depth+1)
+			}
+			count++
+		}
+		if rv.Len() > maxItems || s.nodes > maxNodes || s.textBudget <= 0 {
+			result["_truncated"] = true
+		}
+		return result
+	case reflect.Slice, reflect.Array:
+		if rv.IsNil() {
+			return nil
+		}
+		result := make([]interface{}, 0, rv.Len())
+		limit := rv.Len()
+		if limit > maxItems {
+			limit = maxItems
+		}
+		for i := 0; i < limit; i++ {
+			result = append(result, s.visit(rv.Index(i).Interface(), depth+1))
+			if s.nodes > maxNodes || s.textBudget <= 0 {
+				break
+			}
+		}
+		if limit < rv.Len() {
+			result = append(result, truncated)
+		}
+		return result
+	default:
+		return unsupported
+	}
+}
+
+// mapPointer returns a stable pointer identity for a map.
+// Go maps don't have a stable address, so we use reflect.
+func mapPointer(m map[string]interface{}) uintptr {
+	return reflect.ValueOf(m).Pointer()
 }
