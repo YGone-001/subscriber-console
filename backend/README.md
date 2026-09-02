@@ -2,20 +2,13 @@
 
 This directory contains the Go backend for xCloud subscriber-console.
 
-## Phase 1 — Foundation
-
-- Config from environment variables
-- MongoDB client with dual-database support (xcloud + xcloud_ops)
-- Health endpoints: `/healthz` (liveness), `/readyz` (readiness with Mongo ping)
-- Middleware: RequestID, Recovery, AccessLog, Security
-- JSON response helpers matching existing error shape `{"error":"...","code":"..."}`
-- Graceful shutdown on SIGINT/SIGTERM
-- Structured logging via `log/slog`
-
 ## Quick Start
 
 ```bash
-# Set environment variables
+# Required
+export JWT_SECRET="your-jwt-secret-at-least-32-bytes"
+
+# Optional — defaults shown
 export MONGODB_URI="mongodb://127.0.0.1:27017"
 export MONGODB_XCLOUD_DB="xcloud"
 export MONGODB_APP_DB="xcloud_ops"
@@ -42,13 +35,87 @@ go build -o server ./cmd/server
 | `MONGODB_URI` | `mongodb://127.0.0.1:27017` | MongoDB connection URI |
 | `MONGODB_XCLOUD_DB` | `xcloud` | HSS/OCS database name |
 | `MONGODB_APP_DB` | `xcloud_ops` | Operations database name |
+| `JWT_SECRET` | — (required) | JWT signing secret, ≥32 bytes |
 
 ## Endpoints
 
-| Endpoint | Description |
-|----------|-------------|
-| `GET /healthz` | Liveness probe (no dependencies) |
-| `GET /readyz` | Readiness probe (pings MongoDB) |
+### Health (no auth)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/healthz` | Liveness probe |
+| GET | `/readyz` | Readiness probe (pings MongoDB) |
+
+### Audit
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/audit` | List audit logs |
+| GET | `/api/audit/{id}` | Get audit log detail |
+
+### Analytics
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/analytics/metrics` | Dashboard metrics |
+| GET | `/api/analytics/sparkline` | Sparkline data |
+
+### Ratings
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/ratings` | List rating policies |
+| GET | `/api/ratings/{id}` | Get rating policy detail |
+
+### Profiles
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/profiles` | List profiles |
+| GET | `/api/profiles/{name}` | Get profile detail |
+| GET | `/api/profiles/{name}/stats` | Profile statistics |
+| GET | `/api/profiles/{name}/versions` | Profile versions |
+
+### OCS
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/ocs/balances` | OCS balances |
+| GET | `/api/ocs/sessions` | OCS sessions |
+| GET | `/api/ocs/usage` | OCS usage records |
+| GET | `/api/ocs/reservations` | OCS reservations |
+
+### Tariff Plans
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/tariff-plans` | List tariff plans |
+| GET | `/api/tariff-plans/{planId}` | Get tariff plan detail |
+| GET | `/api/tariff-plans/{planId}/export` | Export tariff plan |
+| GET | `/api/tariff-plans/{planId}/operations` | Plan operations |
+| GET | `/api/tariff-plans/{planId}/rules` | Plan rules |
+| GET | `/api/tariff-plans/{planId}/subscribers` | Plan subscribers |
+| GET | `/api/tariff-plans/{planId}/migrate` | Migration preview |
+
+### Subscribers
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/subscribers` | List subscribers |
+| GET | `/api/subscribers/{imsi}` | Get subscriber detail |
+| GET | `/api/search` | Search subscribers |
+| POST | `/api/subscribers/batch/precheck` | Batch precheck |
+
+### Auth / Users
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/auth/me` | Current user info |
+| GET | `/api/auth/permissions` | Current user permissions |
+| GET | `/api/auth/users` | List users (legacy format) |
+| GET | `/api/auth/users/{username}` | Get user detail |
+| GET | `/api/users` | List users (query format) |
+| GET | `/api/users/{username}` | Get user detail |
 
 ## Module Path
 

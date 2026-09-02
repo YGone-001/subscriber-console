@@ -8,6 +8,7 @@ Install:
 
 - Node.js 20.9 or later
 - npm
+- Go 1.24 or later
 - MongoDB, preferably the same database used by a local xCloud setup
 
 Install dependencies:
@@ -26,6 +27,8 @@ Update `.env` with local values. Never commit `.env`.
 
 ## Local startup
 
+### Single process (legacy)
+
 Start MongoDB, initialize indexes, then run:
 
 ```bash
@@ -34,6 +37,64 @@ npm run dev
 ```
 
 Open `http://localhost:3000`.
+
+### Dual process (frontend + backend)
+
+Frontend and backend can run independently. This is the recommended setup for
+backend migration development and testing.
+
+**Terminal 1 — Go backend** (`:8080`):
+
+```bash
+# Required
+export JWT_SECRET="your-jwt-secret-at-least-32-bytes"
+
+# Optional — defaults shown
+export MONGODB_URI="mongodb://127.0.0.1:27017"
+export MONGODB_XCLOUD_DB="xcloud"
+export MONGODB_APP_DB="xcloud_ops"
+export HTTP_ADDR=":8080"
+
+cd backend
+go run ./cmd/server
+```
+
+The Go backend serves:
+- Health checks: `GET /healthz`, `GET /readyz`
+- Migrated read APIs (31 routes): audit, analytics, ratings, profiles, OCS, tariff, subscribers, auth/user
+- Authorization denial audit evidence (writes to `app_audit_logs`)
+
+**Terminal 2 — Next.js frontend** (`:3000`):
+
+```bash
+npm run dev
+```
+
+The Next.js server serves:
+- UI (all pages)
+- Unmigrated APIs (login, logout, writes, export, etc.)
+- Remaining API routes not yet owned by Go
+
+**Access:**
+
+| URL | What |
+|-----|------|
+| `http://localhost:3000` | Full UI + all APIs (single-process mode) |
+| `http://localhost:8080/healthz` | Go backend liveness check |
+| `http://localhost:8080/api/audit` | Go backend direct access (requires auth cookie) |
+
+In dual-process mode, the frontend at `:3000` still serves all APIs. The Go
+backend at `:8080` handles migrated reads independently. Nginx is only needed
+for production routing — not for local development.
+
+**Environment variables shared by both processes:**
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `MONGODB_URI` | MongoDB connection URI | `mongodb://127.0.0.1:27017` |
+| `MONGODB_DB` / `MONGODB_XCLOUD_DB` | xCloud data database | `xcloud` |
+| `MONGODB_APP_DB` | Operations database | `xcloud_ops` |
+| `JWT_SECRET` | JWT signing secret (≥32 bytes) | — (required) |
 
 ## Code standards
 
