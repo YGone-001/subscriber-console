@@ -7,17 +7,22 @@ import (
 )
 
 // toSafeUser converts a raw userDoc to SafeUser, stripping passwordHash.
+// Matches Node stripPassword() exactly.
 func toSafeUser(doc userDoc) SafeUser {
+	locked := false
+	if doc.Locked != nil {
+		locked = *doc.Locked
+	}
 	u := SafeUser{
 		Username:    doc.Username,
 		DisplayName: doc.DisplayName,
 		Email:       doc.Email,
 		Role:        doc.Role,
 		Status:      doc.Status,
-		CreatedAt:   toString(doc.CreatedAt),
+		CreatedAt:   toStringP(doc.CreatedAt),
 		CreatedBy:   doc.CreatedBy,
-		UpdatedAt:   toString(doc.UpdatedAt),
-		Locked:      doc.Locked,
+		UpdatedAt:   toStringP(doc.UpdatedAt),
+		Locked:      locked,
 	}
 	if sec := parseSecurity(doc.Security); sec != nil {
 		u.Security = sec
@@ -50,6 +55,8 @@ func parseSecurity(v interface{}) *UserSecurity {
 		PasswordChangedAt:   toString(sec["passwordChangedAt"]),
 		LastLoginAt:         toString(sec["lastLoginAt"]),
 		LastLoginIP:         stringField(sec["lastLoginIp"]),
+		LockedAt:            toString(sec["lockedAt"]),
+		LockReason:          stringField(sec["lockReason"]),
 	}
 }
 
@@ -78,6 +85,7 @@ func stringField(v interface{}) string {
 }
 
 // toAuditLog converts a raw auditLogDoc to AuditLog.
+// Uses the `id` field (not _id) to match Node contract.
 func toAuditLog(doc auditLogDoc) AuditLog {
 	id := ""
 	if doc.ID != nil {

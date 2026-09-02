@@ -39,6 +39,9 @@ func (r *Repository) FindAll(ctx context.Context) ([]SafeUser, error) {
 		}
 		results = append(results, toSafeUser(doc))
 	}
+	if results == nil {
+		results = []SafeUser{}
+	}
 	return results, nil
 }
 
@@ -70,28 +73,40 @@ type QueryResult struct {
 }
 
 // QueryUsers runs a paginated, filtered query against app_users.
+// Matches Node queryUsers() contract exactly.
 func (r *Repository) QueryUsers(ctx context.Context, q UserQuery) (*QueryResult, error) {
 	filter := buildUserFilter(q)
 
-	total, err := r.users.CountDocuments(ctx, filter)
+	// Count filtered results for pagination
+	filteredTotal, err := r.users.CountDocuments(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
 
-	sortDir := 1
-	if q.Order == "desc" {
-		sortDir = -1
-	}
+	// Pagination: totalPages = max(1, ceil(total/pageSize)), page = min(requested, totalPages)
+	totalPages := int(math.Max(1, math.Ceil(float64(filteredTotal)/float64(q.PageSize))))
+	page := int(math.Min(float64(q.Page), float64(totalPages)))
+
+	// Sort field mapping
 	sortField := q.Sort
 	if sortField == "lastLoginAt" {
 		sortField = "security.lastLoginAt"
 	}
+	sortDir := -1
+	if q.Order == "asc" {
+		sortDir = 1
+	}
 
-	skip := int64((q.Page - 1) * q.PageSize)
+	skip := int64((page - 1) * q.PageSize)
 	limit := int64(q.PageSize)
 
+	// Find with projection (exclude passwordHash) and stable sort (field + _id tiebreaker)
 	cursor, err := r.users.Find(ctx, filter, options.Find().
-		SetSort(bson.D{{Key: sortField, Value: sortDir}}).
+		SetProjection(bson.M{"passwordHash": 0}).
+		SetSort(bson.D{
+			{Key: sortField, Value: sortDir},
+			{Key: "_id", Value: 1},
+		}).
 		SetSkip(skip).
 		SetLimit(limit))
 	if err != nil {
@@ -107,37 +122,50 @@ func (r *Repository) QueryUsers(ctx context.Context, q UserQuery) (*QueryResult,
 		}
 		items = append(items, toSafeUser(doc))
 	}
+	if items == nil {
+		items = []SafeUser{}
+	}
 
-	// Stats
-	stats, err := r.computeStats(ctx)
+	// Global stats (not filtered)
+	stats, err := r.computeGlobalStats(ctx)
 	if err != nil {
 		return nil, err
 	}
-	stats.Total = int(total)
-
-	totalPages := int(math.Ceil(float64(total) / float64(q.PageSize)))
 
 	return &QueryResult{
 		Items: items,
 		Pagination: Pagination{
-			Page:       q.Page,
+			Page:       page,
 			PageSize:   q.PageSize,
-			Total:      int(total),
+			Total:      int(filteredTotal),
 			TotalPages: totalPages,
 		},
 		Stats: *stats,
 	}, nil
 }
 
-func (r *Repository) computeStats(ctx context.Context) (*UserStats, error) {
+// computeGlobalStats returns global user counts matching Node exactly.
+func (r *Repository) computeGlobalStats(ctx context.Context) (*UserStats, error) {
 	stats := &UserStats{}
 
-	active, err := r.users.CountDocuments(ctx, bson.M{"status": "active"})
+	// total = COUNT(all users)
+	total, err := r.users.CountDocuments(ctx, bson.M{})
+	if err != nil {
+		return nil, err
+	}
+	stats.Total = int(total)
+
+	// active = status=active AND locked != true
+	active, err := r.users.CountDocuments(ctx, bson.M{
+		"status": "active",
+		"locked": bson.M{"$ne": true},
+	})
 	if err != nil {
 		return nil, err
 	}
 	stats.Active = int(active)
 
+	// administrators = role IN [root, super_admin, ops_admin]
 	adminRoles := bson.A{"root", "super_admin", "ops_admin"}
 	admins, err := r.users.CountDocuments(ctx, bson.M{"role": bson.M{"$in": adminRoles}})
 	if err != nil {
@@ -145,7 +173,13 @@ func (r *Repository) computeStats(ctx context.Context) (*UserStats, error) {
 	}
 	stats.Administrators = int(admins)
 
-	locked, err := r.users.CountDocuments(ctx, bson.M{"locked": true})
+	// locked = status=locked OR locked=true
+	locked, err := r.users.CountDocuments(ctx, bson.M{
+		"$or": bson.A{
+			bson.M{"status": "locked"},
+			bson.M{"locked": true},
+		},
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -154,12 +188,20 @@ func (r *Repository) computeStats(ctx context.Context) (*UserStats, error) {
 	return stats, nil
 }
 
-// ListAuditLogsForUser returns recent audit logs for a user (as actor or target).
+// ListAuditLogsForUser returns recent audit logs for a user.
+// Matches Node listAuditLogsForUser() filter exactly:
+// - actor == username
+// - actorContext.username == username
+// - resource.type == "user" AND resource.id == username
+// - targetId == "SYS_USER:" + username
 func (r *Repository) ListAuditLogsForUser(ctx context.Context, username string) ([]AuditLog, error) {
+	sysUserTarget := "SYS_USER:" + username
 	filter := bson.M{
 		"$or": bson.A{
 			bson.M{"actor": username},
-			bson.M{"resource.id": username},
+			bson.M{"actorContext.username": username},
+			bson.M{"resource.type": "user", "resource.id": username},
+			bson.M{"targetId": sysUserTarget},
 		},
 	}
 	cursor, err := r.audit.Find(ctx, filter, options.Find().
@@ -178,6 +220,9 @@ func (r *Repository) ListAuditLogsForUser(ctx context.Context, username string) 
 		}
 		results = append(results, toAuditLog(doc))
 	}
+	if results == nil {
+		results = []AuditLog{}
+	}
 	return results, nil
 }
 
@@ -192,26 +237,44 @@ type UserQuery struct {
 	Order    string
 }
 
+// buildUserFilter constructs a MongoDB filter from the query.
+// Matches Node queryUsers() filter logic exactly.
 func buildUserFilter(q UserQuery) bson.M {
 	filter := bson.M{}
 
+	// Role filter: root and super_admin both expand to $in
 	if q.Role != "" {
-		if q.Role == "super_admin" {
+		if q.Role == "root" || q.Role == "super_admin" {
 			filter["role"] = bson.M{"$in": bson.A{"root", "super_admin"}}
 		} else {
 			filter["role"] = q.Role
 		}
 	}
 
+	// Status filter: locked is special (status=locked OR locked=true)
 	if q.Status != "" {
-		filter["status"] = q.Status
+		if q.Status == "locked" {
+			filter["$or"] = bson.A{
+				bson.M{"status": "locked"},
+				bson.M{"locked": true},
+			}
+		} else {
+			// active or disabled: status matches AND not locked
+			filter["status"] = q.Status
+			filter["locked"] = bson.M{"$ne": true}
+		}
 	}
 
+	// Search filter: escaped regex on username and displayName only
 	if q.Search != "" {
-		filter["$or"] = bson.A{
-			bson.M{"username": bson.M{"$regex": q.Search, "$options": "i"}},
-			bson.M{"displayName": bson.M{"$regex": q.Search, "$options": "i"}},
-			bson.M{"email": bson.M{"$regex": q.Search, "$options": "i"}},
+		escaped := escapeUserSearch(q.Search)
+		filter["$and"] = bson.A{
+			bson.M{
+				"$or": bson.A{
+					bson.M{"username": bson.M{"$regex": escaped, "$options": "i"}},
+					bson.M{"displayName": bson.M{"$regex": escaped, "$options": "i"}},
+				},
+			},
 		}
 	}
 

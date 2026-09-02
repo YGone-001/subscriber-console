@@ -495,10 +495,10 @@ Phase 2 provides:
 
 | Category | Count | Routes |
 |----------|-------|--------|
-| requireAuth only | 24 | analytics/*, ratings GET, profiles/*, ocs/*, tariff-plans/* GET, subscribers GET/Detail, search, auth/me, auth/permissions |
+| requireAuth only | 22 | analytics/*, ratings GET, profiles/*, ocs/*, tariff-plans/* GET, subscribers GET/Detail, search, auth/me, auth/permissions |
 | requireCapability | 3 | audit list/detail (audit_view), batch/precheck (subscriber_write) |
-| requirePermission | 4 | audit list/detail (audit.read), users list/detail (users.read) |
-| authorization.denied audit required | 3 | audit list, audit detail, batch/precheck |
+| requirePermission | 6 | audit list/detail (audit.read), users list/detail (users.read) ×4 |
+| authorization.denied audit required | 7 | audit list, audit detail, batch/precheck, users list/detail ×4 |
 | Go security audit writer | NO | Not implemented (Phase 2 restriction) |
 
 **Node denial path:** `requireCapability` and `requirePermission` both call `recordPermissionDenied` → `scheduleAuditLog({module: 'security', action: 'authorization.denied', ...})`.
@@ -538,17 +538,18 @@ Phase 2 provides:
 | POST /api/subscribers/batch/precheck | YES | PASS | NO | NO | SECURITY_AUDIT_PARITY |
 | GET /api/auth/me | YES | PASS | YES | NO | — |
 | GET /api/auth/permissions | YES | PASS | YES | NO | — |
-| GET /api/auth/users | YES | PASS | YES | NO | — |
-| GET /api/auth/users/:username | YES | PASS | YES | NO | — |
-| GET /api/users | YES | PASS | YES | NO | — |
-| GET /api/users/:username | YES | PASS | YES | NO | — |
+| GET /api/auth/users | YES | PASS | NO | NO | SECURITY_AUDIT_PARITY |
+| GET /api/auth/users/:username | YES | PASS | NO | NO | SECURITY_AUDIT_PARITY |
+| GET /api/users | YES | PASS | NO | NO | SECURITY_AUDIT_PARITY |
+| GET /api/users/:username | YES | PASS | NO | NO | SECURITY_AUDIT_PARITY |
 
 **Summary:**
 - IMPLEMENTED: 31
 - RESPONSE_PARITY_PASS: 31
-- CUTOVER_READY: 29
-- CUTOVER_BLOCKED: 3 (audit list, audit detail, batch/precheck — missing authorization.denied audit)
+- CUTOVER_READY: 24
+- CUTOVER_BLOCKED: 7 (audit list/detail, batch/precheck, users list/detail ×4 — missing authorization.denied audit)
 - ACTUALLY_ROUTED: 0 (Nginx not modified)
+- INVARIANT: ready (24) + blocked (7) = implemented (31) ✅
 
 ### 16.3 Future Security Audit Contract
 

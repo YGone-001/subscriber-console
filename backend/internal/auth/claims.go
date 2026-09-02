@@ -112,6 +112,19 @@ func rolePermissions(role string) []string {
 func capabilityDecision(role, capability string) string {
 	// Legacy capabilities matrix (matching Node LEGACY_CAPABILITIES)
 	matrix := map[string]map[string]string{
+		"root": {
+			"subscriber_write": "allow",
+			"policy_approve":   "allow",
+			"balance_adjust":   "allow",
+			"profile_rollback": "allow",
+			"rating_publish":   "allow",
+			"approval_review":  "allow",
+			"approval_execute": "allow",
+			"audit_view":       "allow",
+			"audit_export":     "export",
+			"system_heal":      "allow",
+			"user_admin":       "allow",
+		},
 		"super_admin": {
 			"subscriber_write": "allow",
 			"policy_approve":   "allow",
@@ -191,6 +204,12 @@ func capabilityDecision(role, capability string) string {
 // Returns nil for unknown roles.
 func CapabilitiesFor(role string) map[string]string {
 	matrix := map[string]map[string]string{
+		"root": {
+			"subscriber_write": "allow", "policy_approve": "allow", "balance_adjust": "allow",
+			"profile_rollback": "allow", "rating_publish": "allow", "approval_review": "allow",
+			"approval_execute": "allow", "audit_view": "allow", "audit_export": "export",
+			"system_heal": "allow", "user_admin": "allow",
+		},
 		"super_admin": {
 			"subscriber_write": "allow", "policy_approve": "allow", "balance_adjust": "allow",
 			"profile_rollback": "allow", "rating_publish": "allow", "approval_review": "allow",

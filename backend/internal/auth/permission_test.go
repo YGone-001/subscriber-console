@@ -196,6 +196,15 @@ func TestCapabilitiesFor(t *testing.T) {
 		wantCaps map[string]string
 	}{
 		{
+			role: "root",
+			wantCaps: map[string]string{
+				"subscriber_write": "allow", "policy_approve": "allow", "balance_adjust": "allow",
+				"profile_rollback": "allow", "rating_publish": "allow", "approval_review": "allow",
+				"approval_execute": "allow", "audit_view": "allow", "audit_export": "export",
+				"system_heal": "allow", "user_admin": "allow",
+			},
+		},
+		{
 			role: "super_admin",
 			wantCaps: map[string]string{
 				"subscriber_write": "allow", "policy_approve": "allow", "balance_adjust": "allow",
@@ -275,7 +284,7 @@ func TestCapabilitiesFor(t *testing.T) {
 
 // TestCapabilitiesForConsistency verifies CapabilitiesFor matches capabilityDecision for each key.
 func TestCapabilitiesForConsistency(t *testing.T) {
-	roles := []string{"super_admin", "ops_admin", "operator", "auditor", "viewer"}
+	roles := []string{"root", "super_admin", "ops_admin", "operator", "auditor", "viewer"}
 	capKeys := []string{
 		"subscriber_write", "policy_approve", "balance_adjust",
 		"profile_rollback", "rating_publish", "approval_review",

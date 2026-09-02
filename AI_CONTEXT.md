@@ -301,9 +301,10 @@ Status:
 ```text
 Implemented = 31
 Response Parity = 31
-Cutover Ready = 29
-Cutover Blocked = 3 (audit/*, batch/precheck — missing authorization.denied audit)
+Cutover Ready = 24
+Cutover Blocked = 7 (audit/*, batch/precheck, users.* — missing authorization.denied audit)
 Actually Routed = 0 (Nginx not modified)
+ready + blocked = implemented ✅
 ```
 
 Production `/api/*` still routes to Next.js.
@@ -805,12 +806,19 @@ Phase 2D complete. Phase 3 may start next.
 
 Phase 2D provides:
 - auth/me with permission and role normalization
-- auth/permissions with full capability map (CapabilitiesFor)
-- User list with two modes: no-query (legacy) and query (paginated, filterable)
+- auth/permissions with full capability map (CapabilitiesFor, supports raw `root` role)
+- User list with two modes: legacy (/api/auth/users no query) and query (strict parser)
 - User detail with activity, actions, assignable roles
 - User management policy (read-only): assignableRoles, userManagementActions
+- Strict query parser: rejects unknown keys, duplicates, invalid values (400 INVALID_QUERY)
+- Regex escape for search input
+- Status filters: locked = status=locked OR locked=true; active/disabled = status + locked!=true
+- Pagination: totalPages=max(1,ceil), page clamp, stable _id tiebreaker sort
+- Stats: global total (not filtered), active excludes locked, locked includes status=locked
+- Empty arrays preserved as [] (not null)
 - Sensitive field guard: passwordHash, _id, security secrets never returned
 - Mongo write guard: user package is read-only
+- CapabilitiesFor supports raw `root` role for auth/permissions endpoint
 
 Phase 3:
 - Governance
@@ -819,10 +827,11 @@ Phase 3:
 - write execution chain
 
 Security audit blocker:
-- 3 routes (audit list, audit detail, batch/precheck) require authorization.denied audit before cutover
+- 7 routes require authorization.denied audit before cutover
+- 3 original: audit list, audit detail, batch/precheck
+- 4 new: users list/detail ×2 (requirePermission users.read denial path)
 - Go security audit writer not yet implemented
-- Does NOT block Phase 2D (reads only)
-- Blocks production cutover of those 3 routes
+- Blocks production cutover of those 7 routes
 
 ---
 

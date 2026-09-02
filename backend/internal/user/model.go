@@ -3,26 +3,30 @@ package user
 import "time"
 
 // SafeUser is the user document without sensitive fields.
+// Fields match Node stripPassword() exactly.
 type SafeUser struct {
 	Username    string        `json:"username"`
-	DisplayName string        `json:"displayName,omitempty"`
-	Email       string        `json:"email,omitempty"`
+	DisplayName *string       `json:"displayName,omitempty"`
+	Email       *string       `json:"email,omitempty"`
 	Role        string        `json:"role"`
 	Status      string        `json:"status"`
-	CreatedAt   string        `json:"createdAt,omitempty"`
-	CreatedBy   string        `json:"createdBy,omitempty"`
-	UpdatedAt   string        `json:"updatedAt,omitempty"`
-	Locked      bool          `json:"locked,omitempty"`
+	CreatedAt   *string       `json:"createdAt,omitempty"`
+	CreatedBy   *string       `json:"createdBy,omitempty"`
+	UpdatedAt   *string       `json:"updatedAt,omitempty"`
+	Locked      bool          `json:"locked"`
 	Security    *UserSecurity `json:"security,omitempty"`
 }
 
 // UserSecurity contains non-sensitive security metadata.
+// Matches Node SysUser.security fields.
 type UserSecurity struct {
-	SessionVersion      int    `json:"sessionVersion,omitempty"`
-	FailedLoginAttempts int    `json:"failedLoginAttempts,omitempty"`
+	SessionVersion      int    `json:"sessionVersion"`
+	FailedLoginAttempts int    `json:"failedLoginAttempts"`
 	PasswordChangedAt   string `json:"passwordChangedAt,omitempty"`
 	LastLoginAt         string `json:"lastLoginAt,omitempty"`
 	LastLoginIP         string `json:"lastLoginIp,omitempty"`
+	LockedAt            string `json:"lockedAt,omitempty"`
+	LockReason          string `json:"lockReason,omitempty"`
 }
 
 // AuthMeResponse is the GET /api/auth/me response.
@@ -32,7 +36,7 @@ type AuthMeResponse struct {
 	DatabaseRole   string   `json:"databaseRole"`
 	NormalizedRole string   `json:"normalizedRole"`
 	Permissions    []string `json:"permissions"`
-	CreatedAt      string   `json:"createdAt,omitempty"`
+	CreatedAt      *string  `json:"createdAt,omitempty"`
 	Status         string   `json:"status"`
 }
 
@@ -47,13 +51,18 @@ type AuthPermissionsResponse struct {
 	Permissions    []string          `json:"permissions"`
 }
 
-// UserListResponse is the user list response.
+// UserListResponse is the user list response (query mode).
 type UserListResponse struct {
-	Users           []SafeUser  `json:"users,omitempty"`
-	Items           []SafeUser  `json:"items,omitempty"`
-	Pagination      *Pagination `json:"pagination,omitempty"`
-	Stats           *UserStats  `json:"stats,omitempty"`
+	Items           []SafeUser  `json:"items"`
+	Pagination      *Pagination `json:"pagination"`
+	Stats           *UserStats  `json:"stats"`
 	AssignableRoles []string    `json:"assignableRoles"`
+}
+
+// UserLegacyListResponse is the legacy no-query response for /api/auth/users.
+type UserLegacyListResponse struct {
+	Users           []SafeUser `json:"users"`
+	AssignableRoles []string   `json:"assignableRoles"`
 }
 
 // Pagination contains pagination metadata.
@@ -65,6 +74,7 @@ type Pagination struct {
 }
 
 // UserStats contains aggregate user statistics.
+// total = ALL users (global), not filtered.
 type UserStats struct {
 	Total          int `json:"total"`
 	Active         int `json:"active"`
@@ -95,21 +105,21 @@ type AuditLog struct {
 // userDoc is the raw MongoDB document from app_users.
 type userDoc struct {
 	Username     string      `bson:"username"`
-	DisplayName  string      `bson:"displayName,omitempty"`
-	Email        string      `bson:"email,omitempty"`
+	DisplayName  *string     `bson:"displayName,omitempty"`
+	Email        *string     `bson:"email,omitempty"`
 	Role         string      `bson:"role"`
 	Status       string      `bson:"status"`
 	CreatedAt    interface{} `bson:"createdAt,omitempty"`
-	CreatedBy    string      `bson:"createdBy,omitempty"`
+	CreatedBy    *string     `bson:"createdBy,omitempty"`
 	UpdatedAt    interface{} `bson:"updatedAt,omitempty"`
-	Locked       bool        `bson:"locked,omitempty"`
+	Locked       *bool       `bson:"locked,omitempty"`
 	PasswordHash string      `bson:"passwordHash"`
 	Security     interface{} `bson:"security,omitempty"`
 }
 
 // auditLogDoc is the raw MongoDB document from app_audit_logs.
 type auditLogDoc struct {
-	ID        interface{} `bson:"_id"`
+	ID        interface{} `bson:"id"`
 	Timestamp interface{} `bson:"timestamp"`
 	Action    string      `bson:"action"`
 	Result    string      `bson:"result"`
@@ -133,7 +143,26 @@ func toTime(v interface{}) time.Time {
 	}
 }
 
-// toString converts various timestamp formats to string.
+// toStringP converts various timestamp formats to *string.
+func toStringP(v interface{}) *string {
+	if v == nil {
+		return nil
+	}
+	switch t := v.(type) {
+	case time.Time:
+		s := t.UTC().Format("2006-01-02T15:04:05.000Z")
+		return &s
+	case string:
+		if t == "" {
+			return nil
+		}
+		return &t
+	default:
+		return nil
+	}
+}
+
+// toString converts various formats to string (for non-pointer fields).
 func toString(v interface{}) string {
 	if v == nil {
 		return ""
@@ -162,4 +191,9 @@ func actorToString(v interface{}) string {
 		}
 	}
 	return ""
+}
+
+// ptrBool returns a pointer to the given bool.
+func ptrBool(b bool) *bool {
+	return &b
 }
