@@ -91,14 +91,20 @@ type pendingRecord struct {
 // It enqueues pre-sanitized records into a fixed-size channel and processes them
 // with a small pool of workers. Supports BestEffort (silent drop)
 // and Strict (typed error on failure) write modes.
+//
+// Lifecycle context: lifecycleCancel terminates all in-flight BestEffort Mongo
+// operations when Close deadline expires, guaranteeing workers no longer use
+// the store after Close returns.
 type Writer struct {
-	store     EvidenceStore
-	queue     chan pendingRecord
-	logger    *slog.Logger
-	wg        sync.WaitGroup
-	mu        sync.RWMutex
-	state     WriterState
-	closeOnce sync.Once
+	store           EvidenceStore
+	queue           chan pendingRecord
+	logger          *slog.Logger
+	wg              sync.WaitGroup
+	mu              sync.RWMutex
+	state           WriterState
+	closeOnce       sync.Once
+	lifecycleCtx    context.Context
+	lifecycleCancel context.CancelFunc
 }
 
 // WriterConfig configures the audit writer.
@@ -125,17 +131,21 @@ func NewWriter(store EvidenceStore, cfg WriterConfig) *Writer {
 		cfg.WriterCtx = context.Background()
 	}
 
+	lifecycleCtx, lifecycleCancel := context.WithCancel(cfg.WriterCtx)
+
 	w := &Writer{
-		store:  store,
-		queue:  make(chan pendingRecord, cfg.QueueSize),
-		logger: cfg.Logger,
-		state:  StateOpen,
+		store:           store,
+		queue:           make(chan pendingRecord, cfg.QueueSize),
+		logger:          cfg.Logger,
+		state:           StateOpen,
+		lifecycleCtx:    lifecycleCtx,
+		lifecycleCancel: lifecycleCancel,
 	}
 
 	// Start workers
 	w.wg.Add(cfg.WorkerCount)
 	for i := 0; i < cfg.WorkerCount; i++ {
-		go w.worker(i, cfg.WriterCtx)
+		go w.worker(i)
 	}
 	return w
 }
@@ -165,6 +175,7 @@ func (w *Writer) WriteBestEffort(input WriteAuditInput) {
 	p := pendingRecord{
 		record: record,
 		mode:   BestEffort,
+		ctx:    w.lifecycleCtx,
 	}
 
 	// Non-blocking enqueue under read lock
@@ -245,8 +256,10 @@ func (w *Writer) WriteStrict(ctx context.Context, input WriteAuditInput) error {
 
 // Close signals all workers to stop and waits for the queue to drain.
 // Safe to call multiple times and concurrently.
-// If ctx expires before workers finish, returns ctx.Err()
-// but workers continue until they complete.
+//
+// If ctx expires before workers finish, lifecycleCancel is invoked to abort
+// in-flight BestEffort Mongo operations so workers can exit promptly.
+// After Close returns, no Writer goroutine is using the store.
 func (w *Writer) Close(ctx context.Context) error {
 	w.closeOnce.Do(func() {
 		w.mu.Lock()
@@ -269,6 +282,15 @@ func (w *Writer) Close(ctx context.Context) error {
 		w.mu.Unlock()
 		return nil
 	case <-ctx.Done():
+		// Cancel lifecycle to abort in-flight BestEffort Mongo operations.
+		// Workers will exit once their current store call returns.
+		w.lifecycleCancel()
+		// Wait for workers to actually finish — they are now using a
+		// cancelled context so Mongo operations will fail fast.
+		<-done
+		w.mu.Lock()
+		w.state = StateClosed
+		w.mu.Unlock()
 		return ctx.Err()
 	}
 }
@@ -280,22 +302,24 @@ func (w *Writer) CloseNow() {
 	w.Close(ctx)
 }
 
-func (w *Writer) worker(id int, writerCtx context.Context) {
+func (w *Writer) worker(id int) {
 	defer w.wg.Done()
 
 	// for range queue: drains remaining items then exits when channel closes
 	for p := range w.queue {
-		w.processRecord(p, writerCtx)
+		w.processRecord(p)
 	}
 }
 
-func (w *Writer) processRecord(p pendingRecord, writerCtx context.Context) {
+func (w *Writer) processRecord(p pendingRecord) {
 	record := p.record // already sanitized, stable ID
 
-	// Determine context for this operation
+	// Context is always set: BestEffort uses lifecycleCtx, Strict uses
+	// a merged context that cancels when either the request or the writer
+	// lifecycle is done. This guarantees workers exit on Close timeout.
 	ctx := p.ctx
-	if ctx == nil {
-		ctx = writerCtx
+	if p.mode == Strict {
+		ctx = mergeContexts(w.lifecycleCtx, p.ctx)
 	}
 
 	var err error
@@ -312,7 +336,7 @@ func (w *Writer) processRecord(p pendingRecord, writerCtx context.Context) {
 		// Safe error classification — no raw Mongo errors logged
 		classification := classifyError(err)
 
-		// Check for context cancellation
+		// Check for context cancellation — no point retrying
 		if classification == "cancelled" || classification == "timeout" {
 			break
 		}
@@ -345,10 +369,12 @@ func (w *Writer) processRecord(p pendingRecord, writerCtx context.Context) {
 				// Continue to next attempt
 			case <-ctx.Done():
 				err = ctx.Err()
-				break
+				// Break out of the retry loop, not just the select.
+				goto retryDone
 			}
 		}
 	}
+retryDone:
 
 	// All retries failed — log safe classification only
 	w.logger.Error("audit record persist failed",
@@ -440,4 +466,20 @@ func IsWriteFailed(err error) (*ErrWriteFailed, bool) {
 		return wf, true
 	}
 	return nil, false
+}
+
+// mergeContexts returns a context that is cancelled when either parent is cancelled.
+// Used for Strict mode so that both request cancellation and writer lifecycle
+// cancellation can abort in-flight Mongo operations.
+func mergeContexts(a, b context.Context) context.Context {
+	ctx, cancel := context.WithCancel(a)
+	go func() {
+		select {
+		case <-b.Done():
+			cancel()
+		case <-ctx.Done():
+			// Already done (parent a cancelled)
+		}
+	}()
+	return ctx
 }

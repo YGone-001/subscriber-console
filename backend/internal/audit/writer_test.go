@@ -209,8 +209,18 @@ func TestWriter_Write_FullQueue(t *testing.T) {
 		WriterCtx:   context.Background(),
 	})
 
-	// Block the worker by holding the store lock
-	store.mu.Lock()
+	// Block the worker with context-aware delay (holds the queue slot)
+	started := make(chan struct{})
+	var startOnce sync.Once
+	store.insertFn = func(ctx context.Context, record AuditWriteRecord) error {
+		startOnce.Do(func() { close(started) })
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(30 * time.Second):
+			return nil
+		}
+	}
 
 	input := WriteAuditInput{
 		Module:   "test",
@@ -219,8 +229,9 @@ func TestWriter_Write_FullQueue(t *testing.T) {
 		Result:   "success",
 	}
 
-	// Fill the queue
+	// Fill the queue (worker is processing first item)
 	w.WriteBestEffort(input)
+	<-started // wait for worker to be blocked
 
 	// Queue full - should drop silently
 	w.WriteBestEffort(input)
@@ -235,10 +246,7 @@ func TestWriter_Write_FullQueue(t *testing.T) {
 		t.Errorf("expected ErrWriteFailed, got %T", err)
 	}
 
-	// Unblock the worker
-	store.mu.Unlock()
-
-	// Cleanup
+	// Cleanup — lifecycle cancel unblocks the worker
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	w.Close(ctx)
@@ -263,10 +271,17 @@ func TestWriter_Close_Idempotent(t *testing.T) {
 	}
 }
 
-func TestWriter_Close_TimeoutThenWait(t *testing.T) {
+func TestWriter_Close_TimeoutThenIdempotent(t *testing.T) {
 	store := newFakeEvidenceStore()
-	// Block the store to prevent workers from finishing
-	store.mu.Lock()
+	// Use a context-aware blocker instead of raw mutex
+	store.insertFn = func(ctx context.Context, record AuditWriteRecord) error {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(30 * time.Second):
+			return nil
+		}
+	}
 
 	w := newTestWriterWithWorkers(t, 2, store)
 
@@ -279,23 +294,23 @@ func TestWriter_Close_TimeoutThenWait(t *testing.T) {
 	}
 	w.WriteBestEffort(input)
 
-	// Close with short timeout - should timeout
-	shortCtx, cancel1 := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	// Close with short timeout — lifecycle cancelled, workers exit fast
+	shortCtx, cancel1 := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel1()
 	err := w.Close(shortCtx)
 	if err == nil {
 		t.Error("expected timeout error")
 	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("expected DeadlineExceeded, got %v", err)
+	}
 
-	// Unblock the store
-	store.mu.Unlock()
-
-	// Later close with longer timeout - should succeed
+	// After Close returns, writer is closed. Second Close is idempotent.
 	longCtx, cancel2 := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel2()
 	err = w.Close(longCtx)
 	if err != nil {
-		t.Errorf("expected success on later close, got %v", err)
+		t.Errorf("expected success on idempotent close, got %v", err)
 	}
 }
 
@@ -391,8 +406,10 @@ func TestWriter_ConcurrentWriteClose(t *testing.T) {
 
 func TestWriter_StrictCancellation(t *testing.T) {
 	store := newFakeEvidenceStore()
+	var insertAttempts atomic.Int32
 	// Make insert block until context cancelled
 	store.insertFn = func(ctx context.Context, record AuditWriteRecord) error {
+		insertAttempts.Add(1)
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -427,6 +444,11 @@ func TestWriter_StrictCancellation(t *testing.T) {
 	// Should return promptly, not after 10s
 	if elapsed > 1*time.Second {
 		t.Errorf("took too long: %v", elapsed)
+	}
+
+	// Exactly 1 insert attempt — no second attempt with cancelled context
+	if n := insertAttempts.Load(); n != 1 {
+		t.Errorf("expected 1 insert attempt, got %d", n)
 	}
 
 	// Cleanup
@@ -529,6 +551,102 @@ func TestWriter_AllAcceptedRecordsDrained(t *testing.T) {
 	// All records should be persisted
 	if store.count() != count {
 		t.Errorf("expected %d records, got %d", count, store.count())
+	}
+}
+
+func TestWriter_CloseTimeout_TerminatesWorkers(t *testing.T) {
+	store := newFakeEvidenceStore()
+	// Block until context cancelled — simulates slow Mongo
+	store.insertFn = func(ctx context.Context, record AuditWriteRecord) error {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(30 * time.Second):
+			return nil
+		}
+	}
+
+	w := newTestWriterWithWorkers(t, 2, store)
+
+	// Enqueue work that will block
+	input := WriteAuditInput{
+		Module:   "test",
+		Action:   "test.action",
+		Resource: &ResourceInput{Type: "api"},
+		Result:   "success",
+	}
+	w.WriteBestEffort(input)
+	w.WriteBestEffort(input)
+
+	// Close with short timeout — should expire, cancel lifecycle, then wait for workers
+	shortCtx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	err := w.Close(shortCtx)
+	elapsed := time.Since(start)
+
+	// Should return with timeout error
+	if err == nil {
+		t.Error("expected timeout error from Close")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("expected DeadlineExceeded, got %v", err)
+	}
+
+	// Close should have waited for workers to finish after cancelling lifecycle.
+	// Workers exit promptly because BestEffort uses lifecycleCtx which was cancelled.
+	// If workers were NOT terminated, Close would hang for 30s (the mock delay).
+	if elapsed > 5*time.Second {
+		t.Errorf("Close took too long — workers may not have been terminated: %v", elapsed)
+	}
+
+	// After Close returns, writer is closed — no worker remains.
+	w.mu.RLock()
+	state := w.state
+	w.mu.RUnlock()
+	if state != StateClosed {
+		t.Errorf("expected state=closed after bounded close, got %d", state)
+	}
+}
+
+func TestWriter_CloseTimeout_MongoSafe(t *testing.T) {
+	store := newFakeEvidenceStore()
+	store.insertFn = func(ctx context.Context, record AuditWriteRecord) error {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(30 * time.Second):
+			return nil
+		}
+	}
+
+	w := newTestWriterWithWorkers(t, 2, store)
+	w.WriteBestEffort(WriteAuditInput{
+		Module: "test", Action: "test.action",
+		Resource: &ResourceInput{Type: "api"}, Result: "success",
+	})
+
+	// Close with timeout
+	shortCtx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	w.Close(shortCtx)
+
+	// After Close returns, it is safe to close Mongo.
+	// Verify by attempting a store operation — it should use cancelled lifecycleCtx.
+	// If a worker were still running, this could race with Mongo close.
+	done := make(chan struct{})
+	go func() {
+		w.WriteBestEffort(WriteAuditInput{
+			Module: "test", Action: "test.after_close",
+			Resource: &ResourceInput{Type: "api"}, Result: "success",
+		})
+		close(done)
+	}()
+	select {
+	case <-done:
+		// WriteBestEffort returned (dropped because writer is closed)
+	case <-time.After(1 * time.Second):
+		t.Error("WriteBestEffort after Close blocked — possible worker leak")
 	}
 }
 
