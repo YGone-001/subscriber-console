@@ -60,12 +60,12 @@
 | System health | GET | `/api/system/health` | Next.js | Go | YES | Joins both DBs |
 | Mongo health | GET | `/api/system/mongo/health` | Next.js | Go | YES | Joins both DBs |
 | System audit status | GET | `/api/system/audit/status` | Next.js | Go | YES | xcloud only |
-| Auth me | GET | `/api/auth/me` | Next.js | Go | YES | xcloud_ops only |
-| Auth permissions | GET | `/api/auth/permissions` | Next.js | Go | YES | Computed |
-| Auth users list | GET | `/api/auth/users` | Next.js | Go | YES | xcloud_ops only |
-| Auth user detail | GET | `/api/auth/users/:username` | Next.js | Go | YES | xcloud_ops only |
-| Users list | GET | `/api/users` | Next.js | Go | YES | xcloud_ops only |
-| User detail | GET | `/api/users/:username` | Next.js | Go | YES | xcloud_ops only |
+| Auth me | GET | `/api/auth/me` | **Go** | Go | YES | xcloud_ops only |
+| Auth permissions | GET | `/api/auth/permissions` | **Go** | Go | YES | Computed |
+| Auth users list | GET | `/api/auth/users` | **Go** | Go | YES | xcloud_ops only |
+| Auth user detail | GET | `/api/auth/users/:username` | **Go** | Go | YES | xcloud_ops only |
+| Users list | GET | `/api/users` | **Go** | Go | YES | xcloud_ops only |
+| User detail | GET | `/api/users/:username` | **Go** | Go | YES | xcloud_ops only |
 | Search | GET | `/api/search` | **Go** | Go | YES | Phase 2C — migrated, joins both DBs |
 | Notifications stream | GET | `/api/notifications/stream` | Next.js | Go | YES | SSE |
 

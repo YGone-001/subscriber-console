@@ -115,3 +115,9 @@ func normalizeGovernanceRole(role string) string {
 		return ""
 	}
 }
+
+// NormalizeRole is the exported version of normalizeGovernanceRole.
+// Maps legacy roles to governance roles. Returns empty string for unknown roles.
+func NormalizeRole(role string) string {
+	return normalizeGovernanceRole(role)
+}

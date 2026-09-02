@@ -186,3 +186,44 @@ func capabilityDecision(role, capability string) string {
 	}
 	return "deny"
 }
+
+// CapabilitiesFor returns the full capability map for a normalized role.
+// Returns nil for unknown roles.
+func CapabilitiesFor(role string) map[string]string {
+	matrix := map[string]map[string]string{
+		"super_admin": {
+			"subscriber_write": "allow", "policy_approve": "allow", "balance_adjust": "allow",
+			"profile_rollback": "allow", "rating_publish": "allow", "approval_review": "allow",
+			"approval_execute": "allow", "audit_view": "allow", "audit_export": "export",
+			"system_heal": "allow", "user_admin": "allow",
+		},
+		"ops_admin": {
+			"subscriber_write": "allow", "policy_approve": "allow", "balance_adjust": "allow",
+			"profile_rollback": "allow", "rating_publish": "allow", "approval_review": "allow",
+			"approval_execute": "allow", "audit_view": "allow", "audit_export": "export",
+			"system_heal": "allow", "user_admin": "deny",
+		},
+		"operator": {
+			"subscriber_write": "allow", "policy_approve": "approval", "balance_adjust": "approval",
+			"profile_rollback": "approval", "rating_publish": "approval", "approval_review": "deny",
+			"approval_execute": "deny", "audit_view": "allow", "audit_export": "deny",
+			"system_heal": "approval", "user_admin": "deny",
+		},
+		"auditor": {
+			"subscriber_write": "deny", "policy_approve": "deny", "balance_adjust": "deny",
+			"profile_rollback": "deny", "rating_publish": "deny", "approval_review": "deny",
+			"approval_execute": "deny", "audit_view": "allow", "audit_export": "export",
+			"system_heal": "deny", "user_admin": "deny",
+		},
+		"viewer": {
+			"subscriber_write": "deny", "policy_approve": "deny", "balance_adjust": "deny",
+			"profile_rollback": "deny", "rating_publish": "deny", "approval_review": "deny",
+			"approval_execute": "deny", "audit_view": "allow", "audit_export": "deny",
+			"system_heal": "deny", "user_admin": "deny",
+		},
+	}
+	if caps, ok := matrix[role]; ok {
+		return caps
+	}
+	return nil
+}

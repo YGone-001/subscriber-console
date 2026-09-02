@@ -107,7 +107,7 @@
 
 **Current owner:** Next.js (`src/app/api/audit/export/route.ts`)
 
-### Endpoints NOT Migrated (Phase 2D+)
+### Endpoints NOT Migrated (Post Phase 2D)
 
 | Endpoint | Reason |
 |----------|--------|
@@ -115,9 +115,9 @@
 | `/api/subscribers/:imsi` (PUT/DELETE) | Phase 4 (write) |
 | `/api/subscribers/batch` | Phase 4 (write) |
 | `/api/subscribers/import` | Phase 4 (write) |
-| `/api/auth/*` | Phase 2D |
-| `/api/users/*` | Phase 2D |
-| `/api/approvals/*` | Phase 2D |
+| `/api/auth/*` (POST/PUT/PATCH/DELETE) | Write operations — not migrated |
+| `/api/users/*` (POST/PUT/PATCH/DELETE) | Write operations — not migrated |
+| `/api/approvals/*` | Phase 3 |
 | `/api/notifications/*` | Phase 7 (streaming) |
 | `/api/alerts/*` | Phase 7 |
 | `/api/system/*` | Phase 7 |
@@ -470,11 +470,11 @@ Not all GET endpoints are pure reads. Classification:
 
 ## 16. Phase 2 Status
 
-**PARTIAL** — Phase 2A + 2B + 2C complete, 2D remaining.
+**COMPLETE** — Phase 2A + 2B + 2C + 2D complete.
 
-Phase 2A+2B+2C provides:
+Phase 2 provides:
 - Auth compatibility layer (JWT + session validation)
-- 25 semantic-read implementations (24 GET + 1 POST semantic read)
+- 31 semantic-read implementations (30 GET + 1 POST semantic read)
 - MongoDB-backed rate limiting
 - Node → Go JWT interoperability proven (real Node jose fixture)
 - Profile reads with cross-DB subscriber stats
@@ -485,14 +485,19 @@ Phase 2A+2B+2C provides:
 - Global search with subscriber/profile split
 - Batch precheck (semantic read with subscriber_write capability)
 - Capability-based authorization matching Node ROLE_CAPABILITIES exactly
+- Auth/me with permission and role normalization
+- Auth/permissions with full capability map
+- User list with query mode (pagination, search, role/status filter)
+- User detail with activity, actions, assignable roles
+- User management policy (assignableRoles, userManagementActions)
 
 ### 16.1 Authorization Side-effect Audit
 
 | Category | Count | Routes |
 |----------|-------|--------|
-| requireAuth only | 22 | analytics/*, ratings GET, profiles/*, ocs/*, tariff-plans/* GET, subscribers GET/Detail, search |
+| requireAuth only | 24 | analytics/*, ratings GET, profiles/*, ocs/*, tariff-plans/* GET, subscribers GET/Detail, search, auth/me, auth/permissions |
 | requireCapability | 3 | audit list/detail (audit_view), batch/precheck (subscriber_write) |
-| requirePermission | 2 | audit list/detail (audit.read) |
+| requirePermission | 4 | audit list/detail (audit.read), users list/detail (users.read) |
 | authorization.denied audit required | 3 | audit list, audit detail, batch/precheck |
 | Go security audit writer | NO | Not implemented (Phase 2 restriction) |
 
@@ -531,11 +536,17 @@ Phase 2A+2B+2C provides:
 | GET /api/subscribers/:imsi | YES | PASS | YES | NO | — |
 | GET /api/search | YES | PASS | YES | NO | — |
 | POST /api/subscribers/batch/precheck | YES | PASS | NO | NO | SECURITY_AUDIT_PARITY |
+| GET /api/auth/me | YES | PASS | YES | NO | — |
+| GET /api/auth/permissions | YES | PASS | YES | NO | — |
+| GET /api/auth/users | YES | PASS | YES | NO | — |
+| GET /api/auth/users/:username | YES | PASS | YES | NO | — |
+| GET /api/users | YES | PASS | YES | NO | — |
+| GET /api/users/:username | YES | PASS | YES | NO | — |
 
 **Summary:**
-- IMPLEMENTED: 25
-- RESPONSE_PARITY_PASS: 25
-- CUTOVER_READY: 23
+- IMPLEMENTED: 31
+- RESPONSE_PARITY_PASS: 31
+- CUTOVER_READY: 29
 - CUTOVER_BLOCKED: 3 (audit list, audit detail, batch/precheck — missing authorization.denied audit)
 - ACTUALLY_ROUTED: 0 (Nginx not modified)
 

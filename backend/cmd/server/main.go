@@ -27,6 +27,7 @@ import (
 	"github.com/YGone-001/subscriber-console/backend/internal/response"
 	"github.com/YGone-001/subscriber-console/backend/internal/subscriber"
 	"github.com/YGone-001/subscriber-console/backend/internal/tariff"
+	"github.com/YGone-001/subscriber-console/backend/internal/user"
 )
 
 func main() {
@@ -120,6 +121,10 @@ func main() {
 	)
 	subscriberHandler := subscriber.NewHandler(subscriberRepo, limiter)
 
+	// Auth/User reads
+	userRepo := user.NewRepository(mc.Ops)
+	userHandler := user.NewHandler(userRepo, limiter)
+
 	// Build handler
 	mux := http.NewServeMux()
 
@@ -168,6 +173,14 @@ func main() {
 	mux.Handle("GET /api/subscribers/{imsi}", authMiddleware(http.HandlerFunc(subscriberHandler.Detail)))
 	mux.Handle("GET /api/search", authMiddleware(http.HandlerFunc(subscriberHandler.Search)))
 	mux.Handle("POST /api/subscribers/batch/precheck", authMiddleware(http.HandlerFunc(subscriberHandler.BatchPrecheck)))
+
+	// Auth/User reads
+	mux.Handle("GET /api/auth/me", authMiddleware(http.HandlerFunc(userHandler.AuthMe)))
+	mux.Handle("GET /api/auth/permissions", authMiddleware(http.HandlerFunc(userHandler.AuthPermissions)))
+	mux.Handle("GET /api/auth/users", authMiddleware(http.HandlerFunc(userHandler.UserList)))
+	mux.Handle("GET /api/auth/users/{username}", authMiddleware(http.HandlerFunc(userHandler.UserDetail)))
+	mux.Handle("GET /api/users", authMiddleware(http.HandlerFunc(userHandler.UserList)))
+	mux.Handle("GET /api/users/{username}", authMiddleware(http.HandlerFunc(userHandler.UserDetail)))
 
 	// Catch-all for unmigrated routes
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {

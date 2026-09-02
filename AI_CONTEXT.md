@@ -143,8 +143,8 @@ Phase 2B    COMPLETE
 Phase 2B.1  COMPLETE
 Phase 2C    COMPLETE
 Phase 2C.1  COMPLETE
+Phase 2D    COMPLETE
 
-Phase 2D    NOT STARTED
 Phase 3     NOT STARTED
 ```
 
@@ -231,7 +231,7 @@ Infrastructure writes = app_rate_limits only
 
 ## 9. Current Go Read Implementations
 
-25 semantic-read implementations (24 GET + 1 POST semantic read).
+31 semantic-read implementations (30 GET + 1 POST semantic read).
 
 Phase 2A — 6:
 
@@ -285,13 +285,24 @@ GET /api/search
 POST /api/subscribers/batch/precheck
 ```
 
+Phase 2D — 6:
+
+```text
+GET /api/auth/me
+GET /api/auth/permissions
+GET /api/auth/users
+GET /api/auth/users/:username
+GET /api/users
+GET /api/users/:username
+```
+
 Status:
 
 ```text
-Implemented = 25
-Response Parity = 25
-Cutover Ready = 23
-Cutover Blocked = 2 (audit/*, batch/precheck — missing authorization.denied audit)
+Implemented = 31
+Response Parity = 31
+Cutover Ready = 29
+Cutover Blocked = 3 (audit/*, batch/precheck — missing authorization.denied audit)
 Actually Routed = 0 (Nginx not modified)
 ```
 
@@ -790,13 +801,16 @@ Actually Routed = NO
 
 ## 25. Phase 2D / Phase 3
 
-Phase 2C.1 closeout complete. Phase 2D may start next.
+Phase 2D complete. Phase 3 may start next.
 
-Phase 2D expected:
-- auth/me
-- permissions
-- user reads
-- remaining read contracts
+Phase 2D provides:
+- auth/me with permission and role normalization
+- auth/permissions with full capability map (CapabilitiesFor)
+- User list with two modes: no-query (legacy) and query (paginated, filterable)
+- User detail with activity, actions, assignable roles
+- User management policy (read-only): assignableRoles, userManagementActions
+- Sensitive field guard: passwordHash, _id, security secrets never returned
+- Mongo write guard: user package is read-only
 
 Phase 3:
 - Governance
@@ -808,7 +822,7 @@ Security audit blocker:
 - 3 routes (audit list, audit detail, batch/precheck) require authorization.denied audit before cutover
 - Go security audit writer not yet implemented
 - Does NOT block Phase 2D (reads only)
-- Blocks production cutover of those 2 routes
+- Blocks production cutover of those 3 routes
 
 ---
 
