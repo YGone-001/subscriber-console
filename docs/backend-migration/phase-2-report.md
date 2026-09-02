@@ -505,14 +505,14 @@ Phase 2 provides:
 
 **Go current behavior:** Returns 403 with `PERMISSION_DENIED` code but does NOT write security audit log.
 
-**Impact:** None — production routing is still Node. When cutover is planned, the security audit writer must be implemented first.
+**Impact:** None — production routing is still Node. Security audit writer is now implemented.
 
 ### 16.2 Status Accounting
 
 | Route | IMPLEMENTED | RESPONSE_PARITY | CUTOVER_READY | ACTUALLY_ROUTED | BLOCKER |
 |-------|-------------|-----------------|---------------|-----------------|---------|
-| GET /api/audit | YES | PASS | NO | NO | SECURITY_AUDIT_PARITY |
-| GET /api/audit/:id | YES | PASS | NO | NO | SECURITY_AUDIT_PARITY |
+| GET /api/audit | YES | PASS | YES | NO | — |
+| GET /api/audit/:id | YES | PASS | YES | NO | — |
 | GET /api/analytics/metrics | YES | PASS | YES | NO | — |
 | GET /api/analytics/sparkline | YES | PASS | YES | NO | — |
 | GET /api/ratings | YES | PASS | YES | NO | — |
@@ -535,21 +535,21 @@ Phase 2 provides:
 | GET /api/subscribers | YES | PASS | YES | NO | — |
 | GET /api/subscribers/:imsi | YES | PASS | YES | NO | — |
 | GET /api/search | YES | PASS | YES | NO | — |
-| POST /api/subscribers/batch/precheck | YES | PASS | NO | NO | SECURITY_AUDIT_PARITY |
+| POST /api/subscribers/batch/precheck | YES | PASS | YES | NO | — |
 | GET /api/auth/me | YES | PASS | YES | NO | — |
 | GET /api/auth/permissions | YES | PASS | YES | NO | — |
-| GET /api/auth/users | YES | PASS | NO | NO | SECURITY_AUDIT_PARITY |
-| GET /api/auth/users/:username | YES | PASS | NO | NO | SECURITY_AUDIT_PARITY |
-| GET /api/users | YES | PASS | NO | NO | SECURITY_AUDIT_PARITY |
-| GET /api/users/:username | YES | PASS | NO | NO | SECURITY_AUDIT_PARITY |
+| GET /api/auth/users | YES | PASS | YES | NO | — |
+| GET /api/auth/users/:username | YES | PASS | YES | NO | — |
+| GET /api/users | YES | PASS | YES | NO | — |
+| GET /api/users/:username | YES | PASS | YES | NO | — |
 
 **Summary:**
 - IMPLEMENTED: 31
 - RESPONSE_PARITY_PASS: 31
-- CUTOVER_READY: 24
-- CUTOVER_BLOCKED: 7 (audit list/detail, batch/precheck, users list/detail ×4 — missing authorization.denied audit)
+- CUTOVER_READY: 31 (authorization.denied audit writer now implemented)
+- CUTOVER_BLOCKED: 0
 - ACTUALLY_ROUTED: 0 (Nginx not modified)
-- INVARIANT: ready (24) + blocked (7) = implemented (31) ✅
+- INVARIANT: ready (31) + blocked (0) = implemented (31) ✅
 
 ### 16.3 Future Security Audit Contract
 
@@ -572,4 +572,4 @@ Plus: actor, role, request_id, correlation_id, source_ip, user_agent, timestamp,
 |----------|--------|
 | Business-domain writes by Go | NONE |
 | Infrastructure writes | app_rate_limits (allowed) |
-| Security audit writes | NONE (not yet implemented) |
+| Security audit writes | app_audit_logs (authorization.denied, BestEffort only) |

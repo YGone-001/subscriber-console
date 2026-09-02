@@ -144,8 +144,10 @@ Phase 2B.1  COMPLETE
 Phase 2C    COMPLETE
 Phase 2C.1  COMPLETE
 Phase 2D    COMPLETE
+Phase 2D.1  COMPLETE
 
-Phase 3     NOT STARTED
+Phase 3     IN PROGRESS
+Phase 3A    COMPLETE — security audit evidence writer + authorization denial integration
 ```
 
 Exact HEAD is intentionally not stored here.
@@ -169,6 +171,9 @@ Always use Git for SHA/status.
 - graceful shutdown
 - HTTP timeouts
 - Go CI
+- security audit evidence writer (BestEffort + Strict modes)
+- authorization denial guard (RequireCapabilityWithAudit, RequirePermissionWithAudit)
+- payload sanitizer (secret redaction, depth/bounds)
 
 `/healthz` does not require Mongo.
 `/readyz` checks Mongo.
@@ -220,11 +225,12 @@ xcloud_ops.app_rate_limits
 
 Preserve exact Node key/limit/window/headers/messages.
 
-Phase 2 invariant:
+Current write invariant:
 
 ```text
 Business-domain writes by Go = NONE
-Infrastructure writes = app_rate_limits only
+Infrastructure writes = app_rate_limits (allowed)
+Security audit writes = app_audit_logs (authorization.denied, BestEffort only)
 ```
 
 ---
@@ -301,8 +307,8 @@ Status:
 ```text
 Implemented = 31
 Response Parity = 31
-Cutover Ready = 24
-Cutover Blocked = 7 (audit/*, batch/precheck, users.* — missing authorization.denied audit)
+Cutover Ready = 31 (authorization.denied audit writer implemented)
+Cutover Blocked = 0
 Actually Routed = 0 (Nginx not modified)
 ready + blocked = implemented ✅
 ```
