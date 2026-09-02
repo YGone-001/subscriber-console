@@ -1,5 +1,5 @@
 import { Document, Filter, Long } from 'mongodb';
-import { getOpen5gsCollection, mongoCollections } from '@/lib/mongo';
+import { getXcloudCollection, mongoCollections } from '@/lib/mongo';
 
 function toNumber(val: unknown, fallback = 0): number {
   if (val === undefined || val === null) return fallback;
@@ -175,8 +175,8 @@ export async function listOcsBalances(options: {
   const limit = Math.min(100, Math.max(1, Number(options.limit) || 20));
   const skip = (page - 1) * limit;
 
-  const balanceColl = await getOpen5gsCollection(mongoCollections.ocsBalances);
-  const subscriberColl = await getOpen5gsCollection(mongoCollections.ocsSubscribers);
+  const balanceColl = await getXcloudCollection(mongoCollections.ocsBalances);
+  const subscriberColl = await getXcloudCollection(mongoCollections.ocsSubscribers);
 
   const filter: Filter<Document> = {};
   if (options.imsi) {
@@ -330,7 +330,7 @@ export async function listOcsSessions(options: {
   const limit = Math.min(100, Math.max(1, Number(options.limit) || 20));
   const skip = (page - 1) * limit;
 
-  const sessionColl = await getOpen5gsCollection(mongoCollections.ocsSessions);
+  const sessionColl = await getXcloudCollection(mongoCollections.ocsSessions);
 
   const filter: Filter<Document> = {};
   if (options.imsi) {
@@ -445,7 +445,7 @@ export async function listOcsUsageRecords(options: {
   const limit = Math.min(100, Math.max(1, Number(options.limit) || 20));
   const skip = (page - 1) * limit;
 
-  const usageColl = await getOpen5gsCollection(mongoCollections.ocsUsageRecords);
+  const usageColl = await getXcloudCollection(mongoCollections.ocsUsageRecords);
 
   const filter: Filter<Document> = {};
   if (options.imsi) {
@@ -558,7 +558,7 @@ export async function listOcsReservations(options: {
   const limit = Math.min(100, Math.max(1, Number(options.limit) || 20));
   const skip = (page - 1) * limit;
 
-  const reservationColl = await getOpen5gsCollection(mongoCollections.ocsReservations);
+  const reservationColl = await getXcloudCollection(mongoCollections.ocsReservations);
 
   const filter: Filter<Document> = {};
   if (options.imsi) {

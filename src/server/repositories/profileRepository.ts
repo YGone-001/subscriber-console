@@ -1,5 +1,5 @@
 import { Document, MongoServerError } from 'mongodb';
-import { getAppCollection, getOpen5gsCollection, mongoCollections } from '@/lib/mongo';
+import { getAppCollection, getXcloudCollection, mongoCollections } from '@/lib/mongo';
 import { sessionQosPreset } from '@/lib/imsQosPresets';
 
 export const PROFILE_VERSION_LIMIT = 50;
@@ -91,8 +91,8 @@ function versionsCollection() {
   return getAppCollection<ProfileVersionRecord & Document>(mongoCollections.profileVersions);
 }
 
-function open5gsSubscribersCollection() {
-  return getOpen5gsCollection<Document>(mongoCollections.subscribers);
+function xcloudSubscribersCollection() {
+  return getXcloudCollection<Document>(mongoCollections.subscribers);
 }
 
 export function defaultProfile(name: string, user: string): ProfileDocument {
@@ -191,7 +191,7 @@ function stripMongoId<T extends Record<string, unknown>>(doc: T | null): T | nul
 }
 
 export async function getProfileSubscriberCounts(): Promise<Map<string, ProfileSubscriberStats>> {
-  const collection = await open5gsSubscribersCollection();
+  const collection = await xcloudSubscribersCollection();
 
   const pipeline = [
     {
@@ -289,7 +289,7 @@ export async function getProfileSubscriberCounts(): Promise<Map<string, ProfileS
 }
 
 export async function getProfileStats(profileName: string): Promise<ProfileStatsDetail> {
-  const collection = await open5gsSubscribersCollection();
+  const collection = await xcloudSubscribersCollection();
   const filter = {
     $or: [
       { 'webui_meta.profile_name': profileName },

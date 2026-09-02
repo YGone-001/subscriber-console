@@ -1,7 +1,7 @@
 // Package mongo provides a MongoDB client with dual-database support.
 //
 // subscriber-console uses two databases:
-//   - open5gs: HSS subscriber data, OCS billing data
+//   - xcloud: HSS subscriber data, OCS billing data
 //   - xcloud_ops: Console operations (users, approvals, audit, alerts, etc.)
 package mongo
 
@@ -17,13 +17,13 @@ import (
 
 // Client wraps a MongoDB connection with two database handles.
 type Client struct {
-	cli     *mongo.Client
-	Open5GS *mongo.Database // HSS/OCS data
-	Ops     *mongo.Database // xcloud_ops data
+	cli    *mongo.Client
+	XCloud *mongo.Database // HSS/OCS data (xcloud)
+	Ops    *mongo.Database // xcloud_ops data
 }
 
 // Connect establishes a MongoDB connection and returns a Client with two database handles.
-func Connect(ctx context.Context, uri, open5gsDB, opsDB string) (*Client, error) {
+func Connect(ctx context.Context, uri, xcloudDB, opsDB string) (*Client, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
@@ -37,9 +37,9 @@ func Connect(ctx context.Context, uri, open5gsDB, opsDB string) (*Client, error)
 	}
 
 	return &Client{
-		cli:     cli,
-		Open5GS: cli.Database(open5gsDB),
-		Ops:     cli.Database(opsDB),
+		cli:    cli,
+		XCloud: cli.Database(xcloudDB),
+		Ops:    cli.Database(opsDB),
 	}, nil
 }
 

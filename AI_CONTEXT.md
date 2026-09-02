@@ -61,7 +61,7 @@ Legacy writes          Auth validation
               |
               v
            MongoDB
-      open5gs + xcloud_ops
+      xcloud + xcloud_ops
 ```
 
 Target:
@@ -111,7 +111,7 @@ No Gin/Fiber/Echo/GORM.
 Same URI, two DBs:
 
 ```text
-open5gs
+xcloud
 xcloud_ops
 ```
 
@@ -120,7 +120,7 @@ Go:
 ```go
 type Databases struct {
     Client  *mongo.Client
-    Open5GS *mongo.Database
+    xCloud *mongo.Database
     Ops     *mongo.Database
 }
 ```
@@ -511,7 +511,7 @@ Detail uses:
 findSubscriberLegacyState(imsi)
 ```
 
-Go must reproduce legacy API representation, not raw Open5GS BSON.
+Go must reproduce legacy API representation, not raw xCloud BSON.
 
 ---
 
@@ -630,12 +630,12 @@ Must audit `precheckSubscriberRange()` before migration.
 
 ---
 
-## 19. Open5GS Subscriber Risk
+## 19. xCloud Subscriber Risk
 
 Highest-risk collection:
 
 ```text
-open5gs.subscribers
+xcloud.subscribers
 ```
 
 Potential structures:
@@ -684,7 +684,7 @@ Node may return []
 Binary/Buffer:
 - do not accidentally emit Go base64 if Node uses hex/string.
 
-Unknown Open5GS fields:
+Unknown xCloud fields:
 - must not make read fail.
 
 ---
@@ -694,7 +694,7 @@ Unknown Open5GS fields:
 Phase 2C may compose:
 
 ```text
-open5gs
+xcloud
 xcloud_ops
 ```
 
@@ -958,7 +958,7 @@ Never:
 - trust forwarded identity headers
 - dual-write business mutations
 - change Mongo schema during language migration
-- remove unknown Open5GS fields
+- remove unknown xCloud fields
 - change API paths/SWR paths
 - move write ownership during Phase 2
 - assume GET is pure

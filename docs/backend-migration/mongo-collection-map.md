@@ -7,7 +7,7 @@
 
 | Database | Env Variable | Default | Purpose |
 |----------|-------------|---------|---------|
-| `open5gs` | `MONGODB_DB` / `MONGODB_OPEN5GS_DB` | `open5gs` | HSS subscriber provisioning + OCS billing |
+| `xcloud` | `MONGODB_DB` / `MONGODB_XCLOUD_DB` | `xcloud` | HSS subscriber provisioning + OCS billing |
 | `xcloud_ops` | `MONGODB_APP_DB` | `xcloud_ops` | Console operations data |
 
 **Connection**: Single `MongoClient` with global promise cache (`src/lib/mongo.ts`).
@@ -42,11 +42,11 @@ export const mongoCollections = {
 };
 ```
 
-## open5gs Database Collections
+## xcloud Database Collections
 
 | Collection | Domain | Read | Write | Repository | Key Fields | Notes |
 |-----------|--------|------|-------|------------|------------|-------|
-| `subscribers` | HSS | subscriberRepository, systemAuditRepository, analyticsRepository | subscriberRepository | `subscriberRepository.ts` | `imsi`, `msisdn[]`, `security`, `ambr`, `slice[]`, `access_restriction_data`, `network_access_mode`, `webui_meta` | Open5GS BSON document. Uses `Long` for numeric fields. `replaceOne` with `upsert: true` for updates. |
+| `subscribers` | HSS | subscriberRepository, systemAuditRepository, analyticsRepository | subscriberRepository | `subscriberRepository.ts` | `imsi`, `msisdn[]`, `security`, `ambr`, `slice[]`, `access_restriction_data`, `network_access_mode`, `webui_meta` | xCloud BSON document. Uses `Long` for numeric fields. `replaceOne` with `upsert: true` for updates. |
 | `ocs_tariff_plans` | OCS | ocsBillingRepository | ocsBillingRepository | `ocsBillingRepository.ts` | `plan_id`, `name`, `status`, `rules[]`, `quota_per_grant`, `validity_time`, `volume_threshold` | Uses `Long` for numeric fields. |
 | `ocs_subscribers` | OCS | ocsBillingRepository, subscriberRepository | ocsBillingRepository | `ocsBillingRepository.ts` | `imsi`, `msisdn`, `status`, `plan_id` | Links subscriber to tariff plan. |
 | `ocs_balances` | OCS | ocsBillingRepository, ocsOperationsRepository, ocsBalanceGovernance | ocsBillingRepository, ocsBalanceGovernance | `ocsBillingRepository.ts`, `ocsBalanceGovernance.ts` | `imsi`, `data_total`, `data_used`, `data_reserved`, `data_available`, `voice_*`, `sms_*`, `version` | Uses `Long` for all numeric fields. Version-based CAS for balance adjustments. |
@@ -97,7 +97,7 @@ Used extensively in OCS collections:
 
 ### Nested Documents
 
-**Open5GS Subscriber** (`subscribers` collection):
+**xCloud Subscriber** (`subscribers` collection):
 ```
 {
   imsi: string,
@@ -143,5 +143,5 @@ Used extensively in OCS collections:
 
 1. **No transactions**: Multi-collection writes (e.g., subscriber + OCS provisioning) are not atomic. Partial failures are possible.
 2. **Long type handling**: OCS collections use BSON `Long` extensively. Incorrect `Long` ↔ `number` conversion can cause data corruption.
-3. **Open5GS schema coupling**: The `subscribers` collection schema is dictated by Open5GS HSS. Changes to Open5GS format would break the console.
-4. **Dual-database joins**: Subscriber list queries join `subscribers` (open5gs) with `ocs_subscribers` + `ocs_balances` (open5gs) + `app_profiles` (xcloud_ops). No cross-database transactions.
+3. **xCloud schema coupling**: The `subscribers` collection schema is dictated by xCloud HSS. Changes to xCloud format would break the console.
+4. **Dual-database joins**: Subscriber list queries join `subscribers` (xcloud) with `ocs_subscribers` + `ocs_balances` (xcloud) + `app_profiles` (xcloud_ops). No cross-database transactions.

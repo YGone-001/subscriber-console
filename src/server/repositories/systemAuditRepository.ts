@@ -1,11 +1,11 @@
 import { Document, Long } from 'mongodb';
-import { getOpen5gsCollection, mongoCollections } from '@/lib/mongo';
-import { buildDefaultOpen5gsSubscriber } from '@/lib/xcloudSubscriber';
+import { getXcloudCollection, mongoCollections } from '@/lib/mongo';
+import { buildDefaultXcloudSubscriber } from '@/lib/xcloudSubscriber';
 import { DEFAULT_OCS_PLAN_ID, provisionOcsSubscriber } from '@/server/repositories/ocsBillingRepository';
 import { getProfile, listProfiles } from '@/server/repositories/profileRepository';
-import type { Open5gsSubscriberDocument } from '@/types/xcloud';
+import type { XcloudSubscriberDocument } from '@/types/xcloud';
 
-type SubscriberDoc = Open5gsSubscriberDocument & Document;
+type SubscriberDoc = XcloudSubscriberDocument & Document;
 
 export type AnomalyType =
   | 'missing_config'
@@ -29,15 +29,15 @@ export type SystemAnomaly = {
 export type ScanPhase = 'sub' | 'ocs' | 'tariff' | 'reservation';
 
 function subscribersCollection() {
-  return getOpen5gsCollection<SubscriberDoc>(mongoCollections.subscribers);
+  return getXcloudCollection<SubscriberDoc>(mongoCollections.subscribers);
 }
 
 function ocsSubscribersCollection() {
-  return getOpen5gsCollection<Document & { imsi: string; plan_id?: string }>(mongoCollections.ocsSubscribers);
+  return getXcloudCollection<Document & { imsi: string; plan_id?: string }>(mongoCollections.ocsSubscribers);
 }
 
 function ocsBalancesCollection() {
-  return getOpen5gsCollection<Document & {
+  return getXcloudCollection<Document & {
     imsi: string;
     data_total?: Long | number;
     data_used?: Long | number;
@@ -54,7 +54,7 @@ function ocsBalancesCollection() {
 }
 
 function ocsReservationsCollection() {
-  return getOpen5gsCollection<Document & {
+  return getXcloudCollection<Document & {
     reservation_id: string;
     session_id: string;
     imsi: string;
@@ -64,11 +64,11 @@ function ocsReservationsCollection() {
 }
 
 function ocsSessionsCollection() {
-  return getOpen5gsCollection<Document & { session_id: string; state?: string }>(mongoCollections.ocsSessions);
+  return getXcloudCollection<Document & { session_id: string; state?: string }>(mongoCollections.ocsSessions);
 }
 
 function tariffPlansCollection() {
-  return getOpen5gsCollection<Document & { plan_id: string }>(mongoCollections.ocsTariffPlans);
+  return getXcloudCollection<Document & { plan_id: string }>(mongoCollections.ocsTariffPlans);
 }
 
 function pageOffset(cursor: unknown): number {
@@ -318,7 +318,7 @@ export async function healSubscriberDocument(imsi: string, type: string, profile
   const profile = profileName ? await getProfile(profileName) : null;
 
   if (type === 'orphan_ocs' || !existing) {
-    const doc = buildDefaultOpen5gsSubscriber(imsi, profile || undefined);
+    const doc = buildDefaultXcloudSubscriber(imsi, profile || undefined);
     await docs.updateOne({ imsi }, { $setOnInsert: doc }, { upsert: true });
   }
 

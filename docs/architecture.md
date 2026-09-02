@@ -2,7 +2,7 @@
 
 ## Project Goal
 
-`subscriber-console` provides a web-based operations console for Open5GS 4G/5G/OCS subscriber data. It focuses on practical operator workflows: provisioning IMSI records, managing reusable profile templates, configuring rating policies, observing traffic metrics, auditing changes, and repairing MongoDB document consistency.
+`subscriber-console` provides a web-based operations console for xCloud 4G/5G/OCS subscriber data. It focuses on practical operator workflows: provisioning IMSI records, managing reusable profile templates, configuring rating policies, observing traffic metrics, auditing changes, and repairing MongoDB document consistency.
 
 ## Module Breakdown
 
@@ -27,7 +27,7 @@
 
 - `src/lib/mongo.ts` centralizes MongoDB client access.
 - `src/server/repositories` contains MongoDB persistence logic.
-- `src/lib/open5gsSubscriber.ts` builds Open5GS-compatible subscriber documents.
+- `src/lib/xcloudSubscriber.ts` builds xCloud-compatible subscriber documents.
 - `src/lib/audit.ts` records operator actions and change details.
 - `src/lib/analytics.ts` handles event hooks for analytics and sentinel checks.
 - `src/lib/authz.ts` enforces API role authorization.
@@ -37,7 +37,7 @@
 
 ## Data Model
 
-The Open5GS database stores HSS subscriber documents in MongoDB `subscribers`, following the Open5GS-compatible document shape without embedded OCS data. OCS operational preset data is stored alongside it in:
+The xCloud database stores HSS subscriber documents in MongoDB `subscribers`, following the xCloud-compatible document shape without embedded OCS data. OCS operational preset data is stored alongside it in:
 
 - `ocs_tariff_plans`
 - `ocs_subscribers`
@@ -80,4 +80,4 @@ Console-owned collections use the `app_` prefix:
 - Add container deployment artifacts and health probes.
 - Support external identity providers or SSO.
 - Add structured observability for logs, metrics, and traces.
-- Add migration scripts for future Open5GS document schema changes.
+- Add migration scripts for future xCloud document schema changes.

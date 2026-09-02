@@ -110,6 +110,6 @@
       { "name": "The Compact Geometry Rule", "body": "圆角表达可操作性和层级，不表达可爱。", "section": "shapes" }
     ],
     "dos": ["Do 使用统一语义 token 表达选择、信息、健康、警告和故障。", "Do 让图标操作与移动/粗指针命中区域至少达到 44×44px。", "Do 让窄屏高密度表格切换为带字段标签的记录卡。", "Do 使用 transform 和 opacity 表达进度、抽屉与短暂状态变化。", "Do 同时验证明暗主题、中英文、键盘操作和移动壳层。"],
-    "donts": ["Don't 把 Open5GS 的视觉或名称置于 xCloud 产品身份之前。", "Don't 把 blur 用在持久工作面或普通卡片。", "Don't 用同一种彩色侧边条表达多种运营含义。", "Don't 动画化 width、height、max-height、padding 或 margin。", "Don't 让窄屏用户依赖整表横向滚动对应字段与操作。"]
+    "donts": ["Don't 把 xCloud 的视觉或名称置于 xCloud 产品身份之前。", "Don't 把 blur 用在持久工作面或普通卡片。", "Don't 用同一种彩色侧边条表达多种运营含义。", "Don't 动画化 width、height、max-height、padding 或 margin。", "Don't 让窄屏用户依赖整表横向滚动对应字段与操作。"]
   }
 }

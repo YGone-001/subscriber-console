@@ -49,7 +49,7 @@ func main() {
 
 	// Connect to MongoDB
 	ctx := context.Background()
-	mc, err := mongoClient.Connect(ctx, cfg.MongoURI, cfg.MongoDBOpen5GS, cfg.MongoDBOps)
+	mc, err := mongoClient.Connect(ctx, cfg.MongoURI, cfg.MongoDBXCloud, cfg.MongoDBOps)
 	if err != nil {
 		logger.Error("failed to connect to MongoDB", "error", err)
 		os.Exit(1)
@@ -59,7 +59,7 @@ func main() {
 			logger.Error("failed to close MongoDB connection", "error", err)
 		}
 	}()
-	logger.Info("mongodb connected", "uri", cfg.MongoURI, "open5gs_db", cfg.MongoDBOpen5GS, "ops_db", cfg.MongoDBOps)
+	logger.Info("mongodb connected", "uri", cfg.MongoURI, "xcloud_db", cfg.MongoDBXCloud, "ops_db", cfg.MongoDBOps)
 
 	// Initialize components
 	sessionValidator := auth.NewSessionValidator(mc.Ops.Collection("app_users"))
@@ -71,51 +71,51 @@ func main() {
 
 	// Analytics
 	analyticsRepo := analytics.NewRepository(
-		mc.Open5GS.Collection("subscribers"),
-		mc.Open5GS.Collection("ocs_balances"),
-		mc.Open5GS.Collection("ocs_sessions"),
-		mc.Open5GS.Collection("ocs_reservations"),
-		mc.Open5GS.Collection("ocs_usage_records"),
-		mc.Open5GS.Collection("ocs_subscribers"),
-		mc.Open5GS.Collection("ocs_tariff_plans"),
+		mc.XCloud.Collection("subscribers"),
+		mc.XCloud.Collection("ocs_balances"),
+		mc.XCloud.Collection("ocs_sessions"),
+		mc.XCloud.Collection("ocs_reservations"),
+		mc.XCloud.Collection("ocs_usage_records"),
+		mc.XCloud.Collection("ocs_subscribers"),
+		mc.XCloud.Collection("ocs_tariff_plans"),
 	)
 	analyticsHandler := analytics.NewHandler(analyticsRepo, limiter)
 
 	// Ratings
-	ratingRepo := rating.NewRepository(mc.Open5GS.Collection("ocs_rating_policies"))
+	ratingRepo := rating.NewRepository(mc.XCloud.Collection("ocs_rating_policies"))
 	ratingHandler := rating.NewHandler(ratingRepo, limiter)
 
 	// Profiles
 	profileRepo := profile.NewRepository(
 		mc.Ops.Collection("app_profiles"),
 		mc.Ops.Collection("app_profile_versions"),
-		mc.Open5GS.Collection("subscribers"),
+		mc.XCloud.Collection("subscribers"),
 	)
 	profileHandler := profile.NewHandler(profileRepo, limiter)
 
 	// OCS
 	ocsRepo := ocs.NewRepository(
-		mc.Open5GS.Collection("ocs_balances"),
-		mc.Open5GS.Collection("ocs_sessions"),
-		mc.Open5GS.Collection("ocs_reservations"),
-		mc.Open5GS.Collection("ocs_usage_records"),
+		mc.XCloud.Collection("ocs_balances"),
+		mc.XCloud.Collection("ocs_sessions"),
+		mc.XCloud.Collection("ocs_reservations"),
+		mc.XCloud.Collection("ocs_usage_records"),
 	)
 	ocsHandler := ocs.NewHandler(ocsRepo, limiter)
 
 	// Tariff Plans
 	tariffRepo := tariff.NewRepository(
-		mc.Open5GS.Collection("ocs_tariff_plans"),
-		mc.Open5GS.Collection("ocs_subscribers"),
+		mc.XCloud.Collection("ocs_tariff_plans"),
+		mc.XCloud.Collection("ocs_subscribers"),
 		mc.Ops.Collection("app_audit_logs"),
 	)
 	tariffHandler := tariff.NewHandler(tariffRepo, limiter)
 
 	// Subscribers (Phase 2C)
 	subscriberRepo := subscriber.NewRepository(
-		mc.Open5GS.Collection("subscribers"),
-		mc.Open5GS.Collection("ocs_subscribers"),
-		mc.Open5GS.Collection("ocs_balances"),
-		mc.Open5GS.Collection("ocs_tariff_plans"),
+		mc.XCloud.Collection("subscribers"),
+		mc.XCloud.Collection("ocs_subscribers"),
+		mc.XCloud.Collection("ocs_balances"),
+		mc.XCloud.Collection("ocs_tariff_plans"),
 		mc.Ops.Collection("app_profiles"),
 	)
 	subscriberHandler := subscriber.NewHandler(subscriberRepo, limiter)

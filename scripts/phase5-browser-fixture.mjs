@@ -6,8 +6,8 @@ const { loadEnvConfig } = nextEnv;
 loadEnvConfig(process.cwd());
 const password = process.env.PHASE5_BROWSER_PASSWORD;
 if (!password) throw new Error('PHASE5_BROWSER_PASSWORD is required');
-const uri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/open5gs';
-const open5gsDbName = process.env.MONGODB_OPEN5GS_DB || process.env.MONGODB_DB || 'open5gs';
+const uri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/xcloud';
+const xcloudDbName = process.env.MONGODB_XCLOUD_DB || process.env.MONGODB_DB || 'xcloud';
 const appDbName = process.env.MONGODB_APP_DB || 'xcloud_ops';
 const imsis = ['460009999990001', '460009999990002'];
 const users = ['phase5_requester', 'phase5_checker'];
@@ -19,7 +19,7 @@ function subscriber(imsi) {
 
 await client.connect();
 try {
-  const subscribers = client.db(open5gsDbName).collection('subscribers');
+  const subscribers = client.db(xcloudDbName).collection('subscribers');
   const appUsers = client.db(appDbName).collection('app_users');
   if (process.argv.includes('--verify')) {
     const values = await subscribers.find({ imsi: { $in: imsis } }, { projection: { _id: 0, imsi: 1, access_restriction_data: 1 } }).sort({ imsi: 1 }).toArray();

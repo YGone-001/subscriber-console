@@ -4,14 +4,14 @@ import { buildDefaultSub4G, getPrimaryMsisdn, normalizeSub4G } from '@/lib/subsc
 import { asRecord, asString, asNumber, asArray } from '@/lib/typeGuards';
 import type {
   LegacySubscriberState,
-  Open5gsAmbr,
-  Open5gsArp,
-  Open5gsPccRule,
-  Open5gsQos,
-  Open5gsSecurity,
-  Open5gsSession,
-  Open5gsSlice,
-  Open5gsSubscriberDocument,
+  XcloudAmbr,
+  XcloudArp,
+  XcloudPccRule,
+  XcloudQos,
+  XcloudSecurity,
+  XcloudSession,
+  XcloudSlice,
+  XcloudSubscriberDocument,
 } from '@/types/xcloud';
 
 const ZERO_128 = '00000000000000000000000000000000';
@@ -36,7 +36,7 @@ function epcRealm(imsi: string) {
   };
 }
 
-function normalizeAmbr(value: unknown, fallback: Open5gsAmbr = defaultAmbr()): Open5gsAmbr {
+function normalizeAmbr(value: unknown, fallback: XcloudAmbr = defaultAmbr()): XcloudAmbr {
   const ambr = asRecord(value);
   const downlink = asRecord(ambr.downlink);
   const uplink = asRecord(ambr.uplink);
@@ -53,14 +53,14 @@ function normalizeAmbr(value: unknown, fallback: Open5gsAmbr = defaultAmbr()): O
   };
 }
 
-function defaultAmbr(): Open5gsAmbr {
+function defaultAmbr(): XcloudAmbr {
   return {
     downlink: { value: 1, unit: 3 },
     uplink: { value: 1, unit: 3 },
   };
 }
 
-function toOpen5gsArp(value: unknown, fallbackPriorityLevel: number): Open5gsArp {
+function toXcloudArp(value: unknown, fallbackPriorityLevel: number): XcloudArp {
   const arp = asRecord(value);
   const preemptCap = asString(arp.preemptCap ?? arp.pre_emption_capability, '');
   const preemptVuln = asString(arp.preemptVuln ?? arp.pre_emption_vulnerability, '');
@@ -88,18 +88,18 @@ function toLegacyArp(value: unknown, fallbackPriorityLevel: number) {
   };
 }
 
-function toOpen5gsQos(value: unknown, fallbackIndex: number, fallbackPriorityLevel: number): Open5gsQos {
+function toXcloudQos(value: unknown, fallbackIndex: number, fallbackPriorityLevel: number): XcloudQos {
   const qos = asRecord(value);
   const qosIndex = asNumber(qos._5qi ?? qos.index, fallbackIndex);
   const preset = sessionQosPreset(qosIndex);
 
   return {
     index: qosIndex,
-    arp: toOpen5gsArp(qos.arp, preset?.arpPriorityLevel ?? fallbackPriorityLevel),
+    arp: toXcloudArp(qos.arp, preset?.arpPriorityLevel ?? fallbackPriorityLevel),
   };
 }
 
-function toOpen5gsPccRule(rule: unknown): Open5gsPccRule {
+function toXcloudPccRule(rule: unknown): XcloudPccRule {
   const source = asRecord(rule);
   const qos = source.qos ? asRecord(source.qos) : null;
   const qosIndex = asNumber(qos?._5qi ?? qos?.index, 9);
@@ -116,7 +116,7 @@ function toOpen5gsPccRule(rule: unknown): Open5gsPccRule {
     qos: qos
       ? {
           index: qosIndex,
-          arp: toOpen5gsArp(qos.arp, preset?.arpPriorityLevel ?? 8),
+          arp: toXcloudArp(qos.arp, preset?.arpPriorityLevel ?? 8),
           mbr: qos.mbr || preset?.mbr ? normalizeAmbr(qos.mbr, preset?.mbr) : undefined,
           gbr: qos.gbr || preset?.gbr ? normalizeAmbr(qos.gbr, preset?.gbr) : undefined,
         }
@@ -124,7 +124,7 @@ function toOpen5gsPccRule(rule: unknown): Open5gsPccRule {
   };
 }
 
-function toOpen5gsSession(session: unknown, index: number): Open5gsSession {
+function toXcloudSession(session: unknown, index: number): XcloudSession {
   const source = asRecord(session);
   const name = asString(source.name, index === 0 ? 'internet' : 'ims');
   const isIms = isImsDnn(name);
@@ -134,13 +134,13 @@ function toOpen5gsSession(session: unknown, index: number): Open5gsSession {
   const smfIpv4 = asString(source.pgwIpv4 ?? asRecord(source.smf).ipv4, '');
   const smfIpv6 = asString(source.pgwIpv6 ?? asRecord(source.smf).ipv6, '');
 
-  const output: Open5gsSession = {
+  const output: XcloudSession = {
     _id: new ObjectId(),
     name,
     type: asNumber(source.type, isIms ? 3 : 1),
-    qos: toOpen5gsQos(source.qos, isIms ? 5 : 9, isIms ? 1 : 8),
+    qos: toXcloudQos(source.qos, isIms ? 5 : 9, isIms ? 1 : 8),
     ambr: normalizeAmbr(source.ambr, isIms ? IMS_SESSION_AMBR : (preset?.sessionAmbr ?? defaultAmbr())),
-    pcc_rule: asArray(source.pcc_rule).map(toOpen5gsPccRule),
+    pcc_rule: asArray(source.pcc_rule).map(toXcloudPccRule),
   };
   if (source.lbo_roaming_allowed !== undefined) output.lbo_roaming_allowed = !!source.lbo_roaming_allowed;
 
@@ -162,28 +162,28 @@ function toOpen5gsSession(session: unknown, index: number): Open5gsSession {
   return output;
 }
 
-function toOpen5gsSlice(slice: unknown): Open5gsSlice {
+function toXcloudSlice(slice: unknown): XcloudSlice {
   const source = asRecord(slice);
   const sessionList = asArray(source.session_list ?? source.session);
 
-  const output: Open5gsSlice = {
+  const output: XcloudSlice = {
     _id: new ObjectId(),
     sst: asNumber(source.sst, 1),
     default_indicator: source.default_indicator !== undefined ? !!source.default_indicator : true,
     session: sessionList.length > 0
-      ? sessionList.map(toOpen5gsSession)
-      : [toOpen5gsSession({ name: 'internet', type: 3 }, 0)],
+      ? sessionList.map(toXcloudSession)
+      : [toXcloudSession({ name: 'internet', type: 3 }, 0)],
   };
   const sd = asString(source.sd, '');
   if (sd && sd !== '000001') output.sd = sd;
   return output;
 }
 
-function toOpen5gsSecurity(auth4G: unknown, existing?: Open5gsSecurity): Open5gsSecurity {
+function toXcloudSecurity(auth4G: unknown, existing?: XcloudSecurity): XcloudSecurity {
   const auth = asRecord(auth4G);
   const op = auth.op !== undefined ? asString(auth.op) : existing?.op ?? null;
   const opc = auth.opc !== undefined ? asString(auth.opc) : existing?.opc ?? ZERO_128;
-  const output: Open5gsSecurity = {
+  const output: XcloudSecurity = {
     k: asString(auth.k, existing?.k || DEFAULT_AUTH_KEY),
     op: op || null,
     opc: opc || DEFAULT_AUTH_KEY,
@@ -194,7 +194,7 @@ function toOpen5gsSecurity(auth4G: unknown, existing?: Open5gsSecurity): Open5gs
   return output;
 }
 
-export function buildDefaultOpen5gsSubscriber(imsi: string, profileData?: unknown): Open5gsSubscriberDocument {
+export function buildDefaultXcloudSubscriber(imsi: string, profileData?: unknown): XcloudSubscriberDocument {
   const sub4G = buildDefaultSub4G('', profileData);
   const realm = epcRealm(imsi);
 
@@ -204,9 +204,9 @@ export function buildDefaultOpen5gsSubscriber(imsi: string, profileData?: unknow
     imsi,
     msisdn: [],
     imeisv: DEFAULT_IMEISV,
-    security: toOpen5gsSecurity({}),
+    security: toXcloudSecurity({}),
     ambr: normalizeAmbr(sub4G.ambr),
-    slice: asArray(sub4G.sliceList).map(toOpen5gsSlice),
+    slice: asArray(sub4G.sliceList).map(toXcloudSlice),
     access_restriction_data: 32,
     subscriber_status: 0,
     network_access_mode: 0,
@@ -218,18 +218,18 @@ export function buildDefaultOpen5gsSubscriber(imsi: string, profileData?: unknow
   };
 }
 
-export function buildOpen5gsSubscriberFromLegacy(
+export function buildXcloudSubscriberFromLegacy(
   imsi: string,
   input: {
     sub4G?: unknown;
     auth4G?: unknown;
     ocsTraffic?: unknown;
   },
-  existing?: Open5gsSubscriberDocument | null
-): Open5gsSubscriberDocument {
+  existing?: XcloudSubscriberDocument | null
+): XcloudSubscriberDocument {
   const normalizedSub4G = input.sub4G ? normalizeSub4G(input.sub4G) : null;
   const requestedMsisdn = normalizedSub4G ? getPrimaryMsisdn(input.sub4G) : '';
-  const base = existing || buildDefaultOpen5gsSubscriber(imsi);
+  const base = existing || buildDefaultXcloudSubscriber(imsi);
   const realm = epcRealm(imsi);
 
   return {
@@ -237,9 +237,9 @@ export function buildOpen5gsSubscriberFromLegacy(
     schema_version: 1,
     imsi,
     msisdn: normalizedSub4G ? (requestedMsisdn ? [requestedMsisdn] : []) : base.msisdn,
-    security: input.auth4G ? toOpen5gsSecurity(input.auth4G, base.security) : base.security,
+    security: input.auth4G ? toXcloudSecurity(input.auth4G, base.security) : base.security,
     ambr: normalizedSub4G ? normalizeAmbr(normalizedSub4G.ambr, base.ambr) : base.ambr,
-    slice: normalizedSub4G ? asArray(normalizedSub4G.sliceList).map(toOpen5gsSlice) : base.slice,
+    slice: normalizedSub4G ? asArray(normalizedSub4G.sliceList).map(toXcloudSlice) : base.slice,
     access_restriction_data: normalizedSub4G
       ? asNumber(normalizedSub4G.access_restriction_data, base.access_restriction_data)
       : base.access_restriction_data,
@@ -254,7 +254,7 @@ export function buildOpen5gsSubscriberFromLegacy(
   };
 }
 
-function legacySession(session: Open5gsSession, index: number) {
+function legacySession(session: XcloudSession, index: number) {
   const name = session.name || (index === 0 ? 'internet' : 'ims');
   const isIms = name === 'ims';
 
@@ -273,7 +273,7 @@ function legacySession(session: Open5gsSession, index: number) {
   };
 }
 
-function legacyPccRule(rule: Open5gsPccRule) {
+function legacyPccRule(rule: XcloudPccRule) {
   const qos = rule.qos;
 
   return {
@@ -291,7 +291,7 @@ function legacyPccRule(rule: Open5gsPccRule) {
   };
 }
 
-export function open5gsToLegacyState(doc: Open5gsSubscriberDocument | null): LegacySubscriberState | null {
+export function xcloudToLegacyState(doc: XcloudSubscriberDocument | null): LegacySubscriberState | null {
   if (!doc) return null;
 
   const sub4G = {

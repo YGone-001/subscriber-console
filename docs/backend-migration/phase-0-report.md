@@ -28,7 +28,7 @@ Browser → Nginx → Next.js :3000
                    │   ├── authz.ts (requireAuth/requireCapability/requirePermission)
                    │   ├── rateLimit.ts (MongoDB-backed)
                    │   └── → server/repositories/ → MongoDB
-                   └── MongoDB (open5gs + xcloud_ops)
+                   └── MongoDB (xcloud + xcloud_ops)
 ```
 
 **No Go backend exists yet.** All API, auth, governance, and data access is in Next.js.
@@ -138,7 +138,7 @@ Browser → Nginx → Next.js :3000
 
 | Database | Collections |
 |----------|----------:|
-| `open5gs` | 9 (subscribers, ocs_tariff_plans, ocs_subscribers, ocs_balances, ocs_sessions, ocs_reservations, ocs_usage_records, ocs_events, ocs_config) |
+| `xcloud` | 9 (subscribers, ocs_tariff_plans, ocs_subscribers, ocs_balances, ocs_sessions, ocs_reservations, ocs_usage_records, ocs_events, ocs_config) |
 | `xcloud_ops` | 11 (app_profiles, app_profile_versions, app_ratings, app_users, app_approvals, app_sequences, app_audit_logs, app_alerts, app_rate_limits, app_metrics, ocs_balance_adjustments) |
 | **Total** | **20** |
 
@@ -147,9 +147,9 @@ Browser → Nginx → Next.js :3000
 ## 13. Critical BSON Risks
 
 1. **Long type handling**: OCS collections use BSON `Long` extensively. Incorrect conversion corrupts data.
-2. **Open5GS subscriber BSON**: Deeply nested (security, ambr, slice, session, qos). Go struct mapping must preserve all fields.
+2. **xCloud subscriber BSON**: Deeply nested (security, ambr, slice, session, qos). Go struct mapping must preserve all fields.
 3. **No transactions**: Multi-collection writes are not atomic.
-4. **Dual-database joins**: Subscriber list joins `open5gs` + `xcloud_ops` collections.
+4. **Dual-database joins**: Subscriber list joins `xcloud` + `xcloud_ops` collections.
 
 ---
 

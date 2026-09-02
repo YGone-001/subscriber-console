@@ -6,8 +6,8 @@ import { errorSummary, writeOpsReport } from './lib/ops-report.mjs';
 const { loadEnvConfig } = nextEnv;
 loadEnvConfig(process.cwd());
 
-const uri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/open5gs';
-const open5gsDbName = process.env.MONGODB_OPEN5GS_DB || process.env.MONGODB_DB || 'open5gs';
+const uri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/xcloud';
+const xcloudDbName = process.env.MONGODB_XCLOUD_DB || process.env.MONGODB_DB || 'xcloud';
 const appDbName = process.env.MONGODB_APP_DB || 'xcloud_ops';
 const startedAt = new Date();
 const createdIndexes = [];
@@ -122,9 +122,9 @@ function tariffRuleFromRating(rating) {
   };
 }
 
-async function seedOcsTariffPlan(open5gsDb, appDb) {
+async function seedOcsTariffPlan(xcloudDb, appDb) {
   const now = new Date();
-  const tariffPlans = open5gsDb.collection('ocs_tariff_plans');
+  const tariffPlans = xcloudDb.collection('ocs_tariff_plans');
   const legacyRatings = await appDb.collection('app_ratings')
     .find({ rating_group_id: { $exists: true } })
     .sort({ rating_group_id: 1 })
@@ -171,7 +171,7 @@ async function seedOcsTariffPlan(open5gsDb, appDb) {
       updated_at: now,
     });
     maintenanceActions.push({
-      database: open5gsDbName,
+      database: xcloudDbName,
       collection: 'ocs_tariff_plans',
       action: 'seed_default_plan',
       importedLegacyRatings: Math.max(0, legacyRatings.length),
@@ -195,18 +195,18 @@ async function seedOcsTariffPlan(open5gsDb, appDb) {
     }
   );
   maintenanceActions.push({
-    database: open5gsDbName,
+    database: xcloudDbName,
     collection: 'ocs_tariff_plans',
     action: 'sync_default_plan_rules',
     importedLegacyRatings: legacyRatings.length,
   });
 }
 
-async function provisionExistingOcsSubscribers(open5gsDb) {
+async function provisionExistingOcsSubscribers(xcloudDb) {
   const now = new Date();
-  const subscribers = open5gsDb.collection('subscribers');
-  const ocsSubscribers = open5gsDb.collection('ocs_subscribers');
-  const balances = open5gsDb.collection('ocs_balances');
+  const subscribers = xcloudDb.collection('subscribers');
+  const ocsSubscribers = xcloudDb.collection('ocs_subscribers');
+  const balances = xcloudDb.collection('ocs_balances');
   const cursor = subscribers.find(
     { imsi: { $type: 'string' } },
     { projection: { imsi: 1, msisdn: 1 } }
@@ -296,7 +296,7 @@ async function provisionExistingOcsSubscribers(open5gsDb) {
     }]
   );
   maintenanceActions.push({
-    database: open5gsDbName,
+    database: xcloudDbName,
     collections: ['ocs_subscribers', 'ocs_balances'],
     action: 'provision_missing_ocs_subscribers',
     subscribersScanned: scanned,
@@ -333,52 +333,52 @@ async function dropConflictingIndexes(collection, desiredIndexes) {
 
 async function ensureIndexes() {
   await client.connect();
-  const open5gsDb = client.db(open5gsDbName);
+  const xcloudDb = client.db(xcloudDbName);
   const appDb = client.db(appDbName);
 
-  // ── open5gs.subscribers ──
-  createdIndexes.push(...(await open5gsDb.collection('subscribers').createIndexes([
+  // ── xcloud.subscribers ──
+  createdIndexes.push(...(await xcloudDb.collection('subscribers').createIndexes([
     { key: { imsi: 1 }, unique: true, name: 'uniq_imsi' },
     { key: { msisdn: 1 }, name: 'subscriber_msisdn' },
-  ])).map((name) => ({ database: open5gsDbName, collection: 'subscribers', name })));
+  ])).map((name) => ({ database: xcloudDbName, collection: 'subscribers', name })));
 
-  // ── open5gs.ocs_tariff_plans ──
+  // ── xcloud.ocs_tariff_plans ──
   const tariffDesired = [
     { key: { plan_id: 1 }, unique: true, name: 'uniq_plan_id' },
     { key: { 'rules.rating_group': 1 }, name: 'rules_rating_group' },
   ];
-  await dropConflictingIndexes(open5gsDb.collection('ocs_tariff_plans'), tariffDesired);
-  createdIndexes.push(...(await open5gsDb.collection('ocs_tariff_plans').createIndexes(tariffDesired))
-    .map((name) => ({ database: open5gsDbName, collection: 'ocs_tariff_plans', name })));
+  await dropConflictingIndexes(xcloudDb.collection('ocs_tariff_plans'), tariffDesired);
+  createdIndexes.push(...(await xcloudDb.collection('ocs_tariff_plans').createIndexes(tariffDesired))
+    .map((name) => ({ database: xcloudDbName, collection: 'ocs_tariff_plans', name })));
 
-  // ── open5gs.ocs_subscribers ──
+  // ── xcloud.ocs_subscribers ──
   const ocsSubDesired = [
     { key: { imsi: 1 }, unique: true, name: 'uniq_ocs_subscriber_imsi' },
     { key: { plan_id: 1 }, name: 'ocs_subscriber_plan_id' },
     { key: { msisdn: 1 }, name: 'ocs_subscriber_msisdn' },
   ];
-  await dropConflictingIndexes(open5gsDb.collection('ocs_subscribers'), ocsSubDesired);
-  createdIndexes.push(...(await open5gsDb.collection('ocs_subscribers').createIndexes(ocsSubDesired))
-    .map((name) => ({ database: open5gsDbName, collection: 'ocs_subscribers', name })));
+  await dropConflictingIndexes(xcloudDb.collection('ocs_subscribers'), ocsSubDesired);
+  createdIndexes.push(...(await xcloudDb.collection('ocs_subscribers').createIndexes(ocsSubDesired))
+    .map((name) => ({ database: xcloudDbName, collection: 'ocs_subscribers', name })));
 
-  // ── open5gs.ocs_balances ──
+  // ── xcloud.ocs_balances ──
   const balanceDesired = [
     { key: { imsi: 1 }, unique: true, name: 'uniq_ocs_balance_imsi' },
     { key: { updated_at: -1 }, name: 'ocs_balance_updated_at_desc' },
   ];
-  await dropConflictingIndexes(open5gsDb.collection('ocs_balances'), balanceDesired);
-  createdIndexes.push(...(await open5gsDb.collection('ocs_balances').createIndexes(balanceDesired))
-    .map((name) => ({ database: open5gsDbName, collection: 'ocs_balances', name })));
+  await dropConflictingIndexes(xcloudDb.collection('ocs_balances'), balanceDesired);
+  createdIndexes.push(...(await xcloudDb.collection('ocs_balances').createIndexes(balanceDesired))
+    .map((name) => ({ database: xcloudDbName, collection: 'ocs_balances', name })));
 
-  // ── open5gs.ocs_sessions ──
-  createdIndexes.push(...(await open5gsDb.collection('ocs_sessions').createIndexes([
+  // ── xcloud.ocs_sessions ──
+  createdIndexes.push(...(await xcloudDb.collection('ocs_sessions').createIndexes([
     { key: { state: 1, last_update_at: -1 }, name: 'ocs_session_state_updated' },
-  ])).map((name) => ({ database: open5gsDbName, collection: 'ocs_sessions', name })));
+  ])).map((name) => ({ database: xcloudDbName, collection: 'ocs_sessions', name })));
 
-  // ── open5gs.ocs_usage_records ──
-  createdIndexes.push(...(await open5gsDb.collection('ocs_usage_records').createIndexes([
+  // ── xcloud.ocs_usage_records ──
+  createdIndexes.push(...(await xcloudDb.collection('ocs_usage_records').createIndexes([
     { key: { created_at: -1 }, name: 'ocs_usage_created_at_desc' },
-  ])).map((name) => ({ database: open5gsDbName, collection: 'ocs_usage_records', name })));
+  ])).map((name) => ({ database: xcloudDbName, collection: 'ocs_usage_records', name })));
 
   // ── xcloud_ops collections ──
   createdIndexes.push(...(await appDb.collection('app_profiles').createIndexes([
@@ -490,8 +490,8 @@ async function seedRootAdminUser(appDb) {
   });
 }
 
-  await seedOcsTariffPlan(open5gsDb, appDb);
-  await provisionExistingOcsSubscribers(open5gsDb);
+  await seedOcsTariffPlan(xcloudDb, appDb);
+  await provisionExistingOcsSubscribers(xcloudDb);
   await seedRootAdminUser(appDb);
 }
 
@@ -500,7 +500,7 @@ ensureIndexes()
     const report = {
       ok: true,
       command: 'mongo:init',
-      databases: { open5gs: open5gsDbName, app: appDbName },
+      databases: { xcloud: xcloudDbName, app: appDbName },
       checkedAt: new Date().toISOString(),
       durationMs: Date.now() - startedAt.getTime(),
       indexes: createdIndexes,
@@ -511,14 +511,14 @@ ensureIndexes()
       },
     };
     const outputPath = await writeOpsReport('mongo-init', report, startedAt);
-    console.log(`MongoDB indexes are ready for databases "${open5gsDbName}" and "${appDbName}".`);
+    console.log(`MongoDB indexes are ready for databases "${xcloudDbName}" and "${appDbName}".`);
     console.log(`Ops report written to ${outputPath}`);
   })
   .catch(async (error) => {
     const report = {
       ok: false,
       command: 'mongo:init',
-      databases: { open5gs: open5gsDbName, app: appDbName },
+      databases: { xcloud: xcloudDbName, app: appDbName },
       checkedAt: new Date().toISOString(),
       durationMs: Date.now() - startedAt.getTime(),
       indexes: createdIndexes,

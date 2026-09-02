@@ -10,7 +10,7 @@ func TestLoadDefaults(t *testing.T) {
 	// Clear env vars to test defaults
 	os.Unsetenv("HTTP_ADDR")
 	os.Unsetenv("MONGODB_URI")
-	os.Unsetenv("MONGODB_OPEN5GS_DB")
+	os.Unsetenv("MONGODB_XCLOUD_DB")
 	os.Unsetenv("MONGODB_APP_DB")
 
 	cfg, err := Load()
@@ -24,8 +24,8 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.MongoURI != "mongodb://127.0.0.1:27017" {
 		t.Errorf("MongoURI = %q, want %q", cfg.MongoURI, "mongodb://127.0.0.1:27017")
 	}
-	if cfg.MongoDBOpen5GS != "open5gs" {
-		t.Errorf("MongoDBOpen5GS = %q, want %q", cfg.MongoDBOpen5GS, "open5gs")
+	if cfg.MongoDBXCloud != "xcloud" {
+		t.Errorf("MongoDBXCloud = %q, want %q", cfg.MongoDBXCloud, "xcloud")
 	}
 	if cfg.MongoDBOps != "xcloud_ops" {
 		t.Errorf("MongoDBOps = %q, want %q", cfg.MongoDBOps, "xcloud_ops")
@@ -47,7 +47,7 @@ func TestLoadDefaults(t *testing.T) {
 func TestLoadFromEnv(t *testing.T) {
 	t.Setenv("HTTP_ADDR", ":9090")
 	t.Setenv("MONGODB_URI", "mongodb://mongo:27017")
-	t.Setenv("MONGODB_OPEN5GS_DB", "test_open5gs")
+	t.Setenv("MONGODB_XCLOUD_DB", "test_xcloud")
 	t.Setenv("MONGODB_APP_DB", "test_ops")
 	t.Setenv("HTTP_READ_TIMEOUT", "5s")
 
@@ -62,8 +62,8 @@ func TestLoadFromEnv(t *testing.T) {
 	if cfg.MongoURI != "mongodb://mongo:27017" {
 		t.Errorf("MongoURI = %q, want %q", cfg.MongoURI, "mongodb://mongo:27017")
 	}
-	if cfg.MongoDBOpen5GS != "test_open5gs" {
-		t.Errorf("MongoDBOpen5GS = %q, want %q", cfg.MongoDBOpen5GS, "test_open5gs")
+	if cfg.MongoDBXCloud != "test_xcloud" {
+		t.Errorf("MongoDBXCloud = %q, want %q", cfg.MongoDBXCloud, "test_xcloud")
 	}
 	if cfg.MongoDBOps != "test_ops" {
 		t.Errorf("MongoDBOps = %q, want %q", cfg.MongoDBOps, "test_ops")

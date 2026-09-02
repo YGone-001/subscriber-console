@@ -1,13 +1,13 @@
 # subscriber-console
 
-Open5GS subscriber operations console built with Next.js, React, and MongoDB.
+xCloud subscriber operations console built with Next.js, React, and MongoDB.
 
 It manages IMSI subscriber records, profile templates, rating policies, traffic analytics, CSV import/export, audit logs, local alerts, system health checks, and role-based access control.
 
 ## Features
 
 - Subscriber CRUD, pagination, search, single create, batch create, CSV import, and delete.
-- Open5GS-compatible MongoDB subscriber document generation.
+- xCloud-compatible MongoDB subscriber document generation.
 - Profile template management with version history and restore.
 - Rating group management for OCS policy templates.
 - Analytics dashboard computed from MongoDB subscriber documents.
@@ -45,9 +45,9 @@ Set a strong `INITIAL_ADMIN_PASSWORD` in `.env` before running `npm run mongo:in
 
 | Variable | Description |
 | --- | --- |
-| `MONGODB_URI` | MongoDB connection URI, usually the Open5GS MongoDB host |
-| `MONGODB_DB` | Open5GS data database name, default `open5gs` |
-| `MONGODB_OPEN5GS_DB` | Optional explicit Open5GS database override; falls back to `MONGODB_DB` |
+| `MONGODB_URI` | MongoDB connection URI, usually the xCloud MongoDB host |
+| `MONGODB_DB` | xCloud data database name, default `xcloud` |
+| `MONGODB_XCLOUD_DB` | Optional explicit xCloud database override; falls back to `MONGODB_DB` |
 | `MONGODB_APP_DB` | Application operations database for `app_*` collections, default `xcloud_ops` |
 | `MONGODB_MAX_POOL_SIZE` | Optional connection pool max size |
 | `MONGODB_MIN_POOL_SIZE` | Optional connection pool min size |
@@ -66,14 +66,14 @@ npm run typecheck           # Run TypeScript without emitting files
 npm test                    # Run Node.js unit tests
 npm run check               # Run lint, typecheck, tests, and build
 npm run mongo:init          # Create MongoDB indexes
-npm run mongo:migrate-app-db # Move app_* collections from open5gs to the app database
+npm run mongo:migrate-app-db # Move app_* collections from xcloud to the app database
 npm run mongo:test-core     # Run MongoDB core integration smoke test against a temporary DB
 npm run mongo:perf          # Explain key MongoDB queries and flag slow scans
 ```
 
 MongoDB operational scripts write JSON reports to `reports/ops/` by default. Set `OPS_REPORT_DIR` to override the location.
 
-`open5gs` stores HSS subscriber data in `subscribers` and OCS preset data in `ocs_tariff_plans`, `ocs_subscribers`, and `ocs_balances`. Project-owned collections such as `app_users`, `app_profiles`, `app_audit_logs`, `app_alerts`, `app_rate_limits`, and `app_metrics` live in `MONGODB_APP_DB`.
+`xcloud` stores HSS subscriber data in `subscribers` and OCS preset data in `ocs_tariff_plans`, `ocs_subscribers`, and `ocs_balances`. Project-owned collections such as `app_users`, `app_profiles`, `app_audit_logs`, `app_alerts`, `app_rate_limits`, and `app_metrics` live in `MONGODB_APP_DB`.
 `npm run mongo:init` creates indexes, seeds the default OCS tariff plan, imports legacy rating rules, and inserts missing OCS subscriber/balance rows without overwriting existing balances.
 
 ## Deployment

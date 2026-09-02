@@ -1,5 +1,5 @@
 import { Long } from 'mongodb';
-import { getAppDb, getOpen5gsDb, mongoCollections, mongoDbNames } from '@/lib/mongo';
+import { getAppDb, getXcloudDb, mongoCollections, mongoDbNames } from '@/lib/mongo';
 import { getMongoHealthReport, MongoHealthReport } from './mongoHealthRepository';
 
 export type SubsystemStatus = 'healthy' | 'degraded' | 'critical';
@@ -7,7 +7,7 @@ export type SubsystemStatus = 'healthy' | 'degraded' | 'critical';
 export type DatabaseSubsystemHealth = {
   status: SubsystemStatus;
   latencyMs: number;
-  open5gsDb: string;
+  xcloudDb: string;
   appDb: string;
   ready: boolean;
   totalCollections: number;
@@ -81,7 +81,7 @@ function numericValue(value: unknown, fallback = 0): number {
 }
 
 export async function getComprehensiveSystemHealth(): Promise<ComprehensiveSystemHealth> {
-  const [open5gsDb, appDb] = await Promise.all([getOpen5gsDb(), getAppDb()]);
+  const [xcloudDb, appDb] = await Promise.all([getXcloudDb(), getAppDb()]);
   const databases = mongoDbNames();
 
   // 1. Run Mongo Health Check
@@ -102,7 +102,7 @@ export async function getComprehensiveSystemHealth(): Promise<ComprehensiveSyste
     auditLogCount,
   ] = await Promise.all([
     // Balance aggregation
-    open5gsDb.collection(mongoCollections.ocsBalances).aggregate<{
+    xcloudDb.collection(mongoCollections.ocsBalances).aggregate<{
       totalSubscribers: number;
       totalAllocated: number;
       totalUsed: number;
@@ -122,10 +122,10 @@ export async function getComprehensiveSystemHealth(): Promise<ComprehensiveSyste
     ]).toArray(),
 
     // Sample balances for invariant validation
-    open5gsDb.collection(mongoCollections.ocsBalances).find({}).limit(500).toArray(),
+    xcloudDb.collection(mongoCollections.ocsBalances).find({}).limit(500).toArray(),
 
     // Sessions aggregation
-    open5gsDb.collection(mongoCollections.ocsSessions).aggregate<{
+    xcloudDb.collection(mongoCollections.ocsSessions).aggregate<{
       active: number;
       closing: number;
     }>([
@@ -139,7 +139,7 @@ export async function getComprehensiveSystemHealth(): Promise<ComprehensiveSyste
     ]).toArray(),
 
     // Reservations aggregation
-    open5gsDb.collection(mongoCollections.ocsReservations).aggregate<{
+    xcloudDb.collection(mongoCollections.ocsReservations).aggregate<{
       active: number;
       orphaned: number;
       totalReservedOctets: number;
@@ -155,10 +155,10 @@ export async function getComprehensiveSystemHealth(): Promise<ComprehensiveSyste
     ]).toArray(),
 
     // Tariff plans count
-    open5gsDb.collection(mongoCollections.ocsTariffPlans).countDocuments({}),
+    xcloudDb.collection(mongoCollections.ocsTariffPlans).countDocuments({}),
 
     // HSS Core subscriber sample & count
-    open5gsDb.collection(mongoCollections.subscribers).find({}, {
+    xcloudDb.collection(mongoCollections.subscribers).find({}, {
       projection: { imsi: 1, security: 1, slice: 1, profile: 1, profile_name: 1, 'webui_meta.profile_name': 1 }
     }).limit(1000).toArray(),
 
@@ -215,7 +215,7 @@ export async function getComprehensiveSystemHealth(): Promise<ComprehensiveSyste
   const databaseSubsystem: DatabaseSubsystemHealth = {
     status: dbStatus,
     latencyMs: mongoReport.latencyMs,
-    open5gsDb: databases.open5gs,
+    xcloudDb: databases.xcloud,
     appDb: databases.app,
     ready: mongoReport.ok,
     totalCollections: mongoReport.collections.length,

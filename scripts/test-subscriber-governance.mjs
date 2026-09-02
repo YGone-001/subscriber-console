@@ -7,9 +7,9 @@ loadEnvConfig(process.cwd());
 
 const startedAt = new Date();
 const suffix = `subscriber_governance_test_${Date.now()}_${process.pid}`;
-const open5gsDbName = `${process.env.MONGODB_OPEN5GS_DB || process.env.MONGODB_DB || 'open5gs'}_${suffix}`;
+const xcloudDbName = `${process.env.MONGODB_XCLOUD_DB || process.env.MONGODB_DB || 'xcloud'}_${suffix}`;
 const appDbName = `${process.env.MONGODB_APP_DB || 'xcloud_ops'}_${suffix}`;
-const uri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/open5gs';
+const uri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/xcloud';
 const checks = [];
 const client = new MongoClient(uri, { maxPoolSize: 4, serverSelectionTimeoutMS: Number(process.env.MONGODB_SERVER_SELECTION_TIMEOUT_MS || 5000) });
 
@@ -20,7 +20,7 @@ function update(imsi, expectedAccess, nextAccess) { return { updateOne: { filter
 
 async function main() {
   await client.connect();
-  const db = client.db(open5gsDbName);
+  const db = client.db(xcloudDbName);
   const appDb = client.db(appDbName);
   const subscribers = db.collection('subscribers');
   const approvals = appDb.collection('app_approvals');
@@ -68,14 +68,14 @@ async function main() {
       await approvals.updateOne({ id: 'approval-fingerprint-a' }, { $set: { status: 'completed' } });
       await approvals.insertOne({ id: 'approval-fingerprint-c', action: 'SUBSCRIBER_BATCH_UPDATE', status: 'pending', operationFingerprint: 'duplicate-fingerprint' });
     });
-    const report = { ok: true, command: 'mongo:test-subscriber-governance', databases: { open5gs: open5gsDbName, app: appDbName }, checkedAt: new Date().toISOString(), durationMs: Date.now() - startedAt.getTime(), checks, cleanup: 'dropped isolated databases' };
+    const report = { ok: true, command: 'mongo:test-subscriber-governance', databases: { xcloud: xcloudDbName, app: appDbName }, checkedAt: new Date().toISOString(), durationMs: Date.now() - startedAt.getTime(), checks, cleanup: 'dropped isolated databases' };
     console.log(JSON.stringify(report, null, 2));
     console.log(`Ops report written to ${await writeOpsReport('mongo-test-subscriber-governance', report, startedAt)}`);
   } finally { await db.dropDatabase(); await appDb.dropDatabase(); await client.close(); }
 }
 
 main().catch(async (error) => {
-  const report = { ok: false, command: 'mongo:test-subscriber-governance', databases: { open5gs: open5gsDbName, app: appDbName }, checkedAt: new Date().toISOString(), durationMs: Date.now() - startedAt.getTime(), checks, error: errorSummary(error), cleanup: 'isolated databases will be removed when connection cleanup succeeds' };
+  const report = { ok: false, command: 'mongo:test-subscriber-governance', databases: { xcloud: xcloudDbName, app: appDbName }, checkedAt: new Date().toISOString(), durationMs: Date.now() - startedAt.getTime(), checks, error: errorSummary(error), cleanup: 'isolated databases will be removed when connection cleanup succeeds' };
   console.error('Subscriber governance MongoDB integration test failed:', error);
   console.error(`Ops report written to ${await writeOpsReport('mongo-test-subscriber-governance', report, startedAt)}`);
   process.exitCode = 1;

@@ -1,9 +1,9 @@
 import { Document, Long } from 'mongodb';
-import { getOpen5gsCollection, mongoCollections } from '@/lib/mongo';
+import { getXcloudCollection, mongoCollections } from '@/lib/mongo';
 import { DEFAULT_OCS_PLAN_ID, firstActiveRatingPolicy } from '@/server/repositories/ocsBillingRepository';
-import type { Open5gsSubscriberDocument } from '@/types/xcloud';
+import type { XcloudSubscriberDocument } from '@/types/xcloud';
 
-type SubscriberDoc = Open5gsSubscriberDocument & Document;
+type SubscriberDoc = XcloudSubscriberDocument & Document;
 
 export type OcsBalanceMetrics = {
   totalSubscribers: number;
@@ -80,11 +80,11 @@ export type AnalyticsMetrics = {
 };
 
 function subscribersCollection() {
-  return getOpen5gsCollection<SubscriberDoc>(mongoCollections.subscribers);
+  return getXcloudCollection<SubscriberDoc>(mongoCollections.subscribers);
 }
 
 function balancesCollection() {
-  return getOpen5gsCollection<Document & {
+  return getXcloudCollection<Document & {
     imsi: string;
     data_total?: Long | number;
     data_used?: Long | number;
@@ -101,23 +101,23 @@ function balancesCollection() {
 }
 
 function sessionsCollection() {
-  return getOpen5gsCollection(mongoCollections.ocsSessions);
+  return getXcloudCollection(mongoCollections.ocsSessions);
 }
 
 function reservationsCollection() {
-  return getOpen5gsCollection(mongoCollections.ocsReservations);
+  return getXcloudCollection(mongoCollections.ocsReservations);
 }
 
 function usageRecordsCollection() {
-  return getOpen5gsCollection(mongoCollections.ocsUsageRecords);
+  return getXcloudCollection(mongoCollections.ocsUsageRecords);
 }
 
 function ocsSubscribersCollection() {
-  return getOpen5gsCollection(mongoCollections.ocsSubscribers);
+  return getXcloudCollection(mongoCollections.ocsSubscribers);
 }
 
 function tariffPlansCollection() {
-  return getOpen5gsCollection(mongoCollections.ocsTariffPlans);
+  return getXcloudCollection(mongoCollections.ocsTariffPlans);
 }
 
 function numericValue(value: unknown, fallback = 0): number {

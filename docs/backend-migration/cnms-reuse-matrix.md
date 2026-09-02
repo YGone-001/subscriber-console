@@ -29,7 +29,7 @@
 | Capability | CNMS Status | subscriber-console Relevance | Notes |
 |-----------|-------------|------------------------------|-------|
 | Config management | JSON file (`config.Load()`) | Phase 1 reference | sub-console should use env vars, not JSON file |
-| MongoDB client lifecycle | `mongo-driver/v2`, single DB, `Connect` + `Ping` + `Close` | Phase 1 reference | sub-console needs **two DB handles** (open5gs + xcloud_ops) |
+| MongoDB client lifecycle | `mongo-driver/v2`, single DB, `Connect` + `Ping` + `Close` | Phase 1 reference | sub-console needs **two DB handles** (xcloud + xcloud_ops) |
 | HTTP handler structure | `net/http` + `ServeMux` switch | Phase 1 reference | sub-console: same approach, no framework |
 | Rate limiting middleware | Token bucket, per-IP, in-memory `sync.Map` | Phase 1 reference | sub-console uses MongoDB-backed fixed-window |
 | JSON response standardization | `{"status":"error","message":"..."}` | Phase 1 reference | sub-console uses `{"error":"...","code":"..."}` — **different shape** |
@@ -67,12 +67,12 @@
 
 | Capability | CNMS Status | subscriber-console Relevance | Notes |
 |-----------|-------------|------------------------------|-------|
-| Subscriber CRUD | UNVERIFIED | Handler style reference only | CNMS subscriber model ≠ Open5GS subscriber BSON. Data model is fundamentally different. |
+| Subscriber CRUD | UNVERIFIED | Handler style reference only | CNMS subscriber model ≠ xCloud subscriber BSON. Data model is fundamentally different. |
 | Subscriber list/pagination | UNVERIFIED | Pattern reference | subscriber-console joins 3 collections for list view |
 | Subscriber import | UNVERIFIED | Pattern reference | subscriber-console has CSV import with OCS provisioning |
 | Subscriber batch | UNVERIFIED | Pattern reference | subscriber-console has frozen payload governance |
 
-**CRITICAL**: CNMS Subscriber API is NOT a direct replacement. subscriber-console works with Open5GS subscription BSON (security, ambr, slice, session). CNMS subscriber is a monitoring/management view.
+**CRITICAL**: CNMS Subscriber API is NOT a direct replacement. subscriber-console works with xCloud subscription BSON (security, ambr, slice, session). CNMS subscriber is a monitoring/management view.
 
 ### OCS / Billing
 

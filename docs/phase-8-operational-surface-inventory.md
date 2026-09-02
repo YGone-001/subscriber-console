@@ -13,7 +13,8 @@ restart, reload, start, stop, reconcile, or remote service action.
 The repository contains subscriber provisioning, OCS administration, and
 subscriber/OCS data-integrity repairs. Those are application-data operations;
 they are not evidence that this console controls the running state of AMF,
-SMF, UPF, MME, IMS, Open5GS, Kamailio, Docker, Kubernetes, or a remote host.
+SMF, UPF, AUSF, BSF, NRF, NSSF, PCF, SCP, SEEP, UDM, UDR,
+MME, HSS, SGWC, SGWU, PCRF, OCS, Docker, Kubernetes, or a remote host.
 
 Phase 8 therefore follows the safe **8.5 readiness** path:
 

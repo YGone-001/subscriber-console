@@ -201,7 +201,7 @@ export function TariffRuleModal({
             {conflictWith && (
               <InlineNotice tone="warning" icon={<AlertTriangle size={18} />}>
                 <div>
-                  <strong>{t("tariff_rule_conflict_warning")}</strong>: Matches existing rule (<code>{conflictWith.rule_id || `RG ${conflictWith.rating_group_id}`}</code>). Open5GS OCS will evaluate based on rule priority.
+                  <strong>{t("tariff_rule_conflict_warning")}</strong>: Matches existing rule (<code>{conflictWith.rule_id || `RG ${conflictWith.rating_group_id}`}</code>). xCloud OCS will evaluate based on rule priority.
                 </div>
               </InlineNotice>
             )}

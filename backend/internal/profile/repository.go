@@ -89,7 +89,7 @@ func (r *Repository) GetProfile(ctx context.Context, name string) (map[string]an
 }
 
 // GetProfileStats returns subscriber statistics for a profile.
-// Queries open5gs.subscribers (cross-domain read, no writes).
+// Queries xcloud.subscribers (cross-domain read, no writes).
 func (r *Repository) GetProfileStats(ctx context.Context, profileName string) (ProfileStats, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()

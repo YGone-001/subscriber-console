@@ -190,7 +190,7 @@ export function validateTariffRule(raw: any): {
 }
 
 /**
- * Returns rule specificity matching level according to Open5GS OCS rule matching priority
+ * Returns rule specificity matching level according to xCloud OCS rule matching priority
  */
 export function getRuleSpecificityLevel(rule: { apn: string; rating_group?: number; rating_group_id?: number; service_identifier?: number }): 'exact' | 'rating_group' | 'apn_wildcard' {
   const rg = Number(rule.rating_group_id ?? rule.rating_group ?? 0);

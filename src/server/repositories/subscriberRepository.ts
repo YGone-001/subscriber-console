@@ -1,9 +1,9 @@
 import { AnyBulkWriteOperation, Document, Filter, Long, MongoServerError, ObjectId } from 'mongodb';
-import { getAppCollection, getOpen5gsCollection, mongoCollections } from '@/lib/mongo';
+import { getAppCollection, getXcloudCollection, mongoCollections } from '@/lib/mongo';
 import {
-  buildDefaultOpen5gsSubscriber,
-  buildOpen5gsSubscriberFromLegacy,
-  open5gsToLegacyState,
+  buildDefaultXcloudSubscriber,
+  buildXcloudSubscriberFromLegacy,
+  xcloudToLegacyState,
 } from '@/lib/xcloudSubscriber';
 import { getPrimaryMsisdn } from '@/lib/subscriberDefaults';
 import {
@@ -14,9 +14,9 @@ import {
   readOcsProvisioning,
   readOcsProvisioningForImsis,
 } from '@/server/repositories/ocsBillingRepository';
-import type { LegacySubscriberState, Open5gsSubscriberDocument } from '@/types/xcloud';
+import type { LegacySubscriberState, XcloudSubscriberDocument } from '@/types/xcloud';
 
-type SubscriberDoc = Open5gsSubscriberDocument & Document;
+type SubscriberDoc = XcloudSubscriberDocument & Document;
 type OcsSubscriberLookupDoc = Document & {
   imsi: string;
   msisdn?: string;
@@ -201,18 +201,18 @@ function objectIdTimestamp(doc?: TimestampDoc | null): Date | undefined {
 }
 
 function lastActive(
-  open5gsDoc?: TimestampDoc | null,
+  xcloudDoc?: TimestampDoc | null,
   subscriberDoc?: TimestampDoc | null,
   balanceDoc?: { updated_at?: unknown } | null
 ): string {
   const raw =
     subscriberDoc?.updated_at ||
-    open5gsDoc?.webui_meta?.updated_at ||
-    open5gsDoc?.updated_at ||
+    xcloudDoc?.webui_meta?.updated_at ||
+    xcloudDoc?.updated_at ||
     subscriberDoc?.created_at ||
-    open5gsDoc?.webui_meta?.created_at ||
-    open5gsDoc?.created_at ||
-    objectIdTimestamp(open5gsDoc) ||
+    xcloudDoc?.webui_meta?.created_at ||
+    xcloudDoc?.created_at ||
+    objectIdTimestamp(xcloudDoc) ||
     balanceDoc?.updated_at;
   const date = raw instanceof Date || typeof raw === 'string' || typeof raw === 'number'
     ? new Date(raw)
@@ -255,11 +255,11 @@ function subscriberSummary(rows: SubscriberRow[]): SubscriberSummary {
 }
 
 async function subscribersCollection() {
-  return getOpen5gsCollection<SubscriberDoc>(mongoCollections.subscribers);
+  return getXcloudCollection<SubscriberDoc>(mongoCollections.subscribers);
 }
 
 async function ocsSubscribersCollection() {
-  return getOpen5gsCollection<OcsSubscriberLookupDoc>(mongoCollections.ocsSubscribers);
+  return getXcloudCollection<OcsSubscriberLookupDoc>(mongoCollections.ocsSubscribers);
 }
 
 async function profilesCollection() {
@@ -318,7 +318,7 @@ async function existingImsiSet(imsis: string[]): Promise<Set<string>> {
 export async function findSubscriberByMsisdn(
   msisdn: string,
   excludeImsi?: string
-): Promise<{ imsi: string; source: 'open5gs' | 'ocs' } | null> {
+): Promise<{ imsi: string; source: 'xcloud' | 'ocs' } | null> {
   const normalizedMsisdn = String(msisdn || '').trim();
   if (!normalizedMsisdn || !/^\d+$/.test(normalizedMsisdn)) return null;
 
@@ -331,7 +331,7 @@ export async function findSubscriberByMsisdn(
     ocsSubscriberCollection.findOne({ msisdn: normalizedMsisdn }, { projection: { imsi: 1 } }),
   ]);
   const match = subscriberDoc?.imsi
-    ? { imsi: subscriberDoc.imsi, source: 'open5gs' as const }
+    ? { imsi: subscriberDoc.imsi, source: 'xcloud' as const }
     : ocsSubscriberDoc?.imsi
       ? { imsi: ocsSubscriberDoc.imsi, source: 'ocs' as const }
       : null;
@@ -383,7 +383,7 @@ async function bulkWriteSubscribers(
 function batchDocForImsi(
   imsi: string,
   profileData: ProfileDoc | null
-): Open5gsSubscriberDocument {
+): XcloudSubscriberDocument {
   const auth4G = profileData?.auth
     ? { ...profileData.auth, sqn: 1 }
     : { k: '00000000000000000000000000000000', opc: '00000000000000000000000000000000', sqn: 1, amf: '8000' };
@@ -393,19 +393,19 @@ function batchDocForImsi(
     access_restriction_data: 32,
     network_access_mode: 0,
   };
-  return buildOpen5gsSubscriberFromLegacy(imsi, {
+  return buildXcloudSubscriberFromLegacy(imsi, {
     sub4G,
     auth4G,
   });
 }
 
-function csvDocForRecord(record: ImportRecord): Open5gsSubscriberDocument | null {
+function csvDocForRecord(record: ImportRecord): XcloudSubscriberDocument | null {
   const imsi = asString(record.imsi).trim();
   if (!isValidImsi(imsi)) return null;
 
   const accessRestriction = asNumber(record.access_restriction_data, 32);
 
-  return buildOpen5gsSubscriberFromLegacy(imsi, {
+  return buildXcloudSubscriberFromLegacy(imsi, {
     sub4G: {
       access_restriction_data: accessRestriction,
       network_access_mode: 0,
@@ -420,7 +420,7 @@ function csvDocForRecord(record: ImportRecord): Open5gsSubscriberDocument | null
 }
 
 function toSubscriberRow(
-  doc: Open5gsSubscriberDocument,
+  doc: XcloudSubscriberDocument,
   ocsSubscriber: { plan_id?: string; updated_at?: unknown; created_at?: unknown } | null | undefined,
   balance: { data_total?: unknown; data_used?: unknown; data_available?: unknown; updated_at?: unknown } | null | undefined,
   smsBalance: { sms_total?: unknown; sms_used?: unknown; sms_available?: unknown } | null | undefined,
@@ -565,7 +565,7 @@ export async function listSubscriberRows(
   };
 }
 
-export async function findSubscriberDocument(imsi: string): Promise<Open5gsSubscriberDocument | null> {
+export async function findSubscriberDocument(imsi: string): Promise<XcloudSubscriberDocument | null> {
   const collection = await subscribersCollection();
   return collection.findOne({ imsi });
 }
@@ -573,7 +573,7 @@ export async function findSubscriberDocument(imsi: string): Promise<Open5gsSubsc
 /** Narrow repository seam for governed bulk mutations. It intentionally exposes
  * only the core-subscriber collection; OCS and authentication material remain
  * outside the Phase 5 batch-update allowlist. */
-export async function findSubscriberDocuments(imsis: string[]): Promise<Open5gsSubscriberDocument[]> {
+export async function findSubscriberDocuments(imsis: string[]): Promise<XcloudSubscriberDocument[]> {
   const collection = await subscribersCollection();
   return collection.find({ imsi: { $in: imsis } }).toArray();
 }
@@ -602,7 +602,7 @@ export async function applyGovernedSubscriberConditionalUpdates(updates: Governe
 
 export async function findSubscriberLegacyState(imsi: string): Promise<LegacySubscriberState | null> {
   const doc = await findSubscriberDocument(imsi);
-  const state = open5gsToLegacyState(doc);
+  const state = xcloudToLegacyState(doc);
   if (!state) return null;
 
   const ocs = await readOcsProvisioning(imsi);
@@ -622,9 +622,9 @@ export async function findSubscriberLegacyState(imsi: string): Promise<LegacySub
   };
 }
 
-export async function createDefaultSubscriber(imsi: string, planId?: unknown, msisdn?: unknown): Promise<Open5gsSubscriberDocument> {
+export async function createDefaultSubscriber(imsi: string, planId?: unknown, msisdn?: unknown): Promise<XcloudSubscriberDocument> {
   const collection = await subscribersCollection();
-  const doc = buildDefaultOpen5gsSubscriber(imsi);
+  const doc = buildDefaultXcloudSubscriber(imsi);
   const normalizedMsisdn = asString(msisdn).trim();
   await assertTariffPlanAssignable(planId);
   if (normalizedMsisdn) {
@@ -647,7 +647,7 @@ export async function createDefaultSubscriber(imsi: string, planId?: unknown, ms
 export async function createSubscriberFromReference(
   imsi: string,
   referenceImsi: string
-): Promise<Open5gsSubscriberDocument> {
+): Promise<XcloudSubscriberDocument> {
   const collection = await subscribersCollection();
   const [existing, reference] = await Promise.all([
     collection.findOne({ imsi }),
@@ -681,9 +681,9 @@ export type LegacySubscriberUpdatePayload = {
 export function prepareSubscriberLegacyUpdate(
   imsi: string,
   payload: LegacySubscriberUpdatePayload,
-  existing?: Open5gsSubscriberDocument | null
+  existing?: XcloudSubscriberDocument | null
 ) {
-  const next = buildOpen5gsSubscriberFromLegacy(imsi, payload, existing);
+  const next = buildXcloudSubscriberFromLegacy(imsi, payload, existing);
   const ocsTraffic = payload.ocsTraffic as Record<string, unknown> | undefined;
   const requestedPlanId = ocsTraffic?.planId ?? ocsTraffic?.plan_id;
   const requestedMsisdn = payload.sub4G
@@ -696,8 +696,8 @@ export function prepareSubscriberLegacyUpdate(
 export async function updateSubscriberFromLegacy(
   imsi: string,
   payload: LegacySubscriberUpdatePayload,
-  expectedDocument?: Open5gsSubscriberDocument
-): Promise<Open5gsSubscriberDocument> {
+  expectedDocument?: XcloudSubscriberDocument
+): Promise<XcloudSubscriberDocument> {
   const collection = await subscribersCollection();
   const existing = expectedDocument || await collection.findOne({ imsi });
   const { next, ocsTraffic, requestedPlanId, requestedMsisdn } = prepareSubscriberLegacyUpdate(
@@ -746,7 +746,7 @@ export async function updateSubscriberFromLegacy(
   return next;
 }
 
-export async function deleteSubscriber(imsi: string, expectedDocument?: Open5gsSubscriberDocument): Promise<boolean> {
+export async function deleteSubscriber(imsi: string, expectedDocument?: XcloudSubscriberDocument): Promise<boolean> {
   const collection = await subscribersCollection();
   const filter = expectedDocument
     ? (() => {
@@ -856,7 +856,7 @@ export async function createSubscribersBatch(options: BatchCreateOptions): Promi
 export async function importSubscribersFromRecords(records: ImportRecord[], overwrite: boolean): Promise<ImportResult> {
   const normalized = records
     .map((record) => ({ record, doc: csvDocForRecord(record) }))
-    .filter((item): item is { record: ImportRecord; doc: Open5gsSubscriberDocument } => item.doc !== null);
+    .filter((item): item is { record: ImportRecord; doc: XcloudSubscriberDocument } => item.doc !== null);
   const planIds = Array.from(new Set(
     normalized
       .map(({ record }) => asString(record.plan_id, 'plan_default_10gb').trim() || 'plan_default_10gb')

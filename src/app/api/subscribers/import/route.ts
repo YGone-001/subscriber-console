@@ -60,7 +60,7 @@ export async function POST(request: Request) {
       const imsis = validation.value.map((record) => String(record.imsi || '').trim()).filter(Boolean);
       const precheck = await precheckSubscriberImsis(imsis);
       const existing = precheck.filter((item) => item.exists).map((item) => item.imsi);
-      // Replace-based CSV import would rebuild Open5GS security from the row.
+      // Replace-based CSV import would rebuild xCloud security from the row.
       // Until a dedicated encrypted staged-secret facility exists it is disabled
       // rather than creating an approval that cannot safely execute.
       if (overwrite) return NextResponse.json({ error: 'SUBSCRIBER_IMPORT_OVERWRITE_NOT_SUPPORTED' }, { status: 422 });

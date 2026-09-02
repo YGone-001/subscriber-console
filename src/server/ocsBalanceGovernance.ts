@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Long, type Document } from 'mongodb';
-import { getAppCollection, getOpen5gsCollection, mongoCollections } from '@/lib/mongo';
+import { getAppCollection, getXcloudCollection, mongoCollections } from '@/lib/mongo';
 
 export type OcsBalanceBucket = 'data' | 'voice';
 export type OcsBalanceOperation = 'credit' | 'debit';
@@ -141,7 +141,7 @@ function expectedAfter(before: BalanceSnapshot, intent: OcsBalanceIntent): Froze
 export async function freezeOcsBalanceAdjustment(imsiInput: unknown, intentInput: unknown): Promise<FrozenOcsBalanceAdjustment> {
   const imsi = validateImsi(imsiInput);
   const intent = validateOcsBalanceIntent(intentInput);
-  const balances = await getOpen5gsCollection<OcsBalanceDocument>(mongoCollections.ocsBalances);
+  const balances = await getXcloudCollection<OcsBalanceDocument>(mongoCollections.ocsBalances);
   const current = await balances.findOne({ imsi });
   if (!current) throw new OcsBalanceGovernanceError('OCS_BALANCE_NOT_FOUND');
   const before = snapshotFromDocument(imsi, intent.bucket, current);
@@ -180,7 +180,7 @@ export async function executeFrozenOcsBalanceAdjustment(input: unknown, context:
     throw new OcsBalanceGovernanceError('OCS_BALANCE_ADJUSTMENT_IN_PROGRESS', false, { adjustmentId: frozen.adjustmentId });
   }
 
-  const balances = await getOpen5gsCollection<OcsBalanceDocument>(mongoCollections.ocsBalances);
+  const balances = await getXcloudCollection<OcsBalanceDocument>(mongoCollections.ocsBalances);
   const prefix = frozen.intent.bucket === 'data' ? 'data' : 'voice';
   const after: BalanceSnapshot = { ...frozen.expectedAfter, version: frozen.before.version + 1, versionPresent: true };
   const versionFilter = frozen.before.versionPresent ? Long.fromNumber(frozen.before.version) : { $exists: false };

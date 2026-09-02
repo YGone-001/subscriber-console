@@ -9,7 +9,7 @@ import {
   listSubscriberRows,
   type SubscriberStatusFilter,
 } from '@/server/repositories/subscriberRepository';
-import { open5gsToLegacyState } from '@/lib/xcloudSubscriber';
+import { xcloudToLegacyState } from '@/lib/xcloudSubscriber';
 import { validateImsi } from '@/lib/subscriberValidation';
 import { evaluateSubscriberOperation, SUBSCRIBER_OPERATIONS } from '@/server/subscriberGovernanceRegistry';
 
@@ -85,7 +85,7 @@ export async function POST(request: Request) {
     }
 
     const created = await createDefaultSubscriber(imsi, data?.planId || data?.plan_id, msisdn);
-    const legacyState = open5gsToLegacyState(created);
+    const legacyState = xcloudToLegacyState(created);
 
     logAudit('CREATE', imsi, null, legacyState, request);
 

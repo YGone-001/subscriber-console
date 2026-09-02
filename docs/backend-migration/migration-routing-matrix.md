@@ -27,8 +27,8 @@
 
 | API | Method | Path | Current Owner | Future Owner | Shadow Allowed | Notes |
 |-----|--------|------|---------------|--------------|----------------|-------|
-| Subscribers list | GET | `/api/subscribers` | **Go** | Go | YES | Phase 2C — migrated, joins open5gs + xcloud_ops |
-| Subscriber detail | GET | `/api/subscribers/:imsi` | **Go** | Go | YES | Phase 2C — migrated, joins open5gs + xcloud_ops |
+| Subscribers list | GET | `/api/subscribers` | **Go** | Go | YES | Phase 2C — migrated, joins xcloud + xcloud_ops |
+| Subscriber detail | GET | `/api/subscribers/:imsi` | **Go** | Go | YES | Phase 2C — migrated, joins xcloud + xcloud_ops |
 | Subscriber batch precheck | POST | `/api/subscribers/batch/precheck` | **Go** | Go | YES | Phase 2C — migrated, read-only despite POST |
 | Profiles list | GET | `/api/profiles` | **Go** | Go | YES | Phase 2B — migrated |
 | Profile detail | GET | `/api/profiles/:name` | **Go** | Go | YES | Phase 2B — migrated |
@@ -59,7 +59,7 @@
 | Analytics sparkline | GET | `/api/analytics/sparkline` | **Go** | Go | YES | Phase 2A — migrated |
 | System health | GET | `/api/system/health` | Next.js | Go | YES | Joins both DBs |
 | Mongo health | GET | `/api/system/mongo/health` | Next.js | Go | YES | Joins both DBs |
-| System audit status | GET | `/api/system/audit/status` | Next.js | Go | YES | open5gs only |
+| System audit status | GET | `/api/system/audit/status` | Next.js | Go | YES | xcloud only |
 | Auth me | GET | `/api/auth/me` | Next.js | Go | YES | xcloud_ops only |
 | Auth permissions | GET | `/api/auth/permissions` | Next.js | Go | YES | Computed |
 | Auth users list | GET | `/api/auth/users` | Next.js | Go | YES | xcloud_ops only |

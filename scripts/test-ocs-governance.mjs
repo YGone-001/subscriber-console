@@ -8,11 +8,11 @@ nextEnv.loadEnvConfig(process.cwd());
 
 const startedAt = Date.now();
 const suffix = `${Date.now()}_${Math.floor(Math.random() * 100000)}`;
-const open5gsDbName = `open5gs_ocs_governance_test_${suffix}`;
+const xcloudDbName = `xcloud_ocs_governance_test_${suffix}`;
 const appDbName = `xcloud_ops_ocs_governance_test_${suffix}`;
-const uri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/open5gs';
+const uri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/xcloud';
 
-process.env.MONGODB_OPEN5GS_DB = open5gsDbName;
+process.env.MONGODB_XCLOUD_DB = xcloudDbName;
 process.env.MONGODB_APP_DB = appDbName;
 const jiti = createJiti(import.meta.url, { interopDefault: true, alias: { '@': new URL('../src/', import.meta.url).pathname } });
 const {
@@ -23,7 +23,7 @@ const {
 const { getMongoClient } = jiti('../src/lib/mongo.ts');
 
 const client = new MongoClient(uri, { serverSelectionTimeoutMS: Number(process.env.MONGODB_SERVER_SELECTION_TIMEOUT_MS || 5000) });
-const report = { ok: false, command: 'mongo:test-ocs-governance', databases: { open5gs: open5gsDbName, app: appDbName }, checks: [] };
+const report = { ok: false, command: 'mongo:test-ocs-governance', databases: { xcloud: xcloudDbName, app: appDbName }, checks: [] };
 
 async function check(name, fn) {
   const at = Date.now();
@@ -46,7 +46,7 @@ function numberValue(value) {
 
 try {
   await client.connect();
-  const open5gs = client.db(open5gsDbName);
+  const xcloud = client.db(xcloudDbName);
   const app = client.db(appDbName);
   await app.collection('ocs_balance_adjustments').createIndexes([
     { key: { adjustmentId: 1 }, unique: true, name: 'uniq_ocs_balance_adjustment_id' },
@@ -55,33 +55,33 @@ try {
 
   await check('balance.stale_version_cas', async () => {
     const imsi = '460020000000701';
-    await open5gs.collection('ocs_balances').insertOne(balance(imsi));
+    await xcloud.collection('ocs_balances').insertOne(balance(imsi));
     const frozen = await freezeOcsBalanceAdjustment(imsi, { bucket: 'data', operation: 'credit', amount: 100, reason: 'stale test' });
-    await open5gs.collection('ocs_balances').updateOne({ imsi }, { $inc: { version: Long.ONE }, $set: { data_available: Long.fromNumber(200) } });
+    await xcloud.collection('ocs_balances').updateOne({ imsi }, { $inc: { version: Long.ONE }, $set: { data_available: Long.fromNumber(200) } });
     await assert.rejects(
       () => executeFrozenOcsBalanceAdjustment(frozen, { approvalId: `approval-${randomUUID()}`, executionId: `execution-${randomUUID()}`, actor: 'tester' }),
       (error) => error instanceof OcsBalanceGovernanceError && error.code === 'OCS_BALANCE_PRECONDITION_CHANGED'
     );
-    const current = await open5gs.collection('ocs_balances').findOne({ imsi });
+    const current = await xcloud.collection('ocs_balances').findOne({ imsi });
     assert.equal(numberValue(current.data_total), 1000);
     assert.equal(numberValue(current.version), 11);
   });
 
   await check('balance.debit_reservation_protection', async () => {
     const imsi = '460020000000702';
-    await open5gs.collection('ocs_balances').insertOne(balance(imsi));
+    await xcloud.collection('ocs_balances').insertOne(balance(imsi));
     await assert.rejects(
       () => freezeOcsBalanceAdjustment(imsi, { bucket: 'data', operation: 'debit', amount: 300, reason: 'must fail' }),
       (error) => error instanceof OcsBalanceGovernanceError && error.code === 'OCS_BALANCE_RESERVATION_CONFLICT'
     );
-    const current = await open5gs.collection('ocs_balances').findOne({ imsi });
+    const current = await xcloud.collection('ocs_balances').findOne({ imsi });
     assert.equal(numberValue(current.data_total), 1000);
     assert.equal(numberValue(current.data_reserved), 500);
   });
 
   await check('balance.idempotent_double_execution', async () => {
     const imsi = '460020000000703';
-    await open5gs.collection('ocs_balances').insertOne(balance(imsi));
+    await xcloud.collection('ocs_balances').insertOne(balance(imsi));
     const frozen = await freezeOcsBalanceAdjustment(imsi, { bucket: 'data', operation: 'credit', amount: 50, reason: 'exactly once' });
     const context = { approvalId: `approval-${randomUUID()}`, executionId: `execution-${randomUUID()}`, actor: 'tester' };
     const attempts = await Promise.allSettled([
@@ -92,7 +92,7 @@ try {
     assert.equal(attempts.filter((attempt) => attempt.status === 'rejected' && attempt.reason?.code !== 'OCS_BALANCE_ADJUSTMENT_IN_PROGRESS').length, 0);
     const replay = await executeFrozenOcsBalanceAdjustment(frozen, context);
     assert.equal(replay.idempotent, true);
-    const current = await open5gs.collection('ocs_balances').findOne({ imsi });
+    const current = await xcloud.collection('ocs_balances').findOne({ imsi });
     assert.equal(numberValue(current.data_total), 1050);
     assert.equal(numberValue(current.data_available), 250);
     assert.equal(await app.collection('ocs_balance_adjustments').countDocuments({ adjustmentId: frozen.adjustmentId }), 1);
@@ -107,7 +107,7 @@ try {
   console.error(JSON.stringify(report, null, 2));
   process.exitCode = 1;
 } finally {
-  await client.db(open5gsDbName).dropDatabase().catch(() => {});
+  await client.db(xcloudDbName).dropDatabase().catch(() => {});
   await client.db(appDbName).dropDatabase().catch(() => {});
   await client.close().catch(() => {});
   const moduleClient = await getMongoClient().catch(() => null);

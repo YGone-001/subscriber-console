@@ -14,7 +14,7 @@ const { prepareSubscriberLegacyUpdate } = await jiti.import("../src/server/repos
 const source = readFileSync(new URL("../src/lib/xcloudSubscriber.ts", import.meta.url), "utf8");
 const types = readFileSync(new URL("../src/types/xcloud.ts", import.meta.url), "utf8");
 
-test("Open5GS subscriber generator emits current collection fields", () => {
+test("xCloud subscriber generator emits current collection fields", () => {
   assert.match(source, /__v:\s*0/);
   assert.match(source, /schema_version:\s*1/);
   assert.doesNotMatch(source, /ocs:\s*\{/);
@@ -26,7 +26,7 @@ test("Open5GS subscriber generator emits current collection fields", () => {
   assert.match(types, /mme_realm\?:\s*string/);
 });
 
-test("Open5GS subscriber reader maps PCC rules into editable fields", () => {
+test("xCloud subscriber reader maps PCC rules into editable fields", () => {
   assert.match(source, /function legacyPccRule/);
   assert.match(source, /pcc_rule:\s*\(session\.pcc_rule \|\| \[\]\)\.map\(legacyPccRule\)/);
   assert.match(source, /_5qi:\s*qos\.index \?\? 1/);

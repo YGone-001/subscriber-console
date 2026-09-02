@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
-import { buildOpen5gsSubscriberFromLegacy } from '@/lib/xcloudSubscriber';
-import type { Open5gsSubscriberDocument } from '@/types/xcloud';
+import { buildXcloudSubscriberFromLegacy } from '@/lib/xcloudSubscriber';
+import type { XcloudSubscriberDocument } from '@/types/xcloud';
 import {
   deleteSubscriber,
   findSubscriberDocument,
@@ -55,7 +55,7 @@ function stable(value: unknown): string {
 function hash(value: unknown) { return createHash('sha256').update(stable(value)).digest('hex'); }
 
 /** Never include security, K, OP/OPc, AMF or SQN in a governed snapshot. */
-export function subscriberSafeSnapshot(doc: Open5gsSubscriberDocument): SafeSnapshot {
+export function subscriberSafeSnapshot(doc: XcloudSubscriberDocument): SafeSnapshot {
   return {
     imsi: doc.imsi,
     msisdn: [...(doc.msisdn || [])],
@@ -68,7 +68,7 @@ export function subscriberSafeSnapshot(doc: Open5gsSubscriberDocument): SafeSnap
 
 function nonBlank(value: unknown) { return value !== undefined && value !== null && String(value).trim() !== ''; }
 
-function assertNoAuthenticationMaterialChange(existing: Open5gsSubscriberDocument, payload: LegacySubscriberUpdatePayload) {
+function assertNoAuthenticationMaterialChange(existing: XcloudSubscriberDocument, payload: LegacySubscriberUpdatePayload) {
   const auth = payload.auth4G && typeof payload.auth4G === 'object' ? payload.auth4G as Record<string, unknown> : null;
   if (!auth) return;
   const current = existing.security || {};
@@ -87,7 +87,7 @@ export async function prepareFrozenSubscriberUpdate(imsi: string, payload: Legac
   if (!existing) throw new SubscriberGovernanceError('SUBSCRIBER_NOT_FOUND');
   assertNoAuthenticationMaterialChange(existing, payload);
   const governedPayload = cleanPayload(payload);
-  const next = buildOpen5gsSubscriberFromLegacy(imsi, governedPayload, existing);
+  const next = buildXcloudSubscriberFromLegacy(imsi, governedPayload, existing);
   const before = subscriberSafeSnapshot(existing);
   const after = subscriberSafeSnapshot(next);
   if (stable(before) === stable(after)) throw new SubscriberGovernanceError('SUBSCRIBER_UPDATE_NO_EFFECT');
@@ -144,7 +144,7 @@ export async function executeFrozenSubscriberBulkDelete(payload: unknown) {
   }
   let deleted = 0;
   for (const { target, current } of loaded) {
-    const ok = await deleteSubscriber(target.imsi, current as Open5gsSubscriberDocument);
+    const ok = await deleteSubscriber(target.imsi, current as XcloudSubscriberDocument);
     if (!ok) throw new SubscriberGovernanceError('SUBSCRIBER_BULK_DELETE_PARTIAL_WRITE', { deleted, expected: frozen.targetCount, partialMutation: deleted > 0 });
     deleted += 1;
   }

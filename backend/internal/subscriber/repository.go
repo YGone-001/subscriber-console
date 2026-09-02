@@ -22,10 +22,10 @@ const (
 
 // Repository provides subscriber data access.
 type Repository struct {
-	subscribers *mongo.Collection // open5gs.subscribers
-	ocsSubs     *mongo.Collection // open5gs.ocs_subscribers
-	ocsBalances *mongo.Collection // open5gs.ocs_balances
-	tariffPlans *mongo.Collection // open5gs.ocs_tariff_plans
+	subscribers *mongo.Collection // xcloud.subscribers
+	ocsSubs     *mongo.Collection // xcloud.ocs_subscribers
+	ocsBalances *mongo.Collection // xcloud.ocs_balances
+	tariffPlans *mongo.Collection // xcloud.ocs_tariff_plans
 	profiles    *mongo.Collection // xcloud_ops.app_profiles
 }
 
@@ -202,29 +202,29 @@ func normalizeSMS(smsTotal, smsUsed, smsAvailable any) SMSSnapshot {
 }
 
 // computeLastActive determines the last active timestamp from multiple sources.
-func computeLastActive(open5gsDoc, ocsSubDoc, balanceDoc bson.M) string {
-	// Try: ocsSub.updated_at > open5gs.webui_meta.updated_at > open5gs.updated_at
-	// > ocsSub.created_at > open5gs.webui_meta.created_at > open5gs.created_at
-	// > open5gs._id timestamp > balance.updated_at
+func computeLastActive(xcloudDoc, ocsSubDoc, balanceDoc bson.M) string {
+	// Try: ocsSub.updated_at > xcloud.webui_meta.updated_at > xcloud.updated_at
+	// > ocsSub.created_at > xcloud.webui_meta.created_at > xcloud.created_at
+	// > xcloud._id timestamp > balance.updated_at
 	candidates := []any{}
 
 	if ocsSubDoc != nil {
 		candidates = append(candidates, ocsSubDoc["updated_at"])
 	}
-	if meta := extractWebuiMeta(open5gsDoc); meta != nil {
+	if meta := extractWebuiMeta(xcloudDoc); meta != nil {
 		candidates = append(candidates, meta["updated_at"])
 	}
-	candidates = append(candidates, open5gsDoc["updated_at"])
+	candidates = append(candidates, xcloudDoc["updated_at"])
 	if ocsSubDoc != nil {
 		candidates = append(candidates, ocsSubDoc["created_at"])
 	}
-	if meta := extractWebuiMeta(open5gsDoc); meta != nil {
+	if meta := extractWebuiMeta(xcloudDoc); meta != nil {
 		candidates = append(candidates, meta["created_at"])
 	}
-	candidates = append(candidates, open5gsDoc["created_at"])
+	candidates = append(candidates, xcloudDoc["created_at"])
 
 	// ObjectId timestamp
-	if id, ok := open5gsDoc["_id"].(bson.ObjectID); ok {
+	if id, ok := xcloudDoc["_id"].(bson.ObjectID); ok {
 		candidates = append(candidates, id.Timestamp())
 	}
 
@@ -259,13 +259,13 @@ func computeLastActive(open5gsDoc, ocsSubDoc, balanceDoc bson.M) string {
 
 // toSubscriberRow converts raw BSON documents to a SubscriberRow.
 func toSubscriberRow(
-	open5gsDoc bson.M,
+	xcloudDoc bson.M,
 	ocsSubDoc bson.M,
 	balanceDoc bson.M,
 	tariffPlanDoc bson.M,
 ) SubscriberRow {
-	imsi, _ := open5gsDoc["imsi"].(string)
-	ard := extractARD(open5gsDoc)
+	imsi, _ := xcloudDoc["imsi"].(string)
+	ard := extractARD(xcloudDoc)
 	plmn := imsi
 	if len(plmn) > 5 {
 		plmn = plmn[:5]
@@ -295,13 +295,13 @@ func toSubscriberRow(
 		Status:       statusFromARD(ard),
 		ARD:          ard,
 		PLMN:         plmn,
-		Profile:      extractProfileName(open5gsDoc),
+		Profile:      extractProfileName(xcloudDoc),
 		Policy:       planID,
 		PolicyName:   planName,
 		PolicyStatus: planStatus,
 		Traffic:      traffic,
 		SMS:          sms,
-		LastActive:   computeLastActive(open5gsDoc, ocsSubDoc, balanceDoc),
+		LastActive:   computeLastActive(xcloudDoc, ocsSubDoc, balanceDoc),
 	}
 }
 
@@ -429,12 +429,12 @@ func (r *Repository) ListSubscriberRows(ctx context.Context, page, limit int, qu
 	}
 	defer cursor.Close(ctx)
 
-	var open5gsDocs []bson.M
-	if err := cursor.All(ctx, &open5gsDocs); err != nil {
+	var xcloudDocs []bson.M
+	if err := cursor.All(ctx, &xcloudDocs); err != nil {
 		return SubscriberListResult[SubscriberRow]{}, fmt.Errorf("decode subscribers: %w", err)
 	}
 
-	if len(open5gsDocs) == 0 {
+	if len(xcloudDocs) == 0 {
 		return SubscriberListResult[SubscriberRow]{
 			Subscribers: []SubscriberRow{},
 			Total:       0,
@@ -445,8 +445,8 @@ func (r *Repository) ListSubscriberRows(ctx context.Context, page, limit int, qu
 	}
 
 	// Collect IMSIs for OCS lookup
-	imsis := make([]string, len(open5gsDocs))
-	for i, doc := range open5gsDocs {
+	imsis := make([]string, len(xcloudDocs))
+	for i, doc := range xcloudDocs {
 		imsis[i], _ = doc["imsi"].(string)
 	}
 
@@ -457,8 +457,8 @@ func (r *Repository) ListSubscriberRows(ctx context.Context, page, limit int, qu
 	}
 
 	// Build rows
-	rows := make([]SubscriberRow, len(open5gsDocs))
-	for i, doc := range open5gsDocs {
+	rows := make([]SubscriberRow, len(xcloudDocs))
+	for i, doc := range xcloudDocs {
 		imsi := imsis[i]
 		rows[i] = toSubscriberRow(
 			doc,
@@ -638,7 +638,7 @@ func sortSubscriberRows(rows []SubscriberRow, sortField, sortDirection string) {
 
 // --- MSISDN Lookup ---
 
-// FindSubscriberByMsisdn looks up a subscriber by MSISDN in both open5gs.subscribers and open5gs.ocs_subscribers.
+// FindSubscriberByMsisdn looks up a subscriber by MSISDN in both xcloud.subscribers and xcloud.ocs_subscribers.
 func (r *Repository) FindSubscriberByMsisdn(ctx context.Context, msisdn, excludeImsi string) (*MsisdnLookupResult, error) {
 	normalized := strings.TrimSpace(msisdn)
 	if normalized == "" {
@@ -659,20 +659,20 @@ func (r *Repository) FindSubscriberByMsisdn(ctx context.Context, msisdn, exclude
 
 	ch := make(chan lookupResult, 2)
 
-	// Check open5gs.subscribers
+	// Check xcloud.subscribers
 	go func() {
 		var doc struct {
 			IMSI string `bson:"imsi"`
 		}
 		err := r.subscribers.FindOne(ctx, bson.M{"msisdn": normalized}, options.FindOne().SetProjection(bson.M{"imsi": 1})).Decode(&doc)
 		if err == nil && doc.IMSI != "" {
-			ch <- lookupResult{imsi: doc.IMSI, source: "open5gs"}
+			ch <- lookupResult{imsi: doc.IMSI, source: "xcloud"}
 		} else {
 			ch <- lookupResult{}
 		}
 	}()
 
-	// Check open5gs.ocs_subscribers
+	// Check xcloud.ocs_subscribers
 	go func() {
 		var doc struct {
 			IMSI string `bson:"imsi"`
@@ -688,7 +688,7 @@ func (r *Repository) FindSubscriberByMsisdn(ctx context.Context, msisdn, exclude
 	r1 := <-ch
 	r2 := <-ch
 
-	// Prefer open5gs source
+	// Prefer xcloud source
 	var match *lookupResult
 	if r1.imsi != "" {
 		match = &r1
@@ -726,8 +726,8 @@ func (r *Repository) FindSubscriberLegacyState(ctx context.Context, imsi string)
 		return nil, fmt.Errorf("find subscriber: %w", err)
 	}
 
-	// Map to legacy state (matching open5gsToLegacyState)
-	state := open5gsToLegacyState(doc)
+	// Map to legacy state (matching xcloudToLegacyState)
+	state := xcloudToLegacyState(doc)
 
 	// Fetch OCS provisioning
 	ocsSub, balance, tariffPlan, err := r.fetchSingleOcsProvisioning(ctx, imsi)
@@ -818,9 +818,9 @@ func (r *Repository) fetchSingleOcsProvisioning(ctx context.Context, imsi string
 	return ocsSub, balance, tariffPlan, nil
 }
 
-// open5gsToLegacyState maps an Open5GS subscriber document to legacy state format.
-// This matches the Node open5gsToLegacyState function exactly.
-func open5gsToLegacyState(doc bson.M) *LegacySubscriberState {
+// xcloudToLegacyState maps a xcloud subscriber document to legacy state format.
+// This matches the Node xcloudToLegacyState function exactly.
+func xcloudToLegacyState(doc bson.M) *LegacySubscriberState {
 	if doc == nil {
 		return nil
 	}

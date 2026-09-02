@@ -7,7 +7,7 @@ import {
   normalizeSub4G,
 } from "../src/lib/subscriberDefaults.ts";
 
-test("normalizeSliceList creates Open5GS-ready default sessions without an SD override", () => {
+test("normalizeSliceList creates xCloud-ready default sessions without an SD override", () => {
   const slices = normalizeSliceList(undefined);
 
   assert.equal(slices.length, 1);

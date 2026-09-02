@@ -8,7 +8,7 @@ Install:
 
 - Node.js 20.9 or later
 - npm
-- MongoDB, preferably the same database used by a local Open5GS setup
+- MongoDB, preferably the same database used by a local xCloud setup
 
 Install dependencies:
 

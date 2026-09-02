@@ -48,7 +48,7 @@
 
 | Method | Path | Source File | Auth | Permission | Operation | Governance | Repository | Mongo DB | Collection | Side Effects |
 |--------|------|-------------|------|------------|-----------|------------|------------|----------|------------|--------------|
-| POST | `/api/analytics/init` | `src/app/api/analytics/init/route.ts` | Yes | `requireAuth` | WRITE | UNKNOWN | analyticsRepository | open5gs | subscribers, ocs_balances, ocs_subscribers | — |
+| POST | `/api/analytics/init` | `src/app/api/analytics/init/route.ts` | Yes | `requireAuth` | WRITE | UNKNOWN | analyticsRepository | xcloud | subscribers, ocs_balances, ocs_subscribers | — |
 | GET | `/api/analytics/metrics` | `src/app/api/analytics/metrics/route.ts` | Yes | `requireAuth` | READ | N/A | analyticsRepository | xcloud_ops | app_metrics | — |
 | GET | `/api/analytics/sparkline` | `src/app/api/analytics/sparkline/route.ts` | Yes | `requireAuth` | READ | N/A | analyticsRepository | xcloud_ops | app_metrics | — |
 
@@ -62,7 +62,7 @@
 | POST | `/api/approvals/:id/approve` | `src/app/api/approvals/[id]/approve/route.ts` | Yes | `requirePermission(approvals.approve)` | WRITE | APPROVAL_GOVERNED | approvalRepository | xcloud_ops | app_approvals | audit |
 | POST | `/api/approvals/:id/reject` | `src/app/api/approvals/[id]/reject/route.ts` | Yes | `requirePermission(approvals.reject)` | WRITE | APPROVAL_GOVERNED | approvalRepository | xcloud_ops | app_approvals | audit |
 | POST | `/api/approvals/:id/cancel` | `src/app/api/approvals/[id]/cancel/route.ts` | Yes | `requirePermission(approvals.cancel)` | WRITE | APPROVAL_GOVERNED | approvalRepository | xcloud_ops | app_approvals | audit |
-| POST | `/api/approvals/:id/execute` | `src/app/api/approvals/[id]/execute/route.ts` | Yes | `requirePermission(approvals.execute)` | WRITE | APPROVAL_GOVERNED | approvalExecutors | xcloud_ops + open5gs | varies | audit |
+| POST | `/api/approvals/:id/execute` | `src/app/api/approvals/[id]/execute/route.ts` | Yes | `requirePermission(approvals.execute)` | WRITE | APPROVAL_GOVERNED | approvalExecutors | xcloud_ops + xcloud | varies | audit |
 | GET | `/api/approvals/:id/audit` | `src/app/api/approvals/[id]/audit/route.ts` | Yes | `requireAuth` | READ | N/A | approvalRepository | xcloud_ops | app_approvals | — |
 | GET | `/api/approvals/export` | `src/app/api/approvals/export/route.ts` | Yes | `requireAuth` | READ | N/A | approvalRepository | xcloud_ops | app_approvals | — |
 
@@ -99,10 +99,10 @@
 
 | Method | Path | Source File | Auth | Permission | Operation | Governance | Repository | Mongo DB | Collection | Side Effects |
 |--------|------|-------------|------|------------|-----------|------------|------------|----------|------------|--------------|
-| GET | `/api/ocs/balances` | `src/app/api/ocs/balances/route.ts` | Yes | `requireAuth` | READ | N/A | ocsOperationsRepository | open5gs | ocs_balances | — |
-| GET | `/api/ocs/sessions` | `src/app/api/ocs/sessions/route.ts` | Yes | `requireAuth` | READ | N/A | ocsOperationsRepository | open5gs | ocs_sessions | — |
-| GET | `/api/ocs/reservations` | `src/app/api/ocs/reservations/route.ts` | Yes | `requireAuth` | READ | N/A | ocsOperationsRepository | open5gs | ocs_reservations | — |
-| GET | `/api/ocs/usage` | `src/app/api/ocs/usage/route.ts` | Yes | `requireAuth` | READ | N/A | ocsOperationsRepository | open5gs | ocs_usage_records | — |
+| GET | `/api/ocs/balances` | `src/app/api/ocs/balances/route.ts` | Yes | `requireAuth` | READ | N/A | ocsOperationsRepository | xcloud | ocs_balances | — |
+| GET | `/api/ocs/sessions` | `src/app/api/ocs/sessions/route.ts` | Yes | `requireAuth` | READ | N/A | ocsOperationsRepository | xcloud | ocs_sessions | — |
+| GET | `/api/ocs/reservations` | `src/app/api/ocs/reservations/route.ts` | Yes | `requireAuth` | READ | N/A | ocsOperationsRepository | xcloud | ocs_reservations | — |
+| GET | `/api/ocs/usage` | `src/app/api/ocs/usage/route.ts` | Yes | `requireAuth` | READ | N/A | ocsOperationsRepository | xcloud | ocs_usage_records | — |
 
 ### Profiles
 
@@ -113,7 +113,7 @@
 | GET | `/api/profiles/:name` | `src/app/api/profiles/[name]/route.ts` | Yes | `requireAuth` | READ | N/A | profileRepository | xcloud_ops | app_profiles | — |
 | PUT | `/api/profiles/:name` | `src/app/api/profiles/[name]/route.ts` | Yes | `requireCapability(profile_write)` | WRITE | DIRECT_GOVERNED | profileRepository | xcloud_ops | app_profiles, app_profile_versions | audit |
 | DELETE | `/api/profiles/:name` | `src/app/api/profiles/[name]/route.ts` | Yes | `requireCapability(profile_write)` | WRITE | DIRECT_GOVERNED | profileRepository | xcloud_ops | app_profiles, app_profile_versions | audit |
-| GET | `/api/profiles/:name/stats` | `src/app/api/profiles/[name]/stats/route.ts` | Yes | `requireAuth` | READ | N/A | profileRepository | open5gs + xcloud_ops | subscribers, app_profiles | — |
+| GET | `/api/profiles/:name/stats` | `src/app/api/profiles/[name]/stats/route.ts` | Yes | `requireAuth` | READ | N/A | profileRepository | xcloud + xcloud_ops | subscribers, app_profiles | — |
 | GET | `/api/profiles/:name/versions` | `src/app/api/profiles/[name]/versions/route.ts` | Yes | `requireAuth` | READ | N/A | profileRepository | xcloud_ops | app_profile_versions | — |
 | POST | `/api/profiles/:name/versions/:versionId/restore` | `src/app/api/profiles/[name]/versions/[versionId]/restore/route.ts` | Yes | `requireCapability(profile_rollback)` | WRITE | APPROVAL_GOVERNED | profileRepository | xcloud_ops | app_profiles | approval, audit |
 
@@ -131,56 +131,56 @@
 
 | Method | Path | Source File | Auth | Permission | Operation | Governance | Repository | Mongo DB | Collection | Side Effects |
 |--------|------|-------------|------|------------|-----------|------------|------------|----------|------------|--------------|
-| GET | `/api/search` | `src/app/api/search/route.ts` | Yes | `requireAuth` | READ | N/A | — | open5gs + xcloud_ops | multiple | — |
+| GET | `/api/search` | `src/app/api/search/route.ts` | Yes | `requireAuth` | READ | N/A | — | xcloud + xcloud_ops | multiple | — |
 
 ### Subscribers
 
 | Method | Path | Source File | Auth | Permission | Operation | Governance | Repository | Mongo DB | Collection | Side Effects |
 |--------|------|-------------|------|------------|-----------|------------|------------|----------|------------|--------------|
-| GET | `/api/subscribers` | `src/app/api/subscribers/route.ts` | Yes | `requireAuth` | READ | N/A | subscriberRepository | open5gs | subscribers, ocs_subscribers, ocs_balances | — |
-| POST | `/api/subscribers` | `src/app/api/subscribers/route.ts` | Yes | `requireCapability(subscriber_write)` | WRITE | DIRECT_GOVERNED | subscriberRepository | open5gs | subscribers | audit |
-| GET | `/api/subscribers/:imsi` | `src/app/api/subscribers/[imsi]/route.ts` | Yes | `requireAuth` | READ | N/A | subscriberRepository | open5gs | subscribers, ocs_subscribers, ocs_balances | — |
-| PUT | `/api/subscribers/:imsi` | `src/app/api/subscribers/[imsi]/route.ts` | Yes | `requireCapability(subscriber_write)` | WRITE | APPROVAL_GOVERNED | subscriberRepository | open5gs | subscribers | approval, audit |
-| DELETE | `/api/subscribers/:imsi` | `src/app/api/subscribers/[imsi]/route.ts` | Yes | `requireCapability(subscriber_write)` | WRITE | APPROVAL_GOVERNED | subscriberRepository | open5gs | subscribers | approval, audit |
-| POST | `/api/subscribers/batch` | `src/app/api/subscribers/batch/route.ts` | Yes | `requireCapability(subscriber_write)` | WRITE | APPROVAL_GOVERNED | subscriberRepository | open5gs | subscribers | approval, audit |
-| POST | `/api/subscribers/batch/precheck` | `src/app/api/subscribers/batch/precheck/route.ts` | Yes | `requireAuth` | READ | N/A | subscriberRepository | open5gs | subscribers | — |
-| POST | `/api/subscribers/batch-update` | `src/app/api/subscribers/batch-update/route.ts` | Yes | `requireCapability(subscriber_write)` | WRITE | APPROVAL_GOVERNED | subscriberRepository | open5gs | subscribers | approval, audit |
-| POST | `/api/subscribers/bulk-delete` | `src/app/api/subscribers/bulk-delete/route.ts` | Yes | `requireCapability(subscriber_write)` | WRITE | APPROVAL_GOVERNED | subscriberRepository | open5gs | subscribers | approval, audit |
-| POST | `/api/subscribers/import` | `src/app/api/subscribers/import/route.ts` | Yes | `requireCapability(subscriber_write)` | WRITE | APPROVAL_GOVERNED | subscriberRepository | open5gs | subscribers | approval, audit |
-| POST | `/api/subscribers/policy` | `src/app/api/subscribers/policy/route.ts` | Yes | `requireCapability(policy_approve)` | WRITE | APPROVAL_GOVERNED | ocsBillingRepository | open5gs | ocs_subscribers, ocs_balances | approval, audit |
-| POST | `/api/subscribers/:imsi/traffic-adjustments` | `src/app/api/subscribers/[imsi]/traffic-adjustments/route.ts` | Yes | `requireCapability(balance_adjust)` | WRITE | APPROVAL_GOVERNED | ocsBillingRepository | open5gs | ocs_balances | approval, audit |
+| GET | `/api/subscribers` | `src/app/api/subscribers/route.ts` | Yes | `requireAuth` | READ | N/A | subscriberRepository | xcloud | subscribers, ocs_subscribers, ocs_balances | — |
+| POST | `/api/subscribers` | `src/app/api/subscribers/route.ts` | Yes | `requireCapability(subscriber_write)` | WRITE | DIRECT_GOVERNED | subscriberRepository | xcloud | subscribers | audit |
+| GET | `/api/subscribers/:imsi` | `src/app/api/subscribers/[imsi]/route.ts` | Yes | `requireAuth` | READ | N/A | subscriberRepository | xcloud | subscribers, ocs_subscribers, ocs_balances | — |
+| PUT | `/api/subscribers/:imsi` | `src/app/api/subscribers/[imsi]/route.ts` | Yes | `requireCapability(subscriber_write)` | WRITE | APPROVAL_GOVERNED | subscriberRepository | xcloud | subscribers | approval, audit |
+| DELETE | `/api/subscribers/:imsi` | `src/app/api/subscribers/[imsi]/route.ts` | Yes | `requireCapability(subscriber_write)` | WRITE | APPROVAL_GOVERNED | subscriberRepository | xcloud | subscribers | approval, audit |
+| POST | `/api/subscribers/batch` | `src/app/api/subscribers/batch/route.ts` | Yes | `requireCapability(subscriber_write)` | WRITE | APPROVAL_GOVERNED | subscriberRepository | xcloud | subscribers | approval, audit |
+| POST | `/api/subscribers/batch/precheck` | `src/app/api/subscribers/batch/precheck/route.ts` | Yes | `requireAuth` | READ | N/A | subscriberRepository | xcloud | subscribers | — |
+| POST | `/api/subscribers/batch-update` | `src/app/api/subscribers/batch-update/route.ts` | Yes | `requireCapability(subscriber_write)` | WRITE | APPROVAL_GOVERNED | subscriberRepository | xcloud | subscribers | approval, audit |
+| POST | `/api/subscribers/bulk-delete` | `src/app/api/subscribers/bulk-delete/route.ts` | Yes | `requireCapability(subscriber_write)` | WRITE | APPROVAL_GOVERNED | subscriberRepository | xcloud | subscribers | approval, audit |
+| POST | `/api/subscribers/import` | `src/app/api/subscribers/import/route.ts` | Yes | `requireCapability(subscriber_write)` | WRITE | APPROVAL_GOVERNED | subscriberRepository | xcloud | subscribers | approval, audit |
+| POST | `/api/subscribers/policy` | `src/app/api/subscribers/policy/route.ts` | Yes | `requireCapability(policy_approve)` | WRITE | APPROVAL_GOVERNED | ocsBillingRepository | xcloud | ocs_subscribers, ocs_balances | approval, audit |
+| POST | `/api/subscribers/:imsi/traffic-adjustments` | `src/app/api/subscribers/[imsi]/traffic-adjustments/route.ts` | Yes | `requireCapability(balance_adjust)` | WRITE | APPROVAL_GOVERNED | ocsBillingRepository | xcloud | ocs_balances | approval, audit |
 
 ### System
 
 | Method | Path | Source File | Auth | Permission | Operation | Governance | Repository | Mongo DB | Collection | Side Effects |
 |--------|------|-------------|------|------------|-----------|------------|------------|----------|------------|--------------|
-| GET | `/api/system/health` | `src/app/api/system/health/route.ts` | Yes | `requireAuth` | READ | N/A | systemHealthRepository | open5gs + xcloud_ops | multiple | — |
-| GET | `/api/system/mongo/health` | `src/app/api/system/mongo/health/route.ts` | Yes | `requireAuth` | READ | N/A | mongoHealthRepository | open5gs + xcloud_ops | multiple | — |
-| GET | `/api/system/audit/status` | `src/app/api/system/audit/status/route.ts` | Yes | `requireAuth` | READ | N/A | systemAuditRepository | open5gs | subscribers, ocs_subscribers, ocs_balances | — |
-| POST | `/api/system/audit/scan` | `src/app/api/system/audit/scan/route.ts` | Yes | `requireAuth` | READ | N/A | systemAuditRepository | open5gs | subscribers, ocs_subscribers, ocs_balances | — |
-| POST | `/api/system/audit/heal` | `src/app/api/system/audit/heal/route.ts` | Yes | `requireCapability(system_heal)` | WRITE | APPROVAL_GOVERNED | systemAuditRepository | open5gs | subscribers | approval, audit |
-| POST | `/api/system/audit/batch-heal` | `src/app/api/system/audit/batch-heal/route.ts` | Yes | `requireCapability(system_heal)` | WRITE | APPROVAL_GOVERNED | systemAuditRepository | open5gs | subscribers | approval, audit |
+| GET | `/api/system/health` | `src/app/api/system/health/route.ts` | Yes | `requireAuth` | READ | N/A | systemHealthRepository | xcloud + xcloud_ops | multiple | — |
+| GET | `/api/system/mongo/health` | `src/app/api/system/mongo/health/route.ts` | Yes | `requireAuth` | READ | N/A | mongoHealthRepository | xcloud + xcloud_ops | multiple | — |
+| GET | `/api/system/audit/status` | `src/app/api/system/audit/status/route.ts` | Yes | `requireAuth` | READ | N/A | systemAuditRepository | xcloud | subscribers, ocs_subscribers, ocs_balances | — |
+| POST | `/api/system/audit/scan` | `src/app/api/system/audit/scan/route.ts` | Yes | `requireAuth` | READ | N/A | systemAuditRepository | xcloud | subscribers, ocs_subscribers, ocs_balances | — |
+| POST | `/api/system/audit/heal` | `src/app/api/system/audit/heal/route.ts` | Yes | `requireCapability(system_heal)` | WRITE | APPROVAL_GOVERNED | systemAuditRepository | xcloud | subscribers | approval, audit |
+| POST | `/api/system/audit/batch-heal` | `src/app/api/system/audit/batch-heal/route.ts` | Yes | `requireCapability(system_heal)` | WRITE | APPROVAL_GOVERNED | systemAuditRepository | xcloud | subscribers | approval, audit |
 
 ### Tariff Plans
 
 | Method | Path | Source File | Auth | Permission | Operation | Governance | Repository | Mongo DB | Collection | Side Effects |
 |--------|------|-------------|------|------------|-----------|------------|------------|----------|------------|--------------|
-| GET | `/api/tariff-plans` | `src/app/api/tariff-plans/route.ts` | Yes | `requireAuth` | READ | N/A | ocsBillingRepository | open5gs | ocs_tariff_plans | — |
-| POST | `/api/tariff-plans` | `src/app/api/tariff-plans/route.ts` | Yes | `requireCapability(tariff_write)` | WRITE | APPROVAL_GOVERNED | ocsBillingRepository | open5gs | ocs_tariff_plans | approval, audit |
-| GET | `/api/tariff-plans/:planId` | `src/app/api/tariff-plans/[planId]/route.ts` | Yes | `requireAuth` | READ | N/A | ocsBillingRepository | open5gs | ocs_tariff_plans | — |
-| PUT | `/api/tariff-plans/:planId` | `src/app/api/tariff-plans/[planId]/route.ts` | Yes | `requireCapability(tariff_write)` | WRITE | APPROVAL_GOVERNED | ocsBillingRepository | open5gs | ocs_tariff_plans | approval, audit |
-| DELETE | `/api/tariff-plans/:planId` | `src/app/api/tariff-plans/[planId]/route.ts` | Yes | `requireCapability(tariff_write)` | WRITE | APPROVAL_GOVERNED | ocsBillingRepository | open5gs | ocs_tariff_plans | approval, audit |
-| POST | `/api/tariff-plans/:planId/clone` | `src/app/api/tariff-plans/[planId]/clone/route.ts` | Yes | `requireCapability(tariff_write)` | WRITE | APPROVAL_GOVERNED | ocsBillingRepository | open5gs | ocs_tariff_plans | approval, audit |
-| GET | `/api/tariff-plans/:planId/export` | `src/app/api/tariff-plans/[planId]/export/route.ts` | Yes | `requireAuth` | READ | N/A | ocsBillingRepository | open5gs | ocs_tariff_plans | — |
-| POST | `/api/tariff-plans/:planId/migrate` | `src/app/api/tariff-plans/[planId]/migrate/route.ts` | Yes | `requireCapability(plan_assign)` | WRITE | APPROVAL_GOVERNED | ocsBillingRepository | open5gs | ocs_subscribers, ocs_balances | approval, audit |
-| GET | `/api/tariff-plans/:planId/operations` | `src/app/api/tariff-plans/[planId]/operations/route.ts` | Yes | `requireAuth` | READ | N/A | ocsBillingRepository | open5gs | ocs_tariff_plans | — |
-| GET | `/api/tariff-plans/:planId/rules` | `src/app/api/tariff-plans/[planId]/rules/route.ts` | Yes | `requireAuth` | READ | N/A | ocsBillingRepository | open5gs | ocs_tariff_plans | — |
-| POST | `/api/tariff-plans/:planId/rules` | `src/app/api/tariff-plans/[planId]/rules/route.ts` | Yes | `requireCapability(tariff_write)` | WRITE | APPROVAL_GOVERNED | ocsBillingRepository | open5gs | ocs_tariff_plans | approval, audit |
-| GET | `/api/tariff-plans/:planId/rules/:ruleId` | `src/app/api/tariff-plans/[planId]/rules/[ruleId]/route.ts` | Yes | `requireAuth` | READ | N/A | ocsBillingRepository | open5gs | ocs_tariff_plans | — |
-| PUT | `/api/tariff-plans/:planId/rules/:ruleId` | `src/app/api/tariff-plans/[planId]/rules/[ruleId]/route.ts` | Yes | `requireCapability(tariff_write)` | WRITE | APPROVAL_GOVERNED | ocsBillingRepository | open5gs | ocs_tariff_plans | approval, audit |
-| DELETE | `/api/tariff-plans/:planId/rules/:ruleId` | `src/app/api/tariff-plans/[planId]/rules/[ruleId]/route.ts` | Yes | `requireCapability(tariff_write)` | WRITE | APPROVAL_GOVERNED | ocsBillingRepository | open5gs | ocs_tariff_plans | approval, audit |
-| GET | `/api/tariff-plans/:planId/subscribers` | `src/app/api/tariff-plans/[planId]/subscribers/route.ts` | Yes | `requireAuth` | READ | N/A | ocsBillingRepository | open5gs | ocs_subscribers | — |
-| POST | `/api/tariff-plans/import` | `src/app/api/tariff-plans/import/route.ts` | Yes | `requireCapability(tariff_write)` | WRITE | APPROVAL_GOVERNED | ocsBillingRepository | open5gs | ocs_tariff_plans | approval, audit |
+| GET | `/api/tariff-plans` | `src/app/api/tariff-plans/route.ts` | Yes | `requireAuth` | READ | N/A | ocsBillingRepository | xcloud | ocs_tariff_plans | — |
+| POST | `/api/tariff-plans` | `src/app/api/tariff-plans/route.ts` | Yes | `requireCapability(tariff_write)` | WRITE | APPROVAL_GOVERNED | ocsBillingRepository | xcloud | ocs_tariff_plans | approval, audit |
+| GET | `/api/tariff-plans/:planId` | `src/app/api/tariff-plans/[planId]/route.ts` | Yes | `requireAuth` | READ | N/A | ocsBillingRepository | xcloud | ocs_tariff_plans | — |
+| PUT | `/api/tariff-plans/:planId` | `src/app/api/tariff-plans/[planId]/route.ts` | Yes | `requireCapability(tariff_write)` | WRITE | APPROVAL_GOVERNED | ocsBillingRepository | xcloud | ocs_tariff_plans | approval, audit |
+| DELETE | `/api/tariff-plans/:planId` | `src/app/api/tariff-plans/[planId]/route.ts` | Yes | `requireCapability(tariff_write)` | WRITE | APPROVAL_GOVERNED | ocsBillingRepository | xcloud | ocs_tariff_plans | approval, audit |
+| POST | `/api/tariff-plans/:planId/clone` | `src/app/api/tariff-plans/[planId]/clone/route.ts` | Yes | `requireCapability(tariff_write)` | WRITE | APPROVAL_GOVERNED | ocsBillingRepository | xcloud | ocs_tariff_plans | approval, audit |
+| GET | `/api/tariff-plans/:planId/export` | `src/app/api/tariff-plans/[planId]/export/route.ts` | Yes | `requireAuth` | READ | N/A | ocsBillingRepository | xcloud | ocs_tariff_plans | — |
+| POST | `/api/tariff-plans/:planId/migrate` | `src/app/api/tariff-plans/[planId]/migrate/route.ts` | Yes | `requireCapability(plan_assign)` | WRITE | APPROVAL_GOVERNED | ocsBillingRepository | xcloud | ocs_subscribers, ocs_balances | approval, audit |
+| GET | `/api/tariff-plans/:planId/operations` | `src/app/api/tariff-plans/[planId]/operations/route.ts` | Yes | `requireAuth` | READ | N/A | ocsBillingRepository | xcloud | ocs_tariff_plans | — |
+| GET | `/api/tariff-plans/:planId/rules` | `src/app/api/tariff-plans/[planId]/rules/route.ts` | Yes | `requireAuth` | READ | N/A | ocsBillingRepository | xcloud | ocs_tariff_plans | — |
+| POST | `/api/tariff-plans/:planId/rules` | `src/app/api/tariff-plans/[planId]/rules/route.ts` | Yes | `requireCapability(tariff_write)` | WRITE | APPROVAL_GOVERNED | ocsBillingRepository | xcloud | ocs_tariff_plans | approval, audit |
+| GET | `/api/tariff-plans/:planId/rules/:ruleId` | `src/app/api/tariff-plans/[planId]/rules/[ruleId]/route.ts` | Yes | `requireAuth` | READ | N/A | ocsBillingRepository | xcloud | ocs_tariff_plans | — |
+| PUT | `/api/tariff-plans/:planId/rules/:ruleId` | `src/app/api/tariff-plans/[planId]/rules/[ruleId]/route.ts` | Yes | `requireCapability(tariff_write)` | WRITE | APPROVAL_GOVERNED | ocsBillingRepository | xcloud | ocs_tariff_plans | approval, audit |
+| DELETE | `/api/tariff-plans/:planId/rules/:ruleId` | `src/app/api/tariff-plans/[planId]/rules/[ruleId]/route.ts` | Yes | `requireCapability(tariff_write)` | WRITE | APPROVAL_GOVERNED | ocsBillingRepository | xcloud | ocs_tariff_plans | approval, audit |
+| GET | `/api/tariff-plans/:planId/subscribers` | `src/app/api/tariff-plans/[planId]/subscribers/route.ts` | Yes | `requireAuth` | READ | N/A | ocsBillingRepository | xcloud | ocs_subscribers | — |
+| POST | `/api/tariff-plans/import` | `src/app/api/tariff-plans/import/route.ts` | Yes | `requireCapability(tariff_write)` | WRITE | APPROVAL_GOVERNED | ocsBillingRepository | xcloud | ocs_tariff_plans | approval, audit |
 
 ### Users
 

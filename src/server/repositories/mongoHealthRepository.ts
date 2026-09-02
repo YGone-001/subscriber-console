@@ -1,7 +1,7 @@
 import { Document } from 'mongodb';
-import { getAppDb, getOpen5gsDb, mongoCollections, mongoDbNames } from '@/lib/mongo';
+import { getAppDb, getXcloudDb, mongoCollections, mongoDbNames } from '@/lib/mongo';
 
-type DatabaseRole = 'open5gs' | 'app';
+type DatabaseRole = 'xcloud' | 'app';
 
 type ExpectedIndex = {
   database: DatabaseRole;
@@ -24,7 +24,7 @@ export type MongoHealthReport = {
   ok: boolean;
   database: string;
   databases: {
-    open5gs: string;
+    xcloud: string;
     app: string;
   };
   checkedAt: string;
@@ -35,13 +35,13 @@ export type MongoHealthReport = {
 };
 
 const expectedIndexes: ExpectedIndex[] = [
-  { database: 'open5gs', collection: 'subscribers', name: 'uniq_imsi', key: { imsi: 1 }, unique: true },
-  { database: 'open5gs', collection: 'ocs_tariff_plans', name: 'uniq_plan_id', key: { plan_id: 1 }, unique: true },
-  { database: 'open5gs', collection: 'ocs_tariff_plans', name: 'rules_rating_group', key: { 'rules.rating_group': 1 } },
-  { database: 'open5gs', collection: 'ocs_subscribers', name: 'uniq_ocs_subscriber_imsi', key: { imsi: 1 }, unique: true },
-  { database: 'open5gs', collection: 'ocs_subscribers', name: 'ocs_subscriber_plan_id', key: { plan_id: 1 } },
-  { database: 'open5gs', collection: 'ocs_balances', name: 'uniq_ocs_balance_imsi', key: { imsi: 1 }, unique: true },
-  { database: 'open5gs', collection: 'ocs_balances', name: 'ocs_balance_updated_at_desc', key: { updated_at: -1 } },
+  { database: 'xcloud', collection: 'subscribers', name: 'uniq_imsi', key: { imsi: 1 }, unique: true },
+  { database: 'xcloud', collection: 'ocs_tariff_plans', name: 'uniq_plan_id', key: { plan_id: 1 }, unique: true },
+  { database: 'xcloud', collection: 'ocs_tariff_plans', name: 'rules_rating_group', key: { 'rules.rating_group': 1 } },
+  { database: 'xcloud', collection: 'ocs_subscribers', name: 'uniq_ocs_subscriber_imsi', key: { imsi: 1 }, unique: true },
+  { database: 'xcloud', collection: 'ocs_subscribers', name: 'ocs_subscriber_plan_id', key: { plan_id: 1 } },
+  { database: 'xcloud', collection: 'ocs_balances', name: 'uniq_ocs_balance_imsi', key: { imsi: 1 }, unique: true },
+  { database: 'xcloud', collection: 'ocs_balances', name: 'ocs_balance_updated_at_desc', key: { updated_at: -1 } },
   { database: 'app', collection: 'app_profiles', name: 'uniq_profile_name', key: { name: 1 }, unique: true },
   { database: 'app', collection: 'app_profiles', name: 'profile_updated_at_desc', key: { updated_at: -1 } },
   { database: 'app', collection: 'app_profile_versions', name: 'profile_versions_by_profile', key: { profileName: 1, savedAt: -1 } },
@@ -76,10 +76,10 @@ const expectedIndexes: ExpectedIndex[] = [
 ];
 
 const expectedCollections: Array<{ database: DatabaseRole; collection: string }> = [
-  { database: 'open5gs', collection: mongoCollections.subscribers },
-  { database: 'open5gs', collection: mongoCollections.ocsTariffPlans },
-  { database: 'open5gs', collection: mongoCollections.ocsSubscribers },
-  { database: 'open5gs', collection: mongoCollections.ocsBalances },
+  { database: 'xcloud', collection: mongoCollections.subscribers },
+  { database: 'xcloud', collection: mongoCollections.ocsTariffPlans },
+  { database: 'xcloud', collection: mongoCollections.ocsSubscribers },
+  { database: 'xcloud', collection: mongoCollections.ocsBalances },
   { database: 'app', collection: mongoCollections.profiles },
   { database: 'app', collection: mongoCollections.profileVersions },
   { database: 'app', collection: mongoCollections.users },
@@ -104,17 +104,17 @@ function indexMatches(actual: Document | undefined, expected: ExpectedIndex): bo
 
 export async function getMongoHealthReport(): Promise<MongoHealthReport> {
   const startedAt = Date.now();
-  const [open5gsDb, appDb] = await Promise.all([getOpen5gsDb(), getAppDb()]);
-  await Promise.all([open5gsDb.command({ ping: 1 }), appDb.command({ ping: 1 })]);
+  const [xcloudDb, appDb] = await Promise.all([getXcloudDb(), getAppDb()]);
+  await Promise.all([xcloudDb.command({ ping: 1 }), appDb.command({ ping: 1 })]);
   const databases = mongoDbNames();
   const dbByRole = {
-    open5gs: open5gsDb,
+    xcloud: xcloudDb,
     app: appDb,
   };
 
   const existingCollectionsByRole = {
-    open5gs: new Set(
-      (await open5gsDb.listCollections({}, { nameOnly: true }).toArray()).map((collection) => collection.name)
+    xcloud: new Set(
+      (await xcloudDb.listCollections({}, { nameOnly: true }).toArray()).map((collection) => collection.name)
     ),
     app: new Set(
       (await appDb.listCollections({}, { nameOnly: true }).toArray()).map((collection) => collection.name)
@@ -158,7 +158,7 @@ export async function getMongoHealthReport(): Promise<MongoHealthReport> {
 
   return {
     ok: missingCollections.length === 0 && missingIndexes.length === 0,
-    database: `${databases.open5gs} / ${databases.app}`,
+    database: `${databases.xcloud} / ${databases.app}`,
     databases,
     checkedAt: new Date().toISOString(),
     latencyMs: Date.now() - startedAt,

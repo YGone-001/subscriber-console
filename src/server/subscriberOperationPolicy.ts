@@ -3,7 +3,7 @@ import { hasPermission } from '@/lib/permissions';
 import { validateImsi } from '@/lib/subscriberValidation';
 import type { Permission } from '@/lib/permissions';
 import type { AuthContext } from '@/lib/authz';
-import type { Open5gsSubscriberDocument } from '@/types/xcloud';
+import type { XcloudSubscriberDocument } from '@/types/xcloud';
 import { applyGovernedSubscriberConditionalUpdates, findSubscriberDocuments, type GovernedSubscriberConditionalUpdate } from '@/server/repositories/subscriberRepository';
 
 export const SUBSCRIBER_BATCH_OPERATION = 'SUBSCRIBER_BATCH_UPDATE' as const;
@@ -151,7 +151,7 @@ export function changedFieldNames(patch: GovernedSubscriberPatch): string[] {
   return fields;
 }
 
-function valuesFor(doc: Open5gsSubscriberDocument, patch: GovernedSubscriberPatch): { before: Record<string, number>; after: Record<string, number> } {
+function valuesFor(doc: XcloudSubscriberDocument, patch: GovernedSubscriberPatch): { before: Record<string, number>; after: Record<string, number> } {
   const before: Record<string, number> = {};
   const after: Record<string, number> = {};
   if (patch.accessRestrictionData !== undefined) {
@@ -185,7 +185,7 @@ export async function prepareFrozenSubscriberBatchChange(input: SubscriberBatchC
   const missing = input.imsis.filter((imsi) => !byImsi.has(imsi));
   if (missing.length > 0) throw new SubscriberBatchGovernanceError('SUBSCRIBER_NOT_FOUND', { imsis: missing.slice(0, 20), count: missing.length });
   const targets = input.imsis.slice().sort().map((imsi) => {
-    const values = valuesFor(byImsi.get(imsi) as Open5gsSubscriberDocument, input.patch);
+    const values = valuesFor(byImsi.get(imsi) as XcloudSubscriberDocument, input.patch);
     if (stableJson(values.before) === stableJson(values.after)) throw new SubscriberBatchGovernanceError('SUBSCRIBER_BATCH_NO_EFFECT', { imsi });
     return { imsi, ...values, preconditionHash: fingerprint(values.before) };
   });

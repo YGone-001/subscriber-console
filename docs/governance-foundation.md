@@ -7,7 +7,7 @@
 ## 1. Existing Architecture
 
 - Next.js 16.2.2 App Router / React 19.2.4 / TypeScript strict / Tailwind 4。
-- 原生 MongoDB driver；应用集合在 `xcloud_ops`，核心网集合在 `open5gs`，名称可由环境变量覆盖。
+- 原生 MongoDB driver；应用集合在 `xcloud_ops`，核心网集合在 `xcloud`，名称可由环境变量覆盖。
 - `src/app/api` 调用 `src/server/repositories`；公共 MongoDB 连接由 `src/lib/mongo.ts` 管理。
 - 页面使用 SWR；JWT 使用 jose，密码使用 bcryptjs；standalone 构建。
 - `src/proxy.ts` 是 JWT 边界；`src/lib/authz.ts` 是 Route Handler 授权入口。

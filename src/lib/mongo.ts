@@ -1,7 +1,7 @@
 import { Collection, Db, Document, MongoClient, MongoClientOptions } from 'mongodb';
 
-const DEFAULT_MONGODB_URI = 'mongodb://127.0.0.1:27017/open5gs';
-const DEFAULT_OPEN5GS_DB = 'open5gs';
+const DEFAULT_MONGODB_URI = 'mongodb://127.0.0.1:27017/xcloud';
+const DEFAULT_XCLOUD_DB = 'xcloud';
 const DEFAULT_APP_DB = 'xcloud_ops';
 
 const globalForMongo = global as unknown as {
@@ -13,11 +13,11 @@ function mongoUri(): string {
 }
 
 export function mongoDbName(): string {
-  return open5gsDbName();
+  return xcloudDbName();
 }
 
-export function open5gsDbName(): string {
-  return process.env.MONGODB_OPEN5GS_DB || process.env.MONGODB_DB || DEFAULT_OPEN5GS_DB;
+export function xcloudDbName(): string {
+  return process.env.MONGODB_XCLOUD_DB || process.env.MONGODB_DB || DEFAULT_XCLOUD_DB;
 }
 
 export function appDbName(): string {
@@ -26,7 +26,7 @@ export function appDbName(): string {
 
 export function mongoDbNames() {
   return {
-    open5gs: open5gsDbName(),
+    xcloud: xcloudDbName(),
     app: appDbName(),
   };
 }
@@ -53,8 +53,8 @@ export async function getMongoDb(dbName = mongoDbName()): Promise<Db> {
   return client.db(dbName);
 }
 
-export function getOpen5gsDb(): Promise<Db> {
-  return getMongoDb(open5gsDbName());
+export function getXcloudDb(): Promise<Db> {
+  return getMongoDb(xcloudDbName());
 }
 
 export function getAppDb(): Promise<Db> {
@@ -69,10 +69,10 @@ export async function getMongoCollection<T extends Document = Document>(
   return db.collection<T>(name);
 }
 
-export async function getOpen5gsCollection<T extends Document = Document>(
+export async function getXcloudCollection<T extends Document = Document>(
   name: string
 ): Promise<Collection<T>> {
-  const db = await getOpen5gsDb();
+  const db = await getXcloudDb();
   return db.collection<T>(name);
 }
 

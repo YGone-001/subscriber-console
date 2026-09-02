@@ -5,7 +5,7 @@ This directory contains the Go backend for xCloud subscriber-console.
 ## Phase 1 — Foundation
 
 - Config from environment variables
-- MongoDB client with dual-database support (open5gs + xcloud_ops)
+- MongoDB client with dual-database support (xcloud + xcloud_ops)
 - Health endpoints: `/healthz` (liveness), `/readyz` (readiness with Mongo ping)
 - Middleware: RequestID, Recovery, AccessLog, Security
 - JSON response helpers matching existing error shape `{"error":"...","code":"..."}`
@@ -17,7 +17,7 @@ This directory contains the Go backend for xCloud subscriber-console.
 ```bash
 # Set environment variables
 export MONGODB_URI="mongodb://127.0.0.1:27017"
-export MONGODB_OPEN5GS_DB="open5gs"
+export MONGODB_XCLOUD_DB="xcloud"
 export MONGODB_APP_DB="xcloud_ops"
 
 # Run
@@ -40,7 +40,7 @@ go build -o server ./cmd/server
 | `HTTP_IDLE_TIMEOUT` | `120s` | HTTP idle timeout |
 | `HTTP_SHUTDOWN_TIMEOUT` | `10s` | Graceful shutdown timeout |
 | `MONGODB_URI` | `mongodb://127.0.0.1:27017` | MongoDB connection URI |
-| `MONGODB_OPEN5GS_DB` | `open5gs` | HSS/OCS database name |
+| `MONGODB_XCLOUD_DB` | `xcloud` | HSS/OCS database name |
 | `MONGODB_APP_DB` | `xcloud_ops` | Operations database name |
 
 ## Endpoints

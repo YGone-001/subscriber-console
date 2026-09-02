@@ -393,7 +393,7 @@ export default function SystemHealthPage() {
               status={systemHealth?.subsystems?.database?.status || 'healthy'}
               icon={<Database size={20} color="var(--primary)" />}
               name={t("health_subsystem_db")}
-              description={`${systemHealth?.subsystems?.database?.open5gsDb || 'open5gs'} / ${systemHealth?.subsystems?.database?.appDb || 'app'}`}
+              description={`${systemHealth?.subsystems?.database?.xcloudDb || 'xcloud'} / ${systemHealth?.subsystems?.database?.appDb || 'app'}`}
               statusBadge={getStatusBadge(systemHealth?.subsystems?.database?.status)}
               metrics={[
                 { label: t("health_db_latency"), value: systemHealth?.subsystems?.database?.latencyMs !== undefined ? `${systemHealth.subsystems.database.latencyMs} ms` : '--' },

@@ -25,8 +25,8 @@ Required variables:
 
 | Variable | Description |
 | --- | --- |
-| `MONGODB_URI` | MongoDB connection URI, usually the Open5GS MongoDB host |
-| `MONGODB_DB` | Open5GS data database name, default `open5gs` |
+| `MONGODB_URI` | MongoDB connection URI, usually the xCloud MongoDB host |
+| `MONGODB_DB` | xCloud data database name, default `xcloud` |
 | `MONGODB_APP_DB` | Application operations database for `app_*` collections, default `xcloud_ops` |
 | `JWT_SECRET` | JWT signing secret, at least 32 bytes |
 | `INITIAL_ADMIN_PASSWORD` | Optional bootstrap password for the first `admin` account |
@@ -43,7 +43,7 @@ Security notes:
 
 - Use a unique `JWT_SECRET` for each environment.
 - Rotate `INITIAL_ADMIN_PASSWORD` after bootstrap by changing the admin password or disabling bootstrap usage.
-- Keep MongoDB private to the application and Open5GS network.
+- Keep MongoDB private to the application and xCloud network.
 
 ## Start Command
 
@@ -55,10 +55,10 @@ The default Next.js server listens on port `3000` unless configured otherwise th
 
 ## Recommended Production Flow
 
-1. Provision MongoDB or reuse the Open5GS MongoDB host.
+1. Provision MongoDB or reuse the xCloud MongoDB host.
 2. Configure environment variables in the deployment platform.
 3. Run `npm ci`.
-4. Run `npm run mongo:init` to create indexes in both the Open5GS and application databases.
+4. Run `npm run mongo:init` to create indexes in both the xCloud and application databases.
 5. Run `npm run build`.
 6. Start with `npm run start`.
 7. Log in with the bootstrap `admin` account if needed.

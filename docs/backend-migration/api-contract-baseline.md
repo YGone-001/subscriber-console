@@ -97,7 +97,7 @@ Query params: `page` (default 1), `limit` (default 50, max 200)
 
 **MSISDN lookup** (when `msisdn` param present):
 ```json
-{ "exists": true, "imsi": "460001234567890", "source": "open5gs" }
+{ "exists": true, "imsi": "460001234567890", "source": "xcloud" }
 ```
 
 ### POST /api/subscribers

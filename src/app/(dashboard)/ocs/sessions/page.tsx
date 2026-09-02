@@ -2,7 +2,7 @@ import OcsSessionsPanel from "@/components/ocs/OcsSessionsPanel";
 import "../ocs.css";
 
 export const metadata = {
-  title: "OCS Diameter Sessions | Open5GS Subscriber Console",
+  title: "OCS Diameter Sessions | xCloud Subscriber Console",
   description: "Real-time Gy / Ro Diameter session state machine and quota authorization monitor.",
 };
 

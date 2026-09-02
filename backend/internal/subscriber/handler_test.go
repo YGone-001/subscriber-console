@@ -228,9 +228,9 @@ func TestMatchesStatusFilter(t *testing.T) {
 	}
 }
 
-func TestOpen5gsToLegacyState(t *testing.T) {
+func TestXcloudToLegacyState(t *testing.T) {
 	// Nil doc returns nil
-	if open5gsToLegacyState(nil) != nil {
+	if xcloudToLegacyState(nil) != nil {
 		t.Error("nil doc should return nil")
 	}
 
@@ -245,9 +245,9 @@ func TestOpen5gsToLegacyState(t *testing.T) {
 		"authentication_management_field": "8000",
 	}
 
-	state := open5gsToLegacyState(doc)
+	state := xcloudToLegacyState(doc)
 	if state == nil {
-		t.Fatal("open5gsToLegacyState should not return nil")
+		t.Fatal("xcloudToLegacyState should not return nil")
 	}
 	if state.Sub4G == nil {
 		t.Error("sub4G should not be nil")
@@ -407,9 +407,9 @@ func TestLegacyDetailSections(t *testing.T) {
 		"authentication_management_field": "8000",
 	}
 
-	state := open5gsToLegacyState(doc)
+	state := xcloudToLegacyState(doc)
 	if state == nil {
-		t.Fatal("open5gsToLegacyState should not return nil")
+		t.Fatal("xcloudToLegacyState should not return nil")
 	}
 
 	// All sections must be present (not nil)
@@ -423,6 +423,6 @@ func TestLegacyDetailSections(t *testing.T) {
 		t.Error("auth4G must not be nil")
 	}
 
-	// OCS sections are added by FindSubscriberLegacyState, not open5gsToLegacyState
+	// OCS sections are added by FindSubscriberLegacyState, not xcloudToLegacyState
 	// So they would be nil here — that's expected
 }

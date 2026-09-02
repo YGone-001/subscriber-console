@@ -5,13 +5,13 @@ import { errorSummary, writeOpsReport } from './lib/ops-report.mjs';
 const { loadEnvConfig } = nextEnv;
 loadEnvConfig(process.cwd());
 
-const DEFAULT_MONGODB_URI = 'mongodb://127.0.0.1:27017/open5gs';
-const DEFAULT_MONGODB_DB = 'open5gs';
+const DEFAULT_MONGODB_URI = 'mongodb://127.0.0.1:27017/xcloud';
+const DEFAULT_MONGODB_DB = 'xcloud';
 const args = new Set(process.argv.slice(2));
 const keepDb = args.has('--keep-db');
 const allowConfiguredDb = args.has('--allow-configured-db');
 const mongoUri = process.env.MONGODB_URI || DEFAULT_MONGODB_URI;
-const configuredOpen5gsDbName = process.env.MONGODB_OPEN5GS_DB || process.env.MONGODB_DB || DEFAULT_MONGODB_DB;
+const configuredOpen5gsDbName = process.env.MONGODB_XCLOUD_DB || process.env.MONGODB_DB || DEFAULT_MONGODB_DB;
 const configuredAppDbName = process.env.MONGODB_APP_DB || 'xcloud_ops';
 const explicitTestDb = process.env.MONGODB_TEST_DB;
 const explicitTestAppDb = process.env.MONGODB_TEST_APP_DB;
@@ -427,7 +427,7 @@ async function main() {
     const report = {
       ok: true,
       command: 'mongo:test-core',
-      databases: { open5gs: dbName, app: appDbName },
+      databases: { xcloud: dbName, app: appDbName },
       kept: keepDb,
       durationMs: Date.now() - runStartedAt,
       checkedAt: new Date().toISOString(),
@@ -451,7 +451,7 @@ main().catch(async (error) => {
   const report = {
     ok: false,
     command: 'mongo:test-core',
-    databases: { open5gs: dbName, app: appDbName },
+    databases: { xcloud: dbName, app: appDbName },
     kept: keepDb,
     checkedAt: new Date().toISOString(),
     durationMs: Date.now() - startedAt.getTime(),

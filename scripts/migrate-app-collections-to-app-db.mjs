@@ -5,7 +5,7 @@ import { errorSummary, writeOpsReport } from './lib/ops-report.mjs';
 const { loadEnvConfig } = nextEnv;
 loadEnvConfig(process.cwd());
 
-const DEFAULT_MONGODB_URI = 'mongodb://127.0.0.1:27017/open5gs';
+const DEFAULT_MONGODB_URI = 'mongodb://127.0.0.1:27017/xcloud';
 const args = new Set(process.argv.slice(2));
 const deleteSource = args.has('--delete-source');
 const dryRun = args.has('--dry-run');
@@ -15,7 +15,7 @@ const sourceArg = process.argv.find((arg) => arg.startsWith('--source-db='));
 const confirmSourceArg = process.argv.find((arg) => arg.startsWith('--confirm-source-db='));
 const confirmedSourceDb = confirmSourceArg?.split('=')[1];
 const mongoUri = process.env.MONGODB_URI || DEFAULT_MONGODB_URI;
-const defaultSourceDbName = process.env.MONGODB_OPEN5GS_DB || process.env.MONGODB_DB || 'open5gs';
+const defaultSourceDbName = process.env.MONGODB_XCLOUD_DB || process.env.MONGODB_DB || 'xcloud';
 const sourceDbName = sourceArg?.split('=')[1] || process.env.MONGODB_APP_SOURCE_DB || defaultSourceDbName;
 const appDbName = process.env.MONGODB_APP_DB || 'xcloud_ops';
 const startedAt = new Date();

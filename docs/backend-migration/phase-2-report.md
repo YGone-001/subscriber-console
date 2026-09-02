@@ -271,8 +271,8 @@ ok  github.com/YGone-001/subscriber-console/backend/internal/response     1.016s
 | Collection | Go Write | Reason |
 |-----------|----------|--------|
 | `xcloud_ops.app_rate_limits` | ✅ ALLOWED | Infrastructure — rate limiting |
-| `open5gs.subscribers` | ❌ FORBIDDEN | Business domain |
-| `open5gs.ocs_*` | ❌ FORBIDDEN | Business domain |
+| `xcloud.subscribers` | ❌ FORBIDDEN | Business domain |
+| `xcloud.ocs_*` | ❌ FORBIDDEN | Business domain |
 | `xcloud_ops.app_profiles` | ❌ FORBIDDEN | Business domain |
 | `xcloud_ops.app_users` | ❌ FORBIDDEN | Business domain (read-only in Phase 2 auth) |
 | `xcloud_ops.app_approvals` | ❌ FORBIDDEN | Business domain |

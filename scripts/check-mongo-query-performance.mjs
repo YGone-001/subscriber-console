@@ -5,8 +5,8 @@ import { errorSummary, writeOpsReport } from './lib/ops-report.mjs';
 const { loadEnvConfig } = nextEnv;
 loadEnvConfig(process.cwd());
 
-const DEFAULT_MONGODB_URI = 'mongodb://127.0.0.1:27017/open5gs';
-const DEFAULT_MONGODB_DB = 'open5gs';
+const DEFAULT_MONGODB_URI = 'mongodb://127.0.0.1:27017/xcloud';
+const DEFAULT_MONGODB_DB = 'xcloud';
 const args = new Set(process.argv.slice(2));
 const jsonOutput = args.has('--json');
 const allowCollscan = args.has('--allow-collscan');
@@ -15,7 +15,7 @@ const slowMsArg = process.argv.find((arg) => arg.startsWith('--slow-ms='));
 const sampleImsiPrefix = sampleImsiPrefixArg?.split('=')[1] || process.env.MONGO_PERF_IMSI_PREFIX || '';
 const slowMs = Number(slowMsArg?.split('=')[1] || process.env.MONGO_PERF_SLOW_MS || 250);
 const mongoUri = process.env.MONGODB_URI || DEFAULT_MONGODB_URI;
-const dbName = process.env.MONGODB_OPEN5GS_DB || process.env.MONGODB_DB || DEFAULT_MONGODB_DB;
+const dbName = process.env.MONGODB_XCLOUD_DB || process.env.MONGODB_DB || DEFAULT_MONGODB_DB;
 const appDbName = process.env.MONGODB_APP_DB || 'xcloud_ops';
 const startedAt = new Date();
 
@@ -254,7 +254,7 @@ async function main() {
   const report = {
     ok: reportOk,
     command: 'mongo:perf',
-    databases: { open5gs: dbName, app: appDbName },
+    databases: { xcloud: dbName, app: appDbName },
     checkedAt: new Date().toISOString(),
     durationMs: Date.now() - startedAt.getTime(),
     slowThresholdMs: slowMs,
@@ -293,7 +293,7 @@ main().catch(async (error) => {
   const report = {
     ok: false,
     command: 'mongo:perf',
-    databases: { open5gs: dbName, app: appDbName },
+    databases: { xcloud: dbName, app: appDbName },
     checkedAt: new Date().toISOString(),
     durationMs: Date.now() - startedAt.getTime(),
     slowThresholdMs: slowMs,

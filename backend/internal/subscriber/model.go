@@ -101,9 +101,9 @@ type BatchPrecheckResult struct {
 
 // --- Internal BSON models ---
 
-// open5gsSubscriberDoc is the raw BSON subscriber document from the open5gs.subscribers collection.
-// We use bson.M for flexible access since Open5GS documents have variable schemas.
-type open5gsSubscriberDoc struct {
+// xcloudSubscriberDoc is the raw BSON subscriber document from the xcloud.subscribers collection.
+// We use bson.M for flexible access since xcloud documents have variable schemas.
+type xcloudSubscriberDoc struct {
 	ID                            bson.ObjectID `bson:"_id,omitempty"`
 	IMSI                          string        `bson:"imsi"`
 	MSISDN                        []string      `bson:"msisdn"`
@@ -119,7 +119,7 @@ type open5gsSubscriberDoc struct {
 	WebuiMeta                     any           `bson:"webui_meta"`
 }
 
-// ocsSubscriberDoc is the raw BSON document from open5gs.ocs_subscribers.
+// ocsSubscriberDoc is the raw BSON document from xcloud.ocs_subscribers.
 type ocsSubscriberDoc struct {
 	IMSI     string `bson:"imsi"`
 	MSISDN   string `bson:"msisdn"`
@@ -129,7 +129,7 @@ type ocsSubscriberDoc struct {
 	CreateAt any    `bson:"created_at"`
 }
 
-// ocsBalanceDoc is the raw BSON document from open5gs.ocs_balances.
+// ocsBalanceDoc is the raw BSON document from xcloud.ocs_balances.
 type ocsBalanceDoc struct {
 	IMSI           string `bson:"imsi"`
 	DataTotal      any    `bson:"data_total"`
@@ -146,7 +146,7 @@ type ocsBalanceDoc struct {
 	UpdateAt       any    `bson:"updated_at"`
 }
 
-// ocsTariffPlanDoc is the raw BSON document from open5gs.ocs_tariff_plans.
+// ocsTariffPlanDoc is the raw BSON document from xcloud.ocs_tariff_plans.
 type ocsTariffPlanDoc struct {
 	PlanID string `bson:"plan_id"`
 	Name   string `bson:"name"`

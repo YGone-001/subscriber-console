@@ -1,5 +1,5 @@
 import { Document, Long } from 'mongodb';
-import { getAppCollection, getOpen5gsCollection, mongoCollections } from '@/lib/mongo';
+import { getAppCollection, getXcloudCollection, mongoCollections } from '@/lib/mongo';
 import type { TrafficAdjustmentPayload } from '@/lib/subscriberValidation';
 import {
   DEFAULT_OCS_PLAN_ID,
@@ -202,15 +202,15 @@ export type TariffPlanMigrationResult = {
 };
 
 function tariffPlansCollection() {
-  return getOpen5gsCollection<OcsTariffPlan>(mongoCollections.ocsTariffPlans);
+  return getXcloudCollection<OcsTariffPlan>(mongoCollections.ocsTariffPlans);
 }
 
 function ocsSubscribersCollection() {
-  return getOpen5gsCollection<OcsSubscriber>(mongoCollections.ocsSubscribers);
+  return getXcloudCollection<OcsSubscriber>(mongoCollections.ocsSubscribers);
 }
 
 function ocsBalancesCollection() {
-  return getOpen5gsCollection<OcsBalance>(mongoCollections.ocsBalances);
+  return getXcloudCollection<OcsBalance>(mongoCollections.ocsBalances);
 }
 
 function legacyRatingsCollection() {

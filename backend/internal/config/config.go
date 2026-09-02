@@ -17,9 +17,9 @@ type Config struct {
 	ShutdownTimeout time.Duration
 
 	// MongoDB
-	MongoURI       string // connection URI
-	MongoDBOpen5GS string // database name for HSS/OCS data
-	MongoDBOps     string // database name for xcloud_ops data
+	MongoURI      string // connection URI
+	MongoDBXCloud string // database name for HSS/OCS data
+	MongoDBOps    string // database name for xcloud_ops data
 }
 
 // Load reads configuration from environment variables with sensible defaults.
@@ -31,7 +31,7 @@ func Load() (*Config, error) {
 		IdleTimeout:     envDurationOrDefault("HTTP_IDLE_TIMEOUT", 120*time.Second),
 		ShutdownTimeout: envDurationOrDefault("HTTP_SHUTDOWN_TIMEOUT", 10*time.Second),
 		MongoURI:        envOrDefault("MONGODB_URI", "mongodb://127.0.0.1:27017"),
-		MongoDBOpen5GS:  envOrDefault("MONGODB_OPEN5GS_DB", "open5gs"),
+		MongoDBXCloud:   envOrDefault("MONGODB_XCLOUD_DB", "xcloud"),
 		MongoDBOps:      envOrDefault("MONGODB_APP_DB", "xcloud_ops"),
 	}
 

@@ -54,7 +54,7 @@ All config from environment variables:
 | `HTTP_IDLE_TIMEOUT` | `120s` | HTTP idle timeout |
 | `HTTP_SHUTDOWN_TIMEOUT` | `10s` | Graceful shutdown timeout |
 | `MONGODB_URI` | `mongodb://127.0.0.1:27017` | MongoDB connection URI |
-| `MONGODB_OPEN5GS_DB` | `open5gs` | HSS/OCS database name |
+| `MONGODB_XCLOUD_DB` | `xcloud` | HSS/OCS database name |
 | `MONGODB_APP_DB` | `xcloud_ops` | Operations database name |
 
 ---
@@ -136,7 +136,7 @@ All tests pass with `-race` flag.
 
 | Component | CNMS Reference | What Changed |
 |-----------|---------------|--------------|
-| MongoDB client | `internal/mongo/client.go` | Added dual-database support (Open5GS + Ops) |
+| MongoDB client | `internal/mongo/client.go` | Added dual-database support (xCloud + Ops) |
 | Config | `internal/config/config.go` | Env vars instead of JSON file |
 | HTTP | `net/http` | Same approach, no framework |
 | Graceful shutdown | Not present in CNMS | Implemented from scratch |

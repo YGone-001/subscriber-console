@@ -1,42 +1,42 @@
 import type { Long, ObjectId } from 'mongodb';
 
-export type Open5gsBitrate = {
+export type XcloudBitrate = {
   value: number;
   unit: number;
 };
 
-export type Open5gsAmbr = {
-  downlink: Open5gsBitrate;
-  uplink: Open5gsBitrate;
+export type XcloudAmbr = {
+  downlink: XcloudBitrate;
+  uplink: XcloudBitrate;
 };
 
-export type Open5gsArp = {
+export type XcloudArp = {
   priority_level: number;
   pre_emption_capability: number;
   pre_emption_vulnerability: number;
 };
 
-export type Open5gsQos = {
+export type XcloudQos = {
   index: number;
-  arp: Open5gsArp;
-  mbr?: Open5gsAmbr;
-  gbr?: Open5gsAmbr;
+  arp: XcloudArp;
+  mbr?: XcloudAmbr;
+  gbr?: XcloudAmbr;
 };
 
-export type Open5gsPccRule = {
+export type XcloudPccRule = {
   flow?: Array<{
     direction: number;
     description: string;
   }>;
-  qos?: Open5gsQos;
+  qos?: XcloudQos;
 };
 
-export type Open5gsSession = {
+export type XcloudSession = {
   _id?: ObjectId;
   name: string;
   type?: number;
-  qos?: Open5gsQos;
-  ambr?: Open5gsAmbr;
+  qos?: XcloudQos;
+  ambr?: XcloudAmbr;
   ue?: {
     ipv4?: string;
     ipv6?: string;
@@ -45,19 +45,19 @@ export type Open5gsSession = {
     ipv4?: string;
     ipv6?: string;
   };
-  pcc_rule?: Open5gsPccRule[];
+  pcc_rule?: XcloudPccRule[];
   lbo_roaming_allowed?: boolean;
 };
 
-export type Open5gsSlice = {
+export type XcloudSlice = {
   _id?: ObjectId;
   sst: number;
   sd?: string;
   default_indicator?: boolean;
-  session?: Open5gsSession[];
+  session?: XcloudSession[];
 };
 
-export type Open5gsSecurity = {
+export type XcloudSecurity = {
   k?: string;
   op?: string | null;
   opc?: string | null;
@@ -72,7 +72,7 @@ export type SubscriberWebuiMeta = {
   updated_at?: Date;
 };
 
-export type Open5gsSubscriberDocument = {
+export type XcloudSubscriberDocument = {
   _id?: ObjectId;
   __v?: number;
   schema_version: number;
@@ -84,9 +84,9 @@ export type Open5gsSubscriberDocument = {
   mme_timestamp?: number;
   mm_realm?: string[];
   purge_flag?: boolean | boolean[];
-  security: Open5gsSecurity;
-  ambr: Open5gsAmbr;
-  slice: Open5gsSlice[];
+  security: XcloudSecurity;
+  ambr: XcloudAmbr;
+  slice: XcloudSlice[];
   access_restriction_data: number;
   subscriber_status: number;
   operator_determined_barring?: number;
