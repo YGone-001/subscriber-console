@@ -1,6 +1,4 @@
 // Package main is the entry point for the subscriber-console Go backend.
-//
-// Phase 2: Read-only API migration — auth compatibility, audit, analytics, ratings.
 package main
 
 import (
@@ -66,9 +64,18 @@ func main() {
 	sessionValidator := auth.NewSessionValidator(mc.Ops.Collection("app_users"))
 	limiter := ratelimit.NewLimiter(mc.Ops.Collection("app_rate_limits"))
 
-	// Audit
-	auditRepo := audit.NewRepository(mc.Ops.Collection("app_audit_logs"))
-	auditHandler := audit.NewHandler(auditRepo, limiter)
+	// Audit Writer — bounded async writer for authorization.denied evidence
+	auditCollection := mc.Ops.Collection("app_audit_logs")
+	auditWriter := audit.NewWriter(auditCollection, audit.WriterConfig{
+		QueueSize:   256,
+		WorkerCount: 2,
+		Logger:      logger,
+	})
+	defer auditWriter.Close()
+
+	// Audit (read-side repository + handler with denial audit)
+	auditRepo := audit.NewRepository(auditCollection)
+	auditHandler := audit.NewHandler(auditRepo, limiter, auditWriter)
 
 	// Analytics
 	analyticsRepo := analytics.NewRepository(
@@ -111,7 +118,7 @@ func main() {
 	)
 	tariffHandler := tariff.NewHandler(tariffRepo, limiter)
 
-	// Subscribers (Phase 2C)
+	// Subscribers
 	subscriberRepo := subscriber.NewRepository(
 		mc.XCloud.Collection("subscribers"),
 		mc.XCloud.Collection("ocs_subscribers"),
@@ -121,9 +128,9 @@ func main() {
 	)
 	subscriberHandler := subscriber.NewHandler(subscriberRepo, limiter)
 
-	// Auth/User reads
+	// Auth/User reads (with audit writer for denial evidence)
 	userRepo := user.NewRepository(mc.Ops)
-	userHandler := user.NewHandler(userRepo, limiter)
+	userHandler := user.NewHandler(userRepo, limiter, auditWriter)
 
 	// Build handler
 	mux := http.NewServeMux()
@@ -135,31 +142,31 @@ func main() {
 	// Auth-protected read endpoints
 	authMiddleware := auth.Middleware(jwtSecretBytes, sessionValidator, logger)
 
-	// Phase 2A: Audit (export remains with Next.js — requires stateful audit evidence persistence)
+	// Audit (export remains with Next.js — requires stateful audit evidence persistence)
 	mux.Handle("GET /api/audit", authMiddleware(http.HandlerFunc(auditHandler.List)))
 	mux.Handle("GET /api/audit/{id}", authMiddleware(http.HandlerFunc(auditHandler.Get)))
 
-	// Phase 2A: Analytics
+	// Analytics
 	mux.Handle("GET /api/analytics/metrics", authMiddleware(http.HandlerFunc(analyticsHandler.Metrics)))
 	mux.Handle("GET /api/analytics/sparkline", authMiddleware(http.HandlerFunc(analyticsHandler.Sparkline)))
 
-	// Phase 2A: Ratings
+	// Ratings
 	mux.Handle("GET /api/ratings", authMiddleware(http.HandlerFunc(ratingHandler.List)))
 	mux.Handle("GET /api/ratings/{id}", authMiddleware(http.HandlerFunc(ratingHandler.Get)))
 
-	// Phase 2B: Profiles
+	// Profiles
 	mux.Handle("GET /api/profiles", authMiddleware(http.HandlerFunc(profileHandler.List)))
 	mux.Handle("GET /api/profiles/{name}", authMiddleware(http.HandlerFunc(profileHandler.Get)))
 	mux.Handle("GET /api/profiles/{name}/stats", authMiddleware(http.HandlerFunc(profileHandler.Stats)))
 	mux.Handle("GET /api/profiles/{name}/versions", authMiddleware(http.HandlerFunc(profileHandler.Versions)))
 
-	// Phase 2B: OCS
+	// OCS
 	mux.Handle("GET /api/ocs/balances", authMiddleware(http.HandlerFunc(ocsHandler.Balances)))
 	mux.Handle("GET /api/ocs/sessions", authMiddleware(http.HandlerFunc(ocsHandler.Sessions)))
 	mux.Handle("GET /api/ocs/usage", authMiddleware(http.HandlerFunc(ocsHandler.Usage)))
 	mux.Handle("GET /api/ocs/reservations", authMiddleware(http.HandlerFunc(ocsHandler.Reservations)))
 
-	// Phase 2B: Tariff Plans
+	// Tariff Plans
 	mux.Handle("GET /api/tariff-plans", authMiddleware(http.HandlerFunc(tariffHandler.List)))
 	mux.Handle("GET /api/tariff-plans/{planId}", authMiddleware(http.HandlerFunc(tariffHandler.Get)))
 	mux.Handle("GET /api/tariff-plans/{planId}/export", authMiddleware(http.HandlerFunc(tariffHandler.Export)))
@@ -168,7 +175,7 @@ func main() {
 	mux.Handle("GET /api/tariff-plans/{planId}/subscribers", authMiddleware(http.HandlerFunc(tariffHandler.Subscribers)))
 	mux.Handle("GET /api/tariff-plans/{planId}/migrate", authMiddleware(http.HandlerFunc(tariffHandler.Migrate)))
 
-	// Phase 2C: Subscribers (list, detail, search, batch precheck)
+	// Subscribers (list, detail, search, batch precheck)
 	mux.Handle("GET /api/subscribers", authMiddleware(http.HandlerFunc(subscriberHandler.List)))
 	mux.Handle("GET /api/subscribers/{imsi}", authMiddleware(http.HandlerFunc(subscriberHandler.Detail)))
 	mux.Handle("GET /api/search", authMiddleware(http.HandlerFunc(subscriberHandler.Search)))
@@ -216,13 +223,16 @@ func main() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 		defer cancel()
 
+		// Close audit writer first (drain queue)
+		auditWriter.Close()
+
 		if err := srv.Shutdown(shutdownCtx); err != nil {
 			logger.Error("server shutdown error", "error", err)
 		}
 		close(done)
 	}()
 
-	logger.Info("server starting", "addr", cfg.HTTPAddr, "phase", "2")
+	logger.Info("server starting", "addr", cfg.HTTPAddr)
 	if err := srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 		logger.Error("server error", "error", err)
 		os.Exit(1)

@@ -15,11 +15,12 @@ import (
 type Handler struct {
 	repo    *Repository
 	limiter *ratelimit.Limiter
+	writer  *Writer
 }
 
 // NewHandler creates a new audit Handler.
-func NewHandler(repo *Repository, limiter *ratelimit.Limiter) *Handler {
-	return &Handler{repo: repo, limiter: limiter}
+func NewHandler(repo *Repository, limiter *ratelimit.Limiter, writer *Writer) *Handler {
+	return &Handler{repo: repo, limiter: limiter, writer: writer}
 }
 
 // List handles GET /api/audit
@@ -30,25 +31,13 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check audit_view capability (matching Node requireCapability('audit_view'))
-	if !auth.HasCapability(p, "audit_view") {
-		response.JSON(w, http.StatusForbidden, map[string]any{
-			"error":            "Forbidden: Insufficient permissions",
-			"code":             "PERMISSION_DENIED",
-			"capability":       "audit_view",
-			"decision":         "deny",
-			"requiresApproval": false,
-		})
+	// Check audit_view capability with denial audit (matching Node requireCapability + recordPermissionDenied)
+	if !RequireCapabilityWithAudit(w, r, p, "audit_view", h.writer) {
 		return
 	}
 
-	// Check audit.read permission (matching Node requirePermission('audit.read'))
-	if !auth.HasPermission(p, "audit.read") {
-		response.JSON(w, http.StatusForbidden, map[string]any{
-			"error":      "Forbidden: Insufficient permissions",
-			"code":       "PERMISSION_DENIED",
-			"permission": "audit.read",
-		})
+	// Check audit.read permission with denial audit (matching Node requirePermission + recordPermissionDenied)
+	if !RequirePermissionWithAudit(w, r, p, "audit.read", h.writer) {
 		return
 	}
 
@@ -66,12 +55,9 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	// Check source IP permission (matching Node requirePermission('audit.source-ip.read-full'))
 	revealSourceIP := auth.HasPermission(p, "audit.source-ip.read-full")
 	if query.SourceIP != "" && !revealSourceIP {
-		response.JSON(w, http.StatusForbidden, map[string]any{
-			"error":      "Forbidden: Insufficient permissions",
-			"code":       "PERMISSION_DENIED",
-			"permission": "audit.source-ip.read-full",
-		})
-		return
+		if !RequirePermissionWithAudit(w, r, p, "audit.source-ip.read-full", h.writer) {
+			return
+		}
 	}
 
 	result, err := h.repo.ListAuditLogs(r.Context(), query, revealSourceIP)
@@ -91,25 +77,13 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check audit_view capability (matching Node requireCapability('audit_view'))
-	if !auth.HasCapability(p, "audit_view") {
-		response.JSON(w, http.StatusForbidden, map[string]any{
-			"error":            "Forbidden: Insufficient permissions",
-			"code":             "PERMISSION_DENIED",
-			"capability":       "audit_view",
-			"decision":         "deny",
-			"requiresApproval": false,
-		})
+	// Check audit_view capability with denial audit
+	if !RequireCapabilityWithAudit(w, r, p, "audit_view", h.writer) {
 		return
 	}
 
-	// Check audit.read permission (matching Node requirePermission('audit.read'))
-	if !auth.HasPermission(p, "audit.read") {
-		response.JSON(w, http.StatusForbidden, map[string]any{
-			"error":      "Forbidden: Insufficient permissions",
-			"code":       "PERMISSION_DENIED",
-			"permission": "audit.read",
-		})
+	// Check audit.read permission with denial audit
+	if !RequirePermissionWithAudit(w, r, p, "audit.read", h.writer) {
 		return
 	}
 
@@ -145,9 +119,7 @@ var validIDPattern = regexp.MustCompile(`^[A-Za-z0-9_.:-]+$`)
 // NOTE: GET /api/audit/export remains with Next.js.
 // It performs stateful audit evidence persistence (writeAuditLog with
 // action=audit.export) on both success and failure paths, which requires
-// Go Audit Writer — deferred to Phase 3+.
-
-// hasPermission is removed — use auth.HasPermission() instead.
+// Go Audit Writer — deferred to a future phase.
 
 func parseAuditQuery(params map[string][]string) (AuditQuery, error) {
 	q := AuditQuery{
@@ -215,6 +187,7 @@ var (
 	auditLevels  = []string{"info", "warning"}
 )
 
+// QueryError represents an invalid audit query parameter.
 type QueryError struct {
 	msg string
 }

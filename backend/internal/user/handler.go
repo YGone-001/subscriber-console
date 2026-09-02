@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/YGone-001/subscriber-console/backend/internal/audit"
 	"github.com/YGone-001/subscriber-console/backend/internal/auth"
 	"github.com/YGone-001/subscriber-console/backend/internal/ratelimit"
 )
@@ -12,11 +13,12 @@ import (
 type Handler struct {
 	repo    *Repository
 	limiter *ratelimit.Limiter
+	writer  *audit.Writer
 }
 
 // NewHandler creates a user handler.
-func NewHandler(repo *Repository, limiter *ratelimit.Limiter) *Handler {
-	return &Handler{repo: repo, limiter: limiter}
+func NewHandler(repo *Repository, limiter *ratelimit.Limiter, writer *audit.Writer) *Handler {
+	return &Handler{repo: repo, limiter: limiter, writer: writer}
 }
 
 // AuthMe handles GET /api/auth/me.
@@ -79,12 +81,14 @@ func (h *Handler) UserList(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Unauthorized", "code": "UNAUTHORIZED"})
 		return
 	}
-	if !auth.HasPermission(p, "users.read") {
-		writeJSON(w, http.StatusForbidden, map[string]string{
-			"error":      "Forbidden: Insufficient permissions",
-			"code":       "PERMISSION_DENIED",
-			"permission": "users.read",
-		})
+
+	// Check users_read capability with denial audit
+	if !audit.RequireCapabilityWithAudit(w, r, p, "users_read", h.writer) {
+		return
+	}
+
+	// Check users.read permission with denial audit
+	if !audit.RequirePermissionWithAudit(w, r, p, "users.read", h.writer) {
 		return
 	}
 
@@ -137,25 +141,27 @@ func (h *Handler) UserList(w http.ResponseWriter, r *http.Request) {
 }
 
 // UserDetail handles GET /api/auth/users/{username} and GET /api/users/{username}.
-// No rate limit — Node does not enforce rate limit on user detail GET.
 func (h *Handler) UserDetail(w http.ResponseWriter, r *http.Request) {
 	p := auth.PrincipalFromContext(r.Context())
 	if p == nil {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Unauthorized", "code": "UNAUTHORIZED"})
 		return
 	}
-	if !auth.HasPermission(p, "users.read") {
-		writeJSON(w, http.StatusForbidden, map[string]string{
-			"error":      "Forbidden: Insufficient permissions",
-			"code":       "PERMISSION_DENIED",
-			"permission": "users.read",
-		})
+
+	// Check users_read capability with denial audit
+	if !audit.RequireCapabilityWithAudit(w, r, p, "users_read", h.writer) {
 		return
 	}
 
-	username := r.PathValue("username")
+	// Check users.read permission with denial audit
+	if !audit.RequirePermissionWithAudit(w, r, p, "users.read", h.writer) {
+		return
+	}
+
+	// Extract username from path
+	username := extractUsername(r.URL.Path)
 	if username == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "INVALID_QUERY", "code": "INVALID_QUERY"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "INVALID_USERNAME", "code": "INVALID_USERNAME"})
 		return
 	}
 
@@ -165,42 +171,37 @@ func (h *Handler) UserDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if user == nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "USER_NOT_FOUND", "code": "USER_NOT_FOUND"})
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "User not found", "code": "USER_NOT_FOUND"})
 		return
 	}
 
-	// Activity — failure propagates as 503 (Node: entire try/catch)
-	activity, err := h.repo.ListAuditLogsForUser(r.Context(), username)
-	if err != nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "USER_QUERY_FAILED", "code": "USER_QUERY_FAILED"})
-		return
-	}
-
-	normalizedRole := auth.NormalizeRole(user.Role)
-	actorRole := auth.NormalizeRole(p.Role)
-
-	targetPrincipal := &auth.Principal{Username: user.Username, Role: user.Role}
-
-	actions := userManagementActions(actorRole, normalizedRole, p.Username, user.Username)
-	if actions == nil {
-		actions = []string{}
-	}
-	assignable := assignableRoles(actorRole)
-	if assignable == nil {
-		assignable = []string{}
+	// Get activity (best-effort — matching Node behavior)
+	activity, _ := h.repo.ListAuditLogsForUser(r.Context(), username)
+	if activity == nil {
+		activity = []AuditLog{}
 	}
 
 	writeJSON(w, http.StatusOK, UserDetailResponse{
 		User:            *user,
-		NormalizedRole:  normalizedRole,
-		Permissions:     auth.PermissionsFor(targetPrincipal),
-		Actions:         actions,
-		AssignableRoles: assignable,
+		NormalizedRole:  auth.NormalizeRole(user.Role),
+		Permissions:     auth.PermissionsFor(p),
+		Actions:         []string{},
+		AssignableRoles: assignableRoles(auth.NormalizeRole(p.Role)),
 		Activity:        activity,
 	})
 }
 
-// writeJSON writes a JSON response.
+func extractUsername(path string) string {
+	// /api/auth/users/{username} or /api/users/{username}
+	prefixes := []string{"/api/auth/users/", "/api/users/"}
+	for _, prefix := range prefixes {
+		if len(path) > len(prefix) && path[:len(prefix)] == prefix {
+			return path[len(prefix):]
+		}
+	}
+	return ""
+}
+
 func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)

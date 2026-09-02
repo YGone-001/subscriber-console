@@ -28,8 +28,21 @@ type Principal struct {
 // HasCapability checks if the principal's normalized role has the given capability.
 // Must match the TypeScript capabilityDecision() + capabilityAllowed() exactly.
 func HasCapability(p *Principal, capability string) bool {
+	if p == nil {
+		return false
+	}
 	decision := capabilityDecision(p.NormalizedRole, capability)
 	return decision == "allow"
+}
+
+// CapabilityDecision returns the raw capability decision string and whether it allows access.
+// Returns (decision, allowed) where decision is one of: "allow", "deny", "approval", "export".
+func CapabilityDecision(p *Principal, capability string) (string, bool) {
+	if p == nil {
+		return "deny", false
+	}
+	decision := capabilityDecision(p.NormalizedRole, capability)
+	return decision, decision == "allow"
 }
 
 // HasPermission checks if the principal's normalized role has the given permission.
