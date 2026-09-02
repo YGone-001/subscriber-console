@@ -36,7 +36,19 @@ npm run mongo:init
 npm run dev
 ```
 
-Open `http://localhost:3000`.
+Open `http://localhost:13333`.
+
+#### Remote access
+
+Next.js 开发服务器默认只允许 `localhost` 访问。如需从外部 IP 访问（如 `10.10.0.139:13333`），
+需要在 `next.config.ts` 中配置：
+
+```ts
+const nextConfig: NextConfig = {
+  allowedDevOrigins: ['10.10.0.139'],  // 添加你的外部 IP
+  // ...
+}
+```
 
 ### Dual process (frontend + backend)
 

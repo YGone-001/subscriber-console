@@ -27,6 +27,7 @@ const nextConfig: NextConfig = {
   output: 'standalone',
   reactStrictMode: true,
   poweredByHeader: false,
+  allowedDevOrigins: ['10.10.0.139'], 
   serverExternalPackages: ['mongodb'],
   async headers() {
     return [
