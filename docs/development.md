@@ -43,7 +43,7 @@ Open `http://localhost:3000`.
 Frontend and backend can run independently. This is the recommended setup for
 backend migration development and testing.
 
-**Terminal 1 — Go backend** (`:8080`):
+**Terminal 1 — Go backend** (`:18888`):
 
 ```bash
 # Required
@@ -79,9 +79,9 @@ The Next.js server serves:
 
 | URL | What |
 |-----|------|
-| `http://localhost:3000` | Full UI + all APIs (single-process mode) |
-| `http://localhost:8080/healthz` | Go backend liveness check |
-| `http://localhost:8080/api/audit` | Go backend direct access (requires auth cookie) |
+| `http://localhost:13333` | Full UI + all APIs (single-process mode) |
+| `http://localhost:18888/healthz` | Go backend liveness check |
+| `http://localhost:18888/api/audit` | Go backend direct access (requires auth cookie) |
 
 In dual-process mode, the frontend at `:3000` still serves all APIs. The Go
 backend at `:8080` handles migrated reads independently. Nginx is only needed

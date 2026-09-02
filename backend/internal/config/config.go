@@ -25,7 +25,7 @@ type Config struct {
 // Load reads configuration from environment variables with sensible defaults.
 func Load() (*Config, error) {
 	cfg := &Config{
-		HTTPAddr:        envOrDefault("HTTP_ADDR", ":8080"),
+		HTTPAddr:        envOrDefault("HTTP_ADDR", ":18888"),
 		ReadTimeout:     envDurationOrDefault("HTTP_READ_TIMEOUT", 15*time.Second),
 		WriteTimeout:    envDurationOrDefault("HTTP_WRITE_TIMEOUT", 30*time.Second),
 		IdleTimeout:     envDurationOrDefault("HTTP_IDLE_TIMEOUT", 120*time.Second),

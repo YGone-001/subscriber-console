@@ -51,7 +51,7 @@ Security notes:
 npm run start
 ```
 
-The default Next.js server listens on port `3000` unless configured otherwise through the runtime environment.
+The default Next.js server listens on port `13333` unless configured otherwise through the runtime environment.
 
 ## Recommended Production Flow
 

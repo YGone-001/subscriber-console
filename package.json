@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "node --max-old-space-size=8192 ./node_modules/next/dist/bin/next dev",
+    "dev": "node --max-old-space-size=8192 ./node_modules/next/dist/bin/next dev -p 13333",
     "build": "node --max-old-space-size=8192 ./node_modules/next/dist/bin/next build",
-    "start": "next start",
+    "start": "next start -p 13333",
     "test": "node --test --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON tests/*.test.mjs",
     "test:unit": "node --test --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON tests/*.test.mjs",
     "test:component": "node --test --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON tests/userAccessRoutes.test.mjs",

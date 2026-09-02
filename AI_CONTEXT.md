@@ -52,7 +52,7 @@ Browser
 Nginx
    |----------------------|
    v                      v
-Next.js :3000          Go :8080
+Next.js :13333        Go :18888
 UI                     Migrating API
 Legacy writes          Auth validation
                        Read APIs
