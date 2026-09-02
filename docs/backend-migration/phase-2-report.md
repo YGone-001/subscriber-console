@@ -542,14 +542,17 @@ Phase 2 provides:
 | GET /api/auth/users/:username | YES | PASS | YES | NO | — |
 | GET /api/users | YES | PASS | YES | NO | — |
 | GET /api/users/:username | YES | PASS | YES | NO | — |
+| GET /api/approvals | YES | PASS | YES | NO | — |
+| GET /api/approvals/:id | YES | PASS | YES | NO | — |
+| GET /api/approvals/:id/audit | YES | PASS | YES | NO | — |
 
 **Summary:**
-- IMPLEMENTED: 31
-- RESPONSE_PARITY_PASS: 31
-- CUTOVER_READY: 31 (authorization.denied audit writer now implemented)
+- IMPLEMENTED: 34
+- RESPONSE_PARITY_PASS: 34
+- CUTOVER_READY: 34
 - CUTOVER_BLOCKED: 0
 - ACTUALLY_ROUTED: 0 (Nginx not modified)
-- INVARIANT: ready (31) + blocked (0) = implemented (31) ✅
+- INVARIANT: ready (34) + blocked (0) = implemented (34) ✅
 
 ### 16.3 Future Security Audit Contract
 

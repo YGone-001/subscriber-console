@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/YGone-001/subscriber-console/backend/internal/analytics"
+	"github.com/YGone-001/subscriber-console/backend/internal/approval"
 	"github.com/YGone-001/subscriber-console/backend/internal/audit"
 	"github.com/YGone-001/subscriber-console/backend/internal/auth"
 	"github.com/YGone-001/subscriber-console/backend/internal/config"
@@ -131,6 +132,13 @@ func main() {
 	userRepo := user.NewRepository(mc.Ops)
 	userHandler := user.NewHandler(userRepo, limiter, auditWriter)
 
+	// Approvals (read-only; mutations remain with Node)
+	approvalRepo := approval.NewRepository(
+		mc.Ops.Collection("app_approvals"),
+		mc.Ops.Collection("app_audit_logs"),
+	)
+	approvalHandler := approval.NewHandler(approvalRepo, limiter, auditWriter)
+
 	// Build handler
 	mux := http.NewServeMux()
 
@@ -187,6 +195,11 @@ func main() {
 	mux.Handle("GET /api/auth/users/{username}", authMiddleware(http.HandlerFunc(userHandler.UserDetail)))
 	mux.Handle("GET /api/users", authMiddleware(http.HandlerFunc(userHandler.UserList)))
 	mux.Handle("GET /api/users/{username}", authMiddleware(http.HandlerFunc(userHandler.UserDetail)))
+
+	// Approvals (read-only; mutations remain with Node)
+	mux.Handle("GET /api/approvals", authMiddleware(http.HandlerFunc(approvalHandler.List)))
+	mux.Handle("GET /api/approvals/{id}/audit", authMiddleware(http.HandlerFunc(approvalHandler.AuditTrail)))
+	mux.Handle("GET /api/approvals/{id}", authMiddleware(http.HandlerFunc(approvalHandler.Detail)))
 
 	// Catch-all for unmigrated routes
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {

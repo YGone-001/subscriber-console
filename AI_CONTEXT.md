@@ -148,6 +148,8 @@ Phase 2D.1  COMPLETE
 
 Phase 3     IN PROGRESS
 Phase 3A    COMPLETE — security audit evidence writer + authorization denial integration
+Phase 3B    COMPLETE — audit writer lifecycle closeout
+Phase 3C    COMPLETE — approval governance read foundation
 ```
 
 Exact HEAD is intentionally not stored here.
@@ -237,7 +239,7 @@ Security audit writes = app_audit_logs (authorization.denied, BestEffort only)
 
 ## 9. Current Go Read Implementations
 
-31 semantic-read implementations (30 GET + 1 POST semantic read).
+34 semantic-read implementations (33 GET + 1 POST semantic read).
 
 Phase 2A — 6:
 
@@ -302,18 +304,51 @@ GET /api/users
 GET /api/users/:username
 ```
 
+Phase 3C — 3 (Approval governance read foundation):
+
+```text
+GET /api/approvals
+GET /api/approvals/:id
+GET /api/approvals/:id/audit
+```
+
 Status:
 
 ```text
-Implemented = 31
-Response Parity = 31
-Cutover Ready = 31 (authorization.denied audit writer implemented)
+Implemented = 34
+Response Parity = 34
+Cutover Ready = 34
 Cutover Blocked = 0
 Actually Routed = 0 (Nginx not modified)
 ready + blocked = implemented ✅
 ```
 
 Production `/api/*` still routes to Next.js.
+
+---
+
+## 9.1 Approval Governance
+
+Go owns:
+- Approval list/detail/audit read views
+- Risk policy (approval-risk-v1)
+- Maker-checker policy (independent reviewer)
+- Pure state machine (CanTransition)
+- Action eligibility (canApprove/canReject/canCancel/canExecute)
+
+Go does NOT own:
+- Approval create
+- Approval approve/reject/cancel
+- Approval execute
+- Business executors
+- CAS transition persistence
+
+Approval mutations remain with Node.
+
+Audit Writer:
+- Strict lifecycle foundation ready (WaitGroup, RWMutex, for-range queue)
+- BestEffort uses lifecycleCtx, Strict uses merged request+lifecycle context
+- Close timeout guarantees workers exit (lifecycle cancel aborts Mongo ops)
 
 ---
 
@@ -827,17 +862,14 @@ Phase 2D provides:
 - CapabilitiesFor supports raw `root` role for auth/permissions endpoint
 
 Phase 3:
-- Governance
-- Approval
-- Audit writes
-- write execution chain
+- Governance — IN PROGRESS
+- Approval read foundation — COMPLETE (list/detail/audit)
+- Audit writer lifecycle — COMPLETE (strict lifecycle, bounded close)
+- Approval decision transitions (approve/reject/cancel) — NEXT
+- Approval execute — DEFERRED (crosses into business mutations)
 
 Security audit blocker:
-- 7 routes require authorization.denied audit before cutover
-- 3 original: audit list, audit detail, batch/precheck
-- 4 new: users list/detail ×2 (requirePermission users.read denial path)
-- Go security audit writer not yet implemented
-- Blocks production cutover of those 7 routes
+- RESOLVED — authorization.denied audit writer implemented (Phase 3A)
 
 ---
 

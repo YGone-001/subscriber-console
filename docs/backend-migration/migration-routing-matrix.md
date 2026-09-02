@@ -47,9 +47,9 @@
 | Tariff plan subscribers | GET | `/api/tariff-plans/:planId/subscribers` | **Go** | Go | YES | Phase 2B — migrated |
 | Ratings list | GET | `/api/ratings` | **Go** | Go | YES | Phase 2A — migrated |
 | Rating detail | GET | `/api/ratings/:id` | **Go** | Go | YES | Phase 2A — migrated |
-| Approvals list | GET | `/api/approvals` | Next.js | Go | YES | xcloud_ops only |
-| Approval detail | GET | `/api/approvals/:id` | Next.js | Go | YES | xcloud_ops only |
-| Approval audit | GET | `/api/approvals/:id/audit` | Next.js | Go | YES | xcloud_ops only |
+| Approvals list | GET | `/api/approvals` | **Go** | Go | YES | xcloud_ops only |
+| Approval detail | GET | `/api/approvals/:id` | **Go** | Go | YES | xcloud_ops only |
+| Approval audit | GET | `/api/approvals/:id/audit` | **Go** | Go | YES | xcloud_ops only |
 | Approvals export | GET | `/api/approvals/export` | Next.js | Go | YES | xcloud_ops only |
 | Audit logs | GET | `/api/audit` | **Go** | Go | YES | Phase 2A — migrated |
 | Audit detail | GET | `/api/audit/:id` | **Go** | Go | YES | Phase 2A — migrated |

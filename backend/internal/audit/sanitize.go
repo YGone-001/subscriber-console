@@ -427,3 +427,15 @@ func (s *sanitizeState) visitStruct(rv reflect.Value, depth int) interface{} {
 func mapPointer(m map[string]interface{}) uintptr {
 	return reflect.ValueOf(m).Pointer()
 }
+
+// SanitizePayload is a narrow exported wrapper for use by other packages
+// (e.g., approval) that need audit-safe payload representation.
+// Applies the same sanitization rules as the internal audit writer.
+func SanitizePayload(value interface{}) interface{} {
+	return sanitizeAuditPayload(value)
+}
+
+// SanitizeText is a narrow exported wrapper for text sanitization.
+func SanitizeText(value string) string {
+	return sanitizeAuditText(value)
+}
