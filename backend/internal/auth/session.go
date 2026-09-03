@@ -121,3 +121,9 @@ func normalizeGovernanceRole(role string) string {
 func NormalizeRole(role string) string {
 	return normalizeGovernanceRole(role)
 }
+
+// IsSuperAdmin returns true if the principal's normalized role is super_admin.
+// Treats both "root" (legacy) and "super_admin" as Super Admin.
+func IsSuperAdmin(p *Principal) bool {
+	return p != nil && p.NormalizedRole == "super_admin"
+}

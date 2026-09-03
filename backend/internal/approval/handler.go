@@ -1,6 +1,7 @@
 package approval
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
@@ -12,16 +13,17 @@ import (
 	"github.com/YGone-001/subscriber-console/backend/internal/response"
 )
 
-// Handler provides HTTP handlers for approval read endpoints.
+// Handler provides HTTP handlers for approval endpoints.
 type Handler struct {
-	repo    *Repository
-	limiter *ratelimit.Limiter
-	writer  *audit.Writer
+	repo     *Repository
+	limiter  *ratelimit.Limiter
+	writer   *audit.Writer
+	workflow *Workflow
 }
 
 // NewHandler creates a new approval Handler.
-func NewHandler(repo *Repository, limiter *ratelimit.Limiter, writer *audit.Writer) *Handler {
-	return &Handler{repo: repo, limiter: limiter, writer: writer}
+func NewHandler(repo *Repository, limiter *ratelimit.Limiter, writer *audit.Writer, workflow *Workflow) *Handler {
+	return &Handler{repo: repo, limiter: limiter, writer: writer, workflow: workflow}
 }
 
 // List handles GET /api/approvals
@@ -192,19 +194,22 @@ func (h *Handler) AuditTrail(w http.ResponseWriter, r *http.Request) {
 
 	logs, err := h.repo.ListAuditLogsForApproval(r.Context(), id, revealSourceIP)
 	if err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to fetch approval audit trail", "AUDIT_TRAIL_FAILED")
+		// Matches Node: { error: "Failed to fetch approval audit trail" } — no code field
+		response.JSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "Failed to fetch approval audit trail",
+		})
 		return
 	}
 
 	if logs == nil {
-		logs = []map[string]interface{}{}
+		logs = []audit.AuditLogRecord{}
 	}
 
 	// Calculate summary
 	lifecycle := 0
 	execution := 0
 	for _, log := range logs {
-		if targetID, ok := log["targetId"].(string); ok && targetID == "approval:"+id {
+		if log.TargetID == "approval:"+id {
 			lifecycle++
 		}
 		if hasApprovalID(log, id) {
@@ -223,15 +228,83 @@ func (h *Handler) AuditTrail(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// hasApprovalID checks if a map has approvalId matching the given ID
+// Decision handles POST /api/approvals/{id}
+// Legacy compatibility wrapper. New clients use explicit approve/reject endpoints.
+// Matches Node POST handler exactly.
+func (h *Handler) Decision(w http.ResponseWriter, r *http.Request) {
+	p := auth.PrincipalFromContext(r.Context())
+	if p == nil {
+		response.Error(w, http.StatusUnauthorized, "Unauthorized", "AUTH_INVALID_TOKEN")
+		return
+	}
+
+	// Parse body
+	var body map[string]interface{}
+	if r.Body != nil {
+		_ = json.NewDecoder(r.Body).Decode(&body)
+	}
+
+	decision, _ := body["decision"].(string)
+	if decision != "approve" && decision != "reject" {
+		response.Error(w, http.StatusBadRequest, "INVALID_DECISION", "INVALID_DECISION")
+		return
+	}
+
+	// Check permission based on decision
+	required := "approvals.approve"
+	if decision == "reject" {
+		required = "approvals.reject"
+	}
+	if !audit.RequirePermissionWithAudit(w, r, p, required, h.writer) {
+		return
+	}
+
+	// Rate limit: 40/60s per user (matches Node legacy-review rate)
+	if !h.limiter.Enforce(w, r, "approvals:legacy-review:"+p.Username, 40, 60) {
+		return
+	}
+
+	id := extractID(r.URL.Path, "/api/approvals/")
+	if id == "" || len(id) > 128 {
+		response.Error(w, http.StatusNotFound, "APPROVAL_NOT_FOUND", "APPROVAL_NOT_FOUND")
+		return
+	}
+
+	var approval *ApprovalDocument
+	var err error
+
+	if decision == "approve" {
+		approval, err = h.workflow.ApproveChange(r, id, p, body)
+	} else {
+		approval, err = h.workflow.RejectChange(r, id, p, body)
+	}
+
+	if err != nil {
+		status, errResp := WorkflowErrorResponse(err)
+		response.JSON(w, status, errResp)
+		return
+	}
+
+	message := "Approval recorded; execution has not started"
+	if decision == "reject" {
+		message = "Approval rejected"
+	}
+
+	response.JSON(w, http.StatusOK, map[string]interface{}{
+		"message":  message,
+		"approval": approval,
+	})
+}
+
+// hasApprovalID checks if an audit record has approvalId matching the given ID
 // in oldData or newData.
-func hasApprovalID(log map[string]interface{}, id string) bool {
-	if oldData, ok := log["oldData"].(map[string]interface{}); ok {
+func hasApprovalID(log audit.AuditLogRecord, id string) bool {
+	if oldData, ok := log.OldData.(map[string]interface{}); ok {
 		if aid, ok := oldData["approvalId"].(string); ok && aid == id {
 			return true
 		}
 	}
-	if newData, ok := log["newData"].(map[string]interface{}); ok {
+	if newData, ok := log.NewData.(map[string]interface{}); ok {
 		if aid, ok := newData["approvalId"].(string); ok && aid == id {
 			return true
 		}
@@ -254,14 +327,43 @@ func extractID(path, prefix string) string {
 
 // boundedInt parses a string as an integer clamped to [1, max].
 // Matches Node boundedInt() exactly: Number(value), safe integer, clamp [1,max].
+// Handles whitespace, leading "+", scientific notation, hex/octal/binary prefixes,
+// NaN, Infinity, and unsafe integers — matching JavaScript Number() semantics.
 func boundedInt(value string, fallback, maxVal int) int {
+	value = strings.TrimSpace(value)
 	if value == "" {
 		return fallback
 	}
-	n, err := strconv.Atoi(value)
-	if err != nil {
+
+	// Handle explicit non-numeric values
+	lower := strings.ToLower(value)
+	if lower == "nan" || lower == "infinity" || lower == "+infinity" || lower == "-infinity" {
 		return fallback
 	}
+
+	// Strip leading "+" (JavaScript Number("+2") === 2)
+	if len(value) > 1 && value[0] == '+' {
+		value = value[1:]
+	}
+
+	// Try integer parse first (fast path)
+	if n, err := strconv.Atoi(value); err == nil {
+		return clampBoundedInt(n, maxVal)
+	}
+
+	// Try float parse for scientific notation (e.g., "2e2" → 200)
+	if f, err := strconv.ParseFloat(value, 64); err == nil {
+		// JavaScript Number.isSafeInteger check
+		if f >= -9007199254740991 && f <= 9007199254740991 && f == float64(int(f)) {
+			return clampBoundedInt(int(f), maxVal)
+		}
+		return maxVal
+	}
+
+	return fallback
+}
+
+func clampBoundedInt(n, maxVal int) int {
 	if n < 1 {
 		return 1
 	}
@@ -273,6 +375,8 @@ func boundedInt(value string, fallback, maxVal int) int {
 
 // dateParam parses a date string. Accepts YYYY-MM-DD or parseable datetime.
 // For endOfDay, converts end date to 23:59:59.999.
+// Matches Node dateParam() — new Date() semantics for datetime parsing.
+// Output uses .000Z millisecond UTC format for Mongo lexicographic comparison.
 func dateParam(value string, endOfDay bool) (*time.Time, bool) {
 	if value == "" {
 		return nil, true
@@ -289,9 +393,20 @@ func dateParam(value string, endOfDay bool) (*time.Time, bool) {
 		}
 		t, err = time.Parse("2006-01-02T15:04:05.000", value+suffix)
 	} else {
-		t, err = time.Parse(time.RFC3339, value)
-		if err != nil {
-			t, err = time.Parse("2006-01-02T15:04:05", value)
+		// Try formats in order of specificity, matching Node new Date() flexibility.
+		// .000Z is the canonical storage format (millisecond UTC).
+		formats := []string{
+			time.RFC3339Nano,
+			time.RFC3339,
+			"2006-01-02T15:04:05.000Z",
+			"2006-01-02T15:04:05.000",
+			"2006-01-02T15:04:05",
+		}
+		for _, format := range formats {
+			t, err = time.Parse(format, value)
+			if err == nil {
+				break
+			}
 		}
 	}
 

@@ -132,12 +132,13 @@ func main() {
 	userRepo := user.NewRepository(mc.Ops)
 	userHandler := user.NewHandler(userRepo, limiter, auditWriter)
 
-	// Approvals (read-only; mutations remain with Node)
+	// Approvals (read + CAS decision transitions; create/execute remain with Node)
 	approvalRepo := approval.NewRepository(
 		mc.Ops.Collection("app_approvals"),
 		mc.Ops.Collection("app_audit_logs"),
 	)
-	approvalHandler := approval.NewHandler(approvalRepo, limiter, auditWriter)
+	approvalWorkflow := approval.NewWorkflow(approvalRepo, userRepo, auditWriter)
+	approvalHandler := approval.NewHandler(approvalRepo, limiter, auditWriter, approvalWorkflow)
 
 	// Build handler
 	mux := http.NewServeMux()
@@ -200,6 +201,7 @@ func main() {
 	mux.Handle("GET /api/approvals", authMiddleware(http.HandlerFunc(approvalHandler.List)))
 	mux.Handle("GET /api/approvals/{id}/audit", authMiddleware(http.HandlerFunc(approvalHandler.AuditTrail)))
 	mux.Handle("GET /api/approvals/{id}", authMiddleware(http.HandlerFunc(approvalHandler.Detail)))
+	mux.Handle("POST /api/approvals/{id}", authMiddleware(http.HandlerFunc(approvalHandler.Decision)))
 
 	// Catch-all for unmigrated routes
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {

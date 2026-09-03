@@ -1,6 +1,12 @@
 // Package audit provides read-only audit log API handlers.
 package audit
 
+// SourceInfo represents the source information in an audit log record.
+type SourceInfo struct {
+	IP        string `json:"ip,omitempty"`
+	UserAgent string `json:"userAgent,omitempty"`
+}
+
 // AuditLogRecord matches the existing API response shape.
 // Fields are kept compatible with the Node.js implementation.
 type AuditLogRecord struct {
@@ -20,10 +26,12 @@ type AuditLogRecord struct {
 	Resource      interface{} `json:"resource,omitempty"`
 	RiskLevel     string      `json:"riskLevel,omitempty"`
 	Result        string      `json:"result,omitempty"`
-	Source        *struct {
-		IP string `json:"ip,omitempty"`
-	} `json:"source,omitempty"`
-	Request interface{} `json:"request,omitempty"`
+	Source        *SourceInfo `json:"source,omitempty"`
+	Request       interface{} `json:"request,omitempty"`
+	Metadata      interface{} `json:"metadata,omitempty"`
+	Error         interface{} `json:"error,omitempty"`
+	OldData       interface{} `json:"oldData,omitempty"`
+	NewData       interface{} `json:"newData,omitempty"`
 }
 
 // AuditListResponse matches the existing API response shape.

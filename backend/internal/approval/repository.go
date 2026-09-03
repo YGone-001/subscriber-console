@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/YGone-001/subscriber-console/backend/internal/audit"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
@@ -328,8 +329,9 @@ func (r *Repository) GetApproval(ctx context.Context, id string) (*ApprovalDocum
 }
 
 // ListAuditLogsForApproval retrieves audit logs related to an approval.
-// Matches Node listAuditLogsForApproval() exactly.
-func (r *Repository) ListAuditLogsForApproval(ctx context.Context, approvalID string, revealSourceIP bool) ([]map[string]interface{}, error) {
+// Uses the unified audit presenter for full record presentation including
+// oldData/newData/metadata/error. Matches Node listAuditLogsForApproval() exactly.
+func (r *Repository) ListAuditLogsForApproval(ctx context.Context, approvalID string, revealSourceIP bool) ([]audit.AuditLogRecord, error) {
 	filter := bson.M{
 		"$or": []bson.M{
 			{"targetId": "approval:" + approvalID},
@@ -355,23 +357,9 @@ func (r *Repository) ListAuditLogsForApproval(ctx context.Context, approvalID st
 		return nil, fmt.Errorf("audit logs decode: %w", err)
 	}
 
-	logs := make([]map[string]interface{}, 0, len(rawDocs))
+	logs := make([]audit.AuditLogRecord, 0, len(rawDocs))
 	for _, doc := range rawDocs {
-		rec := mapBSONToApprovalAuditRecord(doc)
-		// Source IP visibility
-		if !revealSourceIP {
-			delete(rec, "source")
-			if src, ok := doc["source"].(bson.M); ok {
-				if _, ok := src["ip"]; ok {
-					rec["source"] = map[string]interface{}{"ip": "[MASKED]"}
-				}
-			}
-		} else if src, ok := doc["source"].(bson.M); ok {
-			if ip, ok := src["ip"].(string); ok {
-				rec["source"] = map[string]interface{}{"ip": ip}
-			}
-		}
-		logs = append(logs, rec)
+		logs = append(logs, audit.PresentRecord(doc, revealSourceIP))
 	}
 
 	return logs, nil
