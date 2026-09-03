@@ -41,6 +41,10 @@
 .detailGrid dd { margin: 0; overflow-wrap: anywhere; }
 .sectionHeading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .sectionHeading h3 { margin: 0; }
+.reasonList { margin-top: 8px; }
+.reasonList p { margin: 0 0 4px; color: var(--text-secondary); font-size: var(--ref-font-size-body-small); }
+.reasonList ul { margin: 0; padding-left: 18px; list-style: disc; }
+.reasonList li { margin-bottom: 2px; color: var(--text-secondary); font-size: var(--ref-font-size-body-small); }
 .modalLayer { z-index: 1300; justify-content: center; align-items: center; padding: 20px; }
 .modal { width: min(560px, 100%); max-height: calc(100vh - 40px); overflow-y: auto; border: 1px solid var(--surface-border); border-radius: var(--ref-radius-soft-panel); background: var(--surface); box-shadow: var(--shadow-drawer); }
 .modalBody { padding: 20px; display: grid; gap: 14px; }
