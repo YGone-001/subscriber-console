@@ -340,6 +340,20 @@ if (existsSync(MATRIX_PATH)) {
     const goNormalized = new Set(goOps.map(normalizeGoPath));
     const matrixSet = new Set(migratedOps);
 
+    // Check: no duplicate Go router registrations
+    const goOpCounts = {};
+    for (const op of goNormalized) {
+      goOpCounts[op] = (goOpCounts[op] || 0) + 1;
+    }
+    const goDuplicates = Object.entries(goOpCounts).filter(([, c]) => c > 1);
+    if (goDuplicates.length === 0) {
+      ok('No duplicate Go router registrations');
+    } else {
+      for (const [op, count] of goDuplicates) {
+        error(`Duplicate Go router registration: ${op} (${count} times)`);
+      }
+    }
+
     // Check: every Go route should be in matrix
     let goNotInMatrix = 0;
     for (const op of goNormalized) {
@@ -364,21 +378,30 @@ if (existsSync(MATRIX_PATH)) {
       ok(`All ${migratedTotal} matrix **Go** operations found in Go router`);
     }
 
-    // Check: counts match
+    // Check: counts match — MISMATCH IS FATAL (ledger must never silently drift)
     if (goOps.length === migratedTotal) {
       ok(`Go router count (${goOps.length}) matches matrix count (${migratedTotal})`);
     } else {
-      warn(`Go router count (${goOps.length}) != matrix count (${migratedTotal})`);
+      error(`Go router count (${goOps.length}) != matrix count (${migratedTotal}) — ledger drift`);
     }
 
-    // Semantic read classification
+    // Mutation classification: semantic reads vs governance mutations vs business mutations
     const goGetCount = goOps.filter(op => op.startsWith('GET ')).length;
-    const goPostCount = goOps.filter(op => op.startsWith('POST ')).length;
+    const goSemanticReads = goGetCount + goOps.filter(op =>
+      op === 'POST /api/subscribers/batch/precheck'
+    ).length;
+    const goGovernanceMutations = goOps.filter(op =>
+      op.startsWith('POST /api/approvals')
+    ).length;
+    const goBusinessMutations = goOps.filter(op =>
+      op.startsWith('POST ') && !op.startsWith('POST /api/approvals') && op !== 'POST /api/subscribers/batch/precheck'
+    ).length;
+
     console.log(`\n   Go router breakdown:`);
     console.log(`     HTTP operations: ${goOps.length}`);
-    console.log(`     GET reads: ${goGetCount}`);
-    console.log(`     POST semantic reads: ${goPostCount}`);
-    console.log(`     Business mutations: 0`);
+    console.log(`     Semantic reads: ${goSemanticReads}`);
+    console.log(`     Governance mutations: ${goGovernanceMutations}`);
+    console.log(`     Business mutations: ${goBusinessMutations}`);
   }
 
   // MANUAL_SEMANTIC_REVIEW note

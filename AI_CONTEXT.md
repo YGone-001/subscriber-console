@@ -233,7 +233,8 @@ Current write invariant:
 ```text
 Business-domain writes by Go = NONE
 Infrastructure writes = app_rate_limits (allowed)
-Governance state writes = app_approvals CAS transitions (FindOneAndUpdate, Strict audit)
+Governance writes = app_approvals (CAS transitions + ACCESS_REQUEST creation, Strict audit)
+Sequence writes = app_sequences (approval change ID generation)
 Security audit writes = app_audit_logs (authorization.denied, BestEffort only)
 ```
 
@@ -314,13 +315,14 @@ GET /api/approvals/:id
 GET /api/approvals/:id/audit
 ```
 
-Phase 3D — 4 (Explicit approval decision endpoints):
+Phase 3D — 5 (Explicit approval decision endpoints + creation):
 
 ```text
-POST /api/approvals/:id/approve  — CAS transition, comment required
+POST /api/approvals              — ACCESS_REQUEST creation (viewer→operator)
+POST /api/approvals/:id/approve  — CAS transition, comment optional
 POST /api/approvals/:id/reject   — CAS transition, reason required
 POST /api/approvals/:id/cancel   — CAS transition, reason optional
-POST /api/approvals/:id          — legacy compat adapter (dispatches to approve/reject)
+POST /api/approvals/:id          — legacy compat adapter (dispatches by decision=approve|reject)
 ```
 
 Status:
@@ -348,16 +350,18 @@ Go owns:
 - Action eligibility (canApprove/canReject/canCancel/canExecute)
 - Approve/reject/cancel CAS transitions (FindOneAndUpdate only)
 - Explicit POST /api/approvals/:id/approve, /reject, /cancel
-- Legacy POST /api/approvals/:id decision wrapper (compat adapter)
-- Strict audit for transitions
+- Legacy POST /api/approvals/:id decision wrapper (dispatches by decision=approve|reject)
+- ACCESS_REQUEST creation (POST /api/approvals)
+- Generic internal approval creator (reusable for future Subscriber/OCS)
+- Strict audit for transitions and creation
 - ISO 8601 millisecond boundaries for createdAt/todayApproved
+- Workflow interfaces (DecisionStore, IdentityReader, StrictAuditWriter)
 
 Go does NOT own:
-- Approval create
 - Approval execute
 - Business executors
 
-Approval create and execute remain with Node.
+Approval execute remains with Node.
 
 Audit Writer:
 - Strict lifecycle foundation ready (WaitGroup, RWMutex, for-range queue)
@@ -920,6 +924,7 @@ Phase 3:
 - Audit writer lifecycle — COMPLETE (strict lifecycle, bounded close)
 - Explicit decision endpoints — COMPLETE (approve/reject/cancel + legacy compat)
 - Contract preflight — COMPLETE (paramOrElse, ISO8601Millis, presenter bson.D)
+- ACCESS_REQUEST creation — COMPLETE (POST /api/approvals)
 - Approval execute — DEFERRED (crosses into business mutations)
 
 Security audit blocker:

@@ -1,6 +1,7 @@
 package approval
 
 import (
+	"context"
 	"encoding/json"
 	"math"
 	"net/http"
@@ -12,7 +13,14 @@ import (
 	"github.com/YGone-001/subscriber-console/backend/internal/auth"
 	"github.com/YGone-001/subscriber-console/backend/internal/ratelimit"
 	"github.com/YGone-001/subscriber-console/backend/internal/response"
+	"github.com/YGone-001/subscriber-console/backend/internal/user"
 )
+
+// UserLookup abstracts user queries for handler testing.
+type UserLookup interface {
+	FindByUsername(ctx context.Context, username string) (*user.SafeUser, error)
+	FindByUsernameIdentity(ctx context.Context, username string) (*user.UserIdentity, error)
+}
 
 // Handler provides HTTP handlers for approval endpoints.
 type Handler struct {
@@ -20,11 +28,13 @@ type Handler struct {
 	limiter  *ratelimit.Limiter
 	writer   *audit.Writer
 	workflow *Workflow
+	creator  *ApprovalCreator
+	users    UserLookup
 }
 
 // NewHandler creates a new approval Handler.
-func NewHandler(repo *Repository, limiter *ratelimit.Limiter, writer *audit.Writer, workflow *Workflow) *Handler {
-	return &Handler{repo: repo, limiter: limiter, writer: writer, workflow: workflow}
+func NewHandler(repo *Repository, limiter *ratelimit.Limiter, writer *audit.Writer, workflow *Workflow, creator *ApprovalCreator, users *user.Repository) *Handler {
+	return &Handler{repo: repo, limiter: limiter, writer: writer, workflow: workflow, creator: creator, users: users}
 }
 
 // List handles GET /api/approvals
@@ -371,6 +381,156 @@ func (h *Handler) Cancel(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, map[string]interface{}{
 		"message":  "Approval cancelled",
 		"approval": approval,
+	})
+}
+
+// CreateAccessRequest handles POST /api/approvals
+// Public endpoint for ACCESS_REQUEST only (viewer → operator).
+// Matches Node POST handler exactly.
+func (h *Handler) CreateAccessRequest(w http.ResponseWriter, r *http.Request) {
+	p := auth.PrincipalFromContext(r.Context())
+	if p == nil {
+		response.Error(w, http.StatusUnauthorized, "Unauthorized", "AUTH_INVALID_TOKEN")
+		return
+	}
+
+	if !audit.RequirePermissionWithAudit(w, r, p, "approvals.create", h.writer) {
+		return
+	}
+
+	// Rate limit: 6/60s per user
+	if !h.limiter.Enforce(w, r, "approvals:access-request:"+p.Username, 6, 60) {
+		return
+	}
+
+	// Parse body — malformed JSON → {}
+	var body map[string]interface{}
+	if r.Body != nil {
+		_ = json.NewDecoder(r.Body).Decode(&body)
+	}
+
+	// Extract and validate reason
+	reason := ""
+	if rs, ok := body["reason"].(string); ok {
+		reason = strings.TrimSpace(rs)
+		if len(reason) > 1000 {
+			reason = reason[:1000]
+		}
+	}
+	if len(reason) < 8 {
+		response.Error(w, http.StatusBadRequest, "ACCESS_REASON_REQUIRED", "ACCESS_REASON_REQUIRED")
+		return
+	}
+
+	// Get current user from app_users
+	u, err := h.users.FindByUsername(r.Context(), p.Username)
+	if err != nil || u == nil {
+		response.Error(w, http.StatusForbidden, "ACCOUNT_NOT_ELIGIBLE", "ACCOUNT_NOT_ELIGIBLE")
+		return
+	}
+	if u.Status != "active" {
+		response.Error(w, http.StatusForbidden, "ACCOUNT_NOT_ELIGIBLE", "ACCOUNT_NOT_ELIGIBLE")
+		return
+	}
+
+	// Only raw DB role "viewer" can request access
+	if u.Role != "viewer" {
+		response.Error(w, http.StatusConflict, "ACCESS_ALREADY_GRANTED", "ACCESS_ALREADY_GRANTED")
+		return
+	}
+
+	// Check for existing pending request
+	existing, err := h.repo.GetPendingAccessRequest(r.Context(), u.Username)
+	if err != nil {
+		response.Error(w, http.StatusServiceUnavailable, "APPROVAL_CREATE_FAILED", "APPROVAL_CREATE_FAILED")
+		return
+	}
+	if existing != nil {
+		response.JSON(w, http.StatusConflict, map[string]interface{}{
+			"error":    "ACCESS_REQUEST_PENDING",
+			"code":     "ACCESS_REQUEST_PENDING",
+			"approval": existing,
+		})
+		return
+	}
+
+	// Fresh account validation — revalidate against app_users
+	identity, err := h.users.FindByUsernameIdentity(r.Context(), p.Username)
+	if err != nil || identity == nil {
+		response.Error(w, http.StatusForbidden, "ACCOUNT_NOT_ELIGIBLE", "ACCOUNT_NOT_ELIGIBLE")
+		return
+	}
+	su := &identity.SafeUser
+	if su.Locked || su.Status == "locked" || su.Status != "active" {
+		response.Error(w, http.StatusForbidden, "ACCOUNT_NOT_ELIGIBLE", "ACCOUNT_NOT_ELIGIBLE")
+		return
+	}
+	dbSV := 0
+	if su.Security != nil {
+		dbSV = su.Security.SessionVersion
+	}
+	if int64(dbSV) != p.SessionVersion {
+		response.Error(w, http.StatusForbidden, "ACCOUNT_NOT_ELIGIBLE", "ACCOUNT_NOT_ELIGIBLE")
+		return
+	}
+
+	// Build actor context
+	actor := &GovernanceActor{
+		Type:     "user",
+		UserID:   identity.MongoID,
+		Username: su.Username,
+		Role:     su.Role,
+	}
+
+	// Build ACCESS_REQUEST document
+	input := CreateApprovalInput{
+		Action:           "ACCESS_REQUEST",
+		Requester:        su.Username,
+		RequesterContext: actor,
+		TargetID:         su.Username,
+		Summary:          "Request viewer to operator access",
+		Title:            "Request viewer to operator access",
+		Operation: &ApprovalOperation{
+			ResourceType: "user",
+			ResourceID:   su.Username,
+		},
+		Reason: reason,
+		Before: map[string]interface{}{
+			"role":   "viewer",
+			"status": su.Status,
+		},
+		After: map[string]interface{}{
+			"role":   "operator",
+			"status": su.Status,
+		},
+		Payload: map[string]interface{}{
+			"currentRole":   "viewer",
+			"requestedRole": "operator",
+			"reason":        reason,
+		},
+	}
+
+	approval, err := h.creator.Create(r, p, input)
+	if err != nil {
+		if awe, ok := err.(*ApprovalWorkflowError); ok {
+			if awe.Committed {
+				// Audit failure — 503 committed=true
+				response.JSON(w, awe.Status, awe.ErrorResponse())
+				return
+			}
+		}
+		// Generic creation failure
+		response.Error(w, http.StatusServiceUnavailable, "APPROVAL_CREATE_FAILED", "APPROVAL_CREATE_FAILED")
+		return
+	}
+
+	actions := ComputeActionEligibility(*approval, p.Username, p.NormalizedRole)
+
+	response.JSON(w, http.StatusCreated, map[string]interface{}{
+		"approval": ApprovalWithActions{
+			ApprovalDocument: *approval,
+			Actions:          actions,
+		},
 	})
 }
 

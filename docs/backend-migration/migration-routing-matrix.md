@@ -73,8 +73,8 @@
 
 | API | Method | Path | Current Owner | Future Owner | Shadow Allowed | Notes |
 |-----|--------|------|---------------|--------------|----------------|-------|
-| Approval create | POST | `/api/approvals` | Next.js | Go | NEVER | Approval creation |
-| Legacy approval compat | POST | `/api/approvals/:id` | **Go** | Go | NEVER | Compat wrapper — dispatches to approve/reject, retained for legacy callers |
+| Approval create | POST | `/api/approvals` | **Go** | Go | NEVER | ACCESS_REQUEST creation — viewer→operator |
+| Legacy approval compat | POST | `/api/approvals/:id` | **Go** | Go | NEVER | Compat wrapper — dispatches by decision=approve|reject, retained for legacy callers |
 | Approval approve | POST | `/api/approvals/:id/approve` | **Go** | Go | NEVER | CAS transition — explicit decision endpoint |
 | Approval reject | POST | `/api/approvals/:id/reject` | **Go** | Go | NEVER | CAS transition — explicit decision endpoint |
 | Approval cancel | POST | `/api/approvals/:id/cancel` | **Go** | Go | NEVER | CAS transition — explicit decision endpoint |

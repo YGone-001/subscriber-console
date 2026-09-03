@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"net/http"
 	"strings"
 	"time"
 
@@ -13,15 +14,16 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
-// Repository provides read-only access to approvals.
+// Repository provides read and write access to approvals.
 type Repository struct {
 	approvals *mongo.Collection
 	auditLogs *mongo.Collection
+	sequences *mongo.Collection
 }
 
 // NewRepository creates a Repository for the given collections.
-func NewRepository(approvals, auditLogs *mongo.Collection) *Repository {
-	return &Repository{approvals: approvals, auditLogs: auditLogs}
+func NewRepository(approvals, auditLogs, sequences *mongo.Collection) *Repository {
+	return &Repository{approvals: approvals, auditLogs: auditLogs, sequences: sequences}
 }
 
 // ListQuery represents query parameters for listing approvals.
@@ -432,4 +434,184 @@ func escapeRegex(s string) string {
 		"|", "\\|",
 	)
 	return replacer.Replace(s)
+}
+
+// ── Approval Creation ───────────────────────────────────────────────────────
+
+// CreateApprovalInput holds the data for creating a new approval request.
+// This is the internal governance foundation input — not specific to ACCESS_REQUEST.
+type CreateApprovalInput struct {
+	Action               string
+	Requester            string
+	RequesterContext     *GovernanceActor
+	TargetID             string
+	Summary              string
+	Title                string
+	Description          string
+	Operation            *ApprovalOperation
+	OperationFingerprint string
+	Reason               string
+	TicketID             string
+	Before               interface{}
+	After                interface{}
+	Payload              map[string]interface{}
+	ExpiresAt            string
+}
+
+// nextChangeId generates the next sequential change ID for the given date.
+// Sequence key: approval:YYYYMMDD. Uses atomic findOneAndUpdate with upsert.
+// Returns CHG-YYYYMMDD-NNNNN (minimum width 5).
+func (r *Repository) nextChangeId(ctx context.Context, now time.Time) (string, error) {
+	dateKey := "approval:" + now.UTC().Format("20060102")
+
+	filter := bson.M{"_id": dateKey}
+	update := bson.M{
+		"$inc": bson.M{"value": 1},
+		"$set": bson.M{"updatedAt": formatISO8601Millis(now)},
+	}
+	opts := options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.After)
+
+	var result bson.M
+	err := r.sequences.FindOneAndUpdate(ctx, filter, update, opts).Decode(&result)
+	if err != nil {
+		return "", &ApprovalWorkflowError{Code: "APPROVAL_SEQUENCE_UNAVAILABLE", Status: http.StatusServiceUnavailable}
+	}
+
+	// Validate sequence value
+	seqVal := int64(0)
+	switch v := result["value"].(type) {
+	case int32:
+		seqVal = int64(v)
+	case int64:
+		seqVal = v
+	default:
+		return "", &ApprovalWorkflowError{Code: "APPROVAL_SEQUENCE_UNAVAILABLE", Status: http.StatusServiceUnavailable}
+	}
+	if seqVal < 1 {
+		return "", &ApprovalWorkflowError{Code: "APPROVAL_SEQUENCE_UNAVAILABLE", Status: http.StatusServiceUnavailable}
+	}
+
+	dateSegment := now.UTC().Format("20060102")
+	return fmt.Sprintf("CHG-%s-%05d", dateSegment, seqVal), nil
+}
+
+// CreateApprovalRequest creates a new approval document and inserts it.
+// Returns the normalized approval document.
+func (r *Repository) CreateApprovalRequest(ctx context.Context, input CreateApprovalInput) (*ApprovalDocument, error) {
+	now := time.Now().UTC()
+	timestamp := formatISO8601Millis(now)
+	id := audit.GenerateUUID()
+	eventID := audit.GenerateUUID()
+
+	riskAssessment := AssessApprovalRisk(input.Action)
+
+	// Operation fallback: derive from targetId if absent
+	operation := ApprovalOperation{}
+	if input.Operation != nil {
+		operation = ApprovalOperation{
+			ResourceType: audit.SanitizeText(input.Operation.ResourceType),
+			ResourceID:   audit.SanitizeText(input.Operation.ResourceID),
+		}
+	} else {
+		operation = ApprovalOperation{
+			ResourceType: resourceTypeFromTarget(input.TargetID),
+			ResourceID:   input.TargetID,
+		}
+	}
+
+	// Reason selection: input.reason ?? payload.reason (if string) ?? ""
+	reason := input.Reason
+	if reason == "" {
+		if pr, ok := input.Payload["reason"].(string); ok {
+			reason = pr
+		}
+	}
+	reason = audit.SanitizeText(strings.TrimSpace(reason))
+	if reason == "" {
+		reason = "" // omitted below
+	}
+
+	changeId, err := r.nextChangeId(ctx, now)
+	if err != nil {
+		return nil, err
+	}
+
+	// Sanitize fields
+	title := audit.SanitizeText(input.Title)
+	if title == "" {
+		title = audit.SanitizeText(input.Summary)
+	}
+
+	doc := bson.M{
+		"id":                   id,
+		"changeId":             changeId,
+		"title":                title,
+		"action":               input.Action,
+		"status":               "pending",
+		"operation":            bson.M{"resourceType": operation.ResourceType, "resourceId": operation.ResourceID},
+		"operationFingerprint": audit.SanitizeText(input.OperationFingerprint),
+		"riskLevel":            string(riskAssessment.Level),
+		"riskAssessment": bson.M{
+			"level":    string(riskAssessment.Level),
+			"reasons":  riskAssessment.Reasons,
+			"policyId": riskAssessment.PolicyID,
+		},
+		"requester":        audit.SanitizeText(input.Requester),
+		"requesterContext": input.RequesterContext,
+		"targetId":         audit.SanitizeText(input.TargetID),
+		"summary":          audit.SanitizeText(input.Summary),
+		"ticketId":         audit.SanitizeText(input.TicketID),
+		"before":           audit.SanitizePayload(input.Before),
+		"after":            audit.SanitizePayload(input.After),
+		"payload":          audit.SanitizePayload(input.Payload),
+		"events": bson.A{
+			bson.M{
+				"id":        eventID,
+				"timestamp": timestamp,
+				"type":      "created",
+				"actor":     input.Requester,
+				"message":   "Change request created",
+			},
+		},
+		"createdAt": timestamp,
+		"updatedAt": timestamp,
+	}
+
+	if input.Description != "" {
+		doc["description"] = audit.SanitizeText(input.Description)
+	}
+	if reason != "" {
+		doc["reason"] = reason
+	}
+	if input.ExpiresAt != "" {
+		doc["expiresAt"] = input.ExpiresAt
+	}
+
+	_, err = r.approvals.InsertOne(ctx, doc)
+	if err != nil {
+		return nil, fmt.Errorf("approval insert: %w", err)
+	}
+
+	// Normalize and return
+	approval := normalizeApproval(doc)
+	return approval, nil
+}
+
+// GetPendingAccessRequest finds a pending ACCESS_REQUEST for the given requester.
+// Returns nil if none exists.
+func (r *Repository) GetPendingAccessRequest(ctx context.Context, requester string) (*ApprovalDocument, error) {
+	filter := bson.M{
+		"requester": requester,
+		"action":    "ACCESS_REQUEST",
+		"status":    "pending",
+	}
+	var doc bson.M
+	err := r.approvals.FindOne(ctx, filter, options.FindOne().SetProjection(bson.M{"_id": 0})).Decode(&doc)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("pending access request: %w", err)
+	}
+	return normalizeApproval(doc), nil
 }

@@ -132,13 +132,15 @@ func main() {
 	userRepo := user.NewRepository(mc.Ops)
 	userHandler := user.NewHandler(userRepo, limiter, auditWriter)
 
-	// Approvals (read + CAS decision transitions; create/execute remain with Node)
+	// Approvals (read + CAS decision transitions + creation; execute remains with Node)
 	approvalRepo := approval.NewRepository(
 		mc.Ops.Collection("app_approvals"),
 		mc.Ops.Collection("app_audit_logs"),
+		mc.Ops.Collection("app_sequences"),
 	)
 	approvalWorkflow := approval.NewWorkflow(approvalRepo, userRepo, auditWriter)
-	approvalHandler := approval.NewHandler(approvalRepo, limiter, auditWriter, approvalWorkflow)
+	approvalCreator := approval.NewApprovalCreator(approvalRepo, auditWriter)
+	approvalHandler := approval.NewHandler(approvalRepo, limiter, auditWriter, approvalWorkflow, approvalCreator, userRepo)
 
 	// Build handler
 	mux := http.NewServeMux()
@@ -197,10 +199,12 @@ func main() {
 	mux.Handle("GET /api/users", authMiddleware(http.HandlerFunc(userHandler.UserList)))
 	mux.Handle("GET /api/users/{username}", authMiddleware(http.HandlerFunc(userHandler.UserDetail)))
 
-	// Approvals (read + CAS decision transitions; create/execute remain with Node)
+	// Approvals (read + CAS decision transitions + ACCESS_REQUEST creation; execute remains with Node)
 	mux.Handle("GET /api/approvals", authMiddleware(http.HandlerFunc(approvalHandler.List)))
 	mux.Handle("GET /api/approvals/{id}/audit", authMiddleware(http.HandlerFunc(approvalHandler.AuditTrail)))
 	mux.Handle("GET /api/approvals/{id}", authMiddleware(http.HandlerFunc(approvalHandler.Detail)))
+	// ACCESS_REQUEST creation (viewer → operator)
+	mux.Handle("POST /api/approvals", authMiddleware(http.HandlerFunc(approvalHandler.CreateAccessRequest)))
 	// Explicit decision endpoints (registered before legacy for specificity)
 	mux.Handle("POST /api/approvals/{id}/approve", authMiddleware(http.HandlerFunc(approvalHandler.Approve)))
 	mux.Handle("POST /api/approvals/{id}/reject", authMiddleware(http.HandlerFunc(approvalHandler.Reject)))

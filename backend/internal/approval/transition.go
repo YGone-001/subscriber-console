@@ -112,7 +112,7 @@ func generateEventID() string {
 // request method/path, requestId, correlationId, and x-operation-reason.
 // On audit failure, sets committed=true (the in-document event is already durable).
 // Never attempts rollback. Matches Node auditTransition() exactly.
-func AuditTransition(r *http.Request, writer *audit.Writer, action string, before, after *ApprovalDocument, actor GovernanceActor, reason string) error {
+func AuditTransition(r *http.Request, writer StrictAuditWriter, action string, before, after *ApprovalDocument, actor GovernanceActor, reason string) error {
 	afterEvent := interface{}(nil)
 	if len(after.Events) > 0 {
 		afterEvent = after.Events[len(after.Events)-1]

@@ -14,13 +14,18 @@ import (
 
 // Workflow orchestrates approval decision transitions.
 type Workflow struct {
-	repo   *Repository
-	users  *user.Repository
-	writer *audit.Writer
+	repo   DecisionStore
+	users  IdentityReader
+	writer StrictAuditWriter
 }
 
 // NewWorkflow creates a new approval Workflow.
 func NewWorkflow(repo *Repository, users *user.Repository, writer *audit.Writer) *Workflow {
+	return &Workflow{repo: repo, users: users, writer: writer}
+}
+
+// NewWorkflowWithDeps creates a Workflow with abstract dependencies for testing.
+func NewWorkflowWithDeps(repo DecisionStore, users IdentityReader, writer StrictAuditWriter) *Workflow {
 	return &Workflow{repo: repo, users: users, writer: writer}
 }
 
