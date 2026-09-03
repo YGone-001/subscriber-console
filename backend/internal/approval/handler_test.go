@@ -13,8 +13,9 @@ func TestBoundedInt(t *testing.T) {
 		maxVal   int
 		want     int
 	}{
-		// Basic
-		{"empty", "", 10, 100, 10},
+		// Absent vs empty distinction is handled by boundedIntWithAbsent,
+		// boundedInt always treats "" as Number("") = 0 → clamp to 1
+		{"empty string → 1", "", 20, 100, 1},
 		{"valid", "5", 10, 100, 5},
 		{"at min", "1", 10, 100, 1},
 		{"at max", "100", 10, 100, 100},
@@ -29,6 +30,7 @@ func TestBoundedInt(t *testing.T) {
 		{"trailing space", "5 ", 10, 100, 5},
 		{"both spaces", " 5 ", 10, 100, 5},
 		{"tab", "\t5\t", 10, 100, 5},
+		{"whitespace only → 1", "   ", 20, 100, 1},
 
 		// Leading + (Number("+2") === 2)
 		{"leading plus", "+5", 10, 100, 5},
@@ -39,9 +41,27 @@ func TestBoundedInt(t *testing.T) {
 		{"scientific uppercase", "2E2", 10, 1000, 200},
 		{"scientific decimal", "1.5e2", 10, 1000, 150},
 
-		// Float (Number("5.0") === 5; Number.isSafeInteger(5.7) is false → maxVal)
+		// Float (Number("5.0") === 5 → safe integer; Number("5.7") → not safe → fallback)
 		{"float exact", "5.0", 10, 100, 5},
-		{"float rounded", "5.7", 10, 100, 100},
+		{"float fractional → fallback", "5.7", 10, 100, 10},
+
+		// Hex (Number("0x10") === 16)
+		{"hex", "0x10", 10, 100, 16},
+		{"hex uppercase", "0X10", 10, 100, 16},
+		{"hex large", "0xFF", 10, 300, 255},
+		{"hex invalid → fallback", "0xGG", 10, 100, 10},
+
+		// Octal (Number("0o10") === 8)
+		{"octal", "0o10", 10, 100, 8},
+		{"octal uppercase", "0O10", 10, 100, 8},
+		{"octal large", "0o77", 10, 100, 63},
+		{"octal invalid → fallback", "0o99", 10, 100, 10},
+
+		// Binary (Number("0b10") === 2)
+		{"binary", "0b10", 10, 100, 2},
+		{"binary uppercase", "0B10", 10, 100, 2},
+		{"binary large", "0b1111", 10, 100, 15},
+		{"binary invalid → fallback", "0b22", 10, 100, 10},
 
 		// NaN and Infinity → fallback
 		{"NaN", "NaN", 10, 100, 10},
@@ -54,19 +74,235 @@ func TestBoundedInt(t *testing.T) {
 		// Non-numeric → fallback
 		{"abc", "abc", 10, 100, 10},
 		{"mixed", "5abc", 10, 100, 10},
-		{"empty after trim", "   ", 10, 100, 10},
 
-		// Hex (Number("0x10") === 16) — Go ParseFloat doesn't handle hex, returns fallback
-		{"hex", "0x10", 10, 100, 10},
+		// Unsafe integer (Number("9007199254740992") is not safe) → fallback
+		{"unsafe large → fallback", "9007199254740992", 10, 100, 10},
+		{"unsafe negative → fallback", "-9007199254740992", 10, 100, 10},
 
-		// Unsafe integer (Number("99999999999999999999") is not safe)
-		{"unsafe large", "99999999999999999999", 10, 100, 100},
+		// Zero (Number("0") === 0, safe integer → clamp to 1)
+		{"zero → 1", "0", 20, 100, 1},
+
+		// Negative safe integer (Number("-5") === -5 → clamp to 1)
+		{"negative safe → 1", "-5", 20, 100, 1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := boundedInt(tt.value, tt.fallback, tt.maxVal)
 			if got != tt.want {
 				t.Errorf("boundedInt(%q, %d, %d) = %d, want %d", tt.value, tt.fallback, tt.maxVal, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestBoundedIntWithAbsent(t *testing.T) {
+	tests := []struct {
+		name     string
+		value    string
+		absent   bool
+		fallback int
+		maxVal   int
+		want     int
+	}{
+		{"absent → fallback", "", true, 20, 100, 20},
+		{"present empty → 1", "", false, 20, 100, 1},
+		{"present value", "5", false, 20, 100, 5},
+		{"absent with value (edge case)", "5", true, 20, 100, 20},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := boundedIntWithAbsent(tt.value, tt.absent, tt.fallback, tt.maxVal)
+			if got != tt.want {
+				t.Errorf("boundedIntWithAbsent(%q, %v, %d, %d) = %d, want %d", tt.value, tt.absent, tt.fallback, tt.maxVal, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParamOrElse(t *testing.T) {
+	tests := []struct {
+		name      string
+		params    map[string][]string
+		primary   string
+		secondary string
+		wantVal   string
+		wantOK    bool
+	}{
+		{
+			name:      "both absent",
+			params:    map[string][]string{},
+			primary:   "pageSize",
+			secondary: "limit",
+			wantVal:   "",
+			wantOK:    false,
+		},
+		{
+			name:      "primary present",
+			params:    map[string][]string{"pageSize": {"50"}},
+			primary:   "pageSize",
+			secondary: "limit",
+			wantVal:   "50",
+			wantOK:    true,
+		},
+		{
+			name:      "secondary present",
+			params:    map[string][]string{"limit": {"30"}},
+			primary:   "pageSize",
+			secondary: "limit",
+			wantVal:   "30",
+			wantOK:    true,
+		},
+		{
+			name:      "primary present empty",
+			params:    map[string][]string{"pageSize": {""}},
+			primary:   "pageSize",
+			secondary: "limit",
+			wantVal:   "",
+			wantOK:    true,
+		},
+		{
+			name:      "primary empty, secondary present",
+			params:    map[string][]string{"pageSize": {""}, "limit": {"30"}},
+			primary:   "pageSize",
+			secondary: "limit",
+			wantVal:   "",
+			wantOK:    true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotVal, gotOK := paramOrElse(tt.params, tt.primary, tt.secondary)
+			if gotVal != tt.wantVal || gotOK != tt.wantOK {
+				t.Errorf("paramOrElse(%v, %q, %q) = (%q, %v), want (%q, %v)",
+					tt.params, tt.primary, tt.secondary, gotVal, gotOK, tt.wantVal, tt.wantOK)
+			}
+		})
+	}
+}
+
+func TestExtractNullish(t *testing.T) {
+	tests := []struct {
+		name      string
+		body      map[string]interface{}
+		primary   string
+		secondary string
+		want      interface{}
+	}{
+		// comment ?? note
+		{
+			name:      "comment present",
+			body:      map[string]interface{}{"comment": "hello"},
+			primary:   "comment",
+			secondary: "note",
+			want:      "hello",
+		},
+		{
+			name:      "comment null → note",
+			body:      map[string]interface{}{"comment": nil, "note": "fallback"},
+			primary:   "comment",
+			secondary: "note",
+			want:      "fallback",
+		},
+		{
+			name:      "comment missing → note",
+			body:      map[string]interface{}{"note": "fallback"},
+			primary:   "comment",
+			secondary: "note",
+			want:      "fallback",
+		},
+		{
+			name:      "comment empty string → empty (NOT nullish)",
+			body:      map[string]interface{}{"comment": "", "note": "fallback"},
+			primary:   "comment",
+			secondary: "note",
+			want:      "",
+		},
+		{
+			name:      "comment 0 → 0 (NOT nullish)",
+			body:      map[string]interface{}{"comment": 0, "note": "fallback"},
+			primary:   "comment",
+			secondary: "note",
+			want:      0,
+		},
+		{
+			name:      "comment false → false (NOT nullish)",
+			body:      map[string]interface{}{"comment": false, "note": "fallback"},
+			primary:   "comment",
+			secondary: "note",
+			want:      false,
+		},
+		{
+			name:      "both missing → nil",
+			body:      map[string]interface{}{},
+			primary:   "comment",
+			secondary: "note",
+			want:      nil,
+		},
+		{
+			name:      "nil body → nil",
+			body:      nil,
+			primary:   "comment",
+			secondary: "note",
+			want:      nil,
+		},
+		// reason ?? note
+		{
+			name:      "reason present",
+			body:      map[string]interface{}{"reason": "bad"},
+			primary:   "reason",
+			secondary: "note",
+			want:      "bad",
+		},
+		{
+			name:      "reason null → note",
+			body:      map[string]interface{}{"reason": nil, "note": "fallback"},
+			primary:   "reason",
+			secondary: "note",
+			want:      "fallback",
+		},
+		{
+			name:      "reason missing → note",
+			body:      map[string]interface{}{"note": "fallback"},
+			primary:   "reason",
+			secondary: "note",
+			want:      "fallback",
+		},
+		{
+			name:      "reason empty string → empty (NOT nullish)",
+			body:      map[string]interface{}{"reason": "", "note": "fallback"},
+			primary:   "reason",
+			secondary: "note",
+			want:      "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractNullish(tt.body, tt.primary, tt.secondary)
+			if got != tt.want {
+				t.Errorf("extractNullish(%v, %q, %q) = %v, want %v", tt.body, tt.primary, tt.secondary, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestToOptionalString(t *testing.T) {
+	tests := []struct {
+		name string
+		val  interface{}
+		want string
+	}{
+		{"nil", nil, ""},
+		{"string", "hello", "hello"},
+		{"empty string", "", ""},
+		{"int", 42, ""},
+		{"bool", true, ""},
+		{"float", 3.14, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := toOptionalString(tt.val)
+			if got != tt.want {
+				t.Errorf("toOptionalString(%v) = %q, want %q", tt.val, got, tt.want)
 			}
 		})
 	}

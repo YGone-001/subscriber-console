@@ -2,6 +2,7 @@ package approval
 
 import (
 	"encoding/json"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -75,9 +76,13 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Build query
+	// pageSize || limit semantics: pageSize non-empty → pageSize, pageSize empty → limit, both absent → fallback
+	// params.Has() distinguishes absent (no key) from present-but-empty (key exists with "")
+	pageSizeVal, pageSizePresent := paramOrElse(params, "pageSize", "limit")
+
 	q := ListQuery{
-		Page:         boundedInt(params.Get("page"), 1, 100000),
-		PageSize:     boundedInt(firstNonEmpty(params.Get("pageSize"), params.Get("limit")), 20, 100),
+		Page:         boundedIntWithAbsent(params.Get("page"), !params.Has("page"), 1, 100000),
+		PageSize:     boundedIntWithAbsent(pageSizeVal, !pageSizePresent, 20, 100),
 		Q:            truncate(params.Get("q"), 200),
 		Status:       rawStatus,
 		Risk:         rawRisk,
@@ -274,9 +279,14 @@ func (h *Handler) Decision(w http.ResponseWriter, r *http.Request) {
 	var err error
 
 	if decision == "approve" {
-		approval, err = h.workflow.ApproveChange(r, id, p, body)
+		// Node: approveChange(request, id, auth, { comment: body.comment ?? body.note })
+		// Nullish semantics: comment missing/null → note, comment "" → ""
+		comment := toOptionalString(extractNullish(body, "comment", "note"))
+		approval, err = h.workflow.ApproveChange(r, id, p, comment)
 	} else {
-		approval, err = h.workflow.RejectChange(r, id, p, body)
+		// Node: rejectChange(request, id, auth, { reason: body.reason ?? body.note })
+		reason := toOptionalString(extractNullish(body, "reason", "note"))
+		approval, err = h.workflow.RejectChange(r, id, p, reason)
 	}
 
 	if err != nil {
@@ -326,38 +336,85 @@ func extractID(path, prefix string) string {
 }
 
 // boundedInt parses a string as an integer clamped to [1, max].
-// Matches Node boundedInt() exactly: Number(value), safe integer, clamp [1,max].
+// Matches Node boundedInt() exactly:
+//
+//	const number = Number(value ?? fallback);
+//	return Number.isSafeInteger(number) ? Math.min(Math.max(number, 1), max) : fallback;
+//
 // Handles whitespace, leading "+", scientific notation, hex/octal/binary prefixes,
 // NaN, Infinity, and unsafe integers — matching JavaScript Number() semantics.
 func boundedInt(value string, fallback, maxVal int) int {
+	// Trim whitespace (Number(" 2 ") === 2)
 	value = strings.TrimSpace(value)
+
+	// Empty string: Number("") === 0, then clamp → 1
 	if value == "" {
-		return fallback
+		return 1
 	}
 
-	// Handle explicit non-numeric values
+	return parseBoundedNumber(value, fallback, maxVal)
+}
+
+// boundedIntWithAbsent handles the case where the caller knows whether
+// the parameter was actually present in the URL.
+// When absent is true, returns fallback directly (matching Number(undefined ?? fallback) = fallback).
+// When absent is false, applies Number() semantics via boundedInt.
+func boundedIntWithAbsent(value string, absent bool, fallback, maxVal int) int {
+	if absent {
+		return fallback
+	}
+	return boundedInt(value, fallback, maxVal)
+}
+
+// parseBoundedNumber applies JavaScript Number() + isSafeInteger + clamp semantics.
+func parseBoundedNumber(value string, fallback, maxVal int) int {
+	// Explicit non-numeric: NaN, Infinity, etc. → fallback
 	lower := strings.ToLower(value)
 	if lower == "nan" || lower == "infinity" || lower == "+infinity" || lower == "-infinity" {
 		return fallback
 	}
 
-	// Strip leading "+" (JavaScript Number("+2") === 2)
-	if len(value) > 1 && value[0] == '+' {
-		value = value[1:]
+	// Try integer parse (handles "+2", "-1", "42", etc.)
+	if n, err := strconv.ParseInt(value, 10, 64); err == nil {
+		// JavaScript Number.isSafeInteger check: must be within ±(2^53 - 1)
+		if n >= -9007199254740991 && n <= 9007199254740991 {
+			return clampBoundedInt(int(n), maxVal)
+		}
+		return fallback
 	}
 
-	// Try integer parse first (fast path)
-	if n, err := strconv.Atoi(value); err == nil {
-		return clampBoundedInt(n, maxVal)
+	// Try hex: 0x10 → 16
+	if len(value) > 2 && (value[:2] == "0x" || value[:2] == "0X") {
+		if n, err := strconv.ParseInt(value[2:], 16, 64); err == nil {
+			return clampBoundedInt(int(n), maxVal)
+		}
+		return fallback
 	}
 
-	// Try float parse for scientific notation (e.g., "2e2" → 200)
+	// Try octal: 0o10 → 8
+	if len(value) > 2 && (value[:2] == "0o" || value[:2] == "0O") {
+		if n, err := strconv.ParseInt(value[2:], 8, 64); err == nil {
+			return clampBoundedInt(int(n), maxVal)
+		}
+		return fallback
+	}
+
+	// Try binary: 0b10 → 2
+	if len(value) > 2 && (value[:2] == "0b" || value[:2] == "0B") {
+		if n, err := strconv.ParseInt(value[2:], 2, 64); err == nil {
+			return clampBoundedInt(int(n), maxVal)
+		}
+		return fallback
+	}
+
+	// Try float parse for scientific notation (e.g., "2e2" → 200, "1.5" → 1.5)
 	if f, err := strconv.ParseFloat(value, 64); err == nil {
 		// JavaScript Number.isSafeInteger check
-		if f >= -9007199254740991 && f <= 9007199254740991 && f == float64(int(f)) {
+		if !math.IsInf(f, 0) && f >= -9007199254740991 && f <= 9007199254740991 && f == math.Trunc(f) {
 			return clampBoundedInt(int(f), maxVal)
 		}
-		return maxVal
+		// Not a safe integer (fractional, too large, ±Inf) → fallback
+		return fallback
 	}
 
 	return fallback
@@ -371,6 +428,22 @@ func clampBoundedInt(n, maxVal int) int {
 		return maxVal
 	}
 	return n
+}
+
+// paramOrElse implements the Node pageSize || limit semantics.
+// Returns the value of the primary key if present (even if empty),
+// otherwise falls back to the secondary key, then to empty string.
+// Also returns whether any parameter was present at all.
+// This ensures that an explicitly empty primary parameter is distinguished
+// from an absent one (matching URLSearchParams.get() which returns null for absent).
+func paramOrElse(params map[string][]string, primary, secondary string) (string, bool) {
+	if vs, ok := params[primary]; ok && len(vs) > 0 {
+		return vs[0], true
+	}
+	if vs, ok := params[secondary]; ok && len(vs) > 0 {
+		return vs[0], true
+	}
+	return "", false
 }
 
 // dateParam parses a date string. Accepts YYYY-MM-DD or parseable datetime.
@@ -425,12 +498,44 @@ func truncate(s string, maxLen int) string {
 	return s
 }
 
-// firstNonEmpty returns the first non-empty string.
-func firstNonEmpty(values ...string) string {
-	for _, v := range values {
-		if v != "" {
-			return v
-		}
+// extractNullish implements JavaScript nullish coalescing (??) for body fields.
+// Returns the value of the primary key if present and not nil,
+// otherwise falls back to the secondary key, then to nil.
+//
+// Matches Node: body.comment ?? body.note
+//
+// Examples:
+//
+//	{comment: "hello"} → "hello"
+//	{comment: null} → note value
+//	{comment: ""} → "" (empty string is NOT nullish)
+//	{comment: 0} → 0
+//	{comment: false} → false
+//	{} → note value
+func extractNullish(body map[string]interface{}, primary, secondary string) interface{} {
+	if body == nil {
+		return nil
 	}
+	if val, ok := body[primary]; ok && val != nil {
+		return val
+	}
+	if val, ok := body[secondary]; ok && val != nil {
+		return val
+	}
+	return nil
+}
+
+// toOptionalString converts an interface{} to a string.
+// Non-string values (including nil) return empty string.
+// Then cleanOptionalText handles validation and trimming.
+func toOptionalString(val interface{}) string {
+	if val == nil {
+		return ""
+	}
+	if s, ok := val.(string); ok {
+		return s
+	}
+	// Non-string values (number, bool, etc.) → empty string
+	// Matches Node cleanOptionalText which does typeof value === 'string' check
 	return ""
 }

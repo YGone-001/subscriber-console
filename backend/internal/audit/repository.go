@@ -120,16 +120,8 @@ func (r *Repository) ListAuditLogs(ctx context.Context, query AuditQuery, reveal
 
 	logs := make([]AuditLogRecord, 0, len(facet.Logs))
 	for _, doc := range facet.Logs {
-		rec := mapBSONToRecord(doc)
-		// Apply source IP access control: mask source.ip but retain source.userAgent
-		if !revealSourceIP && rec.Source != nil {
-			rec.Source = &SourceInfo{UserAgent: rec.Source.UserAgent}
-		}
-		// Strip large fields from list response (same as Node listAuditLogs)
-		rec.OldData = nil
-		rec.NewData = nil
-		rec.Metadata = nil
-		rec.Error = nil
+		rec := PresentRecord(doc, revealSourceIP)
+		StripListProjection(&rec)
 		logs = append(logs, rec)
 	}
 
@@ -158,104 +150,8 @@ func (r *Repository) GetAuditLog(ctx context.Context, id string, revealSourceIP 
 		return nil, fmt.Errorf("audit find: %w", err)
 	}
 
-	rec := mapBSONToRecord(doc)
-	// Apply source IP access control: mask source.ip but retain source.userAgent
-	if !revealSourceIP && rec.Source != nil {
-		rec.Source = &SourceInfo{UserAgent: rec.Source.UserAgent}
-	}
-	// Sanitize payload fields (matches Node sanitizeAuditRecord)
-	if rec.OldData != nil {
-		rec.OldData = SanitizePayload(rec.OldData)
-	}
-	if rec.NewData != nil {
-		rec.NewData = SanitizePayload(rec.NewData)
-	}
-	if rec.Metadata != nil {
-		rec.Metadata = SanitizePayload(rec.Metadata)
-	}
-	if rec.Error != nil {
-		rec.Error = SanitizePayload(rec.Error)
-	}
+	rec := PresentRecord(doc, revealSourceIP)
 	return &rec, nil
-}
-
-func mapBSONToRecord(doc bson.M) AuditLogRecord {
-	rec := AuditLogRecord{}
-	if v, ok := doc["id"].(string); ok {
-		rec.ID = v
-	}
-	if v, ok := doc["eventId"].(string); ok {
-		rec.EventID = v
-	}
-	if v, ok := doc["timestamp"].(string); ok {
-		rec.Timestamp = v
-	} else if v, ok := doc["timestamp"].(bson.DateTime); ok {
-		rec.Timestamp = v.Time().UTC().Format("2006-01-02T15:04:05.000Z")
-	}
-	if v, ok := doc["level"].(string); ok {
-		rec.Level = v
-	}
-	if v, ok := doc["action"].(string); ok {
-		rec.Action = v
-	}
-	if v, ok := doc["targetId"].(string); ok {
-		rec.TargetID = v
-	}
-	rec.Actor = doc["actor"]
-	// operatorIp is always masked in presentation (matches Node sanitizeAuditRecord)
-	if _, ok := doc["operatorIp"].(string); ok {
-		rec.OperatorIP = "[MASKED]"
-	}
-	if v, ok := doc["correlationId"].(string); ok {
-		rec.CorrelationID = v
-	}
-	if v, ok := doc["approvalId"].(string); ok {
-		rec.ApprovalID = v
-	}
-	if v, ok := doc["reason"].(string); ok {
-		rec.Reason = v
-	}
-	rec.ActorContext = doc["actorContext"]
-	if v, ok := doc["module"].(string); ok {
-		rec.Module = v
-	}
-	rec.Resource = doc["resource"]
-	if v, ok := doc["riskLevel"].(string); ok {
-		rec.RiskLevel = v
-	}
-	if v, ok := doc["result"].(string); ok {
-		rec.Result = v
-	}
-	if src, ok := doc["source"].(bson.M); ok {
-		si := &SourceInfo{}
-		if ip, ok := src["ip"].(string); ok {
-			si.IP = ip
-		}
-		if ua, ok := src["userAgent"].(string); ok {
-			si.UserAgent = ua
-		}
-		if si.IP != "" || si.UserAgent != "" {
-			rec.Source = si
-		}
-	}
-	rec.Request = doc["request"]
-	rec.Metadata = doc["metadata"]
-	rec.Error = doc["error"]
-	rec.OldData = doc["oldData"]
-	rec.NewData = doc["newData"]
-	return rec
-}
-
-// PresentRecord converts a raw BSON audit log document into a sanitized AuditLogRecord.
-// This is the unified presentation function for reuse by other packages.
-// Matches Node present() = sanitizeAuditRecord + applyAuditSourceIpAccess.
-func PresentRecord(doc bson.M, revealSourceIP bool) AuditLogRecord {
-	rec := mapBSONToRecord(doc)
-	// Apply source IP access control: mask source.ip but retain source.userAgent
-	if !revealSourceIP && rec.Source != nil {
-		rec.Source = &SourceInfo{UserAgent: rec.Source.UserAgent}
-	}
-	return rec
 }
 
 func buildAuditFilter(query AuditQuery) bson.M {

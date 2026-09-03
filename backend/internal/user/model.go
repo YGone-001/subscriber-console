@@ -104,6 +104,7 @@ type AuditLog struct {
 
 // userDoc is the raw MongoDB document from app_users.
 type userDoc struct {
+	MongoID      interface{} `bson:"_id"`
 	Username     string      `bson:"username"`
 	DisplayName  *string     `bson:"displayName,omitempty"`
 	Email        *string     `bson:"email,omitempty"`
@@ -115,6 +116,14 @@ type userDoc struct {
 	Locked       *bool       `bson:"locked,omitempty"`
 	PasswordHash string      `bson:"passwordHash"`
 	Security     interface{} `bson:"security,omitempty"`
+}
+
+// UserIdentity contains the full internal user identity including Mongo _id.
+// Used by governance code that needs the actual Mongo ID for userId.
+// NOT exposed through public SafeUser APIs.
+type UserIdentity struct {
+	SafeUser SafeUser
+	MongoID  string // Stringified Mongo _id, falls back to Username
 }
 
 // auditLogDoc is the raw MongoDB document from app_audit_logs.

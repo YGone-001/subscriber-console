@@ -210,6 +210,26 @@ if (existsSync(MATRIX_PATH)) {
   } else if (notifStreamCount > 1) {
     warn(`Notifications stream appears ${notifStreamCount} times — may be duplicate`);
   }
+
+  // Mutation shadow rule: POST/PUT/PATCH/DELETE with shadowAllowed=YES is a regression
+  // Exclude semantic reads (POST for body, no actual writes)
+  const mutationShadowLines = matrix.split('\n').filter(line => {
+    if (!/\|\s*(POST|PUT|PATCH|DELETE)\s*\|/.test(line)) return false;
+    if (!/\|\s*YES\s*\|/.test(line)) return false;
+    return true;
+  });
+  let mutationShadowErrors = 0;
+  for (const line of mutationShadowLines) {
+    // Skip semantic reads: POST endpoints that are read-only despite using POST
+    if (/semantic.read|read.only despite POST/i.test(line)) {
+      continue;
+    }
+    error(`Mutation route has shadowAllowed=YES (must be NEVER): ${line.trim()}`);
+    mutationShadowErrors++;
+  }
+  if (mutationShadowErrors === 0) {
+    ok('No mutation routes have shadowAllowed=YES');
+  }
 } else {
   warn(`Migration routing matrix not found: ${MATRIX_PATH}`);
 }

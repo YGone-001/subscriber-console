@@ -2,6 +2,7 @@ package user
 
 import (
 	"context"
+	"fmt"
 	"math"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -63,6 +64,47 @@ func (r *Repository) FindByUsername(ctx context.Context, username string) (*Safe
 	}
 	su := toSafeUser(doc)
 	return &su, nil
+}
+
+// FindByUsernameIdentity returns the full user identity including Mongo _id.
+// Used by governance/workflow code that needs the actual Mongo ID for userId.
+// Matches Node: userId = String(account._id ?? account.username)
+func (r *Repository) FindByUsernameIdentity(ctx context.Context, username string) (*UserIdentity, error) {
+	res := r.users.FindOne(ctx, bson.M{"username": username})
+	if err := res.Err(); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var doc userDoc
+	if err := res.Decode(&doc); err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, nil
+		}
+		return nil, err
+	}
+	su := toSafeUser(doc)
+	mongoID := stringifyMongoID(doc.MongoID)
+	if mongoID == "" {
+		mongoID = su.Username
+	}
+	return &UserIdentity{SafeUser: su, MongoID: mongoID}, nil
+}
+
+// stringifyMongoID converts a Mongo _id to string.
+func stringifyMongoID(id interface{}) string {
+	if id == nil {
+		return ""
+	}
+	switch v := id.(type) {
+	case string:
+		return v
+	case bson.ObjectID:
+		return v.Hex()
+	default:
+		return fmt.Sprintf("%v", id)
+	}
 }
 
 // QueryResult holds paginated user query results.

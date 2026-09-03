@@ -36,16 +36,18 @@ func cleanOptionalText(value string, max int) (string, error) {
 }
 
 // currentActor revalidates the actor against app_users.
-// Returns a GovernanceActor with userId, username, role from the database.
-// Matches Node currentActor() exactly.
+// Returns a GovernanceActor with userId (Mongo _id or username fallback),
+// username, role from the database.
+// Matches Node: userId = String(account._id ?? account.username)
 func (w *Workflow) currentActor(ctx context.Context, p *auth.Principal) (*GovernanceActor, error) {
-	su, err := w.users.FindByUsername(ctx, p.Username)
+	identity, err := w.users.FindByUsernameIdentity(ctx, p.Username)
 	if err != nil {
 		return nil, &ApprovalWorkflowError{Code: "AUTH_INVALID_TOKEN", Status: http.StatusUnauthorized}
 	}
-	if su == nil {
+	if identity == nil {
 		return nil, &ApprovalWorkflowError{Code: "ACCOUNT_NOT_FOUND", Status: http.StatusUnauthorized}
 	}
+	su := &identity.SafeUser
 	if su.Locked || su.Status == "locked" {
 		return nil, &ApprovalWorkflowError{Code: "ACCOUNT_LOCKED", Status: http.StatusUnauthorized}
 	}
@@ -67,7 +69,7 @@ func (w *Workflow) currentActor(ctx context.Context, p *auth.Principal) (*Govern
 
 	return &GovernanceActor{
 		Type:     "user",
-		UserID:   su.Username,
+		UserID:   identity.MongoID,
 		Username: su.Username,
 		Role:     su.Role,
 	}, nil
@@ -115,8 +117,10 @@ func (w *Workflow) loadPending(ctx context.Context, id string) (*ApprovalDocumen
 }
 
 // ApproveChange executes the approve workflow.
+// Receives the canonical comment field (already extracted by handler with nullish semantics).
+// The workflow does NOT know about legacy "note" fallback.
 // Matches Node approveChange() exactly.
-func (w *Workflow) ApproveChange(r *http.Request, id string, p *auth.Principal, body map[string]interface{}) (*ApprovalDocument, error) {
+func (w *Workflow) ApproveChange(r *http.Request, id string, p *auth.Principal, comment string) (*ApprovalDocument, error) {
 	approval, err := w.loadPending(r.Context(), id)
 	if err != nil {
 		return nil, err
@@ -138,14 +142,6 @@ func (w *Workflow) ApproveChange(r *http.Request, id string, p *auth.Principal, 
 		return nil, err
 	}
 
-	comment := ""
-	if body != nil {
-		if c, ok := body["comment"].(string); ok {
-			comment = c
-		} else if n, ok := body["note"].(string); ok {
-			comment = n
-		}
-	}
 	comment, err = cleanOptionalText(comment, 1000)
 	if err != nil {
 		return nil, err
@@ -192,7 +188,7 @@ func (w *Workflow) ApproveChange(r *http.Request, id string, p *auth.Principal, 
 	}
 
 	// Strict audit — committed=true on failure
-	if auditErr := AuditTransition(r.Context(), w.writer, "approval.approve", approval, result.Approval, *actor, comment); auditErr != nil {
+	if auditErr := AuditTransition(r, w.writer, "approval.approve", approval, result.Approval, *actor, comment); auditErr != nil {
 		return result.Approval, auditErr
 	}
 
@@ -200,16 +196,10 @@ func (w *Workflow) ApproveChange(r *http.Request, id string, p *auth.Principal, 
 }
 
 // RejectChange executes the reject workflow.
+// Receives the canonical reason field (already extracted by handler with nullish semantics).
+// The workflow does NOT know about legacy "note" fallback.
 // Matches Node rejectChange() exactly.
-func (w *Workflow) RejectChange(r *http.Request, id string, p *auth.Principal, body map[string]interface{}) (*ApprovalDocument, error) {
-	reason := ""
-	if body != nil {
-		if r, ok := body["reason"].(string); ok {
-			reason = r
-		} else if n, ok := body["note"].(string); ok {
-			reason = n
-		}
-	}
+func (w *Workflow) RejectChange(r *http.Request, id string, p *auth.Principal, reason string) (*ApprovalDocument, error) {
 	reason, err := cleanOptionalText(reason, 1000)
 	if err != nil {
 		return nil, err
@@ -275,7 +265,7 @@ func (w *Workflow) RejectChange(r *http.Request, id string, p *auth.Principal, b
 	}
 
 	// Strict audit — committed=true on failure
-	if auditErr := AuditTransition(r.Context(), w.writer, "approval.reject", approval, result.Approval, *actor, reason); auditErr != nil {
+	if auditErr := AuditTransition(r, w.writer, "approval.reject", approval, result.Approval, *actor, reason); auditErr != nil {
 		return result.Approval, auditErr
 	}
 
@@ -283,8 +273,10 @@ func (w *Workflow) RejectChange(r *http.Request, id string, p *auth.Principal, b
 }
 
 // CancelChange executes the cancel workflow.
+// Receives the canonical reason field (already extracted by handler with nullish semantics).
+// The workflow does NOT know about legacy "note" fallback.
 // Matches Node cancelChange() exactly.
-func (w *Workflow) CancelChange(r *http.Request, id string, p *auth.Principal, body map[string]interface{}) (*ApprovalDocument, error) {
+func (w *Workflow) CancelChange(r *http.Request, id string, p *auth.Principal, reason string) (*ApprovalDocument, error) {
 	approval, err := w.loadPending(r.Context(), id)
 	if err != nil {
 		return nil, err
@@ -306,12 +298,6 @@ func (w *Workflow) CancelChange(r *http.Request, id string, p *auth.Principal, b
 		return nil, err
 	}
 
-	reason := ""
-	if body != nil {
-		if r, ok := body["reason"].(string); ok {
-			reason = r
-		}
-	}
 	reason, err = cleanOptionalText(reason, 1000)
 	if err != nil {
 		return nil, err
@@ -350,7 +336,7 @@ func (w *Workflow) CancelChange(r *http.Request, id string, p *auth.Principal, b
 	}
 
 	// Strict audit — committed=true on failure
-	if auditErr := AuditTransition(r.Context(), w.writer, "approval.cancel", approval, result.Approval, *actor, reason); auditErr != nil {
+	if auditErr := AuditTransition(r, w.writer, "approval.cancel", approval, result.Approval, *actor, reason); auditErr != nil {
 		return result.Approval, auditErr
 	}
 

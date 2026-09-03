@@ -2,9 +2,8 @@ package approval
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/YGone-001/subscriber-console/backend/internal/audit"
@@ -101,26 +100,31 @@ func (r *Repository) TransitionApproval(ctx context.Context, input TransitionInp
 	return nil, fmt.Errorf("approval CAS: %w", err)
 }
 
-// generateEventID creates a unique event ID.
-// Uses timestamp + random suffix for uniqueness without external dependency.
+// generateEventID creates a UUIDv4 for approval lifecycle events.
+// Matches Node crypto.randomUUID() exactly.
+// Distinct from audit eventId which uses EVT-{UUID} format.
 func generateEventID() string {
-	return fmt.Sprintf("EVT-%d-%s", time.Now().UnixNano(), randomHex(8))
-}
-
-// randomHex generates a random hex string of the given byte length.
-func randomHex(n int) string {
-	b := make([]byte, n)
-	_, _ = rand.Read(b)
-	return hex.EncodeToString(b)
+	return audit.GenerateUUID()
 }
 
 // AuditTransition writes a strict audit log for an approval transition.
+// Receives the full HTTP request to capture source IP, user-agent,
+// request method/path, requestId, correlationId, and x-operation-reason.
 // On audit failure, sets committed=true (the in-document event is already durable).
 // Never attempts rollback. Matches Node auditTransition() exactly.
-func AuditTransition(ctx context.Context, writer *audit.Writer, action string, before, after *ApprovalDocument, actor GovernanceActor, reason string) error {
+func AuditTransition(r *http.Request, writer *audit.Writer, action string, before, after *ApprovalDocument, actor GovernanceActor, reason string) error {
 	afterEvent := interface{}(nil)
 	if len(after.Events) > 0 {
 		afterEvent = after.Events[len(after.Events)-1]
+	}
+
+	// Extract request context for audit (source IP, user-agent, method, path, IDs)
+	source, request, reqReason := audit.AuditRequestContext(r)
+
+	// Reason fallback: explicit reason, then x-operation-reason header
+	effectiveReason := reason
+	if effectiveReason == "" {
+		effectiveReason = reqReason
 	}
 
 	input := audit.WriteAuditInput{
@@ -138,15 +142,17 @@ func AuditTransition(ctx context.Context, writer *audit.Writer, action string, b
 			Name: after.ChangeID,
 		},
 		TargetID:   "approval:" + after.ID,
+		Source:     source,
+		Request:    request,
 		ApprovalID: after.ID,
 		RiskLevel:  string(after.RiskLevel),
 		Result:     "success",
 		Before:     map[string]interface{}{"status": string(before.Status)},
 		After:      map[string]interface{}{"status": string(after.Status), "event": afterEvent},
-		Reason:     reason,
+		Reason:     effectiveReason,
 	}
 
-	err := writer.WriteStrict(ctx, input)
+	err := writer.WriteStrict(r.Context(), input)
 	if err != nil {
 		// The in-document event is already durable. Never rollback.
 		return &ApprovalWorkflowError{

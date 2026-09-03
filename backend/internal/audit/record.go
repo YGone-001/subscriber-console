@@ -11,9 +11,10 @@ import (
 	"github.com/YGone-001/subscriber-console/backend/internal/middleware"
 )
 
-// generateUUID creates a UUID v4 using crypto/rand.
+// GenerateUUID creates a UUID v4 using crypto/rand.
 // Format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-func generateUUID() string {
+// Exported for use by other packages (e.g., approval event IDs).
+func GenerateUUID() string {
 	var buf [16]byte
 	if _, err := rand.Read(buf[:]); err != nil {
 		// Fallback: should never happen with crypto/rand
@@ -127,7 +128,7 @@ type AuditWriteRecord struct {
 // BuildRecord converts a WriteAuditInput into a sanitized, complete
 // AuditWriteRecord ready for MongoDB insertion.
 func BuildRecord(input WriteAuditInput) AuditWriteRecord {
-	id := generateUUID()
+	id := GenerateUUID()
 	now := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
 
 	level := input.Level
@@ -367,7 +368,7 @@ func AuditRequestContext(r *http.Request) (source *SourceInput, request *Request
 		requestID = strings.TrimSpace(r.Header.Get("x-request-id"))
 	}
 	if requestID == "" {
-		requestID = generateUUID()
+		requestID = GenerateUUID()
 	} else if len(requestID) > 128 {
 		requestID = requestID[:128]
 	}

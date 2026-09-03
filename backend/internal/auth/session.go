@@ -10,10 +10,11 @@ import (
 
 // UserDocument represents the app_users collection structure for session validation.
 type UserDocument struct {
-	Username string `bson:"username"`
-	Role     string `bson:"role"`
-	Status   string `bson:"status"`
-	Locked   *bool  `bson:"locked,omitempty"`
+	MongoID  interface{} `bson:"_id"`
+	Username string      `bson:"username"`
+	Role     string      `bson:"role"`
+	Status   string      `bson:"status"`
+	Locked   *bool       `bson:"locked,omitempty"`
 	Security *struct {
 		SessionVersion *int64 `bson:"sessionVersion,omitempty"`
 	} `bson:"security,omitempty"`
@@ -94,12 +95,30 @@ func (sv *SessionValidator) ValidateSession(ctx context.Context, claims *Claims)
 		return nil, fmt.Errorf("SESSION_REVOKED")
 	}
 
+	// userId = String(account._id ?? account.username) — matches Node exactly
+	userID := user.Username
+	if user.MongoID != nil {
+		switch v := user.MongoID.(type) {
+		case string:
+			if v != "" {
+				userID = v
+			}
+		case bson.ObjectID:
+			userID = v.Hex()
+		default:
+			// Use string representation for other types
+			if s := fmt.Sprintf("%v", v); s != "" && s != "<nil>" {
+				userID = s
+			}
+		}
+	}
+
 	return &Principal{
 		Username:       user.Username,
 		Role:           claims.Role,
 		NormalizedRole: normalizedRole,
 		SessionVersion: svValue,
-		UserID:         user.Username, // Will be replaced with actual _id if needed
+		UserID:         userID,
 	}, nil
 }
 
