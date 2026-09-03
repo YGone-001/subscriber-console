@@ -232,6 +232,7 @@ Current write invariant:
 ```text
 Business-domain writes by Go = NONE
 Infrastructure writes = app_rate_limits (allowed)
+Governance state writes = app_approvals CAS transitions (FindOneAndUpdate, Strict audit)
 Security audit writes = app_audit_logs (authorization.denied, BestEffort only)
 ```
 
@@ -310,14 +311,15 @@ Phase 3C — 3 (Approval governance read foundation):
 GET /api/approvals
 GET /api/approvals/:id
 GET /api/approvals/:id/audit
+POST /api/approvals/:id
 ```
 
 Status:
 
 ```text
-Implemented = 34
-Response Parity = 34
-Cutover Ready = 34
+Implemented = 35
+Response Parity = 35
+Cutover Ready = 35
 Cutover Blocked = 0
 Actually Routed = 0 (Nginx not modified)
 ready + blocked = implemented ✅
@@ -335,20 +337,60 @@ Go owns:
 - Maker-checker policy (independent reviewer)
 - Pure state machine (CanTransition)
 - Action eligibility (canApprove/canReject/canCancel/canExecute)
+- Approve/reject/cancel CAS transitions (FindOneAndUpdate only)
+- Legacy POST /api/approvals/:id decision wrapper
+- Strict audit for transitions
 
 Go does NOT own:
 - Approval create
-- Approval approve/reject/cancel
 - Approval execute
 - Business executors
-- CAS transition persistence
 
-Approval mutations remain with Node.
+Approval create and execute remain with Node.
 
 Audit Writer:
 - Strict lifecycle foundation ready (WaitGroup, RWMutex, for-range queue)
 - BestEffort uses lifecycleCtx, Strict uses merged request+lifecycle context
 - Close timeout guarantees workers exit (lifecycle cancel aborts Mongo ops)
+
+---
+
+## 9.2 Super Admin Direct Governance Policy
+
+Separate PERMISSION from GOVERNANCE MODE.
+
+Governance modes:
+```text
+DIRECT_GOVERNED    — execute immediately, no approval
+APPROVAL_GOVERNED  — requires approval workflow
+DISABLED           — not available (no override)
+RUNTIME_INTERNAL   — not available via HTTP (no override)
+```
+
+Effective decision order:
+```text
+1. DISABLED → always DISABLED (even super_admin)
+2. RUNTIME_INTERNAL → always RUNTIME_INTERNAL (even super_admin)
+3. super_admin + APPROVAL_GOVERNED + has executor → DIRECT_GOVERNED
+4. base mode applies
+```
+
+Super Admin detection: `auth.IsSuperAdmin(Principal)` or `approval.IsSuperAdminRole(role)`.
+Treats `root` (legacy) and `super_admin` as Super Admin.
+
+Evaluator: `approval.EvaluateGovernance(operation, role)` → `GovernanceResult`.
+
+Super Admin direct mutations:
+- DO NOT create approval records
+- DO require permission checks
+- DO require session/account validation
+- DO require input validation
+- DO require strict audit (with `governanceMode=DIRECT_GOVERNED`)
+- DO NOT bypass DISABLED/RUNTIME_INTERNAL
+
+Risk and governance are separate: SUBSCRIBER_BULK_DELETE remains critical risk even when DIRECT_GOVERNED.
+
+Existing pending approvals are NOT auto-approved/executed.
 
 ---
 
