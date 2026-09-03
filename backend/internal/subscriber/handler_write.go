@@ -46,7 +46,8 @@ func NewWriteHandler(repo *Repository, limiter *ratelimit.Limiter, userRepo User
 }
 
 // Create handles POST /api/subscribers
-// Creates a new subscriber. Super_admin only for now.
+// Creates a new subscriber with governance: all authorized roles → DIRECT.
+// Ordering: auth → capability check → rate limit → request validation → fresh actor → governance → create
 func (h *WriteHandler) Create(w http.ResponseWriter, r *http.Request) {
 	p := auth.PrincipalFromContext(r.Context())
 	if p == nil {
@@ -54,25 +55,13 @@ func (h *WriteHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Capability check with audit on denial
+	if !audit.RequireCapabilityWithAudit(w, r, p, "subscriber_write", h.auditWriter) {
+		return
+	}
+
 	// Rate limit
 	if !h.limiter.Enforce(w, r, "subscribers:create:"+p.Username, 30, 60) {
-		return
-	}
-
-	// Fresh actor validation
-	freshRole, err := h.validateFreshActor(r.Context(), p)
-	if err != nil {
-		response.Error(w, http.StatusServiceUnavailable, "Unable to validate user session", "AUTH_SERVICE_UNAVAILABLE")
-		return
-	}
-	if freshRole == "" {
-		response.Error(w, http.StatusForbidden, "User account is disabled or locked", "AUTH_USER_DISABLED")
-		return
-	}
-
-	// Only super_admin can create subscribers directly
-	if !governance.IsSuperAdminRole(freshRole) {
-		response.Error(w, http.StatusForbidden, "Insufficient permissions", "AUTH_INSUFFICIENT_PERMISSIONS")
 		return
 	}
 
@@ -89,23 +78,51 @@ func (h *WriteHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if subscriber already exists
-	existing, err := h.repo.FindSubscriberByImsi(r.Context(), imsi)
-	if err != nil {
-		response.Error(w, http.StatusInternalServerError, "Internal Server Error", "INTERNAL_ERROR")
-		return
-	}
-	if existing != nil {
-		response.Error(w, http.StatusConflict, "Subscriber already exists", "SUBSCRIBER_EXISTS")
+	// Fresh actor validation — mandatory, fail-closed
+	fresh, httpErr := RevalidateFreshActor(r.Context(), h.userRepo, p)
+	if httpErr != nil {
+		response.Error(w, httpErr.Status, httpErr.Message, httpErr.Code)
 		return
 	}
 
-	// TODO: Implement actual subscriber creation logic
-	response.Error(w, http.StatusNotImplemented, "Subscriber creation not yet implemented", "NOT_IMPLEMENTED")
+	// Evaluate governance with fresh role
+	result := EvaluateOperation(OpCreate, fresh.NormalizedRole)
+	if !isExecutable(result) {
+		response.Error(w, http.StatusConflict, "Operation not executable", "OPERATION_NOT_EXECUTABLE")
+		return
+	}
+
+	// Create subscriber (governance is DIRECT for CREATE for all authorized roles)
+	created, err := h.repo.CreateSubscriberFromLegacy(r.Context(), imsi, body.PlanId, body.Msisdn)
+	if err != nil {
+		h.handleCreateError(w, err)
+		return
+	}
+
+	// Strict audit — committed=true, never rollback on audit failure
+	h.writeStrictAudit(r, audit.WriteAuditInput{
+		Action:   "CREATE",
+		Module:   "subscribers",
+		TargetID: imsi,
+		After:    created,
+		Result:   "success",
+		Metadata: map[string]interface{}{
+			"governance": map[string]interface{}{
+				"decision": string(result.Decision),
+			},
+		},
+	}, fresh)
+
+	response.JSON(w, http.StatusCreated, map[string]any{
+		"outcome": "executed",
+		"message": "Subscriber created successfully",
+		"imsi":    imsi,
+	})
 }
 
 // Update handles PUT /api/subscribers/{imsi}
-// Updates a subscriber with governance: super_admin→DIRECT, operator→APPROVAL.
+// Updates a subscriber with governance: super_admin/root → DIRECT, operator/ops_admin → APPROVAL.
+// Ordering: auth → capability check → rate limit → validate → fresh actor → governance → prepare/execute/create approval
 func (h *WriteHandler) Update(w http.ResponseWriter, r *http.Request) {
 	imsi := r.PathValue("imsi")
 	if imsi == "" {
@@ -116,6 +133,11 @@ func (h *WriteHandler) Update(w http.ResponseWriter, r *http.Request) {
 	p := auth.PrincipalFromContext(r.Context())
 	if p == nil {
 		response.Error(w, http.StatusUnauthorized, "Unauthorized", "AUTH_INVALID_TOKEN")
+		return
+	}
+
+	// Capability check with audit on denial
+	if !audit.RequireCapabilityWithAudit(w, r, p, "subscriber_write", h.auditWriter) {
 		return
 	}
 
@@ -142,8 +164,15 @@ func (h *WriteHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check governance policy
-	result := EvaluateOperation(OpUpdate, p.NormalizedRole)
+	// Fresh actor validation — mandatory, fail-closed, BEFORE governance evaluation
+	fresh, httpErr := RevalidateFreshActor(r.Context(), h.userRepo, p)
+	if httpErr != nil {
+		response.Error(w, httpErr.Status, httpErr.Message, httpErr.Code)
+		return
+	}
+
+	// Evaluate governance with FRESH actor role (not token role)
+	result := EvaluateOperation(OpUpdate, fresh.NormalizedRole)
 	if !isExecutable(result) {
 		response.Error(w, http.StatusConflict, "Operation not executable", "OPERATION_NOT_EXECUTABLE")
 		return
@@ -156,38 +185,28 @@ func (h *WriteHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Fresh actor validation
-	freshRole, err := h.validateFreshActor(r.Context(), p)
-	if err != nil {
-		response.Error(w, http.StatusServiceUnavailable, "Unable to validate user session", "AUTH_SERVICE_UNAVAILABLE")
-		return
-	}
-	if freshRole == "" {
-		response.Error(w, http.StatusForbidden, "User account is disabled or locked", "AUTH_USER_DISABLED")
-		return
-	}
-	if freshRole != p.NormalizedRole {
-		response.Error(w, http.StatusForbidden, "Session role mismatch", "AUTH_ROLE_MISMATCH")
-		return
-	}
-
 	if result.Decision == governance.Direct {
-		// Super Admin: DIRECT_GOVERNED — execute immediately
+		// Super Admin/root: DIRECT_GOVERNED — execute immediately
 		execResult, err := ExecuteFrozenSubscriberUpdate(r.Context(), frozen, h.repo.FindSubscriberByImsi, h.repo.UpdateSubscriberFromLegacy)
 		if err != nil {
 			h.handleGovernanceError(w, err)
 			return
 		}
 
-		// Audit: committed=true, never rollback on audit failure
+		// Strict audit — committed=true, never rollback on audit failure
 		h.writeStrictAudit(r, audit.WriteAuditInput{
 			Action:   "UPDATE",
-			Module:   "subscriber",
+			Module:   "subscribers",
 			TargetID: imsi,
 			Before:   frozen.Before,
 			After:    execResult.After,
 			Result:   "success",
-		}, p, freshRole)
+			Metadata: map[string]interface{}{
+				"governance": map[string]interface{}{
+					"decision": string(result.Decision),
+				},
+			},
+		}, fresh)
 
 		response.JSON(w, http.StatusOK, map[string]any{
 			"outcome": "executed",
@@ -197,7 +216,7 @@ func (h *WriteHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Normal operator: APPROVAL_GOVERNED — create approval
+	// Normal operator/ops_admin: APPROVAL_GOVERNED — create approval
 	reason := r.URL.Query().Get("reason")
 	var reasonPtr *string
 	if reason != "" {
@@ -206,16 +225,21 @@ func (h *WriteHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	actor := approval.GovernanceActor{
 		Type:     "user",
-		Username: p.Username,
-		Role:     freshRole,
+		UserID:   fresh.UserID,
+		Username: fresh.Username,
+		Role:     fresh.RawRole,
 	}
 
 	approvalDoc, err := h.approvalSvc.Create(r, actor, approval.CreateApprovalInput{
-		Action:               "SUBSCRIBER_UPDATE",
-		Requester:            p.Username,
-		RequesterContext:     &actor,
-		TargetID:             imsi,
-		Summary:              fmt.Sprintf("Update governed subscriber configuration for %s", imsi),
+		Action:           "SUBSCRIBER_UPDATE",
+		Requester:        fresh.Username,
+		RequesterContext: &actor,
+		TargetID:         imsi,
+		Summary:          fmt.Sprintf("Update governed subscriber configuration for %s", imsi),
+		Operation: &approval.ApprovalOperation{
+			ResourceType: "subscriber",
+			ResourceID:   imsi,
+		},
 		OperationFingerprint: frozen.OperationFingerprint,
 		Reason:               reasonPtr,
 		Before:               frozen.Before,
@@ -223,18 +247,16 @@ func (h *WriteHandler) Update(w http.ResponseWriter, r *http.Request) {
 		Payload:              frozenToMap(frozen),
 	})
 	if err != nil {
+		// ApprovalCreator.Create already writes strict audit; check for committed=true
+		if awe, ok := err.(*approval.ApprovalWorkflowError); ok && awe.Committed {
+			response.JSON(w, awe.Status, awe.ErrorResponse())
+			return
+		}
 		response.Error(w, http.StatusInternalServerError, "Failed to create approval request", "APPROVAL_CREATE_FAILED")
 		return
 	}
 
-	// Audit the approval creation
-	h.writeStrictAudit(r, audit.WriteAuditInput{
-		Action:   "UPDATE",
-		Module:   "approval",
-		TargetID: "approval:" + approvalDoc.ChangeID,
-		After:    approvalDoc,
-		Result:   "success",
-	}, p, freshRole)
+	// NO duplicate audit here — ApprovalCreator.Create() already writes strict audit
 
 	response.JSON(w, http.StatusAccepted, map[string]any{
 		"outcome":  "approval_required",
@@ -244,7 +266,8 @@ func (h *WriteHandler) Update(w http.ResponseWriter, r *http.Request) {
 }
 
 // Delete handles DELETE /api/subscribers/{imsi}
-// Deletes a subscriber with governance: super_admin→DIRECT, operator→APPROVAL.
+// Deletes a subscriber with governance: super_admin/root → DIRECT, operator/ops_admin → APPROVAL.
+// Ordering: auth → capability check → rate limit → validate → fresh actor → governance → prepare/execute/create approval
 func (h *WriteHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	imsi := r.PathValue("imsi")
 	if imsi == "" {
@@ -255,6 +278,11 @@ func (h *WriteHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	p := auth.PrincipalFromContext(r.Context())
 	if p == nil {
 		response.Error(w, http.StatusUnauthorized, "Unauthorized", "AUTH_INVALID_TOKEN")
+		return
+	}
+
+	// Capability check with audit on denial
+	if !audit.RequireCapabilityWithAudit(w, r, p, "subscriber_write", h.auditWriter) {
 		return
 	}
 
@@ -270,8 +298,15 @@ func (h *WriteHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check governance policy
-	result := EvaluateOperation(OpDelete, p.NormalizedRole)
+	// Fresh actor validation — mandatory, fail-closed, BEFORE governance evaluation
+	fresh, httpErr := RevalidateFreshActor(r.Context(), h.userRepo, p)
+	if httpErr != nil {
+		response.Error(w, httpErr.Status, httpErr.Message, httpErr.Code)
+		return
+	}
+
+	// Evaluate governance with FRESH actor role (not token role)
+	result := EvaluateOperation(OpDelete, fresh.NormalizedRole)
 	if !isExecutable(result) {
 		response.Error(w, http.StatusConflict, "Operation not executable", "OPERATION_NOT_EXECUTABLE")
 		return
@@ -284,38 +319,28 @@ func (h *WriteHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Fresh actor validation
-	freshRole, err := h.validateFreshActor(r.Context(), p)
-	if err != nil {
-		response.Error(w, http.StatusServiceUnavailable, "Unable to validate user session", "AUTH_SERVICE_UNAVAILABLE")
-		return
-	}
-	if freshRole == "" {
-		response.Error(w, http.StatusForbidden, "User account is disabled or locked", "AUTH_USER_DISABLED")
-		return
-	}
-	if freshRole != p.NormalizedRole {
-		response.Error(w, http.StatusForbidden, "Session role mismatch", "AUTH_ROLE_MISMATCH")
-		return
-	}
-
 	if result.Decision == governance.Direct {
-		// Super Admin: DIRECT_GOVERNED — execute immediately
+		// Super Admin/root: DIRECT_GOVERNED — execute immediately
 		execResult, err := ExecuteFrozenSubscriberDelete(r.Context(), frozen, h.repo.FindSubscriberByImsi, h.repo.DeleteSubscriber)
 		if err != nil {
 			h.handleGovernanceError(w, err)
 			return
 		}
 
-		// Audit: committed=true, never rollback on audit failure
+		// Strict audit — committed=true, never rollback on audit failure
 		h.writeStrictAudit(r, audit.WriteAuditInput{
 			Action:   "DELETE",
-			Module:   "subscriber",
+			Module:   "subscribers",
 			TargetID: imsi,
 			Before:   frozen.Before,
 			After:    map[string]any{"deleted": true, "imsi": imsi},
 			Result:   "success",
-		}, p, freshRole)
+			Metadata: map[string]interface{}{
+				"governance": map[string]interface{}{
+					"decision": string(result.Decision),
+				},
+			},
+		}, fresh)
 
 		response.JSON(w, http.StatusOK, map[string]any{
 			"outcome": "executed",
@@ -326,7 +351,7 @@ func (h *WriteHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Normal operator: APPROVAL_GOVERNED — create approval
+	// Normal operator/ops_admin: APPROVAL_GOVERNED — create approval
 	reason := r.URL.Query().Get("reason")
 	var reasonPtr *string
 	if reason != "" {
@@ -335,66 +360,43 @@ func (h *WriteHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	actor := approval.GovernanceActor{
 		Type:     "user",
-		Username: p.Username,
-		Role:     freshRole,
+		UserID:   fresh.UserID,
+		Username: fresh.Username,
+		Role:     fresh.RawRole,
 	}
 
 	approvalDoc, err := h.approvalSvc.Create(r, actor, approval.CreateApprovalInput{
-		Action:               "SUBSCRIBER_DELETE",
-		Requester:            p.Username,
-		RequesterContext:     &actor,
-		TargetID:             imsi,
-		Summary:              fmt.Sprintf("Delete subscriber %s", imsi),
+		Action:           "SUBSCRIBER_DELETE",
+		Requester:        fresh.Username,
+		RequesterContext: &actor,
+		TargetID:         imsi,
+		Summary:          fmt.Sprintf("Delete subscriber %s", imsi),
+		Operation: &approval.ApprovalOperation{
+			ResourceType: "subscriber",
+			ResourceID:   imsi,
+		},
 		OperationFingerprint: frozen.OperationFingerprint,
 		Reason:               reasonPtr,
 		Before:               frozen.Before,
 		Payload:              frozenToMap(frozen),
 	})
 	if err != nil {
+		// ApprovalCreator.Create already writes strict audit; check for committed=true
+		if awe, ok := err.(*approval.ApprovalWorkflowError); ok && awe.Committed {
+			response.JSON(w, awe.Status, awe.ErrorResponse())
+			return
+		}
 		response.Error(w, http.StatusInternalServerError, "Failed to create approval request", "APPROVAL_CREATE_FAILED")
 		return
 	}
 
-	// Audit the approval creation
-	h.writeStrictAudit(r, audit.WriteAuditInput{
-		Action:   "UPDATE",
-		Module:   "approval",
-		TargetID: "approval:" + approvalDoc.ChangeID,
-		After:    approvalDoc,
-		Result:   "success",
-	}, p, freshRole)
+	// NO duplicate audit here — ApprovalCreator.Create() already writes strict audit
 
 	response.JSON(w, http.StatusAccepted, map[string]any{
 		"outcome":  "approval_required",
 		"message":  "Approval required before subscriber deletion",
 		"approval": approvalDoc,
 	})
-}
-
-// validateFreshActor loads fresh user state from the DB and returns the normalized role.
-// Returns empty string if user is disabled, locked, or not found.
-func (h *WriteHandler) validateFreshActor(ctx context.Context, p *auth.Principal) (string, error) {
-	if h.userRepo == nil {
-		// No user repo available — fall back to token-only
-		return p.NormalizedRole, nil
-	}
-	identity, err := h.userRepo.FindByUsernameIdentity(ctx, p.Username)
-	if err != nil {
-		return "", err
-	}
-	if identity == nil {
-		return "", nil
-	}
-	// Check user is enabled and not locked
-	if identity.SafeUser.Locked || identity.SafeUser.Status != "active" {
-		return "", nil
-	}
-	// Normalize the DB role
-	dbRole := auth.NormalizeRole(identity.SafeUser.Role)
-	if dbRole == "" {
-		return "", nil
-	}
-	return dbRole, nil
 }
 
 // isExecutable checks if a governance result allows execution.
@@ -423,15 +425,44 @@ func (h *WriteHandler) handleGovernanceError(w http.ResponseWriter, err error) {
 	}
 }
 
-// writeStrictAudit writes a strict audit record. Never rolls back on failure.
-func (h *WriteHandler) writeStrictAudit(r *http.Request, input audit.WriteAuditInput, p *auth.Principal, freshRole string) {
-	input.Actor = audit.ActorInput{
-		Username: p.Username,
-		Role:     freshRole,
+// handleCreateError maps create errors to HTTP responses.
+func (h *WriteHandler) handleCreateError(w http.ResponseWriter, err error) {
+	govErr, ok := err.(*SubscriberGovernanceError)
+	if !ok {
+		response.Error(w, http.StatusInternalServerError, "Internal Server Error", "INTERNAL_ERROR")
+		return
 	}
-	input.Source = &audit.SourceInput{
-		IP:        r.RemoteAddr,
-		UserAgent: r.UserAgent(),
+	switch govErr.Code {
+	case "SUBSCRIBER_EXISTS":
+		response.Error(w, http.StatusConflict, "Subscriber already exists", govErr.Code)
+	case "MSISDN_EXISTS":
+		response.Error(w, http.StatusConflict, "MSISDN already in use", govErr.Code)
+	case "INVALID_PLAN_ID":
+		response.Error(w, http.StatusBadRequest, "Invalid tariff plan ID", govErr.Code)
+	case "OCS_PLAN_NOT_FOUND":
+		response.Error(w, http.StatusNotFound, "Tariff plan not found", govErr.Code)
+	case "OCS_PLAN_DISABLED":
+		response.Error(w, http.StatusConflict, "Tariff plan is disabled", govErr.Code)
+	default:
+		response.Error(w, http.StatusInternalServerError, govErr.Code, govErr.Code)
+	}
+}
+
+// writeStrictAudit writes a strict audit record using proper request context.
+// Uses AuditRequestContext for IP/user-agent extraction (matches Node auditRequestContext).
+// Never rolls back on failure (committed=true semantics).
+func (h *WriteHandler) writeStrictAudit(r *http.Request, input audit.WriteAuditInput, fresh *FreshActor) {
+	input.Actor = audit.ActorInput{
+		Type:     "user",
+		UserID:   fresh.UserID,
+		Username: fresh.Username,
+		Role:     fresh.NormalizedRole,
+	}
+	source, request, reason := audit.AuditRequestContext(r)
+	input.Source = source
+	input.Request = request
+	if input.Reason == "" {
+		input.Reason = reason
 	}
 	// Strict audit: committed=true on failure, never rollback
 	_ = h.auditWriter.WriteStrict(r.Context(), input)
@@ -447,6 +478,7 @@ func frozenToMap(v any) map[string]any {
 
 // CreateSubscriberBody is the request body for POST /api/subscribers.
 type CreateSubscriberBody struct {
-	Imsi string `json:"imsi"`
-	// Additional fields TBD
+	Imsi   string  `json:"imsi"`
+	PlanId *string `json:"planId,omitempty"`
+	Msisdn *string `json:"msisdn,omitempty"`
 }

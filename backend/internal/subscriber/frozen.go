@@ -321,17 +321,73 @@ func deepCopyBsonM(m bson.M) bson.M {
 	return out
 }
 
+// stableJSON produces a canonical JSON string with recursively sorted object keys.
+// Matches Node stable() + JSON.stringify() exactly.
 func stableJSON(v any) string {
-	data, _ := json.Marshal(v)
+	data, _ := json.Marshal(stable(v))
 	return string(data)
 }
 
-func hashOperation(operation, imsi string, before, after any) string {
-	parts := []string{operation, imsi, stableJSON(before)}
-	if after != nil {
-		parts = append(parts, stableJSON(after))
+// stable recursively sorts object keys to produce a canonical representation.
+// Matches Node stable() function exactly: objects sorted by keys, arrays in order,
+// primitives via standard JSON serialization.
+func stable(value any) any {
+	if value == nil {
+		return nil
 	}
-	h := sha256.Sum256([]byte(strings.Join(parts, "|")))
+	// Check for map types (bson.M, map[string]any, etc.)
+	switch m := value.(type) {
+	case map[string]any:
+		keys := make([]string, 0, len(m))
+		for k := range m {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		result := make(map[string]any, len(m))
+		for _, k := range keys {
+			result[k] = stable(m[k])
+		}
+		return result
+	case bson.M:
+		keys := make([]string, 0, len(m))
+		for k := range m {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		result := make(map[string]any, len(m))
+		for _, k := range keys {
+			result[k] = stable(m[k])
+		}
+		return result
+	case []any:
+		result := make([]any, len(m))
+		for i, item := range m {
+			result[i] = stable(item)
+		}
+		return result
+	case bson.A:
+		result := make([]any, len(m))
+		for i, item := range m {
+			result[i] = stable(item)
+		}
+		return result
+	default:
+		return value
+	}
+}
+
+// hashOperation computes SHA256(stable({operation, imsi, before, after})).
+// Matches Node hash({ operation, imsi, before, after }) exactly.
+func hashOperation(operation, imsi string, before, after any) string {
+	obj := map[string]any{
+		"operation": operation,
+		"imsi":      imsi,
+		"before":    before,
+	}
+	if after != nil {
+		obj["after"] = after
+	}
+	h := sha256.Sum256([]byte(stableJSON(obj)))
 	return fmt.Sprintf("%x", h)
 }
 
