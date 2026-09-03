@@ -191,6 +191,12 @@ func main() {
 	mux.Handle("GET /api/search", authMiddleware(http.HandlerFunc(subscriberHandler.Search)))
 	mux.Handle("POST /api/subscribers/batch/precheck", authMiddleware(http.HandlerFunc(subscriberHandler.BatchPrecheck)))
 
+	// Subscriber write endpoints (governance: super_admin→DIRECT, operator→APPROVAL)
+	subscriberWriteHandler := subscriber.NewWriteHandler(subscriberRepo, limiter, userRepo, approvalCreator, auditWriter)
+	mux.Handle("POST /api/subscribers", authMiddleware(http.HandlerFunc(subscriberWriteHandler.Create)))
+	mux.Handle("PUT /api/subscribers/{imsi}", authMiddleware(http.HandlerFunc(subscriberWriteHandler.Update)))
+	mux.Handle("DELETE /api/subscribers/{imsi}", authMiddleware(http.HandlerFunc(subscriberWriteHandler.Delete)))
+
 	// Auth/User reads
 	mux.Handle("GET /api/auth/me", authMiddleware(http.HandlerFunc(userHandler.AuthMe)))
 	mux.Handle("GET /api/auth/permissions", authMiddleware(http.HandlerFunc(userHandler.AuthPermissions)))

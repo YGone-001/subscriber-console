@@ -7,6 +7,8 @@ import (
 	"github.com/YGone-001/subscriber-console/backend/internal/user"
 )
 
+func ptrString(s string) *string { return &s }
+
 // ── Fake User Lookup ────────────────────────────────────────────────────────
 
 type fakeUserLookup struct {
@@ -163,7 +165,7 @@ func TestAccessRequest_DocumentShape(t *testing.T) {
 			ResourceType: "user",
 			ResourceID:   "alice",
 		},
-		Reason: "I need operator access for my work",
+		Reason: ptrString("I need operator access for my work"),
 		Before: map[string]interface{}{
 			"role":   "viewer",
 			"status": "active",

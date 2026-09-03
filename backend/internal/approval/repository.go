@@ -440,6 +440,10 @@ func escapeRegex(s string) string {
 
 // CreateApprovalInput holds the data for creating a new approval request.
 // This is the internal governance foundation input — not specific to ACCESS_REQUEST.
+// Reason uses *string for nullish semantics:
+//   - nil = absent, fallback to payload.reason if string
+//   - non-nil empty string = explicitly empty, no fallback
+//   - non-nil non-empty = use as-is
 type CreateApprovalInput struct {
 	Action               string
 	Requester            string
@@ -450,8 +454,9 @@ type CreateApprovalInput struct {
 	Description          string
 	Operation            *ApprovalOperation
 	OperationFingerprint string
-	Reason               string
+	Reason               *string
 	TicketID             string
+	MaintenanceWindow    *ApprovalMaintenanceWindow
 	Before               interface{}
 	After                interface{}
 	Payload              map[string]interface{}
@@ -477,7 +482,7 @@ func (r *Repository) nextChangeId(ctx context.Context, now time.Time) (string, e
 		return "", &ApprovalWorkflowError{Code: "APPROVAL_SEQUENCE_UNAVAILABLE", Status: http.StatusServiceUnavailable}
 	}
 
-	// Validate sequence value
+	// Validate sequence value: must be 1 <= value <= Number.MAX_SAFE_INTEGER (2^53 - 1)
 	seqVal := int64(0)
 	switch v := result["value"].(type) {
 	case int32:
@@ -487,7 +492,8 @@ func (r *Repository) nextChangeId(ctx context.Context, now time.Time) (string, e
 	default:
 		return "", &ApprovalWorkflowError{Code: "APPROVAL_SEQUENCE_UNAVAILABLE", Status: http.StatusServiceUnavailable}
 	}
-	if seqVal < 1 {
+	const maxSafeInteger int64 = 9007199254740991 // Number.MAX_SAFE_INTEGER
+	if seqVal < 1 || seqVal > maxSafeInteger {
 		return "", &ApprovalWorkflowError{Code: "APPROVAL_SEQUENCE_UNAVAILABLE", Status: http.StatusServiceUnavailable}
 	}
 
@@ -497,7 +503,13 @@ func (r *Repository) nextChangeId(ctx context.Context, now time.Time) (string, e
 
 // CreateApprovalRequest creates a new approval document and inserts it.
 // Returns the normalized approval document.
+// Validates action before insertion. Unknown actions are rejected.
 func (r *Repository) CreateApprovalRequest(ctx context.Context, input CreateApprovalInput) (*ApprovalDocument, error) {
+	// Validate action before any sequence allocation or insert
+	if !IsSupportedApprovalAction(input.Action) {
+		return nil, &ApprovalWorkflowError{Code: "INVALID_APPROVAL_ACTION", Status: http.StatusBadRequest}
+	}
+
 	now := time.Now().UTC()
 	timestamp := formatISO8601Millis(now)
 	id := audit.GenerateUUID()
@@ -505,7 +517,7 @@ func (r *Repository) CreateApprovalRequest(ctx context.Context, input CreateAppr
 
 	riskAssessment := AssessApprovalRisk(input.Action)
 
-	// Operation fallback: derive from targetId if absent
+	// Operation fallback: derive from targetId if absent, with sanitization
 	operation := ApprovalOperation{}
 	if input.Operation != nil {
 		operation = ApprovalOperation{
@@ -514,22 +526,22 @@ func (r *Repository) CreateApprovalRequest(ctx context.Context, input CreateAppr
 		}
 	} else {
 		operation = ApprovalOperation{
-			ResourceType: resourceTypeFromTarget(input.TargetID),
-			ResourceID:   input.TargetID,
+			ResourceType: audit.SanitizeText(resourceTypeFromTarget(input.TargetID)),
+			ResourceID:   audit.SanitizeText(input.TargetID),
 		}
 	}
 
-	// Reason selection: input.reason ?? payload.reason (if string) ?? ""
-	reason := input.Reason
-	if reason == "" {
-		if pr, ok := input.Payload["reason"].(string); ok {
-			reason = pr
-		}
+	// Reason nullish semantics:
+	// nil = absent → fallback to payload.reason if string
+	// non-nil "" = explicitly empty → no fallback, omit
+	// non-nil non-empty → use as-is
+	reason := ""
+	if input.Reason != nil {
+		reason = strings.TrimSpace(*input.Reason)
+	} else if pr, ok := input.Payload["reason"].(string); ok {
+		reason = strings.TrimSpace(pr)
 	}
-	reason = audit.SanitizeText(strings.TrimSpace(reason))
-	if reason == "" {
-		reason = "" // omitted below
-	}
+	reason = audit.SanitizeText(reason)
 
 	changeId, err := r.nextChangeId(ctx, now)
 	if err != nil {
@@ -541,6 +553,9 @@ func (r *Repository) CreateApprovalRequest(ctx context.Context, input CreateAppr
 	if title == "" {
 		title = audit.SanitizeText(input.Summary)
 	}
+
+	// Sanitize requester context — only keep safe fields
+	sanitizedRequesterContext := sanitizeRequesterContext(input.RequesterContext)
 
 	doc := bson.M{
 		"id":                   id,
@@ -557,7 +572,7 @@ func (r *Repository) CreateApprovalRequest(ctx context.Context, input CreateAppr
 			"policyId": riskAssessment.PolicyID,
 		},
 		"requester":        audit.SanitizeText(input.Requester),
-		"requesterContext": input.RequesterContext,
+		"requesterContext": sanitizedRequesterContext,
 		"targetId":         audit.SanitizeText(input.TargetID),
 		"summary":          audit.SanitizeText(input.Summary),
 		"ticketId":         audit.SanitizeText(input.TicketID),
@@ -586,6 +601,13 @@ func (r *Repository) CreateApprovalRequest(ctx context.Context, input CreateAppr
 	if input.ExpiresAt != "" {
 		doc["expiresAt"] = input.ExpiresAt
 	}
+	if input.MaintenanceWindow != nil {
+		doc["maintenanceWindow"] = bson.M{
+			"start":    audit.SanitizeText(input.MaintenanceWindow.Start),
+			"end":      audit.SanitizeText(input.MaintenanceWindow.End),
+			"timeZone": audit.SanitizeText(input.MaintenanceWindow.TimeZone),
+		}
+	}
 
 	_, err = r.approvals.InsertOne(ctx, doc)
 	if err != nil {
@@ -595,6 +617,21 @@ func (r *Repository) CreateApprovalRequest(ctx context.Context, input CreateAppr
 	// Normalize and return
 	approval := normalizeApproval(doc)
 	return approval, nil
+}
+
+// sanitizeRequesterContext preserves only safe fields from the requester context.
+// Prevents arbitrary map extension. Matches Node safe requester context.
+func sanitizeRequesterContext(actor *GovernanceActor) *GovernanceActor {
+	if actor == nil {
+		return nil
+	}
+	return &GovernanceActor{
+		Type:        audit.SanitizeText(actor.Type),
+		UserID:      audit.SanitizeText(actor.UserID),
+		Username:    audit.SanitizeText(actor.Username),
+		DisplayName: audit.SanitizeText(actor.DisplayName),
+		Role:        audit.SanitizeText(actor.Role),
+	}
 }
 
 // GetPendingAccessRequest finds a pending ACCESS_REQUEST for the given requester.

@@ -109,42 +109,50 @@ type ExecutionError struct {
 	Message string `json:"message"`
 }
 
+// ApprovalMaintenanceWindow represents a maintenance window for an approval.
+type ApprovalMaintenanceWindow struct {
+	Start    string `json:"start"`
+	End      string `json:"end"`
+	TimeZone string `json:"timeZone,omitempty"`
+}
+
 // ApprovalDocument is the complete approval representation returned by the API.
 // Matches Node ApprovalDocument shape exactly.
 type ApprovalDocument struct {
-	ID                   string                 `json:"id"`
-	ChangeID             string                 `json:"changeId,omitempty"`
-	Title                string                 `json:"title"`
-	Description          string                 `json:"description,omitempty"`
-	Action               string                 `json:"action"`
-	Status               ApprovalStatus         `json:"status"`
-	Operation            ApprovalOperation      `json:"operation"`
-	OperationFingerprint string                 `json:"operationFingerprint,omitempty"`
-	RiskLevel            RiskLevel              `json:"riskLevel"`
-	RiskAssessment       RiskAssessment         `json:"riskAssessment"`
-	Requester            string                 `json:"requester"`
-	RequesterContext     *GovernanceActor       `json:"requesterContext,omitempty"`
-	Reviewer             string                 `json:"reviewer,omitempty"`
-	ReviewerContext      *GovernanceActor       `json:"reviewerContext,omitempty"`
-	TargetID             string                 `json:"targetId"`
-	Summary              string                 `json:"summary"`
-	Reason               string                 `json:"reason,omitempty"`
-	Note                 string                 `json:"note,omitempty"`
-	TicketID             string                 `json:"ticketId,omitempty"`
-	Before               interface{}            `json:"before,omitempty"`
-	After                interface{}            `json:"after,omitempty"`
-	Payload              map[string]interface{} `json:"payload"`
-	Decision             *ApprovalDecision      `json:"decision,omitempty"`
-	Execution            *ApprovalExecution     `json:"execution,omitempty"`
-	Events               []GovernanceEvent      `json:"events"`
-	Result               interface{}            `json:"result,omitempty"`
-	Error                string                 `json:"error,omitempty"`
-	CreatedAt            string                 `json:"createdAt"`
-	ReviewedAt           string                 `json:"reviewedAt,omitempty"`
-	ExecutedAt           string                 `json:"executedAt,omitempty"`
-	UpdatedAt            string                 `json:"updatedAt"`
-	ExpiresAt            string                 `json:"expiresAt,omitempty"`
-	LegacyStatus         string                 `json:"legacyStatus,omitempty"`
+	ID                   string                     `json:"id"`
+	ChangeID             string                     `json:"changeId,omitempty"`
+	Title                string                     `json:"title"`
+	Description          string                     `json:"description,omitempty"`
+	Action               string                     `json:"action"`
+	Status               ApprovalStatus             `json:"status"`
+	Operation            ApprovalOperation          `json:"operation"`
+	OperationFingerprint string                     `json:"operationFingerprint,omitempty"`
+	RiskLevel            RiskLevel                  `json:"riskLevel"`
+	RiskAssessment       RiskAssessment             `json:"riskAssessment"`
+	Requester            string                     `json:"requester"`
+	RequesterContext     *GovernanceActor           `json:"requesterContext,omitempty"`
+	Reviewer             string                     `json:"reviewer,omitempty"`
+	ReviewerContext      *GovernanceActor           `json:"reviewerContext,omitempty"`
+	TargetID             string                     `json:"targetId"`
+	Summary              string                     `json:"summary"`
+	Reason               string                     `json:"reason,omitempty"`
+	Note                 string                     `json:"note,omitempty"`
+	TicketID             string                     `json:"ticketId,omitempty"`
+	MaintenanceWindow    *ApprovalMaintenanceWindow `json:"maintenanceWindow,omitempty"`
+	Before               interface{}                `json:"before,omitempty"`
+	After                interface{}                `json:"after,omitempty"`
+	Payload              map[string]interface{}     `json:"payload"`
+	Decision             *ApprovalDecision          `json:"decision,omitempty"`
+	Execution            *ApprovalExecution         `json:"execution,omitempty"`
+	Events               []GovernanceEvent          `json:"events"`
+	Result               interface{}                `json:"result,omitempty"`
+	Error                string                     `json:"error,omitempty"`
+	CreatedAt            string                     `json:"createdAt"`
+	ReviewedAt           string                     `json:"reviewedAt,omitempty"`
+	ExecutedAt           string                     `json:"executedAt,omitempty"`
+	UpdatedAt            string                     `json:"updatedAt"`
+	ExpiresAt            string                     `json:"expiresAt,omitempty"`
+	LegacyStatus         string                     `json:"legacyStatus,omitempty"`
 }
 
 // ApprovalActionEligibility represents what the current actor can do with an approval.

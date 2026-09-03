@@ -454,15 +454,16 @@ func (h *Handler) CreateAccessRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Fresh account validation — revalidate against app_users
+	// Fresh account validation at mutation boundary — revalidate against app_users
 	identity, err := h.users.FindByUsernameIdentity(r.Context(), p.Username)
 	if err != nil || identity == nil {
-		response.Error(w, http.StatusForbidden, "ACCOUNT_NOT_ELIGIBLE", "ACCOUNT_NOT_ELIGIBLE")
+		// After initial eligibility gate, mutation-boundary failures → 503
+		response.Error(w, http.StatusServiceUnavailable, "APPROVAL_CREATE_FAILED", "APPROVAL_CREATE_FAILED")
 		return
 	}
 	su := &identity.SafeUser
 	if su.Locked || su.Status == "locked" || su.Status != "active" {
-		response.Error(w, http.StatusForbidden, "ACCOUNT_NOT_ELIGIBLE", "ACCOUNT_NOT_ELIGIBLE")
+		response.Error(w, http.StatusServiceUnavailable, "APPROVAL_CREATE_FAILED", "APPROVAL_CREATE_FAILED")
 		return
 	}
 	dbSV := 0
@@ -470,12 +471,18 @@ func (h *Handler) CreateAccessRequest(w http.ResponseWriter, r *http.Request) {
 		dbSV = su.Security.SessionVersion
 	}
 	if int64(dbSV) != p.SessionVersion {
-		response.Error(w, http.StatusForbidden, "ACCOUNT_NOT_ELIGIBLE", "ACCOUNT_NOT_ELIGIBLE")
+		response.Error(w, http.StatusServiceUnavailable, "APPROVAL_CREATE_FAILED", "APPROVAL_CREATE_FAILED")
+		return
+	}
+	// Role consistency check — if role changed between eligibility and mutation
+	dbRole := auth.NormalizeRole(su.Role)
+	if dbRole == "" || dbRole != p.NormalizedRole {
+		response.Error(w, http.StatusServiceUnavailable, "APPROVAL_CREATE_FAILED", "APPROVAL_CREATE_FAILED")
 		return
 	}
 
-	// Build actor context
-	actor := &GovernanceActor{
+	// Build fresh actor from validated account
+	actor := GovernanceActor{
 		Type:     "user",
 		UserID:   identity.MongoID,
 		Username: su.Username,
@@ -483,10 +490,11 @@ func (h *Handler) CreateAccessRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Build ACCESS_REQUEST document
+	reasonPtr := reason
 	input := CreateApprovalInput{
 		Action:           "ACCESS_REQUEST",
 		Requester:        su.Username,
-		RequesterContext: actor,
+		RequesterContext: &actor,
 		TargetID:         su.Username,
 		Summary:          "Request viewer to operator access",
 		Title:            "Request viewer to operator access",
@@ -494,7 +502,7 @@ func (h *Handler) CreateAccessRequest(w http.ResponseWriter, r *http.Request) {
 			ResourceType: "user",
 			ResourceID:   su.Username,
 		},
-		Reason: reason,
+		Reason: &reasonPtr,
 		Before: map[string]interface{}{
 			"role":   "viewer",
 			"status": su.Status,
@@ -510,7 +518,7 @@ func (h *Handler) CreateAccessRequest(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	approval, err := h.creator.Create(r, p, input)
+	approval, err := h.creator.Create(r, actor, input)
 	if err != nil {
 		if awe, ok := err.(*ApprovalWorkflowError); ok {
 			if awe.Committed {

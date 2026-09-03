@@ -1,13 +1,21 @@
 import { NextResponse } from 'next/server';
 import { logAudit } from '@/lib/audit';
 import { requireAuth, requireCapability } from '@/lib/authz';
+import { isSuperAdmin } from '@/lib/permissions';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import {
   findSubscriberLegacyState,
 } from '@/server/repositories/subscriberRepository';
+import { getUser } from '@/server/repositories/userRepository';
 import { validateImsi, validateSubscriberUpdatePayload } from '@/lib/subscriberValidation';
 import { createApprovalRequest } from '@/server/repositories/approvalRepository';
-import { prepareFrozenSubscriberDelete, prepareFrozenSubscriberUpdate, SubscriberGovernanceError } from '@/server/subscriberSingleGovernance';
+import {
+  prepareFrozenSubscriberDelete,
+  prepareFrozenSubscriberUpdate,
+  executeFrozenSubscriberUpdate,
+  executeFrozenSubscriberDelete,
+  SubscriberGovernanceError,
+} from '@/server/subscriberSingleGovernance';
 import { evaluateSubscriberOperation, SUBSCRIBER_OPERATIONS } from '@/server/subscriberGovernanceRegistry';
 
 export const dynamic = 'force-dynamic';
@@ -54,7 +62,22 @@ export async function DELETE(request: Request, { params }: RouteContext) {
   try {
     const policy = evaluateSubscriberOperation(SUBSCRIBER_OPERATIONS.DELETE);
     if (!policy.executable) return NextResponse.json({ error: 'OPERATION_NOT_EXECUTABLE' }, { status: 409 });
+
     const frozen = await prepareFrozenSubscriberDelete(imsi);
+
+    // Fresh actor validation for governance decision
+    const freshAccount = await getUser(auth.auth.user);
+    const freshRole = freshAccount?.role || auth.auth.role;
+    const directExecution = isSuperAdmin(freshRole);
+
+    if (directExecution) {
+      // Super Admin: DIRECT_GOVERNED — execute immediately, no approval
+      await executeFrozenSubscriberDelete(frozen);
+      logAudit('DELETE', imsi, frozen.before, { deleted: true, imsi }, request);
+      return NextResponse.json({ outcome: 'executed', message: 'Subscriber deleted successfully', imsi }, { status: 200 });
+    }
+
+    // Normal operator: APPROVAL_GOVERNED — create approval
     const approval = await createApprovalRequest({
       action: 'SUBSCRIBER_DELETE', requester: auth.auth.user, targetId: imsi,
       summary: `Delete subscriber ${imsi}`, operation: { resourceType: 'subscriber', resourceId: imsi },
@@ -87,11 +110,26 @@ export async function PUT(request: Request, { params }: RouteContext) {
     if (!validation.ok) return NextResponse.json({ error: validation.error }, { status: 400 });
     const policy = evaluateSubscriberOperation(SUBSCRIBER_OPERATIONS.UPDATE);
     if (!policy.executable) return NextResponse.json({ error: 'OPERATION_NOT_EXECUTABLE' }, { status: 409 });
+
     const frozen = await prepareFrozenSubscriberUpdate(imsi, {
       sub4G: body.sub4G,
       auth4G: body.auth4G,
       ocsTraffic: body.ocsTraffic,
     });
+
+    // Fresh actor validation for governance decision
+    const freshAccount = await getUser(auth.auth.user);
+    const freshRole = freshAccount?.role || auth.auth.role;
+    const directExecution = isSuperAdmin(freshRole);
+
+    if (directExecution) {
+      // Super Admin: DIRECT_GOVERNED — execute immediately, no approval
+      const result = await executeFrozenSubscriberUpdate(frozen);
+      logAudit('UPDATE', imsi, frozen.before, result, request);
+      return NextResponse.json({ outcome: 'executed', message: 'Subscriber updated successfully', imsi }, { status: 200 });
+    }
+
+    // Normal operator: APPROVAL_GOVERNED — create approval
     const approval = await createApprovalRequest({
       action: 'SUBSCRIBER_UPDATE', requester: auth.auth.user, targetId: imsi,
       summary: `Update governed subscriber configuration for ${imsi}`,

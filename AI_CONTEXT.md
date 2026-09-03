@@ -231,7 +231,7 @@ Preserve exact Node key/limit/window/headers/messages.
 Current write invariant:
 
 ```text
-Business-domain writes by Go = NONE
+Business-domain writes by Go = subscriber UPDATE/DELETE handlers exist (governance: super_admin→DIRECT, operator→APPROVAL), ACTUALLY_ROUTED=0 (not Nginx-routed)
 Infrastructure writes = app_rate_limits (allowed)
 Governance writes = app_approvals (CAS transitions + ACCESS_REQUEST creation, Strict audit)
 Sequence writes = app_sequences (approval change ID generation)
