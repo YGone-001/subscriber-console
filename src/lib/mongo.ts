@@ -17,7 +17,7 @@ export function mongoDbName(): string {
 }
 
 export function xcloudDbName(): string {
-  return process.env.MONGODB_XCLOUD_DB || process.env.MONGODB_DB || DEFAULT_XCLOUD_DB;
+  return process.env.MONGODB_XCLOUD_DB || DEFAULT_XCLOUD_DB;
 }
 
 export function appDbName(): string {

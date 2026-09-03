@@ -18,8 +18,8 @@ jobs:
     name: Lint, typecheck, test, and build
     runs-on: ubuntu-latest
     env:
-      MONGODB_URI: mongodb://127.0.0.1:27017/open5gs
-      MONGODB_DB: open5gs
+      MONGODB_URI: mongodb://127.0.0.1:27017/xcloud
+      MONGODB_XCLOUD_DB: xcloud
       JWT_SECRET: ci-only-placeholder-secret-with-at-least-32-bytes
       INITIAL_ADMIN_PASSWORD: ChangeMe@2026
     steps:

@@ -7,7 +7,7 @@ const { loadEnvConfig } = nextEnv;
 loadEnvConfig(process.cwd());
 
 const uri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/xcloud';
-const xcloudDbName = process.env.MONGODB_XCLOUD_DB || process.env.MONGODB_DB || 'xcloud';
+const xcloudDbName = process.env.MONGODB_XCLOUD_DB || 'xcloud';
 const appDbName = process.env.MONGODB_APP_DB || 'xcloud_ops';
 const startedAt = new Date();
 const createdIndexes = [];
@@ -525,7 +525,7 @@ ensureIndexes()
       maintenanceActions,
       error: errorSummary(error),
       recommendations: [
-        'Confirm MONGODB_URI, MONGODB_DB, and MONGODB_APP_DB point to the intended databases.',
+        'Confirm MONGODB_URI, MONGODB_XCLOUD_DB, and MONGODB_APP_DB point to the intended databases.',
         'Check MongoDB connectivity and credentials from the application host.',
         'Rerun npm run mongo:init after connectivity or permission issues are fixed.',
       ],

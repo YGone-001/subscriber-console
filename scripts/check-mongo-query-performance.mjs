@@ -15,7 +15,7 @@ const slowMsArg = process.argv.find((arg) => arg.startsWith('--slow-ms='));
 const sampleImsiPrefix = sampleImsiPrefixArg?.split('=')[1] || process.env.MONGO_PERF_IMSI_PREFIX || '';
 const slowMs = Number(slowMsArg?.split('=')[1] || process.env.MONGO_PERF_SLOW_MS || 250);
 const mongoUri = process.env.MONGODB_URI || DEFAULT_MONGODB_URI;
-const dbName = process.env.MONGODB_XCLOUD_DB || process.env.MONGODB_DB || DEFAULT_MONGODB_DB;
+const dbName = process.env.MONGODB_XCLOUD_DB || DEFAULT_MONGODB_DB;
 const appDbName = process.env.MONGODB_APP_DB || 'xcloud_ops';
 const startedAt = new Date();
 
@@ -300,7 +300,7 @@ main().catch(async (error) => {
     allowCollscan,
     error: errorSummary(error),
     recommendations: [
-      'Confirm MONGODB_URI, MONGODB_DB, and MONGODB_APP_DB point to the intended databases.',
+      'Confirm MONGODB_URI, MONGODB_XCLOUD_DB, and MONGODB_APP_DB point to the intended databases.',
       'Run npm run mongo:init if query plans indicate missing indexes.',
       'Use -- --json when collecting machine-readable reports in automation.',
     ],

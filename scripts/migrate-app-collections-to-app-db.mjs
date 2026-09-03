@@ -15,7 +15,7 @@ const sourceArg = process.argv.find((arg) => arg.startsWith('--source-db='));
 const confirmSourceArg = process.argv.find((arg) => arg.startsWith('--confirm-source-db='));
 const confirmedSourceDb = confirmSourceArg?.split('=')[1];
 const mongoUri = process.env.MONGODB_URI || DEFAULT_MONGODB_URI;
-const defaultSourceDbName = process.env.MONGODB_XCLOUD_DB || process.env.MONGODB_DB || 'xcloud';
+const defaultSourceDbName = process.env.MONGODB_XCLOUD_DB || 'xcloud';
 const sourceDbName = sourceArg?.split('=')[1] || process.env.MONGODB_APP_SOURCE_DB || defaultSourceDbName;
 const appDbName = process.env.MONGODB_APP_DB || 'xcloud_ops';
 const startedAt = new Date();
@@ -175,7 +175,7 @@ main()
       durationMs: Date.now() - startedAt.getTime(),
       error: errorSummary(error),
       recommendations: [
-        'Confirm MONGODB_URI, MONGODB_DB, and MONGODB_APP_DB point to the intended databases.',
+        'Confirm MONGODB_URI, MONGODB_XCLOUD_DB, and MONGODB_APP_DB point to the intended databases.',
         'Run without --delete-source first if you want a copy-only verification pass.',
         `Use --delete-source --confirm-source-db=${sourceDbName} --confirm-app-db=${appDbName} only when you are ready to remove old app_* collections from the source database.`,
       ],
