@@ -74,10 +74,10 @@
 | API | Method | Path | Current Owner | Future Owner | Shadow Allowed | Notes |
 |-----|--------|------|---------------|--------------|----------------|-------|
 | Approval create | POST | `/api/approvals` | Next.js | Go | NEVER | Approval creation |
-| Legacy approval compat | POST | `/api/approvals/:id` | **Go** | Go | NEVER | Compat wrapper, dispatches to approve/reject |
-| Approval approve | POST | `/api/approvals/:id/approve` | Next.js | Go | NEVER | CAS transition |
-| Approval reject | POST | `/api/approvals/:id/reject` | Next.js | Go | NEVER | CAS transition |
-| Approval cancel | POST | `/api/approvals/:id/cancel` | Next.js | Go | NEVER | CAS transition |
+| Legacy approval compat | POST | `/api/approvals/:id` | **Go** | Go | NEVER | Compat wrapper — dispatches to approve/reject, retained for legacy callers |
+| Approval approve | POST | `/api/approvals/:id/approve` | **Go** | Go | NEVER | CAS transition — explicit decision endpoint |
+| Approval reject | POST | `/api/approvals/:id/reject` | **Go** | Go | NEVER | CAS transition — explicit decision endpoint |
+| Approval cancel | POST | `/api/approvals/:id/cancel` | **Go** | Go | NEVER | CAS transition — explicit decision endpoint |
 | Approval execute | POST | `/api/approvals/:id/execute` | Next.js | Go | NEVER | Executor dispatch |
 
 ### Phase 4 — Subscriber + Profile Writes

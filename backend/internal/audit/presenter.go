@@ -64,40 +64,14 @@ func sanitizeRecord(rec *AuditLogRecord) {
 		rec.Actor = sanitizeAuditText(s)
 	}
 
-	// ActorContext: sanitize known fields
-	if m, ok := rec.ActorContext.(map[string]interface{}); ok {
-		cleaned := map[string]interface{}{}
-		if v, ok := m["type"].(string); ok {
-			cleaned["type"] = sanitizeAuditText(v)
-		}
-		if v, ok := m["userId"].(string); ok {
-			cleaned["userId"] = sanitizeAuditText(v)
-		}
-		if v, ok := m["username"].(string); ok {
-			cleaned["username"] = sanitizeAuditText(v)
-		}
-		if v, ok := m["displayName"].(string); ok {
-			cleaned["displayName"] = sanitizeAuditText(v)
-		}
-		if v, ok := m["role"].(string); ok {
-			cleaned["role"] = sanitizeAuditText(v)
-		}
-		rec.ActorContext = cleaned
+	// ActorContext: preserve only safe known fields, sanitized
+	if m := toMap(rec.ActorContext); m != nil {
+		rec.ActorContext = sanitizeKnownFields(m, []string{"type", "userId", "username", "displayName", "role"})
 	}
 
-	// Resource: sanitize known fields
-	if m, ok := rec.Resource.(map[string]interface{}); ok {
-		cleaned := map[string]interface{}{}
-		if v, ok := m["type"].(string); ok {
-			cleaned["type"] = sanitizeAuditText(v)
-		}
-		if v, ok := m["id"].(string); ok {
-			cleaned["id"] = sanitizeAuditText(v)
-		}
-		if v, ok := m["name"].(string); ok {
-			cleaned["name"] = sanitizeAuditText(v)
-		}
-		rec.Resource = cleaned
+	// Resource: preserve only safe known fields, sanitized
+	if m := toMap(rec.Resource); m != nil {
+		rec.Resource = sanitizeKnownFields(m, []string{"type", "id", "name"})
 	}
 
 	// Source: sanitize known fields
@@ -108,34 +82,14 @@ func sanitizeRecord(rec *AuditLogRecord) {
 		}
 	}
 
-	// Request: sanitize known fields
-	if m, ok := rec.Request.(map[string]interface{}); ok {
-		cleaned := map[string]interface{}{}
-		if v, ok := m["method"].(string); ok {
-			cleaned["method"] = sanitizeAuditText(v)
-		}
-		if v, ok := m["path"].(string); ok {
-			cleaned["path"] = sanitizeAuditText(v)
-		}
-		if v, ok := m["requestId"].(string); ok {
-			cleaned["requestId"] = sanitizeAuditText(v)
-		}
-		if v, ok := m["correlationId"].(string); ok {
-			cleaned["correlationId"] = sanitizeAuditText(v)
-		}
-		rec.Request = cleaned
+	// Request: preserve only safe known fields, no query/headers/cookies
+	if m := toMap(rec.Request); m != nil {
+		rec.Request = sanitizeKnownFields(m, []string{"method", "path", "requestId", "correlationId"})
 	}
 
-	// Error: sanitize known fields
-	if m, ok := rec.Error.(map[string]interface{}); ok {
-		cleaned := map[string]interface{}{}
-		if v, ok := m["code"].(string); ok {
-			cleaned["code"] = sanitizeAuditText(v)
-		}
-		if v, ok := m["message"].(string); ok {
-			cleaned["message"] = sanitizeAuditText(v)
-		}
-		rec.Error = cleaned
+	// Error: preserve only safe known fields
+	if m := toMap(rec.Error); m != nil {
+		rec.Error = sanitizeKnownFields(m, []string{"code", "message"})
 	}
 
 	// Payload fields: deep sanitize
@@ -148,6 +102,42 @@ func sanitizeRecord(rec *AuditLogRecord) {
 	if rec.Metadata != nil {
 		rec.Metadata = sanitizeAuditPayload(rec.Metadata)
 	}
+}
+
+// toMap converts bson.M, bson.D, map[string]interface{}, or typed struct
+// into a plain map[string]interface{} for safe field extraction.
+// Returns nil if the value is not a recognized map-like type.
+func toMap(v interface{}) map[string]interface{} {
+	if v == nil {
+		return nil
+	}
+	switch m := v.(type) {
+	case map[string]interface{}:
+		return m
+	case bson.M:
+		return m
+	case bson.D:
+		result := make(map[string]interface{}, len(m))
+		for _, elem := range m {
+			result[elem.Key] = elem.Value
+		}
+		return result
+	}
+	return nil
+}
+
+// sanitizeKnownFields extracts only the specified known fields from a map,
+// sanitizing string values. Unknown fields are discarded (safety).
+func sanitizeKnownFields(m map[string]interface{}, fields []string) map[string]interface{} {
+	cleaned := make(map[string]interface{}, len(fields))
+	for _, f := range fields {
+		if v, ok := m[f]; ok {
+			if s, ok := v.(string); ok {
+				cleaned[f] = sanitizeAuditText(s)
+			}
+		}
+	}
+	return cleaned
 }
 
 // applySourceIPAccess applies source-IP masking or reveals full IP.
@@ -324,6 +314,25 @@ func mapBSONToRecord(doc bson.M) AuditLogRecord {
 		}
 		if ua, ok := src["userAgent"].(string); ok {
 			si.UserAgent = ua
+		}
+		if si.IP != "" || si.UserAgent != "" {
+			rec.Source = si
+		}
+	}
+	// Also handle source as bson.D
+	if src, ok := doc["source"].(bson.D); ok {
+		si := &SourceInfo{}
+		for _, elem := range src {
+			switch elem.Key {
+			case "ip":
+				if s, ok := elem.Value.(string); ok {
+					si.IP = s
+				}
+			case "userAgent":
+				if s, ok := elem.Value.(string); ok {
+					si.UserAgent = s
+				}
+			}
 		}
 		if si.IP != "" || si.UserAgent != "" {
 			rec.Source = si

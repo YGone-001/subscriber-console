@@ -197,10 +197,15 @@ func main() {
 	mux.Handle("GET /api/users", authMiddleware(http.HandlerFunc(userHandler.UserList)))
 	mux.Handle("GET /api/users/{username}", authMiddleware(http.HandlerFunc(userHandler.UserDetail)))
 
-	// Approvals (read-only; mutations remain with Node)
+	// Approvals (read + CAS decision transitions; create/execute remain with Node)
 	mux.Handle("GET /api/approvals", authMiddleware(http.HandlerFunc(approvalHandler.List)))
 	mux.Handle("GET /api/approvals/{id}/audit", authMiddleware(http.HandlerFunc(approvalHandler.AuditTrail)))
 	mux.Handle("GET /api/approvals/{id}", authMiddleware(http.HandlerFunc(approvalHandler.Detail)))
+	// Explicit decision endpoints (registered before legacy for specificity)
+	mux.Handle("POST /api/approvals/{id}/approve", authMiddleware(http.HandlerFunc(approvalHandler.Approve)))
+	mux.Handle("POST /api/approvals/{id}/reject", authMiddleware(http.HandlerFunc(approvalHandler.Reject)))
+	mux.Handle("POST /api/approvals/{id}/cancel", authMiddleware(http.HandlerFunc(approvalHandler.Cancel)))
+	// Legacy compatibility: POST /api/approvals/{id}
 	mux.Handle("POST /api/approvals/{id}", authMiddleware(http.HandlerFunc(approvalHandler.Decision)))
 
 	// Catch-all for unmigrated routes

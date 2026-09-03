@@ -150,6 +150,7 @@ Phase 3     IN PROGRESS
 Phase 3A    COMPLETE — security audit evidence writer + authorization denial integration
 Phase 3B    COMPLETE — audit writer lifecycle closeout
 Phase 3C    COMPLETE — approval governance read foundation
+Phase 3D    COMPLETE — explicit approval decision endpoints + contract preflight
 ```
 
 Exact HEAD is intentionally not stored here.
@@ -311,15 +312,23 @@ Phase 3C — 3 (Approval governance read foundation):
 GET /api/approvals
 GET /api/approvals/:id
 GET /api/approvals/:id/audit
-POST /api/approvals/:id
+```
+
+Phase 3D — 4 (Explicit approval decision endpoints):
+
+```text
+POST /api/approvals/:id/approve  — CAS transition, comment required
+POST /api/approvals/:id/reject   — CAS transition, reason required
+POST /api/approvals/:id/cancel   — CAS transition, reason optional
+POST /api/approvals/:id          — legacy compat adapter (dispatches to approve/reject)
 ```
 
 Status:
 
 ```text
-Implemented = 35
-Response Parity = 35
-Cutover Ready = 35
+Implemented = 39
+Response Parity = 39
+Cutover Ready = 39
 Cutover Blocked = 0
 Actually Routed = 0 (Nginx not modified)
 ready + blocked = implemented ✅
@@ -338,8 +347,10 @@ Go owns:
 - Pure state machine (CanTransition)
 - Action eligibility (canApprove/canReject/canCancel/canExecute)
 - Approve/reject/cancel CAS transitions (FindOneAndUpdate only)
-- Legacy POST /api/approvals/:id decision wrapper
+- Explicit POST /api/approvals/:id/approve, /reject, /cancel
+- Legacy POST /api/approvals/:id decision wrapper (compat adapter)
 - Strict audit for transitions
+- ISO 8601 millisecond boundaries for createdAt/todayApproved
 
 Go does NOT own:
 - Approval create
@@ -907,7 +918,8 @@ Phase 3:
 - Governance — IN PROGRESS
 - Approval read foundation — COMPLETE (list/detail/audit)
 - Audit writer lifecycle — COMPLETE (strict lifecycle, bounded close)
-- Approval decision transitions (approve/reject/cancel) — NEXT
+- Explicit decision endpoints — COMPLETE (approve/reject/cancel + legacy compat)
+- Contract preflight — COMPLETE (paramOrElse, ISO8601Millis, presenter bson.D)
 - Approval execute — DEFERRED (crosses into business mutations)
 
 Security audit blocker:

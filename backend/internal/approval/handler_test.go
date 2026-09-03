@@ -1,6 +1,7 @@
 package approval
 
 import (
+	"net/url"
 	"testing"
 	"time"
 )
@@ -137,7 +138,7 @@ func TestParamOrElse(t *testing.T) {
 			wantOK:    false,
 		},
 		{
-			name:      "primary present",
+			name:      "primary present non-empty",
 			params:    map[string][]string{"pageSize": {"50"}},
 			primary:   "pageSize",
 			secondary: "limit",
@@ -145,7 +146,7 @@ func TestParamOrElse(t *testing.T) {
 			wantOK:    true,
 		},
 		{
-			name:      "secondary present",
+			name:      "secondary present, primary absent",
 			params:    map[string][]string{"limit": {"30"}},
 			primary:   "pageSize",
 			secondary: "limit",
@@ -153,20 +154,41 @@ func TestParamOrElse(t *testing.T) {
 			wantOK:    true,
 		},
 		{
-			name:      "primary present empty",
+			// Node: params.get('pageSize') || params.get('limit')
+			// "" is falsy in JS ||, so falls through to limit
+			name:      "primary empty falls through to secondary",
+			params:    map[string][]string{"pageSize": {""}, "limit": {"50"}},
+			primary:   "pageSize",
+			secondary: "limit",
+			wantVal:   "50",
+			wantOK:    true,
+		},
+		{
+			// Both empty: "" || "" → "" (falsy) → ("", false)
+			name:      "both empty",
+			params:    map[string][]string{"pageSize": {""}, "limit": {""}},
+			primary:   "pageSize",
+			secondary: "limit",
+			wantVal:   "",
+			wantOK:    false,
+		},
+		{
+			// Primary empty, secondary absent → ("", false)
+			name:      "primary empty, secondary absent",
 			params:    map[string][]string{"pageSize": {""}},
 			primary:   "pageSize",
 			secondary: "limit",
 			wantVal:   "",
-			wantOK:    true,
+			wantOK:    false,
 		},
 		{
-			name:      "primary empty, secondary present",
-			params:    map[string][]string{"pageSize": {""}, "limit": {"30"}},
+			// Primary absent, secondary empty → ("", false)
+			name:      "primary absent, secondary empty",
+			params:    map[string][]string{"limit": {""}},
 			primary:   "pageSize",
 			secondary: "limit",
 			wantVal:   "",
-			wantOK:    true,
+			wantOK:    false,
 		},
 	}
 	for _, tt := range tests {
@@ -175,6 +197,54 @@ func TestParamOrElse(t *testing.T) {
 			if gotVal != tt.wantVal || gotOK != tt.wantOK {
 				t.Errorf("paramOrElse(%v, %q, %q) = (%q, %v), want (%q, %v)",
 					tt.params, tt.primary, tt.secondary, gotVal, gotOK, tt.wantVal, tt.wantOK)
+			}
+		})
+	}
+}
+
+// TestPageSizeLimitQueryCompat verifies the full query parameter resolution
+// for pageSize || limit and page, matching Node behavior exactly.
+func TestPageSizeLimitQueryCompat(t *testing.T) {
+	tests := []struct {
+		name      string
+		query     string
+		wantPage  int
+		wantPSize int
+	}{
+		// Mandatory spec tests
+		{"?pageSize=25", "pageSize=25", 1, 25},
+		{"?pageSize=&limit=50", "pageSize=&limit=50", 1, 50},
+		{"?pageSize=&limit=", "pageSize=&limit=", 1, 20},
+		{"?limit=30", "limit=30", 1, 30},
+		// pageSize=1.5 selected by || (non-empty), then boundedInt rejects → fallback 20
+		{"?pageSize=1.5&limit=50", "pageSize=1.5&limit=50", 1, 20},
+		// page empty → Number("") = 0 → clamp 1
+		{"?page=", "page=", 1, 20},
+
+		// Additional cases
+		{"no params", "", 1, 20},
+		{"?pageSize=20&limit=50", "pageSize=20&limit=50", 1, 20},
+		{"?page=3&pageSize=10", "page=3&pageSize=10", 3, 10},
+		{"?page=0", "page=0", 1, 20},
+		{"?page=-1", "page=-1", 1, 20},
+		{"?pageSize=0x10", "pageSize=0x10", 1, 16},
+		{"?pageSize=2e1", "pageSize=2e1", 1, 20},
+		{"?pageSize=abc&limit=50", "pageSize=abc&limit=50", 1, 20},
+		{"?pageSize=101", "pageSize=101", 1, 100},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			params, _ := url.ParseQuery(tt.query)
+
+			pageSizeVal, pageSizePresent := paramOrElse(params, "pageSize", "limit")
+			gotPage := boundedIntWithAbsent(params.Get("page"), !params.Has("page"), 1, 100000)
+			gotPSize := boundedIntWithAbsent(pageSizeVal, !pageSizePresent, 20, 100)
+
+			if gotPage != tt.wantPage {
+				t.Errorf("page = %d, want %d (query: %s)", gotPage, tt.wantPage, tt.query)
+			}
+			if gotPSize != tt.wantPSize {
+				t.Errorf("pageSize = %d, want %d (query: %s)", gotPSize, tt.wantPSize, tt.query)
 			}
 		})
 	}
@@ -389,5 +459,70 @@ func TestDateParam(t *testing.T) {
 				tt.checkTime(t, *tm)
 			}
 		})
+	}
+}
+
+// TestFormatISO8601Millis verifies that Mongo comparison boundaries use
+// millisecond format (YYYY-MM-DDTHH:mm:ss.SSSZ), not RFC3339 without millis.
+// This is critical for lexicographic string comparison against stored ISO dates.
+func TestFormatISO8601Millis(t *testing.T) {
+	tests := []struct {
+		name string
+		hour int
+		min  int
+		sec  int
+		nsec int
+		want string
+	}{
+		{"midnight", 0, 0, 0, 0, "2024-01-15T00:00:00.000Z"},
+		{"with millis", 10, 30, 45, 123000000, "2024-01-15T10:30:45.123Z"},
+		{"end of day", 23, 59, 59, 999000000, "2024-01-15T23:59:59.999Z"},
+		{"zero millis", 12, 0, 0, 0, "2024-01-15T12:00:00.000Z"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tm := time.Date(2024, 1, 15, tt.hour, tt.min, tt.sec, tt.nsec, time.UTC)
+			got := formatISO8601Millis(tm)
+			if got != tt.want {
+				t.Errorf("formatISO8601Millis() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestFormatISO8601Millis_FromDateParam verifies that dateParam output,
+// when formatted via formatISO8601Millis, produces millisecond boundaries
+// matching the actual BSON query values used in the repository.
+func TestFormatISO8601Millis_FromDateParam(t *testing.T) {
+	// from=2024-01-15 → 2024-01-15T00:00:00.000Z
+	fromTime, ok := dateParam("2024-01-15", false)
+	if !ok || fromTime == nil {
+		t.Fatal("dateParam failed for from")
+	}
+	fromISO := formatISO8601Millis(*fromTime)
+	if fromISO != "2024-01-15T00:00:00.000Z" {
+		t.Errorf("from boundary = %q, want %q", fromISO, "2024-01-15T00:00:00.000Z")
+	}
+
+	// to=2024-01-15 → 2024-01-15T23:59:59.999Z
+	toTime, ok := dateParam("2024-01-15", true)
+	if !ok || toTime == nil {
+		t.Fatal("dateParam failed for to")
+	}
+	toISO := formatISO8601Millis(*toTime)
+	if toISO != "2024-01-15T23:59:59.999Z" {
+		t.Errorf("to boundary = %q, want %q", toISO, "2024-01-15T23:59:59.999Z")
+	}
+
+	// today boundary: must contain .000Z
+	today := time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC)
+	todayISO := formatISO8601Millis(today)
+	if todayISO != "2024-01-15T00:00:00.000Z" {
+		t.Errorf("todayISO = %q, want %q", todayISO, "2024-01-15T00:00:00.000Z")
+	}
+
+	// Verify NOT RFC3339 without millis
+	if todayISO == "2024-01-15T00:00:00Z" {
+		t.Error("todayISO should NOT be RFC3339 without milliseconds")
 	}
 }

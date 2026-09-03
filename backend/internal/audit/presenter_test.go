@@ -1,6 +1,7 @@
 package audit
 
 import (
+	"fmt"
 	"regexp"
 	"testing"
 
@@ -479,4 +480,299 @@ func TestAuditEventID_Format(t *testing.T) {
 	if record.EventID != expectedEventID {
 		t.Errorf("audit eventId = %q, want %q", record.EventID, expectedEventID)
 	}
+}
+
+// TestPresentRecord_ActorContext_BsonM verifies actorContext as bson.M (map).
+func TestPresentRecord_ActorContext_BsonM(t *testing.T) {
+	doc := bson.M{
+		"id": "log-ac-m",
+		"actorContext": bson.M{
+			"type":        "user",
+			"userId":      "u-1",
+			"username":    "admin",
+			"displayName": "Admin User",
+			"role":        "super_admin",
+			"secret":      "should-be-dropped",
+			"password":    "should-be-dropped",
+		},
+	}
+	rec := PresentRecord(doc, false)
+	m, ok := rec.ActorContext.(map[string]interface{})
+	if !ok {
+		t.Fatalf("ActorContext should be map[string]interface{}, got %T", rec.ActorContext)
+	}
+	if m["type"] != "user" {
+		t.Errorf("type = %v, want user", m["type"])
+	}
+	if m["userId"] != "u-1" {
+		t.Errorf("userId = %v, want u-1", m["userId"])
+	}
+	if m["username"] != "admin" {
+		t.Errorf("username = %v, want admin", m["username"])
+	}
+	if m["displayName"] != "Admin User" {
+		t.Errorf("displayName = %v, want Admin User", m["displayName"])
+	}
+	if m["role"] != "super_admin" {
+		t.Errorf("role = %v, want super_admin", m["role"])
+	}
+	// Unknown fields must be dropped
+	if _, ok := m["secret"]; ok {
+		t.Error("secret field should be dropped from actorContext")
+	}
+	if _, ok := m["password"]; ok {
+		t.Error("password field should be dropped from actorContext")
+	}
+}
+
+// TestPresentRecord_ActorContext_BsonD verifies actorContext as bson.D (ordered).
+func TestPresentRecord_ActorContext_BsonD(t *testing.T) {
+	doc := bson.M{
+		"id": "log-ac-d",
+		"actorContext": bson.D{
+			{Key: "type", Value: "system"},
+			{Key: "userId", Value: "sys-1"},
+			{Key: "username", Value: "system"},
+			{Key: "role", Value: "system"},
+			{Key: "apiKey", Value: "leaked-key-123"},
+		},
+	}
+	rec := PresentRecord(doc, false)
+	m, ok := rec.ActorContext.(map[string]interface{})
+	if !ok {
+		t.Fatalf("ActorContext should be map[string]interface{}, got %T", rec.ActorContext)
+	}
+	if m["type"] != "system" {
+		t.Errorf("type = %v, want system", m["type"])
+	}
+	if m["userId"] != "sys-1" {
+		t.Errorf("userId = %v, want sys-1", m["userId"])
+	}
+	// Unknown fields must be dropped
+	if _, ok := m["apiKey"]; ok {
+		t.Error("apiKey field should be dropped from actorContext")
+	}
+}
+
+// TestPresentRecord_Resource_BsonM verifies resource as bson.M.
+func TestPresentRecord_Resource_BsonM(t *testing.T) {
+	doc := bson.M{
+		"id": "log-res",
+		"resource": bson.M{
+			"type":     "subscriber",
+			"id":       "imsi-123",
+			"name":     "Test Sub",
+			"secret":   "dropped",
+			"password": "dropped",
+			"internal": "dropped",
+		},
+	}
+	rec := PresentRecord(doc, false)
+	m, ok := rec.Resource.(map[string]interface{})
+	if !ok {
+		t.Fatalf("Resource should be map[string]interface{}, got %T", rec.Resource)
+	}
+	if m["type"] != "subscriber" {
+		t.Errorf("type = %v, want subscriber", m["type"])
+	}
+	if m["id"] != "imsi-123" {
+		t.Errorf("id = %v, want imsi-123", m["id"])
+	}
+	if m["name"] != "Test Sub" {
+		t.Errorf("name = %v, want Test Sub", m["name"])
+	}
+	if _, ok := m["secret"]; ok {
+		t.Error("secret field should be dropped from resource")
+	}
+	if _, ok := m["password"]; ok {
+		t.Error("password field should be dropped from resource")
+	}
+	if _, ok := m["internal"]; ok {
+		t.Error("internal field should be dropped from resource")
+	}
+}
+
+// TestPresentRecord_Request_BsonM verifies request as bson.M with no query/headers/cookies.
+func TestPresentRecord_Request_BsonM(t *testing.T) {
+	doc := bson.M{
+		"id": "log-req",
+		"request": bson.M{
+			"method":        "POST",
+			"path":          "/api/subscribers",
+			"requestId":     "req-123",
+			"correlationId": "corr-456",
+			"queryString":   "?secret=token",
+			"headers":       bson.M{"Authorization": "Bearer secret"},
+			"cookies":       bson.M{"auth_token": "jwt-secret"},
+		},
+	}
+	rec := PresentRecord(doc, false)
+	m, ok := rec.Request.(map[string]interface{})
+	if !ok {
+		t.Fatalf("Request should be map[string]interface{}, got %T", rec.Request)
+	}
+	if m["method"] != "POST" {
+		t.Errorf("method = %v, want POST", m["method"])
+	}
+	if m["path"] != "/api/subscribers" {
+		t.Errorf("path = %v, want /api/subscribers", m["path"])
+	}
+	if m["requestId"] != "req-123" {
+		t.Errorf("requestId = %v, want req-123", m["requestId"])
+	}
+	if m["correlationId"] != "corr-456" {
+		t.Errorf("correlationId = %v, want corr-456", m["correlationId"])
+	}
+	// Sensitive fields must be dropped
+	if _, ok := m["queryString"]; ok {
+		t.Error("queryString should be dropped from request")
+	}
+	if _, ok := m["headers"]; ok {
+		t.Error("headers should be dropped from request")
+	}
+	if _, ok := m["cookies"]; ok {
+		t.Error("cookies should be dropped from request")
+	}
+}
+
+// TestPresentRecord_Error_BsonM verifies error as bson.M.
+func TestPresentRecord_Error_BsonM(t *testing.T) {
+	doc := bson.M{
+		"id": "log-err-m",
+		"error": bson.M{
+			"code":    "VALIDATION_ERROR",
+			"message": "Invalid IMSI format",
+			"stack":   "at line 42...",
+			"secret":  "dropped",
+		},
+	}
+	rec := PresentRecord(doc, false)
+	m, ok := rec.Error.(map[string]interface{})
+	if !ok {
+		t.Fatalf("Error should be map[string]interface{}, got %T", rec.Error)
+	}
+	if m["code"] != "VALIDATION_ERROR" {
+		t.Errorf("code = %v, want VALIDATION_ERROR", m["code"])
+	}
+	if m["message"] != "Invalid IMSI format" {
+		t.Errorf("message = %v, want Invalid IMSI format", m["message"])
+	}
+	if _, ok := m["stack"]; ok {
+		t.Error("stack should be dropped from error")
+	}
+	if _, ok := m["secret"]; ok {
+		t.Error("secret should be dropped from error")
+	}
+}
+
+// TestPresentRecord_Error_BsonD verifies error as bson.D (ordered).
+func TestPresentRecord_Error_BsonD(t *testing.T) {
+	doc := bson.M{
+		"id": "log-err-d",
+		"error": bson.D{
+			{Key: "code", Value: "RATE_LIMIT"},
+			{Key: "message", Value: "Too many requests"},
+			{Key: "token", Value: "leaked-token"},
+		},
+	}
+	rec := PresentRecord(doc, false)
+	m, ok := rec.Error.(map[string]interface{})
+	if !ok {
+		t.Fatalf("Error should be map[string]interface{}, got %T", rec.Error)
+	}
+	if m["code"] != "RATE_LIMIT" {
+		t.Errorf("code = %v, want RATE_LIMIT", m["code"])
+	}
+	if m["message"] != "Too many requests" {
+		t.Errorf("message = %v, want Too many requests", m["message"])
+	}
+	if _, ok := m["token"]; ok {
+		t.Error("token should be dropped from error")
+	}
+}
+
+// TestPresentRecord_NestedSecretsInPayloads verifies that secrets in
+// oldData/newData/metadata are scrubbed by the deep sanitizer.
+func TestPresentRecord_NestedSecretsInPayloads(t *testing.T) {
+	doc := bson.M{
+		"id": "log-nested-payload",
+		"oldData": bson.M{
+			"status":   "active",
+			"password": "hunter2",
+			"token":    "jwt-secret-value",
+			"nested": bson.M{
+				"apiKey": "key-123",
+				"safe":   "keep-me",
+			},
+		},
+		"newData": bson.M{
+			"status":  "suspended",
+			"secret":  "new-secret",
+			"api_key": "key-456",
+		},
+		"metadata": bson.M{
+			"source":  "api",
+			"api_key": "meta-key-789",
+			"note":    "safe note",
+		},
+	}
+	rec := PresentRecord(doc, false)
+
+	// oldData should be sanitized — sensitive fields redacted
+	oldJSON := fmt.Sprintf("%v", rec.OldData)
+	if containsSensitive(oldJSON, "hunter2") {
+		t.Error("oldData should not contain raw password")
+	}
+	if containsSensitive(oldJSON, "jwt-secret-value") {
+		t.Error("oldData should not contain raw token")
+	}
+
+	// newData should be sanitized
+	newJSON := fmt.Sprintf("%v", rec.NewData)
+	if containsSensitive(newJSON, "new-secret") {
+		t.Error("newData should not contain raw secret")
+	}
+	if containsSensitive(newJSON, "key-456") {
+		t.Error("newData should not contain raw api_key")
+	}
+
+	// metadata should be sanitized
+	metaJSON := fmt.Sprintf("%v", rec.Metadata)
+	if containsSensitive(metaJSON, "meta-key-789") {
+		t.Error("metadata should not contain raw api_key")
+	}
+}
+
+// TestPresentRecord_Source_BsonD verifies source as bson.D (ordered).
+func TestPresentRecord_Source_BsonD(t *testing.T) {
+	doc := bson.M{
+		"id": "log-src-d",
+		"source": bson.D{
+			{Key: "ip", Value: "10.20.30.40"},
+			{Key: "userAgent", Value: "curl/7.0"},
+		},
+	}
+	rec := PresentRecord(doc, false)
+	if rec.Source == nil {
+		t.Fatal("source should be present")
+	}
+	if rec.Source.IP != "10.20.30.***" {
+		t.Errorf("source.ip = %v, want 10.20.30.***", rec.Source.IP)
+	}
+	if rec.Source.UserAgent != "curl/7.0" {
+		t.Errorf("source.userAgent = %v, want curl/7.0", rec.Source.UserAgent)
+	}
+}
+
+// containsSensitive checks if a string contains a sensitive value verbatim.
+func containsSensitive(s, sensitive string) bool {
+	if sensitive == "" || s == "" {
+		return false
+	}
+	for i := 0; i <= len(s)-len(sensitive); i++ {
+		if s[i:i+len(sensitive)] == sensitive {
+			return true
+		}
+	}
+	return false
 }

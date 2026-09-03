@@ -136,10 +136,10 @@ func (r *Repository) ListApprovals(ctx context.Context, q ListQuery) (*ListResul
 	if q.FromTime != nil || q.ToTime != nil {
 		createdAt := bson.M{}
 		if q.FromTime != nil {
-			createdAt["$gte"] = q.FromTime.UTC().Format(time.RFC3339)
+			createdAt["$gte"] = formatISO8601Millis(*q.FromTime)
 		}
 		if q.ToTime != nil {
-			createdAt["$lte"] = q.ToTime.UTC().Format(time.RFC3339)
+			createdAt["$lte"] = formatISO8601Millis(*q.ToTime)
 		}
 		filter["createdAt"] = createdAt
 	}
@@ -188,7 +188,7 @@ func (r *Repository) ListApprovals(ctx context.Context, q ListQuery) (*ListResul
 	// Summary queries
 	today := time.Now().UTC()
 	today = time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.UTC)
-	todayISO := today.Format(time.RFC3339)
+	todayISO := formatISO8601Millis(today)
 
 	canReviewFilter := withFilter(bson.M{
 		"status": "pending",
@@ -365,11 +365,23 @@ func (r *Repository) ListAuditLogsForApproval(ctx context.Context, approvalID st
 	return logs, nil
 }
 
+// formatISO8601Millis formats a time.Time as an ISO 8601 string with
+// millisecond precision: YYYY-MM-DDTHH:mm:ss.SSSZ.
+// This matches Node's new Date().toISOString() and is the canonical
+// format for Mongo string comparison boundaries.
+func formatISO8601Millis(t time.Time) string {
+	return t.UTC().Format("2006-01-02T15:04:05.000Z")
+}
+
 // approvalAgeHours returns the age of an approval in hours.
 func approvalAgeHours(createdAt string, nowMillis int64) int {
-	t, err := time.Parse(time.RFC3339, createdAt)
+	t, err := time.Parse("2006-01-02T15:04:05.000Z", createdAt)
 	if err != nil {
-		return 0
+		// Fallback: try RFC3339 for backward compat with existing data
+		t, err = time.Parse(time.RFC3339, createdAt)
+		if err != nil {
+			return 0
+		}
 	}
 	createdMillis := t.UnixMilli()
 	if createdMillis >= nowMillis {

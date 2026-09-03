@@ -233,6 +233,160 @@ func (h *Handler) AuditTrail(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// Approve handles POST /api/approvals/{id}/approve
+// Thin HTTP adapter: permission → rate limit → parse body → workflow → response.
+// Canonical field: comment. No legacy "note" fallback for explicit routes.
+func (h *Handler) Approve(w http.ResponseWriter, r *http.Request) {
+	p := auth.PrincipalFromContext(r.Context())
+	if p == nil {
+		response.Error(w, http.StatusUnauthorized, "Unauthorized", "AUTH_INVALID_TOKEN")
+		return
+	}
+
+	if !audit.RequirePermissionWithAudit(w, r, p, "approvals.approve", h.writer) {
+		return
+	}
+
+	if !h.limiter.Enforce(w, r, "approvals:approve:"+p.Username, 40, 60) {
+		return
+	}
+
+	id := extractID(r.URL.Path, "/api/approvals/")
+	id = strings.TrimSuffix(id, "/approve")
+	if id == "" || len(id) > 128 {
+		response.Error(w, http.StatusNotFound, "APPROVAL_NOT_FOUND", "APPROVAL_NOT_FOUND")
+		return
+	}
+
+	// Parse body — malformed JSON → {}
+	var body map[string]interface{}
+	if r.Body != nil {
+		_ = json.NewDecoder(r.Body).Decode(&body)
+	}
+
+	// Canonical field only: comment. No note fallback for explicit routes.
+	comment := toOptionalString(extractField(body, "comment"))
+
+	approval, err := h.workflow.ApproveChange(r, id, p, comment)
+	if err != nil {
+		status, errResp := WorkflowErrorResponse(err)
+		response.JSON(w, status, errResp)
+		return
+	}
+
+	response.JSON(w, http.StatusOK, map[string]interface{}{
+		"message":  "Approval recorded; execution has not started",
+		"approval": approval,
+	})
+}
+
+// Reject handles POST /api/approvals/{id}/reject
+// Thin HTTP adapter: permission → rate limit → parse body → workflow → response.
+// Canonical field: reason. No legacy "note" fallback for explicit routes.
+func (h *Handler) Reject(w http.ResponseWriter, r *http.Request) {
+	p := auth.PrincipalFromContext(r.Context())
+	if p == nil {
+		response.Error(w, http.StatusUnauthorized, "Unauthorized", "AUTH_INVALID_TOKEN")
+		return
+	}
+
+	if !audit.RequirePermissionWithAudit(w, r, p, "approvals.reject", h.writer) {
+		return
+	}
+
+	if !h.limiter.Enforce(w, r, "approvals:reject:"+p.Username, 40, 60) {
+		return
+	}
+
+	id := extractID(r.URL.Path, "/api/approvals/")
+	id = strings.TrimSuffix(id, "/reject")
+	if id == "" || len(id) > 128 {
+		response.Error(w, http.StatusNotFound, "APPROVAL_NOT_FOUND", "APPROVAL_NOT_FOUND")
+		return
+	}
+
+	// Parse body — malformed JSON → {}
+	var body map[string]interface{}
+	if r.Body != nil {
+		_ = json.NewDecoder(r.Body).Decode(&body)
+	}
+
+	// Canonical field only: reason. No note fallback for explicit routes.
+	reason := toOptionalString(extractField(body, "reason"))
+
+	approval, err := h.workflow.RejectChange(r, id, p, reason)
+	if err != nil {
+		status, errResp := WorkflowErrorResponse(err)
+		response.JSON(w, status, errResp)
+		return
+	}
+
+	response.JSON(w, http.StatusOK, map[string]interface{}{
+		"message":  "Approval rejected",
+		"approval": approval,
+	})
+}
+
+// Cancel handles POST /api/approvals/{id}/cancel
+// Thin HTTP adapter: permission → rate limit → parse body → workflow → response.
+// Canonical field: reason (optional). No legacy "note" fallback for explicit routes.
+func (h *Handler) Cancel(w http.ResponseWriter, r *http.Request) {
+	p := auth.PrincipalFromContext(r.Context())
+	if p == nil {
+		response.Error(w, http.StatusUnauthorized, "Unauthorized", "AUTH_INVALID_TOKEN")
+		return
+	}
+
+	if !audit.RequirePermissionWithAudit(w, r, p, "approvals.cancel", h.writer) {
+		return
+	}
+
+	if !h.limiter.Enforce(w, r, "approvals:cancel:"+p.Username, 40, 60) {
+		return
+	}
+
+	id := extractID(r.URL.Path, "/api/approvals/")
+	id = strings.TrimSuffix(id, "/cancel")
+	if id == "" || len(id) > 128 {
+		response.Error(w, http.StatusNotFound, "APPROVAL_NOT_FOUND", "APPROVAL_NOT_FOUND")
+		return
+	}
+
+	// Parse body — malformed JSON → {}
+	var body map[string]interface{}
+	if r.Body != nil {
+		_ = json.NewDecoder(r.Body).Decode(&body)
+	}
+
+	// Canonical field only: reason (optional). No note fallback for explicit routes.
+	reason := toOptionalString(extractField(body, "reason"))
+
+	approval, err := h.workflow.CancelChange(r, id, p, reason)
+	if err != nil {
+		status, errResp := WorkflowErrorResponse(err)
+		response.JSON(w, status, errResp)
+		return
+	}
+
+	response.JSON(w, http.StatusOK, map[string]interface{}{
+		"message":  "Approval cancelled",
+		"approval": approval,
+	})
+}
+
+// extractField extracts a single field from a body map.
+// Returns nil if body is nil or field is missing.
+// Unlike extractNullish, does NOT fall back to a secondary field.
+func extractField(body map[string]interface{}, key string) interface{} {
+	if body == nil {
+		return nil
+	}
+	if val, ok := body[key]; ok {
+		return val
+	}
+	return nil
+}
+
 // Decision handles POST /api/approvals/{id}
 // Legacy compatibility wrapper. New clients use explicit approve/reject endpoints.
 // Matches Node POST handler exactly.
@@ -430,17 +584,17 @@ func clampBoundedInt(n, maxVal int) int {
 	return n
 }
 
-// paramOrElse implements the Node pageSize || limit semantics.
-// Returns the value of the primary key if present (even if empty),
-// otherwise falls back to the secondary key, then to empty string.
-// Also returns whether any parameter was present at all.
-// This ensures that an explicitly empty primary parameter is distinguished
-// from an absent one (matching URLSearchParams.get() which returns null for absent).
+// paramOrElse implements the Node `params.get(primary) || params.get(secondary)` semantics.
+// JavaScript `||` treats empty string as falsy, so an explicitly empty primary
+// value falls through to the secondary key (unlike `??` which only treats null/undefined).
+//
+// Returns the selected value and whether any non-empty parameter was found.
+// When both are empty or absent, returns ("", false).
 func paramOrElse(params map[string][]string, primary, secondary string) (string, bool) {
-	if vs, ok := params[primary]; ok && len(vs) > 0 {
+	if vs, ok := params[primary]; ok && len(vs) > 0 && vs[0] != "" {
 		return vs[0], true
 	}
-	if vs, ok := params[secondary]; ok && len(vs) > 0 {
+	if vs, ok := params[secondary]; ok && len(vs) > 0 && vs[0] != "" {
 		return vs[0], true
 	}
 	return "", false
