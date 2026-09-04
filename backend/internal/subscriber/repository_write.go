@@ -137,42 +137,7 @@ func (r *Repository) UpdateSubscriberFromLegacy(ctx context.Context, imsi string
 		Status: stringPtr("active"),
 	}
 	if payload.OcsTraffic != nil {
-		ocs := payload.OcsTraffic
-		if v, ok := ocs["planId"]; ok && v != nil {
-			if s, ok := v.(string); ok {
-				ocsInput.PlanID = &s
-			}
-		}
-		if v, ok := ocs["total"]; ok && v != nil {
-			if n, ok := toInt64(v); ok {
-				ocsInput.DataTotal = &n
-			}
-		}
-		if v, ok := ocs["available"]; ok && v != nil {
-			if n, ok := toInt64(v); ok {
-				ocsInput.DataAvailable = &n
-			}
-		}
-		if v, ok := ocs["voiceTotal"]; ok && v != nil {
-			if n, ok := toInt64(v); ok {
-				ocsInput.VoiceTotal = &n
-			}
-		}
-		if v, ok := ocs["voiceAvailable"]; ok && v != nil {
-			if n, ok := toInt64(v); ok {
-				ocsInput.VoiceAvailable = &n
-			}
-		}
-		if v, ok := ocs["smsTotal"]; ok && v != nil {
-			if n, ok := toInt64(v); ok {
-				ocsInput.SMSTotal = &n
-			}
-		}
-		if v, ok := ocs["smsAvailable"]; ok && v != nil {
-			if n, ok := toInt64(v); ok {
-				ocsInput.SMSAvailable = &n
-			}
-		}
+		mapOcsTrafficToInput(payload.OcsTraffic, &ocsInput)
 	}
 	if err := r.provisionOcsSubscriber(ctx, ocsInput); err != nil {
 		return nil, &SubscriberGovernanceError{Code: "SUBSCRIBER_UPDATE_PARTIAL_WRITE"}
@@ -220,7 +185,11 @@ func expectedDocumentFilter(doc bson.M) bson.M {
 
 // getTariffPlan validates planId format and returns the plan document.
 // Matches Node getTariffPlanDocument() — uses plan_id (snake_case).
+// For the default plan, creates it if missing (matches Node getOrCreateDefaultPlan).
 func (r *Repository) getTariffPlan(ctx context.Context, planId string) (bson.M, error) {
+	if planId == defaultPlanID {
+		return r.getOrCreateDefaultTariffPlan(ctx)
+	}
 	var plan bson.M
 	err := r.tariffPlans.FindOne(ctx, bson.M{"plan_id": planId}).Decode(&plan)
 	if err != nil {
@@ -230,6 +199,109 @@ func (r *Repository) getTariffPlan(ctx context.Context, planId string) (bson.M, 
 		return nil, fmt.Errorf("get tariff plan %s: %w", planId, err)
 	}
 	return plan, nil
+}
+
+// getOrCreateDefaultTariffPlan returns the default plan, creating it if missing.
+// Matches Node getOrCreateDefaultPlan() exactly.
+// Tolerates duplicate-key race by re-reading after insert failure.
+func (r *Repository) getOrCreateDefaultTariffPlan(ctx context.Context) (bson.M, error) {
+	var plan bson.M
+	err := r.tariffPlans.FindOne(ctx, bson.M{"plan_id": defaultPlanID}).Decode(&plan)
+	if err == nil {
+		return plan, nil
+	}
+	if err != mongo.ErrNoDocuments {
+		return nil, fmt.Errorf("get default tariff plan: %w", err)
+	}
+
+	// Create canonical default plan — matches Node defaultPlan() exactly
+	now := time.Now()
+	defaultDoc := bson.M{
+		"plan_id":          defaultPlanID,
+		"name":             "Default 10GB Data Plan",
+		"description":      "",
+		"status":           "active",
+		"quota_per_grant":  defaultQuotaPerGrant,   // 10MB
+		"validity_time":    defaultValidityTime,    // 300
+		"volume_threshold": defaultVolumeThreshold, // 8MB
+		"unit":             "bytes",
+		"rules": []any{
+			// internet rule
+			bson.M{
+				"rule_id":            "internet_rg1001_si1",
+				"apn":                "internet",
+				"rating_group":       int64(1001),
+				"service_identifier": int64(1),
+				"charging_type":      "data_volume",
+				"unit":               "bytes",
+				"quota_per_grant":    defaultQuotaPerGrant,
+				"validity_time":      defaultValidityTime,
+				"volume_threshold":   defaultVolumeThreshold,
+				"priority":           100,
+				"status":             "active",
+			},
+			// IMS free rule
+			bson.M{
+				"rule_id":            "ims_default",
+				"apn":                "ims",
+				"rating_group":       int64(0),
+				"service_identifier": int64(0),
+				"charging_type":      "free",
+				"unit":               "bytes",
+				"quota_per_grant":    int64(0),
+				"validity_time":      int32(0),
+				"volume_threshold":   int64(0),
+				"priority":           200,
+				"status":             "active",
+			},
+			// voice rule
+			bson.M{
+				"rule_id":            "voice_rg3001_si1",
+				"apn":                "ims",
+				"rating_group":       int64(3001),
+				"service_identifier": int64(1),
+				"charging_type":      "voice_time",
+				"unit":               "seconds",
+				"quota_per_grant":    defaultVoiceQuotaPerGrant, // 60
+				"validity_time":      defaultValidityTime,
+				"volume_threshold":   int64(0),
+				"priority":           90,
+				"status":             "active",
+			},
+			// SMS rule
+			bson.M{
+				"rule_id":            "sms_rg4001_si1",
+				"apn":                "ims",
+				"rating_group":       int64(4001),
+				"service_identifier": int64(1),
+				"charging_type":      "sms_event",
+				"unit":               "events",
+				"quota_per_grant":    defaultSmsQuotaPerGrant, // 1
+				"validity_time":      int32(0),
+				"volume_threshold":   int64(0),
+				"priority":           100,
+				"status":             "active",
+			},
+		},
+		"created_at": now,
+		"updated_at": now,
+	}
+
+	_, insertErr := r.tariffPlans.InsertOne(ctx, defaultDoc)
+	if insertErr != nil {
+		// Tolerate duplicate-key race — re-read the canonical plan
+		if mongo.IsDuplicateKeyError(insertErr) {
+			var existing bson.M
+			err = r.tariffPlans.FindOne(ctx, bson.M{"plan_id": defaultPlanID}).Decode(&existing)
+			if err == nil {
+				return existing, nil
+			}
+			return nil, fmt.Errorf("re-read default plan after race: %w", err)
+		}
+		return nil, fmt.Errorf("insert default tariff plan: %w", insertErr)
+	}
+
+	return defaultDoc, nil
 }
 
 // checkMsisdnExists checks if an MSISDN is already in use in either
@@ -298,6 +370,12 @@ const (
 	defaultVoiceTotal    int64 = 3600                    // 60 minutes
 	defaultSmsTotal      int64 = 100
 	defaultQuotaPerGrant int64 = 10 * 1024 * 1024 // 10MB
+
+	// Default tariff plan constants — matches Node ocsBillingRepository.ts
+	defaultValidityTime       int32 = 300             // 5 minutes
+	defaultVolumeThreshold    int64 = 8 * 1024 * 1024 // 8MB
+	defaultVoiceQuotaPerGrant int64 = 60              // 60 seconds
+	defaultSmsQuotaPerGrant   int64 = 1               // 1 event
 )
 
 // provisionOcsSubscriber upserts ocs_subscribers and ocs_balances records.
@@ -322,6 +400,18 @@ func (r *Repository) provisionOcsSubscriber(ctx context.Context, input OcsProvis
 		}
 	}
 
+	// Validate tariff plan — matches Node: getTariffPlanDocument(planId) → throw OCS_PLAN_NOT_FOUND
+	plan, err := r.getTariffPlan(ctx, planId)
+	if err != nil {
+		return err
+	}
+	if plan == nil {
+		return &SubscriberGovernanceError{Code: "OCS_PLAN_NOT_FOUND"}
+	}
+	if status, _ := plan["status"].(string); status == "disabled" {
+		return &SubscriberGovernanceError{Code: "OCS_PLAN_DISABLED"}
+	}
+
 	// Build $set for ocs_subscribers — matches Node schema exactly (snake_case, Date)
 	ocsSet := bson.M{
 		"status":     "active",
@@ -342,14 +432,14 @@ func (r *Repository) provisionOcsSubscriber(ctx context.Context, input OcsProvis
 		ocsUpdate["$setOnInsert"].(bson.M)["msisdn"] = ""
 	}
 
-	_, err := r.ocsSubs.UpdateOne(
+	_, ocsErr := r.ocsSubs.UpdateOne(
 		ctx,
 		bson.M{"imsi": input.IMSI},
 		ocsUpdate,
 		options.UpdateOne().SetUpsert(true),
 	)
-	if err != nil {
-		return fmt.Errorf("upsert ocs_subscribers: %w", err)
+	if ocsErr != nil {
+		return fmt.Errorf("upsert ocs_subscribers: %w", ocsErr)
 	}
 
 	// Load existing balance for preservation semantics
@@ -803,11 +893,18 @@ func convertSlices(slices any) []any {
 		converted := bson.M{
 			"_id":               bson.NewObjectID(),
 			"sst":               slice["sst"],
-			"sd":                slice["sd"],
 			"default_indicator": slice["default_indicator"],
 		}
-		// Convert sessions
-		if sessions, ok := slice["session_list"].([]any); ok {
+		// Only include sd when present (Node omits when sd=="000001")
+		if sd, ok := slice["sd"]; ok && sd != nil {
+			converted["sd"] = sd
+		}
+		// Convert sessions — supports both session_list and session keys
+		sessionList := slice["session_list"]
+		if sessionList == nil {
+			sessionList = slice["session"]
+		}
+		if sessions, ok := sessionList.([]any); ok {
 			convertedSessions := make([]any, 0, len(sessions))
 			for _, sess := range sessions {
 				s, ok := sess.(map[string]any)
@@ -815,12 +912,17 @@ func convertSlices(slices any) []any {
 					continue
 				}
 				convertedSess := bson.M{
-					"_id":      bson.NewObjectID(),
-					"name":     s["name"],
-					"type":     s["type"],
-					"qos":      s["qos"],
-					"ambr":     s["ambr"],
-					"pcc_rule": []any{},
+					"_id":  bson.NewObjectID(),
+					"name": s["name"],
+					"type": s["type"],
+					"qos":  normalizeSessionQos(s["qos"], s["name"]),
+					"ambr": s["ambr"],
+				}
+				// Preserve pcc_rule from input if present
+				if pcc, ok := s["pcc_rule"]; ok && pcc != nil {
+					convertedSess["pcc_rule"] = pcc
+				} else {
+					convertedSess["pcc_rule"] = []any{}
 				}
 				convertedSessions = append(convertedSessions, convertedSess)
 			}
@@ -882,4 +984,154 @@ func extractPrimaryMsisdn(sub4G map[string]any) string {
 // stringPtr returns a pointer to the given string value.
 func stringPtr(s string) *string {
 	return &s
+}
+
+// normalizeSessionQos normalizes session QoS from legacy format to Open5GS format.
+// Matches Node toXcloudQos() exactly: _5qi → index, priorityLevel → priority_level.
+func normalizeSessionQos(qos any, name any) any {
+	if qos == nil {
+		return nil
+	}
+	q, ok := qos.(map[string]any)
+	if !ok {
+		return qos
+	}
+	isIms := false
+	if n, ok := name.(string); ok && n == "ims" {
+		isIms = true
+	}
+
+	result := bson.M{}
+
+	// Normalize _5qi → index (Node: asNumber(qos._5qi ?? qos.index, fallbackIndex))
+	if v, ok := q["_5qi"]; ok && v != nil {
+		result["index"] = v
+	} else if v, ok := q["index"]; ok && v != nil {
+		result["index"] = v
+	} else {
+		if isIms {
+			result["index"] = 5
+		} else {
+			result["index"] = 9
+		}
+	}
+
+	// Normalize ARP
+	if arp, ok := q["arp"]; ok && arp != nil {
+		result["arp"] = normalizeArp(arp, isIms)
+	}
+
+	return result
+}
+
+// normalizeArp normalizes ARP from legacy format to Open5GS format.
+// Matches Node toXcloudArp() exactly.
+func normalizeArp(arp any, isIms bool) any {
+	a, ok := arp.(map[string]any)
+	if !ok {
+		return arp
+	}
+	result := bson.M{}
+
+	// priorityLevel → priority_level (Node: asNumber(arp.priorityLevel ?? arp.arpPriority ?? arp.priority_level, fallback))
+	if v, ok := a["priority_level"]; ok && v != nil {
+		result["priority_level"] = v
+	} else if v, ok := a["priorityLevel"]; ok && v != nil {
+		result["priority_level"] = v
+	} else if v, ok := a["arpPriority"]; ok && v != nil {
+		result["priority_level"] = v
+	} else {
+		if isIms {
+			result["priority_level"] = 1
+		} else {
+			result["priority_level"] = 8
+		}
+	}
+
+	// preemptCap → pre_emption_capability (Node: cap === 0 ? 'PREEMPT' : 'NOT_PREEMPT')
+	if v, ok := a["pre_emption_capability"]; ok && v != nil {
+		result["pre_emption_capability"] = v
+	} else if v, ok := a["preemptCap"]; ok && v != nil {
+		if s, ok := v.(string); ok && s == "PREEMPT" {
+			result["pre_emption_capability"] = 0
+		} else {
+			result["pre_emption_capability"] = 1
+		}
+	} else {
+		result["pre_emption_capability"] = 1
+	}
+
+	// preemptVuln → pre_emption_vulnerability
+	if v, ok := a["pre_emption_vulnerability"]; ok && v != nil {
+		result["pre_emption_vulnerability"] = v
+	} else if v, ok := a["preemptVuln"]; ok && v != nil {
+		if s, ok := v.(string); ok && s == "PREEMPTABLE" {
+			result["pre_emption_vulnerability"] = 0
+		} else {
+			result["pre_emption_vulnerability"] = 1
+		}
+	} else {
+		result["pre_emption_vulnerability"] = 1
+	}
+
+	return result
+}
+
+// mapOcsTrafficToInput maps the HTTP ocsTraffic payload (snake_case) to OcsProvisioningInput.
+// Matches Node mapping exactly:
+//
+//	planId:   ocsTraffic.planId ?? ocsTraffic.plan_id
+//	DataTotal:     ocsTraffic.traffic_total
+//	DataAvailable: ocsTraffic.traffic_balance
+//	VoiceTotal:    ocsTraffic.voice_total
+//	VoiceAvailable: ocsTraffic.voice_balance
+//	SMSTotal:      ocsTraffic.sms_total
+//	SMSAvailable:  ocsTraffic.sms_balance
+func mapOcsTrafficToInput(ocs map[string]any, input *OcsProvisioningInput) {
+	// planId: ocsTraffic.planId ?? ocsTraffic.plan_id
+	if v, ok := ocs["planId"]; ok && v != nil {
+		if s, ok := v.(string); ok && s != "" {
+			input.PlanID = &s
+		}
+	}
+	if input.PlanID == nil {
+		if v, ok := ocs["plan_id"]; ok && v != nil {
+			if s, ok := v.(string); ok && s != "" {
+				input.PlanID = &s
+			}
+		}
+	}
+	// Data: traffic_total / traffic_balance
+	if v, ok := ocs["traffic_total"]; ok && v != nil {
+		if n, ok := toInt64(v); ok {
+			input.DataTotal = &n
+		}
+	}
+	if v, ok := ocs["traffic_balance"]; ok && v != nil {
+		if n, ok := toInt64(v); ok {
+			input.DataAvailable = &n
+		}
+	}
+	// Voice: voice_total / voice_balance
+	if v, ok := ocs["voice_total"]; ok && v != nil {
+		if n, ok := toInt64(v); ok {
+			input.VoiceTotal = &n
+		}
+	}
+	if v, ok := ocs["voice_balance"]; ok && v != nil {
+		if n, ok := toInt64(v); ok {
+			input.VoiceAvailable = &n
+		}
+	}
+	// SMS: sms_total / sms_balance
+	if v, ok := ocs["sms_total"]; ok && v != nil {
+		if n, ok := toInt64(v); ok {
+			input.SMSTotal = &n
+		}
+	}
+	if v, ok := ocs["sms_balance"]; ok && v != nil {
+		if n, ok := toInt64(v); ok {
+			input.SMSAvailable = &n
+		}
+	}
 }

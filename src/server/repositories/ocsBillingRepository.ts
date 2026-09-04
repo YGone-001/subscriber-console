@@ -1154,13 +1154,30 @@ export async function firstActiveRatingPolicy(): Promise<RatingPolicy | null> {
 
 export async function provisionOcsSubscriber(input: OcsProvisioningInput): Promise<void> {
   const now = new Date();
-  const planId = asString(input.planId, DEFAULT_OCS_PLAN_ID);
-  const dataTotal = toNumber(input.total, DEFAULT_TOTAL_BALANCE);
-  const requestedAvailable = toNumber(input.available, dataTotal);
   const [subscriberCollection, balanceCollection] = await Promise.all([
     ocsSubscribersCollection(),
     ocsBalancesCollection(),
   ]);
+
+  // Load existing OCS subscriber for presence-aware semantics
+  const existingOcsSub = await subscriberCollection.findOne({ imsi: input.imsi });
+
+  // INTENTIONAL CORRECTNESS FIX — preserve existing when absent:
+  // NEW:  planId absent → DEFAULT_OCS_PLAN_ID; msisdn absent → ""
+  // EXISTING: planId absent → preserve current plan_id; msisdn absent → preserve current msisdn
+  const planId = input.planId
+    ? asString(input.planId)
+    : existingOcsSub?.plan_id
+      ? String(existingOcsSub.plan_id)
+      : DEFAULT_OCS_PLAN_ID;
+  const msisdn = input.msisdn !== undefined && input.msisdn !== null
+    ? asString(input.msisdn)
+    : existingOcsSub?.msisdn !== undefined
+      ? String(existingOcsSub.msisdn)
+      : "";
+
+  const dataTotal = toNumber(input.total, DEFAULT_TOTAL_BALANCE);
+  const requestedAvailable = toNumber(input.available, dataTotal);
   const existingBalance = await balanceCollection.findOne({ imsi: input.imsi });
   const hasAvailableInput = input.available !== undefined && input.available !== null && input.available !== '';
   const dataAvailable = Math.min(Math.max(0, requestedAvailable), dataTotal);
@@ -1215,12 +1232,12 @@ export async function provisionOcsSubscriber(input: OcsProvisioningInput): Promi
     { imsi: input.imsi },
     {
       $set: {
-        msisdn: asString(input.msisdn),
+        msisdn,
         status: asString(input.status, 'active'),
         plan_id: planId,
         updated_at: now,
       },
-      $setOnInsert: { created_at: now },
+      $setOnInsert: { created_at: now, imsi: input.imsi },
     },
     { upsert: true }
   );

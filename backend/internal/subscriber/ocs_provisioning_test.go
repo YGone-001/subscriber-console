@@ -28,6 +28,7 @@ func ocsTestRepo(t *testing.T) (*Repository, func()) {
 		subscribers: db.Collection("subscribers"),
 		ocsSubs:     db.Collection("ocs_subscribers"),
 		ocsBalances: db.Collection("ocs_balances"),
+		tariffPlans: db.Collection("ocs_tariff_plans"),
 	}
 
 	cleanup := func() {
@@ -54,8 +55,18 @@ func TestProvisionOcsSubscriber_PlanPreserved(t *testing.T) {
 	imsi := "417001234567890"
 	customPlan := "custom_plan_50gb"
 
+	// Create custom plan in test DB
+	_, err := repo.tariffPlans.InsertOne(ctx, bson.M{
+		"plan_id": customPlan,
+		"name":    "Custom 50GB",
+		"status":  "active",
+	})
+	if err != nil {
+		t.Fatalf("insert custom plan: %v", err)
+	}
+
 	// First provision — creates with custom plan
-	err := repo.provisionOcsSubscriber(ctx, OcsProvisioningInput{
+	err = repo.provisionOcsSubscriber(ctx, OcsProvisioningInput{
 		IMSI:   imsi,
 		PlanID: &customPlan,
 	})
@@ -307,11 +318,9 @@ func TestProvisionOcsSubscriber_VoiceSmsPreservation(t *testing.T) {
 		t.Fatalf("first provision: %v", err)
 	}
 
-	// Second provision — no voice/SMS — should preserve
-	planId := "custom"
+	// Second provision — no voice/SMS — should preserve (use default plan)
 	err = repo.provisionOcsSubscriber(ctx, OcsProvisioningInput{
-		IMSI:   imsi,
-		PlanID: &planId,
+		IMSI: imsi,
 	})
 	if err != nil {
 		t.Fatalf("second provision: %v", err)
@@ -361,5 +370,205 @@ func TestProvisionOcsSubscriber_VoiceSmsDefaults(t *testing.T) {
 	}
 	if numericInt64(bal["sms_total"]) != defaultSmsTotal {
 		t.Errorf("sms_total = %v, want %v", bal["sms_total"], defaultSmsTotal)
+	}
+}
+
+// TestMapOcsTrafficToInput verifies that the HTTP ocsTraffic payload (snake_case)
+// maps exactly to OcsProvisioningInput. No value may be silently discarded.
+func TestMapOcsTrafficToInput(t *testing.T) {
+	ocs := map[string]any{
+		"traffic_total":   1000,
+		"traffic_balance": 800,
+		"voice_total":     500,
+		"voice_balance":   400,
+		"sms_total":       100,
+		"sms_balance":     90,
+	}
+
+	input := OcsProvisioningInput{IMSI: "test"}
+	mapOcsTrafficToInput(ocs, &input)
+
+	// All six values must reach input
+	if input.DataTotal == nil || *input.DataTotal != 1000 {
+		t.Errorf("DataTotal = %v, want 1000", input.DataTotal)
+	}
+	if input.DataAvailable == nil || *input.DataAvailable != 800 {
+		t.Errorf("DataAvailable = %v, want 800", input.DataAvailable)
+	}
+	if input.VoiceTotal == nil || *input.VoiceTotal != 500 {
+		t.Errorf("VoiceTotal = %v, want 500", input.VoiceTotal)
+	}
+	if input.VoiceAvailable == nil || *input.VoiceAvailable != 400 {
+		t.Errorf("VoiceAvailable = %v, want 400", input.VoiceAvailable)
+	}
+	if input.SMSTotal == nil || *input.SMSTotal != 100 {
+		t.Errorf("SMSTotal = %v, want 100", input.SMSTotal)
+	}
+	if input.SMSAvailable == nil || *input.SMSAvailable != 90 {
+		t.Errorf("SMSAvailable = %v, want 90", input.SMSAvailable)
+	}
+}
+
+// TestMapOcsTrafficToInput_PlanIdFallback verifies planId ?? plan_id fallback.
+func TestMapOcsTrafficToInput_PlanIdFallback(t *testing.T) {
+	// planId takes precedence
+	ocs1 := map[string]any{
+		"planId":  "plan_a",
+		"plan_id": "plan_b",
+	}
+	input1 := OcsProvisioningInput{IMSI: "test"}
+	mapOcsTrafficToInput(ocs1, &input1)
+	if input1.PlanID == nil || *input1.PlanID != "plan_a" {
+		t.Errorf("PlanID = %v, want plan_a (planId takes precedence)", input1.PlanID)
+	}
+
+	// plan_id fallback when planId absent
+	ocs2 := map[string]any{
+		"plan_id": "plan_b",
+	}
+	input2 := OcsProvisioningInput{IMSI: "test"}
+	mapOcsTrafficToInput(ocs2, &input2)
+	if input2.PlanID == nil || *input2.PlanID != "plan_b" {
+		t.Errorf("PlanID = %v, want plan_b (plan_id fallback)", input2.PlanID)
+	}
+
+	// Neither present → nil
+	ocs3 := map[string]any{}
+	input3 := OcsProvisioningInput{IMSI: "test"}
+	mapOcsTrafficToInput(ocs3, &input3)
+	if input3.PlanID != nil {
+		t.Errorf("PlanID = %v, want nil (neither present)", input3.PlanID)
+	}
+}
+
+// TestMapOcsTrafficToInput_EmptyPayload verifies empty ocsTraffic doesn't set any fields.
+func TestMapOcsTrafficToInput_EmptyPayload(t *testing.T) {
+	ocs := map[string]any{}
+	input := OcsProvisioningInput{IMSI: "test"}
+	mapOcsTrafficToInput(ocs, &input)
+
+	if input.PlanID != nil {
+		t.Errorf("PlanID = %v, want nil", input.PlanID)
+	}
+	if input.DataTotal != nil {
+		t.Errorf("DataTotal = %v, want nil", input.DataTotal)
+	}
+	if input.DataAvailable != nil {
+		t.Errorf("DataAvailable = %v, want nil", input.DataAvailable)
+	}
+	if input.VoiceTotal != nil {
+		t.Errorf("VoiceTotal = %v, want nil", input.VoiceTotal)
+	}
+	if input.VoiceAvailable != nil {
+		t.Errorf("VoiceAvailable = %v, want nil", input.VoiceAvailable)
+	}
+	if input.SMSTotal != nil {
+		t.Errorf("SMSTotal = %v, want nil", input.SMSTotal)
+	}
+	if input.SMSAvailable != nil {
+		t.Errorf("SMSAvailable = %v, want nil", input.SMSAvailable)
+	}
+}
+
+// TestGetOrCreateDefaultTariffPlan_Creates verifies that requesting the default plan
+// when it doesn't exist creates it with the canonical schema.
+func TestGetOrCreateDefaultTariffPlan_Creates(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires MongoDB")
+	}
+	repo, cleanup := ocsTestRepo(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	plan, err := repo.getOrCreateDefaultTariffPlan(ctx)
+	if err != nil {
+		t.Fatalf("getOrCreateDefaultTariffPlan: %v", err)
+	}
+
+	if plan["plan_id"] != defaultPlanID {
+		t.Errorf("plan_id = %v, want %v", plan["plan_id"], defaultPlanID)
+	}
+	if plan["name"] != "Default 10GB Data Plan" {
+		t.Errorf("name = %v, want 'Default 10GB Data Plan'", plan["name"])
+	}
+	if plan["status"] != "active" {
+		t.Errorf("status = %v, want active", plan["status"])
+	}
+	if plan["unit"] != "bytes" {
+		t.Errorf("unit = %v, want bytes", plan["unit"])
+	}
+
+	// Verify rules
+	rules, ok := plan["rules"].([]any)
+	if !ok {
+		t.Fatalf("rules type = %T, want []any", plan["rules"])
+	}
+	if len(rules) != 4 {
+		t.Errorf("rules len = %d, want 4", len(rules))
+	}
+}
+
+// TestGetOrCreateDefaultTariffPlan_Idempotent verifies duplicate creation race tolerance.
+func TestGetOrCreateDefaultTariffPlan_Idempotent(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires MongoDB")
+	}
+	repo, cleanup := ocsTestRepo(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	// First call creates
+	plan1, err := repo.getOrCreateDefaultTariffPlan(ctx)
+	if err != nil {
+		t.Fatalf("first call: %v", err)
+	}
+
+	// Second call returns existing
+	plan2, err := repo.getOrCreateDefaultTariffPlan(ctx)
+	if err != nil {
+		t.Fatalf("second call: %v", err)
+	}
+
+	if plan1["plan_id"] != plan2["plan_id"] {
+		t.Errorf("plan_id mismatch: %v vs %v", plan1["plan_id"], plan2["plan_id"])
+	}
+}
+
+// TestGetTariffPlan_DefaultCreates verifies getTariffPlan creates default when missing.
+func TestGetTariffPlan_DefaultCreates(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires MongoDB")
+	}
+	repo, cleanup := ocsTestRepo(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	plan, err := repo.getTariffPlan(ctx, defaultPlanID)
+	if err != nil {
+		t.Fatalf("getTariffPlan(default): %v", err)
+	}
+	if plan == nil {
+		t.Fatal("plan is nil, want created default")
+	}
+	if plan["plan_id"] != defaultPlanID {
+		t.Errorf("plan_id = %v, want %v", plan["plan_id"], defaultPlanID)
+	}
+}
+
+// TestGetTariffPlan_CustomMissing returns nil for non-default missing plans.
+func TestGetTariffPlan_CustomMissing(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires MongoDB")
+	}
+	repo, cleanup := ocsTestRepo(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	plan, err := repo.getTariffPlan(ctx, "nonexistent_plan")
+	if err != nil {
+		t.Fatalf("getTariffPlan: %v", err)
+	}
+	if plan != nil {
+		t.Errorf("plan = %v, want nil for missing custom plan", plan)
 	}
 }

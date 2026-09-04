@@ -7,12 +7,13 @@ import (
 )
 
 var (
-	hex32Pattern = regexp.MustCompile(`^[0-9a-fA-F]{32}$`)
-	hex4Pattern  = regexp.MustCompile(`^[0-9a-fA-F]{4}$`)
-	hex1To6      = regexp.MustCompile(`^[0-9a-fA-F]{1,6}$`)
-	sessionName  = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,63}$`)
-	msisdnDigits = regexp.MustCompile(`^\d+$`)
-	plmnDigits   = regexp.MustCompile(`^\d{5,6}$`)
+	hex32Pattern        = regexp.MustCompile(`^[0-9a-fA-F]{32}$`)
+	hex4Pattern         = regexp.MustCompile(`^[0-9a-fA-F]{4}$`)
+	hex1To6             = regexp.MustCompile(`^[0-9a-fA-F]{1,6}$`)
+	sessionName         = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,63}$`)
+	msisdnDigits        = regexp.MustCompile(`^\d+$`)
+	plmnDigits          = regexp.MustCompile(`^\d{5,6}$`)
+	tariffPlanIDPattern = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,64}$`)
 )
 
 // ValidateImsi validates an IMSI string.
@@ -31,6 +32,19 @@ func ValidateImsi(value string) (string, error) {
 		}
 	}
 	return value, nil
+}
+
+// ValidateTariffPlanId validates a tariff plan ID format.
+// Matches Node isValidTariffPlanId() exactly: /^[A-Za-z0-9_.-]{1,64}$/
+func ValidateTariffPlanId(value string) error {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil // empty is allowed (will default)
+	}
+	if !tariffPlanIDPattern.MatchString(value) {
+		return &SubscriberGovernanceError{Code: "INVALID_PLAN_ID"}
+	}
+	return nil
 }
 
 // UpdatePayload holds the subscriber update request body.

@@ -88,6 +88,15 @@ func (m *mockRateLimiter) Enforce(w http.ResponseWriter, r *http.Request, identi
 
 // ── Test Helper ──────────────────────────────────────────────────────────────
 
+// mockApprovalRepo is a minimal mock for the approval Repository.
+type mockApprovalRepo struct {
+	pending *ApprovalDocument
+}
+
+func (m *mockApprovalRepo) GetPendingAccessRequest(ctx context.Context, username string) (*ApprovalDocument, error) {
+	return m.pending, nil
+}
+
 // newPermissionTestHandler creates a handler for ACCESS_REQUEST tests.
 func newPermissionTestHandler(users *fakeUserLookup, evidenceStore *mockEvidenceStore) (*Handler, *audit.Writer) {
 	writer := audit.NewWriter(evidenceStore, audit.WriterConfig{
@@ -95,6 +104,7 @@ func newPermissionTestHandler(users *fakeUserLookup, evidenceStore *mockEvidence
 		WorkerCount: 1,
 	})
 	h := &Handler{
+		repo:    &Repository{approvals: nil}, // minimal repo, won't be used for most tests
 		writer:  writer,
 		users:   users,
 		limiter: &mockRateLimiter{},

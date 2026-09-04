@@ -11,15 +11,19 @@ import (
 	"github.com/YGone-001/subscriber-console/backend/internal/audit"
 	"github.com/YGone-001/subscriber-console/backend/internal/auth"
 	"github.com/YGone-001/subscriber-console/backend/internal/governance"
-	"github.com/YGone-001/subscriber-console/backend/internal/ratelimit"
 	"github.com/YGone-001/subscriber-console/backend/internal/response"
 	"github.com/YGone-001/subscriber-console/backend/internal/user"
 )
 
+// RateLimiter abstracts rate limiting for handler testing.
+type RateLimiter interface {
+	Enforce(w http.ResponseWriter, r *http.Request, identifier string, limit int, windowSeconds int) bool
+}
+
 // WriteHandler provides HTTP handlers for subscriber write endpoints.
 type WriteHandler struct {
 	repo        *Repository
-	limiter     *ratelimit.Limiter
+	limiter     RateLimiter
 	userRepo    UserRepository
 	approvalSvc ApprovalCreator
 	auditWriter *audit.Writer
@@ -36,7 +40,7 @@ type ApprovalCreator interface {
 }
 
 // NewWriteHandler creates a new subscriber write handler.
-func NewWriteHandler(repo *Repository, limiter *ratelimit.Limiter, userRepo UserRepository, approvalSvc ApprovalCreator, auditWriter *audit.Writer) *WriteHandler {
+func NewWriteHandler(repo *Repository, limiter RateLimiter, userRepo UserRepository, approvalSvc ApprovalCreator, auditWriter *audit.Writer) *WriteHandler {
 	return &WriteHandler{
 		repo:        repo,
 		limiter:     limiter,
