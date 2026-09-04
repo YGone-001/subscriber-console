@@ -83,7 +83,14 @@ func (r *Repository) CreateSubscriberFromLegacy(ctx context.Context, imsi string
 	}
 
 	// Provision OCS subscriber and balance
-	if err := r.provisionOcsSubscriber(ctx, imsi, resolvedPlanId, plan); err != nil {
+	input := OcsProvisioningInput{
+		IMSI:   imsi,
+		PlanID: &resolvedPlanId,
+	}
+	if msisdn != nil && *msisdn != "" {
+		input.MSISDN = msisdn
+	}
+	if err := r.provisionOcsSubscriber(ctx, input); err != nil {
 		// Partial failure: subscriber inserted but OCS provisioning failed
 		return nil, &SubscriberGovernanceError{Code: "SUBSCRIBER_CREATE_PARTIAL_WRITE"}
 	}
@@ -212,31 +219,59 @@ func validateMsisdnDigits(msisdn string) error {
 	return nil
 }
 
-// provisionOcsSubscriber upserts ocs_subscribers and ocs_balances records.
-// Matches Node provisionOcsSubscriber() exactly.
-func (r *Repository) provisionOcsSubscriber(ctx context.Context, imsi, planId string, plan bson.M) error {
-	now := time.Now()
+// OcsProvisioningInput carries presence-aware OCS balance fields.
+// nil = absent (preserve existing); pointer = explicit value.
+type OcsProvisioningInput struct {
+	IMSI string
 
-	// Default balance constants — matches Node
-	defaultTotalBalance := int64(10 * 1024 * 1024 * 1024) // 10GB
-	defaultVoiceTotal := int64(3600)                      // 60 minutes
-	defaultSmsTotal := int64(100)
-	defaultQuotaPerGrant := int64(10 * 1024 * 1024) // 10MB
+	PlanID *string
+	MSISDN *string
+	Status *string
+
+	DataTotal     *int64
+	DataAvailable *int64
+
+	VoiceTotal     *int64
+	VoiceAvailable *int64
+
+	SMSTotal     *int64
+	SMSAvailable *int64
+}
+
+// Default OCS balance constants — matches Node exactly.
+const (
+	defaultTotalBalance  int64 = 10 * 1024 * 1024 * 1024 // 10GB
+	defaultVoiceTotal    int64 = 3600                    // 60 minutes
+	defaultSmsTotal      int64 = 100
+	defaultQuotaPerGrant int64 = 10 * 1024 * 1024 // 10MB
+)
+
+// provisionOcsSubscriber upserts ocs_subscribers and ocs_balances records.
+// Matches Node provisionOcsSubscriber() exactly — presence-aware semantics.
+func (r *Repository) provisionOcsSubscriber(ctx context.Context, input OcsProvisioningInput) error {
+	now := time.Now()
+	planId := defaultPlanID
+	if input.PlanID != nil && *input.PlanID != "" {
+		planId = *input.PlanID
+	}
 
 	// Upsert ocs_subscribers — matches Node schema exactly (snake_case, Date)
 	ocsSub := bson.M{
-		"imsi":       imsi,
-		"msisdn":     "",
 		"status":     "active",
-		"plan_id":    planId, // snake_case, not camelCase
-		"updated_at": now,    // BSON Date, not string
+		"plan_id":    planId,
+		"updated_at": now,
+	}
+	if input.MSISDN != nil {
+		ocsSub["msisdn"] = *input.MSISDN
+	} else {
+		ocsSub["msisdn"] = ""
 	}
 	_, err := r.ocsSubs.UpdateOne(
 		ctx,
-		bson.M{"imsi": imsi},
+		bson.M{"imsi": input.IMSI},
 		bson.M{
 			"$set":         ocsSub,
-			"$setOnInsert": bson.M{"created_at": now},
+			"$setOnInsert": bson.M{"created_at": now, "imsi": input.IMSI},
 		},
 		options.UpdateOne().SetUpsert(true),
 	)
@@ -244,76 +279,161 @@ func (r *Repository) provisionOcsSubscriber(ctx context.Context, imsi, planId st
 		return fmt.Errorf("upsert ocs_subscribers: %w", err)
 	}
 
-	// Check existing balance for preservation semantics
+	// Load existing balance for preservation semantics
 	var existingBalance bson.M
-	_ = r.ocsBalances.FindOne(ctx, bson.M{"imsi": imsi}).Decode(&existingBalance)
+	_ = r.ocsBalances.FindOne(ctx, bson.M{"imsi": input.IMSI}).Decode(&existingBalance)
 
+	// ── Data balance ──
+	// Matches Node: dataTotal = toNumber(input.total, DEFAULT_TOTAL_BALANCE)
 	dataTotal := defaultTotalBalance
-	dataAvailable := dataTotal
-	var dataReserved int64
-	var dataUsed int64
-
-	if existingBalance != nil {
-		// Preserve existing balance values — matches Node semantics
-		dataReserved = numericInt64(existingBalance["data_reserved"])
-		dataUsed = numericInt64(existingBalance["data_used"])
-		dataAvailable = dataTotal - dataReserved - dataUsed
-		if dataAvailable < 0 {
-			dataAvailable = 0
-		}
-	} else {
-		// New subscriber: reserve quota_per_grant
-		dataReserved = defaultQuotaPerGrant
-		dataUsed = 0
-		dataAvailable = dataTotal - dataReserved
+	if input.DataTotal != nil {
+		dataTotal = *input.DataTotal
+	}
+	if dataTotal < 0 {
+		dataTotal = 0
 	}
 
-	voiceTotal := defaultVoiceTotal
-	smsTotal := defaultSmsTotal
+	hasAvailableInput := input.DataAvailable != nil
+	requestedAvailable := dataTotal
+	if input.DataAvailable != nil {
+		requestedAvailable = *input.DataAvailable
+	}
+	dataAvailable := min64(max64(0, requestedAvailable), dataTotal)
 
-	// Version: increment if existing, else 1
+	// Matches Node: derivedReserved = dataAvailable < dataTotal ? min(QUOTA_PER_GRANT, dataTotal - dataAvailable) : 0
+	derivedReserved := int64(0)
+	if dataAvailable < dataTotal {
+		derivedReserved = min64(defaultQuotaPerGrant, dataTotal-dataAvailable)
+	}
+
+	// Matches Node: dataReserved = hasAvailableInput ? derivedReserved : existingBalance ? existing.data_reserved : (dataAvailable < dataTotal ? derivedReserved : 0)
+	var dataReserved int64
+	if hasAvailableInput {
+		dataReserved = derivedReserved
+	} else if existingBalance != nil {
+		dataReserved = numericInt64(existingBalance["data_reserved"])
+	} else if dataAvailable < dataTotal {
+		dataReserved = derivedReserved
+	}
+
+	// Matches Node: dataUsed = hasAvailableInput ? max(0, dataTotal - dataReserved - dataAvailable) : existingBalance ? existing.data_used : max(0, dataTotal - dataReserved - dataAvailable)
+	var dataUsed int64
+	if hasAvailableInput {
+		dataUsed = max64(0, dataTotal-dataReserved-dataAvailable)
+	} else if existingBalance != nil {
+		dataUsed = numericInt64(existingBalance["data_used"])
+	} else {
+		dataUsed = max64(0, dataTotal-dataReserved-dataAvailable)
+	}
+
+	// Matches Node: nextTotal = max(dataTotal, dataUsed + dataReserved + dataAvailable)
+	nextTotal := max64(dataTotal, dataUsed+dataReserved+dataAvailable)
+
+	// ── Voice balance ──
+	voiceTotalInput := defaultVoiceTotal
+	if input.VoiceTotal != nil {
+		voiceTotalInput = *input.VoiceTotal
+	} else if existingBalance != nil {
+		voiceTotalInput = numericInt64(existingBalance["voice_total"])
+	}
+	voiceTotal := max64(voiceTotalInput, 0)
+
+	hasVoiceAvailableInput := input.VoiceAvailable != nil
+	requestedVoiceAvailable := voiceTotal
+	if input.VoiceAvailable != nil {
+		requestedVoiceAvailable = *input.VoiceAvailable
+	} else if existingBalance != nil {
+		requestedVoiceAvailable = numericInt64(existingBalance["voice_available"])
+	}
+	voiceAvailable := min64(max64(0, requestedVoiceAvailable), voiceTotal)
+
+	var voiceReserved int64
+	if hasVoiceAvailableInput {
+		voiceReserved = 0
+	} else if existingBalance != nil {
+		voiceReserved = numericInt64(existingBalance["voice_reserved"])
+	}
+
+	var voiceUsed int64
+	if hasVoiceAvailableInput {
+		voiceUsed = max64(0, voiceTotal-voiceReserved-voiceAvailable)
+	} else if existingBalance != nil {
+		voiceUsed = numericInt64(existingBalance["voice_used"])
+	} else {
+		voiceUsed = max64(0, voiceTotal-voiceReserved-voiceAvailable)
+	}
+	nextVoiceTotal := max64(voiceTotal, voiceUsed+voiceReserved+voiceAvailable)
+
+	// ── SMS balance ──
+	smsTotalInput := defaultSmsTotal
+	if input.SMSTotal != nil {
+		smsTotalInput = *input.SMSTotal
+	} else if existingBalance != nil {
+		smsTotalInput = numericInt64(existingBalance["sms_total"])
+	}
+	smsTotal := max64(smsTotalInput, 0)
+
+	hasSmsAvailableInput := input.SMSAvailable != nil
+	requestedSmsAvailable := smsTotal
+	if input.SMSAvailable != nil {
+		requestedSmsAvailable = *input.SMSAvailable
+	} else if existingBalance != nil {
+		requestedSmsAvailable = numericInt64(existingBalance["sms_available"])
+	}
+	smsAvailable := min64(max64(0, requestedSmsAvailable), smsTotal)
+
+	var smsUsed int64
+	if hasSmsAvailableInput {
+		smsUsed = max64(0, smsTotal-smsAvailable)
+	} else if existingBalance != nil {
+		smsUsed = numericInt64(existingBalance["sms_used"])
+	} else {
+		smsUsed = max64(0, smsTotal-smsAvailable)
+	}
+	nextSmsTotal := max64(smsTotal, smsUsed+smsAvailable)
+
+	// ── Version ──
+	// Matches Node: version = existingBalance ? existing.version + 1 : 1
 	version := int64(1)
 	if existingBalance != nil {
-		version = numericInt64(existingBalance["version"]) + 1
-		if version < 1 {
-			version = 1
+		v := numericInt64(existingBalance["version"]) + 1
+		if v < 1 {
+			v = 1
 		}
+		version = v
 	}
 
-	// Upsert ocs_balances — matches Node schema exactly (snake_case, int64, Date)
+	// ── Upsert ocs_balances ──
 	ocsBal := bson.M{
-		"imsi":            imsi,
-		"data_total":      dataTotal,
+		"imsi":            input.IMSI,
+		"data_total":      nextTotal,
 		"data_used":       dataUsed,
 		"data_reserved":   dataReserved,
 		"data_available":  dataAvailable,
-		"voice_total":     voiceTotal,
-		"voice_used":      int64(0),
-		"voice_reserved":  int64(0),
-		"voice_available": voiceTotal,
-		"sms_total":       smsTotal,
-		"sms_used":        int64(0),
-		"sms_available":   smsTotal,
+		"voice_total":     nextVoiceTotal,
+		"voice_used":      voiceUsed,
+		"voice_reserved":  voiceReserved,
+		"voice_available": voiceAvailable,
+		"sms_total":       nextSmsTotal,
+		"sms_used":        smsUsed,
+		"sms_available":   smsAvailable,
 		"money_balance":   int64(0),
 		"plan_id":         planId,
 		"status":          "active",
 		"version":         version,
 		"updated_at":      now,
-		"cycle_start_at":  now,
-		"cycle_reset_at":  now,
 	}
 	if existingBalance != nil {
-		if existingBalance["cycle_start_at"] != nil {
-			ocsBal["cycle_start_at"] = existingBalance["cycle_start_at"]
-		}
-		if existingBalance["cycle_reset_at"] != nil {
-			ocsBal["cycle_reset_at"] = existingBalance["cycle_reset_at"]
-		}
+		ocsBal["cycle_start_at"] = existingBalance["cycle_start_at"]
+		ocsBal["cycle_reset_at"] = existingBalance["cycle_reset_at"]
+	} else {
+		ocsBal["cycle_start_at"] = now
+		ocsBal["cycle_reset_at"] = now
 	}
 
 	_, err = r.ocsBalances.UpdateOne(
 		ctx,
-		bson.M{"imsi": imsi},
+		bson.M{"imsi": input.IMSI},
 		bson.M{
 			"$set":         ocsBal,
 			"$setOnInsert": bson.M{"created_at": now},
@@ -327,21 +447,40 @@ func (r *Repository) provisionOcsSubscriber(ctx context.Context, imsi, planId st
 	return nil
 }
 
+func min64(a, b int64) int64 {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func max64(a, b int64) int64 {
+	if a > b {
+		return a
+	}
+	return b
+}
+
 // updateOcsSubscriber updates OCS subscriber and balance with traffic data.
-// Maps legacy payload keys to OCS schema. Does NOT $set raw ocsTraffic keys.
+// Maps all ocsTraffic fields to presence-aware provisioning input.
+// Matches Node updateSubscriberFromLegacy() → provisionOcsSubscriber() mapping.
 func (r *Repository) updateOcsSubscriber(ctx context.Context, imsi string, ocsTraffic map[string]any) error {
 	if len(ocsTraffic) == 0 {
 		return nil
 	}
 
+	input := OcsProvisioningInput{IMSI: imsi}
+
 	// Resolve plan_id — supports both planId and plan_id aliases
-	planId, _ := ocsTraffic["planId"].(string)
-	if planId == "" {
-		planId, _ = ocsTraffic["plan_id"].(string)
+	if pid, ok := ocsTraffic["planId"].(string); ok && pid != "" {
+		input.PlanID = &pid
+	} else if pid, ok := ocsTraffic["plan_id"].(string); ok && pid != "" {
+		input.PlanID = &pid
 	}
-	if planId != "" {
-		// Validate tariff plan
-		plan, err := r.getTariffPlan(ctx, planId)
+
+	// Validate tariff plan if provided
+	if input.PlanID != nil {
+		plan, err := r.getTariffPlan(ctx, *input.PlanID)
 		if err != nil {
 			return err
 		}
@@ -353,8 +492,33 @@ func (r *Repository) updateOcsSubscriber(ctx context.Context, imsi string, ocsTr
 		}
 	}
 
-	// Delegate to provisionOcsSubscriber which handles all balance math
-	return r.provisionOcsSubscriber(ctx, imsi, planId, nil)
+	// Map all presence-aware traffic fields
+	if v, ok := ocsTraffic["traffic_total"]; ok && v != nil {
+		n := numericInt64(v)
+		input.DataTotal = &n
+	}
+	if v, ok := ocsTraffic["traffic_balance"]; ok && v != nil {
+		n := numericInt64(v)
+		input.DataAvailable = &n
+	}
+	if v, ok := ocsTraffic["voice_total"]; ok && v != nil {
+		n := numericInt64(v)
+		input.VoiceTotal = &n
+	}
+	if v, ok := ocsTraffic["voice_balance"]; ok && v != nil {
+		n := numericInt64(v)
+		input.VoiceAvailable = &n
+	}
+	if v, ok := ocsTraffic["sms_total"]; ok && v != nil {
+		n := numericInt64(v)
+		input.SMSTotal = &n
+	}
+	if v, ok := ocsTraffic["sms_balance"]; ok && v != nil {
+		n := numericInt64(v)
+		input.SMSAvailable = &n
+	}
+
+	return r.provisionOcsSubscriber(ctx, input)
 }
 
 // deleteOcsProvisioning deletes from both ocs_subscribers and ocs_balances.

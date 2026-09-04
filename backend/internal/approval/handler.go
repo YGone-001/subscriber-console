@@ -22,10 +22,15 @@ type UserLookup interface {
 	FindByUsernameIdentity(ctx context.Context, username string) (*user.UserIdentity, error)
 }
 
+// RateLimiter abstracts rate limiting for handler testing.
+type RateLimiter interface {
+	Enforce(w http.ResponseWriter, r *http.Request, identifier string, limit int, windowSeconds int) bool
+}
+
 // Handler provides HTTP handlers for approval endpoints.
 type Handler struct {
 	repo     *Repository
-	limiter  *ratelimit.Limiter
+	limiter  RateLimiter
 	writer   *audit.Writer
 	workflow *Workflow
 	creator  *ApprovalCreator

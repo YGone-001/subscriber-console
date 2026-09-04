@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { enforceRateLimit } from '@/lib/rateLimit';
-import { logAudit } from '@/lib/audit';
+import { writeAuditLog } from '@/lib/audit';
 import { requireAuth, requireCapability } from '@/lib/authz';
 import {
   createDefaultSubscriber,
@@ -11,7 +11,8 @@ import {
 } from '@/server/repositories/subscriberRepository';
 import { xcloudToLegacyState } from '@/lib/xcloudSubscriber';
 import { validateImsi } from '@/lib/subscriberValidation';
-import { evaluateSubscriberOperation, SUBSCRIBER_OPERATIONS } from '@/server/subscriberGovernanceRegistry';
+import { validateCurrentAccount, AccountSessionError } from '@/lib/accountSession';
+import { evaluateSubscriberOperationForActor, SUBSCRIBER_OPERATIONS } from '@/server/subscriberGovernanceRegistry';
 
 export const dynamic = 'force-dynamic';
 
@@ -71,8 +72,12 @@ export async function POST(request: Request) {
     if (!rateLimit.ok) return rateLimit.response;
 
     const data = await request.json();
-    const policy = evaluateSubscriberOperation(SUBSCRIBER_OPERATIONS.CREATE);
-    if (!policy.allowed || policy.requiresApproval || !policy.executable) {
+
+    // Fresh actor validation — fail closed
+    const freshAccount = await validateCurrentAccount(auth.auth);
+
+    const policy = evaluateSubscriberOperationForActor(SUBSCRIBER_OPERATIONS.CREATE, freshAccount.normalizedRole);
+    if (!policy.executable) {
       return NextResponse.json({ error: 'OPERATION_NOT_EXECUTABLE' }, { status: 409 });
     }
     const imsiResult = validateImsi(data?.imsi);
@@ -87,7 +92,17 @@ export async function POST(request: Request) {
     const created = await createDefaultSubscriber(imsi, data?.planId || data?.plan_id, msisdn);
     const legacyState = xcloudToLegacyState(created);
 
-    logAudit('CREATE', imsi, null, legacyState, request);
+    try {
+      await writeAuditLog({
+        module: 'subscribers', action: 'CREATE', targetId: imsi,
+        actor: { type: 'user', username: freshAccount.username, role: freshAccount.normalizedRole },
+        before: null, after: legacyState,
+        result: 'success',
+        metadata: { governanceMode: 'DIRECT_GOVERNED', approvalRequired: false, operation: 'SUBSCRIBER_CREATE', actorRole: freshAccount.normalizedRole },
+      }, { failureMode: 'strict' });
+    } catch {
+      return NextResponse.json({ error: 'AUDIT_UNAVAILABLE', code: 'AUDIT_UNAVAILABLE', committed: true }, { status: 503 });
+    }
 
     return NextResponse.json({ outcome: 'executed', message: 'Subscriber created successfully', imsi }, { status: 201 });
   } catch (error) {
@@ -105,6 +120,10 @@ export async function POST(request: Request) {
     }
     if (error instanceof Error && error.message === 'OCS_PLAN_DISABLED') {
       return NextResponse.json({ error: 'Tariff plan is disabled' }, { status: 409 });
+    }
+    if (error instanceof AccountSessionError) {
+      const statusMap: Record<string, number> = { AUTH_INVALID_TOKEN: 401, ACCOUNT_NOT_FOUND: 401, ACCOUNT_DISABLED: 403, ACCOUNT_LOCKED: 403, SESSION_REVOKED: 403 };
+      return NextResponse.json({ error: error.code }, { status: statusMap[error.code] || 500 });
     }
 
     console.error('Error creating subscriber:', error);

@@ -41,6 +41,30 @@ export function evaluateSubscriberOperation(operation: SubscriberOperation) {
   return { allowed: true, ...subscriberOperationRegistry[operation], operation, executable: !subscriberOperationRegistry[operation].requiresApproval || subscriberOperationRegistry[operation].executionMode === 'automatic' };
 }
 
+function isSuperAdminRole(role: string | undefined): boolean {
+  return role === 'super_admin' || role === 'root';
+}
+
+/** Actor-aware governance evaluation.
+ * Returns governanceMode based on operation + actor role.
+ *
+ * SUBSCRIBER_CREATE: all authorized roles → DIRECT
+ * SUBSCRIBER_UPDATE: super_admin/root → DIRECT, operator/ops_admin → APPROVAL
+ * SUBSCRIBER_DELETE: super_admin/root → DIRECT, operator/ops_admin → APPROVAL
+ */
+export function evaluateSubscriberOperationForActor(operation: SubscriberOperation, role: string) {
+  const base = subscriberOperationRegistry[operation];
+  const direct = operation === 'SUBSCRIBER_CREATE' || isSuperAdminRole(role);
+  return {
+    allowed: true,
+    ...base,
+    operation,
+    governanceMode: direct ? 'DIRECT_GOVERNED' as const : 'APPROVAL_GOVERNED' as const,
+    requiresApproval: !direct,
+    executable: !base.requiresApproval || direct,
+  };
+}
+
 export const governedSubscriberApprovalActions = Object.values(subscriberOperationRegistry)
   .filter((definition) => definition.requiresApproval && definition.executionMode === 'automatic')
   .map((definition) => definition.action) as ApprovalAction[];

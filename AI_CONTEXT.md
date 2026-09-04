@@ -231,7 +231,7 @@ Preserve exact Node key/limit/window/headers/messages.
 Current write invariant:
 
 ```text
-Business-domain writes by Go = subscriber CREATE/UPDATE/DELETE handlers exist (governance: super_admin→DIRECT, operator→APPROVAL), ACTUALLY_ROUTED=0 (not Nginx-routed)
+Business-domain writes by Go = subscriber CREATE/UPDATE/DELETE handlers exist (governance: super_admin/root→DIRECT, operator/ops_admin→APPROVAL), ACTUALLY_ROUTED=0 (not Nginx-routed)
 Infrastructure writes = app_rate_limits (allowed)
 Governance writes = app_approvals (CAS transitions + ACCESS_REQUEST creation, Strict audit)
 Sequence writes = app_sequences (approval change ID generation)
@@ -920,12 +920,17 @@ Phase 2D provides:
 - CapabilitiesFor supports raw `root` role for auth/permissions endpoint
 
 Phase 3:
-- Governance — IN PROGRESS
+- Governance — COMPLETE (for subscriber single-write scope)
 - Approval read foundation — COMPLETE (list/detail/audit)
 - Audit writer lifecycle — COMPLETE (strict lifecycle, bounded close)
 - Explicit decision endpoints — COMPLETE (approve/reject/cancel + legacy compat)
 - Contract preflight — COMPLETE (paramOrElse, ISO8601Millis, presenter bson.D)
 - ACCESS_REQUEST creation — COMPLETE (POST /api/approvals)
+- ACCESS_REQUEST handler tests — COMPLETE (permission denied, inactive, non-viewer, reason, truncation, missing user, unauthenticated)
+- Actor-aware governance — COMPLETE (evaluateSubscriberOperationForActor)
+- Fresh actor validation — COMPLETE (validateCurrentAccount for CREATE/UPDATE/DELETE)
+- Strict audit — COMPLETE (fresh actor in audit metadata)
+- OCS provisioning — COMPLETE (presence-aware input, no admin reservation, balance preservation)
 - Approval execute — DEFERRED (crosses into business mutations)
 
 Security audit blocker:

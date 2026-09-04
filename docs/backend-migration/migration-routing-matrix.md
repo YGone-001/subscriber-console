@@ -82,11 +82,11 @@
 
 ### Phase 4 — Subscriber + Profile Writes
 
-| API | Method | Path | Current Owner | Future Owner | Shadow Allowed | Notes |
-|-----|--------|------|---------------|--------------|----------------|-------|
-| Subscriber create | POST | `/api/subscribers` | **Go** | Go | NEVER | Go handler with governance, ACTUALLY_ROUTED=0 |
-| Subscriber update | PUT | `/api/subscribers/:imsi` | **Go** | Go | NEVER | Go handler with governance, ACTUALLY_ROUTED=0 |
-| Subscriber delete | DELETE | `/api/subscribers/:imsi` | **Go** | Go | NEVER | Go handler with governance, ACTUALLY_ROUTED=0 |
+| API | Method | Path | Implementation | Production Route | Future Owner | Shadow Allowed | Notes |
+|-----|--------|------|----------------|------------------|--------------|----------------|-------|
+| Subscriber create | POST | `/api/subscribers` | **Go** | Next.js | Go | NEVER | Go handler with governance, ACTUALLY_ROUTED=0 |
+| Subscriber update | PUT | `/api/subscribers/:imsi` | **Go** | Next.js | Go | NEVER | Go handler with governance, ACTUALLY_ROUTED=0 |
+| Subscriber delete | DELETE | `/api/subscribers/:imsi` | **Go** | Next.js | Go | NEVER | Go handler with governance, ACTUALLY_ROUTED=0 |
 | Subscriber batch create | POST | `/api/subscribers/batch` | Next.js | Go | NEVER | Creates CHG |
 | Subscriber batch update | POST | `/api/subscribers/batch-update` | Next.js | Go | NEVER | Frozen payload |
 | Subscriber bulk delete | POST | `/api/subscribers/bulk-delete` | Next.js | Go | NEVER | Frozen payload |
