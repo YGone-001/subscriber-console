@@ -117,11 +117,65 @@ func (r *Repository) UpdateSubscriberFromLegacy(ctx context.Context, imsi string
 		return nil, &SubscriberGovernanceError{Code: "SUBSCRIBER_UPDATE_PRECONDITION_CHANGED"}
 	}
 
-	// Handle OCS update if traffic data provided
-	if payload.OcsTraffic != nil {
-		if err := r.updateOcsSubscriber(ctx, imsi, payload.OcsTraffic); err != nil {
-			return nil, &SubscriberGovernanceError{Code: "SUBSCRIBER_UPDATE_PARTIAL_WRITE"}
+	// Extract MSISDN from next subscriber document — matches Node:
+	// requestedMsisdn = payload.sub4G ? getPrimaryMsisdn(payload.sub4G) : next.msisdn[0] || ''
+	var msisdnForOcs string
+	if payload.Sub4G != nil {
+		msisdnForOcs = extractPrimaryMsisdn(payload.Sub4G)
+	}
+	if msisdnForOcs == "" {
+		if msisdnList, ok := next["msisdn"].(bson.A); ok && len(msisdnList) > 0 {
+			msisdnForOcs = fmt.Sprintf("%v", msisdnList[0])
 		}
+	}
+
+	// Always provision OCS — matches Node: updateSubscriberFromLegacy always calls provisionOcsSubscriber
+	// Even without ocsTraffic, MSISDN and status must propagate to OCS
+	ocsInput := OcsProvisioningInput{
+		IMSI:   imsi,
+		MSISDN: &msisdnForOcs,
+		Status: stringPtr("active"),
+	}
+	if payload.OcsTraffic != nil {
+		ocs := payload.OcsTraffic
+		if v, ok := ocs["planId"]; ok && v != nil {
+			if s, ok := v.(string); ok {
+				ocsInput.PlanID = &s
+			}
+		}
+		if v, ok := ocs["total"]; ok && v != nil {
+			if n, ok := toInt64(v); ok {
+				ocsInput.DataTotal = &n
+			}
+		}
+		if v, ok := ocs["available"]; ok && v != nil {
+			if n, ok := toInt64(v); ok {
+				ocsInput.DataAvailable = &n
+			}
+		}
+		if v, ok := ocs["voiceTotal"]; ok && v != nil {
+			if n, ok := toInt64(v); ok {
+				ocsInput.VoiceTotal = &n
+			}
+		}
+		if v, ok := ocs["voiceAvailable"]; ok && v != nil {
+			if n, ok := toInt64(v); ok {
+				ocsInput.VoiceAvailable = &n
+			}
+		}
+		if v, ok := ocs["smsTotal"]; ok && v != nil {
+			if n, ok := toInt64(v); ok {
+				ocsInput.SMSTotal = &n
+			}
+		}
+		if v, ok := ocs["smsAvailable"]; ok && v != nil {
+			if n, ok := toInt64(v); ok {
+				ocsInput.SMSAvailable = &n
+			}
+		}
+	}
+	if err := r.provisionOcsSubscriber(ctx, ocsInput); err != nil {
+		return nil, &SubscriberGovernanceError{Code: "SUBSCRIBER_UPDATE_PARTIAL_WRITE"}
 	}
 
 	// Reload the document to get the full updated state
@@ -248,31 +302,50 @@ const (
 
 // provisionOcsSubscriber upserts ocs_subscribers and ocs_balances records.
 // Matches Node provisionOcsSubscriber() exactly — presence-aware semantics.
+// When PlanID is nil/empty, preserves existing plan_id (or defaults for new).
+// When MSISDN is nil, preserves existing msisdn (or defaults to "" for new).
 func (r *Repository) provisionOcsSubscriber(ctx context.Context, input OcsProvisioningInput) error {
 	now := time.Now()
+
+	// Determine plan_id — preserve existing when not explicitly provided
 	planId := defaultPlanID
 	if input.PlanID != nil && *input.PlanID != "" {
 		planId = *input.PlanID
+	} else {
+		// Try to preserve existing plan_id for updates
+		var existingOcs bson.M
+		err := r.ocsSubs.FindOne(ctx, bson.M{"imsi": input.IMSI}).Decode(&existingOcs)
+		if err == nil && existingOcs != nil {
+			if existingPlan, ok := existingOcs["plan_id"].(string); ok && existingPlan != "" {
+				planId = existingPlan
+			}
+		}
 	}
 
-	// Upsert ocs_subscribers — matches Node schema exactly (snake_case, Date)
-	ocsSub := bson.M{
+	// Build $set for ocs_subscribers — matches Node schema exactly (snake_case, Date)
+	ocsSet := bson.M{
 		"status":     "active",
 		"plan_id":    planId,
 		"updated_at": now,
 	}
+	// MSISDN presence semantics: nil = preserve existing (don't $set), pointer = explicit value
 	if input.MSISDN != nil {
-		ocsSub["msisdn"] = *input.MSISDN
-	} else {
-		ocsSub["msisdn"] = ""
+		ocsSet["msisdn"] = *input.MSISDN
 	}
+
+	ocsUpdate := bson.M{
+		"$set":         ocsSet,
+		"$setOnInsert": bson.M{"created_at": now, "imsi": input.IMSI},
+	}
+	// Only set msisdn on insert when not explicitly provided
+	if input.MSISDN == nil {
+		ocsUpdate["$setOnInsert"].(bson.M)["msisdn"] = ""
+	}
+
 	_, err := r.ocsSubs.UpdateOne(
 		ctx,
 		bson.M{"imsi": input.IMSI},
-		bson.M{
-			"$set":         ocsSub,
-			"$setOnInsert": bson.M{"created_at": now, "imsi": input.IMSI},
-		},
+		ocsUpdate,
 		options.UpdateOne().SetUpsert(true),
 	)
 	if err != nil {
@@ -600,7 +673,7 @@ func buildDefaultSlice() []any {
 			"default_indicator": true,
 			// sd omitted — Node omits when sd=="000001"
 			"session": []any{
-				// internet — index 0, type 1, 5QI 9, ARP priority 8
+				// internet — index 0, type 1, 5QI 9, ARP priority 9
 				bson.M{
 					"_id":  bson.NewObjectID(),
 					"name": "internet",
@@ -608,7 +681,7 @@ func buildDefaultSlice() []any {
 					"qos": bson.M{
 						"index": 9,
 						"arp": bson.M{
-							"priority_level":            8,
+							"priority_level":            9,
 							"pre_emption_capability":    1, // NOT_PREEMPT
 							"pre_emption_vulnerability": 1, // NOT_PREEMPTABLE
 						},
@@ -619,7 +692,7 @@ func buildDefaultSlice() []any {
 					},
 					"pcc_rule": []any{},
 				},
-				// mobile — index 1, type 1, 5QI 9, ARP priority 8
+				// mobile — index 1, type 1, 5QI 9, ARP priority 9
 				bson.M{
 					"_id":  bson.NewObjectID(),
 					"name": "mobile",
@@ -627,7 +700,7 @@ func buildDefaultSlice() []any {
 					"qos": bson.M{
 						"index": 9,
 						"arp": bson.M{
-							"priority_level":            8,
+							"priority_level":            9,
 							"pre_emption_capability":    1,
 							"pre_emption_vulnerability": 1,
 						},
@@ -662,8 +735,16 @@ func buildDefaultSlice() []any {
 								"index": 1,
 								"arp": bson.M{
 									"priority_level":            2,
-									"pre_emption_capability":    1, // 2→NOT_PREEMPT
-									"pre_emption_vulnerability": 1, // 2→NOT_PREEMPTABLE
+									"pre_emption_capability":    2, // matches Node PREEMPT
+									"pre_emption_vulnerability": 2, // matches Node PREEMPTABLE
+								},
+								"gbr": bson.M{
+									"downlink": bson.M{"value": 128, "unit": 1},
+									"uplink":   bson.M{"value": 128, "unit": 1},
+								},
+								"mbr": bson.M{
+									"downlink": bson.M{"value": 128, "unit": 1},
+									"uplink":   bson.M{"value": 128, "unit": 1},
 								},
 							},
 						},
@@ -771,4 +852,34 @@ func convertMsisdnList(msisdn any) []any {
 		}
 	}
 	return result
+}
+
+// extractPrimaryMsisdn extracts the first MSISDN from a sub4G payload.
+// Matches Node getPrimaryMsisdn() exactly.
+func extractPrimaryMsisdn(sub4G map[string]any) string {
+	if sub4G == nil {
+		return ""
+	}
+	msisdnListRaw, ok := sub4G["msisdnList"]
+	if !ok || msisdnListRaw == nil {
+		return ""
+	}
+	msisdnList, ok := msisdnListRaw.([]any)
+	if !ok || len(msisdnList) == 0 {
+		return ""
+	}
+	first, ok := msisdnList[0].(map[string]any)
+	if !ok || first == nil {
+		return ""
+	}
+	msisdn, ok := first["msisdn"]
+	if !ok || msisdn == nil {
+		return ""
+	}
+	return fmt.Sprintf("%v", msisdn)
+}
+
+// stringPtr returns a pointer to the given string value.
+func stringPtr(s string) *string {
+	return &s
 }
