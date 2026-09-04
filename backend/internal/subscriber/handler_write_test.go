@@ -559,8 +559,8 @@ func TestBuildDefaultSubscriber(t *testing.T) {
 	if !ok {
 		t.Fatal("expected security to be bson.M")
 	}
-	if sec["k"] != "00000000000000000000000000000000" {
-		t.Errorf("expected k=00000000000000000000000000000000, got %v", sec["k"])
+	if sec["k"] != "000102030405060708090A0B0C0D0E0F" {
+		t.Errorf("expected k=000102030405060708090A0B0C0D0E0F, got %v", sec["k"])
 	}
 	if sec["amf"] != "8000" {
 		t.Errorf("expected amf=8000, got %v", sec["amf"])
@@ -610,7 +610,7 @@ func TestBuildXcloudSubscriberFromLegacy(t *testing.T) {
 		"msisdn":                  []any{},
 		"ambr":                    bson.M{"downlink": bson.M{"value": 1, "unit": 3}},
 		"slice":                   []any{},
-		"security":                bson.M{"k": "00000000000000000000000000000000"},
+		"security":                bson.M{"k": "000102030405060708090A0B0C0D0E0F"},
 	}
 
 	payload := UpdatePayload{

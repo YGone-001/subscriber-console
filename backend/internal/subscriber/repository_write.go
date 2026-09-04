@@ -50,7 +50,7 @@ func (r *Repository) CreateSubscriberFromLegacy(ctx context.Context, imsi string
 	if plan == nil {
 		return nil, &SubscriberGovernanceError{Code: "OCS_PLAN_NOT_FOUND"}
 	}
-	if disabled, _ := plan["disabled"].(bool); disabled {
+	if status, _ := plan["status"].(string); status == "disabled" {
 		return nil, &SubscriberGovernanceError{Code: "OCS_PLAN_DISABLED"}
 	}
 
@@ -84,9 +84,8 @@ func (r *Repository) CreateSubscriberFromLegacy(ctx context.Context, imsi string
 
 	// Provision OCS subscriber and balance
 	if err := r.provisionOcsSubscriber(ctx, imsi, resolvedPlanId, plan); err != nil {
-		// Log but don't fail — subscriber is already created
-		// In production this would be a warning; the OCS provisioning can be retried
-		return nil, fmt.Errorf("provision OCS for %s: %w", imsi, err)
+		// Partial failure: subscriber inserted but OCS provisioning failed
+		return nil, &SubscriberGovernanceError{Code: "SUBSCRIBER_CREATE_PARTIAL_WRITE"}
 	}
 
 	// Reload the created document
@@ -94,18 +93,16 @@ func (r *Repository) CreateSubscriberFromLegacy(ctx context.Context, imsi string
 }
 
 // UpdateSubscriberFromLegacy applies a payload to an existing subscriber document
-// using atomic CAS (replaceOne with expected document filter).
-// Returns the updated document.
+// using atomic CAS (replaceOne with full expected document filter minus _id).
+// Matches Node updateSubscriberFromLegacy() exactly.
 func (r *Repository) UpdateSubscriberFromLegacy(ctx context.Context, imsi string, payload UpdatePayload, current bson.M) (bson.M, error) {
 	// Build the next document from current + payload using real builder
 	next := buildXcloudSubscriberFromLegacy(imsi, payload, current)
 
-	// Atomic CAS: replaceOne with expected document filter
-	result, err := r.subscribers.ReplaceOne(
-		ctx,
-		bson.M{"imsi": imsi, "__v": current["__v"]},
-		next,
-	)
+	// Atomic CAS: full expected document minus _id — matches Node exactly
+	expectedFilter := expectedDocumentFilter(current)
+
+	result, err := r.subscribers.ReplaceOne(ctx, expectedFilter, next)
 	if err != nil {
 		return nil, fmt.Errorf("update subscriber %s: %w", imsi, err)
 	}
@@ -116,7 +113,7 @@ func (r *Repository) UpdateSubscriberFromLegacy(ctx context.Context, imsi string
 	// Handle OCS update if traffic data provided
 	if payload.OcsTraffic != nil {
 		if err := r.updateOcsSubscriber(ctx, imsi, payload.OcsTraffic); err != nil {
-			return nil, fmt.Errorf("update OCS for %s: %w", imsi, err)
+			return nil, &SubscriberGovernanceError{Code: "SUBSCRIBER_UPDATE_PARTIAL_WRITE"}
 		}
 	}
 
@@ -124,10 +121,14 @@ func (r *Repository) UpdateSubscriberFromLegacy(ctx context.Context, imsi string
 	return r.FindSubscriberByImsi(ctx, imsi)
 }
 
-// DeleteSubscriber removes a subscriber document by IMSI and cleans up OCS provisioning.
-// Returns true if a document was deleted.
-func (r *Repository) DeleteSubscriber(ctx context.Context, imsi string) (bool, error) {
-	result, err := r.subscribers.DeleteOne(ctx, bson.M{"imsi": imsi})
+// DeleteSubscriber removes a subscriber document using atomic CAS
+// and cleans up OCS provisioning.
+// Matches Node deleteSubscriber() exactly — uses full expected document minus _id.
+func (r *Repository) DeleteSubscriber(ctx context.Context, imsi string, expected bson.M) (bool, error) {
+	// Atomic CAS: full expected document minus _id — matches Node exactly
+	expectedFilter := expectedDocumentFilter(expected)
+
+	result, err := r.subscribers.DeleteOne(ctx, expectedFilter)
 	if err != nil {
 		return false, fmt.Errorf("delete subscriber %s: %w", imsi, err)
 	}
@@ -135,19 +136,32 @@ func (r *Repository) DeleteSubscriber(ctx context.Context, imsi string) (bool, e
 		return false, nil
 	}
 
-	// Clean up OCS provisioning
+	// Clean up OCS provisioning — errors are typed, not swallowed
 	if err := r.deleteOcsProvisioning(ctx, imsi); err != nil {
-		// Log but don't fail — subscriber is already deleted
-		// OCS cleanup can be retried
+		return true, &SubscriberGovernanceError{Code: "SUBSCRIBER_DELETE_PARTIAL_WRITE"}
 	}
 
 	return true, nil
 }
 
+// expectedDocumentFilter builds a CAS filter from the full expected document minus _id.
+// Matches Node: const filter = { ...expectedDocument }; delete filter._id;
+func expectedDocumentFilter(doc bson.M) bson.M {
+	filter := bson.M{}
+	for k, v := range doc {
+		if k == "_id" {
+			continue
+		}
+		filter[k] = v
+	}
+	return filter
+}
+
 // getTariffPlan validates planId format and returns the plan document.
+// Matches Node getTariffPlanDocument() — uses plan_id (snake_case).
 func (r *Repository) getTariffPlan(ctx context.Context, planId string) (bson.M, error) {
 	var plan bson.M
-	err := r.tariffPlans.FindOne(ctx, bson.M{"planId": planId}).Decode(&plan)
+	err := r.tariffPlans.FindOne(ctx, bson.M{"plan_id": planId}).Decode(&plan)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, nil
@@ -199,44 +213,111 @@ func validateMsisdnDigits(msisdn string) error {
 }
 
 // provisionOcsSubscriber upserts ocs_subscribers and ocs_balances records.
+// Matches Node provisionOcsSubscriber() exactly.
 func (r *Repository) provisionOcsSubscriber(ctx context.Context, imsi, planId string, plan bson.M) error {
-	now := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
+	now := time.Now()
 
-	// Upsert ocs_subscribers
+	// Default balance constants — matches Node
+	defaultTotalBalance := int64(10 * 1024 * 1024 * 1024) // 10GB
+	defaultVoiceTotal := int64(3600)                      // 60 minutes
+	defaultSmsTotal := int64(100)
+	defaultQuotaPerGrant := int64(10 * 1024 * 1024) // 10MB
+
+	// Upsert ocs_subscribers — matches Node schema exactly (snake_case, Date)
 	ocsSub := bson.M{
-		"imsi":      imsi,
-		"planId":    planId,
-		"status":    "active",
-		"createdAt": now,
-		"updatedAt": now,
+		"imsi":       imsi,
+		"msisdn":     "",
+		"status":     "active",
+		"plan_id":    planId, // snake_case, not camelCase
+		"updated_at": now,    // BSON Date, not string
 	}
 	_, err := r.ocsSubs.UpdateOne(
 		ctx,
 		bson.M{"imsi": imsi},
-		bson.M{"$set": ocsSub},
+		bson.M{
+			"$set":         ocsSub,
+			"$setOnInsert": bson.M{"created_at": now},
+		},
 		options.UpdateOne().SetUpsert(true),
 	)
 	if err != nil {
 		return fmt.Errorf("upsert ocs_subscribers: %w", err)
 	}
 
-	// Upsert ocs_balances
-	ocsBal := bson.M{
-		"imsi":         imsi,
-		"planId":       planId,
-		"trafficTotal": 0,
-		"trafficUsed":  0,
-		"voiceTotal":   0,
-		"voiceUsed":    0,
-		"smsTotal":     0,
-		"smsUsed":      0,
-		"createdAt":    now,
-		"updatedAt":    now,
+	// Check existing balance for preservation semantics
+	var existingBalance bson.M
+	_ = r.ocsBalances.FindOne(ctx, bson.M{"imsi": imsi}).Decode(&existingBalance)
+
+	dataTotal := defaultTotalBalance
+	dataAvailable := dataTotal
+	var dataReserved int64
+	var dataUsed int64
+
+	if existingBalance != nil {
+		// Preserve existing balance values — matches Node semantics
+		dataReserved = numericInt64(existingBalance["data_reserved"])
+		dataUsed = numericInt64(existingBalance["data_used"])
+		dataAvailable = dataTotal - dataReserved - dataUsed
+		if dataAvailable < 0 {
+			dataAvailable = 0
+		}
+	} else {
+		// New subscriber: reserve quota_per_grant
+		dataReserved = defaultQuotaPerGrant
+		dataUsed = 0
+		dataAvailable = dataTotal - dataReserved
 	}
+
+	voiceTotal := defaultVoiceTotal
+	smsTotal := defaultSmsTotal
+
+	// Version: increment if existing, else 1
+	version := int64(1)
+	if existingBalance != nil {
+		version = numericInt64(existingBalance["version"]) + 1
+		if version < 1 {
+			version = 1
+		}
+	}
+
+	// Upsert ocs_balances — matches Node schema exactly (snake_case, int64, Date)
+	ocsBal := bson.M{
+		"imsi":            imsi,
+		"data_total":      dataTotal,
+		"data_used":       dataUsed,
+		"data_reserved":   dataReserved,
+		"data_available":  dataAvailable,
+		"voice_total":     voiceTotal,
+		"voice_used":      int64(0),
+		"voice_reserved":  int64(0),
+		"voice_available": voiceTotal,
+		"sms_total":       smsTotal,
+		"sms_used":        int64(0),
+		"sms_available":   smsTotal,
+		"money_balance":   int64(0),
+		"plan_id":         planId,
+		"status":          "active",
+		"version":         version,
+		"updated_at":      now,
+		"cycle_start_at":  now,
+		"cycle_reset_at":  now,
+	}
+	if existingBalance != nil {
+		if existingBalance["cycle_start_at"] != nil {
+			ocsBal["cycle_start_at"] = existingBalance["cycle_start_at"]
+		}
+		if existingBalance["cycle_reset_at"] != nil {
+			ocsBal["cycle_reset_at"] = existingBalance["cycle_reset_at"]
+		}
+	}
+
 	_, err = r.ocsBalances.UpdateOne(
 		ctx,
 		bson.M{"imsi": imsi},
-		bson.M{"$set": ocsBal},
+		bson.M{
+			"$set":         ocsBal,
+			"$setOnInsert": bson.M{"created_at": now},
+		},
 		options.UpdateOne().SetUpsert(true),
 	)
 	if err != nil {
@@ -246,23 +327,34 @@ func (r *Repository) provisionOcsSubscriber(ctx context.Context, imsi, planId st
 	return nil
 }
 
-// updateOcsSubscriber updates OCS subscriber with traffic data.
+// updateOcsSubscriber updates OCS subscriber and balance with traffic data.
+// Maps legacy payload keys to OCS schema. Does NOT $set raw ocsTraffic keys.
 func (r *Repository) updateOcsSubscriber(ctx context.Context, imsi string, ocsTraffic map[string]any) error {
 	if len(ocsTraffic) == 0 {
 		return nil
 	}
 
-	set := bson.M{"updatedAt": time.Now().UTC().Format("2006-01-02T15:04:05.000Z")}
-	for k, v := range ocsTraffic {
-		set[k] = v
+	// Resolve plan_id — supports both planId and plan_id aliases
+	planId, _ := ocsTraffic["planId"].(string)
+	if planId == "" {
+		planId, _ = ocsTraffic["plan_id"].(string)
+	}
+	if planId != "" {
+		// Validate tariff plan
+		plan, err := r.getTariffPlan(ctx, planId)
+		if err != nil {
+			return err
+		}
+		if plan == nil {
+			return &SubscriberGovernanceError{Code: "OCS_PLAN_NOT_FOUND"}
+		}
+		if status, _ := plan["status"].(string); status == "disabled" {
+			return &SubscriberGovernanceError{Code: "OCS_PLAN_DISABLED"}
+		}
 	}
 
-	_, err := r.ocsSubs.UpdateOne(
-		ctx,
-		bson.M{"imsi": imsi},
-		bson.M{"$set": set},
-	)
-	return err
+	// Delegate to provisionOcsSubscriber which handles all balance math
+	return r.provisionOcsSubscriber(ctx, imsi, planId, nil)
 }
 
 // deleteOcsProvisioning deletes from both ocs_subscribers and ocs_balances.
@@ -279,12 +371,30 @@ func (r *Repository) deleteOcsProvisioning(ctx context.Context, imsi string) err
 }
 
 // buildDefaultSubscriber builds a default Open5GS subscriber document.
-// Matches Node buildDefaultXcloudSubscriber() structure.
+// Matches Node buildDefaultXcloudSubscriber() structure exactly.
 func buildDefaultSubscriber(imsi string, msisdnList []any) bson.M {
 	if msisdnList == nil {
 		msisdnList = []any{}
 	}
-	now := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
+
+	// EPC realm from IMSI — matches Node epcRealm()
+	mcc := "417"
+	if len(imsi) >= 3 {
+		mcc = imsi[:3]
+	}
+	mnc := "001"
+	if len(imsi) >= 5 {
+		mnc = imsi[3:5]
+	}
+	for len(mnc) < 3 {
+		mnc = "0" + mnc
+	}
+	mmeHost := fmt.Sprintf("mme.epc.mnc%s.mcc%s.3gppnetwork.org", mnc, mcc)
+	mmeRealm := fmt.Sprintf("epc.mnc%s.mcc%s.3gppnetwork.org", mnc, mcc)
+
+	// mme_timestamp — matches Date.now() * 1000 (microseconds since epoch)
+	mmeTimestamp := time.Now().UnixMilli() * 1000
+
 	return bson.M{
 		"__v":            0,
 		"schema_version": 1,
@@ -292,51 +402,111 @@ func buildDefaultSubscriber(imsi string, msisdnList []any) bson.M {
 		"msisdn":         msisdnList,
 		"imeisv":         "8672710677532401",
 		"security": bson.M{
-			"k":   "00000000000000000000000000000000",
+			"k":   "000102030405060708090A0B0C0D0E0F", // DEFAULT_AUTH_KEY
+			"op":  nil,                                // null, not missing
+			"opc": "000102030405060708090A0B0C0D0E0F", // DEFAULT_AUTH_KEY
 			"amf": "8000",
-			"sqn": int64(0),
+			"sqn": int64(1719756), // matches Node Long(1719756)
 		},
 		"ambr": bson.M{
 			"downlink": bson.M{"value": 1, "unit": 3},
 			"uplink":   bson.M{"value": 1, "unit": 3},
 		},
-		"slice": []any{
-			bson.M{
-				"_id":               bson.NewObjectID(),
-				"sst":               1,
-				"sd":                "000001",
-				"default_indicator": true,
-				"session": []any{
-					bson.M{
-						"_id":  bson.NewObjectID(),
-						"name": "internet",
-						"type": 3,
-						"qos": bson.M{
-							"index": 9,
-							"arp": bson.M{
-								"priority_level":            8,
-								"pre_emption_capability":    0,
-								"pre_emption_vulnerability": 0,
-							},
-						},
-						"ambr": bson.M{
-							"downlink": bson.M{"value": 1, "unit": 3},
-							"uplink":   bson.M{"value": 1, "unit": 3},
-						},
-						"pcc_rule": []any{},
-					},
-				},
-			},
-		},
+		"slice":                    buildDefaultSlice(),
 		"access_restriction_data":  32,
 		"subscriber_status":        0,
 		"network_access_mode":      0,
 		"subscribed_rau_tau_timer": 12,
-		"mme_host":                 "",
-		"mme_realm":                "",
-		"mme_timestamp":            "",
+		"mme_host":                 mmeHost,
+		"mme_realm":                mmeRealm,
+		"mme_timestamp":            mmeTimestamp, // number (microseconds), not string
 		"purge_flag":               false,
-		"createdAt":                now,
+		// NO createdAt — Node does not produce it
+	}
+}
+
+// buildDefaultSlice builds the default slice array for a new subscriber.
+// Matches Node normalizeSliceList(undefined) → toXcloudSlice() exactly.
+// Default: 1 slice with 3 sessions (internet, mobile, ims).
+func buildDefaultSlice() []any {
+	return []any{
+		bson.M{
+			"_id":               bson.NewObjectID(),
+			"sst":               1,
+			"default_indicator": true,
+			// sd omitted — Node omits when sd=="000001"
+			"session": []any{
+				// internet — index 0, type 1, 5QI 9, ARP priority 8
+				bson.M{
+					"_id":  bson.NewObjectID(),
+					"name": "internet",
+					"type": 1,
+					"qos": bson.M{
+						"index": 9,
+						"arp": bson.M{
+							"priority_level":            8,
+							"pre_emption_capability":    1, // NOT_PREEMPT
+							"pre_emption_vulnerability": 1, // NOT_PREEMPTABLE
+						},
+					},
+					"ambr": bson.M{
+						"downlink": bson.M{"value": 1, "unit": 3},
+						"uplink":   bson.M{"value": 1, "unit": 3},
+					},
+					"pcc_rule": []any{},
+				},
+				// mobile — index 1, type 1, 5QI 9, ARP priority 8
+				bson.M{
+					"_id":  bson.NewObjectID(),
+					"name": "mobile",
+					"type": 1,
+					"qos": bson.M{
+						"index": 9,
+						"arp": bson.M{
+							"priority_level":            8,
+							"pre_emption_capability":    1,
+							"pre_emption_vulnerability": 1,
+						},
+					},
+					"ambr": bson.M{
+						"downlink": bson.M{"value": 1, "unit": 3},
+						"uplink":   bson.M{"value": 1, "unit": 3},
+					},
+					"pcc_rule": []any{},
+				},
+				// ims — index 2, type 3, 5QI 5, ARP priority 1, with pcc_rule
+				bson.M{
+					"_id":  bson.NewObjectID(),
+					"name": "ims",
+					"type": 3, // IMS
+					"qos": bson.M{
+						"index": 5, // 5QI 5 for IMS
+						"arp": bson.M{
+							"priority_level":            1,
+							"pre_emption_capability":    1,
+							"pre_emption_vulnerability": 1,
+						},
+					},
+					"ambr": bson.M{
+						"downlink": bson.M{"value": 1, "unit": 3},
+						"uplink":   bson.M{"value": 1, "unit": 3},
+					},
+					"pcc_rule": []any{
+						bson.M{
+							"flow": []any{},
+							"qos": bson.M{
+								"index": 1,
+								"arp": bson.M{
+									"priority_level":            2,
+									"pre_emption_capability":    1, // 2→NOT_PREEMPT
+									"pre_emption_vulnerability": 1, // 2→NOT_PREEMPTABLE
+								},
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 }
 

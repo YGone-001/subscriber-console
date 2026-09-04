@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"sort"
 	"strings"
 
@@ -59,8 +60,8 @@ type SubscriberLookupFn func(ctx context.Context, imsi string) (bson.M, error)
 // SubscriberWriteFn is a function that writes a subscriber update.
 type SubscriberWriteFn func(ctx context.Context, imsi string, payload UpdatePayload, current bson.M) (bson.M, error)
 
-// SubscriberDeleteFn is a function that deletes a subscriber.
-type SubscriberDeleteFn func(ctx context.Context, imsi string) (bool, error)
+// SubscriberDeleteFn is a function that deletes a subscriber with CAS.
+type SubscriberDeleteFn func(ctx context.Context, imsi string, expected bson.M) (bool, error)
 
 // SubscriberSafeSnapshot extracts a safe snapshot from a subscriber document.
 // NEVER includes security, k, op, opc, amf, or sqn.
@@ -211,7 +212,7 @@ func ExecuteFrozenSubscriberDelete(ctx context.Context, frozen *FrozenSubscriber
 		return nil, &SubscriberGovernanceError{Code: "SUBSCRIBER_DELETE_PRECONDITION_CHANGED"}
 	}
 
-	deleted, err := deleteFn(ctx, frozen.Imsi)
+	deleted, err := deleteFn(ctx, frozen.Imsi, current)
 	if err != nil {
 		return nil, err
 	}
@@ -331,6 +332,7 @@ func stableJSON(v any) string {
 // stable recursively sorts object keys to produce a canonical representation.
 // Matches Node stable() function exactly: objects sorted by keys, arrays in order,
 // primitives via standard JSON serialization.
+// Handles map types, slices, and structs (via reflection with json tags).
 func stable(value any) any {
 	if value == nil {
 		return nil
@@ -372,6 +374,36 @@ func stable(value any) any {
 		}
 		return result
 	default:
+		// Handle structs via reflection: convert to map using json tags
+		rv := reflect.ValueOf(value)
+		if rv.Kind() == reflect.Ptr {
+			rv = rv.Elem()
+		}
+		if rv.Kind() == reflect.Struct {
+			result := make(map[string]any, rv.NumField())
+			rt := rv.Type()
+			for i := 0; i < rv.NumField(); i++ {
+				field := rt.Field(i)
+				if !field.IsExported() {
+					continue
+				}
+				key := field.Tag.Get("json")
+				if key == "" || key == "-" {
+					key = field.Name
+				}
+				// Strip omitempty and other options
+				if comma := strings.IndexByte(key, ','); comma >= 0 {
+					key = key[:comma]
+				}
+				val := rv.Field(i).Interface()
+				// Skip zero values for omitempty fields
+				if strings.Contains(field.Tag.Get("json"), "omitempty") && rv.Field(i).IsZero() {
+					continue
+				}
+				result[key] = stable(val)
+			}
+			return result
+		}
 		return value
 	}
 }

@@ -281,7 +281,7 @@ func TestExecuteFrozenSubscriberDelete_Success(t *testing.T) {
 		return existing, nil
 	}
 
-	deleteFn := func(_ context.Context, _ string) (bool, error) {
+	deleteFn := func(_ context.Context, _ string, _ bson.M) (bool, error) {
 		return true, nil
 	}
 
@@ -309,7 +309,7 @@ func TestExecuteFrozenSubscriberDelete_PreconditionChanged(t *testing.T) {
 		return nil, nil // Subscriber no longer exists
 	}
 
-	deleteFn := func(_ context.Context, _ string) (bool, error) {
+	deleteFn := func(_ context.Context, _ string, _ bson.M) (bool, error) {
 		return false, nil
 	}
 

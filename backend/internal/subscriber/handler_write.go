@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/YGone-001/subscriber-console/backend/internal/approval"
 	"github.com/YGone-001/subscriber-console/backend/internal/audit"
@@ -92,26 +93,42 @@ func (h *WriteHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// MSISDN coercion — matches Node: undefined/null → "", otherwise String(value).trim()
+	var msisdn *string
+	if body.Msisdn != nil {
+		trimmed := strings.TrimSpace(*body.Msisdn)
+		msisdn = &trimmed
+	}
+
 	// Create subscriber (governance is DIRECT for CREATE for all authorized roles)
-	created, err := h.repo.CreateSubscriberFromLegacy(r.Context(), imsi, body.PlanId, body.Msisdn)
+	created, err := h.repo.CreateSubscriberFromLegacy(r.Context(), imsi, body.ResolvedPlanId(), msisdn)
 	if err != nil {
 		h.handleCreateError(w, err)
 		return
 	}
 
-	// Strict audit — committed=true, never rollback on audit failure
-	h.writeStrictAudit(r, audit.WriteAuditInput{
+	// Strict audit — uses SafeSnapshot (no security material), committed=true on failure
+	auditErr := h.writeStrictAudit(r, audit.WriteAuditInput{
 		Action:   "CREATE",
 		Module:   "subscribers",
 		TargetID: imsi,
-		After:    created,
+		After:    SubscriberSafeSnapshot(created), // Safe — no k/op/opc/amf/sqn
 		Result:   "success",
 		Metadata: map[string]interface{}{
-			"governance": map[string]interface{}{
-				"decision": string(result.Decision),
-			},
+			"governanceMode":   "DIRECT_GOVERNED",
+			"approvalRequired": false,
+			"operation":        string(OpCreate),
+			"actorRole":        fresh.NormalizedRole,
 		},
 	}, fresh)
+	if auditErr != nil {
+		response.JSON(w, http.StatusServiceUnavailable, map[string]any{
+			"error":     "AUDIT_UNAVAILABLE",
+			"code":      "AUDIT_UNAVAILABLE",
+			"committed": true,
+		})
+		return
+	}
 
 	response.JSON(w, http.StatusCreated, map[string]any{
 		"outcome": "executed",
@@ -193,8 +210,8 @@ func (h *WriteHandler) Update(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Strict audit — committed=true, never rollback on audit failure
-		h.writeStrictAudit(r, audit.WriteAuditInput{
+		// Strict audit — committed=true on failure
+		auditErr := h.writeStrictAudit(r, audit.WriteAuditInput{
 			Action:   "UPDATE",
 			Module:   "subscribers",
 			TargetID: imsi,
@@ -202,11 +219,20 @@ func (h *WriteHandler) Update(w http.ResponseWriter, r *http.Request) {
 			After:    execResult.After,
 			Result:   "success",
 			Metadata: map[string]interface{}{
-				"governance": map[string]interface{}{
-					"decision": string(result.Decision),
-				},
+				"governanceMode":   "DIRECT_GOVERNED",
+				"approvalRequired": false,
+				"operation":        string(OpUpdate),
+				"actorRole":        fresh.NormalizedRole,
 			},
 		}, fresh)
+		if auditErr != nil {
+			response.JSON(w, http.StatusServiceUnavailable, map[string]any{
+				"error":     "AUDIT_UNAVAILABLE",
+				"code":      "AUDIT_UNAVAILABLE",
+				"committed": true,
+			})
+			return
+		}
 
 		response.JSON(w, http.StatusOK, map[string]any{
 			"outcome": "executed",
@@ -327,8 +353,8 @@ func (h *WriteHandler) Delete(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Strict audit — committed=true, never rollback on audit failure
-		h.writeStrictAudit(r, audit.WriteAuditInput{
+		// Strict audit — committed=true on failure
+		auditErr := h.writeStrictAudit(r, audit.WriteAuditInput{
 			Action:   "DELETE",
 			Module:   "subscribers",
 			TargetID: imsi,
@@ -336,11 +362,20 @@ func (h *WriteHandler) Delete(w http.ResponseWriter, r *http.Request) {
 			After:    map[string]any{"deleted": true, "imsi": imsi},
 			Result:   "success",
 			Metadata: map[string]interface{}{
-				"governance": map[string]interface{}{
-					"decision": string(result.Decision),
-				},
+				"governanceMode":   "DIRECT_GOVERNED",
+				"approvalRequired": false,
+				"operation":        string(OpDelete),
+				"actorRole":        fresh.NormalizedRole,
 			},
 		}, fresh)
+		if auditErr != nil {
+			response.JSON(w, http.StatusServiceUnavailable, map[string]any{
+				"error":     "AUDIT_UNAVAILABLE",
+				"code":      "AUDIT_UNAVAILABLE",
+				"committed": true,
+			})
+			return
+		}
 
 		response.JSON(w, http.StatusOK, map[string]any{
 			"outcome": "executed",
@@ -420,38 +455,45 @@ func (h *WriteHandler) handleGovernanceError(w http.ResponseWriter, err error) {
 		response.Error(w, http.StatusConflict, "Subscriber update has no effect", govErr.Code)
 	case "SUBSCRIBER_UPDATE_PRECONDITION_CHANGED", "SUBSCRIBER_DELETE_PRECONDITION_CHANGED":
 		response.Error(w, http.StatusConflict, "Subscriber state changed since governance check", govErr.Code)
+	case "SUBSCRIBER_UPDATE_PARTIAL_WRITE":
+		response.Error(w, http.StatusInternalServerError, "Subscriber updated but OCS provisioning failed", govErr.Code)
+	case "SUBSCRIBER_DELETE_PARTIAL_WRITE":
+		response.Error(w, http.StatusInternalServerError, "Subscriber deleted but OCS cleanup failed", govErr.Code)
 	default:
 		response.Error(w, http.StatusConflict, govErr.Code, govErr.Code)
 	}
 }
 
 // handleCreateError maps create errors to HTTP responses.
+// Error text matches Node exactly.
 func (h *WriteHandler) handleCreateError(w http.ResponseWriter, err error) {
 	govErr, ok := err.(*SubscriberGovernanceError)
 	if !ok {
-		response.Error(w, http.StatusInternalServerError, "Internal Server Error", "INTERNAL_ERROR")
+		response.Error(w, http.StatusInternalServerError, "Failed to create subscriber", "INTERNAL_ERROR")
 		return
 	}
 	switch govErr.Code {
 	case "SUBSCRIBER_EXISTS":
 		response.Error(w, http.StatusConflict, "Subscriber already exists", govErr.Code)
 	case "MSISDN_EXISTS":
-		response.Error(w, http.StatusConflict, "MSISDN already in use", govErr.Code)
+		response.Error(w, http.StatusConflict, "MSISDN already exists", govErr.Code)
 	case "INVALID_PLAN_ID":
-		response.Error(w, http.StatusBadRequest, "Invalid tariff plan ID", govErr.Code)
+		response.Error(w, http.StatusBadRequest, "Invalid plan_id format", govErr.Code)
 	case "OCS_PLAN_NOT_FOUND":
 		response.Error(w, http.StatusNotFound, "Tariff plan not found", govErr.Code)
 	case "OCS_PLAN_DISABLED":
 		response.Error(w, http.StatusConflict, "Tariff plan is disabled", govErr.Code)
+	case "SUBSCRIBER_CREATE_PARTIAL_WRITE":
+		response.Error(w, http.StatusInternalServerError, "Subscriber created but OCS provisioning failed", govErr.Code)
 	default:
-		response.Error(w, http.StatusInternalServerError, govErr.Code, govErr.Code)
+		response.Error(w, http.StatusInternalServerError, "Failed to create subscriber", govErr.Code)
 	}
 }
 
 // writeStrictAudit writes a strict audit record using proper request context.
 // Uses AuditRequestContext for IP/user-agent extraction (matches Node auditRequestContext).
-// Never rolls back on failure (committed=true semantics).
-func (h *WriteHandler) writeStrictAudit(r *http.Request, input audit.WriteAuditInput, fresh *FreshActor) {
+// Returns error — caller must handle as 503 committed=true.
+func (h *WriteHandler) writeStrictAudit(r *http.Request, input audit.WriteAuditInput, fresh *FreshActor) error {
 	input.Actor = audit.ActorInput{
 		Type:     "user",
 		UserID:   fresh.UserID,
@@ -464,8 +506,7 @@ func (h *WriteHandler) writeStrictAudit(r *http.Request, input audit.WriteAuditI
 	if input.Reason == "" {
 		input.Reason = reason
 	}
-	// Strict audit: committed=true on failure, never rollback
-	_ = h.auditWriter.WriteStrict(r.Context(), input)
+	return h.auditWriter.WriteStrict(r.Context(), input)
 }
 
 // frozenToMap converts a frozen state to a map for the approval payload.
@@ -477,8 +518,18 @@ func frozenToMap(v any) map[string]any {
 }
 
 // CreateSubscriberBody is the request body for POST /api/subscribers.
+// Supports both planId and plan_id aliases (Node precedence: planId || plan_id).
 type CreateSubscriberBody struct {
-	Imsi   string  `json:"imsi"`
-	PlanId *string `json:"planId,omitempty"`
-	Msisdn *string `json:"msisdn,omitempty"`
+	Imsi    string  `json:"imsi"`
+	PlanId  *string `json:"planId,omitempty"`
+	PlanId2 *string `json:"plan_id,omitempty"` // alias
+	Msisdn  *string `json:"msisdn,omitempty"`
+}
+
+// ResolvedPlanId returns planId || plan_id (Node precedence).
+func (b *CreateSubscriberBody) ResolvedPlanId() *string {
+	if b.PlanId != nil && *b.PlanId != "" {
+		return b.PlanId
+	}
+	return b.PlanId2
 }
