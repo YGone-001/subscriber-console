@@ -1,5 +1,10 @@
-import { createHash } from 'node:crypto';
 import { buildXcloudSubscriberFromLegacy } from '@/lib/xcloudSubscriber';
+import {
+  stable,
+  hash,
+  subscriberSafeSnapshot,
+  type SafeSnapshot,
+} from '@/lib/subscriberContract';
 import type { XcloudSubscriberDocument } from '@/types/xcloud';
 import {
   deleteSubscriber,
@@ -8,20 +13,20 @@ import {
   type LegacySubscriberUpdatePayload,
 } from '@/server/repositories/subscriberRepository';
 
+// Re-export for backward compatibility
+// Never include security, K, OP/OPc, AMF or SQN in a governed snapshot.
+export { subscriberSafeSnapshot };
+export type { SafeSnapshot };
+
 export class SubscriberGovernanceError extends Error {
-  constructor(public readonly code: string, public readonly details?: Record<string, unknown>) {
+  code: string;
+  details?: Record<string, unknown>;
+  constructor(code: string, details?: Record<string, unknown>) {
     super(code);
+    this.code = code;
+    this.details = details;
   }
 }
-
-type SafeSnapshot = {
-  imsi: string;
-  msisdn: string[];
-  accessRestrictionData: number;
-  networkAccessMode: number;
-  ambr: unknown;
-  slices: unknown;
-};
 
 export type FrozenSubscriberUpdate = {
   version: 'subscriber-update-v1';
@@ -45,26 +50,6 @@ export type FrozenSubscriberBulkDelete = {
   targetCount: number;
   operationFingerprint: string;
 };
-
-function stable(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
-  if (value && typeof value === 'object') return `{${Object.keys(value as Record<string, unknown>).sort().map((key) => `${JSON.stringify(key)}:${stable((value as Record<string, unknown>)[key])}`).join(',')}}`;
-  return JSON.stringify(value);
-}
-
-function hash(value: unknown) { return createHash('sha256').update(stable(value)).digest('hex'); }
-
-/** Never include security, K, OP/OPc, AMF or SQN in a governed snapshot. */
-export function subscriberSafeSnapshot(doc: XcloudSubscriberDocument): SafeSnapshot {
-  return {
-    imsi: doc.imsi,
-    msisdn: [...(doc.msisdn || [])],
-    accessRestrictionData: Number(doc.access_restriction_data ?? 0),
-    networkAccessMode: Number(doc.network_access_mode ?? 0),
-    ambr: doc.ambr,
-    slices: doc.slice,
-  };
-}
 
 function nonBlank(value: unknown) { return value !== undefined && value !== null && String(value).trim() !== ''; }
 

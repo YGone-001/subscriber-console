@@ -231,7 +231,7 @@ Preserve exact Node key/limit/window/headers/messages.
 Current write invariant:
 
 ```text
-Business-domain writes by Go = subscriber UPDATE/DELETE handlers exist (governance: super_admin→DIRECT, operator→APPROVAL), ACTUALLY_ROUTED=0 (not Nginx-routed)
+Business-domain writes by Go = subscriber CREATE/UPDATE/DELETE handlers exist (governance: super_admin→DIRECT, operator→APPROVAL), ACTUALLY_ROUTED=0 (not Nginx-routed)
 Infrastructure writes = app_rate_limits (allowed)
 Governance writes = app_approvals (CAS transitions + ACCESS_REQUEST creation, Strict audit)
 Sequence writes = app_sequences (approval change ID generation)
@@ -328,12 +328,13 @@ POST /api/approvals/:id          — legacy compat adapter (dispatches by decisi
 Status:
 
 ```text
-Implemented = 39
-Response Parity = 39
-Cutover Ready = 39
+Implemented = 42
+Response Parity = 42
+Cutover Ready = 42
 Cutover Blocked = 0
 Actually Routed = 0 (Nginx not modified)
 ready + blocked = implemented ✅
+Business mutations = 3 (subscriber create/update/delete, ACTUALLY_ROUTED=0)
 ```
 
 Production `/api/*` still routes to Next.js.

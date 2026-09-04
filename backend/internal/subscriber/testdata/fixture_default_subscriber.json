@@ -16,7 +16,11 @@
       "op": null,
       "opc": "00000000000000000000000000000000",
       "amf": "8000",
-      "sqn": 1719756
+      "sqn": {
+        "high": 0,
+        "low": 1719756,
+        "unsigned": false
+      }
     },
     "ambr": {
       "downlink": {
@@ -30,12 +34,12 @@
     },
     "slice": [
       {
-        "_id": "ObjectId",
+        "_id": "6a9a4001f273336139dc581a",
         "sst": 1,
         "default_indicator": true,
         "session": [
           {
-            "_id": "ObjectId",
+            "_id": "6a9a4001f273336139dc581b",
             "name": "internet",
             "type": 1,
             "qos": {
@@ -59,7 +63,7 @@
             "pcc_rule": []
           },
           {
-            "_id": "ObjectId",
+            "_id": "6a9a4001f273336139dc581c",
             "name": "mobile",
             "type": 1,
             "qos": {
@@ -83,7 +87,7 @@
             "pcc_rule": []
           },
           {
-            "_id": "ObjectId",
+            "_id": "6a9a4001f273336139dc581d",
             "name": "ims",
             "type": 3,
             "qos": {
@@ -112,7 +116,7 @@
                   "arp": {
                     "priority_level": 2,
                     "pre_emption_capability": 1,
-                    "pre_emption_vulnerability": 2
+                    "pre_emption_vulnerability": 1
                   },
                   "mbr": {
                     "downlink": {
@@ -147,7 +151,7 @@
     "subscribed_rau_tau_timer": 12,
     "mme_host": "mme.epc.mnc026.mcc310.3gppnetwork.org",
     "mme_realm": "epc.mnc026.mcc310.3gppnetwork.org",
-    "mme_timestamp": 1700000000000000,
+    "mme_timestamp": 1788493825651000,
     "purge_flag": false
   }
 }

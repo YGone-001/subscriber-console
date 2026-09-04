@@ -24,12 +24,12 @@
     },
     "slices": [
       {
-        "_id": "ObjectId",
+        "_id": "6a9a4001f273336139dc581e",
         "sst": 1,
         "default_indicator": true,
         "session": [
           {
-            "_id": "ObjectId",
+            "_id": "6a9a4001f273336139dc581f",
             "name": "internet",
             "type": 1,
             "qos": {
@@ -53,7 +53,7 @@
             "pcc_rule": []
           },
           {
-            "_id": "ObjectId",
+            "_id": "6a9a4001f273336139dc5820",
             "name": "mobile",
             "type": 1,
             "qos": {
@@ -77,7 +77,7 @@
             "pcc_rule": []
           },
           {
-            "_id": "ObjectId",
+            "_id": "6a9a4001f273336139dc5821",
             "name": "ims",
             "type": 3,
             "qos": {
@@ -106,7 +106,7 @@
                   "arp": {
                     "priority_level": 2,
                     "pre_emption_capability": 1,
-                    "pre_emption_vulnerability": 2
+                    "pre_emption_vulnerability": 1
                   },
                   "mbr": {
                     "downlink": {

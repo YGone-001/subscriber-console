@@ -393,9 +393,14 @@ if (existsSync(MATRIX_PATH)) {
     const goGovernanceMutations = goOps.filter(op =>
       op.startsWith('POST /api/approvals')
     ).length;
-    const goBusinessMutations = goOps.filter(op =>
-      op.startsWith('POST ') && !op.startsWith('POST /api/approvals') && op !== 'POST /api/subscribers/batch/precheck'
-    ).length;
+    const goBusinessMutations = goOps.filter(op => {
+      const isGovernance = op.startsWith('POST /api/approvals');
+      const isSemanticRead = op === 'POST /api/subscribers/batch/precheck';
+      const isPost = op.startsWith('POST ') && !isGovernance && !isSemanticRead;
+      const isPut = op.startsWith('PUT ');
+      const isDelete = op.startsWith('DELETE ');
+      return isPost || isPut || isDelete;
+    }).length;
 
     console.log(`\n   Go router breakdown:`);
     console.log(`     HTTP operations: ${goOps.length}`);
