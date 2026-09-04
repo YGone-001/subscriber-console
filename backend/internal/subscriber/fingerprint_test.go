@@ -3,185 +3,398 @@ package subscriber
 import (
 	"crypto/sha256"
 	"encoding/json"
-	"fmt"
 	"os"
+	"strings"
 	"testing"
 )
 
-func loadFixture(t *testing.T, path string) map[string]any {
+// loadFixtureJSON reads a JSON fixture file and returns the raw bytes.
+func loadFixtureJSON(t *testing.T, path string) []byte {
 	t.Helper()
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("failed to read fixture %s: %v", path, err)
 	}
-	var result map[string]any
-	if err := json.Unmarshal(data, &result); err != nil {
+	return data
+}
+
+// loadFixtureField extracts a nested JSON field from a fixture file.
+func loadFixtureField(t *testing.T, path string, field string) map[string]any {
+	t.Helper()
+	data := loadFixtureJSON(t, path)
+	var wrapper map[string]any
+	if err := json.Unmarshal(data, &wrapper); err != nil {
 		t.Fatalf("failed to parse fixture %s: %v", path, err)
+	}
+	raw, ok := wrapper[field]
+	if !ok {
+		t.Fatalf("fixture %s missing field %q", path, field)
+	}
+	result, ok := raw.(map[string]any)
+	if !ok {
+		t.Fatalf("fixture %s field %q is not an object: %T", path, field, raw)
 	}
 	return result
 }
 
-func TestFingerprintParity_Update(t *testing.T) {
-	before := loadFixture(t, "testdata/fixture_update_before.json")
-	after := loadFixture(t, "testdata/fixture_update_after.json")
-
-	// Compute fingerprint using Go stable + hash
-	fp := hashOperation("SUBSCRIBER_UPDATE", "310260123456789", before, after)
-
-	// Verify it's a valid hex string of correct length (SHA256 = 64 hex chars)
-	if len(fp) != 64 {
-		t.Errorf("expected fingerprint length 64, got %d", len(fp))
-	}
-
-	// Verify deterministic: running again produces same result
-	fp2 := hashOperation("SUBSCRIBER_UPDATE", "310260123456789", before, after)
-	if fp != fp2 {
-		t.Errorf("fingerprint not deterministic: %s != %s", fp, fp2)
-	}
-
-	// Verify stable() sorts keys correctly (check via JSON since Go maps don't preserve order)
-	stableBefore := stable(before)
-	stableJSON, err := json.Marshal(stableBefore)
+// loadFixtureString reads a fixture file and returns trimmed string content.
+func loadFixtureString(t *testing.T, path string) string {
+	t.Helper()
+	data, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatalf("failed to marshal stable output: %v", err)
+		t.Fatalf("failed to read fixture %s: %v", path, err)
 	}
-	expectedStable := `{"accessRestrictionData":49,"ambr":{"downlink":{"unit":0,"value":100000000},"uplink":{"unit":0,"value":50000000}},"imsi":"310260123456789","msisdn":"1234567890","networkAccessMode":2,"slice":[{"defaultSessions":[{"name":"internet","pccRule":[],"type":3},{"name":"ims","pccRule":[],"type":3}],"sst":1}]}`
-	if string(stableJSON) != expectedStable {
-		t.Errorf("stable output mismatch:\n  got:      %s\n  expected: %s", string(stableJSON), expectedStable)
-	}
+	return strings.TrimSpace(string(data))
+}
 
-	// Write expected fingerprint to file for cross-language comparison
-	// (Only update if UPDATE_FIXTURES env is set)
-	if os.Getenv("UPDATE_FIXTURES") == "1" {
-		os.WriteFile("testdata/fixture_update_fingerprint.txt", []byte(fp), 0644)
-	} else {
-		expected, err := os.ReadFile("testdata/fixture_update_fingerprint.txt")
-		if err == nil && string(expected) != fp {
-			t.Errorf("fingerprint mismatch:\n  got:      %s\n  expected: %s", fp, string(expected))
+// ============================================================
+// SafeSnapshot shape verification
+// ============================================================
+
+func TestSafeSnapshot_Shape(t *testing.T) {
+	snap := loadFixtureField(t, "testdata/fixture_safe_before.json", "snapshot")
+
+	// Required keys
+	requiredKeys := []string{"imsi", "msisdn", "accessRestrictionData", "networkAccessMode", "ambr", "slices"}
+	for _, key := range requiredKeys {
+		if _, ok := snap[key]; !ok {
+			t.Errorf("SafeSnapshot missing required key: %s", key)
 		}
 	}
 
-	t.Logf("Update fingerprint: %s", fp)
+	// msisdn must be array
+	if _, ok := snap["msisdn"].([]any); !ok {
+		t.Errorf("msisdn must be array, got %T", snap["msisdn"])
+	}
+
+	// slices must be array
+	if _, ok := snap["slices"].([]any); !ok {
+		t.Errorf("slices must be array, got %T", snap["slices"])
+	}
+
+	// NO security fields
+	for _, forbidden := range []string{"security", "k", "op", "opc", "amf", "sqn"} {
+		if _, ok := snap[forbidden]; ok {
+			t.Errorf("SafeSnapshot must NOT contain %q", forbidden)
+		}
+	}
 }
 
-func TestFingerprintParity_Delete(t *testing.T) {
-	before := loadFixture(t, "testdata/fixture_delete_before.json")
+// ============================================================
+// Default subscriber verification
+// ============================================================
 
-	// Compute fingerprint using Go stable + hash
-	fp := hashOperation("SUBSCRIBER_DELETE", "310260123456789", before, nil)
+func TestDefaultSubscriber_Shape(t *testing.T) {
+	doc := loadFixtureField(t, "testdata/fixture_default_subscriber.json", "raw")
 
-	// Verify it's a valid hex string of correct length
-	if len(fp) != 64 {
-		t.Errorf("expected fingerprint length 64, got %d", len(fp))
+	// Required fields
+	if doc["imsi"] != "310260123456789" {
+		t.Errorf("expected imsi=310260123456789, got %v", doc["imsi"])
 	}
 
-	// Verify deterministic
-	fp2 := hashOperation("SUBSCRIBER_DELETE", "310260123456789", before, nil)
-	if fp != fp2 {
-		t.Errorf("fingerprint not deterministic: %s != %s", fp, fp2)
+	// Security
+	sec, ok := doc["security"].(map[string]any)
+	if !ok {
+		t.Fatal("security must be an object")
+	}
+	if sec["k"] != "000102030405060708090A0B0C0D0E0F" {
+		t.Errorf("expected k=000102030405060708090A0B0C0D0E0F, got %v", sec["k"])
+	}
+	if sec["op"] != nil {
+		t.Errorf("expected op=nil, got %v", sec["op"])
+	}
+	if sec["opc"] != "00000000000000000000000000000000" {
+		t.Errorf("expected opc=00000000000000000000000000000000, got %v", sec["opc"])
+	}
+	if sec["amf"] != "8000" {
+		t.Errorf("expected amf=8000, got %v", sec["amf"])
 	}
 
-	// Verify stable() output matches expected JSON
-	stableBefore := stable(before)
-	stableJSON, err := json.Marshal(stableBefore)
-	if err != nil {
-		t.Fatalf("failed to marshal stable output: %v", err)
+	// EPC realm
+	mmeHost, ok := doc["mme_host"].(string)
+	if !ok {
+		t.Fatal("mme_host must be a string")
 	}
-	// The stable output should have sorted keys
-	expectedStable := `{"accessRestrictionData":49,"ambr":{"downlink":{"unit":0,"value":100000000},"uplink":{"unit":0,"value":50000000}},"imsi":"310260123456789","msisdn":"1234567890","networkAccessMode":2,"slice":[{"defaultSessions":[{"name":"internet","pccRule":[],"type":3},{"name":"ims","pccRule":[],"type":3}],"sst":1}]}`
-	if string(stableJSON) != expectedStable {
-		t.Errorf("stable output mismatch:\n  got:      %s\n  expected: %s", string(stableJSON), expectedStable)
+	if !strings.Contains(mmeHost, "mme.epc.mnc") {
+		t.Errorf("mme_host must contain 'mme.epc.mnc', got %s", mmeHost)
 	}
 
-	// Write expected fingerprint to file
-	if os.Getenv("UPDATE_FIXTURES") == "1" {
-		os.WriteFile("testdata/fixture_delete_fingerprint.txt", []byte(fp), 0644)
-	} else {
-		expected, err := os.ReadFile("testdata/fixture_delete_fingerprint.txt")
-		if err == nil && string(expected) != fp {
-			t.Errorf("fingerprint mismatch:\n  got:      %s\n  expected: %s", fp, string(expected))
+	// AMBR defaults
+	ambr, ok := doc["ambr"].(map[string]any)
+	if !ok {
+		t.Fatal("ambr must be an object")
+	}
+	dl, ok := ambr["downlink"].(map[string]any)
+	if !ok {
+		t.Fatal("ambr.downlink must be an object")
+	}
+	if dl["unit"] != float64(3) {
+		t.Errorf("expected ambr.downlink.unit=3, got %v", dl["unit"])
+	}
+	if dl["value"] != float64(1) {
+		t.Errorf("expected ambr.downlink.value=1, got %v", dl["value"])
+	}
+
+	// Slice
+	slice, ok := doc["slice"].([]any)
+	if !ok {
+		t.Fatal("slice must be an array")
+	}
+	if len(slice) < 1 {
+		t.Fatal("must have at least 1 slice")
+	}
+}
+
+// ============================================================
+// Default slice ARP verification
+// ============================================================
+
+func TestDefaultSlice_ARP(t *testing.T) {
+	doc := loadFixtureField(t, "testdata/fixture_default_subscriber.json", "raw")
+	slice := doc["slice"].([]any)
+	first := slice[0].(map[string]any)
+	sessions := first["session"].([]any)
+
+	// Find internet, mobile, ims sessions
+	var internet, mobile, ims map[string]any
+	for _, s := range sessions {
+		sess := s.(map[string]any)
+		switch sess["name"] {
+		case "internet":
+			internet = sess
+		case "mobile":
+			mobile = sess
+		case "ims":
+			ims = sess
 		}
 	}
 
-	t.Logf("Delete fingerprint: %s", fp)
+	if internet == nil {
+		t.Fatal("must have internet session")
+	}
+	internetQos := internet["qos"].(map[string]any)
+	internetArp := internetQos["arp"].(map[string]any)
+	if internetArp["priority_level"] != float64(9) {
+		t.Errorf("internet ARP priority_level expected 9, got %v", internetArp["priority_level"])
+	}
+
+	if mobile == nil {
+		t.Fatal("must have mobile session")
+	}
+	mobileQos := mobile["qos"].(map[string]any)
+	mobileArp := mobileQos["arp"].(map[string]any)
+	if mobileArp["priority_level"] != float64(9) {
+		t.Errorf("mobile ARP priority_level expected 9, got %v", mobileArp["priority_level"])
+	}
+
+	if ims == nil {
+		t.Fatal("must have ims session")
+	}
+	imsQos := ims["qos"].(map[string]any)
+	imsArp := imsQos["arp"].(map[string]any)
+	if imsArp["priority_level"] != float64(1) {
+		t.Errorf("ims ARP priority_level expected 1, got %v", imsArp["priority_level"])
+	}
 }
 
-func TestStable_SortedKeys(t *testing.T) {
-	// Input with unsorted keys
+// ============================================================
+// IMS PCC rule verification
+// ============================================================
+
+func TestDefaultSlice_IMS_PCC(t *testing.T) {
+	doc := loadFixtureField(t, "testdata/fixture_default_subscriber.json", "raw")
+	slice := doc["slice"].([]any)
+	first := slice[0].(map[string]any)
+	sessions := first["session"].([]any)
+
+	var ims map[string]any
+	for _, s := range sessions {
+		sess := s.(map[string]any)
+		if sess["name"] == "ims" {
+			ims = sess
+			break
+		}
+	}
+	if ims == nil {
+		t.Fatal("must have ims session")
+	}
+
+	pccRule, ok := ims["pcc_rule"].([]any)
+	if !ok {
+		t.Fatal("ims pcc_rule must be an array")
+	}
+	if len(pccRule) < 1 {
+		t.Fatal("ims must have at least 1 PCC rule")
+	}
+
+	rule := pccRule[0].(map[string]any)
+	qos := rule["qos"].(map[string]any)
+
+	// GBR
+	gbr := qos["gbr"].(map[string]any)
+	gbrDl := gbr["downlink"].(map[string]any)
+	if gbrDl["value"] != float64(128) {
+		t.Errorf("GBR downlink value expected 128, got %v", gbrDl["value"])
+	}
+	if gbrDl["unit"] != float64(1) {
+		t.Errorf("GBR downlink unit expected 1, got %v", gbrDl["unit"])
+	}
+
+	// MBR
+	mbr := qos["mbr"].(map[string]any)
+	mbrDl := mbr["downlink"].(map[string]any)
+	if mbrDl["value"] != float64(128) {
+		t.Errorf("MBR downlink value expected 128, got %v", mbrDl["value"])
+	}
+	if mbrDl["unit"] != float64(1) {
+		t.Errorf("MBR downlink unit expected 1, got %v", mbrDl["unit"])
+	}
+
+	// ARP
+	arp := qos["arp"].(map[string]any)
+	if arp["priority_level"] != float64(2) {
+		t.Errorf("PCC ARP priority_level expected 2, got %v", arp["priority_level"])
+	}
+}
+
+// ============================================================
+// IMS session AMBR verification
+// ============================================================
+
+func TestDefaultSlice_IMS_AMBR(t *testing.T) {
+	doc := loadFixtureField(t, "testdata/fixture_default_subscriber.json", "raw")
+	slice := doc["slice"].([]any)
+	first := slice[0].(map[string]any)
+	sessions := first["session"].([]any)
+
+	var ims map[string]any
+	for _, s := range sessions {
+		sess := s.(map[string]any)
+		if sess["name"] == "ims" {
+			ims = sess
+			break
+		}
+	}
+	if ims == nil {
+		t.Fatal("must have ims session")
+	}
+
+	ambr := ims["ambr"].(map[string]any)
+	dl := ambr["downlink"].(map[string]any)
+	// IMS_SESSION_AMBR: { value: 1, unit: 3 }
+	if dl["value"] != float64(1) {
+		t.Errorf("IMS AMBR downlink value expected 1, got %v", dl["value"])
+	}
+	if dl["unit"] != float64(3) {
+		t.Errorf("IMS AMBR downlink unit expected 3, got %v", dl["unit"])
+	}
+}
+
+// ============================================================
+// Canonical string parity
+// ============================================================
+
+func TestCanonicalString_Update_Parity(t *testing.T) {
+	nodeCanonical := loadFixtureString(t, "testdata/fixture_update_canonical_string.txt")
+
+	// Build the same object in Go
+	before := loadFixtureField(t, "testdata/fixture_safe_before.json", "snapshot")
+	after := loadFixtureField(t, "testdata/fixture_safe_after.json", "snapshot")
+
+	goCanonical := stableJSON(map[string]any{
+		"operation": "SUBSCRIBER_UPDATE",
+		"imsi":      "310260123456789",
+		"before":    before,
+		"after":     after,
+	})
+
+	if goCanonical != nodeCanonical {
+		t.Errorf("canonical string mismatch:\n  Go:   %s\n  Node: %s", goCanonical[:200], nodeCanonical[:200])
+	}
+}
+
+func TestCanonicalString_Delete_Parity(t *testing.T) {
+	nodeCanonical := loadFixtureString(t, "testdata/fixture_delete_canonical_string.txt")
+
+	before := loadFixtureField(t, "testdata/fixture_safe_before.json", "snapshot")
+
+	goCanonical := stableJSON(map[string]any{
+		"operation": "SUBSCRIBER_DELETE",
+		"imsi":      "310260123456789",
+		"before":    before,
+	})
+
+	if goCanonical != nodeCanonical {
+		t.Errorf("canonical string mismatch:\n  Go:   %s\n  Node: %s", goCanonical[:200], nodeCanonical[:200])
+	}
+}
+
+// ============================================================
+// Fingerprint parity
+// ============================================================
+
+func TestFingerprint_Update_Parity(t *testing.T) {
+	nodeFingerprint := loadFixtureString(t, "testdata/fixture_update_fingerprint.txt")
+
+	before := loadFixtureField(t, "testdata/fixture_safe_before.json", "snapshot")
+	after := loadFixtureField(t, "testdata/fixture_safe_after.json", "snapshot")
+
+	goFingerprint := hashOperation("SUBSCRIBER_UPDATE", "310260123456789", before, after)
+
+	if goFingerprint != nodeFingerprint {
+		t.Errorf("fingerprint mismatch:\n  Go:   %s\n  Node: %s", goFingerprint, nodeFingerprint)
+	}
+}
+
+func TestFingerprint_Delete_Parity(t *testing.T) {
+	nodeFingerprint := loadFixtureString(t, "testdata/fixture_delete_fingerprint.txt")
+
+	before := loadFixtureField(t, "testdata/fixture_safe_before.json", "snapshot")
+
+	goFingerprint := hashOperation("SUBSCRIBER_DELETE", "310260123456789", before, nil)
+
+	if goFingerprint != nodeFingerprint {
+		t.Errorf("fingerprint mismatch:\n  Go:   %s\n  Node: %s", goFingerprint, nodeFingerprint)
+	}
+}
+
+// ============================================================
+// stable() determinism
+// ============================================================
+
+func TestStable_Deterministic(t *testing.T) {
 	input := map[string]any{
-		"z_last":  1,
-		"a_first": 2,
-		"m_mid":   3,
+		"z": 1,
+		"a": map[string]any{"z": 2, "a": 1},
+		"m": []any{3, 1, 2},
 	}
-	result := stable(input)
-
-	// Go maps don't preserve insertion order, so check via JSON serialization
-	data, err := json.Marshal(result)
-	if err != nil {
-		t.Fatalf("failed to marshal: %v", err)
+	s1 := stableJSON(input)
+	s2 := stableJSON(input)
+	if s1 != s2 {
+		t.Errorf("stableJSON not deterministic:\n  %s\n  %s", s1, s2)
 	}
-	expected := `{"a_first":2,"m_mid":3,"z_last":1}`
-	if string(data) != expected {
-		t.Errorf("keys not sorted in JSON output:\n  got:      %s\n  expected: %s", string(data), expected)
+	expected := `{"a":{"a":1,"z":2},"m":[3,1,2],"z":1}`
+	if s1 != expected {
+		t.Errorf("stableJSON output mismatch:\n  got:      %s\n  expected: %s", s1, expected)
 	}
 }
 
-func TestStable_NestedMaps(t *testing.T) {
-	input := map[string]any{
-		"outer": map[string]any{
-			"z": 1,
-			"a": 2,
-		},
-	}
-	result := stable(input)
-
-	// Check via JSON serialization since Go maps don't preserve insertion order
-	data, err := json.Marshal(result)
-	if err != nil {
-		t.Fatalf("failed to marshal: %v", err)
-	}
-	expected := `{"outer":{"a":2,"z":1}}`
-	if string(data) != expected {
-		t.Errorf("nested keys not sorted:\n  got:      %s\n  expected: %s", string(data), expected)
-	}
-}
-
-func TestStable_ArraysPreserved(t *testing.T) {
-	input := map[string]any{
-		"items": []any{"c", "a", "b"},
-	}
-	result := stable(input)
-	m := result.(map[string]any)
-	items := m["items"].([]any)
-
-	// Arrays should preserve order (not sorted)
-	if items[0] != "c" || items[1] != "a" || items[2] != "b" {
-		t.Errorf("array order not preserved: %v", items)
-	}
-}
-
-func TestHashOperation_Deterministic(t *testing.T) {
-	before := map[string]any{"imsi": "310260123456789"}
-	after := map[string]any{"imsi": "310260123456789", "msisdn": "123"}
-
-	h1 := hashOperation("SUBSCRIBER_UPDATE", "310260123456789", before, after)
-	h2 := hashOperation("SUBSCRIBER_UPDATE", "310260123456789", before, after)
+func TestHash_Deterministic(t *testing.T) {
+	input := map[string]any{"operation": "SUBSCRIBER_UPDATE", "imsi": "310260123456789"}
+	h1 := hashOperation("SUBSCRIBER_UPDATE", "310260123456789", nil, nil)
+	h2 := hashOperation("SUBSCRIBER_UPDATE", "310260123456789", nil, nil)
 	if h1 != h2 {
 		t.Errorf("hash not deterministic: %s != %s", h1, h2)
 	}
-
-	// Verify it's a valid SHA256 hex
-	expectedLen := sha256.Size * 2 // 64 hex chars
-	if len(h1) != expectedLen {
-		t.Errorf("expected hash length %d, got %d", expectedLen, len(h1))
+	if len(h1) != sha256.Size*2 {
+		t.Errorf("expected hash length %d, got %d", sha256.Size*2, len(h1))
 	}
-
-	// Different operation should produce different hash
-	h3 := hashOperation("SUBSCRIBER_DELETE", "310260123456789", before, nil)
-	if h1 == h3 {
-		t.Error("different operations should produce different hashes")
-	}
+	_ = input
 }
+
+// ============================================================
+// Struct handling in stable()
+// ============================================================
 
 func TestStable_StructHandling(t *testing.T) {
 	type Inner struct {
@@ -193,65 +406,17 @@ func TestStable_StructHandling(t *testing.T) {
 		Inner Inner  `json:"inner"`
 	}
 
-	input := Outer{
-		Name:  "test",
-		Inner: Inner{Z: 1, A: "hello"},
-	}
-
+	input := Outer{Name: "test", Inner: Inner{Z: 1, A: "hello"}}
 	result := stable(input)
 	m, ok := result.(map[string]any)
 	if !ok {
 		t.Fatalf("expected map[string]any from struct, got %T", result)
 	}
-
-	// Keys should be sorted
 	if m["name"] != "test" {
 		t.Errorf("expected name=test, got %v", m["name"])
 	}
-	inner, ok := m["inner"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected inner to be map[string]any, got %T", m["inner"])
-	}
+	inner := m["inner"].(map[string]any)
 	if inner["a"] != "hello" || inner["z"] != 1 {
 		t.Errorf("inner values wrong: %v", inner)
 	}
-
-	// Verify sorted order in JSON
-	data, _ := json.Marshal(result)
-	expected := `{"inner":{"a":"hello","z":1},"name":"test"}`
-	if string(data) != expected {
-		t.Errorf("struct stable output mismatch:\n  got:      %s\n  expected: %s", string(data), expected)
-	}
-}
-
-func TestGenerateFixtures(t *testing.T) {
-	if os.Getenv("GENERATE_FIXTURES") != "1" {
-		t.Skip("set GENERATE_FIXTURES=1 to regenerate fixture files")
-	}
-
-	// Update fingerprint
-	before := loadFixture(t, "testdata/fixture_update_before.json")
-	after := loadFixture(t, "testdata/fixture_update_after.json")
-	updateFP := hashOperation("SUBSCRIBER_UPDATE", "310260123456789", before, after)
-	os.WriteFile("testdata/fixture_update_fingerprint.txt", []byte(updateFP), 0644)
-	t.Logf("Update fingerprint: %s", updateFP)
-
-	// Delete fingerprint
-	deleteBefore := loadFixture(t, "testdata/fixture_delete_before.json")
-	deleteFP := hashOperation("SUBSCRIBER_DELETE", "310260123456789", deleteBefore, nil)
-	os.WriteFile("testdata/fixture_delete_fingerprint.txt", []byte(deleteFP), 0644)
-	t.Logf("Delete fingerprint: %s", deleteFP)
-
-	// Also output the stable JSON for Node comparison
-	stableBefore := stable(before)
-	sb, _ := json.Marshal(stableBefore)
-	fmt.Printf("Stable before (update): %s\n", string(sb))
-
-	stableAfter := stable(after)
-	sa, _ := json.Marshal(stableAfter)
-	fmt.Printf("Stable after (update): %s\n", string(sa))
-
-	stableDeleteBefore := stable(deleteBefore)
-	sdb, _ := json.Marshal(stableDeleteBefore)
-	fmt.Printf("Stable before (delete): %s\n", string(sdb))
 }

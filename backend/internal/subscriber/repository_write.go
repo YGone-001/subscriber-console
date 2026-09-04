@@ -404,7 +404,7 @@ func buildDefaultSubscriber(imsi string, msisdnList []any) bson.M {
 		"security": bson.M{
 			"k":   "000102030405060708090A0B0C0D0E0F", // DEFAULT_AUTH_KEY
 			"op":  nil,                                // null, not missing
-			"opc": "000102030405060708090A0B0C0D0E0F", // DEFAULT_AUTH_KEY
+			"opc": "00000000000000000000000000000000", // ZERO_128 (not DEFAULT_AUTH_KEY)
 			"amf": "8000",
 			"sqn": int64(1719756), // matches Node Long(1719756)
 		},

@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
-import { logAudit } from '@/lib/audit';
+import { writeAuditLog } from '@/lib/audit';
 import { requireAuth, requireCapability } from '@/lib/authz';
-import { isSuperAdmin } from '@/lib/permissions';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import {
   findSubscriberLegacyState,
@@ -17,6 +16,10 @@ import {
   SubscriberGovernanceError,
 } from '@/server/subscriberSingleGovernance';
 import { evaluateSubscriberOperation, SUBSCRIBER_OPERATIONS } from '@/server/subscriberGovernanceRegistry';
+
+function isDirectExecution(role: string | undefined): boolean {
+  return role === 'super_admin' || role === 'root';
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -65,26 +68,38 @@ export async function DELETE(request: Request, { params }: RouteContext) {
 
     const frozen = await prepareFrozenSubscriberDelete(imsi);
 
-    // Fresh actor validation for governance decision
+    // Fresh actor validation — fail closed
     const freshAccount = await getUser(auth.auth.user);
-    const freshRole = freshAccount?.role || auth.auth.role;
-    const directExecution = isSuperAdmin(freshRole);
+    if (!freshAccount) return NextResponse.json({ error: 'User account not found' }, { status: 401 });
+    if (freshAccount.status === 'locked') return NextResponse.json({ error: 'Account is locked' }, { status: 403 });
+    if (freshAccount.status !== 'active') return NextResponse.json({ error: 'Account is disabled' }, { status: 403 });
+
+    const directExecution = isDirectExecution(freshAccount.role);
 
     if (directExecution) {
-      // Super Admin: DIRECT_GOVERNED — execute immediately, no approval
-      await executeFrozenSubscriberDelete(frozen);
-      logAudit('DELETE', imsi, frozen.before, { deleted: true, imsi }, request);
+      // Super Admin/root: DIRECT_GOVERNED — execute immediately, no approval
+      const result = await executeFrozenSubscriberDelete(frozen);
+      try {
+        await writeAuditLog({
+          module: 'subscribers', action: 'DELETE', targetId: imsi,
+          actor: { type: 'user', username: auth.auth.user, role: freshAccount.role },
+          before: frozen.before, after: { deleted: true, imsi },
+          result: 'success',
+          metadata: { governanceMode: 'DIRECT_GOVERNED', approvalRequired: false, operation: 'SUBSCRIBER_DELETE', actorRole: freshAccount.role },
+        }, { failureMode: 'strict' });
+      } catch {
+        return NextResponse.json({ error: 'AUDIT_UNAVAILABLE', code: 'AUDIT_UNAVAILABLE', committed: true }, { status: 503 });
+      }
       return NextResponse.json({ outcome: 'executed', message: 'Subscriber deleted successfully', imsi }, { status: 200 });
     }
 
-    // Normal operator: APPROVAL_GOVERNED — create approval
+    // Normal operator/ops_admin: APPROVAL_GOVERNED — create approval
     const approval = await createApprovalRequest({
       action: 'SUBSCRIBER_DELETE', requester: auth.auth.user, targetId: imsi,
       summary: `Delete subscriber ${imsi}`, operation: { resourceType: 'subscriber', resourceId: imsi },
       operationFingerprint: frozen.operationFingerprint, before: frozen.before,
       payload: frozen as unknown as Record<string, unknown>,
     });
-    logAudit('UPDATE', `approval:${approval.id}`, null, approval, request);
     return NextResponse.json({ outcome: 'approval_required', message: 'Approval required before subscriber deletion', approval }, { status: 202 });
   } catch (error) {
     if (error instanceof SubscriberGovernanceError && error.code === 'SUBSCRIBER_NOT_FOUND') return NextResponse.json({ error: 'Subscriber not found' }, { status: 404 });
@@ -117,26 +132,38 @@ export async function PUT(request: Request, { params }: RouteContext) {
       ocsTraffic: body.ocsTraffic,
     });
 
-    // Fresh actor validation for governance decision
+    // Fresh actor validation — fail closed
     const freshAccount = await getUser(auth.auth.user);
-    const freshRole = freshAccount?.role || auth.auth.role;
-    const directExecution = isSuperAdmin(freshRole);
+    if (!freshAccount) return NextResponse.json({ error: 'User account not found' }, { status: 401 });
+    if (freshAccount.status === 'locked') return NextResponse.json({ error: 'Account is locked' }, { status: 403 });
+    if (freshAccount.status !== 'active') return NextResponse.json({ error: 'Account is disabled' }, { status: 403 });
+
+    const directExecution = isDirectExecution(freshAccount.role);
 
     if (directExecution) {
-      // Super Admin: DIRECT_GOVERNED — execute immediately, no approval
+      // Super Admin/root: DIRECT_GOVERNED — execute immediately, no approval
       const result = await executeFrozenSubscriberUpdate(frozen);
-      logAudit('UPDATE', imsi, frozen.before, result, request);
+      try {
+        await writeAuditLog({
+          module: 'subscribers', action: 'UPDATE', targetId: imsi,
+          actor: { type: 'user', username: auth.auth.user, role: freshAccount.role },
+          before: frozen.before, after: result.after,
+          result: 'success',
+          metadata: { governanceMode: 'DIRECT_GOVERNED', approvalRequired: false, operation: 'SUBSCRIBER_UPDATE', actorRole: freshAccount.role },
+        }, { failureMode: 'strict' });
+      } catch {
+        return NextResponse.json({ error: 'AUDIT_UNAVAILABLE', code: 'AUDIT_UNAVAILABLE', committed: true }, { status: 503 });
+      }
       return NextResponse.json({ outcome: 'executed', message: 'Subscriber updated successfully', imsi }, { status: 200 });
     }
 
-    // Normal operator: APPROVAL_GOVERNED — create approval
+    // Normal operator/ops_admin: APPROVAL_GOVERNED — create approval
     const approval = await createApprovalRequest({
       action: 'SUBSCRIBER_UPDATE', requester: auth.auth.user, targetId: imsi,
       summary: `Update governed subscriber configuration for ${imsi}`,
       operation: { resourceType: 'subscriber', resourceId: imsi }, operationFingerprint: frozen.operationFingerprint,
       before: frozen.before, after: frozen.after, payload: frozen as unknown as Record<string, unknown>,
     });
-    logAudit('UPDATE', `approval:${approval.id}`, null, approval, request);
     return NextResponse.json({ outcome: 'approval_required', message: 'Approval required before subscriber update', approval }, { status: 202 });
   } catch (error) {
     if (error instanceof SubscriberGovernanceError) {
