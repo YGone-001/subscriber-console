@@ -6,14 +6,13 @@
     "dev": "node --max-old-space-size=8192 ./node_modules/next/dist/bin/next dev -p 13333",
     "build": "node --max-old-space-size=8192 ./node_modules/next/dist/bin/next build",
     "start": "next start -p 13333",
-    "test": "node --test --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON tests/*.test.mjs",
-    "test:batch-acceptance": "npx tsx --test tests/subscriberBatchApprovalCreator.test.mjs tests/subscriberBatchRoute.test.mjs tests/subscriberBatchCrossRuntime.test.mjs",
-    "test:unit": "node --test --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON tests/*.test.mjs",
-    "test:component": "node --test --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON tests/userAccessRoutes.test.mjs",
-    "test:e2e": "node --test --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON tests/userAccessRoutes.test.mjs",
+    "test": "tsx --test tests/*.test.mjs",
+    "test:unit": "tsx --test tests/*.test.mjs",
+    "test:component": "tsx --test tests/userAccessRoutes.test.mjs",
+    "test:e2e": "tsx --test tests/userAccessRoutes.test.mjs",
     "typecheck": "tsc --noEmit --incremental false --pretty false",
     "lint": "eslint",
-    "check": "npm run lint && npm run typecheck && npm test && npm run test:batch-acceptance && npm run build",
+    "check": "npm run lint && npm run typecheck && npm test && npm run build",
     "check:full": "npm run lint && npm run typecheck && npm test && npm run test:component && npm run test:e2e && npm run mongo:test-core && npm run build",
     "mongo:init": "node scripts/init-mongo-indexes.mjs",
     "mongo:migrate-app-db": "node scripts/migrate-app-collections-to-app-db.mjs",
@@ -47,6 +46,7 @@
     "jiti": "^2.6.1",
     "rimraf": "^6.1.3",
     "tailwindcss": "^4",
+    "tsx": "^4.23.13",
     "typescript": "^5"
   }
 }
