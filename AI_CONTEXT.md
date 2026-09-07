@@ -151,6 +151,8 @@ Phase 3A    COMPLETE — security audit evidence writer + authorization denial i
 Phase 3B    COMPLETE — audit writer lifecycle closeout
 Phase 3C    COMPLETE — approval governance read foundation
 Phase 3D    COMPLETE — explicit approval decision endpoints + contract preflight
+Phase 4.1   COMPLETE — subscriber single-write final contract gate
+Phase 4.2-A COMPLETE — subscriber batch create governance
 ```
 
 Exact HEAD is intentionally not stored here.
@@ -231,7 +233,7 @@ Preserve exact Node key/limit/window/headers/messages.
 Current write invariant:
 
 ```text
-Business-domain writes by Go = subscriber CREATE/UPDATE/DELETE handlers exist (governance: super_admin/root→DIRECT, operator/ops_admin→APPROVAL), ACTUALLY_ROUTED=0 (not Nginx-routed)
+Business-domain writes by Go = subscriber CREATE/UPDATE/DELETE/BATCH_CREATE handlers exist (governance: super_admin/root→DIRECT, operator/ops_admin→APPROVAL), ACTUALLY_ROUTED=0 (not Nginx-routed)
 Infrastructure writes = app_rate_limits (allowed)
 Governance writes = app_approvals (CAS transitions + ACCESS_REQUEST creation, Strict audit)
 Sequence writes = app_sequences (approval change ID generation)
@@ -328,13 +330,13 @@ POST /api/approvals/:id          — legacy compat adapter (dispatches by decisi
 Status:
 
 ```text
-Implemented = 42
-Response Parity = 42
-Cutover Ready = 42
+Implemented = 43
+Response Parity = 43
+Cutover Ready = 43
 Cutover Blocked = 0
 Actually Routed = 0 (Nginx not modified)
 ready + blocked = implemented ✅
-Business mutations = 3 (subscriber create/update/delete, ACTUALLY_ROUTED=0)
+Business mutations = 4 (subscriber create/update/delete/batch-create, ACTUALLY_ROUTED=0)
 ```
 
 Production `/api/*` still routes to Next.js.
@@ -931,6 +933,7 @@ Phase 3:
 - Fresh actor validation — COMPLETE (validateCurrentAccount for CREATE/UPDATE/DELETE)
 - Strict audit — COMPLETE (fresh actor in audit metadata)
 - OCS provisioning — COMPLETE (presence-aware input, no admin reservation, balance preservation)
+- Subscriber batch create — COMPLETE (frozen v2 contract, create-only atomicity, profile drift protection, 5GiB default, governance: operator→APPROVAL, super_admin/root→DIRECT)
 - Approval execute — DEFERRED (crosses into business mutations)
 
 Security audit blocker:

@@ -353,3 +353,118 @@ func toFloat64(v any) (float64, bool) {
 		return 0, false
 	}
 }
+
+// ValidateBatchCount validates a batch count value.
+// Matches Node validateBatchCount() exactly: integer, 1..1000.
+func ValidateBatchCount(value any) (int, error) {
+	n, ok := toFloat64(value)
+	if !ok || n != float64(int(n)) || n < 1 || n > 1000 {
+		return 0, fmt.Errorf("Count must be an integer between 1 and 1000")
+	}
+	return int(n), nil
+}
+
+// ValidateBatchCreatePayload validates the batch create request body.
+// Matches Node validateBatchCreatePayload() exactly.
+func ValidateBatchCreatePayload(body map[string]any) (*BatchCreatePayload, error) {
+	// startImsi: required, exactly 15 digits
+	startImsiRaw, ok := body["startImsi"]
+	if !ok || startImsiRaw == nil {
+		return nil, fmt.Errorf("startImsi is required")
+	}
+	startImsi, err := ValidateImsi(fmt.Sprintf("%v", startImsiRaw))
+	if err != nil {
+		return nil, err
+	}
+
+	// count: required, integer, 1..1000
+	countRaw, ok := body["count"]
+	if !ok || countRaw == nil {
+		return nil, fmt.Errorf("count is required")
+	}
+	count, err := ValidateBatchCount(countRaw)
+	if err != nil {
+		return nil, err
+	}
+
+	// Optional non-negative numbers
+	for _, field := range []string{"trafficTotal", "trafficBalance", "smsTotal", "smsBalance"} {
+		if v, ok := body[field]; ok && v != nil {
+			n, ok := toFloat64(v)
+			if !ok || n < 0 {
+				return nil, fmt.Errorf("%s must be a non-negative number", field)
+			}
+		}
+	}
+
+	// planId: optional, trim, validate format
+	var planId string
+	if v, ok := body["planId"]; ok && v != nil {
+		s := strings.TrimSpace(fmt.Sprintf("%v", v))
+		if s != "" {
+			if !tariffPlanIDPattern.MatchString(s) {
+				return nil, &SubscriberGovernanceError{Code: "INVALID_PLAN_ID"}
+			}
+			planId = s
+		}
+	}
+
+	// profileName: optional, String(value)
+	var profileName string
+	if v, ok := body["profileName"]; ok && v != nil {
+		profileName = strings.TrimSpace(fmt.Sprintf("%v", v))
+	}
+
+	// strategy: "skip" → skip, anything else → overwrite
+	strategy := "overwrite"
+	if v, ok := body["strategy"]; ok && v != nil {
+		if fmt.Sprintf("%v", v) == "skip" {
+			strategy = "skip"
+		}
+	}
+
+	// Extract optional numeric values
+	var tt, tb, st, sb *float64
+	if v, ok := body["trafficTotal"]; ok && v != nil {
+		if n, ok := toFloat64(v); ok && n >= 0 {
+			tt = &n
+		}
+	}
+	if v, ok := body["trafficBalance"]; ok && v != nil {
+		if n, ok := toFloat64(v); ok && n >= 0 {
+			tb = &n
+		}
+	}
+	if v, ok := body["smsTotal"]; ok && v != nil {
+		if n, ok := toFloat64(v); ok && n >= 0 {
+			st = &n
+		}
+	}
+	if v, ok := body["smsBalance"]; ok && v != nil {
+		if n, ok := toFloat64(v); ok && n >= 0 {
+			sb = &n
+		}
+	}
+
+	payload := &BatchCreatePayload{
+		StartImsi:   startImsi,
+		Count:       count,
+		ProfileName: profileName,
+		PlanId:      planId,
+		Strategy:    strategy,
+	}
+	if tt != nil {
+		payload.TrafficTotal = *tt
+	}
+	if tb != nil {
+		payload.TrafficBalance = *tb
+	}
+	if st != nil {
+		payload.SmsTotal = *st
+	}
+	if sb != nil {
+		payload.SmsBalance = *sb
+	}
+
+	return payload, nil
+}

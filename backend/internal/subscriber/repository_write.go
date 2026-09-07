@@ -1135,3 +1135,83 @@ func mapOcsTrafficToInput(ocs map[string]any, input *OcsProvisioningInput) {
 		}
 	}
 }
+
+// CreateSubscriberBatchCreateOnly performs create-only batch insert.
+// NEVER uses replaceOne+upsert. Each target is inserted individually.
+// Duplicate key during insert = precondition conflict or partial write.
+// OCS provisioning only for successfully inserted subscribers.
+func (r *Repository) CreateSubscriberBatchCreateOnly(
+	ctx context.Context,
+	frozen *FrozenBatchCreateV2,
+) (*BatchCreateResult, error) {
+	result := &BatchCreateResult{
+		Requested:   len(frozen.ExpectedAbsentImsis),
+		Fingerprint: frozen.OperationFingerprint,
+	}
+
+	profileData := r.loadProfileData(ctx, frozen.Profile.RequestedName)
+
+	for _, imsi := range frozen.ExpectedAbsentImsis {
+		doc := buildBatchSubscriberDoc(imsi, profileData)
+
+		_, err := r.subscribers.InsertOne(ctx, doc)
+		if err != nil {
+			if mongo.IsDuplicateKeyError(err) {
+				// Duplicate key = target already exists (race condition)
+				result.SubscriberFailed = append(result.SubscriberFailed, imsi)
+				continue
+			}
+			return nil, fmt.Errorf("insert subscriber %s: %w", imsi, err)
+		}
+
+		result.CreatedImsis = append(result.CreatedImsis, imsi)
+	}
+
+	// OCS provisioning only for successfully inserted subscribers
+	for _, imsi := range result.CreatedImsis {
+		planId := frozen.EffectiveOcs.PlanId
+		input := OcsProvisioningInput{
+			IMSI:          imsi,
+			PlanID:        &planId,
+			DataTotal:     &frozen.EffectiveOcs.TrafficTotal,
+			DataAvailable: &frozen.EffectiveOcs.TrafficBalance,
+			SMSTotal:      &frozen.EffectiveOcs.SmsTotal,
+			SMSAvailable:  &frozen.EffectiveOcs.SmsBalance,
+		}
+
+		if err := r.provisionOcsSubscriber(ctx, input); err != nil {
+			result.OcsFailed = append(result.OcsFailed, imsi)
+			continue
+		}
+		result.OcsProvisioned = append(result.OcsProvisioned, imsi)
+	}
+
+	result.CreatedCount = len(result.CreatedImsis)
+	result.FailedCount = len(result.SubscriberFailed) + len(result.OcsFailed)
+	result.PartialMutation = result.CreatedCount > 0 && result.FailedCount > 0
+	result.Metrics = BatchMetrics{
+		TotalTraffic: frozen.EffectiveOcs.TrafficTotal * int64(result.CreatedCount),
+		BatchSize:    result.CreatedCount,
+	}
+
+	return result, nil
+}
+
+// loadProfileData loads profile data for batch creation.
+// Returns nil if profile not found (absent state).
+func (r *Repository) loadProfileData(ctx context.Context, profileName string) map[string]any {
+	if profileName == "" || r.profiles == nil {
+		return nil
+	}
+	var doc bson.M
+	err := r.profiles.FindOne(ctx, bson.M{"name": profileName}).Decode(&doc)
+	if err != nil {
+		return nil
+	}
+	// Convert bson.M to map[string]any
+	result := make(map[string]any)
+	for k, v := range doc {
+		result[k] = v
+	}
+	return result
+}

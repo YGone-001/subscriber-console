@@ -14,6 +14,19 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
+// testAuditWriter creates a properly initialized audit writer for tests.
+func testAuditWriter() *audit.Writer {
+	return audit.NewWriter(&noopEvidenceStore{}, audit.WriterConfig{})
+}
+
+// noopEvidenceStore is a no-op evidence store for tests.
+type noopEvidenceStore struct{}
+
+func (n *noopEvidenceStore) Insert(_ context.Context, _ audit.AuditWriteRecord) error { return nil }
+func (n *noopEvidenceStore) FindByMongoID(_ context.Context, _ string) (*audit.AuditWriteRecord, error) {
+	return nil, nil
+}
+
 // --- Mock infrastructure ---
 
 type mockRateLimiter struct {
@@ -114,14 +127,14 @@ func testWriteHandler(userRepo *mockUserRepo, approvalSvc *mockApprovalCreator) 
 		limiter:     &mockRateLimiter{allowed: true},
 		userRepo:    userRepo,
 		approvalSvc: approvalSvc,
-		auditWriter: &audit.Writer{},
+		auditWriter: testAuditWriter(),
 	}
 }
 
 func testPrincipalCtx(username, role string) context.Context {
 	p := &auth.Principal{
 		Username:       username,
-		NormalizedRole: role,
+		NormalizedRole: auth.NormalizeRole(role),
 		SessionVersion: 1,
 	}
 	return auth.ContextWithPrincipal(context.Background(), p)
@@ -149,7 +162,7 @@ func TestHandleCreate_RateLimited(t *testing.T) {
 	// Rate limiter that denies — handler gets429
 	h := &WriteHandler{
 		limiter:     &mockRateLimiter{allowed: false},
-		auditWriter: &audit.Writer{},
+		auditWriter: testAuditWriter(),
 		userRepo: &mockUserRepo{
 			identity: testUserIdentity("testuser", "operator"),
 		},
@@ -172,7 +185,7 @@ func TestHandleCreate_RateLimited(t *testing.T) {
 func TestHandleCreate_InvalidIMSI(t *testing.T) {
 	h := &WriteHandler{
 		limiter:     &mockRateLimiter{allowed: true},
-		auditWriter: &audit.Writer{},
+		auditWriter: testAuditWriter(),
 		userRepo: &mockUserRepo{
 			identity: testUserIdentity("testuser", "operator"),
 		},
@@ -193,7 +206,7 @@ func TestHandleCreate_InvalidIMSI(t *testing.T) {
 func TestHandleCreate_MalformedJSON(t *testing.T) {
 	h := &WriteHandler{
 		limiter:     &mockRateLimiter{allowed: true},
-		auditWriter: &audit.Writer{},
+		auditWriter: testAuditWriter(),
 		userRepo: &mockUserRepo{
 			identity: testUserIdentity("testuser", "operator"),
 		},
@@ -218,7 +231,7 @@ func TestHandleCreate_Success(t *testing.T) {
 	h := &WriteHandler{
 		repo:        repo,
 		limiter:     &mockRateLimiter{allowed: true},
-		auditWriter: &audit.Writer{},
+		auditWriter: testAuditWriter(),
 		userRepo: &mockUserRepo{
 			identity: testUserIdentity("testuser", "operator"),
 		},
@@ -261,7 +274,7 @@ func TestHandleUpdate_Unauthenticated(t *testing.T) {
 func TestHandleUpdate_MissingIMSI(t *testing.T) {
 	h := &WriteHandler{
 		limiter:     &mockRateLimiter{allowed: true},
-		auditWriter: &audit.Writer{},
+		auditWriter: testAuditWriter(),
 		userRepo: &mockUserRepo{
 			identity: testUserIdentity("testuser", "operator"),
 		},
@@ -282,7 +295,7 @@ func TestHandleUpdate_MissingIMSI(t *testing.T) {
 func TestHandleUpdate_InvalidIMSI(t *testing.T) {
 	h := &WriteHandler{
 		limiter:     &mockRateLimiter{allowed: true},
-		auditWriter: &audit.Writer{},
+		auditWriter: testAuditWriter(),
 		userRepo: &mockUserRepo{
 			identity: testUserIdentity("testuser", "operator"),
 		},
@@ -304,7 +317,7 @@ func TestHandleUpdate_InvalidIMSI(t *testing.T) {
 func TestHandleUpdate_MalformedJSON(t *testing.T) {
 	h := &WriteHandler{
 		limiter:     &mockRateLimiter{allowed: true},
-		auditWriter: &audit.Writer{},
+		auditWriter: testAuditWriter(),
 		userRepo: &mockUserRepo{
 			identity: testUserIdentity("testuser", "operator"),
 		},
@@ -343,7 +356,7 @@ func TestHandleDelete_Unauthenticated(t *testing.T) {
 func TestHandleDelete_MissingIMSI(t *testing.T) {
 	h := &WriteHandler{
 		limiter:     &mockRateLimiter{allowed: true},
-		auditWriter: &audit.Writer{},
+		auditWriter: testAuditWriter(),
 		userRepo: &mockUserRepo{
 			identity: testUserIdentity("testuser", "operator"),
 		},
@@ -363,7 +376,7 @@ func TestHandleDelete_MissingIMSI(t *testing.T) {
 func TestHandleDelete_InvalidIMSI(t *testing.T) {
 	h := &WriteHandler{
 		limiter:     &mockRateLimiter{allowed: true},
-		auditWriter: &audit.Writer{},
+		auditWriter: testAuditWriter(),
 		userRepo: &mockUserRepo{
 			identity: testUserIdentity("testuser", "operator"),
 		},
@@ -399,7 +412,7 @@ func TestHandleUpdate_OperatorCreatesApproval(t *testing.T) {
 		limiter:     &mockRateLimiter{allowed: true},
 		userRepo:    userRepo,
 		approvalSvc: approvalSvc,
-		auditWriter: &audit.Writer{},
+		auditWriter: testAuditWriter(),
 	}
 
 	// First create a subscriber to update
@@ -434,7 +447,7 @@ func TestHandleDelete_SuperAdminDirectExecution(t *testing.T) {
 		limiter:     &mockRateLimiter{allowed: true},
 		userRepo:    userRepo,
 		approvalSvc: &mockApprovalCreator{},
-		auditWriter: &audit.Writer{},
+		auditWriter: testAuditWriter(),
 	}
 
 	// First create a subscriber to delete
@@ -451,5 +464,584 @@ func TestHandleDelete_SuperAdminDirectExecution(t *testing.T) {
 	// Should not get 202 (approval)
 	if w.Code == http.StatusAccepted {
 		t.Error("super_admin should not get 202 (approval)")
+	}
+}
+
+// --- PART 4.2: POST /api/subscribers/batch tests ---
+
+func TestBatchCreate_Unauthenticated(t *testing.T) {
+	h := &WriteHandler{
+		limiter: &mockRateLimiter{allowed: true},
+	}
+
+	body := `{"startImsi":"417001234567890","count":2}`
+	r := httptest.NewRequest(http.MethodPost, "/api/subscribers/batch", bytes.NewBufferString(body))
+	w := httptest.NewRecorder()
+
+	h.BatchCreate(w, r)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestBatchCreate_RateLimited(t *testing.T) {
+	h := &WriteHandler{
+		limiter:     &mockRateLimiter{allowed: false},
+		auditWriter: testAuditWriter(),
+		userRepo: &mockUserRepo{
+			identity: testUserIdentity("testuser", "operator"),
+		},
+	}
+
+	body := `{"startImsi":"417001234567890","count":2}`
+	r := httptest.NewRequest(http.MethodPost, "/api/subscribers/batch", bytes.NewBufferString(body))
+	r = r.WithContext(testPrincipalCtx("testuser", "operator"))
+	w := httptest.NewRecorder()
+
+	h.BatchCreate(w, r)
+
+	if w.Code != http.StatusTooManyRequests {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusTooManyRequests)
+	}
+}
+
+func TestBatchCreate_SubscriberWriteDenied(t *testing.T) {
+	h := &WriteHandler{
+		limiter:     &mockRateLimiter{allowed: true},
+		auditWriter: testAuditWriter(),
+		userRepo: &mockUserRepo{
+			identity: testUserIdentity("testuser", "viewer"),
+		},
+	}
+
+	body := `{"startImsi":"417001234567890","count":2}`
+	r := httptest.NewRequest(http.MethodPost, "/api/subscribers/batch", bytes.NewBufferString(body))
+	r = r.WithContext(testPrincipalCtx("testuser", "viewer"))
+	w := httptest.NewRecorder()
+
+	h.BatchCreate(w, r)
+
+	if w.Code != http.StatusForbidden {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusForbidden)
+	}
+}
+
+func TestBatchCreate_MalformedJSON(t *testing.T) {
+	h := &WriteHandler{
+		limiter:     &mockRateLimiter{allowed: true},
+		auditWriter: testAuditWriter(),
+		userRepo: &mockUserRepo{
+			identity: testUserIdentity("testuser", "operator"),
+		},
+	}
+
+	r := httptest.NewRequest(http.MethodPost, "/api/subscribers/batch", bytes.NewBufferString("not json"))
+	r = r.WithContext(testPrincipalCtx("testuser", "operator"))
+	w := httptest.NewRecorder()
+
+	h.BatchCreate(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestBatchCreate_InvalidStartImsi(t *testing.T) {
+	h := &WriteHandler{
+		limiter:     &mockRateLimiter{allowed: true},
+		auditWriter: testAuditWriter(),
+		userRepo: &mockUserRepo{
+			identity: testUserIdentity("testuser", "operator"),
+		},
+	}
+
+	body := `{"startImsi":"invalid","count":2}`
+	r := httptest.NewRequest(http.MethodPost, "/api/subscribers/batch", bytes.NewBufferString(body))
+	r = r.WithContext(testPrincipalCtx("testuser", "operator"))
+	w := httptest.NewRecorder()
+
+	h.BatchCreate(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestBatchCreate_InvalidCountZero(t *testing.T) {
+	h := &WriteHandler{
+		limiter:     &mockRateLimiter{allowed: true},
+		auditWriter: testAuditWriter(),
+		userRepo: &mockUserRepo{
+			identity: testUserIdentity("testuser", "operator"),
+		},
+	}
+
+	body := `{"startImsi":"417001234567890","count":0}`
+	r := httptest.NewRequest(http.MethodPost, "/api/subscribers/batch", bytes.NewBufferString(body))
+	r = r.WithContext(testPrincipalCtx("testuser", "operator"))
+	w := httptest.NewRecorder()
+
+	h.BatchCreate(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestBatchCreate_InvalidCountOver1000(t *testing.T) {
+	h := &WriteHandler{
+		limiter:     &mockRateLimiter{allowed: true},
+		auditWriter: testAuditWriter(),
+		userRepo: &mockUserRepo{
+			identity: testUserIdentity("testuser", "operator"),
+		},
+	}
+
+	body := `{"startImsi":"417001234567890","count":1001}`
+	r := httptest.NewRequest(http.MethodPost, "/api/subscribers/batch", bytes.NewBufferString(body))
+	r = r.WithContext(testPrincipalCtx("testuser", "operator"))
+	w := httptest.NewRecorder()
+
+	h.BatchCreate(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestBatchCreate_InvalidPlanId(t *testing.T) {
+	h := &WriteHandler{
+		limiter:     &mockRateLimiter{allowed: true},
+		auditWriter: testAuditWriter(),
+		userRepo: &mockUserRepo{
+			identity: testUserIdentity("testuser", "operator"),
+		},
+	}
+
+	body := `{"startImsi":"417001234567890","count":2,"planId":"invalid plan id!"}`
+	r := httptest.NewRequest(http.MethodPost, "/api/subscribers/batch", bytes.NewBufferString(body))
+	r = r.WithContext(testPrincipalCtx("testuser", "operator"))
+	w := httptest.NewRecorder()
+
+	h.BatchCreate(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestBatchCreate_IMSIOverflow(t *testing.T) {
+	h := &WriteHandler{
+		limiter:     &mockRateLimiter{allowed: true},
+		auditWriter: testAuditWriter(),
+		userRepo: &mockUserRepo{
+			identity: testUserIdentity("testuser", "operator"),
+		},
+	}
+
+	body := `{"startImsi":"999999999999999","count":2}`
+	r := httptest.NewRequest(http.MethodPost, "/api/subscribers/batch", bytes.NewBufferString(body))
+	r = r.WithContext(testPrincipalCtx("testuser", "operator"))
+	w := httptest.NewRecorder()
+
+	h.BatchCreate(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestBatchCreate_InvalidTrafficTotal(t *testing.T) {
+	h := &WriteHandler{
+		limiter:     &mockRateLimiter{allowed: true},
+		auditWriter: testAuditWriter(),
+		userRepo: &mockUserRepo{
+			identity: testUserIdentity("testuser", "operator"),
+		},
+	}
+
+	body := `{"startImsi":"417001234567890","count":2,"trafficTotal":-1}`
+	r := httptest.NewRequest(http.MethodPost, "/api/subscribers/batch", bytes.NewBufferString(body))
+	r = r.WithContext(testPrincipalCtx("testuser", "operator"))
+	w := httptest.NewRecorder()
+
+	h.BatchCreate(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestBatchCreate_OperatorApprovalPath(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires MongoDB")
+	}
+	repo, cleanup := ocsTestRepo(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	// Insert a profile for loadProfileData
+	_, err := repo.subscribers.Database().Collection("profiles").InsertOne(ctx, bson.M{
+		"profileName": "test_profile",
+		"sub4G": bson.M{
+			"ambr": bson.M{
+				"downlink": bson.M{"value": 1, "unit": 3},
+				"uplink":   bson.M{"value": 1, "unit": 3},
+			},
+			"default5qi": 9,
+			"sliceList": []bson.M{{
+				"sst": 1,
+				"sd":  "000001",
+				"sessionList": []bson.M{{
+					"name":   "internet",
+					"type":   3,
+					"qos":    bson.M{"index": 9},
+					"ambr":   bson.M{"downlink": 1, "uplink": 1},
+					"ueIpv4": "10.45.0.1/16",
+				}},
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("insert profile: %v", err)
+	}
+
+	userRepo := &mockUserRepo{
+		identity: testUserIdentity("testuser", "operator"),
+	}
+	captured := &approval.CreateApprovalInput{}
+	approvalSvc := &mockApprovalCreator{
+		doc: &approval.ApprovalDocument{
+			ID:     "test-approval-id",
+			Status: "pending",
+		},
+		captured: captured,
+	}
+
+	h := &WriteHandler{
+		repo:        repo,
+		limiter:     &mockRateLimiter{allowed: true},
+		userRepo:    userRepo,
+		approvalSvc: approvalSvc,
+		auditWriter: testAuditWriter(),
+	}
+
+	body := `{"startImsi":"417001234567890","count":2,"profileName":"test_profile","strategy":"skip"}`
+	r := httptest.NewRequest(http.MethodPost, "/api/subscribers/batch", bytes.NewBufferString(body))
+	r = r.WithContext(testPrincipalCtx("testuser", "operator"))
+	w := httptest.NewRecorder()
+
+	h.BatchCreate(w, r)
+
+	// Operator → approval path → 202
+	if w.Code != http.StatusAccepted {
+		t.Errorf("status = %d, want %d (operator approval path)", w.Code, http.StatusAccepted)
+	}
+
+	// Verify approval was created
+	if captured.Action == "" {
+		t.Fatal("expected approval to be created")
+	}
+	if captured.Payload == nil {
+		t.Fatal("expected frozen contract in approval payload")
+	}
+	if captured.Payload["version"] != "subscriber-batch-create-v2" {
+		t.Errorf("payload version = %v, want subscriber-batch-create-v2", captured.Payload["version"])
+	}
+
+	// Verify no business writes happened
+	var count int64
+	count, err = repo.subscribers.CountDocuments(ctx, bson.M{"imsi": bson.M{"$gte": "417001234567890", "$lt": "417001234567892"}})
+	if err != nil {
+		t.Fatalf("count subscribers: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("expected 0 business writes for approval path, got %d", count)
+	}
+}
+
+func TestBatchCreate_SuperAdminDirectPath(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires MongoDB")
+	}
+	repo, cleanup := ocsTestRepo(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	// Insert a profile for loadProfileData
+	_, err := repo.subscribers.Database().Collection("profiles").InsertOne(ctx, bson.M{
+		"profileName": "test_profile",
+		"sub4G": bson.M{
+			"ambr": bson.M{
+				"downlink": bson.M{"value": 1, "unit": 3},
+				"uplink":   bson.M{"value": 1, "unit": 3},
+			},
+			"default5qi": 9,
+			"sliceList": []bson.M{{
+				"sst": 1,
+				"sd":  "000001",
+				"sessionList": []bson.M{{
+					"name":   "internet",
+					"type":   3,
+					"qos":    bson.M{"index": 9},
+					"ambr":   bson.M{"downlink": 1, "uplink": 1},
+					"ueIpv4": "10.45.0.1/16",
+				}},
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("insert profile: %v", err)
+	}
+
+	userRepo := &mockUserRepo{
+		identity: testUserIdentity("admin", "super_admin"),
+	}
+	approvalSvc := &mockApprovalCreator{}
+
+	h := &WriteHandler{
+		repo:        repo,
+		limiter:     &mockRateLimiter{allowed: true},
+		userRepo:    userRepo,
+		approvalSvc: approvalSvc,
+		auditWriter: testAuditWriter(),
+	}
+
+	body := `{"startImsi":"417001234567890","count":2,"profileName":"test_profile","strategy":"skip"}`
+	r := httptest.NewRequest(http.MethodPost, "/api/subscribers/batch", bytes.NewBufferString(body))
+	r = r.WithContext(testPrincipalCtx("admin", "super_admin"))
+	w := httptest.NewRecorder()
+
+	h.BatchCreate(w, r)
+
+	// super_admin → direct path → 201
+	if w.Code != http.StatusCreated {
+		t.Errorf("status = %d, want %d (super_admin direct path)", w.Code, http.StatusCreated)
+	}
+
+	// Verify no approval was created
+	if approvalSvc.captured != nil {
+		t.Error("expected no approval for super_admin direct path")
+	}
+
+	// Verify subscribers were created
+	var count int64
+	count, err = repo.subscribers.CountDocuments(ctx, bson.M{"imsi": bson.M{"$gte": "417001234567890", "$lt": "417001234567892"}})
+	if err != nil {
+		t.Fatalf("count subscribers: %v", err)
+	}
+	if count != 2 {
+		t.Errorf("expected 2 subscribers, got %d", count)
+	}
+}
+
+func TestBatchCreate_PreExistingTarget(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires MongoDB")
+	}
+	repo, cleanup := ocsTestRepo(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	// Pre-insert a subscriber
+	_, err := repo.subscribers.InsertOne(ctx, bson.M{"imsi": "417001234567890"})
+	if err != nil {
+		t.Fatalf("insert existing: %v", err)
+	}
+
+	userRepo := &mockUserRepo{
+		identity: testUserIdentity("admin", "super_admin"),
+	}
+
+	h := &WriteHandler{
+		repo:        repo,
+		limiter:     &mockRateLimiter{allowed: true},
+		userRepo:    userRepo,
+		approvalSvc: &mockApprovalCreator{},
+		auditWriter: testAuditWriter(),
+	}
+
+	body := `{"startImsi":"417001234567890","count":2}`
+	r := httptest.NewRequest(http.MethodPost, "/api/subscribers/batch", bytes.NewBufferString(body))
+	r = r.WithContext(testPrincipalCtx("admin", "super_admin"))
+	w := httptest.NewRecorder()
+
+	h.BatchCreate(w, r)
+
+	if w.Code != http.StatusConflict {
+		t.Errorf("status = %d, want %d (pre-existing target)", w.Code, http.StatusConflict)
+	}
+}
+
+func TestBatchCreate_ProfileDrift(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires MongoDB")
+	}
+	repo, cleanup := ocsTestRepo(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	// Add profiles collection to repo
+	profileColl := repo.subscribers.Database().Collection("app_profiles")
+	repo.profiles = profileColl
+
+	// Insert profile with "name" field (what loadProfileData queries on)
+	_, err := profileColl.InsertOne(ctx, bson.M{
+		"name": "test_profile",
+		"sub4G": bson.M{
+			"ambr": bson.M{
+				"downlink": bson.M{"value": 1, "unit": 3},
+				"uplink":   bson.M{"value": 1, "unit": 3},
+			},
+			"default5qi": 9,
+		},
+	})
+	if err != nil {
+		t.Fatalf("insert profile: %v", err)
+	}
+
+	userRepo := &mockUserRepo{
+		identity: testUserIdentity("testuser", "operator"),
+	}
+	captured := &approval.CreateApprovalInput{}
+	approvalSvc := &mockApprovalCreator{
+		doc: &approval.ApprovalDocument{
+			ID:     "test-approval-id",
+			Status: "pending",
+		},
+		captured: captured,
+	}
+
+	h := &WriteHandler{
+		repo:        repo,
+		limiter:     &mockRateLimiter{allowed: true},
+		userRepo:    userRepo,
+		approvalSvc: approvalSvc,
+		auditWriter: testAuditWriter(),
+	}
+
+	body := `{"startImsi":"417001234567890","count":2,"profileName":"test_profile","strategy":"skip"}`
+	r := httptest.NewRequest(http.MethodPost, "/api/subscribers/batch", bytes.NewBufferString(body))
+	r = r.WithContext(testPrincipalCtx("testuser", "operator"))
+	w := httptest.NewRecorder()
+
+	h.BatchCreate(w, r)
+
+	// Should succeed with approval (profile hash is computed fresh)
+	if w.Code != http.StatusAccepted {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusAccepted)
+	}
+
+	// Verify frozen contract has profile hash
+	if captured.Payload == nil {
+		t.Fatal("expected frozen contract in payload")
+	}
+	profile, ok := captured.Payload["profile"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected profile in frozen contract, got %T", captured.Payload["profile"])
+	}
+	if profile["state"] != "present" {
+		t.Errorf("profile.state = %v, want present", profile["state"])
+	}
+	if profile["preconditionHash"] == nil || profile["preconditionHash"] == "" {
+		t.Error("expected preconditionHash for present profile")
+	}
+}
+
+func TestBatchCreate_RootDirectPath(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires MongoDB")
+	}
+	repo, cleanup := ocsTestRepo(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	_, err := repo.subscribers.Database().Collection("profiles").InsertOne(ctx, bson.M{
+		"profileName": "default",
+		"sub4G": bson.M{
+			"ambr": bson.M{
+				"downlink": bson.M{"value": 1, "unit": 3},
+				"uplink":   bson.M{"value": 1, "unit": 3},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("insert profile: %v", err)
+	}
+
+	userRepo := &mockUserRepo{
+		identity: testUserIdentity("root_user", "root"),
+	}
+	approvalSvc := &mockApprovalCreator{}
+
+	h := &WriteHandler{
+		repo:        repo,
+		limiter:     &mockRateLimiter{allowed: true},
+		userRepo:    userRepo,
+		approvalSvc: approvalSvc,
+		auditWriter: testAuditWriter(),
+	}
+
+	body := `{"startImsi":"417001234567890","count":3,"profileName":"default","strategy":"skip"}`
+	r := httptest.NewRequest(http.MethodPost, "/api/subscribers/batch", bytes.NewBufferString(body))
+	r = r.WithContext(testPrincipalCtx("root_user", "root"))
+	w := httptest.NewRecorder()
+
+	h.BatchCreate(w, r)
+
+	// root → direct path → 201
+	if w.Code != http.StatusCreated {
+		t.Errorf("status = %d, want %d (root direct path)", w.Code, http.StatusCreated)
+	}
+
+	// Verify no approval
+	if approvalSvc.captured != nil {
+		t.Error("expected no approval for root direct path")
+	}
+
+	// Verify 3 subscribers created
+	var count int64
+	count, err = repo.subscribers.CountDocuments(ctx, bson.M{
+		"imsi": bson.M{"$gte": "417001234567890", "$lte": "417001234567892"},
+	})
+	if err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if count != 3 {
+		t.Errorf("expected 3 subscribers, got %d", count)
+	}
+}
+
+func TestBatchCreate_DefaultProfile(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires MongoDB")
+	}
+	repo, cleanup := ocsTestRepo(t)
+	defer cleanup()
+
+	// No profile in DB — should use defaults
+	userRepo := &mockUserRepo{
+		identity: testUserIdentity("admin", "super_admin"),
+	}
+
+	h := &WriteHandler{
+		repo:        repo,
+		limiter:     &mockRateLimiter{allowed: true},
+		userRepo:    userRepo,
+		approvalSvc: &mockApprovalCreator{},
+		auditWriter: testAuditWriter(),
+	}
+
+	body := `{"startImsi":"417001234567890","count":2}`
+	r := httptest.NewRequest(http.MethodPost, "/api/subscribers/batch", bytes.NewBufferString(body))
+	r = r.WithContext(testPrincipalCtx("admin", "super_admin"))
+	w := httptest.NewRecorder()
+
+	h.BatchCreate(w, r)
+
+	// Should succeed with defaults (no profile = absent profile state)
+	if w.Code != http.StatusCreated {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusCreated)
 	}
 }
