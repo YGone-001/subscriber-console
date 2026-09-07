@@ -1158,7 +1158,7 @@ func (r *Repository) CreateSubscriberBatchCreateOnly(
 		if err != nil {
 			if mongo.IsDuplicateKeyError(err) {
 				// Duplicate key = target already exists (race condition)
-				result.SubscriberFailed = append(result.SubscriberFailed, imsi)
+				result.FailedImsis = append(result.FailedImsis, imsi)
 				continue
 			}
 			return nil, fmt.Errorf("insert subscriber %s: %w", imsi, err)
@@ -1187,7 +1187,7 @@ func (r *Repository) CreateSubscriberBatchCreateOnly(
 	}
 
 	result.CreatedCount = len(result.CreatedImsis)
-	result.FailedCount = len(result.SubscriberFailed) + len(result.OcsFailed)
+	result.FailedCount = len(result.FailedImsis) + len(result.OcsFailed)
 	result.PartialMutation = result.CreatedCount > 0 && result.FailedCount > 0
 	result.Metrics = BatchMetrics{
 		TotalTraffic: frozen.EffectiveOcs.TrafficTotal * int64(result.CreatedCount),

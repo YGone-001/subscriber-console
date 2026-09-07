@@ -46,8 +46,8 @@ func TestValidateBatchCreatePayload_WithOptionalFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if payload.TrafficTotal != 10737418240 {
-		t.Errorf("trafficTotal = %f, want 10737418240", payload.TrafficTotal)
+	if payload.TrafficTotal == nil || *payload.TrafficTotal != 10737418240 {
+		t.Errorf("trafficTotal = %v, want 10737418240", payload.TrafficTotal)
 	}
 	if payload.PlanId != "custom_plan" {
 		t.Errorf("planId = %s, want custom_plan", payload.PlanId)
@@ -274,6 +274,61 @@ func TestResolveEffectiveOcs_SmsBalanceDefaultsToTotal(t *testing.T) {
 	ocs := ResolveEffectiveOcs(nil, nil, nil, &st, nil, "")
 	if ocs.SmsBalance != 200 {
 		t.Errorf("smsBalance = %d, want 200 (should default to total)", ocs.SmsBalance)
+	}
+}
+
+// --- Explicit Zero Semantics (PART C) ---
+
+func TestResolveEffectiveOcs_ExplicitZeroTrafficTotal(t *testing.T) {
+	zero := float64(0)
+	ocs := ResolveEffectiveOcs(nil, &zero, nil, nil, nil, "")
+	// Explicit zero must be preserved, not treated as absent
+	if ocs.TrafficTotal != 0 {
+		t.Errorf("trafficTotal = %d, want 0 (explicit zero)", ocs.TrafficTotal)
+	}
+}
+
+func TestResolveEffectiveOcs_ExplicitZeroTrafficBalance(t *testing.T) {
+	tt := float64(10737418240)
+	zero := float64(0)
+	ocs := ResolveEffectiveOcs(nil, &tt, &zero, nil, nil, "")
+	// Explicit zero must be preserved
+	if ocs.TrafficBalance != 0 {
+		t.Errorf("trafficBalance = %d, want 0 (explicit zero)", ocs.TrafficBalance)
+	}
+}
+
+func TestResolveEffectiveOcs_ExplicitZeroSmsTotal(t *testing.T) {
+	zero := float64(0)
+	ocs := ResolveEffectiveOcs(nil, nil, nil, &zero, nil, "")
+	// Explicit zero must be preserved
+	if ocs.SmsTotal != 0 {
+		t.Errorf("smsTotal = %d, want 0 (explicit zero)", ocs.SmsTotal)
+	}
+}
+
+func TestResolveEffectiveOcs_ExplicitZeroSmsBalance(t *testing.T) {
+	st := float64(200)
+	zero := float64(0)
+	ocs := ResolveEffectiveOcs(nil, nil, nil, &st, &zero, "")
+	// Explicit zero must be preserved
+	if ocs.SmsBalance != 0 {
+		t.Errorf("smsBalance = %d, want 0 (explicit zero)", ocs.SmsBalance)
+	}
+}
+
+func TestResolveEffectiveOcs_MissingVsZero(t *testing.T) {
+	// Missing = nil pointer → falls back to default
+	ocsMissing := ResolveEffectiveOcs(nil, nil, nil, nil, nil, "")
+	if ocsMissing.TrafficTotal != batchDefaultTrafficTotal {
+		t.Errorf("missing trafficTotal should default to %d, got %d", batchDefaultTrafficTotal, ocsMissing.TrafficTotal)
+	}
+
+	// Explicit zero = non-nil pointer → 0
+	zero := float64(0)
+	ocsZero := ResolveEffectiveOcs(nil, &zero, nil, nil, nil, "")
+	if ocsZero.TrafficTotal != 0 {
+		t.Errorf("explicit zero trafficTotal should be 0, got %d", ocsZero.TrafficTotal)
 	}
 }
 

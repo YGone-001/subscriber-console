@@ -7,6 +7,7 @@ import (
 	"math/big"
 	"sort"
 	"strings"
+	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
@@ -23,16 +24,17 @@ const (
 
 // BatchCreatePayload holds the validated batch create request.
 // Matches Node validateBatchCreatePayload() output.
+// Pointer fields distinguish missing (nil) from explicit zero (ptr to 0).
 type BatchCreatePayload struct {
-	StartImsi      string  `json:"startImsi"`
-	Count          int     `json:"count"`
-	TrafficTotal   float64 `json:"trafficTotal,omitempty"`
-	TrafficBalance float64 `json:"trafficBalance,omitempty"`
-	SmsTotal       float64 `json:"smsTotal,omitempty"`
-	SmsBalance     float64 `json:"smsBalance,omitempty"`
-	ProfileName    string  `json:"profileName,omitempty"`
-	PlanId         string  `json:"planId,omitempty"`
-	Strategy       string  `json:"strategy"`
+	StartImsi      string   `json:"startImsi"`
+	Count          int      `json:"count"`
+	TrafficTotal   *float64 `json:"trafficTotal,omitempty"`
+	TrafficBalance *float64 `json:"trafficBalance,omitempty"`
+	SmsTotal       *float64 `json:"smsTotal,omitempty"`
+	SmsBalance     *float64 `json:"smsBalance,omitempty"`
+	ProfileName    string   `json:"profileName,omitempty"`
+	PlanId         string   `json:"planId,omitempty"`
+	Strategy       string   `json:"strategy"`
 }
 
 // EffectiveOcsConfig holds the resolved OCS configuration for batch creation.
@@ -66,16 +68,16 @@ type FrozenBatchCreateV2 struct {
 
 // BatchCreateResult holds the result of a batch create execution.
 type BatchCreateResult struct {
-	Requested        int          `json:"requested"`
-	CreatedImsis     []string     `json:"createdImsis"`
-	SubscriberFailed []string     `json:"subscriberFailedImsis"`
-	OcsProvisioned   []string     `json:"ocsProvisionedImsis"`
-	OcsFailed        []string     `json:"ocsFailedImsis"`
-	CreatedCount     int          `json:"createdCount"`
-	FailedCount      int          `json:"failedCount"`
-	PartialMutation  bool         `json:"partialMutation"`
-	Metrics          BatchMetrics `json:"metrics"`
-	Fingerprint      string       `json:"operationFingerprint"`
+	Requested       int          `json:"requested"`
+	CreatedImsis    []string     `json:"createdImsis"`
+	FailedImsis     []string     `json:"failedImsis"`
+	OcsProvisioned  []string     `json:"ocsProvisionedImsis"`
+	OcsFailed       []string     `json:"ocsFailedImsis"`
+	CreatedCount    int          `json:"createdCount"`
+	FailedCount     int          `json:"failedCount"`
+	PartialMutation bool         `json:"partialMutation"`
+	Metrics         BatchMetrics `json:"metrics"`
+	Fingerprint     string       `json:"operationFingerprint"`
 }
 
 // BatchMetrics holds batch execution metrics.
@@ -104,7 +106,8 @@ func GenerateImsiRange(startImsi string, count int) ([]string, error) {
 
 // ResolveEffectiveOcs resolves the effective OCS configuration from request,
 // profile defaults, and hardcoded defaults.
-// Matches Node batch create resolution logic exactly.
+// Node contract: explicit zero is a valid value, not absent.
+// Absent = nil pointer; present (including zero) = non-nil pointer.
 func ResolveEffectiveOcs(
 	profileData map[string]any,
 	trafficTotal, trafficBalance, smsTotal, smsBalance *float64,
@@ -125,15 +128,15 @@ func ResolveEffectiveOcs(
 		resolvedPlan = defaultPlanID
 	}
 
-	// Resolve traffic total
+	// Resolve traffic total — nil = absent, use fallback chain
 	var resolvedTrafficTotal int64
-	if trafficTotal != nil && *trafficTotal > 0 {
+	if trafficTotal != nil {
 		resolvedTrafficTotal = int64(*trafficTotal)
 	} else if v := extractInt64(profileOcs, "trafficTotal"); v > 0 {
 		resolvedTrafficTotal = v
 	} else if v := extractInt64(profileOcs, "traffic_total"); v > 0 {
 		resolvedTrafficTotal = v
-	} else if trafficBalance != nil && *trafficBalance > 0 {
+	} else if trafficBalance != nil {
 		resolvedTrafficTotal = int64(*trafficBalance)
 	} else if v := extractInt64(profileOcs, "trafficBalance"); v > 0 {
 		resolvedTrafficTotal = v
@@ -145,7 +148,7 @@ func ResolveEffectiveOcs(
 
 	// Resolve traffic balance
 	var resolvedTrafficBalance int64
-	if trafficBalance != nil && *trafficBalance > 0 {
+	if trafficBalance != nil {
 		resolvedTrafficBalance = int64(*trafficBalance)
 	} else if v := extractInt64(profileOcs, "trafficBalance"); v > 0 {
 		resolvedTrafficBalance = v
@@ -157,13 +160,13 @@ func ResolveEffectiveOcs(
 
 	// Resolve SMS total
 	var resolvedSmsTotal int64
-	if smsTotal != nil && *smsTotal > 0 {
+	if smsTotal != nil {
 		resolvedSmsTotal = int64(*smsTotal)
 	} else if v := extractInt64(profileOcs, "smsTotal"); v > 0 {
 		resolvedSmsTotal = v
 	} else if v := extractInt64(profileOcs, "sms_total"); v > 0 {
 		resolvedSmsTotal = v
-	} else if smsBalance != nil && *smsBalance > 0 {
+	} else if smsBalance != nil {
 		resolvedSmsTotal = int64(*smsBalance)
 	} else if v := extractInt64(profileOcs, "smsBalance"); v > 0 {
 		resolvedSmsTotal = v
@@ -175,7 +178,7 @@ func ResolveEffectiveOcs(
 
 	// Resolve SMS balance
 	var resolvedSmsBalance int64
-	if smsBalance != nil && *smsBalance > 0 {
+	if smsBalance != nil {
 		resolvedSmsBalance = int64(*smsBalance)
 	} else if v := extractInt64(profileOcs, "smsBalance"); v > 0 {
 		resolvedSmsBalance = v
@@ -219,21 +222,8 @@ func PrepareFrozenBatchCreate(
 		return nil, err
 	}
 
-	// Resolve effective OCS
-	var tt, tb, st, sb *float64
-	if payload.TrafficTotal > 0 {
-		tt = &payload.TrafficTotal
-	}
-	if payload.TrafficBalance > 0 {
-		tb = &payload.TrafficBalance
-	}
-	if payload.SmsTotal > 0 {
-		st = &payload.SmsTotal
-	}
-	if payload.SmsBalance > 0 {
-		sb = &payload.SmsBalance
-	}
-	effectiveOcs := ResolveEffectiveOcs(profileData, tt, tb, st, sb, payload.PlanId)
+	// Resolve effective OCS — pass pointers directly to preserve explicit zero
+	effectiveOcs := ResolveEffectiveOcs(profileData, payload.TrafficTotal, payload.TrafficBalance, payload.SmsTotal, payload.SmsBalance, payload.PlanId)
 
 	// Profile state
 	profileState := ProfileState{
@@ -314,7 +304,7 @@ func buildBatchSubscriberDoc(imsi string, profileData map[string]any) bson.M {
 		"subscribed_rau_tau_timer": 12,
 		"mme_host":                 realm["mme_host"],
 		"mme_realm":                realm["mme_realm"],
-		"mme_timestamp":            0, // will be set by DB
+		"mme_timestamp":            time.Now().UnixMicro(),
 		"purge_flag":               false,
 	}
 }
@@ -409,6 +399,11 @@ func buildBatchSlices(profileData map[string]any) bson.A {
 	return result
 }
 
+// defaultBatchSlices returns the default slice list for batch creation without profile.
+// Matches Node normalizeSliceList() default exactly:
+// - internet: type=1, 5QI=9, ARP priority=9
+// - mobile: type=1, 5QI=9, ARP priority=9
+// - ims: type=3, 5QI=5, ARP priority=1, with PCC rule (GBR/MBR 128/unit1, ARP priority=2)
 func defaultBatchSlices() bson.A {
 	return bson.A{
 		bson.M{
@@ -416,6 +411,7 @@ func defaultBatchSlices() bson.A {
 			"sst":               1,
 			"default_indicator": true,
 			"session": bson.A{
+				// internet session
 				bson.M{
 					"_id":  bson.NewObjectID(),
 					"name": "internet",
@@ -423,7 +419,7 @@ func defaultBatchSlices() bson.A {
 					"qos": bson.M{
 						"index": 9,
 						"arp": bson.M{
-							"priority_level":            8,
+							"priority_level":            9,
 							"pre_emption_capability":    1,
 							"pre_emption_vulnerability": 1,
 						},
@@ -433,6 +429,64 @@ func defaultBatchSlices() bson.A {
 						"uplink":   bson.M{"value": 1, "unit": 3},
 					},
 					"pcc_rule": bson.A{},
+				},
+				// mobile session
+				bson.M{
+					"_id":  bson.NewObjectID(),
+					"name": "mobile",
+					"type": 1,
+					"qos": bson.M{
+						"index": 9,
+						"arp": bson.M{
+							"priority_level":            9,
+							"pre_emption_capability":    1,
+							"pre_emption_vulnerability": 1,
+						},
+					},
+					"ambr": bson.M{
+						"downlink": bson.M{"value": 1, "unit": 3},
+						"uplink":   bson.M{"value": 1, "unit": 3},
+					},
+					"pcc_rule": bson.A{},
+				},
+				// ims session with PCC rule
+				bson.M{
+					"_id":  bson.NewObjectID(),
+					"name": "ims",
+					"type": 3,
+					"qos": bson.M{
+						"index": 5,
+						"arp": bson.M{
+							"priority_level":            1,
+							"pre_emption_capability":    1,
+							"pre_emption_vulnerability": 1,
+						},
+					},
+					"ambr": bson.M{
+						"downlink": bson.M{"value": 1, "unit": 3},
+						"uplink":   bson.M{"value": 1, "unit": 3},
+					},
+					"pcc_rule": bson.A{
+						bson.M{
+							"flow": bson.A{},
+							"qos": bson.M{
+								"index": 1,
+								"gbr": bson.M{
+									"downlink": bson.M{"value": 128, "unit": 1},
+									"uplink":   bson.M{"value": 128, "unit": 1},
+								},
+								"mbr": bson.M{
+									"downlink": bson.M{"value": 128, "unit": 1},
+									"uplink":   bson.M{"value": 128, "unit": 1},
+								},
+								"arp": bson.M{
+									"priority_level":            2,
+									"pre_emption_capability":    2,
+									"pre_emption_vulnerability": 2,
+								},
+							},
+						},
+					},
 				},
 			},
 		},
@@ -472,6 +526,8 @@ func buildBatchSlice(sliceData map[string]any) bson.M {
 	return result
 }
 
+// buildBatchSession builds an xcloud session document from profile session data.
+// Matches Node toXcloudSession() semantics.
 func buildBatchSession(sessionData map[string]any) bson.M {
 	name := extractStringWithDefault(sessionData, "name", "internet")
 	isIms := name == "ims"
@@ -487,14 +543,20 @@ func buildBatchSession(sessionData map[string]any) bson.M {
 		sessionType = int(v)
 	}
 
-	return bson.M{
+	// ARP priority: ims=1, internet/mobile=9 (from sessionQosPreset)
+	arpPriority := 9
+	if isIms {
+		arpPriority = 1
+	}
+
+	result := bson.M{
 		"_id":  bson.NewObjectID(),
 		"name": name,
 		"type": sessionType,
 		"qos": bson.M{
 			"index": qosIndex,
 			"arp": bson.M{
-				"priority_level":            8,
+				"priority_level":            arpPriority,
 				"pre_emption_capability":    1,
 				"pre_emption_vulnerability": 1,
 			},
@@ -505,6 +567,33 @@ func buildBatchSession(sessionData map[string]any) bson.M {
 		},
 		"pcc_rule": bson.A{},
 	}
+
+	// IMS sessions get PCC rule with GBR/MBR 128/unit1
+	if isIms {
+		result["pcc_rule"] = bson.A{
+			bson.M{
+				"flow": bson.A{},
+				"qos": bson.M{
+					"index": 1,
+					"gbr": bson.M{
+						"downlink": bson.M{"value": 128, "unit": 1},
+						"uplink":   bson.M{"value": 128, "unit": 1},
+					},
+					"mbr": bson.M{
+						"downlink": bson.M{"value": 128, "unit": 1},
+						"uplink":   bson.M{"value": 128, "unit": 1},
+					},
+					"arp": bson.M{
+						"priority_level":            2,
+						"pre_emption_capability":    2,
+						"pre_emption_vulnerability": 2,
+					},
+				},
+			},
+		}
+	}
+
+	return result
 }
 
 func epcRealmFromImsi(imsi string) map[string]string {
@@ -596,4 +685,205 @@ func sortedKeysForBatch(m map[string]any) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+// --- Frozen v2 Integrity Validation (PART L) ---
+
+// AssertFrozenBatchCreateV2 validates the frozen batch create contract integrity.
+// Returns INVALID_SUBSCRIBER_BATCH_CREATE_PAYLOAD if any check fails.
+func AssertFrozenBatchCreateV2(frozen *FrozenBatchCreateV2) error {
+	if frozen == nil {
+		return &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_CREATE_PAYLOAD"}
+	}
+	if frozen.Version != "subscriber-batch-create-v2" {
+		return &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_CREATE_PAYLOAD"}
+	}
+	if frozen.Count < 1 || frozen.Count > 1000 {
+		return &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_CREATE_PAYLOAD"}
+	}
+	if len(frozen.ExpectedAbsentImsis) != frozen.Count {
+		return &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_CREATE_PAYLOAD"}
+	}
+	if frozen.Strategy != "create-only" {
+		return &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_CREATE_PAYLOAD"}
+	}
+	if frozen.StartImsi == "" || len(frozen.StartImsi) != 15 {
+		return &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_CREATE_PAYLOAD"}
+	}
+	if frozen.Profile.State != "present" && frozen.Profile.State != "absent" {
+		return &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_CREATE_PAYLOAD"}
+	}
+	if frozen.OperationFingerprint == "" {
+		return &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_CREATE_PAYLOAD"}
+	}
+
+	// Verify IMSI range regenerates exactly
+	targets, err := GenerateImsiRange(frozen.StartImsi, frozen.Count)
+	if err != nil {
+		return &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_CREATE_PAYLOAD"}
+	}
+	for i, target := range targets {
+		if target != frozen.ExpectedAbsentImsis[i] {
+			return &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_CREATE_PAYLOAD"}
+		}
+	}
+
+	// Verify fingerprint recomputes exactly
+	expectedFp := ComputeBatchCreateFingerprint(frozen.ExpectedAbsentImsis, frozen.EffectiveOcs, frozen.Profile)
+	if expectedFp != frozen.OperationFingerprint {
+		return &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_CREATE_PAYLOAD"}
+	}
+
+	return nil
+}
+
+// --- Profile Drift Enforcement (PART I) ---
+
+// AssertBatchCreateProfilePrecondition validates that the profile state hasn't
+// changed since the frozen contract was prepared.
+// Returns SUBSCRIBER_BATCH_PROFILE_PRECONDITION_CHANGED if drift detected.
+func AssertBatchCreateProfilePrecondition(ctx context.Context, frozen *FrozenBatchCreateV2, repo *Repository) error {
+	if frozen == nil {
+		return &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_CREATE_PAYLOAD"}
+	}
+
+	currentProfile := repo.loadProfileData(ctx, frozen.Profile.RequestedName)
+
+	switch frozen.Profile.State {
+	case "present":
+		// Profile was present at prepare time — must still exist with same hash
+		if currentProfile == nil {
+			return &SubscriberGovernanceError{Code: "SUBSCRIBER_BATCH_PROFILE_PRECONDITION_CHANGED"}
+		}
+		currentHash := ComputeProfilePreconditionHash(currentProfile)
+		if currentHash != frozen.Profile.PreconditionHash {
+			return &SubscriberGovernanceError{Code: "SUBSCRIBER_BATCH_PROFILE_PRECONDITION_CHANGED"}
+		}
+	case "absent":
+		// Profile was absent at prepare time — must still be absent
+		if currentProfile != nil {
+			return &SubscriberGovernanceError{Code: "SUBSCRIBER_BATCH_PROFILE_PRECONDITION_CHANGED"}
+		}
+	}
+
+	return nil
+}
+
+// --- Expected Absence Recheck (PART M) ---
+
+// AssertExpectedAbsence rechecks that no target IMSIs exist before inserts.
+// Returns SUBSCRIBER_CREATE_PRECONDITION_CHANGED if any target already exists.
+func AssertExpectedAbsence(ctx context.Context, frozen *FrozenBatchCreateV2, repo *Repository) error {
+	if frozen == nil || len(frozen.ExpectedAbsentImsis) == 0 {
+		return nil
+	}
+
+	precheck, err := repo.precheckSubscriberRange(ctx, frozen.StartImsi, frozen.Count)
+	if err != nil {
+		return err
+	}
+	if precheck.ConflictCount > 0 {
+		return &SubscriberGovernanceError{
+			Code: "SUBSCRIBER_CREATE_PRECONDITION_CHANGED",
+			Details: map[string]any{
+				"conflictCount": precheck.ConflictCount,
+				"conflictImsis": precheck.ConflictImsis,
+			},
+		}
+	}
+	return nil
+}
+
+// --- Typed Batch Executor (PART O) ---
+
+// ExecuteFrozenSubscriberBatchCreate is the reusable business executor for batch create.
+// It owns: assert frozen payload → profile precondition → expected-absence precheck →
+// create-only insert → OCS provisioning → partial result classification.
+// Returns typed errors: INVALID_SUBSCRIBER_BATCH_CREATE_PAYLOAD,
+// SUBSCRIBER_BATCH_PROFILE_PRECONDITION_CHANGED, SUBSCRIBER_CREATE_PRECONDITION_CHANGED,
+// SUBSCRIBER_BATCH_CREATE_PARTIAL_WRITE.
+func ExecuteFrozenSubscriberBatchCreate(
+	ctx context.Context,
+	frozen *FrozenBatchCreateV2,
+	repo *Repository,
+) (*BatchCreateResult, error) {
+	// 1. Assert frozen payload integrity
+	if err := AssertFrozenBatchCreateV2(frozen); err != nil {
+		return nil, err
+	}
+
+	// 2. Profile precondition check
+	if err := AssertBatchCreateProfilePrecondition(ctx, frozen, repo); err != nil {
+		return nil, err
+	}
+
+	// 3. Expected absence precheck
+	if err := AssertExpectedAbsence(ctx, frozen, repo); err != nil {
+		return nil, err
+	}
+
+	// 4. Load profile for document building
+	profileData := repo.loadProfileData(ctx, frozen.Profile.RequestedName)
+
+	// 5. Create-only inserts
+	result := &BatchCreateResult{
+		Requested:   len(frozen.ExpectedAbsentImsis),
+		Fingerprint: frozen.OperationFingerprint,
+	}
+
+	for _, imsi := range frozen.ExpectedAbsentImsis {
+		doc := buildBatchSubscriberDoc(imsi, profileData)
+
+		_, err := repo.subscribers.InsertOne(ctx, doc)
+		if err != nil {
+			if isMongoDuplicateKey(err) {
+				// Duplicate = race condition
+				result.FailedImsis = append(result.FailedImsis, imsi)
+				continue
+			}
+			return nil, fmt.Errorf("insert subscriber %s: %w", imsi, err)
+		}
+
+		result.CreatedImsis = append(result.CreatedImsis, imsi)
+	}
+
+	// 6. OCS provisioning only for successfully inserted subscribers
+	for _, imsi := range result.CreatedImsis {
+		planId := frozen.EffectiveOcs.PlanId
+		input := OcsProvisioningInput{
+			IMSI:          imsi,
+			PlanID:        &planId,
+			DataTotal:     &frozen.EffectiveOcs.TrafficTotal,
+			DataAvailable: &frozen.EffectiveOcs.TrafficBalance,
+			SMSTotal:      &frozen.EffectiveOcs.SmsTotal,
+			SMSAvailable:  &frozen.EffectiveOcs.SmsBalance,
+		}
+
+		if err := repo.provisionOcsSubscriber(ctx, input); err != nil {
+			result.OcsFailed = append(result.OcsFailed, imsi)
+			continue
+		}
+		result.OcsProvisioned = append(result.OcsProvisioned, imsi)
+	}
+
+	// 7. Classify result
+	result.CreatedCount = len(result.CreatedImsis)
+	result.FailedCount = len(result.FailedImsis) + len(result.OcsFailed)
+	result.PartialMutation = result.CreatedCount > 0 && result.FailedCount > 0
+	result.Metrics = BatchMetrics{
+		TotalTraffic: frozen.EffectiveOcs.TrafficTotal * int64(result.CreatedCount),
+		BatchSize:    result.CreatedCount,
+	}
+
+	return result, nil
+}
+
+// isMongoDuplicateKey checks if an error is a MongoDB duplicate key error.
+func isMongoDuplicateKey(err error) bool {
+	if err == nil {
+		return false
+	}
+	// Check for MongoDB duplicate key error code (E11000)
+	return strings.Contains(err.Error(), "E11000") ||
+		strings.Contains(err.Error(), "duplicate key")
 }

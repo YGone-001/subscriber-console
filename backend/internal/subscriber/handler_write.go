@@ -660,16 +660,43 @@ func (h *WriteHandler) BatchCreate(w http.ResponseWriter, r *http.Request) {
 }
 
 // executeDirectBatchCreate executes batch create directly for super_admin/root.
+// Uses the reusable ExecuteFrozenSubscriberBatchCreate executor.
 func (h *WriteHandler) executeDirectBatchCreate(
 	w http.ResponseWriter,
 	r *http.Request,
 	frozen *FrozenBatchCreateV2,
 	fresh *FreshActor,
 ) {
-	result, err := h.repo.CreateSubscriberBatchCreateOnly(r.Context(), frozen)
+	// Execute via reusable executor (assert frozen → profile drift → absence → insert → OCS)
+	result, err := ExecuteFrozenSubscriberBatchCreate(r.Context(), frozen, h.repo)
 	if err != nil {
+		// Typed errors from executor
+		if govErr, ok := err.(*SubscriberGovernanceError); ok {
+			switch govErr.Code {
+			case "INVALID_SUBSCRIBER_BATCH_CREATE_PAYLOAD":
+				response.Error(w, http.StatusBadRequest, govErr.Code, govErr.Code)
+				return
+			case "SUBSCRIBER_BATCH_PROFILE_PRECONDITION_CHANGED":
+				response.Error(w, http.StatusConflict, govErr.Code, govErr.Code)
+				return
+			case "SUBSCRIBER_CREATE_PRECONDITION_CHANGED":
+				response.JSON(w, http.StatusConflict, map[string]any{
+					"error":         govErr.Code,
+					"code":          govErr.Code,
+					"conflictCount": govErr.Details["conflictCount"],
+					"conflictImsis": govErr.Details["conflictImsis"],
+				})
+				return
+			}
+		}
 		response.Error(w, http.StatusInternalServerError, "Batch creation failed", "BATCH_CREATE_FAILED")
 		return
+	}
+
+	// PART P: Audit ordering — classify result FIRST, then write accurate audit
+	auditResult := "success"
+	if result.PartialMutation {
+		auditResult = "partial"
 	}
 
 	// Strict audit — committed=true on failure
@@ -682,6 +709,7 @@ func (h *WriteHandler) executeDirectBatchCreate(
 			"count":            frozen.Count,
 			"createdCount":     result.CreatedCount,
 			"failedCount":      result.FailedCount,
+			"partialMutation":  result.PartialMutation,
 			"profileName":      frozen.Profile.RequestedName,
 			"effectivePlanId":  frozen.EffectiveOcs.PlanId,
 			"trafficTotal":     frozen.EffectiveOcs.TrafficTotal,
@@ -692,19 +720,20 @@ func (h *WriteHandler) executeDirectBatchCreate(
 			"operation":        "SUBSCRIBER_BATCH_CREATE",
 			"actorRole":        fresh.NormalizedRole,
 		},
-		Result: "success",
+		Result: auditResult,
 	}, fresh)
 	if auditErr != nil {
+		// PART Q: If partial mutation occurred and audit fails, return 503 with committed=true
 		response.JSON(w, http.StatusServiceUnavailable, map[string]any{
 			"error":     "AUDIT_UNAVAILABLE",
 			"code":      "AUDIT_UNAVAILABLE",
-			"committed": true,
+			"committed": result.PartialMutation,
 		})
 		return
 	}
 
-	// Check for partial write
-	if result.FailedCount > 0 {
+	// Check for partial write (PART P: after audit)
+	if result.PartialMutation {
 		response.JSON(w, http.StatusConflict, map[string]any{
 			"error":           "SUBSCRIBER_BATCH_CREATE_PARTIAL_WRITE",
 			"code":            "SUBSCRIBER_BATCH_CREATE_PARTIAL_WRITE",
@@ -841,8 +870,11 @@ func (r *Repository) precheckSubscriberRange(ctx context.Context, startImsi stri
 // sanitizeBatchResult removes sensitive data from batch result for HTTP response.
 func sanitizeBatchResult(result *BatchCreateResult) map[string]any {
 	return map[string]any{
-		"createdImsis": result.CreatedImsis,
-		"failedImsis":  result.SubscriberFailed,
-		"metrics":      result.Metrics,
+		"createdImsis":    result.CreatedImsis,
+		"failedImsis":     result.FailedImsis,
+		"createdCount":    result.CreatedCount,
+		"failedCount":     result.FailedCount,
+		"partialMutation": result.PartialMutation,
+		"metrics":         result.Metrics,
 	}
 }

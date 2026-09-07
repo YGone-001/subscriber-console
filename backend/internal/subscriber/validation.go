@@ -447,23 +447,15 @@ func ValidateBatchCreatePayload(body map[string]any) (*BatchCreatePayload, error
 	}
 
 	payload := &BatchCreatePayload{
-		StartImsi:   startImsi,
-		Count:       count,
-		ProfileName: profileName,
-		PlanId:      planId,
-		Strategy:    strategy,
-	}
-	if tt != nil {
-		payload.TrafficTotal = *tt
-	}
-	if tb != nil {
-		payload.TrafficBalance = *tb
-	}
-	if st != nil {
-		payload.SmsTotal = *st
-	}
-	if sb != nil {
-		payload.SmsBalance = *sb
+		StartImsi:      startImsi,
+		Count:          count,
+		TrafficTotal:   tt,
+		TrafficBalance: tb,
+		SmsTotal:       st,
+		SmsBalance:     sb,
+		ProfileName:    profileName,
+		PlanId:         planId,
+		Strategy:       strategy,
 	}
 
 	return payload, nil
