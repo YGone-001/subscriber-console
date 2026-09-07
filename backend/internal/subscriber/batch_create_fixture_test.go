@@ -21,11 +21,11 @@ type FixtureExpected struct {
 func loadFixtures(t *testing.T) *FixtureExpected {
 	t.Helper()
 
-	// Try to load from Node-generated fixture file
+	// Required cross-language fixture — absence is a test failure
 	fixturePath := "../../../src/server/__tests__/batch-create-fixtures.json"
 	data, err := os.ReadFile(fixturePath)
 	if err != nil {
-		t.Skipf("fixture file not found (run Node fixture generator first): %v", err)
+		t.Fatalf("required fixture file not found: %v", err)
 		return nil
 	}
 

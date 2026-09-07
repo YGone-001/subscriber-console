@@ -4,9 +4,9 @@ import { enforceRateLimit } from '@/lib/rateLimit';
 import { validateBatchCreatePayload } from '@/lib/subscriberValidation';
 import { validateCurrentAccount, AccountSessionError } from '@/lib/accountSession';
 import { evaluateSubscriberOperationForActor, SUBSCRIBER_OPERATIONS } from '@/server/subscriberGovernanceRegistry';
-import { createApprovalRequest } from '@/server/repositories/approvalRepository';
 import { precheckSubscriberRange } from '@/server/repositories/subscriberRepository';
 import { writeAuditLog } from '@/lib/audit';
+import { createGovernedApproval, ApprovalCreationError } from '@/server/approvalCreator';
 import {
   prepareFrozenBatchCreateV2,
   executeFrozenBatchCreate,
@@ -50,7 +50,7 @@ export async function POST(request: Request) {
       planId: payload.planId,
     });
 
-    // PART J: Request-time precheck — before Approval or direct mutation
+    // Request-time precheck — before Approval or direct mutation
     const precheck = await precheckSubscriberRange(payload.startImsi, payload.count);
     if (precheck.conflictCount > 0) {
       return NextResponse.json({
@@ -64,24 +64,30 @@ export async function POST(request: Request) {
       // super_admin/root direct execution
       const result = await executeFrozenBatchCreate(frozen);
 
-      // Result classification: Centralized result classification
+      // Centralized result classification
       const classification = classifyBatchResult(result.createdCount, result.failedCount);
 
-      // PART L: Zero-created failure
+      // Zero-created failure — distinguish conflict vs non-conflict (PART I)
       if (classification === 'FAILED_NO_MUTATION') {
-        // All failures were target conflicts (caught by precheck+insertOne)
+        if (result.conflictImsis.length > 0 && result.subscriberFailedImsis.length === 0) {
+          // All failures are duplicates
+          return NextResponse.json({
+            error: 'SUBSCRIBER_CREATE_PRECONDITION_CHANGED',
+            conflictCount: result.conflictImsis.length,
+            conflictImsis: result.conflictImsis.slice(0, 20),
+            partialMutation: false,
+          }, { status: 409 });
+        }
+        // Non-conflict storage failure
         return NextResponse.json({
-          error: 'SUBSCRIBER_CREATE_PRECONDITION_CHANGED',
-          conflictCount: result.conflictImsis.length,
-          conflictImsis: result.conflictImsis.slice(0, 20),
+          error: 'SUBSCRIBER_BATCH_CREATE_FAILED',
+          code: 'SUBSCRIBER_BATCH_CREATE_FAILED',
           partialMutation: false,
-        }, { status: 409 });
+        }, { status: 500 });
       }
 
-      // PART P: Audit result classification
+      // Audit result classification (PART L)
       const auditResult = classification === 'SUCCESS' ? 'success' : 'failed';
-
-      // PART O: committed = createdCount > 0
       const committed = result.createdCount > 0;
 
       // Strict business audit
@@ -98,6 +104,7 @@ export async function POST(request: Request) {
             createdCount: result.createdCount,
             failedCount: result.failedCount,
             partialMutation: result.partialMutation,
+            classification,
             profileName: frozen.profile.requestedName,
             effectivePlanId: frozen.effectiveOcs.planId,
             trafficTotal: frozen.effectiveOcs.trafficTotal,
@@ -116,14 +123,15 @@ export async function POST(request: Request) {
             approvalRequired: false,
             operation: 'SUBSCRIBER_BATCH_CREATE',
             actorRole: freshAccount.normalizedRole,
+            classification,
+            partialMutation: result.partialMutation,
           },
         }, { failureMode: 'strict' });
       } catch {
-        // PART O: Audit failure — committed reflects mutation state
         return NextResponse.json({ error: 'AUDIT_UNAVAILABLE', code: 'AUDIT_UNAVAILABLE', committed }, { status: 503 });
       }
 
-      // PART M: Partial write
+      // Partial write (PART K)
       if (classification === 'PARTIAL_WRITE') {
         return NextResponse.json({
           error: 'SUBSCRIBER_BATCH_CREATE_PARTIAL_WRITE',
@@ -137,7 +145,7 @@ export async function POST(request: Request) {
         }, { status: 409 });
       }
 
-      // PART N: Full success
+      // Full success
       return NextResponse.json({
         outcome: 'executed',
         message: 'Subscribers created successfully',
@@ -150,21 +158,36 @@ export async function POST(request: Request) {
       }, { status: 201 });
     }
 
-    // operator/ops_admin → approval
-    const approval = await createApprovalRequest({
-      action: 'SUBSCRIBER_BATCH_CREATE',
-      requester: freshAccount.username,
-      targetId: `subscriber:batch:${payload.startImsi}`,
-      summary: `Batch create ${payload.count} subscriber(s) from ${payload.startImsi}`,
-      payload: frozen,
-      operation: { resourceType: 'subscriber_batch', resourceId: payload.startImsi },
-      operationFingerprint: frozen.operationFingerprint,
-    });
+    // operator/ops_admin → approval (PART G, H)
+    const actor = { type: 'user' as const, username: freshAccount.username, role: freshAccount.normalizedRole };
+    try {
+      const approval = await createGovernedApproval({
+        action: 'SUBSCRIBER_BATCH_CREATE',
+        requester: freshAccount.username,
+        requesterContext: actor,
+        targetId: `subscriber:batch:${payload.startImsi}`,
+        summary: `Batch create ${payload.count} subscriber(s) from ${payload.startImsi}`,
+        payload: frozen,
+        operation: { resourceType: 'subscriber_batch', resourceId: payload.startImsi },
+        operationFingerprint: frozen.operationFingerprint,
+      }, actor);
 
-    return NextResponse.json(
-      { outcome: 'approval_required', message: 'Approval required before batch subscriber creation', approval, requiresApproval: true },
-      { status: 202 }
-    );
+      return NextResponse.json(
+        { outcome: 'approval_required', message: 'Approval required before batch subscriber creation', approval, requiresApproval: true },
+        { status: 202 }
+      );
+    } catch (error) {
+      // PART F: Approval audit failure — committed=true, approval retained
+      if (error instanceof ApprovalCreationError) {
+        return NextResponse.json({
+          error: 'AUDIT_UNAVAILABLE',
+          code: 'AUDIT_UNAVAILABLE',
+          committed: true,
+          approval: error.approval,
+        }, { status: 503 });
+      }
+      throw error;
+    }
   } catch (error) {
     if (error instanceof SubscriberBatchGovernanceError) {
       const statusMap: Record<string, number> = {

@@ -262,8 +262,8 @@ export async function executeApproval(approval: ApprovalDocument, request: Reque
       throw new Error('SUBSCRIBER_BATCH_CREATE_FAILED');
     }
 
-    // PART P: Audit result classification
-    const auditResult = classification === 'SUCCESS' ? 'success' : 'partial';
+    // Audit result classification
+    const auditResult = classification === 'SUCCESS' ? 'success' : 'failed';
 
     if (result.createdCount > 0) {
       logAudit(

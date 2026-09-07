@@ -63,8 +63,11 @@ export type FrozenBatchCreateV2 = {
 export type BatchCreateExecutionResult = {
   requested: number;
   createdImsis: string[];
-  failedImsis: string[];
+  subscriberFailedImsis: string[];
   conflictImsis: string[];
+  ocsProvisionedImsis: string[];
+  ocsFailedImsis: string[];
+  failedImsis: string[]; // flattened: subscriberFailed + conflict + ocsFailed
   createdCount: number;
   failedCount: number;
   partialMutation: boolean;
@@ -335,8 +338,11 @@ export async function executeFrozenBatchCreate(
   return {
     requested: frozen.count,
     createdImsis,
-    failedImsis: allFailed,
+    subscriberFailedImsis: failedImsis,
     conflictImsis,
+    ocsProvisionedImsis: ocsProvisioned,
+    ocsFailedImsis: ocsFailed,
+    failedImsis: allFailed,
     createdCount: createdImsis.length,
     failedCount: allFailed.length,
     partialMutation,
