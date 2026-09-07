@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/YGone-001/subscriber-console/backend/internal/audit"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	"subscriber/internal/audit"
 )
 
 // TransitionInput holds the parameters for a CAS status transition.

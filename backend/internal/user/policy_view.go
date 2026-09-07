@@ -1,7 +1,7 @@
 package user
 
 import (
-	"github.com/YGone-001/subscriber-console/backend/internal/auth"
+	"subscriber/internal/auth"
 )
 
 // assignableRoles returns roles that the actor can assign to others.

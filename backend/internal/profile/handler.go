@@ -5,10 +5,10 @@ import (
 	"regexp"
 	"strconv"
 
-	"github.com/YGone-001/subscriber-console/backend/internal/auth"
-	"github.com/YGone-001/subscriber-console/backend/internal/ratelimit"
-	"github.com/YGone-001/subscriber-console/backend/internal/response"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"subscriber/internal/auth"
+	"subscriber/internal/ratelimit"
+	"subscriber/internal/response"
 )
 
 var validProfileName = regexp.MustCompile(`^[a-zA-Z0-9_\s-]+$`)

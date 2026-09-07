@@ -8,7 +8,7 @@
 // Each domain owns its own registry.
 package governance
 
-import "github.com/YGone-001/subscriber-console/backend/internal/auth"
+import "subscriber/internal/auth"
 
 // Decision represents the effective governance mode for an operation.
 type Decision string

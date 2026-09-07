@@ -1,4 +1,4 @@
-module github.com/YGone-001/subscriber-console/backend
+module subscriber
 
 go 1.24.0
 

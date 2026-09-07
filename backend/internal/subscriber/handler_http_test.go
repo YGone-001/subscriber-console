@@ -7,11 +7,11 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/YGone-001/subscriber-console/backend/internal/approval"
-	"github.com/YGone-001/subscriber-console/backend/internal/audit"
-	"github.com/YGone-001/subscriber-console/backend/internal/auth"
-	"github.com/YGone-001/subscriber-console/backend/internal/user"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"subscriber/internal/approval"
+	"subscriber/internal/audit"
+	"subscriber/internal/auth"
+	"subscriber/internal/user"
 )
 
 // testAuditWriter creates a properly initialized audit writer for tests.

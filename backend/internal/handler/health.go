@@ -4,8 +4,8 @@ package handler
 import (
 	"net/http"
 
-	"github.com/YGone-001/subscriber-console/backend/internal/mongo"
-	"github.com/YGone-001/subscriber-console/backend/internal/response"
+	"subscriber/internal/mongo"
+	"subscriber/internal/response"
 )
 
 // Health handles GET /healthz — liveness probe, no dependencies checked.

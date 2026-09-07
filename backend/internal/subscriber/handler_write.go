@@ -7,14 +7,14 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/YGone-001/subscriber-console/backend/internal/approval"
-	"github.com/YGone-001/subscriber-console/backend/internal/audit"
-	"github.com/YGone-001/subscriber-console/backend/internal/auth"
-	"github.com/YGone-001/subscriber-console/backend/internal/governance"
-	"github.com/YGone-001/subscriber-console/backend/internal/response"
-	"github.com/YGone-001/subscriber-console/backend/internal/user"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	"subscriber/internal/approval"
+	"subscriber/internal/audit"
+	"subscriber/internal/auth"
+	"subscriber/internal/governance"
+	"subscriber/internal/response"
+	"subscriber/internal/user"
 )
 
 // RateLimiter abstracts rate limiting for handler testing.

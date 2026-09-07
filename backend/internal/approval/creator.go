@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/YGone-001/subscriber-console/backend/internal/audit"
+	"subscriber/internal/audit"
 )
 
 // ApprovalCreateStore abstracts approval persistence for creator testing.

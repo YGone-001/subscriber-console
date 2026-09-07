@@ -1,8 +1,8 @@
 package approval
 
 import (
-	"github.com/YGone-001/subscriber-console/backend/internal/auth"
-	"github.com/YGone-001/subscriber-console/backend/internal/governance"
+	"subscriber/internal/auth"
+	"subscriber/internal/governance"
 )
 
 // GovernanceDecision represents the effective governance mode for an operation.

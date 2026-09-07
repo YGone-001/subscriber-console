@@ -119,4 +119,4 @@ go build -o server ./cmd/server
 
 ## Module Path
 
-`github.com/YGone-001/subscriber-console/backend`
+`subscriber`

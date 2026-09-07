@@ -3,8 +3,8 @@ package approval
 import (
 	"strings"
 
-	"github.com/YGone-001/subscriber-console/backend/internal/audit"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"subscriber/internal/audit"
 )
 
 // normalizeApproval converts a raw BSON document into an ApprovalDocument.

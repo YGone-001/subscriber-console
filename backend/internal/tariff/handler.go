@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/YGone-001/subscriber-console/backend/internal/auth"
-	"github.com/YGone-001/subscriber-console/backend/internal/ratelimit"
-	"github.com/YGone-001/subscriber-console/backend/internal/response"
+	"subscriber/internal/auth"
+	"subscriber/internal/ratelimit"
+	"subscriber/internal/response"
 )
 
 // Handler handles tariff plan HTTP requests.

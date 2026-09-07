@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/YGone-001/subscriber-console/backend/internal/response"
+	"subscriber/internal/response"
 )
 
 // CookieName is the name of the auth cookie issued by Next.js.

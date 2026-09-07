@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/YGone-001/subscriber-console/backend/internal/auth"
+	"subscriber/internal/auth"
 )
 
 // DenialMetadata holds additional context for an authorization denial audit record.

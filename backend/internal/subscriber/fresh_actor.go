@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/YGone-001/subscriber-console/backend/internal/auth"
-	"github.com/YGone-001/subscriber-console/backend/internal/user"
+	"subscriber/internal/auth"
+	"subscriber/internal/user"
 )
 
 // FreshActor represents a fully validated fresh user state from the database.

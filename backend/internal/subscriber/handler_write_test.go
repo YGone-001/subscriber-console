@@ -9,11 +9,11 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/YGone-001/subscriber-console/backend/internal/approval"
-	"github.com/YGone-001/subscriber-console/backend/internal/auth"
-	"github.com/YGone-001/subscriber-console/backend/internal/governance"
-	"github.com/YGone-001/subscriber-console/backend/internal/user"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"subscriber/internal/approval"
+	"subscriber/internal/auth"
+	"subscriber/internal/governance"
+	"subscriber/internal/user"
 )
 
 // --- Test doubles for interface dependencies ---

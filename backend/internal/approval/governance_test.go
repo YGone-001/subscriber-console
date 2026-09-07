@@ -4,8 +4,8 @@ import (
 	"regexp"
 	"testing"
 
-	"github.com/YGone-001/subscriber-console/backend/internal/auth"
-	"github.com/YGone-001/subscriber-console/backend/internal/governance"
+	"subscriber/internal/auth"
+	"subscriber/internal/governance"
 )
 
 // TestEvaluateGovernance_SuperAdmin_DirectFromApproval verifies that super_admin

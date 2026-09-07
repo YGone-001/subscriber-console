@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/YGone-001/subscriber-console/backend/internal/audit"
+	"subscriber/internal/audit"
 )
 
 // ── Fake stores for creator tests ──────────────────────────────────────────

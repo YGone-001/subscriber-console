@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/YGone-001/subscriber-console/backend/internal/auth"
+	"subscriber/internal/auth"
 )
 
 func TestRequireCapabilityWithAudit_Allow(t *testing.T) {

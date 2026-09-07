@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/YGone-001/subscriber-console/backend/internal/audit"
-	"github.com/YGone-001/subscriber-console/backend/internal/auth"
-	"github.com/YGone-001/subscriber-console/backend/internal/user"
+	"subscriber/internal/audit"
+	"subscriber/internal/auth"
+	"subscriber/internal/user"
 )
 
 // ── Fake CAS Store ──────────────────────────────────────────────────────────

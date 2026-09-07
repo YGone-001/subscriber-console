@@ -3,7 +3,7 @@ package subscriber
 import (
 	"testing"
 
-	"github.com/YGone-001/subscriber-console/backend/internal/governance"
+	"subscriber/internal/governance"
 )
 
 func TestSubscriberGovernance_Create_Direct(t *testing.T) {

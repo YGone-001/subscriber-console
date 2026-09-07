@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/YGone-001/subscriber-console/backend/internal/middleware"
+	"subscriber/internal/middleware"
 )
 
 // GenerateUUID creates a UUID v4 using crypto/rand.

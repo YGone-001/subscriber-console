@@ -1,6 +1,6 @@
 package approval
 
-import "github.com/YGone-001/subscriber-console/backend/internal/auth"
+import "subscriber/internal/auth"
 
 // ApprovalActionEligibilityInput is the context needed to compute action eligibility.
 type ApprovalActionEligibilityInput struct {

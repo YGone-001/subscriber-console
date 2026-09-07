@@ -3,8 +3,8 @@ package approval
 import (
 	"context"
 
-	"github.com/YGone-001/subscriber-console/backend/internal/audit"
-	"github.com/YGone-001/subscriber-console/backend/internal/user"
+	"subscriber/internal/audit"
+	"subscriber/internal/user"
 )
 
 // DecisionStore abstracts approval persistence for Workflow testing.

@@ -3,9 +3,9 @@ package rating
 import (
 	"net/http"
 
-	"github.com/YGone-001/subscriber-console/backend/internal/auth"
-	"github.com/YGone-001/subscriber-console/backend/internal/ratelimit"
-	"github.com/YGone-001/subscriber-console/backend/internal/response"
+	"subscriber/internal/auth"
+	"subscriber/internal/ratelimit"
+	"subscriber/internal/response"
 )
 
 // Handler provides HTTP handlers for rating endpoints.

@@ -1,6 +1,6 @@
 package subscriber
 
-import "github.com/YGone-001/subscriber-console/backend/internal/governance"
+import "subscriber/internal/governance"
 
 // SubscriberOperation is the canonical subscriber operation ID.
 type SubscriberOperation string
