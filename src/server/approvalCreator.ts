@@ -16,6 +16,16 @@ import {
 } from '@/server/repositories/approvalRepository';
 import type { GovernanceActor } from '@/types/governance';
 
+export type GovernedApprovalDeps = {
+  createApprovalRequest: typeof createApprovalRequest;
+  writeAuditLog: typeof writeAuditLog;
+};
+
+const defaultApprovalDeps: GovernedApprovalDeps = {
+  createApprovalRequest,
+  writeAuditLog,
+};
+
 export class ApprovalCreationError extends Error {
   code: string;
   approval?: ApprovalDocument;
@@ -41,13 +51,14 @@ export class ApprovalCreationError extends Error {
 export async function createGovernedApproval(
   input: CreateApprovalInput,
   actor: GovernanceActor,
+  deps: GovernedApprovalDeps = defaultApprovalDeps,
 ): Promise<ApprovalDocument> {
   // 1. Persist Approval
-  const approval = await createApprovalRequest(input);
+  const approval = await deps.createApprovalRequest(input);
 
   // 2. Strict approval.create audit evidence
   try {
-    await writeAuditLog({
+    await deps.writeAuditLog({
       module: 'approvals',
       action: 'approval.create',
       targetId: `approval:${approval.id}`,

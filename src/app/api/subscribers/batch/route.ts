@@ -14,13 +14,38 @@ import {
   SubscriberBatchGovernanceError,
 } from '@/server/subscriberBatchGovernance';
 
+export type BatchRouteDeps = {
+  requireCapability: typeof requireCapability;
+  enforceRateLimit: typeof enforceRateLimit;
+  validateCurrentAccount: typeof validateCurrentAccount;
+  evaluateSubscriberOperationForActor: typeof evaluateSubscriberOperationForActor;
+  precheckSubscriberRange: typeof precheckSubscriberRange;
+  prepareFrozenBatchCreateV2: typeof prepareFrozenBatchCreateV2;
+  writeAuditLog: typeof writeAuditLog;
+  createGovernedApproval: typeof createGovernedApproval;
+  executeFrozenBatchCreate: typeof executeFrozenBatchCreate;
+};
+
+const defaultBatchDeps: BatchRouteDeps = {
+  requireCapability,
+  enforceRateLimit,
+  validateCurrentAccount,
+  evaluateSubscriberOperationForActor,
+  precheckSubscriberRange,
+  prepareFrozenBatchCreateV2,
+  writeAuditLog,
+  createGovernedApproval,
+  executeFrozenBatchCreate,
+};
+
 export const dynamic = 'force-dynamic';
 
-export async function POST(request: Request) {
-  const auth = requireCapability(request, 'subscriber_write');
+export function createBatchCreateHandler(deps: BatchRouteDeps = defaultBatchDeps) {
+  return async function POST(request: Request) {
+  const auth = deps.requireCapability(request, 'subscriber_write');
   if (!auth.ok) return auth.response;
 
-  const rateLimit = await enforceRateLimit(`subscribers:batch:${auth.auth.user}`, 10, 60);
+  const rateLimit = await deps.enforceRateLimit(`subscribers:batch:${auth.auth.user}`, 10, 60);
   if (!rateLimit.ok) return rateLimit.response;
 
   try {
@@ -30,16 +55,16 @@ export async function POST(request: Request) {
     const payload = validation.value;
 
     // Fresh actor validation — fail closed
-    const freshAccount = await validateCurrentAccount(auth.auth);
+    const freshAccount = await deps.validateCurrentAccount(auth.auth);
 
     // Actor-aware governance
-    const policy = evaluateSubscriberOperationForActor(SUBSCRIBER_OPERATIONS.BATCH_CREATE, freshAccount.normalizedRole);
+    const policy = deps.evaluateSubscriberOperationForActor(SUBSCRIBER_OPERATIONS.BATCH_CREATE, freshAccount.normalizedRole);
     if (!policy.executable) {
       return NextResponse.json({ error: 'OPERATION_NOT_EXECUTABLE' }, { status: 409 });
     }
 
     // Prepare frozen v2
-    const frozen = await prepareFrozenBatchCreateV2({
+    const frozen = await deps.prepareFrozenBatchCreateV2({
       startImsi: payload.startImsi,
       count: payload.count,
       trafficTotal: payload.trafficTotal as number | undefined,
@@ -51,7 +76,7 @@ export async function POST(request: Request) {
     });
 
     // Request-time precheck — before Approval or direct mutation
-    const precheck = await precheckSubscriberRange(payload.startImsi, payload.count);
+    const precheck = await deps.precheckSubscriberRange(payload.startImsi, payload.count);
     if (precheck.conflictCount > 0) {
       return NextResponse.json({
         error: 'SUBSCRIBER_CREATE_PRECONDITION_CHANGED',
@@ -62,37 +87,17 @@ export async function POST(request: Request) {
 
     if (policy.governanceMode === 'DIRECT_GOVERNED') {
       // super_admin/root direct execution
-      const result = await executeFrozenBatchCreate(frozen);
+      const result = await deps.executeFrozenBatchCreate(frozen);
 
       // Centralized result classification
       const classification = classifyBatchResult(result.createdCount, result.failedCount);
-
-      // Zero-created failure — distinguish conflict vs non-conflict (PART I)
-      if (classification === 'FAILED_NO_MUTATION') {
-        if (result.conflictImsis.length > 0 && result.subscriberFailedImsis.length === 0) {
-          // All failures are duplicates
-          return NextResponse.json({
-            error: 'SUBSCRIBER_CREATE_PRECONDITION_CHANGED',
-            conflictCount: result.conflictImsis.length,
-            conflictImsis: result.conflictImsis.slice(0, 20),
-            partialMutation: false,
-          }, { status: 409 });
-        }
-        // Non-conflict storage failure
-        return NextResponse.json({
-          error: 'SUBSCRIBER_BATCH_CREATE_FAILED',
-          code: 'SUBSCRIBER_BATCH_CREATE_FAILED',
-          partialMutation: false,
-        }, { status: 500 });
-      }
-
-      // Audit result classification (PART L)
       const auditResult = classification === 'SUCCESS' ? 'success' : 'failed';
       const committed = result.createdCount > 0;
 
-      // Strict business audit
+      // Strict business audit — always executed after executor invocation
+      // FAILED_NO_MUTATION receives strict evidence too
       try {
-        await writeAuditLog({
+        await deps.writeAuditLog({
           module: 'subscribers',
           action: 'BATCH_CREATE',
           targetId: `${frozen.expectedAbsentImsis[0]}~${frozen.expectedAbsentImsis[frozen.expectedAbsentImsis.length - 1]}`,
@@ -131,7 +136,24 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'AUDIT_UNAVAILABLE', code: 'AUDIT_UNAVAILABLE', committed }, { status: 503 });
       }
 
-      // Partial write (PART K)
+      // Zero-created failure — distinguish conflict vs non-conflict
+      if (classification === 'FAILED_NO_MUTATION') {
+        if (result.conflictImsis.length > 0 && result.subscriberFailedImsis.length === 0) {
+          return NextResponse.json({
+            error: 'SUBSCRIBER_CREATE_PRECONDITION_CHANGED',
+            conflictCount: result.conflictImsis.length,
+            conflictImsis: result.conflictImsis.slice(0, 20),
+            partialMutation: false,
+          }, { status: 409 });
+        }
+        return NextResponse.json({
+          error: 'SUBSCRIBER_BATCH_CREATE_FAILED',
+          code: 'SUBSCRIBER_BATCH_CREATE_FAILED',
+          partialMutation: false,
+        }, { status: 500 });
+      }
+
+      // Partial write
       if (classification === 'PARTIAL_WRITE') {
         return NextResponse.json({
           error: 'SUBSCRIBER_BATCH_CREATE_PARTIAL_WRITE',
@@ -161,7 +183,7 @@ export async function POST(request: Request) {
     // operator/ops_admin → approval (PART G, H)
     const actor = { type: 'user' as const, username: freshAccount.username, role: freshAccount.normalizedRole };
     try {
-      const approval = await createGovernedApproval({
+      const approval = await deps.createGovernedApproval({
         action: 'SUBSCRIBER_BATCH_CREATE',
         requester: freshAccount.username,
         requesterContext: actor,
@@ -221,4 +243,7 @@ export async function POST(request: Request) {
     console.error('Error in batch creation:', error);
     return NextResponse.json({ error: 'Batch creation failed' }, { status: 500 });
   }
+  };
 }
+
+export const POST = createBatchCreateHandler();
