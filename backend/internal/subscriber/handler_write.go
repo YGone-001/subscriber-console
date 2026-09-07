@@ -28,6 +28,7 @@ type WriteHandler struct {
 	limiter     RateLimiter
 	userRepo    UserRepository
 	approvalSvc ApprovalCreator
+	approvalQry ApprovalQuerier
 	auditWriter *audit.Writer
 }
 
@@ -41,13 +42,19 @@ type ApprovalCreator interface {
 	Create(r *http.Request, actor approval.GovernanceActor, input approval.CreateApprovalInput) (*approval.ApprovalDocument, error)
 }
 
+// ApprovalQuerier is the interface for querying approval requests.
+type ApprovalQuerier interface {
+	ListApprovals(ctx context.Context, q approval.ListQuery) (*approval.ListResult, error)
+}
+
 // NewWriteHandler creates a new subscriber write handler.
-func NewWriteHandler(repo *Repository, limiter RateLimiter, userRepo UserRepository, approvalSvc ApprovalCreator, auditWriter *audit.Writer) *WriteHandler {
+func NewWriteHandler(repo *Repository, limiter RateLimiter, userRepo UserRepository, approvalSvc ApprovalCreator, approvalQry ApprovalQuerier, auditWriter *audit.Writer) *WriteHandler {
 	return &WriteHandler{
 		repo:        repo,
 		limiter:     limiter,
 		userRepo:    userRepo,
 		approvalSvc: approvalSvc,
+		approvalQry: approvalQry,
 		auditWriter: auditWriter,
 	}
 }
@@ -865,6 +872,337 @@ func (r *Repository) precheckSubscriberRange(ctx context.Context, startImsi stri
 		ConflictImsis: conflicts,
 		TotalCount:    count,
 	}, nil
+}
+
+// BatchUpdate handles POST /api/subscribers/batch-update
+// Updates multiple subscribers with governance: operator/ops_admin → APPROVAL, super_admin/root → DIRECT.
+// Ordering: auth → capability → rate limit → validate → fresh actor → prepare frozen → governance → approve/execute
+func (h *WriteHandler) BatchUpdate(w http.ResponseWriter, r *http.Request) {
+	p := auth.PrincipalFromContext(r.Context())
+	if p == nil {
+		response.Error(w, http.StatusUnauthorized, "Unauthorized", "AUTH_INVALID_TOKEN")
+		return
+	}
+
+	// Capability check with audit on denial
+	if !audit.RequireCapabilityWithAudit(w, r, p, "subscriber_write", h.auditWriter) {
+		return
+	}
+
+	// Rate limit: 12/60 per user
+	if !h.limiter.Enforce(w, r, "subscribers:batch-update:"+p.Username, 12, 60) {
+		return
+	}
+
+	// Decode and validate request
+	var body map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		response.Error(w, http.StatusBadRequest, "Invalid request body", "INVALID_REQUEST")
+		return
+	}
+
+	imsis, patch, err := ValidateBatchUpdateRequest(body)
+	if err != nil {
+		if govErr, ok := err.(*SubscriberGovernanceError); ok {
+			status := http.StatusBadRequest
+			if govErr.Code == "BATCH_SIZE_EXCEEDED" {
+				status = http.StatusBadRequest
+			}
+			response.Error(w, status, govErr.Code, govErr.Code)
+			return
+		}
+		response.Error(w, http.StatusBadRequest, err.Error(), "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD")
+		return
+	}
+
+	// Fresh actor validation — mandatory, fail-closed
+	fresh, httpErr := RevalidateFreshActor(r.Context(), h.userRepo, p)
+	if httpErr != nil {
+		response.Error(w, httpErr.Status, httpErr.Message, httpErr.Code)
+		return
+	}
+
+	// Evaluate governance with fresh role
+	govResult := EvaluateOperation(OpBatchUpdate, fresh.NormalizedRole)
+	if !isExecutable(govResult) {
+		response.Error(w, http.StatusConflict, "Operation not executable", "OPERATION_NOT_EXECUTABLE")
+		return
+	}
+
+	// Prepare frozen v2 contract
+	frozen, err := PrepareFrozenBatchUpdate(r.Context(), imsis, patch, h.repo)
+	if err != nil {
+		h.handleGovernanceError(w, err)
+		return
+	}
+
+	// Active approval conflict check
+	existing, err := h.findExistingBatchChange(r.Context(), frozen.OperationFingerprint, imsis, frozen.FieldNames)
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, "Failed to check existing approvals", "INTERNAL_ERROR")
+		return
+	}
+	if existing != nil {
+		response.JSON(w, http.StatusConflict, map[string]any{
+			"error": "ACTIVE_CHANGE_CONFLICT",
+			"code":  "ACTIVE_CHANGE_CONFLICT",
+		})
+		return
+	}
+
+	if govResult.Decision == governance.Direct {
+		// super_admin/root: DIRECT_GOVERNED — execute immediately
+		h.executeDirectBatchUpdate(w, r, frozen, fresh)
+		return
+	}
+
+	// operator/ops_admin: APPROVAL_GOVERNED — create approval
+	h.createBatchUpdateApproval(w, r, frozen, fresh)
+}
+
+// executeDirectBatchUpdate executes batch update directly for super_admin/root.
+func (h *WriteHandler) executeDirectBatchUpdate(
+	w http.ResponseWriter,
+	r *http.Request,
+	frozen *FrozenBatchUpdateV2,
+	fresh *FreshActor,
+) {
+	// Execute via reusable executor
+	result, err := ExecuteFrozenSubscriberBatchUpdate(r.Context(), frozen, h.repo)
+	if err != nil {
+		h.handleGovernanceError(w, err)
+		return
+	}
+
+	// Classify result
+	classification := ClassifyBatchUpdateResult(result.ModifiedCount, result.Requested, len(result.ConflictImsis), len(result.FailedImsis))
+	auditResult := "success"
+	if classification != "SUCCESS" {
+		auditResult = "failed"
+	}
+
+	// Strict audit — always executed after executor invocation
+	auditErr := h.writeStrictAudit(r, audit.WriteAuditInput{
+		Action:   "BATCH_UPDATE",
+		Module:   "subscribers",
+		TargetID: fmt.Sprintf("subscriber-batch:%s", frozen.OperationFingerprint),
+		Before: map[string]any{
+			"targetCount": frozen.TargetCount,
+			"fields":      frozen.FieldNames,
+		},
+		After: map[string]any{
+			"targetCount":    frozen.TargetCount,
+			"fields":         frozen.FieldNames,
+			"modifiedCount":  result.ModifiedCount,
+			"classification": classification,
+		},
+		Result: auditResult,
+		Metadata: map[string]any{
+			"governanceMode":   "DIRECT_GOVERNED",
+			"approvalRequired": false,
+			"operation":        "SUBSCRIBER_BATCH_UPDATE",
+			"actorRole":        fresh.NormalizedRole,
+			"targetCount":      frozen.TargetCount,
+			"fieldNames":       frozen.FieldNames,
+			"modifiedCount":    result.ModifiedCount,
+			"conflictCount":    len(result.ConflictImsis),
+			"failedCount":      len(result.FailedImsis),
+			"classification":   classification,
+			"partialMutation":  result.PartialMutation,
+			"fingerprint":      frozen.OperationFingerprint,
+		},
+	}, fresh)
+	if auditErr != nil {
+		response.JSON(w, http.StatusServiceUnavailable, map[string]any{
+			"error":     "AUDIT_UNAVAILABLE",
+			"code":      "AUDIT_UNAVAILABLE",
+			"committed": result.MutationCommitted,
+		})
+		return
+	}
+
+	if classification == "FAILED_NO_MUTATION" {
+		if len(result.ConflictImsis) > 0 {
+			response.JSON(w, http.StatusConflict, map[string]any{
+				"error":          "SUBSCRIBER_BATCH_PRECONDITION_CHANGED",
+				"code":           "SUBSCRIBER_BATCH_PRECONDITION_CHANGED",
+				"partialMutation": false,
+			})
+		} else {
+			response.Error(w, http.StatusInternalServerError, "Batch update failed", "SUBSCRIBER_BATCH_UPDATE_FAILED")
+		}
+		return
+	}
+
+	if classification == "PARTIAL_WRITE" {
+		response.JSON(w, http.StatusConflict, map[string]any{
+			"error":          "SUBSCRIBER_BATCH_PARTIAL_WRITE",
+			"code":           "SUBSCRIBER_BATCH_PARTIAL_WRITE",
+			"partialMutation": true,
+			"result": map[string]any{
+				"modifiedImsis": result.ModifiedImsis,
+				"conflictImsis": result.ConflictImsis,
+				"failedImsis":   result.FailedImsis,
+			},
+		})
+		return
+	}
+
+	response.JSON(w, http.StatusOK, map[string]any{
+		"outcome":         "executed",
+		"message":         "Subscribers updated successfully",
+		"result": map[string]any{
+			"requested":  result.Requested,
+			"modified":   result.ModifiedCount,
+			"fieldNames": result.FieldNames,
+		},
+		"requiresApproval": false,
+	})
+}
+
+// createBatchUpdateApproval creates an approval for operator/ops_admin.
+func (h *WriteHandler) createBatchUpdateApproval(
+	w http.ResponseWriter,
+	r *http.Request,
+	frozen *FrozenBatchUpdateV2,
+	fresh *FreshActor,
+) {
+	actor := approval.GovernanceActor{
+		Type:     "user",
+		UserID:   fresh.UserID,
+		Username: fresh.Username,
+		Role:     fresh.RawRole,
+	}
+
+	approvalDoc, err := h.approvalSvc.Create(r, actor, approval.CreateApprovalInput{
+		Action:           "SUBSCRIBER_BATCH_UPDATE",
+		Requester:        fresh.Username,
+		RequesterContext: &actor,
+		TargetID:         fmt.Sprintf("subscriber-batch:%s", frozen.OperationFingerprint),
+		Summary:          fmt.Sprintf("Batch update %d subscriber(s)", frozen.TargetCount),
+		Operation: &approval.ApprovalOperation{
+			ResourceType: "subscriber_batch",
+			ResourceID:   frozen.OperationFingerprint,
+		},
+		OperationFingerprint: frozen.OperationFingerprint,
+		Payload:              frozenToMap(frozen),
+	})
+	if err != nil {
+		if awe, ok := err.(*approval.ApprovalWorkflowError); ok && awe.Committed {
+			response.JSON(w, awe.Status, awe.ErrorResponse())
+			return
+		}
+		response.Error(w, http.StatusInternalServerError, "Failed to create approval request", "APPROVAL_CREATE_FAILED")
+		return
+	}
+
+	// NO duplicate audit here — ApprovalCreator.Create() already writes strict audit
+
+	response.JSON(w, http.StatusAccepted, map[string]any{
+		"outcome":         "approval_required",
+		"message":         "Approval required before batch subscriber update",
+		"approval":        approvalDoc,
+		"requiresApproval": true,
+	})
+}
+
+// findExistingBatchChange checks for active approvals with the same fingerprint or overlapping targets+fields.
+func (h *WriteHandler) findExistingBatchChange(ctx context.Context, fingerprint string, imsis []string, fields []string) (*approval.ApprovalDocument, error) {
+	// Query active batch-update approvals
+	result, err := h.approvalQry.ListApprovals(ctx, approval.ListQuery{
+		Status:   "pending",
+		PageSize: 100,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	requestedImsis := make(map[string]bool, len(imsis))
+	for _, imsi := range imsis {
+		requestedImsis[imsi] = true
+	}
+	requestedFields := make(map[string]bool, len(fields))
+	for _, f := range fields {
+		requestedFields[f] = true
+	}
+
+	for i := range result.Approvals {
+		a := &result.Approvals[i]
+		// Only check batch operations
+		if a.Action != "SUBSCRIBER_BATCH_UPDATE" && a.Action != "SUBSCRIBER_BATCH_CREATE" {
+			continue
+		}
+		// Duplicate check: same fingerprint
+		if a.OperationFingerprint == fingerprint {
+			return &a.ApprovalDocument, nil
+		}
+
+		// Conflict check: overlapping targets and fields
+		payloadTargets := extractApprovalTargets(&a.ApprovalDocument)
+		payloadFields := extractApprovalFields(&a.ApprovalDocument)
+
+		targetOverlap := false
+		for _, t := range payloadTargets {
+			if requestedImsis[t] {
+				targetOverlap = true
+				break
+			}
+		}
+		if !targetOverlap {
+			continue
+		}
+
+		fieldOverlap := false
+		for _, f := range payloadFields {
+			if requestedFields[f] {
+				fieldOverlap = true
+				break
+			}
+		}
+		if fieldOverlap {
+			return &a.ApprovalDocument, nil
+		}
+	}
+
+	return nil, nil
+}
+
+// extractApprovalTargets extracts IMSI targets from an approval payload.
+func extractApprovalTargets(a *approval.ApprovalDocument) []string {
+	if a.Payload == nil {
+		return nil
+	}
+	targetsRaw, ok := a.Payload["targets"].([]any)
+	if !ok {
+		return nil
+	}
+	var imsis []string
+	for _, t := range targetsRaw {
+		if target, ok := t.(map[string]any); ok {
+			if imsi, ok := target["imsi"].(string); ok {
+				imsis = append(imsis, imsi)
+			}
+		}
+	}
+	return imsis
+}
+
+// extractApprovalFields extracts field names from an approval payload.
+func extractApprovalFields(a *approval.ApprovalDocument) []string {
+	if a.Payload == nil {
+		return nil
+	}
+	fieldsRaw, ok := a.Payload["fieldNames"].([]any)
+	if !ok {
+		return nil
+	}
+	var fields []string
+	for _, f := range fieldsRaw {
+		if field, ok := f.(string); ok {
+			fields = append(fields, field)
+		}
+	}
+	return fields
 }
 
 // sanitizeBatchResult removes sensitive data from batch result for HTTP response.

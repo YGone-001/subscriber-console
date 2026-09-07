@@ -192,11 +192,12 @@ func main() {
 	mux.Handle("POST /api/subscribers/batch/precheck", authMiddleware(http.HandlerFunc(subscriberHandler.BatchPrecheck)))
 
 	// Subscriber write endpoints (governance: super_admin→DIRECT, operator→APPROVAL)
-	subscriberWriteHandler := subscriber.NewWriteHandler(subscriberRepo, limiter, userRepo, approvalCreator, auditWriter)
+	subscriberWriteHandler := subscriber.NewWriteHandler(subscriberRepo, limiter, userRepo, approvalCreator, approvalRepo, auditWriter)
 	mux.Handle("POST /api/subscribers", authMiddleware(http.HandlerFunc(subscriberWriteHandler.Create)))
 	mux.Handle("PUT /api/subscribers/{imsi}", authMiddleware(http.HandlerFunc(subscriberWriteHandler.Update)))
 	mux.Handle("DELETE /api/subscribers/{imsi}", authMiddleware(http.HandlerFunc(subscriberWriteHandler.Delete)))
 	mux.Handle("POST /api/subscribers/batch", authMiddleware(http.HandlerFunc(subscriberWriteHandler.BatchCreate)))
+	mux.Handle("POST /api/subscribers/batch-update", authMiddleware(http.HandlerFunc(subscriberWriteHandler.BatchUpdate)))
 
 	// Auth/User reads
 	mux.Handle("GET /api/auth/me", authMiddleware(http.HandlerFunc(userHandler.AuthMe)))
