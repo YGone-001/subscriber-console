@@ -643,6 +643,7 @@ policy mutation
 ```
 
 Subscriber governance/approval authority remains Node.
+Node batch create now uses: validateCurrentAccount, actor-aware governance, frozen v2, shared create-only executor, profile precondition, strict audit.
 
 ---
 
@@ -933,7 +934,7 @@ Phase 3:
 - Fresh actor validation — COMPLETE (validateCurrentAccount for CREATE/UPDATE/DELETE)
 - Strict audit — COMPLETE (fresh actor in audit metadata)
 - OCS provisioning — COMPLETE (presence-aware input, no admin reservation, balance preservation)
-- Subscriber batch create — COMPLETE (frozen v2 contract, create-only atomicity, profile drift protection, 5GiB default, governance: operator→APPROVAL, super_admin/root→DIRECT)
+- Subscriber batch create — COMPLETE (frozen v2 contract, create-only atomicity, profile drift protection, 5GiB default, governance: operator→APPROVAL, super_admin/root→DIRECT, Node production authority aligned)
 - Approval execute — DEFERRED (crosses into business mutations)
 
 Security audit blocker:

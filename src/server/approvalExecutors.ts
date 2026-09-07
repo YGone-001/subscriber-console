@@ -1,6 +1,5 @@
 import { logAudit } from '@/lib/audit';
 import {
-  validateBatchCreatePayload,
   validateImsi,
   validateImsiList,
   validateImportRecords,
@@ -13,7 +12,6 @@ import { addTariffPlanRule, adjustOcsTrafficBalance, changeOcsPolicyForSubscribe
 import { restoreProfileVersion } from '@/server/repositories/profileRepository';
 import { createRating, deleteRating, updateRating } from '@/server/repositories/ratingRepository';
 import {
-  createSubscribersBatch,
   deleteSubscriber,
   importSubscribersFromRecords,
 } from '@/server/repositories/subscriberRepository';
@@ -237,52 +235,46 @@ export async function executeApproval(approval: ApprovalDocument, request: Reque
   }
 
   if (approval.action === 'SUBSCRIBER_BATCH_CREATE') {
-    const validation = validateBatchCreatePayload(approval.payload);
-    if (!validation.ok) throw new Error(validation.error);
-    const payload = validation.value;
+    const { executeFrozenBatchCreate, translateV1ToFrozenV2 } = await import('@/server/subscriberBatchGovernance');
 
     const frozen = asRecord(approval.payload);
-    const expectedAbsentImsis = Array.isArray(frozen.expectedAbsentImsis)
-      ? frozen.expectedAbsentImsis.map((imsi) => String(imsi))
-      : [];
-    if (frozen.version === 'subscriber-batch-create-v1') {
-      if (expectedAbsentImsis.length !== payload.count) throw new Error('INVALID_SUBSCRIBER_BATCH_CREATE_PAYLOAD');
-      const { precheckSubscriberImsis } = await import('@/server/repositories/subscriberRepository');
-      const precheck = await precheckSubscriberImsis(expectedAbsentImsis);
-      if (precheck.some((item) => item.exists)) throw new Error('SUBSCRIBER_CREATE_PRECONDITION_CHANGED');
+    let executionPayload;
+
+    if (frozen.version === 'subscriber-batch-create-v2') {
+      // v2 native — use directly
+      executionPayload = frozen as import('@/server/subscriberBatchGovernance').FrozenBatchCreateV2;
+    } else {
+      // v1 compatibility — translate to v2 execution intent (PART J)
+      executionPayload = translateV1ToFrozenV2(frozen);
     }
 
-    const result = await createSubscribersBatch({
-      startImsi: payload.startImsi,
-      count: payload.count,
-      trafficTotal: payload.trafficTotal,
-      trafficBalance: payload.trafficBalance,
-      smsTotal: payload.smsTotal,
-      smsBalance: payload.smsBalance,
-      profileName: payload.profileName,
-      planId: payload.planId,
-      strategy: 'skip',
-    });
-    const { createdImsis, skippedImsis, failedImsis, metrics } = result;
+    // Use shared executor (PART K)
+    const result = await executeFrozenBatchCreate(executionPayload);
 
-    if (createdImsis.length > 0) {
+    // PART U: Classify BEFORE audit
+    const auditResult = result.partialMutation ? 'failed' : 'success';
+
+    if (result.createdCount > 0) {
       logAudit(
         'BATCH_CREATE',
-        `${createdImsis[0]} ~ ${createdImsis[createdImsis.length - 1]}`,
+        `${result.createdImsis[0]} ~ ${result.createdImsis[result.createdImsis.length - 1]}`,
         null,
         {
           approvalId: approval.id,
-          batchSize: createdImsis.length,
-          skipped: skippedImsis.length,
-          failed: failedImsis.length,
-          profileTemplate: payload.profileName,
-          batchMetrics: metrics,
+          batchSize: result.createdCount,
+          failed: result.failedCount,
+          partialMutation: result.partialMutation,
+          profileTemplate: executionPayload.profile.requestedName,
+          batchMetrics: result.metrics,
+          fingerprint: result.operationFingerprint,
+          governanceMode: 'APPROVAL_GOVERNED',
+          result: auditResult,
         },
         request
       );
     }
 
-    if (frozen.version === 'subscriber-batch-create-v1' && (result.createdImsis.length !== payload.count || result.skippedImsis.length > 0 || result.failedImsis.length > 0)) {
+    if (result.partialMutation) {
       throw new Error('SUBSCRIBER_BATCH_CREATE_PARTIAL_WRITE');
     }
     return result;

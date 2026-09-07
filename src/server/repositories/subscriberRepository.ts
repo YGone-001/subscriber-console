@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { AnyBulkWriteOperation, Document, Filter, Long, MongoServerError, ObjectId } from 'mongodb';
 import { getAppCollection, getXcloudCollection, mongoCollections } from '@/lib/mongo';
 import {
@@ -65,7 +66,7 @@ export type SubscriberRow = {
   lastActive: string;
 };
 
-type ProfileDoc = Document & {
+export type ProfileDoc = Document & {
   name?: string;
   auth?: Record<string, unknown>;
   ambr?: unknown;
@@ -280,7 +281,7 @@ function isValidImsi(imsi: string): boolean {
   return /^\d{15}$/.test(imsi);
 }
 
-function generateImsiRange(startImsi: string, count: number): string[] {
+export function generateImsiRange(startImsi: string, count: number): string[] {
   const start = BigInt(startImsi);
   return Array.from({ length: count }, (_, index) => (start + BigInt(index)).toString().padStart(15, '0'));
 }
@@ -290,24 +291,24 @@ function ensureImsiRange(imsis: string[]) {
   if (invalid) throw new Error('IMSI_RANGE_OVERFLOW');
 }
 
-async function findProfile(profileName?: string): Promise<ProfileDoc | null> {
+export async function findProfile(profileName?: string): Promise<ProfileDoc | null> {
   if (!profileName) return null;
   const collection = await profilesCollection();
   return collection.findOne({ name: profileName });
 }
 
-function profileOcs(profile: ProfileDoc | null | undefined): Record<string, unknown> {
+export function profileOcs(profile: ProfileDoc | null | undefined): Record<string, unknown> {
   return profile?.ocsDefaults || profile?.ocs_defaults || {};
 }
 
-async function assertTariffPlanAssignable(planId: unknown) {
+export async function assertTariffPlanAssignable(planId: unknown) {
   const plan = await getTariffPlan(planId);
   if (!plan) throw new Error('OCS_PLAN_NOT_FOUND');
   if (plan.status === 'disabled') throw new Error('OCS_PLAN_DISABLED');
   return plan;
 }
 
-async function existingImsiSet(imsis: string[]): Promise<Set<string>> {
+export async function existingImsiSet(imsis: string[]): Promise<Set<string>> {
   const collection = await subscribersCollection();
   const docs = await collection
     .find({ imsi: { $in: imsis } }, { projection: { imsi: 1 } })
@@ -380,7 +381,7 @@ async function bulkWriteSubscribers(
   }
 }
 
-function batchDocForImsi(
+export function batchDocForImsi(
   imsi: string,
   profileData: ProfileDoc | null
 ): XcloudSubscriberDocument {
@@ -851,6 +852,48 @@ export async function createSubscribersBatch(options: BatchCreateOptions): Promi
       batchSize: successfulImsis.length,
     },
   };
+}
+
+/**
+ * Create-only batch insert using insertOne per target.
+ * NEVER uses replaceOne+upsert. Each target is inserted individually.
+ * Returns per-IMS result with race classification.
+ */
+export async function createSubscribersBatchCreateOnly(options: {
+  imsis: string[];
+  profileData: ProfileDoc | null;
+}): Promise<{ createdImsis: string[]; failedImsis: string[]; conflictImsis: string[] }> {
+  const collection = await subscribersCollection();
+  const createdImsis: string[] = [];
+  const failedImsis: string[] = [];
+  const conflictImsis: string[] = [];
+
+  for (const imsi of options.imsis) {
+    try {
+      const doc = batchDocForImsi(imsi, options.profileData);
+      await collection.insertOne(doc as SubscriberDoc);
+      createdImsis.push(imsi);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('duplicate key')) {
+        conflictImsis.push(imsi);
+      } else {
+        failedImsis.push(imsi);
+      }
+    }
+  }
+
+  return { createdImsis, failedImsis, conflictImsis };
+}
+
+export function profileExecutionHash(profileData: ProfileDoc | null): string {
+  if (!profileData) return '';
+  const executionAffecting = {
+    auth: profileData.auth,
+    ambr: profileData.ambr,
+    sliceList: profileData.sliceList,
+    ocsDefaults: profileData.ocsDefaults || profileData.ocs_defaults,
+  };
+  return createHash('sha256').update(JSON.stringify(executionAffecting)).digest('hex');
 }
 
 export async function importSubscribersFromRecords(records: ImportRecord[], overwrite: boolean): Promise<ImportResult> {
