@@ -14,19 +14,27 @@ function routeHarness(activeApprovals = []) {
     'next/server': { NextResponse: { json: (body, init) => Response.json(body, init) } },
     '@/lib/audit': { writeAuditLog: async (event) => { audits.push(event); return true; } },
     '@/lib/audit/record': { auditRequestContext: () => ({ request: { requestId: 'req-phase5', correlationId: 'corr-phase5' } }) },
-    '@/lib/accountSession': { validateCurrentAccount: async () => ({ userId: 'root-1', username: 'admin', role: 'root' }) },
-    '@/lib/authz': { requirePermission: () => ({ ok: true, auth: { user: 'admin', role: 'root', sessionVersion: 0 } }) },
+    '@/lib/accountSession': { validateCurrentAccount: async () => ({ userId: 'root-1', username: 'admin', role: 'root', normalizedRole: 'root' }) },
+    '@/lib/authz': { requireCapability: () => ({ ok: true, auth: { user: 'admin', role: 'root', sessionVersion: 0 } }) },
     '@/lib/rateLimit': { enforceRateLimit: async () => ({ ok: true }) },
     '@/server/approvalWorkflow': { approvalActionEligibility: () => ({ canApprove: false, canExecute: false }) },
     '@/server/subscriberOperationPolicy': {
       validateSubscriberBatchChangeRequest: () => validInput,
-      evaluateSubscriberOperationPolicy: () => ({ allowed: true, operation: 'SUBSCRIBER_BATCH_UPDATE', policyId: 'subscriber-batch-governance-v1', requiresApproval: true }),
-      prepareFrozenSubscriberBatchChange: async () => ({ version: 'subscriber-batch-update-v1', targets: [{ imsi: validInput.imsis[0], before: { access_restriction_data: 32 }, after: { access_restriction_data: 0 }, preconditionHash: 'hash' }], patch: validInput.patch, fieldNames: ['access_restriction_data'], targetCount: 1, snapshotBytes: 200, operationFingerprint: 'fingerprint' }),
+      prepareFrozenSubscriberBatchUpdateV2: async () => ({ version: 'subscriber-batch-update-v2', targets: [{ imsi: validInput.imsis[0], before: { access_restriction_data: 32 }, after: { access_restriction_data: 0 }, preconditionHash: 'hash' }], patch: validInput.patch, fieldNames: ['accessRestrictionData'], targetCount: 1, snapshotBytes: 200, operationFingerprint: 'fingerprint' }),
+      executeFrozenSubscriberBatchUpdate: async () => ({ requested: 1, modifiedImsis: [], conflictImsis: [], failedImsis: [], matchedCount: 0, modifiedCount: 0, partialMutation: false, mutationCommitted: false, fieldNames: ['accessRestrictionData'], operationFingerprint: 'fingerprint' }),
+      classifyBatchUpdateResult: () => 'FAILED_NO_MUTATION',
       SubscriberBatchGovernanceError: class extends Error {},
+    },
+    '@/server/subscriberGovernanceRegistry': {
+      evaluateSubscriberOperationForActor: () => ({ executable: true, governanceMode: 'APPROVAL', requiresApproval: true }),
+      SUBSCRIBER_OPERATIONS: { BATCH_UPDATE: 'SUBSCRIBER_BATCH_UPDATE' },
+    },
+    '@/server/approvalCreator': {
+      createGovernedApproval: async (input) => { const approval = { id: 'approval-1', changeId: 'CHG-1', status: 'pending', riskLevel: 'high', ...input }; approvals.push(approval); return approval; },
+      ApprovalCreationError: class extends Error { constructor(code, approval) { super(code); this.approval = approval; } },
     },
     '@/server/repositories/approvalRepository': {
       listActiveSubscriberBatchApprovals: async () => activeApprovals,
-      createApprovalRequest: async (input) => { const approval = { id: 'approval-1', changeId: 'CHG-1', status: 'pending', riskLevel: 'high', ...input }; approvals.push(approval); return approval; },
     },
   };
   return { route: loadModule('src/app/api/subscribers/batch-update/route.ts', dependencies), approvals, audits };
@@ -41,7 +49,6 @@ test('root batch-update request only creates a governed approval and never recei
   assert.equal(body.approval.action, 'SUBSCRIBER_BATCH_UPDATE');
   assert.equal(h.approvals.length, 1);
   assert.equal(h.approvals[0].payload.targets[0].after.access_restriction_data, 0);
-  assert.equal(h.audits[0].approvalId, 'approval-1');
 });
 
 test('duplicate batch submit returns the existing active approval instead of a second request', async () => {

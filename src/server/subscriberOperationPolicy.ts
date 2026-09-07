@@ -42,6 +42,29 @@ export type FrozenSubscriberBatchChange = {
   operationFingerprint: string;
 };
 
+export type FrozenSubscriberBatchUpdateV2 = {
+  version: 'subscriber-batch-update-v2';
+  targets: SubscriberChangeTarget[];
+  patch: GovernedSubscriberPatch;
+  fieldNames: string[];
+  targetCount: number;
+  snapshotBytes: number;
+  operationFingerprint: string;
+};
+
+export type BatchUpdateExecutionResult = {
+  requested: number;
+  modifiedImsis: string[];
+  conflictImsis: string[];
+  failedImsis: string[];
+  matchedCount: number;
+  modifiedCount: number;
+  partialMutation: boolean;
+  mutationCommitted: boolean;
+  fieldNames: string[];
+  operationFingerprint: string;
+};
+
 export class SubscriberBatchGovernanceError extends Error {
   readonly code: string;
   readonly details?: Record<string, unknown>;
@@ -179,6 +202,15 @@ function fingerprint(value: unknown): string {
   return createHash('sha256').update(stableJson(value)).digest('hex');
 }
 
+function computeBatchUpdateV2Fingerprint(targets: SubscriberChangeTarget[], patch: GovernedSubscriberPatch, fieldNames: string[]): string {
+  return fingerprint({
+    operation: 'SUBSCRIBER_BATCH_UPDATE',
+    targets: targets.map((t) => ({ imsi: t.imsi, preconditionHash: t.preconditionHash, after: t.after })),
+    patch,
+    fieldNames,
+  });
+}
+
 export async function prepareFrozenSubscriberBatchChange(input: SubscriberBatchChangeRequest): Promise<FrozenSubscriberBatchChange> {
   const docs = await findSubscriberDocuments(input.imsis);
   const byImsi = new Map(docs.map((doc) => [doc.imsi, doc]));
@@ -194,6 +226,55 @@ export async function prepareFrozenSubscriberBatchChange(input: SubscriberBatchC
   const snapshotBytes = Buffer.byteLength(stableJson({ targets, patch: input.patch, fieldNames, operationFingerprint }), 'utf8');
   if (snapshotBytes > MAX_SUBSCRIBER_BATCH_SNAPSHOT_BYTES) throw new SubscriberBatchGovernanceError('APPROVAL_SNAPSHOT_TOO_LARGE', { snapshotBytes, max: MAX_SUBSCRIBER_BATCH_SNAPSHOT_BYTES });
   return { version: 'subscriber-batch-update-v1', targets, patch: input.patch, fieldNames, targetCount: targets.length, snapshotBytes, operationFingerprint };
+}
+
+export async function prepareFrozenSubscriberBatchUpdateV2(input: SubscriberBatchChangeRequest): Promise<FrozenSubscriberBatchUpdateV2> {
+  const docs = await findSubscriberDocuments(input.imsis);
+  const byImsi = new Map(docs.map((doc) => [doc.imsi, doc]));
+  const missing = input.imsis.filter((imsi) => !byImsi.has(imsi));
+  if (missing.length > 0) throw new SubscriberBatchGovernanceError('SUBSCRIBER_NOT_FOUND', { imsis: missing.slice(0, 20), count: missing.length });
+  const targets = input.imsis.slice().sort().map((imsi) => {
+    const values = valuesFor(byImsi.get(imsi) as XcloudSubscriberDocument, input.patch);
+    if (stableJson(values.before) === stableJson(values.after)) throw new SubscriberBatchGovernanceError('SUBSCRIBER_BATCH_NO_EFFECT', { imsi });
+    return { imsi, ...values, preconditionHash: fingerprint(values.before) };
+  });
+  const fieldNames = changedFieldNames(input.patch);
+  const operationFingerprint = computeBatchUpdateV2Fingerprint(targets, input.patch, fieldNames);
+  const snapshotBytes = Buffer.byteLength(stableJson({ targets, patch: input.patch, fieldNames, operationFingerprint }), 'utf8');
+  if (snapshotBytes > MAX_SUBSCRIBER_BATCH_SNAPSHOT_BYTES) throw new SubscriberBatchGovernanceError('APPROVAL_SNAPSHOT_TOO_LARGE', { snapshotBytes, max: MAX_SUBSCRIBER_BATCH_SNAPSHOT_BYTES });
+  return { version: 'subscriber-batch-update-v2', targets, patch: input.patch, fieldNames, targetCount: targets.length, snapshotBytes, operationFingerprint };
+}
+
+export function assertFrozenSubscriberBatchUpdateV2(value: unknown): FrozenSubscriberBatchUpdateV2 {
+  const payload = record(value);
+  if (!payload || payload.version !== 'subscriber-batch-update-v2' || !Array.isArray(payload.targets)) throw new SubscriberBatchGovernanceError('INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD');
+  if (typeof payload.targetCount !== 'number' || payload.targetCount < 1 || payload.targetCount > MAX_SUBSCRIBER_BATCH_TARGETS) throw new SubscriberBatchGovernanceError('INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD');
+  if (payload.targets.length !== payload.targetCount) throw new SubscriberBatchGovernanceError('INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD');
+  const request = validateSubscriberBatchChangeRequest({ imsis: payload.targets.map((target) => record(target)?.imsi), patch: payload.patch, reason: 'frozen-payload' });
+  const fieldNames = changedFieldNames(request.patch);
+  if (!Array.isArray(payload.fieldNames) || stableJson((payload.fieldNames as string[]).slice().sort()) !== stableJson(fieldNames.slice().sort())) throw new SubscriberBatchGovernanceError('INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD');
+  const imsis = payload.targets.map((t) => record(t)?.imsi as string);
+  if (new Set(imsis).size !== imsis.length) throw new SubscriberBatchGovernanceError('INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD');
+  const sortedImsis = [...imsis].sort();
+  for (let i = 0; i < imsis.length; i++) {
+    if (imsis[i] !== sortedImsis[i]) throw new SubscriberBatchGovernanceError('INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD');
+  }
+  const targets = payload.targets.map((item) => {
+    const target = record(item);
+    if (!target || typeof target.imsi !== 'string' || !record(target.before) || !record(target.after) || typeof target.preconditionHash !== 'string') throw new SubscriberBatchGovernanceError('INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD');
+    const before = record(target.before) as Record<string, number>;
+    const after = record(target.after) as Record<string, number>;
+    if (fingerprint(before) !== target.preconditionHash) throw new SubscriberBatchGovernanceError('INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD');
+    for (const key of Object.keys(after)) {
+      if (!fieldNames.some((field) => key === field || key.startsWith(`${field}.`))) throw new SubscriberBatchGovernanceError('INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD');
+    }
+    return { imsi: target.imsi, before, after, preconditionHash: target.preconditionHash };
+  });
+  const expectedFp = computeBatchUpdateV2Fingerprint(targets, request.patch, fieldNames);
+  if (typeof payload.operationFingerprint !== 'string' || payload.operationFingerprint !== expectedFp) throw new SubscriberBatchGovernanceError('INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD');
+  const snapshotBytes = Number(payload.snapshotBytes) || 0;
+  if (snapshotBytes > MAX_SUBSCRIBER_BATCH_SNAPSHOT_BYTES) throw new SubscriberBatchGovernanceError('APPROVAL_SNAPSHOT_TOO_LARGE');
+  return { version: 'subscriber-batch-update-v2', targets, patch: request.patch, fieldNames, targetCount: targets.length, snapshotBytes, operationFingerprint: payload.operationFingerprint };
 }
 
 export function assertFrozenSubscriberBatchPayload(value: unknown): FrozenSubscriberBatchChange {
@@ -227,4 +308,53 @@ export async function executeFrozenSubscriberBatchChange(payload: unknown) {
     throw new SubscriberBatchGovernanceError('SUBSCRIBER_BATCH_PARTIAL_WRITE', { ...result, expected: frozen.targetCount, partialMutation: result.modifiedCount > 0 });
   }
   return { requested: frozen.targetCount, matched: result.matchedCount, modified: result.modifiedCount, fieldNames: frozen.fieldNames, operationFingerprint: frozen.operationFingerprint };
+}
+
+export function classifyBatchUpdateResult(modifiedCount: number, requested: number, conflictCount: number, failedCount: number): 'SUCCESS' | 'PARTIAL_WRITE' | 'FAILED_NO_MUTATION' {
+  if (modifiedCount === requested && conflictCount === 0 && failedCount === 0) return 'SUCCESS';
+  if (modifiedCount > 0) return 'PARTIAL_WRITE';
+  return 'FAILED_NO_MUTATION';
+}
+
+export async function executeFrozenSubscriberBatchUpdate(payload: FrozenSubscriberBatchUpdateV2): Promise<BatchUpdateExecutionResult> {
+  const frozen = payload;
+  const docs = await findSubscriberDocuments(frozen.targets.map((target) => target.imsi));
+  const current = new Map(docs.map((doc) => [doc.imsi, doc]));
+  const drifted = frozen.targets.filter((target) => {
+    const doc = current.get(target.imsi);
+    return !doc || fingerprint(valuesFor(doc, frozen.patch).before) !== target.preconditionHash;
+  });
+  if (drifted.length > 0) throw new SubscriberBatchGovernanceError('SUBSCRIBER_BATCH_PRECONDITION_CHANGED', { drifted: drifted.map((target) => target.imsi).slice(0, 20), count: drifted.length, expected: frozen.targetCount });
+  const modifiedImsis: string[] = [];
+  const conflictImsis: string[] = [];
+  const failedImsis: string[] = [];
+  for (const target of frozen.targets) {
+    try {
+      const result = await applyGovernedSubscriberConditionalUpdates([{ imsi: target.imsi, expected: target.before, next: target.after }]);
+      if (result.matchedCount === 1 && result.modifiedCount === 1) {
+        modifiedImsis.push(target.imsi);
+      } else if (result.matchedCount === 0) {
+        conflictImsis.push(target.imsi);
+      } else {
+        failedImsis.push(target.imsi);
+      }
+    } catch {
+      failedImsis.push(target.imsi);
+    }
+  }
+  const matchedCount = modifiedImsis.length + conflictImsis.length;
+  const modifiedCount = modifiedImsis.length;
+  const partialMutation = modifiedCount > 0 && (conflictImsis.length > 0 || failedImsis.length > 0);
+  return {
+    requested: frozen.targetCount,
+    modifiedImsis,
+    conflictImsis,
+    failedImsis,
+    matchedCount,
+    modifiedCount,
+    partialMutation,
+    mutationCommitted: modifiedCount > 0,
+    fieldNames: frozen.fieldNames,
+    operationFingerprint: frozen.operationFingerprint,
+  };
 }

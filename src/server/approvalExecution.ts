@@ -2,7 +2,7 @@ import { writeAuditLog } from '@/lib/audit';
 import { auditRequestContext } from '@/lib/audit/record';
 import { validateCurrentAccount } from '@/lib/accountSession';
 import { executeApproval } from '@/server/approvalExecutors';
-import { executeFrozenSubscriberBatchChange, SubscriberBatchGovernanceError } from '@/server/subscriberOperationPolicy';
+import { executeFrozenSubscriberBatchChange, executeFrozenSubscriberBatchUpdate, assertFrozenSubscriberBatchUpdateV2, classifyBatchUpdateResult, SubscriberBatchGovernanceError } from '@/server/subscriberOperationPolicy';
 import { executeFrozenSubscriberBulkDelete, executeFrozenSubscriberDelete, executeFrozenSubscriberUpdate } from '@/server/subscriberSingleGovernance';
 import { assertGovernedOperationCoverage } from '@/server/subscriberGovernanceRegistry';
 import { executeFrozenOcsBalanceAdjustment, OcsBalanceGovernanceError } from '@/server/ocsBalanceGovernance';
@@ -58,21 +58,25 @@ const defaultExecutor: GovernedApprovalExecutor = {
       return result;
     }
     if (approval.action === 'SUBSCRIBER_BATCH_UPDATE') {
-      const result = await executeFrozenSubscriberBatchChange(approval.payload);
+      // v2 frozen contract with per-target CAS
+      const frozen = assertFrozenSubscriberBatchUpdateV2(approval.payload);
+      const result = await executeFrozenSubscriberBatchUpdate(frozen);
+      const classification = classifyBatchUpdateResult(result.modifiedCount, result.requested, result.conflictImsis.length, result.failedImsis.length);
+      const auditResult = classification === 'SUCCESS' ? 'success' : 'failed';
       try {
         await writeAuditLog({
           actor: actor || { type: 'system', userId: 'system', username: 'system' }, module: 'subscribers', action: 'subscriber.batch.update',
           resource: { type: 'subscriber_batch', id: approval.operation.resourceId, name: approval.changeId || approval.id },
           targetId: `subscriber-batch:${approval.operation.resourceId}`, approvalId: approval.id, riskLevel: approval.riskLevel,
-          result: 'success', reason: approval.reason, before: approval.before, after: approval.after,
-          metadata: { executionId: approval.execution?.id, operationFingerprint: approval.operationFingerprint, requested: result.requested, matched: result.matched, modified: result.modified, fieldNames: result.fieldNames },
+          result: auditResult, reason: approval.reason, before: approval.before, after: approval.after,
+          metadata: { executionId: approval.execution?.id, operationFingerprint: approval.operationFingerprint, requested: result.requested, modifiedCount: result.modifiedCount, conflictCount: result.conflictImsis.length, failedCount: result.failedImsis.length, classification, partialMutation: result.partialMutation, fieldNames: result.fieldNames },
           ...auditRequestContext(request),
         }, { failureMode: 'strict' });
       } catch {
         console.error('SUBSCRIBER_BATCH_AUDIT_PERSISTENCE_ALERT', { approvalId: approval.id, executionId: approval.execution?.id });
-        throw new ApprovalExecutionError('AUDIT_UNAVAILABLE', 503, approval, false, { ...result, mutationCommitted: true });
+        throw new ApprovalExecutionError('AUDIT_UNAVAILABLE', 503, approval, true, { ...result, mutationCommitted: result.mutationCommitted, classification });
       }
-      return result;
+      return { ...result, classification };
     }
     if (approval.action === 'SUBSCRIBER_UPDATE' || approval.action === 'SUBSCRIBER_DELETE' || approval.action === 'SUBSCRIBER_BULK_DELETE') {
       const result = approval.action === 'SUBSCRIBER_UPDATE'
@@ -90,7 +94,7 @@ const defaultExecutor: GovernedApprovalExecutor = {
           metadata: { executionId: approval.execution?.id, operationFingerprint: approval.operationFingerprint }, ...auditRequestContext(request),
         }, { failureMode: 'strict' });
       } catch {
-        throw new ApprovalExecutionError('AUDIT_UNAVAILABLE', 503, approval, false, { mutationCommitted: true });
+        throw new ApprovalExecutionError('AUDIT_UNAVAILABLE', 503, approval, true, { mutationCommitted: true });
       }
       return result;
     }

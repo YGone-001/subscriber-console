@@ -1,17 +1,21 @@
 import { NextResponse } from 'next/server';
 import { writeAuditLog } from '@/lib/audit';
 import { auditRequestContext } from '@/lib/audit/record';
-import { validateCurrentAccount } from '@/lib/accountSession';
-import { requirePermission } from '@/lib/authz';
+import { validateCurrentAccount, AccountSessionError } from '@/lib/accountSession';
+import { requireCapability } from '@/lib/authz';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import { approvalActionEligibility } from '@/server/approvalWorkflow';
 import {
-  evaluateSubscriberOperationPolicy,
-  prepareFrozenSubscriberBatchChange,
+  prepareFrozenSubscriberBatchUpdateV2,
+  assertFrozenSubscriberBatchUpdateV2,
+  executeFrozenSubscriberBatchUpdate,
+  classifyBatchUpdateResult,
   SubscriberBatchGovernanceError,
   validateSubscriberBatchChangeRequest,
 } from '@/server/subscriberOperationPolicy';
-import { createApprovalRequest, listActiveSubscriberBatchApprovals } from '@/server/repositories/approvalRepository';
+import { evaluateSubscriberOperationForActor, SUBSCRIBER_OPERATIONS } from '@/server/subscriberGovernanceRegistry';
+import { createGovernedApproval, ApprovalCreationError } from '@/server/approvalCreator';
+import { listActiveSubscriberBatchApprovals } from '@/server/repositories/approvalRepository';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,58 +43,158 @@ async function existingBatchChange(fingerprint: string, imsis: string[], fields:
   return conflict ? { conflict } : {};
 }
 
-export async function POST(request: Request) {
-  const auth = requirePermission(request, 'subscribers.write');
-  if (!auth.ok) return auth.response;
-  const rate = await enforceRateLimit(`subscribers:batch-update:${auth.auth.user}`, 12, 60);
-  if (!rate.ok) return rate.response;
-  try {
-    const input = validateSubscriberBatchChangeRequest(await request.json());
-    const policy = evaluateSubscriberOperationPolicy(auth.auth, input);
-    if (!policy.allowed) return NextResponse.json({ error: 'PERMISSION_DENIED', code: 'PERMISSION_DENIED' }, { status: 403 });
-    // The policy deliberately has no root/super-admin exception.
-    if (!policy.requiresApproval) return NextResponse.json({ error: 'APPROVAL_REQUIRED', code: 'APPROVAL_REQUIRED' }, { status: 409 });
-    const frozen = await prepareFrozenSubscriberBatchChange(input);
-    const existing = await existingBatchChange(frozen.operationFingerprint, input.imsis, frozen.fieldNames);
-    if (existing.duplicate) {
-      return NextResponse.json({ approval: { ...existing.duplicate, actions: approvalActionEligibility(existing.duplicate, auth.auth) }, requiresApproval: true, idempotent: true }, { status: 202 });
-    }
-    if (existing.conflict) return NextResponse.json({ error: 'ACTIVE_CHANGE_CONFLICT', code: 'ACTIVE_CHANGE_CONFLICT', approval: existing.conflict }, { status: 409 });
-    const account = await validateCurrentAccount({ username: auth.auth.user, role: auth.auth.role, sv: auth.auth.sessionVersion });
-    const actor = { type: 'user' as const, userId: account.userId, username: account.username, role: account.role };
-    const sample = frozen.targets.slice(0, 25).map((target) => ({ imsi: target.imsi, before: target.before, after: target.after }));
-    const approval = await createApprovalRequest({
-      action: 'SUBSCRIBER_BATCH_UPDATE', requester: account.username, requesterContext: actor,
-      targetId: `subscriber-batch:${frozen.operationFingerprint}`, title: `Batch update ${frozen.targetCount} subscriber(s)`,
-      description: `Governed core subscriber update for ${frozen.fieldNames.join(', ')}`,
-      summary: `${frozen.targetCount} subscriber(s): ${frozen.fieldNames.join(', ')}`,
-      operation: { resourceType: 'subscriber_batch', resourceId: frozen.operationFingerprint }, operationFingerprint: frozen.operationFingerprint,
-      reason: input.reason, ticketId: input.ticketId, maintenanceWindow: input.maintenanceWindow,
-      before: { targetCount: frozen.targetCount, fields: frozen.fieldNames, targets: sample },
-      after: { targetCount: frozen.targetCount, fields: frozen.fieldNames, targets: sample.map((target) => ({ imsi: target.imsi, values: target.after })) },
-      payload: frozen,
-    });
+export type BatchUpdateRouteDeps = {
+  requireCapability: typeof requireCapability;
+  enforceRateLimit: typeof enforceRateLimit;
+  validateCurrentAccount: typeof validateCurrentAccount;
+  evaluateSubscriberOperationForActor: typeof evaluateSubscriberOperationForActor;
+  prepareFrozenSubscriberBatchUpdateV2: typeof prepareFrozenSubscriberBatchUpdateV2;
+  createGovernedApproval: typeof createGovernedApproval;
+  executeFrozenSubscriberBatchUpdate: typeof executeFrozenSubscriberBatchUpdate;
+  writeAuditLog: typeof writeAuditLog;
+};
+
+const defaultDeps: BatchUpdateRouteDeps = {
+  requireCapability,
+  enforceRateLimit,
+  validateCurrentAccount,
+  evaluateSubscriberOperationForActor,
+  prepareFrozenSubscriberBatchUpdateV2,
+  createGovernedApproval,
+  executeFrozenSubscriberBatchUpdate,
+  writeAuditLog,
+};
+
+export function createBatchUpdateHandler(deps: BatchUpdateRouteDeps = defaultDeps) {
+  return async function POST(request: Request) {
+    const auth = deps.requireCapability(request, 'subscriber_write');
+    if (!auth.ok) return auth.response;
+    const rate = await deps.enforceRateLimit(`subscribers:batch-update:${auth.auth.user}`, 12, 60);
+    if (!rate.ok) return rate.response;
     try {
-      await writeAuditLog({ actor, module: 'approvals', action: 'approval.create',
-        resource: { type: 'approval', id: approval.id, name: approval.changeId || approval.id }, targetId: `approval:${approval.id}`,
-        approvalId: approval.id, riskLevel: approval.riskLevel, result: 'success', reason: input.reason,
-        after: { status: approval.status, action: approval.action, targetCount: frozen.targetCount, fieldNames: frozen.fieldNames, operationFingerprint: frozen.operationFingerprint },
-        metadata: { operation: policy.operation, policyId: policy.policyId, operationFingerprint: frozen.operationFingerprint, targetCount: frozen.targetCount },
-        ...auditRequestContext(request),
-      }, { failureMode: 'strict' });
-    } catch {
-      console.error('APPROVAL_AUDIT_PERSISTENCE_ALERT', { approvalId: approval.id, action: 'approval.create' });
-      return NextResponse.json({ error: 'AUDIT_UNAVAILABLE', code: 'AUDIT_UNAVAILABLE', committed: true, approval }, { status: 503 });
+      const input = validateSubscriberBatchChangeRequest(await request.json());
+
+      // Fresh actor validation — fail closed
+      const freshAccount = await deps.validateCurrentAccount(auth.auth);
+
+      // Actor-aware governance from central registry
+      const policy = deps.evaluateSubscriberOperationForActor(SUBSCRIBER_OPERATIONS.BATCH_UPDATE, freshAccount.normalizedRole);
+      if (!policy.executable) {
+        return NextResponse.json({ error: 'OPERATION_NOT_EXECUTABLE', code: 'OPERATION_NOT_EXECUTABLE' }, { status: 409 });
+      }
+
+      // Prepare frozen v2
+      const frozen = await deps.prepareFrozenSubscriberBatchUpdateV2(input);
+
+      // Active approval conflict check
+      const existing = await existingBatchChange(frozen.operationFingerprint, input.imsis, frozen.fieldNames);
+      if (existing.duplicate) {
+        return NextResponse.json({ approval: { ...existing.duplicate, actions: approvalActionEligibility(existing.duplicate, auth.auth) }, requiresApproval: true, idempotent: true }, { status: 202 });
+      }
+      if (existing.conflict) return NextResponse.json({ error: 'ACTIVE_CHANGE_CONFLICT', code: 'ACTIVE_CHANGE_CONFLICT', approval: existing.conflict }, { status: 409 });
+
+      const actor = { type: 'user' as const, userId: freshAccount.userId, username: freshAccount.username, role: freshAccount.normalizedRole };
+
+      if (policy.governanceMode === 'DIRECT_GOVERNED') {
+        // super_admin/root direct execution
+        // Active overlap check for direct actor too
+        const directOverlap = await existingBatchChange(frozen.operationFingerprint, input.imsis, frozen.fieldNames);
+        if (directOverlap.duplicate || directOverlap.conflict) {
+          return NextResponse.json({ error: 'ACTIVE_CHANGE_CONFLICT', code: 'ACTIVE_CHANGE_CONFLICT' }, { status: 409 });
+        }
+
+        // Maintenance window check
+        if (input.maintenanceWindow) {
+          const now = Date.now();
+          const start = Date.parse(input.maintenanceWindow.start);
+          const end = Date.parse(input.maintenanceWindow.end);
+          if (now < start || now > end) {
+            return NextResponse.json({ error: 'OUTSIDE_MAINTENANCE_WINDOW', code: 'OUTSIDE_MAINTENANCE_WINDOW' }, { status: 409 });
+          }
+        }
+
+        const result = await deps.executeFrozenSubscriberBatchUpdate(frozen);
+        const classification = classifyBatchUpdateResult(result.modifiedCount, result.requested, result.conflictImsis.length, result.failedImsis.length);
+        const auditResult = classification === 'SUCCESS' ? 'success' : 'failed';
+        const committed = result.mutationCommitted;
+
+        // Strict business audit — always executed after executor invocation
+        try {
+          await deps.writeAuditLog({
+            actor, module: 'subscribers', action: 'subscriber.batch.update',
+            resource: { type: 'subscriber_batch', id: frozen.operationFingerprint },
+            targetId: `subscriber-batch:${frozen.operationFingerprint}`,
+            before: { targetCount: frozen.targetCount, fields: frozen.fieldNames },
+            after: { targetCount: frozen.targetCount, fields: frozen.fieldNames, modifiedCount: result.modifiedCount, classification },
+            result: auditResult,
+            metadata: {
+              governanceMode: 'DIRECT_GOVERNED', approvalRequired: false,
+              operation: 'SUBSCRIBER_BATCH_UPDATE', actorRole: freshAccount.normalizedRole,
+              targetCount: frozen.targetCount, fieldNames: frozen.fieldNames,
+              modifiedCount: result.modifiedCount, conflictCount: result.conflictImsis.length,
+              failedCount: result.failedImsis.length, classification, partialMutation: result.partialMutation,
+              operationFingerprint: frozen.operationFingerprint,
+            },
+            ...auditRequestContext(request),
+          }, { failureMode: 'strict' });
+        } catch {
+          return NextResponse.json({ error: 'AUDIT_UNAVAILABLE', code: 'AUDIT_UNAVAILABLE', committed }, { status: 503 });
+        }
+
+        if (classification === 'FAILED_NO_MUTATION') {
+          if (result.conflictImsis.length > 0) {
+            return NextResponse.json({ error: 'SUBSCRIBER_BATCH_PRECONDITION_CHANGED', code: 'SUBSCRIBER_BATCH_PRECONDITION_CHANGED', partialMutation: false }, { status: 409 });
+          }
+          return NextResponse.json({ error: 'SUBSCRIBER_BATCH_UPDATE_FAILED', code: 'SUBSCRIBER_BATCH_UPDATE_FAILED', partialMutation: false }, { status: 500 });
+        }
+
+        if (classification === 'PARTIAL_WRITE') {
+          return NextResponse.json({ error: 'SUBSCRIBER_BATCH_PARTIAL_WRITE', code: 'SUBSCRIBER_BATCH_PARTIAL_WRITE', partialMutation: true, result: { modifiedImsis: result.modifiedImsis, conflictImsis: result.conflictImsis, failedImsis: result.failedImsis } }, { status: 409 });
+        }
+
+        return NextResponse.json({ outcome: 'executed', message: 'Subscribers updated successfully', result: { requested: result.requested, modified: result.modifiedCount, fieldNames: result.fieldNames }, requiresApproval: false }, { status: 200 });
+      }
+
+      // operator/ops_admin → approval
+      try {
+        const approval = await deps.createGovernedApproval({
+          action: 'SUBSCRIBER_BATCH_UPDATE', requester: freshAccount.username, requesterContext: actor,
+          targetId: `subscriber-batch:${frozen.operationFingerprint}`, title: `Batch update ${frozen.targetCount} subscriber(s)`,
+          description: `Governed core subscriber update for ${frozen.fieldNames.join(', ')}`,
+          summary: `${frozen.targetCount} subscriber(s): ${frozen.fieldNames.join(', ')}`,
+          operation: { resourceType: 'subscriber_batch', resourceId: frozen.operationFingerprint }, operationFingerprint: frozen.operationFingerprint,
+          reason: input.reason, ticketId: input.ticketId, maintenanceWindow: input.maintenanceWindow,
+          before: { targetCount: frozen.targetCount, fields: frozen.fieldNames, targets: frozen.targets.slice(0, 25).map((t) => ({ imsi: t.imsi, before: t.before, after: t.after })) },
+          after: { targetCount: frozen.targetCount, fields: frozen.fieldNames, targets: frozen.targets.slice(0, 25).map((t) => ({ imsi: t.imsi, values: t.after })) },
+          payload: frozen,
+        }, actor);
+        return NextResponse.json({ approval: { ...approval, actions: approvalActionEligibility(approval, auth.auth) }, requiresApproval: true }, { status: 202 });
+      } catch (error) {
+        if (error instanceof ApprovalCreationError) {
+          return NextResponse.json({ error: 'AUDIT_UNAVAILABLE', code: 'AUDIT_UNAVAILABLE', committed: true, approval: error.approval }, { status: 503 });
+        }
+        throw error;
+      }
+    } catch (error) {
+      if (error instanceof SubscriberBatchGovernanceError) {
+        const statusMap: Record<string, number> = {
+          SUBSCRIBER_NOT_FOUND: 404, ACTIVE_CHANGE_CONFLICT: 409, SUBSCRIBER_BATCH_PRECONDITION_CHANGED: 409,
+          SUBSCRIBER_BATCH_NO_EFFECT: 400, INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD: 400,
+          BATCH_SIZE_EXCEEDED: 400, APPROVAL_SNAPSHOT_TOO_LARGE: 400,
+        };
+        return NextResponse.json({ error: error.code, code: error.code, details: error.details }, { status: statusMap[error.code] || 400 });
+      }
+      if (error instanceof AccountSessionError) {
+        const statusMap: Record<string, number> = { AUTH_INVALID_TOKEN: 401, ACCOUNT_NOT_FOUND: 401, ACCOUNT_DISABLED: 403, ACCOUNT_LOCKED: 403, SESSION_REVOKED: 403 };
+        return NextResponse.json({ error: error.code }, { status: statusMap[error.code] || 500 });
+      }
+      if (error && typeof error === 'object' && (error as { code?: number }).code === 11000) {
+        return NextResponse.json({ error: 'ACTIVE_CHANGE_CONFLICT', code: 'ACTIVE_CHANGE_CONFLICT' }, { status: 409 });
+      }
+      console.error('SUBSCRIBER_BATCH_UPDATE_FAILED', { code: error instanceof Error ? error.message : 'UNKNOWN' });
+      return NextResponse.json({ error: 'BATCH_UPDATE_FAILED', code: 'BATCH_UPDATE_FAILED' }, { status: 500 });
     }
-    return NextResponse.json({ approval: { ...approval, actions: approvalActionEligibility(approval, auth.auth) }, requiresApproval: true }, { status: 202 });
-  } catch (error) {
-    if (error instanceof SubscriberBatchGovernanceError) {
-      return NextResponse.json({ error: error.code, code: error.code, details: error.details }, { status: error.code === 'SUBSCRIBER_NOT_FOUND' ? 404 : error.code === 'ACTIVE_CHANGE_CONFLICT' ? 409 : 400 });
-    }
-    if (error && typeof error === 'object' && (error as { code?: number }).code === 11000) {
-      return NextResponse.json({ error: 'ACTIVE_CHANGE_CONFLICT', code: 'ACTIVE_CHANGE_CONFLICT' }, { status: 409 });
-    }
-    console.error('SUBSCRIBER_BATCH_APPROVAL_CREATE_FAILED', { code: error instanceof Error ? error.message : 'UNKNOWN' });
-    return NextResponse.json({ error: 'APPROVAL_CREATE_FAILED', code: 'APPROVAL_CREATE_FAILED' }, { status: 503 });
-  }
+  };
 }
+
+export const POST = createBatchUpdateHandler();

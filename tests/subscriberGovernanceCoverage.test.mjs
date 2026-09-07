@@ -10,7 +10,7 @@ test('every subscriber mutation endpoint is classified by the canonical governan
     'PUT /api/subscribers/:imsi': ['src/app/api/subscribers/[imsi]/route.ts', 'APPROVAL_GOVERNED', 'SUBSCRIBER_OPERATIONS.UPDATE'],
     'DELETE /api/subscribers/:imsi': ['src/app/api/subscribers/[imsi]/route.ts', 'APPROVAL_GOVERNED', 'SUBSCRIBER_OPERATIONS.DELETE'],
     'POST /api/subscribers/batch': ['src/app/api/subscribers/batch/route.ts', 'APPROVAL_GOVERNED', 'SUBSCRIBER_OPERATIONS.BATCH_CREATE'],
-    'POST /api/subscribers/batch-update': ['src/app/api/subscribers/batch-update/route.ts', 'APPROVAL_GOVERNED', 'evaluateSubscriberOperationPolicy'],
+    'POST /api/subscribers/batch-update': ['src/app/api/subscribers/batch-update/route.ts', 'APPROVAL_GOVERNED', 'evaluateSubscriberOperationForActor'],
     'POST /api/subscribers/bulk-delete': ['src/app/api/subscribers/bulk-delete/route.ts', 'APPROVAL_GOVERNED', 'SUBSCRIBER_OPERATIONS.BULK_DELETE'],
     'POST /api/subscribers/import': ['src/app/api/subscribers/import/route.ts', 'APPROVAL_GOVERNED', 'SUBSCRIBER_OPERATIONS.IMPORT'],
     'POST /api/subscribers/policy': ['src/app/api/subscribers/policy/route.ts', 'APPROVAL_GOVERNED', "action: 'POLICY_CHANGE'"],
