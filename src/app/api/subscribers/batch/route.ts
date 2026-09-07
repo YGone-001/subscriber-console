@@ -5,10 +5,12 @@ import { validateBatchCreatePayload } from '@/lib/subscriberValidation';
 import { validateCurrentAccount, AccountSessionError } from '@/lib/accountSession';
 import { evaluateSubscriberOperationForActor, SUBSCRIBER_OPERATIONS } from '@/server/subscriberGovernanceRegistry';
 import { createApprovalRequest } from '@/server/repositories/approvalRepository';
+import { precheckSubscriberRange } from '@/server/repositories/subscriberRepository';
 import { writeAuditLog } from '@/lib/audit';
 import {
   prepareFrozenBatchCreateV2,
   executeFrozenBatchCreate,
+  classifyBatchResult,
   SubscriberBatchGovernanceError,
 } from '@/server/subscriberBatchGovernance';
 
@@ -27,16 +29,16 @@ export async function POST(request: Request) {
     if (!validation.ok) return NextResponse.json({ error: validation.error }, { status: 400 });
     const payload = validation.value;
 
-    // Fresh actor validation — fail closed (PART C)
+    // Fresh actor validation — fail closed
     const freshAccount = await validateCurrentAccount(auth.auth);
 
-    // Actor-aware governance (PART D)
+    // Actor-aware governance
     const policy = evaluateSubscriberOperationForActor(SUBSCRIBER_OPERATIONS.BATCH_CREATE, freshAccount.normalizedRole);
     if (!policy.executable) {
       return NextResponse.json({ error: 'OPERATION_NOT_EXECUTABLE' }, { status: 409 });
     }
 
-    // Prepare frozen v2 (PART F)
+    // Prepare frozen v2
     const frozen = await prepareFrozenBatchCreateV2({
       startImsi: payload.startImsi,
       count: payload.count,
@@ -48,14 +50,41 @@ export async function POST(request: Request) {
       planId: payload.planId,
     });
 
+    // PART J: Request-time precheck — before Approval or direct mutation
+    const precheck = await precheckSubscriberRange(payload.startImsi, payload.count);
+    if (precheck.conflictCount > 0) {
+      return NextResponse.json({
+        error: 'SUBSCRIBER_CREATE_PRECONDITION_CHANGED',
+        conflictCount: precheck.conflictCount,
+        conflictImsis: precheck.conflictImsis.slice(0, 20),
+      }, { status: 409 });
+    }
+
     if (policy.governanceMode === 'DIRECT_GOVERNED') {
-      // PART Q: super_admin/root direct execution
+      // super_admin/root direct execution
       const result = await executeFrozenBatchCreate(frozen);
 
-      // PART U: Classify BEFORE audit
-      const auditResult = result.partialMutation ? 'failed' : 'success';
+      // Result classification: Centralized result classification
+      const classification = classifyBatchResult(result.createdCount, result.failedCount);
 
-      // PART T: Strict business audit
+      // PART L: Zero-created failure
+      if (classification === 'FAILED_NO_MUTATION') {
+        // All failures were target conflicts (caught by precheck+insertOne)
+        return NextResponse.json({
+          error: 'SUBSCRIBER_CREATE_PRECONDITION_CHANGED',
+          conflictCount: result.conflictImsis.length,
+          conflictImsis: result.conflictImsis.slice(0, 20),
+          partialMutation: false,
+        }, { status: 409 });
+      }
+
+      // PART P: Audit result classification
+      const auditResult = classification === 'SUCCESS' ? 'success' : 'failed';
+
+      // PART O: committed = createdCount > 0
+      const committed = result.createdCount > 0;
+
+      // Strict business audit
       try {
         await writeAuditLog({
           module: 'subscribers',
@@ -72,7 +101,9 @@ export async function POST(request: Request) {
             profileName: frozen.profile.requestedName,
             effectivePlanId: frozen.effectiveOcs.planId,
             trafficTotal: frozen.effectiveOcs.trafficTotal,
+            trafficBalance: frozen.effectiveOcs.trafficBalance,
             smsTotal: frozen.effectiveOcs.smsTotal,
+            smsBalance: frozen.effectiveOcs.smsBalance,
             fingerprint: frozen.operationFingerprint,
             governanceMode: 'DIRECT_GOVERNED',
             approvalRequired: false,
@@ -88,12 +119,12 @@ export async function POST(request: Request) {
           },
         }, { failureMode: 'strict' });
       } catch {
-        // PART V: Audit failure after mutation
-        return NextResponse.json({ error: 'AUDIT_UNAVAILABLE', code: 'AUDIT_UNAVAILABLE', committed: result.partialMutation }, { status: 503 });
+        // PART O: Audit failure — committed reflects mutation state
+        return NextResponse.json({ error: 'AUDIT_UNAVAILABLE', code: 'AUDIT_UNAVAILABLE', committed }, { status: 503 });
       }
 
-      // PART N: Check for partial write
-      if (result.partialMutation) {
+      // PART M: Partial write
+      if (classification === 'PARTIAL_WRITE') {
         return NextResponse.json({
           error: 'SUBSCRIBER_BATCH_CREATE_PARTIAL_WRITE',
           code: 'SUBSCRIBER_BATCH_CREATE_PARTIAL_WRITE',
@@ -106,6 +137,7 @@ export async function POST(request: Request) {
         }, { status: 409 });
       }
 
+      // PART N: Full success
       return NextResponse.json({
         outcome: 'executed',
         message: 'Subscribers created successfully',
@@ -118,7 +150,7 @@ export async function POST(request: Request) {
       }, { status: 201 });
     }
 
-    // PART R: operator/ops_admin → approval
+    // operator/ops_admin → approval
     const approval = await createApprovalRequest({
       action: 'SUBSCRIBER_BATCH_CREATE',
       requester: freshAccount.username,

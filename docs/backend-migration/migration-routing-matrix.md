@@ -87,7 +87,7 @@
 | Subscriber create | POST | `/api/subscribers` | **Go** | Next.js | Go | NEVER | Go handler with governance, ACTUALLY_ROUTED=0 |
 | Subscriber update | PUT | `/api/subscribers/:imsi` | **Go** | Next.js | Go | NEVER | Go handler with governance, ACTUALLY_ROUTED=0 |
 | Subscriber delete | DELETE | `/api/subscribers/:imsi` | **Go** | Next.js | Go | NEVER | Go handler with governance, ACTUALLY_ROUTED=0 |
-| Subscriber batch create | POST | `/api/subscribers/batch` | **Go** | Go | NEVER | Creates CHG |
+| Subscriber batch create | POST | `/api/subscribers/batch` | **Go** | Next.js | Go | NEVER | Go implementation complete; Node remains production route, ACTUALLY_ROUTED=0 |
 | Subscriber batch update | POST | `/api/subscribers/batch-update` | Next.js | Go | NEVER | Frozen payload |
 | Subscriber bulk delete | POST | `/api/subscribers/bulk-delete` | Next.js | Go | NEVER | Frozen payload |
 | Subscriber import | POST | `/api/subscribers/import` | Next.js | Go | NEVER | Creates CHG |

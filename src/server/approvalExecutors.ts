@@ -235,7 +235,7 @@ export async function executeApproval(approval: ApprovalDocument, request: Reque
   }
 
   if (approval.action === 'SUBSCRIBER_BATCH_CREATE') {
-    const { executeFrozenBatchCreate, translateV1ToFrozenV2 } = await import('@/server/subscriberBatchGovernance');
+    const { executeFrozenBatchCreate, translateV1ToFrozenV2, classifyBatchResult } = await import('@/server/subscriberBatchGovernance');
 
     const frozen = asRecord(approval.payload);
     let executionPayload;
@@ -244,15 +244,26 @@ export async function executeApproval(approval: ApprovalDocument, request: Reque
       // v2 native — use directly
       executionPayload = frozen as import('@/server/subscriberBatchGovernance').FrozenBatchCreateV2;
     } else {
-      // v1 compatibility — translate to v2 execution intent (PART J)
+      // v1 compatibility — translate to v2 execution intent
       executionPayload = translateV1ToFrozenV2(frozen);
     }
 
-    // Use shared executor (PART K)
+    // Use shared executor
     const result = await executeFrozenBatchCreate(executionPayload);
 
-    // PART U: Classify BEFORE audit
-    const auditResult = result.partialMutation ? 'failed' : 'success';
+    // PART T: Centralized result classification
+    const classification = classifyBatchResult(result.createdCount, result.failedCount);
+
+    // PART L: Zero-created failure
+    if (classification === 'FAILED_NO_MUTATION') {
+      if (result.conflictImsis.length > 0) {
+        throw new Error('SUBSCRIBER_CREATE_PRECONDITION_CHANGED');
+      }
+      throw new Error('SUBSCRIBER_BATCH_CREATE_FAILED');
+    }
+
+    // PART P: Audit result classification
+    const auditResult = classification === 'SUCCESS' ? 'success' : 'partial';
 
     if (result.createdCount > 0) {
       logAudit(
@@ -274,7 +285,8 @@ export async function executeApproval(approval: ApprovalDocument, request: Reque
       );
     }
 
-    if (result.partialMutation) {
+    // PART M: Partial write
+    if (classification === 'PARTIAL_WRITE') {
       throw new Error('SUBSCRIBER_BATCH_CREATE_PARTIAL_WRITE');
     }
     return result;

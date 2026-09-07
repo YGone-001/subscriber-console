@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { stable } from '@/lib/subscriberContract';
 import { AnyBulkWriteOperation, Document, Filter, Long, MongoServerError, ObjectId } from 'mongodb';
 import { getAppCollection, getXcloudCollection, mongoCollections } from '@/lib/mongo';
 import {
@@ -893,7 +894,7 @@ export function profileExecutionHash(profileData: ProfileDoc | null): string {
     sliceList: profileData.sliceList,
     ocsDefaults: profileData.ocsDefaults || profileData.ocs_defaults,
   };
-  return createHash('sha256').update(JSON.stringify(executionAffecting)).digest('hex');
+  return createHash('sha256').update(stable(executionAffecting)).digest('hex');
 }
 
 export async function importSubscribersFromRecords(records: ImportRecord[], overwrite: boolean): Promise<ImportResult> {

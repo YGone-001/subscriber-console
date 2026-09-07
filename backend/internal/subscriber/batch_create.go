@@ -200,12 +200,26 @@ func ResolveEffectiveOcs(
 // ComputeProfilePreconditionHash computes a SHA-256 hash over ALL profile data
 // that materially affects batch creation. Includes security material internally
 // but only the hash leaves the executor boundary.
+// ComputeProfilePreconditionHash computes the execution-affecting profile hash.
+// Uses ONLY fields that materially affect subscriber creation:
+// auth, ambr, sliceList, ocsDefaults.
+// This matches the Node profileExecutionHash exactly.
 func ComputeProfilePreconditionHash(profileData map[string]any) string {
 	if profileData == nil {
 		return ""
 	}
-	// Use stable JSON for deterministic hashing
-	h := sha256.Sum256([]byte(stableJSON(profileData)))
+	// Extract only execution-affecting fields (matching Node canonical projection)
+	executionAffecting := map[string]any{
+		"auth":        profileData["auth"],
+		"ambr":        profileData["ambr"],
+		"sliceList":   profileData["sliceList"],
+		"ocsDefaults": profileData["ocsDefaults"],
+	}
+	// Also check ocs_defaults (alternate key)
+	if executionAffecting["ocsDefaults"] == nil {
+		executionAffecting["ocsDefaults"] = profileData["ocs_defaults"]
+	}
+	h := sha256.Sum256([]byte(stableJSON(executionAffecting)))
 	return fmt.Sprintf("%x", h)
 }
 

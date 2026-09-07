@@ -38,15 +38,15 @@ export class SubscriberBatchGovernanceError extends Error {
 export type EffectiveOcsConfig = {
   planId: string;
   trafficTotal: number;
-  trafficAvailable: number;
+  trafficBalance: number;
   smsTotal: number;
-  smsAvailable: number;
+  smsBalance: number;
 };
 
 export type ProfileState = {
   requestedName: string;
-  dataHash: string;
-  ocsDefaults: Record<string, unknown> | null;
+  state: 'present' | 'absent';
+  preconditionHash: string;
 };
 
 export type FrozenBatchCreateV2 = {
@@ -103,7 +103,7 @@ function resolveEffectiveOcs(
     ?? smsTotal;
   const planId = payload.planId ?? (ocs.planId as string) ?? (ocs.plan_id as string) ?? '';
 
-  return { planId, trafficTotal, trafficAvailable: trafficBalance, smsTotal, smsAvailable: smsBalance };
+  return { planId, trafficTotal, trafficBalance, smsTotal, smsBalance };
 }
 
 // ─── Fingerprint ─────────────────────────────────────────────────────────────
@@ -121,9 +121,15 @@ function computeBatchFingerprint(
     effectiveOcs: {
       planId: effectiveOcs.planId,
       trafficTotal: effectiveOcs.trafficTotal,
+      trafficBalance: effectiveOcs.trafficBalance,
       smsTotal: effectiveOcs.smsTotal,
+      smsBalance: effectiveOcs.smsBalance,
     },
-    profilePrecondition: profileState.dataHash,
+    profile: {
+      requestedName: profileState.requestedName,
+      state: profileState.state,
+      preconditionHash: profileState.preconditionHash,
+    },
     strategy: 'create-only',
   });
   return createHash('sha256').update(canonical).digest('hex');
@@ -156,8 +162,8 @@ export async function prepareFrozenBatchCreateV2(payload: {
   // Build profile state
   const profile: ProfileState = {
     requestedName: payload.profileName || '',
-    dataHash: profileExecutionHash(profileData),
-    ocsDefaults: profileData ? (profileData.ocsDefaults || profileData.ocs_defaults || null) : null,
+    state: profileData ? 'present' : 'absent',
+    preconditionHash: profileExecutionHash(profileData),
   };
 
   // Build expected absent IMSIs
@@ -196,7 +202,7 @@ function assertFrozenV2(frozen: FrozenBatchCreateV2): void {
   if (!frozen.effectiveOcs || typeof frozen.effectiveOcs.planId !== 'string') {
     throw new SubscriberBatchGovernanceError('INVALID_SUBSCRIBER_BATCH_CREATE_PAYLOAD');
   }
-  if (!frozen.profile || typeof frozen.profile.dataHash !== 'string') {
+  if (!frozen.profile || typeof frozen.profile.preconditionHash !== 'string') {
     throw new SubscriberBatchGovernanceError('INVALID_SUBSCRIBER_BATCH_CREATE_PAYLOAD');
   }
   if (typeof frozen.operationFingerprint !== 'string' || frozen.operationFingerprint.length === 0) {
@@ -210,8 +216,15 @@ function assertFrozenV2(frozen: FrozenBatchCreateV2): void {
 }
 
 async function assertProfilePrecondition(frozen: FrozenBatchCreateV2): Promise<void> {
-  if (!frozen.profile.requestedName) {
-    // No profile requested — profile must still be absent
+  // v1 compatibility: preconditionHash is empty — skip hash comparison
+  // v1 does NOT provide profile immutability guarantee.
+  // The current profile is loaded at execution time and used as-is.
+  if (frozen.profile.preconditionHash === '') {
+    return;
+  }
+
+  if (frozen.profile.state === 'absent') {
+    // Profile was absent at freeze time — must still be absent
     const current = await findProfile(frozen.profile.requestedName || undefined);
     if (current) {
       throw new SubscriberBatchGovernanceError('SUBSCRIBER_BATCH_PROFILE_PRECONDITION_CHANGED');
@@ -219,13 +232,14 @@ async function assertProfilePrecondition(frozen: FrozenBatchCreateV2): Promise<v
     return;
   }
 
+  // Profile was present at freeze time — must still match
   const current = await findProfile(frozen.profile.requestedName);
   if (!current) {
     throw new SubscriberBatchGovernanceError('SUBSCRIBER_BATCH_PROFILE_PRECONDITION_CHANGED');
   }
 
   const currentHash = profileExecutionHash(current);
-  if (currentHash !== frozen.profile.dataHash) {
+  if (currentHash !== frozen.profile.preconditionHash) {
     throw new SubscriberBatchGovernanceError('SUBSCRIBER_BATCH_PROFILE_PRECONDITION_CHANGED');
   }
 }
@@ -239,6 +253,23 @@ async function assertExpectedAbsence(frozen: FrozenBatchCreateV2): Promise<void>
       conflictImsis,
     });
   }
+}
+
+// ─── Result Classification ───────────────────────────────────────────────────
+
+export type BatchResultClassification = 'SUCCESS' | 'PARTIAL_WRITE' | 'FAILED_NO_MUTATION';
+
+/**
+ * Centralized result classification shared by direct route and approval executor.
+ *
+ * SUCCESS:            createdCount == requested, failedCount == 0
+ * PARTIAL_WRITE:      createdCount > 0 && failedCount > 0
+ * FAILED_NO_MUTATION: createdCount == 0 && failedCount > 0
+ */
+export function classifyBatchResult(createdCount: number, failedCount: number): BatchResultClassification {
+  if (failedCount === 0) return 'SUCCESS';
+  if (createdCount > 0) return 'PARTIAL_WRITE';
+  return 'FAILED_NO_MUTATION';
 }
 
 // ─── Execute ─────────────────────────────────────────────────────────────────
@@ -286,9 +317,9 @@ export async function executeFrozenBatchCreate(
         imsi,
         planId: frozen.effectiveOcs.planId,
         total: frozen.effectiveOcs.trafficTotal,
-        available: frozen.effectiveOcs.trafficAvailable,
+        available: frozen.effectiveOcs.trafficBalance,
         smsTotal: frozen.effectiveOcs.smsTotal,
-        smsAvailable: frozen.effectiveOcs.smsAvailable,
+        smsAvailable: frozen.effectiveOcs.smsBalance,
       });
       ocsProvisioned.push(imsi);
     } catch {
@@ -298,7 +329,8 @@ export async function executeFrozenBatchCreate(
 
   // 7. Classify result
   const allFailed = [...failedImsis, ...conflictImsis, ...ocsFailed];
-  const partialMutation = createdImsis.length > 0 && allFailed.length > 0;
+  const resultClassification = classifyBatchResult(createdImsis.length, allFailed.length);
+  const partialMutation = resultClassification === 'PARTIAL_WRITE';
 
   return {
     requested: frozen.count,
@@ -321,6 +353,11 @@ export async function executeFrozenBatchCreate(
 /**
  * Translate v1 approval payload to v2 execution intent.
  * v1 documents must still execute through create-only path.
+ *
+ * IMPORTANT: v1 does NOT provide profile immutability guarantee.
+ * Historical v1 approvals did not freeze profile content.
+ * At execution time, the current profile is loaded and used.
+ * The preconditionHash is empty because v1 never computed one.
  */
 export function translateV1ToFrozenV2(v1Payload: Record<string, unknown>): FrozenBatchCreateV2 {
   const startImsi = String(v1Payload.startImsi || '');
@@ -332,15 +369,19 @@ export function translateV1ToFrozenV2(v1Payload: Record<string, unknown>): Froze
   const effectiveOcs: EffectiveOcsConfig = {
     planId: String(v1Payload.planId || ''),
     trafficTotal: Number(v1Payload.trafficTotal ?? BATCH_DEFAULT_TRAFFIC_TOTAL),
-    trafficAvailable: Number(v1Payload.trafficBalance ?? v1Payload.trafficTotal ?? BATCH_DEFAULT_TRAFFIC_TOTAL),
+    trafficBalance: Number(v1Payload.trafficBalance ?? v1Payload.trafficTotal ?? BATCH_DEFAULT_TRAFFIC_TOTAL),
     smsTotal: Number(v1Payload.smsTotal ?? BATCH_DEFAULT_SMS_TOTAL),
-    smsAvailable: Number(v1Payload.smsBalance ?? v1Payload.smsTotal ?? BATCH_DEFAULT_SMS_TOTAL),
+    smsBalance: Number(v1Payload.smsBalance ?? v1Payload.smsTotal ?? BATCH_DEFAULT_SMS_TOTAL),
   };
 
+  const hasProfile = Boolean(v1Payload.profileName);
   const profile: ProfileState = {
     requestedName: String(v1Payload.profileName || ''),
-    dataHash: '', // v1 has no hash; profile check will load fresh
-    ocsDefaults: null,
+    // v1 with profile: state='present', loads current profile at execution
+    // v1 without profile: state='absent', uses defaults
+    state: hasProfile ? 'present' : 'absent',
+    // v1 never froze profile content — empty hash signals legacy-unfrozen mode
+    preconditionHash: '',
   };
 
   const operationFingerprint = computeBatchFingerprint(startImsi, count, effectiveOcs, profile);
