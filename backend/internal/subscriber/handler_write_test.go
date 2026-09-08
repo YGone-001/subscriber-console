@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"subscriber/internal/approval"
@@ -1191,6 +1192,43 @@ func TestBatchUpdate_ResponseContract_DirectSuccess(t *testing.T) {
 	}
 }
 
+// Section 13: Timestamp normalization evidence tests
+
+func TestToISOString_PlusEightNoMilliseconds(t *testing.T) {
+	// Input: 2026-09-08T18:00:00+08:00
+	// Expected: 2026-09-08T10:00:00.000Z
+	loc := time.FixedZone("CST", 8*3600)
+	input := time.Date(2026, 9, 8, 18, 0, 0, 0, loc)
+	got := toISOString(input)
+	want := "2026-09-08T10:00:00.000Z"
+	if got != want {
+		t.Errorf("toISOString(%v) = %q, want %q", input, got, want)
+	}
+}
+
+func TestToISOString_PlusEightWithMilliseconds(t *testing.T) {
+	// Input: 2026-09-08T18:00:00.123+08:00
+	// Expected: 2026-09-08T10:00:00.123Z
+	loc := time.FixedZone("CST", 8*3600)
+	input := time.Date(2026, 9, 8, 18, 0, 0, 123000000, loc)
+	got := toISOString(input)
+	want := "2026-09-08T10:00:00.123Z"
+	if got != want {
+		t.Errorf("toISOString(%v) = %q, want %q", input, got, want)
+	}
+}
+
+func TestToISOString_UTCWithMilliseconds(t *testing.T) {
+	// Input: 2026-09-08T10:00:00.456Z
+	// Expected: 2026-09-08T10:00:00.456Z
+	input := time.Date(2026, 9, 8, 10, 0, 0, 456000000, time.UTC)
+	got := toISOString(input)
+	want := "2026-09-08T10:00:00.456Z"
+	if got != want {
+		t.Errorf("toISOString(%v) = %q, want %q", input, got, want)
+	}
+}
+
 func TestBatchUpdate_ActiveDuplicateOperator(t *testing.T) {
 	store := newFakeBatchUpdateStore()
 	store.targets["001010000000001"] = map[string]any{"access_restriction_data": int64(1)}
@@ -1975,9 +2013,9 @@ func TestBatchUpdate_ErrorCode_UnsupportedAMBR(t *testing.T) {
 		"patch": map[string]any{
 			"sessionAmbr": map[string]any{
 				"downlink": map[string]any{
-					"value":    float64(100),
-					"unit":     "Kbps",
-					"unknown":  "unsupported", // Unsupported AMBR field
+					"value":   float64(100),
+					"unit":    "Kbps",
+					"unknown": "unsupported", // Unsupported AMBR field
 				},
 				"uplink": map[string]any{
 					"value": float64(100),
@@ -2010,9 +2048,9 @@ func TestBatchUpdate_ErrorCode_UnsupportedBitrate(t *testing.T) {
 		"patch": map[string]any{
 			"sessionAmbr": map[string]any{
 				"downlink": map[string]any{
-					"value":        float64(100),
-					"unit":         "Kbps",
-					"unsupported":  "field", // Unsupported bitrate field
+					"value":       float64(100),
+					"unit":        "Kbps",
+					"unsupported": "field", // Unsupported bitrate field
 				},
 				"uplink": map[string]any{
 					"value": float64(100),

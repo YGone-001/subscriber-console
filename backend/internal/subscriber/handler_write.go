@@ -485,16 +485,16 @@ func (h *WriteHandler) handleBatchUpdateError(w http.ResponseWriter, err error) 
 		return
 	}
 	statusMap := map[string]int{
-		"SUBSCRIBER_NOT_FOUND":                    http.StatusNotFound,
-		"ACTIVE_CHANGE_CONFLICT":                  http.StatusConflict,
-		"SUBSCRIBER_BATCH_PRECONDITION_CHANGED":   http.StatusConflict,
-		"SUBSCRIBER_BATCH_NO_EFFECT":              http.StatusBadRequest,
-		ErrInvalidBatchRequest:                    http.StatusBadRequest,
-		ErrUnsupportedSubscriberField:             http.StatusBadRequest,
-		ErrInvalidFrozenBatchUpdate:               http.StatusBadRequest,
-		ErrBatchSizeExceeded:                      http.StatusBadRequest,
-		ErrApprovalSnapshotTooLarge:               http.StatusBadRequest,
-		"AUDIT_UNAVAILABLE":                       http.StatusServiceUnavailable,
+		"SUBSCRIBER_NOT_FOUND":                  http.StatusNotFound,
+		"ACTIVE_CHANGE_CONFLICT":                http.StatusConflict,
+		"SUBSCRIBER_BATCH_PRECONDITION_CHANGED": http.StatusConflict,
+		"SUBSCRIBER_BATCH_NO_EFFECT":            http.StatusBadRequest,
+		ErrInvalidBatchRequest:                  http.StatusBadRequest,
+		ErrUnsupportedSubscriberField:           http.StatusBadRequest,
+		ErrInvalidFrozenBatchUpdate:             http.StatusBadRequest,
+		ErrBatchSizeExceeded:                    http.StatusBadRequest,
+		ErrApprovalSnapshotTooLarge:             http.StatusBadRequest,
+		"AUDIT_UNAVAILABLE":                     http.StatusServiceUnavailable,
 	}
 	status, ok := statusMap[govErr.Code]
 	if !ok {
