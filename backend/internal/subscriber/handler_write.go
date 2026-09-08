@@ -1348,3 +1348,310 @@ func sanitizeBatchResult(result *BatchCreateResult) map[string]any {
 		"metrics":         result.Metrics,
 	}
 }
+
+// BulkDelete handles POST /api/subscribers/bulk-delete
+// Deletes multiple subscribers with governance: operator/ops_admin → Approval, super_admin/root → Direct.
+// Ordering: auth → subscriber_write → rate limit → request validation → fresh actor → prepare v2 → active conflicts → actor governance → Approval / Direct
+func (h *WriteHandler) BulkDelete(w http.ResponseWriter, r *http.Request) {
+	p := auth.PrincipalFromContext(r.Context())
+	if p == nil {
+		response.Error(w, http.StatusUnauthorized, "Unauthorized", "AUTH_INVALID_TOKEN")
+		return
+	}
+
+	// Capability check
+	if !audit.RequireCapabilityWithAudit(w, r, p, "subscriber_write", h.auditWriter) {
+		return
+	}
+
+	// Rate limit: 10 requests / 60 seconds / username
+	if !h.limiter.Enforce(w, r, "subscribers:bulk-delete:"+p.Username, 10, 60) {
+		return
+	}
+
+	// Decode and validate request
+	var body map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		response.Error(w, http.StatusBadRequest, "Invalid request body", "INVALID_REQUEST")
+		return
+	}
+
+	req, err := ValidateBulkDeleteRequest(body)
+	if err != nil {
+		if govErr, ok := err.(*SubscriberGovernanceError); ok {
+			response.Error(w, http.StatusBadRequest, govErr.Code, govErr.Code)
+		} else {
+			response.Error(w, http.StatusBadRequest, "Invalid request", "INVALID_REQUEST")
+		}
+		return
+	}
+
+	// Fresh actor validation
+	fresh, httpErr := RevalidateFreshActor(r.Context(), h.userRepo, p)
+	if httpErr != nil {
+		response.Error(w, httpErr.Status, httpErr.Message, httpErr.Code)
+		return
+	}
+
+	// Prepare frozen v2
+	frozen, err := PrepareFrozenBulkDelete(r.Context(), req.ImsiList, h.repo)
+	if err != nil {
+		if govErr, ok := err.(*SubscriberGovernanceError); ok {
+			code := govErr.Code
+			status := http.StatusBadRequest
+			if code == "SUBSCRIBER_NOT_FOUND" {
+				status = http.StatusNotFound
+			}
+			response.Error(w, status, code, code)
+		} else {
+			response.Error(w, http.StatusInternalServerError, "Failed to prepare bulk delete", "INTERNAL_ERROR")
+		}
+		return
+	}
+
+	// Snapshot size check
+	if frozen.SnapshotBytes > maxBulkDeleteSnapshotBytes {
+		response.Error(w, http.StatusBadRequest, ErrApprovalSnapshotTooLarge, ErrApprovalSnapshotTooLarge)
+		return
+	}
+
+	// Active change protection - check for conflicting active approvals
+	activeMatch, err := h.findExistingBulkDeleteChange(r.Context(), frozen.OperationFingerprint, req.ImsiList)
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, "Failed to check active changes", "INTERNAL_ERROR")
+		return
+	}
+
+	// Evaluate governance with fresh role
+	result := EvaluateOperation(OpBulkDelete, fresh.NormalizedRole)
+
+	if result.Decision == governance.Direct {
+		// super_admin/root: Direct execution
+		// Check for ANY active conflict
+		if activeMatch != nil {
+			response.Error(w, http.StatusConflict, "ACTIVE_CHANGE_CONFLICT", "ACTIVE_CHANGE_CONFLICT")
+			return
+		}
+
+		h.executeDirectBulkDelete(w, r, frozen, fresh)
+		return
+	}
+
+	// operator/ops_admin: Approval path
+	if activeMatch != nil {
+		if activeMatch.Type == "duplicate" {
+			// Exact duplicate → 202 idempotent
+			response.JSON(w, http.StatusAccepted, map[string]any{
+				"approval":         activeMatch.Approval,
+				"requiresApproval": true,
+				"idempotent":       true,
+			})
+			return
+		}
+		// Overlap → 409
+		response.JSON(w, http.StatusConflict, map[string]any{
+			"error":    "ACTIVE_CHANGE_CONFLICT",
+			"code":     "ACTIVE_CHANGE_CONFLICT",
+			"approval": activeMatch.Approval,
+		})
+		return
+	}
+
+	// Create approval
+	actor := approval.GovernanceActor{
+		Type:     "user",
+		UserID:   fresh.UserID,
+		Username: fresh.Username,
+		Role:     fresh.NormalizedRole,
+	}
+	input := approval.CreateApprovalInput{
+		Action:               "SUBSCRIBER_BULK_DELETE",
+		Requester:            fresh.Username,
+		RequesterContext:     &actor,
+		TargetID:             "subscriber:bulk-delete",
+		Summary:              fmt.Sprintf("Delete %d subscriber(s)", frozen.TargetCount),
+		Operation:            &approval.ApprovalOperation{ResourceType: "subscriber_batch", ResourceID: "bulk-delete"},
+		OperationFingerprint: frozen.OperationFingerprint,
+		Before:               map[string]any{"targetCount": frozen.TargetCount, "targets": frozen.Targets},
+		Payload:              frozenBulkDeleteToMap(frozen),
+	}
+
+	approvalDoc, err := h.approvalSvc.Create(r, actor, input)
+	if err != nil {
+		if awe, ok := err.(*approval.ApprovalWorkflowError); ok && awe.Committed {
+			response.JSON(w, awe.Status, awe.ErrorResponse())
+			return
+		}
+		response.Error(w, http.StatusInternalServerError, "Failed to create approval request", "APPROVAL_CREATE_FAILED")
+		return
+	}
+
+	// New Approval response — match Node production (no outcome/message)
+	response.JSON(w, http.StatusAccepted, map[string]any{
+		"approval":         approvalDoc,
+		"requiresApproval": true,
+	})
+}
+
+// executeDirectBulkDelete executes bulk delete directly for super_admin/root.
+func (h *WriteHandler) executeDirectBulkDelete(w http.ResponseWriter, r *http.Request, frozen *FrozenBulkDeleteV2, fresh *FreshActor) {
+	// Execute with CAS and OCS cleanup separation
+	ocsCleanup := func(ctx context.Context, imsi string) error {
+		return h.repo.DeleteOcsProvisioning(ctx, imsi)
+	}
+
+	execResult, err := ExecuteFrozenBulkDelete(r.Context(), frozen, h.repo, ocsCleanup)
+	if err != nil {
+		if govErr, ok := err.(*SubscriberGovernanceError); ok {
+			code := govErr.Code
+			status := http.StatusConflict
+			if code == ErrBulkDeleteFailed {
+				status = http.StatusInternalServerError
+			}
+			committed := execResult != nil && execResult.MutationCommitted
+			response.JSON(w, status, map[string]any{
+				"code":      code,
+				"error":     code,
+				"committed": committed,
+				"result":    sanitizeBulkDeleteResult(execResult),
+			})
+		} else {
+			response.Error(w, http.StatusInternalServerError, "Bulk delete failed", "INTERNAL_ERROR")
+		}
+		return
+	}
+
+	// Classify result
+	classification := ClassifyBulkDeleteResult(
+		execResult.DeletedCount,
+		execResult.Requested,
+		len(execResult.ConflictImsis),
+		len(execResult.FailedImsis),
+		len(execResult.OcsCleanupFailedImsis),
+	)
+
+	// Strict audit
+	auditResult := "success"
+	if classification != "SUCCESS" {
+		auditResult = "failed"
+	}
+
+	auditErr := h.writeStrictAudit(r, audit.WriteAuditInput{
+		Action:   "subscriber.batch.delete",
+		Module:   "subscribers",
+		TargetID: "subscriber:bulk-delete",
+		Result:   auditResult,
+		Metadata: map[string]any{
+			"governanceMode":         "DIRECT_GOVERNED",
+			"approvalRequired":       false,
+			"actorRole":              fresh.NormalizedRole,
+			"risk":                   "critical",
+			"targetCount":            execResult.Requested,
+			"deletedCount":           execResult.DeletedCount,
+			"conflictCount":          len(execResult.ConflictImsis),
+			"failedCount":            len(execResult.FailedImsis),
+			"ocsCleanupFailureCount": len(execResult.OcsCleanupFailedImsis),
+			"operationFingerprint":   execResult.OperationFingerprint,
+			"classification":         classification,
+			"partialMutation":        execResult.PartialMutation,
+		},
+	}, fresh)
+	if auditErr != nil {
+		response.JSON(w, http.StatusServiceUnavailable, map[string]any{
+			"error":     "AUDIT_UNAVAILABLE",
+			"code":      "AUDIT_UNAVAILABLE",
+			"committed": execResult.MutationCommitted,
+		})
+		return
+	}
+
+	// Success response
+	if classification == "SUCCESS" {
+		response.JSON(w, http.StatusOK, map[string]any{
+			"outcome": "executed",
+			"message": "Subscribers deleted successfully",
+			"result": map[string]any{
+				"requested":             execResult.Requested,
+				"deleted":               execResult.DeletedCount,
+				"deletedImsis":          execResult.DeletedImsis,
+				"ocsCleanupFailedImsis": execResult.OcsCleanupFailedImsis,
+			},
+			"requiresApproval": false,
+		})
+	} else {
+		// Partial or failed
+		response.JSON(w, http.StatusConflict, map[string]any{
+			"code":      ErrBulkDeletePartialWrite,
+			"error":     ErrBulkDeletePartialWrite,
+			"committed": execResult.MutationCommitted,
+			"result":    sanitizeBulkDeleteResult(execResult),
+		})
+	}
+}
+
+// sanitizeBulkDeleteResult removes sensitive data from bulk delete result for HTTP response.
+func sanitizeBulkDeleteResult(result *BulkDeleteExecutionResult) map[string]any {
+	if result == nil {
+		return nil
+	}
+	return map[string]any{
+		"requested":             result.Requested,
+		"deletedImsis":          result.DeletedImsis,
+		"conflictImsis":         result.ConflictImsis,
+		"failedImsis":           result.FailedImsis,
+		"ocsCleanedImsis":       result.OcsCleanedImsis,
+		"ocsCleanupFailedImsis": result.OcsCleanupFailedImsis,
+		"deletedCount":          result.DeletedCount,
+		"partialMutation":       result.PartialMutation,
+		"mutationCommitted":     result.MutationCommitted,
+	}
+}
+
+// findExistingBulkDeleteChange checks for active approvals with the same fingerprint or overlapping targets.
+func (h *WriteHandler) findExistingBulkDeleteChange(ctx context.Context, fingerprint string, imsis []string) (*ActiveApprovalMatch, error) {
+	// Check all relevant active subscriber changes
+	actions := []string{"SUBSCRIBER_UPDATE", "SUBSCRIBER_DELETE", "SUBSCRIBER_BATCH_UPDATE", "SUBSCRIBER_BULK_DELETE"}
+	for _, action := range actions {
+		approvals, err := h.approvalQry.ListActiveByAction(ctx, action)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, a := range approvals {
+			// Duplicate check: same fingerprint for BULK_DELETE
+			if action == "SUBSCRIBER_BULK_DELETE" && a.OperationFingerprint == fingerprint {
+				return &ActiveApprovalMatch{Type: "duplicate", Approval: &a}, nil
+			}
+
+			// Overlap check: any active change targeting same IMSIs
+			targetOverlap := false
+			existingTargets := extractApprovalTargets(&a)
+			requestedSet := make(map[string]bool)
+			for _, imsi := range imsis {
+				requestedSet[imsi] = true
+			}
+			for _, existing := range existingTargets {
+				if requestedSet[existing] {
+					targetOverlap = true
+					break
+				}
+			}
+			if targetOverlap {
+				return &ActiveApprovalMatch{Type: "conflict", Approval: &a}, nil
+			}
+		}
+	}
+	return nil, nil
+}
+
+// frozenBulkDeleteToMap converts FrozenBulkDeleteV2 to map for storage.
+func frozenBulkDeleteToMap(frozen *FrozenBulkDeleteV2) map[string]any {
+	return map[string]any{
+		"version":              frozen.Version,
+		"targets":              frozen.Targets,
+		"targetCount":          frozen.TargetCount,
+		"snapshotBytes":        frozen.SnapshotBytes,
+		"strategy":             frozen.Strategy,
+		"operationFingerprint": frozen.OperationFingerprint,
+	}
+}

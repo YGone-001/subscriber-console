@@ -198,6 +198,7 @@ func main() {
 	mux.Handle("DELETE /api/subscribers/{imsi}", authMiddleware(http.HandlerFunc(subscriberWriteHandler.Delete)))
 	mux.Handle("POST /api/subscribers/batch", authMiddleware(http.HandlerFunc(subscriberWriteHandler.BatchCreate)))
 	mux.Handle("POST /api/subscribers/batch-update", authMiddleware(http.HandlerFunc(subscriberWriteHandler.BatchUpdate)))
+	mux.Handle("POST /api/subscribers/bulk-delete", authMiddleware(http.HandlerFunc(subscriberWriteHandler.BulkDelete)))
 
 	// Auth/User reads
 	mux.Handle("GET /api/auth/me", authMiddleware(http.HandlerFunc(userHandler.AuthMe)))

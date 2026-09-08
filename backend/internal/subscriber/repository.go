@@ -818,6 +818,23 @@ func (r *Repository) fetchSingleOcsProvisioning(ctx context.Context, imsi string
 	return ocsSub, balance, tariffPlan, nil
 }
 
+// DeleteOcsProvisioning deletes OCS provisioning data for a subscriber.
+func (r *Repository) DeleteOcsProvisioning(ctx context.Context, imsi string) error {
+	// Delete OCS subscriber
+	_, err := r.ocsSubs.DeleteOne(ctx, bson.M{"imsi": imsi})
+	if err != nil {
+		return fmt.Errorf("delete ocs subscriber: %w", err)
+	}
+
+	// Delete OCS balance
+	_, err = r.ocsBalances.DeleteOne(ctx, bson.M{"imsi": imsi})
+	if err != nil {
+		return fmt.Errorf("delete ocs balance: %w", err)
+	}
+
+	return nil
+}
+
 // xcloudToLegacyState maps a xcloud subscriber document to legacy state format.
 // This matches the Node xcloudToLegacyState function exactly.
 func xcloudToLegacyState(doc bson.M) *LegacySubscriberState {
