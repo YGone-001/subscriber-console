@@ -22,10 +22,11 @@ const (
 )
 
 // FrozenBulkDeleteTarget holds a single target for bulk delete.
+// Uses canonical SafeSnapshot from frozen.go.
 type FrozenBulkDeleteTarget struct {
-	Imsi             string         `json:"imsi"             bson:"imsi"`
-	Before           map[string]any `json:"before"           bson:"before"`
-	PreconditionHash string         `json:"preconditionHash" bson:"preconditionHash"`
+	Imsi             string       `json:"imsi"             bson:"imsi"`
+	Before           SafeSnapshot `json:"before"           bson:"before"`
+	PreconditionHash string       `json:"preconditionHash" bson:"preconditionHash"`
 }
 
 // FrozenBulkDeleteV2 is the v2 frozen contract for bulk delete.
@@ -109,6 +110,7 @@ func ValidateBulkDeleteRequest(payload map[string]any) (*BulkDeleteRequest, erro
 type OcsCleanupFunc func(ctx context.Context, imsi string) error
 
 // PrepareFrozenBulkDelete prepares a frozen v2 bulk delete payload.
+// Uses canonical SubscriberSafeSnapshot from frozen.go.
 func PrepareFrozenBulkDelete(ctx context.Context, imsiList []string, repo *Repository) (*FrozenBulkDeleteV2, error) {
 	// Sort IMSIs ascending
 	sorted := make([]string, len(imsiList))
@@ -129,9 +131,9 @@ func PrepareFrozenBulkDelete(ctx context.Context, imsiList []string, repo *Repos
 			}
 		}
 
-		// Extract safe snapshot (no sensitive fields)
-		before := subscriberSafeSnapshot(doc)
-		preconditionHash := computeHash(before)
+		// Use canonical SafeSnapshot (excludes security/k/op/opc/amf/sqn)
+		before := SubscriberSafeSnapshot(doc)
+		preconditionHash := computeBulkDeleteHash(before)
 
 		targets = append(targets, FrozenBulkDeleteTarget{
 			Imsi:             imsi,
@@ -146,6 +148,11 @@ func PrepareFrozenBulkDelete(ctx context.Context, imsiList []string, repo *Repos
 	// Compute snapshot bytes
 	snapshotBytes := computeBulkDeleteSnapshotBytes(targets, fingerprint)
 
+	// Enforce snapshot cap at prepare time (Section 26)
+	if snapshotBytes > maxBulkDeleteSnapshotBytes {
+		return nil, &SubscriberGovernanceError{Code: ErrApprovalSnapshotTooLarge}
+	}
+
 	return &FrozenBulkDeleteV2{
 		Version:              "subscriber-bulk-delete-v2",
 		Targets:              targets,
@@ -157,6 +164,7 @@ func PrepareFrozenBulkDelete(ctx context.Context, imsiList []string, repo *Repos
 }
 
 // AssertFrozenBulkDeleteV2 validates a frozen v2 bulk delete payload.
+// Handles bson.A, bson.M, bson.D for BSON-safe decoding (Section 27).
 func AssertFrozenBulkDeleteV2(payload map[string]any) (*FrozenBulkDeleteV2, error) {
 	// Version check
 	version, _ := payload["version"].(string)
@@ -165,13 +173,13 @@ func AssertFrozenBulkDeleteV2(payload map[string]any) (*FrozenBulkDeleteV2, erro
 	}
 
 	// TargetCount validation
-	targetCount, _ := payload["targetCount"].(float64)
+	targetCount, _ := toFloat64(payload["targetCount"])
 	if targetCount < 1 || targetCount > float64(maxBulkDeleteTargets) {
 		return nil, &SubscriberGovernanceError{Code: ErrInvalidFrozenBulkDelete}
 	}
 
 	// Targets validation
-	targetsRaw, ok := payload["targets"].([]any)
+	targetsRaw, ok := asAnySlice(payload["targets"])
 	if !ok || len(targetsRaw) == 0 {
 		return nil, &SubscriberGovernanceError{Code: ErrInvalidFrozenBulkDelete}
 	}
@@ -192,8 +200,8 @@ func AssertFrozenBulkDeleteV2(payload map[string]any) (*FrozenBulkDeleteV2, erro
 	imsiSet := make(map[string]bool)
 	var prevImsi string
 	for _, item := range targetsRaw {
-		targetMap, ok := item.(map[string]any)
-		if !ok {
+		targetMap, ok := asStringAnyMap(item)
+		if !ok || len(targetMap) == 0 {
 			return nil, &SubscriberGovernanceError{Code: ErrInvalidFrozenBulkDelete}
 		}
 
@@ -219,23 +227,26 @@ func AssertFrozenBulkDeleteV2(payload map[string]any) (*FrozenBulkDeleteV2, erro
 		}
 		imsiSet[imsi] = true
 
-		// Before must exist
-		before, ok := targetMap["before"].(map[string]any)
-		if !ok || len(before) == 0 {
+		// Parse before as SafeSnapshot
+		beforeRaw, ok := asStringAnyMap(targetMap["before"])
+		if !ok || len(beforeRaw) == 0 {
 			return nil, &SubscriberGovernanceError{Code: ErrInvalidFrozenBulkDelete}
 		}
 
 		// Check no sensitive fields in before
 		sensitiveFields := []string{"k", "op", "opc", "amf", "sqn", "security"}
 		for _, field := range sensitiveFields {
-			if _, exists := before[field]; exists {
+			if _, exists := beforeRaw[field]; exists {
 				return nil, &SubscriberGovernanceError{Code: ErrInvalidFrozenBulkDelete}
 			}
 		}
 
+		// Parse SafeSnapshot fields
+		before := parseSafeSnapshot(beforeRaw)
+
 		// Verify preconditionHash
 		preconditionHash, _ := targetMap["preconditionHash"].(string)
-		expectedHash := computeHash(before)
+		expectedHash := computeBulkDeleteHash(before)
 		if preconditionHash != expectedHash {
 			return nil, &SubscriberGovernanceError{Code: ErrInvalidFrozenBulkDelete}
 		}
@@ -255,7 +266,7 @@ func AssertFrozenBulkDeleteV2(payload map[string]any) (*FrozenBulkDeleteV2, erro
 	}
 
 	// Verify snapshotBytes
-	snapshotBytes, _ := payload["snapshotBytes"].(float64)
+	snapshotBytes := toFloat64OrZero(payload["snapshotBytes"])
 	expectedSnapshotBytes := computeBulkDeleteSnapshotBytes(targets, fingerprint)
 	if int(snapshotBytes) != expectedSnapshotBytes {
 		return nil, &SubscriberGovernanceError{Code: ErrInvalidFrozenBulkDelete}
@@ -278,16 +289,20 @@ func AssertFrozenBulkDeleteV2(payload map[string]any) (*FrozenBulkDeleteV2, erro
 
 // ClassifyBulkDeleteResult classifies the execution result.
 func ClassifyBulkDeleteResult(deletedCount, requested, conflictCount, failedCount, ocsCleanupFailureCount int) string {
+	// Section 16: SUCCESS only when all conditions met
 	if deletedCount == requested && conflictCount == 0 && failedCount == 0 && ocsCleanupFailureCount == 0 {
 		return "SUCCESS"
 	}
+	// Section 16: PARTIAL_WRITE when any deletion occurred
 	if deletedCount > 0 {
 		return "PARTIAL_WRITE"
 	}
+	// Section 16: FAILED_NO_MUTATION when zero deletions
 	return "FAILED_NO_MUTATION"
 }
 
 // ExecuteFrozenBulkDelete executes a frozen bulk delete with CAS and OCS cleanup separation.
+// Uses canonical SubscriberSafeSnapshot from frozen.go.
 func ExecuteFrozenBulkDelete(ctx context.Context, frozen *FrozenBulkDeleteV2, repo *Repository, ocsCleanup OcsCleanupFunc) (*BulkDeleteExecutionResult, error) {
 	result := &BulkDeleteExecutionResult{
 		Requested:             frozen.TargetCount,
@@ -313,9 +328,9 @@ func ExecuteFrozenBulkDelete(ctx context.Context, frozen *FrozenBulkDeleteV2, re
 			continue
 		}
 
-		// Verify precondition
+		// Verify precondition using canonical SafeSnapshot
 		currentSnapshot := SubscriberSafeSnapshot(current)
-		currentHash := computeHash(currentSnapshot)
+		currentHash := computeBulkDeleteHash(currentSnapshot)
 		if currentHash != target.PreconditionHash {
 			result.ConflictImsis = append(result.ConflictImsis, target.Imsi)
 		}
@@ -337,40 +352,50 @@ func ExecuteFrozenBulkDelete(ctx context.Context, frozen *FrozenBulkDeleteV2, re
 		// Re-read current state for final CAS
 		current, err := repo.FindSubscriberByImsi(ctx, target.Imsi)
 		if err != nil {
+			// Section 15: Storage/driver error → failedImsis
 			result.FailedImsis = append(result.FailedImsis, target.Imsi)
-			result.PartialMutation = len(result.DeletedImsis) > 0
-			result.MutationCommitted = len(result.DeletedImsis) > 0
+			classification := ClassifyBulkDeleteResult(result.DeletedCount, result.Requested, len(result.ConflictImsis), len(result.FailedImsis), len(result.OcsCleanupFailedImsis))
+			result.PartialMutation = classification == "PARTIAL_WRITE"
+			result.MutationCommitted = result.DeletedCount > 0
 			continue
 		}
 		if current == nil {
-			result.FailedImsis = append(result.FailedImsis, target.Imsi)
-			result.PartialMutation = len(result.DeletedImsis) > 0
-			result.MutationCommitted = len(result.DeletedImsis) > 0
+			// Section 15: CAS miss (target missing) → conflictImsis
+			result.ConflictImsis = append(result.ConflictImsis, target.Imsi)
+			classification := ClassifyBulkDeleteResult(result.DeletedCount, result.Requested, len(result.ConflictImsis), len(result.FailedImsis), len(result.OcsCleanupFailedImsis))
+			result.PartialMutation = classification == "PARTIAL_WRITE"
+			result.MutationCommitted = result.DeletedCount > 0
 			continue
 		}
 
-		// Final CAS check
+		// Final CAS check using canonical SafeSnapshot
 		currentSnapshot := SubscriberSafeSnapshot(current)
-		currentHash := computeHash(currentSnapshot)
+		currentHash := computeBulkDeleteHash(currentSnapshot)
 		if currentHash != target.PreconditionHash {
-			result.FailedImsis = append(result.FailedImsis, target.Imsi)
-			result.PartialMutation = len(result.DeletedImsis) > 0
-			result.MutationCommitted = len(result.DeletedImsis) > 0
+			// Section 15: CAS miss (hash changed) → conflictImsis
+			result.ConflictImsis = append(result.ConflictImsis, target.Imsi)
+			classification := ClassifyBulkDeleteResult(result.DeletedCount, result.Requested, len(result.ConflictImsis), len(result.FailedImsis), len(result.OcsCleanupFailedImsis))
+			result.PartialMutation = classification == "PARTIAL_WRITE"
+			result.MutationCommitted = result.DeletedCount > 0
 			continue
 		}
 
 		// CAS delete - use expected document state
 		deleted, err := repo.DeleteSubscriberCAS(ctx, target.Imsi, current)
 		if err != nil {
+			// Section 15: Storage/driver error → failedImsis
 			result.FailedImsis = append(result.FailedImsis, target.Imsi)
-			result.PartialMutation = len(result.DeletedImsis) > 0
-			result.MutationCommitted = len(result.DeletedImsis) > 0
+			classification := ClassifyBulkDeleteResult(result.DeletedCount, result.Requested, len(result.ConflictImsis), len(result.FailedImsis), len(result.OcsCleanupFailedImsis))
+			result.PartialMutation = classification == "PARTIAL_WRITE"
+			result.MutationCommitted = result.DeletedCount > 0
 			continue
 		}
 		if !deleted {
-			result.FailedImsis = append(result.FailedImsis, target.Imsi)
-			result.PartialMutation = len(result.DeletedImsis) > 0
-			result.MutationCommitted = len(result.DeletedImsis) > 0
+			// Section 15: CAS miss (delete matched 0) → conflictImsis
+			result.ConflictImsis = append(result.ConflictImsis, target.Imsi)
+			classification := ClassifyBulkDeleteResult(result.DeletedCount, result.Requested, len(result.ConflictImsis), len(result.FailedImsis), len(result.OcsCleanupFailedImsis))
+			result.PartialMutation = classification == "PARTIAL_WRITE"
+			result.MutationCommitted = result.DeletedCount > 0
 			continue
 		}
 
@@ -389,16 +414,17 @@ func ExecuteFrozenBulkDelete(ctx context.Context, frozen *FrozenBulkDeleteV2, re
 		}
 	}
 
-	// Final classification
-	result.PartialMutation = result.DeletedCount > 0 && result.DeletedCount < result.Requested
+	// Section 17: Final classification and partialMutation
+	classification := ClassifyBulkDeleteResult(result.DeletedCount, result.Requested, len(result.ConflictImsis), len(result.FailedImsis), len(result.OcsCleanupFailedImsis))
+	result.PartialMutation = classification == "PARTIAL_WRITE"
 
 	return result, nil
 }
 
-// computeHash computes SHA256 hash of stable JSON.
-func computeHash(value any) string {
-	stable := stableJSON(value)
-	hash := sha256.Sum256([]byte(stable))
+// computeBulkDeleteHash computes SHA256 hash of canonical JSON for SafeSnapshot.
+func computeBulkDeleteHash(value any) string {
+	canonical := stableJSON(value)
+	hash := sha256.Sum256([]byte(canonical))
 	return fmt.Sprintf("%x", hash)
 }
 
@@ -416,7 +442,7 @@ func computeBulkDeleteFingerprint(targets []FrozenBulkDeleteTarget) string {
 			"preconditionHash": t.PreconditionHash,
 		}
 	}
-	return computeHash(fp)
+	return computeBulkDeleteHash(fp)
 }
 
 // computeBulkDeleteSnapshotBytes computes the snapshot size.
@@ -429,23 +455,32 @@ func computeBulkDeleteSnapshotBytes(targets []FrozenBulkDeleteTarget, fingerprin
 	return len(stableJSON(snapshot))
 }
 
-// subscriberSafeSnapshot extracts safe snapshot from subscriber document (bulk_delete version).
-func subscriberSafeSnapshot(doc map[string]any) map[string]any {
-	snapshot := make(map[string]any)
-	sensitiveFields := map[string]bool{
-		"k": true, "op": true, "opc": true, "amf": true, "sqn": true,
-		"security": true, "_id": true, "password": true,
+// parseSafeSnapshot parses a map into a SafeSnapshot struct.
+func parseSafeSnapshot(m map[string]any) SafeSnapshot {
+	snap := SafeSnapshot{
+		Imsi: m["imsi"].(string),
 	}
-	for k, v := range doc {
-		if !sensitiveFields[k] {
-			snapshot[k] = v
+	if v, ok := m["msisdn"]; ok {
+		switch arr := v.(type) {
+		case []any:
+			snap.Msisdn = arr
+		case bson.A:
+			snap.Msisdn = []any(arr)
 		}
 	}
-	return snapshot
+	if v, ok := m["accessRestrictionData"]; ok {
+		snap.AccessRestrictionData = int(toFloat64OrZero(v))
+	}
+	if v, ok := m["networkAccessMode"]; ok {
+		snap.NetworkAccessMode = int(toFloat64OrZero(v))
+	}
+	snap.Ambr = m["ambr"]
+	snap.Slices = m["slices"]
+	return snap
 }
 
 // DeleteSubscriberCAS deletes a subscriber with CAS (Compare-And-Swap).
-func (r *Repository) DeleteSubscriberCAS(ctx context.Context, imsi string, expected map[string]any) (bool, error) {
+func (r *Repository) DeleteSubscriberCAS(ctx context.Context, imsi string, expected bson.M) (bool, error) {
 	collection := r.subscribers
 
 	// Build filter from expected state (excluding _id)

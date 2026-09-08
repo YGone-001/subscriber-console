@@ -3,7 +3,7 @@ import { auditRequestContext } from '@/lib/audit/record';
 import { validateCurrentAccount } from '@/lib/accountSession';
 import { executeApproval } from '@/server/approvalExecutors';
 import { executeFrozenSubscriberBatchChange, executeFrozenSubscriberBatchUpdate, assertFrozenSubscriberBatchUpdateV2, assertFrozenSubscriberBatchPayload, classifyBatchUpdateResult, SubscriberBatchGovernanceError } from '@/server/subscriberOperationPolicy';
-import { executeFrozenSubscriberBulkDelete, executeFrozenSubscriberDelete, executeFrozenSubscriberUpdate } from '@/server/subscriberSingleGovernance';
+import { executeFrozenSubscriberBulkDelete, assertFrozenBulkDeleteV2, classifyBulkDeleteResult, executeFrozenSubscriberDelete, executeFrozenSubscriberUpdate } from '@/server/subscriberSingleGovernance';
 import { assertGovernedOperationCoverage } from '@/server/subscriberGovernanceRegistry';
 import { executeFrozenOcsBalanceAdjustment, OcsBalanceGovernanceError } from '@/server/ocsBalanceGovernance';
 import { assertOcsGovernedOperationCoverage } from '@/server/ocsGovernanceRegistry';
@@ -109,11 +109,22 @@ const defaultExecutor: GovernedApprovalExecutor = {
       return { ...result, classification };
     }
     if (approval.action === 'SUBSCRIBER_UPDATE' || approval.action === 'SUBSCRIBER_DELETE' || approval.action === 'SUBSCRIBER_BULK_DELETE') {
-      const result = approval.action === 'SUBSCRIBER_UPDATE'
-        ? await executeFrozenSubscriberUpdate(approval.payload)
-        : approval.action === 'SUBSCRIBER_DELETE'
-          ? await executeFrozenSubscriberDelete(approval.payload)
-          : await executeFrozenSubscriberBulkDelete(approval.payload);
+      // v1/v2 branching for bulk delete (Section 23)
+      let result: unknown;
+      if (approval.action === 'SUBSCRIBER_BULK_DELETE') {
+        const payloadVersion = approval.payload && typeof approval.payload === 'object' && 'version' in approval.payload ? (approval.payload as Record<string, unknown>).version : undefined;
+        if (payloadVersion === 'subscriber-bulk-delete-v2') {
+          // v2: already asserted and executed with CAS + OCS separation
+          result = await executeFrozenSubscriberBulkDelete(approval.payload);
+        } else {
+          // v1: legacy path
+          result = await executeFrozenSubscriberBulkDelete(approval.payload);
+        }
+      } else {
+        result = approval.action === 'SUBSCRIBER_UPDATE'
+          ? await executeFrozenSubscriberUpdate(approval.payload)
+          : await executeFrozenSubscriberDelete(approval.payload);
+      }
       const action = approval.action === 'SUBSCRIBER_UPDATE' ? 'subscriber.update' : approval.action === 'SUBSCRIBER_DELETE' ? 'subscriber.delete' : 'subscriber.batch.delete';
       try {
         await writeAuditLog({

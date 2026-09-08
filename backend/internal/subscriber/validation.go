@@ -354,6 +354,12 @@ func toFloat64(v any) (float64, bool) {
 	}
 }
 
+// toFloat64OrZero converts various numeric types to float64, returning 0 on failure.
+func toFloat64OrZero(v any) float64 {
+	f, _ := toFloat64(v)
+	return f
+}
+
 // ValidateBatchCount validates a batch count value.
 // Matches Node validateBatchCount() exactly: integer, 1..1000.
 func ValidateBatchCount(value any) (int, error) {

@@ -344,6 +344,15 @@ export async function listActiveSubscriberBatchApprovals() {
   return values.map((item) => normalizeApproval(item as StoredApprovalDocument & Document) as ApprovalDocument);
 }
 
+export async function listActiveSubscriberApprovals(action: string) {
+  const docs = await collection();
+  const values = await docs.find({
+    action: action as ApprovalAction,
+    status: { $in: ['pending', 'approved', 'executing'] },
+  }).project<StoredApprovalDocument>({ _id: 0 }).toArray();
+  return values.map((item) => normalizeApproval(item as StoredApprovalDocument & Document) as ApprovalDocument);
+}
+
 const ALLOWED_TRANSITIONS: Readonly<Record<ApprovalStatus, readonly ApprovalStatus[]>> = {
   pending: ['approved', 'rejected', 'cancelled', 'expired'],
   approved: ['executing', 'cancelled'],
