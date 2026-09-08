@@ -135,6 +135,7 @@ function normalizeTimestamp(value: unknown, field: string): string {
 }
 
 function normalizeMaintenanceWindow(value: unknown): SubscriberBatchChangeRequest['maintenanceWindow'] | undefined {
+  // Section K: null/string/array/number all rejected by record() check below
   if (value === undefined) return undefined;
   const window = record(value);
   if (!window) throw new SubscriberBatchGovernanceError('INVALID_BATCH_REQUEST');
@@ -255,12 +256,27 @@ export async function prepareFrozenSubscriberBatchUpdateV2(input: SubscriberBatc
   });
   const fieldNames = changedFieldNames(input.patch);
   const operationFingerprint = computeBatchUpdateV2Fingerprint(targets, input.patch, fieldNames);
+  // Section H: Authoritative snapshot cap — computed from exact frozen payload fields
   const snapshotBytes = Buffer.byteLength(stableJson({ targets, patch: input.patch, fieldNames, operationFingerprint }), 'utf8');
   if (snapshotBytes > MAX_SUBSCRIBER_BATCH_SNAPSHOT_BYTES) throw new SubscriberBatchGovernanceError('APPROVAL_SNAPSHOT_TOO_LARGE', { snapshotBytes, max: MAX_SUBSCRIBER_BATCH_SNAPSHOT_BYTES });
   return { version: 'subscriber-batch-update-v2', targets, patch: input.patch, fieldNames, targetCount: targets.length, snapshotBytes, operationFingerprint };
 }
 
-function computeExpectedAfterFromPatch(patch: GovernedSubscriberPatch, fieldNames: string[]): Record<string, number> {
+// Section C: Canonical expected touched leaf keys from patch.
+// Returns sorted list of exact leaf keys that before/after must contain.
+export function expectedTouchedLeafKeys(patch: GovernedSubscriberPatch): string[] {
+  const keys: string[] = [];
+  if (patch.accessRestrictionData !== undefined) keys.push('access_restriction_data');
+  for (const direction of ['downlink', 'uplink'] as const) {
+    const bitrate = patch.ambr?.[direction];
+    if (!bitrate) continue;
+    keys.push(`ambr.${direction}.value`);
+    keys.push(`ambr.${direction}.unit`);
+  }
+  return keys.sort();
+}
+
+function computeExpectedAfterFromPatch(patch: GovernedSubscriberPatch): Record<string, number> {
   const after: Record<string, number> = {};
   if (patch.accessRestrictionData !== undefined) {
     after.access_restriction_data = patch.accessRestrictionData;
@@ -279,6 +295,7 @@ export function assertFrozenSubscriberBatchUpdateV2(value: unknown): FrozenSubsc
   if (!payload || payload.version !== 'subscriber-batch-update-v2' || !Array.isArray(payload.targets)) throw new SubscriberBatchGovernanceError('INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD');
   if (typeof payload.targetCount !== 'number' || payload.targetCount < 1 || payload.targetCount > MAX_SUBSCRIBER_BATCH_TARGETS) throw new SubscriberBatchGovernanceError('INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD');
   if (payload.targets.length !== payload.targetCount) throw new SubscriberBatchGovernanceError('INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD');
+  // Section F: Frozen IMSI validation — validateSubscriberBatchChangeRequest calls validateImsi (15 ASCII digits)
   const request = validateSubscriberBatchChangeRequest({ imsis: payload.targets.map((target) => record(target)?.imsi), patch: payload.patch, reason: 'frozen-payload' });
   const fieldNames = changedFieldNames(request.patch);
   if (!Array.isArray(payload.fieldNames) || stableJson((payload.fieldNames as string[]).slice().sort()) !== stableJson(fieldNames.slice().sort())) throw new SubscriberBatchGovernanceError('INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD');
@@ -289,21 +306,19 @@ export function assertFrozenSubscriberBatchUpdateV2(value: unknown): FrozenSubsc
     if (imsis[i] !== sortedImsis[i]) throw new SubscriberBatchGovernanceError('INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD');
   }
   // Compute expected after values from patch intent
-  const expectedAfter = computeExpectedAfterFromPatch(request.patch, fieldNames);
+  const expectedAfter = computeExpectedAfterFromPatch(request.patch);
   const targets = payload.targets.map((item) => {
     const target = record(item);
     if (!target || typeof target.imsi !== 'string' || !record(target.before) || !record(target.after) || typeof target.preconditionHash !== 'string') throw new SubscriberBatchGovernanceError('INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD');
     const before = record(target.before) as Record<string, number>;
     const after = record(target.after) as Record<string, number>;
     if (fingerprint(before) !== target.preconditionHash) throw new SubscriberBatchGovernanceError('INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD');
-    // Validate after keys are exactly allowed
-    for (const key of Object.keys(after)) {
-      if (!fieldNames.some((field) => key === field || key.startsWith(`${field}.`))) throw new SubscriberBatchGovernanceError('INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD');
-    }
-    // Validate before keys are exactly allowed
-    for (const key of Object.keys(before)) {
-      if (!fieldNames.some((field) => key === field || key.startsWith(`${field}.`))) throw new SubscriberBatchGovernanceError('INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD');
-    }
+    // Section D: Exact leaf-key set equality — before and after must exactly match expected keys
+    const expectedKeys = expectedTouchedLeafKeys(request.patch);
+    const beforeKeys = Object.keys(before).sort();
+    const afterKeys = Object.keys(after).sort();
+    if (beforeKeys.join() !== afterKeys.join()) throw new SubscriberBatchGovernanceError('INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD');
+    if (beforeKeys.join() !== expectedKeys.join()) throw new SubscriberBatchGovernanceError('INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD');
     // Validate after values EXACTLY match patch intent
     for (const [key, val] of Object.entries(expectedAfter)) {
       if (after[key] !== val) throw new SubscriberBatchGovernanceError('INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD');

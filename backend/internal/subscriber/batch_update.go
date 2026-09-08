@@ -186,9 +186,12 @@ func ValidateBatchUpdateRequest(payload map[string]any) (*BatchUpdateRequest, er
 		return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
 	}
 
-	// Validate maintenanceWindow: optional, but if present MUST be an object
+	// Section K: Validate maintenanceWindow — null/string/array/number all rejected
 	var maintenanceWindow *MaintenanceWindow
-	if mwPresent, hasMW := payload["maintenanceWindow"]; hasMW && mwPresent != nil {
+	if mwPresent, hasMW := payload["maintenanceWindow"]; hasMW {
+		if mwPresent == nil {
+			return nil, &SubscriberGovernanceError{Code: "INVALID_BATCH_REQUEST"}
+		}
 		mwRaw, ok := mwPresent.(map[string]any)
 		if !ok {
 			return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
@@ -343,6 +346,28 @@ func PrepareFrozenBatchUpdate(
 	}, nil
 }
 
+// Section C: expectedTouchedLeafKeys returns the sorted canonical list of leaf keys from the patch.
+func expectedTouchedLeafKeys(patch map[string]any) []string {
+	var keys []string
+	if _, ok := patch["accessRestrictionData"]; ok {
+		keys = append(keys, "access_restriction_data")
+	}
+	if ambrRaw, ok := patch["ambr"].(map[string]any); ok {
+		for _, dir := range []string{"downlink", "uplink"} {
+			if dirRaw, ok := ambrRaw[dir].(map[string]any); ok {
+				if _, ok := dirRaw["value"]; ok {
+					keys = append(keys, fmt.Sprintf("ambr.%s.value", dir))
+				}
+				if _, ok := dirRaw["unit"]; ok {
+					keys = append(keys, fmt.Sprintf("ambr.%s.unit", dir))
+				}
+			}
+		}
+	}
+	sort.Strings(keys)
+	return keys
+}
+
 // computeExpectedAfterFromPatch computes the expected after values from the patch intent.
 func computeExpectedAfterFromPatch(patch map[string]any) map[string]any {
 	after := make(map[string]any)
@@ -398,10 +423,10 @@ func AssertFrozenBatchUpdateV2(frozen *FrozenBatchUpdateV2) error {
 		}
 	}
 
-	// Validate target ordering and uniqueness
+	// Section F: Frozen IMSI validation — ValidateImsi checks 15 ASCII digits
 	imsis := make([]string, len(frozen.Targets))
 	for i, t := range frozen.Targets {
-		if len(t.Imsi) != 15 {
+		if _, err := ValidateImsi(t.Imsi); err != nil {
 			return &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
 		}
 		imsis[i] = t.Imsi
@@ -435,17 +460,15 @@ func AssertFrozenBatchUpdateV2(frozen *FrozenBatchUpdateV2) error {
 		if expectedHash != t.PreconditionHash {
 			return &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
 		}
-		// Validate after keys are exactly allowed
-		for key := range t.After {
-			if !anyFieldMatches(frozen.FieldNames, key) {
-				return &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
-			}
+		// Section D: Exact leaf-key set equality — before and after must exactly match expected keys
+		expectedKeys := expectedTouchedLeafKeys(frozen.Patch)
+		beforeKeys := sortedKeys(t.Before)
+		afterKeys := sortedKeys(t.After)
+		if strings.Join(beforeKeys, ",") != strings.Join(afterKeys, ",") {
+			return &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
 		}
-		// Validate before keys are exactly allowed
-		for key := range t.Before {
-			if !anyFieldMatches(frozen.FieldNames, key) {
-				return &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
-			}
+		if strings.Join(beforeKeys, ",") != strings.Join(expectedKeys, ",") {
+			return &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
 		}
 		// Validate after values EXACTLY match patch intent
 		for key, val := range expectedAfter {
@@ -470,6 +493,7 @@ func AssertFrozenBatchUpdateV2(frozen *FrozenBatchUpdateV2) error {
 	if frozen.SnapshotBytes != expectedSnapshotBytes {
 		return &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
 	}
+	// Section H: Authoritative snapshot cap — enforced after exact recomputation
 	if frozen.SnapshotBytes > maxSubscriberBatchSnapshotBytes {
 		return &SubscriberGovernanceError{Code: "APPROVAL_SNAPSHOT_TOO_LARGE"}
 	}

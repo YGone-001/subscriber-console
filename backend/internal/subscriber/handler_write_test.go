@@ -1295,3 +1295,282 @@ func TestBatchUpdate_NoEffect(t *testing.T) {
 		t.Errorf("expected 400 (no effect), got %d: %s", w.Code, w.Body.String())
 	}
 }
+
+// ============================================================
+// Section G: Frozen IMSI Validation
+// ============================================================
+
+func TestBatchUpdate_FrozenInvalidIMSI(t *testing.T) {
+	// Test that frozen assertion rejects non-15-digit IMSIs
+	cases := []struct {
+		name string
+		imsi string
+	}{
+		{"too short", "12345678901234"},
+		{"too long", "1234567890123456"},
+		{"non-digit", "00101000000000a"},
+		{"letters", "abcdefghijklmno"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			frozen := &FrozenBatchUpdateV2{
+				Version:     "subscriber-batch-update-v2",
+				TargetCount: 1,
+				FieldNames:  []string{"access_restriction_data"},
+				Targets: []SubscriberChangeTarget{
+					{
+						Imsi:             tc.imsi,
+						Before:           map[string]any{"access_restriction_data": int64(32)},
+						After:            map[string]any{"access_restriction_data": int64(0)},
+						PreconditionHash: fingerprintMap(map[string]any{"access_restriction_data": int64(32)}),
+					},
+				},
+				Patch: map[string]any{"accessRestrictionData": float64(0)},
+			}
+			frozen.SnapshotBytes = len(stableJSON(map[string]any{
+				"targets":              frozen.Targets,
+				"patch":                frozen.Patch,
+				"fieldNames":           frozen.FieldNames,
+				"operationFingerprint": "test",
+			}))
+			frozen.OperationFingerprint = ComputeBatchUpdateV2Fingerprint(frozen.Targets, frozen.Patch, frozen.FieldNames)
+			err := AssertFrozenBatchUpdateV2(frozen)
+			if err == nil {
+				t.Error("expected error for invalid frozen IMSI, got nil")
+			}
+		})
+	}
+}
+
+// ============================================================
+// Section X: Go Handler Acceptance Tests
+// ============================================================
+
+func TestBatchUpdate_MaintenanceWindowNull(t *testing.T) {
+	// Section K: maintenanceWindow null must be rejected
+	store := newFakeBatchUpdateStore()
+	store.targets["001010000000001"] = map[string]any{"access_restriction_data": int64(32)}
+	h := newBatchUpdateHandler(store, &fakeUserRepo{identity: testIdentity("admin1", "super_admin", false)}, &fakeApprovalCreator{}, &fakeApprovalQuerierDocs{}, &fakeRateLimiter{}, &fakeEvidenceStore{})
+	p := testPrincipal("admin1", "super_admin")
+	body := map[string]any{
+		"imsis":             []string{"001010000000001"},
+		"patch":             map[string]any{"accessRestrictionData": float64(0)},
+		"reason":            "test reason",
+		"maintenanceWindow": nil,
+	}
+	r := batchUpdateRequest(p, body)
+	w := httptest.NewRecorder()
+	h.BatchUpdate(w, r)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for maintenanceWindow null, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestBatchUpdate_MaintenanceWindowString(t *testing.T) {
+	// Section K: maintenanceWindow string must be rejected
+	store := newFakeBatchUpdateStore()
+	store.targets["001010000000001"] = map[string]any{"access_restriction_data": int64(32)}
+	h := newBatchUpdateHandler(store, &fakeUserRepo{identity: testIdentity("admin1", "super_admin", false)}, &fakeApprovalCreator{}, &fakeApprovalQuerierDocs{}, &fakeRateLimiter{}, &fakeEvidenceStore{})
+	p := testPrincipal("admin1", "super_admin")
+	body := map[string]any{
+		"imsis":             []string{"001010000000001"},
+		"patch":             map[string]any{"accessRestrictionData": float64(0)},
+		"reason":            "test reason",
+		"maintenanceWindow": "2026-09-08T10:00:00Z",
+	}
+	r := batchUpdateRequest(p, body)
+	w := httptest.NewRecorder()
+	h.BatchUpdate(w, r)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for maintenanceWindow string, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestBatchUpdate_FrozenKeyMismatch(t *testing.T) {
+	// Section D: Exact leaf-key equality — extra key in before must be rejected
+	frozen := &FrozenBatchUpdateV2{
+		Version:     "subscriber-batch-update-v2",
+		TargetCount: 1,
+		FieldNames:  []string{"access_restriction_data"},
+		Targets: []SubscriberChangeTarget{
+			{
+				Imsi:             "001010000000001",
+				Before:           map[string]any{"access_restriction_data": int64(32), "extra_field": int64(0)},
+				After:            map[string]any{"access_restriction_data": int64(0), "extra_field": int64(0)},
+				PreconditionHash: fingerprintMap(map[string]any{"access_restriction_data": int64(32), "extra_field": int64(0)}),
+			},
+		},
+		Patch: map[string]any{"accessRestrictionData": float64(0)},
+	}
+	frozen.SnapshotBytes = len(stableJSON(map[string]any{
+		"targets":              frozen.Targets,
+		"patch":                frozen.Patch,
+		"fieldNames":           frozen.FieldNames,
+		"operationFingerprint": "test",
+	}))
+	frozen.OperationFingerprint = ComputeBatchUpdateV2Fingerprint(frozen.Targets, frozen.Patch, frozen.FieldNames)
+	err := AssertFrozenBatchUpdateV2(frozen)
+	if err == nil {
+		t.Error("expected error for extra key in frozen payload, got nil")
+	}
+}
+
+func TestBatchUpdate_FrozenMissingLeaf(t *testing.T) {
+	// Section D: Exact leaf-key equality — missing leaf must be rejected
+	frozen := &FrozenBatchUpdateV2{
+		Version:     "subscriber-batch-update-v2",
+		TargetCount: 1,
+		FieldNames:  []string{"access_restriction_data"},
+		Targets: []SubscriberChangeTarget{
+			{
+				Imsi:             "001010000000001",
+				Before:           map[string]any{},
+				After:            map[string]any{},
+				PreconditionHash: fingerprintMap(map[string]any{}),
+			},
+		},
+		Patch: map[string]any{"accessRestrictionData": float64(0)},
+	}
+	frozen.SnapshotBytes = len(stableJSON(map[string]any{
+		"targets":              frozen.Targets,
+		"patch":                frozen.Patch,
+		"fieldNames":           frozen.FieldNames,
+		"operationFingerprint": "test",
+	}))
+	frozen.OperationFingerprint = ComputeBatchUpdateV2Fingerprint(frozen.Targets, frozen.Patch, frozen.FieldNames)
+	err := AssertFrozenBatchUpdateV2(frozen)
+	if err == nil {
+		t.Error("expected error for missing leaf key in frozen payload, got nil")
+	}
+}
+
+// ============================================================
+// Section Q: BSON Round-Trip Safety
+// ============================================================
+
+func TestBatchUpdate_BSONRoundTripSafety(t *testing.T) {
+	// Section P/Q: Test that extraction helpers handle bson.A/bson.M/bson.D
+	store := newFakeBatchUpdateStore()
+	store.targets["001010000000001"] = map[string]any{"access_restriction_data": int64(32)}
+
+	// Simulate a BSON-round-tripped approval document
+	bsonApproval := approval.ApprovalDocument{
+		ID:     "approval-bson-1",
+		Action: "SUBSCRIBER_BATCH_UPDATE",
+		Status: approval.StatusPending,
+		Operation: approval.ApprovalOperation{
+			ResourceType: "SUBSCRIBER_BATCH_UPDATE",
+			ResourceID:   "001010000000001",
+		},
+		Payload: map[string]any{
+			"targets": bson.A{
+				bson.M{
+					"imsi":   "001010000000001",
+					"status": "pending",
+				},
+			},
+			"patch": bson.M{
+				"accessRestrictionData": int64(0),
+			},
+		},
+	}
+
+	querier := &fakeApprovalQuerierDocs{
+		docs: []approval.ApprovalDocument{bsonApproval},
+	}
+	h := newBatchUpdateHandler(store, &fakeUserRepo{identity: testIdentity("admin1", "operator", false)}, &fakeApprovalCreator{}, querier, &fakeRateLimiter{}, &fakeEvidenceStore{})
+	p := testPrincipal("admin1", "operator")
+	r := batchUpdateRequest(p, batchUpdateBody([]string{"001010000000001"}, map[string]any{"accessRestrictionData": float64(0)}, "test reason"))
+	w := httptest.NewRecorder()
+	h.BatchUpdate(w, r)
+	// Operator should get 202 (approval required) even with BSON types in active approval
+	if w.Code != http.StatusAccepted {
+		t.Errorf("expected 202 for operator with BSON approval, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestBatchUpdate_ActiveBSONDuplicate(t *testing.T) {
+	// Section R: Active conflict with BSON-round-tripped approval (duplicate fingerprint)
+	store := newFakeBatchUpdateStore()
+	store.targets["001010000000001"] = map[string]any{"access_restriction_data": int64(32)}
+
+	// Compute the fingerprint that the handler will compute for this request
+	frozen, _ := PrepareFrozenBatchUpdate(context.Background(), []string{"001010000000001"}, map[string]any{"accessRestrictionData": float64(0)}, func(_ context.Context, imsi string) (map[string]any, error) {
+		return store.targets[imsi], nil
+	})
+
+	bsonApproval := approval.ApprovalDocument{
+		ID:                   "approval-bson-2",
+		Action:               "SUBSCRIBER_BATCH_UPDATE",
+		Status:               approval.StatusPending,
+		OperationFingerprint: frozen.OperationFingerprint,
+		Operation: approval.ApprovalOperation{
+			ResourceType: "SUBSCRIBER_BATCH_UPDATE",
+			ResourceID:   "BATCH:001010000000001",
+		},
+		Payload: map[string]any{
+			"targets": bson.A{
+				bson.M{
+					"imsi": "001010000000001",
+				},
+			},
+			"fieldNames": bson.A{"access_restriction_data"},
+			"patch": bson.M{
+				"accessRestrictionData": int64(0),
+			},
+		},
+	}
+
+	querier := &fakeApprovalQuerierDocs{
+		docs: []approval.ApprovalDocument{bsonApproval},
+	}
+	h := newBatchUpdateHandler(store, &fakeUserRepo{identity: testIdentity("admin1", "operator", false)}, &fakeApprovalCreator{}, querier, &fakeRateLimiter{}, &fakeEvidenceStore{})
+	p := testPrincipal("admin1", "operator")
+	r := batchUpdateRequest(p, batchUpdateBody([]string{"001010000000001"}, map[string]any{"accessRestrictionData": float64(0)}, "test reason"))
+	w := httptest.NewRecorder()
+	h.BatchUpdate(w, r)
+	// Same fingerprint → 202 idempotent (duplicate)
+	if w.Code != http.StatusAccepted {
+		t.Errorf("expected 202 for duplicate BSON approval, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestBatchUpdate_ActiveBSONOverlap(t *testing.T) {
+	// Section R: Active overlap with BSON-round-tripped approval
+	store := newFakeBatchUpdateStore()
+	store.targets["001010000000001"] = map[string]any{"access_restriction_data": int64(32)}
+
+	bsonApproval := approval.ApprovalDocument{
+		ID:     "approval-bson-3",
+		Action: "SUBSCRIBER_BATCH_UPDATE",
+		Status: approval.StatusPending,
+		Operation: approval.ApprovalOperation{
+			ResourceType: "SUBSCRIBER_BATCH_UPDATE",
+			ResourceID:   "BATCH:001010000000001",
+		},
+		Payload: map[string]any{
+			"targets": bson.A{
+				bson.M{
+					"imsi": "001010000000001",
+				},
+			},
+			"fieldNames": bson.A{"access_restriction_data"},
+			"patch": bson.M{
+				"accessRestrictionData": int64(16),
+			},
+		},
+	}
+
+	querier := &fakeApprovalQuerierDocs{
+		docs: []approval.ApprovalDocument{bsonApproval},
+	}
+	h := newBatchUpdateHandler(store, &fakeUserRepo{identity: testIdentity("admin1", "operator", false)}, &fakeApprovalCreator{}, querier, &fakeRateLimiter{}, &fakeEvidenceStore{})
+	p := testPrincipal("admin1", "operator")
+	r := batchUpdateRequest(p, batchUpdateBody([]string{"001010000000001"}, map[string]any{"accessRestrictionData": float64(0)}, "test reason"))
+	w := httptest.NewRecorder()
+	h.BatchUpdate(w, r)
+	// Same target, different patch → 409 overlap
+	if w.Code != http.StatusConflict {
+		t.Errorf("expected 409 for overlapping BSON approval, got %d: %s", w.Code, w.Body.String())
+	}
+}

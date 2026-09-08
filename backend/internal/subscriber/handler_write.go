@@ -476,7 +476,8 @@ func isExecutable(result governance.Result) bool {
 }
 
 // handleBatchUpdateError maps batch update governance errors to HTTP responses.
-// Matches Node batch-update error status mapping exactly.
+// Section M: Error code separation — INVALID_BATCH_REQUEST for request validation,
+// INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD for frozen integrity.
 func (h *WriteHandler) handleBatchUpdateError(w http.ResponseWriter, err error) {
 	govErr, ok := err.(*SubscriberGovernanceError)
 	if !ok {
@@ -488,6 +489,7 @@ func (h *WriteHandler) handleBatchUpdateError(w http.ResponseWriter, err error) 
 		"ACTIVE_CHANGE_CONFLICT":                  http.StatusConflict,
 		"SUBSCRIBER_BATCH_PRECONDITION_CHANGED":   http.StatusConflict,
 		"SUBSCRIBER_BATCH_NO_EFFECT":              http.StatusBadRequest,
+		"INVALID_BATCH_REQUEST":                   http.StatusBadRequest,
 		"INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD": http.StatusBadRequest,
 		"BATCH_SIZE_EXCEEDED":                     http.StatusBadRequest,
 		"APPROVAL_SNAPSHOT_TOO_LARGE":             http.StatusBadRequest,
@@ -1266,17 +1268,42 @@ func (h *WriteHandler) findExistingBatchChange(ctx context.Context, fingerprint 
 }
 
 // extractApprovalTargets extracts IMSI targets from an approval payload.
+// Section P: asAnySlice converts bson.A or []any to []any for safe extraction.
+func asAnySlice(v any) ([]any, bool) {
+	switch slice := v.(type) {
+	case []any:
+		return slice, true
+	case bson.A:
+		return []any(slice), true
+	default:
+		return nil, false
+	}
+}
+
+// Section P: asStringAnyMap converts bson.M or map[string]any to map[string]any for safe extraction.
+func asStringAnyMap(v any) (map[string]any, bool) {
+	switch m := v.(type) {
+	case map[string]any:
+		return m, true
+	case bson.M:
+		return map[string]any(m), true
+	default:
+		return nil, false
+	}
+}
+
+// Section P: BSON-safe target extraction from approval payload.
 func extractApprovalTargets(a *approval.ApprovalDocument) []string {
 	if a.Payload == nil {
 		return nil
 	}
-	targetsRaw, ok := a.Payload["targets"].([]any)
+	targetsRaw, ok := asAnySlice(a.Payload["targets"])
 	if !ok {
 		return nil
 	}
 	var imsis []string
 	for _, t := range targetsRaw {
-		if target, ok := t.(map[string]any); ok {
+		if target, ok := asStringAnyMap(t); ok {
 			if imsi, ok := target["imsi"].(string); ok {
 				imsis = append(imsis, imsi)
 			}
@@ -1285,12 +1312,12 @@ func extractApprovalTargets(a *approval.ApprovalDocument) []string {
 	return imsis
 }
 
-// extractApprovalFields extracts field names from an approval payload.
+// Section P: BSON-safe field name extraction from approval payload.
 func extractApprovalFields(a *approval.ApprovalDocument) []string {
 	if a.Payload == nil {
 		return nil
 	}
-	fieldsRaw, ok := a.Payload["fieldNames"].([]any)
+	fieldsRaw, ok := asAnySlice(a.Payload["fieldNames"])
 	if !ok {
 		return nil
 	}
