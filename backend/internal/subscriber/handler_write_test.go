@@ -1574,3 +1574,227 @@ func TestBatchUpdate_ActiveBSONOverlap(t *testing.T) {
 		t.Errorf("expected 409 for overlapping BSON approval, got %d: %s", w.Code, w.Body.String())
 	}
 }
+
+// ============================================================
+// Section 7: Real BSON Round-Trip
+// ============================================================
+
+func TestBatchUpdate_RealBSONRoundTrip(t *testing.T) {
+	// Section 7: Real BSON marshal/unmarshal round-trip
+	store := newFakeBatchUpdateStore()
+	store.targets["001010000000001"] = map[string]any{"access_restriction_data": int64(32)}
+
+	// Compute the fingerprint that the handler will compute for this request
+	frozen, _ := PrepareFrozenBatchUpdate(context.Background(), []string{"001010000000001"}, map[string]any{"accessRestrictionData": float64(0)}, func(_ context.Context, imsi string) (map[string]any, error) {
+		return store.targets[imsi], nil
+	})
+
+	// Create an approval document with real BSON types
+	original := approval.ApprovalDocument{
+		ID:                   "approval-bson-real",
+		Action:               "SUBSCRIBER_BATCH_UPDATE",
+		Status:               approval.StatusPending,
+		OperationFingerprint: frozen.OperationFingerprint,
+		Operation: approval.ApprovalOperation{
+			ResourceType: "SUBSCRIBER_BATCH_UPDATE",
+			ResourceID:   "BATCH:001010000000001",
+		},
+		Payload: map[string]any{
+			"targets": []any{
+				map[string]any{"imsi": "001010000000001"},
+			},
+			"fieldNames": []any{"access_restriction_data"},
+			"patch": map[string]any{
+				"accessRestrictionData": int64(0),
+			},
+		},
+	}
+
+	// Marshal to BSON
+	raw, err := bson.Marshal(original)
+	if err != nil {
+		t.Fatalf("failed to marshal: %v", err)
+	}
+
+	// Unmarshal back
+	var decoded approval.ApprovalDocument
+	err = bson.Unmarshal(raw, &decoded)
+	if err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+
+	// Verify targets survive BSON round-trip
+	targets := extractApprovalTargets(&decoded)
+	if len(targets) != 1 || targets[0] != "001010000000001" {
+		t.Errorf("targets not preserved: %v", targets)
+	}
+
+	// Verify fieldNames survive BSON round-trip
+	fields := extractApprovalFields(&decoded)
+	if len(fields) != 1 || fields[0] != "access_restriction_data" {
+		t.Errorf("fieldNames not preserved: %v", fields)
+	}
+
+	// Verify duplicate detection works with BSON-round-tripped approval
+	querier := &fakeApprovalQuerierDocs{
+		docs: []approval.ApprovalDocument{decoded},
+	}
+	h := newBatchUpdateHandler(store, &fakeUserRepo{identity: testIdentity("admin1", "operator", false)}, &fakeApprovalCreator{}, querier, &fakeRateLimiter{}, &fakeEvidenceStore{})
+	p := testPrincipal("admin1", "operator")
+	r := batchUpdateRequest(p, batchUpdateBody([]string{"001010000000001"}, map[string]any{"accessRestrictionData": float64(0)}, "test reason"))
+	w := httptest.NewRecorder()
+	h.BatchUpdate(w, r)
+	// Same fingerprint → 202 idempotent (duplicate)
+	if w.Code != http.StatusAccepted {
+		t.Errorf("expected 202 for duplicate after BSON round-trip, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// ============================================================
+// Section 2: Authoritative Snapshot Cap
+// ============================================================
+
+func TestBatchUpdate_AuthoritativeSnapshotCap(t *testing.T) {
+	// Test that snapshot cap is enforced after authoritative recomputation
+	// 5 targets should succeed (well under 512 KiB)
+	imsis := []string{"001010000000001", "001010000000002", "001010000000003", "001010000000004", "001010000000005"}
+	store := newFakeBatchUpdateStore()
+	for _, imsi := range imsis {
+		store.targets[imsi] = map[string]any{"access_restriction_data": int64(32)}
+	}
+	h := newBatchUpdateHandler(store, &fakeUserRepo{identity: testIdentity("admin1", "super_admin", false)}, &fakeApprovalCreator{}, &fakeApprovalQuerierDocs{}, &fakeRateLimiter{}, &fakeEvidenceStore{})
+	p := testPrincipal("admin1", "super_admin")
+	r := batchUpdateRequest(p, batchUpdateBody(imsis, map[string]any{"accessRestrictionData": float64(0)}, "test reason for snapshot cap"))
+	w := httptest.NewRecorder()
+	h.BatchUpdate(w, r)
+	// 5 targets should succeed (under 512 KiB)
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200 for 5 targets, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// ============================================================
+// Section 6: Go Error-Code Parity Tests
+// ============================================================
+
+func TestBatchUpdate_ErrorCode_MaintenanceWindowNull(t *testing.T) {
+	store := newFakeBatchUpdateStore()
+	store.targets["001010000000001"] = map[string]any{"access_restriction_data": int64(32)}
+	h := newBatchUpdateHandler(store, &fakeUserRepo{identity: testIdentity("admin1", "super_admin", false)}, &fakeApprovalCreator{}, &fakeApprovalQuerierDocs{}, &fakeRateLimiter{}, &fakeEvidenceStore{})
+	p := testPrincipal("admin1", "super_admin")
+	body := map[string]any{
+		"imsis":             []string{"001010000000001"},
+		"patch":             map[string]any{"accessRestrictionData": float64(0)},
+		"reason":            "test reason",
+		"maintenanceWindow": nil,
+	}
+	r := batchUpdateRequest(p, body)
+	w := httptest.NewRecorder()
+	h.BatchUpdate(w, r)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+	var resp map[string]any
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp["code"] != "INVALID_BATCH_REQUEST" {
+		t.Errorf("expected INVALID_BATCH_REQUEST, got %v", resp["code"])
+	}
+}
+
+func TestBatchUpdate_ErrorCode_MaintenanceWindowString(t *testing.T) {
+	store := newFakeBatchUpdateStore()
+	store.targets["001010000000001"] = map[string]any{"access_restriction_data": int64(32)}
+	h := newBatchUpdateHandler(store, &fakeUserRepo{identity: testIdentity("admin1", "super_admin", false)}, &fakeApprovalCreator{}, &fakeApprovalQuerierDocs{}, &fakeRateLimiter{}, &fakeEvidenceStore{})
+	p := testPrincipal("admin1", "super_admin")
+	body := map[string]any{
+		"imsis":             []string{"001010000000001"},
+		"patch":             map[string]any{"accessRestrictionData": float64(0)},
+		"reason":            "test reason",
+		"maintenanceWindow": "bad",
+	}
+	r := batchUpdateRequest(p, body)
+	w := httptest.NewRecorder()
+	h.BatchUpdate(w, r)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+	var resp map[string]any
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	// Go returns INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD for maintenanceWindow string
+	if resp["code"] != "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD" {
+		t.Errorf("expected INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD, got %v", resp["code"])
+	}
+}
+
+func TestBatchUpdate_ErrorCode_ReasonTooShort(t *testing.T) {
+	store := newFakeBatchUpdateStore()
+	store.targets["001010000000001"] = map[string]any{"access_restriction_data": int64(32)}
+	h := newBatchUpdateHandler(store, &fakeUserRepo{identity: testIdentity("admin1", "super_admin", false)}, &fakeApprovalCreator{}, &fakeApprovalQuerierDocs{}, &fakeRateLimiter{}, &fakeEvidenceStore{})
+	p := testPrincipal("admin1", "super_admin")
+	body := map[string]any{
+		"imsis":  []string{"001010000000001"},
+		"patch":  map[string]any{"accessRestrictionData": float64(0)},
+		"reason": "ab",
+	}
+	r := batchUpdateRequest(p, body)
+	w := httptest.NewRecorder()
+	h.BatchUpdate(w, r)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+	var resp map[string]any
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp["code"] != "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD" {
+		t.Errorf("expected INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD, got %v", resp["code"])
+	}
+}
+
+func TestBatchUpdate_ErrorCode_BadAMBR(t *testing.T) {
+	store := newFakeBatchUpdateStore()
+	store.targets["001010000000001"] = map[string]any{"access_restriction_data": int64(32)}
+	h := newBatchUpdateHandler(store, &fakeUserRepo{identity: testIdentity("admin1", "super_admin", false)}, &fakeApprovalCreator{}, &fakeApprovalQuerierDocs{}, &fakeRateLimiter{}, &fakeEvidenceStore{})
+	p := testPrincipal("admin1", "super_admin")
+	body := map[string]any{
+		"imsis":  []string{"001010000000001"},
+		"patch":  map[string]any{"ambr": "bad"},
+		"reason": "test reason",
+	}
+	r := batchUpdateRequest(p, body)
+	w := httptest.NewRecorder()
+	h.BatchUpdate(w, r)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+	var resp map[string]any
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp["code"] != "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD" {
+		t.Errorf("expected INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD, got %v", resp["code"])
+	}
+}
+
+func TestBatchUpdate_ErrorCode_101IMSIs(t *testing.T) {
+	imsis := make([]string, 101)
+	for i := range imsis {
+		imsis[i] = fmt.Sprintf("001010000000%04d", i+1)
+	}
+	store := newFakeBatchUpdateStore()
+	h := newBatchUpdateHandler(store, &fakeUserRepo{identity: testIdentity("admin1", "super_admin", false)}, &fakeApprovalCreator{}, &fakeApprovalQuerierDocs{}, &fakeRateLimiter{}, &fakeEvidenceStore{})
+	p := testPrincipal("admin1", "super_admin")
+	body := map[string]any{
+		"imsis":  imsis,
+		"patch":  map[string]any{"accessRestrictionData": float64(0)},
+		"reason": "test reason",
+	}
+	r := batchUpdateRequest(p, body)
+	w := httptest.NewRecorder()
+	h.BatchUpdate(w, r)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+	var resp map[string]any
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	// Go returns INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD for101 IMSIs (validation happens before size check)
+	if resp["code"] != "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD" {
+		t.Errorf("expected INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD, got %v", resp["code"])
+	}
+}

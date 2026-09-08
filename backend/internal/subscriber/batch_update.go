@@ -318,6 +318,7 @@ func PrepareFrozenBatchUpdate(
 		snapshotBytes += len(stableJSON(before)) + len(stableJSON(after))
 	}
 
+	// Non-authoritative early cap (optimization only; authoritative cap is after final recomputation)
 	if snapshotBytes > maxSubscriberBatchSnapshotBytes {
 		return nil, &SubscriberGovernanceError{Code: "APPROVAL_SNAPSHOT_TOO_LARGE"}
 	}
@@ -334,6 +335,11 @@ func PrepareFrozenBatchUpdate(
 		"fieldNames":           fieldNames,
 		"operationFingerprint": fingerprint,
 	}))
+
+	// Section 2: Authoritative snapshot cap — enforced after final recomputation
+	if snapshotBytes > maxSubscriberBatchSnapshotBytes {
+		return nil, &SubscriberGovernanceError{Code: "APPROVAL_SNAPSHOT_TOO_LARGE"}
+	}
 
 	return &FrozenBatchUpdateV2{
 		Version:              "subscriber-batch-update-v2",

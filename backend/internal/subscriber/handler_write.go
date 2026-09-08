@@ -1280,13 +1280,19 @@ func asAnySlice(v any) ([]any, bool) {
 	}
 }
 
-// Section P: asStringAnyMap converts bson.M or map[string]any to map[string]any for safe extraction.
+// Section P: asStringAnyMap converts bson.M, bson.D, or map[string]any to map[string]any for safe extraction.
 func asStringAnyMap(v any) (map[string]any, bool) {
 	switch m := v.(type) {
 	case map[string]any:
 		return m, true
 	case bson.M:
 		return map[string]any(m), true
+	case bson.D:
+		result := make(map[string]any, len(m))
+		for _, elem := range m {
+			result[elem.Key] = elem.Value
+		}
+		return result, true
 	default:
 		return nil, false
 	}
