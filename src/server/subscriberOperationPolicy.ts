@@ -245,6 +245,20 @@ export async function prepareFrozenSubscriberBatchUpdateV2(input: SubscriberBatc
   return { version: 'subscriber-batch-update-v2', targets, patch: input.patch, fieldNames, targetCount: targets.length, snapshotBytes, operationFingerprint };
 }
 
+function computeExpectedAfterFromPatch(patch: GovernedSubscriberPatch, fieldNames: string[]): Record<string, number> {
+  const after: Record<string, number> = {};
+  if (patch.accessRestrictionData !== undefined) {
+    after.access_restriction_data = patch.accessRestrictionData;
+  }
+  for (const direction of ['downlink', 'uplink'] as const) {
+    const bitrate = patch.ambr?.[direction];
+    if (!bitrate) continue;
+    after[`ambr.${direction}.value`] = bitrate.value;
+    after[`ambr.${direction}.unit`] = bitrate.unit;
+  }
+  return after;
+}
+
 export function assertFrozenSubscriberBatchUpdateV2(value: unknown): FrozenSubscriberBatchUpdateV2 {
   const payload = record(value);
   if (!payload || payload.version !== 'subscriber-batch-update-v2' || !Array.isArray(payload.targets)) throw new SubscriberBatchGovernanceError('INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD');
@@ -259,20 +273,37 @@ export function assertFrozenSubscriberBatchUpdateV2(value: unknown): FrozenSubsc
   for (let i = 0; i < imsis.length; i++) {
     if (imsis[i] !== sortedImsis[i]) throw new SubscriberBatchGovernanceError('INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD');
   }
+  // Compute expected after values from patch intent
+  const expectedAfter = computeExpectedAfterFromPatch(request.patch, fieldNames);
   const targets = payload.targets.map((item) => {
     const target = record(item);
     if (!target || typeof target.imsi !== 'string' || !record(target.before) || !record(target.after) || typeof target.preconditionHash !== 'string') throw new SubscriberBatchGovernanceError('INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD');
     const before = record(target.before) as Record<string, number>;
     const after = record(target.after) as Record<string, number>;
     if (fingerprint(before) !== target.preconditionHash) throw new SubscriberBatchGovernanceError('INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD');
+    // Validate after keys are exactly allowed
     for (const key of Object.keys(after)) {
       if (!fieldNames.some((field) => key === field || key.startsWith(`${field}.`))) throw new SubscriberBatchGovernanceError('INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD');
+    }
+    // Validate before keys are exactly allowed
+    for (const key of Object.keys(before)) {
+      if (!fieldNames.some((field) => key === field || key.startsWith(`${field}.`))) throw new SubscriberBatchGovernanceError('INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD');
+    }
+    // Validate after values EXACTLY match patch intent
+    for (const [key, val] of Object.entries(expectedAfter)) {
+      if (after[key] !== val) throw new SubscriberBatchGovernanceError('INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD');
+    }
+    for (const key of Object.keys(after)) {
+      if (!(key in expectedAfter)) throw new SubscriberBatchGovernanceError('INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD');
     }
     return { imsi: target.imsi, before, after, preconditionHash: target.preconditionHash };
   });
   const expectedFp = computeBatchUpdateV2Fingerprint(targets, request.patch, fieldNames);
   if (typeof payload.operationFingerprint !== 'string' || payload.operationFingerprint !== expectedFp) throw new SubscriberBatchGovernanceError('INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD');
   const snapshotBytes = Number(payload.snapshotBytes) || 0;
+  // Recompute snapshotBytes exactly
+  const expectedSnapshotBytes = Buffer.byteLength(stableJson({ targets, patch: request.patch, fieldNames, operationFingerprint: payload.operationFingerprint }), 'utf8');
+  if (snapshotBytes !== expectedSnapshotBytes) throw new SubscriberBatchGovernanceError('INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD');
   if (snapshotBytes > MAX_SUBSCRIBER_BATCH_SNAPSHOT_BYTES) throw new SubscriberBatchGovernanceError('APPROVAL_SNAPSHOT_TOO_LARGE');
   return { version: 'subscriber-batch-update-v2', targets, patch: request.patch, fieldNames, targetCount: targets.length, snapshotBytes, operationFingerprint: payload.operationFingerprint };
 }
@@ -316,8 +347,8 @@ export function classifyBatchUpdateResult(modifiedCount: number, requested: numb
   return 'FAILED_NO_MUTATION';
 }
 
-export async function executeFrozenSubscriberBatchUpdate(payload: FrozenSubscriberBatchUpdateV2): Promise<BatchUpdateExecutionResult> {
-  const frozen = payload;
+export async function executeFrozenSubscriberBatchUpdate(payload: unknown): Promise<BatchUpdateExecutionResult> {
+  const frozen = assertFrozenSubscriberBatchUpdateV2(payload);
   const docs = await findSubscriberDocuments(frozen.targets.map((target) => target.imsi));
   const current = new Map(docs.map((doc) => [doc.imsi, doc]));
   const drifted = frozen.targets.filter((target) => {

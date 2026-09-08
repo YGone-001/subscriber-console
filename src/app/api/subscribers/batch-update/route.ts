@@ -29,18 +29,25 @@ function payloadFields(approval: { payload: Record<string, unknown> }) {
   return Array.isArray(approval.payload.fieldNames) ? approval.payload.fieldNames.filter((value): value is string => typeof value === 'string') : [];
 }
 
-async function existingBatchChange(fingerprint: string, imsis: string[], fields: string[]) {
+type ActiveApprovalMatch = { type: 'duplicate'; approval: { id: string; [key: string]: unknown } } | { type: 'conflict'; approval: { id: string; [key: string]: unknown } };
+
+async function findActiveApprovalMatch(fingerprint: string, imsis: string[], fields: string[]): Promise<ActiveApprovalMatch | null> {
   const active = await listActiveSubscriberBatchApprovals();
-  const duplicate = active.find((approval) => approval.operationFingerprint === fingerprint);
-  if (duplicate) return { duplicate };
   const requestedImsis = new Set(imsis);
   const requestedFields = new Set(fields);
-  const conflict = active.find((approval) => {
+  for (const approval of active) {
+    // Exact fingerprint = duplicate
+    if (approval.operationFingerprint === fingerprint) {
+      return { type: 'duplicate', approval };
+    }
+    // Overlapping target + field = conflict
     const targetOverlap = payloadTargets(approval).some((imsi) => requestedImsis.has(imsi));
     const fieldOverlap = payloadFields(approval).some((field) => requestedFields.has(field));
-    return targetOverlap && fieldOverlap;
-  });
-  return conflict ? { conflict } : {};
+    if (targetOverlap && fieldOverlap) {
+      return { type: 'conflict', approval };
+    }
+  }
+  return null;
 }
 
 export type BatchUpdateRouteDeps = {
@@ -86,20 +93,15 @@ export function createBatchUpdateHandler(deps: BatchUpdateRouteDeps = defaultDep
       // Prepare frozen v2
       const frozen = await deps.prepareFrozenSubscriberBatchUpdateV2(input);
 
-      // Active approval conflict check
-      const existing = await existingBatchChange(frozen.operationFingerprint, input.imsis, frozen.fieldNames);
-      if (existing.duplicate) {
-        return NextResponse.json({ approval: { ...existing.duplicate, actions: approvalActionEligibility(existing.duplicate, auth.auth) }, requiresApproval: true, idempotent: true }, { status: 202 });
-      }
-      if (existing.conflict) return NextResponse.json({ error: 'ACTIVE_CHANGE_CONFLICT', code: 'ACTIVE_CHANGE_CONFLICT', approval: existing.conflict }, { status: 409 });
-
+      // Actor object for audit
       const actor = { type: 'user' as const, userId: freshAccount.userId, username: freshAccount.username, role: freshAccount.normalizedRole };
 
+      // Inspect active changes AFTER governance
+      const activeMatch = await findActiveApprovalMatch(frozen.operationFingerprint, input.imsis, frozen.fieldNames);
+
       if (policy.governanceMode === 'DIRECT_GOVERNED') {
-        // super_admin/root direct execution
-        // Active overlap check for direct actor too
-        const directOverlap = await existingBatchChange(frozen.operationFingerprint, input.imsis, frozen.fieldNames);
-        if (directOverlap.duplicate || directOverlap.conflict) {
+        // super_admin/root: ANY active duplicate OR overlap → 409
+        if (activeMatch) {
           return NextResponse.json({ error: 'ACTIVE_CHANGE_CONFLICT', code: 'ACTIVE_CHANGE_CONFLICT' }, { status: 409 });
         }
 
@@ -156,6 +158,16 @@ export function createBatchUpdateHandler(deps: BatchUpdateRouteDeps = defaultDep
       }
 
       // operator/ops_admin → approval
+      if (activeMatch) {
+        if (activeMatch.type === 'duplicate') {
+          // Exact duplicate → 202 idempotent
+          return NextResponse.json({ approval: { ...activeMatch.approval, actions: approvalActionEligibility(activeMatch.approval as any, auth.auth) }, requiresApproval: true, idempotent: true }, { status: 202 });
+        }
+        // Overlap → 409
+        return NextResponse.json({ error: 'ACTIVE_CHANGE_CONFLICT', code: 'ACTIVE_CHANGE_CONFLICT', approval: activeMatch.approval }, { status: 409 });
+      }
+
+      // Create new approval
       try {
         const approval = await deps.createGovernedApproval({
           action: 'SUBSCRIBER_BATCH_UPDATE', requester: freshAccount.username, requesterContext: actor,

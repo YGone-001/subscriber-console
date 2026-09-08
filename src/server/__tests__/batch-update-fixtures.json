@@ -1,0 +1,201 @@
+{
+  "accessRestriction": {
+    "targets": [
+      {
+        "imsi": "460001234567890",
+        "before": {
+          "access_restriction_data": 32
+        },
+        "after": {
+          "access_restriction_data": 0
+        },
+        "preconditionHash": "3181ec3c711345a3efa37eb9c11fed3fa11983797e2aa379e533384dc4f852b4"
+      }
+    ],
+    "patch": {
+      "accessRestrictionData": 0
+    },
+    "fieldNames": [
+      "access_restriction_data"
+    ],
+    "targetCount": 1,
+    "snapshotBytes": 371,
+    "operationFingerprint": "db6e98fc88c410f63b822d0cf8df45551657b475176f3288cccd7afdd4c5f7a4"
+  },
+  "ambrDownlink": {
+    "targets": [
+      {
+        "imsi": "460001234567891",
+        "before": {
+          "ambr.downlink.value": 1,
+          "ambr.downlink.unit": 3
+        },
+        "after": {
+          "ambr.downlink.value": 100,
+          "ambr.downlink.unit": 1
+        },
+        "preconditionHash": "b05c2ca1d82ab7e8a26467eebe0b930cb7566bb88f0b78fad68ce2aaca3bd987"
+      }
+    ],
+    "patch": {
+      "ambr": {
+        "downlink": {
+          "value": 100,
+          "unit": 1
+        }
+      }
+    },
+    "fieldNames": [
+      "ambr.downlink"
+    ],
+    "targetCount": 1,
+    "snapshotBytes": 417,
+    "operationFingerprint": "abafc591d3ab80fe144c7d54729a3a4c4c64c439b73bed3027c8ce9f4450cc0b"
+  },
+  "ambrUplink": {
+    "targets": [
+      {
+        "imsi": "460001234567892",
+        "before": {
+          "ambr.uplink.value": 1,
+          "ambr.uplink.unit": 3
+        },
+        "after": {
+          "ambr.uplink.value": 50,
+          "ambr.uplink.unit": 2
+        },
+        "preconditionHash": "a3744586a0354098beef7a5686ac1e693d2bfa96f85ff14949d432997243bdde"
+      }
+    ],
+    "patch": {
+      "ambr": {
+        "uplink": {
+          "value": 50,
+          "unit": 2
+        }
+      }
+    },
+    "fieldNames": [
+      "ambr.uplink"
+    ],
+    "targetCount": 1,
+    "snapshotBytes": 403,
+    "operationFingerprint": "ffb2df6b30a5856947b7209fec86493d564baeba7a7ec27c09412914ec192633"
+  },
+  "ambrBoth": {
+    "targets": [
+      {
+        "imsi": "460001234567893",
+        "before": {
+          "ambr.downlink.value": 1,
+          "ambr.downlink.unit": 3,
+          "ambr.uplink.value": 1,
+          "ambr.uplink.unit": 3
+        },
+        "after": {
+          "ambr.downlink.value": 200,
+          "ambr.downlink.unit": 1,
+          "ambr.uplink.value": 100,
+          "ambr.uplink.unit": 1
+        },
+        "preconditionHash": "ff05be5e82c57b91fdfc3b7f8f536c87fcfc60b0fd1d38de3ff57292d1f91066"
+      }
+    ],
+    "patch": {
+      "ambr": {
+        "downlink": {
+          "value": 200,
+          "unit": 1
+        },
+        "uplink": {
+          "value": 100,
+          "unit": 1
+        }
+      }
+    },
+    "fieldNames": [
+      "ambr.downlink",
+      "ambr.uplink"
+    ],
+    "targetCount": 1,
+    "snapshotBytes": 551,
+    "operationFingerprint": "545b9c8bf1449f74bbf3e67a873e03b81dc1b33fb8dc4a2c51825063b2a2fc95"
+  },
+  "combined": {
+    "targets": [
+      {
+        "imsi": "460001234567894",
+        "before": {
+          "access_restriction_data": 32,
+          "ambr.downlink.value": 1,
+          "ambr.downlink.unit": 3
+        },
+        "after": {
+          "access_restriction_data": 16,
+          "ambr.downlink.value": 500,
+          "ambr.downlink.unit": 1
+        },
+        "preconditionHash": "b42d71cdab03684a55b816f1339f87852e7827774ca56b5eda68da41332ff791"
+      }
+    ],
+    "patch": {
+      "accessRestrictionData": 16,
+      "ambr": {
+        "downlink": {
+          "value": 500,
+          "unit": 1
+        }
+      }
+    },
+    "fieldNames": [
+      "access_restriction_data",
+      "ambr.downlink"
+    ],
+    "targetCount": 1,
+    "snapshotBytes": 528,
+    "operationFingerprint": "5d0a2050caf7b7a0006ff7f6be77deddf94a60ab4b7d1e4dec3879cba9c723ef"
+  },
+  "multiImsi": {
+    "targets": [
+      {
+        "imsi": "460001234567890",
+        "before": {
+          "access_restriction_data": 32
+        },
+        "after": {
+          "access_restriction_data": 0
+        },
+        "preconditionHash": "3181ec3c711345a3efa37eb9c11fed3fa11983797e2aa379e533384dc4f852b4"
+      },
+      {
+        "imsi": "460001234567891",
+        "before": {
+          "access_restriction_data": 64
+        },
+        "after": {
+          "access_restriction_data": 0
+        },
+        "preconditionHash": "9fc59711977ede210777144009f62a71371e76dd9113b1b425a32259e672e58f"
+      },
+      {
+        "imsi": "460001234567892",
+        "before": {
+          "access_restriction_data": 128
+        },
+        "after": {
+          "access_restriction_data": 0
+        },
+        "preconditionHash": "63aa014fe36414e8345a863824a255a211114a7c5ff20280edb9c438d5b5d775"
+      }
+    ],
+    "patch": {
+      "accessRestrictionData": 0
+    },
+    "fieldNames": [
+      "access_restriction_data"
+    ],
+    "targetCount": 3,
+    "snapshotBytes": 754,
+    "operationFingerprint": "9edeaff02df787b62c67b22adad0e09b46785eab39a7c940406e9ac392c85a64"
+  }
+}

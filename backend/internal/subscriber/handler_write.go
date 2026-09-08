@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
@@ -901,14 +902,10 @@ func (h *WriteHandler) BatchUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	imsis, patch, err := ValidateBatchUpdateRequest(body)
+	req, err := ValidateBatchUpdateRequest(body)
 	if err != nil {
 		if govErr, ok := err.(*SubscriberGovernanceError); ok {
-			status := http.StatusBadRequest
-			if govErr.Code == "BATCH_SIZE_EXCEEDED" {
-				status = http.StatusBadRequest
-			}
-			response.Error(w, status, govErr.Code, govErr.Code)
+			response.Error(w, http.StatusBadRequest, govErr.Code, govErr.Code)
 			return
 		}
 		response.Error(w, http.StatusBadRequest, err.Error(), "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD")
@@ -930,34 +927,68 @@ func (h *WriteHandler) BatchUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Prepare frozen v2 contract
-	frozen, err := PrepareFrozenBatchUpdate(r.Context(), imsis, patch, h.repo)
+	frozen, err := PrepareFrozenBatchUpdate(r.Context(), req.Imsis, req.Patch, h.repo)
 	if err != nil {
 		h.handleGovernanceError(w, err)
 		return
 	}
 
 	// Active approval conflict check
-	existing, err := h.findExistingBatchChange(r.Context(), frozen.OperationFingerprint, imsis, frozen.FieldNames)
+	activeMatch, err := h.findExistingBatchChange(r.Context(), frozen.OperationFingerprint, req.Imsis, frozen.FieldNames)
 	if err != nil {
 		response.Error(w, http.StatusInternalServerError, "Failed to check existing approvals", "INTERNAL_ERROR")
 		return
 	}
-	if existing != nil {
-		response.JSON(w, http.StatusConflict, map[string]any{
-			"error": "ACTIVE_CHANGE_CONFLICT",
-			"code":  "ACTIVE_CHANGE_CONFLICT",
-		})
-		return
-	}
 
 	if govResult.Decision == governance.Direct {
-		// super_admin/root: DIRECT_GOVERNED — execute immediately
+		// super_admin/root: ANY active duplicate OR overlap → 409
+		if activeMatch != nil {
+			response.JSON(w, http.StatusConflict, map[string]any{
+				"error": "ACTIVE_CHANGE_CONFLICT",
+				"code":  "ACTIVE_CHANGE_CONFLICT",
+			})
+			return
+		}
+		// Maintenance window check for direct path
+		if req.MaintenanceWindow != nil {
+			now := time.Now()
+			start, _ := time.Parse(time.RFC3339, req.MaintenanceWindow.Start)
+			end, _ := time.Parse(time.RFC3339, req.MaintenanceWindow.End)
+			if now.Before(start) || now.After(end) {
+				response.JSON(w, http.StatusConflict, map[string]any{
+					"error": "OUTSIDE_MAINTENANCE_WINDOW",
+					"code":  "OUTSIDE_MAINTENANCE_WINDOW",
+				})
+				return
+			}
+		}
+		// DIRECT_GOVERNED — execute immediately
 		h.executeDirectBatchUpdate(w, r, frozen, fresh)
 		return
 	}
 
-	// operator/ops_admin: APPROVAL_GOVERNED — create approval
-	h.createBatchUpdateApproval(w, r, frozen, fresh)
+	// operator/ops_admin: APPROVAL_GOVERNED
+	if activeMatch != nil {
+		if activeMatch.Type == "duplicate" {
+			// Exact duplicate → 202 idempotent
+			response.JSON(w, http.StatusAccepted, map[string]any{
+				"approval":         activeMatch.Approval,
+				"requiresApproval": true,
+				"idempotent":       true,
+			})
+			return
+		}
+		// Overlap → 409
+		response.JSON(w, http.StatusConflict, map[string]any{
+			"error":    "ACTIVE_CHANGE_CONFLICT",
+			"code":     "ACTIVE_CHANGE_CONFLICT",
+			"approval": activeMatch.Approval,
+		})
+		return
+	}
+
+	// Create new approval
+	h.createBatchUpdateApproval(w, r, frozen, fresh, req.Reason, req.TicketId, req.MaintenanceWindow)
 }
 
 // executeDirectBatchUpdate executes batch update directly for super_admin/root.
@@ -1024,8 +1055,8 @@ func (h *WriteHandler) executeDirectBatchUpdate(
 	if classification == "FAILED_NO_MUTATION" {
 		if len(result.ConflictImsis) > 0 {
 			response.JSON(w, http.StatusConflict, map[string]any{
-				"error":          "SUBSCRIBER_BATCH_PRECONDITION_CHANGED",
-				"code":           "SUBSCRIBER_BATCH_PRECONDITION_CHANGED",
+				"error":           "SUBSCRIBER_BATCH_PRECONDITION_CHANGED",
+				"code":            "SUBSCRIBER_BATCH_PRECONDITION_CHANGED",
 				"partialMutation": false,
 			})
 		} else {
@@ -1036,8 +1067,8 @@ func (h *WriteHandler) executeDirectBatchUpdate(
 
 	if classification == "PARTIAL_WRITE" {
 		response.JSON(w, http.StatusConflict, map[string]any{
-			"error":          "SUBSCRIBER_BATCH_PARTIAL_WRITE",
-			"code":           "SUBSCRIBER_BATCH_PARTIAL_WRITE",
+			"error":           "SUBSCRIBER_BATCH_PARTIAL_WRITE",
+			"code":            "SUBSCRIBER_BATCH_PARTIAL_WRITE",
 			"partialMutation": true,
 			"result": map[string]any{
 				"modifiedImsis": result.ModifiedImsis,
@@ -1049,8 +1080,8 @@ func (h *WriteHandler) executeDirectBatchUpdate(
 	}
 
 	response.JSON(w, http.StatusOK, map[string]any{
-		"outcome":         "executed",
-		"message":         "Subscribers updated successfully",
+		"outcome": "executed",
+		"message": "Subscribers updated successfully",
 		"result": map[string]any{
 			"requested":  result.Requested,
 			"modified":   result.ModifiedCount,
@@ -1066,12 +1097,25 @@ func (h *WriteHandler) createBatchUpdateApproval(
 	r *http.Request,
 	frozen *FrozenBatchUpdateV2,
 	fresh *FreshActor,
+	reason string,
+	ticketId string,
+	maintenanceWindow *MaintenanceWindow,
 ) {
 	actor := approval.GovernanceActor{
 		Type:     "user",
 		UserID:   fresh.UserID,
 		Username: fresh.Username,
 		Role:     fresh.RawRole,
+	}
+
+	reasonPtr := &reason
+	var mw *approval.ApprovalMaintenanceWindow
+	if maintenanceWindow != nil {
+		mw = &approval.ApprovalMaintenanceWindow{
+			Start:    maintenanceWindow.Start,
+			End:      maintenanceWindow.End,
+			TimeZone: maintenanceWindow.TimeZone,
+		}
 	}
 
 	approvalDoc, err := h.approvalSvc.Create(r, actor, approval.CreateApprovalInput{
@@ -1085,6 +1129,9 @@ func (h *WriteHandler) createBatchUpdateApproval(
 			ResourceID:   frozen.OperationFingerprint,
 		},
 		OperationFingerprint: frozen.OperationFingerprint,
+		Reason:               reasonPtr,
+		TicketID:             ticketId,
+		MaintenanceWindow:    mw,
 		Payload:              frozenToMap(frozen),
 	})
 	if err != nil {
@@ -1099,16 +1146,23 @@ func (h *WriteHandler) createBatchUpdateApproval(
 	// NO duplicate audit here — ApprovalCreator.Create() already writes strict audit
 
 	response.JSON(w, http.StatusAccepted, map[string]any{
-		"outcome":         "approval_required",
-		"message":         "Approval required before batch subscriber update",
-		"approval":        approvalDoc,
+		"outcome":          "approval_required",
+		"message":          "Approval required before batch subscriber update",
+		"approval":         approvalDoc,
 		"requiresApproval": true,
 	})
 }
 
+// ActiveApprovalMatch represents the result of checking for active approvals.
+type ActiveApprovalMatch struct {
+	Type     string // "duplicate" or "conflict"
+	Approval *approval.ApprovalDocument
+}
+
 // findExistingBatchChange checks for active approvals with the same fingerprint or overlapping targets+fields.
-func (h *WriteHandler) findExistingBatchChange(ctx context.Context, fingerprint string, imsis []string, fields []string) (*approval.ApprovalDocument, error) {
-	// Query active batch-update approvals
+// Returns: duplicate (exact fingerprint), conflict (overlapping targets+fields), or nil (no match).
+func (h *WriteHandler) findExistingBatchChange(ctx context.Context, fingerprint string, imsis []string, fields []string) (*ActiveApprovalMatch, error) {
+	// Query all three active states: pending, approved, executing
 	result, err := h.approvalQry.ListApprovals(ctx, approval.ListQuery{
 		Status:   "pending",
 		PageSize: 100,
@@ -1116,6 +1170,21 @@ func (h *WriteHandler) findExistingBatchChange(ctx context.Context, fingerprint 
 	if err != nil {
 		return nil, err
 	}
+	result2, err := h.approvalQry.ListApprovals(ctx, approval.ListQuery{
+		Status:   "approved",
+		PageSize: 100,
+	})
+	if err != nil {
+		return nil, err
+	}
+	result3, err := h.approvalQry.ListApprovals(ctx, approval.ListQuery{
+		Status:   "executing",
+		PageSize: 100,
+	})
+	if err != nil {
+		return nil, err
+	}
+	allApprovals := append(append(result.Approvals, result2.Approvals...), result3.Approvals...)
 
 	requestedImsis := make(map[string]bool, len(imsis))
 	for _, imsi := range imsis {
@@ -1126,15 +1195,15 @@ func (h *WriteHandler) findExistingBatchChange(ctx context.Context, fingerprint 
 		requestedFields[f] = true
 	}
 
-	for i := range result.Approvals {
-		a := &result.Approvals[i]
+	for i := range allApprovals {
+		a := &allApprovals[i]
 		// Only check batch operations
 		if a.Action != "SUBSCRIBER_BATCH_UPDATE" && a.Action != "SUBSCRIBER_BATCH_CREATE" {
 			continue
 		}
 		// Duplicate check: same fingerprint
 		if a.OperationFingerprint == fingerprint {
-			return &a.ApprovalDocument, nil
+			return &ActiveApprovalMatch{Type: "duplicate", Approval: &a.ApprovalDocument}, nil
 		}
 
 		// Conflict check: overlapping targets and fields
@@ -1160,7 +1229,7 @@ func (h *WriteHandler) findExistingBatchChange(ctx context.Context, fingerprint 
 			}
 		}
 		if fieldOverlap {
-			return &a.ApprovalDocument, nil
+			return &ActiveApprovalMatch{Type: "conflict", Approval: &a.ApprovalDocument}, nil
 		}
 	}
 

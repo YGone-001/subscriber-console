@@ -5,21 +5,23 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"sort"
+	"strings"
+	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 const (
-	maxSubscriberBatchTargets      = 100
+	maxSubscriberBatchTargets       = 100
 	maxSubscriberBatchSnapshotBytes = 512 * 1024
 )
 
 // SubscriberChangeTarget holds a single target for batch update.
 type SubscriberChangeTarget struct {
-	Imsi            string            `json:"imsi"            bson:"imsi"`
-	Before          map[string]any    `json:"before"          bson:"before"`
-	After           map[string]any    `json:"after"           bson:"after"`
-	PreconditionHash string           `json:"preconditionHash" bson:"preconditionHash"`
+	Imsi             string         `json:"imsi"            bson:"imsi"`
+	Before           map[string]any `json:"before"          bson:"before"`
+	After            map[string]any `json:"after"           bson:"after"`
+	PreconditionHash string         `json:"preconditionHash" bson:"preconditionHash"`
 }
 
 // FrozenBatchUpdateV2 is the v2 frozen contract for batch update.
@@ -35,86 +37,197 @@ type FrozenBatchUpdateV2 struct {
 
 // BatchUpdateExecutionResult holds the result of a batch update execution.
 type BatchUpdateExecutionResult struct {
-	Requested          int      `json:"requested"`
-	ModifiedImsis      []string `json:"modifiedImsis"`
-	ConflictImsis      []string `json:"conflictImsis"`
-	FailedImsis        []string `json:"failedImsis"`
-	MatchedCount       int64    `json:"matchedCount"`
-	ModifiedCount      int64    `json:"modifiedCount"`
-	PartialMutation    bool     `json:"partialMutation"`
-	MutationCommitted  bool     `json:"mutationCommitted"`
-	FieldNames         []string `json:"fieldNames"`
-	OperationFingerprint string `json:"operationFingerprint"`
+	Requested            int      `json:"requested"`
+	ModifiedImsis        []string `json:"modifiedImsis"`
+	ConflictImsis        []string `json:"conflictImsis"`
+	FailedImsis          []string `json:"failedImsis"`
+	MatchedCount         int64    `json:"matchedCount"`
+	ModifiedCount        int64    `json:"modifiedCount"`
+	PartialMutation      bool     `json:"partialMutation"`
+	MutationCommitted    bool     `json:"mutationCommitted"`
+	FieldNames           []string `json:"fieldNames"`
+	OperationFingerprint string   `json:"operationFingerprint"`
+}
+
+// BatchUpdateRequest holds the validated batch update request.
+type BatchUpdateRequest struct {
+	Imsis             []string
+	Patch             map[string]any
+	Reason            string
+	TicketId          string
+	MaintenanceWindow *MaintenanceWindow
+}
+
+// MaintenanceWindow holds the maintenance window configuration.
+type MaintenanceWindow struct {
+	Start    string `json:"start"`
+	End      string `json:"end"`
+	TimeZone string `json:"timeZone,omitempty"`
 }
 
 // ValidateBatchUpdateRequest validates the raw batch update request.
-func ValidateBatchUpdateRequest(payload map[string]any) (imsis []string, patch map[string]any, err error) {
+func ValidateBatchUpdateRequest(payload map[string]any) (*BatchUpdateRequest, error) {
+	// Validate top-level keys
+	allowedTopLevel := map[string]bool{"imsis": true, "patch": true, "reason": true, "ticketId": true, "maintenanceWindow": true}
+	for key := range payload {
+		if !allowedTopLevel[key] {
+			return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+		}
+	}
+
 	imsisRaw, ok := payload["imsis"].([]any)
 	if !ok || len(imsisRaw) == 0 {
-		return nil, nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+		return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
 	}
+	var imsis []string
 	for _, v := range imsisRaw {
 		s, ok := v.(string)
 		if !ok || len(s) != 15 {
-			return nil, nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+			return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+		}
+		// Validate exactly 15 ASCII digits
+		for _, c := range s {
+			if c < '0' || c > '9' {
+				return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+			}
 		}
 		imsis = append(imsis, s)
 	}
 	if len(imsis) > maxSubscriberBatchTargets {
-		return nil, nil, &SubscriberGovernanceError{Code: "BATCH_SIZE_EXCEEDED"}
+		return nil, &SubscriberGovernanceError{Code: "BATCH_SIZE_EXCEEDED"}
+	}
+	// Reject duplicate IMSIs
+	seen := make(map[string]bool, len(imsis))
+	for _, imsi := range imsis {
+		if seen[imsi] {
+			return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+		}
+		seen[imsi] = true
 	}
 
 	patchRaw, ok := payload["patch"].(map[string]any)
 	if !ok || len(patchRaw) == 0 {
-		return nil, nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+		return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
 	}
 
 	// Validate patch fields — only accessRestrictionData, ambr.downlink.{value,unit}, ambr.uplink.{value,unit}
-	allowedTopLevel := map[string]bool{"accessRestrictionData": true, "ambr": true}
+	allowedPatch := map[string]bool{"accessRestrictionData": true, "ambr": true}
 	for key := range patchRaw {
-		if !allowedTopLevel[key] {
-			return nil, nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+		if !allowedPatch[key] {
+			return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
 		}
 	}
 
+	// Validate accessRestrictionData: integer 0..255
+	if ard, ok := patchRaw["accessRestrictionData"]; ok {
+		ardNum, ok := ard.(float64)
+		if !ok || ardNum < 0 || ardNum > 255 || ardNum != float64(int(ardNum)) {
+			return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+		}
+	}
+
+	// Validate AMBR
 	if ambrRaw, ok := patchRaw["ambr"].(map[string]any); ok {
 		for key := range ambrRaw {
 			if key != "downlink" && key != "uplink" {
-				return nil, nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+				return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
 			}
 		}
 		for _, dir := range []string{"downlink", "uplink"} {
 			if dirRaw, ok := ambrRaw[dir].(map[string]any); ok {
 				for key := range dirRaw {
 					if key != "value" && key != "unit" {
-						return nil, nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+						return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+					}
+				}
+				// Validate value: integer 1..10_000_000
+				if val, ok := dirRaw["value"]; ok {
+					valNum, ok := val.(float64)
+					if !ok || valNum < 1 || valNum > 10_000_000 || valNum != float64(int(valNum)) {
+						return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+					}
+				}
+				// Validate unit: integer 0..9
+				if unit, ok := dirRaw["unit"]; ok {
+					unitNum, ok := unit.(float64)
+					if !ok || unitNum < 0 || unitNum > 9 || unitNum != float64(int(unitNum)) {
+						return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
 					}
 				}
 			}
 		}
+	} else if patchRaw["ambr"] != nil {
+		// ambr is present but not a map
+		return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
 	}
 
-	return imsis, patchRaw, nil
+	// Validate reason: required, trim, 3..1000
+	reason, _ := payload["reason"].(string)
+	reason = strings.TrimSpace(reason)
+	if len(reason) < 3 || len(reason) > 1000 {
+		return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+	}
+
+	// Validate ticketId: optional, trim, max 200
+	ticketId, _ := payload["ticketId"].(string)
+	ticketId = strings.TrimSpace(ticketId)
+	if len(ticketId) > 200 {
+		return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+	}
+
+	// Validate maintenanceWindow: optional
+	var maintenanceWindow *MaintenanceWindow
+	if mwRaw, ok := payload["maintenanceWindow"].(map[string]any); ok {
+		start, _ := mwRaw["start"].(string)
+		end, _ := mwRaw["end"].(string)
+		if start == "" || end == "" {
+			return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+		}
+		startTime, err := time.Parse(time.RFC3339, start)
+		if err != nil {
+			return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+		}
+		endTime, err := time.Parse(time.RFC3339, end)
+		if err != nil {
+			return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+		}
+		if !startTime.Before(endTime) {
+			return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+		}
+		timeZone, _ := mwRaw["timeZone"].(string)
+		timeZone = strings.TrimSpace(timeZone)
+		if len(timeZone) > 100 {
+			return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+		}
+		maintenanceWindow = &MaintenanceWindow{
+			Start:    startTime.Format(time.RFC3339),
+			End:      endTime.Format(time.RFC3339),
+			TimeZone: timeZone,
+		}
+	}
+
+	return &BatchUpdateRequest{
+		Imsis:             imsis,
+		Patch:             patchRaw,
+		Reason:            reason,
+		TicketId:          ticketId,
+		MaintenanceWindow: maintenanceWindow,
+	}, nil
 }
 
 // ChangedFieldNames extracts the list of top-level field names from the patch.
+// Returns: access_restriction_data, ambr.downlink, ambr.uplink (matching Node contract).
 func ChangedFieldNames(patch map[string]any) []string {
 	var fields []string
-	for key := range patch {
-		if key == "ambr" {
-			ambrRaw, ok := patch["ambr"].(map[string]any)
-			if !ok {
-				continue
-			}
-			for _, dir := range []string{"downlink", "uplink"} {
-				if dirRaw, ok := ambrRaw[dir].(map[string]any); ok {
-					for prop := range dirRaw {
-						fields = append(fields, fmt.Sprintf("ambr.%s.%s", dir, prop))
-					}
-				}
-			}
-		} else {
-			fields = append(fields, key)
+	if _, ok := patch["accessRestrictionData"]; ok {
+		fields = append(fields, "access_restriction_data")
+	}
+	if ambrRaw, ok := patch["ambr"].(map[string]any); ok {
+		if _, ok := ambrRaw["downlink"]; ok {
+			fields = append(fields, "ambr.downlink")
+		}
+		if _, ok := ambrRaw["uplink"]; ok {
+			fields = append(fields, "ambr.uplink")
 		}
 	}
 	sort.Strings(fields)
@@ -126,9 +239,9 @@ func ComputeBatchUpdateV2Fingerprint(targets []SubscriberChangeTarget, patch map
 	targetEntries := make([]any, len(targets))
 	for i, t := range targets {
 		targetEntries[i] = map[string]any{
-			"imsi":            t.Imsi,
+			"imsi":             t.Imsi,
 			"preconditionHash": t.PreconditionHash,
-			"after":           t.After,
+			"after":            t.After,
 		}
 	}
 	source := map[string]any{
@@ -162,10 +275,15 @@ func PrepareFrozenBatchUpdate(
 		after := applyPatch(before, patch)
 		beforeHash := fingerprintMap(before)
 
+		// No-effect check: reject if before == after
+		if stableJSON(before) == stableJSON(after) {
+			return nil, &SubscriberGovernanceError{Code: "SUBSCRIBER_BATCH_NO_EFFECT", Details: map[string]any{"imsi": imsi}}
+		}
+
 		target := SubscriberChangeTarget{
-			Imsi:            imsi,
-			Before:          before,
-			After:           after,
+			Imsi:             imsi,
+			Before:           before,
+			After:            after,
 			PreconditionHash: beforeHash,
 		}
 		targets = append(targets, target)
@@ -181,6 +299,14 @@ func PrepareFrozenBatchUpdate(
 
 	fingerprint := ComputeBatchUpdateV2Fingerprint(targets, patch, fieldNames)
 
+	// Compute snapshotBytes matching Node: stableJSON({ targets, patch, fieldNames, operationFingerprint })
+	snapshotBytes = len(stableJSON(map[string]any{
+		"targets":              targets,
+		"patch":                patch,
+		"fieldNames":           fieldNames,
+		"operationFingerprint": fingerprint,
+	}))
+
 	return &FrozenBatchUpdateV2{
 		Version:              "subscriber-batch-update-v2",
 		Targets:              targets,
@@ -190,6 +316,27 @@ func PrepareFrozenBatchUpdate(
 		SnapshotBytes:        snapshotBytes,
 		OperationFingerprint: fingerprint,
 	}, nil
+}
+
+// computeExpectedAfterFromPatch computes the expected after values from the patch intent.
+func computeExpectedAfterFromPatch(patch map[string]any) map[string]any {
+	after := make(map[string]any)
+	if ard, ok := patch["accessRestrictionData"]; ok {
+		after["access_restriction_data"] = ard
+	}
+	if ambrRaw, ok := patch["ambr"].(map[string]any); ok {
+		for _, dir := range []string{"downlink", "uplink"} {
+			if dirRaw, ok := ambrRaw[dir].(map[string]any); ok {
+				if val, ok := dirRaw["value"]; ok {
+					after[fmt.Sprintf("ambr.%s.value", dir)] = val
+				}
+				if unit, ok := dirRaw["unit"]; ok {
+					after[fmt.Sprintf("ambr.%s.unit", dir)] = unit
+				}
+			}
+		}
+	}
+	return after
 }
 
 // AssertFrozenBatchUpdateV2 validates the frozen batch update contract integrity.
@@ -250,6 +397,9 @@ func AssertFrozenBatchUpdateV2(frozen *FrozenBatchUpdateV2) error {
 		}
 	}
 
+	// Compute expected after values from patch intent
+	expectedAfter := computeExpectedAfterFromPatch(frozen.Patch)
+
 	// Validate each target
 	for _, t := range frozen.Targets {
 		if t.Before == nil || t.After == nil || t.PreconditionHash == "" {
@@ -260,15 +410,41 @@ func AssertFrozenBatchUpdateV2(frozen *FrozenBatchUpdateV2) error {
 		if expectedHash != t.PreconditionHash {
 			return &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
 		}
-		// Validate after values
+		// Validate after keys are exactly allowed
 		for key := range t.After {
 			if !anyFieldMatches(frozen.FieldNames, key) {
 				return &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
 			}
 		}
+		// Validate before keys are exactly allowed
+		for key := range t.Before {
+			if !anyFieldMatches(frozen.FieldNames, key) {
+				return &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+			}
+		}
+		// Validate after values EXACTLY match patch intent
+		for key, val := range expectedAfter {
+			if t.After[key] != val {
+				return &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+			}
+		}
+		for key := range t.After {
+			if _, ok := expectedAfter[key]; !ok {
+				return &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+			}
+		}
 	}
 
-	// Validate snapshotBytes
+	// Recompute snapshotBytes exactly
+	expectedSnapshotBytes := len(stableJSON(map[string]any{
+		"targets":              frozen.Targets,
+		"patch":                frozen.Patch,
+		"fieldNames":           frozen.FieldNames,
+		"operationFingerprint": frozen.OperationFingerprint,
+	}))
+	if frozen.SnapshotBytes != expectedSnapshotBytes {
+		return &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+	}
 	if frozen.SnapshotBytes > maxSubscriberBatchSnapshotBytes {
 		return &SubscriberGovernanceError{Code: "APPROVAL_SNAPSHOT_TOO_LARGE"}
 	}
@@ -284,12 +460,15 @@ func AssertFrozenBatchUpdateV2(frozen *FrozenBatchUpdateV2) error {
 
 // ClassifyBatchUpdateResult classifies the execution result.
 func ClassifyBatchUpdateResult(modifiedCount int64, requested int, conflictCount, failedCount int) string {
-	if modifiedCount == int64(requested) {
+	// SUCCESS: modified == requested AND conflicts == 0 AND failures == 0
+	if modifiedCount == int64(requested) && conflictCount == 0 && failedCount == 0 {
 		return "SUCCESS"
 	}
+	// PARTIAL_WRITE: modified > 0 AND (conflicts > 0 OR failures > 0)
 	if modifiedCount > 0 {
 		return "PARTIAL_WRITE"
 	}
+	// FAILED_NO_MUTATION: modified == 0 AND (conflicts > 0 OR failures > 0)
 	return "FAILED_NO_MUTATION"
 }
 
@@ -304,8 +483,8 @@ func ExecuteFrozenSubscriberBatchUpdate(
 	}
 
 	result := &BatchUpdateExecutionResult{
-		Requested:          len(frozen.Targets),
-		FieldNames:         frozen.FieldNames,
+		Requested:            len(frozen.Targets),
+		FieldNames:           frozen.FieldNames,
 		OperationFingerprint: frozen.OperationFingerprint,
 	}
 
@@ -345,29 +524,24 @@ func ExecuteFrozenSubscriberBatchUpdate(
 }
 
 // extractUpdateFields extracts the fields to update from a subscriber document.
+// Returns flattened values matching Node: access_restriction_data, ambr.downlink.value, etc.
 func extractUpdateFields(sub map[string]any, fieldNames []string) map[string]any {
 	result := make(map[string]any)
 	for _, field := range fieldNames {
-		if field == "accessRestrictionData" {
+		if field == "access_restriction_data" {
 			if v, ok := sub["access_restriction_data"]; ok {
 				result["access_restriction_data"] = v
 			}
-		} else {
-			// Nested ambr fields like ambr.downlink.value
-			parts := splitField(field)
-			if len(parts) == 3 && parts[0] == "ambr" {
-				if ambr, ok := sub["ambr"].(map[string]any); ok {
-					if dir, ok := ambr[parts[1]].(map[string]any); ok {
-						if v, ok := dir[parts[2]]; ok {
-							if result["ambr"] == nil {
-								result["ambr"] = map[string]any{}
-							}
-							ambrMap := result["ambr"].(map[string]any)
-							if ambrMap[parts[1]] == nil {
-								ambrMap[parts[1]] = map[string]any{}
-							}
-							ambrMap[parts[1]].(map[string]any)[parts[2]] = v
-						}
+		} else if field == "ambr.downlink" || field == "ambr.uplink" {
+			// Extract flattened ambr values: ambr.downlink.value, ambr.downlink.unit, etc.
+			dir := strings.TrimPrefix(field, "ambr.")
+			if ambr, ok := sub["ambr"].(map[string]any); ok {
+				if dirMap, ok := ambr[dir].(map[string]any); ok {
+					if v, ok := dirMap["value"]; ok {
+						result[fmt.Sprintf("ambr.%s.value", dir)] = v
+					}
+					if v, ok := dirMap["unit"]; ok {
+						result[fmt.Sprintf("ambr.%s.unit", dir)] = v
 					}
 				}
 			}
@@ -377,36 +551,25 @@ func extractUpdateFields(sub map[string]any, fieldNames []string) map[string]any
 }
 
 // applyPatch applies the patch to the before values, returning the after values.
+// Returns flattened values matching Node: access_restriction_data, ambr.downlink.value, etc.
 func applyPatch(before map[string]any, patch map[string]any) map[string]any {
 	result := make(map[string]any)
 	for k, v := range before {
 		result[k] = v
 	}
-	for key, val := range patch {
-		if key == "ambr" {
-			patchAmbr, ok := val.(map[string]any)
-			if !ok {
-				continue
-			}
-			if result["ambr"] == nil {
-				result["ambr"] = map[string]any{}
-			}
-			resultAmbr := result["ambr"].(map[string]any)
-			for dir, dirVal := range patchAmbr {
-				patchDir, ok := dirVal.(map[string]any)
-				if !ok {
-					continue
+	if ard, ok := patch["accessRestrictionData"]; ok {
+		result["access_restriction_data"] = ard
+	}
+	if ambrRaw, ok := patch["ambr"].(map[string]any); ok {
+		for _, dir := range []string{"downlink", "uplink"} {
+			if dirRaw, ok := ambrRaw[dir].(map[string]any); ok {
+				if val, ok := dirRaw["value"]; ok {
+					result[fmt.Sprintf("ambr.%s.value", dir)] = val
 				}
-				if resultAmbr[dir] == nil {
-					resultAmbr[dir] = map[string]any{}
-				}
-				resultDir := resultAmbr[dir].(map[string]any)
-				for prop, propVal := range patchDir {
-					resultDir[prop] = propVal
+				if unit, ok := dirRaw["unit"]; ok {
+					result[fmt.Sprintf("ambr.%s.unit", dir)] = unit
 				}
 			}
-		} else if key == "accessRestrictionData" {
-			result["access_restriction_data"] = val
 		}
 	}
 	return result

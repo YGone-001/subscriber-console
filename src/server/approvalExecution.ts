@@ -2,7 +2,7 @@ import { writeAuditLog } from '@/lib/audit';
 import { auditRequestContext } from '@/lib/audit/record';
 import { validateCurrentAccount } from '@/lib/accountSession';
 import { executeApproval } from '@/server/approvalExecutors';
-import { executeFrozenSubscriberBatchChange, executeFrozenSubscriberBatchUpdate, assertFrozenSubscriberBatchUpdateV2, classifyBatchUpdateResult, SubscriberBatchGovernanceError } from '@/server/subscriberOperationPolicy';
+import { executeFrozenSubscriberBatchChange, executeFrozenSubscriberBatchUpdate, assertFrozenSubscriberBatchUpdateV2, assertFrozenSubscriberBatchPayload, classifyBatchUpdateResult, SubscriberBatchGovernanceError } from '@/server/subscriberOperationPolicy';
 import { executeFrozenSubscriberBulkDelete, executeFrozenSubscriberDelete, executeFrozenSubscriberUpdate } from '@/server/subscriberSingleGovernance';
 import { assertGovernedOperationCoverage } from '@/server/subscriberGovernanceRegistry';
 import { executeFrozenOcsBalanceAdjustment, OcsBalanceGovernanceError } from '@/server/ocsBalanceGovernance';
@@ -58,9 +58,29 @@ const defaultExecutor: GovernedApprovalExecutor = {
       return result;
     }
     if (approval.action === 'SUBSCRIBER_BATCH_UPDATE') {
-      // v2 frozen contract with per-target CAS
-      const frozen = assertFrozenSubscriberBatchUpdateV2(approval.payload);
-      const result = await executeFrozenSubscriberBatchUpdate(frozen);
+      // v1/v2 branching: v1 historical approvals use legacy executor, v2 uses safe CAS
+      const payloadVersion = approval.payload && typeof approval.payload === 'object' && 'version' in approval.payload ? (approval.payload as Record<string, unknown>).version : undefined;
+      let result: { requested: number; modifiedImsis: string[]; conflictImsis: string[]; failedImsis: string[]; matchedCount: number; modifiedCount: number; partialMutation: boolean; mutationCommitted: boolean; fieldNames: string[]; operationFingerprint: string };
+      if (payloadVersion === 'subscriber-batch-update-v2') {
+        // v2: assert and execute with safe CAS
+        const frozen = assertFrozenSubscriberBatchUpdateV2(approval.payload);
+        result = await executeFrozenSubscriberBatchUpdate(frozen);
+      } else {
+        // v1: translate to safe CAS execution
+        const v1Result = await executeFrozenSubscriberBatchChange(approval.payload);
+        result = {
+          requested: v1Result.requested,
+          modifiedImsis: v1Result.matched === v1Result.requested ? (Array.isArray((approval.payload as Record<string, unknown>).targets) ? ((approval.payload as Record<string, unknown>).targets as { imsi: string }[]).map((t) => t.imsi) : []) : [],
+          conflictImsis: [],
+          failedImsis: [],
+          matchedCount: v1Result.matched,
+          modifiedCount: v1Result.modified,
+          partialMutation: v1Result.modified > 0 && v1Result.modified < v1Result.requested,
+          mutationCommitted: v1Result.modified > 0,
+          fieldNames: v1Result.fieldNames,
+          operationFingerprint: v1Result.operationFingerprint,
+        };
+      }
       const classification = classifyBatchUpdateResult(result.modifiedCount, result.requested, result.conflictImsis.length, result.failedImsis.length);
       const auditResult = classification === 'SUCCESS' ? 'success' : 'failed';
       try {
@@ -74,7 +94,17 @@ const defaultExecutor: GovernedApprovalExecutor = {
         }, { failureMode: 'strict' });
       } catch {
         console.error('SUBSCRIBER_BATCH_AUDIT_PERSISTENCE_ALERT', { approvalId: approval.id, executionId: approval.execution?.id });
-        throw new ApprovalExecutionError('AUDIT_UNAVAILABLE', 503, approval, true, { ...result, mutationCommitted: result.mutationCommitted, classification });
+        throw new ApprovalExecutionError('AUDIT_UNAVAILABLE', 503, approval, result.mutationCommitted, { ...result, classification });
+      }
+      // Classification-based error handling (Section F)
+      if (classification === 'PARTIAL_WRITE') {
+        throw new ApprovalExecutionError('SUBSCRIBER_BATCH_PARTIAL_WRITE', 409, approval, true, { ...result, classification });
+      }
+      if (classification === 'FAILED_NO_MUTATION') {
+        if (result.conflictImsis.length > 0) {
+          throw new ApprovalExecutionError('SUBSCRIBER_BATCH_PRECONDITION_CHANGED', 409, approval, false, { ...result, classification });
+        }
+        throw new ApprovalExecutionError('SUBSCRIBER_BATCH_UPDATE_FAILED', 500, approval, false, { ...result, classification });
       }
       return { ...result, classification };
     }
