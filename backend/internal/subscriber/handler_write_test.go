@@ -1083,6 +1083,114 @@ func TestBatchUpdate_RootDirect(t *testing.T) {
 	}
 }
 
+// Section 20: Node↔Go response contract matrix tests
+
+func TestBatchUpdate_ResponseContract_Approval(t *testing.T) {
+	// New Approval response: { approval, requiresApproval } only
+	store := newFakeBatchUpdateStore()
+	store.targets["001010000000001"] = map[string]any{"access_restriction_data": int64(1)}
+	approvalDoc := &approval.ApprovalDocument{ID: "approval-1"}
+	approvalSvc := &fakeApprovalCreator{doc: approvalDoc}
+	h := newBatchUpdateHandler(store, &fakeUserRepo{identity: testIdentity("op1", "operator", false)}, approvalSvc, &fakeApprovalQuerierDocs{}, &fakeRateLimiter{}, &fakeEvidenceStore{})
+	p := testPrincipal("op1", "operator")
+	r := batchUpdateRequest(p, batchUpdateBody([]string{"001010000000001"}, map[string]any{"accessRestrictionData": float64(0)}, "test reason"))
+	w := httptest.NewRecorder()
+	h.BatchUpdate(w, r)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp map[string]any
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	// Section 14: Must have approval and requiresApproval
+	if resp["approval"] == nil {
+		t.Error("expected approval to be present")
+	}
+	if resp["requiresApproval"] != true {
+		t.Errorf("expected requiresApproval=true, got %v", resp["requiresApproval"])
+	}
+	// Section 14: Must NOT have outcome or message
+	if resp["outcome"] != nil {
+		t.Errorf("expected no outcome, got %v", resp["outcome"])
+	}
+	if resp["message"] != nil {
+		t.Errorf("expected no message, got %v", resp["message"])
+	}
+}
+
+func TestBatchUpdate_ResponseContract_Duplicate(t *testing.T) {
+	// Duplicate response: { approval, requiresApproval, idempotent }
+	store := newFakeBatchUpdateStore()
+	store.targets["001010000000001"] = map[string]any{"access_restriction_data": int64(32)}
+
+	// Compute the fingerprint that the handler will compute for this request
+	frozen, _ := PrepareFrozenBatchUpdate(context.Background(), []string{"001010000000001"}, map[string]any{"accessRestrictionData": float64(0)}, func(_ context.Context, imsi string) (map[string]any, error) {
+		return store.targets[imsi], nil
+	})
+
+	existingApproval := approval.ApprovalDocument{
+		ID:                   "existing-1",
+		Action:               "SUBSCRIBER_BATCH_UPDATE",
+		Status:               approval.StatusPending,
+		OperationFingerprint: frozen.OperationFingerprint,
+		Operation: approval.ApprovalOperation{
+			ResourceType: "SUBSCRIBER_BATCH_UPDATE",
+			ResourceID:   "BATCH:001010000000001",
+		},
+		Payload: map[string]any{
+			"targets":    []any{map[string]any{"imsi": "001010000000001"}},
+			"fieldNames": []any{"access_restriction_data"},
+		},
+	}
+	querier := &fakeApprovalQuerierDocs{docs: []approval.ApprovalDocument{existingApproval}}
+	h := newBatchUpdateHandler(store, &fakeUserRepo{identity: testIdentity("op1", "operator", false)}, &fakeApprovalCreator{}, querier, &fakeRateLimiter{}, &fakeEvidenceStore{})
+	p := testPrincipal("op1", "operator")
+	r := batchUpdateRequest(p, batchUpdateBody([]string{"001010000000001"}, map[string]any{"accessRestrictionData": float64(0)}, "test reason"))
+	w := httptest.NewRecorder()
+	h.BatchUpdate(w, r)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("expected 202 duplicate, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp map[string]any
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp["approval"] == nil {
+		t.Error("expected approval to be present")
+	}
+	if resp["requiresApproval"] != true {
+		t.Errorf("expected requiresApproval=true, got %v", resp["requiresApproval"])
+	}
+	if resp["idempotent"] != true {
+		t.Errorf("expected idempotent=true, got %v", resp["idempotent"])
+	}
+}
+
+func TestBatchUpdate_ResponseContract_DirectSuccess(t *testing.T) {
+	// Direct success: { outcome: "executed", message, result, requiresApproval: false }
+	store := newFakeBatchUpdateStore()
+	store.targets["001010000000001"] = map[string]any{"access_restriction_data": int64(1)}
+	h := newBatchUpdateHandler(store, &fakeUserRepo{identity: testIdentity("admin1", "super_admin", false)}, &fakeApprovalCreator{}, &fakeApprovalQuerierDocs{}, &fakeRateLimiter{}, &fakeEvidenceStore{})
+	p := testPrincipal("admin1", "super_admin")
+	r := batchUpdateRequest(p, batchUpdateBody([]string{"001010000000001"}, map[string]any{"accessRestrictionData": float64(0)}, "test reason"))
+	w := httptest.NewRecorder()
+	h.BatchUpdate(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp map[string]any
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp["outcome"] != "executed" {
+		t.Errorf("expected outcome=executed, got %v", resp["outcome"])
+	}
+	if resp["message"] == nil {
+		t.Error("expected message to be present")
+	}
+	if resp["result"] == nil {
+		t.Error("expected result to be present")
+	}
+	if resp["requiresApproval"] != false {
+		t.Errorf("expected requiresApproval=false, got %v", resp["requiresApproval"])
+	}
+}
+
 func TestBatchUpdate_ActiveDuplicateOperator(t *testing.T) {
 	store := newFakeBatchUpdateStore()
 	store.targets["001010000000001"] = map[string]any{"access_restriction_data": int64(1)}
@@ -1720,8 +1828,8 @@ func TestBatchUpdate_ErrorCode_MaintenanceWindowString(t *testing.T) {
 	}
 	var resp map[string]any
 	json.Unmarshal(w.Body.Bytes(), &resp)
-	// Go returns INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD for maintenanceWindow string
-	if resp["code"] != "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD" {
+	// Section 19: maintenanceWindow string → INVALID_BATCH_REQUEST
+	if resp["code"] != "INVALID_BATCH_REQUEST" {
 		t.Errorf("expected INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD, got %v", resp["code"])
 	}
 }
@@ -1744,8 +1852,9 @@ func TestBatchUpdate_ErrorCode_ReasonTooShort(t *testing.T) {
 	}
 	var resp map[string]any
 	json.Unmarshal(w.Body.Bytes(), &resp)
-	if resp["code"] != "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD" {
-		t.Errorf("expected INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD, got %v", resp["code"])
+	// Section 19: reason too short → INVALID_BATCH_REQUEST
+	if resp["code"] != "INVALID_BATCH_REQUEST" {
+		t.Errorf("expected INVALID_BATCH_REQUEST, got %v", resp["code"])
 	}
 }
 
@@ -1767,15 +1876,23 @@ func TestBatchUpdate_ErrorCode_BadAMBR(t *testing.T) {
 	}
 	var resp map[string]any
 	json.Unmarshal(w.Body.Bytes(), &resp)
-	if resp["code"] != "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD" {
-		t.Errorf("expected INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD, got %v", resp["code"])
+	// Section 19: bad AMBR → INVALID_BATCH_REQUEST
+	if resp["code"] != "INVALID_BATCH_REQUEST" {
+		t.Errorf("expected INVALID_BATCH_REQUEST, got %v", resp["code"])
 	}
 }
 
 func TestBatchUpdate_ErrorCode_101IMSIs(t *testing.T) {
+	// Section 6: Generate exactly101 valid 15-digit IMSIs
 	imsis := make([]string, 101)
 	for i := range imsis {
-		imsis[i] = fmt.Sprintf("001010000000%04d", i+1)
+		imsis[i] = fmt.Sprintf("0010100000%05d", i+1) // 15 digits: "0010100000" (10) + 5 digits
+	}
+	// Verify all IMSIs are exactly 15 digits
+	for _, imsi := range imsis {
+		if len(imsi) != 15 {
+			t.Fatalf("generated IMSI %q has length %d, want 15", imsi, len(imsi))
+		}
 	}
 	store := newFakeBatchUpdateStore()
 	h := newBatchUpdateHandler(store, &fakeUserRepo{identity: testIdentity("admin1", "super_admin", false)}, &fakeApprovalCreator{}, &fakeApprovalQuerierDocs{}, &fakeRateLimiter{}, &fakeEvidenceStore{})
@@ -1793,8 +1910,128 @@ func TestBatchUpdate_ErrorCode_101IMSIs(t *testing.T) {
 	}
 	var resp map[string]any
 	json.Unmarshal(w.Body.Bytes(), &resp)
-	// Go returns INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD for101 IMSIs (validation happens before size check)
-	if resp["code"] != "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD" {
-		t.Errorf("expected INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD, got %v", resp["code"])
+	// Section 19: 101 valid IMSIs → BATCH_SIZE_EXCEEDED
+	if resp["code"] != "BATCH_SIZE_EXCEEDED" {
+		t.Errorf("expected BATCH_SIZE_EXCEEDED, got %v", resp["code"])
+	}
+}
+
+func TestBatchUpdate_ErrorCode_UnknownTopLevel(t *testing.T) {
+	store := newFakeBatchUpdateStore()
+	h := newBatchUpdateHandler(store, &fakeUserRepo{identity: testIdentity("admin1", "super_admin", false)}, &fakeApprovalCreator{}, &fakeApprovalQuerierDocs{}, &fakeRateLimiter{}, &fakeEvidenceStore{})
+	p := testPrincipal("admin1", "super_admin")
+	body := map[string]any{
+		"imsis":      []string{"001010000000001"},
+		"patch":      map[string]any{"accessRestrictionData": float64(0)},
+		"reason":     "test reason",
+		"unknownKey": "value", // Unknown top-level key
+	}
+	r := batchUpdateRequest(p, body)
+	w := httptest.NewRecorder()
+	h.BatchUpdate(w, r)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+	var resp map[string]any
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	// Section 5: Unknown top-level key → INVALID_BATCH_REQUEST
+	if resp["code"] != "INVALID_BATCH_REQUEST" {
+		t.Errorf("expected INVALID_BATCH_REQUEST, got %v", resp["code"])
+	}
+}
+
+func TestBatchUpdate_ErrorCode_UnsupportedPatch(t *testing.T) {
+	store := newFakeBatchUpdateStore()
+	h := newBatchUpdateHandler(store, &fakeUserRepo{identity: testIdentity("admin1", "super_admin", false)}, &fakeApprovalCreator{}, &fakeApprovalQuerierDocs{}, &fakeRateLimiter{}, &fakeEvidenceStore{})
+	p := testPrincipal("admin1", "super_admin")
+	body := map[string]any{
+		"imsis": []string{"001010000000001"},
+		"patch": map[string]any{
+			"accessRestrictionData": float64(0),
+			"unsupportedField":      "value", // Unsupported patch field
+		},
+		"reason": "test reason",
+	}
+	r := batchUpdateRequest(p, body)
+	w := httptest.NewRecorder()
+	h.BatchUpdate(w, r)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+	var resp map[string]any
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	// Section 5: Unknown patch key → UNSUPPORTED_SUBSCRIBER_FIELD
+	if resp["code"] != "UNSUPPORTED_SUBSCRIBER_FIELD" {
+		t.Errorf("expected UNSUPPORTED_SUBSCRIBER_FIELD, got %v", resp["code"])
+	}
+}
+
+func TestBatchUpdate_ErrorCode_UnsupportedAMBR(t *testing.T) {
+	store := newFakeBatchUpdateStore()
+	h := newBatchUpdateHandler(store, &fakeUserRepo{identity: testIdentity("admin1", "super_admin", false)}, &fakeApprovalCreator{}, &fakeApprovalQuerierDocs{}, &fakeRateLimiter{}, &fakeEvidenceStore{})
+	p := testPrincipal("admin1", "super_admin")
+	body := map[string]any{
+		"imsis": []string{"001010000000001"},
+		"patch": map[string]any{
+			"sessionAmbr": map[string]any{
+				"downlink": map[string]any{
+					"value":    float64(100),
+					"unit":     "Kbps",
+					"unknown":  "unsupported", // Unsupported AMBR field
+				},
+				"uplink": map[string]any{
+					"value": float64(100),
+					"unit":  "Kbps",
+				},
+			},
+		},
+		"reason": "test reason",
+	}
+	r := batchUpdateRequest(p, body)
+	w := httptest.NewRecorder()
+	h.BatchUpdate(w, r)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+	var resp map[string]any
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	// Section 5: Unknown AMBR key → UNSUPPORTED_SUBSCRIBER_FIELD
+	if resp["code"] != "UNSUPPORTED_SUBSCRIBER_FIELD" {
+		t.Errorf("expected UNSUPPORTED_SUBSCRIBER_FIELD, got %v", resp["code"])
+	}
+}
+
+func TestBatchUpdate_ErrorCode_UnsupportedBitrate(t *testing.T) {
+	store := newFakeBatchUpdateStore()
+	h := newBatchUpdateHandler(store, &fakeUserRepo{identity: testIdentity("admin1", "super_admin", false)}, &fakeApprovalCreator{}, &fakeApprovalQuerierDocs{}, &fakeRateLimiter{}, &fakeEvidenceStore{})
+	p := testPrincipal("admin1", "super_admin")
+	body := map[string]any{
+		"imsis": []string{"001010000000001"},
+		"patch": map[string]any{
+			"sessionAmbr": map[string]any{
+				"downlink": map[string]any{
+					"value":        float64(100),
+					"unit":         "Kbps",
+					"unsupported":  "field", // Unsupported bitrate field
+				},
+				"uplink": map[string]any{
+					"value": float64(100),
+					"unit":  "Kbps",
+				},
+			},
+		},
+		"reason": "test reason",
+	}
+	r := batchUpdateRequest(p, body)
+	w := httptest.NewRecorder()
+	h.BatchUpdate(w, r)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+	var resp map[string]any
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	// Section 5: Unknown bitrate key → UNSUPPORTED_SUBSCRIBER_FIELD
+	if resp["code"] != "UNSUPPORTED_SUBSCRIBER_FIELD" {
+		t.Errorf("expected UNSUPPORTED_SUBSCRIBER_FIELD, got %v", resp["code"])
 	}
 }

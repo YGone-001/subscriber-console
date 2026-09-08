@@ -489,10 +489,12 @@ func (h *WriteHandler) handleBatchUpdateError(w http.ResponseWriter, err error) 
 		"ACTIVE_CHANGE_CONFLICT":                  http.StatusConflict,
 		"SUBSCRIBER_BATCH_PRECONDITION_CHANGED":   http.StatusConflict,
 		"SUBSCRIBER_BATCH_NO_EFFECT":              http.StatusBadRequest,
-		"INVALID_BATCH_REQUEST":                   http.StatusBadRequest,
-		"INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD": http.StatusBadRequest,
-		"BATCH_SIZE_EXCEEDED":                     http.StatusBadRequest,
-		"APPROVAL_SNAPSHOT_TOO_LARGE":             http.StatusBadRequest,
+		ErrInvalidBatchRequest:                    http.StatusBadRequest,
+		ErrUnsupportedSubscriberField:             http.StatusBadRequest,
+		ErrInvalidFrozenBatchUpdate:               http.StatusBadRequest,
+		ErrBatchSizeExceeded:                      http.StatusBadRequest,
+		ErrApprovalSnapshotTooLarge:               http.StatusBadRequest,
+		"AUDIT_UNAVAILABLE":                       http.StatusServiceUnavailable,
 	}
 	status, ok := statusMap[govErr.Code]
 	if !ok {
@@ -1197,9 +1199,8 @@ func (h *WriteHandler) createBatchUpdateApproval(
 
 	// NO duplicate audit here — ApprovalCreator.Create() already writes strict audit
 
+	// Section 14: New Approval response — match Node production (no outcome/message)
 	response.JSON(w, http.StatusAccepted, map[string]any{
-		"outcome":          "approval_required",
-		"message":          "Approval required before batch subscriber update",
 		"approval":         approvalDoc,
 		"requiresApproval": true,
 	})

@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 
 import {
   assertFrozenSubscriberBatchUpdateV2,
@@ -8,36 +9,81 @@ import {
 
 // Section 3: Canonical Node frozen-integrity production tests
 
+// Helper to compute stable JSON (same algorithm as production)
+function stableJson(value) {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  if (value && typeof value === "object")
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`)
+      .join(",")}}`;
+  return JSON.stringify(value);
+}
+
+// Helper to compute fingerprint (same algorithm as production)
+function fingerprint(value) {
+  return createHash("sha256").update(stableJson(value)).digest("hex");
+}
+
+// Helper to build a valid frozen payload with correct hashes
 function makeValidFrozen(overrides = {}) {
+  const patch = overrides.patch || { accessRestrictionData: 0 };
+  const before = overrides.before || { access_restriction_data: 32 };
+  const after = overrides.after || { access_restriction_data: 0 };
+  const imsi = overrides.imsi || "001010000000001";
+
+  const preconditionHash = fingerprint(before);
+  const fieldNames = overrides.fieldNames || ["access_restriction_data"];
+
+  const targets = [
+    { imsi, before, after, preconditionHash },
+  ];
+
+  const operationFingerprint = fingerprint({
+    operation: "SUBSCRIBER_BATCH_UPDATE",
+    targets: targets.map((t) => ({
+      imsi: t.imsi,
+      preconditionHash: t.preconditionHash,
+      after: t.after,
+    })),
+    patch,
+    fieldNames,
+  });
+
+  const snapshotBytes = Buffer.byteLength(
+    stableJson({ targets, patch, fieldNames, operationFingerprint }),
+    "utf8"
+  );
+
   return {
     version: "subscriber-batch-update-v2",
-    targetCount: 1,
-    targets: [
-      {
-        imsi: "001010000000001",
-        before: { access_restriction_data: 32 },
-        after: { access_restriction_data: 0 },
-        preconditionHash: "abc123",
-      },
-    ],
-    patch: { accessRestrictionData: 0 },
-    fieldNames: ["access_restriction_data"],
-    snapshotBytes: 100,
-    operationFingerprint: "test-fp",
+    targetCount: targets.length,
+    targets,
+    patch,
+    fieldNames,
+    snapshotBytes,
+    operationFingerprint,
     ...overrides,
+    // Override computed fields if not explicitly provided
+    ...(overrides.targets ? {} : { targets }),
+    ...(overrides.operationFingerprint ? {} : { operationFingerprint }),
+    ...(overrides.snapshotBytes ? {} : { snapshotBytes }),
   };
 }
 
 // ─── Valid frozen payload ───
 
 test("valid frozen payload passes assertion", () => {
-  // This test verifies the function exists and can be called
-  // The actual assertion requires matching preconditionHash/fingerprint
+  // Section 21: Actually invoke production assert with valid payload
   const frozen = makeValidFrozen();
-  // We can't fully test without the real hash, but we can test structure validation
-  assert.ok(frozen.version === "subscriber-batch-update-v2");
-  assert.ok(frozen.targetCount === 1);
-  assert.ok(frozen.targets.length === 1);
+  const result = assertFrozenSubscriberBatchUpdateV2(frozen);
+  assert.ok(result.version === "subscriber-batch-update-v2");
+  assert.ok(result.targetCount === 1);
+  assert.ok(result.targets.length === 1);
+  assert.ok(result.targets[0].imsi === "001010000000001");
+  assert.ok(result.targets[0].preconditionHash);
+  assert.ok(result.operationFingerprint);
+  assert.ok(result.snapshotBytes > 0);
 });
 
 // ─── expectedTouchedLeafKeys ───

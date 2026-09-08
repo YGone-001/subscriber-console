@@ -14,6 +14,13 @@ import (
 const (
 	maxSubscriberBatchTargets       = 100
 	maxSubscriberBatchSnapshotBytes = 512 * 1024
+
+	// Section 9: Error code constants for batch update
+	ErrInvalidBatchRequest        = "INVALID_BATCH_REQUEST"
+	ErrUnsupportedSubscriberField = "UNSUPPORTED_SUBSCRIBER_FIELD"
+	ErrInvalidFrozenBatchUpdate   = "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"
+	ErrBatchSizeExceeded          = "BATCH_SIZE_EXCEEDED"
+	ErrApprovalSnapshotTooLarge   = "APPROVAL_SNAPSHOT_TOO_LARGE"
 )
 
 // SubscriberChangeTarget holds a single target for batch update.
@@ -65,72 +72,81 @@ type MaintenanceWindow struct {
 	TimeZone string `json:"timeZone,omitempty"`
 }
 
+// Section 13: toISOString normalizes time to UTC ISO form matching JavaScript Date.toISOString()
+// Format: YYYY-MM-DDTHH:mm:ss.SSSZ (millisecond precision, always UTC)
+func toISOString(t time.Time) string {
+	return t.UTC().Format("2006-01-02T15:04:05.000Z")
+}
+
 // ValidateBatchUpdateRequest validates the raw batch update request.
 func ValidateBatchUpdateRequest(payload map[string]any) (*BatchUpdateRequest, error) {
-	// Validate top-level keys
+	// Validate top-level keys — Section 10: unknown top-level → INVALID_BATCH_REQUEST
 	allowedTopLevel := map[string]bool{"imsis": true, "patch": true, "reason": true, "ticketId": true, "maintenanceWindow": true}
 	for key := range payload {
 		if !allowedTopLevel[key] {
-			return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+			return nil, &SubscriberGovernanceError{Code: ErrInvalidBatchRequest}
 		}
 	}
 
+	// Section 4: missing/invalid imsis → INVALID_BATCH_REQUEST
 	imsisRaw, ok := payload["imsis"].([]any)
 	if !ok || len(imsisRaw) == 0 {
-		return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+		return nil, &SubscriberGovernanceError{Code: ErrInvalidBatchRequest}
 	}
 	var imsis []string
 	for _, v := range imsisRaw {
 		s, ok := v.(string)
 		if !ok || len(s) != 15 {
-			return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+			return nil, &SubscriberGovernanceError{Code: ErrInvalidBatchRequest}
 		}
 		// Validate exactly 15 ASCII digits
 		for _, c := range s {
 			if c < '0' || c > '9' {
-				return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+				return nil, &SubscriberGovernanceError{Code: ErrInvalidBatchRequest}
 			}
 		}
 		imsis = append(imsis, s)
 	}
+	// Section 6: 101 valid IMSIs → BATCH_SIZE_EXCEEDED
 	if len(imsis) > maxSubscriberBatchTargets {
-		return nil, &SubscriberGovernanceError{Code: "BATCH_SIZE_EXCEEDED"}
+		return nil, &SubscriberGovernanceError{Code: ErrBatchSizeExceeded}
 	}
-	// Reject duplicate IMSIs
+	// Section 4: duplicate IMSI → INVALID_BATCH_REQUEST
 	seen := make(map[string]bool, len(imsis))
 	for _, imsi := range imsis {
 		if seen[imsi] {
-			return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+			return nil, &SubscriberGovernanceError{Code: ErrInvalidBatchRequest}
 		}
 		seen[imsi] = true
 	}
 
+	// Section 4: missing/invalid patch → INVALID_BATCH_REQUEST
 	patchRaw, ok := payload["patch"].(map[string]any)
 	if !ok || len(patchRaw) == 0 {
-		return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+		return nil, &SubscriberGovernanceError{Code: ErrInvalidBatchRequest}
 	}
 
-	// Validate patch fields — only accessRestrictionData, ambr.downlink.{value,unit}, ambr.uplink.{value,unit}
+	// Section 11: unknown patch key → UNSUPPORTED_SUBSCRIBER_FIELD
 	allowedPatch := map[string]bool{"accessRestrictionData": true, "ambr": true}
 	for key := range patchRaw {
 		if !allowedPatch[key] {
-			return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+			return nil, &SubscriberGovernanceError{Code: ErrUnsupportedSubscriberField}
 		}
 	}
 
-	// Validate accessRestrictionData: integer 0..255
+	// Section 4: invalid accessRestrictionData → INVALID_BATCH_REQUEST
 	if ard, ok := patchRaw["accessRestrictionData"]; ok {
 		ardNum, ok := ard.(float64)
 		if !ok || ardNum < 0 || ardNum > 255 || ardNum != float64(int(ardNum)) {
-			return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+			return nil, &SubscriberGovernanceError{Code: ErrInvalidBatchRequest}
 		}
 	}
 
-	// Validate AMBR
+	// Section 12: AMBR validation — unknown AMBR key → UNSUPPORTED_SUBSCRIBER_FIELD
 	if ambrRaw, ok := patchRaw["ambr"].(map[string]any); ok {
 		for key := range ambrRaw {
 			if key != "downlink" && key != "uplink" {
-				return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+				return nil, &SubscriberGovernanceError{Code: ErrUnsupportedSubscriberField}
 			}
 		}
 		hasDirection := false
@@ -141,92 +157,95 @@ func ValidateBatchUpdateRequest(payload map[string]any) (*BatchUpdateRequest, er
 			}
 			dirMap, ok := dirRaw.(map[string]any)
 			if !ok {
-				return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+				return nil, &SubscriberGovernanceError{Code: ErrInvalidBatchRequest}
 			}
 			hasDirection = true
 			// Require BOTH value and unit — partial objects rejected
 			val, hasVal := dirMap["value"]
 			unit, hasUnit := dirMap["unit"]
 			if !hasVal || !hasUnit {
-				return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+				return nil, &SubscriberGovernanceError{Code: ErrInvalidBatchRequest}
 			}
+			// Section 12: unknown bitrate key → UNSUPPORTED_SUBSCRIBER_FIELD
 			for key := range dirMap {
 				if key != "value" && key != "unit" {
-					return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+					return nil, &SubscriberGovernanceError{Code: ErrUnsupportedSubscriberField}
 				}
 			}
 			valNum, ok := val.(float64)
 			if !ok || valNum < 1 || valNum > 10_000_000 || valNum != float64(int(valNum)) {
-				return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+				return nil, &SubscriberGovernanceError{Code: ErrInvalidBatchRequest}
 			}
 			unitNum, ok := unit.(float64)
 			if !ok || unitNum < 0 || unitNum > 9 || unitNum != float64(int(unitNum)) {
-				return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+				return nil, &SubscriberGovernanceError{Code: ErrInvalidBatchRequest}
 			}
 		}
 		if !hasDirection {
-			return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+			return nil, &SubscriberGovernanceError{Code: ErrInvalidBatchRequest}
 		}
 	} else if patchRaw["ambr"] != nil {
-		// ambr is present but not a map
-		return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+		// Section 4: ambr is present but not a map → INVALID_BATCH_REQUEST
+		return nil, &SubscriberGovernanceError{Code: ErrInvalidBatchRequest}
 	}
 
-	// Validate reason: required, trim, 3..1000
+	// Section 4: reason validation → INVALID_BATCH_REQUEST
 	reason, _ := payload["reason"].(string)
 	reason = strings.TrimSpace(reason)
 	if len(reason) < 3 || len(reason) > 1000 {
-		return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+		return nil, &SubscriberGovernanceError{Code: ErrInvalidBatchRequest}
 	}
 
-	// Validate ticketId: optional, trim, max 200
+	// Section 4: ticketId validation → INVALID_BATCH_REQUEST
 	ticketId, _ := payload["ticketId"].(string)
 	ticketId = strings.TrimSpace(ticketId)
 	if len(ticketId) > 200 {
-		return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+		return nil, &SubscriberGovernanceError{Code: ErrInvalidBatchRequest}
 	}
 
-	// Section K: Validate maintenanceWindow — null/string/array/number all rejected
+	// Section 4: maintenanceWindow validation → INVALID_BATCH_REQUEST
 	var maintenanceWindow *MaintenanceWindow
 	if mwPresent, hasMW := payload["maintenanceWindow"]; hasMW {
 		if mwPresent == nil {
-			return nil, &SubscriberGovernanceError{Code: "INVALID_BATCH_REQUEST"}
+			return nil, &SubscriberGovernanceError{Code: ErrInvalidBatchRequest}
 		}
 		mwRaw, ok := mwPresent.(map[string]any)
 		if !ok {
-			return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+			return nil, &SubscriberGovernanceError{Code: ErrInvalidBatchRequest}
 		}
 		// Reject unknown keys, $-prefixed keys, and dotted keys
 		allowedMW := map[string]bool{"start": true, "end": true, "timeZone": true}
 		for key := range mwRaw {
 			if !allowedMW[key] || strings.HasPrefix(key, "$") || strings.Contains(key, ".") {
-				return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+				return nil, &SubscriberGovernanceError{Code: ErrInvalidBatchRequest}
 			}
 		}
 		start, _ := mwRaw["start"].(string)
 		end, _ := mwRaw["end"].(string)
 		if start == "" || end == "" {
-			return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+			return nil, &SubscriberGovernanceError{Code: ErrInvalidBatchRequest}
 		}
+		// Section 13: Normalize timestamps to UTC ISO form (matching Node Date.toISOString())
 		startTime, err := time.Parse(time.RFC3339, start)
 		if err != nil {
-			return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+			return nil, &SubscriberGovernanceError{Code: ErrInvalidBatchRequest}
 		}
 		endTime, err := time.Parse(time.RFC3339, end)
 		if err != nil {
-			return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+			return nil, &SubscriberGovernanceError{Code: ErrInvalidBatchRequest}
 		}
 		if !startTime.Before(endTime) {
-			return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+			return nil, &SubscriberGovernanceError{Code: ErrInvalidBatchRequest}
 		}
 		timeZone, _ := mwRaw["timeZone"].(string)
 		timeZone = strings.TrimSpace(timeZone)
 		if len(timeZone) > 100 {
-			return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+			return nil, &SubscriberGovernanceError{Code: ErrInvalidBatchRequest}
 		}
 		maintenanceWindow = &MaintenanceWindow{
-			Start:    startTime.Format(time.RFC3339),
-			End:      endTime.Format(time.RFC3339),
+			// Section 13: Normalize to UTC ISO form matching JavaScript Date.toISOString()
+			Start:    toISOString(startTime),
+			End:      toISOString(endTime),
 			TimeZone: timeZone,
 		}
 	}
