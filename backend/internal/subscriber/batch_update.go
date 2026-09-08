@@ -133,28 +133,39 @@ func ValidateBatchUpdateRequest(payload map[string]any) (*BatchUpdateRequest, er
 				return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
 			}
 		}
+		hasDirection := false
 		for _, dir := range []string{"downlink", "uplink"} {
-			if dirRaw, ok := ambrRaw[dir].(map[string]any); ok {
-				for key := range dirRaw {
-					if key != "value" && key != "unit" {
-						return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
-					}
-				}
-				// Validate value: integer 1..10_000_000
-				if val, ok := dirRaw["value"]; ok {
-					valNum, ok := val.(float64)
-					if !ok || valNum < 1 || valNum > 10_000_000 || valNum != float64(int(valNum)) {
-						return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
-					}
-				}
-				// Validate unit: integer 0..9
-				if unit, ok := dirRaw["unit"]; ok {
-					unitNum, ok := unit.(float64)
-					if !ok || unitNum < 0 || unitNum > 9 || unitNum != float64(int(unitNum)) {
-						return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
-					}
+			dirRaw, ok := ambrRaw[dir]
+			if !ok {
+				continue
+			}
+			dirMap, ok := dirRaw.(map[string]any)
+			if !ok {
+				return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+			}
+			hasDirection = true
+			// Require BOTH value and unit — partial objects rejected
+			val, hasVal := dirMap["value"]
+			unit, hasUnit := dirMap["unit"]
+			if !hasVal || !hasUnit {
+				return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+			}
+			for key := range dirMap {
+				if key != "value" && key != "unit" {
+					return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
 				}
 			}
+			valNum, ok := val.(float64)
+			if !ok || valNum < 1 || valNum > 10_000_000 || valNum != float64(int(valNum)) {
+				return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+			}
+			unitNum, ok := unit.(float64)
+			if !ok || unitNum < 0 || unitNum > 9 || unitNum != float64(int(unitNum)) {
+				return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+			}
+		}
+		if !hasDirection {
+			return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
 		}
 	} else if patchRaw["ambr"] != nil {
 		// ambr is present but not a map
@@ -175,9 +186,20 @@ func ValidateBatchUpdateRequest(payload map[string]any) (*BatchUpdateRequest, er
 		return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
 	}
 
-	// Validate maintenanceWindow: optional
+	// Validate maintenanceWindow: optional, but if present MUST be an object
 	var maintenanceWindow *MaintenanceWindow
-	if mwRaw, ok := payload["maintenanceWindow"].(map[string]any); ok {
+	if mwPresent, hasMW := payload["maintenanceWindow"]; hasMW && mwPresent != nil {
+		mwRaw, ok := mwPresent.(map[string]any)
+		if !ok {
+			return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+		}
+		// Reject unknown keys, $-prefixed keys, and dotted keys
+		allowedMW := map[string]bool{"start": true, "end": true, "timeZone": true}
+		for key := range mwRaw {
+			if !allowedMW[key] || strings.HasPrefix(key, "$") || strings.Contains(key, ".") {
+				return nil, &SubscriberGovernanceError{Code: "INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD"}
+			}
+		}
 		start, _ := mwRaw["start"].(string)
 		end, _ := mwRaw["end"].(string)
 		if start == "" || end == "" {
@@ -255,18 +277,21 @@ func ComputeBatchUpdateV2Fingerprint(targets []SubscriberChangeTarget, patch map
 }
 
 // PrepareFrozenBatchUpdate prepares a frozen v2 batch update contract.
+// SubscriberFinder is a function that finds a subscriber by IMSI.
+type SubscriberFinder func(ctx context.Context, imsi string) (map[string]any, error)
+
 func PrepareFrozenBatchUpdate(
 	ctx context.Context,
 	imsis []string,
 	patch map[string]any,
-	repo *Repository,
+	find SubscriberFinder,
 ) (*FrozenBatchUpdateV2, error) {
 	fieldNames := ChangedFieldNames(patch)
 	targets := make([]SubscriberChangeTarget, 0, len(imsis))
 	snapshotBytes := 0
 
 	for _, imsi := range imsis {
-		sub, err := repo.FindSubscriberByImsi(ctx, imsi)
+		sub, err := find(ctx, imsi)
 		if err != nil || sub == nil {
 			return nil, &SubscriberGovernanceError{Code: "SUBSCRIBER_NOT_FOUND", Details: map[string]any{"imsi": imsi}}
 		}
@@ -458,6 +483,47 @@ func AssertFrozenBatchUpdateV2(frozen *FrozenBatchUpdateV2) error {
 	return nil
 }
 
+// BatchUpdateStore abstracts the data access for batch update execution.
+// Enables deterministic testing without Mongo.
+type BatchUpdateStore interface {
+	// LoadBatchUpdateTarget loads the current state of a subscriber target.
+	// Returns nil map if subscriber not found.
+	LoadBatchUpdateTarget(ctx context.Context, imsi string) (map[string]any, error)
+
+	// ConditionalUpdateBatchTarget performs a compare-and-swap update.
+	// matched=0 means precondition mismatch (CAS conflict).
+	ConditionalUpdateBatchTarget(ctx context.Context, imsi string, expected map[string]any, next map[string]any) (matched int64, modified int64, err error)
+}
+
+// Ensure Repository implements BatchUpdateStore.
+var _ BatchUpdateStore = (*Repository)(nil)
+
+// LoadBatchUpdateTarget loads subscriber fields for CAS.
+func (r *Repository) LoadBatchUpdateTarget(ctx context.Context, imsi string) (map[string]any, error) {
+	sub, err := r.FindSubscriberByImsi(ctx, imsi)
+	if err != nil {
+		return nil, err
+	}
+	if sub == nil {
+		return nil, nil
+	}
+	return sub, nil
+}
+
+// ConditionalUpdateBatchTarget performs a CAS update on a subscriber.
+func (r *Repository) ConditionalUpdateBatchTarget(ctx context.Context, imsi string, expected map[string]any, next map[string]any) (int64, int64, error) {
+	filter := bson.M{"imsi": imsi}
+	for key, val := range expected {
+		filter[key] = val
+	}
+	update := bson.M{"$set": next}
+	res, err := r.subscribers.UpdateOne(ctx, filter, update)
+	if err != nil {
+		return 0, 0, err
+	}
+	return res.MatchedCount, res.ModifiedCount, nil
+}
+
 // ClassifyBatchUpdateResult classifies the execution result.
 func ClassifyBatchUpdateResult(modifiedCount int64, requested int, conflictCount, failedCount int) string {
 	// SUCCESS: modified == requested AND conflicts == 0 AND failures == 0
@@ -473,15 +539,37 @@ func ClassifyBatchUpdateResult(modifiedCount int64, requested int, conflictCount
 }
 
 // ExecuteFrozenSubscriberBatchUpdate executes a frozen v2 batch update with per-target CAS.
+// Architecture: assert frozen → all-target preflight → final per-target CAS.
+// The preflight barrier is independent of the final CAS (race may occur between them).
 func ExecuteFrozenSubscriberBatchUpdate(
 	ctx context.Context,
 	frozen *FrozenBatchUpdateV2,
-	repo *Repository,
+	store BatchUpdateStore,
 ) (*BatchUpdateExecutionResult, error) {
 	if err := AssertFrozenBatchUpdateV2(frozen); err != nil {
 		return nil, err
 	}
 
+	// Phase 1: ALL-TARGET PRECONDITION BARRIER
+	// Load every target, recompute precondition hash, reject if ANY missing/drifted.
+	// Zero writes on visible drift.
+	for _, target := range frozen.Targets {
+		current, err := store.LoadBatchUpdateTarget(ctx, target.Imsi)
+		if err != nil {
+			return nil, &SubscriberGovernanceError{Code: "SUBSCRIBER_BATCH_UPDATE_FAILED", Details: map[string]any{"imsi": target.Imsi, "error": err.Error()}}
+		}
+		if current == nil {
+			return nil, &SubscriberGovernanceError{Code: "SUBSCRIBER_BATCH_PRECONDITION_CHANGED", Details: map[string]any{"imsi": target.Imsi, "reason": "not_found"}}
+		}
+		// Recompute before hash from live state
+		currentBefore := extractUpdateFields(current, frozen.FieldNames)
+		currentHash := fingerprintMap(currentBefore)
+		if currentHash != target.PreconditionHash {
+			return nil, &SubscriberGovernanceError{Code: "SUBSCRIBER_BATCH_PRECONDITION_CHANGED", Details: map[string]any{"imsi": target.Imsi, "reason": "drifted"}}
+		}
+	}
+
+	// Phase 2: FINAL PER-TARGET CAS (independent of preflight — race may occur)
 	result := &BatchUpdateExecutionResult{
 		Requested:            len(frozen.Targets),
 		FieldNames:           frozen.FieldNames,
@@ -489,30 +577,23 @@ func ExecuteFrozenSubscriberBatchUpdate(
 	}
 
 	for _, target := range frozen.Targets {
-		// CAS: filter with {imsi, ...expected_before}, $set after, upsert: false
-		filter := bson.M{"imsi": target.Imsi}
-		for key, val := range target.Before {
-			filter[key] = val
-		}
-
-		update := bson.M{"$set": target.After}
-		res, err := repo.subscribers.UpdateOne(ctx, filter, update)
+		matched, modified, err := store.ConditionalUpdateBatchTarget(ctx, target.Imsi, target.Before, target.After)
 		if err != nil {
 			result.FailedImsis = append(result.FailedImsis, target.Imsi)
 			continue
 		}
 
-		if res.MatchedCount == 0 {
-			// Precondition mismatch — subscriber state changed
+		if matched == 0 {
+			// CAS conflict — subscriber state changed between preflight and now
 			result.ConflictImsis = append(result.ConflictImsis, target.Imsi)
-		} else if res.ModifiedCount > 0 {
+		} else if modified > 0 {
 			result.ModifiedImsis = append(result.ModifiedImsis, target.Imsi)
-			result.MatchedCount += res.MatchedCount
-			result.ModifiedCount += res.ModifiedCount
+			result.MatchedCount += matched
+			result.ModifiedCount += modified
 		} else {
 			// Matched but not modified (values already equal)
 			result.ModifiedImsis = append(result.ModifiedImsis, target.Imsi)
-			result.MatchedCount += res.MatchedCount
+			result.MatchedCount += matched
 		}
 	}
 

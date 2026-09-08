@@ -31,6 +31,9 @@ type WriteHandler struct {
 	approvalSvc ApprovalCreator
 	approvalQry ApprovalQuerier
 	auditWriter *audit.Writer
+	// Test seams: when set, used instead of repo for batch update operations.
+	batchStore BatchUpdateStore // nil → use repo
+	findSub    SubscriberFinder // nil → use repo.FindSubscriberByImsi
 }
 
 // UserRepository is the interface for looking up fresh user state.
@@ -46,6 +49,7 @@ type ApprovalCreator interface {
 // ApprovalQuerier is the interface for querying approval requests.
 type ApprovalQuerier interface {
 	ListApprovals(ctx context.Context, q approval.ListQuery) (*approval.ListResult, error)
+	ListActiveByAction(ctx context.Context, action string) ([]approval.ApprovalDocument, error)
 }
 
 // NewWriteHandler creates a new subscriber write handler.
@@ -448,9 +452,55 @@ func (h *WriteHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// effectiveBatchStore returns the batch update store (test seam or repo).
+func (h *WriteHandler) effectiveBatchStore() BatchUpdateStore {
+	if h.batchStore != nil {
+		return h.batchStore
+	}
+	return h.repo
+}
+
+// effectiveFindSub returns the subscriber finder (test seam or repo).
+func (h *WriteHandler) effectiveFindSub() SubscriberFinder {
+	if h.findSub != nil {
+		return h.findSub
+	}
+	return func(ctx context.Context, imsi string) (map[string]any, error) {
+		return h.repo.FindSubscriberByImsi(ctx, imsi)
+	}
+}
+
 // isExecutable checks if a governance result allows execution.
 func isExecutable(result governance.Result) bool {
 	return result.Decision != governance.Disabled && result.Decision != governance.RuntimeOnly
+}
+
+// handleBatchUpdateError maps batch update governance errors to HTTP responses.
+// Matches Node batch-update error status mapping exactly.
+func (h *WriteHandler) handleBatchUpdateError(w http.ResponseWriter, err error) {
+	govErr, ok := err.(*SubscriberGovernanceError)
+	if !ok {
+		response.Error(w, http.StatusInternalServerError, "Internal Server Error", "INTERNAL_ERROR")
+		return
+	}
+	statusMap := map[string]int{
+		"SUBSCRIBER_NOT_FOUND":                    http.StatusNotFound,
+		"ACTIVE_CHANGE_CONFLICT":                  http.StatusConflict,
+		"SUBSCRIBER_BATCH_PRECONDITION_CHANGED":   http.StatusConflict,
+		"SUBSCRIBER_BATCH_NO_EFFECT":              http.StatusBadRequest,
+		"INVALID_SUBSCRIBER_BATCH_UPDATE_PAYLOAD": http.StatusBadRequest,
+		"BATCH_SIZE_EXCEEDED":                     http.StatusBadRequest,
+		"APPROVAL_SNAPSHOT_TOO_LARGE":             http.StatusBadRequest,
+	}
+	status, ok := statusMap[govErr.Code]
+	if !ok {
+		status = http.StatusBadRequest
+	}
+	resp := map[string]any{"error": govErr.Code, "code": govErr.Code}
+	if govErr.Details != nil {
+		resp["details"] = govErr.Details
+	}
+	response.JSON(w, status, resp)
 }
 
 // handleGovernanceError maps governance errors to HTTP responses.
@@ -927,9 +977,9 @@ func (h *WriteHandler) BatchUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Prepare frozen v2 contract
-	frozen, err := PrepareFrozenBatchUpdate(r.Context(), req.Imsis, req.Patch, h.repo)
+	frozen, err := PrepareFrozenBatchUpdate(r.Context(), req.Imsis, req.Patch, h.effectiveFindSub())
 	if err != nil {
-		h.handleGovernanceError(w, err)
+		h.handleBatchUpdateError(w, err)
 		return
 	}
 
@@ -999,7 +1049,7 @@ func (h *WriteHandler) executeDirectBatchUpdate(
 	fresh *FreshActor,
 ) {
 	// Execute via reusable executor
-	result, err := ExecuteFrozenSubscriberBatchUpdate(r.Context(), frozen, h.repo)
+	result, err := ExecuteFrozenSubscriberBatchUpdate(r.Context(), frozen, h.effectiveBatchStore())
 	if err != nil {
 		h.handleGovernanceError(w, err)
 		return
@@ -1161,30 +1211,13 @@ type ActiveApprovalMatch struct {
 
 // findExistingBatchChange checks for active approvals with the same fingerprint or overlapping targets+fields.
 // Returns: duplicate (exact fingerprint), conflict (overlapping targets+fields), or nil (no match).
+// Uses dedicated ListActiveByAction query — no pagination blind spots.
 func (h *WriteHandler) findExistingBatchChange(ctx context.Context, fingerprint string, imsis []string, fields []string) (*ActiveApprovalMatch, error) {
-	// Query all three active states: pending, approved, executing
-	result, err := h.approvalQry.ListApprovals(ctx, approval.ListQuery{
-		Status:   "pending",
-		PageSize: 100,
-	})
+	// Dedicated query: ALL active SUBSCRIBER_BATCH_UPDATE approvals (no pagination limit)
+	allApprovals, err := h.approvalQry.ListActiveByAction(ctx, "SUBSCRIBER_BATCH_UPDATE")
 	if err != nil {
 		return nil, err
 	}
-	result2, err := h.approvalQry.ListApprovals(ctx, approval.ListQuery{
-		Status:   "approved",
-		PageSize: 100,
-	})
-	if err != nil {
-		return nil, err
-	}
-	result3, err := h.approvalQry.ListApprovals(ctx, approval.ListQuery{
-		Status:   "executing",
-		PageSize: 100,
-	})
-	if err != nil {
-		return nil, err
-	}
-	allApprovals := append(append(result.Approvals, result2.Approvals...), result3.Approvals...)
 
 	requestedImsis := make(map[string]bool, len(imsis))
 	for _, imsi := range imsis {
@@ -1197,18 +1230,14 @@ func (h *WriteHandler) findExistingBatchChange(ctx context.Context, fingerprint 
 
 	for i := range allApprovals {
 		a := &allApprovals[i]
-		// Only check batch operations
-		if a.Action != "SUBSCRIBER_BATCH_UPDATE" && a.Action != "SUBSCRIBER_BATCH_CREATE" {
-			continue
-		}
 		// Duplicate check: same fingerprint
 		if a.OperationFingerprint == fingerprint {
-			return &ActiveApprovalMatch{Type: "duplicate", Approval: &a.ApprovalDocument}, nil
+			return &ActiveApprovalMatch{Type: "duplicate", Approval: a}, nil
 		}
 
 		// Conflict check: overlapping targets and fields
-		payloadTargets := extractApprovalTargets(&a.ApprovalDocument)
-		payloadFields := extractApprovalFields(&a.ApprovalDocument)
+		payloadTargets := extractApprovalTargets(a)
+		payloadFields := extractApprovalFields(a)
 
 		targetOverlap := false
 		for _, t := range payloadTargets {
@@ -1229,7 +1258,7 @@ func (h *WriteHandler) findExistingBatchChange(ctx context.Context, fingerprint 
 			}
 		}
 		if fieldOverlap {
-			return &ActiveApprovalMatch{Type: "conflict", Approval: &a.ApprovalDocument}, nil
+			return &ActiveApprovalMatch{Type: "conflict", Approval: a}, nil
 		}
 	}
 

@@ -317,6 +317,31 @@ func (r *Repository) ListApprovals(ctx context.Context, q ListQuery) (*ListResul
 	}, nil
 }
 
+// ListActiveByAction returns ALL active approvals for a given action.
+// Active statuses: pending, approved, executing.
+// No pagination — returns complete result set for conflict detection.
+func (r *Repository) ListActiveByAction(ctx context.Context, action string) ([]ApprovalDocument, error) {
+	filter := bson.M{
+		"action": action,
+		"status": bson.M{"$in": bson.A{"pending", "approved", "executing"}},
+	}
+	opts := options.Find().
+		SetSort(bson.D{{Key: "createdAt", Value: -1}}).
+		SetProjection(bson.M{"_id": 0})
+
+	cursor, err := r.approvals.Find(ctx, filter, opts)
+	if err != nil {
+		return nil, fmt.Errorf("approval find active: %w", err)
+	}
+	defer cursor.Close(ctx)
+
+	var docs []ApprovalDocument
+	if err := cursor.All(ctx, &docs); err != nil {
+		return nil, fmt.Errorf("approval decode active: %w", err)
+	}
+	return docs, nil
+}
+
 // GetApproval retrieves a single approval by ID.
 func (r *Repository) GetApproval(ctx context.Context, id string) (*ApprovalDocument, error) {
 	var doc bson.M

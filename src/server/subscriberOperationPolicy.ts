@@ -123,16 +123,29 @@ function normalizePatch(value: unknown): GovernedSubscriberPatch {
   return output;
 }
 
+// INTENTIONAL_VALIDATION_HARDENING: require RFC3339/ISO-8601 with time component and timezone/offset
+// Rejects bare date strings like "2026-09-08" that Date.parse would accept
+const RFC3339_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
+
+function normalizeTimestamp(value: unknown, field: string): string {
+  if (typeof value !== 'string' || !RFC3339_RE.test(value)) throw new SubscriberBatchGovernanceError('INVALID_BATCH_REQUEST', { field });
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) throw new SubscriberBatchGovernanceError('INVALID_BATCH_REQUEST', { field });
+  return date.toISOString();
+}
+
 function normalizeMaintenanceWindow(value: unknown): SubscriberBatchChangeRequest['maintenanceWindow'] | undefined {
   if (value === undefined) return undefined;
   const window = record(value);
   if (!window) throw new SubscriberBatchGovernanceError('INVALID_BATCH_REQUEST');
   rejectUnknownKeys(window, new Set(['start', 'end', 'timeZone']), 'INVALID_BATCH_REQUEST');
-  const start = typeof window.start === 'string' ? window.start : '';
-  const end = typeof window.end === 'string' ? window.end : '';
-  if (!Number.isFinite(Date.parse(start)) || !Number.isFinite(Date.parse(end)) || Date.parse(start) >= Date.parse(end)) throw new SubscriberBatchGovernanceError('INVALID_BATCH_REQUEST');
-  const timeZone = typeof window.timeZone === 'string' && window.timeZone.trim() ? window.timeZone.trim().slice(0, 100) : undefined;
-  return { start: new Date(start).toISOString(), end: new Date(end).toISOString(), timeZone };
+  const start = normalizeTimestamp(window.start, 'maintenanceWindow.start');
+  const end = normalizeTimestamp(window.end, 'maintenanceWindow.end');
+  if (start >= end) throw new SubscriberBatchGovernanceError('INVALID_BATCH_REQUEST');
+  const timeZoneRaw = typeof window.timeZone === 'string' ? window.timeZone.trim() : '';
+  if (timeZoneRaw.length > 100) throw new SubscriberBatchGovernanceError('INVALID_BATCH_REQUEST', { field: 'timeZone' });
+  const timeZone = timeZoneRaw || undefined;
+  return { start, end, timeZone };
 }
 
 export function validateSubscriberBatchChangeRequest(value: unknown): SubscriberBatchChangeRequest {
@@ -146,7 +159,9 @@ export function validateSubscriberBatchChangeRequest(value: unknown): Subscriber
   if (new Set(imsis).size !== imsis.length) throw new SubscriberBatchGovernanceError('INVALID_BATCH_REQUEST', { reason: 'DUPLICATE_IMSI' });
   const reason = typeof body.reason === 'string' ? body.reason.trim() : '';
   if (reason.length < 3 || reason.length > 1000) throw new SubscriberBatchGovernanceError('INVALID_BATCH_REQUEST', { reason: 'REASON_REQUIRED' });
-  const ticketId = typeof body.ticketId === 'string' && body.ticketId.trim() ? body.ticketId.trim().slice(0, 200) : undefined;
+  const ticketIdRaw = typeof body.ticketId === 'string' ? body.ticketId.trim() : '';
+  if (ticketIdRaw.length > 200) throw new SubscriberBatchGovernanceError('INVALID_BATCH_REQUEST', { field: 'ticketId' });
+  const ticketId = ticketIdRaw || undefined;
   return { imsis, patch: normalizePatch(body.patch), reason, ticketId, maintenanceWindow: normalizeMaintenanceWindow(body.maintenanceWindow) };
 }
 
@@ -359,9 +374,13 @@ export async function executeFrozenSubscriberBatchUpdate(payload: unknown): Prom
   const modifiedImsis: string[] = [];
   const conflictImsis: string[] = [];
   const failedImsis: string[] = [];
+  let matchedCount = 0;
+  let modifiedCount = 0;
   for (const target of frozen.targets) {
     try {
       const result = await applyGovernedSubscriberConditionalUpdates([{ imsi: target.imsi, expected: target.before, next: target.after }]);
+      matchedCount += result.matchedCount;
+      modifiedCount += result.modifiedCount;
       if (result.matchedCount === 1 && result.modifiedCount === 1) {
         modifiedImsis.push(target.imsi);
       } else if (result.matchedCount === 0) {
@@ -373,8 +392,6 @@ export async function executeFrozenSubscriberBatchUpdate(payload: unknown): Prom
       failedImsis.push(target.imsi);
     }
   }
-  const matchedCount = modifiedImsis.length + conflictImsis.length;
-  const modifiedCount = modifiedImsis.length;
   const partialMutation = modifiedCount > 0 && (conflictImsis.length > 0 || failedImsis.length > 0);
   return {
     requested: frozen.targetCount,
