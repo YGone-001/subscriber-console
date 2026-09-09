@@ -75,6 +75,11 @@ export async function POST(request: Request) {
     if (!validation.ok) return NextResponse.json({ error: validation.error, code: 'INVALID_BULK_DELETE_REQUEST' }, { status: 400 });
     if (validation.value.length === 0) return NextResponse.json({ error: 'imsiList cannot be empty', code: 'INVALID_BULK_DELETE_REQUEST' }, { status: 400 });
 
+    // Section 20: Duplicate IMSI request validation
+    if (new Set(validation.value).size !== validation.value.length) {
+      return NextResponse.json({ error: 'INVALID_BULK_DELETE_REQUEST', code: 'INVALID_BULK_DELETE_REQUEST' }, { status: 400 });
+    }
+
     // Fresh actor validation
     const account = await validateCurrentAccount({ username: auth.auth.user, role: auth.auth.role, sv: auth.auth.sessionVersion });
     const actorRole = account.normalizedRole || account.role || 'viewer';
@@ -252,12 +257,18 @@ async function executeDirectBulkDelete(
     }, { status: 503 });
   }
 
-  // HTTP mapping (Section 13)
+  // HTTP mapping (Section 11-12: exact canonical response)
   if (classification === 'SUCCESS') {
     return NextResponse.json({
       outcome: 'executed',
+      message: 'Subscribers deleted successfully',
+      result: {
+        requested: result.requested,
+        deleted: result.deletedCount,
+        deletedImsis: result.deletedImsis,
+        ocsCleanupFailedImsis: result.ocsCleanupFailedImsis,
+      },
       requiresApproval: false,
-      result,
     }, { status: 200 });
   }
 

@@ -3,7 +3,7 @@ import { auditRequestContext } from '@/lib/audit/record';
 import { validateCurrentAccount } from '@/lib/accountSession';
 import { executeApproval } from '@/server/approvalExecutors';
 import { executeFrozenSubscriberBatchChange, executeFrozenSubscriberBatchUpdate, assertFrozenSubscriberBatchUpdateV2, assertFrozenSubscriberBatchPayload, classifyBatchUpdateResult, SubscriberBatchGovernanceError } from '@/server/subscriberOperationPolicy';
-import { executeFrozenSubscriberBulkDelete, assertFrozenBulkDeleteV2, classifyBulkDeleteResult, executeFrozenSubscriberDelete, executeFrozenSubscriberUpdate } from '@/server/subscriberSingleGovernance';
+import { executeFrozenSubscriberBulkDelete, executeFrozenSubscriberBulkDeleteV2, assertFrozenBulkDeleteV2, classifyBulkDeleteResult, executeFrozenSubscriberDelete, executeFrozenSubscriberUpdate } from '@/server/subscriberSingleGovernance';
 import { assertGovernedOperationCoverage } from '@/server/subscriberGovernanceRegistry';
 import { executeFrozenOcsBalanceAdjustment, OcsBalanceGovernanceError } from '@/server/ocsBalanceGovernance';
 import { assertOcsGovernedOperationCoverage } from '@/server/ocsGovernanceRegistry';
@@ -108,24 +108,115 @@ const defaultExecutor: GovernedApprovalExecutor = {
       }
       return { ...result, classification };
     }
-    if (approval.action === 'SUBSCRIBER_UPDATE' || approval.action === 'SUBSCRIBER_DELETE' || approval.action === 'SUBSCRIBER_BULK_DELETE') {
-      // v1/v2 branching for bulk delete (Section 23)
-      let result: unknown;
-      if (approval.action === 'SUBSCRIBER_BULK_DELETE') {
-        const payloadVersion = approval.payload && typeof approval.payload === 'object' && 'version' in approval.payload ? (approval.payload as Record<string, unknown>).version : undefined;
-        if (payloadVersion === 'subscriber-bulk-delete-v2') {
-          // v2: already asserted and executed with CAS + OCS separation
-          result = await executeFrozenSubscriberBulkDelete(approval.payload);
-        } else {
-          // v1: legacy path
-          result = await executeFrozenSubscriberBulkDelete(approval.payload);
-        }
+    // Section 2: Dedicated Bulk Delete branch BEFORE single-operation branch
+    if (approval.action === 'SUBSCRIBER_BULK_DELETE') {
+      const payloadVersion = approval.payload && typeof approval.payload === 'object' && 'version' in approval.payload ? (approval.payload as Record<string, unknown>).version : undefined;
+
+      let result: {
+        requested: number;
+        deletedImsis: string[];
+        conflictImsis: string[];
+        failedImsis: string[];
+        ocsCleanedImsis: string[];
+        ocsCleanupFailedImsis: string[];
+        deletedCount: number;
+        partialMutation: boolean;
+        mutationCommitted: boolean;
+        operationFingerprint: string;
+      };
+
+      if (payloadVersion === 'subscriber-bulk-delete-v2') {
+        // Section 3: v2 - assert and execute with shared v2 executor
+        const frozen = assertFrozenBulkDeleteV2(approval.payload);
+        result = await executeFrozenSubscriberBulkDeleteV2(frozen);
       } else {
-        result = approval.action === 'SUBSCRIBER_UPDATE'
-          ? await executeFrozenSubscriberUpdate(approval.payload)
-          : await executeFrozenSubscriberDelete(approval.payload);
+        // Section 4: v1 - legacy path remains executable
+        const v1Result = await executeFrozenSubscriberBulkDelete(approval.payload) as {
+          requested: number;
+          deleted: number;
+          targets: string[];
+          operationFingerprint: string;
+        };
+        // v1 returns different shape, normalize to v2 structure
+        result = {
+          requested: v1Result.requested,
+          deletedImsis: v1Result.targets || [],
+          conflictImsis: [],
+          failedImsis: [],
+          ocsCleanedImsis: [],
+          ocsCleanupFailedImsis: [],
+          deletedCount: v1Result.deleted,
+          partialMutation: v1Result.deleted > 0 && v1Result.deleted < v1Result.requested,
+          mutationCommitted: v1Result.deleted > 0,
+          operationFingerprint: v1Result.operationFingerprint,
+        };
       }
-      const action = approval.action === 'SUBSCRIBER_UPDATE' ? 'subscriber.update' : approval.action === 'SUBSCRIBER_DELETE' ? 'subscriber.delete' : 'subscriber.batch.delete';
+
+      // Section 12: Classification
+      const classification = classifyBulkDeleteResult(
+        result.deletedCount,
+        result.requested,
+        result.conflictImsis.length,
+        result.failedImsis.length,
+        result.ocsCleanupFailedImsis.length,
+      );
+
+      // Section 9/19: Business audit
+      const auditResult = classification === 'SUCCESS' ? 'success' : 'failed';
+      try {
+        await writeAuditLog({
+          actor: actor || { type: 'system', userId: 'system', username: 'system' },
+          module: 'subscribers',
+          action: 'subscriber.batch.delete',
+          resource: { type: 'subscriber_batch', id: 'bulk-delete' },
+          targetId: approval.targetId,
+          approvalId: approval.id,
+          riskLevel: approval.riskLevel,
+          result: auditResult,
+          reason: approval.reason,
+          before: approval.before,
+          after: null,
+          metadata: {
+            executionId: approval.execution?.id,
+            operationFingerprint: approval.operationFingerprint,
+            requested: result.requested,
+            deletedCount: result.deletedCount,
+            conflictCount: result.conflictImsis.length,
+            failedCount: result.failedImsis.length,
+            ocsCleanupFailureCount: result.ocsCleanupFailedImsis.length,
+            classification,
+            partialMutation: result.partialMutation,
+            mutationCommitted: result.mutationCommitted,
+          },
+          ...auditRequestContext(request),
+        }, { failureMode: 'strict' });
+      } catch {
+        // Section 10: Audit failure
+        throw new ApprovalExecutionError('AUDIT_UNAVAILABLE', 503, approval, result.mutationCommitted, { ...result, classification });
+      }
+
+      // Section 6-8: Classification-based error handling
+      if (classification === 'PARTIAL_WRITE') {
+        throw new ApprovalExecutionError('SUBSCRIBER_BULK_DELETE_PARTIAL_WRITE', 409, approval, true, { ...result, classification });
+      }
+      if (classification === 'FAILED_NO_MUTATION') {
+        if (result.conflictImsis.length > 0) {
+          // Section 7: Conflict
+          throw new ApprovalExecutionError('SUBSCRIBER_BULK_DELETE_PRECONDITION_CHANGED', 409, approval, false, { ...result, classification });
+        }
+        // Section 8: Storage failure
+        throw new ApprovalExecutionError('SUBSCRIBER_BULK_DELETE_FAILED', 500, approval, false, { ...result, classification });
+      }
+
+      // Section 5: SUCCESS
+      return { ...result, classification };
+    }
+
+    if (approval.action === 'SUBSCRIBER_UPDATE' || approval.action === 'SUBSCRIBER_DELETE') {
+      const result = approval.action === 'SUBSCRIBER_UPDATE'
+        ? await executeFrozenSubscriberUpdate(approval.payload)
+        : await executeFrozenSubscriberDelete(approval.payload);
+      const action = approval.action === 'SUBSCRIBER_UPDATE' ? 'subscriber.update' : 'subscriber.delete';
       try {
         await writeAuditLog({
           actor: actor || { type: 'system', userId: 'system', username: 'system' }, module: 'subscribers', action,

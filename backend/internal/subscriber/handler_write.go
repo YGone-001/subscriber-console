@@ -1597,8 +1597,9 @@ func (h *WriteHandler) executeDirectBulkDelete(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	// Success response
-	if classification == "SUCCESS" {
+	// Section 18: Classification-based HTTP mapping
+	switch classification {
+	case "SUCCESS":
 		response.JSON(w, http.StatusOK, map[string]any{
 			"outcome": "executed",
 			"message": "Subscribers deleted successfully",
@@ -1610,14 +1611,32 @@ func (h *WriteHandler) executeDirectBulkDelete(w http.ResponseWriter, r *http.Re
 			},
 			"requiresApproval": false,
 		})
-	} else {
-		// Partial or failed
+	case "PARTIAL_WRITE":
 		response.JSON(w, http.StatusConflict, map[string]any{
-			"code":      ErrBulkDeletePartialWrite,
-			"error":     ErrBulkDeletePartialWrite,
-			"committed": execResult.MutationCommitted,
-			"result":    sanitizeBulkDeleteResult(execResult),
+			"code":            ErrBulkDeletePartialWrite,
+			"error":           ErrBulkDeletePartialWrite,
+			"committed":       true,
+			"partialMutation": true,
+			"result":          sanitizeBulkDeleteResult(execResult),
 		})
+	case "FAILED_NO_MUTATION":
+		if len(execResult.ConflictImsis) > 0 {
+			response.JSON(w, http.StatusConflict, map[string]any{
+				"code":            ErrBulkDeletePreconditionChanged,
+				"error":           ErrBulkDeletePreconditionChanged,
+				"committed":       false,
+				"partialMutation": false,
+				"result":          sanitizeBulkDeleteResult(execResult),
+			})
+		} else {
+			response.JSON(w, http.StatusInternalServerError, map[string]any{
+				"code":            ErrBulkDeleteFailed,
+				"error":           ErrBulkDeleteFailed,
+				"committed":       false,
+				"partialMutation": false,
+				"result":          sanitizeBulkDeleteResult(execResult),
+			})
+		}
 	}
 }
 
