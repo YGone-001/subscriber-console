@@ -8,6 +8,8 @@ import {
 import type { XcloudSubscriberDocument } from '@/types/xcloud';
 import {
   deleteSubscriber,
+  conditionalDeleteSubscriber,
+  deleteSubscriberOcsProvisioning,
   findSubscriberDocument,
   updateSubscriberFromLegacy,
   type LegacySubscriberUpdatePayload,
@@ -258,7 +260,7 @@ export async function executeFrozenSubscriberBulkDelete(payload: unknown) {
   const version = p?.version;
 
   if (version === 'subscriber-bulk-delete-v2') {
-    return executeBulkDeleteV2(assertFrozenBulkDeleteV2(payload));
+    return executeFrozenSubscriberBulkDeleteV2(assertFrozenBulkDeleteV2(payload));
   }
 
   // v1 legacy path
@@ -278,7 +280,7 @@ export async function executeFrozenSubscriberBulkDelete(payload: unknown) {
 }
 
 // Section 14: v2 execution with OCS cleanup separation
-async function executeBulkDeleteV2(frozen: FrozenSubscriberBulkDeleteV2) {
+export async function executeFrozenSubscriberBulkDeleteV2(frozen: FrozenSubscriberBulkDeleteV2) {
   const result = {
     requested: frozen.targetCount,
     deletedImsis: [] as string[],
@@ -340,9 +342,17 @@ async function executeBulkDeleteV2(frozen: FrozenSubscriberBulkDeleteV2) {
       continue;
     }
 
-    // CAS delete
-    const ok = await deleteSubscriber(target.imsi, current);
-    if (!ok) {
+    // CAS delete (subscriber only, no OCS cleanup)
+    try {
+      const ok = await conditionalDeleteSubscriber(target.imsi, current);
+      if (!ok) {
+        result.conflictImsis.push(target.imsi);
+        const classification = classifyBulkDeleteResult(result.deletedCount, result.requested, result.conflictImsis.length, result.failedImsis.length, result.ocsCleanupFailedImsis.length);
+        result.partialMutation = classification === 'PARTIAL_WRITE';
+        result.mutationCommitted = result.deletedCount > 0;
+        continue;
+      }
+    } catch {
       result.failedImsis.push(target.imsi);
       const classification = classifyBulkDeleteResult(result.deletedCount, result.requested, result.conflictImsis.length, result.failedImsis.length, result.ocsCleanupFailedImsis.length);
       result.partialMutation = classification === 'PARTIAL_WRITE';
@@ -350,9 +360,18 @@ async function executeBulkDeleteV2(frozen: FrozenSubscriberBulkDeleteV2) {
       continue;
     }
 
+    // Subscriber deleted successfully
     result.deletedImsis.push(target.imsi);
     result.deletedCount++;
     result.mutationCommitted = true;
+
+    // OCS cleanup - separate from subscriber deletion
+    try {
+      await deleteSubscriberOcsProvisioning(target.imsi);
+      result.ocsCleanedImsis.push(target.imsi);
+    } catch {
+      result.ocsCleanupFailedImsis.push(target.imsi);
+    }
   }
 
   // Final classification

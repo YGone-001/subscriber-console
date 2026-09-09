@@ -1300,10 +1300,42 @@ func asStringAnyMap(v any) (map[string]any, bool) {
 }
 
 // Section P: BSON-safe target extraction from approval payload.
+// extractApprovalTargets extracts target IMSIs from an approval document.
+// Action-aware: SUBSCRIBER_UPDATE/DELETE use payload.imsi,
+// SUBSCRIBER_BATCH_UPDATE/BULK_DELETE use payload.targets[].imsi.
 func extractApprovalTargets(a *approval.ApprovalDocument) []string {
 	if a.Payload == nil {
 		return nil
 	}
+
+	// SUBSCRIBER_UPDATE / SUBSCRIBER_DELETE: payload.imsi
+	if a.Action == "SUBSCRIBER_UPDATE" || a.Action == "SUBSCRIBER_DELETE" {
+		if imsi, ok := a.Payload["imsi"].(string); ok && len(imsi) == 15 {
+			return []string{imsi}
+		}
+		// Legacy fallback: targetId might contain IMSI
+		if a.TargetID != "" && len(a.TargetID) >= 15 {
+			// Extract IMSI from "subscriber:IMSI" format
+			parts := strings.Split(a.TargetID, ":")
+			for _, part := range parts {
+				if len(part) == 15 {
+					allDigits := true
+					for _, c := range part {
+						if c < '0' || c > '9' {
+							allDigits = false
+							break
+						}
+					}
+					if allDigits {
+						return []string{part}
+					}
+				}
+			}
+		}
+		return nil
+	}
+
+	// SUBSCRIBER_BATCH_UPDATE / SUBSCRIBER_BULK_DELETE: payload.targets[].imsi
 	targetsRaw, ok := asAnySlice(a.Payload["targets"])
 	if !ok {
 		return nil

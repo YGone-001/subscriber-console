@@ -762,6 +762,20 @@ export async function deleteSubscriber(imsi: string, expectedDocument?: XcloudSu
   return result.deletedCount > 0;
 }
 
+/** CAS-only delete. Returns true if document matched and was deleted. */
+export async function conditionalDeleteSubscriber(imsi: string, expectedDocument: XcloudSubscriberDocument): Promise<boolean> {
+  const collection = await subscribersCollection();
+  const value = { ...expectedDocument } as Record<string, unknown>;
+  delete value._id;
+  const result = await collection.deleteOne(value);
+  return result.deletedCount > 0;
+}
+
+/** OCS-only cleanup. Does NOT delete subscriber. */
+export async function deleteSubscriberOcsProvisioning(imsi: string): Promise<void> {
+  await deleteOcsProvisioning(imsi);
+}
+
 export async function precheckSubscriberImsis(imsis: string[]) {
   const validImsis = imsis.map((imsi) => String(imsi).trim()).filter(isValidImsi);
   const existing = await existingImsiSet(validImsis);

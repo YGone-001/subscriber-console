@@ -2173,62 +2173,62 @@ func TestBulkDelete_CASConflict(t *testing.T) {
 func TestBulkDelete_PartialMutation(t *testing.T) {
 	// partialMutation must equal (classification == PARTIAL_WRITE)
 	testCases := []struct {
-		name              string
-		deletedCount      int
-		requested         int
-		conflictCount     int
-		failedCount       int
-		ocsCleanupFailure int
+		name               string
+		deletedCount       int
+		requested          int
+		conflictCount      int
+		failedCount        int
+		ocsCleanupFailure  int
 		wantClassification string
 		wantPartial        bool
 	}{
 		{
-			name:              "all deleted",
-			deletedCount:      3,
-			requested:         3,
-			conflictCount:     0,
-			failedCount:       0,
-			ocsCleanupFailure: 0,
+			name:               "all deleted",
+			deletedCount:       3,
+			requested:          3,
+			conflictCount:      0,
+			failedCount:        0,
+			ocsCleanupFailure:  0,
 			wantClassification: "SUCCESS",
 			wantPartial:        false,
 		},
 		{
-			name:              "partial with conflicts",
-			deletedCount:      2,
-			requested:         3,
-			conflictCount:     1,
-			failedCount:       0,
-			ocsCleanupFailure: 0,
+			name:               "partial with conflicts",
+			deletedCount:       2,
+			requested:          3,
+			conflictCount:      1,
+			failedCount:        0,
+			ocsCleanupFailure:  0,
 			wantClassification: "PARTIAL_WRITE",
 			wantPartial:        true,
 		},
 		{
-			name:              "partial with failures",
-			deletedCount:      1,
-			requested:         3,
-			conflictCount:     0,
-			failedCount:       2,
-			ocsCleanupFailure: 0,
+			name:               "partial with failures",
+			deletedCount:       1,
+			requested:          3,
+			conflictCount:      0,
+			failedCount:        2,
+			ocsCleanupFailure:  0,
 			wantClassification: "PARTIAL_WRITE",
 			wantPartial:        true,
 		},
 		{
-			name:              "zero deletions",
-			deletedCount:      0,
-			requested:         3,
-			conflictCount:     3,
-			failedCount:       0,
-			ocsCleanupFailure: 0,
+			name:               "zero deletions",
+			deletedCount:       0,
+			requested:          3,
+			conflictCount:      3,
+			failedCount:        0,
+			ocsCleanupFailure:  0,
 			wantClassification: "FAILED_NO_MUTATION",
 			wantPartial:        false,
 		},
 		{
-			name:              "ocs cleanup failures don't affect partialMutation",
-			deletedCount:      3,
-			requested:         3,
-			conflictCount:     0,
-			failedCount:       0,
-			ocsCleanupFailure: 2,
+			name:               "ocs cleanup failures don't affect partialMutation",
+			deletedCount:       3,
+			requested:          3,
+			conflictCount:      0,
+			failedCount:        0,
+			ocsCleanupFailure:  2,
 			wantClassification: "PARTIAL_WRITE",
 			wantPartial:        true,
 		},
