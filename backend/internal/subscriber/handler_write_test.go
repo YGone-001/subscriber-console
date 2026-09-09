@@ -2694,10 +2694,11 @@ func TestBulkDelete_SnapshotCapExceeded(t *testing.T) {
 	repo.deleteCASResult = true
 
 	// First verify the snapshot actually exceeds 512 KiB
+	// This MUST fail-closed: if PrepareFrozenBulkDelete succeeds, the test fails
 	frozen, err := PrepareFrozenBulkDelete(context.Background(), imsiList, repo)
 	if err == nil {
-		// If prepare succeeded, snapshot is under cap - need more data
-		t.Skipf("Snapshot %d bytes under cap for %d targets - need more data", frozen.SnapshotBytes, len(imsiList))
+		// Snapshot under cap = test construction failure, not acceptable
+		t.Fatalf("Snapshot %d bytes under cap for %d targets - test construction failure: data must exceed 512 KiB", frozen.SnapshotBytes, len(imsiList))
 	}
 	govErr, ok := err.(*SubscriberGovernanceError)
 	if !ok {
