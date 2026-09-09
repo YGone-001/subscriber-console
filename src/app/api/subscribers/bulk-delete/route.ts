@@ -12,6 +12,43 @@ import type { GovernanceActor } from '@/types/governance';
 
 export const dynamic = 'force-dynamic';
 
+// Section 14: DI seam for testing
+export interface BulkDeleteDeps {
+  requireCapability: typeof requireCapability;
+  enforceRateLimit: typeof enforceRateLimit;
+  validateImsiList: typeof validateImsiList;
+  validateCurrentAccount: typeof validateCurrentAccount;
+  prepareFrozenSubscriberBulkDelete: typeof prepareFrozenSubscriberBulkDelete;
+  evaluateSubscriberOperationForActor: typeof evaluateSubscriberOperationForActor;
+  listActiveSubscriberApprovals: typeof listActiveSubscriberApprovals;
+  createGovernedApproval: typeof createGovernedApproval;
+  writeAuditLog: typeof writeAuditLog;
+  executeFrozenSubscriberBulkDeleteV2?: (frozen: ReturnType<typeof prepareFrozenSubscriberBulkDelete> extends Promise<infer T> ? T : never) => Promise<{
+    requested: number;
+    deletedImsis: string[];
+    conflictImsis: string[];
+    failedImsis: string[];
+    ocsCleanedImsis: string[];
+    ocsCleanupFailedImsis: string[];
+    deletedCount: number;
+    partialMutation: boolean;
+    mutationCommitted: boolean;
+    operationFingerprint: string;
+  }>;
+}
+
+const productionBulkDeleteDeps: BulkDeleteDeps = {
+  requireCapability,
+  enforceRateLimit,
+  validateImsiList,
+  validateCurrentAccount,
+  prepareFrozenSubscriberBulkDelete,
+  evaluateSubscriberOperationForActor,
+  listActiveSubscriberApprovals,
+  createGovernedApproval,
+  writeAuditLog,
+};
+
 type ActiveApprovalMatch = { type: 'duplicate'; approval: { id: string; [key: string]: unknown } } | { type: 'conflict'; approval: { id: string; [key: string]: unknown } };
 
 /** Action-aware target extraction (Section 5). */
@@ -39,12 +76,12 @@ function extractSubscriberApprovalTargets(approval: { action: string; payload?: 
   return [];
 }
 
-async function findActiveApprovalMatch(fingerprint: string, imsis: string[]): Promise<ActiveApprovalMatch | null> {
+async function findActiveApprovalMatch(fingerprint: string, imsis: string[], deps: BulkDeleteDeps = productionBulkDeleteDeps): Promise<ActiveApprovalMatch | null> {
   const actions = ['SUBSCRIBER_UPDATE', 'SUBSCRIBER_DELETE', 'SUBSCRIBER_BATCH_UPDATE', 'SUBSCRIBER_BULK_DELETE'];
   const requestedImsis = new Set(imsis);
 
   for (const action of actions) {
-    const active = await listActiveSubscriberApprovals(action);
+    const active = await deps.listActiveSubscriberApprovals(action);
     for (const approval of active) {
       // Duplicate check: same fingerprint for BULK_DELETE
       if (action === 'SUBSCRIBER_BULK_DELETE' && approval.operationFingerprint === fingerprint) {
@@ -62,51 +99,75 @@ async function findActiveApprovalMatch(fingerprint: string, imsis: string[]): Pr
   return null;
 }
 
-export async function POST(request: Request) {
-  const auth = requireCapability(request, 'subscriber_write');
-  if (!auth.ok) return auth.response;
+// Section 14: Factory function for DI seam
+export function createBulkDeleteHandler(deps: BulkDeleteDeps = productionBulkDeleteDeps) {
+  return async function bulkDeleteHandler(request: Request) {
+    const auth = deps.requireCapability(request, 'subscriber_write');
+    if (!auth.ok) return auth.response;
 
-  const rateLimit = await enforceRateLimit(`subscribers:bulk-delete:${auth.auth.user}`, 10, 60);
-  if (!rateLimit.ok) return rateLimit.response;
+    const rateLimit = await deps.enforceRateLimit(`subscribers:bulk-delete:${auth.auth.user}`, 10, 60);
+    if (!rateLimit.ok) return rateLimit.response;
 
-  try {
-    const body = await request.json();
-    const validation = validateImsiList(body?.imsiList);
-    if (!validation.ok) return NextResponse.json({ error: validation.error, code: 'INVALID_BULK_DELETE_REQUEST' }, { status: 400 });
-    if (validation.value.length === 0) return NextResponse.json({ error: 'imsiList cannot be empty', code: 'INVALID_BULK_DELETE_REQUEST' }, { status: 400 });
+    try {
+      const body = await request.json();
+      const validation = deps.validateImsiList(body?.imsiList);
+      if (!validation.ok) return NextResponse.json({ error: validation.error, code: 'INVALID_BULK_DELETE_REQUEST' }, { status: 400 });
+      if (validation.value.length === 0) return NextResponse.json({ error: 'imsiList cannot be empty', code: 'INVALID_BULK_DELETE_REQUEST' }, { status: 400 });
 
-    // Section 20: Duplicate IMSI request validation
-    if (new Set(validation.value).size !== validation.value.length) {
-      return NextResponse.json({ error: 'INVALID_BULK_DELETE_REQUEST', code: 'INVALID_BULK_DELETE_REQUEST' }, { status: 400 });
-    }
+      // Section 20: Duplicate IMSI request validation
+      if (new Set(validation.value).size !== validation.value.length) {
+        return NextResponse.json({ error: 'INVALID_BULK_DELETE_REQUEST', code: 'INVALID_BULK_DELETE_REQUEST' }, { status: 400 });
+      }
 
-    // Fresh actor validation
-    const account = await validateCurrentAccount({ username: auth.auth.user, role: auth.auth.role, sv: auth.auth.sessionVersion });
-    const actorRole = account.normalizedRole || account.role || 'viewer';
-    const actor: GovernanceActor = { type: 'user', userId: account.userId, username: account.username || auth.auth.user, role: actorRole };
+      // Fresh actor validation
+      const account = await deps.validateCurrentAccount({ username: auth.auth.user, role: auth.auth.role, sv: auth.auth.sessionVersion });
+      const actorRole = account.normalizedRole || account.role || 'viewer';
+      const actor: GovernanceActor = { type: 'user', userId: account.userId, username: account.username || auth.auth.user, role: actorRole };
 
-    // Prepare frozen v2
-    const frozen = await prepareFrozenSubscriberBulkDelete(validation.value);
+      // Prepare frozen v2
+      const frozen = await deps.prepareFrozenSubscriberBulkDelete(validation.value);
 
-    // Snapshot size check
-    if (frozen.snapshotBytes > 512 * 1024) {
-      return NextResponse.json({ error: 'APPROVAL_SNAPSHOT_TOO_LARGE', code: 'APPROVAL_SNAPSHOT_TOO_LARGE' }, { status: 400 });
-    }
+      // Snapshot size check
+      if (frozen.snapshotBytes > 512 * 1024) {
+        return NextResponse.json({ error: 'APPROVAL_SNAPSHOT_TOO_LARGE', code: 'APPROVAL_SNAPSHOT_TOO_LARGE' }, { status: 400 });
+      }
 
-    // Evaluate governance with actor-aware policy
-    const result = evaluateSubscriberOperationForActor(SUBSCRIBER_OPERATIONS.BULK_DELETE, actorRole);
+      // Evaluate governance with actor-aware policy
+      const result = deps.evaluateSubscriberOperationForActor(SUBSCRIBER_OPERATIONS.BULK_DELETE, actorRole);
 
-    if (!result.executable) {
-      return NextResponse.json({ error: 'OPERATION_NOT_EXECUTABLE' }, { status: 409 });
-    }
+      if (!result.executable) {
+        return NextResponse.json({ error: 'OPERATION_NOT_EXECUTABLE' }, { status: 409 });
+      }
 
-    // Active change protection (Section 3: before governance decision)
-    const activeMatch = await findActiveApprovalMatch(frozen.operationFingerprint, validation.value);
+      // Active change protection (Section 3: before governance decision)
+      const activeMatch = await findActiveApprovalMatch(frozen.operationFingerprint, validation.value, deps);
 
-    // DIRECT path (super_admin/root)
-    if (result.governanceMode === 'DIRECT_GOVERNED') {
-      // ANY active conflict including exact duplicate → 409
+      // DIRECT path (super_admin/root)
+      if (result.governanceMode === 'DIRECT_GOVERNED') {
+        // ANY active conflict including exact duplicate → 409
+        if (activeMatch) {
+          return NextResponse.json({
+            error: 'ACTIVE_CHANGE_CONFLICT',
+            code: 'ACTIVE_CHANGE_CONFLICT',
+            approval: activeMatch.approval,
+          }, { status: 409 });
+        }
+
+        // Execute directly
+        return executeDirectBulkDelete(frozen, actor, request, deps);
+      }
+
+      // APPROVAL path (operator/ops_admin)
       if (activeMatch) {
+        if (activeMatch.type === 'duplicate') {
+          // Exact duplicate → 202 idempotent
+          return NextResponse.json({
+            approval: activeMatch.approval,
+            requiresApproval: true,
+            idempotent: true,
+          }, { status: 202 });
+        }
+        // Overlap → 409
         return NextResponse.json({
           error: 'ACTIVE_CHANGE_CONFLICT',
           code: 'ACTIVE_CHANGE_CONFLICT',
@@ -114,65 +175,49 @@ export async function POST(request: Request) {
         }, { status: 409 });
       }
 
-      // Execute directly
-      return executeDirectBulkDelete(frozen, actor, request);
-    }
+      // Create approval (Section 4: remove duplicate logAudit)
+      const approval = await deps.createGovernedApproval({
+        action: 'SUBSCRIBER_BULK_DELETE',
+        requester: actor.username || auth.auth.user,
+        requesterContext: actor,
+        targetId: 'subscriber:bulk-delete',
+        summary: `Delete ${frozen.targetCount} subscriber(s)`,
+        operation: { resourceType: 'subscriber_batch', resourceId: 'bulk-delete' },
+        operationFingerprint: frozen.operationFingerprint,
+        before: { targetCount: frozen.targetCount, targets: frozen.targets },
+        payload: frozen as unknown as Record<string, unknown>,
+      }, actor);
 
-    // APPROVAL path (operator/ops_admin)
-    if (activeMatch) {
-      if (activeMatch.type === 'duplicate') {
-        // Exact duplicate → 202 idempotent
-        return NextResponse.json({
-          approval: activeMatch.approval,
-          requiresApproval: true,
-          idempotent: true,
-        }, { status: 202 });
-      }
-      // Overlap → 409
       return NextResponse.json({
-        error: 'ACTIVE_CHANGE_CONFLICT',
-        code: 'ACTIVE_CHANGE_CONFLICT',
-        approval: activeMatch.approval,
-      }, { status: 409 });
-    }
-
-    // Create approval (Section 4: remove duplicate logAudit)
-    const approval = await createGovernedApproval({
-      action: 'SUBSCRIBER_BULK_DELETE',
-      requester: actor.username || auth.auth.user,
-      requesterContext: actor,
-      targetId: 'subscriber:bulk-delete',
-      summary: `Delete ${frozen.targetCount} subscriber(s)`,
-      operation: { resourceType: 'subscriber_batch', resourceId: 'bulk-delete' },
-      operationFingerprint: frozen.operationFingerprint,
-      before: { targetCount: frozen.targetCount, targets: frozen.targets },
-      payload: frozen as unknown as Record<string, unknown>,
-    }, actor);
-
-    return NextResponse.json({
-      approval,
-      requiresApproval: true,
-    }, { status: 202 });
-  } catch (error) {
-    if (error instanceof SubscriberGovernanceError) {
-      if (error.code === 'SUBSCRIBER_NOT_FOUND') {
-        return NextResponse.json({ error: 'Subscriber not found', details: error.details }, { status: 404 });
+        approval,
+        requiresApproval: true,
+      }, { status: 202 });
+    } catch (error) {
+      if (error instanceof SubscriberGovernanceError) {
+        if (error.code === 'SUBSCRIBER_NOT_FOUND') {
+          return NextResponse.json({ error: 'Subscriber not found', details: error.details }, { status: 404 });
+        }
+        return NextResponse.json({ error: error.code, code: error.code }, { status: 400 });
       }
-      return NextResponse.json({ error: error.code, code: error.code }, { status: 400 });
+      console.error('Error bulk deleting subscribers:', error);
+      return NextResponse.json({ error: 'Bulk subscriber delete failed' }, { status: 500 });
     }
-    console.error('Error bulk deleting subscribers:', error);
-    return NextResponse.json({ error: 'Bulk subscriber delete failed' }, { status: 500 });
-  }
+  };
 }
+
+// Production POST handler
+export const POST = createBulkDeleteHandler();
 
 /** Direct execution for super_admin/root (Sections 13-15). */
 async function executeDirectBulkDelete(
   frozen: ReturnType<typeof prepareFrozenSubscriberBulkDelete> extends Promise<infer T> ? T : never,
   actor: GovernanceActor,
   request: Request,
+  deps: BulkDeleteDeps = productionBulkDeleteDeps,
 ) {
   // Use v2 executor directly
   const { assertFrozenBulkDeleteV2, executeFrozenSubscriberBulkDeleteV2 } = await import('@/server/subscriberSingleGovernance');
+  const executor = deps.executeFrozenSubscriberBulkDeleteV2 || executeFrozenSubscriberBulkDeleteV2;
 
   let result: {
     requested: number;
@@ -188,7 +233,7 @@ async function executeDirectBulkDelete(
   };
 
   try {
-    result = await executeFrozenSubscriberBulkDeleteV2(frozen);
+    result = await executor(frozen);
   } catch (error) {
     // Section 3-4: Capture error evidence for audit before returning HTTP
     if (error instanceof SubscriberGovernanceError && error.code === 'SUBSCRIBER_BULK_DELETE_PRECONDITION_CHANGED') {
@@ -234,7 +279,7 @@ async function executeDirectBulkDelete(
 
   // Strict audit (Section 14)
   try {
-    await writeAuditLog({
+    await deps.writeAuditLog({
       actor,
       module: 'subscribers',
       action: 'subscriber.batch.delete',
