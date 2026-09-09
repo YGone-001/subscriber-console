@@ -1,377 +1,515 @@
 // tests/subscriberBulkDeleteApprovalExecution.test.mjs
-// Sections 8-16: Bulk Delete Approval Execute v1/v2 tests
-import { describe, it } from 'node:test';
+// Sections 8-16: Bulk Delete Approval Execute v1/v2 — production executor path
+import test from 'node:test';
 import assert from 'node:assert/strict';
+import { loadModule } from './helpers/loadModule.mjs';
 
-// Build a v2 bulk delete approval payload
-function buildV2ApprovalPayload(imsiList) {
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function approvalDocument(action, payload, status = 'approved') {
+  const now = new Date().toISOString();
+  return {
+    id: `approval-${crypto.randomUUID()}`,
+    changeId: `CHG-${Date.now()}`,
+    title: 'Test bulk delete',
+    summary: 'Test bulk delete',
+    action,
+    status,
+    operation: { resourceType: 'subscriber', resourceId: 'bulk-delete' },
+    riskLevel: 'critical',
+    riskAssessment: { level: 'critical', factors: [] },
+    requester: 'testuser',
+    targetId: 'subscriber:bulk-delete',
+    payload,
+    before: { targetCount: payload.targetCount || payload.requested || 1 },
+    operationFingerprint: payload.operationFingerprint,
+    events: [],
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+function v2Payload(imsiList) {
   const targets = imsiList.map((imsi) => ({
     imsi,
-    before: {
-      imsi,
-      msisdn: ['1234567890'],
-      accessRestrictionData: 0,
-      networkAccessMode: 0,
-    },
-    preconditionHash: 'hash-' + imsi,
+    before: { imsi, msisdn: ['1234567890'], accessRestrictionData: 0, networkAccessMode: 0 },
+    preconditionHash: `hash-${imsi}`,
   }));
-
   return {
     version: 'subscriber-bulk-delete-v2',
     targets,
     targetCount: imsiList.length,
     snapshotBytes: 1024,
     strategy: 'delete-only',
-    operationFingerprint: 'fp-' + imsiList.join('-'),
+    operationFingerprint: `fp-${imsiList.join('-')}`,
   };
 }
 
-// Build a v1 bulk delete approval payload (legacy format)
-function buildV1ApprovalPayload(imsiList) {
+function v1Payload(imsiList) {
   return {
-    targets: imsiList.map(imsi => ({
-      imsi,
-      before: { imsi, msisdn: ['1234567890'] },
-    })),
+    targets: imsiList.map((imsi) => ({ imsi, before: { imsi, msisdn: ['1234567890'] } })),
     requested: imsiList.length,
-    operationFingerprint: 'fp-v1-' + imsiList.join('-'),
+    operationFingerprint: `fp-v1-${imsiList.join('-')}`,
   };
 }
 
-function createMockApproval(action, payload, overrides = {}) {
+// Fake in-memory approval repository with state machine transitions
+function createFakeApprovalRepo(initialApproval) {
+  const records = new Map();
+  if (initialApproval) records.set(initialApproval.id, structuredClone(initialApproval));
+  const transitions = [];
+
   return {
-    id: 'approval-' + Date.now(),
-    action,
-    status: 'approved',
-    payload,
-    targetId: 'subscriber:bulk-delete',
-    riskLevel: 'critical',
-    reason: 'Test bulk delete',
-    before: { targetCount: payload.targetCount || payload.requested || 1 },
-    operationFingerprint: payload.operationFingerprint,
-    execution: { id: 'exec-123', startedAt: new Date().toISOString() },
-    ...overrides,
+    records,
+    transitions,
+    async getApproval(id) {
+      const rec = records.get(id);
+      return rec ? structuredClone(rec) : null;
+    },
+    async transitionApproval(input) {
+      transitions.push(input);
+      const rec = records.get(input.id);
+      if (!rec) return { ok: false, reason: 'not_found' };
+      if (rec.status !== input.expectedStatus) {
+        return { ok: false, reason: 'conflict', approval: structuredClone(rec) };
+      }
+      if (input.expectedExecutionId && rec.execution?.id !== input.expectedExecutionId) {
+        return { ok: false, reason: 'conflict', approval: structuredClone(rec) };
+      }
+      // Apply transition
+      const patch = input.patch || {};
+      rec.status = input.nextStatus;
+      rec.execution = { ...rec.execution, ...patch.execution };
+      rec.result = patch.result;
+      rec.error = patch.error;
+      rec.executedAt = patch.executedAt;
+      rec.events.push({
+        id: crypto.randomUUID(),
+        timestamp: new Date().toISOString(),
+        type: input.eventType,
+        actor: input.actor,
+        message: input.eventMessage,
+      });
+      rec.updatedAt = new Date().toISOString();
+      return { ok: true, approval: structuredClone(rec) };
+    },
   };
 }
 
-describe('Bulk Delete Approval Execute Tests', async () => {
-  const executionModule = await import('../src/server/approvalExecution.ts');
-  const { ApprovalExecutionError } = executionModule;
+// Build governance spies that track call counts
+function createGovernanceSpies(overrides = {}) {
+  const calls = {
+    assertFrozenBulkDeleteV2: 0,
+    executeFrozenSubscriberBulkDeleteV2: 0,
+    executeFrozenSubscriberBulkDelete: 0,
+    classifyBulkDeleteResult: 0,
+  };
 
-  describe('Section 9: v2 Success Test', () => {
-    it('Bulk Delete Approval Execute v2 succeeds', async () => {
-      const payload = buildV2ApprovalPayload(['001010000000001']);
-      const approval = createMockApproval('SUBSCRIBER_BULK_DELETE', payload);
+  return {
+    calls,
+    module: {
+      assertFrozenBulkDeleteV2(payload) {
+        calls.assertFrozenBulkDeleteV2++;
+        // Return a minimal valid frozen structure
+        return {
+          version: 'subscriber-bulk-delete-v2',
+          targets: payload.targets || [],
+          targetCount: payload.targetCount || 0,
+          snapshotBytes: payload.snapshotBytes || 0,
+          strategy: 'delete-only',
+          operationFingerprint: payload.operationFingerprint || '',
+        };
+      },
+      async executeFrozenSubscriberBulkDeleteV2(frozen) {
+        calls.executeFrozenSubscriberBulkDeleteV2++;
+        if (overrides.v2Result) return overrides.v2Result;
+        return {
+          requested: frozen.targetCount,
+          deletedImsis: frozen.targets.map((t) => t.imsi),
+          conflictImsis: [],
+          failedImsis: [],
+          ocsCleanedImsis: frozen.targets.map((t) => t.imsi),
+          ocsCleanupFailedImsis: [],
+          deletedCount: frozen.targetCount,
+          partialMutation: false,
+          mutationCommitted: true,
+          operationFingerprint: frozen.operationFingerprint,
+        };
+      },
+      async executeFrozenSubscriberBulkDelete(payload) {
+        calls.executeFrozenSubscriberBulkDelete++;
+        if (overrides.v1Result) return overrides.v1Result;
+        const targets = Array.isArray(payload.targets) ? payload.targets : [];
+        return {
+          requested: payload.requested || targets.length,
+          deleted: payload.requested || targets.length,
+          targets: targets.map((t) => (typeof t === 'string' ? t : t.imsi)),
+          operationFingerprint: payload.operationFingerprint || '',
+        };
+      },
+      classifyBulkDeleteResult(deletedCount, requested, conflictCount, failedCount, ocsCleanupFailureCount) {
+        calls.classifyBulkDeleteResult++;
+        if (deletedCount === requested && conflictCount === 0 && failedCount === 0 && ocsCleanupFailureCount === 0) return 'SUCCESS';
+        if (deletedCount > 0) return 'PARTIAL_WRITE';
+        return 'FAILED_NO_MUTATION';
+      },
+      executeFrozenSubscriberDelete: async () => ({}),
+      executeFrozenSubscriberUpdate: async () => ({}),
+      SubscriberGovernanceError: class extends Error {
+        constructor(code) { super(code); this.code = code; }
+      },
+    },
+  };
+}
 
-      // Mock successful execution result
-      const mockResult = {
-        requested: 1,
-        deletedImsis: ['001010000000001'],
-        conflictImsis: [],
-        failedImsis: [],
-        ocsCleanedImsis: ['001010000000001'],
-        ocsCleanupFailedImsis: [],
-        deletedCount: 1,
-        partialMutation: false,
-        mutationCommitted: true,
-        operationFingerprint: payload.operationFingerprint,
-      };
+// Build the service module with injected dependencies
+function createExecutionService(repo, governanceSpies, auditOverrides = {}) {
+  const auditCalls = [];
 
-      // Verify success classification
-      assert.equal(mockResult.mutationCommitted, true);
-      assert.equal(mockResult.deletedCount, 1);
-      assert.deepEqual(mockResult.deletedImsis, ['001010000000001']);
-      assert.equal(mockResult.conflictImsis.length, 0);
-      assert.equal(mockResult.failedImsis.length, 0);
-    });
+  const mockWriteAuditLog = async (input, opts) => {
+    auditCalls.push(input);
+    if (auditOverrides.throwForAction && input.action === auditOverrides.throwForAction) {
+      throw new Error('audit service down');
+    }
+    return true;
+  };
+
+  const service = loadModule('src/server/approvalExecution.ts', {
+    '@/lib/audit': { writeAuditLog: mockWriteAuditLog },
+    '@/lib/audit/record': { auditRequestContext: () => ({}) },
+    '@/lib/accountSession': { validateCurrentAccount: async ({ username, role }) => ({ userId: username, username, role }) },
+    '@/server/approvalExecutors': { executeApproval: async () => ({}) },
+    '@/server/subscriberOperationPolicy': {
+      executeFrozenSubscriberBatchChange: async () => ({}),
+      executeFrozenSubscriberBatchUpdate: async () => ({}),
+      assertFrozenSubscriberBatchUpdateV2: () => ({}),
+      assertFrozenSubscriberBatchPayload: () => ({}),
+      classifyBatchUpdateResult: () => 'SUCCESS',
+      SubscriberBatchGovernanceError: class extends Error { constructor(code) { super(code); this.code = code; } },
+    },
+    '@/server/subscriberSingleGovernance': governanceSpies.module,
+    '@/server/subscriberGovernanceRegistry': { assertGovernedOperationCoverage: () => {} },
+    '@/server/ocsGovernanceRegistry': { assertOcsGovernedOperationCoverage: () => {} },
+    '@/server/coreOperationRegistry': { assertCoreOperationExecutorCoverage: () => {} },
+    '@/server/ocsBalanceGovernance': {
+      executeFrozenOcsBalanceAdjustment: async () => ({}),
+      OcsBalanceGovernanceError: class extends Error { constructor(code) { super(code); this.code = code; } },
+    },
+    '@/server/approvalWorkflow': {
+      ApprovalWorkflowError: class extends Error { constructor(code) { super(code); this.code = code; } },
+      approvalActionEligibility: (item) => ({ canExecute: item.status === 'approved' }),
+    },
+    '@/server/repositories/approvalRepository': repo,
+    '@/server/repositories/userRepository': { getUser: async () => ({ role: 'super_admin', status: 'active' }) },
+    '@/server/repositories/ocsBillingRepository': { getTariffPlan: async () => null },
+    '@/server/repositories/ratingRepository': { getRating: async () => null },
   });
 
-  describe('Section 10: v2 Precondition Conflict Test', () => {
-    it('Bulk Delete Approval Execute v2 precondition conflict', async () => {
-      const payload = buildV2ApprovalPayload(['001010000000001']);
-      const approval = createMockApproval('SUBSCRIBER_BULK_DELETE', payload);
+  return { service, auditCalls };
+}
 
-      // Mock precondition conflict result
-      const mockResult = {
-        requested: 1,
-        deletedImsis: [],
-        conflictImsis: ['001010000000001'],
-        failedImsis: [],
-        ocsCleanedImsis: [],
-        ocsCleanupFailedImsis: [],
-        deletedCount: 0,
-        partialMutation: false,
-        mutationCommitted: false,
-        operationFingerprint: payload.operationFingerprint,
-      };
+// ---------------------------------------------------------------------------
+// Section 8: v2 Success — Production Path
+// ---------------------------------------------------------------------------
+test('Bulk Delete Approval Execute v2 succeeds through production executor', async () => {
+  const payload = v2Payload(['001010000000001']);
+  const approval = approvalDocument('SUBSCRIBER_BULK_DELETE', payload);
+  const repo = createFakeApprovalRepo(approval);
+  const govSpies = createGovernanceSpies();
+  const { service, auditCalls } = createExecutionService(repo, govSpies);
 
-      // Classification: FAILED_NO_MUTATION with conflict
-      const error = new ApprovalExecutionError(
-        'SUBSCRIBER_BULK_DELETE_PRECONDITION_CHANGED',
-        409,
-        approval,
-        false,
-        { ...mockResult, classification: 'FAILED_NO_MUTATION' },
-      );
+  const request = new Request('https://ops.test/api/approvals/a/execute');
+  const auth = { user: 'testuser', role: 'super_admin', sessionVersion: 0 };
 
-      assert.ok(error instanceof ApprovalExecutionError);
-      assert.equal(error.code, 'SUBSCRIBER_BULK_DELETE_PRECONDITION_CHANGED');
-      assert.equal(error.status, 409);
-      assert.equal(error.committed, false);
-      assert.equal(error.details.classification, 'FAILED_NO_MUTATION');
-      assert.equal(error.details.conflictImsis.length, 1);
-    });
+  const result = await service.executeApprovedChange(request, approval.id, auth);
+
+  // v2 executor was called, legacy was not
+  assert.equal(govSpies.calls.assertFrozenBulkDeleteV2, 1);
+  assert.equal(govSpies.calls.executeFrozenSubscriberBulkDeleteV2, 1);
+  assert.equal(govSpies.calls.executeFrozenSubscriberBulkDelete, 0);
+
+  // Business audit was called with correct action
+  const batchAudit = auditCalls.find((a) => a.action === 'subscriber.batch.delete');
+  assert.ok(batchAudit, 'subscriber.batch.delete audit must be called');
+  assert.equal(batchAudit.result, 'success');
+  assert.equal(batchAudit.metadata.classification, 'SUCCESS');
+  assert.equal(batchAudit.metadata.mutationCommitted, true);
+
+  // Approval transitioned to completed
+  assert.equal(result.status, 'completed');
+  assert.equal(result.execution.success, true);
+});
+
+// ---------------------------------------------------------------------------
+// Section 9: v2 Precondition Conflict — Production Classification
+// ---------------------------------------------------------------------------
+test('Bulk Delete Approval Execute v2 precondition conflict through production executor', async () => {
+  const payload = v2Payload(['001010000000001']);
+  const approval = approvalDocument('SUBSCRIBER_BULK_DELETE', payload);
+  const repo = createFakeApprovalRepo(approval);
+  const govSpies = createGovernanceSpies({
+    v2Result: {
+      requested: 1,
+      deletedImsis: [],
+      conflictImsis: ['001010000000001'],
+      failedImsis: [],
+      ocsCleanedImsis: [],
+      ocsCleanupFailedImsis: [],
+      deletedCount: 0,
+      partialMutation: false,
+      mutationCommitted: false,
+      operationFingerprint: payload.operationFingerprint,
+    },
   });
+  const { service, auditCalls } = createExecutionService(repo, govSpies);
 
-  describe('Section 11: v2 Zero Storage Failure Test', () => {
-    it('Bulk Delete Approval Execute v2 storage failure', async () => {
-      const payload = buildV2ApprovalPayload(['001010000000001']);
-      const approval = createMockApproval('SUBSCRIBER_BULK_DELETE', payload);
+  const request = new Request('https://ops.test/api/approvals/a/execute');
+  const auth = { user: 'testuser', role: 'super_admin', sessionVersion: 0 };
 
-      // Mock storage failure result
-      const mockResult = {
-        requested: 1,
-        deletedImsis: [],
-        conflictImsis: [],
-        failedImsis: ['001010000000001'],
-        ocsCleanedImsis: [],
-        ocsCleanupFailedImsis: [],
-        deletedCount: 0,
-        partialMutation: false,
-        mutationCommitted: false,
-        operationFingerprint: payload.operationFingerprint,
-      };
+  const result = await service.executeApprovedChange(request, approval.id, auth);
 
-      // Classification: FAILED_NO_MUTATION without conflict
-      const error = new ApprovalExecutionError(
-        'SUBSCRIBER_BULK_DELETE_FAILED',
-        500,
-        approval,
-        false,
-        { ...mockResult, classification: 'FAILED_NO_MUTATION' },
-      );
+  // Production classified and rejected
+  assert.equal(govSpies.calls.classifyBulkDeleteResult, 1);
 
-      assert.ok(error instanceof ApprovalExecutionError);
-      assert.equal(error.code, 'SUBSCRIBER_BULK_DELETE_FAILED');
-      assert.equal(error.status, 500);
-      assert.equal(error.committed, false);
-      assert.equal(error.details.classification, 'FAILED_NO_MUTATION');
-      assert.equal(error.details.failedImsis.length, 1);
-    });
+  // Business audit called with failed result
+  const batchAudit = auditCalls.find((a) => a.action === 'subscriber.batch.delete');
+  assert.ok(batchAudit);
+  assert.equal(batchAudit.result, 'failed');
+  assert.equal(batchAudit.metadata.classification, 'FAILED_NO_MUTATION');
+  assert.equal(batchAudit.metadata.mutationCommitted, false);
+
+  // Approval transitioned to failed with correct error
+  assert.equal(result.status, 'failed');
+  assert.equal(result.error, 'SUBSCRIBER_BULK_DELETE_PRECONDITION_CHANGED');
+});
+
+// ---------------------------------------------------------------------------
+// Section 10: v2 Zero Storage Failure
+// ---------------------------------------------------------------------------
+test('Bulk Delete Approval Execute v2 storage failure through production executor', async () => {
+  const payload = v2Payload(['001010000000001']);
+  const approval = approvalDocument('SUBSCRIBER_BULK_DELETE', payload);
+  const repo = createFakeApprovalRepo(approval);
+  const govSpies = createGovernanceSpies({
+    v2Result: {
+      requested: 1,
+      deletedImsis: [],
+      conflictImsis: [],
+      failedImsis: ['001010000000001'],
+      ocsCleanedImsis: [],
+      ocsCleanupFailedImsis: [],
+      deletedCount: 0,
+      partialMutation: false,
+      mutationCommitted: false,
+      operationFingerprint: payload.operationFingerprint,
+    },
   });
+  const { service, auditCalls } = createExecutionService(repo, govSpies);
 
-  describe('Section 12: v2 Partial CAS Test', () => {
-    it('Bulk Delete Approval Execute v2 partial CAS', async () => {
-      const payload = buildV2ApprovalPayload(['001010000000001', '001010000000002']);
-      const approval = createMockApproval('SUBSCRIBER_BULK_DELETE', payload);
+  const request = new Request('https://ops.test/api/approvals/a/execute');
+  const auth = { user: 'testuser', role: 'super_admin', sessionVersion: 0 };
 
-      // Mock partial CAS result (some deleted, some conflict)
-      const mockResult = {
-        requested: 2,
-        deletedImsis: ['001010000000001'],
-        conflictImsis: ['001010000000002'],
-        failedImsis: [],
-        ocsCleanedImsis: ['001010000000001'],
-        ocsCleanupFailedImsis: [],
-        deletedCount: 1,
-        partialMutation: true,
-        mutationCommitted: true,
-        operationFingerprint: payload.operationFingerprint,
-      };
+  const result = await service.executeApprovedChange(request, approval.id, auth);
 
-      // Classification: PARTIAL_WRITE
-      const error = new ApprovalExecutionError(
-        'SUBSCRIBER_BULK_DELETE_PARTIAL_WRITE',
-        409,
-        approval,
-        true,
-        { ...mockResult, classification: 'PARTIAL_WRITE' },
-      );
+  // Business audit called with failed result
+  const batchAudit = auditCalls.find((a) => a.action === 'subscriber.batch.delete');
+  assert.ok(batchAudit);
+  assert.equal(batchAudit.result, 'failed');
+  assert.equal(batchAudit.metadata.classification, 'FAILED_NO_MUTATION');
 
-      assert.ok(error instanceof ApprovalExecutionError);
+  // Approval transitioned to failed
+  assert.equal(result.status, 'failed');
+  assert.equal(result.error, 'SUBSCRIBER_BULK_DELETE_FAILED');
+  assert.equal(result.result.classification, 'FAILED_NO_MUTATION');
+});
+
+// ---------------------------------------------------------------------------
+// Section 11: v2 Partial CAS
+// ---------------------------------------------------------------------------
+test('Bulk Delete Approval Execute v2 partial CAS through production executor', async () => {
+  const payload = v2Payload(['001010000000001', '001010000000002']);
+  const approval = approvalDocument('SUBSCRIBER_BULK_DELETE', payload);
+  const repo = createFakeApprovalRepo(approval);
+  const govSpies = createGovernanceSpies({
+    v2Result: {
+      requested: 2,
+      deletedImsis: ['001010000000001'],
+      conflictImsis: ['001010000000002'],
+      failedImsis: [],
+      ocsCleanedImsis: ['001010000000001'],
+      ocsCleanupFailedImsis: [],
+      deletedCount: 1,
+      partialMutation: true,
+      mutationCommitted: true,
+      operationFingerprint: payload.operationFingerprint,
+    },
+  });
+  const { service, auditCalls } = createExecutionService(repo, govSpies);
+
+  const request = new Request('https://ops.test/api/approvals/a/execute');
+  const auth = { user: 'testuser', role: 'super_admin', sessionVersion: 0 };
+
+  // committed=true → production rethrows instead of converting to failed approval
+  await assert.rejects(
+    service.executeApprovedChange(request, approval.id, auth),
+    (error) => {
       assert.equal(error.code, 'SUBSCRIBER_BULK_DELETE_PARTIAL_WRITE');
       assert.equal(error.status, 409);
       assert.equal(error.committed, true);
-      assert.equal(error.details.partialMutation, true);
       assert.equal(error.details.classification, 'PARTIAL_WRITE');
-      assert.equal(error.details.deletedCount, 1);
-      assert.equal(error.details.conflictImsis.length, 1);
-    });
+      return true;
+    },
+  );
+
+  // Business audit was called
+  const batchAudit = auditCalls.find((a) => a.action === 'subscriber.batch.delete');
+  assert.ok(batchAudit);
+  assert.equal(batchAudit.metadata.partialMutation, true);
+});
+
+// ---------------------------------------------------------------------------
+// Section 12: v2 OCS Partial
+// ---------------------------------------------------------------------------
+test('Bulk Delete Approval Execute v2 OCS partial through production executor', async () => {
+  const payload = v2Payload(['001010000000001']);
+  const approval = approvalDocument('SUBSCRIBER_BULK_DELETE', payload);
+  const repo = createFakeApprovalRepo(approval);
+  const govSpies = createGovernanceSpies({
+    v2Result: {
+      requested: 1,
+      deletedImsis: ['001010000000001'],
+      conflictImsis: [],
+      failedImsis: [],
+      ocsCleanedImsis: [],
+      ocsCleanupFailedImsis: ['001010000000001'],
+      deletedCount: 1,
+      partialMutation: true,
+      mutationCommitted: true,
+      operationFingerprint: payload.operationFingerprint,
+    },
   });
+  const { service } = createExecutionService(repo, govSpies);
 
-  describe('Section 13: v2 OCS Partial Test', () => {
-    it('Bulk Delete Approval Execute v2 OCS partial', async () => {
-      const payload = buildV2ApprovalPayload(['001010000000001']);
-      const approval = createMockApproval('SUBSCRIBER_BULK_DELETE', payload);
+  const request = new Request('https://ops.test/api/approvals/a/execute');
+  const auth = { user: 'testuser', role: 'super_admin', sessionVersion: 0 };
 
-      // Mock OCS partial result (subscriber deleted but OCS cleanup failed)
-      const mockResult = {
-        requested: 1,
-        deletedImsis: ['001010000000001'],
-        conflictImsis: [],
-        failedImsis: [],
-        ocsCleanedImsis: [],
-        ocsCleanupFailedImsis: ['001010000000001'],
-        deletedCount: 1,
-        partialMutation: true,
-        mutationCommitted: true,
-        operationFingerprint: payload.operationFingerprint,
-      };
-
-      // Classification: PARTIAL_WRITE (due to OCS cleanup failure)
-      const error = new ApprovalExecutionError(
-        'SUBSCRIBER_BULK_DELETE_PARTIAL_WRITE',
-        409,
-        approval,
-        true,
-        { ...mockResult, classification: 'PARTIAL_WRITE' },
-      );
-
-      assert.ok(error instanceof ApprovalExecutionError);
+  await assert.rejects(
+    service.executeApprovedChange(request, approval.id, auth),
+    (error) => {
       assert.equal(error.code, 'SUBSCRIBER_BULK_DELETE_PARTIAL_WRITE');
       assert.equal(error.status, 409);
       assert.equal(error.committed, true);
-
-      // Verify subscriber delete remained committed (no rollback)
       assert.deepEqual(error.details.deletedImsis, ['001010000000001']);
-      assert.equal(error.details.ocsCleanupFailedImsis.length, 1);
-    });
+      return true;
+    },
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Section 13: Business Audit Failure After Mutation (committed=true)
+// ---------------------------------------------------------------------------
+test('Bulk Delete Approval Execute v2 audit failure committed true through production executor', async () => {
+  const payload = v2Payload(['001010000000001']);
+  const approval = approvalDocument('SUBSCRIBER_BULK_DELETE', payload);
+  const repo = createFakeApprovalRepo(approval);
+  const govSpies = createGovernanceSpies(); // success result
+  const { service, auditCalls } = createExecutionService(repo, govSpies, {
+    throwForAction: 'subscriber.batch.delete',
   });
 
-  describe('Section 14: Audit Failure After Mutation', () => {
-    it('Bulk Delete Approval Execute audit failure committed true', async () => {
-      const payload = buildV2ApprovalPayload(['001010000000001']);
-      const approval = createMockApproval('SUBSCRIBER_BULK_DELETE', payload);
+  const request = new Request('https://ops.test/api/approvals/a/execute');
+  const auth = { user: 'testuser', role: 'super_admin', sessionVersion: 0 };
 
-      // Mock successful mutation but audit failure
-      const mockResult = {
-        requested: 1,
-        deletedImsis: ['001010000000001'],
-        conflictImsis: [],
-        failedImsis: [],
-        ocsCleanedImsis: ['001010000000001'],
-        ocsCleanupFailedImsis: [],
-        deletedCount: 1,
-        partialMutation: false,
-        mutationCommitted: true,
-        operationFingerprint: payload.operationFingerprint,
-      };
-
-      // Audit failure after mutation committed
-      const error = new ApprovalExecutionError(
-        'AUDIT_UNAVAILABLE',
-        503,
-        approval,
-        true,
-        { ...mockResult, classification: 'SUCCESS' },
-      );
-
-      assert.ok(error instanceof ApprovalExecutionError);
+  // v2 executor was called before audit failure
+  await assert.rejects(
+    service.executeApprovedChange(request, approval.id, auth),
+    (error) => {
       assert.equal(error.code, 'AUDIT_UNAVAILABLE');
       assert.equal(error.status, 503);
       assert.equal(error.committed, true);
-    });
+      return true;
+    },
+  );
+
+  // Verify v2 executor was actually called
+  assert.equal(govSpies.calls.executeFrozenSubscriberBulkDeleteV2, 1);
+});
+
+// ---------------------------------------------------------------------------
+// Section 14: Business Audit Failure With Zero Mutation (committed=false)
+// ---------------------------------------------------------------------------
+test('Bulk Delete Approval Execute v2 audit failure committed false through production executor', async () => {
+  const payload = v2Payload(['001010000000001']);
+  const approval = approvalDocument('SUBSCRIBER_BULK_DELETE', payload);
+  const repo = createFakeApprovalRepo(approval);
+  const govSpies = createGovernanceSpies({
+    v2Result: {
+      requested: 1,
+      deletedImsis: [],
+      conflictImsis: ['001010000000001'],
+      failedImsis: [],
+      ocsCleanedImsis: [],
+      ocsCleanupFailedImsis: [],
+      deletedCount: 0,
+      partialMutation: false,
+      mutationCommitted: false,
+      operationFingerprint: payload.operationFingerprint,
+    },
+  });
+  const { service, auditCalls } = createExecutionService(repo, govSpies, {
+    throwForAction: 'subscriber.batch.delete',
   });
 
-  describe('Section 15: Audit Failure With Zero Mutation', () => {
-    it('Bulk Delete Approval Execute audit failure committed false', async () => {
-      const payload = buildV2ApprovalPayload(['001010000000001']);
-      const approval = createMockApproval('SUBSCRIBER_BULK_DELETE', payload);
+  const request = new Request('https://ops.test/api/approvals/a/execute');
+  const auth = { user: 'testuser', role: 'super_admin', sessionVersion: 0 };
 
-      // Mock precondition conflict with audit failure
-      const mockResult = {
-        requested: 1,
-        deletedImsis: [],
-        conflictImsis: ['001010000000001'],
-        failedImsis: [],
-        ocsCleanedImsis: [],
-        ocsCleanupFailedImsis: [],
-        deletedCount: 0,
-        partialMutation: false,
-        mutationCommitted: false,
-        operationFingerprint: payload.operationFingerprint,
-      };
+  const result = await service.executeApprovedChange(request, approval.id, auth);
 
-      // Audit failure before any mutation
-      const error = new ApprovalExecutionError(
-        'AUDIT_UNAVAILABLE',
-        503,
-        approval,
-        false,
-        { ...mockResult, classification: 'FAILED_NO_MUTATION' },
-      );
+  // committed=false → production converts to failed approval
+  assert.equal(result.status, 'failed');
+  assert.equal(result.error, 'AUDIT_UNAVAILABLE');
+  assert.equal(result.result.classification, 'FAILED_NO_MUTATION');
+  assert.equal(result.result.mutationCommitted, false);
+});
 
-      assert.ok(error instanceof ApprovalExecutionError);
-      assert.equal(error.code, 'AUDIT_UNAVAILABLE');
-      assert.equal(error.status, 503);
-      assert.equal(error.committed, false);
-    });
+// ---------------------------------------------------------------------------
+// Section 15: v1 Historical Compatibility
+// ---------------------------------------------------------------------------
+test('Bulk Delete Approval Execute v1 remains executable through production executor', async () => {
+  const payload = v1Payload(['001010000000001']);
+  const approval = approvalDocument('SUBSCRIBER_BULK_DELETE', payload);
+  const repo = createFakeApprovalRepo(approval);
+  const govSpies = createGovernanceSpies({
+    v1Result: {
+      requested: 1,
+      deleted: 1,
+      targets: ['001010000000001'],
+      operationFingerprint: payload.operationFingerprint,
+    },
   });
+  const { service, auditCalls } = createExecutionService(repo, govSpies);
 
-  describe('Section 16: v1 Historical Compatibility', () => {
-    it('Bulk Delete Approval Execute v1 remains executable', async () => {
-      // Build a real v1 approval payload
-      const payload = buildV1ApprovalPayload(['001010000000001']);
-      const approval = createMockApproval('SUBSCRIBER_BULK_DELETE', payload);
+  const request = new Request('https://ops.test/api/approvals/a/execute');
+  const auth = { user: 'testuser', role: 'super_admin', sessionVersion: 0 };
 
-      // Verify that the v1 path is taken (no 'version' field)
-      assert.equal(payload.version, undefined);
+  const result = await service.executeApprovedChange(request, approval.id, auth);
 
-      // Mock v1 execution result
-      const mockV1Result = {
-        requested: 1,
-        deleted: 1,
-        targets: ['001010000000001'],
-        operationFingerprint: payload.operationFingerprint,
-      };
+  // Legacy executor was called, v2 was not
+  assert.equal(govSpies.calls.executeFrozenSubscriberBulkDelete, 1);
+  assert.equal(govSpies.calls.executeFrozenSubscriberBulkDeleteV2, 0);
 
-      // In production, v1 results are normalized to v2 structure
-      const normalizedResult = {
-        requested: mockV1Result.requested,
-        deletedImsis: mockV1Result.targets,
-        conflictImsis: [],
-        failedImsis: [],
-        ocsCleanedImsis: [],
-        ocsCleanupFailedImsis: [],
-        deletedCount: mockV1Result.deleted,
-        partialMutation: mockV1Result.deleted > 0 && mockV1Result.deleted < mockV1Result.requested,
-        mutationCommitted: mockV1Result.deleted > 0,
-        operationFingerprint: mockV1Result.operationFingerprint,
-      };
+  // Business audit called with success
+  const batchAudit = auditCalls.find((a) => a.action === 'subscriber.batch.delete');
+  assert.ok(batchAudit);
+  assert.equal(batchAudit.result, 'success');
+  assert.equal(batchAudit.metadata.classification, 'SUCCESS');
+  assert.equal(batchAudit.metadata.mutationCommitted, true);
 
-      // v1 remains executable
-      assert.equal(normalizedResult.mutationCommitted, true);
-      assert.equal(normalizedResult.deletedCount, 1);
-      assert.deepEqual(normalizedResult.deletedImsis, ['001010000000001']);
-      assert.equal(normalizedResult.conflictImsis.length, 0);
-      assert.equal(normalizedResult.failedImsis.length, 0);
-    });
-  });
-
-  describe('ApprovalExecutionError Class', () => {
-    it('constructor sets all properties', () => {
-      const approval = createMockApproval('SUBSCRIBER_BULK_DELETE', buildV2ApprovalPayload(['001010000000001']));
-      const details = { classification: 'SUCCESS', deletedCount: 1 };
-
-      const error = new ApprovalExecutionError('TEST_CODE', 409, approval, true, details);
-
-      assert.equal(error.code, 'TEST_CODE');
-      assert.equal(error.status, 409);
-      assert.equal(error.approval, approval);
-      assert.equal(error.committed, true);
-      assert.equal(error.details, details);
-      assert.ok(error instanceof Error);
-      // Note: ApprovalExecutionError doesn't set this.name, so it inherits 'Error'
-      assert.equal(error.name, 'Error');
-    });
-
-    it('defaults status to 409 and committed to false', () => {
-      const error = new ApprovalExecutionError('TEST_CODE');
-
-      assert.equal(error.status, 409);
-      assert.equal(error.committed, false);
-      assert.equal(error.approval, undefined);
-      assert.equal(error.details, undefined);
-    });
-  });
+  // Production normalizes v1 result — approval completed
+  assert.equal(result.status, 'completed');
+  assert.equal(result.execution.success, true);
+  assert.equal(result.result.deletedCount, 1);
+  assert.deepEqual(result.result.deletedImsis, ['001010000000001']);
 });
