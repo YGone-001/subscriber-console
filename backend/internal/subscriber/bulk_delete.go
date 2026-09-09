@@ -9,6 +9,13 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
+// BulkDeleteRepository defines the interface for bulk delete operations.
+// This allows test doubles to be used instead of the concrete Repository.
+type BulkDeleteRepository interface {
+	FindSubscriberByImsi(ctx context.Context, imsi string) (bson.M, error)
+	DeleteSubscriberCAS(ctx context.Context, imsi string, expected bson.M) (bool, error)
+}
+
 const (
 	maxBulkDeleteTargets       = 5000
 	maxBulkDeleteSnapshotBytes = 512 * 1024
@@ -111,7 +118,7 @@ type OcsCleanupFunc func(ctx context.Context, imsi string) error
 
 // PrepareFrozenBulkDelete prepares a frozen v2 bulk delete payload.
 // Uses canonical SubscriberSafeSnapshot from frozen.go.
-func PrepareFrozenBulkDelete(ctx context.Context, imsiList []string, repo *Repository) (*FrozenBulkDeleteV2, error) {
+func PrepareFrozenBulkDelete(ctx context.Context, imsiList []string, repo BulkDeleteRepository) (*FrozenBulkDeleteV2, error) {
 	// Sort IMSIs ascending
 	sorted := make([]string, len(imsiList))
 	copy(sorted, imsiList)
@@ -303,7 +310,7 @@ func ClassifyBulkDeleteResult(deletedCount, requested, conflictCount, failedCoun
 
 // ExecuteFrozenBulkDelete executes a frozen bulk delete with CAS and OCS cleanup separation.
 // Uses canonical SubscriberSafeSnapshot from frozen.go.
-func ExecuteFrozenBulkDelete(ctx context.Context, frozen *FrozenBulkDeleteV2, repo *Repository, ocsCleanup OcsCleanupFunc) (*BulkDeleteExecutionResult, error) {
+func ExecuteFrozenBulkDelete(ctx context.Context, frozen *FrozenBulkDeleteV2, repo BulkDeleteRepository, ocsCleanup OcsCleanupFunc) (*BulkDeleteExecutionResult, error) {
 	result := &BulkDeleteExecutionResult{
 		Requested:             frozen.TargetCount,
 		OperationFingerprint:  frozen.OperationFingerprint,

@@ -190,24 +190,37 @@ async function executeDirectBulkDelete(
   try {
     result = await executeFrozenSubscriberBulkDeleteV2(frozen);
   } catch (error) {
-    if (error instanceof SubscriberGovernanceError) {
-      // Precondition failure before any mutation
-      if (error.code === 'SUBSCRIBER_BULK_DELETE_PRECONDITION_CHANGED') {
-        return NextResponse.json({
-          error: error.code,
-          code: error.code,
-          committed: false,
-          partialMutation: false,
-          details: error.details,
-        }, { status: 409 });
-      }
+    // Section 3-4: Capture error evidence for audit before returning HTTP
+    if (error instanceof SubscriberGovernanceError && error.code === 'SUBSCRIBER_BULK_DELETE_PRECONDITION_CHANGED') {
+      // Preflight conflict - build zero-write result for audit
+      result = {
+        requested: frozen.targetCount,
+        deletedImsis: [],
+        conflictImsis: (error.details as { conflictImsis?: string[] })?.conflictImsis || frozen.targets.map((t) => t.imsi),
+        failedImsis: [],
+        ocsCleanedImsis: [],
+        ocsCleanupFailedImsis: [],
+        deletedCount: 0,
+        partialMutation: false,
+        mutationCommitted: false,
+        operationFingerprint: frozen.operationFingerprint,
+      };
+    } else {
+      // Section 5: Storage failure - build zero-write result for audit
+      result = {
+        requested: frozen.targetCount,
+        deletedImsis: [],
+        conflictImsis: [],
+        failedImsis: frozen.targets.map((t) => t.imsi),
+        ocsCleanedImsis: [],
+        ocsCleanupFailedImsis: [],
+        deletedCount: 0,
+        partialMutation: false,
+        mutationCommitted: false,
+        operationFingerprint: frozen.operationFingerprint,
+      };
     }
-    return NextResponse.json({
-      error: 'SUBSCRIBER_BULK_DELETE_FAILED',
-      code: 'SUBSCRIBER_BULK_DELETE_FAILED',
-      committed: false,
-      partialMutation: false,
-    }, { status: 500 });
+    // Fall through to classification and audit below
   }
 
   // Classify

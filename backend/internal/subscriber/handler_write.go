@@ -34,6 +34,8 @@ type WriteHandler struct {
 	// Test seams: when set, used instead of repo for batch update operations.
 	batchStore BatchUpdateStore // nil → use repo
 	findSub    SubscriberFinder // nil → use repo.FindSubscriberByImsi
+	// Test seam for bulk delete: when set, used instead of repo for bulk delete operations.
+	bulkDeleteRepo BulkDeleteRepository // nil → use repo
 }
 
 // UserRepository is the interface for looking up fresh user state.
@@ -1426,7 +1428,12 @@ func (h *WriteHandler) BulkDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Prepare frozen v2
-	frozen, err := PrepareFrozenBulkDelete(r.Context(), req.ImsiList, h.repo)
+	// Use test seam if available, otherwise use repo
+	var bulkRepo BulkDeleteRepository = h.repo
+	if h.bulkDeleteRepo != nil {
+		bulkRepo = h.bulkDeleteRepo
+	}
+	frozen, err := PrepareFrozenBulkDelete(r.Context(), req.ImsiList, bulkRepo)
 	if err != nil {
 		if govErr, ok := err.(*SubscriberGovernanceError); ok {
 			code := govErr.Code
@@ -1526,31 +1533,55 @@ func (h *WriteHandler) BulkDelete(w http.ResponseWriter, r *http.Request) {
 }
 
 // executeDirectBulkDelete executes bulk delete directly for super_admin/root.
+// Section 7: All terminal outcomes generate strict audit.
 func (h *WriteHandler) executeDirectBulkDelete(w http.ResponseWriter, r *http.Request, frozen *FrozenBulkDeleteV2, fresh *FreshActor) {
+	// Use test seam if available, otherwise use repo
+	var bulkRepo BulkDeleteRepository = h.repo
+	if h.bulkDeleteRepo != nil {
+		bulkRepo = h.bulkDeleteRepo
+	}
+
 	// Execute with CAS and OCS cleanup separation
+	// Use test seam if available for OCS cleanup
 	ocsCleanup := func(ctx context.Context, imsi string) error {
+		if h.bulkDeleteRepo != nil {
+			if ocsRepo, ok := h.bulkDeleteRepo.(interface {
+				DeleteOcsProvisioning(ctx context.Context, imsi string) error
+			}); ok {
+				return ocsRepo.DeleteOcsProvisioning(ctx, imsi)
+			}
+		}
 		return h.repo.DeleteOcsProvisioning(ctx, imsi)
 	}
 
-	execResult, err := ExecuteFrozenBulkDelete(r.Context(), frozen, h.repo, ocsCleanup)
+	execResult, err := ExecuteFrozenBulkDelete(r.Context(), frozen, bulkRepo, ocsCleanup)
+
+	// Section 7: Build result evidence for audit even on error
 	if err != nil {
-		if govErr, ok := err.(*SubscriberGovernanceError); ok {
-			code := govErr.Code
-			status := http.StatusConflict
-			if code == ErrBulkDeleteFailed {
-				status = http.StatusInternalServerError
+		// Build zero-write result for audit
+		if execResult == nil {
+			execResult = &BulkDeleteExecutionResult{
+				Requested:             frozen.TargetCount,
+				OperationFingerprint:  frozen.OperationFingerprint,
+				DeletedImsis:          []string{},
+				ConflictImsis:         []string{},
+				FailedImsis:           []string{},
+				OcsCleanedImsis:       []string{},
+				OcsCleanupFailedImsis: []string{},
 			}
-			committed := execResult != nil && execResult.MutationCommitted
-			response.JSON(w, status, map[string]any{
-				"code":      code,
-				"error":     code,
-				"committed": committed,
-				"result":    sanitizeBulkDeleteResult(execResult),
-			})
-		} else {
-			response.Error(w, http.StatusInternalServerError, "Bulk delete failed", "INTERNAL_ERROR")
+			// Classify error type for conflict/failed distinction
+			if govErr, ok := err.(*SubscriberGovernanceError); ok && govErr.Code == ErrBulkDeletePreconditionChanged {
+				// Preflight conflict
+				for _, t := range frozen.Targets {
+					execResult.ConflictImsis = append(execResult.ConflictImsis, t.Imsi)
+				}
+			} else {
+				// Storage failure
+				for _, t := range frozen.Targets {
+					execResult.FailedImsis = append(execResult.FailedImsis, t.Imsi)
+				}
+			}
 		}
-		return
 	}
 
 	// Classify result
@@ -1562,7 +1593,7 @@ func (h *WriteHandler) executeDirectBulkDelete(w http.ResponseWriter, r *http.Re
 		len(execResult.OcsCleanupFailedImsis),
 	)
 
-	// Strict audit
+	// Section 7: Strict audit for ALL terminal outcomes
 	auditResult := "success"
 	if classification != "SUCCESS" {
 		auditResult = "failed"
