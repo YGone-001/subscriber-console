@@ -90,6 +90,7 @@ function createMockDeps(overrides = {}) {
       mutationCommitted: true,
       operationFingerprint: frozen.operationFingerprint,
     }),
+    listActiveSubscriberApprovals: async () => [],
     classifyImportResult: (result) => {
       if (result.createdCount === result.intendedCreateCount &&
           result.conflictImsis.length === 0 &&
@@ -134,6 +135,7 @@ const mockDependencies = {
   '@/lib/rateLimit': { enforceRateLimit: async () => ({ ok: true }) },
   '@/server/repositories/subscriberRepository': { precheckSubscriberImsis: async () => ({}) },
   '@/server/repositories/ocsBillingRepository': { getTariffPlan: async () => ({}) },
+  '@/server/repositories/approvalRepository': { listActiveSubscriberApprovals: async () => [] },
   '@/lib/subscriberValidation': {
     validateImportRecords: (r) => ({ valid: true, value: r }),
     validateImsiList: (l) => ({ valid: true, value: l }),
@@ -329,5 +331,5 @@ test('import route: failed no mutation returns 409', async () => {
   const response = await handler(request, {});
   assert.equal(response.status, 409);
   const body = await response.json();
-  assert.equal(body.error, 'SUBSCRIBER_IMPORT_FAILED_NO_MUTATION');
+  assert.equal(body.error, 'SUBSCRIBER_IMPORT_PRECONDITION_CHANGED');
 });

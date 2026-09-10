@@ -1834,9 +1834,9 @@ func (h *WriteHandler) handleImportPrecheck(w http.ResponseWriter, r *http.Reque
 	}
 
 	response.JSON(w, http.StatusOK, map[string]any{
-		"total":    len(conflicts),
-		"existing": existing,
-		"newCount": len(conflicts) - existing,
+		"total":     len(conflicts),
+		"existing":  existing,
+		"newCount":  len(conflicts) - existing,
 		"conflicts": conflicts,
 	})
 }
@@ -2045,14 +2045,14 @@ func (h *WriteHandler) executeDirectImport(w http.ResponseWriter, r *http.Reques
 	if err != nil {
 		if execResult == nil {
 			execResult = &ImportExecutionResult{
-				Requested:            frozen.TargetCount,
-				IntendedCreateCount:  frozen.Summary.CreateCount,
-				OperationFingerprint: frozen.OperationFingerprint,
-				CreatedImsis:         []string{},
-				SkippedImsis:         []string{},
-				ConflictImsis:        []string{},
-				FailedImsis:          []string{},
-				OcsProvisionedImsis:  []string{},
+				Requested:                  frozen.TargetCount,
+				IntendedCreateCount:        frozen.Summary.CreateCount,
+				OperationFingerprint:       frozen.OperationFingerprint,
+				CreatedImsis:               []string{},
+				SkippedImsis:               []string{},
+				ConflictImsis:              []string{},
+				FailedImsis:                []string{},
+				OcsProvisionedImsis:        []string{},
 				OcsProvisioningFailedImsis: []string{},
 			}
 		}
@@ -2106,10 +2106,12 @@ func (h *WriteHandler) executeDirectImport(w http.ResponseWriter, r *http.Reques
 	})
 
 	if auditErr != nil {
-		// Audit failure after mutation
-		committed := execResult.MutationCommitted
-		response.Error(w, http.StatusServiceUnavailable, "AUDIT_UNAVAILABLE", "AUDIT_UNAVAILABLE")
-		_ = committed
+		// Audit failure after mutation — pass committed state
+		response.JSON(w, http.StatusServiceUnavailable, map[string]any{
+			"error":     "AUDIT_UNAVAILABLE",
+			"code":      "AUDIT_UNAVAILABLE",
+			"committed": execResult.MutationCommitted,
+		})
 		return
 	}
 
@@ -2133,18 +2135,42 @@ func (h *WriteHandler) executeDirectImport(w http.ResponseWriter, r *http.Reques
 	// Handle partial write
 	if classification == "PARTIAL_WRITE" {
 		response.JSON(w, http.StatusConflict, map[string]any{
-			"error":                  ErrImportPartialWrite,
-			"code":                   ErrImportPartialWrite,
-			"requested":              execResult.Requested,
-			"imported":               execResult.CreatedCount,
-			"skipped":                len(execResult.SkippedImsis),
-			"failed":                 len(execResult.FailedImsis),
-			"importedImsis":          execResult.CreatedImsis,
-			"failedImsis":            execResult.FailedImsis,
+			"error":                      ErrImportPartialWrite,
+			"code":                       ErrImportPartialWrite,
+			"requested":                  execResult.Requested,
+			"imported":                   execResult.CreatedCount,
+			"skipped":                    len(execResult.SkippedImsis),
+			"failed":                     len(execResult.FailedImsis),
+			"importedImsis":              execResult.CreatedImsis,
+			"failedImsis":                execResult.FailedImsis,
 			"ocsProvisioningFailedImsis": execResult.OcsProvisioningFailedImsis,
-			"partialMutation":        true,
-			"mutationCommitted":      true,
+			"partialMutation":            true,
+			"mutationCommitted":          true,
 		})
+		return
+	}
+
+	// Handle FAILED_NO_MUTATION: distinguish precondition from storage failure
+	if classification == "FAILED_NO_MUTATION" {
+		if len(execResult.ConflictImsis) > 0 {
+			response.JSON(w, http.StatusConflict, map[string]any{
+				"error":             ErrImportPreconditionChanged,
+				"code":              ErrImportPreconditionChanged,
+				"requested":         execResult.Requested,
+				"imported":          execResult.CreatedCount,
+				"partialMutation":   false,
+				"mutationCommitted": false,
+			})
+		} else {
+			response.JSON(w, http.StatusInternalServerError, map[string]any{
+				"error":             ErrImportFailed,
+				"code":              ErrImportFailed,
+				"requested":         execResult.Requested,
+				"imported":          execResult.CreatedCount,
+				"partialMutation":   false,
+				"mutationCommitted": false,
+			})
+		}
 		return
 	}
 
@@ -2154,12 +2180,12 @@ func (h *WriteHandler) executeDirectImport(w http.ResponseWriter, r *http.Reques
 		"message":          "Subscribers imported successfully",
 		"requiresApproval": false,
 		"result": map[string]any{
-			"requested":              execResult.Requested,
-			"imported":               execResult.CreatedCount,
-			"skipped":                len(execResult.SkippedImsis),
-			"failed":                 len(execResult.FailedImsis),
-			"importedImsis":          execResult.CreatedImsis,
-			"failedImsis":            execResult.FailedImsis,
+			"requested":                  execResult.Requested,
+			"imported":                   execResult.CreatedCount,
+			"skipped":                    len(execResult.SkippedImsis),
+			"failed":                     len(execResult.FailedImsis),
+			"importedImsis":              execResult.CreatedImsis,
+			"failedImsis":                execResult.FailedImsis,
 			"ocsProvisioningFailedImsis": execResult.OcsProvisioningFailedImsis,
 		},
 	})

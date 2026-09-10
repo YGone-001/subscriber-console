@@ -305,8 +305,72 @@ export function validateImsiList(value: unknown): ValidationResult<string[]> {
   return { ok: true, value: imsis };
 }
 
+const IMPORT_MUTATION_FIELDS = new Set([
+  'imsi', 'access_restriction_data',
+  'traffic_total', 'traffic_balance',
+  'sms_total', 'sms_balance',
+  'plan_id',
+]);
+
+const IMPORT_SENSITIVE_KEYS = new Set(['k', 'op', 'opc', 'amf', 'sqn']);
+
+export type ImportErrorCode = 'INVALID_SUBSCRIBER_IMPORT_REQUEST' | 'SENSITIVE_SUBSCRIBER_CHANGE_NOT_SUPPORTED';
+
 export function validateImportRecords(value: unknown): ValidationResult<Record<string, unknown>[]> {
   if (!Array.isArray(value)) return { ok: false, error: 'records array is required' };
+  if (value.length === 0) return { ok: false, error: 'records array is required' };
   if (value.length > 5000) return { ok: false, error: 'records cannot contain more than 5000 entries' };
-  return { ok: true, value: value.map((item) => asRecord(item)) };
+
+  const seenImsis = new Set<string>();
+  const result: Record<string, unknown>[] = [];
+
+  for (let i = 0; i < value.length; i++) {
+    const item = value[i];
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      return { ok: false, error: 'INVALID_SUBSCRIBER_IMPORT_REQUEST' };
+    }
+    const rec = item as Record<string, unknown>;
+
+    // Allowlist check: reject unknown fields
+    for (const key of Object.keys(rec)) {
+      if (!IMPORT_MUTATION_FIELDS.has(key) && !IMPORT_SENSITIVE_KEYS.has(key)) {
+        return { ok: false, error: 'INVALID_SUBSCRIBER_IMPORT_REQUEST' };
+      }
+    }
+
+    // Sensitive field check: non-empty → 422
+    for (const key of IMPORT_SENSITIVE_KEYS) {
+      if (key in rec && rec[key] !== undefined && rec[key] !== null && String(rec[key]).trim() !== '') {
+        return { ok: false, error: 'SENSITIVE_SUBSCRIBER_CHANGE_NOT_SUPPORTED' };
+      }
+    }
+
+    // IMSI validation
+    const imsi = typeof rec.imsi === 'string' ? rec.imsi.trim() : '';
+    if (!isValidImsi(imsi)) return { ok: false, error: 'INVALID_SUBSCRIBER_IMPORT_REQUEST' };
+    if (seenImsis.has(imsi)) return { ok: false, error: 'INVALID_SUBSCRIBER_IMPORT_REQUEST' };
+    seenImsis.add(imsi);
+
+    // access_restriction_data: integer 0..255
+    if (rec.access_restriction_data !== undefined) {
+      const ard = Number(rec.access_restriction_data);
+      if (!Number.isInteger(ard) || ard < 0 || ard > 255) {
+        return { ok: false, error: 'INVALID_SUBSCRIBER_IMPORT_REQUEST' };
+      }
+    }
+
+    // Numeric fields: non-negative integer
+    for (const field of ['traffic_total', 'traffic_balance', 'sms_total', 'sms_balance']) {
+      if (rec[field] !== undefined) {
+        const n = Number(rec[field]);
+        if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0) {
+          return { ok: false, error: 'INVALID_SUBSCRIBER_IMPORT_REQUEST' };
+        }
+      }
+    }
+
+    result.push(rec);
+  }
+
+  return { ok: true, value: result };
 }

@@ -423,16 +423,24 @@ export async function prepareFrozenSubscriberImport(records: Record<string, unkn
     throw new SubscriberGovernanceError('INVALID_SUBSCRIBER_IMPORT_REQUEST');
   }
 
-  // Normalize records
-  const normalized = records.map((rec) => ({
-    imsi: String(rec.imsi || '').trim(),
-    access_restriction_data: Number(rec.access_restriction_data ?? 32),
-    traffic_total: Number(rec.traffic_total ?? 10737418240),
-    traffic_balance: Number(rec.traffic_balance ?? 10737418240),
-    sms_total: Number(rec.sms_total ?? 100),
-    sms_balance: Number(rec.sms_balance ?? 100),
-    plan_id: String(rec.plan_id || 'plan_default_10gb').trim() || 'plan_default_10gb',
-  }));
+  // Normalize records — legacy-compatible OCS defaults:
+  // traffic_balance missing → 10737418240
+  // traffic_total missing → traffic_balance (if present) → 10737418240
+  // sms_balance missing → 100
+  // sms_total missing → sms_balance (if present) → 100
+  const normalized = records.map((rec) => {
+    const trafficBalance = Number(rec.traffic_balance ?? 10737418240);
+    const smsBalance = Number(rec.sms_balance ?? 100);
+    return {
+      imsi: String(rec.imsi || '').trim(),
+      access_restriction_data: Number(rec.access_restriction_data ?? 32),
+      traffic_total: Number(rec.traffic_total ?? trafficBalance),
+      traffic_balance: trafficBalance,
+      sms_total: Number(rec.sms_total ?? smsBalance),
+      sms_balance: smsBalance,
+      plan_id: String(rec.plan_id || 'plan_default_10gb').trim() || 'plan_default_10gb',
+    };
+  });
 
   // Sort by IMSI
   normalized.sort((a, b) => a.imsi.localeCompare(b.imsi));
@@ -503,7 +511,10 @@ export function assertFrozenSubscriberImportV2(payload: unknown): FrozenSubscrib
   if (!p || p.version !== 'subscriber-import-v2' || !Array.isArray(p.records) || !Array.isArray(p.targets)) {
     throw new SubscriberGovernanceError('INVALID_SUBSCRIBER_IMPORT_PAYLOAD');
   }
-  if (p.records.length === 0 || p.targets.length === 0 || p.records.length !== p.targets.length) {
+  if (p.records.length === 0 || p.records.length > MAX_IMPORT_ROWS) {
+    throw new SubscriberGovernanceError('INVALID_SUBSCRIBER_IMPORT_PAYLOAD');
+  }
+  if (p.targets.length === 0 || p.records.length !== p.targets.length) {
     throw new SubscriberGovernanceError('INVALID_SUBSCRIBER_IMPORT_PAYLOAD');
   }
   if (typeof p.targetCount !== 'number' || p.targetCount !== p.targets.length) {
@@ -513,9 +524,23 @@ export function assertFrozenSubscriberImportV2(payload: unknown): FrozenSubscrib
     throw new SubscriberGovernanceError('INVALID_SUBSCRIBER_IMPORT_PAYLOAD');
   }
 
-  // Verify sorted by IMSI
   const records = p.records as Array<Record<string, unknown>>;
   const targets = p.targets as Array<Record<string, unknown>>;
+
+  // Verify IMSI format: exactly 15 ASCII digits
+  const IMSI_RE = /^\d{15}$/;
+  for (const rec of records) {
+    if (typeof rec.imsi !== 'string' || !IMSI_RE.test(rec.imsi)) {
+      throw new SubscriberGovernanceError('INVALID_SUBSCRIBER_IMPORT_PAYLOAD');
+    }
+  }
+  for (const t of targets) {
+    if (typeof t.imsi !== 'string' || !IMSI_RE.test(t.imsi)) {
+      throw new SubscriberGovernanceError('INVALID_SUBSCRIBER_IMPORT_PAYLOAD');
+    }
+  }
+
+  // Verify sorted by IMSI (strictly ascending)
   for (let i = 1; i < records.length; i++) {
     if ((records[i].imsi as string) <= (records[i - 1].imsi as string)) {
       throw new SubscriberGovernanceError('INVALID_SUBSCRIBER_IMPORT_PAYLOAD');
@@ -525,6 +550,15 @@ export function assertFrozenSubscriberImportV2(payload: unknown): FrozenSubscrib
     if ((targets[i].imsi as string) <= (targets[i - 1].imsi as string)) {
       throw new SubscriberGovernanceError('INVALID_SUBSCRIBER_IMPORT_PAYLOAD');
     }
+  }
+
+  // Verify unique IMSIs
+  const seenImsis = new Set<string>();
+  for (const rec of records) {
+    if (seenImsis.has(rec.imsi as string)) {
+      throw new SubscriberGovernanceError('INVALID_SUBSCRIBER_IMPORT_PAYLOAD');
+    }
+    seenImsis.add(rec.imsi as string);
   }
 
   // Verify 1:1 correlation
@@ -548,6 +582,95 @@ export function assertFrozenSubscriberImportV2(payload: unknown): FrozenSubscrib
         throw new SubscriberGovernanceError('INVALID_SUBSCRIBER_IMPORT_PAYLOAD');
       }
     }
+  }
+
+  // Verify normalized numeric domains
+  for (const rec of records) {
+    const ard = Number(rec.access_restriction_data);
+    if (!Number.isInteger(ard) || ard < 0 || ard > 255) {
+      throw new SubscriberGovernanceError('INVALID_SUBSCRIBER_IMPORT_PAYLOAD');
+    }
+    for (const field of ['traffic_total', 'traffic_balance', 'sms_total', 'sms_balance']) {
+      const n = Number(rec[field]);
+      if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0) {
+        throw new SubscriberGovernanceError('INVALID_SUBSCRIBER_IMPORT_PAYLOAD');
+      }
+    }
+    if (typeof rec.plan_id !== 'string' || (rec.plan_id as string).trim() === '') {
+      throw new SubscriberGovernanceError('INVALID_SUBSCRIBER_IMPORT_PAYLOAD');
+    }
+  }
+
+  // Verify recordIntentHash for every target
+  for (let i = 0; i < targets.length; i++) {
+    const expectedHash = hash(records[i]);
+    if (targets[i].recordIntentHash !== expectedHash) {
+      throw new SubscriberGovernanceError('INVALID_SUBSCRIBER_IMPORT_PAYLOAD');
+    }
+  }
+
+  // Verify summary
+  const summary = p.summary as Record<string, unknown>;
+  if (!summary || typeof summary !== 'object') {
+    throw new SubscriberGovernanceError('INVALID_SUBSCRIBER_IMPORT_PAYLOAD');
+  }
+  if (summary.rowCount !== records.length) {
+    throw new SubscriberGovernanceError('INVALID_SUBSCRIBER_IMPORT_PAYLOAD');
+  }
+
+  // Recompute createCount/skipCount independently
+  const recomputedCreateCount = targets.filter((t) => t.state === 'absent').length;
+  const recomputedSkipCount = targets.filter((t) => t.state === 'present').length;
+  if (summary.createCount !== recomputedCreateCount || summary.skipCount !== recomputedSkipCount) {
+    throw new SubscriberGovernanceError('INVALID_SUBSCRIBER_IMPORT_PAYLOAD');
+  }
+
+  // Verify fieldNames: exact canonical sorted value
+  const fieldNameSet = new Set<string>();
+  for (const rec of records) {
+    for (const key of Object.keys(rec)) {
+      if (key !== 'imsi') fieldNameSet.add(key);
+    }
+  }
+  const expectedFieldNames = Array.from(fieldNameSet).sort();
+  const actualFieldNames = summary.fieldNames as string[];
+  if (!Array.isArray(actualFieldNames) || actualFieldNames.length !== expectedFieldNames.length ||
+      actualFieldNames.some((f, i) => f !== expectedFieldNames[i])) {
+    throw new SubscriberGovernanceError('INVALID_SUBSCRIBER_IMPORT_PAYLOAD');
+  }
+
+  // Verify fileHash
+  const expectedFileHash = hash(records);
+  if (summary.fileHash !== expectedFileHash) {
+    throw new SubscriberGovernanceError('INVALID_SUBSCRIBER_IMPORT_PAYLOAD');
+  }
+
+  // Verify operationFingerprint
+  const expectedFingerprint = hash({
+    operation: 'SUBSCRIBER_IMPORT',
+    targets,
+    strategy: 'skip-existing-create-only',
+    fileHash: summary.fileHash,
+  });
+  if (p.operationFingerprint !== expectedFingerprint) {
+    throw new SubscriberGovernanceError('INVALID_SUBSCRIBER_IMPORT_PAYLOAD');
+  }
+
+  // Verify snapshotBytes: recompute and check cap
+  const expectedSnapshotBytes = stable({
+    version: 'subscriber-import-v2',
+    records,
+    targets,
+    targetCount: targets.length,
+    summary: { rowCount: records.length, createCount: summary.createCount, skipCount: summary.skipCount, fieldNames: actualFieldNames, fileHash: summary.fileHash },
+    strategy: 'skip-existing-create-only',
+    operationFingerprint: p.operationFingerprint,
+  }).length;
+  if (p.snapshotBytes !== expectedSnapshotBytes) {
+    throw new SubscriberGovernanceError('INVALID_SUBSCRIBER_IMPORT_PAYLOAD');
+  }
+  if (expectedSnapshotBytes > MAX_IMPORT_SNAPSHOT_BYTES) {
+    throw new SubscriberGovernanceError('INVALID_SUBSCRIBER_IMPORT_PAYLOAD');
   }
 
   return payload as FrozenSubscriberImportV2;
@@ -581,10 +704,10 @@ export async function executeFrozenSubscriberImportV2(frozen: FrozenSubscriberIm
 
   for (const { target, exists } of existenceChecks) {
     if (target.state === 'present' && !exists) {
-      return result; // Zero writes on state drift
+      throw new SubscriberGovernanceError('SUBSCRIBER_IMPORT_PRECONDITION_CHANGED');
     }
     if (target.state === 'absent' && exists) {
-      return result; // Zero writes on state drift
+      throw new SubscriberGovernanceError('SUBSCRIBER_IMPORT_PRECONDITION_CHANGED');
     }
   }
 

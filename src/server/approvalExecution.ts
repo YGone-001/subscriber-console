@@ -213,6 +213,14 @@ const defaultExecutor: GovernedApprovalExecutor = {
     }
 
     if (approval.action === 'SUBSCRIBER_IMPORT') {
+      // v1/v2 branching: check payload version
+      const payload = approval.payload as Record<string, unknown> | undefined;
+      if (!payload || payload.version !== 'subscriber-import-v2') {
+        // v1 legacy: delegate to legacy executor
+        return executeApproval(approval, request);
+      }
+
+      // v2 path
       const frozen = assertFrozenSubscriberImportV2(approval.payload);
       const result = await executeFrozenSubscriberImportV2(frozen);
       const classification = classifyImportResult(result);
@@ -230,6 +238,18 @@ const defaultExecutor: GovernedApprovalExecutor = {
         }, { failureMode: 'strict' });
       } catch {
         throw new ApprovalExecutionError('AUDIT_UNAVAILABLE', 503, approval, result.mutationCommitted, result);
+      }
+
+      // Terminal-state semantics: PARTIAL_WRITE and FAILED_NO_MUTATION must throw
+      if (classification === 'PARTIAL_WRITE') {
+        throw new ApprovalExecutionError('SUBSCRIBER_IMPORT_PARTIAL_WRITE', 409, approval, true, result);
+      }
+      if (classification === 'FAILED_NO_MUTATION') {
+        // Determine if this is precondition drift or storage failure
+        if (result.conflictImsis.length > 0) {
+          throw new ApprovalExecutionError('SUBSCRIBER_IMPORT_PRECONDITION_CHANGED', 409, approval, false, result);
+        }
+        throw new ApprovalExecutionError('SUBSCRIBER_IMPORT_FAILED', 500, approval, false, result);
       }
 
       return { ...result, classification };

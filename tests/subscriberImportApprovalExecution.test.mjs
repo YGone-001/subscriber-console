@@ -299,14 +299,21 @@ test('Import Approval Execute v2 partial write', async () => {
   const request = new Request('https://ops.test/api/approvals/a/execute');
   const auth = { user: 'testuser', role: 'super_admin', sessionVersion: 0 };
 
-  const result = await service.executeApprovedChange(request, approval.id, auth);
+  // PARTIAL_WRITE with committed=true is re-thrown from executeApprovedChange
+  try {
+    await service.executeApprovedChange(request, approval.id, auth);
+    assert.fail('expected ApprovalExecutionError');
+  } catch (error) {
+    assert.equal(error.code, 'SUBSCRIBER_IMPORT_PARTIAL_WRITE');
+    assert.equal(error.committed, true);
+    assert.equal(error.status, 409);
+  }
 
   assert.equal(govSpies.calls.assertFrozenSubscriberImportV2, 1);
   assert.equal(govSpies.calls.executeFrozenSubscriberImportV2, 1);
 
   const importAudit = auditCalls.find((a) => a.action === 'subscriber.import');
   assert.ok(importAudit, 'subscriber.import audit must be called');
-  assert.equal(importAudit.result, 'success');
   assert.equal(importAudit.metadata.classification, 'PARTIAL');
   assert.equal(importAudit.metadata.mutationCommitted, true);
 });

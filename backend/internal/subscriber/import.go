@@ -33,13 +33,13 @@ const (
 
 // ImportRecord holds a single normalized import record.
 type ImportRecord struct {
-	Imsi                  string  `json:"imsi"`
-	AccessRestrictionData int     `json:"access_restriction_data"`
-	TrafficTotal          int64   `json:"traffic_total"`
-	TrafficBalance        int64   `json:"traffic_balance"`
-	SmsTotal              int64   `json:"sms_total"`
-	SmsBalance            int64   `json:"sms_balance"`
-	PlanId                string  `json:"plan_id"`
+	Imsi                  string `json:"imsi"`
+	AccessRestrictionData int    `json:"access_restriction_data"`
+	TrafficTotal          int64  `json:"traffic_total"`
+	TrafficBalance        int64  `json:"traffic_balance"`
+	SmsTotal              int64  `json:"sms_total"`
+	SmsBalance            int64  `json:"sms_balance"`
+	PlanId                string `json:"plan_id"`
 	// Omitted fields for fingerprint stability
 	_ struct{} `json:"-"`
 }
@@ -99,15 +99,18 @@ type ImportRepository interface {
 // sensitiveKeys are the keys that must not be non-empty in import records.
 var sensitiveKeys = []string{"k", "op", "opc", "amf", "sqn"}
 
-// unsafeKeys are keys that must not appear in import records.
-var unsafeKeys = map[string]bool{
-	"_id": true, "security": true, "$set": true, "$unset": true,
-	"__proto__": true, "constructor": true, "prototype": true,
-}
-
 // allowedTopLevelKeys are the only allowed top-level keys in import request.
 var allowedTopLevelKeys = map[string]bool{
 	"records": true, "overwrite": true,
+}
+
+// allowedImportRowKeys is the explicit row-field allowlist for import records.
+// Sensitive keys are recognized only so they can produce the 422 response.
+var allowedImportRowKeys = map[string]bool{
+	"imsi": true, "access_restriction_data": true,
+	"traffic_total": true, "traffic_balance": true,
+	"sms_total": true, "sms_balance": true, "plan_id": true,
+	"k": true, "op": true, "opc": true, "amf": true, "sqn": true,
 }
 
 // ValidateImportRequest validates the raw import request.
@@ -173,12 +176,9 @@ func ValidateImportRequest(payload map[string]any) ([]map[string]any, error) {
 			}
 		}
 
-		// Check unsafe keys
+		// Allowlist check: reject unknown fields
 		for key := range rec {
-			if unsafeKeys[key] {
-				return nil, &SubscriberGovernanceError{Code: ErrInvalidImportRequest}
-			}
-			if strings.Contains(key, ".") || strings.Contains(key, "$") {
+			if !allowedImportRowKeys[key] {
 				return nil, &SubscriberGovernanceError{Code: ErrInvalidImportRequest}
 			}
 		}
@@ -234,8 +234,13 @@ func validateImportNumericFields(rec map[string]any) error {
 	return nil
 }
 
-
 // NormalizeImportRecord normalizes a raw import record to canonical form.
+// Legacy-compatible OCS defaults:
+//
+//	traffic_balance missing → 10737418240
+//	traffic_total missing → traffic_balance (if present) → 10737418240
+//	sms_balance missing → 100
+//	sms_total missing → sms_balance (if present) → 100
 func NormalizeImportRecord(rec map[string]any) ImportRecord {
 	imsi, _ := rec["imsi"].(string)
 	imsi = strings.TrimSpace(imsi)
@@ -247,13 +252,6 @@ func NormalizeImportRecord(rec map[string]any) ImportRecord {
 		}
 	}
 
-	trafficTotal := int64(importDefaultTraffic)
-	if v, ok := rec["traffic_total"]; ok {
-		if n, ok := toFloat64(v); ok {
-			trafficTotal = int64(n)
-		}
-	}
-
 	trafficBalance := int64(importDefaultTraffic)
 	if v, ok := rec["traffic_balance"]; ok {
 		if n, ok := toFloat64(v); ok {
@@ -261,10 +259,10 @@ func NormalizeImportRecord(rec map[string]any) ImportRecord {
 		}
 	}
 
-	smsTotal := int64(importDefaultSms)
-	if v, ok := rec["sms_total"]; ok {
+	trafficTotal := trafficBalance // default to balance
+	if v, ok := rec["traffic_total"]; ok {
 		if n, ok := toFloat64(v); ok {
-			smsTotal = int64(n)
+			trafficTotal = int64(n)
 		}
 	}
 
@@ -272,6 +270,13 @@ func NormalizeImportRecord(rec map[string]any) ImportRecord {
 	if v, ok := rec["sms_balance"]; ok {
 		if n, ok := toFloat64(v); ok {
 			smsBalance = int64(n)
+		}
+	}
+
+	smsTotal := smsBalance // default to balance
+	if v, ok := rec["sms_total"]; ok {
+		if n, ok := toFloat64(v); ok {
+			smsTotal = int64(n)
 		}
 	}
 
@@ -398,10 +403,10 @@ func PrepareFrozenImport(
 
 	// Compute snapshotBytes
 	snapshotBytes := len(stableJSON(map[string]any{
-		"version":              "subscriber-import-v2",
-		"records":              records,
-		"targets":              targets,
-		"targetCount":          len(targets),
+		"version":     "subscriber-import-v2",
+		"records":     records,
+		"targets":     targets,
+		"targetCount": len(targets),
 		"summary": map[string]any{
 			"rowCount":    len(records),
 			"createCount": createCount,
@@ -419,9 +424,9 @@ func PrepareFrozenImport(
 	}
 
 	return &FrozenImportV2{
-		Version: "subscriber-import-v2",
-		Records: records,
-		Targets: targets,
+		Version:     "subscriber-import-v2",
+		Records:     records,
+		Targets:     targets,
 		TargetCount: len(targets),
 		Summary: ImportSummary{
 			RowCount:    len(records),
@@ -444,10 +449,10 @@ func AssertFrozenImportV2(frozen *FrozenImportV2) error {
 	if frozen.Version != "subscriber-import-v2" {
 		return &SubscriberGovernanceError{Code: ErrInvalidFrozenImport}
 	}
-	if len(frozen.Records) == 0 || len(frozen.Targets) == 0 {
+	if len(frozen.Records) == 0 || len(frozen.Records) > maxImportRows {
 		return &SubscriberGovernanceError{Code: ErrInvalidFrozenImport}
 	}
-	if len(frozen.Records) != len(frozen.Targets) {
+	if len(frozen.Targets) == 0 || len(frozen.Records) != len(frozen.Targets) {
 		return &SubscriberGovernanceError{Code: ErrInvalidFrozenImport}
 	}
 	if frozen.TargetCount != len(frozen.Targets) {
@@ -457,7 +462,19 @@ func AssertFrozenImportV2(frozen *FrozenImportV2) error {
 		return &SubscriberGovernanceError{Code: ErrInvalidFrozenImport}
 	}
 
-	// Verify sorted by IMSI
+	// Verify IMSI format: exactly 15 ASCII digits
+	for _, rec := range frozen.Records {
+		if len(rec.Imsi) != 15 {
+			return &SubscriberGovernanceError{Code: ErrInvalidFrozenImport}
+		}
+		for _, c := range rec.Imsi {
+			if c < '0' || c > '9' {
+				return &SubscriberGovernanceError{Code: ErrInvalidFrozenImport}
+			}
+		}
+	}
+
+	// Verify sorted by IMSI (strictly ascending)
 	for i := 1; i < len(frozen.Records); i++ {
 		if frozen.Records[i].Imsi <= frozen.Records[i-1].Imsi {
 			return &SubscriberGovernanceError{Code: ErrInvalidFrozenImport}
@@ -492,6 +509,19 @@ func AssertFrozenImportV2(frozen *FrozenImportV2) error {
 		}
 	}
 
+	// Verify normalized numeric domains
+	for _, rec := range frozen.Records {
+		if rec.AccessRestrictionData < 0 || rec.AccessRestrictionData > 255 {
+			return &SubscriberGovernanceError{Code: ErrInvalidFrozenImport}
+		}
+		if rec.TrafficTotal < 0 || rec.TrafficBalance < 0 || rec.SmsTotal < 0 || rec.SmsBalance < 0 {
+			return &SubscriberGovernanceError{Code: ErrInvalidFrozenImport}
+		}
+		if rec.PlanId == "" {
+			return &SubscriberGovernanceError{Code: ErrInvalidFrozenImport}
+		}
+	}
+
 	// Verify recordIntentHash
 	for i, t := range frozen.Targets {
 		expected := ComputeRecordIntentHash(frozen.Records[i])
@@ -504,8 +534,44 @@ func AssertFrozenImportV2(frozen *FrozenImportV2) error {
 	if frozen.Summary.RowCount != len(frozen.Records) {
 		return &SubscriberGovernanceError{Code: ErrInvalidFrozenImport}
 	}
-	if frozen.Summary.CreateCount+frozen.Summary.SkipCount != len(frozen.Records) {
+
+	// Recompute createCount/skipCount independently
+	recomputedCreate := 0
+	recomputedSkip := 0
+	for _, t := range frozen.Targets {
+		if t.State == "absent" {
+			recomputedCreate++
+		} else {
+			recomputedSkip++
+		}
+	}
+	if frozen.Summary.CreateCount != recomputedCreate || frozen.Summary.SkipCount != recomputedSkip {
 		return &SubscriberGovernanceError{Code: ErrInvalidFrozenImport}
+	}
+
+	// Verify fieldNames: exact canonical sorted value
+	fieldNameSet := make(map[string]bool)
+	for _, rec := range frozen.Records {
+		_ = rec
+		fieldNameSet["access_restriction_data"] = true
+		fieldNameSet["traffic_total"] = true
+		fieldNameSet["traffic_balance"] = true
+		fieldNameSet["sms_total"] = true
+		fieldNameSet["sms_balance"] = true
+		fieldNameSet["plan_id"] = true
+	}
+	expectedFieldNames := make([]string, 0, len(fieldNameSet))
+	for name := range fieldNameSet {
+		expectedFieldNames = append(expectedFieldNames, name)
+	}
+	sort.Strings(expectedFieldNames)
+	if len(frozen.Summary.FieldNames) != len(expectedFieldNames) {
+		return &SubscriberGovernanceError{Code: ErrInvalidFrozenImport}
+	}
+	for i, name := range expectedFieldNames {
+		if frozen.Summary.FieldNames[i] != name {
+			return &SubscriberGovernanceError{Code: ErrInvalidFrozenImport}
+		}
 	}
 
 	// Verify fileHash
@@ -520,7 +586,7 @@ func AssertFrozenImportV2(frozen *FrozenImportV2) error {
 		return &SubscriberGovernanceError{Code: ErrInvalidFrozenImport}
 	}
 
-	// Verify snapshotBytes
+	// Verify snapshotBytes: recompute and check cap
 	expectedSnapshot := len(stableJSON(map[string]any{
 		"version":              frozen.Version,
 		"records":              frozen.Records,
@@ -533,17 +599,21 @@ func AssertFrozenImportV2(frozen *FrozenImportV2) error {
 	if frozen.SnapshotBytes != expectedSnapshot {
 		return &SubscriberGovernanceError{Code: ErrInvalidFrozenImport}
 	}
+	// Execution-time cap: prevent oversized stored payloads from bypassing the limit
+	if expectedSnapshot > maxImportSnapshotBytes {
+		return &SubscriberGovernanceError{Code: ErrInvalidFrozenImport}
+	}
 
 	// Verify no sensitive fields in records
 	for _, rec := range frozen.Records {
 		recMap := map[string]any{
-			"imsi":                   rec.Imsi,
+			"imsi":                    rec.Imsi,
 			"access_restriction_data": rec.AccessRestrictionData,
-			"traffic_total":          rec.TrafficTotal,
-			"traffic_balance":        rec.TrafficBalance,
-			"sms_total":              rec.SmsTotal,
-			"sms_balance":            rec.SmsBalance,
-			"plan_id":                rec.PlanId,
+			"traffic_total":           rec.TrafficTotal,
+			"traffic_balance":         rec.TrafficBalance,
+			"sms_total":               rec.SmsTotal,
+			"sms_balance":             rec.SmsBalance,
+			"plan_id":                 rec.PlanId,
 		}
 		for _, key := range sensitiveKeys {
 			if _, ok := recMap[key]; ok {
@@ -596,27 +666,27 @@ func ExecuteFrozenImport(
 		actualExists := existsMap[t.Imsi]
 		if t.State == "present" && !actualExists {
 			return &ImportExecutionResult{
-				Requested:            frozen.TargetCount,
-				IntendedCreateCount:  frozen.Summary.CreateCount,
-				OperationFingerprint: frozen.OperationFingerprint,
-				CreatedImsis:         []string{},
-				SkippedImsis:         []string{},
-				ConflictImsis:        []string{},
-				FailedImsis:          []string{},
-				OcsProvisionedImsis:  []string{},
+				Requested:                  frozen.TargetCount,
+				IntendedCreateCount:        frozen.Summary.CreateCount,
+				OperationFingerprint:       frozen.OperationFingerprint,
+				CreatedImsis:               []string{},
+				SkippedImsis:               []string{},
+				ConflictImsis:              []string{},
+				FailedImsis:                []string{},
+				OcsProvisionedImsis:        []string{},
 				OcsProvisioningFailedImsis: []string{},
 			}, &SubscriberGovernanceError{Code: ErrImportPreconditionChanged}
 		}
 		if t.State == "absent" && actualExists {
 			return &ImportExecutionResult{
-				Requested:            frozen.TargetCount,
-				IntendedCreateCount:  frozen.Summary.CreateCount,
-				OperationFingerprint: frozen.OperationFingerprint,
-				CreatedImsis:         []string{},
-				SkippedImsis:         []string{},
-				ConflictImsis:        []string{},
-				FailedImsis:          []string{},
-				OcsProvisionedImsis:  []string{},
+				Requested:                  frozen.TargetCount,
+				IntendedCreateCount:        frozen.Summary.CreateCount,
+				OperationFingerprint:       frozen.OperationFingerprint,
+				CreatedImsis:               []string{},
+				SkippedImsis:               []string{},
+				ConflictImsis:              []string{},
+				FailedImsis:                []string{},
+				OcsProvisionedImsis:        []string{},
 				OcsProvisioningFailedImsis: []string{},
 			}, &SubscriberGovernanceError{Code: ErrImportPreconditionChanged}
 		}
@@ -624,14 +694,14 @@ func ExecuteFrozenImport(
 
 	// Phase 2: Execute — skip present, insert absent
 	result := &ImportExecutionResult{
-		Requested:            frozen.TargetCount,
-		IntendedCreateCount:  frozen.Summary.CreateCount,
-		OperationFingerprint: frozen.OperationFingerprint,
-		CreatedImsis:         []string{},
-		SkippedImsis:         []string{},
-		ConflictImsis:        []string{},
-		FailedImsis:          []string{},
-		OcsProvisionedImsis:  []string{},
+		Requested:                  frozen.TargetCount,
+		IntendedCreateCount:        frozen.Summary.CreateCount,
+		OperationFingerprint:       frozen.OperationFingerprint,
+		CreatedImsis:               []string{},
+		SkippedImsis:               []string{},
+		ConflictImsis:              []string{},
+		FailedImsis:                []string{},
+		OcsProvisionedImsis:        []string{},
 		OcsProvisioningFailedImsis: []string{},
 	}
 
@@ -715,27 +785,27 @@ func buildImportSubscriberDoc(rec ImportRecord) bson.M {
 	realm := epcRealmFromImsi(rec.Imsi)
 
 	return bson.M{
-		"__v":                      0,
-		"schema_version":           1,
-		"imsi":                     rec.Imsi,
-		"msisdn":                   bson.A{},
-		"access_restriction_data":  int64(rec.AccessRestrictionData),
-		"network_access_mode":      int64(0),
-		"subscriber_status":        int64(0),
-		"operator_select_access":   int64(0),
-		"slice":                    bson.A{},
-		"ambr":                     ambr,
-		"security":                 auth,
-		"schema_version_of_pdu":    1,
-		"pdu_session":              bson.A{},
-		"session":                  bson.A{},
-		"flows":                    bson.A{},
-		"webui_meta":               bson.M{"profile_name": ""},
-		"name":                     "",
+		"__v":                     0,
+		"schema_version":          1,
+		"imsi":                    rec.Imsi,
+		"msisdn":                  bson.A{},
+		"access_restriction_data": int64(rec.AccessRestrictionData),
+		"network_access_mode":     int64(0),
+		"subscriber_status":       int64(0),
+		"operator_select_access":  int64(0),
+		"slice":                   bson.A{},
+		"ambr":                    ambr,
+		"security":                auth,
+		"schema_version_of_pdu":   1,
+		"pdu_session":             bson.A{},
+		"session":                 bson.A{},
+		"flows":                   bson.A{},
+		"webui_meta":              bson.M{"profile_name": ""},
+		"name":                    "",
 		"epc": bson.M{
-			"realm":     realm,
-			"ue_realm":  realm,
-			"ue_ipv4":   "",
+			"realm":      realm,
+			"ue_realm":   realm,
+			"ue_ipv4":    "",
 			"visited_id": "",
 		},
 	}

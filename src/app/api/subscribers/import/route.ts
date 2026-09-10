@@ -4,6 +4,7 @@ import { requireCapability } from '@/lib/authz';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import { precheckSubscriberImsis } from '@/server/repositories/subscriberRepository';
 import { getTariffPlan } from '@/server/repositories/ocsBillingRepository';
+import { listActiveSubscriberApprovals } from '@/server/repositories/approvalRepository';
 import { validateImportRecords, validateImsiList } from '@/lib/subscriberValidation';
 import { createHash } from 'node:crypto';
 import { evaluateSubscriberOperationForActor, SUBSCRIBER_OPERATIONS } from '@/server/subscriberGovernanceRegistry';
@@ -37,6 +38,7 @@ export interface SubscriberImportDeps {
   createGovernedApproval: typeof createGovernedApproval;
   writeAuditLog: typeof writeAuditLog;
   prepareFrozenSubscriberImport: typeof prepareFrozenSubscriberImport;
+  listActiveSubscriberApprovals: typeof listActiveSubscriberApprovals;
   executeFrozenSubscriberImportV2?: (frozen: unknown) => Promise<unknown>;
 }
 
@@ -52,6 +54,7 @@ const productionDeps: SubscriberImportDeps = {
   createGovernedApproval,
   writeAuditLog,
   prepareFrozenSubscriberImport,
+  listActiveSubscriberApprovals,
 };
 
 export function createSubscriberImportHandler(deps: SubscriberImportDeps = productionDeps) {
@@ -78,13 +81,19 @@ export function createSubscriberImportHandler(deps: SubscriberImportDeps = produ
       return NextResponse.json({ error: 'Invalid mode parameter' }, { status: 400 });
     } catch (error) {
       if (error instanceof Error && error.message === 'INVALID_PLAN_ID') {
-        return NextResponse.json({ error: 'Invalid plan_id format' }, { status: 400 });
+        return NextResponse.json({ error: 'Invalid plan_id format', code: 'INVALID_PLAN_ID' }, { status: 400 });
       }
       if (error instanceof Error && error.message === 'OCS_PLAN_NOT_FOUND') {
-        return NextResponse.json({ error: 'Tariff plan not found' }, { status: 404 });
+        return NextResponse.json({ error: 'Tariff plan not found', code: 'OCS_PLAN_NOT_FOUND' }, { status: 404 });
       }
       if (error instanceof Error && error.message === 'OCS_PLAN_DISABLED') {
-        return NextResponse.json({ error: 'Tariff plan is disabled' }, { status: 409 });
+        return NextResponse.json({ error: 'Tariff plan is disabled', code: 'OCS_PLAN_DISABLED' }, { status: 409 });
+      }
+      if (error instanceof Error && error.message === 'SUBSCRIBER_IMPORT_PRECONDITION_CHANGED') {
+        return NextResponse.json({ error: 'SUBSCRIBER_IMPORT_PRECONDITION_CHANGED', code: 'SUBSCRIBER_IMPORT_PRECONDITION_CHANGED', mutationCommitted: false, partialMutation: false }, { status: 409 });
+      }
+      if (error instanceof Error && error.message === 'APPROVAL_SNAPSHOT_TOO_LARGE') {
+        return NextResponse.json({ error: 'APPROVAL_SNAPSHOT_TOO_LARGE', code: 'APPROVAL_SNAPSHOT_TOO_LARGE' }, { status: 413 });
       }
 
       console.error('Import Error:', error);
@@ -109,6 +118,49 @@ async function handlePrecheck(body: Record<string, unknown>, deps: SubscriberImp
 }
 
 const SENSITIVE_KEYS = ['k', 'op', 'opc', 'amf', 'sqn'];
+
+const IMPORT_CONFLICT_ACTIONS = [
+  'SUBSCRIBER_BATCH_CREATE', 'SUBSCRIBER_IMPORT', 'SUBSCRIBER_BULK_DELETE',
+  'SUBSCRIBER_BATCH_UPDATE', 'SUBSCRIBER_UPDATE', 'SUBSCRIBER_DELETE',
+];
+
+type ActiveApprovalMatch = { type: 'duplicate'; approval: Record<string, unknown> } | { type: 'conflict'; approval: Record<string, unknown> };
+
+function extractApprovalTargets(approval: { action: string; payload?: Record<string, unknown>; targetId?: string }): string[] {
+  const payload = approval.payload || {};
+  if (approval.action === 'SUBSCRIBER_UPDATE' || approval.action === 'SUBSCRIBER_DELETE') {
+    if (typeof payload.imsi === 'string' && payload.imsi.length === 15) return [payload.imsi];
+    return [];
+  }
+  // BATCH_UPDATE, BULK_DELETE, BATCH_CREATE, IMPORT: payload.targets[].imsi
+  const targets = Array.isArray(payload.targets) ? payload.targets : [];
+  return targets.map((t: Record<string, unknown>) => t.imsi).filter((i): i is string => typeof i === 'string');
+}
+
+async function findActiveImportConflicts(
+  fingerprint: string,
+  targets: Array<{ imsi: string; state: string }>,
+  deps: SubscriberImportDeps,
+): Promise<ActiveApprovalMatch | null> {
+  const createImsis = new Set(targets.filter((t) => t.state === 'absent').map((t) => t.imsi));
+
+  for (const action of IMPORT_CONFLICT_ACTIONS) {
+    const active = await deps.listActiveSubscriberApprovals(action);
+    for (const approval of active) {
+      // Duplicate check: same fingerprint for IMPORT
+      if (action === 'SUBSCRIBER_IMPORT' && approval.operationFingerprint === fingerprint) {
+        return { type: 'duplicate', approval };
+      }
+      // Overlap check: any active change targeting same IMSIs we intend to create
+      const existingTargets = extractApprovalTargets(approval);
+      const hasOverlap = existingTargets.some((imsi) => createImsis.has(imsi));
+      if (hasOverlap) {
+        return { type: 'conflict', approval };
+      }
+    }
+  }
+  return null;
+}
 
 async function handleImport(
   request: Request,
@@ -163,44 +215,60 @@ async function handleImport(
   // Prepare frozen v2
   const frozen = await deps.prepareFrozenSubscriberImport(validation.value);
 
-  // Check for existing active approvals (simplified — production uses full active-change check)
-  // This is handled by the approval creator in production
+  // Active change protection — cross-action target overlap check
+  const activeMatch = await findActiveImportConflicts(frozen.operationFingerprint, frozen.targets, deps);
 
   if (!policy.requiresApproval) {
-    // super_admin/root: Direct execution
+    // super_admin/root: Direct execution — ANY active conflict → 409
+    if (activeMatch) {
+      return NextResponse.json({
+        error: 'ACTIVE_CHANGE_CONFLICT',
+        code: 'ACTIVE_CHANGE_CONFLICT',
+        approval: activeMatch.approval,
+      }, { status: 409 });
+    }
+
     const result = await (deps.executeFrozenSubscriberImportV2 || executeFrozenSubscriberImportV2)(frozen) as Awaited<ReturnType<typeof executeFrozenSubscriberImportV2>>;
     const classification = classifyImportResult(result);
 
-    // Business audit
+    // Business audit — strict, with committed semantics
     const auditResult = classification === 'SUCCESS' ? 'success' : 'failed';
-    await deps.writeAuditLog({
-      actor: freshActor,
-      module: 'subscribers',
-      action: 'subscriber.import',
-      resource: { type: 'subscriber_import', id: 'csv-import' },
-      targetId: 'subscriber:csv-import',
-      riskLevel: 'high',
-      result: auditResult,
-      metadata: {
-        governanceMode: 'DIRECT_GOVERNED',
-        approvalRequired: false,
-        actorRole: freshActor.role,
-        risk: 'high',
-        requested: result.requested,
-        intendedCreateCount: result.intendedCreateCount,
-        createdCount: result.createdCount,
-        skipCount: result.skippedImsis.length,
-        conflictCount: result.conflictImsis.length,
-        failedCount: result.failedImsis.length,
-        ocsProvisioningFailureCount: result.ocsProvisioningFailedImsis.length,
-        fileHash: frozen.summary.fileHash,
-        operationFingerprint: frozen.operationFingerprint,
-        classification,
-        partialMutation: result.partialMutation,
-        mutationCommitted: result.mutationCommitted,
-      },
-      ...auditRequestContext(request),
-    }, { failureMode: 'strict' });
+    try {
+      await deps.writeAuditLog({
+        actor: freshActor,
+        module: 'subscribers',
+        action: 'subscriber.import',
+        resource: { type: 'subscriber_import', id: 'csv-import' },
+        targetId: 'subscriber:csv-import',
+        riskLevel: 'high',
+        result: auditResult,
+        metadata: {
+          governanceMode: 'DIRECT_GOVERNED',
+          approvalRequired: false,
+          actorRole: freshActor.role,
+          risk: 'high',
+          requested: result.requested,
+          intendedCreateCount: result.intendedCreateCount,
+          createdCount: result.createdCount,
+          skipCount: result.skippedImsis.length,
+          conflictCount: result.conflictImsis.length,
+          failedCount: result.failedImsis.length,
+          ocsProvisioningFailureCount: result.ocsProvisioningFailedImsis.length,
+          fileHash: frozen.summary.fileHash,
+          operationFingerprint: frozen.operationFingerprint,
+          classification,
+          partialMutation: result.partialMutation,
+          mutationCommitted: result.mutationCommitted,
+        },
+        ...auditRequestContext(request),
+      }, { failureMode: 'strict' });
+    } catch {
+      return NextResponse.json({
+        error: 'AUDIT_UNAVAILABLE',
+        code: 'AUDIT_UNAVAILABLE',
+        committed: result.mutationCommitted,
+      }, { status: 503 });
+    }
 
     if (classification === 'PARTIAL_WRITE') {
       return NextResponse.json({
@@ -219,9 +287,25 @@ async function handleImport(
     }
 
     if (classification === 'FAILED_NO_MUTATION') {
+      // Zero inserts: distinguish precondition drift from storage failure
+      if (result.conflictImsis.length > 0) {
+        return NextResponse.json({
+          error: 'SUBSCRIBER_IMPORT_PRECONDITION_CHANGED',
+          code: 'SUBSCRIBER_IMPORT_PRECONDITION_CHANGED',
+          requested: result.requested,
+          imported: result.createdCount,
+          skipped: result.skippedImsis.length,
+          failed: result.failedImsis.length,
+          importedImsis: result.createdImsis,
+          failedImsis: result.failedImsis,
+          ocsProvisioningFailedImsis: result.ocsProvisioningFailedImsis,
+          partialMutation: false,
+          mutationCommitted: false,
+        }, { status: 409 });
+      }
       return NextResponse.json({
-        error: 'SUBSCRIBER_IMPORT_FAILED_NO_MUTATION',
-        code: 'SUBSCRIBER_IMPORT_FAILED_NO_MUTATION',
+        error: 'SUBSCRIBER_IMPORT_FAILED',
+        code: 'SUBSCRIBER_IMPORT_FAILED',
         requested: result.requested,
         imported: result.createdCount,
         skipped: result.skippedImsis.length,
@@ -231,7 +315,7 @@ async function handleImport(
         ocsProvisioningFailedImsis: result.ocsProvisioningFailedImsis,
         partialMutation: false,
         mutationCommitted: false,
-      }, { status: 409 });
+      }, { status: 500 });
     }
 
     return NextResponse.json({
@@ -251,6 +335,21 @@ async function handleImport(
   }
 
   // operator/ops_admin: Approval path
+  if (activeMatch) {
+    if (activeMatch.type === 'duplicate') {
+      return NextResponse.json({
+        approval: activeMatch.approval,
+        requiresApproval: true,
+        idempotent: true,
+      }, { status: 202 });
+    }
+    return NextResponse.json({
+      error: 'ACTIVE_CHANGE_CONFLICT',
+      code: 'ACTIVE_CHANGE_CONFLICT',
+      approval: activeMatch.approval,
+    }, { status: 409 });
+  }
+
   const approval = await deps.createGovernedApproval({
     action: 'SUBSCRIBER_IMPORT',
     requester: auth.user,

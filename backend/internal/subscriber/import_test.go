@@ -112,11 +112,11 @@ func TestNormalizeImportRecord_Defaults(t *testing.T) {
 func TestNormalizeImportRecord_ExplicitValues(t *testing.T) {
 	record := map[string]any{
 		"imsi":                    "454000000000001",
-		"traffic_total":          5000000000,
-		"traffic_balance":        4000000000,
-		"sms_total":              200,
-		"sms_balance":            150,
-		"plan_id":                "plan_custom",
+		"traffic_total":           5000000000,
+		"traffic_balance":         4000000000,
+		"sms_total":               200,
+		"sms_balance":             150,
+		"plan_id":                 "plan_custom",
 		"access_restriction_data": 64,
 	}
 	normalized := NormalizeImportRecord(record)
@@ -230,11 +230,11 @@ func TestAssertFrozenImportV2_NilPayload(t *testing.T) {
 
 func TestAssertFrozenImportV2_EmptyRecords(t *testing.T) {
 	frozen := &FrozenImportV2{
-		Version:    "subscriber-import-v2",
-		Records:    []ImportRecord{},
-		Targets:    []ImportTarget{{Imsi: "454000000000001", State: "absent", RecordIntentHash: "abc"}},
+		Version:     "subscriber-import-v2",
+		Records:     []ImportRecord{},
+		Targets:     []ImportTarget{{Imsi: "454000000000001", State: "absent", RecordIntentHash: "abc"}},
 		TargetCount: 1,
-		Strategy:   "skip-existing-create-only",
+		Strategy:    "skip-existing-create-only",
 	}
 	err := AssertFrozenImportV2(frozen)
 	if err == nil {
@@ -244,11 +244,11 @@ func TestAssertFrozenImportV2_EmptyRecords(t *testing.T) {
 
 func TestAssertFrozenImportV2_EmptyTargets(t *testing.T) {
 	frozen := &FrozenImportV2{
-		Version:    "subscriber-import-v2",
-		Records:    []ImportRecord{{Imsi: "454000000000001"}},
-		Targets:    []ImportTarget{},
+		Version:     "subscriber-import-v2",
+		Records:     []ImportRecord{{Imsi: "454000000000001"}},
+		Targets:     []ImportTarget{},
 		TargetCount: 0,
-		Strategy:   "skip-existing-create-only",
+		Strategy:    "skip-existing-create-only",
 	}
 	err := AssertFrozenImportV2(frozen)
 	if err == nil {
@@ -258,11 +258,11 @@ func TestAssertFrozenImportV2_EmptyTargets(t *testing.T) {
 
 func TestAssertFrozenImportV2_MismatchedCounts(t *testing.T) {
 	frozen := &FrozenImportV2{
-		Version:    "subscriber-import-v2",
-		Records:    []ImportRecord{{Imsi: "454000000000001"}},
-		Targets:    []ImportTarget{{Imsi: "454000000000001", State: "absent", RecordIntentHash: "abc"}, {Imsi: "454000000000002", State: "absent", RecordIntentHash: "def"}},
+		Version:     "subscriber-import-v2",
+		Records:     []ImportRecord{{Imsi: "454000000000001"}},
+		Targets:     []ImportTarget{{Imsi: "454000000000001", State: "absent", RecordIntentHash: "abc"}, {Imsi: "454000000000002", State: "absent", RecordIntentHash: "def"}},
 		TargetCount: 2,
-		Strategy:   "skip-existing-create-only",
+		Strategy:    "skip-existing-create-only",
 	}
 	err := AssertFrozenImportV2(frozen)
 	if err == nil {
@@ -318,26 +318,23 @@ func TestAssertFrozenImportV2_Valid(t *testing.T) {
 	}
 	fileHash := ComputeFileHash(records)
 	fingerprint := ComputeImportFingerprint(targets, "skip-existing-create-only", fileHash)
+	fieldNames := []string{"access_restriction_data", "plan_id", "sms_balance", "sms_total", "traffic_balance", "traffic_total"}
+	summary := ImportSummary{RowCount: 2, CreateCount: 1, SkipCount: 1, FieldNames: fieldNames, FileHash: fileHash}
 	snapshotBytes := len(stableJSON(map[string]any{
 		"version":              "subscriber-import-v2",
 		"records":              records,
 		"targets":              targets,
 		"targetCount":          2,
-		"summary":              ImportSummary{RowCount: 2, CreateCount: 1, SkipCount: 1, FileHash: fileHash},
+		"summary":              summary,
 		"strategy":             "skip-existing-create-only",
 		"operationFingerprint": fingerprint,
 	}))
 	frozen := &FrozenImportV2{
-		Version: "subscriber-import-v2",
-		Records: records,
-		Targets: targets,
-		TargetCount: 2,
-		Summary: ImportSummary{
-			RowCount:    2,
-			CreateCount: 1,
-			SkipCount:   1,
-			FileHash:    fileHash,
-		},
+		Version:              "subscriber-import-v2",
+		Records:              records,
+		Targets:              targets,
+		TargetCount:          2,
+		Summary:              summary,
 		Strategy:             "skip-existing-create-only",
 		SnapshotBytes:        snapshotBytes,
 		OperationFingerprint: fingerprint,
