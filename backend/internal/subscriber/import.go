@@ -99,6 +99,18 @@ type ImportRepository interface {
 // sensitiveKeys are the keys that must not be non-empty in import records.
 var sensitiveKeys = []string{"k", "op", "opc", "amf", "sqn"}
 
+// canonicalImportFieldNames is the fixed canonical fieldNames for subscriber-import-v2.
+// Represents the effective normalized write intent, NOT raw CSV column presence.
+// Lexically sorted. Both Prepare and Assert must use this exact value.
+var canonicalImportFieldNames = []string{
+	"access_restriction_data",
+	"plan_id",
+	"sms_balance",
+	"sms_total",
+	"traffic_balance",
+	"traffic_total",
+}
+
 // allowedTopLevelKeys are the only allowed top-level keys in import request.
 var allowedTopLevelKeys = map[string]bool{
 	"records": true, "overwrite": true,
@@ -382,20 +394,9 @@ func PrepareFrozenImport(
 		})
 	}
 
-	// Compute field names (sorted, unique)
-	fieldNameSet := make(map[string]bool)
-	for _, raw := range rawRecords {
-		for key := range raw {
-			if key != "imsi" {
-				fieldNameSet[key] = true
-			}
-		}
-	}
-	fieldNames := make([]string, 0, len(fieldNameSet))
-	for name := range fieldNameSet {
-		fieldNames = append(fieldNames, name)
-	}
-	sort.Strings(fieldNames)
+	// Canonical fieldNames — fixed for subscriber-import-v2 (not derived from raw CSV)
+	fieldNames := make([]string, len(canonicalImportFieldNames))
+	copy(fieldNames, canonicalImportFieldNames)
 
 	// Compute hashes
 	fileHash := ComputeFileHash(records)
@@ -549,22 +550,8 @@ func AssertFrozenImportV2(frozen *FrozenImportV2) error {
 		return &SubscriberGovernanceError{Code: ErrInvalidFrozenImport}
 	}
 
-	// Verify fieldNames: exact canonical sorted value
-	fieldNameSet := make(map[string]bool)
-	for _, rec := range frozen.Records {
-		_ = rec
-		fieldNameSet["access_restriction_data"] = true
-		fieldNameSet["traffic_total"] = true
-		fieldNameSet["traffic_balance"] = true
-		fieldNameSet["sms_total"] = true
-		fieldNameSet["sms_balance"] = true
-		fieldNameSet["plan_id"] = true
-	}
-	expectedFieldNames := make([]string, 0, len(fieldNameSet))
-	for name := range fieldNameSet {
-		expectedFieldNames = append(expectedFieldNames, name)
-	}
-	sort.Strings(expectedFieldNames)
+	// Verify fieldNames: exact canonical sorted value (fixed for subscriber-import-v2)
+	expectedFieldNames := canonicalImportFieldNames
 	if len(frozen.Summary.FieldNames) != len(expectedFieldNames) {
 		return &SubscriberGovernanceError{Code: ErrInvalidFrozenImport}
 	}

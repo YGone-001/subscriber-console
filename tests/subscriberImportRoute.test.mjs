@@ -34,6 +34,20 @@ function createMockDeps(overrides = {}) {
       if (!Array.isArray(records) || records.length === 0) {
         return { ok: false, error: 'INVALID_SUBSCRIBER_IMPORT_REQUEST' };
       }
+      const IMPORT_MUTATION_FIELDS = new Set(['imsi', 'access_restriction_data', 'traffic_total', 'traffic_balance', 'sms_total', 'sms_balance', 'plan_id']);
+      const IMPORT_SENSITIVE_KEYS = new Set(['k', 'op', 'opc', 'amf', 'sqn']);
+      for (const rec of records) {
+        for (const key of Object.keys(rec)) {
+          if (!IMPORT_MUTATION_FIELDS.has(key) && !IMPORT_SENSITIVE_KEYS.has(key)) {
+            return { ok: false, error: 'INVALID_SUBSCRIBER_IMPORT_REQUEST' };
+          }
+        }
+        for (const key of IMPORT_SENSITIVE_KEYS) {
+          if (key in rec && rec[key] !== undefined && rec[key] !== null && String(rec[key]).trim() !== '') {
+            return { ok: false, error: 'SENSITIVE_SUBSCRIBER_CHANGE_NOT_SUPPORTED' };
+          }
+        }
+      }
       return { ok: true, value: records };
     },
     validateCurrentAccount: async () => ({
@@ -207,40 +221,64 @@ test('import route: reject overwrite=true', async () => {
   assert.equal(body.error, 'SUBSCRIBER_IMPORT_OVERWRITE_NOT_SUPPORTED');
 });
 
-test('import route: reject sensitive field k', async () => {
+test('import route: reject sensitive field k → 422', async () => {
   const request = createImportRequest([{ imsi: '454000000000001', k: '00000000000000000000000000000000' }]);
   const handler = routeModule.createSubscriberImportHandler(createMockDeps());
   const response = await handler(request, {});
   assert.equal(response.status, 422);
   const body = await response.json();
   assert.equal(body.error, 'SENSITIVE_SUBSCRIBER_CHANGE_NOT_SUPPORTED');
+  assert.equal(body.code, 'SENSITIVE_SUBSCRIBER_CHANGE_NOT_SUPPORTED');
 });
 
-test('import route: reject sensitive field opc', async () => {
+test('import route: reject sensitive field op → 422', async () => {
+  const request = createImportRequest([{ imsi: '454000000000001', op: '00000000000000000000000000000000' }]);
+  const handler = routeModule.createSubscriberImportHandler(createMockDeps());
+  const response = await handler(request, {});
+  assert.equal(response.status, 422);
+  const body = await response.json();
+  assert.equal(body.error, 'SENSITIVE_SUBSCRIBER_CHANGE_NOT_SUPPORTED');
+  assert.equal(body.code, 'SENSITIVE_SUBSCRIBER_CHANGE_NOT_SUPPORTED');
+});
+
+test('import route: reject sensitive field opc → 422', async () => {
   const request = createImportRequest([{ imsi: '454000000000001', opc: '00000000000000000000000000000000' }]);
   const handler = routeModule.createSubscriberImportHandler(createMockDeps());
   const response = await handler(request, {});
   assert.equal(response.status, 422);
   const body = await response.json();
   assert.equal(body.error, 'SENSITIVE_SUBSCRIBER_CHANGE_NOT_SUPPORTED');
+  assert.equal(body.code, 'SENSITIVE_SUBSCRIBER_CHANGE_NOT_SUPPORTED');
 });
 
-test('import route: reject sensitive field amf', async () => {
+test('import route: reject sensitive field amf → 422', async () => {
   const request = createImportRequest([{ imsi: '454000000000001', amf: '8000' }]);
   const handler = routeModule.createSubscriberImportHandler(createMockDeps());
   const response = await handler(request, {});
   assert.equal(response.status, 422);
   const body = await response.json();
   assert.equal(body.error, 'SENSITIVE_SUBSCRIBER_CHANGE_NOT_SUPPORTED');
+  assert.equal(body.code, 'SENSITIVE_SUBSCRIBER_CHANGE_NOT_SUPPORTED');
 });
 
-test('import route: reject sensitive field sqn', async () => {
+test('import route: reject sensitive field sqn → 422', async () => {
   const request = createImportRequest([{ imsi: '454000000000001', sqn: '1' }]);
   const handler = routeModule.createSubscriberImportHandler(createMockDeps());
   const response = await handler(request, {});
   assert.equal(response.status, 422);
   const body = await response.json();
   assert.equal(body.error, 'SENSITIVE_SUBSCRIBER_CHANGE_NOT_SUPPORTED');
+  assert.equal(body.code, 'SENSITIVE_SUBSCRIBER_CHANGE_NOT_SUPPORTED');
+});
+
+test('import route: reject unknown normal field → 400', async () => {
+  const request = createImportRequest([{ imsi: '454000000000001', unknown_field: 'value' }]);
+  const handler = routeModule.createSubscriberImportHandler(createMockDeps());
+  const response = await handler(request, {});
+  assert.equal(response.status, 400);
+  const body = await response.json();
+  assert.equal(body.error, 'INVALID_SUBSCRIBER_IMPORT_REQUEST');
+  assert.equal(body.code, 'INVALID_SUBSCRIBER_IMPORT_REQUEST');
 });
 
 test('import route: operator → 202 approval', async () => {

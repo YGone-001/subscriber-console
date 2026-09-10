@@ -117,8 +117,6 @@ async function handlePrecheck(body: Record<string, unknown>, deps: SubscriberImp
   });
 }
 
-const SENSITIVE_KEYS = ['k', 'op', 'opc', 'amf', 'sqn'];
-
 const IMPORT_CONFLICT_ACTIONS = [
   'SUBSCRIBER_BATCH_CREATE', 'SUBSCRIBER_IMPORT', 'SUBSCRIBER_BULK_DELETE',
   'SUBSCRIBER_BATCH_UPDATE', 'SUBSCRIBER_UPDATE', 'SUBSCRIBER_DELETE',
@@ -178,7 +176,14 @@ async function handleImport(
   // Validate records
   const validation = deps.validateImportRecords(records);
   if (!validation.ok) {
-    return NextResponse.json({ error: validation.error }, { status: 400 });
+    // Preserve SENSITIVE_SUBSCRIBER_CHANGE_NOT_SUPPORTED as 422 (validator is authority)
+    if (validation.error === 'SENSITIVE_SUBSCRIBER_CHANGE_NOT_SUPPORTED') {
+      return NextResponse.json(
+        { error: 'SENSITIVE_SUBSCRIBER_CHANGE_NOT_SUPPORTED', code: 'SENSITIVE_SUBSCRIBER_CHANGE_NOT_SUPPORTED' },
+        { status: 422 },
+      );
+    }
+    return NextResponse.json({ error: 'INVALID_SUBSCRIBER_IMPORT_REQUEST', code: 'INVALID_SUBSCRIBER_IMPORT_REQUEST' }, { status: 400 });
   }
 
   // Validate tariff plans
@@ -189,14 +194,6 @@ async function handleImport(
     const plan = await deps.getTariffPlan(planId);
     if (!plan) throw new Error('OCS_PLAN_NOT_FOUND');
     if (plan.status === 'disabled') throw new Error('OCS_PLAN_DISABLED');
-  }
-
-  // Reject sensitive records
-  const secretBearing = validation.value.some((record) =>
-    SENSITIVE_KEYS.some((key) => record[key] !== undefined && String(record[key]).trim() !== '')
-  );
-  if (secretBearing) {
-    return NextResponse.json({ error: 'SENSITIVE_SUBSCRIBER_CHANGE_NOT_SUPPORTED' }, { status: 422 });
   }
 
   // Fresh actor validation

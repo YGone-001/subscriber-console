@@ -418,6 +418,18 @@ const SENSITIVE_IMPORT_KEYS = ['k', 'op', 'opc', 'amf', 'sqn'];
 const MAX_IMPORT_ROWS = 5000;
 const MAX_IMPORT_SNAPSHOT_BYTES = 512 * 1024;
 
+// Canonical fieldNames for subscriber-import-v2.
+// Represents the effective normalized write intent, NOT raw CSV column presence.
+// Lexically sorted. Both Prepare and Assert must use this exact value.
+const CANONICAL_IMPORT_FIELD_NAMES = [
+  'access_restriction_data',
+  'plan_id',
+  'sms_balance',
+  'sms_total',
+  'traffic_balance',
+  'traffic_total',
+];
+
 export async function prepareFrozenSubscriberImport(records: Record<string, unknown>[]): Promise<FrozenSubscriberImportV2> {
   if (!Array.isArray(records) || records.length === 0 || records.length > MAX_IMPORT_ROWS) {
     throw new SubscriberGovernanceError('INVALID_SUBSCRIBER_IMPORT_REQUEST');
@@ -459,14 +471,8 @@ export async function prepareFrozenSubscriberImport(records: Record<string, unkn
   const createCount = targets.filter((t) => t.state === 'absent').length;
   const skipCount = targets.filter((t) => t.state === 'present').length;
 
-  // Compute field names
-  const fieldNameSet = new Set<string>();
-  for (const rec of records) {
-    for (const key of Object.keys(rec)) {
-      if (key !== 'imsi') fieldNameSet.add(key);
-    }
-  }
-  const fieldNames = Array.from(fieldNameSet).sort();
+  // Canonical fieldNames — fixed for subscriber-import-v2 (not derived from raw CSV)
+  const fieldNames = [...CANONICAL_IMPORT_FIELD_NAMES];
 
   // Compute hashes
   const fileHash = hash(normalized);
@@ -625,14 +631,8 @@ export function assertFrozenSubscriberImportV2(payload: unknown): FrozenSubscrib
     throw new SubscriberGovernanceError('INVALID_SUBSCRIBER_IMPORT_PAYLOAD');
   }
 
-  // Verify fieldNames: exact canonical sorted value
-  const fieldNameSet = new Set<string>();
-  for (const rec of records) {
-    for (const key of Object.keys(rec)) {
-      if (key !== 'imsi') fieldNameSet.add(key);
-    }
-  }
-  const expectedFieldNames = Array.from(fieldNameSet).sort();
+  // Verify fieldNames: exact canonical sorted value (fixed for subscriber-import-v2)
+  const expectedFieldNames = CANONICAL_IMPORT_FIELD_NAMES;
   const actualFieldNames = summary.fieldNames as string[];
   if (!Array.isArray(actualFieldNames) || actualFieldNames.length !== expectedFieldNames.length ||
       actualFieldNames.some((f, i) => f !== expectedFieldNames[i])) {
