@@ -371,3 +371,105 @@ test('import route: failed no mutation returns 409', async () => {
   const body = await response.json();
   assert.equal(body.error, 'SUBSCRIBER_IMPORT_PRECONDITION_CHANGED');
 });
+
+test('import route: executor precondition throw → 409 with business audit', async () => {
+  const request = createImportRequest([{ imsi: '454000000000001' }], { role: 'super_admin' });
+  const auditCalls = [];
+  const deps = createMockDeps({
+    validateCurrentAccount: async () => ({
+      user: { username: 'admin', role: 'super_admin' },
+      fresh: true,
+    }),
+    evaluateSubscriberOperationForActor: () => ({ requiresApproval: false }),
+    executeFrozenSubscriberImportV2: async () => {
+      throw new Error('SUBSCRIBER_IMPORT_PRECONDITION_CHANGED');
+    },
+    writeAuditLog: async (input) => { auditCalls.push(input); },
+  });
+  const handler = routeModule.createSubscriberImportHandler(deps);
+  const response = await handler(request, {});
+  assert.equal(response.status, 409);
+  const body = await response.json();
+  assert.equal(body.error, 'SUBSCRIBER_IMPORT_PRECONDITION_CHANGED');
+  assert.equal(body.mutationCommitted, false);
+
+  // Business audit was written
+  const importAudit = auditCalls.find((a) => a.action === 'subscriber.import');
+  assert.ok(importAudit, 'subscriber.import audit must be called');
+  assert.equal(importAudit.result, 'failed');
+  assert.equal(importAudit.metadata.classification, 'FAILED_NO_MUTATION');
+  assert.equal(importAudit.metadata.mutationCommitted, false);
+});
+
+test('import route: executor storage throw → 500 with business audit', async () => {
+  const request = createImportRequest([{ imsi: '454000000000001' }], { role: 'super_admin' });
+  const auditCalls = [];
+  const deps = createMockDeps({
+    validateCurrentAccount: async () => ({
+      user: { username: 'admin', role: 'super_admin' },
+      fresh: true,
+    }),
+    evaluateSubscriberOperationForActor: () => ({ requiresApproval: false }),
+    executeFrozenSubscriberImportV2: async () => {
+      throw new Error('DATABASE_CONNECTION_FAILED');
+    },
+    writeAuditLog: async (input) => { auditCalls.push(input); },
+  });
+  const handler = routeModule.createSubscriberImportHandler(deps);
+  const response = await handler(request, {});
+  assert.equal(response.status, 500);
+  const body = await response.json();
+  assert.equal(body.error, 'SUBSCRIBER_IMPORT_FAILED');
+  assert.equal(body.mutationCommitted, false);
+
+  // Business audit was written
+  const importAudit = auditCalls.find((a) => a.action === 'subscriber.import');
+  assert.ok(importAudit, 'subscriber.import audit must be called');
+  assert.equal(importAudit.result, 'failed');
+  assert.equal(importAudit.metadata.classification, 'FAILED_NO_MUTATION');
+  assert.equal(importAudit.metadata.mutationCommitted, false);
+});
+
+test('import route: audit failure after zero-write → 503', async () => {
+  const request = createImportRequest([{ imsi: '454000000000001' }], { role: 'super_admin' });
+  const deps = createMockDeps({
+    validateCurrentAccount: async () => ({
+      user: { username: 'admin', role: 'super_admin' },
+      fresh: true,
+    }),
+    evaluateSubscriberOperationForActor: () => ({ requiresApproval: false }),
+    executeFrozenSubscriberImportV2: async () => {
+      throw new Error('SUBSCRIBER_IMPORT_PRECONDITION_CHANGED');
+    },
+    writeAuditLog: async () => { throw new Error('audit service down'); },
+  });
+  const handler = routeModule.createSubscriberImportHandler(deps);
+  const response = await handler(request, {});
+  assert.equal(response.status, 503);
+  const body = await response.json();
+  assert.equal(body.error, 'AUDIT_UNAVAILABLE');
+  assert.equal(body.committed, false);
+});
+
+test('import route: oversized Prepare snapshot → 413', async () => {
+  const records = Array.from({ length: 100 }, (_, i) => ({
+    imsi: `454000000${String(i).padStart(8, '0')}`,
+  }));
+  const request = createImportRequest(records, { role: 'super_admin' });
+  const deps = createMockDeps({
+    validateCurrentAccount: async () => ({
+      user: { username: 'admin', role: 'super_admin' },
+      fresh: true,
+    }),
+    evaluateSubscriberOperationForActor: () => ({ requiresApproval: true }),
+    prepareFrozenSubscriberImport: async () => {
+      throw new Error('APPROVAL_SNAPSHOT_TOO_LARGE');
+    },
+  });
+  const handler = routeModule.createSubscriberImportHandler(deps);
+  const response = await handler(request, {});
+  assert.equal(response.status, 413);
+  const body = await response.json();
+  assert.equal(body.error, 'APPROVAL_SNAPSHOT_TOO_LARGE');
+  assert.equal(body.code, 'APPROVAL_SNAPSHOT_TOO_LARGE');
+});

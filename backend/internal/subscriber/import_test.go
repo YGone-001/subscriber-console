@@ -1028,6 +1028,35 @@ func TestNormalizedRecord_NoSensitiveKeys(t *testing.T) {
 	}
 }
 
+func TestPrepareFrozenImport_OversizedSnapshotRejected(t *testing.T) {
+	repo := newFakeImportRepo()
+	// Generate enough records to exceed 512KB snapshotBytes
+	// Each record ~308 bytes in stable JSON, need >1701 records to exceed 512KB
+	records := make([]map[string]any, 2000)
+	for i := range records {
+		records[i] = map[string]any{
+			"imsi":                    fmt.Sprintf("45400000%07d", i),
+			"access_restriction_data": 32,
+			"traffic_total":           10737418240,
+			"traffic_balance":         10737418240,
+			"sms_total":               100,
+			"sms_balance":             100,
+			"plan_id":                 "plan_default_10gb",
+		}
+	}
+	_, err := PrepareFrozenImport(context.Background(), records, repo)
+	if err == nil {
+		t.Fatal("expected error for oversized snapshot")
+	}
+	govErr, ok := err.(*SubscriberGovernanceError)
+	if !ok {
+		t.Fatalf("expected SubscriberGovernanceError, got %T: %v", err, err)
+	}
+	if govErr.Code != ErrApprovalSnapshotTooLarge {
+		t.Fatalf("expected APPROVAL_SNAPSHOT_TOO_LARGE, got %s", govErr.Code)
+	}
+}
+
 // Helper for test logging cross-runtime fixture values
 func TestCrossRuntime_PrintCanonicalValues(t *testing.T) {
 	repo := newFakeImportRepo()

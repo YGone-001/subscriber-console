@@ -226,14 +226,14 @@ const defaultExecutor: GovernedApprovalExecutor = {
       const classification = classifyImportResult(result);
 
       // Audit
-      const auditClassification = classification === 'PARTIAL_WRITE' ? 'PARTIAL' : classification;
+      const auditResult = classification === 'SUCCESS' ? 'success' : 'failed';
       try {
         await writeAuditLog({
           actor: actor || { type: 'system', userId: 'system', username: 'system' }, module: 'subscribers', action: 'subscriber.import',
           resource: { type: 'subscriber_bulk_operation', id: approval.targetId, name: approval.targetId }, targetId: approval.targetId,
-          approvalId: approval.id, riskLevel: approval.riskLevel, result: classification === 'FAILED_NO_MUTATION' ? 'failed' : 'success', reason: approval.reason,
+          approvalId: approval.id, riskLevel: approval.riskLevel, result: auditResult, reason: approval.reason,
           before: approval.before, after: null,
-          metadata: { executionId: approval.execution?.id, operationFingerprint: approval.operationFingerprint, requested: result.requested, createdCount: result.createdCount, skippedCount: result.skippedImsis.length, conflictCount: result.conflictImsis.length, failedCount: result.failedImsis.length, ocsProvisionedCount: result.ocsProvisionedImsis.length, ocsProvisioningFailedCount: result.ocsProvisioningFailedImsis.length, classification: auditClassification, mutationCommitted: result.mutationCommitted, snapshotBytes: frozen.snapshotBytes, strategy: frozen.strategy },
+          metadata: { executionId: approval.execution?.id, operationFingerprint: approval.operationFingerprint, requested: result.requested, createdCount: result.createdCount, skippedCount: result.skippedImsis.length, conflictCount: result.conflictImsis.length, failedCount: result.failedImsis.length, ocsProvisionedCount: result.ocsProvisionedImsis.length, ocsProvisioningFailedCount: result.ocsProvisioningFailedImsis.length, classification, mutationCommitted: result.mutationCommitted, snapshotBytes: frozen.snapshotBytes, strategy: frozen.strategy },
           ...auditRequestContext(request),
         }, { failureMode: 'strict' });
       } catch {

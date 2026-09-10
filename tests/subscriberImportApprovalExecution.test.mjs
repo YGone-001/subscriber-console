@@ -314,7 +314,8 @@ test('Import Approval Execute v2 partial write', async () => {
 
   const importAudit = auditCalls.find((a) => a.action === 'subscriber.import');
   assert.ok(importAudit, 'subscriber.import audit must be called');
-  assert.equal(importAudit.metadata.classification, 'PARTIAL');
+  assert.equal(importAudit.result, 'failed');
+  assert.equal(importAudit.metadata.classification, 'PARTIAL_WRITE');
   assert.equal(importAudit.metadata.mutationCommitted, true);
 });
 

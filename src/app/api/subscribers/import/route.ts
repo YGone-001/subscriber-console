@@ -71,28 +71,29 @@ export function createSubscriberImportHandler(deps: SubscriberImportDeps = produ
       const body = await request.json();
 
       if (mode === 'precheck') {
-        return handlePrecheck(body, deps);
+        return await handlePrecheck(body, deps);
       }
 
       if (mode === 'import') {
-        return handleImport(request, body, auth.auth, deps);
+        return await handleImport(request, body, auth.auth, deps);
       }
 
       return NextResponse.json({ error: 'Invalid mode parameter' }, { status: 400 });
     } catch (error) {
-      if (error instanceof Error && error.message === 'INVALID_PLAN_ID') {
+      const errorMsg = (error as Error)?.message;
+      if (errorMsg === 'INVALID_PLAN_ID') {
         return NextResponse.json({ error: 'Invalid plan_id format', code: 'INVALID_PLAN_ID' }, { status: 400 });
       }
-      if (error instanceof Error && error.message === 'OCS_PLAN_NOT_FOUND') {
+      if (errorMsg === 'OCS_PLAN_NOT_FOUND') {
         return NextResponse.json({ error: 'Tariff plan not found', code: 'OCS_PLAN_NOT_FOUND' }, { status: 404 });
       }
-      if (error instanceof Error && error.message === 'OCS_PLAN_DISABLED') {
+      if (errorMsg === 'OCS_PLAN_DISABLED') {
         return NextResponse.json({ error: 'Tariff plan is disabled', code: 'OCS_PLAN_DISABLED' }, { status: 409 });
       }
-      if (error instanceof Error && error.message === 'SUBSCRIBER_IMPORT_PRECONDITION_CHANGED') {
+      if (errorMsg === 'SUBSCRIBER_IMPORT_PRECONDITION_CHANGED') {
         return NextResponse.json({ error: 'SUBSCRIBER_IMPORT_PRECONDITION_CHANGED', code: 'SUBSCRIBER_IMPORT_PRECONDITION_CHANGED', mutationCommitted: false, partialMutation: false }, { status: 409 });
       }
-      if (error instanceof Error && error.message === 'APPROVAL_SNAPSHOT_TOO_LARGE') {
+      if (errorMsg === 'APPROVAL_SNAPSHOT_TOO_LARGE') {
         return NextResponse.json({ error: 'APPROVAL_SNAPSHOT_TOO_LARGE', code: 'APPROVAL_SNAPSHOT_TOO_LARGE' }, { status: 413 });
       }
 
@@ -225,7 +226,96 @@ async function handleImport(
       }, { status: 409 });
     }
 
-    const result = await (deps.executeFrozenSubscriberImportV2 || executeFrozenSubscriberImportV2)(frozen) as Awaited<ReturnType<typeof executeFrozenSubscriberImportV2>>;
+    // Execute with strict business audit on every terminal outcome
+    let result: Awaited<ReturnType<typeof executeFrozenSubscriberImportV2>>;
+    try {
+      result = await (deps.executeFrozenSubscriberImportV2 || executeFrozenSubscriberImportV2)(frozen) as typeof result;
+    } catch (error) {
+      // Executor threw — classify the zero-write failure and audit it
+      const isPrecondition = (error as Error)?.message === 'SUBSCRIBER_IMPORT_PRECONDITION_CHANGED';
+      const zeroWriteResult = {
+        requested: frozen.targetCount,
+        intendedCreateCount: frozen.summary.createCount,
+        createdImsis: [] as string[],
+        skippedImsis: [] as string[],
+        conflictImsis: isPrecondition ? frozen.targets.filter((t) => t.state === 'absent').map((t) => t.imsi) : [] as string[],
+        failedImsis: isPrecondition ? [] as string[] : frozen.targets.filter((t) => t.state === 'absent').map((t) => t.imsi),
+        ocsProvisionedImsis: [] as string[],
+        ocsProvisioningFailedImsis: [] as string[],
+        createdCount: 0,
+        partialMutation: false,
+        mutationCommitted: false,
+        operationFingerprint: frozen.operationFingerprint,
+      };
+
+      // Business audit — strict, zero-write failure
+      try {
+        await deps.writeAuditLog({
+          actor: freshActor,
+          module: 'subscribers',
+          action: 'subscriber.import',
+          resource: { type: 'subscriber_import', id: 'csv-import' },
+          targetId: 'subscriber:csv-import',
+          riskLevel: 'high',
+          result: 'failed',
+          metadata: {
+            governanceMode: 'DIRECT_GOVERNED',
+            approvalRequired: false,
+            actorRole: freshActor.role,
+            risk: 'high',
+            requested: zeroWriteResult.requested,
+            intendedCreateCount: zeroWriteResult.intendedCreateCount,
+            createdCount: 0,
+            skipCount: 0,
+            conflictCount: zeroWriteResult.conflictImsis.length,
+            failedCount: zeroWriteResult.failedImsis.length,
+            ocsProvisioningFailureCount: 0,
+            fileHash: frozen.summary.fileHash,
+            operationFingerprint: frozen.operationFingerprint,
+            classification: 'FAILED_NO_MUTATION',
+            partialMutation: false,
+            mutationCommitted: false,
+          },
+          ...auditRequestContext(request),
+        }, { failureMode: 'strict' });
+      } catch {
+        return NextResponse.json({
+          error: 'AUDIT_UNAVAILABLE',
+          code: 'AUDIT_UNAVAILABLE',
+          committed: false,
+        }, { status: 503 });
+      }
+
+      if (isPrecondition) {
+        return NextResponse.json({
+          error: 'SUBSCRIBER_IMPORT_PRECONDITION_CHANGED',
+          code: 'SUBSCRIBER_IMPORT_PRECONDITION_CHANGED',
+          requested: frozen.targetCount,
+          imported: 0,
+          skipped: 0,
+          failed: 0,
+          importedImsis: [],
+          failedImsis: [],
+          ocsProvisioningFailedImsis: [],
+          partialMutation: false,
+          mutationCommitted: false,
+        }, { status: 409 });
+      }
+      return NextResponse.json({
+        error: 'SUBSCRIBER_IMPORT_FAILED',
+        code: 'SUBSCRIBER_IMPORT_FAILED',
+        requested: frozen.targetCount,
+        imported: 0,
+        skipped: 0,
+        failed: frozen.summary.createCount,
+        importedImsis: [],
+        failedImsis: frozen.targets.filter((t) => t.state === 'absent').map((t) => t.imsi),
+        ocsProvisioningFailedImsis: [],
+        partialMutation: false,
+        mutationCommitted: false,
+      }, { status: 500 });
+    }
+
     const classification = classifyImportResult(result);
 
     // Business audit — strict, with committed semantics

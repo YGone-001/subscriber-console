@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"subscriber/internal/approval"
+	"subscriber/internal/audit"
 	"subscriber/internal/auth"
 )
 
@@ -447,5 +449,107 @@ func TestImport_InsufficientPermissions(t *testing.T) {
 	h.Import(w, req)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("expected 403, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// --- Zero storage / partial insert / OCS failure / audit unavailable ---
+
+type failingInsertRepo struct {
+	mockImportRepo
+}
+
+func (f *failingInsertRepo) InsertSubscriberImportCreateOnly(_ context.Context, _ bson.M) error {
+	return &SubscriberGovernanceError{Code: ErrImportFailed}
+}
+
+func TestImport_ZeroStorage_500(t *testing.T) {
+	repo := &failingInsertRepo{
+		mockImportRepo: mockImportRepo{tariffPlans: map[string]bool{"plan_default_10gb": true}},
+	}
+	h := newImportTestHandler(repo, &mockApprovalQuerier{}, "super_admin")
+	body := map[string]any{"records": []any{map[string]any{"imsi": "454000000000001"}}}
+	req := importRequest("import", body, "super_admin")
+	w := httptest.NewRecorder()
+	h.Import(w, req)
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d: %s", w.Code, w.Body.String())
+	}
+	resp := importResponse(w)
+	if resp["code"] != ErrImportFailed {
+		t.Fatalf("expected %s, got %v", ErrImportFailed, resp["code"])
+	}
+}
+
+type failingOcsRepo struct {
+	mockImportRepo
+}
+
+func (f *failingOcsRepo) ProvisionImportedSubscriberOcs(_ context.Context, _ OcsProvisioningInput) error {
+	return fmt.Errorf("OCS provisioning failed")
+}
+
+func TestImport_OcsFailure_PartialWrite(t *testing.T) {
+	repo := &failingOcsRepo{
+		mockImportRepo: mockImportRepo{tariffPlans: map[string]bool{"plan_default_10gb": true}},
+	}
+	h := newImportTestHandler(repo, &mockApprovalQuerier{}, "super_admin")
+	body := map[string]any{"records": []any{map[string]any{"imsi": "454000000000001"}}}
+	req := importRequest("import", body, "super_admin")
+	w := httptest.NewRecorder()
+	h.Import(w, req)
+	// OCS failure → PARTIAL_WRITE → 409
+	if w.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d: %s", w.Code, w.Body.String())
+	}
+	resp := importResponse(w)
+	if resp["code"] != "SUBSCRIBER_IMPORT_PARTIAL_WRITE" {
+		t.Fatalf("expected SUBSCRIBER_IMPORT_PARTIAL_WRITE, got %v", resp["code"])
+	}
+	// Record was created but OCS failed
+	if resp["imported"].(float64) != 1 {
+		t.Fatalf("expected imported=1, got %v", resp["imported"])
+	}
+	ocsFailed := resp["ocsProvisioningFailedImsis"].([]any)
+	if len(ocsFailed) != 1 {
+		t.Fatalf("expected 1 OCS failure, got %d", len(ocsFailed))
+	}
+}
+
+type failingEvidenceStore struct{}
+
+func (f *failingEvidenceStore) Insert(_ context.Context, _ audit.AuditWriteRecord) error {
+	return fmt.Errorf("audit store unavailable")
+}
+func (f *failingEvidenceStore) FindByMongoID(_ context.Context, _ string) (*audit.AuditWriteRecord, error) {
+	return nil, fmt.Errorf("audit store unavailable")
+}
+
+func TestImport_AuditUnavailable_503(t *testing.T) {
+	repo := &mockImportRepo{tariffPlans: map[string]bool{"plan_default_10gb": true}}
+	repo2 := &Repository{}
+	limiter := &mockRateLimiter{allowed: true}
+	userRepo := &mockUserRepo{identity: testUserIdentity("testuser", "super_admin")}
+	approvalSvc := &mockApprovalCreator{
+		doc: &approval.ApprovalDocument{
+			ID:     "approval-123",
+			Action: "SUBSCRIBER_IMPORT",
+			Status: "pending",
+		},
+	}
+	auditWriter := audit.NewWriter(&failingEvidenceStore{}, audit.WriterConfig{})
+
+	h := NewWriteHandler(repo2, limiter, userRepo, approvalSvc, &mockApprovalQuerier{}, auditWriter)
+	h.importRepo = repo
+
+	body := map[string]any{"records": []any{map[string]any{"imsi": "454000000000001"}}}
+	req := importRequest("import", body, "super_admin")
+	w := httptest.NewRecorder()
+	h.Import(w, req)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d: %s", w.Code, w.Body.String())
+	}
+	resp := importResponse(w)
+	if resp["code"] != "AUDIT_UNAVAILABLE" {
+		t.Fatalf("expected AUDIT_UNAVAILABLE, got %v", resp["code"])
 	}
 }
