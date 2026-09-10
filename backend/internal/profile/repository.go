@@ -10,14 +10,14 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
-// Repository provides read-only access to profile data.
+// Repository provides access to profile data.
 type Repository struct {
 	profiles    *mongo.Collection
 	versions    *mongo.Collection
 	subscribers *mongo.Collection
 }
 
-// NewRepository creates a new read-only profile Repository.
+// NewRepository creates a new profile Repository.
 func NewRepository(profiles, versions, subscribers *mongo.Collection) *Repository {
 	return &Repository{
 		profiles:    profiles,
@@ -70,7 +70,7 @@ func (r *Repository) ListProfiles(ctx context.Context) ([]ProfileListItem, Profi
 }
 
 // GetProfile returns a single profile by name, or nil if not found.
-func (r *Repository) GetProfile(ctx context.Context, name string) (map[string]any, error) {
+func (r *Repository) GetProfile(ctx context.Context, name string) (bson.M, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
@@ -321,4 +321,146 @@ func stringify(v any) string {
 	default:
 		return fmt.Sprintf("%v", v)
 	}
+}
+
+// ── Write Primitives ────────────────────────────────────────────────────────
+
+const ProfileVersionLimit = 50
+
+// InsertProfileCreateOnly inserts a new profile document using InsertOne.
+// Returns PROFILE_EXISTS error if the profile name already exists.
+func (r *Repository) InsertProfileCreateOnly(ctx context.Context, doc bson.M) error {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	_, err := r.profiles.InsertOne(ctx, doc)
+	if err != nil {
+		if mongo.IsDuplicateKeyError(err) {
+			return ErrProfileExists
+		}
+		return err
+	}
+	return nil
+}
+
+// ReplaceProfileCAS replaces a profile document using CAS (expected document match).
+// Returns nil on success, ErrProfilePreconditionChanged if the document changed,
+// or other errors.
+func (r *Repository) ReplaceProfileCAS(ctx context.Context, name string, expected bson.M, updated bson.M) error {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	// Build filter from expected document (match all fields except _id)
+	filter := bson.M{"name": name}
+	if expected != nil {
+		// Use the full expected document as filter for CAS
+		filter = bson.M{}
+		for k, v := range expected {
+			if k == "_id" {
+				continue
+			}
+			filter[k] = v
+		}
+	}
+
+	result, err := r.profiles.ReplaceOne(ctx, filter, updated)
+	if err != nil {
+		return err
+	}
+	if result.MatchedCount == 0 {
+		return ErrProfilePreconditionChanged
+	}
+	return nil
+}
+
+// DeleteProfileCAS deletes a profile document using CAS.
+// Returns nil on success, ErrProfilePreconditionChanged if the document changed,
+// or other errors.
+func (r *Repository) DeleteProfileCAS(ctx context.Context, name string, expected bson.M) error {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	// Build filter from expected document
+	filter := bson.M{"name": name}
+	if expected != nil {
+		filter = bson.M{}
+		for k, v := range expected {
+			if k == "_id" {
+				continue
+			}
+			filter[k] = v
+		}
+	}
+
+	result, err := r.profiles.DeleteOne(ctx, filter)
+	if err != nil {
+		return err
+	}
+	if result.DeletedCount == 0 {
+		return ErrProfilePreconditionChanged
+	}
+	return nil
+}
+
+// SaveProfileVersion saves a profile version record and prunes old versions.
+func (r *Repository) SaveProfileVersion(ctx context.Context, record bson.M) error {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	_, err := r.versions.InsertOne(ctx, record)
+	if err != nil {
+		return err
+	}
+
+	// Prune old versions beyond the limit
+	profileName, _ := record["profileName"].(string)
+	if profileName == "" {
+		return nil
+	}
+
+	// Find versions beyond the limit
+	cursor, err := r.versions.Find(ctx,
+		bson.M{"profileName": profileName},
+		options.Find().
+			SetSort(bson.D{{Key: "savedAt", Value: -1}}).
+			SetSkip(int64(ProfileVersionLimit)).
+			SetProjection(bson.M{"versionId": 1}),
+	)
+	if err != nil {
+		return nil // Don't fail the save just because pruning failed
+	}
+	defer cursor.Close(ctx)
+
+	var staleIDs []string
+	for cursor.Next(ctx) {
+		var doc bson.M
+		if cursor.Decode(&doc) == nil {
+			if vid, ok := doc["versionId"].(string); ok {
+				staleIDs = append(staleIDs, vid)
+			}
+		}
+	}
+
+	if len(staleIDs) > 0 {
+		_, _ = r.versions.DeleteMany(ctx, bson.M{"versionId": bson.M{"$in": staleIDs}})
+	}
+
+	return nil
+}
+
+// CountSubscribersByProfile counts subscribers using a specific profile.
+func (r *Repository) CountSubscribersByProfile(ctx context.Context, profileName string) (int64, error) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	filter := bson.M{
+		"$or": bson.A{
+			bson.M{"webui_meta.profile_name": profileName},
+			bson.M{"webui_meta.profile": profileName},
+			bson.M{"profile_name": profileName},
+			bson.M{"profile": profileName},
+		},
+	}
+
+	return r.subscribers.CountDocuments(ctx, filter)
 }

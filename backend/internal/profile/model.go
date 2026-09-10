@@ -68,3 +68,26 @@ type ProfileCurrentSummary struct {
 	UpdatedBy  string `json:"updatedBy,omitempty"`
 	SliceCount int    `json:"sliceCount"`
 }
+
+// ── Write Request/Response Types ────────────────────────────────────────────
+
+// CreateProfileRequest is the request body for POST /api/profiles.
+type CreateProfileRequest struct {
+	Name string `json:"name"`
+}
+
+// CreateProfileResponse matches POST /api/profiles response shape.
+type CreateProfileResponse struct {
+	Message string `json:"message"`
+	Name    string `json:"name"`
+}
+
+// UpdateProfileResponse matches PUT /api/profiles/:name response shape.
+type UpdateProfileResponse struct {
+	Message string `json:"message"`
+}
+
+// DeleteProfileResponse matches DELETE /api/profiles/:name response shape.
+type DeleteProfileResponse struct {
+	Message string `json:"message"`
+}

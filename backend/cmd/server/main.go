@@ -99,7 +99,7 @@ func main() {
 		mc.Ops.Collection("app_profile_versions"),
 		mc.XCloud.Collection("subscribers"),
 	)
-	profileHandler := profile.NewHandler(profileRepo, limiter)
+	profileHandler := profile.NewHandler(profileRepo, limiter, auditWriter)
 
 	// OCS
 	ocsRepo := ocs.NewRepository(
