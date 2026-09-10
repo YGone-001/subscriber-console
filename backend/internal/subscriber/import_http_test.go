@@ -478,6 +478,9 @@ func TestImport_ZeroStorage_500(t *testing.T) {
 	if resp["code"] != ErrImportFailed {
 		t.Fatalf("expected %s, got %v", ErrImportFailed, resp["code"])
 	}
+	if resp["mutationCommitted"] != false {
+		t.Fatalf("expected mutationCommitted=false, got %v", resp["mutationCommitted"])
+	}
 }
 
 type failingOcsRepo struct {
@@ -509,6 +512,12 @@ func TestImport_OcsFailure_PartialWrite(t *testing.T) {
 	if resp["imported"].(float64) != 1 {
 		t.Fatalf("expected imported=1, got %v", resp["imported"])
 	}
+	if resp["partialMutation"] != true {
+		t.Fatalf("expected partialMutation=true, got %v", resp["partialMutation"])
+	}
+	if resp["mutationCommitted"] != true {
+		t.Fatalf("expected mutationCommitted=true, got %v", resp["mutationCommitted"])
+	}
 	ocsFailed := resp["ocsProvisioningFailedImsis"].([]any)
 	if len(ocsFailed) != 1 {
 		t.Fatalf("expected 1 OCS failure, got %d", len(ocsFailed))
@@ -524,7 +533,45 @@ func (f *failingEvidenceStore) FindByMongoID(_ context.Context, _ string) (*audi
 	return nil, fmt.Errorf("audit store unavailable")
 }
 
-func TestImport_AuditUnavailable_503(t *testing.T) {
+func TestImport_AuditUnavailable_ZeroMutation_503(t *testing.T) {
+	// Use a repo where insert fails → mutationCommitted=false
+	repo := &failingInsertRepo{
+		mockImportRepo: mockImportRepo{tariffPlans: map[string]bool{"plan_default_10gb": true}},
+	}
+	repo2 := &Repository{}
+	limiter := &mockRateLimiter{allowed: true}
+	userRepo := &mockUserRepo{identity: testUserIdentity("testuser", "super_admin")}
+	approvalSvc := &mockApprovalCreator{
+		doc: &approval.ApprovalDocument{
+			ID:     "approval-123",
+			Action: "SUBSCRIBER_IMPORT",
+			Status: "pending",
+		},
+	}
+	auditWriter := audit.NewWriter(&failingEvidenceStore{}, audit.WriterConfig{})
+
+	h := NewWriteHandler(repo2, limiter, userRepo, approvalSvc, &mockApprovalQuerier{}, auditWriter)
+	h.importRepo = repo
+
+	body := map[string]any{"records": []any{map[string]any{"imsi": "454000000000001"}}}
+	req := importRequest("import", body, "super_admin")
+	w := httptest.NewRecorder()
+	h.Import(w, req)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d: %s", w.Code, w.Body.String())
+	}
+	resp := importResponse(w)
+	if resp["code"] != "AUDIT_UNAVAILABLE" {
+		t.Fatalf("expected AUDIT_UNAVAILABLE, got %v", resp["code"])
+	}
+	// Zero mutation → committed=false
+	if resp["committed"] != false {
+		t.Fatalf("expected committed=false, got %v", resp["committed"])
+	}
+}
+
+func TestImport_AuditUnavailable_AfterMutation_503(t *testing.T) {
+	// Use a repo where insert succeeds → mutationCommitted=true
 	repo := &mockImportRepo{tariffPlans: map[string]bool{"plan_default_10gb": true}}
 	repo2 := &Repository{}
 	limiter := &mockRateLimiter{allowed: true}
@@ -551,5 +598,136 @@ func TestImport_AuditUnavailable_503(t *testing.T) {
 	resp := importResponse(w)
 	if resp["code"] != "AUDIT_UNAVAILABLE" {
 		t.Fatalf("expected AUDIT_UNAVAILABLE, got %v", resp["code"])
+	}
+	// After mutation → committed=true
+	if resp["committed"] != true {
+		t.Fatalf("expected committed=true, got %v", resp["committed"])
+	}
+}
+
+// --- Gate B: Go HTTP oversized production Prepare ---
+
+type trackingImportRepo struct {
+	mockImportRepo
+	insertCalls int
+	ocsCalls    int
+}
+
+func (t *trackingImportRepo) InsertSubscriberImportCreateOnly(_ context.Context, _ bson.M) error {
+	t.insertCalls++
+	return nil
+}
+
+func (t *trackingImportRepo) ProvisionImportedSubscriberOcs(_ context.Context, _ OcsProvisioningInput) error {
+	t.ocsCalls++
+	return nil
+}
+
+// --- Gate D: Two-target partial-insert ---
+
+type partialInsertRepo struct {
+	mockImportRepo
+	callCount int
+}
+
+func (p *partialInsertRepo) InsertSubscriberImportCreateOnly(_ context.Context, doc bson.M) error {
+	p.callCount++
+	if p.callCount == 2 {
+		// Second insert fails with duplicate key (simulates race)
+		return &SubscriberGovernanceError{Code: ErrImportFailed}
+	}
+	return nil
+}
+
+func TestImport_TwoTargetPartialInsert_409(t *testing.T) {
+	repo := &partialInsertRepo{
+		mockImportRepo: mockImportRepo{tariffPlans: map[string]bool{"plan_default_10gb": true}},
+	}
+	h := newImportTestHandler(repo, &mockApprovalQuerier{}, "super_admin")
+	body := map[string]any{
+		"records": []any{
+			map[string]any{"imsi": "454000000000911"},
+			map[string]any{"imsi": "454000000000912"},
+		},
+	}
+	req := importRequest("import", body, "super_admin")
+	w := httptest.NewRecorder()
+	h.Import(w, req)
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d: %s", w.Code, w.Body.String())
+	}
+	resp := importResponse(w)
+	if resp["code"] != "SUBSCRIBER_IMPORT_PARTIAL_WRITE" {
+		t.Fatalf("expected SUBSCRIBER_IMPORT_PARTIAL_WRITE, got %v", resp["code"])
+	}
+	// One created, one failed
+	if resp["imported"].(float64) != 1 {
+		t.Fatalf("expected imported=1, got %v", resp["imported"])
+	}
+	if resp["partialMutation"] != true {
+		t.Fatalf("expected partialMutation=true, got %v", resp["partialMutation"])
+	}
+	if resp["mutationCommitted"] != true {
+		t.Fatalf("expected mutationCommitted=true, got %v", resp["mutationCommitted"])
+	}
+}
+
+func TestImport_OversizedSnapshot_HTTP413(t *testing.T) {
+	repo := &trackingImportRepo{
+		mockImportRepo: mockImportRepo{tariffPlans: map[string]bool{"plan_default_10gb": true}},
+	}
+	approvalCaptured := &approval.CreateApprovalInput{}
+	approvalSvc := &mockApprovalCreator{
+		doc: &approval.ApprovalDocument{
+			ID:     "approval-123",
+			Action: "SUBSCRIBER_IMPORT",
+			Status: "pending",
+		},
+		captured: approvalCaptured,
+	}
+	repo2 := &Repository{}
+	limiter := &mockRateLimiter{allowed: true}
+	userRepo := &mockUserRepo{identity: testUserIdentity("testuser", "super_admin")}
+	auditWriter := testAuditWriter()
+
+	h := NewWriteHandler(repo2, limiter, userRepo, approvalSvc, &mockApprovalQuerier{}, auditWriter)
+	h.importRepo = repo
+
+	// Generate enough records to exceed512KB
+	records := make([]any, 2000)
+	for i := range records {
+		records[i] = map[string]any{
+			"imsi":                    fmt.Sprintf("45400000%07d", i),
+			"access_restriction_data": 32,
+			"traffic_total":           10737418240,
+			"traffic_balance":         10737418240,
+			"sms_total":               100,
+			"sms_balance":             100,
+			"plan_id":                 "plan_default_10gb",
+		}
+	}
+	body := map[string]any{"records": records}
+	req := importRequest("import", body, "super_admin")
+	w := httptest.NewRecorder()
+	h.Import(w, req)
+
+	if w.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("expected 413, got %d: %s", w.Code, w.Body.String())
+	}
+	resp := importResponse(w)
+	if resp["code"] != ErrApprovalSnapshotTooLarge {
+		t.Fatalf("expected %s, got %v", ErrApprovalSnapshotTooLarge, resp["code"])
+	}
+
+	// Side-effect gate: none of these should have been called
+	if approvalSvc.captured.OperationFingerprint != "" {
+		t.Fatal("Approval creation must not be called")
+	}
+	if repo.insertCalls != 0 {
+		t.Fatalf("Subscriber insert must not be called, got %d", repo.insertCalls)
+	}
+	if repo.ocsCalls != 0 {
+		t.Fatalf("OCS provisioning must not be called, got %d", repo.ocsCalls)
 	}
 }

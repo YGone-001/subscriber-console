@@ -473,3 +473,146 @@ test('import route: oversized Prepare snapshot → 413', async () => {
   assert.equal(body.error, 'APPROVAL_SNAPSHOT_TOO_LARGE');
   assert.equal(body.code, 'APPROVAL_SNAPSHOT_TOO_LARGE');
 });
+
+// ---------------------------------------------------------------------------
+// Gate A: Node REAL production Prepare oversized proof
+// Loads the real subscriberSingleGovernance module (not mocked prepare)
+// with mocked repository (findSubscriberDocument returns null)
+// ---------------------------------------------------------------------------
+
+test('import route: REAL production Prepare rejects oversized snapshot', async () => {
+  // Load the real subscriberContract module with real crypto
+  const realContract = loadModule('src/lib/subscriberContract.ts', {
+    'node:crypto': await import('node:crypto'),
+  });
+
+  // Load the real subscriberSingleGovernance module with mocked repository
+  const realGovernance = loadModule('src/server/subscriberSingleGovernance.ts', {
+    '@/lib/xcloudSubscriber': { buildXcloudSubscriberFromLegacy: () => ({}) },
+    '@/lib/subscriberContract': realContract,
+    '@/server/repositories/subscriberRepository': {
+      findSubscriberDocument: async () => null, // all subscribers are "new"
+      insertSubscriberImportCreateOnly: async () => {},
+      provisionImportedSubscriberOcs: async () => {},
+      deleteSubscriber: async () => {},
+      conditionalDeleteSubscriber: async () => {},
+      deleteSubscriberOcsProvisioning: async () => {},
+      updateSubscriberFromLegacy: async () => {},
+    },
+  });
+
+  // Generate records that will produce snapshotBytes > 512KB
+  // Each record ~308 bytes in stable JSON, need ~1701+ records
+  const records = Array.from({ length: 2000 }, (_, i) => ({
+    imsi: `454000000${String(i).padStart(8, '0')}`,
+    access_restriction_data: 32,
+    traffic_total: 10737418240,
+    traffic_balance: 10737418240,
+    sms_total: 100,
+    sms_balance: 100,
+    plan_id: 'plan_default_10gb',
+  }));
+
+  // Call the REAL production prepareFrozenSubscriberImport
+  let threw = false;
+  let errorCode = '';
+  let snapshotBytes = 0;
+  try {
+    await realGovernance.prepareFrozenSubscriberImport(records);
+  } catch (error) {
+    threw = true;
+    errorCode = error.code || error.message;
+    // Compute what snapshotBytes would have been (for evidence)
+    const targets = records.map((r) => ({
+      imsi: r.imsi,
+      state: 'absent',
+      recordIntentHash: realContract.hash(r),
+    }));
+    const normalized = records.map((r) => ({ ...r })).sort((a, b) => a.imsi.localeCompare(b.imsi));
+    const snapshotSource = {
+      version: 'subscriber-import-v2',
+      records: normalized,
+      targets,
+      targetCount: targets.length,
+      summary: {
+        rowCount: normalized.length,
+        createCount: normalized.length,
+        skipCount: 0,
+        fieldNames: ['access_restriction_data', 'plan_id', 'sms_balance', 'sms_total', 'traffic_balance', 'traffic_total'],
+        fileHash: realContract.hash(normalized),
+      },
+      strategy: 'skip-existing-create-only',
+      operationFingerprint: 'fp',
+    };
+    snapshotBytes = realContract.stable(snapshotSource).length;
+  }
+
+  assert.ok(threw, 'prepareFrozenSubscriberImport must throw for oversized payload');
+  assert.equal(errorCode, 'APPROVAL_SNAPSHOT_TOO_LARGE');
+  assert.ok(snapshotBytes > 512 * 1024, `snapshotBytes=${snapshotBytes} must exceed 512KB`);
+});
+
+test('import route: REAL oversized Prepare cannot reach side effects', async () => {
+  // Load the real modules
+  const realContract = loadModule('src/lib/subscriberContract.ts', {
+    'node:crypto': await import('node:crypto'),
+  });
+
+  const approvalCreateCalls = [];
+  const subscriberInsertCalls = [];
+  const ocsProvisionCalls = [];
+
+  const realGovernance = loadModule('src/server/subscriberSingleGovernance.ts', {
+    '@/lib/xcloudSubscriber': { buildXcloudSubscriberFromLegacy: () => ({}) },
+    '@/lib/subscriberContract': realContract,
+    '@/server/repositories/subscriberRepository': {
+      findSubscriberDocument: async () => null,
+      insertSubscriberImportCreateOnly: async (doc) => { subscriberInsertCalls.push(doc); },
+      provisionImportedSubscriberOcs: async (input) => { ocsProvisionCalls.push(input); },
+      deleteSubscriber: async () => {},
+      conditionalDeleteSubscriber: async () => {},
+      deleteSubscriberOcsProvisioning: async () => {},
+      updateSubscriberFromLegacy: async () => {},
+    },
+  });
+
+  // Build route handler with real Prepare but spies for side effects
+  const sideEffectDeps = {
+    ...createMockDeps({
+      validateCurrentAccount: async () => ({
+        user: { username: 'admin', role: 'super_admin' },
+        fresh: true,
+      }),
+      evaluateSubscriberOperationForActor: () => ({ requiresApproval: true }),
+      createGovernedApproval: async (input) => {
+        approvalCreateCalls.push(input);
+        return { id: 'approval-123', action: input.action, status: 'pending' };
+      },
+    }),
+    prepareFrozenSubscriberImport: realGovernance.prepareFrozenSubscriberImport,
+  };
+
+  const records = Array.from({ length: 2000 }, (_, i) => ({
+    imsi: `454000000${String(i).padStart(8, '0')}`,
+    access_restriction_data: 32,
+    traffic_total: 10737418240,
+    traffic_balance: 10737418240,
+    sms_total: 100,
+    sms_balance: 100,
+    plan_id: 'plan_default_10gb',
+  }));
+
+  const request = createImportRequest(records, { role: 'super_admin' });
+  const handler = routeModule.createSubscriberImportHandler(sideEffectDeps);
+  const response = await handler(request, {});
+
+  assert.equal(response.status, 413);
+  const body = await response.json();
+  assert.equal(body.error, 'APPROVAL_SNAPSHOT_TOO_LARGE');
+  assert.equal(body.code, 'APPROVAL_SNAPSHOT_TOO_LARGE');
+
+  // Side-effect gate: none of these should have been called
+  assert.equal(approvalCreateCalls.length, 0, 'Approval creation must not be called');
+  assert.equal(subscriberInsertCalls.length, 0, 'Subscriber insert must not be called');
+  assert.equal(ocsProvisionCalls.length, 0, 'OCS provisioning must not be called');
+});
