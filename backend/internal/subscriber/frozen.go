@@ -374,10 +374,18 @@ func stable(value any) any {
 		}
 		return result
 	default:
-		// Handle structs via reflection: convert to map using json tags
+		// Handle structs and slices via reflection
 		rv := reflect.ValueOf(value)
 		if rv.Kind() == reflect.Ptr {
 			rv = rv.Elem()
+		}
+		// Handle any slice type (not just []any)
+		if rv.Kind() == reflect.Slice {
+			result := make([]any, rv.Len())
+			for i := 0; i < rv.Len(); i++ {
+				result[i] = stable(rv.Index(i).Interface())
+			}
+			return result
 		}
 		if rv.Kind() == reflect.Struct {
 			result := make(map[string]any, rv.NumField())
