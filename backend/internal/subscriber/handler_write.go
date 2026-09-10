@@ -36,6 +36,8 @@ type WriteHandler struct {
 	findSub    SubscriberFinder // nil → use repo.FindSubscriberByImsi
 	// Test seam for bulk delete: when set, used instead of repo for bulk delete operations.
 	bulkDeleteRepo BulkDeleteRepository // nil → use repo
+	// Test seam for import: when set, used instead of repo for import operations.
+	importRepo ImportRepository // nil → use repo
 }
 
 // UserRepository is the interface for looking up fresh user state.
@@ -1734,6 +1736,445 @@ func frozenBulkDeleteToMap(frozen *FrozenBulkDeleteV2) map[string]any {
 		"targetCount":          frozen.TargetCount,
 		"snapshotBytes":        frozen.SnapshotBytes,
 		"strategy":             frozen.Strategy,
+		"operationFingerprint": frozen.OperationFingerprint,
+	}
+}
+
+// Import handles POST /api/subscribers/import
+// Supports ?mode=precheck (semantic read) and ?mode=import (governed mutation).
+func (h *WriteHandler) Import(w http.ResponseWriter, r *http.Request) {
+	p := auth.PrincipalFromContext(r.Context())
+	if p == nil {
+		response.Error(w, http.StatusUnauthorized, "Unauthorized", "AUTH_INVALID_TOKEN")
+		return
+	}
+
+	// Capability check
+	if !audit.RequireCapabilityWithAudit(w, r, p, "subscriber_write", h.auditWriter) {
+		return
+	}
+
+	// Rate limit: 12 requests / 60 seconds / username
+	if !h.limiter.Enforce(w, r, "subscribers:import:"+p.Username, 12, 60) {
+		return
+	}
+
+	// Parse mode
+	mode := r.URL.Query().Get("mode")
+	if mode == "" {
+		mode = "precheck"
+	}
+
+	var body map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		response.Error(w, http.StatusBadRequest, "Invalid request body", "INVALID_REQUEST")
+		return
+	}
+
+	if mode == "precheck" {
+		h.handleImportPrecheck(w, r, body)
+		return
+	}
+
+	if mode == "import" {
+		h.handleImportMutation(w, r, body, p)
+		return
+	}
+
+	response.Error(w, http.StatusBadRequest, "Invalid mode parameter", "INVALID_MODE")
+}
+
+// handleImportPrecheck handles the precheck mode (semantic read).
+func (h *WriteHandler) handleImportPrecheck(w http.ResponseWriter, r *http.Request, body map[string]any) {
+	imsiListRaw, ok := body["imsiList"].([]any)
+	if !ok {
+		response.Error(w, http.StatusBadRequest, "imsiList array is required", "INVALID_REQUEST")
+		return
+	}
+
+	var imsis []string
+	for _, v := range imsiListRaw {
+		s, ok := v.(string)
+		if !ok {
+			response.Error(w, http.StatusBadRequest, "Invalid IMSI in list", "INVALID_REQUEST")
+			return
+		}
+		imsi, err := ValidateImsi(s)
+		if err != nil {
+			response.Error(w, http.StatusBadRequest, "Invalid IMSI in list: "+s, "INVALID_REQUEST")
+			return
+		}
+		imsis = append(imsis, imsi)
+	}
+
+	if len(imsis) > maxImportRows {
+		response.Error(w, http.StatusBadRequest, "imsiList cannot contain more than 5000 entries", "INVALID_REQUEST")
+		return
+	}
+
+	existsMap, err := h.effectiveImportRepo().FindSubscribersForImport(r.Context(), imsis)
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, "Precheck failed", "INTERNAL_ERROR")
+		return
+	}
+
+	conflicts := make([]map[string]any, 0, len(imsis))
+	for _, imsi := range imsis {
+		conflicts = append(conflicts, map[string]any{
+			"imsi":   imsi,
+			"exists": existsMap[imsi],
+		})
+	}
+
+	existing := 0
+	for _, c := range conflicts {
+		if exists, _ := c["exists"].(bool); exists {
+			existing++
+		}
+	}
+
+	response.JSON(w, http.StatusOK, map[string]any{
+		"total":    len(conflicts),
+		"existing": existing,
+		"newCount": len(conflicts) - existing,
+		"conflicts": conflicts,
+	})
+}
+
+// handleImportMutation handles the import mode (governed mutation).
+func (h *WriteHandler) handleImportMutation(w http.ResponseWriter, r *http.Request, body map[string]any, p *auth.Principal) {
+	// Validate request
+	records, err := ValidateImportRequest(body)
+	if err != nil {
+		if govErr, ok := err.(*SubscriberGovernanceError); ok {
+			code := govErr.Code
+			status := http.StatusBadRequest
+			if code == ErrSensitiveChangeNotSupported || code == ErrImportOverwriteNotSupported {
+				status = http.StatusUnprocessableEntity
+			}
+			response.Error(w, status, code, code)
+		} else {
+			response.Error(w, http.StatusBadRequest, "Invalid request", "INVALID_REQUEST")
+		}
+		return
+	}
+
+	// Tariff validation
+	repo := h.effectiveImportRepo()
+	for _, rec := range records {
+		planId := defaultPlanId
+		if v, ok := rec["plan_id"].(string); ok && v != "" {
+			planId = v
+		}
+		if err := repo.ValidateTariffPlan(r.Context(), planId); err != nil {
+			if govErr, ok := err.(*SubscriberGovernanceError); ok {
+				code := govErr.Code
+				status := http.StatusNotFound
+				if code == "OCS_PLAN_DISABLED" {
+					status = http.StatusConflict
+				}
+				response.Error(w, status, code, code)
+			} else {
+				response.Error(w, http.StatusInternalServerError, "Tariff validation failed", "INTERNAL_ERROR")
+			}
+			return
+		}
+	}
+
+	// Fresh actor validation
+	fresh, httpErr := RevalidateFreshActor(r.Context(), h.userRepo, p)
+	if httpErr != nil {
+		response.Error(w, httpErr.Status, httpErr.Message, httpErr.Code)
+		return
+	}
+
+	// Prepare frozen v2
+	frozen, err := PrepareFrozenImport(r.Context(), records, repo)
+	if err != nil {
+		if govErr, ok := err.(*SubscriberGovernanceError); ok {
+			code := govErr.Code
+			status := http.StatusBadRequest
+			if code == ErrApprovalSnapshotTooLarge {
+				status = http.StatusRequestEntityTooLarge
+			}
+			response.Error(w, status, code, code)
+		} else {
+			response.Error(w, http.StatusInternalServerError, "Failed to prepare import", "INTERNAL_ERROR")
+		}
+		return
+	}
+
+	// Snapshot size check
+	if frozen.SnapshotBytes > maxImportSnapshotBytes {
+		response.Error(w, http.StatusBadRequest, ErrApprovalSnapshotTooLarge, ErrApprovalSnapshotTooLarge)
+		return
+	}
+
+	// Active change protection
+	activeMatch, err := h.findExistingImportChange(r.Context(), frozen.OperationFingerprint, frozen.Targets)
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, "Failed to check active changes", "INTERNAL_ERROR")
+		return
+	}
+
+	// Evaluate governance with fresh role
+	result := EvaluateOperation(OpImport, fresh.NormalizedRole)
+
+	if result.Decision == governance.Direct {
+		// super_admin/root: Direct execution
+		if activeMatch != nil {
+			response.Error(w, http.StatusConflict, "ACTIVE_CHANGE_CONFLICT", "ACTIVE_CHANGE_CONFLICT")
+			return
+		}
+		h.executeDirectImport(w, r, frozen, fresh)
+		return
+	}
+
+	// operator/ops_admin: Approval path
+	if activeMatch != nil {
+		if activeMatch.Type == "duplicate" {
+			response.JSON(w, http.StatusAccepted, map[string]any{
+				"approval":         activeMatch.Approval,
+				"requiresApproval": true,
+				"idempotent":       true,
+			})
+			return
+		}
+		// Overlap → 409
+		response.JSON(w, http.StatusConflict, map[string]any{
+			"error":    "ACTIVE_CHANGE_CONFLICT",
+			"code":     "ACTIVE_CHANGE_CONFLICT",
+			"approval": activeMatch.Approval,
+		})
+		return
+	}
+
+	h.createImportApproval(w, r, frozen, fresh)
+}
+
+// effectiveImportRepo returns the test seam or the real repository.
+func (h *WriteHandler) effectiveImportRepo() ImportRepository {
+	if h.importRepo != nil {
+		return h.importRepo
+	}
+	return h.repo
+}
+
+// findExistingImportChange checks for active approvals with the same fingerprint or overlapping targets.
+func (h *WriteHandler) findExistingImportChange(ctx context.Context, fingerprint string, targets []ImportTarget) (*ActiveApprovalMatch, error) {
+	// Build set of IMSIs we intend to create (state=absent)
+	createImsis := make([]string, 0)
+	for _, t := range targets {
+		if t.State == "absent" {
+			createImsis = append(createImsis, t.Imsi)
+		}
+	}
+
+	actions := []string{"SUBSCRIBER_BATCH_CREATE", "SUBSCRIBER_IMPORT", "SUBSCRIBER_BULK_DELETE", "SUBSCRIBER_BATCH_UPDATE", "SUBSCRIBER_UPDATE", "SUBSCRIBER_DELETE"}
+	for _, action := range actions {
+		approvals, err := h.approvalQry.ListActiveByAction(ctx, action)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, a := range approvals {
+			// Duplicate check: same fingerprint for IMPORT
+			if action == "SUBSCRIBER_IMPORT" && a.OperationFingerprint == fingerprint {
+				return &ActiveApprovalMatch{Type: "duplicate", Approval: &a}, nil
+			}
+
+			// Overlap check: any active change targeting same IMSIs we intend to create
+			existingTargets := extractApprovalTargets(&a)
+			requestedSet := make(map[string]bool)
+			for _, imsi := range createImsis {
+				requestedSet[imsi] = true
+			}
+			for _, existing := range existingTargets {
+				if requestedSet[existing] {
+					return &ActiveApprovalMatch{Type: "conflict", Approval: &a}, nil
+				}
+			}
+		}
+	}
+	return nil, nil
+}
+
+// createImportApproval creates an approval for operator/ops_admin.
+func (h *WriteHandler) createImportApproval(w http.ResponseWriter, r *http.Request, frozen *FrozenImportV2, fresh *FreshActor) {
+	actor := approval.GovernanceActor{
+		Type:     "user",
+		UserID:   fresh.UserID,
+		Username: fresh.Username,
+		Role:     fresh.NormalizedRole,
+	}
+	input := approval.CreateApprovalInput{
+		Action:               "SUBSCRIBER_IMPORT",
+		Requester:            fresh.Username,
+		RequesterContext:     &actor,
+		TargetID:             "subscriber:csv-import",
+		Summary:              fmt.Sprintf("Import %d subscriber record(s)", frozen.TargetCount),
+		Operation:            &approval.ApprovalOperation{ResourceType: "subscriber_import", ResourceID: frozen.Summary.FileHash},
+		OperationFingerprint: frozen.OperationFingerprint,
+		Before:               map[string]any{"targetCount": frozen.TargetCount, "summary": frozen.Summary},
+		Payload:              frozenImportToMap(frozen),
+	}
+
+	approvalDoc, err := h.approvalSvc.Create(r, actor, input)
+	if err != nil {
+		if awe, ok := err.(*approval.ApprovalWorkflowError); ok && awe.Committed {
+			response.JSON(w, awe.Status, awe.ErrorResponse())
+			return
+		}
+		response.Error(w, http.StatusInternalServerError, "Failed to create approval request", "APPROVAL_CREATE_FAILED")
+		return
+	}
+
+	response.JSON(w, http.StatusAccepted, map[string]any{
+		"approval":         approvalDoc,
+		"requiresApproval": true,
+	})
+}
+
+// executeDirectImport executes import directly for super_admin/root.
+func (h *WriteHandler) executeDirectImport(w http.ResponseWriter, r *http.Request, frozen *FrozenImportV2, fresh *FreshActor) {
+	repo := h.effectiveImportRepo()
+
+	execResult, err := ExecuteFrozenImport(r.Context(), frozen, repo)
+
+	// Build result evidence for audit even on error
+	if err != nil {
+		if execResult == nil {
+			execResult = &ImportExecutionResult{
+				Requested:            frozen.TargetCount,
+				IntendedCreateCount:  frozen.Summary.CreateCount,
+				OperationFingerprint: frozen.OperationFingerprint,
+				CreatedImsis:         []string{},
+				SkippedImsis:         []string{},
+				ConflictImsis:        []string{},
+				FailedImsis:          []string{},
+				OcsProvisionedImsis:  []string{},
+				OcsProvisioningFailedImsis: []string{},
+			}
+		}
+	}
+
+	// Classification
+	classification := ClassifyImportResult(
+		execResult.CreatedCount,
+		execResult.IntendedCreateCount,
+		len(execResult.ConflictImsis),
+		len(execResult.FailedImsis),
+		len(execResult.OcsProvisioningFailedImsis),
+	)
+
+	// Business audit
+	auditResult := "success"
+	if classification != "SUCCESS" {
+		auditResult = "failed"
+	}
+	auditErr := h.auditWriter.WriteStrict(r.Context(), audit.WriteAuditInput{
+		Action: "subscriber.import",
+		Module: "subscribers",
+		Actor: audit.ActorInput{
+			Type:     "user",
+			UserID:   fresh.UserID,
+			Username: fresh.Username,
+			Role:     fresh.NormalizedRole,
+		},
+		Resource:  &audit.ResourceInput{Type: "subscriber_import", ID: "csv-import"},
+		TargetID:  "subscriber:csv-import",
+		Result:    auditResult,
+		RiskLevel: "high",
+		Metadata: map[string]any{
+			"governanceMode":              "DIRECT_GOVERNED",
+			"approvalRequired":            false,
+			"actorRole":                   fresh.NormalizedRole,
+			"risk":                        "high",
+			"requested":                   execResult.Requested,
+			"intendedCreateCount":         execResult.IntendedCreateCount,
+			"createdCount":                execResult.CreatedCount,
+			"skipCount":                   len(execResult.SkippedImsis),
+			"conflictCount":               len(execResult.ConflictImsis),
+			"failedCount":                 len(execResult.FailedImsis),
+			"ocsProvisioningFailureCount": len(execResult.OcsProvisioningFailedImsis),
+			"fileHash":                    frozen.Summary.FileHash,
+			"operationFingerprint":        frozen.OperationFingerprint,
+			"classification":              classification,
+			"partialMutation":             execResult.PartialMutation,
+			"mutationCommitted":           execResult.MutationCommitted,
+		},
+	})
+
+	if auditErr != nil {
+		// Audit failure after mutation
+		committed := execResult.MutationCommitted
+		response.Error(w, http.StatusServiceUnavailable, "AUDIT_UNAVAILABLE", "AUDIT_UNAVAILABLE")
+		_ = committed
+		return
+	}
+
+	// Handle errors from execution
+	if err != nil {
+		if govErr, ok := err.(*SubscriberGovernanceError); ok {
+			switch govErr.Code {
+			case ErrImportPreconditionChanged:
+				response.Error(w, http.StatusConflict, govErr.Code, govErr.Code)
+			case ErrImportFailed:
+				response.Error(w, http.StatusInternalServerError, govErr.Code, govErr.Code)
+			default:
+				response.Error(w, http.StatusInternalServerError, govErr.Code, govErr.Code)
+			}
+		} else {
+			response.Error(w, http.StatusInternalServerError, "Import failed", "INTERNAL_ERROR")
+		}
+		return
+	}
+
+	// Handle partial write
+	if classification == "PARTIAL_WRITE" {
+		response.JSON(w, http.StatusConflict, map[string]any{
+			"error":                  ErrImportPartialWrite,
+			"code":                   ErrImportPartialWrite,
+			"requested":              execResult.Requested,
+			"imported":               execResult.CreatedCount,
+			"skipped":                len(execResult.SkippedImsis),
+			"failed":                 len(execResult.FailedImsis),
+			"importedImsis":          execResult.CreatedImsis,
+			"failedImsis":            execResult.FailedImsis,
+			"ocsProvisioningFailedImsis": execResult.OcsProvisioningFailedImsis,
+			"partialMutation":        true,
+			"mutationCommitted":      true,
+		})
+		return
+	}
+
+	// SUCCESS
+	response.JSON(w, http.StatusOK, map[string]any{
+		"outcome":          "executed",
+		"message":          "Subscribers imported successfully",
+		"requiresApproval": false,
+		"result": map[string]any{
+			"requested":              execResult.Requested,
+			"imported":               execResult.CreatedCount,
+			"skipped":                len(execResult.SkippedImsis),
+			"failed":                 len(execResult.FailedImsis),
+			"importedImsis":          execResult.CreatedImsis,
+			"failedImsis":            execResult.FailedImsis,
+			"ocsProvisioningFailedImsis": execResult.OcsProvisioningFailedImsis,
+		},
+	})
+}
+
+// frozenImportToMap converts FrozenImportV2 to map for storage.
+func frozenImportToMap(frozen *FrozenImportV2) map[string]any {
+	return map[string]any{
+		"version":              frozen.Version,
+		"records":              frozen.Records,
+		"targets":              frozen.Targets,
+		"targetCount":          frozen.TargetCount,
+		"summary":              frozen.Summary,
+		"strategy":             frozen.Strategy,
+		"snapshotBytes":        frozen.SnapshotBytes,
 		"operationFingerprint": frozen.OperationFingerprint,
 	}
 }

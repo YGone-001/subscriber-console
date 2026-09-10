@@ -3,7 +3,7 @@ import { auditRequestContext } from '@/lib/audit/record';
 import { validateCurrentAccount } from '@/lib/accountSession';
 import { executeApproval } from '@/server/approvalExecutors';
 import { executeFrozenSubscriberBatchChange, executeFrozenSubscriberBatchUpdate, assertFrozenSubscriberBatchUpdateV2, assertFrozenSubscriberBatchPayload, classifyBatchUpdateResult, SubscriberBatchGovernanceError } from '@/server/subscriberOperationPolicy';
-import { executeFrozenSubscriberBulkDelete, executeFrozenSubscriberBulkDeleteV2, assertFrozenBulkDeleteV2, classifyBulkDeleteResult, executeFrozenSubscriberDelete, executeFrozenSubscriberUpdate } from '@/server/subscriberSingleGovernance';
+import { executeFrozenSubscriberBulkDelete, executeFrozenSubscriberBulkDeleteV2, assertFrozenBulkDeleteV2, classifyBulkDeleteResult, executeFrozenSubscriberDelete, executeFrozenSubscriberUpdate, assertFrozenSubscriberImportV2, executeFrozenSubscriberImportV2, classifyImportResult } from '@/server/subscriberSingleGovernance';
 import { assertGovernedOperationCoverage } from '@/server/subscriberGovernanceRegistry';
 import { executeFrozenOcsBalanceAdjustment, OcsBalanceGovernanceError } from '@/server/ocsBalanceGovernance';
 import { assertOcsGovernedOperationCoverage } from '@/server/ocsGovernanceRegistry';
@@ -209,6 +209,29 @@ const defaultExecutor: GovernedApprovalExecutor = {
       }
 
       // Section 5: SUCCESS
+      return { ...result, classification };
+    }
+
+    if (approval.action === 'SUBSCRIBER_IMPORT') {
+      const frozen = assertFrozenSubscriberImportV2(approval.payload);
+      const result = await executeFrozenSubscriberImportV2(frozen);
+      const classification = classifyImportResult(result);
+
+      // Audit
+      const auditClassification = classification === 'PARTIAL_WRITE' ? 'PARTIAL' : classification;
+      try {
+        await writeAuditLog({
+          actor: actor || { type: 'system', userId: 'system', username: 'system' }, module: 'subscribers', action: 'subscriber.import',
+          resource: { type: 'subscriber_bulk_operation', id: approval.targetId, name: approval.targetId }, targetId: approval.targetId,
+          approvalId: approval.id, riskLevel: approval.riskLevel, result: classification === 'FAILED_NO_MUTATION' ? 'failed' : 'success', reason: approval.reason,
+          before: approval.before, after: null,
+          metadata: { executionId: approval.execution?.id, operationFingerprint: approval.operationFingerprint, requested: result.requested, createdCount: result.createdCount, skippedCount: result.skippedImsis.length, conflictCount: result.conflictImsis.length, failedCount: result.failedImsis.length, ocsProvisionedCount: result.ocsProvisionedImsis.length, ocsProvisioningFailedCount: result.ocsProvisioningFailedImsis.length, classification: auditClassification, mutationCommitted: result.mutationCommitted, snapshotBytes: frozen.snapshotBytes, strategy: frozen.strategy },
+          ...auditRequestContext(request),
+        }, { failureMode: 'strict' });
+      } catch {
+        throw new ApprovalExecutionError('AUDIT_UNAVAILABLE', 503, approval, result.mutationCommitted, result);
+      }
+
       return { ...result, classification };
     }
 

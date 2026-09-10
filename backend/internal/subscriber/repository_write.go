@@ -1215,3 +1215,60 @@ func (r *Repository) loadProfileData(ctx context.Context, profileName string) ma
 	}
 	return result
 }
+
+// FindSubscribersForImport checks which IMSIs exist in the subscribers collection.
+// Returns a map[imsi]bool where true = exists, false = absent.
+func (r *Repository) FindSubscribersForImport(ctx context.Context, imsis []string) (map[string]bool, error) {
+	result := make(map[string]bool, len(imsis))
+	for _, imsi := range imsis {
+		result[imsi] = false
+	}
+
+	cursor, err := r.subscribers.Find(ctx, bson.M{"imsi": bson.M{"$in": imsis}}, options.Find().SetProjection(bson.M{"imsi": 1}))
+	if err != nil {
+		return nil, fmt.Errorf("find subscribers for import: %w", err)
+	}
+	defer cursor.Close(ctx)
+
+	for cursor.Next(ctx) {
+		var doc bson.M
+		if err := cursor.Decode(&doc); err != nil {
+			continue
+		}
+		if imsi, ok := doc["imsi"].(string); ok {
+			result[imsi] = true
+		}
+	}
+
+	return result, nil
+}
+
+// InsertSubscriberImportCreateOnly inserts a subscriber document using insertOne only.
+// Returns error if the subscriber already exists (duplicate key).
+func (r *Repository) InsertSubscriberImportCreateOnly(ctx context.Context, doc bson.M) error {
+	_, err := r.subscribers.InsertOne(ctx, doc)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// ProvisionImportedSubscriberOcs provisions OCS records for an imported subscriber.
+func (r *Repository) ProvisionImportedSubscriberOcs(ctx context.Context, input OcsProvisioningInput) error {
+	return r.provisionOcsSubscriber(ctx, input)
+}
+
+// ValidateTariffPlan validates that a tariff plan exists and is not disabled.
+func (r *Repository) ValidateTariffPlan(ctx context.Context, planId string) error {
+	plan, err := r.getTariffPlan(ctx, planId)
+	if err != nil {
+		return err
+	}
+	if plan == nil {
+		return &SubscriberGovernanceError{Code: "OCS_PLAN_NOT_FOUND"}
+	}
+	if status, _ := plan["status"].(string); status == "disabled" {
+		return &SubscriberGovernanceError{Code: "OCS_PLAN_DISABLED"}
+	}
+	return nil
+}

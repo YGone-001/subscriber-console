@@ -970,3 +970,48 @@ export async function importSubscribersFromRecords(records: ImportRecord[], over
     failedImsis,
   };
 }
+
+export async function insertSubscriberImportCreateOnly(record: {
+  imsi: string;
+  access_restriction_data: number;
+  traffic_total: number;
+  traffic_balance: number;
+  sms_total: number;
+  sms_balance: number;
+  plan_id: string;
+}): Promise<void> {
+  const subscribers = await getXcloudCollection<SubscriberDoc>('subscribers');
+
+  const doc = buildXcloudSubscriberFromLegacy(record.imsi, {
+    sub4G: {
+      access_restriction_data: record.access_restriction_data,
+      network_access_mode: 0,
+    },
+    auth4G: {
+      k: '00000000000000000000000000000000',
+      opc: '00000000000000000000000000000000',
+      sqn: 1,
+      amf: '8000',
+    },
+  });
+
+  await subscribers.insertOne(doc as SubscriberDoc);
+}
+
+export async function provisionImportedSubscriberOcs(input: {
+  imsi: string;
+  planId: string;
+  trafficTotal: number;
+  trafficBalance: number;
+  smsTotal: number;
+  smsBalance: number;
+}): Promise<void> {
+  await provisionOcsSubscriber({
+    imsi: input.imsi,
+    planId: input.planId,
+    total: input.trafficTotal,
+    available: input.trafficBalance,
+    smsTotal: input.smsTotal,
+    smsAvailable: input.smsBalance,
+  });
+}

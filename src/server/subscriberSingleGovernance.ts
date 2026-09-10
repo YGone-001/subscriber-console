@@ -12,6 +12,8 @@ import {
   deleteSubscriberOcsProvisioning,
   findSubscriberDocument,
   updateSubscriberFromLegacy,
+  insertSubscriberImportCreateOnly,
+  provisionImportedSubscriberOcs,
   type LegacySubscriberUpdatePayload,
 } from '@/server/repositories/subscriberRepository';
 
@@ -379,4 +381,278 @@ export async function executeFrozenSubscriberBulkDeleteV2(frozen: FrozenSubscrib
   result.partialMutation = classification === 'PARTIAL_WRITE';
 
   return result;
+}
+
+// --- Import v2 ---
+
+export interface FrozenSubscriberImportV2 {
+  version: string;
+  records: Array<{
+    imsi: string;
+    access_restriction_data: number;
+    traffic_total: number;
+    traffic_balance: number;
+    sms_total: number;
+    sms_balance: number;
+    plan_id: string;
+  }>;
+  targets: Array<{
+    imsi: string;
+    state: 'present' | 'absent';
+    recordIntentHash: string;
+  }>;
+  targetCount: number;
+  summary: {
+    rowCount: number;
+    createCount: number;
+    skipCount: number;
+    fieldNames: string[];
+    fileHash: string;
+  };
+  strategy: string;
+  snapshotBytes: number;
+  operationFingerprint: string;
+}
+
+const SENSITIVE_IMPORT_KEYS = ['k', 'op', 'opc', 'amf', 'sqn'];
+const MAX_IMPORT_ROWS = 5000;
+const MAX_IMPORT_SNAPSHOT_BYTES = 512 * 1024;
+
+export async function prepareFrozenSubscriberImport(records: Record<string, unknown>[]): Promise<FrozenSubscriberImportV2> {
+  if (!Array.isArray(records) || records.length === 0 || records.length > MAX_IMPORT_ROWS) {
+    throw new SubscriberGovernanceError('INVALID_SUBSCRIBER_IMPORT_REQUEST');
+  }
+
+  // Normalize records
+  const normalized = records.map((rec) => ({
+    imsi: String(rec.imsi || '').trim(),
+    access_restriction_data: Number(rec.access_restriction_data ?? 32),
+    traffic_total: Number(rec.traffic_total ?? 10737418240),
+    traffic_balance: Number(rec.traffic_balance ?? 10737418240),
+    sms_total: Number(rec.sms_total ?? 100),
+    sms_balance: Number(rec.sms_balance ?? 100),
+    plan_id: String(rec.plan_id || 'plan_default_10gb').trim() || 'plan_default_10gb',
+  }));
+
+  // Sort by IMSI
+  normalized.sort((a, b) => a.imsi.localeCompare(b.imsi));
+
+  // Load existence states
+  const targets = await Promise.all(normalized.map(async (rec) => {
+    const existing = await findSubscriberDocument(rec.imsi);
+    const recordIntentHash = hash(rec);
+    return {
+      imsi: rec.imsi,
+      state: existing ? 'present' as const : 'absent' as const,
+      recordIntentHash,
+    };
+  }));
+
+  const createCount = targets.filter((t) => t.state === 'absent').length;
+  const skipCount = targets.filter((t) => t.state === 'present').length;
+
+  // Compute field names
+  const fieldNameSet = new Set<string>();
+  for (const rec of records) {
+    for (const key of Object.keys(rec)) {
+      if (key !== 'imsi') fieldNameSet.add(key);
+    }
+  }
+  const fieldNames = Array.from(fieldNameSet).sort();
+
+  // Compute hashes
+  const fileHash = hash(normalized);
+  const fingerprintSource = {
+    operation: 'SUBSCRIBER_IMPORT',
+    targets,
+    strategy: 'skip-existing-create-only',
+    fileHash,
+  };
+  const operationFingerprint = hash(fingerprintSource);
+
+  // Compute snapshotBytes
+  const snapshotSource = {
+    version: 'subscriber-import-v2',
+    records: normalized,
+    targets,
+    targetCount: targets.length,
+    summary: { rowCount: normalized.length, createCount, skipCount, fieldNames, fileHash },
+    strategy: 'skip-existing-create-only',
+    operationFingerprint,
+  };
+  const snapshotBytes = stable(snapshotSource).length;
+
+  if (snapshotBytes > MAX_IMPORT_SNAPSHOT_BYTES) {
+    throw new SubscriberGovernanceError('APPROVAL_SNAPSHOT_TOO_LARGE');
+  }
+
+  return {
+    version: 'subscriber-import-v2',
+    records: normalized,
+    targets,
+    targetCount: targets.length,
+    summary: { rowCount: normalized.length, createCount, skipCount, fieldNames, fileHash },
+    strategy: 'skip-existing-create-only',
+    snapshotBytes,
+    operationFingerprint,
+  };
+}
+
+export function assertFrozenSubscriberImportV2(payload: unknown): FrozenSubscriberImportV2 {
+  const p = payload as Record<string, unknown>;
+  if (!p || p.version !== 'subscriber-import-v2' || !Array.isArray(p.records) || !Array.isArray(p.targets)) {
+    throw new SubscriberGovernanceError('INVALID_SUBSCRIBER_IMPORT_PAYLOAD');
+  }
+  if (p.records.length === 0 || p.targets.length === 0 || p.records.length !== p.targets.length) {
+    throw new SubscriberGovernanceError('INVALID_SUBSCRIBER_IMPORT_PAYLOAD');
+  }
+  if (typeof p.targetCount !== 'number' || p.targetCount !== p.targets.length) {
+    throw new SubscriberGovernanceError('INVALID_SUBSCRIBER_IMPORT_PAYLOAD');
+  }
+  if (p.strategy !== 'skip-existing-create-only') {
+    throw new SubscriberGovernanceError('INVALID_SUBSCRIBER_IMPORT_PAYLOAD');
+  }
+
+  // Verify sorted by IMSI
+  const records = p.records as Array<Record<string, unknown>>;
+  const targets = p.targets as Array<Record<string, unknown>>;
+  for (let i = 1; i < records.length; i++) {
+    if ((records[i].imsi as string) <= (records[i - 1].imsi as string)) {
+      throw new SubscriberGovernanceError('INVALID_SUBSCRIBER_IMPORT_PAYLOAD');
+    }
+  }
+  for (let i = 1; i < targets.length; i++) {
+    if ((targets[i].imsi as string) <= (targets[i - 1].imsi as string)) {
+      throw new SubscriberGovernanceError('INVALID_SUBSCRIBER_IMPORT_PAYLOAD');
+    }
+  }
+
+  // Verify 1:1 correlation
+  for (let i = 0; i < records.length; i++) {
+    if (records[i].imsi !== targets[i].imsi) {
+      throw new SubscriberGovernanceError('INVALID_SUBSCRIBER_IMPORT_PAYLOAD');
+    }
+  }
+
+  // Verify target states
+  for (const t of targets) {
+    if (t.state !== 'present' && t.state !== 'absent') {
+      throw new SubscriberGovernanceError('INVALID_SUBSCRIBER_IMPORT_PAYLOAD');
+    }
+  }
+
+  // Verify no sensitive fields in records
+  for (const rec of records) {
+    for (const key of SENSITIVE_IMPORT_KEYS) {
+      if (key in rec) {
+        throw new SubscriberGovernanceError('INVALID_SUBSCRIBER_IMPORT_PAYLOAD');
+      }
+    }
+  }
+
+  return payload as FrozenSubscriberImportV2;
+}
+
+export async function executeFrozenSubscriberImportV2(frozen: FrozenSubscriberImportV2) {
+  assertFrozenSubscriberImportV2(frozen);
+
+  const result = {
+    requested: frozen.targetCount,
+    intendedCreateCount: frozen.summary.createCount,
+    createdImsis: [] as string[],
+    skippedImsis: [] as string[],
+    conflictImsis: [] as string[],
+    failedImsis: [] as string[],
+    ocsProvisionedImsis: [] as string[],
+    ocsProvisioningFailedImsis: [] as string[],
+    createdCount: 0,
+    partialMutation: false,
+    mutationCommitted: false,
+    operationFingerprint: frozen.operationFingerprint,
+  };
+
+  // Phase 1: ALL-TARGET STATE BARRIER
+  const existenceChecks = await Promise.all(
+    frozen.targets.map(async (t) => ({
+      target: t,
+      exists: !!(await findSubscriberDocument(t.imsi)),
+    }))
+  );
+
+  for (const { target, exists } of existenceChecks) {
+    if (target.state === 'present' && !exists) {
+      return result; // Zero writes on state drift
+    }
+    if (target.state === 'absent' && exists) {
+      return result; // Zero writes on state drift
+    }
+  }
+
+  // Phase 2: Execute — skip present, insert absent
+  const recordByImsi = new Map(frozen.records.map((r) => [r.imsi, r]));
+
+  for (const target of frozen.targets) {
+    if (target.state === 'present') {
+      result.skippedImsis.push(target.imsi);
+      continue;
+    }
+
+    // Insert new subscriber
+    const rec = recordByImsi.get(target.imsi)!;
+    try {
+      await insertSubscriberImportCreateOnly(rec);
+      result.createdImsis.push(target.imsi);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('duplicate key')) {
+        result.conflictImsis.push(target.imsi);
+      } else {
+        result.failedImsis.push(target.imsi);
+      }
+    }
+  }
+
+  // Phase 3: OCS provisioning for created subscribers
+  for (const imsi of result.createdImsis) {
+    const rec = recordByImsi.get(imsi)!;
+    try {
+      await provisionImportedSubscriberOcs({
+        imsi,
+        planId: rec.plan_id,
+        trafficTotal: rec.traffic_total,
+        trafficBalance: rec.traffic_balance,
+        smsTotal: rec.sms_total,
+        smsBalance: rec.sms_balance,
+      });
+      result.ocsProvisionedImsis.push(imsi);
+    } catch {
+      result.ocsProvisioningFailedImsis.push(imsi);
+    }
+  }
+
+  // Classify
+  result.createdCount = result.createdImsis.length;
+  const classification = classifyImportResult(result);
+  result.partialMutation = classification === 'PARTIAL_WRITE';
+  result.mutationCommitted = result.createdCount > 0;
+
+  return result;
+}
+
+export function classifyImportResult(result: {
+  createdCount: number;
+  intendedCreateCount: number;
+  conflictImsis: string[];
+  failedImsis: string[];
+  ocsProvisioningFailedImsis: string[];
+}): 'SUCCESS' | 'PARTIAL_WRITE' | 'FAILED_NO_MUTATION' {
+  if (
+    result.createdCount === result.intendedCreateCount &&
+    result.conflictImsis.length === 0 &&
+    result.failedImsis.length === 0 &&
+    result.ocsProvisioningFailedImsis.length === 0
+  ) {
+    return 'SUCCESS';
+  }
+  if (result.createdCount > 0) return 'PARTIAL_WRITE';
+  return 'FAILED_NO_MUTATION';
 }
