@@ -47,20 +47,6 @@ func NewLimiter(collection *mongo.Collection) *Limiter {
 // Check verifies the rate limit for the given identifier.
 // It matches the Node.js implementation: incrementFixedWindow().
 func (l *Limiter) Check(ctx context.Context, identifier string, limit int, windowSeconds int) (*Result, error) {
-	// Fail open if no collection (e.g., in tests)
-	if l.collection == nil {
-		nowSeconds := time.Now().Unix()
-		currentWindow := nowSeconds / int64(windowSeconds)
-		resetAt := (currentWindow + 1) * int64(windowSeconds)
-		return &Result{
-			Allowed:    true,
-			Limit:      limit,
-			Remaining:  limit,
-			RetryAfter: 0,
-			ResetAt:    resetAt,
-		}, nil
-	}
-
 	nowSeconds := time.Now().Unix()
 	currentWindow := nowSeconds / int64(windowSeconds)
 	key := fmt.Sprintf("RATELIMIT:%s:%d", identifier, currentWindow)

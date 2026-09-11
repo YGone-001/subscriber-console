@@ -2,7 +2,6 @@ package profile
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -13,7 +12,6 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"subscriber/internal/audit"
 	"subscriber/internal/auth"
-	"subscriber/internal/ratelimit"
 	"subscriber/internal/response"
 )
 
@@ -48,15 +46,20 @@ type AuditWriter interface {
 	WriteStrict(ctx context.Context, input audit.WriteAuditInput) error
 }
 
+// RateLimiter defines the interface for rate limiting.
+type RateLimiter interface {
+	Enforce(w http.ResponseWriter, r *http.Request, identifier string, limit int, windowSeconds int) bool
+}
+
 // Handler provides HTTP handlers for profile endpoints.
 type Handler struct {
 	repo    ProfileReadWriter
-	limiter *ratelimit.Limiter
+	limiter RateLimiter
 	audit   AuditWriter
 }
 
 // NewHandler creates a new profile Handler.
-func NewHandler(repo ProfileReadWriter, limiter *ratelimit.Limiter, auditWriter AuditWriter) *Handler {
+func NewHandler(repo ProfileReadWriter, limiter RateLimiter, auditWriter AuditWriter) *Handler {
 	return &Handler{repo: repo, limiter: limiter, audit: auditWriter}
 }
 
@@ -265,7 +268,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Build default profile document (matches Node defaultProfile exactly)
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
 	doc := bson.M{
 		"name":      req.Name,
 		"title":     req.Name,
@@ -338,7 +341,6 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 			"smsTotal":       int32(100),
 			"smsBalance":     int32(100),
 		},
-		"preconditionHash": computePreconditionHash(nil),
 	}
 
 	// Insert profile
@@ -351,14 +353,16 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Save version record (best-effort, log failure but don't fail the request)
+	// Save version record
 	versionRecord := bson.M{
-		"versionId":       generateVersionID(),
-		"profileName":     req.Name,
-		"profileSnapshot": doc,
-		"action":          "CREATE",
-		"savedAt":         now,
-		"savedBy":         p.Username,
+		"versionId":   generateVersionID(),
+		"profileName": req.Name,
+		"profile":     doc,
+		"action":      "CREATE",
+		"savedAt":     now,
+		"savedBy":     p.Username,
+		"title":       req.Name,
+		"sliceCount":  countSliceList(doc),
 	}
 	if err := h.repo.SaveProfileVersion(r.Context(), versionRecord); err != nil {
 		// Profile was created but version save failed - partial write
@@ -370,8 +374,15 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Write audit record (best-effort)
-	h.writeAudit(r.Context(), "PROFILE_CREATE", "profile", req.Name, p.Username, doc, "success", nil)
+	// Write strict audit record
+	if err := h.writeStrictAudit(r.Context(), "PROFILE_CREATE", "profile", req.Name, p.Username, nil, doc, "success", nil, true); err != nil {
+		response.JSON(w, http.StatusServiceUnavailable, map[string]any{
+			"error":     "Audit unavailable",
+			"code":      "AUDIT_UNAVAILABLE",
+			"committed": true,
+		})
+		return
+	}
 
 	response.JSON(w, http.StatusCreated, CreateProfileResponse{
 		Message: "Profile created successfully",
@@ -418,11 +429,10 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Compute preconditionHash from existing
-	preconditionHash := computePreconditionHash(existing)
-
 	// Build updated document (merge body into existing or create default)
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
+
+	// Start with existing profile or build default
 	updated := bson.M{
 		"name":      name,
 		"title":     name,
@@ -495,50 +505,83 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 			"smsTotal":       int32(100),
 			"smsBalance":     int32(100),
 		},
-		"preconditionHash": preconditionHash,
 	}
 
-	// Merge body fields into updated document
+	// If existing profile, use its createdAt/createdBy
+	if existing != nil {
+		if ct, ok := existing["createdAt"].(string); ok {
+			updated["createdAt"] = ct
+		}
+		if cb, ok := existing["createdBy"].(string); ok {
+			updated["createdBy"] = cb
+		}
+	}
+
+	// Merge allowed body fields into updated document
 	for k, v := range body {
-		if k != "name" && k != "preconditionHash" {
+		if isAllowedProfileField(k) {
 			updated[k] = v
 		}
 	}
 	updated["updatedBy"] = p.Username
 	updated["updatedAt"] = now
-	updated["preconditionHash"] = computePreconditionHash(updated)
 
-	// Perform CAS update (or insert if profile doesn't exist yet)
-	if err := h.repo.ReplaceProfileCAS(r.Context(), name, existing, updated); err != nil {
-		if err == ErrProfilePreconditionChanged {
-			response.Error(w, http.StatusConflict, "Profile was modified since loaded", "PROFILE_PRECONDITION_CHANGED")
+	// Perform CAS update or insert if profile doesn't exist
+	if existing != nil {
+		// CAS update for existing profile
+		if err := h.repo.ReplaceProfileCAS(r.Context(), name, existing, updated); err != nil {
+			if err == ErrProfilePreconditionChanged {
+				response.Error(w, http.StatusConflict, "Profile was modified since loaded", "PROFILE_UPDATE_PRECONDITION_CHANGED")
+				return
+			}
+			response.InternalError(w)
 			return
 		}
-		response.InternalError(w)
-		return
+	} else {
+		// Insert for missing profile (legacy upsert behavior)
+		if err := h.repo.InsertProfileCreateOnly(r.Context(), updated); err != nil {
+			if err == ErrProfileExists {
+				// Concurrent creator won
+				response.Error(w, http.StatusConflict, "Profile was modified since loaded", "PROFILE_UPDATE_PRECONDITION_CHANGED")
+				return
+			}
+			response.InternalError(w)
+			return
+		}
 	}
 
-	// Save version record (best-effort)
-	versionRecord := bson.M{
-		"versionId":       generateVersionID(),
-		"profileName":     name,
-		"profileSnapshot": existing,
-		"action":          "UPDATE",
-		"savedAt":         now,
-		"savedBy":         p.Username,
+	// Save version record (only if updating existing profile)
+	if existing != nil {
+		versionRecord := bson.M{
+			"versionId":   generateVersionID(),
+			"profileName": name,
+			"profile":     existing,
+			"action":      "UPDATE",
+			"savedAt":     now,
+			"savedBy":     p.Username,
+			"title":       existing["title"],
+			"sliceCount":  countSliceList(existing),
+		}
+		if err := h.repo.SaveProfileVersion(r.Context(), versionRecord); err != nil {
+			// Profile was updated but version save failed - partial write
+			response.JSON(w, http.StatusInternalServerError, map[string]any{
+				"error":     "Profile updated but version save failed",
+				"code":      "PROFILE_UPDATE_PARTIAL_WRITE",
+				"committed": true,
+			})
+			return
+		}
 	}
-	if err := h.repo.SaveProfileVersion(r.Context(), versionRecord); err != nil {
-		// Profile was updated but version save failed - partial write
-		response.JSON(w, http.StatusInternalServerError, map[string]any{
-			"error":     "Profile updated but version save failed",
-			"code":      "PROFILE_UPDATE_PARTIAL_WRITE",
+
+	// Write strict audit record
+	if err := h.writeStrictAudit(r.Context(), "PROFILE_UPDATE", "profile", name, p.Username, existing, updated, "success", nil, true); err != nil {
+		response.JSON(w, http.StatusServiceUnavailable, map[string]any{
+			"error":     "Audit unavailable",
+			"code":      "AUDIT_UNAVAILABLE",
 			"committed": true,
 		})
 		return
 	}
-
-	// Write audit record (best-effort)
-	h.writeAudit(r.Context(), "PROFILE_UPDATE", "profile", name, p.Username, existing, "success", nil)
 
 	response.JSON(w, http.StatusOK, UpdateProfileResponse{
 		Message: "Profile updated successfully",
@@ -576,8 +619,21 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		response.InternalError(w)
 		return
 	}
+
+	// Missing profile is idempotent 200 (matches Node behavior)
 	if existing == nil {
-		response.NotFound(w)
+		// Write audit for no-op
+		if err := h.writeStrictAudit(r.Context(), "PROFILE_DELETE", "profile", name, p.Username, nil, nil, "no_op", nil, false); err != nil {
+			response.JSON(w, http.StatusServiceUnavailable, map[string]any{
+				"error":     "Audit unavailable",
+				"code":      "AUDIT_UNAVAILABLE",
+				"committed": false,
+			})
+			return
+		}
+		response.JSON(w, http.StatusOK, DeleteProfileResponse{
+			Message: "Profile deleted successfully",
+		})
 		return
 	}
 
@@ -598,22 +654,24 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	// Perform CAS delete
 	if err := h.repo.DeleteProfileCAS(r.Context(), name, existing); err != nil {
 		if err == ErrProfilePreconditionChanged {
-			response.Error(w, http.StatusConflict, "Profile was modified since loaded", "PROFILE_PRECONDITION_CHANGED")
+			response.Error(w, http.StatusConflict, "Profile was modified since loaded", "PROFILE_DELETE_PRECONDITION_CHANGED")
 			return
 		}
 		response.InternalError(w)
 		return
 	}
 
-	// Save version record (best-effort)
-	now := time.Now().UTC().Format(time.RFC3339)
+	// Save version record
+	now := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
 	versionRecord := bson.M{
-		"versionId":       generateVersionID(),
-		"profileName":     name,
-		"profileSnapshot": existing,
-		"action":          "DELETE",
-		"savedAt":         now,
-		"savedBy":         p.Username,
+		"versionId":   generateVersionID(),
+		"profileName": name,
+		"profile":     existing,
+		"action":      "DELETE",
+		"savedAt":     now,
+		"savedBy":     p.Username,
+		"title":       existing["title"],
+		"sliceCount":  countSliceList(existing),
 	}
 	if err := h.repo.SaveProfileVersion(r.Context(), versionRecord); err != nil {
 		// Profile was deleted but version save failed - partial write
@@ -625,34 +683,19 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Write audit record (best-effort)
-	h.writeAudit(r.Context(), "PROFILE_DELETE", "profile", name, p.Username, existing, "success", nil)
+	// Write strict audit record
+	if err := h.writeStrictAudit(r.Context(), "PROFILE_DELETE", "profile", name, p.Username, existing, nil, "success", nil, true); err != nil {
+		response.JSON(w, http.StatusServiceUnavailable, map[string]any{
+			"error":     "Audit unavailable",
+			"code":      "AUDIT_UNAVAILABLE",
+			"committed": true,
+		})
+		return
+	}
 
 	response.JSON(w, http.StatusOK, DeleteProfileResponse{
 		Message: "Profile deleted successfully",
 	})
-}
-
-// computePreconditionHash computes a SHA-256 hash of the profile document for CAS.
-func computePreconditionHash(doc bson.M) string {
-	if doc == nil {
-		return sha256Hex("{}")
-	}
-	// Remove preconditionHash before hashing
-	cleaned := bson.M{}
-	for k, v := range doc {
-		if k != "preconditionHash" && k != "_id" {
-			cleaned[k] = v
-		}
-	}
-	data, _ := json.Marshal(cleaned)
-	return sha256Hex(string(data))
-}
-
-// sha256Hex computes the SHA-256 hex digest of a string.
-func sha256Hex(s string) string {
-	h := sha256.Sum256([]byte(s))
-	return fmt.Sprintf("%x", h)
 }
 
 // generateVersionID generates a unique version ID.
@@ -669,10 +712,10 @@ func randomHex(n int) string {
 	return fmt.Sprintf("%x", b)
 }
 
-// writeAudit writes an audit record (best-effort).
-func (h *Handler) writeAudit(ctx context.Context, action, targetType, targetName, username string, snapshot any, result string, errDetails error) {
+// writeStrictAudit writes a strict audit record and returns error on failure.
+func (h *Handler) writeStrictAudit(ctx context.Context, action, targetType, targetName, username string, before, after any, result string, errDetails error, committed bool) error {
 	if h.audit == nil {
-		return
+		return nil
 	}
 
 	input := audit.WriteAuditInput{
@@ -688,10 +731,17 @@ func (h *Handler) writeAudit(ctx context.Context, action, targetType, targetName
 		},
 		Result: result,
 		Level:  "info",
+		Metadata: map[string]interface{}{
+			"committed": committed,
+		},
 	}
 
-	if snapshot != nil {
-		input.Before = snapshot
+	// Use safe snapshot (redact secrets)
+	if before != nil {
+		input.Before = safeProfileSnapshot(before)
+	}
+	if after != nil {
+		input.After = safeProfileSnapshot(after)
 	}
 
 	if errDetails != nil {
@@ -701,6 +751,55 @@ func (h *Handler) writeAudit(ctx context.Context, action, targetType, targetName
 		}
 	}
 
-	// Best-effort audit write
-	h.audit.WriteBestEffort(input)
+	return h.audit.WriteStrict(ctx, input)
+}
+
+// safeProfileSnapshot creates a safe snapshot with secrets redacted.
+func safeProfileSnapshot(profile any) map[string]interface{} {
+	if profile == nil {
+		return nil
+	}
+
+	doc, ok := profile.(bson.M)
+	if !ok {
+		return map[string]interface{}{"_type": "unknown"}
+	}
+
+	safe := map[string]interface{}{}
+
+	// Copy safe fields
+	for _, field := range []string{"name", "title", "access_restriction_data", "ambr", "sliceList", "ocsDefaults", "createdAt", "createdBy", "updatedAt", "updatedBy"} {
+		if v, ok := doc[field]; ok {
+			safe[field] = v
+		}
+	}
+
+	// Add authConfigured indicator (no raw secrets)
+	if auth, ok := doc["auth"].(bson.M); ok {
+		safe["authConfigured"] = auth["k"] != "" && auth["k"] != "00000000000000000000000000000000"
+	}
+
+	return safe
+}
+
+// isAllowedProfileField checks if a field is allowed in the PUT body.
+func isAllowedProfileField(field string) bool {
+	allowed := map[string]bool{
+		"title":                   true,
+		"description":             true,
+		"auth":                    true,
+		"ambr":                    true,
+		"access_restriction_data": true,
+		"sliceList":               true,
+		"ocsDefaults":             true,
+	}
+	return allowed[field]
+}
+
+// countSliceList counts the number of slices in a profile.
+func countSliceList(doc bson.M) int {
+	if sl, ok := doc["sliceList"].(bson.A); ok {
+		return len(sl)
+	}
+	return 0
 }

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { logAudit } from '@/lib/audit';
 import { enforceRateLimit } from '@/lib/rateLimit';
-import { requireAuth, requireRole } from '@/lib/authz';
+import { requireAuth, requirePermission } from '@/lib/authz';
 import {
   createProfile,
   getProfilesGlobalSummary,
@@ -32,7 +32,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const auth = requireRole(request, 'root');
+    const auth = requirePermission(request, 'profiles.write');
     if (!auth.ok) return auth.response;
 
     const rateLimit = await enforceRateLimit(`profiles:create:${auth.auth.user}`, 20, 60);

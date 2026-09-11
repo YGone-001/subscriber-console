@@ -170,6 +170,11 @@ func main() {
 	mux.Handle("GET /api/profiles/{name}/stats", authMiddleware(http.HandlerFunc(profileHandler.Stats)))
 	mux.Handle("GET /api/profiles/{name}/versions", authMiddleware(http.HandlerFunc(profileHandler.Versions)))
 
+	// Profile write endpoints (governance: super_admin/root/ops_admin→DIRECT)
+	mux.Handle("POST /api/profiles", authMiddleware(http.HandlerFunc(profileHandler.Create)))
+	mux.Handle("PUT /api/profiles/{name}", authMiddleware(http.HandlerFunc(profileHandler.Update)))
+	mux.Handle("DELETE /api/profiles/{name}", authMiddleware(http.HandlerFunc(profileHandler.Delete)))
+
 	// OCS
 	mux.Handle("GET /api/ocs/balances", authMiddleware(http.HandlerFunc(ocsHandler.Balances)))
 	mux.Handle("GET /api/ocs/sessions", authMiddleware(http.HandlerFunc(ocsHandler.Sessions)))

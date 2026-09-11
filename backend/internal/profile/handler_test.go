@@ -11,7 +11,6 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"subscriber/internal/audit"
 	"subscriber/internal/auth"
-	"subscriber/internal/ratelimit"
 )
 
 // mockLimiter always allows requests (for testing).
@@ -130,7 +129,7 @@ func (m *mockAuditWriter) WriteStrict(ctx context.Context, input audit.WriteAudi
 func TestCreateProfile(t *testing.T) {
 	repo := newMockRepository()
 	auditWriter := &mockAuditWriter{}
-	limiter := ratelimit.NewLimiter(nil) // nil store = fail-open (allows all)
+	limiter := &mockLimiter{}
 	handler := NewHandler(repo, limiter, auditWriter)
 
 	// Create a test principal
@@ -189,7 +188,7 @@ func TestCreateProfile(t *testing.T) {
 func TestCreateProfileDuplicate(t *testing.T) {
 	repo := newMockRepository()
 	auditWriter := &mockAuditWriter{}
-	limiter := ratelimit.NewLimiter(nil)
+	limiter := &mockLimiter{}
 	handler := NewHandler(repo, limiter, auditWriter)
 
 	principal := &auth.Principal{
@@ -220,7 +219,7 @@ func TestCreateProfileDuplicate(t *testing.T) {
 func TestCreateProfilePermissionDenied(t *testing.T) {
 	repo := newMockRepository()
 	auditWriter := &mockAuditWriter{}
-	limiter := ratelimit.NewLimiter(nil)
+	limiter := &mockLimiter{}
 	handler := NewHandler(repo, limiter, auditWriter)
 
 	// Viewer doesn't have profiles.write permission
@@ -249,7 +248,7 @@ func TestCreateProfilePermissionDenied(t *testing.T) {
 func TestUpdateProfile(t *testing.T) {
 	repo := newMockRepository()
 	auditWriter := &mockAuditWriter{}
-	limiter := ratelimit.NewLimiter(nil)
+	limiter := &mockLimiter{}
 	handler := NewHandler(repo, limiter, auditWriter)
 
 	principal := &auth.Principal{
@@ -260,9 +259,8 @@ func TestUpdateProfile(t *testing.T) {
 
 	// Create existing profile
 	existingProfile := bson.M{
-		"name":             "test_profile",
-		"title":            "test_profile",
-		"preconditionHash": computePreconditionHash(bson.M{"name": "test_profile"}),
+		"name":  "test_profile",
+		"title": "test_profile",
 	}
 	repo.profiles["test_profile"] = existingProfile
 
@@ -295,7 +293,7 @@ func TestUpdateProfile(t *testing.T) {
 func TestDeleteProfile(t *testing.T) {
 	repo := newMockRepository()
 	auditWriter := &mockAuditWriter{}
-	limiter := ratelimit.NewLimiter(nil)
+	limiter := &mockLimiter{}
 	handler := NewHandler(repo, limiter, auditWriter)
 
 	principal := &auth.Principal{
@@ -306,9 +304,8 @@ func TestDeleteProfile(t *testing.T) {
 
 	// Create existing profile
 	existingProfile := bson.M{
-		"name":             "test_profile",
-		"title":            "test_profile",
-		"preconditionHash": computePreconditionHash(bson.M{"name": "test_profile"}),
+		"name":  "test_profile",
+		"title": "test_profile",
 	}
 	repo.profiles["test_profile"] = existingProfile
 
@@ -338,7 +335,7 @@ func TestDeleteProfile(t *testing.T) {
 func TestDeleteProfileInUse(t *testing.T) {
 	repo := newMockRepository()
 	auditWriter := &mockAuditWriter{}
-	limiter := ratelimit.NewLimiter(nil)
+	limiter := &mockLimiter{}
 	handler := NewHandler(repo, limiter, auditWriter)
 
 	principal := &auth.Principal{
@@ -349,9 +346,8 @@ func TestDeleteProfileInUse(t *testing.T) {
 
 	// Create existing profile
 	existingProfile := bson.M{
-		"name":             "test_profile",
-		"title":            "test_profile",
-		"preconditionHash": computePreconditionHash(bson.M{"name": "test_profile"}),
+		"name":  "test_profile",
+		"title": "test_profile",
 	}
 	repo.profiles["test_profile"] = existingProfile
 
@@ -379,7 +375,7 @@ func TestDeleteProfileInUse(t *testing.T) {
 func TestDeleteProfileForce(t *testing.T) {
 	repo := newMockRepository()
 	auditWriter := &mockAuditWriter{}
-	limiter := ratelimit.NewLimiter(nil)
+	limiter := &mockLimiter{}
 	handler := NewHandler(repo, limiter, auditWriter)
 
 	principal := &auth.Principal{
@@ -390,9 +386,8 @@ func TestDeleteProfileForce(t *testing.T) {
 
 	// Create existing profile
 	existingProfile := bson.M{
-		"name":             "test_profile",
-		"title":            "test_profile",
-		"preconditionHash": computePreconditionHash(bson.M{"name": "test_profile"}),
+		"name":  "test_profile",
+		"title": "test_profile",
 	}
 	repo.profiles["test_profile"] = existingProfile
 
@@ -520,29 +515,183 @@ func TestDefaultProfileParity(t *testing.T) {
 	}
 }
 
-func TestComputePreconditionHash(t *testing.T) {
-	// Test that preconditionHash is deterministic
-	doc1 := bson.M{"name": "test", "title": "test"}
-	doc2 := bson.M{"name": "test", "title": "test"}
+func TestUpdateMissingProfile(t *testing.T) {
+	repo := newMockRepository()
+	auditWriter := &mockAuditWriter{}
+	limiter := &mockLimiter{}
+	handler := NewHandler(repo, limiter, auditWriter)
 
-	hash1 := computePreconditionHash(doc1)
-	hash2 := computePreconditionHash(doc2)
-
-	if hash1 != hash2 {
-		t.Errorf("preconditionHash should be deterministic: %s != %s", hash1, hash2)
+	principal := &auth.Principal{
+		Username:       "testuser",
+		Role:           "super_admin",
+		NormalizedRole: "super_admin",
 	}
 
-	// Test that different docs produce different hashes
-	doc3 := bson.M{"name": "test", "title": "different"}
-	hash3 := computePreconditionHash(doc3)
+	// Update a profile that doesn't exist (should insert, not 404)
+	body := map[string]any{
+		"title": "New Title",
+	}
+	bodyBytes, _ := json.Marshal(body)
+	req := httptest.NewRequest("PUT", "/api/profiles/new_profile", bytes.NewReader(bodyBytes))
+	req.Header.Set("Content-Type", "application/json")
 
-	if hash1 == hash3 {
-		t.Error("different docs should produce different hashes")
+	ctx := auth.ContextWithPrincipal(req.Context(), principal)
+	req = req.WithContext(ctx)
+	req.SetPathValue("name", "new_profile")
+
+	w := httptest.NewRecorder()
+	handler.Update(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, w.Code)
 	}
 
-	// Test nil doc
-	hashNil := computePreconditionHash(nil)
-	if hashNil == "" {
-		t.Error("nil doc should produce a hash")
+	// Verify profile was inserted
+	if _, exists := repo.profiles["new_profile"]; !exists {
+		t.Error("profile should have been inserted")
 	}
+
+	// Verify no version was saved (no existing profile to version)
+	if len(repo.versions) != 0 {
+		t.Errorf("expected 0 versions for missing profile, got %d", len(repo.versions))
+	}
+}
+
+func TestDeleteMissingProfile(t *testing.T) {
+	repo := newMockRepository()
+	auditWriter := &mockAuditWriter{}
+	limiter := &mockLimiter{}
+	handler := NewHandler(repo, limiter, auditWriter)
+
+	principal := &auth.Principal{
+		Username:       "testuser",
+		Role:           "super_admin",
+		NormalizedRole: "super_admin",
+	}
+
+	// Delete a profile that doesn't exist (should return 200, not 404)
+	req := httptest.NewRequest("DELETE", "/api/profiles/missing_profile", nil)
+	ctx := auth.ContextWithPrincipal(req.Context(), principal)
+	req = req.WithContext(ctx)
+	req.SetPathValue("name", "missing_profile")
+
+	w := httptest.NewRecorder()
+	handler.Delete(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, w.Code)
+	}
+
+	// Verify audit record for no-op
+	if len(auditWriter.records) != 1 {
+		t.Errorf("expected 1 audit record for no-op, got %d", len(auditWriter.records))
+	}
+	if auditWriter.records[0].Result != "no_op" {
+		t.Errorf("expected audit result 'no_op', got '%s'", auditWriter.records[0].Result)
+	}
+}
+
+func TestVersionSchemaParity(t *testing.T) {
+	repo := newMockRepository()
+	auditWriter := &mockAuditWriter{}
+	limiter := &mockLimiter{}
+	handler := NewHandler(repo, limiter, auditWriter)
+
+	principal := &auth.Principal{
+		Username:       "testuser",
+		Role:           "super_admin",
+		NormalizedRole: "super_admin",
+	}
+
+	// Create a profile
+	body := CreateProfileRequest{Name: "test_profile"}
+	bodyBytes, _ := json.Marshal(body)
+	req := httptest.NewRequest("POST", "/api/profiles", bytes.NewReader(bodyBytes))
+	req.Header.Set("Content-Type", "application/json")
+
+	ctx := auth.ContextWithPrincipal(req.Context(), principal)
+	req = req.WithContext(ctx)
+
+	w := httptest.NewRecorder()
+	handler.Create(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected status %d, got %d", http.StatusCreated, w.Code)
+	}
+
+	// Verify version record has correct schema
+	if len(repo.versions) != 1 {
+		t.Fatalf("expected 1 version, got %d", len(repo.versions))
+	}
+
+	version := repo.versions[0]
+
+	// Must have "profile" field, not "profileSnapshot"
+	if _, ok := version["profile"]; !ok {
+		t.Error("version should have 'profile' field")
+	}
+	if _, ok := version["profileSnapshot"]; ok {
+		t.Error("version should NOT have 'profileSnapshot' field")
+	}
+
+	// Must have title and sliceCount
+	if _, ok := version["title"]; !ok {
+		t.Error("version should have 'title' field")
+	}
+	if _, ok := version["sliceCount"]; !ok {
+		t.Error("version should have 'sliceCount' field")
+	}
+
+	// Verify action
+	if version["action"] != "CREATE" {
+		t.Errorf("expected action 'CREATE', got '%s'", version["action"])
+	}
+}
+
+func TestSafeAuditSnapshot(t *testing.T) {
+	// Create a profile with auth secrets
+	profile := bson.M{
+		"name":  "test",
+		"title": "test",
+		"auth": bson.M{
+			"k":   "SECRET_K_VALUE",
+			"opc": "SECRET_OPC_VALUE",
+			"amf": "SECRET_AMF_VALUE",
+		},
+		"sliceList": bson.A{},
+	}
+
+	safe := safeProfileSnapshot(profile)
+
+	// Verify secrets are NOT in the safe snapshot
+	safeJSON, _ := json.Marshal(safe)
+	safeStr := string(safeJSON)
+
+	if contains(safeStr, "SECRET_K_VALUE") {
+		t.Error("auth.k should be redacted from audit snapshot")
+	}
+	if contains(safeStr, "SECRET_OPC_VALUE") {
+		t.Error("auth.opc should be redacted from audit snapshot")
+	}
+	if contains(safeStr, "SECRET_AMF_VALUE") {
+		t.Error("auth.amf should be redacted from audit snapshot")
+	}
+
+	// Verify authConfigured indicator is present
+	if _, ok := safe["authConfigured"]; !ok {
+		t.Error("safe snapshot should have 'authConfigured' field")
+	}
+}
+
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsSubstr(s, substr))
+}
+
+func containsSubstr(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
 }

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { logAudit } from '@/lib/audit';
-import { requireAuth, requireRole } from '@/lib/authz';
+import { requireAuth, requirePermission } from '@/lib/authz';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import {
   deleteProfile,
@@ -47,7 +47,7 @@ export async function GET(request: Request, { params }: RouteContext) {
 
 export async function PUT(request: Request, { params }: RouteContext) {
   const { name } = await params;
-  const auth = requireRole(request, 'root');
+  const auth = requirePermission(request, 'profiles.write');
   if (!auth.ok) return auth.response;
 
   const rateLimit = await enforceRateLimit(`profiles:update:${auth.auth.user}`, 30, 60);
@@ -72,7 +72,7 @@ export async function PUT(request: Request, { params }: RouteContext) {
 
 export async function DELETE(request: Request, { params }: RouteContext) {
   const { name } = await params;
-  const auth = requireRole(request, 'root');
+  const auth = requirePermission(request, 'profiles.write');
   if (!auth.ok) return auth.response;
 
   const rateLimit = await enforceRateLimit(`profiles:delete:${auth.auth.user}`, 20, 60);
