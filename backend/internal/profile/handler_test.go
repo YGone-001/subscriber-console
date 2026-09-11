@@ -695,3 +695,213 @@ func containsSubstr(s, substr string) bool {
 	}
 	return false
 }
+
+func TestExistingPUTPreservation(t *testing.T) {
+	repo := newMockRepository()
+	auditWriter := &mockAuditWriter{}
+	limiter := &mockLimiter{}
+	handler := NewHandler(repo, limiter, auditWriter)
+
+	principal := &auth.Principal{
+		Username:       "testuser",
+		Role:           "super_admin",
+		NormalizedRole: "super_admin",
+	}
+
+	// Create existing profile with non-default values
+	existingProfile := bson.M{
+		"name":      "test_profile",
+		"title":     "Original Title",
+		"createdAt": "2024-01-01T00:00:00.000Z",
+		"createdBy": "original_user",
+		"updatedAt": "2024-01-01T00:00:00.000Z",
+		"updatedBy": "original_user",
+		"auth": bson.M{
+			"k":   "K_SENTINEL",
+			"opc": "OPC_SENTINEL",
+			"amf": "AMF_SENTINEL",
+		},
+		"ambr": bson.M{
+			"downlink": bson.M{"unit": 5, "value": 999},
+			"uplink":   bson.M{"unit": 5, "value": 999},
+		},
+		"sliceList": bson.A{
+			bson.M{"custom": "slice"},
+		},
+		"ocsDefaults": bson.M{
+			"planId": "custom_plan",
+		},
+		"custom_field": "should_be_preserved",
+	}
+	repo.profiles["test_profile"] = existingProfile
+
+	// Update only title
+	body := map[string]any{
+		"title": "Changed Title",
+	}
+	bodyBytes, _ := json.Marshal(body)
+	req := httptest.NewRequest("PUT", "/api/profiles/test_profile", bytes.NewReader(bodyBytes))
+	req.Header.Set("Content-Type", "application/json")
+
+	ctx := auth.ContextWithPrincipal(req.Context(), principal)
+	req = req.WithContext(ctx)
+	req.SetPathValue("name", "test_profile")
+
+	w := httptest.NewRecorder()
+	handler.Update(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, w.Code)
+	}
+
+	// Verify the updated profile preserves untouched fields
+	updated := repo.profiles["test_profile"]
+
+	// Title should be changed
+	if updated["title"] != "Changed Title" {
+		t.Errorf("expected title 'Changed Title', got '%s'", updated["title"])
+	}
+
+	// Auth should be preserved
+	auth, _ := updated["auth"].(bson.M)
+	if auth["k"] != "K_SENTINEL" {
+		t.Errorf("auth.k should be preserved, got '%s'", auth["k"])
+	}
+	if auth["opc"] != "OPC_SENTINEL" {
+		t.Errorf("auth.opc should be preserved, got '%s'", auth["opc"])
+	}
+	if auth["amf"] != "AMF_SENTINEL" {
+		t.Errorf("auth.amf should be preserved, got '%s'", auth["amf"])
+	}
+
+	// AMBR should be preserved
+	ambr, _ := updated["ambr"].(bson.M)
+	downlink, _ := ambr["downlink"].(bson.M)
+	if downlink["unit"] != 5 || downlink["value"] != 999 {
+		t.Error("ambr should be preserved")
+	}
+
+	// sliceList should be preserved
+	sl, _ := updated["sliceList"].(bson.A)
+	if len(sl) != 1 {
+		t.Errorf("sliceList should be preserved, got %d items", len(sl))
+	}
+
+	// ocsDefaults should be preserved
+	ocs, _ := updated["ocsDefaults"].(bson.M)
+	if ocs["planId"] != "custom_plan" {
+		t.Errorf("ocsDefaults should be preserved, got '%s'", ocs["planId"])
+	}
+
+	// Custom field should be preserved
+	if updated["custom_field"] != "should_be_preserved" {
+		t.Error("custom_field should be preserved")
+	}
+
+	// createdAt/createdBy should be preserved
+	if updated["createdAt"] != "2024-01-01T00:00:00.000Z" {
+		t.Error("createdAt should be preserved")
+	}
+	if updated["createdBy"] != "original_user" {
+		t.Error("createdBy should be preserved")
+	}
+}
+
+func TestMissingPUTSparseDocument(t *testing.T) {
+	repo := newMockRepository()
+	auditWriter := &mockAuditWriter{}
+	limiter := &mockLimiter{}
+	handler := NewHandler(repo, limiter, auditWriter)
+
+	principal := &auth.Principal{
+		Username:       "testuser",
+		Role:           "super_admin",
+		NormalizedRole: "super_admin",
+	}
+
+	// Update a missing profile with only title
+	body := map[string]any{
+		"title": "New Title",
+	}
+	bodyBytes, _ := json.Marshal(body)
+	req := httptest.NewRequest("PUT", "/api/profiles/new_profile", bytes.NewReader(bodyBytes))
+	req.Header.Set("Content-Type", "application/json")
+
+	ctx := auth.ContextWithPrincipal(req.Context(), principal)
+	req = req.WithContext(ctx)
+	req.SetPathValue("name", "new_profile")
+
+	w := httptest.NewRecorder()
+	handler.Update(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, w.Code)
+	}
+
+	// Verify the profile was created with sparse document
+	created := repo.profiles["new_profile"]
+
+	// Should have name
+	if created["name"] != "new_profile" {
+		t.Errorf("expected name 'new_profile', got '%s'", created["name"])
+	}
+
+	// Should have title from body
+	if created["title"] != "New Title" {
+		t.Errorf("expected title 'New Title', got '%s'", created["title"])
+	}
+
+	// Should NOT have default auth/ambr/sliceList/ocsDefaults
+	if _, ok := created["auth"]; ok {
+		t.Error("missing PUT should NOT have auth field")
+	}
+	if _, ok := created["ambr"]; ok {
+		t.Error("missing PUT should NOT have ambr field")
+	}
+	if _, ok := created["sliceList"]; ok {
+		t.Error("missing PUT should NOT have sliceList field")
+	}
+	if _, ok := created["ocsDefaults"]; ok {
+		t.Error("missing PUT should NOT have ocsDefaults field")
+	}
+}
+
+func TestUnknownFieldRejection(t *testing.T) {
+	repo := newMockRepository()
+	auditWriter := &mockAuditWriter{}
+	limiter := &mockLimiter{}
+	handler := NewHandler(repo, limiter, auditWriter)
+
+	principal := &auth.Principal{
+		Username:       "testuser",
+		Role:           "super_admin",
+		NormalizedRole: "super_admin",
+	}
+
+	// Try to update with unknown field
+	body := map[string]any{
+		"title":       "New Title",
+		"unknown_xyz": "should_be_rejected",
+	}
+	bodyBytes, _ := json.Marshal(body)
+	req := httptest.NewRequest("PUT", "/api/profiles/test_profile", bytes.NewReader(bodyBytes))
+	req.Header.Set("Content-Type", "application/json")
+
+	ctx := auth.ContextWithPrincipal(req.Context(), principal)
+	req = req.WithContext(ctx)
+	req.SetPathValue("name", "test_profile")
+
+	w := httptest.NewRecorder()
+	handler.Update(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+
+	// Verify error code
+	var resp map[string]any
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp["code"] != "INVALID_PROFILE_UPDATE" {
+		t.Errorf("expected code 'INVALID_PROFILE_UPDATE', got '%s'", resp["code"])
+	}
+}

@@ -73,4 +73,3 @@ temp/
 # Deployment metadata
 .vercel/
 .netlify/
-CLAUDE.md

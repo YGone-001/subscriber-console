@@ -470,7 +470,17 @@ export async function updateProfile(name: string, body: Record<string, unknown>,
   };
   const sanitized = stripSubscriberIdentityFields(updated) as ProfileDocument;
 
-  await collection.replaceOne({ name }, sanitized, { upsert: true });
+  if (existing) {
+    // CAS: match the existing document to prevent lost updates
+    const existingSanitized = stripSubscriberIdentityFields(existing) as ProfileDocument;
+    const result = await collection.replaceOne(existingSanitized, sanitized);
+    if (result.matchedCount === 0) {
+      throw new Error('PROFILE_PRECONDITION_CHANGED');
+    }
+  } else {
+    // Missing profile: insert
+    await collection.insertOne(sanitized);
+  }
   return { existing, updated: sanitized };
 }
 
@@ -488,7 +498,13 @@ export async function deleteProfile(name: string, user: string, force = false) {
   }
 
   await saveProfileVersion(name, existing, user, 'DELETE');
-  await collection.deleteOne({ name });
+
+  // CAS: match the existing document to prevent lost deletes
+  const existingSanitized = stripSubscriberIdentityFields(existing) as ProfileDocument;
+  const result = await collection.deleteOne(existingSanitized);
+  if (result.deletedCount === 0) {
+    throw new Error('PROFILE_PRECONDITION_CHANGED');
+  }
   return existing;
 }
 
@@ -581,6 +597,16 @@ export async function restoreProfileVersion(name: string, versionId: string, use
     restoredFromSavedAt: version.savedAt,
   }) as ProfileDocument;
 
-  await collection.replaceOne({ name }, restored, { upsert: true });
+  if (current) {
+    // CAS: match the existing document to prevent lost updates
+    const currentSanitized = stripSubscriberIdentityFields(current) as ProfileDocument;
+    const result = await collection.replaceOne(currentSanitized, restored);
+    if (result.matchedCount === 0) {
+      throw new Error('PROFILE_PRECONDITION_CHANGED');
+    }
+  } else {
+    // Missing profile: insert
+    await collection.insertOne(restored);
+  }
   return { version, current, restored };
 }

@@ -194,7 +194,7 @@ func (r *Repository) ListProfileVersions(ctx context.Context, profileName string
 
 	// Match Node ordering: sorted by savedAt descending (most recent first)
 	cursor, err := r.versions.Find(ctx,
-		bson.M{"name": profileName},
+		bson.M{"profileName": profileName},
 		options.Find().SetSort(bson.D{{Key: "savedAt", Value: -1}}).SetLimit(int64(limit)),
 	)
 	if err != nil {
@@ -427,7 +427,7 @@ func (r *Repository) SaveProfileVersion(ctx context.Context, record bson.M) erro
 			SetProjection(bson.M{"versionId": 1}),
 	)
 	if err != nil {
-		return nil // Don't fail the save just because pruning failed
+		return fmt.Errorf("query stale versions: %w", err)
 	}
 	defer cursor.Close(ctx)
 
@@ -442,7 +442,10 @@ func (r *Repository) SaveProfileVersion(ctx context.Context, record bson.M) erro
 	}
 
 	if len(staleIDs) > 0 {
-		_, _ = r.versions.DeleteMany(ctx, bson.M{"versionId": bson.M{"$in": staleIDs}})
+		_, err = r.versions.DeleteMany(ctx, bson.M{"versionId": bson.M{"$in": staleIDs}})
+		if err != nil {
+			return fmt.Errorf("prune stale versions: %w", err)
+		}
 	}
 
 	return nil

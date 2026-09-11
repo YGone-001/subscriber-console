@@ -1021,6 +1021,7 @@ After one logical feature:
 - commit immediately
 - concise Conventional Commit
 - no phase/stage numbers in commit messages (describe what changed, not which phase)
+- no trailing signatures (no Co-Authored-By, Signed-off-by, etc.)
 - do not push unless explicitly requested
 - do not amend completed phase history
 - do not reset/discard user changes

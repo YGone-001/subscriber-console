@@ -349,7 +349,12 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 			response.Error(w, http.StatusConflict, "Profile already exists", "PROFILE_EXISTS")
 			return
 		}
-		response.InternalError(w)
+		// Storage failure
+		response.JSON(w, http.StatusInternalServerError, map[string]any{
+			"error":     "Profile creation failed",
+			"code":      "PROFILE_CREATE_FAILED",
+			"committed": false,
+		})
 		return
 	}
 
@@ -422,6 +427,16 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate body fields (fail-closed)
+	if err := validateProfileUpdateBody(body); err != nil {
+		response.JSON(w, http.StatusBadRequest, map[string]any{
+			"error":     err.Error(),
+			"code":      "INVALID_PROFILE_UPDATE",
+			"committed": false,
+		})
+		return
+	}
+
 	// Load existing profile
 	existing, err := h.repo.GetProfile(r.Context(), name)
 	if err != nil {
@@ -429,102 +444,39 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Build updated document (merge body into existing or create default)
 	now := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
 
-	// Start with existing profile or build default
-	updated := bson.M{
-		"name":      name,
-		"title":     name,
-		"createdAt": now,
-		"createdBy": p.Username,
-		"updatedAt": now,
-		"updatedBy": p.Username,
-		"auth": bson.M{
-			"k":   "00000000000000000000000000000000",
-			"opc": "00000000000000000000000000000000",
-			"amf": "8000",
-		},
-		"ambr": bson.M{
-			"downlink": bson.M{"unit": 2, "value": 10},
-			"uplink":   bson.M{"unit": 2, "value": 10},
-		},
-		"sliceList": bson.A{
-			bson.M{
-				"default_indicator": true,
-				"sd":                "000001",
-				"sst":               int32(1),
-				"session_list": bson.A{
-					bson.M{
-						"name": "internet",
-						"type": int32(1),
-						"qos": bson.M{
-							"_5qi":  int32(9),
-							"index": int32(0),
-							"arp": bson.M{
-								"priorityLevel": int32(9),
-								"preemptCap":    "NOT_PREEMPT",
-								"preemptVuln":   "NOT_PREEMPTABLE",
-							},
-						},
-						"ambr": bson.M{
-							"downlink": bson.M{"unit": int32(3), "value": int32(1)},
-							"uplink":   bson.M{"unit": int32(3), "value": int32(1)},
-						},
-						"pcc_rule": bson.A{},
-						"pgwIpv4":  "127.0.0.4",
-						"pgwIpv6":  "",
-					},
-					bson.M{
-						"name": "ims",
-						"type": int32(3),
-						"qos": bson.M{
-							"_5qi":  int32(5),
-							"index": int32(0),
-							"arp": bson.M{
-								"priorityLevel": int32(1),
-								"preemptCap":    "NOT_PREEMPT",
-								"preemptVuln":   "NOT_PREEMPTABLE",
-							},
-						},
-						"ambr": bson.M{
-							"downlink": bson.M{"unit": int32(3), "value": int32(1)},
-							"uplink":   bson.M{"unit": int32(3), "value": int32(1)},
-						},
-						"pcc_rule": bson.A{},
-						"pgwIpv4":  "127.0.0.4",
-						"pgwIpv6":  "",
-					},
-				},
-			},
-		},
-		"ocsDefaults": bson.M{
-			"planId":         "plan_default_10gb",
-			"trafficTotal":   int64(10737418240),
-			"trafficBalance": int64(10737418240),
-			"smsTotal":       int32(100),
-			"smsBalance":     int32(100),
-		},
-	}
+	var updated bson.M
 
-	// If existing profile, use its createdAt/createdBy
 	if existing != nil {
-		if ct, ok := existing["createdAt"].(string); ok {
-			updated["createdAt"] = ct
+		// Existing profile: copy existing, apply only allowed fields from body
+		updated = deepCopyBsonM(existing)
+		for k, v := range body {
+			if isAllowedProfileField(k) {
+				updated[k] = v
+			}
 		}
-		if cb, ok := existing["createdBy"].(string); ok {
-			updated["createdBy"] = cb
+		// Force immutable/system fields
+		updated["name"] = name
+		updated["updatedBy"] = p.Username
+		updated["updatedAt"] = now
+	} else {
+		// Missing profile: build sparse legacy-compatible document
+		updated = bson.M{
+			"name":      name,
+			"title":     name,
+			"createdAt": now,
+			"createdBy": p.Username,
+			"updatedAt": now,
+			"updatedBy": p.Username,
+		}
+		// Apply only allowed fields from body
+		for k, v := range body {
+			if isAllowedProfileField(k) {
+				updated[k] = v
+			}
 		}
 	}
-
-	// Merge allowed body fields into updated document
-	for k, v := range body {
-		if isAllowedProfileField(k) {
-			updated[k] = v
-		}
-	}
-	updated["updatedBy"] = p.Username
-	updated["updatedAt"] = now
 
 	// Perform CAS update or insert if profile doesn't exist
 	if existing != nil {
@@ -534,7 +486,12 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 				response.Error(w, http.StatusConflict, "Profile was modified since loaded", "PROFILE_UPDATE_PRECONDITION_CHANGED")
 				return
 			}
-			response.InternalError(w)
+			// Storage failure
+			response.JSON(w, http.StatusInternalServerError, map[string]any{
+				"error":     "Profile update failed",
+				"code":      "PROFILE_UPDATE_FAILED",
+				"committed": false,
+			})
 			return
 		}
 	} else {
@@ -545,7 +502,12 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 				response.Error(w, http.StatusConflict, "Profile was modified since loaded", "PROFILE_UPDATE_PRECONDITION_CHANGED")
 				return
 			}
-			response.InternalError(w)
+			// Storage failure
+			response.JSON(w, http.StatusInternalServerError, map[string]any{
+				"error":     "Profile update failed",
+				"code":      "PROFILE_UPDATE_FAILED",
+				"committed": false,
+			})
 			return
 		}
 	}
@@ -657,7 +619,12 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 			response.Error(w, http.StatusConflict, "Profile was modified since loaded", "PROFILE_DELETE_PRECONDITION_CHANGED")
 			return
 		}
-		response.InternalError(w)
+		// Storage failure
+		response.JSON(w, http.StatusInternalServerError, map[string]any{
+			"error":     "Profile deletion failed",
+			"code":      "PROFILE_DELETE_FAILED",
+			"committed": false,
+		})
 		return
 	}
 
@@ -802,4 +769,46 @@ func countSliceList(doc bson.M) int {
 		return len(sl)
 	}
 	return 0
+}
+
+// validateProfileUpdateBody validates the PUT body fields.
+// Returns error if any unknown or forbidden field is present.
+func validateProfileUpdateBody(body map[string]any) error {
+	for field := range body {
+		// Check allowed fields
+		if isAllowedProfileField(field) {
+			continue
+		}
+		// Reject unknown fields
+		return fmt.Errorf("unknown field: %s", field)
+	}
+	return nil
+}
+
+// deepCopyBsonM creates a deep copy of a bson.M document.
+func deepCopyBsonM(src bson.M) bson.M {
+	if src == nil {
+		return nil
+	}
+	dst := bson.M{}
+	for k, v := range src {
+		dst[k] = deepCopyBsonValue(v)
+	}
+	return dst
+}
+
+// deepCopyBsonValue creates a deep copy of a BSON value.
+func deepCopyBsonValue(v any) any {
+	switch val := v.(type) {
+	case bson.M:
+		return deepCopyBsonM(val)
+	case bson.A:
+		cp := make(bson.A, len(val))
+		for i, item := range val {
+			cp[i] = deepCopyBsonValue(item)
+		}
+		return cp
+	default:
+		return v
+	}
 }
