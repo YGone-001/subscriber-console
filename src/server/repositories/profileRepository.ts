@@ -580,7 +580,9 @@ export async function updateProfile(name: string, body: Record<string, unknown>,
         (conflictError as unknown as { code?: string }).code = 'PROFILE_UPDATE_PRECONDITION_CHANGED';
         throw conflictError;
       }
-      throw error;
+      const storageError = new Error('PROFILE_UPDATE_FAILED');
+      (storageError as unknown as { code?: string }).code = 'PROFILE_UPDATE_FAILED';
+      throw storageError;
     }
     // No version for missing PUT insert
   }

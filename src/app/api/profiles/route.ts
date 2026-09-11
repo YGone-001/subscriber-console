@@ -32,23 +32,25 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  // Authorization - available to all paths including catch
+  const auth = requirePermission(request, 'profiles.write');
+  if (!auth.ok) return auth.response;
+
+  const rateLimit = await enforceRateLimit(`profiles:create:${auth.auth.user}`, 20, 60);
+  if (!rateLimit.ok) return rateLimit.response;
+
+  // Parse and validate name - available to all paths including catch
+  const data = await request.json();
+  const { name } = data;
+
+  if (!name) {
+    return NextResponse.json({ error: 'Profile name is required' }, { status: 400 });
+  }
+  if (!/^[a-zA-Z0-9_\s-]+$/.test(name)) {
+    return NextResponse.json({ error: 'Invalid profile name format' }, { status: 400 });
+  }
+
   try {
-    const auth = requirePermission(request, 'profiles.write');
-    if (!auth.ok) return auth.response;
-
-    const rateLimit = await enforceRateLimit(`profiles:create:${auth.auth.user}`, 20, 60);
-    if (!rateLimit.ok) return rateLimit.response;
-
-    const data = await request.json();
-    const { name } = data;
-
-    if (!name) {
-      return NextResponse.json({ error: 'Profile name is required' }, { status: 400 });
-    }
-    if (!/^[a-zA-Z0-9_\s-]+$/.test(name)) {
-      return NextResponse.json({ error: 'Invalid profile name format' }, { status: 400 });
-    }
-
     const profile = await createProfile(name, auth.auth.user);
 
     // Strict audit AFTER mutation with safe snapshot
@@ -85,15 +87,16 @@ export async function POST(request: Request) {
       // Version write failed after insert - mutation committed
       try {
         await writeAuditLog({
-          actor: { type: 'user', username: '', role: '' },
+          actor: { type: 'user', username: auth.auth.user, role: auth.auth.role },
           module: 'profiles',
           action: 'PROFILE_CREATE',
-          targetId: '',
-          resource: { type: 'profile', id: '' },
+          targetId: name,
+          resource: { type: 'profile', id: name },
           result: 'failed',
           metadata: {
             governanceMode: 'DIRECT_GOVERNED',
             approvalRequired: false,
+            actorRole: auth.auth.role,
             mutationCommitted: true,
             classification: 'PARTIAL_WRITE',
           },
@@ -116,15 +119,16 @@ export async function POST(request: Request) {
       // Storage failure - no mutation
       try {
         await writeAuditLog({
-          actor: { type: 'user', username: '', role: '' },
+          actor: { type: 'user', username: auth.auth.user, role: auth.auth.role },
           module: 'profiles',
           action: 'PROFILE_CREATE',
-          targetId: '',
-          resource: { type: 'profile', id: '' },
+          targetId: name,
+          resource: { type: 'profile', id: name },
           result: 'failed',
           metadata: {
             governanceMode: 'DIRECT_GOVERNED',
             approvalRequired: false,
+            actorRole: auth.auth.role,
             mutationCommitted: false,
             classification: 'FAILED_NO_MUTATION',
           },

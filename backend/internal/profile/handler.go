@@ -350,7 +350,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// Storage failure - audit FAILED_NO_MUTATION
-		if auditErr := h.writeStrictAudit(r.Context(), "PROFILE_CREATE", "profile", req.Name, p.Username, nil, nil, "failed", err, false); auditErr != nil {
+		if auditErr := h.writeStrictAudit(r.Context(), "PROFILE_CREATE", "profile", req.Name, p.Username, p.NormalizedRole, nil, nil, "failed", "FAILED_NO_MUTATION", false, err); auditErr != nil {
 			response.JSON(w, http.StatusServiceUnavailable, map[string]any{
 				"error":     "Audit unavailable",
 				"code":      "AUDIT_UNAVAILABLE",
@@ -379,7 +379,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := h.repo.SaveProfileVersion(r.Context(), versionRecord); err != nil {
 		// Profile was created but version save failed - partial write
-		if auditErr := h.writeStrictAudit(r.Context(), "PROFILE_CREATE", "profile", req.Name, p.Username, nil, doc, "failed", err, true); auditErr != nil {
+		if auditErr := h.writeStrictAudit(r.Context(), "PROFILE_CREATE", "profile", req.Name, p.Username, p.NormalizedRole, nil, doc, "failed", "PARTIAL_WRITE", true, err); auditErr != nil {
 			response.JSON(w, http.StatusServiceUnavailable, map[string]any{
 				"error":     "Audit unavailable",
 				"code":      "AUDIT_UNAVAILABLE",
@@ -396,7 +396,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Write strict audit record
-	if err := h.writeStrictAudit(r.Context(), "PROFILE_CREATE", "profile", req.Name, p.Username, nil, doc, "success", nil, true); err != nil {
+	if err := h.writeStrictAudit(r.Context(), "PROFILE_CREATE", "profile", req.Name, p.Username, p.NormalizedRole, nil, doc, "success", "SUCCESS", true, nil); err != nil {
 		response.JSON(w, http.StatusServiceUnavailable, map[string]any{
 			"error":     "Audit unavailable",
 			"code":      "AUDIT_UNAVAILABLE",
@@ -500,7 +500,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		if err := h.repo.ReplaceProfileCAS(r.Context(), name, existing, updated); err != nil {
 			if err == ErrProfilePreconditionChanged {
 				// Audit PRECONDITION_CHANGED
-				if auditErr := h.writeStrictAudit(r.Context(), "PROFILE_UPDATE", "profile", name, p.Username, existing, nil, "failed", err, false); auditErr != nil {
+				if auditErr := h.writeStrictAudit(r.Context(), "PROFILE_UPDATE", "profile", name, p.Username, p.NormalizedRole, existing, nil, "failed", "PRECONDITION_CHANGED", false, err); auditErr != nil {
 					response.JSON(w, http.StatusServiceUnavailable, map[string]any{
 						"error":     "Audit unavailable",
 						"code":      "AUDIT_UNAVAILABLE",
@@ -512,7 +512,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			// Storage failure - audit FAILED_NO_MUTATION
-			if auditErr := h.writeStrictAudit(r.Context(), "PROFILE_UPDATE", "profile", name, p.Username, existing, nil, "failed", err, false); auditErr != nil {
+			if auditErr := h.writeStrictAudit(r.Context(), "PROFILE_UPDATE", "profile", name, p.Username, p.NormalizedRole, existing, nil, "failed", "FAILED_NO_MUTATION", false, err); auditErr != nil {
 				response.JSON(w, http.StatusServiceUnavailable, map[string]any{
 					"error":     "Audit unavailable",
 					"code":      "AUDIT_UNAVAILABLE",
@@ -532,7 +532,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		if err := h.repo.InsertProfileCreateOnly(r.Context(), updated); err != nil {
 			if err == ErrProfileExists {
 				// Concurrent creator won - audit PRECONDITION_CHANGED
-				if auditErr := h.writeStrictAudit(r.Context(), "PROFILE_UPDATE", "profile", name, p.Username, nil, nil, "failed", err, false); auditErr != nil {
+				if auditErr := h.writeStrictAudit(r.Context(), "PROFILE_UPDATE", "profile", name, p.Username, p.NormalizedRole, nil, nil, "failed", "PRECONDITION_CHANGED", false, err); auditErr != nil {
 					response.JSON(w, http.StatusServiceUnavailable, map[string]any{
 						"error":     "Audit unavailable",
 						"code":      "AUDIT_UNAVAILABLE",
@@ -544,7 +544,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			// Storage failure - audit FAILED_NO_MUTATION
-			if auditErr := h.writeStrictAudit(r.Context(), "PROFILE_UPDATE", "profile", name, p.Username, nil, nil, "failed", err, false); auditErr != nil {
+			if auditErr := h.writeStrictAudit(r.Context(), "PROFILE_UPDATE", "profile", name, p.Username, p.NormalizedRole, nil, nil, "failed", "FAILED_NO_MUTATION", false, err); auditErr != nil {
 				response.JSON(w, http.StatusServiceUnavailable, map[string]any{
 					"error":     "Audit unavailable",
 					"code":      "AUDIT_UNAVAILABLE",
@@ -575,7 +575,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		}
 		if err := h.repo.SaveProfileVersion(r.Context(), versionRecord); err != nil {
 			// Profile was updated but version save failed - partial write
-			if auditErr := h.writeStrictAudit(r.Context(), "PROFILE_UPDATE", "profile", name, p.Username, existing, updated, "failed", err, true); auditErr != nil {
+			if auditErr := h.writeStrictAudit(r.Context(), "PROFILE_UPDATE", "profile", name, p.Username, p.NormalizedRole, existing, updated, "failed", "PARTIAL_WRITE", true, err); auditErr != nil {
 				response.JSON(w, http.StatusServiceUnavailable, map[string]any{
 					"error":     "Audit unavailable",
 					"code":      "AUDIT_UNAVAILABLE",
@@ -593,7 +593,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Write strict audit record
-	if err := h.writeStrictAudit(r.Context(), "PROFILE_UPDATE", "profile", name, p.Username, existing, updated, "success", nil, true); err != nil {
+	if err := h.writeStrictAudit(r.Context(), "PROFILE_UPDATE", "profile", name, p.Username, p.NormalizedRole, existing, updated, "success", "SUCCESS", true, nil); err != nil {
 		response.JSON(w, http.StatusServiceUnavailable, map[string]any{
 			"error":     "Audit unavailable",
 			"code":      "AUDIT_UNAVAILABLE",
@@ -642,7 +642,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	// Missing profile is idempotent 200 (matches Node behavior)
 	if existing == nil {
 		// Write audit for no-op
-		if err := h.writeStrictAudit(r.Context(), "PROFILE_DELETE", "profile", name, p.Username, nil, nil, "no_op", nil, false); err != nil {
+		if err := h.writeStrictAudit(r.Context(), "PROFILE_DELETE", "profile", name, p.Username, p.NormalizedRole, nil, nil, "no_op", "NO_OP", false, nil); err != nil {
 			response.JSON(w, http.StatusServiceUnavailable, map[string]any{
 				"error":     "Audit unavailable",
 				"code":      "AUDIT_UNAVAILABLE",
@@ -674,7 +674,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	if err := h.repo.DeleteProfileCAS(r.Context(), name, existing); err != nil {
 		if err == ErrProfilePreconditionChanged {
 			// Audit PRECONDITION_CHANGED
-			if auditErr := h.writeStrictAudit(r.Context(), "PROFILE_DELETE", "profile", name, p.Username, existing, nil, "failed", err, false); auditErr != nil {
+			if auditErr := h.writeStrictAudit(r.Context(), "PROFILE_DELETE", "profile", name, p.Username, p.NormalizedRole, existing, nil, "failed", "PRECONDITION_CHANGED", false, err); auditErr != nil {
 				response.JSON(w, http.StatusServiceUnavailable, map[string]any{
 					"error":     "Audit unavailable",
 					"code":      "AUDIT_UNAVAILABLE",
@@ -686,7 +686,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// Storage failure - audit FAILED_NO_MUTATION
-		if auditErr := h.writeStrictAudit(r.Context(), "PROFILE_DELETE", "profile", name, p.Username, existing, nil, "failed", err, false); auditErr != nil {
+		if auditErr := h.writeStrictAudit(r.Context(), "PROFILE_DELETE", "profile", name, p.Username, p.NormalizedRole, existing, nil, "failed", "FAILED_NO_MUTATION", false, err); auditErr != nil {
 			response.JSON(w, http.StatusServiceUnavailable, map[string]any{
 				"error":     "Audit unavailable",
 				"code":      "AUDIT_UNAVAILABLE",
@@ -703,7 +703,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Save version record
-	now := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
+	now := time.Now().UTC()
 	versionRecord := bson.M{
 		"versionId":   generateVersionID(),
 		"profileName": name,
@@ -716,7 +716,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := h.repo.SaveProfileVersion(r.Context(), versionRecord); err != nil {
 		// Profile was deleted but version save failed - partial write
-		if auditErr := h.writeStrictAudit(r.Context(), "PROFILE_DELETE", "profile", name, p.Username, existing, nil, "failed", err, true); auditErr != nil {
+		if auditErr := h.writeStrictAudit(r.Context(), "PROFILE_DELETE", "profile", name, p.Username, p.NormalizedRole, existing, nil, "failed", "PARTIAL_WRITE", true, err); auditErr != nil {
 			response.JSON(w, http.StatusServiceUnavailable, map[string]any{
 				"error":     "Audit unavailable",
 				"code":      "AUDIT_UNAVAILABLE",
@@ -733,7 +733,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Write strict audit record
-	if err := h.writeStrictAudit(r.Context(), "PROFILE_DELETE", "profile", name, p.Username, existing, nil, "success", nil, true); err != nil {
+	if err := h.writeStrictAudit(r.Context(), "PROFILE_DELETE", "profile", name, p.Username, p.NormalizedRole, existing, nil, "success", "SUCCESS", true, nil); err != nil {
 		response.JSON(w, http.StatusServiceUnavailable, map[string]any{
 			"error":     "Audit unavailable",
 			"code":      "AUDIT_UNAVAILABLE",
@@ -762,7 +762,7 @@ func randomHex(n int) string {
 }
 
 // writeStrictAudit writes a strict audit record and returns error on failure.
-func (h *Handler) writeStrictAudit(ctx context.Context, action, targetType, targetName, username string, before, after any, result string, errDetails error, committed bool) error {
+func (h *Handler) writeStrictAudit(ctx context.Context, action, targetType, targetName, username, role string, before, after any, result string, classification string, committed bool, errDetails error) error {
 	if h.audit == nil {
 		return nil
 	}
@@ -773,6 +773,7 @@ func (h *Handler) writeStrictAudit(ctx context.Context, action, targetType, targ
 		Actor: audit.ActorInput{
 			Type:     "user",
 			Username: username,
+			Role:     role,
 		},
 		Resource: &audit.ResourceInput{
 			Type: targetType,
@@ -781,7 +782,11 @@ func (h *Handler) writeStrictAudit(ctx context.Context, action, targetType, targ
 		Result: result,
 		Level:  "info",
 		Metadata: map[string]interface{}{
-			"committed": committed,
+			"governanceMode":    "DIRECT_GOVERNED",
+			"approvalRequired":  false,
+			"actorRole":         role,
+			"mutationCommitted": committed,
+			"classification":    classification,
 		},
 	}
 
@@ -795,7 +800,7 @@ func (h *Handler) writeStrictAudit(ctx context.Context, action, targetType, targ
 
 	if errDetails != nil {
 		input.Error = &audit.ErrorInput{
-			Code:    "WRITE_FAILED",
+			Code:    classification,
 			Message: errDetails.Error(),
 		}
 	}
