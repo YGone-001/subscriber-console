@@ -79,6 +79,48 @@ function isDuplicateKey(error: unknown): boolean {
   return error instanceof MongoServerError && error.code === 11000;
 }
 
+const ALLOWED_PROFILE_FIELDS = new Set([
+  'title',
+  'description',
+  'auth',
+  'ambr',
+  'access_restriction_data',
+  'sliceList',
+  'ocsDefaults',
+]);
+
+const REJECTED_FIELDS = new Set([
+  '_id',
+  'name',
+  'createdAt',
+  'createdBy',
+  'updatedAt',
+  'updatedBy',
+  'restoredFromVersionId',
+  'restoredFromSavedAt',
+  'preconditionHash',
+  'imsi',
+  'msisdn',
+  'msisdnList',
+]);
+
+function isAllowedProfileField(field: string): boolean {
+  if (REJECTED_FIELDS.has(field)) return false;
+  if (field.startsWith('$')) return false;
+  if (field.includes('.')) return false;
+  if (field === '__proto__' || field === 'prototype' || field === 'constructor') return false;
+  return ALLOWED_PROFILE_FIELDS.has(field);
+}
+
+export function validateProfileUpdateBody(body: Record<string, unknown>): { valid: boolean; error?: string } {
+  for (const field of Object.keys(body)) {
+    if (!isAllowedProfileField(field)) {
+      return { valid: false, error: `unknown field: ${field}` };
+    }
+  }
+  return { valid: true };
+}
+
 function nowIso(): string {
   return new Date().toISOString();
 }
@@ -452,22 +494,46 @@ export async function createProfile(name: string, user: string): Promise<Profile
 }
 
 export async function updateProfile(name: string, body: Record<string, unknown>, user: string) {
-  const collection = await profilesCollection();
-  const existing = await getProfile(name);
-  if (existing) {
-    await saveProfileVersion(name, existing, user, 'UPDATE');
+  const validation = validateProfileUpdateBody(body);
+  if (!validation.valid) {
+    const error = new Error(validation.error);
+    (error as unknown as { code?: string }).code = 'INVALID_PROFILE_UPDATE';
+    throw error;
   }
 
-  const updated: ProfileDocument = {
-    ...(existing || { name }),
-    ...body,
-    name,
-    title: String(body.title || existing?.title || name),
-    createdAt: existing?.createdAt || nowIso(),
-    createdBy: existing?.createdBy || user,
-    updatedAt: nowIso(),
-    updatedBy: user,
-  };
+  const collection = await profilesCollection();
+  const existing = await getProfile(name);
+
+  let updated: ProfileDocument;
+  if (existing) {
+    // Existing: clone existing, apply only validated allowed fields
+    updated = { ...existing };
+    for (const key of Object.keys(body)) {
+      if (isAllowedProfileField(key)) {
+        (updated as Record<string, unknown>)[key] = body[key];
+      }
+    }
+    // Force immutable/system fields
+    updated.name = name;
+    updated.updatedAt = nowIso();
+    updated.updatedBy = user;
+  } else {
+    // Missing: sparse legacy-compatible document
+    updated = {
+      name,
+      title: String(body.title || name),
+      createdAt: nowIso(),
+      createdBy: user,
+      updatedAt: nowIso(),
+      updatedBy: user,
+    };
+    for (const key of Object.keys(body)) {
+      if (isAllowedProfileField(key)) {
+        (updated as Record<string, unknown>)[key] = body[key];
+      }
+    }
+  }
+
   const sanitized = stripSubscriberIdentityFields(updated) as ProfileDocument;
 
   if (existing) {
@@ -475,11 +541,25 @@ export async function updateProfile(name: string, body: Record<string, unknown>,
     const existingSanitized = stripSubscriberIdentityFields(existing) as ProfileDocument;
     const result = await collection.replaceOne(existingSanitized, sanitized);
     if (result.matchedCount === 0) {
-      throw new Error('PROFILE_PRECONDITION_CHANGED');
+      const error = new Error('PROFILE_UPDATE_PRECONDITION_CHANGED');
+      (error as unknown as { code?: string }).code = 'PROFILE_UPDATE_PRECONDITION_CHANGED';
+      throw error;
     }
+    // Version AFTER mutation
+    await saveProfileVersion(name, existing, user, 'UPDATE');
   } else {
     // Missing profile: insert
-    await collection.insertOne(sanitized);
+    try {
+      await collection.insertOne(sanitized);
+    } catch (error) {
+      if (isDuplicateKey(error)) {
+        const conflictError = new Error('PROFILE_UPDATE_PRECONDITION_CHANGED');
+        (conflictError as unknown as { code?: string }).code = 'PROFILE_UPDATE_PRECONDITION_CHANGED';
+        throw conflictError;
+      }
+      throw error;
+    }
+    // No version for missing PUT insert
   }
   return { existing, updated: sanitized };
 }
@@ -497,14 +577,17 @@ export async function deleteProfile(name: string, user: string, force = false) {
     throw error;
   }
 
-  await saveProfileVersion(name, existing, user, 'DELETE');
-
   // CAS: match the existing document to prevent lost deletes
   const existingSanitized = stripSubscriberIdentityFields(existing) as ProfileDocument;
   const result = await collection.deleteOne(existingSanitized);
   if (result.deletedCount === 0) {
-    throw new Error('PROFILE_PRECONDITION_CHANGED');
+    const error = new Error('PROFILE_DELETE_PRECONDITION_CHANGED');
+    (error as unknown as { code?: string }).code = 'PROFILE_DELETE_PRECONDITION_CHANGED';
+    throw error;
   }
+
+  // Version AFTER mutation
+  await saveProfileVersion(name, existing, user, 'DELETE');
   return existing;
 }
 
@@ -597,16 +680,6 @@ export async function restoreProfileVersion(name: string, versionId: string, use
     restoredFromSavedAt: version.savedAt,
   }) as ProfileDocument;
 
-  if (current) {
-    // CAS: match the existing document to prevent lost updates
-    const currentSanitized = stripSubscriberIdentityFields(current) as ProfileDocument;
-    const result = await collection.replaceOne(currentSanitized, restored);
-    if (result.matchedCount === 0) {
-      throw new Error('PROFILE_PRECONDITION_CHANGED');
-    }
-  } else {
-    // Missing profile: insert
-    await collection.insertOne(restored);
-  }
+  await collection.replaceOne({ name }, restored, { upsert: true });
   return { version, current, restored };
 }

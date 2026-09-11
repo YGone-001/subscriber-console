@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { logAudit } from '@/lib/audit';
+import { writeAuditLog } from '@/lib/audit';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import { requireAuth, requirePermission } from '@/lib/authz';
 import {
@@ -50,7 +50,31 @@ export async function POST(request: Request) {
 
     const profile = await createProfile(name, auth.auth.user);
 
-    logAudit('PROFILE_CREATE', name, null, profile, request);
+    // Strict audit AFTER mutation
+    try {
+      await writeAuditLog({
+        actor: { type: 'user', username: auth.auth.user, role: auth.auth.role },
+        module: 'profiles',
+        action: 'PROFILE_CREATE',
+        targetId: name,
+        resource: { type: 'profile', id: name },
+        result: 'success',
+        before: null,
+        after: profile,
+        metadata: {
+          governanceMode: 'DIRECT_GOVERNED',
+          approvalRequired: false,
+          actorRole: auth.auth.role,
+          mutationCommitted: true,
+        },
+      }, { failureMode: 'strict' });
+    } catch {
+      return NextResponse.json({
+        code: 'AUDIT_UNAVAILABLE',
+        message: 'Audit evidence could not be persisted',
+        committed: true,
+      }, { status: 503 });
+    }
 
     return NextResponse.json({ message: 'Profile created successfully', name }, { status: 201 });
   } catch (error) {

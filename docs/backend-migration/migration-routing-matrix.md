@@ -91,9 +91,9 @@
 | Subscriber batch update | POST | `/api/subscribers/batch-update` | **Go** | Next.js | Go | NEVER | Go implementation with per-target CAS, ACTUALLY_ROUTED=0 |
 | Subscriber bulk delete | POST | `/api/subscribers/bulk-delete` | **Go** | Next.js | Go | NEVER | Go implementation with frozen v2, per-target CAS, ACTUALLY_ROUTED=0 |
 | Subscriber import | POST | `/api/subscribers/import` | **Go** | Next.js | Go | NEVER | Go implementation with frozen v2, create-only, ACTUALLY_ROUTED=0 |
-| Profile create | POST | `/api/profiles` | Next.js | Go | NEVER | DIRECT_GOVERNED |
-| Profile update | PUT | `/api/profiles/:name` | Next.js | Go | NEVER | DIRECT_GOVERNED |
-| Profile delete | DELETE | `/api/profiles/:name` | Next.js | Go | NEVER | DIRECT_GOVERNED |
+| Profile create | POST | `/api/profiles` | **Go** | Next.js | Go | NEVER | DIRECT_GOVERNED, ACTUALLY_ROUTED=0 |
+| Profile update | PUT | `/api/profiles/:name` | **Go** | Next.js | Go | NEVER | DIRECT_GOVERNED, ACTUALLY_ROUTED=0 |
+| Profile delete | DELETE | `/api/profiles/:name` | **Go** | Next.js | Go | NEVER | DIRECT_GOVERNED, ACTUALLY_ROUTED=0 |
 | Profile restore | POST | `/api/profiles/:name/versions/:versionId/restore` | Next.js | Go | NEVER | Creates CHG |
 
 ### Phase 5 — OCS + Tariff + Rating Writes
