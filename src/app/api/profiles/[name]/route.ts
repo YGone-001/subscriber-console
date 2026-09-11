@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { writeAuditLog } from '@/lib/audit';
 import { requireAuth, requirePermission } from '@/lib/authz';
 import { enforceRateLimit } from '@/lib/rateLimit';
+import { safeProfileSnapshot } from '@/lib/profileAudit';
 import {
   deleteProfile,
   getProfile,
@@ -17,25 +18,6 @@ type RouteContext = {
 
 function isValidProfileName(name: string): boolean {
   return /^[a-zA-Z0-9_\s-]+$/.test(name);
-}
-
-function safeProfileSnapshot(profile: Record<string, unknown> | null): Record<string, unknown> | null {
-  if (!profile) return null;
-  const { k, op, opc, amf, sqn, ...safeAuth } = (profile.auth as Record<string, unknown>) || {};
-  return {
-    name: profile.name,
-    title: profile.title,
-    description: profile.description,
-    access_restriction_data: profile.access_restriction_data,
-    ambr: profile.ambr,
-    sliceList: profile.sliceList,
-    ocsDefaults: profile.ocsDefaults,
-    createdAt: profile.createdAt,
-    createdBy: profile.createdBy,
-    updatedAt: profile.updatedAt,
-    updatedBy: profile.updatedBy,
-    authConfigured: !!(k || op || opc || amf),
-  };
 }
 
 export async function GET(request: Request, { params }: RouteContext) {
@@ -109,6 +91,7 @@ export async function PUT(request: Request, { params }: RouteContext) {
     return NextResponse.json({ message: 'Profile updated successfully' });
   } catch (error) {
     const code = (error as unknown as { code?: string }).code;
+
     if (code === 'INVALID_PROFILE_UPDATE') {
       return NextResponse.json({
         code: 'INVALID_PROFILE_UPDATE',
@@ -116,8 +99,9 @@ export async function PUT(request: Request, { params }: RouteContext) {
         committed: false,
       }, { status: 400 });
     }
+
     if (code === 'PROFILE_UPDATE_PRECONDITION_CHANGED') {
-      // Audit the conflict
+      // Audit the conflict - strict audit failure returns 503
       try {
         await writeAuditLog({
           actor: { type: 'user', username: auth.auth.user, role: auth.auth.role },
@@ -135,13 +119,81 @@ export async function PUT(request: Request, { params }: RouteContext) {
           },
         }, { failureMode: 'strict' });
       } catch {
-        // Audit failure before mutation
+        return NextResponse.json({
+          code: 'AUDIT_UNAVAILABLE',
+          message: 'Audit evidence could not be persisted',
+          committed: false,
+        }, { status: 503 });
       }
       return NextResponse.json({
         code: 'PROFILE_UPDATE_PRECONDITION_CHANGED',
         message: 'Profile was modified by another request',
         committed: false,
       }, { status: 409 });
+    }
+
+    if (code === 'PROFILE_UPDATE_PARTIAL_WRITE') {
+      // CAS succeeded but version write failed - mutation committed
+      try {
+        await writeAuditLog({
+          actor: { type: 'user', username: auth.auth.user, role: auth.auth.role },
+          module: 'profiles',
+          action: 'PROFILE_UPDATE',
+          targetId: name,
+          resource: { type: 'profile', id: name },
+          result: 'failed',
+          metadata: {
+            governanceMode: 'DIRECT_GOVERNED',
+            approvalRequired: false,
+            actorRole: auth.auth.role,
+            mutationCommitted: true,
+            classification: 'PARTIAL_WRITE',
+          },
+        }, { failureMode: 'strict' });
+      } catch {
+        return NextResponse.json({
+          code: 'AUDIT_UNAVAILABLE',
+          message: 'Audit evidence could not be persisted',
+          committed: true,
+        }, { status: 503 });
+      }
+      return NextResponse.json({
+        code: 'PROFILE_UPDATE_PARTIAL_WRITE',
+        message: 'Profile updated but version write failed',
+        committed: true,
+      }, { status: 500 });
+    }
+
+    if (code === 'PROFILE_UPDATE_FAILED') {
+      // Storage failure - no mutation
+      try {
+        await writeAuditLog({
+          actor: { type: 'user', username: auth.auth.user, role: auth.auth.role },
+          module: 'profiles',
+          action: 'PROFILE_UPDATE',
+          targetId: name,
+          resource: { type: 'profile', id: name },
+          result: 'failed',
+          metadata: {
+            governanceMode: 'DIRECT_GOVERNED',
+            approvalRequired: false,
+            actorRole: auth.auth.role,
+            mutationCommitted: false,
+            classification: 'FAILED_NO_MUTATION',
+          },
+        }, { failureMode: 'strict' });
+      } catch {
+        return NextResponse.json({
+          code: 'AUDIT_UNAVAILABLE',
+          message: 'Audit evidence could not be persisted',
+          committed: false,
+        }, { status: 503 });
+      }
+      return NextResponse.json({
+        code: 'PROFILE_UPDATE_FAILED',
+        message: 'Failed to update profile',
+        committed: false,
+      }, { status: 500 });
     }
 
     console.error('Error updating profile:', error);
@@ -166,6 +218,34 @@ export async function DELETE(request: Request, { params }: RouteContext) {
 
   try {
     const existing = await deleteProfile(name, auth.auth.user, force);
+
+    if (!existing) {
+      // Missing profile - NO_OP
+      try {
+        await writeAuditLog({
+          actor: { type: 'user', username: auth.auth.user, role: auth.auth.role },
+          module: 'profiles',
+          action: 'PROFILE_DELETE',
+          targetId: name,
+          resource: { type: 'profile', id: name },
+          result: 'success',
+          metadata: {
+            governanceMode: 'DIRECT_GOVERNED',
+            approvalRequired: false,
+            actorRole: auth.auth.role,
+            mutationCommitted: false,
+            classification: 'NO_OP',
+          },
+        }, { failureMode: 'strict' });
+      } catch {
+        return NextResponse.json({
+          code: 'AUDIT_UNAVAILABLE',
+          message: 'Audit evidence could not be persisted',
+          committed: false,
+        }, { status: 503 });
+      }
+      return NextResponse.json({ message: 'Profile deleted successfully' });
+    }
 
     // Strict audit AFTER mutation
     try {
@@ -196,6 +276,7 @@ export async function DELETE(request: Request, { params }: RouteContext) {
     return NextResponse.json({ message: 'Profile deleted successfully' });
   } catch (error) {
     const code = (error as unknown as { code?: string }).code;
+
     if (code === 'PROFILE_IN_USE') {
       const subscriberCount = (error as unknown as { subscriberCount?: number }).subscriberCount || 0;
       return NextResponse.json({
@@ -204,8 +285,9 @@ export async function DELETE(request: Request, { params }: RouteContext) {
         subscriberCount,
       }, { status: 409 });
     }
+
     if (code === 'PROFILE_DELETE_PRECONDITION_CHANGED') {
-      // Audit the conflict
+      // Audit the conflict - strict audit failure returns 503
       try {
         await writeAuditLog({
           actor: { type: 'user', username: auth.auth.user, role: auth.auth.role },
@@ -223,13 +305,81 @@ export async function DELETE(request: Request, { params }: RouteContext) {
           },
         }, { failureMode: 'strict' });
       } catch {
-        // Audit failure before mutation
+        return NextResponse.json({
+          code: 'AUDIT_UNAVAILABLE',
+          message: 'Audit evidence could not be persisted',
+          committed: false,
+        }, { status: 503 });
       }
       return NextResponse.json({
         code: 'PROFILE_DELETE_PRECONDITION_CHANGED',
         message: 'Profile was modified by another request',
         committed: false,
       }, { status: 409 });
+    }
+
+    if (code === 'PROFILE_DELETE_PARTIAL_WRITE') {
+      // Delete succeeded but version write failed - mutation committed
+      try {
+        await writeAuditLog({
+          actor: { type: 'user', username: auth.auth.user, role: auth.auth.role },
+          module: 'profiles',
+          action: 'PROFILE_DELETE',
+          targetId: name,
+          resource: { type: 'profile', id: name },
+          result: 'failed',
+          metadata: {
+            governanceMode: 'DIRECT_GOVERNED',
+            approvalRequired: false,
+            actorRole: auth.auth.role,
+            mutationCommitted: true,
+            classification: 'PARTIAL_WRITE',
+          },
+        }, { failureMode: 'strict' });
+      } catch {
+        return NextResponse.json({
+          code: 'AUDIT_UNAVAILABLE',
+          message: 'Audit evidence could not be persisted',
+          committed: true,
+        }, { status: 503 });
+      }
+      return NextResponse.json({
+        code: 'PROFILE_DELETE_PARTIAL_WRITE',
+        message: 'Profile deleted but version write failed',
+        committed: true,
+      }, { status: 500 });
+    }
+
+    if (code === 'PROFILE_DELETE_FAILED') {
+      // Storage failure - no mutation
+      try {
+        await writeAuditLog({
+          actor: { type: 'user', username: auth.auth.user, role: auth.auth.role },
+          module: 'profiles',
+          action: 'PROFILE_DELETE',
+          targetId: name,
+          resource: { type: 'profile', id: name },
+          result: 'failed',
+          metadata: {
+            governanceMode: 'DIRECT_GOVERNED',
+            approvalRequired: false,
+            actorRole: auth.auth.role,
+            mutationCommitted: false,
+            classification: 'FAILED_NO_MUTATION',
+          },
+        }, { failureMode: 'strict' });
+      } catch {
+        return NextResponse.json({
+          code: 'AUDIT_UNAVAILABLE',
+          message: 'Audit evidence could not be persisted',
+          committed: false,
+        }, { status: 503 });
+      }
+      return NextResponse.json({
+        code: 'PROFILE_DELETE_FAILED',
+        message: 'Failed to delete profile',
+        committed: false,
+      }, { status: 500 });
     }
 
     console.error('Error deleting profile:', error);

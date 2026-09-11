@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { writeAuditLog } from '@/lib/audit';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import { requireAuth, requirePermission } from '@/lib/authz';
+import { safeProfileSnapshot } from '@/lib/profileAudit';
 import {
   createProfile,
   getProfilesGlobalSummary,
@@ -50,7 +51,7 @@ export async function POST(request: Request) {
 
     const profile = await createProfile(name, auth.auth.user);
 
-    // Strict audit AFTER mutation
+    // Strict audit AFTER mutation with safe snapshot
     try {
       await writeAuditLog({
         actor: { type: 'user', username: auth.auth.user, role: auth.auth.role },
@@ -60,7 +61,7 @@ export async function POST(request: Request) {
         resource: { type: 'profile', id: name },
         result: 'success',
         before: null,
-        after: profile,
+        after: safeProfileSnapshot(profile as Record<string, unknown>),
         metadata: {
           governanceMode: 'DIRECT_GOVERNED',
           approvalRequired: false,
@@ -78,6 +79,70 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ message: 'Profile created successfully', name }, { status: 201 });
   } catch (error) {
+    const code = (error as unknown as { code?: string }).code;
+
+    if (code === 'PROFILE_CREATE_PARTIAL_WRITE') {
+      // Version write failed after insert - mutation committed
+      try {
+        await writeAuditLog({
+          actor: { type: 'user', username: '', role: '' },
+          module: 'profiles',
+          action: 'PROFILE_CREATE',
+          targetId: '',
+          resource: { type: 'profile', id: '' },
+          result: 'failed',
+          metadata: {
+            governanceMode: 'DIRECT_GOVERNED',
+            approvalRequired: false,
+            mutationCommitted: true,
+            classification: 'PARTIAL_WRITE',
+          },
+        }, { failureMode: 'strict' });
+      } catch {
+        return NextResponse.json({
+          code: 'AUDIT_UNAVAILABLE',
+          message: 'Audit evidence could not be persisted',
+          committed: true,
+        }, { status: 503 });
+      }
+      return NextResponse.json({
+        code: 'PROFILE_CREATE_PARTIAL_WRITE',
+        message: 'Profile created but version write failed',
+        committed: true,
+      }, { status: 500 });
+    }
+
+    if (code === 'PROFILE_CREATE_FAILED') {
+      // Storage failure - no mutation
+      try {
+        await writeAuditLog({
+          actor: { type: 'user', username: '', role: '' },
+          module: 'profiles',
+          action: 'PROFILE_CREATE',
+          targetId: '',
+          resource: { type: 'profile', id: '' },
+          result: 'failed',
+          metadata: {
+            governanceMode: 'DIRECT_GOVERNED',
+            approvalRequired: false,
+            mutationCommitted: false,
+            classification: 'FAILED_NO_MUTATION',
+          },
+        }, { failureMode: 'strict' });
+      } catch {
+        return NextResponse.json({
+          code: 'AUDIT_UNAVAILABLE',
+          message: 'Audit evidence could not be persisted',
+          committed: false,
+        }, { status: 503 });
+      }
+      return NextResponse.json({
+        code: 'PROFILE_CREATE_FAILED',
+        message: 'Failed to create profile',
+        committed: false,
+      }, { status: 500 });
+    }
+
     if (error instanceof Error && error.message === 'PROFILE_EXISTS') {
       return NextResponse.json({ error: 'Profile with this name already exists' }, { status: 409 });
     }

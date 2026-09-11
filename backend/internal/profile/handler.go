@@ -349,7 +349,15 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 			response.Error(w, http.StatusConflict, "Profile already exists", "PROFILE_EXISTS")
 			return
 		}
-		// Storage failure
+		// Storage failure - audit FAILED_NO_MUTATION
+		if auditErr := h.writeStrictAudit(r.Context(), "PROFILE_CREATE", "profile", req.Name, p.Username, nil, nil, "failed", err, false); auditErr != nil {
+			response.JSON(w, http.StatusServiceUnavailable, map[string]any{
+				"error":     "Audit unavailable",
+				"code":      "AUDIT_UNAVAILABLE",
+				"committed": false,
+			})
+			return
+		}
 		response.JSON(w, http.StatusInternalServerError, map[string]any{
 			"error":     "Profile creation failed",
 			"code":      "PROFILE_CREATE_FAILED",
@@ -371,6 +379,14 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := h.repo.SaveProfileVersion(r.Context(), versionRecord); err != nil {
 		// Profile was created but version save failed - partial write
+		if auditErr := h.writeStrictAudit(r.Context(), "PROFILE_CREATE", "profile", req.Name, p.Username, nil, doc, "failed", err, true); auditErr != nil {
+			response.JSON(w, http.StatusServiceUnavailable, map[string]any{
+				"error":     "Audit unavailable",
+				"code":      "AUDIT_UNAVAILABLE",
+				"committed": true,
+			})
+			return
+		}
 		response.JSON(w, http.StatusInternalServerError, map[string]any{
 			"error":     "Profile created but version save failed",
 			"code":      "PROFILE_CREATE_PARTIAL_WRITE",
@@ -483,10 +499,27 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		// CAS update for existing profile
 		if err := h.repo.ReplaceProfileCAS(r.Context(), name, existing, updated); err != nil {
 			if err == ErrProfilePreconditionChanged {
+				// Audit PRECONDITION_CHANGED
+				if auditErr := h.writeStrictAudit(r.Context(), "PROFILE_UPDATE", "profile", name, p.Username, existing, nil, "failed", err, false); auditErr != nil {
+					response.JSON(w, http.StatusServiceUnavailable, map[string]any{
+						"error":     "Audit unavailable",
+						"code":      "AUDIT_UNAVAILABLE",
+						"committed": false,
+					})
+					return
+				}
 				response.Error(w, http.StatusConflict, "Profile was modified since loaded", "PROFILE_UPDATE_PRECONDITION_CHANGED")
 				return
 			}
-			// Storage failure
+			// Storage failure - audit FAILED_NO_MUTATION
+			if auditErr := h.writeStrictAudit(r.Context(), "PROFILE_UPDATE", "profile", name, p.Username, existing, nil, "failed", err, false); auditErr != nil {
+				response.JSON(w, http.StatusServiceUnavailable, map[string]any{
+					"error":     "Audit unavailable",
+					"code":      "AUDIT_UNAVAILABLE",
+					"committed": false,
+				})
+				return
+			}
 			response.JSON(w, http.StatusInternalServerError, map[string]any{
 				"error":     "Profile update failed",
 				"code":      "PROFILE_UPDATE_FAILED",
@@ -498,11 +531,27 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		// Insert for missing profile (legacy upsert behavior)
 		if err := h.repo.InsertProfileCreateOnly(r.Context(), updated); err != nil {
 			if err == ErrProfileExists {
-				// Concurrent creator won
+				// Concurrent creator won - audit PRECONDITION_CHANGED
+				if auditErr := h.writeStrictAudit(r.Context(), "PROFILE_UPDATE", "profile", name, p.Username, nil, nil, "failed", err, false); auditErr != nil {
+					response.JSON(w, http.StatusServiceUnavailable, map[string]any{
+						"error":     "Audit unavailable",
+						"code":      "AUDIT_UNAVAILABLE",
+						"committed": false,
+					})
+					return
+				}
 				response.Error(w, http.StatusConflict, "Profile was modified since loaded", "PROFILE_UPDATE_PRECONDITION_CHANGED")
 				return
 			}
-			// Storage failure
+			// Storage failure - audit FAILED_NO_MUTATION
+			if auditErr := h.writeStrictAudit(r.Context(), "PROFILE_UPDATE", "profile", name, p.Username, nil, nil, "failed", err, false); auditErr != nil {
+				response.JSON(w, http.StatusServiceUnavailable, map[string]any{
+					"error":     "Audit unavailable",
+					"code":      "AUDIT_UNAVAILABLE",
+					"committed": false,
+				})
+				return
+			}
 			response.JSON(w, http.StatusInternalServerError, map[string]any{
 				"error":     "Profile update failed",
 				"code":      "PROFILE_UPDATE_FAILED",
@@ -526,6 +575,14 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		}
 		if err := h.repo.SaveProfileVersion(r.Context(), versionRecord); err != nil {
 			// Profile was updated but version save failed - partial write
+			if auditErr := h.writeStrictAudit(r.Context(), "PROFILE_UPDATE", "profile", name, p.Username, existing, updated, "failed", err, true); auditErr != nil {
+				response.JSON(w, http.StatusServiceUnavailable, map[string]any{
+					"error":     "Audit unavailable",
+					"code":      "AUDIT_UNAVAILABLE",
+					"committed": true,
+				})
+				return
+			}
 			response.JSON(w, http.StatusInternalServerError, map[string]any{
 				"error":     "Profile updated but version save failed",
 				"code":      "PROFILE_UPDATE_PARTIAL_WRITE",
@@ -616,10 +673,27 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	// Perform CAS delete
 	if err := h.repo.DeleteProfileCAS(r.Context(), name, existing); err != nil {
 		if err == ErrProfilePreconditionChanged {
+			// Audit PRECONDITION_CHANGED
+			if auditErr := h.writeStrictAudit(r.Context(), "PROFILE_DELETE", "profile", name, p.Username, existing, nil, "failed", err, false); auditErr != nil {
+				response.JSON(w, http.StatusServiceUnavailable, map[string]any{
+					"error":     "Audit unavailable",
+					"code":      "AUDIT_UNAVAILABLE",
+					"committed": false,
+				})
+				return
+			}
 			response.Error(w, http.StatusConflict, "Profile was modified since loaded", "PROFILE_DELETE_PRECONDITION_CHANGED")
 			return
 		}
-		// Storage failure
+		// Storage failure - audit FAILED_NO_MUTATION
+		if auditErr := h.writeStrictAudit(r.Context(), "PROFILE_DELETE", "profile", name, p.Username, existing, nil, "failed", err, false); auditErr != nil {
+			response.JSON(w, http.StatusServiceUnavailable, map[string]any{
+				"error":     "Audit unavailable",
+				"code":      "AUDIT_UNAVAILABLE",
+				"committed": false,
+			})
+			return
+		}
 		response.JSON(w, http.StatusInternalServerError, map[string]any{
 			"error":     "Profile deletion failed",
 			"code":      "PROFILE_DELETE_FAILED",
@@ -642,6 +716,14 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := h.repo.SaveProfileVersion(r.Context(), versionRecord); err != nil {
 		// Profile was deleted but version save failed - partial write
+		if auditErr := h.writeStrictAudit(r.Context(), "PROFILE_DELETE", "profile", name, p.Username, existing, nil, "failed", err, true); auditErr != nil {
+			response.JSON(w, http.StatusServiceUnavailable, map[string]any{
+				"error":     "Audit unavailable",
+				"code":      "AUDIT_UNAVAILABLE",
+				"committed": true,
+			})
+			return
+		}
 		response.JSON(w, http.StatusInternalServerError, map[string]any{
 			"error":     "Profile deleted but version save failed",
 			"code":      "PROFILE_DELETE_PARTIAL_WRITE",

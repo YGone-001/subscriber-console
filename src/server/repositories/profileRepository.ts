@@ -485,12 +485,22 @@ export async function createProfile(name: string, user: string): Promise<Profile
 
   try {
     await collection.insertOne(profile);
-    await saveProfileVersion(name, profile, user, 'CREATE');
-    return profile;
   } catch (error) {
     if (isDuplicateKey(error)) throw new Error('PROFILE_EXISTS');
-    throw error;
+    const storageError = new Error('PROFILE_CREATE_FAILED');
+    (storageError as unknown as { code?: string }).code = 'PROFILE_CREATE_FAILED';
+    throw storageError;
   }
+
+  try {
+    await saveProfileVersion(name, profile, user, 'CREATE');
+  } catch {
+    const partialError = new Error('PROFILE_CREATE_PARTIAL_WRITE');
+    (partialError as unknown as { code?: string }).code = 'PROFILE_CREATE_PARTIAL_WRITE';
+    throw partialError;
+  }
+
+  return profile;
 }
 
 export async function updateProfile(name: string, body: Record<string, unknown>, user: string) {
@@ -539,14 +549,27 @@ export async function updateProfile(name: string, body: Record<string, unknown>,
   if (existing) {
     // CAS: match the existing document to prevent lost updates
     const existingSanitized = stripSubscriberIdentityFields(existing) as ProfileDocument;
-    const result = await collection.replaceOne(existingSanitized, sanitized);
+    let result;
+    try {
+      result = await collection.replaceOne(existingSanitized, sanitized);
+    } catch {
+      const storageError = new Error('PROFILE_UPDATE_FAILED');
+      (storageError as unknown as { code?: string }).code = 'PROFILE_UPDATE_FAILED';
+      throw storageError;
+    }
     if (result.matchedCount === 0) {
       const error = new Error('PROFILE_UPDATE_PRECONDITION_CHANGED');
       (error as unknown as { code?: string }).code = 'PROFILE_UPDATE_PRECONDITION_CHANGED';
       throw error;
     }
     // Version AFTER mutation
-    await saveProfileVersion(name, existing, user, 'UPDATE');
+    try {
+      await saveProfileVersion(name, existing, user, 'UPDATE');
+    } catch {
+      const partialError = new Error('PROFILE_UPDATE_PARTIAL_WRITE');
+      (partialError as unknown as { code?: string }).code = 'PROFILE_UPDATE_PARTIAL_WRITE';
+      throw partialError;
+    }
   } else {
     // Missing profile: insert
     try {
@@ -579,7 +602,14 @@ export async function deleteProfile(name: string, user: string, force = false) {
 
   // CAS: match the existing document to prevent lost deletes
   const existingSanitized = stripSubscriberIdentityFields(existing) as ProfileDocument;
-  const result = await collection.deleteOne(existingSanitized);
+  let result;
+  try {
+    result = await collection.deleteOne(existingSanitized);
+  } catch {
+    const storageError = new Error('PROFILE_DELETE_FAILED');
+    (storageError as unknown as { code?: string }).code = 'PROFILE_DELETE_FAILED';
+    throw storageError;
+  }
   if (result.deletedCount === 0) {
     const error = new Error('PROFILE_DELETE_PRECONDITION_CHANGED');
     (error as unknown as { code?: string }).code = 'PROFILE_DELETE_PRECONDITION_CHANGED';
@@ -587,7 +617,13 @@ export async function deleteProfile(name: string, user: string, force = false) {
   }
 
   // Version AFTER mutation
-  await saveProfileVersion(name, existing, user, 'DELETE');
+  try {
+    await saveProfileVersion(name, existing, user, 'DELETE');
+  } catch {
+    const partialError = new Error('PROFILE_DELETE_PARTIAL_WRITE');
+    (partialError as unknown as { code?: string }).code = 'PROFILE_DELETE_PARTIAL_WRITE';
+    throw partialError;
+  }
   return existing;
 }
 
