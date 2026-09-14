@@ -165,9 +165,10 @@ function makeMockDeps() {
   };
 }
 
-// ─── Import Production Handler ───
+// ─── Import Production Handler & Executor ───
 
 const { handleProfileRestorePost } = await import('../src/app/api/profiles/[name]/versions/[versionId]/restore/route.ts');
+const { executeProfileRestoreV2Approval } = await import('../src/server/approvalExecution.ts');
 
 // ─── Helper to create mock request ───
 
@@ -397,6 +398,259 @@ describe('Profile Restore Production Route', () => {
 
       // Profile was actually restored (mutation committed)
       assert.equal(mockProfiles.get('test_profile').title, 'Old Title');
+    });
+  });
+});
+
+// ─── Approval Executor Tests ───
+
+function makeApproval(overrides = {}) {
+  return {
+    id: 'approval-001',
+    action: 'PROFILE_RESTORE',
+    status: 'approved',
+    payload: {
+      name: 'test_profile',
+      versionId: 'v-001',
+      sourceVersionHash: 'a'.repeat(64),
+      currentState: 'present',
+      currentProfileHash: 'b'.repeat(64),
+      effectiveRestoredHash: 'c'.repeat(64),
+      operationFingerprint: 'd'.repeat(64),
+    },
+    requestedBy: 'operator_b',
+    ...overrides,
+  };
+}
+
+function makeV2Deps() {
+  return {
+    assertFrozenRestoreV2: async (intent) => {
+      const profile = mockProfiles.get(intent.profileName);
+      const version = mockVersions.get(`${intent.profileName}:${intent.versionId}`);
+      if (!version) return null;
+      if (intent.currentState === 'present' && !profile) return null;
+
+      const versionProfile = version.profile || {};
+      const restored = {
+        ...versionProfile,
+        name: intent.profileName,
+        title: versionProfile.title || intent.profileName,
+        createdAt: versionProfile.createdAt || profile?.createdAt || '2024-06-01T10:00:00.000Z',
+        createdBy: versionProfile.createdBy || profile?.createdBy || 'admin',
+        updatedAt: '2024-06-01T10:00:00.000Z',
+        updatedBy: 'admin',
+        restoredFromVersionId: intent.versionId,
+        restoredFromSavedAt: version.savedAt,
+      };
+
+      return {
+        intent: { ...intent, effectiveRestored: restored },
+        currentProfile: profile || null,
+        versionDoc: version,
+      };
+    },
+    executeFrozenRestoreV2: async (assertion, actor) => {
+      const restored = { ...assertion.intent.effectiveRestored, updatedBy: actor };
+      mockProfiles.set(assertion.intent.profileName, restored);
+      return { restored, classification: 'SUCCESS', committed: true };
+    },
+    writeRestoreAudit: async (intent, currentProfile, restored, actor, result, classification, committed, governanceMode) => {
+      if (mockAuditShouldFail) throw new Error('Audit unavailable');
+      mockAuditLogs.push({ intent, currentProfile, restored, actor, result, classification, committed, governanceMode });
+    },
+  };
+}
+
+describe('Profile Restore Approval Executor', () => {
+  beforeEach(resetMocks);
+
+  describe('Actor Validation', () => {
+    it('validated executor=admin_a, execute actor=admin_a, audit actor=admin_a', async () => {
+      setupTestData();
+      const deps = makeV2Deps();
+      const approval = makeApproval({ requestedBy: 'operator_b' });
+      const actor = { username: 'admin_a', role: 'super_admin' };
+
+      const result = await executeProfileRestoreV2Approval(approval, actor, deps);
+
+      assert.equal(result.approvalId, 'approval-001');
+      assert.equal(result.profile.title, 'Old Title');
+      assert.equal(result.profile.updatedBy, 'admin_a');
+      assert.equal(mockAuditLogs.length, 1);
+      assert.equal(mockAuditLogs[0].actor.username, 'admin_a');
+    });
+
+    it('requester NOT used as executor', async () => {
+      setupTestData();
+      const deps = makeV2Deps();
+      const approval = makeApproval({ requestedBy: 'operator_b' });
+      const actor = { username: 'admin_a', role: 'super_admin' };
+
+      const result = await executeProfileRestoreV2Approval(approval, actor, deps);
+
+      assert.equal(result.profile.updatedBy, 'admin_a');
+      assert.notEqual(result.profile.updatedBy, 'operator_b');
+    });
+
+    it('missing actor rejected', async () => {
+      setupTestData();
+      const deps = makeV2Deps();
+      const approval = makeApproval();
+
+      await assert.rejects(
+        () => executeProfileRestoreV2Approval(approval, null, deps),
+        (err) => {
+          assert.equal(err.code, 'PROFILE_RESTORE_FAILED');
+          assert.equal(err.status, 500);
+          return true;
+        }
+      );
+    });
+
+    it('empty username rejected', async () => {
+      setupTestData();
+      const deps = makeV2Deps();
+      const approval = makeApproval();
+
+      await assert.rejects(
+        () => executeProfileRestoreV2Approval(approval, { username: '', role: 'super_admin' }, deps),
+        (err) => {
+          assert.equal(err.code, 'PROFILE_RESTORE_FAILED');
+          return true;
+        }
+      );
+    });
+  });
+
+  describe('Precondition Changed', () => {
+    it('audit success → PROFILE_RESTORE_PRECONDITION_CHANGED', async () => {
+      setupTestData();
+      const deps = makeV2Deps();
+      deps.assertFrozenRestoreV2 = async () => null;
+      const approval = makeApproval();
+      const actor = { username: 'admin_a', role: 'super_admin' };
+
+      await assert.rejects(
+        () => executeProfileRestoreV2Approval(approval, actor, deps),
+        (err) => {
+          assert.equal(err.code, 'PROFILE_RESTORE_PRECONDITION_CHANGED');
+          assert.equal(err.status, 409);
+          assert.equal(err.committed, false);
+          return true;
+        }
+      );
+      assert.equal(mockAuditLogs.length, 1);
+      assert.equal(mockAuditLogs[0].classification, 'PRECONDITION_CHANGED');
+      assert.equal(mockAuditLogs[0].committed, false);
+    });
+
+    it('audit unavailable → 503', async () => {
+      setupTestData();
+      const deps = makeV2Deps();
+      deps.assertFrozenRestoreV2 = async () => null;
+      mockAuditShouldFail = true;
+      const approval = makeApproval();
+      const actor = { username: 'admin_a', role: 'super_admin' };
+
+      await assert.rejects(
+        () => executeProfileRestoreV2Approval(approval, actor, deps),
+        (err) => {
+          assert.equal(err.code, 'AUDIT_UNAVAILABLE');
+          assert.equal(err.status, 503);
+          assert.equal(err.committed, false);
+          return true;
+        }
+      );
+    });
+  });
+
+  describe('Storage Failure', () => {
+    it('audit success → PROFILE_RESTORE_FAILED committed=false', async () => {
+      setupTestData();
+      const deps = makeV2Deps();
+      deps.executeFrozenRestoreV2 = async () => {
+        const err = new Error('Storage failure');
+        err.code = 'STORAGE_FAILURE';
+        throw err;
+      };
+      const approval = makeApproval();
+      const actor = { username: 'admin_a', role: 'super_admin' };
+
+      await assert.rejects(
+        () => executeProfileRestoreV2Approval(approval, actor, deps),
+        (err) => {
+          assert.equal(err.code, 'PROFILE_RESTORE_FAILED');
+          assert.equal(err.status, 500);
+          assert.equal(err.committed, false);
+          return true;
+        }
+      );
+      assert.equal(mockAuditLogs.length, 1);
+      assert.equal(mockAuditLogs[0].classification, 'FAILED_NO_MUTATION');
+      assert.equal(mockAuditLogs[0].committed, false);
+    });
+  });
+
+  describe('Partial Write', () => {
+    it('audit success → PROFILE_RESTORE_PARTIAL_WRITE committed=true', async () => {
+      setupTestData();
+      const deps = makeV2Deps();
+      deps.executeFrozenRestoreV2 = async () => {
+        const err = new Error('Partial write');
+        err.code = 'PROFILE_RESTORE_PARTIAL_WRITE';
+        throw err;
+      };
+      const approval = makeApproval();
+      const actor = { username: 'admin_a', role: 'super_admin' };
+
+      await assert.rejects(
+        () => executeProfileRestoreV2Approval(approval, actor, deps),
+        (err) => {
+          assert.equal(err.code, 'PROFILE_RESTORE_PARTIAL_WRITE');
+          assert.equal(err.status, 500);
+          assert.equal(err.committed, true);
+          return true;
+        }
+      );
+      assert.equal(mockAuditLogs.length, 1);
+      assert.equal(mockAuditLogs[0].classification, 'PARTIAL_WRITE');
+      assert.equal(mockAuditLogs[0].committed, true);
+    });
+  });
+
+  describe('Success', () => {
+    it('audit success → profile restored', async () => {
+      setupTestData();
+      const deps = makeV2Deps();
+      const approval = makeApproval();
+      const actor = { username: 'admin_a', role: 'super_admin' };
+
+      const result = await executeProfileRestoreV2Approval(approval, actor, deps);
+
+      assert.equal(result.profile.title, 'Old Title');
+      assert.equal(result.profile.updatedBy, 'admin_a');
+      assert.equal(mockAuditLogs.length, 1);
+      assert.equal(mockAuditLogs[0].classification, 'SUCCESS');
+      assert.equal(mockAuditLogs[0].committed, true);
+    });
+
+    it('audit unavailable → 503 committed=true', async () => {
+      setupTestData();
+      const deps = makeV2Deps();
+      mockAuditShouldFail = true;
+      const approval = makeApproval();
+      const actor = { username: 'admin_a', role: 'super_admin' };
+
+      await assert.rejects(
+        () => executeProfileRestoreV2Approval(approval, actor, deps),
+        (err) => {
+          assert.equal(err.code, 'AUDIT_UNAVAILABLE');
+          assert.equal(err.status, 503);
+          assert.equal(err.committed, true);
+          return true;
+        }
+      );
     });
   });
 });
