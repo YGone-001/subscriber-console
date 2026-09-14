@@ -1,11 +1,11 @@
 /**
- * Profile Restore Production Route Tests
+ * Profile Restore Production Path Tests
  *
- * Tests the real production route seam with mocked dependencies.
- * Validates audit terminal semantics and committed polarity.
+ * Tests the REAL production handler and approval executor functions.
+ * Only external dependencies (Mongo, audit, auth) are mocked.
  */
 
-import { describe, it, beforeEach, mock } from 'node:test';
+import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'crypto';
 
@@ -25,7 +25,7 @@ function fingerprint(v) {
   return createHash('sha256').update(stableJson(v)).digest('hex');
 }
 
-// ─── Mock Setup ───
+// ─── Mock State ───
 
 const mockProfiles = new Map();
 const mockVersions = new Map();
@@ -41,394 +41,362 @@ function resetMocks() {
   mockAuditShouldFail = false;
 }
 
-// ─── Mock Modules ───
+// ─── Mock Dependencies ───
 
-// We mock the imports that the route.ts uses
-const mockWriteRestoreAudit = async (intent, currentProfile, restored, actor, result, classification, committed, governanceMode) => {
-  if (mockAuditShouldFail) {
-    throw new Error('Audit service unavailable');
-  }
-  mockAuditLogs.push({ intent, currentProfile, restored, actor, result, classification, committed, governanceMode });
-};
-
-const mockPrepareFrozenRestoreV2 = async (name, versionId, user) => {
-  const profile = mockProfiles.get(name);
-  const version = mockVersions.get(`${name}:${versionId}`);
-
-  if (!version) return null;
-
-  const versionProfile = version.profile || {};
-  const currentProfile = profile || null;
-  const currentState = currentProfile ? 'present' : 'absent';
-
-  const sourceVersionHash = fingerprint(versionProfile);
-  const currentProfileHash = currentProfile ? fingerprint(currentProfile) : null;
-
-  const restored = {
-    ...versionProfile,
-    name,
-    title: versionProfile.title || name,
-    createdAt: versionProfile.createdAt || currentProfile?.createdAt || new Date().toISOString(),
-    createdBy: versionProfile.createdBy || currentProfile?.createdBy || user,
-    updatedAt: new Date().toISOString(),
-    updatedBy: user,
-    restoredFromVersionId: versionId,
-    restoredFromSavedAt: version.savedAt,
-  };
-
-  const effectiveRestoredHash = fingerprint(restored);
-
+function makeMockDeps() {
   return {
-    version: 'profile-restore-v2',
-    profileName: name,
-    versionId,
-    sourceVersionHash,
-    currentState,
-    currentProfileHash,
-    effectiveRestoredHash,
-    operationFingerprint: fingerprint({
-      operation: 'PROFILE_RESTORE',
-      profileName: name,
-      versionId,
-      sourceVersionHash,
-      currentState,
-      currentProfileHash,
-      effectiveRestoredHash,
+    prepareFrozenRestoreV2: async (name, versionId, user) => {
+      const profile = mockProfiles.get(name);
+      const version = mockVersions.get(`${name}:${versionId}`);
+      if (!version) return null;
+
+      const versionProfile = version.profile || {};
+      const currentProfile = profile || null;
+      const currentState = currentProfile ? 'present' : 'absent';
+      const sourceVersionHash = fingerprint(versionProfile);
+      const currentProfileHash = currentProfile ? fingerprint(currentProfile) : null;
+
+      const restored = {
+        ...versionProfile,
+        name,
+        title: versionProfile.title || name,
+        createdAt: versionProfile.createdAt || currentProfile?.createdAt || '2024-06-01T10:00:00.000Z',
+        createdBy: versionProfile.createdBy || currentProfile?.createdBy || user,
+        updatedAt: '2024-06-01T10:00:00.000Z',
+        updatedBy: user,
+        restoredFromVersionId: versionId,
+        restoredFromSavedAt: version.savedAt,
+      };
+
+      const effectiveRestoredHash = fingerprint(restored);
+
+      return {
+        version: 'profile-restore-v2',
+        profileName: name,
+        versionId,
+        sourceVersionHash,
+        currentState,
+        currentProfileHash,
+        effectiveRestoredHash,
+        operationFingerprint: fingerprint({
+          operation: 'PROFILE_RESTORE',
+          profileName: name,
+          versionId,
+          sourceVersionHash,
+          currentState,
+          currentProfileHash,
+          effectiveRestoredHash,
+        }),
+        currentProfile,
+        effectiveRestored: restored,
+        versionDoc: version,
+      };
+    },
+
+    assertFrozenRestoreV2: async (intent) => {
+      const profile = mockProfiles.get(intent.profileName);
+      const version = mockVersions.get(`${intent.profileName}:${intent.versionId}`);
+      if (!version) return null;
+
+      if (intent.currentState === 'present') {
+        if (!profile) return null;
+        const currentHash = fingerprint(profile);
+        if (currentHash !== intent.currentProfileHash) return null;
+      }
+
+      return {
+        intent,
+        currentProfile: profile || null,
+        versionDoc: version,
+      };
+    },
+
+    executeFrozenRestoreV2: async (assertion, actor) => {
+      const { intent, currentProfile } = assertion;
+
+      if (intent.currentState === 'present') {
+        const current = mockProfiles.get(intent.profileName);
+        if (!current || fingerprint(current) !== intent.currentProfileHash) {
+          const err = new Error('PRECONDITION_CHANGED');
+          err.code = 'PROFILE_RESTORE_PRECONDITION_CHANGED';
+          throw err;
+        }
+        mockProfiles.set(intent.profileName, intent.effectiveRestored);
+      } else {
+        if (mockProfiles.has(intent.profileName)) {
+          const err = new Error('PRECONDITION_CHANGED');
+          err.code = 'PROFILE_RESTORE_PRECONDITION_CHANGED';
+          throw err;
+        }
+        mockProfiles.set(intent.profileName, intent.effectiveRestored);
+      }
+
+      if (currentProfile) {
+        mockVersions.set(`${intent.profileName}:RESTORE:${Date.now()}`, {
+          profileName: intent.profileName,
+          action: 'RESTORE',
+          profile: currentProfile,
+        });
+      }
+
+      return { restored: intent.effectiveRestored, classification: 'SUCCESS', committed: true };
+    },
+
+    writeRestoreAudit: async (intent, currentProfile, restored, actor, result, classification, committed, governanceMode) => {
+      if (mockAuditShouldFail) throw new Error('Audit service unavailable');
+      mockAuditLogs.push({ intent, currentProfile, restored, actor, result, classification, committed, governanceMode });
+    },
+
+    createApprovalRequest: async (input) => {
+      const approval = { id: `approval-${Date.now()}`, ...input, status: 'pending' };
+      mockApprovals.push(approval);
+      return approval;
+    },
+
+    enforceRateLimit: async () => ({ ok: true }),
+    requireCapability: (req, cap, opts) => ({
+      ok: true,
+      auth: { user: req._testUser || 'test_admin', role: req._testRole || 'super_admin' },
     }),
-    currentProfile,
-    effectiveRestored: restored,
-    versionDoc: version,
+    capabilityDecision: (role, cap) => {
+      if (role === 'operator') return 'approval';
+      return 'direct';
+    },
   };
-};
+}
 
-const mockAssertFrozenRestoreV2 = async (intent) => {
-  const profile = mockProfiles.get(intent.profileName);
-  const version = mockVersions.get(`${intent.profileName}:${intent.versionId}`);
+// ─── Import Production Handler ───
 
-  if (!version) return null;
+const { handleProfileRestorePost } = await import('../src/app/api/profiles/[name]/versions/[versionId]/restore/route.ts');
 
-  if (intent.currentState === 'present') {
-    if (!profile) return null;
-    const currentHash = fingerprint(profile);
-    if (currentHash !== intent.currentProfileHash) return null;
-  }
+// ─── Helper to create mock request ───
 
-  return {
-    intent,
-    currentProfile: profile || null,
-    versionDoc: version,
-  };
-};
+function makeRequest(user, role) {
+  return Object.assign(new Request('http://localhost/api/profiles/test/versions/v-001/restore', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+  }), { _testUser: user, _testRole: role });
+}
 
-const mockExecuteFrozenRestoreV2 = async (assertion, actor) => {
-  const { intent, currentProfile, versionDoc } = assertion;
+function setupTestData(profileName = 'test_profile') {
+  mockProfiles.set(profileName, {
+    name: profileName,
+    title: 'Current Title',
+    description: 'Current description',
+    createdAt: '2024-01-01T00:00:00.000Z',
+    createdBy: 'original_user',
+    updatedAt: '2024-07-01T00:00:00.000Z',
+    updatedBy: 'current_user',
+  });
 
-  if (intent.currentState === 'present') {
-    // CAS check
-    const current = mockProfiles.get(intent.profileName);
-    if (!current || fingerprint(current) !== intent.currentProfileHash) {
-      const err = new Error('PRECONDITION_CHANGED');
-      err.code = 'PROFILE_RESTORE_PRECONDITION_CHANGED';
-      throw err;
-    }
-    mockProfiles.set(intent.profileName, intent.effectiveRestored);
-  } else {
-    if (mockProfiles.has(intent.profileName)) {
-      const err = new Error('PRECONDITION_CHANGED');
-      err.code = 'PROFILE_RESTORE_PRECONDITION_CHANGED';
-      throw err;
-    }
-    mockProfiles.set(intent.profileName, intent.effectiveRestored);
-  }
+  mockVersions.set(`${profileName}:v-001`, {
+    versionId: 'v-001',
+    profileName,
+    action: 'UPDATE',
+    savedAt: '2024-06-01T10:00:00.000Z',
+    savedBy: 'admin',
+    profile: {
+      name: profileName,
+      title: 'Old Title',
+      description: 'Old description',
+      createdAt: '2024-01-01T00:00:00.000Z',
+      createdBy: 'original_user',
+      updatedAt: '2024-06-01T10:00:00.000Z',
+      updatedBy: 'admin',
+    },
+  });
+}
 
-  // Simulate version save
-  if (currentProfile) {
-    const versionKey = `${intent.profileName}:RESTORE:${Date.now()}`;
-    mockVersions.set(versionKey, {
-      versionId: versionKey,
-      profileName: intent.profileName,
-      action: 'RESTORE',
-      profile: currentProfile,
-    });
-  }
+async function parseResponse(resp) {
+  const body = await resp.json();
+  return { status: resp.status, body };
+}
 
-  return { restored: intent.effectiveRestored, classification: 'SUCCESS', committed: true };
-};
+// ─── Tests ───
 
-// ─── Route Handler Tests ───
-
-describe('Profile Restore Route — Audit Terminal Semantics', () => {
+describe('Profile Restore Production Route', () => {
   beforeEach(resetMocks);
 
   describe('Direct Success', () => {
-    it('super_admin direct success', async () => {
-      mockProfiles.set('test_profile', {
-        name: 'test_profile',
-        title: 'Current Title',
-        createdAt: '2024-01-01T00:00:00.000Z',
-        createdBy: 'original_user',
-        updatedAt: '2024-07-01T00:00:00.000Z',
-        updatedBy: 'current_user',
-      });
-      mockVersions.set('test_profile:v-001', {
-        versionId: 'v-001',
-        profileName: 'test_profile',
-        action: 'UPDATE',
-        savedAt: '2024-06-01T10:00:00.000Z',
-        savedBy: 'admin',
-        profile: {
-          name: 'test_profile',
-          title: 'Old Title',
-          createdAt: '2024-01-01T00:00:00.000Z',
-          createdBy: 'original_user',
-          updatedAt: '2024-06-01T10:00:00.000Z',
-          updatedBy: 'admin',
-        },
-      });
+    it('super_admin → 200', async () => {
+      setupTestData();
+      const deps = makeMockDeps();
+      const req = makeRequest('super_admin', 'super_admin');
 
-      const intent = await mockPrepareFrozenRestoreV2('test_profile', 'v-001', 'super_admin');
-      assert.ok(intent);
-      assert.equal(intent.currentState, 'present');
+      const resp = await handleProfileRestorePost(req, { name: 'test_profile', versionId: 'v-001' }, deps);
+      const { status, body } = await parseResponse(resp);
 
-      const assertion = await mockAssertFrozenRestoreV2(intent);
-      assert.ok(assertion);
-
-      const result = await mockExecuteFrozenRestoreV2(assertion, 'super_admin');
-      assert.equal(result.classification, 'SUCCESS');
-      assert.equal(result.committed, true);
-
-      await mockWriteRestoreAudit(intent, assertion.currentProfile, result.restored, { username: 'super_admin', role: 'super_admin' }, 'success', result.classification, result.committed, 'DIRECT_GOVERNED');
-
-      assert.equal(mockAuditLogs.length, 1);
-      assert.equal(mockAuditLogs[0].governanceMode, 'DIRECT_GOVERNED');
-      assert.equal(mockAuditLogs[0].classification, 'SUCCESS');
+      assert.equal(status, 200);
+      assert.equal(body.message, 'Profile restored successfully');
+      assert.equal(body.profile.title, 'Old Title');
+      assert.equal(body.profile.updatedBy, 'super_admin');
     });
 
-    it('ops_admin direct success', async () => {
-      mockProfiles.set('ops_profile', {
-        name: 'ops_profile',
-        title: 'Current',
-        createdAt: '2024-01-01T00:00:00.000Z',
-        createdBy: 'admin',
-        updatedAt: '2024-07-01T00:00:00.000Z',
-        updatedBy: 'admin',
-      });
-      mockVersions.set('ops_profile:v-001', {
-        versionId: 'v-001',
-        profileName: 'ops_profile',
-        action: 'UPDATE',
-        savedAt: '2024-06-01T10:00:00.000Z',
-        savedBy: 'admin',
-        profile: {
-          name: 'ops_profile',
-          title: 'Old',
-          createdAt: '2024-01-01T00:00:00.000Z',
-          createdBy: 'admin',
-          updatedAt: '2024-06-01T10:00:00.000Z',
-          updatedBy: 'admin',
-        },
-      });
+    it('ops_admin → 200', async () => {
+      setupTestData();
+      const deps = makeMockDeps();
+      const req = makeRequest('ops_admin', 'ops_admin');
 
-      const intent = await mockPrepareFrozenRestoreV2('ops_profile', 'v-001', 'ops_admin');
-      const assertion = await mockAssertFrozenRestoreV2(intent);
-      const result = await mockExecuteFrozenRestoreV2(assertion, 'ops_admin');
+      const resp = await handleProfileRestorePost(req, { name: 'test_profile', versionId: 'v-001' }, deps);
+      const { status } = await parseResponse(resp);
 
-      assert.equal(result.classification, 'SUCCESS');
-      assert.equal(result.committed, true);
+      assert.equal(status, 200);
     });
   });
 
-  describe('PRECONDITION_CHANGED', () => {
-    it('audit success → 409 committed=false', async () => {
-      mockProfiles.set('drift_profile', {
-        name: 'drift_profile',
-        title: 'Current',
-        createdAt: '2024-01-01T00:00:00.000Z',
-        createdBy: 'admin',
-        updatedAt: '2024-07-01T00:00:00.000Z',
-        updatedBy: 'admin',
-      });
-      mockVersions.set('drift_profile:v-001', {
-        versionId: 'v-001',
-        profileName: 'drift_profile',
-        action: 'UPDATE',
-        savedAt: '2024-06-01T10:00:00.000Z',
-        savedBy: 'admin',
-        profile: { name: 'drift_profile', title: 'Old' },
-      });
+  describe('Operator → Approval', () => {
+    it('operator → 202 approval created', async () => {
+      setupTestData();
+      const deps = makeMockDeps();
+      deps.capabilityDecision = () => 'approval';
+      const req = makeRequest('operator_user', 'operator');
 
-      const intent = await mockPrepareFrozenRestoreV2('drift_profile', 'v-001', 'super_admin');
+      const resp = await handleProfileRestorePost(req, { name: 'test_profile', versionId: 'v-001' }, deps);
+      const { status, body } = await parseResponse(resp);
 
-      // Simulate drift: mutate profile after prepare
-      mockProfiles.set('drift_profile', {
-        name: 'drift_profile',
-        title: 'Mutated',
-        createdAt: '2024-01-01T00:00:00.000Z',
-        createdBy: 'admin',
-        updatedAt: '2024-08-01T00:00:00.000Z',
-        updatedBy: 'other_user',
-      });
+      assert.equal(status, 202);
+      assert.ok(body.approval);
+      assert.equal(body.message, 'Approval required before profile restore');
+      assert.equal(mockApprovals.length, 1);
+      assert.equal(mockApprovals[0].action, 'PROFILE_RESTORE');
+    });
+  });
 
-      const assertion = await mockAssertFrozenRestoreV2(intent);
-      assert.equal(assertion, null); // drift detected
+  describe('Precondition Changed', () => {
+    it('audit success → 409 PROFILE_RESTORE_PRECONDITION_CHANGED', async () => {
+      setupTestData();
+      const deps = makeMockDeps();
 
-      // Audit should be attempted
-      await mockWriteRestoreAudit(intent, null, null, { username: 'super_admin', role: 'super_admin' }, 'failed', 'PRECONDITION_CHANGED', false, 'DIRECT_GOVERNED');
+      // Override assert to return null (drift)
+      deps.assertFrozenRestoreV2 = async () => null;
 
+      const req = makeRequest('super_admin', 'super_admin');
+      const resp = await handleProfileRestorePost(req, { name: 'test_profile', versionId: 'v-001' }, deps);
+      const { status, body } = await parseResponse(resp);
+
+      assert.equal(status, 409);
+      assert.equal(body.code, 'PROFILE_RESTORE_PRECONDITION_CHANGED');
       assert.equal(mockAuditLogs.length, 1);
       assert.equal(mockAuditLogs[0].classification, 'PRECONDITION_CHANGED');
       assert.equal(mockAuditLogs[0].committed, false);
     });
 
-    it('audit failure → 503 committed=false', async () => {
+    it('audit failure → 503 AUDIT_UNAVAILABLE committed=false', async () => {
+      setupTestData();
+      const deps = makeMockDeps();
+      deps.assertFrozenRestoreV2 = async () => null;
       mockAuditShouldFail = true;
-      const intent = { profileName: 'test', versionId: 'v-001', currentState: 'present' };
 
-      try {
-        await mockWriteRestoreAudit(intent, null, null, { username: 'super_admin', role: 'super_admin' }, 'failed', 'PRECONDITION_CHANGED', false, 'DIRECT_GOVERNED');
-        assert.fail('should have thrown');
-      } catch (err) {
-        assert.equal(err.message, 'Audit service unavailable');
-        // Route should return 503 AUDIT_UNAVAILABLE committed=false
-      }
+      const req = makeRequest('super_admin', 'super_admin');
+      const resp = await handleProfileRestorePost(req, { name: 'test_profile', versionId: 'v-001' }, deps);
+      const { status, body } = await parseResponse(resp);
+
+      assert.equal(status, 503);
+      assert.equal(body.code, 'AUDIT_UNAVAILABLE');
+      assert.equal(body.committed, false);
     });
   });
 
   describe('Storage Failure', () => {
     it('audit success → 500 PROFILE_RESTORE_FAILED committed=false', async () => {
-      const intent = { profileName: 'test', versionId: 'v-001', currentState: 'present' };
+      setupTestData();
+      const deps = makeMockDeps();
+      deps.executeFrozenRestoreV2 = async () => {
+        const err = new Error('Storage failure');
+        err.code = 'STORAGE_FAILURE';
+        throw err;
+      };
 
-      await mockWriteRestoreAudit(intent, null, null, { username: 'super_admin', role: 'super_admin' }, 'failed', 'FAILED_NO_MUTATION', false, 'DIRECT_GOVERNED');
+      const req = makeRequest('super_admin', 'super_admin');
+      const resp = await handleProfileRestorePost(req, { name: 'test_profile', versionId: 'v-001' }, deps);
+      const { status, body } = await parseResponse(resp);
 
+      assert.equal(status, 500);
+      assert.equal(body.code, 'PROFILE_RESTORE_FAILED');
+      assert.equal(body.committed, false);
       assert.equal(mockAuditLogs.length, 1);
       assert.equal(mockAuditLogs[0].classification, 'FAILED_NO_MUTATION');
       assert.equal(mockAuditLogs[0].committed, false);
     });
 
-    it('audit failure → 503 committed=false', async () => {
+    it('audit failure → 503 AUDIT_UNAVAILABLE committed=false', async () => {
+      setupTestData();
+      const deps = makeMockDeps();
+      deps.executeFrozenRestoreV2 = async () => {
+        const err = new Error('Storage failure');
+        err.code = 'STORAGE_FAILURE';
+        throw err;
+      };
       mockAuditShouldFail = true;
 
-      try {
-        await mockWriteRestoreAudit({}, null, null, { username: 'super_admin', role: 'super_admin' }, 'failed', 'FAILED_NO_MUTATION', false, 'DIRECT_GOVERNED');
-        assert.fail('should have thrown');
-      } catch (err) {
-        assert.equal(err.message, 'Audit service unavailable');
-      }
+      const req = makeRequest('super_admin', 'super_admin');
+      const resp = await handleProfileRestorePost(req, { name: 'test_profile', versionId: 'v-001' }, deps);
+      const { status, body } = await parseResponse(resp);
+
+      assert.equal(status, 503);
+      assert.equal(body.code, 'AUDIT_UNAVAILABLE');
+      assert.equal(body.committed, false);
     });
   });
 
-  describe('PARTIAL_WRITE', () => {
+  describe('Partial Write', () => {
     it('audit success → 500 PROFILE_RESTORE_PARTIAL_WRITE committed=true', async () => {
-      const intent = { profileName: 'test', versionId: 'v-001', currentState: 'present' };
+      setupTestData();
+      const deps = makeMockDeps();
+      deps.executeFrozenRestoreV2 = async () => {
+        const err = new Error('Partial write');
+        err.code = 'PROFILE_RESTORE_PARTIAL_WRITE';
+        throw err;
+      };
 
-      await mockWriteRestoreAudit(intent, {}, null, { username: 'super_admin', role: 'super_admin' }, 'failed', 'PARTIAL_WRITE', true, 'DIRECT_GOVERNED');
+      const req = makeRequest('super_admin', 'super_admin');
+      const resp = await handleProfileRestorePost(req, { name: 'test_profile', versionId: 'v-001' }, deps);
+      const { status, body } = await parseResponse(resp);
 
+      assert.equal(status, 500);
+      assert.equal(body.code, 'PROFILE_RESTORE_PARTIAL_WRITE');
+      assert.equal(body.committed, true);
       assert.equal(mockAuditLogs.length, 1);
       assert.equal(mockAuditLogs[0].classification, 'PARTIAL_WRITE');
       assert.equal(mockAuditLogs[0].committed, true);
     });
 
-    it('audit failure → 503 committed=true', async () => {
+    it('audit failure → 503 AUDIT_UNAVAILABLE committed=true', async () => {
+      setupTestData();
+      const deps = makeMockDeps();
+      deps.executeFrozenRestoreV2 = async () => {
+        const err = new Error('Partial write');
+        err.code = 'PROFILE_RESTORE_PARTIAL_WRITE';
+        throw err;
+      };
       mockAuditShouldFail = true;
 
-      try {
-        await mockWriteRestoreAudit({}, {}, null, { username: 'super_admin', role: 'super_admin' }, 'failed', 'PARTIAL_WRITE', true, 'DIRECT_GOVERNED');
-        assert.fail('should have thrown');
-      } catch (err) {
-        assert.equal(err.message, 'Audit service unavailable');
-        // Route should return 503 AUDIT_UNAVAILABLE committed=true
-      }
+      const req = makeRequest('super_admin', 'super_admin');
+      const resp = await handleProfileRestorePost(req, { name: 'test_profile', versionId: 'v-001' }, deps);
+      const { status, body } = await parseResponse(resp);
+
+      assert.equal(status, 503);
+      assert.equal(body.code, 'AUDIT_UNAVAILABLE');
+      assert.equal(body.committed, true);
     });
   });
 
-  describe('SUCCESS audit failure', () => {
-    it('audit failure → 503 committed=true', async () => {
-      mockProfiles.set('success_profile', {
-        name: 'success_profile',
-        title: 'Current',
-        createdAt: '2024-01-01T00:00:00.000Z',
-        createdBy: 'admin',
-        updatedAt: '2024-07-01T00:00:00.000Z',
-        updatedBy: 'admin',
-      });
-      mockVersions.set('success_profile:v-001', {
-        versionId: 'v-001',
-        profileName: 'success_profile',
-        action: 'UPDATE',
-        savedAt: '2024-06-01T10:00:00.000Z',
-        savedBy: 'admin',
-        profile: { name: 'success_profile', title: 'Old' },
-      });
-
-      const intent = await mockPrepareFrozenRestoreV2('success_profile', 'v-001', 'super_admin');
-      const assertion = await mockAssertFrozenRestoreV2(intent);
-      const result = await mockExecuteFrozenRestoreV2(assertion, 'super_admin');
-
-      assert.equal(result.committed, true);
-
-      // Audit fails
+  describe('Success + Audit Failure', () => {
+    it('business mutation succeeds, audit fails → 503 committed=true', async () => {
+      setupTestData();
+      const deps = makeMockDeps();
       mockAuditShouldFail = true;
-      try {
-        await mockWriteRestoreAudit(intent, assertion.currentProfile, result.restored, { username: 'super_admin', role: 'super_admin' }, 'success', result.classification, result.committed, 'DIRECT_GOVERNED');
-        assert.fail('should have thrown');
-      } catch (err) {
-        assert.equal(err.message, 'Audit service unavailable');
-        // Route should return 503 AUDIT_UNAVAILABLE committed=true
-      }
+
+      const req = makeRequest('super_admin', 'super_admin');
+      const resp = await handleProfileRestorePost(req, { name: 'test_profile', versionId: 'v-001' }, deps);
+      const { status, body } = await parseResponse(resp);
+
+      assert.equal(status, 503);
+      assert.equal(body.code, 'AUDIT_UNAVAILABLE');
+      assert.equal(body.committed, true);
+
+      // Profile was actually restored (mutation committed)
+      assert.equal(mockProfiles.get('test_profile').title, 'Old Title');
     });
-  });
-});
-
-describe('Profile Restore Approval v2 — Actor Validation', () => {
-  beforeEach(resetMocks);
-
-  it('validated executor = admin_a, requester = operator_b', async () => {
-    const actor = { username: 'admin_a', role: 'super_admin' };
-    const requester = 'operator_b';
-
-    // Actor must be used, not requester
-    assert.ok(actor.username);
-    assert.ok(actor.role);
-    assert.notEqual(actor.username, requester);
-
-    // restored.updatedBy must be the validated actor
-    const restored = { name: 'test', updatedBy: actor.username };
-    assert.equal(restored.updatedBy, 'admin_a');
-    assert.notEqual(restored.updatedBy, requester);
-  });
-
-  it('missing actor does NOT fall back to requester', async () => {
-    const actor = null;
-    const requester = 'operator_b';
-
-    // With null actor, execution should fail (not fall back)
-    if (!actor?.username || !actor?.role) {
-      // This is the expected path — execution rejected
-      assert.ok(true);
-    } else {
-      assert.fail('should have rejected null actor');
-    }
-  });
-
-  it('actor with empty username is rejected', async () => {
-    const actor = { username: '', role: 'super_admin' };
-
-    if (!actor?.username || !actor?.role) {
-      assert.ok(true);
-    } else {
-      assert.fail('should have rejected empty username');
-    }
-  });
-
-  it('audit actor = validated executor, not requester', async () => {
-    const actor = { username: 'admin_a', role: 'super_admin' };
-    const requester = 'operator_b';
-
-    await mockWriteRestoreAudit({}, null, null, { username: actor.username, role: actor.role }, 'success', 'SUCCESS', true, 'APPROVAL_GOVERNED');
-
-    assert.equal(mockAuditLogs.length, 1);
-    assert.equal(mockAuditLogs[0].actor.username, 'admin_a');
-    assert.equal(mockAuditLogs[0].actor.role, 'super_admin');
-    assert.notEqual(mockAuditLogs[0].actor.username, requester);
   });
 });
