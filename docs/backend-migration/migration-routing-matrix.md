@@ -94,7 +94,7 @@
 | Profile create | POST | `/api/profiles` | **Go** | Next.js | Go | NEVER | DIRECT_GOVERNED, ACTUALLY_ROUTED=0 |
 | Profile update | PUT | `/api/profiles/:name` | **Go** | Next.js | Go | NEVER | DIRECT_GOVERNED, ACTUALLY_ROUTED=0 |
 | Profile delete | DELETE | `/api/profiles/:name` | **Go** | Next.js | Go | NEVER | DIRECT_GOVERNED, ACTUALLY_ROUTED=0 |
-| Profile restore | POST | `/api/profiles/:name/versions/:versionId/restore` | Next.js | Go | NEVER | Creates CHG |
+| Profile restore | POST | `/api/profiles/:name/versions/:versionId/restore` | **Go** | Next.js | Go | NEVER | Go handler with frozen v2, CAS, approval, ACTUALLY_ROUTED=0 |
 
 ### Phase 5 — OCS + Tariff + Rating Writes
 

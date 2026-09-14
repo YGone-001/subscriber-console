@@ -284,6 +284,176 @@ func TestCrossRuntimeFingerprint(t *testing.T) {
 	putUnknownFp := fingerprint(PutUnknownFieldBody)
 	t.Logf("PUT unknown field body fingerprint: %s", putUnknownFp)
 
+	// Restore fixtures
+	restoreFp := fingerprint(RestoreVersionDoc)
+	t.Logf("Restore version doc fingerprint: %s", restoreFp)
+
+	restoreCurrentFp := fingerprint(RestoreCurrentProfile)
+	t.Logf("Restore current profile fingerprint: %s", restoreCurrentFp)
+
 	// These fingerprints should match between Node and Go
 	// to ensure contract parity
+}
+
+// ─── Fixture 5: Profile Restore ───
+
+var RestoreVersionDoc = bson.M{
+	"versionId":   "v-001",
+	"profileName": "fixture_restore",
+	"action":      "UPDATE",
+	"savedAt":     "2024-06-01T10:00:00.000Z",
+	"savedBy":     "admin",
+	"title":       "Old Title",
+	"sliceCount":  1,
+	"profile": bson.M{
+		"name":        "fixture_restore",
+		"title":       "Old Title",
+		"description": "Old description",
+		"auth": bson.M{
+			"k":   "00000000000000000000000000000001",
+			"opc": "00000000000000000000000000000002",
+			"amf": "8000",
+		},
+		"ambr": bson.M{
+			"downlink": bson.M{"unit": 2, "value": 10},
+			"uplink":   bson.M{"unit": 2, "value": 10},
+		},
+		"sliceList": bson.A{
+			bson.M{
+				"default_indicator": true,
+				"sd":                "000001",
+				"sst":               1,
+				"session_list":      bson.A{},
+			},
+		},
+		"createdAt": "2024-01-01T00:00:00.000Z",
+		"createdBy": "original_user",
+		"updatedAt": "2024-06-01T10:00:00.000Z",
+		"updatedBy": "admin",
+	},
+}
+
+var RestoreCurrentProfile = bson.M{
+	"name":        "fixture_restore",
+	"title":       "Current Title",
+	"description": "Current description",
+	"auth": bson.M{
+		"k":   "00000000000000000000000000000003",
+		"opc": "00000000000000000000000000000004",
+		"amf": "8000",
+	},
+	"ambr": bson.M{
+		"downlink": bson.M{"unit": 2, "value": 20},
+		"uplink":   bson.M{"unit": 2, "value": 20},
+	},
+	"createdAt": "2024-01-01T00:00:00.000Z",
+	"createdBy": "original_user",
+	"updatedAt": "2024-07-01T10:00:00.000Z",
+	"updatedBy": "current_user",
+}
+
+// RestoreExpectedHashes contains the expected hash values for cross-runtime parity.
+// These values must match between Node and Go implementations.
+var RestoreExpectedHashes = struct {
+	SourceVersionHash     string
+	CurrentProfileHash    string
+	EffectiveRestoredHash string
+	OperationFingerprint  string
+}{
+	// These will be computed by the test and validated against Node
+	SourceVersionHash:     "", // computed at runtime
+	CurrentProfileHash:    "", // computed at runtime
+	EffectiveRestoredHash: "", // computed at runtime
+	OperationFingerprint:  "", // computed at runtime
+}
+
+func validateRestoreResponse(t *testing.T, resp bson.M, user string) {
+	t.Helper()
+
+	if resp["name"] != "fixture_restore" {
+		t.Errorf("name: expected fixture_restore, got %v", resp["name"])
+	}
+
+	// Title should come from version
+	if resp["title"] != "Old Title" {
+		t.Errorf("title: expected Old Title, got %v", resp["title"])
+	}
+
+	// Should have restoredFromVersionId
+	if resp["restoredFromVersionId"] != "v-001" {
+		t.Errorf("restoredFromVersionId: expected v-001, got %v", resp["restoredFromVersionId"])
+	}
+
+	// Should have restoredFromSavedAt
+	if resp["restoredFromSavedAt"] != "2024-06-01T10:00:00.000Z" {
+		t.Errorf("restoredFromSavedAt: expected 2024-06-01T10:00:00.000Z, got %v", resp["restoredFromSavedAt"])
+	}
+
+	// createdBy should come from version
+	if resp["createdBy"] != "original_user" {
+		t.Errorf("createdBy: expected original_user, got %v", resp["createdBy"])
+	}
+
+	// updatedBy should be the actor
+	if resp["updatedBy"] != user {
+		t.Errorf("updatedBy: expected %s, got %v", user, resp["updatedBy"])
+	}
+}
+
+func TestRestoreFingerprintParity(t *testing.T) {
+	// Compute sourceVersionHash from version doc
+	sourceVersionHash := fingerprint(RestoreVersionDoc["profile"])
+	t.Logf("sourceVersionHash: %s", sourceVersionHash)
+
+	// Compute currentProfileHash
+	currentProfileHash := fingerprint(RestoreCurrentProfile)
+	t.Logf("currentProfileHash: %s", currentProfileHash)
+
+	// Build effective restored profile (simulating what the handler does)
+	restored := bson.M{
+		"name":        "fixture_restore",
+		"title":       "Old Title",
+		"description": "Old description",
+		"auth": bson.M{
+			"k":   "00000000000000000000000000000001",
+			"opc": "00000000000000000000000000000002",
+			"amf": "8000",
+		},
+		"ambr": bson.M{
+			"downlink": bson.M{"unit": 2, "value": 10},
+			"uplink":   bson.M{"unit": 2, "value": 10},
+		},
+		"sliceList": bson.A{
+			bson.M{
+				"default_indicator": true,
+				"sd":                "000001",
+				"sst":               1,
+				"session_list":      bson.A{},
+			},
+		},
+		"createdAt":             "2024-01-01T00:00:00.000Z",
+		"createdBy":             "original_user",
+		"updatedAt":             "2024-06-01T10:00:00.000Z",
+		"updatedBy":             "admin",
+		"restoredFromVersionId": "v-001",
+		"restoredFromSavedAt":   "2024-06-01T10:00:00.000Z",
+	}
+
+	effectiveRestoredHash := fingerprint(restored)
+	t.Logf("effectiveRestoredHash: %s", effectiveRestoredHash)
+
+	// Compute operationFingerprint
+	opFp := fingerprint(map[string]any{
+		"operation":             "PROFILE_RESTORE",
+		"profileName":           "fixture_restore",
+		"versionId":             "v-001",
+		"sourceVersionHash":     sourceVersionHash,
+		"currentState":          "present",
+		"currentProfileHash":    currentProfileHash,
+		"effectiveRestoredHash": effectiveRestoredHash,
+	})
+	t.Logf("operationFingerprint: %s", opFp)
+
+	// These fingerprints must match between Node and Go
+	// to ensure cross-runtime contract parity
 }

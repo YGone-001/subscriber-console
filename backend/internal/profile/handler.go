@@ -2,6 +2,8 @@ package profile
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -10,6 +12,7 @@ import (
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"subscriber/internal/approval"
 	"subscriber/internal/audit"
 	"subscriber/internal/auth"
 	"subscriber/internal/response"
@@ -21,6 +24,7 @@ var validProfileName = regexp.MustCompile(`^[a-zA-Z0-9_\s-]+$`)
 type ProfileReader interface {
 	ListProfiles(ctx context.Context) ([]ProfileListItem, ProfileSummary, error)
 	GetProfile(ctx context.Context, name string) (bson.M, error)
+	GetProfileVersion(ctx context.Context, profileName, versionId string) (bson.M, error)
 	GetProfileStats(ctx context.Context, name string) (ProfileStats, error)
 	ListProfileVersions(ctx context.Context, name string, limit int) ([]ProfileVersionSummary, error)
 }
@@ -51,16 +55,22 @@ type RateLimiter interface {
 	Enforce(w http.ResponseWriter, r *http.Request, identifier string, limit int, windowSeconds int) bool
 }
 
+// ApprovalCreateStore abstracts approval persistence for profile governance.
+type ApprovalCreateStore interface {
+	CreateApprovalRequest(ctx context.Context, input approval.CreateApprovalInput) (*approval.ApprovalDocument, error)
+}
+
 // Handler provides HTTP handlers for profile endpoints.
 type Handler struct {
-	repo    ProfileReadWriter
-	limiter RateLimiter
-	audit   AuditWriter
+	repo         ProfileReadWriter
+	approvalRepo ApprovalCreateStore
+	limiter      RateLimiter
+	audit        AuditWriter
 }
 
 // NewHandler creates a new profile Handler.
-func NewHandler(repo ProfileReadWriter, limiter RateLimiter, auditWriter AuditWriter) *Handler {
-	return &Handler{repo: repo, limiter: limiter, audit: auditWriter}
+func NewHandler(repo ProfileReadWriter, approvalRepo ApprovalCreateStore, limiter RateLimiter, auditWriter AuditWriter) *Handler {
+	return &Handler{repo: repo, approvalRepo: approvalRepo, limiter: limiter, audit: auditWriter}
 }
 
 // List handles GET /api/profiles
@@ -745,6 +755,521 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, DeleteProfileResponse{
 		Message: "Profile deleted successfully",
 	})
+}
+
+// Restore handles POST /api/profiles/:name/versions/:versionId/restore
+func (h *Handler) Restore(w http.ResponseWriter, r *http.Request) {
+	p := auth.PrincipalFromContext(r.Context())
+	if p == nil {
+		response.Error(w, http.StatusUnauthorized, "Unauthorized", "AUTH_INVALID_TOKEN")
+		return
+	}
+
+	name := r.PathValue("name")
+	versionId := r.PathValue("versionId")
+
+	// Rate limit: 10/60s
+	if !h.limiter.Enforce(w, r, "profiles:restore:"+p.Username, 10, 60) {
+		return
+	}
+
+	// Validate profile name
+	if !validProfileName.MatchString(name) {
+		response.JSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid profile name format"})
+		return
+	}
+
+	// Check capability
+	decision, allowed := auth.CapabilityDecision(p, "profile_rollback")
+	if !allowed {
+		if decision == "approval" {
+			// Create approval for operator
+			h.handleRestoreApproval(w, r, p, name, versionId)
+			return
+		}
+		response.Error(w, http.StatusForbidden, "Permission denied", "FORBIDDEN")
+		return
+	}
+
+	// Direct execution for super_admin/root/ops_admin
+	h.executeDirectRestore(w, r, p, name, versionId)
+}
+
+// handleRestoreApproval creates an approval request for operator restore.
+func (h *Handler) handleRestoreApproval(w http.ResponseWriter, r *http.Request, p *auth.Principal, name, versionId string) {
+	// Prepare frozen v2 intent
+	intent, err := h.prepareFrozenRestoreV2(r.Context(), p, name, versionId)
+	if err != nil {
+		response.InternalError(w)
+		return
+	}
+	if intent == nil {
+		response.Error(w, http.StatusNotFound, "Version not found", "VERSION_NOT_FOUND")
+		return
+	}
+
+	// Create approval request
+	approvalInput := approval.CreateApprovalInput{
+		Action:    "PROFILE_RESTORE",
+		Requester: p.Username,
+		RequesterContext: &approval.GovernanceActor{
+			Type:     "user",
+			Username: p.Username,
+			Role:     p.NormalizedRole,
+		},
+		TargetID:             fmt.Sprintf("profile:%s", name),
+		Summary:              fmt.Sprintf("Restore profile %s from version %s", name, versionId),
+		OperationFingerprint: intent.OperationFingerprint,
+		Payload: map[string]interface{}{
+			"version":               "profile-restore-v2",
+			"name":                  name,
+			"versionId":             versionId,
+			"requester":             p.Username,
+			"sourceVersionHash":     intent.SourceVersionHash,
+			"currentState":          intent.CurrentState,
+			"currentProfileHash":    intent.CurrentProfileHash,
+			"effectiveRestoredHash": intent.EffectiveRestoredHash,
+			"operationFingerprint":  intent.OperationFingerprint,
+		},
+	}
+
+	approvalDoc, err := h.approvalRepo.CreateApprovalRequest(r.Context(), approvalInput)
+	if err != nil {
+		response.InternalError(w)
+		return
+	}
+
+	// Audit approval creation using restore-specific audit
+	_ = h.writeRestoreAudit(r.Context(), p, name, intent, nil, "APPROVAL_GOVERNED", false, nil)
+
+	response.JSON(w, http.StatusAccepted, map[string]interface{}{
+		"message":  "Approval required before profile restore",
+		"approval": approvalDoc,
+	})
+}
+
+// executeDirectRestore executes the restore directly for privileged roles.
+func (h *Handler) executeDirectRestore(w http.ResponseWriter, r *http.Request, p *auth.Principal, name, versionId string) {
+	// Prepare frozen v2 intent
+	intent, err := h.prepareFrozenRestoreV2(r.Context(), p, name, versionId)
+	if err != nil {
+		response.InternalError(w)
+		return
+	}
+	if intent == nil {
+		response.Error(w, http.StatusNotFound, "Version not found", "VERSION_NOT_FOUND")
+		return
+	}
+
+	// Assert frozen v2 (re-read and verify hashes match)
+	assertion, err := h.assertFrozenRestoreV2(r.Context(), p, name, versionId, intent)
+	if err != nil {
+		response.InternalError(w)
+		return
+	}
+	if assertion == nil {
+		// Source version or current profile drifted
+		h.writeStrictAudit(r.Context(), "PROFILE_RESTORE", "profile", name, p.Username, p.NormalizedRole, nil, nil, "failed", "PRECONDITION_CHANGED", false, nil)
+		response.Error(w, http.StatusConflict, "Profile was modified since loaded", "PROFILE_RESTORE_PRECONDITION_CHANGED")
+		return
+	}
+
+	// Execute frozen restore v2
+	result, err := h.executeFrozenRestoreV2(r.Context(), p, name, intent)
+	if err != nil {
+		if err == ErrProfilePreconditionChanged {
+			h.writeStrictAudit(r.Context(), "PROFILE_RESTORE", "profile", name, p.Username, p.NormalizedRole, intent.CurrentProfile, nil, "failed", "PRECONDITION_CHANGED", false, err)
+			response.Error(w, http.StatusConflict, "Profile was modified since loaded", "PROFILE_RESTORE_PRECONDITION_CHANGED")
+			return
+		}
+		// Check if it's a partial write error
+		if err == ErrRestorePartialWrite {
+			h.writeStrictAudit(r.Context(), "PROFILE_RESTORE", "profile", name, p.Username, p.NormalizedRole, intent.CurrentProfile, intent.EffectiveRestored, "failed", "PARTIAL_WRITE", true, err)
+			response.JSON(w, http.StatusInternalServerError, map[string]interface{}{
+				"error":     "Profile restored but version save failed",
+				"code":      "PROFILE_RESTORE_PARTIAL_WRITE",
+				"committed": true,
+			})
+			return
+		}
+		// Storage failure
+		h.writeStrictAudit(r.Context(), "PROFILE_RESTORE", "profile", name, p.Username, p.NormalizedRole, intent.CurrentProfile, nil, "failed", "FAILED_NO_MUTATION", false, err)
+		response.JSON(w, http.StatusInternalServerError, map[string]interface{}{
+			"error":     "Profile restore failed",
+			"code":      "PROFILE_RESTORE_FAILED",
+			"committed": false,
+		})
+		return
+	}
+
+	// Success - strict audit
+	if auditErr := h.writeRestoreAudit(r.Context(), p, name, intent, result, "SUCCESS", true, nil); auditErr != nil {
+		response.JSON(w, http.StatusServiceUnavailable, map[string]interface{}{
+			"error":     "Audit unavailable",
+			"code":      "AUDIT_UNAVAILABLE",
+			"committed": true,
+		})
+		return
+	}
+
+	response.JSON(w, http.StatusOK, map[string]interface{}{
+		"message": "Profile restored successfully",
+		"profile": result,
+	})
+}
+
+// RestoreIntent holds the frozen v2 restore intent.
+type RestoreIntent struct {
+	Version               string  `json:"version"`
+	ProfileName           string  `json:"profileName"`
+	VersionId             string  `json:"versionId"`
+	SourceVersionHash     string  `json:"sourceVersionHash"`
+	CurrentState          string  `json:"currentState"`
+	CurrentProfileHash    *string `json:"currentProfileHash"`
+	EffectiveRestoredHash string  `json:"effectiveRestoredHash"`
+	OperationFingerprint  string  `json:"operationFingerprint"`
+	CurrentProfile        bson.M  `json:"-"`
+	EffectiveRestored     bson.M  `json:"-"`
+	VersionDoc            bson.M  `json:"-"`
+}
+
+// RestoreResult holds the result of a successful restore.
+type RestoreResult struct {
+	Current  bson.M `json:"current"`
+	Restored bson.M `json:"restored"`
+	Version  bson.M `json:"version"`
+}
+
+var ErrRestorePartialWrite = fmt.Errorf("profile restored but version save failed")
+
+// prepareFrozenRestoreV2 prepares the frozen v2 restore intent.
+func (h *Handler) prepareFrozenRestoreV2(ctx context.Context, p *auth.Principal, name, versionId string) (*RestoreIntent, error) {
+	// Load version
+	versionDoc, err := h.repo.GetProfileVersion(ctx, name, versionId)
+	if err != nil {
+		return nil, err
+	}
+	if versionDoc == nil {
+		return nil, nil
+	}
+
+	// Compute sourceVersionHash
+	sourceVersionHash, err := computeProfileHash(versionDoc["profile"])
+	if err != nil {
+		return nil, err
+	}
+
+	// Load current profile
+	current, err := h.repo.GetProfile(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+
+	// Compute currentState and currentProfileHash
+	currentState := "absent"
+	var currentProfileHash *string
+	if current != nil {
+		currentState = "present"
+		hash, err := computeProfileHash(current)
+		if err != nil {
+			return nil, err
+		}
+		currentProfileHash = &hash
+	}
+
+	// Build effective restored profile
+	restored := buildEffectiveRestoredProfile(current, versionDoc, name, p.Username)
+
+	// Compute effectiveRestoredHash
+	effectiveRestoredHash, err := computeProfileHash(restored)
+	if err != nil {
+		return nil, err
+	}
+
+	// Compute operationFingerprint
+	fingerprint, err := computeOperationFingerprint(map[string]interface{}{
+		"operation":             "PROFILE_RESTORE",
+		"profileName":           name,
+		"versionId":             versionId,
+		"sourceVersionHash":     sourceVersionHash,
+		"currentState":          currentState,
+		"currentProfileHash":    currentProfileHash,
+		"effectiveRestoredHash": effectiveRestoredHash,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &RestoreIntent{
+		Version:               "profile-restore-v2",
+		ProfileName:           name,
+		VersionId:             versionId,
+		SourceVersionHash:     sourceVersionHash,
+		CurrentState:          currentState,
+		CurrentProfileHash:    currentProfileHash,
+		EffectiveRestoredHash: effectiveRestoredHash,
+		OperationFingerprint:  fingerprint,
+		CurrentProfile:        current,
+		EffectiveRestored:     restored,
+		VersionDoc:            versionDoc,
+	}, nil
+}
+
+// assertFrozenRestoreV2 re-reads and verifies that the intent is still valid.
+func (h *Handler) assertFrozenRestoreV2(ctx context.Context, p *auth.Principal, name, versionId string, intent *RestoreIntent) (*RestoreIntent, error) {
+	// Re-read version and recompute hash
+	versionDoc, err := h.repo.GetProfileVersion(ctx, name, versionId)
+	if err != nil {
+		return nil, err
+	}
+	if versionDoc == nil {
+		return nil, nil
+	}
+
+	sourceVersionHash, err := computeProfileHash(versionDoc["profile"])
+	if err != nil {
+		return nil, err
+	}
+	if sourceVersionHash != intent.SourceVersionHash {
+		return nil, nil // Source version drifted
+	}
+
+	// Re-read current profile
+	current, err := h.repo.GetProfile(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+
+	// Verify current state matches
+	if intent.CurrentState == "present" {
+		if current == nil {
+			return nil, nil // Current profile disappeared
+		}
+		currentHash, err := computeProfileHash(current)
+		if err != nil {
+			return nil, err
+		}
+		if intent.CurrentProfileHash == nil || currentHash != *intent.CurrentProfileHash {
+			return nil, nil // Current profile changed
+		}
+	} else {
+		if current != nil {
+			return nil, nil // Current profile appeared
+		}
+	}
+
+	return intent, nil
+}
+
+// executeFrozenRestoreV2 executes the restore operation.
+func (h *Handler) executeFrozenRestoreV2(ctx context.Context, p *auth.Principal, name string, intent *RestoreIntent) (bson.M, error) {
+	now := time.Now().UTC()
+
+	if intent.CurrentState == "present" {
+		// CAS update for existing profile
+		if err := h.repo.ReplaceProfileCAS(ctx, name, intent.CurrentProfile, intent.EffectiveRestored); err != nil {
+			if err == ErrProfilePreconditionChanged {
+				return nil, ErrProfilePreconditionChanged
+			}
+			return nil, err
+		}
+	} else {
+		// Insert for missing profile
+		if err := h.repo.InsertProfileCreateOnly(ctx, intent.EffectiveRestored); err != nil {
+			if err == ErrProfileExists {
+				return nil, ErrProfilePreconditionChanged
+			}
+			return nil, err
+		}
+	}
+
+	// Save RESTORE version (pre-restore current profile)
+	if intent.CurrentProfile != nil {
+		versionRecord := bson.M{
+			"versionId":   generateVersionID(),
+			"profileName": name,
+			"profile":     intent.CurrentProfile,
+			"action":      "RESTORE",
+			"savedAt":     now,
+			"savedBy":     p.Username,
+			"title":       intent.CurrentProfile["title"],
+			"sliceCount":  countSliceList(intent.CurrentProfile),
+		}
+		if err := h.repo.SaveProfileVersion(ctx, versionRecord); err != nil {
+			// Partial write - profile was restored but version save failed
+			return nil, ErrRestorePartialWrite
+		}
+	}
+
+	return intent.EffectiveRestored, nil
+}
+
+// writeRestoreAudit writes a restore-specific audit record with full metadata.
+func (h *Handler) writeRestoreAudit(ctx context.Context, p *auth.Principal, name string, intent *RestoreIntent, restored bson.M, classification string, committed bool, errDetails error) error {
+	if h.audit == nil {
+		return nil
+	}
+
+	governanceMode := "DIRECT_GOVERNED"
+	if p.NormalizedRole == "operator" {
+		governanceMode = "APPROVAL_GOVERNED"
+	}
+
+	input := audit.WriteAuditInput{
+		Action: "PROFILE_RESTORE",
+		Module: "profiles",
+		Actor: audit.ActorInput{
+			Type:     "user",
+			Username: p.Username,
+			Role:     p.NormalizedRole,
+		},
+		Resource: &audit.ResourceInput{
+			Type: "profile",
+			Name: name,
+		},
+		Result: "success",
+		Level:  "info",
+		Metadata: map[string]interface{}{
+			"governanceMode":       governanceMode,
+			"approvalRequired":     p.NormalizedRole == "operator",
+			"actorRole":            p.NormalizedRole,
+			"mutationCommitted":    committed,
+			"classification":       classification,
+			"operationFingerprint": intent.OperationFingerprint,
+			"sourceVersionHash":    intent.SourceVersionHash,
+			"currentProfileHash":   intent.CurrentProfileHash,
+			"versionId":            intent.VersionId,
+		},
+	}
+
+	// Use safe snapshot (redact secrets)
+	if intent.CurrentProfile != nil {
+		input.Before = safeProfileSnapshot(intent.CurrentProfile)
+	}
+	if restored != nil {
+		input.After = safeProfileSnapshot(restored)
+	}
+
+	if errDetails != nil {
+		input.Error = &audit.ErrorInput{
+			Code:    classification,
+			Message: errDetails.Error(),
+		}
+	}
+
+	return h.audit.WriteStrict(ctx, input)
+}
+
+// computeProfileHash computes SHA256 of stable JSON of a profile (excluding _id).
+func computeProfileHash(profile interface{}) (string, error) {
+	if profile == nil {
+		return "", nil
+	}
+
+	// Remove _id if present
+	cleaned := removeField(profile, "_id")
+
+	data, err := json.Marshal(cleaned)
+	if err != nil {
+		return "", err
+	}
+
+	hash := sha256.Sum256(data)
+	return hex.EncodeToString(hash[:]), nil
+}
+
+// computeOperationFingerprint computes SHA256 of stable JSON of the operation.
+func computeOperationFingerprint(data map[string]interface{}) (string, error) {
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return "", err
+	}
+
+	hash := sha256.Sum256(jsonData)
+	return hex.EncodeToString(hash[:]), nil
+}
+
+// removeField recursively removes a field from a BSON document.
+func removeField(doc interface{}, field string) interface{} {
+	switch v := doc.(type) {
+	case bson.M:
+		result := bson.M{}
+		for k, val := range v {
+			if k == field {
+				continue
+			}
+			result[k] = removeField(val, field)
+		}
+		return result
+	case bson.A:
+		result := bson.A{}
+		for _, val := range v {
+			result = append(result, removeField(val, field))
+		}
+		return result
+	default:
+		return doc
+	}
+}
+
+// buildEffectiveRestoredProfile builds the effective restored profile from version and current.
+func buildEffectiveRestoredProfile(current bson.M, versionDoc bson.M, name, actor string) bson.M {
+	versionProfile, _ := versionDoc["profile"].(bson.M)
+	if versionProfile == nil {
+		versionProfile = bson.M{}
+	}
+
+	// Strip subscriber identity fields
+	stripped := stripSubscriberIdentityFields(versionProfile)
+
+	// Build restored document
+	restored := bson.M{}
+	for k, v := range stripped {
+		restored[k] = v
+	}
+
+	// Server-controlled fields
+	restored["name"] = name
+	restored["title"] = versionProfile["title"]
+	if restored["title"] == nil || restored["title"] == "" {
+		restored["title"] = name
+	}
+
+	now := time.Now().UTC()
+	if versionProfile["createdAt"] != nil {
+		restored["createdAt"] = versionProfile["createdAt"]
+	} else if current != nil && current["createdAt"] != nil {
+		restored["createdAt"] = current["createdAt"]
+	} else {
+		restored["createdAt"] = now
+	}
+
+	if versionProfile["createdBy"] != nil {
+		restored["createdBy"] = versionProfile["createdBy"]
+	} else if current != nil && current["createdBy"] != nil {
+		restored["createdBy"] = current["createdBy"]
+	} else {
+		restored["createdBy"] = actor
+	}
+
+	restored["updatedAt"] = now
+	restored["updatedBy"] = actor
+	restored["restoredFromVersionId"] = versionDoc["versionId"]
+	restored["restoredFromSavedAt"] = versionDoc["savedAt"]
+
+	return restored
+}
+
+// stripSubscriberIdentityFields removes subscriber identity fields from a profile.
+func stripSubscriberIdentityFields(doc bson.M) bson.M {
+	result := bson.M{}
+	for k, v := range doc {
+		if k == "imsi" || k == "msisdn" || k == "msisdnList" {
+			continue
+		}
+		result[k] = v
+	}
+	return result
 }
 
 // generateVersionID generates a unique version ID.

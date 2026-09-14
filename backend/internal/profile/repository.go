@@ -88,6 +88,26 @@ func (r *Repository) GetProfile(ctx context.Context, name string) (bson.M, error
 	return doc, nil
 }
 
+// GetProfileVersion returns a specific version by profileName and versionId.
+// Returns nil if not found.
+func (r *Repository) GetProfileVersion(ctx context.Context, profileName, versionId string) (bson.M, error) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	var doc bson.M
+	err := r.versions.FindOne(ctx, bson.M{
+		"profileName": profileName,
+		"versionId":   versionId,
+	}).Decode(&doc)
+	if err == mongo.ErrNoDocuments {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return doc, nil
+}
+
 // GetProfileStats returns subscriber statistics for a profile.
 // Queries xcloud.subscribers (cross-domain read, no writes).
 func (r *Repository) GetProfileStats(ctx context.Context, profileName string) (ProfileStats, error) {

@@ -99,7 +99,6 @@ func main() {
 		mc.Ops.Collection("app_profile_versions"),
 		mc.XCloud.Collection("subscribers"),
 	)
-	profileHandler := profile.NewHandler(profileRepo, limiter, auditWriter)
 
 	// OCS
 	ocsRepo := ocs.NewRepository(
@@ -142,6 +141,9 @@ func main() {
 	approvalCreator := approval.NewApprovalCreator(approvalRepo, auditWriter)
 	approvalHandler := approval.NewHandler(approvalRepo, limiter, auditWriter, approvalWorkflow, approvalCreator, userRepo)
 
+	// Profile handler (with approval repo for restore governance)
+	profileHandler := profile.NewHandler(profileRepo, approvalRepo, limiter, auditWriter)
+
 	// Build handler
 	mux := http.NewServeMux()
 
@@ -174,6 +176,7 @@ func main() {
 	mux.Handle("POST /api/profiles", authMiddleware(http.HandlerFunc(profileHandler.Create)))
 	mux.Handle("PUT /api/profiles/{name}", authMiddleware(http.HandlerFunc(profileHandler.Update)))
 	mux.Handle("DELETE /api/profiles/{name}", authMiddleware(http.HandlerFunc(profileHandler.Delete)))
+	mux.Handle("POST /api/profiles/{name}/versions/{versionId}/restore", authMiddleware(http.HandlerFunc(profileHandler.Restore)))
 
 	// OCS
 	mux.Handle("GET /api/ocs/balances", authMiddleware(http.HandlerFunc(ocsHandler.Balances)))

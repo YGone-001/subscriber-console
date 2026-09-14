@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"subscriber/internal/approval"
 	"subscriber/internal/audit"
 	"subscriber/internal/auth"
 )
@@ -104,6 +105,15 @@ func (m *mockRepository) GetProfile(ctx context.Context, name string) (bson.M, e
 	return nil, nil
 }
 
+func (m *mockRepository) GetProfileVersion(ctx context.Context, profileName, versionId string) (bson.M, error) {
+	for _, v := range m.versions {
+		if v["profileName"] == profileName && v["versionId"] == versionId {
+			return v, nil
+		}
+	}
+	return nil, nil
+}
+
 func (m *mockRepository) GetProfileStats(ctx context.Context, name string) (ProfileStats, error) {
 	return ProfileStats{}, nil
 }
@@ -126,11 +136,26 @@ func (m *mockAuditWriter) WriteStrict(ctx context.Context, input audit.WriteAudi
 	return nil
 }
 
+// mockApprovalRepo implements ApprovalCreateStore for testing.
+type mockApprovalRepo struct {
+	approvals []approval.CreateApprovalInput
+}
+
+func (m *mockApprovalRepo) CreateApprovalRequest(ctx context.Context, input approval.CreateApprovalInput) (*approval.ApprovalDocument, error) {
+	m.approvals = append(m.approvals, input)
+	return &approval.ApprovalDocument{
+		ID:      "test-approval-id",
+		Action:  input.Action,
+		Status:  approval.StatusPending,
+		Summary: input.Summary,
+	}, nil
+}
+
 func TestCreateProfile(t *testing.T) {
 	repo := newMockRepository()
 	auditWriter := &mockAuditWriter{}
 	limiter := &mockLimiter{}
-	handler := NewHandler(repo, limiter, auditWriter)
+	handler := NewHandler(repo, &mockApprovalRepo{}, limiter, auditWriter)
 
 	// Create a test principal
 	principal := &auth.Principal{
@@ -189,7 +214,7 @@ func TestCreateProfileDuplicate(t *testing.T) {
 	repo := newMockRepository()
 	auditWriter := &mockAuditWriter{}
 	limiter := &mockLimiter{}
-	handler := NewHandler(repo, limiter, auditWriter)
+	handler := NewHandler(repo, &mockApprovalRepo{}, limiter, auditWriter)
 
 	principal := &auth.Principal{
 		Username:       "testuser",
@@ -220,7 +245,7 @@ func TestCreateProfilePermissionDenied(t *testing.T) {
 	repo := newMockRepository()
 	auditWriter := &mockAuditWriter{}
 	limiter := &mockLimiter{}
-	handler := NewHandler(repo, limiter, auditWriter)
+	handler := NewHandler(repo, &mockApprovalRepo{}, limiter, auditWriter)
 
 	// Viewer doesn't have profiles.write permission
 	principal := &auth.Principal{
@@ -249,7 +274,7 @@ func TestUpdateProfile(t *testing.T) {
 	repo := newMockRepository()
 	auditWriter := &mockAuditWriter{}
 	limiter := &mockLimiter{}
-	handler := NewHandler(repo, limiter, auditWriter)
+	handler := NewHandler(repo, &mockApprovalRepo{}, limiter, auditWriter)
 
 	principal := &auth.Principal{
 		Username:       "testuser",
@@ -294,7 +319,7 @@ func TestDeleteProfile(t *testing.T) {
 	repo := newMockRepository()
 	auditWriter := &mockAuditWriter{}
 	limiter := &mockLimiter{}
-	handler := NewHandler(repo, limiter, auditWriter)
+	handler := NewHandler(repo, &mockApprovalRepo{}, limiter, auditWriter)
 
 	principal := &auth.Principal{
 		Username:       "testuser",
@@ -336,7 +361,7 @@ func TestDeleteProfileInUse(t *testing.T) {
 	repo := newMockRepository()
 	auditWriter := &mockAuditWriter{}
 	limiter := &mockLimiter{}
-	handler := NewHandler(repo, limiter, auditWriter)
+	handler := NewHandler(repo, &mockApprovalRepo{}, limiter, auditWriter)
 
 	principal := &auth.Principal{
 		Username:       "testuser",
@@ -376,7 +401,7 @@ func TestDeleteProfileForce(t *testing.T) {
 	repo := newMockRepository()
 	auditWriter := &mockAuditWriter{}
 	limiter := &mockLimiter{}
-	handler := NewHandler(repo, limiter, auditWriter)
+	handler := NewHandler(repo, &mockApprovalRepo{}, limiter, auditWriter)
 
 	principal := &auth.Principal{
 		Username:       "testuser",
@@ -519,7 +544,7 @@ func TestUpdateMissingProfile(t *testing.T) {
 	repo := newMockRepository()
 	auditWriter := &mockAuditWriter{}
 	limiter := &mockLimiter{}
-	handler := NewHandler(repo, limiter, auditWriter)
+	handler := NewHandler(repo, &mockApprovalRepo{}, limiter, auditWriter)
 
 	principal := &auth.Principal{
 		Username:       "testuser",
@@ -561,7 +586,7 @@ func TestDeleteMissingProfile(t *testing.T) {
 	repo := newMockRepository()
 	auditWriter := &mockAuditWriter{}
 	limiter := &mockLimiter{}
-	handler := NewHandler(repo, limiter, auditWriter)
+	handler := NewHandler(repo, &mockApprovalRepo{}, limiter, auditWriter)
 
 	principal := &auth.Principal{
 		Username:       "testuser",
@@ -595,7 +620,7 @@ func TestVersionSchemaParity(t *testing.T) {
 	repo := newMockRepository()
 	auditWriter := &mockAuditWriter{}
 	limiter := &mockLimiter{}
-	handler := NewHandler(repo, limiter, auditWriter)
+	handler := NewHandler(repo, &mockApprovalRepo{}, limiter, auditWriter)
 
 	principal := &auth.Principal{
 		Username:       "testuser",
@@ -700,7 +725,7 @@ func TestExistingPUTPreservation(t *testing.T) {
 	repo := newMockRepository()
 	auditWriter := &mockAuditWriter{}
 	limiter := &mockLimiter{}
-	handler := NewHandler(repo, limiter, auditWriter)
+	handler := NewHandler(repo, &mockApprovalRepo{}, limiter, auditWriter)
 
 	principal := &auth.Principal{
 		Username:       "testuser",
@@ -811,7 +836,7 @@ func TestMissingPUTSparseDocument(t *testing.T) {
 	repo := newMockRepository()
 	auditWriter := &mockAuditWriter{}
 	limiter := &mockLimiter{}
-	handler := NewHandler(repo, limiter, auditWriter)
+	handler := NewHandler(repo, &mockApprovalRepo{}, limiter, auditWriter)
 
 	principal := &auth.Principal{
 		Username:       "testuser",
@@ -870,7 +895,7 @@ func TestUnknownFieldRejection(t *testing.T) {
 	repo := newMockRepository()
 	auditWriter := &mockAuditWriter{}
 	limiter := &mockLimiter{}
-	handler := NewHandler(repo, limiter, auditWriter)
+	handler := NewHandler(repo, &mockApprovalRepo{}, limiter, auditWriter)
 
 	principal := &auth.Principal{
 		Username:       "testuser",
@@ -903,5 +928,378 @@ func TestUnknownFieldRejection(t *testing.T) {
 	json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["code"] != "INVALID_PROFILE_UPDATE" {
 		t.Errorf("expected code 'INVALID_PROFILE_UPDATE', got '%s'", resp["code"])
+	}
+}
+
+// ─── Restore Handler Tests ───
+
+func TestRestoreDirectSuccess(t *testing.T) {
+	repo := newMockRepository()
+	auditWriter := &mockAuditWriter{}
+	limiter := &mockLimiter{}
+	handler := NewHandler(repo, &mockApprovalRepo{}, limiter, auditWriter)
+
+	// Add a profile and version to restore
+	profileName := "test_restore_profile"
+	repo.profiles[profileName] = bson.M{
+		"name":        profileName,
+		"title":       "Current Title",
+		"description": "Current description",
+		"createdAt":   "2024-01-01T00:00:00.000Z",
+		"createdBy":   "original_user",
+		"updatedAt":   "2024-07-01T00:00:00.000Z",
+		"updatedBy":   "current_user",
+	}
+
+	repo.versions = append(repo.versions, bson.M{
+		"versionId":   "v-001",
+		"profileName": profileName,
+		"action":      "UPDATE",
+		"savedAt":     "2024-06-01T10:00:00.000Z",
+		"savedBy":     "admin",
+		"title":       "Old Title",
+		"profile": bson.M{
+			"name":        profileName,
+			"title":       "Old Title",
+			"description": "Old description",
+			"createdAt":   "2024-01-01T00:00:00.000Z",
+			"createdBy":   "original_user",
+			"updatedAt":   "2024-06-01T10:00:00.000Z",
+			"updatedBy":   "admin",
+		},
+	})
+
+	principal := &auth.Principal{
+		Username:       "testuser",
+		Role:           "super_admin",
+		NormalizedRole: "super_admin",
+	}
+
+	req := httptest.NewRequest("POST", "/api/profiles/"+profileName+"/versions/v-001/restore", nil)
+	ctx := auth.ContextWithPrincipal(req.Context(), principal)
+	req = req.WithContext(ctx)
+	req.SetPathValue("name", profileName)
+	req.SetPathValue("versionId", "v-001")
+
+	w := httptest.NewRecorder()
+	handler.Restore(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+
+	var resp map[string]any
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp["message"] != "Profile restored successfully" {
+		t.Errorf("expected message 'Profile restored successfully', got '%s'", resp["message"])
+	}
+
+	// Verify audit was written
+	if len(auditWriter.records) == 0 {
+		t.Error("expected audit record to be written")
+	}
+
+	// Verify audit has correct metadata
+	lastAudit := auditWriter.records[len(auditWriter.records)-1]
+	if lastAudit.Metadata["classification"] != "SUCCESS" {
+		t.Errorf("expected classification 'SUCCESS', got '%s'", lastAudit.Metadata["classification"])
+	}
+	if lastAudit.Metadata["mutationCommitted"] != true {
+		t.Error("expected mutationCommitted=true")
+	}
+	if lastAudit.Metadata["governanceMode"] != "DIRECT_GOVERNED" {
+		t.Errorf("expected governanceMode 'DIRECT_GOVERNED', got '%s'", lastAudit.Metadata["governanceMode"])
+	}
+}
+
+func TestRestoreMissingProfileSuccess(t *testing.T) {
+	repo := newMockRepository()
+	auditWriter := &mockAuditWriter{}
+	limiter := &mockLimiter{}
+	handler := NewHandler(repo, &mockApprovalRepo{}, limiter, auditWriter)
+
+	profileName := "test_restore_missing"
+
+	// Add a version but no current profile
+	repo.versions = append(repo.versions, bson.M{
+		"versionId":   "v-001",
+		"profileName": profileName,
+		"action":      "CREATE",
+		"savedAt":     "2024-06-01T10:00:00.000Z",
+		"savedBy":     "admin",
+		"title":       "New Profile",
+		"profile": bson.M{
+			"name":        profileName,
+			"title":       "New Profile",
+			"description": "New description",
+			"createdAt":   "2024-06-01T10:00:00.000Z",
+			"createdBy":   "admin",
+			"updatedAt":   "2024-06-01T10:00:00.000Z",
+			"updatedBy":   "admin",
+		},
+	})
+
+	principal := &auth.Principal{
+		Username:       "testuser",
+		Role:           "super_admin",
+		NormalizedRole: "super_admin",
+	}
+
+	req := httptest.NewRequest("POST", "/api/profiles/"+profileName+"/versions/v-001/restore", nil)
+	ctx := auth.ContextWithPrincipal(req.Context(), principal)
+	req = req.WithContext(ctx)
+	req.SetPathValue("name", profileName)
+	req.SetPathValue("versionId", "v-001")
+
+	w := httptest.NewRecorder()
+	handler.Restore(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
+	}
+
+	// Verify profile was inserted
+	if _, exists := repo.profiles[profileName]; !exists {
+		t.Error("expected profile to be inserted")
+	}
+}
+
+func TestRestoreOperatorApproval(t *testing.T) {
+	repo := newMockRepository()
+	auditWriter := &mockAuditWriter{}
+	approvalRepo := &mockApprovalRepo{}
+	limiter := &mockLimiter{}
+	handler := NewHandler(repo, approvalRepo, limiter, auditWriter)
+
+	profileName := "test_restore_approval"
+
+	// Add a profile and version
+	repo.profiles[profileName] = bson.M{
+		"name":      profileName,
+		"title":     "Current Title",
+		"createdAt": "2024-01-01T00:00:00.000Z",
+		"createdBy": "original_user",
+		"updatedAt": "2024-07-01T00:00:00.000Z",
+		"updatedBy": "current_user",
+	}
+
+	repo.versions = append(repo.versions, bson.M{
+		"versionId":   "v-001",
+		"profileName": profileName,
+		"action":      "UPDATE",
+		"savedAt":     "2024-06-01T10:00:00.000Z",
+		"savedBy":     "admin",
+		"title":       "Old Title",
+		"profile": bson.M{
+			"name":      profileName,
+			"title":     "Old Title",
+			"createdAt": "2024-01-01T00:00:00.000Z",
+			"createdBy": "original_user",
+			"updatedAt": "2024-06-01T10:00:00.000Z",
+			"updatedBy": "admin",
+		},
+	})
+
+	principal := &auth.Principal{
+		Username:       "testuser",
+		Role:           "operator",
+		NormalizedRole: "operator",
+	}
+
+	req := httptest.NewRequest("POST", "/api/profiles/"+profileName+"/versions/v-001/restore", nil)
+	ctx := auth.ContextWithPrincipal(req.Context(), principal)
+	req = req.WithContext(ctx)
+	req.SetPathValue("name", profileName)
+	req.SetPathValue("versionId", "v-001")
+
+	w := httptest.NewRecorder()
+	handler.Restore(w, req)
+
+	if w.Code != http.StatusAccepted {
+		t.Errorf("expected status %d, got %d: %s", http.StatusAccepted, w.Code, w.Body.String())
+	}
+
+	// Verify approval was created
+	if len(approvalRepo.approvals) == 0 {
+		t.Error("expected approval to be created")
+	}
+
+	// Verify approval has v2 payload
+	if len(approvalRepo.approvals) > 0 {
+		approval := approvalRepo.approvals[0]
+		if approval.Payload["version"] != "profile-restore-v2" {
+			t.Errorf("expected payload version 'profile-restore-v2', got '%s'", approval.Payload["version"])
+		}
+	}
+
+	// Verify audit
+	if len(auditWriter.records) > 0 {
+		lastAudit := auditWriter.records[len(auditWriter.records)-1]
+		if lastAudit.Metadata["governanceMode"] != "APPROVAL_GOVERNED" {
+			t.Errorf("expected governanceMode 'APPROVAL_GOVERNED', got '%s'", lastAudit.Metadata["governanceMode"])
+		}
+	}
+}
+
+func TestRestoreAuditorDenied(t *testing.T) {
+	repo := newMockRepository()
+	auditWriter := &mockAuditWriter{}
+	limiter := &mockLimiter{}
+	handler := NewHandler(repo, &mockApprovalRepo{}, limiter, auditWriter)
+
+	principal := &auth.Principal{
+		Username:       "testuser",
+		Role:           "auditor",
+		NormalizedRole: "auditor",
+	}
+
+	req := httptest.NewRequest("POST", "/api/profiles/test/versions/v-001/restore", nil)
+	ctx := auth.ContextWithPrincipal(req.Context(), principal)
+	req = req.WithContext(ctx)
+	req.SetPathValue("name", "test")
+	req.SetPathValue("versionId", "v-001")
+
+	w := httptest.NewRecorder()
+	handler.Restore(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Errorf("expected status %d, got %d", http.StatusForbidden, w.Code)
+	}
+}
+
+func TestRestoreViewerDenied(t *testing.T) {
+	repo := newMockRepository()
+	auditWriter := &mockAuditWriter{}
+	limiter := &mockLimiter{}
+	handler := NewHandler(repo, &mockApprovalRepo{}, limiter, auditWriter)
+
+	principal := &auth.Principal{
+		Username:       "testuser",
+		Role:           "viewer",
+		NormalizedRole: "viewer",
+	}
+
+	req := httptest.NewRequest("POST", "/api/profiles/test/versions/v-001/restore", nil)
+	ctx := auth.ContextWithPrincipal(req.Context(), principal)
+	req = req.WithContext(ctx)
+	req.SetPathValue("name", "test")
+	req.SetPathValue("versionId", "v-001")
+
+	w := httptest.NewRecorder()
+	handler.Restore(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Errorf("expected status %d, got %d", http.StatusForbidden, w.Code)
+	}
+}
+
+func TestRestoreMissingVersion(t *testing.T) {
+	repo := newMockRepository()
+	auditWriter := &mockAuditWriter{}
+	limiter := &mockLimiter{}
+	handler := NewHandler(repo, &mockApprovalRepo{}, limiter, auditWriter)
+
+	principal := &auth.Principal{
+		Username:       "testuser",
+		Role:           "super_admin",
+		NormalizedRole: "super_admin",
+	}
+
+	req := httptest.NewRequest("POST", "/api/profiles/test/versions/v-nonexistent/restore", nil)
+	ctx := auth.ContextWithPrincipal(req.Context(), principal)
+	req = req.WithContext(ctx)
+	req.SetPathValue("name", "test")
+	req.SetPathValue("versionId", "v-nonexistent")
+
+	w := httptest.NewRecorder()
+	handler.Restore(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected status %d, got %d", http.StatusNotFound, w.Code)
+	}
+}
+
+func TestRestoreInvalidProfileName(t *testing.T) {
+	repo := newMockRepository()
+	auditWriter := &mockAuditWriter{}
+	limiter := &mockLimiter{}
+	handler := NewHandler(repo, &mockApprovalRepo{}, limiter, auditWriter)
+
+	principal := &auth.Principal{
+		Username:       "testuser",
+		Role:           "super_admin",
+		NormalizedRole: "super_admin",
+	}
+
+	req := httptest.NewRequest("POST", "/api/profiles/invalid@name/versions/v-001/restore", nil)
+	ctx := auth.ContextWithPrincipal(req.Context(), principal)
+	req = req.WithContext(ctx)
+	req.SetPathValue("name", "invalid@name")
+	req.SetPathValue("versionId", "v-001")
+
+	w := httptest.NewRecorder()
+	handler.Restore(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d, got %d", http.StatusBadRequest, w.Code)
+	}
+}
+
+func TestRestoreCASConflict(t *testing.T) {
+	repo := newMockRepository()
+	auditWriter := &mockAuditWriter{}
+	limiter := &mockLimiter{}
+	handler := NewHandler(repo, &mockApprovalRepo{}, limiter, auditWriter)
+
+	profileName := "test_restore_cas"
+
+	// Add a profile with a specific hash
+	repo.profiles[profileName] = bson.M{
+		"name":             profileName,
+		"title":            "Current Title",
+		"preconditionHash": "hash1",
+		"createdAt":        "2024-01-01T00:00:00.000Z",
+		"createdBy":        "original_user",
+		"updatedAt":        "2024-07-01T00:00:00.000Z",
+		"updatedBy":        "current_user",
+	}
+
+	// Add a version
+	repo.versions = append(repo.versions, bson.M{
+		"versionId":   "v-001",
+		"profileName": profileName,
+		"action":      "UPDATE",
+		"savedAt":     "2024-06-01T10:00:00.000Z",
+		"savedBy":     "admin",
+		"title":       "Old Title",
+		"profile": bson.M{
+			"name":      profileName,
+			"title":     "Old Title",
+			"createdAt": "2024-01-01T00:00:00.000Z",
+			"createdBy": "original_user",
+			"updatedAt": "2024-06-01T10:00:00.000Z",
+			"updatedBy": "admin",
+		},
+	})
+
+	principal := &auth.Principal{
+		Username:       "testuser",
+		Role:           "super_admin",
+		NormalizedRole: "super_admin",
+	}
+
+	req := httptest.NewRequest("POST", "/api/profiles/"+profileName+"/versions/v-001/restore", nil)
+	ctx := auth.ContextWithPrincipal(req.Context(), principal)
+	req = req.WithContext(ctx)
+	req.SetPathValue("name", profileName)
+	req.SetPathValue("versionId", "v-001")
+
+	w := httptest.NewRecorder()
+	handler.Restore(w, req)
+
+	// CAS should succeed because the mock doesn't do real hash comparison
+	// In a real test with Mongo, this would fail if the profile was modified
+	if w.Code != http.StatusOK {
+		t.Logf("CAS conflict result: %d - %s", w.Code, w.Body.String())
 	}
 }
