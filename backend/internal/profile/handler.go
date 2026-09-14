@@ -869,7 +869,14 @@ func (h *Handler) executeDirectRestore(w http.ResponseWriter, r *http.Request, p
 	}
 	if assertion == nil {
 		// Source version or current profile drifted
-		_ = h.writeRestoreAudit(r.Context(), p, name, intent, nil, "PRECONDITION_CHANGED", false, nil)
+		if auditErr := h.writeRestoreAudit(r.Context(), p, name, intent, nil, "PRECONDITION_CHANGED", false, nil); auditErr != nil {
+			response.JSON(w, http.StatusServiceUnavailable, map[string]interface{}{
+				"error":     "Audit unavailable",
+				"code":      "AUDIT_UNAVAILABLE",
+				"committed": false,
+			})
+			return
+		}
 		response.Error(w, http.StatusConflict, "Profile was modified since loaded", "PROFILE_RESTORE_PRECONDITION_CHANGED")
 		return
 	}
@@ -878,13 +885,27 @@ func (h *Handler) executeDirectRestore(w http.ResponseWriter, r *http.Request, p
 	result, err := h.executeFrozenRestoreV2(r.Context(), p, name, intent)
 	if err != nil {
 		if err == ErrProfilePreconditionChanged {
-			_ = h.writeRestoreAudit(r.Context(), p, name, intent, nil, "PRECONDITION_CHANGED", false, err)
+			if auditErr := h.writeRestoreAudit(r.Context(), p, name, intent, nil, "PRECONDITION_CHANGED", false, err); auditErr != nil {
+				response.JSON(w, http.StatusServiceUnavailable, map[string]interface{}{
+					"error":     "Audit unavailable",
+					"code":      "AUDIT_UNAVAILABLE",
+					"committed": false,
+				})
+				return
+			}
 			response.Error(w, http.StatusConflict, "Profile was modified since loaded", "PROFILE_RESTORE_PRECONDITION_CHANGED")
 			return
 		}
 		// Check if it's a partial write error
 		if err == ErrRestorePartialWrite {
-			_ = h.writeRestoreAudit(r.Context(), p, name, intent, intent.EffectiveRestored, "PARTIAL_WRITE", true, err)
+			if auditErr := h.writeRestoreAudit(r.Context(), p, name, intent, intent.EffectiveRestored, "PARTIAL_WRITE", true, err); auditErr != nil {
+				response.JSON(w, http.StatusServiceUnavailable, map[string]interface{}{
+					"error":     "Audit unavailable",
+					"code":      "AUDIT_UNAVAILABLE",
+					"committed": true,
+				})
+				return
+			}
 			response.JSON(w, http.StatusInternalServerError, map[string]interface{}{
 				"error":     "Profile restored but version save failed",
 				"code":      "PROFILE_RESTORE_PARTIAL_WRITE",
@@ -893,7 +914,14 @@ func (h *Handler) executeDirectRestore(w http.ResponseWriter, r *http.Request, p
 			return
 		}
 		// Storage failure
-		_ = h.writeRestoreAudit(r.Context(), p, name, intent, nil, "FAILED_NO_MUTATION", false, err)
+		if auditErr := h.writeRestoreAudit(r.Context(), p, name, intent, nil, "FAILED_NO_MUTATION", false, err); auditErr != nil {
+			response.JSON(w, http.StatusServiceUnavailable, map[string]interface{}{
+				"error":     "Audit unavailable",
+				"code":      "AUDIT_UNAVAILABLE",
+				"committed": false,
+			})
+			return
+		}
 		response.JSON(w, http.StatusInternalServerError, map[string]interface{}{
 			"error":     "Profile restore failed",
 			"code":      "PROFILE_RESTORE_FAILED",

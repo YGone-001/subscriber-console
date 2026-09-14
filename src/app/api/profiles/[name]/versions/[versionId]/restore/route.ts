@@ -75,16 +75,24 @@ export async function POST(
     // Direct execution for super_admin/root/ops_admin
     const assertion = await assertFrozenRestoreV2(intent);
     if (!assertion) {
-      await writeRestoreAudit(
-        intent,
-        null,
-        null,
-        { username: auth.auth.user, role: auth.auth.role },
-        'failed',
-        'PRECONDITION_CHANGED',
-        false,
-        'DIRECT_GOVERNED'
-      );
+      // Source version or current profile drifted
+      try {
+        await writeRestoreAudit(
+          intent,
+          null,
+          null,
+          { username: auth.auth.user, role: auth.auth.role },
+          'failed',
+          'PRECONDITION_CHANGED',
+          false,
+          'DIRECT_GOVERNED'
+        );
+      } catch {
+        return NextResponse.json(
+          { error: 'Audit unavailable', code: 'AUDIT_UNAVAILABLE', committed: false },
+          { status: 503 }
+        );
+      }
       return NextResponse.json(
         { error: 'Profile was modified since loaded', code: 'PROFILE_RESTORE_PRECONDITION_CHANGED' },
         { status: 409 }
@@ -92,39 +100,105 @@ export async function POST(
     }
 
     // Execute frozen restore v2
-    const result = await executeFrozenRestoreV2(assertion, auth.auth.user);
+    let result;
+    try {
+      result = await executeFrozenRestoreV2(assertion, auth.auth.user);
+    } catch (error: unknown) {
+      const err = error as { code?: string; message?: string };
 
-    // Success - strict audit
-    await writeRestoreAudit(
-      intent,
-      assertion.currentProfile,
-      result.restored as Record<string, unknown>,
-      { username: auth.auth.user, role: auth.auth.role },
-      'success',
-      result.classification,
-      result.committed,
-      'DIRECT_GOVERNED'
-    );
+      if (err.code === 'PROFILE_RESTORE_PRECONDITION_CHANGED') {
+        try {
+          await writeRestoreAudit(
+            intent,
+            assertion.currentProfile,
+            null,
+            { username: auth.auth.user, role: auth.auth.role },
+            'failed',
+            'PRECONDITION_CHANGED',
+            false,
+            'DIRECT_GOVERNED'
+          );
+        } catch {
+          return NextResponse.json(
+            { error: 'Audit unavailable', code: 'AUDIT_UNAVAILABLE', committed: false },
+            { status: 503 }
+          );
+        }
+        return NextResponse.json(
+          { error: 'Profile was modified since loaded', code: 'PROFILE_RESTORE_PRECONDITION_CHANGED' },
+          { status: 409 }
+        );
+      }
 
-    return NextResponse.json({ message: 'Profile restored successfully', profile: result.restored });
-  } catch (error: unknown) {
-    const err = error as { code?: string; message?: string };
+      if (err.code === 'PROFILE_RESTORE_PARTIAL_WRITE') {
+        try {
+          await writeRestoreAudit(
+            intent,
+            assertion.currentProfile,
+            null,
+            { username: auth.auth.user, role: auth.auth.role },
+            'failed',
+            'PARTIAL_WRITE',
+            true,
+            'DIRECT_GOVERNED'
+          );
+        } catch {
+          return NextResponse.json(
+            { error: 'Audit unavailable', code: 'AUDIT_UNAVAILABLE', committed: true },
+            { status: 503 }
+          );
+        }
+        return NextResponse.json(
+          { error: 'Profile restored but version save failed', code: 'PROFILE_RESTORE_PARTIAL_WRITE', committed: true },
+          { status: 500 }
+        );
+      }
 
-    // Handle specific error codes
-    if (err.code === 'PROFILE_RESTORE_PRECONDITION_CHANGED') {
+      // Storage failure
+      try {
+        await writeRestoreAudit(
+          intent,
+          assertion.currentProfile,
+          null,
+          { username: auth.auth.user, role: auth.auth.role },
+          'failed',
+          'FAILED_NO_MUTATION',
+          false,
+          'DIRECT_GOVERNED'
+        );
+      } catch {
+        return NextResponse.json(
+          { error: 'Audit unavailable', code: 'AUDIT_UNAVAILABLE', committed: false },
+          { status: 503 }
+        );
+      }
       return NextResponse.json(
-        { error: 'Profile was modified since loaded', code: 'PROFILE_RESTORE_PRECONDITION_CHANGED' },
-        { status: 409 }
-      );
-    }
-
-    if (err.code === 'PROFILE_RESTORE_PARTIAL_WRITE') {
-      return NextResponse.json(
-        { error: 'Profile restored but version save failed', code: 'PROFILE_RESTORE_PARTIAL_WRITE', committed: true },
+        { error: 'Profile restore failed', code: 'PROFILE_RESTORE_FAILED', committed: false },
         { status: 500 }
       );
     }
 
+    // Success - strict audit
+    try {
+      await writeRestoreAudit(
+        intent,
+        assertion.currentProfile,
+        result.restored as Record<string, unknown>,
+        { username: auth.auth.user, role: auth.auth.role },
+        'success',
+        result.classification,
+        result.committed,
+        'DIRECT_GOVERNED'
+      );
+    } catch {
+      return NextResponse.json(
+        { error: 'Audit unavailable', code: 'AUDIT_UNAVAILABLE', committed: true },
+        { status: 503 }
+      );
+    }
+
+    return NextResponse.json({ message: 'Profile restored successfully', profile: result.restored });
+  } catch (error: unknown) {
     console.error('Error restoring profile version:', error);
     return NextResponse.json(
       { error: 'Profile restore failed', code: 'PROFILE_RESTORE_FAILED', committed: false },

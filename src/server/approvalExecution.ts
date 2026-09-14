@@ -296,30 +296,78 @@ const defaultExecutor: GovernedApprovalExecutor = {
           operationFingerprint: String(payload.operationFingerprint || ''),
         };
 
+        // Validate actor — required for v2 privileged execution
+        if (!actor?.username || !actor?.role) {
+          throw new ApprovalExecutionError('PROFILE_RESTORE_FAILED', 500, approval, false, new Error('Validated execution actor required'));
+        }
+        const executorUsername = actor.username;
+        const executorRole = actor.role;
+
         // Assert frozen v2 (re-read and verify)
         let assertion;
         try {
           assertion = await assertFrozenRestoreV2(intent);
         } catch (error) {
+          // Assert read storage failure
+          try {
+            await writeRestoreAudit(
+              intent,
+              null,
+              null,
+              { username: executorUsername, role: executorRole },
+              'failed',
+              'FAILED_NO_MUTATION',
+              false,
+              'APPROVAL_GOVERNED'
+            );
+          } catch {
+            throw new ApprovalExecutionError('AUDIT_UNAVAILABLE', 503, approval, false);
+          }
           throw new ApprovalExecutionError('PROFILE_RESTORE_FAILED', 500, approval, false, error);
         }
         if (!assertion) {
+          // Assert drift — precondition changed
+          try {
+            await writeRestoreAudit(
+              intent,
+              null,
+              null,
+              { username: executorUsername, role: executorRole },
+              'failed',
+              'PRECONDITION_CHANGED',
+              false,
+              'APPROVAL_GOVERNED'
+            );
+          } catch {
+            throw new ApprovalExecutionError('AUDIT_UNAVAILABLE', 503, approval, false);
+          }
           throw new ApprovalExecutionError('PROFILE_RESTORE_PRECONDITION_CHANGED', 409, approval, false);
         }
 
-        // Execute frozen restore v2 using validated actor
-        const executorUsername = actor?.username || approval.requester;
-        const executorRole = actor?.role || 'unknown';
+        // Execute frozen restore v2
         let result;
         try {
           result = await executeFrozenRestoreV2(assertion, executorUsername);
         } catch (error: unknown) {
           const err = error as { code?: string };
           if (err.code === 'PROFILE_RESTORE_PRECONDITION_CHANGED') {
+            try {
+              await writeRestoreAudit(
+                intent,
+                assertion.currentProfile,
+                null,
+                { username: executorUsername, role: executorRole },
+                'failed',
+                'PRECONDITION_CHANGED',
+                false,
+                'APPROVAL_GOVERNED'
+              );
+            } catch {
+              throw new ApprovalExecutionError('AUDIT_UNAVAILABLE', 503, approval, false);
+            }
             throw new ApprovalExecutionError('PROFILE_RESTORE_PRECONDITION_CHANGED', 409, approval, false);
           }
           if (err.code === 'PROFILE_RESTORE_PARTIAL_WRITE') {
-            // Try audit before throwing
             try {
               await writeRestoreAudit(
                 intent,
