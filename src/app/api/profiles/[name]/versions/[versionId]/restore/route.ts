@@ -9,18 +9,50 @@ import {
   executeFrozenRestoreV2,
   writeRestoreAudit,
 } from '@/server/profileRestoreGovernance';
+import type { RestoreIntent } from '@/server/profileRestoreGovernance';
 
 export const dynamic = 'force-dynamic';
 
-export async function POST(
+/**
+ * Dependencies for profile restore route — injectable for testing.
+ * All fields default to production implementations.
+ */
+export interface ProfileRestoreRouteDeps {
+  prepareFrozenRestoreV2: typeof prepareFrozenRestoreV2;
+  assertFrozenRestoreV2: typeof assertFrozenRestoreV2;
+  executeFrozenRestoreV2: typeof executeFrozenRestoreV2;
+  writeRestoreAudit: typeof writeRestoreAudit;
+  createApprovalRequest: typeof createApprovalRequest;
+  enforceRateLimit: typeof enforceRateLimit;
+  requireCapability: typeof requireCapability;
+  capabilityDecision: typeof capabilityDecision;
+}
+
+const productionDeps: ProfileRestoreRouteDeps = {
+  prepareFrozenRestoreV2,
+  assertFrozenRestoreV2,
+  executeFrozenRestoreV2,
+  writeRestoreAudit,
+  createApprovalRequest,
+  enforceRateLimit,
+  requireCapability,
+  capabilityDecision,
+};
+
+/**
+ * Core handler logic — called by both POST() and tests.
+ * All external dependencies are injected via `deps`.
+ */
+export async function handleProfileRestorePost(
   request: Request,
-  { params }: { params: Promise<{ name: string; versionId: string }> }
-) {
-  const { name, versionId } = await params;
-  const auth = requireCapability(request, 'profile_rollback', { allowApproval: true });
+  params: { name: string; versionId: string },
+  deps: ProfileRestoreRouteDeps = productionDeps
+): Promise<Response> {
+  const { name, versionId } = params;
+  const auth = deps.requireCapability(request, 'profile_rollback', { allowApproval: true });
   if (!auth.ok) return auth.response;
 
-  const rateLimit = await enforceRateLimit(`profiles:restore:${auth.auth.user}`, 10, 60);
+  const rateLimit = await deps.enforceRateLimit(`profiles:restore:${auth.auth.user}`, 10, 60);
   if (!rateLimit.ok) return rateLimit.response;
 
   if (!/^[a-zA-Z0-9_\s-]+$/.test(name)) {
@@ -29,14 +61,14 @@ export async function POST(
 
   try {
     // Prepare frozen v2 intent
-    const intent = await prepareFrozenRestoreV2(name, versionId, auth.auth.user);
+    const intent = await deps.prepareFrozenRestoreV2(name, versionId, auth.auth.user);
     if (!intent) {
       return NextResponse.json({ error: 'Version not found' }, { status: 404 });
     }
 
     // Check if approval required (operator)
-    if (capabilityDecision(auth.auth.role, 'profile_rollback') === 'approval') {
-      const approval = await createApprovalRequest({
+    if (deps.capabilityDecision(auth.auth.role, 'profile_rollback') === 'approval') {
+      const approval = await deps.createApprovalRequest({
         action: 'PROFILE_RESTORE',
         requester: auth.auth.user,
         targetId: `profile:${name}`,
@@ -55,7 +87,7 @@ export async function POST(
       });
 
       // Audit approval creation
-      await writeRestoreAudit(
+      await deps.writeRestoreAudit(
         intent,
         null,
         null,
@@ -73,11 +105,11 @@ export async function POST(
     }
 
     // Direct execution for super_admin/root/ops_admin
-    const assertion = await assertFrozenRestoreV2(intent);
+    const assertion = await deps.assertFrozenRestoreV2(intent);
     if (!assertion) {
       // Source version or current profile drifted
       try {
-        await writeRestoreAudit(
+        await deps.writeRestoreAudit(
           intent,
           null,
           null,
@@ -102,13 +134,13 @@ export async function POST(
     // Execute frozen restore v2
     let result;
     try {
-      result = await executeFrozenRestoreV2(assertion, auth.auth.user);
+      result = await deps.executeFrozenRestoreV2(assertion, auth.auth.user);
     } catch (error: unknown) {
       const err = error as { code?: string; message?: string };
 
       if (err.code === 'PROFILE_RESTORE_PRECONDITION_CHANGED') {
         try {
-          await writeRestoreAudit(
+          await deps.writeRestoreAudit(
             intent,
             assertion.currentProfile,
             null,
@@ -132,7 +164,7 @@ export async function POST(
 
       if (err.code === 'PROFILE_RESTORE_PARTIAL_WRITE') {
         try {
-          await writeRestoreAudit(
+          await deps.writeRestoreAudit(
             intent,
             assertion.currentProfile,
             null,
@@ -156,7 +188,7 @@ export async function POST(
 
       // Storage failure
       try {
-        await writeRestoreAudit(
+        await deps.writeRestoreAudit(
           intent,
           assertion.currentProfile,
           null,
@@ -180,7 +212,7 @@ export async function POST(
 
     // Success - strict audit
     try {
-      await writeRestoreAudit(
+      await deps.writeRestoreAudit(
         intent,
         assertion.currentProfile,
         result.restored as Record<string, unknown>,
@@ -205,4 +237,12 @@ export async function POST(
       { status: 500 }
     );
   }
+}
+
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ name: string; versionId: string }> }
+) {
+  const resolved = await params;
+  return handleProfileRestorePost(request, resolved);
 }
