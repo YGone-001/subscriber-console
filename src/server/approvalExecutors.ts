@@ -190,57 +190,9 @@ export async function executeApproval(approval: ApprovalDocument, request: Reque
   }
 
   if (approval.action === 'PROFILE_RESTORE') {
+    // LEGACY V1 ONLY — DO NOT USE FOR profile-restore-v2
+    // v2 is handled by the governed executor in approvalExecution.ts
     const payload = asRecord(approval.payload);
-
-    // v2 frozen intent — use shared governed executor
-    if (payload.version === 'profile-restore-v2') {
-      const { assertFrozenRestoreV2, executeFrozenRestoreV2, writeRestoreAudit } = await import('@/server/profileRestoreGovernance');
-
-      const name = String(payload.name || '');
-      const versionId = String(payload.versionId || '');
-      if (!/^[a-zA-Z0-9_\s-]+$/.test(name)) throw new Error('Invalid profile name format');
-      if (!versionId) throw new Error('versionId is required');
-
-      // Reconstruct intent from frozen payload
-      const intent = {
-        version: 'profile-restore-v2' as const,
-        profileName: name,
-        versionId,
-        sourceVersionHash: String(payload.sourceVersionHash || ''),
-        currentState: (payload.currentState as 'present' | 'absent') || 'absent',
-        currentProfileHash: payload.currentProfileHash as string | null,
-        effectiveRestoredHash: String(payload.effectiveRestoredHash || ''),
-        operationFingerprint: String(payload.operationFingerprint || ''),
-      };
-
-      // Assert frozen v2 (re-read and verify)
-      const assertion = await assertFrozenRestoreV2(intent);
-      if (!assertion) {
-        throw Object.assign(new Error('Profile was modified since loaded'), {
-          code: 'PROFILE_RESTORE_PRECONDITION_CHANGED',
-        });
-      }
-
-      // Execute frozen restore v2
-      const executor = String(request?.headers?.get('x-username') || approval.requester);
-      const result = await executeFrozenRestoreV2(assertion, executor);
-
-      // Strict audit
-      await writeRestoreAudit(
-        intent,
-        assertion.currentProfile,
-        result.restored as Record<string, unknown>,
-        { username: executor, role: 'approver' },
-        'success',
-        result.classification,
-        result.committed,
-        'APPROVAL_GOVERNED'
-      );
-
-      return { profile: result.restored, approvalId: approval.id };
-    }
-
-    // Legacy v1 — fallback to old implementation
     const name = String(payload.name || '');
     const versionId = String(payload.versionId || '');
     const requester = String(payload.requester || approval.requester);

@@ -869,7 +869,7 @@ func (h *Handler) executeDirectRestore(w http.ResponseWriter, r *http.Request, p
 	}
 	if assertion == nil {
 		// Source version or current profile drifted
-		h.writeStrictAudit(r.Context(), "PROFILE_RESTORE", "profile", name, p.Username, p.NormalizedRole, nil, nil, "failed", "PRECONDITION_CHANGED", false, nil)
+		_ = h.writeRestoreAudit(r.Context(), p, name, intent, nil, "PRECONDITION_CHANGED", false, nil)
 		response.Error(w, http.StatusConflict, "Profile was modified since loaded", "PROFILE_RESTORE_PRECONDITION_CHANGED")
 		return
 	}
@@ -878,13 +878,13 @@ func (h *Handler) executeDirectRestore(w http.ResponseWriter, r *http.Request, p
 	result, err := h.executeFrozenRestoreV2(r.Context(), p, name, intent)
 	if err != nil {
 		if err == ErrProfilePreconditionChanged {
-			h.writeStrictAudit(r.Context(), "PROFILE_RESTORE", "profile", name, p.Username, p.NormalizedRole, intent.CurrentProfile, nil, "failed", "PRECONDITION_CHANGED", false, err)
+			_ = h.writeRestoreAudit(r.Context(), p, name, intent, nil, "PRECONDITION_CHANGED", false, err)
 			response.Error(w, http.StatusConflict, "Profile was modified since loaded", "PROFILE_RESTORE_PRECONDITION_CHANGED")
 			return
 		}
 		// Check if it's a partial write error
 		if err == ErrRestorePartialWrite {
-			h.writeStrictAudit(r.Context(), "PROFILE_RESTORE", "profile", name, p.Username, p.NormalizedRole, intent.CurrentProfile, intent.EffectiveRestored, "failed", "PARTIAL_WRITE", true, err)
+			_ = h.writeRestoreAudit(r.Context(), p, name, intent, intent.EffectiveRestored, "PARTIAL_WRITE", true, err)
 			response.JSON(w, http.StatusInternalServerError, map[string]interface{}{
 				"error":     "Profile restored but version save failed",
 				"code":      "PROFILE_RESTORE_PARTIAL_WRITE",
@@ -893,7 +893,7 @@ func (h *Handler) executeDirectRestore(w http.ResponseWriter, r *http.Request, p
 			return
 		}
 		// Storage failure
-		h.writeStrictAudit(r.Context(), "PROFILE_RESTORE", "profile", name, p.Username, p.NormalizedRole, intent.CurrentProfile, nil, "failed", "FAILED_NO_MUTATION", false, err)
+		_ = h.writeRestoreAudit(r.Context(), p, name, intent, nil, "FAILED_NO_MUTATION", false, err)
 		response.JSON(w, http.StatusInternalServerError, map[string]interface{}{
 			"error":     "Profile restore failed",
 			"code":      "PROFILE_RESTORE_FAILED",
@@ -1115,6 +1115,18 @@ func (h *Handler) writeRestoreAudit(ctx context.Context, p *auth.Principal, name
 		governanceMode = "APPROVAL_GOVERNED"
 	}
 
+	result := "success"
+	level := "info"
+	if classification == "APPROVAL_GOVERNED" {
+		result = "approval_governed"
+	} else if classification == "PRECONDITION_CHANGED" || classification == "FAILED_NO_MUTATION" {
+		result = "failed"
+		level = "error"
+	} else if classification == "PARTIAL_WRITE" {
+		result = "partial_write"
+		level = "warn"
+	}
+
 	input := audit.WriteAuditInput{
 		Action: "PROFILE_RESTORE",
 		Module: "profiles",
@@ -1127,8 +1139,8 @@ func (h *Handler) writeRestoreAudit(ctx context.Context, p *auth.Principal, name
 			Type: "profile",
 			Name: name,
 		},
-		Result: "success",
-		Level:  "info",
+		Result: result,
+		Level:  level,
 		Metadata: map[string]interface{}{
 			"governanceMode":       governanceMode,
 			"approvalRequired":     p.NormalizedRole == "operator",
@@ -1213,7 +1225,8 @@ func removeField(doc interface{}, field string) interface{} {
 }
 
 // buildEffectiveRestoredProfile builds the effective restored profile from version and current.
-func buildEffectiveRestoredProfile(current bson.M, versionDoc bson.M, name, actor string) bson.M {
+// Uses deterministic clock for test parity when provided.
+func buildEffectiveRestoredProfile(current bson.M, versionDoc bson.M, name, actor string, clock ...time.Time) bson.M {
 	versionProfile, _ := versionDoc["profile"].(bson.M)
 	if versionProfile == nil {
 		versionProfile = bson.M{}
@@ -1235,13 +1248,21 @@ func buildEffectiveRestoredProfile(current bson.M, versionDoc bson.M, name, acto
 		restored["title"] = name
 	}
 
-	now := time.Now().UTC()
+	var now time.Time
+	if len(clock) > 0 {
+		now = clock[0]
+	} else {
+		now = time.Now().UTC()
+	}
+	// Format as ISO string with milliseconds to match Node behavior
+	nowISO := now.Format("2006-01-02T15:04:05.000Z")
+
 	if versionProfile["createdAt"] != nil {
 		restored["createdAt"] = versionProfile["createdAt"]
 	} else if current != nil && current["createdAt"] != nil {
 		restored["createdAt"] = current["createdAt"]
 	} else {
-		restored["createdAt"] = now
+		restored["createdAt"] = nowISO
 	}
 
 	if versionProfile["createdBy"] != nil {
@@ -1252,7 +1273,7 @@ func buildEffectiveRestoredProfile(current bson.M, versionDoc bson.M, name, acto
 		restored["createdBy"] = actor
 	}
 
-	restored["updatedAt"] = now
+	restored["updatedAt"] = nowISO
 	restored["updatedBy"] = actor
 	restored["restoredFromVersionId"] = versionDoc["versionId"]
 	restored["restoredFromSavedAt"] = versionDoc["savedAt"]

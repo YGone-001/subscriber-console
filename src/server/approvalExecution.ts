@@ -273,6 +273,109 @@ const defaultExecutor: GovernedApprovalExecutor = {
       }
       return result;
     }
+    // Profile Restore v2 — dedicated governed executor
+    if (approval.action === 'PROFILE_RESTORE') {
+      const payload = approval.payload as Record<string, unknown> | undefined;
+      if (payload && payload.version === 'profile-restore-v2') {
+        const { assertFrozenRestoreV2, executeFrozenRestoreV2, writeRestoreAudit } = await import('@/server/profileRestoreGovernance');
+
+        const name = String(payload.name || '');
+        const versionId = String(payload.versionId || '');
+        if (!/^[a-zA-Z0-9_\s-]+$/.test(name)) throw new Error('Invalid profile name format');
+        if (!versionId) throw new Error('versionId is required');
+
+        // Reconstruct intent from frozen payload
+        const intent = {
+          version: 'profile-restore-v2' as const,
+          profileName: name,
+          versionId,
+          sourceVersionHash: String(payload.sourceVersionHash || ''),
+          currentState: (payload.currentState as 'present' | 'absent') || 'absent',
+          currentProfileHash: payload.currentProfileHash as string | null,
+          effectiveRestoredHash: String(payload.effectiveRestoredHash || ''),
+          operationFingerprint: String(payload.operationFingerprint || ''),
+        };
+
+        // Assert frozen v2 (re-read and verify)
+        let assertion;
+        try {
+          assertion = await assertFrozenRestoreV2(intent);
+        } catch (error) {
+          throw new ApprovalExecutionError('PROFILE_RESTORE_FAILED', 500, approval, false, error);
+        }
+        if (!assertion) {
+          throw new ApprovalExecutionError('PROFILE_RESTORE_PRECONDITION_CHANGED', 409, approval, false);
+        }
+
+        // Execute frozen restore v2 using validated actor
+        const executorUsername = actor?.username || approval.requester;
+        const executorRole = actor?.role || 'unknown';
+        let result;
+        try {
+          result = await executeFrozenRestoreV2(assertion, executorUsername);
+        } catch (error: unknown) {
+          const err = error as { code?: string };
+          if (err.code === 'PROFILE_RESTORE_PRECONDITION_CHANGED') {
+            throw new ApprovalExecutionError('PROFILE_RESTORE_PRECONDITION_CHANGED', 409, approval, false);
+          }
+          if (err.code === 'PROFILE_RESTORE_PARTIAL_WRITE') {
+            // Try audit before throwing
+            try {
+              await writeRestoreAudit(
+                intent,
+                assertion.currentProfile,
+                null,
+                { username: executorUsername, role: executorRole },
+                'failed',
+                'PARTIAL_WRITE',
+                true,
+                'APPROVAL_GOVERNED'
+              );
+            } catch {
+              throw new ApprovalExecutionError('AUDIT_UNAVAILABLE', 503, approval, true);
+            }
+            throw new ApprovalExecutionError('PROFILE_RESTORE_PARTIAL_WRITE', 500, approval, true);
+          }
+          // Storage failure
+          try {
+            await writeRestoreAudit(
+              intent,
+              assertion.currentProfile,
+              null,
+              { username: executorUsername, role: executorRole },
+              'failed',
+              'FAILED_NO_MUTATION',
+              false,
+              'APPROVAL_GOVERNED'
+            );
+          } catch {
+            throw new ApprovalExecutionError('AUDIT_UNAVAILABLE', 503, approval, false);
+          }
+          throw new ApprovalExecutionError('PROFILE_RESTORE_FAILED', 500, approval, false);
+        }
+
+        // Success - strict audit
+        try {
+          await writeRestoreAudit(
+            intent,
+            assertion.currentProfile,
+            result.restored as Record<string, unknown>,
+            { username: executorUsername, role: executorRole },
+            'success',
+            result.classification,
+            result.committed,
+            'APPROVAL_GOVERNED'
+          );
+        } catch {
+          throw new ApprovalExecutionError('AUDIT_UNAVAILABLE', 503, approval, true);
+        }
+
+        return { profile: result.restored, approvalId: approval.id };
+      }
+      // Legacy v1 — fallback to old implementation
+      return executeApproval(approval, request);
+    }
+
     // Legacy subscriber provisioning, import and bulk-delete actions remain
     // executable while their routes are migrated to frozen payloads.  A CHG
     // must never be creatable merely because this switch forgot its executor.

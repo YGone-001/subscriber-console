@@ -3,6 +3,8 @@
  *
  * Used by both direct restore route and approval execution.
  * Implements: prepare → assert → execute → classify → strict audit.
+ *
+ * DO NOT call legacy restoreProfileVersion() for profile-restore-v2.
  */
 
 import { createHash } from 'crypto';
@@ -11,8 +13,12 @@ import { safeProfileSnapshot } from '@/lib/profileAudit';
 import {
   getProfile,
   getProfileVersion,
-  restoreProfileVersion,
+  replaceProfileCAS,
+  insertProfileCreateOnly,
+  saveProfileVersion,
+  stripSubscriberIdentityFields,
 } from '@/server/repositories/profileRepository';
+import type { ProfileDocument } from '@/server/repositories/profileRepository';
 
 export interface RestoreIntent {
   version: 'profile-restore-v2';
@@ -27,27 +33,51 @@ export interface RestoreIntent {
 
 export interface RestoreAssertion {
   intent: RestoreIntent;
-  currentProfile: Record<string, unknown> | null;
+  currentProfile: ProfileDocument | null;
   versionDoc: Record<string, unknown>;
-  effectiveRestored: Record<string, unknown>;
+  effectiveRestored: ProfileDocument;
 }
 
 /**
- * Compute SHA256 of stable JSON of a profile (excluding _id).
+ * Recursive canonical JSON serializer.
+ * Keys are sorted recursively at every level.
+ * Arrays preserve order.
+ * All nested values are preserved.
  */
-function computeProfileHash(profile: unknown): string {
+export function stableCanonicalJSON(value: unknown): string {
+  if (value === null || value === undefined) {
+    return JSON.stringify(value);
+  }
+  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'string') {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    const items = value.map(item => stableCanonicalJSON(item));
+    return `[${items.join(',')}]`;
+  }
+  if (typeof value === 'object') {
+    const obj = value as Record<string, unknown>;
+    const keys = Object.keys(obj).sort();
+    const entries = keys.map(k => `${JSON.stringify(k)}:${stableCanonicalJSON(obj[k])}`);
+    return `{${entries.join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+/**
+ * Compute SHA256 of stable canonical JSON of a profile (excluding _id).
+ */
+export function computeProfileHash(profile: unknown): string {
   if (!profile) return '';
   const cleaned = removeField(profile, '_id');
-  const data = JSON.stringify(cleaned, Object.keys(cleaned as Record<string, unknown>).sort());
-  return createHash('sha256').update(data).digest('hex');
+  return createHash('sha256').update(stableCanonicalJSON(cleaned)).digest('hex');
 }
 
 /**
- * Compute SHA256 of stable JSON of the operation.
+ * Compute SHA256 of stable canonical JSON of the operation.
  */
-function computeOperationFingerprint(data: Record<string, unknown>): string {
-  const dataStr = JSON.stringify(data, Object.keys(data).sort());
-  return createHash('sha256').update(dataStr).digest('hex');
+export function computeOperationFingerprint(data: Record<string, unknown>): string {
+  return createHash('sha256').update(stableCanonicalJSON(data)).digest('hex');
 }
 
 /**
@@ -143,7 +173,7 @@ export async function assertFrozenRestoreV2(
 
   return {
     intent,
-    currentProfile: current as Record<string, unknown> | null,
+    currentProfile: current,
     versionDoc: version as unknown as Record<string, unknown>,
     effectiveRestored,
   };
@@ -151,6 +181,8 @@ export async function assertFrozenRestoreV2(
 
 /**
  * Execute frozen restore v2.
+ * Uses proper CAS/InsertOne primitives — NOT legacy restoreProfileVersion.
+ *
  * Returns the restored profile document.
  * Throws on CAS conflict or storage failure.
  */
@@ -158,26 +190,57 @@ export async function executeFrozenRestoreV2(
   assertion: RestoreAssertion,
   actor: string
 ): Promise<{
-  restored: Record<string, unknown>;
+  restored: ProfileDocument;
   classification: string;
   committed: boolean;
 }> {
   const { intent, currentProfile, versionDoc } = assertion;
 
-  // Use the existing restoreProfileVersion function which handles:
-  // - Loading the version
-  // - Saving RESTORE version
-  // - Replacing/inserting the profile
-  const result = await restoreProfileVersion(intent.profileName, intent.versionId, actor);
+  // Build effective restored with correct actor
+  const effectiveRestored = buildEffectiveRestoredProfile(
+    currentProfile,
+    versionDoc,
+    intent.profileName,
+    actor
+  );
 
-  if (!result) {
-    throw Object.assign(new Error('Version not found'), {
-      code: 'PROFILE_RESTORE_FAILED',
-    });
+  if (intent.currentState === 'present') {
+    // CAS replace for existing profile
+    const matched = await replaceProfileCAS(
+      intent.profileName,
+      currentProfile!,
+      effectiveRestored
+    );
+    if (!matched) {
+      throw Object.assign(new Error('PROFILE_RESTORE_PRECONDITION_CHANGED'), {
+        code: 'PROFILE_RESTORE_PRECONDITION_CHANGED',
+      });
+    }
+  } else {
+    // Insert for missing profile (no upsert)
+    const inserted = await insertProfileCreateOnly(effectiveRestored);
+    if (!inserted) {
+      // Concurrent creator won
+      throw Object.assign(new Error('PROFILE_RESTORE_PRECONDITION_CHANGED'), {
+        code: 'PROFILE_RESTORE_PRECONDITION_CHANGED',
+      });
+    }
+  }
+
+  // Save RESTORE version AFTER mutation (only if current profile existed)
+  if (currentProfile) {
+    try {
+      await saveProfileVersion(intent.profileName, currentProfile, actor, 'RESTORE');
+    } catch {
+      // Partial write - profile was restored but version save failed
+      throw Object.assign(new Error('Profile restored but version save failed'), {
+        code: 'PROFILE_RESTORE_PARTIAL_WRITE',
+      });
+    }
   }
 
   return {
-    restored: result.restored as unknown as Record<string, unknown>,
+    restored: effectiveRestored,
     classification: 'SUCCESS',
     committed: true,
   };
@@ -225,19 +288,21 @@ export async function writeRestoreAudit(
 
 /**
  * Build effective restored profile from version and current.
+ * Uses deterministic clock for test parity when provided.
  */
-function buildEffectiveRestoredProfile(
+export function buildEffectiveRestoredProfile(
   current: Record<string, unknown> | null,
   versionDoc: Record<string, unknown>,
   profileName: string,
-  actor: string
-): Record<string, unknown> {
+  actor: string,
+  clock?: () => string
+): ProfileDocument {
   const versionProfile = (versionDoc.profile as Record<string, unknown>) || {};
 
   // Strip subscriber identity fields
   const stripped = stripSubscriberIdentityFields(versionProfile);
 
-  const now = new Date().toISOString();
+  const now = clock ? clock() : new Date().toISOString();
 
   return {
     ...stripped,
@@ -249,28 +314,5 @@ function buildEffectiveRestoredProfile(
     updatedBy: actor,
     restoredFromVersionId: versionDoc.versionId,
     restoredFromSavedAt: versionDoc.savedAt,
-  };
-}
-
-/**
- * Strip subscriber identity fields from a profile.
- */
-function stripSubscriberIdentityFields(doc: Record<string, unknown>): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(doc)) {
-    if (k === 'imsi' || k === 'msisdn' || k === 'msisdnList') continue;
-    result[k] = v;
-  }
-  return result;
-}
-
-/**
- * Check if error is a duplicate key error.
- */
-function isDuplicateKey(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    (error.message.includes('duplicate key') ||
-      error.message.includes('E11000'))
-  );
+  } as ProfileDocument;
 }

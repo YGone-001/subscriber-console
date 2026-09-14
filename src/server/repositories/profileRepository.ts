@@ -217,7 +217,7 @@ export function defaultProfile(name: string, user: string): ProfileDocument {
   };
 }
 
-function stripSubscriberIdentityFields<T extends Record<string, unknown>>(profile: T): T {
+export function stripSubscriberIdentityFields<T extends Record<string, unknown>>(profile: T): T {
   const rest = { ...profile };
   delete rest.msisdnList;
   delete rest.msisdn;
@@ -696,6 +696,11 @@ export function summarizeProfileVersion(record: ProfileVersionRecord): ProfileVe
   return summary as ProfileVersionSummary;
 }
 
+/**
+ * LEGACY V1 ONLY — DO NOT USE FOR profile-restore-v2
+ * This function uses upsert which is not CAS-safe.
+ * Kept only for historical non-v2 approval payloads.
+ */
 export async function restoreProfileVersion(name: string, versionId: string, user: string) {
   const version = await getProfileVersion(name, versionId);
   if (!version) return null;
@@ -720,4 +725,52 @@ export async function restoreProfileVersion(name: string, versionId: string, use
 
   await collection.replaceOne({ name }, restored, { upsert: true });
   return { version, current, restored };
+}
+
+/**
+ * CAS replace for existing profile.
+ * Returns true if matched and replaced, false if no match (CAS conflict).
+ * Throws on storage failure.
+ */
+export async function replaceProfileCAS(
+  name: string,
+  expected: ProfileDocument,
+  restored: ProfileDocument
+): Promise<boolean> {
+  const collection = await profilesCollection();
+  const expectedSanitized = stripSubscriberIdentityFields(expected) as ProfileDocument;
+  const restoredSanitized = stripSubscriberIdentityFields(restored) as ProfileDocument;
+
+  try {
+    const result = await collection.replaceOne(expectedSanitized, restoredSanitized);
+    return result.matchedCount > 0;
+  } catch (error) {
+    const storageError = new Error('PROFILE_RESTORE_FAILED');
+    (storageError as unknown as { code?: string }).code = 'PROFILE_RESTORE_FAILED';
+    throw storageError;
+  }
+}
+
+/**
+ * Insert for missing profile (no upsert).
+ * Returns true if inserted, false if duplicate key (concurrent creator).
+ * Throws on other storage failures.
+ */
+export async function insertProfileCreateOnly(
+  restored: ProfileDocument
+): Promise<boolean> {
+  const collection = await profilesCollection();
+  const restoredSanitized = stripSubscriberIdentityFields(restored) as ProfileDocument;
+
+  try {
+    await collection.insertOne(restoredSanitized);
+    return true;
+  } catch (error) {
+    if (isDuplicateKey(error)) {
+      return false; // Concurrent creator won
+    }
+    const storageError = new Error('PROFILE_RESTORE_FAILED');
+    (storageError as unknown as { code?: string }).code = 'PROFILE_RESTORE_FAILED';
+    throw storageError;
+  }
 }

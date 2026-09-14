@@ -6,9 +6,19 @@ import (
 	"encoding/json"
 	"sort"
 	"testing"
+	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
+
+// ─── Test helpers ───
+
+func assertEqual(t *testing.T, name, got, want string) {
+	t.Helper()
+	if got != want {
+		t.Errorf("%s: expected %s, got %s", name, want, got)
+	}
+}
 
 // ─── Stable JSON for cross-runtime fingerprint ───
 
@@ -403,44 +413,20 @@ func validateRestoreResponse(t *testing.T, resp bson.M, user string) {
 func TestRestoreFingerprintParity(t *testing.T) {
 	// Compute sourceVersionHash from version doc
 	sourceVersionHash := fingerprint(RestoreVersionDoc["profile"])
-	t.Logf("sourceVersionHash: %s", sourceVersionHash)
+	assertEqual(t, "sourceVersionHash", sourceVersionHash, "3f33fcbbdf86b5b6e7385bfdd2e410e94f6da04cf126dd1163234c9c76a0bf60")
 
 	// Compute currentProfileHash
 	currentProfileHash := fingerprint(RestoreCurrentProfile)
-	t.Logf("currentProfileHash: %s", currentProfileHash)
+	assertEqual(t, "currentProfileHash", currentProfileHash, "270d5f1afbe0d64e7ec3ed6df3f7cf6d56eb9867111987cc7be878751de2ba01")
 
-	// Build effective restored profile (simulating what the handler does)
-	restored := bson.M{
-		"name":        "fixture_restore",
-		"title":       "Old Title",
-		"description": "Old description",
-		"auth": bson.M{
-			"k":   "00000000000000000000000000000001",
-			"opc": "00000000000000000000000000000002",
-			"amf": "8000",
-		},
-		"ambr": bson.M{
-			"downlink": bson.M{"unit": 2, "value": 10},
-			"uplink":   bson.M{"unit": 2, "value": 10},
-		},
-		"sliceList": bson.A{
-			bson.M{
-				"default_indicator": true,
-				"sd":                "000001",
-				"sst":               1,
-				"session_list":      bson.A{},
-			},
-		},
-		"createdAt":             "2024-01-01T00:00:00.000Z",
-		"createdBy":             "original_user",
-		"updatedAt":             "2024-06-01T10:00:00.000Z",
-		"updatedBy":             "admin",
-		"restoredFromVersionId": "v-001",
-		"restoredFromSavedAt":   "2024-06-01T10:00:00.000Z",
-	}
+	// Use deterministic clock for cross-runtime parity
+	deterministicClock := time.Date(2024, 6, 1, 10, 0, 0, 0, time.UTC)
+
+	// Build effective restored profile using actual production function
+	restored := buildEffectiveRestoredProfile(RestoreCurrentProfile, RestoreVersionDoc, "fixture_restore", "admin", deterministicClock)
 
 	effectiveRestoredHash := fingerprint(restored)
-	t.Logf("effectiveRestoredHash: %s", effectiveRestoredHash)
+	assertEqual(t, "effectiveRestoredHash", effectiveRestoredHash, "04d4d79798be9f7adb5242423a63cf4dbb8324a05beeea193e62dec9b87ba2cb")
 
 	// Compute operationFingerprint
 	opFp := fingerprint(map[string]any{
@@ -452,8 +438,5 @@ func TestRestoreFingerprintParity(t *testing.T) {
 		"currentProfileHash":    currentProfileHash,
 		"effectiveRestoredHash": effectiveRestoredHash,
 	})
-	t.Logf("operationFingerprint: %s", opFp)
-
-	// These fingerprints must match between Node and Go
-	// to ensure cross-runtime contract parity
+	assertEqual(t, "operationFingerprint", opFp, "b02a280c12c5f5e4f89f6199d62aa45f5406d7cd32104075cde61aafac1fd970")
 }
