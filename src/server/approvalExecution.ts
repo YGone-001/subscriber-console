@@ -192,6 +192,182 @@ export async function executeProfileRestoreV2Approval(
   return { profile: result.restored, approvalId: approval.id };
 }
 
+/**
+ * Subscriber Profile Apply v1 approval executor — extracted for testability.
+ * Called by defaultExecutor for SUBSCRIBER_PROFILE_APPLY with version=subscriber-profile-apply-v1.
+ *
+ * Dependencies are injectable for testing; defaults to production imports.
+ */
+export interface SubscriberProfileApplyDeps {
+  assertFrozen: (intent: import('@/server/subscriberProfileApplyGovernance').FrozenSubscriberProfileApplyV1) => Promise<import('@/server/subscriberProfileApplyGovernance').ProfileApplyAssertion | null>;
+  executeFrozen: (assertion: import('@/server/subscriberProfileApplyGovernance').ProfileApplyAssertion, actor: string, replaceCAS: (expected: import('@/types/xcloud').XcloudSubscriberDocument, replacement: import('@/types/xcloud').XcloudSubscriberDocument) => Promise<boolean>) => Promise<{ restored: import('@/types/xcloud').XcloudSubscriberDocument; classification: string; committed: boolean; securityChanged: boolean }>;
+  writeAudit: typeof writeAuditLog;
+  replaceSubscriberCAS: (expected: import('@/types/xcloud').XcloudSubscriberDocument, replacement: import('@/types/xcloud').XcloudSubscriberDocument) => Promise<boolean>;
+}
+
+const productionProfileApplyDeps: SubscriberProfileApplyDeps = {
+  assertFrozen: (intent) => import('@/server/subscriberProfileApplyGovernance').then(m => m.assertFrozenSubscriberProfileApply(intent)),
+  executeFrozen: (assertion, actor, replaceCAS) => import('@/server/subscriberProfileApplyGovernance').then(m => m.executeFrozenSubscriberProfileApply(assertion, actor, replaceCAS)),
+  writeAudit: (...args) => import('@/lib/audit').then(m => m.writeAuditLog(...args)),
+  replaceSubscriberCAS: (expected, replacement) => import('@/server/repositories/subscriberRepository').then(m => m.replaceSubscriberCAS(expected, replacement)),
+};
+
+export async function executeSubscriberProfileApplyApproval(
+  approval: ApprovalDocument,
+  actor: GovernanceActor,
+  deps: SubscriberProfileApplyDeps = productionProfileApplyDeps,
+): Promise<{ imsi: string; profileName: string; approvalId: string }> {
+  const payload = approval.payload as Record<string, unknown>;
+  const imsi = String(payload.imsi || '');
+  const profileName = String(payload.profileName || '');
+  if (!imsi || !profileName) {
+    throw new ApprovalExecutionError('SUBSCRIBER_PROFILE_APPLY_FAILED', 500, approval, false, new Error('Missing imsi or profileName'));
+  }
+
+  // Validate actor — required for v2 privileged execution
+  if (!actor?.username || !actor?.role) {
+    throw new ApprovalExecutionError('SUBSCRIBER_PROFILE_APPLY_FAILED', 500, approval, false, new Error('Validated execution actor required'));
+  }
+  const executorUsername = actor.username;
+  const executorRole = actor.role;
+
+  // Reconstruct intent from frozen payload
+  const intent = {
+    version: 'subscriber-profile-apply-v1' as const,
+    imsi,
+    profileName,
+    subscriberPreconditionHash: String(payload.subscriberPreconditionHash || ''),
+    profilePreconditionHash: String(payload.profilePreconditionHash || ''),
+    before: payload.before as import('@/lib/subscriberContract').SafeSnapshot,
+    afterPreview: payload.afterPreview as import('@/lib/subscriberContract').SafeSnapshot,
+    operationFingerprint: String(payload.operationFingerprint || ''),
+  };
+
+  // Assert frozen v1 (re-read and verify)
+  let assertion;
+  try {
+    assertion = await deps.assertFrozen(intent);
+  } catch (error) {
+    // Assert read storage failure
+    try {
+      await deps.writeAudit({
+        actor: { type: 'user', username: executorUsername, role: executorRole },
+        module: 'subscribers',
+        action: 'SUBSCRIBER_PROFILE_APPLY' as never,
+        targetId: imsi,
+        result: 'failed',
+        metadata: {
+          governanceMode: 'APPROVAL_GOVERNED',
+          classification: 'FAILED_NO_MUTATION',
+          mutationCommitted: false,
+          profileName,
+          actorRole: executorRole,
+        },
+      }, { failureMode: 'strict' });
+    } catch {
+      throw new ApprovalExecutionError('AUDIT_UNAVAILABLE', 503, approval, false);
+    }
+    throw new ApprovalExecutionError('SUBSCRIBER_PROFILE_APPLY_FAILED', 500, approval, false, error);
+  }
+  if (!assertion) {
+    // Drift — subscriber or profile changed
+    try {
+      await deps.writeAudit({
+        actor: { type: 'user', username: executorUsername, role: executorRole },
+        module: 'subscribers',
+        action: 'SUBSCRIBER_PROFILE_APPLY' as never,
+        targetId: imsi,
+        result: 'failed',
+        metadata: {
+          governanceMode: 'APPROVAL_GOVERNED',
+          classification: 'PRECONDITION_CHANGED',
+          mutationCommitted: false,
+          profileName,
+          actorRole: executorRole,
+        },
+      }, { failureMode: 'strict' });
+    } catch {
+      throw new ApprovalExecutionError('AUDIT_UNAVAILABLE', 503, approval, false);
+    }
+    throw new ApprovalExecutionError('SUBSCRIBER_PROFILE_APPLY_PRECONDITION_CHANGED', 409, approval, false);
+  }
+
+  // Execute frozen profile apply
+  let result;
+  try {
+    result = await deps.executeFrozen(assertion, executorUsername, deps.replaceSubscriberCAS);
+  } catch (error: unknown) {
+    const err = error as { code?: string };
+    if (err.code === 'SUBSCRIBER_PROFILE_APPLY_PRECONDITION_CHANGED') {
+      try {
+        await deps.writeAudit({
+          actor: { type: 'user', username: executorUsername, role: executorRole },
+          module: 'subscribers',
+          action: 'SUBSCRIBER_PROFILE_APPLY' as never,
+          targetId: imsi,
+          result: 'failed',
+          metadata: {
+            governanceMode: 'APPROVAL_GOVERNED',
+            classification: 'PRECONDITION_CHANGED',
+            mutationCommitted: false,
+            profileName,
+            actorRole: executorRole,
+          },
+        }, { failureMode: 'strict' });
+      } catch {
+        throw new ApprovalExecutionError('AUDIT_UNAVAILABLE', 503, approval, false);
+      }
+      throw new ApprovalExecutionError('SUBSCRIBER_PROFILE_APPLY_PRECONDITION_CHANGED', 409, approval, false);
+    }
+    // Storage failure
+    try {
+      await deps.writeAudit({
+        actor: { type: 'user', username: executorUsername, role: executorRole },
+        module: 'subscribers',
+        action: 'SUBSCRIBER_PROFILE_APPLY' as never,
+        targetId: imsi,
+        result: 'failed',
+        metadata: {
+          governanceMode: 'APPROVAL_GOVERNED',
+          classification: 'FAILED_NO_MUTATION',
+          mutationCommitted: false,
+          profileName,
+          actorRole: executorRole,
+        },
+      }, { failureMode: 'strict' });
+    } catch {
+      throw new ApprovalExecutionError('AUDIT_UNAVAILABLE', 503, approval, false);
+    }
+    throw new ApprovalExecutionError('SUBSCRIBER_PROFILE_APPLY_FAILED', 500, approval, false, error);
+  }
+
+  // Success — strict audit
+  try {
+    await deps.writeAudit({
+      actor: { type: 'user', username: executorUsername, role: executorRole },
+      module: 'subscribers',
+      action: 'SUBSCRIBER_PROFILE_APPLY' as never,
+      targetId: imsi,
+      result: 'success',
+      metadata: {
+        governanceMode: 'APPROVAL_GOVERNED',
+        profileName,
+        subscriberPreconditionHash: intent.subscriberPreconditionHash,
+        profilePreconditionHash: intent.profilePreconditionHash,
+        operationFingerprint: intent.operationFingerprint,
+        classification: result.classification,
+        mutationCommitted: result.committed,
+        securityChanged: result.securityChanged,
+        actorRole: executorRole,
+      },
+    }, { failureMode: 'strict' });
+  } catch {
+    throw new ApprovalExecutionError('AUDIT_UNAVAILABLE', 503, approval, true);
+  }
+
+  return { imsi, profileName, approvalId: approval.id };
+}
+
 const defaultExecutor: GovernedApprovalExecutor = {
   async execute(approval, request, actor) {
     if (approval.action === 'ACCESS_REQUEST') return executeApproval(approval, request);
@@ -449,6 +625,14 @@ const defaultExecutor: GovernedApprovalExecutor = {
       return executeApproval(approval, request);
     }
 
+    // Subscriber Profile Apply v1 — dedicated governed executor
+    if (approval.action === 'SUBSCRIBER_PROFILE_APPLY') {
+      const payload = approval.payload as Record<string, unknown> | undefined;
+      if (payload && payload.version === 'subscriber-profile-apply-v1') {
+        return executeSubscriberProfileApplyApproval(approval, actor!);
+      }
+    }
+
     // Legacy subscriber provisioning, import and bulk-delete actions remain
     // executable while their routes are migrated to frozen payloads.  A CHG
     // must never be creatable merely because this switch forgot its executor.
@@ -462,6 +646,8 @@ export const automaticSubscriberExecutorActions = [
   'SUBSCRIBER_UPDATE', 'SUBSCRIBER_DELETE', 'SUBSCRIBER_BATCH_CREATE',
   'SUBSCRIBER_BATCH_UPDATE', 'SUBSCRIBER_IMPORT',
   'SUBSCRIBER_BULK_DELETE',
+  'SUBSCRIBER_RESTORE_V2',
+  'SUBSCRIBER_PROFILE_APPLY',
 ] as const;
 
 export function assertSubscriberApprovalExecutorCoverage() {

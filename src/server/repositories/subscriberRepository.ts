@@ -771,6 +771,23 @@ export async function conditionalDeleteSubscriber(imsi: string, expectedDocument
   return result.deletedCount > 0;
 }
 
+/**
+ * Full-document CAS replace for Profile Apply.
+ * Uses expected current document (minus _id) as filter.
+ * Returns true if document matched and was replaced.
+ * Never uses upsert.
+ */
+export async function replaceSubscriberCAS(
+  expectedCurrent: XcloudSubscriberDocument,
+  replacement: XcloudSubscriberDocument,
+): Promise<boolean> {
+  const collection = await subscribersCollection();
+  const filter = { ...expectedCurrent } as Record<string, unknown>;
+  delete filter._id;
+  const result = await collection.replaceOne(filter, replacement as Parameters<typeof collection.replaceOne>[1]);
+  return result.matchedCount === 1;
+}
+
 /** OCS-only cleanup. Does NOT delete subscriber. */
 export async function deleteSubscriberOcsProvisioning(imsi: string): Promise<void> {
   await deleteOcsProvisioning(imsi);

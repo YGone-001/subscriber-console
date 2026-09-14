@@ -14,6 +14,7 @@ export const SUBSCRIBER_OPERATIONS = {
   BATCH_UPDATE: 'SUBSCRIBER_BATCH_UPDATE',
   BULK_DELETE: 'SUBSCRIBER_BULK_DELETE',
   IMPORT: 'SUBSCRIBER_IMPORT',
+  PROFILE_APPLY: 'SUBSCRIBER_PROFILE_APPLY',
 } as const;
 
 export type SubscriberOperation = typeof SUBSCRIBER_OPERATIONS[keyof typeof SUBSCRIBER_OPERATIONS];
@@ -35,6 +36,7 @@ export const subscriberOperationRegistry: Readonly<Record<SubscriberOperation, S
   SUBSCRIBER_BATCH_UPDATE: { action: 'SUBSCRIBER_BATCH_UPDATE', permission: 'subscribers.write', riskLevel: 'high', requiresApproval: true, requiresIndependentReviewer: true, executionMode: 'automatic', snapshotStrategy: 'batch-precondition' },
   SUBSCRIBER_BULK_DELETE: { action: 'SUBSCRIBER_BULK_DELETE', permission: 'subscribers.write', riskLevel: 'critical', requiresApproval: true, requiresIndependentReviewer: true, executionMode: 'automatic', snapshotStrategy: 'batch-precondition' },
   SUBSCRIBER_IMPORT: { action: 'SUBSCRIBER_IMPORT', permission: 'subscribers.write', riskLevel: 'high', requiresApproval: true, requiresIndependentReviewer: true, executionMode: 'automatic', snapshotStrategy: 'normalized-import' },
+  SUBSCRIBER_PROFILE_APPLY: { action: 'SUBSCRIBER_PROFILE_APPLY', permission: 'subscribers.write', riskLevel: 'high', requiresApproval: true, requiresIndependentReviewer: true, executionMode: 'automatic', snapshotStrategy: 'single-state' },
 };
 
 export function evaluateSubscriberOperation(operation: SubscriberOperation) {
