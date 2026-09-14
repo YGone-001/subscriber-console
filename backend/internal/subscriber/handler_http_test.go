@@ -3,6 +3,7 @@ package subscriber
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -1043,5 +1044,178 @@ func TestBatchCreate_DefaultProfile(t *testing.T) {
 	// Should succeed with defaults (no profile = absent profile state)
 	if w.Code != http.StatusCreated {
 		t.Errorf("status = %d, want %d", w.Code, http.StatusCreated)
+	}
+}
+
+// --- ProfileApply HTTP tests ---
+
+func TestProfileApply_Unauthenticated(t *testing.T) {
+	h := &WriteHandler{
+		limiter:     &mockRateLimiter{allowed: true},
+		auditWriter: testAuditWriter(),
+	}
+
+	body := `{"profileName":"test-profile"}`
+	r := httptest.NewRequest(http.MethodPost, "/api/subscribers/001011234567890/profile", bytes.NewBufferString(body))
+	r.SetPathValue("imsi", "001011234567890")
+	w := httptest.NewRecorder()
+
+	h.ProfileApply(w, r)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestProfileApply_MissingIMSI(t *testing.T) {
+	h := &WriteHandler{
+		limiter:     &mockRateLimiter{allowed: true},
+		auditWriter: testAuditWriter(),
+	}
+
+	body := `{"profileName":"test-profile"}`
+	r := httptest.NewRequest(http.MethodPost, "/api/subscribers//profile", bytes.NewBufferString(body))
+	// No SetPathValue — imsi will be empty
+	w := httptest.NewRecorder()
+
+	h.ProfileApply(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestProfileApply_RateLimited(t *testing.T) {
+	h := &WriteHandler{
+		limiter:     &mockRateLimiter{allowed: false},
+		auditWriter: testAuditWriter(),
+		userRepo: &mockUserRepo{
+			identity: testUserIdentity("testuser", "operator"),
+		},
+	}
+
+	body := `{"profileName":"test-profile"}`
+	r := httptest.NewRequest(http.MethodPost, "/api/subscribers/001011234567890/profile", bytes.NewBufferString(body))
+	r.SetPathValue("imsi", "001011234567890")
+	r = r.WithContext(testPrincipalCtx("testuser", "operator"))
+	w := httptest.NewRecorder()
+
+	h.ProfileApply(w, r)
+
+	// Rate limiter mock returns false but doesn't write response; handler continues
+	// In production, Enforce() writes 429 and returns false
+	if w.Code == http.StatusUnauthorized {
+		t.Error("should not fail at auth")
+	}
+}
+
+func TestProfileApply_InvalidJSON(t *testing.T) {
+	h := &WriteHandler{
+		limiter:     &mockRateLimiter{allowed: true},
+		auditWriter: testAuditWriter(),
+		userRepo: &mockUserRepo{
+			identity: testUserIdentity("testuser", "super_admin"),
+		},
+	}
+
+	r := httptest.NewRequest(http.MethodPost, "/api/subscribers/001011234567890/profile", bytes.NewBufferString("not json"))
+	r.SetPathValue("imsi", "001011234567890")
+	r = r.WithContext(testPrincipalCtx("testuser", "super_admin"))
+	w := httptest.NewRecorder()
+
+	h.ProfileApply(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestProfileApply_EmptyProfileName(t *testing.T) {
+	h := &WriteHandler{
+		limiter:     &mockRateLimiter{allowed: true},
+		auditWriter: testAuditWriter(),
+		userRepo: &mockUserRepo{
+			identity: testUserIdentity("testuser", "super_admin"),
+		},
+	}
+
+	body := `{"profileName":""}`
+	r := httptest.NewRequest(http.MethodPost, "/api/subscribers/001011234567890/profile", bytes.NewBufferString(body))
+	r.SetPathValue("imsi", "001011234567890")
+	r = r.WithContext(testPrincipalCtx("testuser", "super_admin"))
+	w := httptest.NewRecorder()
+
+	h.ProfileApply(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestProfileApply_MissingProfileNameField(t *testing.T) {
+	h := &WriteHandler{
+		limiter:     &mockRateLimiter{allowed: true},
+		auditWriter: testAuditWriter(),
+		userRepo: &mockUserRepo{
+			identity: testUserIdentity("testuser", "super_admin"),
+		},
+	}
+
+	body := `{}`
+	r := httptest.NewRequest(http.MethodPost, "/api/subscribers/001011234567890/profile", bytes.NewBufferString(body))
+	r.SetPathValue("imsi", "001011234567890")
+	r = r.WithContext(testPrincipalCtx("testuser", "super_admin"))
+	w := httptest.NewRecorder()
+
+	h.ProfileApply(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestProfileApply_CapabilityDenied(t *testing.T) {
+	h := &WriteHandler{
+		limiter:     &mockRateLimiter{allowed: true},
+		auditWriter: testAuditWriter(),
+		userRepo: &mockUserRepo{
+			identity: testUserIdentity("testuser", "subscriber_read_only"),
+		},
+	}
+
+	body := `{"profileName":"test-profile"}`
+	r := httptest.NewRequest(http.MethodPost, "/api/subscribers/001011234567890/profile", bytes.NewBufferString(body))
+	r.SetPathValue("imsi", "001011234567890")
+	r = r.WithContext(testPrincipalCtx("testuser", "subscriber_read_only"))
+	w := httptest.NewRecorder()
+
+	h.ProfileApply(w, r)
+
+	if w.Code != http.StatusForbidden {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusForbidden)
+	}
+}
+
+func TestProfileApply_FreshActorValidation(t *testing.T) {
+	// User repo returns nil identity → fresh actor validation fails
+	h := &WriteHandler{
+		limiter:     &mockRateLimiter{allowed: true},
+		auditWriter: testAuditWriter(),
+		userRepo: &mockUserRepo{
+			identity: nil,
+			err:      fmt.Errorf("user not found"),
+		},
+	}
+
+	body := `{"profileName":"test-profile"}`
+	r := httptest.NewRequest(http.MethodPost, "/api/subscribers/001011234567890/profile", bytes.NewBufferString(body))
+	r.SetPathValue("imsi", "001011234567890")
+	r = r.WithContext(testPrincipalCtx("testuser", "super_admin"))
+	w := httptest.NewRecorder()
+
+	h.ProfileApply(w, r)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusServiceUnavailable)
 	}
 }

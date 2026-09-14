@@ -6,13 +6,14 @@ import "subscriber/internal/governance"
 type SubscriberOperation string
 
 const (
-	OpCreate      SubscriberOperation = "SUBSCRIBER_CREATE"
-	OpUpdate      SubscriberOperation = "SUBSCRIBER_UPDATE"
-	OpDelete      SubscriberOperation = "SUBSCRIBER_DELETE"
-	OpBatchCreate SubscriberOperation = "SUBSCRIBER_BATCH_CREATE"
-	OpBatchUpdate SubscriberOperation = "SUBSCRIBER_BATCH_UPDATE"
-	OpBulkDelete  SubscriberOperation = "SUBSCRIBER_BULK_DELETE"
-	OpImport      SubscriberOperation = "SUBSCRIBER_IMPORT"
+	OpCreate        SubscriberOperation = "SUBSCRIBER_CREATE"
+	OpUpdate        SubscriberOperation = "SUBSCRIBER_UPDATE"
+	OpDelete        SubscriberOperation = "SUBSCRIBER_DELETE"
+	OpBatchCreate   SubscriberOperation = "SUBSCRIBER_BATCH_CREATE"
+	OpBatchUpdate   SubscriberOperation = "SUBSCRIBER_BATCH_UPDATE"
+	OpBulkDelete    SubscriberOperation = "SUBSCRIBER_BULK_DELETE"
+	OpImport        SubscriberOperation = "SUBSCRIBER_IMPORT"
+	OpProfileApply  SubscriberOperation = "SUBSCRIBER_PROFILE_APPLY"
 )
 
 // subscriberRegistry is the subscriber-domain governance registry.
@@ -56,6 +57,12 @@ var subscriberRegistry = map[SubscriberOperation]governance.OperationDefinition{
 	},
 	OpImport: {
 		Operation:         string(OpImport),
+		BaseMode:          governance.Approval,
+		HumanExecutable:   true,
+		ExecutorAvailable: true,
+	},
+	OpProfileApply: {
+		Operation:         string(OpProfileApply),
 		BaseMode:          governance.Approval,
 		HumanExecutable:   true,
 		ExecutorAvailable: true,

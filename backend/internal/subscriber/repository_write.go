@@ -1272,3 +1272,29 @@ func (r *Repository) ValidateTariffPlan(ctx context.Context, planId string) erro
 	}
 	return nil
 }
+
+// FindProfileByName loads a profile document by name from app_profiles.
+// Returns nil if not found.
+func (r *Repository) FindProfileByName(ctx context.Context, name string) (bson.M, error) {
+	var doc bson.M
+	err := r.profiles.FindOne(ctx, bson.M{"name": name}).Decode(&doc)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("find profile %s: %w", name, err)
+	}
+	return doc, nil
+}
+
+// ReplaceSubscriberCAS replaces a subscriber document using atomic CAS.
+// The expected document is the full current state minus _id.
+// Returns true if the document was matched and replaced, false if CAS failed.
+func (r *Repository) ReplaceSubscriberCAS(ctx context.Context, expected bson.M, replacement bson.M) (bool, error) {
+	filter := expectedDocumentFilter(expected)
+	result, err := r.subscribers.ReplaceOne(ctx, filter, replacement)
+	if err != nil {
+		return false, fmt.Errorf("replace subscriber CAS: %w", err)
+	}
+	return result.MatchedCount == 1, nil
+}

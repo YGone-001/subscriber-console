@@ -2204,3 +2204,233 @@ func frozenImportToMap(frozen *FrozenImportV2) map[string]any {
 		"operationFingerprint": frozen.OperationFingerprint,
 	}
 }
+
+// ProfileApply handles POST /api/subscribers/{imsi}/profile
+// Applies profile auth/AMBR/slices to subscriber with governance:
+// super_admin/root → DIRECT_GOVERNED, ops_admin/operator → APPROVAL_GOVERNED.
+// Ordering: auth → capability check → rate limit → body validation → fresh actor → prepare → governance → execute/approve
+func (h *WriteHandler) ProfileApply(w http.ResponseWriter, r *http.Request) {
+	imsi := r.PathValue("imsi")
+	if imsi == "" {
+		response.Error(w, http.StatusBadRequest, "Missing IMSI", "INVALID_IMSI")
+		return
+	}
+
+	p := auth.PrincipalFromContext(r.Context())
+	if p == nil {
+		response.Error(w, http.StatusUnauthorized, "Unauthorized", "AUTH_INVALID_TOKEN")
+		return
+	}
+
+	// Capability check with audit on denial
+	if !audit.RequireCapabilityWithAudit(w, r, p, "subscriber_write", h.auditWriter) {
+		return
+	}
+
+	// Rate limit
+	if !h.limiter.Enforce(w, r, "subscribers:profile-apply:"+p.Username, 30, 60) {
+		return
+	}
+
+	// Parse body
+	var body struct {
+		ProfileName string `json:"profileName"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		response.Error(w, http.StatusBadRequest, "Invalid request body", "INVALID_REQUEST")
+		return
+	}
+	if body.ProfileName == "" {
+		response.Error(w, http.StatusBadRequest, "profileName is required", "INVALID_PROFILE_NAME")
+		return
+	}
+
+	// Fresh actor validation — mandatory, fail-closed
+	fresh, httpErr := RevalidateFreshActor(r.Context(), h.userRepo, p)
+	if httpErr != nil {
+		response.Error(w, httpErr.Status, httpErr.Message, httpErr.Code)
+		return
+	}
+
+	// Prepare frozen intent
+	intent, err := PrepareFrozenSubscriberProfileApply(
+		r.Context(), imsi, strings.TrimSpace(body.ProfileName),
+		h.repo.FindSubscriberByImsi, h.repo.FindProfileByName,
+	)
+	if err != nil {
+		h.handleProfileApplyError(w, err)
+		return
+	}
+
+	// Evaluate governance with fresh role
+	result := EvaluateOperation(OpProfileApply, fresh.NormalizedRole)
+	if !isExecutable(result) {
+		response.Error(w, http.StatusConflict, "Operation not executable", "OPERATION_NOT_EXECUTABLE")
+		return
+	}
+
+	if result.Decision == governance.Direct {
+		// DIRECT_GOVERNED: execute immediately
+		h.executeDirectProfileApply(w, r, intent, fresh)
+		return
+	}
+
+	// APPROVAL_GOVERNED: create approval
+	h.createProfileApplyApproval(w, r, intent, fresh)
+}
+
+// executeDirectProfileApply handles DIRECT_GOVERNED profile apply execution.
+func (h *WriteHandler) executeDirectProfileApply(w http.ResponseWriter, r *http.Request, intent *FrozenSubscriberProfileApplyV1, fresh *FreshActor) {
+	// Re-assert current state
+	assertion, err := AssertFrozenSubscriberProfileApply(
+		r.Context(), *intent,
+		h.repo.FindSubscriberByImsi, h.repo.FindProfileByName,
+	)
+	if err != nil {
+		h.handleProfileApplyError(w, err)
+		return
+	}
+	if assertion == nil {
+		// Drift detected
+		h.writeProfileApplyAudit(r, intent, fresh, "failed", "DIRECT_GOVERNED", "PRECONDITION_CHANGED", false, false)
+		response.JSON(w, http.StatusConflict, map[string]any{
+			"error":     "Subscriber or Profile changed since preparation",
+			"code":      "SUBSCRIBER_PROFILE_APPLY_PRECONDITION_CHANGED",
+			"committed": false,
+		})
+		return
+	}
+
+	// Execute CAS
+	execResult, err := ExecuteFrozenSubscriberProfileApply(
+		r.Context(), assertion, fresh.Username,
+		h.repo.ReplaceSubscriberCAS,
+	)
+	if err != nil {
+		if govErr, ok := err.(*SubscriberGovernanceError); ok && govErr.Code == "SUBSCRIBER_PROFILE_APPLY_PRECONDITION_CHANGED" {
+			h.writeProfileApplyAudit(r, intent, fresh, "failed", "DIRECT_GOVERNED", "PRECONDITION_CHANGED", false, false)
+			response.JSON(w, http.StatusConflict, map[string]any{
+				"error":     "Subscriber changed during execution",
+				"code":      "SUBSCRIBER_PROFILE_APPLY_PRECONDITION_CHANGED",
+				"committed": false,
+			})
+			return
+		}
+		h.writeProfileApplyAudit(r, intent, fresh, "failed", "DIRECT_GOVERNED", "FAILED_NO_MUTATION", false, false)
+		response.Error(w, http.StatusInternalServerError, "Profile apply failed", "SUBSCRIBER_PROFILE_APPLY_FAILED")
+		return
+	}
+
+	// Strict audit — committed=true on failure
+	auditErr := h.writeProfileApplyAudit(r, intent, fresh, "success", "DIRECT_GOVERNED", execResult.Classification, execResult.Committed, execResult.SecurityChanged)
+	if auditErr != nil {
+		response.JSON(w, http.StatusServiceUnavailable, map[string]any{
+			"error":     "AUDIT_UNAVAILABLE",
+			"code":      "AUDIT_UNAVAILABLE",
+			"committed": true,
+		})
+		return
+	}
+
+	response.JSON(w, http.StatusOK, map[string]any{
+		"outcome":     "executed",
+		"message":     "Profile applied successfully",
+		"imsi":        intent.Imsi,
+		"profileName": intent.ProfileName,
+	})
+}
+
+// createProfileApplyApproval creates an approval request for APPROVAL_GOVERNED profile apply.
+func (h *WriteHandler) createProfileApplyApproval(w http.ResponseWriter, r *http.Request, intent *FrozenSubscriberProfileApplyV1, fresh *FreshActor) {
+	actor := approval.GovernanceActor{Type: "user", Username: fresh.Username, Role: fresh.NormalizedRole}
+	approvalDoc, err := h.approvalSvc.Create(r, actor, approval.CreateApprovalInput{
+		Action:    "SUBSCRIBER_PROFILE_APPLY",
+		Requester: fresh.Username,
+		TargetID:  fmt.Sprintf("subscriber:%s", intent.Imsi),
+		Summary:   fmt.Sprintf("Apply profile %s to subscriber %s", intent.ProfileName, intent.Imsi),
+		Payload:   frozenProfileApplyToMap(intent),
+	})
+	if err != nil {
+		h.handleProfileApplyError(w, err)
+		return
+	}
+
+	// Audit the approval creation
+	auditErr := h.writeProfileApplyAudit(r, intent, fresh, "success", "APPROVAL_GOVERNED", "APPROVAL_CREATED", false, false)
+	if auditErr != nil {
+		response.JSON(w, http.StatusServiceUnavailable, map[string]any{
+			"error":     "AUDIT_UNAVAILABLE",
+			"code":      "AUDIT_UNAVAILABLE",
+			"committed": false,
+		})
+		return
+	}
+
+	response.JSON(w, http.StatusAccepted, map[string]any{
+		"outcome":          "approval_required",
+		"message":          "Approval required before profile apply",
+		"approval":         map[string]any{"id": approvalDoc.ID},
+		"requiresApproval": true,
+	})
+}
+
+// writeProfileApplyAudit writes a strict audit entry for profile apply.
+func (h *WriteHandler) writeProfileApplyAudit(r *http.Request, intent *FrozenSubscriberProfileApplyV1, fresh *FreshActor, result, governanceMode, classification string, committed, securityChanged bool) error {
+	return h.writeStrictAudit(r, audit.WriteAuditInput{
+		Action:   "SUBSCRIBER_PROFILE_APPLY",
+		Module:   "subscribers",
+		TargetID: intent.Imsi,
+		Before:   intent.Before,
+		After:    intent.AfterPreview,
+		Result:   result,
+		Metadata: map[string]any{
+			"governanceMode":              governanceMode,
+			"profileName":                 intent.ProfileName,
+			"subscriberPreconditionHash":  intent.SubscriberPreconditionHash,
+			"profilePreconditionHash":     intent.ProfilePreconditionHash,
+			"operationFingerprint":        intent.OperationFingerprint,
+			"classification":              classification,
+			"mutationCommitted":           committed,
+			"securityChanged":             securityChanged,
+			"actorRole":                   fresh.NormalizedRole,
+		},
+	}, fresh)
+}
+
+// handleProfileApplyError handles errors from profile apply operations.
+func (h *WriteHandler) handleProfileApplyError(w http.ResponseWriter, err error) {
+	if govErr, ok := err.(*SubscriberGovernanceError); ok {
+		switch govErr.Code {
+		case "SUBSCRIBER_NOT_FOUND":
+			response.Error(w, http.StatusNotFound, "Subscriber not found", govErr.Code)
+		case "PROFILE_NOT_FOUND":
+			response.Error(w, http.StatusNotFound, "Profile not found", govErr.Code)
+		case "INVALID_PROFILE_NAME":
+			response.Error(w, http.StatusBadRequest, "profileName is required", govErr.Code)
+		case "SUBSCRIBER_PROFILE_APPLY_NO_EFFECT":
+			response.JSON(w, http.StatusOK, map[string]any{
+				"outcome":       "no_effect",
+				"classification": "NO_EFFECT",
+				"message":       "Profile is already applied",
+			})
+		default:
+			response.Error(w, http.StatusInternalServerError, "Profile apply error", govErr.Code)
+		}
+		return
+	}
+	response.Error(w, http.StatusInternalServerError, "Internal server error", "INTERNAL_ERROR")
+}
+
+// frozenProfileApplyToMap converts FrozenSubscriberProfileApplyV1 to map for storage.
+func frozenProfileApplyToMap(frozen *FrozenSubscriberProfileApplyV1) map[string]any {
+	return map[string]any{
+		"version":                    frozen.Version,
+		"imsi":                       frozen.Imsi,
+		"profileName":                frozen.ProfileName,
+		"subscriberPreconditionHash": frozen.SubscriberPreconditionHash,
+		"profilePreconditionHash":    frozen.ProfilePreconditionHash,
+		"before":                     frozen.Before,
+		"afterPreview":               frozen.AfterPreview,
+		"operationFingerprint":       frozen.OperationFingerprint,
+	}
+}

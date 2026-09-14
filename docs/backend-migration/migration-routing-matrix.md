@@ -91,6 +91,7 @@
 | Subscriber batch update | POST | `/api/subscribers/batch-update` | **Go** | Next.js | Go | NEVER | Go implementation with per-target CAS, ACTUALLY_ROUTED=0 |
 | Subscriber bulk delete | POST | `/api/subscribers/bulk-delete` | **Go** | Next.js | Go | NEVER | Go implementation with frozen v2, per-target CAS, ACTUALLY_ROUTED=0 |
 | Subscriber import | POST | `/api/subscribers/import` | **Go** | Next.js | Go | NEVER | Go implementation with frozen v2, create-only, ACTUALLY_ROUTED=0 |
+| Subscriber profile apply | POST | `/api/subscribers/:imsi/profile` | **Go** | Next.js | Go | NEVER | Go handler with frozen v1, CAS, governance (DIRECT/APPROVAL), ACTUALLY_ROUTED=0 |
 | Profile create | POST | `/api/profiles` | **Go** | Next.js | Go | NEVER | DIRECT_GOVERNED, ACTUALLY_ROUTED=0 |
 | Profile update | PUT | `/api/profiles/:name` | **Go** | Next.js | Go | NEVER | DIRECT_GOVERNED, ACTUALLY_ROUTED=0 |
 | Profile delete | DELETE | `/api/profiles/:name` | **Go** | Next.js | Go | NEVER | DIRECT_GOVERNED, ACTUALLY_ROUTED=0 |
@@ -168,11 +169,11 @@
 |-------|-------------------:|---------------:|
 | Phase 2 | 0 | 42 |
 | Phase 3 | 6 | 0 |
-| Phase 4 | 11 | 0 |
+| Phase 4 | 12 | 0 |
 | Phase 5 | 14 | 0 |
 | Phase 6 | 10 | 0 |
 | Phase 7 | 6 | 0 |
-| **Total** | **47** | **42** |
+| **Total** | **48** | **42** |
 
-> **Total: 89 HTTP operations** — matches source scanner output exactly.
+> **Total: 90 HTTP operations** — matches source scanner output exactly.
 > Non-GET operations: 47 (all mutations) + 2 semantic reads using POST = 49 non-GET HTTP methods.
