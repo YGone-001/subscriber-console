@@ -882,12 +882,16 @@ func buildXcloudSubscriberFromLegacy(imsi string, payload UpdatePayload, existin
 func convertSlices(slices any) []any {
 	list, ok := slices.([]any)
 	if !ok {
-		return []any{}
+		if bsonA, ok := slices.(bson.A); ok {
+			list = []any(bsonA)
+		} else {
+			return []any{}
+		}
 	}
 	result := make([]any, 0, len(list))
 	for _, item := range list {
-		slice, ok := item.(map[string]any)
-		if !ok {
+		slice := toMap(item)
+		if slice == nil {
 			continue
 		}
 		converted := bson.M{
@@ -904,11 +908,17 @@ func convertSlices(slices any) []any {
 		if sessionList == nil {
 			sessionList = slice["session"]
 		}
-		if sessions, ok := sessionList.([]any); ok {
+		var sessions []any
+		if s, ok := sessionList.([]any); ok {
+			sessions = s
+		} else if s, ok := sessionList.(bson.A); ok {
+			sessions = []any(s)
+		}
+		if sessions != nil {
 			convertedSessions := make([]any, 0, len(sessions))
 			for _, sess := range sessions {
-				s, ok := sess.(map[string]any)
-				if !ok {
+				s := toMap(sess)
+				if s == nil {
 					continue
 				}
 				convertedSess := bson.M{
@@ -928,14 +938,14 @@ func convertSlices(slices any) []any {
 				smf := bson.M{}
 				if ipv4, ok := s["pgwIpv4"]; ok && ipv4 != nil && ipv4 != "" {
 					smf["ipv4"] = ipv4
-				} else if smfObj, ok := s["smf"].(map[string]any); ok {
+				} else if smfObj := toMap(s["smf"]); smfObj != nil {
 					if ipv4, ok := smfObj["ipv4"]; ok && ipv4 != nil && ipv4 != "" {
 						smf["ipv4"] = ipv4
 					}
 				}
 				if ipv6, ok := s["pgwIpv6"]; ok && ipv6 != nil && ipv6 != "" {
 					smf["ipv6"] = ipv6
-				} else if smfObj, ok := s["smf"].(map[string]any); ok {
+				} else if smfObj := toMap(s["smf"]); smfObj != nil {
 					if ipv6, ok := smfObj["ipv6"]; ok && ipv6 != nil && ipv6 != "" {
 						smf["ipv6"] = ipv6
 					}
@@ -989,8 +999,8 @@ func extractPrimaryMsisdn(sub4G map[string]any) string {
 	if !ok || len(msisdnList) == 0 {
 		return ""
 	}
-	first, ok := msisdnList[0].(map[string]any)
-	if !ok || first == nil {
+	first := toMap(msisdnList[0])
+	if first == nil {
 		return ""
 	}
 	msisdn, ok := first["msisdn"]
@@ -1011,8 +1021,8 @@ func normalizeSessionQos(qos any, name any) any {
 	if qos == nil {
 		return nil
 	}
-	q, ok := qos.(map[string]any)
-	if !ok {
+	q := toMap(qos)
+	if q == nil {
 		return qos
 	}
 	isIms := false
@@ -1046,8 +1056,8 @@ func normalizeSessionQos(qos any, name any) any {
 // normalizeArp normalizes ARP from legacy format to Open5GS format.
 // Matches Node toXcloudArp() exactly.
 func normalizeArp(arp any, isIms bool) any {
-	a, ok := arp.(map[string]any)
-	if !ok {
+	a := toMap(arp)
+	if a == nil {
 		return arp
 	}
 	result := bson.M{}

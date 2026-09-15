@@ -2,18 +2,22 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-// Import production fixture and hash functions
+// Import production fixture data (hash logic lives in production code, not here)
 const {
   SUBSCRIBER_FIXTURE,
   PROFILE_FIXTURE,
   SUBSCRIBER_WITH_DIFFERENT_PROFILE,
   EXPECTED,
   AFTER_PREVIEW,
-  computeSubscriberHash,
-  computeProfileHash,
-  computeFingerprint,
   verifyCanonicalSerialization,
 } = await import('../src/server/__tests__/profile-apply-fixtures.ts');
+
+// Import production canonical helpers directly
+const {
+  computeSubscriberPreconditionHash,
+  computeProfilePreconditionHash,
+  computeProfileApplyFingerprint,
+} = await import('../src/server/subscriberProfileApplyGovernance.ts');
 
 // Load committed JSON fixtures
 const fixtureJson = JSON.parse(
@@ -26,12 +30,12 @@ test('subscriber hash: committed JSON matches live computation', () => {
 });
 
 test('subscriber hash: live computation matches fixture data', () => {
-  assert.equal(computeSubscriberHash(SUBSCRIBER_FIXTURE), fixtureJson.subscriberHash);
+  assert.equal(computeSubscriberPreconditionHash(SUBSCRIBER_FIXTURE), fixtureJson.subscriberHash);
 });
 
 test('subscriber hash: different profile_name produces different hash', () => {
-  assert.notEqual(computeSubscriberHash(SUBSCRIBER_WITH_DIFFERENT_PROFILE), fixtureJson.subscriberHash);
-  assert.equal(computeSubscriberHash(SUBSCRIBER_WITH_DIFFERENT_PROFILE), fixtureJson.subscriberHashDifferentProfile);
+  assert.notEqual(computeSubscriberPreconditionHash(SUBSCRIBER_WITH_DIFFERENT_PROFILE), fixtureJson.subscriberHash);
+  assert.equal(computeSubscriberPreconditionHash(SUBSCRIBER_WITH_DIFFERENT_PROFILE), fixtureJson.subscriberHashDifferentProfile);
 });
 
 // ─── Profile Precondition Hash ───
@@ -40,7 +44,7 @@ test('profile hash: committed JSON matches live computation', () => {
 });
 
 test('profile hash: live computation matches fixture data', () => {
-  assert.equal(computeProfileHash(PROFILE_FIXTURE), fixtureJson.profileHash);
+  assert.equal(computeProfilePreconditionHash(PROFILE_FIXTURE), fixtureJson.profileHash);
 });
 
 // ─── Operation Fingerprint ───
@@ -50,11 +54,11 @@ test('fingerprint: committed JSON matches live computation', () => {
 
 test('fingerprint: live computation matches fixture data', () => {
   assert.equal(
-    computeFingerprint(
+    computeProfileApplyFingerprint(
       SUBSCRIBER_FIXTURE.imsi,
       PROFILE_FIXTURE.name,
-      computeSubscriberHash(SUBSCRIBER_FIXTURE),
-      computeProfileHash(PROFILE_FIXTURE),
+      computeSubscriberPreconditionHash(SUBSCRIBER_FIXTURE),
+      computeProfilePreconditionHash(PROFILE_FIXTURE),
       AFTER_PREVIEW
     ),
     fixtureJson.fingerprint
@@ -88,33 +92,30 @@ test('fixture hashes are valid hex SHA-256', () => {
 
 // ─── Sentinel Leak Detection ───
 test('sentinel: subscriber hash fields do not include forbidden fields', () => {
-  // The subscriber hash must NOT include: enabled, subscriber_status, operator_specific_data
-  // These fields were previously incorrectly included in Go implementation.
   const subscriberWithSentinel = {
     ...SUBSCRIBER_FIXTURE,
-    enabled: false,  // Should NOT affect hash
-    subscriber_status: 1,  // Should NOT affect hash
-    operator_specific_data: 'sentinel-value',  // Should NOT affect hash
+    enabled: false,
+    subscriber_status: 1,
+    operator_specific_data: 'sentinel-value',
   };
 
-  const hashOriginal = computeSubscriberHash(SUBSCRIBER_FIXTURE);
-  const hashWithSentinel = computeSubscriberHash(subscriberWithSentinel);
+  const hashOriginal = computeSubscriberPreconditionHash(SUBSCRIBER_FIXTURE);
+  const hashWithSentinel = computeSubscriberPreconditionHash(subscriberWithSentinel);
 
   assert.equal(hashOriginal, hashWithSentinel, 'sentinel fields must not affect subscriber hash');
 });
 
 test('sentinel: profile hash fields do not include forbidden fields', () => {
-  // The profile hash must NOT include: name, mcc, mnc, enabled, etc.
   const profileWithSentinel = {
     ...PROFILE_FIXTURE,
-    name: 'different-name',  // Should NOT affect hash
-    mcc: '999',  // Should NOT affect hash
-    mnc: '99',  // Should NOT affect hash
-    enabled: false,  // Should NOT affect hash
+    name: 'different-name',
+    mcc: '999',
+    mnc: '99',
+    enabled: false,
   };
 
-  const hashOriginal = computeProfileHash(PROFILE_FIXTURE);
-  const hashWithSentinel = computeProfileHash(profileWithSentinel);
+  const hashOriginal = computeProfilePreconditionHash(PROFILE_FIXTURE);
+  const hashWithSentinel = computeProfilePreconditionHash(profileWithSentinel);
 
   assert.equal(hashOriginal, hashWithSentinel, 'sentinel fields must not affect profile hash');
 });
@@ -122,7 +123,7 @@ test('sentinel: profile hash fields do not include forbidden fields', () => {
 // ─── Hash Determinism ───
 test('hashes are deterministic across multiple calls', () => {
   for (let i = 0; i < 10; i++) {
-    assert.equal(computeSubscriberHash(SUBSCRIBER_FIXTURE), fixtureJson.subscriberHash);
-    assert.equal(computeProfileHash(PROFILE_FIXTURE), fixtureJson.profileHash);
+    assert.equal(computeSubscriberPreconditionHash(SUBSCRIBER_FIXTURE), fixtureJson.subscriberHash);
+    assert.equal(computeProfilePreconditionHash(PROFILE_FIXTURE), fixtureJson.profileHash);
   }
 });

@@ -319,6 +319,14 @@
     "file": "src/app/api/subscribers/[imsi]/route.ts"
   },
   {
+    "path": "/api/subscribers/:imsi/profile",
+    "domain": "subscribers",
+    "methods": [
+      "POST"
+    ],
+    "file": "src/app/api/subscribers/[imsi]/profile/route.ts"
+  },
+  {
     "path": "/api/subscribers/:imsi/traffic-adjustments",
     "domain": "subscribers",
     "methods": [

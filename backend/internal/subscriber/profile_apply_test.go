@@ -427,20 +427,22 @@ func TestConvertValue(t *testing.T) {
 
 func TestProfileApplyCrossRuntimeFixture(t *testing.T) {
 	// Expected values from profile-apply-fixtures.json
-	const expectedSubscriberHash = "ed4f2dd48fcecfabec59876dcf9a87fed20beea982c9de74b49dc8196e7a6873"
-	const expectedSubscriberHashDifferentProfile = "6716dc90d6ed3a8fccba9cbdf81f354265202ac86d98303bae69fc9d778bb72a"
-	const expectedProfileHash = "3d0842c165a9a06420efabc5022c444766a3de11ac75e6f1b843921c5848cec6"
-	const expectedFingerprint = "7d55e91ffe8c18d67887e98222aa0d5ea5b7da11837f7cb09ce5e457f856bad3"
+	const expectedSubscriberHash = "940bd7a5f1688ea8d33ccb5136606dbc72e74c1d1e90e2fa4410c38b471db6c1"
+	const expectedSubscriberHashDifferentProfile = "e38cc16bbf517243595db8125d386465e44652367f88457d669e58281b7a301b"
+	const expectedProfileHash = "e4bf1c4b9dde482776785d53a648bef436773a28565af41efd460cf1390f2e6c"
+	const expectedFingerprint = "5bd08437e033eac25a8421657974626d192e98937e0de243b8898ad91229d9d6"
 
 	// Fixture subscriber (must match profile-apply-fixtures.ts exactly)
 	subscriber := bson.M{
-		"imsi":   "460001234567890",
-		"msisdn": bson.A{"13800138000", "13900139000"},
+		"schema_version": 1,
+		"imsi":           "460001234567890",
+		"msisdn":         bson.A{"13800138000", "13900139000"},
+		"imeisv":         "",
 		"security": bson.M{
 			"opc": "aabbccddee00112233445566778899ff",
 			"amf": "8000",
 			"k":   "00112233445566778899aabbccddeeff",
-			"sqn": "000000001234",
+			"sqn": 1234,
 		},
 		"ambr": bson.M{
 			"downlink": bson.M{"value": 50, "unit": 3},
@@ -461,18 +463,20 @@ func TestProfileApplyCrossRuntimeFixture(t *testing.T) {
 						"qos": bson.M{
 							"index": 9,
 							"arp": bson.M{
-								"priorityLevel":           8,
-								"preemptionCapability":    1,
-								"preemptionVulnerability": 1,
+								"priority_level":          8,
+								"pre_emption_capability":  1,
+								"pre_emption_vulnerability": 1,
 							},
 						},
-						"pccRuleList": bson.A{},
+						"pcc_rule": bson.A{},
 					},
 				},
 			},
 		},
-		"access_restriction_data": 4,
-		"network_access_mode":     0,
+		"access_restriction_data":  4,
+		"subscriber_status":        0,
+		"network_access_mode":      0,
+		"subscribed_rau_tau_timer": 0,
 		"webui_meta": bson.M{
 			"profile_name": "basic-4g",
 		},
@@ -505,12 +509,12 @@ func TestProfileApplyCrossRuntimeFixture(t *testing.T) {
 						"qos": bson.M{
 							"index": 9,
 							"arp": bson.M{
-								"priorityLevel":           8,
-								"preemptionCapability":    1,
-								"preemptionVulnerability": 1,
+								"priority_level":          8,
+								"pre_emption_capability":  1,
+								"pre_emption_vulnerability": 1,
 							},
 						},
-						"pccRuleList": bson.A{},
+						"pcc_rule": bson.A{},
 					},
 				},
 			},
@@ -572,12 +576,12 @@ func TestProfileApplyCrossRuntimeFixture(t *testing.T) {
 							"qos": bson.M{
 								"index": 9,
 								"arp": bson.M{
-									"priorityLevel":           8,
-									"preemptionCapability":    1,
-									"preemptionVulnerability": 1,
+									"priority_level":          8,
+									"pre_emption_capability":  1,
+									"pre_emption_vulnerability": 1,
 								},
 							},
-							"pccRuleList": bson.A{},
+							"pcc_rule": bson.A{},
 						},
 					},
 				},
