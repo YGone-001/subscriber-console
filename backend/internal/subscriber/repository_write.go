@@ -924,6 +924,25 @@ func convertSlices(slices any) []any {
 				} else {
 					convertedSess["pcc_rule"] = []any{}
 				}
+				// Convert pgwIpv4/pgwIpv6 → smf.ipv4/ipv6
+				smf := bson.M{}
+				if ipv4, ok := s["pgwIpv4"]; ok && ipv4 != nil && ipv4 != "" {
+					smf["ipv4"] = ipv4
+				} else if smfObj, ok := s["smf"].(map[string]any); ok {
+					if ipv4, ok := smfObj["ipv4"]; ok && ipv4 != nil && ipv4 != "" {
+						smf["ipv4"] = ipv4
+					}
+				}
+				if ipv6, ok := s["pgwIpv6"]; ok && ipv6 != nil && ipv6 != "" {
+					smf["ipv6"] = ipv6
+				} else if smfObj, ok := s["smf"].(map[string]any); ok {
+					if ipv6, ok := smfObj["ipv6"]; ok && ipv6 != nil && ipv6 != "" {
+						smf["ipv6"] = ipv6
+					}
+				}
+				if len(smf) > 0 {
+					convertedSess["smf"] = smf
+				}
 				convertedSessions = append(convertedSessions, convertedSess)
 			}
 			converted["session"] = convertedSessions

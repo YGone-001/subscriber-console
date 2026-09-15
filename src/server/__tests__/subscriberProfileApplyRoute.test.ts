@@ -32,15 +32,14 @@ function makeProfileDoc(): ProfileDocument {
     auth: {
       opc: 'aabbccddee00112233445566778899ff',
       amf: '8000',
-      key: '00112233445566778899aabbccddeeff',
-      algorithm: 'milenage',
+      k: '00112233445566778899aabbccddeeff',
     },
     ambr: { downlink: { value: 100, unit: 3 }, uplink: { value: 50, unit: 3 } },
     sliceList: [
       {
         sst: 1,
         sd: '000001',
-        sessionList: [
+        session_list: [
           {
             name: 'internet',
             type: 3,
@@ -70,16 +69,15 @@ function makeSubscriber(overrides?: Record<string, unknown>): XcloudSubscriberDo
     security: {
       opc: 'existing-opc-value',
       amf: '8000',
-      key: '00112233445566778899aabbccddeeff',
-      algorithm: 'milenage',
+      k: '00112233445566778899aabbccddeeff',
       sqn: '000000001234',
     },
     ambr: { downlink: { value: 50, unit: 3 }, uplink: { value: 25, unit: 3 } },
-    sliceList: [
+    slice: [
       {
         sst: 1,
         sd: '000001',
-        sessionList: [
+        session: [
           {
             name: 'internet',
             type: 3,
@@ -91,7 +89,7 @@ function makeSubscriber(overrides?: Record<string, unknown>): XcloudSubscriberDo
       },
     ],
     access_restriction_data: 4,
-    profileName: 'basic-4g',
+    webui_meta: { profile_name: 'basic-4g' },
     subscellularinfo: [],
     mps_priority: false,
     mcs_priority: false,
@@ -298,7 +296,7 @@ describe('POST /api/subscribers/:imsi/profile — production path', () => {
 
   it('SQN preserved after profile apply', async () => {
     const subscriberDoc = makeSubscriber({
-      security: { opc: 'old-opc', amf: '8000', key: 'key', algorithm: 'milenage', sqn: '999999999999' },
+      security: { opc: 'old-opc', amf: '8000', k: 'key', sqn: '999999999999' },
     });
     const profileDoc = makeProfileDoc();
     let replacementDoc: XcloudSubscriberDocument | undefined;

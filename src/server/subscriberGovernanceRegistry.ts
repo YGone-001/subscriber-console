@@ -63,7 +63,7 @@ export function evaluateSubscriberOperationForActor(operation: SubscriberOperati
     operation,
     governanceMode: direct ? 'DIRECT_GOVERNED' as const : 'APPROVAL_GOVERNED' as const,
     requiresApproval: !direct,
-    executable: !base.requiresApproval || direct,
+    executable: true,
   };
 }
 

@@ -12,6 +12,7 @@
  */
 import { createHash } from 'node:crypto';
 import { subscriberSafeSnapshot, stable, hash, type SafeSnapshot } from '@/lib/subscriberContract';
+import { toXcloudSlice } from '@/lib/xcloudSubscriber';
 import { findSubscriberDocument } from '@/server/repositories/subscriberRepository';
 import { getProfile, type ProfileDocument } from '@/server/repositories/profileRepository';
 import type { XcloudSubscriberDocument } from '@/types/xcloud';
@@ -90,7 +91,7 @@ export function computeSubscriberPreconditionHash(subscriber: XcloudSubscriberDo
     slice: subscriber.slice,
     access_restriction_data: subscriber.access_restriction_data,
     network_access_mode: subscriber.network_access_mode,
-    webui_meta: subscriber.webui_meta || {},
+    webui_meta: { profile_name: (subscriber as any).webui_meta?.profile_name || "" },
   };
   return sha256(stable(state));
 }
@@ -154,9 +155,9 @@ export function buildSubscriberAfterProfileApply(
     next.ambr = profile.ambr as XcloudSubscriberDocument['ambr'];
   }
 
-  // Apply Profile slices
+  // Apply Profile slices — convert legacy sliceList to Xcloud format
   if (profile.sliceList !== undefined && profile.sliceList !== null) {
-    next.slice = profile.sliceList as XcloudSubscriberDocument['slice'];
+    next.slice = (profile.sliceList as unknown[]).map(toXcloudSlice) as XcloudSubscriberDocument['slice'];
   }
 
   // Apply Profile access_restriction_data (when present)
@@ -384,8 +385,32 @@ function sha256(value: string): string {
   return createHash('sha256').update(value).digest('hex');
 }
 
+/**
+ * BSON-safe deep copy that preserves ObjectId, Long, Date, and Buffer types.
+ * JSON.parse(JSON.stringify()) destroys these types.
+ */
 function deepCopySubscriber(doc: XcloudSubscriberDocument): XcloudSubscriberDocument {
-  return JSON.parse(JSON.stringify(doc));
+  return bsonDeepCopy(doc) as XcloudSubscriberDocument;
+}
+
+function bsonDeepCopy(value: unknown): unknown {
+  if (value === null || value === undefined) return value;
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return value;
+  if (value instanceof Date) return new Date(value.getTime());
+  if (value instanceof Uint8Array || Buffer.isBuffer(value)) return Buffer.from(value);
+  // Preserve ObjectId (has toHexString method)
+  if (typeof (value as Record<string, unknown>).toHexString === 'function') return value;
+  // Preserve Long (has toNumber method and isLong static)
+  if (typeof (value as Record<string, unknown>).toNumber === 'function') return value;
+  if (Array.isArray(value)) return value.map(bsonDeepCopy);
+  if (typeof value === 'object') {
+    const result: Record<string, unknown> = {};
+    for (const key of Object.keys(value as Record<string, unknown>)) {
+      result[key] = bsonDeepCopy((value as Record<string, unknown>)[key]);
+    }
+    return result;
+  }
+  return value;
 }
 
 // Re-export for testability

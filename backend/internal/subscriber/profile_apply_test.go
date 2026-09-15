@@ -11,11 +11,10 @@ func TestBuildSubscriberAfterProfileApply(t *testing.T) {
 		"imsi":    "test-imsi",
 		"enabled": true,
 		"security": bson.M{
-			"opc":       "old-opc",
-			"amf":       "8000",
-			"key":       "00112233445566778899aabbccddeeff",
-			"algorithm": "milenage",
-			"sqn":       "000000001234",
+			"opc": "old-opc",
+			"amf": "8000",
+			"k":   "00112233445566778899aabbccddeeff",
+			"sqn": "000000001234",
 		},
 		"ambr": bson.M{
 			"downlink": bson.M{"value": 50, "unit": 3},
@@ -40,10 +39,9 @@ func TestBuildSubscriberAfterProfileApply(t *testing.T) {
 		profile := bson.M{
 			"name": "premium-5g",
 			"auth": bson.M{
-				"opc":       "aabbccddee00112233445566778899ff",
-				"amf":       "8000",
-				"key":       "00112233445566778899aabbccddeeff",
-				"algorithm": "milenage",
+				"opc": "aabbccddee00112233445566778899ff",
+				"amf": "8000",
+				"k":   "00112233445566778899aabbccddeeff",
 			},
 			"ambr": bson.M{
 				"downlink": bson.M{"value": 100, "unit": 3},
@@ -126,7 +124,7 @@ func TestBuildSubscriberAfterProfileApply(t *testing.T) {
 			"auth": bson.M{
 				"op":  "aabbccddee00112233",
 				"amf": "8000",
-				"key": "00112233445566778899aabbccddeeff",
+				"k":   "00112233445566778899aabbccddeeff",
 			},
 		}
 
@@ -198,7 +196,7 @@ func TestComputeProfilePreconditionHash(t *testing.T) {
 		"ambr": bson.M{
 			"downlink": bson.M{"value": 100},
 		},
-		"sliceList": bson.A{},
+		"sliceList":               bson.A{},
 		"access_restriction_data": 32,
 	}
 
@@ -271,17 +269,16 @@ func TestIsProfileApplyNoEffect(t *testing.T) {
 		"imsi":    "test-imsi",
 		"enabled": true,
 		"security": bson.M{
-			"opc":       "same-opc",
-			"amf":       "8000",
-			"key":       "key",
-			"algorithm": "milenage",
-			"sqn":       "1234",
+			"opc": "same-opc",
+			"amf": "8000",
+			"k":   "key",
+			"sqn": "1234",
 		},
 		"ambr": bson.M{
 			"downlink": bson.M{"value": 100, "unit": 3},
 			"uplink":   bson.M{"value": 50, "unit": 3},
 		},
-		"slice":                  bson.A{},
+		"slice":                   bson.A{},
 		"access_restriction_data": 32,
 		"webui_meta": bson.M{
 			"profile_name": "same-profile",
@@ -291,16 +288,15 @@ func TestIsProfileApplyNoEffect(t *testing.T) {
 	profile := bson.M{
 		"name": "same-profile",
 		"auth": bson.M{
-			"opc":       "same-opc",
-			"amf":       "8000",
-			"key":       "key",
-			"algorithm": "milenage",
+			"opc": "same-opc",
+			"amf": "8000",
+			"k":   "key",
 		},
 		"ambr": bson.M{
 			"downlink": bson.M{"value": 100, "unit": 3},
 			"uplink":   bson.M{"value": 50, "unit": 3},
 		},
-		"sliceList":              bson.A{},
+		"sliceList":               bson.A{},
 		"access_restriction_data": 32,
 	}
 
@@ -421,6 +417,200 @@ func TestConvertValue(t *testing.T) {
 		}
 		if convertValue(42) != 42 {
 			t.Error("int passthrough failed")
+		}
+	})
+}
+
+// ─── Cross-Runtime Fixture Parity ───
+// These tests verify that Go produces identical hashes to Node.
+// Expected values are committed in src/server/__tests__/profile-apply-fixtures.json
+
+func TestProfileApplyCrossRuntimeFixture(t *testing.T) {
+	// Expected values from profile-apply-fixtures.json
+	const expectedSubscriberHash = "ed4f2dd48fcecfabec59876dcf9a87fed20beea982c9de74b49dc8196e7a6873"
+	const expectedSubscriberHashDifferentProfile = "6716dc90d6ed3a8fccba9cbdf81f354265202ac86d98303bae69fc9d778bb72a"
+	const expectedProfileHash = "3d0842c165a9a06420efabc5022c444766a3de11ac75e6f1b843921c5848cec6"
+	const expectedFingerprint = "7d55e91ffe8c18d67887e98222aa0d5ea5b7da11837f7cb09ce5e457f856bad3"
+
+	// Fixture subscriber (must match profile-apply-fixtures.ts exactly)
+	subscriber := bson.M{
+		"imsi":   "460001234567890",
+		"msisdn": bson.A{"13800138000", "13900139000"},
+		"security": bson.M{
+			"opc": "aabbccddee00112233445566778899ff",
+			"amf": "8000",
+			"k":   "00112233445566778899aabbccddeeff",
+			"sqn": "000000001234",
+		},
+		"ambr": bson.M{
+			"downlink": bson.M{"value": 50, "unit": 3},
+			"uplink":   bson.M{"value": 25, "unit": 3},
+		},
+		"slice": bson.A{
+			bson.M{
+				"sst": 1,
+				"sd":  "000001",
+				"session": bson.A{
+					bson.M{
+						"name": "internet",
+						"type": 3,
+						"ambr": bson.M{
+							"downlink": bson.M{"value": 50, "unit": 3},
+							"uplink":   bson.M{"value": 25, "unit": 3},
+						},
+						"qos": bson.M{
+							"index": 9,
+							"arp": bson.M{
+								"priorityLevel":           8,
+								"preemptionCapability":    1,
+								"preemptionVulnerability": 1,
+							},
+						},
+						"pccRuleList": bson.A{},
+					},
+				},
+			},
+		},
+		"access_restriction_data": 4,
+		"network_access_mode":     0,
+		"webui_meta": bson.M{
+			"profile_name": "basic-4g",
+		},
+	}
+
+	// Fixture profile (must match profile-apply-fixtures.ts exactly)
+	profile := bson.M{
+		"name": "premium-5g",
+		"auth": bson.M{
+			"opc": "aabbccddee00112233445566778899ff",
+			"amf": "8000",
+			"k":   "00112233445566778899aabbccddeeff",
+		},
+		"ambr": bson.M{
+			"downlink": bson.M{"value": 100, "unit": 3},
+			"uplink":   bson.M{"value": 50, "unit": 3},
+		},
+		"sliceList": bson.A{
+			bson.M{
+				"sst": 1,
+				"sd":  "000001",
+				"session_list": bson.A{
+					bson.M{
+						"name": "internet",
+						"type": 3,
+						"ambr": bson.M{
+							"downlink": bson.M{"value": 100, "unit": 3},
+							"uplink":   bson.M{"value": 50, "unit": 3},
+						},
+						"qos": bson.M{
+							"index": 9,
+							"arp": bson.M{
+								"priorityLevel":           8,
+								"preemptionCapability":    1,
+								"preemptionVulnerability": 1,
+							},
+						},
+						"pccRuleList": bson.A{},
+					},
+				},
+			},
+		},
+		"access_restriction_data": 32,
+	}
+
+	t.Run("subscriber hash matches committed JSON", func(t *testing.T) {
+		hash := computeSubscriberPreconditionHash(subscriber)
+		if hash != expectedSubscriberHash {
+			t.Errorf("expected %s, got %s", expectedSubscriberHash, hash)
+		}
+	})
+
+	t.Run("subscriber hash: different profile_name produces different hash", func(t *testing.T) {
+		subDifferent := deepCopyBsonM(subscriber)
+		subDifferent["webui_meta"] = bson.M{"profile_name": "standard-5g"}
+		hash := computeSubscriberPreconditionHash(subDifferent)
+		if hash != expectedSubscriberHashDifferentProfile {
+			t.Errorf("expected %s, got %s", expectedSubscriberHashDifferentProfile, hash)
+		}
+		if hash == expectedSubscriberHash {
+			t.Error("expected different hash for different profile_name")
+		}
+	})
+
+	t.Run("profile hash matches committed JSON", func(t *testing.T) {
+		hash := computeProfilePreconditionHash(profile)
+		if hash != expectedProfileHash {
+			t.Errorf("expected %s, got %s", expectedProfileHash, hash)
+		}
+	})
+
+	t.Run("fingerprint matches committed JSON", func(t *testing.T) {
+		subHash := computeSubscriberPreconditionHash(subscriber)
+		profHash := computeProfilePreconditionHash(profile)
+		// afterPreview must match Node AFTER_PREVIEW exactly
+		after := SafeSnapshot{
+			Imsi:                  "460001234567890",
+			Msisdn:                []any{"13800138000", "13900139000"},
+			AccessRestrictionData: 32,
+			NetworkAccessMode:     0,
+			Ambr: bson.M{
+				"downlink": bson.M{"value": 100, "unit": 3},
+				"uplink":   bson.M{"value": 50, "unit": 3},
+			},
+			Slices: bson.A{
+				bson.M{
+					"sst": 1,
+					"sd":  "000001",
+					"session": bson.A{
+						bson.M{
+							"name": "internet",
+							"type": 3,
+							"ambr": bson.M{
+								"downlink": bson.M{"value": 100, "unit": 3},
+								"uplink":   bson.M{"value": 50, "unit": 3},
+							},
+							"qos": bson.M{
+								"index": 9,
+								"arp": bson.M{
+									"priorityLevel":           8,
+									"preemptionCapability":    1,
+									"preemptionVulnerability": 1,
+								},
+							},
+							"pccRuleList": bson.A{},
+						},
+					},
+				},
+			},
+		}
+		fp := computeProfileApplyFingerprint("460001234567890", "premium-5g", subHash, profHash, after)
+		if fp != expectedFingerprint {
+			t.Errorf("expected %s, got %s", expectedFingerprint, fp)
+		}
+	})
+
+	t.Run("sentinel: subscriber hash excludes forbidden fields", func(t *testing.T) {
+		// Adding enabled, subscriber_status, operator_specific_data must NOT change hash
+		withSentinel := deepCopyBsonM(subscriber)
+		withSentinel["enabled"] = false
+		withSentinel["subscriber_status"] = 1
+		withSentinel["operator_specific_data"] = "sentinel-value"
+		hash := computeSubscriberPreconditionHash(withSentinel)
+		if hash != expectedSubscriberHash {
+			t.Errorf("sentinel fields affected hash: expected %s, got %s", expectedSubscriberHash, hash)
+		}
+	})
+
+	t.Run("sentinel: profile hash excludes forbidden fields", func(t *testing.T) {
+		// Adding name, mcc, mnc, enabled must NOT change hash
+		withSentinel := deepCopyBsonM(profile)
+		withSentinel["name"] = "different-name"
+		withSentinel["mcc"] = "999"
+		withSentinel["mnc"] = "99"
+		withSentinel["enabled"] = false
+		hash := computeProfilePreconditionHash(withSentinel)
+		if hash != expectedProfileHash {
+			t.Errorf("sentinel fields affected hash: expected %s, got %s", expectedProfileHash, hash)
 		}
 	})
 }

@@ -1,0 +1,93 @@
+{
+  "subscriberHash": "ed4f2dd48fcecfabec59876dcf9a87fed20beea982c9de74b49dc8196e7a6873",
+  "subscriberHashDifferentProfile": "6716dc90d6ed3a8fccba9cbdf81f354265202ac86d98303bae69fc9d778bb72a",
+  "profileHash": "3d0842c165a9a06420efabc5022c444766a3de11ac75e6f1b843921c5848cec6",
+  "fingerprint": "7d55e91ffe8c18d67887e98222aa0d5ea5b7da11837f7cb09ce5e457f856bad3",
+  "afterPreview": {
+    "imsi": "460001234567890",
+    "msisdn": ["13800138000", "13900139000"],
+    "accessRestrictionData": 32,
+    "networkAccessMode": 0,
+    "ambr": {
+      "downlink": { "value": 100, "unit": 3 },
+      "uplink": { "value": 50, "unit": 3 }
+    },
+    "slices": [
+      {
+        "sst": 1,
+        "sd": "000001",
+        "session": [
+          {
+            "name": "internet",
+            "type": 3,
+            "ambr": { "downlink": { "value": 100, "unit": 3 }, "uplink": { "value": 50, "unit": 3 } },
+            "qos": { "index": 9, "arp": { "priorityLevel": 8, "preemptionCapability": 1, "preemptionVulnerability": 1 } },
+            "pccRuleList": []
+          }
+        ]
+      }
+    ]
+  },
+  "fixtures": {
+    "subscriber": {
+      "imsi": "460001234567890",
+      "msisdn": ["13800138000", "13900139000"],
+      "security": {
+        "opc": "aabbccddee00112233445566778899ff",
+        "amf": "8000",
+        "k": "00112233445566778899aabbccddeeff",
+        "sqn": "000000001234"
+      },
+      "ambr": {
+        "downlink": { "value": 50, "unit": 3 },
+        "uplink": { "value": 25, "unit": 3 }
+      },
+      "slice": [
+        {
+          "sst": 1,
+          "sd": "000001",
+          "session": [
+            {
+              "name": "internet",
+              "type": 3,
+              "ambr": { "downlink": { "value": 50, "unit": 3 }, "uplink": { "value": 25, "unit": 3 } },
+              "qos": { "index": 9, "arp": { "priorityLevel": 8, "preemptionCapability": 1, "preemptionVulnerability": 1 } },
+              "pccRuleList": []
+            }
+          ]
+        }
+      ],
+      "access_restriction_data": 4,
+      "network_access_mode": 0,
+      "webui_meta": { "profile_name": "basic-4g" }
+    },
+    "profile": {
+      "name": "premium-5g",
+      "auth": {
+        "opc": "aabbccddee00112233445566778899ff",
+        "amf": "8000",
+        "k": "00112233445566778899aabbccddeeff"
+      },
+      "ambr": {
+        "downlink": { "value": 100, "unit": 3 },
+        "uplink": { "value": 50, "unit": 3 }
+      },
+      "sliceList": [
+        {
+          "sst": 1,
+          "sd": "000001",
+          "session_list": [
+            {
+              "name": "internet",
+              "type": 3,
+              "ambr": { "downlink": { "value": 100, "unit": 3 }, "uplink": { "value": 50, "unit": 3 } },
+              "qos": { "index": 9, "arp": { "priorityLevel": 8, "preemptionCapability": 1, "preemptionVulnerability": 1 } },
+              "pccRuleList": []
+            }
+          ]
+        }
+      ],
+      "access_restriction_data": 32
+    }
+  }
+}

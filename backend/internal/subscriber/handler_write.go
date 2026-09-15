@@ -2348,7 +2348,11 @@ func (h *WriteHandler) createProfileApplyApproval(w http.ResponseWriter, r *http
 		Requester: fresh.Username,
 		TargetID:  fmt.Sprintf("subscriber:%s", intent.Imsi),
 		Summary:   fmt.Sprintf("Apply profile %s to subscriber %s", intent.ProfileName, intent.Imsi),
-		Payload:   frozenProfileApplyToMap(intent),
+		Operation: &approval.ApprovalOperation{
+			ResourceType: "subscriber",
+			ResourceID:   intent.Imsi,
+		},
+		Payload: frozenProfileApplyToMap(intent),
 	})
 	if err != nil {
 		h.handleProfileApplyError(w, err)
@@ -2384,15 +2388,15 @@ func (h *WriteHandler) writeProfileApplyAudit(r *http.Request, intent *FrozenSub
 		After:    intent.AfterPreview,
 		Result:   result,
 		Metadata: map[string]any{
-			"governanceMode":              governanceMode,
-			"profileName":                 intent.ProfileName,
-			"subscriberPreconditionHash":  intent.SubscriberPreconditionHash,
-			"profilePreconditionHash":     intent.ProfilePreconditionHash,
-			"operationFingerprint":        intent.OperationFingerprint,
-			"classification":              classification,
-			"mutationCommitted":           committed,
-			"securityChanged":             securityChanged,
-			"actorRole":                   fresh.NormalizedRole,
+			"governanceMode":             governanceMode,
+			"profileName":                intent.ProfileName,
+			"subscriberPreconditionHash": intent.SubscriberPreconditionHash,
+			"profilePreconditionHash":    intent.ProfilePreconditionHash,
+			"operationFingerprint":       intent.OperationFingerprint,
+			"classification":             classification,
+			"mutationCommitted":          committed,
+			"securityChanged":            securityChanged,
+			"actorRole":                  fresh.NormalizedRole,
 		},
 	}, fresh)
 }
@@ -2409,9 +2413,9 @@ func (h *WriteHandler) handleProfileApplyError(w http.ResponseWriter, err error)
 			response.Error(w, http.StatusBadRequest, "profileName is required", govErr.Code)
 		case "SUBSCRIBER_PROFILE_APPLY_NO_EFFECT":
 			response.JSON(w, http.StatusOK, map[string]any{
-				"outcome":       "no_effect",
+				"outcome":        "no_effect",
 				"classification": "NO_EFFECT",
-				"message":       "Profile is already applied",
+				"message":        "Profile is already applied",
 			})
 		default:
 			response.Error(w, http.StatusInternalServerError, "Profile apply error", govErr.Code)

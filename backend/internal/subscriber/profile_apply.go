@@ -12,14 +12,14 @@ import (
 // FrozenSubscriberProfileApplyV1 holds the frozen state for a subscriber profile apply.
 // Matches Node FrozenSubscriberProfileApplyV1 shape exactly.
 type FrozenSubscriberProfileApplyV1 struct {
-	Version                  string       `json:"version"`
-	Imsi                     string       `json:"imsi"`
-	ProfileName              string       `json:"profileName"`
-	SubscriberPreconditionHash string     `json:"subscriberPreconditionHash"`
-	ProfilePreconditionHash  string       `json:"profilePreconditionHash"`
-	Before                   SafeSnapshot `json:"before"`
-	AfterPreview             SafeSnapshot `json:"afterPreview"`
-	OperationFingerprint     string       `json:"operationFingerprint"`
+	Version                    string       `json:"version"`
+	Imsi                       string       `json:"imsi"`
+	ProfileName                string       `json:"profileName"`
+	SubscriberPreconditionHash string       `json:"subscriberPreconditionHash"`
+	ProfilePreconditionHash    string       `json:"profilePreconditionHash"`
+	Before                     SafeSnapshot `json:"before"`
+	AfterPreview               SafeSnapshot `json:"afterPreview"`
+	OperationFingerprint       string       `json:"operationFingerprint"`
 }
 
 // ProfileApplyAssertion holds the assertion result after re-reading current state.
@@ -32,10 +32,10 @@ type ProfileApplyAssertion struct {
 
 // ProfileApplyResult holds the result of a profile apply execution.
 type ProfileApplyResult struct {
-	Restored         bson.M `json:"restored"`
-	Classification   string `json:"classification"`
-	Committed        bool   `json:"committed"`
-	SecurityChanged  bool   `json:"securityChanged"`
+	Restored        bson.M `json:"restored"`
+	Classification  string `json:"classification"`
+	Committed       bool   `json:"committed"`
+	SecurityChanged bool   `json:"securityChanged"`
 }
 
 // ProfileLookupFn is a function that loads a profile document by name.
@@ -84,14 +84,14 @@ func PrepareFrozenSubscriberProfileApply(ctx context.Context, imsi string, profi
 	fingerprint := computeProfileApplyFingerprint(imsi, profileName, subHash, profHash, afterPreview)
 
 	return &FrozenSubscriberProfileApplyV1{
-		Version:                  "subscriber-profile-apply-v1",
-		Imsi:                     imsi,
-		ProfileName:              profileName,
+		Version:                    "subscriber-profile-apply-v1",
+		Imsi:                       imsi,
+		ProfileName:                profileName,
 		SubscriberPreconditionHash: subHash,
-		ProfilePreconditionHash:  profHash,
-		Before:                   before,
-		AfterPreview:             afterPreview,
-		OperationFingerprint:     fingerprint,
+		ProfilePreconditionHash:    profHash,
+		Before:                     before,
+		AfterPreview:               afterPreview,
+		OperationFingerprint:       fingerprint,
 	}, nil
 }
 
@@ -211,9 +211,9 @@ func BuildSubscriberAfterProfileApply(current bson.M, profile bson.M, profileNam
 		next["ambr"] = ambr
 	}
 
-	// Apply profile slices
+	// Apply profile slices — convert legacy sliceList to Xcloud format
 	if sliceList := profile["sliceList"]; sliceList != nil {
-		next["slice"] = sliceList
+		next["slice"] = convertSlices(sliceList)
 	}
 
 	// Apply access_restriction_data
@@ -301,19 +301,18 @@ func buildSubscriberAfterProfileApply(current bson.M, profile bson.M, profileNam
 
 // computeSubscriberPreconditionHash computes the full execution-relevant state hash.
 // Includes security fields as INPUT (unlike profile hash).
+// Canonical fields: imsi, msisdn, security, ambr, slice, access_restriction_data,
+// network_access_mode, webui_meta.profile_name.
 func computeSubscriberPreconditionHash(doc bson.M) string {
-	// Build canonical representation
 	data := map[string]any{
-		"imsi":                   doc["imsi"],
-		"enabled":                doc["enabled"],
-		"subscriber_status":      doc["subscriber_status"],
-		"operator_specific_data": doc["operator_specific_data"],
-		"msisdn":                 doc["msisdn"],
-		"security":               doc["security"],
-		"ambr":                   doc["ambr"],
-		"slice":                  doc["slice"],
+		"imsi":                    doc["imsi"],
+		"msisdn":                  doc["msisdn"],
+		"security":                doc["security"],
+		"ambr":                    doc["ambr"],
+		"slice":                   doc["slice"],
 		"access_restriction_data": doc["access_restriction_data"],
-		"webui_meta":             doc["webui_meta"],
+		"network_access_mode":     doc["network_access_mode"],
+		"webui_meta":              map[string]any{"profile_name": getProfileName(doc)},
 	}
 	return sha256Hex(stableJSON(data))
 }
@@ -322,22 +321,24 @@ func computeSubscriberPreconditionHash(doc bson.M) string {
 // Only includes auth, ambr, sliceList, access_restriction_data.
 func computeProfilePreconditionHash(profile bson.M) string {
 	data := map[string]any{
-		"auth":                   profile["auth"],
-		"ambr":                   profile["ambr"],
-		"sliceList":              profile["sliceList"],
+		"auth":                    profile["auth"],
+		"ambr":                    profile["ambr"],
+		"sliceList":               profile["sliceList"],
 		"access_restriction_data": profile["access_restriction_data"],
 	}
 	return sha256Hex(stableJSON(data))
 }
 
 // computeProfileApplyFingerprint computes the operation fingerprint.
+// Must include operation field for Node/Go parity.
 func computeProfileApplyFingerprint(imsi, profileName, subHash, profHash string, after SafeSnapshot) string {
 	data := map[string]any{
-		"imsi":                     imsi,
-		"profileName":              profileName,
+		"operation":                  "SUBSCRIBER_PROFILE_APPLY",
+		"imsi":                       imsi,
+		"profileName":                profileName,
 		"subscriberPreconditionHash": subHash,
-		"profilePreconditionHash":  profHash,
-		"afterPreview":             after,
+		"profilePreconditionHash":    profHash,
+		"afterPreview":               after,
 	}
 	return sha256Hex(stableJSON(data))
 }

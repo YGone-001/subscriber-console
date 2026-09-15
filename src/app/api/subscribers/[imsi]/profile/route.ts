@@ -156,6 +156,10 @@ export async function handleSubscriberProfileApplyPost(
       requester: fresh.username,
       targetId: `subscriber:${imsi}`,
       summary: `Apply profile ${profileName} to subscriber ${imsi}`,
+      operation: {
+        resourceType: 'subscriber',
+        resourceId: imsi,
+      },
       payload: {
         version: 'subscriber-profile-apply-v1',
         imsi,

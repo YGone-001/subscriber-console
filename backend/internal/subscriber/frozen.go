@@ -373,6 +373,19 @@ func stable(value any) any {
 			result[i] = stable(item)
 		}
 		return result
+	case bson.D:
+		// bson.D is an ordered document — treat like a sorted map
+		keys := make([]string, 0, len(m))
+		for _, elem := range m {
+			keys = append(keys, elem.Key)
+		}
+		sort.Strings(keys)
+		result := make(map[string]any, len(m))
+		for _, elem := range m {
+			result[elem.Key] = stable(elem.Value)
+		}
+		_ = keys // keys are sorted but result is a map so JSON serialization will re-sort
+		return result
 	default:
 		// Handle structs and slices via reflection
 		rv := reflect.ValueOf(value)

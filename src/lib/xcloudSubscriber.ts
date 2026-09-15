@@ -162,7 +162,7 @@ function toXcloudSession(session: unknown, index: number): XcloudSession {
   return output;
 }
 
-function toXcloudSlice(slice: unknown): XcloudSlice {
+export function toXcloudSlice(slice: unknown): XcloudSlice {
   const source = asRecord(slice);
   const sessionList = asArray(source.session_list ?? source.session);
 
