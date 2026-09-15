@@ -2,6 +2,7 @@ package subscriber
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 
@@ -14,7 +15,12 @@ import (
 func profileApplyTestRepo(t *testing.T) (*Repository, *mongo.Database, func()) {
 	t.Helper()
 
-	client, err := mongo.Connect(options.Client().ApplyURI("mongodb://127.0.0.1:27017"))
+	uri := os.Getenv("MONGODB_URI")
+	if uri == "" {
+		t.Fatal("MONGODB_URI is required for Profile Apply integration tests")
+	}
+
+	client, err := mongo.Connect(options.Client().ApplyURI(uri))
 	if err != nil {
 		t.Fatalf("connect mongo: %v", err)
 	}
@@ -659,4 +665,3 @@ func TestProfileApplyIntegration_OcsUntouched(t *testing.T) {
 		t.Errorf("ocs_subscribers plan_id changed: %v", ocsSub["plan_id"])
 	}
 }
-

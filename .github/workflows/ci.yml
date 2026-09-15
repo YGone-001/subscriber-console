@@ -53,6 +53,8 @@ jobs:
   go:
     name: Go backend quality gates
     runs-on: ubuntu-latest
+    env:
+      MONGODB_URI: mongodb://127.0.0.1:27017
     defaults:
       run:
         working-directory: backend

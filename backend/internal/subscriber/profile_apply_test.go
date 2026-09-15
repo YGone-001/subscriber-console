@@ -463,8 +463,8 @@ func TestProfileApplyCrossRuntimeFixture(t *testing.T) {
 						"qos": bson.M{
 							"index": 9,
 							"arp": bson.M{
-								"priority_level":          8,
-								"pre_emption_capability":  1,
+								"priority_level":            8,
+								"pre_emption_capability":    1,
 								"pre_emption_vulnerability": 1,
 							},
 						},
@@ -509,8 +509,8 @@ func TestProfileApplyCrossRuntimeFixture(t *testing.T) {
 						"qos": bson.M{
 							"index": 9,
 							"arp": bson.M{
-								"priority_level":          8,
-								"pre_emption_capability":  1,
+								"priority_level":            8,
+								"pre_emption_capability":    1,
 								"pre_emption_vulnerability": 1,
 							},
 						},
@@ -576,8 +576,8 @@ func TestProfileApplyCrossRuntimeFixture(t *testing.T) {
 							"qos": bson.M{
 								"index": 9,
 								"arp": bson.M{
-									"priority_level":          8,
-									"pre_emption_capability":  1,
+									"priority_level":            8,
+									"pre_emption_capability":    1,
 									"pre_emption_vulnerability": 1,
 								},
 							},

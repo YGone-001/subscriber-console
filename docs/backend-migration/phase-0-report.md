@@ -39,10 +39,10 @@ Browser → Nginx → Next.js :3000
 
 | Metric | Count |
 |--------|------:|
-| Route files | **63** |
-| Total operations | **89** |
+| Route files | **64** |
+| Total operations | **90** |
 | GET | 40 |
-| POST | 32 |
+| POST | 33 |
 | PUT | 7 |
 | PATCH | 3 |
 | DELETE | 7 |
@@ -83,7 +83,7 @@ Browser → Nginx → Next.js :3000
 
 ## 6. Mutation Count
 
-**49 non-GET HTTP operations** (POST + PUT + PATCH + DELETE).
+**50 non-GET HTTP operations** (POST + PUT + PATCH + DELETE).
 
 - 46 are semantic writes (actual data mutations)
 - 2 are semantic reads using POST (`batch/precheck`, `system/audit/scan`)
@@ -200,7 +200,7 @@ See `cnms-reuse-matrix.md` for detailed comparison.
 ## 18. Phase 1 Readiness
 
 **Infrastructure ready**:
-- [x] API inventory complete (63 files, 89 operations)
+- [x] API inventory complete (64 files, 90 operations)
 - [x] Governance system fully mapped
 - [x] Approval chain fully traced
 - [x] MongoDB collection map complete
@@ -233,7 +233,7 @@ See `cnms-reuse-matrix.md` for detailed comparison.
 
 | Document | Old Statement | Current Reality | Evidence | Impact |
 |----------|--------------|-----------------|----------|--------|
-| CLAUDE.md | "54 API Route Handlers" | 63 route files, 89 operations | `scripts/migration/inventory-api.mjs` scan | Migration scope underestimated |
+| CLAUDE.md | "54 API Route Handlers" | 64 route files, 90 operations | `scripts/migration/inventory-api.mjs` scan | Migration scope underestimated |
 | CLAUDE.md | "14 repositories" | 14 repositories (confirmed) | `src/server/repositories/` listing | Accurate |
 | CLAUDE.md | "尚未 standalone" | **Already configured** — `next.config.ts` has `output: 'standalone'` | `next.config.ts:13` | Phase 1 can skip standalone setup |
 | CLAUDE.md | "CNMS JWT 可直接复制" | UNVERIFIED — likely incompatible | subscriber-console has `sv`, `locked`, `status` | Must verify before Phase 6 |
