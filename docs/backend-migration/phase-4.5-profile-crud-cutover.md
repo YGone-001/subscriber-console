@@ -183,7 +183,14 @@ node scripts/migration/validate-inventory.mjs
 | Business mutations | 12 |
 | **Total Go operations** | **51** |
 
-**Phase 4.5 additions**: +3 business mutations (Profile Create, Update, Delete)
+**Phase 4.5 routing additions**:
++3 ACTUALLY_ROUTED business mutation endpoints (Profile Create, Update, Delete)
+
+**Implementation inventory unchanged**:
+- 34 semantic reads
+- 5 governance mutations
+- 12 business mutations
+- 51 total Go operations
 
 ## Migration Routing Matrix Updates
 
@@ -322,3 +329,102 @@ feat(routing): cutover profile CRUD to Go backend
 ---
 
 **Phase 4.5 Complete**: Profile CRUD operations successfully cut over to Go backend with full verification, rollback proof, and contract preservation.
+
+---
+
+## Phase 4.5-C: Normal-CI Routing Acceptance Correction
+
+> **Status**: IN PROGRESS
+> **Date**: 2026-09-16
+
+### Original Defect
+
+**Stale test path**: `src/lib/__tests__/cutover-routing.test.ts`
+**Stale table-size assertion**: `CUTOVER_TABLE.length === 2`
+**Stale Profile DELETE assertion**: `DELETE /api/profiles/:name → node`
+**npm test discovery pattern**: `tests/*.test.mjs`
+**Stale test included in normal CI before correction**: NO
+**Reason run #70 could remain green**: Stale test was outside normal CI discovery
+
+### Routing Test Correction
+
+**Authoritative normal-CI test path**: `tests/cutoverRouting.test.mjs`
+**Duplicate stale test removed**: `src/lib/__tests__/cutover-routing.test.ts`
+**Test discovered by npm test**: YES
+**Executed routing test count**: 26 assertions across 5 describe blocks
+
+### Phase 4.5 Routing Commit
+
+**SHA**: `f3185ead37b18b629915bc4f30080bb9e2603219`
+**Message**: `feat(routing): cutover profile CRUD to Go backend`
+**Remote status**: Pushed to origin/develop
+**Phase 4.5 routing CI**: Run #70, Run ID 35077990307, Result: SUCCESS
+**Note**: Run #70 did NOT test the new routing acceptance test (stale test was outside CI)
+
+### Correction Commit
+
+**SHA**: (pending)
+**Message**: `test(routing): cover profile CRUD cutover in normal CI`
+**Changes**:
+- Remove stale test: `src/lib/__tests__/cutover-routing.test.ts`
+- Add normal-CI test: `tests/cutoverRouting.test.mjs`
+- Correct accounting wording in this report
+
+### Baseline Failure Proof
+
+**Old expected table size**: 2
+**Actual final table size**: 5
+
+**Old DELETE /api/profiles/:name expectation**: node
+**Actual accepted owner**: go
+
+**Conclusion**: The stale test would fail against the current production routing state. The correction aligns the test with the authoritative accepted state.
+
+### Final Routing Assertions (Verified)
+
+**Go-owned routes**:
+- POST /api/profiles → go ✅
+- PUT /api/profiles/{name} → go ✅
+- DELETE /api/profiles/{name} → go ✅
+- POST /api/profiles/{name}/versions/{versionId}/restore → go ✅
+- POST /api/subscribers/{imsi}/profile → go ✅
+
+**METHOD isolation**:
+- GET /api/profiles → node ✅
+- GET /api/profiles/{name} → node ✅
+- POST /api/profiles/{name} → node ✅
+- PATCH /api/profiles/{name} → node ✅
+- GET /api/profiles/{name}/versions/{versionId}/restore → node ✅
+
+**Remaining Phase 4 Node ownership**:
+- POST /api/subscribers → node ✅
+- PUT /api/subscribers/{imsi} → node ✅
+- DELETE /api/subscribers/{imsi} → node ✅
+- POST /api/subscribers/batch → node ✅
+- POST /api/subscribers/batch-update → node ✅
+- POST /api/subscribers/bulk-delete → node ✅
+- POST /api/subscribers/import → node ✅
+
+**Unmatched routes**:
+- POST /api/approvals/123/approve → node ✅
+- GET /dashboard → node ✅
+- POST /api/unknown-operation → node ✅
+
+### Accounting Correction
+
+**Corrected wording**:
+```
+Phase 4.5 routing additions:
++3 ACTUALLY_ROUTED business mutation endpoints
+
+Implementation inventory unchanged:
+34 semantic reads
+5 governance mutations
+12 business mutations
+51 total Go operations
+```
+
+**Removed incorrect wording**:
+```
+Phase 4.5 additions: +3 business mutations (Profile Create, Update, Delete)
+```
