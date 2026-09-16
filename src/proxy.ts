@@ -3,8 +3,55 @@ import type { NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
 import { getJwtSecretKey } from '@/lib/security';
 import { AccountSessionError, validateCurrentAccount } from '@/lib/accountSession';
+import { resolveRouteOwner } from '@/lib/cutover-routing';
 
 const JWT_SECRET = getJwtSecretKey();
+const GO_BACKEND_URL = process.env.GO_BACKEND_URL || 'http://127.0.0.1:18888';
+
+/**
+ * Forward an authenticated request to the Go backend.
+ * The Go backend performs its own JWT verification from the auth_token cookie.
+ * Cookies and body are forwarded; auth headers are set by the Node proxy.
+ */
+async function forwardToGo(request: NextRequest, requestHeaders: Headers): Promise<Response> {
+  const goUrl = new URL(request.nextUrl.pathname + request.nextUrl.search, GO_BACKEND_URL);
+
+  // Forward original request with cookies and body.
+  // Go middleware extracts auth_token cookie independently.
+  const goRequest = new Request(goUrl.toString(), {
+    method: request.method,
+    headers: requestHeaders,
+    body: request.method !== 'GET' && request.method !== 'HEAD' ? request.body : undefined,
+    // @ts-expect-error -- duplex is required for streaming body but not in standard types
+    duplex: 'half',
+  });
+
+  let goResponse: Response;
+  try {
+    goResponse = await fetch(goRequest);
+  } catch (err) {
+    // Go backend unreachable — return 502, do NOT fall back to Node.
+    // Single-writer invariant: owner=go means only Go may execute.
+    // Rollback: change owner in cutover-routing.ts to 'node'.
+    console.error('[cutover] Go backend unreachable:', request.method, request.nextUrl.pathname, err);
+    return NextResponse.json(
+      { error: 'Backend temporarily unavailable', code: 'GO_BACKEND_UNREACHABLE' },
+      { status: 502 }
+    );
+  }
+
+  // Build response for the browser — preserve Go's status, headers, body.
+  const responseHeaders = new Headers(goResponse.headers);
+  // Remove hop-by-hop headers that should not be forwarded
+  responseHeaders.delete('transfer-encoding');
+  responseHeaders.delete('connection');
+
+  return new Response(goResponse.body, {
+    status: goResponse.status,
+    statusText: goResponse.statusText,
+    headers: responseHeaders,
+  });
+}
 
 export async function proxy(request: NextRequest) {
   const token = request.cookies.get('auth_token')?.value;
@@ -34,6 +81,17 @@ export async function proxy(request: NextRequest) {
     requestHeaders.set('x-user-role', account.role);
     requestHeaders.set('x-user-id', account.userId);
     requestHeaders.set('x-user-session-version', String(account.sessionVersion));
+
+    // ── Controlled Single-Writer Cutover ──────────────────────────
+    // For routes owned by Go, forward the authenticated request to Go :18888.
+    // Go performs its own JWT verification; single-writer invariant is preserved.
+    // Rollback: change owner in cutover-routing.ts from 'go' to 'node'.
+    if (isApiRoute) {
+      const owner = resolveRouteOwner(request.method, request.nextUrl.pathname);
+      if (owner === 'go') {
+        return await forwardToGo(request, requestHeaders);
+      }
+    }
 
     if (isAuthRoute) {
       return NextResponse.redirect(new URL('/', request.url));

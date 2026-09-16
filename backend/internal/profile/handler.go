@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -15,6 +16,7 @@ import (
 	"subscriber/internal/approval"
 	"subscriber/internal/audit"
 	"subscriber/internal/auth"
+	"subscriber/internal/middleware"
 	"subscriber/internal/response"
 )
 
@@ -768,6 +770,17 @@ func (h *Handler) Restore(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	versionId := r.PathValue("versionId")
 
+	slog.Info("profile_restore_start",
+		"operation", "PROFILE_RESTORE",
+		"request_id", middleware.RequestIDFromContext(r.Context()),
+		"method", r.Method,
+		"path", r.URL.Path,
+		"principal", p.Username,
+		"role", p.NormalizedRole,
+		"profile", name,
+		"version_id", versionId,
+	)
+
 	// Rate limit: 10/60s
 	if !h.limiter.Enforce(w, r, "profiles:restore:"+p.Username, 10, 60) {
 		return
@@ -842,6 +855,16 @@ func (h *Handler) handleRestoreApproval(w http.ResponseWriter, r *http.Request, 
 	// Audit approval creation using restore-specific audit
 	_ = h.writeRestoreAudit(r.Context(), p, name, intent, nil, "APPROVAL_GOVERNED", false, nil)
 
+	slog.Info("profile_restore_approval_created",
+		"operation", "PROFILE_RESTORE",
+		"request_id", middleware.RequestIDFromContext(r.Context()),
+		"principal", p.Username,
+		"governance_mode", "APPROVAL_GOVERNED",
+		"approval_id", approvalDoc.ID,
+		"profile", name,
+		"version_id", versionId,
+	)
+
 	response.JSON(w, http.StatusAccepted, map[string]interface{}{
 		"message":  "Approval required before profile restore",
 		"approval": approvalDoc,
@@ -850,6 +873,15 @@ func (h *Handler) handleRestoreApproval(w http.ResponseWriter, r *http.Request, 
 
 // executeDirectRestore executes the restore directly for privileged roles.
 func (h *Handler) executeDirectRestore(w http.ResponseWriter, r *http.Request, p *auth.Principal, name, versionId string) {
+	reqID := middleware.RequestIDFromContext(r.Context())
+	slog.Info("profile_restore_direct_execute",
+		"operation", "PROFILE_RESTORE",
+		"request_id", reqID,
+		"principal", p.Username,
+		"governance_mode", "DIRECT_GOVERNED",
+		"profile", name,
+		"version_id", versionId,
+	)
 	// Prepare frozen v2 intent
 	intent, err := h.prepareFrozenRestoreV2(r.Context(), p, name, versionId)
 	if err != nil {
@@ -869,6 +901,14 @@ func (h *Handler) executeDirectRestore(w http.ResponseWriter, r *http.Request, p
 	}
 	if assertion == nil {
 		// Source version or current profile drifted
+		slog.Warn("profile_restore_drift",
+			"operation", "PROFILE_RESTORE",
+			"request_id", reqID,
+			"principal", p.Username,
+			"governance_mode", "DIRECT_GOVERNED",
+			"profile", name,
+			"result", "PRECONDITION_CHANGED",
+		)
 		if auditErr := h.writeRestoreAudit(r.Context(), p, name, intent, nil, "PRECONDITION_CHANGED", false, nil); auditErr != nil {
 			response.JSON(w, http.StatusServiceUnavailable, map[string]interface{}{
 				"error":     "Audit unavailable",
@@ -932,6 +972,13 @@ func (h *Handler) executeDirectRestore(w http.ResponseWriter, r *http.Request, p
 
 	// Success - strict audit
 	if auditErr := h.writeRestoreAudit(r.Context(), p, name, intent, result, "SUCCESS", true, nil); auditErr != nil {
+		slog.Error("profile_restore_audit_failed",
+			"operation", "PROFILE_RESTORE",
+			"request_id", reqID,
+			"principal", p.Username,
+			"governance_mode", "DIRECT_GOVERNED",
+			"result", "AUDIT_UNAVAILABLE",
+		)
 		response.JSON(w, http.StatusServiceUnavailable, map[string]interface{}{
 			"error":     "Audit unavailable",
 			"code":      "AUDIT_UNAVAILABLE",
@@ -939,6 +986,15 @@ func (h *Handler) executeDirectRestore(w http.ResponseWriter, r *http.Request, p
 		})
 		return
 	}
+
+	slog.Info("profile_restore_success",
+		"operation", "PROFILE_RESTORE",
+		"request_id", reqID,
+		"principal", p.Username,
+		"governance_mode", "DIRECT_GOVERNED",
+		"profile", name,
+		"result", "success",
+	)
 
 	response.JSON(w, http.StatusOK, map[string]interface{}{
 		"message": "Profile restored successfully",

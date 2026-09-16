@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"subscriber/internal/audit"
 	"subscriber/internal/auth"
 	"subscriber/internal/governance"
+	"subscriber/internal/middleware"
 	"subscriber/internal/response"
 	"subscriber/internal/user"
 )
@@ -2269,13 +2271,33 @@ func (h *WriteHandler) ProfileApply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	reqID := middleware.RequestIDFromContext(r.Context())
+
 	if result.Decision == governance.Direct {
 		// DIRECT_GOVERNED: execute immediately
+		slog.Info("profile_apply_start",
+			"operation", "SUBSCRIBER_PROFILE_APPLY",
+			"request_id", reqID,
+			"principal", fresh.Username,
+			"role", fresh.NormalizedRole,
+			"governance_mode", "DIRECT_GOVERNED",
+			"imsi", imsi,
+			"profile", strings.TrimSpace(body.ProfileName),
+		)
 		h.executeDirectProfileApply(w, r, intent, fresh)
 		return
 	}
 
 	// APPROVAL_GOVERNED: create approval
+	slog.Info("profile_apply_start",
+		"operation", "SUBSCRIBER_PROFILE_APPLY",
+		"request_id", reqID,
+		"principal", fresh.Username,
+		"role", fresh.NormalizedRole,
+		"governance_mode", "APPROVAL_GOVERNED",
+		"imsi", imsi,
+		"profile", strings.TrimSpace(body.ProfileName),
+	)
 	h.createProfileApplyApproval(w, r, intent, fresh)
 }
 
@@ -2292,6 +2314,15 @@ func (h *WriteHandler) executeDirectProfileApply(w http.ResponseWriter, r *http.
 	}
 	if assertion == nil {
 		// Drift detected
+		slog.Warn("profile_apply_drift",
+			"operation", "SUBSCRIBER_PROFILE_APPLY",
+			"request_id", middleware.RequestIDFromContext(r.Context()),
+			"principal", fresh.Username,
+			"governance_mode", "DIRECT_GOVERNED",
+			"imsi", intent.Imsi,
+			"profile", intent.ProfileName,
+			"result", "PRECONDITION_CHANGED",
+		)
 		h.writeProfileApplyAudit(r, intent, fresh, "failed", "DIRECT_GOVERNED", "PRECONDITION_CHANGED", false, false)
 		response.JSON(w, http.StatusConflict, map[string]any{
 			"error":     "Subscriber or Profile changed since preparation",
@@ -2324,6 +2355,13 @@ func (h *WriteHandler) executeDirectProfileApply(w http.ResponseWriter, r *http.
 	// Strict audit — committed=true on failure
 	auditErr := h.writeProfileApplyAudit(r, intent, fresh, "success", "DIRECT_GOVERNED", execResult.Classification, execResult.Committed, execResult.SecurityChanged)
 	if auditErr != nil {
+		slog.Error("profile_apply_audit_failed",
+			"operation", "SUBSCRIBER_PROFILE_APPLY",
+			"request_id", middleware.RequestIDFromContext(r.Context()),
+			"principal", fresh.Username,
+			"governance_mode", "DIRECT_GOVERNED",
+			"result", "AUDIT_UNAVAILABLE",
+		)
 		response.JSON(w, http.StatusServiceUnavailable, map[string]any{
 			"error":     "AUDIT_UNAVAILABLE",
 			"code":      "AUDIT_UNAVAILABLE",
@@ -2331,6 +2369,16 @@ func (h *WriteHandler) executeDirectProfileApply(w http.ResponseWriter, r *http.
 		})
 		return
 	}
+
+	slog.Info("profile_apply_success",
+		"operation", "SUBSCRIBER_PROFILE_APPLY",
+		"request_id", middleware.RequestIDFromContext(r.Context()),
+		"principal", fresh.Username,
+		"governance_mode", "DIRECT_GOVERNED",
+		"imsi", intent.Imsi,
+		"profile", intent.ProfileName,
+		"result", "success",
+	)
 
 	response.JSON(w, http.StatusOK, map[string]any{
 		"outcome":     "executed",
@@ -2369,6 +2417,16 @@ func (h *WriteHandler) createProfileApplyApproval(w http.ResponseWriter, r *http
 		})
 		return
 	}
+
+	slog.Info("profile_apply_approval_created",
+		"operation", "SUBSCRIBER_PROFILE_APPLY",
+		"request_id", middleware.RequestIDFromContext(r.Context()),
+		"principal", fresh.Username,
+		"governance_mode", "APPROVAL_GOVERNED",
+		"approval_id", approvalDoc.ID,
+		"imsi", intent.Imsi,
+		"profile", intent.ProfileName,
+	)
 
 	response.JSON(w, http.StatusAccepted, map[string]any{
 		"outcome":          "approval_required",
