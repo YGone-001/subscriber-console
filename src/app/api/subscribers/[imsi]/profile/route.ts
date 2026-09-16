@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { requireCapability } from '@/lib/authz';
+import { requireCapability, type AuthContext } from '@/lib/authz';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import { createApprovalRequest, type CreateApprovalInput } from '@/server/repositories/approvalRepository';
 import { writeAuditLog, type WriteAuditInput, type AuditWriteOptions } from '@/lib/audit';
@@ -16,6 +16,23 @@ import type { XcloudSubscriberDocument } from '@/types/xcloud';
 import type { GovernanceActor } from '@/types/governance';
 
 export const dynamic = 'force-dynamic';
+
+/**
+ * Map requireCapability AuthContext to validateCurrentAccount SessionClaims.
+ *
+ * requireCapability returns: { user, role, sessionVersion }
+ * validateCurrentAccount expects: { username, role, sv }
+ *
+ * This adapter makes the field-shape translation explicit and prevents
+ * silent validation failures from mismatched field names.
+ */
+export function toCurrentAccountClaims(auth: AuthContext): { username: string; role: string; sv: number } {
+  return {
+    username: auth.user,
+    role: auth.role,
+    sv: auth.sessionVersion,
+  };
+}
 
 // ─── Testable Seam ───
 
@@ -77,7 +94,7 @@ export async function handleSubscriberProfileApplyPost(
   // Fresh actor validation — fail closed
   let fresh: { username: string; normalizedRole: string };
   try {
-    fresh = await deps.validateAccount(auth.auth);
+    fresh = await deps.validateAccount(toCurrentAccountClaims(auth.auth));
   } catch {
     return NextResponse.json({ error: 'Session invalid', code: 'AUTH_INVALID_SESSION' }, { status: 401 });
   }
