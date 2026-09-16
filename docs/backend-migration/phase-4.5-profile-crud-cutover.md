@@ -363,7 +363,7 @@ feat(routing): cutover profile CRUD to Go backend
 
 ### Correction Commit
 
-**SHA**: (pending)
+**SHA**: `dd84f0ec82528e6d92cc44baae42dcf8434a9996`
 **Message**: `test(routing): cover profile CRUD cutover in normal CI`
 **Changes**:
 - Remove stale test: `src/lib/__tests__/cutover-routing.test.ts`
