@@ -117,7 +117,7 @@ one mongo.Client
 2. 自动化测试
 3. 冻结 API Contract / migration inventory
 4. AI_CONTEXT.md
-5. architecture.md / api.md / deployment.md
+5. deployment.md
 6. DEV_LOG.md
 7. README / 旧设计文档
 8. 注释
@@ -155,7 +155,6 @@ git log --oneline -10
 
 ```text
 docs/backend-migration/README.md
-docs/backend-migration/phase-2-report.md
 docs/backend-migration/migration-routing-matrix.md
 ```
 

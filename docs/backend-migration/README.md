@@ -29,7 +29,7 @@ Browser → Nginx
 
 | Document | Description |
 |----------|-------------|
-| [Phase 0 Report](phase-0-report.md) | Executive summary, findings, risks, readiness |
+| [API Baseline](api-baseline.md) | Executive summary, findings, risks, readiness |
 | [API Inventory](api-inventory.md) | Complete route table: 63 files, 89 operations |
 | [API Contract Baseline](api-contract-baseline.md) | Frozen request/response contracts |
 | [Write Operation Inventory](write-operation-inventory.md) | All 48 mutations classified by governance mode |

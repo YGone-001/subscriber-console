@@ -27,7 +27,7 @@ const ROOT = resolve(__dirname, '../..');
 const JSON_PATH = resolve(ROOT, 'docs/backend-migration/generated/api-routes.json');
 const MATRIX_PATH = resolve(ROOT, 'docs/backend-migration/migration-routing-matrix.md');
 const WRITE_INV_PATH = resolve(ROOT, 'docs/backend-migration/write-operation-inventory.md');
-const REPORT_PATH = resolve(ROOT, 'docs/backend-migration/phase-0-report.md');
+const REPORT_PATH = resolve(ROOT, 'docs/backend-migration/api-baseline.md');
 
 let errors = 0;
 let warnings = 0;
@@ -68,9 +68,9 @@ console.log(`\n📊 Scanner output: ${routes.length} routes, ${totalOps} operati
 console.log(`   GET=${methodCounts.GET} POST=${methodCounts.POST} PUT=${methodCounts.PUT} PATCH=${methodCounts.PATCH} DELETE=${methodCounts.DELETE}`);
 console.log(`   Non-GET: ${nonGetOps}`);
 
-// ── Check 1: Method distribution in phase-0-report.md ────────────────────────
+// ── Check 1: Method distribution in api-baseline.md ──────────────────────────
 
-console.log('\n── Check 1: phase-0-report.md method counts ──');
+console.log('\n── Check 1: api-baseline.md method counts ──');
 
 if (existsSync(REPORT_PATH)) {
   const report = readFileSync(REPORT_PATH, 'utf-8');
