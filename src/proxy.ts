@@ -89,6 +89,14 @@ export async function proxy(request: NextRequest) {
     if (isApiRoute) {
       const owner = resolveRouteOwner(request.method, request.nextUrl.pathname);
       if (owner === 'go') {
+        console.log(JSON.stringify({
+          level: 'info',
+          msg: 'cutover_forward',
+          method: request.method,
+          path: request.nextUrl.pathname,
+          owner: 'go',
+          principal: account.username,
+        }));
         return await forwardToGo(request, requestHeaders);
       }
     }
