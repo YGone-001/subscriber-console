@@ -4,8 +4,8 @@ import { resolveRouteOwner, CUTOVER_TABLE } from '../src/lib/cutover-routing.ts'
 
 describe('cutover-routing', () => {
   describe('CUTOVER_TABLE', () => {
-    it('contains exactly 9 cutover routes', () => {
-      assert.equal(CUTOVER_TABLE.length, 9);
+    it('contains exactly 10 cutover routes', () => {
+      assert.equal(CUTOVER_TABLE.length, 10);
     });
 
     it('Pilot A: POST /api/profiles/{name}/versions/{versionId}/restore is owned by Go', () => {
@@ -81,6 +81,14 @@ describe('cutover-routing', () => {
       assert.ok(batch, 'Subscriber Batch Create must exist');
       assert.equal(batch.owner, 'go');
     });
+
+    it('Phase 4.7: POST /api/subscribers/batch-update is owned by Go', () => {
+      const batchUpdate = CUTOVER_TABLE.find(
+        (r) => r.path === '/api/subscribers/batch-update' && r.method === 'POST'
+      );
+      assert.ok(batchUpdate, 'Subscriber Batch Update must exist');
+      assert.equal(batchUpdate.owner, 'go');
+    });
   });
 
   describe('resolveRouteOwner - Go-owned routes', () => {
@@ -125,6 +133,10 @@ describe('cutover-routing', () => {
     it('routes POST /api/subscribers/batch to Go (Batch Create)', () => {
       assert.equal(resolveRouteOwner('POST', '/api/subscribers/batch'), 'go');
     });
+
+    it('routes POST /api/subscribers/batch-update to Go (Batch Update)', () => {
+      assert.equal(resolveRouteOwner('POST', '/api/subscribers/batch-update'), 'go');
+    });
   });
 
   describe('resolveRouteOwner - METHOD isolation', () => {
@@ -165,10 +177,6 @@ describe('cutover-routing', () => {
   });
 
   describe('resolveRouteOwner - Remaining Phase 4 Node ownership', () => {
-    it('routes POST /api/subscribers/batch-update to Node (Batch Update)', () => {
-      assert.equal(resolveRouteOwner('POST', '/api/subscribers/batch-update'), 'node');
-    });
-
     it('routes POST /api/subscribers/bulk-delete to Node (Bulk Delete)', () => {
       assert.equal(resolveRouteOwner('POST', '/api/subscribers/bulk-delete'), 'node');
     });

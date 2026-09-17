@@ -45,6 +45,7 @@ export const CUTOVER_TABLE: readonly CutoverRoute[] = [
 
   // ── Phase 4.7: Subscriber Batch ────────────────────────────
   { method: 'POST', path: '/api/subscribers/batch', owner: 'go' },
+  { method: 'POST', path: '/api/subscribers/batch-update', owner: 'go' },
 ] as const;
 
 /**
