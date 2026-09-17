@@ -4,8 +4,8 @@ import { resolveRouteOwner, CUTOVER_TABLE } from '../src/lib/cutover-routing.ts'
 
 describe('cutover-routing', () => {
   describe('CUTOVER_TABLE', () => {
-    it('contains exactly 11 cutover routes', () => {
-      assert.equal(CUTOVER_TABLE.length, 11);
+    it('contains exactly 12 cutover routes', () => {
+      assert.equal(CUTOVER_TABLE.length, 12);
     });
 
     it('Pilot A: POST /api/profiles/{name}/versions/{versionId}/restore is owned by Go', () => {
@@ -97,6 +97,14 @@ describe('cutover-routing', () => {
       assert.ok(importRoute, 'Subscriber Import must exist');
       assert.equal(importRoute.owner, 'go');
     });
+
+    it('Phase 4.7: POST /api/subscribers/bulk-delete is owned by Go', () => {
+      const bulkDelete = CUTOVER_TABLE.find(
+        (r) => r.path === '/api/subscribers/bulk-delete' && r.method === 'POST'
+      );
+      assert.ok(bulkDelete, 'Subscriber Bulk Delete must exist');
+      assert.equal(bulkDelete.owner, 'go');
+    });
   });
 
   describe('resolveRouteOwner - Go-owned routes', () => {
@@ -149,6 +157,10 @@ describe('cutover-routing', () => {
     it('routes POST /api/subscribers/import to Go (Import)', () => {
       assert.equal(resolveRouteOwner('POST', '/api/subscribers/import'), 'go');
     });
+
+    it('routes POST /api/subscribers/bulk-delete to Go (Bulk Delete)', () => {
+      assert.equal(resolveRouteOwner('POST', '/api/subscribers/bulk-delete'), 'go');
+    });
   });
 
   describe('resolveRouteOwner - METHOD isolation', () => {
@@ -189,10 +201,6 @@ describe('cutover-routing', () => {
   });
 
   describe('resolveRouteOwner - Remaining Phase 4 Node ownership', () => {
-    it('routes POST /api/subscribers/bulk-delete to Node (Bulk Delete)', () => {
-      assert.equal(resolveRouteOwner('POST', '/api/subscribers/bulk-delete'), 'node');
-    });
-
     it('routes GET /api/subscribers to Node (Subscriber List)', () => {
       assert.equal(resolveRouteOwner('GET', '/api/subscribers'), 'node');
     });

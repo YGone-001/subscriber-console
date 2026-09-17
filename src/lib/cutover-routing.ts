@@ -47,6 +47,7 @@ export const CUTOVER_TABLE: readonly CutoverRoute[] = [
   { method: 'POST', path: '/api/subscribers/batch', owner: 'go' },
   { method: 'POST', path: '/api/subscribers/batch-update', owner: 'go' },
   { method: 'POST', path: '/api/subscribers/import', owner: 'go' },
+  { method: 'POST', path: '/api/subscribers/bulk-delete', owner: 'go' },
 ] as const;
 
 /**
