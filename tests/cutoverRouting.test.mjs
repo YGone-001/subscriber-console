@@ -4,8 +4,8 @@ import { resolveRouteOwner, CUTOVER_TABLE } from '../src/lib/cutover-routing.ts'
 
 describe('cutover-routing', () => {
   describe('CUTOVER_TABLE', () => {
-    it('contains exactly 10 cutover routes', () => {
-      assert.equal(CUTOVER_TABLE.length, 10);
+    it('contains exactly 11 cutover routes', () => {
+      assert.equal(CUTOVER_TABLE.length, 11);
     });
 
     it('Pilot A: POST /api/profiles/{name}/versions/{versionId}/restore is owned by Go', () => {
@@ -89,6 +89,14 @@ describe('cutover-routing', () => {
       assert.ok(batchUpdate, 'Subscriber Batch Update must exist');
       assert.equal(batchUpdate.owner, 'go');
     });
+
+    it('Phase 4.7: POST /api/subscribers/import is owned by Go', () => {
+      const importRoute = CUTOVER_TABLE.find(
+        (r) => r.path === '/api/subscribers/import' && r.method === 'POST'
+      );
+      assert.ok(importRoute, 'Subscriber Import must exist');
+      assert.equal(importRoute.owner, 'go');
+    });
   });
 
   describe('resolveRouteOwner - Go-owned routes', () => {
@@ -137,6 +145,10 @@ describe('cutover-routing', () => {
     it('routes POST /api/subscribers/batch-update to Go (Batch Update)', () => {
       assert.equal(resolveRouteOwner('POST', '/api/subscribers/batch-update'), 'go');
     });
+
+    it('routes POST /api/subscribers/import to Go (Import)', () => {
+      assert.equal(resolveRouteOwner('POST', '/api/subscribers/import'), 'go');
+    });
   });
 
   describe('resolveRouteOwner - METHOD isolation', () => {
@@ -179,10 +191,6 @@ describe('cutover-routing', () => {
   describe('resolveRouteOwner - Remaining Phase 4 Node ownership', () => {
     it('routes POST /api/subscribers/bulk-delete to Node (Bulk Delete)', () => {
       assert.equal(resolveRouteOwner('POST', '/api/subscribers/bulk-delete'), 'node');
-    });
-
-    it('routes POST /api/subscribers/import to Node (Import)', () => {
-      assert.equal(resolveRouteOwner('POST', '/api/subscribers/import'), 'node');
     });
 
     it('routes GET /api/subscribers to Node (Subscriber List)', () => {

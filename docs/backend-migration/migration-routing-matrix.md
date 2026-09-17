@@ -90,7 +90,7 @@
 | Subscriber batch create | POST | `/api/subscribers/batch` | **Go** | **Go** | Go | NEVER | Go handler with frozen v2, governance (DIRECT/APPROVAL), ACTUALLY_ROUTED=1, cutover_verified |
 | Subscriber batch update | POST | `/api/subscribers/batch-update` | **Go** | **Go** | Go | NEVER | Go handler with frozen v2, per-target CAS, governance (DIRECT/APPROVAL), ACTUALLY_ROUTED=1, cutover_verified |
 | Subscriber bulk delete | POST | `/api/subscribers/bulk-delete` | **Go** | Next.js | Go | NEVER | Go implementation with frozen v2, per-target CAS, ACTUALLY_ROUTED=0 |
-| Subscriber import | POST | `/api/subscribers/import` | **Go** | Next.js | Go | NEVER | Go implementation with frozen v2, create-only, ACTUALLY_ROUTED=0 |
+| Subscriber import | POST | `/api/subscribers/import` | **Go** | **Go** | Go | NEVER | Go handler with frozen v2, create-only, governance (DIRECT/APPROVAL), ACTUALLY_ROUTED=1, cutover_verified |
 | Subscriber profile apply | POST | `/api/subscribers/:imsi/profile` | **Go** | **Go** | Go | NEVER | Go handler with frozen v1, CAS, governance (DIRECT/APPROVAL), ACTUALLY_ROUTED=1, cutover_verified |
 | Profile create | POST | `/api/profiles` | **Go** | **Go** | Go | NEVER | DIRECT_GOVERNED, ACTUALLY_ROUTED=1, cutover_verified |
 | Profile update | PUT | `/api/profiles/:name` | **Go** | **Go** | Go | NEVER | DIRECT_GOVERNED, ACTUALLY_ROUTED=1, cutover_verified |
