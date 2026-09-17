@@ -73,3 +73,5 @@ temp/
 # Deployment metadata
 .vercel/
 .netlify/
+
+backend/server

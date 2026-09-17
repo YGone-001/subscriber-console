@@ -37,6 +37,11 @@ export const CUTOVER_TABLE: readonly CutoverRoute[] = [
   { method: 'POST', path: '/api/profiles', owner: 'go' },
   { method: 'PUT', path: '/api/profiles/{name}', owner: 'go' },
   { method: 'DELETE', path: '/api/profiles/{name}', owner: 'go' },
+
+  // ── Phase 4.6: Subscriber CRUD ──────────────────────────────
+  { method: 'POST', path: '/api/subscribers', owner: 'go' },
+  { method: 'PUT', path: '/api/subscribers/{imsi}', owner: 'go' },
+  { method: 'DELETE', path: '/api/subscribers/{imsi}', owner: 'go' },
 ] as const;
 
 /**

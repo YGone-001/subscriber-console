@@ -4,8 +4,8 @@ import { resolveRouteOwner, CUTOVER_TABLE } from '../src/lib/cutover-routing.ts'
 
 describe('cutover-routing', () => {
   describe('CUTOVER_TABLE', () => {
-    it('contains exactly 5 cutover routes', () => {
-      assert.equal(CUTOVER_TABLE.length, 5);
+    it('contains exactly 8 cutover routes', () => {
+      assert.equal(CUTOVER_TABLE.length, 8);
     });
 
     it('Pilot A: POST /api/profiles/{name}/versions/{versionId}/restore is owned by Go', () => {
@@ -49,6 +49,30 @@ describe('cutover-routing', () => {
       assert.ok(del, 'Profile Delete must exist');
       assert.equal(del.owner, 'go');
     });
+
+    it('Phase 4.6: POST /api/subscribers is owned by Go', () => {
+      const create = CUTOVER_TABLE.find(
+        (r) => r.path === '/api/subscribers' && r.method === 'POST'
+      );
+      assert.ok(create, 'Subscriber Create must exist');
+      assert.equal(create.owner, 'go');
+    });
+
+    it('Phase 4.6: PUT /api/subscribers/{imsi} is owned by Go', () => {
+      const update = CUTOVER_TABLE.find(
+        (r) => r.path === '/api/subscribers/{imsi}' && r.method === 'PUT'
+      );
+      assert.ok(update, 'Subscriber Update must exist');
+      assert.equal(update.owner, 'go');
+    });
+
+    it('Phase 4.6: DELETE /api/subscribers/{imsi} is owned by Go', () => {
+      const del = CUTOVER_TABLE.find(
+        (r) => r.path === '/api/subscribers/{imsi}' && r.method === 'DELETE'
+      );
+      assert.ok(del, 'Subscriber Delete must exist');
+      assert.equal(del.owner, 'go');
+    });
   });
 
   describe('resolveRouteOwner - Go-owned routes', () => {
@@ -77,6 +101,18 @@ describe('cutover-routing', () => {
         'go'
       );
     });
+
+    it('routes POST /api/subscribers to Go (Subscriber Create)', () => {
+      assert.equal(resolveRouteOwner('POST', '/api/subscribers'), 'go');
+    });
+
+    it('routes PUT /api/subscribers/208930000000001 to Go (Subscriber Update)', () => {
+      assert.equal(resolveRouteOwner('PUT', '/api/subscribers/208930000000001'), 'go');
+    });
+
+    it('routes DELETE /api/subscribers/208930000000001 to Go (Subscriber Delete)', () => {
+      assert.equal(resolveRouteOwner('DELETE', '/api/subscribers/208930000000001'), 'go');
+    });
   });
 
   describe('resolveRouteOwner - METHOD isolation', () => {
@@ -102,21 +138,21 @@ describe('cutover-routing', () => {
         'node'
       );
     });
+
+    it('routes GET /api/subscribers to Node (not in cutover table)', () => {
+      assert.equal(resolveRouteOwner('GET', '/api/subscribers'), 'node');
+    });
+
+    it('routes GET /api/subscribers/208930000000001 to Node (not in cutover table)', () => {
+      assert.equal(resolveRouteOwner('GET', '/api/subscribers/208930000000001'), 'node');
+    });
+
+    it('routes PATCH /api/subscribers/208930000000001 to Node (not in cutover table)', () => {
+      assert.equal(resolveRouteOwner('PATCH', '/api/subscribers/208930000000001'), 'node');
+    });
   });
 
   describe('resolveRouteOwner - Remaining Phase 4 Node ownership', () => {
-    it('routes POST /api/subscribers to Node (Subscriber Create)', () => {
-      assert.equal(resolveRouteOwner('POST', '/api/subscribers'), 'node');
-    });
-
-    it('routes PUT /api/subscribers/208930000000001 to Node (Subscriber Update)', () => {
-      assert.equal(resolveRouteOwner('PUT', '/api/subscribers/208930000000001'), 'node');
-    });
-
-    it('routes DELETE /api/subscribers/208930000000001 to Node (Subscriber Delete)', () => {
-      assert.equal(resolveRouteOwner('DELETE', '/api/subscribers/208930000000001'), 'node');
-    });
-
     it('routes POST /api/subscribers/batch to Node (Batch Create)', () => {
       assert.equal(resolveRouteOwner('POST', '/api/subscribers/batch'), 'node');
     });
@@ -131,6 +167,14 @@ describe('cutover-routing', () => {
 
     it('routes POST /api/subscribers/import to Node (Import)', () => {
       assert.equal(resolveRouteOwner('POST', '/api/subscribers/import'), 'node');
+    });
+
+    it('routes GET /api/subscribers to Node (Subscriber List)', () => {
+      assert.equal(resolveRouteOwner('GET', '/api/subscribers'), 'node');
+    });
+
+    it('routes GET /api/subscribers/208930000000001 to Node (Subscriber Detail)', () => {
+      assert.equal(resolveRouteOwner('GET', '/api/subscribers/208930000000001'), 'node');
     });
   });
 
