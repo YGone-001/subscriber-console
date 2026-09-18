@@ -4,8 +4,8 @@ import { resolveRouteOwner, CUTOVER_TABLE } from '../src/lib/cutover-routing.ts'
 
 describe('cutover-routing', () => {
   describe('CUTOVER_TABLE', () => {
-    it('contains exactly 12 cutover routes', () => {
-      assert.equal(CUTOVER_TABLE.length, 12);
+    it('contains exactly 18 cutover routes', () => {
+      assert.equal(CUTOVER_TABLE.length, 18);
     });
 
     it('Pilot A: POST /api/profiles/{name}/versions/{versionId}/restore is owned by Go', () => {
@@ -105,6 +105,54 @@ describe('cutover-routing', () => {
       assert.ok(bulkDelete, 'Subscriber Bulk Delete must exist');
       assert.equal(bulkDelete.owner, 'go');
     });
+
+    it('Tariff: POST /api/tariff-plans is owned by Go', () => {
+      const create = CUTOVER_TABLE.find(
+        (r) => r.path === '/api/tariff-plans' && r.method === 'POST'
+      );
+      assert.ok(create, 'Tariff Plan Create must exist');
+      assert.equal(create.owner, 'go');
+    });
+
+    it('Tariff: PUT /api/tariff-plans/{planId} is owned by Go', () => {
+      const update = CUTOVER_TABLE.find(
+        (r) => r.path === '/api/tariff-plans/{planId}' && r.method === 'PUT'
+      );
+      assert.ok(update, 'Tariff Plan Update must exist');
+      assert.equal(update.owner, 'go');
+    });
+
+    it('Tariff: DELETE /api/tariff-plans/{planId} is owned by Go', () => {
+      const del = CUTOVER_TABLE.find(
+        (r) => r.path === '/api/tariff-plans/{planId}' && r.method === 'DELETE'
+      );
+      assert.ok(del, 'Tariff Plan Delete must exist');
+      assert.equal(del.owner, 'go');
+    });
+
+    it('Tariff: POST /api/tariff-plans/{planId}/clone is owned by Go', () => {
+      const clone = CUTOVER_TABLE.find(
+        (r) => r.path === '/api/tariff-plans/{planId}/clone' && r.method === 'POST'
+      );
+      assert.ok(clone, 'Tariff Plan Clone must exist');
+      assert.equal(clone.owner, 'go');
+    });
+
+    it('Tariff: POST /api/tariff-plans/{planId}/enable is owned by Go', () => {
+      const enable = CUTOVER_TABLE.find(
+        (r) => r.path === '/api/tariff-plans/{planId}/enable' && r.method === 'POST'
+      );
+      assert.ok(enable, 'Tariff Plan Enable must exist');
+      assert.equal(enable.owner, 'go');
+    });
+
+    it('Tariff: POST /api/tariff-plans/{planId}/disable is owned by Go', () => {
+      const disable = CUTOVER_TABLE.find(
+        (r) => r.path === '/api/tariff-plans/{planId}/disable' && r.method === 'POST'
+      );
+      assert.ok(disable, 'Tariff Plan Disable must exist');
+      assert.equal(disable.owner, 'go');
+    });
   });
 
   describe('resolveRouteOwner - Go-owned routes', () => {
@@ -161,6 +209,30 @@ describe('cutover-routing', () => {
     it('routes POST /api/subscribers/bulk-delete to Go (Bulk Delete)', () => {
       assert.equal(resolveRouteOwner('POST', '/api/subscribers/bulk-delete'), 'go');
     });
+
+    it('routes POST /api/tariff-plans to Go (Tariff Plan Create)', () => {
+      assert.equal(resolveRouteOwner('POST', '/api/tariff-plans'), 'go');
+    });
+
+    it('routes PUT /api/tariff-plans/plan_10gb to Go (Tariff Plan Update)', () => {
+      assert.equal(resolveRouteOwner('PUT', '/api/tariff-plans/plan_10gb'), 'go');
+    });
+
+    it('routes DELETE /api/tariff-plans/plan_10gb to Go (Tariff Plan Delete)', () => {
+      assert.equal(resolveRouteOwner('DELETE', '/api/tariff-plans/plan_10gb'), 'go');
+    });
+
+    it('routes POST /api/tariff-plans/plan_10gb/clone to Go (Tariff Plan Clone)', () => {
+      assert.equal(resolveRouteOwner('POST', '/api/tariff-plans/plan_10gb/clone'), 'go');
+    });
+
+    it('routes POST /api/tariff-plans/plan_10gb/enable to Go (Tariff Plan Enable)', () => {
+      assert.equal(resolveRouteOwner('POST', '/api/tariff-plans/plan_10gb/enable'), 'go');
+    });
+
+    it('routes POST /api/tariff-plans/plan_10gb/disable to Go (Tariff Plan Disable)', () => {
+      assert.equal(resolveRouteOwner('POST', '/api/tariff-plans/plan_10gb/disable'), 'go');
+    });
   });
 
   describe('resolveRouteOwner - METHOD isolation', () => {
@@ -197,6 +269,14 @@ describe('cutover-routing', () => {
 
     it('routes PATCH /api/subscribers/208930000000001 to Node (not in cutover table)', () => {
       assert.equal(resolveRouteOwner('PATCH', '/api/subscribers/208930000000001'), 'node');
+    });
+
+    it('routes GET /api/tariff-plans to Node (read not in cutover table)', () => {
+      assert.equal(resolveRouteOwner('GET', '/api/tariff-plans'), 'node');
+    });
+
+    it('routes GET /api/tariff-plans/plan_10gb to Node (read not in cutover table)', () => {
+      assert.equal(resolveRouteOwner('GET', '/api/tariff-plans/plan_10gb'), 'node');
     });
   });
 

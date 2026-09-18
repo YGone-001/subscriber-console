@@ -110,24 +110,6 @@ func main() {
 	)
 	ocsHandler := ocs.NewHandler(ocsRepo, limiter)
 
-	// Tariff Plans
-	tariffRepo := tariff.NewRepository(
-		mc.XCloud.Collection("ocs_tariff_plans"),
-		mc.XCloud.Collection("ocs_subscribers"),
-		mc.Ops.Collection("app_audit_logs"),
-	)
-	tariffHandler := tariff.NewHandler(tariffRepo, limiter)
-
-	// Subscribers
-	subscriberRepo := subscriber.NewRepository(
-		mc.XCloud.Collection("subscribers"),
-		mc.XCloud.Collection("ocs_subscribers"),
-		mc.XCloud.Collection("ocs_balances"),
-		mc.XCloud.Collection("ocs_tariff_plans"),
-		mc.Ops.Collection("app_profiles"),
-	)
-	subscriberHandler := subscriber.NewHandler(subscriberRepo, limiter, auditWriter)
-
 	// Auth/User reads (with audit writer for denial evidence)
 	userRepo := user.NewRepository(mc.Ops)
 	userHandler := user.NewHandler(userRepo, limiter, auditWriter)
@@ -141,6 +123,25 @@ func main() {
 	approvalWorkflow := approval.NewWorkflow(approvalRepo, userRepo, auditWriter)
 	approvalCreator := approval.NewApprovalCreator(approvalRepo, auditWriter)
 	approvalHandler := approval.NewHandler(approvalRepo, limiter, auditWriter, approvalWorkflow, approvalCreator, userRepo)
+
+	// Tariff Plans
+	tariffRepo := tariff.NewRepository(
+		mc.XCloud.Collection("ocs_tariff_plans"),
+		mc.XCloud.Collection("ocs_subscribers"),
+		mc.Ops.Collection("app_audit_logs"),
+	)
+	tariffHandler := tariff.NewHandler(tariffRepo, limiter)
+	tariffWriteHandler := tariff.NewWriteHandler(tariffRepo, limiter, userRepo, approvalCreator, auditWriter)
+
+	// Subscribers
+	subscriberRepo := subscriber.NewRepository(
+		mc.XCloud.Collection("subscribers"),
+		mc.XCloud.Collection("ocs_subscribers"),
+		mc.XCloud.Collection("ocs_balances"),
+		mc.XCloud.Collection("ocs_tariff_plans"),
+		mc.Ops.Collection("app_profiles"),
+	)
+	subscriberHandler := subscriber.NewHandler(subscriberRepo, limiter, auditWriter)
 
 	// Profile handler (with approval repo for restore governance)
 	profileHandler := profile.NewHandler(profileRepo, approvalRepo, limiter, auditWriter)
@@ -194,6 +195,14 @@ func main() {
 	mux.Handle("GET /api/tariff-plans/{planId}/rules", authMiddleware(http.HandlerFunc(tariffHandler.Rules)))
 	mux.Handle("GET /api/tariff-plans/{planId}/subscribers", authMiddleware(http.HandlerFunc(tariffHandler.Subscribers)))
 	mux.Handle("GET /api/tariff-plans/{planId}/migrate", authMiddleware(http.HandlerFunc(tariffHandler.Migrate)))
+
+	// Tariff Plan write endpoints (governance: super_admin/root→DIRECT, operator→APPROVAL)
+	mux.Handle("POST /api/tariff-plans", authMiddleware(http.HandlerFunc(tariffWriteHandler.Create)))
+	mux.Handle("PUT /api/tariff-plans/{planId}", authMiddleware(http.HandlerFunc(tariffWriteHandler.Update)))
+	mux.Handle("DELETE /api/tariff-plans/{planId}", authMiddleware(http.HandlerFunc(tariffWriteHandler.Delete)))
+	mux.Handle("POST /api/tariff-plans/{planId}/clone", authMiddleware(http.HandlerFunc(tariffWriteHandler.Clone)))
+	mux.Handle("POST /api/tariff-plans/{planId}/enable", authMiddleware(http.HandlerFunc(tariffWriteHandler.Enable)))
+	mux.Handle("POST /api/tariff-plans/{planId}/disable", authMiddleware(http.HandlerFunc(tariffWriteHandler.Disable)))
 
 	// Subscribers (list, detail, search, batch precheck)
 	mux.Handle("GET /api/subscribers", authMiddleware(http.HandlerFunc(subscriberHandler.List)))

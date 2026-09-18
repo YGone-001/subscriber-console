@@ -37,6 +37,7 @@ export const NAVIGATION_ROUTES: readonly NavigationRoute[] = [
   { path: "/subscribers", labelKey: "nav_subscriber", commandLabelKey: "cp_nav_subscribers", commandDescriptionKey: "cp_nav_subscribers_desc", icon: Users },
   { path: "/ocs/dashboard", labelKey: "nav_ocs_dashboard", commandDescriptionKey: "ocs_dashboard_desc", icon: LayoutDashboard, group: "ocs", groupLabelKey: "nav_ocs", groupPath: "/ocs/dashboard" },
   { path: "/ocs/subscribers", labelKey: "nav_ocs_subscribers", commandDescriptionKey: "ocs_subscribers_desc", icon: Users, group: "ocs", groupLabelKey: "nav_ocs", groupPath: "/ocs/dashboard" },
+  { path: "/ocs/tariffs", labelKey: "nav_ocs_tariffs", commandDescriptionKey: "ocs_tariffs_desc", icon: Zap, group: "ocs", groupLabelKey: "nav_ocs", groupPath: "/ocs/dashboard" },
   { path: "/ocs/balances", labelKey: "nav_ocs_balances", commandDescriptionKey: "ocs_balances_desc", icon: Wallet, group: "ocs", groupLabelKey: "nav_ocs", groupPath: "/ocs/dashboard" },
   { path: "/ocs/sessions", labelKey: "nav_ocs_sessions", commandDescriptionKey: "ocs_sessions_desc", icon: Radio, group: "ocs", groupLabelKey: "nav_ocs", groupPath: "/ocs/dashboard" },
   { path: "/ocs/usage", labelKey: "nav_ocs_usage", commandDescriptionKey: "ocs_usage_desc", icon: Receipt, group: "ocs", groupLabelKey: "nav_ocs", groupPath: "/ocs/dashboard" },

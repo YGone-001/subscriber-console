@@ -48,6 +48,14 @@ export const CUTOVER_TABLE: readonly CutoverRoute[] = [
   { method: 'POST', path: '/api/subscribers/batch-update', owner: 'go' },
   { method: 'POST', path: '/api/subscribers/import', owner: 'go' },
   { method: 'POST', path: '/api/subscribers/bulk-delete', owner: 'go' },
+
+  // ── Tariff Plan Governance ─────────────────────────────────
+  { method: 'POST', path: '/api/tariff-plans', owner: 'go' },
+  { method: 'PUT', path: '/api/tariff-plans/{planId}', owner: 'go' },
+  { method: 'DELETE', path: '/api/tariff-plans/{planId}', owner: 'go' },
+  { method: 'POST', path: '/api/tariff-plans/{planId}/clone', owner: 'go' },
+  { method: 'POST', path: '/api/tariff-plans/{planId}/enable', owner: 'go' },
+  { method: 'POST', path: '/api/tariff-plans/{planId}/disable', owner: 'go' },
 ] as const;
 
 /**

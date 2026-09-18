@@ -100,22 +100,24 @@
 
 ### Phase 5 — OCS + Tariff + Rating Writes
 
-| API | Method | Path | Current Owner | Future Owner | Shadow Allowed | Notes |
-|-----|--------|------|---------------|--------------|----------------|-------|
-| Balance adjust | POST | `/api/subscribers/:imsi/traffic-adjustments` | Next.js | Go | NEVER | Frozen payload, CAS |
-| Tariff plan create | POST | `/api/tariff-plans` | Next.js | Go | NEVER | Creates CHG |
-| Tariff plan update | PUT | `/api/tariff-plans/:planId` | Next.js | Go | NEVER | Creates CHG |
-| Tariff plan delete | DELETE | `/api/tariff-plans/:planId` | Next.js | Go | NEVER | Creates CHG |
-| Tariff plan clone | POST | `/api/tariff-plans/:planId/clone` | Next.js | Go | NEVER | Creates CHG |
-| Tariff plan migrate | POST | `/api/tariff-plans/:planId/migrate` | Next.js | Go | NEVER | Creates CHG |
-| Tariff plan import | POST | `/api/tariff-plans/import` | Next.js | Go | NEVER | Creates CHG |
-| Tariff rule create | POST | `/api/tariff-plans/:planId/rules` | Next.js | Go | NEVER | Creates CHG |
-| Tariff rule update | PUT | `/api/tariff-plans/:planId/rules/:ruleId` | Next.js | Go | NEVER | Creates CHG |
-| Tariff rule delete | DELETE | `/api/tariff-plans/:planId/rules/:ruleId` | Next.js | Go | NEVER | Creates CHG |
-| Rating create | POST | `/api/ratings` | Next.js | Go | NEVER | Creates CHG |
-| Rating update | PUT | `/api/ratings/:id` | Next.js | Go | NEVER | Creates CHG |
-| Rating delete | DELETE | `/api/ratings/:id` | Next.js | Go | NEVER | Creates CHG |
-| Policy change | POST | `/api/subscribers/policy` | Next.js | Go | NEVER | Creates CHG |
+| API | Method | Path | Implementation | Production Route | Future Owner | Shadow Allowed | Notes |
+|-----|--------|------|----------------|------------------|--------------|----------------|-------|
+| Tariff plan create | POST | `/api/tariff-plans` | **Go** | **Go** | Go | NEVER | Go handler with governance, ACTUALLY_ROUTED=1, cutover_verified |
+| Tariff plan update | PUT | `/api/tariff-plans/:planId` | **Go** | **Go** | Go | NEVER | Go handler with governance, ACTUALLY_ROUTED=1, cutover_verified |
+| Tariff plan delete | DELETE | `/api/tariff-plans/:planId` | **Go** | **Go** | Go | NEVER | Go handler with governance, ACTUALLY_ROUTED=1, cutover_verified |
+| Tariff plan clone | POST | `/api/tariff-plans/:planId/clone` | **Go** | **Go** | Go | NEVER | Go handler with governance, ACTUALLY_ROUTED=1, cutover_verified |
+| Tariff plan enable | POST | `/api/tariff-plans/:planId/enable` | **Go** | **Go** | Go | NEVER | Go handler with governance, ACTUALLY_ROUTED=1, cutover_verified |
+| Tariff plan disable | POST | `/api/tariff-plans/:planId/disable` | **Go** | **Go** | Go | NEVER | Go handler with governance, ACTUALLY_ROUTED=1, cutover_verified |
+| Balance adjust | POST | `/api/subscribers/:imsi/traffic-adjustments` | Next.js | Next.js | Go | NEVER | Frozen payload, CAS |
+| Tariff plan migrate | POST | `/api/tariff-plans/:planId/migrate` | Next.js | Next.js | Go | NEVER | Creates CHG |
+| Tariff plan import | POST | `/api/tariff-plans/import` | Next.js | Next.js | Go | NEVER | Creates CHG |
+| Tariff rule create | POST | `/api/tariff-plans/:planId/rules` | Next.js | Next.js | Go | NEVER | Creates CHG |
+| Tariff rule update | PUT | `/api/tariff-plans/:planId/rules/:ruleId` | Next.js | Next.js | Go | NEVER | Creates CHG |
+| Tariff rule delete | DELETE | `/api/tariff-plans/:planId/rules/:ruleId` | Next.js | Next.js | Go | NEVER | Creates CHG |
+| Rating create | POST | `/api/ratings` | Next.js | Next.js | Go | NEVER | Creates CHG |
+| Rating update | PUT | `/api/ratings/:id` | Next.js | Next.js | Go | NEVER | Creates CHG |
+| Rating delete | DELETE | `/api/ratings/:id` | Next.js | Next.js | Go | NEVER | Creates CHG |
+| Policy change | POST | `/api/subscribers/policy` | Next.js | Next.js | Go | NEVER | Creates CHG |
 
 ### Phase 6 — Auth + User Management
 
