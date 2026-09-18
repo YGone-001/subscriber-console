@@ -149,6 +149,7 @@ export default function OcsAuditTimeline() {
     <OcsPageShell
       eyebrow={t("nav_ocs")}
       title={t("ocs_audit_title")}
+      readonly={false}
       description={t("ocs_audit_desc")}
       loading={loading}
       onRefresh={refresh}

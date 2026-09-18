@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
 import { ArrowLeft, ShieldCheck, Users } from "lucide-react";
@@ -47,9 +48,9 @@ export default function OcsContractDetail({ imsi }: OcsContractDetailProps) {
         description={contract.msisdn || ""}
         actions={
           <div className="ocs-header-actions">
-            <a href="/ocs/contracts" className="ocs-btn ocs-btn-secondary">
+            <Link href="/ocs/contracts" className="ocs-btn ocs-btn-secondary">
               <ArrowLeft size={14} /> {t("ocs_back_to_list")}
-            </a>
+            </Link>
             <RefreshButton loading={loading} onClick={() => refresh()} label={t("refresh")} className="ocs-btn" />
           </div>
         }
@@ -78,7 +79,7 @@ export default function OcsContractDetail({ imsi }: OcsContractDetailProps) {
             <div className="ocs-detail-field">
               <span className="ocs-detail-label">{t("ocs_contract_col_tariff")}</span>
               <span className="ocs-detail-value">
-                <a href={`/ocs/tariffs/${contract.plan_id}`} className="ocs-link">{contract.plan_id}</a>
+                <Link href={`/ocs/tariffs/${contract.plan_id}`} className="ocs-link">{contract.plan_id}</Link>
               </span>
             </div>
             <div className="ocs-detail-field">

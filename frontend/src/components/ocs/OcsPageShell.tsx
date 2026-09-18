@@ -17,6 +17,8 @@ interface OcsPageShellProps {
   tableContent: ReactNode;
   pagination: ReactNode;
   children?: ReactNode;
+  /** When false, hides the readonly warning banner (default: true) */
+  readonly?: boolean;
 }
 
 export default function OcsPageShell({
@@ -30,6 +32,7 @@ export default function OcsPageShell({
   tableContent,
   pagination,
   children,
+  readonly = true,
 }: OcsPageShellProps) {
   const { t } = useI18n();
 
@@ -39,7 +42,7 @@ export default function OcsPageShell({
         eyebrow={eyebrow}
         title={title}
         description={description}
-        status={<><Lock size={12} /> {t("ocs_readonly_badge")}</>}
+        status={readonly ? <><Lock size={12} /> {t("ocs_readonly_badge")}</> : undefined}
         actions={<div className="ocs-header-actions">
           <RefreshButton
             loading={loading}
@@ -50,10 +53,12 @@ export default function OcsPageShell({
         </div>}
       />
 
-      <div className="ocs-readonly-banner">
-        <ShieldAlert size={18} />
-        <span>{t("ocs_readonly_notice")}</span>
-      </div>
+      {readonly && (
+        <div className="ocs-readonly-banner">
+          <ShieldAlert size={18} />
+          <span>{t("ocs_readonly_notice")}</span>
+        </div>
+      )}
 
       {kpiGrid}
 

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
 import { ArrowLeft, FileText, Users, ShieldCheck, History } from "lucide-react";
@@ -58,9 +59,9 @@ export default function OcsTariffDetail({ planId }: OcsTariffDetailProps) {
         description={plan.description || ""}
         actions={
           <div className="ocs-header-actions">
-            <a href="/ocs/tariffs" className="ocs-btn ocs-btn-secondary">
+            <Link href="/ocs/tariffs" className="ocs-btn ocs-btn-secondary">
               <ArrowLeft size={14} /> {t("ocs_back_to_list")}
-            </a>
+            </Link>
             <RefreshButton loading={loading} onClick={() => refresh()} label={t("refresh")} className="ocs-btn" />
           </div>
         }

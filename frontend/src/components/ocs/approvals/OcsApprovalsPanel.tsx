@@ -158,6 +158,7 @@ export default function OcsApprovalsPanel() {
     <OcsPageShell
       eyebrow={t("nav_ocs")}
       title={t("ocs_approvals_title")}
+      readonly={false}
       description={t("ocs_approvals_desc")}
       loading={loading}
       onRefresh={refresh}

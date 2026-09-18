@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import Link from "next/link";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
 import {
@@ -213,13 +214,13 @@ export default function OcsContractsPanel() {
               <td><GovernanceBadge compact /></td>
               <td>
                 <div className="ocs-action-group">
-                  <a
+                  <Link
                     className="ocs-action-btn"
                     title={t("ocs_contract_view_detail")}
                     href={`/ocs/contracts/${r.imsi}`}
                   >
                     <Eye size={14} />
-                  </a>
+                  </Link>
                   <button
                     className="ocs-action-btn"
                     title={t("ocs_sub_action_change_tariff")}
@@ -294,6 +295,7 @@ export default function OcsContractsPanel() {
       <OcsPageShell
         eyebrow={t("nav_ocs")}
         title={t("ocs_contracts_title")}
+        readonly={false}
         description={t("ocs_contracts_desc")}
         loading={loading}
         onRefresh={refresh}

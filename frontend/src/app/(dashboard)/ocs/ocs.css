@@ -718,7 +718,8 @@
   flex-shrink: 0;
 }
 
-.ocs-dashboard-card-body {
+.ocs-dashboard-card-body,
+.ocs-dashboard-card-content {
   display: flex;
   flex-direction: column;
   gap: 0.15rem;

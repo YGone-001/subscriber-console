@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
+import Link from "next/link";
 import {
   Copy,
   Eye,
@@ -127,6 +128,7 @@ export default function OcsTariffGovernancePanel() {
       <OcsPageShell
         eyebrow={t("nav_ocs")}
         title={t("ocs_tariffs_title")}
+        readonly={false}
         description={t("ocs_tariffs_desc")}
         loading={loading}
         onRefresh={() => refresh()}
@@ -170,13 +172,13 @@ export default function OcsTariffGovernancePanel() {
                       <td><GovernanceBadge compact /></td>
                       <td>
                         <div className="ocs-action-group">
-                          <a
+                          <Link
                             className="ocs-action-btn"
                             title={t("ocs_tariff_view_detail")}
                             href={`/ocs/tariffs/${plan.plan_id}`}
                           >
                             <Eye size={14} />
-                          </a>
+                          </Link>
                           {plan.status === "active" ? (
                             <button
                               className="ocs-action-btn"
