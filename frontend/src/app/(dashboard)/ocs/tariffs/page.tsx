@@ -1,6 +1,6 @@
-import OcsTariffsPanel from "@/components/ocs/OcsTariffsPanel";
+import OcsTariffGovernancePanel from "@/components/ocs/tariffs/OcsTariffGovernancePanel";
 import "../ocs.css";
 
 export default function OcsTariffsPage() {
-  return <OcsTariffsPanel />;
+  return <OcsTariffGovernancePanel />;
 }
