@@ -17,15 +17,17 @@ type Repository struct {
 	sessions     *mongo.Collection
 	reservations *mongo.Collection
 	usage        *mongo.Collection
+	subscribers  *mongo.Collection
 }
 
 // NewRepository creates a new read-only OCS Repository.
-func NewRepository(balances, sessions, reservations, usage *mongo.Collection) *Repository {
+func NewRepository(balances, sessions, reservations, usage, subscribers *mongo.Collection) *Repository {
 	return &Repository{
 		balances:     balances,
 		sessions:     sessions,
 		reservations: reservations,
 		usage:        usage,
+		subscribers:  subscribers,
 	}
 }
 
@@ -413,6 +415,81 @@ func (r *Repository) ListReservations(ctx context.Context, opts ReservationQuery
 	}, nil
 }
 
+// ListSubscribers returns paginated OCS subscriber (billing contract) records.
+func (r *Repository) ListSubscribers(ctx context.Context, opts SubscriberQueryOptions) (SubscriberListResponse, error) {
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+
+	page := max(1, opts.Page)
+	limit := clampLimit(opts.Limit)
+	skip := int64((page - 1) * limit)
+
+	filter := bson.M{}
+	if opts.IMSI != "" {
+		filter["imsi"] = bson.M{"$regex": opts.IMSI, "$options": "i"}
+	}
+	if opts.PlanID != "" {
+		filter["plan_id"] = opts.PlanID
+	}
+	if opts.Status != "" {
+		filter["status"] = opts.Status
+	}
+
+	totalCount, err := r.subscribers.CountDocuments(ctx, filter)
+	if err != nil {
+		return SubscriberListResponse{}, err
+	}
+
+	sortKey := mapSortField(opts.SortField, map[string]string{
+		"imsi": "imsi", "status": "status", "plan_id": "plan_id", "updated_at": "updated_at",
+	}, "updated_at")
+	sortDir := sortDirection(opts.SortOrder)
+
+	cursor, err := r.subscribers.Find(ctx, filter, options.Find().
+		SetSort(bson.D{{Key: sortKey, Value: sortDir}, {Key: "_id", Value: -1}}).
+		SetSkip(skip).
+		SetLimit(int64(limit)))
+	if err != nil {
+		return SubscriberListResponse{}, err
+	}
+	defer cursor.Close(ctx)
+
+	var rawDocs []bson.M
+	if err := cursor.All(ctx, &rawDocs); err != nil {
+		return SubscriberListResponse{}, err
+	}
+
+	records := make([]SubscriberRecord, 0, len(rawDocs))
+	for _, doc := range rawDocs {
+		records = append(records, SubscriberRecord{
+			ID:        docID(doc),
+			IMSI:      strWithDefault(doc, "imsi", ""),
+			MSISDN:    strWithDefault(doc, "msisdn", ""),
+			Status:    strWithDefault(doc, "status", "active"),
+			PlanID:    strWithDefault(doc, "plan_id", ""),
+			CreatedAt: timeStr(doc, "created_at"),
+			UpdatedAt: timeStr(doc, "updated_at"),
+		})
+	}
+	if records == nil {
+		records = []SubscriberRecord{}
+	}
+
+	totalPages := int(totalCount)/limit + 1
+	if totalPages < 1 {
+		totalPages = 1
+	}
+
+	return SubscriberListResponse{
+		OK:         true,
+		Records:    records,
+		Total:      totalCount,
+		Page:       page,
+		Limit:      limit,
+		TotalPages: totalPages,
+	}, nil
+}
+
 // ── Query option types ──────────────────────────────────────────────────────
 
 // BalanceQueryOptions holds query parameters for balance listing.
@@ -463,6 +540,17 @@ type ReservationQueryOptions struct {
 	ChargingType string
 	SortField    string
 	SortOrder    string
+}
+
+// SubscriberQueryOptions holds query parameters for OCS subscriber listing.
+type SubscriberQueryOptions struct {
+	Page      int
+	Limit     int
+	IMSI      string
+	PlanID    string
+	Status    string
+	SortField string
+	SortOrder string
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

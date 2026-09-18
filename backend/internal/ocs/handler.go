@@ -163,6 +163,38 @@ func (h *Handler) Reservations(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, result)
 }
 
+// Subscribers handles GET /api/ocs/subscribers
+func (h *Handler) Subscribers(w http.ResponseWriter, r *http.Request) {
+	p := auth.PrincipalFromContext(r.Context())
+	if p == nil {
+		response.Error(w, http.StatusUnauthorized, "Unauthorized", "AUTH_INVALID_TOKEN")
+		return
+	}
+
+	if !h.limiter.Enforce(w, r, "ocs:subscribers:"+p.Username, 120, 60) {
+		return
+	}
+
+	q := r.URL.Query()
+	opts := SubscriberQueryOptions{
+		Page:      intParam(q, "page", 1),
+		Limit:     intParam(q, "limit", 20),
+		IMSI:      firstNonEmpty(q.Get("imsi"), q.Get("q")),
+		PlanID:    q.Get("planId"),
+		Status:    q.Get("status"),
+		SortField: firstNonEmpty(q.Get("sortField"), q.Get("sort")),
+		SortOrder: firstNonEmpty(q.Get("sortOrder"), q.Get("order")),
+	}
+
+	result, err := h.repo.ListSubscribers(r.Context(), opts)
+	if err != nil {
+		response.InternalError(w)
+		return
+	}
+
+	response.JSON(w, http.StatusOK, result)
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 func intParam(q map[string][]string, key string, fallback int) int {

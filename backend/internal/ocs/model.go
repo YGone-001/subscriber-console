@@ -195,3 +195,26 @@ type ReservationSummary struct {
 	TotalReservedOctets  int64 `json:"totalReservedOctets"`
 	TotalReleasedOctets  int64 `json:"totalReleasedOctets"`
 }
+
+// ── OCS Subscribers (billing contract) ──────────────────────────────────────
+
+// SubscriberListResponse matches GET /api/ocs/subscribers response shape.
+type SubscriberListResponse struct {
+	OK         bool               `json:"ok"`
+	Records    []SubscriberRecord `json:"records"`
+	Total      int64              `json:"total"`
+	Page       int                `json:"page"`
+	Limit      int                `json:"limit"`
+	TotalPages int                `json:"totalPages"`
+}
+
+// SubscriberRecord matches OCS subscriber (billing contract).
+type SubscriberRecord struct {
+	ID        string `json:"id"`
+	IMSI      string `json:"imsi"`
+	MSISDN    string `json:"msisdn,omitempty"`
+	Status    string `json:"status"`
+	PlanID    string `json:"plan_id"`
+	CreatedAt string `json:"created_at,omitempty"`
+	UpdatedAt string `json:"updated_at,omitempty"`
+}

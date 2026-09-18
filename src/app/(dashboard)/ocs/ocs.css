@@ -694,3 +694,140 @@
     display: none;
   }
 }
+
+/* ── OCS Dashboard ─────────────────────────────────────────────────────── */
+
+.ocs-dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1rem;
+}
+
+.ocs-dashboard-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.25rem 1.5rem;
+  background: var(--surface);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-soft-panel);
+}
+
+.ocs-dashboard-card-icon {
+  color: var(--color-primary, var(--text-secondary));
+  flex-shrink: 0;
+}
+
+.ocs-dashboard-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.ocs-dashboard-card-label {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ocs-dashboard-card-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-main);
+  line-height: 1.2;
+}
+
+.ocs-dashboard-card-detail {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+}
+
+.ocs-dashboard-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  background: var(--surface);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-soft-panel);
+  padding: 1.25rem 1.5rem;
+}
+
+.ocs-dashboard-section-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-main);
+  margin: 0;
+}
+
+.ocs-dashboard-pool-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 1rem;
+}
+
+.ocs-dashboard-pool-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.ocs-dashboard-pool-label {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ocs-dashboard-pool-value {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.ocs-dashboard-plans-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.ocs-dashboard-plan-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  background: var(--surface-hover, var(--surface));
+  border: 1px solid var(--surface-border);
+  border-radius: 0.5rem;
+}
+
+.ocs-dashboard-plan-name {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.ocs-dashboard-plan-meta {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.ocs-default-badge {
+  font-size: 0.7rem;
+  padding: 0.1rem 0.4rem;
+  background: var(--color-primary-alpha, rgba(59, 130, 246, 0.1));
+  color: var(--color-primary, #3b82f6);
+  border-radius: 0.25rem;
+  font-weight: 600;
+}
+
+.ocs-plan-badge {
+  font-size: 0.8rem;
+  padding: 0.15rem 0.5rem;
+  background: var(--surface-hover, var(--surface));
+  border: 1px solid var(--surface-border);
+  border-radius: 0.25rem;
+  font-family: var(--ref-font-mono, monospace);
+}

@@ -10,6 +10,7 @@ import {
   UserCog,
   Users,
   Wallet,
+  Zap,
   type LucideIcon,
 } from "lucide-react";
 import type { UserRole } from "@/lib/authz";
@@ -34,9 +35,11 @@ export interface NavigationRoute {
 export const NAVIGATION_ROUTES: readonly NavigationRoute[] = [
   { path: "/", labelKey: "nav_dashboard", commandLabelKey: "cp_nav_dashboard", commandDescriptionKey: "cp_nav_dashboard_desc", icon: LayoutDashboard },
   { path: "/subscribers", labelKey: "nav_subscriber", commandLabelKey: "cp_nav_subscribers", commandDescriptionKey: "cp_nav_subscribers_desc", icon: Users },
-  { path: "/ocs/balances", labelKey: "nav_ocs_balances", commandDescriptionKey: "ocs_balances_desc", icon: Wallet, group: "ocs", groupLabelKey: "nav_ocs", groupPath: "/ocs/balances" },
-  { path: "/ocs/sessions", labelKey: "nav_ocs_sessions", commandDescriptionKey: "ocs_sessions_desc", icon: Radio, group: "ocs", groupLabelKey: "nav_ocs", groupPath: "/ocs/balances" },
-  { path: "/ocs/usage", labelKey: "nav_ocs_usage", commandDescriptionKey: "ocs_usage_desc", icon: Receipt, group: "ocs", groupLabelKey: "nav_ocs", groupPath: "/ocs/balances" },
+  { path: "/ocs/dashboard", labelKey: "nav_ocs_dashboard", commandDescriptionKey: "ocs_dashboard_desc", icon: LayoutDashboard, group: "ocs", groupLabelKey: "nav_ocs", groupPath: "/ocs/dashboard" },
+  { path: "/ocs/subscribers", labelKey: "nav_ocs_subscribers", commandDescriptionKey: "ocs_subscribers_desc", icon: Users, group: "ocs", groupLabelKey: "nav_ocs", groupPath: "/ocs/dashboard" },
+  { path: "/ocs/balances", labelKey: "nav_ocs_balances", commandDescriptionKey: "ocs_balances_desc", icon: Wallet, group: "ocs", groupLabelKey: "nav_ocs", groupPath: "/ocs/dashboard" },
+  { path: "/ocs/sessions", labelKey: "nav_ocs_sessions", commandDescriptionKey: "ocs_sessions_desc", icon: Radio, group: "ocs", groupLabelKey: "nav_ocs", groupPath: "/ocs/dashboard" },
+  { path: "/ocs/usage", labelKey: "nav_ocs_usage", commandDescriptionKey: "ocs_usage_desc", icon: Receipt, group: "ocs", groupLabelKey: "nav_ocs", groupPath: "/ocs/dashboard" },
   { path: "/profile", labelKey: "nav_profile", commandLabelKey: "cp_nav_profiles", commandDescriptionKey: "cp_nav_profiles_desc", icon: CreditCard },
   { path: "/rating", labelKey: "nav_rating", commandLabelKey: "nav_rating", commandDescriptionKey: "cp_nav_rating_plans_desc", icon: Gauge, showInCommandPalette: false },
   { path: "/rating/plans", labelKey: "nav_rating_plans", commandLabelKey: "cp_nav_rating_plans", commandDescriptionKey: "cp_nav_rating_plans_desc", icon: Gauge, group: "rating", groupLabelKey: "nav_rating", groupPath: "/rating" },
