@@ -107,6 +107,7 @@ func main() {
 		mc.XCloud.Collection("ocs_reservations"),
 		mc.XCloud.Collection("ocs_usage_records"),
 		mc.XCloud.Collection("ocs_subscribers"),
+		mc.XCloud.Collection("ocs_tariff_plans"),
 	)
 	ocsHandler := ocs.NewHandler(ocsRepo, limiter)
 
@@ -132,6 +133,9 @@ func main() {
 	)
 	tariffHandler := tariff.NewHandler(tariffRepo, limiter)
 	tariffWriteHandler := tariff.NewWriteHandler(tariffRepo, limiter, userRepo, approvalCreator, auditWriter)
+
+	// OCS Subscriber Contract write handler
+	ocsSubscriberWriteHandler := ocs.NewSubscriberWriteHandler(ocsRepo, limiter, userRepo, approvalCreator, auditWriter)
 
 	// Subscribers
 	subscriberRepo := subscriber.NewRepository(
@@ -203,6 +207,13 @@ func main() {
 	mux.Handle("POST /api/tariff-plans/{planId}/clone", authMiddleware(http.HandlerFunc(tariffWriteHandler.Clone)))
 	mux.Handle("POST /api/tariff-plans/{planId}/enable", authMiddleware(http.HandlerFunc(tariffWriteHandler.Enable)))
 	mux.Handle("POST /api/tariff-plans/{planId}/disable", authMiddleware(http.HandlerFunc(tariffWriteHandler.Disable)))
+
+	// OCS Subscriber Contract write endpoints (governance: super_admin/root→DIRECT, operator→APPROVAL)
+	mux.Handle("POST /api/ocs/subscribers", authMiddleware(http.HandlerFunc(ocsSubscriberWriteHandler.Create)))
+	mux.Handle("PATCH /api/ocs/subscribers/{imsi}", authMiddleware(http.HandlerFunc(ocsSubscriberWriteHandler.UpdateTariff)))
+	mux.Handle("POST /api/ocs/subscribers/{imsi}/suspend", authMiddleware(http.HandlerFunc(ocsSubscriberWriteHandler.Suspend)))
+	mux.Handle("POST /api/ocs/subscribers/{imsi}/resume", authMiddleware(http.HandlerFunc(ocsSubscriberWriteHandler.Resume)))
+	mux.Handle("DELETE /api/ocs/subscribers/{imsi}", authMiddleware(http.HandlerFunc(ocsSubscriberWriteHandler.Terminate)))
 
 	// Subscribers (list, detail, search, batch precheck)
 	mux.Handle("GET /api/subscribers", authMiddleware(http.HandlerFunc(subscriberHandler.List)))

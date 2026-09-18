@@ -108,6 +108,11 @@
 | Tariff plan clone | POST | `/api/tariff-plans/:planId/clone` | **Go** | **Go** | Go | NEVER | Go handler with governance, ACTUALLY_ROUTED=1, cutover_verified |
 | Tariff plan enable | POST | `/api/tariff-plans/:planId/enable` | **Go** | **Go** | Go | NEVER | Go handler with governance, ACTUALLY_ROUTED=1, cutover_verified |
 | Tariff plan disable | POST | `/api/tariff-plans/:planId/disable` | **Go** | **Go** | Go | NEVER | Go handler with governance, ACTUALLY_ROUTED=1, cutover_verified |
+| OCS subscriber create | POST | `/api/ocs/subscribers` | **Go** | **Go** | Go | NEVER | Go handler with governance, ACTUALLY_ROUTED=1 |
+| OCS subscriber update tariff | PATCH | `/api/ocs/subscribers/:imsi` | **Go** | **Go** | Go | NEVER | Go handler with governance, ACTUALLY_ROUTED=1 |
+| OCS subscriber suspend | POST | `/api/ocs/subscribers/:imsi/suspend` | **Go** | **Go** | Go | NEVER | Go handler with governance, ACTUALLY_ROUTED=1 |
+| OCS subscriber resume | POST | `/api/ocs/subscribers/:imsi/resume` | **Go** | **Go** | Go | NEVER | Go handler with governance, ACTUALLY_ROUTED=1 |
+| OCS subscriber terminate | DELETE | `/api/ocs/subscribers/:imsi` | **Go** | **Go** | Go | NEVER | Go handler with governance, ACTUALLY_ROUTED=1 |
 | Balance adjust | POST | `/api/subscribers/:imsi/traffic-adjustments` | Next.js | Next.js | Go | NEVER | Frozen payload, CAS |
 | Tariff plan migrate | POST | `/api/tariff-plans/:planId/migrate` | Next.js | Next.js | Go | NEVER | Creates CHG |
 | Tariff plan import | POST | `/api/tariff-plans/import` | Next.js | Next.js | Go | NEVER | Creates CHG |

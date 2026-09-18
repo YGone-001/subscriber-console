@@ -160,6 +160,7 @@ Phase 4.6   COMPLETE — subscriber single CRUD cutover (create/update/delete)
 Phase 4.7   COMPLETE — subscriber batch create/update/import/bulk-delete cutover
 Phase 5.0   COMPLETE — OCS management domain architecture freeze
 Phase 5.1   COMPLETE — OCS read API migration + management UI
+Phase 5.2   COMPLETE — OCS tariff plan governance (create/update/delete/clone/enable/disable)
 ```
 
 Exact HEAD is intentionally not stored here.
@@ -245,7 +246,8 @@ Infrastructure writes = app_rate_limits (allowed)
 Governance writes = app_approvals (CAS transitions + ACCESS_REQUEST creation, Strict audit)
 Sequence writes = app_sequences (approval change ID generation)
 Security audit writes = app_audit_logs (authorization.denied, BestEffort only)
-OCS writes = NONE (Phase 5.1 read-only)
+OCS writes = ocs_tariff_plans CRUD + enable/disable (governance: super_admin/root→DIRECT, operator/ops_admin→APPROVAL), ACTUALLY_ROUTED=1 (Nginx-routed)
+OCS subscriber/balance writes = NONE (deferred)
 ```
 
 ---
@@ -339,15 +341,16 @@ POST /api/approvals/:id          — legacy compat adapter (dispatches by decisi
 Status:
 
 ```text
-Go HTTP operations = 52
+Go HTTP operations = 58
   Semantic reads = 35
   Governance mutations = 5 (approve/reject/cancel/create/legacy-compat)
   Business mutations = 12 (subscriber+profile CRUD + batch)
-Actually Routed = 12 (CUTOVER_TABLE mutation routes)
-OCS writes = NONE (read-only)
+  Tariff mutations = 6 (create/update/delete/clone/enable/disable)
+Actually Routed = 18 (CUTOVER_TABLE mutation routes)
+OCS writes = 6 (tariff plan governance)
 ```
 
-CUTOVER_TABLE = 12 mutation routes (all ACTUALLY_ROUTED=1).
+CUTOVER_TABLE = 18 mutation routes (all ACTUALLY_ROUTED=1).
 
 Read endpoints are shadow-implemented in Go; production reads still route through Next.js unless explicitly cut over.
 
@@ -445,9 +448,17 @@ Phase 5.1 added:
 - OCS Dashboard UI (`/ocs/dashboard`) — 4 KPI cards, balance pool, tariff plans
 - OCS Subscribers UI (`/ocs/subscribers`) — paginated table, status filter, search
 
-Phase 5.1 = READ ONLY. No write migration. No CUTOVER_TABLE changes.
+Phase 5.2 added:
+- 6 tariff plan write operations (create/update/delete/clone/enable/disable) — Go governed
+- Tariff governance registry (APPROVAL_GOVERNED base, super_admin→DIRECT)
+- Fresh actor revalidation before every mutation
+- CUTOVER_TABLE = 18 (was 12): 6 tariff routes ACTUALLY_ROUTED to Go
+- Tariff list UI (`/ocs/tariffs`) — KPI cards, table, enable/disable/clone/delete actions
+- Rate limits: create=20/60, update=30/60, delete=20/60, clone=20/60, enable/disable=20/60
+- Capability: `ocs.tariff.write`
+- Error codes: TARIFF_PLAN_EXISTS, TARIFF_PLAN_NOT_FOUND, DEFAULT_TARIFF_PLAN_PROTECTED, TARIFF_PLAN_DISABLE_IN_USE, INVALID_PLAN_ID
 
-Next: Phase 5.2+ OCS governance and write migration per TODO.md.
+Next: Phase 5.3+ OCS subscriber/balance governance per TODO.md.
 
 ## 10. Deferred Stateful GET
 
@@ -498,8 +509,8 @@ Rate limit:
 
 ### Tariff operations
 
-Go = compatibility read view only.
-Governance authority = Node.
+Go = compatibility read view only + governed write (create/update/delete/clone/enable/disable).
+Governance authority = Go (Phase 5.2+). Node = read owner for remaining read endpoints not yet cut over.
 
 ### Tariff migrate GET
 

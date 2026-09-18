@@ -1834,6 +1834,14 @@ export const zh: Record<string, string> = {
     ocs_subscribers_col_updated: "更新时间",
     ocs_filter_all_statuses: "全部状态",
 
+    ocs_sub_action_change_tariff: "更换资费",
+    ocs_sub_action_suspend: "暂停合约",
+    ocs_sub_action_resume: "恢复合约",
+    ocs_sub_action_terminate: "终止合约",
+    ocs_sub_action_network_error: "网络错误，请重试",
+    ocs_sub_confirm_terminate: "确定终止 {imsi} 的 OCS 合约？此操作不可撤销。",
+    ocs_sub_prompt_change_tariff: "输入新资费计划 ID（当前：{plan}）：",
+
     nav_ocs_tariffs: "OCS 资费计划",
     ocs_tariffs_title: "OCS 资费计划",
     ocs_tariffs_desc: "资费计划管理 — 创建、更新、克隆、启用、禁用资费计划",

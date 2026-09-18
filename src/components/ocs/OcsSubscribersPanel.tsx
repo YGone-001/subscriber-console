@@ -6,6 +6,10 @@ import { fetcher } from "@/lib/fetcher";
 import {
   Search,
   Users,
+  ArrowLeftRight,
+  Pause,
+  Play,
+  Trash2,
 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { DataTablePagination } from "@/components/ui/DataTablePagination";
@@ -30,6 +34,8 @@ export default function OcsSubscribersPanel() {
   const [statusFilter, setStatusFilter] = useState("");
   const [sortField, setSortField] = useState("updated_at");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const getAriaSort = (field: string): "ascending" | "descending" | undefined =>
     sortField === field ? (sortOrder === "asc" ? "ascending" : "descending") : undefined;
@@ -61,6 +67,40 @@ export default function OcsSubscribersPanel() {
       setSortField(field);
       setSortOrder("desc");
     }
+  };
+
+  const executeAction = async (imsi: string, action: string, method: string, url: string, body?: Record<string, string>) => {
+    const key = `${imsi}:${action}`;
+    setActionLoading(key);
+    setFeedback(null);
+    try {
+      const opts: RequestInit = { method, headers: { "Content-Type": "application/json" } };
+      if (body) opts.body = JSON.stringify(body);
+      const res = await fetch(url, opts);
+      const data = await res.json();
+      if (!res.ok) {
+        setFeedback({ type: "error", message: data.message || data.error || `Action failed (${res.status})` });
+      } else {
+        setFeedback({ type: "success", message: data.message || `${action} successful` });
+        refresh();
+      }
+    } catch {
+      setFeedback({ type: "error", message: t("ocs_sub_action_network_error") });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleSuspend = (imsi: string) => executeAction(imsi, "suspend", "POST", `/api/ocs/subscribers/${imsi}/suspend`);
+  const handleResume = (imsi: string) => executeAction(imsi, "resume", "POST", `/api/ocs/subscribers/${imsi}/resume`);
+  const handleTerminate = (imsi: string) => {
+    if (!window.confirm(t("ocs_sub_confirm_terminate").replace("{imsi}", imsi))) return;
+    executeAction(imsi, "terminate", "DELETE", `/api/ocs/subscribers/${imsi}`);
+  };
+  const handleChangeTariff = (imsi: string, currentPlanId: string) => {
+    const newPlanId = window.prompt(t("ocs_sub_prompt_change_tariff").replace("{plan}", currentPlanId));
+    if (!newPlanId || newPlanId.trim() === "" || newPlanId === currentPlanId) return;
+    executeAction(imsi, "change-tariff", "PATCH", `/api/ocs/subscribers/${imsi}`, { plan_id: newPlanId.trim() });
   };
 
   const formatTime = (iso?: string) => {
@@ -108,8 +148,16 @@ export default function OcsSubscribersPanel() {
     </div>
   );
 
+  const feedbackBanner = feedback && (
+    <div className={`ocs-feedback-${feedback.type}`}>
+      {feedback.message}
+    </div>
+  );
+
   const tableContent = (
-    <table className="ocs-table">
+    <>
+      {feedbackBanner}
+      <table className="ocs-table">
       <thead>
         <tr>
           <th
@@ -141,11 +189,12 @@ export default function OcsSubscribersPanel() {
           >
             {t("ocs_subscribers_col_updated")} {sortField === "updated_at" ? (sortOrder === "asc" ? "↑" : "↓") : ""}
           </th>
+          <th>{t("actions")}</th>
         </tr>
       </thead>
       <tbody>
         {records.length === 0 ? (
-          <tr><td colSpan={5} className="ocs-empty-cell">{t("no_data")}</td></tr>
+          <tr><td colSpan={6} className="ocs-empty-cell">{t("no_data")}</td></tr>
         ) : (
           records.map((r) => (
             <tr key={r.id}>
@@ -158,11 +207,51 @@ export default function OcsSubscribersPanel() {
                 </span>
               </td>
               <td className="ocs-time-cell">{formatTime(r.updated_at)}</td>
+              <td>
+                <div className="ocs-action-group">
+                  <button
+                    className="ocs-action-btn"
+                    title={t("ocs_sub_action_change_tariff")}
+                    disabled={actionLoading === `${r.imsi}:change-tariff`}
+                    onClick={() => handleChangeTariff(r.imsi, r.plan_id)}
+                  >
+                    <ArrowLeftRight size={14} />
+                  </button>
+                  {r.status === "active" ? (
+                    <button
+                      className="ocs-action-btn"
+                      title={t("ocs_sub_action_suspend")}
+                      disabled={actionLoading === `${r.imsi}:suspend`}
+                      onClick={() => handleSuspend(r.imsi)}
+                    >
+                      <Pause size={14} />
+                    </button>
+                  ) : (
+                    <button
+                      className="ocs-action-btn"
+                      title={t("ocs_sub_action_resume")}
+                      disabled={actionLoading === `${r.imsi}:resume`}
+                      onClick={() => handleResume(r.imsi)}
+                    >
+                      <Play size={14} />
+                    </button>
+                  )}
+                  <button
+                    className="ocs-action-btn ocs-action-danger"
+                    title={t("ocs_sub_action_terminate")}
+                    disabled={actionLoading === `${r.imsi}:terminate`}
+                    onClick={() => handleTerminate(r.imsi)}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </td>
             </tr>
           ))
         )}
       </tbody>
     </table>
+    </>
   );
 
   const pagination = (

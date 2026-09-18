@@ -11,23 +11,25 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
-// Repository provides read-only access to OCS data.
+// Repository provides read/write access to OCS data.
 type Repository struct {
 	balances     *mongo.Collection
 	sessions     *mongo.Collection
 	reservations *mongo.Collection
 	usage        *mongo.Collection
 	subscribers  *mongo.Collection
+	plans        *mongo.Collection
 }
 
-// NewRepository creates a new read-only OCS Repository.
-func NewRepository(balances, sessions, reservations, usage, subscribers *mongo.Collection) *Repository {
+// NewRepository creates a new OCS Repository.
+func NewRepository(balances, sessions, reservations, usage, subscribers, plans *mongo.Collection) *Repository {
 	return &Repository{
 		balances:     balances,
 		sessions:     sessions,
 		reservations: reservations,
 		usage:        usage,
 		subscribers:  subscribers,
+		plans:        plans,
 	}
 }
 

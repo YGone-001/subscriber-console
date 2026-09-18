@@ -1835,6 +1835,14 @@ export const en: Record<string, string> = {
     ocs_subscribers_col_updated: "Updated",
     ocs_filter_all_statuses: "All Statuses",
 
+    ocs_sub_action_change_tariff: "Change Tariff",
+    ocs_sub_action_suspend: "Suspend Contract",
+    ocs_sub_action_resume: "Resume Contract",
+    ocs_sub_action_terminate: "Terminate Contract",
+    ocs_sub_action_network_error: "Network error — please try again",
+    ocs_sub_confirm_terminate: "Terminate OCS subscriber contract for {imsi}? This action cannot be undone.",
+    ocs_sub_prompt_change_tariff: "Enter new tariff plan ID (current: {plan}):",
+
     nav_ocs_tariffs: "OCS Tariff Plans",
     ocs_tariffs_title: "OCS Tariff Plans",
     ocs_tariffs_desc: "Tariff plan management — create, update, clone, enable, disable tariff plans",
