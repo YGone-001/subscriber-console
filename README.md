@@ -1,21 +1,35 @@
 # subscriber-console
 
-xCloud subscriber operations console built with Next.js, React, and MongoDB.
+xCloud subscriber operations console built with Next.js, Go, React, and MongoDB.
 
-It manages IMSI subscriber records, profile templates, rating policies, traffic analytics, CSV import/export, audit logs, local alerts, system health checks, and role-based access control.
+It manages IMSI subscriber records, profile templates, OCS tariff plans, subscriber contracts, balance accounts, rating policies, traffic analytics, CSV import/export, audit logs, approval governance, local alerts, system health checks, and role-based access control.
+
+## Architecture
+
+```
+Browser → Nginx
+           ├── /*         → Next.js :13333 (React UI)
+           └── /api/*     → Go :18888 (REST API + MongoDB)
+```
+
+API routes are progressively migrating from Next.js to Go on a per-endpoint basis.
 
 ## Features
 
 - Subscriber CRUD, pagination, search, single create, batch create, CSV import, and delete.
 - xCloud-compatible MongoDB subscriber document generation.
 - Profile template management with version history and restore.
+- OCS management: tariff plans, subscriber contracts, balance accounts, dashboard.
 - Rating group management for OCS policy templates.
 - Analytics dashboard computed from MongoDB subscriber documents.
+- Approval governance with maker-checker workflow, risk policy, and audit trail.
 - Audit logs, alert acknowledgment, and system document consistency checks.
 - JWT cookie authentication with `root`, `operator`, and `viewer` roles.
 - Chinese/English UI, theme switching, command palette, and responsive dashboard layout.
 
 ## Tech Stack
+
+### Frontend / Legacy Backend
 
 - Next.js 16.2.2 App Router
 - React 19.2.4
@@ -27,6 +41,13 @@ It manages IMSI subscriber records, profile templates, rating policies, traffic 
 - bcryptjs
 - lucide-react
 - ESLint 9
+
+### Go Backend
+
+- Go 1.24+
+- Standard library `net/http`
+- `log/slog`
+- `mongo-driver/v2`
 
 ## Quick Start
 
@@ -78,13 +99,19 @@ MongoDB operational scripts write JSON reports to `reports/ops/` by default. Set
 
 ## Deployment
 
-Run the app as a Node.js service. It is not a static export.
+The application runs as two services behind Nginx: Next.js on `:13333` and Go on `:18888`.
 
 ```bash
+# Next.js
 npm ci
 npm run mongo:init
 npm run build
 npm run start
+
+# Go backend
+cd backend
+go build ./cmd/server
+./server
 ```
 
 More detail is available in [Deployment](docs/deployment.md).

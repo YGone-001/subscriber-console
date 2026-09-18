@@ -153,6 +153,13 @@ Phase 3C    COMPLETE — approval governance read foundation
 Phase 3D    COMPLETE — explicit approval decision endpoints + contract preflight
 Phase 4.1   COMPLETE — subscriber single-write final contract gate
 Phase 4.2-A COMPLETE — subscriber batch create governance
+Phase 4.3   COMPLETE — subscriber single create/update/delete cutover
+Phase 4.4   COMPLETE — subscriber profile apply cutover
+Phase 4.5   COMPLETE — profile CRUD cutover
+Phase 4.6   COMPLETE — subscriber single CRUD cutover (create/update/delete)
+Phase 4.7   COMPLETE — subscriber batch create/update/import/bulk-delete cutover
+Phase 5.0   COMPLETE — OCS management domain architecture freeze
+Phase 5.1   COMPLETE — OCS read API migration + management UI
 ```
 
 Exact HEAD is intentionally not stored here.
@@ -233,18 +240,19 @@ Preserve exact Node key/limit/window/headers/messages.
 Current write invariant:
 
 ```text
-Business-domain writes by Go = subscriber CREATE/UPDATE/DELETE/BATCH_CREATE handlers exist (governance: super_admin/root→DIRECT, operator/ops_admin→APPROVAL), ACTUALLY_ROUTED=0 (not Nginx-routed)
+Business-domain writes by Go = subscriber/profle CRUD + batch (governance: super_admin/root→DIRECT, operator/ops_admin→APPROVAL), ACTUALLY_ROUTED=1 (Nginx-routed)
 Infrastructure writes = app_rate_limits (allowed)
 Governance writes = app_approvals (CAS transitions + ACCESS_REQUEST creation, Strict audit)
 Sequence writes = app_sequences (approval change ID generation)
 Security audit writes = app_audit_logs (authorization.denied, BestEffort only)
+OCS writes = NONE (Phase 5.1 read-only)
 ```
 
 ---
 
 ## 9. Current Go Read Implementations
 
-34 semantic-read implementations (33 GET + 1 POST semantic read).
+35 semantic-read implementations (34 GET + 1 POST semantic read).
 
 Phase 2A — 6:
 
@@ -257,7 +265,7 @@ GET /api/ratings
 GET /api/ratings/:id
 ```
 
-Phase 2B — 15:
+Phase 2B — 16:
 
 ### Profiles
 
@@ -275,6 +283,7 @@ GET /api/ocs/balances
 GET /api/ocs/sessions
 GET /api/ocs/usage
 GET /api/ocs/reservations
+GET /api/ocs/subscribers          — Phase 5.1
 ```
 
 ### Tariff
@@ -330,16 +339,17 @@ POST /api/approvals/:id          — legacy compat adapter (dispatches by decisi
 Status:
 
 ```text
-Implemented = 43
-Response Parity = 43
-Cutover Ready = 43
-Cutover Blocked = 0
-Actually Routed = 0 (Nginx not modified)
-ready + blocked = implemented ✅
-Business mutations = 4 (subscriber create/update/delete/batch-create, ACTUALLY_ROUTED=0)
+Go HTTP operations = 52
+  Semantic reads = 35
+  Governance mutations = 5 (approve/reject/cancel/create/legacy-compat)
+  Business mutations = 12 (subscriber+profile CRUD + batch)
+Actually Routed = 12 (CUTOVER_TABLE mutation routes)
+OCS writes = NONE (read-only)
 ```
 
-Production `/api/*` still routes to Next.js.
+CUTOVER_TABLE = 12 mutation routes (all ACTUALLY_ROUTED=1).
+
+Read endpoints are shadow-implemented in Go; production reads still route through Next.js unless explicitly cut over.
 
 ---
 
@@ -411,6 +421,33 @@ Risk and governance are separate: SUBSCRIBER_BULK_DELETE remains critical risk e
 Existing pending approvals are NOT auto-approved/executed.
 
 ---
+
+## 9.3 OCS Management Domain
+
+Phase 5.0 defined the OCS boundary:
+
+```text
+Management plane (active migration):
+  ocs_tariff_plans   — tariff plan definitions + rules
+  ocs_subscribers    — subscriber contracts + plan assignments
+  ocs_balances       — balance accounts + pools
+
+Charging plane (frozen, not migrating):
+  ocs_sessions       — active Gy/Ro sessions
+  ocs_reservations   — reserved quota
+  ocs_usage          — usage records
+  ocs_events         — charging events
+  ocs_config         — OCS engine config
+```
+
+Phase 5.1 added:
+- `GET /api/ocs/subscribers` — Go read implementation (shadow, not production-routed)
+- OCS Dashboard UI (`/ocs/dashboard`) — 4 KPI cards, balance pool, tariff plans
+- OCS Subscribers UI (`/ocs/subscribers`) — paginated table, status filter, search
+
+Phase 5.1 = READ ONLY. No write migration. No CUTOVER_TABLE changes.
+
+Next: Phase 5.2+ OCS governance and write migration per TODO.md.
 
 ## 10. Deferred Stateful GET
 
