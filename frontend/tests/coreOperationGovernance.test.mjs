@@ -45,7 +45,7 @@ test('approval execution loads the core executor coverage invariant', () => {
 });
 
 test('Phase 8 surface inventory classifies every existing system operation route', () => {
-  const inventory = read('../docs/core-network-operations-inventory.md');
+  const inventory = read('../../docs/database/core-network-operations-inventory.md');
   for (const route of [
     'GET /api/system/health',
     'GET /api/system/mongo/health',

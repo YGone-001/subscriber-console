@@ -14,6 +14,9 @@ jobs:
   node:
     name: Node quality gates
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
     env:
       MONGODB_URI: mongodb://127.0.0.1:27017/xcloud
       MONGODB_XCLOUD_DB: xcloud
@@ -26,8 +29,9 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version-file: .nvmrc
+          node-version-file: frontend/.nvmrc
           cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
         run: npm ci
@@ -45,10 +49,10 @@ jobs:
         run: npm run build
 
       - name: Migration inventory
-        run: node scripts/migration/inventory-api.mjs
+        run: node ../scripts/migration/inventory-api.mjs
 
       - name: Migration validator
-        run: node scripts/migration/validate-inventory.mjs
+        run: node ../scripts/migration/validate-inventory.mjs
 
   go:
     name: Go backend quality gates

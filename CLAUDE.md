@@ -544,6 +544,7 @@ node_modules/next/dist/docs/
 ### Node
 
 ```bash
+cd frontend
 npm run lint
 npm run typecheck
 npm test
@@ -571,6 +572,7 @@ go build ./...
 ### Migration
 
 ```bash
+# Run from repo root
 node scripts/migration/inventory-api.mjs
 node scripts/migration/validate-inventory.mjs
 ```

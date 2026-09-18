@@ -1,5 +1,6 @@
 # Dependencies
 node_modules/
+frontend/node_modules/
 /.pnp
 .pnp.*
 .yarn/*
@@ -10,12 +11,14 @@ node_modules/
 
 # Build output
 .next/
+frontend/.next/
 out/
 build/
 dist/
 
 # Next.js and TypeScript generated files
 next-env.d.ts
+frontend/next-env.d.ts
 *.tsbuildinfo
 
 # Test and coverage artifacts

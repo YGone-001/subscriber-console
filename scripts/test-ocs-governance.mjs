@@ -14,13 +14,13 @@ const uri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/xcloud';
 
 process.env.MONGODB_XCLOUD_DB = xcloudDbName;
 process.env.MONGODB_APP_DB = appDbName;
-const jiti = createJiti(import.meta.url, { interopDefault: true, alias: { '@': new URL('../src/', import.meta.url).pathname } });
+const jiti = createJiti(import.meta.url, { interopDefault: true, alias: { '@': new URL('../frontend/src/', import.meta.url).pathname } });
 const {
   freezeOcsBalanceAdjustment,
   executeFrozenOcsBalanceAdjustment,
   OcsBalanceGovernanceError,
-} = jiti('../src/server/ocsBalanceGovernance.ts');
-const { getMongoClient } = jiti('../src/lib/mongo.ts');
+} = jiti('../frontend/src/server/ocsBalanceGovernance.ts');
+const { getMongoClient } = jiti('../frontend/src/lib/mongo.ts');
 
 const client = new MongoClient(uri, { serverSelectionTimeoutMS: Number(process.env.MONGODB_SERVER_SELECTION_TIMEOUT_MS || 5000) });
 const report = { ok: false, command: 'mongo:test-ocs-governance', databases: { xcloud: xcloudDbName, app: appDbName }, checks: [] };

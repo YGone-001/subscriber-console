@@ -592,7 +592,7 @@ Production routing: still Node.
 Node:
 
 ```text
-src/app/api/subscribers/route.ts
+frontend/src/app/api/subscribers/route.ts
 ```
 
 Modes:
@@ -650,7 +650,7 @@ when not found.
 Node:
 
 ```text
-src/app/api/subscribers/[imsi]/route.ts
+frontend/src/app/api/subscribers/[imsi]/route.ts
 ```
 
 Phase 2C only migrates:
@@ -700,7 +700,7 @@ Node batch create now uses: validateCurrentAccount, actor-aware governance, froz
 Node:
 
 ```text
-src/app/api/search/route.ts
+frontend/src/app/api/search/route.ts
 ```
 
 Behavior:
@@ -772,7 +772,7 @@ Do not improve/re-rank during migration.
 Node:
 
 ```text
-src/app/api/subscribers/batch/precheck/route.ts
+frontend/src/app/api/subscribers/batch/precheck/route.ts
 ```
 
 HTTP = POST.
@@ -1011,13 +1011,13 @@ Future integration by API/SSO/unified UI/context links, not repo absorption.
 For Phase 2C start only with:
 
 ```text
-src/app/api/subscribers/route.ts
-src/app/api/subscribers/[imsi]/route.ts
-src/app/api/search/route.ts
-src/app/api/subscribers/batch/precheck/route.ts
-src/server/repositories/subscriberRepository.ts
-src/lib/xcloudSubscriber.ts
-src/lib/subscriberValidation.ts
+frontend/src/app/api/subscribers/route.ts
+frontend/src/app/api/subscribers/[imsi]/route.ts
+frontend/src/app/api/search/route.ts
+frontend/src/app/api/subscribers/batch/precheck/route.ts
+frontend/src/server/repositories/subscriberRepository.ts
+frontend/src/lib/xcloudSubscriber.ts
+frontend/src/lib/subscriberValidation.ts
 ```
 
 Expand only by actual imports/call-chain.

@@ -13,7 +13,7 @@
 import { readdir, readFile, writeFile, mkdir } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
 
-const API_ROOT = join(import.meta.dirname, '..', '..', 'src', 'app', 'api');
+const API_ROOT = join(import.meta.dirname, '..', '..', 'frontend', 'src', 'app', 'api');
 const OUTPUT_DIR = join(import.meta.dirname, '..', '..', 'docs', 'backend-migration', 'generated');
 const OUTPUT_FILE = join(OUTPUT_DIR, 'api-routes.json');
 

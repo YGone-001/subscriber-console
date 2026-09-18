@@ -32,7 +32,7 @@ test('change IDs use an atomic sequence and new writes never persist legacy exec
   assert.match(repository, /CHG-\$\{key\}-\$\{String\(sequence\.value\)\.padStart\(5, '0'\)\}/);
   assert.match(repository, /legacyExecuted \? 'completed'/);
   assert.doesNotMatch(repository, /nextStatus:\s*'executed'|status:\s*'executed'/);
-  assert.match(read('scripts/init-mongo-indexes.mjs'), /partialFilterExpression:\s*\{ changeId: \{ \$type: 'string' \} \}/);
+  assert.match(read('../scripts/init-mongo-indexes.mjs'), /partialFilterExpression:\s*\{ changeId: \{ \$type: 'string' \} \}/);
 });
 
 test('decision APIs are explicit, reject reason is server validated, and approval cannot execute', () => {

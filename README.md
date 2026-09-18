@@ -7,6 +7,28 @@ It manages IMSI subscriber records, profile templates, OCS tariff plans, subscri
 ## Architecture
 
 ```
+subscriber-console/
+├── frontend/          # Next.js + React UI
+│   ├── src/
+│   ├── public/
+│   ├── tests/
+│   └── package.json
+├── backend/           # Go REST API
+│   ├── cmd/
+│   ├── internal/
+│   └── go.mod
+├── docs/              # Project documentation
+│   ├── architecture/
+│   ├── backend-migration/
+│   ├── api/
+│   ├── database/
+│   └── operations/
+├── scripts/           # Operational and migration scripts
+├── CLAUDE.md
+└── AI_CONTEXT.md
+```
+
+```
 Browser → Nginx
            ├── /*         → Next.js :13333 (React UI)
            └── /api/*     → Go :18888 (REST API + MongoDB)
@@ -29,7 +51,7 @@ API routes are progressively migrating from Next.js to Go on a per-endpoint basi
 
 ## Tech Stack
 
-### Frontend / Legacy Backend
+### Frontend
 
 - Next.js 16.2.2 App Router
 - React 19.2.4
@@ -42,7 +64,7 @@ API routes are progressively migrating from Next.js to Go on a per-endpoint basi
 - lucide-react
 - ESLint 9
 
-### Go Backend
+### Backend
 
 - Go 1.24+
 - Standard library `net/http`
@@ -51,7 +73,10 @@ API routes are progressively migrating from Next.js to Go on a per-endpoint basi
 
 ## Quick Start
 
+### Frontend
+
 ```bash
+cd frontend
 npm install
 cp .env.example .env
 npm run mongo:init
@@ -61,6 +86,13 @@ npm run dev
 Open `http://localhost:3000`.
 
 Set a strong `INITIAL_ADMIN_PASSWORD` in `.env` before running `npm run mongo:init`. The initialization script creates the initial `admin` account when it does not already exist.
+
+### Backend
+
+```bash
+cd backend
+go run ./cmd/server
+```
 
 ## Environment
 
@@ -79,6 +111,7 @@ Set a strong `INITIAL_ADMIN_PASSWORD` in `.env` before running `npm run mongo:in
 ## Scripts
 
 ```bash
+# Frontend (from frontend/)
 npm run dev                 # Start development server
 npm run build               # Production build
 npm run start               # Start production server
@@ -102,26 +135,43 @@ MongoDB operational scripts write JSON reports to `reports/ops/` by default. Set
 The application runs as two services behind Nginx: Next.js on `:13333` and Go on `:18888`.
 
 ```bash
-# Next.js
+# Frontend
+cd frontend
 npm ci
 npm run mongo:init
 npm run build
 npm run start
 
-# Go backend
+# Backend
 cd backend
 go build ./cmd/server
 ./server
 ```
 
-More detail is available in [Deployment](docs/deployment.md).
+More detail is available in [Deployment](docs/operations/deployment.md).
+
+## Documentation
+
+| Document | Location |
+| --- | --- |
+| Architecture | `docs/architecture/` |
+| Backend Migration | `docs/backend-migration/` |
+| API Reference | `docs/api/` |
+| Database | `docs/database/` |
+| Operations | `docs/operations/` |
+| Project Rules | `CLAUDE.md` |
+| Current State | `AI_CONTEXT.md` |
 
 ## Checks
 
 Before committing, run:
 
 ```bash
-npm run check
+# Frontend
+cd frontend && npm run check
+
+# Backend
+cd backend && go vet ./... && go build ./...
 ```
 
 ## License

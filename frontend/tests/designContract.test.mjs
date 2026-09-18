@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-const design = readFileSync(new URL('../DESIGN.md', import.meta.url), 'utf8');
-const sidecar = JSON.parse(readFileSync(new URL('../.impeccable/design.json', import.meta.url), 'utf8'));
+const design = readFileSync(new URL('../../DESIGN.md', import.meta.url), 'utf8');
+const sidecar = JSON.parse(readFileSync(new URL('../../.impeccable/design.json', import.meta.url), 'utf8'));
 
 test('DESIGN.md records the implemented responsive and touch contracts', () => {
   assert.match(design, /44×44px/);

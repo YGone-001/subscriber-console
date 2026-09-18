@@ -103,7 +103,7 @@ test('application typography and corner radii use the global reference tokens', 
 });
 
 test('responsive width queries stay inside the documented breakpoint vocabulary', () => {
-  const designRules = readFileSync(join(projectRoot, 'docs/design-system-rules.md'), 'utf8');
+  const designRules = readFileSync(join(projectRoot, '..', 'docs', 'architecture', 'design-system-rules.md'), 'utf8');
   const approvedBreakpoints = new Set([560, 640, 760, 768, 900, 980, 1180, 1440]);
   const grandfatheredBreakpoints = new Map([
     ['src/app/globals.css', new Set([780, 1100, 1400])],
