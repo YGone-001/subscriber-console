@@ -1,7 +1,7 @@
 # AI_CONTEXT.md — xCloud subscriber-console
 
 > 当前项目快照，用于 Claude Code / MiMo / Codex 长会话续开发。
-> **稳定规则看 `CLAUDE.md`；历史看 `DEV_LOG.md`；待办看 `TODO.md`。**
+> **稳定规则看 `CLAUDE.md`；历史看 `docs/operations/dev-log.md`；待办看 `docs/operations/todo.md`。**
 > 本文件可覆盖更新，不保存完整历史。
 
 ## 0. Minimal Bootstrap
@@ -161,6 +161,8 @@ Phase 4.7   COMPLETE — subscriber batch create/update/import/bulk-delete cutov
 Phase 5.0   COMPLETE — OCS management domain architecture freeze
 Phase 5.1   COMPLETE — OCS read API migration + management UI
 Phase 5.2   COMPLETE — OCS tariff plan governance (create/update/delete/clone/enable/disable)
+Phase 5.3   COMPLETE — OCS subscriber contract governance (create/update-tariff/suspend/resume/terminate)
+Phase 5.3-B-0 COMPLETE — repository structure refactor (frontend/backend separation)
 ```
 
 Exact HEAD is intentionally not stored here.
@@ -247,7 +249,8 @@ Governance writes = app_approvals (CAS transitions + ACCESS_REQUEST creation, St
 Sequence writes = app_sequences (approval change ID generation)
 Security audit writes = app_audit_logs (authorization.denied, BestEffort only)
 OCS writes = ocs_tariff_plans CRUD + enable/disable (governance: super_admin/root→DIRECT, operator/ops_admin→APPROVAL), ACTUALLY_ROUTED=1 (Nginx-routed)
-OCS subscriber/balance writes = NONE (deferred)
+OCS subscriber writes = ocs_subscribers create/update-tariff/suspend/resume/terminate (governance: super_admin/root→DIRECT, operator/ops_admin→APPROVAL), ACTUALLY_ROUTED=1 (Nginx-routed)
+OCS balance writes = NONE (deferred)
 ```
 
 ---
@@ -341,16 +344,17 @@ POST /api/approvals/:id          — legacy compat adapter (dispatches by decisi
 Status:
 
 ```text
-Go HTTP operations = 58
+Go HTTP operations = 63
   Semantic reads = 35
   Governance mutations = 5 (approve/reject/cancel/create/legacy-compat)
   Business mutations = 12 (subscriber+profile CRUD + batch)
   Tariff mutations = 6 (create/update/delete/clone/enable/disable)
-Actually Routed = 18 (CUTOVER_TABLE mutation routes)
-OCS writes = 6 (tariff plan governance)
+  OCS subscriber mutations = 5 (create/update-tariff/suspend/resume/terminate)
+Actually Routed = 23 (CUTOVER_TABLE mutation routes)
+OCS writes = 11 (tariff plan + subscriber contract governance)
 ```
 
-CUTOVER_TABLE = 18 mutation routes (all ACTUALLY_ROUTED=1).
+CUTOVER_TABLE = 23 mutation routes (all ACTUALLY_ROUTED=1).
 
 Read endpoints are shadow-implemented in Go; production reads still route through Next.js unless explicitly cut over.
 
@@ -458,7 +462,7 @@ Phase 5.2 added:
 - Capability: `ocs.tariff.write`
 - Error codes: TARIFF_PLAN_EXISTS, TARIFF_PLAN_NOT_FOUND, DEFAULT_TARIFF_PLAN_PROTECTED, TARIFF_PLAN_DISABLE_IN_USE, INVALID_PLAN_ID
 
-Next: Phase 5.3+ OCS subscriber/balance governance per TODO.md.
+Next: Phase 5.3+ OCS subscriber/balance governance per `docs/operations/todo.md`.
 
 ## 10. Deferred Stateful GET
 
@@ -1115,8 +1119,8 @@ Persistent placement:
 
 ```text
 Architecture/current ownership → AI_CONTEXT.md
-Historical completed work      → DEV_LOG.md
-Pending work                   → TODO.md
+Historical completed work      → docs/operations/dev-log.md
+Pending work                   → docs/operations/todo.md
 Stable rules                   → CLAUDE.md
 ```
 

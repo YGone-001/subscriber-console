@@ -22,8 +22,10 @@ subscriber-console/
 │   ├── backend-migration/
 │   ├── api/
 │   ├── database/
-│   └── operations/
+│   ├── operations/
+│   └── archive/
 ├── scripts/           # Operational and migration scripts
+├── README.md
 ├── CLAUDE.md
 └── AI_CONTEXT.md
 ```

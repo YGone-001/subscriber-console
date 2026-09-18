@@ -117,8 +117,8 @@ one mongo.Client
 2. 自动化测试
 3. 冻结 API Contract / migration inventory
 4. AI_CONTEXT.md
-5. deployment.md
-6. DEV_LOG.md
+5. docs/operations/deployment.md
+6. docs/operations/dev-log.md
 7. README / 旧设计文档
 8. 注释
 ```
@@ -195,8 +195,8 @@ git show
 上下文膨胀时：
 1. 总结已确认事实。
 2. 架构级事实更新 `AI_CONTEXT.md`。
-3. 历史写 `DEV_LOG.md`。
-4. 待办写 `TODO.md`。
+3. 历史写 `docs/operations/dev-log.md`。
+4. 待办写 `docs/operations/todo.md`。
 5. 下一会话从 `CLAUDE.md + AI_CONTEXT.md` 重建上下文。
 
 ## 6. 文档职责
@@ -221,14 +221,14 @@ git show
 
 必须短、准、可覆盖。
 
-### DEV_LOG.md
+### docs/operations/dev-log.md
 只放历史增量：
 - 阶段完成
 - commit
 - 重要 bug / 修复
 - 关键结论
 
-### TODO.md
+### docs/operations/todo.md
 只放：
 - 当前任务
 - blocker
@@ -656,11 +656,11 @@ rollbackable
 
 ```text
 AI_CONTEXT.md
-DEV_LOG.md
-TODO.md
-architecture.md
-api.md
-deployment.md
+docs/operations/dev-log.md
+docs/operations/todo.md
+docs/architecture/
+docs/api/
+docs/operations/deployment.md
 ```
 
 只有这些变化需要更新 `AI_CONTEXT.md`：
