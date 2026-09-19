@@ -1804,8 +1804,8 @@ export const en: Record<string, string> = {
     noc_status_online: "NOC online",
     dash_unit_plmn: "PLMN",
 
-    // -- Tariff Management --
-    nav_ocs: "Tariff Management",
+    // -- Charging Management --
+    nav_ocs: "Charging Management",
     nav_ocs_dashboard: "OCS Dashboard",
     nav_ocs_subscribers: "OCS Subscribers",
     nav_ocs_balances: "Balance Management",

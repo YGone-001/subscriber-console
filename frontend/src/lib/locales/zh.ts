@@ -1803,8 +1803,8 @@ export const zh: Record<string, string> = {
     noc_status_online: "NOC 正常运行",
     dash_unit_plmn: "PLMN",
 
-    // -- Tariff Management --
-    nav_ocs: "Tariff 管理",
+    // -- Charging Management --
+    nav_ocs: "计费管理",
     nav_ocs_dashboard: "OCS 仪表盘",
     nav_ocs_subscribers: "OCS 签约用户",
     nav_ocs_balances: "余额管理",

@@ -325,3 +325,35 @@ Tariff Management (Tariff 管理)
 2. **Charging Plane UI Frozen**: Runtime sessions (`ocs_sessions`), reservations (`ocs_reservations`), usage records (`ocs_usage`), Gy/Ro CCR state, and rating-engine navigation are removed from product navigation and remain internal/frozen. Legacy routes redirect cleanly to `/ocs/tariffs`.
 3. **Balance Mutations Read-Only Until Phase 5.4**: Governed balance mutations are scheduled for Phase 5.4.
 
+---
+
+## 10. Phase 5.3-B-Correction-3 Acceptance Corrections (Billing Management)
+
+**Date:** 2026-09-20  
+**Decision:** Finalize runtime read cutover, align product naming, enforce toolbar CSS contract, and cleanse legacy charging telemetry from the global dashboard.
+
+### Key Corrections:
+1. **Product Naming Alignment**:
+   - Chinese: strictly `计费管理` (replaces `Tariff 管理` and legacy `OCS 运营治理`).
+   - English: `Charging Management` (replaces `Tariff Management`).
+   - Navigation hierarchy consists strictly of 3 managed domains: 资费计划 (`/ocs/tariffs`), 签约用户 (`/ocs/contracts`), 余额管理 (`/ocs/balances`).
+
+2. **Contract Subscriber Read Cutover (`ACTUALLY_ROUTED = 24`)**:
+   - Added `GET /api/ocs/subscribers -> go` to `frontend/src/lib/cutover-routing.ts`.
+   - The Go backend handles contract subscriber queries with full pagination and status filtering against `ocs_subscribers`.
+   - Frontend UI explicitly renders four distinct lifecycle states: `LOADING`, `ERROR` (surfaced without masking as zero or empty), `EMPTY`, and `SUCCESS`.
+
+3. **Global Dashboard Presentation Cleansed**:
+   - Completely removed legacy charging-runtime telemetry cards (`OcsSessionTelemetryCard`, `OcsBalanceCapacityCard`) and active session count KPIs from the root dashboard (`/`).
+   - Replaced with compact management summaries:
+     - **Charging Management Summary**: Total tariff plans, contract subscribers, and balance records with direct deep links.
+     - **Platform Governance Summary**: Pending approvals, failed audit records, and system health status.
+
+4. **Toolbar CSS Contract Enforced**:
+   - Replaced fragmented/broken filter bar classes across `OcsContractsPanel` and `OcsBalancePlaceholder` with canonical design system classes:
+     - `.ocs-controls-bar`
+     - `.ocs-search-group`
+     - `.ocs-filters-group`
+     - `.ocs-select`
+   - Enforced strict 1-row desktop layout with localized `全部状态` (`All Statuses`) placeholder.
+

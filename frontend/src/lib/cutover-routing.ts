@@ -58,6 +58,7 @@ export const CUTOVER_TABLE: readonly CutoverRoute[] = [
   { method: 'POST', path: '/api/tariff-plans/{planId}/disable', owner: 'go' },
 
   // ── OCS Subscriber Contract Governance ──────────────────────
+  { method: 'GET', path: '/api/ocs/subscribers', owner: 'go' },
   { method: 'POST', path: '/api/ocs/subscribers', owner: 'go' },
   { method: 'POST', path: '/api/ocs/subscribers/{imsi}/suspend', owner: 'go' },
   { method: 'POST', path: '/api/ocs/subscribers/{imsi}/resume', owner: 'go' },

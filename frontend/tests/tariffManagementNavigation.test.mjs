@@ -84,8 +84,8 @@ test('Legacy routes redirect cleanly without redirect loops', () => {
 });
 
 test('Tariff Management terminology is properly localized in zh and en', () => {
-  assert.match(zhLocale, /nav_ocs:\s*"Tariff 管理"/);
-  assert.match(enLocale, /nav_ocs:\s*"Tariff Management"/);
+  assert.match(zhLocale, /nav_ocs:\s*"计费管理"/);
+  assert.match(enLocale, /nav_ocs:\s*"Charging Management"/);
 
   assert.match(zhLocale, /nav_ocs_tariffs:\s*"资费计划"/);
   assert.match(enLocale, /nav_ocs_tariffs:\s*"Tariff Plans"/);

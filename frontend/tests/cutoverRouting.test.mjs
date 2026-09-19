@@ -4,8 +4,8 @@ import { resolveRouteOwner, CUTOVER_TABLE } from '../src/lib/cutover-routing.ts'
 
 describe('cutover-routing', () => {
   describe('CUTOVER_TABLE', () => {
-    it('contains exactly 23 cutover routes', () => {
-      assert.equal(CUTOVER_TABLE.length, 23);
+    it('contains exactly 24 cutover routes', () => {
+      assert.equal(CUTOVER_TABLE.length, 24);
     });
 
     it('Pilot A: POST /api/profiles/{name}/versions/{versionId}/restore is owned by Go', () => {
@@ -154,6 +154,14 @@ describe('cutover-routing', () => {
       assert.equal(disable.owner, 'go');
     });
 
+    it('OCS Sub: GET /api/ocs/subscribers is owned by Go', () => {
+      const list = CUTOVER_TABLE.find(
+        (r) => r.path === '/api/ocs/subscribers' && r.method === 'GET'
+      );
+      assert.ok(list, 'OCS Subscriber List must exist');
+      assert.equal(list.owner, 'go');
+    });
+
     it('OCS Sub: POST /api/ocs/subscribers is owned by Go', () => {
       const create = CUTOVER_TABLE.find(
         (r) => r.path === '/api/ocs/subscribers' && r.method === 'POST'
@@ -274,6 +282,10 @@ describe('cutover-routing', () => {
       assert.equal(resolveRouteOwner('POST', '/api/tariff-plans/plan_10gb/disable'), 'go');
     });
 
+    it('routes GET /api/ocs/subscribers to Go (OCS Subscriber List)', () => {
+      assert.equal(resolveRouteOwner('GET', '/api/ocs/subscribers'), 'go');
+    });
+
     it('routes POST /api/ocs/subscribers to Go (OCS Subscriber Create)', () => {
       assert.equal(resolveRouteOwner('POST', '/api/ocs/subscribers'), 'go');
     });
@@ -339,8 +351,8 @@ describe('cutover-routing', () => {
       assert.equal(resolveRouteOwner('GET', '/api/tariff-plans/plan_10gb'), 'node');
     });
 
-    it('routes GET /api/ocs/subscribers to Node (read not in cutover table)', () => {
-      assert.equal(resolveRouteOwner('GET', '/api/ocs/subscribers'), 'node');
+    it('routes GET /api/ocs/balances to Node (read not in cutover table)', () => {
+      assert.equal(resolveRouteOwner('GET', '/api/ocs/balances'), 'node');
     });
 
     it('routes PUT /api/ocs/subscribers/208930000000001 to Node (PUT not in cutover table)', () => {

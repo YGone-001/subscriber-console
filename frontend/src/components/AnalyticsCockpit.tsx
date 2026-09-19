@@ -3,16 +3,18 @@ import './analytics.css';
 import './analytics/KpiStrip.css';
 
 import React from "react";
+import Link from "next/link";
 import useSWR from "swr";
 import {
   Activity,
   AlertCircle,
   Globe,
   TrendingUp,
-  Radio,
   Database,
   ShieldCheck,
   AlertTriangle,
+  Users,
+  ArrowUpRight,
 } from "lucide-react";
 import { fetcher } from "@/lib/fetcher";
 import { useI18n } from "./I18nProvider";
@@ -25,8 +27,6 @@ import type { KpiStripItem } from "./analytics/KpiStrip";
 import SkeletonDashboard from "./analytics/SkeletonDashboard";
 import TopConsumerChart from "./analytics/TopConsumerChart";
 import WorkbenchPanel from "./analytics/WorkbenchPanel";
-import OcsBalanceCapacityCard from "./analytics/OcsBalanceCapacityCard";
-import OcsSessionTelemetryCard from "./analytics/OcsSessionTelemetryCard";
 import TariffPlanDistributionChart from "./analytics/TariffPlanDistributionChart";
 
 export default function AnalyticsCockpit() {
@@ -35,6 +35,10 @@ export default function AnalyticsCockpit() {
   const { data, error, isLoading } = useSWR<MetricsData>("/api/analytics/metrics", fetcher, { refreshInterval: 5000 });
   const { data: sparkData } = useSWR<SparklineData>("/api/analytics/sparkline", fetcher, { refreshInterval: 30000 });
   const { data: alertData } = useSWR<AlertResponse>("/api/alerts", fetcher, { refreshInterval: 5000 });
+  const { data: ocsSubData } = useSWR<{ total: number }>("/api/ocs/subscribers?limit=1", fetcher, { refreshInterval: 10000 });
+  const { data: approvalData } = useSWR<{ total: number }>("/api/approvals?status=PENDING&limit=1", fetcher, { refreshInterval: 10000 });
+  const { data: auditFailureData } = useSWR<{ total: number }>("/api/audit-logs?result=FAILURE&limit=1", fetcher, { refreshInterval: 10000 });
+  const { data: tariffPlansData } = useSWR<any>("/api/tariff-plans", fetcher, { refreshInterval: 10000 });
 
   if (isLoading) {
     return <SkeletonDashboard />;
@@ -55,9 +59,13 @@ export default function AnalyticsCockpit() {
   const top5 = data?.top5 || [];
 
   const ocsBalances = data?.ocsBalances;
-  const ocsSessions = data?.ocsSessions;
-  const ocsReservations = data?.ocsReservations;
   const tariffPlanDist = data?.tariffPlanDist || [];
+
+  const tariffPlanCount = Array.isArray(tariffPlansData) ? tariffPlansData.length : (tariffPlansData?.records?.length ?? tariffPlanDist.length);
+  const contractSubscriberCount = ocsSubData?.total ?? 0;
+  const balanceAccountCount = ocsBalances?.totalSubscribers ?? 0;
+  const pendingApprovalsCount = approvalData?.total ?? 0;
+  const failedAuditCount = auditFailureData?.total ?? 0;
 
   const trafficSparkline = sparkData?.traffic || [];
   const subscriberSparkline = sparkData?.subscribers || [];
@@ -77,7 +85,6 @@ export default function AnalyticsCockpit() {
   const activeWarningCount = alertData?.activeWarningCount || activeAlerts.filter((alert) => alert.level === "WARNING").length;
 
   const brokenInvariants = ocsBalances?.brokenInvariantCount || 0;
-  const orphanedReservations = ocsReservations?.orphanedReservations || 0;
   const utilizationRate = ocsBalances?.dataUtilizationRate || 0;
 
   const operationsScore = normalizeRingValue(
@@ -85,7 +92,6 @@ export default function AnalyticsCockpit() {
     activeCriticalCount * 20 -
     activeWarningCount * 8 -
     (brokenInvariants > 0 ? 15 : 0) -
-    (orphanedReservations > 0 ? 10 : 0) -
     (exhaustionTone === "danger" ? 15 : exhaustionTone === "warning" ? 8 : 0)
   );
 
@@ -141,17 +147,6 @@ export default function AnalyticsCockpit() {
       detail: t("dash_work_top_consumer_detail", { imsi: topImsi, share: topConsumerShare.toFixed(0) }),
       href: "/subscribers",
       action: t("dash_work_open_subscribers"),
-    });
-  }
-  if (orphanedReservations > 0) {
-    workItems.push({
-      id: "orphaned-reservations",
-      tone: "warning",
-      priority: "P1",
-      title: t("dash_work_orphaned_title", { count: orphanedReservations }),
-      detail: t("dash_work_orphaned_detail"),
-      href: "/ocs/dashboard",
-      action: t("dash_work_open_ocs"),
     });
   }
   if (activeWarningCount > 0) {
@@ -251,11 +246,11 @@ export default function AnalyticsCockpit() {
       tone: "normal" as const,
     },
     {
-      color: "var(--status-success)",
-      icon: <Radio size={16} />,
-      label: t("dash_ocs_kpi_active_sessions"),
-      value: <CountUpNumber value={ocsSessions?.activeSessions || 0} />,
-      ringValue: ocsSessions?.totalSessions ? normalizeRingValue(((ocsSessions.activeSessions || 0) / ocsSessions.totalSessions) * 100) : 0,
+      color: "var(--chart-3)",
+      icon: <Users size={16} />,
+      label: t("nav_ocs_contracts"),
+      value: <CountUpNumber value={contractSubscriberCount} />,
+      ringValue: contractSubscriberCount > 0 ? 100 : 0,
       tone: "normal" as const,
     },
     {
@@ -295,10 +290,91 @@ export default function AnalyticsCockpit() {
         t={t}
       />
 
-      {/* 3. OCS Overview — capacity and session telemetry */}
+      {/* 3. Management Overview — Charging Management & Platform Governance */}
       <div className="analytics-ocs-grid">
-        <OcsBalanceCapacityCard metrics={ocsBalances} t={t} />
-        <OcsSessionTelemetryCard sessions={ocsSessions} reservations={ocsReservations} t={t} />
+        <div className="analytics-ocs-card analytics-panel">
+          <div className="analytics-panel-header">
+            <div className="analytics-panel-title">
+              <div className="analytics-ocs-icon" style={{ color: "var(--chart-1)", background: "var(--selection-soft)" }}>
+                <Database size={20} />
+              </div>
+              <div>
+                <h3>{t("nav_ocs")}</h3>
+                <p className="analytics-ocs-subtitle">{t("ocs_contracts_desc")}</p>
+              </div>
+            </div>
+            <div className="analytics-ocs-header-actions">
+              <Link href="/ocs/tariffs" className="analytics-ocs-link-btn">
+                <span>{t("nav_ocs_tariffs")}</span>
+                <ArrowUpRight size={14} />
+              </Link>
+            </div>
+          </div>
+          <div className="analytics-ocs-body">
+            <div className="analytics-ocs-capacity-summary">
+              <Link href="/ocs/tariffs" className="analytics-ocs-metric-item">
+                <span className="analytics-ocs-metric-label">{t("nav_ocs_tariffs")}</span>
+                <span className="analytics-ocs-metric-val"><CountUpNumber value={tariffPlanCount} /></span>
+                <span className="analytics-ocs-subtext">ocs_tariff_plans</span>
+              </Link>
+              <Link href="/ocs/contracts" className="analytics-ocs-metric-item">
+                <span className="analytics-ocs-metric-label">{t("nav_ocs_contracts")}</span>
+                <span className="analytics-ocs-metric-val"><CountUpNumber value={contractSubscriberCount} /></span>
+                <span className="analytics-ocs-subtext">ocs_subscribers</span>
+              </Link>
+              <Link href="/ocs/balances" className="analytics-ocs-metric-item">
+                <span className="analytics-ocs-metric-label">{t("nav_ocs_balances")}</span>
+                <span className="analytics-ocs-metric-val"><CountUpNumber value={balanceAccountCount} /></span>
+                <span className="analytics-ocs-subtext">ocs_balances</span>
+              </Link>
+            </div>
+          </div>
+        </div>
+
+        <div className="analytics-ocs-card analytics-panel">
+          <div className="analytics-panel-header">
+            <div className="analytics-panel-title">
+              <div className="analytics-ocs-icon" style={{ color: "var(--status-success)", background: "var(--status-success-soft)" }}>
+                <ShieldCheck size={20} />
+              </div>
+              <div>
+                <h3>{t("nav_operations_governance")}</h3>
+                <p className="analytics-ocs-subtitle">{t("dash_work_healthy_detail")}</p>
+              </div>
+            </div>
+            <div className="analytics-ocs-header-actions">
+              <Link href="/approvals" className="analytics-ocs-link-btn">
+                <span>{t("nav_approvals")}</span>
+                <ArrowUpRight size={14} />
+              </Link>
+            </div>
+          </div>
+          <div className="analytics-ocs-body">
+            <div className="analytics-ocs-capacity-summary">
+              <Link href="/approvals" className="analytics-ocs-metric-item">
+                <span className="analytics-ocs-metric-label">{t("nav_approvals")}</span>
+                <span className="analytics-ocs-metric-val" style={{ color: pendingApprovalsCount > 0 ? "var(--status-warning)" : "inherit" }}>
+                  <CountUpNumber value={pendingApprovalsCount} />
+                </span>
+                <span className="analytics-ocs-subtext">{pendingApprovalsCount > 0 ? t("ocs_dashboard_pending_governance_detail") : "—"}</span>
+              </Link>
+              <Link href="/audit-logs" className="analytics-ocs-metric-item">
+                <span className="analytics-ocs-metric-label">{t("nav_audit_logs")}</span>
+                <span className="analytics-ocs-metric-val" style={{ color: failedAuditCount > 0 ? "var(--status-danger)" : "inherit" }}>
+                  <CountUpNumber value={failedAuditCount} />
+                </span>
+                <span className="analytics-ocs-subtext">{failedAuditCount > 0 ? t("dash_work_critical_detail") : "—"}</span>
+              </Link>
+              <Link href="/system-health" className="analytics-ocs-metric-item">
+                <span className="analytics-ocs-metric-label">{t("nav_system_health")}</span>
+                <span className="analytics-ocs-metric-val" style={{ color: activeCriticalCount > 0 ? "var(--status-danger)" : activeWarningCount > 0 ? "var(--status-warning)" : "var(--status-success)" }}>
+                  {activeCriticalCount > 0 ? `${activeCriticalCount}!` : activeWarningCount > 0 ? `${activeWarningCount}▲` : "100%"}
+                </span>
+                <span className="analytics-ocs-subtext">{activeCriticalCount === 0 && activeWarningCount === 0 ? t("noc_status_online") : `${activeAlerts.length} issues`}</span>
+              </Link>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* 4. Charts — distribution and top consumers */}

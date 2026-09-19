@@ -15,9 +15,9 @@ test('Dashboard OCS components exist', () => {
   assert.equal(existsSync(new URL('../src/components/analytics/WorkbenchPanel.tsx', import.meta.url)), true);
 });
 
-test('AnalyticsCockpit integrates OCS telemetry and elevated workbench layout', () => {
-  assert.match(analyticsCockpitSource, /OcsBalanceCapacityCard/);
-  assert.match(analyticsCockpitSource, /OcsSessionTelemetryCard/);
+test('AnalyticsCockpit enforces platform overview and does NOT mount runtime telemetry', () => {
+  assert.doesNotMatch(analyticsCockpitSource, /OcsSessionTelemetryCard/);
+  assert.doesNotMatch(analyticsCockpitSource, /dash_ocs_kpi_active_sessions/);
   assert.match(analyticsCockpitSource, /TariffPlanDistributionChart/);
   assert.match(analyticsCockpitSource, /WorkbenchPanel/);
   assert.match(analyticsCockpitSource, /KpiStrip/);

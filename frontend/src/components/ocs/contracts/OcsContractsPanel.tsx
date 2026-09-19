@@ -57,7 +57,7 @@ export default function OcsContractsPanel() {
     return `/api/ocs/subscribers?${params.toString()}`;
   }, [page, limit, search, statusFilter, sortField, sortOrder]);
 
-  const { data, isLoading: loading, mutate: refresh } = useSWR(url, fetcher, {
+  const { data, error, isLoading: loading, mutate: refresh } = useSWR(url, fetcher, {
     keepPreviousData: true,
   });
 
@@ -131,21 +131,21 @@ export default function OcsContractsPanel() {
       <div className="ocs-dashboard-card">
         <div className="ocs-dashboard-card-icon"><Users size={20} /></div>
         <div className="ocs-dashboard-card-content">
-          <span className="ocs-dashboard-card-value">{total}</span>
+          <span className="ocs-dashboard-card-value">{error ? "—" : total}</span>
           <span className="ocs-dashboard-card-label">{t("ocs_contract_total")}</span>
         </div>
       </div>
       <div className="ocs-dashboard-card">
         <div className="ocs-dashboard-card-icon"><Users size={20} /></div>
         <div className="ocs-dashboard-card-content">
-          <span className="ocs-dashboard-card-value">{activeCount}</span>
+          <span className="ocs-dashboard-card-value">{error ? "—" : activeCount}</span>
           <span className="ocs-dashboard-card-label">{t("ocs_contract_active")}</span>
         </div>
       </div>
       <div className="ocs-dashboard-card">
         <div className="ocs-dashboard-card-icon"><Pause size={20} /></div>
         <div className="ocs-dashboard-card-content">
-          <span className="ocs-dashboard-card-value">{suspendedCount}</span>
+          <span className="ocs-dashboard-card-value">{error ? "—" : suspendedCount}</span>
           <span className="ocs-dashboard-card-label">{t("ocs_contract_suspended")}</span>
         </div>
       </div>
@@ -153,9 +153,9 @@ export default function OcsContractsPanel() {
   );
 
   const controls = (
-    <div className="ocs-controls">
-      <div className="ocs-search-wrap">
-        <Search size={14} className="ocs-search-icon" />
+    <div className="ocs-controls-bar">
+      <div className="ocs-search-group">
+        <Search size={16} className="ocs-search-icon" />
         <input
           type="text"
           className="ocs-search-input"
@@ -164,15 +164,18 @@ export default function OcsContractsPanel() {
           onChange={(e) => { setSearch(e.target.value); setPage(1); }}
         />
       </div>
-      <select
-        className="ocs-filter-select"
-        value={statusFilter}
-        onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-      >
-        <option value="">{t("ocs_filter_all_statuses")}</option>
-        <option value="active">active</option>
-        <option value="suspended">suspended</option>
-      </select>
+      <div className="ocs-filters-group">
+        <select
+          className="ocs-select"
+          value={statusFilter}
+          onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
+        >
+          <option value="">{t("ocs_filter_all_statuses")}</option>
+          <option value="active">{t("status_active") || "active"}</option>
+          <option value="suspended">{t("status_suspended") || "suspended"}</option>
+          <option value="terminated">已终止</option>
+        </select>
+      </div>
     </div>
   );
 
@@ -187,9 +190,16 @@ export default function OcsContractsPanel() {
     </div>
   );
 
+  const errorBanner = error && (
+    <div className="ocs-feedback-error" style={{ marginBottom: "1rem" }}>
+      <span>{error.message || "Failed to load contract subscribers"}</span>
+    </div>
+  );
+
   const tableContent = (
     <>
       {feedbackBanner}
+      {errorBanner}
       <table className="ocs-table">
       <caption className="sr-only">{t("ocs_contracts_title")}</caption>
       <thead>
@@ -212,7 +222,11 @@ export default function OcsContractsPanel() {
         </tr>
       </thead>
       <tbody>
-        {records.length === 0 ? (
+        {loading ? (
+          <tr><td colSpan={7} className="ocs-empty-cell"><div className="ocs-loading">{t("loading") || "加载中..."}</div></td></tr>
+        ) : error ? (
+          <tr><td colSpan={7} className="ocs-empty-cell ocs-error-cell"><div style={{ color: "var(--status-danger)" }}>{error?.message || "加载失败，请检查网络或后端服务"}</div></td></tr>
+        ) : records.length === 0 ? (
           <tr><td colSpan={7} className="ocs-empty-cell">{t("no_data")}</td></tr>
         ) : (
           records.map((r) => (

@@ -26,7 +26,7 @@ export default function OcsBalancePlaceholder() {
     return `/api/ocs/balances?${params.toString()}`;
   }, [page, limit, search, statusFilter]);
 
-  const { data, isLoading: loading, mutate: refresh } = useSWR(url, fetcher, {
+  const { data, error, isLoading: loading, mutate: refresh } = useSWR(url, fetcher, {
     keepPreviousData: true,
   });
 
@@ -47,7 +47,7 @@ export default function OcsBalancePlaceholder() {
       <div className="ocs-dashboard-card">
         <div className="ocs-dashboard-card-icon"><Wallet size={20} /></div>
         <div className="ocs-dashboard-card-content">
-          <span className="ocs-dashboard-card-value">{total}</span>
+          <span className="ocs-dashboard-card-value">{error ? "—" : total}</span>
           <span className="ocs-dashboard-card-label">{t("ocs_balance_total_accounts")}</span>
         </div>
       </div>
@@ -55,9 +55,9 @@ export default function OcsBalancePlaceholder() {
   );
 
   const controls = (
-    <div className="ocs-controls">
-      <div className="ocs-search-wrap">
-        <Search size={14} className="ocs-search-icon" />
+    <div className="ocs-controls-bar">
+      <div className="ocs-search-group">
+        <Search size={16} className="ocs-search-icon" />
         <input
           type="text"
           className="ocs-search-input"
@@ -66,15 +66,17 @@ export default function OcsBalancePlaceholder() {
           onChange={(e) => { setSearch(e.target.value); setPage(1); }}
         />
       </div>
-      <select
-        className="ocs-filter-select"
-        value={statusFilter}
-        onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-      >
-        <option value="">{t("ocs_filter_all_statuses")}</option>
-        <option value="active">active</option>
-        <option value="suspended">suspended</option>
-      </select>
+      <div className="ocs-filters-group">
+        <select
+          className="ocs-select"
+          value={statusFilter}
+          onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
+        >
+          <option value="">{t("ocs_filter_all_statuses")}</option>
+          <option value="active">{t("status_active") || "active"}</option>
+          <option value="suspended">{t("status_suspended") || "suspended"}</option>
+        </select>
+      </div>
     </div>
   );
 
@@ -84,6 +86,11 @@ export default function OcsBalancePlaceholder() {
         <ShieldAlert size={18} />
         <span>{t("ocs_balance_adjustment_notice")}</span>
       </div>
+      {error && (
+        <div className="ocs-feedback-error" style={{ marginBottom: "1rem" }}>
+          <span>{error.message || "Failed to load balance accounts"}</span>
+        </div>
+      )}
       <table className="ocs-table">
         <caption className="sr-only">{t("ocs_balances_title")}</caption>
         <thead>
@@ -97,7 +104,11 @@ export default function OcsBalancePlaceholder() {
           </tr>
         </thead>
         <tbody>
-          {records.length === 0 && !loading ? (
+          {loading ? (
+            <tr><td colSpan={6} className="ocs-empty-cell"><div className="ocs-loading">{t("loading") || "加载中..."}</div></td></tr>
+          ) : error ? (
+            <tr><td colSpan={6} className="ocs-empty-cell ocs-error-cell"><div style={{ color: "var(--status-danger)" }}>{error?.message || "加载失败，请检查网络或后端服务"}</div></td></tr>
+          ) : records.length === 0 ? (
             <tr><td colSpan={6} className="ocs-empty-cell">{t("no_data")}</td></tr>
           ) : (
             records.map((r: any) => (
