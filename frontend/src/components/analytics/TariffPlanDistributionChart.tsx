@@ -52,7 +52,7 @@ export default function TariffPlanDistributionChart({
         </div>
         <div className="analytics-ocs-header-actions">
           <span className="analytics-panel-badge">{tariffPlanDist.length} {t("dash_unit_plans")}</span>
-          <Link href="/rating" className="analytics-ocs-link-btn">
+          <Link href="/ocs/tariffs" className="analytics-ocs-link-btn">
             <span>{t("dash_ocs_view_plans")}</span>
             <ArrowUpRight size={14} />
           </Link>
@@ -117,7 +117,7 @@ export default function TariffPlanDistributionChart({
             icon={<Tag size={42} />}
             title={t("dash_chart_tariff_plan_empty")}
             action={
-              <Link href="/rating" className="btn btn-outline analytics-empty-button">
+              <Link href="/ocs/tariffs" className="btn btn-outline analytics-empty-button">
                 {t("dash_ocs_create_plan_hint")}
               </Link>
             }

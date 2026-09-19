@@ -38,7 +38,7 @@ export default function OcsContractsPanel() {
   const [statusFilter, setStatusFilter] = useState("");
   const [sortField, setSortField] = useState("updated_at");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
-  const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string; approvalId?: string } | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [confirmTerminate, setConfirmTerminate] = useState<string | null>(null);
 
@@ -88,10 +88,15 @@ export default function OcsContractsPanel() {
       if (!res.ok) {
         setFeedback({ type: "error", message: data.message || data.error || `Action failed (${res.status})` });
       } else {
-        const msg = data.outcome === "approval_required"
+        const isApproval = data.outcome === "approval_required";
+        const msg = isApproval
           ? t("ocs_contract_approval_created")
           : data.message || t("ocs_contract_action_success");
-        setFeedback({ type: "success", message: msg });
+        setFeedback({
+          type: "success",
+          message: msg,
+          approvalId: data.approval_id || data.approvalId,
+        });
         refresh();
       }
     } catch {
@@ -173,7 +178,12 @@ export default function OcsContractsPanel() {
 
   const feedbackBanner = feedback && (
     <div className={`ocs-feedback-${feedback.type}`}>
-      {feedback.message}
+      <span>{feedback.message}</span>
+      {feedback.approvalId && (
+        <Link href={`/approvals?id=${encodeURIComponent(feedback.approvalId)}`} className="ocs-feedback-link">
+          {t("nav_approvals")} ({feedback.approvalId}) →
+        </Link>
+      )}
     </div>
   );
 

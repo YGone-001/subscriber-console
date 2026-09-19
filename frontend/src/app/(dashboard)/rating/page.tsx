@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
 export default function RatingPage() {
-  redirect("/rating/plans");
+  redirect("/ocs/tariffs");
 }

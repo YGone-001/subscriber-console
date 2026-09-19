@@ -194,7 +194,7 @@ export default function AnalyticsCockpit() {
       priority: "P1",
       title: t("dash_work_rating_title"),
       detail: t("dash_work_rating_detail"),
-      href: "/rating",
+      href: "/ocs/tariffs",
       action: t("dash_work_open_rating"),
     });
   }

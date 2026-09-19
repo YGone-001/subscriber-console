@@ -18,7 +18,7 @@ import {
 import type { UserRole } from "@/lib/authz";
 import { hasPermission, type Permission } from '@/lib/permissions';
 
-export type NavigationGroup = "ocs" | "rating" | "governance" | "system";
+export type NavigationGroup = "ocs" | "governance" | "system";
 
 export interface NavigationRoute {
   path: string;
@@ -37,19 +37,19 @@ export interface NavigationRoute {
 export const NAVIGATION_ROUTES: readonly NavigationRoute[] = [
   { path: "/", labelKey: "nav_dashboard", commandLabelKey: "cp_nav_dashboard", commandDescriptionKey: "cp_nav_dashboard_desc", icon: LayoutDashboard },
   { path: "/subscribers", labelKey: "nav_subscriber", commandLabelKey: "cp_nav_subscribers", commandDescriptionKey: "cp_nav_subscribers_desc", icon: Users },
-  { path: "/ocs/dashboard", labelKey: "nav_ocs_overview", commandDescriptionKey: "ocs_overview_desc", icon: LayoutDashboard, group: "ocs", groupLabelKey: "nav_ocs", groupPath: "/ocs/dashboard" },
-  { path: "/ocs/tariffs", labelKey: "nav_ocs_tariffs", commandDescriptionKey: "ocs_tariffs_desc", icon: Zap, group: "ocs", groupLabelKey: "nav_ocs", groupPath: "/ocs/dashboard" },
-  { path: "/ocs/contracts", labelKey: "nav_ocs_contracts", commandDescriptionKey: "ocs_contracts_desc", icon: FileText, group: "ocs", groupLabelKey: "nav_ocs", groupPath: "/ocs/dashboard" },
-  { path: "/ocs/balances", labelKey: "nav_ocs_balances", commandDescriptionKey: "ocs_balances_desc", icon: Wallet, group: "ocs", groupLabelKey: "nav_ocs", groupPath: "/ocs/dashboard" },
-  { path: "/ocs/approvals", labelKey: "nav_ocs_approvals", commandDescriptionKey: "ocs_approvals_desc", icon: ShieldCheck, group: "ocs", groupLabelKey: "nav_ocs", groupPath: "/ocs/dashboard" },
-  { path: "/ocs/audit", labelKey: "nav_ocs_audit", commandDescriptionKey: "ocs_audit_desc", icon: History, group: "ocs", groupLabelKey: "nav_ocs", groupPath: "/ocs/dashboard" },
+  { path: "/ocs/tariffs", labelKey: "nav_ocs_tariffs", commandDescriptionKey: "ocs_tariffs_desc", icon: Zap, group: "ocs", groupLabelKey: "nav_ocs", groupPath: "/ocs/tariffs" },
+  { path: "/ocs/contracts", labelKey: "nav_ocs_contracts", commandDescriptionKey: "ocs_contracts_desc", icon: FileText, group: "ocs", groupLabelKey: "nav_ocs", groupPath: "/ocs/tariffs" },
+  { path: "/ocs/balances", labelKey: "nav_ocs_balances", commandDescriptionKey: "ocs_balances_desc", icon: Wallet, group: "ocs", groupLabelKey: "nav_ocs", groupPath: "/ocs/tariffs" },
+  { path: "/ocs/dashboard", labelKey: "nav_ocs_overview", commandDescriptionKey: "ocs_overview_desc", icon: LayoutDashboard, showInCommandPalette: false },
+  { path: "/ocs/approvals", labelKey: "nav_ocs_approvals", commandDescriptionKey: "ocs_approvals_desc", icon: ShieldCheck, showInCommandPalette: false },
+  { path: "/ocs/audit", labelKey: "nav_ocs_audit", commandDescriptionKey: "ocs_audit_desc", icon: History, showInCommandPalette: false },
   { path: "/ocs/subscribers", labelKey: "nav_ocs_subscribers", commandDescriptionKey: "ocs_subscribers_desc", icon: Users, showInCommandPalette: false },
   { path: "/ocs/sessions", labelKey: "nav_ocs_sessions", commandDescriptionKey: "ocs_sessions_desc", icon: Radio, showInCommandPalette: false },
   { path: "/ocs/usage", labelKey: "nav_ocs_usage", commandDescriptionKey: "ocs_usage_desc", icon: Receipt, showInCommandPalette: false },
   { path: "/profile", labelKey: "nav_profile", commandLabelKey: "cp_nav_profiles", commandDescriptionKey: "cp_nav_profiles_desc", icon: CreditCard },
   { path: "/rating", labelKey: "nav_rating", commandLabelKey: "nav_rating", commandDescriptionKey: "cp_nav_rating_plans_desc", icon: Gauge, showInCommandPalette: false },
-  { path: "/rating/plans", labelKey: "nav_rating_plans", commandLabelKey: "cp_nav_rating_plans", commandDescriptionKey: "cp_nav_rating_plans_desc", icon: Gauge, group: "rating", groupLabelKey: "nav_rating", groupPath: "/rating" },
-  { path: "/rating/rules", labelKey: "nav_rating_rules", commandLabelKey: "cp_nav_rating_rules", commandDescriptionKey: "cp_nav_rating_rules_desc", icon: GitBranch, group: "rating", groupLabelKey: "nav_rating", groupPath: "/rating" },
+  { path: "/rating/plans", labelKey: "nav_rating_plans", commandLabelKey: "cp_nav_rating_plans", commandDescriptionKey: "cp_nav_rating_plans_desc", icon: Gauge, showInCommandPalette: false },
+  { path: "/rating/rules", labelKey: "nav_rating_rules", commandLabelKey: "cp_nav_rating_rules", commandDescriptionKey: "cp_nav_rating_rules_desc", icon: GitBranch, showInCommandPalette: false },
   { path: "/approvals", labelKey: "nav_approvals", commandDescriptionKey: "approvals_center_desc", icon: GitBranch, group: "governance", groupLabelKey: "nav_operations_governance", groupPath: "/approvals" },
   { path: "/audit-logs", labelKey: "nav_audit_logs", commandLabelKey: "cp_nav_audit", commandDescriptionKey: "cp_nav_audit_desc", icon: History, group: "governance", groupLabelKey: "nav_operations_governance", groupPath: "/approvals" },
   { path: "/users", labelKey: "nav_system_users", commandDescriptionKey: "users_mgmt_desc", icon: UserCog, group: "system", groupLabelKey: "nav_system_settings", groupPath: "/users", permission: 'users.read' },

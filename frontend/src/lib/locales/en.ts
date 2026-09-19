@@ -1804,11 +1804,11 @@ export const en: Record<string, string> = {
     noc_status_online: "NOC online",
     dash_unit_plmn: "PLMN",
 
-    // -- OCS Operations & Monitoring --
-    nav_ocs: "OCS Operations Governance",
+    // -- Tariff Management --
+    nav_ocs: "Tariff Management",
     nav_ocs_dashboard: "OCS Dashboard",
     nav_ocs_subscribers: "OCS Subscribers",
-    nav_ocs_balances: "Balance Governance",
+    nav_ocs_balances: "Balance Management",
     nav_ocs_sessions: "OCS Sessions",
     nav_ocs_usage: "OCS Usage & Reservations",
 
@@ -1844,7 +1844,7 @@ export const en: Record<string, string> = {
     ocs_sub_prompt_change_tariff: "Enter new tariff plan ID (current: {plan}):",
 
     nav_ocs_tariffs: "Tariff Plans",
-    ocs_tariffs_title: "Tariff Plan Governance",
+    ocs_tariffs_title: "Tariff Plans",
     ocs_tariff_total_plans: "Total Plans",
     ocs_tariff_active_plans: "Active Plans",
     ocs_tariff_disabled_plans: "Disabled Plans",
@@ -1865,8 +1865,8 @@ export const en: Record<string, string> = {
     ocs_tariff_action_success: "Action completed successfully",
     ocs_tariff_action_failed: "Action failed",
 
-    ocs_balances_title: "OCS Subscriber Balances",
-    ocs_balances_desc: "Real-time monitoring of subscriber data, voice, and SMS quotas, usages, and full balance invariant audits",
+    ocs_balances_title: "Balance Management",
+    ocs_balances_desc: "Tariff account balance monitoring. Governed balance adjustment will be implemented in Phase 5.4.",
     ocs_sessions_title: "OCS Real-Time Diameter Sessions",
     ocs_sessions_desc: "Inspect live Gy / Ro Diameter session state machines, quota authorizations, Rating Groups, and lifecycle cleanup stages",
     ocs_usage_title: "OCS Usage CDRs & Quota Reservations",
@@ -1991,7 +1991,7 @@ export const en: Record<string, string> = {
 
     // -- OCS Governance UI Refactor --
     nav_ocs_overview: "Overview",
-    nav_ocs_contracts: "Contract Management",
+    nav_ocs_contracts: "Contract Subscribers",
     nav_ocs_approvals: "Approval Center",
     nav_ocs_audit: "Audit Center",
 
@@ -2038,8 +2038,8 @@ export const en: Record<string, string> = {
     ocs_tariff_detail_created: "Created",
 
     // Contracts
-    ocs_contracts_title: "OCS Contract Management",
-    ocs_contracts_desc: "Manage OCS subscriber contracts with governance workflow",
+    ocs_contracts_title: "Contract Subscribers",
+    ocs_contracts_desc: "Manage contract subscribers with governance workflow",
     ocs_contract_total: "Total Contracts",
     ocs_contract_active: "Active",
     ocs_contract_suspended: "Suspended",
@@ -2113,7 +2113,7 @@ export const en: Record<string, string> = {
 
     // Balance placeholder
     ocs_balance_total_accounts: "Total Balance Accounts",
-    ocs_balance_adjustment_notice: "Balance adjustment requires governance approval. Contact your administrator.",
+    ocs_balance_adjustment_notice: "Balance modification is a governed operation. Governed balance adjustment will be implemented in Phase 5.4. Current mode is read-only monitoring.",
 
     // Navigation helpers
     ocs_back_to_list: "Back to List",

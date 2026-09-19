@@ -916,6 +916,14 @@
   border: 1px solid var(--status-danger-border);
 }
 
+.ocs-feedback-link {
+  display: inline-block;
+  margin-left: 0.5rem;
+  font-weight: 600;
+  text-decoration: underline;
+  color: inherit;
+}
+
 /* -- Governance UI Refactor Styles -- */
 
 /* Governance Badges */

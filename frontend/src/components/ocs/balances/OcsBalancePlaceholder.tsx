@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
-import { ShieldAlert, Wallet } from "lucide-react";
+import { Search, ShieldAlert, Wallet } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { DataTablePagination } from "@/components/ui/DataTablePagination";
 import { formatBytes } from "@/lib/unitParser";
@@ -13,11 +13,18 @@ export default function OcsBalancePlaceholder() {
   const { t } = useI18n();
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
 
   const url = useMemo(() => {
-    const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+    const params = new URLSearchParams({
+      page: String(page),
+      limit: String(limit),
+      imsi: search.trim(),
+      status: statusFilter,
+    });
     return `/api/ocs/balances?${params.toString()}`;
-  }, [page, limit]);
+  }, [page, limit, search, statusFilter]);
 
   const { data, isLoading: loading, mutate: refresh } = useSWR(url, fetcher, {
     keepPreviousData: true,
@@ -25,6 +32,15 @@ export default function OcsBalancePlaceholder() {
 
   const records = data?.records || [];
   const total = data?.total || 0;
+
+  const formatTime = (iso?: string) => {
+    if (!iso) return "—";
+    try {
+      return new Date(iso).toLocaleString();
+    } catch {
+      return iso;
+    }
+  };
 
   const kpiGrid = (
     <div className="ocs-dashboard-grid">
@@ -35,6 +51,30 @@ export default function OcsBalancePlaceholder() {
           <span className="ocs-dashboard-card-label">{t("ocs_balance_total_accounts")}</span>
         </div>
       </div>
+    </div>
+  );
+
+  const controls = (
+    <div className="ocs-controls">
+      <div className="ocs-search-wrap">
+        <Search size={14} className="ocs-search-icon" />
+        <input
+          type="text"
+          className="ocs-search-input"
+          placeholder={t("ocs_subscribers_search_ph")}
+          value={search}
+          onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+        />
+      </div>
+      <select
+        className="ocs-filter-select"
+        value={statusFilter}
+        onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
+      >
+        <option value="">{t("ocs_filter_all_statuses")}</option>
+        <option value="active">active</option>
+        <option value="suspended">suspended</option>
+      </select>
     </div>
   );
 
@@ -53,11 +93,12 @@ export default function OcsBalancePlaceholder() {
             <th>{t("ocs_col_voice_avail")}</th>
             <th>{t("ocs_col_sms_avail")}</th>
             <th>{t("ocs_col_status")}</th>
+            <th>{t("ocs_tariff_col_updated")}</th>
           </tr>
         </thead>
         <tbody>
           {records.length === 0 && !loading ? (
-            <tr><td colSpan={5} className="ocs-empty-cell">{t("no_data")}</td></tr>
+            <tr><td colSpan={6} className="ocs-empty-cell">{t("no_data")}</td></tr>
           ) : (
             records.map((r: any) => (
               <tr key={r.id}>
@@ -70,6 +111,7 @@ export default function OcsBalancePlaceholder() {
                     {r.status}
                   </span>
                 </td>
+                <td className="ocs-time-cell">{formatTime(r.updated_at)}</td>
               </tr>
             ))
           )}
@@ -107,7 +149,7 @@ export default function OcsBalancePlaceholder() {
       loading={loading}
       onRefresh={() => refresh()}
       kpiGrid={kpiGrid}
-      controls={null}
+      controls={controls}
       tableContent={tableContent}
       pagination={pagination}
     />

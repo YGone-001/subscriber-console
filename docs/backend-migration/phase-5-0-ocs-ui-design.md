@@ -301,3 +301,27 @@ OCS Management
 - Balance invariant broken = red indicator
 - All user-visible text in Chinese and English (locale sync)
 - Responsive: minimum 1024px viewport for tables
+
+---
+
+## 9. Phase 5.3-B-Correction-2 Scope Consolidation (Tariff Management)
+
+**Date:** 2026-09-19  
+**Decision:** Consolidate OCS frontend from broad "OCS Operations Governance" into narrow "Tariff Management" console.
+
+### Final Information Architecture
+
+The Tariff Management frontend consists of **exactly three primary management surfaces**:
+
+```text
+Tariff Management (Tariff 管理)
+├── 1. Tariff Plans (/ocs/tariffs)           -> backs ocs_tariff_plans
+├── 2. Contract Subscribers (/ocs/contracts) -> backs ocs_subscribers
+└── 3. Balance Management (/ocs/balances)    -> backs ocs_balances
+```
+
+### Key Clarifications:
+1. **Global Governance Unchanged**: Approvals (`/approvals`) and Audit Logs (`/audit-logs`) remain platform-wide capabilities within Operations Governance. They are not duplicate OCS/Tariff pages. Tariff operations link inline to `/approvals` upon approval request creation.
+2. **Charging Plane UI Frozen**: Runtime sessions (`ocs_sessions`), reservations (`ocs_reservations`), usage records (`ocs_usage`), Gy/Ro CCR state, and rating-engine navigation are removed from product navigation and remain internal/frozen. Legacy routes redirect cleanly to `/ocs/tariffs`.
+3. **Balance Mutations Read-Only Until Phase 5.4**: Governed balance mutations are scheduled for Phase 5.4.
+

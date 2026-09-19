@@ -1803,11 +1803,11 @@ export const zh: Record<string, string> = {
     noc_status_online: "NOC 正常运行",
     dash_unit_plmn: "PLMN",
 
-    // -- OCS Operations & Monitoring --
-    nav_ocs: "OCS 运营治理",
+    // -- Tariff Management --
+    nav_ocs: "Tariff 管理",
     nav_ocs_dashboard: "OCS 仪表盘",
     nav_ocs_subscribers: "OCS 签约用户",
-    nav_ocs_balances: "余额治理",
+    nav_ocs_balances: "余额管理",
     nav_ocs_sessions: "OCS 实时会话",
     nav_ocs_usage: "OCS 用量与预留",
 
@@ -1843,7 +1843,7 @@ export const zh: Record<string, string> = {
     ocs_sub_prompt_change_tariff: "输入新资费计划 ID（当前：{plan}）：",
 
     nav_ocs_tariffs: "资费计划",
-    ocs_tariffs_title: "资费计划治理",
+    ocs_tariffs_title: "资费计划",
     ocs_tariff_total_plans: "计划总数",
     ocs_tariff_active_plans: "活跃计划",
     ocs_tariff_disabled_plans: "已禁用计划",
@@ -1864,8 +1864,8 @@ export const zh: Record<string, string> = {
     ocs_tariff_action_success: "操作成功",
     ocs_tariff_action_failed: "操作失败",
 
-    ocs_balances_title: "OCS 余额监控与管理",
-    ocs_balances_desc: "实时监控签约用户流量、语音及短信配额、已用量与可用余额，全量校验 balance 不变量状态",
+    ocs_balances_title: "余额管理",
+    ocs_balances_desc: "资费账户余额监控。受管余额调整将在 Phase 5.4 开放。",
     ocs_sessions_title: "OCS 实时 Diameter 会话",
     ocs_sessions_desc: "监控活跃 Gy / Ro 会话状态机、配额授权与消耗、Rating Group 规则绑定及会话清理生命周期",
     ocs_usage_title: "OCS 计费用量流水与配额预留",
@@ -1990,7 +1990,7 @@ export const zh: Record<string, string> = {
 
     // -- OCS Governance UI Refactor --
     nav_ocs_overview: "概览",
-    nav_ocs_contracts: "合同管理",
+    nav_ocs_contracts: "签约用户",
     nav_ocs_approvals: "审批中心",
     nav_ocs_audit: "审计中心",
 
@@ -2037,8 +2037,8 @@ export const zh: Record<string, string> = {
     ocs_tariff_detail_created: "创建时间",
 
     // Contracts
-    ocs_contracts_title: "OCS 合同管理",
-    ocs_contracts_desc: "管理 OCS 合同及治理流程",
+    ocs_contracts_title: "签约用户",
+    ocs_contracts_desc: "管理资费签约用户及治理流程",
     ocs_contract_total: "合同总数",
     ocs_contract_active: "活跃",
     ocs_contract_suspended: "暂停",
@@ -2112,7 +2112,7 @@ export const zh: Record<string, string> = {
 
     // Balance placeholder
     ocs_balance_total_accounts: "余额账户总数",
-    ocs_balance_adjustment_notice: "余额调整需要治理审批。请联系管理员。",
+    ocs_balance_adjustment_notice: "余额变更属于受治理操作，受管余额调整功能将在 Phase 5.4 开放。当前模式为只读监控。",
 
     // Navigation helpers
     ocs_back_to_list: "返回列表",

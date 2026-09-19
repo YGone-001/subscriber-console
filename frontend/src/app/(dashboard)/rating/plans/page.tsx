@@ -1,5 +1,5 @@
-import RatingManagementPage from "@/components/RatingManagementPage";
+import { redirect } from "next/navigation";
 
 export default function RatingPlansPage() {
-  return <RatingManagementPage view="plans" />;
+  redirect("/ocs/tariffs");
 }

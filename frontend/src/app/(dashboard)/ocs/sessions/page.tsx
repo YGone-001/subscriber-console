@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
 export default function OcsSessionsPage() {
-  redirect("/ocs/dashboard");
+  redirect("/ocs/tariffs");
 }

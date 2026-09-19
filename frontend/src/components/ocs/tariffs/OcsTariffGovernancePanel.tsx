@@ -24,6 +24,7 @@ import type { TariffPlan } from "@/lib/api/ocs";
 interface ActionFeedback {
   type: "success" | "error";
   message: string;
+  approvalId?: string;
 }
 
 export default function OcsTariffGovernancePanel() {
@@ -71,10 +72,15 @@ export default function OcsTariffGovernancePanel() {
 
       const body = await res.json();
       if (res.ok || res.status === 202) {
-        const msg = body.outcome === "approval_required"
+        const isApproval = body.outcome === "approval_required";
+        const msg = isApproval
           ? t("ocs_tariff_approval_created")
           : t("ocs_tariff_action_success");
-        setActionFeedback({ type: "success", message: msg });
+        setActionFeedback({
+          type: "success",
+          message: msg,
+          approvalId: body.approval_id || body.approvalId,
+        });
         refresh();
       } else {
         setActionFeedback({ type: "error", message: body.error || t("ocs_tariff_action_failed") });
@@ -138,7 +144,12 @@ export default function OcsTariffGovernancePanel() {
           <>
             {actionFeedback && (
               <div className={actionFeedback.type === "success" ? "ocs-feedback-success" : "ocs-feedback-error"}>
-                {actionFeedback.message}
+                <span>{actionFeedback.message}</span>
+                {actionFeedback.approvalId && (
+                  <Link href={`/approvals?id=${encodeURIComponent(actionFeedback.approvalId)}`} className="ocs-feedback-link">
+                    {t("nav_approvals")} ({actionFeedback.approvalId}) →
+                  </Link>
+                )}
               </div>
             )}
             <div className="ocs-table-wrap">
