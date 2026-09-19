@@ -20,7 +20,7 @@ type ImportFixtureData struct {
 
 func loadImportFixture(t *testing.T, name string) ImportFixtureData {
 	t.Helper()
-	data, err := os.ReadFile("../../../tests/fixtures/subscriber-import-v2.json")
+	data, err := os.ReadFile("../../../frontend/tests/fixtures/subscriber-import-v2.json")
 	if err != nil {
 		t.Fatalf("read fixture: %v", err)
 	}
@@ -132,7 +132,7 @@ func TestImportFixture_ArdChanged(t *testing.T) {
 }
 
 func TestImportFixture_CrossRuntimeParity(t *testing.T) {
-	data, err := os.ReadFile("../../../tests/fixtures/subscriber-import-v2.json")
+	data, err := os.ReadFile("../../../frontend/tests/fixtures/subscriber-import-v2.json")
 	if err != nil {
 		t.Fatalf("read fixture: %v", err)
 	}

@@ -25,6 +25,9 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   output: 'standalone',
+  turbopack: {
+    root: __dirname,
+  },
   reactStrictMode: true,
   poweredByHeader: false,
   allowedDevOrigins: ['10.10.0.139'], 

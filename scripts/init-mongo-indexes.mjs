@@ -312,7 +312,14 @@ async function provisionExistingOcsSubscribers(xcloudDb) {
  * that collide when we try to create a named index on the same key.
  */
 async function dropConflictingIndexes(collection, desiredIndexes) {
-  const existing = await collection.listIndexes().toArray();
+  let existing;
+  try {
+    existing = await collection.listIndexes().toArray();
+  } catch (error) {
+    // A fresh database has no namespace yet. createIndexes below creates it.
+    if (error?.code === 26 || error?.codeName === 'NamespaceNotFound') return;
+    throw error;
+  }
   for (const desired of desiredIndexes) {
     const desiredKey = JSON.stringify(desired.key);
     for (const existingIdx of existing) {

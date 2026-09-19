@@ -402,9 +402,9 @@ async function testUsersAuditAlertsAndRuntimeCollections(appDb) {
 }
 
 async function main() {
-  if ((dbName === configuredOpen5gsDbName || appDbName === configuredAppDbName) && !allowConfiguredDb) {
+  if ((dbName === configuredXcloudDbName || appDbName === configuredAppDbName) && !allowConfiguredDb) {
     throw new Error(
-      `Refusing to run against configured databases "${configuredOpen5gsDbName}" or "${configuredAppDbName}". Set MONGODB_TEST_DB/MONGODB_TEST_APP_DB or pass --allow-configured-db intentionally.`
+      `Refusing to run against configured databases "${configuredXcloudDbName}" or "${configuredAppDbName}". Set MONGODB_TEST_DB/MONGODB_TEST_APP_DB or pass --allow-configured-db intentionally.`
     );
   }
 

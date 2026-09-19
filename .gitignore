@@ -29,6 +29,7 @@ playwright-report/
 output/
 test-results/
 reports/ops/
+frontend/reports/ops/
 *.lcov
 
 # Logs

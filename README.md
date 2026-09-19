@@ -78,16 +78,22 @@ API routes are progressively migrating from Next.js to Go on a per-endpoint basi
 ### Frontend
 
 ```bash
-cd frontend
-npm install
+# From the repository root: install dependencies used by scripts/.
+npm ci
 cp .env.example .env
+# Edit .env with the intended local values before continuing.
+
+# Install and configure the Next.js app.
+cd frontend
+npm ci
+cp ../.env .env
 npm run mongo:init
 npm run dev
 ```
 
-Open `http://localhost:3000`.
+Open `http://localhost:13333`.
 
-Set a strong `INITIAL_ADMIN_PASSWORD` in `.env` before running `npm run mongo:init`. The initialization script creates the initial `admin` account when it does not already exist.
+Set the same strong `JWT_SECRET` and `INITIAL_ADMIN_PASSWORD` in root `.env` and `frontend/.env` before running `npm run mongo:init`. The initialization script creates the initial `admin` account when it does not already exist.
 
 ### Backend
 
@@ -113,6 +119,12 @@ go run ./cmd/server
 ## Scripts
 
 ```bash
+# Repository-root operational scripts (run `npm ci` at the repository root first)
+npm run mongo:init          # Create MongoDB indexes
+npm run mongo:migrate-app-db # Move app_* collections from xcloud to the app database
+npm run mongo:test-core     # Run MongoDB core integration smoke test against a temporary DB
+npm run mongo:perf          # Explain key MongoDB queries and flag slow scans
+
 # Frontend (from frontend/)
 npm run dev                 # Start development server
 npm run build               # Production build
@@ -121,10 +133,6 @@ npm run lint                # Run ESLint
 npm run typecheck           # Run TypeScript without emitting files
 npm test                    # Run Node.js unit tests
 npm run check               # Run lint, typecheck, tests, and build
-npm run mongo:init          # Create MongoDB indexes
-npm run mongo:migrate-app-db # Move app_* collections from xcloud to the app database
-npm run mongo:test-core     # Run MongoDB core integration smoke test against a temporary DB
-npm run mongo:perf          # Explain key MongoDB queries and flag slow scans
 ```
 
 MongoDB operational scripts write JSON reports to `reports/ops/` by default. Set `OPS_REPORT_DIR` to override the location.
@@ -138,9 +146,11 @@ The application runs as two services behind Nginx: Next.js on `:13333` and Go on
 
 ```bash
 # Frontend
+npm ci
+cp .env.example .env
 cd frontend
 npm ci
-npm run mongo:init
+npm --prefix .. run mongo:init
 npm run build
 npm run start
 

@@ -37,8 +37,12 @@ Frontend SWR paths remain unchanged — the routing layer is transparent to the 
 ### Next.js
 
 ```bash
+# From the repository root
 npm ci
-npm run mongo:init
+cp .env.example .env
+cd frontend
+npm ci
+npm --prefix .. run mongo:init
 npm run build
 ```
 
@@ -164,9 +168,9 @@ cd backend
 
 1. Provision MongoDB or reuse the xCloud MongoDB host.
 2. Configure environment variables for both Next.js and Go.
-3. Build Next.js: `npm ci && npm run build`.
+3. Install root operational dependencies with `npm ci`, then build Next.js with `cd frontend && npm ci && npm run build`.
 4. Build Go: `cd backend && go build ./cmd/server`.
-5. Run `npm run mongo:init` to create indexes in both databases.
+5. Run `npm run mongo:init` from the repository root to create indexes in both databases.
 6. Start Next.js on `:13333` and Go on `:18888`.
 7. Configure Nginx with the route split above.
 8. Log in with the bootstrap `admin` account.

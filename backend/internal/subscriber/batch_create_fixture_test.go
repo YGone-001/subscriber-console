@@ -22,7 +22,7 @@ func loadFixtures(t *testing.T) *FixtureExpected {
 	t.Helper()
 
 	// Required cross-language fixture — absence is a test failure
-	fixturePath := "../../../src/server/__tests__/batch-create-fixtures.json"
+	fixturePath := "../../../frontend/src/server/__tests__/batch-create-fixtures.json"
 	data, err := os.ReadFile(fixturePath)
 	if err != nil {
 		t.Fatalf("required fixture file not found: %v", err)
