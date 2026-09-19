@@ -9,7 +9,8 @@ set -euo pipefail
 PORT="${1:-3000}"
 STANDALONE_DIR=".next/standalone"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+REPO_DIR="$(dirname "$SCRIPT_DIR")"
+PROJECT_DIR="$REPO_DIR/frontend"
 
 cd "$PROJECT_DIR"
 

@@ -181,6 +181,7 @@ export default function OcsContractsPanel() {
     <>
       {feedbackBanner}
       <table className="ocs-table">
+      <caption className="sr-only">{t("ocs_contracts_title")}</caption>
       <thead>
         <tr>
           <th className="ocs-th-sortable" aria-sort={getAriaSort("imsi")} onClick={() => toggleSort("imsi")}>

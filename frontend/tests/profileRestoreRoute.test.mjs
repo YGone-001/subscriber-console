@@ -167,7 +167,7 @@ function makeMockDeps() {
 
 // ─── Import Production Handler & Executor ───
 
-const { handleProfileRestorePost } = await import('../src/app/api/profiles/[name]/versions/[versionId]/restore/route.ts');
+const { handleProfileRestorePost } = await import('../src/app/api/profiles/[name]/versions/[versionId]/restore/handler.ts');
 const { executeProfileRestoreV2Approval } = await import('../src/server/approvalExecution.ts');
 
 // ─── Helper to create mock request ───

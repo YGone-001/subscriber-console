@@ -84,7 +84,7 @@ function createRequest(imsiList, role = 'operator', user = 'testuser') {
 
 describe('Bulk Delete Route Tests', async () => {
   // Import the handler factory
-  const { createBulkDeleteHandler } = await import('../src/app/api/subscribers/bulk-delete/route.ts');
+  const { createBulkDeleteHandler } = await import('../src/app/api/subscribers/bulk-delete/handler.ts');
 
   describe('Section 15: Approval Path', () => {
     it('operator → 202 Approval', async () => {

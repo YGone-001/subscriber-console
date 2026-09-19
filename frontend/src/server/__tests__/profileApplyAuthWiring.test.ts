@@ -9,7 +9,7 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { toCurrentAccountClaims } from '@/app/api/subscribers/[imsi]/profile/route';
+import { toCurrentAccountClaims } from '@/app/api/subscribers/[imsi]/profile/handler';
 import type { AuthContext } from '@/lib/authz';
 
 describe('Profile Apply Fresh-Actor claim mapping', () => {

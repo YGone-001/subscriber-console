@@ -15,11 +15,11 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { NextResponse } from 'next/server';
-import { handleSubscriberProfileApplyPost } from '@/app/api/subscribers/[imsi]/profile/route';
+import { handleSubscriberProfileApplyPost } from '@/app/api/subscribers/[imsi]/profile/handler';
 
 import type { XcloudSubscriberDocument } from '@/types/xcloud';
 import type { ProfileDocument } from '@/server/repositories/profileRepository';
-import type { SubscriberProfileApplyDeps } from '@/app/api/subscribers/[imsi]/profile/route';
+import type { SubscriberProfileApplyDeps } from '@/app/api/subscribers/[imsi]/profile/handler';
 
 const FIXED_ISO = '2024-06-01T10:00:00.000Z';
 
@@ -354,7 +354,7 @@ describe('Profile Apply production composition — Fresh Actor wiring', () => {
 
     // The route now uses toCurrentAccountClaims before calling validateAccount
     // We test that the mapping produces the correct shape
-    const { toCurrentAccountClaims } = await import('@/app/api/subscribers/[imsi]/profile/route');
+    const { toCurrentAccountClaims } = await import('@/app/api/subscribers/[imsi]/profile/handler');
     const claims = toCurrentAccountClaims(requireCapabilityResult.auth);
 
     assert.strictEqual(claims.username, 'admin');
@@ -382,7 +382,7 @@ describe('Profile Apply production composition — Fresh Actor wiring', () => {
     assert.strictEqual((directPass as Record<string, unknown>).sv, undefined);
 
     // The fix maps correctly
-    const { toCurrentAccountClaims } = await import('@/app/api/subscribers/[imsi]/profile/route');
+    const { toCurrentAccountClaims } = await import('@/app/api/subscribers/[imsi]/profile/handler');
     const fixedClaims = toCurrentAccountClaims(authContext);
 
     assert.strictEqual(fixedClaims.username, 'admin');
@@ -395,7 +395,7 @@ describe('Profile Apply production composition — Fresh Actor wiring', () => {
 
     const authContext = { user: 'admin', role: 'super_admin' as const, sessionVersion: 999 };
 
-    const { toCurrentAccountClaims } = await import('@/app/api/subscribers/[imsi]/profile/route');
+    const { toCurrentAccountClaims } = await import('@/app/api/subscribers/[imsi]/profile/handler');
     const claims = toCurrentAccountClaims(authContext);
 
     // The sv value is preserved correctly for validation
@@ -408,7 +408,7 @@ describe('Profile Apply production composition — Fresh Actor wiring', () => {
   it('role mismatch is preserved through mapping', async () => {
     const authContext = { user: 'admin', role: 'operator' as const, sessionVersion: 5 };
 
-    const { toCurrentAccountClaims } = await import('@/app/api/subscribers/[imsi]/profile/route');
+    const { toCurrentAccountClaims } = await import('@/app/api/subscribers/[imsi]/profile/handler');
     const claims = toCurrentAccountClaims(authContext);
 
     assert.strictEqual(claims.role, 'operator');

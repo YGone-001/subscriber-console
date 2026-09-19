@@ -46,6 +46,7 @@ export default function OcsBalancePlaceholder() {
         <span>{t("ocs_balance_adjustment_notice")}</span>
       </div>
       <table className="ocs-table">
+        <caption className="sr-only">{t("ocs_balances_title")}</caption>
         <thead>
           <tr>
             <th>IMSI</th>

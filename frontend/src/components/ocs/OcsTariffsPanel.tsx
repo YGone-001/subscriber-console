@@ -145,6 +145,7 @@ export default function OcsTariffsPanel() {
           )}
           <div className="ocs-table-wrap">
             <table className="ocs-table">
+              <caption className="sr-only">{t("ocs_tariffs_title")}</caption>
               <thead>
                 <tr>
                   <th>{t("ocs_tariff_col_plan_id")}</th>

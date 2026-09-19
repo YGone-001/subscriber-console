@@ -182,6 +182,7 @@ export default function OcsGovernanceDashboard() {
         <div className="ocs-table-card">
           <div className="ocs-table-wrapper">
             <table className="ocs-table">
+              <caption className="sr-only">{t("ocs_overview_recent_activities")}</caption>
               <thead>
                 <tr>
                   <th>{t("ocs_audit_col_action")}</th>

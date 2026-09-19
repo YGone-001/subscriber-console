@@ -137,6 +137,8 @@ npm run check               # Run lint, typecheck, tests, and build
 
 MongoDB operational scripts write JSON reports to `reports/ops/` by default. Set `OPS_REPORT_DIR` to override the location.
 
+Use Node.js 20.19.0 or newer. Install dependencies separately at the repository root and in `frontend/`; never share or copy `node_modules` between them or between operating systems.
+
 `xcloud` stores HSS subscriber data in `subscribers` and OCS preset data in `ocs_tariff_plans`, `ocs_subscribers`, and `ocs_balances`. Project-owned collections such as `app_users`, `app_profiles`, `app_audit_logs`, `app_alerts`, `app_rate_limits`, and `app_metrics` live in `MONGODB_APP_DB`.
 `npm run mongo:init` creates indexes, seeds the default OCS tariff plan, imports legacy rating rules, and inserts missing OCS subscriber/balance rows without overwriting existing balances.
 

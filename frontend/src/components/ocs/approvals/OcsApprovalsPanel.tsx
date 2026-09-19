@@ -93,6 +93,7 @@ export default function OcsApprovalsPanel() {
 
   const tableContent = (
     <table className="ocs-table">
+      <caption className="sr-only">{t("ocs_approvals_title")}</caption>
       <thead>
         <tr>
           <th>{t("ocs_approval_col_action")}</th>

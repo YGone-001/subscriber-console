@@ -54,7 +54,7 @@ function routeHarness({ role = 'root', activeApprovals = [], executorResult = nu
     },
   };
   return {
-    route: loadModule('src/app/api/subscribers/batch-update/route.ts', dependencies),
+    route: loadModule('src/app/api/subscribers/batch-update/handler.ts', dependencies),
     approvals,
     audits,
     executions,
@@ -165,7 +165,7 @@ test('root overlap → 409', async () => {
 // ─── Legacy tests (preserved) ───
 
 test('legacy high-risk batch-create route no longer contains a super-admin direct mutation branch', () => {
-  const source = readFileSync(new URL('../src/app/api/subscribers/batch/route.ts', import.meta.url), 'utf8');
+  const source = readFileSync(new URL('../src/app/api/subscribers/batch/handler.ts', import.meta.url), 'utf8');
   assert.doesNotMatch(source, /isSuperAdmin|createSubscribersBatch/);
   assert.match(source, /requiresApproval:\s*true/);
 });

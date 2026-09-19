@@ -91,7 +91,7 @@ function makeDeps(overrides = {}) {
 }
 
 // Import real production handler factory
-const { createBatchCreateHandler } = await import('../src/app/api/subscribers/batch/route.ts');
+const { createBatchCreateHandler } = await import('../src/app/api/subscribers/batch/handler.ts');
 
 // ─── PART J: Operator Route Test ───
 test('POST /api/subscribers/batch: operator → 202 approval_required', async () => {

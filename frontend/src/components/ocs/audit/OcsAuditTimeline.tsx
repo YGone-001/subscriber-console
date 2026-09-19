@@ -85,6 +85,7 @@ export default function OcsAuditTimeline() {
 
   const tableContent = (
     <table className="ocs-table">
+      <caption className="sr-only">{t("ocs_audit_title")}</caption>
       <thead>
         <tr>
           <th>{t("ocs_audit_col_timestamp")}</th>

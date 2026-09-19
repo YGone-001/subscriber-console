@@ -158,6 +158,7 @@ export default function OcsSubscribersPanel() {
     <>
       {feedbackBanner}
       <table className="ocs-table">
+      <caption className="sr-only">{t("ocs_subscribers_title")}</caption>
       <thead>
         <tr>
           <th

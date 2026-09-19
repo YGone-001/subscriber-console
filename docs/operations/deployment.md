@@ -146,10 +146,14 @@ See [Migration Routing Matrix](backend-migration/migration-routing-matrix.md) fo
 
 ```bash
 # Terminal 1: Next.js
+cd frontend
 npm run dev
 
 # Terminal 2: Go backend
 cd backend
+set -a
+source ../.env
+set +a
 go run ./cmd/server
 ```
 
@@ -157,6 +161,7 @@ go run ./cmd/server
 
 ```bash
 # Next.js
+cd frontend
 npm run start    # listens on :13333
 
 # Go backend
@@ -175,6 +180,10 @@ cd backend
 7. Configure Nginx with the route split above.
 8. Log in with the bootstrap `admin` account.
 9. Create named operator/viewer accounts and store credentials securely.
+
+For a standalone Linux deployment, run `./scripts/deploy-standalone.sh 13333` from the repository root after `cd frontend && npm run build`. The script resolves the application from `frontend/` and starts `frontend/.next/standalone/server.js`.
+
+MongoDB may remain disabled at boot on development hosts. Start it only when needed with `sudo systemctl start mongod`, and stop it with `sudo systemctl stop mongod`; do not run `systemctl enable mongod`.
 
 ## Health Checks
 

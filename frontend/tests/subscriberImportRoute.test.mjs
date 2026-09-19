@@ -204,7 +204,7 @@ const mockDependencies = {
 
 // Load the route module with mocked dependencies
 const routeModule = loadModule(
-  'src/app/api/subscribers/import/route.ts',
+  'src/app/api/subscribers/import/handler.ts',
   mockDependencies
 );
 

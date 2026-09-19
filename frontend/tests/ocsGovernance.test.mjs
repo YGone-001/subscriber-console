@@ -84,7 +84,7 @@ test('disabled OCS administration routes reject before creating an approval', ()
 
 test('secret-bearing subscriber provisioning remains server-side and absent from approval payloads', () => {
   const repository = read('src/server/repositories/subscriberRepository.ts');
-  const batchRoute = read('src/app/api/subscribers/batch/route.ts');
+  const batchRoute = read('src/app/api/subscribers/batch/handler.ts');
   assert.match(repository, /buildDefaultXcloudSubscriber/);
   assert.match(repository, /batchDocForImsi/);
   assert.doesNotMatch(batchRoute, /\bauth\s*:/);
