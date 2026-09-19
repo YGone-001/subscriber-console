@@ -1,6 +1,5 @@
 "use client";
 
-import { useMemo } from "react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
 import {
@@ -41,8 +40,18 @@ function SummaryCard({ icon, label, value, detail, color }: SummaryCardProps) {
 export default function OcsGovernanceDashboard() {
   const { t } = useI18n();
 
-  const { data: subscribersData, isLoading: subLoading, mutate: mutateSubs } = useSWR(
-    "/api/ocs/subscribers?limit=1",
+  const { data: activeSubsData, isLoading: activeLoading, mutate: mutateActive } = useSWR(
+    "/api/ocs/subscribers?status=active&limit=1",
+    fetcher,
+  );
+
+  const { data: suspendedSubsData, isLoading: suspendedLoading, mutate: mutateSuspended } = useSWR(
+    "/api/ocs/subscribers?status=suspended&limit=1",
+    fetcher,
+  );
+
+  const { data: terminatedSubsData, isLoading: terminatedLoading, mutate: mutateTerminated } = useSWR(
+    "/api/ocs/subscribers?status=terminated&limit=1",
     fetcher,
   );
 
@@ -61,29 +70,27 @@ export default function OcsGovernanceDashboard() {
     fetcher,
   );
 
-  const loading = subLoading || plansLoading || approvalsLoading || auditLoading;
+  const loading = activeLoading || suspendedLoading || terminatedLoading || plansLoading || approvalsLoading || auditLoading;
 
   const refresh = () => {
-    mutateSubs();
+    mutateActive();
+    mutateSuspended();
+    mutateTerminated();
     mutatePlans();
     mutateApprovals();
     mutateAudit();
   };
 
-  const records: any[] = subscribersData?.records || [];
-  const activeContracts = records.filter((r: any) => r.status === "active").length;
-  const suspendedContracts = records.filter((r: any) => r.status === "suspended").length;
-  const totalContracts = subscribersData?.total || 0;
+  const activeContracts = activeSubsData?.total ?? 0;
+  const suspendedContracts = suspendedSubsData?.total ?? 0;
+  const terminatedContracts = terminatedSubsData?.total ?? 0;
 
   const plans: any[] = plansData?.plans || [];
   const activeTariffs = plans.filter((p: any) => p.status === "active").length;
   const disabledTariffs = plans.filter((p: any) => p.status === "disabled").length;
 
-  const approvals: any[] = approvalsData?.approvals || [];
-  const pendingApprovals = approvalsData?.pagination?.total || 0;
-  const ocsApprovals = approvals.filter((a: any) =>
-    a.resourceType?.startsWith("ocs_") || a.resourceType === "ocs_subscriber" || a.resourceType === "ocs_tariff",
-  );
+  const pendingApprovals = approvalsData?.summary?.awaiting ?? approvalsData?.pagination?.total ?? 0;
+  const approvedToday = approvalsData?.summary?.todayApproved ?? 0;
 
   const auditLogs: any[] = auditData?.logs || [];
   const todayFailures = auditLogs.filter((l: any) => l.result === "failure").length;
@@ -119,7 +126,7 @@ export default function OcsGovernanceDashboard() {
           <SummaryCard
             icon={<XCircle size={24} />}
             label={t("ocs_overview_terminated_contracts")}
-            value={totalContracts - activeContracts - suspendedContracts}
+            value={terminatedContracts}
           />
         </div>
       </div>
@@ -161,9 +168,9 @@ export default function OcsGovernanceDashboard() {
             color={pendingApprovals > 0 ? "var(--color-amber)" : undefined}
           />
           <SummaryCard
-            icon={<History size={24} />}
-            label={t("ocs_overview_today_changes")}
-            value={ocsApprovals.length}
+            icon={<CheckCircle2 size={24} />}
+            label={t("ocs_overview_approved_today")}
+            value={approvedToday}
           />
           <SummaryCard
             icon={<AlertCircle size={24} />}
@@ -174,7 +181,7 @@ export default function OcsGovernanceDashboard() {
         </div>
       </div>
 
-      {/* Recent Activities */}
+      {/* Recent Governance Activity */}
       <div className="ocs-dashboard-section">
         <h3 className="ocs-dashboard-section-title">
           <History size={16} /> {t("ocs_overview_recent_activities")}
@@ -186,8 +193,8 @@ export default function OcsGovernanceDashboard() {
               <thead>
                 <tr>
                   <th>{t("ocs_audit_col_action")}</th>
-                  <th>{t("ocs_audit_col_operator")}</th>
                   <th>{t("ocs_audit_col_object")}</th>
+                  <th>{t("ocs_audit_col_operator")}</th>
                   <th>{t("ocs_audit_col_timestamp")}</th>
                   <th>{t("ocs_audit_col_result")}</th>
                 </tr>
@@ -199,8 +206,8 @@ export default function OcsGovernanceDashboard() {
                   auditLogs.slice(0, 8).map((log: any) => (
                     <tr key={log._id}>
                       <td>{log.action}</td>
-                      <td>{log.actorContext?.displayName || log.actor || "—"}</td>
                       <td>{log.resource?.id || log.targetId || "—"}</td>
+                      <td>{log.actorContext?.displayName || log.actor || "—"}</td>
                       <td className="ocs-time-cell">{log.timestamp ? new Date(log.timestamp).toLocaleString() : "—"}</td>
                       <td>
                         <span className={`ocs-status-badge ocs-status-${log.result === "success" ? "active" : "disabled"}`}>

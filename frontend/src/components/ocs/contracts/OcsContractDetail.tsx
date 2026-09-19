@@ -3,7 +3,7 @@
 import Link from "next/link";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
-import { ArrowLeft, ShieldCheck, Users } from "lucide-react";
+import { ArrowLeft, FileText, ShieldCheck, Users } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import PageHeader from "@/components/ui/PageHeader";
 import RefreshButton from "@/components/ui/RefreshButton";
@@ -74,7 +74,7 @@ export default function OcsContractDetail({ imsi }: OcsContractDetailProps) {
 
         {/* Billing Contract */}
         <div className="ocs-detail-section">
-          <h3><Users size={16} /> {t("ocs_contract_detail_billing")}</h3>
+          <h3><FileText size={16} /> {t("ocs_contract_detail_billing")}</h3>
           <div className="ocs-detail-fields">
             <div className="ocs-detail-field">
               <span className="ocs-detail-label">{t("ocs_contract_col_tariff")}</span>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
 import Link from "next/link";

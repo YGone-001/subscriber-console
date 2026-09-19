@@ -30,7 +30,7 @@ export default function OcsSubscribersPanel() {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
   const [search, setSearch] = useState("");
-  const [planFilter, setPlanFilter] = useState("");
+  const [planFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [sortField, setSortField] = useState("updated_at");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");

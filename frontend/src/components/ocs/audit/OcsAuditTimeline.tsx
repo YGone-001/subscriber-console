@@ -66,6 +66,13 @@ export default function OcsAuditTimeline() {
 
   const controls = (
     <div className="ocs-controls">
+      <input
+        type="text"
+        className="ocs-search-input"
+        placeholder={`${t("ocs_audit_col_action")}...`}
+        value={actionFilter}
+        onChange={(e) => { setActionFilter(e.target.value); setPage(1); }}
+      />
       <select
         className="ocs-filter-select"
         value={resultFilter}
@@ -146,6 +153,10 @@ export default function OcsAuditTimeline() {
     />
   );
 
+  const beforeState = detailData?.log?.beforeState || detailData?.log?.metadata?.beforeState || detailData?.log?.metadata?.before;
+  const afterState = detailData?.log?.afterState || detailData?.log?.metadata?.afterState || detailData?.log?.metadata?.after;
+  const governanceMeta = detailData?.log?.metadata?.governance || detailData?.log?.governanceMetadata || detailData?.log?.metadata;
+
   return (
     <OcsPageShell
       eyebrow={t("nav_ocs")}
@@ -176,17 +187,33 @@ export default function OcsAuditTimeline() {
                 <span className="ocs-detail-value">{detailData.log.action}</span>
               </div>
               <div className="ocs-detail-field">
+                <span className="ocs-detail-label">{t("ocs_audit_col_object")}</span>
+                <span className="ocs-detail-value">{detailData.log.resource?.id || detailData.log.targetId || "—"}</span>
+              </div>
+              <div className="ocs-detail-field">
                 <span className="ocs-detail-label">{t("ocs_audit_col_operator")}</span>
-                <span className="ocs-detail-value">{detailData.log.actorContext?.displayName || detailData.log.actor}</span>
+                <span className="ocs-detail-value">{detailData.log.actorContext?.displayName || detailData.log.actor || "—"}</span>
               </div>
               <div className="ocs-detail-field">
                 <span className="ocs-detail-label">{t("ocs_audit_col_result")}</span>
                 <span className="ocs-detail-value"><OcsStatusBadge status={detailData.log.result === "success" ? "active" : "failed"} /></span>
               </div>
-              {detailData.log.metadata && (
+              {beforeState && (
                 <div className="ocs-detail-field">
-                  <span className="ocs-detail-label">{t("ocs_audit_detail_metadata")}</span>
-                  <pre className="ocs-detail-pre">{JSON.stringify(detailData.log.metadata, null, 2)}</pre>
+                  <span className="ocs-detail-label">{t("ocs_audit_detail_before_state")}</span>
+                  <pre className="ocs-detail-pre">{JSON.stringify(beforeState, null, 2)}</pre>
+                </div>
+              )}
+              {afterState && (
+                <div className="ocs-detail-field">
+                  <span className="ocs-detail-label">{t("ocs_audit_detail_after_state")}</span>
+                  <pre className="ocs-detail-pre">{JSON.stringify(afterState, null, 2)}</pre>
+                </div>
+              )}
+              {governanceMeta && (
+                <div className="ocs-detail-field">
+                  <span className="ocs-detail-label">{t("ocs_audit_detail_governance_meta")}</span>
+                  <pre className="ocs-detail-pre">{JSON.stringify(governanceMeta, null, 2)}</pre>
                 </div>
               )}
             </div>

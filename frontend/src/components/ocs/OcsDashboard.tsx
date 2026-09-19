@@ -1,16 +1,10 @@
 "use client";
 
-import { useMemo } from "react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
 import {
-  Activity,
   AlertCircle,
-  CheckCircle2,
-  CreditCard,
-  Database,
   FileText,
-  Gauge,
   Users,
   Wallet,
 } from "lucide-react";

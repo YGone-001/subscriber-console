@@ -77,11 +77,10 @@ export default function OcsApprovalsPanel() {
         onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
       >
         <option value="">{t("ocs_filter_all_statuses")}</option>
-        <option value="pending">pending</option>
-        <option value="approved">approved</option>
-        <option value="rejected">rejected</option>
-        <option value="completed">completed</option>
-        <option value="cancelled">cancelled</option>
+        <option value="pending">PENDING</option>
+        <option value="approved">APPROVED</option>
+        <option value="rejected">REJECTED</option>
+        <option value="completed">EXECUTED</option>
       </select>
     </div>
   );

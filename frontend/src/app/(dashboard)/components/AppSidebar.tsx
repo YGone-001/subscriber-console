@@ -56,7 +56,7 @@ export default function AppSidebar({ sidebarOpen, setSidebarOpen, isMobileShell 
     const items: NavItem[] = [
       routeItem("/"),
       routeItem("/subscribers"),
-      { key: "nav_ocs", path: "/ocs/balances", match: "/ocs", icon: <Zap size={20} />, children: ocsChildren },
+      { key: "nav_ocs", path: "/ocs/dashboard", match: "/ocs", icon: <Zap size={20} />, children: ocsChildren },
       routeItem("/profile"),
       routeItem("/rating"),
       { key: "nav_operations_governance", path: "/approvals", match: "/approvals", icon: <ShieldCheck size={20} />, children: governanceChildren },

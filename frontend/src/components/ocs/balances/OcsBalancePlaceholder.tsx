@@ -25,7 +25,6 @@ export default function OcsBalancePlaceholder() {
 
   const records = data?.records || [];
   const total = data?.total || 0;
-  const summary = data?.summary || {};
 
   const kpiGrid = (
     <div className="ocs-dashboard-grid">

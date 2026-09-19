@@ -150,7 +150,7 @@ export default function AnalyticsCockpit() {
       priority: "P1",
       title: t("dash_work_orphaned_title", { count: orphanedReservations }),
       detail: t("dash_work_orphaned_detail"),
-      href: "/ocs/usage",
+      href: "/ocs/dashboard",
       action: t("dash_work_open_ocs"),
     });
   }

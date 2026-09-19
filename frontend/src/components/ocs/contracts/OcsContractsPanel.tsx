@@ -194,10 +194,10 @@ export default function OcsContractsPanel() {
           <th className="ocs-th-sortable" aria-sort={getAriaSort("status")} onClick={() => toggleSort("status")}>
             {t("ocs_contract_col_billing_status")} {sortField === "status" ? (sortOrder === "asc" ? "↑" : "↓") : ""}
           </th>
-          <th className="ocs-th-sortable" aria-sort={getAriaSort("updated_at")} onClick={() => toggleSort("updated_at")}>
-            {t("ocs_contract_col_updated")} {sortField === "updated_at" ? (sortOrder === "asc" ? "↑" : "↓") : ""}
-          </th>
           <th>{t("ocs_contract_col_governance")}</th>
+          <th className="ocs-th-sortable" aria-sort={getAriaSort("updated_at")} onClick={() => toggleSort("updated_at")}>
+            {t("ocs_contract_col_last_change")} {sortField === "updated_at" ? (sortOrder === "asc" ? "↑" : "↓") : ""}
+          </th>
           <th>{t("actions")}</th>
         </tr>
       </thead>
@@ -211,8 +211,8 @@ export default function OcsContractsPanel() {
               <td>{r.msisdn || "—"}</td>
               <td><span className="ocs-plan-badge">{r.plan_id}</span></td>
               <td><OcsStatusBadge status={r.status} /></td>
-              <td className="ocs-time-cell">{formatTime(r.updated_at)}</td>
               <td><GovernanceBadge compact /></td>
+              <td className="ocs-time-cell">{formatTime(r.updated_at)}</td>
               <td>
                 <div className="ocs-action-group">
                   <Link

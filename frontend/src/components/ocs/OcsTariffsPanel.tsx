@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
 import {
@@ -9,7 +9,6 @@ import {
   Power,
   PowerOff,
   Trash2,
-  Edit,
   CheckCircle,
   XCircle,
 } from "lucide-react";
