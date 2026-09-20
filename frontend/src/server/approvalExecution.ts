@@ -371,33 +371,40 @@ export async function executeSubscriberProfileApplyApproval(
 const defaultExecutor: GovernedApprovalExecutor = {
   async execute(approval, request, actor) {
     if (approval.action === 'ACCESS_REQUEST') return executeApproval(approval, request);
-    if (approval.action === 'TRAFFIC_ADJUSTMENT' && approval.payload.schema === 'ocs-balance-adjustment-v1') {
-      let result: Awaited<ReturnType<typeof executeFrozenOcsBalanceAdjustment>>;
-      try {
-        result = await executeFrozenOcsBalanceAdjustment(approval.payload, {
-          approvalId: approval.id,
-          executionId: approval.execution?.id || 'missing-execution-id',
-          actor: actor?.username || 'system',
-        });
-      } catch (error) {
-        if (error instanceof OcsBalanceGovernanceError) {
-          throw new ApprovalExecutionError(error.code, error.committed ? 503 : 409, approval, error.committed, error.details);
+    if (approval.action === 'TRAFFIC_ADJUSTMENT') {
+      const payload = approval.payload as Record<string, unknown> | undefined;
+      if (payload && typeof payload === 'object' && 'schema' in payload) {
+        if (payload.schema !== 'ocs-balance-adjustment-v1') {
+          throw new ApprovalExecutionError('UNSUPPORTED_APPROVAL_PAYLOAD_SCHEMA', 400, approval, false);
         }
-        throw error;
+        let result: Awaited<ReturnType<typeof executeFrozenOcsBalanceAdjustment>>;
+        try {
+          result = await executeFrozenOcsBalanceAdjustment(approval.payload, {
+            approvalId: approval.id,
+            executionId: approval.execution?.id || 'missing-execution-id',
+            actor: actor?.username || 'system',
+          });
+        } catch (error) {
+          if (error instanceof OcsBalanceGovernanceError) {
+            throw new ApprovalExecutionError(error.code, error.committed ? 503 : 409, approval, error.committed, error.details);
+          }
+          throw error;
+        }
+        try {
+          await writeAuditLog({
+            actor: actor || { type: 'system', userId: 'system', username: 'system' }, module: 'ocs', action: 'ocs.balance.adjust',
+            resource: { type: 'ocs_balance', id: `${approval.targetId}:${payload.intent && typeof payload.intent === 'object' && 'bucket' in payload.intent ? (payload.intent as Record<string, unknown>).bucket : 'unknown'}` },
+            targetId: approval.targetId, approvalId: approval.id, riskLevel: approval.riskLevel, result: 'success', reason: approval.reason,
+            before: result.before, after: result.after,
+            metadata: { adjustmentId: result.adjustmentId, executionId: approval.execution?.id, operationFingerprint: approval.operationFingerprint, idempotent: result.idempotent },
+            ...auditRequestContext(request),
+          }, { failureMode: 'strict' });
+        } catch {
+          throw new ApprovalExecutionError('AUDIT_UNAVAILABLE', 503, approval, true, { ...result, mutationCommitted: true });
+        }
+        return result;
       }
-      try {
-        await writeAuditLog({
-          actor: actor || { type: 'system', userId: 'system', username: 'system' }, module: 'ocs', action: 'ocs.balance.adjust',
-          resource: { type: 'ocs_balance', id: `${approval.targetId}:${approval.payload.intent && typeof approval.payload.intent === 'object' && 'bucket' in approval.payload.intent ? approval.payload.intent.bucket : 'unknown'}` },
-          targetId: approval.targetId, approvalId: approval.id, riskLevel: approval.riskLevel, result: 'success', reason: approval.reason,
-          before: result.before, after: result.after,
-          metadata: { adjustmentId: result.adjustmentId, executionId: approval.execution?.id, operationFingerprint: approval.operationFingerprint, idempotent: result.idempotent },
-          ...auditRequestContext(request),
-        }, { failureMode: 'strict' });
-      } catch {
-        throw new ApprovalExecutionError('AUDIT_UNAVAILABLE', 503, approval, true, { ...result, mutationCommitted: true });
-      }
-      return result;
+      return executeApproval(approval, request);
     }
     if (approval.action === 'SUBSCRIBER_BATCH_UPDATE') {
       // v1/v2 branching: v1 historical approvals use legacy executor, v2 uses safe CAS

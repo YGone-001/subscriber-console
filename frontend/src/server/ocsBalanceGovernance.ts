@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Long, type Document } from 'mongodb';
 import { getAppCollection, getXcloudCollection, mongoCollections } from '@/lib/mongo';
 
-export type OcsBalanceBucket = 'data' | 'voice';
+export type OcsBalanceBucket = 'data' | 'voice' | 'sms';
 export type OcsBalanceOperation = 'credit' | 'debit';
 
 export type OcsBalanceIntent = {
@@ -44,6 +44,9 @@ type OcsBalanceDocument = Document & {
   voice_used?: Long | number;
   voice_reserved?: Long | number;
   voice_available?: Long | number;
+  sms_total?: Long | number;
+  sms_used?: Long | number;
+  sms_available?: Long | number;
   version?: Long | number;
 };
 
@@ -87,6 +90,16 @@ function versionFrom(value: unknown): number {
 }
 
 function snapshotFromDocument(imsi: string, bucket: OcsBalanceBucket, document: OcsBalanceDocument): BalanceSnapshot {
+  if (bucket === 'sms') {
+    const total = safeInteger(document.sms_total as unknown, 'sms_total', 0);
+    const used = safeInteger(document.sms_used as unknown, 'sms_used', 0);
+    const reserved = 0; // SMS has no reservation engine; canonically 0
+    const available = safeInteger(document.sms_available as unknown, 'sms_available', 0);
+    if (total !== used + reserved + available) {
+      throw new OcsBalanceGovernanceError('OCS_BALANCE_INVARIANT_VIOLATION', false, { imsi, bucket, total, used, reserved, available });
+    }
+    return { imsi, bucket, total, used, reserved, available, version: versionFrom(document.version), versionPresent: document.version !== undefined };
+  }
   const prefix = bucket === 'data' ? 'data' : 'voice';
   const total = safeInteger(document[`${prefix}_total`] as unknown, `${prefix}_total`, 0);
   const used = safeInteger(document[`${prefix}_used`] as unknown, `${prefix}_used`, 0);
@@ -113,7 +126,7 @@ export function validateOcsBalanceIntent(value: unknown): OcsBalanceIntent {
   }
   const bucket = input.bucket;
   const operation = input.operation;
-  if (bucket !== 'data' && bucket !== 'voice') throw new OcsBalanceGovernanceError('INVALID_OCS_BALANCE_BUCKET');
+  if (bucket !== 'data' && bucket !== 'voice' && bucket !== 'sms') throw new OcsBalanceGovernanceError('INVALID_OCS_BALANCE_BUCKET');
   if (operation !== 'credit' && operation !== 'debit') throw new OcsBalanceGovernanceError('INVALID_OCS_BALANCE_OPERATION');
   const amount = safeInteger(input.amount, 'amount');
   if (amount <= 0) throw new OcsBalanceGovernanceError('INVALID_OCS_BALANCE_AMOUNT');
@@ -181,7 +194,40 @@ export async function executeFrozenOcsBalanceAdjustment(input: unknown, context:
   }
 
   const balances = await getXcloudCollection<OcsBalanceDocument>(mongoCollections.ocsBalances);
-  const prefix = frozen.intent.bucket === 'data' ? 'data' : 'voice';
+  const live = await balances.findOne({ imsi: frozen.imsi });
+  if (!live) {
+    await ledger.updateOne({ adjustmentId: frozen.adjustmentId }, { $set: { status: 'failed', failedAt: new Date().toISOString(), error: 'OCS_BALANCE_NOT_FOUND' } });
+    throw new OcsBalanceGovernanceError('OCS_BALANCE_NOT_FOUND', false, { imsi: frozen.imsi });
+  }
+
+  let liveSnapshot: BalanceSnapshot;
+  try {
+    liveSnapshot = snapshotFromDocument(frozen.imsi, frozen.intent.bucket, live);
+  } catch (err) {
+    await ledger.updateOne({ adjustmentId: frozen.adjustmentId }, { $set: { status: 'failed', failedAt: new Date().toISOString(), error: 'OCS_BALANCE_INVARIANT_VIOLATION' } });
+    throw err;
+  }
+
+  // Execution-time CAS: verify live state matches frozen precondition
+  const drift = (
+    liveSnapshot.version !== frozen.before.version ||
+    liveSnapshot.total !== frozen.before.total ||
+    liveSnapshot.used !== frozen.before.used ||
+    liveSnapshot.reserved !== frozen.before.reserved ||
+    liveSnapshot.available !== frozen.before.available
+  );
+  if (drift) {
+    await ledger.updateOne({ adjustmentId: frozen.adjustmentId }, { $set: { status: 'failed', failedAt: new Date().toISOString(), error: 'OCS_BALANCE_PRECONDITION_CHANGED' } });
+    throw new OcsBalanceGovernanceError('OCS_BALANCE_PRECONDITION_CHANGED', false, {
+      imsi: frozen.imsi,
+      expectedVersion: frozen.before.version,
+      liveVersion: liveSnapshot.version,
+      expectedAvailable: frozen.before.available,
+      liveAvailable: liveSnapshot.available,
+    });
+  }
+
+  const prefix = frozen.intent.bucket; // 'data' | 'voice' | 'sms'
   const after: BalanceSnapshot = { ...frozen.expectedAfter, version: frozen.before.version + 1, versionPresent: true };
   const versionFilter = frozen.before.versionPresent ? Long.fromNumber(frozen.before.version) : { $exists: false };
   const update = await balances.updateOne(

@@ -280,7 +280,7 @@ func (h *Handler) Adjust(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		h.writeStrictAudit(r, audit.WriteAuditInput{
+		auditErr := h.writeStrictAudit(r, audit.WriteAuditInput{
 			Action:   "BALANCE_ADJUST",
 			Module:   "ocs",
 			TargetID: fmt.Sprintf("balance:%s", imsi),
@@ -306,6 +306,17 @@ func (h *Handler) Adjust(w http.ResponseWriter, r *http.Request) {
 				"actorRole":        fresh.NormalizedRole,
 			},
 		}, fresh)
+		if auditErr != nil {
+			response.JSON(w, http.StatusServiceUnavailable, map[string]any{
+				"error":     "AUDIT_UNAVAILABLE",
+				"code":      "AUDIT_UNAVAILABLE",
+				"message":   "Balance adjustment committed but strict audit persistence failed",
+				"committed": true,
+				"imsi":      imsi,
+				"version":   res.After.Version,
+			})
+			return
+		}
 
 		response.JSON(w, http.StatusOK, map[string]any{
 			"ok":      true,
@@ -325,26 +336,47 @@ func (h *Handler) Adjust(w http.ResponseWriter, r *http.Request) {
 		Role:     fresh.RawRole,
 	}
 
-	frozenPayload := map[string]interface{}{
-		"schema": "balance-adjustment-v1",
-		"imsi":   imsi,
-		"before": map[string]interface{}{
-			"data":  current.DataAvailable,
-			"voice": current.VoiceAvailable,
-			"sms":   current.SmsAvailable,
-		},
-		"after": map[string]interface{}{
-			"data":  after.DataAvailable,
-			"voice": after.VoiceAvailable,
-			"sms":   after.SmsAvailable,
-		},
-		"operation": body.Operation,
+	beforeSnap := current.SnapshotForBucket(body.Bucket)
+	expectedAfterSnap := ExpectedAfterForSnapshot(beforeSnap, body.Operation, body.Amount)
+	adjID := audit.GenerateUUID()
+
+	intentMap := map[string]interface{}{
 		"bucket":    body.Bucket,
+		"operation": body.Operation,
 		"amount":    body.Amount,
 		"reason":    body.Reason,
 	}
 	if body.TicketID != "" {
-		frozenPayload["ticketId"] = body.TicketID
+		intentMap["ticketId"] = body.TicketID
+	}
+
+	beforeMap := map[string]interface{}{
+		"imsi":           beforeSnap.IMSI,
+		"bucket":         beforeSnap.Bucket,
+		"total":          beforeSnap.Total,
+		"used":           beforeSnap.Used,
+		"reserved":       beforeSnap.Reserved,
+		"available":      beforeSnap.Available,
+		"version":        beforeSnap.Version,
+		"versionPresent": beforeSnap.VersionPresent,
+	}
+
+	expectedAfterMap := map[string]interface{}{
+		"imsi":      expectedAfterSnap.IMSI,
+		"bucket":    expectedAfterSnap.Bucket,
+		"total":     expectedAfterSnap.Total,
+		"used":      expectedAfterSnap.Used,
+		"reserved":  expectedAfterSnap.Reserved,
+		"available": expectedAfterSnap.Available,
+	}
+
+	frozenPayload := map[string]interface{}{
+		"schema":        "ocs-balance-adjustment-v1",
+		"adjustmentId":  adjID,
+		"imsi":          imsi,
+		"intent":        intentMap,
+		"before":        beforeMap,
+		"expectedAfter": expectedAfterMap,
 	}
 
 	summary := fmt.Sprintf("Adjust %s balance for %s: %s %d", body.Bucket, imsi, body.Operation, body.Amount)
@@ -361,16 +393,8 @@ func (h *Handler) Adjust(w http.ResponseWriter, r *http.Request) {
 			ResourceType: "ocs_balance",
 			ResourceID:   imsi,
 		},
-		Before: map[string]interface{}{
-			"data":  current.DataAvailable,
-			"voice": current.VoiceAvailable,
-			"sms":   current.SmsAvailable,
-		},
-		After: map[string]interface{}{
-			"data":  after.DataAvailable,
-			"voice": after.VoiceAvailable,
-			"sms":   after.SmsAvailable,
-		},
+		Before:  beforeMap,
+		After:   expectedAfterMap,
 		Payload: frozenPayload,
 	})
 	if err != nil {
@@ -416,9 +440,9 @@ func (h *Handler) Reset(w http.ResponseWriter, r *http.Request) {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-func (h *Handler) writeStrictAudit(r *http.Request, input audit.WriteAuditInput, actor *FreshActor) {
+func (h *Handler) writeStrictAudit(r *http.Request, input audit.WriteAuditInput, actor *FreshActor) error {
 	if h.auditWriter == nil {
-		return
+		return nil
 	}
 	source, req, reason := audit.AuditRequestContext(r)
 	input.Source = source
@@ -434,7 +458,7 @@ func (h *Handler) writeStrictAudit(r *http.Request, input audit.WriteAuditInput,
 			Role:     actor.RawRole,
 		}
 	}
-	_ = h.auditWriter.WriteStrict(r.Context(), input)
+	return h.auditWriter.WriteStrict(r.Context(), input)
 }
 
 func intParam(s string, fallback int) int {

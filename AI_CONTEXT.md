@@ -19,6 +19,12 @@
 
 不要先扫描整个仓库。
 
+### 0.1 核心防卫底线 (Core Defensive Constraints)
+
+1. **【编码与字符规范】**：程序编码强制默认使用 UTF-8 格式，绝不允许使用 Base64 编码方式。所有编程语言源码必须严格遵守“纯 ASCII（纯英文+符号）”原则，剔除代码中的所有 Emoji 和无关中文，仅保留最纯粹的代码以及必要的中文注释说明。
+2. **【接口向前兼容性】**：每次更新源码前，必须全面回顾涉及模块的上下文。绝对不能随意删除已有函数接口！如需调整，必须选择更新原接口或创建新接口。功能模块的升级必须紧密依赖现有的最新内容框架与源码结构进行，严禁“去头掐尾”导致旧功能断裂。
+3. **【前端表达规范】**：在输出修改说明、更新日志或注释时，涉及前端开发的变动，严禁使用“说明出现在网页前端展示上”这类非专业表述，必须采用规范的工程化技术术语。
+
 ---
 
 ## 1. Repository
@@ -250,7 +256,7 @@ Sequence writes = app_sequences (approval change ID generation)
 Security audit writes = app_audit_logs (authorization.denied, BestEffort only)
 OCS writes = ocs_tariff_plans CRUD + enable/disable (governance: super_admin/root→DIRECT, operator/ops_admin→APPROVAL), ACTUALLY_ROUTED=1 (Nginx-routed)
 OCS subscriber writes = ocs_subscribers create/update-tariff/suspend/resume/terminate (governance: super_admin/root→DIRECT, operator/ops_admin→APPROVAL), ACTUALLY_ROUTED=1 (Nginx-routed)
-OCS balance writes = NONE (deferred)
+OCS balance writes = ocs_balances adjust (governance: super_admin/root→DIRECT, operator/ops_admin→APPROVAL), reset (permanently disabled); Go implemented in shadow mode (ACTUALLY_ROUTED=24 preserved unchanged)
 ```
 
 ---

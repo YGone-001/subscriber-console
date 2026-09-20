@@ -199,11 +199,9 @@ export default function OcsBalancePlaceholder() {
                   <button
                     type="button"
                     className="ocs-btn-sm ocs-btn-secondary"
-                    onClick={() => {
-                      setFeedback(null);
-                      setAdjustTarget(r);
-                    }}
-                    title={t("ocs_balance_adjust")}
+                    disabled
+                    title={t("ocs_balance_cutover_pending")}
+                    style={{ opacity: 0.5, cursor: "not-allowed" }}
                   >
                     <SlidersHorizontal size={14} />
                     <span>{t("ocs_balance_adjust")}</span>

@@ -82,24 +82,94 @@ type BalanceFingerprint struct {
 	Version      int64  `json:"version"`
 }
 
-// BucketAmounts captures available balances across buckets.
-type BucketAmounts struct {
-	Data  int64 `json:"data"`
-	Voice int64 `json:"voice"`
-	Sms   int64 `json:"sms"`
+// BalanceSnapshot captures a single bucket snapshot for CAS validation.
+type BalanceSnapshot struct {
+	IMSI           string `json:"imsi"`
+	Bucket         string `json:"bucket"`
+	Total          int64  `json:"total"`
+	Used           int64  `json:"used"`
+	Reserved       int64  `json:"reserved"`
+	Available      int64  `json:"available"`
+	Version        int64  `json:"version"`
+	VersionPresent bool   `json:"versionPresent"`
 }
 
-// FrozenBalanceAdjustmentPayload is the frozen approval payload schema balance-adjustment-v1.
-type FrozenBalanceAdjustmentPayload struct {
-	Schema    string        `json:"schema"` // "balance-adjustment-v1"
-	IMSI      string        `json:"imsi"`
-	Before    BucketAmounts `json:"before"`
-	After     BucketAmounts `json:"after"`
-	Operation string        `json:"operation"`
-	Bucket    string        `json:"bucket"`
-	Amount    int64         `json:"amount"`
-	Reason    string        `json:"reason"`
-	TicketID  string        `json:"ticketId,omitempty"`
+// ExpectedAfterSnapshot captures expected bucket balances after adjustment.
+type ExpectedAfterSnapshot struct {
+	IMSI      string `json:"imsi"`
+	Bucket    string `json:"bucket"`
+	Total     int64  `json:"total"`
+	Used      int64  `json:"used"`
+	Reserved  int64  `json:"reserved"`
+	Available int64  `json:"available"`
+}
+
+// BalanceAdjustmentIntent captures the adjustment operation intent.
+type BalanceAdjustmentIntent struct {
+	Bucket    string `json:"bucket"`
+	Operation string `json:"operation"`
+	Amount    int64  `json:"amount"`
+	Reason    string `json:"reason"`
+	TicketID  string `json:"ticketId,omitempty"`
+}
+
+// OcsBalanceAdjustmentV1Payload matches canonical ocs-balance-adjustment-v1 schema.
+type OcsBalanceAdjustmentV1Payload struct {
+	Schema        string                  `json:"schema"` // "ocs-balance-adjustment-v1"
+	AdjustmentID  string                  `json:"adjustmentId"`
+	IMSI          string                  `json:"imsi"`
+	Intent        BalanceAdjustmentIntent `json:"intent"`
+	Before        BalanceSnapshot         `json:"before"`
+	ExpectedAfter ExpectedAfterSnapshot   `json:"expectedAfter"`
+}
+
+// FrozenBalanceAdjustmentPayload is kept as alias for canonical payload.
+type FrozenBalanceAdjustmentPayload = OcsBalanceAdjustmentV1Payload
+
+// SnapshotForBucket extracts the balance snapshot for a specific bucket.
+func (r *BalanceRecord) SnapshotForBucket(bucket string) BalanceSnapshot {
+	snap := BalanceSnapshot{
+		IMSI:           r.IMSI,
+		Bucket:         bucket,
+		Version:        r.Version,
+		VersionPresent: true,
+	}
+	switch bucket {
+	case "data":
+		snap.Total = r.DataTotal
+		snap.Used = r.DataUsed
+		snap.Reserved = r.DataReserved
+		snap.Available = r.DataAvailable
+	case "voice":
+		snap.Total = r.VoiceTotal
+		snap.Used = r.VoiceUsed
+		snap.Reserved = r.VoiceReserved
+		snap.Available = r.VoiceAvailable
+	case "sms":
+		snap.Total = r.SmsTotal
+		snap.Used = r.SmsUsed
+		snap.Reserved = 0
+		snap.Available = r.SmsAvailable
+	}
+	return snap
+}
+
+// ExpectedAfterForSnapshot computes the expected after snapshot from a before snapshot and operation.
+func ExpectedAfterForSnapshot(before BalanceSnapshot, op string, amount int64) ExpectedAfterSnapshot {
+	delta := amount
+	if op == "debit" {
+		delta = -amount
+	}
+	expectedTotal := before.Total + delta
+	expectedAvailable := expectedTotal - before.Used - before.Reserved
+	return ExpectedAfterSnapshot{
+		IMSI:      before.IMSI,
+		Bucket:    before.Bucket,
+		Total:     expectedTotal,
+		Used:      before.Used,
+		Reserved:  before.Reserved,
+		Available: expectedAvailable,
+	}
 }
 
 // CheckInvariants computes the invariant status for a balance record.

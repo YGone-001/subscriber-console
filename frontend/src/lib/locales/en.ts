@@ -1876,6 +1876,7 @@ export const en: Record<string, string> = {
     ocs_balance_active_accounts: "Active Accounts",
     ocs_balance_pending_adjustments: "Pending Adjustments",
     ocs_balance_adjust: "Adjust Balance",
+    ocs_balance_cutover_pending: "Balance write cutover pending; currently in read-only shadow mode",
     ocs_balance_modal_title: "Governed Balance Adjustment",
     ocs_balance_bucket: "Bucket",
     ocs_balance_bucket_data: "Data",

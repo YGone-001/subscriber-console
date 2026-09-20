@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -47,6 +48,15 @@ type noopEvidenceStore struct{}
 
 func (n *noopEvidenceStore) Insert(_ context.Context, _ audit.AuditWriteRecord) error { return nil }
 func (n *noopEvidenceStore) FindByMongoID(_ context.Context, _ string) (*audit.AuditWriteRecord, error) {
+	return nil, nil
+}
+
+type failingEvidenceStore struct{}
+
+func (f *failingEvidenceStore) Insert(_ context.Context, _ audit.AuditWriteRecord) error {
+	return errors.New("audit persistence failed")
+}
+func (f *failingEvidenceStore) FindByMongoID(_ context.Context, _ string) (*audit.AuditWriteRecord, error) {
 	return nil, nil
 }
 
@@ -289,14 +299,26 @@ func TestHandler_Adjust_ApprovalCreation_Operator(t *testing.T) {
 		t.Fatalf("expected approval input to be captured")
 	}
 	payload := mockAppr.lastInput.Payload
-	if payload["schema"] != "balance-adjustment-v1" {
-		t.Errorf("expected schema balance-adjustment-v1, got %v", payload["schema"])
+	if payload["schema"] != "ocs-balance-adjustment-v1" {
+		t.Errorf("expected schema ocs-balance-adjustment-v1, got %v", payload["schema"])
 	}
 	if payload["imsi"] != testIMSI {
 		t.Errorf("expected imsi %s, got %v", testIMSI, payload["imsi"])
 	}
-	if payload["operation"] != "credit" || payload["bucket"] != "data" {
-		t.Errorf("expected credit data, got %v %v", payload["operation"], payload["bucket"])
+	if adjID, ok := payload["adjustmentId"].(string); !ok || adjID == "" {
+		t.Errorf("expected non-empty adjustmentId, got %v", payload["adjustmentId"])
+	}
+	intent, ok := payload["intent"].(map[string]interface{})
+	if !ok || intent["operation"] != "credit" || intent["bucket"] != "data" || intent["amount"] != int64(500) {
+		t.Errorf("unexpected intent: %v", payload["intent"])
+	}
+	before, ok := payload["before"].(map[string]interface{})
+	if !ok || before["total"] != int64(1000) || before["available"] != int64(1000) {
+		t.Errorf("unexpected before snapshot: %v", payload["before"])
+	}
+	expectedAfter, ok := payload["expectedAfter"].(map[string]interface{})
+	if !ok || expectedAfter["total"] != int64(1500) || expectedAfter["available"] != int64(1500) {
+		t.Errorf("unexpected expectedAfter snapshot: %v", payload["expectedAfter"])
 	}
 }
 
@@ -363,5 +385,72 @@ func TestHandler_Adjust_DirectExecution_SuperAdmin(t *testing.T) {
 	}
 	if updated.Version != 3 {
 		t.Errorf("expected version 3, got %d", updated.Version)
+	}
+}
+
+func TestHandler_Adjust_DirectExecution_AuditFailure_503(t *testing.T) {
+	repo, cleanup := setupTestDB(t)
+	if repo == nil {
+		return
+	}
+	defer cleanup()
+
+	ctx := context.Background()
+	testIMSI := "417018888888003"
+
+	doc := bson.M{
+		"imsi":            testIMSI,
+		"data_total":      int64(2000),
+		"data_used":       int64(200),
+		"data_reserved":   int64(0),
+		"data_available":  int64(1800),
+		"voice_total":     int64(3600),
+		"voice_used":      int64(0),
+		"voice_reserved":  int64(0),
+		"voice_available": int64(3600),
+		"sms_total":       int64(100),
+		"sms_used":        int64(0),
+		"sms_available":   int64(100),
+		"version":         int64(2),
+		"status":          "active",
+	}
+	_, err := repo.balances.InsertOne(ctx, doc)
+	if err != nil {
+		t.Fatalf("failed to insert test doc: %v", err)
+	}
+
+	userRepo := &mockUserRepo{identity: testUserIdentity("admin", "super_admin")}
+	failingWriter := audit.NewWriter(&failingEvidenceStore{}, audit.WriterConfig{})
+	h := NewHandler(repo, &mockRateLimiter{allowed: true}, userRepo, nil, failingWriter)
+
+	body := `{"operation":"credit","bucket":"data","amount":500,"reason":"test audit fail"}`
+	req := reqWithPrincipal("POST", "/api/ocs/balances/"+testIMSI+"/adjust", []byte(body), "admin", "super_admin")
+	req.SetPathValue("imsi", testIMSI)
+	w := httptest.NewRecorder()
+
+	h.Adjust(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 Service Unavailable, got %d, body: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if resp["code"] != "AUDIT_UNAVAILABLE" {
+		t.Errorf("expected code AUDIT_UNAVAILABLE, got %v", resp["code"])
+	}
+	if resp["committed"] != true {
+		t.Errorf("expected committed true, got %v", resp["committed"])
+	}
+
+	// Verify the CAS mutation was NOT rolled back in Mongo
+	updated, err := repo.GetBalanceByIMSI(ctx, testIMSI)
+	if err != nil || updated == nil {
+		t.Fatalf("failed to load updated balance: %v", err)
+	}
+	if updated.DataTotal != 2500 || updated.DataAvailable != 2300 {
+		t.Errorf("expected committed mutation in mongo, got total %d avail %d", updated.DataTotal, updated.DataAvailable)
 	}
 }

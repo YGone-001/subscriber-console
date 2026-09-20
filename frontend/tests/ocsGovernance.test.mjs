@@ -47,7 +47,9 @@ test('balance intent accepts only a reasoned credit/debit and rejects direct sta
   assert.throws(() => validateOcsBalanceIntent({ bucket: 'data', operation: 'debit', amount: 100, reason: 'x', data_used: 0 }), /INVALID_OCS_BALANCE_ADJUSTMENT/);
   assert.throws(() => validateOcsBalanceIntent({ bucket: 'data', operation: 'debit', amount: 0, reason: 'x' }), /INVALID_OCS_BALANCE_AMOUNT/);
   assert.throws(() => validateOcsBalanceIntent({ bucket: 'data', operation: 'credit', amount: Number.MAX_SAFE_INTEGER + 1, reason: 'x' }), /OCS_BALANCE_VALUE_OUT_OF_RANGE/);
-  assert.throws(() => validateOcsBalanceIntent({ bucket: 'sms', operation: 'credit', amount: 1, reason: 'x' }), /INVALID_OCS_BALANCE_BUCKET/);
+  const validSms = validateOcsBalanceIntent({ bucket: 'sms', operation: 'credit', amount: 1, reason: 'x' });
+  assert.equal(validSms.bucket, 'sms');
+  assert.throws(() => validateOcsBalanceIntent({ bucket: 'mms', operation: 'credit', amount: 1, reason: 'x' }), /INVALID_OCS_BALANCE_BUCKET/);
 });
 
 test('high-risk OCS HTTP writes submit approvals and contain no direct repository mutators', () => {

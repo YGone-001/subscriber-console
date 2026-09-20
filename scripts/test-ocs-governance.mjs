@@ -98,6 +98,75 @@ try {
     assert.equal(await app.collection('ocs_balance_adjustments').countDocuments({ adjustmentId: frozen.adjustmentId }), 1);
   });
 
+  await check('balance.sms_adjustment', async () => {
+    const imsi = '460020000000704';
+    await xcloud.collection('ocs_balances').insertOne({
+      imsi,
+      sms_total: Long.fromNumber(100), sms_used: Long.fromNumber(20), sms_available: Long.fromNumber(80),
+      version: Long.fromNumber(1), updated_at: new Date(),
+    });
+    // Credit 50 SMS
+    const frozenCredit = await freezeOcsBalanceAdjustment(imsi, { bucket: 'sms', operation: 'credit', amount: 50, reason: 'sms credit test' });
+    assert.equal(frozenCredit.before.reserved, 0);
+    assert.equal(frozenCredit.before.total, 100);
+    assert.equal(frozenCredit.before.available, 80);
+    assert.equal(frozenCredit.expectedAfter.total, 150);
+    assert.equal(frozenCredit.expectedAfter.available, 130);
+
+    const creditResult = await executeFrozenOcsBalanceAdjustment(frozenCredit, {
+      approvalId: `approval-${randomUUID()}`, executionId: `execution-${randomUUID()}`, actor: 'tester',
+    });
+    assert.equal(creditResult.after.total, 150);
+    assert.equal(creditResult.after.available, 130);
+
+    let current = await xcloud.collection('ocs_balances').findOne({ imsi });
+    assert.equal(numberValue(current.sms_total), 150);
+    assert.equal(numberValue(current.sms_available), 130);
+    assert.equal(numberValue(current.version), 2);
+
+    // Debit 30 SMS
+    const frozenDebit = await freezeOcsBalanceAdjustment(imsi, { bucket: 'sms', operation: 'debit', amount: 30, reason: 'sms debit test' });
+    assert.equal(frozenDebit.expectedAfter.total, 120);
+    assert.equal(frozenDebit.expectedAfter.available, 100);
+
+    const debitResult = await executeFrozenOcsBalanceAdjustment(frozenDebit, {
+      approvalId: `approval-${randomUUID()}`, executionId: `execution-${randomUUID()}`, actor: 'tester',
+    });
+    assert.equal(debitResult.after.total, 120);
+    assert.equal(debitResult.after.available, 100);
+
+    current = await xcloud.collection('ocs_balances').findOne({ imsi });
+    assert.equal(numberValue(current.sms_total), 120);
+    assert.equal(numberValue(current.sms_available), 100);
+    assert.equal(numberValue(current.version), 3);
+  });
+
+  await check('balance.cas_drift_field_change', async () => {
+    const imsi = '460020000000705';
+    await xcloud.collection('ocs_balances').insertOne(balance(imsi, 20));
+    const frozen = await freezeOcsBalanceAdjustment(imsi, { bucket: 'data', operation: 'credit', amount: 100, reason: 'drift test' });
+
+    // Live balance changed available/total without bumping version
+    await xcloud.collection('ocs_balances').updateOne({ imsi }, { $set: { data_total: Long.fromNumber(1100), data_available: Long.fromNumber(300) } });
+    await assert.rejects(
+      () => executeFrozenOcsBalanceAdjustment(frozen, { approvalId: `approval-${randomUUID()}`, executionId: `execution-${randomUUID()}`, actor: 'tester' }),
+      (error) => error instanceof OcsBalanceGovernanceError && error.code === 'OCS_BALANCE_PRECONDITION_CHANGED'
+    );
+  });
+
+  await check('balance.broken_invariant_rejection', async () => {
+    const imsi = '460020000000706';
+    await xcloud.collection('ocs_balances').insertOne(balance(imsi, 30));
+    const frozen = await freezeOcsBalanceAdjustment(imsi, { bucket: 'data', operation: 'credit', amount: 100, reason: 'invariant test' });
+
+    // Corrupt document invariants in database
+    await xcloud.collection('ocs_balances').updateOne({ imsi }, { $set: { data_total: Long.fromNumber(9999) } });
+    await assert.rejects(
+      () => executeFrozenOcsBalanceAdjustment(frozen, { approvalId: `approval-${randomUUID()}`, executionId: `execution-${randomUUID()}`, actor: 'tester' }),
+      (error) => error instanceof OcsBalanceGovernanceError && error.code === 'OCS_BALANCE_INVARIANT_VIOLATION'
+    );
+  });
+
   report.ok = true;
   report.durationMs = Date.now() - startedAt;
   console.log(JSON.stringify(report, null, 2));

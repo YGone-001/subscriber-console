@@ -95,4 +95,11 @@ test('Balance governance localization keys are complete in zh and en', () => {
 
   assert.match(zhLocale, /ocs_balance_adjust:\s*"调整余额"/);
   assert.match(enLocale, /ocs_balance_adjust:\s*"Adjust Balance"/);
+
+  assert.match(zhLocale, /ocs_balance_cutover_pending:\s*"余额写入割接尚未完成，当前处于只读模式"/);
+  assert.match(enLocale, /ocs_balance_cutover_pending:\s*"Balance write cutover pending; currently in read-only shadow mode"/);
+});
+
+test('OcsBalancePlaceholder keeps Adjust Balance button disabled until Phase 5.4-B cutover', () => {
+  assert.match(placeholderSource, /<button[^>]*disabled[^>]*title=\{t\("ocs_balance_cutover_pending"\)\}/);
 });

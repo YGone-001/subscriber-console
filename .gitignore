@@ -57,6 +57,7 @@ pnpm-debug.log*
 # IDE and editor files
 .idea/
 .vscode/
+.agents/
 *.swp
 *.swo
 *.sublime-project
