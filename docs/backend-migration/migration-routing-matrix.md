@@ -38,7 +38,7 @@
 | OCS sessions | GET | `/api/ocs/sessions` | **Go** | Go | YES | Phase 2B — migrated |
 | OCS reservations | GET | `/api/ocs/reservations` | **Go** | Go | YES | Phase 2B — migrated |
 | OCS usage | GET | `/api/ocs/usage` | **Go** | Go | YES | Phase 2B — migrated |
-| OCS subscribers | GET | `/api/ocs/subscribers` | **Go** | Go | YES | Phase 5.1 — read implementation, shadow |
+| OCS subscribers | GET | `/api/ocs/subscribers` | **Go** | Go | YES | Phase 5.1 Go implementation; Phase 5.3-B-Correction-3 production cutover; ACTUALLY_ROUTED=1; cutover_verified |
 | Tariff plans list | GET | `/api/tariff-plans` | **Go** | Go | YES | Phase 2B — migrated |
 | Tariff plan detail | GET | `/api/tariff-plans/:planId` | **Go** | Go | YES | Phase 2B — migrated |
 | Tariff plan export | GET | `/api/tariff-plans/:planId/export` | **Go** | Go | YES | Phase 2B — migrated |

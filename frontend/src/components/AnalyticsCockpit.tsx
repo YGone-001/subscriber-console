@@ -29,16 +29,26 @@ import TopConsumerChart from "./analytics/TopConsumerChart";
 import WorkbenchPanel from "./analytics/WorkbenchPanel";
 import TariffPlanDistributionChart from "./analytics/TariffPlanDistributionChart";
 
+interface ApprovalSummaryResponse {
+  total?: number;
+  pagination?: { total?: number };
+}
+
+interface AuditSummaryResponse {
+  pagination?: { total?: number };
+  summary?: { failed?: number; matched?: number };
+}
+
 export default function AnalyticsCockpit() {
   const { t } = useI18n();
 
   const { data, error, isLoading } = useSWR<MetricsData>("/api/analytics/metrics", fetcher, { refreshInterval: 5000 });
   const { data: sparkData } = useSWR<SparklineData>("/api/analytics/sparkline", fetcher, { refreshInterval: 30000 });
   const { data: alertData } = useSWR<AlertResponse>("/api/alerts", fetcher, { refreshInterval: 5000 });
-  const { data: ocsSubData } = useSWR<{ total: number }>("/api/ocs/subscribers?limit=1", fetcher, { refreshInterval: 10000 });
-  const { data: approvalData } = useSWR<{ total: number }>("/api/approvals?status=PENDING&limit=1", fetcher, { refreshInterval: 10000 });
-  const { data: auditFailureData } = useSWR<{ total: number }>("/api/audit-logs?result=FAILURE&limit=1", fetcher, { refreshInterval: 10000 });
-  const { data: tariffPlansData } = useSWR<any>("/api/tariff-plans", fetcher, { refreshInterval: 10000 });
+  const { data: ocsSubData, error: ocsSubError, isLoading: ocsSubLoading } = useSWR<{ total?: number; pagination?: { total?: number } }>("/api/ocs/subscribers?limit=1", fetcher, { refreshInterval: 10000 });
+  const { data: approvalData, error: approvalError, isLoading: approvalLoading } = useSWR<ApprovalSummaryResponse>("/api/approvals?status=pending&limit=1", fetcher, { refreshInterval: 10000 });
+  const { data: auditFailureData, error: auditFailureError, isLoading: auditFailureLoading } = useSWR<AuditSummaryResponse>("/api/audit?result=failed&limit=1", fetcher, { refreshInterval: 10000 });
+  const { data: tariffPlansData, error: tariffPlansError, isLoading: tariffPlansLoading } = useSWR<any>("/api/tariff-plans", fetcher, { refreshInterval: 10000 });
 
   if (isLoading) {
     return <SkeletonDashboard />;
@@ -61,11 +71,35 @@ export default function AnalyticsCockpit() {
   const ocsBalances = data?.ocsBalances;
   const tariffPlanDist = data?.tariffPlanDist || [];
 
-  const tariffPlanCount = Array.isArray(tariffPlansData) ? tariffPlansData.length : (tariffPlansData?.records?.length ?? tariffPlanDist.length);
-  const contractSubscriberCount = ocsSubData?.total ?? 0;
+  // Tariff Plans metric state
+  const isTariffPlansUnavailable = Boolean(tariffPlansError || (!tariffPlansData && tariffPlansLoading));
+  const tariffPlanCount = !isTariffPlansUnavailable && tariffPlansData != null
+    ? (Array.isArray(tariffPlansData)
+        ? tariffPlansData.length
+        : (tariffPlansData?.plans?.length ?? tariffPlansData?.records?.length ?? (typeof tariffPlansData?.total === "number" ? tariffPlansData.total : tariffPlanDist.length)))
+    : null;
+
+  // Contract Subscribers metric state
+  const isContractSubscribersUnavailable = Boolean(ocsSubError || (!ocsSubData && ocsSubLoading));
+  const contractSubscriberCount = !isContractSubscribersUnavailable && ocsSubData != null
+    ? (typeof ocsSubData.total === "number" ? ocsSubData.total : (ocsSubData.pagination?.total ?? 0))
+    : null;
+
   const balanceAccountCount = ocsBalances?.totalSubscribers ?? 0;
-  const pendingApprovalsCount = approvalData?.total ?? 0;
-  const failedAuditCount = auditFailureData?.total ?? 0;
+
+  // Pending Approvals metric state
+  const isPendingApprovalsUnavailable = Boolean(approvalError || (!approvalData && approvalLoading));
+  const pendingApprovalsCount = !isPendingApprovalsUnavailable && approvalData != null
+    ? (typeof approvalData.total === "number" ? approvalData.total : (approvalData.pagination?.total ?? 0))
+    : null;
+
+  // Failed Operations (Audit) metric state
+  const isFailedAuditUnavailable = Boolean(auditFailureError || (!auditFailureData && auditFailureLoading));
+  const failedAuditCount = !isFailedAuditUnavailable && auditFailureData != null
+    ? (typeof auditFailureData.summary?.failed === "number"
+        ? auditFailureData.summary.failed
+        : (typeof auditFailureData.pagination?.total === "number" ? auditFailureData.pagination.total : 0))
+    : null;
 
   const trafficSparkline = sparkData?.traffic || [];
   const subscriberSparkline = sparkData?.subscribers || [];
@@ -249,8 +283,8 @@ export default function AnalyticsCockpit() {
       color: "var(--chart-3)",
       icon: <Users size={16} />,
       label: t("nav_ocs_contracts"),
-      value: <CountUpNumber value={contractSubscriberCount} />,
-      ringValue: contractSubscriberCount > 0 ? 100 : 0,
+      value: contractSubscriberCount !== null ? <CountUpNumber value={contractSubscriberCount} /> : "—",
+      ringValue: contractSubscriberCount !== null && contractSubscriberCount > 0 ? 100 : 0,
       tone: "normal" as const,
     },
     {
@@ -314,12 +348,16 @@ export default function AnalyticsCockpit() {
             <div className="analytics-ocs-capacity-summary">
               <Link href="/ocs/tariffs" className="analytics-ocs-metric-item">
                 <span className="analytics-ocs-metric-label">{t("nav_ocs_tariffs")}</span>
-                <span className="analytics-ocs-metric-val"><CountUpNumber value={tariffPlanCount} /></span>
+                <span className="analytics-ocs-metric-val">
+                  {tariffPlanCount !== null ? <CountUpNumber value={tariffPlanCount} /> : "—"}
+                </span>
                 <span className="analytics-ocs-subtext">ocs_tariff_plans</span>
               </Link>
               <Link href="/ocs/contracts" className="analytics-ocs-metric-item">
                 <span className="analytics-ocs-metric-label">{t("nav_ocs_contracts")}</span>
-                <span className="analytics-ocs-metric-val"><CountUpNumber value={contractSubscriberCount} /></span>
+                <span className="analytics-ocs-metric-val">
+                  {contractSubscriberCount !== null ? <CountUpNumber value={contractSubscriberCount} /> : "—"}
+                </span>
                 <span className="analytics-ocs-subtext">ocs_subscribers</span>
               </Link>
               <Link href="/ocs/balances" className="analytics-ocs-metric-item">
@@ -353,17 +391,27 @@ export default function AnalyticsCockpit() {
             <div className="analytics-ocs-capacity-summary">
               <Link href="/approvals" className="analytics-ocs-metric-item">
                 <span className="analytics-ocs-metric-label">{t("nav_approvals")}</span>
-                <span className="analytics-ocs-metric-val" style={{ color: pendingApprovalsCount > 0 ? "var(--status-warning)" : "inherit" }}>
-                  <CountUpNumber value={pendingApprovalsCount} />
+                <span
+                  className="analytics-ocs-metric-val"
+                  style={{ color: pendingApprovalsCount !== null && pendingApprovalsCount > 0 ? "var(--status-warning)" : "inherit" }}
+                >
+                  {pendingApprovalsCount !== null ? <CountUpNumber value={pendingApprovalsCount} /> : "—"}
                 </span>
-                <span className="analytics-ocs-subtext">{pendingApprovalsCount > 0 ? t("ocs_dashboard_pending_governance_detail") : "—"}</span>
+                <span className="analytics-ocs-subtext">
+                  {pendingApprovalsCount !== null && pendingApprovalsCount > 0 ? t("ocs_dashboard_pending_governance_detail") : "—"}
+                </span>
               </Link>
               <Link href="/audit-logs" className="analytics-ocs-metric-item">
                 <span className="analytics-ocs-metric-label">{t("nav_audit_logs")}</span>
-                <span className="analytics-ocs-metric-val" style={{ color: failedAuditCount > 0 ? "var(--status-danger)" : "inherit" }}>
-                  <CountUpNumber value={failedAuditCount} />
+                <span
+                  className="analytics-ocs-metric-val"
+                  style={{ color: failedAuditCount !== null && failedAuditCount > 0 ? "var(--status-danger)" : "inherit" }}
+                >
+                  {failedAuditCount !== null ? <CountUpNumber value={failedAuditCount} /> : "—"}
                 </span>
-                <span className="analytics-ocs-subtext">{failedAuditCount > 0 ? t("dash_work_critical_detail") : "—"}</span>
+                <span className="analytics-ocs-subtext">
+                  {failedAuditCount !== null && failedAuditCount > 0 ? t("dash_work_critical_detail") : "—"}
+                </span>
               </Link>
               <Link href="/system-health" className="analytics-ocs-metric-item">
                 <span className="analytics-ocs-metric-label">{t("nav_system_health")}</span>
