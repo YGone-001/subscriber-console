@@ -13,6 +13,7 @@
     "mongo:test-core": "node scripts/test-mongo-core.mjs",
     "mongo:test-subscriber-governance": "node scripts/test-subscriber-governance.mjs",
     "mongo:test-ocs-governance": "node scripts/test-ocs-governance.mjs",
+    "mongo:test-ocs-balance-approval-e2e": "node scripts/test-ocs-balance-approval-e2e.mjs",
     "mongo:perf": "node scripts/check-mongo-query-performance.mjs"
   },
   "dependencies": {

@@ -114,8 +114,8 @@
 | OCS subscriber suspend | POST | `/api/ocs/subscribers/:imsi/suspend` | **Go** | **Go** | Go | NEVER | Go handler with governance, ACTUALLY_ROUTED=1 |
 | OCS subscriber resume | POST | `/api/ocs/subscribers/:imsi/resume` | **Go** | **Go** | Go | NEVER | Go handler with governance, ACTUALLY_ROUTED=1 |
 | OCS subscriber terminate | DELETE | `/api/ocs/subscribers/:imsi` | **Go** | **Go** | Go | NEVER | Go handler with governance, ACTUALLY_ROUTED=1 |
-| OCS balance adjust | POST | `/api/ocs/balances/:imsi/adjust` | **Go** | Next.js | Go | NEVER | Phase 5.4 Go implementation with governance (shadow) |
-| OCS balance reset | POST | `/api/ocs/balances/:imsi/reset` | **Go** | Next.js | Go | NEVER | Phase 5.4 permanently disabled compatibility endpoint |
+| OCS balance adjust | POST | `/api/ocs/balances/:imsi/adjust` | **Go** | Next.js | Go | NEVER | Phase 5.4-A2: IMPLEMENTED=YES, APPROVAL_EXECUTION_PASS=YES, CUTOVER_READY=YES, ACTUALLY_ROUTED=NO |
+| OCS balance reset | POST | `/api/ocs/balances/:imsi/reset` | **Go** | Next.js | Go | NEVER | Phase 5.4-A2: IMPLEMENTED=YES, DISABLED_BY_POLICY=YES, ACTUALLY_ROUTED=NO |
 | Balance adjust | POST | `/api/subscribers/:imsi/traffic-adjustments` | Next.js | Next.js | Go | NEVER | Frozen payload, CAS |
 | Tariff plan migrate | POST | `/api/tariff-plans/:planId/migrate` | Next.js | Next.js | Go | NEVER | Creates CHG |
 | Tariff plan import | POST | `/api/tariff-plans/import` | Next.js | Next.js | Go | NEVER | Creates CHG |
