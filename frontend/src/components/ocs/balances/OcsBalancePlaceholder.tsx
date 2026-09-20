@@ -1,13 +1,35 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
-import { Search, ShieldAlert, Wallet } from "lucide-react";
+import { Search, Wallet, CheckCircle, Clock, SlidersHorizontal } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { DataTablePagination } from "@/components/ui/DataTablePagination";
 import { formatBytes } from "@/lib/unitParser";
 import OcsPageShell from "../OcsPageShell";
+import AdjustBalanceModal from "./AdjustBalanceModal";
+
+interface BalanceRecordUI {
+  id: string;
+  imsi: string;
+  plan_id?: string;
+  status: string;
+  data_total: number;
+  data_used: number;
+  data_reserved: number;
+  data_available: number;
+  voice_total: number;
+  voice_used: number;
+  voice_reserved: number;
+  voice_available: number;
+  sms_total: number;
+  sms_used: number;
+  sms_available: number;
+  version: number;
+  updated_at?: string;
+}
 
 export default function OcsBalancePlaceholder() {
   const { t } = useI18n();
@@ -15,6 +37,14 @@ export default function OcsBalancePlaceholder() {
   const [limit, setLimit] = useState(20);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+
+  // Modal state
+  const [adjustTarget, setAdjustTarget] = useState<BalanceRecordUI | null>(null);
+  const [feedback, setFeedback] = useState<{
+    type: "success" | "error";
+    message: string;
+    approvalId?: string;
+  } | null>(null);
 
   const url = useMemo(() => {
     const params = new URLSearchParams({
@@ -30,8 +60,20 @@ export default function OcsBalancePlaceholder() {
     keepPreviousData: true,
   });
 
-  const records = data?.records || [];
+  // Approvals SWR for Pending Adjustments KPI
+  const { data: pendingApprovalsData } = useSWR(
+    "/api/approvals?action=TRAFFIC_ADJUSTMENT&status=pending",
+    fetcher,
+    { refreshInterval: 15000 }
+  );
+
+  const records: BalanceRecordUI[] = data?.records || [];
   const total = data?.total || 0;
+  const activeCount = data?.summary?.activeAccounts ?? records.filter((r) => r.status === "active").length;
+  const pendingCount =
+    pendingApprovalsData?.total ??
+    data?.summary?.pendingAdjustments ??
+    0;
 
   const formatTime = (iso?: string) => {
     if (!iso) return "—";
@@ -49,6 +91,20 @@ export default function OcsBalancePlaceholder() {
         <div className="ocs-dashboard-card-content">
           <span className="ocs-dashboard-card-value">{error ? "—" : total}</span>
           <span className="ocs-dashboard-card-label">{t("ocs_balance_total_accounts")}</span>
+        </div>
+      </div>
+      <div className="ocs-dashboard-card">
+        <div className="ocs-dashboard-card-icon"><CheckCircle size={20} /></div>
+        <div className="ocs-dashboard-card-content">
+          <span className="ocs-dashboard-card-value">{error ? "—" : activeCount}</span>
+          <span className="ocs-dashboard-card-label">{t("ocs_balance_active_accounts")}</span>
+        </div>
+      </div>
+      <div className="ocs-dashboard-card">
+        <div className="ocs-dashboard-card-icon"><Clock size={20} /></div>
+        <div className="ocs-dashboard-card-content">
+          <span className="ocs-dashboard-card-value">{error ? "—" : pendingCount}</span>
+          <span className="ocs-dashboard-card-label">{t("ocs_balance_pending_adjustments")}</span>
         </div>
       </div>
     </div>
@@ -82,15 +138,30 @@ export default function OcsBalancePlaceholder() {
 
   const tableContent = (
     <>
-      <div className="ocs-readonly-banner">
-        <ShieldAlert size={18} />
-        <span>{t("ocs_balance_adjustment_notice")}</span>
-      </div>
+      {feedback && (
+        <div
+          className={feedback.type === "success" ? "ocs-feedback-success" : "ocs-feedback-error"}
+          style={{ marginBottom: "1rem" }}
+        >
+          <span>{feedback.message}</span>
+          {feedback.approvalId && (
+            <Link
+              href={`/approvals?id=${encodeURIComponent(feedback.approvalId)}`}
+              className="ocs-feedback-link"
+              style={{ marginLeft: "0.5rem", textDecoration: "underline" }}
+            >
+              {t("view_approval") || "查看审批"} →
+            </Link>
+          )}
+        </div>
+      )}
+
       {error && (
         <div className="ocs-feedback-error" style={{ marginBottom: "1rem" }}>
           <span>{error.message || "Failed to load balance accounts"}</span>
         </div>
       )}
+
       <table className="ocs-table">
         <caption className="sr-only">{t("ocs_balances_title")}</caption>
         <thead>
@@ -101,18 +172,19 @@ export default function OcsBalancePlaceholder() {
             <th>{t("ocs_col_sms_avail")}</th>
             <th>{t("ocs_col_status")}</th>
             <th>{t("ocs_tariff_col_updated")}</th>
+            <th style={{ textAlign: "right" }}>{t("actions") || "操作"}</th>
           </tr>
         </thead>
         <tbody>
           {loading ? (
-            <tr><td colSpan={6} className="ocs-empty-cell"><div className="ocs-loading">{t("loading") || "加载中..."}</div></td></tr>
+            <tr><td colSpan={7} className="ocs-empty-cell"><div className="ocs-loading">{t("loading") || "加载中..."}</div></td></tr>
           ) : error ? (
-            <tr><td colSpan={6} className="ocs-empty-cell ocs-error-cell"><div style={{ color: "var(--status-danger)" }}>{error?.message || "加载失败，请检查网络或后端服务"}</div></td></tr>
+            <tr><td colSpan={7} className="ocs-empty-cell ocs-error-cell"><div style={{ color: "var(--status-danger)" }}>{error?.message || "加载失败，请检查网络或后端服务"}</div></td></tr>
           ) : records.length === 0 ? (
-            <tr><td colSpan={6} className="ocs-empty-cell">{t("no_data")}</td></tr>
+            <tr><td colSpan={7} className="ocs-empty-cell">{t("no_data")}</td></tr>
           ) : (
-            records.map((r: any) => (
-              <tr key={r.id}>
+            records.map((r) => (
+              <tr key={r.id || r.imsi}>
                 <td className="ocs-mono">{r.imsi}</td>
                 <td className="ocs-mono">{formatBytes(r.data_available)}</td>
                 <td className="ocs-mono">{r.voice_available}s</td>
@@ -123,11 +195,44 @@ export default function OcsBalancePlaceholder() {
                   </span>
                 </td>
                 <td className="ocs-time-cell">{formatTime(r.updated_at)}</td>
+                <td style={{ textAlign: "right" }}>
+                  <button
+                    type="button"
+                    className="ocs-btn-sm ocs-btn-secondary"
+                    onClick={() => {
+                      setFeedback(null);
+                      setAdjustTarget(r);
+                    }}
+                    title={t("ocs_balance_adjust")}
+                  >
+                    <SlidersHorizontal size={14} />
+                    <span>{t("ocs_balance_adjust")}</span>
+                  </button>
+                </td>
               </tr>
             ))
           )}
         </tbody>
       </table>
+
+      {adjustTarget && (
+        <AdjustBalanceModal
+          isOpen={true}
+          imsi={adjustTarget.imsi}
+          dataAvailable={adjustTarget.data_available}
+          voiceAvailable={adjustTarget.voice_available}
+          smsAvailable={adjustTarget.sms_available}
+          onClose={() => setAdjustTarget(null)}
+          onSuccess={(result) => {
+            setFeedback({
+              type: "success",
+              message: result.message,
+              approvalId: result.approvalId,
+            });
+            refresh();
+          }}
+        />
+      )}
     </>
   );
 

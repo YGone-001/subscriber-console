@@ -5,7 +5,7 @@
     "methods": [
       "GET"
     ],
-    "file": "frontend/src/app/api/alerts/route.ts"
+    "file": "frontend\\src\\app\\api\\alerts\\route.ts"
   },
   {
     "path": "/api/alerts/acknowledge",
@@ -13,7 +13,7 @@
     "methods": [
       "POST"
     ],
-    "file": "frontend/src/app/api/alerts/acknowledge/route.ts"
+    "file": "frontend\\src\\app\\api\\alerts\\acknowledge\\route.ts"
   },
   {
     "path": "/api/alerts/workflow",
@@ -21,7 +21,7 @@
     "methods": [
       "POST"
     ],
-    "file": "frontend/src/app/api/alerts/workflow/route.ts"
+    "file": "frontend\\src\\app\\api\\alerts\\workflow\\route.ts"
   },
   {
     "path": "/api/analytics/init",
@@ -29,7 +29,7 @@
     "methods": [
       "POST"
     ],
-    "file": "frontend/src/app/api/analytics/init/route.ts"
+    "file": "frontend\\src\\app\\api\\analytics\\init\\route.ts"
   },
   {
     "path": "/api/analytics/metrics",
@@ -37,7 +37,7 @@
     "methods": [
       "GET"
     ],
-    "file": "frontend/src/app/api/analytics/metrics/route.ts"
+    "file": "frontend\\src\\app\\api\\analytics\\metrics\\route.ts"
   },
   {
     "path": "/api/analytics/sparkline",
@@ -45,7 +45,7 @@
     "methods": [
       "GET"
     ],
-    "file": "frontend/src/app/api/analytics/sparkline/route.ts"
+    "file": "frontend\\src\\app\\api\\analytics\\sparkline\\route.ts"
   },
   {
     "path": "/api/approvals",
@@ -54,7 +54,7 @@
       "GET",
       "POST"
     ],
-    "file": "frontend/src/app/api/approvals/route.ts"
+    "file": "frontend\\src\\app\\api\\approvals\\route.ts"
   },
   {
     "path": "/api/approvals/:id",
@@ -63,7 +63,7 @@
       "GET",
       "POST"
     ],
-    "file": "frontend/src/app/api/approvals/[id]/route.ts"
+    "file": "frontend\\src\\app\\api\\approvals\\[id]\\route.ts"
   },
   {
     "path": "/api/approvals/:id/approve",
@@ -71,7 +71,7 @@
     "methods": [
       "POST"
     ],
-    "file": "frontend/src/app/api/approvals/[id]/approve/route.ts"
+    "file": "frontend\\src\\app\\api\\approvals\\[id]\\approve\\route.ts"
   },
   {
     "path": "/api/approvals/:id/audit",
@@ -79,7 +79,7 @@
     "methods": [
       "GET"
     ],
-    "file": "frontend/src/app/api/approvals/[id]/audit/route.ts"
+    "file": "frontend\\src\\app\\api\\approvals\\[id]\\audit\\route.ts"
   },
   {
     "path": "/api/approvals/:id/cancel",
@@ -87,7 +87,7 @@
     "methods": [
       "POST"
     ],
-    "file": "frontend/src/app/api/approvals/[id]/cancel/route.ts"
+    "file": "frontend\\src\\app\\api\\approvals\\[id]\\cancel\\route.ts"
   },
   {
     "path": "/api/approvals/:id/execute",
@@ -95,7 +95,7 @@
     "methods": [
       "POST"
     ],
-    "file": "frontend/src/app/api/approvals/[id]/execute/route.ts"
+    "file": "frontend\\src\\app\\api\\approvals\\[id]\\execute\\route.ts"
   },
   {
     "path": "/api/approvals/:id/reject",
@@ -103,7 +103,7 @@
     "methods": [
       "POST"
     ],
-    "file": "frontend/src/app/api/approvals/[id]/reject/route.ts"
+    "file": "frontend\\src\\app\\api\\approvals\\[id]\\reject\\route.ts"
   },
   {
     "path": "/api/approvals/export",
@@ -111,7 +111,7 @@
     "methods": [
       "GET"
     ],
-    "file": "frontend/src/app/api/approvals/export/route.ts"
+    "file": "frontend\\src\\app\\api\\approvals\\export\\route.ts"
   },
   {
     "path": "/api/audit",
@@ -119,7 +119,7 @@
     "methods": [
       "GET"
     ],
-    "file": "frontend/src/app/api/audit/route.ts"
+    "file": "frontend\\src\\app\\api\\audit\\route.ts"
   },
   {
     "path": "/api/audit/:id",
@@ -127,7 +127,7 @@
     "methods": [
       "GET"
     ],
-    "file": "frontend/src/app/api/audit/[id]/route.ts"
+    "file": "frontend\\src\\app\\api\\audit\\[id]\\route.ts"
   },
   {
     "path": "/api/audit/export",
@@ -135,7 +135,7 @@
     "methods": [
       "GET"
     ],
-    "file": "frontend/src/app/api/audit/export/route.ts"
+    "file": "frontend\\src\\app\\api\\audit\\export\\route.ts"
   },
   {
     "path": "/api/auth/login",
@@ -143,7 +143,7 @@
     "methods": [
       "POST"
     ],
-    "file": "frontend/src/app/api/auth/login/route.ts"
+    "file": "frontend\\src\\app\\api\\auth\\login\\route.ts"
   },
   {
     "path": "/api/auth/logout",
@@ -151,7 +151,7 @@
     "methods": [
       "POST"
     ],
-    "file": "frontend/src/app/api/auth/logout/route.ts"
+    "file": "frontend\\src\\app\\api\\auth\\logout\\route.ts"
   },
   {
     "path": "/api/auth/me",
@@ -159,7 +159,7 @@
     "methods": [
       "GET"
     ],
-    "file": "frontend/src/app/api/auth/me/route.ts"
+    "file": "frontend\\src\\app\\api\\auth\\me\\route.ts"
   },
   {
     "path": "/api/auth/permissions",
@@ -167,7 +167,7 @@
     "methods": [
       "GET"
     ],
-    "file": "frontend/src/app/api/auth/permissions/route.ts"
+    "file": "frontend\\src\\app\\api\\auth\\permissions\\route.ts"
   },
   {
     "path": "/api/auth/users",
@@ -176,7 +176,7 @@
       "GET",
       "POST"
     ],
-    "file": "frontend/src/app/api/auth/users/route.ts"
+    "file": "frontend\\src\\app\\api\\auth\\users\\route.ts"
   },
   {
     "path": "/api/auth/users/:username",
@@ -187,7 +187,7 @@
       "PATCH",
       "PUT"
     ],
-    "file": "frontend/src/app/api/auth/users/[username]/route.ts"
+    "file": "frontend\\src\\app\\api\\auth\\users\\[username]\\route.ts"
   },
   {
     "path": "/api/notifications/stream",
@@ -195,7 +195,7 @@
     "methods": [
       "GET"
     ],
-    "file": "frontend/src/app/api/notifications/stream/route.ts"
+    "file": "frontend\\src\\app\\api\\notifications\\stream\\route.ts"
   },
   {
     "path": "/api/ocs/balances",
@@ -203,7 +203,7 @@
     "methods": [
       "GET"
     ],
-    "file": "frontend/src/app/api/ocs/balances/route.ts"
+    "file": "frontend\\src\\app\\api\\ocs\\balances\\route.ts"
   },
   {
     "path": "/api/ocs/reservations",
@@ -211,7 +211,7 @@
     "methods": [
       "GET"
     ],
-    "file": "frontend/src/app/api/ocs/reservations/route.ts"
+    "file": "frontend\\src\\app\\api\\ocs\\reservations\\route.ts"
   },
   {
     "path": "/api/ocs/sessions",
@@ -219,7 +219,7 @@
     "methods": [
       "GET"
     ],
-    "file": "frontend/src/app/api/ocs/sessions/route.ts"
+    "file": "frontend\\src\\app\\api\\ocs\\sessions\\route.ts"
   },
   {
     "path": "/api/ocs/usage",
@@ -227,7 +227,7 @@
     "methods": [
       "GET"
     ],
-    "file": "frontend/src/app/api/ocs/usage/route.ts"
+    "file": "frontend\\src\\app\\api\\ocs\\usage\\route.ts"
   },
   {
     "path": "/api/profiles",
@@ -236,7 +236,7 @@
       "GET",
       "POST"
     ],
-    "file": "frontend/src/app/api/profiles/route.ts"
+    "file": "frontend\\src\\app\\api\\profiles\\route.ts"
   },
   {
     "path": "/api/profiles/:name",
@@ -246,7 +246,7 @@
       "GET",
       "PUT"
     ],
-    "file": "frontend/src/app/api/profiles/[name]/route.ts"
+    "file": "frontend\\src\\app\\api\\profiles\\[name]\\route.ts"
   },
   {
     "path": "/api/profiles/:name/stats",
@@ -254,7 +254,7 @@
     "methods": [
       "GET"
     ],
-    "file": "frontend/src/app/api/profiles/[name]/stats/route.ts"
+    "file": "frontend\\src\\app\\api\\profiles\\[name]\\stats\\route.ts"
   },
   {
     "path": "/api/profiles/:name/versions",
@@ -262,7 +262,7 @@
     "methods": [
       "GET"
     ],
-    "file": "frontend/src/app/api/profiles/[name]/versions/route.ts"
+    "file": "frontend\\src\\app\\api\\profiles\\[name]\\versions\\route.ts"
   },
   {
     "path": "/api/profiles/:name/versions/:versionId/restore",
@@ -270,7 +270,7 @@
     "methods": [
       "POST"
     ],
-    "file": "frontend/src/app/api/profiles/[name]/versions/[versionId]/restore/route.ts"
+    "file": "frontend\\src\\app\\api\\profiles\\[name]\\versions\\[versionId]\\restore\\route.ts"
   },
   {
     "path": "/api/ratings",
@@ -279,7 +279,7 @@
       "GET",
       "POST"
     ],
-    "file": "frontend/src/app/api/ratings/route.ts"
+    "file": "frontend\\src\\app\\api\\ratings\\route.ts"
   },
   {
     "path": "/api/ratings/:id",
@@ -289,7 +289,7 @@
       "GET",
       "PUT"
     ],
-    "file": "frontend/src/app/api/ratings/[id]/route.ts"
+    "file": "frontend\\src\\app\\api\\ratings\\[id]\\route.ts"
   },
   {
     "path": "/api/search",
@@ -297,7 +297,7 @@
     "methods": [
       "GET"
     ],
-    "file": "frontend/src/app/api/search/route.ts"
+    "file": "frontend\\src\\app\\api\\search\\route.ts"
   },
   {
     "path": "/api/subscribers",
@@ -306,7 +306,7 @@
       "GET",
       "POST"
     ],
-    "file": "frontend/src/app/api/subscribers/route.ts"
+    "file": "frontend\\src\\app\\api\\subscribers\\route.ts"
   },
   {
     "path": "/api/subscribers/:imsi",
@@ -316,7 +316,7 @@
       "GET",
       "PUT"
     ],
-    "file": "frontend/src/app/api/subscribers/[imsi]/route.ts"
+    "file": "frontend\\src\\app\\api\\subscribers\\[imsi]\\route.ts"
   },
   {
     "path": "/api/subscribers/:imsi/profile",
@@ -324,7 +324,7 @@
     "methods": [
       "POST"
     ],
-    "file": "frontend/src/app/api/subscribers/[imsi]/profile/route.ts"
+    "file": "frontend\\src\\app\\api\\subscribers\\[imsi]\\profile\\route.ts"
   },
   {
     "path": "/api/subscribers/:imsi/traffic-adjustments",
@@ -332,7 +332,7 @@
     "methods": [
       "POST"
     ],
-    "file": "frontend/src/app/api/subscribers/[imsi]/traffic-adjustments/route.ts"
+    "file": "frontend\\src\\app\\api\\subscribers\\[imsi]\\traffic-adjustments\\route.ts"
   },
   {
     "path": "/api/subscribers/batch",
@@ -340,7 +340,7 @@
     "methods": [
       "POST"
     ],
-    "file": "frontend/src/app/api/subscribers/batch/route.ts"
+    "file": "frontend\\src\\app\\api\\subscribers\\batch\\route.ts"
   },
   {
     "path": "/api/subscribers/batch-update",
@@ -348,7 +348,7 @@
     "methods": [
       "POST"
     ],
-    "file": "frontend/src/app/api/subscribers/batch-update/route.ts"
+    "file": "frontend\\src\\app\\api\\subscribers\\batch-update\\route.ts"
   },
   {
     "path": "/api/subscribers/batch/precheck",
@@ -356,7 +356,7 @@
     "methods": [
       "POST"
     ],
-    "file": "frontend/src/app/api/subscribers/batch/precheck/route.ts"
+    "file": "frontend\\src\\app\\api\\subscribers\\batch\\precheck\\route.ts"
   },
   {
     "path": "/api/subscribers/bulk-delete",
@@ -364,7 +364,7 @@
     "methods": [
       "POST"
     ],
-    "file": "frontend/src/app/api/subscribers/bulk-delete/route.ts"
+    "file": "frontend\\src\\app\\api\\subscribers\\bulk-delete\\route.ts"
   },
   {
     "path": "/api/subscribers/import",
@@ -372,7 +372,7 @@
     "methods": [
       "POST"
     ],
-    "file": "frontend/src/app/api/subscribers/import/route.ts"
+    "file": "frontend\\src\\app\\api\\subscribers\\import\\route.ts"
   },
   {
     "path": "/api/subscribers/policy",
@@ -380,7 +380,7 @@
     "methods": [
       "POST"
     ],
-    "file": "frontend/src/app/api/subscribers/policy/route.ts"
+    "file": "frontend\\src\\app\\api\\subscribers\\policy\\route.ts"
   },
   {
     "path": "/api/system/audit/batch-heal",
@@ -388,7 +388,7 @@
     "methods": [
       "POST"
     ],
-    "file": "frontend/src/app/api/system/audit/batch-heal/route.ts"
+    "file": "frontend\\src\\app\\api\\system\\audit\\batch-heal\\route.ts"
   },
   {
     "path": "/api/system/audit/heal",
@@ -396,7 +396,7 @@
     "methods": [
       "POST"
     ],
-    "file": "frontend/src/app/api/system/audit/heal/route.ts"
+    "file": "frontend\\src\\app\\api\\system\\audit\\heal\\route.ts"
   },
   {
     "path": "/api/system/audit/scan",
@@ -404,7 +404,7 @@
     "methods": [
       "POST"
     ],
-    "file": "frontend/src/app/api/system/audit/scan/route.ts"
+    "file": "frontend\\src\\app\\api\\system\\audit\\scan\\route.ts"
   },
   {
     "path": "/api/system/audit/status",
@@ -412,7 +412,7 @@
     "methods": [
       "GET"
     ],
-    "file": "frontend/src/app/api/system/audit/status/route.ts"
+    "file": "frontend\\src\\app\\api\\system\\audit\\status\\route.ts"
   },
   {
     "path": "/api/system/health",
@@ -420,7 +420,7 @@
     "methods": [
       "GET"
     ],
-    "file": "frontend/src/app/api/system/health/route.ts"
+    "file": "frontend\\src\\app\\api\\system\\health\\route.ts"
   },
   {
     "path": "/api/system/mongo/health",
@@ -428,7 +428,7 @@
     "methods": [
       "GET"
     ],
-    "file": "frontend/src/app/api/system/mongo/health/route.ts"
+    "file": "frontend\\src\\app\\api\\system\\mongo\\health\\route.ts"
   },
   {
     "path": "/api/tariff-plans",
@@ -437,7 +437,7 @@
       "GET",
       "POST"
     ],
-    "file": "frontend/src/app/api/tariff-plans/route.ts"
+    "file": "frontend\\src\\app\\api\\tariff-plans\\route.ts"
   },
   {
     "path": "/api/tariff-plans/:planId",
@@ -447,7 +447,7 @@
       "GET",
       "PUT"
     ],
-    "file": "frontend/src/app/api/tariff-plans/[planId]/route.ts"
+    "file": "frontend\\src\\app\\api\\tariff-plans\\[planId]\\route.ts"
   },
   {
     "path": "/api/tariff-plans/:planId/clone",
@@ -455,7 +455,7 @@
     "methods": [
       "POST"
     ],
-    "file": "frontend/src/app/api/tariff-plans/[planId]/clone/route.ts"
+    "file": "frontend\\src\\app\\api\\tariff-plans\\[planId]\\clone\\route.ts"
   },
   {
     "path": "/api/tariff-plans/:planId/export",
@@ -463,7 +463,7 @@
     "methods": [
       "GET"
     ],
-    "file": "frontend/src/app/api/tariff-plans/[planId]/export/route.ts"
+    "file": "frontend\\src\\app\\api\\tariff-plans\\[planId]\\export\\route.ts"
   },
   {
     "path": "/api/tariff-plans/:planId/migrate",
@@ -472,7 +472,7 @@
       "GET",
       "POST"
     ],
-    "file": "frontend/src/app/api/tariff-plans/[planId]/migrate/route.ts"
+    "file": "frontend\\src\\app\\api\\tariff-plans\\[planId]\\migrate\\route.ts"
   },
   {
     "path": "/api/tariff-plans/:planId/operations",
@@ -480,7 +480,7 @@
     "methods": [
       "GET"
     ],
-    "file": "frontend/src/app/api/tariff-plans/[planId]/operations/route.ts"
+    "file": "frontend\\src\\app\\api\\tariff-plans\\[planId]\\operations\\route.ts"
   },
   {
     "path": "/api/tariff-plans/:planId/rules",
@@ -489,7 +489,7 @@
       "GET",
       "POST"
     ],
-    "file": "frontend/src/app/api/tariff-plans/[planId]/rules/route.ts"
+    "file": "frontend\\src\\app\\api\\tariff-plans\\[planId]\\rules\\route.ts"
   },
   {
     "path": "/api/tariff-plans/:planId/rules/:ruleId",
@@ -499,7 +499,7 @@
       "PATCH",
       "PUT"
     ],
-    "file": "frontend/src/app/api/tariff-plans/[planId]/rules/[ruleId]/route.ts"
+    "file": "frontend\\src\\app\\api\\tariff-plans\\[planId]\\rules\\[ruleId]\\route.ts"
   },
   {
     "path": "/api/tariff-plans/:planId/subscribers",
@@ -507,7 +507,7 @@
     "methods": [
       "GET"
     ],
-    "file": "frontend/src/app/api/tariff-plans/[planId]/subscribers/route.ts"
+    "file": "frontend\\src\\app\\api\\tariff-plans\\[planId]\\subscribers\\route.ts"
   },
   {
     "path": "/api/tariff-plans/import",
@@ -515,7 +515,7 @@
     "methods": [
       "POST"
     ],
-    "file": "frontend/src/app/api/tariff-plans/import/route.ts"
+    "file": "frontend\\src\\app\\api\\tariff-plans\\import\\route.ts"
   },
   {
     "path": "/api/users",
@@ -524,7 +524,7 @@
       "GET",
       "POST"
     ],
-    "file": "frontend/src/app/api/users/route.ts"
+    "file": "frontend\\src\\app\\api\\users\\route.ts"
   },
   {
     "path": "/api/users/:username",
@@ -535,6 +535,6 @@
       "PATCH",
       "PUT"
     ],
-    "file": "frontend/src/app/api/users/[username]/route.ts"
+    "file": "frontend\\src\\app\\api\\users\\[username]\\route.ts"
   }
 ]

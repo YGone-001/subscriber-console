@@ -1228,3 +1228,86 @@
   margin-bottom: 0.75rem;
   color: var(--text-main);
 }
+
+/* Balance Governance Modal & Actions */
+.ocs-modal-dialog {
+  max-width: 480px;
+  width: 90%;
+  background: var(--surface);
+  border: 1px solid var(--surface-border);
+  box-shadow: var(--shadow-popover);
+}
+
+.ocs-btn-sm {
+  padding: 0.3rem 0.6rem;
+  font-size: var(--ref-font-size-label);
+  border-radius: var(--ref-radius-compact);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: pointer;
+  border: 1px solid var(--surface-border);
+  background: var(--surface-hover);
+  color: var(--text-main);
+  transition: all var(--duration-fast) ease;
+}
+
+.ocs-btn-sm:hover {
+  background: var(--surface-field);
+  border-color: var(--primary);
+}
+
+.ocs-btn-icon {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--ref-radius-compact);
+}
+
+.ocs-btn-icon:hover {
+  background: var(--surface-hover);
+  color: var(--text-main);
+}
+
+.ocs-form-group {
+  margin-bottom: 0.875rem;
+}
+
+.ocs-form-label {
+  display: block;
+  font-size: var(--ref-font-size-label);
+  font-weight: 500;
+  margin-bottom: 0.3rem;
+  color: var(--text-secondary);
+}
+
+.ocs-form-input,
+.ocs-form-textarea {
+  width: 100%;
+  padding: 0.45rem 0.65rem;
+  border-radius: var(--ref-radius-compact);
+  border: 1px solid var(--surface-border);
+  background: var(--surface-field);
+  color: var(--text-main);
+  font-size: var(--ref-font-size-data-relaxed);
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.ocs-form-input:focus,
+.ocs-form-textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary);
+}
+
+.ocs-form-textarea {
+  resize: vertical;
+  min-height: 60px;
+}
+

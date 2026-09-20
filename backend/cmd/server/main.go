@@ -15,6 +15,7 @@ import (
 	"subscriber/internal/approval"
 	"subscriber/internal/audit"
 	"subscriber/internal/auth"
+	"subscriber/internal/balance"
 	"subscriber/internal/config"
 	"subscriber/internal/handler"
 	"subscriber/internal/middleware"
@@ -134,6 +135,15 @@ func main() {
 	tariffHandler := tariff.NewHandler(tariffRepo, limiter)
 	tariffWriteHandler := tariff.NewWriteHandler(tariffRepo, limiter, userRepo, approvalCreator, auditWriter)
 
+	// OCS Balances
+	balanceRepo := balance.NewRepository(
+		mc.XCloud.Collection("ocs_balances"),
+		mc.XCloud.Collection("ocs_subscribers"),
+		mc.Ops.Collection("app_approvals"),
+		mc.Ops.Collection("app_audit_logs"),
+	)
+	balanceHandler := balance.NewHandler(balanceRepo, limiter, userRepo, approvalCreator, auditWriter)
+
 	// OCS Subscriber Contract write handler
 	ocsSubscriberWriteHandler := ocs.NewSubscriberWriteHandler(ocsRepo, limiter, userRepo, approvalCreator, auditWriter)
 
@@ -184,8 +194,13 @@ func main() {
 	mux.Handle("DELETE /api/profiles/{name}", authMiddleware(http.HandlerFunc(profileHandler.Delete)))
 	mux.Handle("POST /api/profiles/{name}/versions/{versionId}/restore", authMiddleware(http.HandlerFunc(profileHandler.Restore)))
 
-	// OCS
-	mux.Handle("GET /api/ocs/balances", authMiddleware(http.HandlerFunc(ocsHandler.Balances)))
+	// OCS Balances (read + governed adjustment)
+	mux.Handle("GET /api/ocs/balances", authMiddleware(http.HandlerFunc(balanceHandler.List)))
+	mux.Handle("GET /api/ocs/balances/{imsi}", authMiddleware(http.HandlerFunc(balanceHandler.Get)))
+	mux.Handle("POST /api/ocs/balances/{imsi}/adjust", authMiddleware(http.HandlerFunc(balanceHandler.Adjust)))
+	mux.Handle("POST /api/ocs/balances/{imsi}/reset", authMiddleware(http.HandlerFunc(balanceHandler.Reset)))
+
+	// OCS Charging Plane (read-only telemetry)
 	mux.Handle("GET /api/ocs/sessions", authMiddleware(http.HandlerFunc(ocsHandler.Sessions)))
 	mux.Handle("GET /api/ocs/usage", authMiddleware(http.HandlerFunc(ocsHandler.Usage)))
 	mux.Handle("GET /api/ocs/reservations", authMiddleware(http.HandlerFunc(ocsHandler.Reservations)))

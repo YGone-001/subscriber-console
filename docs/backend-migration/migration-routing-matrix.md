@@ -35,6 +35,7 @@
 | Profile stats | GET | `/api/profiles/:name/stats` | **Go** | Go | YES | Phase 2B — migrated |
 | Profile versions | GET | `/api/profiles/:name/versions` | **Go** | Go | YES | Phase 2B — migrated |
 | OCS balances | GET | `/api/ocs/balances` | **Go** | Go | YES | Phase 2B — migrated |
+| OCS balance detail | GET | `/api/ocs/balances/:imsi` | **Go** | Go | YES | Phase 5.4 Go implementation |
 | OCS sessions | GET | `/api/ocs/sessions` | **Go** | Go | YES | Phase 2B — migrated |
 | OCS reservations | GET | `/api/ocs/reservations` | **Go** | Go | YES | Phase 2B — migrated |
 | OCS usage | GET | `/api/ocs/usage` | **Go** | Go | YES | Phase 2B — migrated |
@@ -113,6 +114,8 @@
 | OCS subscriber suspend | POST | `/api/ocs/subscribers/:imsi/suspend` | **Go** | **Go** | Go | NEVER | Go handler with governance, ACTUALLY_ROUTED=1 |
 | OCS subscriber resume | POST | `/api/ocs/subscribers/:imsi/resume` | **Go** | **Go** | Go | NEVER | Go handler with governance, ACTUALLY_ROUTED=1 |
 | OCS subscriber terminate | DELETE | `/api/ocs/subscribers/:imsi` | **Go** | **Go** | Go | NEVER | Go handler with governance, ACTUALLY_ROUTED=1 |
+| OCS balance adjust | POST | `/api/ocs/balances/:imsi/adjust` | **Go** | Next.js | Go | NEVER | Phase 5.4 Go implementation with governance (shadow) |
+| OCS balance reset | POST | `/api/ocs/balances/:imsi/reset` | **Go** | Next.js | Go | NEVER | Phase 5.4 permanently disabled compatibility endpoint |
 | Balance adjust | POST | `/api/subscribers/:imsi/traffic-adjustments` | Next.js | Next.js | Go | NEVER | Frozen payload, CAS |
 | Tariff plan migrate | POST | `/api/tariff-plans/:planId/migrate` | Next.js | Next.js | Go | NEVER | Creates CHG |
 | Tariff plan import | POST | `/api/tariff-plans/import` | Next.js | Next.js | Go | NEVER | Creates CHG |
