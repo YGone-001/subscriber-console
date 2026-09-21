@@ -4,8 +4,8 @@ import { resolveRouteOwner, CUTOVER_TABLE } from '../src/lib/cutover-routing.ts'
 
 describe('cutover-routing', () => {
   describe('CUTOVER_TABLE', () => {
-    it('contains exactly 24 cutover routes', () => {
-      assert.equal(CUTOVER_TABLE.length, 24);
+    it('contains exactly 26 cutover routes', () => {
+      assert.equal(CUTOVER_TABLE.length, 26);
     });
 
     it('Pilot A: POST /api/profiles/{name}/versions/{versionId}/restore is owned by Go', () => {
@@ -201,6 +201,22 @@ describe('cutover-routing', () => {
       assert.ok(terminate, 'OCS Subscriber Terminate must exist');
       assert.equal(terminate.owner, 'go');
     });
+
+    it('OCS Balance: POST /api/ocs/balances/{imsi}/adjust is owned by Go', () => {
+      const adjust = CUTOVER_TABLE.find(
+        (r) => r.path === '/api/ocs/balances/{imsi}/adjust' && r.method === 'POST'
+      );
+      assert.ok(adjust, 'OCS Balance Adjust must exist');
+      assert.equal(adjust.owner, 'go');
+    });
+
+    it('OCS Balance: POST /api/ocs/balances/{imsi}/reset is owned by Go', () => {
+      const reset = CUTOVER_TABLE.find(
+        (r) => r.path === '/api/ocs/balances/{imsi}/reset' && r.method === 'POST'
+      );
+      assert.ok(reset, 'OCS Balance Reset must exist');
+      assert.equal(reset.owner, 'go');
+    });
   });
 
   describe('resolveRouteOwner - Go-owned routes', () => {
@@ -305,6 +321,20 @@ describe('cutover-routing', () => {
     it('routes DELETE /api/ocs/subscribers/208930000000001 to Go (OCS Subscriber Terminate)', () => {
       assert.equal(resolveRouteOwner('DELETE', '/api/ocs/subscribers/208930000000001'), 'go');
     });
+
+    it('routes POST /api/ocs/balances/208930000000001/adjust to Go (OCS Balance Adjust)', () => {
+      assert.equal(
+        resolveRouteOwner('POST', '/api/ocs/balances/208930000000001/adjust'),
+        'go'
+      );
+    });
+
+    it('routes POST /api/ocs/balances/208930000000001/reset to Go (OCS Balance Reset)', () => {
+      assert.equal(
+        resolveRouteOwner('POST', '/api/ocs/balances/208930000000001/reset'),
+        'go'
+      );
+    });
   });
 
   describe('resolveRouteOwner - METHOD isolation', () => {
@@ -357,6 +387,14 @@ describe('cutover-routing', () => {
 
     it('routes PUT /api/ocs/subscribers/208930000000001 to Node (PUT not in cutover table)', () => {
       assert.equal(resolveRouteOwner('PUT', '/api/ocs/subscribers/208930000000001'), 'node');
+    });
+
+    it('routes GET /api/ocs/balances/208930000000001/adjust to Node (GET not in cutover table)', () => {
+      assert.equal(resolveRouteOwner('GET', '/api/ocs/balances/208930000000001/adjust'), 'node');
+    });
+
+    it('routes PUT /api/ocs/balances/208930000000001/reset to Node (PUT not in cutover table)', () => {
+      assert.equal(resolveRouteOwner('PUT', '/api/ocs/balances/208930000000001/reset'), 'node');
     });
   });
 

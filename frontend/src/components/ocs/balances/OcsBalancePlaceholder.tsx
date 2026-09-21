@@ -10,6 +10,8 @@ import { DataTablePagination } from "@/components/ui/DataTablePagination";
 import { formatBytes } from "@/lib/unitParser";
 import OcsPageShell from "../OcsPageShell";
 import AdjustBalanceModal from "./AdjustBalanceModal";
+import { useAuth } from "@/hooks/useAuth";
+import { capabilityDecision } from "@/lib/permissions";
 
 interface BalanceRecordUI {
   id: string;
@@ -33,6 +35,8 @@ interface BalanceRecordUI {
 
 export default function OcsBalancePlaceholder() {
   const { t } = useI18n();
+  const { user } = useAuth();
+  const canAdjust = user?.role ? capabilityDecision(user.role, "balance_adjust") !== "deny" : false;
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
   const [search, setSearch] = useState("");
@@ -199,9 +203,10 @@ export default function OcsBalancePlaceholder() {
                   <button
                     type="button"
                     className="ocs-btn-sm ocs-btn-secondary"
-                    disabled
-                    title={t("ocs_balance_cutover_pending")}
-                    style={{ opacity: 0.5, cursor: "not-allowed" }}
+                    disabled={!canAdjust}
+                    onClick={() => canAdjust && setAdjustTarget(r)}
+                    title={canAdjust ? t("ocs_balance_adjust") : t("permission_denied")}
+                    style={!canAdjust ? { opacity: 0.5, cursor: "not-allowed" } : undefined}
                   >
                     <SlidersHorizontal size={14} />
                     <span>{t("ocs_balance_adjust")}</span>
@@ -223,7 +228,7 @@ export default function OcsBalancePlaceholder() {
           onClose={() => setAdjustTarget(null)}
           onSuccess={(result) => {
             setFeedback({
-              type: "success",
+              type: result.outcome === "executed_audit_warning" ? "error" : "success",
               message: result.message,
               approvalId: result.approvalId,
             });

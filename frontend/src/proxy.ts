@@ -6,7 +6,6 @@ import { AccountSessionError, validateCurrentAccount } from '@/lib/accountSessio
 import { resolveRouteOwner } from '@/lib/cutover-routing';
 
 const JWT_SECRET = getJwtSecretKey();
-const GO_BACKEND_URL = process.env.GO_BACKEND_URL || 'http://127.0.0.1:18888';
 
 /**
  * Forward an authenticated request to the Go backend.
@@ -14,7 +13,8 @@ const GO_BACKEND_URL = process.env.GO_BACKEND_URL || 'http://127.0.0.1:18888';
  * Cookies and body are forwarded; auth headers are set by the Node proxy.
  */
 async function forwardToGo(request: NextRequest, requestHeaders: Headers): Promise<Response> {
-  const goUrl = new URL(request.nextUrl.pathname + request.nextUrl.search, GO_BACKEND_URL);
+  const backendUrl = process.env.GO_BACKEND_URL || 'http://127.0.0.1:18888';
+  const goUrl = new URL(request.nextUrl.pathname + request.nextUrl.search, backendUrl);
 
   // Forward original request with cookies and body.
   // Go middleware extracts auth_token cookie independently.

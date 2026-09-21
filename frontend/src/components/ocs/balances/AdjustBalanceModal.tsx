@@ -109,6 +109,30 @@ export default function AdjustBalanceModal({
             t("ocs_balance_precondition_changed") ||
               "Balance was modified concurrently; please refresh and retry"
           );
+        } else if (
+          res.status === 503 &&
+          (data.committed === true ||
+            data.code === "AUDIT_UNAVAILABLE" ||
+            data.error === "AUDIT_UNAVAILABLE")
+        ) {
+          onSuccess({
+            outcome: "executed_audit_warning",
+            message:
+              t("ocs_balance_audit_unavailable_warning") ||
+              data.message ||
+              "Balance adjustment committed, but strict audit persistence failed. Do not retry. Please refresh.",
+          });
+          onClose();
+          return;
+        } else if (
+          res.status === 502 ||
+          data.code === "GO_BACKEND_UNREACHABLE" ||
+          data.error === "GO_BACKEND_UNREACHABLE"
+        ) {
+          setError(
+            t("ocs_balance_backend_unreachable") ||
+              "Go backend service is temporarily unavailable (GO_BACKEND_UNREACHABLE). No changes were made."
+          );
         } else {
           setError(data.message || data.error || `Adjustment failed (${res.status})`);
         }

@@ -141,3 +141,6 @@ jobs:
       - name: OCS balance approval E2E
         run: node scripts/test-ocs-balance-approval-e2e.mjs
 
+      - name: OCS balance controlled cutover
+        run: node scripts/test-ocs-balance-controlled-cutover.mjs
+

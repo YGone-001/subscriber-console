@@ -98,8 +98,36 @@ test('Balance governance localization keys are complete in zh and en', () => {
 
   assert.match(zhLocale, /ocs_balance_cutover_pending:\s*"余额写入割接尚未完成，当前处于只读模式"/);
   assert.match(enLocale, /ocs_balance_cutover_pending:\s*"Balance write cutover pending; currently in read-only shadow mode"/);
+
+  assert.match(zhLocale, /ocs_balance_audit_unavailable_warning/);
+  assert.match(enLocale, /ocs_balance_audit_unavailable_warning/);
+  assert.match(zhLocale, /ocs_balance_backend_unreachable/);
+  assert.match(enLocale, /ocs_balance_backend_unreachable/);
 });
 
-test('OcsBalancePlaceholder keeps Adjust Balance button disabled until Phase 5.4-B cutover', () => {
-  assert.match(placeholderSource, /<button[^>]*disabled[^>]*title=\{t\("ocs_balance_cutover_pending"\)\}/);
+test('OcsBalancePlaceholder operational cutover enables Adjust Balance with role gating', () => {
+  // Uses auth and capabilityDecision
+  assert.match(placeholderSource, /useAuth/);
+  assert.match(placeholderSource, /capabilityDecision\(.*"balance_adjust"\)/);
+
+  // Button is gated on canAdjust, opens modal on click
+  assert.match(placeholderSource, /disabled=\{!canAdjust\}/);
+  assert.match(placeholderSource, /onClick=\{.*setAdjustTarget\(r\)\}/);
+
+  // Still NEVER show reset button in UI
+  assert.doesNotMatch(placeholderSource, /reset/i);
+  assert.doesNotMatch(placeholderSource, /BALANCE_RESET/);
+});
+
+test('AdjustBalanceModal handles post-cutover governance errors (CAS 409, Audit 503, Go 502)', () => {
+  // CAS 409 conflict
+  assert.match(modalSource, /BALANCE_PRECONDITION_CHANGED/);
+
+  // Strict Audit 503 with committed=true
+  assert.match(modalSource, /AUDIT_UNAVAILABLE/);
+  assert.match(modalSource, /executed_audit_warning/);
+
+  // Go backend unreachable 502
+  assert.match(modalSource, /GO_BACKEND_UNREACHABLE/);
+  assert.match(modalSource, /ocs_balance_backend_unreachable/);
 });
