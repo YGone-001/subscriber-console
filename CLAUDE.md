@@ -79,6 +79,21 @@ Browser -> Nginx
 - 前端 SWR 不感知 Node/Go ownership。
 - 禁止一次性将整个 `/api/*` 切到 Go。
 
+### 2.1 OCS 生产冻结规范 (OCS Management Plane Freeze)
+
+OCS Management Plane is frozen.
+Managed domains:
+- Tariff Plans
+- Contract Subscribers
+- Balance Management
+
+Charging Plane remains frozen and excluded.
+
+- 资费计划 (`ocs_tariff_plans`, `/ocs/tariffs`)、签约合同 (`ocs_subscribers`, `/ocs/contracts`)、余额管理 (`ocs_balances`, `/ocs/balances`) 生产基线永久冻结。
+- 严禁向 OCS 管理平面添加新业务能力或重新设计架构。
+- 严禁引入或耦合运行时计费面实体（`ocs_sessions`, `ocs_reservations`, `ocs_usage_records`, `ocs_events`, `ocs_config`, Gy/Ro/CCR/CCA 协议栈）。
+- 路由表 `ACTUALLY_ROUTED = 26` 严格保持不变。
+
 ## 3. 技术栈
 
 ### Frontend / Legacy Backend

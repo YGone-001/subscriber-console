@@ -169,7 +169,28 @@ Phase 5.1   COMPLETE — OCS read API migration + management UI
 Phase 5.2   COMPLETE — OCS tariff plan governance (create/update/delete/clone/enable/disable)
 Phase 5.3   COMPLETE — OCS subscriber contract governance (create/update-tariff/suspend/resume/terminate)
 Phase 5.3-B-0 COMPLETE — repository structure refactor (frontend/backend separation)
+Phase 5.4   COMPLETE — OCS balance governance implementation (CAS versioning, strict audit, disabled reset)
+Phase 5.4-B COMPLETE — OCS balance controlled production cutover (ACTUALLY_ROUTED = 26)
+Phase 5.5-A COMPLETE — OCS management final alignment & UI polish
+Phase 5.6   COMPLETE — OCS production freeze & documentation closure
 ```
+
+### 5.1 OCS 生产冻结基线 (OCS Production Freeze Baseline)
+
+OCS Management Plane is frozen.
+Managed domains:
+- Tariff Plans
+- Contract Subscribers
+- Balance Management
+
+Charging Plane remains frozen and excluded.
+
+- 权威基线：Phase 5.6 生产冻结基准。
+- 路由表状态：`ACTUALLY_ROUTED = 26`（严格保持不变，零变更）。
+- 托管集合：`ocs_tariff_plans`、`ocs_subscribers`、`ocs_balances`。
+- 冻结规约文档：`docs/backend-migration/phase-5-6-ocs-production-freeze.md`。
+- 运维操作手册：`docs/operations/ocs-management-runbook.md`。
+- 界面验收验证：通过无头浏览器 CDP 1440x900 渲染断言验证通过（本地测试截图即测即消，不入版本库）。
 
 Exact HEAD is intentionally not stored here.
 

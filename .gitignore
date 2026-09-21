@@ -31,6 +31,8 @@ test-results/
 reports/ops/
 frontend/reports/ops/
 *.lcov
+evidence/
+docs/backend-migration/evidence/
 
 # Logs
 logs/

@@ -51,6 +51,16 @@ API routes are progressively migrating from Next.js to Go on a per-endpoint basi
 - JWT cookie authentication with `root`, `operator`, and `viewer` roles.
 - Chinese/English UI, theme switching, command palette, and responsive dashboard layout.
 
+## OCS Management Plane Status
+
+OCS Management Plane is frozen.
+Managed domains:
+- Tariff Plans
+- Contract Subscribers
+- Balance Management
+
+Charging Plane remains frozen and excluded.
+
 ## Tech Stack
 
 ### Frontend
