@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
-import { Search, Wallet, CheckCircle, Clock, SlidersHorizontal } from "lucide-react";
+import { Search, Wallet, CheckCircle, Clock, SlidersHorizontal, Eye } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { DataTablePagination } from "@/components/ui/DataTablePagination";
 import { formatBytes } from "@/lib/unitParser";
@@ -175,17 +175,18 @@ export default function OcsBalancePlaceholder() {
             <th>{t("ocs_col_voice_avail")}</th>
             <th>{t("ocs_col_sms_avail")}</th>
             <th>{t("ocs_col_status")}</th>
+            <th>{t("ocs_col_version")}</th>
             <th>{t("ocs_tariff_col_updated")}</th>
-            <th style={{ textAlign: "right" }}>{t("actions") || "操作"}</th>
+            <th style={{ textAlign: "right" }}>{t("actions")}</th>
           </tr>
         </thead>
         <tbody>
           {loading ? (
-            <tr><td colSpan={7} className="ocs-empty-cell"><div className="ocs-loading">{t("loading") || "加载中..."}</div></td></tr>
+            <tr><td colSpan={8} className="ocs-empty-cell"><div className="ocs-loading">{t("loading") || "加载中..."}</div></td></tr>
           ) : error ? (
-            <tr><td colSpan={7} className="ocs-empty-cell ocs-error-cell"><div style={{ color: "var(--status-danger)" }}>{error?.message || "加载失败，请检查网络或后端服务"}</div></td></tr>
+            <tr><td colSpan={8} className="ocs-empty-cell ocs-error-cell"><div style={{ color: "var(--status-danger)" }}>{error?.message || "加载失败，请检查网络或后端服务"}</div></td></tr>
           ) : records.length === 0 ? (
-            <tr><td colSpan={7} className="ocs-empty-cell">{t("no_data")}</td></tr>
+            <tr><td colSpan={8} className="ocs-empty-cell">{t("no_data")}</td></tr>
           ) : (
             records.map((r) => (
               <tr key={r.id || r.imsi}>
@@ -198,19 +199,29 @@ export default function OcsBalancePlaceholder() {
                     {r.status}
                   </span>
                 </td>
+                <td className="ocs-mono">v{r.version || 1}</td>
                 <td className="ocs-time-cell">{formatTime(r.updated_at)}</td>
                 <td style={{ textAlign: "right" }}>
-                  <button
-                    type="button"
-                    className="ocs-btn-sm ocs-btn-secondary"
-                    disabled={!canAdjust}
-                    onClick={() => canAdjust && setAdjustTarget(r)}
-                    title={canAdjust ? t("ocs_balance_adjust") : t("permission_denied")}
-                    style={!canAdjust ? { opacity: 0.5, cursor: "not-allowed" } : undefined}
-                  >
-                    <SlidersHorizontal size={14} />
-                    <span>{t("ocs_balance_adjust")}</span>
-                  </button>
+                  <div className="ocs-action-group" style={{ justifyContent: "flex-end" }}>
+                    <Link
+                      className="ocs-action-btn"
+                      title={t("ocs_balance_view_detail")}
+                      href={`/ocs/balances/${r.imsi}`}
+                    >
+                      <Eye size={14} />
+                    </Link>
+                    <button
+                      type="button"
+                      className="ocs-btn-sm ocs-btn-secondary"
+                      disabled={!canAdjust}
+                      onClick={() => canAdjust && setAdjustTarget(r)}
+                      title={canAdjust ? t("ocs_balance_adjust") : t("permission_denied")}
+                      style={!canAdjust ? { opacity: 0.5, cursor: "not-allowed" } : undefined}
+                    >
+                      <SlidersHorizontal size={14} />
+                      <span>{t("ocs_balance_adjust")}</span>
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))

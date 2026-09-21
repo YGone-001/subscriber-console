@@ -144,3 +144,6 @@ jobs:
       - name: OCS balance controlled cutover
         run: node scripts/test-ocs-balance-controlled-cutover.mjs
 
+      - name: OCS management suite
+        run: node scripts/test-ocs-management-suite.mjs
+

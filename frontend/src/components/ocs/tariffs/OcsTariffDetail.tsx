@@ -31,9 +31,16 @@ export default function OcsTariffDetail({ planId }: OcsTariffDetailProps) {
     fetcher,
   );
 
+  const { data: opsData } = useSWR(
+    `/api/tariff-plans/${planId}/operations`,
+    fetcher,
+  );
+
   const plan = data?.plan;
   const rules = rulesData?.rules || [];
   const subscriberCount = subsData?.subscribers?.length ?? plan?.subscriberCount ?? 0;
+  const operations = opsData?.history || [];
+  const latestOp = operations[0];
 
   if (loading) {
     return (
@@ -135,15 +142,27 @@ export default function OcsTariffDetail({ planId }: OcsTariffDetailProps) {
             </div>
             <div className="ocs-detail-field">
               <span className="ocs-detail-label">{t("ocs_tariff_detail_updated_by")}</span>
-              <span className="ocs-detail-value">{plan.updated_by || "—"}</span>
+              <span className="ocs-detail-value">{plan.updated_by || latestOp?.actor || "—"}</span>
             </div>
             <div className="ocs-detail-field">
               <span className="ocs-detail-label">{t("ocs_tariff_detail_last_operation")}</span>
-              <span className="ocs-detail-value">—</span>
+              <span className="ocs-detail-value">{latestOp?.action || "—"}</span>
             </div>
             <div className="ocs-detail-field">
               <span className="ocs-detail-label">{t("ocs_tariff_detail_approval_status")}</span>
-              <span className="ocs-detail-value">—</span>
+              <span className="ocs-detail-value">{latestOp?.result || "DIRECT"}</span>
+            </div>
+            <div className="ocs-detail-field">
+              <span className="ocs-detail-label">{t("ocs_contract_detail_audit_ref")}</span>
+              <span className="ocs-detail-value">
+                {latestOp?.id ? (
+                  <Link href={`/audit-logs?q=${encodeURIComponent(plan.plan_id)}`} className="ocs-link">
+                    {latestOp.id}
+                  </Link>
+                ) : (
+                  "—"
+                )}
+              </span>
             </div>
           </div>
         </div>

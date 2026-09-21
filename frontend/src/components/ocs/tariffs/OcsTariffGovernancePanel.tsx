@@ -13,12 +13,15 @@ import {
   FileText,
   CheckCircle,
   XCircle,
+  Plus,
+  Pencil,
 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import OcsPageShell from "../OcsPageShell";
 import OcsStatusBadge from "../common/OcsStatusBadge";
 import GovernanceBadge from "../common/GovernanceBadge";
 import ConfirmDialog from "../common/ConfirmDialog";
+import TariffPlanModal from "./TariffPlanModal";
 import type { TariffPlan } from "@/lib/api/ocs";
 
 interface ActionFeedback {
@@ -32,6 +35,8 @@ export default function OcsTariffGovernancePanel() {
   const [actionFeedback, setActionFeedback] = useState<ActionFeedback | null>(null);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [confirmAction, setConfirmAction] = useState<{ action: string; planId: string } | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [selectedPlanForEdit, setSelectedPlanForEdit] = useState<TariffPlan | null>(null);
 
   const { data, isLoading: loading, mutate: refresh } = useSWR(
     "/api/tariff-plans",
@@ -139,7 +144,21 @@ export default function OcsTariffGovernancePanel() {
         loading={loading}
         onRefresh={() => refresh()}
         kpiGrid={kpiGrid}
-        controls={null}
+        controls={
+          <div className="ocs-controls-bar" style={{ justifyContent: "flex-end" }}>
+            <button
+              type="button"
+              className="ocs-btn ocs-btn-primary"
+              onClick={() => {
+                setSelectedPlanForEdit(null);
+                setModalOpen(true);
+              }}
+            >
+              <Plus size={16} />
+              <span>{t("ocs_tariff_create")}</span>
+            </button>
+          </div>
+        }
         tableContent={
           <>
             {actionFeedback && (
@@ -191,6 +210,17 @@ export default function OcsTariffGovernancePanel() {
                           >
                             <Eye size={14} />
                           </Link>
+                          <button
+                            type="button"
+                            className="ocs-action-btn"
+                            title={t("ocs_tariff_edit")}
+                            onClick={() => {
+                              setSelectedPlanForEdit(plan);
+                              setModalOpen(true);
+                            }}
+                          >
+                            <Pencil size={14} />
+                          </button>
                           {plan.status === "active" ? (
                             <button
                               className="ocs-action-btn"
@@ -239,6 +269,24 @@ export default function OcsTariffGovernancePanel() {
         }
         pagination={null}
       />
+      {modalOpen && (
+        <TariffPlanModal
+          isOpen={modalOpen}
+          plan={selectedPlanForEdit}
+          onClose={() => {
+            setModalOpen(false);
+            setSelectedPlanForEdit(null);
+          }}
+          onSuccess={(result) => {
+            setActionFeedback({
+              type: "success",
+              message: result.message,
+              approvalId: result.approvalId,
+            });
+            refresh();
+          }}
+        />
+      )}
       {confirmAction && (
         <ConfirmDialog
           title={t("ocs_confirm_danger_title")}

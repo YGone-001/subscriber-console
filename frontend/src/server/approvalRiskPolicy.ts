@@ -39,6 +39,11 @@ const RISK_CATALOG: Readonly<Record<ApprovalAction, RiskRule>> = {
   SUBSCRIBER_IMPORT_OVERWRITE: { level: 'critical', reasons: ['Imports records that overwrite existing subscribers'] },
   SUBSCRIBER_BULK_DELETE: { level: 'critical', reasons: ['Deletes multiple subscriber records'] },
   SUBSCRIBER_PROFILE_APPLY: { level: 'high', reasons: ['Applies a profile to live subscriber configuration'] },
+  OCS_SUBSCRIBER_CREATE: { level: 'medium', reasons: ['Creates a new OCS subscriber contract'] },
+  OCS_SUBSCRIBER_UPDATE: { level: 'high', reasons: ['Updates an OCS subscriber contract tariff binding'] },
+  OCS_SUBSCRIBER_SUSPEND: { level: 'high', reasons: ['Suspends an OCS subscriber contract'] },
+  OCS_SUBSCRIBER_RESUME: { level: 'high', reasons: ['Resumes an OCS subscriber contract'] },
+  OCS_SUBSCRIBER_TERMINATE: { level: 'critical', reasons: ['Terminates an OCS subscriber contract'] },
 };
 
 export const APPROVAL_RISK_POLICY_ID = 'approval-risk-v1';

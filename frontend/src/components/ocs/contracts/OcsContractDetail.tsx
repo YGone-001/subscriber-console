@@ -21,8 +21,14 @@ export default function OcsContractDetail({ imsi }: OcsContractDetailProps) {
     fetcher,
   );
 
+  const { data: auditData } = useSWR(
+    `/api/audit?q=${encodeURIComponent(imsi)}&limit=1`,
+    fetcher,
+  );
+
   const records = data?.records || [];
   const contract = records.find((r: any) => r.imsi === imsi) || records[0];
+  const latestAudit = auditData?.logs?.[0];
 
   if (loading) {
     return (
@@ -95,19 +101,27 @@ export default function OcsContractDetail({ imsi }: OcsContractDetailProps) {
           <div className="ocs-detail-fields">
             <div className="ocs-detail-field">
               <span className="ocs-detail-label">{t("ocs_contract_detail_last_operation")}</span>
-              <span className="ocs-detail-value">—</span>
+              <span className="ocs-detail-value">{latestAudit?.action || "—"}</span>
             </div>
             <div className="ocs-detail-field">
               <span className="ocs-detail-label">{t("ocs_contract_detail_operator")}</span>
-              <span className="ocs-detail-value">—</span>
+              <span className="ocs-detail-value">{latestAudit?.actor || "—"}</span>
             </div>
             <div className="ocs-detail-field">
               <span className="ocs-detail-label">{t("ocs_contract_detail_approval_status")}</span>
-              <span className="ocs-detail-value">—</span>
+              <span className="ocs-detail-value">{latestAudit?.result || "DIRECT"}</span>
             </div>
             <div className="ocs-detail-field">
               <span className="ocs-detail-label">{t("ocs_contract_detail_audit_ref")}</span>
-              <span className="ocs-detail-value">—</span>
+              <span className="ocs-detail-value">
+                {latestAudit?._id ? (
+                  <Link href={`/audit-logs?q=${encodeURIComponent(contract.imsi)}`} className="ocs-link">
+                    {latestAudit._id}
+                  </Link>
+                ) : (
+                  "—"
+                )}
+              </span>
             </div>
             <div className="ocs-detail-field">
               <span className="ocs-detail-label">{t("ocs_contract_col_created")}</span>

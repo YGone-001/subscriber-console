@@ -173,7 +173,7 @@ export default function OcsContractsPanel() {
           <option value="">{t("ocs_filter_all_statuses")}</option>
           <option value="active">{t("status_active") || "active"}</option>
           <option value="suspended">{t("status_suspended") || "suspended"}</option>
-          <option value="terminated">已终止</option>
+          <option value="terminated">{t("ocs_contract_status_terminated") || "terminated"}</option>
         </select>
       </div>
     </div>
@@ -215,6 +215,7 @@ export default function OcsContractsPanel() {
             {t("ocs_contract_col_billing_status")} {sortField === "status" ? (sortOrder === "asc" ? "↑" : "↓") : ""}
           </th>
           <th>{t("ocs_contract_col_governance")}</th>
+          <th>{t("ocs_contract_col_created")}</th>
           <th className="ocs-th-sortable" aria-sort={getAriaSort("updated_at")} onClick={() => toggleSort("updated_at")}>
             {t("ocs_contract_col_last_change")} {sortField === "updated_at" ? (sortOrder === "asc" ? "↑" : "↓") : ""}
           </th>
@@ -223,11 +224,11 @@ export default function OcsContractsPanel() {
       </thead>
       <tbody>
         {loading ? (
-          <tr><td colSpan={7} className="ocs-empty-cell"><div className="ocs-loading">{t("loading") || "加载中..."}</div></td></tr>
+          <tr><td colSpan={8} className="ocs-empty-cell"><div className="ocs-loading">{t("loading") || "加载中..."}</div></td></tr>
         ) : error ? (
-          <tr><td colSpan={7} className="ocs-empty-cell ocs-error-cell"><div style={{ color: "var(--status-danger)" }}>{error?.message || "加载失败，请检查网络或后端服务"}</div></td></tr>
+          <tr><td colSpan={8} className="ocs-empty-cell ocs-error-cell"><div style={{ color: "var(--status-danger)" }}>{error?.message || "加载失败，请检查网络或后端服务"}</div></td></tr>
         ) : records.length === 0 ? (
-          <tr><td colSpan={7} className="ocs-empty-cell">{t("no_data")}</td></tr>
+          <tr><td colSpan={8} className="ocs-empty-cell">{t("no_data")}</td></tr>
         ) : (
           records.map((r) => (
             <tr key={r.id}>
@@ -236,6 +237,7 @@ export default function OcsContractsPanel() {
               <td><span className="ocs-plan-badge">{r.plan_id}</span></td>
               <td><OcsStatusBadge status={r.status} /></td>
               <td><GovernanceBadge compact /></td>
+              <td className="ocs-time-cell">{formatTime(r.created_at)}</td>
               <td className="ocs-time-cell">{formatTime(r.updated_at)}</td>
               <td>
                 <div className="ocs-action-group">

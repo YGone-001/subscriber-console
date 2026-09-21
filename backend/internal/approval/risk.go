@@ -44,6 +44,11 @@ var riskCatalog = map[string]riskRule{
 	"SUBSCRIBER_IMPORT_OVERWRITE": {level: RiskCritical, reasons: []string{"Imports records that overwrite existing subscribers"}},
 	"SUBSCRIBER_BULK_DELETE":      {level: RiskCritical, reasons: []string{"Deletes multiple subscriber records"}},
 	"SUBSCRIBER_PROFILE_APPLY":    {level: RiskHigh, reasons: []string{"Applies a profile to live subscriber configuration"}},
+	"OCS_SUBSCRIBER_CREATE":       {level: RiskMedium, reasons: []string{"Creates a new OCS subscriber contract"}},
+	"OCS_SUBSCRIBER_UPDATE":       {level: RiskHigh, reasons: []string{"Updates an OCS subscriber contract tariff binding"}},
+	"OCS_SUBSCRIBER_SUSPEND":      {level: RiskHigh, reasons: []string{"Suspends an OCS subscriber contract"}},
+	"OCS_SUBSCRIBER_RESUME":       {level: RiskHigh, reasons: []string{"Resumes an OCS subscriber contract"}},
+	"OCS_SUBSCRIBER_TERMINATE":    {level: RiskCritical, reasons: []string{"Terminates an OCS subscriber contract"}},
 }
 
 // AssessApprovalRisk evaluates the risk for a given action.

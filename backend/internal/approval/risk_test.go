@@ -35,6 +35,11 @@ func TestAssessApprovalRisk_KnownActions(t *testing.T) {
 		{"SUBSCRIBER_IMPORT_OVERWRITE", RiskCritical},
 		{"SUBSCRIBER_BULK_DELETE", RiskCritical},
 		{"SUBSCRIBER_PROFILE_APPLY", RiskHigh},
+		{"OCS_SUBSCRIBER_CREATE", RiskMedium},
+		{"OCS_SUBSCRIBER_UPDATE", RiskHigh},
+		{"OCS_SUBSCRIBER_SUSPEND", RiskHigh},
+		{"OCS_SUBSCRIBER_RESUME", RiskHigh},
+		{"OCS_SUBSCRIBER_TERMINATE", RiskCritical},
 	}
 
 	for _, tt := range tests {
@@ -98,7 +103,7 @@ func TestIsSupportedApprovalAction(t *testing.T) {
 func TestSupportedApprovalActions_Count(t *testing.T) {
 	actions := SupportedApprovalActions()
 	// Verify we have all expected actions from the source risk catalog
-	expected := 25
+	expected := 30
 	if len(actions) != expected {
 		t.Errorf("expected %d supported actions, got %d", expected, len(actions))
 	}
@@ -132,6 +137,11 @@ func TestSupportedApprovalActions_DriftGuard(t *testing.T) {
 		"SUBSCRIBER_IMPORT_OVERWRITE": false,
 		"SUBSCRIBER_BULK_DELETE":      false,
 		"SUBSCRIBER_PROFILE_APPLY":    false,
+		"OCS_SUBSCRIBER_CREATE":       false,
+		"OCS_SUBSCRIBER_UPDATE":       false,
+		"OCS_SUBSCRIBER_SUSPEND":      false,
+		"OCS_SUBSCRIBER_RESUME":       false,
+		"OCS_SUBSCRIBER_TERMINATE":    false,
 	}
 
 	actions := SupportedApprovalActions()

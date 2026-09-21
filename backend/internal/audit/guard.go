@@ -76,6 +76,12 @@ func RequireCapabilityWithAudit(w http.ResponseWriter, r *http.Request, p *auth.
 	if allowed {
 		return true
 	}
+	if auth.HasPermission(p, capability) {
+		return true
+	}
+	if (capability == "ocs.subscriber.write" || capability == "subscriber_write") && auth.HasPermission(p, "ocs.plan.assign") {
+		return true
+	}
 
 	requiresApproval := decision == "approval"
 
