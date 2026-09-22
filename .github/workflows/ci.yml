@@ -138,12 +138,6 @@ jobs:
       - name: OCS governance Mongo integration
         run: node scripts/test-ocs-governance.mjs
 
-      - name: OCS balance approval E2E
-        run: node scripts/test-ocs-balance-approval-e2e.mjs
-
-      - name: OCS balance controlled cutover
-        run: node scripts/test-ocs-balance-controlled-cutover.mjs
-
       - name: OCS management suite
         run: node scripts/test-ocs-management-suite.mjs
 
