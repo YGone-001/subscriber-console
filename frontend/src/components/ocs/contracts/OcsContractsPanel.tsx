@@ -37,7 +37,7 @@ export default function OcsContractsPanel() {
   const [statusFilter, setStatusFilter] = useState("");
   const [sortField, setSortField] = useState("updated_at");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
-  const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string; approvalId?: string } | null>(null);
+  const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [confirmTerminate, setConfirmTerminate] = useState<string | null>(null);
 

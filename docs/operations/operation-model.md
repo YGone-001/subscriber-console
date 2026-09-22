@@ -1,7 +1,7 @@
 # Operational Model: Direct Operation & Governance Architecture
 
 Status: PRODUCTION  
-Phase: 5.7-A  
+Phase: 5.7-C
 Baseline: `develop`  
 Target Services: Next.js Frontend (:13333), Go Production Backend (:18888), MongoDB (`xcloud`, `xcloud_ops`)
 
@@ -45,10 +45,10 @@ Permission Check (RBAC capability & fresh actor state revalidation)
 Business Mutation (Direct execution with atomic CAS concurrency control)
        │
        ▼
-Operation Log (Synchronous strict audit trail written to app_audit_logs)
+Operation Log (best-effort, non-gating append to app_audit_logs)
 ```
 
-Approval workflow is completely removed from the business execution path. Authorization and operation logging remain strictly enforced.
+Approval workflow is completely removed from the business execution path. Authorization remains enforced; operation logging is retained without gating business success.
 
 ---
 
@@ -68,8 +68,8 @@ Approval workflow is completely removed from the business execution path. Author
    Every mutation queries fresh user identity and session version (`sessionVersion`) from the primary database before execution to guarantee active status and prevent token revocation bypass.
 5. **Optimistic Concurrency Control (CAS)**:
    Concurrent operations enforce atomic versioning (`version` precondition) to prevent lost updates or overwrite races.
-6. **Strict Operation Logging**:
-   Every state modification generates an immutable operational log in `app_audit_logs` containing actor identity, before/after state diffs, client IP, user agent, and mutation metadata.
+6. **Non-Gating Operation Logging**:
+   State modifications enqueue a safe operational record in `app_audit_logs`. Persistence failures are diagnosed but never change the committed business response.
 
 ---
 
@@ -122,4 +122,4 @@ In alignment with direct operation semantics:
 - **ACTUALLY_ROUTED = 26**: The production cutover routing inventory is strictly preserved. All 26 cutover endpoints are owned authoritatively by Go.
 - **Single-Writer Ownership**: Go backend remains the single authoritative writer for OCS Management domains (`ocs_tariff_plans`, `ocs_subscribers`, `ocs_balances`).
 - **Charging Plane Boundary**: Runtime charging collections (`ocs_sessions`, `ocs_reservations`, `ocs_usage_records`, `ocs_events`, `ocs_config`) and Diameter interfaces remain completely frozen and isolated from console operations.
-- **Audit Persistence Guarantee**: If strict audit persistence fails during a direct operation, the handler returns `503 Service Unavailable` (`AUDIT_UNAVAILABLE`) with reconciliation details, ensuring non-repudiation.
+- **Non-Gating Audit Invariant**: Operation-log persistence failures never roll back a mutation or replace its success response. `/api/system/audit/*` remains dedicated to data-integrity diagnostics and healing.

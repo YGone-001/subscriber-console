@@ -12,7 +12,7 @@ interface AdjustBalanceModalProps {
   dataAvailable: number;
   voiceAvailable: number;
   smsAvailable: number;
-  onSuccess: (result: { outcome: string; message: string; approvalId?: string }) => void;
+  onSuccess: (result: { outcome: string; message: string }) => void;
 }
 
 export default function AdjustBalanceModal({
@@ -107,21 +107,6 @@ export default function AdjustBalanceModal({
             t("ocs_balance_precondition_changed") ||
               "Balance was modified concurrently; please refresh and retry"
           );
-        } else if (
-          res.status === 503 &&
-          (data.committed === true ||
-            data.code === "AUDIT_UNAVAILABLE" ||
-            data.error === "AUDIT_UNAVAILABLE")
-        ) {
-          onSuccess({
-            outcome: "executed_audit_warning",
-            message:
-              t("ocs_balance_audit_unavailable_warning") ||
-              data.message ||
-              "Balance adjustment committed, but strict audit persistence failed. Do not retry. Please refresh.",
-          });
-          onClose();
-          return;
         } else if (
           res.status === 502 ||
           data.code === "GO_BACKEND_UNREACHABLE" ||

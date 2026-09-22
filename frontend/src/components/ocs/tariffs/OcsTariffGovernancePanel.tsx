@@ -26,7 +26,6 @@ import type { TariffPlan } from "@/lib/api/ocs";
 interface ActionFeedback {
   type: "success" | "error";
   message: string;
-  approvalId?: string;
 }
 
 export default function OcsTariffGovernancePanel() {

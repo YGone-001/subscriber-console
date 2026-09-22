@@ -98,7 +98,6 @@ export const mongoCollections = {
   profileVersions: 'app_profile_versions',
   ratings: 'app_ratings',
   users: 'app_users',
-  approvals: 'app_approvals',
   sequences: 'app_sequences',
   auditLogs: 'app_audit_logs',
   alerts: 'app_alerts',

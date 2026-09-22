@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
-	"subscriber/internal/approval"
 	"subscriber/internal/audit"
 	"subscriber/internal/auth"
 	"subscriber/internal/user"
@@ -65,19 +64,6 @@ func testUserIdentity(username, role string) *user.UserIdentity {
 	}
 }
 
-type mockApprovalCreator struct {
-	doc      *approval.ApprovalDocument
-	err      error
-	captured *approval.CreateApprovalInput
-}
-
-func (m *mockApprovalCreator) Create(r *http.Request, actor approval.GovernanceActor, input approval.CreateApprovalInput) (*approval.ApprovalDocument, error) {
-	if m.captured != nil {
-		*m.captured = input
-	}
-	return m.doc, m.err
-}
-
 type mockSubscriberRepo struct {
 	subscriber  bson.M
 	err         error
@@ -123,11 +109,10 @@ func (m *mockSubscriberRepo) FindSubscriberByImsi(ctx context.Context, imsi stri
 
 // --- Test helpers ---
 
-func testWriteHandler(userRepo *mockUserRepo, approvalSvc *mockApprovalCreator) *WriteHandler {
+func testWriteHandler(userRepo *mockUserRepo) *WriteHandler {
 	return &WriteHandler{
 		limiter:     &mockRateLimiter{allowed: true},
 		userRepo:    userRepo,
-		approvalSvc: approvalSvc,
 		auditWriter: testAuditWriter(),
 	}
 }
@@ -397,13 +382,11 @@ func TestHandleDelete_InvalidIMSI(t *testing.T) {
 
 // --- Governance tests ---
 
-func TestHandleUpdate_OperatorCreatesApproval(t *testing.T) {
-	// Operator/ops_admin → APPROVAL (202)
+func TestHandleUpdate_OperatorDirectExecution(t *testing.T) {
+	// Operator → DIRECT (200)
 	repo, cleanup := ocsTestRepo(t)
 	defer cleanup()
 
-	approvalDoc := &approval.ApprovalDocument{}
-	approvalSvc := &mockApprovalCreator{doc: approvalDoc}
 	userRepo := &mockUserRepo{
 		identity: testUserIdentity("testuser", "operator"),
 	}
@@ -412,7 +395,6 @@ func TestHandleUpdate_OperatorCreatesApproval(t *testing.T) {
 		repo:        repo,
 		limiter:     &mockRateLimiter{allowed: true},
 		userRepo:    userRepo,
-		approvalSvc: approvalSvc,
 		auditWriter: testAuditWriter(),
 	}
 
@@ -428,9 +410,9 @@ func TestHandleUpdate_OperatorCreatesApproval(t *testing.T) {
 
 	h.Update(w, r)
 
-	// Operator update should go through approval (202)
-	if w.Code == http.StatusOK {
-		t.Error("operator should not get 200 (direct execution)")
+	// Operator update executes directly (200)
+	if w.Code != http.StatusOK {
+		t.Errorf("operator should get 200 (direct execution), got %d: %s", w.Code, w.Body.String())
 	}
 }
 
@@ -447,7 +429,6 @@ func TestHandleDelete_SuperAdminDirectExecution(t *testing.T) {
 		repo:        repo,
 		limiter:     &mockRateLimiter{allowed: true},
 		userRepo:    userRepo,
-		approvalSvc: &mockApprovalCreator{},
 		auditWriter: testAuditWriter(),
 	}
 
@@ -674,7 +655,7 @@ func TestBatchCreate_InvalidTrafficTotal(t *testing.T) {
 	}
 }
 
-func TestBatchCreate_OperatorApprovalPath(t *testing.T) {
+func TestBatchCreate_OperatorDirectPath(t *testing.T) {
 	if testing.Short() {
 		t.Skip("requires MongoDB")
 	}
@@ -711,20 +692,11 @@ func TestBatchCreate_OperatorApprovalPath(t *testing.T) {
 	userRepo := &mockUserRepo{
 		identity: testUserIdentity("testuser", "operator"),
 	}
-	captured := &approval.CreateApprovalInput{}
-	approvalSvc := &mockApprovalCreator{
-		doc: &approval.ApprovalDocument{
-			ID:     "test-approval-id",
-			Status: "pending",
-		},
-		captured: captured,
-	}
 
 	h := &WriteHandler{
 		repo:        repo,
 		limiter:     &mockRateLimiter{allowed: true},
 		userRepo:    userRepo,
-		approvalSvc: approvalSvc,
 		auditWriter: testAuditWriter(),
 	}
 
@@ -735,30 +707,19 @@ func TestBatchCreate_OperatorApprovalPath(t *testing.T) {
 
 	h.BatchCreate(w, r)
 
-	// Operator → approval path → 202
-	if w.Code != http.StatusAccepted {
-		t.Errorf("status = %d, want %d (operator approval path)", w.Code, http.StatusAccepted)
+	// Operator → direct path → 201
+	if w.Code != http.StatusCreated {
+		t.Errorf("status = %d, want %d (operator direct path)", w.Code, http.StatusCreated)
 	}
 
-	// Verify approval was created
-	if captured.Action == "" {
-		t.Fatal("expected approval to be created")
-	}
-	if captured.Payload == nil {
-		t.Fatal("expected frozen contract in approval payload")
-	}
-	if captured.Payload["version"] != "subscriber-batch-create-v2" {
-		t.Errorf("payload version = %v, want subscriber-batch-create-v2", captured.Payload["version"])
-	}
-
-	// Verify no business writes happened
+	// Verify subscribers were created
 	var count int64
 	count, err = repo.subscribers.CountDocuments(ctx, bson.M{"imsi": bson.M{"$gte": "417001234567890", "$lt": "417001234567892"}})
 	if err != nil {
 		t.Fatalf("count subscribers: %v", err)
 	}
-	if count != 0 {
-		t.Errorf("expected 0 business writes for approval path, got %d", count)
+	if count != 2 {
+		t.Errorf("expected 2 subscribers created for operator, got %d", count)
 	}
 }
 
@@ -799,13 +760,11 @@ func TestBatchCreate_SuperAdminDirectPath(t *testing.T) {
 	userRepo := &mockUserRepo{
 		identity: testUserIdentity("admin", "super_admin"),
 	}
-	approvalSvc := &mockApprovalCreator{}
 
 	h := &WriteHandler{
 		repo:        repo,
 		limiter:     &mockRateLimiter{allowed: true},
 		userRepo:    userRepo,
-		approvalSvc: approvalSvc,
 		auditWriter: testAuditWriter(),
 	}
 
@@ -819,11 +778,6 @@ func TestBatchCreate_SuperAdminDirectPath(t *testing.T) {
 	// super_admin → direct path → 201
 	if w.Code != http.StatusCreated {
 		t.Errorf("status = %d, want %d (super_admin direct path)", w.Code, http.StatusCreated)
-	}
-
-	// Verify no approval was created
-	if approvalSvc.captured != nil {
-		t.Error("expected no approval for super_admin direct path")
 	}
 
 	// Verify subscribers were created
@@ -859,7 +813,6 @@ func TestBatchCreate_PreExistingTarget(t *testing.T) {
 		repo:        repo,
 		limiter:     &mockRateLimiter{allowed: true},
 		userRepo:    userRepo,
-		approvalSvc: &mockApprovalCreator{},
 		auditWriter: testAuditWriter(),
 	}
 
@@ -872,81 +825,6 @@ func TestBatchCreate_PreExistingTarget(t *testing.T) {
 
 	if w.Code != http.StatusConflict {
 		t.Errorf("status = %d, want %d (pre-existing target)", w.Code, http.StatusConflict)
-	}
-}
-
-func TestBatchCreate_ProfileDrift(t *testing.T) {
-	if testing.Short() {
-		t.Skip("requires MongoDB")
-	}
-	repo, cleanup := ocsTestRepo(t)
-	defer cleanup()
-
-	ctx := context.Background()
-	// Add profiles collection to repo
-	profileColl := repo.subscribers.Database().Collection("app_profiles")
-	repo.profiles = profileColl
-
-	// Insert profile with "name" field (what loadProfileData queries on)
-	_, err := profileColl.InsertOne(ctx, bson.M{
-		"name": "test_profile",
-		"sub4G": bson.M{
-			"ambr": bson.M{
-				"downlink": bson.M{"value": 1, "unit": 3},
-				"uplink":   bson.M{"value": 1, "unit": 3},
-			},
-			"default5qi": 9,
-		},
-	})
-	if err != nil {
-		t.Fatalf("insert profile: %v", err)
-	}
-
-	userRepo := &mockUserRepo{
-		identity: testUserIdentity("testuser", "operator"),
-	}
-	captured := &approval.CreateApprovalInput{}
-	approvalSvc := &mockApprovalCreator{
-		doc: &approval.ApprovalDocument{
-			ID:     "test-approval-id",
-			Status: "pending",
-		},
-		captured: captured,
-	}
-
-	h := &WriteHandler{
-		repo:        repo,
-		limiter:     &mockRateLimiter{allowed: true},
-		userRepo:    userRepo,
-		approvalSvc: approvalSvc,
-		auditWriter: testAuditWriter(),
-	}
-
-	body := `{"startImsi":"417001234567890","count":2,"profileName":"test_profile","strategy":"skip"}`
-	r := httptest.NewRequest(http.MethodPost, "/api/subscribers/batch", bytes.NewBufferString(body))
-	r = r.WithContext(testPrincipalCtx("testuser", "operator"))
-	w := httptest.NewRecorder()
-
-	h.BatchCreate(w, r)
-
-	// Should succeed with approval (profile hash is computed fresh)
-	if w.Code != http.StatusAccepted {
-		t.Errorf("status = %d, want %d", w.Code, http.StatusAccepted)
-	}
-
-	// Verify frozen contract has profile hash
-	if captured.Payload == nil {
-		t.Fatal("expected frozen contract in payload")
-	}
-	profile, ok := captured.Payload["profile"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected profile in frozen contract, got %T", captured.Payload["profile"])
-	}
-	if profile["state"] != "present" {
-		t.Errorf("profile.state = %v, want present", profile["state"])
-	}
-	if profile["preconditionHash"] == nil || profile["preconditionHash"] == "" {
-		t.Error("expected preconditionHash for present profile")
 	}
 }
 
@@ -974,13 +852,11 @@ func TestBatchCreate_RootDirectPath(t *testing.T) {
 	userRepo := &mockUserRepo{
 		identity: testUserIdentity("root_user", "root"),
 	}
-	approvalSvc := &mockApprovalCreator{}
 
 	h := &WriteHandler{
 		repo:        repo,
 		limiter:     &mockRateLimiter{allowed: true},
 		userRepo:    userRepo,
-		approvalSvc: approvalSvc,
 		auditWriter: testAuditWriter(),
 	}
 
@@ -994,11 +870,6 @@ func TestBatchCreate_RootDirectPath(t *testing.T) {
 	// root → direct path → 201
 	if w.Code != http.StatusCreated {
 		t.Errorf("status = %d, want %d (root direct path)", w.Code, http.StatusCreated)
-	}
-
-	// Verify no approval
-	if approvalSvc.captured != nil {
-		t.Error("expected no approval for root direct path")
 	}
 
 	// Verify 3 subscribers created
@@ -1030,7 +901,6 @@ func TestBatchCreate_DefaultProfile(t *testing.T) {
 		repo:        repo,
 		limiter:     &mockRateLimiter{allowed: true},
 		userRepo:    userRepo,
-		approvalSvc: &mockApprovalCreator{},
 		auditWriter: testAuditWriter(),
 	}
 

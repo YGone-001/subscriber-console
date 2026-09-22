@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
-	"subscriber/internal/approval"
 	"subscriber/internal/audit"
 	"subscriber/internal/auth"
 )
@@ -136,26 +135,11 @@ func (m *mockAuditWriter) WriteStrict(ctx context.Context, input audit.WriteAudi
 	return nil
 }
 
-// mockApprovalRepo implements ApprovalCreateStore for testing.
-type mockApprovalRepo struct {
-	approvals []approval.CreateApprovalInput
-}
-
-func (m *mockApprovalRepo) CreateApprovalRequest(ctx context.Context, input approval.CreateApprovalInput) (*approval.ApprovalDocument, error) {
-	m.approvals = append(m.approvals, input)
-	return &approval.ApprovalDocument{
-		ID:      "test-approval-id",
-		Action:  input.Action,
-		Status:  approval.StatusPending,
-		Summary: input.Summary,
-	}, nil
-}
-
 func TestCreateProfile(t *testing.T) {
 	repo := newMockRepository()
 	auditWriter := &mockAuditWriter{}
 	limiter := &mockLimiter{}
-	handler := NewHandler(repo, &mockApprovalRepo{}, limiter, auditWriter)
+	handler := NewHandler(repo, limiter, auditWriter)
 
 	// Create a test principal
 	principal := &auth.Principal{
@@ -214,7 +198,7 @@ func TestCreateProfileDuplicate(t *testing.T) {
 	repo := newMockRepository()
 	auditWriter := &mockAuditWriter{}
 	limiter := &mockLimiter{}
-	handler := NewHandler(repo, &mockApprovalRepo{}, limiter, auditWriter)
+	handler := NewHandler(repo, limiter, auditWriter)
 
 	principal := &auth.Principal{
 		Username:       "testuser",
@@ -245,7 +229,7 @@ func TestCreateProfilePermissionDenied(t *testing.T) {
 	repo := newMockRepository()
 	auditWriter := &mockAuditWriter{}
 	limiter := &mockLimiter{}
-	handler := NewHandler(repo, &mockApprovalRepo{}, limiter, auditWriter)
+	handler := NewHandler(repo, limiter, auditWriter)
 
 	// Viewer doesn't have profiles.write permission
 	principal := &auth.Principal{
@@ -274,7 +258,7 @@ func TestUpdateProfile(t *testing.T) {
 	repo := newMockRepository()
 	auditWriter := &mockAuditWriter{}
 	limiter := &mockLimiter{}
-	handler := NewHandler(repo, &mockApprovalRepo{}, limiter, auditWriter)
+	handler := NewHandler(repo, limiter, auditWriter)
 
 	principal := &auth.Principal{
 		Username:       "testuser",
@@ -319,7 +303,7 @@ func TestDeleteProfile(t *testing.T) {
 	repo := newMockRepository()
 	auditWriter := &mockAuditWriter{}
 	limiter := &mockLimiter{}
-	handler := NewHandler(repo, &mockApprovalRepo{}, limiter, auditWriter)
+	handler := NewHandler(repo, limiter, auditWriter)
 
 	principal := &auth.Principal{
 		Username:       "testuser",
@@ -361,7 +345,7 @@ func TestDeleteProfileInUse(t *testing.T) {
 	repo := newMockRepository()
 	auditWriter := &mockAuditWriter{}
 	limiter := &mockLimiter{}
-	handler := NewHandler(repo, &mockApprovalRepo{}, limiter, auditWriter)
+	handler := NewHandler(repo, limiter, auditWriter)
 
 	principal := &auth.Principal{
 		Username:       "testuser",
@@ -401,7 +385,7 @@ func TestDeleteProfileForce(t *testing.T) {
 	repo := newMockRepository()
 	auditWriter := &mockAuditWriter{}
 	limiter := &mockLimiter{}
-	handler := NewHandler(repo, &mockApprovalRepo{}, limiter, auditWriter)
+	handler := NewHandler(repo, limiter, auditWriter)
 
 	principal := &auth.Principal{
 		Username:       "testuser",
@@ -544,7 +528,7 @@ func TestUpdateMissingProfile(t *testing.T) {
 	repo := newMockRepository()
 	auditWriter := &mockAuditWriter{}
 	limiter := &mockLimiter{}
-	handler := NewHandler(repo, &mockApprovalRepo{}, limiter, auditWriter)
+	handler := NewHandler(repo, limiter, auditWriter)
 
 	principal := &auth.Principal{
 		Username:       "testuser",
@@ -586,7 +570,7 @@ func TestDeleteMissingProfile(t *testing.T) {
 	repo := newMockRepository()
 	auditWriter := &mockAuditWriter{}
 	limiter := &mockLimiter{}
-	handler := NewHandler(repo, &mockApprovalRepo{}, limiter, auditWriter)
+	handler := NewHandler(repo, limiter, auditWriter)
 
 	principal := &auth.Principal{
 		Username:       "testuser",
@@ -620,7 +604,7 @@ func TestVersionSchemaParity(t *testing.T) {
 	repo := newMockRepository()
 	auditWriter := &mockAuditWriter{}
 	limiter := &mockLimiter{}
-	handler := NewHandler(repo, &mockApprovalRepo{}, limiter, auditWriter)
+	handler := NewHandler(repo, limiter, auditWriter)
 
 	principal := &auth.Principal{
 		Username:       "testuser",
@@ -725,7 +709,7 @@ func TestExistingPUTPreservation(t *testing.T) {
 	repo := newMockRepository()
 	auditWriter := &mockAuditWriter{}
 	limiter := &mockLimiter{}
-	handler := NewHandler(repo, &mockApprovalRepo{}, limiter, auditWriter)
+	handler := NewHandler(repo, limiter, auditWriter)
 
 	principal := &auth.Principal{
 		Username:       "testuser",
@@ -836,7 +820,7 @@ func TestMissingPUTSparseDocument(t *testing.T) {
 	repo := newMockRepository()
 	auditWriter := &mockAuditWriter{}
 	limiter := &mockLimiter{}
-	handler := NewHandler(repo, &mockApprovalRepo{}, limiter, auditWriter)
+	handler := NewHandler(repo, limiter, auditWriter)
 
 	principal := &auth.Principal{
 		Username:       "testuser",
@@ -895,7 +879,7 @@ func TestUnknownFieldRejection(t *testing.T) {
 	repo := newMockRepository()
 	auditWriter := &mockAuditWriter{}
 	limiter := &mockLimiter{}
-	handler := NewHandler(repo, &mockApprovalRepo{}, limiter, auditWriter)
+	handler := NewHandler(repo, limiter, auditWriter)
 
 	principal := &auth.Principal{
 		Username:       "testuser",
@@ -937,7 +921,7 @@ func TestRestoreDirectSuccess(t *testing.T) {
 	repo := newMockRepository()
 	auditWriter := &mockAuditWriter{}
 	limiter := &mockLimiter{}
-	handler := NewHandler(repo, &mockApprovalRepo{}, limiter, auditWriter)
+	handler := NewHandler(repo, limiter, auditWriter)
 
 	// Add a profile and version to restore
 	profileName := "test_restore_profile"
@@ -1016,7 +1000,7 @@ func TestRestoreMissingProfileSuccess(t *testing.T) {
 	repo := newMockRepository()
 	auditWriter := &mockAuditWriter{}
 	limiter := &mockLimiter{}
-	handler := NewHandler(repo, &mockApprovalRepo{}, limiter, auditWriter)
+	handler := NewHandler(repo, limiter, auditWriter)
 
 	profileName := "test_restore_missing"
 
@@ -1067,9 +1051,8 @@ func TestRestoreMissingProfileSuccess(t *testing.T) {
 func TestRestoreOperatorDirect(t *testing.T) {
 	repo := newMockRepository()
 	auditWriter := &mockAuditWriter{}
-	approvalRepo := &mockApprovalRepo{}
 	limiter := &mockLimiter{}
-	handler := NewHandler(repo, approvalRepo, limiter, auditWriter)
+	handler := NewHandler(repo, limiter, auditWriter)
 
 	profileName := "test_restore_approval"
 
@@ -1119,11 +1102,6 @@ func TestRestoreOperatorDirect(t *testing.T) {
 		t.Errorf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
 	}
 
-	// Verify no approval was created (direct execution in Phase 5.7)
-	if len(approvalRepo.approvals) != 0 {
-		t.Error("expected no approval to be created")
-	}
-
 	// Verify audit
 	if len(auditWriter.records) > 0 {
 		lastAudit := auditWriter.records[len(auditWriter.records)-1]
@@ -1137,7 +1115,7 @@ func TestRestoreAuditorDenied(t *testing.T) {
 	repo := newMockRepository()
 	auditWriter := &mockAuditWriter{}
 	limiter := &mockLimiter{}
-	handler := NewHandler(repo, &mockApprovalRepo{}, limiter, auditWriter)
+	handler := NewHandler(repo, limiter, auditWriter)
 
 	principal := &auth.Principal{
 		Username:       "testuser",
@@ -1163,7 +1141,7 @@ func TestRestoreViewerDenied(t *testing.T) {
 	repo := newMockRepository()
 	auditWriter := &mockAuditWriter{}
 	limiter := &mockLimiter{}
-	handler := NewHandler(repo, &mockApprovalRepo{}, limiter, auditWriter)
+	handler := NewHandler(repo, limiter, auditWriter)
 
 	principal := &auth.Principal{
 		Username:       "testuser",
@@ -1189,7 +1167,7 @@ func TestRestoreMissingVersion(t *testing.T) {
 	repo := newMockRepository()
 	auditWriter := &mockAuditWriter{}
 	limiter := &mockLimiter{}
-	handler := NewHandler(repo, &mockApprovalRepo{}, limiter, auditWriter)
+	handler := NewHandler(repo, limiter, auditWriter)
 
 	principal := &auth.Principal{
 		Username:       "testuser",
@@ -1215,7 +1193,7 @@ func TestRestoreInvalidProfileName(t *testing.T) {
 	repo := newMockRepository()
 	auditWriter := &mockAuditWriter{}
 	limiter := &mockLimiter{}
-	handler := NewHandler(repo, &mockApprovalRepo{}, limiter, auditWriter)
+	handler := NewHandler(repo, limiter, auditWriter)
 
 	principal := &auth.Principal{
 		Username:       "testuser",
@@ -1241,7 +1219,7 @@ func TestRestoreCASConflict(t *testing.T) {
 	repo := newMockRepository()
 	auditWriter := &mockAuditWriter{}
 	limiter := &mockLimiter{}
-	handler := NewHandler(repo, &mockApprovalRepo{}, limiter, auditWriter)
+	handler := NewHandler(repo, limiter, auditWriter)
 
 	profileName := "test_restore_cas"
 

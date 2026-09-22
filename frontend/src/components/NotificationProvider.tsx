@@ -4,7 +4,7 @@ import React, { createContext, useContext, useEffect, useRef, useState, useCallb
 import { usePathname } from "next/navigation";
 import { playNotificationSound, NotificationSoundType } from "@/lib/soundEffects";
 
-export type NotificationCategory = "alert" | "approval" | "system" | "task";
+export type NotificationCategory = "alert" | "system" | "task";
 export type NotificationType = "critical" | "warning" | "success" | "info";
 export type ConnectionStatus = "connected" | "connecting" | "disconnected" | "error";
 
@@ -356,22 +356,6 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
               title: isCritical ? "Critical Telecom Fault" : "Alert Status Changed",
               message: `Active alarms: ${data.activeCount} (Critical: ${data.activeCriticalCount}, Warning: ${data.activeWarningCount})`,
               link: "/system-health",
-              sound: true,
-              toast: true,
-            });
-          } catch {}
-        });
-
-        sse.addEventListener("approvals_update", (e: MessageEvent) => {
-          if (unmounted) return;
-          try {
-            const data = JSON.parse(e.data);
-            addNotification({
-              category: "approval",
-              type: "warning",
-              title: "Pending Approvals Updated",
-              message: `${data.pendingCount} request(s) awaiting review.`,
-              link: "/approvals",
               sound: true,
               toast: true,
             });

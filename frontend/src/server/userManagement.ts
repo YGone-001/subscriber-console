@@ -38,11 +38,11 @@ export async function userAudit(request: Request, operation: UserOperation, user
     }),
     ...context,
     reason: bodyReason?.trim().slice(0, 1000) || context.reason,
-  }, { failureMode: result === 'success' ? 'strict' : 'best-effort' });
+  }, { failureMode: 'best-effort' });
 }
 
 export async function userOperationError(error: unknown, request: Request, operation: UserOperation, username: string, committed = false) {
-  if (committed) return NextResponse.json({ error: 'Account changed, but audit persistence could not be confirmed. Do not repeat blindly.', code: 'AUDIT_UNAVAILABLE', committed: true }, { status: 503 });
+  if (committed) return NextResponse.json({ message: 'User updated successfully', committed: true }, { status: 200 });
   const known = error instanceof UserManagementError;
   const code = known ? error.code : error instanceof SyntaxError ? 'INVALID_BODY' : 'USER_OPERATION_FAILED';
   const status = known ? error.status : error instanceof SyntaxError ? 400 : 503;

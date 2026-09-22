@@ -1,8 +1,7 @@
 /**
- * Profile Restore Governance — shared frozen v2 implementation.
+ * Profile Restore — shared frozen v2 implementation.
  *
- * Used by both direct restore route and approval execution.
- * Implements: prepare → assert → execute → classify → strict audit.
+ * Implements: prepare → assert → execute → classify → non-gating audit.
  *
  * DO NOT call legacy restoreProfileVersion() for profile-restore-v2.
  */
@@ -247,7 +246,7 @@ export async function executeFrozenRestoreV2(
 }
 
 /**
- * Write strict audit for restore operation.
+ * Write non-gating audit for restore operation.
  */
 export async function writeRestoreAudit(
   intent: RestoreIntent,
@@ -274,7 +273,6 @@ export async function writeRestoreAudit(
       : undefined,
     metadata: {
       governanceMode,
-      approvalRequired: governanceMode === 'APPROVAL_GOVERNED',
       actorRole: actor.role,
       mutationCommitted: committed,
       classification,
@@ -283,7 +281,7 @@ export async function writeRestoreAudit(
       currentProfileHash: intent.currentProfileHash,
       versionId: intent.versionId,
     },
-  }, { failureMode: 'strict' });
+  });
 }
 
 /**

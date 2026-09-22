@@ -48,96 +48,6 @@
     "file": "frontend\\src\\app\\api\\analytics\\sparkline\\route.ts"
   },
   {
-    "path": "/api/approvals",
-    "domain": "approvals",
-    "methods": [
-      "GET",
-      "POST"
-    ],
-    "file": "frontend\\src\\app\\api\\approvals\\route.ts"
-  },
-  {
-    "path": "/api/approvals/:id",
-    "domain": "approvals",
-    "methods": [
-      "GET",
-      "POST"
-    ],
-    "file": "frontend\\src\\app\\api\\approvals\\[id]\\route.ts"
-  },
-  {
-    "path": "/api/approvals/:id/approve",
-    "domain": "approvals",
-    "methods": [
-      "POST"
-    ],
-    "file": "frontend\\src\\app\\api\\approvals\\[id]\\approve\\route.ts"
-  },
-  {
-    "path": "/api/approvals/:id/audit",
-    "domain": "approvals",
-    "methods": [
-      "GET"
-    ],
-    "file": "frontend\\src\\app\\api\\approvals\\[id]\\audit\\route.ts"
-  },
-  {
-    "path": "/api/approvals/:id/cancel",
-    "domain": "approvals",
-    "methods": [
-      "POST"
-    ],
-    "file": "frontend\\src\\app\\api\\approvals\\[id]\\cancel\\route.ts"
-  },
-  {
-    "path": "/api/approvals/:id/execute",
-    "domain": "approvals",
-    "methods": [
-      "POST"
-    ],
-    "file": "frontend\\src\\app\\api\\approvals\\[id]\\execute\\route.ts"
-  },
-  {
-    "path": "/api/approvals/:id/reject",
-    "domain": "approvals",
-    "methods": [
-      "POST"
-    ],
-    "file": "frontend\\src\\app\\api\\approvals\\[id]\\reject\\route.ts"
-  },
-  {
-    "path": "/api/approvals/export",
-    "domain": "approvals",
-    "methods": [
-      "GET"
-    ],
-    "file": "frontend\\src\\app\\api\\approvals\\export\\route.ts"
-  },
-  {
-    "path": "/api/audit",
-    "domain": "audit",
-    "methods": [
-      "GET"
-    ],
-    "file": "frontend\\src\\app\\api\\audit\\route.ts"
-  },
-  {
-    "path": "/api/audit/:id",
-    "domain": "audit",
-    "methods": [
-      "GET"
-    ],
-    "file": "frontend\\src\\app\\api\\audit\\[id]\\route.ts"
-  },
-  {
-    "path": "/api/audit/export",
-    "domain": "audit",
-    "methods": [
-      "GET"
-    ],
-    "file": "frontend\\src\\app\\api\\audit\\export\\route.ts"
-  },
-  {
     "path": "/api/auth/login",
     "domain": "auth",
     "methods": [
@@ -473,14 +383,6 @@
       "POST"
     ],
     "file": "frontend\\src\\app\\api\\tariff-plans\\[planId]\\migrate\\route.ts"
-  },
-  {
-    "path": "/api/tariff-plans/:planId/operations",
-    "domain": "tariff-plans",
-    "methods": [
-      "GET"
-    ],
-    "file": "frontend\\src\\app\\api\\tariff-plans\\[planId]\\operations\\route.ts"
   },
   {
     "path": "/api/tariff-plans/:planId/rules",

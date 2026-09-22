@@ -1,7 +1,6 @@
 import type { Dispatch, SetStateAction } from "react";
 import type { UserOperation } from '@/lib/userManagementPolicy';
 import type {
-  AuditLogResponse,
   BulkAction,
   BulkProgressState,
   DetailTab,
@@ -116,8 +115,4 @@ export interface UserDrawerProps {
   openDetails: (user: SysUser) => void;
   startEdit: (user: SysUser) => void;
   startPasswordReset: (user: SysUser) => void;
-  isAuditLoading: boolean;
-  auditError: unknown;
-  mutateAudit: () => Promise<unknown>;
-  auditData?: AuditLogResponse;
 }

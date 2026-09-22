@@ -1,8 +1,6 @@
 import { requireAuth } from '@/lib/authz';
 import { validateCurrentAccount } from '@/lib/accountSession';
-import { isSuperAdmin } from '@/lib/permissions';
 import { listAlerts } from '@/server/repositories/alertRepository';
-import { listApprovals } from '@/server/repositories/approvalRepository';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,14 +8,12 @@ export async function GET(request: Request) {
   const auth = requireAuth(request);
   if (!auth.ok) return auth.response;
 
-  const isRoot = isSuperAdmin(auth.auth.role);
   const user = auth.auth.user;
   const encoder = new TextEncoder();
 
   let isClosed = false;
   let intervalId: NodeJS.Timeout | null = null;
   let lastAlertsCount = -1;
-  let lastApprovalCount = -1;
   let lastHeartbeat = Date.now();
 
   const stream = new ReadableStream({
@@ -54,13 +50,9 @@ export async function GET(request: Request) {
 
       // Initial snapshot fetch
       try {
-        const [alertData, approvalData] = await Promise.all([
-          listAlerts(15).catch(() => ({ alerts: [], activeCriticalCount: 0, activeWarningCount: 0, activeCount: 0 })),
-          listApprovals({ status: isRoot ? 'pending' : 'all', limit: 10, requester: isRoot ? undefined : user }).catch(() => ({ approvals: [], pending: 0 })),
-        ]);
+        const alertData = await listAlerts(15).catch(() => ({ alerts: [], activeCriticalCount: 0, activeWarningCount: 0, activeCount: 0 }));
 
         lastAlertsCount = alertData.activeCount;
-        lastApprovalCount = approvalData.pending;
 
         sendEvent('init', {
           timestamp: new Date().toISOString(),
@@ -71,10 +63,6 @@ export async function GET(request: Request) {
             activeWarningCount: alertData.activeWarningCount,
             activeCount: alertData.activeCount,
             recent: alertData.alerts.slice(0, 5),
-          },
-          approvals: {
-            pendingCount: approvalData.pending,
-            recent: approvalData.approvals.slice(0, 5),
           },
         });
       } catch (err) {
@@ -94,10 +82,7 @@ export async function GET(request: Request) {
         }
 
         try {
-          const [alertData, approvalData] = await Promise.all([
-            listAlerts(10).catch(() => null),
-            listApprovals({ status: isRoot ? 'pending' : 'all', limit: 5, requester: isRoot ? undefined : user }).catch(() => null),
-          ]);
+          const alertData = await listAlerts(10).catch(() => null);
 
           let hasUpdate = false;
 
@@ -110,16 +95,6 @@ export async function GET(request: Request) {
               activeWarningCount: alertData.activeWarningCount,
               activeCount: alertData.activeCount,
               latestAlerts: alertData.alerts.slice(0, 5),
-            });
-          }
-
-          if (approvalData && (approvalData.pending !== lastApprovalCount)) {
-            lastApprovalCount = approvalData.pending;
-            hasUpdate = true;
-            sendEvent('approvals_update', {
-              timestamp: new Date().toISOString(),
-              pendingCount: approvalData.pending,
-              latestApprovals: approvalData.approvals.slice(0, 5),
             });
           }
 

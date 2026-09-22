@@ -62,8 +62,6 @@ test('primary dashboard routes expose a bounded first-screen prefetch plan', () 
     '/ocs/contracts',
     '/ocs/balances',
     '/profile',
-    '/approvals',
-    '/audit-logs',
     '/users',
     '/system-health',
   ];

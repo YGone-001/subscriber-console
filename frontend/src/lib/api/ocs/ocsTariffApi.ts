@@ -26,7 +26,6 @@ export interface TariffListResponse {
 export interface TariffActionResponse {
   outcome?: string;
   message?: string;
-  approval?: Record<string, unknown>;
   error?: string;
 }
 
@@ -36,7 +35,6 @@ export const ocsTariffApi = {
   list: () => fetcher(BASE),
   get: (planId: string) => fetcher(`${BASE}/${planId}`),
   getRules: (planId: string) => fetcher(`${BASE}/${planId}/rules`),
-  getOperations: (planId: string) => fetcher(`${BASE}/${planId}/operations`),
   getSubscribers: (planId: string) => fetcher(`${BASE}/${planId}/subscribers`),
 
   clone: async (planId: string, targetPlanId: string): Promise<TariffActionResponse> => {

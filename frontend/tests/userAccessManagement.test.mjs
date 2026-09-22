@@ -121,12 +121,12 @@ test('user status mapping uses stable UI states', () => {
   });
 });
 
-test('permission decisions normalize to allow approval_required deny', () => {
+test('permission decisions normalize to binary allow and deny', () => {
   assert.equal(normalizePermissionEffect('allow'), 'allow');
   assert.equal(normalizePermissionEffect('export'), 'allow');
-  assert.equal(normalizePermissionEffect('approval'), 'approval_required');
+  assert.equal(normalizePermissionEffect('approval'), 'allow');
   assert.equal(normalizePermissionEffect('deny'), 'deny');
-  assert.equal(permissionEffectToDecisionKey('approval_required'), 'approval');
+  assert.equal(permissionEffectToDecisionKey('allow'), 'allow');
 });
 
 test('user query string omits default filters and keeps active state', () => {
@@ -152,8 +152,8 @@ test('permission diff classifies added removed and dangerous downgrades', () => 
 
   assert.deepEqual(diff.map((item) => [item.key, item.category]), [
     ['audit_export', 'removed'],
-    ['rating_publish', 'allow_to_approval'],
-    ['system_heal', 'approval_to_deny'],
+    ['rating_publish', 'changed'],
+    ['system_heal', 'removed'],
     ['user_admin', 'added'],
   ]);
 });

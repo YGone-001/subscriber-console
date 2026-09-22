@@ -46,7 +46,7 @@ export function useUsersPage() {
   const selection = useUserSelection(users, users, currentUser?.username);
   const canManage = (target: SysUser, operation: UserOperation) => !!currentUser && userManagementActions(currentUser, target).includes(operation);
   const eligible = selection.selectedUsers.filter((user) => canManage(user, 'disable'));
-  const mutate = async () => { await Promise.all([mutateList(), drawer.mutateAudit()]); };
+  const mutate = async () => { await Promise.all([mutateList(), drawer.mutateDetail()]); };
   const crud = useUserCrud({ users, filteredUsers: users, selectedUsers: selection.selectedUsers, mutableSelectedUsers: eligible,
     currentUsername: currentUser?.username, selectedUser: drawer.selectedUser, newForm: drawer.newForm, editForm: drawer.editForm,
     setEditForm: drawer.setEditForm, setDrawerMode: drawer.setDrawerMode, closeDrawer: drawer.closeDrawer,
@@ -87,7 +87,6 @@ export function useUsersPage() {
   } satisfies UsersTableProps;
   const drawerProps = {
     ...drawer, ...crud, openDetails, startEdit, startPasswordReset, assignableRoles: roles, canManage,
-    mutateAudit: async () => { await drawer.mutateAudit(); },
   } satisfies UserDrawerProps;
   return { canRead: can('users.read'), canCreate: can('users.create'), authLoading, stats: data?.stats, openCreateDrawer, t, toolbarProps, drawerProps, tableProps };
 }

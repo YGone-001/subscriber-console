@@ -11,7 +11,6 @@ import (
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
-	"subscriber/internal/approval"
 	"subscriber/internal/audit"
 	"subscriber/internal/auth"
 	"subscriber/internal/governance"
@@ -30,8 +29,6 @@ type WriteHandler struct {
 	repo        *Repository
 	limiter     RateLimiter
 	userRepo    UserRepository
-	approvalSvc ApprovalCreator
-	approvalQry ApprovalQuerier
 	auditWriter *audit.Writer
 	// Test seams: when set, used instead of repo for batch update operations.
 	batchStore BatchUpdateStore // nil → use repo
@@ -47,25 +44,12 @@ type UserRepository interface {
 	FindByUsernameIdentity(ctx context.Context, username string) (*user.UserIdentity, error)
 }
 
-// ApprovalCreator is the interface for creating approval requests.
-type ApprovalCreator interface {
-	Create(r *http.Request, actor approval.GovernanceActor, input approval.CreateApprovalInput) (*approval.ApprovalDocument, error)
-}
-
-// ApprovalQuerier is the interface for querying approval requests.
-type ApprovalQuerier interface {
-	ListApprovals(ctx context.Context, q approval.ListQuery) (*approval.ListResult, error)
-	ListActiveByAction(ctx context.Context, action string) ([]approval.ApprovalDocument, error)
-}
-
 // NewWriteHandler creates a new subscriber write handler.
-func NewWriteHandler(repo *Repository, limiter RateLimiter, userRepo UserRepository, approvalSvc ApprovalCreator, approvalQry ApprovalQuerier, auditWriter *audit.Writer) *WriteHandler {
+func NewWriteHandler(repo *Repository, limiter RateLimiter, userRepo UserRepository, auditWriter *audit.Writer) *WriteHandler {
 	return &WriteHandler{
 		repo:        repo,
 		limiter:     limiter,
 		userRepo:    userRepo,
-		approvalSvc: approvalSvc,
-		approvalQry: approvalQry,
 		auditWriter: auditWriter,
 	}
 }
@@ -131,28 +115,19 @@ func (h *WriteHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Strict audit — uses SafeSnapshot (no security material), committed=true on failure
-	auditErr := h.writeStrictAudit(r, audit.WriteAuditInput{
+	// Strict audit — uses SafeSnapshot (no security material), non-gating
+	h.writeStrictAudit(r, audit.WriteAuditInput{
 		Action:   "CREATE",
 		Module:   "subscribers",
 		TargetID: imsi,
 		After:    SubscriberSafeSnapshot(created), // Safe — no k/op/opc/amf/sqn
 		Result:   "success",
 		Metadata: map[string]interface{}{
-			"governanceMode":   "DIRECT_GOVERNED",
-			"approvalRequired": false,
-			"operation":        string(OpCreate),
-			"actorRole":        fresh.NormalizedRole,
+			"governanceMode": "DIRECT_GOVERNED",
+			"operation":      string(OpCreate),
+			"actorRole":      fresh.NormalizedRole,
 		},
 	}, fresh)
-	if auditErr != nil {
-		response.JSON(w, http.StatusServiceUnavailable, map[string]any{
-			"error":     "AUDIT_UNAVAILABLE",
-			"code":      "AUDIT_UNAVAILABLE",
-			"committed": true,
-		})
-		return
-	}
 
 	response.JSON(w, http.StatusCreated, map[string]any{
 		"outcome": "executed",
@@ -226,92 +201,31 @@ func (h *WriteHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if result.Decision == governance.Direct {
-		// Super Admin/root: DIRECT_GOVERNED — execute immediately
-		execResult, err := ExecuteFrozenSubscriberUpdate(r.Context(), frozen, h.repo.FindSubscriberByImsi, h.repo.UpdateSubscriberFromLegacy)
-		if err != nil {
-			h.handleGovernanceError(w, err)
-			return
-		}
-
-		// Strict audit — committed=true on failure
-		auditErr := h.writeStrictAudit(r, audit.WriteAuditInput{
-			Action:   "UPDATE",
-			Module:   "subscribers",
-			TargetID: imsi,
-			Before:   frozen.Before,
-			After:    execResult.After,
-			Result:   "success",
-			Metadata: map[string]interface{}{
-				"governanceMode":   "DIRECT_GOVERNED",
-				"approvalRequired": false,
-				"operation":        string(OpUpdate),
-				"actorRole":        fresh.NormalizedRole,
-			},
-		}, fresh)
-		if auditErr != nil {
-			response.JSON(w, http.StatusServiceUnavailable, map[string]any{
-				"error":     "AUDIT_UNAVAILABLE",
-				"code":      "AUDIT_UNAVAILABLE",
-				"committed": true,
-			})
-			return
-		}
-
-		response.JSON(w, http.StatusOK, map[string]any{
-			"outcome": "executed",
-			"message": "Subscriber updated successfully",
-			"imsi":    imsi,
-		})
-		return
-	}
-
-	// Normal operator/ops_admin: APPROVAL_GOVERNED — create approval
-	reason := r.URL.Query().Get("reason")
-	var reasonPtr *string
-	if reason != "" {
-		reasonPtr = &reason
-	}
-
-	actor := approval.GovernanceActor{
-		Type:     "user",
-		UserID:   fresh.UserID,
-		Username: fresh.Username,
-		Role:     fresh.RawRole,
-	}
-
-	approvalDoc, err := h.approvalSvc.Create(r, actor, approval.CreateApprovalInput{
-		Action:           "SUBSCRIBER_UPDATE",
-		Requester:        fresh.Username,
-		RequesterContext: &actor,
-		TargetID:         imsi,
-		Summary:          fmt.Sprintf("Update governed subscriber configuration for %s", imsi),
-		Operation: &approval.ApprovalOperation{
-			ResourceType: "subscriber",
-			ResourceID:   imsi,
-		},
-		OperationFingerprint: frozen.OperationFingerprint,
-		Reason:               reasonPtr,
-		Before:               frozen.Before,
-		After:                frozen.After,
-		Payload:              frozenToMap(frozen),
-	})
+	// DIRECT_GOVERNED — execute immediately
+	execResult, err := ExecuteFrozenSubscriberUpdate(r.Context(), frozen, h.repo.FindSubscriberByImsi, h.repo.UpdateSubscriberFromLegacy)
 	if err != nil {
-		// ApprovalCreator.Create already writes strict audit; check for committed=true
-		if awe, ok := err.(*approval.ApprovalWorkflowError); ok && awe.Committed {
-			response.JSON(w, awe.Status, awe.ErrorResponse())
-			return
-		}
-		response.Error(w, http.StatusInternalServerError, "Failed to create approval request", "APPROVAL_CREATE_FAILED")
+		h.handleGovernanceError(w, err)
 		return
 	}
 
-	// NO duplicate audit here — ApprovalCreator.Create() already writes strict audit
+	h.writeStrictAudit(r, audit.WriteAuditInput{
+		Action:   "UPDATE",
+		Module:   "subscribers",
+		TargetID: imsi,
+		Before:   frozen.Before,
+		After:    execResult.After,
+		Result:   "success",
+		Metadata: map[string]interface{}{
+			"governanceMode": "DIRECT_GOVERNED",
+			"operation":      string(OpUpdate),
+			"actorRole":      fresh.NormalizedRole,
+		},
+	}, fresh)
 
-	response.JSON(w, http.StatusAccepted, map[string]any{
-		"outcome":  "approval_required",
-		"message":  "Approval required before subscriber update",
-		"approval": approvalDoc,
+	response.JSON(w, http.StatusOK, map[string]any{
+		"outcome": "executed",
+		"message": "Subscriber updated successfully",
+		"imsi":    imsi,
 	})
 }
 
@@ -369,92 +283,32 @@ func (h *WriteHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if result.Decision == governance.Direct {
-		// Super Admin/root: DIRECT_GOVERNED — execute immediately
-		execResult, err := ExecuteFrozenSubscriberDelete(r.Context(), frozen, h.repo.FindSubscriberByImsi, h.repo.DeleteSubscriber)
-		if err != nil {
-			h.handleGovernanceError(w, err)
-			return
-		}
-
-		// Strict audit — committed=true on failure
-		auditErr := h.writeStrictAudit(r, audit.WriteAuditInput{
-			Action:   "DELETE",
-			Module:   "subscribers",
-			TargetID: imsi,
-			Before:   frozen.Before,
-			After:    map[string]any{"deleted": true, "imsi": imsi},
-			Result:   "success",
-			Metadata: map[string]interface{}{
-				"governanceMode":   "DIRECT_GOVERNED",
-				"approvalRequired": false,
-				"operation":        string(OpDelete),
-				"actorRole":        fresh.NormalizedRole,
-			},
-		}, fresh)
-		if auditErr != nil {
-			response.JSON(w, http.StatusServiceUnavailable, map[string]any{
-				"error":     "AUDIT_UNAVAILABLE",
-				"code":      "AUDIT_UNAVAILABLE",
-				"committed": true,
-			})
-			return
-		}
-
-		response.JSON(w, http.StatusOK, map[string]any{
-			"outcome": "executed",
-			"message": "Subscriber deleted successfully",
-			"imsi":    imsi,
-			"deleted": execResult.Deleted,
-		})
-		return
-	}
-
-	// Normal operator/ops_admin: APPROVAL_GOVERNED — create approval
-	reason := r.URL.Query().Get("reason")
-	var reasonPtr *string
-	if reason != "" {
-		reasonPtr = &reason
-	}
-
-	actor := approval.GovernanceActor{
-		Type:     "user",
-		UserID:   fresh.UserID,
-		Username: fresh.Username,
-		Role:     fresh.RawRole,
-	}
-
-	approvalDoc, err := h.approvalSvc.Create(r, actor, approval.CreateApprovalInput{
-		Action:           "SUBSCRIBER_DELETE",
-		Requester:        fresh.Username,
-		RequesterContext: &actor,
-		TargetID:         imsi,
-		Summary:          fmt.Sprintf("Delete subscriber %s", imsi),
-		Operation: &approval.ApprovalOperation{
-			ResourceType: "subscriber",
-			ResourceID:   imsi,
-		},
-		OperationFingerprint: frozen.OperationFingerprint,
-		Reason:               reasonPtr,
-		Before:               frozen.Before,
-		Payload:              frozenToMap(frozen),
-	})
+	// DIRECT_GOVERNED — execute immediately
+	execResult, err := ExecuteFrozenSubscriberDelete(r.Context(), frozen, h.repo.FindSubscriberByImsi, h.repo.DeleteSubscriber)
 	if err != nil {
-		// ApprovalCreator.Create already writes strict audit; check for committed=true
-		if awe, ok := err.(*approval.ApprovalWorkflowError); ok && awe.Committed {
-			response.JSON(w, awe.Status, awe.ErrorResponse())
-			return
-		}
-		response.Error(w, http.StatusInternalServerError, "Failed to create approval request", "APPROVAL_CREATE_FAILED")
+		h.handleGovernanceError(w, err)
 		return
 	}
 
-	// NO duplicate audit here — ApprovalCreator.Create() already writes strict audit
+	h.writeStrictAudit(r, audit.WriteAuditInput{
+		Action:   "DELETE",
+		Module:   "subscribers",
+		TargetID: imsi,
+		Before:   frozen.Before,
+		After:    map[string]any{"deleted": true, "imsi": imsi},
+		Result:   "success",
+		Metadata: map[string]interface{}{
+			"governanceMode": "DIRECT_GOVERNED",
+			"operation":      string(OpDelete),
+			"actorRole":      fresh.NormalizedRole,
+		},
+	}, fresh)
 
-	response.JSON(w, http.StatusAccepted, map[string]any{
-		"outcome":  "approval_required",
-		"message":  "Approval required before subscriber deletion",
-		"approval": approvalDoc,
+	response.JSON(w, http.StatusOK, map[string]any{
+		"outcome": "executed",
+		"message": "Subscriber deleted successfully",
+		"imsi":    imsi,
+		"deleted": execResult.Deleted,
 	})
 }
 
@@ -500,7 +354,6 @@ func (h *WriteHandler) handleBatchUpdateError(w http.ResponseWriter, err error) 
 		ErrInvalidFrozenBatchUpdate:             http.StatusBadRequest,
 		ErrBatchSizeExceeded:                    http.StatusBadRequest,
 		ErrApprovalSnapshotTooLarge:             http.StatusBadRequest,
-		"AUDIT_UNAVAILABLE":                     http.StatusServiceUnavailable,
 	}
 	status, ok := statusMap[govErr.Code]
 	if !ok {
@@ -564,10 +417,12 @@ func (h *WriteHandler) handleCreateError(w http.ResponseWriter, err error) {
 	}
 }
 
-// writeStrictAudit writes a strict audit record using proper request context.
-// Uses AuditRequestContext for IP/user-agent extraction (matches Node auditRequestContext).
-// Returns error — caller must handle as 503 committed=true.
-func (h *WriteHandler) writeStrictAudit(r *http.Request, input audit.WriteAuditInput, fresh *FreshActor) error {
+// writeStrictAudit writes an audit record using proper request context.
+// Audit failures are logged with slog.Error and are strictly non-gating for business mutations.
+func (h *WriteHandler) writeStrictAudit(r *http.Request, input audit.WriteAuditInput, fresh *FreshActor) {
+	if h.auditWriter == nil {
+		return
+	}
 	input.Actor = audit.ActorInput{
 		Type:     "user",
 		UserID:   fresh.UserID,
@@ -580,7 +435,9 @@ func (h *WriteHandler) writeStrictAudit(r *http.Request, input audit.WriteAuditI
 	if input.Reason == "" {
 		input.Reason = reason
 	}
-	return h.auditWriter.WriteStrict(r.Context(), input)
+	if err := h.auditWriter.WriteStrict(r.Context(), input); err != nil {
+		slog.Error("subscriber_audit_write_failed", "action", input.Action, "target", input.TargetID, "error", err)
+	}
 }
 
 // frozenToMap converts a frozen state to a map for the approval payload.
@@ -717,17 +574,11 @@ func (h *WriteHandler) BatchCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// DIRECT path: super_admin/root
-	if govResult.Decision == governance.Direct {
-		h.executeDirectBatchCreate(w, r, frozen, fresh)
-		return
-	}
-
-	// APPROVAL path: operator/ops_admin
-	h.createBatchApproval(w, r, frozen, fresh)
+	// DIRECT path: execute immediately
+	h.executeDirectBatchCreate(w, r, frozen, fresh)
 }
 
-// executeDirectBatchCreate executes batch create directly for super_admin/root.
+// executeDirectBatchCreate executes batch create directly.
 // Uses the reusable ExecuteFrozenSubscriberBatchCreate executor.
 func (h *WriteHandler) executeDirectBatchCreate(
 	w http.ResponseWriter,
@@ -761,46 +612,36 @@ func (h *WriteHandler) executeDirectBatchCreate(
 		return
 	}
 
-	// PART P: Audit ordering — classify result FIRST, then write accurate audit
+	// Classify result FIRST, then write accurate audit
 	auditResult := "success"
 	if result.PartialMutation {
 		auditResult = "partial"
 	}
 
-	// Strict audit — committed=true on failure
-	auditErr := h.writeStrictAudit(r, audit.WriteAuditInput{
+	// Strict audit — non-gating
+	h.writeStrictAudit(r, audit.WriteAuditInput{
 		Action:   "BATCH_CREATE",
 		Module:   "subscribers",
 		TargetID: fmt.Sprintf("%s~%s", frozen.ExpectedAbsentImsis[0], frozen.ExpectedAbsentImsis[len(frozen.ExpectedAbsentImsis)-1]),
 		After: map[string]any{
-			"startImsi":        frozen.StartImsi,
-			"count":            frozen.Count,
-			"createdCount":     result.CreatedCount,
-			"failedCount":      result.FailedCount,
-			"partialMutation":  result.PartialMutation,
-			"profileName":      frozen.Profile.RequestedName,
-			"effectivePlanId":  frozen.EffectiveOcs.PlanId,
-			"trafficTotal":     frozen.EffectiveOcs.TrafficTotal,
-			"smsTotal":         frozen.EffectiveOcs.SmsTotal,
-			"fingerprint":      frozen.OperationFingerprint,
-			"governanceMode":   "DIRECT_GOVERNED",
-			"approvalRequired": false,
-			"operation":        "SUBSCRIBER_BATCH_CREATE",
-			"actorRole":        fresh.NormalizedRole,
+			"startImsi":       frozen.StartImsi,
+			"count":           frozen.Count,
+			"createdCount":    result.CreatedCount,
+			"failedCount":     result.FailedCount,
+			"partialMutation": result.PartialMutation,
+			"profileName":     frozen.Profile.RequestedName,
+			"effectivePlanId": frozen.EffectiveOcs.PlanId,
+			"trafficTotal":    frozen.EffectiveOcs.TrafficTotal,
+			"smsTotal":        frozen.EffectiveOcs.SmsTotal,
+			"fingerprint":     frozen.OperationFingerprint,
+			"governanceMode":  "DIRECT_GOVERNED",
+			"operation":       "SUBSCRIBER_BATCH_CREATE",
+			"actorRole":       fresh.NormalizedRole,
 		},
 		Result: auditResult,
 	}, fresh)
-	if auditErr != nil {
-		// PART Q: If partial mutation occurred and audit fails, return 503 with committed=true
-		response.JSON(w, http.StatusServiceUnavailable, map[string]any{
-			"error":     "AUDIT_UNAVAILABLE",
-			"code":      "AUDIT_UNAVAILABLE",
-			"committed": result.PartialMutation,
-		})
-		return
-	}
 
-	// Check for partial write (PART P: after audit)
+	// Check for partial write (after audit)
 	if result.PartialMutation {
 		response.JSON(w, http.StatusConflict, map[string]any{
 			"error":           "SUBSCRIBER_BATCH_CREATE_PARTIAL_WRITE",
@@ -812,78 +653,9 @@ func (h *WriteHandler) executeDirectBatchCreate(
 	}
 
 	response.JSON(w, http.StatusCreated, map[string]any{
-		"outcome":          "executed",
-		"message":          "Subscribers created successfully",
-		"result":           sanitizeBatchResult(result),
-		"requiresApproval": false,
-	})
-}
-
-// createBatchApproval creates an approval for operator/ops_admin.
-func (h *WriteHandler) createBatchApproval(
-	w http.ResponseWriter,
-	r *http.Request,
-	frozen *FrozenBatchCreateV2,
-	fresh *FreshActor,
-) {
-	actor := approval.GovernanceActor{
-		Type:     "user",
-		UserID:   fresh.UserID,
-		Username: fresh.Username,
-		Role:     fresh.RawRole,
-	}
-
-	approvalDoc, err := h.approvalSvc.Create(r, actor, approval.CreateApprovalInput{
-		Action:           "SUBSCRIBER_BATCH_CREATE",
-		Requester:        fresh.Username,
-		RequesterContext: &actor,
-		TargetID:         fmt.Sprintf("subscriber:batch:%s", frozen.StartImsi),
-		Summary:          fmt.Sprintf("Batch create %d subscriber(s) from %s", frozen.Count, frozen.StartImsi),
-		Operation: &approval.ApprovalOperation{
-			ResourceType: "subscriber_batch",
-			ResourceID:   frozen.StartImsi,
-		},
-		OperationFingerprint: frozen.OperationFingerprint,
-		Payload:              frozenToMap(frozen),
-	})
-	if err != nil {
-		if awe, ok := err.(*approval.ApprovalWorkflowError); ok && awe.Committed {
-			response.JSON(w, awe.Status, awe.ErrorResponse())
-			return
-		}
-		response.Error(w, http.StatusInternalServerError, "Failed to create approval request", "APPROVAL_CREATE_FAILED")
-		return
-	}
-
-	// Strict audit for approval creation
-	auditErr := h.writeStrictAudit(r, audit.WriteAuditInput{
-		Action:   "BATCH_CREATE",
-		Module:   "subscribers",
-		TargetID: fmt.Sprintf("subscriber:batch:%s", frozen.StartImsi),
-		Result:   "approval_required",
-		Metadata: map[string]any{
-			"approvalId":       approvalDoc.ID,
-			"governanceMode":   "APPROVAL_GOVERNED",
-			"approvalRequired": true,
-			"operation":        "SUBSCRIBER_BATCH_CREATE",
-			"actorRole":        fresh.NormalizedRole,
-		},
-	}, fresh)
-	if auditErr != nil {
-		response.JSON(w, http.StatusServiceUnavailable, map[string]any{
-			"error":     "AUDIT_UNAVAILABLE",
-			"code":      "AUDIT_UNAVAILABLE",
-			"committed": true,
-			"approval":  approvalDoc,
-		})
-		return
-	}
-
-	response.JSON(w, http.StatusAccepted, map[string]any{
-		"outcome":          "approval_required",
-		"message":          "Approval required before batch subscriber creation",
-		"approval":         approvalDoc,
-		"requiresApproval": true,
+		"outcome": "executed",
+		"message": "Subscribers created successfully",
+		"result":  sanitizeBatchResult(result),
 	})
 }
 
@@ -993,65 +765,24 @@ func (h *WriteHandler) BatchUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Active approval conflict check
-	activeMatch, err := h.findExistingBatchChange(r.Context(), frozen.OperationFingerprint, req.Imsis, frozen.FieldNames)
-	if err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to check existing approvals", "INTERNAL_ERROR")
-		return
-	}
-
-	if govResult.Decision == governance.Direct {
-		// super_admin/root: ANY active duplicate OR overlap → 409
-		if activeMatch != nil {
+	// Maintenance window check for direct path
+	if req.MaintenanceWindow != nil {
+		now := time.Now()
+		start, _ := time.Parse(time.RFC3339, req.MaintenanceWindow.Start)
+		end, _ := time.Parse(time.RFC3339, req.MaintenanceWindow.End)
+		if now.Before(start) || now.After(end) {
 			response.JSON(w, http.StatusConflict, map[string]any{
-				"error": "ACTIVE_CHANGE_CONFLICT",
-				"code":  "ACTIVE_CHANGE_CONFLICT",
+				"error": "OUTSIDE_MAINTENANCE_WINDOW",
+				"code":  "OUTSIDE_MAINTENANCE_WINDOW",
 			})
 			return
 		}
-		// Maintenance window check for direct path
-		if req.MaintenanceWindow != nil {
-			now := time.Now()
-			start, _ := time.Parse(time.RFC3339, req.MaintenanceWindow.Start)
-			end, _ := time.Parse(time.RFC3339, req.MaintenanceWindow.End)
-			if now.Before(start) || now.After(end) {
-				response.JSON(w, http.StatusConflict, map[string]any{
-					"error": "OUTSIDE_MAINTENANCE_WINDOW",
-					"code":  "OUTSIDE_MAINTENANCE_WINDOW",
-				})
-				return
-			}
-		}
-		// DIRECT_GOVERNED — execute immediately
-		h.executeDirectBatchUpdate(w, r, frozen, fresh)
-		return
 	}
-
-	// operator/ops_admin: APPROVAL_GOVERNED
-	if activeMatch != nil {
-		if activeMatch.Type == "duplicate" {
-			// Exact duplicate → 202 idempotent
-			response.JSON(w, http.StatusAccepted, map[string]any{
-				"approval":         activeMatch.Approval,
-				"requiresApproval": true,
-				"idempotent":       true,
-			})
-			return
-		}
-		// Overlap → 409
-		response.JSON(w, http.StatusConflict, map[string]any{
-			"error":    "ACTIVE_CHANGE_CONFLICT",
-			"code":     "ACTIVE_CHANGE_CONFLICT",
-			"approval": activeMatch.Approval,
-		})
-		return
-	}
-
-	// Create new approval
-	h.createBatchUpdateApproval(w, r, frozen, fresh, req.Reason, req.TicketId, req.MaintenanceWindow)
+	// DIRECT_GOVERNED — execute immediately
+	h.executeDirectBatchUpdate(w, r, frozen, fresh)
 }
 
-// executeDirectBatchUpdate executes batch update directly for super_admin/root.
+// executeDirectBatchUpdate executes batch update directly.
 func (h *WriteHandler) executeDirectBatchUpdate(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -1061,7 +792,7 @@ func (h *WriteHandler) executeDirectBatchUpdate(
 	// Execute via reusable executor
 	result, err := ExecuteFrozenSubscriberBatchUpdate(r.Context(), frozen, h.effectiveBatchStore())
 	if err != nil {
-		h.handleGovernanceError(w, err)
+		h.handleBatchUpdateError(w, err)
 		return
 	}
 
@@ -1072,8 +803,8 @@ func (h *WriteHandler) executeDirectBatchUpdate(
 		auditResult = "failed"
 	}
 
-	// Strict audit — always executed after executor invocation
-	auditErr := h.writeStrictAudit(r, audit.WriteAuditInput{
+	// Strict audit — non-gating
+	h.writeStrictAudit(r, audit.WriteAuditInput{
 		Action:   "BATCH_UPDATE",
 		Module:   "subscribers",
 		TargetID: fmt.Sprintf("subscriber-batch:%s", frozen.OperationFingerprint),
@@ -1089,28 +820,19 @@ func (h *WriteHandler) executeDirectBatchUpdate(
 		},
 		Result: auditResult,
 		Metadata: map[string]any{
-			"governanceMode":   "DIRECT_GOVERNED",
-			"approvalRequired": false,
-			"operation":        "SUBSCRIBER_BATCH_UPDATE",
-			"actorRole":        fresh.NormalizedRole,
-			"targetCount":      frozen.TargetCount,
-			"fieldNames":       frozen.FieldNames,
-			"modifiedCount":    result.ModifiedCount,
-			"conflictCount":    len(result.ConflictImsis),
-			"failedCount":      len(result.FailedImsis),
-			"classification":   classification,
-			"partialMutation":  result.PartialMutation,
-			"fingerprint":      frozen.OperationFingerprint,
+			"governanceMode":  "DIRECT_GOVERNED",
+			"operation":       "SUBSCRIBER_BATCH_UPDATE",
+			"actorRole":       fresh.NormalizedRole,
+			"targetCount":     frozen.TargetCount,
+			"fieldNames":      frozen.FieldNames,
+			"modifiedCount":   result.ModifiedCount,
+			"conflictCount":   len(result.ConflictImsis),
+			"failedCount":     len(result.FailedImsis),
+			"classification":  classification,
+			"partialMutation": result.PartialMutation,
+			"fingerprint":     frozen.OperationFingerprint,
 		},
 	}, fresh)
-	if auditErr != nil {
-		response.JSON(w, http.StatusServiceUnavailable, map[string]any{
-			"error":     "AUDIT_UNAVAILABLE",
-			"code":      "AUDIT_UNAVAILABLE",
-			"committed": result.MutationCommitted,
-		})
-		return
-	}
 
 	if classification == "FAILED_NO_MUTATION" {
 		if len(result.ConflictImsis) > 0 {
@@ -1147,232 +869,7 @@ func (h *WriteHandler) executeDirectBatchUpdate(
 			"modified":   result.ModifiedCount,
 			"fieldNames": result.FieldNames,
 		},
-		"requiresApproval": false,
 	})
-}
-
-// createBatchUpdateApproval creates an approval for operator/ops_admin.
-func (h *WriteHandler) createBatchUpdateApproval(
-	w http.ResponseWriter,
-	r *http.Request,
-	frozen *FrozenBatchUpdateV2,
-	fresh *FreshActor,
-	reason string,
-	ticketId string,
-	maintenanceWindow *MaintenanceWindow,
-) {
-	actor := approval.GovernanceActor{
-		Type:     "user",
-		UserID:   fresh.UserID,
-		Username: fresh.Username,
-		Role:     fresh.RawRole,
-	}
-
-	reasonPtr := &reason
-	var mw *approval.ApprovalMaintenanceWindow
-	if maintenanceWindow != nil {
-		mw = &approval.ApprovalMaintenanceWindow{
-			Start:    maintenanceWindow.Start,
-			End:      maintenanceWindow.End,
-			TimeZone: maintenanceWindow.TimeZone,
-		}
-	}
-
-	approvalDoc, err := h.approvalSvc.Create(r, actor, approval.CreateApprovalInput{
-		Action:           "SUBSCRIBER_BATCH_UPDATE",
-		Requester:        fresh.Username,
-		RequesterContext: &actor,
-		TargetID:         fmt.Sprintf("subscriber-batch:%s", frozen.OperationFingerprint),
-		Summary:          fmt.Sprintf("Batch update %d subscriber(s)", frozen.TargetCount),
-		Operation: &approval.ApprovalOperation{
-			ResourceType: "subscriber_batch",
-			ResourceID:   frozen.OperationFingerprint,
-		},
-		OperationFingerprint: frozen.OperationFingerprint,
-		Reason:               reasonPtr,
-		TicketID:             ticketId,
-		MaintenanceWindow:    mw,
-		Payload:              frozenToMap(frozen),
-	})
-	if err != nil {
-		if awe, ok := err.(*approval.ApprovalWorkflowError); ok && awe.Committed {
-			response.JSON(w, awe.Status, awe.ErrorResponse())
-			return
-		}
-		response.Error(w, http.StatusInternalServerError, "Failed to create approval request", "APPROVAL_CREATE_FAILED")
-		return
-	}
-
-	// NO duplicate audit here — ApprovalCreator.Create() already writes strict audit
-
-	// Section 14: New Approval response — match Node production (no outcome/message)
-	response.JSON(w, http.StatusAccepted, map[string]any{
-		"approval":         approvalDoc,
-		"requiresApproval": true,
-	})
-}
-
-// ActiveApprovalMatch represents the result of checking for active approvals.
-type ActiveApprovalMatch struct {
-	Type     string // "duplicate" or "conflict"
-	Approval *approval.ApprovalDocument
-}
-
-// findExistingBatchChange checks for active approvals with the same fingerprint or overlapping targets+fields.
-// Returns: duplicate (exact fingerprint), conflict (overlapping targets+fields), or nil (no match).
-// Uses dedicated ListActiveByAction query — no pagination blind spots.
-func (h *WriteHandler) findExistingBatchChange(ctx context.Context, fingerprint string, imsis []string, fields []string) (*ActiveApprovalMatch, error) {
-	// Dedicated query: ALL active SUBSCRIBER_BATCH_UPDATE approvals (no pagination limit)
-	allApprovals, err := h.approvalQry.ListActiveByAction(ctx, "SUBSCRIBER_BATCH_UPDATE")
-	if err != nil {
-		return nil, err
-	}
-
-	requestedImsis := make(map[string]bool, len(imsis))
-	for _, imsi := range imsis {
-		requestedImsis[imsi] = true
-	}
-	requestedFields := make(map[string]bool, len(fields))
-	for _, f := range fields {
-		requestedFields[f] = true
-	}
-
-	for i := range allApprovals {
-		a := &allApprovals[i]
-		// Duplicate check: same fingerprint
-		if a.OperationFingerprint == fingerprint {
-			return &ActiveApprovalMatch{Type: "duplicate", Approval: a}, nil
-		}
-
-		// Conflict check: overlapping targets and fields
-		payloadTargets := extractApprovalTargets(a)
-		payloadFields := extractApprovalFields(a)
-
-		targetOverlap := false
-		for _, t := range payloadTargets {
-			if requestedImsis[t] {
-				targetOverlap = true
-				break
-			}
-		}
-		if !targetOverlap {
-			continue
-		}
-
-		fieldOverlap := false
-		for _, f := range payloadFields {
-			if requestedFields[f] {
-				fieldOverlap = true
-				break
-			}
-		}
-		if fieldOverlap {
-			return &ActiveApprovalMatch{Type: "conflict", Approval: a}, nil
-		}
-	}
-
-	return nil, nil
-}
-
-// extractApprovalTargets extracts IMSI targets from an approval payload.
-// Section P: asAnySlice converts bson.A or []any to []any for safe extraction.
-func asAnySlice(v any) ([]any, bool) {
-	switch slice := v.(type) {
-	case []any:
-		return slice, true
-	case bson.A:
-		return []any(slice), true
-	default:
-		return nil, false
-	}
-}
-
-// Section P: asStringAnyMap converts bson.M, bson.D, or map[string]any to map[string]any for safe extraction.
-func asStringAnyMap(v any) (map[string]any, bool) {
-	switch m := v.(type) {
-	case map[string]any:
-		return m, true
-	case bson.M:
-		return map[string]any(m), true
-	case bson.D:
-		result := make(map[string]any, len(m))
-		for _, elem := range m {
-			result[elem.Key] = elem.Value
-		}
-		return result, true
-	default:
-		return nil, false
-	}
-}
-
-// Section P: BSON-safe target extraction from approval payload.
-// extractApprovalTargets extracts target IMSIs from an approval document.
-// Action-aware: SUBSCRIBER_UPDATE/DELETE use payload.imsi,
-// SUBSCRIBER_BATCH_UPDATE/BULK_DELETE use payload.targets[].imsi.
-func extractApprovalTargets(a *approval.ApprovalDocument) []string {
-	if a.Payload == nil {
-		return nil
-	}
-
-	// SUBSCRIBER_UPDATE / SUBSCRIBER_DELETE: payload.imsi
-	if a.Action == "SUBSCRIBER_UPDATE" || a.Action == "SUBSCRIBER_DELETE" {
-		if imsi, ok := a.Payload["imsi"].(string); ok && len(imsi) == 15 {
-			return []string{imsi}
-		}
-		// Legacy fallback: targetId might contain IMSI
-		if a.TargetID != "" && len(a.TargetID) >= 15 {
-			// Extract IMSI from "subscriber:IMSI" format
-			parts := strings.Split(a.TargetID, ":")
-			for _, part := range parts {
-				if len(part) == 15 {
-					allDigits := true
-					for _, c := range part {
-						if c < '0' || c > '9' {
-							allDigits = false
-							break
-						}
-					}
-					if allDigits {
-						return []string{part}
-					}
-				}
-			}
-		}
-		return nil
-	}
-
-	// SUBSCRIBER_BATCH_UPDATE / SUBSCRIBER_BULK_DELETE: payload.targets[].imsi
-	targetsRaw, ok := asAnySlice(a.Payload["targets"])
-	if !ok {
-		return nil
-	}
-	var imsis []string
-	for _, t := range targetsRaw {
-		if target, ok := asStringAnyMap(t); ok {
-			if imsi, ok := target["imsi"].(string); ok {
-				imsis = append(imsis, imsi)
-			}
-		}
-	}
-	return imsis
-}
-
-// Section P: BSON-safe field name extraction from approval payload.
-func extractApprovalFields(a *approval.ApprovalDocument) []string {
-	if a.Payload == nil {
-		return nil
-	}
-	fieldsRaw, ok := asAnySlice(a.Payload["fieldNames"])
-	if !ok {
-		return nil
-	}
-	var fields []string
-	for _, f := range fieldsRaw {
-		if field, ok := f.(string); ok {
-			fields = append(fields, field)
-		}
-	}
-	return fields
 }
 
 // sanitizeBatchResult removes sensitive data from batch result for HTTP response.
@@ -1458,82 +955,14 @@ func (h *WriteHandler) BulkDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Active change protection - check for conflicting active approvals
-	activeMatch, err := h.findExistingBulkDeleteChange(r.Context(), frozen.OperationFingerprint, req.ImsiList)
-	if err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to check active changes", "INTERNAL_ERROR")
-		return
-	}
-
 	// Evaluate governance with fresh role
 	result := EvaluateOperation(OpBulkDelete, fresh.NormalizedRole)
-
-	if result.Decision == governance.Direct {
-		// super_admin/root: Direct execution
-		// Check for ANY active conflict
-		if activeMatch != nil {
-			response.Error(w, http.StatusConflict, "ACTIVE_CHANGE_CONFLICT", "ACTIVE_CHANGE_CONFLICT")
-			return
-		}
-
-		h.executeDirectBulkDelete(w, r, frozen, fresh)
+	if !isExecutable(result) {
+		response.Error(w, http.StatusConflict, "Operation not executable", "OPERATION_NOT_EXECUTABLE")
 		return
 	}
 
-	// operator/ops_admin: Approval path
-	if activeMatch != nil {
-		if activeMatch.Type == "duplicate" {
-			// Exact duplicate → 202 idempotent
-			response.JSON(w, http.StatusAccepted, map[string]any{
-				"approval":         activeMatch.Approval,
-				"requiresApproval": true,
-				"idempotent":       true,
-			})
-			return
-		}
-		// Overlap → 409
-		response.JSON(w, http.StatusConflict, map[string]any{
-			"error":    "ACTIVE_CHANGE_CONFLICT",
-			"code":     "ACTIVE_CHANGE_CONFLICT",
-			"approval": activeMatch.Approval,
-		})
-		return
-	}
-
-	// Create approval
-	actor := approval.GovernanceActor{
-		Type:     "user",
-		UserID:   fresh.UserID,
-		Username: fresh.Username,
-		Role:     fresh.NormalizedRole,
-	}
-	input := approval.CreateApprovalInput{
-		Action:               "SUBSCRIBER_BULK_DELETE",
-		Requester:            fresh.Username,
-		RequesterContext:     &actor,
-		TargetID:             "subscriber:bulk-delete",
-		Summary:              fmt.Sprintf("Delete %d subscriber(s)", frozen.TargetCount),
-		Operation:            &approval.ApprovalOperation{ResourceType: "subscriber_batch", ResourceID: "bulk-delete"},
-		OperationFingerprint: frozen.OperationFingerprint,
-		Before:               map[string]any{"targetCount": frozen.TargetCount, "targets": frozen.Targets},
-		Payload:              frozenBulkDeleteToMap(frozen),
-	}
-
-	approvalDoc, err := h.approvalSvc.Create(r, actor, input)
-	if err != nil {
-		if awe, ok := err.(*approval.ApprovalWorkflowError); ok && awe.Committed {
-			response.JSON(w, awe.Status, awe.ErrorResponse())
-			return
-		}
-		response.Error(w, http.StatusInternalServerError, "Failed to create approval request", "APPROVAL_CREATE_FAILED")
-		return
-	}
-
-	// New Approval response — match Node production (no outcome/message)
-	response.JSON(w, http.StatusAccepted, map[string]any{
-		"approval":         approvalDoc,
-		"requiresApproval": true,
-	})
+	h.executeDirectBulkDelete(w, r, frozen, fresh)
 }
 
 // executeDirectBulkDelete executes bulk delete directly for super_admin/root.
@@ -1603,14 +1032,13 @@ func (h *WriteHandler) executeDirectBulkDelete(w http.ResponseWriter, r *http.Re
 		auditResult = "failed"
 	}
 
-	auditErr := h.writeStrictAudit(r, audit.WriteAuditInput{
+	h.writeStrictAudit(r, audit.WriteAuditInput{
 		Action:   "subscriber.batch.delete",
 		Module:   "subscribers",
 		TargetID: "subscriber:bulk-delete",
 		Result:   auditResult,
 		Metadata: map[string]any{
 			"governanceMode":         "DIRECT_GOVERNED",
-			"approvalRequired":       false,
 			"actorRole":              fresh.NormalizedRole,
 			"risk":                   "critical",
 			"targetCount":            execResult.Requested,
@@ -1623,14 +1051,6 @@ func (h *WriteHandler) executeDirectBulkDelete(w http.ResponseWriter, r *http.Re
 			"partialMutation":        execResult.PartialMutation,
 		},
 	}, fresh)
-	if auditErr != nil {
-		response.JSON(w, http.StatusServiceUnavailable, map[string]any{
-			"error":     "AUDIT_UNAVAILABLE",
-			"code":      "AUDIT_UNAVAILABLE",
-			"committed": execResult.MutationCommitted,
-		})
-		return
-	}
 
 	// Section 18: Classification-based HTTP mapping
 	switch classification {
@@ -1644,7 +1064,6 @@ func (h *WriteHandler) executeDirectBulkDelete(w http.ResponseWriter, r *http.Re
 				"deletedImsis":          execResult.DeletedImsis,
 				"ocsCleanupFailedImsis": execResult.OcsCleanupFailedImsis,
 			},
-			"requiresApproval": false,
 		})
 	case "PARTIAL_WRITE":
 		response.JSON(w, http.StatusConflict, map[string]any{
@@ -1690,55 +1109,6 @@ func sanitizeBulkDeleteResult(result *BulkDeleteExecutionResult) map[string]any 
 		"deletedCount":          result.DeletedCount,
 		"partialMutation":       result.PartialMutation,
 		"mutationCommitted":     result.MutationCommitted,
-	}
-}
-
-// findExistingBulkDeleteChange checks for active approvals with the same fingerprint or overlapping targets.
-func (h *WriteHandler) findExistingBulkDeleteChange(ctx context.Context, fingerprint string, imsis []string) (*ActiveApprovalMatch, error) {
-	// Check all relevant active subscriber changes
-	actions := []string{"SUBSCRIBER_UPDATE", "SUBSCRIBER_DELETE", "SUBSCRIBER_BATCH_UPDATE", "SUBSCRIBER_BULK_DELETE"}
-	for _, action := range actions {
-		approvals, err := h.approvalQry.ListActiveByAction(ctx, action)
-		if err != nil {
-			return nil, err
-		}
-
-		for _, a := range approvals {
-			// Duplicate check: same fingerprint for BULK_DELETE
-			if action == "SUBSCRIBER_BULK_DELETE" && a.OperationFingerprint == fingerprint {
-				return &ActiveApprovalMatch{Type: "duplicate", Approval: &a}, nil
-			}
-
-			// Overlap check: any active change targeting same IMSIs
-			targetOverlap := false
-			existingTargets := extractApprovalTargets(&a)
-			requestedSet := make(map[string]bool)
-			for _, imsi := range imsis {
-				requestedSet[imsi] = true
-			}
-			for _, existing := range existingTargets {
-				if requestedSet[existing] {
-					targetOverlap = true
-					break
-				}
-			}
-			if targetOverlap {
-				return &ActiveApprovalMatch{Type: "conflict", Approval: &a}, nil
-			}
-		}
-	}
-	return nil, nil
-}
-
-// frozenBulkDeleteToMap converts FrozenBulkDeleteV2 to map for storage.
-func frozenBulkDeleteToMap(frozen *FrozenBulkDeleteV2) map[string]any {
-	return map[string]any{
-		"version":              frozen.Version,
-		"targets":              frozen.Targets,
-		"targetCount":          frozen.TargetCount,
-		"snapshotBytes":        frozen.SnapshotBytes,
-		"strategy":             frozen.Strategy,
-		"operationFingerprint": frozen.OperationFingerprint,
 	}
 }
 
@@ -1912,46 +1282,14 @@ func (h *WriteHandler) handleImportMutation(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Active change protection
-	activeMatch, err := h.findExistingImportChange(r.Context(), frozen.OperationFingerprint, frozen.Targets)
-	if err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to check active changes", "INTERNAL_ERROR")
-		return
-	}
-
 	// Evaluate governance with fresh role
 	result := EvaluateOperation(OpImport, fresh.NormalizedRole)
-
-	if result.Decision == governance.Direct {
-		// super_admin/root: Direct execution
-		if activeMatch != nil {
-			response.Error(w, http.StatusConflict, "ACTIVE_CHANGE_CONFLICT", "ACTIVE_CHANGE_CONFLICT")
-			return
-		}
-		h.executeDirectImport(w, r, frozen, fresh)
+	if !isExecutable(result) {
+		response.Error(w, http.StatusConflict, "Operation not executable", "OPERATION_NOT_EXECUTABLE")
 		return
 	}
 
-	// operator/ops_admin: Approval path
-	if activeMatch != nil {
-		if activeMatch.Type == "duplicate" {
-			response.JSON(w, http.StatusAccepted, map[string]any{
-				"approval":         activeMatch.Approval,
-				"requiresApproval": true,
-				"idempotent":       true,
-			})
-			return
-		}
-		// Overlap → 409
-		response.JSON(w, http.StatusConflict, map[string]any{
-			"error":    "ACTIVE_CHANGE_CONFLICT",
-			"code":     "ACTIVE_CHANGE_CONFLICT",
-			"approval": activeMatch.Approval,
-		})
-		return
-	}
-
-	h.createImportApproval(w, r, frozen, fresh)
+	h.executeDirectImport(w, r, frozen, fresh)
 }
 
 // effectiveImportRepo returns the test seam or the real repository.
@@ -1960,81 +1298,6 @@ func (h *WriteHandler) effectiveImportRepo() ImportRepository {
 		return h.importRepo
 	}
 	return h.repo
-}
-
-// findExistingImportChange checks for active approvals with the same fingerprint or overlapping targets.
-func (h *WriteHandler) findExistingImportChange(ctx context.Context, fingerprint string, targets []ImportTarget) (*ActiveApprovalMatch, error) {
-	// Build set of IMSIs we intend to create (state=absent)
-	createImsis := make([]string, 0)
-	for _, t := range targets {
-		if t.State == "absent" {
-			createImsis = append(createImsis, t.Imsi)
-		}
-	}
-
-	actions := []string{"SUBSCRIBER_BATCH_CREATE", "SUBSCRIBER_IMPORT", "SUBSCRIBER_BULK_DELETE", "SUBSCRIBER_BATCH_UPDATE", "SUBSCRIBER_UPDATE", "SUBSCRIBER_DELETE"}
-	for _, action := range actions {
-		approvals, err := h.approvalQry.ListActiveByAction(ctx, action)
-		if err != nil {
-			return nil, err
-		}
-
-		for _, a := range approvals {
-			// Duplicate check: same fingerprint for IMPORT
-			if action == "SUBSCRIBER_IMPORT" && a.OperationFingerprint == fingerprint {
-				return &ActiveApprovalMatch{Type: "duplicate", Approval: &a}, nil
-			}
-
-			// Overlap check: any active change targeting same IMSIs we intend to create
-			existingTargets := extractApprovalTargets(&a)
-			requestedSet := make(map[string]bool)
-			for _, imsi := range createImsis {
-				requestedSet[imsi] = true
-			}
-			for _, existing := range existingTargets {
-				if requestedSet[existing] {
-					return &ActiveApprovalMatch{Type: "conflict", Approval: &a}, nil
-				}
-			}
-		}
-	}
-	return nil, nil
-}
-
-// createImportApproval creates an approval for operator/ops_admin.
-func (h *WriteHandler) createImportApproval(w http.ResponseWriter, r *http.Request, frozen *FrozenImportV2, fresh *FreshActor) {
-	actor := approval.GovernanceActor{
-		Type:     "user",
-		UserID:   fresh.UserID,
-		Username: fresh.Username,
-		Role:     fresh.NormalizedRole,
-	}
-	input := approval.CreateApprovalInput{
-		Action:               "SUBSCRIBER_IMPORT",
-		Requester:            fresh.Username,
-		RequesterContext:     &actor,
-		TargetID:             "subscriber:csv-import",
-		Summary:              fmt.Sprintf("Import %d subscriber record(s)", frozen.TargetCount),
-		Operation:            &approval.ApprovalOperation{ResourceType: "subscriber_import", ResourceID: frozen.Summary.FileHash},
-		OperationFingerprint: frozen.OperationFingerprint,
-		Before:               map[string]any{"targetCount": frozen.TargetCount, "summary": frozen.Summary},
-		Payload:              frozenImportToMap(frozen),
-	}
-
-	approvalDoc, err := h.approvalSvc.Create(r, actor, input)
-	if err != nil {
-		if awe, ok := err.(*approval.ApprovalWorkflowError); ok && awe.Committed {
-			response.JSON(w, awe.Status, awe.ErrorResponse())
-			return
-		}
-		response.Error(w, http.StatusInternalServerError, "Failed to create approval request", "APPROVAL_CREATE_FAILED")
-		return
-	}
-
-	response.JSON(w, http.StatusAccepted, map[string]any{
-		"approval":         approvalDoc,
-		"requiresApproval": true,
-	})
 }
 
 // executeDirectImport executes import directly for super_admin/root.
@@ -2074,47 +1337,40 @@ func (h *WriteHandler) executeDirectImport(w http.ResponseWriter, r *http.Reques
 	if classification != "SUCCESS" {
 		auditResult = "failed"
 	}
-	auditErr := h.auditWriter.WriteStrict(r.Context(), audit.WriteAuditInput{
-		Action: "subscriber.import",
-		Module: "subscribers",
-		Actor: audit.ActorInput{
-			Type:     "user",
-			UserID:   fresh.UserID,
-			Username: fresh.Username,
-			Role:     fresh.NormalizedRole,
-		},
-		Resource:  &audit.ResourceInput{Type: "subscriber_import", ID: "csv-import"},
-		TargetID:  "subscriber:csv-import",
-		Result:    auditResult,
-		RiskLevel: "high",
-		Metadata: map[string]any{
-			"governanceMode":              "DIRECT_GOVERNED",
-			"approvalRequired":            false,
-			"actorRole":                   fresh.NormalizedRole,
-			"risk":                        "high",
-			"requested":                   execResult.Requested,
-			"intendedCreateCount":         execResult.IntendedCreateCount,
-			"createdCount":                execResult.CreatedCount,
-			"skipCount":                   len(execResult.SkippedImsis),
-			"conflictCount":               len(execResult.ConflictImsis),
-			"failedCount":                 len(execResult.FailedImsis),
-			"ocsProvisioningFailureCount": len(execResult.OcsProvisioningFailedImsis),
-			"fileHash":                    frozen.Summary.FileHash,
-			"operationFingerprint":        frozen.OperationFingerprint,
-			"classification":              classification,
-			"partialMutation":             execResult.PartialMutation,
-			"mutationCommitted":           execResult.MutationCommitted,
-		},
-	})
-
-	if auditErr != nil {
-		// Audit failure after mutation — pass committed state
-		response.JSON(w, http.StatusServiceUnavailable, map[string]any{
-			"error":     "AUDIT_UNAVAILABLE",
-			"code":      "AUDIT_UNAVAILABLE",
-			"committed": execResult.MutationCommitted,
-		})
-		return
+	if h.auditWriter != nil {
+		if auditErr := h.auditWriter.WriteStrict(r.Context(), audit.WriteAuditInput{
+			Action: "subscriber.import",
+			Module: "subscribers",
+			Actor: audit.ActorInput{
+				Type:     "user",
+				UserID:   fresh.UserID,
+				Username: fresh.Username,
+				Role:     fresh.NormalizedRole,
+			},
+			Resource:  &audit.ResourceInput{Type: "subscriber_import", ID: "csv-import"},
+			TargetID:  "subscriber:csv-import",
+			Result:    auditResult,
+			RiskLevel: "high",
+			Metadata: map[string]any{
+				"governanceMode":              "DIRECT_GOVERNED",
+				"actorRole":                   fresh.NormalizedRole,
+				"risk":                        "high",
+				"requested":                   execResult.Requested,
+				"intendedCreateCount":         execResult.IntendedCreateCount,
+				"createdCount":                execResult.CreatedCount,
+				"skipCount":                   len(execResult.SkippedImsis),
+				"conflictCount":               len(execResult.ConflictImsis),
+				"failedCount":                 len(execResult.FailedImsis),
+				"ocsProvisioningFailureCount": len(execResult.OcsProvisioningFailedImsis),
+				"fileHash":                    frozen.Summary.FileHash,
+				"operationFingerprint":        frozen.OperationFingerprint,
+				"classification":              classification,
+				"partialMutation":             execResult.PartialMutation,
+				"mutationCommitted":           execResult.MutationCommitted,
+			},
+		}); auditErr != nil {
+			slog.Error("subscriber_import_audit_failed", "error", auditErr)
+		}
 	}
 
 	// Handle errors from execution
@@ -2160,6 +1416,8 @@ func (h *WriteHandler) executeDirectImport(w http.ResponseWriter, r *http.Reques
 				"code":              ErrImportPreconditionChanged,
 				"requested":         execResult.Requested,
 				"imported":          execResult.CreatedCount,
+				"skipped":           len(execResult.SkippedImsis),
+				"conflictImsis":     execResult.ConflictImsis,
 				"partialMutation":   false,
 				"mutationCommitted": false,
 			})
@@ -2178,9 +1436,8 @@ func (h *WriteHandler) executeDirectImport(w http.ResponseWriter, r *http.Reques
 
 	// SUCCESS
 	response.JSON(w, http.StatusOK, map[string]any{
-		"outcome":          "executed",
-		"message":          "Subscribers imported successfully",
-		"requiresApproval": false,
+		"outcome": "executed",
+		"message": "Subscribers imported successfully",
 		"result": map[string]any{
 			"requested":                  execResult.Requested,
 			"imported":                   execResult.CreatedCount,
@@ -2193,23 +1450,9 @@ func (h *WriteHandler) executeDirectImport(w http.ResponseWriter, r *http.Reques
 	})
 }
 
-// frozenImportToMap converts FrozenImportV2 to map for storage.
-func frozenImportToMap(frozen *FrozenImportV2) map[string]any {
-	return map[string]any{
-		"version":              frozen.Version,
-		"records":              frozen.Records,
-		"targets":              frozen.Targets,
-		"targetCount":          frozen.TargetCount,
-		"summary":              frozen.Summary,
-		"strategy":             frozen.Strategy,
-		"snapshotBytes":        frozen.SnapshotBytes,
-		"operationFingerprint": frozen.OperationFingerprint,
-	}
-}
-
 // ProfileApply handles POST /api/subscribers/{imsi}/profile
 // Applies profile auth/AMBR/slices to subscriber with governance:
-// super_admin/root → DIRECT_GOVERNED, ops_admin/operator → APPROVAL_GOVERNED.
+// Canonical admin/operator roles execute directly; viewer is denied.
 // Ordering: auth → capability check → rate limit → body validation → fresh actor → prepare → governance → execute/approve
 func (h *WriteHandler) ProfileApply(w http.ResponseWriter, r *http.Request) {
 	imsi := r.PathValue("imsi")
@@ -2273,32 +1516,16 @@ func (h *WriteHandler) ProfileApply(w http.ResponseWriter, r *http.Request) {
 
 	reqID := middleware.RequestIDFromContext(r.Context())
 
-	if result.Decision == governance.Direct {
-		// DIRECT_GOVERNED: execute immediately
-		slog.Info("profile_apply_start",
-			"operation", "SUBSCRIBER_PROFILE_APPLY",
-			"request_id", reqID,
-			"principal", fresh.Username,
-			"role", fresh.NormalizedRole,
-			"governance_mode", "DIRECT_GOVERNED",
-			"imsi", imsi,
-			"profile", strings.TrimSpace(body.ProfileName),
-		)
-		h.executeDirectProfileApply(w, r, intent, fresh)
-		return
-	}
-
-	// APPROVAL_GOVERNED: create approval
 	slog.Info("profile_apply_start",
 		"operation", "SUBSCRIBER_PROFILE_APPLY",
 		"request_id", reqID,
 		"principal", fresh.Username,
 		"role", fresh.NormalizedRole,
-		"governance_mode", "APPROVAL_GOVERNED",
+		"governance_mode", "DIRECT_GOVERNED",
 		"imsi", imsi,
 		"profile", strings.TrimSpace(body.ProfileName),
 	)
-	h.createProfileApplyApproval(w, r, intent, fresh)
+	h.executeDirectProfileApply(w, r, intent, fresh)
 }
 
 // executeDirectProfileApply handles DIRECT_GOVERNED profile apply execution.
@@ -2352,23 +1579,8 @@ func (h *WriteHandler) executeDirectProfileApply(w http.ResponseWriter, r *http.
 		return
 	}
 
-	// Strict audit — committed=true on failure
-	auditErr := h.writeProfileApplyAudit(r, intent, fresh, "success", "DIRECT_GOVERNED", execResult.Classification, execResult.Committed, execResult.SecurityChanged)
-	if auditErr != nil {
-		slog.Error("profile_apply_audit_failed",
-			"operation", "SUBSCRIBER_PROFILE_APPLY",
-			"request_id", middleware.RequestIDFromContext(r.Context()),
-			"principal", fresh.Username,
-			"governance_mode", "DIRECT_GOVERNED",
-			"result", "AUDIT_UNAVAILABLE",
-		)
-		response.JSON(w, http.StatusServiceUnavailable, map[string]any{
-			"error":     "AUDIT_UNAVAILABLE",
-			"code":      "AUDIT_UNAVAILABLE",
-			"committed": true,
-		})
-		return
-	}
+	// Non-gating audit log
+	h.writeProfileApplyAudit(r, intent, fresh, "success", "DIRECT_GOVERNED", execResult.Classification, execResult.Committed, execResult.SecurityChanged)
 
 	slog.Info("profile_apply_success",
 		"operation", "SUBSCRIBER_PROFILE_APPLY",
@@ -2388,57 +1600,9 @@ func (h *WriteHandler) executeDirectProfileApply(w http.ResponseWriter, r *http.
 	})
 }
 
-// createProfileApplyApproval creates an approval request for APPROVAL_GOVERNED profile apply.
-func (h *WriteHandler) createProfileApplyApproval(w http.ResponseWriter, r *http.Request, intent *FrozenSubscriberProfileApplyV1, fresh *FreshActor) {
-	actor := approval.GovernanceActor{Type: "user", Username: fresh.Username, Role: fresh.NormalizedRole}
-	approvalDoc, err := h.approvalSvc.Create(r, actor, approval.CreateApprovalInput{
-		Action:    "SUBSCRIBER_PROFILE_APPLY",
-		Requester: fresh.Username,
-		TargetID:  fmt.Sprintf("subscriber:%s", intent.Imsi),
-		Summary:   fmt.Sprintf("Apply profile %s to subscriber %s", intent.ProfileName, intent.Imsi),
-		Operation: &approval.ApprovalOperation{
-			ResourceType: "subscriber",
-			ResourceID:   intent.Imsi,
-		},
-		Payload: frozenProfileApplyToMap(intent),
-	})
-	if err != nil {
-		h.handleProfileApplyError(w, err)
-		return
-	}
-
-	// Audit the approval creation
-	auditErr := h.writeProfileApplyAudit(r, intent, fresh, "success", "APPROVAL_GOVERNED", "APPROVAL_CREATED", false, false)
-	if auditErr != nil {
-		response.JSON(w, http.StatusServiceUnavailable, map[string]any{
-			"error":     "AUDIT_UNAVAILABLE",
-			"code":      "AUDIT_UNAVAILABLE",
-			"committed": false,
-		})
-		return
-	}
-
-	slog.Info("profile_apply_approval_created",
-		"operation", "SUBSCRIBER_PROFILE_APPLY",
-		"request_id", middleware.RequestIDFromContext(r.Context()),
-		"principal", fresh.Username,
-		"governance_mode", "APPROVAL_GOVERNED",
-		"approval_id", approvalDoc.ID,
-		"imsi", intent.Imsi,
-		"profile", intent.ProfileName,
-	)
-
-	response.JSON(w, http.StatusAccepted, map[string]any{
-		"outcome":          "approval_required",
-		"message":          "Approval required before profile apply",
-		"approval":         map[string]any{"id": approvalDoc.ID},
-		"requiresApproval": true,
-	})
-}
-
-// writeProfileApplyAudit writes a strict audit entry for profile apply.
-func (h *WriteHandler) writeProfileApplyAudit(r *http.Request, intent *FrozenSubscriberProfileApplyV1, fresh *FreshActor, result, governanceMode, classification string, committed, securityChanged bool) error {
-	return h.writeStrictAudit(r, audit.WriteAuditInput{
+// writeProfileApplyAudit writes an audit entry for profile apply.
+func (h *WriteHandler) writeProfileApplyAudit(r *http.Request, intent *FrozenSubscriberProfileApplyV1, fresh *FreshActor, result, governanceMode, classification string, committed, securityChanged bool) {
+	h.writeStrictAudit(r, audit.WriteAuditInput{
 		Action:   "SUBSCRIBER_PROFILE_APPLY",
 		Module:   "subscribers",
 		TargetID: intent.Imsi,
@@ -2481,18 +1645,4 @@ func (h *WriteHandler) handleProfileApplyError(w http.ResponseWriter, err error)
 		return
 	}
 	response.Error(w, http.StatusInternalServerError, "Internal server error", "INTERNAL_ERROR")
-}
-
-// frozenProfileApplyToMap converts FrozenSubscriberProfileApplyV1 to map for storage.
-func frozenProfileApplyToMap(frozen *FrozenSubscriberProfileApplyV1) map[string]any {
-	return map[string]any{
-		"version":                    frozen.Version,
-		"imsi":                       frozen.Imsi,
-		"profileName":                frozen.ProfileName,
-		"subscriberPreconditionHash": frozen.SubscriberPreconditionHash,
-		"profilePreconditionHash":    frozen.ProfilePreconditionHash,
-		"before":                     frozen.Before,
-		"afterPreview":               frozen.AfterPreview,
-		"operationFingerprint":       frozen.OperationFingerprint,
-	}
 }

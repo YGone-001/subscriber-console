@@ -15,16 +15,14 @@ import (
 type Repository struct {
 	balances    *mongo.Collection
 	subscribers *mongo.Collection
-	approvals   *mongo.Collection
 	auditLogs   *mongo.Collection
 }
 
 // NewRepository creates a new balance Repository.
-func NewRepository(balances, subscribers, approvals, auditLogs *mongo.Collection) *Repository {
+func NewRepository(balances, subscribers, auditLogs *mongo.Collection) *Repository {
 	return &Repository{
 		balances:    balances,
 		subscribers: subscribers,
-		approvals:   approvals,
 		auditLogs:   auditLogs,
 	}
 }
@@ -184,21 +182,6 @@ func (r *Repository) GetBalanceByIMSI(ctx context.Context, imsi string) (*Balanc
 	return &rec, nil
 }
 
-// CountPendingAdjustments counts pending balance adjustment approvals.
-func (r *Repository) CountPendingAdjustments(ctx context.Context) (int64, error) {
-	if r.approvals == nil {
-		return 0, nil
-	}
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
-	filter := bson.M{
-		"status": "pending",
-		"action": bson.M{"$in": bson.A{"TRAFFIC_ADJUSTMENT", "BALANCE_ADJUST", "OCS_BALANCE_ADJUST"}},
-	}
-	return r.approvals.CountDocuments(ctx, filter)
-}
-
 func (r *Repository) computeBalanceSummary(ctx context.Context) (BalanceSummary, error) {
 	totalSubscribers, err := r.balances.CountDocuments(ctx, bson.M{})
 	if err != nil {
@@ -216,12 +199,9 @@ func (r *Repository) computeBalanceSummary(ctx context.Context) (BalanceSummary,
 		activeCount = totalSubscribers
 	}
 
-	pendingCount, _ := r.CountPendingAdjustments(ctx)
-
 	return BalanceSummary{
-		TotalSubscribers:   totalSubscribers,
-		ActiveAccounts:     activeCount,
-		PendingAdjustments: pendingCount,
+		TotalSubscribers: totalSubscribers,
+		ActiveAccounts:   activeCount,
 	}, nil
 }
 

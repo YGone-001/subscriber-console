@@ -164,24 +164,15 @@ verify('active mutations have direct execution (allow), never approval', () => {
   }
 });
 
-verify('administrative duties separation: user_admin, approval_review, audit_export', () => {
-  // admin: all administrative capabilities allowed
+verify('administrative duty separation keeps user administration admin-only', () => {
   assert.equal(capabilityDecision('admin', 'user_admin'), 'allow');
-  assert.equal(capabilityDecision('admin', 'approval_review'), 'allow');
-  assert.equal(capabilityDecision('admin', 'approval_execute'), 'allow');
-  assert.equal(capabilityDecision('admin', 'audit_export'), 'export');
-
-  // operator: administrative capabilities denied
   assert.equal(capabilityDecision('operator', 'user_admin'), 'deny');
-  assert.equal(capabilityDecision('operator', 'approval_review'), 'deny');
-  assert.equal(capabilityDecision('operator', 'approval_execute'), 'deny');
-  assert.equal(capabilityDecision('operator', 'audit_export'), 'deny');
-
-  // viewer: administrative capabilities denied
   assert.equal(capabilityDecision('viewer', 'user_admin'), 'deny');
-  assert.equal(capabilityDecision('viewer', 'approval_review'), 'deny');
-  assert.equal(capabilityDecision('viewer', 'approval_execute'), 'deny');
-  assert.equal(capabilityDecision('viewer', 'audit_export'), 'deny');
+  for (const removed of ['approval_review', 'approval_execute', 'audit_view', 'audit_export']) {
+    assert.equal(capabilityDecision('admin', removed), 'deny');
+    assert.equal(capabilityDecision('operator', removed), 'deny');
+    assert.equal(capabilityDecision('viewer', removed), 'deny');
+  }
 });
 
 verify('representative permissions table verification', () => {
@@ -204,9 +195,6 @@ verify('representative permissions table verification', () => {
     ['ocs.tariff.write', true, true, false],
     ['ocs.plan.assign', true, true, false],
     ['ocs.rating.write', true, true, false],
-    ['audit.read', true, true, true],
-    ['audit.export', true, false, false],
-    ['audit.source-ip.read-full', true, false, false],
   ];
 
   for (const [perm, expectedAdmin, expectedOperator, expectedViewer] of representativeMatrix) {
@@ -287,7 +275,7 @@ verify('non-admin user cannot manage users', () => {
 console.log('\n5. Go Backend Parity Verification');
 
 verify('Go backend auth and user tests pass', () => {
-  const output = execSync('go test -short ./internal/auth ./internal/user ./internal/approval', {
+  const output = execSync('go test -short ./internal/auth ./internal/user', {
     cwd: fileURLToPath(new URL('../backend', import.meta.url)),
     encoding: 'utf8',
   });

@@ -114,7 +114,7 @@ export default function BatchCreateModal({ isOpen, onClose, onSuccess, profileLi
       const data = await res.json();
       if (res.ok) {
         setBatchResult(data);
-        if (!data?.approval?.id) onSuccess();
+        onSuccess();
       } else {
         const message = data.error === "Tariff plan not found"
           ? t("tariff_plan_err_not_found")
@@ -224,9 +224,7 @@ export default function BatchCreateModal({ isOpen, onClose, onSuccess, profileLi
                   presentation="modal"
                   tone={batchResult.failedCount > 0 ? "warning" : "success"}
                   title={batchResult.failedCount > 0 ? t("status") : t("success")}
-                  message={`${batchResult.approval?.id
-                    ? t("approval_msg_submitted", { id: batchResult.approval.id })
-                    : t("created_subscribers", { count: batchResult.count, start: batchResult.range?.from, end: batchResult.range?.to })}${batchResult.failedCount > 0 ? ` Failed: ${batchResult.failedCount}` : ""}`}
+                  message={`${t("created_subscribers", { count: batchResult.count, start: batchResult.range?.from, end: batchResult.range?.to })}${batchResult.failedCount > 0 ? ` Failed: ${batchResult.failedCount}` : ""}`}
                   onClose={() => setBatchResult(null)}
                 />
               )}

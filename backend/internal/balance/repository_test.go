@@ -34,10 +34,9 @@ func setupTestDB(t *testing.T) (*Repository, func()) {
 	testDBName := "xcloud_test_balance"
 	balancesColl := client.Database(testDBName).Collection("ocs_balances")
 	subsColl := client.Database(testDBName).Collection("ocs_subscribers")
-	approvalsColl := client.Database("xcloud_ops_test_balance").Collection("app_approvals")
 	auditColl := client.Database("xcloud_ops_test_balance").Collection("app_audit_logs")
 
-	repo := NewRepository(balancesColl, subsColl, approvalsColl, auditColl)
+	repo := NewRepository(balancesColl, subsColl, auditColl)
 
 	cleanup := func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

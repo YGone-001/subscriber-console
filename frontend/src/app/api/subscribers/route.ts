@@ -92,17 +92,13 @@ export async function POST(request: Request) {
     const created = await createDefaultSubscriber(imsi, data?.planId || data?.plan_id, msisdn);
     const legacyState = xcloudToLegacyState(created);
 
-    try {
-      await writeAuditLog({
+    await writeAuditLog({
         module: 'subscribers', action: 'CREATE', targetId: imsi,
         actor: { type: 'user', username: freshAccount.username, role: freshAccount.normalizedRole },
         before: null, after: legacyState,
         result: 'success',
-        metadata: { governanceMode: 'DIRECT_GOVERNED', approvalRequired: false, operation: 'SUBSCRIBER_CREATE', actorRole: freshAccount.normalizedRole },
-      }, { failureMode: 'strict' });
-    } catch {
-      return NextResponse.json({ error: 'AUDIT_UNAVAILABLE', code: 'AUDIT_UNAVAILABLE', committed: true }, { status: 503 });
-    }
+        metadata: { governanceMode: 'DIRECT_GOVERNED', operation: 'SUBSCRIBER_CREATE', actorRole: freshAccount.normalizedRole },
+      });
 
     return NextResponse.json({ outcome: 'executed', message: 'Subscriber created successfully', imsi }, { status: 201 });
   } catch (error) {

@@ -176,9 +176,7 @@ export function evaluateSubscriberOperationPolicy(auth: Pick<AuthContext, 'role'
     allowed: hasPermission({ role: auth.role }, permission),
     permission,
     riskLevel: sensitiveAttempt ? 'critical' as const : 'high' as const,
-    requiresApproval: true,
-    requiresIndependentReviewer: true,
-    reasons: sensitiveAttempt ? ['Sensitive authentication field requested'] : ['Bulk core subscriber state change requires independent approval'],
+    reasons: sensitiveAttempt ? ['Sensitive authentication field requested'] : ['Direct batch update execution'],
   };
 }
 

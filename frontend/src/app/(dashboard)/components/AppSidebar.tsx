@@ -7,7 +7,6 @@ import {
   ChevronRight,
   Search,
   Settings,
-  ShieldCheck,
   SidebarClose,
   SidebarOpen,
   X,
@@ -34,7 +33,6 @@ interface AppSidebarProps {
 
 export default function AppSidebar({ sidebarOpen, setSidebarOpen, isMobileShell }: AppSidebarProps) {
   const [ocsNavOpen, setOcsNavOpen] = useState(true);
-  const [governanceNavOpen, setGovernanceNavOpen] = useState(true);
   const [systemNavOpen, setSystemNavOpen] = useState(true);
   const [filterQuery, setFilterQuery] = useState("");
   const pathname = usePathname();
@@ -51,14 +49,12 @@ export default function AppSidebar({ sidebarOpen, setSidebarOpen, isMobileShell 
       .filter((route) => route.group === group)
       .map((route) => ({ key: route.labelKey, path: route.path, match: route.path, icon: createElement(route.icon, { size: 18 }) }));
     const ocsChildren = groupChildren("ocs");
-    const governanceChildren = groupChildren("governance");
     const systemChildren = groupChildren("system");
     const items: NavItem[] = [
       routeItem("/"),
       routeItem("/subscribers"),
       { key: "nav_ocs", path: "/ocs/tariffs", match: "/ocs", icon: <Zap size={20} />, children: ocsChildren },
       routeItem("/profile"),
-      { key: "nav_operations_governance", path: "/approvals", match: "/approvals", icon: <ShieldCheck size={20} />, children: governanceChildren },
       ...(systemChildren.length > 0 ? [{ key: "nav_system_settings", path: "/users", match: "/users", icon: <Settings size={20} />, children: systemChildren }] : []),
       routeItem("/system-health"),
     ];
@@ -68,7 +64,6 @@ export default function AppSidebar({ sidebarOpen, setSidebarOpen, isMobileShell 
 
   const sidebarWidth = sidebarOpen ? 264 : 72;
   const ocsNavExpanded = ocsNavOpen || pathname.startsWith("/ocs");
-  const governanceNavExpanded = governanceNavOpen || pathname.startsWith("/approvals") || pathname.startsWith("/audit-logs");
   const systemNavExpanded = systemNavOpen || pathname.startsWith("/users");
 
   const filteredNavItems = useMemo(() => {
@@ -139,13 +134,10 @@ export default function AppSidebar({ sidebarOpen, setSidebarOpen, isMobileShell 
           const isActive =
             childActive || routeMatchesPath(pathname, item.match);
           const isOcsParent = item.key === "nav_ocs";
-          const isGovernanceParent = item.key === "nav_operations_governance";
           const isSystemParent = item.key === "nav_system_settings";
-          const isExpandable = isOcsParent || isGovernanceParent || isSystemParent;
+          const isExpandable = isOcsParent || isSystemParent;
           const parentExpanded = isOcsParent
             ? ocsNavExpanded
-            : isGovernanceParent
-            ? governanceNavExpanded
             : systemNavExpanded;
 
           return (
@@ -163,8 +155,6 @@ export default function AppSidebar({ sidebarOpen, setSidebarOpen, isMobileShell 
                       if (!sidebarOpen) setSidebarOpen(true);
                       if (isOcsParent) {
                         setOcsNavOpen((open) => !open);
-                      } else if (isGovernanceParent) {
-                        setGovernanceNavOpen((open) => !open);
                       } else {
                         setSystemNavOpen((open) => !open);
                       }

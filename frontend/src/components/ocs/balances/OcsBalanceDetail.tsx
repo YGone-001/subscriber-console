@@ -27,7 +27,6 @@ export default function OcsBalanceDetail({ imsi }: OcsBalanceDetailProps) {
   const [feedback, setFeedback] = useState<{
     type: "success" | "error";
     message: string;
-    approvalId?: string;
   } | null>(null);
 
   const { data, isLoading: loading, mutate: refresh } = useSWR(
@@ -241,7 +240,6 @@ export default function OcsBalanceDetail({ imsi }: OcsBalanceDetailProps) {
             setFeedback({
               type: result.outcome === "executed_audit_warning" ? "error" : "success",
               message: result.message,
-              approvalId: result.approvalId,
             });
             refresh();
           }}

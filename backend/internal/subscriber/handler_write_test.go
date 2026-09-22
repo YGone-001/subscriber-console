@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
-	"subscriber/internal/approval"
 	"subscriber/internal/audit"
 	"subscriber/internal/auth"
 	"subscriber/internal/governance"
@@ -27,21 +26,6 @@ type fakeUserRepo struct {
 
 func (f *fakeUserRepo) FindByUsernameIdentity(_ context.Context, _ string) (*user.UserIdentity, error) {
 	return f.identity, f.err
-}
-
-type fakeApprovalCreator struct {
-	doc       *approval.ApprovalDocument
-	err       error
-	captured  *approval.CreateApprovalInput
-	callCount int
-}
-
-func (f *fakeApprovalCreator) Create(_ *http.Request, _ approval.GovernanceActor, input approval.CreateApprovalInput) (*approval.ApprovalDocument, error) {
-	f.callCount++
-	if f.captured != nil {
-		*f.captured = input
-	}
-	return f.doc, f.err
 }
 
 // --- Helpers ---
@@ -82,7 +66,6 @@ func TestIsExecutable(t *testing.T) {
 		want   bool
 	}{
 		{"Direct", governance.Result{Decision: governance.Direct}, true},
-		{"Approval", governance.Result{Decision: governance.Approval}, true},
 		{"Disabled", governance.Result{Decision: governance.Disabled}, false},
 		{"RuntimeOnly", governance.Result{Decision: governance.RuntimeOnly}, false},
 	}
@@ -339,77 +322,6 @@ func TestRevalidateFreshActor_Success(t *testing.T) {
 	}
 }
 
-// --- Approval Operation field tests ---
-
-func TestApprovalInput_IncludesOperationField(t *testing.T) {
-	var captured approval.CreateApprovalInput
-	approvalSvc := &fakeApprovalCreator{
-		doc:      &approval.ApprovalDocument{ID: "test-approval", Status: approval.StatusPending},
-		captured: &captured,
-	}
-
-	actor := approval.GovernanceActor{
-		Type:     "user",
-		UserID:   "user-123",
-		Username: "op1",
-		Role:     "operator",
-	}
-
-	// Simulate what the Update handler does
-	input := approval.CreateApprovalInput{
-		Action:           "SUBSCRIBER_UPDATE",
-		Requester:        "op1",
-		RequesterContext: &actor,
-		TargetID:         "001010000000001",
-		Summary:          "Update governed subscriber configuration for 001010000000001",
-		Operation: &approval.ApprovalOperation{
-			ResourceType: "subscriber",
-			ResourceID:   "001010000000001",
-		},
-		OperationFingerprint: "abc123",
-	}
-
-	r := httptest.NewRequest(http.MethodPut, "/api/subscribers/001010000000001", nil)
-	_, err := approvalSvc.Create(r, actor, input)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if captured.Operation == nil {
-		t.Fatal("expected Operation to be captured")
-	}
-	if captured.Operation.ResourceType != "subscriber" {
-		t.Errorf("expected ResourceType=subscriber, got %s", captured.Operation.ResourceType)
-	}
-	if captured.Operation.ResourceID != "001010000000001" {
-		t.Errorf("expected ResourceID=001010000000001, got %s", captured.Operation.ResourceID)
-	}
-}
-
-// --- ApprovalWorkflowError tests ---
-
-func TestApprovalWorkflowError_CommittedResponse(t *testing.T) {
-	awe := &approval.ApprovalWorkflowError{
-		Code:      "AUDIT_UNAVAILABLE",
-		Status:    http.StatusServiceUnavailable,
-		Committed: true,
-		Approval: &approval.ApprovalDocument{
-			ID: "approval-789",
-		},
-	}
-
-	resp := awe.ErrorResponse()
-	if resp["code"] != "AUDIT_UNAVAILABLE" {
-		t.Errorf("expected code AUDIT_UNAVAILABLE, got %v", resp["code"])
-	}
-	if resp["committed"] != true {
-		t.Errorf("expected committed=true, got %v", resp["committed"])
-	}
-	if resp["approval"] == nil {
-		t.Error("expected approval to be present")
-	}
-}
-
 // --- Governance evaluation tests ---
 
 func TestGovernance_Create_AllRolesDirect(t *testing.T) {
@@ -424,20 +336,10 @@ func TestGovernance_Create_AllRolesDirect(t *testing.T) {
 	}
 }
 
-func TestGovernance_Update_OperatorApproval_SuperAdminDirect(t *testing.T) {
-	// Operator/ops_admin → Approval
-	for _, role := range []string{"operator", "ops_admin"} {
-		t.Run(role+"_Approval", func(t *testing.T) {
-			result := EvaluateOperation(OpUpdate, role)
-			if result.Decision != governance.Approval {
-				t.Errorf("expected Approval for %s, got %s", role, result.Decision)
-			}
-		})
-	}
-
-	// super_admin/root → Direct
-	for _, role := range []string{"super_admin", "root"} {
-		t.Run(role+"_Direct", func(t *testing.T) {
+func TestGovernance_Update_AllRolesDirect(t *testing.T) {
+	roles := []string{"operator", "ops_admin", "super_admin", "root"}
+	for _, role := range roles {
+		t.Run(role, func(t *testing.T) {
 			result := EvaluateOperation(OpUpdate, role)
 			if result.Decision != governance.Direct {
 				t.Errorf("expected Direct for %s, got %s", role, result.Decision)
@@ -446,20 +348,10 @@ func TestGovernance_Update_OperatorApproval_SuperAdminDirect(t *testing.T) {
 	}
 }
 
-func TestGovernance_Delete_OperatorApproval_SuperAdminDirect(t *testing.T) {
-	// Operator/ops_admin → Approval
-	for _, role := range []string{"operator", "ops_admin"} {
-		t.Run(role+"_Approval", func(t *testing.T) {
-			result := EvaluateOperation(OpDelete, role)
-			if result.Decision != governance.Approval {
-				t.Errorf("expected Approval for %s, got %s", role, result.Decision)
-			}
-		})
-	}
-
-	// super_admin/root → Direct
-	for _, role := range []string{"super_admin", "root"} {
-		t.Run(role+"_Direct", func(t *testing.T) {
+func TestGovernance_Delete_AllRolesDirect(t *testing.T) {
+	roles := []string{"operator", "ops_admin", "super_admin", "root"}
+	for _, role := range roles {
+		t.Run(role, func(t *testing.T) {
 			result := EvaluateOperation(OpDelete, role)
 			if result.Decision != governance.Direct {
 				t.Errorf("expected Direct for %s, got %s", role, result.Decision)
@@ -741,24 +633,16 @@ func (f *fakeBatchUpdateStore) ConditionalUpdateBatchTarget(_ context.Context, i
 	return 1, 1, nil
 }
 
+type fakeApprovalCreator struct {
+	doc       any
+	err       error
+	captured  any
+	callCount int
+}
+
 type fakeApprovalQuerierDocs struct {
-	docs []approval.ApprovalDocument
+	docs any
 	err  error
-}
-
-func (f *fakeApprovalQuerierDocs) ListApprovals(_ context.Context, _ approval.ListQuery) (*approval.ListResult, error) {
-	return &approval.ListResult{}, nil
-}
-
-func (f *fakeApprovalQuerierDocs) ListActiveByAction(_ context.Context, action string) ([]approval.ApprovalDocument, error) {
-	// Filter docs by action
-	var filtered []approval.ApprovalDocument
-	for _, doc := range f.docs {
-		if doc.Action == action {
-			filtered = append(filtered, doc)
-		}
-	}
-	return filtered, f.err
 }
 
 type fakeEvidenceStore struct {
@@ -800,22 +684,26 @@ func batchUpdateRequest(principal *auth.Principal, body any) *http.Request {
 func newBatchUpdateHandler(
 	store BatchUpdateStore,
 	userRepo UserRepository,
-	approvalSvc ApprovalCreator,
-	approvalQry ApprovalQuerier,
-	limiter RateLimiter,
-	auditStore audit.EvidenceStore,
+	args ...any,
 ) *WriteHandler {
+	var limiter RateLimiter = &fakeRateLimiter{}
+	var auditStore audit.EvidenceStore = &fakeEvidenceStore{}
+	for _, arg := range args {
+		switch a := arg.(type) {
+		case RateLimiter:
+			limiter = a
+		case audit.EvidenceStore:
+			auditStore = a
+		}
+	}
 	writer := audit.NewWriter(auditStore, audit.WriterConfig{})
-	h := &WriteHandler{
+	return &WriteHandler{
 		limiter:     limiter,
 		userRepo:    userRepo,
-		approvalSvc: approvalSvc,
-		approvalQry: approvalQry,
 		auditWriter: writer,
 		batchStore:  store,
 		findSub:     store.LoadBatchUpdateTarget,
 	}
-	return h
 }
 
 // --- BatchUpdate HTTP Acceptance Tests ---
@@ -1028,17 +916,17 @@ func TestBatchUpdate_TicketLength(t *testing.T) {
 
 	store := newFakeBatchUpdateStore()
 	store.targets["001010000000001"] = map[string]any{"access_restriction_data": int64(1)}
-	h := newBatchUpdateHandler(store, &fakeUserRepo{identity: testIdentity("op1", "operator", false)}, &fakeApprovalCreator{doc: &approval.ApprovalDocument{ID: "a1"}}, &fakeApprovalQuerierDocs{}, &fakeRateLimiter{}, &fakeEvidenceStore{})
+	h := newBatchUpdateHandler(store, &fakeUserRepo{identity: testIdentity("op1", "operator", false)}, &fakeApprovalCreator{}, &fakeApprovalQuerierDocs{}, &fakeRateLimiter{}, &fakeEvidenceStore{})
 	p := testPrincipal("op1", "operator")
 
-	// 200 should pass (approval path)
+	// 200 should pass (direct execution)
 	body := batchUpdateBody([]string{"001010000000001"}, map[string]any{"accessRestrictionData": float64(0)}, "test reason")
 	body["ticketId"] = long200
 	r := batchUpdateRequest(p, body)
 	w := httptest.NewRecorder()
 	h.BatchUpdate(w, r)
-	if w.Code != http.StatusAccepted {
-		t.Errorf("200 chars: expected 202, got %d: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusOK {
+		t.Errorf("200 chars: expected 200, got %d: %s", w.Code, w.Body.String())
 	}
 
 	// 201 should fail
@@ -1051,23 +939,16 @@ func TestBatchUpdate_TicketLength(t *testing.T) {
 	}
 }
 
-func TestBatchUpdate_OperatorApproval(t *testing.T) {
+func TestBatchUpdate_OperatorDirect(t *testing.T) {
 	store := newFakeBatchUpdateStore()
 	store.targets["001010000000001"] = map[string]any{"access_restriction_data": int64(1)}
-	approvalDoc := &approval.ApprovalDocument{ID: "approval-1"}
-	var capturedInput approval.CreateApprovalInput
-	approvalSvc := &fakeApprovalCreator{doc: approvalDoc, captured: &capturedInput}
-	h := newBatchUpdateHandler(store, &fakeUserRepo{identity: testIdentity("op1", "operator", false)}, approvalSvc, &fakeApprovalQuerierDocs{}, &fakeRateLimiter{}, &fakeEvidenceStore{})
+	h := newBatchUpdateHandler(store, &fakeUserRepo{identity: testIdentity("op1", "operator", false)}, &fakeApprovalCreator{}, &fakeApprovalQuerierDocs{}, &fakeRateLimiter{}, &fakeEvidenceStore{})
 	p := testPrincipal("op1", "operator")
 	r := batchUpdateRequest(p, batchUpdateBody([]string{"001010000000001"}, map[string]any{"accessRestrictionData": float64(0)}, "test reason"))
 	w := httptest.NewRecorder()
 	h.BatchUpdate(w, r)
-	if w.Code != http.StatusAccepted {
-		t.Fatalf("expected 202, got %d: %s", w.Code, w.Body.String())
-	}
-	// Verify approval was created
-	if capturedInput.Action != "SUBSCRIBER_BATCH_UPDATE" {
-		t.Errorf("expected action SUBSCRIBER_BATCH_UPDATE, got %s", capturedInput.Action)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
 }
 
@@ -1100,86 +981,8 @@ func TestBatchUpdate_RootDirect(t *testing.T) {
 
 // Section 20: Node↔Go response contract matrix tests
 
-func TestBatchUpdate_ResponseContract_Approval(t *testing.T) {
-	// New Approval response: { approval, requiresApproval } only
-	store := newFakeBatchUpdateStore()
-	store.targets["001010000000001"] = map[string]any{"access_restriction_data": int64(1)}
-	approvalDoc := &approval.ApprovalDocument{ID: "approval-1"}
-	approvalSvc := &fakeApprovalCreator{doc: approvalDoc}
-	h := newBatchUpdateHandler(store, &fakeUserRepo{identity: testIdentity("op1", "operator", false)}, approvalSvc, &fakeApprovalQuerierDocs{}, &fakeRateLimiter{}, &fakeEvidenceStore{})
-	p := testPrincipal("op1", "operator")
-	r := batchUpdateRequest(p, batchUpdateBody([]string{"001010000000001"}, map[string]any{"accessRestrictionData": float64(0)}, "test reason"))
-	w := httptest.NewRecorder()
-	h.BatchUpdate(w, r)
-	if w.Code != http.StatusAccepted {
-		t.Fatalf("expected 202, got %d: %s", w.Code, w.Body.String())
-	}
-	var resp map[string]any
-	json.Unmarshal(w.Body.Bytes(), &resp)
-	// Section 14: Must have approval and requiresApproval
-	if resp["approval"] == nil {
-		t.Error("expected approval to be present")
-	}
-	if resp["requiresApproval"] != true {
-		t.Errorf("expected requiresApproval=true, got %v", resp["requiresApproval"])
-	}
-	// Section 14: Must NOT have outcome or message
-	if resp["outcome"] != nil {
-		t.Errorf("expected no outcome, got %v", resp["outcome"])
-	}
-	if resp["message"] != nil {
-		t.Errorf("expected no message, got %v", resp["message"])
-	}
-}
-
-func TestBatchUpdate_ResponseContract_Duplicate(t *testing.T) {
-	// Duplicate response: { approval, requiresApproval, idempotent }
-	store := newFakeBatchUpdateStore()
-	store.targets["001010000000001"] = map[string]any{"access_restriction_data": int64(32)}
-
-	// Compute the fingerprint that the handler will compute for this request
-	frozen, _ := PrepareFrozenBatchUpdate(context.Background(), []string{"001010000000001"}, map[string]any{"accessRestrictionData": float64(0)}, func(_ context.Context, imsi string) (map[string]any, error) {
-		return store.targets[imsi], nil
-	})
-
-	existingApproval := approval.ApprovalDocument{
-		ID:                   "existing-1",
-		Action:               "SUBSCRIBER_BATCH_UPDATE",
-		Status:               approval.StatusPending,
-		OperationFingerprint: frozen.OperationFingerprint,
-		Operation: approval.ApprovalOperation{
-			ResourceType: "SUBSCRIBER_BATCH_UPDATE",
-			ResourceID:   "BATCH:001010000000001",
-		},
-		Payload: map[string]any{
-			"targets":    []any{map[string]any{"imsi": "001010000000001"}},
-			"fieldNames": []any{"access_restriction_data"},
-		},
-	}
-	querier := &fakeApprovalQuerierDocs{docs: []approval.ApprovalDocument{existingApproval}}
-	h := newBatchUpdateHandler(store, &fakeUserRepo{identity: testIdentity("op1", "operator", false)}, &fakeApprovalCreator{}, querier, &fakeRateLimiter{}, &fakeEvidenceStore{})
-	p := testPrincipal("op1", "operator")
-	r := batchUpdateRequest(p, batchUpdateBody([]string{"001010000000001"}, map[string]any{"accessRestrictionData": float64(0)}, "test reason"))
-	w := httptest.NewRecorder()
-	h.BatchUpdate(w, r)
-	if w.Code != http.StatusAccepted {
-		t.Fatalf("expected 202 duplicate, got %d: %s", w.Code, w.Body.String())
-	}
-	var resp map[string]any
-	json.Unmarshal(w.Body.Bytes(), &resp)
-	if resp["approval"] == nil {
-		t.Error("expected approval to be present")
-	}
-	if resp["requiresApproval"] != true {
-		t.Errorf("expected requiresApproval=true, got %v", resp["requiresApproval"])
-	}
-	if resp["idempotent"] != true {
-		t.Errorf("expected idempotent=true, got %v", resp["idempotent"])
-	}
-}
-
 func TestBatchUpdate_ResponseContract_DirectSuccess(t *testing.T) {
-	// Direct success: { outcome: "executed", message, result, requiresApproval: false }
+	// Direct success: { outcome: "executed", message, result }
 	store := newFakeBatchUpdateStore()
 	store.targets["001010000000001"] = map[string]any{"access_restriction_data": int64(1)}
 	h := newBatchUpdateHandler(store, &fakeUserRepo{identity: testIdentity("admin1", "super_admin", false)}, &fakeApprovalCreator{}, &fakeApprovalQuerierDocs{}, &fakeRateLimiter{}, &fakeEvidenceStore{})
@@ -1200,9 +1003,6 @@ func TestBatchUpdate_ResponseContract_DirectSuccess(t *testing.T) {
 	}
 	if resp["result"] == nil {
 		t.Error("expected result to be present")
-	}
-	if resp["requiresApproval"] != false {
-		t.Errorf("expected requiresApproval=false, got %v", resp["requiresApproval"])
 	}
 }
 
@@ -1240,80 +1040,6 @@ func TestToISOString_UTCWithMilliseconds(t *testing.T) {
 	want := "2026-09-08T10:00:00.456Z"
 	if got != want {
 		t.Errorf("toISOString(%v) = %q, want %q", input, got, want)
-	}
-}
-
-func TestBatchUpdate_ActiveDuplicateOperator(t *testing.T) {
-	store := newFakeBatchUpdateStore()
-	store.targets["001010000000001"] = map[string]any{"access_restriction_data": int64(1)}
-	// Compute what the fingerprint would be for this request
-	existingApproval := approval.ApprovalDocument{
-		ID:                   "existing-1",
-		Action:               "SUBSCRIBER_BATCH_UPDATE",
-		OperationFingerprint: "", // Will be set below
-		Payload: map[string]any{
-			"targets":    []any{map[string]any{"imsi": "001010000000001"}},
-			"fieldNames": []any{"access_restriction_data"},
-		},
-	}
-	approvalQry := &fakeApprovalQuerierDocs{docs: []approval.ApprovalDocument{existingApproval}}
-	h := newBatchUpdateHandler(store, &fakeUserRepo{identity: testIdentity("op1", "operator", false)}, &fakeApprovalCreator{}, approvalQry, &fakeRateLimiter{}, &fakeEvidenceStore{})
-	p := testPrincipal("op1", "operator")
-	r := batchUpdateRequest(p, batchUpdateBody([]string{"001010000000001"}, map[string]any{"accessRestrictionData": float64(0)}, "test reason"))
-	w := httptest.NewRecorder()
-	h.BatchUpdate(w, r)
-	// Since fingerprints won't match (we can't compute the exact one without running PrepareFrozenBatchUpdate),
-	// this will either be 202 (new approval) or 409 (conflict if targets overlap)
-	if w.Code != http.StatusAccepted && w.Code != http.StatusConflict {
-		t.Errorf("expected 202 or 409, got %d: %s", w.Code, w.Body.String())
-	}
-}
-
-func TestBatchUpdate_ActiveOverlapOperator(t *testing.T) {
-	store := newFakeBatchUpdateStore()
-	store.targets["001010000000001"] = map[string]any{"access_restriction_data": int64(1)}
-	// Create an existing approval with overlapping target and field but different fingerprint
-	existingApproval := approval.ApprovalDocument{
-		ID:                   "existing-1",
-		Action:               "SUBSCRIBER_BATCH_UPDATE",
-		OperationFingerprint: "different-fingerprint",
-		Payload: map[string]any{
-			"targets":    []any{map[string]any{"imsi": "001010000000001"}},
-			"fieldNames": []any{"access_restriction_data"},
-		},
-	}
-	approvalQry := &fakeApprovalQuerierDocs{docs: []approval.ApprovalDocument{existingApproval}}
-	approvalDoc := &approval.ApprovalDocument{ID: "new-1"}
-	h := newBatchUpdateHandler(store, &fakeUserRepo{identity: testIdentity("op1", "operator", false)}, &fakeApprovalCreator{doc: approvalDoc}, approvalQry, &fakeRateLimiter{}, &fakeEvidenceStore{})
-	p := testPrincipal("op1", "operator")
-	r := batchUpdateRequest(p, batchUpdateBody([]string{"001010000000001"}, map[string]any{"accessRestrictionData": float64(0)}, "test reason"))
-	w := httptest.NewRecorder()
-	h.BatchUpdate(w, r)
-	if w.Code != http.StatusConflict {
-		t.Errorf("expected 409, got %d: %s", w.Code, w.Body.String())
-	}
-}
-
-func TestBatchUpdate_ActiveOverlapDirect(t *testing.T) {
-	store := newFakeBatchUpdateStore()
-	store.targets["001010000000001"] = map[string]any{"access_restriction_data": int64(1)}
-	existingApproval := approval.ApprovalDocument{
-		ID:                   "existing-1",
-		Action:               "SUBSCRIBER_BATCH_UPDATE",
-		OperationFingerprint: "different-fingerprint",
-		Payload: map[string]any{
-			"targets":    []any{map[string]any{"imsi": "001010000000001"}},
-			"fieldNames": []any{"access_restriction_data"},
-		},
-	}
-	approvalQry := &fakeApprovalQuerierDocs{docs: []approval.ApprovalDocument{existingApproval}}
-	h := newBatchUpdateHandler(store, &fakeUserRepo{identity: testIdentity("admin1", "super_admin", false)}, &fakeApprovalCreator{}, approvalQry, &fakeRateLimiter{}, &fakeEvidenceStore{})
-	p := testPrincipal("admin1", "super_admin")
-	r := batchUpdateRequest(p, batchUpdateBody([]string{"001010000000001"}, map[string]any{"accessRestrictionData": float64(0)}, "test reason"))
-	w := httptest.NewRecorder()
-	h.BatchUpdate(w, r)
-	if w.Code != http.StatusConflict {
-		t.Errorf("expected 409, got %d: %s", w.Code, w.Body.String())
 	}
 }
 
@@ -1419,13 +1145,13 @@ func TestBatchUpdate_AuditFailure_SuccessCommitted(t *testing.T) {
 	r := batchUpdateRequest(p, batchUpdateBody([]string{"001010000000001"}, map[string]any{"accessRestrictionData": float64(0)}, "test reason"))
 	w := httptest.NewRecorder()
 	h.BatchUpdate(w, r)
-	if w.Code != http.StatusServiceUnavailable {
-		t.Errorf("expected 503, got %d: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
 	var resp map[string]any
 	json.Unmarshal(w.Body.Bytes(), &resp)
-	if resp["committed"] != true {
-		t.Errorf("expected committed=true, got %v", resp["committed"])
+	if resp["outcome"] != "executed" {
+		t.Errorf("expected outcome=executed, got %v", resp["outcome"])
 	}
 }
 
@@ -1601,212 +1327,6 @@ func TestBatchUpdate_FrozenMissingLeaf(t *testing.T) {
 	err := AssertFrozenBatchUpdateV2(frozen)
 	if err == nil {
 		t.Error("expected error for missing leaf key in frozen payload, got nil")
-	}
-}
-
-// ============================================================
-// Section Q: BSON Round-Trip Safety
-// ============================================================
-
-func TestBatchUpdate_BSONRoundTripSafety(t *testing.T) {
-	// Section P/Q: Test that extraction helpers handle bson.A/bson.M/bson.D
-	store := newFakeBatchUpdateStore()
-	store.targets["001010000000001"] = map[string]any{"access_restriction_data": int64(32)}
-
-	// Simulate a BSON-round-tripped approval document
-	bsonApproval := approval.ApprovalDocument{
-		ID:     "approval-bson-1",
-		Action: "SUBSCRIBER_BATCH_UPDATE",
-		Status: approval.StatusPending,
-		Operation: approval.ApprovalOperation{
-			ResourceType: "SUBSCRIBER_BATCH_UPDATE",
-			ResourceID:   "001010000000001",
-		},
-		Payload: map[string]any{
-			"targets": bson.A{
-				bson.M{
-					"imsi":   "001010000000001",
-					"status": "pending",
-				},
-			},
-			"patch": bson.M{
-				"accessRestrictionData": int64(0),
-			},
-		},
-	}
-
-	querier := &fakeApprovalQuerierDocs{
-		docs: []approval.ApprovalDocument{bsonApproval},
-	}
-	h := newBatchUpdateHandler(store, &fakeUserRepo{identity: testIdentity("admin1", "operator", false)}, &fakeApprovalCreator{}, querier, &fakeRateLimiter{}, &fakeEvidenceStore{})
-	p := testPrincipal("admin1", "operator")
-	r := batchUpdateRequest(p, batchUpdateBody([]string{"001010000000001"}, map[string]any{"accessRestrictionData": float64(0)}, "test reason"))
-	w := httptest.NewRecorder()
-	h.BatchUpdate(w, r)
-	// Operator should get 202 (approval required) even with BSON types in active approval
-	if w.Code != http.StatusAccepted {
-		t.Errorf("expected 202 for operator with BSON approval, got %d: %s", w.Code, w.Body.String())
-	}
-}
-
-func TestBatchUpdate_ActiveBSONDuplicate(t *testing.T) {
-	// Section R: Active conflict with BSON-round-tripped approval (duplicate fingerprint)
-	store := newFakeBatchUpdateStore()
-	store.targets["001010000000001"] = map[string]any{"access_restriction_data": int64(32)}
-
-	// Compute the fingerprint that the handler will compute for this request
-	frozen, _ := PrepareFrozenBatchUpdate(context.Background(), []string{"001010000000001"}, map[string]any{"accessRestrictionData": float64(0)}, func(_ context.Context, imsi string) (map[string]any, error) {
-		return store.targets[imsi], nil
-	})
-
-	bsonApproval := approval.ApprovalDocument{
-		ID:                   "approval-bson-2",
-		Action:               "SUBSCRIBER_BATCH_UPDATE",
-		Status:               approval.StatusPending,
-		OperationFingerprint: frozen.OperationFingerprint,
-		Operation: approval.ApprovalOperation{
-			ResourceType: "SUBSCRIBER_BATCH_UPDATE",
-			ResourceID:   "BATCH:001010000000001",
-		},
-		Payload: map[string]any{
-			"targets": bson.A{
-				bson.M{
-					"imsi": "001010000000001",
-				},
-			},
-			"fieldNames": bson.A{"access_restriction_data"},
-			"patch": bson.M{
-				"accessRestrictionData": int64(0),
-			},
-		},
-	}
-
-	querier := &fakeApprovalQuerierDocs{
-		docs: []approval.ApprovalDocument{bsonApproval},
-	}
-	h := newBatchUpdateHandler(store, &fakeUserRepo{identity: testIdentity("admin1", "operator", false)}, &fakeApprovalCreator{}, querier, &fakeRateLimiter{}, &fakeEvidenceStore{})
-	p := testPrincipal("admin1", "operator")
-	r := batchUpdateRequest(p, batchUpdateBody([]string{"001010000000001"}, map[string]any{"accessRestrictionData": float64(0)}, "test reason"))
-	w := httptest.NewRecorder()
-	h.BatchUpdate(w, r)
-	// Same fingerprint → 202 idempotent (duplicate)
-	if w.Code != http.StatusAccepted {
-		t.Errorf("expected 202 for duplicate BSON approval, got %d: %s", w.Code, w.Body.String())
-	}
-}
-
-func TestBatchUpdate_ActiveBSONOverlap(t *testing.T) {
-	// Section R: Active overlap with BSON-round-tripped approval
-	store := newFakeBatchUpdateStore()
-	store.targets["001010000000001"] = map[string]any{"access_restriction_data": int64(32)}
-
-	bsonApproval := approval.ApprovalDocument{
-		ID:     "approval-bson-3",
-		Action: "SUBSCRIBER_BATCH_UPDATE",
-		Status: approval.StatusPending,
-		Operation: approval.ApprovalOperation{
-			ResourceType: "SUBSCRIBER_BATCH_UPDATE",
-			ResourceID:   "BATCH:001010000000001",
-		},
-		Payload: map[string]any{
-			"targets": bson.A{
-				bson.M{
-					"imsi": "001010000000001",
-				},
-			},
-			"fieldNames": bson.A{"access_restriction_data"},
-			"patch": bson.M{
-				"accessRestrictionData": int64(16),
-			},
-		},
-	}
-
-	querier := &fakeApprovalQuerierDocs{
-		docs: []approval.ApprovalDocument{bsonApproval},
-	}
-	h := newBatchUpdateHandler(store, &fakeUserRepo{identity: testIdentity("admin1", "operator", false)}, &fakeApprovalCreator{}, querier, &fakeRateLimiter{}, &fakeEvidenceStore{})
-	p := testPrincipal("admin1", "operator")
-	r := batchUpdateRequest(p, batchUpdateBody([]string{"001010000000001"}, map[string]any{"accessRestrictionData": float64(0)}, "test reason"))
-	w := httptest.NewRecorder()
-	h.BatchUpdate(w, r)
-	// Same target, different patch → 409 overlap
-	if w.Code != http.StatusConflict {
-		t.Errorf("expected 409 for overlapping BSON approval, got %d: %s", w.Code, w.Body.String())
-	}
-}
-
-// ============================================================
-// Section 7: Real BSON Round-Trip
-// ============================================================
-
-func TestBatchUpdate_RealBSONRoundTrip(t *testing.T) {
-	// Section 7: Real BSON marshal/unmarshal round-trip
-	store := newFakeBatchUpdateStore()
-	store.targets["001010000000001"] = map[string]any{"access_restriction_data": int64(32)}
-
-	// Compute the fingerprint that the handler will compute for this request
-	frozen, _ := PrepareFrozenBatchUpdate(context.Background(), []string{"001010000000001"}, map[string]any{"accessRestrictionData": float64(0)}, func(_ context.Context, imsi string) (map[string]any, error) {
-		return store.targets[imsi], nil
-	})
-
-	// Create an approval document with real BSON types
-	original := approval.ApprovalDocument{
-		ID:                   "approval-bson-real",
-		Action:               "SUBSCRIBER_BATCH_UPDATE",
-		Status:               approval.StatusPending,
-		OperationFingerprint: frozen.OperationFingerprint,
-		Operation: approval.ApprovalOperation{
-			ResourceType: "SUBSCRIBER_BATCH_UPDATE",
-			ResourceID:   "BATCH:001010000000001",
-		},
-		Payload: map[string]any{
-			"targets": []any{
-				map[string]any{"imsi": "001010000000001"},
-			},
-			"fieldNames": []any{"access_restriction_data"},
-			"patch": map[string]any{
-				"accessRestrictionData": int64(0),
-			},
-		},
-	}
-
-	// Marshal to BSON
-	raw, err := bson.Marshal(original)
-	if err != nil {
-		t.Fatalf("failed to marshal: %v", err)
-	}
-
-	// Unmarshal back
-	var decoded approval.ApprovalDocument
-	err = bson.Unmarshal(raw, &decoded)
-	if err != nil {
-		t.Fatalf("failed to unmarshal: %v", err)
-	}
-
-	// Verify targets survive BSON round-trip
-	targets := extractApprovalTargets(&decoded)
-	if len(targets) != 1 || targets[0] != "001010000000001" {
-		t.Errorf("targets not preserved: %v", targets)
-	}
-
-	// Verify fieldNames survive BSON round-trip
-	fields := extractApprovalFields(&decoded)
-	if len(fields) != 1 || fields[0] != "access_restriction_data" {
-		t.Errorf("fieldNames not preserved: %v", fields)
-	}
-
-	// Verify duplicate detection works with BSON-round-tripped approval
-	querier := &fakeApprovalQuerierDocs{
-		docs: []approval.ApprovalDocument{decoded},
-	}
-	h := newBatchUpdateHandler(store, &fakeUserRepo{identity: testIdentity("admin1", "operator", false)}, &fakeApprovalCreator{}, querier, &fakeRateLimiter{}, &fakeEvidenceStore{})
-	p := testPrincipal("admin1", "operator")
-	r := batchUpdateRequest(p, batchUpdateBody([]string{"001010000000001"}, map[string]any{"accessRestrictionData": float64(0)}, "test reason"))
-	w := httptest.NewRecorder()
-	h.BatchUpdate(w, r)
-	// Same fingerprint → 202 idempotent (duplicate)
-	if w.Code != http.StatusAccepted {
-		t.Errorf("expected 202 for duplicate after BSON round-trip, got %d: %s", w.Code, w.Body.String())
 	}
 }
 
@@ -2615,22 +2135,26 @@ func bulkDeleteRequest(principal *auth.Principal, body any) *http.Request {
 func newBulkDeleteHandler(
 	repo *fakeBulkDeleteRepo,
 	userRepo UserRepository,
-	approvalSvc ApprovalCreator,
-	approvalQry ApprovalQuerier,
-	limiter RateLimiter,
-	auditStore audit.EvidenceStore,
+	args ...any,
 ) *WriteHandler {
+	var limiter RateLimiter = &fakeRateLimiter{}
+	var auditStore audit.EvidenceStore = &fakeEvidenceStore{}
+	for _, arg := range args {
+		switch a := arg.(type) {
+		case RateLimiter:
+			limiter = a
+		case audit.EvidenceStore:
+			auditStore = a
+		}
+	}
 	writer := audit.NewWriter(auditStore, audit.WriterConfig{})
-	h := &WriteHandler{
+	return &WriteHandler{
 		repo:           &Repository{}, // Not used directly in tests with DI
 		bulkDeleteRepo: repo,
 		limiter:        limiter,
 		userRepo:       userRepo,
-		approvalSvc:    approvalSvc,
-		approvalQry:    approvalQry,
 		auditWriter:    writer,
 	}
-	return h
 }
 
 // --- BulkDelete HTTP Acceptance Tests ---
@@ -2911,13 +2435,11 @@ func TestBulkDelete_OperatorApproval(t *testing.T) {
 	}
 	repo.deleteCASResult = true
 
-	approvalDoc := &approval.ApprovalDocument{ID: "approval-1"}
-	approvalCreator := &fakeApprovalCreator{doc: approvalDoc}
 	auditStore := &fakeEvidenceStore{}
 	h := newBulkDeleteHandler(
 		repo,
 		&fakeUserRepo{identity: testIdentity("op1", "operator", false)},
-		approvalCreator,
+		&fakeApprovalCreator{},
 		&fakeApprovalQuerierDocs{},
 		&fakeRateLimiter{},
 		auditStore,
@@ -2927,27 +2449,15 @@ func TestBulkDelete_OperatorApproval(t *testing.T) {
 	w := httptest.NewRecorder()
 	h.BulkDelete(w, r)
 
-	if w.Code != http.StatusAccepted {
-		t.Fatalf("expected 202, got %d: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
-	var resp map[string]any
-	json.Unmarshal(w.Body.Bytes(), &resp)
-	if resp["requiresApproval"] != true {
-		t.Errorf("expected requiresApproval=true, got %v", resp["requiresApproval"])
-	}
-	if resp["approval"] == nil {
-		t.Error("expected approval to be present")
-	}
-	// Section 4: ApprovalCreator calls = 1, CAS calls = 0
-	if approvalCreator.callCount != 1 {
-		t.Errorf("expected 1 ApprovalCreator call, got %d", approvalCreator.callCount)
-	}
-	if len(repo.deletedImsis) != 0 {
-		t.Errorf("expected 0 CAS calls, got %d", len(repo.deletedImsis))
+	if len(repo.deletedImsis) != 1 {
+		t.Errorf("expected 1 CAS call, got %d", len(repo.deletedImsis))
 	}
 }
 
-func TestBulkDelete_OpsAdminApproval(t *testing.T) {
+func TestBulkDelete_OpsAdminDirect(t *testing.T) {
 	repo := newFakeBulkDeleteRepo()
 	repo.subscribers["001010000000001"] = bson.M{
 		"imsi":                    "001010000000001",
@@ -2957,13 +2467,11 @@ func TestBulkDelete_OpsAdminApproval(t *testing.T) {
 	}
 	repo.deleteCASResult = true
 
-	approvalDoc := &approval.ApprovalDocument{ID: "approval-1"}
-	approvalCreator := &fakeApprovalCreator{doc: approvalDoc}
 	auditStore := &fakeEvidenceStore{}
 	h := newBulkDeleteHandler(
 		repo,
 		&fakeUserRepo{identity: testIdentity("ops1", "ops_admin", false)},
-		approvalCreator,
+		&fakeApprovalCreator{},
 		&fakeApprovalQuerierDocs{},
 		&fakeRateLimiter{},
 		auditStore,
@@ -2973,19 +2481,11 @@ func TestBulkDelete_OpsAdminApproval(t *testing.T) {
 	w := httptest.NewRecorder()
 	h.BulkDelete(w, r)
 
-	if w.Code != http.StatusAccepted {
-		t.Fatalf("expected 202, got %d: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
-	var resp map[string]any
-	json.Unmarshal(w.Body.Bytes(), &resp)
-	if resp["requiresApproval"] != true {
-		t.Errorf("expected requiresApproval=true, got %v", resp["requiresApproval"])
-	}
-	if approvalCreator.callCount != 1 {
-		t.Errorf("expected 1 ApprovalCreator call, got %d", approvalCreator.callCount)
-	}
-	if len(repo.deletedImsis) != 0 {
-		t.Errorf("expected 0 CAS calls, got %d", len(repo.deletedImsis))
+	if len(repo.deletedImsis) != 1 {
+		t.Errorf("expected 1 CAS call, got %d", len(repo.deletedImsis))
 	}
 }
 
@@ -3025,9 +2525,6 @@ func TestBulkDelete_SuperAdminDirect(t *testing.T) {
 	json.Unmarshal(w.Body.Bytes(), &resp)
 	if resp["outcome"] != "executed" {
 		t.Errorf("expected outcome=executed, got %v", resp["outcome"])
-	}
-	if resp["requiresApproval"] != false {
-		t.Errorf("expected requiresApproval=false, got %v", resp["requiresApproval"])
 	}
 	// Section 5: ApprovalCreator calls = 0, CAS calls = target count
 	if approvalCreator.callCount != 0 {
@@ -3071,313 +2568,11 @@ func TestBulkDelete_RootDirect(t *testing.T) {
 	if resp["outcome"] != "executed" {
 		t.Errorf("expected outcome=executed, got %v", resp["outcome"])
 	}
-	if resp["requiresApproval"] != false {
-		t.Errorf("expected requiresApproval=false, got %v", resp["requiresApproval"])
-	}
 	if approvalCreator.callCount != 0 {
 		t.Errorf("expected 0 ApprovalCreator calls, got %d", approvalCreator.callCount)
 	}
 	if len(repo.deletedImsis) != 1 {
 		t.Errorf("expected 1 CAS call, got %d", len(repo.deletedImsis))
-	}
-}
-
-// ==============================================================================
-// Section 6: Go Duplicate Tests
-// ==============================================================================
-
-func TestBulkDelete_OperatorExactDuplicate(t *testing.T) {
-	repo := newFakeBulkDeleteRepo()
-	repo.subscribers["001010000000001"] = bson.M{
-		"imsi":                    "001010000000001",
-		"msisdn":                  []any{"1234567890"},
-		"access_restriction_data": int64(0),
-		"network_access_mode":     int64(0),
-	}
-	repo.deleteCASResult = true
-
-	// Compute the fingerprint for this request
-	frozen, _ := PrepareFrozenBulkDelete(context.Background(), []string{"001010000000001"}, repo)
-
-	existingApproval := approval.ApprovalDocument{
-		ID:                   "existing-1",
-		Action:               "SUBSCRIBER_BULK_DELETE",
-		Status:               approval.StatusPending,
-		OperationFingerprint: frozen.OperationFingerprint,
-		Operation: approval.ApprovalOperation{
-			ResourceType: "SUBSCRIBER_BULK_DELETE",
-			ResourceID:   "BULK:001010000000001",
-		},
-		Payload: map[string]any{
-			"targets": []any{map[string]any{"imsi": "001010000000001"}},
-		},
-	}
-	querier := &fakeApprovalQuerierDocs{docs: []approval.ApprovalDocument{existingApproval}}
-	approvalCreator := &fakeApprovalCreator{}
-	auditStore := &fakeEvidenceStore{}
-	h := newBulkDeleteHandler(
-		repo,
-		&fakeUserRepo{identity: testIdentity("op1", "operator", false)},
-		approvalCreator,
-		querier,
-		&fakeRateLimiter{},
-		auditStore,
-	)
-	p := testPrincipal("op1", "operator")
-	r := bulkDeleteRequest(p, map[string]any{"imsiList": []string{"001010000000001"}})
-	w := httptest.NewRecorder()
-	h.BulkDelete(w, r)
-
-	if w.Code != http.StatusAccepted {
-		t.Fatalf("expected 202, got %d: %s", w.Code, w.Body.String())
-	}
-	var resp map[string]any
-	json.Unmarshal(w.Body.Bytes(), &resp)
-	if resp["idempotent"] != true {
-		t.Errorf("expected idempotent=true, got %v", resp["idempotent"])
-	}
-	// Section 6: ApprovalCreator calls = 0, executor calls = 0
-	if approvalCreator.callCount != 0 {
-		t.Errorf("expected 0 ApprovalCreator calls, got %d", approvalCreator.callCount)
-	}
-	if len(repo.deletedImsis) != 0 {
-		t.Errorf("expected 0 CAS calls, got %d", len(repo.deletedImsis))
-	}
-}
-
-func TestBulkDelete_DirectExactDuplicate(t *testing.T) {
-	repo := newFakeBulkDeleteRepo()
-	repo.subscribers["001010000000001"] = bson.M{
-		"imsi":                    "001010000000001",
-		"msisdn":                  []any{"1234567890"},
-		"access_restriction_data": int64(0),
-		"network_access_mode":     int64(0),
-	}
-	repo.deleteCASResult = true
-
-	// Compute the fingerprint for this request
-	frozen, _ := PrepareFrozenBulkDelete(context.Background(), []string{"001010000000001"}, repo)
-
-	existingApproval := approval.ApprovalDocument{
-		ID:                   "existing-1",
-		Action:               "SUBSCRIBER_BULK_DELETE",
-		Status:               approval.StatusPending,
-		OperationFingerprint: frozen.OperationFingerprint,
-		Operation: approval.ApprovalOperation{
-			ResourceType: "SUBSCRIBER_BULK_DELETE",
-			ResourceID:   "BULK:001010000000001",
-		},
-		Payload: map[string]any{
-			"targets": []any{map[string]any{"imsi": "001010000000001"}},
-		},
-	}
-	querier := &fakeApprovalQuerierDocs{docs: []approval.ApprovalDocument{existingApproval}}
-	approvalCreator := &fakeApprovalCreator{}
-	auditStore := &fakeEvidenceStore{}
-	h := newBulkDeleteHandler(
-		repo,
-		&fakeUserRepo{identity: testIdentity("admin1", "super_admin", false)},
-		approvalCreator,
-		querier,
-		&fakeRateLimiter{},
-		auditStore,
-	)
-	p := testPrincipal("admin1", "super_admin")
-	r := bulkDeleteRequest(p, map[string]any{"imsiList": []string{"001010000000001"}})
-	w := httptest.NewRecorder()
-	h.BulkDelete(w, r)
-
-	// Section 6: Direct path with active conflict → 409
-	if w.Code != http.StatusConflict {
-		t.Fatalf("expected 409, got %d: %s", w.Code, w.Body.String())
-	}
-	var resp map[string]any
-	json.Unmarshal(w.Body.Bytes(), &resp)
-	if resp["code"] != "ACTIVE_CHANGE_CONFLICT" {
-		t.Errorf("expected code=ACTIVE_CHANGE_CONFLICT, got %v", resp["code"])
-	}
-	if len(repo.deletedImsis) != 0 {
-		t.Errorf("expected 0 CAS calls, got %d", len(repo.deletedImsis))
-	}
-}
-
-// ==============================================================================
-// Section 7: Go Active Overlap HTTP Tests
-// ==============================================================================
-
-func TestBulkDelete_ActiveOverlap_Update(t *testing.T) {
-	repo := newFakeBulkDeleteRepo()
-	repo.subscribers["001010000000001"] = bson.M{
-		"imsi":                    "001010000000001",
-		"msisdn":                  []any{"1234567890"},
-		"access_restriction_data": int64(0),
-		"network_access_mode":     int64(0),
-	}
-	repo.deleteCASResult = true
-
-	existingApproval := approval.ApprovalDocument{
-		ID:     "existing-1",
-		Action: "SUBSCRIBER_UPDATE",
-		Status: approval.StatusPending,
-		Operation: approval.ApprovalOperation{
-			ResourceType: "SUBSCRIBER_UPDATE",
-			ResourceID:   "001010000000001",
-		},
-		Payload: map[string]any{
-			"imsi": "001010000000001",
-		},
-	}
-	querier := &fakeApprovalQuerierDocs{docs: []approval.ApprovalDocument{existingApproval}}
-	auditStore := &fakeEvidenceStore{}
-	h := newBulkDeleteHandler(
-		repo,
-		&fakeUserRepo{identity: testIdentity("admin1", "super_admin", false)},
-		&fakeApprovalCreator{},
-		querier,
-		&fakeRateLimiter{},
-		auditStore,
-	)
-	p := testPrincipal("admin1", "super_admin")
-	r := bulkDeleteRequest(p, map[string]any{"imsiList": []string{"001010000000001"}})
-	w := httptest.NewRecorder()
-	h.BulkDelete(w, r)
-
-	if w.Code != http.StatusConflict {
-		t.Fatalf("expected 409, got %d: %s", w.Code, w.Body.String())
-	}
-	var resp map[string]any
-	json.Unmarshal(w.Body.Bytes(), &resp)
-	if resp["code"] != "ACTIVE_CHANGE_CONFLICT" {
-		t.Errorf("expected code=ACTIVE_CHANGE_CONFLICT, got %v", resp["code"])
-	}
-}
-
-func TestBulkDelete_ActiveOverlap_Delete(t *testing.T) {
-	repo := newFakeBulkDeleteRepo()
-	repo.subscribers["001010000000001"] = bson.M{
-		"imsi":                    "001010000000001",
-		"msisdn":                  []any{"1234567890"},
-		"access_restriction_data": int64(0),
-		"network_access_mode":     int64(0),
-	}
-	repo.deleteCASResult = true
-
-	existingApproval := approval.ApprovalDocument{
-		ID:     "existing-1",
-		Action: "SUBSCRIBER_DELETE",
-		Status: approval.StatusPending,
-		Operation: approval.ApprovalOperation{
-			ResourceType: "SUBSCRIBER_DELETE",
-			ResourceID:   "001010000000001",
-		},
-		Payload: map[string]any{
-			"imsi": "001010000000001",
-		},
-	}
-	querier := &fakeApprovalQuerierDocs{docs: []approval.ApprovalDocument{existingApproval}}
-	auditStore := &fakeEvidenceStore{}
-	h := newBulkDeleteHandler(
-		repo,
-		&fakeUserRepo{identity: testIdentity("admin1", "super_admin", false)},
-		&fakeApprovalCreator{},
-		querier,
-		&fakeRateLimiter{},
-		auditStore,
-	)
-	p := testPrincipal("admin1", "super_admin")
-	r := bulkDeleteRequest(p, map[string]any{"imsiList": []string{"001010000000001"}})
-	w := httptest.NewRecorder()
-	h.BulkDelete(w, r)
-
-	if w.Code != http.StatusConflict {
-		t.Fatalf("expected 409, got %d: %s", w.Code, w.Body.String())
-	}
-}
-
-func TestBulkDelete_ActiveOverlap_BatchUpdate(t *testing.T) {
-	repo := newFakeBulkDeleteRepo()
-	repo.subscribers["001010000000001"] = bson.M{
-		"imsi":                    "001010000000001",
-		"msisdn":                  []any{"1234567890"},
-		"access_restriction_data": int64(0),
-		"network_access_mode":     int64(0),
-	}
-	repo.deleteCASResult = true
-
-	existingApproval := approval.ApprovalDocument{
-		ID:     "existing-1",
-		Action: "SUBSCRIBER_BATCH_UPDATE",
-		Status: approval.StatusPending,
-		Operation: approval.ApprovalOperation{
-			ResourceType: "SUBSCRIBER_BATCH_UPDATE",
-			ResourceID:   "BATCH:001010000000001",
-		},
-		Payload: map[string]any{
-			"targets":    []any{map[string]any{"imsi": "001010000000001"}},
-			"fieldNames": []any{"access_restriction_data"},
-		},
-	}
-	querier := &fakeApprovalQuerierDocs{docs: []approval.ApprovalDocument{existingApproval}}
-	auditStore := &fakeEvidenceStore{}
-	h := newBulkDeleteHandler(
-		repo,
-		&fakeUserRepo{identity: testIdentity("admin1", "super_admin", false)},
-		&fakeApprovalCreator{},
-		querier,
-		&fakeRateLimiter{},
-		auditStore,
-	)
-	p := testPrincipal("admin1", "super_admin")
-	r := bulkDeleteRequest(p, map[string]any{"imsiList": []string{"001010000000001"}})
-	w := httptest.NewRecorder()
-	h.BulkDelete(w, r)
-
-	if w.Code != http.StatusConflict {
-		t.Fatalf("expected 409, got %d: %s", w.Code, w.Body.String())
-	}
-}
-
-func TestBulkDelete_ActiveOverlap_BulkDelete(t *testing.T) {
-	repo := newFakeBulkDeleteRepo()
-	repo.subscribers["001010000000001"] = bson.M{
-		"imsi":                    "001010000000001",
-		"msisdn":                  []any{"1234567890"},
-		"access_restriction_data": int64(0),
-		"network_access_mode":     int64(0),
-	}
-	repo.deleteCASResult = true
-
-	// Different fingerprint
-	existingApproval := approval.ApprovalDocument{
-		ID:                   "existing-1",
-		Action:               "SUBSCRIBER_BULK_DELETE",
-		Status:               approval.StatusPending,
-		OperationFingerprint: "different-fingerprint",
-		Operation: approval.ApprovalOperation{
-			ResourceType: "SUBSCRIBER_BULK_DELETE",
-			ResourceID:   "BULK:001010000000001",
-		},
-		Payload: map[string]any{
-			"targets": []any{map[string]any{"imsi": "001010000000001"}},
-		},
-	}
-	querier := &fakeApprovalQuerierDocs{docs: []approval.ApprovalDocument{existingApproval}}
-	auditStore := &fakeEvidenceStore{}
-	h := newBulkDeleteHandler(
-		repo,
-		&fakeUserRepo{identity: testIdentity("admin1", "super_admin", false)},
-		&fakeApprovalCreator{},
-		querier,
-		&fakeRateLimiter{},
-		auditStore,
-	)
-	p := testPrincipal("admin1", "super_admin")
-	r := bulkDeleteRequest(p, map[string]any{"imsiList": []string{"001010000000001"}})
-	w := httptest.NewRecorder()
-	h.BulkDelete(w, r)
-
-	if w.Code != http.StatusConflict {
-		t.Fatalf("expected 409, got %d: %s", w.Code, w.Body.String())
 	}
 }
 
@@ -3684,7 +2879,7 @@ func TestBulkDelete_AuditFailure_ZeroWrite(t *testing.T) {
 	}
 	repo.deleteCASResult = false // CAS conflict → zero write
 
-	// Audit writer fails
+	// Audit writer fails, but does not mask conflict
 	auditStore := &fakeEvidenceStore{insertErr: fmt.Errorf("audit service down")}
 	h := newBulkDeleteHandler(
 		repo,
@@ -3699,17 +2894,14 @@ func TestBulkDelete_AuditFailure_ZeroWrite(t *testing.T) {
 	w := httptest.NewRecorder()
 	h.BulkDelete(w, r)
 
-	// Section 12: Should be 503 AUDIT_UNAVAILABLE
-	if w.Code != http.StatusServiceUnavailable {
-		t.Fatalf("expected 503, got %d: %s", w.Code, w.Body.String())
+	// Non-gating audit: Returns 409 conflict
+	if w.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d: %s", w.Code, w.Body.String())
 	}
 	var resp map[string]any
 	json.Unmarshal(w.Body.Bytes(), &resp)
-	if resp["error"] != "AUDIT_UNAVAILABLE" {
-		t.Errorf("expected error=AUDIT_UNAVAILABLE, got %v", resp["error"])
-	}
-	if resp["committed"] != false {
-		t.Errorf("expected committed=false, got %v", resp["committed"])
+	if resp["code"] != "SUBSCRIBER_BULK_DELETE_PRECONDITION_CHANGED" {
+		t.Errorf("expected code=SUBSCRIBER_BULK_DELETE_PRECONDITION_CHANGED, got %v", resp["code"])
 	}
 }
 
@@ -3727,7 +2919,7 @@ func TestBulkDelete_AuditFailure_MutationCommitted(t *testing.T) {
 	}
 	repo.deleteCASResult = true // Successful delete
 
-	// Audit writer fails
+	// Audit writer fails, but mutation is already committed
 	auditStore := &fakeEvidenceStore{insertErr: fmt.Errorf("audit service down")}
 	h := newBulkDeleteHandler(
 		repo,
@@ -3742,18 +2934,14 @@ func TestBulkDelete_AuditFailure_MutationCommitted(t *testing.T) {
 	w := httptest.NewRecorder()
 	h.BulkDelete(w, r)
 
-	// Section 13: Should be 503 AUDIT_UNAVAILABLE
-	if w.Code != http.StatusServiceUnavailable {
-		t.Fatalf("expected 503, got %d: %s", w.Code, w.Body.String())
+	// Non-gating audit: committed business mutation succeeds with 200 OK
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
 	var resp map[string]any
 	json.Unmarshal(w.Body.Bytes(), &resp)
-	if resp["error"] != "AUDIT_UNAVAILABLE" {
-		t.Errorf("expected error=AUDIT_UNAVAILABLE, got %v", resp["error"])
-	}
-	// Section 13: committed = true (mutation was committed before audit failed)
-	if resp["committed"] != true {
-		t.Errorf("expected committed=true, got %v", resp["committed"])
+	if resp["outcome"] != "executed" {
+		t.Errorf("expected outcome=executed, got %v", resp["outcome"])
 	}
 	// No rollback: CAS delete should have been called
 	if len(repo.deletedImsis) != 1 {

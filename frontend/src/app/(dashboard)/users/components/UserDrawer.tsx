@@ -5,7 +5,6 @@ import iamStyles from "@/components/iam/iam.module.css";
 import { OperationNotice } from "@/components/OperationFeedback";
 import { Dialog } from "@/components/ui/Dialog";
 import type { DetailTab } from "../types";
-import { UserActivityLog } from "./UserActivityLog";
 import { BulkProgressModal } from "./BulkProgressModal";
 import { UserBasicInfo } from "./UserBasicInfo";
 import { UserConfirmDialogs } from "./UserConfirmDialogs";
@@ -21,7 +20,6 @@ const DETAIL_TABS: Array<{ key: DetailTab; labelKey: string }> = [
   { key: "basic", labelKey: "users_detail_tab_basic" },
   { key: "permissions", labelKey: "users_detail_tab_permissions" },
   { key: "login", labelKey: "users_security_state" },
-  { key: "activity", labelKey: "users_detail_tab_activity" },
 ];
 
 export function UserDrawer(props: UserDrawerProps) {
@@ -88,10 +86,8 @@ export function UserDrawer(props: UserDrawerProps) {
                   <UserBasicInfo user={selectedUser} />
                 ) : props.detailTab === "permissions" ? (
                   <UserPermissions user={selectedUser} />
-                ) : props.detailTab === "login" ? (
-                  <UserLoginHistory user={selectedUser} />
                 ) : (
-                  <UserActivityLog {...props} />
+                  <UserLoginHistory user={selectedUser} />
                 )}
               </div>
             </>

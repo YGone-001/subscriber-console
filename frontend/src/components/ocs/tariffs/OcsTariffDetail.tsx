@@ -3,7 +3,7 @@
 import Link from "next/link";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
-import { ArrowLeft, FileText, Users, ShieldCheck, History } from "lucide-react";
+import { ArrowLeft, FileText, Users, History } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import PageHeader from "@/components/ui/PageHeader";
 import RefreshButton from "@/components/ui/RefreshButton";
@@ -31,16 +31,9 @@ export default function OcsTariffDetail({ planId }: OcsTariffDetailProps) {
     fetcher,
   );
 
-  const { data: opsData } = useSWR(
-    `/api/tariff-plans/${planId}/operations`,
-    fetcher,
-  );
-
   const plan = data?.plan;
   const rules = rulesData?.rules || [];
   const subscriberCount = subsData?.subscribers?.length ?? plan?.subscriberCount ?? 0;
-  const operations = opsData?.history || [];
-  const latestOp = operations[0];
 
   if (loading) {
     return (
@@ -128,41 +121,6 @@ export default function OcsTariffDetail({ planId }: OcsTariffDetailProps) {
             <div className="ocs-detail-field">
               <span className="ocs-detail-label">{t("ocs_tariff_detail_bound_count")}</span>
               <span className="ocs-detail-value">{subscriberCount}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Governance */}
-        <div className="ocs-detail-section">
-          <h3><ShieldCheck size={16} /> {t("ocs_tariff_detail_governance")}</h3>
-          <div className="ocs-detail-fields">
-            <div className="ocs-detail-field">
-              <span className="ocs-detail-label">{t("ocs_tariff_detail_created_by")}</span>
-              <span className="ocs-detail-value">{plan.created_by || "—"}</span>
-            </div>
-            <div className="ocs-detail-field">
-              <span className="ocs-detail-label">{t("ocs_tariff_detail_updated_by")}</span>
-              <span className="ocs-detail-value">{plan.updated_by || latestOp?.actor || "—"}</span>
-            </div>
-            <div className="ocs-detail-field">
-              <span className="ocs-detail-label">{t("ocs_tariff_detail_last_operation")}</span>
-              <span className="ocs-detail-value">{latestOp?.action || "—"}</span>
-            </div>
-            <div className="ocs-detail-field">
-              <span className="ocs-detail-label">{t("ocs_tariff_detail_approval_status")}</span>
-              <span className="ocs-detail-value">{latestOp?.result || "DIRECT"}</span>
-            </div>
-            <div className="ocs-detail-field">
-              <span className="ocs-detail-label">{t("ocs_contract_detail_audit_ref")}</span>
-              <span className="ocs-detail-value">
-                {latestOp?.id ? (
-                  <Link href={`/audit-logs?q=${encodeURIComponent(plan.plan_id)}`} className="ocs-link">
-                    {latestOp.id}
-                  </Link>
-                ) : (
-                  "—"
-                )}
-              </span>
             </div>
           </div>
         </div>

@@ -42,7 +42,7 @@ export type PermissionDiff = {
   key: string;
   before: PermissionEffect;
   after: PermissionEffect;
-  category: "added" | "removed" | "allow_to_approval" | "approval_to_deny" | "changed";
+  category: "added" | "removed" | "changed";
 };
 
 export const USER_ACCESS_STATUS_META: Record<UserAccessDisplayStatus, { labelKey: string; tone: "success" | "neutral" | "danger" }> = {
@@ -65,13 +65,11 @@ export function getUserAccessStatusMeta(value: string | undefined, locked = fals
 }
 
 export function normalizePermissionEffect(decision: CapabilityDecision): PermissionEffect {
-  if (decision === "approval") return "approval_required";
   if (decision === "deny") return "deny";
   return "allow";
 }
 
 export function permissionEffectToDecisionKey(effect: PermissionEffect) {
-  if (effect === "approval_required") return "approval";
   if (effect === "deny") return "deny";
   return "allow";
 }
@@ -120,8 +118,6 @@ export function buildPermissionDiff(
     if (from === to) return [];
     const category =
       from === "deny" && to !== "deny" ? "added" :
-      from === "allow" && to === "approval_required" ? "allow_to_approval" :
-      from === "approval_required" && to === "deny" ? "approval_to_deny" :
       from !== "deny" && to === "deny" ? "removed" :
       "changed";
     return [{ key, before: from, after: to, category }];

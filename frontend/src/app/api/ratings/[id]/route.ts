@@ -2,9 +2,10 @@ import { NextResponse } from 'next/server';
 import { logAudit } from '@/lib/audit';
 import { requireAuth, requirePermission } from '@/lib/authz';
 import { enforceRateLimit } from '@/lib/rateLimit';
-import { createApprovalRequest } from '@/server/repositories/approvalRepository';
 import {
+  deleteRating,
   getRating,
+  updateRating,
 } from '@/server/repositories/ratingRepository';
 import { OCS_OPERATIONS, evaluateOcsOperation } from '@/server/ocsGovernanceRegistry';
 
@@ -59,9 +60,13 @@ export async function PUT(request: Request, { params }: RouteContext) {
     const planId = body?.planId || body?.plan_id || new URL(request.url).searchParams.get('planId') || undefined;
     const before = await getRating(id, planId);
     if (!before) return NextResponse.json({ error: 'Rating not found' }, { status: 404 });
-    const approval = await createApprovalRequest({ action: 'RATING_UPDATE', requester: auth.auth.user, targetId: `rating:${planId || 'plan_default_10gb'}:${id}`, summary: `Update rating group ${id} in ${planId || 'plan_default_10gb'}`, operation: { resourceType: 'ocs_rating', resourceId: `${planId || 'plan_default_10gb'}:${id}` }, before, payload: { id, planId, changes: body } });
-    logAudit('UPDATE', `approval:${approval.id}`, null, approval, request);
-    return NextResponse.json({ outcome: 'approval_required', message: 'Approval required before rating update', approval }, { status: 202 });
+    const result = await updateRating(id, body, planId);
+    try {
+      logAudit('UPDATE', `rating:${planId || 'plan_default_10gb'}:${id}`, before, result, request);
+    } catch (auditErr) {
+      console.warn('Non-gating audit log failed:', auditErr);
+    }
+    return NextResponse.json({ success: true, rating: result });
   } catch (error) {
     console.error('Error updating rating:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
@@ -84,9 +89,13 @@ export async function DELETE(request: Request, { params }: RouteContext) {
     const planId = new URL(request.url).searchParams.get('planId') || undefined;
     const before = await getRating(id, planId);
     if (!before) return NextResponse.json({ error: 'Rating not found' }, { status: 404 });
-    const approval = await createApprovalRequest({ action: 'RATING_DELETE', requester: auth.auth.user, targetId: `rating:${planId || 'plan_default_10gb'}:${id}`, summary: `Delete rating group ${id} from ${planId || 'plan_default_10gb'}`, operation: { resourceType: 'ocs_rating', resourceId: `${planId || 'plan_default_10gb'}:${id}` }, before, payload: { id, planId } });
-    logAudit('UPDATE', `approval:${approval.id}`, null, approval, request);
-    return NextResponse.json({ outcome: 'approval_required', message: 'Approval required before rating deletion', approval }, { status: 202 });
+    const result = await deleteRating(id, planId);
+    try {
+      logAudit('DELETE', `rating:${planId || 'plan_default_10gb'}:${id}`, before, result, request);
+    } catch (auditErr) {
+      console.warn('Non-gating audit log failed:', auditErr);
+    }
+    return NextResponse.json({ success: true, rating: result });
   } catch (error) {
     console.error('Error deleting rating:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });

@@ -19,14 +19,8 @@ type BulkPolicyResult = {
   resetBalances: boolean;
 };
 
-type ApprovalRequest = {
-  id: string;
-  status: string;
-};
-
 type BulkPolicySuccess = {
   result?: BulkPolicyResult;
-  approval?: ApprovalRequest;
 };
 
 type BulkPolicyModalProps = {

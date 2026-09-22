@@ -186,13 +186,6 @@ export default function NotificationCenter() {
               </button>
               <button
                 type="button"
-                className={`notif-tab ${activeTab === "approval" ? "active" : ""}`}
-                onClick={() => setActiveTab("approval")}
-              >
-                {t("notif_tab_approvals")}
-              </button>
-              <button
-                type="button"
                 className={`notif-tab ${activeTab === "system" ? "active" : ""}`}
                 onClick={() => setActiveTab("system")}
               >

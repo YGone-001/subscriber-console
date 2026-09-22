@@ -6,7 +6,6 @@ import { isPasswordStrong, PASSWORD_POLICY_MESSAGE } from '@/lib/security';
 import { normalizeGovernanceRole, permissionsFor } from '@/lib/permissions';
 import { assignableRoles, userManagementActions, UserManagementError, type UserOperation } from '@/lib/userManagementPolicy';
 import { getSafeUser, safeUser, updateUser, type UserDocument } from '@/server/repositories/userRepository';
-import { listAuditLogsForUser } from '@/server/repositories/auditRepository';
 import { authorizeUserOperation, profileFields, recheckUserPolicy, requireObject, userAudit, userOperationError } from '@/server/userManagement';
 import type { RoleKey } from '@/types/iam';
 
@@ -22,8 +21,7 @@ export async function GET(request: Request, { params }: RouteContext) {
     if (!user) return NextResponse.json({ error: 'USER_NOT_FOUND', code: 'USER_NOT_FOUND' }, { status: 404 });
     const actor = { username: auth.auth.user, role: auth.auth.role };
     return NextResponse.json({ user, normalizedRole: normalizeGovernanceRole(user.role), permissions: permissionsFor({ role: user.role }),
-      actions: userManagementActions(actor, user), assignableRoles: assignableRoles(actor),
-      activity: await listAuditLogsForUser(username) });
+      actions: userManagementActions(actor, user), assignableRoles: assignableRoles(actor) });
   } catch { return NextResponse.json({ error: 'USER_QUERY_FAILED', code: 'USER_QUERY_FAILED' }, { status: 503 }); }
 }
 

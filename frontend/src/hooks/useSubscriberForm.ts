@@ -353,11 +353,7 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
     try {
       const res = await fetch(`/api/subscribers/${imsi}`, { method: "DELETE" });
       if (res.ok) {
-        const data = await res.json().catch(() => ({}));
-        if (data?.outcome === 'approval_required') {
-          setToastMessage(`Change request ${data?.approval?.changeId || ''} submitted. The subscriber remains unchanged until approval is executed.`);
-          return;
-        }
+        await res.json().catch(() => ({}));
         onRefresh();
         onClose();
       } else {
@@ -473,12 +469,6 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
           throw new Error(t("sub_err_msisdn_exists"));
         }
         throw new Error(data?.error || t("sub_err_save"));
-      }
-
-      if (responseData?.outcome === 'approval_required') {
-        setToastMessage(`Change request ${responseData?.approval?.changeId || ''} submitted. The subscriber remains unchanged until approval is executed.`);
-        setIsEditing(false);
-        return;
       }
 
       onRefresh();

@@ -504,3 +504,33 @@ func (r *Repository) DeleteSubscriberCAS(ctx context.Context, imsi string, expec
 	}
 	return result.DeletedCount > 0, nil
 }
+
+// asAnySlice converts bson.A or []any to []any for safe extraction.
+func asAnySlice(v any) ([]any, bool) {
+	switch slice := v.(type) {
+	case []any:
+		return slice, true
+	case bson.A:
+		return []any(slice), true
+	default:
+		return nil, false
+	}
+}
+
+// asStringAnyMap converts bson.M, bson.D, or map[string]any to map[string]any for safe extraction.
+func asStringAnyMap(v any) (map[string]any, bool) {
+	switch m := v.(type) {
+	case map[string]any:
+		return m, true
+	case bson.M:
+		return map[string]any(m), true
+	case bson.D:
+		result := make(map[string]any, len(m))
+		for _, elem := range m {
+			result[elem.Key] = elem.Value
+		}
+		return result, true
+	default:
+		return nil, false
+	}
+}

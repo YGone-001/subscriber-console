@@ -9,7 +9,7 @@ interface TariffPlanModalProps {
   isOpen: boolean;
   onClose: () => void;
   plan?: TariffPlan | null;
-  onSuccess: (result: { outcome: string; message: string; approvalId?: string }) => void;
+  onSuccess: (result: { outcome: string; message: string }) => void;
 }
 
 export default function TariffPlanModal({

@@ -48,7 +48,6 @@ export default function OcsBalancePlaceholder() {
   const [feedback, setFeedback] = useState<{
     type: "success" | "error";
     message: string;
-    approvalId?: string;
   } | null>(null);
 
   const url = useMemo(() => {
@@ -211,7 +210,6 @@ export default function OcsBalancePlaceholder() {
             setFeedback({
               type: result.outcome === "executed_audit_warning" ? "error" : "success",
               message: result.message,
-              approvalId: result.approvalId,
             });
             refresh();
           }}

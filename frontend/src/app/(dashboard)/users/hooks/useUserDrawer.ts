@@ -4,7 +4,6 @@ import { fetcher } from "@/lib/fetcher";
 import {
   DEFAULT_EDIT_FORM,
   DEFAULT_NEW_FORM,
-  type AuditLogResponse,
   type DetailTab,
   type DrawerMode,
   type EditUserForm,
@@ -24,14 +23,8 @@ export function useUserDrawer(users: SysUser[], selectedUsername: string | null,
   const [newConfirmPasswordVisible, setNewConfirmPasswordVisible] = useState(false);
   const [editPasswordVisible, setEditPasswordVisible] = useState(false);
   const [openMenuUsername, setOpenMenuUsername] = useState<string | null>(null);
-  const {
-    data: detail,
-    error: auditError,
-    isLoading: isAuditLoading,
-    mutate: mutateAudit,
-  } = useSWR<{ user: SysUser; actions: UserOperation[]; assignableRoles: RoleKey[]; activity: AuditLogResponse['logs'] }>(selectedUsername ? `/api/users/${encodeURIComponent(selectedUsername)}` : null, fetcher);
+  const { data: detail, mutate: mutateDetail } = useSWR<{ user: SysUser; actions: UserOperation[]; assignableRoles: RoleKey[] }>(selectedUsername ? `/api/users/${encodeURIComponent(selectedUsername)}` : null, fetcher);
   const selectedUser = detail?.user ?? users.find((item) => item.username === selectedUsername) ?? null;
-  const auditData = detail ? { logs: detail.activity, filteredTotal: detail.activity.length, totalScanned: detail.activity.length } : undefined;
 
   const resetNewForm = () => {
     setNewForm(DEFAULT_NEW_FORM);
@@ -110,9 +103,6 @@ export function useUserDrawer(users: SysUser[], selectedUsername: string | null,
     startEdit,
     startPasswordReset,
     closeDrawer,
-    auditData,
-    auditError,
-    isAuditLoading,
-    mutateAudit,
+    mutateDetail,
   };
 }

@@ -302,7 +302,6 @@ export default function DataHub({
       const data = await res.json();
 
       if (res.status === 202) {
-        // Approval requested
         setImportResult(data);
         setImportStage("done");
       } else if (res.ok || res.status === 207) {
@@ -906,18 +905,12 @@ export default function DataHub({
                   <div className="dh-done-icon-wrap">
                     <CheckCircle2 size={36} className="dh-done-icon" />
                   </div>
-                  <h4 className="dh-done-title">
-                    {importResult.approval?.id
-                      ? t("approval_status_pending")
-                      : t("dh_import_complete")}
-                  </h4>
+                  <h4 className="dh-done-title">{t("dh_import_complete")}</h4>
                   <p className="dh-done-desc">
-                    {importResult.approval?.id
-                      ? t("approval_msg_submitted", { id: importResult.approval.id })
-                      : t("dh_import_summary", {
-                          imported: importResult.imported ?? 0,
-                          skipped: importResult.skipped ?? 0,
-                        })}
+                    {t("dh_import_summary", {
+                      imported: importResult.imported ?? 0,
+                      skipped: importResult.skipped ?? 0,
+                    })}
                   </p>
 
                   {importResult.failed > 0 && (
@@ -945,7 +938,7 @@ export default function DataHub({
                     <button
                       type="button"
                       onClick={() => {
-                        if (!importResult.approval?.id) onComplete();
+                        onComplete();
                         onClose();
                       }}
                       className="btn dh-btn-done"

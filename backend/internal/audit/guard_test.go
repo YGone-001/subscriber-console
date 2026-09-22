@@ -54,13 +54,8 @@ func TestRequireCapabilityWithAudit_Denied(t *testing.T) {
 		t.Error("expected error field in response")
 	}
 
-	// requiresApproval MUST be present (even if false)
-	requiresApproval, ok := resp["requiresApproval"]
-	if !ok {
-		t.Error("expected requiresApproval to be present in response")
-	}
-	if requiresApproval != false {
-		t.Errorf("expected requiresApproval=false, got %v", requiresApproval)
+	if _, exists := resp["requiresApproval"]; exists {
+		t.Error("retired requiresApproval field must be absent")
 	}
 
 	// Cleanup
@@ -68,7 +63,7 @@ func TestRequireCapabilityWithAudit_Denied(t *testing.T) {
 	writer.Close(closeCtx)
 }
 
-func TestRequireCapabilityWithAudit_NoRequiresApprovalDeletion(t *testing.T) {
+func TestRequireCapabilityWithAudit_NoApprovalMetadata(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("POST", "/api/test", nil)
 	p := &auth.Principal{Username: "viewer", Role: "viewer", NormalizedRole: "viewer"}
@@ -81,9 +76,8 @@ func TestRequireCapabilityWithAudit_NoRequiresApprovalDeletion(t *testing.T) {
 	var resp map[string]any
 	json.NewDecoder(w.Body).Decode(&resp)
 
-	// Verify requiresApproval is NOT deleted from response
-	if _, exists := resp["requiresApproval"]; !exists {
-		t.Error("requiresApproval should NOT be deleted from denial response")
+	if _, exists := resp["requiresApproval"]; exists {
+		t.Error("retired requiresApproval field must be absent")
 	}
 
 	// Cleanup
@@ -96,10 +90,9 @@ func TestRequirePermissionWithAudit_Allow(t *testing.T) {
 	r := httptest.NewRequest("GET", "/api/test", nil)
 	p := &auth.Principal{Username: "admin", Role: "super_admin", NormalizedRole: "super_admin"}
 
-	// super_admin has all permissions
-	result := RequirePermissionWithAudit(w, r, p, "audit.read", nil)
+	result := RequirePermissionWithAudit(w, r, p, "users.read", nil)
 	if !result {
-		t.Error("expected super_admin to have audit.read permission")
+		t.Error("expected super_admin to have users.read permission")
 	}
 	if w.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d", w.Code)
@@ -115,10 +108,9 @@ func TestRequirePermissionWithAudit_Denied(t *testing.T) {
 	store := newFakeEvidenceStore()
 	writer := newTestWriterWithWorkers(t, 2, store)
 
-	// viewer does NOT have audit.source-ip.read-full permission
-	result := RequirePermissionWithAudit(w, r, p, "audit.source-ip.read-full", writer)
+	result := RequirePermissionWithAudit(w, r, p, "users.create", writer)
 	if result {
-		t.Error("expected viewer to be denied audit.source-ip.read-full permission")
+		t.Error("expected viewer to be denied users.create permission")
 	}
 	if w.Code != http.StatusForbidden {
 		t.Errorf("expected 403, got %d", w.Code)
@@ -134,8 +126,8 @@ func TestRequirePermissionWithAudit_Denied(t *testing.T) {
 	}
 
 	// Permission denial response should have permission field
-	if resp["permission"] != "audit.source-ip.read-full" {
-		t.Errorf("expected permission=audit.source-ip.read-full, got %v", resp["permission"])
+	if resp["permission"] != "users.create" {
+		t.Errorf("expected permission=users.create, got %v", resp["permission"])
 	}
 
 	// Cleanup
@@ -189,7 +181,7 @@ func TestRecordPermissionDenied_NoRiskLevel(t *testing.T) {
 	writer.Close(closeCtx)
 }
 
-func TestRecordPermissionDenied_NoRequiresApprovalInMetadata(t *testing.T) {
+func TestRecordPermissionDenied_NoRetiredApprovalMetadata(t *testing.T) {
 	r := httptest.NewRequest("POST", "/api/test", nil)
 	p := &auth.Principal{Username: "testuser", Role: "viewer", NormalizedRole: "viewer"}
 
@@ -237,7 +229,7 @@ func TestRecordPermissionDenied_PermissionMetadata(t *testing.T) {
 	writer := newTestWriterWithWorkers(t, 2, store)
 
 	// Use permission guard (not capability)
-	RequirePermissionWithAudit(httptest.NewRecorder(), r, p, "audit.source-ip.read-full", writer)
+	RequirePermissionWithAudit(httptest.NewRecorder(), r, p, "users.create", writer)
 
 	// Give workers time to process
 	waitForRecords(t, store, 1)

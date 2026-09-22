@@ -20,8 +20,6 @@ const NAVIGATION_DATA_KEYS: Readonly<Record<string, readonly string[]>> = {
   ],
   "/ocs/balances": ["/api/ocs/balances?page=1&limit=20&imsi=&status="],
   "/profile": ["/api/profiles"],
-  "/approvals": ["/api/approvals?page=1&pageSize=20"],
-  "/audit-logs": ["/api/audit?page=1&pageSize=20"],
   "/users": ["/api/users?page=1&pageSize=10&sort=createdAt&order=desc"],
   "/system-health": ["/api/system/health"],
 };

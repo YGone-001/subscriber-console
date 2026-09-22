@@ -3,12 +3,12 @@ package balance
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
 
-	"subscriber/internal/approval"
 	"subscriber/internal/audit"
 	"subscriber/internal/auth"
 	"subscriber/internal/governance"
@@ -16,11 +16,6 @@ import (
 )
 
 var imsiRegex = regexp.MustCompile(`^[0-9]{10,18}$`)
-
-// ApprovalCreator abstracts approval request creation.
-type ApprovalCreator interface {
-	Create(r *http.Request, actor approval.GovernanceActor, input approval.CreateApprovalInput) (*approval.ApprovalDocument, error)
-}
 
 // RateLimiter abstracts rate limiting for testing.
 type RateLimiter interface {
@@ -32,17 +27,15 @@ type Handler struct {
 	repo        *Repository
 	limiter     RateLimiter
 	userRepo    UserRepository
-	approvalSvc ApprovalCreator
 	auditWriter *audit.Writer
 }
 
 // NewHandler creates a new balance Handler.
-func NewHandler(repo *Repository, limiter RateLimiter, userRepo UserRepository, approvalSvc ApprovalCreator, auditWriter *audit.Writer) *Handler {
+func NewHandler(repo *Repository, limiter RateLimiter, userRepo UserRepository, auditWriter *audit.Writer) *Handler {
 	return &Handler{
 		repo:        repo,
 		limiter:     limiter,
 		userRepo:    userRepo,
-		approvalSvc: approvalSvc,
 		auditWriter: auditWriter,
 	}
 }
@@ -123,7 +116,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 // Adjust handles POST /api/ocs/balances/{imsi}/adjust.
 // Enforces CAS precondition checks and maker-checker governance.
 // - super_admin / root -> DIRECT_GOVERNED
-// - ops_admin / operator -> APPROVAL_GOVERNED
+// - admin / operator -> direct execution
 func (h *Handler) Adjust(w http.ResponseWriter, r *http.Request) {
 	p := auth.PrincipalFromContext(r.Context())
 	if p == nil {
@@ -285,15 +278,12 @@ func (h *Handler) Adjust(w http.ResponseWriter, r *http.Request) {
 		},
 	}, fresh)
 	if auditErr != nil {
-		response.JSON(w, http.StatusServiceUnavailable, map[string]any{
-			"error":     "AUDIT_UNAVAILABLE",
-			"code":      "AUDIT_UNAVAILABLE",
-			"message":   "Balance adjustment committed but strict audit persistence failed",
-			"committed": true,
-			"imsi":      imsi,
-			"version":   res.After.Version,
-		})
-		return
+		slog.Error("operation_log_persistence_failed",
+			"operation", "BALANCE_ADJUST",
+			"imsi", imsi,
+			"operator", fresh.Username,
+			"error", auditErr,
+		)
 	}
 
 	response.JSON(w, http.StatusOK, map[string]any{

@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server';
 import { logAudit } from '@/lib/audit';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import { requireAuth, requirePermission } from '@/lib/authz';
-import { createApprovalRequest } from '@/server/repositories/approvalRepository';
 import {
+  createRating,
   getRating,
   listRatings,
 } from '@/server/repositories/ratingRepository';
@@ -51,13 +51,13 @@ export async function POST(request: Request) {
 
     const existing = await getRating(String(rating_group_id), planId);
     if (existing) return NextResponse.json({ error: 'Rating Group ID already exists' }, { status: 409 });
-    const approval = await createApprovalRequest({
-      action: 'RATING_CREATE', requester: auth.auth.user, targetId: `rating:${planId || 'plan_default_10gb'}:${rating_group_id}`,
-      summary: `Create rating group ${rating_group_id} in ${planId || 'plan_default_10gb'}`,
-      operation: { resourceType: 'ocs_rating', resourceId: `${planId || 'plan_default_10gb'}:${rating_group_id}` }, payload: { ...data, planId },
-    });
-    logAudit('UPDATE', `approval:${approval.id}`, null, approval, request);
-    return NextResponse.json({ outcome: 'approval_required', message: 'Approval required before rating creation', approval }, { status: 202 });
+    const result = await createRating(data, planId);
+    try {
+      logAudit('CREATE', `rating:${result.rating_group_id}`, null, result, request);
+    } catch (auditErr) {
+      console.warn('Non-gating audit log failed:', auditErr);
+    }
+    return NextResponse.json({ success: true, rating: result }, { status: 201 });
   } catch (error) {
     if (error instanceof Error && error.message === 'RATING_EXISTS') {
       return NextResponse.json({ error: 'Rating Group ID already exists' }, { status: 409 });

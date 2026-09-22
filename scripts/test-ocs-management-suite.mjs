@@ -95,7 +95,6 @@ try {
   await xcloud.collection('ocs_balances').createIndex({ imsi: 1 }, { unique: true });
   await xcloud.collection('ocs_subscribers').createIndex({ imsi: 1 }, { unique: true });
   await xcloud.collection('ocs_tariff_plans').createIndex({ plan_id: 1 }, { unique: true });
-  await app.collection('app_approvals').createIndex({ id: 1 }, { unique: true });
   await app.collection('app_users').createIndex({ username: 1 }, { unique: true });
   await app.collection('ocs_balance_adjustments').createIndexes([
     { key: { adjustmentId: 1 }, unique: true, name: 'uniq_ocs_balance_adjustment_id' },

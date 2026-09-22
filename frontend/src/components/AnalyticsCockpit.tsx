@@ -196,8 +196,8 @@ export default function AnalyticsCockpit() {
       tone: "normal",
       title: t("dash_work_healthy_title"),
       detail: t("dash_work_healthy_detail"),
-      href: "/audit-logs",
-      action: t("dash_work_open_audit"),
+      href: "/system-health",
+      action: t("dash_work_open_health"),
     });
   }
 

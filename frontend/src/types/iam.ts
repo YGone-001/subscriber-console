@@ -10,15 +10,11 @@ export type Capability =
   | "balance_adjust"
   | "profile_rollback"
   | "rating_publish"
-  | "approval_review"
-  | "approval_execute"
-  | "audit_view"
-  | "audit_export"
   | "system_heal"
   | "user_admin";
 
-export type CapabilityDecision = "allow" | "approval" | "export" | "deny";
-export type PermissionEffect = "allow" | "approval_required" | "deny";
+export type CapabilityDecision = "allow" | "deny";
+export type PermissionEffect = "allow" | "deny";
 
 export interface SysUser {
   username: string;
@@ -63,7 +59,7 @@ export type EditUserForm = {
 };
 
 export type DrawerMode = "closed" | "view" | "create" | "edit" | "resetPassword";
-export type DetailTab = "basic" | "permissions" | "login" | "activity";
+export type DetailTab = "basic" | "permissions" | "login";
 export type BulkAction = "enable" | "disable" | "assignRole";
 
 export const CANONICAL_ROLES: readonly CanonicalRole[] = ["admin", "operator", "viewer"];
@@ -78,10 +74,6 @@ export const CAPABILITY_LABEL_KEYS: Record<Capability, string> = {
   balance_adjust: "users_cap_action_balance_adjust",
   profile_rollback: "users_cap_action_profile_rollback",
   rating_publish: "users_cap_action_rating_publish",
-  approval_review: "users_cap_action_approval_review",
-  approval_execute: "users_cap_action_approval_execute",
-  audit_view: "users_cap_action_audit_view",
-  audit_export: "users_cap_action_audit_export",
   system_heal: "users_cap_action_system_heal",
   user_admin: "users_cap_action_user_admin",
 };
@@ -92,10 +84,6 @@ export const CAPABILITY_DIMENSION_KEYS: Record<Capability, string> = {
   balance_adjust: "role_perm_dimension_edit",
   profile_rollback: "role_perm_dimension_rollback",
   rating_publish: "role_perm_dimension_publish",
-  approval_review: "role_perm_dimension_approve",
-  approval_execute: "role_perm_dimension_approve",
-  audit_view: "role_perm_dimension_view",
-  audit_export: "role_perm_dimension_export",
   system_heal: "role_perm_dimension_system",
   user_admin: "role_perm_dimension_system",
 };

@@ -11,9 +11,7 @@
     "mongo:import-xcloud": "node scripts/import-xcloud-shell-json.mjs",
     "mongo:migrate-app-db": "node scripts/migrate-app-collections-to-app-db.mjs",
     "mongo:test-core": "node scripts/test-mongo-core.mjs",
-    "mongo:test-subscriber-governance": "node scripts/test-subscriber-governance.mjs",
-    "mongo:test-ocs-governance": "node scripts/test-ocs-governance.mjs",
-    "mongo:test-ocs-balance-approval-e2e": "node scripts/test-ocs-balance-approval-e2e.mjs",
+    "test:direct-operations": "node scripts/test-direct-operations.mjs",
     "mongo:perf": "node scripts/check-mongo-query-performance.mjs"
   },
   "dependencies": {

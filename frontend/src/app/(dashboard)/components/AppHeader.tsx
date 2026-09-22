@@ -8,7 +8,6 @@ import NocSentinel from "@/components/NocSentinel";
 import CommandPalette from "@/components/CommandPalette";
 import ThemeSwitcher from "@/components/ThemeSwitcher";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
-import ApprovalMenu from "./ApprovalMenu";
 import NotificationCenter from "./NotificationCenter";
 import UserMenu from "./UserMenu";
 
@@ -70,7 +69,6 @@ export default function AppHeader({ sidebarOpen, setSidebarOpen }: AppHeaderProp
 
         <div className="header-right">
           <NocSentinel />
-          <ApprovalMenu />
           <NotificationCenter />
           <LanguageSwitcher />
           <ThemeSwitcher />

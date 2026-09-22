@@ -404,21 +404,9 @@ async function ensureIndexes() {
     { key: { role: 1, status: 1 }, name: 'users_role_status' },
   ])).map((name) => ({ database: appDbName, collection: 'app_users', name })));
 
-  createdIndexes.push(...(await appDb.collection('app_approvals').createIndexes([
-    { key: { status: 1, createdAt: -1 }, name: 'approvals_status_created' },
-    { key: { id: 1 }, unique: true, name: 'uniq_approval_id' },
-    { key: { changeId: 1 }, unique: true, partialFilterExpression: { changeId: { $type: 'string' } }, name: 'uniq_approval_change_id' },
-    { key: { riskLevel: 1, status: 1, createdAt: -1 }, name: 'approvals_risk_status_created' },
-    { key: { requester: 1, createdAt: -1 }, name: 'approvals_requester_created' },
-    { key: { reviewer: 1, createdAt: -1 }, name: 'approvals_reviewer_created' },
-    { key: { 'operation.resourceType': 1, 'operation.resourceId': 1, createdAt: -1 }, name: 'approvals_resource_created' },
-    { key: { operationFingerprint: 1 }, unique: true, partialFilterExpression: { action: { $in: ['SUBSCRIBER_UPDATE', 'SUBSCRIBER_DELETE', 'SUBSCRIBER_BATCH_CREATE', 'SUBSCRIBER_BATCH_UPDATE', 'SUBSCRIBER_IMPORT', 'SUBSCRIBER_IMPORT_OVERWRITE', 'SUBSCRIBER_BULK_DELETE'] }, status: { $in: ['pending', 'approved', 'executing'] }, operationFingerprint: { $type: 'string' } }, name: 'uniq_active_subscriber_governed_fingerprint' },
-  ])).map((name) => ({ database: appDbName, collection: 'app_approvals', name })));
-
   createdIndexes.push(...(await appDb.collection('ocs_balance_adjustments').createIndexes([
     { key: { adjustmentId: 1 }, unique: true, name: 'uniq_ocs_balance_adjustment_id' },
     { key: { executionId: 1 }, unique: true, name: 'uniq_ocs_balance_execution_id' },
-    { key: { approvalId: 1, completedAt: -1 }, name: 'ocs_balance_adjustment_approval_completed' },
     { key: { imsi: 1, claimedAt: -1 }, name: 'ocs_balance_adjustment_imsi_claimed' },
   ])).map((name) => ({ database: appDbName, collection: 'ocs_balance_adjustments', name })));
 
@@ -434,7 +422,6 @@ async function ensureIndexes() {
     { key: { 'resource.type': 1, 'resource.id': 1, timestamp: -1 }, name: 'audit_resource_timestamp' },
     { key: { 'request.requestId': 1 }, name: 'audit_request_id' },
     { key: { 'request.correlationId': 1 }, name: 'audit_request_correlation_id' },
-    { key: { approvalId: 1, timestamp: -1 }, name: 'audit_approval_timestamp' },
   ])).map((name) => ({ database: appDbName, collection: 'app_audit_logs', name })));
 
   createdIndexes.push(...(await appDb.collection('app_alerts').createIndexes([

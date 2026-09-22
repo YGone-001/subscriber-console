@@ -13,7 +13,7 @@ import (
 
 // GenerateUUID creates a UUID v4 using crypto/rand.
 // Format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-// Exported for use by other packages (e.g., approval event IDs).
+// Exported for use by other packages that need correlated event IDs.
 func GenerateUUID() string {
 	var buf [16]byte
 	if _, err := rand.Read(buf[:]); err != nil {
@@ -43,22 +43,21 @@ const (
 // WriteAuditInput is the caller-facing input for creating an audit record.
 // Matches Node WriteAuditInput shape.
 type WriteAuditInput struct {
-	Action     string                 `json:"action"`
-	Module     string                 `json:"module"`
-	Actor      ActorInput             `json:"actor"`
-	Resource   *ResourceInput         `json:"resource,omitempty"`
-	TargetID   string                 `json:"targetId,omitempty"`
-	Source     *SourceInput           `json:"source,omitempty"`
-	Request    *RequestInput          `json:"request,omitempty"`
-	ApprovalID string                 `json:"approvalId,omitempty"`
-	Reason     string                 `json:"reason,omitempty"`
-	Before     interface{}            `json:"before,omitempty"`
-	After      interface{}            `json:"after,omitempty"`
-	RiskLevel  string                 `json:"riskLevel,omitempty"`
-	Result     string                 `json:"result,omitempty"`
-	Level      string                 `json:"level,omitempty"`
-	Metadata   map[string]interface{} `json:"metadata,omitempty"`
-	Error      *ErrorInput            `json:"error,omitempty"`
+	Action    string                 `json:"action"`
+	Module    string                 `json:"module"`
+	Actor     ActorInput             `json:"actor"`
+	Resource  *ResourceInput         `json:"resource,omitempty"`
+	TargetID  string                 `json:"targetId,omitempty"`
+	Source    *SourceInput           `json:"source,omitempty"`
+	Request   *RequestInput          `json:"request,omitempty"`
+	Reason    string                 `json:"reason,omitempty"`
+	Before    interface{}            `json:"before,omitempty"`
+	After     interface{}            `json:"after,omitempty"`
+	RiskLevel string                 `json:"riskLevel,omitempty"`
+	Result    string                 `json:"result,omitempty"`
+	Level     string                 `json:"level,omitempty"`
+	Metadata  map[string]interface{} `json:"metadata,omitempty"`
+	Error     *ErrorInput            `json:"error,omitempty"`
 }
 
 // ActorInput describes who performed the action.
@@ -115,7 +114,6 @@ type AuditWriteRecord struct {
 	Source        *SourceInput           `bson:"source,omitempty" json:"source,omitempty"`
 	Request       *RequestInput          `bson:"request,omitempty" json:"request,omitempty"`
 	CorrelationID string                 `bson:"correlationId,omitempty" json:"correlationId,omitempty"`
-	ApprovalID    string                 `bson:"approvalId,omitempty" json:"approvalId,omitempty"`
 	Reason        string                 `bson:"reason,omitempty" json:"reason,omitempty"`
 	OldData       interface{}            `bson:"oldData" json:"oldData"`
 	NewData       interface{}            `bson:"newData" json:"newData"`
@@ -262,7 +260,6 @@ func BuildRecord(input WriteAuditInput) AuditWriteRecord {
 		Source:        source,
 		Request:       request,
 		CorrelationID: sanitizeAuditText(correlationID),
-		ApprovalID:    sanitizeAuditText(input.ApprovalID),
 		Reason:        sanitizeAuditText(input.Reason),
 		OldData:       oldData,
 		NewData:       newData,

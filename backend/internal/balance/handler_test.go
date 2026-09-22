@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
-	"subscriber/internal/approval"
 	"subscriber/internal/audit"
 	"subscriber/internal/auth"
 	"subscriber/internal/user"
@@ -64,28 +63,6 @@ func testAuditWriter() *audit.Writer {
 	return audit.NewWriter(&noopEvidenceStore{}, audit.WriterConfig{})
 }
 
-type mockApprovalCreator struct {
-	createdDoc *approval.ApprovalDocument
-	err        error
-	lastInput  *approval.CreateApprovalInput
-}
-
-func (m *mockApprovalCreator) Create(r *http.Request, actor approval.GovernanceActor, input approval.CreateApprovalInput) (*approval.ApprovalDocument, error) {
-	m.lastInput = &input
-	if m.err != nil {
-		return nil, m.err
-	}
-	doc := &approval.ApprovalDocument{
-		ID:       "app-test-123",
-		Action:   input.Action,
-		Status:   approval.StatusPending,
-		TargetID: input.TargetID,
-		Payload:  input.Payload,
-	}
-	m.createdDoc = doc
-	return doc, nil
-}
-
 func reqWithPrincipal(method, path string, body []byte, username, role string) *http.Request {
 	var r *http.Request
 	if body != nil {
@@ -106,7 +83,7 @@ func reqWithPrincipal(method, path string, body []byte, username, role string) *
 // ── Test Reset Permanently Disabled ─────────────────────────────────────────
 
 func TestHandler_Reset_PermanentlyDisabled(t *testing.T) {
-	h := NewHandler(nil, &mockRateLimiter{allowed: true}, nil, nil, testAuditWriter())
+	h := NewHandler(nil, &mockRateLimiter{allowed: true}, nil, testAuditWriter())
 
 	req := reqWithPrincipal("POST", "/api/ocs/balances/417010000000001/reset", nil, "admin", "super_admin")
 	req.SetPathValue("imsi", "417010000000001")
@@ -178,7 +155,7 @@ func TestHandler_Adjust_Validation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			userRepo := &mockUserRepo{identity: testUserIdentity("admin", "super_admin")}
-			h := NewHandler(nil, &mockRateLimiter{allowed: true}, userRepo, nil, testAuditWriter())
+			h := NewHandler(nil, &mockRateLimiter{allowed: true}, userRepo, testAuditWriter())
 
 			req := reqWithPrincipal("POST", "/api/ocs/balances/"+tt.imsi+"/adjust", []byte(tt.body), "admin", "super_admin")
 			req.SetPathValue("imsi", tt.imsi)
@@ -206,7 +183,7 @@ func TestHandler_Adjust_Validation(t *testing.T) {
 func TestHandler_Adjust_RoleMismatch_Rejected(t *testing.T) {
 	// Token says super_admin, DB says viewer
 	userRepo := &mockUserRepo{identity: testUserIdentity("admin", "viewer")}
-	h := NewHandler(nil, &mockRateLimiter{allowed: true}, userRepo, nil, testAuditWriter())
+	h := NewHandler(nil, &mockRateLimiter{allowed: true}, userRepo, testAuditWriter())
 
 	body := `{"operation":"credit","bucket":"data","amount":100,"reason":"test compensation"}`
 	req := reqWithPrincipal("POST", "/api/ocs/balances/417010000000001/adjust", []byte(body), "admin", "super_admin")
@@ -222,7 +199,7 @@ func TestHandler_Adjust_RoleMismatch_Rejected(t *testing.T) {
 
 func TestHandler_Adjust_Viewer_Forbidden(t *testing.T) {
 	userRepo := &mockUserRepo{identity: testUserIdentity("viewer1", "viewer")}
-	h := NewHandler(nil, &mockRateLimiter{allowed: true}, userRepo, nil, testAuditWriter())
+	h := NewHandler(nil, &mockRateLimiter{allowed: true}, userRepo, testAuditWriter())
 
 	body := `{"operation":"credit","bucket":"data","amount":100,"reason":"test compensation"}`
 	req := reqWithPrincipal("POST", "/api/ocs/balances/417010000000001/adjust", []byte(body), "viewer1", "viewer")
@@ -269,7 +246,7 @@ func TestHandler_Adjust_ApprovalCreation_Operator(t *testing.T) {
 	}
 
 	userRepo := &mockUserRepo{identity: testUserIdentity("op1", "operator")}
-	h := NewHandler(repo, &mockRateLimiter{allowed: true}, userRepo, nil, testAuditWriter())
+	h := NewHandler(repo, &mockRateLimiter{allowed: true}, userRepo, testAuditWriter())
 
 	body := `{"operation":"credit","bucket":"data","amount":500,"reason":"customer compensation","ticketId":"INC1001"}`
 	req := reqWithPrincipal("POST", "/api/ocs/balances/"+testIMSI+"/adjust", []byte(body), "op1", "operator")
@@ -335,7 +312,7 @@ func TestHandler_Adjust_DirectExecution_SuperAdmin(t *testing.T) {
 	}
 
 	userRepo := &mockUserRepo{identity: testUserIdentity("admin", "super_admin")}
-	h := NewHandler(repo, &mockRateLimiter{allowed: true}, userRepo, nil, testAuditWriter())
+	h := NewHandler(repo, &mockRateLimiter{allowed: true}, userRepo, testAuditWriter())
 
 	body := `{"operation":"credit","bucket":"data","amount":1000,"reason":"direct grant","ticketId":"INC2002"}`
 	req := reqWithPrincipal("POST", "/api/ocs/balances/"+testIMSI+"/adjust", []byte(body), "admin", "super_admin")
@@ -402,7 +379,7 @@ func TestHandler_Adjust_DirectExecution_AuditFailure_503(t *testing.T) {
 
 	userRepo := &mockUserRepo{identity: testUserIdentity("admin", "super_admin")}
 	failingWriter := audit.NewWriter(&failingEvidenceStore{}, audit.WriterConfig{})
-	h := NewHandler(repo, &mockRateLimiter{allowed: true}, userRepo, nil, failingWriter)
+	h := NewHandler(repo, &mockRateLimiter{allowed: true}, userRepo, failingWriter)
 
 	body := `{"operation":"credit","bucket":"data","amount":500,"reason":"test audit fail"}`
 	req := reqWithPrincipal("POST", "/api/ocs/balances/"+testIMSI+"/adjust", []byte(body), "admin", "super_admin")
@@ -411,19 +388,17 @@ func TestHandler_Adjust_DirectExecution_AuditFailure_503(t *testing.T) {
 
 	h.Adjust(w, req)
 
-	if w.Code != http.StatusServiceUnavailable {
-		t.Fatalf("expected 503 Service Unavailable, got %d, body: %s", w.Code, w.Body.String())
+	// Under Phase 5.7-C, operation log failure must NOT turn committed mutation into 503 AUDIT_UNAVAILABLE
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d, body: %s", w.Code, w.Body.String())
 	}
 
 	var resp map[string]any
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
-	if resp["code"] != "AUDIT_UNAVAILABLE" {
-		t.Errorf("expected code AUDIT_UNAVAILABLE, got %v", resp["code"])
-	}
-	if resp["committed"] != true {
-		t.Errorf("expected committed true, got %v", resp["committed"])
+	if resp["outcome"] != "success" {
+		t.Errorf("expected outcome success, got %v", resp["outcome"])
 	}
 
 	// Verify the CAS mutation was NOT rolled back in Mongo

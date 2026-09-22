@@ -167,11 +167,9 @@ export default function SubscriberPage() {
         setFeedback({
           tone: "success",
           title: t("sub_feedback_success_title"),
-          message: data.approval?.id
-            ? t("approval_msg_submitted", { id: data.approval.id })
-            : t("sub_feedback_bulk_delete_success", { count: data.deleted ?? imsis.length }),
+          message: t("sub_feedback_bulk_delete_success", { count: data.deletedCount ?? data.deleted ?? imsis.length }),
         });
-        if (!data.approval?.id) await mutateSubscribers();
+        await mutateSubscribers();
         return;
       }
 
@@ -437,15 +435,7 @@ export default function SubscriberPage() {
           defaultMode={trafficAdjustmentTarget.mode}
           currentTraffic={trafficAdjustmentTarget.traffic}
           onClose={() => setTrafficAdjustmentTarget(null)}
-          onSuccess={(response) => {
-            if (response?.approval?.id) {
-              setFeedback({
-                tone: "success",
-                title: t("success"),
-                message: t("approval_msg_submitted", { id: response.approval.id }),
-              });
-              return;
-            }
+          onSuccess={() => {
             mutateSubscribers();
             setFeedback({
               tone: "success",
@@ -461,16 +451,8 @@ export default function SubscriberPage() {
         selectedImsis={selectedImsis}
         t={t}
         onClose={() => setIsPolicyModalOpen(false)}
-        onSuccess={(response) => {
+        onSuccess={() => {
           setSelectedImsis([]);
-          if (response?.approval?.id) {
-            setFeedback({
-              tone: "success",
-              title: t("success"),
-              message: t("approval_msg_submitted", { id: response.approval.id }),
-            });
-            return;
-          }
           mutateSubscribers();
           setFeedback({
             tone: "success",
@@ -488,9 +470,10 @@ export default function SubscriberPage() {
           setSelectedImsis([]);
           setFeedback({
             tone: "success",
-            title: "变更申请已创建",
-            message: `CHG ${response.approval?.changeId || response.approval?.id || ""} 已提交，等待独立审批。订阅用户数据尚未修改。`,
+            title: t("success"),
+            message: `已直接更新 ${response.result?.modified ?? selectedImsis.length} 个订阅用户。`,
           });
+          mutateSubscribers();
         }}
       />
 

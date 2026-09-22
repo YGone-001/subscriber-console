@@ -90,17 +90,12 @@ test('Balance governance localization keys are complete in zh and en', () => {
   assert.match(zhLocale, /ocs_balance_active_accounts:\s*"活跃账户"/);
   assert.match(enLocale, /ocs_balance_active_accounts:\s*"Active Accounts"/);
 
-  assert.match(zhLocale, /ocs_balance_pending_adjustments:\s*"待审批调整"/);
-  assert.match(enLocale, /ocs_balance_pending_adjustments:\s*"Pending Adjustments"/);
-
   assert.match(zhLocale, /ocs_balance_adjust:\s*"调整余额"/);
   assert.match(enLocale, /ocs_balance_adjust:\s*"Adjust Balance"/);
 
   assert.match(zhLocale, /ocs_balance_cutover_pending:\s*"余额写入割接尚未完成，当前处于只读模式"/);
   assert.match(enLocale, /ocs_balance_cutover_pending:\s*"Balance write cutover pending; currently in read-only shadow mode"/);
 
-  assert.match(zhLocale, /ocs_balance_audit_unavailable_warning/);
-  assert.match(enLocale, /ocs_balance_audit_unavailable_warning/);
   assert.match(zhLocale, /ocs_balance_backend_unreachable/);
   assert.match(enLocale, /ocs_balance_backend_unreachable/);
 });
@@ -119,13 +114,9 @@ test('OcsBalancePlaceholder operational cutover enables Adjust Balance with role
   assert.doesNotMatch(placeholderSource, /BALANCE_RESET/);
 });
 
-test('AdjustBalanceModal handles post-cutover governance errors (CAS 409, Audit 503, Go 502)', () => {
+test('AdjustBalanceModal handles direct-operation errors (CAS 409 and Go 502)', () => {
   // CAS 409 conflict
   assert.match(modalSource, /BALANCE_PRECONDITION_CHANGED/);
-
-  // Strict Audit 503 with committed=true
-  assert.match(modalSource, /AUDIT_UNAVAILABLE/);
-  assert.match(modalSource, /executed_audit_warning/);
 
   // Go backend unreachable 502
   assert.match(modalSource, /GO_BACKEND_UNREACHABLE/);

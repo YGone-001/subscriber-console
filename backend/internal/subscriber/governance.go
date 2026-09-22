@@ -16,8 +16,9 @@ const (
 	OpProfileApply SubscriberOperation = "SUBSCRIBER_PROFILE_APPLY"
 )
 
-// subscriberRegistry is the subscriber-domain governance registry.
-// Derived from Node subscriberGovernanceRegistry.ts exactly.
+// subscriberRegistry is the subscriber-domain operation registry.
+// Under the Phase 5.7-C direct operation model, all valid subscriber operations
+// execute directly without approval workflows.
 var subscriberRegistry = map[SubscriberOperation]governance.OperationDefinition{
 	OpCreate: {
 		Operation:         string(OpCreate),
@@ -27,43 +28,43 @@ var subscriberRegistry = map[SubscriberOperation]governance.OperationDefinition{
 	},
 	OpUpdate: {
 		Operation:         string(OpUpdate),
-		BaseMode:          governance.Approval,
+		BaseMode:          governance.Direct,
 		HumanExecutable:   true,
 		ExecutorAvailable: true,
 	},
 	OpDelete: {
 		Operation:         string(OpDelete),
-		BaseMode:          governance.Approval,
+		BaseMode:          governance.Direct,
 		HumanExecutable:   true,
 		ExecutorAvailable: true,
 	},
 	OpBatchCreate: {
 		Operation:         string(OpBatchCreate),
-		BaseMode:          governance.Approval,
+		BaseMode:          governance.Direct,
 		HumanExecutable:   true,
 		ExecutorAvailable: true,
 	},
 	OpBatchUpdate: {
 		Operation:         string(OpBatchUpdate),
-		BaseMode:          governance.Approval,
+		BaseMode:          governance.Direct,
 		HumanExecutable:   true,
 		ExecutorAvailable: true,
 	},
 	OpBulkDelete: {
 		Operation:         string(OpBulkDelete),
-		BaseMode:          governance.Approval,
+		BaseMode:          governance.Direct,
 		HumanExecutable:   true,
 		ExecutorAvailable: true,
 	},
 	OpImport: {
 		Operation:         string(OpImport),
-		BaseMode:          governance.Approval,
+		BaseMode:          governance.Direct,
 		HumanExecutable:   true,
 		ExecutorAvailable: true,
 	},
 	OpProfileApply: {
 		Operation:         string(OpProfileApply),
-		BaseMode:          governance.Approval,
+		BaseMode:          governance.Direct,
 		HumanExecutable:   true,
 		ExecutorAvailable: true,
 	},

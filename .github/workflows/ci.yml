@@ -94,8 +94,8 @@ jobs:
       - name: Build
         run: go build -o /dev/null ./...
 
-  ocs-governance:
-    name: OCS governance integration
+  direct-operations:
+    name: Direct operations integration
     runs-on: ubuntu-latest
     env:
       MONGODB_URI: mongodb://127.0.0.1:27017/xcloud
@@ -135,8 +135,8 @@ jobs:
           npm ci
           cd frontend && npm ci
 
-      - name: OCS governance Mongo integration
-        run: node scripts/test-ocs-governance.mjs
+      - name: Governance surface removal contract
+        run: node scripts/test-direct-operations.mjs
 
       - name: OCS management suite
         run: node scripts/test-ocs-management-suite.mjs
@@ -146,4 +146,3 @@ jobs:
 
       - name: RBAC role migration acceptance
         run: node scripts/test-rbac-role-migration.mjs
-

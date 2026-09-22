@@ -10,27 +10,10 @@ import (
 	"testing"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
-	"subscriber/internal/approval"
-	"subscriber/internal/audit"
 	"subscriber/internal/auth"
 )
 
 // --- Import-specific mocks ---
-
-type mockApprovalQuerier struct {
-	activeApprovals map[string][]approval.ApprovalDocument
-}
-
-func (m *mockApprovalQuerier) ListApprovals(_ context.Context, _ approval.ListQuery) (*approval.ListResult, error) {
-	return &approval.ListResult{}, nil
-}
-
-func (m *mockApprovalQuerier) ListActiveByAction(_ context.Context, action string) ([]approval.ApprovalDocument, error) {
-	if m.activeApprovals == nil {
-		return nil, nil
-	}
-	return m.activeApprovals[action], nil
-}
 
 type mockImportRepo struct {
 	existingImsis map[string]bool
@@ -66,20 +49,13 @@ func (m *mockImportRepo) ValidateTariffPlan(_ context.Context, planId string) er
 
 // --- Helper to build a WriteHandler with import test seam ---
 
-func newImportTestHandler(importRepo ImportRepository, approvalQry ApprovalQuerier, role string) *WriteHandler {
+func newImportTestHandler(importRepo ImportRepository, role string) *WriteHandler {
 	repo := &Repository{}
 	limiter := &mockRateLimiter{allowed: true}
 	userRepo := &mockUserRepo{identity: testUserIdentity("testuser", auth.NormalizeRole(role))}
-	approvalSvc := &mockApprovalCreator{
-		doc: &approval.ApprovalDocument{
-			ID:     "approval-123",
-			Action: "SUBSCRIBER_IMPORT",
-			Status: "pending",
-		},
-	}
 	auditWriter := testAuditWriter()
 
-	h := NewWriteHandler(repo, limiter, userRepo, approvalSvc, approvalQry, auditWriter)
+	h := NewWriteHandler(repo, limiter, userRepo, auditWriter)
 	h.importRepo = importRepo
 	return h
 }
@@ -111,7 +87,7 @@ func TestImport_Precheck(t *testing.T) {
 	repo := &mockImportRepo{
 		existingImsis: map[string]bool{"454000000000001": true},
 	}
-	h := newImportTestHandler(repo, &mockApprovalQuerier{}, "operator")
+	h := newImportTestHandler(repo, "operator")
 	body := map[string]any{"imsiList": []any{"454000000000001", "454000000000002"}}
 	req := importRequest("precheck", body, "operator")
 	w := httptest.NewRecorder()
@@ -130,7 +106,7 @@ func TestImport_Precheck(t *testing.T) {
 
 func TestImport_EmptyRecords(t *testing.T) {
 	repo := &mockImportRepo{tariffPlans: map[string]bool{"plan_default_10gb": true}}
-	h := newImportTestHandler(repo, &mockApprovalQuerier{}, "operator")
+	h := newImportTestHandler(repo, "operator")
 	body := map[string]any{"records": []any{}}
 	req := importRequest("import", body, "operator")
 	w := httptest.NewRecorder()
@@ -142,7 +118,7 @@ func TestImport_EmptyRecords(t *testing.T) {
 
 func TestImport_InvalidImsi(t *testing.T) {
 	repo := &mockImportRepo{tariffPlans: map[string]bool{"plan_default_10gb": true}}
-	h := newImportTestHandler(repo, &mockApprovalQuerier{}, "operator")
+	h := newImportTestHandler(repo, "operator")
 	body := map[string]any{"records": []any{map[string]any{"imsi": "invalid"}}}
 	req := importRequest("import", body, "operator")
 	w := httptest.NewRecorder()
@@ -154,7 +130,7 @@ func TestImport_InvalidImsi(t *testing.T) {
 
 func TestImport_DuplicateImsi(t *testing.T) {
 	repo := &mockImportRepo{tariffPlans: map[string]bool{"plan_default_10gb": true}}
-	h := newImportTestHandler(repo, &mockApprovalQuerier{}, "operator")
+	h := newImportTestHandler(repo, "operator")
 	body := map[string]any{"records": []any{
 		map[string]any{"imsi": "454000000000001"},
 		map[string]any{"imsi": "454000000000001"},
@@ -169,7 +145,7 @@ func TestImport_DuplicateImsi(t *testing.T) {
 
 func TestImport_UnknownField(t *testing.T) {
 	repo := &mockImportRepo{tariffPlans: map[string]bool{"plan_default_10gb": true}}
-	h := newImportTestHandler(repo, &mockApprovalQuerier{}, "operator")
+	h := newImportTestHandler(repo, "operator")
 	body := map[string]any{"records": []any{map[string]any{"imsi": "454000000000001", "unknown_field": "value"}}}
 	req := importRequest("import", body, "operator")
 	w := httptest.NewRecorder()
@@ -181,7 +157,7 @@ func TestImport_UnknownField(t *testing.T) {
 
 func TestImport_SensitiveKey(t *testing.T) {
 	repo := &mockImportRepo{tariffPlans: map[string]bool{"plan_default_10gb": true}}
-	h := newImportTestHandler(repo, &mockApprovalQuerier{}, "operator")
+	h := newImportTestHandler(repo, "operator")
 	for _, key := range []string{"k", "op", "opc", "amf", "sqn"} {
 		body := map[string]any{"records": []any{map[string]any{"imsi": "454000000000001", key: "00000000000000000000000000000000"}}}
 		req := importRequest("import", body, "operator")
@@ -199,7 +175,7 @@ func TestImport_SensitiveKey(t *testing.T) {
 
 func TestImport_Overwrite(t *testing.T) {
 	repo := &mockImportRepo{tariffPlans: map[string]bool{"plan_default_10gb": true}}
-	h := newImportTestHandler(repo, &mockApprovalQuerier{}, "operator")
+	h := newImportTestHandler(repo, "operator")
 	body := map[string]any{"records": []any{map[string]any{"imsi": "454000000000001"}}, "overwrite": true}
 	req := importRequest("import", body, "operator")
 	w := httptest.NewRecorder()
@@ -211,7 +187,7 @@ func TestImport_Overwrite(t *testing.T) {
 
 func TestImport_MissingTariff(t *testing.T) {
 	repo := &mockImportRepo{tariffPlans: map[string]bool{}} // no plans
-	h := newImportTestHandler(repo, &mockApprovalQuerier{}, "operator")
+	h := newImportTestHandler(repo, "operator")
 	body := map[string]any{"records": []any{map[string]any{"imsi": "454000000000001"}}}
 	req := importRequest("import", body, "operator")
 	w := httptest.NewRecorder()
@@ -221,25 +197,25 @@ func TestImport_MissingTariff(t *testing.T) {
 	}
 }
 
-func TestImport_OperatorApproval(t *testing.T) {
+func TestImport_OperatorDirect(t *testing.T) {
 	repo := &mockImportRepo{tariffPlans: map[string]bool{"plan_default_10gb": true}}
-	h := newImportTestHandler(repo, &mockApprovalQuerier{}, "operator")
+	h := newImportTestHandler(repo, "operator")
 	body := map[string]any{"records": []any{map[string]any{"imsi": "454000000000001"}}}
 	req := importRequest("import", body, "operator")
 	w := httptest.NewRecorder()
 	h.Import(w, req)
-	if w.Code != http.StatusAccepted {
-		t.Fatalf("expected 202, got %d: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
 	resp := importResponse(w)
-	if resp["requiresApproval"] != true {
-		t.Fatalf("expected requiresApproval=true, got %v", resp["requiresApproval"])
+	if resp["outcome"] != "executed" {
+		t.Fatalf("expected outcome=executed, got %v", resp["outcome"])
 	}
 }
 
 func TestImport_SuperAdminDirect(t *testing.T) {
 	repo := &mockImportRepo{tariffPlans: map[string]bool{"plan_default_10gb": true}}
-	h := newImportTestHandler(repo, &mockApprovalQuerier{}, "super_admin")
+	h := newImportTestHandler(repo, "super_admin")
 	body := map[string]any{"records": []any{map[string]any{"imsi": "454000000000001"}}}
 	req := importRequest("import", body, "super_admin")
 	w := httptest.NewRecorder()
@@ -259,95 +235,13 @@ func TestImport_SuperAdminDirect(t *testing.T) {
 
 func TestImport_RootDirect(t *testing.T) {
 	repo := &mockImportRepo{tariffPlans: map[string]bool{"plan_default_10gb": true}}
-	h := newImportTestHandler(repo, &mockApprovalQuerier{}, "root")
+	h := newImportTestHandler(repo, "root")
 	body := map[string]any{"records": []any{map[string]any{"imsi": "454000000000001"}}}
 	req := importRequest("import", body, "root")
 	w := httptest.NewRecorder()
 	h.Import(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
-	}
-}
-
-func TestImport_ExactDuplicateApproval(t *testing.T) {
-	repo := &mockImportRepo{tariffPlans: map[string]bool{"plan_default_10gb": true}}
-	// Compute the fingerprint that Prepare will produce
-	rawRec := map[string]any{"imsi": "454000000000001"}
-	normalized := NormalizeImportRecord(rawRec)
-	recHash := ComputeRecordIntentHash(normalized)
-	targets := []ImportTarget{{Imsi: "454000000000001", State: "absent", RecordIntentHash: recHash}}
-	fileHash := ComputeFileHash([]ImportRecord{normalized})
-	fp := ComputeImportFingerprint(targets, "skip-existing-create-only", fileHash)
-
-	approvals := map[string][]approval.ApprovalDocument{
-		"SUBSCRIBER_IMPORT": {
-			{ID: "existing-approval", Action: "SUBSCRIBER_IMPORT", Status: "pending", OperationFingerprint: fp},
-		},
-	}
-	h := newImportTestHandler(repo, &mockApprovalQuerier{activeApprovals: approvals}, "operator")
-	body := map[string]any{"records": []any{rawRec}}
-	req := importRequest("import", body, "operator")
-	w := httptest.NewRecorder()
-	h.Import(w, req)
-	if w.Code != http.StatusAccepted {
-		t.Fatalf("expected 202, got %d: %s", w.Code, w.Body.String())
-	}
-	resp := importResponse(w)
-	if resp["idempotent"] != true {
-		t.Fatalf("expected idempotent=true, got %v", resp["idempotent"])
-	}
-}
-
-func TestImport_OverlapConflict(t *testing.T) {
-	repo := &mockImportRepo{tariffPlans: map[string]bool{"plan_default_10gb": true}}
-	// Active approval targeting same IMSI we want to create
-	approvals := map[string][]approval.ApprovalDocument{
-		"SUBSCRIBER_BATCH_CREATE": {
-			{
-				ID:     "other-approval",
-				Action: "SUBSCRIBER_BATCH_CREATE",
-				Status: "pending",
-				Payload: map[string]any{
-					"targets": []any{map[string]any{"imsi": "454000000000001"}},
-				},
-			},
-		},
-	}
-	h := newImportTestHandler(repo, &mockApprovalQuerier{activeApprovals: approvals}, "operator")
-	body := map[string]any{"records": []any{map[string]any{"imsi": "454000000000001"}}}
-	req := importRequest("import", body, "operator")
-	w := httptest.NewRecorder()
-	h.Import(w, req)
-	if w.Code != http.StatusConflict {
-		t.Fatalf("expected 409, got %d: %s", w.Code, w.Body.String())
-	}
-	resp := importResponse(w)
-	if resp["error"] != "ACTIVE_CHANGE_CONFLICT" {
-		t.Fatalf("expected ACTIVE_CHANGE_CONFLICT, got %v", resp["error"])
-	}
-}
-
-func TestImport_DirectOverlapConflict(t *testing.T) {
-	repo := &mockImportRepo{tariffPlans: map[string]bool{"plan_default_10gb": true}}
-	approvals := map[string][]approval.ApprovalDocument{
-		"SUBSCRIBER_BATCH_CREATE": {
-			{
-				ID:     "other-approval",
-				Action: "SUBSCRIBER_BATCH_CREATE",
-				Status: "pending",
-				Payload: map[string]any{
-					"targets": []any{map[string]any{"imsi": "454000000000001"}},
-				},
-			},
-		},
-	}
-	h := newImportTestHandler(repo, &mockApprovalQuerier{activeApprovals: approvals}, "super_admin")
-	body := map[string]any{"records": []any{map[string]any{"imsi": "454000000000001"}}}
-	req := importRequest("import", body, "super_admin")
-	w := httptest.NewRecorder()
-	h.Import(w, req)
-	if w.Code != http.StatusConflict {
-		t.Fatalf("expected 409, got %d: %s", w.Code, w.Body.String())
 	}
 }
 
@@ -380,7 +274,7 @@ func TestImport_PreconditionDrift(t *testing.T) {
 			tariffPlans: map[string]bool{"plan_default_10gb": true},
 		},
 	}
-	h := newImportTestHandler(repo, &mockApprovalQuerier{}, "super_admin")
+	h := newImportTestHandler(repo, "super_admin")
 	body := map[string]any{"records": []any{map[string]any{"imsi": "454000000000001"}}}
 	req := importRequest("import", body, "super_admin")
 	w := httptest.NewRecorder()
@@ -395,19 +289,19 @@ func TestImport_PreconditionDrift(t *testing.T) {
 	}
 }
 
-func TestImport_OpsAdminApproval(t *testing.T) {
+func TestImport_OpsAdminDirect(t *testing.T) {
 	repo := &mockImportRepo{tariffPlans: map[string]bool{"plan_default_10gb": true}}
-	h := newImportTestHandler(repo, &mockApprovalQuerier{}, "ops_admin")
+	h := newImportTestHandler(repo, "ops_admin")
 	body := map[string]any{"records": []any{map[string]any{"imsi": "454000000000001"}}}
 	req := importRequest("import", body, "ops_admin")
 	w := httptest.NewRecorder()
 	h.Import(w, req)
-	if w.Code != http.StatusAccepted {
-		t.Fatalf("expected 202, got %d: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
 	resp := importResponse(w)
-	if resp["requiresApproval"] != true {
-		t.Fatalf("expected requiresApproval=true, got %v", resp["requiresApproval"])
+	if resp["outcome"] != "executed" {
+		t.Fatalf("expected outcome=executed, got %v", resp["outcome"])
 	}
 }
 
@@ -426,7 +320,7 @@ func TestImport_DisabledTariff(t *testing.T) {
 			tariffPlans: map[string]bool{"plan_default_10gb": true},
 		},
 	}
-	h := newImportTestHandler(repo, &mockApprovalQuerier{}, "operator")
+	h := newImportTestHandler(repo, "operator")
 	body := map[string]any{"records": []any{map[string]any{"imsi": "454000000000001"}}}
 	req := importRequest("import", body, "operator")
 	w := httptest.NewRecorder()
@@ -442,7 +336,7 @@ func TestImport_DisabledTariff(t *testing.T) {
 
 func TestImport_InsufficientPermissions(t *testing.T) {
 	repo := &mockImportRepo{tariffPlans: map[string]bool{"plan_default_10gb": true}}
-	h := newImportTestHandler(repo, &mockApprovalQuerier{}, "read_only")
+	h := newImportTestHandler(repo, "read_only")
 	body := map[string]any{"records": []any{map[string]any{"imsi": "454000000000001"}}}
 	req := importRequest("import", body, "read_only")
 	w := httptest.NewRecorder()
@@ -466,7 +360,7 @@ func TestImport_ZeroStorage_500(t *testing.T) {
 	repo := &failingInsertRepo{
 		mockImportRepo: mockImportRepo{tariffPlans: map[string]bool{"plan_default_10gb": true}},
 	}
-	h := newImportTestHandler(repo, &mockApprovalQuerier{}, "super_admin")
+	h := newImportTestHandler(repo, "super_admin")
 	body := map[string]any{"records": []any{map[string]any{"imsi": "454000000000001"}}}
 	req := importRequest("import", body, "super_admin")
 	w := httptest.NewRecorder()
@@ -495,7 +389,7 @@ func TestImport_OcsFailure_PartialWrite(t *testing.T) {
 	repo := &failingOcsRepo{
 		mockImportRepo: mockImportRepo{tariffPlans: map[string]bool{"plan_default_10gb": true}},
 	}
-	h := newImportTestHandler(repo, &mockApprovalQuerier{}, "super_admin")
+	h := newImportTestHandler(repo, "super_admin")
 	body := map[string]any{"records": []any{map[string]any{"imsi": "454000000000001"}}}
 	req := importRequest("import", body, "super_admin")
 	w := httptest.NewRecorder()
@@ -521,87 +415,6 @@ func TestImport_OcsFailure_PartialWrite(t *testing.T) {
 	ocsFailed := resp["ocsProvisioningFailedImsis"].([]any)
 	if len(ocsFailed) != 1 {
 		t.Fatalf("expected 1 OCS failure, got %d", len(ocsFailed))
-	}
-}
-
-type failingEvidenceStore struct{}
-
-func (f *failingEvidenceStore) Insert(_ context.Context, _ audit.AuditWriteRecord) error {
-	return fmt.Errorf("audit store unavailable")
-}
-func (f *failingEvidenceStore) FindByMongoID(_ context.Context, _ string) (*audit.AuditWriteRecord, error) {
-	return nil, fmt.Errorf("audit store unavailable")
-}
-
-func TestImport_AuditUnavailable_ZeroMutation_503(t *testing.T) {
-	// Use a repo where insert fails → mutationCommitted=false
-	repo := &failingInsertRepo{
-		mockImportRepo: mockImportRepo{tariffPlans: map[string]bool{"plan_default_10gb": true}},
-	}
-	repo2 := &Repository{}
-	limiter := &mockRateLimiter{allowed: true}
-	userRepo := &mockUserRepo{identity: testUserIdentity("testuser", "super_admin")}
-	approvalSvc := &mockApprovalCreator{
-		doc: &approval.ApprovalDocument{
-			ID:     "approval-123",
-			Action: "SUBSCRIBER_IMPORT",
-			Status: "pending",
-		},
-	}
-	auditWriter := audit.NewWriter(&failingEvidenceStore{}, audit.WriterConfig{})
-
-	h := NewWriteHandler(repo2, limiter, userRepo, approvalSvc, &mockApprovalQuerier{}, auditWriter)
-	h.importRepo = repo
-
-	body := map[string]any{"records": []any{map[string]any{"imsi": "454000000000001"}}}
-	req := importRequest("import", body, "super_admin")
-	w := httptest.NewRecorder()
-	h.Import(w, req)
-	if w.Code != http.StatusServiceUnavailable {
-		t.Fatalf("expected 503, got %d: %s", w.Code, w.Body.String())
-	}
-	resp := importResponse(w)
-	if resp["code"] != "AUDIT_UNAVAILABLE" {
-		t.Fatalf("expected AUDIT_UNAVAILABLE, got %v", resp["code"])
-	}
-	// Zero mutation → committed=false
-	if resp["committed"] != false {
-		t.Fatalf("expected committed=false, got %v", resp["committed"])
-	}
-}
-
-func TestImport_AuditUnavailable_AfterMutation_503(t *testing.T) {
-	// Use a repo where insert succeeds → mutationCommitted=true
-	repo := &mockImportRepo{tariffPlans: map[string]bool{"plan_default_10gb": true}}
-	repo2 := &Repository{}
-	limiter := &mockRateLimiter{allowed: true}
-	userRepo := &mockUserRepo{identity: testUserIdentity("testuser", "super_admin")}
-	approvalSvc := &mockApprovalCreator{
-		doc: &approval.ApprovalDocument{
-			ID:     "approval-123",
-			Action: "SUBSCRIBER_IMPORT",
-			Status: "pending",
-		},
-	}
-	auditWriter := audit.NewWriter(&failingEvidenceStore{}, audit.WriterConfig{})
-
-	h := NewWriteHandler(repo2, limiter, userRepo, approvalSvc, &mockApprovalQuerier{}, auditWriter)
-	h.importRepo = repo
-
-	body := map[string]any{"records": []any{map[string]any{"imsi": "454000000000001"}}}
-	req := importRequest("import", body, "super_admin")
-	w := httptest.NewRecorder()
-	h.Import(w, req)
-	if w.Code != http.StatusServiceUnavailable {
-		t.Fatalf("expected 503, got %d: %s", w.Code, w.Body.String())
-	}
-	resp := importResponse(w)
-	if resp["code"] != "AUDIT_UNAVAILABLE" {
-		t.Fatalf("expected AUDIT_UNAVAILABLE, got %v", resp["code"])
-	}
-	// After mutation → committed=true
-	if resp["committed"] != true {
-		t.Fatalf("expected committed=true, got %v", resp["committed"])
 	}
 }
 
@@ -643,7 +456,7 @@ func TestImport_TwoTargetPartialInsert_409(t *testing.T) {
 	repo := &partialInsertRepo{
 		mockImportRepo: mockImportRepo{tariffPlans: map[string]bool{"plan_default_10gb": true}},
 	}
-	h := newImportTestHandler(repo, &mockApprovalQuerier{}, "super_admin")
+	h := newImportTestHandler(repo, "super_admin")
 	body := map[string]any{
 		"records": []any{
 			map[string]any{"imsi": "454000000000911"},
@@ -677,24 +490,15 @@ func TestImport_OversizedSnapshot_HTTP413(t *testing.T) {
 	repo := &trackingImportRepo{
 		mockImportRepo: mockImportRepo{tariffPlans: map[string]bool{"plan_default_10gb": true}},
 	}
-	approvalCaptured := &approval.CreateApprovalInput{}
-	approvalSvc := &mockApprovalCreator{
-		doc: &approval.ApprovalDocument{
-			ID:     "approval-123",
-			Action: "SUBSCRIBER_IMPORT",
-			Status: "pending",
-		},
-		captured: approvalCaptured,
-	}
 	repo2 := &Repository{}
 	limiter := &mockRateLimiter{allowed: true}
 	userRepo := &mockUserRepo{identity: testUserIdentity("testuser", "super_admin")}
 	auditWriter := testAuditWriter()
 
-	h := NewWriteHandler(repo2, limiter, userRepo, approvalSvc, &mockApprovalQuerier{}, auditWriter)
+	h := NewWriteHandler(repo2, limiter, userRepo, auditWriter)
 	h.importRepo = repo
 
-	// Generate enough records to exceed512KB
+	// Generate enough records to exceed 512KB
 	records := make([]any, 2000)
 	for i := range records {
 		records[i] = map[string]any{
@@ -721,9 +525,6 @@ func TestImport_OversizedSnapshot_HTTP413(t *testing.T) {
 	}
 
 	// Side-effect gate: none of these should have been called
-	if approvalSvc.captured.OperationFingerprint != "" {
-		t.Fatal("Approval creation must not be called")
-	}
 	if repo.insertCalls != 0 {
 		t.Fatalf("Subscriber insert must not be called, got %d", repo.insertCalls)
 	}

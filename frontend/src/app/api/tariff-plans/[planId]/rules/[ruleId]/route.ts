@@ -4,10 +4,12 @@ import { requirePermission } from '@/lib/authz';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import { validateTariffRule } from '@/lib/tariffPlanOperations';
 import {
+  deleteTariffPlanRule,
   getTariffPlan,
+  toggleTariffPlanRuleStatus,
+  updateTariffPlanRule,
 } from '@/server/repositories/ocsBillingRepository';
 import { OCS_OPERATIONS, evaluateOcsOperation } from '@/server/ocsGovernanceRegistry';
-import { createApprovalRequest } from '@/server/repositories/approvalRepository';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,9 +39,13 @@ export async function PUT(request: Request, { params }: RouteContext) {
       return NextResponse.json({ error: 'Tariff plan not found' }, { status: 404 });
     }
 
-    const approval = await createApprovalRequest({ action: 'TARIFF_PLAN_RULE_UPDATE', requester: auth.auth.user, targetId: `tariff-plan:${planId}:rule:${ruleId}`, summary: `Update tariff rule ${ruleId}`, operation: { resourceType: 'ocs_tariff_plan', resourceId: planId }, before, payload: { schema: 'ocs-tariff-rule-v1', planId, ruleId, rule: body } });
-    logAudit('UPDATE', `approval:${approval.id}`, null, approval, request);
-    return NextResponse.json({ outcome: 'approval_required', message: 'Approval required before tariff rule update', approval }, { status: 202 });
+    const result = await updateTariffPlanRule(planId, ruleId, body);
+    try {
+      logAudit('UPDATE', `tariff-plan:${planId}:rule:${ruleId}`, before, result, request);
+    } catch (auditErr) {
+      console.warn('Non-gating audit log failed:', auditErr);
+    }
+    return NextResponse.json({ success: true, rule: result });
   } catch (error) {
     if (error instanceof Error) {
       if (error.message === 'RULE_NOT_FOUND') {
@@ -71,9 +77,13 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       return NextResponse.json({ error: 'Tariff plan not found' }, { status: 404 });
     }
 
-    const approval = await createApprovalRequest({ action: 'TARIFF_PLAN_RULE_TOGGLE', requester: auth.auth.user, targetId: `tariff-plan:${planId}:rule:${ruleId}`, summary: `Toggle tariff rule ${ruleId}`, operation: { resourceType: 'ocs_tariff_plan', resourceId: planId }, before, payload: { schema: 'ocs-tariff-rule-v1', planId, ruleId } });
-    logAudit('UPDATE', `approval:${approval.id}`, null, approval, request);
-    return NextResponse.json({ outcome: 'approval_required', message: 'Approval required before tariff rule state change', approval }, { status: 202 });
+    const result = await toggleTariffPlanRuleStatus(planId, ruleId);
+    try {
+      logAudit('UPDATE', `tariff-plan:${planId}:rule:${ruleId}`, before, result, request);
+    } catch (auditErr) {
+      console.warn('Non-gating audit log failed:', auditErr);
+    }
+    return NextResponse.json({ success: true, rule: result });
   } catch (error) {
     if (error instanceof Error) {
       if (error.message === 'RULE_NOT_FOUND') {
@@ -105,9 +115,13 @@ export async function DELETE(request: Request, { params }: RouteContext) {
       return NextResponse.json({ error: 'Tariff plan not found' }, { status: 404 });
     }
 
-    const approval = await createApprovalRequest({ action: 'TARIFF_PLAN_RULE_DELETE', requester: auth.auth.user, targetId: `tariff-plan:${planId}:rule:${ruleId}`, summary: `Delete tariff rule ${ruleId}`, operation: { resourceType: 'ocs_tariff_plan', resourceId: planId }, before, payload: { schema: 'ocs-tariff-rule-v1', planId, ruleId } });
-    logAudit('UPDATE', `approval:${approval.id}`, null, approval, request);
-    return NextResponse.json({ outcome: 'approval_required', message: 'Approval required before tariff rule deletion', approval }, { status: 202 });
+    const result = await deleteTariffPlanRule(planId, ruleId);
+    try {
+      logAudit('DELETE', `tariff-plan:${planId}:rule:${ruleId}`, before, result, request);
+    } catch (auditErr) {
+      console.warn('Non-gating audit log failed:', auditErr);
+    }
+    return NextResponse.json({ success: true, rule: result });
   } catch (error) {
     if (error instanceof Error && error.message === 'OCS_PLAN_NOT_FOUND') {
       return NextResponse.json({ error: 'Tariff plan not found' }, { status: 404 });

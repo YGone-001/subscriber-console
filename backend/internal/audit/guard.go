@@ -28,8 +28,7 @@ func RecordPermissionDenied(w *Writer, r *http.Request, p *auth.Principal, meta 
 
 	source, request, reason := AuditRequestContext(r)
 
-	// Build metadata — matches Node: capability+decision OR permission only.
-	// Node does NOT include requiresApproval in audit metadata.
+	// Build metadata from the denied capability or permission.
 	metadata := make(map[string]interface{})
 	if meta.Capability != "" {
 		metadata["capability"] = meta.Capability
@@ -83,22 +82,17 @@ func RequireCapabilityWithAudit(w http.ResponseWriter, r *http.Request, p *auth.
 		return true
 	}
 
-	requiresApproval := decision == "approval"
-
-	// Schedule audit evidence (no requiresApproval in metadata — Node does not include it)
+	// Schedule audit evidence.
 	RecordPermissionDenied(writer, r, p, DenialMetadata{
 		Capability: capability,
 		Decision:   decision,
 	})
 
-	// Write 403 response — requiresApproval ALWAYS present (true or false)
-	// Node: requiresApproval: decision === 'approval'
 	writeDenialJSON(w, http.StatusForbidden, map[string]interface{}{
-		"error":            "Forbidden: Insufficient permissions",
-		"code":             "PERMISSION_DENIED",
-		"capability":       capability,
-		"decision":         decision,
-		"requiresApproval": requiresApproval,
+		"error":      "Forbidden: Insufficient permissions",
+		"code":       "PERMISSION_DENIED",
+		"capability": capability,
+		"decision":   decision,
 	})
 	return false
 }

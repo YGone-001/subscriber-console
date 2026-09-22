@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
-	"subscriber/internal/approval"
 	"subscriber/internal/audit"
 	"subscriber/internal/auth"
 	"subscriber/internal/governance"
@@ -24,11 +23,6 @@ type UserRepository interface {
 	FindByUsernameIdentity(ctx context.Context, username string) (*user.UserIdentity, error)
 }
 
-// ApprovalCreator is the interface for creating approval requests.
-type ApprovalCreator interface {
-	Create(r *http.Request, actor approval.GovernanceActor, input approval.CreateApprovalInput) (*approval.ApprovalDocument, error)
-}
-
 // RateLimiter abstracts rate limiting for handler testing.
 type RateLimiter interface {
 	Enforce(w http.ResponseWriter, r *http.Request, identifier string, limit int, windowSeconds int) bool
@@ -39,17 +33,15 @@ type SubscriberWriteHandler struct {
 	repo        *Repository
 	limiter     RateLimiter
 	userRepo    UserRepository
-	approvalSvc ApprovalCreator
 	auditWriter *audit.Writer
 }
 
 // NewSubscriberWriteHandler creates a new OCS subscriber write handler.
-func NewSubscriberWriteHandler(repo *Repository, limiter RateLimiter, userRepo UserRepository, approvalSvc ApprovalCreator, auditWriter *audit.Writer) *SubscriberWriteHandler {
+func NewSubscriberWriteHandler(repo *Repository, limiter RateLimiter, userRepo UserRepository, auditWriter *audit.Writer) *SubscriberWriteHandler {
 	return &SubscriberWriteHandler{
 		repo:        repo,
 		limiter:     limiter,
 		userRepo:    userRepo,
-		approvalSvc: approvalSvc,
 		auditWriter: auditWriter,
 	}
 }

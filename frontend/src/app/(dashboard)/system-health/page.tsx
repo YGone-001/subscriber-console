@@ -443,7 +443,6 @@ export default function SystemHealthPage() {
               metrics={[
                 { label: t("health_sec_root"), value: systemHealth?.subsystems?.security?.rootUserConfigured ? t("health_status_active") : t("health_status_missing", { count: 1 }), tone: systemHealth?.subsystems?.security?.rootUserConfigured ? 'success' : 'danger' },
                 { label: t("health_sec_alerts"), value: systemHealth?.subsystems?.security?.unacknowledgedAlertsCount ?? '--', tone: (systemHealth?.subsystems?.security?.criticalAlertsCount || 0) > 0 ? 'danger' : 'success' },
-                { label: t("health_sec_approvals"), value: systemHealth?.subsystems?.security?.pendingApprovalsCount ?? '--' },
                 { label: t("users_title"), value: systemHealth?.subsystems?.security?.activeUsersCount ?? '--' },
               ]}
             />

@@ -29,9 +29,8 @@ type BalanceRecord struct {
 
 // BalanceSummary contains aggregate statistics for balance management.
 type BalanceSummary struct {
-	TotalSubscribers   int64 `json:"totalSubscribers"`
-	ActiveAccounts     int64 `json:"activeAccounts"`
-	PendingAdjustments int64 `json:"pendingAdjustments"`
+	TotalSubscribers int64 `json:"totalSubscribers"`
+	ActiveAccounts   int64 `json:"activeAccounts"`
 }
 
 // BalanceQueryOptions contains filtering and pagination options for balance listing.

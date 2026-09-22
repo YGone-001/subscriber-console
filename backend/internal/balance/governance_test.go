@@ -51,23 +51,23 @@ func TestFingerprint(t *testing.T) {
 func TestEvaluateOperation_GovernanceRoles(t *testing.T) {
 	// Adjust: super_admin / root -> DIRECT
 	resRoot := EvaluateOperation(OpAdjust, "root")
-	if resRoot.Decision != governance.Direct || resRoot.ApprovalRequired {
+	if resRoot.Decision != governance.Direct {
 		t.Errorf("expected root to get DIRECT, got %+v", resRoot)
 	}
 
 	resSuperAdmin := EvaluateOperation(OpAdjust, "super_admin")
-	if resSuperAdmin.Decision != governance.Direct || resSuperAdmin.ApprovalRequired {
+	if resSuperAdmin.Decision != governance.Direct {
 		t.Errorf("expected super_admin to get DIRECT, got %+v", resSuperAdmin)
 	}
 
 	// Adjust: operator / ops_admin -> DIRECT (Phase 5.7-A)
 	resOperator := EvaluateOperation(OpAdjust, "operator")
-	if resOperator.Decision != governance.Direct || resOperator.ApprovalRequired {
+	if resOperator.Decision != governance.Direct {
 		t.Errorf("expected operator to get DIRECT, got %+v", resOperator)
 	}
 
 	resOpsAdmin := EvaluateOperation(OpAdjust, "ops_admin")
-	if resOpsAdmin.Decision != governance.Direct || resOpsAdmin.ApprovalRequired {
+	if resOpsAdmin.Decision != governance.Direct {
 		t.Errorf("expected ops_admin to get DIRECT, got %+v", resOpsAdmin)
 	}
 

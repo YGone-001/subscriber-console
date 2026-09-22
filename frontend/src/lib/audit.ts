@@ -8,16 +8,9 @@ export type { WriteAuditInput } from '@/types/audit';
 // Keep the established import narrow for existing analytics and business routes.
 export type AuditAction = LegacyAuditAction;
 
-export type AuditWriteOptions = { failureMode?: 'best-effort' | 'strict' };
+export type AuditWriteOptions = { failureMode?: 'best-effort' };
 
-export class AuditWriteError extends Error {
-  constructor(public readonly eventId: string) {
-    super('Audit evidence could not be persisted');
-    this.name = 'AuditWriteError';
-  }
-}
-
-async function persistAuditRecord(record: AuditLogRecord, options: AuditWriteOptions = {}): Promise<boolean> {
+async function persistAuditRecord(record: AuditLogRecord): Promise<boolean> {
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     try {
       await appendAuditLog(record);
@@ -28,13 +21,13 @@ async function persistAuditRecord(record: AuditLogRecord, options: AuditWriteOpt
   }
   // Driver errors can embed credentials or rejected documents. Log safe context only.
   console.error('Audit logging failed after retries', { eventId: record.eventId, action: record.action });
-  if (options.failureMode === 'strict') throw new AuditWriteError(record.eventId || record.id);
   return false;
 }
 
-/** Await this for security gates; a strict failure is explicit, not a silent success. */
-export async function writeAuditLog(input: WriteAuditInput, options: AuditWriteOptions = {}): Promise<boolean> {
-  return persistAuditRecord(createAuditRecord(input), options);
+/** Append an operation record without gating business success. */
+export async function writeAuditLog(input: WriteAuditInput, _options: AuditWriteOptions = {}): Promise<boolean> {
+	void _options;
+  return persistAuditRecord(createAuditRecord(input));
 }
 
 /** Request-scoped best effort. after() is not a durable queue across process crashes. */
@@ -71,12 +64,8 @@ function extractDeltas(oldValue: unknown, newValue: unknown) {
 export function logAudit(action: LegacyAuditAction, targetId: string, oldVal: unknown, newVal: unknown, req?: Request): void {
   const actor = req?.headers.get('x-user')?.trim();
   const source = auditRequestContext(req);
-  const oldObject = asObject(oldVal);
   const newObject = asObject(newVal);
-  const approvalId = [newObject?.approvalId, oldObject?.approvalId, targetId.startsWith('approval:') ? targetId.slice(9) : undefined]
-    .find((value): value is string => typeof value === 'string' && value.trim().length > 0);
   const auditModule = targetId.startsWith('SYS_USER:') ? 'users'
-    : targetId.startsWith('approval:') ? 'approvals'
     : action.startsWith('PROFILE_') ? 'profiles'
     : action.startsWith('TRAFFIC_') ? 'ocs'
     : action === 'HEAL' ? 'system' : 'legacy';
@@ -87,7 +76,6 @@ export function logAudit(action: LegacyAuditAction, targetId: string, oldVal: un
     targetId,
     resource: { type: auditModule, id: targetId },
     result: newObject?.status === 'failed' || newObject?.success === false ? 'failed' : 'success',
-    approvalId,
     before: oldVal,
     after: newVal,
     level: action.includes('DELETE') || action === 'HEAL' ? 'warning' : 'info',

@@ -18,15 +18,16 @@ const valid = {
   ticketId: 'CHG-20260828-001',
 };
 
-test('subscriber batch policy always requires approval, including root', () => {
+test('subscriber batch policy authorizes admin and operator for direct execution', () => {
   const input = validateSubscriberBatchChangeRequest(valid);
-  for (const role of ['root', 'super_admin', 'ops_admin', 'operator']) {
+  for (const role of ['admin', 'root', 'super_admin', 'ops_admin', 'operator']) {
     const policy = evaluateSubscriberOperationPolicy({ role }, input);
     assert.equal(policy.allowed, true, role);
-    assert.equal(policy.requiresApproval, true, role);
-    assert.equal(policy.requiresIndependentReviewer, true, role);
+    assert.equal('requiresApproval' in policy, false, role);
+    assert.equal('requiresIndependentReviewer' in policy, false, role);
     assert.equal(policy.riskLevel, 'high', role);
   }
+  assert.equal(evaluateSubscriberOperationPolicy({ role: 'viewer' }, input).allowed, false);
 });
 
 test('batch request has a strict DTO and explicitly rejects secret fields and Mongo operators', () => {

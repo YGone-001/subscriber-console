@@ -30,11 +30,8 @@ test('high-density data tables switch to labelled record cards on narrow screens
   const ratingTable = read('../src/components/rating/PccRuleList.tsx');
   const tariffPlanTable = read('../src/components/rating/TariffPlanList.tsx');
   const ratingCss = read('../src/components/rating/rating.css');
-  const approvalsTable = read('../src/components/users/ApprovalCenterPanel.tsx');
-  const approvalsCss = read('../src/components/users/ApprovalCenterPanel.css');
   const healthTable = read('../src/app/(dashboard)/system-health/page.tsx');
   const healthCss = read('../src/app/(dashboard)/system-health/system-health.css');
-  const auditTable = read('../src/app/(dashboard)/audit-logs/AuditConsole.tsx');
   const profileTable = read('../src/app/(dashboard)/profile/page.tsx');
   const profileCss = read('../src/app/(dashboard)/profile/profile.css');
   const ocsTariffTable = read('../src/components/ocs/tariffs/OcsTariffGovernancePanel.tsx');
@@ -42,11 +39,11 @@ test('high-density data tables switch to labelled record cards on narrow screens
   const ocsBalanceTable = read('../src/components/ocs/balances/OcsBalancePlaceholder.tsx');
   const ocsCss = read('../src/app/(dashboard)/ocs/ocs.css');
 
-  for (const source of [subscriberTable, usersTable, ratingTable, tariffPlanTable, approvalsTable, healthTable, auditTable, profileTable, ocsTariffTable, ocsContractTable, ocsBalanceTable]) {
+  for (const source of [subscriberTable, usersTable, ratingTable, tariffPlanTable, healthTable, profileTable, ocsTariffTable, ocsContractTable, ocsBalanceTable]) {
     assert.match(source, /data-label=/);
   }
 
-  for (const source of [subscriberCss, usersCss, ratingCss, approvalsCss, healthCss, profileCss]) {
+  for (const source of [subscriberCss, usersCss, ratingCss, healthCss, profileCss]) {
     assert.match(source, /display:\s*grid/);
     assert.match(source, /content:\s*attr\(data-label\)/);
   }
@@ -60,14 +57,10 @@ test('high-density data tables switch to labelled record cards on narrow screens
   assert.match(profileCss, /@media \(max-width:\s*980px\)[\s\S]*?\.profile-governance-table thead\s*\{[\s\S]*?display:\s*none/);
 });
 
-test('phase 5 status and compact governance badges expose localized text', () => {
+test('OCS status badges expose localized text', () => {
   const statusBadge = read('../src/components/ocs/common/OcsStatusBadge.tsx');
-  const governanceBadge = read('../src/components/ocs/common/GovernanceBadge.tsx');
-
   assert.match(statusBadge, /STATUS_LABEL_KEYS/);
   assert.match(statusBadge, /aria-label=\{label\}/);
-  assert.match(governanceBadge, /aria-label=\{label\}/);
-  assert.match(governanceBadge, /<span>\{label\}<\/span>/);
 });
 
 test('critical shell and row actions share the 44px touch-target floor', () => {

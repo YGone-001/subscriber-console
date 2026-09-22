@@ -6,9 +6,8 @@ import {
   detectRuleConflicts,
   validateTariffRule,
 } from '@/lib/tariffPlanOperations';
-import { getTariffPlan } from '@/server/repositories/ocsBillingRepository';
+import { addTariffPlanRule, getTariffPlan } from '@/server/repositories/ocsBillingRepository';
 import { OCS_OPERATIONS, evaluateOcsOperation } from '@/server/ocsGovernanceRegistry';
-import { createApprovalRequest } from '@/server/repositories/approvalRepository';
 
 export const dynamic = 'force-dynamic';
 
@@ -67,13 +66,13 @@ export async function POST(request: Request, { params }: RouteContext) {
       return NextResponse.json({ error: 'Tariff plan not found' }, { status: 404 });
     }
 
-    const approval = await createApprovalRequest({
-      action: 'TARIFF_PLAN_RULE_CREATE', requester: auth.auth.user, targetId: `tariff-plan:${planId}`,
-      summary: `Add tariff rule to ${planId}`, operation: { resourceType: 'ocs_tariff_plan', resourceId: planId }, before,
-      payload: { schema: 'ocs-tariff-rule-v1', planId, rule: body },
-    });
-    logAudit('UPDATE', `approval:${approval.id}`, null, approval, request);
-    return NextResponse.json({ outcome: 'approval_required', message: 'Approval required before tariff rule creation', approval }, { status: 202 });
+    const result = await addTariffPlanRule(planId, body);
+    try {
+      logAudit('CREATE', `tariff-plan:${planId}:rule:${result.rule_id}`, before, result, request);
+    } catch (auditErr) {
+      console.warn('Non-gating audit log failed:', auditErr);
+    }
+    return NextResponse.json({ success: true, rule: result }, { status: 201 });
   } catch (error) {
     if (error instanceof Error) {
       if (error.message === 'RULE_ID_EXISTS') {

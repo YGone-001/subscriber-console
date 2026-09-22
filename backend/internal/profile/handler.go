@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
-	"subscriber/internal/approval"
 	"subscriber/internal/audit"
 	"subscriber/internal/auth"
 	"subscriber/internal/middleware"
@@ -57,22 +56,16 @@ type RateLimiter interface {
 	Enforce(w http.ResponseWriter, r *http.Request, identifier string, limit int, windowSeconds int) bool
 }
 
-// ApprovalCreateStore abstracts approval persistence for profile governance.
-type ApprovalCreateStore interface {
-	CreateApprovalRequest(ctx context.Context, input approval.CreateApprovalInput) (*approval.ApprovalDocument, error)
-}
-
 // Handler provides HTTP handlers for profile endpoints.
 type Handler struct {
-	repo         ProfileReadWriter
-	approvalRepo ApprovalCreateStore
-	limiter      RateLimiter
-	audit        AuditWriter
+	repo    ProfileReadWriter
+	limiter RateLimiter
+	audit   AuditWriter
 }
 
 // NewHandler creates a new profile Handler.
-func NewHandler(repo ProfileReadWriter, approvalRepo ApprovalCreateStore, limiter RateLimiter, auditWriter AuditWriter) *Handler {
-	return &Handler{repo: repo, approvalRepo: approvalRepo, limiter: limiter, audit: auditWriter}
+func NewHandler(repo ProfileReadWriter, limiter RateLimiter, auditWriter AuditWriter) *Handler {
+	return &Handler{repo: repo, limiter: limiter, audit: auditWriter}
 }
 
 // List handles GET /api/profiles
@@ -362,14 +355,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// Storage failure - audit FAILED_NO_MUTATION
-		if auditErr := h.writeStrictAudit(r.Context(), "PROFILE_CREATE", "profile", req.Name, p.Username, p.NormalizedRole, nil, nil, "failed", "FAILED_NO_MUTATION", false, err); auditErr != nil {
-			response.JSON(w, http.StatusServiceUnavailable, map[string]any{
-				"error":     "Audit unavailable",
-				"code":      "AUDIT_UNAVAILABLE",
-				"committed": false,
-			})
-			return
-		}
+		h.writeStrictAudit(r.Context(), "PROFILE_CREATE", "profile", req.Name, p.Username, p.NormalizedRole, nil, nil, "failed", "FAILED_NO_MUTATION", false, err)
 		response.JSON(w, http.StatusInternalServerError, map[string]any{
 			"error":     "Profile creation failed",
 			"code":      "PROFILE_CREATE_FAILED",
@@ -391,14 +377,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := h.repo.SaveProfileVersion(r.Context(), versionRecord); err != nil {
 		// Profile was created but version save failed - partial write
-		if auditErr := h.writeStrictAudit(r.Context(), "PROFILE_CREATE", "profile", req.Name, p.Username, p.NormalizedRole, nil, doc, "failed", "PARTIAL_WRITE", true, err); auditErr != nil {
-			response.JSON(w, http.StatusServiceUnavailable, map[string]any{
-				"error":     "Audit unavailable",
-				"code":      "AUDIT_UNAVAILABLE",
-				"committed": true,
-			})
-			return
-		}
+		h.writeStrictAudit(r.Context(), "PROFILE_CREATE", "profile", req.Name, p.Username, p.NormalizedRole, nil, doc, "failed", "PARTIAL_WRITE", true, err)
 		response.JSON(w, http.StatusInternalServerError, map[string]any{
 			"error":     "Profile created but version save failed",
 			"code":      "PROFILE_CREATE_PARTIAL_WRITE",
@@ -407,15 +386,8 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Write strict audit record
-	if err := h.writeStrictAudit(r.Context(), "PROFILE_CREATE", "profile", req.Name, p.Username, p.NormalizedRole, nil, doc, "success", "SUCCESS", true, nil); err != nil {
-		response.JSON(w, http.StatusServiceUnavailable, map[string]any{
-			"error":     "Audit unavailable",
-			"code":      "AUDIT_UNAVAILABLE",
-			"committed": true,
-		})
-		return
-	}
+	// Write strict audit record (non-gating)
+	h.writeStrictAudit(r.Context(), "PROFILE_CREATE", "profile", req.Name, p.Username, p.NormalizedRole, nil, doc, "success", "SUCCESS", true, nil)
 
 	response.JSON(w, http.StatusCreated, CreateProfileResponse{
 		Message: "Profile created successfully",
@@ -512,26 +484,12 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		if err := h.repo.ReplaceProfileCAS(r.Context(), name, existing, updated); err != nil {
 			if err == ErrProfilePreconditionChanged {
 				// Audit PRECONDITION_CHANGED
-				if auditErr := h.writeStrictAudit(r.Context(), "PROFILE_UPDATE", "profile", name, p.Username, p.NormalizedRole, existing, nil, "failed", "PRECONDITION_CHANGED", false, err); auditErr != nil {
-					response.JSON(w, http.StatusServiceUnavailable, map[string]any{
-						"error":     "Audit unavailable",
-						"code":      "AUDIT_UNAVAILABLE",
-						"committed": false,
-					})
-					return
-				}
+				h.writeStrictAudit(r.Context(), "PROFILE_UPDATE", "profile", name, p.Username, p.NormalizedRole, existing, nil, "failed", "PRECONDITION_CHANGED", false, err)
 				response.Error(w, http.StatusConflict, "Profile was modified since loaded", "PROFILE_UPDATE_PRECONDITION_CHANGED")
 				return
 			}
 			// Storage failure - audit FAILED_NO_MUTATION
-			if auditErr := h.writeStrictAudit(r.Context(), "PROFILE_UPDATE", "profile", name, p.Username, p.NormalizedRole, existing, nil, "failed", "FAILED_NO_MUTATION", false, err); auditErr != nil {
-				response.JSON(w, http.StatusServiceUnavailable, map[string]any{
-					"error":     "Audit unavailable",
-					"code":      "AUDIT_UNAVAILABLE",
-					"committed": false,
-				})
-				return
-			}
+			h.writeStrictAudit(r.Context(), "PROFILE_UPDATE", "profile", name, p.Username, p.NormalizedRole, existing, nil, "failed", "FAILED_NO_MUTATION", false, err)
 			response.JSON(w, http.StatusInternalServerError, map[string]any{
 				"error":     "Profile update failed",
 				"code":      "PROFILE_UPDATE_FAILED",
@@ -544,26 +502,12 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		if err := h.repo.InsertProfileCreateOnly(r.Context(), updated); err != nil {
 			if err == ErrProfileExists {
 				// Concurrent creator won - audit PRECONDITION_CHANGED
-				if auditErr := h.writeStrictAudit(r.Context(), "PROFILE_UPDATE", "profile", name, p.Username, p.NormalizedRole, nil, nil, "failed", "PRECONDITION_CHANGED", false, err); auditErr != nil {
-					response.JSON(w, http.StatusServiceUnavailable, map[string]any{
-						"error":     "Audit unavailable",
-						"code":      "AUDIT_UNAVAILABLE",
-						"committed": false,
-					})
-					return
-				}
+				h.writeStrictAudit(r.Context(), "PROFILE_UPDATE", "profile", name, p.Username, p.NormalizedRole, nil, nil, "failed", "PRECONDITION_CHANGED", false, err)
 				response.Error(w, http.StatusConflict, "Profile was modified since loaded", "PROFILE_UPDATE_PRECONDITION_CHANGED")
 				return
 			}
 			// Storage failure - audit FAILED_NO_MUTATION
-			if auditErr := h.writeStrictAudit(r.Context(), "PROFILE_UPDATE", "profile", name, p.Username, p.NormalizedRole, nil, nil, "failed", "FAILED_NO_MUTATION", false, err); auditErr != nil {
-				response.JSON(w, http.StatusServiceUnavailable, map[string]any{
-					"error":     "Audit unavailable",
-					"code":      "AUDIT_UNAVAILABLE",
-					"committed": false,
-				})
-				return
-			}
+			h.writeStrictAudit(r.Context(), "PROFILE_UPDATE", "profile", name, p.Username, p.NormalizedRole, nil, nil, "failed", "FAILED_NO_MUTATION", false, err)
 			response.JSON(w, http.StatusInternalServerError, map[string]any{
 				"error":     "Profile update failed",
 				"code":      "PROFILE_UPDATE_FAILED",
@@ -587,14 +531,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		}
 		if err := h.repo.SaveProfileVersion(r.Context(), versionRecord); err != nil {
 			// Profile was updated but version save failed - partial write
-			if auditErr := h.writeStrictAudit(r.Context(), "PROFILE_UPDATE", "profile", name, p.Username, p.NormalizedRole, existing, updated, "failed", "PARTIAL_WRITE", true, err); auditErr != nil {
-				response.JSON(w, http.StatusServiceUnavailable, map[string]any{
-					"error":     "Audit unavailable",
-					"code":      "AUDIT_UNAVAILABLE",
-					"committed": true,
-				})
-				return
-			}
+			h.writeStrictAudit(r.Context(), "PROFILE_UPDATE", "profile", name, p.Username, p.NormalizedRole, existing, updated, "failed", "PARTIAL_WRITE", true, err)
 			response.JSON(w, http.StatusInternalServerError, map[string]any{
 				"error":     "Profile updated but version save failed",
 				"code":      "PROFILE_UPDATE_PARTIAL_WRITE",
@@ -604,15 +541,8 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Write strict audit record
-	if err := h.writeStrictAudit(r.Context(), "PROFILE_UPDATE", "profile", name, p.Username, p.NormalizedRole, existing, updated, "success", "SUCCESS", true, nil); err != nil {
-		response.JSON(w, http.StatusServiceUnavailable, map[string]any{
-			"error":     "Audit unavailable",
-			"code":      "AUDIT_UNAVAILABLE",
-			"committed": true,
-		})
-		return
-	}
+	// Write strict audit record (non-gating)
+	h.writeStrictAudit(r.Context(), "PROFILE_UPDATE", "profile", name, p.Username, p.NormalizedRole, existing, updated, "success", "SUCCESS", true, nil)
 
 	response.JSON(w, http.StatusOK, UpdateProfileResponse{
 		Message: "Profile updated successfully",
@@ -654,14 +584,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	// Missing profile is idempotent 200 (matches Node behavior)
 	if existing == nil {
 		// Write audit for no-op
-		if err := h.writeStrictAudit(r.Context(), "PROFILE_DELETE", "profile", name, p.Username, p.NormalizedRole, nil, nil, "no_op", "NO_OP", false, nil); err != nil {
-			response.JSON(w, http.StatusServiceUnavailable, map[string]any{
-				"error":     "Audit unavailable",
-				"code":      "AUDIT_UNAVAILABLE",
-				"committed": false,
-			})
-			return
-		}
+		h.writeStrictAudit(r.Context(), "PROFILE_DELETE", "profile", name, p.Username, p.NormalizedRole, nil, nil, "no_op", "NO_OP", false, nil)
 		response.JSON(w, http.StatusOK, DeleteProfileResponse{
 			Message: "Profile deleted successfully",
 		})
@@ -686,26 +609,12 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	if err := h.repo.DeleteProfileCAS(r.Context(), name, existing); err != nil {
 		if err == ErrProfilePreconditionChanged {
 			// Audit PRECONDITION_CHANGED
-			if auditErr := h.writeStrictAudit(r.Context(), "PROFILE_DELETE", "profile", name, p.Username, p.NormalizedRole, existing, nil, "failed", "PRECONDITION_CHANGED", false, err); auditErr != nil {
-				response.JSON(w, http.StatusServiceUnavailable, map[string]any{
-					"error":     "Audit unavailable",
-					"code":      "AUDIT_UNAVAILABLE",
-					"committed": false,
-				})
-				return
-			}
+			h.writeStrictAudit(r.Context(), "PROFILE_DELETE", "profile", name, p.Username, p.NormalizedRole, existing, nil, "failed", "PRECONDITION_CHANGED", false, err)
 			response.Error(w, http.StatusConflict, "Profile was modified since loaded", "PROFILE_DELETE_PRECONDITION_CHANGED")
 			return
 		}
 		// Storage failure - audit FAILED_NO_MUTATION
-		if auditErr := h.writeStrictAudit(r.Context(), "PROFILE_DELETE", "profile", name, p.Username, p.NormalizedRole, existing, nil, "failed", "FAILED_NO_MUTATION", false, err); auditErr != nil {
-			response.JSON(w, http.StatusServiceUnavailable, map[string]any{
-				"error":     "Audit unavailable",
-				"code":      "AUDIT_UNAVAILABLE",
-				"committed": false,
-			})
-			return
-		}
+		h.writeStrictAudit(r.Context(), "PROFILE_DELETE", "profile", name, p.Username, p.NormalizedRole, existing, nil, "failed", "FAILED_NO_MUTATION", false, err)
 		response.JSON(w, http.StatusInternalServerError, map[string]any{
 			"error":     "Profile deletion failed",
 			"code":      "PROFILE_DELETE_FAILED",
@@ -728,14 +637,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := h.repo.SaveProfileVersion(r.Context(), versionRecord); err != nil {
 		// Profile was deleted but version save failed - partial write
-		if auditErr := h.writeStrictAudit(r.Context(), "PROFILE_DELETE", "profile", name, p.Username, p.NormalizedRole, existing, nil, "failed", "PARTIAL_WRITE", true, err); auditErr != nil {
-			response.JSON(w, http.StatusServiceUnavailable, map[string]any{
-				"error":     "Audit unavailable",
-				"code":      "AUDIT_UNAVAILABLE",
-				"committed": true,
-			})
-			return
-		}
+		h.writeStrictAudit(r.Context(), "PROFILE_DELETE", "profile", name, p.Username, p.NormalizedRole, existing, nil, "failed", "PARTIAL_WRITE", true, err)
 		response.JSON(w, http.StatusInternalServerError, map[string]any{
 			"error":     "Profile deleted but version save failed",
 			"code":      "PROFILE_DELETE_PARTIAL_WRITE",
@@ -744,15 +646,8 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Write strict audit record
-	if err := h.writeStrictAudit(r.Context(), "PROFILE_DELETE", "profile", name, p.Username, p.NormalizedRole, existing, nil, "success", "SUCCESS", true, nil); err != nil {
-		response.JSON(w, http.StatusServiceUnavailable, map[string]any{
-			"error":     "Audit unavailable",
-			"code":      "AUDIT_UNAVAILABLE",
-			"committed": true,
-		})
-		return
-	}
+	// Write strict audit record (non-gating)
+	h.writeStrictAudit(r.Context(), "PROFILE_DELETE", "profile", name, p.Username, p.NormalizedRole, existing, nil, "success", "SUCCESS", true, nil)
 
 	response.JSON(w, http.StatusOK, DeleteProfileResponse{
 		Message: "Profile deleted successfully",
@@ -793,85 +688,17 @@ func (h *Handler) Restore(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check capability
-	decision, allowed := auth.CapabilityDecision(p, "profile_rollback")
+	_, allowed := auth.CapabilityDecision(p, "profile_rollback")
 	if !allowed {
-		if decision == "approval" {
-			// Create approval for operator
-			h.handleRestoreApproval(w, r, p, name, versionId)
-			return
-		}
 		response.Error(w, http.StatusForbidden, "Permission denied", "FORBIDDEN")
 		return
 	}
 
-	// Direct execution for super_admin/root/ops_admin
+	// Direct execution for admin/operator
 	h.executeDirectRestore(w, r, p, name, versionId)
 }
 
-// handleRestoreApproval creates an approval request for operator restore.
-func (h *Handler) handleRestoreApproval(w http.ResponseWriter, r *http.Request, p *auth.Principal, name, versionId string) {
-	// Prepare frozen v2 intent
-	intent, err := h.prepareFrozenRestoreV2(r.Context(), p, name, versionId)
-	if err != nil {
-		response.InternalError(w)
-		return
-	}
-	if intent == nil {
-		response.Error(w, http.StatusNotFound, "Version not found", "VERSION_NOT_FOUND")
-		return
-	}
-
-	// Create approval request
-	approvalInput := approval.CreateApprovalInput{
-		Action:    "PROFILE_RESTORE",
-		Requester: p.Username,
-		RequesterContext: &approval.GovernanceActor{
-			Type:     "user",
-			Username: p.Username,
-			Role:     p.NormalizedRole,
-		},
-		TargetID:             fmt.Sprintf("profile:%s", name),
-		Summary:              fmt.Sprintf("Restore profile %s from version %s", name, versionId),
-		OperationFingerprint: intent.OperationFingerprint,
-		Payload: map[string]interface{}{
-			"version":               "profile-restore-v2",
-			"name":                  name,
-			"versionId":             versionId,
-			"requester":             p.Username,
-			"sourceVersionHash":     intent.SourceVersionHash,
-			"currentState":          intent.CurrentState,
-			"currentProfileHash":    intent.CurrentProfileHash,
-			"effectiveRestoredHash": intent.EffectiveRestoredHash,
-			"operationFingerprint":  intent.OperationFingerprint,
-		},
-	}
-
-	approvalDoc, err := h.approvalRepo.CreateApprovalRequest(r.Context(), approvalInput)
-	if err != nil {
-		response.InternalError(w)
-		return
-	}
-
-	// Audit approval creation using restore-specific audit
-	_ = h.writeRestoreAudit(r.Context(), p, name, intent, nil, "APPROVAL_GOVERNED", false, nil)
-
-	slog.Info("profile_restore_approval_created",
-		"operation", "PROFILE_RESTORE",
-		"request_id", middleware.RequestIDFromContext(r.Context()),
-		"principal", p.Username,
-		"governance_mode", "APPROVAL_GOVERNED",
-		"approval_id", approvalDoc.ID,
-		"profile", name,
-		"version_id", versionId,
-	)
-
-	response.JSON(w, http.StatusAccepted, map[string]interface{}{
-		"message":  "Approval required before profile restore",
-		"approval": approvalDoc,
-	})
-}
-
-// executeDirectRestore executes the restore directly for privileged roles.
+// executeDirectRestore executes the restore directly.
 func (h *Handler) executeDirectRestore(w http.ResponseWriter, r *http.Request, p *auth.Principal, name, versionId string) {
 	reqID := middleware.RequestIDFromContext(r.Context())
 	slog.Info("profile_restore_direct_execute",
@@ -909,14 +736,7 @@ func (h *Handler) executeDirectRestore(w http.ResponseWriter, r *http.Request, p
 			"profile", name,
 			"result", "PRECONDITION_CHANGED",
 		)
-		if auditErr := h.writeRestoreAudit(r.Context(), p, name, intent, nil, "PRECONDITION_CHANGED", false, nil); auditErr != nil {
-			response.JSON(w, http.StatusServiceUnavailable, map[string]interface{}{
-				"error":     "Audit unavailable",
-				"code":      "AUDIT_UNAVAILABLE",
-				"committed": false,
-			})
-			return
-		}
+		h.writeRestoreAudit(r.Context(), p, name, intent, nil, "PRECONDITION_CHANGED", false, nil)
 		response.Error(w, http.StatusConflict, "Profile was modified since loaded", "PROFILE_RESTORE_PRECONDITION_CHANGED")
 		return
 	}
@@ -925,27 +745,13 @@ func (h *Handler) executeDirectRestore(w http.ResponseWriter, r *http.Request, p
 	result, err := h.executeFrozenRestoreV2(r.Context(), p, name, intent)
 	if err != nil {
 		if err == ErrProfilePreconditionChanged {
-			if auditErr := h.writeRestoreAudit(r.Context(), p, name, intent, nil, "PRECONDITION_CHANGED", false, err); auditErr != nil {
-				response.JSON(w, http.StatusServiceUnavailable, map[string]interface{}{
-					"error":     "Audit unavailable",
-					"code":      "AUDIT_UNAVAILABLE",
-					"committed": false,
-				})
-				return
-			}
+			h.writeRestoreAudit(r.Context(), p, name, intent, nil, "PRECONDITION_CHANGED", false, err)
 			response.Error(w, http.StatusConflict, "Profile was modified since loaded", "PROFILE_RESTORE_PRECONDITION_CHANGED")
 			return
 		}
 		// Check if it's a partial write error
 		if err == ErrRestorePartialWrite {
-			if auditErr := h.writeRestoreAudit(r.Context(), p, name, intent, intent.EffectiveRestored, "PARTIAL_WRITE", true, err); auditErr != nil {
-				response.JSON(w, http.StatusServiceUnavailable, map[string]interface{}{
-					"error":     "Audit unavailable",
-					"code":      "AUDIT_UNAVAILABLE",
-					"committed": true,
-				})
-				return
-			}
+			h.writeRestoreAudit(r.Context(), p, name, intent, intent.EffectiveRestored, "PARTIAL_WRITE", true, err)
 			response.JSON(w, http.StatusInternalServerError, map[string]interface{}{
 				"error":     "Profile restored but version save failed",
 				"code":      "PROFILE_RESTORE_PARTIAL_WRITE",
@@ -954,14 +760,7 @@ func (h *Handler) executeDirectRestore(w http.ResponseWriter, r *http.Request, p
 			return
 		}
 		// Storage failure
-		if auditErr := h.writeRestoreAudit(r.Context(), p, name, intent, nil, "FAILED_NO_MUTATION", false, err); auditErr != nil {
-			response.JSON(w, http.StatusServiceUnavailable, map[string]interface{}{
-				"error":     "Audit unavailable",
-				"code":      "AUDIT_UNAVAILABLE",
-				"committed": false,
-			})
-			return
-		}
+		h.writeRestoreAudit(r.Context(), p, name, intent, nil, "FAILED_NO_MUTATION", false, err)
 		response.JSON(w, http.StatusInternalServerError, map[string]interface{}{
 			"error":     "Profile restore failed",
 			"code":      "PROFILE_RESTORE_FAILED",
@@ -970,22 +769,8 @@ func (h *Handler) executeDirectRestore(w http.ResponseWriter, r *http.Request, p
 		return
 	}
 
-	// Success - strict audit
-	if auditErr := h.writeRestoreAudit(r.Context(), p, name, intent, result, "SUCCESS", true, nil); auditErr != nil {
-		slog.Error("profile_restore_audit_failed",
-			"operation", "PROFILE_RESTORE",
-			"request_id", reqID,
-			"principal", p.Username,
-			"governance_mode", "DIRECT_GOVERNED",
-			"result", "AUDIT_UNAVAILABLE",
-		)
-		response.JSON(w, http.StatusServiceUnavailable, map[string]interface{}{
-			"error":     "Audit unavailable",
-			"code":      "AUDIT_UNAVAILABLE",
-			"committed": true,
-		})
-		return
-	}
+	// Success - strict audit (non-gating)
+	h.writeRestoreAudit(r.Context(), p, name, intent, result, "SUCCESS", true, nil)
 
 	slog.Info("profile_restore_success",
 		"operation", "PROFILE_RESTORE",
@@ -1189,21 +974,16 @@ func (h *Handler) executeFrozenRestoreV2(ctx context.Context, p *auth.Principal,
 }
 
 // writeRestoreAudit writes a restore-specific audit record with full metadata.
-func (h *Handler) writeRestoreAudit(ctx context.Context, p *auth.Principal, name string, intent *RestoreIntent, restored bson.M, classification string, committed bool, errDetails error) error {
+func (h *Handler) writeRestoreAudit(ctx context.Context, p *auth.Principal, name string, intent *RestoreIntent, restored bson.M, classification string, committed bool, errDetails error) {
 	if h.audit == nil {
-		return nil
+		return
 	}
 
 	governanceMode := "DIRECT_GOVERNED"
-	if classification == "APPROVAL_GOVERNED" {
-		governanceMode = "APPROVAL_GOVERNED"
-	}
 
 	result := "success"
 	level := "info"
-	if classification == "APPROVAL_GOVERNED" {
-		result = "approval_governed"
-	} else if classification == "PRECONDITION_CHANGED" || classification == "FAILED_NO_MUTATION" {
+	if classification == "PRECONDITION_CHANGED" || classification == "FAILED_NO_MUTATION" {
 		result = "failed"
 		level = "error"
 	} else if classification == "PARTIAL_WRITE" {
@@ -1227,7 +1007,6 @@ func (h *Handler) writeRestoreAudit(ctx context.Context, p *auth.Principal, name
 		Level:  level,
 		Metadata: map[string]interface{}{
 			"governanceMode":       governanceMode,
-			"approvalRequired":     p.NormalizedRole == "operator",
 			"actorRole":            p.NormalizedRole,
 			"mutationCommitted":    committed,
 			"classification":       classification,
@@ -1253,7 +1032,13 @@ func (h *Handler) writeRestoreAudit(ctx context.Context, p *auth.Principal, name
 		}
 	}
 
-	return h.audit.WriteStrict(ctx, input)
+	if err := h.audit.WriteStrict(ctx, input); err != nil {
+		slog.Error("profile_restore_audit_write_failed",
+			"operation", "PROFILE_RESTORE",
+			"profile", name,
+			"error", err,
+		)
+	}
 }
 
 // computeProfileHash computes SHA256 of stable JSON of a profile (excluding _id).
@@ -1391,10 +1176,10 @@ func randomHex(n int) string {
 	return fmt.Sprintf("%x", b)
 }
 
-// writeStrictAudit writes a strict audit record and returns error on failure.
-func (h *Handler) writeStrictAudit(ctx context.Context, action, targetType, targetName, username, role string, before, after any, result string, classification string, committed bool, errDetails error) error {
+// writeStrictAudit writes an audit record and logs on failure without gating.
+func (h *Handler) writeStrictAudit(ctx context.Context, action, targetType, targetName, username, role string, before, after any, result string, classification string, committed bool, errDetails error) {
 	if h.audit == nil {
-		return nil
+		return
 	}
 
 	input := audit.WriteAuditInput{
@@ -1413,7 +1198,6 @@ func (h *Handler) writeStrictAudit(ctx context.Context, action, targetType, targ
 		Level:  "info",
 		Metadata: map[string]interface{}{
 			"governanceMode":    "DIRECT_GOVERNED",
-			"approvalRequired":  false,
 			"actorRole":         role,
 			"mutationCommitted": committed,
 			"classification":    classification,
@@ -1435,7 +1219,13 @@ func (h *Handler) writeStrictAudit(ctx context.Context, action, targetType, targ
 		}
 	}
 
-	return h.audit.WriteStrict(ctx, input)
+	if err := h.audit.WriteStrict(ctx, input); err != nil {
+		slog.Error("profile_audit_write_failed",
+			"action", action,
+			"target", targetName,
+			"error", err,
+		)
+	}
 }
 
 // safeProfileSnapshot creates a safe snapshot with secrets redacted.

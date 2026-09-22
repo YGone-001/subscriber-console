@@ -39,10 +39,10 @@ Browser → Nginx → Next.js :3000
 
 | Metric | Count |
 |--------|------:|
-| Route files | **64** |
-| Total operations | **90** |
-| GET | 40 |
-| POST | 33 |
+| Route files | **52** |
+| Total operations | **76** |
+| GET | 32 |
+| POST | 27 |
 | PUT | 7 |
 | PATCH | 3 |
 | DELETE | 7 |
@@ -57,24 +57,22 @@ Browser → Nginx → Next.js :3000
 |--------|-------:|----------:|
 | alerts | 3 | 3 |
 | analytics | 3 | 3 |
-| approvals | 8 | 10 |
-| audit | 3 | 3 |
 | auth | 6 | 10 |
 | notifications | 1 | 1 |
 | ocs | 4 | 4 |
 | profiles | 5 | 8 |
 | ratings | 2 | 5 |
 | search | 1 | 1 |
-| subscribers | 9 | 12 |
+| subscribers | 10 | 13 |
 | system | 6 | 6 |
-| tariff-plans | 10 | 17 |
+| tariff-plans | 9 | 16 |
 | users | 2 | 6 |
 
 ---
 
 ## 5. GET Count
 
-**40 GET operations** across all domains.
+**32 GET operations** across all domains.
 
 > The Phase 2 migration table has 43 read entries: 40 GET + 2 semantic reads using POST
 > (`batch/precheck`, `system/audit/scan`) + 1 dry-run preview (`tariff-plans/:planId/migrate` GET).
@@ -83,7 +81,7 @@ Browser → Nginx → Next.js :3000
 
 ## 6. Mutation Count
 
-**50 non-GET HTTP operations** (POST + PUT + PATCH + DELETE).
+**44 non-GET HTTP operations** (POST + PUT + PATCH + DELETE).
 
 - 46 are semantic writes (actual data mutations)
 - 2 are semantic reads using POST (`batch/precheck`, `system/audit/scan`)

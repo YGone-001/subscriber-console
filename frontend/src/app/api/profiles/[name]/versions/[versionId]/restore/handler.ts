@@ -2,14 +2,12 @@ import { NextResponse } from 'next/server';
 import { requireCapability } from '@/lib/authz';
 import { capabilityDecision } from '@/lib/permissions';
 import { enforceRateLimit } from '@/lib/rateLimit';
-import { createApprovalRequest } from '@/server/repositories/approvalRepository';
 import {
   prepareFrozenRestoreV2,
   assertFrozenRestoreV2,
   executeFrozenRestoreV2,
   writeRestoreAudit,
 } from '@/server/profileRestoreGovernance';
-import type { RestoreIntent } from '@/server/profileRestoreGovernance';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,7 +20,6 @@ export interface ProfileRestoreRouteDeps {
   assertFrozenRestoreV2: typeof assertFrozenRestoreV2;
   executeFrozenRestoreV2: typeof executeFrozenRestoreV2;
   writeRestoreAudit: typeof writeRestoreAudit;
-  createApprovalRequest: typeof createApprovalRequest;
   enforceRateLimit: typeof enforceRateLimit;
   requireCapability: typeof requireCapability;
   capabilityDecision: typeof capabilityDecision;
@@ -33,7 +30,6 @@ const productionDeps: ProfileRestoreRouteDeps = {
   assertFrozenRestoreV2,
   executeFrozenRestoreV2,
   writeRestoreAudit,
-  createApprovalRequest,
   enforceRateLimit,
   requireCapability,
   capabilityDecision,
@@ -49,7 +45,7 @@ export async function handleProfileRestorePost(
   deps: ProfileRestoreRouteDeps = productionDeps
 ): Promise<Response> {
   const { name, versionId } = params;
-  const auth = deps.requireCapability(request, 'profile_rollback', { allowApproval: true });
+  const auth = deps.requireCapability(request, 'profile_rollback');
   if (!auth.ok) return auth.response;
 
   const rateLimit = await deps.enforceRateLimit(`profiles:restore:${auth.auth.user}`, 10, 60);
@@ -66,45 +62,7 @@ export async function handleProfileRestorePost(
       return NextResponse.json({ error: 'Version not found' }, { status: 404 });
     }
 
-    // Check if approval required (operator)
-    if (deps.capabilityDecision(auth.auth.role, 'profile_rollback') === 'approval') {
-      const approval = await deps.createApprovalRequest({
-        action: 'PROFILE_RESTORE',
-        requester: auth.auth.user,
-        targetId: `profile:${name}`,
-        summary: `Restore profile ${name} from version ${versionId}`,
-        payload: {
-          version: 'profile-restore-v2',
-          name,
-          versionId,
-          requester: auth.auth.user,
-          sourceVersionHash: intent.sourceVersionHash,
-          currentState: intent.currentState,
-          currentProfileHash: intent.currentProfileHash,
-          effectiveRestoredHash: intent.effectiveRestoredHash,
-          operationFingerprint: intent.operationFingerprint,
-        },
-      });
-
-      // Audit approval creation
-      await deps.writeRestoreAudit(
-        intent,
-        null,
-        null,
-        { username: auth.auth.user, role: auth.auth.role },
-        'success',
-        'APPROVAL_GOVERNED',
-        false,
-        'APPROVAL_GOVERNED'
-      );
-
-      return NextResponse.json(
-        { message: 'Approval required before profile restore', approval },
-        { status: 202 }
-      );
-    }
-
-    // Direct execution for super_admin/root/ops_admin
+    // Direct execution for all authorized roles
     const assertion = await deps.assertFrozenRestoreV2(intent);
     if (!assertion) {
       // Source version or current profile drifted
@@ -119,11 +77,8 @@ export async function handleProfileRestorePost(
           false,
           'DIRECT_GOVERNED'
         );
-      } catch {
-        return NextResponse.json(
-          { error: 'Audit unavailable', code: 'AUDIT_UNAVAILABLE', committed: false },
-          { status: 503 }
-        );
+      } catch (err) {
+        console.warn('Audit write failed (non-gating):', err);
       }
       return NextResponse.json(
         { error: 'Profile was modified since loaded', code: 'PROFILE_RESTORE_PRECONDITION_CHANGED' },
@@ -150,11 +105,8 @@ export async function handleProfileRestorePost(
             false,
             'DIRECT_GOVERNED'
           );
-        } catch {
-          return NextResponse.json(
-            { error: 'Audit unavailable', code: 'AUDIT_UNAVAILABLE', committed: false },
-            { status: 503 }
-          );
+        } catch (auditErr) {
+          console.warn('Audit write failed (non-gating):', auditErr);
         }
         return NextResponse.json(
           { error: 'Profile was modified since loaded', code: 'PROFILE_RESTORE_PRECONDITION_CHANGED' },
@@ -174,11 +126,8 @@ export async function handleProfileRestorePost(
             true,
             'DIRECT_GOVERNED'
           );
-        } catch {
-          return NextResponse.json(
-            { error: 'Audit unavailable', code: 'AUDIT_UNAVAILABLE', committed: true },
-            { status: 503 }
-          );
+        } catch (auditErr) {
+          console.warn('Audit write failed (non-gating):', auditErr);
         }
         return NextResponse.json(
           { error: 'Profile restored but version save failed', code: 'PROFILE_RESTORE_PARTIAL_WRITE', committed: true },
@@ -198,11 +147,8 @@ export async function handleProfileRestorePost(
           false,
           'DIRECT_GOVERNED'
         );
-      } catch {
-        return NextResponse.json(
-          { error: 'Audit unavailable', code: 'AUDIT_UNAVAILABLE', committed: false },
-          { status: 503 }
-        );
+      } catch (auditErr) {
+        console.warn('Audit write failed (non-gating):', auditErr);
       }
       return NextResponse.json(
         { error: 'Profile restore failed', code: 'PROFILE_RESTORE_FAILED', committed: false },
@@ -210,7 +156,7 @@ export async function handleProfileRestorePost(
       );
     }
 
-    // Success - strict audit
+    // Success - non-gating audit
     try {
       await deps.writeRestoreAudit(
         intent,
@@ -222,11 +168,8 @@ export async function handleProfileRestorePost(
         result.committed,
         'DIRECT_GOVERNED'
       );
-    } catch {
-      return NextResponse.json(
-        { error: 'Audit unavailable', code: 'AUDIT_UNAVAILABLE', committed: true },
-        { status: 503 }
-      );
+    } catch (auditErr) {
+      console.warn('Audit write failed (non-gating):', auditErr);
     }
 
     return NextResponse.json({ message: 'Profile restored successfully', profile: result.restored });

@@ -7,7 +7,6 @@ import {
 } from '@/server/repositories/subscriberRepository';
 import { validateCurrentAccount, AccountSessionError } from '@/lib/accountSession';
 import { validateImsi, validateSubscriberUpdatePayload } from '@/lib/subscriberValidation';
-import { createApprovalRequest } from '@/server/repositories/approvalRepository';
 import {
   prepareFrozenSubscriberDelete,
   prepareFrozenSubscriberUpdate,
@@ -67,31 +66,20 @@ export async function DELETE(request: Request, { params }: RouteContext) {
 
     const frozen = await prepareFrozenSubscriberDelete(imsi);
 
-    if (policy.governanceMode === 'DIRECT_GOVERNED') {
-      // Super Admin/root: DIRECT_GOVERNED — execute immediately, no approval
-      const result = await executeFrozenSubscriberDelete(frozen);
-      try {
-        await writeAuditLog({
-          module: 'subscribers', action: 'DELETE', targetId: imsi,
-          actor: { type: 'user', username: freshAccount.username, role: freshAccount.normalizedRole },
-          before: frozen.before, after: { deleted: true, imsi },
-          result: 'success',
-          metadata: { governanceMode: 'DIRECT_GOVERNED', approvalRequired: false, operation: 'SUBSCRIBER_DELETE', actorRole: freshAccount.normalizedRole },
-        }, { failureMode: 'strict' });
-      } catch {
-        return NextResponse.json({ error: 'AUDIT_UNAVAILABLE', code: 'AUDIT_UNAVAILABLE', committed: true }, { status: 503 });
-      }
-      return NextResponse.json({ outcome: 'executed', message: 'Subscriber deleted successfully', imsi }, { status: 200 });
+    // Direct execution
+    await executeFrozenSubscriberDelete(frozen);
+    try {
+      await writeAuditLog({
+        module: 'subscribers', action: 'DELETE', targetId: imsi,
+        actor: { type: 'user', username: freshAccount.username, role: freshAccount.normalizedRole },
+        before: frozen.before, after: { deleted: true, imsi },
+        result: 'success',
+        metadata: { governanceMode: 'DIRECT_GOVERNED', operation: 'SUBSCRIBER_DELETE', actorRole: freshAccount.normalizedRole },
+      }, { failureMode: 'best-effort' });
+    } catch (err) {
+      console.warn('Audit log write failed for subscriber delete (non-gating):', err);
     }
-
-    // Normal operator/ops_admin: APPROVAL_GOVERNED — create approval
-    const approval = await createApprovalRequest({
-      action: 'SUBSCRIBER_DELETE', requester: freshAccount.username, targetId: imsi,
-      summary: `Delete subscriber ${imsi}`, operation: { resourceType: 'subscriber', resourceId: imsi },
-      operationFingerprint: frozen.operationFingerprint, before: frozen.before,
-      payload: frozen as unknown as Record<string, unknown>,
-    });
-    return NextResponse.json({ outcome: 'approval_required', message: 'Approval required before subscriber deletion', approval }, { status: 202 });
+    return NextResponse.json({ outcome: 'executed', message: 'Subscriber deleted successfully', imsi }, { status: 200 });
   } catch (error) {
     if (error instanceof SubscriberGovernanceError && error.code === 'SUBSCRIBER_NOT_FOUND') return NextResponse.json({ error: 'Subscriber not found' }, { status: 404 });
     if (error instanceof AccountSessionError) {
@@ -131,31 +119,20 @@ export async function PUT(request: Request, { params }: RouteContext) {
       ocsTraffic: body.ocsTraffic,
     });
 
-    if (policy.governanceMode === 'DIRECT_GOVERNED') {
-      // Super Admin/root: DIRECT_GOVERNED — execute immediately, no approval
-      const result = await executeFrozenSubscriberUpdate(frozen);
-      try {
-        await writeAuditLog({
-          module: 'subscribers', action: 'UPDATE', targetId: imsi,
-          actor: { type: 'user', username: freshAccount.username, role: freshAccount.normalizedRole },
-          before: frozen.before, after: result.after,
-          result: 'success',
-          metadata: { governanceMode: 'DIRECT_GOVERNED', approvalRequired: false, operation: 'SUBSCRIBER_UPDATE', actorRole: freshAccount.normalizedRole },
-        }, { failureMode: 'strict' });
-      } catch {
-        return NextResponse.json({ error: 'AUDIT_UNAVAILABLE', code: 'AUDIT_UNAVAILABLE', committed: true }, { status: 503 });
-      }
-      return NextResponse.json({ outcome: 'executed', message: 'Subscriber updated successfully', imsi }, { status: 200 });
+    // Direct execution
+    const result = await executeFrozenSubscriberUpdate(frozen);
+    try {
+      await writeAuditLog({
+        module: 'subscribers', action: 'UPDATE', targetId: imsi,
+        actor: { type: 'user', username: freshAccount.username, role: freshAccount.normalizedRole },
+        before: frozen.before, after: result.after,
+        result: 'success',
+        metadata: { governanceMode: 'DIRECT_GOVERNED', operation: 'SUBSCRIBER_UPDATE', actorRole: freshAccount.normalizedRole },
+      }, { failureMode: 'best-effort' });
+    } catch (err) {
+      console.warn('Audit log write failed for subscriber update (non-gating):', err);
     }
-
-    // Normal operator/ops_admin: APPROVAL_GOVERNED — create approval
-    const approval = await createApprovalRequest({
-      action: 'SUBSCRIBER_UPDATE', requester: freshAccount.username, targetId: imsi,
-      summary: `Update governed subscriber configuration for ${imsi}`,
-      operation: { resourceType: 'subscriber', resourceId: imsi }, operationFingerprint: frozen.operationFingerprint,
-      before: frozen.before, after: frozen.after, payload: frozen as unknown as Record<string, unknown>,
-    });
-    return NextResponse.json({ outcome: 'approval_required', message: 'Approval required before subscriber update', approval }, { status: 202 });
+    return NextResponse.json({ outcome: 'executed', message: 'Subscriber updated successfully', imsi }, { status: 200 });
   } catch (error) {
     if (error instanceof SubscriberGovernanceError) {
       const status = error.code === 'SUBSCRIBER_NOT_FOUND' ? 404 : error.code === 'SENSITIVE_SUBSCRIBER_CHANGE_NOT_SUPPORTED' ? 422 : 409;

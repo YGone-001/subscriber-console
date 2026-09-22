@@ -6,13 +6,14 @@ import { validateCurrentAccount, AccountSessionError } from '@/lib/accountSessio
 import { evaluateSubscriberOperationForActor, SUBSCRIBER_OPERATIONS } from '@/server/subscriberGovernanceRegistry';
 import { precheckSubscriberRange } from '@/server/repositories/subscriberRepository';
 import { writeAuditLog } from '@/lib/audit';
-import { createGovernedApproval, ApprovalCreationError } from '@/server/approvalCreator';
 import {
   prepareFrozenBatchCreateV2,
   executeFrozenBatchCreate,
   classifyBatchResult,
   SubscriberBatchGovernanceError,
 } from '@/server/subscriberBatchGovernance';
+
+export const dynamic = 'force-dynamic';
 
 export type BatchRouteDeps = {
   requireCapability: typeof requireCapability;
@@ -22,7 +23,6 @@ export type BatchRouteDeps = {
   precheckSubscriberRange: typeof precheckSubscriberRange;
   prepareFrozenBatchCreateV2: typeof prepareFrozenBatchCreateV2;
   writeAuditLog: typeof writeAuditLog;
-  createGovernedApproval: typeof createGovernedApproval;
   executeFrozenBatchCreate: typeof executeFrozenBatchCreate;
 };
 
@@ -34,68 +34,60 @@ const defaultBatchDeps: BatchRouteDeps = {
   precheckSubscriberRange,
   prepareFrozenBatchCreateV2,
   writeAuditLog,
-  createGovernedApproval,
   executeFrozenBatchCreate,
 };
 
-export const dynamic = 'force-dynamic';
-
 export function createBatchCreateHandler(deps: BatchRouteDeps = defaultBatchDeps) {
   return async function POST(request: Request) {
-  const auth = deps.requireCapability(request, 'subscriber_write');
-  if (!auth.ok) return auth.response;
+    const auth = deps.requireCapability(request, 'subscriber_write');
+    if (!auth.ok) return auth.response;
 
-  const rateLimit = await deps.enforceRateLimit(`subscribers:batch:${auth.auth.user}`, 10, 60);
-  if (!rateLimit.ok) return rateLimit.response;
+    const rate = await deps.enforceRateLimit(`batch-create:${auth.auth.user}`, 30, 60);
+    if (!rate.ok) return rate.response;
 
-  try {
-    const body = await request.json();
-    const validation = validateBatchCreatePayload(body);
-    if (!validation.ok) return NextResponse.json({ error: validation.error }, { status: 400 });
-    const payload = validation.value;
+    try {
+      const body = await request.json();
+      const validation = validateBatchCreatePayload(body);
+      if (!validation.ok) {
+        return NextResponse.json({ error: validation.error }, { status: 400 });
+      }
 
-    // Fresh actor validation — fail closed
-    const freshAccount = await deps.validateCurrentAccount(auth.auth);
+      // Fresh actor validation — fail closed
+      const freshAccount = await deps.validateCurrentAccount(auth.auth);
 
-    // Actor-aware governance
-    const policy = deps.evaluateSubscriberOperationForActor(SUBSCRIBER_OPERATIONS.BATCH_CREATE, freshAccount.normalizedRole);
-    if (!policy.executable) {
-      return NextResponse.json({ error: 'OPERATION_NOT_EXECUTABLE' }, { status: 409 });
-    }
+      // Governance check from central registry
+      const policy = deps.evaluateSubscriberOperationForActor(SUBSCRIBER_OPERATIONS.BATCH_CREATE, freshAccount.normalizedRole);
+      if (!policy.executable) {
+        return NextResponse.json({ error: 'OPERATION_NOT_EXECUTABLE' }, { status: 409 });
+      }
 
-    // Prepare frozen v2
-    const frozen = await deps.prepareFrozenBatchCreateV2({
-      startImsi: payload.startImsi,
-      count: payload.count,
-      trafficTotal: payload.trafficTotal as number | undefined,
-      trafficBalance: payload.trafficBalance as number | undefined,
-      smsTotal: payload.smsTotal as number | undefined,
-      smsBalance: payload.smsBalance as number | undefined,
-      profileName: payload.profileName,
-      planId: payload.planId,
-    });
+      // Prepare frozen snapshot
+      const frozen = await deps.prepareFrozenBatchCreateV2({
+        ...validation.value,
+        trafficTotal: validation.value.trafficTotal === undefined ? undefined : Number(validation.value.trafficTotal),
+        trafficBalance: validation.value.trafficBalance === undefined ? undefined : Number(validation.value.trafficBalance),
+        smsTotal: validation.value.smsTotal === undefined ? undefined : Number(validation.value.smsTotal),
+        smsBalance: validation.value.smsBalance === undefined ? undefined : Number(validation.value.smsBalance),
+      });
 
-    // Request-time precheck — before Approval or direct mutation
-    const precheck = await deps.precheckSubscriberRange(payload.startImsi, payload.count);
-    if (precheck.conflictCount > 0) {
-      return NextResponse.json({
-        error: 'SUBSCRIBER_CREATE_PRECONDITION_CHANGED',
-        conflictCount: precheck.conflictCount,
-        conflictImsis: precheck.conflictImsis.slice(0, 20),
-      }, { status: 409 });
-    }
+      // Preflight conflict check
+      const precheck = await deps.precheckSubscriberRange(frozen.startImsi, frozen.count);
+      if (precheck.conflictCount > 0) {
+        return NextResponse.json({
+          error: 'SUBSCRIBER_CREATE_PRECONDITION_CHANGED',
+          conflictCount: precheck.conflictCount,
+          conflictImsis: precheck.conflictImsis.slice(0, 20),
+        }, { status: 409 });
+      }
 
-    if (policy.governanceMode === 'DIRECT_GOVERNED') {
-      // super_admin/root direct execution
+      // Direct execution
       const result = await deps.executeFrozenBatchCreate(frozen);
 
       // Centralized result classification
       const classification = classifyBatchResult(result.createdCount, result.failedCount);
       const auditResult = classification === 'SUCCESS' ? 'success' : 'failed';
-      const committed = result.createdCount > 0;
 
-      // Strict business audit — always executed after executor invocation
-      // FAILED_NO_MUTATION receives strict evidence too
+      // Non-gating audit
       try {
         await deps.writeAuditLog({
           module: 'subscribers',
@@ -118,22 +110,20 @@ export function createBatchCreateHandler(deps: BatchRouteDeps = defaultBatchDeps
             smsBalance: frozen.effectiveOcs.smsBalance,
             fingerprint: frozen.operationFingerprint,
             governanceMode: 'DIRECT_GOVERNED',
-            approvalRequired: false,
             operation: 'SUBSCRIBER_BATCH_CREATE',
             actorRole: freshAccount.normalizedRole,
           },
           result: auditResult,
           metadata: {
             governanceMode: 'DIRECT_GOVERNED',
-            approvalRequired: false,
             operation: 'SUBSCRIBER_BATCH_CREATE',
             actorRole: freshAccount.normalizedRole,
             classification,
             partialMutation: result.partialMutation,
           },
-        }, { failureMode: 'strict' });
-      } catch {
-        return NextResponse.json({ error: 'AUDIT_UNAVAILABLE', code: 'AUDIT_UNAVAILABLE', committed }, { status: 503 });
+        }, { failureMode: 'best-effort' });
+      } catch (auditErr) {
+        console.warn('Batch create audit failed (non-gating):', auditErr);
       }
 
       // Zero-created failure — distinguish conflict vs non-conflict
@@ -159,90 +149,37 @@ export function createBatchCreateHandler(deps: BatchRouteDeps = defaultBatchDeps
           error: 'SUBSCRIBER_BATCH_CREATE_PARTIAL_WRITE',
           code: 'SUBSCRIBER_BATCH_CREATE_PARTIAL_WRITE',
           partialMutation: true,
-          result: {
-            createdImsis: result.createdImsis,
-            failedImsis: result.failedImsis,
-            metrics: result.metrics,
-          },
+          createdCount: result.createdCount,
+          failedCount: result.failedCount,
+          startImsi: frozen.startImsi,
+          count: frozen.count,
+          conflictImsis: result.conflictImsis,
+          subscriberFailedImsis: result.subscriberFailedImsis,
+          ocsFailedImsis: result.ocsFailedImsis,
         }, { status: 409 });
       }
 
-      // Full success
       return NextResponse.json({
         outcome: 'executed',
-        message: 'Subscribers created successfully',
-        result: {
-          createdImsis: result.createdImsis,
-          failedImsis: result.failedImsis,
-          metrics: result.metrics,
-        },
-        requiresApproval: false,
+        message: 'Batch creation completed successfully',
+        createdCount: result.createdCount,
+        startImsi: frozen.startImsi,
+        count: frozen.count,
       }, { status: 201 });
-    }
-
-    // operator/ops_admin → approval (PART G, H)
-    const actor = { type: 'user' as const, username: freshAccount.username, role: freshAccount.normalizedRole };
-    try {
-      const approval = await deps.createGovernedApproval({
-        action: 'SUBSCRIBER_BATCH_CREATE',
-        requester: freshAccount.username,
-        requesterContext: actor,
-        targetId: `subscriber:batch:${payload.startImsi}`,
-        summary: `Batch create ${payload.count} subscriber(s) from ${payload.startImsi}`,
-        payload: frozen,
-        operation: { resourceType: 'subscriber_batch', resourceId: payload.startImsi },
-        operationFingerprint: frozen.operationFingerprint,
-      }, actor);
-
-      return NextResponse.json(
-        { outcome: 'approval_required', message: 'Approval required before batch subscriber creation', approval, requiresApproval: true },
-        { status: 202 }
-      );
     } catch (error) {
-      // PART F: Approval audit failure — committed=true, approval retained
-      if (error instanceof ApprovalCreationError) {
-        return NextResponse.json({
-          error: 'AUDIT_UNAVAILABLE',
-          code: 'AUDIT_UNAVAILABLE',
-          committed: true,
-          approval: error.approval,
-        }, { status: 503 });
+      if (error instanceof SubscriberBatchGovernanceError) {
+        return NextResponse.json({ error: error.code, code: error.code }, { status: error.code === 'TARIFF_PLAN_NOT_FOUND' ? 404 : 400 });
       }
-      throw error;
+      if (error instanceof AccountSessionError) {
+        const statusMap: Record<string, number> = { AUTH_INVALID_TOKEN: 401, ACCOUNT_NOT_FOUND: 401, ACCOUNT_DISABLED: 403, ACCOUNT_LOCKED: 403, SESSION_REVOKED: 403 };
+        return NextResponse.json({ error: error.code }, { status: statusMap[error.code] || 500 });
+      }
+      if (error && typeof error === 'object' && (error as { code?: number }).code === 11000) {
+        return NextResponse.json({ error: 'SUBSCRIBER_CREATE_PRECONDITION_CHANGED' }, { status: 409 });
+      }
+      console.error('Error in batch create:', error);
+      return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
-  } catch (error) {
-    if (error instanceof SubscriberBatchGovernanceError) {
-      const statusMap: Record<string, number> = {
-        INVALID_SUBSCRIBER_BATCH_CREATE_PAYLOAD: 400,
-        IMSI_RANGE_OVERFLOW: 400,
-        SUBSCRIBER_CREATE_PRECONDITION_CHANGED: 409,
-        SUBSCRIBER_BATCH_PROFILE_PRECONDITION_CHANGED: 409,
-      };
-      const status = statusMap[error.code] || 500;
-      const body: Record<string, unknown> = { error: error.code, code: error.code };
-      if (error.details) Object.assign(body, error.details);
-      return NextResponse.json(body, { status });
-    }
-    if (error instanceof AccountSessionError) {
-      const statusMap: Record<string, number> = { AUTH_INVALID_TOKEN: 401, ACCOUNT_NOT_FOUND: 401, ACCOUNT_DISABLED: 403, ACCOUNT_LOCKED: 403, SESSION_REVOKED: 403 };
-      return NextResponse.json({ error: error.code }, { status: statusMap[error.code] || 500 });
-    }
-    if (error instanceof Error && error.message === 'IMSI_RANGE_OVERFLOW') {
-      return NextResponse.json({ error: 'Generated IMSI range exceeds 15 digits' }, { status: 400 });
-    }
-    if (error instanceof Error && error.message === 'INVALID_PLAN_ID') {
-      return NextResponse.json({ error: 'Invalid plan_id format' }, { status: 400 });
-    }
-    if (error instanceof Error && error.message === 'OCS_PLAN_NOT_FOUND') {
-      return NextResponse.json({ error: 'Tariff plan not found' }, { status: 404 });
-    }
-    if (error instanceof Error && error.message === 'OCS_PLAN_DISABLED') {
-      return NextResponse.json({ error: 'Tariff plan is disabled' }, { status: 409 });
-    }
-
-    console.error('Error in batch creation:', error);
-    return NextResponse.json({ error: 'Batch creation failed' }, { status: 500 });
-  }
   };
 }
 

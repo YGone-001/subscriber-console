@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"subscriber/internal/analytics"
-	"subscriber/internal/approval"
 	"subscriber/internal/audit"
 	"subscriber/internal/auth"
 	"subscriber/internal/balance"
@@ -66,17 +65,13 @@ func main() {
 	sessionValidator := auth.NewSessionValidator(mc.Ops.Collection("app_users"))
 	limiter := ratelimit.NewLimiter(mc.Ops.Collection("app_rate_limits"))
 
-	// Audit Writer — bounded async writer for authorization.denied evidence
+	// Audit Writer — bounded async writer for authorization.denied evidence and operation logs
 	auditCollection := mc.Ops.Collection("app_audit_logs")
 	auditWriter := audit.NewWriterLegacy(auditCollection, audit.WriterConfig{
 		QueueSize:   256,
 		WorkerCount: 2,
 		Logger:      logger,
 	})
-
-	// Audit (read-side repository + handler with denial audit)
-	auditRepo := audit.NewRepository(auditCollection)
-	auditHandler := audit.NewHandler(auditRepo, limiter, auditWriter)
 
 	// Analytics
 	analyticsRepo := analytics.NewRepository(
@@ -116,16 +111,6 @@ func main() {
 	userRepo := user.NewRepository(mc.Ops)
 	userHandler := user.NewHandler(userRepo, limiter, auditWriter)
 
-	// Approvals (read + CAS decision transitions + creation; execute remains with Node)
-	approvalRepo := approval.NewRepository(
-		mc.Ops.Collection("app_approvals"),
-		mc.Ops.Collection("app_audit_logs"),
-		mc.Ops.Collection("app_sequences"),
-	)
-	approvalWorkflow := approval.NewWorkflow(approvalRepo, userRepo, auditWriter)
-	approvalCreator := approval.NewApprovalCreator(approvalRepo, auditWriter)
-	approvalHandler := approval.NewHandler(approvalRepo, limiter, auditWriter, approvalWorkflow, approvalCreator, userRepo)
-
 	// Tariff Plans
 	tariffRepo := tariff.NewRepository(
 		mc.XCloud.Collection("ocs_tariff_plans"),
@@ -133,19 +118,18 @@ func main() {
 		mc.Ops.Collection("app_audit_logs"),
 	)
 	tariffHandler := tariff.NewHandler(tariffRepo, limiter)
-	tariffWriteHandler := tariff.NewWriteHandler(tariffRepo, limiter, userRepo, approvalCreator, auditWriter)
+	tariffWriteHandler := tariff.NewWriteHandler(tariffRepo, limiter, userRepo, auditWriter)
 
 	// OCS Balances
 	balanceRepo := balance.NewRepository(
 		mc.XCloud.Collection("ocs_balances"),
 		mc.XCloud.Collection("ocs_subscribers"),
-		mc.Ops.Collection("app_approvals"),
 		mc.Ops.Collection("app_audit_logs"),
 	)
-	balanceHandler := balance.NewHandler(balanceRepo, limiter, userRepo, approvalCreator, auditWriter)
+	balanceHandler := balance.NewHandler(balanceRepo, limiter, userRepo, auditWriter)
 
 	// OCS Subscriber Contract write handler
-	ocsSubscriberWriteHandler := ocs.NewSubscriberWriteHandler(ocsRepo, limiter, userRepo, approvalCreator, auditWriter)
+	ocsSubscriberWriteHandler := ocs.NewSubscriberWriteHandler(ocsRepo, limiter, userRepo, auditWriter)
 
 	// Subscribers
 	subscriberRepo := subscriber.NewRepository(
@@ -157,8 +141,8 @@ func main() {
 	)
 	subscriberHandler := subscriber.NewHandler(subscriberRepo, limiter, auditWriter)
 
-	// Profile handler (with approval repo for restore governance)
-	profileHandler := profile.NewHandler(profileRepo, approvalRepo, limiter, auditWriter)
+	// Profile handler
+	profileHandler := profile.NewHandler(profileRepo, limiter, auditWriter)
 
 	// Build handler
 	mux := http.NewServeMux()
@@ -169,10 +153,6 @@ func main() {
 
 	// Auth-protected read endpoints
 	authMiddleware := auth.Middleware(jwtSecretBytes, sessionValidator, logger)
-
-	// Audit (export remains with Next.js — requires stateful audit evidence persistence)
-	mux.Handle("GET /api/audit", authMiddleware(http.HandlerFunc(auditHandler.List)))
-	mux.Handle("GET /api/audit/{id}", authMiddleware(http.HandlerFunc(auditHandler.Get)))
 
 	// Analytics
 	mux.Handle("GET /api/analytics/metrics", authMiddleware(http.HandlerFunc(analyticsHandler.Metrics)))
@@ -236,8 +216,8 @@ func main() {
 	mux.Handle("GET /api/search", authMiddleware(http.HandlerFunc(subscriberHandler.Search)))
 	mux.Handle("POST /api/subscribers/batch/precheck", authMiddleware(http.HandlerFunc(subscriberHandler.BatchPrecheck)))
 
-	// Subscriber write endpoints (governance: super_admin→DIRECT, operator→APPROVAL)
-	subscriberWriteHandler := subscriber.NewWriteHandler(subscriberRepo, limiter, userRepo, approvalCreator, approvalRepo, auditWriter)
+	// Subscriber write endpoints (direct execution: admin/operator → DIRECT)
+	subscriberWriteHandler := subscriber.NewWriteHandler(subscriberRepo, limiter, userRepo, auditWriter)
 	mux.Handle("POST /api/subscribers", authMiddleware(http.HandlerFunc(subscriberWriteHandler.Create)))
 	mux.Handle("PUT /api/subscribers/{imsi}", authMiddleware(http.HandlerFunc(subscriberWriteHandler.Update)))
 	mux.Handle("DELETE /api/subscribers/{imsi}", authMiddleware(http.HandlerFunc(subscriberWriteHandler.Delete)))
@@ -254,19 +234,6 @@ func main() {
 	mux.Handle("GET /api/auth/users/{username}", authMiddleware(http.HandlerFunc(userHandler.UserDetail)))
 	mux.Handle("GET /api/users", authMiddleware(http.HandlerFunc(userHandler.UserList)))
 	mux.Handle("GET /api/users/{username}", authMiddleware(http.HandlerFunc(userHandler.UserDetail)))
-
-	// Approvals (read + CAS decision transitions + ACCESS_REQUEST creation; execute remains with Node)
-	mux.Handle("GET /api/approvals", authMiddleware(http.HandlerFunc(approvalHandler.List)))
-	mux.Handle("GET /api/approvals/{id}/audit", authMiddleware(http.HandlerFunc(approvalHandler.AuditTrail)))
-	mux.Handle("GET /api/approvals/{id}", authMiddleware(http.HandlerFunc(approvalHandler.Detail)))
-	// ACCESS_REQUEST creation (viewer → operator)
-	mux.Handle("POST /api/approvals", authMiddleware(http.HandlerFunc(approvalHandler.CreateAccessRequest)))
-	// Explicit decision endpoints (registered before legacy for specificity)
-	mux.Handle("POST /api/approvals/{id}/approve", authMiddleware(http.HandlerFunc(approvalHandler.Approve)))
-	mux.Handle("POST /api/approvals/{id}/reject", authMiddleware(http.HandlerFunc(approvalHandler.Reject)))
-	mux.Handle("POST /api/approvals/{id}/cancel", authMiddleware(http.HandlerFunc(approvalHandler.Cancel)))
-	// Legacy compatibility: POST /api/approvals/{id}
-	mux.Handle("POST /api/approvals/{id}", authMiddleware(http.HandlerFunc(approvalHandler.Decision)))
 
 	// Catch-all for unmigrated routes
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {

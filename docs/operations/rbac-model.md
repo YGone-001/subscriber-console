@@ -15,9 +15,9 @@ In **Phase 5.7-B**, the six-role RBAC model (`root`, `super_admin`, `ops_admin`,
 
 | Role | Display Name (ZH / EN) | Description |
 | :--- | :--- | :--- |
-| **`admin`** | 管理员 / Administrator | Full administration privileges: user management, role assignments, audit export & full source-IP inspection, approval review/execution, and direct business mutations. |
-| **`operator`** | 操作员 / Operator | Operational execution privileges: direct business mutations (subscribers, balances, profiles, tariffs, rating), core operation/configuration, and audit viewing. Cannot manage users, cannot export audits. |
-| **`viewer`** | 查看员 / Viewer | Read-only inspection privileges: viewing subscribers, profiles, tariffs, balances, and audit logs. All mutations, administration, and exports are strictly denied. |
+| **`admin`** | 管理员 / Administrator | Full administration privileges, including user management, role assignments, and direct business mutations. |
+| **`operator`** | 操作员 / Operator | Direct business mutations for subscribers, balances, profiles, tariffs, and rating. Cannot manage users. |
+| **`viewer`** | 查看员 / Viewer | Read-only inspection privileges. All mutations and administration are denied. |
 
 ---
 
@@ -77,11 +77,7 @@ While existing documents may contain legacy roles, **all write operations (creat
 | `profile_rollback` | **allow** | **allow** | deny | Direct mutation (Phase 5.7-A) |
 | `rating_publish` | **allow** | **allow** | deny | Direct mutation (Phase 5.7-A) |
 | `system_heal` | **allow** | **allow** | deny | Direct mutation (Phase 5.7-A) |
-| `audit_view` | **allow** | **allow** | **allow** | Read audit logs |
-| `audit_export` | **export** | deny | deny | Export CSV/JSON logs |
 | `user_admin` | **allow** | deny | deny | Manage users & assign roles |
-| `approval_review` | **allow** | deny | deny | Reserved administrative duty |
-| `approval_execute` | **allow** | deny | deny | Reserved administrative duty |
 
 ### Representative Permissions
 
@@ -104,9 +100,6 @@ While existing documents may contain legacy roles, **all write operations (creat
 | `ocs.tariff.write` | ✓ | ✓ | ✗ |
 | `ocs.plan.assign` | ✓ | ✓ | ✗ |
 | `ocs.rating.write` | ✓ | ✓ | ✗ |
-| `audit.read` | ✓ | ✓ | ✓ |
-| `audit.export` | ✓ | ✗ | ✗ |
-| `audit.source-ip.read-full` | ✓ | ✗ | ✗ |
 
 ---
 
@@ -139,4 +132,3 @@ node scripts/migrate-rbac-roles.mjs --apply
 5. **Field Preservation**: Preserves all unrelated document fields (`displayName`, `email`, `status`, `createdAt`, credentials, metadata).
 6. **Audit Trail**: Generates an audit record in `xcloud_ops.app_audit_logs` with action `users.role.migration` recording migrated account details.
 7. **Replay Safe (Idempotent)**: Subsequent executions find 0 candidates, commit 0 writes, and generate no duplicate audit logs.
-

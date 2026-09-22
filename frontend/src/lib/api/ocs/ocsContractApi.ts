@@ -21,7 +21,6 @@ export interface ContractListResponse {
 export interface ContractActionResponse {
   outcome?: string;
   message?: string;
-  approval?: Record<string, unknown>;
   error?: string;
 }
 

@@ -70,7 +70,6 @@ export function requireCapability(request: Request, capability: Capability, opti
           code: 'PERMISSION_DENIED',
           capability,
           decision,
-          requiresApproval: decision === 'approval',
         },
         { status: 403 }
       ),

@@ -41,12 +41,10 @@ test('Forbidden legacy and charging-plane routes do NOT appear in Tariff Managem
   }
 });
 
-test('Global governance routes (/approvals and /audit-logs) remain available', () => {
-  const governanceRoutes = NAVIGATION_ROUTES.filter((r) => r.group === 'governance');
-  const paths = governanceRoutes.map((r) => r.path);
-
-  assert.ok(paths.includes('/approvals'), 'global /approvals must remain available');
-  assert.ok(paths.includes('/audit-logs'), 'global /audit-logs must remain available');
+test('retired governance routes are absent from global navigation', () => {
+  const paths = NAVIGATION_ROUTES.map((r) => r.path);
+  assert.equal(paths.includes('/approvals'), false);
+  assert.equal(paths.includes('/audit-logs'), false);
 });
 
 test('AppSidebar consolidates Tariff Management and eliminates legacy rating navigation', () => {
@@ -68,10 +66,6 @@ test('Legacy routes redirect cleanly without redirect loops', () => {
 
   // /ocs/subscribers redirects to /ocs/contracts
   assert.match(readPage('../src/app/(dashboard)/ocs/subscribers/page.tsx'), /redirect\("\/ocs\/contracts"\)/);
-
-  // /ocs/approvals and /ocs/audit redirect to global governance
-  assert.match(readPage('../src/app/(dashboard)/ocs/approvals/page.tsx'), /redirect\("\/approvals"\)/);
-  assert.match(readPage('../src/app/(dashboard)/ocs/audit/page.tsx'), /redirect\("\/audit-logs"\)/);
 
   // /ocs/sessions and /ocs/usage redirect to /ocs/tariffs
   assert.match(readPage('../src/app/(dashboard)/ocs/sessions/page.tsx'), /redirect\("\/ocs\/tariffs"\)/);

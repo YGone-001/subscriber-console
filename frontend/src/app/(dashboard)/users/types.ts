@@ -26,31 +26,6 @@ export type {
   UserStatus,
 } from "@/types/iam";
 
-export type ApprovalMetricResponse = {
-  pending?: number;
-};
-
-export type AuditLogRecord = {
-  id: string;
-  timestamp: string;
-  level?: "info" | "warning";
-  result?: 'success' | 'failed' | 'denied';
-  action: string;
-  targetId: string;
-  actor?: string;
-  operatorIp?: string;
-  correlationId?: string;
-  approvalId?: string;
-  oldData?: unknown;
-  newData?: unknown;
-};
-
-export type AuditLogResponse = {
-  logs: AuditLogRecord[];
-  filteredTotal: number;
-  totalScanned: number;
-};
-
 export type Notice = {
   type: "success" | "error" | "info";
   text: string;

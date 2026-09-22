@@ -1,16 +1,14 @@
 import { NextResponse } from 'next/server';
 import { logAudit } from '@/lib/audit';
 import { requireCapability } from '@/lib/authz';
-import { capabilityDecision } from '@/lib/permissions';
 import { enforceRateLimit } from '@/lib/rateLimit';
-import { createApprovalRequest } from '@/server/repositories/approvalRepository';
 import { batchHealSubscriberDocuments } from '@/server/repositories/systemAuditRepository';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
   try {
-    const auth = requireCapability(request, 'system_heal', { allowApproval: true });
+    const auth = requireCapability(request, 'system_heal');
     if (!auth.ok) return auth.response;
 
     const rateLimit = await enforceRateLimit(`system:audit-batch-heal:${auth.auth.user}`, 10, 60);
@@ -19,25 +17,6 @@ export async function POST(request: Request) {
     const { anomalies, profileName } = await request.json();
     if (!Array.isArray(anomalies) || anomalies.length === 0) {
       return NextResponse.json({ error: 'anomalies list is required and cannot be empty' }, { status: 400 });
-    }
-
-    if (capabilityDecision(auth.auth.role, 'system_heal') === 'approval') {
-      const approval = await createApprovalRequest({
-        action: 'SYSTEM_HEAL',
-        requester: auth.auth.user,
-        targetId: `batch:${anomalies.length}`,
-        summary: `Batch self-heal ${anomalies.length} detected system anomalies`,
-        payload: {
-          anomalies,
-          profileName: profileName ? String(profileName) : undefined,
-        },
-      });
-
-      logAudit('UPDATE', `approval:${approval.id}`, null, approval, request);
-      return NextResponse.json(
-        { message: `Approval required before batch healing ${anomalies.length} items`, approval },
-        { status: 202 }
-      );
     }
 
     const result = await batchHealSubscriberDocuments(anomalies, profileName ? String(profileName) : undefined);

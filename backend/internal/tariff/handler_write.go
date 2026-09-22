@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
-	"subscriber/internal/approval"
 	"subscriber/internal/audit"
 	"subscriber/internal/auth"
 	"subscriber/internal/governance"
@@ -24,17 +23,11 @@ type UserRepository interface {
 	FindByUsernameIdentity(ctx context.Context, username string) (*user.UserIdentity, error)
 }
 
-// ApprovalCreator is the interface for creating approval requests.
-type ApprovalCreator interface {
-	Create(r *http.Request, actor approval.GovernanceActor, input approval.CreateApprovalInput) (*approval.ApprovalDocument, error)
-}
-
 // WriteHandler provides HTTP handlers for tariff plan write endpoints.
 type WriteHandler struct {
 	repo        *Repository
 	limiter     RateLimiter
 	userRepo    UserRepository
-	approvalSvc ApprovalCreator
 	auditWriter *audit.Writer
 }
 
@@ -44,12 +37,11 @@ type RateLimiter interface {
 }
 
 // NewWriteHandler creates a new tariff write handler.
-func NewWriteHandler(repo *Repository, limiter RateLimiter, userRepo UserRepository, approvalSvc ApprovalCreator, auditWriter *audit.Writer) *WriteHandler {
+func NewWriteHandler(repo *Repository, limiter RateLimiter, userRepo UserRepository, auditWriter *audit.Writer) *WriteHandler {
 	return &WriteHandler{
 		repo:        repo,
 		limiter:     limiter,
 		userRepo:    userRepo,
-		approvalSvc: approvalSvc,
 		auditWriter: auditWriter,
 	}
 }

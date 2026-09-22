@@ -17,7 +17,8 @@ func profileApplyTestRepo(t *testing.T) (*Repository, *mongo.Database, func()) {
 
 	uri := os.Getenv("MONGODB_URI")
 	if uri == "" {
-		t.Fatal("MONGODB_URI is required for Profile Apply integration tests")
+		t.Skip("MONGODB_URI is required for Profile Apply integration tests")
+		return nil, nil, nil
 	}
 
 	client, err := mongo.Connect(options.Client().ApplyURI(uri))

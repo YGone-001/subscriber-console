@@ -29,7 +29,6 @@ export interface AuditLogRecord {
   actor?: string;
   operatorIp: string;
   correlationId?: string;
-  approvalId?: string;
   reason?: string;
   oldData: unknown;
   newData: unknown;
@@ -72,13 +71,12 @@ export interface WriteAuditInput {
   result: AuditResult;
   source?: AuditSource;
   request?: AuditRequestContext;
-  approvalId?: string;
   reason?: string;
   before?: unknown;
   after?: unknown;
   metadata?: Record<string, unknown>;
   error?: { code?: string; message?: string };
-  /** Preserve legacy target keys such as SYS_USER:name and approval:uuid. */
+  /** Preserve legacy target keys such as SYS_USER:name. */
   targetId?: string;
   level?: 'info' | 'warning';
 }

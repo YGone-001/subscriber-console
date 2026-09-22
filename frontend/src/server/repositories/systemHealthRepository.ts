@@ -49,7 +49,6 @@ export type SecuritySubsystemHealth = {
   status: SubsystemStatus;
   rootUserConfigured: boolean;
   activeUsersCount: number;
-  pendingApprovalsCount: number;
   unacknowledgedAlertsCount: number;
   criticalAlertsCount: number;
   warningAlertsCount: number;
@@ -97,7 +96,6 @@ export async function getComprehensiveSystemHealth(): Promise<ComprehensiveSyste
     hssSubscribers,
     profileNames,
     usersCount,
-    pendingApprovals,
     alertsAgg,
     auditLogCount,
   ] = await Promise.all([
@@ -167,9 +165,6 @@ export async function getComprehensiveSystemHealth(): Promise<ComprehensiveSyste
 
     // App users count
     appDb.collection(mongoCollections.users).countDocuments({}),
-
-    // Pending approvals count
-    appDb.collection(mongoCollections.approvals).countDocuments({ status: 'PENDING' }),
 
     // Active Alerts aggregation
     appDb.collection(mongoCollections.alerts).aggregate<{
@@ -308,7 +303,7 @@ export async function getComprehensiveSystemHealth(): Promise<ComprehensiveSyste
 
   const securityStatus: SubsystemStatus = (!rootUserConfigured || criticalAlerts > 0)
     ? 'critical'
-    : (warningAlerts > 0 || pendingApprovals > 5)
+    : warningAlerts > 0
     ? 'degraded'
     : 'healthy';
 
@@ -316,7 +311,6 @@ export async function getComprehensiveSystemHealth(): Promise<ComprehensiveSyste
     status: securityStatus,
     rootUserConfigured,
     activeUsersCount: usersCount,
-    pendingApprovalsCount: pendingApprovals,
     unacknowledgedAlertsCount: alertStats.unacknowledged,
     criticalAlertsCount: criticalAlerts,
     warningAlertsCount: warningAlerts,
