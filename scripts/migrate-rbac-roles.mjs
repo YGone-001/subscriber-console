@@ -2,7 +2,7 @@
 /**
  * Phase 5.7-B — RBAC Role Migration Utility
  *
- * Optional migration script to update legacy role values in the MongoDB `users` collection
+ * Optional migration script to update legacy role values in the MongoDB `app_users` collection
  * to the canonical three-role model:
  *   - root, super_admin -> admin
  *   - ops_admin -> operator
@@ -35,7 +35,7 @@ function printHelp() {
   console.log(`
 RBAC Role Migration Utility (Phase 5.7-B)
 
-Maps legacy role values in the database to canonical three-role names:
+Maps legacy role values in the application user collection (app_users) to canonical three-role names:
   root         -> admin
   super_admin  -> admin
   ops_admin    -> operator
@@ -74,7 +74,7 @@ async function main() {
   try {
     await client.connect();
     const db = client.db(dbName);
-    const usersCol = db.collection('users');
+    const usersCol = db.collection('app_users');
     const auditCol = db.collection('app_audit_logs');
 
     // Find all users
@@ -134,29 +134,31 @@ async function main() {
       }
     }
 
-    // Record audit log entry
-    const auditRecord = {
-      id: randomUUID(),
-      eventId: `EVT-${randomUUID()}`,
-      timestamp: now,
-      level: 'info',
-      action: 'users.role.migration',
-      actor: { type: 'system', username: 'migration_script' },
-      resource: { type: 'users', id: 'all' },
-      result: 'success',
-      riskLevel: 'medium',
-      metadata: {
-        migratedCount: updatedCount,
-        candidatesCount: candidates.length,
-        migratedAccounts: candidates.map((c) => ({ username: c.username, from: c.currentRole, to: c.canonicalRole })),
-      },
-    };
+    if (updatedCount > 0) {
+      // Record audit log entry
+      const auditRecord = {
+        id: randomUUID(),
+        eventId: `EVT-${randomUUID()}`,
+        timestamp: now,
+        level: 'info',
+        action: 'users.role.migration',
+        actor: { type: 'system', username: 'migration_script' },
+        resource: { type: 'app_users', id: 'all' },
+        result: 'success',
+        riskLevel: 'medium',
+        metadata: {
+          migratedCount: updatedCount,
+          candidatesCount: candidates.length,
+          migratedAccounts: candidates.map((c) => ({ username: c.username, from: c.currentRole, to: c.canonicalRole })),
+        },
+      };
 
-    try {
-      await auditCol.insertOne(auditRecord);
-      console.log(`  ✓ Audit record recorded (action: users.role.migration)`);
-    } catch (auditErr) {
-      console.warn(`  ! Could not record audit record: ${auditErr.message}`);
+      try {
+        await auditCol.insertOne(auditRecord);
+        console.log(`  ✓ Audit record recorded (action: users.role.migration)`);
+      } catch (auditErr) {
+        console.warn(`  ! Could not record audit record: ${auditErr.message}`);
+      }
     }
 
     console.log(`\nMigration complete: ${updatedCount} of ${candidates.length} accounts updated.`);

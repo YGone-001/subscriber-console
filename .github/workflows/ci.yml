@@ -144,3 +144,6 @@ jobs:
       - name: RBAC simplification acceptance
         run: node scripts/test-rbac-simplification.mjs
 
+      - name: RBAC role migration acceptance
+        run: node scripts/test-rbac-role-migration.mjs
+

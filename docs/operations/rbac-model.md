@@ -112,12 +112,31 @@ While existing documents may contain legacy roles, **all write operations (creat
 
 ## 5. Operations & Migration Utility
 
-For environments desiring database hygiene where all historical `role` values are updated to canonical strings, the repository includes a migration script:
+### Authoritative Application User Collection
+The authoritative user collection across the platform (Go backend, Next.js frontend, and authentication services) is:
+```text
+xcloud_ops.app_users
+```
+> [!NOTE]
+> The MongoDB collection `xcloud_ops.users` is **NOT** the application user collection and must never be targeted by authentication or user administration tools.
+
+### Role Migration Utility (`scripts/migrate-rbac-roles.mjs`)
+For environments desiring database hygiene where all historical legacy role values (`root`, `super_admin`, `ops_admin`, `auditor`) are updated to canonical three-role strings (`admin`, `operator`, `viewer`), the repository includes an operational migration script:
 
 ```bash
-# Dry run: view affected accounts without modifying the database
+# Dry run: view affected accounts without modifying the database (default mode)
 node scripts/migrate-rbac-roles.mjs
 
 # Apply: execute migration, commit updates, and record audit evidence
 node scripts/migrate-rbac-roles.mjs --apply
 ```
+
+#### Safety Guarantees
+1. **Targeting**: Authoritatively targets `xcloud_ops.app_users` (never modifies `users`).
+2. **Dry-Run by Default**: Without `--apply`, runs in dry-run mode performing zero database writes, zero role modifications, zero `sessionVersion` increments, and zero audit log entries.
+3. **Atomic Conditional Updates**: Updates use conditional matching `{ username: candidate.username, role: candidate.currentRole }` to prevent stale race conditions.
+4. **Session Invalidation**: Increments `security.sessionVersion` by exactly 1 for migrated accounts to gracefully invalidate active JWT sessions, while canonical accounts retain their current `sessionVersion`.
+5. **Field Preservation**: Preserves all unrelated document fields (`displayName`, `email`, `status`, `createdAt`, credentials, metadata).
+6. **Audit Trail**: Generates an audit record in `xcloud_ops.app_audit_logs` with action `users.role.migration` recording migrated account details.
+7. **Replay Safe (Idempotent)**: Subsequent executions find 0 candidates, commit 0 writes, and generate no duplicate audit logs.
+
