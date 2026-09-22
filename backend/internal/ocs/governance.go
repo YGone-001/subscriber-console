@@ -14,35 +14,35 @@ const (
 )
 
 // subscriberRegistry is the OCS subscriber contract governance registry.
-// All operations are APPROVAL_GOVERNED base; super_admin/root override to DIRECT.
+// Phase 5.7-A: All authorized operations execute directly.
 var subscriberRegistry = map[SubscriberOperation]governance.OperationDefinition{
 	OpContractCreate: {
 		Operation:         string(OpContractCreate),
-		BaseMode:          governance.Approval,
+		BaseMode:          governance.Direct,
 		HumanExecutable:   true,
 		ExecutorAvailable: true,
 	},
 	OpContractUpdate: {
 		Operation:         string(OpContractUpdate),
-		BaseMode:          governance.Approval,
+		BaseMode:          governance.Direct,
 		HumanExecutable:   true,
 		ExecutorAvailable: true,
 	},
 	OpContractSuspend: {
 		Operation:         string(OpContractSuspend),
-		BaseMode:          governance.Approval,
+		BaseMode:          governance.Direct,
 		HumanExecutable:   true,
 		ExecutorAvailable: true,
 	},
 	OpContractResume: {
 		Operation:         string(OpContractResume),
-		BaseMode:          governance.Approval,
+		BaseMode:          governance.Direct,
 		HumanExecutable:   true,
 		ExecutorAvailable: true,
 	},
 	OpContractTerminate: {
 		Operation:         string(OpContractTerminate),
-		BaseMode:          governance.Approval,
+		BaseMode:          governance.Direct,
 		HumanExecutable:   true,
 		ExecutorAvailable: true,
 	},

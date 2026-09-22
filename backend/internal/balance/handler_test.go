@@ -268,9 +268,8 @@ func TestHandler_Adjust_ApprovalCreation_Operator(t *testing.T) {
 		t.Fatalf("failed to insert test doc: %v", err)
 	}
 
-	mockAppr := &mockApprovalCreator{}
 	userRepo := &mockUserRepo{identity: testUserIdentity("op1", "operator")}
-	h := NewHandler(repo, &mockRateLimiter{allowed: true}, userRepo, mockAppr, testAuditWriter())
+	h := NewHandler(repo, &mockRateLimiter{allowed: true}, userRepo, nil, testAuditWriter())
 
 	body := `{"operation":"credit","bucket":"data","amount":500,"reason":"customer compensation","ticketId":"INC1001"}`
 	req := reqWithPrincipal("POST", "/api/ocs/balances/"+testIMSI+"/adjust", []byte(body), "op1", "operator")
@@ -279,46 +278,28 @@ func TestHandler_Adjust_ApprovalCreation_Operator(t *testing.T) {
 
 	h.Adjust(w, req)
 
-	if w.Code != http.StatusAccepted {
-		t.Fatalf("expected 202 Accepted for operator, got %d, body: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for operator, got %d, body: %s", w.Code, w.Body.String())
 	}
 
 	var resp map[string]any
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
-	if resp["outcome"] != "approval_required" {
-		t.Errorf("expected outcome approval_required, got %v", resp["outcome"])
-	}
-	if resp["approvalId"] != "app-test-123" {
-		t.Errorf("expected approvalId app-test-123, got %v", resp["approvalId"])
+	if resp["outcome"] != "success" {
+		t.Errorf("expected outcome success, got %v", resp["outcome"])
 	}
 
-	// Verify frozen payload schema
-	if mockAppr.lastInput == nil {
-		t.Fatalf("expected approval input to be captured")
+	// Verify MongoDB was directly updated
+	updated, err := repo.GetBalanceByIMSI(ctx, testIMSI)
+	if err != nil || updated == nil {
+		t.Fatalf("failed to load updated balance: %v", err)
 	}
-	payload := mockAppr.lastInput.Payload
-	if payload["schema"] != "ocs-balance-adjustment-v1" {
-		t.Errorf("expected schema ocs-balance-adjustment-v1, got %v", payload["schema"])
+	if updated.DataTotal != 1500 || updated.DataAvailable != 1500 {
+		t.Errorf("expected total 1500 avail 1500, got total %d avail %d", updated.DataTotal, updated.DataAvailable)
 	}
-	if payload["imsi"] != testIMSI {
-		t.Errorf("expected imsi %s, got %v", testIMSI, payload["imsi"])
-	}
-	if adjID, ok := payload["adjustmentId"].(string); !ok || adjID == "" {
-		t.Errorf("expected non-empty adjustmentId, got %v", payload["adjustmentId"])
-	}
-	intent, ok := payload["intent"].(map[string]interface{})
-	if !ok || intent["operation"] != "credit" || intent["bucket"] != "data" || intent["amount"] != int64(500) {
-		t.Errorf("unexpected intent: %v", payload["intent"])
-	}
-	before, ok := payload["before"].(map[string]interface{})
-	if !ok || before["total"] != int64(1000) || before["available"] != int64(1000) {
-		t.Errorf("unexpected before snapshot: %v", payload["before"])
-	}
-	expectedAfter, ok := payload["expectedAfter"].(map[string]interface{})
-	if !ok || expectedAfter["total"] != int64(1500) || expectedAfter["available"] != int64(1500) {
-		t.Errorf("unexpected expectedAfter snapshot: %v", payload["expectedAfter"])
+	if updated.Version != 2 {
+		t.Errorf("expected version 2, got %d", updated.Version)
 	}
 }
 
@@ -371,8 +352,8 @@ func TestHandler_Adjust_DirectExecution_SuperAdmin(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
-	if resp["outcome"] != "executed" {
-		t.Errorf("expected outcome executed, got %v", resp["outcome"])
+	if resp["outcome"] != "success" {
+		t.Errorf("expected outcome success, got %v", resp["outcome"])
 	}
 
 	// Verify MongoDB was directly updated

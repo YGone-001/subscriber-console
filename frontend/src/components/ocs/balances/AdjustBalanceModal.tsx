@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { AlertCircle, RefreshCw, X } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { formatBytes } from "@/lib/unitParser";
@@ -26,7 +25,6 @@ export default function AdjustBalanceModal({
   onSuccess,
 }: AdjustBalanceModalProps) {
   const { t } = useI18n();
-  const router = useRouter();
 
   const [bucket, setBucket] = useState<"data" | "voice" | "sms">("data");
   const [operation, setOperation] = useState<"credit" | "debit">("credit");
@@ -139,23 +137,12 @@ export default function AdjustBalanceModal({
         return;
       }
 
-      const isApproval = data.outcome === "approval_required";
-      const approvalId = data.approvalId || data.approval_id;
-      const message = isApproval
-        ? t("ocs_balance_approval_created")
-        : t("ocs_balance_success_executed");
-
       onSuccess({
-        outcome: data.outcome,
-        message,
-        approvalId,
+        outcome: data.outcome || "success",
+        message: t("ocs_balance_success_executed") || "Balance adjusted successfully",
       });
 
       onClose();
-
-      if (isApproval && approvalId) {
-        router.push(`/approvals?id=${encodeURIComponent(approvalId)}`);
-      }
     } catch {
       setError(t("network_error") || "Network error occurred. Please try again.");
     } finally {

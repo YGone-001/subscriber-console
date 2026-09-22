@@ -23,7 +23,7 @@ test('OcsBalancePlaceholder exists and implements Governed Balance Console', () 
   // KPI cards
   assert.match(placeholderSource, /ocs_balance_total_accounts/);
   assert.match(placeholderSource, /ocs_balance_active_accounts/);
-  assert.match(placeholderSource, /ocs_balance_pending_adjustments/);
+  assert.doesNotMatch(placeholderSource, /ocs_balance_pending_adjustments/);
 
   // Table columns & Actions
   assert.match(placeholderSource, /ocs_col_data_available/);
@@ -73,8 +73,8 @@ test('AdjustBalanceModal implements governed balance adjustment fields and flows
   // API endpoint
   assert.match(modalSource, /\/api\/ocs\/balances\/.*\/adjust/);
 
-  // Approval redirect
-  assert.match(modalSource, /\/approvals\?id=/);
+  // Direct execution: no approval redirect
+  assert.doesNotMatch(modalSource, /\/approvals\?id=/);
 
   // CAS precondition conflict handling
   assert.match(modalSource, /BALANCE_PRECONDITION_CHANGED/);

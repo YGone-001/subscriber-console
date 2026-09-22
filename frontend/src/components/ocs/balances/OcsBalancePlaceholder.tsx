@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
-import { Search, Wallet, CheckCircle, Clock, SlidersHorizontal, Eye } from "lucide-react";
+import { Search, Wallet, CheckCircle, SlidersHorizontal, Eye } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { DataTablePagination } from "@/components/ui/DataTablePagination";
 import { formatBytes } from "@/lib/unitParser";
@@ -65,20 +65,9 @@ export default function OcsBalancePlaceholder() {
     keepPreviousData: true,
   });
 
-  // Approvals SWR for Pending Adjustments KPI
-  const { data: pendingApprovalsData } = useSWR(
-    "/api/approvals?action=TRAFFIC_ADJUSTMENT&status=pending",
-    fetcher,
-    { refreshInterval: 15000 }
-  );
-
   const records: BalanceRecordUI[] = data?.records || [];
   const total = data?.total || 0;
   const activeCount = data?.summary?.activeAccounts ?? records.filter((r) => r.status === "active").length;
-  const pendingCount =
-    pendingApprovalsData?.total ??
-    data?.summary?.pendingAdjustments ??
-    0;
 
   const formatTime = (iso?: string) => {
     if (!iso) return "—";
@@ -103,13 +92,6 @@ export default function OcsBalancePlaceholder() {
         <div className="ocs-dashboard-card-content">
           <span className="ocs-dashboard-card-value">{error ? "—" : activeCount}</span>
           <span className="ocs-dashboard-card-label">{t("ocs_balance_active_accounts")}</span>
-        </div>
-      </div>
-      <div className="ocs-dashboard-card">
-        <div className="ocs-dashboard-card-icon"><Clock size={20} /></div>
-        <div className="ocs-dashboard-card-content">
-          <span className="ocs-dashboard-card-value">{error ? "—" : pendingCount}</span>
-          <span className="ocs-dashboard-card-label">{t("ocs_balance_pending_adjustments")}</span>
         </div>
       </div>
     </div>
@@ -149,15 +131,6 @@ export default function OcsBalancePlaceholder() {
           style={{ marginBottom: "1rem" }}
         >
           <span>{feedback.message}</span>
-          {feedback.approvalId && (
-            <Link
-              href={`/approvals?id=${encodeURIComponent(feedback.approvalId)}`}
-              className="ocs-feedback-link"
-              style={{ marginLeft: "0.5rem", textDecoration: "underline" }}
-            >
-              {t("view_approval") || "查看审批"} →
-            </Link>
-          )}
         </div>
       )}
 

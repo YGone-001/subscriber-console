@@ -142,70 +142,32 @@ func (h *WriteHandler) Create(w http.ResponseWriter, r *http.Request) {
 		"rules":            body.Rules,
 	}
 
-	if result.Decision == governance.Direct {
-		// DIRECT: execute immediately
-		if err := h.repo.CreatePlan(r.Context(), doc); err != nil {
-			if err.Error() == "TARIFF_PLAN_EXISTS" {
-				response.Error(w, http.StatusConflict, "Tariff plan already exists", "TARIFF_PLAN_EXISTS")
-				return
-			}
-			response.InternalError(w)
+	// Direct execution (Phase 5.7-A)
+	if err := h.repo.CreatePlan(r.Context(), doc); err != nil {
+		if err.Error() == "TARIFF_PLAN_EXISTS" {
+			response.Error(w, http.StatusConflict, "Tariff plan already exists", "TARIFF_PLAN_EXISTS")
 			return
 		}
-
-		h.writeStrictAudit(r, audit.WriteAuditInput{
-			Action:   "CREATE",
-			Module:   "tariff-plans",
-			TargetID: fmt.Sprintf("tariff-plan:%s", planID),
-			After:    doc,
-			Result:   "success",
-			Metadata: map[string]interface{}{
-				"governanceMode":   "DIRECT_GOVERNED",
-				"approvalRequired": false,
-				"operation":        string(OpCreate),
-				"actorRole":        fresh.NormalizedRole,
-			},
-		}, fresh)
-
-		response.JSON(w, http.StatusCreated, map[string]any{
-			"outcome": "executed",
-			"message": "Tariff plan created successfully",
-			"plan_id": planID,
-		})
+		response.InternalError(w)
 		return
 	}
 
-	// APPROVAL: create approval request
-	actor := approval.GovernanceActor{
-		Type: "user", UserID: fresh.UserID, Username: fresh.Username, Role: fresh.RawRole,
-	}
-	approvalDoc, err := h.approvalSvc.Create(r, actor, approval.CreateApprovalInput{
-		Action:           string(OpCreate),
-		Requester:        fresh.Username,
-		RequesterContext: &actor,
-		TargetID:         fmt.Sprintf("tariff-plan:%s", planID),
-		Summary:          fmt.Sprintf("Create tariff plan %s", planID),
-		Operation: &approval.ApprovalOperation{
-			ResourceType: "ocs_tariff_plan", ResourceID: planID,
+	h.writeStrictAudit(r, audit.WriteAuditInput{
+		Action:   "CREATE",
+		Module:   "tariff-plans",
+		TargetID: fmt.Sprintf("tariff-plan:%s", planID),
+		After:    doc,
+		Result:   "success",
+		Metadata: map[string]interface{}{
+			"operation": string(OpCreate),
+			"actorRole": fresh.NormalizedRole,
 		},
-		Payload: map[string]interface{}{
-			"schema": "ocs-tariff-plan-v1",
-			"plan":   doc,
-		},
-	})
-	if err != nil {
-		if awe, ok := err.(*approval.ApprovalWorkflowError); ok && awe.Committed {
-			response.JSON(w, awe.Status, awe.ErrorResponse())
-			return
-		}
-		response.Error(w, http.StatusInternalServerError, "Failed to create tariff plan approval", "APPROVAL_CREATE_FAILED")
-		return
-	}
+	}, fresh)
 
-	response.JSON(w, http.StatusAccepted, map[string]any{
-		"outcome":  "approval_required",
-		"message":  "Approval required before tariff plan creation",
-		"approval": approvalDoc,
+	response.JSON(w, http.StatusCreated, map[string]any{
+		"outcome": "success",
+		"message": "operation completed",
+		"plan_id": planID,
 	})
 }
 
@@ -295,72 +257,33 @@ func (h *WriteHandler) Update(w http.ResponseWriter, r *http.Request) {
 		after["rules"] = body.Rules
 	}
 
-	if result.Decision == governance.Direct {
-		if err := h.repo.UpdatePlan(r.Context(), planID, after); err != nil {
-			if err.Error() == "TARIFF_PLAN_NOT_FOUND" {
-				response.Error(w, http.StatusNotFound, "Tariff plan not found", "NOT_FOUND")
-				return
-			}
-			response.InternalError(w)
+	// Direct execution (Phase 5.7-A)
+	if err := h.repo.UpdatePlan(r.Context(), planID, after); err != nil {
+		if err.Error() == "TARIFF_PLAN_NOT_FOUND" {
+			response.Error(w, http.StatusNotFound, "Tariff plan not found", "NOT_FOUND")
 			return
 		}
-
-		h.writeStrictAudit(r, audit.WriteAuditInput{
-			Action:   "UPDATE",
-			Module:   "tariff-plans",
-			TargetID: fmt.Sprintf("tariff-plan:%s", planID),
-			Before:   before,
-			After:    after,
-			Result:   "success",
-			Metadata: map[string]interface{}{
-				"governanceMode":   "DIRECT_GOVERNED",
-				"approvalRequired": false,
-				"operation":        string(OpUpdate),
-				"actorRole":        fresh.NormalizedRole,
-			},
-		}, fresh)
-
-		response.JSON(w, http.StatusOK, map[string]any{
-			"outcome": "executed",
-			"message": "Tariff plan updated successfully",
-			"plan_id": planID,
-		})
+		response.InternalError(w)
 		return
 	}
 
-	// APPROVAL
-	actor := approval.GovernanceActor{
-		Type: "user", UserID: fresh.UserID, Username: fresh.Username, Role: fresh.RawRole,
-	}
-	approvalDoc, err := h.approvalSvc.Create(r, actor, approval.CreateApprovalInput{
-		Action:           string(OpUpdate),
-		Requester:        fresh.Username,
-		RequesterContext: &actor,
-		TargetID:         fmt.Sprintf("tariff-plan:%s", planID),
-		Summary:          fmt.Sprintf("Update tariff plan %s", planID),
-		Operation: &approval.ApprovalOperation{
-			ResourceType: "ocs_tariff_plan", ResourceID: planID,
+	h.writeStrictAudit(r, audit.WriteAuditInput{
+		Action:   "UPDATE",
+		Module:   "tariff-plans",
+		TargetID: fmt.Sprintf("tariff-plan:%s", planID),
+		Before:   before,
+		After:    after,
+		Result:   "success",
+		Metadata: map[string]interface{}{
+			"operation": string(OpUpdate),
+			"actorRole": fresh.NormalizedRole,
 		},
-		Before: before,
-		Payload: map[string]interface{}{
-			"schema":  "ocs-tariff-plan-v1",
-			"planId":  planID,
-			"changes": after,
-		},
-	})
-	if err != nil {
-		if awe, ok := err.(*approval.ApprovalWorkflowError); ok && awe.Committed {
-			response.JSON(w, awe.Status, awe.ErrorResponse())
-			return
-		}
-		response.Error(w, http.StatusInternalServerError, "Failed to create tariff plan approval", "APPROVAL_CREATE_FAILED")
-		return
-	}
+	}, fresh)
 
-	response.JSON(w, http.StatusAccepted, map[string]any{
-		"outcome":  "approval_required",
-		"message":  "Approval required before tariff plan update",
-		"approval": approvalDoc,
+	response.JSON(w, http.StatusOK, map[string]any{
+		"outcome": "success",
+		"message": "operation completed",
+		"plan_id": planID,
 	})
 }
 
@@ -415,74 +338,36 @@ func (h *WriteHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if result.Decision == governance.Direct {
-		if err := h.repo.DeletePlan(r.Context(), planID); err != nil {
-			if err.Error() == "DEFAULT_TARIFF_PLAN_PROTECTED" {
-				response.Error(w, http.StatusConflict, "Default tariff plan cannot be deleted", "DEFAULT_TARIFF_PLAN_PROTECTED")
-				return
-			}
-			if err.Error() == "TARIFF_PLAN_NOT_FOUND" {
-				response.Error(w, http.StatusNotFound, "Tariff plan not found", "NOT_FOUND")
-				return
-			}
-			response.InternalError(w)
+	// Direct execution (Phase 5.7-A)
+	if err := h.repo.DeletePlan(r.Context(), planID); err != nil {
+		if err.Error() == "DEFAULT_TARIFF_PLAN_PROTECTED" {
+			response.Error(w, http.StatusConflict, "Default tariff plan cannot be deleted", "DEFAULT_TARIFF_PLAN_PROTECTED")
 			return
 		}
-
-		h.writeStrictAudit(r, audit.WriteAuditInput{
-			Action:   "DELETE",
-			Module:   "tariff-plans",
-			TargetID: fmt.Sprintf("tariff-plan:%s", planID),
-			Before:   before,
-			Result:   "success",
-			Metadata: map[string]interface{}{
-				"governanceMode":   "DIRECT_GOVERNED",
-				"approvalRequired": false,
-				"operation":        string(OpDelete),
-				"actorRole":        fresh.NormalizedRole,
-			},
-		}, fresh)
-
-		response.JSON(w, http.StatusOK, map[string]any{
-			"outcome": "executed",
-			"message": "Tariff plan deleted successfully",
-			"plan_id": planID,
-		})
+		if err.Error() == "TARIFF_PLAN_NOT_FOUND" {
+			response.Error(w, http.StatusNotFound, "Tariff plan not found", "NOT_FOUND")
+			return
+		}
+		response.InternalError(w)
 		return
 	}
 
-	// APPROVAL
-	actor := approval.GovernanceActor{
-		Type: "user", UserID: fresh.UserID, Username: fresh.Username, Role: fresh.RawRole,
-	}
-	approvalDoc, err := h.approvalSvc.Create(r, actor, approval.CreateApprovalInput{
-		Action:           string(OpDelete),
-		Requester:        fresh.Username,
-		RequesterContext: &actor,
-		TargetID:         fmt.Sprintf("tariff-plan:%s", planID),
-		Summary:          fmt.Sprintf("Delete tariff plan %s", planID),
-		Operation: &approval.ApprovalOperation{
-			ResourceType: "ocs_tariff_plan", ResourceID: planID,
+	h.writeStrictAudit(r, audit.WriteAuditInput{
+		Action:   "DELETE",
+		Module:   "tariff-plans",
+		TargetID: fmt.Sprintf("tariff-plan:%s", planID),
+		Before:   before,
+		Result:   "success",
+		Metadata: map[string]interface{}{
+			"operation": string(OpDelete),
+			"actorRole": fresh.NormalizedRole,
 		},
-		Before: before,
-		Payload: map[string]interface{}{
-			"schema": "ocs-tariff-plan-v1",
-			"planId": planID,
-		},
-	})
-	if err != nil {
-		if awe, ok := err.(*approval.ApprovalWorkflowError); ok && awe.Committed {
-			response.JSON(w, awe.Status, awe.ErrorResponse())
-			return
-		}
-		response.Error(w, http.StatusInternalServerError, "Failed to create tariff plan approval", "APPROVAL_CREATE_FAILED")
-		return
-	}
+	}, fresh)
 
-	response.JSON(w, http.StatusAccepted, map[string]any{
-		"outcome":  "approval_required",
-		"message":  "Approval required before tariff plan deletion",
-		"approval": approvalDoc,
+	response.JSON(w, http.StatusOK, map[string]any{
+		"outcome": "success",
+		"message": "operation completed",
+		"plan_id": planID,
 	})
 }
 
@@ -579,77 +464,34 @@ func (h *WriteHandler) Clone(w http.ResponseWriter, r *http.Request) {
 		"rules":            clonedRules,
 	}
 
-	if result.Decision == governance.Direct {
-		if err := h.repo.CreatePlan(r.Context(), cloned); err != nil {
-			if err.Error() == "TARIFF_PLAN_EXISTS" {
-				response.Error(w, http.StatusConflict, "Tariff plan already exists", "TARIFF_PLAN_EXISTS")
-				return
-			}
-			response.InternalError(w)
+	// Direct execution (Phase 5.7-A)
+	if err := h.repo.CreatePlan(r.Context(), cloned); err != nil {
+		if err.Error() == "TARIFF_PLAN_EXISTS" {
+			response.Error(w, http.StatusConflict, "Tariff plan already exists", "TARIFF_PLAN_EXISTS")
 			return
 		}
-
-		h.writeStrictAudit(r, audit.WriteAuditInput{
-			Action:   "CREATE",
-			Module:   "tariff-plans",
-			TargetID: fmt.Sprintf("tariff-plan:%s", targetPlanID),
-			Before:   map[string]any{"sourcePlan": sourcePlan},
-			After:    cloned,
-			Result:   "success",
-			Metadata: map[string]interface{}{
-				"governanceMode":   "DIRECT_GOVERNED",
-				"approvalRequired": false,
-				"operation":        string(OpCreate),
-				"actorRole":        fresh.NormalizedRole,
-				"cloneFromPlanId":  sourcePlanID,
-			},
-		}, fresh)
-
-		response.JSON(w, http.StatusCreated, map[string]any{
-			"outcome": "executed",
-			"message": "Tariff plan cloned successfully",
-			"plan_id": targetPlanID,
-		})
+		response.InternalError(w)
 		return
 	}
 
-	// APPROVAL
-	actor := approval.GovernanceActor{
-		Type: "user", UserID: fresh.UserID, Username: fresh.Username, Role: fresh.RawRole,
-	}
-	approvalDoc, err := h.approvalSvc.Create(r, actor, approval.CreateApprovalInput{
-		Action:           string(OpCreate),
-		Requester:        fresh.Username,
-		RequesterContext: &actor,
-		TargetID:         fmt.Sprintf("tariff-plan:%s", targetPlanID),
-		Summary:          fmt.Sprintf("Clone tariff plan %s as %s", sourcePlanID, targetPlanID),
-		Operation: &approval.ApprovalOperation{
-			ResourceType: "ocs_tariff_plan", ResourceID: targetPlanID,
+	h.writeStrictAudit(r, audit.WriteAuditInput{
+		Action:   "CREATE",
+		Module:   "tariff-plans",
+		TargetID: fmt.Sprintf("tariff-plan:%s", targetPlanID),
+		Before:   map[string]any{"sourcePlan": sourcePlan},
+		After:    cloned,
+		Result:   "success",
+		Metadata: map[string]interface{}{
+			"operation":       string(OpCreate),
+			"actorRole":       fresh.NormalizedRole,
+			"cloneFromPlanId": sourcePlanID,
 		},
-		Before: map[string]any{"sourcePlan": sourcePlan},
-		Payload: map[string]interface{}{
-			"schema": "ocs-tariff-plan-v1",
-			"plan": map[string]any{
-				"plan_id":         targetPlanID,
-				"name":            name,
-				"description":     description,
-				"cloneFromPlanId": sourcePlanID,
-			},
-		},
-	})
-	if err != nil {
-		if awe, ok := err.(*approval.ApprovalWorkflowError); ok && awe.Committed {
-			response.JSON(w, awe.Status, awe.ErrorResponse())
-			return
-		}
-		response.Error(w, http.StatusInternalServerError, "Failed to create tariff plan approval", "APPROVAL_CREATE_FAILED")
-		return
-	}
+	}, fresh)
 
-	response.JSON(w, http.StatusAccepted, map[string]any{
-		"outcome":  "approval_required",
-		"message":  "Approval required before tariff plan clone",
-		"approval": approvalDoc,
+	response.JSON(w, http.StatusCreated, map[string]any{
+		"outcome": "success",
+		"message": "operation completed",
+		"plan_id": targetPlanID,
 	})
 }
 
@@ -727,77 +569,38 @@ func (h *WriteHandler) setStatus(w http.ResponseWriter, r *http.Request, status 
 		return
 	}
 
-	if result.Decision == governance.Direct {
-		if err := h.repo.SetPlanStatus(r.Context(), planID, status); err != nil {
-			if err.Error() == "TARIFF_PLAN_NOT_FOUND" {
-				response.Error(w, http.StatusNotFound, "Tariff plan not found", "NOT_FOUND")
-				return
-			}
-			response.InternalError(w)
+	// Direct execution (Phase 5.7-A)
+	if err := h.repo.SetPlanStatus(r.Context(), planID, status); err != nil {
+		if err.Error() == "TARIFF_PLAN_NOT_FOUND" {
+			response.Error(w, http.StatusNotFound, "Tariff plan not found", "NOT_FOUND")
 			return
 		}
-
-		after := copyBsonM(before)
-		after["status"] = status
-
-		action := "UPDATE"
-		h.writeStrictAudit(r, audit.WriteAuditInput{
-			Action:   action,
-			Module:   "tariff-plans",
-			TargetID: fmt.Sprintf("tariff-plan:%s", planID),
-			Before:   before,
-			After:    after,
-			Result:   "success",
-			Metadata: map[string]interface{}{
-				"governanceMode":   "DIRECT_GOVERNED",
-				"approvalRequired": false,
-				"operation":        string(OpUpdate),
-				"actorRole":        fresh.NormalizedRole,
-				"statusChange":     status,
-			},
-		}, fresh)
-
-		response.JSON(w, http.StatusOK, map[string]any{
-			"outcome": "executed",
-			"message": fmt.Sprintf("Tariff plan %sd successfully", status),
-			"plan_id": planID,
-		})
+		response.InternalError(w)
 		return
 	}
 
-	// APPROVAL
-	actor := approval.GovernanceActor{
-		Type: "user", UserID: fresh.UserID, Username: fresh.Username, Role: fresh.RawRole,
-	}
-	approvalDoc, err := h.approvalSvc.Create(r, actor, approval.CreateApprovalInput{
-		Action:           string(OpUpdate),
-		Requester:        fresh.Username,
-		RequesterContext: &actor,
-		TargetID:         fmt.Sprintf("tariff-plan:%s", planID),
-		Summary:          fmt.Sprintf("%s tariff plan %s", capitalize(status), planID),
-		Operation: &approval.ApprovalOperation{
-			ResourceType: "ocs_tariff_plan", ResourceID: planID,
-		},
-		Before: before,
-		Payload: map[string]interface{}{
-			"schema":       "ocs-tariff-plan-v1",
-			"planId":       planID,
+	after := copyBsonM(before)
+	after["status"] = status
+
+	action := "UPDATE"
+	h.writeStrictAudit(r, audit.WriteAuditInput{
+		Action:   action,
+		Module:   "tariff-plans",
+		TargetID: fmt.Sprintf("tariff-plan:%s", planID),
+		Before:   before,
+		After:    after,
+		Result:   "success",
+		Metadata: map[string]interface{}{
+			"operation":    string(OpUpdate),
+			"actorRole":    fresh.NormalizedRole,
 			"statusChange": status,
 		},
-	})
-	if err != nil {
-		if awe, ok := err.(*approval.ApprovalWorkflowError); ok && awe.Committed {
-			response.JSON(w, awe.Status, awe.ErrorResponse())
-			return
-		}
-		response.Error(w, http.StatusInternalServerError, "Failed to create tariff plan approval", "APPROVAL_CREATE_FAILED")
-		return
-	}
+	}, fresh)
 
-	response.JSON(w, http.StatusAccepted, map[string]any{
-		"outcome":  "approval_required",
-		"message":  fmt.Sprintf("Approval required before tariff plan %s", status),
-		"approval": approvalDoc,
+	response.JSON(w, http.StatusOK, map[string]any{
+		"outcome": "success",
+		"message": "operation completed",
+		"plan_id": planID,
 	})
 }
 

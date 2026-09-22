@@ -449,7 +449,7 @@
 
   .analytics-chart-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr);
     gap: 1rem;
   }
 
@@ -1437,7 +1437,6 @@
   .ocs-res-bar-fill {
     height: 100%;
     border-radius: inherit;
-    transition: width 0.4s var(--ease-smooth);
     min-width: 2px;
   }
 

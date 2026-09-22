@@ -17,7 +17,7 @@ const (
 var balanceRegistry = map[BalanceOperation]governance.OperationDefinition{
 	OpAdjust: {
 		Operation:         string(OpAdjust),
-		BaseMode:          governance.Approval,
+		BaseMode:          governance.Direct,
 		HumanExecutable:   true,
 		ExecutorAvailable: true,
 	},

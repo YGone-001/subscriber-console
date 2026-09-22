@@ -137,69 +137,32 @@ func (h *SubscriberWriteHandler) Create(w http.ResponseWriter, r *http.Request) 
 		"status":  nonEmptyStr(body.Status, "active"),
 	}
 
-	if result.Decision == governance.Direct {
-		if err := h.repo.CreateSubscriberContract(r.Context(), doc); err != nil {
-			if err.Error() == "OCS_SUBSCRIBER_EXISTS" {
-				response.Error(w, http.StatusConflict, "OCS subscriber contract already exists", "OCS_SUBSCRIBER_EXISTS")
-				return
-			}
-			response.InternalError(w)
+	// Direct execution (Phase 5.7-A)
+	if err := h.repo.CreateSubscriberContract(r.Context(), doc); err != nil {
+		if err.Error() == "OCS_SUBSCRIBER_EXISTS" {
+			response.Error(w, http.StatusConflict, "OCS subscriber contract already exists", "OCS_SUBSCRIBER_EXISTS")
 			return
 		}
-
-		h.writeSubscriberAudit(r, audit.WriteAuditInput{
-			Action:   "CREATE",
-			Module:   "ocs-subscribers",
-			TargetID: fmt.Sprintf("ocs-subscriber:%s", imsi),
-			After:    doc,
-			Result:   "success",
-			Metadata: map[string]interface{}{
-				"governanceMode":   "DIRECT_GOVERNED",
-				"approvalRequired": false,
-				"operation":        string(OpContractCreate),
-				"actorRole":        fresh.NormalizedRole,
-			},
-		}, fresh)
-
-		response.JSON(w, http.StatusCreated, map[string]any{
-			"outcome": "executed",
-			"message": "OCS subscriber contract created successfully",
-			"imsi":    imsi,
-		})
+		response.InternalError(w)
 		return
 	}
 
-	// APPROVAL
-	actor := approval.GovernanceActor{
-		Type: "user", UserID: fresh.UserID, Username: fresh.Username, Role: fresh.RawRole,
-	}
-	approvalDoc, err := h.approvalSvc.Create(r, actor, approval.CreateApprovalInput{
-		Action:           string(OpContractCreate),
-		Requester:        fresh.Username,
-		RequesterContext: &actor,
-		TargetID:         fmt.Sprintf("ocs-subscriber:%s", imsi),
-		Summary:          fmt.Sprintf("Create OCS subscriber contract for %s", imsi),
-		Operation: &approval.ApprovalOperation{
-			ResourceType: "ocs_subscriber", ResourceID: imsi,
+	h.writeSubscriberAudit(r, audit.WriteAuditInput{
+		Action:   "CREATE",
+		Module:   "ocs-subscribers",
+		TargetID: fmt.Sprintf("ocs-subscriber:%s", imsi),
+		After:    doc,
+		Result:   "success",
+		Metadata: map[string]interface{}{
+			"operation": string(OpContractCreate),
+			"actorRole": fresh.NormalizedRole,
 		},
-		Payload: map[string]interface{}{
-			"schema":   "ocs-subscriber-v1",
-			"contract": doc,
-		},
-	})
-	if err != nil {
-		if awe, ok := err.(*approval.ApprovalWorkflowError); ok && awe.Committed {
-			response.JSON(w, awe.Status, awe.ErrorResponse())
-			return
-		}
-		response.Error(w, http.StatusInternalServerError, "Failed to create subscriber contract approval", "APPROVAL_CREATE_FAILED")
-		return
-	}
+	}, fresh)
 
-	response.JSON(w, http.StatusAccepted, map[string]any{
-		"outcome":  "approval_required",
-		"message":  "Approval required before OCS subscriber contract creation",
-		"approval": approvalDoc,
+	response.JSON(w, http.StatusCreated, map[string]any{
+		"outcome": "success",
+		"message": "operation completed",
+		"imsi":    imsi,
 	})
 }
 
@@ -277,75 +240,36 @@ func (h *SubscriberWriteHandler) UpdateTariff(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	if result.Decision == governance.Direct {
-		if err := h.repo.UpdateTariffBinding(r.Context(), imsi, planID); err != nil {
-			if err.Error() == "OCS_SUBSCRIBER_NOT_FOUND" {
-				response.Error(w, http.StatusNotFound, "OCS subscriber contract not found", "OCS_SUBSCRIBER_NOT_FOUND")
-				return
-			}
-			response.InternalError(w)
+	// Direct execution (Phase 5.7-A)
+	if err := h.repo.UpdateTariffBinding(r.Context(), imsi, planID); err != nil {
+		if err.Error() == "OCS_SUBSCRIBER_NOT_FOUND" {
+			response.Error(w, http.StatusNotFound, "OCS subscriber contract not found", "OCS_SUBSCRIBER_NOT_FOUND")
 			return
 		}
-
-		after := copyBson(before)
-		after["plan_id"] = planID
-
-		h.writeSubscriberAudit(r, audit.WriteAuditInput{
-			Action:   "UPDATE",
-			Module:   "ocs-subscribers",
-			TargetID: fmt.Sprintf("ocs-subscriber:%s", imsi),
-			Before:   before,
-			After:    after,
-			Result:   "success",
-			Metadata: map[string]interface{}{
-				"governanceMode":   "DIRECT_GOVERNED",
-				"approvalRequired": false,
-				"operation":        string(OpContractUpdate),
-				"actorRole":        fresh.NormalizedRole,
-			},
-		}, fresh)
-
-		response.JSON(w, http.StatusOK, map[string]any{
-			"outcome": "executed",
-			"message": "Tariff binding updated successfully",
-			"imsi":    imsi,
-		})
+		response.InternalError(w)
 		return
 	}
 
-	// APPROVAL
-	actor := approval.GovernanceActor{
-		Type: "user", UserID: fresh.UserID, Username: fresh.Username, Role: fresh.RawRole,
-	}
-	approvalDoc, err := h.approvalSvc.Create(r, actor, approval.CreateApprovalInput{
-		Action:           string(OpContractUpdate),
-		Requester:        fresh.Username,
-		RequesterContext: &actor,
-		TargetID:         fmt.Sprintf("ocs-subscriber:%s", imsi),
-		Summary:          fmt.Sprintf("Update tariff binding for OCS subscriber %s to %s", imsi, planID),
-		Operation: &approval.ApprovalOperation{
-			ResourceType: "ocs_subscriber", ResourceID: imsi,
-		},
-		Before: before,
-		Payload: map[string]interface{}{
-			"schema":  "ocs-subscriber-v1",
-			"imsi":    imsi,
-			"plan_id": planID,
-		},
-	})
-	if err != nil {
-		if awe, ok := err.(*approval.ApprovalWorkflowError); ok && awe.Committed {
-			response.JSON(w, awe.Status, awe.ErrorResponse())
-			return
-		}
-		response.Error(w, http.StatusInternalServerError, "Failed to create tariff binding approval", "APPROVAL_CREATE_FAILED")
-		return
-	}
+	after := copyBson(before)
+	after["plan_id"] = planID
 
-	response.JSON(w, http.StatusAccepted, map[string]any{
-		"outcome":  "approval_required",
-		"message":  "Approval required before tariff binding update",
-		"approval": approvalDoc,
+	h.writeSubscriberAudit(r, audit.WriteAuditInput{
+		Action:   "UPDATE",
+		Module:   "ocs-subscribers",
+		TargetID: fmt.Sprintf("ocs-subscriber:%s", imsi),
+		Before:   before,
+		After:    after,
+		Result:   "success",
+		Metadata: map[string]interface{}{
+			"operation": string(OpContractUpdate),
+			"actorRole": fresh.NormalizedRole,
+		},
+	}, fresh)
+
+	response.JSON(w, http.StatusOK, map[string]any{
+		"outcome": "success",
+		"message": "operation completed",
+		"imsi":    imsi,
 	})
 }
 
@@ -423,76 +347,36 @@ func (h *SubscriberWriteHandler) setContractStatus(w http.ResponseWriter, r *htt
 		return
 	}
 
-	if result.Decision == governance.Direct {
-		if err := h.repo.SetContractStatus(r.Context(), imsi, status); err != nil {
-			if err.Error() == "OCS_SUBSCRIBER_NOT_FOUND" {
-				response.Error(w, http.StatusNotFound, "OCS subscriber contract not found", "OCS_SUBSCRIBER_NOT_FOUND")
-				return
-			}
-			response.InternalError(w)
+	if err := h.repo.SetContractStatus(r.Context(), imsi, status); err != nil {
+		if err.Error() == "OCS_SUBSCRIBER_NOT_FOUND" {
+			response.Error(w, http.StatusNotFound, "OCS subscriber contract not found", "OCS_SUBSCRIBER_NOT_FOUND")
 			return
 		}
-
-		after := copyBson(before)
-		after["status"] = status
-
-		h.writeSubscriberAudit(r, audit.WriteAuditInput{
-			Action:   "UPDATE",
-			Module:   "ocs-subscribers",
-			TargetID: fmt.Sprintf("ocs-subscriber:%s", imsi),
-			Before:   before,
-			After:    after,
-			Result:   "success",
-			Metadata: map[string]interface{}{
-				"governanceMode":   "DIRECT_GOVERNED",
-				"approvalRequired": false,
-				"operation":        string(op),
-				"actorRole":        fresh.NormalizedRole,
-				"statusChange":     status,
-			},
-		}, fresh)
-
-		response.JSON(w, http.StatusOK, map[string]any{
-			"outcome": "executed",
-			"message": fmt.Sprintf("OCS subscriber contract %sd successfully", status),
-			"imsi":    imsi,
-		})
+		response.InternalError(w)
 		return
 	}
 
-	// APPROVAL
-	actor := approval.GovernanceActor{
-		Type: "user", UserID: fresh.UserID, Username: fresh.Username, Role: fresh.RawRole,
-	}
-	approvalDoc, err := h.approvalSvc.Create(r, actor, approval.CreateApprovalInput{
-		Action:           string(op),
-		Requester:        fresh.Username,
-		RequesterContext: &actor,
-		TargetID:         fmt.Sprintf("ocs-subscriber:%s", imsi),
-		Summary:          fmt.Sprintf("%s OCS subscriber contract %s", capitalizeStr(status), imsi),
-		Operation: &approval.ApprovalOperation{
-			ResourceType: "ocs_subscriber", ResourceID: imsi,
-		},
-		Before: before,
-		Payload: map[string]interface{}{
-			"schema":       "ocs-subscriber-v1",
-			"imsi":         imsi,
+	after := copyBson(before)
+	after["status"] = status
+
+	h.writeSubscriberAudit(r, audit.WriteAuditInput{
+		Action:   "UPDATE",
+		Module:   "ocs-subscribers",
+		TargetID: fmt.Sprintf("ocs-subscriber:%s", imsi),
+		Before:   before,
+		After:    after,
+		Result:   "success",
+		Metadata: map[string]interface{}{
+			"operation":    string(op),
+			"actorRole":    fresh.NormalizedRole,
 			"statusChange": status,
 		},
-	})
-	if err != nil {
-		if awe, ok := err.(*approval.ApprovalWorkflowError); ok && awe.Committed {
-			response.JSON(w, awe.Status, awe.ErrorResponse())
-			return
-		}
-		response.Error(w, http.StatusInternalServerError, "Failed to create subscriber contract approval", "APPROVAL_CREATE_FAILED")
-		return
-	}
+	}, fresh)
 
-	response.JSON(w, http.StatusAccepted, map[string]any{
-		"outcome":  "approval_required",
-		"message":  fmt.Sprintf("Approval required before OCS subscriber contract %s", status),
-		"approval": approvalDoc,
+	response.JSON(w, http.StatusOK, map[string]any{
+		"outcome": "success",
+		"message": "operation completed",
+		"imsi":    imsi,
 	})
 }
 
@@ -542,70 +426,31 @@ func (h *SubscriberWriteHandler) Terminate(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if result.Decision == governance.Direct {
-		if err := h.repo.TerminateContract(r.Context(), imsi); err != nil {
-			if err.Error() == "OCS_SUBSCRIBER_NOT_FOUND" {
-				response.Error(w, http.StatusNotFound, "OCS subscriber contract not found", "OCS_SUBSCRIBER_NOT_FOUND")
-				return
-			}
-			response.InternalError(w)
+	if err := h.repo.TerminateContract(r.Context(), imsi); err != nil {
+		if err.Error() == "OCS_SUBSCRIBER_NOT_FOUND" {
+			response.Error(w, http.StatusNotFound, "OCS subscriber contract not found", "OCS_SUBSCRIBER_NOT_FOUND")
 			return
 		}
-
-		h.writeSubscriberAudit(r, audit.WriteAuditInput{
-			Action:   "DELETE",
-			Module:   "ocs-subscribers",
-			TargetID: fmt.Sprintf("ocs-subscriber:%s", imsi),
-			Before:   before,
-			Result:   "success",
-			Metadata: map[string]interface{}{
-				"governanceMode":   "DIRECT_GOVERNED",
-				"approvalRequired": false,
-				"operation":        string(OpContractTerminate),
-				"actorRole":        fresh.NormalizedRole,
-			},
-		}, fresh)
-
-		response.JSON(w, http.StatusOK, map[string]any{
-			"outcome": "executed",
-			"message": "OCS subscriber contract terminated successfully",
-			"imsi":    imsi,
-		})
+		response.InternalError(w)
 		return
 	}
 
-	// APPROVAL
-	actor := approval.GovernanceActor{
-		Type: "user", UserID: fresh.UserID, Username: fresh.Username, Role: fresh.RawRole,
-	}
-	approvalDoc, err := h.approvalSvc.Create(r, actor, approval.CreateApprovalInput{
-		Action:           string(OpContractTerminate),
-		Requester:        fresh.Username,
-		RequesterContext: &actor,
-		TargetID:         fmt.Sprintf("ocs-subscriber:%s", imsi),
-		Summary:          fmt.Sprintf("Terminate OCS subscriber contract %s", imsi),
-		Operation: &approval.ApprovalOperation{
-			ResourceType: "ocs_subscriber", ResourceID: imsi,
+	h.writeSubscriberAudit(r, audit.WriteAuditInput{
+		Action:   "DELETE",
+		Module:   "ocs-subscribers",
+		TargetID: fmt.Sprintf("ocs-subscriber:%s", imsi),
+		Before:   before,
+		Result:   "success",
+		Metadata: map[string]interface{}{
+			"operation": string(OpContractTerminate),
+			"actorRole": fresh.NormalizedRole,
 		},
-		Before: before,
-		Payload: map[string]interface{}{
-			"schema": "ocs-subscriber-v1",
-			"imsi":   imsi,
-		},
-	})
-	if err != nil {
-		if awe, ok := err.(*approval.ApprovalWorkflowError); ok && awe.Committed {
-			response.JSON(w, awe.Status, awe.ErrorResponse())
-			return
-		}
-		response.Error(w, http.StatusInternalServerError, "Failed to create subscriber termination approval", "APPROVAL_CREATE_FAILED")
-		return
-	}
+	}, fresh)
 
-	response.JSON(w, http.StatusAccepted, map[string]any{
-		"outcome":  "approval_required",
-		"message":  "Approval required before OCS subscriber contract termination",
-		"approval": approvalDoc,
+	response.JSON(w, http.StatusOK, map[string]any{
+		"outcome": "success",
+		"message": "operation completed",
+		"imsi":    imsi,
 	})
 }
 

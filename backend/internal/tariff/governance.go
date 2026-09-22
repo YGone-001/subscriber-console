@@ -12,23 +12,23 @@ const (
 )
 
 // tariffRegistry is the tariff-domain governance registry.
-// Derived from Node ocsGovernanceRegistry.ts exactly.
+// Phase 5.7-A: All authorized operations execute directly.
 var tariffRegistry = map[TariffOperation]governance.OperationDefinition{
 	OpCreate: {
 		Operation:         string(OpCreate),
-		BaseMode:          governance.Approval,
+		BaseMode:          governance.Direct,
 		HumanExecutable:   true,
 		ExecutorAvailable: true,
 	},
 	OpUpdate: {
 		Operation:         string(OpUpdate),
-		BaseMode:          governance.Approval,
+		BaseMode:          governance.Direct,
 		HumanExecutable:   true,
 		ExecutorAvailable: true,
 	},
 	OpDelete: {
 		Operation:         string(OpDelete),
-		BaseMode:          governance.Approval,
+		BaseMode:          governance.Direct,
 		HumanExecutable:   true,
 		ExecutorAvailable: true,
 	},

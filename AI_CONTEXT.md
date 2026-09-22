@@ -25,6 +25,13 @@
 2. **【接口向前兼容性】**：每次更新源码前，必须全面回顾涉及模块的上下文。绝对不能随意删除已有函数接口！如需调整，必须选择更新原接口或创建新接口。功能模块的升级必须紧密依赖现有的最新内容框架与源码结构进行，严禁“去头掐尾”导致旧功能断裂。
 3. **【前端表达规范】**：在输出修改说明、更新日志或注释时，涉及前端开发的变动，严禁使用“说明出现在网页前端展示上”这类非专业表述，必须采用规范的工程化技术术语。
 
+### 0.2 操作模式 (Operation Model - Phase 5.7-A)
+
+Approval workflow removed from business execution path. Authorization and operation logging remain.
+- Authorized users execute permitted operations directly (Direct Execution).
+- Zero approval records created on business operations (`app_approvals` count == 0).
+- Strict audit logging to `app_audit_logs`, RBAC capability gates, fresh actor revalidation, and CAS concurrency control remain active.
+
 ---
 
 ## 1. Repository

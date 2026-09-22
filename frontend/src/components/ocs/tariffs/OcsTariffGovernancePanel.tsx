@@ -19,7 +19,6 @@ import {
 import { useI18n } from "@/components/I18nProvider";
 import OcsPageShell from "../OcsPageShell";
 import OcsStatusBadge from "../common/OcsStatusBadge";
-import GovernanceBadge from "../common/GovernanceBadge";
 import ConfirmDialog from "../common/ConfirmDialog";
 import TariffPlanModal from "./TariffPlanModal";
 import type { TariffPlan } from "@/lib/api/ocs";
@@ -77,14 +76,9 @@ export default function OcsTariffGovernancePanel() {
 
       const body = await res.json();
       if (res.ok || res.status === 202) {
-        const isApproval = body.outcome === "approval_required";
-        const msg = isApproval
-          ? t("ocs_tariff_approval_created")
-          : t("ocs_tariff_action_success");
         setActionFeedback({
           type: "success",
-          message: msg,
-          approvalId: body.approval_id || body.approvalId,
+          message: t("ocs_tariff_action_success"),
         });
         refresh();
       } else {
@@ -164,11 +158,6 @@ export default function OcsTariffGovernancePanel() {
             {actionFeedback && (
               <div className={actionFeedback.type === "success" ? "ocs-feedback-success" : "ocs-feedback-error"}>
                 <span>{actionFeedback.message}</span>
-                {actionFeedback.approvalId && (
-                  <Link href={`/approvals?id=${encodeURIComponent(actionFeedback.approvalId)}`} className="ocs-feedback-link">
-                    {t("nav_approvals")} ({actionFeedback.approvalId}) →
-                  </Link>
-                )}
               </div>
             )}
             <div className="ocs-table-wrap">
@@ -183,13 +172,12 @@ export default function OcsTariffGovernancePanel() {
                     <th data-column-priority="important">{t("ocs_tariff_col_subscribers")}</th>
                     <th data-column-priority="supplementary">{t("ocs_tariff_governance_col_updated_by")}</th>
                     <th data-column-priority="supplementary">{t("ocs_tariff_col_updated")}</th>
-                    <th data-column-priority="essential">{t("ocs_tariff_governance_col_governance")}</th>
                     <th data-column-priority="essential">{t("ocs_tariff_col_actions")}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {plans.length === 0 && !loading && (
-                    <tr><td colSpan={9} className="ocs-empty">{t("no_data")}</td></tr>
+                    <tr><td colSpan={8} className="ocs-empty">{t("no_data")}</td></tr>
                   )}
                   {plans.map((plan) => (
                     <tr key={plan.plan_id}>
@@ -200,7 +188,6 @@ export default function OcsTariffGovernancePanel() {
                       <td data-label={t("ocs_tariff_col_subscribers")} data-column-priority="important">{plan.subscriberCount}</td>
                       <td data-label={t("ocs_tariff_governance_col_updated_by")} data-column-priority="supplementary">{plan.updated_by || "—"}</td>
                       <td data-label={t("ocs_tariff_col_updated")} data-column-priority="supplementary">{plan.updated_at ? new Date(plan.updated_at).toLocaleDateString() : "—"}</td>
-                      <td data-label={t("ocs_tariff_governance_col_governance")} data-column-priority="essential"><GovernanceBadge compact /></td>
                       <td data-label={t("ocs_tariff_col_actions")} data-column-priority="essential">
                         <div className="ocs-action-group">
                           <Link
@@ -281,7 +268,6 @@ export default function OcsTariffGovernancePanel() {
             setActionFeedback({
               type: "success",
               message: result.message,
-              approvalId: result.approvalId,
             });
             refresh();
           }}

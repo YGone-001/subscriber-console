@@ -36,6 +36,13 @@ xCloud 是独立的电信运营与核心网运维平台，不是 xCloud 的附�
 - 系统健康
 - 运营分析
 
+### 1.1 运维操作模式 (Operation Model - Phase 5.7-A)
+
+Approval workflow removed from business execution path. Authorization and operation logging remain.
+- 授权用户直接执行业务变更操作，即时生效（Direct Execution）。
+- 移除阻塞式业务审批工作流，业务操作不再生成 `app_approvals` 记录。
+- 严格保留 RBAC 权限检查、操作主体重新鉴权（Fresh Actor Revalidation）、严格操作审计日志（Operation Log / `app_audit_logs`）及 CAS 并发冲突保护。
+
 长期演进：
 - EPC / 5GC / IMS 网元管理
 - 信令追踪、HEP/HOMER

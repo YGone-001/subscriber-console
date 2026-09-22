@@ -60,15 +60,15 @@ func TestEvaluateOperation_GovernanceRoles(t *testing.T) {
 		t.Errorf("expected super_admin to get DIRECT, got %+v", resSuperAdmin)
 	}
 
-	// Adjust: operator / ops_admin -> APPROVAL
+	// Adjust: operator / ops_admin -> DIRECT (Phase 5.7-A)
 	resOperator := EvaluateOperation(OpAdjust, "operator")
-	if resOperator.Decision != governance.Approval || !resOperator.ApprovalRequired {
-		t.Errorf("expected operator to get APPROVAL, got %+v", resOperator)
+	if resOperator.Decision != governance.Direct || resOperator.ApprovalRequired {
+		t.Errorf("expected operator to get DIRECT, got %+v", resOperator)
 	}
 
 	resOpsAdmin := EvaluateOperation(OpAdjust, "ops_admin")
-	if resOpsAdmin.Decision != governance.Approval || !resOpsAdmin.ApprovalRequired {
-		t.Errorf("expected ops_admin to get APPROVAL, got %+v", resOpsAdmin)
+	if resOpsAdmin.Decision != governance.Direct || resOpsAdmin.ApprovalRequired {
+		t.Errorf("expected ops_admin to get DIRECT, got %+v", resOpsAdmin)
 	}
 
 	// Reset: always DISABLED, even for super_admin

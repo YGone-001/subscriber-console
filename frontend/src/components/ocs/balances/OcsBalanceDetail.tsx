@@ -100,11 +100,6 @@ export default function OcsBalanceDetail({ imsi }: OcsBalanceDetailProps) {
           style={{ marginBottom: "1rem" }}
         >
           <span>{feedback.message}</span>
-          {feedback.approvalId && (
-            <Link href={`/approvals?id=${encodeURIComponent(feedback.approvalId)}`} className="ocs-feedback-link">
-              {t("nav_approvals")} ({feedback.approvalId}) →
-            </Link>
-          )}
         </div>
       )}
 

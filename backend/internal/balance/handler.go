@@ -241,178 +241,67 @@ func (h *Handler) Adjust(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Compute target after state for payload/audit
-	delta := body.Amount
-	if body.Operation == "debit" {
-		delta = -body.Amount
-	}
-	after := *current
-	switch body.Bucket {
-	case "data":
-		after.DataTotal += delta
-		after.DataAvailable += delta
-	case "voice":
-		after.VoiceTotal += delta
-		after.VoiceAvailable += delta
-	case "sms":
-		after.SmsTotal += delta
-		after.SmsAvailable += delta
-	}
-	after.Version = current.Version + 1
-
-	// ── DIRECT GOVERNANCE (root, super_admin) ────────────────────────────────
-	if eval.Decision == governance.Direct {
-		res, err := h.repo.AdjustBalanceCAS(r.Context(), imsi, expectedVersion, body.Bucket, body.Operation, body.Amount)
-		if err != nil {
-			if err == ErrPreconditionChanged {
-				response.Error(w, http.StatusConflict, "Balance was modified concurrently; please retry", "BALANCE_PRECONDITION_CHANGED")
-				return
-			}
-			if err == ErrInsufficientBalance {
-				response.Error(w, http.StatusBadRequest, "Insufficient balance", "INSUFFICIENT_BALANCE")
-				return
-			}
-			if err == ErrInvariantViolation {
-				response.Error(w, http.StatusConflict, "Balance record violates invariants", "BALANCE_INVARIANT_VIOLATION")
-				return
-			}
-			response.InternalError(w)
-			return
-		}
-
-		auditErr := h.writeStrictAudit(r, audit.WriteAuditInput{
-			Action:   "BALANCE_ADJUST",
-			Module:   "ocs",
-			TargetID: fmt.Sprintf("balance:%s", imsi),
-			Resource: &audit.ResourceInput{
-				Type: "ocs_balance",
-				ID:   imsi,
-				Name: imsi,
-			},
-			Before: res.Before,
-			After:  res.After,
-			Result: "success",
-			Reason: body.Reason,
-			Metadata: map[string]interface{}{
-				"governanceMode":   "DIRECT_GOVERNED",
-				"approvalRequired": false,
-				"operation":        body.Operation,
-				"bucket":           body.Bucket,
-				"amount":           body.Amount,
-				"ticketId":         body.TicketID,
-				"imsi":             imsi,
-				"beforeVersion":    res.Before.Version,
-				"afterVersion":     res.After.Version,
-				"actorRole":        fresh.NormalizedRole,
-			},
-		}, fresh)
-		if auditErr != nil {
-			response.JSON(w, http.StatusServiceUnavailable, map[string]any{
-				"error":     "AUDIT_UNAVAILABLE",
-				"code":      "AUDIT_UNAVAILABLE",
-				"message":   "Balance adjustment committed but strict audit persistence failed",
-				"committed": true,
-				"imsi":      imsi,
-				"version":   res.After.Version,
-			})
-			return
-		}
-
-		response.JSON(w, http.StatusOK, map[string]any{
-			"ok":      true,
-			"outcome": "executed",
-			"message": "Balance adjusted successfully",
-			"imsi":    imsi,
-			"balance": res.After,
-		})
-		return
-	}
-
-	// ── APPROVAL GOVERNANCE (ops_admin, operator) ────────────────────────────
-	actor := approval.GovernanceActor{
-		Type:     "user",
-		UserID:   fresh.UserID,
-		Username: fresh.Username,
-		Role:     fresh.RawRole,
-	}
-
-	beforeSnap := current.SnapshotForBucket(body.Bucket)
-	expectedAfterSnap := ExpectedAfterForSnapshot(beforeSnap, body.Operation, body.Amount)
-	adjID := audit.GenerateUUID()
-
-	intentMap := map[string]interface{}{
-		"bucket":    body.Bucket,
-		"operation": body.Operation,
-		"amount":    body.Amount,
-		"reason":    body.Reason,
-	}
-	if body.TicketID != "" {
-		intentMap["ticketId"] = body.TicketID
-	}
-
-	beforeMap := map[string]interface{}{
-		"imsi":           beforeSnap.IMSI,
-		"bucket":         beforeSnap.Bucket,
-		"total":          beforeSnap.Total,
-		"used":           beforeSnap.Used,
-		"reserved":       beforeSnap.Reserved,
-		"available":      beforeSnap.Available,
-		"version":        beforeSnap.Version,
-		"versionPresent": beforeSnap.VersionPresent,
-	}
-
-	expectedAfterMap := map[string]interface{}{
-		"imsi":      expectedAfterSnap.IMSI,
-		"bucket":    expectedAfterSnap.Bucket,
-		"total":     expectedAfterSnap.Total,
-		"used":      expectedAfterSnap.Used,
-		"reserved":  expectedAfterSnap.Reserved,
-		"available": expectedAfterSnap.Available,
-	}
-
-	frozenPayload := map[string]interface{}{
-		"schema":        "ocs-balance-adjustment-v1",
-		"adjustmentId":  adjID,
-		"imsi":          imsi,
-		"intent":        intentMap,
-		"before":        beforeMap,
-		"expectedAfter": expectedAfterMap,
-	}
-
-	summary := fmt.Sprintf("Adjust %s balance for %s: %s %d", body.Bucket, imsi, body.Operation, body.Amount)
-	approvalDoc, err := h.approvalSvc.Create(r, actor, approval.CreateApprovalInput{
-		Action:           "TRAFFIC_ADJUSTMENT",
-		Requester:        fresh.Username,
-		RequesterContext: &actor,
-		TargetID:         fmt.Sprintf("balance:%s", imsi),
-		Summary:          summary,
-		Title:            summary,
-		Reason:           &body.Reason,
-		TicketID:         body.TicketID,
-		Operation: &approval.ApprovalOperation{
-			ResourceType: "ocs_balance",
-			ResourceID:   imsi,
-		},
-		Before:  beforeMap,
-		After:   expectedAfterMap,
-		Payload: frozenPayload,
-	})
+	// Direct execution (Phase 5.7-A)
+	res, err := h.repo.AdjustBalanceCAS(r.Context(), imsi, expectedVersion, body.Bucket, body.Operation, body.Amount)
 	if err != nil {
-		if awe, ok := err.(*approval.ApprovalWorkflowError); ok && awe.Committed {
-			response.JSON(w, awe.Status, awe.ErrorResponse())
+		if err == ErrPreconditionChanged {
+			response.Error(w, http.StatusConflict, "Balance was modified concurrently; please retry", "BALANCE_PRECONDITION_CHANGED")
+			return
+		}
+		if err == ErrInsufficientBalance {
+			response.Error(w, http.StatusBadRequest, "Insufficient balance", "INSUFFICIENT_BALANCE")
+			return
+		}
+		if err == ErrInvariantViolation {
+			response.Error(w, http.StatusConflict, "Balance record violates invariants", "BALANCE_INVARIANT_VIOLATION")
 			return
 		}
 		response.InternalError(w)
 		return
 	}
 
-	response.JSON(w, http.StatusAccepted, map[string]any{
-		"ok":          true,
-		"outcome":     "approval_required",
-		"approvalId":  approvalDoc.ID,
-		"approval_id": approvalDoc.ID,
-		"message":     "Approval request created",
-		"imsi":        imsi,
+	auditErr := h.writeStrictAudit(r, audit.WriteAuditInput{
+		Action:   "BALANCE_ADJUST",
+		Module:   "ocs",
+		TargetID: fmt.Sprintf("balance:%s", imsi),
+		Resource: &audit.ResourceInput{
+			Type: "ocs_balance",
+			ID:   imsi,
+			Name: imsi,
+		},
+		Before: res.Before,
+		After:  res.After,
+		Result: "success",
+		Reason: body.Reason,
+		Metadata: map[string]interface{}{
+			"operation":     body.Operation,
+			"bucket":        body.Bucket,
+			"amount":        body.Amount,
+			"ticketId":      body.TicketID,
+			"imsi":          imsi,
+			"beforeVersion": res.Before.Version,
+			"afterVersion":  res.After.Version,
+			"actorRole":     fresh.NormalizedRole,
+		},
+	}, fresh)
+	if auditErr != nil {
+		response.JSON(w, http.StatusServiceUnavailable, map[string]any{
+			"error":     "AUDIT_UNAVAILABLE",
+			"code":      "AUDIT_UNAVAILABLE",
+			"message":   "Balance adjustment committed but strict audit persistence failed",
+			"committed": true,
+			"imsi":      imsi,
+			"version":   res.After.Version,
+		})
+		return
+	}
+
+	response.JSON(w, http.StatusOK, map[string]any{
+		"ok":      true,
+		"outcome": "success",
+		"message": "operation completed",
+		"imsi":    imsi,
+		"balance": res.After,
 	})
 }
 

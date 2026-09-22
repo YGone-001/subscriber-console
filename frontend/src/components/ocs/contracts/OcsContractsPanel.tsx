@@ -17,7 +17,6 @@ import { useI18n } from "@/components/I18nProvider";
 import { DataTablePagination } from "@/components/ui/DataTablePagination";
 import OcsPageShell from "../OcsPageShell";
 import OcsStatusBadge from "../common/OcsStatusBadge";
-import GovernanceBadge from "../common/GovernanceBadge";
 import ConfirmDialog from "../common/ConfirmDialog";
 
 interface OcsContractRecord {
@@ -88,14 +87,9 @@ export default function OcsContractsPanel() {
       if (!res.ok) {
         setFeedback({ type: "error", message: data.message || data.error || `Action failed (${res.status})` });
       } else {
-        const isApproval = data.outcome === "approval_required";
-        const msg = isApproval
-          ? t("ocs_contract_approval_created")
-          : data.message || t("ocs_contract_action_success");
         setFeedback({
           type: "success",
-          message: msg,
-          approvalId: data.approval_id || data.approvalId,
+          message: data.message || t("ocs_contract_action_success"),
         });
         refresh();
       }
@@ -182,11 +176,6 @@ export default function OcsContractsPanel() {
   const feedbackBanner = feedback && (
     <div className={`ocs-feedback-${feedback.type}`}>
       <span>{feedback.message}</span>
-      {feedback.approvalId && (
-        <Link href={`/approvals?id=${encodeURIComponent(feedback.approvalId)}`} className="ocs-feedback-link">
-          {t("nav_approvals")} ({feedback.approvalId}) →
-        </Link>
-      )}
     </div>
   );
 
@@ -214,7 +203,6 @@ export default function OcsContractsPanel() {
           <th data-column-priority="essential" className="ocs-th-sortable" aria-sort={getAriaSort("status")} onClick={() => toggleSort("status")}>
             {t("ocs_contract_col_billing_status")} {sortField === "status" ? (sortOrder === "asc" ? "↑" : "↓") : ""}
           </th>
-          <th data-column-priority="essential">{t("ocs_contract_col_governance")}</th>
           <th data-column-priority="supplementary">{t("ocs_contract_col_created")}</th>
           <th data-column-priority="supplementary" className="ocs-th-sortable" aria-sort={getAriaSort("updated_at")} onClick={() => toggleSort("updated_at")}>
             {t("ocs_contract_col_last_change")} {sortField === "updated_at" ? (sortOrder === "asc" ? "↑" : "↓") : ""}
@@ -224,11 +212,11 @@ export default function OcsContractsPanel() {
       </thead>
       <tbody>
         {loading ? (
-          <tr><td colSpan={8} className="ocs-empty-cell"><div className="ocs-loading">{t("loading") || "加载中..."}</div></td></tr>
+          <tr><td colSpan={7} className="ocs-empty-cell"><div className="ocs-loading">{t("loading") || "加载中..."}</div></td></tr>
         ) : error ? (
-          <tr><td colSpan={8} className="ocs-empty-cell ocs-error-cell"><div style={{ color: "var(--status-danger)" }}>{error?.message || "加载失败，请检查网络或后端服务"}</div></td></tr>
+          <tr><td colSpan={7} className="ocs-empty-cell ocs-error-cell"><div style={{ color: "var(--status-danger)" }}>{error?.message || "加载失败，请检查网络或后端服务"}</div></td></tr>
         ) : records.length === 0 ? (
-          <tr><td colSpan={8} className="ocs-empty-cell">{t("no_data")}</td></tr>
+          <tr><td colSpan={7} className="ocs-empty-cell">{t("no_data")}</td></tr>
         ) : (
           records.map((r) => (
             <tr key={r.id}>
@@ -236,7 +224,6 @@ export default function OcsContractsPanel() {
               <td data-label={t("ocs_contract_col_msisdn")} data-column-priority="essential">{r.msisdn || "—"}</td>
               <td data-label={t("ocs_contract_col_tariff")} data-column-priority="essential"><span className="ocs-plan-badge">{r.plan_id}</span></td>
               <td data-label={t("ocs_contract_col_billing_status")} data-column-priority="essential"><OcsStatusBadge status={r.status} /></td>
-              <td data-label={t("ocs_contract_col_governance")} data-column-priority="essential"><GovernanceBadge compact /></td>
               <td data-label={t("ocs_contract_col_created")} data-column-priority="supplementary" className="ocs-time-cell">{formatTime(r.created_at)}</td>
               <td data-label={t("ocs_contract_col_last_change")} data-column-priority="supplementary" className="ocs-time-cell">{formatTime(r.updated_at)}</td>
               <td data-label={t("actions")} data-column-priority="essential">

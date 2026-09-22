@@ -268,22 +268,40 @@ try {
     recordCheck('tariff.direct_creation_super_admin');
   }
 
-  // 1.2 Approval Plan Creation by operator
+  // 1.2 Direct Plan Creation by operator
   {
     const res = await requestViaProxy('/api/tariff-plans', {
       method: 'POST',
       token: tokens.operator,
       body: {
-        plan_id: 'plan_suite_approval',
-        name: 'Suite Approval Plan',
-        description: 'Testing approval tariff creation',
+        plan_id: 'plan_suite_operator',
+        name: 'Suite Operator Plan',
+        description: 'Testing direct operator tariff creation',
+        quota_per_grant: 52428800,
+        validity_time: 43200,
+        volume_threshold: 5242880,
       },
     });
-    assert.equal(res.status, 202, `Expected 202 on operator plan creation, got ${res.status}`);
-    assert.equal(res.data?.outcome, 'approval_required');
-    const doc = await xcloud.collection('ocs_tariff_plans').findOne({ plan_id: 'plan_suite_approval' });
-    assert.equal(doc, null, 'Plan must NOT be created before approval execution');
-    recordCheck('tariff.approval_required_operator');
+    assert([200, 201].includes(res.status), `Expected 200/201 on operator plan creation, got ${res.status}`);
+    assert(['success', 'executed'].includes(res.data?.outcome));
+    const doc = await xcloud.collection('ocs_tariff_plans').findOne({ plan_id: 'plan_suite_operator' });
+    assert(doc, 'Plan must be created directly in MongoDB');
+    assert.equal(doc.name, 'Suite Operator Plan');
+    recordCheck('tariff.direct_creation_operator');
+  }
+
+  // 1.2.1 Authorization boundary for viewer
+  {
+    const res = await requestViaProxy('/api/tariff-plans', {
+      method: 'POST',
+      token: tokens.viewer,
+      body: {
+        plan_id: 'plan_suite_viewer',
+        name: 'Viewer Plan',
+      },
+    });
+    assert.equal(res.status, 403, `Viewer must receive 403 on plan creation, got ${res.status}`);
+    recordCheck('tariff.authorization_boundary_viewer_forbidden');
   }
 
   // 1.3 Plan Update (Direct)
@@ -395,7 +413,7 @@ try {
     recordCheck('contract.direct_creation_super_admin');
   }
 
-  // 2.2 Approval Contract Creation by operator
+  // 2.2 Direct Contract Creation by operator
   {
     const res = await requestViaProxy('/api/ocs/subscribers', {
       method: 'POST',
@@ -406,11 +424,27 @@ try {
         plan_id: 'plan_suite_direct',
       },
     });
-    assert.equal(res.status, 202);
-    assert.equal(res.data?.outcome, 'approval_required');
+    assert([200, 201].includes(res.status), `Expected 200/201 on operator contract creation, got ${res.status}`);
+    assert(['success', 'executed'].includes(res.data?.outcome));
     const doc = await xcloud.collection('ocs_subscribers').findOne({ imsi: '460020000009902' });
-    assert.equal(doc, null, 'Contract must not be created before approval');
-    recordCheck('contract.approval_required_operator');
+    assert(doc, 'Contract must be created directly without approval');
+    assert.equal(doc.status, 'active');
+    recordCheck('contract.direct_creation_operator');
+  }
+
+  // 2.2.1 Authorization boundary for viewer
+  {
+    const res = await requestViaProxy('/api/ocs/subscribers', {
+      method: 'POST',
+      token: tokens.viewer,
+      body: {
+        imsi: '460020000009903',
+        msisdn: '8613800009903',
+        plan_id: 'plan_suite_direct',
+      },
+    });
+    assert.equal(res.status, 403, `Viewer must receive 403 on contract creation, got ${res.status}`);
+    recordCheck('contract.authorization_boundary_viewer_forbidden');
   }
 
   // 2.3 Contract Suspend and Resume
@@ -499,7 +533,7 @@ try {
       },
     });
     assert.equal(res.status, 200);
-    assert.equal(res.data?.outcome, 'executed');
+    assert(['success', 'executed'].includes(res.data?.outcome));
     const doc = await xcloud.collection('ocs_balances').findOne({ imsi: imsiBalance });
     assert.equal(numberValue(doc.version), 2);
     assert.equal(numberValue(doc.data_total), 1073741824 + 52428800);
@@ -507,7 +541,7 @@ try {
     recordCheck('balance.direct_adjustment_super_admin');
   }
 
-  // 3.2 Approval Balance Adjustment (operator)
+  // 3.2 Direct Balance Adjustment (operator)
   {
     const res = await requestViaProxy(`/api/ocs/balances/${imsiBalance}/adjust`, {
       method: 'POST',
@@ -519,11 +553,29 @@ try {
         reason: 'Operator voice quota compensation',
       },
     });
-    assert.equal(res.status, 202);
-    assert.equal(res.data?.outcome, 'approval_required');
+    assert.equal(res.status, 200, `Expected 200 on operator balance adjustment, got ${res.status}`);
+    assert(['success', 'executed'].includes(res.data?.outcome));
     const doc = await xcloud.collection('ocs_balances').findOne({ imsi: imsiBalance });
-    assert.equal(numberValue(doc.version), 2, 'Version must not increment on approval request');
-    recordCheck('balance.approval_adjustment_operator');
+    assert.equal(numberValue(doc.version), 3, 'Version must increment to 3 on direct operator adjustment');
+    assert.equal(numberValue(doc.voice_total), 3600 + 600);
+    assert.equal(numberValue(doc.voice_available), 3480 + 600);
+    recordCheck('balance.direct_adjustment_operator');
+  }
+
+  // 3.2.1 Authorization boundary for viewer
+  {
+    const res = await requestViaProxy(`/api/ocs/balances/${imsiBalance}/adjust`, {
+      method: 'POST',
+      token: tokens.viewer,
+      body: {
+        bucket: 'voice',
+        operation: 'credit',
+        amount: 60,
+        reason: 'Viewer attempted adjustment',
+      },
+    });
+    assert.equal(res.status, 403, `Viewer must receive 403 on balance adjustment, got ${res.status}`);
+    recordCheck('balance.authorization_boundary_viewer_forbidden');
   }
 
   // 3.3 Balance Reset Disabled Across All 6 Roles
@@ -538,7 +590,7 @@ try {
       assert.equal(res.data?.error || res.data?.code, 'BALANCE_RESET_DISABLED');
     }
     const doc = await xcloud.collection('ocs_balances').findOne({ imsi: imsiBalance });
-    assert.equal(numberValue(doc.version), 2, 'Balance reset must never mutate balances');
+    assert.equal(numberValue(doc.version), 3, 'Balance reset must never mutate balances');
     recordCheck('balance.reset_permanently_disabled_6_roles');
   }
 
@@ -550,7 +602,7 @@ try {
     });
     assert.equal(res.status, 200);
     assert.equal(res.data?.balance?.imsi, imsiBalance);
-    assert.equal(res.data?.balance?.version, 2);
+    assert.equal(res.data?.balance?.version, 3);
     assert(res.data?.balance?.data_total > 0);
     assert(res.data?.balance?.voice_total > 0);
     assert(res.data?.balance?.sms_total > 0);
@@ -570,6 +622,16 @@ try {
   const nonGoRoutes = CUTOVER_TABLE.filter((r) => r.owner !== 'go');
   assert.equal(nonGoRoutes.length, 0, `All cutover routes must be owned by Go`);
   recordCheck('invariants.all_cutover_routes_owned_by_go');
+
+  // 4.3 Zero approval documents created in business operations
+  const approvalsCount = await app.collection('app_approvals').countDocuments();
+  assert.equal(approvalsCount, 0, `Zero approval documents should be created in direct operation model, found ${approvalsCount}`);
+  recordCheck('invariants.zero_approval_documents_created');
+
+  // 4.4 Operation logs written to app_audit_logs
+  const auditCount = await app.collection('app_audit_logs').countDocuments();
+  assert(auditCount > 0, `Audit logs must be written on direct execution, found ${auditCount}`);
+  recordCheck('invariants.operation_logs_recorded_in_audit');
 
   console.log(`\n========================================`);
   console.log(`OCS MANAGEMENT SUITE PASSED: ${checks.length} assertions verified`);

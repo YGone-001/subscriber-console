@@ -92,18 +92,14 @@ export default function TariffPlanModal({
       });
 
       const data = await res.json();
-      if (!res.ok && res.status !== 202) {
+      if (!res.ok) {
         setError(data.error || data.message || t("ocs_tariff_action_failed"));
         return;
       }
 
-      const isApproval = data.outcome === "approval_required" || res.status === 202;
-      const msg = isApproval ? t("ocs_tariff_approval_created") : t("ocs_tariff_action_success");
-
       onSuccess({
-        outcome: data.outcome || "executed",
-        message: msg,
-        approvalId: data.approval_id || data.approvalId,
+        outcome: data.outcome || "success",
+        message: t("ocs_tariff_action_success"),
       });
       onClose();
     } catch {

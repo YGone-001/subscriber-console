@@ -21,7 +21,7 @@ test('AnalyticsCockpit enforces platform overview and does NOT mount runtime tel
   assert.match(analyticsCockpitSource, /TariffPlanDistributionChart/);
   assert.match(analyticsCockpitSource, /WorkbenchPanel/);
   assert.match(analyticsCockpitSource, /KpiStrip/);
-  assert.match(analyticsCockpitSource, /analytics-ocs-grid/);
+  assert.match(analyticsCockpitSource, /(?:analytics-ocs-grid|OcsResourceStrip)/);
   assert.match(analyticsCockpitSource, /analytics-chart-grid/);
 });
 

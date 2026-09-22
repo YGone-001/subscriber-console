@@ -78,10 +78,7 @@ export default function OcsTariffsPanel() {
 
       const body = await res.json();
       if (res.ok || res.status === 202) {
-        const msg = body.outcome === "approval_required"
-          ? t("ocs_tariff_approval_created")
-          : t("ocs_tariff_action_success");
-        setActionFeedback({ type: "success", message: msg });
+        setActionFeedback({ type: "success", message: t("ocs_tariff_action_success") });
         refresh();
       } else {
         setActionFeedback({ type: "error", message: body.error || t("ocs_tariff_action_failed") });
