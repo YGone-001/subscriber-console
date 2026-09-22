@@ -31,16 +31,19 @@ export default function SkeletonDashboard() {
         </div>
       </div>
 
-      {/* OCS grid skeleton */}
-      <div className="analytics-ocs-grid">
-        <div className="analytics-panel">
-          <div className="skeleton-loader analytics-skeleton-panel-title" />
-          <div className="skeleton-loader analytics-skeleton-panel-body" />
-        </div>
-        <div className="analytics-panel">
-          <div className="skeleton-loader analytics-skeleton-panel-title" />
-          <div className="skeleton-loader analytics-skeleton-panel-body" />
-        </div>
+      {/* OCS Resource Strip skeleton — 4 columns */}
+      <div className="ocs-resource-strip">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <div className="ocs-res-cell" key={index} style={{ pointerEvents: "none" }}>
+            <div className="ocs-res-head">
+              <div className="skeleton-loader" style={{ width: 22, height: 22, borderRadius: "var(--ref-radius-compact)" }} />
+              <div className="skeleton-loader" style={{ width: "55%", height: 10, borderRadius: "var(--ref-radius-micro)" }} />
+            </div>
+            <div className="skeleton-loader" style={{ width: "60%", height: 18, borderRadius: "var(--ref-radius-micro)", marginTop: 2 }} />
+            <div className="skeleton-loader" style={{ width: "100%", height: 4, borderRadius: "var(--ref-radius-pill)", marginTop: 4 }} />
+            <div className="skeleton-loader" style={{ width: "75%", height: 8, borderRadius: "var(--ref-radius-micro)", marginTop: 2 }} />
+          </div>
+        ))}
       </div>
 
       {/* Charts skeleton */}
