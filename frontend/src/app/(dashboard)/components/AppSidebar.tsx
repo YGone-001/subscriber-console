@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { useAuth } from "@/hooks/useAuth";
+import { prefetchNavigationData } from "@/lib/navigationPrefetch";
 import { getAccessibleNavigationRoutes, routeMatchesPath, type NavigationGroup } from "@/lib/navigationRoutes";
 
 type NavItem = {
@@ -193,6 +194,9 @@ export default function AppSidebar({ sidebarOpen, setSidebarOpen, isMobileShell 
                             href={child.path}
                             className={`${isChildActive ? "sidebar-link active" : "sidebar-link"} child`}
                             aria-current={isChildActive ? "page" : undefined}
+                            onMouseEnter={() => prefetchNavigationData(child.path)}
+                            onFocus={() => prefetchNavigationData(child.path)}
+                            onPointerDown={() => prefetchNavigationData(child.path)}
                             onClick={handleNavigate}
                           >
                             <span className="sidebar-active-bar" />
@@ -213,6 +217,9 @@ export default function AppSidebar({ sidebarOpen, setSidebarOpen, isMobileShell 
                   href={item.path}
                   className={isActive ? "sidebar-link active" : "sidebar-link"}
                   aria-current={isActive ? "page" : undefined}
+                  onMouseEnter={() => prefetchNavigationData(item.path)}
+                  onFocus={() => prefetchNavigationData(item.path)}
+                  onPointerDown={() => prefetchNavigationData(item.path)}
                   onClick={handleNavigate}
                 >
                   <span className="sidebar-active-bar" />

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { X, Pin, MoreHorizontal, ChevronLeft, ChevronRight } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { useAuth } from "@/hooks/useAuth";
+import { prefetchNavigationData } from "@/lib/navigationPrefetch";
 import {
   canAccessNavigationRoute,
   getNavigationRoute,
@@ -221,6 +222,9 @@ export default function NavigationTabBar() {
                 className={`nav-tab-link ${tab.isPinned ? "pinned" : ""}`}
                 aria-current={isActive ? "page" : undefined}
                 title={t(tab.labelKey)}
+                onMouseEnter={() => prefetchNavigationData(tab.path)}
+                onFocus={() => prefetchNavigationData(tab.path)}
+                onPointerDown={() => prefetchNavigationData(tab.path)}
               >
                 <span className="nav-tab-icon" aria-hidden="true">{tab.icon}</span>
                 <span className="nav-tab-label">{t(tab.labelKey)}</span>

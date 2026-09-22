@@ -445,8 +445,7 @@ export async function listProfiles(): Promise<ProfileListItem[]> {
   });
 }
 
-export async function getProfilesGlobalSummary(): Promise<ProfileGlobalSummary> {
-  const profiles = await listProfiles();
+export function summarizeProfiles(profiles: ProfileListItem[]): ProfileGlobalSummary {
   const totalProfiles = profiles.length;
   let totalGovernedSubscribers = 0;
   let activeSubscribers = 0;
@@ -472,6 +471,10 @@ export async function getProfilesGlobalSummary(): Promise<ProfileGlobalSummary> 
     restrictedSubscribers,
     unassignedProfiles,
   };
+}
+
+export async function getProfilesGlobalSummary(): Promise<ProfileGlobalSummary> {
+  return summarizeProfiles(await listProfiles());
 }
 
 export async function getProfile(name: string): Promise<ProfileDocument | null> {

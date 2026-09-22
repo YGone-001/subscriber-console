@@ -5,8 +5,8 @@ import { requireAuth, requirePermission } from '@/lib/authz';
 import { safeProfileSnapshot } from '@/lib/profileAudit';
 import {
   createProfile,
-  getProfilesGlobalSummary,
   listProfiles,
+  summarizeProfiles,
 } from '@/server/repositories/profileRepository';
 
 export const dynamic = 'force-dynamic';
@@ -19,10 +19,11 @@ export async function GET(request: Request) {
     const rateLimit = await enforceRateLimit(`profiles:list:${auth.auth.user}`, 90, 60);
     if (!rateLimit.ok) return rateLimit.response;
 
-    const [profiles, summary] = await Promise.all([
-      listProfiles(),
-      getProfilesGlobalSummary(),
-    ]);
+    // listProfiles already includes the subscriber aggregation used by the
+    // summary. Derive both response sections from that single result so a page
+    // visit does not repeat the same MongoDB work.
+    const profiles = await listProfiles();
+    const summary = summarizeProfiles(profiles);
 
     return NextResponse.json({ profiles, summary });
   } catch (error) {
