@@ -8,6 +8,7 @@ func TestHasPermissionAuditRead(t *testing.T) {
 		role string
 		want bool
 	}{
+		{"admin", true},
 		{"super_admin", true},
 		{"ops_admin", true},
 		{"operator", true},
@@ -16,7 +17,7 @@ func TestHasPermissionAuditRead(t *testing.T) {
 		{"unknown", false},
 	}
 	for _, tt := range tests {
-		p := &Principal{NormalizedRole: tt.role}
+		p := &Principal{NormalizedRole: NormalizeRole(tt.role)}
 		got := HasPermission(p, "audit.read")
 		if got != tt.want {
 			t.Errorf("HasPermission(%q, audit.read) = %v, want %v", tt.role, got, tt.want)
@@ -30,15 +31,16 @@ func TestHasPermissionAuditSourceIP(t *testing.T) {
 		role string
 		want bool
 	}{
+		{"admin", true},
 		{"super_admin", true},
-		{"ops_admin", false}, // ops_admin does NOT have audit.source-ip.read-full
+		{"ops_admin", false},
 		{"operator", false},
-		{"auditor", true},
+		{"auditor", false},
 		{"viewer", false},
 		{"unknown", false},
 	}
 	for _, tt := range tests {
-		p := &Principal{NormalizedRole: tt.role}
+		p := &Principal{NormalizedRole: NormalizeRole(tt.role)}
 		got := HasPermission(p, "audit.source-ip.read-full")
 		if got != tt.want {
 			t.Errorf("HasPermission(%q, audit.source-ip.read-full) = %v, want %v", tt.role, got, tt.want)
@@ -52,14 +54,15 @@ func TestHasPermissionUsersRead(t *testing.T) {
 		role string
 		want bool
 	}{
+		{"admin", true},
 		{"super_admin", true},
-		{"ops_admin", true},
-		{"operator", false}, // operator does NOT have users.read
-		{"auditor", true},
+		{"ops_admin", false}, // ops_admin normalizes to operator (no users.read)
+		{"operator", false},  // operator does NOT have users.read
+		{"auditor", false},   // auditor normalizes to viewer
 		{"viewer", false},
 	}
 	for _, tt := range tests {
-		p := &Principal{NormalizedRole: tt.role}
+		p := &Principal{NormalizedRole: NormalizeRole(tt.role)}
 		got := HasPermission(p, "users.read")
 		if got != tt.want {
 			t.Errorf("HasPermission(%q, users.read) = %v, want %v", tt.role, got, tt.want)
@@ -76,9 +79,9 @@ func TestHasPermissionNilPrincipal(t *testing.T) {
 
 // TestHasPermissionUnknownPermission verifies unknown permission returns false.
 func TestHasPermissionUnknownPermission(t *testing.T) {
-	p := &Principal{NormalizedRole: "super_admin"}
+	p := &Principal{NormalizedRole: "admin"}
 	if HasPermission(p, "nonexistent.permission") {
-		t.Error("HasPermission(super_admin, nonexistent.permission) should be false")
+		t.Error("HasPermission(admin, nonexistent.permission) should be false")
 	}
 }
 
@@ -89,14 +92,15 @@ func TestPermissionsFor(t *testing.T) {
 		wantPerm string
 		wantNot  string
 	}{
+		{"admin", "audit.source-ip.read-full", ""},
 		{"super_admin", "audit.source-ip.read-full", ""},
-		{"ops_admin", "audit.read", "audit.source-ip.read-full"},
 		{"operator", "subscribers.write", "users.read"},
-		{"auditor", "audit.source-ip.read-full", "subscribers.write"},
+		{"ops_admin", "subscribers.write", "users.read"},
 		{"viewer", "audit.read", "audit.export"},
+		{"auditor", "audit.read", "audit.export"},
 	}
 	for _, tt := range tests {
-		p := &Principal{NormalizedRole: tt.role}
+		p := &Principal{NormalizedRole: NormalizeRole(tt.role)}
 		perms := PermissionsFor(p)
 		permSet := make(map[string]bool)
 		for _, perm := range perms {
@@ -133,8 +137,8 @@ func TestPermissionCatalogParity(t *testing.T) {
 		"core.read", "core.operate", "core.configure",
 	}
 
-	// Get Go catalog via super_admin (has all permissions)
-	goPerms := rolePermissions("super_admin")
+	// Get Go catalog via admin (has all permissions)
+	goPerms := rolePermissions("admin")
 
 	goSet := make(map[string]bool)
 	for _, p := range goPerms {
@@ -164,15 +168,16 @@ func TestPermissionCatalogParity(t *testing.T) {
 	}
 }
 
-// TestRolePermissionMatrixParity verifies Go role matrix matches Node ROLE_PERMISSIONS exactly.
+// TestRolePermissionMatrixParity verifies Go role matrix matches canonical 3-role model.
 func TestRolePermissionMatrixParity(t *testing.T) {
-	// Expected counts per role from Node ROLE_PERMISSIONS
 	expected := map[string]int{
+		"admin":       32,
 		"super_admin": 32,
-		"ops_admin":   29,
-		"operator":    15,
-		"auditor":     5,
+		"root":        32,
+		"operator":    17,
+		"ops_admin":   17,
 		"viewer":      6,
+		"auditor":     6,
 	}
 
 	for role, wantCount := range expected {
@@ -190,69 +195,38 @@ func TestRolePermissionMatrixParity(t *testing.T) {
 
 // TestCapabilitiesFor verifies capability maps match Node ROLE_CAPABILITIES.
 func TestCapabilitiesFor(t *testing.T) {
+	adminCaps := map[string]string{
+		"subscriber_write": "allow", "policy_approve": "allow", "balance_adjust": "allow",
+		"profile_rollback": "allow", "rating_publish": "allow", "approval_review": "allow",
+		"approval_execute": "allow", "audit_view": "allow", "audit_export": "export",
+		"system_heal": "allow", "user_admin": "allow",
+	}
+	operatorCaps := map[string]string{
+		"subscriber_write": "allow", "policy_approve": "allow", "balance_adjust": "allow",
+		"profile_rollback": "allow", "rating_publish": "allow", "approval_review": "deny",
+		"approval_execute": "deny", "audit_view": "allow", "audit_export": "deny",
+		"system_heal": "allow", "user_admin": "deny",
+	}
+	viewerCaps := map[string]string{
+		"subscriber_write": "deny", "policy_approve": "deny", "balance_adjust": "deny",
+		"profile_rollback": "deny", "rating_publish": "deny", "approval_review": "deny",
+		"approval_execute": "deny", "audit_view": "allow", "audit_export": "deny",
+		"system_heal": "deny", "user_admin": "deny",
+	}
+
 	tests := []struct {
 		role     string
 		wantNil  bool
 		wantCaps map[string]string
 	}{
-		{
-			role: "root",
-			wantCaps: map[string]string{
-				"subscriber_write": "allow", "policy_approve": "allow", "balance_adjust": "allow",
-				"profile_rollback": "allow", "rating_publish": "allow", "approval_review": "allow",
-				"approval_execute": "allow", "audit_view": "allow", "audit_export": "export",
-				"system_heal": "allow", "user_admin": "allow",
-			},
-		},
-		{
-			role: "super_admin",
-			wantCaps: map[string]string{
-				"subscriber_write": "allow", "policy_approve": "allow", "balance_adjust": "allow",
-				"profile_rollback": "allow", "rating_publish": "allow", "approval_review": "allow",
-				"approval_execute": "allow", "audit_view": "allow", "audit_export": "export",
-				"system_heal": "allow", "user_admin": "allow",
-			},
-		},
-		{
-			role: "ops_admin",
-			wantCaps: map[string]string{
-				"subscriber_write": "allow", "policy_approve": "allow", "balance_adjust": "allow",
-				"profile_rollback": "allow", "rating_publish": "allow", "approval_review": "allow",
-				"approval_execute": "allow", "audit_view": "allow", "audit_export": "export",
-				"system_heal": "allow", "user_admin": "deny",
-			},
-		},
-		{
-			role: "operator",
-			wantCaps: map[string]string{
-				"subscriber_write": "allow", "policy_approve": "approval", "balance_adjust": "approval",
-				"profile_rollback": "approval", "rating_publish": "approval", "approval_review": "deny",
-				"approval_execute": "deny", "audit_view": "allow", "audit_export": "deny",
-				"system_heal": "approval", "user_admin": "deny",
-			},
-		},
-		{
-			role: "auditor",
-			wantCaps: map[string]string{
-				"subscriber_write": "deny", "policy_approve": "deny", "balance_adjust": "deny",
-				"profile_rollback": "deny", "rating_publish": "deny", "approval_review": "deny",
-				"approval_execute": "deny", "audit_view": "allow", "audit_export": "export",
-				"system_heal": "deny", "user_admin": "deny",
-			},
-		},
-		{
-			role: "viewer",
-			wantCaps: map[string]string{
-				"subscriber_write": "deny", "policy_approve": "deny", "balance_adjust": "deny",
-				"profile_rollback": "deny", "rating_publish": "deny", "approval_review": "deny",
-				"approval_execute": "deny", "audit_view": "allow", "audit_export": "deny",
-				"system_heal": "deny", "user_admin": "deny",
-			},
-		},
-		{
-			role:    "unknown",
-			wantNil: true,
-		},
+		{role: "admin", wantCaps: adminCaps},
+		{role: "super_admin", wantCaps: adminCaps},
+		{role: "root", wantCaps: adminCaps},
+		{role: "operator", wantCaps: operatorCaps},
+		{role: "ops_admin", wantCaps: operatorCaps},
+		{role: "viewer", wantCaps: viewerCaps},
+		{role: "auditor", wantCaps: viewerCaps},
+		{role: "unknown", wantNil: true},
 	}
 
 	for _, tt := range tests {
@@ -284,7 +258,7 @@ func TestCapabilitiesFor(t *testing.T) {
 
 // TestCapabilitiesForConsistency verifies CapabilitiesFor matches capabilityDecision for each key.
 func TestCapabilitiesForConsistency(t *testing.T) {
-	roles := []string{"root", "super_admin", "ops_admin", "operator", "auditor", "viewer"}
+	roles := []string{"admin", "root", "super_admin", "ops_admin", "operator", "auditor", "viewer"}
 	capKeys := []string{
 		"subscriber_write", "policy_approve", "balance_adjust",
 		"profile_rollback", "rating_publish", "approval_review",
@@ -308,23 +282,28 @@ func TestCapabilitiesForConsistency(t *testing.T) {
 }
 
 // TestHasCapabilityOnlyAllows verifies HasCapability returns true only for "allow" decisions.
-// "approval" and "export" require explicit guard options — base HasCapability must deny them.
 func TestHasCapabilityOnlyAllows(t *testing.T) {
-	// super_admin: all "allow" except audit_export="export"
-	superAdmin := &Principal{NormalizedRole: "super_admin"}
-	if !HasCapability(superAdmin, "subscriber_write") {
-		t.Error("super_admin subscriber_write should be allow")
+	admin := &Principal{NormalizedRole: "admin"}
+	if !HasCapability(admin, "subscriber_write") {
+		t.Error("admin subscriber_write should be allow")
 	}
-	if HasCapability(superAdmin, "audit_export") {
-		t.Error("super_admin audit_export should be false (export requires options)")
+	if HasCapability(admin, "audit_export") {
+		t.Error("admin audit_export should be false (export requires options)")
 	}
 
-	// operator: policy_approve="approval" → false without options
 	operator := &Principal{NormalizedRole: "operator"}
-	if HasCapability(operator, "policy_approve") {
-		t.Error("operator policy_approve should be false (approval requires options)")
-	}
 	if !HasCapability(operator, "subscriber_write") {
 		t.Error("operator subscriber_write should be allow")
+	}
+	if !HasCapability(operator, "balance_adjust") {
+		t.Error("operator balance_adjust should be allow")
+	}
+	if HasCapability(operator, "user_admin") {
+		t.Error("operator user_admin should be deny")
+	}
+
+	viewer := &Principal{NormalizedRole: "viewer"}
+	if HasCapability(viewer, "subscriber_write") {
+		t.Error("viewer subscriber_write should be deny")
 	}
 }

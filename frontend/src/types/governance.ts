@@ -1,7 +1,7 @@
 /** Shared wire types. Existing collections continue to store ISO timestamps. */
 export type RiskLevel = 'low' | 'medium' | 'high' | 'critical';
 
-export type GovernanceRole = 'super_admin' | 'ops_admin' | 'operator' | 'auditor' | 'viewer';
+export type GovernanceRole = 'admin' | 'operator' | 'viewer';
 
 export type ApprovalStatus =
   | 'pending'

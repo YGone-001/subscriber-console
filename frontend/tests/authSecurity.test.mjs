@@ -13,7 +13,7 @@ test('current-account validation supports legacy sessions and rejects revoked or
   const account = { username: 'admin', role: 'root', status: 'active' };
   const claims = { username: 'admin', role: 'root' };
   assert.equal(validateAccountSnapshot(claims, account).sessionVersion, 0);
-  assert.equal(validateAccountSnapshot({ ...claims, sv: 0 }, { ...account, security: { sessionVersion: 0 } }).normalizedRole, 'super_admin');
+  assert.equal(validateAccountSnapshot({ ...claims, sv: 0 }, { ...account, security: { sessionVersion: 0 } }).normalizedRole, 'admin');
   assert.equal(validateAccountSnapshot({ ...claims, role: 'super_admin' }, account).role, 'root');
   for (const sv of [undefined, 0]) assert.throws(() => validateAccountSnapshot({ ...claims, sv }, { ...account, security: { sessionVersion: 1 } }), /SESSION_REVOKED/);
   for (const [patch, code] of [[{ status: 'disabled' }, 'ACCOUNT_DISABLED'], [{ status: 'locked' }, 'ACCOUNT_LOCKED'], [{ locked: true }, 'ACCOUNT_LOCKED'], [{ role: 'viewer' }, 'SESSION_REVOKED']]) {

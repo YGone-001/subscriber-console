@@ -15,8 +15,8 @@ var allowedUserQueryKeys = map[string]bool{
 
 // allowedRoles includes both legacy and normalized governance roles.
 var allowedRoles = map[string]bool{
-	"root": true, "super_admin": true, "ops_admin": true,
-	"operator": true, "auditor": true, "viewer": true,
+	"admin": true, "operator": true, "viewer": true,
+	"root": true, "super_admin": true, "ops_admin": true, "auditor": true,
 }
 
 // allowedStatuses are the only valid status filter values.

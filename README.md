@@ -48,7 +48,7 @@ API routes are progressively migrating from Next.js to Go on a per-endpoint basi
 - Analytics dashboard computed from MongoDB subscriber documents.
 - Approval governance with maker-checker workflow, risk policy, and audit trail.
 - Audit logs, alert acknowledgment, and system document consistency checks.
-- JWT cookie authentication with `root`, `operator`, and `viewer` roles.
+- JWT cookie authentication with canonical `admin`, `operator`, and `viewer` roles (with transparent legacy alias normalization).
 - Chinese/English UI, theme switching, command palette, and responsive dashboard layout.
 
 ## OCS Management Plane Status

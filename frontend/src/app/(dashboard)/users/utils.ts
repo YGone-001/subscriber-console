@@ -37,7 +37,7 @@ export function isSortDirection(value: string | null): value is SortDirection {
 export function normalizeRole(value: string): RoleKey {
   const role = normalizeGovernanceRole(value);
   if (!role) throw new Error('UNKNOWN_ROLE');
-  return role === 'super_admin' ? 'root' : role;
+  return role;
 }
 
 export function normalizeStatus(value: string | undefined): UserStatus {

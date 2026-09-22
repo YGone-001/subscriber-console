@@ -1,4 +1,6 @@
-export type RoleKey = "root" | "super_admin" | "ops_admin" | "operator" | "auditor" | "viewer";
+export type CanonicalRole = "admin" | "operator" | "viewer";
+export type LegacyRole = "root" | "super_admin" | "ops_admin" | "auditor";
+export type RoleKey = CanonicalRole | LegacyRole;
 export type UserStatus = "active" | "disabled" | "locked";
 export type DisplayUserStatus = UserStatus | "locked";
 
@@ -64,7 +66,8 @@ export type DrawerMode = "closed" | "view" | "create" | "edit" | "resetPassword"
 export type DetailTab = "basic" | "permissions" | "login" | "activity";
 export type BulkAction = "enable" | "disable" | "assignRole";
 
-export const VALID_ROLES: readonly RoleKey[] = ["root", "ops_admin", "operator", "auditor", "viewer"];
+export const CANONICAL_ROLES: readonly CanonicalRole[] = ["admin", "operator", "viewer"];
+export const VALID_ROLES: readonly RoleKey[] = CANONICAL_ROLES;
 export const VALID_STATUS = ["active", "disabled", "locked"] as const satisfies readonly UserStatus[];
 export const USERNAME_PATTERN = /^[a-zA-Z0-9_]{3,20}$/;
 export const PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
@@ -115,6 +118,7 @@ export const DEFAULT_EDIT_FORM: EditUserForm = {
 };
 
 export const ROLE_STYLE: Record<RoleKey, { color: string; bg: string }> = {
+  admin: { color: "var(--danger)", bg: "var(--danger-soft)" },
   root: { color: "var(--danger)", bg: "var(--danger-soft)" },
   super_admin: { color: "var(--danger)", bg: "var(--danger-soft)" },
   ops_admin: { color: "var(--warning)", bg: "var(--warning-soft)" },

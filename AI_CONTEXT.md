@@ -32,6 +32,18 @@ Approval workflow removed from business execution path. Authorization and operat
 - Zero approval records created on business operations (`app_approvals` count == 0).
 - Strict audit logging to `app_audit_logs`, RBAC capability gates, fresh actor revalidation, and CAS concurrency control remain active.
 
+### 0.3 角色权限模型 (RBAC Model - Phase 5.7-B)
+
+Canonical Three-Role Model:
+- `admin`: Full administration, user management, approval review/execute, audit export, full source-IP access, direct business mutations.
+- `operator`: Direct business mutations (subscribers, balances, profiles, tariffs, rating), core operations, audit viewing. No user admin, no audit export.
+- `viewer`: Read-only inspection. All mutations and user admin denied.
+
+Backward Compatibility:
+- Runtime normalization: `root` / `super_admin` -> `admin`, `ops_admin` -> `operator`, `auditor` -> `viewer`.
+- Write boundary: API strictly accepts only `['admin', 'operator', 'viewer']`; legacy roles rejected with HTTP 400 (`INVALID_ROLE`).
+- UI role selection: Exactly 3 options (`admin`, `operator`, `viewer`).
+
 ---
 
 ## 1. Repository

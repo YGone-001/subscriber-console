@@ -42,7 +42,8 @@ test('audit export policy is configurable, bounded and role permissions keep vie
   assert.equal(auditExport.auditExportMaxRows('2500'), 2500);
   assert.throws(() => auditExport.auditExportMaxRows('0'));
   assert.throws(() => auditExport.auditExportMaxRows('many'));
-  assert.equal(permissions.hasPermission({ role: 'auditor' }, 'audit.export'), true);
+  assert.equal(permissions.hasPermission({ role: 'admin' }, 'audit.export'), true);
+  assert.equal(permissions.hasPermission({ role: 'auditor' }, 'audit.export'), false);
   assert.equal(permissions.hasPermission({ role: 'viewer' }, 'audit.export'), false);
   assert.equal(permissions.hasPermission({ role: 'operator' }, 'audit.read'), true);
   assert.equal(permissions.hasPermission({ role: 'operator' }, 'audit.export'), false);
@@ -71,8 +72,8 @@ test('audit export route records strict success/failure evidence and does not du
     },
     '@/lib/permissions': permissions,
     '@/lib/authz': {
-      requireCapability: (request) => { guardCalls.push('capability'); const role = request.headers.get('x-user-role'); return role === 'auditor' ? { ok: true, auth: { user: 'audit_user', role, sessionVersion: 0 } } : { ok: false, response: Response.json({}, { status: 403 }) }; },
-      requirePermission: () => { guardCalls.push('permission'); return { ok: true, auth: { user: 'audit_user', role: 'auditor', sessionVersion: 0 } }; },
+      requireCapability: (request) => { guardCalls.push('capability'); const role = request.headers.get('x-user-role'); return role === 'admin' ? { ok: true, auth: { user: 'audit_user', role, sessionVersion: 0 } } : { ok: false, response: Response.json({}, { status: 403 }) }; },
+      requirePermission: () => { guardCalls.push('permission'); return { ok: true, auth: { user: 'audit_user', role: 'admin', sessionVersion: 0 } }; },
     },
     '@/lib/rateLimit': { enforceRateLimit: async () => ({ ok: true }) },
     '@/server/repositories/auditRepository': {
@@ -86,7 +87,7 @@ test('audit export route records strict success/failure evidence and does not du
   assert.deepEqual(guardCalls, ['capability']);
   assert.equal(writes.length, 0);
 
-  const success = await route.GET(new Request('https://ops.test/api/audit/export?format=csv&actor=admin', { headers: { 'x-user-role': 'auditor' } }));
+  const success = await route.GET(new Request('https://ops.test/api/audit/export?format=csv&actor=admin', { headers: { 'x-user-role': 'admin' } }));
   assert.equal(success.status, 200);
   assert.equal(writes[0].record.action, 'audit.export');
   assert.equal(writes[0].record.result, 'success');
@@ -94,7 +95,7 @@ test('audit export route records strict success/failure evidence and does not du
   assert.equal(writes[0].options.failureMode, 'strict');
 
   exportMode = 'large';
-  const large = await route.GET(new Request('https://ops.test/api/audit/export?format=json', { headers: { 'x-user-role': 'auditor' } }));
+  const large = await route.GET(new Request('https://ops.test/api/audit/export?format=json', { headers: { 'x-user-role': 'admin' } }));
   assert.equal(large.status, 422);
   assert.equal(writes.at(-1).record.result, 'failed');
   assert.equal(writes.at(-1).record.error.code, 'AUDIT_EXPORT_TOO_LARGE');

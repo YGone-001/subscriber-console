@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"math"
 
+	"subscriber/internal/auth"
+
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
@@ -207,8 +209,8 @@ func (r *Repository) computeGlobalStats(ctx context.Context) (*UserStats, error)
 	}
 	stats.Active = int(active)
 
-	// administrators = role IN [root, super_admin, ops_admin]
-	adminRoles := bson.A{"root", "super_admin", "ops_admin"}
+	// administrators = role IN [admin, root, super_admin]
+	adminRoles := bson.A{"admin", "root", "super_admin"}
 	admins, err := r.users.CountDocuments(ctx, bson.M{"role": bson.M{"$in": adminRoles}})
 	if err != nil {
 		return nil, err
@@ -284,11 +286,17 @@ type UserQuery struct {
 func buildUserFilter(q UserQuery) bson.M {
 	filter := bson.M{}
 
-	// Role filter: root and super_admin both expand to $in
+	// Role filter: expands canonical roles to include legacy aliases
 	if q.Role != "" {
-		if q.Role == "root" || q.Role == "super_admin" {
-			filter["role"] = bson.M{"$in": bson.A{"root", "super_admin"}}
-		} else {
+		norm := auth.NormalizeRole(q.Role)
+		switch norm {
+		case "admin":
+			filter["role"] = bson.M{"$in": bson.A{"admin", "root", "super_admin"}}
+		case "operator":
+			filter["role"] = bson.M{"$in": bson.A{"operator", "ops_admin"}}
+		case "viewer":
+			filter["role"] = bson.M{"$in": bson.A{"viewer", "auditor"}}
+		default:
 			filter["role"] = q.Role
 		}
 	}

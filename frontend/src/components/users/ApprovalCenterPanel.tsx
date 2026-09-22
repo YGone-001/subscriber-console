@@ -5,7 +5,7 @@ import { useId, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 import { AlertTriangle, CheckCircle2, Copy, Eye, GitBranch, RefreshCw, Search, X } from "lucide-react";
 import { fetcher } from "@/lib/fetcher";
-import { ROLE_CAPABILITIES } from "@/lib/permissions";
+import { ROLE_CAPABILITIES, normalizeGovernanceRole } from "@/lib/permissions";
 import { normalizePermissionEffect } from "@/lib/userAccessManagement";
 import { useAuth } from "@/hooks/useAuth";
 import { useI18n } from "@/components/I18nProvider";
@@ -138,7 +138,8 @@ export default function ApprovalCenterPanel() {
 
   const accessSummary = useMemo(() => {
     if (!user) return { allowed: 0, approvals: 0, denied: 0 };
-    const effects = Object.values(ROLE_CAPABILITIES[user.role]).map(normalizePermissionEffect);
+    const canonical = normalizeGovernanceRole(user.role) ?? 'viewer';
+    const effects = Object.values(ROLE_CAPABILITIES[canonical] ?? ROLE_CAPABILITIES.viewer).map(normalizePermissionEffect);
     return {
       allowed: effects.filter((effect) => effect === "allow").length,
       approvals: effects.filter((effect) => effect === "approval_required").length,

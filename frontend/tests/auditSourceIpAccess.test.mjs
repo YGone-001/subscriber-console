@@ -59,7 +59,7 @@ test('audit repository masks by default and reveals only after an explicit acces
   assert.equal((await repository.listAuditLogsForTariffPlan('plan-1'))[0].source.ip, '203.0.113.***');
 });
 
-test('source IP filtering is denied without the full-IP permission and enabled for auditors', async () => {
+test('source IP filtering is denied without the full-IP permission and enabled for administrators', async () => {
   class TestNextResponse extends Response { static json(body, init) { return Response.json(body, init); } }
   const calls = [];
   const makeRoute = (role) => loadModule('src/app/api/audit/route.ts', {
@@ -86,13 +86,13 @@ test('source IP filtering is denied without the full-IP permission and enabled f
   assert.equal(denied.status, 403);
   assert.deepEqual(calls.slice(0, 2), ['audit.read', 'audit.source-ip.read-full']);
   calls.length = 0;
-  const allowed = await makeRoute('auditor').GET(new Request('https://ops.test/api/audit?sourceIp=203.0.113.42'));
+  const allowed = await makeRoute('admin').GET(new Request('https://ops.test/api/audit?sourceIp=203.0.113.42'));
   assert.equal(allowed.status, 200);
   assert.equal(calls[0], 'audit.read');
   assert.deepEqual(calls[1].options, { revealSourceIp: true });
 });
 
-test('audit export keeps operations-admin IPs masked and gives auditors full-IP evidence', async () => {
+test('audit export requires audit.export permission and gives administrators full-IP evidence', async () => {
   class TestNextResponse extends Response { static json(body, init) { return Response.json(body, init); } }
   class AuditWriteError extends Error {}
   class AuditExportTooLargeError extends Error {}
@@ -128,13 +128,13 @@ test('audit export keeps operations-admin IPs masked and gives auditors full-IP 
     },
   });
 
-  assert.equal((await makeRoute('ops_admin').GET(new Request('https://ops.test/api/audit/export?format=json'))).status, 200);
-  assert.deepEqual(optionsSeen.at(-1), { revealSourceIp: false });
-  assert.equal((await makeRoute('auditor').GET(new Request('https://ops.test/api/audit/export?format=json'))).status, 200);
+  assert.equal((await makeRoute('admin').GET(new Request('https://ops.test/api/audit/export?format=json'))).status, 200);
   assert.deepEqual(optionsSeen.at(-1), { revealSourceIp: true });
-  const beforeDenied = optionsSeen.length;
-  assert.equal((await makeRoute('ops_admin').GET(new Request('https://ops.test/api/audit/export?format=json&sourceIp=203.0.113.42'))).status, 403);
-  assert.equal(optionsSeen.length, beforeDenied);
+  assert.equal((await makeRoute('operator').GET(new Request('https://ops.test/api/audit/export?format=json'))).status, 403);
+  assert.equal((await makeRoute('viewer').GET(new Request('https://ops.test/api/audit/export?format=json'))).status, 403);
+  const beforeAdmin = optionsSeen.length;
+  assert.equal((await makeRoute('admin').GET(new Request('https://ops.test/api/audit/export?format=json&sourceIp=203.0.113.42'))).status, 200);
+  assert.equal(optionsSeen.length, beforeAdmin + 1);
 });
 
 test('audit and approval response paths pass an explicit source-IP access decision', () => {

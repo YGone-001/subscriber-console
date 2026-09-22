@@ -147,3 +147,6 @@ jobs:
       - name: OCS management suite
         run: node scripts/test-ocs-management-suite.mjs
 
+      - name: RBAC simplification acceptance
+        run: node scripts/test-rbac-simplification.mjs
+

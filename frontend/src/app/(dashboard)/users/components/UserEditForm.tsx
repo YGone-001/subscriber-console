@@ -1,4 +1,5 @@
 import { useI18n } from '@/components/I18nProvider';
+import { normalizeGovernanceRole } from '@/lib/permissions';
 import { VALID_STATUS, type RoleKey, type UserStatus } from '../types';
 import type { UserDrawerProps } from './types';
 import styles from './UserDrawer.module.css';
@@ -17,9 +18,15 @@ export function UserEditForm(props: Props) {
     </section>
     <section className={styles.formSection}>
       <h3>{t('users_form_role')}</h3>
-      <label><span>{t('users_role')}</span><select className="form-input" value={props.editForm.role} disabled={!props.canManage(user, 'role.change')} onChange={(event) => props.setEditForm((form) => ({ ...form, role: event.target.value as RoleKey }))}>
-        {Array.from(new Set([props.editForm.role, ...props.assignableRoles])).map((role) => <option key={role} value={role}>{t(`users_${role}`)}</option>)}
-      </select></label>
+      {(() => {
+        const currentRole = (normalizeGovernanceRole(props.editForm.role) || props.editForm.role) as RoleKey;
+        const options = props.assignableRoles.length > 0 ? props.assignableRoles : [currentRole];
+        return (
+          <label><span>{t('users_role')}</span><select className="form-input" value={currentRole} disabled={!props.canManage(user, 'role.change')} onChange={(event) => props.setEditForm((form) => ({ ...form, role: event.target.value as RoleKey }))}>
+            {options.map((role) => <option key={role} value={role}>{t(`users_${role}`)}</option>)}
+          </select></label>
+        );
+      })()}
       <label><span>{t('users_status')}</span><select className="form-input" value={props.editForm.status} disabled={!props.canManage(user, 'disable')} onChange={(event) => props.setEditForm((form) => ({ ...form, status: event.target.value as UserStatus }))}>
         {VALID_STATUS.map((status) => <option key={status} value={status}>{t(`users_${status}`)}</option>)}
       </select></label>

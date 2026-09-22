@@ -1064,7 +1064,7 @@ func TestRestoreMissingProfileSuccess(t *testing.T) {
 	}
 }
 
-func TestRestoreOperatorApproval(t *testing.T) {
+func TestRestoreOperatorDirect(t *testing.T) {
 	repo := newMockRepository()
 	auditWriter := &mockAuditWriter{}
 	approvalRepo := &mockApprovalRepo{}
@@ -1115,28 +1115,20 @@ func TestRestoreOperatorApproval(t *testing.T) {
 	w := httptest.NewRecorder()
 	handler.Restore(w, req)
 
-	if w.Code != http.StatusAccepted {
-		t.Errorf("expected status %d, got %d: %s", http.StatusAccepted, w.Code, w.Body.String())
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d: %s", http.StatusOK, w.Code, w.Body.String())
 	}
 
-	// Verify approval was created
-	if len(approvalRepo.approvals) == 0 {
-		t.Error("expected approval to be created")
-	}
-
-	// Verify approval has v2 payload
-	if len(approvalRepo.approvals) > 0 {
-		approval := approvalRepo.approvals[0]
-		if approval.Payload["version"] != "profile-restore-v2" {
-			t.Errorf("expected payload version 'profile-restore-v2', got '%s'", approval.Payload["version"])
-		}
+	// Verify no approval was created (direct execution in Phase 5.7)
+	if len(approvalRepo.approvals) != 0 {
+		t.Error("expected no approval to be created")
 	}
 
 	// Verify audit
 	if len(auditWriter.records) > 0 {
 		lastAudit := auditWriter.records[len(auditWriter.records)-1]
-		if lastAudit.Metadata["governanceMode"] != "APPROVAL_GOVERNED" {
-			t.Errorf("expected governanceMode 'APPROVAL_GOVERNED', got '%s'", lastAudit.Metadata["governanceMode"])
+		if lastAudit.Metadata["governanceMode"] != "DIRECT_GOVERNED" {
+			t.Errorf("expected governanceMode 'DIRECT_GOVERNED', got '%s'", lastAudit.Metadata["governanceMode"])
 		}
 	}
 }

@@ -69,11 +69,9 @@ func PermissionsFor(p *Principal) []string {
 	return rolePermissions(p.NormalizedRole)
 }
 
-// rolePermissions returns the permission list for a governance role.
-// Matches TypeScript ROLE_PERMISSIONS exactly.
-func rolePermissions(role string) []string {
-	// All permissions in the catalog
-	allPerms := []string{
+// canonicalRolePermissions defines permissions for the three canonical roles.
+var canonicalRolePermissions = map[string][]string{
+	"admin": {
 		"users.read", "users.create", "users.update", "users.disable", "users.delete",
 		"users.role.change", "users.reset-password", "users.unlock",
 		"approvals.read", "approvals.create", "approvals.approve", "approvals.reject",
@@ -83,129 +81,82 @@ func rolePermissions(role string) []string {
 		"ocs.read", "ocs.balance.adjust", "ocs.balance.reset", "ocs.tariff.write", "ocs.plan.assign", "ocs.rating.write", "ocs.runtime.execute",
 		"profiles.read", "profiles.write",
 		"core.read", "core.operate", "core.configure",
-	}
+	},
+	"operator": {
+		"subscribers.read", "subscribers.write", "subscribers.delete",
+		"profiles.read", "profiles.write",
+		"core.read", "core.operate", "core.configure",
+		"audit.read",
+		"ocs.read", "ocs.balance.adjust", "ocs.tariff.write", "ocs.plan.assign", "ocs.rating.write",
+		"approvals.read", "approvals.create", "approvals.cancel",
+	},
+	"viewer": {
+		"subscribers.read", "profiles.read", "ocs.read", "core.read", "approvals.read", "audit.read",
+	},
+}
 
-	// Read permissions (end with .read)
-	readPerms := []string{
-		"users.read", "approvals.read", "audit.read",
-		"subscribers.read", "ocs.read", "profiles.read", "core.read",
-	}
+// canonicalCapabilities defines capabilities for the three canonical roles.
+// Active mutations for operator resolve to "allow" (direct execution, no approval).
+var canonicalCapabilities = map[string]map[string]string{
+	"admin": {
+		"subscriber_write": "allow",
+		"policy_approve":   "allow",
+		"balance_adjust":   "allow",
+		"profile_rollback": "allow",
+		"rating_publish":   "allow",
+		"approval_review":  "allow",
+		"approval_execute": "allow",
+		"audit_view":       "allow",
+		"audit_export":     "export",
+		"system_heal":      "allow",
+		"user_admin":       "allow",
+	},
+	"operator": {
+		"subscriber_write": "allow",
+		"policy_approve":   "allow",
+		"balance_adjust":   "allow",
+		"profile_rollback": "allow",
+		"rating_publish":   "allow",
+		"approval_review":  "deny",
+		"approval_execute": "deny",
+		"audit_view":       "allow",
+		"audit_export":     "deny",
+		"system_heal":      "allow",
+		"user_admin":       "deny",
+	},
+	"viewer": {
+		"subscriber_write": "deny",
+		"policy_approve":   "deny",
+		"balance_adjust":   "deny",
+		"profile_rollback": "deny",
+		"rating_publish":   "deny",
+		"approval_review":  "deny",
+		"approval_execute": "deny",
+		"audit_view":       "allow",
+		"audit_export":     "deny",
+		"system_heal":      "deny",
+		"user_admin":       "deny",
+	},
+}
 
-	matrix := map[string][]string{
-		"super_admin": allPerms,
-		"ops_admin": {
-			"users.create", "users.update", "users.disable", "users.delete", "users.role.change", "users.reset-password", "users.unlock",
-			"users.read", "approvals.read", "audit.read",
-			"subscribers.read", "ocs.read", "profiles.read", "core.read",
-			"approvals.create", "approvals.approve", "approvals.reject",
-			"approvals.cancel", "approvals.execute", "audit.export",
-			"subscribers.write", "subscribers.delete", "profiles.write", "core.operate", "core.configure",
-			"ocs.balance.adjust", "ocs.tariff.write", "ocs.plan.assign", "ocs.rating.write",
-		},
-		"operator": {
-			"subscribers.read", "subscribers.write", "subscribers.delete",
-			"profiles.read", "core.read", "core.operate", "audit.read",
-			"ocs.read", "ocs.balance.adjust", "ocs.tariff.write", "ocs.plan.assign", "ocs.rating.write",
-			"approvals.read", "approvals.create", "approvals.cancel",
-		},
-		"auditor": {"users.read", "approvals.read", "audit.read", "audit.export", "audit.source-ip.read-full"},
-		"viewer":  {"subscribers.read", "profiles.read", "ocs.read", "core.read", "approvals.read", "audit.read"},
+// rolePermissions returns the permission list for a governance role.
+// Matches TypeScript ROLE_PERMISSIONS exactly.
+func rolePermissions(role string) []string {
+	canonical := normalizeGovernanceRole(role)
+	if canonical == "" {
+		return nil
 	}
-
-	if perms, ok := matrix[role]; ok {
-		return perms
-	}
-	// Suppress unused variable warning
-	_ = readPerms
-	return nil
+	return canonicalRolePermissions[canonical]
 }
 
 // capabilityDecision returns the capability decision for a role.
 // Matches TypeScript ROLE_CAPABILITIES exactly.
 func capabilityDecision(role, capability string) string {
-	// Legacy capabilities matrix (matching Node LEGACY_CAPABILITIES)
-	matrix := map[string]map[string]string{
-		"root": {
-			"subscriber_write": "allow",
-			"policy_approve":   "allow",
-			"balance_adjust":   "allow",
-			"profile_rollback": "allow",
-			"rating_publish":   "allow",
-			"approval_review":  "allow",
-			"approval_execute": "allow",
-			"audit_view":       "allow",
-			"audit_export":     "export",
-			"system_heal":      "allow",
-			"user_admin":       "allow",
-		},
-		"super_admin": {
-			"subscriber_write": "allow",
-			"policy_approve":   "allow",
-			"balance_adjust":   "allow",
-			"profile_rollback": "allow",
-			"rating_publish":   "allow",
-			"approval_review":  "allow",
-			"approval_execute": "allow",
-			"audit_view":       "allow",
-			"audit_export":     "export",
-			"system_heal":      "allow",
-			"user_admin":       "allow",
-		},
-		"ops_admin": {
-			"subscriber_write": "allow",
-			"policy_approve":   "allow",
-			"balance_adjust":   "allow",
-			"profile_rollback": "allow",
-			"rating_publish":   "allow",
-			"approval_review":  "allow",
-			"approval_execute": "allow",
-			"audit_view":       "allow",
-			"audit_export":     "export",
-			"system_heal":      "allow",
-			"user_admin":       "deny",
-		},
-		"operator": {
-			"subscriber_write": "allow",
-			"policy_approve":   "approval",
-			"balance_adjust":   "approval",
-			"profile_rollback": "approval",
-			"rating_publish":   "approval",
-			"approval_review":  "deny",
-			"approval_execute": "deny",
-			"audit_view":       "allow",
-			"audit_export":     "deny",
-			"system_heal":      "approval",
-			"user_admin":       "deny",
-		},
-		"auditor": {
-			"subscriber_write": "deny",
-			"policy_approve":   "deny",
-			"balance_adjust":   "deny",
-			"profile_rollback": "deny",
-			"rating_publish":   "deny",
-			"approval_review":  "deny",
-			"approval_execute": "deny",
-			"audit_view":       "allow",
-			"audit_export":     "export",
-			"system_heal":      "deny",
-			"user_admin":       "deny",
-		},
-		"viewer": {
-			"subscriber_write": "deny",
-			"policy_approve":   "deny",
-			"balance_adjust":   "deny",
-			"profile_rollback": "deny",
-			"rating_publish":   "deny",
-			"approval_review":  "deny",
-			"approval_execute": "deny",
-			"audit_view":       "allow",
-			"audit_export":     "deny",
-			"system_heal":      "deny",
-			"user_admin":       "deny",
-		},
+	canonical := normalizeGovernanceRole(role)
+	if canonical == "" {
+		return "deny"
 	}
-
-	if caps, ok := matrix[role]; ok {
+	if caps, ok := canonicalCapabilities[canonical]; ok {
 		if decision, ok := caps[capability]; ok {
 			return decision
 		}
@@ -216,46 +167,16 @@ func capabilityDecision(role, capability string) string {
 // CapabilitiesFor returns the full capability map for a normalized role.
 // Returns nil for unknown roles.
 func CapabilitiesFor(role string) map[string]string {
-	matrix := map[string]map[string]string{
-		"root": {
-			"subscriber_write": "allow", "policy_approve": "allow", "balance_adjust": "allow",
-			"profile_rollback": "allow", "rating_publish": "allow", "approval_review": "allow",
-			"approval_execute": "allow", "audit_view": "allow", "audit_export": "export",
-			"system_heal": "allow", "user_admin": "allow",
-		},
-		"super_admin": {
-			"subscriber_write": "allow", "policy_approve": "allow", "balance_adjust": "allow",
-			"profile_rollback": "allow", "rating_publish": "allow", "approval_review": "allow",
-			"approval_execute": "allow", "audit_view": "allow", "audit_export": "export",
-			"system_heal": "allow", "user_admin": "allow",
-		},
-		"ops_admin": {
-			"subscriber_write": "allow", "policy_approve": "allow", "balance_adjust": "allow",
-			"profile_rollback": "allow", "rating_publish": "allow", "approval_review": "allow",
-			"approval_execute": "allow", "audit_view": "allow", "audit_export": "export",
-			"system_heal": "allow", "user_admin": "deny",
-		},
-		"operator": {
-			"subscriber_write": "allow", "policy_approve": "approval", "balance_adjust": "approval",
-			"profile_rollback": "approval", "rating_publish": "approval", "approval_review": "deny",
-			"approval_execute": "deny", "audit_view": "allow", "audit_export": "deny",
-			"system_heal": "approval", "user_admin": "deny",
-		},
-		"auditor": {
-			"subscriber_write": "deny", "policy_approve": "deny", "balance_adjust": "deny",
-			"profile_rollback": "deny", "rating_publish": "deny", "approval_review": "deny",
-			"approval_execute": "deny", "audit_view": "allow", "audit_export": "export",
-			"system_heal": "deny", "user_admin": "deny",
-		},
-		"viewer": {
-			"subscriber_write": "deny", "policy_approve": "deny", "balance_adjust": "deny",
-			"profile_rollback": "deny", "rating_publish": "deny", "approval_review": "deny",
-			"approval_execute": "deny", "audit_view": "allow", "audit_export": "deny",
-			"system_heal": "deny", "user_admin": "deny",
-		},
+	canonical := normalizeGovernanceRole(role)
+	if canonical == "" {
+		return nil
 	}
-	if caps, ok := matrix[role]; ok {
-		return caps
+	if caps, ok := canonicalCapabilities[canonical]; ok {
+		res := make(map[string]string, len(caps))
+		for k, v := range caps {
+			res[k] = v
+		}
+		return res
 	}
 	return nil
 }

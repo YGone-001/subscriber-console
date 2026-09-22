@@ -101,8 +101,9 @@ func Evaluate(def OperationDefinition, actorRole string) Result {
 	}
 }
 
-// IsSuperAdminRole checks if a role is super_admin.
-// Handles both raw and normalized roles: "root" (legacy) and "super_admin".
+// IsSuperAdminRole checks if a role is admin or super_admin.
+// Handles canonical "admin" as well as legacy "root" and "super_admin".
 func IsSuperAdminRole(role string) bool {
-	return auth.NormalizeRole(role) == "super_admin"
+	norm := auth.NormalizeRole(role)
+	return norm == "admin" || norm == "super_admin"
 }

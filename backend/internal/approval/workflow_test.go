@@ -163,7 +163,8 @@ func (f *fakeAuditWriter) captured() []audit.WriteAuditInput {
 func makePrincipal(username, role string) *auth.Principal {
 	return &auth.Principal{
 		Username:       username,
-		NormalizedRole: role,
+		Role:           role,
+		NormalizedRole: auth.NormalizeRole(role),
 		SessionVersion: 1,
 	}
 }
@@ -245,9 +246,9 @@ func TestApprove_PendingMedium_SameReviewer(t *testing.T) {
 	wf := NewWorkflowWithDeps(store, identities, writer)
 
 	seedApproval(store, "a1", "pending", "alice", "RATING_CREATE", "medium")
-	seedUserIdentity(identities, "alice", "ops_admin", "active", false)
+	seedUserIdentity(identities, "alice", "admin", "active", false)
 
-	approval, err := wf.ApproveChange(makeRequest("POST", "/api/approvals/a1/approve"), "a1", makePrincipal("alice", "ops_admin"), "looks good")
+	approval, err := wf.ApproveChange(makeRequest("POST", "/api/approvals/a1/approve"), "a1", makePrincipal("alice", "admin"), "looks good")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -274,9 +275,9 @@ func TestApprove_PendingHigh_SelfReview_Blocked(t *testing.T) {
 	wf := NewWorkflowWithDeps(store, identities, writer)
 
 	seedApproval(store, "a2", "pending", "alice", "ACCESS_REQUEST", "high")
-	seedUserIdentity(identities, "alice", "ops_admin", "active", false)
+	seedUserIdentity(identities, "alice", "admin", "active", false)
 
-	_, err := wf.ApproveChange(makeRequest("POST", "/api/approvals/a2/approve"), "a2", makePrincipal("alice", "ops_admin"), "")
+	_, err := wf.ApproveChange(makeRequest("POST", "/api/approvals/a2/approve"), "a2", makePrincipal("alice", "admin"), "")
 	assertErrorCode(t, err, "MAKER_CHECKER_VIOLATION")
 	assertStatus(t, err, http.StatusForbidden)
 
@@ -293,9 +294,9 @@ func TestApprove_PendingHigh_IndependentReviewer_Success(t *testing.T) {
 	wf := NewWorkflowWithDeps(store, identities, writer)
 
 	seedApproval(store, "a3", "pending", "alice", "ACCESS_REQUEST", "high")
-	seedUserIdentity(identities, "bob", "ops_admin", "active", false)
+	seedUserIdentity(identities, "bob", "admin", "active", false)
 
-	approval, err := wf.ApproveChange(makeRequest("POST", "/api/approvals/a3/approve"), "a3", makePrincipal("bob", "ops_admin"), "")
+	approval, err := wf.ApproveChange(makeRequest("POST", "/api/approvals/a3/approve"), "a3", makePrincipal("bob", "admin"), "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -311,9 +312,9 @@ func TestApprove_NonPending_Conflict(t *testing.T) {
 	wf := NewWorkflowWithDeps(store, identities, writer)
 
 	seedApproval(store, "a4", "approved", "alice", "ACCESS_REQUEST", "medium")
-	seedUserIdentity(identities, "bob", "ops_admin", "active", false)
+	seedUserIdentity(identities, "bob", "admin", "active", false)
 
-	_, err := wf.ApproveChange(makeRequest("POST", "/api/approvals/a4/approve"), "a4", makePrincipal("bob", "ops_admin"), "")
+	_, err := wf.ApproveChange(makeRequest("POST", "/api/approvals/a4/approve"), "a4", makePrincipal("bob", "admin"), "")
 	assertErrorCode(t, err, "APPROVAL_STATE_CONFLICT")
 	assertStatus(t, err, http.StatusConflict)
 }
@@ -324,9 +325,9 @@ func TestApprove_NotFound(t *testing.T) {
 	writer := newFakeAuditWriter()
 	wf := NewWorkflowWithDeps(store, identities, writer)
 
-	seedUserIdentity(identities, "bob", "ops_admin", "active", false)
+	seedUserIdentity(identities, "bob", "admin", "active", false)
 
-	_, err := wf.ApproveChange(makeRequest("POST", "/api/approvals/nonexistent/approve"), "nonexistent", makePrincipal("bob", "ops_admin"), "")
+	_, err := wf.ApproveChange(makeRequest("POST", "/api/approvals/nonexistent/approve"), "nonexistent", makePrincipal("bob", "admin"), "")
 	assertErrorCode(t, err, "APPROVAL_NOT_FOUND")
 	assertStatus(t, err, http.StatusNotFound)
 }
@@ -340,9 +341,9 @@ func TestReject_ReasonMissing(t *testing.T) {
 	wf := NewWorkflowWithDeps(store, identities, writer)
 
 	seedApproval(store, "r1", "pending", "alice", "ACCESS_REQUEST", "high")
-	seedUserIdentity(identities, "bob", "ops_admin", "active", false)
+	seedUserIdentity(identities, "bob", "admin", "active", false)
 
-	_, err := wf.RejectChange(makeRequest("POST", "/api/approvals/r1/reject"), "r1", makePrincipal("bob", "ops_admin"), "")
+	_, err := wf.RejectChange(makeRequest("POST", "/api/approvals/r1/reject"), "r1", makePrincipal("bob", "admin"), "")
 	assertErrorCode(t, err, "REJECTION_REASON_REQUIRED")
 	assertStatus(t, err, http.StatusBadRequest)
 }
@@ -354,9 +355,9 @@ func TestReject_ReasonTooShort(t *testing.T) {
 	wf := NewWorkflowWithDeps(store, identities, writer)
 
 	seedApproval(store, "r2", "pending", "alice", "ACCESS_REQUEST", "high")
-	seedUserIdentity(identities, "bob", "ops_admin", "active", false)
+	seedUserIdentity(identities, "bob", "admin", "active", false)
 
-	_, err := wf.RejectChange(makeRequest("POST", "/api/approvals/r2/reject"), "r2", makePrincipal("bob", "ops_admin"), "ab")
+	_, err := wf.RejectChange(makeRequest("POST", "/api/approvals/r2/reject"), "r2", makePrincipal("bob", "admin"), "ab")
 	assertErrorCode(t, err, "REJECTION_REASON_REQUIRED")
 	assertStatus(t, err, http.StatusBadRequest)
 }
@@ -368,14 +369,14 @@ func TestReject_ReasonTooLong(t *testing.T) {
 	wf := NewWorkflowWithDeps(store, identities, writer)
 
 	seedApproval(store, "r3", "pending", "alice", "ACCESS_REQUEST", "high")
-	seedUserIdentity(identities, "bob", "ops_admin", "active", false)
+	seedUserIdentity(identities, "bob", "admin", "active", false)
 
 	longReason := make([]byte, 1001)
 	for i := range longReason {
 		longReason[i] = 'x'
 	}
 
-	_, err := wf.RejectChange(makeRequest("POST", "/api/approvals/r3/reject"), "r3", makePrincipal("bob", "ops_admin"), string(longReason))
+	_, err := wf.RejectChange(makeRequest("POST", "/api/approvals/r3/reject"), "r3", makePrincipal("bob", "admin"), string(longReason))
 	assertErrorCode(t, err, "APPROVAL_TEXT_TOO_LONG")
 	assertStatus(t, err, http.StatusBadRequest)
 }
@@ -387,9 +388,9 @@ func TestReject_HighRisk_SelfReview_Blocked(t *testing.T) {
 	wf := NewWorkflowWithDeps(store, identities, writer)
 
 	seedApproval(store, "r4", "pending", "alice", "ACCESS_REQUEST", "high")
-	seedUserIdentity(identities, "alice", "ops_admin", "active", false)
+	seedUserIdentity(identities, "alice", "admin", "active", false)
 
-	_, err := wf.RejectChange(makeRequest("POST", "/api/approvals/r4/reject"), "r4", makePrincipal("alice", "ops_admin"), "not needed")
+	_, err := wf.RejectChange(makeRequest("POST", "/api/approvals/r4/reject"), "r4", makePrincipal("alice", "admin"), "not needed")
 	assertErrorCode(t, err, "MAKER_CHECKER_VIOLATION")
 	assertStatus(t, err, http.StatusForbidden)
 }
@@ -401,9 +402,9 @@ func TestReject_IndependentReviewer_Success(t *testing.T) {
 	wf := NewWorkflowWithDeps(store, identities, writer)
 
 	seedApproval(store, "r5", "pending", "alice", "ACCESS_REQUEST", "high")
-	seedUserIdentity(identities, "bob", "ops_admin", "active", false)
+	seedUserIdentity(identities, "bob", "admin", "active", false)
 
-	approval, err := wf.RejectChange(makeRequest("POST", "/api/approvals/r5/reject"), "r5", makePrincipal("bob", "ops_admin"), "not justified")
+	approval, err := wf.RejectChange(makeRequest("POST", "/api/approvals/r5/reject"), "r5", makePrincipal("bob", "admin"), "not justified")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -524,8 +525,8 @@ func TestCAS_ApproveApprove_OnlyOneWins(t *testing.T) {
 	wf := NewWorkflowWithDeps(store, identities, writer)
 
 	seedApproval(store, "cas1", "pending", "alice", "ACCESS_REQUEST", "medium")
-	seedUserIdentity(identities, "bob", "ops_admin", "active", false)
-	seedUserIdentity(identities, "charlie", "ops_admin", "active", false)
+	seedUserIdentity(identities, "bob", "admin", "active", false)
+	seedUserIdentity(identities, "charlie", "admin", "active", false)
 
 	var wg sync.WaitGroup
 	results := make(chan error, 2)
@@ -533,12 +534,12 @@ func TestCAS_ApproveApprove_OnlyOneWins(t *testing.T) {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		_, err := wf.ApproveChange(makeRequest("POST", "/api/approvals/cas1/approve"), "cas1", makePrincipal("bob", "ops_admin"), "approved by bob")
+		_, err := wf.ApproveChange(makeRequest("POST", "/api/approvals/cas1/approve"), "cas1", makePrincipal("bob", "admin"), "approved by bob")
 		results <- err
 	}()
 	go func() {
 		defer wg.Done()
-		_, err := wf.ApproveChange(makeRequest("POST", "/api/approvals/cas1/approve"), "cas1", makePrincipal("charlie", "ops_admin"), "approved by charlie")
+		_, err := wf.ApproveChange(makeRequest("POST", "/api/approvals/cas1/approve"), "cas1", makePrincipal("charlie", "admin"), "approved by charlie")
 		results <- err
 	}()
 	wg.Wait()
@@ -587,8 +588,8 @@ func TestCAS_ApproveReject_OnlyOneWins(t *testing.T) {
 	wf := NewWorkflowWithDeps(store, identities, writer)
 
 	seedApproval(store, "cas2", "pending", "alice", "ACCESS_REQUEST", "medium")
-	seedUserIdentity(identities, "bob", "ops_admin", "active", false)
-	seedUserIdentity(identities, "charlie", "ops_admin", "active", false)
+	seedUserIdentity(identities, "bob", "admin", "active", false)
+	seedUserIdentity(identities, "charlie", "admin", "active", false)
 
 	var wg sync.WaitGroup
 	results := make(chan error, 2)
@@ -596,12 +597,12 @@ func TestCAS_ApproveReject_OnlyOneWins(t *testing.T) {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		_, err := wf.ApproveChange(makeRequest("POST", "/api/approvals/cas2/approve"), "cas2", makePrincipal("bob", "ops_admin"), "")
+		_, err := wf.ApproveChange(makeRequest("POST", "/api/approvals/cas2/approve"), "cas2", makePrincipal("bob", "admin"), "")
 		results <- err
 	}()
 	go func() {
 		defer wg.Done()
-		_, err := wf.RejectChange(makeRequest("POST", "/api/approvals/cas2/reject"), "cas2", makePrincipal("charlie", "ops_admin"), "not justified reason")
+		_, err := wf.RejectChange(makeRequest("POST", "/api/approvals/cas2/reject"), "cas2", makePrincipal("charlie", "admin"), "not justified reason")
 		results <- err
 	}()
 	wg.Wait()
@@ -626,7 +627,7 @@ func TestCAS_ApproveCancel_OnlyOneWins(t *testing.T) {
 
 	seedApproval(store, "cas3", "pending", "alice", "ACCESS_REQUEST", "medium")
 	seedUserIdentity(identities, "alice", "operator", "active", false)
-	seedUserIdentity(identities, "bob", "ops_admin", "active", false)
+	seedUserIdentity(identities, "bob", "admin", "active", false)
 
 	var wg sync.WaitGroup
 	results := make(chan error, 2)
@@ -634,7 +635,7 @@ func TestCAS_ApproveCancel_OnlyOneWins(t *testing.T) {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		_, err := wf.ApproveChange(makeRequest("POST", "/api/approvals/cas3/approve"), "cas3", makePrincipal("bob", "ops_admin"), "")
+		_, err := wf.ApproveChange(makeRequest("POST", "/api/approvals/cas3/approve"), "cas3", makePrincipal("bob", "admin"), "")
 		results <- err
 	}()
 	go func() {
@@ -665,9 +666,9 @@ func TestStrictAudit_Success_CapturesAllFields(t *testing.T) {
 	wf := NewWorkflowWithDeps(store, identities, writer)
 
 	seedApproval(store, "sa1", "pending", "alice", "ACCESS_REQUEST", "high")
-	seedUserIdentity(identities, "bob", "ops_admin", "active", false)
+	seedUserIdentity(identities, "bob", "admin", "active", false)
 
-	_, err := wf.ApproveChange(makeRequest("POST", "/api/approvals/sa1/approve"), "sa1", makePrincipal("bob", "ops_admin"), "approved reason")
+	_, err := wf.ApproveChange(makeRequest("POST", "/api/approvals/sa1/approve"), "sa1", makePrincipal("bob", "admin"), "approved reason")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -725,9 +726,9 @@ func TestStrictAudit_Failure_CommittedTrue(t *testing.T) {
 	wf := NewWorkflowWithDeps(store, identities, writer)
 
 	seedApproval(store, "sa2", "pending", "alice", "ACCESS_REQUEST", "medium")
-	seedUserIdentity(identities, "bob", "ops_admin", "active", false)
+	seedUserIdentity(identities, "bob", "admin", "active", false)
 
-	approval, err := wf.ApproveChange(makeRequest("POST", "/api/approvals/sa2/approve"), "sa2", makePrincipal("bob", "ops_admin"), "")
+	approval, err := wf.ApproveChange(makeRequest("POST", "/api/approvals/sa2/approve"), "sa2", makePrincipal("bob", "admin"), "")
 	if err == nil {
 		t.Fatal("expected error from audit failure")
 	}

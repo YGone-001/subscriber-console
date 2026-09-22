@@ -44,7 +44,7 @@ export function evaluateSubscriberOperation(operation: SubscriberOperation) {
 }
 
 function isSuperAdminRole(role: string | undefined): boolean {
-  return role === 'super_admin' || role === 'root';
+  return role === 'admin' || role === 'super_admin' || role === 'root';
 }
 
 /** Actor-aware governance evaluation.

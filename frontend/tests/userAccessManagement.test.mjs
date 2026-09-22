@@ -27,12 +27,16 @@ test('user management policy protects self and privileged targets and restricts 
   }
   const ops = { username: 'ops', role: 'ops_admin', status: 'active' };
   for (const operation of ['update', 'password.reset', 'disable', 'delete', 'lock', 'role.change']) {
-    assert.throws(() => policy.checkUserManagementPolicy(ops, root, operation, 'viewer'), /TARGET_ROLE_PROTECTED/);
+    assert.throws(() => policy.checkUserManagementPolicy(ops, root, operation, 'viewer'), /PERMISSION_DENIED/);
   }
-  for (const role of ['root', 'super_admin', 'ops_admin']) assert.throws(() => policy.checkUserManagementPolicy(ops, null, 'create', role), /ROLE_ASSIGNMENT_FORBIDDEN/);
-  assert.deepEqual(Array.from(policy.assignableRoles(ops)), ['operator', 'auditor', 'viewer']);
+  for (const role of ['root', 'super_admin', 'ops_admin', 'operator', 'admin']) {
+    assert.throws(() => policy.checkUserManagementPolicy(ops, null, 'create', role), /PERMISSION_DENIED/);
+  }
+  assert.deepEqual(Array.from(policy.assignableRoles(ops)), []);
+  assert.deepEqual(Array.from(policy.assignableRoles(root)), ['admin', 'operator', 'viewer']);
   for (const role of ['viewer', 'auditor']) assert.throws(() => policy.checkUserManagementPolicy({ ...ops, role }, root, 'update'), /PERMISSION_DENIED/);
   policy.checkUserManagementPolicy(root, { username: 'other', role: 'root' }, 'update');
+  assert.throws(() => policy.checkUserManagementPolicy(root, null, 'create', 'auditor'), /ROLE_ASSIGNMENT_FORBIDDEN/);
 });
 
 function lifecycleHarness() {

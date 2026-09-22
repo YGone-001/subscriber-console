@@ -1,3 +1,4 @@
+import { normalizeGovernanceRole } from "@/lib/permissions";
 import type {
   CapabilityDecision,
   DisplayUserStatus,
@@ -80,7 +81,7 @@ export function isProtectedSystemUser(user: UserAccessRecord, currentUsername?: 
 }
 
 export function isBulkMutableUser(user: UserAccessRecord, currentUsername?: string | null) {
-  return !isProtectedSystemUser(user, currentUsername) && user.role !== "root";
+  return !isProtectedSystemUser(user, currentUsername) && normalizeGovernanceRole(user.role) !== "admin";
 }
 
 export function buildUserQueryString(state: UserQueryState) {

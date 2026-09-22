@@ -8,8 +8,8 @@ export type CapabilityGuardOptions = {
   allowExport?: boolean;
 };
 
-const LEGACY_CAPABILITIES = {
-  root: {
+const CANONICAL_CAPABILITIES = {
+  admin: {
     subscriber_write: 'allow',
     policy_approve: 'allow',
     balance_adjust: 'allow',
@@ -24,15 +24,15 @@ const LEGACY_CAPABILITIES = {
   },
   operator: {
     subscriber_write: 'allow',
-    policy_approve: 'approval',
-    balance_adjust: 'approval',
-    profile_rollback: 'approval',
-    rating_publish: 'approval',
+    policy_approve: 'allow',
+    balance_adjust: 'allow',
+    profile_rollback: 'allow',
+    rating_publish: 'allow',
     approval_review: 'deny',
     approval_execute: 'deny',
     audit_view: 'allow',
     audit_export: 'deny',
-    system_heal: 'approval',
+    system_heal: 'allow',
     user_admin: 'deny',
   },
   viewer: {
@@ -51,14 +51,19 @@ const LEGACY_CAPABILITIES = {
 } as const;
 
 export const ROLE_CAPABILITIES: Record<RoleKey, Record<Capability, CapabilityDecision>> = {
-  ...LEGACY_CAPABILITIES,
-  super_admin: LEGACY_CAPABILITIES.root,
-  ops_admin: { ...LEGACY_CAPABILITIES.root, user_admin: 'deny' },
-  auditor: { ...LEGACY_CAPABILITIES.viewer, audit_export: 'export' },
+  admin: CANONICAL_CAPABILITIES.admin,
+  operator: CANONICAL_CAPABILITIES.operator,
+  viewer: CANONICAL_CAPABILITIES.viewer,
+  root: CANONICAL_CAPABILITIES.admin,
+  super_admin: CANONICAL_CAPABILITIES.admin,
+  ops_admin: CANONICAL_CAPABILITIES.operator,
+  auditor: CANONICAL_CAPABILITIES.viewer,
 };
 
-export function capabilityDecision(role: RoleKey, capability: Capability): CapabilityDecision {
-  return ROLE_CAPABILITIES[role]?.[capability] || 'deny';
+export function capabilityDecision(role: RoleKey | string | unknown, capability: Capability): CapabilityDecision {
+  const canonical = normalizeGovernanceRole(role);
+  if (!canonical) return 'deny';
+  return CANONICAL_CAPABILITIES[canonical]?.[capability] || 'deny';
 }
 
 export function capabilityAllowed(decision: CapabilityDecision, options: CapabilityGuardOptions = {}) {
@@ -83,40 +88,45 @@ export const PERMISSION_CATALOG = [
 
 export type Permission = (typeof PERMISSION_CATALOG)[number];
 
-const READ_PERMISSIONS = PERMISSION_CATALOG.filter((permission) => permission.endsWith('.read'));
-
 export const ROLE_PERMISSIONS: Readonly<Record<GovernanceRole, readonly Permission[]>> = {
-  super_admin: [...PERMISSION_CATALOG],
-  ops_admin: [
-    'users.create', 'users.update', 'users.disable', 'users.delete', 'users.role.change', 'users.reset-password', 'users.unlock',
-    ...READ_PERMISSIONS, 'approvals.create', 'approvals.approve', 'approvals.reject',
-    'approvals.cancel', 'approvals.execute', 'audit.export',
-    'subscribers.write', 'subscribers.delete', 'profiles.write', 'core.operate', 'core.configure',
-    'ocs.balance.adjust', 'ocs.tariff.write', 'ocs.plan.assign', 'ocs.rating.write',
-  ],
+  admin: [...PERMISSION_CATALOG],
   operator: [
     'subscribers.read', 'subscribers.write', 'subscribers.delete',
-    'profiles.read', 'core.read', 'core.operate', 'audit.read',
+    'profiles.read', 'profiles.write',
+    'core.read', 'core.operate', 'core.configure',
+    'audit.read',
     'ocs.read', 'ocs.balance.adjust', 'ocs.tariff.write', 'ocs.plan.assign', 'ocs.rating.write',
     'approvals.read', 'approvals.create', 'approvals.cancel',
   ],
-  auditor: ['users.read', 'approvals.read', 'audit.read', 'audit.export', 'audit.source-ip.read-full'],
-  viewer: ['subscribers.read', 'profiles.read', 'ocs.read', 'core.read', 'approvals.read', 'audit.read'],
+  viewer: [
+    'subscribers.read', 'profiles.read', 'ocs.read', 'core.read',
+    'approvals.read', 'audit.read',
+  ],
 };
 
 export function normalizeGovernanceRole(role: unknown): GovernanceRole | null {
-  // Existing JWTs and app_users keep root. This is an authorization alias only.
-  if (role === 'root') return 'super_admin';
   switch (role) {
-    case 'super_admin': case 'ops_admin': case 'operator': case 'auditor': case 'viewer':
-      return role;
+    case 'admin':
+    case 'root':
+    case 'super_admin':
+      return 'admin';
+    case 'operator':
+    case 'ops_admin':
+      return 'operator';
+    case 'viewer':
+    case 'auditor':
+      return 'viewer';
     default:
       return null;
   }
 }
 
 export function isSuperAdmin(role: unknown): boolean {
-  return normalizeGovernanceRole(role) === 'super_admin';
+  return normalizeGovernanceRole(role) === 'admin';
+}
+
+export function isAdmin(role: unknown): boolean {
+  return normalizeGovernanceRole(role) === 'admin';
 }
 
 export type PermissionSubject = { role?: string; status?: string; locked?: boolean };

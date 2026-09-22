@@ -189,11 +189,10 @@ func TestBuildUserFilterRoleSuperAdmin(t *testing.T) {
 	if !ok {
 		t.Fatalf("$in is not bson.A: %T", roleFilter["$in"])
 	}
-	if len(inArr) != 2 {
-		t.Fatalf("$in length = %d, want 2", len(inArr))
+	if len(inArr) != 3 {
+		t.Fatalf("$in length = %d, want 3", len(inArr))
 	}
-	hasRoot := false
-	hasSuperAdmin := false
+	hasRoot, hasSuperAdmin, hasAdmin := false, false, false
 	for _, v := range inArr {
 		if v == "root" {
 			hasRoot = true
@@ -201,28 +200,43 @@ func TestBuildUserFilterRoleSuperAdmin(t *testing.T) {
 		if v == "super_admin" {
 			hasSuperAdmin = true
 		}
+		if v == "admin" {
+			hasAdmin = true
+		}
 	}
-	if !hasRoot || !hasSuperAdmin {
-		t.Errorf("$in = %v, want [root super_admin]", inArr)
+	if !hasRoot || !hasSuperAdmin || !hasAdmin {
+		t.Errorf("$in = %v, want [admin root super_admin]", inArr)
 	}
 }
 
 func TestBuildUserFilterRoleRoot(t *testing.T) {
-	// root should also expand to [root, super_admin]
+	// root should also expand to [admin, root, super_admin]
 	q := UserQuery{Role: "root"}
+	f := buildUserFilter(q)
+	roleFilter := f["role"].(bson.M)
+	inArr := roleFilter["$in"].(bson.A)
+	if len(inArr) != 3 {
+		t.Fatalf("$in length = %d, want 3", len(inArr))
+	}
+}
+
+func TestBuildUserFilterRoleAdmin(t *testing.T) {
+	q := UserQuery{Role: "admin"}
+	f := buildUserFilter(q)
+	roleFilter := f["role"].(bson.M)
+	inArr := roleFilter["$in"].(bson.A)
+	if len(inArr) != 3 {
+		t.Fatalf("$in length = %d, want 3", len(inArr))
+	}
+}
+
+func TestBuildUserFilterRoleOperator(t *testing.T) {
+	q := UserQuery{Role: "operator"}
 	f := buildUserFilter(q)
 	roleFilter := f["role"].(bson.M)
 	inArr := roleFilter["$in"].(bson.A)
 	if len(inArr) != 2 {
 		t.Fatalf("$in length = %d, want 2", len(inArr))
-	}
-}
-
-func TestBuildUserFilterRoleOther(t *testing.T) {
-	q := UserQuery{Role: "operator"}
-	f := buildUserFilter(q)
-	if f["role"] != "operator" {
-		t.Errorf("role = %v, want operator", f["role"])
 	}
 }
 

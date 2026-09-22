@@ -1,7 +1,7 @@
 import { Document, MongoServerError, type Filter } from 'mongodb';
 import { getAppCollection, mongoCollections } from '@/lib/mongo';
 import type { SysUser } from '@/types/iam';
-import { isSuperAdmin } from '@/lib/permissions';
+import { isSuperAdmin, normalizeGovernanceRole } from '@/lib/permissions';
 import { UserManagementError } from '@/lib/userManagementPolicy';
 import { withUserManagementLock } from '@/server/userManagementLock';
 import { escapeUserSearch, USER_SORT_FIELDS, type UserQuery } from '@/lib/userQuery';
@@ -72,7 +72,7 @@ export async function updateUser(username: string, updates: Partial<UserDocument
   const nextState = { ...existing, ...updates };
   if (isSuperAdmin(existing.role) && existing.status === 'active' && !existing.locked &&
       (!isSuperAdmin(nextState.role) || nextState.status !== 'active' || nextState.locked)) {
-    const activeAdmins = await docs.countDocuments({ role: { $in: ['root', 'super_admin'] }, status: 'active', locked: { $ne: true } });
+    const activeAdmins = await docs.countDocuments({ role: { $in: ['admin', 'root', 'super_admin'] }, status: 'active', locked: { $ne: true } });
     if (activeAdmins <= 1) throw new UserManagementError('LAST_ACTIVE_ADMIN', 409);
   }
 
@@ -114,7 +114,18 @@ export function safeUser(user: UserDocument & Record<string, unknown>): SafeUser
 export async function queryUsers(query: UserQuery) {
   const docs = await collection();
   const filter: Filter<UserDocument> = {};
-  if (query.role) filter.role = isSuperAdmin(query.role) ? { $in: ['root', 'super_admin'] } : query.role as SysUser['role'];
+  if (query.role) {
+    const norm = normalizeGovernanceRole(query.role);
+    if (norm === 'admin') {
+      filter.role = { $in: ['admin', 'root', 'super_admin'] };
+    } else if (norm === 'operator') {
+      filter.role = { $in: ['operator', 'ops_admin'] };
+    } else if (norm === 'viewer') {
+      filter.role = { $in: ['viewer', 'auditor'] };
+    } else {
+      filter.role = query.role as SysUser['role'];
+    }
+  }
   if (query.status === 'locked') filter.$or = [{ status: 'locked' }, { locked: true }];
   else if (query.status) { filter.status = query.status as SysUser['status']; filter.locked = { $ne: true }; }
   if (query.search) filter.$and = [{ $or: [{ username: { $regex: escapeUserSearch(query.search), $options: 'i' } }, { displayName: { $regex: escapeUserSearch(query.search), $options: 'i' } }] }];
@@ -124,7 +135,7 @@ export async function queryUsers(query: UserQuery) {
   const [items, totalUsers, active, administrators, locked] = await Promise.all([
     docs.find(filter, { projection: { passwordHash: 0 } }).sort({ [USER_SORT_FIELDS[query.sort]]: query.order === 'asc' ? 1 : -1, _id: 1 }).skip((page - 1) * query.pageSize).limit(query.pageSize).toArray(),
     docs.countDocuments({}), docs.countDocuments({ status: 'active', locked: { $ne: true } }),
-    docs.countDocuments({ role: { $in: ['root', 'super_admin', 'ops_admin'] } }),
+    docs.countDocuments({ role: { $in: ['admin', 'root', 'super_admin'] } }),
     docs.countDocuments({ $or: [{ status: 'locked' }, { locked: true }] }),
   ]);
   return { items: items.map(stripPassword), pagination: { page, pageSize: query.pageSize, total, totalPages }, stats: { total: totalUsers, active, administrators, locked } };

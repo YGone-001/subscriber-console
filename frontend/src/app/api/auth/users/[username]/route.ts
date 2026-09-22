@@ -8,6 +8,7 @@ import { assignableRoles, userManagementActions, UserManagementError, type UserO
 import { getSafeUser, safeUser, updateUser, type UserDocument } from '@/server/repositories/userRepository';
 import { listAuditLogsForUser } from '@/server/repositories/auditRepository';
 import { authorizeUserOperation, profileFields, recheckUserPolicy, requireObject, userAudit, userOperationError } from '@/server/userManagement';
+import type { RoleKey } from '@/types/iam';
 
 export const dynamic = 'force-dynamic';
 type RouteContext = { params: Promise<{ username: string }> };
@@ -43,9 +44,8 @@ async function mutate(request: Request, context: RouteContext, deletion = false)
     operations = deletion ? ['delete', 'disable'] : [];
     if (updates.displayName !== undefined || updates.email !== undefined) operations.push('update');
     if (Object.hasOwn(body, 'role')) {
-      const normalized = normalizeGovernanceRole(body.role);
-      if (!normalized) throw new UserManagementError('INVALID_ROLE', 400);
-      updates.role = normalized === 'super_admin' ? 'root' : normalized;
+      if (typeof body.role !== 'string' || !['admin', 'operator', 'viewer'].includes(body.role)) throw new UserManagementError('INVALID_ROLE', 400);
+      updates.role = body.role as RoleKey;
       operations.push('role.change');
     }
     if (body.action !== undefined && !['lock', 'unlock', 'enable', 'disable'].includes(String(body.action))) throw new UserManagementError('INVALID_ACTION', 400);

@@ -155,7 +155,7 @@ describe('POST /api/subscribers/:imsi/profile — production path', () => {
       createApproval: async () => ({ id: 'approval-001' }),
       enforceRateLimit: async () => ({ ok: true } as Awaited<ReturnType<SubscriberProfileApplyDeps['enforceRateLimit']>>),
       requireCapability: (() => ({ ok: true, auth: { user: 'admin', role: 'super_admin', sessionVersion: 1 } })) as SubscriberProfileApplyDeps['requireCapability'],
-      validateAccount: async () => ({ userId: 'user-001', username: 'admin', role: 'super_admin' as const, normalizedRole: 'super_admin' as const, status: 'active' as const, sessionVersion: 1 }),
+      validateAccount: async () => ({ userId: 'user-001', username: 'admin', role: 'super_admin' as const, normalizedRole: 'admin' as const, status: 'active' as const, sessionVersion: 1 }),
       replaceSubscriberCAS: async (expected: XcloudSubscriberDocument, replacement: XcloudSubscriberDocument) => {
         casCalls.push({ expected, replacement });
         return true;
@@ -186,7 +186,7 @@ describe('POST /api/subscribers/:imsi/profile — production path', () => {
       createApproval: async () => ({ id: 'approval-001' }),
       enforceRateLimit: async () => ({ ok: true } as Awaited<ReturnType<SubscriberProfileApplyDeps['enforceRateLimit']>>),
       requireCapability: (() => ({ ok: false, response: NextResponse.json({ error: 'Unauthorized', code: 'UNAUTHORIZED' }, { status: 401 }) })) as SubscriberProfileApplyDeps['requireCapability'],
-      validateAccount: async () => ({ userId: 'user-001', username: 'admin', role: 'super_admin' as const, normalizedRole: 'super_admin' as const, status: 'active' as const, sessionVersion: 1 }),
+      validateAccount: async () => ({ userId: 'user-001', username: 'admin', role: 'super_admin' as const, normalizedRole: 'admin' as const, status: 'active' as const, sessionVersion: 1 }),
       replaceSubscriberCAS: async () => true,
     };
 
@@ -208,7 +208,7 @@ describe('POST /api/subscribers/:imsi/profile — production path', () => {
       createApproval: async () => ({ id: 'approval-001' }),
       enforceRateLimit: async () => ({ ok: true } as Awaited<ReturnType<SubscriberProfileApplyDeps['enforceRateLimit']>>),
       requireCapability: (() => ({ ok: false, response: NextResponse.json({ error: 'Forbidden', code: 'PERMISSION_DENIED' }, { status: 403 }) })) as SubscriberProfileApplyDeps['requireCapability'],
-      validateAccount: async () => ({ userId: 'user-001', username: 'admin', role: 'super_admin' as const, normalizedRole: 'super_admin' as const, status: 'active' as const, sessionVersion: 1 }),
+      validateAccount: async () => ({ userId: 'user-001', username: 'admin', role: 'super_admin' as const, normalizedRole: 'admin' as const, status: 'active' as const, sessionVersion: 1 }),
       replaceSubscriberCAS: async () => true,
     };
 
@@ -230,7 +230,7 @@ describe('POST /api/subscribers/:imsi/profile — production path', () => {
       createApproval: async () => ({ id: 'approval-001' }),
       enforceRateLimit: async () => ({ ok: true } as Awaited<ReturnType<SubscriberProfileApplyDeps['enforceRateLimit']>>),
       requireCapability: (() => ({ ok: true, auth: { user: 'admin', role: 'super_admin', sessionVersion: 1 } })) as SubscriberProfileApplyDeps['requireCapability'],
-      validateAccount: async () => ({ userId: 'user-001', username: 'admin', role: 'super_admin' as const, normalizedRole: 'super_admin' as const, status: 'active' as const, sessionVersion: 1 }),
+      validateAccount: async () => ({ userId: 'user-001', username: 'admin', role: 'super_admin' as const, normalizedRole: 'admin' as const, status: 'active' as const, sessionVersion: 1 }),
       replaceSubscriberCAS: async () => true,
     };
 
@@ -255,7 +255,7 @@ describe('POST /api/subscribers/:imsi/profile — production path', () => {
       createApproval: async () => ({ id: 'approval-001' }),
       enforceRateLimit: async () => ({ ok: true } as Awaited<ReturnType<SubscriberProfileApplyDeps['enforceRateLimit']>>),
       requireCapability: (() => ({ ok: true, auth: { user: 'admin', role: 'super_admin', sessionVersion: 1 } })) as SubscriberProfileApplyDeps['requireCapability'],
-      validateAccount: async () => ({ userId: 'user-001', username: 'admin', role: 'super_admin' as const, normalizedRole: 'super_admin' as const, status: 'active' as const, sessionVersion: 1 }),
+      validateAccount: async () => ({ userId: 'user-001', username: 'admin', role: 'super_admin' as const, normalizedRole: 'admin' as const, status: 'active' as const, sessionVersion: 1 }),
       replaceSubscriberCAS: async () => true,
     };
 
@@ -279,7 +279,7 @@ describe('POST /api/subscribers/:imsi/profile — production path', () => {
       createApproval: async () => ({ id: 'approval-001' }),
       enforceRateLimit: async () => ({ ok: true } as Awaited<ReturnType<SubscriberProfileApplyDeps['enforceRateLimit']>>),
       requireCapability: (() => ({ ok: true, auth: { user: 'admin', role: 'super_admin', sessionVersion: 1 } })) as SubscriberProfileApplyDeps['requireCapability'],
-      validateAccount: async () => ({ userId: 'user-001', username: 'admin', role: 'super_admin' as const, normalizedRole: 'super_admin' as const, status: 'active' as const, sessionVersion: 1 }),
+      validateAccount: async () => ({ userId: 'user-001', username: 'admin', role: 'super_admin' as const, normalizedRole: 'admin' as const, status: 'active' as const, sessionVersion: 1 }),
       replaceSubscriberCAS: async () => true,
     };
 
@@ -319,7 +319,7 @@ describe('POST /api/subscribers/:imsi/profile — production path', () => {
       createApproval: async () => ({ id: 'approval-001' }),
       enforceRateLimit: async () => ({ ok: true } as Awaited<ReturnType<SubscriberProfileApplyDeps['enforceRateLimit']>>),
       requireCapability: (() => ({ ok: true, auth: { user: 'admin', role: 'super_admin', sessionVersion: 1 } })) as SubscriberProfileApplyDeps['requireCapability'],
-      validateAccount: async () => ({ userId: 'user-001', username: 'admin', role: 'super_admin' as const, normalizedRole: 'super_admin' as const, status: 'active' as const, sessionVersion: 1 }),
+      validateAccount: async () => ({ userId: 'user-001', username: 'admin', role: 'super_admin' as const, normalizedRole: 'admin' as const, status: 'active' as const, sessionVersion: 1 }),
       replaceSubscriberCAS: async () => true,
     };
 

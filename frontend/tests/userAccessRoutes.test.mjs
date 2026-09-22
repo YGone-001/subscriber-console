@@ -40,7 +40,8 @@ test('user route handlers enforce policy and emit create, role, disable, passwor
   const context = { params: Promise.resolve({ username: 'phase2_test' }) };
   const create = await h.create.POST(request({ username: 'phase2_test', displayName: 'Phase 2 test', password: 'Strong-Sample!2026', role: 'operator', email: '' }));
   assert.equal(create.status, 201);
-  assert.equal((await h.target.PATCH(request({ role: 'auditor' }), context)).status, 200);
+  assert.equal((await h.target.PATCH(request({ role: 'auditor' }), context)).status, 400);
+  assert.equal((await h.target.PATCH(request({ role: 'viewer' }), context)).status, 200);
   assert.equal((await h.target.PATCH(request({ status: 'disabled' }), context)).status, 200);
   assert.equal((await h.target.PATCH(request({ password: 'Rotated-Sample!2026' }), context)).status, 200);
   assert.equal((await h.target.PATCH(request({ role: 'root' }, 'viewer'), context)).status, 403);

@@ -7,19 +7,16 @@ import (
 // assignableRoles returns roles that the actor can assign to others.
 // Matches Node assignableRoles() exactly.
 func assignableRoles(actorRole string) []string {
+	norm := auth.NormalizeRole(actorRole)
 	// Check if actor has users.create or users.role.change
-	p := &auth.Principal{NormalizedRole: actorRole}
+	p := &auth.Principal{NormalizedRole: norm}
 	if !auth.HasPermission(p, "users.create") && !auth.HasPermission(p, "users.role.change") {
 		return nil
 	}
-	switch actorRole {
-	case "super_admin":
-		return []string{"root", "ops_admin", "operator", "auditor", "viewer"}
-	case "ops_admin":
-		return []string{"operator", "auditor", "viewer"}
-	default:
-		return nil
+	if norm == "admin" || norm == "super_admin" {
+		return []string{"admin", "operator", "viewer"}
 	}
+	return nil
 }
 
 // userOperation represents a management operation on a user.
@@ -94,7 +91,9 @@ func canPerformOperation(actorRole, targetRole, actorUsername, targetUsername st
 
 	// Target role protection
 	if targetRole != "" {
-		if actorRole != "super_admin" && (targetRole == "super_admin" || targetRole == "ops_admin") {
+		targetNorm := auth.NormalizeRole(targetRole)
+		actorNorm := auth.NormalizeRole(actorRole)
+		if (actorNorm != "admin" && actorNorm != "super_admin") && (targetNorm == "admin" || targetNorm == "super_admin") {
 			return false
 		}
 	}

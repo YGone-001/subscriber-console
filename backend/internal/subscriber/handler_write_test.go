@@ -49,7 +49,8 @@ func (f *fakeApprovalCreator) Create(_ *http.Request, _ approval.GovernanceActor
 func testPrincipal(username, role string) *auth.Principal {
 	return &auth.Principal{
 		Username:       username,
-		NormalizedRole: role,
+		Role:           role,
+		NormalizedRole: auth.NormalizeRole(role),
 		SessionVersion: 1,
 	}
 }
@@ -327,8 +328,8 @@ func TestRevalidateFreshActor_Success(t *testing.T) {
 	if fresh.Username != "admin1" {
 		t.Errorf("expected username admin1, got %s", fresh.Username)
 	}
-	if fresh.NormalizedRole != "super_admin" {
-		t.Errorf("expected role super_admin, got %s", fresh.NormalizedRole)
+	if fresh.NormalizedRole != "admin" {
+		t.Errorf("expected role admin, got %s", fresh.NormalizedRole)
 	}
 	if fresh.UserID != "user-mongo-id-123" {
 		t.Errorf("expected UserID user-mongo-id-123, got %s", fresh.UserID)

@@ -43,6 +43,18 @@ Approval workflow removed from business execution path. Authorization and operat
 - 移除阻塞式业务审批工作流，业务操作不再生成 `app_approvals` 记录。
 - 严格保留 RBAC 权限检查、操作主体重新鉴权（Fresh Actor Revalidation）、严格操作审计日志（Operation Log / `app_audit_logs`）及 CAS 并发冲突保护。
 
+### 1.2 角色权限模型 (RBAC Model - Phase 5.7-B)
+
+三标准角色模型 (Canonical Three-Role Model)：
+- `admin` (管理员): 全系统管理，包含用户管理、角色分配、审批复核/执行、审计导出与完整源 IP 查看、业务直接变更。
+- `operator` (操作员): 业务直接变更（签约、余额、Profile 回滚、资费、计费等）、核心网运维与配置，不可管理用户，不可导出审计。
+- `viewer` (查看员): 只读查看，所有业务变更与用户管理均拒绝。
+
+向后兼容与运行时归一化：
+- 历史角色透明映射：`root` / `super_admin` → `admin`，`ops_admin` → `operator`，`auditor` → `viewer`。
+- 写入边界：用户创建与角色更新仅接受 `['admin', 'operator', 'viewer']`，写入历史角色直接返回 HTTP 400 `INVALID_ROLE`。
+- UI 下拉选项严格展示三标准角色。
+
 长期演进：
 - EPC / 5GC / IMS 网元管理
 - 信令追踪、HEP/HOMER

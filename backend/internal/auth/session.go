@@ -126,10 +126,12 @@ func (sv *SessionValidator) ValidateSession(ctx context.Context, claims *Claims)
 // Must match the TypeScript normalizeGovernanceRole() exactly.
 func normalizeGovernanceRole(role string) string {
 	switch role {
-	case "root":
-		return "super_admin"
-	case "super_admin", "ops_admin", "operator", "auditor", "viewer":
-		return role
+	case "root", "super_admin", "admin":
+		return "admin"
+	case "ops_admin", "operator":
+		return "operator"
+	case "auditor", "viewer":
+		return "viewer"
 	default:
 		return ""
 	}
@@ -141,8 +143,8 @@ func NormalizeRole(role string) string {
 	return normalizeGovernanceRole(role)
 }
 
-// IsSuperAdmin returns true if the principal's normalized role is super_admin.
-// Treats both "root" (legacy) and "super_admin" as Super Admin.
+// IsSuperAdmin returns true if the principal's normalized role is admin.
+// Treats "root", "super_admin", and "admin" as Admin.
 func IsSuperAdmin(p *Principal) bool {
-	return p != nil && p.NormalizedRole == "super_admin"
+	return p != nil && (p.NormalizedRole == "admin" || p.NormalizedRole == "super_admin")
 }

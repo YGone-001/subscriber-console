@@ -1195,7 +1195,7 @@ func (h *Handler) writeRestoreAudit(ctx context.Context, p *auth.Principal, name
 	}
 
 	governanceMode := "DIRECT_GOVERNED"
-	if p.NormalizedRole == "operator" {
+	if classification == "APPROVAL_GOVERNED" {
 		governanceMode = "APPROVAL_GOVERNED"
 	}
 

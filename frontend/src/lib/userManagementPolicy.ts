@@ -18,8 +18,7 @@ export const USER_OPERATION_PERMISSIONS: Record<UserOperation, Permission> = {
 export function assignableRoles(actor: ManagementActor): RoleKey[] {
   if (!hasPermission(actor, 'users.create') && !hasPermission(actor, 'users.role.change')) return [];
   switch (normalizeGovernanceRole(actor.role)) {
-    case 'super_admin': return ['root', 'ops_admin', 'operator', 'auditor', 'viewer'];
-    case 'ops_admin': return ['operator', 'auditor', 'viewer'];
+    case 'admin': return ['admin', 'operator', 'viewer'];
     default: return [];
   }
 }
@@ -35,13 +34,12 @@ export function checkUserManagementPolicy(actor: ManagementActor, target: Manage
     }
     const actorRole = normalizeGovernanceRole(actor.role);
     const targetRole = normalizeGovernanceRole(target.role);
-    if (!targetRole || (actorRole !== 'super_admin' && (targetRole === 'super_admin' || targetRole === 'ops_admin'))) {
+    if (!targetRole || (actorRole !== 'admin' && targetRole === 'admin')) {
       throw new UserManagementError('TARGET_ROLE_PROTECTED');
     }
   }
   if (operation === 'create' || operation === 'role.change') {
-    const normalized = normalizeGovernanceRole(nextRole);
-    if (!normalized || !assignableRoles(actor).some((role) => normalizeGovernanceRole(role) === normalized)) {
+    if (!assignableRoles(actor).includes(nextRole as RoleKey)) {
       throw new UserManagementError('ROLE_ASSIGNMENT_FORBIDDEN');
     }
   }

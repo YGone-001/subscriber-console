@@ -13,7 +13,7 @@ export async function GET(request: Request) {
     role: auth.auth.role,
     databaseRole: auth.auth.role,
     normalizedRole: normalizeGovernanceRole(auth.auth.role),
-    capabilities: ROLE_CAPABILITIES[auth.auth.role],
+    capabilities: ROLE_CAPABILITIES[normalizeGovernanceRole(auth.auth.role) ?? 'viewer'],
     // Additive catalog information. Legacy endpoints still enforce capabilities.
     governanceRole: normalizeGovernanceRole(auth.auth.role),
     permissions: permissionsFor({ role: auth.auth.role }),

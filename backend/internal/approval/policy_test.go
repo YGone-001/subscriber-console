@@ -33,8 +33,8 @@ func TestComputeActionEligibility_MakerChecker_CriticalRisk_DifferentReviewer(t 
 		Requester: "alice",
 	}
 
-	// Different reviewer with approvals.approve permission (ops_admin)
-	actions := ComputeActionEligibility(approval, "bob", "ops_admin")
+	// Different reviewer with approvals.approve permission (admin)
+	actions := ComputeActionEligibility(approval, "bob", "admin")
 
 	if !actions.CanApprove {
 		t.Error("critical risk, different reviewer: expected canApprove=true")
@@ -107,8 +107,8 @@ func TestComputeActionEligibility_Execute_Approved(t *testing.T) {
 		Requester: "alice",
 	}
 
-	// ops_admin has approvals.execute
-	actions := ComputeActionEligibility(approval, "bob", "ops_admin")
+	// admin has approvals.execute
+	actions := ComputeActionEligibility(approval, "bob", "admin")
 
 	if !actions.CanExecute {
 		t.Error("approved + approvals.execute: expected canExecute=true")
@@ -125,7 +125,7 @@ func TestComputeActionEligibility_Execute_Pending(t *testing.T) {
 		Requester: "alice",
 	}
 
-	actions := ComputeActionEligibility(approval, "bob", "ops_admin")
+	actions := ComputeActionEligibility(approval, "bob", "admin")
 
 	if actions.CanExecute {
 		t.Error("pending: expected canExecute=false")
@@ -142,7 +142,7 @@ func TestComputeActionEligibility_Execute_Completed(t *testing.T) {
 		Requester: "alice",
 	}
 
-	actions := ComputeActionEligibility(approval, "bob", "ops_admin")
+	actions := ComputeActionEligibility(approval, "bob", "admin")
 
 	if actions.CanExecute {
 		t.Error("completed: expected canExecute=false")

@@ -15,9 +15,9 @@ test('role capability matrix matches operator guardrails', () => {
   assert.equal(capabilityDecision('root', 'user_admin'), 'allow');
   assert.equal(capabilityDecision('root', 'profile_rollback'), 'allow');
   assert.equal(capabilityDecision('operator', 'subscriber_write'), 'allow');
-  assert.equal(capabilityDecision('operator', 'policy_approve'), 'approval');
-  assert.equal(capabilityDecision('operator', 'balance_adjust'), 'approval');
-  assert.equal(capabilityDecision('operator', 'profile_rollback'), 'approval');
+  assert.equal(capabilityDecision('operator', 'policy_approve'), 'allow');
+  assert.equal(capabilityDecision('operator', 'balance_adjust'), 'allow');
+  assert.equal(capabilityDecision('operator', 'profile_rollback'), 'allow');
   assert.equal(capabilityDecision('operator', 'user_admin'), 'deny');
   assert.equal(capabilityDecision('root', 'approval_review'), 'allow');
   assert.equal(capabilityDecision('root', 'approval_execute'), 'allow');
@@ -43,13 +43,14 @@ test('all roles expose the same capability keys', () => {
 });
 
 test('governance permissions preserve root and separate operation, review and audit duties', () => {
-  assert.equal(normalizeGovernanceRole('root'), 'super_admin');
-  assert.deepEqual(permissionsFor({ role: 'root' }), permissionsFor({ role: 'super_admin' }));
+  assert.equal(normalizeGovernanceRole('root'), 'admin');
+  assert.deepEqual(permissionsFor({ role: 'root' }), permissionsFor({ role: 'admin' }));
   assert.equal(hasPermission({ role: 'viewer' }, 'users.update'), false);
   assert.equal(hasPermission({ role: 'viewer' }, 'audit.export'), false);
   assert.equal(hasPermission({ role: 'auditor' }, 'core.operate'), false);
-  assert.equal(hasPermission({ role: 'auditor' }, 'audit.export'), true);
-  assert.equal(hasPermission({ role: 'auditor' }, 'audit.source-ip.read-full'), true);
+  assert.equal(hasPermission({ role: 'auditor' }, 'audit.export'), false);
+  assert.equal(hasPermission({ role: 'auditor' }, 'audit.source-ip.read-full'), false);
+  assert.equal(hasPermission({ role: 'admin' }, 'audit.source-ip.read-full'), true);
   assert.equal(hasPermission({ role: 'root' }, 'audit.source-ip.read-full'), true);
   assert.equal(hasPermission({ role: 'super_admin' }, 'audit.source-ip.read-full'), true);
   assert.equal(hasPermission({ role: 'ops_admin' }, 'audit.source-ip.read-full'), false);
@@ -57,12 +58,12 @@ test('governance permissions preserve root and separate operation, review and au
   assert.equal(hasPermission({ role: 'viewer' }, 'audit.source-ip.read-full'), false);
   assert.equal(hasPermission({ role: 'operator' }, 'approvals.create'), true);
   assert.equal(hasPermission({ role: 'operator' }, 'approvals.approve'), false);
-  assert.equal(hasPermission({ role: 'ops_admin' }, 'approvals.approve'), true);
-  assert.equal(hasPermission({ role: 'ops_admin' }, 'users.role.change'), true); // resource policy restricts targets/assignments
+  assert.equal(hasPermission({ role: 'ops_admin' }, 'approvals.approve'), false);
+  assert.equal(hasPermission({ role: 'ops_admin' }, 'users.role.change'), false);
 });
 
 test('permission evaluation fails closed for missing, unknown and inactive identities', () => {
-  for (const user of [null, undefined, {}, { role: 'admin' }, { role: '__proto__' },
+  for (const user of [null, undefined, {}, { role: 'unknown_role' }, { role: '__proto__' },
     { role: 'root', status: 'disabled' }, { role: 'root', status: 'locked' },
     { role: 'root', status: 'unknown' }, { role: 'root', locked: true }]) {
     assert.equal(hasPermission(user, 'audit.read'), false);

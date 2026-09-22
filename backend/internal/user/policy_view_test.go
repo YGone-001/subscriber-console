@@ -5,34 +5,23 @@ import (
 	"testing"
 )
 
-func TestAssignableRolesSuperAdmin(t *testing.T) {
-	roles := assignableRoles("super_admin")
-	expected := []string{"root", "ops_admin", "operator", "auditor", "viewer"}
-	if len(roles) != len(expected) {
-		t.Fatalf("len = %d, want %d; got %v", len(roles), len(expected), roles)
-	}
-	for i, r := range expected {
-		if roles[i] != r {
-			t.Errorf("roles[%d] = %q, want %q", i, roles[i], r)
+func TestAssignableRolesAdmin(t *testing.T) {
+	for _, role := range []string{"admin", "super_admin", "root"} {
+		roles := assignableRoles(role)
+		expected := []string{"admin", "operator", "viewer"}
+		if len(roles) != len(expected) {
+			t.Fatalf("%s len = %d, want %d; got %v", role, len(roles), len(expected), roles)
+		}
+		for i, r := range expected {
+			if roles[i] != r {
+				t.Errorf("%s roles[%d] = %q, want %q", role, i, roles[i], r)
+			}
 		}
 	}
 }
 
-func TestAssignableRolesOpsAdmin(t *testing.T) {
-	roles := assignableRoles("ops_admin")
-	expected := []string{"operator", "auditor", "viewer"}
-	if len(roles) != len(expected) {
-		t.Fatalf("len = %d, want %d", len(roles), len(expected))
-	}
-	for i, r := range expected {
-		if roles[i] != r {
-			t.Errorf("roles[%d] = %q, want %q", i, roles[i], r)
-		}
-	}
-}
-
-func TestAssignableRolesOthers(t *testing.T) {
-	for _, role := range []string{"operator", "auditor", "viewer", "unknown"} {
+func TestAssignableRolesNonAdmin(t *testing.T) {
+	for _, role := range []string{"ops_admin", "operator", "auditor", "viewer", "unknown"} {
 		roles := assignableRoles(role)
 		if len(roles) != 0 {
 			t.Errorf("assignableRoles(%q) = %v, want empty", role, roles)
@@ -85,33 +74,25 @@ func TestUserManagementActionsOperatorOnViewer(t *testing.T) {
 	}
 }
 
-func TestUserManagementActionsOpsAdminOnOperator(t *testing.T) {
-	actions := userManagementActions("ops_admin", "operator", "ops1", "op1")
-	actionSet := make(map[string]bool)
-	for _, a := range actions {
-		actionSet[a] = true
-	}
-	if !actionSet["update"] {
-		t.Error("ops_admin should have update on operator")
-	}
-	if !actionSet["role.change"] {
-		t.Error("ops_admin should have role.change on operator")
-	}
-	if !actionSet["disable"] {
-		t.Error("ops_admin should have disable on operator")
+func TestUserManagementActionsOperatorOnOther(t *testing.T) {
+	for _, actorRole := range []string{"operator", "ops_admin"} {
+		actions := userManagementActions(actorRole, "operator", "ops1", "op1")
+		if len(actions) != 0 {
+			t.Errorf("%s should have no actions on operator, got %v", actorRole, actions)
+		}
 	}
 }
 
 func TestUserManagementActionsTargetRoleProtection(t *testing.T) {
-	// ops_admin cannot manage super_admin or ops_admin targets
-	actions := userManagementActions("ops_admin", "super_admin", "ops1", "admin1")
+	// non-admin cannot manage admin targets
+	actions := userManagementActions("operator", "admin", "op1", "admin1")
 	if len(actions) != 0 {
-		t.Errorf("ops_admin should have no actions on super_admin, got %v", actions)
+		t.Errorf("operator should have no actions on admin, got %v", actions)
 	}
 
-	actions2 := userManagementActions("ops_admin", "ops_admin", "ops1", "ops2")
+	actions2 := userManagementActions("operator", "super_admin", "op1", "admin1")
 	if len(actions2) != 0 {
-		t.Errorf("ops_admin should have no actions on another ops_admin, got %v", actions2)
+		t.Errorf("operator should have no actions on super_admin, got %v", actions2)
 	}
 }
 
