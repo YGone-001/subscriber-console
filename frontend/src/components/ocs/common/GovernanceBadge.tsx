@@ -11,56 +11,39 @@ interface GovernanceBadgeProps {
 
 export default function GovernanceBadge({ status, mode, compact }: GovernanceBadgeProps) {
   const { t } = useI18n();
+  const normalizedStatus = status?.toLowerCase();
+  const normalizedMode = mode?.toUpperCase();
 
-  if (mode === "DIRECT_GOVERNED") {
-    return (
-      <span className="ocs-governance-badge ocs-governance-direct">
-        <ShieldCheck size={compact ? 10 : 12} />
-        {!compact && <span>{t("ocs_governance_direct")}</span>}
-      </span>
-    );
-  }
+  let className = "ocs-governance-badge ocs-governance-unknown";
+  let label = status || t("ocs_status_unknown");
+  let Icon = AlertTriangle;
 
-  if (!status || status === "none") {
-    return (
-      <span className="ocs-governance-badge ocs-governance-none">
-        <ShieldCheck size={compact ? 10 : 12} />
-        {!compact && <span>{t("ocs_governance_none")}</span>}
-      </span>
-    );
-  }
-
-  if (status === "pending") {
-    return (
-      <span className="ocs-governance-badge ocs-governance-pending">
-        <Clock size={compact ? 10 : 12} />
-        {!compact && <span>{t("ocs_governance_pending")}</span>}
-      </span>
-    );
-  }
-
-  if (status === "approved" || status === "completed" || status === "executed") {
-    return (
-      <span className="ocs-governance-badge ocs-governance-approved">
-        <CheckCircle2 size={compact ? 10 : 12} />
-        {!compact && <span>{t("ocs_governance_approved")}</span>}
-      </span>
-    );
-  }
-
-  if (status === "rejected") {
-    return (
-      <span className="ocs-governance-badge ocs-governance-rejected">
-        <XCircle size={compact ? 10 : 12} />
-        {!compact && <span>{t("ocs_governance_rejected")}</span>}
-      </span>
-    );
+  if (normalizedMode === "DIRECT_GOVERNED") {
+    className = "ocs-governance-badge ocs-governance-direct";
+    label = t("ocs_governance_direct");
+    Icon = ShieldCheck;
+  } else if (!normalizedStatus || normalizedStatus === "none") {
+    className = "ocs-governance-badge ocs-governance-none";
+    label = t("ocs_governance_none");
+    Icon = ShieldCheck;
+  } else if (normalizedStatus === "pending") {
+    className = "ocs-governance-badge ocs-governance-pending";
+    label = t("ocs_governance_pending");
+    Icon = Clock;
+  } else if (["approved", "completed", "executed"].includes(normalizedStatus)) {
+    className = "ocs-governance-badge ocs-governance-approved";
+    label = t("ocs_governance_approved");
+    Icon = CheckCircle2;
+  } else if (normalizedStatus === "rejected") {
+    className = "ocs-governance-badge ocs-governance-rejected";
+    label = t("ocs_governance_rejected");
+    Icon = XCircle;
   }
 
   return (
-    <span className="ocs-governance-badge ocs-governance-unknown">
-      <AlertTriangle size={compact ? 10 : 12} />
-      {!compact && <span>{status}</span>}
+    <span className={className} aria-label={label} title={label}>
+      <Icon size={compact ? 11 : 12} aria-hidden="true" />
+      <span>{label}</span>
     </span>
   );
 }

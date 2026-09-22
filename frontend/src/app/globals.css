@@ -1272,6 +1272,32 @@ body.global-emergency-flash {
   flex-wrap: wrap;
 }
 
+.profile-action-bar {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) auto max-content;
+}
+
+.profile-search-input {
+  width: 100%;
+  min-width: 0;
+}
+
+.profile-domain-filters {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.profile-domain-btn,
+.profile-action-bar .page-action-buttons,
+.profile-action-bar .page-action-buttons .btn {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 .btn-icon {
   background: transparent;
   border: none;
@@ -1403,6 +1429,11 @@ body.global-emergency-flash {
   .page-action-bar {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .profile-action-bar {
+    display: grid;
+    grid-template-columns: 1fr;
   }
 
   .workflow-body {

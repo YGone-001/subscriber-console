@@ -610,7 +610,7 @@
 
 /* ── Mobile table transforms ── */
 
-@media (max-width: 760px) {
+@media (max-width: 980px) {
   .ocs-container {
     padding: 1rem;
   }
@@ -687,6 +687,10 @@
     color: var(--text-muted);
     font-size: var(--ref-font-size-label);
     font-weight: 750;
+  }
+
+  .ocs-table td[data-label] > .ocs-action-group {
+    justify-content: flex-start !important;
   }
 
   /* Hide supplementary columns on mobile */
@@ -1310,4 +1314,3 @@
   resize: vertical;
   min-height: 60px;
 }
-

@@ -9,6 +9,7 @@ import { useI18n } from "@/components/I18nProvider";
 import { DataTablePagination } from "@/components/ui/DataTablePagination";
 import { formatBytes } from "@/lib/unitParser";
 import OcsPageShell from "../OcsPageShell";
+import OcsStatusBadge from "../common/OcsStatusBadge";
 import AdjustBalanceModal from "./AdjustBalanceModal";
 import { useAuth } from "@/hooks/useAuth";
 import { capabilityDecision } from "@/lib/permissions";
@@ -170,14 +171,14 @@ export default function OcsBalancePlaceholder() {
         <caption className="sr-only">{t("ocs_balances_title")}</caption>
         <thead>
           <tr>
-            <th>IMSI</th>
-            <th>{t("ocs_col_data_available")}</th>
-            <th>{t("ocs_col_voice_avail")}</th>
-            <th>{t("ocs_col_sms_avail")}</th>
-            <th>{t("ocs_col_status")}</th>
-            <th>{t("ocs_col_version")}</th>
-            <th>{t("ocs_tariff_col_updated")}</th>
-            <th style={{ textAlign: "right" }}>{t("actions")}</th>
+            <th data-column-priority="essential">IMSI</th>
+            <th data-column-priority="essential">{t("ocs_col_data_available")}</th>
+            <th data-column-priority="essential">{t("ocs_col_voice_avail")}</th>
+            <th data-column-priority="essential">{t("ocs_col_sms_avail")}</th>
+            <th data-column-priority="essential">{t("ocs_col_status")}</th>
+            <th data-column-priority="supplementary">{t("ocs_col_version")}</th>
+            <th data-column-priority="supplementary">{t("ocs_tariff_col_updated")}</th>
+            <th data-column-priority="essential" style={{ textAlign: "right" }}>{t("actions")}</th>
           </tr>
         </thead>
         <tbody>
@@ -190,18 +191,14 @@ export default function OcsBalancePlaceholder() {
           ) : (
             records.map((r) => (
               <tr key={r.id || r.imsi}>
-                <td className="ocs-mono">{r.imsi}</td>
-                <td className="ocs-mono">{formatBytes(r.data_available)}</td>
-                <td className="ocs-mono">{r.voice_available}s</td>
-                <td className="ocs-mono">{r.sms_available}</td>
-                <td>
-                  <span className={`ocs-status-badge ocs-status-${r.status}`}>
-                    {r.status}
-                  </span>
-                </td>
-                <td className="ocs-mono">v{r.version || 1}</td>
-                <td className="ocs-time-cell">{formatTime(r.updated_at)}</td>
-                <td style={{ textAlign: "right" }}>
+                <td data-label="IMSI" data-column-priority="essential" className="ocs-mono">{r.imsi}</td>
+                <td data-label={t("ocs_col_data_available")} data-column-priority="essential" className="ocs-mono">{formatBytes(r.data_available)}</td>
+                <td data-label={t("ocs_col_voice_avail")} data-column-priority="essential" className="ocs-mono">{r.voice_available}s</td>
+                <td data-label={t("ocs_col_sms_avail")} data-column-priority="essential" className="ocs-mono">{r.sms_available}</td>
+                <td data-label={t("ocs_col_status")} data-column-priority="essential"><OcsStatusBadge status={r.status} /></td>
+                <td data-label={t("ocs_col_version")} data-column-priority="supplementary" className="ocs-mono">v{r.version || 1}</td>
+                <td data-label={t("ocs_tariff_col_updated")} data-column-priority="supplementary" className="ocs-time-cell">{formatTime(r.updated_at)}</td>
+                <td data-label={t("actions")} data-column-priority="essential" style={{ textAlign: "right" }}>
                   <div className="ocs-action-group" style={{ justifyContent: "flex-end" }}>
                     <Link
                       className="ocs-action-btn"

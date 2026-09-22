@@ -35,18 +35,39 @@ test('high-density data tables switch to labelled record cards on narrow screens
   const healthTable = read('../src/app/(dashboard)/system-health/page.tsx');
   const healthCss = read('../src/app/(dashboard)/system-health/system-health.css');
   const auditTable = read('../src/app/(dashboard)/audit-logs/AuditConsole.tsx');
+  const profileTable = read('../src/app/(dashboard)/profile/page.tsx');
+  const profileCss = read('../src/app/(dashboard)/profile/profile.css');
+  const ocsTariffTable = read('../src/components/ocs/tariffs/OcsTariffGovernancePanel.tsx');
+  const ocsContractTable = read('../src/components/ocs/contracts/OcsContractsPanel.tsx');
+  const ocsBalanceTable = read('../src/components/ocs/balances/OcsBalancePlaceholder.tsx');
+  const ocsCss = read('../src/app/(dashboard)/ocs/ocs.css');
 
-  for (const source of [subscriberTable, usersTable, ratingTable, tariffPlanTable, approvalsTable, healthTable, auditTable]) {
+  for (const source of [subscriberTable, usersTable, ratingTable, tariffPlanTable, approvalsTable, healthTable, auditTable, profileTable, ocsTariffTable, ocsContractTable, ocsBalanceTable]) {
     assert.match(source, /data-label=/);
   }
 
-  for (const source of [subscriberCss, usersCss, ratingCss, approvalsCss, healthCss]) {
+  for (const source of [subscriberCss, usersCss, ratingCss, approvalsCss, healthCss, profileCss]) {
     assert.match(source, /display:\s*grid/);
     assert.match(source, /content:\s*attr\(data-label\)/);
   }
 
   assert.match(subscriberTable, /mobile-sort-strip/);
   assert.match(usersTable, /mobile-sort-strip/);
+  for (const source of [ocsTariffTable, ocsContractTable, ocsBalanceTable]) {
+    assert.match(source, /data-column-priority=/);
+  }
+  assert.match(ocsCss, /@media \(max-width:\s*980px\)[\s\S]*?content:\s*attr\(data-label\)/);
+  assert.match(profileCss, /@media \(max-width:\s*980px\)[\s\S]*?\.profile-governance-table thead\s*\{[\s\S]*?display:\s*none/);
+});
+
+test('phase 5 status and compact governance badges expose localized text', () => {
+  const statusBadge = read('../src/components/ocs/common/OcsStatusBadge.tsx');
+  const governanceBadge = read('../src/components/ocs/common/GovernanceBadge.tsx');
+
+  assert.match(statusBadge, /STATUS_LABEL_KEYS/);
+  assert.match(statusBadge, /aria-label=\{label\}/);
+  assert.match(governanceBadge, /aria-label=\{label\}/);
+  assert.match(governanceBadge, /<span>\{label\}<\/span>/);
 });
 
 test('critical shell and row actions share the 44px touch-target floor', () => {

@@ -204,22 +204,22 @@ export default function OcsContractsPanel() {
       <caption className="sr-only">{t("ocs_contracts_title")}</caption>
       <thead>
         <tr>
-          <th className="ocs-th-sortable" aria-sort={getAriaSort("imsi")} onClick={() => toggleSort("imsi")}>
+          <th data-column-priority="essential" className="ocs-th-sortable" aria-sort={getAriaSort("imsi")} onClick={() => toggleSort("imsi")}>
             IMSI {sortField === "imsi" ? (sortOrder === "asc" ? "↑" : "↓") : ""}
           </th>
-          <th>{t("ocs_contract_col_msisdn")}</th>
-          <th className="ocs-th-sortable" aria-sort={getAriaSort("plan_id")} onClick={() => toggleSort("plan_id")}>
+          <th data-column-priority="essential">{t("ocs_contract_col_msisdn")}</th>
+          <th data-column-priority="essential" className="ocs-th-sortable" aria-sort={getAriaSort("plan_id")} onClick={() => toggleSort("plan_id")}>
             {t("ocs_contract_col_tariff")} {sortField === "plan_id" ? (sortOrder === "asc" ? "↑" : "↓") : ""}
           </th>
-          <th className="ocs-th-sortable" aria-sort={getAriaSort("status")} onClick={() => toggleSort("status")}>
+          <th data-column-priority="essential" className="ocs-th-sortable" aria-sort={getAriaSort("status")} onClick={() => toggleSort("status")}>
             {t("ocs_contract_col_billing_status")} {sortField === "status" ? (sortOrder === "asc" ? "↑" : "↓") : ""}
           </th>
-          <th>{t("ocs_contract_col_governance")}</th>
-          <th>{t("ocs_contract_col_created")}</th>
-          <th className="ocs-th-sortable" aria-sort={getAriaSort("updated_at")} onClick={() => toggleSort("updated_at")}>
+          <th data-column-priority="essential">{t("ocs_contract_col_governance")}</th>
+          <th data-column-priority="supplementary">{t("ocs_contract_col_created")}</th>
+          <th data-column-priority="supplementary" className="ocs-th-sortable" aria-sort={getAriaSort("updated_at")} onClick={() => toggleSort("updated_at")}>
             {t("ocs_contract_col_last_change")} {sortField === "updated_at" ? (sortOrder === "asc" ? "↑" : "↓") : ""}
           </th>
-          <th>{t("actions")}</th>
+          <th data-column-priority="essential">{t("actions")}</th>
         </tr>
       </thead>
       <tbody>
@@ -232,14 +232,14 @@ export default function OcsContractsPanel() {
         ) : (
           records.map((r) => (
             <tr key={r.id}>
-              <td className="ocs-imsi-cell"><code>{r.imsi}</code></td>
-              <td>{r.msisdn || "—"}</td>
-              <td><span className="ocs-plan-badge">{r.plan_id}</span></td>
-              <td><OcsStatusBadge status={r.status} /></td>
-              <td><GovernanceBadge compact /></td>
-              <td className="ocs-time-cell">{formatTime(r.created_at)}</td>
-              <td className="ocs-time-cell">{formatTime(r.updated_at)}</td>
-              <td>
+              <td data-label="IMSI" data-column-priority="essential" className="ocs-imsi-cell"><code>{r.imsi}</code></td>
+              <td data-label={t("ocs_contract_col_msisdn")} data-column-priority="essential">{r.msisdn || "—"}</td>
+              <td data-label={t("ocs_contract_col_tariff")} data-column-priority="essential"><span className="ocs-plan-badge">{r.plan_id}</span></td>
+              <td data-label={t("ocs_contract_col_billing_status")} data-column-priority="essential"><OcsStatusBadge status={r.status} /></td>
+              <td data-label={t("ocs_contract_col_governance")} data-column-priority="essential"><GovernanceBadge compact /></td>
+              <td data-label={t("ocs_contract_col_created")} data-column-priority="supplementary" className="ocs-time-cell">{formatTime(r.created_at)}</td>
+              <td data-label={t("ocs_contract_col_last_change")} data-column-priority="supplementary" className="ocs-time-cell">{formatTime(r.updated_at)}</td>
+              <td data-label={t("actions")} data-column-priority="essential">
                 <div className="ocs-action-group">
                   <Link
                     className="ocs-action-btn"

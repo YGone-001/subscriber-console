@@ -34,12 +34,15 @@ test("operational data typography follows the documented Cascadia Mono stack", (
   assert.match(dataSurfaces, /font-family:\s*"Cascadia Mono", "SFMono-Regular", Consolas, monospace/);
 });
 
-test("floating actions use semantic classes instead of inline brand colors", () => {
+test("desktop write actions stay in toolbars without duplicate floating actions", () => {
   const subscribersPage = read("../src/app/(dashboard)/subscribers/page.tsx");
+  const profilePage = read("../src/app/(dashboard)/profile/page.tsx");
 
-  assert.match(subscribersPage, /className="fab fab-secondary"/);
+  assert.doesNotMatch(subscribersPage, /className="fab(?:\s|\")/);
+  assert.doesNotMatch(profilePage, /className="fab(?:\s|\")/);
+  assert.match(subscribersPage, /<SubscriberToolbar[\s\S]*?handleOpenNew=\{handleOpenNew\}[\s\S]*?setIsBatchOpen=\{setIsBatchOpen\}/);
+  assert.match(profilePage, /className="page-action-bar profile-action-bar"/);
   assert.doesNotMatch(subscribersPage, /background:\s*"#6366f1"/);
-  assert.match(globalsCss, /\.fab-secondary\s*\{[\s\S]*?background-color:\s*var\(--status-info\)/);
 });
 
 test("the global notification stream stays idle on the unauthenticated login route", () => {

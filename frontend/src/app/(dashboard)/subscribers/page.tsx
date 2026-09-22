@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useMemo } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, Plus, Layers } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Layers } from "lucide-react";
 import SubscriberModal from "@/components/SubscriberModal";
 import BatchCreateModal from "@/components/BatchCreateModal";
 import BulkPolicyModal from "@/components/BulkPolicyModal";
@@ -414,27 +414,6 @@ export default function SubscriberPage() {
         )}
       </div>
     </div>
-
-      {/* FAB: Single Add */}
-      <button
-        className="fab"
-        onClick={handleOpenNew}
-        title={t("add_subscriber")}
-        aria-label={t("add_subscriber")}
-      >
-        <Plus size={28} />
-      </button>
-
-      {/* FAB: Batch Create (positioned above single FAB) */}
-      <button
-        className="fab fab-secondary"
-        onClick={() => setIsBatchOpen(true)}
-        title={t("batch_create")}
-        aria-label={t("batch_create")}
-        style={{ bottom: "120px" }}
-      >
-        <Layers size={24} />
-      </button>
 
       <BatchCreateModal
         isOpen={isBatchOpen}

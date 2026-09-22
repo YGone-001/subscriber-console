@@ -176,15 +176,15 @@ export default function OcsTariffGovernancePanel() {
                 <caption className="sr-only">{t("ocs_tariffs_title")}</caption>
                 <thead>
                   <tr>
-                    <th>{t("ocs_tariff_col_plan_id")}</th>
-                    <th>{t("ocs_tariff_col_name")}</th>
-                    <th>{t("ocs_tariff_col_status")}</th>
-                    <th>{t("ocs_tariff_governance_col_version")}</th>
-                    <th>{t("ocs_tariff_col_subscribers")}</th>
-                    <th>{t("ocs_tariff_governance_col_updated_by")}</th>
-                    <th>{t("ocs_tariff_col_updated")}</th>
-                    <th>{t("ocs_tariff_governance_col_governance")}</th>
-                    <th>{t("ocs_tariff_col_actions")}</th>
+                    <th data-column-priority="essential">{t("ocs_tariff_col_plan_id")}</th>
+                    <th data-column-priority="essential">{t("ocs_tariff_col_name")}</th>
+                    <th data-column-priority="essential">{t("ocs_tariff_col_status")}</th>
+                    <th data-column-priority="supplementary">{t("ocs_tariff_governance_col_version")}</th>
+                    <th data-column-priority="important">{t("ocs_tariff_col_subscribers")}</th>
+                    <th data-column-priority="supplementary">{t("ocs_tariff_governance_col_updated_by")}</th>
+                    <th data-column-priority="supplementary">{t("ocs_tariff_col_updated")}</th>
+                    <th data-column-priority="essential">{t("ocs_tariff_governance_col_governance")}</th>
+                    <th data-column-priority="essential">{t("ocs_tariff_col_actions")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -193,15 +193,15 @@ export default function OcsTariffGovernancePanel() {
                   )}
                   {plans.map((plan) => (
                     <tr key={plan.plan_id}>
-                      <td className="ocs-mono">{plan.plan_id}</td>
-                      <td>{plan.name}</td>
-                      <td><OcsStatusBadge status={plan.status} /></td>
-                      <td className="ocs-mono">v{plan.version || 1}</td>
-                      <td>{plan.subscriberCount}</td>
-                      <td>{plan.updated_by || "—"}</td>
-                      <td>{plan.updated_at ? new Date(plan.updated_at).toLocaleDateString() : "—"}</td>
-                      <td><GovernanceBadge compact /></td>
-                      <td>
+                      <td data-label={t("ocs_tariff_col_plan_id")} data-column-priority="essential" className="ocs-mono">{plan.plan_id}</td>
+                      <td data-label={t("ocs_tariff_col_name")} data-column-priority="essential">{plan.name}</td>
+                      <td data-label={t("ocs_tariff_col_status")} data-column-priority="essential"><OcsStatusBadge status={plan.status} /></td>
+                      <td data-label={t("ocs_tariff_governance_col_version")} data-column-priority="supplementary" className="ocs-mono">v{plan.version || 1}</td>
+                      <td data-label={t("ocs_tariff_col_subscribers")} data-column-priority="important">{plan.subscriberCount}</td>
+                      <td data-label={t("ocs_tariff_governance_col_updated_by")} data-column-priority="supplementary">{plan.updated_by || "—"}</td>
+                      <td data-label={t("ocs_tariff_col_updated")} data-column-priority="supplementary">{plan.updated_at ? new Date(plan.updated_at).toLocaleDateString() : "—"}</td>
+                      <td data-label={t("ocs_tariff_governance_col_governance")} data-column-priority="essential"><GovernanceBadge compact /></td>
+                      <td data-label={t("ocs_tariff_col_actions")} data-column-priority="essential">
                         <div className="ocs-action-group">
                           <Link
                             className="ocs-action-btn"

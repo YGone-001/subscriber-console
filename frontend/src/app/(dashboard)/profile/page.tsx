@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useI18n } from "@/components/I18nProvider";
-import { AlertTriangle, ArrowRight, Boxes, Clock, Gauge, Layers, Plus, ShieldCheck, UserRound, Users } from "lucide-react";
+import { AlertTriangle, Boxes, Clock, Pencil, Plus, Users } from "lucide-react";
 import ProfileModal from "@/components/ProfileModal";
 import { EmptyState, LoadingRows, OperationNotice } from "@/components/OperationFeedback";
 import useSWR from "swr";
@@ -11,6 +11,7 @@ import { useAuth } from "@/hooks/useAuth";
 
 import PageHeader from "@/components/ui/PageHeader";
 import MetricStrip from "@/components/ui/MetricStrip";
+import "./profile.css";
 
 interface ProfileSummary {
   name: string;
@@ -46,24 +47,6 @@ type RiskLevel = "low" | "medium" | "high";
 type ProfileNotice = { type: "success" | "error"; text: string };
 
 const DOMAIN_OPTIONS: GovernanceDomain[] = ["all", "billing", "network", "slice", "access"];
-
-const RISK_STYLE: Record<RiskLevel, { color: string; background: string; border: string }> = {
-  low: {
-    color: "var(--success)",
-    background: "var(--status-success-soft)",
-    border: "var(--status-success-border)",
-  },
-  medium: {
-    color: "var(--warning)",
-    background: "var(--status-warning-soft)",
-    border: "var(--status-warning-border)",
-  },
-  high: {
-    color: "var(--danger)",
-    background: "var(--status-danger-soft)",
-    border: "var(--status-danger-border)",
-  },
-};
 
 function inferProfileDomain(profile: ProfileSummary): ProfileDomain {
   const searchable = `${profile.name} ${profile.title || ""}`.toLowerCase();
@@ -176,7 +159,7 @@ export default function ProfilePage() {
           ]}
         />
 
-        <div className="page-action-bar">
+        <div className="page-action-bar profile-action-bar">
           <input
             type="search"
             className="form-input hover-glass profile-search-input"
@@ -206,11 +189,11 @@ export default function ProfilePage() {
         </div>
 
         {isLoading ? (
-          <div className="dash-card profile-empty-card">
-            <LoadingRows columns={4} rows={4} />
+          <div className="dash-card profile-table-state">
+            <LoadingRows columns={9} rows={4} />
           </div>
         ) : filteredProfiles.length === 0 ? (
-          <div className="dash-card profile-empty-card">
+          <div className="dash-card profile-table-state">
             <EmptyState
               icon={<Boxes size={48} />}
               title={searchQuery || domainFilter !== "all" ? t("prof_no_match") : t("prof_empty_list")}
@@ -225,83 +208,81 @@ export default function ProfilePage() {
             />
           </div>
         ) : (
-          <div className="imsi-grid">
-            {filteredProfiles.map(profile => (
-              <div
-                key={profile.name}
-                className="dash-card profile-imsi-card"
-                onClick={() => handleOpenEdit(profile.name)}
-              >
-                <div className="profile-card-header">
-                  <div className="profile-card-title-box">
-                    <div className="profile-card-title">
-                      {profile.title || profile.name}
-                    </div>
-                    <div className="profile-card-subtitle">
-                      {profile.name}
-                    </div>
-                  </div>
-                  <span
-                    className="profile-risk-badge"
-                    style={{
-                      border: `1px solid ${RISK_STYLE[profile.risk].border}`,
-                      background: RISK_STYLE[profile.risk].background,
-                      color: RISK_STYLE[profile.risk].color,
-                    }}
-                  >
-                    {t(`prof_risk_${profile.risk}`)}
-                  </span>
-                </div>
-
-                <div className="profile-tags-row">
-                  <span className="profile-tag-bordered">
-                    <Gauge size={14} /> {t(`prof_domain_${profile.domain}`)}
-                  </span>
-                  <span className="profile-tag">
-                    <Layers size={16} /> {t("prof_slices_count", { count: profile.sliceCount || 0 })}
-                  </span>
-                  <span className="profile-tag">
-                    <Users size={16} /> {t("prof_governance_subscribers", { count: profile.impactedSubscribers })}
-                  </span>
-                </div>
-
-                <div className="profile-preview-box">
-                  <div className="profile-preview-header">
-                    <ShieldCheck size={15} color="var(--primary)" /> {t("prof_governance_change_preview")}
-                  </div>
-                  <div className="profile-preview-content">
-                    <div className="profile-preview-row">
-                      <span>{t("prof_governance_scope")}</span>
-                      <strong className="profile-preview-value">{t("prof_governance_scope_value", { count: profile.impactedSubscribers })}</strong>
-                    </div>
-                    <div className="profile-preview-row">
-                      <span>{t("prof_governance_next_change")}</span>
-                      <strong className="profile-preview-value">{t(`prof_preview_${profile.domain}`)}</strong>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="profile-meta-row">
-                  <UserRound size={14} /> {profile.updatedBy ? `${t("prof_modified_by")} ${profile.updatedBy}` : t("prof_governance_no_owner")}
-                  <ArrowRight size={13} />
-                  <Clock size={14} /> {formatDate(profile.updatedAt || profile.createdAt)}
-                </div>
-              </div>
-            ))}
+          <div className="dash-card profile-table-card">
+            <div className="profile-table-wrap">
+              <table className="profile-governance-table">
+                <caption className="sr-only">{t("prof_governance_title")}</caption>
+                <thead>
+                  <tr>
+                    <th data-column-priority="essential">{t("prof_table_template")}</th>
+                    <th data-column-priority="essential">{t("prof_table_domain")}</th>
+                    <th data-column-priority="essential">{t("prof_table_risk")}</th>
+                    <th data-column-priority="important" className="profile-table-number">{t("prof_table_slices")}</th>
+                    <th data-column-priority="important" className="profile-table-number">{t("prof_table_linked_users")}</th>
+                    <th data-column-priority="essential">{t("prof_table_main_effect")}</th>
+                    <th data-column-priority="supplementary">{t("prof_table_modified_by")}</th>
+                    <th data-column-priority="essential">{t("prof_table_updated")}</th>
+                    <th data-column-priority="essential" className="profile-table-actions-heading">{t("actions")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredProfiles.map(profile => (
+                    <tr key={profile.name}>
+                      <td data-label={t("prof_table_template")} data-column-priority="essential">
+                        <button
+                          type="button"
+                          className="profile-template-button"
+                          onClick={() => handleOpenEdit(profile.name)}
+                          aria-label={`${t("edit")}: ${profile.title || profile.name}`}
+                        >
+                          <span className="profile-template-title">{profile.title || profile.name}</span>
+                          <span className="profile-template-key">{profile.name}</span>
+                        </button>
+                      </td>
+                      <td data-label={t("prof_table_domain")} data-column-priority="essential">
+                        <span className={`profile-domain-badge profile-domain-${profile.domain}`}>
+                          {t(`prof_domain_${profile.domain}`)}
+                        </span>
+                      </td>
+                      <td data-label={t("prof_table_risk")} data-column-priority="essential">
+                        <span className={`profile-risk-badge profile-risk-${profile.risk}`}>
+                          {t(`prof_risk_${profile.risk}`)}
+                        </span>
+                      </td>
+                      <td data-label={t("prof_table_slices")} data-column-priority="important" className="profile-table-number profile-table-data">
+                        {profile.sliceCount || 0}
+                      </td>
+                      <td data-label={t("prof_table_linked_users")} data-column-priority="important" className="profile-table-number profile-table-data">
+                        {profile.impactedSubscribers}
+                      </td>
+                      <td data-label={t("prof_table_main_effect")} data-column-priority="essential" className="profile-impact-cell">
+                        {t(`prof_preview_${profile.domain}`)}
+                      </td>
+                      <td data-label={t("prof_table_modified_by")} data-column-priority="supplementary" className="profile-owner-cell">
+                        {profile.updatedBy || t("prof_governance_no_owner")}
+                      </td>
+                      <td data-label={t("prof_table_updated")} data-column-priority="essential" className="profile-date-cell">
+                        {formatDate(profile.updatedAt || profile.createdAt)}
+                      </td>
+                      <td data-label={t("actions")} data-column-priority="essential" className="profile-table-actions">
+                        <button
+                          type="button"
+                          className="profile-row-action"
+                          onClick={() => handleOpenEdit(profile.name)}
+                          title={t("edit")}
+                          aria-label={`${t("edit")}: ${profile.title || profile.name}`}
+                        >
+                          <Pencil size={17} aria-hidden="true" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>
-
-      {canEditTemplates && (
-        <button
-          className="fab"
-          onClick={handleOpenNew}
-          title={t("prof_btn_create")}
-          aria-label={t("prof_btn_create")}
-        >
-          <Plus size={28} />
-        </button>
-      )}
 
       {isModalOpen && (
         <ProfileModal
