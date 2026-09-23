@@ -23,7 +23,7 @@
 import assert from 'node:assert/strict';
 import net from 'node:net';
 import path from 'node:path';
-import { unlinkSync } from 'node:fs';
+import { existsSync, unlinkSync } from 'node:fs';
 import { execSync, spawn } from 'node:child_process';
 import { SignJWT } from 'jose';
 import { MongoClient } from 'mongodb';
@@ -445,12 +445,30 @@ async function main() {
     try { await client.db(xcloudDbName).dropDatabase(); } catch {}
     try { await client.db(appDbName).dropDatabase(); } catch {}
     try { await client.close(); } catch {}
-    if (goProc) { try { goProc.kill('SIGTERM'); } catch {} }
-    if (binPath) { try { unlinkSync(binPath); } catch {} }
+    try {
+      const { getMongoClient } = jiti('../frontend/src/lib/mongo.ts');
+      const moduleClient = await getMongoClient().catch(() => null);
+      await moduleClient?.close().catch(() => {});
+    } catch {}
+    if (goProc && !goProc.killed) {
+      try { goProc.kill('SIGTERM'); } catch {}
+      if (process.platform === 'win32') {
+        try { execSync(`taskkill /pid ${goProc.pid} /T /F`, { stdio: 'ignore' }); } catch {}
+      } else {
+        try { goProc.kill('SIGKILL'); } catch {}
+      }
+    }
+    if (binPath && existsSync(binPath)) {
+      try { unlinkSync(binPath); } catch {}
+    }
   }
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+main()
+  .then(() => {
+    process.exit(0);
+  })
+  .catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
