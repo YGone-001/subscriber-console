@@ -94,6 +94,46 @@ func (l *Limiter) Check(ctx context.Context, identifier string, limit int, windo
 	}, nil
 }
 
+// Peek inspects the rate limit state without incrementing the counter.
+// It matches the Node.js implementation: peekRateLimit().
+func (l *Limiter) Peek(ctx context.Context, identifier string, limit int, windowSeconds int) (*Result, error) {
+	nowSeconds := time.Now().Unix()
+	currentWindow := nowSeconds / int64(windowSeconds)
+	key := fmt.Sprintf("RATELIMIT:%s:%d", identifier, currentWindow)
+	resetAt := (currentWindow + 1) * int64(windowSeconds)
+
+	filter := bson.M{"key": key}
+	var doc RateLimitDocument
+	err := l.collection.FindOne(ctx, filter).Decode(&doc)
+	count := 0
+	if err == nil {
+		count = doc.Count
+	} else if err != mongo.ErrNoDocuments {
+		// Fail open on error — same as Node behavior
+		return &Result{
+			Allowed:    true,
+			Limit:      limit,
+			Remaining:  limit,
+			RetryAfter: 0,
+			ResetAt:    resetAt,
+		}, nil
+	}
+
+	remaining := int(math.Max(0, float64(limit-count)))
+	retryAfter := 0
+	if count >= limit {
+		retryAfter = int(math.Max(1, float64(resetAt-nowSeconds)))
+	}
+
+	return &Result{
+		Allowed:    count < limit,
+		Limit:      limit,
+		Remaining:  remaining,
+		RetryAfter: retryAfter,
+		ResetAt:    resetAt,
+	}, nil
+}
+
 // Enforce checks the rate limit and writes the 429 response if exceeded.
 // Returns true if the request is allowed, false if it was rejected.
 func (l *Limiter) Enforce(w http.ResponseWriter, r *http.Request, identifier string, limit int, windowSeconds int) bool {

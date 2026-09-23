@@ -28,6 +28,40 @@ func (m *mockLookup) GetUserByUsername(_ context.Context, username string) (*Aut
 	return m.users[username], nil
 }
 
+func (m *mockLookup) RecordFailedLogin(_ context.Context, username string) (bool, int, error) {
+	u := m.users[username]
+	if u == nil {
+		return false, 0, nil
+	}
+	u.FailedLoginAttempts++
+	if u.FailedLoginAttempts >= 10 {
+		u.Locked = true
+		u.Status = "locked"
+		u.SessionVersion++
+		return true, u.FailedLoginAttempts, nil
+	}
+	return false, u.FailedLoginAttempts, nil
+}
+
+func (m *mockLookup) RecordSuccessfulLogin(_ context.Context, user *AuthUser, _ string) (*AuthUser, error) {
+	u := m.users[user.Username]
+	if u == nil {
+		return nil, nil
+	}
+	u.FailedLoginAttempts = 0
+	return u, nil
+}
+
+func (m *mockLookup) CountActiveAdmins(_ context.Context) (int64, error) {
+	var count int64
+	for _, u := range m.users {
+		if NormalizeRole(u.Role) == "admin" && u.Status == "active" && !u.Locked {
+			count++
+		}
+	}
+	return count, nil
+}
+
 var testSecret = []byte("test-secret-with-at-least-32-bytes-long!!")
 
 func testLogger() *slog.Logger {
@@ -52,7 +86,7 @@ func TestLoginValid(t *testing.T) {
 	lookup := &mockLookup{users: map[string]*AuthUser{
 		"admin": makeAuthUser("admin", "correct-horse-battery", "admin", "active", false, 5),
 	}}
-	h := NewHandler(lookup, testSecret, testLogger())
+	h := NewHandler(lookup, nil, nil, testSecret, testLogger())
 
 	body, _ := json.Marshal(LoginRequest{Username: "admin", Password: "correct-horse-battery"})
 	req := httptest.NewRequest("POST", "/api/auth/login", bytes.NewReader(body))
@@ -67,14 +101,11 @@ func TestLoginValid(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
+	if !resp.Success {
+		t.Errorf("success = false, want true")
+	}
 	if resp.Username != "admin" {
 		t.Errorf("username = %q, want admin", resp.Username)
-	}
-	if resp.Role != "admin" {
-		t.Errorf("role = %q, want admin", resp.Role)
-	}
-	if resp.Message != "login successful" {
-		t.Errorf("message = %q, want login successful", resp.Message)
 	}
 
 	cookies := w.Result().Cookies()
@@ -104,7 +135,7 @@ func TestLoginInvalidPassword(t *testing.T) {
 	lookup := &mockLookup{users: map[string]*AuthUser{
 		"admin": makeAuthUser("admin", "correct-horse-battery", "admin", "active", false, 0),
 	}}
-	h := NewHandler(lookup, testSecret, testLogger())
+	h := NewHandler(lookup, nil, nil, testSecret, testLogger())
 
 	body, _ := json.Marshal(LoginRequest{Username: "admin", Password: "wrong-password"})
 	req := httptest.NewRequest("POST", "/api/auth/login", bytes.NewReader(body))
@@ -123,7 +154,7 @@ func TestLoginDisabledAccount(t *testing.T) {
 	lookup := &mockLookup{users: map[string]*AuthUser{
 		"admin": makeAuthUser("admin", "correct-horse-battery", "admin", "disabled", false, 0),
 	}}
-	h := NewHandler(lookup, testSecret, testLogger())
+	h := NewHandler(lookup, nil, nil, testSecret, testLogger())
 
 	body, _ := json.Marshal(LoginRequest{Username: "admin", Password: "correct-horse-battery"})
 	req := httptest.NewRequest("POST", "/api/auth/login", bytes.NewReader(body))
@@ -131,24 +162,20 @@ func TestLoginDisabledAccount(t *testing.T) {
 
 	h.Login(w, req)
 
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("status = %d, want 403", w.Code)
+	// In Phase 6.2+, disabled accounts return uniform 401 to preserve response privacy
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", w.Code)
 	}
 }
 
 // --- Test 4: JWT expiration ---
 
 func TestJWTExpiration(t *testing.T) {
-	// GenerateToken always creates 24h tokens; craft an expired one manually.
-	// An expired token must be rejected by VerifyJWT.
-	// We generate a token and verify it is valid first, then test with
-	// a tampered exp by signing an expired claim set.
 	token, err := GenerateToken("admin", "admin", 0, testSecret)
 	if err != nil {
 		t.Fatalf("GenerateToken: %v", err)
 	}
 
-	// Valid token passes
 	claims, err := VerifyJWT(token, testSecret)
 	if err != nil {
 		t.Fatalf("VerifyJWT valid token: %v", err)
@@ -157,9 +184,6 @@ func TestJWTExpiration(t *testing.T) {
 		t.Errorf("username = %q, want admin", claims.Username)
 	}
 
-	// Build an expired token by re-signing with exp=0
-	// Use GenerateToken then manually check expiry path in VerifyJWT.
-	// Since GenerateToken always sets future exp, create raw expired claims.
 	headerB64 := base64RawURL(`{"alg":"HS256","typ":"JWT"}`)
 	claimsB64 := base64RawURL(`{"username":"admin","role":"admin","sv":0,"exp":1}`)
 	unsigned := headerB64 + "." + claimsB64
@@ -196,7 +220,7 @@ func TestSessionVersionMismatch(t *testing.T) {
 		Status:   "active",
 		Security: &struct {
 			SessionVersion *int64 `bson:"sessionVersion,omitempty"`
-		}{SessionVersion: int64Ptr(3)}, // mismatch: 5 != 3
+		}{SessionVersion: int64Ptr(3)},
 	}
 	_, err := ValidateSessionMatch(claims, user)
 	if err == nil {
@@ -208,7 +232,7 @@ func TestSessionVersionMismatch(t *testing.T) {
 
 func TestLogoutClearsCookie(t *testing.T) {
 	lookup := &mockLookup{users: map[string]*AuthUser{}}
-	h := NewHandler(lookup, testSecret, testLogger())
+	h := NewHandler(lookup, nil, nil, testSecret, testLogger())
 
 	req := httptest.NewRequest("POST", "/api/auth/logout", nil)
 	w := httptest.NewRecorder()
@@ -222,8 +246,8 @@ func TestLogoutClearsCookie(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if resp.Message != "logout successful" {
-		t.Errorf("message = %q, want logout successful", resp.Message)
+	if !resp.Success {
+		t.Errorf("success = false, want true")
 	}
 
 	cookies := w.Result().Cookies()
@@ -247,7 +271,7 @@ func TestMeSuccess(t *testing.T) {
 	lookup := &mockLookup{users: map[string]*AuthUser{
 		"admin": {Username: "admin", Role: "admin", Status: "active", SessionVersion: 1},
 	}}
-	h := NewHandler(lookup, testSecret, testLogger())
+	h := NewHandler(lookup, nil, nil, testSecret, testLogger())
 
 	req := httptest.NewRequest("GET", "/api/auth/me", nil)
 	ctx := ContextWithPrincipal(req.Context(), &Principal{
@@ -281,7 +305,7 @@ func TestMeSuccess(t *testing.T) {
 
 func TestMeWithoutToken(t *testing.T) {
 	lookup := &mockLookup{users: map[string]*AuthUser{}}
-	h := NewHandler(lookup, testSecret, testLogger())
+	h := NewHandler(lookup, nil, nil, testSecret, testLogger())
 
 	req := httptest.NewRequest("GET", "/api/auth/me", nil)
 	w := httptest.NewRecorder()

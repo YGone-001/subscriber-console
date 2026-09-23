@@ -391,6 +391,23 @@ Phase 6.2 hardens the existing authentication model without adding external IAM 
    - Aligned cookie attributes on logout (`maxAge: 0`).
    - `Cache-Control: no-store` on all sensitive authentication responses (`/api/auth/login`, `/api/auth/logout`, `/api/auth/me`).
 
+### 13.1 Authentication Go Contract Parity Foundation (Phase 6.3-A)
+
+Phase 6.3-A established complete 1:1 parity between Node and Go authentication implementations without cutting over production traffic:
+1. **Behavioral & Contract Parity**:
+   - `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`, `GET /api/auth/permissions`.
+   - Dual rate limiting (IP-scoped 5/60s, account-scoped 10/300s peek pre-auth).
+   - Uniform 401 response privacy for all credential/account failures.
+   - Account lockout at 10 consecutive failed attempts (single sessionVersion increment; protected last active admin).
+   - Permissive cookie clearance (`Max-Age=0`).
+   - Deep equality of permissions catalog ordering across all 7 canonical and legacy roles.
+2. **Production Routing Invariant**:
+   - `CUTOVER_TABLE = 32`, `ACTUALLY_ROUTED = 32` unchanged.
+   - Production authentication owner remains Node.
+   - Go authentication implementations act as verified shadow endpoints.
+3. **Verification**:
+   - Rigorous side-by-side integration suite `scripts/test-auth-go-parity.mjs` (40 checks).
+
 ## 14. Hard Prohibitions
 
 DO NOT:

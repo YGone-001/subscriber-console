@@ -68,7 +68,11 @@ export async function proxy(request: NextRequest) {
 
   if (!token) {
     if (isAuthRoute) return NextResponse.next();
-    if (isApiRoute) return NextResponse.json({ error: 'Unauthorized', code: 'AUTH_INVALID_TOKEN' }, { status: 401 });
+    if (isApiRoute) {
+      const res = NextResponse.json({ error: 'Unauthorized', code: 'AUTH_INVALID_TOKEN' }, { status: 401 });
+      res.headers.set('Cache-Control', 'no-store');
+      return res;
+    }
     return NextResponse.redirect(new URL('/login', request.url));
   }
 

@@ -200,6 +200,7 @@ Phase 6.1-B COMPLETE — User management CRUD lifecycle (Go backend)
 Phase 6.1-C COMPLETE — User management UI (dedicated pages and API client)
 Phase 6.1-D COMPLETE — User management integration hardening and controlled Go cutover (ACTUALLY_ROUTED = 32)
 Phase 6.2   COMPLETE — Authentication security hardening (dual rate limits, auto lockout, response privacy, JWT secret validation)
+Phase 6.3-A COMPLETE — Authentication Go contract parity foundation (1:1 behavioral/security/contract/persistence parity, no production cutover, CUTOVER_TABLE=32, ACTUALLY_ROUTED=32)
 ```
 
 ### 5.1 OCS 生产冻结基线 (OCS Production Freeze Baseline)
@@ -313,6 +314,12 @@ Phase 6.2 Authentication Security Hardening:
 - Last active admin protection: prevent auto-lockout or manual lock/disable on last active admin (`LAST_ACTIVE_ADMIN` 409).
 - JWT secret startup validation: Node and Go fail closed on startup if `JWT_SECRET` is missing, <32 UTF-8 bytes, or matches common insecure placeholders.
 - Cookie & header hardening: `SameSite=Lax`, `HttpOnly=true`, dynamic `Secure` over HTTPS, aligned logout cookie attributes, `Cache-Control: no-store` on sensitive auth responses.
+
+Phase 6.3-A Authentication Go Contract Parity Foundation:
+- Complete 1:1 behavioral, HTTP contract, security, and persistence parity achieved across Node and Go authentication implementations (`POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`, `GET /api/auth/permissions`).
+- Validated via 40 comprehensive cross-engine tests in `scripts/test-auth-go-parity.mjs`.
+- No production cutover: Node remains production owner (`CUTOVER_TABLE = 32`, `ACTUALLY_ROUTED = 32`). Go endpoints are verified candidate implementations.
+
 
 ---
 

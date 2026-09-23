@@ -81,12 +81,12 @@ var canonicalRolePermissions = map[string][]string{
 	},
 	"operator": {
 		"subscribers.read", "subscribers.write", "subscribers.delete",
+		"ocs.read", "ocs.balance.adjust", "ocs.tariff.write", "ocs.plan.assign", "ocs.rating.write",
 		"profiles.read", "profiles.write",
 		"core.read", "core.operate", "core.configure",
-		"ocs.read", "ocs.balance.adjust", "ocs.tariff.write", "ocs.plan.assign", "ocs.rating.write",
 	},
 	"viewer": {
-		"subscribers.read", "profiles.read", "ocs.read", "core.read",
+		"subscribers.read", "ocs.read", "profiles.read", "core.read",
 	},
 }
 

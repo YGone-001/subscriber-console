@@ -80,6 +80,8 @@ Approval workflow removed from business execution path. Authorization and operat
 - 管理员解锁 (Admin Unlock): 仅管理员可通过 Go 用户管理 API (`PATCH /api/users/{username}`) 解锁，恢复 `status="active"`, `locked=false`，清空锁定元数据与重置 `failedLoginAttempts=0`，并递增 `sessionVersion` 撤销历史会话。
 - 末位管理员保护 (Last Active Admin Protection): 严禁自动锁定或手动锁定/禁用系统中最后一个处于激活状态的管理员（返回 HTTP 409 `LAST_ACTIVE_ADMIN`）。
 - 密钥与会话安全 (Secret & Cookie Hardening): Node 与 Go 启动时强校验 `JWT_SECRET`（>= 32 UTF-8 字节，禁止弱占位符，不符则拒绝启动）；Cookie 属性强绑定 `HttpOnly=true`, `SameSite=Lax`, HTTPS 下强制 `Secure=true`；敏感认证响应强制 `Cache-Control: no-store`。
+- Go 认证契约对齐基线 (Phase 6.3-A Parity): Go 后端认证接口 (`/api/auth/login`, `/api/auth/logout`, `/api/auth/me`, `/api/auth/permissions`) 全面达成与 Node 端 1:1 行为与数据契约对齐；保持生产路由不变（Node 仍为生产所有者，`CUTOVER_TABLE = 32`, `ACTUALLY_ROUTED = 32`）。
+
 
 长期演进：
 - EPC / 5GC / IMS 网元管理

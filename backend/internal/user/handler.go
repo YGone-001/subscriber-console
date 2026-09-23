@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 
 	"subscriber/internal/audit"
 	"subscriber/internal/auth"
@@ -25,14 +26,25 @@ func NewHandler(repo *Repository, limiter *ratelimit.Limiter, writer *audit.Writ
 
 // AuthMe handles GET /api/auth/me.
 func (h *Handler) AuthMe(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	p := auth.PrincipalFromContext(r.Context())
 	if p == nil {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Unauthorized", "code": "UNAUTHORIZED"})
 		return
 	}
 
-	if !h.limiter.Enforce(w, r, "auth:me:"+p.Username, 120, 60) {
-		return
+	if h.limiter != nil {
+		res, err := h.limiter.Check(r.Context(), "auth:me:"+p.Username, 120, 60)
+		if err == nil {
+			w.Header().Set("X-RateLimit-Limit", strconv.Itoa(res.Limit))
+			w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(res.Remaining))
+			w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(res.ResetAt, 10))
+			if !res.Allowed {
+				w.Header().Set("Retry-After", strconv.Itoa(res.RetryAfter))
+				writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "Too many requests"})
+				return
+			}
+		}
 	}
 
 	user, err := h.repo.FindByUsername(r.Context(), p.Username)

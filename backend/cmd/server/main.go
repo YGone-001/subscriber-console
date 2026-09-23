@@ -144,7 +144,9 @@ func main() {
 	profileHandler := profile.NewHandler(profileRepo, limiter, auditWriter)
 
 	// Auth handler (login / logout / me)
-	authHandler := auth.NewHandler(auth.NewUserRepository(mc.Ops.Collection("app_users")), jwtSecretBytes, logger)
+	authAuditAdapter := &authAuditRecorder{writer: auditWriter}
+	authRepo := auth.NewUserRepository(mc.Ops.Collection("app_users"))
+	authHandler := auth.NewHandler(authRepo, limiter, authAuditAdapter, jwtSecretBytes, logger)
 
 	// Build handler
 	mux := http.NewServeMux()
@@ -304,4 +306,33 @@ func main() {
 	<-done
 	logger.Info("server stopped")
 	time.Sleep(100 * time.Millisecond)
+}
+
+type authAuditRecorder struct {
+	writer *audit.Writer
+}
+
+func (a *authAuditRecorder) RecordAuthEvent(action, result, actorType, username, role, ip, userAgent string, metadata map[string]interface{}) {
+	if a.writer == nil {
+		return
+	}
+	a.writer.WriteBestEffort(audit.WriteAuditInput{
+		Actor: audit.ActorInput{
+			Type:     actorType,
+			Username: username,
+			Role:     role,
+		},
+		Module: "security",
+		Action: action,
+		Result: result,
+		Resource: &audit.ResourceInput{
+			Type: "user",
+			ID:   username,
+		},
+		Source: &audit.SourceInput{
+			IP:        ip,
+			UserAgent: userAgent,
+		},
+		Metadata: metadata,
+	})
 }

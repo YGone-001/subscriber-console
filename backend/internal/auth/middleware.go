@@ -22,11 +22,13 @@ func Middleware(secret []byte, validator *SessionValidator, logger *slog.Logger)
 			// Extract token from cookie
 			cookie, err := r.Cookie(CookieName)
 			if err != nil || cookie.Value == "" {
+				w.Header().Set("Cache-Control", "no-store")
 				response.Error(w, http.StatusUnauthorized, "Unauthorized", "AUTH_INVALID_TOKEN")
 				return
 			}
 			tokenStr := strings.TrimSpace(cookie.Value)
 			if tokenStr == "" {
+				w.Header().Set("Cache-Control", "no-store")
 				response.Error(w, http.StatusUnauthorized, "Unauthorized", "AUTH_INVALID_TOKEN")
 				return
 			}
@@ -39,6 +41,7 @@ func Middleware(secret []byte, validator *SessionValidator, logger *slog.Logger)
 					response.Error(w, http.StatusServiceUnavailable, "Authentication temporarily unavailable", "AUTH_UNAVAILABLE")
 					return
 				}
+				w.Header().Set("Cache-Control", "no-store")
 				response.Error(w, http.StatusUnauthorized, "Unauthorized", code)
 				return
 			}
@@ -48,6 +51,7 @@ func Middleware(secret []byte, validator *SessionValidator, logger *slog.Logger)
 			if err != nil {
 				code := extractErrorCode(err.Error())
 				if code == "AUTH_UNAVAILABLE" {
+					w.Header().Set("Cache-Control", "no-store")
 					response.Error(w, http.StatusServiceUnavailable, "Authentication temporarily unavailable", "AUTH_UNAVAILABLE")
 					return
 				}
@@ -56,6 +60,7 @@ func Middleware(secret []byte, validator *SessionValidator, logger *slog.Logger)
 					"username", claims.Username,
 					"request_id", r.Header.Get("X-Request-ID"),
 				)
+				w.Header().Set("Cache-Control", "no-store")
 				response.Error(w, http.StatusUnauthorized, "Unauthorized", code)
 				return
 			}

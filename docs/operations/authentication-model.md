@@ -158,4 +158,19 @@ if `JWT_SECRET` is missing, shorter than 32 bytes, or matches common insecure pl
 
 Node (`jose`) and Go (`golang.org/x/crypto` / custom HS256 verifier) must produce
 and verify identical JWT signatures from the same `JWT_SECRET`.
-Cross-language verification is covered by `backend/internal/auth/verifier_cross_lang_test.go`.
+Cross-language verification is covered by `backend/internal/auth/verifier_cross_lang_test.go`
+and `scripts/test-auth-go-parity.mjs`.
+
+## 10. Go Contract Parity Foundation (Phase 6.3-A)
+
+Phase 6.3-A brought Go Authentication implementations into complete 1:1 parity with the frozen Node implementation:
+- `POST /api/auth/login`: IP-scoped rate limiter (5/60s), account failed-login limiter peek (10/300s), dummy bcrypt for timing mitigation, uniform 401 response privacy, atomic lockout threshold (10 attempts, single sessionVersion bump), last-active-admin lockout protection, successful login conditional state update, and auth_token cookie issuance.
+- `POST /api/auth/logout`: IP-scoped rate limiter (30/60s), exact cookie clearance (`Max-Age=0`), Cache-Control: no-store, and `{ success: true }` body.
+- `GET /api/auth/me`: Rate limiter (60/60s), Cache-Control: no-store, exact role/capability/permission payload structure.
+- `GET /api/auth/permissions`: Exact PERMISSION_CATALOG catalog ordering across all canonical and legacy roles.
+
+Production Routing Invariant:
+- Production authentication ownership remains with **Node**.
+- `CUTOVER_TABLE = 32`, `ACTUALLY_ROUTED = 32`.
+- Go authentication endpoints operate as verified shadow implementations ready for potential future controlled cutover.
+
