@@ -46,9 +46,10 @@ API routes are progressively migrating from Next.js to Go on a per-endpoint basi
 - OCS management: tariff plans, subscriber contracts, balance accounts, dashboard.
 - Rating group management for OCS policy templates.
 - Analytics dashboard computed from MongoDB subscriber documents.
-- Approval governance with maker-checker workflow, risk policy, and audit trail.
+- Direct execution operation model with RBAC, operation logging, and CAS concurrency control.
 - Audit logs, alert acknowledgment, and system document consistency checks.
 - JWT cookie authentication with canonical `admin`, `operator`, and `viewer` roles (with transparent legacy alias normalization).
+- User lifecycle management: create, update, soft delete, password reset, session invalidation.
 - Chinese/English UI, theme switching, command palette, and responsive dashboard layout.
 
 ## OCS Management Plane Status

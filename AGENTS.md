@@ -195,6 +195,7 @@ Phase 5.6   COMPLETE — OCS production freeze & documentation closure
 Phase 5.7-A COMPLETE — Direct Execution (approval workflow removed from business execution path)
 Phase 5.7-B COMPLETE — Three-role RBAC canonicalization (admin/operator/viewer with legacy normalization)
 Phase 5.7-C COMPLETE — CI migration validator dependency installation fix
+Phase 6.0   COMPLETE — Authentication & User Management architecture freeze
 ```
 
 ### 5.1 OCS 生产冻结基线 (OCS Production Freeze Baseline)
@@ -244,7 +245,20 @@ Always use Git for SHA/status.
 
 ---
 
-## 7. Auth Compatibility
+## 7. Auth & User Management (Phase 6.0 Frozen)
+
+Architecture freeze: `docs/architecture/phase-6-auth-architecture.md`.
+Authentication model: `docs/operations/authentication-model.md`.
+User management model: `docs/operations/user-management-model.md`.
+
+Three canonical roles: `admin`, `operator`, `viewer`.
+Legacy normalization: `root`/`super_admin`->`admin`, `ops_admin`->`operator`, `auditor`->`viewer`.
+New users: only `admin`/`operator`/`viewer` accepted (HTTP 400 `INVALID_ROLE` otherwise).
+User collection: `xcloud_ops.app_users` (single source of truth).
+Delete policy: soft delete only (`status=disabled`).
+Session invalidation: `security.sessionVersion++` on password/role/status change.
+JWT: HS256, 24h expiry, `auth_token` cookie (httpOnly, sameSite=lax).
+No refresh token. No OAuth/SSO/LDAP/MFA. No policy engine.
 
 Current chain:
 

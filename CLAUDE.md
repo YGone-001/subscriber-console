@@ -30,7 +30,7 @@ xCloud 是独立的电信运营与核心网运维平台，不是 xCloud 的附�
 - Profile
 - OCS
 - Tariff / Rating
-- 审批治理
+- 用户管理与认证
 - 审计
 - 告警
 - 系统健康
@@ -54,6 +54,23 @@ Approval workflow removed from business execution path. Authorization and operat
 - 历史角色透明映射：`root` / `super_admin` → `admin`，`ops_admin` → `operator`，`auditor` → `viewer`。
 - 写入边界：用户创建与角色更新仅接受 `['admin', 'operator', 'viewer']`，写入历史角色直接返回 HTTP 400 `INVALID_ROLE`。
 - UI 下拉选项严格展示三标准角色。
+
+### 1.3 Auth & User Management Architecture (Phase 6.0 Freeze)
+
+架构冻结文档：`docs/architecture/phase-6-auth-architecture.md`。
+
+稳定边界：
+- 用户集合：`xcloud_ops.app_users` 为唯一权威用户存储，禁止复制到其他集合。
+- 新用户仅接受 `admin` / `operator` / `viewer` 三标准角色。
+- 会话失效机制：`security.sessionVersion++`（密码/角色/状态变更时强制递增）。
+- 删除策略：不硬删除用户，使用 `status=disabled`（保留操作溯源能力）。
+- 认证链：`auth_token` cookie → HS256 JWT → `app_users` 校验 → Principal；Node 与 Go 独立验签。
+- 禁止引入：IAM 框架、OAuth、SSO、LDAP、MFA、多租户隔离、策略引擎。
+- 禁止触碰：OCS 业务逻辑、`CUTOVER_TABLE`、`ACTUALLY_ROUTED = 26`、charging plane。
+
+运维模型文档：
+- `docs/operations/authentication-model.md`
+- `docs/operations/user-management-model.md`
 
 长期演进：
 - EPC / 5GC / IMS 网元管理
