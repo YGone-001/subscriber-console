@@ -144,6 +144,9 @@ func main() {
 	// Profile handler
 	profileHandler := profile.NewHandler(profileRepo, limiter, auditWriter)
 
+	// Auth handler (login / logout / me)
+	authHandler := auth.NewHandler(auth.NewUserRepository(mc.Ops.Collection("app_users")), jwtSecretBytes, logger)
+
 	// Build handler
 	mux := http.NewServeMux()
 
@@ -226,6 +229,10 @@ func main() {
 	mux.Handle("POST /api/subscribers/bulk-delete", authMiddleware(http.HandlerFunc(subscriberWriteHandler.BulkDelete)))
 	mux.Handle("POST /api/subscribers/import", authMiddleware(http.HandlerFunc(subscriberWriteHandler.Import)))
 	mux.Handle("POST /api/subscribers/{imsi}/profile", authMiddleware(http.HandlerFunc(subscriberWriteHandler.ProfileApply)))
+
+	// Authentication (public)
+	mux.Handle("POST /api/auth/login", http.HandlerFunc(authHandler.Login))
+	mux.Handle("POST /api/auth/logout", http.HandlerFunc(authHandler.Logout))
 
 	// Auth/User reads
 	mux.Handle("GET /api/auth/me", authMiddleware(http.HandlerFunc(userHandler.AuthMe)))

@@ -49,9 +49,6 @@ func (sv *SessionValidator) ValidateSession(ctx context.Context, claims *Claims)
 		return nil, fmt.Errorf("AUTH_INVALID_TOKEN")
 	}
 
-	// Legacy tokens may not have sv; treat missing as 0
-	svValue := claims.SV
-
 	var user UserDocument
 	err := sv.collection.FindOne(ctx, bson.M{"username": claims.Username}).Decode(&user)
 	if err != nil {
@@ -65,61 +62,12 @@ func (sv *SessionValidator) ValidateSession(ctx context.Context, claims *Claims)
 		return nil, fmt.Errorf("ACCOUNT_NOT_FOUND")
 	}
 
-	// Check locked status
-	if user.Locked != nil && *user.Locked {
-		return nil, fmt.Errorf("ACCOUNT_LOCKED")
+	// Extract comparison logic for testability
+	principal, err := ValidateSessionMatch(claims, &user)
+	if err != nil {
+		return nil, err
 	}
-	if user.Status == "locked" {
-		return nil, fmt.Errorf("ACCOUNT_LOCKED")
-	}
-
-	// Check active status
-	if user.Status != "active" {
-		return nil, fmt.Errorf("ACCOUNT_DISABLED")
-	}
-
-	// Normalize the DB role and compare
-	dbRole := normalizeGovernanceRole(user.Role)
-	if dbRole == "" {
-		return nil, fmt.Errorf("SESSION_REVOKED")
-	}
-
-	// Get session version from DB
-	var dbSV int64
-	if user.Security != nil && user.Security.SessionVersion != nil {
-		dbSV = *user.Security.SessionVersion
-	}
-
-	// Session version and role must match
-	if svValue != dbSV || normalizedRole != dbRole {
-		return nil, fmt.Errorf("SESSION_REVOKED")
-	}
-
-	// userId = String(account._id ?? account.username) — matches Node exactly
-	userID := user.Username
-	if user.MongoID != nil {
-		switch v := user.MongoID.(type) {
-		case string:
-			if v != "" {
-				userID = v
-			}
-		case bson.ObjectID:
-			userID = v.Hex()
-		default:
-			// Use string representation for other types
-			if s := fmt.Sprintf("%v", v); s != "" && s != "<nil>" {
-				userID = s
-			}
-		}
-	}
-
-	return &Principal{
-		Username:       user.Username,
-		Role:           claims.Role,
-		NormalizedRole: normalizedRole,
-		SessionVersion: svValue,
-		UserID:         userID,
-	}, nil
+	return principal, nil
 }
 
 // normalizeGovernanceRole maps legacy roles to governance roles.
