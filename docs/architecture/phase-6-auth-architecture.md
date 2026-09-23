@@ -370,7 +370,7 @@ DO NOT:
 - introduce tenant isolation
 - modify OCS business logic
 - modify `CUTOVER_TABLE`
-- modify `ACTUALLY_ROUTED = 26`
+- modify `ACTUALLY_ROUTED = 32`
 - modify charging plane collections
 
 ## 14. Acceptance Gates
@@ -394,4 +394,4 @@ Validation:
 
 - `npm test`, `npm run lint`, `npm run typecheck`, `npm run build`
 - `go test ./...`, `go build ./...`
-- `ACTUALLY_ROUTED = 26` unchanged
+- `ACTUALLY_ROUTED = 32` unchanged

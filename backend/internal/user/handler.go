@@ -84,8 +84,8 @@ func (h *Handler) UserList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check users_read capability with denial audit
-	if !audit.RequireCapabilityWithAudit(w, r, p, "users_read", h.writer) {
+	// Check users.read capability with denial audit
+	if !audit.RequireCapabilityWithAudit(w, r, p, "users.read", h.writer) {
 		return
 	}
 
@@ -150,8 +150,8 @@ func (h *Handler) UserDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check users_read capability with denial audit
-	if !audit.RequireCapabilityWithAudit(w, r, p, "users_read", h.writer) {
+	// Check users.read capability with denial audit
+	if !audit.RequireCapabilityWithAudit(w, r, p, "users.read", h.writer) {
 		return
 	}
 
@@ -229,7 +229,9 @@ func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req CreateUserRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body", "code": "INVALID_REQUEST"})
 		return
 	}

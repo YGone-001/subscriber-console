@@ -6,7 +6,7 @@
  * 1. Tariff Plan Governance (CRUD, enable, disable, clone, operations, DIRECT/APPROVAL)
  * 2. Contract Subscriber Governance (Create, change-tariff, suspend, resume, terminate, DIRECT/APPROVAL)
  * 3. Balance Governance (Direct adjustment, approval adjustment, CAS conflict, reset disabled across 6 roles, detail read)
- * 4. System Invariants (ACTUALLY_ROUTED = 26, single-writer production ownership, charging plane boundary)
+ * 4. System Invariants (ACTUALLY_ROUTED = 32, single-writer production ownership, charging plane boundary)
  */
 
 import assert from 'node:assert/strict';
@@ -613,9 +613,9 @@ try {
   // ══════════════════════════════════════════════════════════════════
   console.log('\n4. System Invariants & Production Cutover Integrity');
 
-  // 4.1 CUTOVER_TABLE count must be strictly 26
-  assert.equal(CUTOVER_TABLE.length, 26, `CUTOVER_TABLE count must be exactly 26, found ${CUTOVER_TABLE.length}`);
-  recordCheck('invariants.actually_routed_strictly_26');
+  // 4.1 CUTOVER_TABLE count must be strictly 32
+  assert.equal(CUTOVER_TABLE.length, 32, `CUTOVER_TABLE count must be exactly 32, found ${CUTOVER_TABLE.length}`);
+  recordCheck('invariants.actually_routed_strictly_32');
 
   // 4.2 All routes in CUTOVER_TABLE must have owner: 'go'
   const nonGoRoutes = CUTOVER_TABLE.filter((r) => r.owner !== 'go');

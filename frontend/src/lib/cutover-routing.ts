@@ -68,6 +68,14 @@ export const CUTOVER_TABLE: readonly CutoverRoute[] = [
   // ── OCS Balance Governance ──────────────────────────────────
   { method: 'POST', path: '/api/ocs/balances/{imsi}/adjust', owner: 'go' },
   { method: 'POST', path: '/api/ocs/balances/{imsi}/reset', owner: 'go' },
+
+  // ── User Management ──────────────────────────────────────────
+  { method: 'GET', path: '/api/users', owner: 'go' },
+  { method: 'POST', path: '/api/users', owner: 'go' },
+  { method: 'GET', path: '/api/users/{username}', owner: 'go' },
+  { method: 'PATCH', path: '/api/users/{username}', owner: 'go' },
+  { method: 'POST', path: '/api/users/{username}/disable', owner: 'go' },
+  { method: 'POST', path: '/api/users/{username}/password-reset', owner: 'go' },
 ] as const;
 
 /**

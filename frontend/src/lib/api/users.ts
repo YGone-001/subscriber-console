@@ -126,21 +126,21 @@ export const usersApi = {
     return res.json();
   },
 
-  /** POST /api/users/{username}/disable — mapped to PATCH with status=disabled */
+  /** POST /api/users/{username}/disable */
   async disable(username: string, reason?: string): Promise<SysUser> {
-    const res = await fetch(`${BASE}/${encodeURIComponent(username)}`, {
-      method: "PATCH",
+    const res = await fetch(`${BASE}/${encodeURIComponent(username)}/disable`, {
+      method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: "disabled", reason }),
+      body: JSON.stringify({ reason }),
     });
     if (!res.ok) throw await toApiError(res, "Failed to disable user.");
     return res.json();
   },
 
-  /** POST /api/users/{username}/password-reset — mapped to PATCH with password */
+  /** POST /api/users/{username}/password-reset */
   async resetPassword(username: string, password: string, reason?: string): Promise<void> {
-    const res = await fetch(`${BASE}/${encodeURIComponent(username)}`, {
-      method: "PATCH",
+    const res = await fetch(`${BASE}/${encodeURIComponent(username)}/password-reset`, {
+      method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ password, reason }),
     });

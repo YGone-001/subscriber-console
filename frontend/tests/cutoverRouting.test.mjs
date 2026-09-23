@@ -4,8 +4,8 @@ import { resolveRouteOwner, CUTOVER_TABLE } from '../src/lib/cutover-routing.ts'
 
 describe('cutover-routing', () => {
   describe('CUTOVER_TABLE', () => {
-    it('contains exactly 26 cutover routes', () => {
-      assert.equal(CUTOVER_TABLE.length, 26);
+    it('contains exactly 32 cutover routes', () => {
+      assert.equal(CUTOVER_TABLE.length, 32);
     });
 
     it('Pilot A: POST /api/profiles/{name}/versions/{versionId}/restore is owned by Go', () => {

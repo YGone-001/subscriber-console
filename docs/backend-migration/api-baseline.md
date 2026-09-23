@@ -39,10 +39,10 @@ Browser → Nginx → Next.js :3000
 
 | Metric | Count |
 |--------|------:|
-| Route files | **52** |
-| Total operations | **76** |
+| Route files | **54** |
+| Total operations | **78** |
 | GET | 32 |
-| POST | 27 |
+| POST | 29 |
 | PUT | 7 |
 | PATCH | 3 |
 | DELETE | 7 |
@@ -66,7 +66,7 @@ Browser → Nginx → Next.js :3000
 | subscribers | 10 | 13 |
 | system | 6 | 6 |
 | tariff-plans | 9 | 16 |
-| users | 2 | 6 |
+| users | 4 | 8 |
 
 ---
 
@@ -81,7 +81,7 @@ Browser → Nginx → Next.js :3000
 
 ## 6. Mutation Count
 
-**44 non-GET HTTP operations** (POST + PUT + PATCH + DELETE).
+**46 non-GET HTTP operations** (POST + PUT + PATCH + DELETE).
 
 - 46 are semantic writes (actual data mutations)
 - 2 are semantic reads using POST (`batch/precheck`, `system/audit/scan`)

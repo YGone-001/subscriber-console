@@ -438,5 +438,21 @@
       "PUT"
     ],
     "file": "frontend/src/app/api/users/[username]/route.ts"
+  },
+  {
+    "path": "/api/users/:username/disable",
+    "domain": "users",
+    "methods": [
+      "POST"
+    ],
+    "file": "frontend/src/app/api/users/[username]/disable/route.ts"
+  },
+  {
+    "path": "/api/users/:username/password-reset",
+    "domain": "users",
+    "methods": [
+      "POST"
+    ],
+    "file": "frontend/src/app/api/users/[username]/password-reset/route.ts"
   }
 ]

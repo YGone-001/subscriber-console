@@ -196,6 +196,9 @@ Phase 5.7-A COMPLETE — Direct Execution (approval workflow removed from busine
 Phase 5.7-B COMPLETE — Three-role RBAC canonicalization (admin/operator/viewer with legacy normalization)
 Phase 5.7-C COMPLETE — CI migration validator dependency installation fix
 Phase 6.0   COMPLETE — Authentication & User Management architecture freeze
+Phase 6.1-B COMPLETE — User management CRUD lifecycle (Go backend)
+Phase 6.1-C COMPLETE — User management UI (dedicated pages and API client)
+Phase 6.1-D COMPLETE — User management integration hardening and controlled Go cutover (ACTUALLY_ROUTED = 32)
 ```
 
 ### 5.1 OCS 生产冻结基线 (OCS Production Freeze Baseline)
@@ -306,12 +309,13 @@ Preserve exact Node key/limit/window/headers/messages.
 Current write invariant:
 
 ```text
-Business-domain writes by Go = subscriber/profile CRUD + batch (Direct Execution), ACTUALLY_ROUTED=26
+Business-domain writes by Go = subscriber/profile CRUD + batch (Direct Execution), ACTUALLY_ROUTED=32
 Infrastructure writes = app_rate_limits (allowed)
 Security audit writes = app_audit_logs (authorization.denied + operation logs, Strict mode)
-OCS writes = ocs_tariff_plans CRUD + enable/disable (Direct Execution), ACTUALLY_ROUTED=26
-OCS subscriber writes = ocs_subscribers create/update-tariff/suspend/resume/terminate (Direct Execution), ACTUALLY_ROUTED=26
-OCS balance writes = ocs_balances adjust (Direct Execution), reset (permanently disabled), ACTUALLY_ROUTED=26
+OCS writes = ocs_tariff_plans CRUD + enable/disable (Direct Execution), ACTUALLY_ROUTED=32
+OCS subscriber writes = ocs_subscribers create/update-tariff/suspend/resume/terminate (Direct Execution), ACTUALLY_ROUTED=32
+OCS balance writes = ocs_balances adjust (Direct Execution), reset (permanently disabled), ACTUALLY_ROUTED=32
+User Management writes = app_users CRUD + disable + password-reset (Direct Execution), ACTUALLY_ROUTED=32
 ```
 
 ---
@@ -411,11 +415,12 @@ Go HTTP operations = 58
   Tariff mutations = 6 (create/update/delete/clone/enable/disable)
   OCS subscriber mutations = 5 (create/update-tariff/suspend/resume/terminate)
   OCS balance mutations = 2 (adjust/reset)
-Actually Routed = 26 (CUTOVER_TABLE routes)
+  User Management mutations = 4 (create/update/disable/password-reset)
+Actually Routed = 32 (CUTOVER_TABLE routes)
 OCS writes = 13 (tariff plan + subscriber contract + balance)
 ```
 
-CUTOVER_TABLE = 26 routes (all ACTUALLY_ROUTED=1).
+CUTOVER_TABLE = 32 routes (all ACTUALLY_ROUTED=1).
 
 Read endpoints are shadow-implemented in Go; production reads still route through Next.js unless explicitly cut over.
 

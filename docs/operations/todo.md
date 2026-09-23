@@ -28,6 +28,6 @@
 
 | Risk | Mitigation |
 |------|------------|
-| OCS production freeze regression | `ACTUALLY_ROUTED = 26` strictly enforced by migration validator |
+| OCS production freeze regression | `ACTUALLY_ROUTED = 32` strictly enforced by migration validator |
 | Charging plane exposure | Frozen collections (sessions, reservations, usage, events) excluded from migration |
 | JWT_SECRET mismatch across processes | frontend/.env must share same JWT_SECRET as root/.env (verified 2026-09-23) |

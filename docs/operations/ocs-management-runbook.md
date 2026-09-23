@@ -11,7 +11,7 @@ Target Components: Next.js Frontend (:13333), Go Backend (:18888), MongoDB (`xcl
 The **OCS Management Plane** governs administrative operations for commercial telecommunication offerings, subscriber billing contracts, and quota balances. It operates strictly separated from the runtime **Charging Plane** (Gy/Ro/CCR/Diameter rating and session management).
 
 ### Operational Invariants
-1. **Single-Writer Production Invariant**: All mutations are executed authoritatively by Go backend (`:18888`). The Next.js reverse proxy routes requests strictly according to `CUTOVER_TABLE` (`ACTUALLY_ROUTED = 26`). Node fallback is disabled.
+1. **Single-Writer Production Invariant**: All mutations are executed authoritatively by Go backend (`:18888`). The Next.js reverse proxy routes requests strictly according to `CUTOVER_TABLE` (`ACTUALLY_ROUTED = 32`). Node fallback is disabled.
 2. **Dual-Governance Access Control**:
    - `root`, `super_admin`: **DIRECT** immediate execution.
    - `operator`, `ops_admin`: **APPROVAL** workflow (two-person maker-checker rule).
