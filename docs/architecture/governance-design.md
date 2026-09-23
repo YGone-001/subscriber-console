@@ -1,7 +1,7 @@
 # Governance Design
 
 > Approval governance and audit architecture.
-> Detailed rules: `CLAUDE.md` §15. Current state: `AI_CONTEXT.md` §9.1, §9.2.
+> Detailed rules: `CLAUDE.md` §15. Current state: `AGENTS.md` §9.1, §9.2.
 
 ## Governance Modes
 

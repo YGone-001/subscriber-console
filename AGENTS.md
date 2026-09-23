@@ -1,4 +1,4 @@
-# AI_CONTEXT.md — xCloud subscriber-console
+# AGENTS.md — xCloud subscriber-console
 
 > 当前项目快照，用于 Claude Code / MiMo / Codex 长会话续开发。
 > **稳定规则看 `CLAUDE.md`；历史看 `docs/operations/dev-log.md`；待办看 `docs/operations/todo.md`。**
@@ -10,7 +10,7 @@
 
 ```text
 1. Read CLAUDE.md
-2. Read AI_CONTEXT.md
+2. Read AGENTS.md
 3. git status
 4. git branch --show-current
 5. git log --oneline -10
@@ -192,6 +192,9 @@ Phase 5.4   COMPLETE — OCS balance governance implementation (CAS versioning, 
 Phase 5.4-B COMPLETE — OCS balance controlled production cutover (ACTUALLY_ROUTED = 26)
 Phase 5.5-A COMPLETE — OCS management final alignment & UI polish
 Phase 5.6   COMPLETE — OCS production freeze & documentation closure
+Phase 5.7-A COMPLETE — Direct Execution (approval workflow removed from business execution path)
+Phase 5.7-B COMPLETE — Three-role RBAC canonicalization (admin/operator/viewer with legacy normalization)
+Phase 5.7-C COMPLETE — CI migration validator dependency installation fix
 ```
 
 ### 5.1 OCS 生产冻结基线 (OCS Production Freeze Baseline)
@@ -289,14 +292,12 @@ Preserve exact Node key/limit/window/headers/messages.
 Current write invariant:
 
 ```text
-Business-domain writes by Go = subscriber/profle CRUD + batch (governance: super_admin/root→DIRECT, operator/ops_admin→APPROVAL), ACTUALLY_ROUTED=1 (Nginx-routed)
+Business-domain writes by Go = subscriber/profile CRUD + batch (Direct Execution), ACTUALLY_ROUTED=26
 Infrastructure writes = app_rate_limits (allowed)
-Governance writes = app_approvals (CAS transitions + ACCESS_REQUEST creation, Strict audit)
-Sequence writes = app_sequences (approval change ID generation)
-Security audit writes = app_audit_logs (authorization.denied, BestEffort only)
-OCS writes = ocs_tariff_plans CRUD + enable/disable (governance: super_admin/root→DIRECT, operator/ops_admin→APPROVAL), ACTUALLY_ROUTED=1 (Nginx-routed)
-OCS subscriber writes = ocs_subscribers create/update-tariff/suspend/resume/terminate (governance: super_admin/root→DIRECT, operator/ops_admin→APPROVAL), ACTUALLY_ROUTED=1 (Nginx-routed)
-OCS balance writes = ocs_balances adjust (governance: super_admin/root→DIRECT, operator/ops_admin→APPROVAL), reset (permanently disabled); Go implemented in shadow mode (ACTUALLY_ROUTED=24 preserved unchanged)
+Security audit writes = app_audit_logs (authorization.denied + operation logs, Strict mode)
+OCS writes = ocs_tariff_plans CRUD + enable/disable (Direct Execution), ACTUALLY_ROUTED=26
+OCS subscriber writes = ocs_subscribers create/update-tariff/suspend/resume/terminate (Direct Execution), ACTUALLY_ROUTED=26
+OCS balance writes = ocs_balances adjust (Direct Execution), reset (permanently disabled), ACTUALLY_ROUTED=26
 ```
 
 ---
@@ -390,17 +391,17 @@ POST /api/approvals/:id          — legacy compat adapter (dispatches by decisi
 Status:
 
 ```text
-Go HTTP operations = 63
-  Semantic reads = 35
-  Governance mutations = 5 (approve/reject/cancel/create/legacy-compat)
+Go HTTP operations = 58
+  Semantic reads = 32
   Business mutations = 12 (subscriber+profile CRUD + batch)
   Tariff mutations = 6 (create/update/delete/clone/enable/disable)
   OCS subscriber mutations = 5 (create/update-tariff/suspend/resume/terminate)
-Actually Routed = 23 (CUTOVER_TABLE mutation routes)
-OCS writes = 11 (tariff plan + subscriber contract governance)
+  OCS balance mutations = 2 (adjust/reset)
+Actually Routed = 26 (CUTOVER_TABLE routes)
+OCS writes = 13 (tariff plan + subscriber contract + balance)
 ```
 
-CUTOVER_TABLE = 23 mutation routes (all ACTUALLY_ROUTED=1).
+CUTOVER_TABLE = 26 routes (all ACTUALLY_ROUTED=1).
 
 Read endpoints are shadow-implemented in Go; production reads still route through Next.js unless explicitly cut over.
 
@@ -1164,7 +1165,7 @@ Next exact action
 Persistent placement:
 
 ```text
-Architecture/current ownership → AI_CONTEXT.md
+Architecture/current ownership → AGENTS.md
 Historical completed work      → docs/operations/dev-log.md
 Pending work                   → docs/operations/todo.md
 Stable rules                   → CLAUDE.md
@@ -1175,7 +1176,7 @@ Rule:
 ```text
 Source code is memory.
 Git is history.
-AI_CONTEXT.md is the current map.
+AGENTS.md is the current map.
 CLAUDE.md is the law.
 ```
 

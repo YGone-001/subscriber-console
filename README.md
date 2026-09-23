@@ -27,7 +27,7 @@ subscriber-console/
 ├── scripts/           # Operational and migration scripts
 ├── README.md
 ├── CLAUDE.md
-└── AI_CONTEXT.md
+└── AGENTS.md
 ```
 
 ```
@@ -184,7 +184,7 @@ More detail is available in [Deployment](docs/operations/deployment.md).
 | Database | `docs/database/` |
 | Operations | `docs/operations/` |
 | Project Rules | `CLAUDE.md` |
-| Current State | `AI_CONTEXT.md` |
+| Current State | `AGENTS.md` |
 
 ## Checks
 

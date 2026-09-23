@@ -1,8 +1,8 @@
 # xCloud — Claude Code 项目规则
 
 > 适用于 `subscriber-console` 当前 `develop` 分支长期开发。
-> `CLAUDE.md` 只保存稳定规则；当前阶段、已迁接口和下一步放在 `AI_CONTEXT.md`。
-> 新会话必须先读 `CLAUDE.md`，再读 `AI_CONTEXT.md`，然后只读取任务直接相关源码。
+> `CLAUDE.md` 只保存稳定规则；当前阶段、已迁接口和下一步放在 `AGENTS.md`。
+> 新会话必须先读 `CLAUDE.md`，再读 `AGENTS.md`，然后只读取任务直接相关源码。
 
 ## 0. 核心防卫底线 (Core Defensive Constraints)
 
@@ -167,7 +167,7 @@ one mongo.Client
 1. 当前运行源码
 2. 自动化测试
 3. 冻结 API Contract / migration inventory
-4. AI_CONTEXT.md
+4. AGENTS.md
 5. docs/operations/deployment.md
 6. docs/operations/dev-log.md
 7. README / 旧设计文档
@@ -191,7 +191,7 @@ one mongo.Client
 
 ```text
 CLAUDE.md
-AI_CONTEXT.md
+AGENTS.md
 ```
 
 然后：
@@ -245,10 +245,10 @@ git show
 
 上下文膨胀时：
 1. 总结已确认事实。
-2. 架构级事实更新 `AI_CONTEXT.md`。
+2. 架构级事实更新 `AGENTS.md`。
 3. 历史写 `docs/operations/dev-log.md`。
 4. 待办写 `docs/operations/todo.md`。
-5. 下一会话从 `CLAUDE.md + AI_CONTEXT.md` 重建上下文。
+5. 下一会话从 `CLAUDE.md + AGENTS.md` 重建上下文。
 
 ## 6. 文档职责
 
@@ -261,7 +261,7 @@ git show
 - 迁移禁止项
 - 测试门槛
 
-### AI_CONTEXT.md
+### AGENTS.md
 只放：
 - 当前架构
 - 当前阶段
@@ -706,7 +706,7 @@ rollbackable
 仅在确有变化时更新：
 
 ```text
-AI_CONTEXT.md
+AGENTS.md
 docs/operations/dev-log.md
 docs/operations/todo.md
 docs/architecture/
@@ -714,7 +714,7 @@ docs/api/
 docs/operations/deployment.md
 ```
 
-只有这些变化需要更新 `AI_CONTEXT.md`：
+只有这些变化需要更新 `AGENTS.md`：
 - ownership 改变
 - phase 完成
 - 安全边界改变
@@ -729,7 +729,7 @@ docs/operations/deployment.md
 开始编码前：
 1. 读任务。
 2. 读 CLAUDE.md。
-3. 读 AI_CONTEXT.md。
+3. 读 AGENTS.md。
 4. 查 Git。
 5. 定位真实源码。
 6. 建最小调用链。
@@ -782,7 +782,7 @@ Deferred
 当前迁移状态、ownership 和下一阶段入口全部见：
 
 ```text
-AI_CONTEXT.md
+AGENTS.md
 ```
 
 不要把阶段日志继续堆进本文件。

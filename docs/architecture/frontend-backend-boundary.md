@@ -1,7 +1,7 @@
 # Frontend-Backend Boundary
 
 > Defines responsibility boundaries between frontend and backend.
-> Detailed rules: `CLAUDE.md`. Current ownership: `AI_CONTEXT.md`.
+> Detailed rules: `CLAUDE.md`. Current ownership: `AGENTS.md`.
 
 ## Frontend Responsibility
 

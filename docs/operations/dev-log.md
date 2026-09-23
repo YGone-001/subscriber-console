@@ -1,7 +1,7 @@
 # DEV_LOG
 
 > 历史增量记录：阶段完成、commit、重要 bug / 修复、关键结论。
-> 当前状态看 `AI_CONTEXT.md`；待办看 `TODO.md`；规则看 `CLAUDE.md`。
+> 当前状态看 `AGENTS.md`；待办看 `TODO.md`；规则看 `CLAUDE.md`。
 
 ---
 

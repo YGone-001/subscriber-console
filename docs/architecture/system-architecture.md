@@ -1,7 +1,7 @@
 # System Architecture
 
 > Overview of xCloud subscriber-console architecture.
-> Detailed rules: `CLAUDE.md`. Current state: `AI_CONTEXT.md`.
+> Detailed rules: `CLAUDE.md`. Current state: `AGENTS.md`.
 
 ## Components
 
