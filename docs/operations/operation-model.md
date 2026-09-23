@@ -55,7 +55,7 @@ Approval workflow is completely removed from the business execution path. Author
 ## 2. Core Principles of the Direct Operation Model
 
 1. **Direct Immediate Execution**:
-   Authorized operators (`root`, `super_admin`, `ops_admin`, `operator`) execute permitted business operations directly. Operations take effect in MongoDB immediately upon request completion.
+   Authorized operators (`admin`, `operator`) execute permitted business operations directly. Legacy roles (`root`, `super_admin`, `ops_admin`) normalize transparently at runtime. Operations take effect in MongoDB immediately upon request completion.
 2. **Zero Approval Dependency**:
    Business mutations no longer generate pending tickets in `app_approvals`. All mutation endpoints return HTTP 200/201 with `{"outcome": "success", "message": "operation completed"}`.
 3. **Rigorous RBAC Capability Gates**:
@@ -79,31 +79,31 @@ Approval workflow is completely removed from the business execution path. Author
 
 | Operation | Endpoint | HTTP Method | Permitted Roles | Execution Mode | Response |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| Create Plan | `/api/tariff-plans` | `POST` | `root`, `super_admin`, `ops_admin`, `operator` | Direct | `201 Created` (`outcome: success`) |
-| Update Plan | `/api/tariff-plans/{id}` | `PUT` | `root`, `super_admin`, `ops_admin`, `operator` | Direct | `200 OK` (`outcome: success`) |
-| Enable Plan | `/api/tariff-plans/{id}/enable` | `POST` | `root`, `super_admin`, `ops_admin`, `operator` | Direct | `200 OK` (`outcome: success`) |
-| Disable Plan | `/api/tariff-plans/{id}/disable` | `POST` | `root`, `super_admin`, `ops_admin`, `operator` | Direct | `200 OK` (`outcome: success`) |
-| Clone Plan | `/api/tariff-plans/{id}/clone` | `POST` | `root`, `super_admin`, `ops_admin`, `operator` | Direct | `201 Created` (`outcome: success`) |
-| Delete Plan | `/api/tariff-plans/{id}` | `DELETE` | `root`, `super_admin`, `ops_admin`, `operator` | Direct | `200 OK` (`outcome: success`) |
+| Create Plan | `/api/tariff-plans` | `POST` | `admin`, `operator` | Direct | `201 Created` (`outcome: success`) |
+| Update Plan | `/api/tariff-plans/{id}` | `PUT` | `admin`, `operator` | Direct | `200 OK` (`outcome: success`) |
+| Enable Plan | `/api/tariff-plans/{id}/enable` | `POST` | `admin`, `operator` | Direct | `200 OK` (`outcome: success`) |
+| Disable Plan | `/api/tariff-plans/{id}/disable` | `POST` | `admin`, `operator` | Direct | `200 OK` (`outcome: success`) |
+| Clone Plan | `/api/tariff-plans/{id}/clone` | `POST` | `admin`, `operator` | Direct | `201 Created` (`outcome: success`) |
+| Delete Plan | `/api/tariff-plans/{id}` | `DELETE` | `admin`, `operator` | Direct | `200 OK` (`outcome: success`) |
 
 ### 3.2 Contract Subscriber Management (`ocs_subscribers`)
 
 | Operation | Endpoint | HTTP Method | Permitted Roles | Execution Mode | Response |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| Create Contract | `/api/ocs/subscribers` | `POST` | `root`, `super_admin`, `ops_admin`, `operator` | Direct | `201 Created` (`outcome: success`) |
-| Change Tariff | `/api/ocs/subscribers/{imsi}` | `PATCH` | `root`, `super_admin`, `ops_admin`, `operator` | Direct | `200 OK` (`outcome: success`) |
-| Suspend Contract | `/api/ocs/subscribers/{imsi}/suspend` | `POST` | `root`, `super_admin`, `ops_admin`, `operator` | Direct | `200 OK` (`outcome: success`) |
-| Resume Contract | `/api/ocs/subscribers/{imsi}/resume` | `POST` | `root`, `super_admin`, `ops_admin`, `operator` | Direct | `200 OK` (`outcome: success`) |
-| Terminate Contract | `/api/ocs/subscribers/{imsi}` | `DELETE` | `root`, `super_admin`, `ops_admin`, `operator` | Direct | `200 OK` (`outcome: success`) |
+| Create Contract | `/api/ocs/subscribers` | `POST` | `admin`, `operator` | Direct | `201 Created` (`outcome: success`) |
+| Change Tariff | `/api/ocs/subscribers/{imsi}` | `PATCH` | `admin`, `operator` | Direct | `200 OK` (`outcome: success`) |
+| Suspend Contract | `/api/ocs/subscribers/{imsi}/suspend` | `POST` | `admin`, `operator` | Direct | `200 OK` (`outcome: success`) |
+| Resume Contract | `/api/ocs/subscribers/{imsi}/resume` | `POST` | `admin`, `operator` | Direct | `200 OK` (`outcome: success`) |
+| Terminate Contract | `/api/ocs/subscribers/{imsi}` | `DELETE` | `admin`, `operator` | Direct | `200 OK` (`outcome: success`) |
 
 ### 3.3 Balance Governance (`ocs_balances`)
 
 | Operation | Endpoint | HTTP Method | Permitted Roles | Execution Mode | Response |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| Adjust Balance | `/api/ocs/balances/{imsi}/adjust` | `POST` | `root`, `super_admin`, `ops_admin`, `operator` | Direct (CAS) | `200 OK` (`outcome: success`) |
-| Reset Balance | `/api/ocs/balances/{imsi}/reset` | `POST` | *None* (All 6 roles) | Permanently Disabled | `400 Bad Request` (`BALANCE_RESET_DISABLED`) |
+| Adjust Balance | `/api/ocs/balances/{imsi}/adjust` | `POST` | `admin`, `operator` | Direct (CAS) | `200 OK` (`outcome: success`) |
+| Reset Balance | `/api/ocs/balances/{imsi}/reset` | `POST` | *None* (All roles) | Permanently Disabled | `400 Bad Request` (`BALANCE_RESET_DISABLED`) |
 
-*Note: Hard balance resets remain permanently prohibited across all 6 roles to prevent arbitrary financial adjustments and maintain accounting integrity.*
+*Note: Hard balance resets remain permanently prohibited across all roles to prevent arbitrary financial adjustments and maintain accounting integrity.*
 
 ---
 

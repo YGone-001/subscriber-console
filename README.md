@@ -2,7 +2,7 @@
 
 xCloud subscriber operations console built with Next.js, Go, React, and MongoDB.
 
-It manages IMSI subscriber records, profile templates, OCS tariff plans, subscriber contracts, balance accounts, rating policies, traffic analytics, CSV import/export, audit logs, approval governance, local alerts, system health checks, and role-based access control.
+It manages IMSI subscriber records, profile templates, OCS tariff plans, subscriber contracts, balance accounts, rating policies, traffic analytics, CSV import/export, operation logs, local alerts, system health checks, and role-based access control.
 
 ## Architecture
 

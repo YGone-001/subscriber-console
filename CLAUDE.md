@@ -41,13 +41,13 @@ xCloud 是独立的电信运营与核心网运维平台，不是 xCloud 的附�
 Approval workflow removed from business execution path. Authorization and operation logging remain.
 - 授权用户直接执行业务变更操作，即时生效（Direct Execution）。
 - 移除阻塞式业务审批工作流，业务操作不再生成 `app_approvals` 记录。
-- 严格保留 RBAC 权限检查、操作主体重新鉴权（Fresh Actor Revalidation）、严格操作审计日志（Operation Log / `app_audit_logs`）及 CAS 并发冲突保护。
+- 严格保留 RBAC 权限检查、操作主体重新鉴权（Fresh Actor Revalidation）、非阻塞式内部操作日志（Operation Log / `app_audit_logs`，best-effort 模式）及 CAS 并发冲突保护。
 
 ### 1.2 角色权限模型 (RBAC Model - Phase 5.7-B)
 
 三标准角色模型 (Canonical Three-Role Model)：
-- `admin` (管理员): 全系统管理，包含用户管理、角色分配、审批复核/执行、审计导出与完整源 IP 查看、业务直接变更。
-- `operator` (操作员): 业务直接变更（签约、余额、Profile 回滚、资费、计费等）、核心网运维与配置，不可管理用户，不可导出审计。
+- `admin` (管理员): 全系统与用户管理，包含用户生命周期管理、角色分配、业务直接变更。
+- `operator` (操作员): 业务直接变更（签约、余额、Profile 回滚、资费、计费等）、核心网运维与配置，不可管理用户。
 - `viewer` (查看员): 只读查看，所有业务变更与用户管理均拒绝。
 
 向后兼容与运行时归一化：
@@ -66,7 +66,7 @@ Approval workflow removed from business execution path. Authorization and operat
 - 删除策略：不硬删除用户，使用 `status=disabled`（保留操作溯源能力）。
 - 认证链：`auth_token` cookie → HS256 JWT → `app_users` 校验 → Principal；Node 与 Go 独立验签。
 - 禁止引入：IAM 框架、OAuth、SSO、LDAP、MFA、多租户隔离、策略引擎。
-- 禁止触碰：OCS 业务逻辑、`CUTOVER_TABLE`、`ACTUALLY_ROUTED = 26`、charging plane。
+- 禁止触碰：OCS 业务逻辑、`CUTOVER_TABLE`、`ACTUALLY_ROUTED = 32`、charging plane。
 
 运维模型文档：
 - `docs/operations/authentication-model.md`
@@ -128,7 +128,7 @@ Charging Plane remains frozen and excluded.
 - 资费计划 (`ocs_tariff_plans`, `/ocs/tariffs`)、签约合同 (`ocs_subscribers`, `/ocs/contracts`)、余额管理 (`ocs_balances`, `/ocs/balances`) 生产基线永久冻结。
 - 严禁向 OCS 管理平面添加新业务能力或重新设计架构。
 - 严禁引入或耦合运行时计费面实体（`ocs_sessions`, `ocs_reservations`, `ocs_usage_records`, `ocs_events`, `ocs_config`, Gy/Ro/CCR/CCA 协议栈）。
-- 路由表 `ACTUALLY_ROUTED = 26` 严格保持不变。
+- 路由表状态：`CUTOVER_TABLE = 32`, `ACTUALLY_ROUTED = 32`（OCS 历史基线为 26）。
 
 ## 3. 技术栈
 

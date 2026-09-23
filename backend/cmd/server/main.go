@@ -171,7 +171,7 @@ func main() {
 	mux.Handle("GET /api/profiles/{name}/stats", authMiddleware(http.HandlerFunc(profileHandler.Stats)))
 	mux.Handle("GET /api/profiles/{name}/versions", authMiddleware(http.HandlerFunc(profileHandler.Versions)))
 
-	// Profile write endpoints (governance: super_admin/root/ops_admin→DIRECT)
+	// Profile write endpoints (authorized admin/operator direct execution)
 	mux.Handle("POST /api/profiles", authMiddleware(http.HandlerFunc(profileHandler.Create)))
 	mux.Handle("PUT /api/profiles/{name}", authMiddleware(http.HandlerFunc(profileHandler.Update)))
 	mux.Handle("DELETE /api/profiles/{name}", authMiddleware(http.HandlerFunc(profileHandler.Delete)))
@@ -198,7 +198,7 @@ func main() {
 	mux.Handle("GET /api/tariff-plans/{planId}/subscribers", authMiddleware(http.HandlerFunc(tariffHandler.Subscribers)))
 	mux.Handle("GET /api/tariff-plans/{planId}/migrate", authMiddleware(http.HandlerFunc(tariffHandler.Migrate)))
 
-	// Tariff Plan write endpoints (governance: super_admin/root→DIRECT, operator→APPROVAL)
+	// Tariff Plan write endpoints (authorized admin/operator direct execution)
 	mux.Handle("POST /api/tariff-plans", authMiddleware(http.HandlerFunc(tariffWriteHandler.Create)))
 	mux.Handle("PUT /api/tariff-plans/{planId}", authMiddleware(http.HandlerFunc(tariffWriteHandler.Update)))
 	mux.Handle("DELETE /api/tariff-plans/{planId}", authMiddleware(http.HandlerFunc(tariffWriteHandler.Delete)))
@@ -206,7 +206,7 @@ func main() {
 	mux.Handle("POST /api/tariff-plans/{planId}/enable", authMiddleware(http.HandlerFunc(tariffWriteHandler.Enable)))
 	mux.Handle("POST /api/tariff-plans/{planId}/disable", authMiddleware(http.HandlerFunc(tariffWriteHandler.Disable)))
 
-	// OCS Subscriber Contract write endpoints (governance: super_admin/root→DIRECT, operator→APPROVAL)
+	// OCS Subscriber Contract write endpoints (authorized admin/operator direct execution)
 	mux.Handle("POST /api/ocs/subscribers", authMiddleware(http.HandlerFunc(ocsSubscriberWriteHandler.Create)))
 	mux.Handle("PATCH /api/ocs/subscribers/{imsi}", authMiddleware(http.HandlerFunc(ocsSubscriberWriteHandler.UpdateTariff)))
 	mux.Handle("POST /api/ocs/subscribers/{imsi}/suspend", authMiddleware(http.HandlerFunc(ocsSubscriberWriteHandler.Suspend)))
@@ -219,7 +219,7 @@ func main() {
 	mux.Handle("GET /api/search", authMiddleware(http.HandlerFunc(subscriberHandler.Search)))
 	mux.Handle("POST /api/subscribers/batch/precheck", authMiddleware(http.HandlerFunc(subscriberHandler.BatchPrecheck)))
 
-	// Subscriber write endpoints (direct execution: admin/operator → DIRECT)
+	// Subscriber write endpoints (authorized admin/operator direct execution)
 	subscriberWriteHandler := subscriber.NewWriteHandler(subscriberRepo, limiter, userRepo, auditWriter)
 	mux.Handle("POST /api/subscribers", authMiddleware(http.HandlerFunc(subscriberWriteHandler.Create)))
 	mux.Handle("PUT /api/subscribers/{imsi}", authMiddleware(http.HandlerFunc(subscriberWriteHandler.Update)))

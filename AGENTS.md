@@ -30,14 +30,14 @@
 Approval workflow removed from business execution path. Authorization and operation logging remain.
 - Authorized users execute permitted operations directly (Direct Execution).
 - Zero approval records created on business operations (`app_approvals` count == 0).
-- Strict audit logging to `app_audit_logs`, RBAC capability gates, fresh actor revalidation, and CAS concurrency control remain active.
+- Best-effort / non-business-gating operation logging to `app_audit_logs`, RBAC capability gates, fresh actor revalidation, and CAS concurrency control remain active.
 
 ### 0.3 角色权限模型 (RBAC Model - Phase 5.7-B)
 
 Canonical Three-Role Model:
-- `admin`: Full administration, user management, approval review/execute, audit export, full source-IP access, direct business mutations.
-- `operator`: Direct business mutations (subscribers, balances, profiles, tariffs, rating), core operations, audit viewing. No user admin, no audit export.
-- `viewer`: Read-only inspection. All mutations and user admin denied.
+- `admin`: System and user administration, plus permitted business operations.
+- `operator`: Permitted operational business operations (subscribers, balances, profiles, tariffs, rating); no user administration.
+- `viewer`: Read-only inspection. All mutations and user administration denied.
 
 Backward Compatibility:
 - Runtime normalization: `root` / `super_admin` -> `admin`, `ops_admin` -> `operator`, `auditor` -> `viewer`.
@@ -211,8 +211,8 @@ Managed domains:
 
 Charging Plane remains frozen and excluded.
 
-- 权威基线：Phase 5.6 生产冻结基准。
-- 路由表状态：`ACTUALLY_ROUTED = 26`（严格保持不变，零变更）。
+- 权威基线：Phase 5.6 生产冻结基准（历史基线 ACTUALLY_ROUTED = 26，当前生产路由 ACTUALLY_ROUTED = 32）。
+- 路由表状态：`CUTOVER_TABLE = 32`，`ACTUALLY_ROUTED = 32`。
 - 托管集合：`ocs_tariff_plans`、`ocs_subscribers`、`ocs_balances`。
 - 冻结规约文档：`docs/backend-migration/phase-5-6-ocs-production-freeze.md`。
 - 运维操作手册：`docs/operations/ocs-management-runbook.md`。
@@ -290,7 +290,15 @@ x-user-session-version
 
 as authority.
 
-`app_users` = Phase 2 read-only.
+`app_users` = Authoritative User Management store (`xcloud_ops.app_users`).
+Canonical User Management routes (production owner = Go):
+- `GET /api/users`
+- `POST /api/users`
+- `GET /api/users/{username}`
+- `PATCH /api/users/{username}`
+- `POST /api/users/{username}/disable`
+- `POST /api/users/{username}/password-reset`
+Legacy compatibility read aliases: `/api/auth/users`, `/api/auth/users/{username}`.
 Login/logout = Node owner.
 
 ---
@@ -311,7 +319,7 @@ Current write invariant:
 ```text
 Business-domain writes by Go = subscriber/profile CRUD + batch (Direct Execution), ACTUALLY_ROUTED=32
 Infrastructure writes = app_rate_limits (allowed)
-Security audit writes = app_audit_logs (authorization.denied + operation logs, Strict mode)
+Operation logging = app_audit_logs (best-effort / non-business-gating internal operation logs; authorization denial evidence)
 OCS writes = ocs_tariff_plans CRUD + enable/disable (Direct Execution), ACTUALLY_ROUTED=32
 OCS subscriber writes = ocs_subscribers create/update-tariff/suspend/resume/terminate (Direct Execution), ACTUALLY_ROUTED=32
 OCS balance writes = ocs_balances adjust (Direct Execution), reset (permanently disabled), ACTUALLY_ROUTED=32
@@ -322,13 +330,11 @@ User Management writes = app_users CRUD + disable + password-reset (Direct Execu
 
 ## 9. Current Go Read Implementations
 
-35 semantic-read implementations (34 GET + 1 POST semantic read).
+30 semantic-read implementations (29 GET + 1 POST semantic read).
 
-Phase 2A — 6:
+Phase 2A — 4:
 
 ```text
-GET /api/audit
-GET /api/audit/:id
 GET /api/analytics/metrics
 GET /api/analytics/sparkline
 GET /api/ratings
@@ -388,34 +394,18 @@ GET /api/users
 GET /api/users/:username
 ```
 
-Phase 3C — 3 (Approval governance read foundation):
-
-```text
-GET /api/approvals
-GET /api/approvals/:id
-GET /api/approvals/:id/audit
-```
-
-Phase 3D — 5 (Explicit approval decision endpoints + creation):
-
-```text
-POST /api/approvals              — ACCESS_REQUEST creation (viewer→operator)
-POST /api/approvals/:id/approve  — CAS transition, comment optional
-POST /api/approvals/:id/reject   — CAS transition, reason required
-POST /api/approvals/:id/cancel   — CAS transition, reason optional
-POST /api/approvals/:id          — legacy compat adapter (dispatches by decision=approve|reject)
-```
-
 Status:
 
 ```text
 Go HTTP operations = 58
-  Semantic reads = 32
+  Semantic reads = 30
   Business mutations = 12 (subscriber+profile CRUD + batch)
   Tariff mutations = 6 (create/update/delete/clone/enable/disable)
   OCS subscriber mutations = 5 (create/update-tariff/suspend/resume/terminate)
   OCS balance mutations = 2 (adjust/reset)
   User Management mutations = 4 (create/update/disable/password-reset)
+  Auth public = 2 (login/logout)
+  Health = 2 (healthz/readyz)
 Actually Routed = 32 (CUTOVER_TABLE routes)
 OCS writes = 13 (tariff plan + subscriber contract + balance)
 ```
@@ -426,76 +416,21 @@ Read endpoints are shadow-implemented in Go; production reads still route throug
 
 ---
 
-## 9.1 Approval Governance
+## 9.1 Direct Operation Model (Phase 5.7-A / Phase 5.7-C)
 
-Go owns:
-- Approval list/detail/audit read views
-- Risk policy (approval-risk-v1)
-- Maker-checker policy (independent reviewer)
-- Pure state machine (CanTransition)
-- Action eligibility (canApprove/canReject/canCancel/canExecute)
-- Approve/reject/cancel CAS transitions (FindOneAndUpdate only)
-- Explicit POST /api/approvals/:id/approve, /reject, /cancel
-- Legacy POST /api/approvals/:id decision wrapper (dispatches by decision=approve|reject)
-- ACCESS_REQUEST creation (POST /api/approvals)
-- Generic internal approval creator (reusable for future Subscriber/OCS)
-- Strict audit for transitions and creation
-- ISO 8601 millisecond boundaries for createdAt/todayApproved
-- Workflow interfaces (DecisionStore, IdentityReader, StrictAuditWriter)
-
-Go does NOT own:
-- Approval execute
-- Business executors
-
-Approval execute remains with Node.
-
-Audit Writer:
-- Strict lifecycle foundation ready (WaitGroup, RWMutex, for-range queue)
-- BestEffort uses lifecycleCtx, Strict uses merged request+lifecycle context
-- Close timeout guarantees workers exit (lifecycle cancel aborts Mongo ops)
+All business mutations execute directly after authentication, fresh actor validation, RBAC capability checks, domain validation, and concurrency checks:
+- Zero approval dependency: No approval tickets, maker-checker handoffs, or pending approvals created (`app_approvals` count == 0 for normal operations).
+- Canonical three-role authorization:
+  - `admin`: Full administration, user management, direct business mutations.
+  - `operator`: Direct business mutations (subscribers, balances, profiles, tariffs, rating); no user administration.
+  - `viewer`: Read-only; all mutations denied with HTTP 403.
+- Non-gating operation logging: Mutations record operation evidence to `xcloud_ops.app_audit_logs`. Logging is best-effort and does not gate business response.
+- Concurrency: Atomic CAS versioning protects balances, tariff plans, and subscribers against concurrent modification conflicts.
+- Historical data: `xcloud_ops.app_approvals` is retained as historical data only; not accessed during normal business operations.
 
 ---
 
-## 9.2 Super Admin Direct Governance Policy
-
-Separate PERMISSION from GOVERNANCE MODE.
-
-Governance modes:
-```text
-DIRECT_GOVERNED    — execute immediately, no approval
-APPROVAL_GOVERNED  — requires approval workflow
-DISABLED           — not available (no override)
-RUNTIME_INTERNAL   — not available via HTTP (no override)
-```
-
-Effective decision order:
-```text
-1. DISABLED → always DISABLED (even super_admin)
-2. RUNTIME_INTERNAL → always RUNTIME_INTERNAL (even super_admin)
-3. super_admin + APPROVAL_GOVERNED + has executor → DIRECT_GOVERNED
-4. base mode applies
-```
-
-Super Admin detection: `auth.IsSuperAdmin(Principal)` or `approval.IsSuperAdminRole(role)`.
-Treats `root` (legacy) and `super_admin` as Super Admin.
-
-Evaluator: `approval.EvaluateGovernance(operation, role)` → `GovernanceResult`.
-
-Super Admin direct mutations:
-- DO NOT create approval records
-- DO require permission checks
-- DO require session/account validation
-- DO require input validation
-- DO require strict audit (with `governanceMode=DIRECT_GOVERNED`)
-- DO NOT bypass DISABLED/RUNTIME_INTERNAL
-
-Risk and governance are separate: SUBSCRIBER_BULK_DELETE remains critical risk even when DIRECT_GOVERNED.
-
-Existing pending approvals are NOT auto-approved/executed.
-
----
-
-## 9.3 OCS Management Domain
+## 9.2 OCS Management Domain
 
 Phase 5.0 defined the OCS boundary:
 
@@ -520,7 +455,6 @@ Phase 5.1 added:
 
 Phase 5.2 added:
 - 6 tariff plan write operations (create/update/delete/clone/enable/disable) — Go governed
-- Tariff governance registry (APPROVAL_GOVERNED base, super_admin→DIRECT)
 - Fresh actor revalidation before every mutation
 - CUTOVER_TABLE = 18 (was 12): 6 tariff routes ACTUALLY_ROUTED to Go
 - Tariff list UI (`/ocs/tariffs`) — KPI cards, table, enable/disable/clone/delete actions
@@ -530,23 +464,12 @@ Phase 5.2 added:
 
 Next: Phase 5.3+ OCS subscriber/balance governance per `docs/operations/todo.md`.
 
-## 10. Deferred Stateful GET
+## 10. Removed Governance Surfaces (Phase 5.7-C)
 
-Do not migrate/count:
-
-```text
-GET /api/audit/export
-```
-
-Reason:
-
-```text
-writes audit evidence to app_audit_logs
-```
-
-Node remains owner.
-
-Do not add Go 501 placeholder.
+The following governance endpoints and surfaces were retired in Phase 5.7-C:
+- `/api/approvals/*` (all approval read, decision, and export routes)
+- `/api/audit/*` (user-facing audit console list, detail, export routes; note `/api/system/audit/*` remains for diagnostics and healing)
+- Approval and Audit UI console pages and navigation entries
 
 ---
 
@@ -590,7 +513,7 @@ GET /api/tariff-plans/:planId/migrate
 
 = dry-run only.
 
-No tariff/subscriber/balance/approval/audit business write.
+No tariff/subscriber/balance/audit business write.
 
 ### Numeric
 
@@ -746,10 +669,10 @@ Go must reproduce legacy API representation, not raw xCloud BSON.
 
 ---
 
-## 16. Subscriber Writes Stay Node
-
-Do not migrate in Phase 2C:
-
+## 16. Historical Phase 2C Note: Subscriber Writes
+ 
+During historical Phase 2C, subscriber writes remained with Node:
+ 
 ```text
 POST /api/subscribers
 PUT /api/subscribers/:imsi
@@ -759,9 +682,8 @@ bulk delete
 import
 policy mutation
 ```
-
-Subscriber governance/approval authority remains Node.
-Node batch create now uses: validateCurrentAccount, actor-aware governance, frozen v2, shared create-only executor, profile precondition, strict audit.
+ 
+In Phase 4.6 and 4.7, subscriber CRUD and batch were cut over to Go with direct execution (ACTUALLY_ROUTED = 32). Node retains no active subscriber write paths.
 
 ---
 
@@ -1040,20 +962,20 @@ Phase 2D provides:
 - Mongo write guard: user package is read-only
 - CapabilitiesFor supports raw `root` role for auth/permissions endpoint
 
-Phase 3:
+Phase 3 (Historical Archive — approval workflow retired in Phase 5.7-C):
 - Governance — COMPLETE (for subscriber single-write scope)
-- Approval read foundation — COMPLETE (list/detail/audit)
+- Approval read foundation — COMPLETE (retired in Phase 5.7-C)
 - Audit writer lifecycle — COMPLETE (strict lifecycle, bounded close)
-- Explicit decision endpoints — COMPLETE (approve/reject/cancel + legacy compat)
+- Explicit decision endpoints — COMPLETE (retired in Phase 5.7-C)
 - Contract preflight — COMPLETE (paramOrElse, ISO8601Millis, presenter bson.D)
-- ACCESS_REQUEST creation — COMPLETE (POST /api/approvals)
-- ACCESS_REQUEST handler tests — COMPLETE (permission denied, inactive, non-viewer, reason, truncation, missing user, unauthenticated)
+- ACCESS_REQUEST creation — COMPLETE (retired in Phase 5.7-C)
+- ACCESS_REQUEST handler tests — COMPLETE
 - Actor-aware governance — COMPLETE (evaluateSubscriberOperationForActor)
 - Fresh actor validation — COMPLETE (validateCurrentAccount for CREATE/UPDATE/DELETE)
 - Strict audit — COMPLETE (fresh actor in audit metadata)
 - OCS provisioning — COMPLETE (presence-aware input, no admin reservation, balance preservation)
-- Subscriber batch create — COMPLETE (frozen v2 contract, create-only atomicity, profile drift protection, 5GiB default, governance: operator→APPROVAL, super_admin/root→DIRECT, Node production authority aligned)
-- Approval execute — DEFERRED (crosses into business mutations)
+- Subscriber batch create — COMPLETE (frozen v2 contract, create-only atomicity, profile drift protection, 5GiB default, Node production authority aligned)
+- Approval execute — RETIRED (direct execution established in Phase 5.7-A/5.7-C)
 
 Security audit blocker:
 - RESOLVED — authorization.denied audit writer implemented (Phase 3A)
