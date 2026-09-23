@@ -76,7 +76,7 @@ export function UserConfirmDialogs(props: UserConfirmDialogsProps) {
         >
           <ConfirmDetails
             target={props.pendingBulkAction.usernames.join(", ")}
-            approval={props.pendingBulkAction.action === "assignRole" && props.pendingBulkAction.role === "root" ? t("users_confirm_root_role") : t("users_confirm_approval_none")}
+            approval={t("users_confirm_approval_none")}
             irreversible={t("users_confirm_irreversible_no")}
             reason={props.confirmReason}
             setReason={props.setConfirmReason}
@@ -87,7 +87,7 @@ export function UserConfirmDialogs(props: UserConfirmDialogsProps) {
       {pendingUpdate && selectedUser ? (
         <ConfirmActionPanel
           presentation="modal"
-          tone={pendingUpdate.payload.role === "root" || pendingUpdate.payload.status === "disabled" ? "warning" : "info"}
+          tone={pendingUpdate.payload.status === "disabled" ? "warning" : "info"}
           title={t("users_update_confirm", { username: pendingUpdate.username })}
           message={pendingUpdate.impact}
           confirmLabel={t("confirm")}
@@ -99,7 +99,7 @@ export function UserConfirmDialogs(props: UserConfirmDialogsProps) {
         >
           <ConfirmDetails
             target={pendingUpdate.username}
-            approval={pendingUpdate.payload.role === "root" ? t("users_confirm_root_role") : t("users_confirm_approval_none")}
+            approval={t("users_confirm_approval_none")}
             irreversible={t("users_confirm_irreversible_no")}
             reason={props.confirmReason}
             setReason={props.setConfirmReason}

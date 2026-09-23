@@ -1,7 +1,7 @@
 import { useRef, useState, type Dispatch, type SetStateAction } from "react";
 import type { I18nContextType } from "@/components/I18nProvider";
 import { toCsvRow } from "@/lib/csv";
-import { handleSessionExpiry } from '@/lib/fetcher';
+import { usersApi } from "@/lib/api/users";
 import { isPasswordStrong } from '@/lib/security';
 import type { UserOperation } from '@/lib/userManagementPolicy';
 import {
@@ -43,16 +43,6 @@ interface UseUserCrudOptions {
   mutate: () => Promise<unknown>;
   canManage: (user: SysUser, operation: UserOperation) => boolean;
   t: I18nContextType["t"];
-}
-
-async function readError(response: Response, fallback: string) {
-  handleSessionExpiry(response.status);
-  try {
-    const body = await response.json() as { error?: string };
-    return body.error || fallback;
-  } catch {
-    return fallback;
-  }
 }
 
 export function useUserCrud(options: UseUserCrudOptions) {
@@ -119,12 +109,14 @@ export function useUserCrud(options: UseUserCrudOptions) {
     usernameCheckRequestRef.current = requestId;
     setUsernameAvailability("checking");
     try {
-      const response = await fetch(`/api/users/${encodeURIComponent(normalizedUsername)}`, { cache: "no-store" });
-      if (response.status === 404) { if (usernameCheckRequestRef.current === requestId) setUsernameAvailability('available'); return; }
-      if (!response.ok) throw new Error(await readError(response, t("users_username_check_error")));
-      if (usernameCheckRequestRef.current !== requestId) return;
-      setUsernameAvailability('taken');
-    } catch (requestError) {
+      await usersApi.get(normalizedUsername);
+      if (usernameCheckRequestRef.current === requestId) setUsernameAvailability('taken');
+    } catch (requestError: unknown) {
+      const status = (requestError as { status?: number })?.status;
+      if (status === 404) {
+        if (usernameCheckRequestRef.current === requestId) setUsernameAvailability('available');
+        return;
+      }
       console.error(requestError);
       if (usernameCheckRequestRef.current === requestId) setUsernameAvailability("error");
     }
@@ -146,21 +138,13 @@ export function useUserCrud(options: UseUserCrudOptions) {
 
     setSavingAction("create");
     try {
-      const response = await fetch("/api/auth/users", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          username: newForm.username.trim(),
-          displayName: newForm.displayName.trim() || undefined,
-          email: newForm.email.trim() || undefined,
-          password: newForm.password,
-          role: newForm.role,
-        }),
+      await usersApi.create({
+        username: newForm.username.trim(),
+        displayName: newForm.displayName.trim() || undefined,
+        email: newForm.email.trim() || undefined,
+        password: newForm.password,
+        role: newForm.role,
       });
-      if (!response.ok) {
-        setNotice({ type: "error", text: await readError(response, t("users_err_create")) });
-        return;
-      }
       resetNewForm();
       resetUsernameAvailability();
       closeDrawer();
@@ -168,7 +152,7 @@ export function useUserCrud(options: UseUserCrudOptions) {
       await mutate();
     } catch (requestError) {
       console.error(requestError);
-      setNotice({ type: "error", text: t("users_err_create") });
+      setNotice({ type: "error", text: requestError instanceof Error ? requestError.message : t("users_err_create") });
     } finally {
       setSavingAction(null);
     }
@@ -177,15 +161,7 @@ export function useUserCrud(options: UseUserCrudOptions) {
   const submitUpdate = async (targetUser: SysUser, payload: UpdatePayload, reason: string) => {
     setSavingAction(`update:${targetUser.username}`);
     try {
-      const response = await fetch(`/api/auth/users/${targetUser.username}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...payload, reason }),
-      });
-      if (!response.ok) {
-        setNotice({ type: "error", text: await readError(response, t("users_err_update")) });
-        return;
-      }
+      await usersApi.update(targetUser.username, { ...payload, reason: reason || undefined });
       setDrawerMode("view");
       setEditForm((current) => ({ ...current, password: "" }));
       setPendingUpdate(null);
@@ -194,7 +170,7 @@ export function useUserCrud(options: UseUserCrudOptions) {
       await mutate();
     } catch (requestError) {
       console.error(requestError);
-      setNotice({ type: "error", text: t("users_err_update") });
+      setNotice({ type: "error", text: requestError instanceof Error ? requestError.message : t("users_err_update") });
     } finally {
       setSavingAction(null);
     }
@@ -260,22 +236,14 @@ export function useUserCrud(options: UseUserCrudOptions) {
     }
     setSavingAction(`status:${targetUser.username}`);
     try {
-      const response = await fetch(`/api/auth/users/${targetUser.username}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: pendingStatusChange.status, reason: confirmReason.trim() }),
-      });
-      if (!response.ok) {
-        setNotice({ type: "error", text: await readError(response, t("users_err_update")) });
-        return;
-      }
+      await usersApi.update(targetUser.username, { status: pendingStatusChange.status, reason: confirmReason.trim() || undefined });
       setPendingStatusChange(null);
       setConfirmReason("");
       setNotice({ type: "success", text: t("users_msg_updated") });
       await mutate();
     } catch (requestError) {
       console.error(requestError);
-      setNotice({ type: "error", text: t("users_err_update") });
+      setNotice({ type: "error", text: requestError instanceof Error ? requestError.message : t("users_err_update") });
     } finally {
       setSavingAction(null);
     }
@@ -350,23 +318,19 @@ export function useUserCrud(options: UseUserCrudOptions) {
         continue;
       }
       try {
-        const response = await fetch(`/api/auth/users/${username}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(action.action === 'assignRole'
-            ? { role: action.role, reason: confirmReason.trim() }
-            : { status: action.action === 'enable' ? 'active' : 'disabled', reason: confirmReason.trim() }),
-        });
-        const reason = response.ok ? undefined : await readError(response, t("users_bulk_default_failure"));
+        await usersApi.update(username, action.action === 'assignRole'
+          ? { role: action.role, reason: confirmReason.trim() || undefined }
+          : { status: action.action === 'enable' ? 'active' : 'disabled', reason: confirmReason.trim() || undefined });
         setBulkProgress((current) => current ? {
           ...current,
-          items: current.items.map((item) => item.username === username ? { ...item, status: response.ok ? "success" : "failed", reason } : item),
+          items: current.items.map((item) => item.username === username ? { ...item, status: "success" } : item),
         } : current);
       } catch (requestError) {
         console.error(requestError);
+        const reason = requestError instanceof Error ? requestError.message : t("users_bulk_default_failure");
         setBulkProgress((current) => current ? {
           ...current,
-          items: current.items.map((item) => item.username === username ? { ...item, status: "failed", reason: t("users_bulk_network_failure") } : item),
+          items: current.items.map((item) => item.username === username ? { ...item, status: "failed", reason } : item),
         } : current);
       }
     }
