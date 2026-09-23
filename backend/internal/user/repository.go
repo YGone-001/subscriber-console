@@ -330,3 +330,24 @@ func buildUserFilter(q UserQuery) bson.M {
 
 	return filter
 }
+
+// InsertUser creates a new user document in app_users.
+func (r *Repository) InsertUser(ctx context.Context, doc bson.M) error {
+	_, err := r.users.InsertOne(ctx, doc)
+	return err
+}
+
+// UpdateUserDoc applies an update document to a user by username.
+func (r *Repository) UpdateUserDoc(ctx context.Context, username string, update bson.M) error {
+	_, err := r.users.UpdateOne(ctx, bson.M{"username": username}, update)
+	return err
+}
+
+// UsernameExists checks if a username is already taken.
+func (r *Repository) UsernameExists(ctx context.Context, username string) (bool, error) {
+	count, err := r.users.CountDocuments(ctx, bson.M{"username": username})
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}

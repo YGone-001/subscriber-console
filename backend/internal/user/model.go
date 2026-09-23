@@ -206,3 +206,26 @@ func actorToString(v interface{}) string {
 func ptrBool(b bool) *bool {
 	return &b
 }
+
+// CreateUserRequest is the POST /api/users request body.
+type CreateUserRequest struct {
+	Username    string `json:"username"`
+	Password    string `json:"password"`
+	DisplayName string `json:"displayName"`
+	Email       string `json:"email"`
+	Role        string `json:"role"`
+}
+
+// UpdateUserRequest is the PATCH /api/users/{username} request body.
+// Only non-nil fields are updated.
+type UpdateUserRequest struct {
+	DisplayName *string `json:"displayName,omitempty"`
+	Email       *string `json:"email,omitempty"`
+	Role        *string `json:"role,omitempty"`
+	Status      *string `json:"status,omitempty"`
+}
+
+// ResetPasswordRequest is the POST /api/users/{username}/password-reset request body.
+type ResetPasswordRequest struct {
+	Password string `json:"password"`
+}

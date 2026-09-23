@@ -242,6 +242,12 @@ func main() {
 	mux.Handle("GET /api/users", authMiddleware(http.HandlerFunc(userHandler.UserList)))
 	mux.Handle("GET /api/users/{username}", authMiddleware(http.HandlerFunc(userHandler.UserDetail)))
 
+	// User write endpoints (admin only)
+	mux.Handle("POST /api/users", authMiddleware(http.HandlerFunc(userHandler.CreateUser)))
+	mux.Handle("PATCH /api/users/{username}", authMiddleware(http.HandlerFunc(userHandler.UpdateUser)))
+	mux.Handle("POST /api/users/{username}/disable", authMiddleware(http.HandlerFunc(userHandler.DisableUser)))
+	mux.Handle("POST /api/users/{username}/password-reset", authMiddleware(http.HandlerFunc(userHandler.ResetPassword)))
+
 	// Catch-all for unmigrated routes
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		response.NotFound(w)
