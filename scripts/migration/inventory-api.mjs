@@ -132,7 +132,7 @@ async function main() {
     const methods = await extractMethods(filePath);
     const apiPath = filePathToApiPath(filePath);
     const domain = deriveDomain(apiPath);
-    const relativeFile = relative(join(import.meta.dirname, '..', '..'), filePath);
+    const relativeFile = relative(join(import.meta.dirname, '..', '..'), filePath).replaceAll('\\', '/');
 
     routes.push({
       path: apiPath,

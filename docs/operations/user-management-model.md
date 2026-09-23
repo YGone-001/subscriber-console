@@ -136,10 +136,11 @@ Reason: retain operation traceability and audit history.
 ## 5. Password Policy
 
 Enforced identically by Node (`frontend/src/lib/security.ts` via `isPasswordStrong(password, username)`)
-and Go (`backend/internal/user/validator.go` via `ValidatePassword(password, username)`):
+and Go (`backend/internal/user/validator.go` via `ValidatePassword(password, username)`),
+proven identical across both runtimes via cross-language parameterized parity tests (`scripts/fixtures/password-parity-vectors.json`):
 
-- Trimmed length >= 8 characters (runes; whitespace-only or trimmed < 8 rejected)
-- UTF-8 encoded byte length <= 72 bytes (bcrypt byte boundary)
+- Minimum: 8 Unicode code points after trimming surrounding whitespace (whitespace-only or trimmed < 8 rejected; supplementary characters/emoji counted as code points, not UTF-16 code units)
+- Maximum: 72 UTF-8 bytes (bcrypt byte boundary)
 - Must not contain the target username (case-insensitive substring check)
 - For user creation (`POST /api/users`), validated against the requested `username`
 - For password reset (`POST /api/users/{username}/password-reset`), validated against the target `username` from route

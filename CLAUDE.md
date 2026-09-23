@@ -76,7 +76,7 @@ Approval workflow removed from business execution path. Authorization and operat
 - 双重限流 (Dual Rate Limiting): IP 维度请求限流（`login:<ip>`, 5 次 / 60 秒）与账号维度失败限流（`login-user:<normalized-username>`, 10 次失败 / 300 秒，密码验证前预检，仅认证失败时扣减配额，登录成功不扣减），触发时返回 HTTP 429 与 `Cache-Control: no-store`。
 - 自动锁定 (Automatic Lockout): 连续 10 次密码错误自动置为 `status="locked"`, `locked=true`, `sessionVersion+=1`, `lockedAt`, `lockReason="excessive_failed_logins"`；后续错误不重复递增 `sessionVersion`。
 - 响应隐私与状态码契约 (Response Privacy & Status Contract): 凭据与账号状态失败场景（用户不存在、密码错误、已禁用、已锁定）统一返回 HTTP 401 `{"error": "Invalid credentials"}` 与 `Cache-Control: no-store`；请求格式错误、字段缺失或密码超长（>72 字节）返回 HTTP 400。
-- 密码策略对齐 (Password Policy Parity): Node 与 Go 端强校验裁剪后长度 >= 8 字符、UTF-8 编码 <= 72 字节、且不包含目标用户名（不区分大小写）。
+- 密码策略对齐 (Password Policy Parity): Node 与 Go 端强校验去除首尾空白字符后 Unicode 码点数 >= 8、UTF-8 编码 <= 72 字节、且不包含目标用户名（不区分大小写）。
 - 管理员解锁 (Admin Unlock): 仅管理员可通过 Go 用户管理 API (`PATCH /api/users/{username}`) 解锁，恢复 `status="active"`, `locked=false`，清空锁定元数据与重置 `failedLoginAttempts=0`，并递增 `sessionVersion` 撤销历史会话。
 - 末位管理员保护 (Last Active Admin Protection): 严禁自动锁定或手动锁定/禁用系统中最后一个处于激活状态的管理员（返回 HTTP 409 `LAST_ACTIVE_ADMIN`）。
 - 密钥与会话安全 (Secret & Cookie Hardening): Node 与 Go 启动时强校验 `JWT_SECRET`（>= 32 UTF-8 字节，禁止弱占位符，不符则拒绝启动）；Cookie 属性强绑定 `HttpOnly=true`, `SameSite=Lax`, HTTPS 下强制 `Secure=true`；敏感认证响应强制 `Cache-Control: no-store`。

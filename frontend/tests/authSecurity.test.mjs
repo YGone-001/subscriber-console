@@ -31,16 +31,34 @@ test('Proxy overwrites identity headers only after verified JWT and current data
   assert.doesNotMatch(source, /payload\.role as string/);
 });
 
-test('isPasswordStrong rejects passwords shorter than 8 characters', () => {
+test('isPasswordStrong validates Unicode code points, byte length, and username containment', () => {
   assert.equal(isPasswordStrong('1234567'), false);
   assert.equal(isPasswordStrong(''), false);
   assert.equal(isPasswordStrong('12345678'), true);
-  assert.equal(isPasswordStrong('ComplexP@ssw0rd!'), true);
+  assert.equal(isPasswordStrong('ComplexP@ssw0rd!', 'alice'), true);
   assert.equal(isPasswordStrong({ length: 20 }), false);
   assert.equal(isPasswordStrong(' '.repeat(20)), false);
   assert.equal(isPasswordStrong('x'.repeat(73)), false);
   assert.equal(isPasswordStrong('ALICE-Secret!2026', 'alice'), false);
   assert.equal(typeof PASSWORD_POLICY_MESSAGE, 'string');
+
+  // Unicode code-point counting (supplementary characters)
+  assert.equal(isPasswordStrong('😀😀😀😀'), false, '4 emojis should fail (4 code points)');
+  assert.equal(isPasswordStrong('😀😀😀😀😀😀😀'), false, '7 emojis should fail (7 code points)');
+  assert.equal(isPasswordStrong('😀😀😀😀😀😀😀😀'), true, '8 emojis should pass (8 code points, 32 UTF-8 bytes)');
+  assert.equal(isPasswordStrong('测试密码安全验证'), true, '8 BMP characters should pass (8 code points, 24 UTF-8 bytes)');
+  assert.equal(isPasswordStrong('  Abcd1234  '), true, 'whitespace around 8 characters should pass');
+  assert.equal(isPasswordStrong('          '), false, 'whitespace-only should fail');
+
+  // Verify against shared parity vectors fixture
+  const fixturePath = new URL('../../scripts/fixtures/password-parity-vectors.json', import.meta.url);
+  if (fs.existsSync(fixturePath)) {
+    const vectors = JSON.parse(fs.readFileSync(fixturePath, 'utf8'));
+    for (const v of vectors) {
+      const actual = isPasswordStrong(v.password, v.username);
+      assert.equal(actual, v.expected, `Node decision for "${v.case}" must be ${v.expected}`);
+    }
+  }
 });
 
 test('getJwtSecretKey validates secret length and rejects unsafe placeholders', () => {

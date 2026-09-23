@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -140,20 +142,50 @@ func TestValidatePasswordPolicyMatrix(t *testing.T) {
 		wantErr  bool
 	}{
 		{
-			name:     "valid password",
-			password: "ValidPass123!",
+			name:     "8 ASCII characters",
+			password: "Abcd1234",
 			username: "alice",
 			wantErr:  false,
 		},
 		{
-			name:     "trimmed length below 8",
-			password: "  abc  ",
+			name:     "7 ASCII characters",
+			password: "Abcd123",
 			username: "alice",
 			wantErr:  true,
 		},
 		{
-			name:     "whitespace only",
-			password: "        ",
+			name:     "8 BMP Unicode characters",
+			password: "测试密码安全验证",
+			username: "alice",
+			wantErr:  false,
+		},
+		{
+			name:     "4 supplementary Unicode characters",
+			password: "😀😀😀😀",
+			username: "alice",
+			wantErr:  true,
+		},
+		{
+			name:     "7 supplementary Unicode characters",
+			password: "😀😀😀😀😀😀😀",
+			username: "alice",
+			wantErr:  true,
+		},
+		{
+			name:     "8 supplementary Unicode characters",
+			password: "😀😀😀😀😀😀😀😀",
+			username: "alice",
+			wantErr:  false,
+		},
+		{
+			name:     "leading/trailing whitespace around 8 characters",
+			password: "  Abcd1234  ",
+			username: "alice",
+			wantErr:  false,
+		},
+		{
+			name:     "whitespace-only",
+			password: "          ",
 			username: "alice",
 			wantErr:  true,
 		},
@@ -224,6 +256,38 @@ func TestValidatePasswordPolicyMatrix(t *testing.T) {
 				t.Fatalf("ValidateResetPassword(%q, %q) err = %v, wantErr %v", tt.password, tt.username, resetErr, tt.wantErr)
 			}
 		})
+	}
+
+	// Dynamic verification of all cases from shared fixture if present
+	for _, fixtureRelPath := range []string{
+		filepath.Join("..", "..", "..", "scripts", "fixtures", "password-parity-vectors.json"),
+		filepath.Join("..", "..", "scripts", "fixtures", "password-parity-vectors.json"),
+		filepath.Join("scripts", "fixtures", "password-parity-vectors.json"),
+	} {
+		if data, readErr := os.ReadFile(fixtureRelPath); readErr == nil {
+			var sharedVectors []struct {
+				Case     string `json:"case"`
+				Password string `json:"password"`
+				Username string `json:"username"`
+				Expected bool   `json:"expected"`
+			}
+			if unmarshalErr := json.Unmarshal(data, &sharedVectors); unmarshalErr == nil {
+				for _, v := range sharedVectors {
+					t.Run("fixture_"+v.Case, func(t *testing.T) {
+						uname := v.Username
+						if uname == "" {
+							uname = "alice"
+						}
+						err := ValidatePassword(v.Password, uname)
+						wantErr := !v.Expected
+						if (err != nil) != wantErr {
+							t.Fatalf("ValidatePassword(%q, %q) err = %v, wantErr %v", v.Password, uname, err, wantErr)
+						}
+					})
+				}
+			}
+			break
+		}
 	}
 }
 

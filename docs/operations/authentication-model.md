@@ -142,6 +142,12 @@ convenience context. Both Node and Go independently verify the `auth_token` cook
 Password storage: bcrypt cost 10. Never exposed via API (`stripPassword` on all responses).
 `passwordHash` is never returned by any endpoint.
 
+Password policy:
+- Minimum: 8 Unicode code points after trimming surrounding whitespace (whitespace-only or trimmed < 8 rejected; supplementary characters/emoji counted as code points, not UTF-16 code units)
+- Maximum: 72 UTF-8 bytes (bcrypt byte boundary)
+- Must not contain the target username (case-insensitive substring check)
+- Enforced identically by Node (`isPasswordStrong`) and canonical Go (`ValidatePassword`), verified by cross-language parity assertions.
+
 JWT secret: shared `JWT_SECRET` environment variable (>= 32 UTF-8 bytes).
 Must be identical across Node and Go processes (mismatch causes `AUTH_INVALID_TOKEN` loops).
 Both Node (`frontend/src/lib/security.ts`) and Go (`backend/internal/auth/secret.go`) fail closed on startup

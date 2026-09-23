@@ -19,7 +19,7 @@
 import assert from 'node:assert/strict';
 import net from 'node:net';
 import path from 'node:path';
-import { existsSync, unlinkSync } from 'node:fs';
+import { existsSync, unlinkSync, readFileSync } from 'node:fs';
 import { execSync, spawn } from 'node:child_process';
 import { SignJWT } from 'jose';
 import { MongoClient } from 'mongodb';
@@ -60,7 +60,7 @@ const { NextRequest } = jiti('next/server');
 const { POST: loginHandler } = jiti('../frontend/src/app/api/auth/login/route.ts');
 const { POST: logoutHandler } = jiti('../frontend/src/app/api/auth/logout/route.ts');
 const { GET: meHandler } = jiti('../frontend/src/app/api/auth/me/route.ts');
-const { getJwtSecretKey } = jiti('../frontend/src/lib/security.ts');
+const { getJwtSecretKey, isPasswordStrong, PASSWORD_POLICY_MESSAGE } = jiti('../frontend/src/lib/security.ts');
 const { getRateLimit } = jiti('../frontend/src/lib/rateLimit.ts');
 const { getMongoClient } = jiti('../frontend/src/lib/mongo.ts');
 
@@ -756,95 +756,97 @@ async function main() {
       });
     });
 
-    // ── 10. Go Password Policy Parity ─────────────────────────────────────────
-    console.log('\n10. Go Password Policy Parity');
+    // ── 10. Cross-Language Unicode Password Policy Parity ────────────────────
+    console.log('\n10. Cross-Language Unicode Password Policy Parity');
 
-    await verifyAsync('Go Create User rejects passwords failing policy (length, whitespace, username containment, >72 bytes)', async () => {
+    await verifyAsync('Node isPasswordStrong and Go ValidatePassword evaluate shared vectors identically', async () => {
+      const adminToken = await makeToken('active_admin1', 'admin', 1);
+      const fixturePath = path.resolve(process.cwd(), 'scripts/fixtures/password-parity-vectors.json');
+      assert.ok(existsSync(fixturePath), 'password-parity-vectors.json must exist');
+      const vectors = JSON.parse(readFileSync(fixturePath, 'utf8'));
+
+      for (let i = 0; i < vectors.length; i++) {
+        const v = vectors[i];
+        const createUsername = v.username || `vec_u_${i}`;
+
+        // 1. Evaluate Node decision
+        const nodeDecision = isPasswordStrong(v.password, createUsername);
+        assert.equal(
+          nodeDecision,
+          v.expected,
+          `Node isPasswordStrong decision for "${v.case}" must be ${v.expected}`
+        );
+
+        // Reset user create rate limit counter so test vectors don't hit 10/60s rate limit
+        await ops.collection('app_rate_limits').deleteMany({ key: { $regex: 'users:create' } });
+
+        // 2. Evaluate Go decision via canonical Create User API
+        const goCreateRes = await callGoUserMgmt('POST', '/api/users', adminToken, {
+          username: createUsername,
+          password: v.password,
+          role: 'operator',
+        });
+        const goCreateValid = goCreateRes.status === 201;
+        if (!v.expected) {
+          assert.equal(goCreateRes.status, 400, `Go Create User for "${v.case}" should return 400`);
+          assert.equal(goCreateRes.body?.error, 'INVALID_PASSWORD', `Go Create User for "${v.case}" should return INVALID_PASSWORD`);
+        }
+
+        // 3. Cross-language parity assertion: Node and Go MUST agree
+        assert.equal(
+          nodeDecision,
+          goCreateValid,
+          `PARITY FAILURE: Node and Go decisions diverged for "${v.case}": Node=${nodeDecision}, Go=${goCreateValid}`
+        );
+      }
+    });
+
+    await verifyAsync('Go User Management HTTP coverage for emoji passwords (4 emoji rejected, 8 emoji accepted)', async () => {
       const adminToken = await makeToken('active_admin1', 'admin', 1);
 
-      // 1. Trimmed length below 8
-      const resShort = await callGoUserMgmt('POST', '/api/users', adminToken, {
-        username: 'user_short_pwd',
-        password: '   abc  ',
+      // 1. Create User with 4 emoji password -> rejected (400 INVALID_PASSWORD)
+      const res4Emoji = await callGoUserMgmt('POST', '/api/users', adminToken, {
+        username: 'user_4emoji',
+        password: '😀😀😀😀',
         role: 'operator',
       });
-      assert.equal(resShort.status, 400);
-      assert.equal(resShort.body?.error, 'INVALID_PASSWORD');
+      assert.equal(res4Emoji.status, 400);
+      assert.equal(res4Emoji.body?.error, 'INVALID_PASSWORD');
 
-      // 2. Whitespace only
-      const resSpaces = await callGoUserMgmt('POST', '/api/users', adminToken, {
-        username: 'user_space_pwd',
-        password: '        ',
+      // 2. Create User with 8 emoji password -> accepted (201 Created)
+      const res8Emoji = await callGoUserMgmt('POST', '/api/users', adminToken, {
+        username: 'user_8emoji',
+        password: '😀😀😀😀😀😀😀😀',
         role: 'operator',
       });
-      assert.equal(resSpaces.status, 400);
-      assert.equal(resSpaces.body?.error, 'INVALID_PASSWORD');
+      assert.equal(res8Emoji.status, 201);
 
-      // 3. Contains username exact case
-      const resExact = await callGoUserMgmt('POST', '/api/users', adminToken, {
-        username: 'alice_exact',
-        password: 'alice_exact-123',
-        role: 'operator',
+      // 3. Password Reset with 4 emoji password -> rejected (400 INVALID_PASSWORD)
+      const resReset4 = await callGoUserMgmt('POST', '/api/users/user_8emoji/password-reset', adminToken, {
+        password: '😀😀😀😀',
       });
-      assert.equal(resExact.status, 400);
-      assert.equal(resExact.body?.error, 'INVALID_PASSWORD');
+      assert.equal(resReset4.status, 400);
+      assert.equal(resReset4.body?.error, 'INVALID_PASSWORD');
 
-      // 4. Contains username different case
-      const resDiffCase = await callGoUserMgmt('POST', '/api/users', adminToken, {
-        username: 'alice_case',
-        password: 'XXALICE_CASEXX123',
-        role: 'operator',
+      // 4. Password Reset with 8 emoji password -> accepted (200 OK)
+      const resReset8 = await callGoUserMgmt('POST', '/api/users/user_8emoji/password-reset', adminToken, {
+        password: '🎉🎉🎉🎉🎉🎉🎉🎉',
       });
-      assert.equal(resDiffCase.status, 400);
-      assert.equal(resDiffCase.body?.error, 'INVALID_PASSWORD');
-
-      // 5. UTF-8 bytes > 72
-      const resOver72 = await callGoUserMgmt('POST', '/api/users', adminToken, {
-        username: 'user_over72',
-        password: 'a'.repeat(73),
-        role: 'operator',
-      });
-      assert.equal(resOver72.status, 400);
-      assert.equal(resOver72.body?.error, 'INVALID_PASSWORD');
-
-      // 6. Multibyte over 72 bytes (25 Chinese characters = 75 bytes)
-      const resMultiOver = await callGoUserMgmt('POST', '/api/users', adminToken, {
-        username: 'user_multiover',
-        password: '密'.repeat(25),
-        role: 'operator',
-      });
-      assert.equal(resMultiOver.status, 400);
-      assert.equal(resMultiOver.body?.error, 'INVALID_PASSWORD');
-
-      // 7. Exactly 72 UTF-8 bytes accepted (201)
-      const res72 = await callGoUserMgmt('POST', '/api/users', adminToken, {
-        username: 'user_72bytes',
-        password: 'a'.repeat(72),
-        role: 'operator',
-      });
-      assert.equal(res72.status, 201);
-
-      // 8. Multibyte under 72 bytes accepted (10 Chinese chars = 30 bytes)
-      const resMultiUnder = await callGoUserMgmt('POST', '/api/users', adminToken, {
-        username: 'user_multiunder',
-        password: '测试密码安全加固验证',
-        role: 'operator',
-      });
-      assert.equal(resMultiUnder.status, 201);
+      assert.equal(resReset8.status, 200);
     });
 
     await verifyAsync('Go Password Reset validates new password against TARGET username from route', async () => {
       const adminToken = await makeToken('active_admin1', 'admin', 1);
 
-      // Attempt to reset user_72bytes password containing target username
-      const resTargetMatch = await callGoUserMgmt('POST', '/api/users/user_72bytes/password-reset', adminToken, {
-        password: 'user_72bytes-pass123',
+      // Attempt to reset user_8emoji password containing target username
+      const resTargetMatch = await callGoUserMgmt('POST', '/api/users/user_8emoji/password-reset', adminToken, {
+        password: 'user_8emoji-pass123',
       });
       assert.equal(resTargetMatch.status, 400);
       assert.equal(resTargetMatch.body?.error, 'INVALID_PASSWORD');
 
-      // Attempt to reset password containing admin actor username (allowed since target is user_72bytes)
-      const resActorMatch = await callGoUserMgmt('POST', '/api/users/user_72bytes/password-reset', adminToken, {
+      // Attempt to reset password containing admin actor username (allowed since target is user_8emoji)
+      const resActorMatch = await callGoUserMgmt('POST', '/api/users/user_8emoji/password-reset', adminToken, {
         password: 'active_admin1-allowed123',
       });
       assert.equal(resActorMatch.status, 200);

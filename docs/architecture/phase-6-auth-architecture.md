@@ -373,7 +373,7 @@ Phase 6.2 hardens the existing authentication model without adding external IAM 
    - Request validation and malformed payload failures return HTTP 400.
    - Zero disclosure of account existence or specific failure cause.
 4. **Password Policy Parity**:
-   - Trimmed length >= 8 characters (runes), UTF-8 encoded byte length <= 72 bytes, and target username exclusion enforced identically in Node (`isPasswordStrong`) and canonical Go (`ValidatePassword`).
+   - Minimum 8 Unicode code points after trimming surrounding whitespace, maximum 72 UTF-8 bytes, and case-insensitive target username exclusion enforced identically in Node (`isPasswordStrong`) and canonical Go (`ValidatePassword`), verified by cross-language parity assertions.
 5. **Successful Login Accounting**:
    - Atomically resets `failedLoginAttempts=0`, updates `lastLoginAt` and `lastLoginIp`.
    - Does not consume account failed-login limiter budget.
