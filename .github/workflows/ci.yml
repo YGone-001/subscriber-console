@@ -199,3 +199,48 @@ jobs:
 
       - name: User management HTTP E2E
         run: node scripts/test-user-management-e2e.mjs
+
+  auth-security:
+    name: Authentication security integration
+    runs-on: ubuntu-latest
+    env:
+      MONGODB_URI: mongodb://127.0.0.1:27017/xcloud
+      MONGODB_XCLOUD_DB: xcloud
+      MONGODB_APP_DB: xcloud_ops
+      JWT_SECRET: ci-only-placeholder-secret-with-at-least-32-bytes
+      INITIAL_ADMIN_PASSWORD: ChangeMe@2026
+    services:
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ ping: 1 })'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          cd frontend && npm ci
+
+      - name: Authentication security integration
+        run: node scripts/test-auth-security-hardening.mjs
+

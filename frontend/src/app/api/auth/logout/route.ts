@@ -3,14 +3,26 @@ import { enforceRateLimit } from '@/lib/rateLimit';
 
 function clientIp(request: Request): string {
   const forwarded = request.headers.get('x-forwarded-for');
-  return forwarded?.split(',')[0]?.trim() || request.headers.get('x-real-ip') || 'unknown';
+  return request.headers.get('x-real-ip')?.trim()
+    || forwarded?.split(',')[0]?.trim()
+    || 'unknown';
 }
 
 export async function POST(request: Request) {
   const rateLimit = await enforceRateLimit(`auth:logout:${clientIp(request)}`, 30, 60);
   if (!rateLimit.ok) return rateLimit.response;
 
+  const isSecure = request.headers.get('x-forwarded-proto') === 'https' ||
+                   request.url.startsWith('https:');
+
   const response = NextResponse.json({ success: true });
-  response.cookies.set('auth_token', '', { maxAge: 0, path: '/' });
+  response.headers.set('Cache-Control', 'no-store');
+  response.cookies.set('auth_token', '', {
+    httpOnly: true,
+    secure: isSecure,
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 0,
+  });
   return response;
 }

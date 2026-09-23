@@ -48,8 +48,8 @@ API routes are progressively migrating from Next.js to Go on a per-endpoint basi
 - Analytics dashboard computed from MongoDB subscriber documents.
 - Direct execution operation model with RBAC, operation logging, and CAS concurrency control.
 - Audit logs, alert acknowledgment, and system document consistency checks.
-- JWT cookie authentication with canonical `admin`, `operator`, and `viewer` roles (with transparent legacy alias normalization).
-- User lifecycle management: create, update, soft delete, password reset, session invalidation.
+- Hardened JWT authentication with dual rate limits (IP + username), automatic lockout after 10 failed attempts, response privacy, and canonical `admin`, `operator`, and `viewer` roles (with legacy alias normalization).
+- User lifecycle management: create, update, admin unlock, soft delete, password reset, session invalidation via `sessionVersion`.
 - Chinese/English UI, theme switching, command palette, and responsive dashboard layout.
 
 ## OCS Management Plane Status

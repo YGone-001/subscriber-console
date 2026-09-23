@@ -40,12 +40,11 @@ func main() {
 	}
 
 	// JWT secret
-	jwtSecret := os.Getenv("JWT_SECRET")
-	if jwtSecret == "" {
-		logger.Error("JWT_SECRET is required")
+	jwtSecretBytes, err := auth.ValidateSecret(os.Getenv("JWT_SECRET"))
+	if err != nil {
+		logger.Error("invalid JWT_SECRET", "error", err)
 		os.Exit(1)
 	}
-	jwtSecretBytes := []byte(jwtSecret)
 
 	// Connect to MongoDB
 	ctx := context.Background()

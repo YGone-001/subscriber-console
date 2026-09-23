@@ -351,3 +351,13 @@ func (r *Repository) UsernameExists(ctx context.Context, username string) (bool,
 	}
 	return count > 0, nil
 }
+
+// CountActiveAdmins returns the number of active, unlocked administrator users.
+func (r *Repository) CountActiveAdmins(ctx context.Context) (int64, error) {
+	filter := bson.M{
+		"role":   bson.M{"$in": bson.A{"admin", "root", "super_admin"}},
+		"status": "active",
+		"locked": bson.M{"$ne": true},
+	}
+	return r.users.CountDocuments(ctx, filter)
+}

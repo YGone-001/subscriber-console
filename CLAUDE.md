@@ -68,9 +68,17 @@ Approval workflow removed from business execution path. Authorization and operat
 - 禁止引入：IAM 框架、OAuth、SSO、LDAP、MFA、多租户隔离、策略引擎。
 - 禁止触碰：OCS 业务逻辑、`CUTOVER_TABLE`、`ACTUALLY_ROUTED = 32`、charging plane。
 
-运维模型文档：
+- 运维模型文档：
 - `docs/operations/authentication-model.md`
 - `docs/operations/user-management-model.md`
+
+认证与账号安全加固规范 (Phase 6.2):
+- 双重限流 (Dual Rate Limiting): IP 维度（`login:<ip>`, 5 次 / 60 秒）与账号维度（`login-user:<normalized-username>`, 10 次 / 300 秒），触发时返回 HTTP 429 与 `Cache-Control: no-store`。
+- 自动锁定 (Automatic Lockout): 连续 10 次密码错误自动置为 `status="locked"`, `locked=true`, `sessionVersion+=1`, `lockedAt`, `lockReason="excessive_failed_logins"`；后续错误不重复递增 `sessionVersion`。
+- 响应隐私 (Response Privacy): 所有登录失败场景（用户不存在、密码错误、已禁用、已锁定、超长载荷）统一返回 HTTP 401 `{"error": "Invalid credentials"}` 与 `Cache-Control: no-store`，严禁泄露账号存在性。
+- 管理员解锁 (Admin Unlock): 仅管理员可通过 Go 用户管理 API (`PATCH /api/users/{username}`) 解锁，恢复 `status="active"`, `locked=false`，清空锁定元数据与重置 `failedLoginAttempts=0`，并递增 `sessionVersion` 撤销历史会话。
+- 末位管理员保护 (Last Active Admin Protection): 严禁自动锁定或手动锁定/禁用系统中最后一个处于激活状态的管理员（返回 HTTP 409 `LAST_ACTIVE_ADMIN`）。
+- 密钥与会话安全 (Secret & Cookie Hardening): Node 与 Go 启动时强校验 `JWT_SECRET`（>= 32 UTF-8 字节，禁止弱占位符，不符则拒绝启动）；Cookie 属性强绑定 `HttpOnly=true`, `SameSite=Lax`, HTTPS 下强制 `Secure=true`；敏感认证响应强制 `Cache-Control: no-store`。
 
 长期演进：
 - EPC / 5GC / IMS 网元管理

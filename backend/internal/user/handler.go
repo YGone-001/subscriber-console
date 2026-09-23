@@ -378,6 +378,8 @@ func writeServiceError(w http.ResponseWriter, err error) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Cannot disable your own account", "code": "SELF_OPERATION_FORBIDDEN"})
 	case errors.Is(err, ErrSelfRoleChange):
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Cannot change your own role", "code": "SELF_ROLE_CHANGE_FORBIDDEN"})
+	case errors.Is(err, ErrLastActiveAdmin):
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "Cannot remove or disable the last active administrator", "code": "LAST_ACTIVE_ADMIN"})
 	default:
 		code := err.Error()
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": code, "code": code})

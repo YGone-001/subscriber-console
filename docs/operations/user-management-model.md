@@ -99,9 +99,26 @@ Message: `User disabled; account history was preserved`.
 
 ### Lock / Unlock User
 
-Via `PUT /api/users/{username}` with `action: 'lock' | 'unlock' | 'enable'`.
-Lock sets `status = 'locked'` and `locked = true`, records `security.lockedAt` and `security.lockReason`.
-Unlock sets `status = 'active'`, clears lock metadata.
+Managed by administrators via canonical Go User Management API:
+- `PATCH /api/users/{username}` (or `PUT /api/users/{username}`) with `status: 'locked'` or `status: 'active'`.
+
+Manual lock (`status: 'locked'`):
+- Protected: cannot lock the last active admin (returns HTTP 409 `LAST_ACTIVE_ADMIN`).
+- Sets `status = 'locked'` and `locked = true`.
+- Sets `security.lockedAt = now` and `security.lockReason = 'manual_lock'`.
+- Increments `security.sessionVersion` to revoke all active sessions.
+
+Admin unlock (`status: 'active'`):
+- Sets `status = 'active'` and `locked = false`.
+- Unsets `security.lockedAt` and `security.lockReason`.
+- Resets `security.failedLoginAttempts = 0`.
+- Increments `security.sessionVersion` to invalidate any pre-lockout tokens.
+
+Automatic lockout (authentication plane):
+- Triggered on active unlocked account upon reaching exactly 10 consecutive failed password attempts.
+- Sets `status = 'locked'`, `locked = true`, `security.lockedAt = now`, and `security.lockReason = 'excessive_failed_logins'`.
+- Increments `security.sessionVersion` exactly once.
+- Protected: last active admin is never automatically locked out.
 
 ### Password Reset
 

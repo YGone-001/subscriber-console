@@ -79,6 +79,14 @@ export async function updateUser(username: string, updates: Partial<UserDocument
   const { security, ...fields } = updates;
   const changes: Record<string, unknown> = { ...fields, username, updatedAt: new Date().toISOString() };
   if (updates.passwordHash !== undefined) changes['security.passwordChangedAt'] = new Date().toISOString();
+  if (updates.status === 'active') {
+    changes.locked = false;
+    changes['security.failedLoginAttempts'] = 0;
+  } else if (updates.status === 'locked') {
+    changes.locked = true;
+    changes['security.lockedAt'] = new Date().toISOString();
+    if (!changes['security.lockReason']) changes['security.lockReason'] = 'manual_lock';
+  }
   for (const [key, value] of Object.entries(security || {})) {
     if (key !== 'sessionVersion') changes[`security.${key}`] = value;
   }
@@ -93,9 +101,63 @@ export async function updateUser(username: string, updates: Partial<UserDocument
   });
 }
 
-export async function recordFailedLogin(username: string) {
+export async function recordFailedLogin(username: string): Promise<{ locked: boolean; attempts: number }> {
   const docs = await collection();
-  await docs.updateOne({ username }, { $inc: { 'security.failedLoginAttempts': 1 } });
+  const now = new Date().toISOString();
+
+  // 1. Atomically increment failedLoginAttempts for an active unlocked account
+  const incrementResult = await docs.findOneAndUpdate(
+    { username, status: 'active', locked: { $ne: true } },
+    {
+      $inc: { 'security.failedLoginAttempts': 1 },
+      $set: { updatedAt: now },
+    },
+    { returnDocument: 'after' }
+  );
+
+  if (!incrementResult) {
+    return { locked: false, attempts: 0 };
+  }
+
+  const attempts = incrementResult.security?.failedLoginAttempts ?? 1;
+  if (attempts < 10) {
+    return { locked: false, attempts };
+  }
+
+  // 2. Threshold (10) reached: preserve last active admin safety before locking
+  if (isSuperAdmin(incrementResult.role)) {
+    const activeAdmins = await docs.countDocuments({
+      role: { $in: ['admin', 'root', 'super_admin'] },
+      status: 'active',
+      locked: { $ne: true },
+    });
+    if (activeAdmins <= 1) {
+      return { locked: false, attempts };
+    }
+  }
+
+  // 3. Atomically transition unlocked -> locked exactly once
+  const lockResult = await docs.findOneAndUpdate(
+    {
+      username,
+      status: 'active',
+      locked: { $ne: true },
+      'security.failedLoginAttempts': { $gte: 10 },
+    },
+    {
+      $set: {
+        status: 'locked',
+        locked: true,
+        'security.lockedAt': now,
+        'security.lockReason': 'excessive_failed_logins',
+        updatedAt: now,
+      },
+      $inc: { 'security.sessionVersion': 1 },
+    },
+    { returnDocument: 'after' }
+  );
+
+  return { locked: Boolean(lockResult), attempts };
 }
 
 export async function recordSuccessfulLogin(user: UserDocument, ip: string) {

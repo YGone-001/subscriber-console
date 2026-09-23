@@ -199,6 +199,7 @@ Phase 6.0   COMPLETE — Authentication & User Management architecture freeze
 Phase 6.1-B COMPLETE — User management CRUD lifecycle (Go backend)
 Phase 6.1-C COMPLETE — User management UI (dedicated pages and API client)
 Phase 6.1-D COMPLETE — User management integration hardening and controlled Go cutover (ACTUALLY_ROUTED = 32)
+Phase 6.2   COMPLETE — Authentication security hardening (dual rate limits, auto lockout, response privacy, JWT secret validation)
 ```
 
 ### 5.1 OCS 生产冻结基线 (OCS Production Freeze Baseline)
@@ -300,6 +301,17 @@ Canonical User Management routes (production owner = Go):
 - `POST /api/users/{username}/password-reset`
 Legacy compatibility read aliases: `/api/auth/users`, `/api/auth/users/{username}`.
 Login/logout = Node owner.
+
+Phase 6.2 Authentication Security Hardening:
+- Dual rate limiting: IP-scoped (`login:<ip>`, 5/60s) + Account-scoped (`login-user:<normalized-username>`, 10/300s).
+- Automatic lockout: 10 consecutive failed password attempts transitions active unlocked user to `status="locked"`, `locked=true`, `sessionVersion+=1`, `lockedAt=now`, `lockReason="excessive_failed_logins"`. Attempt 11+ does not repeatedly increment `sessionVersion`.
+- Response privacy: uniform HTTP 401 `{"error": "Invalid credentials"}` with `Cache-Control: no-store` on all login failure modes (unknown username, wrong password, disabled account, locked account, payload limits).
+- Successful login: atomic reset of `failedLoginAttempts=0`, update `lastLoginAt` and `lastLoginIp` with concurrency state check.
+- Admin unlock: canonical Go API `PATCH /api/users/{username}` with `status="active"` resets lock state, unsets lock metadata, resets `failedLoginAttempts=0`, increments `sessionVersion`.
+- Manual lock: `status="locked"` sets `locked=true`, `lockedAt`, `lockReason="manual_lock"`, increments `sessionVersion`.
+- Last active admin protection: prevent auto-lockout or manual lock/disable on last active admin (`LAST_ACTIVE_ADMIN` 409).
+- JWT secret startup validation: Node and Go fail closed on startup if `JWT_SECRET` is missing, <32 UTF-8 bytes, or matches common insecure placeholders.
+- Cookie & header hardening: `SameSite=Lax`, `HttpOnly=true`, dynamic `Secure` over HTTPS, aligned logout cookie attributes, `Cache-Control: no-store` on sensitive auth responses.
 
 ---
 

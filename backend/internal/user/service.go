@@ -12,10 +12,11 @@ import (
 
 // Service errors for user management operations.
 var (
-	ErrUserNotFound   = errors.New("USER_NOT_FOUND")
-	ErrUsernameTaken  = errors.New("USERNAME_ALREADY_EXISTS")
-	ErrSelfDisable    = errors.New("SELF_OPERATION_FORBIDDEN")
-	ErrSelfRoleChange = errors.New("SELF_ROLE_CHANGE_FORBIDDEN")
+	ErrUserNotFound    = errors.New("USER_NOT_FOUND")
+	ErrUsernameTaken   = errors.New("USERNAME_ALREADY_EXISTS")
+	ErrSelfDisable     = errors.New("SELF_OPERATION_FORBIDDEN")
+	ErrSelfRoleChange  = errors.New("SELF_ROLE_CHANGE_FORBIDDEN")
+	ErrLastActiveAdmin = errors.New("LAST_ACTIVE_ADMIN")
 )
 
 // Service handles user management business logic.
@@ -101,7 +102,9 @@ func (s *Service) UpdateUser(ctx context.Context, username string, req UpdateUse
 		return nil, ErrSelfRoleChange
 	}
 
-	set := bson.M{"updatedAt": time.Now().UTC()}
+	now := time.Now().UTC()
+	set := bson.M{"updatedAt": now}
+	unset := bson.M{}
 	incrementSession := false
 
 	if req.DisplayName != nil {
@@ -110,16 +113,62 @@ func (s *Service) UpdateUser(ctx context.Context, username string, req UpdateUse
 	if req.Email != nil {
 		set["email"] = *req.Email
 	}
-	if req.Role != nil {
+
+	if req.Role != nil && *req.Role != existing.Role {
+		if auth.NormalizeRole(existing.Role) == "admin" && auth.NormalizeRole(*req.Role) != "admin" {
+			if existing.Status == "active" && !existing.Locked {
+				activeAdmins, err := s.repo.CountActiveAdmins(ctx)
+				if err != nil {
+					return nil, err
+				}
+				if activeAdmins <= 1 {
+					return nil, ErrLastActiveAdmin
+				}
+			}
+		}
 		set["role"] = *req.Role
 		incrementSession = true
 	}
+
 	if req.Status != nil {
-		set["status"] = *req.Status
-		incrementSession = true
+		newStatus := *req.Status
+		if newStatus != existing.Status || (newStatus == "active" && existing.Locked) {
+			if (newStatus == "locked" || newStatus == "disabled") && auth.NormalizeRole(existing.Role) == "admin" && existing.Status == "active" && !existing.Locked {
+				activeAdmins, err := s.repo.CountActiveAdmins(ctx)
+				if err != nil {
+					return nil, err
+				}
+				if activeAdmins <= 1 {
+					return nil, ErrLastActiveAdmin
+				}
+			}
+
+			if newStatus == "active" {
+				// Admin unlock semantics
+				set["status"] = "active"
+				set["locked"] = false
+				set["security.failedLoginAttempts"] = 0
+				unset["security.lockedAt"] = ""
+				unset["security.lockReason"] = ""
+				incrementSession = true
+			} else if newStatus == "locked" {
+				// Manual lock consistency
+				set["status"] = "locked"
+				set["locked"] = true
+				set["security.lockedAt"] = now
+				set["security.lockReason"] = "manual_lock"
+				incrementSession = true
+			} else {
+				set["status"] = newStatus
+				incrementSession = true
+			}
+		}
 	}
 
 	update := bson.M{"$set": set}
+	if len(unset) > 0 {
+		update["$unset"] = unset
+	}
 	if incrementSession {
 		update["$inc"] = bson.M{"security.sessionVersion": 1}
 	}
@@ -143,6 +192,16 @@ func (s *Service) DisableUser(ctx context.Context, username string, actor *auth.
 	}
 	if existing == nil {
 		return nil, ErrUserNotFound
+	}
+
+	if auth.NormalizeRole(existing.Role) == "admin" && existing.Status == "active" && !existing.Locked {
+		activeAdmins, err := s.repo.CountActiveAdmins(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if activeAdmins <= 1 {
+			return nil, ErrLastActiveAdmin
+		}
 	}
 
 	update := bson.M{

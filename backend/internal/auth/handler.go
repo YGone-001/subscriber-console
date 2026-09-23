@@ -74,6 +74,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		MaxAge:   86400, // 24 hours
 	})
 
+	w.Header().Set("Cache-Control", "no-store")
 	response.JSON(w, http.StatusOK, LoginResponse{
 		Username: user.Username,
 		Role:     user.Role,
@@ -82,16 +83,20 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 }
 
 // Logout handles POST /api/auth/logout.
-// Clears the auth_token cookie. No database write required.
+// Clears the auth_token cookie with aligned security attributes. No database write required.
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
+	isSecure := r.Header.Get("x-forwarded-proto") == "https" || r.TLS != nil
 	http.SetCookie(w, &http.Cookie{
 		Name:     CookieName,
 		Value:    "",
 		HttpOnly: true,
+		Secure:   isSecure,
+		SameSite: http.SameSiteLaxMode,
 		Path:     "/",
 		MaxAge:   -1,
 		Expires:  time.Unix(0, 0),
 	})
+	w.Header().Set("Cache-Control", "no-store")
 	response.JSON(w, http.StatusOK, LogoutResponse{Message: "logout successful"})
 }
 
@@ -114,6 +119,7 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.Header().Set("Cache-Control", "no-store")
 	response.JSON(w, http.StatusOK, MeResponse{
 		Username: user.Username,
 		Role:     user.Role,
