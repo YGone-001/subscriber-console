@@ -3,6 +3,8 @@ package user
 import (
 	"fmt"
 	"regexp"
+	"strings"
+	"unicode/utf8"
 )
 
 // canonicalWriteRoles are the only roles accepted in write requests.
@@ -18,13 +20,31 @@ var validWriteStatuses = map[string]bool{
 // usernamePattern allows alphanumeric, underscore, dash, and dot (1-100 chars).
 var usernamePattern = regexp.MustCompile(`^[a-zA-Z0-9._-]{1,100}$`)
 
+// ValidatePassword validates password strength against the frozen policy:
+// 1. Trimmed length must be at least 8 characters (runes).
+// 2. UTF-8 byte length must not exceed 72 bytes.
+// 3. Password must not contain the target username (case-insensitive).
+func ValidatePassword(password, username string) error {
+	trimmed := strings.TrimSpace(password)
+	if utf8.RuneCountInString(trimmed) < 8 {
+		return fmt.Errorf("INVALID_PASSWORD")
+	}
+	if len(password) > 72 {
+		return fmt.Errorf("INVALID_PASSWORD")
+	}
+	if username != "" && strings.Contains(strings.ToLower(password), strings.ToLower(username)) {
+		return fmt.Errorf("INVALID_PASSWORD")
+	}
+	return nil
+}
+
 // ValidateCreateUser validates a create user request.
 func ValidateCreateUser(req CreateUserRequest) error {
 	if req.Username == "" || len(req.Username) > 100 || !usernamePattern.MatchString(req.Username) {
 		return fmt.Errorf("INVALID_USERNAME")
 	}
-	if len(req.Password) < 8 || len(req.Password) > 72 {
-		return fmt.Errorf("INVALID_PASSWORD")
+	if err := ValidatePassword(req.Password, req.Username); err != nil {
+		return err
 	}
 	if req.Role != "" && !canonicalWriteRoles[req.Role] {
 		return fmt.Errorf("INVALID_ROLE")
@@ -55,10 +75,7 @@ func ValidateUpdateUser(req UpdateUserRequest) error {
 	return nil
 }
 
-// ValidateResetPassword validates a password reset request.
-func ValidateResetPassword(req ResetPasswordRequest) error {
-	if len(req.Password) < 8 || len(req.Password) > 72 {
-		return fmt.Errorf("INVALID_PASSWORD")
-	}
-	return nil
+// ValidateResetPassword validates a password reset request against the target username.
+func ValidateResetPassword(req ResetPasswordRequest, targetUsername string) error {
+	return ValidatePassword(req.Password, targetUsername)
 }

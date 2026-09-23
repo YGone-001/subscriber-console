@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { SignJWT } from 'jose';
 import { getJwtSecretKey } from '@/lib/security';
-import { getRateLimit } from '@/lib/rateLimit';
+import { getRateLimit, peekRateLimit } from '@/lib/rateLimit';
 import { getUser, recordFailedLogin, recordSuccessfulLogin } from '@/server/repositories/userRepository';
 import type { UserDocument } from '@/server/repositories/userRepository';
 import { normalizeGovernanceRole } from '@/lib/permissions';
@@ -70,9 +70,9 @@ export async function POST(req: Request) {
       return res;
     }
 
-    // 3. Account-scoped login rate limiting (10 attempts per 300 seconds)
+    // 3. Pre-auth account-scoped failed login rate check (10 failed attempts per 300 seconds)
     const normalizedUsername = username.trim().toLowerCase();
-    const userRateCheck = await getRateLimit(
+    const userRateCheck = await peekRateLimit(
       `login-user:${normalizedUsername}`,
       RATE_LIMIT_USER_MAX,
       RATE_LIMIT_USER_WINDOW
@@ -109,6 +109,13 @@ export async function POST(req: Request) {
       storedUser.locked ||
       !normalizeGovernanceRole(storedUser.role)
     ) {
+      // Consume one failed authentication attempt for this account
+      await getRateLimit(
+        `login-user:${normalizedUsername}`,
+        RATE_LIMIT_USER_MAX,
+        RATE_LIMIT_USER_WINDOW
+      );
+
       if (storedUser && storedUser.status === 'active' && !storedUser.locked) {
         const lockResult = await recordFailedLogin(username);
         if (lockResult.locked) {
@@ -141,6 +148,11 @@ export async function POST(req: Request) {
     // 6. Record successful login with race-safe atomic state check
     const current = await recordSuccessfulLogin(storedUser, ip);
     if (!current) {
+      await getRateLimit(
+        `login-user:${normalizedUsername}`,
+        RATE_LIMIT_USER_MAX,
+        RATE_LIMIT_USER_WINDOW
+      );
       const res = NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
       res.headers.set('Cache-Control', 'no-store');
       return res;

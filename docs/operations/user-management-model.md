@@ -25,7 +25,7 @@ Single source of truth. Do not duplicate users into another collection.
   createdAt:      string,   // ISO 8601, required
   updatedAt:      string,   // ISO 8601, required
   security: {
-    sessionVersion:      number,   // required, monotonic, starts at 0
+    sessionVersion:      number,   // required, monotonic, starts at 1 for canonical users (0 for legacy unversioned accounts)
     failedLoginAttempts: number,   // required, starts at 0
     passwordChangedAt:   string,   // optional, ISO 8601
     lastLoginAt:         string,   // optional, ISO 8601
@@ -135,11 +135,14 @@ Reason: retain operation traceability and audit history.
 
 ## 5. Password Policy
 
-Implemented by `isPasswordStrong(password, username)`:
+Enforced identically by Node (`frontend/src/lib/security.ts` via `isPasswordStrong(password, username)`)
+and Go (`backend/internal/user/validator.go` via `ValidatePassword(password, username)`):
 
-- length >= 8 non-blank characters
-- UTF-8 byte length <= 72 (bcrypt limit)
-- must not contain the username (case-insensitive)
+- Trimmed length >= 8 characters (runes; whitespace-only or trimmed < 8 rejected)
+- UTF-8 encoded byte length <= 72 bytes (bcrypt byte boundary)
+- Must not contain the target username (case-insensitive substring check)
+- For user creation (`POST /api/users`), validated against the requested `username`
+- For password reset (`POST /api/users/{username}/password-reset`), validated against the target `username` from route
 
 Hash: bcrypt cost 10. Never stored in plaintext. Never returned by API.
 

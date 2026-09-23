@@ -221,7 +221,7 @@ func (s *Service) DisableUser(ctx context.Context, username string, actor *auth.
 
 // ResetPassword updates the password hash and increments sessionVersion.
 func (s *Service) ResetPassword(ctx context.Context, username string, req ResetPasswordRequest) error {
-	if err := ValidateResetPassword(req); err != nil {
+	if err := ValidateResetPassword(req, username); err != nil {
 		return err
 	}
 

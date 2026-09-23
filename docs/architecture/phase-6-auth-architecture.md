@@ -361,27 +361,31 @@ xcloud_ops.app_rate_limits  — infrastructure only
 Phase 6.2 hardens the existing authentication model without adding external IAM services:
 
 1. **Dual Rate Limiting**:
-   - IP-scoped: `login:<ip>`, 5 requests / 60s window.
-   - Account-scoped: `login-user:<normalized-username>`, 10 requests / 300s window.
+   - IP-scoped: `login:<ip>`, 5 requests / 60s window (enforced upfront).
+   - Account-scoped: `login-user:<normalized-username>`, 10 failed attempts / 300s window (peeked pre-auth; consumed only on failed authentication; successful logins do not consume budget).
    - Protects against distributed brute-force attacks across rotating proxy IPs.
 2. **Automatic Lockout Threshold**:
    - 10 consecutive failed password attempts on active unlocked account transitions status to `locked`.
    - Atomic `$inc` of `failedLoginAttempts`; at threshold 10, atomically sets `locked=true`, `status="locked"`, `lockedAt=now`, `lockReason="excessive_failed_logins"`, and increments `sessionVersion` exactly once.
    - Subsequent failed attempts do not repeatedly increment `sessionVersion`.
-3. **Response Privacy Invariant**:
-   - Uniform HTTP 401 `{"error": "Invalid credentials"}` with `Cache-Control: no-store` across all failure branches (unknown username, invalid password, disabled account, locked account, over-length body).
+3. **Response Privacy and Status Contract**:
+   - Uniform HTTP 401 `{"error": "Invalid credentials"}` with `Cache-Control: no-store` across all credential and account-state failures (unknown username, invalid password, disabled account, locked account).
+   - Request validation and malformed payload failures return HTTP 400.
    - Zero disclosure of account existence or specific failure cause.
-4. **Successful Login Accounting**:
+4. **Password Policy Parity**:
+   - Trimmed length >= 8 characters (runes), UTF-8 encoded byte length <= 72 bytes, and target username exclusion enforced identically in Node (`isPasswordStrong`) and canonical Go (`ValidatePassword`).
+5. **Successful Login Accounting**:
    - Atomically resets `failedLoginAttempts=0`, updates `lastLoginAt` and `lastLoginIp`.
+   - Does not consume account failed-login limiter budget.
    - Conditional predicate ensures account status and sessionVersion did not mutate concurrently.
-5. **Admin Unlock and Manual Lock Consistency**:
+6. **Admin Unlock and Manual Lock Consistency**:
    - Admin unlock via canonical Go User Management (`PATCH /api/users/{username}`) restores `status="active"`, `locked=false`, unsets lock metadata, resets `failedLoginAttempts=0`, and increments `sessionVersion` to revoke pre-lockout tokens.
    - Manual lock sets `status="locked"`, `locked=true`, `lockReason="manual_lock"`, and increments `sessionVersion`.
-6. **Last Active Admin Protection**:
+7. **Last Active Admin Protection**:
    - Neither automatic lockout nor manual lock/disable is permitted against the last active administrator (`LAST_ACTIVE_ADMIN` 409 guard).
-7. **JWT Secret Startup Validation Parity**:
+8. **JWT Secret Startup Validation Parity**:
    - Node and Go both validate that `JWT_SECRET` is >= 32 UTF-8 bytes and does not match insecure placeholders (`secret`, `jwt_secret`, `change-me`, `changeme`, `development`, `password`). Fails closed on startup.
-8. **Cookie and Header Hardening**:
+9. **Cookie and Header Hardening**:
    - `HttpOnly=true`, `SameSite=Lax`, `Path=/`.
    - `Secure=true` dynamically applied when request is HTTPS (detected via `x-forwarded-proto` or protocol).
    - Aligned cookie attributes on logout (`maxAge: 0`).

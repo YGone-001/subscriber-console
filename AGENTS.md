@@ -303,10 +303,11 @@ Legacy compatibility read aliases: `/api/auth/users`, `/api/auth/users/{username
 Login/logout = Node owner.
 
 Phase 6.2 Authentication Security Hardening:
-- Dual rate limiting: IP-scoped (`login:<ip>`, 5/60s) + Account-scoped (`login-user:<normalized-username>`, 10/300s).
+- Dual rate limiting: IP-scoped request limiter (`login:<ip>`, 5/60s) + Account-scoped failed-login limiter (`login-user:<normalized-username>`, 10 failed attempts / 300s, peeked pre-auth, consumed only on failed authentication; successful logins do not consume budget).
 - Automatic lockout: 10 consecutive failed password attempts transitions active unlocked user to `status="locked"`, `locked=true`, `sessionVersion+=1`, `lockedAt=now`, `lockReason="excessive_failed_logins"`. Attempt 11+ does not repeatedly increment `sessionVersion`.
-- Response privacy: uniform HTTP 401 `{"error": "Invalid credentials"}` with `Cache-Control: no-store` on all login failure modes (unknown username, wrong password, disabled account, locked account, payload limits).
-- Successful login: atomic reset of `failedLoginAttempts=0`, update `lastLoginAt` and `lastLoginIp` with concurrency state check.
+- Response privacy: uniform HTTP 401 `{"error": "Invalid credentials"}` with `Cache-Control: no-store` on all credential/account-state failures (unknown username, wrong password, disabled account, locked account). Malformed JSON or request validation failures return HTTP 400.
+- Password policy parity: trimmed length >= 8, <= 72 UTF-8 bytes, case-insensitive target username exclusion enforced identically in Node (`isPasswordStrong`) and canonical Go (`ValidatePassword`).
+- Successful login: atomic reset of `failedLoginAttempts=0`, update `lastLoginAt` and `lastLoginIp` with concurrency state check; does not consume failed-login rate limit.
 - Admin unlock: canonical Go API `PATCH /api/users/{username}` with `status="active"` resets lock state, unsets lock metadata, resets `failedLoginAttempts=0`, increments `sessionVersion`.
 - Manual lock: `status="locked"` sets `locked=true`, `lockedAt`, `lockReason="manual_lock"`, increments `sessionVersion`.
 - Last active admin protection: prevent auto-lockout or manual lock/disable on last active admin (`LAST_ACTIVE_ADMIN` 409).

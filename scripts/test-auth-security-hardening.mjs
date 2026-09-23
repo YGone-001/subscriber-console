@@ -303,6 +303,28 @@ async function main() {
       updatedAt: now,
       security: { sessionVersion: 1, failedLoginAttempts: 10, lockedAt: now, lockReason: 'excessive_failed_logins' },
     },
+    {
+      username: 'legit_user',
+      passwordHash: hash,
+      role: 'operator',
+      status: 'active',
+      displayName: 'Legit User',
+      email: 'legit@test.local',
+      createdAt: now,
+      updatedAt: now,
+      security: { sessionVersion: 1, failedLoginAttempts: 0 },
+    },
+    {
+      username: 'mixed_user',
+      passwordHash: hash,
+      role: 'operator',
+      status: 'active',
+      displayName: 'Mixed User',
+      email: 'mixed@test.local',
+      createdAt: now,
+      updatedAt: now,
+      security: { sessionVersion: 1, failedLoginAttempts: 0 },
+    },
   ]);
 
   try {
@@ -397,20 +419,74 @@ async function main() {
       assert.equal(denied.headers.get('x-ratelimit-limit'), '5');
       assert.equal(denied.headers.get('x-ratelimit-remaining'), '0');
       assert.ok(Number(denied.headers.get('retry-after')) > 0);
+      assert.equal(denied.headers.get('cache-control'), 'no-store');
     });
 
-    await verifyAsync('Account-scoped rate limit triggers at 11th request across different IPs within 300s', async () => {
+    await verifyAsync('Account-scoped failed-login rate limit triggers at 11th failed attempt across different IPs within 300s', async () => {
       const targetUser = 'victim_user_test';
       for (let i = 1; i <= 10; i++) {
         const ip = `10.0.4.${i}`;
         const res = await callLogin({ username: targetUser, password: 'BadPassword!' }, { 'x-real-ip': ip });
         assert.equal(res.status, 401);
+        assert.equal(res.body?.error, 'Invalid credentials');
       }
       const denied = await callLogin({ username: targetUser, password: 'BadPassword!' }, { 'x-real-ip': '10.0.4.99' });
       assert.equal(denied.status, 429);
       assert.equal(denied.headers.get('x-ratelimit-limit'), '10');
       assert.equal(denied.headers.get('x-ratelimit-remaining'), '0');
       assert.ok(Number(denied.headers.get('retry-after')) > 0);
+      assert.equal(denied.headers.get('cache-control'), 'no-store');
+    });
+
+    await verifyAsync('Successful logins do NOT consume account-scoped failed-login quota (11 logins all 200)', async () => {
+      for (let i = 1; i <= 10; i++) {
+        const ip = `10.0.5.${i}`;
+        const res = await callLogin({ username: 'legit_user', password: 'CorrectPass123!' }, { 'x-real-ip': ip });
+        assert.equal(res.status, 200, `login ${i} must succeed with 200`);
+      }
+      // 11th successful login within the same window must also succeed
+      const res11 = await callLogin({ username: 'legit_user', password: 'CorrectPass123!' }, { 'x-real-ip': '10.0.5.99' });
+      assert.equal(res11.status, 200, '11th login must succeed with 200');
+    });
+
+    await verifyAsync('Mixed failed and successful logins: only failures increment budget; exhausted budget returns 429', async () => {
+      // 5 failed logins
+      for (let i = 1; i <= 5; i++) {
+        const res = await callLogin({ username: 'mixed_user', password: 'BadPassword!' }, { 'x-real-ip': `10.0.6.${i}` });
+        assert.equal(res.status, 401);
+      }
+      // 1 successful login does NOT increment failed-attempt budget
+      const successRes = await callLogin({ username: 'mixed_user', password: 'CorrectPass123!' }, { 'x-real-ip': '10.0.6.50' });
+      assert.equal(successRes.status, 200);
+
+      // 5 more failed logins (reaches 10 total failures in window)
+      for (let i = 6; i <= 10; i++) {
+        const res = await callLogin({ username: 'mixed_user', password: 'BadPassword!' }, { 'x-real-ip': `10.0.6.${i}` });
+        assert.equal(res.status, 401);
+      }
+
+      // 11th attempt returns 429 before password authentication because failure budget is exhausted
+      const denied = await callLogin({ username: 'mixed_user', password: 'CorrectPass123!' }, { 'x-real-ip': '10.0.6.99' });
+      assert.equal(denied.status, 429);
+      assert.equal(denied.headers.get('x-ratelimit-limit'), '10');
+      assert.equal(denied.headers.get('x-ratelimit-remaining'), '0');
+    });
+
+    await verifyAsync('Unknown username failures consume account rate limit without disclosing existence', async () => {
+      const ghostUser = 'ghost_unknown_account_xyz';
+      for (let i = 1; i <= 10; i++) {
+        const res = await callLogin({ username: ghostUser, password: 'BadPassword!' }, { 'x-real-ip': `10.0.7.${i}` });
+        assert.equal(res.status, 401);
+        assert.equal(res.body?.error, 'Invalid credentials');
+      }
+      const denied = await callLogin({ username: ghostUser, password: 'BadPassword!' }, { 'x-real-ip': '10.0.7.99' });
+      assert.equal(denied.status, 429);
+      assert.equal(denied.headers.get('x-ratelimit-limit'), '10');
+      assert.equal(denied.headers.get('x-ratelimit-remaining'), '0');
+
+      // Verify no user record was created in Mongo for the unknown user
+      const doc = await ops.collection('app_users').findOne({ username: ghostUser });
+      assert.equal(doc, null);
     });
 
     // ── 4. Automatic Lockout Threshold (10 Failed Attempts) ───────────────────
@@ -665,10 +741,117 @@ async function main() {
         role: 'operator',
       });
       assert.equal(roleRes.status, 400); // self-role change forbidden or last active admin
+
+      // Restore active_admin1
+      await ops.collection('app_users').insertOne({
+        username: 'active_admin1',
+        passwordHash: hash,
+        role: 'admin',
+        status: 'active',
+        displayName: 'Active Admin 1',
+        email: 'admin1@test.local',
+        createdAt: now,
+        updatedAt: now,
+        security: { sessionVersion: 1, failedLoginAttempts: 0 },
+      });
     });
 
-    // ── 10. JWT Secret Validation Parity ──────────────────────────────────────
-    console.log('\n10. JWT Secret Validation Parity');
+    // ── 10. Go Password Policy Parity ─────────────────────────────────────────
+    console.log('\n10. Go Password Policy Parity');
+
+    await verifyAsync('Go Create User rejects passwords failing policy (length, whitespace, username containment, >72 bytes)', async () => {
+      const adminToken = await makeToken('active_admin1', 'admin', 1);
+
+      // 1. Trimmed length below 8
+      const resShort = await callGoUserMgmt('POST', '/api/users', adminToken, {
+        username: 'user_short_pwd',
+        password: '   abc  ',
+        role: 'operator',
+      });
+      assert.equal(resShort.status, 400);
+      assert.equal(resShort.body?.error, 'INVALID_PASSWORD');
+
+      // 2. Whitespace only
+      const resSpaces = await callGoUserMgmt('POST', '/api/users', adminToken, {
+        username: 'user_space_pwd',
+        password: '        ',
+        role: 'operator',
+      });
+      assert.equal(resSpaces.status, 400);
+      assert.equal(resSpaces.body?.error, 'INVALID_PASSWORD');
+
+      // 3. Contains username exact case
+      const resExact = await callGoUserMgmt('POST', '/api/users', adminToken, {
+        username: 'alice_exact',
+        password: 'alice_exact-123',
+        role: 'operator',
+      });
+      assert.equal(resExact.status, 400);
+      assert.equal(resExact.body?.error, 'INVALID_PASSWORD');
+
+      // 4. Contains username different case
+      const resDiffCase = await callGoUserMgmt('POST', '/api/users', adminToken, {
+        username: 'alice_case',
+        password: 'XXALICE_CASEXX123',
+        role: 'operator',
+      });
+      assert.equal(resDiffCase.status, 400);
+      assert.equal(resDiffCase.body?.error, 'INVALID_PASSWORD');
+
+      // 5. UTF-8 bytes > 72
+      const resOver72 = await callGoUserMgmt('POST', '/api/users', adminToken, {
+        username: 'user_over72',
+        password: 'a'.repeat(73),
+        role: 'operator',
+      });
+      assert.equal(resOver72.status, 400);
+      assert.equal(resOver72.body?.error, 'INVALID_PASSWORD');
+
+      // 6. Multibyte over 72 bytes (25 Chinese characters = 75 bytes)
+      const resMultiOver = await callGoUserMgmt('POST', '/api/users', adminToken, {
+        username: 'user_multiover',
+        password: '密'.repeat(25),
+        role: 'operator',
+      });
+      assert.equal(resMultiOver.status, 400);
+      assert.equal(resMultiOver.body?.error, 'INVALID_PASSWORD');
+
+      // 7. Exactly 72 UTF-8 bytes accepted (201)
+      const res72 = await callGoUserMgmt('POST', '/api/users', adminToken, {
+        username: 'user_72bytes',
+        password: 'a'.repeat(72),
+        role: 'operator',
+      });
+      assert.equal(res72.status, 201);
+
+      // 8. Multibyte under 72 bytes accepted (10 Chinese chars = 30 bytes)
+      const resMultiUnder = await callGoUserMgmt('POST', '/api/users', adminToken, {
+        username: 'user_multiunder',
+        password: '测试密码安全加固验证',
+        role: 'operator',
+      });
+      assert.equal(resMultiUnder.status, 201);
+    });
+
+    await verifyAsync('Go Password Reset validates new password against TARGET username from route', async () => {
+      const adminToken = await makeToken('active_admin1', 'admin', 1);
+
+      // Attempt to reset user_72bytes password containing target username
+      const resTargetMatch = await callGoUserMgmt('POST', '/api/users/user_72bytes/password-reset', adminToken, {
+        password: 'user_72bytes-pass123',
+      });
+      assert.equal(resTargetMatch.status, 400);
+      assert.equal(resTargetMatch.body?.error, 'INVALID_PASSWORD');
+
+      // Attempt to reset password containing admin actor username (allowed since target is user_72bytes)
+      const resActorMatch = await callGoUserMgmt('POST', '/api/users/user_72bytes/password-reset', adminToken, {
+        password: 'active_admin1-allowed123',
+      });
+      assert.equal(resActorMatch.status, 200);
+    });
+
+    // ── 11. JWT Secret Validation Parity ──────────────────────────────────────
+    console.log('\n11. JWT Secret Validation Parity');
 
     await verifyAsync('Node rejects unsafe placeholders and secrets under 32 bytes', () => {
       const orig = process.env.JWT_SECRET;
@@ -696,8 +879,8 @@ async function main() {
       }
     });
 
-    // ── 11. Cookie & Cache-Control Hardening ───────────────────────────────────
-    console.log('\n11. Cookie & Cache-Control Hardening');
+    // ── 12. Cookie & Cache-Control Hardening ───────────────────────────────────
+    console.log('\n12. Cookie & Cache-Control Hardening');
 
     await verifyAsync('Login over HTTP sets HttpOnly, SameSite=Lax, Secure=false', async () => {
       const res = await callLogin(

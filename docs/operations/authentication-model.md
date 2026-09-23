@@ -19,27 +19,30 @@ Username + Password
 Endpoint: `POST /api/auth/login` (Node owner).
 
 Dual rate limit:
-- IP-scoped: 5 attempts / 60s per key `login:<ip>`
-- Account-scoped: 10 attempts / 300s per key `login-user:<normalized-username>`
+- IP-scoped: 5 requests / 60s per key `login:<ip>` (enforced upfront on all incoming requests)
+- Account-scoped: 10 FAILED authentication attempts / 300s per key `login-user:<normalized-username>` (peeked before password verification; consumed only on failed authentication attempts)
 - When exceeded: HTTP 429 with `Retry-After`, `X-RateLimit-Limit`, `X-RateLimit-Remaining: 0`, and `Cache-Control: no-store`.
 
 Flow:
 
 1. Extract client IP (prioritizing `x-real-ip`, then `x-forwarded-for`, falling back to `unknown`).
-2. Enforce IP-scoped rate limit (5 / 60s).
-3. Parse and validate JSON body (`username` <= 100 chars, `password` <= 72 bytes).
-4. Enforce account-scoped rate limit (10 / 300s) on normalized lowercase username.
+2. Enforce IP-scoped request rate limit (5 / 60s). If exceeded, return HTTP 429.
+3. Parse and validate JSON request body (`username` non-empty <= 100 chars, `password` non-empty <= 72 bytes).
+   - On malformed JSON, invalid body, missing username/password, or password over 72 bytes: return HTTP 400 `{"error": "Username and password required"}` with `Cache-Control: no-store`.
+4. Pre-auth check on account failed-login limiter: peeks `login-user:<normalized-username>` (10 / 300s). If the failure budget is already exhausted (>= 10 failures in current window), return HTTP 429 immediately without performing password verification.
 5. Look up `xcloud_ops.app_users` by username.
-6. Verify password with `bcrypt.compare` (cost 10).
+6. Verify password with `bcrypt.compare` (cost 10) or constant-shape dummy work for unknown users.
 7. Validate account status: `status == 'active'`, `locked != true`, role normalizable.
-8. On failure (unknown user, bad password, disabled, locked, or malformed payload):
-   - If active unlocked account with wrong password: atomically increment `failedLoginAttempts`.
+8. On credential/account-state failure (unknown user, bad password, disabled, locked):
+   - Atomically consume one failed-attempt unit on `login-user:<normalized-username>` (applies identically to existing and non-existing accounts).
+   - If active unlocked account with wrong password: atomically increment `security.failedLoginAttempts`.
    - If `failedLoginAttempts >= 10` and account is not the last active admin: atomically transition to `status="locked"`, `locked=true`, `security.lockedAt`, `security.lockReason="excessive_failed_logins"`, and increment `security.sessionVersion` exactly once.
    - Schedule `auth.login` failed audit log (and `auth.account.locked` if newly locked).
-   - Return uniform HTTP 401 `{"error": "Invalid credentials"}` with `Cache-Control: no-store` (strict response privacy).
+   - Return uniform HTTP 401 `{"error": "Invalid credentials"}` with `Cache-Control: no-store` (strict response privacy for account and credential state).
 9. Record successful login via atomic conditional update:
+   - Does NOT consume account failed-login rate limit budget (`login-user:...` remains unincremented).
    - Sets `security.lastLoginAt` and `security.lastLoginIp`.
-   - Resets `security.failedLoginAttempts` to 0.
+   - Resets persistent `security.failedLoginAttempts` to 0.
    - Validates that `sessionVersion`, `status`, and `passwordHash` have not changed concurrently during bcrypt computation.
 10. Issue JWT: `{ username, role, sv }`, exp = 24h.
 11. Set `auth_token` cookie (httpOnly, sameSite=lax, path=/, maxAge=86400, secure if HTTPS).

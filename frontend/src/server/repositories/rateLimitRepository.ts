@@ -27,3 +27,9 @@ export async function incrementFixedWindow(key: string, resetAtSeconds: number) 
 
   return result?.count || 0;
 }
+
+export async function getFixedWindowCount(key: string): Promise<number> {
+  const docs = await collection();
+  const doc = await docs.findOne({ key });
+  return doc?.count || 0;
+}

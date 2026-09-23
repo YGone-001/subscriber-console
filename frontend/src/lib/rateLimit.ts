@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { incrementFixedWindow } from '@/server/repositories/rateLimitRepository';
+import { getFixedWindowCount, incrementFixedWindow } from '@/server/repositories/rateLimitRepository';
 
 export type RateLimitResult = {
   allowed: boolean;
@@ -16,6 +16,34 @@ type RateLimitCheck =
 export async function checkRateLimit(identifier: string, limit: number, windowSeconds: number): Promise<boolean> {
   const result = await getRateLimit(identifier, limit, windowSeconds);
   return result.allowed;
+}
+
+export async function peekRateLimit(identifier: string, limit: number, windowSeconds: number): Promise<RateLimitResult> {
+  try {
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    const currentWindow = Math.floor(nowSeconds / windowSeconds);
+    const key = `RATELIMIT:${identifier}:${currentWindow}`;
+    const resetAt = (currentWindow + 1) * windowSeconds;
+    const current = await getFixedWindowCount(key);
+    const remaining = Math.max(0, limit - current);
+
+    return {
+      allowed: current < limit,
+      limit,
+      remaining,
+      retryAfter: current >= limit ? Math.max(1, resetAt - nowSeconds) : 0,
+      resetAt,
+    };
+  } catch (error) {
+    console.warn('Rate limiter MongoDB error, failing open:', error);
+    return {
+      allowed: true,
+      limit,
+      remaining: limit,
+      retryAfter: 0,
+      resetAt: Math.floor(Date.now() / 1000) + windowSeconds,
+    };
+  }
 }
 
 export async function getRateLimit(identifier: string, limit: number, windowSeconds: number): Promise<RateLimitResult> {

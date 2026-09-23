@@ -121,14 +121,124 @@ func TestValidateUpdateUserInvalidStatus(t *testing.T) {
 }
 
 func TestValidateResetPasswordValid(t *testing.T) {
-	if err := ValidateResetPassword(ResetPasswordRequest{Password: "new-password-1"}); err != nil {
+	if err := ValidateResetPassword(ResetPasswordRequest{Password: "new-password-1"}, "alice"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
 func TestValidateResetPasswordShort(t *testing.T) {
-	if err := ValidateResetPassword(ResetPasswordRequest{Password: "abc"}); err == nil || err.Error() != "INVALID_PASSWORD" {
+	if err := ValidateResetPassword(ResetPasswordRequest{Password: "abc"}, "alice"); err == nil || err.Error() != "INVALID_PASSWORD" {
 		t.Fatalf("err = %v, want INVALID_PASSWORD", err)
+	}
+}
+
+func TestValidatePasswordPolicyMatrix(t *testing.T) {
+	tests := []struct {
+		name     string
+		password string
+		username string
+		wantErr  bool
+	}{
+		{
+			name:     "valid password",
+			password: "ValidPass123!",
+			username: "alice",
+			wantErr:  false,
+		},
+		{
+			name:     "trimmed length below 8",
+			password: "  abc  ",
+			username: "alice",
+			wantErr:  true,
+		},
+		{
+			name:     "whitespace only",
+			password: "        ",
+			username: "alice",
+			wantErr:  true,
+		},
+		{
+			name:     "contains username exact case",
+			password: "alice-password-123",
+			username: "alice",
+			wantErr:  true,
+		},
+		{
+			name:     "contains username different case",
+			password: "XXALICEXX123",
+			username: "alice",
+			wantErr:  true,
+		},
+		{
+			name:     "exactly 72 UTF-8 bytes",
+			password: strings.Repeat("a", 72),
+			username: "alice",
+			wantErr:  false,
+		},
+		{
+			name:     "73 UTF-8 bytes",
+			password: strings.Repeat("a", 73),
+			username: "alice",
+			wantErr:  true,
+		},
+		{
+			name:     "multibyte under 72 bytes",
+			password: "测试密码安全加固验证", // 10 runes, 30 bytes
+			username: "alice",
+			wantErr:  false,
+		},
+		{
+			name:     "multibyte over 72 bytes",
+			password: strings.Repeat("密", 25), // 25 runes * 3 bytes = 75 bytes
+			username: "alice",
+			wantErr:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidatePassword(tt.password, tt.username)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("ValidatePassword(%q, %q) err = %v, wantErr %v", tt.password, tt.username, err, tt.wantErr)
+			}
+			if err != nil && err.Error() != "INVALID_PASSWORD" {
+				t.Fatalf("ValidatePassword error = %v, want INVALID_PASSWORD", err)
+			}
+
+			// Verify CreateUser consumes this policy
+			createReq := CreateUserRequest{
+				Username: tt.username,
+				Password: tt.password,
+			}
+			createErr := ValidateCreateUser(createReq)
+			if (createErr != nil) != tt.wantErr {
+				t.Fatalf("ValidateCreateUser(%q, %q) err = %v, wantErr %v", tt.password, tt.username, createErr, tt.wantErr)
+			}
+
+			// Verify Password Reset consumes this policy against target username
+			resetReq := ResetPasswordRequest{
+				Password: tt.password,
+			}
+			resetErr := ValidateResetPassword(resetReq, tt.username)
+			if (resetErr != nil) != tt.wantErr {
+				t.Fatalf("ValidateResetPassword(%q, %q) err = %v, wantErr %v", tt.password, tt.username, resetErr, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestResetPasswordValidatesAgainstTargetUsername(t *testing.T) {
+	// target is "subscriber_admin"
+	// new password contains target username -> must be rejected
+	req := ResetPasswordRequest{Password: "subscriber_admin-123"}
+	if err := ValidateResetPassword(req, "subscriber_admin"); err == nil || err.Error() != "INVALID_PASSWORD" {
+		t.Fatalf("expected INVALID_PASSWORD for target username match, got %v", err)
+	}
+
+	// new password contains actor username "admin_actor" but target is "subscriber_admin" -> allowed
+	req2 := ResetPasswordRequest{Password: "admin_actor-123"}
+	if err := ValidateResetPassword(req2, "subscriber_admin"); err != nil {
+		t.Fatalf("unexpected error when password contains actor instead of target: %v", err)
 	}
 }
 
