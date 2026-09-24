@@ -29,7 +29,7 @@ const jiti = createJiti(import.meta.url, {
 });
 
 // Import UI helper and policy modules
-const { mapLoginResponse, parseRetryAfter, mapUserManagementError } = await jiti(
+const { mapLoginResponse, parseRetryAfter, mapUserManagementError, executePasswordReset } = await jiti(
   '../frontend/src/lib/auth-ui.ts'
 );
 const { userManagementActions, checkUserManagementPolicy, assignableRoles } = await jiti(
@@ -51,6 +51,18 @@ function verify(description, fn) {
   totalChecks++;
   try {
     fn();
+    console.log(`  PASS  ${description}`);
+    passed++;
+  } catch (err) {
+    console.error(`  FAIL  ${description}: ${err.message}`);
+    throw err;
+  }
+}
+
+async function verifyAsync(description, fn) {
+  totalChecks++;
+  try {
+    await fn();
     console.log(`  PASS  ${description}`);
     passed++;
   } catch (err) {
@@ -394,34 +406,394 @@ verify('UserLoginHistory conditionally displays locked metadata only when locked
 });
 
 // ============================================================================
-// 9. User Management Error Mapping
+// 9. User Management Error Mapping (Direct, Nested FetchError, Unknown Safety)
 // ============================================================================
-console.log('\n[9] User Management Error Mapping');
-
-const errorMappingCases = [
-  { code: 'LAST_ACTIVE_ADMIN', expected: 'users_err_last_active_admin' },
-  { code: 'SELF_OPERATION_FORBIDDEN', expected: 'users_err_self_operation' },
-  { code: 'SELF_DISABLE_FORBIDDEN', expected: 'users_err_self_operation' },
-  { code: 'SELF_ROLE_CHANGE_FORBIDDEN', expected: 'users_err_self_role_change' },
-  { code: 'USER_NOT_FOUND', expected: 'users_err_not_found' },
-  { code: 'USERNAME_ALREADY_EXISTS', expected: 'users_username_taken' },
-  { code: 'INVALID_PASSWORD', expected: 'users_err_password' },
-  { code: 'PERMISSION_DENIED', expected: 'users_err_permission_denied' },
-];
+console.log('\n[9] User Management Error Mapping (Direct, Nested FetchError, Unknown Safety)');
 
 const mockT = (key) => key;
 
-for (const tc of errorMappingCases) {
-  verify(`mapUserManagementError: ${tc.code} => ${tc.expected}`, () => {
-    const msg = mapUserManagementError({ code: tc.code }, mockT);
+const errorMappingTable = [
+  // Direct known codes
+  { case: 'direct known: LAST_ACTIVE_ADMIN', error: { code: 'LAST_ACTIVE_ADMIN' }, expected: 'users_err_last_active_admin' },
+  { case: 'direct known: SELF_OPERATION_FORBIDDEN', error: { code: 'SELF_OPERATION_FORBIDDEN' }, expected: 'users_err_self_operation' },
+  { case: 'direct known: SELF_DISABLE_FORBIDDEN', error: { code: 'SELF_DISABLE_FORBIDDEN' }, expected: 'users_err_self_operation' },
+  { case: 'direct known: SELF_DELETE_FORBIDDEN', error: { code: 'SELF_DELETE_FORBIDDEN' }, expected: 'users_err_self_operation' },
+  { case: 'direct known: SELF_ROLE_CHANGE_FORBIDDEN', error: { code: 'SELF_ROLE_CHANGE_FORBIDDEN' }, expected: 'users_err_self_role_change' },
+  { case: 'direct known: USER_NOT_FOUND', error: { code: 'USER_NOT_FOUND' }, expected: 'users_err_not_found' },
+  { case: 'direct known: USERNAME_ALREADY_EXISTS', error: { code: 'USERNAME_ALREADY_EXISTS' }, expected: 'users_username_taken' },
+  { case: 'direct known: INVALID_PASSWORD', error: { code: 'INVALID_PASSWORD' }, expected: 'users_err_password' },
+  { case: 'direct known: PERMISSION_DENIED', error: { code: 'PERMISSION_DENIED' }, expected: 'users_err_permission_denied' },
+  { case: 'direct known: INVALID_USERNAME', error: { code: 'INVALID_USERNAME' }, expected: 'users_err_username' },
+  { case: 'direct known: INVALID_ROLE', error: { code: 'INVALID_ROLE' }, expected: 'users_err_role' },
+  { case: 'direct known: ROLE_ASSIGNMENT_FORBIDDEN', error: { code: 'ROLE_ASSIGNMENT_FORBIDDEN' }, expected: 'users_err_role' },
+  { case: 'direct known: INVALID_STATUS', error: { code: 'INVALID_STATUS' }, expected: 'users_err_status' },
+  { case: 'direct known: INVALID_EMAIL', error: { code: 'INVALID_EMAIL' }, expected: 'users_err_email' },
+  { case: 'direct known: INVALID_DISPLAY_NAME', error: { code: 'INVALID_DISPLAY_NAME' }, expected: 'users_err_display_name' },
+
+  // Nested FetchError known codes
+  {
+    case: 'nested FetchError known: USER_NOT_FOUND',
+    error: {
+      info: { code: 'USER_NOT_FOUND' },
+      message: 'User not found in system',
+    },
+    expected: 'users_err_not_found',
+    rawMessageCheck: 'User not found in system',
+  },
+  {
+    case: 'nested FetchError known: LAST_ACTIVE_ADMIN',
+    error: {
+      info: { code: 'LAST_ACTIVE_ADMIN' },
+      message: 'Cannot disable the last active administrator',
+    },
+    expected: 'users_err_last_active_admin',
+    rawMessageCheck: 'Cannot disable the last active administrator',
+  },
+  {
+    case: 'nested FetchError known: INVALID_PASSWORD',
+    error: {
+      info: { code: 'INVALID_PASSWORD' },
+      message: 'Password does not satisfy complexity requirements',
+    },
+    expected: 'users_err_password',
+  },
+  {
+    case: 'nested FetchError known: USERNAME_ALREADY_EXISTS',
+    error: {
+      info: { code: 'USERNAME_ALREADY_EXISTS' },
+      message: 'Username collision',
+    },
+    expected: 'users_username_taken',
+  },
+  {
+    case: 'nested FetchError known: PERMISSION_DENIED',
+    error: {
+      info: { code: 'PERMISSION_DENIED' },
+      message: 'Forbidden from modifying user',
+    },
+    expected: 'users_err_permission_denied',
+  },
+
+  // Direct unknown codes with raw internal message
+  {
+    case: 'direct unknown code with raw internal message',
+    error: {
+      code: 'INTERNAL_DATABASE_FAILURE',
+      message: 'mongodb://internal-host:27017 failed',
+    },
+    expected: 'users_err_update',
+    prohibitStrings: ['INTERNAL_DATABASE_FAILURE', 'mongodb://internal-host:27017', 'failed'],
+  },
+  // Nested unknown code with raw internal message
+  {
+    case: 'nested unknown code with raw internal message',
+    error: {
+      info: { code: 'PRIVATE_INTERNAL_ERROR' },
+      message: 'context deadline exceeded at app_users',
+    },
+    expected: 'users_err_update',
+    prohibitStrings: ['PRIVATE_INTERNAL_ERROR', 'context deadline exceeded', 'app_users'],
+  },
+  // Plain Error with private backend diagnostic
+  {
+    case: 'plain Error with private backend diagnostic',
+    error: new Error('panic: runtime error: dial tcp 127.0.0.1:27017 connect: connection refused'),
+    expected: 'users_err_update',
+    prohibitStrings: ['panic', '127.0.0.1', 'connection refused'],
+  },
+  // Null error
+  {
+    case: 'null error',
+    error: null,
+    expected: 'users_err_update',
+  },
+  // Undefined error
+  {
+    case: 'undefined error',
+    error: undefined,
+    expected: 'users_err_update',
+  },
+];
+
+for (const tc of errorMappingTable) {
+  verify(`mapUserManagementError: ${tc.case} => ${tc.expected}`, () => {
+    const msg = mapUserManagementError(tc.error, mockT);
     assert.equal(msg, tc.expected);
+    if (tc.rawMessageCheck) {
+      assert.ok(!msg.includes(tc.rawMessageCheck), `Must not contain raw message: ${tc.rawMessageCheck}`);
+    }
+    if (tc.prohibitStrings) {
+      for (const str of tc.prohibitStrings) {
+        assert.ok(!msg.includes(str), `Must not leak prohibited substring: ${str}`);
+      }
+    }
   });
 }
 
 // ============================================================================
-// 10. I18n Completeness (EN & ZH Parity)
+// 10. Password Reset Runtime Behavioral Semantics (Rejection, Safety, Success)
 // ============================================================================
-console.log('\n[10] I18n Completeness (EN & ZH Parity for New UI Concepts)');
+console.log('\n[10] Password Reset Runtime Behavioral Semantics (Rejection, Safety, Success)');
+
+await verifyAsync('executePasswordReset rejects with known API error: safe error, no success callback, fields preserved', async () => {
+  let successCalls = 0;
+  let resetCalls = 0;
+  let capturedError = '';
+  const onReset = async () => {
+    throw { code: 'INVALID_PASSWORD', message: 'Raw password invalid' };
+  };
+  const onSuccess = () => { successCalls++; };
+  const resetFields = () => { resetCalls++; };
+  const setError = (msg) => { capturedError = msg; };
+
+  const result = await executePasswordReset({
+    username: 'testuser',
+    password: 'ValidPassword123!',
+    confirmPassword: 'ValidPassword123!',
+    onReset,
+    onSuccess,
+    setError,
+    resetFields,
+    t: mockT,
+  });
+
+  assert.equal(result, false, 'executePasswordReset must return false on rejection');
+  assert.equal(successCalls, 0, 'onSuccess must NOT be called on API rejection');
+  assert.equal(resetCalls, 0, 'resetFields must NOT be called on API rejection so fields remain editable');
+  assert.equal(capturedError, 'users_err_password', 'Error must be localized password error');
+  assert.ok(!capturedError.includes('Raw password invalid'), 'Must not leak raw server message');
+});
+
+await verifyAsync('executePasswordReset rejects with unknown server error: generic error, no leak of diagnostic string', async () => {
+  let successCalls = 0;
+  let resetCalls = 0;
+  let capturedError = '';
+  const rawDiagnostic = 'mongodb://private-cluster:27017 write conflict at app_users';
+  const onReset = async () => {
+    throw new Error(rawDiagnostic);
+  };
+  const onSuccess = () => { successCalls++; };
+  const resetFields = () => { resetCalls++; };
+  const setError = (msg) => { capturedError = msg; };
+
+  const result = await executePasswordReset({
+    username: 'testuser',
+    password: 'ValidPassword123!',
+    confirmPassword: 'ValidPassword123!',
+    onReset,
+    onSuccess,
+    setError,
+    resetFields,
+    t: mockT,
+  });
+
+  assert.equal(result, false, 'executePasswordReset must return false on unknown error');
+  assert.equal(successCalls, 0, 'onSuccess must NOT be called on unknown error');
+  assert.equal(resetCalls, 0, 'resetFields must NOT be called on unknown error');
+  assert.equal(capturedError, 'users_err_update', 'Error must be generic localized error');
+  assert.ok(!capturedError.includes(rawDiagnostic), 'Must not leak raw diagnostic message');
+  assert.ok(!capturedError.includes('mongodb://'), 'Must not leak database URL');
+  assert.ok(!capturedError.includes('app_users'), 'Must not leak collection name');
+});
+
+await verifyAsync('executePasswordReset rejects with nested FetchError: maps nested code and suppresses raw message', async () => {
+  let successCalls = 0;
+  let resetCalls = 0;
+  let capturedError = '';
+  const onReset = async () => {
+    throw {
+      status: 404,
+      message: 'Target user does not exist in cluster',
+      info: { code: 'USER_NOT_FOUND', error: 'Target user does not exist in cluster' },
+    };
+  };
+  const onSuccess = () => { successCalls++; };
+  const resetFields = () => { resetCalls++; };
+  const setError = (msg) => { capturedError = msg; };
+
+  const result = await executePasswordReset({
+    username: 'testuser',
+    password: 'ValidPassword123!',
+    confirmPassword: 'ValidPassword123!',
+    onReset,
+    onSuccess,
+    setError,
+    resetFields,
+    t: mockT,
+  });
+
+  assert.equal(result, false, 'Must return false');
+  assert.equal(successCalls, 0, 'No onSuccess');
+  assert.equal(resetCalls, 0, 'No resetFields');
+  assert.equal(capturedError, 'users_err_not_found', 'Must map nested USER_NOT_FOUND');
+  assert.ok(!capturedError.includes('Target user does not exist'), 'Must not leak message');
+});
+
+await verifyAsync('executePasswordReset client-side validation: weak password or mismatch aborts before onReset', async () => {
+  let onResetCalls = 0;
+  let capturedError = '';
+  const onReset = async () => { onResetCalls++; };
+  const onSuccess = () => {};
+  const resetFields = () => {};
+  const setError = (msg) => { capturedError = msg; };
+
+  // Weak password (< 8 chars)
+  const res1 = await executePasswordReset({
+    username: 'testuser',
+    password: '123',
+    confirmPassword: '123',
+    onReset,
+    onSuccess,
+    setError,
+    resetFields,
+    t: mockT,
+  });
+  assert.equal(res1, false);
+  assert.equal(onResetCalls, 0);
+  assert.equal(capturedError, 'users_err_password');
+
+  // Password contains username
+  const res2 = await executePasswordReset({
+    username: 'testuser',
+    password: 'password_testuser_123',
+    confirmPassword: 'password_testuser_123',
+    onReset,
+    onSuccess,
+    setError,
+    resetFields,
+    t: mockT,
+  });
+  assert.equal(res2, false);
+  assert.equal(onResetCalls, 0);
+  assert.equal(capturedError, 'users_err_password');
+
+  // Password mismatch
+  const res3 = await executePasswordReset({
+    username: 'testuser',
+    password: 'ValidPassword123!',
+    confirmPassword: 'DifferentPassword123!',
+    onReset,
+    onSuccess,
+    setError,
+    resetFields,
+    t: mockT,
+  });
+  assert.equal(res3, false);
+  assert.equal(onResetCalls, 0);
+  assert.equal(capturedError, 'users_err_password_match');
+});
+
+await verifyAsync('executePasswordReset resolves successfully: calls onReset once, clears fields, invokes onSuccess once', async () => {
+  let onResetCalls = 0;
+  let successCalls = 0;
+  let resetCalls = 0;
+  let capturedError = 'previous_error';
+
+  const onReset = async (uname, pwd, rsn) => {
+    onResetCalls++;
+    assert.equal(uname, 'testuser');
+    assert.equal(pwd, 'ValidPassword123!');
+  };
+  const onSuccess = () => { successCalls++; };
+  const resetFields = () => { resetCalls++; };
+  const setError = (msg) => { capturedError = msg; };
+
+  const result = await executePasswordReset({
+    username: 'testuser',
+    password: 'ValidPassword123!',
+    confirmPassword: 'ValidPassword123!',
+    onReset,
+    onSuccess,
+    setError,
+    resetFields,
+    t: mockT,
+  });
+
+  assert.equal(result, true, 'executePasswordReset must return true on success');
+  assert.equal(onResetCalls, 1, 'onReset must be called exactly once');
+  assert.equal(resetCalls, 1, 'resetFields must be called exactly once');
+  assert.equal(successCalls, 1, 'onSuccess must be called exactly once');
+  assert.equal(capturedError, '', 'Error state must be cleared');
+});
+
+await verifyAsync('Detail page handlePasswordReset does not swallow API rejection', async () => {
+  const pageSource = readFileSync(
+    path.resolve(import.meta.dirname, '../frontend/src/app/(dashboard)/users/[username]/page.tsx'),
+    'utf8'
+  );
+  assert.ok(
+    !pageSource.includes('try {\n      await usersApi.resetPassword') &&
+      !pageSource.includes('await usersApi.resetPassword(targetUsername, password, reason);\n      setShowResetModal(false)'),
+    'page.tsx handlePasswordReset must not catch/swallow rejection or close modal inside the callback'
+  );
+  assert.ok(
+    pageSource.includes('const handlePasswordResetSuccess = () => {'),
+    'page.tsx must define handlePasswordResetSuccess for modal close and notice presentation'
+  );
+  assert.ok(
+    pageSource.includes('onSuccess={handlePasswordResetSuccess}'),
+    'PasswordResetModal must be passed handlePasswordResetSuccess'
+  );
+  assert.ok(
+    pageSource.includes('onReset={handlePasswordReset}'),
+    'PasswordResetModal must be passed handlePasswordReset'
+  );
+
+  // Runtime test of the unswallowed contract
+  let mutateCalls = 0;
+  const mockUsersApi = {
+    resetPassword: async () => {
+      throw new Error('API failure');
+    },
+  };
+  const mockMutate = async () => { mutateCalls++; };
+  const handlePasswordResetContract = async (targetUsername, password, reason) => {
+    await mockUsersApi.resetPassword(targetUsername, password, reason);
+    await mockMutate();
+  };
+
+  await assert.rejects(
+    async () => {
+      await handlePasswordResetContract('testuser', 'secret');
+    },
+    { message: 'API failure' },
+    'handlePasswordReset must propagate rejection to caller'
+  );
+  assert.equal(mutateCalls, 0, 'mutate must not be called when resetPassword fails');
+
+  // Runtime test of success contract
+  let resetSuccessCalls = 0;
+  const mockSuccessApi = {
+    resetPassword: async () => { resetSuccessCalls++; },
+  };
+  const handlePasswordResetSuccessContract = async (targetUsername, password, reason) => {
+    await mockSuccessApi.resetPassword(targetUsername, password, reason);
+    await mockMutate();
+  };
+  await handlePasswordResetSuccessContract('testuser', 'secret');
+  assert.equal(resetSuccessCalls, 1);
+  assert.equal(mutateCalls, 1);
+});
+
+verify('PasswordResetModal uses executePasswordReset and never uses err.message', () => {
+  const modalSource = readFileSync(
+    path.resolve(import.meta.dirname, '../frontend/src/app/(dashboard)/users/components/PasswordResetModal.tsx'),
+    'utf8'
+  );
+  assert.ok(
+    modalSource.includes('executePasswordReset'),
+    'PasswordResetModal must use executePasswordReset'
+  );
+  assert.ok(
+    !modalSource.includes('err.message'),
+    'PasswordResetModal must NEVER reference err.message'
+  );
+});
+
+// ============================================================================
+// 11. I18n Completeness (EN & ZH Parity)
+// ============================================================================
+console.log('\n[11] I18n Completeness (EN & ZH Parity for New UI Concepts)');
 
 const requiredKeys = [
   'login_invalid_credentials',
@@ -434,7 +806,17 @@ const requiredKeys = [
   'users_err_self_operation',
   'users_err_self_role_change',
   'users_err_not_found',
+  'users_username_taken',
+  'users_err_password',
+  'users_err_password_match',
+  'users_err_email',
+  'users_err_role',
+  'users_err_status',
+  'users_err_create',
+  'users_err_update',
   'users_err_permission_denied',
+  'users_err_display_name',
+  'users_err_username',
   'users_unlock_desc',
 ];
 
@@ -451,9 +833,9 @@ for (const key of requiredKeys) {
 }
 
 // ============================================================================
-// 11. API Inventory & Routing Freeze
+// 12. API Inventory & Routing Freeze
 // ============================================================================
-console.log('\n[11] API Inventory & Routing Freeze (CUTOVER_TABLE=36, ACTUALLY_ROUTED=36)');
+console.log('\n[12] API Inventory & Routing Freeze (CUTOVER_TABLE=36, ACTUALLY_ROUTED=36)');
 
 verify('CUTOVER_TABLE is exactly 36 and ACTUALLY_ROUTED is exactly 36', () => {
   assert.equal(CUTOVER_TABLE.length, 36, `CUTOVER_TABLE entries count must be 36, got ${CUTOVER_TABLE.length}`);
