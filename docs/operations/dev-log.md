@@ -133,3 +133,16 @@
 - All 41 checks pass in `scripts/test-auth-cutover.mjs`
 - CI remote pipeline: 7/7 jobs green on commit `f4ec52ebe4eb6d33f0e64c08aaa222022a3008df`
 
+## Phase 6.4 — Authentication & User Management UI Final Integration
+
+- Completed user-facing frontend integration and UX hardening for Authentication and User Management.
+- Created `frontend/src/lib/auth-ui.ts` with `parseRetryAfter`, `mapLoginResponse`, and `mapUserManagementError`.
+- Updated `LoginForm.tsx` with dynamic rate-limit cooldown countdown, accessible ARIA announcements, and session-expired vs credential alert presentation (`role="status"` vs `role="alert"`).
+- Refactored user detail page `[username]/page.tsx` with dynamic `currentUser` actor awareness and self-protection; eliminated hard-coded `isSelf = false`.
+- Wired user status lifecycle operations (`active`, `disabled`, `locked`) to canonical Go endpoints (`POST /api/users/{username}/disable`, `PATCH /api/users/{username}` with `status: "locked" | "active"`) with confirmation modal.
+- Rendered security state metadata panel with safe attributes (`sessionVersion`, `failedLoginAttempts`, `lastLoginAt`, `lastLoginIp`, `passwordChangedAt`, and conditional `lockedAt`/`lockReason`).
+- Added complete English (`en.ts`) and Chinese (`zh.ts`) localization parity for auth & user management error codes and UI concepts.
+- Retained strict backend & routing invariants: `CUTOVER_TABLE = 36`, `ACTUALLY_ROUTED = 36`, 0 backend modifications, 54 route files / 78 operations unchanged.
+- Validated via 75/75 checks in `scripts/test-auth-user-ui-integration.mjs`.
+
+

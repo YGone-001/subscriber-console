@@ -1,26 +1,47 @@
 "use client";
 import "./LoginForm.css";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Eye, EyeOff, Loader2, Lock, User } from "lucide-react";
 import Image from "next/image";
 import { useI18n } from "@/components/I18nProvider";
 import { Field } from "@/components/ui/Field";
 import { IconButton } from "@/components/ui/IconButton";
+import { mapLoginResponse, type LoginUiState } from "@/lib/auth-ui";
 
 export default function LoginForm({ sessionExpired = false }: { sessionExpired?: boolean }) {
   const { t } = useI18n();
   const [passwordVisible, setPasswordVisible] = useState(false);
-  const [error, setError] = useState("");
+  const [errorState, setErrorState] = useState<LoginUiState | null>(null);
+  const [cooldownRemaining, setCooldownRemaining] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+  const [showSessionNotice, setShowSessionNotice] = useState(sessionExpired);
+  const isCooldownActive = cooldownRemaining > 0;
+
+  // Cooldown countdown manager
+  useEffect(() => {
+    if (!isCooldownActive) return;
+
+    const timer = setInterval(() => {
+      setCooldownRemaining((prev) => {
+        if (prev <= 1) return 0;
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [isCooldownActive]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (isLoading || cooldownRemaining > 0) return;
+
     const formData = new FormData(event.currentTarget);
     const username = String(formData.get("username") || "");
     const password = String(formData.get("password") || "");
 
-    setError("");
+    setShowSessionNotice(false);
+    setErrorState(null);
     setIsLoading(true);
 
     try {
@@ -31,23 +52,45 @@ export default function LoginForm({ sessionExpired = false }: { sessionExpired?:
       });
 
       if (response.ok) {
+        // eslint-disable-next-line @next/next/no-location-assign-relative-destination
         window.location.assign("/");
         return;
       }
 
-      let data: { error?: string } = {};
+      let data: { error?: string; code?: string } = {};
       try {
         data = await response.json();
       } catch {
-        // Keep the generic fallback below
+        // Fall back to status-based mapping
       }
-      setError(data.error || t("login_failed"));
+
+      const retryAfterHeader = response.headers.get("retry-after");
+      const mapped = mapLoginResponse(response.status, data, retryAfterHeader);
+      setErrorState(mapped);
+
+      if (mapped.retryAfterSeconds > 0) {
+        setCooldownRemaining(mapped.retryAfterSeconds);
+      }
     } catch {
-      setError(t("login_network_error"));
+      setErrorState(mapLoginResponse(undefined));
     } finally {
       setIsLoading(false);
     }
   };
+
+  const getErrorMessage = (): string => {
+    if (!errorState) return "";
+    if (errorState.category === "rate_limited") {
+      if (cooldownRemaining > 0) {
+        return `${t("login_rate_limited")} ${t("login_retry_after", { seconds: cooldownRemaining })}`;
+      }
+      return t("login_rate_limited");
+    }
+    return t(errorState.i18nKey);
+  };
+
+  const errorMessage = getErrorMessage();
+  const isSubmitDisabled = isLoading || cooldownRemaining > 0;
 
   return (
     <main className="login-container">
@@ -72,11 +115,17 @@ export default function LoginForm({ sessionExpired = false }: { sessionExpired?:
         </div>
 
         <form id="xcloud-login-form" onSubmit={handleSubmit} className="login-form">
-          {sessionExpired && !error ? <p role="status">{t('users_session_expired')}</p> : null}
-          {error && (
+          {showSessionNotice && !errorMessage ? (
+            <div id="xcloud-session-notice" className="login-session-container" role="status">
+              <div className="login-session-indicator" aria-hidden="true" />
+              <span id="xcloud-session-notice-text">{t("login_session_expired")}</span>
+            </div>
+          ) : null}
+
+          {errorMessage && (
             <div id="xcloud-login-error" className="login-error-container" role="alert" aria-live="assertive">
               <div className="login-error-indicator" aria-hidden="true" />
-              <span id="xcloud-login-error-text">{error}</span>
+              <span id="xcloud-login-error-text">{errorMessage}</span>
             </div>
           )}
 
@@ -90,8 +139,8 @@ export default function LoginForm({ sessionExpired = false }: { sessionExpired?:
               type="text"
               placeholder={t("login_username")}
               autoComplete="username"
-              aria-invalid={Boolean(error)}
-              aria-describedby={error ? "xcloud-login-error-text" : undefined}
+              aria-invalid={Boolean(errorMessage)}
+              aria-describedby={errorMessage ? "xcloud-login-error-text" : undefined}
               required
               className="login-input"
             />
@@ -107,8 +156,8 @@ export default function LoginForm({ sessionExpired = false }: { sessionExpired?:
               type={passwordVisible ? "text" : "password"}
               placeholder={t("login_password")}
               autoComplete="current-password"
-              aria-invalid={Boolean(error)}
-              aria-describedby={error ? "xcloud-login-error-text" : undefined}
+              aria-invalid={Boolean(errorMessage)}
+              aria-describedby={errorMessage ? "xcloud-login-error-text" : undefined}
               required
               className="login-input login-input-password"
             />
@@ -131,7 +180,7 @@ export default function LoginForm({ sessionExpired = false }: { sessionExpired?:
           <button
             id="xcloud-login-submit"
             type="submit"
-            disabled={isLoading}
+            disabled={isSubmitDisabled}
             className="login-submit-btn"
           >
             <span id="xcloud-login-spinner" hidden={!isLoading}>

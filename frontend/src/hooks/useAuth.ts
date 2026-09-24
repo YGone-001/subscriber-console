@@ -12,6 +12,7 @@ export interface User {
   normalizedRole?: GovernanceRole;
   status?: string;
   createdAt?: string;
+  permissions?: string[];
 }
 
 export function useAuth() {

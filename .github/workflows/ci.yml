@@ -159,6 +159,9 @@ jobs:
       - name: Authentication controlled cutover
         run: node scripts/test-auth-cutover.mjs
 
+      - name: Authentication & User Management UI integration
+        run: node scripts/test-auth-user-ui-integration.mjs
+
   user-management-e2e:
     name: User management HTTP integration
     runs-on: ubuntu-latest
