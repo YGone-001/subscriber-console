@@ -134,14 +134,24 @@ function makeExpiredToken(username, role, sv) {
     .sign(getJwtSecretKey());
 }
 
+function getCookieHeader(headers) {
+  if (headers && typeof headers.getSetCookie === 'function') {
+    const list = headers.getSetCookie();
+    if (list && list.length > 0) {
+      return list.join('; ');
+    }
+  }
+  return (headers && typeof headers.get === 'function' ? headers.get('set-cookie') : null) || '';
+}
+
 function assertCookieCleared(headers, label) {
-  const sc = headers.get('set-cookie') || '';
+  const sc = getCookieHeader(headers);
   const cleared = sc.includes('auth_token=;') || (sc.includes('auth_token=') && (sc.includes('Max-Age=0') || sc.includes('Expires=Thu, 01 Jan 1970')));
   assert(cleared, `${label}: Set-Cookie header must clear auth_token, got: ${sc}`);
 }
 
 function assertCookieNotCleared(headers, label) {
-  const sc = headers.get('set-cookie') || '';
+  const sc = getCookieHeader(headers);
   const cleared = sc.includes('auth_token=;') || (sc.includes('auth_token=') && (sc.includes('Max-Age=0') || sc.includes('Expires=Thu, 01 Jan 1970')));
   assert(!cleared, `${label}: Set-Cookie header must NOT clear auth_token, got: ${sc}`);
 }
@@ -658,7 +668,7 @@ async function main() {
       assert.equal(goRes.headers.get('x-ratelimit-limit'), '5');
 
       // Check Go Set-Cookie header
-      const goCookieHeader = goRes.headers.get('set-cookie');
+      const goCookieHeader = getCookieHeader(goRes.headers);
       assert(goCookieHeader, 'Go must set Set-Cookie header');
       assert(goCookieHeader.includes('auth_token='), 'Go cookie must be auth_token');
       assert(goCookieHeader.includes('HttpOnly'), 'Go cookie must be HttpOnly');
@@ -696,7 +706,7 @@ async function main() {
 
     // Call Go login to get Go-issued cookie token
     const goLoginRes = await callGoLogin({ username: 'admin1', password: 'CorrectPass123!' }, { 'x-real-ip': '10.250.1.1' });
-    const goCookie = goLoginRes.headers.get('set-cookie');
+    const goCookie = getCookieHeader(goLoginRes.headers);
     const tokenMatch = goCookie.match(/auth_token=([^;]+)/);
     assert(tokenMatch, 'Go cookie match');
     const goToken = tokenMatch[1];
@@ -724,7 +734,7 @@ async function main() {
     assert.equal(nodeRes.headers.get('cache-control'), 'no-store');
     assert.equal(goRes.headers.get('cache-control'), 'no-store');
 
-    const goCookie = goRes.headers.get('set-cookie');
+    const goCookie = getCookieHeader(goRes.headers);
     assert(goCookie.includes('auth_token=;'), 'Go logout cookie value must be empty');
     assert(goCookie.includes('Max-Age=0'), 'Go logout cookie MaxAge must be 0');
     assert(goCookie.includes('HttpOnly'), 'Go logout cookie must be HttpOnly');
@@ -734,6 +744,11 @@ async function main() {
 
   await verifyAsync('Logout rate limiting parity (30 requests in 60s, 31st returns 429)', async () => {
     const logoutIp = '198.51.100.99';
+    let nowSeconds = Math.floor(Date.now() / 1000);
+    let remainingWindowTime = (Math.floor(nowSeconds / 60) + 1) * 60 - nowSeconds;
+    if (remainingWindowTime < 5) {
+      await new Promise((r) => setTimeout(r, (remainingWindowTime + 1) * 1000));
+    }
     for (let i = 1; i <= 30; i++) {
       const n = await callNodeLogout({ 'x-real-ip': logoutIp });
       const g = await callGoLogout({ 'x-real-ip': logoutIp });
@@ -938,13 +953,43 @@ async function main() {
 
     const rlToken = await makeToken(rlUser, 'operator', 1);
 
-    for (let i = 1; i <= 120; i++) {
-      const n = await callNodeMe(rlToken);
-      const g = await callGoMe(rlToken);
-      assert.equal(n.status, 200, `Node call ${i} status`);
-      assert.equal(g.status, 200, `Go call ${i} status`);
+    // Guard against minute boundary: ensure at least 8 seconds remain in current window
+    let nowSeconds = Math.floor(Date.now() / 1000);
+    let remainingWindowTime = (Math.floor(nowSeconds / 60) + 1) * 60 - nowSeconds;
+    if (remainingWindowTime < 8) {
+      await new Promise((r) => setTimeout(r, (remainingWindowTime + 1) * 1000));
+      nowSeconds = Math.floor(Date.now() / 1000);
     }
 
+    const currentWindow = Math.floor(nowSeconds / 60);
+    const resetAtSeconds = (currentWindow + 1) * 60;
+    const rlKey = `RATELIMIT:auth:me:${rlUser}:${currentWindow}`;
+
+    // Pre-seed rate limit counter to 119 in both databases for current window
+    await opsNode.collection('app_rate_limits').updateOne(
+      { key: rlKey },
+      {
+        $set: { count: 119, reset_at: new Date(resetAtSeconds * 1000), updated_at: new Date() },
+        $setOnInsert: { key: rlKey },
+      },
+      { upsert: true }
+    );
+    await opsGo.collection('app_rate_limits').updateOne(
+      { key: rlKey },
+      {
+        $set: { count: 119, reset_at: new Date(resetAtSeconds * 1000), updated_at: new Date() },
+        $setOnInsert: { key: rlKey },
+      },
+      { upsert: true }
+    );
+
+    // Call 120: allowed
+    const n120 = await callNodeMe(rlToken);
+    const g120 = await callGoMe(rlToken);
+    assert.equal(n120.status, 200, 'Node 120th status');
+    assert.equal(g120.status, 200, 'Go 120th status');
+
+    // Call 121: rejected with HTTP 429
     const n121 = await callNodeMe(rlToken);
     const g121 = await callGoMe(rlToken);
 
