@@ -7,22 +7,24 @@
 
 | Task | Status | Notes |
 |------|--------|-------|
-| Phase 5.7-C push to origin develop | PENDING | Commit `4952483` ready; user must push manually |
-| Phase 5.7-C exact-final-SHA CI verification | PENDING | Requires push; all 4 jobs must SUCCESS at final SHA |
-| Phase 5.7-D or Phase 6 planning | NOT STARTED | Next phase decision after 5.7-C CI green |
+| Phase 7.0 — Platform Services Architecture Freeze | COMPLETE | Architecture freeze, contract inventory, planning validator |
+| Phase 7.1 — Platform Health & Status Contract Parity | NOT STARTED | Go shadow implementation for health/status reads |
+| Phase 7.2 — Alert Domain Governance & Mutations | NOT STARTED | Acknowledge & workflow direct execution in Go |
+| Phase 7.3 — Notification Streaming (SSE) Migration | NOT STARTED | Native Go SSE handler with http.Flusher |
+| Phase 7.4 — System Integrity Self-Healing Mutations | NOT STARTED | Go implementation for heal & batch-heal |
+| Phase 7.5 — Controlled Platform Services Cutover | NOT STARTED | CUTOVER_TABLE expansion (36 -> 47) & production freeze |
 
 ## Deferred
 
 | Item | Reason |
 |------|--------|
-| `GET /api/audit/export` | Writes audit evidence; Node remains owner |
-| Login / Logout | Auth session management; Node remains owner until Phase 6 |
+| `GET /api/audit/export` | Retired governance surface; audit console removed |
+| Notification broker / Kafka / Redis | Carrier on-premise single-instance deployment; SSE polling stream sufficient |
+| Charging plane migration | Out of scope; billing engine retains raw charging control |
 
 ## Blockers
 
-| Blocker | Impact |
-|---------|--------|
-| Phase 5.7-C push requires user credentials | CI acceptance cannot complete until pushed |
+None currently.
 
 ## Risks
 

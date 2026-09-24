@@ -145,4 +145,18 @@
 - Retained strict backend & routing invariants: `CUTOVER_TABLE = 36`, `ACTUALLY_ROUTED = 36`, 0 backend modifications, 54 route files / 78 operations unchanged.
 - Validated via 75/75 checks in `scripts/test-auth-user-ui-integration.mjs`.
 
+## Phase 7.0 — Alerts, Notifications & Platform Services Architecture Freeze
 
+- Reconciled stale documentation drift across `AGENTS.md`, `docs/operations/todo.md`, and `docs/backend-migration/migration-routing-matrix.md`.
+- Completed full inventory and freeze for 11 Phase 7 candidate platform endpoints:
+  - Alerts: `GET /api/alerts`, `POST /api/alerts/acknowledge`, `POST /api/alerts/workflow`
+  - Notification streaming: `GET /api/notifications/stream`
+  - System health: `GET /api/system/health`, `GET /api/system/mongo/health`
+  - System integrity audit: `GET /api/system/audit/status`, `POST /api/system/audit/scan`, `POST /api/system/audit/heal`, `POST /api/system/audit/batch-heal`
+  - Analytics platform action: `POST /api/analytics/init`
+- Proved read-only semantics for `POST /api/system/audit/scan` (zero mutation calls) and `POST /api/analytics/init`.
+- Audited all background processes and timers across `frontend/src` and `backend/` (confirmed zero background daemon cron jobs; SSE connection-scoped polling).
+- Created authoritative architecture freeze specification: `docs/architecture/phase-7-platform-services-architecture.md` (20 sections complete).
+- Implemented parameterized freeze test suite: `scripts/test-phase-7-architecture-freeze.mjs`.
+- Integrated `test-phase-7-architecture-freeze.mjs` into `.github/workflows/ci.yml`.
+- Maintained strict operational invariants: `CUTOVER_TABLE = 36`, `ACTUALLY_ROUTED = 36`, 54 route files / 78 operations, 0 runtime code changes, 0 backend migrations.
