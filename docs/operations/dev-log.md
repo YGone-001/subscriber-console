@@ -118,3 +118,18 @@
 - 4 KPI cards, balance pool, tariff plans list, paginated subscriber table
 - 23 new i18n keys (en + zh)
 - Migration validator: 0 errors,52 Go operations,35 semantic reads
+
+## Phase 6.3-B — Controlled Authentication Cutover
+
+- Commit: `f4ec52e`
+- Production ownership of authentication endpoints migrated from Node to Go backend (`:18888`):
+  - `POST /api/auth/login`
+  - `POST /api/auth/logout`
+  - `GET /api/auth/me`
+  - `GET /api/auth/permissions`
+- `CUTOVER_TABLE`: 32 → 36 routes
+- `ACTUALLY_ROUTED`: 32 → 36 routes
+- Next.js reverse proxy (`proxy.ts`) routes requests to Go with fail-closed semantics (HTTP 502 `GO_BACKEND_UNREACHABLE`; zero Node fallback)
+- All 41 checks pass in `scripts/test-auth-cutover.mjs`
+- CI remote pipeline: 7/7 jobs green on commit `f4ec52ebe4eb6d33f0e64c08aaa222022a3008df`
+
