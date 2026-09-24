@@ -169,8 +169,8 @@ Phase 6.3-A brought Go Authentication implementations into complete 1:1 parity w
 - `GET /api/auth/me`: Rate limiter (60/60s), Cache-Control: no-store, exact role/capability/permission payload structure.
 - `GET /api/auth/permissions`: Exact PERMISSION_CATALOG catalog ordering across all canonical and legacy roles.
 
-Production Routing Invariant:
-- Production authentication ownership remains with **Node**.
-- `CUTOVER_TABLE = 32`, `ACTUALLY_ROUTED = 32`.
-- Go authentication endpoints operate as verified shadow implementations ready for potential future controlled cutover.
+Production Routing Invariant (Phase 6.3-B Controlled Cutover):
+- Production authentication ownership has been cut over authoritatively to **Go backend** (`:18888`).
+- `CUTOVER_TABLE = 36`, `ACTUALLY_ROUTED = 36`.
+- The Next.js reverse proxy routes `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`, and `GET /api/auth/permissions` to Go with fail-closed semantics (HTTP 502 `GO_BACKEND_UNREACHABLE` on backend failure; zero Node fallback).
 

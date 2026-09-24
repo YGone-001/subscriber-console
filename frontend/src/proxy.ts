@@ -16,14 +16,15 @@ async function forwardToGo(request: NextRequest, requestHeaders: Headers): Promi
   const backendUrl = process.env.GO_BACKEND_URL || 'http://127.0.0.1:18888';
   const goUrl = new URL(request.nextUrl.pathname + request.nextUrl.search, backendUrl);
 
+  const hasBody = request.method !== 'GET' && request.method !== 'HEAD';
+  const bodyBuffer = hasBody && request.body ? await request.arrayBuffer() : undefined;
+
   // Forward original request with cookies and body.
   // Go middleware extracts auth_token cookie independently.
   const goRequest = new Request(goUrl.toString(), {
     method: request.method,
     headers: requestHeaders,
-    body: request.method !== 'GET' && request.method !== 'HEAD' ? request.body : undefined,
-    // @ts-expect-error -- duplex is required for streaming body but not in standard types
-    duplex: 'half',
+    body: bodyBuffer,
   });
 
   let goResponse: Response;
@@ -60,7 +61,23 @@ export async function proxy(request: NextRequest) {
   const isPublicApiRoute = request.nextUrl.pathname === '/api/auth/login' || request.nextUrl.pathname === '/api/auth/logout';
   const isPublicImage = request.nextUrl.pathname.startsWith('/images/');
 
-  if (isPublicApiRoute || isPublicImage || request.nextUrl.pathname.startsWith('/_next')) {
+  if (isPublicImage || request.nextUrl.pathname.startsWith('/_next')) {
+    return NextResponse.next();
+  }
+
+  if (isPublicApiRoute) {
+    const owner = resolveRouteOwner(request.method, request.nextUrl.pathname);
+    if (owner === 'go') {
+      console.log(JSON.stringify({
+        level: 'info',
+        msg: 'cutover_forward',
+        method: request.method,
+        path: request.nextUrl.pathname,
+        owner: 'go',
+        principal: 'anonymous',
+      }));
+      return await forwardToGo(request, new Headers(request.headers));
+    }
     return NextResponse.next();
   }
 

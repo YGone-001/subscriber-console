@@ -200,7 +200,8 @@ Phase 6.1-B COMPLETE — User management CRUD lifecycle (Go backend)
 Phase 6.1-C COMPLETE — User management UI (dedicated pages and API client)
 Phase 6.1-D COMPLETE — User management integration hardening and controlled Go cutover (ACTUALLY_ROUTED = 32)
 Phase 6.2   COMPLETE — Authentication security hardening (dual rate limits, auto lockout, response privacy, JWT secret validation)
-Phase 6.3-A COMPLETE — Authentication Go contract parity foundation (1:1 behavioral/security/contract/persistence parity, no production cutover, CUTOVER_TABLE=32, ACTUALLY_ROUTED=32)
+Phase 6.3-A COMPLETE — Authentication Go contract parity foundation (1:1 behavioral/security/contract/persistence parity, shadow Go candidate, CUTOVER_TABLE=32, ACTUALLY_ROUTED=32)
+Phase 6.3-B COMPLETE — Controlled Authentication Cutover (Production owner = Go backend, CUTOVER_TABLE = 36, ACTUALLY_ROUTED = 36)
 ```
 
 ### 5.1 OCS 生产冻结基线 (OCS Production Freeze Baseline)
@@ -213,8 +214,8 @@ Managed domains:
 
 Charging Plane remains frozen and excluded.
 
-- 权威基线：Phase 5.6 生产冻结基准（历史基线 ACTUALLY_ROUTED = 26，当前生产路由 ACTUALLY_ROUTED = 32）。
-- 路由表状态：`CUTOVER_TABLE = 32`，`ACTUALLY_ROUTED = 32`。
+- 权威基线：Phase 5.6 生产冻结基准（历史基线 ACTUALLY_ROUTED = 26，当前生产路由 ACTUALLY_ROUTED = 36）。
+- 路由表状态：`CUTOVER_TABLE = 36`，`ACTUALLY_ROUTED = 36`。
 - 托管集合：`ocs_tariff_plans`、`ocs_subscribers`、`ocs_balances`。
 - 冻结规约文档：`docs/backend-migration/phase-5-6-ocs-production-freeze.md`。
 - 运维操作手册：`docs/operations/ocs-management-runbook.md`。
@@ -317,9 +318,14 @@ Phase 6.2 Authentication Security Hardening:
 
 Phase 6.3-A Authentication Go Contract Parity Foundation:
 - Complete 1:1 behavioral, HTTP contract, security, and persistence parity achieved across Node and Go authentication implementations (`POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`, `GET /api/auth/permissions`).
-- Validated via 40 comprehensive cross-engine tests in `scripts/test-auth-go-parity.mjs`.
-- No production cutover: Node remains production owner (`CUTOVER_TABLE = 32`, `ACTUALLY_ROUTED = 32`). Go endpoints are verified candidate implementations.
+- Validated via 63 comprehensive cross-engine tests in `scripts/test-auth-go-parity.mjs`.
 
+Phase 6.3-B Controlled Authentication Cutover:
+- Authoritative production ownership cutover of Authentication APIs (`POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`, `GET /api/auth/permissions`) to Go backend (`:18888`).
+- `CUTOVER_TABLE = 36`, `ACTUALLY_ROUTED = 36`.
+- Reverse proxy forwards all 4 routes to Go with `cutover_forward` telemetry.
+- Fail closed: Go backend unreachable returns HTTP 502 `GO_BACKEND_UNREACHABLE` with zero Node fallback.
+- Validated via comprehensive cross-engine tests in `scripts/test-auth-cutover.mjs` (41/41 PASS).
 
 ---
 
@@ -337,13 +343,13 @@ Preserve exact Node key/limit/window/headers/messages.
 Current write invariant:
 
 ```text
-Business-domain writes by Go = subscriber/profile CRUD + batch (Direct Execution), ACTUALLY_ROUTED=32
+Business-domain writes by Go = subscriber/profile CRUD + batch (Direct Execution), ACTUALLY_ROUTED=36
 Infrastructure writes = app_rate_limits (allowed)
 Operation logging = app_audit_logs (best-effort / non-business-gating internal operation logs; authorization denial evidence)
-OCS writes = ocs_tariff_plans CRUD + enable/disable (Direct Execution), ACTUALLY_ROUTED=32
-OCS subscriber writes = ocs_subscribers create/update-tariff/suspend/resume/terminate (Direct Execution), ACTUALLY_ROUTED=32
-OCS balance writes = ocs_balances adjust (Direct Execution), reset (permanently disabled), ACTUALLY_ROUTED=32
-User Management writes = app_users CRUD + disable + password-reset (Direct Execution), ACTUALLY_ROUTED=32
+OCS writes = ocs_tariff_plans CRUD + enable/disable (Direct Execution), ACTUALLY_ROUTED=36
+OCS subscriber writes = ocs_subscribers create/update-tariff/suspend/resume/terminate (Direct Execution), ACTUALLY_ROUTED=36
+OCS balance writes = ocs_balances adjust (Direct Execution), reset (permanently disabled), ACTUALLY_ROUTED=36
+User Management writes = app_users CRUD + disable + password-reset (Direct Execution), ACTUALLY_ROUTED=36
 ```
 
 ---
@@ -426,11 +432,11 @@ Go HTTP operations = 58
   User Management mutations = 4 (create/update/disable/password-reset)
   Auth public = 2 (login/logout)
   Health = 2 (healthz/readyz)
-Actually Routed = 32 (CUTOVER_TABLE routes)
+Actually Routed = 36 (CUTOVER_TABLE routes)
 OCS writes = 13 (tariff plan + subscriber contract + balance)
 ```
 
-CUTOVER_TABLE = 32 routes (all ACTUALLY_ROUTED=1).
+CUTOVER_TABLE = 36 routes (all ACTUALLY_ROUTED=1).
 
 Read endpoints are shadow-implemented in Go; production reads still route through Next.js unless explicitly cut over.
 
@@ -703,7 +709,7 @@ import
 policy mutation
 ```
  
-In Phase 4.6 and 4.7, subscriber CRUD and batch were cut over to Go with direct execution (ACTUALLY_ROUTED = 32). Node retains no active subscriber write paths.
+In Phase 4.6 and 4.7, subscriber CRUD and batch were cut over to Go with direct execution (ACTUALLY_ROUTED = 36). Node retains no active subscriber write paths.
 
 ---
 

@@ -76,6 +76,12 @@ export const CUTOVER_TABLE: readonly CutoverRoute[] = [
   { method: 'PATCH', path: '/api/users/{username}', owner: 'go' },
   { method: 'POST', path: '/api/users/{username}/disable', owner: 'go' },
   { method: 'POST', path: '/api/users/{username}/password-reset', owner: 'go' },
+
+  // ── Authentication (Phase 6.3-B) ─────────────────────────────
+  { method: 'POST', path: '/api/auth/login', owner: 'go' },
+  { method: 'POST', path: '/api/auth/logout', owner: 'go' },
+  { method: 'GET', path: '/api/auth/me', owner: 'go' },
+  { method: 'GET', path: '/api/auth/permissions', owner: 'go' },
 ] as const;
 
 /**

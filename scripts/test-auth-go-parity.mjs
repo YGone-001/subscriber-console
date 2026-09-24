@@ -22,7 +22,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { existsSync, unlinkSync } from 'node:fs';
 import { execSync, spawn } from 'node:child_process';
-import { SignJWT } from 'jose';
+import { SignJWT, jwtVerify } from 'jose';
 import { MongoClient } from 'mongodb';
 import { createJiti } from 'jiti';
 import nextEnv from '@next/env';
@@ -63,7 +63,8 @@ const jiti = createJiti(import.meta.url, {
   },
 });
 
-const { NextRequest } = jiti('next/server');
+const { NextRequest, NextResponse } = jiti('next/server');
+const { AccountSessionError, validateCurrentAccount } = jiti('../frontend/src/lib/accountSession.ts');
 const { POST: nodeLoginHandler } = jiti('../frontend/src/app/api/auth/login/route.ts');
 const { POST: nodeLogoutHandler } = jiti('../frontend/src/app/api/auth/logout/route.ts');
 const { GET: nodeMeHandler } = jiti('../frontend/src/app/api/auth/me/route.ts');
@@ -179,30 +180,46 @@ async function callNodeLogout(headers = {}) {
   return { status: res.status, headers: res.headers, cookies: res.cookies, body: json };
 }
 
+async function runNodeAuth(token, reqHeaders) {
+  if (!token) {
+    const res = NextResponse.json({ error: 'Unauthorized', code: 'AUTH_INVALID_TOKEN' }, { status: 401 });
+    res.headers.set('Cache-Control', 'no-store');
+    return { ok: false, status: 401, headers: res.headers, body: { error: 'Unauthorized', code: 'AUTH_INVALID_TOKEN' } };
+  }
+  try {
+    const { payload } = await jwtVerify(token, getJwtSecretKey(), { algorithms: ['HS256'], requiredClaims: ['exp'] });
+    const account = await validateCurrentAccount({ username: payload.username, role: payload.role, sv: payload.sv });
+    const forwardedHeaders = new Headers(reqHeaders);
+    forwardedHeaders.set('x-user', account.username);
+    forwardedHeaders.set('x-user-role', account.role);
+    forwardedHeaders.set('x-user-id', account.userId);
+    forwardedHeaders.set('x-user-session-version', String(account.sessionVersion));
+    return { ok: true, forwardedHeaders };
+  } catch (error) {
+    const code = error instanceof AccountSessionError ? error.code : 'AUTH_INVALID_TOKEN';
+    const isAuthError = error instanceof AccountSessionError || (error instanceof Error && error.name.startsWith('JWT')) || (error instanceof Error && error.name.startsWith('JWS'));
+    if (!isAuthError) {
+      const res = NextResponse.json({ error: 'Authentication temporarily unavailable', code: 'AUTH_UNAVAILABLE' }, { status: 503 });
+      res.headers.set('Cache-Control', 'no-store');
+      return { ok: false, status: 503, headers: res.headers, body: { error: 'Authentication temporarily unavailable', code: 'AUTH_UNAVAILABLE' } };
+    }
+    const res = NextResponse.json({ error: 'Unauthorized', code }, { status: 401 });
+    res.headers.set('Cache-Control', 'no-store');
+    res.cookies.delete('auth_token');
+    return { ok: false, status: 401, headers: res.headers, body: { error: 'Unauthorized', code } };
+  }
+}
+
 async function callNodeMe(token, headers = {}) {
   const reqHeaders = { 'content-type': 'application/json', ...headers };
   if (token) reqHeaders['cookie'] = `auth_token=${token}`;
-  const req = new NextRequest('http://localhost/api/auth/me', {
-    method: 'GET',
-    headers: reqHeaders,
-  });
-  const proxyRes = await proxy(req);
-  if (proxyRes.status !== 200) {
-    let json = null;
-    try { json = await proxyRes.json(); } catch {}
-    return { status: proxyRes.status, headers: proxyRes.headers, body: json };
+  const authRes = await runNodeAuth(token, reqHeaders);
+  if (!authRes.ok) {
+    return { status: authRes.status, headers: authRes.headers, body: authRes.body };
   }
-  const forwardedHeaders = new Headers(reqHeaders);
-  proxyRes.headers.forEach((val, key) => {
-    if (key.startsWith('x-middleware-request-')) {
-      forwardedHeaders.set(key.slice('x-middleware-request-'.length), val);
-    } else {
-      forwardedHeaders.set(key, val);
-    }
-  });
   const forwardedReq = new NextRequest('http://localhost/api/auth/me', {
     method: 'GET',
-    headers: forwardedHeaders,
+    headers: authRes.forwardedHeaders,
   });
   const res = await nodeMeHandler(forwardedReq);
   let json = null;
@@ -213,27 +230,13 @@ async function callNodeMe(token, headers = {}) {
 async function callNodePermissions(token, headers = {}) {
   const reqHeaders = { 'content-type': 'application/json', ...headers };
   if (token) reqHeaders['cookie'] = `auth_token=${token}`;
-  const req = new NextRequest('http://localhost/api/auth/permissions', {
-    method: 'GET',
-    headers: reqHeaders,
-  });
-  const proxyRes = await proxy(req);
-  if (proxyRes.status !== 200) {
-    let json = null;
-    try { json = await proxyRes.json(); } catch {}
-    return { status: proxyRes.status, headers: proxyRes.headers, body: json };
+  const authRes = await runNodeAuth(token, reqHeaders);
+  if (!authRes.ok) {
+    return { status: authRes.status, headers: authRes.headers, body: authRes.body };
   }
-  const forwardedHeaders = new Headers(reqHeaders);
-  proxyRes.headers.forEach((val, key) => {
-    if (key.startsWith('x-middleware-request-')) {
-      forwardedHeaders.set(key.slice('x-middleware-request-'.length), val);
-    } else {
-      forwardedHeaders.set(key, val);
-    }
-  });
   const forwardedReq = new NextRequest('http://localhost/api/auth/permissions', {
     method: 'GET',
-    headers: forwardedHeaders,
+    headers: authRes.forwardedHeaders,
   });
   const res = await nodePermissionsHandler(forwardedReq);
   let json = null;
@@ -1019,29 +1022,30 @@ async function main() {
   // -------------------------------------------------------------
   console.log('\n[12] Authentication Production-Path Ownership Invariant');
 
-  verify('CUTOVER_TABLE contains exactly 32 routes', () => {
-    assert.equal(CUTOVER_TABLE.length, 32);
+  verify('CUTOVER_TABLE contains exactly 36 routes', () => {
+    assert.equal(CUTOVER_TABLE.length, 36);
   });
 
-  verify('Zero authentication routes in CUTOVER_TABLE', () => {
+  verify('Exactly 4 authentication routes in CUTOVER_TABLE', () => {
     const authRoutes = CUTOVER_TABLE.filter((r) => r.path.startsWith('/api/auth'));
-    assert.equal(authRoutes.length, 0, `Expected 0 auth routes in CUTOVER_TABLE, found ${authRoutes.length}`);
+    assert.equal(authRoutes.length, 4, `Expected 4 auth routes in CUTOVER_TABLE, found ${authRoutes.length}`);
   });
 
-  verify('resolveRouteOwner returns "node" for all authentication routes', () => {
-    assert.equal(resolveRouteOwner('POST', '/api/auth/login'), 'node');
-    assert.equal(resolveRouteOwner('POST', '/api/auth/logout'), 'node');
-    assert.equal(resolveRouteOwner('GET', '/api/auth/me'), 'node');
-    assert.equal(resolveRouteOwner('GET', '/api/auth/permissions'), 'node');
+  verify('resolveRouteOwner returns "go" for all authentication routes', () => {
+    assert.equal(resolveRouteOwner('POST', '/api/auth/login'), 'go');
+    assert.equal(resolveRouteOwner('POST', '/api/auth/logout'), 'go');
+    assert.equal(resolveRouteOwner('GET', '/api/auth/me'), 'go');
+    assert.equal(resolveRouteOwner('GET', '/api/auth/permissions'), 'go');
   });
 
-  verify('resolveRouteOwner returns "go" for cutover routes (contrast check)', () => {
+  verify('resolveRouteOwner returns "go" for user and subscriber cutover routes', () => {
     assert.equal(resolveRouteOwner('GET', '/api/users'), 'go');
     assert.equal(resolveRouteOwner('POST', '/api/users'), 'go');
     assert.equal(resolveRouteOwner('POST', '/api/subscribers'), 'go');
   });
 
-  await verifyAsync('Zero cutover_forward events occur during real auth execution through proxy', async () => {
+  await verifyAsync('Cutover_forward events occur during real auth execution through proxy', async () => {
+    process.env.GO_BACKEND_URL = goBaseUrl;
     const interceptedLogs = [];
     const origLog = console.log;
     console.log = (...args) => {
@@ -1054,15 +1058,35 @@ async function main() {
 
     try {
       const validToken = await makeToken('admin1', 'admin', 1);
-      await callNodeLogin({ username: 'admin1', password: 'CorrectPass123!' }, { 'x-real-ip': '10.254.1.1' });
-      await callNodeLogout({ 'x-real-ip': '10.254.1.2' });
-      await callNodeMe(validToken);
-      await callNodePermissions(validToken);
+      const reqLogin = new NextRequest('http://localhost/api/auth/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-real-ip': '10.254.1.1' },
+        body: JSON.stringify({ username: 'admin1', password: 'CorrectPass123!' }),
+      });
+      await proxy(reqLogin);
+
+      const reqLogout = new NextRequest('http://localhost/api/auth/logout', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-real-ip': '10.254.1.2' },
+      });
+      await proxy(reqLogout);
+
+      const reqMe = new NextRequest('http://localhost/api/auth/me', {
+        method: 'GET',
+        headers: { 'content-type': 'application/json', cookie: `auth_token=${validToken}` },
+      });
+      await proxy(reqMe);
+
+      const reqPerm = new NextRequest('http://localhost/api/auth/permissions', {
+        method: 'GET',
+        headers: { 'content-type': 'application/json', cookie: `auth_token=${validToken}` },
+      });
+      await proxy(reqPerm);
 
       assert.equal(
         interceptedLogs.length,
-        0,
-        `Expected 0 cutover_forward events for auth routes, but intercepted: ${JSON.stringify(interceptedLogs)}`
+        4,
+        `Expected 4 cutover_forward events for auth routes, but intercepted: ${JSON.stringify(interceptedLogs)}`
       );
     } finally {
       console.log = origLog;

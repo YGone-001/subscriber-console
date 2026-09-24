@@ -66,7 +66,7 @@ Approval workflow removed from business execution path. Authorization and operat
 - 删除策略：不硬删除用户，使用 `status=disabled`（保留操作溯源能力）。
 - 认证链：`auth_token` cookie → HS256 JWT → `app_users` 校验 → Principal；Node 与 Go 独立验签。
 - 禁止引入：IAM 框架、OAuth、SSO、LDAP、MFA、多租户隔离、策略引擎。
-- 禁止触碰：OCS 业务逻辑、`CUTOVER_TABLE`、`ACTUALLY_ROUTED = 32`、charging plane。
+- 禁止触碰：OCS 业务逻辑、charging plane。
 
 - 运维模型文档：
 - `docs/operations/authentication-model.md`
@@ -80,7 +80,7 @@ Approval workflow removed from business execution path. Authorization and operat
 - 管理员解锁 (Admin Unlock): 仅管理员可通过 Go 用户管理 API (`PATCH /api/users/{username}`) 解锁，恢复 `status="active"`, `locked=false`，清空锁定元数据与重置 `failedLoginAttempts=0`，并递增 `sessionVersion` 撤销历史会话。
 - 末位管理员保护 (Last Active Admin Protection): 严禁自动锁定或手动锁定/禁用系统中最后一个处于激活状态的管理员（返回 HTTP 409 `LAST_ACTIVE_ADMIN`）。
 - 密钥与会话安全 (Secret & Cookie Hardening): Node 与 Go 启动时强校验 `JWT_SECRET`（>= 32 UTF-8 字节，禁止弱占位符，不符则拒绝启动）；Cookie 属性强绑定 `HttpOnly=true`, `SameSite=Lax`, HTTPS 下强制 `Secure=true`；敏感认证响应强制 `Cache-Control: no-store`。
-- Go 认证契约对齐基线 (Phase 6.3-A Parity): Go 后端认证接口 (`/api/auth/login`, `/api/auth/logout`, `/api/auth/me`, `/api/auth/permissions`) 全面达成与 Node 端 1:1 行为与数据契约对齐；保持生产路由不变（Node 仍为生产所有者，`CUTOVER_TABLE = 32`, `ACTUALLY_ROUTED = 32`）。
+- Go 认证生产接管基线 (Phase 6.3-B Cutover): Go 后端认证接口 (`/api/auth/login`, `/api/auth/logout`, `/api/auth/me`, `/api/auth/permissions`) 全面接管生产所有权，Next.js 反向代理严格转发 (`CUTOVER_TABLE = 36`, `ACTUALLY_ROUTED = 36`)。
 
 
 长期演进：
@@ -139,7 +139,7 @@ Charging Plane remains frozen and excluded.
 - 资费计划 (`ocs_tariff_plans`, `/ocs/tariffs`)、签约合同 (`ocs_subscribers`, `/ocs/contracts`)、余额管理 (`ocs_balances`, `/ocs/balances`) 生产基线永久冻结。
 - 严禁向 OCS 管理平面添加新业务能力或重新设计架构。
 - 严禁引入或耦合运行时计费面实体（`ocs_sessions`, `ocs_reservations`, `ocs_usage_records`, `ocs_events`, `ocs_config`, Gy/Ro/CCR/CCA 协议栈）。
-- 路由表状态：`CUTOVER_TABLE = 32`, `ACTUALLY_ROUTED = 32`（OCS 历史基线为 26）。
+- 路由表状态：`CUTOVER_TABLE = 36`, `ACTUALLY_ROUTED = 36`（OCS 历史基线为 26，用户管理基线为 32）。
 
 ## 3. 技术栈
 

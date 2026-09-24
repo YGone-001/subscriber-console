@@ -11,7 +11,7 @@ Target Components: Next.js Frontend (:13333), Go Backend (:18888), MongoDB (`xcl
 The **OCS Management Plane** governs administrative operations for commercial telecommunication offerings, subscriber billing contracts, and quota balances. It operates strictly separated from the runtime **Charging Plane** (Gy/Ro/CCR/Diameter rating and session management).
 
 ### Operational Invariants
-1. **Single-Writer Production Invariant**: All mutations are executed authoritatively by Go backend (`:18888`). The Next.js reverse proxy routes requests strictly according to `CUTOVER_TABLE` (`ACTUALLY_ROUTED = 32`). Node fallback is disabled.
+1. **Single-Writer Production Invariant**: All mutations are executed authoritatively by Go backend (`:18888`). The Next.js reverse proxy routes requests strictly according to `CUTOVER_TABLE` (`ACTUALLY_ROUTED = 36`). Node fallback is disabled.
 2. **Canonical RBAC & Direct Execution**:
    - `admin`: System administration, user management, and direct business mutations.
    - `operator`: Core operational mutations (subscribers, balances, profiles, tariffs, rating) execute directly without approval. No user administration.
@@ -32,7 +32,7 @@ Operator / Admin Browser
            ▼
 Next.js Reverse Proxy (frontend/src/proxy.ts)
    - Inspects auth token cookie (JWT)
-   - Matches route against CUTOVER_TABLE (ACTUALLY_ROUTED = 32)
+   - Matches route against CUTOVER_TABLE (ACTUALLY_ROUTED = 36)
    - Appends X-Request-ID, X-Actor-ID, X-Actor-Role
    - Dispatches to Go backend (:18888)
            │
@@ -237,4 +237,4 @@ db.app_audit_logs.find({
 
 The OCS Management Plane is in permanent maintenance mode.  
 No further architectural modifications, new management routes, or Charging Plane couplings are permitted.  
-Production routing invariant `ACTUALLY_ROUTED = 32` is strictly maintained.
+Production routing invariant `ACTUALLY_ROUTED = 36` is strictly maintained.

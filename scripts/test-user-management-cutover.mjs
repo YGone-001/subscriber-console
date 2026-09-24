@@ -5,7 +5,7 @@
  * Verifies:
  * 1. All six canonical User Management routes resolve to owner=go
  * 2. No duplicate METHOD+PATH entries in CUTOVER_TABLE
- * 3. CUTOVER_TABLE = 32, ACTUALLY_ROUTED = 32
+ * 3. CUTOVER_TABLE = 36, ACTUALLY_ROUTED = 36
  * 4. Frontend API client uses dedicated canonical endpoints
  * 5. Go backend registers all six canonical routes
  * 6. No frontend owner-specific branching
@@ -58,13 +58,13 @@ for (const route of userMgmtRoutes) {
   });
 }
 
-verify('CUTOVER_TABLE = 32', () => {
-  assert.equal(CUTOVER_TABLE.length, 32, `found ${CUTOVER_TABLE.length}`);
+verify('CUTOVER_TABLE = 36', () => {
+  assert.equal(CUTOVER_TABLE.length, 36, `found ${CUTOVER_TABLE.length}`);
 });
 
-verify('ACTUALLY_ROUTED = 32', () => {
+verify('ACTUALLY_ROUTED = 36', () => {
   const goRoutes = CUTOVER_TABLE.filter((r) => r.owner === 'go');
-  assert.equal(goRoutes.length, 32, `found ${goRoutes.length}`);
+  assert.equal(goRoutes.length, 36, `found ${goRoutes.length}`);
 });
 
 verify('no duplicate METHOD+PATH entries', () => {
@@ -88,8 +88,8 @@ const resolveCases = [
   { method: 'POST', pathname: '/api/users/alice/password-reset', expected: 'go' },
   { method: 'GET', pathname: '/api/users', expected: 'go' },
   { method: 'POST', pathname: '/api/auth/users', expected: 'node' },
-  { method: 'GET', pathname: '/api/auth/me', expected: 'node' },
-  { method: 'POST', pathname: '/api/auth/login', expected: 'node' },
+  { method: 'GET', pathname: '/api/auth/me', expected: 'go' },
+  { method: 'POST', pathname: '/api/auth/login', expected: 'go' },
 ];
 
 for (const tc of resolveCases) {
@@ -222,4 +222,4 @@ verify('frontend API client never exposes passwordHash', () => {
 
 // ── Summary ─────────────────────────────────────────────────────────────────
 console.log(`\nAll ${passed} cutover checks passed.`);
-console.log('CUTOVER_TABLE=32 ACTUALLY_ROUTED=32');
+console.log('CUTOVER_TABLE=36 ACTUALLY_ROUTED=36');

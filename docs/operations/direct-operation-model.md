@@ -32,8 +32,8 @@ Historical `app_approvals` data is not dropped. It is left untouched for retenti
 
 ## Invariants
 
-- `CUTOVER_TABLE = 32`.
-- `ACTUALLY_ROUTED = 32`; every cutover route is owned by Go.
+- `CUTOVER_TABLE = 36`.
+- `ACTUALLY_ROUTED = 36`; every cutover route is owned by Go.
 - Go remains the authoritative writer for cutover operations.
 - Runtime charging-plane boundaries are unchanged.
 - Direct writes preserve validation, CAS/precondition checks, idempotency where applicable, and safe before/after operation-log snapshots.

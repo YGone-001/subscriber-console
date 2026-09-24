@@ -4,8 +4,8 @@ import { resolveRouteOwner, CUTOVER_TABLE } from '../src/lib/cutover-routing.ts'
 
 describe('cutover-routing', () => {
   describe('CUTOVER_TABLE', () => {
-    it('contains exactly 32 cutover routes', () => {
-      assert.equal(CUTOVER_TABLE.length, 32);
+    it('contains exactly 36 cutover routes', () => {
+      assert.equal(CUTOVER_TABLE.length, 36);
     });
 
     it('Pilot A: POST /api/profiles/{name}/versions/{versionId}/restore is owned by Go', () => {
@@ -217,6 +217,38 @@ describe('cutover-routing', () => {
       assert.ok(reset, 'OCS Balance Reset must exist');
       assert.equal(reset.owner, 'go');
     });
+
+    it('Phase 6.3-B: POST /api/auth/login is owned by Go', () => {
+      const login = CUTOVER_TABLE.find(
+        (r) => r.path === '/api/auth/login' && r.method === 'POST'
+      );
+      assert.ok(login, 'Auth Login must exist');
+      assert.equal(login.owner, 'go');
+    });
+
+    it('Phase 6.3-B: POST /api/auth/logout is owned by Go', () => {
+      const logout = CUTOVER_TABLE.find(
+        (r) => r.path === '/api/auth/logout' && r.method === 'POST'
+      );
+      assert.ok(logout, 'Auth Logout must exist');
+      assert.equal(logout.owner, 'go');
+    });
+
+    it('Phase 6.3-B: GET /api/auth/me is owned by Go', () => {
+      const me = CUTOVER_TABLE.find(
+        (r) => r.path === '/api/auth/me' && r.method === 'GET'
+      );
+      assert.ok(me, 'Auth Me must exist');
+      assert.equal(me.owner, 'go');
+    });
+
+    it('Phase 6.3-B: GET /api/auth/permissions is owned by Go', () => {
+      const perm = CUTOVER_TABLE.find(
+        (r) => r.path === '/api/auth/permissions' && r.method === 'GET'
+      );
+      assert.ok(perm, 'Auth Permissions must exist');
+      assert.equal(perm.owner, 'go');
+    });
   });
 
   describe('resolveRouteOwner - Go-owned routes', () => {
@@ -334,6 +366,22 @@ describe('cutover-routing', () => {
         resolveRouteOwner('POST', '/api/ocs/balances/208930000000001/reset'),
         'go'
       );
+    });
+
+    it('routes POST /api/auth/login to Go', () => {
+      assert.equal(resolveRouteOwner('POST', '/api/auth/login'), 'go');
+    });
+
+    it('routes POST /api/auth/logout to Go', () => {
+      assert.equal(resolveRouteOwner('POST', '/api/auth/logout'), 'go');
+    });
+
+    it('routes GET /api/auth/me to Go', () => {
+      assert.equal(resolveRouteOwner('GET', '/api/auth/me'), 'go');
+    });
+
+    it('routes GET /api/auth/permissions to Go', () => {
+      assert.equal(resolveRouteOwner('GET', '/api/auth/permissions'), 'go');
     });
   });
 

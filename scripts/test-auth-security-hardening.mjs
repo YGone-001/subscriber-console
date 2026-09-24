@@ -157,7 +157,7 @@ async function callMe(token, headers = {}) {
     headers: reqHeaders,
   });
   const proxyRes = await proxy(req);
-  if (proxyRes.status !== 200) {
+  if (proxyRes.status !== 200 || !proxyRes.headers.get('x-middleware-next')) {
     let json = null;
     try { json = await proxyRes.json(); } catch {}
     return { status: proxyRes.status, headers: proxyRes.headers, body: json };
@@ -227,6 +227,7 @@ async function main() {
   }
   assert(goReady, 'Go backend server failed to become ready');
   const goBaseUrl = `http://127.0.0.1:${goPort}`;
+  process.env.GO_BACKEND_URL = goBaseUrl;
 
   // Helper for calling Go User Management
   async function callGoUserMgmt(method, pathStr, token, body) {

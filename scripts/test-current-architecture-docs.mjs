@@ -30,7 +30,7 @@ for (const pattern of forbiddenInRunbook) {
   );
 }
 
-assert.ok(runbook.includes('ACTUALLY_ROUTED = 32'), 'Runbook must document ACTUALLY_ROUTED = 32');
+assert.ok(runbook.includes('ACTUALLY_ROUTED = 36'), 'Runbook must document ACTUALLY_ROUTED = 36');
 assert.ok(runbook.includes('Canonical RBAC & Direct Execution'), 'Runbook must document Canonical RBAC & Direct Execution');
 assert.ok(runbook.includes('xcloud_ops.app_audit_logs'), 'Runbook must reference app_audit_logs');
 assert.ok(runbook.includes('app_approvals'), 'Runbook must mention historical app_approvals status');
@@ -62,8 +62,8 @@ for (const pattern of forbiddenInAgents) {
 }
 
 assert.ok(agents.includes('Best-effort / non-business-gating operation logging'), 'AGENTS.md must document best-effort operation logging');
-assert.ok(agents.includes('ACTUALLY_ROUTED = 32'), 'AGENTS.md must document ACTUALLY_ROUTED = 32');
-assert.ok(agents.includes('CUTOVER_TABLE = 32'), 'AGENTS.md must document CUTOVER_TABLE = 32');
+assert.ok(agents.includes('ACTUALLY_ROUTED = 36'), 'AGENTS.md must document ACTUALLY_ROUTED = 36');
+assert.ok(agents.includes('CUTOVER_TABLE = 36'), 'AGENTS.md must document CUTOVER_TABLE = 36');
 
 // 4. CLAUDE.md
 const claudePath = path.join(ROOT, 'CLAUDE.md');

@@ -401,12 +401,19 @@ Phase 6.3-A established complete 1:1 parity between Node and Go authentication i
    - Account lockout at 10 consecutive failed attempts (single sessionVersion increment; protected last active admin).
    - Permissive cookie clearance (`Max-Age=0`).
    - Deep equality of permissions catalog ordering across all 7 canonical and legacy roles.
-2. **Production Routing Invariant**:
-   - `CUTOVER_TABLE = 32`, `ACTUALLY_ROUTED = 32` unchanged.
-   - Production authentication owner remains Node.
-   - Go authentication implementations act as verified shadow endpoints.
+### 13.2 Controlled Authentication Production Cutover (Phase 6.3-B)
+
+Phase 6.3-B cuts over production authentication ownership authoritatively from Node to the Go backend (`:18888`):
+1. **Cutover Inventory Expansion**:
+   - `CUTOVER_TABLE` expanded from 32 to 36 routes.
+   - `ACTUALLY_ROUTED = 36` (all 36 routes owned by Go).
+   - Added routes: `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`, `GET /api/auth/permissions`.
+2. **Reverse Proxy Routing**:
+   - Next.js reverse proxy (`proxy.ts`) inspects route ownership via `resolveRouteOwner`.
+   - All 4 authentication routes forward to Go with `cutover_forward` telemetry.
+   - Fail-closed contract: unreachable Go backend returns HTTP 502 `GO_BACKEND_UNREACHABLE`; absolutely NO fallback to Node.
 3. **Verification**:
-   - Rigorous side-by-side integration suite `scripts/test-auth-go-parity.mjs` (40 checks).
+   - Comprehensive test suite `scripts/test-auth-cutover.mjs` (41 checks covering routing, unavailable contract, login/logout/me/permissions matrices, rate limiting, and single-writer invariants).
 
 ## 14. Hard Prohibitions
 
@@ -421,8 +428,6 @@ DO NOT:
 - introduce multi-factor authentication
 - introduce tenant isolation
 - modify OCS business logic
-- modify `CUTOVER_TABLE`
-- modify `ACTUALLY_ROUTED = 32`
 - modify charging plane collections
 
 ## 15. Acceptance Gates
@@ -446,4 +451,5 @@ Validation:
 
 - `npm test`, `npm run lint`, `npm run typecheck`, `npm run build`
 - `go test ./...`, `go build ./...`
-- `ACTUALLY_ROUTED = 32` unchanged
+- `CUTOVER_TABLE = 36`, `ACTUALLY_ROUTED = 36` production baseline verified
+

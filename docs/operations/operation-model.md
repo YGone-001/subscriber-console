@@ -119,7 +119,7 @@ In alignment with direct operation semantics:
 
 ## 5. System Invariants & Guardrails
 
-- **ACTUALLY_ROUTED = 32**: The production cutover routing inventory is strictly preserved. All 32 cutover endpoints are owned authoritatively by Go.
+- **ACTUALLY_ROUTED = 36**: The production cutover routing inventory is strictly preserved. All 36 cutover endpoints are owned authoritatively by Go.
 - **Single-Writer Ownership**: Go backend remains the single authoritative writer for OCS Management domains (`ocs_tariff_plans`, `ocs_subscribers`, `ocs_balances`).
 - **Charging Plane Boundary**: Runtime charging collections (`ocs_sessions`, `ocs_reservations`, `ocs_usage_records`, `ocs_events`, `ocs_config`) and Diameter interfaces remain completely frozen and isolated from console operations.
 - **Non-Gating Audit Invariant**: Operation-log persistence failures never roll back a mutation or replace its success response. `/api/system/audit/*` remains dedicated to data-integrity diagnostics and healing.

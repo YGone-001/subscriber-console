@@ -41,8 +41,8 @@ assert.match(baseline, /\*\*46 non-GET/);
 
 const jiti = createJiti(import.meta.url);
 const { CUTOVER_TABLE } = jiti(resolve(root, 'frontend/src/lib/cutover-routing.ts'));
-assert.equal(CUTOVER_TABLE.length, 32, 'CUTOVER_TABLE must be exactly 32');
-assert.equal(CUTOVER_TABLE.filter((route) => route.owner === 'go').length, 32, 'ACTUALLY_ROUTED must be exactly 32');
+assert.equal(CUTOVER_TABLE.length, 36, 'CUTOVER_TABLE must be exactly 36');
+assert.equal(CUTOVER_TABLE.filter((route) => route.owner === 'go').length, 36, 'ACTUALLY_ROUTED must be exactly 36');
 
 // Verify no duplicate METHOD+PATH entries
 const seen = new Set();
@@ -68,6 +68,20 @@ for (const key of userMgmtRoutes) {
   assert.equal(entry.owner, 'go', `cutover route ${key} must be owner=go`);
 }
 
+// Verify Authentication canonical routes are present and owned by go
+const authRoutes = [
+  'POST /api/auth/login',
+  'POST /api/auth/logout',
+  'GET /api/auth/me',
+  'GET /api/auth/permissions',
+];
+for (const key of authRoutes) {
+  const [method, path] = key.split(' ');
+  const entry = CUTOVER_TABLE.find((r) => r.method === method && r.path === path);
+  assert.ok(entry, `missing cutover route: ${key}`);
+  assert.equal(entry.owner, 'go', `cutover route ${key} must be owner=go`);
+}
+
 console.log('Migration inventory validation passed.');
 console.log(`Routes=${routes.length} Operations=${total} GET=${counts.GET} POST=${counts.POST} PUT=${counts.PUT} PATCH=${counts.PATCH} DELETE=${counts.DELETE}`);
-console.log('CUTOVER_TABLE=32 ACTUALLY_ROUTED=32');
+console.log('CUTOVER_TABLE=36 ACTUALLY_ROUTED=36');
