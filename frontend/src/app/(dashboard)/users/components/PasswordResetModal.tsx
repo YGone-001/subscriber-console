@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useI18n } from "@/components/I18nProvider";
 import { PasswordField } from "@/components/iam/PasswordField";
 import { ConfirmActionPanel } from "@/components/OperationFeedback";
-import { isPasswordStrong } from "@/lib/security";
+import { executePasswordReset } from "@/lib/auth-ui";
 import { PasswordStrengthBar } from "./PasswordStrengthBar";
 import styles from "./UserDrawer.module.css";
 
@@ -41,22 +41,18 @@ export function PasswordResetModal({ username, open, onClose, onSuccess, onReset
   };
 
   const handleSubmit = async () => {
-    if (!isPasswordStrong(password, username)) {
-      setError(t("users_err_password"));
-      return;
-    }
-    if (password !== confirmPassword) {
-      setError(t("users_err_password_match"));
-      return;
-    }
     setSaving(true);
-    setError("");
     try {
-      await onReset(username, password);
-      reset();
-      onSuccess();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t("users_err_update"));
+      await executePasswordReset({
+        username,
+        password,
+        confirmPassword,
+        onReset,
+        onSuccess,
+        setError,
+        resetFields: reset,
+        t,
+      });
     } finally {
       setSaving(false);
     }

@@ -123,14 +123,14 @@ export default function UserDetailPage() {
   };
 
   const handlePasswordReset = async (targetUsername: string, password: string, reason?: string) => {
-    try {
-      await usersApi.resetPassword(targetUsername, password, reason);
-      setShowResetModal(false);
-      setNotice(t("users_msg_updated"));
-      await mutate();
-    } catch (err) {
-      setFormError(mapUserManagementError(err, t));
-    }
+    await usersApi.resetPassword(targetUsername, password, reason);
+    await mutate();
+  };
+
+  const handlePasswordResetSuccess = () => {
+    setShowResetModal(false);
+    setNotice(t("users_msg_updated"));
+    setFormError("");
   };
 
   if (error) {
@@ -365,7 +365,7 @@ export default function UserDetailPage() {
         username={username}
         open={showResetModal}
         onClose={() => setShowResetModal(false)}
-        onSuccess={() => setNotice(t("users_msg_updated"))}
+        onSuccess={handlePasswordResetSuccess}
         onReset={handlePasswordReset}
       />
     </div>
