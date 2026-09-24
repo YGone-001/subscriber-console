@@ -203,6 +203,7 @@ Phase 6.2   COMPLETE — Authentication security hardening (dual rate limits, au
 Phase 6.3-A COMPLETE — Authentication Go contract parity foundation (1:1 behavioral/security/contract/persistence parity, shadow Go candidate, CUTOVER_TABLE=32, ACTUALLY_ROUTED=32)
 Phase 6.3-B COMPLETE — Controlled Authentication Cutover (Production owner = Go backend, CUTOVER_TABLE = 36, ACTUALLY_ROUTED = 36)
 Phase 6.4   COMPLETE — Authentication & User Management UI Final Integration (UX hardening, rate limit cooldown, privacy, status lifecycle, security state)
+Phase 7.0   COMPLETE — Alerts, Notifications & Platform Services Architecture Freeze (Current-State Reconciliation, Contract Inventory, and Migration Planning)
 ```
 
 ### 5.1 OCS 生产冻结基线 (OCS Production Freeze Baseline)
@@ -303,7 +304,7 @@ Canonical User Management routes (production owner = Go):
 - `POST /api/users/{username}/disable`
 - `POST /api/users/{username}/password-reset`
 Legacy compatibility read aliases: `/api/auth/users`, `/api/auth/users/{username}`.
-Login/logout = Node owner.
+Login/logout = Go owner (Phase 6.3-B cutover).
 
 Phase 6.2 Authentication Security Hardening:
 - Dual rate limiting: IP-scoped request limiter (`login:<ip>`, 5/60s) + Account-scoped failed-login limiter (`login-user:<normalized-username>`, 10 failed attempts / 300s, peeked pre-auth, consumed only on failed authentication; successful logins do not consume budget).
@@ -500,14 +501,27 @@ Phase 5.2 added:
 - Capability: `ocs.tariff.write`
 - Error codes: TARIFF_PLAN_EXISTS, TARIFF_PLAN_NOT_FOUND, DEFAULT_TARIFF_PLAN_PROTECTED, TARIFF_PLAN_DISABLE_IN_USE, INVALID_PLAN_ID
 
-Next: Phase 5.3+ OCS subscriber/balance governance per `docs/operations/todo.md`.
-
 ## 10. Removed Governance Surfaces (Phase 5.7-C)
 
 The following governance endpoints and surfaces were retired in Phase 5.7-C:
 - `/api/approvals/*` (all approval read, decision, and export routes)
 - `/api/audit/*` (user-facing audit console list, detail, export routes; note `/api/system/audit/*` remains for diagnostics and healing)
 - Approval and Audit UI console pages and navigation entries
+
+---
+
+## 10.1 Platform Services Architecture Freeze (Phase 7.0)
+
+Architecture freeze: `docs/architecture/phase-7-platform-services-architecture.md`.
+Platform Services scope (11 candidate endpoints):
+- Alerts: `GET /api/alerts`, `POST /api/alerts/acknowledge`, `POST /api/alerts/workflow`
+- Notification streaming: `GET /api/notifications/stream` (SSE, ping heartbeat, zero external broker)
+- System health: `GET /api/system/health`, `GET /api/system/mongo/health` (distinct from `/healthz` and `/readyz`)
+- System integrity: `GET /api/system/audit/status`, `POST /api/system/audit/scan` (read-only), `POST /api/system/audit/heal`, `POST /api/system/audit/batch-heal`
+- Analytics platform action: `POST /api/analytics/init` (read-only on-demand calculation)
+
+All 11 candidate endpoints remain currently owned by Next.js/Node runtime.
+Production routing baseline: `CUTOVER_TABLE = 36`, `ACTUALLY_ROUTED = 36`.
 
 ---
 

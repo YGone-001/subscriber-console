@@ -162,6 +162,9 @@ jobs:
       - name: Authentication & User Management UI integration
         run: node scripts/test-auth-user-ui-integration.mjs
 
+      - name: Platform services architecture freeze
+        run: node scripts/test-phase-7-architecture-freeze.mjs
+
   user-management-e2e:
     name: User management HTTP integration
     runs-on: ubuntu-latest

@@ -146,12 +146,12 @@
 
 | API | Method | Path | Current Owner | Future Owner | Shadow Allowed | Notes |
 |-----|--------|------|---------------|--------------|----------------|-------|
-| Alert acknowledge | POST | `/api/alerts/acknowledge` | Next.js | Go | NEVER | UNKNOWN governance |
-| Alert workflow | POST | `/api/alerts/workflow` | Next.js | Go | NEVER | UNKNOWN governance |
-| Analytics init | POST | `/api/analytics/init` | Next.js | Go | NEVER | UNKNOWN governance |
-| System heal | POST | `/api/system/audit/heal` | Next.js | Go | NEVER | Creates CHG |
-| System batch heal | POST | `/api/system/audit/batch-heal` | Next.js | Go | NEVER | Creates CHG |
-| System scan | POST | `/api/system/audit/scan` | Next.js | Go | NEVER | Read-only despite POST |
+| Alert acknowledge | POST | `/api/alerts/acknowledge` | Next.js | Go | NEVER | Direct execution (app_alerts) |
+| Alert workflow | POST | `/api/alerts/workflow` | Next.js | Go | NEVER | Direct execution (app_alerts) |
+| Analytics init | POST | `/api/analytics/init` | Next.js | Go | NEVER | Semantic read-only on-demand metrics |
+| System heal | POST | `/api/system/audit/heal` | Next.js | Go | NEVER | Direct execution (system_heal) |
+| System batch heal | POST | `/api/system/audit/batch-heal` | Next.js | Go | NEVER | Direct execution (system_heal) |
+| System scan | POST | `/api/system/audit/scan` | Next.js | Go | NEVER | Semantic read-only cursor scanner |
 
 ### Phase 8 — Remove Next.js Backend
 
