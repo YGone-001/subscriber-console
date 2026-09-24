@@ -117,11 +117,16 @@ export async function proxy(request: NextRequest) {
   } catch (error) {
     const code = error instanceof AccountSessionError ? error.code : 'AUTH_INVALID_TOKEN';
     const isAuthError = error instanceof AccountSessionError || (error instanceof Error && error.name.startsWith('JWT')) || (error instanceof Error && error.name.startsWith('JWS'));
-    if (!isAuthError) return NextResponse.json({ error: 'Authentication temporarily unavailable', code: 'AUTH_UNAVAILABLE' }, { status: 503 });
+    if (!isAuthError) {
+      const res = NextResponse.json({ error: 'Authentication temporarily unavailable', code: 'AUTH_UNAVAILABLE' }, { status: 503 });
+      res.headers.set('Cache-Control', 'no-store');
+      return res;
+    }
     if (isAuthRoute) return NextResponse.next();
 
     if (isApiRoute) {
       const response = NextResponse.json({ error: 'Unauthorized', code }, { status: 401 });
+      response.headers.set('Cache-Control', 'no-store');
       response.cookies.delete('auth_token');
       return response;
     }

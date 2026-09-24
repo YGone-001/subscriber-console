@@ -6,9 +6,12 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
   const auth = requireAuth(request);
-  if (!auth.ok) return auth.response;
+  if (!auth.ok) {
+    auth.response.headers.set('Cache-Control', 'no-store');
+    return auth.response;
+  }
 
-  return NextResponse.json({
+  const res = NextResponse.json({
     username: auth.auth.user,
     role: auth.auth.role,
     databaseRole: auth.auth.role,
@@ -18,4 +21,6 @@ export async function GET(request: Request) {
     governanceRole: normalizeGovernanceRole(auth.auth.role),
     permissions: permissionsFor({ role: auth.auth.role }),
   });
+  res.headers.set('Cache-Control', 'no-store');
+  return res;
 }

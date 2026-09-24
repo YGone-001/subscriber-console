@@ -29,7 +29,7 @@ func (h *Handler) AuthMe(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	p := auth.PrincipalFromContext(r.Context())
 	if p == nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Unauthorized", "code": "UNAUTHORIZED"})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Unauthorized", "code": "AUTH_INVALID_TOKEN"})
 		return
 	}
 
@@ -70,9 +70,10 @@ func (h *Handler) AuthMe(w http.ResponseWriter, r *http.Request) {
 
 // AuthPermissions handles GET /api/auth/permissions.
 func (h *Handler) AuthPermissions(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	p := auth.PrincipalFromContext(r.Context())
 	if p == nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Unauthorized", "code": "UNAUTHORIZED"})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Unauthorized", "code": "AUTH_INVALID_TOKEN"})
 		return
 	}
 

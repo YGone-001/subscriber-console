@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -22,6 +23,12 @@ const (
 	dummyBcryptHash       = "$2b$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy"
 )
 
+// RateLimiter abstracts rate limiting for authentication handler.
+type RateLimiter interface {
+	Check(ctx context.Context, identifier string, limit int, windowSeconds int) (*ratelimit.Result, error)
+	Peek(ctx context.Context, identifier string, limit int, windowSeconds int) (*ratelimit.Result, error)
+}
+
 // AuditRecorder defines the interface for recording authentication audit events.
 type AuditRecorder interface {
 	RecordAuthEvent(action, result, actorType, username, role, ip, userAgent string, metadata map[string]interface{})
@@ -30,14 +37,14 @@ type AuditRecorder interface {
 // Handler serves authentication endpoints: Login, Logout, Me.
 type Handler struct {
 	lookup  UserLookup
-	limiter *ratelimit.Limiter
+	limiter RateLimiter
 	audit   AuditRecorder
 	secret  []byte
 	logger  *slog.Logger
 }
 
 // NewHandler creates an authentication handler with rate limiting and audit logging.
-func NewHandler(lookup UserLookup, limiter *ratelimit.Limiter, audit AuditRecorder, secret []byte, logger *slog.Logger) *Handler {
+func NewHandler(lookup UserLookup, limiter RateLimiter, audit AuditRecorder, secret []byte, logger *slog.Logger) *Handler {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -79,6 +86,13 @@ func writeInvalidCredentials(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusUnauthorized)
 	w.Write([]byte(`{"error":"Invalid credentials"}`))
+}
+
+func writeInternalAuthError(w http.ResponseWriter) {
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusInternalServerError)
+	w.Write([]byte(`{"error":"Internal Server Error"}`))
 }
 
 // Login handles POST /api/auth/login.
@@ -153,7 +167,12 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 4. Credential verification with constant-shape bcrypt work
-	storedUser, _ := h.lookup.GetUserByUsername(r.Context(), username)
+	storedUser, err := h.lookup.GetUserByUsername(r.Context(), username)
+	if err != nil {
+		h.logger.Error("user lookup failed", "username", username, "error", err)
+		writeInternalAuthError(w)
+		return
+	}
 	hashToVerify := dummyBcryptHash
 	if storedUser != nil && storedUser.PasswordHash != "" {
 		hashToVerify = storedUser.PasswordHash
@@ -168,7 +187,12 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if storedUser != nil && storedUser.Status == "active" && !storedUser.Locked {
-			locked, attempts, _ := h.lookup.RecordFailedLogin(r.Context(), username)
+			locked, attempts, err := h.lookup.RecordFailedLogin(r.Context(), username)
+			if err != nil {
+				h.logger.Error("record failed login failed", "username", username, "error", err)
+				writeInternalAuthError(w)
+				return
+			}
 			if locked && h.audit != nil {
 				h.audit.RecordAuthEvent(
 					"auth.account.locked",
@@ -193,7 +217,12 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 
 	// 6. Record successful login with race-safe atomic state check
 	current, err := h.lookup.RecordSuccessfulLogin(r.Context(), storedUser, ip)
-	if err != nil || current == nil {
+	if err != nil {
+		h.logger.Error("record successful login failed", "username", username, "error", err)
+		writeInternalAuthError(w)
+		return
+	}
+	if current == nil {
 		if h.limiter != nil {
 			_, _ = h.limiter.Check(r.Context(), "login-user:"+normalizedUsername, rateLimitUserMax, rateLimitUserWindow)
 		}
@@ -208,10 +237,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	token, err := GenerateToken(current.Username, current.Role, current.SessionVersion, h.secret)
 	if err != nil {
 		h.logger.Error("token generation failed", "username", current.Username, "error", err)
-		w.Header().Set("Cache-Control", "no-store")
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(`{"error":"Internal Server Error"}`))
+		writeInternalAuthError(w)
 		return
 	}
 

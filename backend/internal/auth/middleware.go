@@ -11,6 +11,19 @@ import (
 // CookieName is the name of the auth cookie issued by Next.js.
 const CookieName = "auth_token"
 
+func clearAuthCookie(w http.ResponseWriter, r *http.Request) {
+	isSecure := r.Header.Get("x-forwarded-proto") == "https" || r.TLS != nil
+	http.SetCookie(w, &http.Cookie{
+		Name:     CookieName,
+		Value:    "",
+		HttpOnly: true,
+		Secure:   isSecure,
+		SameSite: http.SameSiteLaxMode,
+		Path:     "/",
+		MaxAge:   -1,
+	})
+}
+
 // Middleware creates an HTTP middleware that verifies the auth_token cookie,
 // validates the JWT, and checks the session against MongoDB.
 //
@@ -38,9 +51,11 @@ func Middleware(secret []byte, validator *SessionValidator, logger *slog.Logger)
 			if err != nil {
 				code := extractErrorCode(err.Error())
 				if code == "AUTH_UNAVAILABLE" {
+					w.Header().Set("Cache-Control", "no-store")
 					response.Error(w, http.StatusServiceUnavailable, "Authentication temporarily unavailable", "AUTH_UNAVAILABLE")
 					return
 				}
+				clearAuthCookie(w, r)
 				w.Header().Set("Cache-Control", "no-store")
 				response.Error(w, http.StatusUnauthorized, "Unauthorized", code)
 				return
@@ -60,6 +75,7 @@ func Middleware(secret []byte, validator *SessionValidator, logger *slog.Logger)
 					"username", claims.Username,
 					"request_id", r.Header.Get("X-Request-ID"),
 				)
+				clearAuthCookie(w, r)
 				w.Header().Set("Cache-Control", "no-store")
 				response.Error(w, http.StatusUnauthorized, "Unauthorized", code)
 				return

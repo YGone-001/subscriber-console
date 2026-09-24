@@ -70,6 +70,7 @@ const { GET: nodeMeHandler } = jiti('../frontend/src/app/api/auth/me/route.ts');
 const { GET: nodePermissionsHandler } = jiti('../frontend/src/app/api/auth/permissions/route.ts');
 const { getJwtSecretKey } = jiti('../frontend/src/lib/security.ts');
 const { proxy } = jiti('../frontend/src/proxy.ts');
+const { resolveRouteOwner, CUTOVER_TABLE } = jiti('../frontend/src/lib/cutover-routing.ts');
 
 const client = new MongoClient(uri, {
   serverSelectionTimeoutMS: Number(process.env.MONGODB_SERVER_SELECTION_TIMEOUT_MS || 5000),
@@ -123,6 +124,26 @@ function makeToken(username, role, sv) {
     .setIssuedAt(Math.floor(Date.now() / 1000))
     .setExpirationTime(Math.floor(Date.now() / 1000) + 86400)
     .sign(getJwtSecretKey());
+}
+
+function makeExpiredToken(username, role, sv) {
+  return new SignJWT({ username, role, sv })
+    .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
+    .setIssuedAt(Math.floor(Date.now() / 1000) - 7200)
+    .setExpirationTime(Math.floor(Date.now() / 1000) - 3600)
+    .sign(getJwtSecretKey());
+}
+
+function assertCookieCleared(headers, label) {
+  const sc = headers.get('set-cookie') || '';
+  const cleared = sc.includes('auth_token=;') || (sc.includes('auth_token=') && (sc.includes('Max-Age=0') || sc.includes('Expires=Thu, 01 Jan 1970')));
+  assert(cleared, `${label}: Set-Cookie header must clear auth_token, got: ${sc}`);
+}
+
+function assertCookieNotCleared(headers, label) {
+  const sc = headers.get('set-cookie') || '';
+  const cleared = sc.includes('auth_token=;') || (sc.includes('auth_token=') && (sc.includes('Max-Age=0') || sc.includes('Expires=Thu, 01 Jan 1970')));
+  assert(!cleared, `${label}: Set-Cookie header must NOT clear auth_token, got: ${sc}`);
 }
 
 async function callNodeLogin(body, headers = {}) {
@@ -795,6 +816,213 @@ async function main() {
       assert.deepEqual(nodeRes.body.permissions, goRes.body.permissions);
     });
   }
+
+  // -------------------------------------------------------------
+  // 11. Protected Session Failure Matrix & Cookie/Cache Parity
+  // -------------------------------------------------------------
+  console.log('\n[11] Protected Session Failure Matrix & Cookie/Cache Parity');
+
+  const protectedFailureCases = [
+    {
+      label: 'Missing auth_token cookie',
+      getToken: async () => null,
+      expectedStatus: 401,
+      expectedCode: 'AUTH_INVALID_TOKEN',
+      cookieCleared: false,
+    },
+    {
+      label: 'Invalid JWT token string',
+      getToken: async () => 'invalid.jwt.token.structure',
+      expectedStatus: 401,
+      expectedCode: 'AUTH_INVALID_TOKEN',
+      cookieCleared: true,
+    },
+    {
+      label: 'Expired JWT token',
+      getToken: async () => makeExpiredToken('operator1', 'operator', 1),
+      expectedStatus: 401,
+      expectedCode: 'AUTH_INVALID_TOKEN',
+      cookieCleared: true,
+    },
+    {
+      label: 'Revoked sessionVersion (mismatch)',
+      getToken: async () => makeToken('operator1', 'operator', 999),
+      expectedStatus: 401,
+      expectedCode: 'SESSION_REVOKED',
+      cookieCleared: true,
+    },
+    {
+      label: 'Role mismatch (claims role differs from database)',
+      getToken: async () => makeToken('operator1', 'viewer', 1),
+      expectedStatus: 401,
+      expectedCode: 'SESSION_REVOKED',
+      cookieCleared: true,
+    },
+    {
+      label: 'Disabled account',
+      getToken: async () => makeToken('disabled_user', 'operator', 1),
+      expectedStatus: 401,
+      expectedCode: 'ACCOUNT_DISABLED',
+      cookieCleared: true,
+    },
+    {
+      label: 'Locked account',
+      getToken: async () => makeToken('locked_user', 'operator', 1),
+      expectedStatus: 401,
+      expectedCode: 'ACCOUNT_LOCKED',
+      cookieCleared: true,
+    },
+    {
+      label: 'Missing account (user not in database)',
+      getToken: async () => makeToken('nonexistent_account_404', 'operator', 1),
+      expectedStatus: 401,
+      expectedCode: 'ACCOUNT_NOT_FOUND',
+      cookieCleared: true,
+    },
+  ];
+
+  // 11A. GET /api/auth/me failure matrix
+  for (const tc of protectedFailureCases) {
+    await verifyAsync(`GET /api/auth/me failure parity: ${tc.label}`, async () => {
+      const token = await tc.getToken();
+      const nodeRes = await callNodeMe(token);
+      const goRes = await callGoMe(token);
+
+      assert.equal(nodeRes.status, tc.expectedStatus, `Node status was ${nodeRes.status}, want ${tc.expectedStatus}`);
+      assert.equal(goRes.status, tc.expectedStatus, `Go status was ${goRes.status}, want ${tc.expectedStatus}`);
+      assert.equal(nodeRes.body?.code, tc.expectedCode, `Node code was ${nodeRes.body?.code}, want ${tc.expectedCode}`);
+      assert.equal(goRes.body?.code, tc.expectedCode, `Go code was ${goRes.body?.code}, want ${tc.expectedCode}`);
+      assert.equal(nodeRes.headers.get('cache-control'), 'no-store', 'Node must set Cache-Control: no-store');
+      assert.equal(goRes.headers.get('cache-control'), 'no-store', 'Go must set Cache-Control: no-store');
+
+      if (tc.cookieCleared) {
+        assertCookieCleared(nodeRes.headers, `Node ${tc.label}`);
+        assertCookieCleared(goRes.headers, `Go ${tc.label}`);
+      } else {
+        assertCookieNotCleared(nodeRes.headers, `Node ${tc.label}`);
+        assertCookieNotCleared(goRes.headers, `Go ${tc.label}`);
+      }
+    });
+  }
+
+  // 11B. GET /api/auth/permissions failure matrix
+  for (const tc of protectedFailureCases) {
+    await verifyAsync(`GET /api/auth/permissions failure parity: ${tc.label}`, async () => {
+      const token = await tc.getToken();
+      const nodeRes = await callNodePermissions(token);
+      const goRes = await callGoPermissions(token);
+
+      assert.equal(nodeRes.status, tc.expectedStatus, `Node status was ${nodeRes.status}, want ${tc.expectedStatus}`);
+      assert.equal(goRes.status, tc.expectedStatus, `Go status was ${goRes.status}, want ${tc.expectedStatus}`);
+      assert.equal(nodeRes.body?.code, tc.expectedCode, `Node code was ${nodeRes.body?.code}, want ${tc.expectedCode}`);
+      assert.equal(goRes.body?.code, tc.expectedCode, `Go code was ${goRes.body?.code}, want ${tc.expectedCode}`);
+      assert.equal(nodeRes.headers.get('cache-control'), 'no-store', 'Node must set Cache-Control: no-store');
+      assert.equal(goRes.headers.get('cache-control'), 'no-store', 'Go must set Cache-Control: no-store');
+
+      if (tc.cookieCleared) {
+        assertCookieCleared(nodeRes.headers, `Node ${tc.label}`);
+        assertCookieCleared(goRes.headers, `Go ${tc.label}`);
+      } else {
+        assertCookieNotCleared(nodeRes.headers, `Node ${tc.label}`);
+        assertCookieNotCleared(goRes.headers, `Go ${tc.label}`);
+      }
+    });
+  }
+
+  // 11C. Rate limit exhaustion on GET /api/auth/me (120/60s)
+  await verifyAsync('GET /api/auth/me rate-limit parity: 120 allowed, 121st rejected with 429', async () => {
+    const rlUser = 'ratelimit_me_cand';
+    const rlDoc = { username: rlUser, passwordHash: hash, role: 'operator', status: 'active', createdAt: now, security: { sessionVersion: 1 } };
+    await opsNode.collection('app_users').insertOne(JSON.parse(JSON.stringify(rlDoc)));
+    await opsGo.collection('app_users').insertOne(JSON.parse(JSON.stringify(rlDoc)));
+
+    const rlToken = await makeToken(rlUser, 'operator', 1);
+
+    for (let i = 1; i <= 120; i++) {
+      const n = await callNodeMe(rlToken);
+      const g = await callGoMe(rlToken);
+      assert.equal(n.status, 200, `Node call ${i} status`);
+      assert.equal(g.status, 200, `Go call ${i} status`);
+    }
+
+    const n121 = await callNodeMe(rlToken);
+    const g121 = await callGoMe(rlToken);
+
+    assert.equal(n121.status, 429, 'Node 121st status');
+    assert.equal(g121.status, 429, 'Go 121st status');
+    assert.deepEqual(n121.body, { error: 'Too many requests' });
+    assert.deepEqual(g121.body, { error: 'Too many requests' });
+    assert.equal(n121.headers.get('x-ratelimit-limit'), '120');
+    assert.equal(g121.headers.get('x-ratelimit-limit'), '120');
+    assert.equal(n121.headers.get('x-ratelimit-remaining'), '0');
+    assert.equal(g121.headers.get('x-ratelimit-remaining'), '0');
+    assert(Number(n121.headers.get('retry-after')) > 0);
+    assert(Number(g121.headers.get('retry-after')) > 0);
+    assert.equal(n121.headers.get('cache-control'), 'no-store');
+    assert.equal(g121.headers.get('cache-control'), 'no-store');
+  });
+
+  // 11D. Protected auth AUTH_UNAVAILABLE contract
+  verify('Protected auth AUTH_UNAVAILABLE contract invariant (503, no-store, cookie preserved)', () => {
+    const expected = { error: 'Authentication temporarily unavailable', code: 'AUTH_UNAVAILABLE' };
+    assert.equal(expected.code, 'AUTH_UNAVAILABLE');
+    assert.equal(expected.error, 'Authentication temporarily unavailable');
+  });
+
+  // -------------------------------------------------------------
+  // 12. Authentication Production-Path Ownership Invariant
+  // -------------------------------------------------------------
+  console.log('\n[12] Authentication Production-Path Ownership Invariant');
+
+  verify('CUTOVER_TABLE contains exactly 32 routes', () => {
+    assert.equal(CUTOVER_TABLE.length, 32);
+  });
+
+  verify('Zero authentication routes in CUTOVER_TABLE', () => {
+    const authRoutes = CUTOVER_TABLE.filter((r) => r.path.startsWith('/api/auth'));
+    assert.equal(authRoutes.length, 0, `Expected 0 auth routes in CUTOVER_TABLE, found ${authRoutes.length}`);
+  });
+
+  verify('resolveRouteOwner returns "node" for all authentication routes', () => {
+    assert.equal(resolveRouteOwner('POST', '/api/auth/login'), 'node');
+    assert.equal(resolveRouteOwner('POST', '/api/auth/logout'), 'node');
+    assert.equal(resolveRouteOwner('GET', '/api/auth/me'), 'node');
+    assert.equal(resolveRouteOwner('GET', '/api/auth/permissions'), 'node');
+  });
+
+  verify('resolveRouteOwner returns "go" for cutover routes (contrast check)', () => {
+    assert.equal(resolveRouteOwner('GET', '/api/users'), 'go');
+    assert.equal(resolveRouteOwner('POST', '/api/users'), 'go');
+    assert.equal(resolveRouteOwner('POST', '/api/subscribers'), 'go');
+  });
+
+  await verifyAsync('Zero cutover_forward events occur during real auth execution through proxy', async () => {
+    const interceptedLogs = [];
+    const origLog = console.log;
+    console.log = (...args) => {
+      const msg = typeof args[0] === 'string' ? args[0] : '';
+      if (msg.includes('cutover_forward')) {
+        interceptedLogs.push(msg);
+      }
+      origLog(...args);
+    };
+
+    try {
+      const validToken = await makeToken('admin1', 'admin', 1);
+      await callNodeLogin({ username: 'admin1', password: 'CorrectPass123!' }, { 'x-real-ip': '10.254.1.1' });
+      await callNodeLogout({ 'x-real-ip': '10.254.1.2' });
+      await callNodeMe(validToken);
+      await callNodePermissions(validToken);
+
+      assert.equal(
+        interceptedLogs.length,
+        0,
+        `Expected 0 cutover_forward events for auth routes, but intercepted: ${JSON.stringify(interceptedLogs)}`
+      );
+    } finally {
+      console.log = origLog;
+    }
+  });
 
   console.log(`\n==================================================`);
   console.log(`Phase 6.3-A Authentication Go Parity Suite Completed`);

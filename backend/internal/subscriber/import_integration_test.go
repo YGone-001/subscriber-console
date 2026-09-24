@@ -3,6 +3,7 @@ package subscriber
 import (
 	"context"
 	"fmt"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -17,9 +18,21 @@ import (
 func importTestRepo(t *testing.T) (*Repository, *mongo.Collection, func()) {
 	t.Helper()
 
-	client, err := mongo.Connect(options.Client().ApplyURI("mongodb://127.0.0.1:27017"))
+	uri := os.Getenv("MONGODB_URI")
+	if uri == "" {
+		uri = "mongodb://127.0.0.1:27017"
+	}
+
+	client, err := mongo.Connect(options.Client().ApplyURI(uri))
 	if err != nil {
 		t.Fatalf("connect mongo: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := client.Ping(ctx, nil); err != nil {
+		t.Skipf("MongoDB ping failed: %v", err)
+		return nil, nil, func() {}
 	}
 
 	dbName := "xcloud_test_import_" + bson.NewObjectID().Hex()
