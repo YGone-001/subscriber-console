@@ -202,6 +202,7 @@ Phase 6.1-D COMPLETE — User management integration hardening and controlled Go
 Phase 6.2   COMPLETE — Authentication security hardening (dual rate limits, auto lockout, response privacy, JWT secret validation)
 Phase 6.3-A COMPLETE — Authentication Go contract parity foundation (1:1 behavioral/security/contract/persistence parity, shadow Go candidate, CUTOVER_TABLE=32, ACTUALLY_ROUTED=32)
 Phase 6.3-B COMPLETE — Controlled Authentication Cutover (Production owner = Go backend, CUTOVER_TABLE = 36, ACTUALLY_ROUTED = 36)
+Phase 6.4   COMPLETE — Authentication & User Management UI Final Integration (UX hardening, rate limit cooldown, privacy, status lifecycle, security state)
 ```
 
 ### 5.1 OCS 生产冻结基线 (OCS Production Freeze Baseline)
@@ -326,6 +327,17 @@ Phase 6.3-B Controlled Authentication Cutover:
 - Reverse proxy forwards all 4 routes to Go with `cutover_forward` telemetry.
 - Fail closed: Go backend unreachable returns HTTP 502 `GO_BACKEND_UNREACHABLE` with zero Node fallback.
 - Validated via comprehensive cross-engine tests in `scripts/test-auth-cutover.mjs` (41/41 PASS).
+
+Phase 6.4 Authentication & User Management UI Final Integration:
+- Structured response and code mapping helper (`auth-ui.ts`) with strict privacy preserving uniform HTTP 401 presentation.
+- Resilient rate-limit cooldown with countdown seconds display, automatic button re-enablement, unmount cleanup, and ARIA live regions.
+- Session-expired vs credential alert presentation (`role="status"` vs `role="alert"`).
+- Dynamic current actor awareness and self-protection in user detail view; removal of hard-coded `isSelf = false`.
+- Status lifecycle governance actions (`active`, `disabled`, `locked`) guarded by confirmation modal.
+- Security state metadata panel (`sessionVersion`, `failedLoginAttempts`, `lastLoginAt`, `lastLoginIp`, `passwordChangedAt`, and conditional `lockedAt`/`lockReason`).
+- Complete English and Chinese localization parity for all auth & user management error codes and UI concepts.
+- Strict invariant preservation: `CUTOVER_TABLE = 36`, `ACTUALLY_ROUTED = 36`, 0 backend modifications, 54 route files / 78 operations unchanged.
+- Validated via 75 acceptance tests in `scripts/test-auth-user-ui-integration.mjs`.
 
 ---
 

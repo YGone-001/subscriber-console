@@ -113,6 +113,25 @@
   border-radius: var(--ref-radius-micro);
 }
 
+.login-session-container {
+  background: var(--status-info-soft);
+  border: 1px solid var(--status-info-border);
+  color: var(--status-info);
+  padding: 0.75rem 1rem;
+  border-radius: var(--ref-radius-soft-panel);
+  font-size: var(--ref-font-size-body-compact);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.login-session-indicator {
+  width: 4px;
+  height: 16px;
+  background: var(--status-info);
+  border-radius: var(--ref-radius-micro);
+}
+
 .input-container {
   position: relative;
 }
