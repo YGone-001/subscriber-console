@@ -162,7 +162,15 @@ console.log('\n5. Alert Domain Source vs Architecture Document Verification');
 
 const archDocPath = path.join(ROOT, 'docs/architecture/phase-7-platform-services-architecture.md');
 assert.ok(fs.existsSync(archDocPath), 'Phase 7 architecture document must exist');
-const archDoc = fs.readFileSync(archDocPath, 'utf8');
+const archDoc = fs.readFileSync(archDocPath, 'utf8').replace(/\r\n/g, '\n');
+
+function getDocSection(text, startHeader, endHeader) {
+  const startIdx = text.indexOf(startHeader);
+  if (startIdx === -1) return '';
+  const searchFrom = startIdx + startHeader.length;
+  const endIdx = endHeader ? text.indexOf(endHeader, searchFrom) : text.length;
+  return endIdx === -1 ? text.slice(startIdx) : text.slice(startIdx, endIdx);
+}
 
 // 5a. GET /api/alerts
 const alertRouteContent = fs.readFileSync(path.join(ROOT, 'frontend/src/app/api/alerts/route.ts'), 'utf8');
@@ -246,26 +254,58 @@ assert.ok(archDoc.includes('alerts_imsi_timestamp`: `{ imsi: 1, timestamp: -1 }`
 console.log('  [PASS] Alert collection expected indexes verified');
 
 // ---------------------------------------------------------------------------
-// 6. System Health & Mongo Health Deep Contract Verification
+// 6. System Health & Mongo Health Deep Contract & Shape Drift Verification
 // ---------------------------------------------------------------------------
-console.log('\n6. System Health & Mongo Health Deep Contract Verification');
+console.log('\n6. System Health & Mongo Health Deep Contract & Shape Drift Verification');
 
 const sysHealthContent = fs.readFileSync(path.join(ROOT, 'frontend/src/app/api/system/health/route.ts'), 'utf8');
 assert.ok(sysHealthContent.includes("'Comprehensive system health check failed'"), 'system/health 500 error message match');
 assert.ok(archDoc.includes('"Comprehensive system health check failed"'), 'archDoc must document system/health 500 error');
 
+// Mongo Health repository type and implementation
+const mongoHealthRepoPath = path.join(ROOT, 'frontend/src/server/repositories/mongoHealthRepository.ts');
+const mongoHealthRepoContent = fs.readFileSync(mongoHealthRepoPath, 'utf8');
+assert.ok(mongoHealthRepoContent.includes('export type MongoHealthReport = {'), 'MongoHealthReport type must be exported');
+assert.ok(mongoHealthRepoContent.includes('export async function getMongoHealthReport(): Promise<MongoHealthReport>'), 'getMongoHealthReport must be exported');
+assert.ok(mongoHealthRepoContent.includes('database: `${databases.xcloud} / ${databases.app}`'), 'mongoHealthRepo combines xcloud and app database names');
+assert.ok(mongoHealthRepoContent.includes('databases,'), 'mongoHealthRepo returns databases role dictionary');
+
+// Mongo Health route failure contract
 const mongoHealthRouteContent = fs.readFileSync(path.join(ROOT, 'frontend/src/app/api/system/mongo/health/route.ts'), 'utf8');
 assert.ok(mongoHealthRouteContent.includes('{ status: 200 }'), 'mongo/health catch block must return status 200');
 assert.ok(mongoHealthRouteContent.includes("'MongoDB health check failed'"), 'mongo/health error message match');
 assert.ok(archDoc.includes('HTTP **200 OK** (not 500) with diagnostic payload'), 'archDoc must document mongo/health returns 200 on failure');
-console.log('  [PASS] System Health and Mongo Health contracts verified');
+
+// Cross-check Mongo Health success shape in archDoc
+const mongoDocSection = getDocSection(archDoc, '#### `GET /api/system/mongo/health`', '\n---');
+assert.ok(mongoDocSection, 'Mongo health section must exist in archDoc');
+
+const mongoJsonBlock = mongoDocSection.match(/```json([\s\S]*?)```/)?.[1] || '';
+assert.ok(mongoJsonBlock, 'Mongo health success JSON block must exist');
+assert.ok(mongoJsonBlock.includes('"database": "xcloud / xcloud_ops"'), 'archDoc must document combined database string');
+assert.ok(mongoJsonBlock.includes('"xcloud": "xcloud"'), 'archDoc must document xcloud string property');
+assert.ok(mongoJsonBlock.includes('"app": "xcloud_ops"'), 'archDoc must document app string property');
+assert.ok(mongoJsonBlock.includes('"documentCount": 100'), 'archDoc must document documentCount in collections');
+assert.ok(mongoJsonBlock.includes('"missingIndexes": []'), 'archDoc must document missingIndexes in collections');
+
+assert.ok(mongoDocSection.includes('databases.xcloud` is a string'), 'archDoc must state databases.xcloud is a string');
+assert.ok(mongoDocSection.includes('databases.app` is a string'), 'archDoc must state databases.app is a string');
+assert.ok(mongoDocSection.includes('database`: String combining xcloud and app database names'), 'archDoc must document combined string invariant');
+
+// Negative drift checks for Mongo Health (inside documented JSON block)
+assert.ok(!/^\s{4}"database":\s*"xcloud",/m.test(mongoJsonBlock), 'archDoc JSON must NOT document top-level "database": "xcloud" alone');
+assert.ok(!mongoJsonBlock.includes('"xcloud": {'), 'archDoc JSON must NOT document databases.xcloud as object');
+assert.ok(!mongoJsonBlock.includes('"xcloud_ops": {'), 'archDoc JSON must NOT document databases.xcloud_ops as object');
+assert.ok(!mongoDocSection.includes('databases.xcloud.ok'), 'archDoc must NOT claim databases.xcloud.ok');
+assert.ok(!mongoDocSection.includes('databases.xcloud_ops.ok'), 'archDoc must NOT claim databases.xcloud_ops.ok');
+console.log('  [PASS] System Health and Mongo Health contracts & shape invariants verified');
 
 // ---------------------------------------------------------------------------
-// 7. System Integrity Audit Deep Contract Verification
+// 7. System Integrity Audit Deep Contract & Drift Verification
 // ---------------------------------------------------------------------------
-console.log('\n7. System Integrity Audit Deep Contract Verification');
+console.log('\n7. System Integrity Audit Deep Contract & Drift Verification');
 
-// Read-only proof for scan
+// 7a. Read-only proof for scan
 const scanRepoPath = path.join(ROOT, 'frontend/src/server/repositories/systemAuditRepository.ts');
 const scanRepoContent = fs.readFileSync(scanRepoPath, 'utf8');
 const scanFnMatch = scanRepoContent.match(/export async function scanSubscriberDocuments[\s\S]*?(?=export async function healSubscriberDocument|$)/);
@@ -282,34 +322,306 @@ for (const writeMethod of writeMethods) {
 }
 console.log('  [PASS] scanSubscriberDocuments confirmed strictly read-only');
 
-// Audit heal and batch-heal action logging
+// 7b. Scan read dependency inventory and phase matrix
+assert.ok(scanRepoContent.includes('subscribersCollection()'), 'scan reads subscribers');
+assert.ok(scanRepoContent.includes('ocsSubscribersCollection()'), 'scan reads ocs_subscribers');
+assert.ok(scanRepoContent.includes('ocsBalancesCollection()'), 'scan reads ocs_balances');
+assert.ok(scanRepoContent.includes('ocsReservationsCollection()'), 'scan reads ocs_reservations');
+assert.ok(scanRepoContent.includes('ocsSessionsCollection()'), 'scan reads ocs_sessions');
+assert.ok(scanRepoContent.includes('tariffPlansCollection()'), 'scan reads ocs_tariff_plans');
+assert.ok(scanRepoContent.includes('listProfiles()'), 'scan reads profiles via listProfiles()');
+
+const scanDocSection = getDocSection(archDoc, '#### `POST /api/system/audit/scan`', '\n---');
+assert.ok(scanDocSection, 'scan section must exist in archDoc');
+assert.ok(scanDocSection.includes('xcloud.subscribers'), 'archDoc scan must document xcloud.subscribers');
+assert.ok(scanDocSection.includes('xcloud.ocs_subscribers'), 'archDoc scan must document xcloud.ocs_subscribers');
+assert.ok(scanDocSection.includes('xcloud.ocs_balances'), 'archDoc scan must document xcloud.ocs_balances');
+assert.ok(scanDocSection.includes('xcloud.ocs_reservations'), 'archDoc scan must document xcloud.ocs_reservations');
+assert.ok(scanDocSection.includes('xcloud.ocs_sessions'), 'archDoc scan must document xcloud.ocs_sessions');
+assert.ok(scanDocSection.includes('xcloud.ocs_tariff_plans'), 'archDoc scan must document xcloud.ocs_tariff_plans');
+assert.ok(scanDocSection.includes('xcloud_ops.app_profiles'), 'archDoc scan must document xcloud_ops.app_profiles');
+
+// Scan phases
+assert.ok(scanDocSection.includes('phase = reservation'), 'archDoc scan must document phase = reservation');
+assert.ok(scanDocSection.includes('phase = tariff'), 'archDoc scan must document phase = tariff');
+assert.ok(scanDocSection.includes('phase = ocs'), 'archDoc scan must document phase = ocs');
+assert.ok(scanDocSection.includes('phase = sub'), 'archDoc scan must document phase = sub');
+
+// Negative drift checks for scan
+assert.ok(scanDocSection.includes('ocs_sessions'), 'dependency inventory must include ocs_sessions');
+assert.ok(scanDocSection.includes('ocs_tariff_plans'), 'dependency inventory must include ocs_tariff_plans');
+console.log('  [PASS] Audit scan dependency inventory and phase matrix verified');
+
+// 7c. Audit heal request validation and recognized repair types
 const healContent = fs.readFileSync(path.join(ROOT, 'frontend/src/app/api/system/audit/heal/route.ts'), 'utf8');
+assert.ok(healContent.includes('!imsi || !type'), 'heal route checks !imsi || !type');
+assert.ok(healContent.includes('!/^\\d{15}$|^UNKNOWN$/'), 'heal route checks IMSI regex format');
 assert.ok(healContent.includes("logAudit('HEAL'"), "heal route must log action 'HEAL'");
 
+const healDocSection = getDocSection(archDoc, '#### `POST /api/system/audit/heal`', '\n---');
+assert.ok(healDocSection, 'heal section must exist in archDoc');
+assert.ok(healDocSection.includes('Recognized repair types'), 'archDoc heal must label types as recognized repair types');
+assert.ok(healDocSection.includes('NOT** a strict route-enforced enum'), 'archDoc heal must note not a strict enum');
+assert.ok(healDocSection.includes("action string is **`HEAL`**"), "archDoc must document action string 'HEAL'");
+console.log('  [PASS] Audit heal validation and recognized repair types verified');
+
+// 7d. Batch-heal input validation and response schema
 const batchHealContent = fs.readFileSync(path.join(ROOT, 'frontend/src/app/api/system/audit/batch-heal/route.ts'), 'utf8');
+assert.ok(batchHealContent.includes('!Array.isArray(anomalies) || anomalies.length === 0'), 'batch-heal checks array and non-empty');
 assert.ok(batchHealContent.includes("logAudit('HEAL'"), "batch-heal route must log action 'HEAL'");
-assert.ok(!batchHealContent.includes("HEAL_BATCH"), "batch-heal route must not emit HEAL_BATCH in current source");
+assert.ok(!batchHealContent.includes("HEAL_BATCH"), "batch-heal route must not emit HEAL_BATCH");
 
-// Cross-check with archDoc
-assert.ok(archDoc.includes("action string is **`HEAL`**"), "archDoc must document action string 'HEAL'");
-assert.ok(archDoc.includes("Notice action string is **`HEAL`** (not `HEAL_BATCH`)"), "archDoc must clarify batch heal uses 'HEAL'");
-console.log('  [PASS] System Audit heal and batch-heal contracts verified');
+assert.ok(scanRepoContent.includes('failedCount: number'), 'systemAuditRepository must declare failedCount');
+assert.ok(scanRepoContent.includes('let failedCount = 0;'), 'batchHealSubscriberDocuments must track failedCount');
+
+const batchHealDocSection = getDocSection(archDoc, '#### `POST /api/system/audit/batch-heal`', '\n---');
+assert.ok(batchHealDocSection, 'batch-heal section must exist in archDoc');
+assert.ok(batchHealDocSection.includes('does **not** perform strict per-item schema validation'), 'archDoc batch-heal boundary documented');
+assert.ok(batchHealDocSection.includes('"failedCount": 0'), 'archDoc batch-heal must document "failedCount": 0');
+assert.ok(batchHealDocSection.includes('Field name is **`failedCount`**'), 'archDoc batch-heal must explicitly emphasize failedCount');
+assert.ok(batchHealDocSection.includes("Notice action string is **`HEAL`** (not `HEAL_BATCH`)"), "archDoc must clarify batch heal uses 'HEAL'");
+
+// Negative drift check: failureCount must not appear in batch-heal CURRENT contract
+assert.ok(!batchHealDocSection.includes('"failureCount"'), 'archDoc batch-heal section must NOT contain "failureCount"');
+console.log('  [PASS] Batch-heal validation and failedCount response verified');
 
 // ---------------------------------------------------------------------------
-// 8. Analytics Init Platform Action Verification
+// 8. Analytics Init Deep Contract & Schema Drift Verification
 // ---------------------------------------------------------------------------
-console.log('\n8. Analytics Init Platform Action Verification');
+console.log('\n8. Analytics Init Deep Contract & Schema Drift Verification');
 
 const initContent = fs.readFileSync(path.join(ROOT, 'frontend/src/app/api/analytics/init/route.ts'), 'utf8');
 assert.ok(initContent.includes('computeAnalyticsMetrics()'), 'analytics/init must call computeAnalyticsMetrics()');
 assert.ok(initContent.includes('enforceRateLimit(`analytics:init:${auth.auth.user}`, 3, 300)'), 'analytics/init 3/300s limiter match');
-assert.ok(archDoc.includes('"MongoDB analytics are computed from subscriber documents on demand."'), 'archDoc message match');
-console.log('  [PASS] Analytics Init contract verified');
+
+const analyticsRepoPath = path.join(ROOT, 'frontend/src/server/repositories/analyticsRepository.ts');
+const analyticsRepoContent = fs.readFileSync(analyticsRepoPath, 'utf8');
+const analyticsMetricsMatch = analyticsRepoContent.match(/export type AnalyticsMetrics = {([\s\S]*?)};/);
+assert.ok(analyticsMetricsMatch, 'AnalyticsMetrics type declaration must exist in analyticsRepository.ts');
+const metricsTypeBody = analyticsMetricsMatch[1];
+
+const EXPECTED_ANALYTICS_KEYS = [
+  'totalTraffic',
+  'plmnDist',
+  'ratesDist',
+  'top5',
+  'timestamp',
+  'ocsBalances',
+  'ocsSessions',
+  'ocsReservations',
+  'tariffPlanDist',
+  'ocsUsage',
+];
+
+for (const key of EXPECTED_ANALYTICS_KEYS) {
+  assert.ok(metricsTypeBody.includes(`${key}:`), `AnalyticsMetrics in source must declare key ${key}`);
+}
+
+const analyticsDocSection = getDocSection(archDoc, '## 9. Analytics Init Platform Action Architecture & Contract', '## 10');
+assert.ok(analyticsDocSection, 'Analytics section must exist in archDoc');
+assert.ok(analyticsDocSection.includes('"MongoDB analytics are computed from subscriber documents on demand."'), 'archDoc message match');
+
+for (const key of EXPECTED_ANALYTICS_KEYS) {
+  assert.ok(
+    analyticsDocSection.includes(`"${key}":`) || analyticsDocSection.includes(`\`${key}\``),
+    `archDoc must document analytics key ${key}`
+  );
+}
+
+// Verify nested telemetry metric schemas
+const EXPECTED_OCS_BALANCE_FIELDS = [
+  'totalSubscribers', 'totalDataAllocated', 'totalDataUsed', 'totalDataReserved',
+  'totalDataAvailable', 'dataUtilizationRate', 'totalVoiceAllocated', 'totalVoiceUsed',
+  'totalVoiceReserved', 'totalVoiceAvailable', 'totalSmsAllocated', 'totalSmsUsed',
+  'totalSmsAvailable', 'validInvariantCount', 'brokenInvariantCount', 'allInvariantsOk',
+];
+for (const field of EXPECTED_OCS_BALANCE_FIELDS) {
+  assert.ok(analyticsDocSection.includes(`\`${field}\``), `archDoc must document ocsBalances field ${field}`);
+}
+
+const EXPECTED_OCS_SESSION_FIELDS = [
+  'totalSessions', 'activeSessions', 'closingSessions', 'closedSessions',
+  'totalGrantedOctets', 'totalUsedOctets', 'interfaceGyCount', 'interfaceRoCount', 'apnDistribution',
+];
+for (const field of EXPECTED_OCS_SESSION_FIELDS) {
+  assert.ok(analyticsDocSection.includes(`\`${field}\``), `archDoc must document ocsSessions field ${field}`);
+}
+
+const EXPECTED_OCS_RESERVATION_FIELDS = [
+  'totalReservations', 'activeReservations', 'settledReservations', 'releasedReservations',
+  'orphanedReservations', 'totalReservedOctets', 'totalReleasedOctets', 'totalUsedOctets',
+];
+for (const field of EXPECTED_OCS_RESERVATION_FIELDS) {
+  assert.ok(analyticsDocSection.includes(`\`${field}\``), `archDoc must document ocsReservations field ${field}`);
+}
+
+const EXPECTED_TARIFF_DIST_FIELDS = [
+  'planId', 'name', 'subscriberCount', 'percentage', 'status',
+];
+for (const field of EXPECTED_TARIFF_DIST_FIELDS) {
+  assert.ok(analyticsDocSection.includes(`\`${field}\``), `archDoc must document tariffPlanDist field ${field}`);
+}
+
+const EXPECTED_OCS_USAGE_FIELDS = [
+  'totalRecords', 'chargedRecords', 'totalInputOctets', 'totalOutputOctets', 'totalOctets',
+];
+for (const field of EXPECTED_OCS_USAGE_FIELDS) {
+  assert.ok(analyticsDocSection.includes(`\`${field}\``), `archDoc must document ocsUsage field ${field}`);
+}
+
+// Negative drift checks for analytics: fictional fields must not appear in current contract
+const fictionalAnalyticsFields = [
+  'activeSubscriberCount',
+  'balanceMetrics',
+  'sessionMetrics',
+  'tariffDistribution',
+];
+
+const analyticsCurrentContract = getDocSection(analyticsDocSection, '#### CURRENT FROZEN CONTRACT', '##### TARGET GO MIGRATION');
+const analyticsJsonBlock = getDocSection(analyticsCurrentContract, '```json', '```');
+for (const fictional of fictionalAnalyticsFields) {
+  assert.ok(
+    !analyticsJsonBlock.includes(`"${fictional}":`),
+    `archDoc CURRENT FROZEN CONTRACT JSON must not use fictional analytics field "${fictional}":`
+  );
+}
+// subscriberCount must NOT appear as a direct top-level key under metrics (exactly 6 spaces indentation)
+assert.ok(
+  !/^[ ]{6}"subscriberCount":/m.test(analyticsJsonBlock),
+  'archDoc CURRENT FROZEN CONTRACT JSON must not contain top-level metrics.subscriberCount'
+);
+console.log('  [PASS] Analytics Init metrics schema and nested type definitions verified');
 
 // ---------------------------------------------------------------------------
-// 9. Architecture Freeze Document Structure & Separation Verification
+// 9. Notification Streaming (SSE) Timer Semantics Verification
 // ---------------------------------------------------------------------------
-console.log('\n9. Architecture Freeze Document Structure & Separation Verification');
+console.log('\n9. Notification Streaming (SSE) Timer Semantics Verification');
+
+assert.ok(sseContent.includes('!hasUpdate && now - lastHeartbeat >= 12000'), 'SSE heartbeat condition match in route');
+const sseDocSection = getDocSection(archDoc, '## 6. Notification Streaming Architecture & Contract', '## 7');
+assert.ok(sseDocSection, 'SSE section must exist in archDoc');
+assert.ok(sseDocSection.includes('now - lastHeartbeat >= 12000'), 'archDoc SSE heartbeat condition match');
+assert.ok(sseDocSection.includes('Alert updates do **not** reset `lastHeartbeat`'), 'archDoc SSE lastHeartbeat semantics match');
+console.log('  [PASS] Notification stream timer and heartbeat semantics verified');
+
+// ---------------------------------------------------------------------------
+// 10. Parameterized Phase 7.1 Candidate Wire Contract Gate
+// ---------------------------------------------------------------------------
+console.log('\n10. Parameterized Phase 7.1 Candidate Wire Contract Gate');
+
+const PHASE_7_1_CANDIDATE_FIXTURES = [
+  {
+    method: 'GET',
+    path: '/api/alerts',
+    routeFile: 'frontend/src/app/api/alerts/route.ts',
+    authGuard: 'requireAuth',
+    rateLimitKey: 'alerts:list:',
+    rateLimitCount: 120,
+    rateLimitWindow: 60,
+    repositoryCall: 'listAlerts(101)',
+    requestBehavior: 'no query parameters parsed',
+    successStatus: 200,
+    responseKeys: ['alerts', 'activeCriticalCount', 'activeWarningCount', 'activeCount'],
+    failureStatus: 500,
+    readOnly: true,
+  },
+  {
+    method: 'GET',
+    path: '/api/system/health',
+    routeFile: 'frontend/src/app/api/system/health/route.ts',
+    authGuard: 'requireAuth',
+    rateLimitKey: 'system:health:',
+    rateLimitCount: 30,
+    rateLimitWindow: 60,
+    repositoryCall: 'getComprehensiveSystemHealth()',
+    requestBehavior: 'no query parameters parsed',
+    successStatus: 200,
+    responseKeys: ['status', 'score', 'checkedAt', 'subsystems', 'summary'],
+    failureStatus: 500,
+    readOnly: true,
+  },
+  {
+    method: 'GET',
+    path: '/api/system/mongo/health',
+    routeFile: 'frontend/src/app/api/system/mongo/health/route.ts',
+    authGuard: 'requireAuth',
+    rateLimitKey: 'system:mongo-health:',
+    rateLimitCount: 30,
+    rateLimitWindow: 60,
+    repositoryCall: 'getMongoHealthReport()',
+    requestBehavior: 'no query parameters parsed',
+    successStatus: 200,
+    responseKeys: ['ok', 'database', 'databases', 'checkedAt', 'latencyMs', 'collections', 'missingCollections', 'missingIndexes'],
+    failureStatus: 200,
+    readOnly: true,
+  },
+  {
+    method: 'GET',
+    path: '/api/system/audit/status',
+    routeFile: 'frontend/src/app/api/system/audit/status/route.ts',
+    authGuard: 'requireAuth',
+    rateLimitKey: 'system:audit-status:',
+    rateLimitCount: 60,
+    rateLimitWindow: 60,
+    repositoryCall: 'internal status query',
+    requestBehavior: 'no query parameters parsed',
+    successStatus: 200,
+    responseKeys: ['lastSaveTime'],
+    failureStatus: 500,
+    readOnly: true,
+  },
+  {
+    method: 'POST',
+    path: '/api/system/audit/scan',
+    routeFile: 'frontend/src/app/api/system/audit/scan/route.ts',
+    authGuard: "requireAnyRole(request, ['root', 'operator'])",
+    rateLimitKey: 'system:audit-scan:',
+    rateLimitCount: 30,
+    rateLimitWindow: 60,
+    repositoryCall: 'scanSubscriberDocuments(cursor, phase)',
+    requestBehavior: 'cursor, phase in JSON body',
+    successStatus: 200,
+    responseKeys: ['nextCursor', 'scannedCount', 'anomalies'],
+    failureStatus: 500,
+    readOnly: true,
+  },
+  {
+    method: 'POST',
+    path: '/api/analytics/init',
+    routeFile: 'frontend/src/app/api/analytics/init/route.ts',
+    authGuard: "requireAnyRole(request, ['root', 'operator'])",
+    rateLimitKey: 'analytics:init:',
+    rateLimitCount: 3,
+    rateLimitWindow: 300,
+    repositoryCall: 'computeAnalyticsMetrics()',
+    requestBehavior: 'no body required',
+    successStatus: 200,
+    responseKeys: ['message', 'metrics'],
+    failureStatus: 500,
+    readOnly: true,
+  },
+];
+
+assert.equal(PHASE_7_1_CANDIDATE_FIXTURES.length, 6, 'Must validate exactly 6 Phase 7.1 read candidates');
+
+for (const fix of PHASE_7_1_CANDIDATE_FIXTURES) {
+  const content = fs.readFileSync(path.join(ROOT, fix.routeFile), 'utf8');
+  assert.ok(
+    content.includes(fix.authGuard),
+    `${fix.routeFile} must enforce auth guard: ${fix.authGuard}`
+  );
+  assert.ok(
+    content.includes(`enforceRateLimit(\`${fix.rateLimitKey}`),
+    `${fix.routeFile} must enforce rate limit key prefix: ${fix.rateLimitKey}`
+  );
+  assert.equal(fix.readOnly, true, `${fix.path} must be classified as strictly read-only`);
+  console.log(`  [PASS] Phase 7.1 candidate wire contract: ${fix.method} ${fix.path}`);
+}
+
+// ---------------------------------------------------------------------------
+// 11. Architecture Freeze Document Structure & Separation Verification
+// ---------------------------------------------------------------------------
+console.log('\n11. Architecture Freeze Document Structure & Separation Verification');
 
 const requiredSections = [
   '## 1. Executive Summary & Phase 7 Scope Definition',
@@ -345,11 +657,11 @@ assert.ok(archDoc.includes('TARGET GO MIGRATION REQUIREMENTS'), 'archDoc must ha
 console.log('  [PASS] CURRENT vs TARGET separation confirmed in archDoc');
 
 // ---------------------------------------------------------------------------
-// 10. Documentation Reconciliation Verification
+// 12. Documentation Reconciliation Verification
 // ---------------------------------------------------------------------------
-console.log('\n10. Documentation Reconciliation Verification');
+console.log('\n12. Documentation Reconciliation Verification');
 
-// 10a. AGENTS.md
+// 12a. AGENTS.md
 const agentsPath = path.join(ROOT, 'AGENTS.md');
 assert.ok(fs.existsSync(agentsPath), 'AGENTS.md must exist');
 const agentsContent = fs.readFileSync(agentsPath, 'utf8');
@@ -360,7 +672,7 @@ assert.ok(agentsContent.includes('CUTOVER_TABLE = 36'), 'AGENTS.md must document
 assert.ok(agentsContent.includes('ACTUALLY_ROUTED = 36'), 'AGENTS.md must document ACTUALLY_ROUTED = 36');
 console.log('  [PASS] AGENTS.md reconciled');
 
-// 10b. docs/operations/todo.md
+// 12b. docs/operations/todo.md
 const todoPath = path.join(ROOT, 'docs/operations/todo.md');
 assert.ok(fs.existsSync(todoPath), 'todo.md must exist');
 const todoContent = fs.readFileSync(todoPath, 'utf8');
@@ -369,7 +681,7 @@ assert.ok(todoContent.includes('Phase 7.0'), 'todo.md must mention Phase 7.0');
 assert.ok(!todoContent.includes('Phase 5.7-C push requires user credentials'), 'todo.md must not contain stale Phase 5.7-C push blocker');
 console.log('  [PASS] todo.md reconciled');
 
-// 10c. docs/operations/dev-log.md
+// 12c. docs/operations/dev-log.md
 const devLogPath = path.join(ROOT, 'docs/operations/dev-log.md');
 assert.ok(fs.existsSync(devLogPath), 'dev-log.md must exist');
 const devLogContent = fs.readFileSync(devLogPath, 'utf8');
@@ -377,7 +689,7 @@ const devLogContent = fs.readFileSync(devLogPath, 'utf8');
 assert.ok(devLogContent.includes('Phase 7.0'), 'dev-log.md must document Phase 7.0');
 console.log('  [PASS] dev-log.md reconciled');
 
-// 10d. docs/backend-migration/migration-routing-matrix.md
+// 12d. docs/backend-migration/migration-routing-matrix.md
 const matrixPath = path.join(ROOT, 'docs/backend-migration/migration-routing-matrix.md');
 assert.ok(fs.existsSync(matrixPath), 'migration-routing-matrix.md must exist');
 const matrixContent = fs.readFileSync(matrixPath, 'utf8');
@@ -386,9 +698,9 @@ assert.ok(matrixContent.includes('### Phase 7'), 'matrix must include Phase 7 se
 console.log('  [PASS] migration-routing-matrix.md reconciled');
 
 // ---------------------------------------------------------------------------
-// 11. Pure ASCII Compliance Check
+// 13. Pure ASCII Compliance Check
 // ---------------------------------------------------------------------------
-console.log('\n11. Pure ASCII Compliance Check');
+console.log('\n13. Pure ASCII Compliance Check');
 
 const filesToCheckAscii = [
   'scripts/test-phase-7-architecture-freeze.mjs',

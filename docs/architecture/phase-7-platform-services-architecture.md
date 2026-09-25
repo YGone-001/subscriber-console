@@ -367,7 +367,8 @@ Nonexistent indexes such as `{ status, severity, createdAt }`, `{ alertId } uniq
      data: {"timestamp":"2026-09-25T01:00:04.000Z","activeCriticalCount":2,"activeWarningCount":3,"activeCount":5,"latestAlerts":[...]}
      ```
 3. **Heartbeat & Transient Error Protocol**:
-   - Heartbeat comment: Emits `:ping\n\n` when no update has been emitted for at least **12000ms** (`Date.now() - lastHeartbeat >= 12000`).
+   - `lastHeartbeat` timer semantics: `lastHeartbeat` is initialized at stream start (`Date.now()`) and is updated **only** when a `:ping` comment is emitted. Alert updates do **not** reset `lastHeartbeat`.
+   - Ping condition: If no alert update occurred in the polling interval (`!hasUpdate`) and elapsed time since the last heartbeat is at least 12,000ms (`now - lastHeartbeat >= 12000`), the handler updates `lastHeartbeat = now` and emits `:ping\n\n`.
    - Transient database error comment: Emits `:transient_retry\n\n` on MongoDB read errors during polling to keep client connection alive.
 4. **Connection Teardown & Resource Cleanup**:
    - Client disconnect listener on `request.signal.addEventListener('abort', cleanup)` and `cancel()`.
@@ -453,21 +454,43 @@ Container orchestration probes remain decoupled from deep diagnostic checks.
 - **Rate Limit**: Key `system:mongo-health:<user>`, **30 requests / 60 seconds**.
 - **Repository Invocation**: Calls `getMongoHealthReport()`.
 - **Success Response `200 OK`**:
+  Matches the authoritative `MongoHealthReport` type from `frontend/src/server/repositories/mongoHealthRepository.ts`:
   ```json
   {
     "ok": true,
-    "database": "xcloud",
+    "database": "xcloud / xcloud_ops",
     "databases": {
-      "xcloud": { "ok": true },
-      "xcloud_ops": { "ok": true }
+      "xcloud": "xcloud",
+      "app": "xcloud_ops"
     },
     "checkedAt": "2026-09-25T01:00:00.000Z",
     "latencyMs": 1.45,
-    "collections": [ /* array of collection reports */ ],
+    "collections": [
+      {
+        "database": "xcloud",
+        "name": "subscribers",
+        "exists": true,
+        "documentCount": 100,
+        "missingIndexes": []
+      },
+      {
+        "database": "xcloud_ops",
+        "name": "app_profiles",
+        "exists": true,
+        "documentCount": 10,
+        "missingIndexes": []
+      }
+    ],
     "missingCollections": [],
     "missingIndexes": []
   }
   ```
+- **Success Schema Invariants**:
+  - `database`: String combining xcloud and app database names: `"${databases.xcloud} / ${databases.app}"` (default `"xcloud / xcloud_ops"`). Never `"xcloud"` alone.
+  - `databases`: Object with string properties `xcloud` and `app` mapping role to configured DB name (`databases.xcloud` is a string, `databases.app` is a string). Never boolean/object maps like `{ "xcloud": { "ok": true } }`.
+  - `collections`: Array of `CollectionHealth` items with `database` (string), `name` (string), `exists` (boolean), `documentCount` (number or null), `missingIndexes` (string[]).
+  - `missingCollections`: Array of missing collection strings (format: `${databases[database]}.${collection}`).
+  - `missingIndexes`: Array of objects with `collection` (string, format: `${databases[database]}.${collection}`) and `index` (string, the expected index name).
 - **Failure Behavior**: On exception, the route handler returns HTTP **200 OK** (not 500) with diagnostic payload:
   ```json
   {
@@ -520,7 +543,21 @@ The remaining `/api/system/audit/*` endpoints perform **System Integrity Diagnos
 - **Access**: `requireAnyRole(request, ['root', 'operator'])`. `viewer` denied with HTTP 403.
 - **Rate Limit**: Key `system:audit-scan:<user>`, **30 requests / 60 seconds**.
 - **Semantics**: Strictly **READ-ONLY** despite using HTTP POST (due to complex cursor payload).
-- **Read-Only Verification Proof**: Scans `xcloud.subscribers`, `xcloud.ocs_balances`, `xcloud.ocs_reservations`, and `xcloud.ocs_subscribers` via cursor paging. Performs zero write, insert, update, or delete operations.
+- **Read Dependency Inventory**:
+  `scanSubscriberDocuments()` directly or indirectly reads across seven distinct data stores:
+  1. `xcloud.subscribers` (HSS subscriber documents, authentication credentials, slice configs)
+  2. `xcloud.ocs_subscribers` (OCS contract assignments and plan IDs)
+  3. `xcloud.ocs_balances` (OCS balance records and data/voice/SMS quotas)
+  4. `xcloud.ocs_reservations` (OCS active and released quota reservations)
+  5. `xcloud.ocs_sessions` (OCS Gy/Ro charging sessions)
+  6. `xcloud.ocs_tariff_plans` (OCS tariff plan definitions and rules)
+  7. `xcloud_ops.app_profiles` (Profile template definitions obtained via `listProfiles()`, reading the profile repository collection)
+- **Phase Dependency Matrix**:
+  - `phase = reservation`: Reads `xcloud.ocs_reservations` and `xcloud.ocs_sessions`. Identifies orphaned quota reservations missing active sessions.
+  - `phase = tariff`: Reads `xcloud.ocs_subscribers` and `xcloud.ocs_tariff_plans`. Identifies subscribers assigned to nonexistent or invalid tariff plans.
+  - `phase = ocs`: Reads `xcloud.subscribers`, `xcloud.ocs_subscribers`, `xcloud.ocs_balances`, and `xcloud.ocs_tariff_plans`. Identifies missing configurations and data/voice/SMS balance invariant mismatches (`total != used + reserved + available`).
+  - `phase = sub`: Reads `xcloud.subscribers` and profiles via `listProfiles()` (`xcloud_ops.app_profiles`). Identifies missing HSS authentication/slice configs and dangling profile references.
+- **Read-Only Invariant**: All phases are strictly read-only. `scanSubscriberDocuments()` performs zero write, insert, update, or delete operations (`insertOne`, `insertMany`, `updateOne`, `updateMany`, `deleteOne`, `deleteMany`, `replaceOne`, `findOneAndUpdate`, `findOneAndDelete`, `findOneAndReplace`, `drop`).
 - **Request Body**:
   ```json
   { "cursor": "0", "phase": "sub | ocs | tariff | reservation" }
@@ -559,20 +596,21 @@ The remaining `/api/system/audit/*` endpoints perform **System Integrity Diagnos
   ```json
   {
     "imsi": "460020000000001", // required, 15 digits or "UNKNOWN"
-    "type": "missing_config | balance_mismatch | orphan_ocs | orphan_reservation | invalid_tariff | dangling_profile", // required
+    "type": "string", // required (recognized repair types below)
     "profileName": "default (optional)"
   }
   ```
-- **Validation Errors (`400 Bad Request`)**:
-  - Missing `imsi` or `type`:
+- **HTTP Boundary Validation**:
+  - Missing `imsi` or `type` (`400 Bad Request`):
     ```json
     { "error": "imsi and type are required" }
     ```
-  - Invalid IMSI format (`!/^\d{15}$|^UNKNOWN$/.test(imsi)`):
+  - Invalid IMSI format (`!/^\d{15}$|^UNKNOWN$/.test(String(imsi))`):
     ```json
     { "error": "IMSI must be exactly 15 digits or UNKNOWN" }
     ```
-- **Repository Mutation**: Calls `healSubscriberDocument(imsi, type, profileName)`.
+  - **Type Validation Distinction**: The HTTP route does **not** enforce an enum validator on `type`. Any non-empty string is accepted at the HTTP boundary. The anomaly types (`orphan_ocs`, `missing_config`, `balance_mismatch`, `invalid_tariff`, `dangling_profile`, `orphan_reservation`) describe the set of **Recognized repair types** handled by `healSubscriberDocument()`, **NOT** a strict route-enforced enum. An unrecognized `type` performs a no-op and returns HTTP 200.
+- **Repository Mutation**: Calls `healSubscriberDocument(String(imsi), String(type), profileName)`.
 - **Audit Logging**: Emits audit log via `logAudit('HEAL', String(imsi), null, { type, profileName }, request)`.
   Notice action string is **`HEAL`**.
 - **Success Response `200 OK`**:
@@ -599,12 +637,16 @@ The remaining `/api/system/audit/*` endpoints perform **System Integrity Diagnos
     "profileName": "default (optional)"
   }
   ```
-- **Validation Errors (`400 Bad Request`)**:
-  - If `!Array.isArray(anomalies) || anomalies.length === 0`:
+- **HTTP Boundary Validation**:
+  - Validates solely that `anomalies` is an array and `anomalies.length > 0`. If missing or empty array, returns `400 Bad Request`:
     ```json
     { "error": "anomalies list is required and cannot be empty" }
     ```
-- **Repository Mutation**: Calls `batchHealSubscriberDocuments(anomalies, profileName)`.
+  - The HTTP route does **not** perform strict per-item schema validation on elements within the `anomalies` array.
+- **Repository Mutation & Execution**:
+  - Calls `batchHealSubscriberDocuments(anomalies, profileName)`.
+  - Repository iterates sequentially, applying `healSubscriberDocument(item.imsi, item.type, profileName)` to each item and returns:
+    `{ successCount: number, failedCount: number, errors: string[] }`.
 - **Audit Logging**: Emits audit log via `logAudit('HEAL', 'batch:${anomalies.length}', null, { count: anomalies.length, result, profileName }, request)`.
   Notice action string is **`HEAL`** (not `HEAL_BATCH`).
 - **Success Response `200 OK`**:
@@ -612,10 +654,11 @@ The remaining `/api/system/audit/*` endpoints perform **System Integrity Diagnos
   {
     "message": "Successfully healed 15 of 15 anomalies",
     "successCount": 15,
-    "failureCount": 0,
+    "failedCount": 0,
     "errors": []
   }
   ```
+  Note: Field name is **`failedCount`** (derived from `systemAuditRepository.ts`). Fictional field `failureCount` does **not** exist in the current frozen contract.
 - **Error Response `500 Internal Server Error`**:
   ```json
   { "error": "Batch self-healing execution failed" }
@@ -634,18 +677,149 @@ The remaining `/api/system/audit/*` endpoints perform **System Integrity Diagnos
 - **Semantics**: Strictly **READ-ONLY** on-demand aggregation. Despite HTTP POST, it creates zero database mutations.
 - **Repository Call**: Calls `computeAnalyticsMetrics()`, the identical aggregation engine used by `GET /api/analytics/metrics`.
 - **Success Response `200 OK`**:
+  Matches the authoritative `AnalyticsMetrics` type from `frontend/src/server/repositories/analyticsRepository.ts`:
   ```json
   {
     "message": "MongoDB analytics are computed from subscriber documents on demand.",
     "metrics": {
-      "subscriberCount": 1500,
-      "activeSubscriberCount": 1420,
-      "balanceMetrics": { /* ... */ },
-      "sessionMetrics": { /* ... */ },
-      "tariffDistribution": [ /* ... */ ]
+      "totalTraffic": 10737418240,
+      "plmnDist": [
+        { "name": "46000", "value": 10 }
+      ],
+      "ratesDist": [
+        { "name": "100Mbps", "value": 10 }
+      ],
+      "top5": [
+        {
+          "imsi": "460020000000001",
+          "balance": 10737418240,
+          "voiceBalance": 100,
+          "smsBalance": 100
+        }
+      ],
+      "timestamp": 1727226000000,
+      "ocsBalances": {
+        "totalSubscribers": 100,
+        "totalDataAllocated": 1073741824000,
+        "totalDataUsed": 107374182400,
+        "totalDataReserved": 0,
+        "totalDataAvailable": 966367641600,
+        "dataUtilizationRate": 10.0,
+        "totalVoiceAllocated": 10000,
+        "totalVoiceUsed": 1000,
+        "totalVoiceReserved": 0,
+        "totalVoiceAvailable": 9000,
+        "totalSmsAllocated": 10000,
+        "totalSmsUsed": 500,
+        "totalSmsAvailable": 9500,
+        "validInvariantCount": 100,
+        "brokenInvariantCount": 0,
+        "allInvariantsOk": true
+      },
+      "ocsSessions": {
+        "totalSessions": 5,
+        "activeSessions": 5,
+        "closingSessions": 0,
+        "closedSessions": 0,
+        "totalGrantedOctets": 524288000,
+        "totalUsedOctets": 104857600,
+        "interfaceGyCount": 5,
+        "interfaceRoCount": 0,
+        "apnDistribution": [
+          { "apn": "default", "count": 5 }
+        ]
+      },
+      "ocsReservations": {
+        "totalReservations": 2,
+        "activeReservations": 2,
+        "settledReservations": 0,
+        "releasedReservations": 0,
+        "orphanedReservations": 0,
+        "totalReservedOctets": 10485760,
+        "totalReleasedOctets": 0,
+        "totalUsedOctets": 0
+      },
+      "tariffPlanDist": [
+        {
+          "planId": "standard_postpaid",
+          "name": "Standard Postpaid Plan",
+          "subscriberCount": 100,
+          "percentage": 100.0,
+          "status": "active"
+        }
+      ],
+      "ocsUsage": {
+        "totalRecords": 500,
+        "chargedRecords": 500,
+        "totalInputOctets": 52428800,
+        "totalOutputOctets": 52428800,
+        "totalOctets": 104857600
+      }
     }
   }
   ```
+- **Top-Level `AnalyticsMetrics` Schema Keys**:
+  - `totalTraffic`: number (aggregate data volume in bytes)
+  - `plmnDist`: Array of `{ name: string, value: number }` (PLMN distribution)
+  - `ratesDist`: Array of `{ name: string, value: number }` (rate tier distribution)
+  - `top5`: Array of `{ imsi: string, balance: number, voiceBalance: number, smsBalance: number }` (top balance consumers)
+  - `timestamp`: number (calculation epoch timestamp)
+  - `ocsBalances`: `OcsBalanceMetrics` (balance pool invariant metrics)
+  - `ocsSessions`: `OcsSessionMetrics` (active charging sessions telemetry)
+  - `ocsReservations`: `OcsReservationMetrics` (quota reservation state counters)
+  - `tariffPlanDist`: `TariffPlanDistItem[]` (plan distribution breakdown)
+  - `ocsUsage`: `OcsUsageMetrics` (aggregate charging usage records)
+- **Nested Schema Specifications**:
+  - `ocsBalances`:
+    - `totalSubscribers`: number
+    - `totalDataAllocated`: number
+    - `totalDataUsed`: number
+    - `totalDataReserved`: number
+    - `totalDataAvailable`: number
+    - `dataUtilizationRate`: number
+    - `totalVoiceAllocated`: number
+    - `totalVoiceUsed`: number
+    - `totalVoiceReserved`: number
+    - `totalVoiceAvailable`: number
+    - `totalSmsAllocated`: number
+    - `totalSmsUsed`: number
+    - `totalSmsAvailable`: number
+    - `validInvariantCount`: number
+    - `brokenInvariantCount`: number
+    - `allInvariantsOk`: boolean
+  - `ocsSessions`:
+    - `totalSessions`: number
+    - `activeSessions`: number
+    - `closingSessions`: number
+    - `closedSessions`: number
+    - `totalGrantedOctets`: number
+    - `totalUsedOctets`: number
+    - `interfaceGyCount`: number
+    - `interfaceRoCount`: number
+    - `apnDistribution`: `Array<{ apn: string, count: number }>`
+  - `ocsReservations`:
+    - `totalReservations`: number
+    - `activeReservations`: number
+    - `settledReservations`: number
+    - `releasedReservations`: number
+    - `orphanedReservations`: number
+    - `totalReservedOctets`: number
+    - `totalReleasedOctets`: number
+    - `totalUsedOctets`: number
+  - `tariffPlanDist` items:
+    - `planId`: string
+    - `name`: string
+    - `subscriberCount`: number
+    - `percentage`: number
+    - `status`: string
+  - `ocsUsage`:
+    - `totalRecords`: number
+    - `chargedRecords`: number
+    - `totalInputOctets`: number
+    - `totalOutputOctets`: number
+    - `totalOctets`: number
+- **Nonexistent Fields Disclaimed**:
+  Fictional fields such as `subscriberCount`, `activeSubscriberCount`, `balanceMetrics`, `sessionMetrics`, and `tariffDistribution` do **not** exist in the current production source.
 - **Audit Logging**: None in current source.
 
 ##### TARGET GO MIGRATION REQUIREMENTS (PHASE 7.1)
