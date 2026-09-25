@@ -11,20 +11,21 @@
 
 Phase 7 encompasses the platform infrastructure, diagnostic, alerting, and notification services
 supporting the xCloud operational console. Following the completion of Subscriber/Profile CRUD (Phase 4),
-OCS Management Governance (Phase 5), and Authentication & User Management (Phase 6), Phase 7 migrates
-the remaining operational platform and real-time event mechanisms into the canonical Go backend.
+OCS Management Governance (Phase 5), and Authentication & User Management (Phase 6), Phase 7 plans
+the controlled transition of the remaining operational platform and real-time event mechanisms into
+the canonical Go backend.
 
 ### 1.1 In-Scope Domains
 
 Phase 7 exclusively owns and governs:
 
 1. **Alert Domain**:
-   - Querying active and acknowledged operational alerts (`GET /api/alerts`).
+   - Querying operational alerts from MongoDB (`GET /api/alerts`).
    - Acknowledging alert entries (`POST /api/alerts/acknowledge`).
    - Updating alert workflow lifecycle status, assignment, and notes (`POST /api/alerts/workflow`).
 2. **Notification Streaming Domain**:
    - Real-time Server-Sent Events (SSE) telemetry stream (`GET /api/notifications/stream`).
-   - Client event broadcasting (`init`, `alerts_update`, `session_expired`) and heartbeats (`:ping`, `:transient_retry`).
+   - Client event broadcasting (`init`, `alerts_update`, `session_expired`) and comments (`:ping`, `:transient_retry`).
 3. **System Health Domain**:
    - Deep comprehensive system health evaluation across Database, OCS Engine, HSS Core, and Security (`GET /api/system/health`).
    - Deep MongoDB connection pool and collection diagnostic report (`GET /api/system/mongo/health`).
@@ -50,7 +51,7 @@ Phase 7 strictly excludes and will not touch:
 
 ### 2.1 Commit Baseline
 
-- **Authoritative Baseline SHA**: `a25a6b1c1289881406c048eea750c4a6150bb923`
+- **Authoritative Baseline SHA**: `f3feaf69bfc0ed10cc67d5740c224ada3d8a5217`
 - **Branch**: `develop`
 - **Baseline State**: Clean working directory, all tests passing.
 
@@ -66,21 +67,21 @@ Phase 7 strictly excludes and will not touch:
 
 ## 3. Phase 7 Candidate Endpoint Inventory
 
-The 11 candidate endpoints for Phase 7 migration:
+The 11 candidate endpoints for Phase 7 migration with exact source-derived attributes:
 
-| # | Endpoint | Method | Path | Current Owner | Target Owner | Semantics | Auth & Capability |
-|---|----------|--------|------|---------------|--------------|-----------|-------------------|
-| 1 | Alert List | `GET` | `/api/alerts` | Node | Go | Read | `admin`, `operator`, `viewer` |
-| 2 | Alert Acknowledge | `POST` | `/api/alerts/acknowledge` | Node | Go | Mutation | `admin`, `operator` |
-| 3 | Alert Workflow | `POST` | `/api/alerts/workflow` | Node | Go | Mutation | `admin`, `operator` |
-| 4 | Notification Stream | `GET` | `/api/notifications/stream` | Node | Go | SSE Stream | `admin`, `operator`, `viewer` |
-| 5 | System Health | `GET` | `/api/system/health` | Node | Go | Deep Read | `admin`, `operator`, `viewer` |
-| 6 | Mongo Health | `GET` | `/api/system/mongo/health` | Node | Go | Deep Read | `admin`, `operator`, `viewer` |
-| 7 | Audit Status | `GET` | `/api/system/audit/status` | Node | Go | Read | `admin`, `operator`, `viewer` |
-| 8 | Audit Scan | `POST` | `/api/system/audit/scan` | Node | Go | Semantic Read | `admin`, `operator` |
-| 9 | Audit Heal | `POST` | `/api/system/audit/heal` | Node | Go | Mutation | `admin`, `operator` (`system_heal`) |
-| 10 | Audit Batch Heal | `POST` | `/api/system/audit/batch-heal` | Node | Go | Mutation | `admin`, `operator` (`system_heal`) |
-| 11 | Analytics Init | `POST` | `/api/analytics/init` | Node | Go | Semantic Read | `admin`, `operator` |
+| # | Endpoint | Method | Path | Current Owner | Target Owner | Semantics | Auth Guard | Rate Limit Key | Rate Limit |
+|---|----------|--------|------|---------------|--------------|-----------|------------|----------------|------------|
+| 1 | Alert List | `GET` | `/api/alerts` | Node | Go | Read | `requireAuth` | `alerts:list:<user>` | 120 / 60s |
+| 2 | Alert Acknowledge | `POST` | `/api/alerts/acknowledge` | Node | Go | Mutation | `requireAnyRole(['root', 'operator'])` | `alerts:acknowledge:<user>` | 60 / 60s |
+| 3 | Alert Workflow | `POST` | `/api/alerts/workflow` | Node | Go | Mutation | `requireAnyRole(['root', 'operator'])` | `alerts:workflow:<user>` | 120 / 60s |
+| 4 | Notification Stream | `GET` | `/api/notifications/stream` | Node | Go | SSE Stream | `requireAuth` | None (stream-scoped) | None |
+| 5 | System Health | `GET` | `/api/system/health` | Node | Go | Deep Read | `requireAuth` | `system:health:<user>` | 30 / 60s |
+| 6 | Mongo Health | `GET` | `/api/system/mongo/health` | Node | Go | Deep Read | `requireAuth` | `system:mongo-health:<user>` | 30 / 60s |
+| 7 | Audit Status | `GET` | `/api/system/audit/status` | Node | Go | Read | `requireAuth` | `system:audit-status:<user>` | 60 / 60s |
+| 8 | Audit Scan | `POST` | `/api/system/audit/scan` | Node | Go | Semantic Read | `requireAnyRole(['root', 'operator'])` | `system:audit-scan:<user>` | 30 / 60s |
+| 9 | Audit Heal | `POST` | `/api/system/audit/heal` | Node | Go | Mutation | `requireCapability('system_heal')` | `system:audit-heal:<user>` | 20 / 60s |
+| 10 | Audit Batch Heal | `POST` | `/api/system/audit/batch-heal` | Node | Go | Mutation | `requireCapability('system_heal')` | `system:audit-batch-heal:<user>` | 10 / 60s |
+| 11 | Analytics Init | `POST` | `/api/analytics/init` | Node | Go | Semantic Read | `requireAnyRole(['root', 'operator'])` | `analytics:init:<user>` | 3 / 300s |
 
 ---
 
@@ -121,98 +122,208 @@ Browser -> Nginx
 
 ## 5. Alert Domain Architecture & Contract
 
-### 5.1 Storage Model
+### 5.1 Storage Model & Actual Schema
 
-- **Database**: `xcloud_ops`
+- **Database**: `xcloud_ops` (`getAppCollection`)
 - **Collection**: `app_alerts`
-- **Cap / Retention**: Fixed rolling window of 10,000 documents (`ALERT_MAX_DOCS = 10000`). When exceeded, oldest acknowledged alerts are trimmed.
-- **Indexes**:
-  - `{ status: 1, severity: 1, createdAt: -1 }`
-  - `{ alertId: 1 }` (unique)
-  - `{ imsi: 1, status: 1 }`
+- **Source Model**: `AlertDocument` in `frontend/src/server/repositories/alertRepository.ts`
 
-### 5.2 Document Schema
+#### Current Persisted Fields
 
-```json
-{
-  "_id": "ObjectId",
-  "alertId": "string (UUID / nanoId)",
-  "imsi": "string (15 digits | null)",
-  "type": "string (balance_exhaustion | rapid_drain | invariant_violation | subscriber_anomaly)",
-  "severity": "critical | warning | info",
-  "status": "active | acknowledged | assigned | recovering | resolved",
-  "title": "string",
-  "description": "string",
-  "metadata": "object",
-  "assignedTo": "string | null",
-  "note": "string | null",
-  "createdAt": "ISO date string",
-  "updatedAt": "ISO date string",
-  "acknowledgedAt": "ISO date string | null",
-  "acknowledgedBy": "string | null",
-  "resolvedAt": "ISO date string | null",
-  "resolvedBy": "string | null"
-}
-```
+The actual fields defined and persisted by `alertRepository.ts` are:
 
-### 5.3 Endpoint Contracts
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `string` | Unique identifier for the alert |
+| `timestamp` | `string` | ISO timestamp of the alert event |
+| `level` | `SyslogLevel` | Severity level (`CRITICAL`, `WARNING`, `INFO`, etc.) |
+| `imsi` | `string` | Associated IMSI or identifier |
+| `reason` | `string` | Reason or description of the alert |
+| `is_acknowledged` | `boolean` | Primary boolean acknowledgement flag |
+| `workflow_status` | `AlertWorkflowStatus` (optional) | Workflow state (`acknowledged`, `assigned`, `recovering`, `resolved`) |
+| `assigned_to` | `string` (optional) | Operator username assigned to handle the alert |
+| `handling_note` | `string` (optional) | Operational note or resolution remark |
+| `workflow_updated_at` | `string` (optional) | ISO timestamp of last workflow modification |
+
+Nonexistent fields such as `alertId`, `severity`, `title`, `description`, `metadata`, `assignedTo`, `note`, `createdAt`, `updatedAt`, `acknowledgedAt`, `acknowledgedBy`, `resolvedAt`, or `resolvedBy` are **NOT** part of the current production alert document model.
+
+### 5.2 Alert Retention Contract
+
+- **Retention Limit**: `ALERT_LIMIT = 10000`
+- **Source Mechanism**: `appendAlert()` in `alertRepository.ts`:
+  1. Inserts the new alert document (`insertOne`).
+  2. Queries all documents sorted by `timestamp: -1`, skipping the first 10,000 (`skip(10000)`).
+  3. Deletes all IDs exceeding the 10,000 threshold (`deleteMany({ id: { $in: staleIds } })`).
+  4. Notice: Retention trims all alerts beyond 10,000 based strictly on `timestamp` order; it does **not** restrict trimming to acknowledged alerts.
+
+### 5.3 Alert Indexes Contract
+
+Source-derived expected indexes from `frontend/src/server/repositories/mongoHealthRepository.ts`:
+
+1. `alerts_timestamp_desc`: `{ timestamp: -1 }`
+2. `alerts_active_by_level`: `{ is_acknowledged: 1, level: 1, timestamp: -1 }`
+3. `alerts_imsi_timestamp`: `{ imsi: 1, timestamp: -1 }`
+
+Nonexistent indexes such as `{ status, severity, createdAt }`, `{ alertId } unique`, or `{ imsi, status }` are **NOT** declared in the production schema.
+
+---
+
+### 5.4 Endpoint Contracts
 
 #### `GET /api/alerts`
+
+##### CURRENT FROZEN CONTRACT
+- **Route Handler**: `frontend/src/app/api/alerts/route.ts`
 - **Access**: `requireAuth(request)` (any authenticated role: `admin`, `operator`, `viewer`).
-- **Rate Limit**: 60 requests / 60 seconds.
-- **Query Parameters**:
-  - `limit`: integer, 1 to 100 (default: 50).
-  - `status`: `all | active | acknowledged | resolved` (default: `active`).
-  - `severity`: `all | critical | warning | info` (default: `all`).
+- **Rate Limit**: Key `alerts:list:<user>`, **120 requests / 60 seconds**.
+- **Query Parameters**: **NONE**. The route handler does not parse `limit`, `status`, or `severity`.
+- **Repository Invocation**: Calls `listAlerts(101)` with a hard-coded limit of 101.
+- **Data Transformation**: Strips `_id` via `stripMongoId`.
 - **Response `200 OK`**:
   ```json
   {
-    "alerts": [ /* array of alert items */ ],
-    "activeCount": 5,
+    "alerts": [
+      {
+        "id": "alert-uuid",
+        "timestamp": "2026-09-25T01:00:00.000Z",
+        "level": "CRITICAL",
+        "imsi": "460020000000001",
+        "reason": "Balance exhausted",
+        "is_acknowledged": false,
+        "workflow_status": "assigned",
+        "assigned_to": "operator1",
+        "handling_note": "Investigating",
+        "workflow_updated_at": "2026-09-25T01:05:00.000Z"
+      }
+    ],
     "activeCriticalCount": 2,
     "activeWarningCount": 3,
-    "totalCount": 12
+    "activeCount": 5
   }
   ```
+  Note: `totalCount` is **not** returned by current production source.
+- **Error Response `500 Internal Server Error`**:
+  ```json
+  { "error": "Alert fetch failed" }
+  ```
+- **Audit Logging**: None.
+
+##### TARGET GO MIGRATION REQUIREMENTS (PHASE 7.1)
+- Go shadow handler must match exact 120/60s rate limit and `listAlerts(101)` fixed query behavior.
+
+---
 
 #### `POST /api/alerts/acknowledge`
-- **Access**: `requireAnyRole(request, ['admin', 'operator'])` (`root`/`super_admin`/`ops_admin` normalized). `viewer` denied with HTTP 403.
-- **Rate Limit**: 30 requests / 60 seconds.
-- **Payload**:
+
+##### CURRENT FROZEN CONTRACT
+- **Route Handler**: `frontend/src/app/api/alerts/acknowledge/route.ts`
+- **Access**: `requireAnyRole(request, ['root', 'operator'])`. In canonical RBAC, accessible by `admin` and `operator`; `viewer` receives HTTP 403.
+- **Rate Limit**: Key `alerts:acknowledge:<user>`, **60 requests / 60 seconds**.
+- **Request Body Schema**:
   ```json
   {
-    "alertIds": ["string"], // required, non-empty array
-    "note": "string (optional)"
+    "id": "string (optional)",
+    "ids": ["string"] // optional
   }
   ```
-- **Operation**: Atomic bulk update of `app_alerts` setting `status = 'acknowledged'`, `acknowledgedAt = now`, `acknowledgedBy = currentUser.username`.
-- **Response `200 OK`**:
+- **Processing Logic**:
+  - `rawIds = Array.isArray(body.ids) ? body.ids : [body.id]`
+  - Filters `typeof value === 'string'`, applies `.trim()`, drops empty values, deduplicates via `Set`.
+  - Max IDs constant: `MAX_ACK_IDS = 200`.
+- **Validation Errors (`400 Bad Request`)**:
+  - If deduplicated `alertIds.length === 0`:
+    ```json
+    { "error": "Alert ID(s) required" }
+    ```
+  - If `alertIds.length > 200`:
+    ```json
+    { "error": "At most 200 alerts can be acknowledged at once" }
+    ```
+- **Repository Mutation**:
+  - Executes `updateMany({ id: { $in: ids }, is_acknowledged: false }, { $set: { is_acknowledged: true } })`.
+  - Persists **only** `is_acknowledged: true`.
+  - Does **not** write `status`, `acknowledgedAt`, `acknowledgedBy`, or `note`.
+- **Success Response `200 OK`**:
   ```json
   {
     "success": true,
-    "acknowledgedCount": 2
+    "acknowledged": 2,
+    "requested": 2,
+    "skipped": 0
   }
   ```
+- **Error Response `500 Internal Server Error`**:
+  ```json
+  { "error": "Failed to acknowledge alert" }
+  ```
+- **Audit Logging**: None in current source.
+
+##### TARGET GO MIGRATION REQUIREMENTS (PHASE 7.2)
+- Replicate `MAX_ACK_IDS = 200`, `id`/`ids` dual input extraction, and `{ success: true, acknowledged, requested, skipped }` response.
+- Best-effort audit logging to `xcloud_ops.app_audit_logs` may be added if required by Phase 7.2 governance alignment.
+
+---
 
 #### `POST /api/alerts/workflow`
-- **Access**: `requireAnyRole(request, ['admin', 'operator'])`. `viewer` denied with HTTP 403.
-- **Rate Limit**: 30 requests / 60 seconds.
-- **Payload**:
+
+##### CURRENT FROZEN CONTRACT
+- **Route Handler**: `frontend/src/app/api/alerts/workflow/route.ts`
+- **Access**: `requireAnyRole(request, ['root', 'operator'])`. In canonical RBAC, accessible by `admin` and `operator`; `viewer` receives HTTP 403.
+- **Rate Limit**: Key `alerts:workflow:<user>`, **120 requests / 60 seconds**.
+- **Request Body Schema**:
   ```json
   {
-    "alertId": "string", // required
-    "status": "active | acknowledged | assigned | recovering | resolved", // required
+    "id": "alert-uuid", // required
+    "status": "acknowledged | assigned | recovering | resolved", // required
     "assignedTo": "string (optional)",
     "note": "string (optional)"
   }
   ```
-- **Response `200 OK`**:
+- **Field Name**: Primary identifier field is **`id`** (not `alertId`).
+- **Allowed Workflow Statuses**: Exactly `['acknowledged', 'assigned', 'recovering', 'resolved']`. (`active` is **not** an accepted workflow status).
+- **Text Cleaning Semantics (`cleanText`)**:
+  - Value must be `string`. Trimmed. Empty string becomes `undefined`.
+  - Truncated to a maximum of 80 characters via `slice(0, 80)`.
+- **Validation Errors**:
+  - Missing or empty `id` (`400 Bad Request`):
+    ```json
+    { "error": "Alert ID required" }
+    ```
+  - Invalid `status` value (`400 Bad Request`):
+    ```json
+    { "error": "Invalid alert workflow status" }
+    ```
+  - Alert not found (`404 Not Found`, when `matched === 0`):
+    ```json
+    { "error": "Alert not found" }
+    ```
+- **Repository Mutation & Persistence**:
+  - Executes `updateOne({ id }, { $set })` on `xcloud_ops.app_alerts`.
+  - Persisted `$set` fields:
+    - `workflow_status`: `update.status`
+    - `workflow_updated_at`: `new Date().toISOString()`
+    - `assigned_to`: `update.assignedTo` (if defined)
+    - `handling_note`: `update.note` (if defined)
+    - `is_acknowledged`: `true` when `status === 'resolved'`
+  - Filter: Matches strictly on `{ id }`. No optimistic version/CAS matching on `updatedAt`, `status`, or `_id`.
+- **Success Response `200 OK`**:
   ```json
   {
     "success": true,
-    "alert": { /* updated alert item */ }
+    "matched": 1,
+    "modified": 1
   }
   ```
+  Note: Returns `matched` and `modified` counts; does **not** return the updated Alert entity.
+- **Error Response `500 Internal Server Error`**:
+  ```json
+  { "error": "Failed to update alert workflow" }
+  ```
+- **Audit Logging**: None in current source.
+
+##### TARGET GO MIGRATION REQUIREMENTS (PHASE 7.2)
+- Replicate 80-character text clamping, status set, and `{ success: true, matched, modified }` response.
+- Concurrency hardening (e.g. CAS versioning) may be evaluated in Phase 7.2 if separately approved.
 
 ---
 
@@ -221,8 +332,9 @@ Browser -> Nginx
 ### 6.1 Server-Sent Events (SSE) Protocol
 
 - **Endpoint**: `GET /api/notifications/stream`
-- **Access**: `requireAuth(request)`. All authenticated roles permitted.
-- **Transport**: HTTP/1.1 or HTTP/2 chunked transfer stream.
+- **Route Handler**: `frontend/src/app/api/notifications/stream/route.ts`
+- **Access**: `requireAuth(request)`. All authenticated roles permitted (`admin`, `operator`, `viewer`).
+- **Rate Limit**: **NONE**. No route-level fixed-window rate limiter exists on `/api/notifications/stream`.
 - **Required Response Headers**:
   ```http
   Content-Type: text/event-stream; charset=utf-8
@@ -230,40 +342,40 @@ Browser -> Nginx
   Connection: keep-alive
   X-Accel-Buffering: no
   ```
-- **Proxy Buffering**: `X-Accel-Buffering: no` ensures Nginx does not buffer stream chunks.
 
 ### 6.2 Connection Lifecycle & Event Specification
 
-1. **Connection Initialization**:
-   - Server sends `init` event immediately upon stream establishment:
+#### CURRENT FROZEN CONTRACT
+
+1. **Connection Initialization (`init` event)**:
+   - Queries `listAlerts(15)` for initial snapshot.
+   - Emits `event: init`:
      ```text
      event: init
-     data: {"timestamp":"2026-09-25T01:00:00.000Z","alerts":{"activeCount":5,"activeCriticalCount":2,"activeWarningCount":3}}
+     data: {"timestamp":"2026-09-25T01:00:00.000Z","user":"admin","role":"admin","alerts":{"activeCriticalCount":2,"activeWarningCount":3,"activeCount":5,"recent":[...]}}
      ```
 2. **Periodic Check & Polling Loop**:
-   - Connection loop evaluates changes every 4000ms.
-   - Actor revalidation: evaluates `validateCurrentAccount({ username, role, sessionVersion })`. If invalid, sends `session_expired` event and terminates connection.
-   - Alert count change: if `activeCount` changes from previous cycle, emits `alerts_update`:
+   - Polling interval: exactly **4000ms** (`setInterval`).
+   - Session Revalidation: evaluates `validateCurrentAccount({ username: user, role: auth.auth.role, sv: auth.auth.sessionVersion })`. If invalid or revoked, emits `session_expired` event and closes the connection:
+     ```text
+     event: session_expired
+     data: {}
+     ```
+   - Alert Update Detection: evaluates `listAlerts(10)`. If `alertData.activeCount !== lastAlertsCount`, updates internal counter and emits `alerts_update`:
      ```text
      event: alerts_update
      data: {"timestamp":"2026-09-25T01:00:04.000Z","activeCriticalCount":2,"activeWarningCount":3,"activeCount":5,"latestAlerts":[...]}
      ```
-3. **Heartbeat Protocol**:
-   - If no event payload is sent for 12000ms, server emits an SSE comment:
-     ```text
-     :ping
-     ```
-   - On transient database read errors during polling, server emits:
-     ```text
-     :transient_retry
-     ```
-4. **Client Termination**:
-   - On client abort or tab close, `request.signal` abort listener clears polling interval and releases connection resources. Zero connection leak.
+3. **Heartbeat & Transient Error Protocol**:
+   - Heartbeat comment: Emits `:ping\n\n` when no update has been emitted for at least **12000ms** (`Date.now() - lastHeartbeat >= 12000`).
+   - Transient database error comment: Emits `:transient_retry\n\n` on MongoDB read errors during polling to keep client connection alive.
+4. **Connection Teardown & Resource Cleanup**:
+   - Client disconnect listener on `request.signal.addEventListener('abort', cleanup)` and `cancel()`.
+   - Clears `intervalId` and closes `controller`. Zero resource leakage.
 
-### 6.3 Architectural Boundary Declaration
-
-The notification stream is intentionally designed without external pub/sub infrastructure (no Redis, no Kafka).
-It operates as a lightweight, polling-backed SSE stream suited for on-premise carrier operations with concurrent operator consoles (<100 active connections).
+##### TARGET GO MIGRATION REQUIREMENTS (PHASE 7.3)
+- Replicate 4s polling, 12s `:ping` heartbeat, `:transient_retry` comment, and exact event schemas.
+- Use `http.Flusher` and `r.Context()` cancellation in a per-connection goroutine.
 
 ---
 
@@ -278,18 +390,19 @@ The system maintains two distinct health layers:
 | **Orchestration Probes** | `/healthz`, `/readyz` | Liveness & Readiness for Docker / K8s / Systemd | `/healthz`: None (instant 200)<br>`/readyz`: Mongo ping | K8s kubelet, load balancer, systemd watchdog |
 | **Platform Health Console** | `/api/system/health`<br>`/api/system/mongo/health` | Deep business & database telemetry diagnostics | Mongo collections, invariant aggregations, credential checks, slice audits | NOC Sentinel, Admin Dashboard, Health UI |
 
-These two layers serve distinct operational purposes and will remain separate. Container probes will not perform comprehensive business aggregations.
+Container orchestration probes remain decoupled from deep diagnostic checks.
+
+---
 
 ### 7.2 Endpoint Contracts
 
 #### `GET /api/system/health`
+
+##### CURRENT FROZEN CONTRACT
+- **Route Handler**: `frontend/src/app/api/system/health/route.ts`
 - **Access**: `requireAuth(request)` (`admin`, `operator`, `viewer`).
-- **Rate Limit**: 30 requests / 60 seconds.
-- **Telemetry Subsystems**:
-  1. `database`: Latency, existing collections, missing indexes report.
-  2. `ocsEngine`: Allocated/used/reserved octets, utilization rate, balance invariants integrity, active sessions, orphaned reservations.
-  3. `hssCore`: Subscriber counts, credentials validation, slice validity, profile attachment integrity.
-  4. `security`: Admin configuration, active user counts, unacknowledged alerts, critical alerts.
+- **Rate Limit**: Key `system:health:<user>`, **30 requests / 60 seconds**.
+- **Repository Invocation**: Calls `getComprehensiveSystemHealth()`.
 - **Response `200 OK`**:
   ```json
   {
@@ -297,7 +410,18 @@ These two layers serve distinct operational purposes and will remain separate. C
     "score": 98,
     "checkedAt": "2026-09-25T01:00:00.000Z",
     "subsystems": {
-      "database": { /* ... */ },
+      "database": {
+        "status": "healthy",
+        "latencyMs": 1.2,
+        "xcloudDb": "xcloud",
+        "appDb": "xcloud_ops",
+        "ready": true,
+        "totalCollections": 11,
+        "existingCollections": 11,
+        "missingCollectionsCount": 0,
+        "missingIndexesCount": 0,
+        "report": { /* ... */ }
+      },
       "ocsEngine": { /* ... */ },
       "hssCore": { /* ... */ },
       "security": { /* ... */ }
@@ -309,21 +433,53 @@ These two layers serve distinct operational purposes and will remain separate. C
     }
   }
   ```
+- **Error Response `500 Internal Server Error`**:
+  ```json
+  {
+    "status": "critical",
+    "score": 0,
+    "checkedAt": "2026-09-25T01:00:00.000Z",
+    "error": "Comprehensive system health check failed"
+  }
+  ```
+
+---
 
 #### `GET /api/system/mongo/health`
+
+##### CURRENT FROZEN CONTRACT
+- **Route Handler**: `frontend/src/app/api/system/mongo/health/route.ts`
 - **Access**: `requireAuth(request)` (`admin`, `operator`, `viewer`).
-- **Rate Limit**: 30 requests / 60 seconds.
-- **Response `200 OK`**:
+- **Rate Limit**: Key `system:mongo-health:<user>`, **30 requests / 60 seconds**.
+- **Repository Invocation**: Calls `getMongoHealthReport()`.
+- **Success Response `200 OK`**:
   ```json
   {
     "ok": true,
     "database": "xcloud",
-    "databases": { "xcloud": { "ok": true }, "xcloud_ops": { "ok": true } },
+    "databases": {
+      "xcloud": { "ok": true },
+      "xcloud_ops": { "ok": true }
+    },
     "checkedAt": "2026-09-25T01:00:00.000Z",
     "latencyMs": 1.45,
-    "collections": [ /* list of collections with document counts */ ],
+    "collections": [ /* array of collection reports */ ],
     "missingCollections": [],
     "missingIndexes": []
+  }
+  ```
+- **Failure Behavior**: On exception, the route handler returns HTTP **200 OK** (not 500) with diagnostic payload:
+  ```json
+  {
+    "ok": false,
+    "database": null,
+    "databases": null,
+    "checkedAt": "2026-09-25T01:00:00.000Z",
+    "latencyMs": null,
+    "collections": [],
+    "missingCollections": [],
+    "missingIndexes": [],
+    "error": "MongoDB health check failed"
   }
   ```
 
@@ -331,31 +487,46 @@ These two layers serve distinct operational purposes and will remain separate. C
 
 ## 8. System Audit & Self-Healing Architecture & Contract
 
-### 8.1 System Integrity vs User-Facing Audit Console
+### 8.1 System Integrity Diagnostics vs Retired Audit Console
 
 Phase 5.7-C retired the user-facing audit inspection console (`/api/audit/*`).
 The remaining `/api/system/audit/*` endpoints perform **System Integrity Diagnostics & Self-Healing** (HSS subscriber data structure repair, OCS balance reconciliation, and dangling profile cleanup).
 
+---
+
 ### 8.2 Endpoint Contracts
 
 #### `GET /api/system/audit/status`
+
+##### CURRENT FROZEN CONTRACT
+- **Route Handler**: `frontend/src/app/api/system/audit/status/route.ts`
 - **Access**: `requireAuth(request)` (`admin`, `operator`, `viewer`).
-- **Rate Limit**: 60 requests / 60 seconds.
-- **Response `200 OK`**:
+- **Rate Limit**: Key `system:audit-status:<user>`, **60 requests / 60 seconds**.
+- **Success Response `200 OK`**:
   ```json
   { "lastSaveTime": 1727226000 }
   ```
+- **Error Response `500 Internal Server Error`**:
+  ```json
+  { "error": "Failed to retrieve system status" }
+  ```
+
+---
 
 #### `POST /api/system/audit/scan`
-- **Access**: `requireAnyRole(request, ['admin', 'operator'])`. `viewer` denied with HTTP 403.
-- **Rate Limit**: 30 requests / 60 seconds.
+
+##### CURRENT FROZEN CONTRACT
+- **Route Handler**: `frontend/src/app/api/system/audit/scan/route.ts`
+- **Access**: `requireAnyRole(request, ['root', 'operator'])`. `viewer` denied with HTTP 403.
+- **Rate Limit**: Key `system:audit-scan:<user>`, **30 requests / 60 seconds**.
 - **Semantics**: Strictly **READ-ONLY** despite using HTTP POST (due to complex cursor payload).
-- **Verification Proof**: Scans `xcloud.subscribers`, `xcloud.ocs_balances`, `xcloud.ocs_reservations`, and `xcloud.ocs_subscribers` via cursor paging. Performs zero write, insert, update, or delete operations.
-- **Payload**:
+- **Read-Only Verification Proof**: Scans `xcloud.subscribers`, `xcloud.ocs_balances`, `xcloud.ocs_reservations`, and `xcloud.ocs_subscribers` via cursor paging. Performs zero write, insert, update, or delete operations.
+- **Request Body**:
   ```json
   { "cursor": "0", "phase": "sub | ocs | tariff | reservation" }
   ```
-- **Response `200 OK`**:
+  Defaults: `cursor = '0'`, `phase = 'sub'`.
+- **Success Response `200 OK`**:
   ```json
   {
     "nextCursor": "1000",
@@ -371,35 +542,72 @@ The remaining `/api/system/audit/*` endpoints perform **System Integrity Diagnos
     ]
   }
   ```
+- **Error Response `500 Internal Server Error`**:
+  ```json
+  { "error": "Audit scan failed" }
+  ```
+
+---
 
 #### `POST /api/system/audit/heal`
+
+##### CURRENT FROZEN CONTRACT
+- **Route Handler**: `frontend/src/app/api/system/audit/heal/route.ts`
 - **Access**: `requireCapability(request, 'system_heal')` (`admin` or `operator`). `viewer` denied with HTTP 403.
-- **Rate Limit**: 20 requests / 60 seconds.
-- **Payload**:
+- **Rate Limit**: Key `system:audit-heal:<user>`, **20 requests / 60 seconds**.
+- **Request Body Schema**:
   ```json
   {
-    "imsi": "460020000000001", // 15 digits or "UNKNOWN"
-    "type": "missing_config | balance_mismatch | orphan_ocs | orphan_reservation | invalid_tariff | dangling_profile",
+    "imsi": "460020000000001", // required, 15 digits or "UNKNOWN"
+    "type": "missing_config | balance_mismatch | orphan_ocs | orphan_reservation | invalid_tariff | dangling_profile", // required
     "profileName": "default (optional)"
   }
   ```
-- **Operation**: Direct execution repair of the subscriber record or balance document. Records operation audit log (`HEAL`).
-- **Response `200 OK`**:
+- **Validation Errors (`400 Bad Request`)**:
+  - Missing `imsi` or `type`:
+    ```json
+    { "error": "imsi and type are required" }
+    ```
+  - Invalid IMSI format (`!/^\d{15}$|^UNKNOWN$/.test(imsi)`):
+    ```json
+    { "error": "IMSI must be exactly 15 digits or UNKNOWN" }
+    ```
+- **Repository Mutation**: Calls `healSubscriberDocument(imsi, type, profileName)`.
+- **Audit Logging**: Emits audit log via `logAudit('HEAL', String(imsi), null, { type, profileName }, request)`.
+  Notice action string is **`HEAL`**.
+- **Success Response `200 OK`**:
   ```json
   { "message": "Successfully applied targeted self-healing for 460020000000001" }
   ```
+- **Error Response `500 Internal Server Error`**:
+  ```json
+  { "error": "Self-healing execution failed" }
+  ```
+
+---
 
 #### `POST /api/system/audit/batch-heal`
-- **Access**: `requireCapability(request, 'system_heal')`.
-- **Rate Limit**: 10 requests / 60 seconds.
-- **Payload**:
+
+##### CURRENT FROZEN CONTRACT
+- **Route Handler**: `frontend/src/app/api/system/audit/batch-heal/route.ts`
+- **Access**: `requireCapability(request, 'system_heal')` (`admin` or `operator`).
+- **Rate Limit**: Key `system:audit-batch-heal:<user>`, **10 requests / 60 seconds**.
+- **Request Body Schema**:
   ```json
   {
-    "anomalies": [ /* array of anomaly objects */ ],
+    "anomalies": [ /* array of anomaly objects */ ], // required, non-empty
     "profileName": "default (optional)"
   }
   ```
-- **Response `200 OK`**:
+- **Validation Errors (`400 Bad Request`)**:
+  - If `!Array.isArray(anomalies) || anomalies.length === 0`:
+    ```json
+    { "error": "anomalies list is required and cannot be empty" }
+    ```
+- **Repository Mutation**: Calls `batchHealSubscriberDocuments(anomalies, profileName)`.
+- **Audit Logging**: Emits audit log via `logAudit('HEAL', 'batch:${anomalies.length}', null, { count: anomalies.length, result, profileName }, request)`.
+  Notice action string is **`HEAL`** (not `HEAL_BATCH`).
+- **Success Response `200 OK`**:
   ```json
   {
     "message": "Successfully healed 15 of 15 anomalies",
@@ -408,6 +616,10 @@ The remaining `/api/system/audit/*` endpoints perform **System Integrity Diagnos
     "errors": []
   }
   ```
+- **Error Response `500 Internal Server Error`**:
+  ```json
+  { "error": "Batch self-healing execution failed" }
+  ```
 
 ---
 
@@ -415,11 +627,13 @@ The remaining `/api/system/audit/*` endpoints perform **System Integrity Diagnos
 
 ### 9.1 Endpoint Contract: `POST /api/analytics/init`
 
-- **Access**: `requireAnyRole(request, ['admin', 'operator'])`.
-- **Rate Limit**: 3 requests / 300 seconds.
+#### CURRENT FROZEN CONTRACT
+- **Route Handler**: `frontend/src/app/api/analytics/init/route.ts`
+- **Access**: `requireAnyRole(request, ['root', 'operator'])`.
+- **Rate Limit**: Key `analytics:init:<user>`, **3 requests / 300 seconds**.
 - **Semantics**: Strictly **READ-ONLY** on-demand aggregation. Despite HTTP POST, it creates zero database mutations.
-- **Behavior**: Calls the shared `computeAnalyticsMetrics()` engine across subscribers, OCS balances, sessions, and tariff plans.
-- **Response `200 OK`**:
+- **Repository Call**: Calls `computeAnalyticsMetrics()`, the identical aggregation engine used by `GET /api/analytics/metrics`.
+- **Success Response `200 OK`**:
   ```json
   {
     "message": "MongoDB analytics are computed from subscriber documents on demand.",
@@ -432,6 +646,10 @@ The remaining `/api/system/audit/*` endpoints perform **System Integrity Diagnos
     }
   }
   ```
+- **Audit Logging**: None in current source.
+
+##### TARGET GO MIGRATION REQUIREMENTS (PHASE 7.1)
+- Replicate 3/300s rate limit and reuse existing Go `computeAnalyticsMetrics` implementation.
 
 ---
 
@@ -453,10 +671,10 @@ An exhaustive audit of the codebase confirms:
 
 ## 11. Security, Authorization & RBAC Canonical Alignment
 
-Phase 7 adopts the canonical three-role model established in Phase 5.7-B:
+Phase 7 candidate authorization aligns with the canonical three-role model established in Phase 5.7-B:
 
-| Domain / Action | Endpoint | `admin` | `operator` | `viewer` | Required Capability |
-|-----------------|----------|:-------:|:----------:|:--------:|:-------------------:|
+| Domain / Action | Endpoint | `admin` | `operator` | `viewer` | Required Capability / Guard |
+|-----------------|----------|:-------:|:----------:|:--------:|:---------------------------:|
 | Alert Read | `GET /api/alerts` | ALLOW | ALLOW | ALLOW | `authenticated` |
 | Alert Acknowledge | `POST /api/alerts/acknowledge` | ALLOW | ALLOW | DENY | `role: admin, operator` |
 | Alert Workflow | `POST /api/alerts/workflow` | ALLOW | ALLOW | DENY | `role: admin, operator` |
@@ -479,41 +697,68 @@ Zero approval tickets (`app_approvals`) will be generated. All permitted mutatio
 
 ## 12. Audit Logging & Evidence Contract
 
-- **Target Collection**: `xcloud_ops.app_audit_logs`.
-- **Mode**: Non-business-gating, best-effort internal operation logging.
-- **Operations Logged**:
-  - `POST /api/alerts/acknowledge`: Action `ALERT_ACKNOWLEDGE`
-  - `POST /api/alerts/workflow`: Action `ALERT_WORKFLOW`
-  - `POST /api/system/audit/heal`: Action `HEAL`
-  - `POST /api/system/audit/batch-heal`: Action `HEAL_BATCH`
-  - Authorization denials (HTTP 403) across all endpoints: Action `AUTHORIZATION_DENIED`
-- **Fields**: `action`, `actor`, `actorRole`, `target`, `timestamp`, `metadata`, `clientIp`, `userAgent`.
+### 12.1 CURRENT FROZEN CONTRACT
+
+- **Alert Mutations**:
+  - `POST /api/alerts/acknowledge`: **Zero** audit records emitted in current Node implementation.
+  - `POST /api/alerts/workflow`: **Zero** audit records emitted in current Node implementation.
+- **System Integrity Mutations**:
+  - `POST /api/system/audit/heal`: Emits action **`HEAL`** with target `imsi` via `logAudit('HEAL', String(imsi), null, { type, profileName }, request)`.
+  - `POST /api/system/audit/batch-heal`: Emits action **`HEAL`** with target `batch:<count>` via `logAudit('HEAL', 'batch:${anomalies.length}', null, { count: anomalies.length, result, profileName }, request)`.
+- **Authorization Denials**:
+  - Middleware and route guards emit `AUTHORIZATION_DENIED` on forbidden attempts (HTTP 403).
+
+### 12.2 TARGET GO MIGRATION REQUIREMENTS (PHASE 7.2 / 7.4)
+
+- **Alert Domain (Phase 7.2)**: Go implementation may introduce best-effort internal operation logging to `xcloud_ops.app_audit_logs` (`ALERT_ACKNOWLEDGE`, `ALERT_WORKFLOW`) to align with the platform governance standard.
+- **Self-Healing Domain (Phase 7.4)**: Go implementation will preserve `HEAL` action semantics with exact metadata payloads.
 
 ---
 
 ## 13. Concurrency Control & State Management
 
-1. **Alert Workflow Concurrency**:
-   - Alert workflow updates use optimistic matching (`_id` and `updatedAt` / `status`) to prevent clobbering concurrent assignments.
-2. **Self-Healing Document Mutations**:
-   - Updates to subscriber or balance documents during healing verify document existence and apply atomic MongoDB update operators (`$set`, `$setOnInsert`).
+### 13.1 CURRENT FROZEN CONTRACT
+
+- **Alert Workflow Concurrency**:
+  - Uses standard `updateOne({ id }, { $set })` filter without optimistic versioning or CAS matching on `updatedAt`, `status`, or `_id`.
+- **Alert Acknowledge Concurrency**:
+  - Atomic bulk `updateMany({ id: { $in: ids }, is_acknowledged: false }, { $set: { is_acknowledged: true } })`.
+- **Self-Healing Document Mutations**:
+  - Updates to subscriber or balance documents during healing verify document existence and apply atomic MongoDB update operators (`$set`, `$setOnInsert`).
+
+### 13.2 TARGET GO MIGRATION REQUIREMENTS (PHASE 7.2)
+
+- Phase 7.2 may evaluate optimistic state matching on workflow status updates if approved during subphase specification.
 
 ---
 
 ## 14. Error Code & Contract Canonical Catalog
 
-| HTTP Status | Error Code / JSON Shape | Trigger Condition |
-|-------------|-------------------------|-------------------|
-| 400 | `{"error": "imsi and type are required"}` | Missing required fields in heal request |
-| 400 | `{"error": "IMSI must be exactly 15 digits or UNKNOWN"}` | Regex validation failure on IMSI |
-| 400 | `{"error": "anomalies list is required and cannot be empty"}` | Empty batch anomalies list |
-| 400 | `{"error": "alertIds must be a non-empty array"}` | Missing or empty alert IDs |
-| 401 | `{"error": "Unauthorized"}` / `{"code": "AUTH_INVALID_TOKEN"}` | Missing or invalid auth token |
-| 403 | `{"error": "Forbidden"}` / `{"code": "PERMISSION_DENIED"}` | Insufficient RBAC capability |
-| 404 | `{"error": "Alert not found"}` | Target alert ID not found in database |
-| 429 | `{"error": "Rate limit exceeded"}` | Fixed-window rate limit hit |
-| 500 | `{"error": "Internal server error"}` | Unhandled database or operational error |
-| 502 | `{"code": "GO_BACKEND_UNREACHABLE"}` | Reverse proxy failed to connect to Go backend |
+Source-derived exact error responses across all Phase 7 candidate endpoints:
+
+| HTTP Status | Error JSON Shape | Originating Handler | Trigger Condition |
+|-------------|------------------|---------------------|-------------------|
+| 400 | `{"error": "Alert ID(s) required"}` | `alerts/acknowledge` | Empty or non-string alert IDs |
+| 400 | `{"error": "At most 200 alerts can be acknowledged at once"}` | `alerts/acknowledge` | Alert IDs count exceeds 200 |
+| 400 | `{"error": "Alert ID required"}` | `alerts/workflow` | Missing or empty `id` field |
+| 400 | `{"error": "Invalid alert workflow status"}` | `alerts/workflow` | Status not in allowed set |
+| 400 | `{"error": "imsi and type are required"}` | `system/audit/heal` | Missing `imsi` or `type` |
+| 400 | `{"error": "IMSI must be exactly 15 digits or UNKNOWN"}` | `system/audit/heal` | Regex failure on IMSI |
+| 400 | `{"error": "anomalies list is required and cannot be empty"}` | `system/audit/batch-heal` | Anomalies list is missing or empty array |
+| 401 | `{"error": "Unauthorized"}` / `{"code": "AUTH_INVALID_TOKEN"}` | `requireAuth` | Missing or invalid auth token |
+| 403 | `{"error": "Forbidden"}` / `{"code": "PERMISSION_DENIED"}` | `requireAnyRole` / `requireCapability` | Insufficient role or missing capability |
+| 404 | `{"error": "Alert not found"}` | `alerts/workflow` | `matched === 0` on workflow update |
+| 429 | `{"error": "Rate limit exceeded"}` | `enforceRateLimit` | Rate limit window exceeded |
+| 500 | `{"error": "Alert fetch failed"}` | `alerts` | Exception in `listAlerts` |
+| 500 | `{"error": "Failed to acknowledge alert"}` | `alerts/acknowledge` | Exception in `acknowledgeAlerts` |
+| 500 | `{"error": "Failed to update alert workflow"}` | `alerts/workflow` | Exception in `updateAlertWorkflow` |
+| 500 | `{"error": "Comprehensive system health check failed"}` | `system/health` | Exception in `getComprehensiveSystemHealth` |
+| 200 (Fail) | `{"ok": false, "database": null, ..., "error": "MongoDB health check failed"}` | `system/mongo/health` | Exception in `getMongoHealthReport` (returns HTTP 200) |
+| 500 | `{"error": "Failed to retrieve system status"}` | `system/audit/status` | Exception in status query |
+| 500 | `{"error": "Audit scan failed"}` | `system/audit/scan` | Exception in `scanSubscriberDocuments` |
+| 500 | `{"error": "Self-healing execution failed"}` | `system/audit/heal` | Exception in `healSubscriberDocument` |
+| 500 | `{"error": "Batch self-healing execution failed"}` | `system/audit/batch-heal` | Exception in `batchHealSubscriberDocuments` |
+| 502 | `{"code": "GO_BACKEND_UNREACHABLE"}` | `proxy.ts` | Reverse proxy failed to connect to Go backend |
 
 ---
 
@@ -602,7 +847,7 @@ To achieve completion of Phase 7.0:
 Phase 7.0 definitively freezes the contract, scope, and migration architecture for Platform Services.
 No implementation code will be written until this freeze is committed, pushed, and verified via remote CI.
 
-- **Baseline SHA**: `a25a6b1c1289881406c048eea750c4a6150bb923`
+- **Baseline SHA**: `f3feaf69bfc0ed10cc67d5740c224ada3d8a5217`
 - **Architecture Freeze Document**: `docs/architecture/phase-7-platform-services-architecture.md`
 - **Validation Script**: `scripts/test-phase-7-architecture-freeze.mjs`
 - **Target Cutover Table**: Unchanged at 36 routes (`ACTUALLY_ROUTED = 36`).
