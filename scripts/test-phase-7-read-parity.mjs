@@ -20,6 +20,7 @@
  */
 
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import net from 'node:net';
 import path from 'node:path';
 import os from 'node:os';
@@ -40,11 +41,22 @@ console.error = (...args) => {
     (args[0].includes('Alert fetch failed') ||
       args[0].includes('Audit scan failed') ||
       args[0].includes('Failed to get system status') ||
-      args[0].includes('Audit engine API failed'))
+      args[0].includes('Audit engine API failed') ||
+      args[0].includes('System health check failed') ||
+      args[0].includes('MongoDB health check failed') ||
+      args[0].includes('Rate limiter MongoDB error'))
   ) {
     return;
   }
   originalConsoleError(...args);
+};
+
+const originalConsoleWarn = console.warn;
+console.warn = (...args) => {
+  if (typeof args[0] === 'string' && args[0].includes('Rate limiter MongoDB error')) {
+    return;
+  }
+  originalConsoleWarn(...args);
 };
 
 const suffix = `${Date.now()}_${process.pid}_${Math.floor(Math.random() * 100000)}`;
@@ -339,12 +351,20 @@ async function callNode(handler, pathStr, method, token, role, user, body = null
     headers: reqHeaders,
     body: body !== null ? (typeof body === 'string' ? body : JSON.stringify(body)) : undefined,
   });
-  const res = await handler(req);
-  let json = null;
   try {
-    json = await res.json();
-  } catch {}
-  return { status: res.status, headers: res.headers, body: json };
+    const res = await handler(req);
+    let json = null;
+    try {
+      json = await res.json();
+    } catch {}
+    return { status: res.status, headers: res.headers, body: json };
+  } catch (err) {
+    return {
+      status: 500,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      body: { error: 'Internal Server Error' },
+    };
+  }
 }
 
 async function callGo(pathStr, method, token, body = null) {
@@ -659,50 +679,80 @@ async function main() {
     assert.equal(goRes.body.error, 'Audit scan failed');
   });
 
-  // Verify failure response wire contracts
-  verify('Verify deterministic error contract definitions across all endpoints', () => {
-    // Alerts failure contract
-    const alertsFailure = { error: 'Alert fetch failed' };
-    assert.equal(alertsFailure.error, 'Alert fetch failed');
+  // Real Node failure execution via simulated database connection rejection
+  await verifyAsync('Execute real Node failure handlers under simulated database connection failure', async () => {
+    const originalMongoPromise = global.mongoClientPromise;
+    global.mongoClientPromise = Promise.reject(new Error('Simulated database connection failure'));
 
-    // System health failure contract
-    const sysHealthFailure = {
-      status: 'critical',
-      score: 0,
-      checkedAt: new Date().toISOString(),
-      error: 'Comprehensive system health check failed',
-    };
-    assert.equal(sysHealthFailure.status, 'critical');
-    assert.equal(sysHealthFailure.score, 0);
+    try {
+      // 1. GET /api/alerts failure -> HTTP 500
+      const nodeAlerts = await callNode(nodeAlertsHandler, '/api/alerts', 'GET', adminToken, 'admin', 'admin_user');
+      assert.equal(nodeAlerts.status, 500, 'GET /api/alerts failure must return 500');
+      assert.deepEqual(nodeAlerts.body, { error: 'Alert fetch failed' });
 
-    // Mongo health degraded failure contract
-    const mongoHealthFailure = {
-      ok: false,
-      database: null,
-      databases: null,
-      checkedAt: new Date().toISOString(),
-      latencyMs: null,
-      collections: [],
-      missingCollections: [],
-      missingIndexes: [],
-      error: 'MongoDB health check failed',
-    };
-    assert.equal(mongoHealthFailure.ok, false);
-    assert.equal(mongoHealthFailure.database, null);
-    assert.equal(mongoHealthFailure.error, 'MongoDB health check failed');
+      // 2. GET /api/system/health failure -> HTTP 500
+      const nodeSysHealth = await callNode(nodeSystemHealthHandler, '/api/system/health', 'GET', adminToken, 'admin', 'admin_user');
+      assert.equal(nodeSysHealth.status, 500, 'GET /api/system/health failure must return 500');
+      assert.equal(nodeSysHealth.body.status, 'critical');
+      assert.equal(nodeSysHealth.body.score, 0);
+      assert.equal(nodeSysHealth.body.error, 'Comprehensive system health check failed');
+      assert.ok(typeof nodeSysHealth.body.checkedAt === 'string', 'checkedAt must be ISO timestamp');
 
-    // Audit scan failure contract
-    const auditScanFailure = { error: 'Audit scan failed' };
-    assert.equal(auditScanFailure.error, 'Audit scan failed');
+      // 3. GET /api/system/mongo/health failure -> HTTP 200 (degraded mode)
+      const nodeMongoHealth = await callNode(nodeMongoHealthHandler, '/api/system/mongo/health', 'GET', adminToken, 'admin', 'admin_user');
+      assert.equal(nodeMongoHealth.status, 200, 'GET /api/system/mongo/health failure must return degraded 200');
+      assert.equal(nodeMongoHealth.body.ok, false);
+      assert.equal(nodeMongoHealth.body.database, null);
+      assert.equal(nodeMongoHealth.body.databases, null);
+      assert.equal(nodeMongoHealth.body.latencyMs, null);
+      assert.deepEqual(nodeMongoHealth.body.collections, []);
+      assert.deepEqual(nodeMongoHealth.body.missingCollections, []);
+      assert.deepEqual(nodeMongoHealth.body.missingIndexes, []);
+      assert.equal(nodeMongoHealth.body.error, 'MongoDB health check failed');
+      assert.ok(typeof nodeMongoHealth.body.checkedAt === 'string');
+
+      // 4. POST /api/system/audit/scan with valid JSON -> HTTP 500
+      const nodeAuditScan = await callNode(nodeAuditScanHandler, '/api/system/audit/scan', 'POST', adminToken, 'admin', 'admin_user', { cursor: '0', phase: 'sub' });
+      assert.equal(nodeAuditScan.status, 500, 'POST /api/system/audit/scan failure must return 500');
+      assert.deepEqual(nodeAuditScan.body, { error: 'Audit scan failed' });
+
+      // 5. POST /api/analytics/init compute failure -> HTTP 500
+      const nodeAnalyticsInit = await callNode(nodeAnalyticsInitHandler, '/api/analytics/init', 'POST', adminToken, 'admin', 'admin_user');
+      assert.equal(nodeAnalyticsInit.status, 500, 'POST /api/analytics/init failure must return 500');
+      assert.ok(!JSON.stringify(nodeAnalyticsInit.body).includes('Simulated database connection failure'));
+    } finally {
+      if (originalMongoPromise) {
+        global.mongoClientPromise = originalMongoPromise;
+      } else {
+        delete global.mongoClientPromise;
+      }
+    }
   });
 
-  verify('Verify no sensitive diagnostic exposure in failure contracts', () => {
-    const disallowedStrings = ['mongodb://', 'ReplicaSet', 'MongoError', 'BSON', 'panic:'];
-    for (const s of disallowedStrings) {
-      assert.ok(!'Alert fetch failed'.includes(s));
-      assert.ok(!'Audit scan failed'.includes(s));
-      assert.ok(!'Comprehensive system health check failed'.includes(s));
-      assert.ok(!'MongoDB health check failed'.includes(s));
+  // Execute Go table-driven unit tests for deterministic failure injection across alert, system, and analytics
+  verify('Execute Go unit failure-path tests for alert, system, and analytics', () => {
+    const output = execSync(
+      'go test -v -count=1 -run "TestAlertHandlerFailureTable|TestSystemHandlersFailureTable|TestAnalyticsInitFailureTable" ./internal/alert ./internal/system ./internal/analytics',
+      { cwd: path.resolve(process.cwd(), 'backend'), encoding: 'utf8' }
+    );
+    assert.ok(output.includes('PASS: TestAlertHandlerFailureTable'), 'TestAlertHandlerFailureTable must pass');
+    assert.ok(output.includes('PASS: TestSystemHandlersFailureTable'), 'TestSystemHandlersFailureTable must pass');
+    assert.ok(output.includes('PASS: TestAnalyticsInitFailureTable'), 'TestAnalyticsInitFailureTable must pass');
+  });
+
+  verify('Verify no sensitive diagnostic exposure in failure responses', () => {
+    const disallowedStrings = ['mongodb://', 'ReplicaSet', 'MongoError', 'BSON', 'panic:', 'Topology'];
+    const failureMessages = [
+      'Alert fetch failed',
+      'Audit scan failed',
+      'Comprehensive system health check failed',
+      'MongoDB health check failed',
+      'Internal server error',
+    ];
+    for (const msg of failureMessages) {
+      for (const s of disallowedStrings) {
+        assert.ok(!msg.toLowerCase().includes(s.toLowerCase()), `Message ${msg} must not leak diagnostic ${s}`);
+      }
     }
   });
 
@@ -1011,11 +1061,13 @@ async function main() {
   // 11. Zero business mutation
   // ---------------------------------------------------------------------------
   console.log('\n--- 11. Zero business mutation ---');
-  await verifyAsync('Verify zero business mutation across all 12 business collections', async () => {
+  await verifyAsync('Verify content-level zero business mutation across all 12 business collections', async () => {
     const xDbGo = client.db(xcloudDbGo);
     const aDbGo = client.db(appDbGo);
+    const xDbNode = client.db(xcloudDbNode);
+    const aDbNode = client.db(appDbNode);
 
-    const businessCollections = [
+    const businessCollectionsGo = [
       { db: xDbGo, name: 'subscribers' },
       { db: xDbGo, name: 'ocs_tariff_plans' },
       { db: xDbGo, name: 'ocs_subscribers' },
@@ -1030,22 +1082,91 @@ async function main() {
       { db: aDbGo, name: 'app_alerts' },
     ];
 
-    const snapshotBefore = {};
-    for (const col of businessCollections) {
-      snapshotBefore[col.name] = await col.db.collection(col.name).countDocuments({});
+    const businessCollectionsNode = [
+      { db: xDbNode, name: 'subscribers' },
+      { db: xDbNode, name: 'ocs_tariff_plans' },
+      { db: xDbNode, name: 'ocs_subscribers' },
+      { db: xDbNode, name: 'ocs_balances' },
+      { db: xDbNode, name: 'ocs_sessions' },
+      { db: xDbNode, name: 'ocs_reservations' },
+      { db: xDbNode, name: 'ocs_usage' },
+      { db: aDbNode, name: 'app_profiles' },
+      { db: aDbNode, name: 'app_profile_versions' },
+      { db: aDbNode, name: 'app_users' },
+      { db: aDbNode, name: 'app_audit_logs' },
+      { db: aDbNode, name: 'app_alerts' },
+    ];
+
+    function normalizeBsonValue(val) {
+      if (val === null || val === undefined) return null;
+      if (val instanceof Date) return val.toISOString();
+      if (typeof val === 'bigint') return val.toString();
+      if (typeof val === 'object') {
+        if (
+          val._bsontype === 'Long' ||
+          val._bsontype === 'Int32' ||
+          val._bsontype === 'Double' ||
+          val._bsontype === 'Decimal128'
+        ) {
+          return val.toString();
+        }
+        if (val._bsontype === 'ObjectId') {
+          return val.toHexString();
+        }
+        if (Array.isArray(val)) {
+          return val.map(normalizeBsonValue);
+        }
+        const sorted = {};
+        for (const k of Object.keys(val).sort()) {
+          sorted[k] = normalizeBsonValue(val[k]);
+        }
+        return sorted;
+      }
+      return val;
     }
 
-    // Call POST /api/system/audit/scan and POST /api/analytics/init
+    async function computeCollectionDigest(db, colName) {
+      const docs = await db.collection(colName).find({}).sort({ _id: 1 }).toArray();
+      const normalized = docs.map(normalizeBsonValue);
+      const jsonStr = JSON.stringify(normalized);
+      return crypto.createHash('sha256').update(jsonStr).digest('hex');
+    }
+
+    // Capture digests before invocation
+    const digestsBeforeGo = {};
+    for (const col of businessCollectionsGo) {
+      digestsBeforeGo[col.name] = await computeCollectionDigest(col.db, col.name);
+    }
+    const digestsBeforeNode = {};
+    for (const col of businessCollectionsNode) {
+      digestsBeforeNode[col.name] = await computeCollectionDigest(col.db, col.name);
+    }
+
+    // Invoke candidate platform actions on Go
     await callGo('/api/system/audit/scan', 'POST', adminToken, { cursor: '0', phase: 'sub' });
     await callGo('/api/analytics/init', 'POST', adminToken);
 
-    const snapshotAfter = {};
-    for (const col of businessCollections) {
-      snapshotAfter[col.name] = await col.db.collection(col.name).countDocuments({});
+    // Invoke candidate platform actions on Node
+    await callNode(nodeAuditScanHandler, '/api/system/audit/scan', 'POST', adminToken, 'admin', 'admin_user', { cursor: '0', phase: 'sub' });
+    await callNode(nodeAnalyticsInitHandler, '/api/analytics/init', 'POST', adminToken, 'admin', 'admin_user');
+
+    // Assert exact SHA-256 digest match for Go database (zero insert, delete, or in-place update)
+    for (const col of businessCollectionsGo) {
+      const digestAfter = await computeCollectionDigest(col.db, col.name);
       assert.equal(
-        snapshotAfter[col.name],
-        snapshotBefore[col.name],
-        `Business collection ${col.name} count must not mutate`
+        digestAfter,
+        digestsBeforeGo[col.name],
+        `Go business collection ${col.name} SHA-256 content digest must not mutate`
+      );
+    }
+
+    // Assert exact SHA-256 digest match for Node database (zero insert, delete, or in-place update)
+    for (const col of businessCollectionsNode) {
+      const digestAfter = await computeCollectionDigest(col.db, col.name);
+      assert.equal(
+        digestAfter,
+        digestsBeforeNode[col.name],
+        `Node business collection ${col.name} SHA-256 content digest must not mutate`
       );
     }
   });

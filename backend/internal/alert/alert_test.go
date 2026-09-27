@@ -1,10 +1,16 @@
 package alert
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
+
+	"subscriber/internal/auth"
 )
 
 func TestAlertDocumentSerialization(t *testing.T) {
@@ -133,6 +139,45 @@ func TestAlertWorkflowFieldsTable(t *testing.T) {
 				if _, ok := m[k]; ok {
 					t.Errorf("expected key %s to be omitted", k)
 				}
+			}
+		})
+	}
+}
+
+func TestAlertHandlerFailureTable(t *testing.T) {
+	cli, err := mongo.Connect(options.Client().ApplyURI("mongodb://127.0.0.1:27017"))
+	if err != nil {
+		t.Fatalf("failed to create mongo client: %v", err)
+	}
+	_ = cli.Disconnect(context.Background())
+
+	failingCol := cli.Database("dummy_db").Collection("app_alerts")
+	repo := NewRepository(failingCol)
+	h := NewHandler(repo, nil)
+
+	roles := []string{"admin", "operator", "viewer"}
+	for _, role := range roles {
+		t.Run("role_"+role, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/api/alerts", nil)
+			p := &auth.Principal{
+				Username:       "test_" + role,
+				Role:           role,
+				NormalizedRole: role,
+			}
+			req = req.WithContext(auth.ContextWithPrincipal(req.Context(), p))
+
+			w := httptest.NewRecorder()
+			h.List(w, req)
+
+			if w.Code != http.StatusInternalServerError {
+				t.Errorf("expected 500, got %d", w.Code)
+			}
+			var m map[string]string
+			if err := json.Unmarshal(w.Body.Bytes(), &m); err != nil {
+				t.Fatalf("unmarshal error: %v", err)
+			}
+			if m["error"] != "Alert fetch failed" {
+				t.Errorf("expected 'Alert fetch failed', got %q", m["error"])
 			}
 		})
 	}
