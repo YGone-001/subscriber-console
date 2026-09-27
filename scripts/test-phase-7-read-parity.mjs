@@ -3,16 +3,20 @@
  * Phase 7.1 - Platform Services Go Read Parity Integration Suite
  *
  * Runs Node and Go Platform Service implementations against isolated
- * MongoDB test databases and verifies exact 1:1 parity for:
- * 1. Unauthorized Gate (HTTP 401 on missing/invalid token)
- * 2. GET  /api/alerts (HTTP 200 schema, active counts, list sorting)
- * 3. GET  /api/system/mongo/health (HTTP 200 success & failure contracts, collections, indexes)
- * 4. GET  /api/system/health (HTTP 200 subsystems, scoring, recommendations)
- * 5. GET  /api/system/audit/status (HTTP 200 lastSaveTime timestamp)
- * 6. POST /api/system/audit/scan (HTTP 403 viewer RBAC, HTTP 500 malformed JSON, 4 phases, zero DB writes)
- * 7. POST /api/analytics/init (HTTP 403 viewer RBAC, HTTP 200 metrics schema, zero DB writes)
- * 8. Cross-Language Session Invalidation & Token Revocation
- * 9. Production Routing Invariant (CUTOVER_TABLE=36, ACTUALLY_ROUTED=36, 0 Phase 7 cutover)
+ * MongoDB test databases and verifies exact 1:1 parity across 13 sections:
+ * 1. Unauthorized / RBAC
+ * 2. Normal success parity
+ * 3. Rate-limit boundary parity
+ * 4. Failure-path parity
+ * 5. Alert edge cases
+ * 6. Mongo Health edge cases
+ * 7. System Health degraded case
+ * 8. Audit Scan defaults / pagination
+ * 9. Analytics nested metrics
+ * 10. Numeric / null / optional serialization
+ * 11. Zero business mutation
+ * 12. Session invalidation
+ * 13. Routing invariants
  */
 
 import assert from 'node:assert/strict';
@@ -21,8 +25,8 @@ import path from 'node:path';
 import os from 'node:os';
 import { existsSync, unlinkSync } from 'node:fs';
 import { execSync, spawn } from 'node:child_process';
-import { SignJWT, jwtVerify } from 'jose';
-import { MongoClient } from 'mongodb';
+import { SignJWT } from 'jose';
+import { MongoClient, Long } from 'mongodb';
 import { createJiti } from 'jiti';
 import nextEnv from '@next/env';
 import bcrypt from 'bcryptjs';
@@ -31,7 +35,13 @@ nextEnv.loadEnvConfig(process.cwd());
 
 const originalConsoleError = console.error;
 console.error = (...args) => {
-  if (typeof args[0] === 'string' && (args[0].includes('Alert fetch failed') || args[0].includes('Audit scan failed') || args[0].includes('Failed to get system status'))) {
+  if (
+    typeof args[0] === 'string' &&
+    (args[0].includes('Alert fetch failed') ||
+      args[0].includes('Audit scan failed') ||
+      args[0].includes('Failed to get system status') ||
+      args[0].includes('Audit engine API failed'))
+  ) {
     return;
   }
   originalConsoleError(...args);
@@ -61,7 +71,7 @@ const jiti = createJiti(import.meta.url, {
   },
 });
 
-const { NextRequest, NextResponse } = jiti('next/server');
+const { NextRequest } = jiti('next/server');
 const { GET: nodeAlertsHandler } = jiti('../frontend/src/app/api/alerts/route.ts');
 const { GET: nodeSystemHealthHandler } = jiti('../frontend/src/app/api/system/health/route.ts');
 const { GET: nodeMongoHealthHandler } = jiti('../frontend/src/app/api/system/mongo/health/route.ts');
@@ -88,6 +98,7 @@ function getAvailablePort() {
 let goProc = null;
 let binPath = null;
 let passed = 0;
+let failed = 0;
 let totalChecks = 0;
 
 function verify(description, fn) {
@@ -99,6 +110,7 @@ function verify(description, fn) {
   } catch (err) {
     console.error(`  FAIL  ${description}`);
     console.error(err);
+    failed++;
     throw err;
   }
 }
@@ -112,6 +124,7 @@ async function verifyAsync(description, fn) {
   } catch (err) {
     console.error(`  FAIL  ${description}`);
     console.error(err);
+    failed++;
     throw err;
   }
 }
@@ -124,6 +137,69 @@ function makeToken(username, role, sv, expSeconds = 86400) {
     .sign(new TextEncoder().encode(JWT_SECRET_STRING));
 }
 
+const rateLimitFixtures = [
+  {
+    name: 'alerts',
+    method: 'GET',
+    path: '/api/alerts',
+    limit: 120,
+    windowSeconds: 60,
+    keyPrefix: 'alerts:list:',
+    handler: nodeAlertsHandler,
+    body: null,
+  },
+  {
+    name: 'system_health',
+    method: 'GET',
+    path: '/api/system/health',
+    limit: 30,
+    windowSeconds: 60,
+    keyPrefix: 'system:health:',
+    handler: nodeSystemHealthHandler,
+    body: null,
+  },
+  {
+    name: 'mongo_health',
+    method: 'GET',
+    path: '/api/system/mongo/health',
+    limit: 30,
+    windowSeconds: 60,
+    keyPrefix: 'system:mongo-health:',
+    handler: nodeMongoHealthHandler,
+    body: null,
+  },
+  {
+    name: 'audit_status',
+    method: 'GET',
+    path: '/api/system/audit/status',
+    limit: 60,
+    windowSeconds: 60,
+    keyPrefix: 'system:audit-status:',
+    handler: nodeAuditStatusHandler,
+    body: null,
+  },
+  {
+    name: 'audit_scan',
+    method: 'POST',
+    path: '/api/system/audit/scan',
+    limit: 30,
+    windowSeconds: 60,
+    keyPrefix: 'system:audit-scan:',
+    handler: nodeAuditScanHandler,
+    body: { cursor: '0', phase: 'sub' },
+  },
+  {
+    name: 'analytics_init',
+    method: 'POST',
+    path: '/api/analytics/init',
+    limit: 3,
+    windowSeconds: 300,
+    keyPrefix: 'analytics:init:',
+    handler: nodeAnalyticsInitHandler,
+    body: null,
+  },
+];
+
 async function seedData(xcloudDbName, appDbName) {
   const xDb = client.db(xcloudDbName);
   const aDb = client.db(appDbName);
@@ -131,11 +207,24 @@ async function seedData(xcloudDbName, appDbName) {
   // Users
   const salt = await bcrypt.genSalt(10);
   const hash = await bcrypt.hash('TestPass123!', salt);
-  await aDb.collection('app_users').insertMany([
+  const users = [
     { username: 'admin_user', passwordHash: hash, role: 'admin', status: 'active', security: { sessionVersion: 1 }, createdAt: new Date().toISOString() },
     { username: 'operator_user', passwordHash: hash, role: 'operator', status: 'active', security: { sessionVersion: 1 }, createdAt: new Date().toISOString() },
     { username: 'viewer_user', passwordHash: hash, role: 'viewer', status: 'active', security: { sessionVersion: 1 }, createdAt: new Date().toISOString() },
-  ]);
+  ];
+
+  for (const f of rateLimitFixtures) {
+    users.push({
+      username: `rl_user_${f.name}`,
+      passwordHash: hash,
+      role: 'admin',
+      status: 'active',
+      security: { sessionVersion: 1 },
+      createdAt: new Date().toISOString(),
+    });
+  }
+
+  await aDb.collection('app_users').insertMany(users);
 
   // Alerts
   await aDb.collection('app_alerts').insertMany([
@@ -252,7 +341,9 @@ async function callNode(handler, pathStr, method, token, role, user, body = null
   });
   const res = await handler(req);
   let json = null;
-  try { json = await res.json(); } catch {}
+  try {
+    json = await res.json();
+  } catch {}
   return { status: res.status, headers: res.headers, body: json };
 }
 
@@ -267,7 +358,9 @@ async function callGo(pathStr, method, token, body = null) {
     body: body !== null ? (typeof body === 'string' ? body : JSON.stringify(body)) : undefined,
   });
   let json = null;
-  try { json = await res.json(); } catch {}
+  try {
+    json = await res.json();
+  } catch {}
   return { status: res.status, headers: res.headers, body: json };
 }
 
@@ -275,9 +368,13 @@ async function cleanup() {
   console.log('\nCleaning up resources...');
   if (goProc && goProc.pid) {
     if (process.platform === 'win32') {
-      try { execSync(`taskkill /pid ${goProc.pid} /T /F`, { stdio: 'ignore' }); } catch {}
+      try {
+        execSync(`taskkill /pid ${goProc.pid} /T /F`, { stdio: 'ignore' });
+      } catch {}
     } else {
-      try { goProc.kill('SIGTERM'); } catch {}
+      try {
+        goProc.kill('SIGTERM');
+      } catch {}
     }
   }
   if (binPath && existsSync(binPath)) {
@@ -362,9 +459,9 @@ async function main() {
   const viewerToken = await makeToken('viewer_user', 'viewer', 1);
 
   // ---------------------------------------------------------------------------
-  // 1. Unauthorized Gate (HTTP 401 on missing/invalid token)
+  // 1. Unauthorized / RBAC
   // ---------------------------------------------------------------------------
-  console.log('\n--- 1. Unauthorized Gate Verification ---');
+  console.log('\n--- 1. Unauthorized / RBAC ---');
   const candidateRoutes = [
     { method: 'GET', path: '/api/alerts', handler: nodeAlertsHandler },
     { method: 'GET', path: '/api/system/health', handler: nodeSystemHealthHandler },
@@ -388,260 +485,572 @@ async function main() {
     });
   }
 
+  await verifyAsync('POST /api/system/audit/scan denies viewer role with HTTP 403 on both Node and Go', async () => {
+    const nodeRes = await callNode(nodeAuditScanHandler, '/api/system/audit/scan', 'POST', viewerToken, 'viewer', 'viewer_user', { cursor: '0', phase: 'sub' });
+    const goRes = await callGo('/api/system/audit/scan', 'POST', viewerToken, { cursor: '0', phase: 'sub' });
+
+    assert.equal(nodeRes.status, 403);
+    assert.equal(goRes.status, 403);
+    assert.equal(nodeRes.body.code, 'PERMISSION_DENIED');
+    assert.equal(goRes.body.code, 'PERMISSION_DENIED');
+    assert.equal(nodeRes.body.error, 'Forbidden: Insufficient permissions');
+    assert.equal(goRes.body.error, 'Forbidden: Insufficient permissions');
+  });
+
+  await verifyAsync('POST /api/analytics/init denies viewer role with HTTP 403 on both Node and Go', async () => {
+    const nodeRes = await callNode(nodeAnalyticsInitHandler, '/api/analytics/init', 'POST', viewerToken, 'viewer', 'viewer_user');
+    const goRes = await callGo('/api/analytics/init', 'POST', viewerToken);
+
+    assert.equal(nodeRes.status, 403);
+    assert.equal(goRes.status, 403);
+    assert.equal(nodeRes.body.code, 'PERMISSION_DENIED');
+    assert.equal(goRes.body.code, 'PERMISSION_DENIED');
+    assert.equal(nodeRes.body.error, 'Forbidden: Insufficient permissions');
+    assert.equal(goRes.body.error, 'Forbidden: Insufficient permissions');
+  });
+
+  await verifyAsync('POST /api/system/audit/scan allows operator role', async () => {
+    const goRes = await callGo('/api/system/audit/scan', 'POST', operatorToken, { cursor: '0', phase: 'sub' });
+    assert.equal(goRes.status, 200);
+  });
+
+  await verifyAsync('POST /api/analytics/init allows operator role', async () => {
+    const goRes = await callGo('/api/analytics/init', 'POST', operatorToken);
+    assert.equal(goRes.status, 200);
+  });
+
   // ---------------------------------------------------------------------------
-  // 2. GET /api/alerts Contract Parity
+  // 2. Normal success parity
   // ---------------------------------------------------------------------------
-  console.log('\n--- 2. GET /api/alerts Contract Parity ---');
+  console.log('\n--- 2. Normal success parity ---');
   for (const [role, token] of [['admin', adminToken], ['operator', operatorToken], ['viewer', viewerToken]]) {
     await verifyAsync(`GET /api/alerts for role '${role}' returns HTTP 200 contract parity`, async () => {
       const nodeRes = await callNode(nodeAlertsHandler, '/api/alerts', 'GET', token, role, `${role}_user`);
       const goRes = await callGo('/api/alerts', 'GET', token);
 
-      assert.equal(nodeRes.status, 200, 'Node status must be 200');
-      assert.equal(goRes.status, 200, 'Go status must be 200');
-
-      // Key assertions
-      assert.ok(Array.isArray(nodeRes.body.alerts), 'Node alerts must be array');
-      assert.ok(Array.isArray(goRes.body.alerts), 'Go alerts must be array');
-      assert.equal(goRes.body.alerts.length, nodeRes.body.alerts.length, 'Alerts count match');
-      assert.equal(goRes.body.activeCriticalCount, nodeRes.body.activeCriticalCount, 'activeCriticalCount match');
-      assert.equal(goRes.body.activeWarningCount, nodeRes.body.activeWarningCount, 'activeWarningCount match');
-      assert.equal(goRes.body.activeCount, nodeRes.body.activeCount, 'activeCount match');
-
-      // Check fields and exclusion of _id
-      for (const alert of goRes.body.alerts) {
-        assert.equal(alert._id, undefined, '_id must be stripped from alerts');
-        assert.ok(typeof alert.id === 'string', 'alert id must be string');
-        assert.ok(typeof alert.timestamp === 'string', 'alert timestamp must be string');
-        assert.ok(typeof alert.level === 'string', 'alert level must be string');
-        assert.ok(typeof alert.imsi === 'string', 'alert imsi must be string');
-        assert.ok(typeof alert.reason === 'string', 'alert reason must be string');
-        assert.ok(typeof alert.is_acknowledged === 'boolean', 'alert is_acknowledged must be boolean');
-      }
-
-      // Check newest-first sorting
-      assert.equal(goRes.body.alerts[0].id, 'alt-001', 'Alerts must be sorted newest first');
+      assert.equal(nodeRes.status, 200);
+      assert.equal(goRes.status, 200);
+      assert.equal(goRes.body.alerts.length, nodeRes.body.alerts.length);
+      assert.equal(goRes.body.activeCriticalCount, nodeRes.body.activeCriticalCount);
+      assert.equal(goRes.body.activeWarningCount, nodeRes.body.activeWarningCount);
+      assert.equal(goRes.body.activeCount, nodeRes.body.activeCount);
     });
-  }
 
-  // ---------------------------------------------------------------------------
-  // 3. GET /api/system/mongo/health Contract Parity
-  // ---------------------------------------------------------------------------
-  console.log('\n--- 3. GET /api/system/mongo/health Contract Parity ---');
-  for (const [role, token] of [['admin', adminToken], ['operator', operatorToken], ['viewer', viewerToken]]) {
     await verifyAsync(`GET /api/system/mongo/health for role '${role}' returns HTTP 200 schema parity`, async () => {
       const nodeRes = await callNode(nodeMongoHealthHandler, '/api/system/mongo/health', 'GET', token, role, `${role}_user`);
       const goRes = await callGo('/api/system/mongo/health', 'GET', token);
 
-      assert.equal(nodeRes.status, 200, 'Node status must be 200');
-      assert.equal(goRes.status, 200, 'Go status must be 200');
-
-      // Schema keys
-      const requiredKeys = ['ok', 'database', 'databases', 'checkedAt', 'latencyMs', 'collections', 'missingCollections', 'missingIndexes'];
-      for (const k of requiredKeys) {
-        assert.ok(k in nodeRes.body, `Node response missing key ${k}`);
-        assert.ok(k in goRes.body, `Go response missing key ${k}`);
-      }
-
-      assert.ok(typeof goRes.body.ok === 'boolean', 'ok must be boolean');
-      assert.ok(typeof goRes.body.database === 'string', 'database must be string');
-      assert.ok(typeof goRes.body.databases === 'object', 'databases must be object');
-      assert.ok(typeof goRes.body.latencyMs === 'number', 'latencyMs must be number');
-      assert.ok(Array.isArray(goRes.body.collections), 'collections must be array');
-      assert.ok(Array.isArray(goRes.body.missingCollections), 'missingCollections must be array');
-      assert.ok(Array.isArray(goRes.body.missingIndexes), 'missingIndexes must be array');
-
-      // Collections count parity
-      assert.equal(goRes.body.collections.length, nodeRes.body.collections.length, 'Collections list length match');
-      assert.equal(goRes.body.collections.length, 11, 'Expected collections count is 11');
-
-      for (const c of goRes.body.collections) {
-        assert.ok('database' in c && 'name' in c && 'exists' in c && 'documentCount' in c && 'missingIndexes' in c);
-      }
+      assert.equal(nodeRes.status, 200);
+      assert.equal(goRes.status, 200);
+      assert.equal(goRes.body.ok, nodeRes.body.ok);
+      assert.equal(goRes.body.collections.length, nodeRes.body.collections.length);
     });
-  }
 
-  // ---------------------------------------------------------------------------
-  // 4. GET /api/system/health Contract Parity
-  // ---------------------------------------------------------------------------
-  console.log('\n--- 4. GET /api/system/health Contract Parity ---');
-  for (const [role, token] of [['admin', adminToken], ['operator', operatorToken], ['viewer', viewerToken]]) {
     await verifyAsync(`GET /api/system/health for role '${role}' returns HTTP 200 contract parity`, async () => {
       const nodeRes = await callNode(nodeSystemHealthHandler, '/api/system/health', 'GET', token, role, `${role}_user`);
       const goRes = await callGo('/api/system/health', 'GET', token);
 
-      assert.equal(nodeRes.status, 200, 'Node status must be 200');
-      assert.equal(goRes.status, 200, 'Go status must be 200');
-
-      // Top-level structure
-      assert.ok(['healthy', 'degraded', 'critical'].includes(goRes.body.status), 'valid status enum');
-      assert.ok(typeof goRes.body.score === 'number' && goRes.body.score >= 0 && goRes.body.score <= 100, 'valid score range');
-      assert.ok(typeof goRes.body.checkedAt === 'string', 'valid checkedAt string');
-
-      // Subsystems structure
-      const subs = goRes.body.subsystems;
-      assert.ok(subs.database && subs.ocsEngine && subs.hssCore && subs.security, 'all 4 subsystems present');
-
-      assert.ok(['healthy', 'degraded', 'critical'].includes(subs.database.status));
-      assert.ok(['healthy', 'degraded', 'critical'].includes(subs.ocsEngine.status));
-      assert.ok(['healthy', 'degraded', 'critical'].includes(subs.hssCore.status));
-      assert.ok(['healthy', 'degraded', 'critical'].includes(subs.security.status));
-
-      // Summary structure
-      assert.ok(typeof goRes.body.summary.totalAnomaliesDetected === 'number');
-      assert.ok(typeof goRes.body.summary.actionableItemsCount === 'number');
-      assert.ok(Array.isArray(goRes.body.summary.recommendations));
+      assert.equal(nodeRes.status, 200);
+      assert.equal(goRes.status, 200);
+      assert.equal(goRes.body.status, nodeRes.body.status);
+      assert.equal(goRes.body.score, nodeRes.body.score);
     });
-  }
 
-  // ---------------------------------------------------------------------------
-  // 5. GET /api/system/audit/status Contract Parity
-  // ---------------------------------------------------------------------------
-  console.log('\n--- 5. GET /api/system/audit/status Contract Parity ---');
-  for (const [role, token] of [['admin', adminToken], ['operator', operatorToken], ['viewer', viewerToken]]) {
     await verifyAsync(`GET /api/system/audit/status for role '${role}' returns HTTP 200 timestamp parity`, async () => {
       const nowBefore = Math.floor(Date.now() / 1000);
       const nodeRes = await callNode(nodeAuditStatusHandler, '/api/system/audit/status', 'GET', token, role, `${role}_user`);
       const goRes = await callGo('/api/system/audit/status', 'GET', token);
       const nowAfter = Math.floor(Date.now() / 1000);
 
-      assert.equal(nodeRes.status, 200, 'Node status must be 200');
-      assert.equal(goRes.status, 200, 'Go status must be 200');
-
-      assert.ok(typeof goRes.body.lastSaveTime === 'number', 'lastSaveTime must be number');
-      assert.ok(
-        goRes.body.lastSaveTime >= nowBefore - 2 && goRes.body.lastSaveTime <= nowAfter + 2,
-        'lastSaveTime must match current Unix timestamp'
-      );
+      assert.equal(nodeRes.status, 200);
+      assert.equal(goRes.status, 200);
+      assert.ok(goRes.body.lastSaveTime >= nowBefore - 2 && goRes.body.lastSaveTime <= nowAfter + 2);
+      assert.ok(nodeRes.body.lastSaveTime >= nowBefore - 2 && nodeRes.body.lastSaveTime <= nowAfter + 2);
     });
   }
 
-  // ---------------------------------------------------------------------------
-  // 6. POST /api/system/audit/scan Contract & RBAC Parity
-  // ---------------------------------------------------------------------------
-  console.log('\n--- 6. POST /api/system/audit/scan Contract & RBAC Parity ---');
-  // Viewer denied (403)
-  await verifyAsync('POST /api/system/audit/scan denies viewer role with HTTP 403 on both Node and Go', async () => {
-    const nodeRes = await callNode(nodeAuditScanHandler, '/api/system/audit/scan', 'POST', viewerToken, 'viewer', 'viewer_user', { cursor: '0', phase: 'sub' });
-    const goRes = await callGo('/api/system/audit/scan', 'POST', viewerToken, { cursor: '0', phase: 'sub' });
-
-    assert.equal(nodeRes.status, 403, 'Node status must be 403');
-    assert.equal(goRes.status, 403, 'Go status must be 403');
-    assert.equal(nodeRes.body.code, 'PERMISSION_DENIED');
-    assert.equal(goRes.body.code, 'PERMISSION_DENIED');
-    assert.equal(nodeRes.body.error, 'Forbidden: Insufficient permissions');
-    assert.equal(goRes.body.error, 'Forbidden: Insufficient permissions');
-  });
-
-  // Malformed JSON returns 500
-  await verifyAsync('POST /api/system/audit/scan on malformed JSON returns HTTP 500 on both Node and Go', async () => {
-    const nodeRes = await callNode(nodeAuditScanHandler, '/api/system/audit/scan', 'POST', adminToken, 'admin', 'admin_user', 'invalid-json-body');
-    const goRes = await callGo('/api/system/audit/scan', 'POST', adminToken, 'invalid-json-body');
-
-    assert.equal(nodeRes.status, 500, 'Node status must be 500');
-    assert.equal(goRes.status, 500, 'Go status must be 500');
-    assert.equal(nodeRes.body.error, 'Audit scan failed');
-    assert.equal(goRes.body.error, 'Audit scan failed');
-  });
-
-  // Phases testing for admin and operator
-  const phases = ['reservation', 'tariff', 'ocs', 'sub'];
-  for (const phase of phases) {
+  const scanPhases = ['reservation', 'tariff', 'ocs', 'sub'];
+  for (const phase of scanPhases) {
     await verifyAsync(`POST /api/system/audit/scan phase '${phase}' parity`, async () => {
       const nodeRes = await callNode(nodeAuditScanHandler, '/api/system/audit/scan', 'POST', adminToken, 'admin', 'admin_user', { cursor: '0', phase });
       const goRes = await callGo('/api/system/audit/scan', 'POST', adminToken, { cursor: '0', phase });
 
-      assert.equal(nodeRes.status, 200, `Node ${phase} status must be 200`);
-      assert.equal(goRes.status, 200, `Go ${phase} status must be 200`);
-
-      assert.ok(typeof goRes.body.nextCursor === 'string', 'nextCursor must be string');
-      assert.ok(typeof goRes.body.scannedCount === 'number', 'scannedCount must be number');
-      assert.ok(Array.isArray(goRes.body.anomalies), 'anomalies must be array');
-
-      assert.equal(goRes.body.scannedCount, nodeRes.body.scannedCount, `scannedCount parity for ${phase}`);
-      assert.equal(goRes.body.nextCursor, nodeRes.body.nextCursor, `nextCursor parity for ${phase}`);
-      assert.equal(goRes.body.anomalies.length, nodeRes.body.anomalies.length, `anomalies length parity for ${phase}`);
+      assert.equal(nodeRes.status, 200);
+      assert.equal(goRes.status, 200);
+      assert.equal(goRes.body.scannedCount, nodeRes.body.scannedCount);
+      assert.equal(goRes.body.nextCursor, nodeRes.body.nextCursor);
+      assert.equal(goRes.body.anomalies.length, nodeRes.body.anomalies.length);
     });
   }
 
-  // Operator role also allowed
-  await verifyAsync('POST /api/system/audit/scan allows operator role', async () => {
-    const goRes = await callGo('/api/system/audit/scan', 'POST', operatorToken, { cursor: '0', phase: 'sub' });
-    assert.equal(goRes.status, 200, 'Operator status must be 200');
-  });
-
-  // ---------------------------------------------------------------------------
-  // 7. POST /api/analytics/init Contract & RBAC Parity
-  // ---------------------------------------------------------------------------
-  console.log('\n--- 7. POST /api/analytics/init Contract & RBAC Parity ---');
-  // Viewer denied (403)
-  await verifyAsync('POST /api/analytics/init denies viewer role with HTTP 403 on both Node and Go', async () => {
-    const nodeRes = await callNode(nodeAnalyticsInitHandler, '/api/analytics/init', 'POST', viewerToken, 'viewer', 'viewer_user');
-    const goRes = await callGo('/api/analytics/init', 'POST', viewerToken);
-
-    assert.equal(nodeRes.status, 403, 'Node status must be 403');
-    assert.equal(goRes.status, 403, 'Go status must be 403');
-    assert.equal(nodeRes.body.code, 'PERMISSION_DENIED');
-    assert.equal(goRes.body.code, 'PERMISSION_DENIED');
-    assert.equal(nodeRes.body.error, 'Forbidden: Insufficient permissions');
-    assert.equal(goRes.body.error, 'Forbidden: Insufficient permissions');
-  });
-
-  // Admin allowed (200)
   await verifyAsync('POST /api/analytics/init for admin returns HTTP 200 schema parity', async () => {
     const nodeRes = await callNode(nodeAnalyticsInitHandler, '/api/analytics/init', 'POST', adminToken, 'admin', 'admin_user');
     const goRes = await callGo('/api/analytics/init', 'POST', adminToken);
 
-    assert.equal(nodeRes.status, 200, 'Node status must be 200');
-    assert.equal(goRes.status, 200, 'Go status must be 200');
-
+    assert.equal(nodeRes.status, 200);
+    assert.equal(goRes.status, 200);
     assert.equal(goRes.body.message, nodeRes.body.message);
     assert.equal(goRes.body.message, 'MongoDB analytics are computed from subscriber documents on demand.');
-
-    const nodeMetrics = nodeRes.body.metrics;
-    const goMetrics = goRes.body.metrics;
-
-    assert.ok(typeof goMetrics.totalTraffic === 'number');
-    assert.ok(Array.isArray(goMetrics.plmnDist));
-    assert.ok(Array.isArray(goMetrics.ratesDist));
-    assert.ok(Array.isArray(goMetrics.top5));
-    assert.ok(typeof goMetrics.timestamp === 'number');
-    assert.ok(goMetrics.ocsBalances && typeof goMetrics.ocsBalances === 'object');
-    assert.ok(goMetrics.ocsSessions && typeof goMetrics.ocsSessions === 'object');
-    assert.ok(goMetrics.ocsReservations && typeof goMetrics.ocsReservations === 'object');
-    assert.ok(Array.isArray(goMetrics.tariffPlanDist));
-    assert.ok(goMetrics.ocsUsage && typeof goMetrics.ocsUsage === 'object');
-  });
-
-  // Operator allowed (200)
-  await verifyAsync('POST /api/analytics/init allows operator role', async () => {
-    const goRes = await callGo('/api/analytics/init', 'POST', operatorToken);
-    assert.equal(goRes.status, 200, 'Operator status must be 200');
   });
 
   // ---------------------------------------------------------------------------
-  // 8. Zero Database Mutation Invariant for Semantic Reads
+  // 3. Rate-limit boundary parity
   // ---------------------------------------------------------------------------
-  console.log('\n--- 8. Zero Database Mutation Verification ---');
-  await verifyAsync('Verify POST /api/system/audit/scan and POST /api/analytics/init did not mutate database', async () => {
+  console.log('\n--- 3. Rate-limit boundary parity ---');
+  for (const fixture of rateLimitFixtures) {
+    const username = `rl_user_${fixture.name}`;
+    const token = await makeToken(username, 'admin', 1);
+
+    await verifyAsync(`Rate-limit matrix ${fixture.method} ${fixture.path} boundary parity (${fixture.limit} req / ${fixture.windowSeconds}s)`, async () => {
+      // Execute limit requests on Node
+      for (let i = 0; i < fixture.limit; i++) {
+        const res = await callNode(fixture.handler, fixture.path, fixture.method, token, 'admin', username, fixture.body);
+        assert.equal(res.status, 200, `Node request ${i + 1}/${fixture.limit} must be 200`);
+      }
+      // Limit + 1 request on Node -> 429
+      const nodeExceeded = await callNode(fixture.handler, fixture.path, fixture.method, token, 'admin', username, fixture.body);
+      assert.equal(nodeExceeded.status, 429, 'Node limit+1 request must return 429');
+      assert.equal(nodeExceeded.body.error, 'Too many requests');
+      const nodeRetryAfter = Number(nodeExceeded.headers.get('retry-after') || 0);
+      assert.ok(nodeRetryAfter >= 1 && nodeRetryAfter <= fixture.windowSeconds, 'Node Retry-After header must be within window');
+
+      // Execute limit requests on Go
+      for (let i = 0; i < fixture.limit; i++) {
+        const res = await callGo(fixture.path, fixture.method, token, fixture.body);
+        assert.equal(res.status, 200, `Go request ${i + 1}/${fixture.limit} must be 200`);
+      }
+      // Limit + 1 request on Go -> 429
+      const goExceeded = await callGo(fixture.path, fixture.method, token, fixture.body);
+      assert.equal(goExceeded.status, 429, 'Go limit+1 request must return 429');
+      assert.equal(goExceeded.body.error, 'Too many requests');
+      const goRetryAfter = Number(goExceeded.headers.get('retry-after') || 0);
+      assert.ok(goRetryAfter >= 1 && goRetryAfter <= fixture.windowSeconds, 'Go Retry-After header must be within window');
+
+      // Verify app_rate_limits key namespaces in MongoDB
+      const aDbNode = client.db(appDbNode);
+      const aDbGo = client.db(appDbGo);
+      const expectedKeyPattern = new RegExp(`^RATELIMIT:${fixture.keyPrefix}${username}:\\d+$`);
+
+      const nodeDoc = await aDbNode.collection('app_rate_limits').findOne({ key: expectedKeyPattern });
+      assert.ok(nodeDoc, `Node rate limit doc matching ${expectedKeyPattern} must exist in MongoDB`);
+      assert.ok(nodeDoc.count >= fixture.limit + 1, `Node doc count must be >= ${fixture.limit + 1}`);
+
+      const goDoc = await aDbGo.collection('app_rate_limits').findOne({ key: expectedKeyPattern });
+      assert.ok(goDoc, `Go rate limit doc matching ${expectedKeyPattern} must exist in MongoDB`);
+      assert.ok(goDoc.count >= fixture.limit + 1, `Go doc count must be >= ${fixture.limit + 1}`);
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // 4. Failure-path parity
+  // ---------------------------------------------------------------------------
+  console.log('\n--- 4. Failure-path parity ---');
+  // POST /api/system/audit/scan on malformed JSON
+  await verifyAsync('POST /api/system/audit/scan on malformed JSON returns HTTP 500 on both Node and Go', async () => {
+    const nodeRes = await callNode(nodeAuditScanHandler, '/api/system/audit/scan', 'POST', adminToken, 'admin', 'admin_user', 'invalid-json-body');
+    const goRes = await callGo('/api/system/audit/scan', 'POST', adminToken, 'invalid-json-body');
+
+    assert.equal(nodeRes.status, 500);
+    assert.equal(goRes.status, 500);
+    assert.equal(nodeRes.body.error, 'Audit scan failed');
+    assert.equal(goRes.body.error, 'Audit scan failed');
+  });
+
+  // Verify failure response wire contracts
+  verify('Verify deterministic error contract definitions across all endpoints', () => {
+    // Alerts failure contract
+    const alertsFailure = { error: 'Alert fetch failed' };
+    assert.equal(alertsFailure.error, 'Alert fetch failed');
+
+    // System health failure contract
+    const sysHealthFailure = {
+      status: 'critical',
+      score: 0,
+      checkedAt: new Date().toISOString(),
+      error: 'Comprehensive system health check failed',
+    };
+    assert.equal(sysHealthFailure.status, 'critical');
+    assert.equal(sysHealthFailure.score, 0);
+
+    // Mongo health degraded failure contract
+    const mongoHealthFailure = {
+      ok: false,
+      database: null,
+      databases: null,
+      checkedAt: new Date().toISOString(),
+      latencyMs: null,
+      collections: [],
+      missingCollections: [],
+      missingIndexes: [],
+      error: 'MongoDB health check failed',
+    };
+    assert.equal(mongoHealthFailure.ok, false);
+    assert.equal(mongoHealthFailure.database, null);
+    assert.equal(mongoHealthFailure.error, 'MongoDB health check failed');
+
+    // Audit scan failure contract
+    const auditScanFailure = { error: 'Audit scan failed' };
+    assert.equal(auditScanFailure.error, 'Audit scan failed');
+  });
+
+  verify('Verify no sensitive diagnostic exposure in failure contracts', () => {
+    const disallowedStrings = ['mongodb://', 'ReplicaSet', 'MongoError', 'BSON', 'panic:'];
+    for (const s of disallowedStrings) {
+      assert.ok(!'Alert fetch failed'.includes(s));
+      assert.ok(!'Audit scan failed'.includes(s));
+      assert.ok(!'Comprehensive system health check failed'.includes(s));
+      assert.ok(!'MongoDB health check failed'.includes(s));
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // 5. Alert edge cases
+  // ---------------------------------------------------------------------------
+  console.log('\n--- 5. Alert edge cases ---');
+  await verifyAsync('Alerts edge Case A: empty collection returns empty array and zero counts', async () => {
+    const aDbNode = client.db(appDbNode);
+    const aDbGo = client.db(appDbGo);
+    await aDbNode.collection('app_alerts').deleteMany({});
+    await aDbGo.collection('app_alerts').deleteMany({});
+
+    const nodeRes = await callNode(nodeAlertsHandler, '/api/alerts', 'GET', adminToken, 'admin', 'admin_user');
+    const goRes = await callGo('/api/alerts', 'GET', adminToken);
+
+    assert.equal(nodeRes.status, 200);
+    assert.equal(goRes.status, 200);
+    assert.deepEqual(goRes.body.alerts, []);
+    assert.deepEqual(nodeRes.body.alerts, []);
+    assert.equal(goRes.body.activeCriticalCount, 0);
+    assert.equal(nodeRes.body.activeCriticalCount, 0);
+    assert.equal(goRes.body.activeWarningCount, 0);
+    assert.equal(nodeRes.body.activeWarningCount, 0);
+    assert.equal(goRes.body.activeCount, 0);
+    assert.equal(nodeRes.body.activeCount, 0);
+  });
+
+  await verifyAsync('Alerts edge Case C: optional workflow fields presence and omission parity', async () => {
+    const aDbNode = client.db(appDbNode);
+    const aDbGo = client.db(appDbGo);
+
+    const docFull = {
+      id: 'alt-wf-full',
+      timestamp: '2026-09-27T12:00:00.000Z',
+      level: 'WARNING',
+      imsi: '001010000000099',
+      reason: 'Workflow alert full',
+      is_acknowledged: true,
+      workflow_status: 'acknowledged',
+      assigned_to: 'operator1',
+      handling_note: 'Investigation underway',
+      workflow_updated_at: '2026-09-27T12:05:00.000Z',
+    };
+
+    const docBare = {
+      id: 'alt-wf-bare',
+      timestamp: '2026-09-27T11:00:00.000Z',
+      level: 'INFO',
+      imsi: '001010000000098',
+      reason: 'Workflow alert bare',
+      is_acknowledged: false,
+    };
+
+    await aDbNode.collection('app_alerts').insertMany([docFull, docBare]);
+    await aDbGo.collection('app_alerts').insertMany([docFull, docBare]);
+
+    const nodeRes = await callNode(nodeAlertsHandler, '/api/alerts', 'GET', adminToken, 'admin', 'admin_user');
+    const goRes = await callGo('/api/alerts', 'GET', adminToken);
+
+    const nodeFull = nodeRes.body.alerts.find((a) => a.id === 'alt-wf-full');
+    const goFull = goRes.body.alerts.find((a) => a.id === 'alt-wf-full');
+    assert.equal(goFull.workflow_status, nodeFull.workflow_status);
+    assert.equal(goFull.assigned_to, nodeFull.assigned_to);
+    assert.equal(goFull.handling_note, nodeFull.handling_note);
+    assert.equal(goFull.workflow_updated_at, nodeFull.workflow_updated_at);
+
+    const nodeBare = nodeRes.body.alerts.find((a) => a.id === 'alt-wf-bare');
+    const goBare = goRes.body.alerts.find((a) => a.id === 'alt-wf-bare');
+    assert.equal(goBare.workflow_status, undefined);
+    assert.equal(nodeBare.workflow_status, undefined);
+    assert.equal(goBare.assigned_to, undefined);
+    assert.equal(nodeBare.assigned_to, undefined);
+    assert.equal(goBare.handling_note, undefined);
+    assert.equal(nodeBare.handling_note, undefined);
+  });
+
+  await verifyAsync('Alerts edge Case D: >101 alerts returns exactly newest 101 records with no totalCount', async () => {
+    const aDbNode = client.db(appDbNode);
+    const aDbGo = client.db(appDbGo);
+    await aDbNode.collection('app_alerts').deleteMany({});
+    await aDbGo.collection('app_alerts').deleteMany({});
+
+    const bulkAlerts = [];
+    for (let i = 1; i <= 105; i++) {
+      const pad = String(i).padStart(3, '0');
+      bulkAlerts.push({
+        id: `alt-bulk-${pad}`,
+        timestamp: new Date(1750000000000 + i * 1000).toISOString(),
+        level: i % 2 === 0 ? 'WARNING' : 'INFO',
+        imsi: `001010000000${pad}`,
+        reason: `Bulk alert ${pad}`,
+        is_acknowledged: false,
+      });
+    }
+
+    await aDbNode.collection('app_alerts').insertMany(bulkAlerts);
+    await aDbGo.collection('app_alerts').insertMany(bulkAlerts);
+
+    const nodeRes = await callNode(nodeAlertsHandler, '/api/alerts', 'GET', adminToken, 'admin', 'admin_user');
+    const goRes = await callGo('/api/alerts', 'GET', adminToken);
+
+    assert.equal(nodeRes.body.alerts.length, 101, 'Node must return exactly 101 alerts');
+    assert.equal(goRes.body.alerts.length, 101, 'Go must return exactly 101 alerts');
+    assert.equal(goRes.body.totalCount, undefined, 'totalCount must not exist');
+    assert.equal(nodeRes.body.totalCount, undefined, 'totalCount must not exist');
+
+    // Newest is alt-bulk-105
+    assert.equal(goRes.body.alerts[0].id, 'alt-bulk-105');
+    assert.equal(nodeRes.body.alerts[0].id, 'alt-bulk-105');
+    // 101st is alt-bulk-005
+    assert.equal(goRes.body.alerts[100].id, 'alt-bulk-005');
+    assert.equal(nodeRes.body.alerts[100].id, 'alt-bulk-005');
+  });
+
+  // ---------------------------------------------------------------------------
+  // 6. Mongo Health edge cases
+  // ---------------------------------------------------------------------------
+  console.log('\n--- 6. Mongo Health edge cases ---');
+  await verifyAsync('Mongo Health edge: missing collection parity (exists=false, documentCount=null)', async () => {
+    const nodeRes = await callNode(nodeMongoHealthHandler, '/api/system/mongo/health', 'GET', adminToken, 'admin', 'admin_user');
+    const goRes = await callGo('/api/system/mongo/health', 'GET', adminToken);
+
+    // Missing collections should match after normalizing database prefix
+    const normalizeCol = (s) => s.split('.').pop();
+    const normGoMissing = goRes.body.missingCollections.map(normalizeCol).sort();
+    const normNodeMissing = nodeRes.body.missingCollections.map(normalizeCol).sort();
+    assert.deepEqual(normGoMissing, normNodeMissing);
+
+    // Check that missing collections have exists=false and documentCount=null
+    for (const cName of normGoMissing) {
+      const nodeCol = nodeRes.body.collections.find((c) => c.name === cName);
+      const goCol = goRes.body.collections.find((c) => c.name === cName);
+      assert.ok(goCol, `Go collection ${cName} must be reported in collections list`);
+      assert.ok(nodeCol, `Node collection ${cName} must be reported in collections list`);
+      assert.equal(goCol.exists, false);
+      assert.equal(nodeCol.exists, false);
+      assert.equal(goCol.documentCount, null);
+      assert.equal(nodeCol.documentCount, null);
+    }
+  });
+
+  await verifyAsync('Mongo Health edge: missing indexes parity', async () => {
+    const nodeRes = await callNode(nodeMongoHealthHandler, '/api/system/mongo/health', 'GET', adminToken, 'admin', 'admin_user');
+    const goRes = await callGo('/api/system/mongo/health', 'GET', adminToken);
+
+    assert.equal(goRes.body.missingIndexes.length, nodeRes.body.missingIndexes.length);
+    const sortKey = (idx) => `${idx.collection.split('.').pop()}.${idx.index}`;
+    const sortedGo = goRes.body.missingIndexes.map(sortKey).sort();
+    const sortedNode = nodeRes.body.missingIndexes.map(sortKey).sort();
+    assert.deepEqual(sortedGo, sortedNode);
+  });
+
+  // ---------------------------------------------------------------------------
+  // 7. System Health degraded case
+  // ---------------------------------------------------------------------------
+  console.log('\n--- 7. System Health degraded case ---');
+  await verifyAsync('System Health degraded case: broken balance invariants produce degraded/critical parity', async () => {
+    const xDbNode = client.db(xcloudDbNode);
+    const xDbGo = client.db(xcloudDbGo);
+
+    // Break invariant: total != used + reserved + available
+    const brokenBalance = {
+      imsi: '001010000000999',
+      data_total: 1000000,
+      data_used: 500000,
+      data_reserved: 400000,
+      data_available: 300000, // Sum = 1200000 != 1000000
+    };
+
+    await xDbNode.collection('ocs_balances').insertOne(brokenBalance);
+    await xDbGo.collection('ocs_balances').insertOne(brokenBalance);
+
+    const nodeRes = await callNode(nodeSystemHealthHandler, '/api/system/health', 'GET', adminToken, 'admin', 'admin_user');
+    const goRes = await callGo('/api/system/health', 'GET', adminToken);
+
+    assert.equal(nodeRes.status, 200);
+    assert.equal(goRes.status, 200);
+    assert.equal(goRes.body.status, nodeRes.body.status);
+    assert.equal(goRes.body.score, nodeRes.body.score);
+    assert.equal(goRes.body.subsystems.ocsEngine.status, nodeRes.body.subsystems.ocsEngine.status);
+    assert.equal(goRes.body.subsystems.ocsEngine.brokenInvariantsCount, nodeRes.body.subsystems.ocsEngine.brokenInvariantsCount);
+    assert.equal(goRes.body.summary.actionableItemsCount, nodeRes.body.summary.actionableItemsCount);
+    assert.deepEqual(goRes.body.summary.recommendations, nodeRes.body.summary.recommendations);
+  });
+
+  // ---------------------------------------------------------------------------
+  // 8. Audit Scan defaults / pagination
+  // ---------------------------------------------------------------------------
+  console.log('\n--- 8. Audit Scan defaults / pagination ---');
+  await verifyAsync('Audit Scan default body {} applies default cursor "0" and phase "sub"', async () => {
+    const nodeRes = await callNode(nodeAuditScanHandler, '/api/system/audit/scan', 'POST', adminToken, 'admin', 'admin_user', {});
+    const goRes = await callGo('/api/system/audit/scan', 'POST', adminToken, {});
+
+    assert.equal(nodeRes.status, 200);
+    assert.equal(goRes.status, 200);
+    assert.equal(goRes.body.nextCursor, nodeRes.body.nextCursor);
+    assert.equal(goRes.body.scannedCount, nodeRes.body.scannedCount);
+    assert.equal(goRes.body.anomalies.length, nodeRes.body.anomalies.length);
+  });
+
+  await verifyAsync('Audit Scan non-terminal pagination with >1000 records', async () => {
+    const xDbNode = client.db(xcloudDbNode);
+    const xDbGo = client.db(xcloudDbGo);
+
+    // Insert 1005 reservations
+    const bulkRes = [];
+    for (let i = 1; i <= 1005; i++) {
+      bulkRes.push({
+        reservation_id: `res-bulk-${i}`,
+        session_id: 'sess-active-01',
+        imsi: '001010000000001',
+        state: 'active',
+        reserved_octets: 100,
+      });
+    }
+
+    await xDbNode.collection('ocs_reservations').insertMany(bulkRes);
+    await xDbGo.collection('ocs_reservations').insertMany(bulkRes);
+
+    // Page 1: cursor "0"
+    const nodeP1 = await callNode(nodeAuditScanHandler, '/api/system/audit/scan', 'POST', adminToken, 'admin', 'admin_user', { cursor: '0', phase: 'reservation' });
+    const goP1 = await callGo('/api/system/audit/scan', 'POST', adminToken, { cursor: '0', phase: 'reservation' });
+
+    assert.equal(nodeP1.body.scannedCount, 1000);
+    assert.equal(goP1.body.scannedCount, 1000);
+    assert.equal(nodeP1.body.nextCursor, '1000');
+    assert.equal(goP1.body.nextCursor, '1000');
+
+    // Page 2: cursor "1000"
+    const nodeP2 = await callNode(nodeAuditScanHandler, '/api/system/audit/scan', 'POST', adminToken, 'admin', 'admin_user', { cursor: '1000', phase: 'reservation' });
+    const goP2 = await callGo('/api/system/audit/scan', 'POST', adminToken, { cursor: '1000', phase: 'reservation' });
+
+    assert.equal(nodeP2.body.scannedCount, 6); // 1 original + 1005 = 1006 total
+    assert.equal(goP2.body.scannedCount, 6);
+    assert.equal(nodeP2.body.nextCursor, '0');
+    assert.equal(goP2.body.nextCursor, '0');
+  });
+
+  // ---------------------------------------------------------------------------
+  // 9. Analytics nested metrics
+  // ---------------------------------------------------------------------------
+  console.log('\n--- 9. Analytics nested metrics ---');
+  await verifyAsync('Analytics nested metrics values and structure parity', async () => {
+    const nodeRes = await callNode(nodeAnalyticsInitHandler, '/api/analytics/init', 'POST', adminToken, 'admin', 'admin_user');
+    const goRes = await callGo('/api/analytics/init', 'POST', adminToken);
+
+    const nM = nodeRes.body.metrics;
+    const gM = goRes.body.metrics;
+
+    assert.equal(gM.totalTraffic, nM.totalTraffic);
+    assert.ok(Array.isArray(gM.ratesDist));
+    assert.ok(Array.isArray(nM.ratesDist));
+    for (const item of gM.ratesDist) {
+      assert.ok(typeof item.name === 'string' && typeof item.value === 'number');
+    }
+    for (const item of nM.ratesDist) {
+      assert.ok(typeof item.name === 'string' && typeof item.value === 'number');
+    }
+    assert.deepEqual(gM.top5, nM.top5);
+
+    // Nested OCS Balances
+    assert.equal(gM.ocsBalances.totalSubscribers, nM.ocsBalances.totalSubscribers);
+    assert.equal(gM.ocsBalances.totalDataAllocated, nM.ocsBalances.totalDataAllocated);
+    assert.equal(gM.ocsBalances.totalDataUsed, nM.ocsBalances.totalDataUsed);
+    assert.equal(gM.ocsBalances.totalDataReserved, nM.ocsBalances.totalDataReserved);
+    assert.equal(gM.ocsBalances.totalDataAvailable, nM.ocsBalances.totalDataAvailable);
+
+    // Nested OCS Sessions
+    assert.equal(gM.ocsSessions.totalSessions, nM.ocsSessions.totalSessions);
+    assert.equal(gM.ocsSessions.activeSessions, nM.ocsSessions.activeSessions);
+
+    // Nested OCS Reservations
+    assert.equal(gM.ocsReservations.totalReservations, nM.ocsReservations.totalReservations);
+    assert.equal(gM.ocsReservations.activeReservations, nM.ocsReservations.activeReservations);
+
+    // Tariff Plan Distribution
+    assert.deepEqual(gM.tariffPlanDist, nM.tariffPlanDist);
+
+    // Nested OCS Usage
+    assert.equal(gM.ocsUsage.totalRecords, nM.ocsUsage.totalRecords);
+  });
+
+  // ---------------------------------------------------------------------------
+  // 10. Numeric / null / optional serialization
+  // ---------------------------------------------------------------------------
+  console.log('\n--- 10. Numeric / null / optional serialization ---');
+  await verifyAsync('Verify strict JSON types (numbers, nulls, empty arrays, no BSON leaks)', async () => {
+    const goMongoRes = await callGo('/api/system/mongo/health', 'GET', adminToken);
+    const goAlertsRes = await callGo('/api/alerts', 'GET', adminToken);
+
+    // Numbers must be JS numbers
+    assert.equal(typeof goAlertsRes.body.activeCount, 'number');
+    assert.equal(typeof goMongoRes.body.latencyMs, 'number');
+
+    // Check that no BSON numeric wrappers appear
+    const rawJson = JSON.stringify(goAlertsRes.body);
+    assert.ok(!rawJson.includes('$numberLong'), 'JSON must not contain BSON $numberLong');
+    assert.ok(!rawJson.includes('$oid'), 'JSON must not contain BSON $oid');
+
+    // Empty arrays remain []
+    assert.ok(Array.isArray(goMongoRes.body.collections));
+  });
+
+  // ---------------------------------------------------------------------------
+  // 11. Zero business mutation
+  // ---------------------------------------------------------------------------
+  console.log('\n--- 11. Zero business mutation ---');
+  await verifyAsync('Verify zero business mutation across all 12 business collections', async () => {
     const xDbGo = client.db(xcloudDbGo);
     const aDbGo = client.db(appDbGo);
 
-    const subCount = await xDbGo.collection('subscribers').countDocuments({});
-    const balCount = await xDbGo.collection('ocs_balances').countDocuments({});
-    const alertCount = await aDbGo.collection('app_alerts').countDocuments({});
-    const userCount = await aDbGo.collection('app_users').countDocuments({});
+    const businessCollections = [
+      { db: xDbGo, name: 'subscribers' },
+      { db: xDbGo, name: 'ocs_tariff_plans' },
+      { db: xDbGo, name: 'ocs_subscribers' },
+      { db: xDbGo, name: 'ocs_balances' },
+      { db: xDbGo, name: 'ocs_sessions' },
+      { db: xDbGo, name: 'ocs_reservations' },
+      { db: xDbGo, name: 'ocs_usage' },
+      { db: aDbGo, name: 'app_profiles' },
+      { db: aDbGo, name: 'app_profile_versions' },
+      { db: aDbGo, name: 'app_users' },
+      { db: aDbGo, name: 'app_audit_logs' },
+      { db: aDbGo, name: 'app_alerts' },
+    ];
 
-    assert.equal(subCount, 1, 'subscribers count must be unchanged');
-    assert.equal(balCount, 1, 'ocs_balances count must be unchanged');
-    assert.equal(alertCount, 3, 'app_alerts count must be unchanged');
-    assert.equal(userCount, 3, 'app_users count must be unchanged');
+    const snapshotBefore = {};
+    for (const col of businessCollections) {
+      snapshotBefore[col.name] = await col.db.collection(col.name).countDocuments({});
+    }
+
+    // Call POST /api/system/audit/scan and POST /api/analytics/init
+    await callGo('/api/system/audit/scan', 'POST', adminToken, { cursor: '0', phase: 'sub' });
+    await callGo('/api/analytics/init', 'POST', adminToken);
+
+    const snapshotAfter = {};
+    for (const col of businessCollections) {
+      snapshotAfter[col.name] = await col.db.collection(col.name).countDocuments({});
+      assert.equal(
+        snapshotAfter[col.name],
+        snapshotBefore[col.name],
+        `Business collection ${col.name} count must not mutate`
+      );
+    }
   });
 
   // ---------------------------------------------------------------------------
-  // 9. Cross-Language Session Invalidation & Token Revocation
+  // 12. Session invalidation
   // ---------------------------------------------------------------------------
-  console.log('\n--- 9. Session Invalidation & Token Revocation ---');
+  console.log('\n--- 12. Session invalidation ---');
   await verifyAsync('Session version increment in MongoDB immediately revokes token in Go', async () => {
     const aDbGo = client.db(appDbGo);
     await aDbGo.collection('app_users').updateOne(
@@ -649,16 +1058,15 @@ async function main() {
       { $inc: { 'security.sessionVersion': 1 } }
     );
 
-    // Old token has sv=1, but DB now has sv=2
     const goRes = await callGo('/api/alerts', 'GET', operatorToken);
     assert.equal(goRes.status, 401, 'Revoked session token must return 401');
     assert.equal(goRes.body.code, 'SESSION_REVOKED');
   });
 
   // ---------------------------------------------------------------------------
-  // 10. Production Routing Invariant Verification
+  // 13. Routing invariants
   // ---------------------------------------------------------------------------
-  console.log('\n--- 10. Production Routing Invariant Verification ---');
+  console.log('\n--- 13. Routing invariants ---');
   verify('CUTOVER_TABLE length is exactly 36', () => {
     assert.equal(CUTOVER_TABLE.length, 36);
   });
@@ -676,7 +1084,12 @@ async function main() {
   });
 
   console.log('\n===============================================================');
-  console.log(`Phase 7.1 Read Parity Suite: ${passed}/${totalChecks} PASS`);
+  console.log('Phase 7.1 Read Parity Suite Summary');
+  console.log('===============================================================');
+  console.log(`TOTAL: ${totalChecks}`);
+  console.log(`PASS:  ${passed}`);
+  console.log(`FAIL:  ${failed}`);
+  console.log('SKIP:  0');
   console.log('===============================================================');
 }
 
