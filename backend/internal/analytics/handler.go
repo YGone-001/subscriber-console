@@ -62,3 +62,41 @@ func (h *Handler) Sparkline(w http.ResponseWriter, r *http.Request) {
 
 	response.JSON(w, http.StatusOK, result)
 }
+
+// InitResponse represents the response body for POST /api/analytics/init.
+type InitResponse struct {
+	Message string            `json:"message"`
+	Metrics *AnalyticsMetrics `json:"metrics"`
+}
+
+// Init handles POST /api/analytics/init.
+// Accessible by admin and operator roles; viewer is denied.
+func (h *Handler) Init(w http.ResponseWriter, r *http.Request) {
+	p := auth.PrincipalFromContext(r.Context())
+	if p == nil {
+		response.Error(w, http.StatusUnauthorized, "Unauthorized", "AUTH_INVALID_TOKEN")
+		return
+	}
+
+	normRole := auth.NormalizeRole(p.Role)
+	if normRole != "admin" && normRole != "operator" {
+		response.Error(w, http.StatusForbidden, "Forbidden: Insufficient permissions", "PERMISSION_DENIED")
+		return
+	}
+
+	// Rate limit: 3 req / 300s per user (analytics:init:<user>)
+	if h.limiter != nil && !h.limiter.Enforce(w, r, "analytics:init:"+p.Username, 3, 300) {
+		return
+	}
+
+	metrics, err := h.repo.ComputeMetrics(r.Context())
+	if err != nil {
+		response.InternalError(w)
+		return
+	}
+
+	response.JSON(w, http.StatusOK, InitResponse{
+		Message: "MongoDB analytics are computed from subscriber documents on demand.",
+		Metrics: metrics,
+	})
+}
