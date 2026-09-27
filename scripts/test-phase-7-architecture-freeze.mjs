@@ -509,6 +509,263 @@ console.log('  [PASS] Notification stream timer and heartbeat semantics verified
 // ---------------------------------------------------------------------------
 console.log('\n10. Parameterized Phase 7.1 Candidate Wire Contract Gate');
 
+function extractCandidateRateLimit(content, routeFile) {
+  const match = content.match(/enforceRateLimit\(`([^`]+)`,\s*(\d+),\s*(\d+)\)/);
+  assert.ok(match, `${routeFile} must call enforceRateLimit`);
+  return {
+    keyPattern: match[1],
+    count: Number(match[2]),
+    window: Number(match[3]),
+  };
+}
+
+function assertCandidateAuthGuard(content, routeFile, expectedAuthGuard) {
+  assert.ok(content.includes(expectedAuthGuard), `${routeFile} must declare auth guard ${expectedAuthGuard}`);
+  if (expectedAuthGuard === 'requireAuth') {
+    assert.ok(
+      content.includes('requireAuth(request)') && content.includes('if (!auth.ok) return auth.response'),
+      `${routeFile} must invoke requireAuth(request) and short-circuit on non-ok`
+    );
+  } else if (expectedAuthGuard.includes('requireAnyRole')) {
+    assert.ok(
+      content.includes(expectedAuthGuard) && content.includes('if (!auth.ok) return auth.response'),
+      `${routeFile} must invoke requireAnyRole and short-circuit on non-ok`
+    );
+  }
+}
+
+function assertCandidateRepositoryCall(content, routeFile, expectedRepoCall) {
+  if (expectedRepoCall !== null) {
+    assert.ok(content.includes(expectedRepoCall), `${routeFile} must execute repository call ${expectedRepoCall}`);
+    const fnMatch = expectedRepoCall.match(/^([a-zA-Z0-9_]+)/);
+    assert.ok(fnMatch, `Could not parse function name from ${expectedRepoCall}`);
+    assert.ok(
+      content.includes(`from '@/server/repositories/`),
+      `${routeFile} must import from repository directory`
+    );
+  } else {
+    // Explicit absence of repository call (e.g. GET /api/system/audit/status)
+    assert.ok(
+      !content.includes(`@/server/repositories/`),
+      `${routeFile} must not import or invoke any repository methods`
+    );
+    assert.ok(
+      content.includes('Math.floor(Date.now() / 1000)'),
+      `${routeFile} must generate status directly from epoch timestamp`
+    );
+  }
+}
+
+function assertCandidateRequestBehavior(content, routeFile, expectedBehavior, method) {
+  if (expectedBehavior === 'no query parameters parsed') {
+    assert.ok(!content.includes('searchParams'), `${routeFile} must not parse searchParams`);
+    assert.ok(!content.includes('nextUrl'), `${routeFile} must not parse nextUrl`);
+    assert.ok(!content.includes('new URL('), `${routeFile} must not parse URL search params`);
+    assert.ok(!content.includes('request.json()'), `${routeFile} must not parse request body`);
+  } else if (expectedBehavior === 'cursor, phase in JSON body') {
+    assert.ok(content.includes('await request.json()'), `${routeFile} must parse JSON request body`);
+    assert.ok(content.includes("cursor = '0'"), `${routeFile} must default cursor to '0'`);
+    assert.ok(content.includes("phase = 'sub'"), `${routeFile} must default phase to 'sub'`);
+    assert.ok(
+      content.includes('scanSubscriberDocuments(cursor, phase)'),
+      `${routeFile} must pass cursor and phase to scanSubscriberDocuments`
+    );
+  } else if (expectedBehavior === 'no body required') {
+    assert.ok(!content.includes('request.json()'), `${routeFile} must not parse JSON request body`);
+    assert.ok(!content.includes('request.text()'), `${routeFile} must not parse text body`);
+    assert.ok(!content.includes('request.formData()'), `${routeFile} must not parse form data`);
+  } else {
+    throw new Error(`Unknown requestBehavior: ${expectedBehavior}`);
+  }
+}
+
+function assertCandidateSuccessStatus(content, routeFile, expectedSuccessStatus, expectedSuccessMode) {
+  assert.equal(expectedSuccessStatus, 200, `${routeFile} expected success status must be 200`);
+  if (expectedSuccessMode === 'explicit') {
+    assert.ok(
+      content.includes('{ status: 200 }'),
+      `${routeFile} must explicitly specify { status: 200 } in NextResponse.json`
+    );
+  } else if (expectedSuccessMode === 'default') {
+    const lines = content.split('\n');
+    const returnLine = lines.find((l) => l.includes('return NextResponse.json(') && !l.includes('error:'));
+    assert.ok(returnLine, `Success return statement must exist in ${routeFile}`);
+    assert.ok(
+      !returnLine.includes('status:'),
+      `${routeFile} success return must rely on framework default 200 without explicit status option`
+    );
+  } else {
+    throw new Error(`Unknown successStatusMode: ${expectedSuccessMode}`);
+  }
+}
+
+function assertCandidateResponseFields(content, routeFile, expectedResponseKeys, repoFile) {
+  assert.ok(Array.isArray(expectedResponseKeys) && expectedResponseKeys.length > 0, `responseKeys must be non-empty`);
+  let sourceText = content;
+  if (repoFile) {
+    const repoPath = path.join(ROOT, repoFile);
+    assert.ok(fs.existsSync(repoPath), `Repository file ${repoFile} must exist`);
+    sourceText = fs.readFileSync(repoPath, 'utf8') + '\n' + content;
+  }
+  for (const key of expectedResponseKeys) {
+    assert.ok(
+      sourceText.includes(key),
+      `${routeFile} (or ${repoFile}) must define or return response key "${key}"`
+    );
+  }
+}
+
+function assertCandidateFailureContract(content, routeFile, failureMode, expectedFailureStatus) {
+  if (failureMode === 'explicit-status') {
+    assert.ok(content.includes('catch'), `${routeFile} must implement catch block for error handling`);
+    assert.ok(
+      content.includes(`status: ${expectedFailureStatus}`),
+      `${routeFile} catch block must respond with HTTP ${expectedFailureStatus}`
+    );
+  } else if (failureMode === 'framework-error') {
+    // Route has no local catch block; unhandled promise rejection bubbles to Next.js framework runtime
+    assert.ok(
+      !content.includes('catch'),
+      `${routeFile} must not define local catch block; unhandled failure bubbles to framework error handler`
+    );
+    assert.equal(expectedFailureStatus, 500, `${routeFile} framework failure must represent HTTP 500`);
+  } else {
+    throw new Error(`Unknown failureMode: ${failureMode}`);
+  }
+}
+
+function assertCandidateReadOnly(method, routeFile, repoFile, repoFunction, readOnly) {
+  assert.equal(readOnly, true, `${routeFile} fixture must declare readOnly === true`);
+  const content = fs.readFileSync(path.join(ROOT, routeFile), 'utf8');
+
+  // Verify route file exports no mutating HTTP verbs
+  if (method === 'GET') {
+    const mutatingVerbs = ['POST', 'PUT', 'PATCH', 'DELETE'];
+    for (const verb of mutatingVerbs) {
+      assert.ok(
+        !content.includes(`export async function ${verb}`) && !content.includes(`export function ${verb}`),
+        `${routeFile} must not export mutating HTTP verb ${verb}`
+      );
+    }
+  }
+
+  // Verify zero database mutation methods in route
+  const mutationMethods = [
+    'insertOne',
+    'insertMany',
+    'updateOne',
+    'updateMany',
+    'deleteOne',
+    'deleteMany',
+    'replaceOne',
+    'findOneAndUpdate',
+    'findOneAndDelete',
+    'findOneAndReplace',
+    'drop',
+  ];
+  for (const m of mutationMethods) {
+    assert.ok(!content.includes(`.${m}(`), `${routeFile} must not execute DB mutation method ${m}`);
+  }
+
+  // If repository-backed, verify execution slice has zero mutation methods
+  if (repoFile && repoFunction) {
+    const repoContent = fs.readFileSync(path.join(ROOT, repoFile), 'utf8');
+    const fnStart = repoContent.indexOf(`function ${repoFunction}`);
+    assert.ok(fnStart !== -1, `Function ${repoFunction} must exist in ${repoFile}`);
+    let fnEnd = repoContent.indexOf('\nexport async function ', fnStart + 1);
+    if (fnEnd === -1) fnEnd = repoContent.indexOf('\nexport function ', fnStart + 1);
+    if (fnEnd === -1) fnEnd = repoContent.length;
+    const fnSlice = repoContent.slice(fnStart, fnEnd);
+    for (const m of mutationMethods) {
+      assert.ok(
+        !fnSlice.includes(`.${m}(`),
+        `Repository function ${repoFunction} in ${repoFile} must not call mutation method ${m}`
+      );
+    }
+  }
+}
+
+function validateReadCandidateContract(fixture) {
+  // Destructure and consume every material field:
+  const {
+    method,
+    path: routePath,
+    routeFile,
+    authGuard,
+    rateLimitKey,
+    rateLimitCount,
+    rateLimitWindow,
+    repositoryCall,
+    repoFile,
+    repoFunction,
+    requestBehavior,
+    successStatus,
+    successStatusMode,
+    responseKeys,
+    failureStatus,
+    failureMode,
+    readOnly,
+  } = fixture;
+
+  const fullPath = path.join(ROOT, routeFile);
+  assert.ok(fs.existsSync(fullPath), `Route file ${routeFile} must exist`);
+  const content = fs.readFileSync(fullPath, 'utf8');
+
+  // 1. Method & path / route identity
+  assert.ok(
+    routeFile.startsWith('frontend/src/app') && routeFile.endsWith(`${routePath}/route.ts`),
+    `routeFile ${routeFile} must map to route path ${routePath}`
+  );
+  assert.ok(
+    content.includes(`export async function ${method}`) || content.includes(`export function ${method}`),
+    `${routeFile} must export HTTP ${method} handler`
+  );
+
+  // 2. Auth guard
+  assertCandidateAuthGuard(content, routeFile, authGuard);
+
+  // 3. Rate limit (exact key prefix, count, window)
+  const rl = extractCandidateRateLimit(content, routeFile);
+  assert.ok(
+    rl.keyPattern.startsWith(rateLimitKey),
+    `${routeFile} rate limit key mismatch: expected prefix ${rateLimitKey}, got ${rl.keyPattern}`
+  );
+  assert.ok(
+    rl.keyPattern.includes('${auth.auth.user}'),
+    `${routeFile} rate limit key must incorporate user identity`
+  );
+  assert.equal(
+    rl.count,
+    rateLimitCount,
+    `${routeFile} rate limit count mismatch: expected ${rateLimitCount}, got ${rl.count}`
+  );
+  assert.equal(
+    rl.window,
+    rateLimitWindow,
+    `${routeFile} rate limit window mismatch: expected ${rateLimitWindow}, got ${rl.window}`
+  );
+
+  // 4. Repository / service call
+  assertCandidateRepositoryCall(content, routeFile, repositoryCall);
+
+  // 5. Request behavior
+  assertCandidateRequestBehavior(content, routeFile, requestBehavior, method);
+
+  // 6. Success status & mode
+  assertCandidateSuccessStatus(content, routeFile, successStatus, successStatusMode);
+
+  // 7. Success response keys
+  assertCandidateResponseFields(content, routeFile, responseKeys, repoFile);
+
+  // 8. Failure contract & mode
+  assertCandidateFailureContract(content, routeFile, failureMode, failureStatus);
+
+  // 9. Read-only verification
+  assertCandidateReadOnly(method, routeFile, repoFile, repoFunction, readOnly);
+
+  console.log(`  [PASS] Phase 7.1 candidate executable contract: ${method} ${routePath}`);
+}
+
 const PHASE_7_1_CANDIDATE_FIXTURES = [
   {
     method: 'GET',
@@ -519,10 +776,14 @@ const PHASE_7_1_CANDIDATE_FIXTURES = [
     rateLimitCount: 120,
     rateLimitWindow: 60,
     repositoryCall: 'listAlerts(101)',
+    repoFile: 'frontend/src/server/repositories/alertRepository.ts',
+    repoFunction: 'listAlerts',
     requestBehavior: 'no query parameters parsed',
     successStatus: 200,
+    successStatusMode: 'default',
     responseKeys: ['alerts', 'activeCriticalCount', 'activeWarningCount', 'activeCount'],
     failureStatus: 500,
+    failureMode: 'explicit-status',
     readOnly: true,
   },
   {
@@ -534,10 +795,14 @@ const PHASE_7_1_CANDIDATE_FIXTURES = [
     rateLimitCount: 30,
     rateLimitWindow: 60,
     repositoryCall: 'getComprehensiveSystemHealth()',
+    repoFile: 'frontend/src/server/repositories/systemHealthRepository.ts',
+    repoFunction: 'getComprehensiveSystemHealth',
     requestBehavior: 'no query parameters parsed',
     successStatus: 200,
+    successStatusMode: 'explicit',
     responseKeys: ['status', 'score', 'checkedAt', 'subsystems', 'summary'],
     failureStatus: 500,
+    failureMode: 'explicit-status',
     readOnly: true,
   },
   {
@@ -549,10 +814,14 @@ const PHASE_7_1_CANDIDATE_FIXTURES = [
     rateLimitCount: 30,
     rateLimitWindow: 60,
     repositoryCall: 'getMongoHealthReport()',
+    repoFile: 'frontend/src/server/repositories/mongoHealthRepository.ts',
+    repoFunction: 'getMongoHealthReport',
     requestBehavior: 'no query parameters parsed',
     successStatus: 200,
+    successStatusMode: 'explicit',
     responseKeys: ['ok', 'database', 'databases', 'checkedAt', 'latencyMs', 'collections', 'missingCollections', 'missingIndexes'],
     failureStatus: 200,
+    failureMode: 'explicit-status',
     readOnly: true,
   },
   {
@@ -563,11 +832,15 @@ const PHASE_7_1_CANDIDATE_FIXTURES = [
     rateLimitKey: 'system:audit-status:',
     rateLimitCount: 60,
     rateLimitWindow: 60,
-    repositoryCall: 'internal status query',
+    repositoryCall: null,
+    repoFile: null,
+    repoFunction: null,
     requestBehavior: 'no query parameters parsed',
     successStatus: 200,
+    successStatusMode: 'explicit',
     responseKeys: ['lastSaveTime'],
     failureStatus: 500,
+    failureMode: 'explicit-status',
     readOnly: true,
   },
   {
@@ -579,10 +852,14 @@ const PHASE_7_1_CANDIDATE_FIXTURES = [
     rateLimitCount: 30,
     rateLimitWindow: 60,
     repositoryCall: 'scanSubscriberDocuments(cursor, phase)',
+    repoFile: 'frontend/src/server/repositories/systemAuditRepository.ts',
+    repoFunction: 'scanSubscriberDocuments',
     requestBehavior: 'cursor, phase in JSON body',
     successStatus: 200,
+    successStatusMode: 'default',
     responseKeys: ['nextCursor', 'scannedCount', 'anomalies'],
     failureStatus: 500,
+    failureMode: 'explicit-status',
     readOnly: true,
   },
   {
@@ -594,10 +871,14 @@ const PHASE_7_1_CANDIDATE_FIXTURES = [
     rateLimitCount: 3,
     rateLimitWindow: 300,
     repositoryCall: 'computeAnalyticsMetrics()',
+    repoFile: 'frontend/src/server/repositories/analyticsRepository.ts',
+    repoFunction: 'computeAnalyticsMetrics',
     requestBehavior: 'no body required',
     successStatus: 200,
+    successStatusMode: 'default',
     responseKeys: ['message', 'metrics'],
     failureStatus: 500,
+    failureMode: 'framework-error',
     readOnly: true,
   },
 ];
@@ -605,17 +886,7 @@ const PHASE_7_1_CANDIDATE_FIXTURES = [
 assert.equal(PHASE_7_1_CANDIDATE_FIXTURES.length, 6, 'Must validate exactly 6 Phase 7.1 read candidates');
 
 for (const fix of PHASE_7_1_CANDIDATE_FIXTURES) {
-  const content = fs.readFileSync(path.join(ROOT, fix.routeFile), 'utf8');
-  assert.ok(
-    content.includes(fix.authGuard),
-    `${fix.routeFile} must enforce auth guard: ${fix.authGuard}`
-  );
-  assert.ok(
-    content.includes(`enforceRateLimit(\`${fix.rateLimitKey}`),
-    `${fix.routeFile} must enforce rate limit key prefix: ${fix.rateLimitKey}`
-  );
-  assert.equal(fix.readOnly, true, `${fix.path} must be classified as strictly read-only`);
-  console.log(`  [PASS] Phase 7.1 candidate wire contract: ${fix.method} ${fix.path}`);
+  validateReadCandidateContract(fix);
 }
 
 // ---------------------------------------------------------------------------
