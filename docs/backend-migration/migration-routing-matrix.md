@@ -56,12 +56,12 @@
 | Audit logs | GET | `/api/audit` | **Go** | Go | YES | Phase 2A — migrated |
 | Audit detail | GET | `/api/audit/:id` | **Go** | Go | YES | Phase 2A — migrated |
 | Audit export | GET | `/api/audit/export` | Next.js | Go | YES | DEFERRED — requires stateful audit evidence persistence |
-| Alerts list | GET | `/api/alerts` | Next.js | Go | YES | xcloud_ops only |
+| Alerts list | GET | `/api/alerts` | Next.js | Go | YES | Phase 7.1 — Go shadow implemented, production owner Next.js |
 | Analytics metrics | GET | `/api/analytics/metrics` | **Go** | Go | YES | Phase 2A — migrated |
 | Analytics sparkline | GET | `/api/analytics/sparkline` | **Go** | Go | YES | Phase 2A — migrated |
-| System health | GET | `/api/system/health` | Next.js | Go | YES | Joins both DBs |
-| Mongo health | GET | `/api/system/mongo/health` | Next.js | Go | YES | Joins both DBs |
-| System audit status | GET | `/api/system/audit/status` | Next.js | Go | YES | xcloud only |
+| System health | GET | `/api/system/health` | Next.js | Go | YES | Phase 7.1 — Go shadow implemented, production owner Next.js |
+| Mongo health | GET | `/api/system/mongo/health` | Next.js | Go | YES | Phase 7.1 — Go shadow implemented, production owner Next.js |
+| System audit status | GET | `/api/system/audit/status` | Next.js | Go | YES | Phase 7.1 — Go shadow implemented, production owner Next.js |
 | Auth me | GET | `/api/auth/me` | **Go** | Go | YES | xcloud_ops only |
 | Auth permissions | GET | `/api/auth/permissions` | **Go** | Go | YES | Computed |
 | Auth users list | GET | `/api/auth/users` | **Go** | Go | YES | xcloud_ops only |
@@ -148,10 +148,10 @@
 |-----|--------|------|---------------|--------------|----------------|-------|
 | Alert acknowledge | POST | `/api/alerts/acknowledge` | Next.js | Go | NEVER | Direct execution (app_alerts) |
 | Alert workflow | POST | `/api/alerts/workflow` | Next.js | Go | NEVER | Direct execution (app_alerts) |
-| Analytics init | POST | `/api/analytics/init` | Next.js | Go | NEVER | Semantic read-only on-demand metrics |
+| Analytics init | POST | `/api/analytics/init` | Next.js | Go | NEVER | Phase 7.1 — Go shadow implemented, production owner Next.js; on-demand metrics |
 | System heal | POST | `/api/system/audit/heal` | Next.js | Go | NEVER | Direct execution (system_heal) |
 | System batch heal | POST | `/api/system/audit/batch-heal` | Next.js | Go | NEVER | Direct execution (system_heal) |
-| System scan | POST | `/api/system/audit/scan` | Next.js | Go | NEVER | Semantic read-only cursor scanner |
+| System scan | POST | `/api/system/audit/scan` | Next.js | Go | NEVER | Phase 7.1 — Go shadow implemented, production owner Next.js; read-only scanner |
 
 ### Phase 8 — Remove Next.js Backend
 

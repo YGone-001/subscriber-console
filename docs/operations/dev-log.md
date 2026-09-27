@@ -160,3 +160,18 @@
 - Implemented parameterized freeze test suite: `scripts/test-phase-7-architecture-freeze.mjs`.
 - Integrated `test-phase-7-architecture-freeze.mjs` into `.github/workflows/ci.yml`.
 - Maintained strict operational invariants: `CUTOVER_TABLE = 36`, `ACTUALLY_ROUTED = 36`, 54 route files / 78 operations, 0 runtime code changes, 0 backend migrations.
+
+## Phase 7.1 — Platform Health & Diagnostic Read Parity (Go Shadow Implementation)
+
+- Implemented dormant Go HTTP parity for all six Phase 7.1 read / semantic-read platform service endpoints:
+  - `GET /api/alerts`: List alerts with pagination, status filtering, and parallel active counts (`backend/internal/alert`). Rate limit `alerts:list:<user>` (120 req / 60s).
+  - `GET /api/system/mongo/health`: Diagnostic Mongo health checking 30 expected indexes across 11 collections (`backend/internal/system`). Returns HTTP 200 with degraded null schema on failure. Rate limit `system:mongo-health:<user>` (30 req / 60s).
+  - `GET /api/system/health`: Comprehensive system health report aggregating 4 subsystems (Database, OCS Engine, HSS Core, Security) with weighted scoring (0-100) and actionable recommendations (`backend/internal/system`). Rate limit `system:health:<user>` (30 req / 60s).
+  - `GET /api/system/audit/status`: Audit scheduler status check returning integer Unix seconds timestamp and scheduler state (`backend/internal/system`). Rate limit `system:audit-status:<user>` (60 req / 60s).
+  - `POST /api/system/audit/scan`: Multi-phase read-only document scan (`reservation`, `tariff`, `ocs`, `sub`) with cursor pagination and zero database writes (`backend/internal/system`). Denies viewer role (HTTP 403 `PERMISSION_DENIED`), returns HTTP 500 on malformed JSON. Rate limit `system:audit-scan:<user>` (30 req / 60s).
+  - `POST /api/analytics/init`: Semantic-read platform action computing metrics across all collections with zero database writes (`backend/internal/analytics`). Denies viewer role (HTTP 403 `PERMISSION_DENIED`). Rate limit `analytics:init:<user>` (3 req / 300s).
+- Registered all 6 endpoints in Go HTTP router under `authMiddleware` in `backend/cmd/server/main.go`. Total Go HTTP operations expanded to 64 (36 semantic reads/platform actions + 28 mutations/auth/health).
+- Created parameterized Node-vs-Go parity integration test suite: `scripts/test-phase-7-read-parity.mjs` (33/33 PASS across 10 modules: unauthorized gates, contract parity, RBAC gates, rate limits, schema alignment, zero mutations, session invalidation, and cutover invariants).
+- Updated architecture freeze test suite `scripts/test-phase-7-architecture-freeze.mjs` to enforce presence of the 6 Phase 7.1 routes and strict absence of later-phase routes in Go router.
+- Added dedicated CI workflow job `platform-read-parity` in `.github/workflows/ci.yml`.
+- Maintained strict operational invariants: `CUTOVER_TABLE = 36`, `ACTUALLY_ROUTED = 36`, 0 Next.js routes modified (54 route files, 78 operations), 0 production cutovers, 100% pure ASCII.

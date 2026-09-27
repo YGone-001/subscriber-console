@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"subscriber/internal/alert"
 	"subscriber/internal/analytics"
 	"subscriber/internal/audit"
 	"subscriber/internal/auth"
@@ -25,6 +26,7 @@ import (
 	"subscriber/internal/rating"
 	"subscriber/internal/response"
 	"subscriber/internal/subscriber"
+	"subscriber/internal/system"
 	"subscriber/internal/tariff"
 	"subscriber/internal/user"
 )
@@ -64,7 +66,7 @@ func main() {
 	sessionValidator := auth.NewSessionValidator(mc.Ops.Collection("app_users"))
 	limiter := ratelimit.NewLimiter(mc.Ops.Collection("app_rate_limits"))
 
-	// Audit Writer — bounded async writer for authorization.denied evidence and operation logs
+	// Audit Writer - bounded async writer for authorization.denied evidence and operation logs
 	auditCollection := mc.Ops.Collection("app_audit_logs")
 	auditWriter := audit.NewWriterLegacy(auditCollection, audit.WriterConfig{
 		QueueSize:   256,
@@ -83,6 +85,13 @@ func main() {
 		mc.XCloud.Collection("ocs_tariff_plans"),
 	)
 	analyticsHandler := analytics.NewHandler(analyticsRepo, limiter)
+
+	// Alerts
+	alertRepo := alert.NewRepository(mc.Ops.Collection("app_alerts"))
+	alertHandler := alert.NewHandler(alertRepo, limiter)
+
+	// System Health & Diagnostics
+	systemHandler := system.NewHandler(mc.XCloud, mc.Ops, limiter)
 
 	// Ratings
 	ratingRepo := rating.NewRepository(mc.XCloud.Collection("ocs_rating_policies"))
@@ -249,12 +258,20 @@ func main() {
 	mux.Handle("POST /api/users/{username}/disable", authMiddleware(http.HandlerFunc(userHandler.DisableUser)))
 	mux.Handle("POST /api/users/{username}/password-reset", authMiddleware(http.HandlerFunc(userHandler.ResetPassword)))
 
+	// Platform Services (Phase 7.1 read / semantic-read shadow endpoints)
+	mux.Handle("GET /api/alerts", authMiddleware(http.HandlerFunc(alertHandler.List)))
+	mux.Handle("POST /api/analytics/init", authMiddleware(http.HandlerFunc(analyticsHandler.Init)))
+	mux.Handle("GET /api/system/health", authMiddleware(http.HandlerFunc(systemHandler.SystemHealth)))
+	mux.Handle("GET /api/system/mongo/health", authMiddleware(http.HandlerFunc(systemHandler.MongoHealth)))
+	mux.Handle("GET /api/system/audit/status", authMiddleware(http.HandlerFunc(systemHandler.AuditStatus)))
+	mux.Handle("POST /api/system/audit/scan", authMiddleware(http.HandlerFunc(systemHandler.AuditScan)))
+
 	// Catch-all for unmigrated routes
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		response.NotFound(w)
 	})
 
-	// Apply middleware chain (without auth — auth is applied per-route)
+	// Apply middleware chain (without auth - auth is applied per-route)
 	finalHandler := middleware.Chain(
 		mux,
 		middleware.RequestID,
@@ -288,7 +305,7 @@ func main() {
 			logger.Error("server shutdown error", "error", err)
 		}
 
-		// 2. Now safe to close audit writer — no more handlers can enqueue
+		// 2. Now safe to close audit writer - no more handlers can enqueue
 		writerCtx, writerCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer writerCancel()
 		if err := auditWriter.Close(writerCtx); err != nil {
