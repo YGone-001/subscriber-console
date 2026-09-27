@@ -173,3 +173,111 @@ func TestAuditScanInvalidJSON(t *testing.T) {
 		t.Errorf("expected error 'Audit scan failed', got %s", errResp["error"])
 	}
 }
+
+func TestIndexOptionsTable(t *testing.T) {
+	ttlZero := int32(0)
+	tests := []struct {
+		name     string
+		exp      expectedIndexDef
+		doc      bson.M
+		expected bool
+	}{
+		{
+			name: "unique option match",
+			exp: expectedIndexDef{
+				database:   "app",
+				collection: "app_users",
+				name:       "uniq_username",
+				key:        bson.D{{Key: "username", Value: 1}},
+				unique:     &boolTrue,
+			},
+			doc: bson.M{
+				"name":   "uniq_username",
+				"key":    bson.D{{Key: "username", Value: int32(1)}},
+				"unique": true,
+			},
+			expected: true,
+		},
+		{
+			name: "unique option mismatch when missing",
+			exp: expectedIndexDef{
+				database:   "app",
+				collection: "app_users",
+				name:       "uniq_username",
+				key:        bson.D{{Key: "username", Value: 1}},
+				unique:     &boolTrue,
+			},
+			doc: bson.M{
+				"name": "uniq_username",
+				"key":  bson.D{{Key: "username", Value: int32(1)}},
+			},
+			expected: false,
+		},
+		{
+			name: "ttl expireAfterSeconds match",
+			exp: expectedIndexDef{
+				database:           "app",
+				collection:         "app_rate_limits",
+				name:               "ttl_rate_limit_reset_at",
+				key:                bson.D{{Key: "reset_at", Value: 1}},
+				expireAfterSeconds: &ttlZero,
+			},
+			doc: bson.M{
+				"name":               "ttl_rate_limit_reset_at",
+				"key":                bson.D{{Key: "reset_at", Value: int32(1)}},
+				"expireAfterSeconds": int32(0),
+			},
+			expected: true,
+		},
+		{
+			name: "ttl expireAfterSeconds mismatch",
+			exp: expectedIndexDef{
+				database:           "app",
+				collection:         "app_rate_limits",
+				name:               "ttl_rate_limit_reset_at",
+				key:                bson.D{{Key: "reset_at", Value: 1}},
+				expireAfterSeconds: &ttlZero,
+			},
+			doc: bson.M{
+				"name":               "ttl_rate_limit_reset_at",
+				"key":                bson.D{{Key: "reset_at", Value: int32(1)}},
+				"expireAfterSeconds": int32(60),
+			},
+			expected: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			res := indexMatches(tc.doc, tc.exp)
+			if res != tc.expected {
+				t.Errorf("expected %v, got %v", tc.expected, res)
+			}
+		})
+	}
+}
+
+func TestSystemHandlersUnauthorizedTable(t *testing.T) {
+	h := NewHandler(nil, nil, nil)
+	endpoints := []struct {
+		method string
+		path   string
+		fn     func(w http.ResponseWriter, r *http.Request)
+	}{
+		{"GET", "/api/system/health", h.SystemHealth},
+		{"GET", "/api/system/mongo/health", h.MongoHealth},
+		{"GET", "/api/system/audit/status", h.AuditStatus},
+		{"POST", "/api/system/audit/scan", h.AuditScan},
+	}
+
+	for _, ep := range endpoints {
+		t.Run(ep.method+" "+ep.path, func(t *testing.T) {
+			req := httptest.NewRequest(ep.method, ep.path, nil)
+			w := httptest.NewRecorder()
+			ep.fn(w, req)
+			if w.Code != http.StatusUnauthorized {
+				t.Errorf("expected 401 for %s, got %d", ep.path, w.Code)
+			}
+		})
+	}
+}
