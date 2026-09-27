@@ -2,12 +2,16 @@ package system
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
 	"subscriber/internal/auth"
 )
@@ -280,4 +284,117 @@ func TestSystemHandlersUnauthorizedTable(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestSystemHandlersFailureTable(t *testing.T) {
+	cli, err := mongo.Connect(options.Client().ApplyURI("mongodb://127.0.0.1:27017"))
+	if err != nil {
+		t.Fatalf("failed to create mongo client: %v", err)
+	}
+	_ = cli.Disconnect(context.Background())
+
+	xcloudDb := cli.Database("dummy_xcloud")
+	appDb := cli.Database("dummy_ops")
+	h := NewHandler(xcloudDb, appDb, nil)
+
+	adminPrincipal := &auth.Principal{
+		Username:       "admin_user",
+		Role:           "admin",
+		NormalizedRole: "admin",
+	}
+
+	t.Run("GET /api/system/health failure", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/system/health", nil)
+		req = req.WithContext(auth.ContextWithPrincipal(req.Context(), adminPrincipal))
+		w := httptest.NewRecorder()
+		h.SystemHealth(w, req)
+
+		if w.Code != http.StatusInternalServerError {
+			t.Errorf("expected 500, got %d", w.Code)
+		}
+		var m map[string]interface{}
+		if err := json.Unmarshal(w.Body.Bytes(), &m); err != nil {
+			t.Fatalf("unmarshal error: %v", err)
+		}
+		if m["status"] != "critical" {
+			t.Errorf("expected status 'critical', got %v", m["status"])
+		}
+		if m["score"] != float64(0) {
+			t.Errorf("expected score 0, got %v", m["score"])
+		}
+		if m["error"] != "Comprehensive system health check failed" {
+			t.Errorf("expected error 'Comprehensive system health check failed', got %v", m["error"])
+		}
+		if checkedAt, ok := m["checkedAt"].(string); !ok || checkedAt == "" {
+			t.Errorf("expected non-empty checkedAt string, got %v", m["checkedAt"])
+		}
+	})
+
+	t.Run("GET /api/system/mongo/health degraded failure", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/system/mongo/health", nil)
+		req = req.WithContext(auth.ContextWithPrincipal(req.Context(), adminPrincipal))
+		w := httptest.NewRecorder()
+		h.MongoHealth(w, req)
+
+		// Mongo health degrades to HTTP 200 with ok: false
+		if w.Code != http.StatusOK {
+			t.Errorf("expected 200, got %d", w.Code)
+		}
+		var m map[string]interface{}
+		if err := json.Unmarshal(w.Body.Bytes(), &m); err != nil {
+			t.Fatalf("unmarshal error: %v", err)
+		}
+		if m["ok"] != false {
+			t.Errorf("expected ok false, got %v", m["ok"])
+		}
+		if m["database"] != nil {
+			t.Errorf("expected database null, got %v", m["database"])
+		}
+		if m["error"] != "MongoDB health check failed" {
+			t.Errorf("expected error 'MongoDB health check failed', got %v", m["error"])
+		}
+		if colls, ok := m["collections"].([]interface{}); !ok || len(colls) != 0 {
+			t.Errorf("expected empty collections array, got %v", m["collections"])
+		}
+	})
+
+	t.Run("POST /api/system/audit/scan valid json database failure", func(t *testing.T) {
+		body := bytes.NewBufferString(`{"cursor":"0","phase":"sub"}`)
+		req := httptest.NewRequest(http.MethodPost, "/api/system/audit/scan", body)
+		req.Header.Set("Content-Type", "application/json")
+		req = req.WithContext(auth.ContextWithPrincipal(req.Context(), adminPrincipal))
+		w := httptest.NewRecorder()
+		h.AuditScan(w, req)
+
+		if w.Code != http.StatusInternalServerError {
+			t.Errorf("expected 500, got %d", w.Code)
+		}
+		var m map[string]string
+		if err := json.Unmarshal(w.Body.Bytes(), &m); err != nil {
+			t.Fatalf("unmarshal error: %v", err)
+		}
+		if m["error"] != "Audit scan failed" {
+			t.Errorf("expected 'Audit scan failed', got %v", m["error"])
+		}
+	})
+
+	t.Run("POST /api/system/audit/scan malformed json decoder failure", func(t *testing.T) {
+		body := strings.NewReader(`invalid-json-body`)
+		req := httptest.NewRequest(http.MethodPost, "/api/system/audit/scan", body)
+		req.Header.Set("Content-Type", "application/json")
+		req = req.WithContext(auth.ContextWithPrincipal(req.Context(), adminPrincipal))
+		w := httptest.NewRecorder()
+		h.AuditScan(w, req)
+
+		if w.Code != http.StatusInternalServerError {
+			t.Errorf("expected 500, got %d", w.Code)
+		}
+		var m map[string]string
+		if err := json.Unmarshal(w.Body.Bytes(), &m); err != nil {
+			t.Fatalf("unmarshal error: %v", err)
+		}
+		if m["error"] != "Audit scan failed" {
+			t.Errorf("expected 'Audit scan failed', got %v", m["error"])
+		}
+	})
 }
