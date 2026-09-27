@@ -412,11 +412,14 @@ async function main() {
   // Build Go backend
   goPort = await getAvailablePort();
   console.log('Building Go backend binary...');
-  const binExt = process.platform === 'win32' ? '.exe' : '';
-  binPath = path.join(os.tmpdir(), `server_p71_parity_${suffix}${binExt}`);
+  const isWin = process.platform === 'win32';
+  const binName = isWin ? `test-p71-parity-${suffix}.exe` : `test-p71-parity-${suffix}`;
+  const backendDir = path.resolve(import.meta.dirname, '..', 'backend');
+  binPath = path.join(os.tmpdir(), binName);
+
   execSync(`go build -o "${binPath}" ./cmd/server`, {
-    cwd: path.join(process.cwd(), 'backend'),
-    stdio: 'pipe',
+    cwd: backendDir,
+    stdio: 'ignore',
   });
   assert.ok(existsSync(binPath), 'compiled Go binary must exist');
   console.log('Go binary compiled successfully:', binPath);
@@ -432,25 +435,25 @@ async function main() {
     JWT_SECRET: JWT_SECRET_STRING,
   };
 
-  goProc = spawn(binPath, [], { env, stdio: ['ignore', 'pipe', 'pipe'] });
-
-  // Wait for Go server to become ready
-  await new Promise((resolve, reject) => {
-    const start = Date.now();
-    const timer = setInterval(() => {
-      if (Date.now() - start > 10000) {
-        clearInterval(timer);
-        reject(new Error('timeout waiting for Go server'));
-        return;
-      }
-      const sock = net.connect(goPort, '127.0.0.1', () => {
-        sock.destroy();
-        clearInterval(timer);
-        resolve();
-      });
-      sock.on('error', () => {});
-    }, 100);
+  goProc = spawn(binPath, [], {
+    cwd: backendDir,
+    env,
+    stdio: ['ignore', 'ignore', 'inherit'],
   });
+
+  // Wait for Go server to become ready via /healthz poll
+  let goReady = false;
+  for (let i = 0; i < 60; i++) {
+    try {
+      const res = await fetch(`http://127.0.0.1:${goPort}/healthz`);
+      if (res.ok) {
+        goReady = true;
+        break;
+      }
+    } catch {}
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  assert.ok(goReady, 'timeout waiting for Go server to become ready');
   console.log('Go server ready on port', goPort);
 
   // Generate tokens for each role
