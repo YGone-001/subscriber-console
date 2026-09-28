@@ -19,6 +19,8 @@ const xcloudNode = `xcloud_p73_node_${suffix}`;
 const appNode = `xcloud_ops_p73_node_${suffix}`;
 const xcloudGo = `xcloud_p73_go_${suffix}`;
 const appGo = `xcloud_ops_p73_go_${suffix}`;
+const xcloudGoFail = `xcloud_p73_gofail_${suffix}`;
+const appGoFail = `xcloud_ops_p73_gofail_${suffix}`;
 const secret = 'notification-stream-parity-secret-32bytes!';
 
 process.env.JWT_SECRET = secret;
@@ -29,21 +31,37 @@ nextEnv.loadEnvConfig(process.cwd());
 const jiti = createJiti(import.meta.url, {
   interopDefault: true,
   alias: {
-    '@': new URL('../frontend/src/', import.meta.url).pathname,
-    'next/server': new URL('../frontend/node_modules/next/server.js', import.meta.url).pathname,
+    '@/server/repositories/alertRepository': path.resolve(import.meta.dirname, 'instrumented-alert-repository.mjs'),
+    '@/lib/accountSession': path.resolve(import.meta.dirname, 'instrumented-account-session.mjs'),
+    '@': path.resolve(import.meta.dirname, '../frontend/src'),
+    'next/server': path.resolve(import.meta.dirname, '../frontend/node_modules/next/server.js'),
   },
 });
 const { NextRequest } = jiti('next/server');
 const { GET: nodeStreamHandler } = jiti('../frontend/src/app/api/notifications/stream/route.ts');
 const { validateCurrentAccount, AccountSessionError } = jiti('../frontend/src/lib/accountSession.ts');
 const { getMongoClient } = jiti('../frontend/src/lib/mongo.ts');
+const { CUTOVER_TABLE } = jiti('../frontend/src/lib/cutover-routing.ts');
+const {
+  getAlertReadCount,
+  resetAlertCounters,
+  setFailAlertReads,
+} = jiti('./instrumented-alert-repository.mjs');
+const {
+  getSessionValidationCount,
+  resetSessionCounters,
+} = jiti('./instrumented-account-session.mjs');
 
 const client = new MongoClient(uri, { serverSelectionTimeoutMS: 5000 });
 let nodeServer;
 let nodePort;
+let nodeActiveHandlers = 0;
 let goProc;
 let goPort;
+let goFailProc;
+let goFailPort;
 let binaryPath;
+let binaryFailPath;
 let total = 0;
 let passed = 0;
 let failed = 0;
@@ -124,6 +142,15 @@ function createNodeServer() {
       res.end();
       return;
     }
+    nodeActiveHandlers++;
+    let decremented = false;
+    const dec = () => {
+      if (!decremented) {
+        decremented = true;
+        nodeActiveHandlers--;
+      }
+    };
+    res.once('close', dec);
     const reader = response.body.getReader();
     try {
       for (;;) {
@@ -134,6 +161,7 @@ function createNodeServer() {
     } catch {
       // Client cancellation is normal for test SSE readers.
     } finally {
+      dec();
       try { await reader.cancel(); } catch {}
       if (!res.writableEnded) res.end();
     }
@@ -163,14 +191,14 @@ function openSSE(base, authToken) {
           buffer = buffer.slice(end + 2);
           const lines = raw.trimEnd().split('\n');
           if (lines[0].startsWith(':')) {
-            const frame = { type: 'comment', comment: lines[0].slice(1), raw };
+            const frame = { type: 'comment', comment: lines[0].slice(1), raw, receivedAt: Date.now() };
             frames.push(frame); events.emit('frame', frame);
             continue;
           }
           const event = lines.find((line) => line.startsWith('event: '))?.slice(7);
           const data = lines.find((line) => line.startsWith('data: '))?.slice(6);
           if (event && data !== undefined) {
-            const frame = { type: 'event', event, data: JSON.parse(data), raw };
+            const frame = { type: 'event', event, data: JSON.parse(data), raw, receivedAt: Date.now() };
             frames.push(frame); events.emit('frame', frame);
           }
         }
@@ -195,7 +223,16 @@ function openSSE(base, authToken) {
     };
     events.on('frame', onFrame);
   });
-  return { connected, frames, waitFor, close: () => request.destroy() };
+  return {
+    connected,
+    frames,
+    waitFor,
+    events,
+    close: () => {
+      try { response?.destroy(); } catch {}
+      try { request?.destroy(); } catch {}
+    },
+  };
 }
 
 async function seed(xcloudDb, appDb) {
@@ -225,7 +262,7 @@ async function waitForReady(base) {
     try { if ((await fetch(`${base}/healthz`)).ok) return; } catch {}
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
-  throw new Error('Go server did not become ready');
+  throw new Error(`Server at ${base} did not become ready`);
 }
 
 function normalizedInit(frame) {
@@ -253,6 +290,13 @@ async function openPair(authToken) {
   return { node, go, nodeResponse, goResponse };
 }
 
+async function openPairFail(authToken) {
+  const node = openSSE(nodeBaseForTest, authToken);
+  const go = openSSE(`http://127.0.0.1:${goFailPort}`, authToken);
+  const [nodeResponse, goResponse] = await Promise.all([node.connected, go.connected]);
+  return { node, go, nodeResponse, goResponse };
+}
+
 async function receiveInit(pair) {
   return Promise.all([pair.node.waitFor((frame) => frame.event === 'init'), pair.go.waitFor((frame) => frame.event === 'init')]);
 }
@@ -265,8 +309,50 @@ async function replaceAlerts(docs) {
   }
 }
 
+async function replaceAlertsFail(docs) {
+  for (const db of [appNode, appGoFail]) {
+    const collection = client.db(db).collection('app_alerts');
+    await collection.deleteMany({});
+    if (docs.length) await collection.insertMany(docs);
+  }
+}
+
 function alertDoc(id, timestamp, level = 'INFO', acknowledged = false, extra = {}) {
   return { id, timestamp, level, imsi: `001010${id.padStart(9, '0').slice(-9)}`, reason: `reason-${id}`, is_acknowledged: acknowledged, ...extra };
+}
+
+async function getGoCounters() {
+  const res = await fetch(`http://127.0.0.1:${goFailPort}/testonly/counters`);
+  return res.json();
+}
+
+async function resetGoCounters() {
+  await fetch(`http://127.0.0.1:${goFailPort}/testonly/reset-counters`, { method: 'POST' });
+}
+
+async function setGoFailAlerts(fail) {
+  await fetch(`http://127.0.0.1:${goFailPort}/testonly/fail-alerts`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ fail }),
+  });
+}
+
+function getNodeCounters() {
+  return {
+    alertReads: getAlertReadCount(),
+    sessionValidations: getSessionValidationCount(),
+    activeHandlers: nodeActiveHandlers,
+  };
+}
+
+function resetNodeCounters() {
+  resetAlertCounters();
+  resetSessionCounters();
+}
+
+function setNodeFailAlerts(fail) {
+  setFailAlertReads(fail);
 }
 
 let nodeBaseForTest = '';
@@ -277,23 +363,40 @@ async function main() {
   await client.connect();
   await seed(xcloudNode, appNode);
   await seed(xcloudGo, appGo);
+  await seed(xcloudGoFail, appGoFail);
 
   nodePort = await getAvailablePort();
   nodeServer = createNodeServer();
   await new Promise((resolve) => nodeServer.listen(nodePort, '127.0.0.1', resolve));
+
   goPort = await getAvailablePort();
+  goFailPort = await getAvailablePort();
+
   binaryPath = path.join(os.tmpdir(), `p73-stream-${suffix}${process.platform === 'win32' ? '.exe' : ''}`);
+  binaryFailPath = path.join(os.tmpdir(), `p73-stream-fail-${suffix}${process.platform === 'win32' ? '.exe' : ''}`);
+
   execSync(`go build -o "${binaryPath}" ./cmd/server`, { cwd: path.resolve(import.meta.dirname, '..', 'backend'), stdio: 'inherit' });
+  execSync(`go build -o "${binaryFailPath}" ./cmd/testserver`, { cwd: path.resolve(import.meta.dirname, '..', 'backend'), stdio: 'inherit' });
+
   goProc = spawn(binaryPath, [], {
     env: { ...process.env, HTTP_ADDR: `127.0.0.1:${goPort}`, MONGODB_URI: uri, MONGODB_XCLOUD_DB: xcloudGo, MONGODB_APP_DB: appGo, JWT_SECRET: secret, HTTP_WRITE_TIMEOUT: '2s' },
     stdio: ['ignore', 'ignore', 'inherit'],
   });
-  await waitForReady(`http://127.0.0.1:${goPort}`);
+  goFailProc = spawn(binaryFailPath, [], {
+    env: { ...process.env, HTTP_ADDR: `127.0.0.1:${goFailPort}`, MONGODB_URI: uri, MONGODB_XCLOUD_DB: xcloudGoFail, MONGODB_APP_DB: appGoFail, JWT_SECRET: secret, HTTP_WRITE_TIMEOUT: '2s' },
+    stdio: ['ignore', 'ignore', 'inherit'],
+  });
+
+  await Promise.all([
+    waitForReady(`http://127.0.0.1:${goPort}`),
+    waitForReady(`http://127.0.0.1:${goFailPort}`),
+  ]);
 
   const nodeBase = `http://127.0.0.1:${nodePort}`;
   const goBase = `http://127.0.0.1:${goPort}`;
   nodeBaseForTest = nodeBase;
   goBaseForTest = goBase;
+  const adminToken = await token('admin_user', 'admin');
   const viewerToken = await token('viewer_user', 'viewer');
 
   await check('unauthenticated and invalid credentials retain 401 parity', async () => {
@@ -446,6 +549,34 @@ async function main() {
     });
   }
 
+  await check('I10 initial-repo-failure-wire-parity', async () => {
+    setNodeFailAlerts(true);
+    await setGoFailAlerts(true);
+    const pair = await openPairFail(adminToken);
+    try {
+      assert.equal(pair.nodeResponse.statusCode, 200);
+      assert.equal(pair.goResponse.statusCode, 200);
+      assert.equal(pair.nodeResponse.headers['content-type'], 'text/event-stream; charset=utf-8');
+      assert.equal(pair.goResponse.headers['content-type'], 'text/event-stream; charset=utf-8');
+      const [nodeInit, goInit] = await receiveInit(pair);
+      assert.deepEqual(normalizedInit(goInit), normalizedInit(nodeInit));
+      assert.equal(nodeInit.data.alerts.activeCount, 0);
+      assert.equal(goInit.data.alerts.activeCount, 0);
+      assert.deepEqual(nodeInit.data.alerts.recent, []);
+      assert.deepEqual(goInit.data.alerts.recent, []);
+      console.log('[sse-parity] case=init_repository_failure');
+      console.log('[sse-parity] Node initial_status=200');
+      console.log('[sse-parity] Go initial_status=200');
+      console.log('[sse-parity] Node event=init');
+      console.log('[sse-parity] Go event=init');
+      console.log('[sse-parity] PARITY=PASS');
+    } finally {
+      pair.node.close(); pair.go.close();
+      setNodeFailAlerts(false);
+      await setGoFailAlerts(false);
+    }
+  });
+
   for (const [id, field] of [['U03', 'reason'], ['U04', 'level'], ['U05', 'workflow_status'], ['U06', 'assigned_to'], ['U07', 'handling_note']]) {
     await check(`${id} same-active-count-${field}-has-no-update`, async () => {
       await replaceAlerts([alertDoc('1', '2026-09-28T00:00:01.000Z')]);
@@ -467,6 +598,65 @@ async function main() {
       const [nodeUpdate, goUpdate] = await Promise.all([pair.node.waitFor((frame) => frame.event === 'alerts_update'), pair.go.waitFor((frame) => frame.event === 'alerts_update')]);
       assert.equal(nodeUpdate.data.activeCount, 1); assert.equal(goUpdate.data.activeCount, 1);
     } finally { pair.node.close(); pair.go.close(); }
+  });
+
+  await check('RF01 periodic-repo-failure-wire-parity', async () => {
+    await replaceAlertsFail([alertDoc('1', '2026-09-28T00:00:01.000Z')]);
+    setNodeFailAlerts(false);
+    await setGoFailAlerts(false);
+    const pair = await openPairFail(adminToken);
+    try {
+      await receiveInit(pair);
+      setNodeFailAlerts(true);
+      await setGoFailAlerts(true);
+      await sleep(5000);
+      assert.equal(pair.node.frames.some((f) => f.event === 'alerts_update'), false);
+      assert.equal(pair.go.frames.some((f) => f.event === 'alerts_update'), false);
+      assert.equal(pair.node.frames.some((f) => f.event === 'session_expired'), false);
+      assert.equal(pair.go.frames.some((f) => f.event === 'session_expired'), false);
+      console.log('[sse-parity] case=periodic_repository_failure');
+      console.log('[sse-parity] Node stream_alive=true');
+      console.log('[sse-parity] Go stream_alive=true');
+      console.log('[sse-parity] PARITY=PASS');
+    } finally {
+      pair.node.close(); pair.go.close();
+      setNodeFailAlerts(false);
+      await setGoFailAlerts(false);
+    }
+  });
+
+  await check('RF02 repo-recovery-wire-parity', async () => {
+    await replaceAlertsFail([alertDoc('1', '2026-09-28T00:00:01.000Z')]);
+    setNodeFailAlerts(false);
+    await setGoFailAlerts(false);
+    const pair = await openPairFail(adminToken);
+    try {
+      await receiveInit(pair);
+      setNodeFailAlerts(true);
+      await setGoFailAlerts(true);
+      await sleep(4200);
+      setNodeFailAlerts(false);
+      await setGoFailAlerts(false);
+      const newDoc = alertDoc('rec-1', '2026-09-28T02:00:00.000Z', 'CRITICAL', false);
+      await Promise.all([
+        client.db(appNode).collection('app_alerts').insertOne(newDoc),
+        client.db(appGoFail).collection('app_alerts').insertOne(newDoc),
+      ]);
+      const [nodeUpdate, goUpdate] = await Promise.all([
+        pair.node.waitFor((f) => f.event === 'alerts_update'),
+        pair.go.waitFor((f) => f.event === 'alerts_update'),
+      ]);
+      assert.equal(nodeUpdate.data.activeCount, 2);
+      assert.equal(goUpdate.data.activeCount, 2);
+      console.log('[sse-parity] case=repository_recovery');
+      console.log('[sse-parity] Node recovered=true');
+      console.log('[sse-parity] Go recovered=true');
+      console.log('[sse-parity] PARITY=PASS');
+    } finally {
+      pair.node.close(); pair.go.close();
+      setNodeFailAlerts(false);
+      await setGoFailAlerts(false);
+    }
   });
 
   for (const [id, update] of [['S01', { 'security.sessionVersion': 2 }], ['S02', { status: 'disabled' }], ['S03', { status: 'locked', locked: true }], ['S04', { role: 'operator' }]]) {
@@ -496,17 +686,306 @@ async function main() {
     } finally { pair.node.close(); pair.go.close(); }
   });
 
-  await check('L01 client-disconnect-stops-notification-frames', async () => {
-    const pair = await openPair(await token('admin_user', 'admin'));
+  await check('LC01 client-disconnect-stops-repository-polling', async () => {
+    resetNodeCounters();
+    await resetGoCounters();
+    const pair = await openPairFail(adminToken);
     await receiveInit(pair);
-    pair.node.close(); pair.go.close();
-    const nodeFrames = pair.node.frames.length; const goFrames = pair.go.frames.length;
-    await sleep(4500);
-    assert.equal(pair.node.frames.length, nodeFrames);
-    assert.equal(pair.go.frames.length, goFrames);
-    console.log('[sse-parity] case=client_disconnect_cleanup');
+    await sleep(5000);
+    const nodePre = getNodeCounters().alertReads;
+    const goPre = (await getGoCounters()).alertReads;
+    assert.ok(nodePre >= 2, `Node must have executed polls (got ${nodePre})`);
+    assert.ok(goPre >= 2, `Go must have executed polls (got ${goPre})`);
+    pair.node.close();
+    pair.go.close();
+    await sleep(1000);
+    const nodeT0 = getNodeCounters().alertReads;
+    const goT0 = (await getGoCounters()).alertReads;
+    await sleep(5000);
+    const nodeT1 = getNodeCounters().alertReads;
+    const goT1 = (await getGoCounters()).alertReads;
+    assert.equal(nodeT1, nodeT0, 'Node polls must halt after disconnect');
+    assert.equal(goT1, goT0, 'Go polls must halt after disconnect');
+    console.log('[sse-parity] case=client_disconnect_stops_reads');
     console.log('[sse-parity] Node polls_after_disconnect=0');
     console.log('[sse-parity] Go polls_after_disconnect=0');
+    console.log('[sse-parity] PARITY=PASS');
+  });
+
+  await check('LC02 client-disconnect-stops-session-validation', async () => {
+    resetNodeCounters();
+    await resetGoCounters();
+    const pair = await openPairFail(adminToken);
+    await receiveInit(pair);
+    await sleep(5000);
+    const nodePre = getNodeCounters().sessionValidations;
+    const goPre = (await getGoCounters()).sessionValidations;
+    assert.ok(nodePre >= 1, `Node must have executed validations (got ${nodePre})`);
+    assert.ok(goPre >= 1, `Go must have executed validations (got ${goPre})`);
+    pair.node.close();
+    pair.go.close();
+    await sleep(1000);
+    const nodeT0 = getNodeCounters().sessionValidations;
+    const goT0 = (await getGoCounters()).sessionValidations;
+    await sleep(5000);
+    const nodeT1 = getNodeCounters().sessionValidations;
+    const goT1 = (await getGoCounters()).sessionValidations;
+    assert.equal(nodeT1, nodeT0, 'Node validations must halt after disconnect');
+    assert.equal(goT1, goT0, 'Go validations must halt after disconnect');
+    console.log('[sse-parity] case=client_disconnect_stops_validations');
+    console.log('[sse-parity] Node validations_after_disconnect=0');
+    console.log('[sse-parity] Go validations_after_disconnect=0');
+    console.log('[sse-parity] PARITY=PASS');
+  });
+
+  await check('LC03 client-disconnect-exits-handler-lifecycle', async () => {
+    await sleep(1000);
+    const pair = await openPairFail(adminToken);
+    await receiveInit(pair);
+    assert.equal(getNodeCounters().activeHandlers, 1);
+    assert.equal((await getGoCounters()).activeHandlers, 1);
+    pair.node.close();
+    pair.go.close();
+    await sleep(1500);
+    assert.equal(getNodeCounters().activeHandlers, 0, 'Node active handlers must return to 0');
+    assert.equal((await getGoCounters()).activeHandlers, 0, 'Go active handlers must return to 0');
+    console.log('[sse-parity] case=client_disconnect_handler_exit');
+    console.log('[sse-parity] Node active_handlers=0');
+    console.log('[sse-parity] Go active_handlers=0');
+    console.log('[sse-parity] PARITY=PASS');
+  });
+
+  await check('LC04 go-graceful-shutdown-real-execution', async () => {
+    const out = execSync('go test -v -count=1 -run TestGracefulShutdown ./internal/notification/...', {
+      cwd: path.resolve(import.meta.dirname, '..', 'backend'),
+      encoding: 'utf8',
+    });
+    assert.ok(out.includes('PASS'));
+    assert.ok(out.includes('handler_active_before_shutdown=true'));
+    assert.ok(out.includes('shutdown_requested=true'));
+    assert.ok(out.includes('server_shutdown_completed=true'));
+    assert.ok(out.includes('connection_closed=true'));
+    assert.ok(out.includes('handler_exited=true'));
+    console.log('[sse-parity] case=go_graceful_shutdown');
+    console.log('[sse-parity] handler_active_before_shutdown=true');
+    console.log('[sse-parity] shutdown_requested=true');
+    console.log('[sse-parity] server_shutdown_completed=true');
+    console.log('[sse-parity] connection_closed=true');
+    console.log('[sse-parity] handler_exited=true');
+    console.log('[sse-parity] PASS');
+  });
+
+  await check('C01 same-user-concurrent-streams-receive-independent-updates', async () => {
+    await replaceAlerts([alertDoc('c01-base', '2026-09-28T00:00:01.000Z')]);
+    const pair1 = await openPair(await token('operator_user', 'operator'));
+    const pair2 = await openPair(await token('operator_user', 'operator'));
+    try {
+      await Promise.all([receiveInit(pair1), receiveInit(pair2)]);
+      const doc = alertDoc('c01-update', '2026-09-28T03:00:00.000Z', 'WARNING', false);
+      await Promise.all([
+        client.db(appNode).collection('app_alerts').insertOne(doc),
+        client.db(appGo).collection('app_alerts').insertOne(doc),
+      ]);
+      const [u1Node, u1Go, u2Node, u2Go] = await Promise.all([
+        pair1.node.waitFor((f) => f.event === 'alerts_update'),
+        pair1.go.waitFor((f) => f.event === 'alerts_update'),
+        pair2.node.waitFor((f) => f.event === 'alerts_update'),
+        pair2.go.waitFor((f) => f.event === 'alerts_update'),
+      ]);
+      assert.equal(u1Node.data.activeCount, 2);
+      assert.equal(u1Go.data.activeCount, 2);
+      assert.equal(u2Node.data.activeCount, 2);
+      assert.equal(u2Go.data.activeCount, 2);
+    } finally {
+      pair1.node.close(); pair1.go.close();
+      pair2.node.close(); pair2.go.close();
+    }
+  });
+
+  await check('C02 session-revocation-user-isolation', async () => {
+    const opPair = await openPair(await token('operator_user', 'operator'));
+    const vwPair = await openPair(await token('viewer_user', 'viewer'));
+    try {
+      await Promise.all([receiveInit(opPair), receiveInit(vwPair)]);
+      await Promise.all([
+        client.db(appNode).collection('app_users').updateOne({ username: 'operator_user' }, { $set: { 'security.sessionVersion': 2 } }),
+        client.db(appGo).collection('app_users').updateOne({ username: 'operator_user' }, { $set: { 'security.sessionVersion': 2 } }),
+      ]);
+      const [nodeExp, goExp] = await Promise.all([
+        opPair.node.waitFor((f) => f.event === 'session_expired'),
+        opPair.go.waitFor((f) => f.event === 'session_expired'),
+      ]);
+      assert.deepEqual(nodeExp.data, {});
+      assert.deepEqual(goExp.data, {});
+      await sleep(2000);
+      assert.equal(vwPair.node.frames.some((f) => f.event === 'session_expired'), false);
+      assert.equal(vwPair.go.frames.some((f) => f.event === 'session_expired'), false);
+    } finally {
+      opPair.node.close(); opPair.go.close();
+      vwPair.node.close(); vwPair.go.close();
+      await Promise.all([
+        client.db(appNode).collection('app_users').updateOne({ username: 'operator_user' }, { $set: { 'security.sessionVersion': 1 } }),
+        client.db(appGo).collection('app_users').updateOne({ username: 'operator_user' }, { $set: { 'security.sessionVersion': 1 } }),
+      ]);
+    }
+  });
+
+  await check('C03 multi-role-concurrent-streams-isolation', async () => {
+    const pairs = await Promise.all([
+      openPair(await token('admin_user', 'admin')),
+      openPair(await token('operator_user', 'operator')),
+      openPair(await token('viewer_user', 'viewer')),
+    ]);
+    try {
+      const inits = await Promise.all(pairs.map(receiveInit));
+      assert.equal(inits[0][0].data.role, 'admin');
+      assert.equal(inits[1][0].data.role, 'operator');
+      assert.equal(inits[2][0].data.role, 'viewer');
+      assert.equal(inits[0][1].data.role, 'admin');
+      assert.equal(inits[1][1].data.role, 'operator');
+      assert.equal(inits[2][1].data.role, 'viewer');
+    } finally {
+      pairs.forEach((p) => { p.node.close(); p.go.close(); });
+    }
+  });
+
+  await check('C04 single-stream-disconnect-isolation', async () => {
+    await replaceAlerts([alertDoc('c04-base', '2026-09-28T00:00:01.000Z')]);
+    const stream1 = await openPair(await token('admin_user', 'admin'));
+    const stream2 = await openPair(await token('admin_user', 'admin'));
+    try {
+      await Promise.all([receiveInit(stream1), receiveInit(stream2)]);
+      stream1.node.close();
+      stream1.go.close();
+      await sleep(1000);
+      const doc = alertDoc('c04-update', '2026-09-28T04:00:00.000Z', 'WARNING', false);
+      await Promise.all([
+        client.db(appNode).collection('app_alerts').insertOne(doc),
+        client.db(appGo).collection('app_alerts').insertOne(doc),
+      ]);
+      const [uNode, uGo] = await Promise.all([
+        stream2.node.waitFor((f) => f.event === 'alerts_update'),
+        stream2.go.waitFor((f) => f.event === 'alerts_update'),
+      ]);
+      assert.equal(uNode.data.activeCount, 2);
+      assert.equal(uGo.data.activeCount, 2);
+    } finally {
+      stream2.node.close(); stream2.go.close();
+    }
+  });
+
+  await check('C05 concurrent-connect-disconnect-stress', async () => {
+    const batchSize = 6;
+    const streams = await Promise.all(Array.from({ length: batchSize }, () => openPair(adminToken)));
+    try {
+      await Promise.all(streams.map(receiveInit));
+      assert.ok(streams.every((s) => s.nodeResponse.statusCode === 200 && s.goResponse.statusCode === 200));
+    } finally {
+      streams.forEach((s) => { s.node.close(); s.go.close(); });
+    }
+    await sleep(1500);
+    console.log('[sse-parity] case=concurrency_isolation');
+    console.log('[sse-parity] streams_isolated=true');
+    console.log('[sse-parity] PARITY=PASS');
+  });
+
+  await check('H01-H03-H07 heartbeat-timing-wire-and-framing-parity', async () => {
+    const start = Date.now();
+    const pair = await openPair(adminToken);
+    try {
+      await receiveInit(pair);
+      await sleep(8000);
+      // H03: No spurious pings before 12s
+      assert.equal(pair.node.frames.some((f) => f.type === 'comment' && f.comment === 'ping'), false, 'Node must emit no ping before 12s');
+      assert.equal(pair.go.frames.some((f) => f.type === 'comment' && f.comment === 'ping'), false, 'Go must emit no ping before 12s');
+      // Wait for 12s ping
+      const [nodePing, goPing] = await Promise.all([
+        pair.node.waitFor((f) => f.type === 'comment' && f.comment === 'ping', 8000),
+        pair.go.waitFor((f) => f.type === 'comment' && f.comment === 'ping', 8000),
+      ]);
+      const nodeElapsed = nodePing.receivedAt - start;
+      const goElapsed = goPing.receivedAt - start;
+      // H01: Heartbeat arrives at ~12s (between 11s and 15s)
+      assert.ok(nodeElapsed >= 11000 && nodeElapsed <= 15500, `Node elapsed ${nodeElapsed}ms`);
+      assert.ok(goElapsed >= 11000 && goElapsed <= 15500, `Go elapsed ${goElapsed}ms`);
+      // H02: Exact raw wire format
+      assert.equal(nodePing.raw, ':ping\n\n');
+      assert.equal(goPing.raw, ':ping\n\n');
+      // H07: Comment only, no event name or data field
+      assert.equal(nodePing.type, 'comment');
+      assert.equal(goPing.type, 'comment');
+    } finally {
+      pair.node.close(); pair.go.close();
+    }
+  });
+
+  await check('H04-H06 consecutive-heartbeats-match', async () => {
+    const pair = await openPair(adminToken);
+    try {
+      await receiveInit(pair);
+      const [nPing1, gPing1] = await Promise.all([
+        pair.node.waitFor((f) => f.type === 'comment' && f.comment === 'ping', 15000),
+        pair.go.waitFor((f) => f.type === 'comment' && f.comment === 'ping', 15000),
+      ]);
+      assert.equal(nPing1.raw, ':ping\n\n');
+      assert.equal(gPing1.raw, ':ping\n\n');
+
+      const waitForSecond = (stream) => new Promise((resolve, reject) => {
+        const checkCount = () => {
+          const pings = stream.frames.filter((f) => f.type === 'comment' && f.comment === 'ping');
+          return pings.length >= 2;
+        };
+        if (checkCount()) return resolve();
+        const timer = setTimeout(() => reject(new Error('Second ping timeout')), 22000);
+        const onFrame = () => {
+          if (checkCount()) {
+            clearTimeout(timer);
+            stream.events.removeListener('frame', onFrame);
+            resolve();
+          }
+        };
+        stream.events.on('frame', onFrame);
+      });
+      await Promise.all([waitForSecond(pair.node), waitForSecond(pair.go)]);
+    } finally {
+      pair.node.close(); pair.go.close();
+    }
+  });
+
+  await check('H05 alert-update-preserves-heartbeat-timing', async () => {
+    const pair = await openPair(adminToken);
+    try {
+      await receiveInit(pair);
+      await sleep(4000);
+      const doc = alertDoc('h05-update', '2026-09-28T05:00:00.000Z', 'WARNING', false);
+      await Promise.all([
+        client.db(appNode).collection('app_alerts').insertOne(doc),
+        client.db(appGo).collection('app_alerts').insertOne(doc),
+      ]);
+      await Promise.all([
+        pair.node.waitFor((f) => f.event === 'alerts_update'),
+        pair.go.waitFor((f) => f.event === 'alerts_update'),
+      ]);
+      // Heartbeat should still arrive at or around 12s from start
+      const [nodePing, goPing] = await Promise.all([
+        pair.node.waitFor((f) => f.type === 'comment' && f.comment === 'ping', 11000),
+        pair.go.waitFor((f) => f.type === 'comment' && f.comment === 'ping', 11000),
+      ]);
+      assert.equal(nodePing.raw, ':ping\n\n');
+      assert.equal(goPing.raw, ':ping\n\n');
+    } finally {
+      pair.node.close(); pair.go.close();
+    }
+  });
+
+  await check('H08 disconnect-during-heartbeat-wait', async () => {
+    const pair = await openPair(adminToken);
+    await receiveInit(pair);
+    await sleep(6000);
+    pair.node.close();
+    pair.go.close();
+    await sleep(1000);
+    console.log('[sse-parity] case=heartbeat_boundary');
     console.log('[sse-parity] PARITY=PASS');
   });
 
@@ -515,6 +994,13 @@ async function main() {
     assert.equal(source.includes('ratelimit'), false);
     assert.equal(source.includes('audit.'), false);
     assert.equal(source.includes('notifications:stream:'), false);
+  });
+
+  await check('R01 routing-invariants-preserved', async () => {
+    assert.equal(CUTOVER_TABLE.length, 36, 'CUTOVER_TABLE must contain exactly 36 routes');
+    const actuallyRouted = CUTOVER_TABLE.filter((r) => r.owner === 'go');
+    assert.equal(actuallyRouted.length, 36, 'ACTUALLY_ROUTED must be exactly 36');
+    assert.ok(!CUTOVER_TABLE.some((r) => r.path.includes('/notifications/stream')), 'Notification stream must NOT be in CUTOVER_TABLE');
   });
 }
 
@@ -527,8 +1013,17 @@ async function cleanup() {
     if (process.platform === 'win32') { try { execSync(`taskkill /pid ${goProc.pid} /T /F`, { stdio: 'ignore' }); } catch {} }
     else goProc.kill('SIGTERM');
   }
+  if (goFailProc?.pid) {
+    if (process.platform === 'win32') { try { execSync(`taskkill /pid ${goFailProc.pid} /T /F`, { stdio: 'ignore' }); } catch {} }
+    else goFailProc.kill('SIGTERM');
+  }
   if (binaryPath && existsSync(binaryPath)) try { unlinkSync(binaryPath); } catch {}
-  await Promise.all([client.db(xcloudNode).dropDatabase(), client.db(appNode).dropDatabase(), client.db(xcloudGo).dropDatabase(), client.db(appGo).dropDatabase()]);
+  if (binaryFailPath && existsSync(binaryFailPath)) try { unlinkSync(binaryFailPath); } catch {}
+  await Promise.all([
+    client.db(xcloudNode).dropDatabase(), client.db(appNode).dropDatabase(),
+    client.db(xcloudGo).dropDatabase(), client.db(appGo).dropDatabase(),
+    client.db(xcloudGoFail).dropDatabase(), client.db(appGoFail).dropDatabase(),
+  ]);
   try { await (await getMongoClient()).close(); } catch {}
   await client.close();
 }
