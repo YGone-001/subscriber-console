@@ -206,7 +206,7 @@ Phase 6.4   COMPLETE — Authentication & User Management UI Final Integration (
 Phase 7.0   COMPLETE — Alerts, Notifications & Platform Services Architecture Freeze (Current-State Reconciliation, Contract Inventory, and Migration Planning)
 Phase 7.1   COMPLETE — Platform Health & Diagnostic Read Parity (Go Shadow Implementation: GET /api/alerts, GET /api/system/health, GET /api/system/mongo/health, GET /api/system/audit/status, POST /api/system/audit/scan, POST /api/analytics/init; CUTOVER_TABLE=36, ACTUALLY_ROUTED=36)
 Phase 7.2   COMPLETE — Alert Domain Governance & Mutation Shadow Parity (Go Shadow Implementation: POST /api/alerts/acknowledge, POST /api/alerts/workflow; Best-Effort Operation Logging to app_audit_logs; CUTOVER_TABLE=36, ACTUALLY_ROUTED=36)
-Phase 7.3   COMPLETE — Notification Streaming SSE Shadow Parity (Go shadow implementation: GET /api/notifications/stream; per-stream session revalidation, polling, heartbeat, and stream-scoped write deadline; CUTOVER_TABLE=36, ACTUALLY_ROUTED=36)
+Phase 7.3   PARTIAL — Notification Streaming SSE Shadow Parity (Go shadow implementation exists; full acceptance matrix closure in progress; CUTOVER_TABLE=36, ACTUALLY_ROUTED=36)
 ```
 
 ### 5.1 OCS 生产冻结基线 (OCS Production Freeze Baseline)

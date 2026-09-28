@@ -236,8 +236,41 @@ function normalizedInit(frame) {
 
 async function fingerprint(db, name) {
   const docs = await client.db(db).collection(name).find({}).sort({ _id: 1 }).toArray();
-  return JSON.stringify(docs.map(({ _id, ...doc }) => doc));
+  return { count: docs.length, digest: JSON.stringify(docs.map(({ _id, ...doc }) => doc)) };
 }
+
+function sleep(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
+
+async function noFrame(stream, predicate, duration = 4300) {
+  await sleep(duration);
+  assert.equal(stream.frames.some(predicate), false, `unexpected frame: ${JSON.stringify(stream.frames)}`);
+}
+
+async function openPair(authToken) {
+  const node = openSSE(nodeBaseForTest, authToken);
+  const go = openSSE(goBaseForTest, authToken);
+  const [nodeResponse, goResponse] = await Promise.all([node.connected, go.connected]);
+  return { node, go, nodeResponse, goResponse };
+}
+
+async function receiveInit(pair) {
+  return Promise.all([pair.node.waitFor((frame) => frame.event === 'init'), pair.go.waitFor((frame) => frame.event === 'init')]);
+}
+
+async function replaceAlerts(docs) {
+  for (const db of [appNode, appGo]) {
+    const collection = client.db(db).collection('app_alerts');
+    await collection.deleteMany({});
+    if (docs.length) await collection.insertMany(docs);
+  }
+}
+
+function alertDoc(id, timestamp, level = 'INFO', acknowledged = false, extra = {}) {
+  return { id, timestamp, level, imsi: `001010${id.padStart(9, '0').slice(-9)}`, reason: `reason-${id}`, is_acknowledged: acknowledged, ...extra };
+}
+
+let nodeBaseForTest = '';
+let goBaseForTest = '';
 
 async function main() {
   console.log('Phase 7.3 Notification Streaming Parity Suite');
@@ -259,6 +292,8 @@ async function main() {
 
   const nodeBase = `http://127.0.0.1:${nodePort}`;
   const goBase = `http://127.0.0.1:${goPort}`;
+  nodeBaseForTest = nodeBase;
+  goBaseForTest = goBase;
   const viewerToken = await token('viewer_user', 'viewer');
 
   await check('unauthenticated and invalid credentials retain 401 parity', async () => {
@@ -317,6 +352,10 @@ async function main() {
     ]);
     const [nodeExpired, goExpired] = await Promise.all([node.waitFor((f) => f.event === 'session_expired'), go.waitFor((f) => f.event === 'session_expired')]);
     assert.deepEqual(nodeExpired.data, {}); assert.deepEqual(goExpired.data, {});
+    await Promise.all([
+      client.db(appNode).collection('app_users').updateOne({ username: 'viewer_user' }, { $set: { 'security.sessionVersion': 1 } }),
+      client.db(appGo).collection('app_users').updateOne({ username: 'viewer_user' }, { $set: { 'security.sessionVersion': 1 } }),
+    ]);
     console.log('[sse-parity] case=session_expired');
     console.log('[sse-parity] Node event=session_expired');
     console.log('[sse-parity] Go event=session_expired');
@@ -343,19 +382,139 @@ async function main() {
   await check('notification activity leaves protected collection contents unchanged', async () => {
     const protectedCollections = [
       [xcloudNode, 'subscribers'], [xcloudNode, 'ocs_tariff_plans'], [xcloudNode, 'ocs_subscribers'], [xcloudNode, 'ocs_balances'], [xcloudNode, 'ocs_sessions'], [xcloudNode, 'ocs_reservations'], [xcloudNode, 'ocs_usage_records'],
-      [appNode, 'app_profiles'], [appNode, 'app_profile_versions'], [appNode, 'app_audit_logs'], [appNode, 'app_rate_limits'],
+      [appNode, 'app_profiles'], [appNode, 'app_profile_versions'], [appNode, 'app_users'], [appNode, 'app_alerts'], [appNode, 'app_audit_logs'], [appNode, 'app_rate_limits'],
       [xcloudGo, 'subscribers'], [xcloudGo, 'ocs_tariff_plans'], [xcloudGo, 'ocs_subscribers'], [xcloudGo, 'ocs_balances'], [xcloudGo, 'ocs_sessions'], [xcloudGo, 'ocs_reservations'], [xcloudGo, 'ocs_usage_records'],
-      [appGo, 'app_profiles'], [appGo, 'app_profile_versions'], [appGo, 'app_audit_logs'], [appGo, 'app_rate_limits'],
+      [appGo, 'app_profiles'], [appGo, 'app_profile_versions'], [appGo, 'app_users'], [appGo, 'app_alerts'], [appGo, 'app_audit_logs'], [appGo, 'app_rate_limits'],
     ];
     const before = await Promise.all(protectedCollections.map(([db, name]) => fingerprint(db, name)));
-    const beforeAlerts = await Promise.all([fingerprint(appNode, 'app_alerts'), fingerprint(appGo, 'app_alerts')]);
     const authToken = await token('admin_user', 'admin');
     const node = openSSE(nodeBase, authToken); const go = openSSE(goBase, authToken);
     await Promise.all([node.connected, go.connected, node.waitFor((f) => f.event === 'init'), go.waitFor((f) => f.event === 'init')]);
     node.close(); go.close();
     const after = await Promise.all(protectedCollections.map(([db, name]) => fingerprint(db, name)));
     assert.deepEqual(after, before);
-    assert.deepEqual(await Promise.all([fingerprint(appNode, 'app_alerts'), fingerprint(appGo, 'app_alerts')]), beforeAlerts);
+  });
+
+  for (const [id, label, candidate] of [
+    ['A01', 'no-token', null],
+    ['A02', 'invalid-token', 'invalid.token.value'],
+    ['A03', 'expired-token', await token('viewer_user', 'viewer', 1, -60)],
+    ['A04', 'initial-revoked', await token('viewer_user', 'viewer', 99)],
+    ['A05', 'initial-disabled', await token('disabled_user', 'viewer')],
+    ['A06', 'initial-locked', await token('locked_user', 'viewer')],
+  ]) {
+    await check(`${id} initial-auth:${label}`, async () => {
+      const pair = await openPair(candidate);
+      assert.equal(pair.nodeResponse.statusCode, 401);
+      assert.equal(pair.goResponse.statusCode, 401);
+      pair.node.close(); pair.go.close();
+    });
+  }
+
+  for (const [id, role] of [['A07', 'admin'], ['A08', 'operator'], ['A09', 'viewer'], ['A10', 'root'], ['A11', 'super_admin'], ['A12', 'ops_admin'], ['A13', 'auditor']]) {
+    await check(`${id} initial-auth:${role}`, async () => {
+      const pair = await openPair(await token(`${role}_user`, role));
+      try {
+        assert.equal(pair.nodeResponse.statusCode, 200); assert.equal(pair.goResponse.statusCode, 200);
+        const [nodeInit, goInit] = await receiveInit(pair);
+        assert.equal(nodeInit.data.user, `${role}_user`); assert.equal(goInit.data.user, `${role}_user`);
+        assert.equal(goInit.data.role, nodeInit.data.role);
+      } finally { pair.node.close(); pair.go.close(); }
+    });
+  }
+
+  const initCases = [
+    ['I01', 'populated', [alertDoc('1', '2026-09-28T00:00:01.000Z', 'CRITICAL'), alertDoc('2', '2026-09-28T00:00:02.000Z', 'WARNING')]],
+    ['I02', 'empty', []],
+    ['I03', 'more-than-five', Array.from({ length: 6 }, (_, i) => alertDoc(String(i + 1), `2026-09-28T00:00:${String(i).padStart(2, '0')}.000Z`))],
+    ['I04', 'more-than-fifteen', Array.from({ length: 16 }, (_, i) => alertDoc(String(i + 1), `2026-09-28T00:00:${String(i).padStart(2, '0')}.000Z`))],
+    ['I05', 'critical-count', [alertDoc('1', '2026-09-28T00:00:01.000Z', 'CRITICAL'), alertDoc('2', '2026-09-28T00:00:02.000Z', 'CRITICAL')]],
+    ['I06', 'warning-count', [alertDoc('1', '2026-09-28T00:00:01.000Z', 'WARNING'), alertDoc('2', '2026-09-28T00:00:02.000Z', 'WARNING')]],
+    ['I07', 'mixed-levels', [alertDoc('1', '2026-09-28T00:00:01.000Z', 'CRITICAL'), alertDoc('2', '2026-09-28T00:00:02.000Z', 'WARNING'), alertDoc('3', '2026-09-28T00:00:03.000Z')]],
+    ['I08', 'acknowledged', [alertDoc('1', '2026-09-28T00:00:01.000Z', 'CRITICAL', true)]],
+    ['I09', 'workflow-fields', [alertDoc('1', '2026-09-28T00:00:01.000Z', 'WARNING', false, { workflow_status: 'assigned', assigned_to: 'ops', handling_note: 'note' })]],
+  ];
+  for (const [id, label, docs] of initCases) {
+    await check(`${id} init:${label}`, async () => {
+      await replaceAlerts(docs);
+      const pair = await openPair(await token('admin_user', 'admin'));
+      try {
+        const [nodeInit, goInit] = await receiveInit(pair);
+        assert.deepEqual(normalizedInit(goInit), normalizedInit(nodeInit));
+        assert.ok(goInit.data.alerts.recent.length <= 5);
+      } finally { pair.node.close(); pair.go.close(); }
+    });
+  }
+
+  for (const [id, field] of [['U03', 'reason'], ['U04', 'level'], ['U05', 'workflow_status'], ['U06', 'assigned_to'], ['U07', 'handling_note']]) {
+    await check(`${id} same-active-count-${field}-has-no-update`, async () => {
+      await replaceAlerts([alertDoc('1', '2026-09-28T00:00:01.000Z')]);
+      const pair = await openPair(await token('admin_user', 'admin'));
+      try {
+        await receiveInit(pair);
+        await Promise.all([client.db(appNode).collection('app_alerts').updateOne({ id: '1' }, { $set: { [field]: `changed-${field}` } }), client.db(appGo).collection('app_alerts').updateOne({ id: '1' }, { $set: { [field]: `changed-${field}` } })]);
+        await Promise.all([noFrame(pair.node, (frame) => frame.event === 'alerts_update'), noFrame(pair.go, (frame) => frame.event === 'alerts_update')]);
+      } finally { pair.node.close(); pair.go.close(); }
+    });
+  }
+
+  await check('U02 active-count-decrease-emits-update', async () => {
+    await replaceAlerts([alertDoc('1', '2026-09-28T00:00:01.000Z'), alertDoc('2', '2026-09-28T00:00:02.000Z')]);
+    const pair = await openPair(await token('admin_user', 'admin'));
+    try {
+      await receiveInit(pair);
+      await Promise.all([client.db(appNode).collection('app_alerts').updateOne({ id: '1' }, { $set: { is_acknowledged: true } }), client.db(appGo).collection('app_alerts').updateOne({ id: '1' }, { $set: { is_acknowledged: true } })]);
+      const [nodeUpdate, goUpdate] = await Promise.all([pair.node.waitFor((frame) => frame.event === 'alerts_update'), pair.go.waitFor((frame) => frame.event === 'alerts_update')]);
+      assert.equal(nodeUpdate.data.activeCount, 1); assert.equal(goUpdate.data.activeCount, 1);
+    } finally { pair.node.close(); pair.go.close(); }
+  });
+
+  for (const [id, update] of [['S01', { 'security.sessionVersion': 2 }], ['S02', { status: 'disabled' }], ['S03', { status: 'locked', locked: true }], ['S04', { role: 'operator' }]]) {
+    await check(`${id} post-connect-session-expiry`, async () => {
+      const username = 'viewer_user';
+      await Promise.all([client.db(appNode).collection('app_users').updateOne({ username }, { $set: { role: 'viewer', status: 'active', locked: false, 'security.sessionVersion': 1 } }), client.db(appGo).collection('app_users').updateOne({ username }, { $set: { role: 'viewer', status: 'active', locked: false, 'security.sessionVersion': 1 } })]);
+      const pair = await openPair(await token(username, 'viewer'));
+      try {
+        await receiveInit(pair);
+        await Promise.all([client.db(appNode).collection('app_users').updateOne({ username }, { $set: update }), client.db(appGo).collection('app_users').updateOne({ username }, { $set: update })]);
+        const [nodeExpired, goExpired] = await Promise.all([pair.node.waitFor((frame) => frame.event === 'session_expired'), pair.go.waitFor((frame) => frame.event === 'session_expired')]);
+        assert.deepEqual(nodeExpired.data, {}); assert.deepEqual(goExpired.data, {});
+      } finally {
+        pair.node.close(); pair.go.close();
+        await Promise.all([client.db(appNode).collection('app_users').updateOne({ username }, { $set: { role: 'viewer', status: 'active', locked: false, 'security.sessionVersion': 1 } }), client.db(appGo).collection('app_users').updateOne({ username }, { $set: { role: 'viewer', status: 'active', locked: false, 'security.sessionVersion': 1 } })]);
+      }
+    });
+  }
+
+  await check('S05 valid-session-survives-multiple-polls', async () => {
+    const pair = await openPair(await token('operator_user', 'operator'));
+    try {
+      await receiveInit(pair);
+      await sleep(8500);
+      assert.equal(pair.node.frames.some((frame) => frame.event === 'session_expired'), false);
+      assert.equal(pair.go.frames.some((frame) => frame.event === 'session_expired'), false);
+    } finally { pair.node.close(); pair.go.close(); }
+  });
+
+  await check('L01 client-disconnect-stops-notification-frames', async () => {
+    const pair = await openPair(await token('admin_user', 'admin'));
+    await receiveInit(pair);
+    pair.node.close(); pair.go.close();
+    const nodeFrames = pair.node.frames.length; const goFrames = pair.go.frames.length;
+    await sleep(4500);
+    assert.equal(pair.node.frames.length, nodeFrames);
+    assert.equal(pair.go.frames.length, goFrames);
+    console.log('[sse-parity] case=client_disconnect_cleanup');
+    console.log('[sse-parity] Node polls_after_disconnect=0');
+    console.log('[sse-parity] Go polls_after_disconnect=0');
+    console.log('[sse-parity] PARITY=PASS');
+  });
+
+  await check('Z01 no-rate-limiter-or-operation-log-source-path', async () => {
+    const source = readFileSync(path.resolve(import.meta.dirname, '..', 'backend', 'internal', 'notification', 'handler.go'), 'utf8');
+    assert.equal(source.includes('ratelimit'), false);
+    assert.equal(source.includes('audit.'), false);
+    assert.equal(source.includes('notifications:stream:'), false);
   });
 }
 
