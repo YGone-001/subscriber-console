@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
+	"unicode/utf8"
 
 	"subscriber/internal/audit"
 	"subscriber/internal/auth"
@@ -122,7 +122,7 @@ func (h *Handler) Acknowledge(w http.ResponseWriter, r *http.Request) {
 		if !isStr {
 			continue
 		}
-		trimmed := strings.TrimSpace(str)
+		trimmed := jsTrimSpace(str)
 		if trimmed == "" {
 			continue
 		}
@@ -315,22 +315,91 @@ func (h *Handler) writeAudit(r *http.Request, p *auth.Principal, input audit.Wri
 	if input.Reason == "" {
 		input.Reason = reason
 	}
-	_ = h.auditWriter.WriteStrict(r.Context(), input)
+	// Direct Execution governance: operation logging is best-effort. An audit
+	// persistence failure must not roll back the committed business mutation nor
+	// alter the success response the caller already earned.
+	h.auditWriter.WriteBestEffort(input)
 }
 
+// cleanText mirrors the Node route cleaner: reject non-strings, apply the
+// ECMAScript String.prototype.trim() character set, then truncate to
+// maxTextLength UTF-16 code units exactly as String.prototype.slice does.
 func cleanText(val any) *string {
 	str, ok := val.(string)
 	if !ok {
 		return nil
 	}
-	trimmed := strings.TrimSpace(str)
+	trimmed := jsTrimSpace(str)
 	if trimmed == "" {
 		return nil
 	}
-	if len(trimmed) > maxTextLength {
-		trimmed = trimmed[:maxTextLength]
-	}
+	trimmed = truncateUTF16(trimmed, maxTextLength)
 	return &trimmed
+}
+
+// truncateUTF16 truncates s to at most maxUnits UTF-16 code units, matching
+// JavaScript String.prototype.slice(0, maxUnits) semantics. JavaScript indexes
+// by UTF-16 code unit, so a supplementary code point counts as two units.
+//
+// When maxUnits lands inside a surrogate pair, String.prototype.slice returns a
+// lone high surrogate. That code unit has no UTF-8 encoding, and the Node
+// MongoDB driver stores U+FFFD for it when writing a BSON string. Emitting
+// U+FFFD here keeps Go's HTTP and MongoDB strings byte-identical to Node's
+// observable result while remaining valid UTF-8.
+func truncateUTF16(s string, maxUnits int) string {
+	if maxUnits <= 0 {
+		return ""
+	}
+	units := 0
+	for i, r := range s {
+		width := 1
+		if r > 0xFFFF {
+			width = 2
+		}
+		if units+width <= maxUnits {
+			units += width
+			continue
+		}
+		if width == 2 && units == maxUnits-1 {
+			return s[:i] + string(rune(0xFFFD))
+		}
+		return s[:i]
+	}
+	return s
+}
+
+// jsTrimSpace trims the ECMAScript WhiteSpace + LineTerminator set consumed by
+// String.prototype.trim. It deliberately does not use strings.TrimSpace: Go also
+// trims U+0085 and leaves U+FEFF in place, both of which diverge from Node.
+func jsTrimSpace(s string) string {
+	start := 0
+	for start < len(s) {
+		r, size := utf8.DecodeRuneInString(s[start:])
+		if !isJSTrimSpace(r) {
+			break
+		}
+		start += size
+	}
+	end := len(s)
+	for end > start {
+		r, size := utf8.DecodeLastRuneInString(s[:end])
+		if !isJSTrimSpace(r) {
+			break
+		}
+		end -= size
+	}
+	return s[start:end]
+}
+
+func isJSTrimSpace(r rune) bool {
+	switch r {
+	case 0x0009, 0x000A, 0x000B, 0x000C, 0x000D,
+		0x0020, 0x00A0, 0x1680,
+		0x2028, 0x2029, 0x202F, 0x205F, 0x3000,
+		0xFEFF:
+		return true
+	}
+	return r >= 0x2000 && r <= 0x200A
 }
 
 func isValidWorkflowStatus(s string) bool {
