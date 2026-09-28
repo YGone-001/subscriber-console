@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	defaultOcsPlanID     = "plan_default_10gb"
+	defaultOcsPlanID           = "plan_default_10gb"
 	defaultTotalBalance  int64 = 10737418240 // 10 * 1024 * 1024 * 1024 (10GB)
 	defaultQuotaPerGrant int64 = 10485760    // 10 * 1024 * 1024 (10MB)
 	defaultVoiceTotal    int64 = 3600        // 60 minutes
