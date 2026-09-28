@@ -175,3 +175,16 @@
 - Updated architecture freeze test suite `scripts/test-phase-7-architecture-freeze.mjs` to enforce presence of the 6 Phase 7.1 routes and strict absence of later-phase routes in Go router.
 - Added dedicated CI workflow job `platform-read-parity` in `.github/workflows/ci.yml`.
 - Maintained strict operational invariants: `CUTOVER_TABLE = 36`, `ACTUALLY_ROUTED = 36`, 0 Next.js routes modified (54 route files, 78 operations), 0 production cutovers, 100% pure ASCII.
+
+## Phase 7.2 — Alert Domain Governance & Mutation Shadow Parity (Go Shadow Implementation)
+
+- Implemented Go shadow mutation endpoints for the Alert domain:
+  - `POST /api/alerts/acknowledge`: Single and batch acknowledge up to 200 IDs with string filtering, whitespace trimming, and deduplication (`backend/internal/alert`). Rate limit `alerts:acknowledge:<user>` (60 req / 60s). Direct execution against `xcloud_ops.app_alerts`.
+  - `POST /api/alerts/workflow`: Alert workflow status update (`acknowledged`, `assigned`, `recovering`, `resolved`), field cleaning (max 80 chars), and automatic acknowledgment on `resolved` status (`backend/internal/alert`). Rate limit `alerts:workflow:<user>` (120 req / 60s).
+- Closed governance gap (Outcome B) across both Node and Go:
+  - Added non-gating best-effort operation logging to `app_audit_logs` (`action: "alert.acknowledge"`, `action: "alert.workflow"`).
+  - Validated that audit persistence failure (via MongoDB schema validation errors) does not roll back committed alert mutations.
+- Updated Go HTTP router in `backend/cmd/server/main.go` and `backend/cmd/testserver/main.go` with `POST /api/alerts/acknowledge` and `POST /api/alerts/workflow`. Total Go HTTP operations expanded to 66 (36 semantic reads/platform actions + 2 alert mutations + 28 mutations/auth/health).
+- Created dedicated integration test suite: `scripts/test-phase-7-alert-mutation-parity.mjs` (42/42 PASS across 8 sections: authentication & RBAC, rate limits, acknowledge mutations, workflow mutations, best-effort audit logs, database failure paths, zero unrelated collection mutations, and routing freeze invariants).
+- Updated architecture freeze validator `scripts/test-phase-7-architecture-freeze.mjs` to include Phase 7.2 endpoints in implemented routes while strictly forbidding later-phase routes.
+- Maintained strict operational invariants: `CUTOVER_TABLE = 36`, `ACTUALLY_ROUTED = 36`, zero Phase 7 production cutover (Node remains authoritative production owner), 100% pure ASCII.

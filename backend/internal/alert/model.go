@@ -22,3 +22,35 @@ type ListAlertsResponse struct {
 	ActiveWarningCount  int64           `json:"activeWarningCount"`
 	ActiveCount         int64           `json:"activeCount"`
 }
+
+// AcknowledgeResponse represents the payload returned by POST /api/alerts/acknowledge.
+type AcknowledgeResponse struct {
+	Success      bool  `json:"success"`
+	Acknowledged int64 `json:"acknowledged"`
+	Requested    int   `json:"requested"`
+	Skipped      int64 `json:"skipped"`
+}
+
+// AlertWorkflowStatus represents valid alert workflow status strings.
+type AlertWorkflowStatus string
+
+const (
+	WorkflowStatusAcknowledged AlertWorkflowStatus = "acknowledged"
+	WorkflowStatusAssigned     AlertWorkflowStatus = "assigned"
+	WorkflowStatusRecovering   AlertWorkflowStatus = "recovering"
+	WorkflowStatusResolved     AlertWorkflowStatus = "resolved"
+)
+
+// AlertWorkflowUpdate contains workflow fields to update on an alert document.
+type AlertWorkflowUpdate struct {
+	Status     string
+	AssignedTo *string
+	Note       *string
+}
+
+// WorkflowResponse represents the payload returned by POST /api/alerts/workflow.
+type WorkflowResponse struct {
+	Success  bool  `json:"success"`
+	Matched  int64 `json:"matched"`
+	Modified int64 `json:"modified"`
+}

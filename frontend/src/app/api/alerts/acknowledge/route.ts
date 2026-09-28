@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { requireAnyRole } from '@/lib/authz';
 import { enforceRateLimit } from '@/lib/rateLimit';
 import { acknowledgeAlerts } from '@/server/repositories/alertRepository';
+import { writeAuditLog } from '@/lib/audit';
+import { auditRequestContext } from '@/lib/audit/record';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,6 +36,23 @@ export async function POST(request: Request) {
     }
 
     const acknowledged = await acknowledgeAlerts(alertIds);
+    const targetId = alertIds.length === 1 ? alertIds[0] : `batch:${alertIds.length}`;
+    await writeAuditLog({
+      actor: { type: 'user', username: auth.auth.user, role: auth.auth.role },
+      module: 'alerts',
+      action: 'alert.acknowledge',
+      targetId,
+      resource: { type: 'alert', id: targetId },
+      result: 'success',
+      metadata: {
+        requested: alertIds.length,
+        acknowledged,
+        skipped: alertIds.length - acknowledged,
+        ids: alertIds,
+      },
+      ...auditRequestContext(request),
+    }, { failureMode: 'best-effort' });
+
     return NextResponse.json({
       success: true,
       acknowledged,

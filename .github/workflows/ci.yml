@@ -385,5 +385,8 @@ jobs:
       - name: Platform services Go read parity
         run: node scripts/test-phase-7-read-parity.mjs
 
+      - name: Alert domain mutation parity
+        run: node scripts/test-phase-7-alert-mutation-parity.mjs
+
 
 

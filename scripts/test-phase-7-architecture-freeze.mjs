@@ -102,9 +102,11 @@ const mainGoPath = path.join(ROOT, 'backend/cmd/server/main.go');
 assert.ok(fs.existsSync(mainGoPath), 'backend/cmd/server/main.go must exist');
 const mainGoContent = fs.readFileSync(mainGoPath, 'utf8');
 
-// Phase 7.1 implemented read routes in Go
+// Phase 7 implemented routes in Go (Phase 7.1 reads + Phase 7.2 alert mutations)
 const implementedPhase7GoRoutes = [
   'GET /api/alerts',
+  'POST /api/alerts/acknowledge',
+  'POST /api/alerts/workflow',
   'POST /api/analytics/init',
   'GET /api/system/health',
   'GET /api/system/mongo/health',
@@ -115,15 +117,13 @@ const implementedPhase7GoRoutes = [
 for (const route of implementedPhase7GoRoutes) {
   assert.ok(
     mainGoContent.includes(`"${route}"`),
-    `Go backend must register Phase 7.1 route: ${route}`
+    `Go backend must register Phase 7 route: ${route}`
   );
-  console.log(`  [PASS] Go router contains Phase 7.1 shadow route ${route}`);
+  console.log(`  [PASS] Go router contains Phase 7 shadow route ${route}`);
 }
 
-// Later phase routes (Phase 7.2+) must NOT be registered in Go
+// Later phase routes (Phase 7.3+) must NOT be registered in Go
 const forbiddenLaterPhaseGoRoutes = [
-  'POST /api/alerts/acknowledge',
-  'POST /api/alerts/workflow',
   'GET /api/notifications/stream',
   'POST /api/system/audit/heal',
   'POST /api/system/audit/batch-heal',
@@ -132,7 +132,7 @@ const forbiddenLaterPhaseGoRoutes = [
 for (const route of forbiddenLaterPhaseGoRoutes) {
   assert.ok(
     !mainGoContent.includes(`"${route}"`),
-    `Go backend must not register later-phase route ${route} before Phase 7.2+`
+    `Go backend must not register later-phase route ${route} before Phase 7.3+`
   );
   console.log(`  [PASS] Go router does not contain later-phase route ${route}`);
 }

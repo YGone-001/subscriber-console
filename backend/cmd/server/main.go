@@ -88,7 +88,7 @@ func main() {
 
 	// Alerts
 	alertRepo := alert.NewRepository(mc.Ops.Collection("app_alerts"))
-	alertHandler := alert.NewHandler(alertRepo, limiter)
+	alertHandler := alert.NewHandlerWithAudit(alertRepo, limiter, auditWriter)
 
 	// System Health & Diagnostics
 	systemHandler := system.NewHandler(mc.XCloud, mc.Ops, limiter)
@@ -258,8 +258,10 @@ func main() {
 	mux.Handle("POST /api/users/{username}/disable", authMiddleware(http.HandlerFunc(userHandler.DisableUser)))
 	mux.Handle("POST /api/users/{username}/password-reset", authMiddleware(http.HandlerFunc(userHandler.ResetPassword)))
 
-	// Platform Services (Phase 7.1 read / semantic-read shadow endpoints)
+	// Platform Services (Phase 7.1 read & Phase 7.2 alert mutation shadow endpoints)
 	mux.Handle("GET /api/alerts", authMiddleware(http.HandlerFunc(alertHandler.List)))
+	mux.Handle("POST /api/alerts/acknowledge", authMiddleware(http.HandlerFunc(alertHandler.Acknowledge)))
+	mux.Handle("POST /api/alerts/workflow", authMiddleware(http.HandlerFunc(alertHandler.Workflow)))
 	mux.Handle("POST /api/analytics/init", authMiddleware(http.HandlerFunc(analyticsHandler.Init)))
 	mux.Handle("GET /api/system/health", authMiddleware(http.HandlerFunc(systemHandler.SystemHealth)))
 	mux.Handle("GET /api/system/mongo/health", authMiddleware(http.HandlerFunc(systemHandler.MongoHealth)))

@@ -98,6 +98,8 @@ func main() {
 	authMiddleware := auth.Middleware(jwtSecretBytes, sessionValidator, logger)
 
 	mux.Handle("GET /api/alerts", authMiddleware(http.HandlerFunc(alertHandler.List)))
+	mux.Handle("POST /api/alerts/acknowledge", authMiddleware(http.HandlerFunc(alertHandler.Acknowledge)))
+	mux.Handle("POST /api/alerts/workflow", authMiddleware(http.HandlerFunc(alertHandler.Workflow)))
 	mux.Handle("POST /api/analytics/init", authMiddleware(http.HandlerFunc(analyticsHandler.Init)))
 	mux.Handle("GET /api/system/health", authMiddleware(http.HandlerFunc(systemHandler.SystemHealth)))
 	mux.Handle("GET /api/system/mongo/health", authMiddleware(http.HandlerFunc(systemHandler.MongoHealth)))
