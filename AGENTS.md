@@ -205,8 +205,8 @@ Phase 6.3-B COMPLETE — Controlled Authentication Cutover (Production owner = G
 Phase 6.4   COMPLETE — Authentication & User Management UI Final Integration (UX hardening, rate limit cooldown, privacy, status lifecycle, security state)
 Phase 7.0   COMPLETE — Alerts, Notifications & Platform Services Architecture Freeze (Current-State Reconciliation, Contract Inventory, and Migration Planning)
 Phase 7.1   COMPLETE — Platform Health & Diagnostic Read Parity (Go Shadow Implementation: GET /api/alerts, GET /api/system/health, GET /api/system/mongo/health, GET /api/system/audit/status, POST /api/system/audit/scan, POST /api/analytics/init; CUTOVER_TABLE=36, ACTUALLY_ROUTED=36)
-Phase 7.2   COMPLETE — Alert Domain Governance & Mutation Shadow Parity (Go Shadow Implementation: POST /api/alerts/acknowledge, POST /api/alerts/workflow; Best-Effort Operation Logging to app_audit_logs; CUTOVER_TABLE=36, ACTUALLY_ROUTED=36)
-Phase 7.3   PARTIAL — Notification Streaming SSE Shadow Parity (Go shadow implementation exists; full acceptance matrix closure in progress; CUTOVER_TABLE=36, ACTUALLY_ROUTED=36)
+Phase 7.3   COMPLETE — Notification Streaming SSE Shadow Parity (Go shadow implementation; full acceptance matrix closed; Run #140 green; CUTOVER_TABLE=36, ACTUALLY_ROUTED=36)
+Phase 7.4   COMPLETE — System Integrity Controlled Remediation Shadow Parity (Go shadow implementation for POST /api/system/audit/heal and POST /api/system/audit/batch-heal; CUTOVER_TABLE=36, ACTUALLY_ROUTED=36)
 ```
 
 ### 5.1 OCS 生产冻结基线 (OCS Production Freeze Baseline)
@@ -468,7 +468,7 @@ OCS writes = 13 (tariff plan + subscriber contract + balance)
 CUTOVER_TABLE = 36 routes (all ACTUALLY_ROUTED=1).
 
 Read endpoints and alert mutations are shadow-implemented in Go; production operations still route through Next.js unless explicitly cut over.
-Phase 7 platform service, alert mutation, and notification streaming endpoints are Go shadow-implemented with zero production cutover in Phase 7.3.
+Phase 7 platform service, alert mutation, notification streaming, and controlled remediation endpoints are Go shadow-implemented with zero production cutover in Phase 7.4.
 
 ---
 

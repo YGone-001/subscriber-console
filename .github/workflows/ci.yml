@@ -391,5 +391,5 @@ jobs:
       - name: Notification streaming SSE parity
         run: node scripts/test-phase-7-notification-stream-parity.mjs
 
-
-
+      - name: System integrity controlled remediation parity
+        run: node scripts/test-phase-7-system-heal-parity.mjs

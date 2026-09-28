@@ -27,6 +27,7 @@ import (
 	mongoClient "subscriber/internal/mongo"
 	"subscriber/internal/notification"
 	"subscriber/internal/ratelimit"
+	"subscriber/internal/remediation"
 	"subscriber/internal/response"
 	"subscriber/internal/system"
 )
@@ -100,6 +101,8 @@ func main() {
 	analyticsHandler := analytics.NewHandler(analyticsRepo, limiter)
 
 	systemHandler := system.NewHandler(failingXCloud, failingOps, limiter)
+	remediationRepo := remediation.NewRepository(failingXCloud, failingOps)
+	remediationHandler := remediation.NewHandler(remediationRepo, limiter, nil)
 
 	mux := http.NewServeMux()
 
@@ -124,6 +127,7 @@ func main() {
 	mux.Handle("GET /api/system/mongo/health", authMiddleware(http.HandlerFunc(systemHandler.MongoHealth)))
 	mux.Handle("GET /api/system/audit/status", authMiddleware(http.HandlerFunc(systemHandler.AuditStatus)))
 	mux.Handle("POST /api/system/audit/scan", authMiddleware(http.HandlerFunc(systemHandler.AuditScan)))
+	remediation.RegisterRoutes(mux, authMiddleware, remediationHandler)
 
 	// Dedicated test control endpoints for test-only failure harness
 	mux.HandleFunc("GET /testonly/counters", func(w http.ResponseWriter, r *http.Request) {

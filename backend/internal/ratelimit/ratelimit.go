@@ -158,3 +158,27 @@ func (l *Limiter) Enforce(w http.ResponseWriter, r *http.Request, identifier str
 
 	return true
 }
+
+// EnforceNodeParity enforces rate limiting matching Node.js enforceRateLimit semantics:
+// On allowed: sets no headers on w, returns true.
+// On denied: sets X-RateLimit headers and Retry-After, writes HTTP 429 with {"error":"Too many requests"}, returns false.
+func (l *Limiter) EnforceNodeParity(w http.ResponseWriter, r *http.Request, identifier string, limit int, windowSeconds int) bool {
+	result, err := l.Check(r.Context(), identifier, limit, windowSeconds)
+	if err != nil {
+		// Fail open
+		return true
+	}
+
+	if !result.Allowed {
+		w.Header().Set("X-RateLimit-Limit", strconv.Itoa(result.Limit))
+		w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(result.Remaining))
+		w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(result.ResetAt, 10))
+		w.Header().Set("Retry-After", strconv.Itoa(result.RetryAfter))
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"error":"Too many requests"}`))
+		return false
+	}
+
+	return true
+}

@@ -25,6 +25,7 @@ import (
 	"subscriber/internal/profile"
 	"subscriber/internal/ratelimit"
 	"subscriber/internal/rating"
+	"subscriber/internal/remediation"
 	"subscriber/internal/response"
 	"subscriber/internal/subscriber"
 	"subscriber/internal/system"
@@ -94,6 +95,10 @@ func main() {
 
 	// System Health & Diagnostics
 	systemHandler := system.NewHandler(mc.XCloud, mc.Ops, limiter)
+
+	// Controlled Remediation
+	remediationRepo := remediation.NewRepository(mc.XCloud, mc.Ops)
+	remediationHandler := remediation.NewHandler(remediationRepo, limiter, auditWriter)
 
 	// Ratings
 	ratingRepo := rating.NewRepository(mc.XCloud.Collection("ocs_rating_policies"))
@@ -270,6 +275,7 @@ func main() {
 	mux.Handle("GET /api/system/mongo/health", authMiddleware(http.HandlerFunc(systemHandler.MongoHealth)))
 	mux.Handle("GET /api/system/audit/status", authMiddleware(http.HandlerFunc(systemHandler.AuditStatus)))
 	mux.Handle("POST /api/system/audit/scan", authMiddleware(http.HandlerFunc(systemHandler.AuditScan)))
+	remediation.RegisterRoutes(mux, authMiddleware, remediationHandler)
 
 	// Catch-all for unmigrated routes
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {

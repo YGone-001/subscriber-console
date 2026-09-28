@@ -197,3 +197,14 @@
 - Registered the Go endpoint only as a shadow candidate in the production and dedicated test server. Next.js remains the production owner and `CUTOVER_TABLE = 36`, `ACTUALLY_ROUTED = 36` remain unchanged.
 - Added `scripts/test-phase-7-notification-stream-parity.mjs`, which uses real TCP Node and Go streams with incremental SSE parsing and checks headers, authentication, init, alerts updates, session expiry, heartbeat, short WriteTimeout survival, and read-only collection behavior.
 - Added the separate `Notification streaming SSE parity` step to the platform parity CI job. Existing Phase 7.1 and 7.2 suites remain separate.
+- Remote CI Run #140 completed successfully on exact commit SHA `7787edf87d95a80ced8c29fff46b45cae782e007`, freezing Phase 7.3.
+
+## Phase 7.4 — System Integrity Controlled Remediation Shadow Parity
+
+- Completed Phase 7.4: System Integrity Controlled Remediation Shadow Parity for `POST /api/system/audit/heal` and `POST /api/system/audit/batch-heal`.
+- Implemented `backend/internal/remediation` package providing Go shadow parity for operator-initiated controlled remediation (L2; strictly NO autonomous loops, background intervals, or cron self-healing).
+- Implemented exact 1:1 parity for authentication, RBAC capability checks (`system_heal`), user-scoped fixed-window rate limiting (20/60s for heal, 10/60s for batch-heal; emitting headers only on 429), validation, profile inheritance, targeted subscriber/OCS provisioning, reservation release, idempotency, best-effort audit logging (`app_audit_logs`), and runtime error isolation.
+- Maintained strict operational invariants: `CUTOVER_TABLE = 36`, `ACTUALLY_ROUTED = 36`, zero Phase 7 production cutover (Node remains authoritative production owner), 100% pure ASCII.
+- Added comprehensive cross-engine parity test suite in `scripts/test-phase-7-system-heal-parity.mjs` (65/65 PASS).
+- Added `System integrity controlled remediation parity` step to `platform-read-parity` CI job in `.github/workflows/ci.yml`.
+- All regression suites verified green: Phase 7.1 (55/55), Phase 7.2 (93/93), Phase 7.3 (63/63), Phase 7.4 (65/65), Go unit tests, Node test suite (445/445), Next.js production build, and migration inventory validation.
