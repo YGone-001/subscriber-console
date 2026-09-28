@@ -321,6 +321,10 @@ function alertDoc(id, timestamp, level = 'INFO', acknowledged = false, extra = {
   return { id, timestamp, level, imsi: `001010${id.padStart(9, '0').slice(-9)}`, reason: `reason-${id}`, is_acknowledged: acknowledged, ...extra };
 }
 
+function hasTransientRetry(stream) {
+  return stream.frames.some((f) => (f.comment && f.comment.includes('transient_retry')) || (f.raw && f.raw.includes('transient_retry')));
+}
+
 async function getGoCounters() {
   const res = await fetch(`http://127.0.0.1:${goFailPort}/testonly/counters`);
   return res.json();
@@ -610,14 +614,46 @@ async function main() {
       setNodeFailAlerts(true);
       await setGoFailAlerts(true);
       await sleep(5000);
-      assert.equal(pair.node.frames.some((f) => f.event === 'alerts_update'), false);
-      assert.equal(pair.go.frames.some((f) => f.event === 'alerts_update'), false);
-      assert.equal(pair.node.frames.some((f) => f.event === 'session_expired'), false);
-      assert.equal(pair.go.frames.some((f) => f.event === 'session_expired'), false);
-      console.log('[sse-parity] case=periodic_repository_failure');
-      console.log('[sse-parity] Node stream_alive=true');
-      console.log('[sse-parity] Go stream_alive=true');
-      console.log('[sse-parity] PARITY=PASS');
+
+      const nodeAlertsUpdate = pair.node.frames.some((f) => f.event === 'alerts_update');
+      const goAlertsUpdate = pair.go.frames.some((f) => f.event === 'alerts_update');
+      const nodeSessionExpired = pair.node.frames.some((f) => f.event === 'session_expired');
+      const goSessionExpired = pair.go.frames.some((f) => f.event === 'session_expired');
+      const nodeTransientRetry = hasTransientRetry(pair.node);
+      const goTransientRetry = hasTransientRetry(pair.go);
+
+      assert.equal(nodeAlertsUpdate, false, 'Node must not emit alerts_update on repo failure');
+      assert.equal(goAlertsUpdate, false, 'Go must not emit alerts_update on repo failure');
+      assert.equal(nodeSessionExpired, false, 'Node must not emit session_expired on repo failure');
+      assert.equal(goSessionExpired, false, 'Go must not emit session_expired on repo failure');
+      assert.equal(nodeTransientRetry, false, 'Node must not emit transient_retry for handled listAlerts');
+      assert.equal(goTransientRetry, false, 'Go must not emit transient_retry for handled listAlerts');
+
+      // Prove stream survival: restore repository access and prove connection delivers subsequent frame
+      setNodeFailAlerts(false);
+      await setGoFailAlerts(false);
+      const survivalDoc = alertDoc('rf01-surv', '2026-09-28T01:30:00.000Z', 'WARNING', false);
+      await Promise.all([
+        client.db(appNode).collection('app_alerts').insertOne(survivalDoc),
+        client.db(appGoFail).collection('app_alerts').insertOne(survivalDoc),
+      ]);
+      const [nodeSurvUpdate, goSurvUpdate] = await Promise.all([
+        pair.node.waitFor((f) => f.event === 'alerts_update', 8000),
+        pair.go.waitFor((f) => f.event === 'alerts_update', 8000),
+      ]);
+      assert.ok(nodeSurvUpdate, 'Node connection must deliver recovery frame');
+      assert.ok(goSurvUpdate, 'Go connection must deliver recovery frame');
+
+      console.log('[sse-parity] case=RF01_periodic_failure');
+      console.log(`[sse-parity] node_alerts_update=${nodeAlertsUpdate}`);
+      console.log(`[sse-parity] go_alerts_update=${goAlertsUpdate}`);
+      console.log(`[sse-parity] node_session_expired=${nodeSessionExpired}`);
+      console.log(`[sse-parity] go_session_expired=${goSessionExpired}`);
+      console.log(`[sse-parity] node_transient_retry=${nodeTransientRetry}`);
+      console.log(`[sse-parity] go_transient_retry=${goTransientRetry}`);
+      console.log('[sse-parity] node_stream_survival_proven=true');
+      console.log('[sse-parity] go_stream_survival_proven=true');
+      console.log('[sse-parity] parity=PASS');
     } finally {
       pair.node.close(); pair.go.close();
       setNodeFailAlerts(false);
@@ -627,6 +663,8 @@ async function main() {
 
   await check('RF02 repo-recovery-wire-parity', async () => {
     await replaceAlertsFail([alertDoc('1', '2026-09-28T00:00:01.000Z')]);
+    resetNodeCounters();
+    await resetGoCounters();
     setNodeFailAlerts(false);
     await setGoFailAlerts(false);
     const pair = await openPairFail(adminToken);
@@ -634,7 +672,9 @@ async function main() {
       await receiveInit(pair);
       setNodeFailAlerts(true);
       await setGoFailAlerts(true);
-      await sleep(4200);
+      await sleep(4500); // allow at least one failed periodic cycle
+      const nodeValDuring = getNodeCounters().sessionValidations;
+      const goValDuring = (await getGoCounters()).sessionValidations;
       setNodeFailAlerts(false);
       await setGoFailAlerts(false);
       const newDoc = alertDoc('rec-1', '2026-09-28T02:00:00.000Z', 'CRITICAL', false);
@@ -643,15 +683,24 @@ async function main() {
         client.db(appGoFail).collection('app_alerts').insertOne(newDoc),
       ]);
       const [nodeUpdate, goUpdate] = await Promise.all([
-        pair.node.waitFor((f) => f.event === 'alerts_update'),
-        pair.go.waitFor((f) => f.event === 'alerts_update'),
+        pair.node.waitFor((f) => f.event === 'alerts_update', 8000),
+        pair.go.waitFor((f) => f.event === 'alerts_update', 8000),
       ]);
       assert.equal(nodeUpdate.data.activeCount, 2);
       assert.equal(goUpdate.data.activeCount, 2);
-      console.log('[sse-parity] case=repository_recovery');
-      console.log('[sse-parity] Node recovered=true');
-      console.log('[sse-parity] Go recovered=true');
-      console.log('[sse-parity] PARITY=PASS');
+      await sleep(4500); // allow at least one subsequent periodic cycle
+      const nodeValAfter = getNodeCounters().sessionValidations;
+      const goValAfter = (await getGoCounters()).sessionValidations;
+      assert.ok(nodeValAfter > nodeValDuring, `Node validations after (${nodeValAfter}) must be > during (${nodeValDuring})`);
+      assert.ok(goValAfter > goValDuring, `Go validations after (${goValAfter}) must be > during (${goValDuring})`);
+      console.log('[sse-parity] case=RF02_repository_recovery');
+      console.log(`[sse-parity] node_validations_during_failure=${nodeValDuring}`);
+      console.log(`[sse-parity] node_validations_after_recovery=${nodeValAfter}`);
+      console.log(`[sse-parity] go_validations_during_failure=${goValDuring}`);
+      console.log(`[sse-parity] go_validations_after_recovery=${goValAfter}`);
+      console.log('[sse-parity] node_update_after_recovery=true');
+      console.log('[sse-parity] go_update_after_recovery=true');
+      console.log('[sse-parity] parity=PASS');
     } finally {
       pair.node.close(); pair.go.close();
       setNodeFailAlerts(false);
@@ -692,24 +741,28 @@ async function main() {
     const pair = await openPairFail(adminToken);
     await receiveInit(pair);
     await sleep(5000);
-    const nodePre = getNodeCounters().alertReads;
-    const goPre = (await getGoCounters()).alertReads;
-    assert.ok(nodePre >= 2, `Node must have executed polls (got ${nodePre})`);
-    assert.ok(goPre >= 2, `Go must have executed polls (got ${goPre})`);
+    const nodeReadsBefore = getNodeCounters().alertReads;
+    const goReadsBefore = (await getGoCounters()).alertReads;
+    assert.ok(nodeReadsBefore >= 2, `Node must have executed polls (got ${nodeReadsBefore})`);
+    assert.ok(goReadsBefore >= 2, `Go must have executed polls (got ${goReadsBefore})`);
     pair.node.close();
     pair.go.close();
     await sleep(1000);
-    const nodeT0 = getNodeCounters().alertReads;
-    const goT0 = (await getGoCounters()).alertReads;
+    const nodeReadsAfterCleanup = getNodeCounters().alertReads;
+    const goReadsAfterCleanup = (await getGoCounters()).alertReads;
     await sleep(5000);
-    const nodeT1 = getNodeCounters().alertReads;
-    const goT1 = (await getGoCounters()).alertReads;
-    assert.equal(nodeT1, nodeT0, 'Node polls must halt after disconnect');
-    assert.equal(goT1, goT0, 'Go polls must halt after disconnect');
-    console.log('[sse-parity] case=client_disconnect_stops_reads');
-    console.log('[sse-parity] Node polls_after_disconnect=0');
-    console.log('[sse-parity] Go polls_after_disconnect=0');
-    console.log('[sse-parity] PARITY=PASS');
+    const nodeReadsAfterExtra = getNodeCounters().alertReads;
+    const goReadsAfterExtra = (await getGoCounters()).alertReads;
+    assert.equal(nodeReadsAfterExtra, nodeReadsAfterCleanup, 'Node polls must halt after disconnect');
+    assert.equal(goReadsAfterExtra, goReadsAfterCleanup, 'Go polls must halt after disconnect');
+    console.log('[sse-parity] case=LC01');
+    console.log(`[sse-parity] node_reads_before_disconnect=${nodeReadsBefore}`);
+    console.log(`[sse-parity] node_reads_after_cleanup=${nodeReadsAfterCleanup}`);
+    console.log(`[sse-parity] node_reads_after_extra_interval=${nodeReadsAfterExtra}`);
+    console.log(`[sse-parity] go_reads_before_disconnect=${goReadsBefore}`);
+    console.log(`[sse-parity] go_reads_after_cleanup=${goReadsAfterCleanup}`);
+    console.log(`[sse-parity] go_reads_after_extra_interval=${goReadsAfterExtra}`);
+    console.log('[sse-parity] parity=PASS');
   });
 
   await check('LC02 client-disconnect-stops-session-validation', async () => {
@@ -718,24 +771,28 @@ async function main() {
     const pair = await openPairFail(adminToken);
     await receiveInit(pair);
     await sleep(5000);
-    const nodePre = getNodeCounters().sessionValidations;
-    const goPre = (await getGoCounters()).sessionValidations;
-    assert.ok(nodePre >= 1, `Node must have executed validations (got ${nodePre})`);
-    assert.ok(goPre >= 1, `Go must have executed validations (got ${goPre})`);
+    const nodeValsBefore = getNodeCounters().sessionValidations;
+    const goValsBefore = (await getGoCounters()).sessionValidations;
+    assert.ok(nodeValsBefore >= 1, `Node must have executed validations (got ${nodeValsBefore})`);
+    assert.ok(goValsBefore >= 1, `Go must have executed validations (got ${goValsBefore})`);
     pair.node.close();
     pair.go.close();
     await sleep(1000);
-    const nodeT0 = getNodeCounters().sessionValidations;
-    const goT0 = (await getGoCounters()).sessionValidations;
+    const nodeValsAfterCleanup = getNodeCounters().sessionValidations;
+    const goValsAfterCleanup = (await getGoCounters()).sessionValidations;
     await sleep(5000);
-    const nodeT1 = getNodeCounters().sessionValidations;
-    const goT1 = (await getGoCounters()).sessionValidations;
-    assert.equal(nodeT1, nodeT0, 'Node validations must halt after disconnect');
-    assert.equal(goT1, goT0, 'Go validations must halt after disconnect');
-    console.log('[sse-parity] case=client_disconnect_stops_validations');
-    console.log('[sse-parity] Node validations_after_disconnect=0');
-    console.log('[sse-parity] Go validations_after_disconnect=0');
-    console.log('[sse-parity] PARITY=PASS');
+    const nodeValsAfterExtra = getNodeCounters().sessionValidations;
+    const goValsAfterExtra = (await getGoCounters()).sessionValidations;
+    assert.equal(nodeValsAfterExtra, nodeValsAfterCleanup, 'Node validations must halt after disconnect');
+    assert.equal(goValsAfterExtra, goValsAfterCleanup, 'Go validations must halt after disconnect');
+    console.log('[sse-parity] case=LC02');
+    console.log(`[sse-parity] node_validations_before_disconnect=${nodeValsBefore}`);
+    console.log(`[sse-parity] node_validations_after_cleanup=${nodeValsAfterCleanup}`);
+    console.log(`[sse-parity] node_validations_after_extra_interval=${nodeValsAfterExtra}`);
+    console.log(`[sse-parity] go_validations_before_disconnect=${goValsBefore}`);
+    console.log(`[sse-parity] go_validations_after_cleanup=${goValsAfterCleanup}`);
+    console.log(`[sse-parity] go_validations_after_extra_interval=${goValsAfterExtra}`);
+    console.log('[sse-parity] parity=PASS');
   });
 
   await check('LC03 client-disconnect-exits-handler-lifecycle', async () => {
@@ -749,10 +806,10 @@ async function main() {
     await sleep(1500);
     assert.equal(getNodeCounters().activeHandlers, 0, 'Node active handlers must return to 0');
     assert.equal((await getGoCounters()).activeHandlers, 0, 'Go active handlers must return to 0');
-    console.log('[sse-parity] case=client_disconnect_handler_exit');
-    console.log('[sse-parity] Node active_handlers=0');
-    console.log('[sse-parity] Go active_handlers=0');
-    console.log('[sse-parity] PARITY=PASS');
+    console.log('[sse-parity] case=LC03');
+    console.log('[sse-parity] node_active_handlers=0');
+    console.log('[sse-parity] go_active_handlers=0');
+    console.log('[sse-parity] parity=PASS');
   });
 
   await check('LC04 go-graceful-shutdown-real-execution', async () => {
@@ -803,13 +860,15 @@ async function main() {
   });
 
   await check('C02 session-revocation-user-isolation', async () => {
-    const opPair = await openPair(await token('operator_user', 'operator'));
-    const vwPair = await openPair(await token('viewer_user', 'viewer'));
+    resetNodeCounters();
+    await resetGoCounters();
+    const opPair = await openPairFail(await token('operator_user', 'operator'));
+    const vwPair = await openPairFail(await token('viewer_user', 'viewer'));
     try {
       await Promise.all([receiveInit(opPair), receiveInit(vwPair)]);
       await Promise.all([
         client.db(appNode).collection('app_users').updateOne({ username: 'operator_user' }, { $set: { 'security.sessionVersion': 2 } }),
-        client.db(appGo).collection('app_users').updateOne({ username: 'operator_user' }, { $set: { 'security.sessionVersion': 2 } }),
+        client.db(appGoFail).collection('app_users').updateOne({ username: 'operator_user' }, { $set: { 'security.sessionVersion': 2 } }),
       ]);
       const [nodeExp, goExp] = await Promise.all([
         opPair.node.waitFor((f) => f.event === 'session_expired'),
@@ -817,15 +876,49 @@ async function main() {
       ]);
       assert.deepEqual(nodeExp.data, {});
       assert.deepEqual(goExp.data, {});
-      await sleep(2000);
+      opPair.node.close();
+      opPair.go.close();
+
+      const nodeReadsBeforeA = getNodeCounters().alertReads;
+      const nodeValsBeforeA = getNodeCounters().sessionValidations;
+      const goReadsBeforeA = (await getGoCounters()).alertReads;
+      const goValsBeforeA = (await getGoCounters()).sessionValidations;
+
+      await sleep(5500);
+
       assert.equal(vwPair.node.frames.some((f) => f.event === 'session_expired'), false);
       assert.equal(vwPair.go.frames.some((f) => f.event === 'session_expired'), false);
+
+      const nodeReadsAfterA = getNodeCounters().alertReads;
+      const nodeValsAfterA = getNodeCounters().sessionValidations;
+      const goReadsAfterA = (await getGoCounters()).alertReads;
+      const goValsAfterA = (await getGoCounters()).sessionValidations;
+
+      assert.ok(nodeReadsAfterA > nodeReadsBeforeA, 'Node Stream B must continue repository polling');
+      assert.ok(goReadsAfterA > goReadsBeforeA, 'Go Stream B must continue repository polling');
+      assert.ok(nodeValsAfterA > nodeValsBeforeA, 'Node Stream B must continue session validation');
+      assert.ok(goValsAfterA > goValsBeforeA, 'Go Stream B must continue session validation');
+
+      console.log('[sse-parity] case=C02_session_isolation');
+      console.log('[sse-parity] stream_a_invalidated=true');
+      console.log('[sse-parity] stream_a_closed=true');
+      console.log('[sse-parity] stream_b_session_expired=false');
+      console.log('[sse-parity] stream_b_still_connected=true');
+      console.log(`[sse-parity] node_b_reads_before=${nodeReadsBeforeA}`);
+      console.log(`[sse-parity] node_b_reads_after=${nodeReadsAfterA}`);
+      console.log(`[sse-parity] go_b_reads_before=${goReadsBeforeA}`);
+      console.log(`[sse-parity] go_b_reads_after=${goReadsAfterA}`);
+      console.log(`[sse-parity] node_b_validations_before=${nodeValsBeforeA}`);
+      console.log(`[sse-parity] node_b_validations_after=${nodeValsAfterA}`);
+      console.log(`[sse-parity] go_b_validations_before=${goValsBeforeA}`);
+      console.log(`[sse-parity] go_b_validations_after=${goValsAfterA}`);
+      console.log('[sse-parity] parity=PASS');
     } finally {
       opPair.node.close(); opPair.go.close();
       vwPair.node.close(); vwPair.go.close();
       await Promise.all([
         client.db(appNode).collection('app_users').updateOne({ username: 'operator_user' }, { $set: { 'security.sessionVersion': 1 } }),
-        client.db(appGo).collection('app_users').updateOne({ username: 'operator_user' }, { $set: { 'security.sessionVersion': 1 } }),
+        client.db(appGoFail).collection('app_users').updateOne({ username: 'operator_user' }, { $set: { 'security.sessionVersion': 1 } }),
       ]);
     }
   });
@@ -889,37 +982,160 @@ async function main() {
     console.log('[sse-parity] PARITY=PASS');
   });
 
-  await check('H01-H03-H07 heartbeat-timing-wire-and-framing-parity', async () => {
-    const start = Date.now();
+  let h02NodePing, h02GoPing, h02Start;
+
+  await check('H01 no-early-ping-before-threshold', async () => {
     const pair = await openPair(adminToken);
     try {
       await receiveInit(pair);
       await sleep(8000);
-      // H03: No spurious pings before 12s
       assert.equal(pair.node.frames.some((f) => f.type === 'comment' && f.comment === 'ping'), false, 'Node must emit no ping before 12s');
       assert.equal(pair.go.frames.some((f) => f.type === 'comment' && f.comment === 'ping'), false, 'Go must emit no ping before 12s');
-      // Wait for 12s ping
-      const [nodePing, goPing] = await Promise.all([
-        pair.node.waitFor((f) => f.type === 'comment' && f.comment === 'ping', 8000),
-        pair.go.waitFor((f) => f.type === 'comment' && f.comment === 'ping', 8000),
-      ]);
-      const nodeElapsed = nodePing.receivedAt - start;
-      const goElapsed = goPing.receivedAt - start;
-      // H01: Heartbeat arrives at ~12s (between 11s and 15s)
-      assert.ok(nodeElapsed >= 11000 && nodeElapsed <= 15500, `Node elapsed ${nodeElapsed}ms`);
-      assert.ok(goElapsed >= 11000 && goElapsed <= 15500, `Go elapsed ${goElapsed}ms`);
-      // H02: Exact raw wire format
-      assert.equal(nodePing.raw, ':ping\n\n');
-      assert.equal(goPing.raw, ':ping\n\n');
-      // H07: Comment only, no event name or data field
-      assert.equal(nodePing.type, 'comment');
-      assert.equal(goPing.type, 'comment');
     } finally {
       pair.node.close(); pair.go.close();
     }
   });
 
-  await check('H04-H06 consecutive-heartbeats-match', async () => {
+  await check('H02 ping-at-heartbeat-threshold', async () => {
+    h02Start = Date.now();
+    const pair = await openPair(adminToken);
+    try {
+      await receiveInit(pair);
+      [h02NodePing, h02GoPing] = await Promise.all([
+        pair.node.waitFor((f) => f.type === 'comment' && f.comment === 'ping', 16000),
+        pair.go.waitFor((f) => f.type === 'comment' && f.comment === 'ping', 16000),
+      ]);
+      const nodeElapsed = h02NodePing.receivedAt - h02Start;
+      const goElapsed = h02GoPing.receivedAt - h02Start;
+      assert.ok(nodeElapsed >= 11000 && nodeElapsed <= 15500, `Node elapsed ${nodeElapsed}ms`);
+      assert.ok(goElapsed >= 11000 && goElapsed <= 15500, `Go elapsed ${goElapsed}ms`);
+    } finally {
+      pair.node.close(); pair.go.close();
+    }
+  });
+
+  await check('H03 exact-raw-ping-framing', async () => {
+    assert.ok(h02NodePing && h02GoPing, 'H02 must have captured ping frames');
+    assert.equal(h02NodePing.raw, ':ping\n\n');
+    assert.equal(h02GoPing.raw, ':ping\n\n');
+    assert.equal(h02NodePing.type, 'comment');
+    assert.equal(h02GoPing.type, 'comment');
+    assert.equal(h02NodePing.comment, 'ping');
+    assert.equal(h02GoPing.comment, 'ping');
+  });
+
+  let hEligiblePair;
+  let hUpdateNode, hUpdateGo;
+  let hPingAfterNode, hPingAfterGo;
+  let hUpdateEmittedAt = 0;
+  let hPingReceivedAt = 0;
+
+  await check('H04 heartbeat-eligible-update-emitted', async () => {
+    await replaceAlerts([alertDoc('h-base', '2026-09-28T00:00:01.000Z')]);
+    hEligiblePair = await openPair(adminToken);
+    await receiveInit(hEligiblePair);
+    // Wait through 4s and 8s polls until ~9.5s
+    await sleep(9500);
+    // Insert alert so activeCount changes before the 12s poll
+    const doc = alertDoc('h-update', '2026-09-28T06:00:00.000Z', 'WARNING', false);
+    await Promise.all([
+      client.db(appNode).collection('app_alerts').insertOne(doc),
+      client.db(appGo).collection('app_alerts').insertOne(doc),
+    ]);
+    [hUpdateNode, hUpdateGo] = await Promise.all([
+      hEligiblePair.node.waitFor((f) => f.event === 'alerts_update', 8000),
+      hEligiblePair.go.waitFor((f) => f.event === 'alerts_update', 8000),
+    ]);
+    hUpdateEmittedAt = Date.now();
+    assert.equal(hUpdateNode.data.activeCount, 2);
+    assert.equal(hUpdateGo.data.activeCount, 2);
+  });
+
+  await check('H05 no-same-cycle-ping', async () => {
+    assert.ok(hEligiblePair, 'hEligiblePair must exist');
+    const nodePings = hEligiblePair.node.frames.filter((f) => f.type === 'comment' && f.comment === 'ping');
+    const goPings = hEligiblePair.go.frames.filter((f) => f.type === 'comment' && f.comment === 'ping');
+    assert.equal(nodePings.length, 0, 'Node must not emit ping in same iteration as alerts_update');
+    assert.equal(goPings.length, 0, 'Go must not emit ping in same iteration as alerts_update');
+  });
+
+  await check('H06 alert-update-does-not-reset-heartbeat-baseline', async () => {
+    assert.ok(hEligiblePair, 'hEligiblePair must exist');
+    // Because lastHeartbeat was NOT reset, the heartbeat is overdue and must fire on the next no-update poll (t~16s, ~4s after update)
+    [hPingAfterNode, hPingAfterGo] = await Promise.all([
+      hEligiblePair.node.waitFor((f) => f.type === 'comment' && f.comment === 'ping', 8000),
+      hEligiblePair.go.waitFor((f) => f.type === 'comment' && f.comment === 'ping', 8000),
+    ]);
+    hPingReceivedAt = Date.now();
+    const elapsedSinceUpdate = hPingReceivedAt - hUpdateEmittedAt;
+    assert.ok(elapsedSinceUpdate >= 2500 && elapsedSinceUpdate <= 8000, `Ping arrived ${elapsedSinceUpdate}ms after update`);
+  });
+
+  await check('H07 following-no-update-poll-emits-due-heartbeat', async () => {
+    assert.ok(hPingAfterNode && hPingAfterGo, 'Overdue ping must have been captured');
+    assert.equal(hPingAfterNode.raw, ':ping\n\n');
+    assert.equal(hPingAfterGo.raw, ':ping\n\n');
+    assert.equal(hPingAfterNode.type, 'comment');
+    assert.equal(hPingAfterGo.type, 'comment');
+    hEligiblePair.node.close();
+    hEligiblePair.go.close();
+  });
+
+  await check('H08 concurrent-streams-have-independent-heartbeat-state', async () => {
+    const pairA = await openPair(adminToken);
+    await receiveInit(pairA);
+    // Wait 6 seconds before opening Stream B
+    await sleep(6000);
+    const pairB = await openPair(adminToken);
+    await receiveInit(pairB);
+    try {
+      // At T~12s from start: Stream A (elapsed 12s) reaches heartbeat threshold.
+      // Stream B (elapsed ~6s) must NOT receive ping yet!
+      const [pingA_Node, pingA_Go] = await Promise.all([
+        pairA.node.waitFor((f) => f.type === 'comment' && f.comment === 'ping', 8000),
+        pairA.go.waitFor((f) => f.type === 'comment' && f.comment === 'ping', 8000),
+      ]);
+      assert.ok(pingA_Node && pingA_Go, 'Stream A must receive ping at its 12s threshold');
+      assert.equal(pairB.node.frames.some((f) => f.type === 'comment' && f.comment === 'ping'), false, 'Stream B must NOT receive ping at Stream A threshold');
+      assert.equal(pairB.go.frames.some((f) => f.type === 'comment' && f.comment === 'ping'), false, 'Stream B must NOT receive ping at Stream A threshold');
+
+      // At T~18s from start: Stream B (elapsed ~12s) reaches its own heartbeat threshold!
+      const [pingB_Node, pingB_Go] = await Promise.all([
+        pairB.node.waitFor((f) => f.type === 'comment' && f.comment === 'ping', 8000),
+        pairB.go.waitFor((f) => f.type === 'comment' && f.comment === 'ping', 8000),
+      ]);
+      assert.ok(pingB_Node && pingB_Go, 'Stream B must receive ping at its own 12s threshold');
+
+      // Stream A has not reached 24s yet, so it should only have 1 ping total
+      const pingsA_Node = pairA.node.frames.filter((f) => f.type === 'comment' && f.comment === 'ping');
+      const pingsA_Go = pairA.go.frames.filter((f) => f.type === 'comment' && f.comment === 'ping');
+      assert.equal(pingsA_Node.length, 1, 'Stream A must not receive early second ping');
+      assert.equal(pingsA_Go.length, 1, 'Stream A must not receive early second ping');
+
+      console.log('[sse-parity] case=H08_heartbeat_isolation');
+      console.log('[sse-parity] stream_a_ping_at_12s=true');
+      console.log('[sse-parity] stream_b_no_ping_at_6s=true');
+      console.log('[sse-parity] stream_b_ping_at_own_12s=true');
+      console.log('[sse-parity] stream_a_no_spurious_ping=true');
+      console.log('[sse-parity] parity=PASS');
+    } finally {
+      pairA.node.close(); pairA.go.close();
+      pairB.node.close(); pairB.go.close();
+    }
+  });
+
+  await check('H09 disconnect-during-heartbeat-wait', async () => {
+    const pair = await openPair(adminToken);
+    await receiveInit(pair);
+    await sleep(6000);
+    pair.node.close();
+    pair.go.close();
+    await sleep(1000);
+    console.log('[sse-parity] case=heartbeat_boundary');
+    console.log('[sse-parity] PARITY=PASS');
+  });
+
+  await check('H10 consecutive-heartbeats-match', async () => {
     const pair = await openPair(adminToken);
     try {
       await receiveInit(pair);
@@ -950,43 +1166,6 @@ async function main() {
     } finally {
       pair.node.close(); pair.go.close();
     }
-  });
-
-  await check('H05 alert-update-preserves-heartbeat-timing', async () => {
-    const pair = await openPair(adminToken);
-    try {
-      await receiveInit(pair);
-      await sleep(4000);
-      const doc = alertDoc('h05-update', '2026-09-28T05:00:00.000Z', 'WARNING', false);
-      await Promise.all([
-        client.db(appNode).collection('app_alerts').insertOne(doc),
-        client.db(appGo).collection('app_alerts').insertOne(doc),
-      ]);
-      await Promise.all([
-        pair.node.waitFor((f) => f.event === 'alerts_update'),
-        pair.go.waitFor((f) => f.event === 'alerts_update'),
-      ]);
-      // Heartbeat should still arrive at or around 12s from start
-      const [nodePing, goPing] = await Promise.all([
-        pair.node.waitFor((f) => f.type === 'comment' && f.comment === 'ping', 11000),
-        pair.go.waitFor((f) => f.type === 'comment' && f.comment === 'ping', 11000),
-      ]);
-      assert.equal(nodePing.raw, ':ping\n\n');
-      assert.equal(goPing.raw, ':ping\n\n');
-    } finally {
-      pair.node.close(); pair.go.close();
-    }
-  });
-
-  await check('H08 disconnect-during-heartbeat-wait', async () => {
-    const pair = await openPair(adminToken);
-    await receiveInit(pair);
-    await sleep(6000);
-    pair.node.close();
-    pair.go.close();
-    await sleep(1000);
-    console.log('[sse-parity] case=heartbeat_boundary');
-    console.log('[sse-parity] PARITY=PASS');
   });
 
   await check('Z01 no-rate-limiter-or-operation-log-source-path', async () => {
