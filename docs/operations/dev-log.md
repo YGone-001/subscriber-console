@@ -188,3 +188,12 @@
 - Created dedicated integration test suite: `scripts/test-phase-7-alert-mutation-parity.mjs` (42/42 PASS across 8 sections: authentication & RBAC, rate limits, acknowledge mutations, workflow mutations, best-effort audit logs, database failure paths, zero unrelated collection mutations, and routing freeze invariants).
 - Updated architecture freeze validator `scripts/test-phase-7-architecture-freeze.mjs` to include Phase 7.2 endpoints in implemented routes while strictly forbidding later-phase routes.
 - Maintained strict operational invariants: `CUTOVER_TABLE = 36`, `ACTUALLY_ROUTED = 36`, zero Phase 7 production cutover (Node remains authoritative production owner), 100% pure ASCII.
+
+## Phase 7.3 — Notification Streaming SSE Shadow Parity
+
+- Added `backend/internal/notification`, a polling SSE handler for `GET /api/notifications/stream` that uses the frozen Node contract: initial `listAlerts(15)` with five emitted recent alerts, 4-second periodic `listAlerts(10)`, active-count-only updates, and a 12-second `:ping` heartbeat.
+- The handler uses the existing authenticated `auth.Principal` and `auth.SessionValidator` for post-connection account/session checks. A failed check emits `session_expired` with `{}` and closes the stream.
+- Added request-scoped write-deadline clearing through `http.ResponseController`; normal server read/write/idle timeout configuration remains unchanged. The access-log response wrapper now transparently supports `http.Flusher` and response-controller unwrapping.
+- Registered the Go endpoint only as a shadow candidate in the production and dedicated test server. Next.js remains the production owner and `CUTOVER_TABLE = 36`, `ACTUALLY_ROUTED = 36` remain unchanged.
+- Added `scripts/test-phase-7-notification-stream-parity.mjs`, which uses real TCP Node and Go streams with incremental SSE parsing and checks headers, authentication, init, alerts updates, session expiry, heartbeat, short WriteTimeout survival, and read-only collection behavior.
+- Added the separate `Notification streaming SSE parity` step to the platform parity CI job. Existing Phase 7.1 and 7.2 suites remain separate.

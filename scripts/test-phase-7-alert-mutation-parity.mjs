@@ -2196,19 +2196,20 @@ async function main() {
     }
   });
 
-  verify('No Phase 7.3 / 7.4 / 7.5 implementation expansion', () => {
-    // No production cutover for the deferred Phase 7.3 / 7.4 endpoints.
+  verify('Phase 7.3 shadow route preserves routing freeze and excludes later phases', () => {
+    // No Phase 7 endpoint is production cut over.
     for (const ep of ['/api/notifications/stream', '/api/system/audit/heal', '/api/system/audit/batch-heal']) {
       const match = CUTOVER_TABLE.find((r) => r.path === ep);
       assert.ok(!match, `${ep} must not be cut over in Phase 7.2`);
     }
 
-    // No Go implementation expansion for those endpoints in the production router.
+    // Phase 7.3 permits only the notification stream shadow implementation.
     const serverMain = readFileSync(
       path.resolve(import.meta.dirname, '..', 'backend', 'cmd', 'server', 'main.go'),
       'utf8'
     );
-    for (const ep of ['/api/notifications/stream', '/api/system/audit/heal', '/api/system/audit/batch-heal']) {
+    assert.ok(serverMain.includes('/api/notifications/stream'), 'Go notification stream shadow implementation must exist');
+    for (const ep of ['/api/system/audit/heal', '/api/system/audit/batch-heal']) {
       assert.ok(!serverMain.includes(ep), `Go production router must not implement ${ep} in Phase 7.2`);
     }
     assert.ok(!serverMain.includes('POST /api/system/audit/batch-heal'));

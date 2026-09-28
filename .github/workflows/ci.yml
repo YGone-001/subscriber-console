@@ -388,5 +388,8 @@ jobs:
       - name: Alert domain mutation parity
         run: node scripts/test-phase-7-alert-mutation-parity.mjs
 
+      - name: Notification streaming SSE parity
+        run: node scripts/test-phase-7-notification-stream-parity.mjs
+
 
 

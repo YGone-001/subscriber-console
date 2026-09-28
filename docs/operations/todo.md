@@ -10,7 +10,7 @@
 | Phase 7.0 — Platform Services Architecture Freeze | COMPLETE | Architecture freeze, contract inventory, planning validator |
 | Phase 7.1 — Platform Health & Status Contract Parity | COMPLETE | Go shadow implementation for health/status reads (33/33 tests PASS) |
 | Phase 7.2 — Alert Domain Governance & Mutations | COMPLETE | Acknowledge & workflow direct execution shadow in Go (42/42 tests PASS) |
-| Phase 7.3 — Notification Streaming (SSE) Migration | NOT STARTED | Native Go SSE handler with http.Flusher |
+| Phase 7.3 — Notification Streaming (SSE) Migration | COMPLETE | Go shadow SSE handler; Node remains the production owner; 36/36 routing freeze |
 | Phase 7.4 — System Integrity Self-Healing Mutations | NOT STARTED | Go implementation for heal & batch-heal |
 | Phase 7.5 — Controlled Platform Services Cutover | NOT STARTED | CUTOVER_TABLE expansion (36 -> 47) & production freeze |
 

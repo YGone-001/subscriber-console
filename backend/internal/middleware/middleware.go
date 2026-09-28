@@ -118,6 +118,22 @@ func (sw *statusWriter) Write(b []byte) (int, error) {
 	return sw.ResponseWriter.Write(b)
 }
 
+// Flush preserves streaming support for handlers wrapped by AccessLog.
+func (sw *statusWriter) Flush() {
+	if !sw.wroteHeader {
+		sw.WriteHeader(http.StatusOK)
+	}
+	if flusher, ok := sw.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
+
+// Unwrap lets http.ResponseController reach server-specific response features,
+// including request-scoped write deadline control for streaming handlers.
+func (sw *statusWriter) Unwrap() http.ResponseWriter {
+	return sw.ResponseWriter
+}
+
 // generateID creates a random 16-byte hex string for request IDs.
 func generateID() string {
 	b := make([]byte, 16)

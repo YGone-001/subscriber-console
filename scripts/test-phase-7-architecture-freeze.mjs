@@ -122,9 +122,13 @@ for (const route of implementedPhase7GoRoutes) {
   console.log(`  [PASS] Go router contains Phase 7 shadow route ${route}`);
 }
 
-// Later phase routes (Phase 7.3+) must NOT be registered in Go
+// Phase 7.3 adds only the notification stream as a Go shadow candidate.
+assert.ok(mainGoContent.includes('"GET /api/notifications/stream"'),
+  'Go backend must register the Phase 7.3 notification stream shadow route');
+console.log('  [PASS] Go router contains Phase 7.3 notification stream shadow route');
+
+// Phase 7.4 routes remain outside the Phase 7.3 scope.
 const forbiddenLaterPhaseGoRoutes = [
-  'GET /api/notifications/stream',
   'POST /api/system/audit/heal',
   'POST /api/system/audit/batch-heal',
 ];
@@ -132,7 +136,7 @@ const forbiddenLaterPhaseGoRoutes = [
 for (const route of forbiddenLaterPhaseGoRoutes) {
   assert.ok(
     !mainGoContent.includes(`"${route}"`),
-    `Go backend must not register later-phase route ${route} before Phase 7.3+`
+    `Go backend must not register later-phase route ${route} before its approved phase`
   );
   console.log(`  [PASS] Go router does not contain later-phase route ${route}`);
 }

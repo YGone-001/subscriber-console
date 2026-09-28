@@ -22,6 +22,7 @@ import (
 	"subscriber/internal/handler"
 	"subscriber/internal/middleware"
 	mongoClient "subscriber/internal/mongo"
+	"subscriber/internal/notification"
 	"subscriber/internal/ratelimit"
 	"subscriber/internal/response"
 	"subscriber/internal/system"
@@ -74,6 +75,7 @@ func main() {
 	// Wire platform read handlers with failing dependencies
 	alertRepo := alert.NewRepository(failingOps.Collection("app_alerts"))
 	alertHandler := alert.NewHandler(alertRepo, limiter)
+	notificationHandler := notification.NewHandler(alertRepo, sessionValidator)
 
 	analyticsRepo := analytics.NewRepository(
 		failingXCloud.Collection("subscribers"),
@@ -100,6 +102,7 @@ func main() {
 	mux.Handle("GET /api/alerts", authMiddleware(http.HandlerFunc(alertHandler.List)))
 	mux.Handle("POST /api/alerts/acknowledge", authMiddleware(http.HandlerFunc(alertHandler.Acknowledge)))
 	mux.Handle("POST /api/alerts/workflow", authMiddleware(http.HandlerFunc(alertHandler.Workflow)))
+	mux.Handle("GET /api/notifications/stream", authMiddleware(notificationHandler))
 	mux.Handle("POST /api/analytics/init", authMiddleware(http.HandlerFunc(analyticsHandler.Init)))
 	mux.Handle("GET /api/system/health", authMiddleware(http.HandlerFunc(systemHandler.SystemHealth)))
 	mux.Handle("GET /api/system/mongo/health", authMiddleware(http.HandlerFunc(systemHandler.MongoHealth)))

@@ -206,6 +206,7 @@ Phase 6.4   COMPLETE — Authentication & User Management UI Final Integration (
 Phase 7.0   COMPLETE — Alerts, Notifications & Platform Services Architecture Freeze (Current-State Reconciliation, Contract Inventory, and Migration Planning)
 Phase 7.1   COMPLETE — Platform Health & Diagnostic Read Parity (Go Shadow Implementation: GET /api/alerts, GET /api/system/health, GET /api/system/mongo/health, GET /api/system/audit/status, POST /api/system/audit/scan, POST /api/analytics/init; CUTOVER_TABLE=36, ACTUALLY_ROUTED=36)
 Phase 7.2   COMPLETE — Alert Domain Governance & Mutation Shadow Parity (Go Shadow Implementation: POST /api/alerts/acknowledge, POST /api/alerts/workflow; Best-Effort Operation Logging to app_audit_logs; CUTOVER_TABLE=36, ACTUALLY_ROUTED=36)
+Phase 7.3   COMPLETE — Notification Streaming SSE Shadow Parity (Go shadow implementation: GET /api/notifications/stream; per-stream session revalidation, polling, heartbeat, and stream-scoped write deadline; CUTOVER_TABLE=36, ACTUALLY_ROUTED=36)
 ```
 
 ### 5.1 OCS 生产冻结基线 (OCS Production Freeze Baseline)
@@ -449,8 +450,8 @@ POST /api/analytics/init
 Status:
 
 ```text
-Go HTTP operations = 66
-  Semantic reads = 36 (34 GET + 2 POST semantic read: batch/precheck, audit/scan)
+Go HTTP operations = 67
+  Semantic reads = 37 (35 GET + 2 POST semantic read: batch/precheck, audit/scan)
   Platform actions = 1 (POST /api/analytics/init)
   Alert mutations = 2 (POST /api/alerts/acknowledge, POST /api/alerts/workflow)
   Business mutations = 12 (subscriber+profile CRUD + batch)
@@ -467,7 +468,7 @@ OCS writes = 13 (tariff plan + subscriber contract + balance)
 CUTOVER_TABLE = 36 routes (all ACTUALLY_ROUTED=1).
 
 Read endpoints and alert mutations are shadow-implemented in Go; production operations still route through Next.js unless explicitly cut over.
-Phase 7 platform service and alert mutation endpoints are Go shadow-implemented with zero production cutover in Phase 7.2.
+Phase 7 platform service, alert mutation, and notification streaming endpoints are Go shadow-implemented with zero production cutover in Phase 7.3.
 
 ---
 
