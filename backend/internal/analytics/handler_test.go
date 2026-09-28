@@ -131,15 +131,8 @@ func TestAnalyticsInitFailureTable(t *testing.T) {
 			if w.Code != http.StatusInternalServerError {
 				t.Errorf("expected 500, got %d", w.Code)
 			}
-			var m map[string]string
-			if err := json.Unmarshal(w.Body.Bytes(), &m); err != nil {
-				t.Fatalf("unmarshal error: %v", err)
-			}
-			if m["error"] != "Internal server error" {
-				t.Errorf("expected 'Internal server error', got %q", m["error"])
-			}
-			if m["code"] != "INTERNAL_ERROR" {
-				t.Errorf("expected 'INTERNAL_ERROR', got %q", m["code"])
+			if body := strings.TrimSpace(w.Body.String()); body != "Internal Server Error" {
+				t.Errorf("expected body 'Internal Server Error', got %q", body)
 			}
 
 			// Verify that no sensitive internal diagnostics are leaked

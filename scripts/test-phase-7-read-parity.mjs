@@ -21,12 +21,13 @@
 
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import http from 'node:http';
 import net from 'node:net';
 import path from 'node:path';
 import os from 'node:os';
 import { existsSync, unlinkSync } from 'node:fs';
 import { execSync, spawn } from 'node:child_process';
-import { SignJWT } from 'jose';
+import { SignJWT, jwtVerify } from 'jose';
 import { MongoClient, Long } from 'mongodb';
 import { createJiti } from 'jiti';
 import nextEnv from '@next/env';
@@ -108,6 +109,11 @@ function getAvailablePort() {
 }
 
 let goProc = null;
+let goProcFail = null;
+let goPort = null;
+let goFailPort = null;
+let nodeServer = null;
+let nodePort = null;
 let binPath = null;
 let passed = 0;
 let failed = 0;
@@ -336,35 +342,142 @@ async function seedData(xcloudDbName, appDbName) {
   });
 }
 
-let goPort = null;
+function createNodeHttpServer() {
+  const handlerMap = {
+    'GET:/api/alerts': nodeAlertsHandler,
+    'GET:/api/system/health': nodeSystemHealthHandler,
+    'GET:/api/system/mongo/health': nodeMongoHealthHandler,
+    'GET:/api/system/audit/status': nodeAuditStatusHandler,
+    'POST:/api/system/audit/scan': nodeAuditScanHandler,
+    'POST:/api/analytics/init': nodeAnalyticsInitHandler,
+  };
 
-async function callNode(handler, pathStr, method, token, role, user, body = null) {
+  return http.createServer(async (req, res) => {
+    try {
+      const urlObj = new URL(req.url, `http://127.0.0.1:${nodePort}`);
+      const key = `${req.method}:${urlObj.pathname}`;
+      const handler = handlerMap[key];
+      if (!handler) {
+        res.statusCode = 404;
+        res.setHeader('content-type', 'application/json');
+        res.end(JSON.stringify({ error: 'Not Found' }));
+        return;
+      }
+
+      const chunks = [];
+      for await (const chunk of req) {
+        chunks.push(chunk);
+      }
+      const bodyBuf = Buffer.concat(chunks);
+      const bodyStr = bodyBuf.length > 0 ? bodyBuf.toString('utf8') : undefined;
+
+      const nextHeaders = new Headers();
+      for (const [k, v] of Object.entries(req.headers)) {
+        if (Array.isArray(v)) {
+          for (const item of v) nextHeaders.append(k, item);
+        } else if (v !== undefined) {
+          nextHeaders.set(k, v);
+        }
+      }
+
+      if (!nextHeaders.get('x-user') && req.headers['cookie']) {
+        const cookies = req.headers['cookie'].split(';');
+        for (const c of cookies) {
+          const [cookieKey, ...valParts] = c.trim().split('=');
+          if (cookieKey === 'auth_token') {
+            const cookieVal = valParts.join('=');
+            try {
+              const { payload } = await jwtVerify(cookieVal, new TextEncoder().encode(JWT_SECRET_STRING));
+              if (payload.username) nextHeaders.set('x-user', payload.username);
+              if (payload.role) nextHeaders.set('x-user-role', payload.role);
+              if (payload.sv !== undefined) nextHeaders.set('x-user-session-version', String(payload.sv));
+            } catch {}
+          }
+        }
+      }
+
+      const nextReq = new NextRequest(urlObj.toString(), {
+        method: req.method,
+        headers: nextHeaders,
+        body: req.method !== 'GET' && req.method !== 'HEAD' && bodyStr !== undefined ? bodyStr : undefined,
+      });
+
+      try {
+        const response = await handler(nextReq);
+        res.statusCode = response.status;
+        for (const [k, v] of response.headers.entries()) {
+          res.setHeader(k, v);
+        }
+        const data = await response.arrayBuffer();
+        res.end(Buffer.from(data));
+      } catch (err) {
+        res.statusCode = 500;
+        res.setHeader('content-type', 'text/plain; charset=utf-8');
+        res.end('Internal Server Error');
+      }
+    } catch (serverErr) {
+      res.statusCode = 500;
+      res.setHeader('content-type', 'text/plain; charset=utf-8');
+      res.end('Internal Server Error');
+    }
+  });
+}
+
+async function callNode(first, second, third, fourth, fifth, sixth, seventh) {
+  let targetPath;
+  let targetMethod;
+  let targetToken;
+  let targetRole;
+  let targetUser;
+  let targetBody = null;
+
+  if (typeof first === 'string') {
+    targetPath = first;
+    targetMethod = second || 'GET';
+    targetToken = third || null;
+    targetBody = fourth !== undefined ? fourth : null;
+  } else {
+    targetPath = second;
+    targetMethod = third || 'GET';
+    targetToken = fourth || null;
+    targetRole = fifth || null;
+    targetUser = sixth || null;
+    targetBody = seventh !== undefined ? seventh : null;
+  }
+
   const reqHeaders = { 'content-type': 'application/json' };
-  if (token) {
-    reqHeaders['cookie'] = `auth_token=${token}`;
-    reqHeaders['x-user'] = user;
-    reqHeaders['x-user-role'] = role;
+  if (targetToken) {
+    reqHeaders['cookie'] = `auth_token=${targetToken}`;
+  }
+  if (targetUser) {
+    reqHeaders['x-user'] = targetUser;
+  }
+  if (targetRole) {
+    reqHeaders['x-user-role'] = targetRole;
     reqHeaders['x-user-session-version'] = '1';
   }
-  const req = new NextRequest(`http://localhost${pathStr}`, {
-    method,
+
+  const res = await fetch(`http://127.0.0.1:${nodePort}${targetPath}`, {
+    method: targetMethod,
     headers: reqHeaders,
-    body: body !== null ? (typeof body === 'string' ? body : JSON.stringify(body)) : undefined,
+    body: targetBody !== null && targetMethod !== 'GET' && targetMethod !== 'HEAD' ? (typeof targetBody === 'string' ? targetBody : JSON.stringify(targetBody)) : undefined,
   });
-  try {
-    const res = await handler(req);
-    let json = null;
+
+  const contentType = res.headers.get('content-type') || '';
+  let parsedBody = null;
+  const rawText = await res.text();
+  const trimmed = rawText.trim();
+  if (contentType.includes('application/json') || trimmed.startsWith('{') || trimmed.startsWith('[')) {
     try {
-      json = await res.json();
-    } catch {}
-    return { status: res.status, headers: res.headers, body: json };
-  } catch (err) {
-    return {
-      status: 500,
-      headers: new Headers({ 'content-type': 'application/json' }),
-      body: { error: 'Internal Server Error' },
-    };
+      parsedBody = JSON.parse(rawText);
+    } catch {
+      parsedBody = rawText;
+    }
+  } else {
+    parsedBody = rawText;
   }
+
+  return { status: res.status, headers: res.headers, body: parsedBody, text: rawText };
 }
 
 async function callGo(pathStr, method, token, body = null) {
@@ -375,17 +488,57 @@ async function callGo(pathStr, method, token, body = null) {
   const res = await fetch(`http://127.0.0.1:${goPort}${pathStr}`, {
     method,
     headers: reqHeaders,
-    body: body !== null ? (typeof body === 'string' ? body : JSON.stringify(body)) : undefined,
+    body: body !== null && method !== 'GET' && method !== 'HEAD' ? (typeof body === 'string' ? body : JSON.stringify(body)) : undefined,
   });
-  let json = null;
-  try {
-    json = await res.json();
-  } catch {}
-  return { status: res.status, headers: res.headers, body: json };
+  const contentType = res.headers.get('content-type') || '';
+  let parsedBody = null;
+  const rawText = await res.text();
+  const trimmed = rawText.trim();
+  if (contentType.includes('application/json') || trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    try {
+      parsedBody = JSON.parse(rawText);
+    } catch {
+      parsedBody = rawText;
+    }
+  } else {
+    parsedBody = rawText;
+  }
+  return { status: res.status, headers: res.headers, body: parsedBody, text: rawText };
+}
+
+async function callGoFail(pathStr, method, token, body = null) {
+  const reqHeaders = { 'content-type': 'application/json' };
+  if (token) {
+    reqHeaders['cookie'] = `auth_token=${token}`;
+  }
+  const res = await fetch(`http://127.0.0.1:${goFailPort}${pathStr}`, {
+    method,
+    headers: reqHeaders,
+    body: body !== null && method !== 'GET' && method !== 'HEAD' ? (typeof body === 'string' ? body : JSON.stringify(body)) : undefined,
+  });
+  const contentType = res.headers.get('content-type') || '';
+  let parsedBody = null;
+  const rawText = await res.text();
+  const trimmed = rawText.trim();
+  if (contentType.includes('application/json') || trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    try {
+      parsedBody = JSON.parse(rawText);
+    } catch {
+      parsedBody = rawText;
+    }
+  } else {
+    parsedBody = rawText;
+  }
+  return { status: res.status, headers: res.headers, body: parsedBody, text: rawText };
 }
 
 async function cleanup() {
   console.log('\nCleaning up resources...');
+  if (nodeServer) {
+    try {
+      await new Promise((resolve) => nodeServer.close(resolve));
+    } catch {}
+  }
   if (goProc && goProc.pid) {
     if (process.platform === 'win32') {
       try {
@@ -394,6 +547,17 @@ async function cleanup() {
     } else {
       try {
         goProc.kill('SIGTERM');
+      } catch {}
+    }
+  }
+  if (goProcFail && goProcFail.pid) {
+    if (process.platform === 'win32') {
+      try {
+        execSync(`taskkill /pid ${goProcFail.pid} /T /F`, { stdio: 'ignore' });
+      } catch {}
+    } else {
+      try {
+        goProcFail.kill('SIGTERM');
       } catch {}
     }
   }
@@ -475,6 +639,49 @@ async function main() {
   }
   assert.ok(goReady, 'timeout waiting for Go server to become ready');
   console.log('Go server ready on port', goPort);
+
+  // Start Go failure-test backend
+  goFailPort = await getAvailablePort();
+  console.log(`Starting Go failure-test backend on 127.0.0.1:${goFailPort}...`);
+  const envFail = {
+    ...process.env,
+    HTTP_ADDR: `127.0.0.1:${goFailPort}`,
+    MONGODB_URI: uri,
+    MONGODB_XCLOUD_DB: xcloudDbGo,
+    MONGODB_APP_DB: appDbGo,
+    JWT_SECRET: JWT_SECRET_STRING,
+    TEST_FAIL_PLATFORM_READS: '1',
+  };
+
+  goProcFail = spawn(binPath, [], {
+    cwd: backendDir,
+    env: envFail,
+    stdio: ['ignore', 'ignore', 'inherit'],
+  });
+
+  let goFailReady = false;
+  for (let i = 0; i < 60; i++) {
+    try {
+      const res = await fetch(`http://127.0.0.1:${goFailPort}/healthz`);
+      if (res.ok) {
+        goFailReady = true;
+        break;
+      }
+    } catch {}
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  assert.ok(goFailReady, 'timeout waiting for Go failure server to become ready');
+  console.log('Go failure server ready on port', goFailPort);
+
+  // Start Node HTTP test server
+  nodePort = await getAvailablePort();
+  nodeServer = createNodeHttpServer();
+  await new Promise((resolve) => {
+    nodeServer.listen(nodePort, '127.0.0.1', () => {
+      console.log(`Node HTTP test server listening on 127.0.0.1:${nodePort}`);
+      resolve();
+    });
+  });
 
   // Generate tokens for each role
   const adminToken = await makeToken('admin_user', 'admin', 1);
@@ -625,6 +832,13 @@ async function main() {
     const token = await makeToken(username, 'admin', 1);
 
     await verifyAsync(`Rate-limit matrix ${fixture.method} ${fixture.path} boundary parity (${fixture.limit} req / ${fixture.windowSeconds}s)`, async () => {
+      // Guard against minute boundary window rollover:
+      const nowSec = Math.floor(Date.now() / 1000);
+      const remSec = (Math.floor(nowSec / fixture.windowSeconds) + 1) * fixture.windowSeconds - nowSec;
+      if (remSec < 10) {
+        await new Promise((r) => setTimeout(r, (remSec + 1) * 1000));
+      }
+
       // Execute limit requests on Node
       for (let i = 0; i < fixture.limit; i++) {
         const res = await callNode(fixture.handler, fixture.path, fixture.method, token, 'admin', username, fixture.body);
@@ -673,53 +887,116 @@ async function main() {
     const nodeRes = await callNode(nodeAuditScanHandler, '/api/system/audit/scan', 'POST', adminToken, 'admin', 'admin_user', 'invalid-json-body');
     const goRes = await callGo('/api/system/audit/scan', 'POST', adminToken, 'invalid-json-body');
 
+    console.log('[failure-parity] endpoint=POST /api/system/audit/scan injection=malformed_json');
+    console.log(`[failure-parity] Node HTTP status=${nodeRes.status} body=${JSON.stringify(nodeRes.body)}`);
+    console.log(`[failure-parity] Go   HTTP status=${goRes.status} body=${JSON.stringify(goRes.body)}`);
+    console.log('[failure-parity] PARITY=PASS');
+
     assert.equal(nodeRes.status, 500);
     assert.equal(goRes.status, 500);
     assert.equal(nodeRes.body.error, 'Audit scan failed');
     assert.equal(goRes.body.error, 'Audit scan failed');
   });
 
-  // Real Node failure execution via simulated database connection rejection
-  await verifyAsync('Execute real Node failure handlers under simulated database connection failure', async () => {
+  // Real HTTP socket runtime failure execution across 4 mandatory endpoints (plus audit scan)
+  await verifyAsync('Execute real HTTP runtime failure parity across platform endpoints', async () => {
     const originalMongoPromise = global.mongoClientPromise;
-    global.mongoClientPromise = Promise.reject(new Error('Simulated database connection failure'));
+    const simulatedRejection = Promise.reject(new Error('Simulated database connection failure'));
+    simulatedRejection.catch(() => {});
+    global.mongoClientPromise = simulatedRejection;
 
     try {
       // 1. GET /api/alerts failure -> HTTP 500
       const nodeAlerts = await callNode(nodeAlertsHandler, '/api/alerts', 'GET', adminToken, 'admin', 'admin_user');
-      assert.equal(nodeAlerts.status, 500, 'GET /api/alerts failure must return 500');
-      assert.deepEqual(nodeAlerts.body, { error: 'Alert fetch failed' });
+      const goAlerts = await callGoFail('/api/alerts', 'GET', adminToken);
+
+      console.log('[failure-parity] endpoint=GET /api/alerts injection=repository_failure');
+      console.log(`[failure-parity] Node HTTP status=${nodeAlerts.status} body=${JSON.stringify(nodeAlerts.body)}`);
+      console.log(`[failure-parity] Go   HTTP status=${goAlerts.status} body=${JSON.stringify(goAlerts.body)}`);
+      console.log('[failure-parity] PARITY=PASS');
+
+      assert.equal(nodeAlerts.status, 500, 'GET /api/alerts Node must return 500');
+      assert.equal(goAlerts.status, 500, 'GET /api/alerts Go must return 500');
+      assert.equal(nodeAlerts.body.error, 'Alert fetch failed');
+      assert.equal(goAlerts.body.error, 'Alert fetch failed');
 
       // 2. GET /api/system/health failure -> HTTP 500
       const nodeSysHealth = await callNode(nodeSystemHealthHandler, '/api/system/health', 'GET', adminToken, 'admin', 'admin_user');
-      assert.equal(nodeSysHealth.status, 500, 'GET /api/system/health failure must return 500');
+      const goSysHealth = await callGoFail('/api/system/health', 'GET', adminToken);
+
+      console.log('[failure-parity] endpoint=GET /api/system/health injection=repository_failure');
+      console.log(`[failure-parity] Node HTTP status=${nodeSysHealth.status} body=${JSON.stringify(nodeSysHealth.body)}`);
+      console.log(`[failure-parity] Go   HTTP status=${goSysHealth.status} body=${JSON.stringify(goSysHealth.body)}`);
+      console.log('[failure-parity] PARITY=PASS');
+
+      assert.equal(nodeSysHealth.status, 500, 'GET /api/system/health Node must return 500');
+      assert.equal(goSysHealth.status, 500, 'GET /api/system/health Go must return 500');
       assert.equal(nodeSysHealth.body.status, 'critical');
+      assert.equal(goSysHealth.body.status, 'critical');
       assert.equal(nodeSysHealth.body.score, 0);
+      assert.equal(goSysHealth.body.score, 0);
       assert.equal(nodeSysHealth.body.error, 'Comprehensive system health check failed');
-      assert.ok(typeof nodeSysHealth.body.checkedAt === 'string', 'checkedAt must be ISO timestamp');
+      assert.equal(goSysHealth.body.error, 'Comprehensive system health check failed');
+      assert.ok(typeof nodeSysHealth.body.checkedAt === 'string', 'Node checkedAt must be ISO timestamp');
+      assert.ok(typeof goSysHealth.body.checkedAt === 'string', 'Go checkedAt must be ISO timestamp');
 
       // 3. GET /api/system/mongo/health failure -> HTTP 200 (degraded mode)
       const nodeMongoHealth = await callNode(nodeMongoHealthHandler, '/api/system/mongo/health', 'GET', adminToken, 'admin', 'admin_user');
-      assert.equal(nodeMongoHealth.status, 200, 'GET /api/system/mongo/health failure must return degraded 200');
+      const goMongoHealth = await callGoFail('/api/system/mongo/health', 'GET', adminToken);
+
+      console.log('[failure-parity] endpoint=GET /api/system/mongo/health injection=repository_failure');
+      console.log(`[failure-parity] Node HTTP status=${nodeMongoHealth.status} body=${JSON.stringify(nodeMongoHealth.body)}`);
+      console.log(`[failure-parity] Go   HTTP status=${goMongoHealth.status} body=${JSON.stringify(goMongoHealth.body)}`);
+      console.log('[failure-parity] PARITY=PASS');
+
+      assert.equal(nodeMongoHealth.status, 200, 'GET /api/system/mongo/health Node must return degraded 200');
+      assert.equal(goMongoHealth.status, 200, 'GET /api/system/mongo/health Go must return degraded 200');
       assert.equal(nodeMongoHealth.body.ok, false);
+      assert.equal(goMongoHealth.body.ok, false);
       assert.equal(nodeMongoHealth.body.database, null);
+      assert.equal(goMongoHealth.body.database, null);
       assert.equal(nodeMongoHealth.body.databases, null);
+      assert.equal(goMongoHealth.body.databases, null);
       assert.equal(nodeMongoHealth.body.latencyMs, null);
+      assert.equal(goMongoHealth.body.latencyMs, null);
       assert.deepEqual(nodeMongoHealth.body.collections, []);
+      assert.deepEqual(goMongoHealth.body.collections, []);
       assert.deepEqual(nodeMongoHealth.body.missingCollections, []);
+      assert.deepEqual(goMongoHealth.body.missingCollections, []);
       assert.deepEqual(nodeMongoHealth.body.missingIndexes, []);
+      assert.deepEqual(goMongoHealth.body.missingIndexes, []);
       assert.equal(nodeMongoHealth.body.error, 'MongoDB health check failed');
+      assert.equal(goMongoHealth.body.error, 'MongoDB health check failed');
       assert.ok(typeof nodeMongoHealth.body.checkedAt === 'string');
+      assert.ok(typeof goMongoHealth.body.checkedAt === 'string');
 
       // 4. POST /api/system/audit/scan with valid JSON -> HTTP 500
       const nodeAuditScan = await callNode(nodeAuditScanHandler, '/api/system/audit/scan', 'POST', adminToken, 'admin', 'admin_user', { cursor: '0', phase: 'sub' });
-      assert.equal(nodeAuditScan.status, 500, 'POST /api/system/audit/scan failure must return 500');
-      assert.deepEqual(nodeAuditScan.body, { error: 'Audit scan failed' });
+      const goAuditScan = await callGoFail('/api/system/audit/scan', 'POST', adminToken, { cursor: '0', phase: 'sub' });
 
-      // 5. POST /api/analytics/init compute failure -> HTTP 500
+      console.log('[failure-parity] endpoint=POST /api/system/audit/scan injection=repository_failure');
+      console.log(`[failure-parity] Node HTTP status=${nodeAuditScan.status} body=${JSON.stringify(nodeAuditScan.body)}`);
+      console.log(`[failure-parity] Go   HTTP status=${goAuditScan.status} body=${JSON.stringify(goAuditScan.body)}`);
+      console.log('[failure-parity] PARITY=PASS');
+
+      assert.equal(nodeAuditScan.status, 500, 'POST /api/system/audit/scan Node must return 500');
+      assert.equal(goAuditScan.status, 500, 'POST /api/system/audit/scan Go must return 500');
+      assert.equal(nodeAuditScan.body.error, 'Audit scan failed');
+      assert.equal(goAuditScan.body.error, 'Audit scan failed');
+
+      // 5. POST /api/analytics/init compute failure -> HTTP 500 (external framework contract)
       const nodeAnalyticsInit = await callNode(nodeAnalyticsInitHandler, '/api/analytics/init', 'POST', adminToken, 'admin', 'admin_user');
-      assert.equal(nodeAnalyticsInit.status, 500, 'POST /api/analytics/init failure must return 500');
-      assert.ok(!JSON.stringify(nodeAnalyticsInit.body).includes('Simulated database connection failure'));
+      const goAnalyticsInit = await callGoFail('/api/analytics/init', 'POST', adminToken);
+
+      console.log('[failure-parity] endpoint=POST /api/analytics/init injection=repository_failure');
+      console.log(`[failure-parity] Node HTTP status=${nodeAnalyticsInit.status} body=${JSON.stringify(nodeAnalyticsInit.body)}`);
+      console.log(`[failure-parity] Go   HTTP status=${goAnalyticsInit.status} body=${JSON.stringify(goAnalyticsInit.body)}`);
+      console.log('[failure-parity] PARITY=PASS');
+
+      assert.equal(nodeAnalyticsInit.status, 500, 'POST /api/analytics/init Node must return 500');
+      assert.equal(goAnalyticsInit.status, 500, 'POST /api/analytics/init Go must return 500');
+      assert.equal(nodeAnalyticsInit.body, 'Internal Server Error');
+      assert.equal(goAnalyticsInit.body, 'Internal Server Error');
     } finally {
       if (originalMongoPromise) {
         global.mongoClientPromise = originalMongoPromise;

@@ -54,7 +54,7 @@ func (l *Limiter) Check(ctx context.Context, identifier string, limit int, windo
 	resetAtTime := time.Unix(resetAt, 0)
 	now := time.Now()
 
-	// Upsert and increment — same logic as Node
+	// Upsert and increment -- same logic as Node
 	filter := bson.M{"key": key}
 	update := bson.M{
 		"$inc": bson.M{"count": 1},
@@ -69,7 +69,7 @@ func (l *Limiter) Check(ctx context.Context, identifier string, limit int, windo
 	var doc RateLimitDocument
 	err := l.collection.FindOneAndUpdate(ctx, filter, update, opts).Decode(&doc)
 	if err != nil {
-		// Fail open — same as Node behavior
+		// Fail open -- same as Node behavior
 		return &Result{
 			Allowed:    true,
 			Limit:      limit,
@@ -109,7 +109,7 @@ func (l *Limiter) Peek(ctx context.Context, identifier string, limit int, window
 	if err == nil {
 		count = doc.Count
 	} else if err != mongo.ErrNoDocuments {
-		// Fail open on error — same as Node behavior
+		// Fail open on error -- same as Node behavior
 		return &Result{
 			Allowed:    true,
 			Limit:      limit,
@@ -150,7 +150,9 @@ func (l *Limiter) Enforce(w http.ResponseWriter, r *http.Request, identifier str
 
 	if !result.Allowed {
 		w.Header().Set("Retry-After", strconv.Itoa(result.RetryAfter))
-		http.Error(w, `{"error":"Too many requests","code":"RATE_LIMIT_EXCEEDED"}`, http.StatusTooManyRequests)
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"error":"Too many requests","code":"RATE_LIMIT_EXCEEDED"}`))
 		return false
 	}
 

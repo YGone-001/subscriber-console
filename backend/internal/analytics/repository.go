@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"os"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -41,6 +42,9 @@ const defaultPlanID = "plan_default_10gb"
 // ComputeMetrics computes the full analytics metrics.
 // Matches the Node.js computeAnalyticsMetrics() aggregation pipeline.
 func (r *Repository) ComputeMetrics(ctx context.Context) (*AnalyticsMetrics, error) {
+	if os.Getenv("TEST_FAIL_PLATFORM_READS") == "1" {
+		return nil, fmt.Errorf("analytics compute metrics failure: connection refused")
+	}
 	// Run all aggregations in parallel
 	type balanceResult struct {
 		data *OcsBalanceMetrics

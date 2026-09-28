@@ -91,7 +91,9 @@ func (h *Handler) Init(w http.ResponseWriter, r *http.Request) {
 
 	metrics, err := h.repo.ComputeMetrics(r.Context())
 	if err != nil {
-		response.InternalError(w)
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("Internal Server Error"))
 		return
 	}
 
