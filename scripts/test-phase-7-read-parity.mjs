@@ -3,7 +3,7 @@
  * Phase 7.1 - Platform Services Go Read Parity Integration Suite
  *
  * Runs Node and Go Platform Service implementations against isolated
- * MongoDB test databases and verifies exact 1:1 parity across 13 sections:
+ * MongoDB test databases and verifies exact 1:1 parity across 14 sections:
  * 1. Unauthorized / RBAC
  * 2. Normal success parity
  * 3. Rate-limit boundary parity
@@ -17,6 +17,7 @@
  * 11. Zero business mutation
  * 12. Session invalidation
  * 13. Routing invariants
+ * 14. Production fault-switch isolation
  */
 
 import assert from 'node:assert/strict';
@@ -25,7 +26,7 @@ import http from 'node:http';
 import net from 'node:net';
 import path from 'node:path';
 import os from 'node:os';
-import { existsSync, unlinkSync } from 'node:fs';
+import { existsSync, unlinkSync, readFileSync, readdirSync } from 'node:fs';
 import { execSync, spawn } from 'node:child_process';
 import { SignJWT, jwtVerify } from 'jose';
 import { MongoClient, Long } from 'mongodb';
@@ -115,6 +116,7 @@ let goFailPort = null;
 let nodeServer = null;
 let nodePort = null;
 let binPath = null;
+let binPathFail = null;
 let passed = 0;
 let failed = 0;
 let totalChecks = 0;
@@ -566,6 +568,11 @@ async function cleanup() {
       unlinkSync(binPath);
     } catch {}
   }
+  if (binPathFail && existsSync(binPathFail)) {
+    try {
+      unlinkSync(binPathFail);
+    } catch {}
+  }
   try {
     await client.db(xcloudDbNode).dropDatabase();
     await client.db(appDbNode).dropDatabase();
@@ -593,23 +600,33 @@ async function main() {
   console.log('Seeding Go test databases:', xcloudDbGo, appDbGo);
   await seedData(xcloudDbGo, appDbGo);
 
-  // Build Go backend
+  // Build Go backends (production server and dedicated testserver)
   goPort = await getAvailablePort();
-  console.log('Building Go backend binary...');
+  console.log('Building Go production backend binary...');
   const isWin = process.platform === 'win32';
   const binName = isWin ? `test-p71-parity-${suffix}.exe` : `test-p71-parity-${suffix}`;
+  const binNameFail = isWin ? `test-p71-fail-${suffix}.exe` : `test-p71-fail-${suffix}`;
   const backendDir = path.resolve(import.meta.dirname, '..', 'backend');
   binPath = path.join(os.tmpdir(), binName);
+  binPathFail = path.join(os.tmpdir(), binNameFail);
 
   execSync(`go build -o "${binPath}" ./cmd/server`, {
     cwd: backendDir,
     stdio: 'ignore',
   });
-  assert.ok(existsSync(binPath), 'compiled Go binary must exist');
-  console.log('Go binary compiled successfully:', binPath);
+  assert.ok(existsSync(binPath), 'compiled Go production binary must exist');
+  console.log('Go production binary compiled successfully:', binPath);
 
-  // Start Go backend
-  console.log(`Starting Go backend on 127.0.0.1:${goPort}...`);
+  console.log('Building Go dedicated test failure server binary...');
+  execSync(`go build -o "${binPathFail}" ./cmd/testserver`, {
+    cwd: backendDir,
+    stdio: 'ignore',
+  });
+  assert.ok(existsSync(binPathFail), 'compiled Go testserver binary must exist');
+  console.log('Go testserver binary compiled successfully:', binPathFail);
+
+  // Start Go production backend (with TEST_FAIL_PLATFORM_READS=1 to prove complete isolation)
+  console.log(`Starting Go production backend on 127.0.0.1:${goPort}...`);
   const env = {
     ...process.env,
     HTTP_ADDR: `127.0.0.1:${goPort}`,
@@ -617,6 +634,7 @@ async function main() {
     MONGODB_XCLOUD_DB: xcloudDbGo,
     MONGODB_APP_DB: appDbGo,
     JWT_SECRET: JWT_SECRET_STRING,
+    TEST_FAIL_PLATFORM_READS: '1',
   };
 
   goProc = spawn(binPath, [], {
@@ -638,7 +656,7 @@ async function main() {
     await new Promise((r) => setTimeout(r, 100));
   }
   assert.ok(goReady, 'timeout waiting for Go server to become ready');
-  console.log('Go server ready on port', goPort);
+  console.log('Go production server ready on port', goPort);
 
   // Start Go failure-test backend
   goFailPort = await getAvailablePort();
@@ -650,10 +668,9 @@ async function main() {
     MONGODB_XCLOUD_DB: xcloudDbGo,
     MONGODB_APP_DB: appDbGo,
     JWT_SECRET: JWT_SECRET_STRING,
-    TEST_FAIL_PLATFORM_READS: '1',
   };
 
-  goProcFail = spawn(binPath, [], {
+  goProcFail = spawn(binPathFail, [], {
     cwd: backendDir,
     env: envFail,
     stdio: ['ignore', 'ignore', 'inherit'],
@@ -1482,6 +1499,51 @@ async function main() {
       assert.ok(!entry.path.startsWith('/api/system'), `cutover table must not contain ${entry.path}`);
       assert.ok(entry.path !== '/api/analytics/init', `cutover table must not contain ${entry.path}`);
     }
+  });
+
+  // ---------------------------------------------------------------------------
+  // 14. Production fault-switch isolation
+  // ---------------------------------------------------------------------------
+  console.log('\n--- 14. Production fault-switch isolation ---');
+  verify('TEST_FAIL_PLATFORM_READS is completely removed from all backend Go source', () => {
+    function walkDir(dir) {
+      const entries = readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          walkDir(fullPath);
+        } else if (entry.isFile() && entry.name.endsWith('.go') && !entry.name.endsWith('_test.go')) {
+          const content = readFileSync(fullPath, 'utf8');
+          if (content.includes('TEST_FAIL_PLATFORM_READS')) {
+            throw new Error(`Found TEST_FAIL_PLATFORM_READS in ${fullPath}`);
+          }
+        }
+      }
+    }
+    walkDir(backendDir);
+  });
+
+  verify('Compiled production binary contains zero references to TEST_FAIL_PLATFORM_READS', () => {
+    const binBuffer = readFileSync(binPath);
+    const needle = Buffer.from('TEST_FAIL_PLATFORM_READS');
+    const index = binBuffer.indexOf(needle);
+    assert.equal(index, -1, 'Compiled production binary must not contain TEST_FAIL_PLATFORM_READS');
+  });
+
+  await verifyAsync('Normal production server ignores TEST_FAIL_PLATFORM_READS=1 and returns normal HTTP 200', async () => {
+    const isolateToken = await makeToken('operator_user', 'operator', 2);
+    const alertsRes = await callGo('/api/alerts', 'GET', isolateToken);
+    assert.equal(alertsRes.status, 200, 'GET /api/alerts must return 200 on normal server');
+    assert.ok(Array.isArray(alertsRes.body.alerts), 'GET /api/alerts must return alerts array');
+
+    const mongoRes = await callGo('/api/system/mongo/health', 'GET', isolateToken);
+    assert.equal(mongoRes.status, 200, 'GET /api/system/mongo/health must return 200 on normal server');
+    assert.ok(mongoRes.body.databases !== null && typeof mongoRes.body.databases === 'object', 'databases must be present on normal server');
+    assert.equal(mongoRes.body.error, undefined, 'error must not exist on normal server');
+
+    const analyticsRes = await callGo('/api/analytics/init', 'POST', isolateToken);
+    assert.equal(analyticsRes.status, 200, 'POST /api/analytics/init must return 200 on normal server');
+    assert.ok(analyticsRes.body.metrics, 'POST /api/analytics/init must return metrics on normal server');
   });
 
   console.log('\n===============================================================');

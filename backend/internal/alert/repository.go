@@ -2,8 +2,6 @@ package alert
 
 import (
 	"context"
-	"fmt"
-	"os"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -22,9 +20,6 @@ func NewRepository(collection *mongo.Collection) *Repository {
 
 // ListAlerts retrieves alerts up to limit, sorted newest first, along with active counts.
 func (r *Repository) ListAlerts(ctx context.Context, limit int64) (*ListAlertsResponse, error) {
-	if os.Getenv("TEST_FAIL_PLATFORM_READS") == "1" {
-		return nil, fmt.Errorf("alert repository query failure: connection refused")
-	}
 	findOpts := options.Find().
 		SetSort(bson.D{{Key: "timestamp", Value: -1}}).
 		SetLimit(limit)

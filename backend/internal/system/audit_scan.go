@@ -3,7 +3,6 @@ package system
 import (
 	"context"
 	"fmt"
-	"os"
 	"strconv"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -31,10 +30,6 @@ func getString(doc bson.M, key string) string {
 // ScanSubscriberDocuments performs an audit scan over subscriber documents across phases.
 // Supported phases: "reservation", "tariff", "ocs", "sub" (default). Strictly read-only.
 func ScanSubscriberDocuments(ctx context.Context, xcloudDb, appDb *mongo.Database, cursorStr, phase string) (*AuditScanResponse, error) {
-	if os.Getenv("TEST_FAIL_PLATFORM_READS") == "1" {
-		return nil, fmt.Errorf("audit scan repository failure: connection refused")
-	}
-
 	offset := parseCursorOffset(cursorStr)
 	limit := int64(1000)
 	anomalies := make([]SystemAnomaly, 0)

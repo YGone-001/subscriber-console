@@ -3,7 +3,6 @@ package system
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -164,10 +163,6 @@ func indexMatches(doc bson.M, expected expectedIndexDef) bool {
 
 // CheckMongoHealth generates a MongoHealthReport by checking connection and schemas.
 func CheckMongoHealth(ctx context.Context, xcloudDb, appDb *mongo.Database) (*MongoHealthReport, error) {
-	if os.Getenv("TEST_FAIL_PLATFORM_READS") == "1" {
-		return nil, fmt.Errorf("ping xcloud failed: connection refused")
-	}
-
 	startedAt := time.Now()
 
 	// Ping both databases
