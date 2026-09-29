@@ -100,9 +100,10 @@ func main() {
 	remediationRepo := remediation.NewRepository(mc.XCloud, mc.Ops)
 	remediationHandler := remediation.NewHandler(remediationRepo, limiter, auditWriter)
 
-	// Ratings
-	ratingRepo := rating.NewRepository(mc.XCloud.Collection("ocs_rating_policies"))
+	// Ratings (policies are derived from tariff plan rules, matching Node)
+	ratingRepo := rating.NewRepository(mc.XCloud.Collection("ocs_tariff_plans"))
 	ratingHandler := rating.NewHandler(ratingRepo, limiter)
+	ratingWriteHandler := rating.NewWriteHandler(auditWriter)
 
 	// Profiles
 	profileRepo := profile.NewRepository(
@@ -134,6 +135,7 @@ func main() {
 	)
 	tariffHandler := tariff.NewHandler(tariffRepo, limiter)
 	tariffWriteHandler := tariff.NewWriteHandler(tariffRepo, limiter, userRepo, auditWriter)
+	tariffResidualWriteHandler := tariff.NewResidualWriteHandler(auditWriter)
 
 	// OCS Balances
 	balanceRepo := balance.NewRepository(
@@ -145,6 +147,9 @@ func main() {
 
 	// OCS Subscriber Contract write handler
 	ocsSubscriberWriteHandler := ocs.NewSubscriberWriteHandler(ocsRepo, limiter, userRepo, auditWriter)
+
+	// Residual OCS management handler (policy assign + traffic adjustments)
+	ocsResidualHandler := ocs.NewResidualHandler(limiter, auditWriter)
 
 	// Subscribers
 	subscriberRepo := subscriber.NewRepository(
@@ -246,6 +251,24 @@ func main() {
 	mux.Handle("POST /api/subscribers/bulk-delete", authMiddleware(http.HandlerFunc(subscriberWriteHandler.BulkDelete)))
 	mux.Handle("POST /api/subscribers/import", authMiddleware(http.HandlerFunc(subscriberWriteHandler.Import)))
 	mux.Handle("POST /api/subscribers/{imsi}/profile", authMiddleware(http.HandlerFunc(subscriberWriteHandler.ProfileApply)))
+
+	// Residual write endpoints (shadow surface: registered in Go, NOT part of
+	// CUTOVER_TABLE; Node remains the production owner until an approved cutover)
+	//
+	// Ratings (OCS_RATING_* disabled contract)
+	mux.Handle("POST /api/ratings", authMiddleware(http.HandlerFunc(ratingWriteHandler.Create)))
+	mux.Handle("PUT /api/ratings/{id}", authMiddleware(http.HandlerFunc(ratingWriteHandler.Update)))
+	mux.Handle("DELETE /api/ratings/{id}", authMiddleware(http.HandlerFunc(ratingWriteHandler.Delete)))
+	// OCS plan assignment (disabled contract) + traffic adjustments (allow)
+	mux.Handle("POST /api/subscribers/policy", authMiddleware(http.HandlerFunc(ocsResidualHandler.AssignPolicy)))
+	mux.Handle("POST /api/subscribers/{imsi}/traffic-adjustments", authMiddleware(http.HandlerFunc(ocsResidualHandler.TrafficAdjustments)))
+	// Tariff import / migrate / rules write (OCS_TARIFF_* / OCS_PLAN_* disabled contract)
+	mux.Handle("POST /api/tariff-plans/import", authMiddleware(http.HandlerFunc(tariffResidualWriteHandler.Import)))
+	mux.Handle("POST /api/tariff-plans/{planId}/migrate", authMiddleware(http.HandlerFunc(tariffResidualWriteHandler.Migrate)))
+	mux.Handle("POST /api/tariff-plans/{planId}/rules", authMiddleware(http.HandlerFunc(tariffResidualWriteHandler.CreateRule)))
+	mux.Handle("PUT /api/tariff-plans/{planId}/rules/{ruleId}", authMiddleware(http.HandlerFunc(tariffResidualWriteHandler.UpdateRule)))
+	mux.Handle("PATCH /api/tariff-plans/{planId}/rules/{ruleId}", authMiddleware(http.HandlerFunc(tariffResidualWriteHandler.ToggleRule)))
+	mux.Handle("DELETE /api/tariff-plans/{planId}/rules/{ruleId}", authMiddleware(http.HandlerFunc(tariffResidualWriteHandler.DeleteRule)))
 
 	// Authentication (public)
 	mux.Handle("POST /api/auth/login", http.HandlerFunc(authHandler.Login))

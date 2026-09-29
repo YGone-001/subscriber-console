@@ -2,11 +2,15 @@ package rating
 
 import (
 	"net/http"
+	"regexp"
 
 	"subscriber/internal/auth"
 	"subscriber/internal/ratelimit"
 	"subscriber/internal/response"
 )
+
+// ratingIDPattern matches the Node.js isValidRatingId() check: digits only.
+var ratingIDPattern = regexp.MustCompile(`^[0-9]+$`)
 
 // Handler provides HTTP handlers for rating endpoints.
 type Handler struct {
@@ -50,15 +54,15 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Rate limit
-	if !h.limiter.Enforce(w, r, "ratings:get:"+p.Username, 90, 60) {
+	// Rate limit: 120 req/60s per user (same as Node)
+	if !h.limiter.Enforce(w, r, "ratings:detail:"+p.Username, 120, 60) {
 		return
 	}
 
 	// Extract ID from path: /api/ratings/:id
 	id := r.PathValue("id")
-	if id == "" {
-		response.BadRequest(w, "Rating ID is required", "INVALID_QUERY")
+	if !ratingIDPattern.MatchString(id) {
+		response.JSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid rating ID format"})
 		return
 	}
 
@@ -69,9 +73,9 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if rating == nil {
-		response.NotFound(w)
+		response.JSON(w, http.StatusNotFound, map[string]string{"error": "Rating not found"})
 		return
 	}
 
-	response.JSON(w, http.StatusOK, rating)
+	response.JSON(w, http.StatusOK, map[string]any{"rating": rating})
 }

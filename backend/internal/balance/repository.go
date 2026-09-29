@@ -137,7 +137,7 @@ func (r *Repository) ListBalances(ctx context.Context, opts BalanceQueryOptions)
 
 	summary, err := r.computeBalanceSummary(ctx)
 	if err != nil {
-		summary = BalanceSummary{TotalSubscribers: totalCount, ActiveAccounts: totalCount}
+		summary = BalanceSummary{}
 	}
 
 	totalPages := int(totalCount) / limit
@@ -183,25 +183,38 @@ func (r *Repository) GetBalanceByIMSI(ctx context.Context, imsi string) (*Balanc
 }
 
 func (r *Repository) computeBalanceSummary(ctx context.Context) (BalanceSummary, error) {
-	totalSubscribers, err := r.balances.CountDocuments(ctx, bson.M{})
+	pipeline := mongo.Pipeline{
+		{{Key: "$group", Value: bson.M{
+			"_id":                nil,
+			"totalDataAllocated": bson.M{"$sum": "$data_total"},
+			"totalDataUsed":      bson.M{"$sum": "$data_used"},
+			"totalDataReserved":  bson.M{"$sum": "$data_reserved"},
+			"totalDataAvailable": bson.M{"$sum": "$data_available"},
+			"totalSubscribers":   bson.M{"$sum": 1},
+		}}},
+	}
+
+	cursor, err := r.balances.Aggregate(ctx, pipeline)
 	if err != nil {
 		return BalanceSummary{}, err
 	}
+	defer cursor.Close(ctx)
 
-	activeCount, err := r.balances.CountDocuments(ctx, bson.M{
-		"$or": bson.A{
-			bson.M{"status": "active"},
-			bson.M{"status": bson.M{"$exists": false}},
-			bson.M{"status": ""},
-		},
-	})
-	if err != nil {
-		activeCount = totalSubscribers
+	var results []bson.M
+	if err := cursor.All(ctx, &results); err != nil {
+		return BalanceSummary{}, err
 	}
 
+	if len(results) == 0 {
+		return BalanceSummary{}, nil
+	}
+	row := results[0]
 	return BalanceSummary{
-		TotalSubscribers: totalSubscribers,
-		ActiveAccounts:   activeCount,
+		TotalSubscribers:   numericInt64(row["totalSubscribers"]),
+		TotalDataAllocated: numericInt64(row["totalDataAllocated"]),
+		TotalDataUsed:      numericInt64(row["totalDataUsed"]),
+		TotalDataReserved:  numericInt64(row["totalDataReserved"]),
+		TotalDataAvailable: numericInt64(row["totalDataAvailable"]),
 	}, nil
 }
 
@@ -293,7 +306,14 @@ func strWithDefault(doc bson.M, key, fallback string) string {
 
 func docID(doc bson.M) string {
 	if id, ok := doc["_id"]; ok {
-		return fmt.Sprintf("%v", id)
+		switch v := id.(type) {
+		case bson.ObjectID:
+			return v.Hex()
+		case string:
+			return v
+		default:
+			return fmt.Sprintf("%v", id)
+		}
 	}
 	return ""
 }
@@ -349,6 +369,11 @@ func mapBalanceDoc(doc bson.M, subMap map[string]bson.M) BalanceRecord {
 		status = "active"
 	}
 
+	createdAt := timeStr(doc, "created_at")
+	if createdAt == "" && sub != nil {
+		createdAt = timeStr(sub, "created_at")
+	}
+
 	rec := BalanceRecord{
 		ID:             docID(doc),
 		IMSI:           imsi,
@@ -367,8 +392,13 @@ func mapBalanceDoc(doc bson.M, subMap map[string]bson.M) BalanceRecord {
 		SmsAvailable:   smsAvailable,
 		MoneyBalance:   numericFloat64(doc["money_balance"]),
 		Version:        numericInt64WithDefault(doc, "version", 1),
-		CreatedAt:      timeStr(doc, "created_at"),
+		CreatedAt:      createdAt,
 		UpdatedAt:      timeStr(doc, "updated_at"),
+		CycleStartAt:   timeStr(doc, "cycle_start_at"),
+		CycleResetAt:   timeStr(doc, "cycle_reset_at"),
+	}
+	if rec.ID == "" {
+		rec.ID = imsi
 	}
 	rec.CheckInvariants()
 	return rec

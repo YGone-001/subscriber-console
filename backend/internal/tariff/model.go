@@ -11,9 +11,9 @@ type PlanSummary struct {
 	Name            string `json:"name"`
 	Description     string `json:"description"`
 	Status          string `json:"status"`
-	QuotaPerGrant   int64  `json:"quota_per_grant,omitempty"`
-	ValidityTime    int    `json:"validity_time,omitempty"`
-	VolumeThreshold int64  `json:"volume_threshold,omitempty"`
+	QuotaPerGrant   int64  `json:"quota_per_grant"`
+	ValidityTime    int    `json:"validity_time"`
+	VolumeThreshold int64  `json:"volume_threshold"`
 	RulesCount      int    `json:"rulesCount"`
 	SubscriberCount int    `json:"subscriberCount"`
 	IsDefault       bool   `json:"isDefault"`
@@ -32,7 +32,9 @@ type PlanDetail struct {
 	Rules []RatingPolicy `json:"rules"`
 }
 
-// RatingPolicy matches Node RatingPolicy (normalized rule).
+// RatingPolicy matches Node RatingPolicy (normalized rule). APN and
+// ChargingType stay omitempty because Node drops these keys entirely when the
+// source document does not define them (undefined is not serialized).
 type RatingPolicy struct {
 	RatingGroupID     int64  `json:"rating_group_id"`
 	Currency          string `json:"currency"`
@@ -40,9 +42,9 @@ type RatingPolicy struct {
 	RatesType         int    `json:"rates_type"`
 	PlanID            string `json:"plan_id"`
 	RuleID            string `json:"rule_id"`
-	APN               string `json:"apn"`
+	APN               string `json:"apn,omitempty"`
 	ServiceIdentifier int64  `json:"service_identifier"`
-	ChargingType      string `json:"charging_type"`
+	ChargingType      string `json:"charging_type,omitempty"`
 	Unit              string `json:"unit"`
 	QuotaPerGrant     int64  `json:"quota_per_grant"`
 	ValidityTime      int    `json:"validity_time"`
@@ -78,7 +80,26 @@ type ExportResponse struct {
 	QuotaPerGrant   int64          `json:"quota_per_grant"`
 	ValidityTime    int            `json:"validity_time"`
 	VolumeThreshold int64          `json:"volume_threshold"`
-	Rules           []RatingPolicy `json:"rules"`
+	Rules           []ExportedRule `json:"rules"`
+}
+
+// ExportedRule matches Node NormalizedTariffRule (validateTariffRule output).
+type ExportedRule struct {
+	RuleID            string `json:"rule_id"`
+	APN               string `json:"apn"`
+	RatingGroup       int    `json:"rating_group"`
+	RatingGroupID     int    `json:"rating_group_id"`
+	ServiceIdentifier int    `json:"service_identifier"`
+	ChargingType      string `json:"charging_type"`
+	Unit              string `json:"unit"`
+	QuotaPerGrant     int64  `json:"quota_per_grant"`
+	ValidityTime      int    `json:"validity_time"`
+	VolumeThreshold   int64  `json:"volume_threshold"`
+	Priority          int    `json:"priority"`
+	Status            string `json:"status"`
+	Currency          string `json:"currency"`
+	Rates             string `json:"rates"`
+	RatesType         int    `json:"rates_type"`
 }
 
 // OperationsResponse matches GET /api/tariff-plans/:planId/operations response shape.
@@ -112,27 +133,35 @@ type AuditLogEntry struct {
 
 // SubscribersResponse matches GET /api/tariff-plans/:planId/subscribers response shape.
 type SubscribersResponse struct {
-	Subscribers []SubscriberEntry `json:"subscribers"`
 	Total       int64             `json:"total"`
-	PlanID      string            `json:"plan_id"`
+	Subscribers []SubscriberEntry `json:"subscribers"`
+	HasMore     bool              `json:"hasMore"`
 }
 
-// SubscriberEntry represents a subscriber on a tariff plan.
+// SubscriberEntry represents a subscriber on a tariff plan. Node projects the
+// raw document fields (imsi, msisdn, status, updated_at), so fields absent
+// from the document are absent from the payload.
 type SubscriberEntry struct {
 	IMSI      string `json:"imsi"`
 	MSISDN    string `json:"msisdn,omitempty"`
-	Status    string `json:"status"`
+	Status    string `json:"status,omitempty"`
 	UpdatedAt string `json:"updated_at,omitempty"`
 }
 
 // MigratePreviewResponse matches GET /api/tariff-plans/:planId/migrate response shape.
 type MigratePreviewResponse struct {
-	Preview MigratePreview `json:"preview"`
+	DryRun MigratePreview `json:"dryRun"`
 }
 
 // MigratePreview holds dry-run migration results.
 type MigratePreview struct {
-	SourcePlanID    string `json:"sourcePlanId"`
-	TargetPlanID    string `json:"targetPlanId"`
-	SubscriberCount int64  `json:"subscriberCount"`
+	SourcePlanID         string `json:"sourcePlanId"`
+	SourcePlanName       string `json:"sourcePlanName"`
+	TargetPlanID         string `json:"targetPlanId"`
+	TargetPlanName       string `json:"targetPlanName"`
+	TargetPlanStatus     string `json:"targetPlanStatus"`
+	TotalSubscribers     int64  `json:"totalSubscribers"`
+	ActiveSubscribers    int64  `json:"activeSubscribers"`
+	SuspendedSubscribers int64  `json:"suspendedSubscribers"`
+	CanMigrate           bool   `json:"canMigrate"`
 }

@@ -3,7 +3,10 @@ package tariff
 import (
 	"context"
 	"fmt"
+	"math"
 	"math/big"
+	"strconv"
+	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -11,7 +14,15 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
-const defaultPlanID = "plan_default_10gb"
+const (
+	defaultPlanID = "plan_default_10gb"
+
+	// Summary fallbacks mirror Node DEFAULT_QUOTA_PER_GRANT,
+	// DEFAULT_VALIDITY_TIME and DEFAULT_VOLUME_THRESHOLD.
+	defaultQuotaPerGrant   int64 = 10485760
+	defaultValidityTime    int64 = 300
+	defaultVolumeThreshold int64 = 8388608
+)
 
 // Repository provides read-only access to tariff plan data.
 type Repository struct {
@@ -115,8 +126,12 @@ func (r *Repository) ListPlanSubscribers(ctx context.Context, planID string, lim
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	if limit <= 0 || limit > 100 {
+	// Node clamps the limit to between 1 and 100, defaulting to 20.
+	if limit <= 0 {
 		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
 	}
 
 	totalCount, err := r.subscribers.CountDocuments(ctx, bson.M{"plan_id": planID})
@@ -151,16 +166,22 @@ func (r *Repository) ListPlanSubscribers(ctx context.Context, planID string, lim
 	}
 
 	return &SubscribersResponse{
-		Subscribers: subs,
 		Total:       totalCount,
-		PlanID:      planID,
+		Subscribers: subs,
+		HasMore:     totalCount > int64(len(subs)),
 	}, nil
 }
 
-// DryRunMigrate counts subscribers that would be migrated.
+// DryRunMigrate builds the migration preview without writing anything.
+// Mirrors Node dryRunMigrateTariffPlanSubscribers, which never rejects a
+// disabled target plan; that only makes canMigrate false.
 func (r *Repository) DryRunMigrate(ctx context.Context, sourcePlanID, targetPlanID string) (*MigratePreview, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
+
+	if sourcePlanID == targetPlanID {
+		return nil, fmt.Errorf("TARIFF_PLAN_MIGRATE_SAME")
+	}
 
 	// Validate both plans exist
 	var sourceDoc, targetDoc bson.M
@@ -177,26 +198,26 @@ func (r *Repository) DryRunMigrate(ctx context.Context, sourcePlanID, targetPlan
 		return nil, err
 	}
 
-	// Check same plan
-	if sourcePlanID == targetPlanID {
-		return nil, fmt.Errorf("TARIFF_PLAN_MIGRATE_SAME")
-	}
-
-	// Check target not disabled
-	if strField(targetDoc, "status") == "disabled" {
-		return nil, fmt.Errorf("TARGET_PLAN_DISABLED")
-	}
-
-	// Count affected subscribers
-	count, err := r.subscribers.CountDocuments(ctx, bson.M{"plan_id": sourcePlanID})
+	total, err := r.subscribers.CountDocuments(ctx, bson.M{"plan_id": sourcePlanID})
 	if err != nil {
 		return nil, err
 	}
+	active, err := r.subscribers.CountDocuments(ctx, bson.M{"plan_id": sourcePlanID, "status": "active"})
+	if err != nil {
+		return nil, err
+	}
+	targetStatus := strWithDefault(targetDoc, "status", "active")
 
 	return &MigratePreview{
-		SourcePlanID:    sourcePlanID,
-		TargetPlanID:    targetPlanID,
-		SubscriberCount: count,
+		SourcePlanID:         sourcePlanID,
+		SourcePlanName:       strWithDefault(sourceDoc, "name", sourcePlanID),
+		TargetPlanID:         targetPlanID,
+		TargetPlanName:       strWithDefault(targetDoc, "name", targetPlanID),
+		TargetPlanStatus:     targetStatus,
+		TotalSubscribers:     total,
+		ActiveSubscribers:    active,
+		SuspendedSubscribers: total - active,
+		CanMigrate:           total > 0 && targetStatus != "disabled",
 	}, nil
 }
 
@@ -345,9 +366,9 @@ func summarizePlan(doc bson.M, subscriberCount int) PlanSummary {
 		Name:            strWithDefault(doc, "name", planID),
 		Description:     strField(doc, "description"),
 		Status:          strWithDefault(doc, "status", "active"),
-		QuotaPerGrant:   numericInt64WithDefault(doc, "quota_per_grant", 1073741824),
-		ValidityTime:    int(numericInt64WithDefault(doc, "validity_time", 86400)),
-		VolumeThreshold: numericInt64WithDefault(doc, "volume_threshold", 1048576),
+		QuotaPerGrant:   numericToNumber(doc, "quota_per_grant", defaultQuotaPerGrant),
+		ValidityTime:    int(numericToNumber(doc, "validity_time", defaultValidityTime)),
+		VolumeThreshold: numericToNumber(doc, "volume_threshold", defaultVolumeThreshold),
 		RulesCount:      ruleCount(doc),
 		SubscriberCount: subscriberCount,
 		IsDefault:       planID == defaultPlanID,
@@ -357,22 +378,14 @@ func summarizePlan(doc bson.M, subscriberCount int) PlanSummary {
 }
 
 func normalizeRules(doc bson.M, planID string) []RatingPolicy {
-	rulesRaw, ok := doc["rules"]
-	if !ok || rulesRaw == nil {
+	raw, ok := doc["rules"]
+	if !ok || raw == nil {
 		return []RatingPolicy{}
 	}
 
-	arr, ok := rulesRaw.(bson.A)
-	if !ok {
-		return []RatingPolicy{}
-	}
-
+	arr := asDocumentList(raw)
 	result := make([]RatingPolicy, 0, len(arr))
-	for _, r := range arr {
-		rule, ok := r.(bson.M)
-		if !ok {
-			continue
-		}
+	for _, rule := range arr {
 		result = append(result, RatingPolicy{
 			RatingGroupID:     numericInt64(rule["rating_group"]),
 			Currency:          strWithDefault(rule, "currency", "USD"),
@@ -393,6 +406,83 @@ func normalizeRules(doc bson.M, planID string) []RatingPolicy {
 	}
 
 	return result
+}
+
+// normalizeExportRules mirrors Node validateTariffRule applied to the already
+// normalized policy rules that the export endpoint embeds on success.
+func normalizeExportRules(rules []RatingPolicy) []ExportedRule {
+	out := make([]ExportedRule, 0, len(rules))
+	for _, rule := range rules {
+		chargingType := rule.ChargingType
+		switch chargingType {
+		case "data_volume", "free", "voice_time", "sms_event":
+		default:
+			chargingType = "data_volume"
+		}
+
+		unit := strings.ToLower(strings.TrimSpace(rule.Unit))
+		if unit == "" {
+			switch chargingType {
+			case "voice_time":
+				unit = "seconds"
+			case "sms_event":
+				unit = "events"
+			default:
+				unit = "bytes"
+			}
+		}
+
+		apn := strings.ToLower(strings.TrimSpace(rule.APN))
+		if apn == "" {
+			apn = "internet"
+		}
+
+		currency := strings.TrimSpace(rule.Currency)
+		if currency == "" {
+			currency = "USD"
+		} else {
+			currency = strings.ToUpper(currency)
+		}
+
+		status := "active"
+		if rule.Status == "disabled" {
+			status = "disabled"
+		}
+
+		ratingGroup := int(nonNegativeInt64(rule.RatingGroupID))
+		out = append(out, ExportedRule{
+			RuleID:            rule.RuleID,
+			APN:               apn,
+			RatingGroup:       ratingGroup,
+			RatingGroupID:     ratingGroup,
+			ServiceIdentifier: int(nonNegativeInt64(rule.ServiceIdentifier)),
+			ChargingType:      chargingType,
+			Unit:              unit,
+			QuotaPerGrant:     nonNegativeInt64(rule.QuotaPerGrant),
+			ValidityTime:      nonNegativeInt(rule.ValidityTime),
+			VolumeThreshold:   nonNegativeInt64(rule.VolumeThreshold),
+			Priority:          nonNegativeInt(rule.Priority),
+			Status:            status,
+			Currency:          currency,
+			Rates:             strings.TrimSpace(rule.Rates),
+			RatesType:         rule.RatesType,
+		})
+	}
+	return out
+}
+
+func nonNegativeInt64(v int64) int64 {
+	if v < 0 {
+		return 0
+	}
+	return v
+}
+
+func nonNegativeInt(v int) int {
+	if v < 0 {
+		return 0
+	}
+	return v
 }
 
 func detectConflicts(rules []RatingPolicy) []RuleConflict {
@@ -418,12 +508,7 @@ func detectConflicts(rules []RatingPolicy) []RuleConflict {
 }
 
 func ruleCount(doc bson.M) int {
-	if rules, ok := doc["rules"]; ok && rules != nil {
-		if arr, ok := rules.(bson.A); ok {
-			return len(arr)
-		}
-	}
-	return 0
+	return len(asList(doc["rules"]))
 }
 
 func strField(doc bson.M, key string) string {
@@ -458,9 +543,59 @@ func timeStr(doc bson.M, key string) string {
 		return t.UTC().Format("2006-01-02T15:04:05.000Z")
 	case bson.DateTime:
 		return t.Time().UTC().Format("2006-01-02T15:04:05.000Z")
+	case string:
+		// Node passes raw string timestamps straight through to JSON.
+		return t
 	default:
 		return ""
 	}
+}
+
+// numericToNumber mirrors the Node tariff summary coercion toNumber(value,
+// fallback): a Long (int64) is used as is, otherwise Number(value) when it is
+// finite. An undefined value (missing key) falls back, while an explicit null
+// coerces to 0, matching Number(null) === 0.
+func numericToNumber(doc bson.M, key string, fallback int64) int64 {
+	v, ok := doc[key]
+	if !ok {
+		return fallback
+	}
+	switch val := v.(type) {
+	case nil:
+		return 0
+	case int32:
+		return int64(val)
+	case int64:
+		return val
+	case float64:
+		if math.IsNaN(val) || math.IsInf(val, 0) {
+			return fallback
+		}
+		return int64(val)
+	case bool:
+		if val {
+			return 1
+		}
+		return 0
+	case string:
+		return numericFromString(val, fallback)
+	case bson.Decimal128:
+		return numericFromString(val.String(), fallback)
+	default:
+		return fallback
+	}
+}
+
+func numericFromString(s string, fallback int64) int64 {
+	trimmed := strings.TrimSpace(s)
+	if trimmed == "" {
+		return 0
+	}
+	f, err := strconv.ParseFloat(trimmed, 64)
+	if err != nil || math.IsNaN(f) || math.IsInf(f, 0) {
+		return fallback
+	}
+	return int64(f)
 }
 
 func numericInt64(v any) int64 {
@@ -502,4 +637,51 @@ func numericInt64WithDefault(doc bson.M, key string, fallback int64) int64 {
 		return fallback
 	}
 	return n
+}
+
+// asList extracts a BSON array from a dynamically decoded value. The driver
+// decodes arrays into bson.A by default; []interface{} is tolerated for other
+// decode paths.
+func asList(v interface{}) []interface{} {
+	switch a := v.(type) {
+	case bson.A:
+		return a
+	case []interface{}:
+		return a
+	default:
+		return nil
+	}
+}
+
+// asDocument normalizes a dynamically decoded BSON document into a plain map.
+// The driver decodes nested documents into bson.D by default, so all shapes
+// are tolerated.
+func asDocument(v interface{}) (map[string]interface{}, bool) {
+	switch m := v.(type) {
+	case bson.M:
+		return m, true
+	case map[string]interface{}:
+		return m, true
+	case bson.D:
+		out := make(map[string]interface{}, len(m))
+		for _, elem := range m {
+			out[elem.Key] = elem.Value
+		}
+		return out, true
+	default:
+		return nil, false
+	}
+}
+
+// asDocumentList extracts a document array from a dynamically decoded BSON
+// value, skipping non-document entries.
+func asDocumentList(v interface{}) []map[string]interface{} {
+	items := asList(v)
+	out := make([]map[string]interface{}, 0, len(items))
+	for _, item := range items {
+		if doc, ok := asDocument(item); ok {
+			out = append(out, doc)
+		}
+	}
+	return out
 }

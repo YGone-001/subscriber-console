@@ -210,19 +210,9 @@ func (h *Handler) Versions(w http.ResponseWriter, r *http.Request) {
 		if t, ok := currentProfile["title"].(string); ok && t != "" {
 			cs.Title = t
 		}
-		if u, ok := currentProfile["updatedAt"].(string); ok {
-			cs.UpdatedAt = u
-		} else if c, ok := currentProfile["createdAt"].(string); ok {
-			cs.UpdatedAt = c
-		}
-		if u, ok := currentProfile["updatedBy"].(string); ok {
-			cs.UpdatedBy = u
-		} else if c, ok := currentProfile["createdBy"].(string); ok {
-			cs.UpdatedBy = c
-		}
-		if sl, ok := currentProfile["sliceList"].(bson.A); ok {
-			cs.SliceCount = len(sl)
-		}
+		cs.UpdatedAt = firstNonNullDate(currentProfile, "updatedAt", "createdAt")
+		cs.UpdatedBy = firstStringField(currentProfile, "updatedBy", "createdBy")
+		cs.SliceCount = sliceCount(currentProfile)
 		currentSummary = &cs
 	}
 

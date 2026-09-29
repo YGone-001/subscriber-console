@@ -1,6 +1,7 @@
 package subscriber
 
 import (
+	"encoding/json"
 	"testing"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -234,29 +235,92 @@ func TestXcloudToLegacyState(t *testing.T) {
 		t.Error("nil doc should return nil")
 	}
 
-	// Basic doc
 	doc := bson.M{
-		"imsi":                            "460001234567890",
-		"access_restriction_data":         int32(32),
-		"network_access_mode":             int32(0),
-		"subscriber_status":               int32(0),
-		"sequence_number":                 int64(123456),
-		"security_key":                    "00112233445566778899aabbccddeeff",
-		"authentication_management_field": "8000",
+		"imsi":     "460001234567890",
+		"security": bson.M{"k": "00112233445566778899aabbccddeeff", "opc": "E8ED289DEBA952E4283B54E88E6183CA"},
+		"slice":    []any{bson.M{"sst": 1}},
+		"ambr":     bson.M{"dl": 10000000, "ul": 10000000},
 	}
 
 	state := xcloudToLegacyState(doc)
 	if state == nil {
 		t.Fatal("xcloudToLegacyState should not return nil")
 	}
-	if state.Sub4G == nil {
-		t.Error("sub4G should not be nil")
+
+	raw, err := json.Marshal(state)
+	if err != nil {
+		t.Fatalf("marshal state: %v", err)
 	}
-	if state.Auth4G == nil {
-		t.Error("auth4G should not be nil")
+	var decoded map[string]any
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		t.Fatalf("unmarshal state: %v", err)
 	}
-	if state.Pcrf4G == nil {
-		t.Error("pcrf4G should not be nil")
+
+	sub4G, ok := decoded["sub4G"].(map[string]any)
+	if !ok {
+		t.Fatal("sub4G must be present")
+	}
+
+	// Node parity: nullish defaults.
+	if sub4G["access_restriction_data"] != float64(32) {
+		t.Errorf("access_restriction_data = %v, want 32", sub4G["access_restriction_data"])
+	}
+	if sub4G["network_access_mode"] != float64(0) {
+		t.Errorf("network_access_mode = %v, want 0", sub4G["network_access_mode"])
+	}
+	if sub4G["allowedVisitedPlmns"] != "all" {
+		t.Errorf("allowedVisitedPlmns = %v, want all", sub4G["allowedVisitedPlmns"])
+	}
+	if sub4G["profile_name"] != "" {
+		t.Errorf("profile_name = %v, want empty string", sub4G["profile_name"])
+	}
+
+	// Node parity: normalizeAmbr falls back to {value:1, unit:3} because the
+	// document stores ambr.dl/ambr.ul instead of downlink/uplink records.
+	ambr, _ := sub4G["ambr"].(map[string]any)
+	downlink, _ := ambr["downlink"].(map[string]any)
+	if downlink["value"] != float64(1) || downlink["unit"] != float64(3) {
+		t.Errorf("ambr.downlink = %v, want {value:1 unit:3}", downlink)
+	}
+
+	msisdnList, ok := sub4G["msisdnList"].([]any)
+	if !ok || len(msisdnList) != 0 {
+		t.Errorf("msisdnList = %v, want []", sub4G["msisdnList"])
+	}
+
+	sliceList, ok := sub4G["sliceList"].([]any)
+	if !ok || len(sliceList) != 1 {
+		t.Fatalf("sliceList = %v, want one slice", sub4G["sliceList"])
+	}
+	slice, _ := sliceList[0].(map[string]any)
+	if slice["default_indicator"] != true || slice["sd"] != "000001" || slice["sst"] != float64(1) {
+		t.Errorf("slice = %v", slice)
+	}
+	if sessionList, ok := slice["session_list"].([]any); !ok || len(sessionList) != 0 {
+		t.Errorf("session_list = %v, want []", slice["session_list"])
+	}
+
+	// pcrf4G mirrors sub4G.sliceList.
+	pcrf4G, _ := decoded["pcrf4G"].(map[string]any)
+	if pcrfSlices, ok := pcrf4G["sliceList"].([]any); !ok || len(pcrfSlices) != 1 {
+		t.Errorf("pcrf4G.sliceList = %v, want one slice", pcrf4G["sliceList"])
+	}
+
+	auth4G, _ := decoded["auth4G"].(map[string]any)
+	if auth4G["k"] != "00112233445566778899aabbccddeeff" {
+		t.Errorf("auth4G.k = %v", auth4G["k"])
+	}
+	if auth4G["opc"] != "E8ED289DEBA952E4283B54E88E6183CA" {
+		t.Errorf("auth4G.opc = %v", auth4G["opc"])
+	}
+	if auth4G["sqn"] != float64(0) {
+		t.Errorf("auth4G.sqn = %v, want 0", auth4G["sqn"])
+	}
+	if auth4G["amf"] != "8000" {
+		t.Errorf("auth4G.amf = %v, want 8000", auth4G["amf"])
+	}
+	if _, exists := auth4G["op"]; exists {
+		t.Error("auth4G.op must be dropped when absent (Node undefined semantics)")
 	}
 }
 
@@ -395,16 +459,13 @@ func TestPaginationAfterFilter(t *testing.T) {
 	}
 }
 
-// TestLegacyDetailSections verifies the legacy detail response has all required sections.
+// TestLegacyDetailSections verifies the legacy detail response always carries
+// all six sections of findSubscriberLegacyState() on the wire.
 func TestLegacyDetailSections(t *testing.T) {
 	doc := bson.M{
-		"imsi":                            "460001234567890",
-		"access_restriction_data":         int32(32),
-		"network_access_mode":             int32(0),
-		"subscriber_status":               int32(0),
-		"sequence_number":                 int64(123456),
-		"security_key":                    "00112233445566778899aabbccddeeff",
-		"authentication_management_field": "8000",
+		"imsi":     "460001234567890",
+		"security": bson.M{"k": "00112233445566778899aabbccddeeff"},
+		"slice":    []any{bson.M{"sst": 1}},
 	}
 
 	state := xcloudToLegacyState(doc)
@@ -412,17 +473,23 @@ func TestLegacyDetailSections(t *testing.T) {
 		t.Fatal("xcloudToLegacyState should not return nil")
 	}
 
-	// All sections must be present (not nil)
-	if state.Sub4G == nil {
-		t.Error("sub4G must not be nil")
+	// OCS sections are attached by FindSubscriberLegacyState; even when they are
+	// nil, the keys must be present (Node always returns them, possibly null).
+	raw, err := json.Marshal(state)
+	if err != nil {
+		t.Fatalf("marshal state: %v", err)
 	}
-	if state.Pcrf4G == nil {
-		t.Error("pcrf4G must not be nil")
-	}
-	if state.Auth4G == nil {
-		t.Error("auth4G must not be nil")
+	var decoded map[string]any
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		t.Fatalf("unmarshal state: %v", err)
 	}
 
-	// OCS sections are added by FindSubscriberLegacyState, not xcloudToLegacyState
-	// So they would be nil here — that's expected
+	for _, key := range []string{"sub4G", "pcrf4G", "auth4G", "ocsImsi", "ocsTraffic", "ocsTariffPlan"} {
+		if _, ok := decoded[key]; !ok {
+			t.Errorf("legacy detail response must contain %q", key)
+		}
+	}
+	if len(decoded) != 6 {
+		t.Errorf("legacy detail response must have exactly 6 sections, got %d", len(decoded))
+	}
 }

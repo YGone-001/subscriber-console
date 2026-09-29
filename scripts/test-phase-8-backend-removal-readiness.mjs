@@ -616,6 +616,10 @@ async function main() {
   check('P8-I15', proxy.responsibilities.every((r) => r.ok), `proxy responsibilities=${proxy.responsibilities.filter((r) => r.ok).length}/${proxy.responsibilities.length}`);
 
   // ---- P8-I16 residual Node production operations explicitly counted --------
+  // Post-Phase-8.1 current state (see docs/backend-migration/phase-8.1-residual-go-parity.md):
+  // every canonical residual operation now has a registered, non-production-routed
+  // Go shadow. The Phase 8.0 frozen finding (22 shadows + 11 missing) is historical;
+  // this current-state view is derived from the registrations scanned today.
   const nodeRemainder = nodeProductionOwned.map((o) => ({
     method: o.method,
     path: o.canonicalPath,
@@ -623,18 +627,37 @@ async function main() {
       ? 'Go implementation exists (shadow) but route is not production-routed through CUTOVER_TABLE'
       : 'No Go implementation / not in CUTOVER_TABLE; Node remains production owner',
     goImplementation: o.goRegistered ? 'PRESENT (shadow)' : 'ABSENT',
-    parity: o.goRegistered ? 'UNVERIFIED (no cutover acceptance)' : 'N/A',
+    parity: o.goRegistered
+      ? 'SHADOW PARITY SUITE: scripts/test-phase-8-residual-api-parity.mjs'
+      : 'N/A',
     cutoverReadiness: o.goRegistered ? 'CANDIDATE' : 'REQUIRES_GO_IMPLEMENTATION',
     decision: 'MIGRATE_TO_GO',
     requiredPhase: o.goRegistered ? '8.2' : '8.1',
+    goRegistered: o.goRegistered,
+    inCutover: o.inCutover,
+    runtimeOwner: o.runtimeOwner,
   }));
-  // NODE_PRODUCTION_OWNED=33 is the canonical lifecycle/migration bucket. It is NOT
-  // the complete count of operations whose current runtime owner is Node: legacy
-  // aliases and retired-but-reachable surfaces are also Node-routed at runtime.
   check(
     'P8-I16',
     nodeRemainder.length === nodeProductionOwned.length,
     `canonical_node_migration_remainder=${nodeRemainder.length}`,
+  );
+
+  // ---- P8-I21 canonical residual Go shadow coverage --------------------------
+  // Post-Phase-8.1 gate: all canonical residual operations must have an exact
+  // production Go registration (derived from the main.go/remediation scan) while
+  // remaining outside CUTOVER_TABLE, with runtime ownership still resolving to
+  // Node through the production routing function. Fails closed while any
+  // canonical residual operation lacks a Go shadow.
+  const residualWithGoShadow = nodeRemainder.filter((r) => r.goRegistered).length;
+  const residualMissingGo = nodeRemainder.filter((r) => !r.goRegistered);
+  const residualShadowsNotRouted = nodeRemainder.every(
+    (r) => !r.inCutover && r.runtimeOwner === RUNTIME_OWNER.NODE,
+  );
+  check(
+    'P8-I21',
+    residualWithGoShadow === nodeRemainder.length && residualShadowsNotRouted,
+    `canonical_node_with_go_shadow=${residualWithGoShadow} canonical_node_missing_go=${residualMissingGo.length} residual_not_cutover_and_runtime_node=${residualShadowsNotRouted}`,
   );
 
   // ---- P8-I17 charging-plane boundary preserved -----------------------------
@@ -671,7 +694,7 @@ async function main() {
 
   console.log('\n-- Canonical Node migration remainder (lifecycle NODE_PRODUCTION_OWNED) --');
   for (const r of nodeRemainder) {
-    console.log(`  ${r.method.padEnd(7)} ${r.path}`);
+    console.log(`  ${r.method.padEnd(7)} ${r.path} go_shadow=${r.goRegistered ? 'yes' : 'no'} runtime_owner=${r.runtimeOwner}`);
   }
 
   console.log('\n-- Runtime ownership (derived by invoking resolveRouteOwner) --');
@@ -741,6 +764,11 @@ async function main() {
   for (const r of goUnroutedReads) console.log(`go_registered_unrouted_read=${r.key}`);
   console.log('');
   console.log(`canonical_node_migration_remainder=${nodeRemainder.length}`);
+  console.log(`canonical_node_with_go_shadow=${residualWithGoShadow}`);
+  console.log(`canonical_node_missing_go=${residualMissingGo.length}`);
+  console.log(`existing_go_shadow=${residualWithGoShadow}`);
+  console.log(`missing_go_implementation=${residualMissingGo.length}`);
+  for (const r of residualMissingGo) console.log(`canonical_node_missing_go_operation=${r.method} ${r.path}`);
   console.log(`backend_removal_ready=${backendRemovalReady}`);
   console.log(`backend_removal_blockers=${blockers.length}`);
   for (const b of blockers) console.log(`backend_removal_blocker=${b}`);

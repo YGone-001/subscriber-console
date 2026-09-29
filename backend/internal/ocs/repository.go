@@ -148,7 +148,7 @@ func (r *Repository) ListBalances(ctx context.Context, opts BalanceQueryOptions)
 		Total:      totalCount,
 		Page:       page,
 		Limit:      limit,
-		TotalPages: int(totalCount)/limit + 1,
+		TotalPages: totalPages(totalCount, limit),
 		Summary:    summary,
 	}, nil
 }
@@ -226,7 +226,7 @@ func (r *Repository) ListSessions(ctx context.Context, opts SessionQueryOptions)
 		Total:      totalCount,
 		Page:       page,
 		Limit:      limit,
-		TotalPages: int(totalCount)/limit + 1,
+		TotalPages: totalPages(totalCount, limit),
 		Summary: SessionSummary{
 			ActiveSessions:     activeCount,
 			ClosingSessions:    closingCount,
@@ -332,7 +332,7 @@ func (r *Repository) ListUsageRecords(ctx context.Context, opts UsageQueryOption
 		Total:      totalCount,
 		Page:       page,
 		Limit:      limit,
-		TotalPages: int(totalCount)/limit + 1,
+		TotalPages: totalPages(totalCount, limit),
 		Summary:    summary,
 	}, nil
 }
@@ -406,8 +406,9 @@ func (r *Repository) ListReservations(ctx context.Context, opts ReservationQuery
 		Total:      totalCount,
 		Page:       page,
 		Limit:      limit,
-		TotalPages: int(totalCount)/limit + 1,
+		TotalPages: totalPages(totalCount, limit),
 		Summary: ReservationSummary{
+			TotalReservations:    totalCount,
 			ActiveReservations:   activeCount,
 			SettledReservations:  settledCount,
 			OrphanedReservations: orphanedCount,
@@ -686,10 +687,30 @@ func strWithDefault(doc bson.M, key, fallback string) string {
 }
 
 func docID(doc bson.M) string {
-	if id, ok := doc["_id"]; ok {
-		return fmt.Sprintf("%v", id)
+	id, ok := doc["_id"]
+	if !ok || id == nil {
+		return ""
 	}
-	return ""
+	switch v := id.(type) {
+	case bson.ObjectID:
+		return v.Hex()
+	case string:
+		return v
+	default:
+		return fmt.Sprintf("%v", v)
+	}
+}
+
+// totalPages mirrors Node Math.ceil(totalCount / limit) || 1.
+func totalPages(totalCount int64, limit int) int {
+	if limit <= 0 {
+		return 1
+	}
+	pages := int((totalCount + int64(limit) - 1) / int64(limit))
+	if pages < 1 {
+		pages = 1
+	}
+	return pages
 }
 
 func mapBalance(doc bson.M, subMap map[string]bson.M) BalanceRecord {

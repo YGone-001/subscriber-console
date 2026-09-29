@@ -6,23 +6,29 @@ type ProfileListResponse struct {
 	Summary  ProfileSummary    `json:"summary"`
 }
 
-// ProfileListItem represents a single profile in the list.
+// ProfileListItem matches Node ProfileListItem from listProfiles().
 type ProfileListItem struct {
-	Name        string `json:"name"`
-	Title       string `json:"title,omitempty"`
-	Description string `json:"description,omitempty"`
-	SliceCount  int    `json:"sliceCount"`
-	CreatedAt   string `json:"createdAt,omitempty"`
-	UpdatedAt   string `json:"updatedAt,omitempty"`
-	CreatedBy   string `json:"createdBy,omitempty"`
-	UpdatedBy   string `json:"updatedBy,omitempty"`
+	Name                  string `json:"name"`
+	Title                 string `json:"title"`
+	SliceCount            int    `json:"sliceCount"`
+	CreatedAt             any    `json:"createdAt"`
+	UpdatedAt             any    `json:"updatedAt"`
+	UpdatedBy             any    `json:"updatedBy"`
+	SubscriberCount       int    `json:"subscriberCount"`
+	ImpactedSubscribers   int    `json:"impactedSubscribers"`
+	ActiveSubscribers     int    `json:"activeSubscribers"`
+	SuspendedSubscribers  int    `json:"suspendedSubscribers"`
+	RestrictedSubscribers int    `json:"restrictedSubscribers"`
 }
 
-// ProfileSummary is the global summary object.
+// ProfileSummary matches Node ProfileGlobalSummary from summarizeProfiles().
 type ProfileSummary struct {
-	TotalProfiles     int `json:"totalProfiles"`
-	TotalSubscribers  int `json:"totalSubscribers"`
-	ActiveSubscribers int `json:"activeSubscribers"`
+	TotalProfiles            int `json:"totalProfiles"`
+	TotalGovernedSubscribers int `json:"totalGovernedSubscribers"`
+	ActiveSubscribers        int `json:"activeSubscribers"`
+	SuspendedSubscribers     int `json:"suspendedSubscribers"`
+	RestrictedSubscribers    int `json:"restrictedSubscribers"`
+	UnassignedProfiles       int `json:"unassignedProfiles"`
 }
 
 // ProfileDetailResponse matches GET /api/profiles/:name response shape.
@@ -64,8 +70,8 @@ type ProfileVersionSummary struct {
 // ProfileCurrentSummary is the current profile summary shown in versions list.
 type ProfileCurrentSummary struct {
 	Title      string `json:"title"`
-	UpdatedAt  string `json:"updatedAt,omitempty"`
-	UpdatedBy  string `json:"updatedBy,omitempty"`
+	UpdatedAt  any    `json:"updatedAt"`
+	UpdatedBy  any    `json:"updatedBy"`
 	SliceCount int    `json:"sliceCount"`
 }
 

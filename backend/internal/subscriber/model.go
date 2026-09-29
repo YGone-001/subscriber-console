@@ -71,7 +71,7 @@ type LegacySubscriberState struct {
 	Auth4G        map[string]any `json:"auth4G"`
 	OcsImsi       map[string]any `json:"ocsImsi"`
 	OcsTraffic    map[string]any `json:"ocsTraffic"`
-	OcsTariffPlan map[string]any `json:"ocsTariffPlan,omitempty"`
+	OcsTariffPlan map[string]any `json:"ocsTariffPlan"`
 }
 
 // --- Search ---

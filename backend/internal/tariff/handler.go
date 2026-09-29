@@ -99,7 +99,7 @@ func (h *Handler) Export(w http.ResponseWriter, r *http.Request) {
 		QuotaPerGrant:   plan.QuotaPerGrant,
 		ValidityTime:    plan.ValidityTime,
 		VolumeThreshold: plan.VolumeThreshold,
-		Rules:           plan.Rules,
+		Rules:           normalizeExportRules(plan.Rules),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -202,29 +202,26 @@ func (h *Handler) Migrate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sourcePlanID := r.PathValue("planId")
-	targetPlanID := strings.TrimSpace(r.URL.Query().Get("target"))
+	targetPlanID := strings.TrimSpace(r.URL.Query().Get("targetPlanId"))
 	if targetPlanID == "" {
-		response.Error(w, http.StatusBadRequest, "target query parameter is required", "VALIDATION_ERROR")
+		targetPlanID = strings.TrimSpace(r.URL.Query().Get("target_plan_id"))
+	}
+	if targetPlanID == "" {
+		response.Error(w, http.StatusBadRequest, "targetPlanId query parameter is required", "VALIDATION_ERROR")
 		return
 	}
 
 	result, err := h.repo.DryRunMigrate(r.Context(), sourcePlanID, targetPlanID)
 	if err != nil {
-		msg := err.Error()
-		code := http.StatusBadRequest
-		errCode := "VALIDATION_ERROR"
-		switch msg {
+		switch err.Error() {
 		case "SOURCE_PLAN_NOT_FOUND", "TARGET_PLAN_NOT_FOUND":
-			code = http.StatusNotFound
-			errCode = "NOT_FOUND"
-			msg = "Tariff plan not found"
+			response.Error(w, http.StatusNotFound, "Tariff plan not found", "NOT_FOUND")
 		case "TARIFF_PLAN_MIGRATE_SAME":
-			msg = "Cannot migrate a tariff plan to itself"
-		case "TARGET_PLAN_DISABLED":
-			msg = "Target tariff plan is disabled"
+			response.Error(w, http.StatusBadRequest, "Source and target tariff plan must be different", "VALIDATION_ERROR")
+		default:
+			response.InternalError(w)
 		}
-		response.Error(w, code, msg, errCode)
 		return
 	}
-	response.JSON(w, http.StatusOK, result)
+	response.JSON(w, http.StatusOK, MigratePreviewResponse{DryRun: *result})
 }

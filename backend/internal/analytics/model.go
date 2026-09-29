@@ -92,6 +92,8 @@ type OcsUsageMetrics struct {
 
 // SparklineResponse matches the existing API response shape.
 type SparklineResponse struct {
-	CurrentSubCount int   `json:"currentSubCount"`
-	CurrentTraffic  int64 `json:"currentTraffic"`
+	Subscribers     []int64 `json:"subscribers"`
+	Traffic         []int64 `json:"traffic"`
+	CurrentSubCount int     `json:"currentSubCount"`
+	CurrentTraffic  int64   `json:"currentTraffic"`
 }

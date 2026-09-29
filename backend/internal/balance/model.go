@@ -17,7 +17,7 @@ type BalanceRecord struct {
 	SmsTotal         int64   `json:"sms_total"`
 	SmsUsed          int64   `json:"sms_used"`
 	SmsAvailable     int64   `json:"sms_available"`
-	MoneyBalance     float64 `json:"money_balance,omitempty"`
+	MoneyBalance     float64 `json:"money_balance"`
 	Version          int64   `json:"version"`
 	DataInvariantOk  bool    `json:"data_invariant_ok"`
 	VoiceInvariantOk bool    `json:"voice_invariant_ok"`
@@ -25,12 +25,18 @@ type BalanceRecord struct {
 	InvariantOk      bool    `json:"invariant_ok"`
 	CreatedAt        string  `json:"created_at,omitempty"`
 	UpdatedAt        string  `json:"updated_at,omitempty"`
+	CycleStartAt     string  `json:"cycle_start_at,omitempty"`
+	CycleResetAt     string  `json:"cycle_reset_at,omitempty"`
 }
 
-// BalanceSummary contains aggregate statistics for balance management.
+// BalanceSummary contains the aggregate statistics returned with the balance
+// list. The shape matches the Node.js listOcsBalances() summary exactly.
 type BalanceSummary struct {
-	TotalSubscribers int64 `json:"totalSubscribers"`
-	ActiveAccounts   int64 `json:"activeAccounts"`
+	TotalSubscribers   int64 `json:"totalSubscribers"`
+	TotalDataAllocated int64 `json:"totalDataAllocated"`
+	TotalDataUsed      int64 `json:"totalDataUsed"`
+	TotalDataReserved  int64 `json:"totalDataReserved"`
+	TotalDataAvailable int64 `json:"totalDataAvailable"`
 }
 
 // BalanceQueryOptions contains filtering and pagination options for balance listing.

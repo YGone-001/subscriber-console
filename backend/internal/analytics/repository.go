@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/rand"
+	"sort"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -64,12 +66,18 @@ func (r *Repository) ComputeMetrics(ctx context.Context) (*AnalyticsMetrics, err
 		data []TariffPlanDistItem
 		err  error
 	}
+	type policyResult struct {
+		id  int64
+		ok  bool
+		err error
+	}
 
 	balCh := make(chan balanceResult, 1)
 	sesCh := make(chan sessionResult, 1)
 	resCh := make(chan reservationResult, 1)
 	useCh := make(chan usageResult, 1)
 	tarCh := make(chan tariffResult, 1)
+	polCh := make(chan policyResult, 1)
 
 	go func() {
 		d, t, p, err := r.computeBalanceMetrics(ctx)
@@ -91,12 +99,17 @@ func (r *Repository) ComputeMetrics(ctx context.Context) (*AnalyticsMetrics, err
 		d, err := r.computeTariffPlanDist(ctx)
 		tarCh <- tariffResult{d, err}
 	}()
+	go func() {
+		id, ok, err := r.firstActiveRatingPolicyID(ctx)
+		polCh <- policyResult{id, ok, err}
+	}()
 
 	bal := <-balCh
 	ses := <-sesCh
 	res := <-resCh
 	use := <-useCh
 	tar := <-tarCh
+	pol := <-polCh
 
 	if bal.err != nil {
 		return nil, fmt.Errorf("balance metrics: %w", bal.err)
@@ -113,11 +126,23 @@ func (r *Repository) ComputeMetrics(ctx context.Context) (*AnalyticsMetrics, err
 	if tar.err != nil {
 		return nil, fmt.Errorf("tariff plan dist: %w", tar.err)
 	}
+	if pol.err != nil {
+		return nil, fmt.Errorf("rating policy: %w", pol.err)
+	}
+
+	// ratesDist mirrors the Node.js firstActiveRatingPolicy() derivation.
+	ratesDist := []NameValue{}
+	if pol.ok {
+		ratesDist = []NameValue{{
+			Name:  fmt.Sprintf("Group #%d", pol.id),
+			Value: int64(bal.data.TotalSubscribers),
+		}}
+	}
 
 	return &AnalyticsMetrics{
 		TotalTraffic:    int(bal.data.TotalDataAvailable),
 		PlmnDist:        bal.plmn,
-		RatesDist:       []NameValue{}, // Will be populated if policy exists
+		RatesDist:       ratesDist,
 		Top5:            bal.top5,
 		Timestamp:       time.Now().UnixMilli(),
 		OcsBalances:     *bal.data,
@@ -126,6 +151,59 @@ func (r *Repository) ComputeMetrics(ctx context.Context) (*AnalyticsMetrics, err
 		TariffPlanDist:  tar.data,
 		OcsUsage:        *use.data,
 	}, nil
+}
+
+// firstActiveRatingPolicyID mirrors the Node.js firstActiveRatingPolicy()
+// behavior: among the default tariff plan rules with rating_group > 0 (sorted
+// by rating_group ascending), the first rule whose normalized status is active
+// (or the first rule when none is active) provides the rating group id.
+func (r *Repository) firstActiveRatingPolicyID(ctx context.Context) (int64, bool, error) {
+	var doc bson.M
+	err := r.tariffPlans.FindOne(ctx, bson.M{"plan_id": defaultPlanID}).Decode(&doc)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return 0, false, nil
+		}
+		return 0, false, fmt.Errorf("find default plan: %w", err)
+	}
+
+	rules := asDocumentList(doc["rules"])
+	type candidate struct {
+		id     int64
+		active bool
+	}
+	candidates := make([]candidate, 0, len(rules))
+	for _, rule := range rules {
+		id := numericInt64(rule["rating_group"])
+		if id <= 0 {
+			continue
+		}
+		candidates = append(candidates, candidate{id: id, active: isActiveStatus(rule["status"])})
+	}
+	if len(candidates) == 0 {
+		return 0, false, nil
+	}
+
+	sort.SliceStable(candidates, func(i, j int) bool { return candidates[i].id < candidates[j].id })
+	for _, c := range candidates {
+		if c.active {
+			return c.id, true, nil
+		}
+	}
+	return candidates[0].id, true, nil
+}
+
+// isActiveStatus matches Node.js normalizePolicy() status handling:
+// a missing/empty status defaults to 'active'; only 'active' counts as active.
+func isActiveStatus(v interface{}) bool {
+	if v == nil {
+		return true
+	}
+	s, ok := v.(string)
+	if !ok {
+		return false
+	}
+	return s == "" || s == "active"
 }
 
 // ComputeSparkline computes the sparkline basis.
@@ -161,9 +239,34 @@ func (r *Repository) ComputeSparkline(ctx context.Context) (*SparklineResponse, 
 	}
 
 	return &SparklineResponse{
+		Subscribers:     generateTrend(int64(subCount), 24, 0.03),
+		Traffic:         generateTrend(traffic, 24, 0.05),
 		CurrentSubCount: int(subCount),
 		CurrentTraffic:  traffic,
 	}, nil
+}
+
+// generateTrend mirrors the Node.js generateTrend() helper: a deterministic
+// anchor at the current value with random jitter across the series. The final
+// point always equals the current value.
+func generateTrend(current int64, points int, variance float64) []int64 {
+	result := make([]int64, 0, points)
+	if current == 0 {
+		for i := 0; i < points; i++ {
+			result = append(result, int64(rand.Intn(3)))
+		}
+		return result
+	}
+
+	startVal := float64(current) * (1 - variance*float64(points)*0.3)
+	for i := 0; i < points; i++ {
+		progress := float64(i) / float64(points-1)
+		baseVal := startVal + (float64(current)-startVal)*progress
+		jitter := baseVal * variance * (rand.Float64() - 0.4)
+		result = append(result, int64(math.Max(0, math.Round(baseVal+jitter))))
+	}
+	result[points-1] = current
+	return result
 }
 
 func (r *Repository) computeBalanceMetrics(ctx context.Context) (*OcsBalanceMetrics, []Top5Entry, []NameValue, error) {
@@ -601,4 +704,43 @@ func numericInt64(v interface{}) int64 {
 	default:
 		return 0
 	}
+}
+
+// asDocument normalizes a dynamically decoded BSON document into a plain map.
+// The driver decodes nested documents into bson.D by default (arrays become
+// bson.A), so all shapes are tolerated.
+func asDocument(v interface{}) (map[string]interface{}, bool) {
+	switch m := v.(type) {
+	case bson.M:
+		return m, true
+	case map[string]interface{}:
+		return m, true
+	case bson.D:
+		out := make(map[string]interface{}, len(m))
+		for _, elem := range m {
+			out[elem.Key] = elem.Value
+		}
+		return out, true
+	default:
+		return nil, false
+	}
+}
+
+// asDocumentList extracts a document array from a dynamically decoded BSON
+// value, skipping non-document entries.
+func asDocumentList(v interface{}) []map[string]interface{} {
+	var items []interface{}
+	switch a := v.(type) {
+	case bson.A:
+		items = a
+	case []interface{}:
+		items = a
+	}
+	out := make([]map[string]interface{}, 0, len(items))
+	for _, item := range items {
+		if doc, ok := asDocument(item); ok {
+			out = append(out, doc)
+		}
+	}
+	return out
 }

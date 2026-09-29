@@ -3,6 +3,7 @@ package profile
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -37,33 +38,50 @@ func (r *Repository) ListProfiles(ctx context.Context) ([]ProfileListItem, Profi
 	}
 	defer cursor.Close(ctx)
 
-	var profiles []ProfileListItem
-	for cursor.Next(ctx) {
-		var doc bson.M
-		if err := cursor.Decode(&doc); err != nil {
-			continue
-		}
-		item := ProfileListItem{
-			Name:        stringField(doc, "name"),
-			Title:       stringField(doc, "title"),
-			Description: stringField(doc, "description"),
-			SliceCount:  sliceCount(doc),
-			CreatedAt:   timeField(doc, "createdAt"),
-			UpdatedAt:   timeField(doc, "updatedAt"),
-			CreatedBy:   stringField(doc, "createdBy"),
-			UpdatedBy:   stringField(doc, "updatedBy"),
-		}
-		profiles = append(profiles, item)
+	var rawDocs []bson.M
+	if err := cursor.All(ctx, &rawDocs); err != nil {
+		return nil, ProfileSummary{}, err
 	}
 
-	if profiles == nil {
-		profiles = []ProfileListItem{}
-	}
-
-	// Global summary: count profiles and subscriber stats
-	summary, err := r.computeSummary(ctx)
+	statsMap, err := r.profileSubscriberCounts(ctx)
 	if err != nil {
-		return profiles, ProfileSummary{}, err
+		statsMap = map[string]profileSubscriberStats{}
+	}
+
+	profiles := make([]ProfileListItem, 0, len(rawDocs))
+	for _, doc := range rawDocs {
+		name := stringField(doc, "name")
+		stats := statsMap[name]
+		title := stringField(doc, "title")
+		if title == "" {
+			title = name
+		}
+		profiles = append(profiles, ProfileListItem{
+			Name:                  name,
+			Title:                 title,
+			SliceCount:            sliceCount(doc),
+			CreatedAt:             jsonDateOrNull(doc, "createdAt"),
+			UpdatedAt:             jsonDateOrNull(doc, "updatedAt"),
+			UpdatedBy:             firstStringField(doc, "updatedBy", "createdBy"),
+			SubscriberCount:       stats.total,
+			ImpactedSubscribers:   stats.total,
+			ActiveSubscribers:     stats.active,
+			SuspendedSubscribers:  stats.suspended,
+			RestrictedSubscribers: stats.restricted,
+		})
+	}
+
+	// Summary mirrors Node summarizeProfiles(): derived from the profile list
+	// so both response sections stay consistent.
+	summary := ProfileSummary{TotalProfiles: len(profiles)}
+	for _, p := range profiles {
+		summary.TotalGovernedSubscribers += p.SubscriberCount
+		summary.ActiveSubscribers += p.ActiveSubscribers
+		summary.SuspendedSubscribers += p.SuspendedSubscribers
+		summary.RestrictedSubscribers += p.RestrictedSubscribers
+		if p.SubscriberCount == 0 {
+			summary.UnassignedProfiles++
+		}
 	}
 
 	return profiles, summary, nil
@@ -245,51 +263,87 @@ func (r *Repository) ListProfileVersions(ctx context.Context, profileName string
 	return versions, nil
 }
 
-// computeSummary counts total profiles and aggregates subscriber stats.
-func (r *Repository) computeSummary(ctx context.Context) (ProfileSummary, error) {
-	totalProfiles, err := r.profiles.CountDocuments(ctx, bson.M{})
-	if err != nil {
-		return ProfileSummary{}, err
-	}
+// profileSubscriberStats holds per-profile subscriber counters.
+type profileSubscriberStats struct {
+	total      int
+	active     int
+	suspended  int
+	restricted int
+}
 
-	// Count total and active subscribers across all profiles
+// profileSubscriberCounts mirrors Node getProfileSubscriberCounts(): a single
+// aggregation over xcloud.subscribers keyed by the coalesced profile name.
+func (r *Repository) profileSubscriberCounts(ctx context.Context) (map[string]profileSubscriberStats, error) {
 	pipeline := mongo.Pipeline{
-		{{Key: "$group", Value: bson.M{
-			"_id":   nil,
-			"total": bson.M{"$sum": 1},
-			"active": bson.M{"$sum": bson.M{
-				"$cond": bson.A{
-					bson.M{"$or": bson.A{
-						bson.M{"$eq": bson.A{"$access_restriction_data", 32}},
-						bson.M{"$eq": bson.A{"$access_restriction_data", 0}},
-						bson.M{"$not": bson.A{"$access_restriction_data"}},
-						bson.M{"$eq": bson.A{"$access_restriction_data", nil}},
+		{{Key: "$project", Value: bson.M{
+			"profileName": bson.M{"$ifNull": bson.A{
+				"$webui_meta.profile_name",
+				bson.M{"$ifNull": bson.A{
+					"$webui_meta.profile",
+					bson.M{"$ifNull": bson.A{
+						"$profile_name",
+						bson.M{"$ifNull": bson.A{"$profile", ""}},
 					}},
-					1, 0,
-				},
+				}},
 			}},
+			"access_restriction_data": 1,
+		}}},
+		{{Key: "$match", Value: bson.M{"profileName": bson.M{"$exists": true, "$ne": ""}}}},
+		{{Key: "$group", Value: bson.M{
+			"_id":              "$profileName",
+			"totalSubscribers": bson.M{"$sum": 1},
+			"activeSubscribers": bson.M{"$sum": bson.M{"$cond": bson.A{
+				bson.M{"$or": bson.A{
+					bson.M{"$eq": bson.A{"$access_restriction_data", 32}},
+					bson.M{"$eq": bson.A{"$access_restriction_data", 0}},
+					bson.M{"$not": bson.A{"$access_restriction_data"}},
+					bson.M{"$eq": bson.A{"$access_restriction_data", nil}},
+				}},
+				1, 0,
+			}}},
+			"suspendedSubscribers": bson.M{"$sum": bson.M{"$cond": bson.A{
+				bson.M{"$eq": bson.A{"$access_restriction_data", 255}}, 1, 0,
+			}}},
+			"restrictedSubscribers": bson.M{"$sum": bson.M{"$cond": bson.A{
+				bson.M{"$and": bson.A{
+					bson.M{"$gt": bson.A{"$access_restriction_data", 0}},
+					bson.M{"$ne": bson.A{"$access_restriction_data", 32}},
+					bson.M{"$ne": bson.A{"$access_restriction_data", 255}},
+				}},
+				1, 0,
+			}}},
 		}}},
 	}
 
 	cursor, err := r.subscribers.Aggregate(ctx, pipeline)
 	if err != nil {
-		return ProfileSummary{TotalProfiles: int(totalProfiles)}, nil
+		return nil, err
 	}
 	defer cursor.Close(ctx)
 
-	summary := ProfileSummary{TotalProfiles: int(totalProfiles)}
-	if cursor.Next(ctx) {
-		var agg struct {
-			Total  int `bson:"total"`
-			Active int `bson:"active"`
-		}
-		if err := cursor.Decode(&agg); err == nil {
-			summary.TotalSubscribers = agg.Total
-			summary.ActiveSubscribers = agg.Active
-		}
+	var results []bson.M
+	if err := cursor.All(ctx, &results); err != nil {
+		return nil, err
 	}
 
-	return summary, nil
+	statsMap := make(map[string]profileSubscriberStats, len(results))
+	for _, item := range results {
+		id, ok := item["_id"].(string)
+		if !ok {
+			continue
+		}
+		key := strings.TrimSpace(id)
+		if key == "" {
+			continue
+		}
+		statsMap[key] = profileSubscriberStats{
+			total:      int(aggregationInt(item["totalSubscribers"])),
+			active:     int(aggregationInt(item["activeSubscribers"])),
+			suspended:  int(aggregationInt(item["suspendedSubscribers"])),
+			restricted: int(aggregationInt(item["restrictedSubscribers"])),
+		}
+	}
+	return statsMap, nil
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -329,6 +383,62 @@ func sliceCount(doc bson.M) int {
 		return len(arr)
 	}
 	return 0
+}
+
+// jsonDateOrNull mirrors Node truthy-or-null date handling: Date values become
+// ISO strings, non-empty strings pass through, everything else becomes null.
+func jsonDateOrNull(doc bson.M, key string) any {
+	v, ok := doc[key]
+	if !ok || v == nil {
+		return nil
+	}
+	switch t := v.(type) {
+	case time.Time:
+		return t.UTC().Format("2006-01-02T15:04:05.000Z")
+	case bson.DateTime:
+		return t.Time().UTC().Format("2006-01-02T15:04:05.000Z")
+	case string:
+		if t == "" {
+			return nil
+		}
+		return t
+	default:
+		return nil
+	}
+}
+
+// firstStringField returns the first non-empty string field, or nil.
+func firstStringField(doc bson.M, keys ...string) any {
+	for _, key := range keys {
+		if s := stringField(doc, key); s != "" {
+			return s
+		}
+	}
+	return nil
+}
+
+// firstNonNullDate returns the first date-like field as JSON value, or null.
+func firstNonNullDate(doc bson.M, keys ...string) any {
+	for _, key := range keys {
+		if v := jsonDateOrNull(doc, key); v != nil {
+			return v
+		}
+	}
+	return nil
+}
+
+// aggregationInt converts aggregation-produced numeric values.
+func aggregationInt(v any) int64 {
+	switch val := v.(type) {
+	case int32:
+		return int64(val)
+	case int64:
+		return val
+	case float64:
+		return int64(val)
+	default:
+		return 0
+	}
 }
 
 func stringify(v any) string {

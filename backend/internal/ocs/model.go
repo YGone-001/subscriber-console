@@ -189,6 +189,7 @@ type ReservationRecord struct {
 
 // ReservationSummary matches Node reservation summary.
 type ReservationSummary struct {
+	TotalReservations    int64 `json:"totalReservations"`
 	ActiveReservations   int64 `json:"activeReservations"`
 	SettledReservations  int64 `json:"settledReservations"`
 	OrphanedReservations int64 `json:"orphanedReservations"`

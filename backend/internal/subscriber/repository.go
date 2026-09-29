@@ -3,8 +3,10 @@ package subscriber
 import (
 	"context"
 	"fmt"
+	"math"
 	"math/big"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -715,6 +717,7 @@ func (r *Repository) FindSubscriberByMsisdn(ctx context.Context, msisdn, exclude
 // --- Subscriber Detail ---
 
 // FindSubscriberLegacyState returns the full legacy state for a subscriber.
+// Node authority: subscriberRepository.findSubscriberLegacyState().
 func (r *Repository) FindSubscriberLegacyState(ctx context.Context, imsi string) (*LegacySubscriberState, error) {
 	// Fetch subscriber document
 	var doc bson.M
@@ -729,54 +732,71 @@ func (r *Repository) FindSubscriberLegacyState(ctx context.Context, imsi string)
 	// Map to legacy state (matching xcloudToLegacyState)
 	state := xcloudToLegacyState(doc)
 
-	// Fetch OCS provisioning
+	// Fetch OCS provisioning (readOcsProvisioning parity)
 	ocsSub, balance, tariffPlan, err := r.fetchSingleOcsProvisioning(ctx, imsi)
 	if err != nil {
 		return nil, fmt.Errorf("fetch ocs provisioning: %w", err)
 	}
 
-	// Build ocsTraffic
+	// Build ocsTraffic: the exact inline traffic shape of Node readOcsProvisioning().
+	// Defaults apply only when the balance field is absent (undefined), never on 0.
 	var ocsTraffic map[string]any
 	if balance != nil {
+		plmn := imsi
+		if len(plmn) > 5 {
+			plmn = plmn[:5]
+		}
 		ocsTraffic = map[string]any{
-			"traffic_total":   numericInt64(balance["data_total"]),
-			"traffic_balance": numericInt64(balance["data_available"]),
-			"data_used":       numericInt64(balance["data_used"]),
-			"data_reserved":   numericInt64(balance["data_reserved"]),
-			"voice_total":     numericInt64Default(balance["voice_total"], 3600),
-			"voice_balance":   numericInt64Default(balance["voice_available"], 3600),
-			"voice_used":      numericInt64(balance["voice_used"]),
-			"voice_reserved":  numericInt64(balance["voice_reserved"]),
-			"sms_total":       numericInt64Default(balance["sms_total"], 100),
-			"sms_balance":     numericInt64Default(balance["sms_available"], 100),
-			"sms_used":        numericInt64(balance["sms_used"]),
+			"traffic_total":   mongoNumberField(balance, "data_total", 0),
+			"traffic_balance": mongoNumberField(balance, "data_available", 0),
+			"data_used":       mongoNumberField(balance, "data_used", 0),
+			"data_reserved":   mongoNumberField(balance, "data_reserved", 0),
+			"voice_total":     mongoNumberField(balance, "voice_total", 3600),
+			"voice_balance":   mongoNumberField(balance, "voice_available", 3600),
+			"voice_used":      mongoNumberField(balance, "voice_used", 0),
+			"voice_reserved":  mongoNumberField(balance, "voice_reserved", 0),
+			"sms_total":       mongoNumberField(balance, "sms_total", 100),
+			"sms_balance":     mongoNumberField(balance, "sms_available", 100),
+			"sms_used":        mongoNumberField(balance, "sms_used", 0),
 			"imsi":            imsi,
-			"plmn":            imsi[:5],
+			"plmn":            plmn,
 		}
 	}
 
-	// Build ocsImsi
+	// Build ocsImsi: only the keys actually present on the OCS subscriber are
+	// emitted (Node drops undefined properties from the JSON payload).
 	var ocsImsi map[string]any
 	if ocsSub != nil {
 		ocsImsi = map[string]any{
 			"account_id": imsi,
 			"imsi":       imsi,
-			"msisdn":     ocsSub["msisdn"],
-			"status":     ocsSub["status"],
-			"plan_id":    ocsSub["plan_id"],
+		}
+		if v, ok := ocsSub["msisdn"]; ok {
+			ocsImsi["msisdn"] = v
+		}
+		if v, ok := ocsSub["status"]; ok {
+			ocsImsi["status"] = v
+		}
+		if v, ok := ocsSub["plan_id"]; ok {
+			ocsImsi["plan_id"] = v
 		}
 	}
 
 	state.OcsTraffic = ocsTraffic
 	state.OcsImsi = ocsImsi
 	if tariffPlan != nil {
-		state.OcsTariffPlan = tariffPlan
+		state.OcsTariffPlan = tariffPlanSnapshot(tariffPlan)
 	}
 
 	return state, nil
 }
 
 // fetchSingleOcsProvisioning fetches OCS data for a single IMSI.
+// Plan selection mirrors Node readOcsProvisioning():
+//
+//	subscriber?.plan_id && subscriber.plan_id !== defaultPlan.plan_id
+//	  ? findOne({ plan_id: subscriber.plan_id })
+//	  : defaultPlan
 func (r *Repository) fetchSingleOcsProvisioning(ctx context.Context, imsi string) (
 	ocsSub bson.M, balance bson.M, tariffPlan bson.M, err error,
 ) {
@@ -798,10 +818,10 @@ func (r *Repository) fetchSingleOcsProvisioning(ctx context.Context, imsi string
 		balance = nil
 	}
 
-	// Determine plan ID
+	// Determine plan ID: the default plan unless the subscriber overrides it.
 	planID := defaultPlanID
 	if ocsSub != nil {
-		if pid, ok := ocsSub["plan_id"].(string); ok && pid != "" {
+		if pid, ok := ocsSub["plan_id"].(string); ok && pid != "" && pid != defaultPlanID {
 			planID = pid
 		}
 	}
@@ -836,72 +856,433 @@ func (r *Repository) DeleteOcsProvisioning(ctx context.Context, imsi string) err
 }
 
 // xcloudToLegacyState maps a xcloud subscriber document to legacy state format.
-// This matches the Node xcloudToLegacyState function exactly.
+// Node authority: xcloudSubscriber.ts xcloudToLegacyState().
 func xcloudToLegacyState(doc bson.M) *LegacySubscriberState {
 	if doc == nil {
 		return nil
 	}
 
-	// Build sub4G
+	sliceList := legacySliceList(doc["slice"])
+
 	sub4G := map[string]any{
-		"access_restriction_data": doc["access_restriction_data"],
-		"network_access_mode":     doc["network_access_mode"],
-	}
-
-	// Extract msisdnList from doc
-	if msisdn, ok := doc["msisdn"]; ok {
-		sub4G["msisdnList"] = msisdn
-	}
-	if ambr, ok := doc["ambr"]; ok {
-		sub4G["ambr"] = ambr
-	}
-	if sliceList, ok := doc["slice_list"]; ok {
-		sub4G["sliceList"] = sliceList
-	}
-	if allowedPlmns, ok := doc["allowed_visited_plmns"]; ok {
-		sub4G["allowedVisitedPlmns"] = allowedPlmns
-	}
-
-	// Build pcrf4G
-	pcrf4G := map[string]any{
-		"name":                    doc["imsi"],
-		"access_restriction_data": doc["access_restriction_data"],
-		"subscriber_status":       doc["subscriber_status"],
-	}
-	if subStatus, ok := doc["subscriber_status"]; ok {
-		pcrf4G["subscriber_status"] = subStatus
-	}
-
-	// Build auth4G
-	auth4G := map[string]any{
-		"sqn": doc["sequence_number"],
-	}
-	// K and OPc are sensitive — expose only if present in the raw doc.
-	// The Node version reads from the document directly.
-	if k, ok := doc["security_key"]; ok {
-		auth4G["k"] = k
-	}
-	if opc, ok := doc["opc"]; ok {
-		auth4G["opc"] = opc
-	}
-	if amf, ok := doc["authentication_management_field"]; ok {
-		auth4G["amf"] = amf
+		"access_restriction_data": nullishOrValue(doc, "access_restriction_data", int64(32)),
+		"allowedVisitedPlmns":     "all",
+		"ambr":                    normalizeLegacyAmbr(doc["ambr"]),
+		"msisdnList":              legacyMsisdnList(doc["msisdn"]),
+		"network_access_mode":     nullishOrValue(doc, "network_access_mode", int64(0)),
+		"profile_name":            legacyProfileName(doc["webui_meta"]),
+		"sliceList":               sliceList,
 	}
 
 	return &LegacySubscriberState{
-		Sub4G:  sub4G,
-		Pcrf4G: pcrf4G,
-		Auth4G: auth4G,
+		Sub4G: sub4G,
+		// pcrf4G shares the exact sliceList payload of sub4G.
+		Pcrf4G: map[string]any{"sliceList": sliceList},
+		Auth4G: legacyAuth4G(doc["security"]),
 	}
 }
 
-// numericInt64Default converts a value to int64, returning defaultVal if zero/nil.
-func numericInt64Default(v any, defaultVal int64) int64 {
-	val := numericInt64(v)
-	if val == 0 {
-		return defaultVal
+// --- Node parity value helpers ---
+//
+// The Node authority relies on JS truthiness, nullish, and Number() semantics;
+// these helpers reproduce them so shadow responses stay byte-compatible.
+
+// jsTruthy mirrors JS truthiness (!!value).
+func jsTruthy(v any) bool {
+	switch t := v.(type) {
+	case nil:
+		return false
+	case bool:
+		return t
+	case string:
+		return t != ""
+	case int:
+		return t != 0
+	case int32:
+		return t != 0
+	case int64:
+		return t != 0
+	case float32:
+		return t != 0
+	case float64:
+		return t != 0
+	default:
+		return true
 	}
-	return val
+}
+
+// jsNumber mirrors JS Number(value) for scalar BSON values: null becomes 0,
+// non-numeric values fall back (mirroring the `Number.isFinite` guard).
+func jsNumber(v any, fallback float64) float64 {
+	switch t := v.(type) {
+	case nil:
+		return 0
+	case bool:
+		if t {
+			return 1
+		}
+		return 0
+	case int:
+		return float64(t)
+	case int32:
+		return float64(t)
+	case int64:
+		return float64(t)
+	case float32:
+		return float64(t)
+	case float64:
+		return t
+	case string:
+		trimmed := strings.TrimSpace(t)
+		if trimmed == "" {
+			return 0
+		}
+		if n, err := strconv.ParseFloat(trimmed, 64); err == nil && !math.IsNaN(n) && !math.IsInf(n, 0) {
+			return n
+		}
+		return fallback
+	case bson.Decimal128:
+		if n, err := strconv.ParseFloat(t.String(), 64); err == nil && !math.IsNaN(n) && !math.IsInf(n, 0) {
+			return n
+		}
+		return fallback
+	default:
+		return fallback
+	}
+}
+
+// jsNumberOr reads a numeric field with JS semantics: a missing key behaves
+// like undefined (fallback), an explicit null behaves like Number(null) = 0.
+func jsNumberOr(m map[string]any, key string, fallback float64) float64 {
+	v, ok := m[key]
+	if !ok {
+		return fallback
+	}
+	return jsNumber(v, fallback)
+}
+
+// mongoNumberField is jsNumberOr for raw BSON documents.
+func mongoNumberField(m bson.M, key string, fallback float64) float64 {
+	v, ok := m[key]
+	if !ok {
+		return fallback
+	}
+	return jsNumber(v, fallback)
+}
+
+// jsOrValue mirrors JS `v || fallback`.
+func jsOrValue(v any, fallback any) any {
+	if jsTruthy(v) {
+		return v
+	}
+	return fallback
+}
+
+// nullishOrValue mirrors JS `v ?? fallback` for map fields.
+func nullishOrValue(m map[string]any, key string, fallback any) any {
+	v, ok := m[key]
+	if !ok || v == nil {
+		return fallback
+	}
+	return v
+}
+
+// nodeAsString mirrors typeGuards.asString: only strings pass through.
+func nodeAsString(v any, fallback string) string {
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return fallback
+}
+
+// legacyProfileName mirrors `doc.webui_meta?.profile_name || ”`.
+func legacyProfileName(webuiMeta any) any {
+	m, ok := asStringAnyMap(webuiMeta)
+	if !ok {
+		return ""
+	}
+	return jsOrValue(m["profile_name"], "")
+}
+
+// legacyMsisdnList mirrors `(doc.msisdn || []).map((msisdn) => ({ msisdn }))`.
+func legacyMsisdnList(v any) []any {
+	items, ok := asAnySlice(v)
+	if !ok {
+		return []any{}
+	}
+	out := make([]any, 0, len(items))
+	for _, item := range items {
+		out = append(out, map[string]any{"msisdn": item})
+	}
+	return out
+}
+
+// legacySliceList mirrors `(doc.slice || []).map(...)`.
+func legacySliceList(v any) []any {
+	slices, ok := asAnySlice(v)
+	if !ok {
+		return []any{}
+	}
+	out := make([]any, 0, len(slices))
+	for _, slice := range slices {
+		out = append(out, legacySlice(slice))
+	}
+	return out
+}
+
+func legacySlice(slice any) map[string]any {
+	m, _ := asStringAnyMap(slice)
+
+	defaultIndicator := true
+	if raw, ok := m["default_indicator"]; ok {
+		defaultIndicator = jsTruthy(raw)
+	}
+
+	return map[string]any{
+		"default_indicator": defaultIndicator,
+		"sd":                jsOrValue(m["sd"], "000001"),
+		"sst":               nullishOrValue(m, "sst", int64(1)),
+		"session_list":      legacySessionList(m["session"]),
+	}
+}
+
+// legacySessionList mirrors `(slice.session || []).map(legacySession)`.
+func legacySessionList(v any) []any {
+	sessions, ok := asAnySlice(v)
+	if !ok {
+		return []any{}
+	}
+	out := make([]any, 0, len(sessions))
+	for index, session := range sessions {
+		out = append(out, legacySession(session, index))
+	}
+	return out
+}
+
+func legacySession(session any, index int) map[string]any {
+	m, _ := asStringAnyMap(session)
+
+	name := nodeAsString(m["name"], "")
+	if name == "" {
+		if index == 0 {
+			name = "internet"
+		} else {
+			name = "ims"
+		}
+	}
+	isIms := name == "ims"
+
+	defaultType := int64(1)
+	defaultQosIndex := int64(9)
+	arpFallback := int64(8)
+	if isIms {
+		defaultType = 3
+		defaultQosIndex = 5
+		arpFallback = 1
+	}
+
+	smf, _ := asStringAnyMap(m["smf"])
+	qosSource, _ := asStringAnyMap(m["qos"])
+
+	return map[string]any{
+		"name":    name,
+		"type":    nullishOrValue(m, "type", defaultType),
+		"pgwIpv4": jsOrValue(smf["ipv4"], ""),
+		"pgwIpv6": jsOrValue(smf["ipv6"], ""),
+		"qos": map[string]any{
+			"_5qi":  nullishOrValue(qosSource, "index", defaultQosIndex),
+			"index": int64(0),
+			"arp":   legacyArp(qosSource["arp"], arpFallback),
+		},
+		"ambr":     normalizeLegacyAmbr(m["ambr"]),
+		"pcc_rule": legacyPccRuleList(m["pcc_rule"]),
+	}
+}
+
+// normalizeLegacyAmbr mirrors xcloudSubscriber.ts normalizeAmbr() with the
+// default { value: 1, unit: 3 } fallback.
+func normalizeLegacyAmbr(v any) map[string]any {
+	m, _ := asStringAnyMap(v)
+	downlink, _ := asStringAnyMap(m["downlink"])
+	uplink, _ := asStringAnyMap(m["uplink"])
+
+	return map[string]any{
+		"downlink": map[string]any{
+			"value": jsNumberOr(downlink, "value", 1),
+			"unit":  jsNumberOr(downlink, "unit", 3),
+		},
+		"uplink": map[string]any{
+			"value": jsNumberOr(uplink, "value", 1),
+			"unit":  jsNumberOr(uplink, "unit", 3),
+		},
+	}
+}
+
+// legacyArp mirrors xcloudSubscriber.ts toLegacyArp().
+func legacyArp(v any, fallbackPriorityLevel int64) map[string]any {
+	m, _ := asStringAnyMap(v)
+
+	capability := jsNumberOr(m, "pre_emption_capability", 1)
+	vulnerability := jsNumberOr(m, "pre_emption_vulnerability", 2)
+
+	preemptCap := "NOT_PREEMPT"
+	if capability == 0 {
+		preemptCap = "PREEMPT"
+	}
+	preemptVuln := "NOT_PREEMPTABLE"
+	if vulnerability == 0 {
+		preemptVuln = "PREEMPTABLE"
+	}
+
+	return map[string]any{
+		"priorityLevel": jsNumberOr(m, "priority_level", float64(fallbackPriorityLevel)),
+		"preemptCap":    preemptCap,
+		"preemptVuln":   preemptVuln,
+	}
+}
+
+// legacyPccRuleList mirrors `(session.pcc_rule || []).map(legacyPccRule)`.
+func legacyPccRuleList(v any) []any {
+	rules, ok := asAnySlice(v)
+	if !ok {
+		return []any{}
+	}
+	out := make([]any, 0, len(rules))
+	for _, rule := range rules {
+		out = append(out, legacyPccRule(rule))
+	}
+	return out
+}
+
+// legacyPccRule mirrors xcloudSubscriber.ts legacyPccRule(): the raw rule is
+// spread, then flow and qos are normalized.
+func legacyPccRule(rule any) map[string]any {
+	m, _ := asStringAnyMap(rule)
+
+	out := make(map[string]any, len(m)+2)
+	for k, v := range m {
+		out[k] = v
+	}
+
+	// flow: rule.flow || []
+	if flowValue := m["flow"]; jsTruthy(flowValue) {
+		out["flow"] = flowValue
+	} else {
+		out["flow"] = []any{}
+	}
+
+	// qos: normalized when present, otherwise the key is dropped (Node emits
+	// undefined, which JSON.stringify removes).
+	if qosValue := m["qos"]; jsTruthy(qosValue) {
+		qosSource, _ := asStringAnyMap(qosValue)
+		qos := map[string]any{
+			"_5qi":  nullishOrValue(qosSource, "index", int64(1)),
+			"index": nullishOrValue(qosSource, "index", int64(1)),
+			"arp":   legacyArp(qosSource["arp"], 2),
+		}
+		if mbr := qosSource["mbr"]; jsTruthy(mbr) {
+			qos["mbr"] = normalizeLegacyAmbr(mbr)
+		}
+		if gbr := qosSource["gbr"]; jsTruthy(gbr) {
+			qos["gbr"] = normalizeLegacyAmbr(gbr)
+		}
+		out["qos"] = qos
+	} else {
+		delete(out, "qos")
+	}
+
+	return out
+}
+
+// legacyAuth4G mirrors the auth4G section of xcloudToLegacyState(). Sensitive
+// key material is exposed exactly like the Node authority: only when present
+// and truthy.
+func legacyAuth4G(security any) map[string]any {
+	m, _ := asStringAnyMap(security)
+
+	auth4G := map[string]any{
+		"k":   jsOrValue(m["k"], ""),
+		"sqn": jsNumberOr(m, "sqn", 0),
+		"amf": jsOrValue(m["amf"], "8000"),
+	}
+	if op := m["op"]; jsTruthy(op) {
+		auth4G["op"] = op
+	}
+	if opc := m["opc"]; jsTruthy(opc) {
+		auth4G["opc"] = opc
+	}
+
+	return auth4G
+}
+
+// tariffPlanSnapshot mirrors ocsBillingRepository.ts tariffPlanSnapshot().
+func tariffPlanSnapshot(plan bson.M) map[string]any {
+	planID, _ := plan["plan_id"].(string)
+
+	snapshot := map[string]any{
+		"plan_id":     plan["plan_id"],
+		"name":        nodeAsString(plan["name"], planID),
+		"description": nodeAsString(plan["description"], ""),
+		"rules":       normalizePolicyRules(plan["rules"], planID),
+	}
+	if status, ok := plan["status"]; ok {
+		snapshot["status"] = status
+	}
+	return snapshot
+}
+
+// normalizePolicyRules maps plan rules through normalizePolicyRule().
+func normalizePolicyRules(v any, planID string) []any {
+	rules, ok := asAnySlice(v)
+	if !ok {
+		return []any{}
+	}
+	out := make([]any, 0, len(rules))
+	for _, rule := range rules {
+		out = append(out, normalizePolicyRule(rule, planID))
+	}
+	return out
+}
+
+// normalizePolicyRule mirrors ocsBillingRepository.ts normalizePolicy().
+func normalizePolicyRule(rule any, planID string) map[string]any {
+	m, _ := asStringAnyMap(rule)
+
+	// `Number(v) || 2` and `Number(v) || 100`: NaN and 0 fall back.
+	ratesType := jsNumberOr(m, "rates_type", 0)
+	if ratesType == 0 {
+		ratesType = 2
+	}
+	priority := jsNumberOr(m, "priority", 0)
+	if priority == 0 {
+		priority = 100
+	}
+
+	policy := map[string]any{
+		"rating_group_id":    jsNumberOr(m, "rating_group", 0),
+		"currency":           nodeAsString(m["currency"], "USD"),
+		"rates":              nodeAsString(m["rates"], "0"),
+		"rates_type":         ratesType,
+		"plan_id":            planID,
+		"service_identifier": jsNumberOr(m, "service_identifier", 0),
+		"unit":               jsOrValue(m["unit"], "bytes"),
+		"quota_per_grant":    jsNumberOr(m, "quota_per_grant", 0),
+		"validity_time":      jsNumberOr(m, "validity_time", 0),
+		"volume_threshold":   jsNumberOr(m, "volume_threshold", 0),
+		"priority":           priority,
+		"status":             jsOrValue(m["status"], "active"),
+	}
+	if ruleID, ok := m["rule_id"]; ok {
+		policy["rule_id"] = ruleID
+	}
+	if apn, ok := m["apn"]; ok {
+		policy["apn"] = apn
+	}
+	if chargingType, ok := m["charging_type"]; ok {
+		policy["charging_type"] = chargingType
+	}
+
+	return policy
 }
 
 // --- Batch Precheck ---
@@ -1022,7 +1403,7 @@ func (r *Repository) SearchProfiles(ctx context.Context, query string, limit int
 	}
 	needle := strings.ToLower(query)
 
-	cursor, err := r.profiles.Find(ctx, bson.M{})
+	cursor, err := r.profiles.Find(ctx, bson.M{}, options.Find().SetSort(bson.D{{Key: "name", Value: 1}}))
 	if err != nil {
 		return nil
 	}
@@ -1034,20 +1415,23 @@ func (r *Repository) SearchProfiles(ctx context.Context, query string, limit int
 		if err := cursor.Decode(&doc); err != nil {
 			continue
 		}
-		name := strings.ToLower(doc.Name)
-		title := strings.ToLower(doc.Title)
-		if !strings.Contains(name, needle) && !strings.Contains(title, needle) {
+		name := doc.Name
+		title := doc.Title
+		if title == "" {
+			title = name
+		}
+		if !strings.Contains(strings.ToLower(name), needle) && !strings.Contains(strings.ToLower(title), needle) {
 			continue
 		}
 
-		desc := doc.Title
-		if doc.Title == doc.Name {
+		desc := title
+		if title == name {
 			desc = "Open profile template"
 		}
 
 		results = append(results, SearchResult{
-			ID:    "profile-" + doc.Name,
-			Label: doc.Name,
+			ID:    "profile-" + name,
+			Label: name,
 			Desc:  desc,
 			Type:  "profile",
 			Path:  "/profile",
