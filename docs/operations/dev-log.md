@@ -224,3 +224,14 @@
 - The Mongo command monitor now enforces the protected sequence with executable assertions: `rs_initial_fixture_batches=1`, `rs_interstep_fixture_writes=0`, `rs_cumulative_state_verified=true`, `rs_sequence_continuous=true`. Budget resets are deliberately skipped between RS steps so no harness write can invalidate the evidence.
 - Added `mandatory_ids_executed` evidence alongside expected/missing/duplicate; all 96 mandatory callbacks execute (106/106 checks PASS, FAIL=0, SKIP=0).
 - Status: Phase 7.4 CORRECTION IMPLEMENTED / NOT FROZEN pending independent acceptance; Phase 7.5 NOT STARTED / RECOVERY PENDING; Phase 8 NOT STARTED.
+
+## Phase 7.5 — Controlled Platform Services Production Cutover
+
+- Assigned production ownership of exactly 11 Platform Services operations to the Go backend by appending them to `frontend/src/lib/cutover-routing.ts`: `GET /api/alerts`, `POST /api/alerts/acknowledge`, `POST /api/alerts/workflow`, `GET /api/notifications/stream`, `GET /api/system/health`, `GET /api/system/mongo/health`, `GET /api/system/audit/status`, `POST /api/system/audit/scan`, `POST /api/system/audit/heal`, `POST /api/system/audit/batch-heal`, and `POST /api/analytics/init`.
+- Routing table delta is exactly +11: `CUTOVER_TABLE = 36 -> 47`, `ACTUALLY_ROUTED = 36 -> 47`. The 36 historical cutover routes are unchanged and independently compared against the final table.
+- Preserved the single-writer invariant and fail-closed semantics: `owner: 'go'` with an unreachable Go backend returns HTTP 502 `GO_BACKEND_UNREACHABLE` with zero Node fallback and no dual write.
+- Node route files for the 11 endpoints remain in place (dormant rollback/reference implementations, deferred cleanup); the production flow short-circuits to Go in `frontend/src/proxy.ts`.
+- Added `scripts/test-phase-7-platform-cutover.mjs`, a production-boundary acceptance suite (Next proxy -> production Go server -> isolated MongoDB) covering routing-table invariants, per-route ownership, fail-closed/no-fallback, exactly-once mutation and read-only assertions, and incremental SSE streaming.
+- Rebuilt the Phase 7.4 RS01-RS05 continuous persistent-state correction on top of this cutover: only the routing-count assertions changed (36 -> 47) and the frozen RS sequence, the 96 mandatory callback inventory, and `rs_interstep_fixture_writes = 0` remain enforced.
+- Reconciled routing-invariant counts (36 -> 47) across the regression suites and current-state documentation. Node and Go quality gates plus all Phase 7 regression suites remain green.
+- Status: IMPLEMENTED / NOT FROZEN. Not self-declared frozen; independent acceptance is required before Phase 8.

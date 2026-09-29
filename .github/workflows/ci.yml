@@ -393,3 +393,6 @@ jobs:
 
       - name: System integrity controlled remediation parity
         run: node scripts/test-phase-7-system-heal-parity.mjs
+
+      - name: Controlled platform services cutover
+        run: node scripts/test-phase-7-platform-cutover.mjs

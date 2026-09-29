@@ -406,7 +406,7 @@ Phase 6.3-A established complete 1:1 parity between Node and Go authentication i
 Phase 6.3-B cuts over production authentication ownership authoritatively from Node to the Go backend (`:18888`):
 1. **Cutover Inventory Expansion**:
    - `CUTOVER_TABLE` expanded from 32 to 36 routes.
-   - `ACTUALLY_ROUTED = 36` (all 36 routes owned by Go).
+   - `ACTUALLY_ROUTED = 36` (all 36 routes owned by Go). This is the Phase 6.3-B authentication baseline; the current production routing baseline is `CUTOVER_TABLE = 47`, `ACTUALLY_ROUTED = 47` after the Platform Services cutover.
    - Added routes: `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`, `GET /api/auth/permissions`.
 2. **Reverse Proxy Routing**:
    - Next.js reverse proxy (`proxy.ts`) inspects route ownership via `resolveRouteOwner`.
@@ -451,5 +451,5 @@ Validation:
 
 - `npm test`, `npm run lint`, `npm run typecheck`, `npm run build`
 - `go test ./...`, `go build ./...`
-- `CUTOVER_TABLE = 36`, `ACTUALLY_ROUTED = 36` production baseline verified
+- `CUTOVER_TABLE = 36`, `ACTUALLY_ROUTED = 36` production baseline verified for Phase 6.3-B (superseded by `CUTOVER_TABLE = 47`, `ACTUALLY_ROUTED = 47` after the Platform Services cutover)
 

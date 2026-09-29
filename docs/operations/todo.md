@@ -7,12 +7,12 @@
 
 | Task | Status | Notes |
 |------|--------|-------|
-| Phase 7.0 — Platform Services Architecture Freeze | COMPLETE | Architecture freeze, contract inventory, planning validator |
-| Phase 7.1 — Platform Health & Status Contract Parity | COMPLETE | Go shadow implementation for health/status reads (33/33 tests PASS) |
-| Phase 7.2 — Alert Domain Governance & Mutations | COMPLETE | Acknowledge & workflow direct execution shadow in Go (42/42 tests PASS) |
-| Phase 7.3 — Notification Streaming (SSE) Migration | COMPLETE / FROZEN | Go shadow SSE handler complete and verified; Run #140 PASS; Node remains production owner; 36/36 routing freeze |
-| Phase 7.4 — System Integrity Self-Healing Mutations | CORRECTION IMPLEMENTED / NOT FROZEN | RS01-RS05 closed as one continuous persistent-state sequence (96 mandatory callbacks, zero inter-step harness writes); independent review required before freezing |
-| Phase 7.5 — Controlled Platform Services Cutover | NOT STARTED / RECOVERY PENDING | Premature cutover reverted forward-only; production ownership remains Node; `CUTOVER_TABLE = 36`, `ACTUALLY_ROUTED = 36` |
+| Phase 7.0 — Platform Services Architecture Freeze | PASS / FROZEN | Architecture freeze, contract inventory, planning validator |
+| Phase 7.1 — Platform Health & Status Contract Parity | PASS / FROZEN | Go health/status read parity (full acceptance matrix closed) |
+| Phase 7.2 — Alert Domain Governance & Mutations | PASS / FROZEN | Acknowledge & workflow mutation parity (full acceptance matrix closed) |
+| Phase 7.3 — Notification Streaming (SSE) Migration | PASS / FROZEN | Go SSE parity complete and verified; Run #140 PASS |
+| Phase 7.4 — System Integrity Self-Healing Mutations | PASS / FROZEN | RS01-RS05 frozen as one continuous persistent-state sequence (96 mandatory callbacks executed, `rs_interstep_fixture_writes = 0`); independently accepted |
+| Phase 7.5 — Controlled Platform Services Cutover | IMPLEMENTED / NOT FROZEN | 11 Phase 7 operations Go production-owned; `CUTOVER_TABLE = 47`, `ACTUALLY_ROUTED = 47`; independent acceptance pending |
 
 ## Deferred
 
@@ -24,12 +24,12 @@
 
 ## Blockers
 
-Phase 7.4 correction is implemented and requires independent acceptance review before freezing. Phase 7.5 is NOT STARTED / RECOVERY PENDING after the premature cutover was reverted forward-only; Phase 8 is NOT STARTED. Residual scanner/remediation gaps are documented in `docs/backend-migration/remediation-acceptance-corrections.md`.
+Phase 7.5 is implemented and NOT FROZEN pending independent acceptance. Phase 8 is NOT STARTED. Two known scanner/remediation residual gaps remain frozen by design in `docs/backend-migration/remediation-acceptance-corrections.md`.
 
 ## Risks
 
 | Risk | Mitigation |
 |------|------------|
-| OCS production freeze regression | `ACTUALLY_ROUTED = 36` strictly enforced by migration validator |
+| OCS production freeze regression | `ACTUALLY_ROUTED = 47` strictly enforced by migration validator |
 | Charging plane exposure | Frozen collections (sessions, reservations, usage, events) excluded from migration |
 | JWT_SECRET mismatch across processes | frontend/.env must share same JWT_SECRET as root/.env (verified 2026-09-23) |

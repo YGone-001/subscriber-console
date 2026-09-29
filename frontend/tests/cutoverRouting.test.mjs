@@ -4,8 +4,8 @@ import { resolveRouteOwner, CUTOVER_TABLE } from '../src/lib/cutover-routing.ts'
 
 describe('cutover-routing', () => {
   describe('CUTOVER_TABLE', () => {
-    it('contains exactly 36 cutover routes', () => {
-      assert.equal(CUTOVER_TABLE.length, 36);
+    it('contains exactly 47 cutover routes', () => {
+      assert.equal(CUTOVER_TABLE.length, 47);
     });
 
     it('Pilot A: POST /api/profiles/{name}/versions/{versionId}/restore is owned by Go', () => {
@@ -249,6 +249,30 @@ describe('cutover-routing', () => {
       assert.ok(perm, 'Auth Permissions must exist');
       assert.equal(perm.owner, 'go');
     });
+
+    const platformServicesRoutes = [
+      { method: 'GET', path: '/api/alerts' },
+      { method: 'POST', path: '/api/alerts/acknowledge' },
+      { method: 'POST', path: '/api/alerts/workflow' },
+      { method: 'GET', path: '/api/notifications/stream' },
+      { method: 'GET', path: '/api/system/health' },
+      { method: 'GET', path: '/api/system/mongo/health' },
+      { method: 'GET', path: '/api/system/audit/status' },
+      { method: 'POST', path: '/api/system/audit/scan' },
+      { method: 'POST', path: '/api/system/audit/heal' },
+      { method: 'POST', path: '/api/system/audit/batch-heal' },
+      { method: 'POST', path: '/api/analytics/init' },
+    ];
+
+    for (const route of platformServicesRoutes) {
+      it(`Platform Services: ${route.method} ${route.path} is owned by Go`, () => {
+        const entry = CUTOVER_TABLE.find(
+          (r) => r.path === route.path && r.method === route.method
+        );
+        assert.ok(entry, `${route.method} ${route.path} must exist`);
+        assert.equal(entry.owner, 'go');
+      });
+    }
   });
 
   describe('resolveRouteOwner - Go-owned routes', () => {

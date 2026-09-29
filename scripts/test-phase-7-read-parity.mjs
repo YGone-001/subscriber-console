@@ -1485,19 +1485,32 @@ async function main() {
   // 13. Routing invariants
   // ---------------------------------------------------------------------------
   console.log('\n--- 13. Routing invariants ---');
-  verify('CUTOVER_TABLE length is exactly 36', () => {
-    assert.equal(CUTOVER_TABLE.length, 36);
+  verify('CUTOVER_TABLE length is exactly 47', () => {
+    assert.equal(CUTOVER_TABLE.length, 47);
   });
-  verify('ACTUALLY_ROUTED count is exactly 36', () => {
+  verify('ACTUALLY_ROUTED count is exactly 47', () => {
     const routed = CUTOVER_TABLE.filter((r) => r.owner === 'go');
-    assert.equal(routed.length, 36);
+    assert.equal(routed.length, 47);
   });
-  verify('Zero Phase 7 endpoints exist in CUTOVER_TABLE', () => {
-    for (const entry of CUTOVER_TABLE) {
-      assert.ok(!entry.path.startsWith('/api/alerts'), `cutover table must not contain ${entry.path}`);
-      assert.ok(!entry.path.startsWith('/api/notifications'), `cutover table must not contain ${entry.path}`);
-      assert.ok(!entry.path.startsWith('/api/system'), `cutover table must not contain ${entry.path}`);
-      assert.ok(entry.path !== '/api/analytics/init', `cutover table must not contain ${entry.path}`);
+  verify('All 11 Phase 7 Platform Services endpoints are in CUTOVER_TABLE owned by Go', () => {
+    const phase7 = [
+      'GET /api/alerts',
+      'POST /api/alerts/acknowledge',
+      'POST /api/alerts/workflow',
+      'GET /api/notifications/stream',
+      'GET /api/system/health',
+      'GET /api/system/mongo/health',
+      'GET /api/system/audit/status',
+      'POST /api/system/audit/scan',
+      'POST /api/system/audit/heal',
+      'POST /api/system/audit/batch-heal',
+      'POST /api/analytics/init',
+    ];
+    for (const key of phase7) {
+      const [method, p] = key.split(' ');
+      const entry = CUTOVER_TABLE.find((r) => r.method === method && r.path === p);
+      assert.ok(entry, `cutover table must contain ${key}`);
+      assert.equal(entry.owner, 'go', `${key} must be owned by Go`);
     }
   });
 
