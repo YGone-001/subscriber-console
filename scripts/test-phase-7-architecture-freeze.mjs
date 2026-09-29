@@ -5,12 +5,9 @@
  *
  * Strengthened Source-Derived Contract Validator:
  * 1. Authoritative 11 candidate endpoints exist in Next.js / Node.
- * 2. Routing ownership invariants: 36 historical baseline routes preserved,
- *    11 Phase 7 candidates now Go-owned after the controlled cutover
- *    (CUTOVER_TABLE = 47, ACTUALLY_ROUTED = 47).
- * 3. All 11 Phase 7 candidate endpoints are in CUTOVER_TABLE with owner = go.
- * 4. Go backend registers all 11 Phase 7 endpoints (9 directly in main.go,
- *    2 constrained remediation endpoints via the remediation package).
+ * 2. Strict freeze invariants: CUTOVER_TABLE = 36, ACTUALLY_ROUTED = 36.
+ * 3. None of the 11 Phase 7 candidate endpoints are in CUTOVER_TABLE or routed to Go.
+ * 4. Go backend cmd/server/main.go contains zero Phase 7 endpoint registrations.
  * 5. POST /api/system/audit/scan is verified to be read-only (zero DB mutations).
  * 6. Source-derived rate limit extraction and cross-check across all 11 endpoints.
  * 7. Alert Domain source vs architecture doc contract verification:
@@ -79,44 +76,22 @@ const cutoverModule = jiti(path.join(ROOT, 'frontend/src/lib/cutover-routing.ts'
 const CUTOVER_TABLE = cutoverModule.CUTOVER_TABLE;
 
 assert.ok(Array.isArray(CUTOVER_TABLE), 'CUTOVER_TABLE must be an array');
-
-// Historical Phase 7.0 baseline (zero Phase 7 production ownership).
-const HISTORICAL_PHASE_7_0_BASELINE = 36;
-
-// Current Phase 7.5 production ownership.
-assert.equal(CUTOVER_TABLE.length, 47, `CUTOVER_TABLE must be exactly 47 (found ${CUTOVER_TABLE.length})`);
+assert.equal(CUTOVER_TABLE.length, 36, `CUTOVER_TABLE must be exactly 36 (found ${CUTOVER_TABLE.length})`);
 
 const actuallyRoutedGo = CUTOVER_TABLE.filter((r) => r.owner === 'go');
-assert.equal(actuallyRoutedGo.length, 47, `ACTUALLY_ROUTED must be exactly 47 (found ${actuallyRoutedGo.length})`);
+assert.equal(actuallyRoutedGo.length, 36, `ACTUALLY_ROUTED must be exactly 36 (found ${actuallyRoutedGo.length})`);
 
-// The only routing-table delta versus the frozen Phase 7.0 baseline is the
-// 11 Phase 7 Platform Services operations. No unrelated route may be added.
-const nonPhase7Count = CUTOVER_TABLE.filter(
-  (r) => !PHASE_7_CANDIDATES.some((c) => c.method === r.method && c.path === r.path)
-).length;
-assert.equal(
-  nonPhase7Count,
-  HISTORICAL_PHASE_7_0_BASELINE,
-  `non-Phase-7 routes must remain exactly ${HISTORICAL_PHASE_7_0_BASELINE} (found ${nonPhase7Count})`
-);
-
-// All 11 Phase 7 candidates must now be present and owned by Go.
+// Ensure none of the 11 Phase 7 candidate endpoints are in CUTOVER_TABLE
 for (const candidate of PHASE_7_CANDIDATES) {
   const match = CUTOVER_TABLE.find((r) => r.method === candidate.method && r.path === candidate.path);
   assert.ok(
-    match,
-    `Phase 7 candidate ${candidate.method} ${candidate.path} must be in CUTOVER_TABLE after the cutover`
-  );
-  assert.equal(
-    match.owner,
-    'go',
-    `Phase 7 candidate ${candidate.method} ${candidate.path} must be owned by Go after the cutover`
+    !match,
+    `Phase 7 candidate ${candidate.method} ${candidate.path} must NOT be in CUTOVER_TABLE during Phase 7.0 freeze`
   );
 }
-console.log('  [PASS] CUTOVER_TABLE length is exactly 47');
-console.log('  [PASS] ACTUALLY_ROUTED count is exactly 47');
-console.log(`  [PASS] Non-Phase-7 historical baseline preserved at ${HISTORICAL_PHASE_7_0_BASELINE}`);
-console.log('  [PASS] All 11 Phase 7 candidates are in CUTOVER_TABLE owned by Go');
+console.log('  [PASS] CUTOVER_TABLE length is exactly 36');
+console.log('  [PASS] ACTUALLY_ROUTED count is exactly 36');
+console.log('  [PASS] Zero Phase 7 candidates exist in CUTOVER_TABLE');
 
 // ---------------------------------------------------------------------------
 // 3. Go Backend Zero Leakage / No Premature Migration
@@ -147,32 +122,23 @@ for (const route of implementedPhase7GoRoutes) {
   console.log(`  [PASS] Go router contains Phase 7 shadow route ${route}`);
 }
 
-// Phase 7.3 adds the notification stream as a Go candidate.
+// Phase 7.3 adds only the notification stream as a Go shadow candidate.
 assert.ok(mainGoContent.includes('"GET /api/notifications/stream"'),
-  'Go backend must register the Phase 7.3 notification stream route');
-console.log('  [PASS] Go router contains Phase 7.3 notification stream route');
+  'Go backend must register the Phase 7.3 notification stream shadow route');
+console.log('  [PASS] Go router contains Phase 7.3 notification stream shadow route');
 
-// Phase 7.4 constrained remediation endpoints are registered through the
-// remediation package (not inlined in main.go) and must be wired.
-const remediationRegisteredGoRoutes = [
+// Phase 7.4 routes remain outside the Phase 7.3 scope.
+const forbiddenLaterPhaseGoRoutes = [
   'POST /api/system/audit/heal',
   'POST /api/system/audit/batch-heal',
 ];
 
-assert.ok(mainGoContent.includes('remediation.RegisterRoutes(mux'),
-  'Go backend must wire remediation.RegisterRoutes for the constrained remediation endpoints');
-console.log('  [PASS] Go router wires remediation.RegisterRoutes');
-
-const remediationHandlerPath = path.join(ROOT, 'backend/internal/remediation/handler.go');
-assert.ok(fs.existsSync(remediationHandlerPath), 'backend/internal/remediation/handler.go must exist');
-const remediationHandlerContent = fs.readFileSync(remediationHandlerPath, 'utf8');
-
-for (const route of remediationRegisteredGoRoutes) {
+for (const route of forbiddenLaterPhaseGoRoutes) {
   assert.ok(
-    remediationHandlerContent.includes(`"${route}"`),
-    `Remediation package must register route ${route}`
+    !mainGoContent.includes(`"${route}"`),
+    `Go backend must not register later-phase route ${route} before its approved phase`
   );
-  console.log(`  [PASS] Remediation package registers ${route}`);
+  console.log(`  [PASS] Go router does not contain later-phase route ${route}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -994,8 +960,8 @@ const agentsContent = fs.readFileSync(agentsPath, 'utf8');
 
 assert.ok(agentsContent.includes('Phase 7.0'), 'AGENTS.md must document Phase 7.0');
 assert.ok(!agentsContent.includes('Login/logout = Node owner.'), 'AGENTS.md must not contain stale "Login/logout = Node owner."');
-assert.ok(agentsContent.includes('CUTOVER_TABLE = 47'), 'AGENTS.md must document CUTOVER_TABLE = 47');
-assert.ok(agentsContent.includes('ACTUALLY_ROUTED = 47'), 'AGENTS.md must document ACTUALLY_ROUTED = 47');
+assert.ok(agentsContent.includes('CUTOVER_TABLE = 36'), 'AGENTS.md must document CUTOVER_TABLE = 36');
+assert.ok(agentsContent.includes('ACTUALLY_ROUTED = 36'), 'AGENTS.md must document ACTUALLY_ROUTED = 36');
 console.log('  [PASS] AGENTS.md reconciled');
 
 // 12b. docs/operations/todo.md

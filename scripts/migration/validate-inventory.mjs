@@ -41,8 +41,8 @@ assert.match(baseline, /\*\*46 non-GET/);
 
 const jiti = createJiti(import.meta.url);
 const { CUTOVER_TABLE } = jiti(resolve(root, 'frontend/src/lib/cutover-routing.ts'));
-assert.equal(CUTOVER_TABLE.length, 47, 'CUTOVER_TABLE must be exactly 47');
-assert.equal(CUTOVER_TABLE.filter((route) => route.owner === 'go').length, 47, 'ACTUALLY_ROUTED must be exactly 47');
+assert.equal(CUTOVER_TABLE.length, 36, 'CUTOVER_TABLE must be exactly 36');
+assert.equal(CUTOVER_TABLE.filter((route) => route.owner === 'go').length, 36, 'ACTUALLY_ROUTED must be exactly 36');
 
 // Verify no duplicate METHOD+PATH entries
 const seen = new Set();
@@ -50,29 +50,6 @@ for (const route of CUTOVER_TABLE) {
   const key = `${route.method} ${route.path}`;
   assert.equal(seen.has(key), false, `duplicate cutover route: ${key}`);
   seen.add(key);
-}
-
-// Platform Services production ownership delta (previously 36, now 47).
-// The 11 additions must be exactly the frozen Phase 7 Platform Services
-// operations, one METHOD+PATH each, and nothing else.
-const platformServicesRoutes = [
-  'GET /api/alerts',
-  'POST /api/alerts/acknowledge',
-  'POST /api/alerts/workflow',
-  'GET /api/notifications/stream',
-  'GET /api/system/health',
-  'GET /api/system/mongo/health',
-  'GET /api/system/audit/status',
-  'POST /api/system/audit/scan',
-  'POST /api/system/audit/heal',
-  'POST /api/system/audit/batch-heal',
-  'POST /api/analytics/init',
-];
-for (const key of platformServicesRoutes) {
-  const [method, path] = key.split(' ');
-  const entry = CUTOVER_TABLE.find((r) => r.method === method && r.path === path);
-  assert.ok(entry, `missing Platform Services cutover route: ${key}`);
-  assert.equal(entry.owner, 'go', `cutover route ${key} must be owner=go`);
 }
 
 // Verify User Management canonical routes are present and owned by go
@@ -107,4 +84,4 @@ for (const key of authRoutes) {
 
 console.log('Migration inventory validation passed.');
 console.log(`Routes=${routes.length} Operations=${total} GET=${counts.GET} POST=${counts.POST} PUT=${counts.PUT} PATCH=${counts.PATCH} DELETE=${counts.DELETE}`);
-console.log('CUTOVER_TABLE=47 ACTUALLY_ROUTED=47');
+console.log('CUTOVER_TABLE=36 ACTUALLY_ROUTED=36');

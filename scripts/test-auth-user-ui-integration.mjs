@@ -13,7 +13,7 @@
  * 8. Security State Metadata Contract & Leak Prevention
  * 9. User Management Error Mapping (LAST_ACTIVE_ADMIN, etc.)
  * 10. I18n Completeness (EN & ZH parity for new UI concepts)
- * 11. API Inventory & Routing Invariants (54 routes, 78 ops, CUTOVER_TABLE=47, ACTUALLY_ROUTED=47)
+ * 11. API Inventory & Routing Invariants (54 routes, 78 ops, CUTOVER_TABLE=36, ACTUALLY_ROUTED=36)
  */
 
 import assert from 'node:assert/strict';
@@ -835,12 +835,12 @@ for (const key of requiredKeys) {
 // ============================================================================
 // 12. API Inventory & Routing Freeze
 // ============================================================================
-console.log('\n[12] API Inventory & Routing Freeze (CUTOVER_TABLE=47, ACTUALLY_ROUTED=47)');
+console.log('\n[12] API Inventory & Routing Freeze (CUTOVER_TABLE=36, ACTUALLY_ROUTED=36)');
 
-verify('CUTOVER_TABLE is exactly 47 and ACTUALLY_ROUTED is exactly 47', () => {
-  assert.equal(CUTOVER_TABLE.length, 47, `CUTOVER_TABLE entries count must be 47, got ${CUTOVER_TABLE.length}`);
+verify('CUTOVER_TABLE is exactly 36 and ACTUALLY_ROUTED is exactly 36', () => {
+  assert.equal(CUTOVER_TABLE.length, 36, `CUTOVER_TABLE entries count must be 36, got ${CUTOVER_TABLE.length}`);
   const actuallyRouted = CUTOVER_TABLE.filter((r) => r.owner === 'go');
-  assert.equal(actuallyRouted.length, 47, `ACTUALLY_ROUTED count must be 47, got ${actuallyRouted.length}`);
+  assert.equal(actuallyRouted.length, 36, `ACTUALLY_ROUTED count must be 36, got ${actuallyRouted.length}`);
 });
 
 verify('Authentication and User Management routes are Go-owned in CUTOVER_TABLE', () => {

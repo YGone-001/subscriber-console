@@ -15,10 +15,6 @@ import nextEnv from '@next/env';
 
 const suffix = `${Date.now()}_${process.pid}`;
 const uri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/xcloud';
-// Pin the harness URI before loadEnvConfig so the code under test and the
-// harness always resolve the same server (loadEnvConfig never overrides an
-// already-defined variable, and .env may point at a different host).
-process.env.MONGODB_URI = uri;
 const xcloudNode = `xcloud_p73_node_${suffix}`;
 const appNode = `xcloud_ops_p73_node_${suffix}`;
 const xcloudGo = `xcloud_p73_go_${suffix}`;
@@ -1180,13 +1176,10 @@ async function main() {
   });
 
   await check('R01 routing-invariants-preserved', async () => {
-    assert.equal(CUTOVER_TABLE.length, 47, 'CUTOVER_TABLE must contain exactly 47 routes');
+    assert.equal(CUTOVER_TABLE.length, 36, 'CUTOVER_TABLE must contain exactly 36 routes');
     const actuallyRouted = CUTOVER_TABLE.filter((r) => r.owner === 'go');
-    assert.equal(actuallyRouted.length, 47, 'ACTUALLY_ROUTED must be exactly 47');
-    const stream = CUTOVER_TABLE.find((r) => r.path === '/api/notifications/stream');
-    assert.ok(stream, 'Notification stream must be in CUTOVER_TABLE after production cutover');
-    assert.equal(stream.method, 'GET', 'Notification stream must be a GET route');
-    assert.equal(stream.owner, 'go', 'Notification stream must be owned by Go after production cutover');
+    assert.equal(actuallyRouted.length, 36, 'ACTUALLY_ROUTED must be exactly 36');
+    assert.ok(!CUTOVER_TABLE.some((r) => r.path.includes('/notifications/stream')), 'Notification stream must NOT be in CUTOVER_TABLE');
   });
 }
 

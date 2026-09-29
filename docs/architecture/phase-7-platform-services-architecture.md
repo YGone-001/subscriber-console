@@ -57,20 +57,11 @@ Phase 7 strictly excludes and will not touch:
 
 ### 2.2 Operational Baseline
 
-Historical Phase 7.0 baseline (pre-cutover):
-
 - **CUTOVER_TABLE**: Exactly 36 routes.
 - **ACTUALLY_ROUTED**: Exactly 36 routes.
 - **API Inventory**: Exactly 54 route files, 78 HTTP operations (GET=32, POST=29, PUT=7, PATCH=3, DELETE=7; non-GET=46).
 - **Go HTTP Endpoints**: 58 operations implemented in Go.
-- **Phase 7 Candidate Status**: Exactly 11 endpoints, historically 100% owned by Next.js/Node runtime (`CUTOVER_TABLE` = unlisted / owner `node`). Zero Phase 7 endpoints historically registered in Go backend.
-
-Current Phase 7.5 status (controlled cutover implemented, not frozen):
-
-- **CUTOVER_TABLE**: Exactly 47 routes.
-- **ACTUALLY_ROUTED**: Exactly 47 routes.
-- **API Inventory**: Unchanged at 54 route files / 78 HTTP operations (ownership changes do not alter file or operation counts).
-- **Phase 7 Candidate Status**: All 11 Phase 7 endpoints are Go production-owned (`owner: go`), with no Node fallback. Node route files remain present for reference and deferred cleanup.
+- **Phase 7 Candidate Status**: Exactly 11 endpoints, currently 100% owned by Next.js/Node runtime (`CUTOVER_TABLE` = unlisted / owner `node`). Zero Phase 7 endpoints currently registered in Go backend.
 
 ---
 
@@ -988,7 +979,6 @@ Phase 7.4: System Integrity Self-Healing Mutations
 Phase 7.5: Controlled Platform Services Cutover & Freeze
   - Update CUTOVER_TABLE from 36 to 47
   - ACTUALLY_ROUTED = 47
-  - Status: IMPLEMENTED / NOT FROZEN (independent acceptance pending)
   - Final freeze documentation and production runbook
 ```
 

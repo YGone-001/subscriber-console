@@ -1,7 +1,7 @@
 # Controlled remediation acceptance corrections
 
-Status: Phase 7.4 COMPLETE / FROZEN (remediation parity closed at 106/106). The two scanner/remediation residual gaps below are explicitly accepted and frozen.
-Phase 7.3 is COMPLETE / FROZEN. Phase 7.5 is IMPLEMENTED / NOT FROZEN. Phase 8 is NOT STARTED.
+Status: Phase 7.4 CORRECTION IMPLEMENTED / NOT FROZEN. Frozen: NO. Independent review is required.
+Phase 7.3 is COMPLETE / FROZEN. Phase 7.5 is NOT STARTED / RECOVERY PENDING; Phase 8 is NOT STARTED.
 
 Correction baseline: `eb8558ef32935cfd79e74503b3fd3970ce315f14`.
 Run #142 covers that baseline only; it is not evidence for this correction.
@@ -30,21 +30,29 @@ missing-subscriber healing branch. Normalization retains generated-field presenc
 and BSON types, and masks only independently generated ObjectIds and clock values.
 Node production behavior, handler APIs, routing and schemas are unchanged.
 
-## Unassisted real re-scan evidence
+## Continuous persistent-state re-scan evidence
 
-Each case seeds only its initial state, performs a real pre-scan, asserts the
-specific anomaly, sends an authorized heal HTTP request to each engine, compares
-complete persisted business documents, and immediately performs a real post-scan.
-Fixture MongoDB command monitoring rejects any fixture write between heal and
-re-scan. No manual HSS, balance, tariff, profile or reservation repair is performed.
+All five targets are established in exactly one initial fixture batch. From
+PROTECTED SEQUENCE START to the final cumulative verification the harness performs
+zero MongoDB writes. Each step performs a real pre-scan on both engines, asserts
+the specific anomaly, sends an authorized heal HTTP request to each engine,
+compares complete persisted business documents, and immediately performs a real
+post-scan. Every step also re-verifies that all previously healed targets still
+hold their persisted outcome, so the suite proves one evolving state machine
+rather than five isolated cases. Mongo command monitoring asserts zero harness
+fixture writes between steps. No manual HSS, balance, tariff, profile or
+reservation repair is performed.
 
-| ID | Type | Pre-scan | Heal HTTP | State parity | Manual DB repair | Post-scan Node | Post-scan Go | Result |
-|---|---|---|---|---|---|---|---|---|
-| RS01 | missing_config | observed | 200 / 200 | PASS | NO | missing_config remains | missing_config remains | PASS |
-| RS02 | balance_mismatch | observed | 200 / 200 | PASS | NO | cleared | cleared | PASS |
-| RS03 | invalid_tariff | observed | 200 / 200 | PASS | NO | cleared | cleared | PASS |
-| RS04 | dangling_profile | observed | 200 / 200 | PASS | NO | cleared | cleared | PASS |
-| RS05 | orphan_reservation | observed | 200 / 200 | PASS | NO | orphan_reservation remains | orphan_reservation remains | PASS |
+Executable evidence: `rs_initial_fixture_batches=1`, `rs_interstep_fixture_writes=0`,
+`rs_sequence_continuous=true`, `rs_cumulative_state_verified=true`.
+
+| ID | Type | Pre-scan | Heal HTTP | State parity | Inherited state | Manual DB repair | Post-scan Node | Post-scan Go | Result |
+|---|---|---|---|---|---|---|---|---|---|
+| RS01 | missing_config | observed | 200 / 200 | PASS | n/a (first step) | NO | missing_config remains | missing_config remains | PASS |
+| RS02 | balance_mismatch | observed | 200 / 200 | PASS | RS01 persisted | NO | cleared | cleared | PASS |
+| RS03 | invalid_tariff | observed | 200 / 200 | PASS | RS01+RS02 persisted | NO | cleared | cleared | PASS |
+| RS04 | dangling_profile | observed | 200 / 200 | PASS | RS01-RS03 persisted | NO | cleared | cleared | PASS |
+| RS05 | orphan_reservation | observed | 200 / 200 | PASS | RS01-RS04 persisted | NO | orphan_reservation remains | orphan_reservation remains | PASS |
 
 ### Residual scanner/remediation contracts
 
@@ -89,14 +97,16 @@ BH-I07. Unknown types retain Node behavior without an enum whitelist.
 ## Invariants and accounting
 
 - Required IDs: 96; executed: 96; missing: 0; duplicate: 0.
-- Single: 52; batch: 44; re-scans: 5; distinct invariants: 5.
+- Single: 52; batch: 44; continuous RS steps: 5; distinct invariants: 5.
+- RS01-RS05 run as one continuous persistent-state sequence: initial fixture
+  batches: 1; inter-step harness fixture writes: 0; cumulative state verified.
 - Corrected local suite: TOTAL 106, PASS 106, FAIL 0, SKIP 0.
 - Protected collections use count plus stable content digest, including document
   identities, dates and nested fields. app_approvals remains empty and unchanged.
 - Static production call-site checks and a dynamic scan/idle probe preserve
   explicit authenticated remediation, with no automatic scan-to-heal path.
-- CUTOVER_TABLE=47; ACTUALLY_ROUTED=47; both remediation endpoints are Go production-owned after the controlled cutover.
-- Historical note at the correction baseline: CUTOVER_TABLE=36 and both remediation production owners were Node. The remaining remediation endpoint paths are now Go-owned with no fallback or dual write.
+- CUTOVER_TABLE=36; ACTUALLY_ROUTED=36; Phase 7 production cutover=0.
+- Both remediation production owners remain Node. No fallback or dual write.
 
 ## Independently executed mandatory inventory
 

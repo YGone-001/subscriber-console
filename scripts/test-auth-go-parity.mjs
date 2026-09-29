@@ -1022,8 +1022,8 @@ async function main() {
   // -------------------------------------------------------------
   console.log('\n[12] Authentication Production-Path Ownership Invariant');
 
-  verify('CUTOVER_TABLE contains exactly 47 routes', () => {
-    assert.equal(CUTOVER_TABLE.length, 47);
+  verify('CUTOVER_TABLE contains exactly 36 routes', () => {
+    assert.equal(CUTOVER_TABLE.length, 36);
   });
 
   verify('Exactly 4 authentication routes in CUTOVER_TABLE', () => {

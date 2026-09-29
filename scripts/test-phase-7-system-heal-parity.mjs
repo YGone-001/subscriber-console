@@ -6,7 +6,7 @@
  *   POST /api/system/audit/batch-heal
  *
  * Invariants enforced:
- *   - CUTOVER_TABLE = 47, ACTUALLY_ROUTED = 47 (Phase 7 owned by Go)
+ *   - CUTOVER_TABLE = 36, ACTUALLY_ROUTED = 36 (Phase 7 cutover = 0)
  *   - Node remains production owner
  *   - Operator-initiated controlled remediation only (no autonomous loop / cron)
  *   - Pure ASCII only
@@ -1101,40 +1101,115 @@ async function main() {
     }
   });
 
-  const rescans = [['missing_config', 'sub'], ['balance_mismatch', 'ocs'], ['invalid_tariff', 'tariff'], ['dangling_profile', 'sub'], ['orphan_reservation', 'reservation']];
-  rescans.forEach(([type, phase], i) => test(`RS0${i + 1}`, type, async () => {
-    const imsi = nextImsi();
-    const sub = type === 'missing_config' ? { imsi } : validSub(imsi);
-    if (type === 'dangling_profile') { sub.profile_name = 'deleted'; sub.profile = 'deleted'; sub.webui_meta = { profile_name: 'deleted' }; }
-    await insertBoth('subscribers', sub);
-    if (type === 'balance_mismatch' || type === 'invalid_tariff') await insertBoth('ocs_subscribers', { imsi, plan_id: type === 'invalid_tariff' ? 'deleted' : 'plan_default_10gb' });
-    if (type === 'balance_mismatch') await insertBoth('ocs_balances', { imsi, data_total: 1000, data_used: 100, data_reserved: 20, data_available: 1, voice_total: 100, voice_used: 10, voice_reserved: 0, voice_available: 90, sms_total: 100, sms_used: 0, sms_available: 100 });
-    if (type === 'orphan_reservation') await insertBoth('ocs_reservations', { imsi, reservation_id: imsi, session_id: 'absent-session', state: 'active' });
-    async function scan() {
-      const n = await callNode('/api/system/audit/scan', 'POST', adminToken, { cursor: '0', phase });
-      const g = await callGo('/api/system/audit/scan', 'POST', adminToken, { cursor: '0', phase });
-      assert.equal(n.status, 200); assert.equal(g.status, 200);
-      const target = (r) => r.body.anomalies.filter((a) => a.imsi === imsi).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
-      assert.deepStrictEqual(target(g), target(n), 'Post/pre-scan exact anomaly parity');
-      return target(n);
+  // --- RS01-RS05: one continuous persistent-state remediation sequence -----------
+  // All five remediation targets are established in exactly ONE initial fixture
+  // batch. From PROTECTED SEQUENCE START to the final cumulative verification the
+  // harness performs zero Mongo writes; the Mongo command monitor enforces this
+  // with executable assertions. Each step inherits the persisted outcomes of all
+  // previous steps, so the suite proves one evolving state machine rather than
+  // five isolated fixture -> scan -> heal -> re-scan units.
+  const rsTargets = [
+    { id: 'RS01', type: 'missing_config', phase: 'sub' },
+    { id: 'RS02', type: 'balance_mismatch', phase: 'ocs' },
+    { id: 'RS03', type: 'invalid_tariff', phase: 'tariff' },
+    { id: 'RS04', type: 'dangling_profile', phase: 'sub' },
+    { id: 'RS05', type: 'orphan_reservation', phase: 'reservation' },
+  ].map((step) => ({ ...step, imsi: nextImsi() }));
+  let rsFixtureBatches = 0;
+  let rsProtectedStart = null;
+  const rsCompleted = [];
+
+  function rsAssertHealed(type, imsi, state) {
+    const sub = state.subscribers.find((doc) => doc.imsi === imsi);
+    const balance = state.ocs_balances.find((doc) => doc.imsi === imsi);
+    const ocsSub = state.ocs_subscribers.find((doc) => doc.imsi === imsi);
+    const reservations = state.ocs_reservations.filter((doc) => doc.imsi === imsi);
+    if (type === 'missing_config') { assert.ok(sub, 'missing_config target subscriber must persist'); assert.ok(!sub.security); assert.equal(balance.version, 1); }
+    if (type === 'balance_mismatch') assert.equal(balance.data_total, balance.data_used + balance.data_reserved + balance.data_available);
+    if (type === 'invalid_tariff') assert.equal(ocsSub.plan_id, 'plan_default_10gb');
+    if (type === 'dangling_profile') assert.equal(sub.webui_meta.profile_name, 'default');
+    if (type === 'orphan_reservation') assert.equal(reservations[0].state, 'released');
+  }
+
+  async function rsCumulativeState() {
+    return stateParity(rsTargets.map((target) => target.imsi));
+  }
+
+  async function rsScan(imsi, phase) {
+    const n = await callNode('/api/system/audit/scan', 'POST', adminToken, { cursor: '0', phase });
+    const g = await callGo('/api/system/audit/scan', 'POST', adminToken, { cursor: '0', phase });
+    assert.equal(n.status, 200); assert.equal(g.status, 200);
+    const target = (r) => r.body.anomalies.filter((a) => a.imsi === imsi).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+    assert.deepStrictEqual(target(g), target(n), 'Post/pre-scan exact anomaly parity');
+    return target(n);
+  }
+
+  // One-time fixture establishment for the whole protected sequence.
+  async function rsEstablishFixtures() {
+    for (const target of rsTargets) {
+      const sub = target.type === 'missing_config' ? { imsi: target.imsi } : validSub(target.imsi);
+      if (target.type === 'dangling_profile') { sub.profile_name = 'deleted'; sub.profile = 'deleted'; sub.webui_meta = { profile_name: 'deleted' }; }
+      await insertBoth('subscribers', sub);
+      if (target.type === 'balance_mismatch' || target.type === 'invalid_tariff') await insertBoth('ocs_subscribers', { imsi: target.imsi, plan_id: target.type === 'invalid_tariff' ? 'deleted' : 'plan_default_10gb' });
+      if (target.type === 'balance_mismatch') await insertBoth('ocs_balances', { imsi: target.imsi, data_total: 1000, data_used: 100, data_reserved: 20, data_available: 1, voice_total: 100, voice_used: 10, voice_reserved: 0, voice_available: 90, sms_total: 100, sms_used: 0, sms_available: 100 });
+      if (target.type === 'orphan_reservation') await insertBoth('ocs_reservations', { imsi: target.imsi, reservation_id: target.imsi, session_id: 'absent-session', state: 'active' });
     }
-    const before = await scan();
-    assert.ok(before.some((a) => a.type === type), 'Explicit pre-scan must observe target');
-    await pair('SH', { imsi, type });
+    rsFixtureBatches += 1;
+  }
+
+  rsTargets.forEach((target, index) => test(target.id, `${target.type} continuous remediation step`, async () => {
+    if (index === 0) {
+      await rsEstablishFixtures();
+      assert.equal(rsFixtureBatches, 1, 'Exactly one initial RS fixture establishment batch');
+      // PROTECTED SEQUENCE START: no harness writes are permitted from here on.
+      rsProtectedStart = fixtureWrites.length;
+    }
+    assert.notEqual(rsProtectedStart, null, 'RS protected-sequence baseline must be captured');
+    assert.equal(fixtureWrites.length, rsProtectedStart, 'No harness fixture writes between RS steps');
+
+    // Inherited-state proof: every prior remediation outcome must still be persisted.
+    if (index > 0) {
+      const inherited = await rsCumulativeState();
+      for (const done of rsCompleted) rsAssertHealed(done.type, done.imsi, inherited);
+      console.log(`[heal-parity] ${target.id} inherited_state_verified=${rsCompleted.map((done) => done.id).join('+')}`);
+    }
+
+    // Real Node and Go pre-scan with exact parity and intended anomaly visibility.
+    const before = await rsScan(target.imsi, target.phase);
+    assert.ok(before.some((a) => a.type === target.type), 'Explicit pre-scan must observe target');
+
+    // Real Node and Go remediation.
+    await pair('SH', { imsi: target.imsi, type: target.type });
     const fixtureWriteCount = fixtureWrites.length;
-    const healed = await stateParity([imsi]);
-    if (type === 'missing_config') { assert.ok(!healed.subscribers[0].security); assert.equal(healed.ocs_balances[0].version, 1); }
-    if (type === 'balance_mismatch') { const b = healed.ocs_balances[0]; assert.equal(b.data_total, b.data_used + b.data_reserved + b.data_available); }
-    if (type === 'invalid_tariff') assert.equal(healed.ocs_subscribers[0].plan_id, 'plan_default_10gb');
-    if (type === 'dangling_profile') assert.equal(healed.subscribers[0].webui_meta.profile_name, 'default');
-    if (type === 'orphan_reservation') assert.equal(healed.ocs_reservations[0].state, 'released');
-    // Only read operations occur between heal completion and this real scan.
-    const after = await scan();
+
+    // Persisted state from both databases plus expected remediation mutation.
+    const healed = await stateParity([target.imsi]);
+    rsAssertHealed(target.type, target.imsi, healed);
+
+    // Real Node and Go post-scan parity. Only read operations occur in between.
+    const after = await rsScan(target.imsi, target.phase);
     assert.equal(fixtureWrites.length, fixtureWriteCount, 'No fixture database mutation between heal and re-scan');
-    assert.deepStrictEqual(await stateParity([imsi]), healed, 'Scanner must not repair persisted state');
-    const remains = after.some((a) => a.type === type);
-    assert.equal(remains, type === 'missing_config' || type === 'orphan_reservation');
-    console.log(`[heal-parity] RS0${i + 1} ${type} manual_db_repair_between_heal_and_rescan=false post_scan_outcome=${remains ? 'target_remains' : after.length ? 'other_anomaly' : 'cleared'} Node=${JSON.stringify(after)} Go=${JSON.stringify(after)}`);
+    assert.deepStrictEqual(await stateParity([target.imsi]), healed, 'Scanner must not repair persisted state');
+    const remains = after.some((a) => a.type === target.type);
+    assert.equal(remains, target.type === 'missing_config' || target.type === 'orphan_reservation');
+    rsCompleted.push(target);
+    console.log(`[heal-parity] ${target.id} ${target.type} manual_db_repair_between_heal_and_rescan=false post_scan_outcome=${remains ? 'target_remains' : after.length ? 'other_anomaly' : 'cleared'} Node=${JSON.stringify(after)} Go=${JSON.stringify(after)}`);
+
+    // Cumulative verification plus executable zero-harness-write assertion.
+    const cumulative = await rsCumulativeState();
+    for (const done of rsCompleted) rsAssertHealed(done.type, done.imsi, cumulative);
+    const interstepWrites = fixtureWrites.length - rsProtectedStart;
+    assert.equal(interstepWrites, 0, 'Protected RS sequence must perform zero harness fixture writes');
+
+    if (index === rsTargets.length - 1) {
+      assert.equal(rsCompleted.length, rsTargets.length, 'All five RS remediation outcomes must persist together');
+      assert.ok(rsTargets.every((step) => executedIds.includes(step.id)), 'RS01-RS05 must all execute in strict order');
+      console.log('[heal-parity] rs_sequence=RS01,RS02,RS03,RS04,RS05');
+      console.log('[heal-parity] rs_sequence_continuous=true');
+      console.log(`[heal-parity] rs_initial_fixture_batches=${rsFixtureBatches}`);
+      console.log(`[heal-parity] rs_interstep_fixture_writes=${interstepWrites}`);
+      console.log('[heal-parity] rs_cumulative_state_verified=true');
+    }
   }));
 
   test('INV01', 'protected content fingerprints and zero approval writes', async () => {
@@ -1175,13 +1250,11 @@ async function main() {
     await new Promise((r) => setTimeout(r, 1100));
     assert.deepStrictEqual(await stateParity([imsi]), before);
   });
-  test('INV05', 'routing freeze: 47 routes, Go-owned Phase 7 remediation endpoints', async () => {
-    assert.equal(CUTOVER_TABLE.length, 47);
-    assert.equal(CUTOVER_TABLE.filter((r) => r.owner === 'go').length, 47);
+  test('INV05', 'routing freeze: 36 routes, Node remediation owners, zero Phase 7 cutover', async () => {
+    assert.equal(CUTOVER_TABLE.length, 36);
+    assert.equal(CUTOVER_TABLE.filter((r) => r.owner === 'go').length, 36);
     for (const path of ['/api/alerts', '/api/alerts/acknowledge', '/api/alerts/workflow', '/api/notifications/stream', '/api/system/health', '/api/system/mongo/health', '/api/system/audit/status', '/api/system/audit/scan', ...Object.values(endpoints), '/api/analytics/init']) {
-      const entry = CUTOVER_TABLE.find((r) => r.path === path);
-      assert.ok(entry, `${path} must be in CUTOVER_TABLE after Phase 7 cutover`);
-      assert.equal(entry.owner, 'go', `${path} must be owned by Go`);
+      assert.ok(!CUTOVER_TABLE.some((r) => r.path === path));
     }
   });
 
@@ -1190,14 +1263,22 @@ async function main() {
   assert.deepStrictEqual(registered.duplicate, [], 'Duplicate registered IDs');
   assert.equal(REQUIRED_IDS.length, 96);
   console.log('[heal-parity] mandatory_ids_expected=96');
+  // Budgets are reset once before the protected sequence (before RS01) and never
+  // again inside it: a harness write between RS steps would invalidate the
+  // continuous-state evidence. The heal budget used inside the sequence is 5/20
+  // and the scan budget 10/30, both far below the fixed-window limits.
+  const rsInteriorIds = new Set(rsTargets.slice(1).map((target) => target.id));
   for (const c of cases) {
-    await clearBudgets();
+    if (!rsInteriorIds.has(c.id)) await clearBudgets();
     executedIds.push(c.id);
     await verifyAsync(`${c.id} ${c.description}`, c.run);
   }
   const completed = inventory(executedIds);
+  const executedMandatory = REQUIRED_IDS.filter((id) => executedIds.includes(id)).length;
+  console.log(`[heal-parity] mandatory_ids_executed=${executedMandatory}`);
   console.log(`[heal-parity] mandatory_ids_missing=${completed.missing.length}`);
   console.log(`[heal-parity] mandatory_ids_duplicate=${completed.duplicate.length}`);
+  assert.equal(executedMandatory, 96, 'All 96 mandatory callbacks must actually execute');
   assert.deepStrictEqual(completed, { missing: [], duplicate: [] });
   assert.ok(['RS01', 'RS02', 'RS03', 'RS04', 'RS05'].every((id) => executedIds.includes(id)));
 
