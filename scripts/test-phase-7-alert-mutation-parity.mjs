@@ -11,7 +11,7 @@
  * 5. Best-Effort Audit Log Evidence & Schema Failure Resilience
  * 6. Database Error Failure-Path Parity (HTTP 500 error messages)
  * 7. Zero Unrelated Business Domain Mutation
- * 8. Routing Invariants & Freeze Verification (CUTOVER_TABLE=36, ACTUALLY_ROUTED=36)
+ * 8. Routing Invariants & Freeze Verification (CUTOVER_TABLE=47, ACTUALLY_ROUTED=47)
  */
 
 import assert from 'node:assert/strict';
@@ -2151,56 +2151,58 @@ async function main() {
 
   console.log('\n--- Section 8: Routing Invariants & Freeze Verification ---');
 
-  verify('CUTOVER_TABLE length must be exactly 36', () => {
-    assert.equal(CUTOVER_TABLE.length, 36);
+  verify('CUTOVER_TABLE length must be exactly 47', () => {
+    assert.equal(CUTOVER_TABLE.length, 47);
   });
 
-  verify('ACTUALLY_ROUTED count must be exactly 36', () => {
+  verify('ACTUALLY_ROUTED count must be exactly 47', () => {
     const routed = CUTOVER_TABLE.filter((r) => r.owner === 'go');
-    assert.equal(routed.length, 36);
+    assert.equal(routed.length, 47);
   });
 
-  verify('Phase 7 endpoints must NOT be in CUTOVER_TABLE (Phase 7 cutover = 0)', () => {
+  verify('All 11 Phase 7 endpoints are in CUTOVER_TABLE owned by Go', () => {
     const p7Candidates = [
-      '/api/alerts',
-      '/api/alerts/acknowledge',
-      '/api/alerts/workflow',
-      '/api/notifications/stream',
-      '/api/system/health',
-      '/api/system/mongo/health',
-      '/api/system/audit/status',
-      '/api/system/audit/scan',
-      '/api/system/audit/heal',
-      '/api/system/audit/batch-heal',
-      '/api/analytics/init',
+      'GET /api/alerts',
+      'POST /api/alerts/acknowledge',
+      'POST /api/alerts/workflow',
+      'GET /api/notifications/stream',
+      'GET /api/system/health',
+      'GET /api/system/mongo/health',
+      'GET /api/system/audit/status',
+      'POST /api/system/audit/scan',
+      'POST /api/system/audit/heal',
+      'POST /api/system/audit/batch-heal',
+      'POST /api/analytics/init',
     ];
-    for (const ep of p7Candidates) {
-      const match = CUTOVER_TABLE.find((r) => r.path === ep);
-      assert.ok(!match, `Phase 7 candidate ${ep} must not be in CUTOVER_TABLE in Phase 7.2`);
+    for (const key of p7Candidates) {
+      const [method, p] = key.split(' ');
+      const match = CUTOVER_TABLE.find((r) => r.method === method && r.path === p);
+      assert.ok(match, `Phase 7 endpoint ${key} must be in CUTOVER_TABLE`);
+      assert.equal(match.owner, 'go', `Phase 7 endpoint ${key} must be owned by Go`);
     }
   });
 
-  verify('Alert mutations remain Node production-owned (not cut over)', () => {
+  verify('Alert mutations are Go production-owned after Phase 7 cutover', () => {
     for (const ep of ['/api/alerts/acknowledge', '/api/alerts/workflow']) {
       const match = CUTOVER_TABLE.find((r) => r.path === ep);
-      assert.ok(!match, `${ep} must not be routed to Go in Phase 7.2`);
-      assert.ok(!CUTOVER_TABLE.some((r) => r.path === ep && r.owner === 'go'),
-        `${ep} production owner must remain Node`);
+      assert.ok(match, `${ep} must be routed to Go after Phase 7 cutover`);
+      assert.equal(match.owner, 'go', `${ep} production owner must be Go`);
     }
-    // The production Node routes must still be the authoritative implementations.
+    // The dormant Node routes must remain present as contract reference / rollback.
     for (const route of ['acknowledge', 'workflow']) {
       const routeFile = path.resolve(
         import.meta.dirname, '..', 'frontend', 'src', 'app', 'api', 'alerts', route, 'route.ts'
       );
-      assert.ok(existsSync(routeFile), `Node production route for /api/alerts/${route} must exist`);
+      assert.ok(existsSync(routeFile), `Node reference route for /api/alerts/${route} must exist`);
     }
   });
 
   verify('Phase 7.3 shadow route preserves routing freeze and excludes later phases', () => {
-    // No Phase 7 endpoint is production cut over.
+    // After the controlled production cutover, these Phase 7 endpoints are Go-owned.
     for (const ep of ['/api/notifications/stream', '/api/system/audit/heal', '/api/system/audit/batch-heal']) {
       const match = CUTOVER_TABLE.find((r) => r.path === ep);
-      assert.ok(!match, `${ep} must not be cut over in Phase 7.2`);
+      assert.ok(match, `${ep} must be cut over to Go after Phase 7 cutover`);
+      assert.equal(match.owner, 'go', `${ep} must be owned by Go`);
     }
 
     // Phase 7.3 permits only the notification stream shadow implementation.

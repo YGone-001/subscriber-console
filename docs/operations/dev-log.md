@@ -215,4 +215,15 @@
 - Removed fixture-side HSS repairs after heal; MongoDB command monitoring asserts zero fixture writes between heal and re-scan. Missing HSS fields and released reservations without sessions remain anomalous on both engines.
 - Added complete persisted-document parity, individual malformed-item response/state evidence, real MongoDB rejection evidence for repository/audit/limiter failures, and independent rate budgets.
 - The expanded HTTP matrix reproduced a Go default PCC persistence defect: GBR/MBR lacked directional fields and default pre-emption flags differed from Node. Corrected only those Go fields and added a focused regression test; Node production behavior is unchanged.
-- Status: Phase 7.3 COMPLETE / FROZEN; Phase 7.4 PARTIAL / IN PROGRESS, not frozen pending independent review; Phase 7.5 and Phase 8 NOT STARTED. Route ownership remains Node, CUTOVER_TABLE=36 and ACTUALLY_ROUTED=36.
+- Status: Phase 7.3 COMPLETE / FROZEN; Phase 7.4 COMPLETE / FROZEN (remediation parity closed at 106/106; the two scanner/remediation residual gaps are explicitly accepted and frozen); Phase 7.5 IMPLEMENTED / NOT FROZEN pending independent acceptance; Phase 8 NOT STARTED.
+
+## Phase 7.5 — Controlled Platform Services Production Cutover
+
+- Assigned production ownership of exactly 11 Platform Services operations to the Go backend by appending them to `frontend/src/lib/cutover-routing.ts`: `GET /api/alerts`, `POST /api/alerts/acknowledge`, `POST /api/alerts/workflow`, `GET /api/notifications/stream`, `GET /api/system/health`, `GET /api/system/mongo/health`, `GET /api/system/audit/status`, `POST /api/system/audit/scan`, `POST /api/system/audit/heal`, `POST /api/system/audit/batch-heal`, and `POST /api/analytics/init`.
+- Routing table delta is exactly +11: `CUTOVER_TABLE = 36 -> 47`, `ACTUALLY_ROUTED = 36 -> 47`. The 36 historical cutover routes are unchanged and preserved as a regression baseline.
+- Preserved the single-writer invariant and fail-closed semantics: `owner: 'go'` with an unreachable Go backend returns HTTP 502 `GO_BACKEND_UNREACHABLE` with zero Node fallback (no dual write).
+- Node route files for the 11 endpoints remain in place (deferred cleanup in Phase 8); production flow short-circuits to Go in `frontend/src/proxy.ts` so the Node handler is not executed.
+- Added `scripts/test-phase-7-platform-cutover.mjs`, a production-boundary acceptance suite (Next proxy -> capture proxy -> real Go) with independently counted route ownership (CO-R01..R11), routing-table invariants (CO-T01..T07), no-fallback (CO-F01..F03), mutation exactly-once, SSE incremental streaming, and Node non-execution evidence.
+- Updated `scripts/migration/validate-inventory.mjs` (47/47 plus exact per-route delta assertion) and `scripts/test-phase-7-architecture-freeze.mjs` to distinguish the historical Phase 7.0 baseline from current Phase 7 ownership.
+- Reconciled routing-invariant counts (36 -> 47) across the regression suites and current-state documentation. Node and Go quality gates plus all Phase 7 regression suites remain green.
+- Status: IMPLEMENTED / NOT FROZEN. Not self-declared frozen; independent acceptance is required before Phase 8.

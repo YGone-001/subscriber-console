@@ -82,6 +82,24 @@ export const CUTOVER_TABLE: readonly CutoverRoute[] = [
   { method: 'POST', path: '/api/auth/logout', owner: 'go' },
   { method: 'GET', path: '/api/auth/me', owner: 'go' },
   { method: 'GET', path: '/api/auth/permissions', owner: 'go' },
+
+  // -- Phase 7.5: Platform Services production ownership ----------
+  // Alert domain
+  { method: 'GET', path: '/api/alerts', owner: 'go' },
+  { method: 'POST', path: '/api/alerts/acknowledge', owner: 'go' },
+  { method: 'POST', path: '/api/alerts/workflow', owner: 'go' },
+  // Notification streaming
+  { method: 'GET', path: '/api/notifications/stream', owner: 'go' },
+  // Platform / system health
+  { method: 'GET', path: '/api/system/health', owner: 'go' },
+  { method: 'GET', path: '/api/system/mongo/health', owner: 'go' },
+  // System integrity
+  { method: 'GET', path: '/api/system/audit/status', owner: 'go' },
+  { method: 'POST', path: '/api/system/audit/scan', owner: 'go' },
+  { method: 'POST', path: '/api/system/audit/heal', owner: 'go' },
+  { method: 'POST', path: '/api/system/audit/batch-heal', owner: 'go' },
+  // Analytics
+  { method: 'POST', path: '/api/analytics/init', owner: 'go' },
 ] as const;
 
 /**

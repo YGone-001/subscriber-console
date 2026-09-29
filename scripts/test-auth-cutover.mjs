@@ -5,8 +5,8 @@
  * Verifies production ownership cutover of Authentication APIs from Node to Go backend (:18888):
  *
  * 1. Cutover Table Routing & Inventory Checks:
- *    - CUTOVER_TABLE contains exactly 36 routes
- *    - ACTUALLY_ROUTED = 36 (all routes owned by Go)
+ *    - CUTOVER_TABLE contains exactly 47 routes
+ *    - ACTUALLY_ROUTED = 47 (all routes owned by Go)
  *    - No duplicate METHOD+PATH entries in CUTOVER_TABLE
  *    - All 4 authentication routes present with owner: 'go':
  *        POST /api/auth/login
@@ -155,13 +155,13 @@ async function main() {
   // =============================================================
   console.log('[1] Cutover Table Routing & Inventory Checks');
 
-  verify('CUTOVER_TABLE contains exactly 36 routes', () => {
-    assert.equal(CUTOVER_TABLE.length, 36, `Expected 36 routes, found ${CUTOVER_TABLE.length}`);
+  verify('CUTOVER_TABLE contains exactly 47 routes', () => {
+    assert.equal(CUTOVER_TABLE.length, 47, `Expected 47 routes, found ${CUTOVER_TABLE.length}`);
   });
 
-  verify('ACTUALLY_ROUTED = 36 (all routes owned by Go)', () => {
+  verify('ACTUALLY_ROUTED = 47 (all routes owned by Go)', () => {
     const goRoutes = CUTOVER_TABLE.filter((r) => r.owner === 'go');
-    assert.equal(goRoutes.length, 36, `Expected 36 Go-owned routes, found ${goRoutes.length}`);
+    assert.equal(goRoutes.length, 47, `Expected 47 Go-owned routes, found ${goRoutes.length}`);
   });
 
   verify('No duplicate METHOD+PATH entries in CUTOVER_TABLE', () => {
@@ -672,7 +672,7 @@ async function main() {
   console.log(`\n==================================================`);
   console.log(`Phase 6.3-B Authentication Controlled Cutover Suite Passed`);
   console.log(`Passed: ${passed} / ${totalChecks} checks`);
-  console.log(`CUTOVER_TABLE=36 ACTUALLY_ROUTED=36 Production Owner=Go`);
+  console.log(`CUTOVER_TABLE=47 ACTUALLY_ROUTED=47 Production Owner=Go`);
   console.log(`==================================================\n`);
 }
 

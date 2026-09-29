@@ -1,7 +1,7 @@
 # Controlled remediation acceptance corrections
 
-Status: Phase 7.4 PARTIAL / IN PROGRESS. Frozen: NO. Independent review is required.
-Phase 7.3 is COMPLETE / FROZEN. Phase 7.5 and Phase 8 are NOT STARTED.
+Status: Phase 7.4 COMPLETE / FROZEN (remediation parity closed at 106/106). The two scanner/remediation residual gaps below are explicitly accepted and frozen.
+Phase 7.3 is COMPLETE / FROZEN. Phase 7.5 is IMPLEMENTED / NOT FROZEN. Phase 8 is NOT STARTED.
 
 Correction baseline: `eb8558ef32935cfd79e74503b3fd3970ce315f14`.
 Run #142 covers that baseline only; it is not evidence for this correction.
@@ -95,8 +95,8 @@ BH-I07. Unknown types retain Node behavior without an enum whitelist.
   identities, dates and nested fields. app_approvals remains empty and unchanged.
 - Static production call-site checks and a dynamic scan/idle probe preserve
   explicit authenticated remediation, with no automatic scan-to-heal path.
-- CUTOVER_TABLE=36; ACTUALLY_ROUTED=36; Phase 7 production cutover=0.
-- Both remediation production owners remain Node. No fallback or dual write.
+- CUTOVER_TABLE=47; ACTUALLY_ROUTED=47; both remediation endpoints are Go production-owned after the controlled cutover.
+- Historical note at the correction baseline: CUTOVER_TABLE=36 and both remediation production owners were Node. The remaining remediation endpoint paths are now Go-owned with no fallback or dual write.
 
 ## Independently executed mandatory inventory
 
