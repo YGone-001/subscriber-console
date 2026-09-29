@@ -60,6 +60,9 @@ jobs:
       - name: Migration validator
         run: node ../scripts/migration/validate-inventory.mjs
 
+      - name: Phase 8 backend removal readiness
+        run: node ../scripts/test-phase-8-backend-removal-readiness.mjs
+
   go:
     name: Go backend quality gates
     runs-on: ubuntu-latest
