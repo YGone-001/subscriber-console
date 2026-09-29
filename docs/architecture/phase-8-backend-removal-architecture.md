@@ -26,9 +26,10 @@ Nginx
 Next.js :13333                Go :18888
 - UI (App Router)             - Migrated API (production owner for 47 ops)
 - Node API handlers            - Auth verification (HS256, independent)
-  (residual production owner    - Read APIs + governed writes
-   for 33 ops + 2 legacy
-   aliases + 6 retired files)
+  (runtime production owner     - Read APIs + governed writes
+   for 41 ops = 33 canonical
+   + 2 legacy aliases
+   + 6 retired surfaces)
   |                             |
   +--------------+--------------+
                  v
@@ -45,15 +46,37 @@ telemetry and **no Node fallback** (Go unreachable → HTTP 502
 `GO_BACKEND_UNREACHABLE`). Otherwise the request continues into the Next.js
 Node route handler (`NextResponse.next()`), which is the Node production owner.
 
-Current measured state (derived from source by the Phase 8.0 validator):
+Current measured state (derived from source by the Phase 8.0 validator).
+
+Two ownership dimensions are measured and validated **independently**:
+
+```text
+lifecycle_class  = contract/migration state (GO_PRODUCTION_OWNED / NODE_PRODUCTION_OWNED /
+                   LEGACY_ALIAS / RETIRED_SURFACE / TEST_ONLY / UNRESOLVED)
+runtime_owner    = actual request owner, derived by invoking the production routing
+                   function resolveRouteOwner (frontend/src/lib/cutover-routing.ts),
+                   which frontend/src/proxy.ts executes per request.
+```
 
 ```text
 api route files          = 54
 api operations           = 78
 CUTOVER_TABLE            = 47  (37 present in the 78 + 10 Go-native)
 ACTUALLY_ROUTED          = 47
+
+inventory_runtime_go          = 37
+inventory_runtime_node        = 41
+inventory_runtime_unreachable = 0
+runtime_owner_unknown         = 0
+                                37 + 41 + 0 + 0 = 78
+
 go_registered_operations = 73  (production source: cmd/server + internal/remediation)
+go_registered_classified = 73  (61 inventory + 10 Go-native cutover + 2 curated unrouted reads)
+go_registered_unclassified = 0
+go_registration_negative_sentinel = true
 go_native_cutover        = 10  (Go routes with no Node route file)
+
+canonical_node_migration_remainder = 33  (lifecycle bucket; NOT the runtime Node count)
 ```
 
 ---
@@ -63,7 +86,7 @@ go_native_cutover        = 10  (Go routes with no Node route file)
 The "Next.js backend" that Phase 8 ultimately removes is exactly:
 
 ```text
-frontend/src/app/api/**            (54 route files, 78 operations; production owner of 33 + aliases/retired)
+frontend/src/app/api/**            (54 route files, 78 operations; runtime owner of 41 = 33 canonical + 2 legacy aliases + 6 retired surfaces)
 frontend/src/server/**             (repositories, governance, policy, lock, fixtures-support, __tests__)
 frontend/src/proxy.ts              (cutover routing + Go forwarding + public-route gate)  -- retained until cutover boundary is finalized
 frontend/src/lib/mongo*.ts         (Mongo client/driver access)
@@ -102,17 +125,33 @@ surface (Section 9), which are reported, not hidden.
 
 ---
 
-## 4. Residual Production API Inventory (NODE_PRODUCTION_REMAINDER)
+## 4. Canonical Node Migration Remainder (33) vs Runtime Node Ownership (41)
 
-Residual Node production operations = operations whose real production owner is
-Node because their `METHOD + PATH` is absent from `CUTOVER_TABLE`. There are
-**33** such operations. Because this list is non-empty:
+`NODE_PRODUCTION_OWNED = 33` is the canonical **lifecycle/migration bucket**:
+canonical contract operations that still require migration to Go because their
+`METHOD + PATH` is absent from `CUTOVER_TABLE`. There are **33** such operations.
+Because this list is non-empty:
 
 ```text
 Next.js backend removal readiness = BLOCKED
 ```
 
-`backend_removal_ready = false` is the truthful, evidence-derived result for Phase 8.0.
+`backend_removal_ready = false` is the truthful, evidence-derived result for Phase 8.0,
+with exactly 4 evidence-derived blockers:
+
+```text
+CANONICAL_NODE_MIGRATION_REMAINDER=33
+RETIRED_SURFACES_PENDING_DELETION=6
+LEGACY_ALIASES_PENDING_CLOSURE=2
+STALE_CALLERS_TO_RETIRED_SURFACES=2
+```
+
+The 33 is **not** the complete count of operations whose current *runtime* owner is
+Node. The 2 legacy read aliases and the 6 retired-but-still-reachable surfaces are
+also Node-routed at runtime (Section 9), because they are absent from
+`CUTOVER_TABLE` and are backed by executable Next.js route files. Runtime totals
+(totals in Section 1) are therefore `37 go + 41 node = 78`; the validator derives
+them by invoking `resolveRouteOwner`, never by re-labeling lifecycle buckets.
 
 ### 4a. Residual Node operations with an existing Go shadow implementation (candidate for cutover)
 
@@ -160,14 +199,14 @@ These are already implemented in Go but not production-routed. They are
 | PATCH | /api/tariff-plans/{planId}/rules/{ruleId} | ABSENT |
 | DELETE | /api/tariff-plans/{planId}/rules/{ruleId} | ABSENT |
 
-4a (22) + 4b (11) = 33 residual Node production operations.
+4a (22) + 4b (11) = 33 operations in the canonical Node migration remainder.
 
 For a per-operation record (reason, Go status, parity, cutover readiness,
 retire-vs-migrate decision, required phase) see the residual inventory document.
 
 ---
 
-## 5. Go Registration Coverage
+## 5. Go Registration Classification (Non-Tautological)
 
 Production Go registrations are derived from the production binary source only:
 
@@ -176,14 +215,41 @@ backend/cmd/server/main.go              (mux.Handle("METHOD /path", ...))
 backend/internal/remediation/handler.go (RegisterRoutes → POST /api/system/audit/heal, /batch-heal)
 ```
 
-Measured:
+Every registration must **independently** map to exactly one accepted category
+(P8-I11). Merely existing inside the Go source list is not evidence:
 
 ```text
-go_registered_operations (API) = 73
-  of which in CUTOVER_TABLE    = 47   (all 47 production-owned routes are registered)
-  additional (read shadow)     = 26
-cutover routes NOT in the 78   = 10   (Go-native; no Node route file)
+A. exact current 78-operation inventory entry           = 61
+     - production-routed via CUTOVER_TABLE (owner=go)   = 37
+     - Go shadow implementation, not routed             = 22
+     - legacy read aliases (Go-registered; runtime=node)= 2
+B. approved Go-native CUTOVER_TABLE operation           = 10  (no Node route file)
+C. curated Go-native unrouted read registration         = 2   (explicit allowlist)
+
+go_registered_operations  = 73
+go_registered_classified  = 73
+go_registered_unclassified = 0
 ```
+
+Anything not matching A / B / C is `UNCLASSIFIED_GO_REGISTRATION` and fails
+Phase 8.0 acceptance. The gate is falsifiable: a synthetic sentinel registration
+(`GET /api/__phase8_unclassified_sentinel__`, never registered in production) is
+asserted to classify as `UNCLASSIFIED_GO_REGISTRATION`
+(`go_registration_negative_sentinel=true`), proving the classification function
+can fail.
+
+### 5a. Curated unrouted read residue (category C)
+
+Explicit, exact-match allowlist of Go-native READ registrations that are currently
+**not production-routed** — absent from the 78-operation inventory (no current
+Next.js route backs them) and absent from `CUTOVER_TABLE` (so the runtime request
+path does not reach Go for them). Membership is exact-match only and asserted to
+be `GET`.
+
+| METHOD | PATH | Evidence / reason |
+| --- | --- | --- |
+| GET | /api/tariff-plans/{planId}/operations | Node route file was deleted with the retired governance surfaces (Phase 5.7-C); the Go read registration remains; the rating UI caller `useRatingManagement.tsx:25` still references it and the request does not reach Go at runtime — tracked Phase 8 cleanup residue |
+| GET | /api/ocs/balances/{imsi} | Go-first read added with OCS balance governance; no Node counterpart ever existed; no frontend caller |
 
 All 47 cutover routes are registered by the production Go source. Independent
 executable registration probes over the real production binary (invalid auth →
@@ -192,8 +258,9 @@ non-404 / non-405) are provided by the Phase 7.5 cutover suite
 and by the Phase 2–6 cutover suites. Phase 8.0 adds a static source-level
 cross-check across the full 78-operation inventory plus all 47 cutover routes.
 
-Remaining coverage gap for full removal = the 33 residual Node operations
-(Section 4).
+Remaining coverage gap for full removal = the 33 canonical Node migration
+remainder (Section 4) plus the 2 legacy aliases and 6 retired surfaces
+(Section 9).
 
 ---
 
@@ -268,34 +335,48 @@ are deleted (Phase 8.4).
 
 ## 9. Compatibility / Retirement Strategy
 
-Every operation has exactly one classification (see residual inventory doc):
+Every operation has exactly one **lifecycle** classification (contract/migration
+state; see residual inventory doc):
 
 ```text
-GO_PRODUCTION_OWNED = 37   production owner is Go (CUTOVER_TABLE)
-NODE_PRODUCTION_OWNED = 33 production owner is Node (residual; removal blocker)
+GO_PRODUCTION_OWNED = 37   contract migrated; production owner is Go (CUTOVER_TABLE)
+NODE_PRODUCTION_OWNED = 33 canonical Node migration remainder (removal blocker)
 LEGACY_ALIAS = 2           read-only compatibility aliases: GET /api/auth/users, GET /api/auth/users/{username}
 RETIRED_SURFACE = 6        present as Node route files but not part of the canonical contract
 TEST_ONLY = 0
 UNRESOLVED = 0
 ```
 
+Lifecycle class does **not** by itself express runtime request ownership.
+`runtime_owner` is derived independently by invoking `resolveRouteOwner` (the
+production routing function executed by proxy.ts). All eight compatibility
+surfaces below are absent from `CUTOVER_TABLE` and backed by executable Next.js
+route files, so each request resolves to the Next.js handler and their runtime
+owner is `node` — asserted executably by P8-I20 (the routing function must also
+discriminate cutover operations to Go, otherwise "unmatched defaults to Node"
+would be vacuous). `RETIRED_SURFACE` does not imply `unreachable`;
+`LEGACY_ALIAS` does not imply Go.
+
 Retired surfaces still present as Node files (retire before Node removal):
 
-| METHOD | PATH | Rationale |
-| --- | --- | --- |
-| POST | /api/auth/users | `/api/auth/users` is a read-only alias; mutations are not canonical |
-| PUT | /api/auth/users/{username} | same |
-| PATCH | /api/auth/users/{username} | same |
-| DELETE | /api/auth/users/{username} | same |
-| PUT | /api/users/{username} | canonical update is `PATCH /api/users/{username}` |
-| DELETE | /api/users/{username} | delete policy is soft-delete via `POST /api/users/{username}/disable` |
+| METHOD | PATH | Lifecycle | Runtime owner | Removal action | Rationale |
+| --- | --- | --- | --- | --- | --- |
+| POST | /api/auth/users | RETIRED_SURFACE | node | RETIRE_BEFORE_NODE_REMOVAL | `/api/auth/users` is a read-only alias; mutations are not canonical |
+| PUT | /api/auth/users/{username} | RETIRED_SURFACE | node | RETIRE_BEFORE_NODE_REMOVAL | same |
+| PATCH | /api/auth/users/{username} | RETIRED_SURFACE | node | RETIRE_BEFORE_NODE_REMOVAL | same |
+| DELETE | /api/auth/users/{username} | RETIRED_SURFACE | node | RETIRE_BEFORE_NODE_REMOVAL | same |
+| PUT | /api/users/{username} | RETIRED_SURFACE | node | RETIRE_BEFORE_NODE_REMOVAL | canonical update is `PATCH /api/users/{username}` |
+| DELETE | /api/users/{username} | RETIRED_SURFACE | node | RETIRE_BEFORE_NODE_REMOVAL | delete policy is soft-delete via `POST /api/users/{username}/disable` |
 
 Evidence: no frontend caller exists for any of the six (repository-wide caller
 scan) and none is registered by Go (except the retained GET read aliases).
-Decision for all six: `RETIRE_BEFORE_NODE_REMOVAL`.
+Behavior is intentionally unchanged in Phase 8.0 — retirement belongs to a later
+controlled phase (`RETIRE_BEFORE_NODE_REMOVAL`).
 
-Legacy read aliases: `KEEP_COMPAT` (documented in `AGENTS.md` §7) until the
-compatibility window closes.
+Legacy read aliases: lifecycle `LEGACY_ALIAS`, decision `KEEP_COMPAT` (documented
+in `AGENTS.md` §7) until the compatibility window closes; current runtime owner
+`node` for both (Go-registered reads exist, but the routes are not in
+`CUTOVER_TABLE`, so production requests are served by the Next.js handlers).
 
 Stale frontend references to already-removed surfaces:
 
@@ -306,7 +387,16 @@ frontend/src/components/ocs/balances/OcsBalanceDetail.tsx:38 -> /api/audit?q=...
 
 `/api/audit/*` was retired in Phase 5.7-C. These calls are dead against the
 current backend (404). Decision: `RETIRE_BEFORE_NODE_REMOVAL` (remove the stale
-UI calls before Node backend removal). Non-blocking for Phase 8.0 acceptance.
+UI calls before Node backend removal). They form the
+`STALE_CALLERS_TO_RETIRED_SURFACES=2` blocker; non-blocking for Phase 8.0
+acceptance.
+
+Additional tracked residue (not a blocker, maps to a Go registration):
+`frontend/src/components/rating/hooks/useRatingManagement.tsx:25` calls
+`GET /api/tariff-plans/{planId}/operations`, which matches a Go registration
+(category C, Section 5a) but is not in `CUTOVER_TABLE`; the Next.js route file no
+longer exists, so the request cannot reach a handler. Cleanup tracked for
+Phase 8.2.
 
 ---
 

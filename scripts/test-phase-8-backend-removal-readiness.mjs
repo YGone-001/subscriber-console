@@ -10,14 +10,22 @@
  *   - scans Node backend dependencies (mongodb / jose / bcryptjs);
  *   - inspects proxy.ts responsibilities.
  *
- * It validates P8-I01 .. P8-I18 and emits the machine-readable block required by
- * the Phase 8.0 specification. It NEVER hard-codes backend_removal_ready=true:
- * readiness is DERIVED from evidence. As long as residual Node production
- * operations exist, it truthfully reports backend_removal_ready=false while the
- * Phase 8.0 architecture/inventory phase itself may PASS.
+ * It validates P8-I01 .. P8-I20 plus the P8-I11 negative sentinel, and emits the
+ * machine-readable block required by the Phase 8.0 specification. It NEVER
+ * hard-codes backend_removal_ready=true: readiness is DERIVED from evidence. As
+ * long as residual Node production operations exist, it truthfully reports
+ * backend_removal_ready=false while the Phase 8.0 architecture/inventory phase
+ * itself may PASS.
  *
- * Acceptance for Phase 8.0 fails only when:
+ * Two ownership dimensions are validated INDEPENDENTLY:
+ *   - lifecycle_class: contract/migration state of an operation;
+ *   - runtime_owner:   actual request owner, derived by invoking the production
+ *                      routing function (locate in frontend/src/lib/cutover-routing.ts:
+ *                      resolveRouteOwner) which frontend/src/proxy.ts executes.
+ *
+ * Acceptance for Phase 8.0 fails when any invariant fails, including:
  *   unresolved > 0 | unknown_production_owner > 0 | frontend_api_callers_unmapped > 0
+ *   | runtime_owner_unknown > 0 | go_registered_unclassified > 0
  *
  * Usage: node scripts/test-phase-8-backend-removal-readiness.mjs
  */
@@ -138,7 +146,12 @@ function loadGeneratedInventory() {
 async function loadCutoverTable() {
   const jiti = createJiti(import.meta.url);
   const mod = await jiti(cutoverPath);
-  return mod.CUTOVER_TABLE.map((r) => ({ method: r.method, path: r.path, owner: r.owner }));
+  return {
+    table: mod.CUTOVER_TABLE.map((r) => ({ method: r.method, path: r.path, owner: r.owner })),
+    // The ACTUAL production routing function used by proxy.ts. Runtime ownership is
+    // derived by invoking it, never inferred from lifecycle labels.
+    resolveRouteOwner: mod.resolveRouteOwner,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -334,12 +347,79 @@ const CLASS = {
 };
 
 // ---------------------------------------------------------------------------
+// Runtime ownership (independent of lifecycle classification)
+// ---------------------------------------------------------------------------
+// Derived by invoking the ACTUAL production routing function (resolveRouteOwner)
+// with a concrete instance path. proxy.ts defaults every unmatched METHOD+PATH to
+// the Next.js Node route handler (`NextResponse.next()`), so a route is only
+// `unreachable` when no Next.js route file backs it.
+const RUNTIME_OWNER = { GO: 'go', NODE: 'node', UNREACHABLE: 'unreachable', UNKNOWN: 'unknown' };
+
+function concretePath(canonicalPath) {
+  return canonicalPath.replace(/\{[^}]+\}/g, '__p8__');
+}
+
+function deriveRuntimeOwner(op, resolveRouteOwner) {
+  let routed;
+  try {
+    routed = resolveRouteOwner(op.method, concretePath(op.canonicalPath));
+  } catch {
+    return RUNTIME_OWNER.UNKNOWN;
+  }
+  if (routed === 'go') return RUNTIME_OWNER.GO;
+  if (routed !== 'node') return RUNTIME_OWNER.UNKNOWN;
+  // proxy.ts default branch: unmatched METHOD+PATH executes the Node route handler.
+  return existsSync(resolve(root, op.file)) ? RUNTIME_OWNER.NODE : RUNTIME_OWNER.UNREACHABLE;
+}
+
+// ---------------------------------------------------------------------------
+// Go registration classification (non-tautological)
+// ---------------------------------------------------------------------------
+// Every production Go registration must map to exactly one accepted category:
+//   A. exact current 78-operation inventory entry, or
+//   B. exact CUTOVER_TABLE (approved, production-routed Go-native) operation, or
+//   C. exact reviewed entry of the curated not-production-routed read residue list.
+// Anything else is UNCLASSIFIED_GO_REGISTRATION and fails Phase 8.0 acceptance.
+const GO_REG_CLASS = {
+  INVENTORY: 'INVENTORY_OPERATION',
+  GO_NATIVE: 'GO_NATIVE_CUTOVER_OPERATION',
+  GO_NATIVE_UNROUTED: 'GO_NATIVE_UNROUTED_READ',
+  UNCLASSIFIED: 'UNCLASSIFIED_GO_REGISTRATION',
+};
+
+// Category C: explicit, CURATED allowlist of Go-native READ registrations that are
+// currently NOT production-routed — absent from the 78-operation inventory (no current
+// Next.js route backs them) and absent from CUTOVER_TABLE (proxy.ts resolves unmatched
+// METHOD+PATH to Node; no Node route exists, so the production request path never
+// reaches Go for these). Membership is EXACT-MATCH only and additionally asserted to
+// be read-only; any registration not matching A, B, or this reviewed list fails P8-I11.
+//   GET /api/tariff-plans/{planId}/operations — the Node counterpart route file was
+//     deleted with the retired governance surfaces; the Go read registration remains;
+//     the rating UI caller still exists and is tracked as Phase 8 cleanup residue.
+//   GET /api/ocs/balances/{imsi} — Go-first read added with OCS balance governance;
+//     no Node counterpart ever existed; no frontend caller.
+const GO_NATIVE_UNROUTED_READS = new Set([
+  'GET /api/tariff-plans/{planId}/operations',
+  'GET /api/ocs/balances/{imsi}',
+]);
+
+function classifyGoRegistration(key, inventoryKeys, cutoverKeys) {
+  if (inventoryKeys.has(key)) return GO_REG_CLASS.INVENTORY;
+  if (cutoverKeys.has(key)) return GO_REG_CLASS.GO_NATIVE;
+  if (GO_NATIVE_UNROUTED_READS.has(key)) return GO_REG_CLASS.GO_NATIVE_UNROUTED;
+  return GO_REG_CLASS.UNCLASSIFIED;
+}
+
+// Synthetic sentinel: proves P8-I11 is capable of failing. NEVER registered in production.
+const GO_SENTINEL_KEY = 'GET /api/__phase8_unclassified_sentinel__';
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 async function main() {
   console.log('-- Phase 8.0 Next.js Backend Removal Readiness --\n');
 
-  const cutover = await loadCutoverTable();
+  const { table: cutover, resolveRouteOwner } = await loadCutoverTable();
   const cutoverKeys = new Set(cutover.map((r) => methodPathKey(r.method, r.path)));
   const cutoverByKey = new Map(cutover.map((r) => [methodPathKey(r.method, r.path), r]));
 
@@ -404,9 +484,6 @@ async function main() {
     else if (RETIRED_SURFACES.has(key)) classification = CLASS.RETIRED;
     else classification = CLASS.NODE;
 
-    const ownerHint =
-      classification === CLASS.GO ? 'go' : classification === CLASS.RETIRED ? 'none' : classification === CLASS.LEGACY ? 'go(node-alias)' : 'node';
-
     return {
       method: op.method,
       nodePath: op.nodePath,
@@ -414,9 +491,14 @@ async function main() {
       file: op.file,
       key,
       classification,
-      ownerHint,
       inCutover: cutoverKeys.has(key),
       goRegistered: goKeys.has(key),
+      // Runtime ownership is EXECUTABLE evidence: proxy.ts resolves each request by
+      // invoking resolveRouteOwner(method, path) and defaults every unmatched
+      // METHOD+PATH to the Next.js Node handler. It is never inferred from the
+      // lifecycle label (RETIRED_SURFACE does not imply unreachable, LEGACY_ALIAS
+      // does not imply Go).
+      runtimeOwner: deriveRuntimeOwner(op, resolveRouteOwner),
       callers: callers.filter((c) => patternRegex(op.canonicalPath).test(c.normalised)).map((c) => `${c.file}:${c.line}`),
     };
   });
@@ -456,11 +538,67 @@ async function main() {
   check('P8-I10', classified.length === inventory.length, `node routes classified=${classified.length}/${inventory.length}`);
 
   // ---- P8-I11 every Go production route registration classified -------------
-  const goUnclassified = goRegs.filter((r) => {
-    const k = methodPathKey(r.method, r.canonicalPath);
-    return !inventoryKeys.has(k) && !cutoverKeys.has(k) && !goKeys.has(k);
+  // Non-tautological classification: each registration must independently map to
+  //   A. an exact current 78-operation inventory entry, or
+  //   B. an exact approved Go-native CUTOVER_TABLE operation,
+  // otherwise it is UNCLASSIFIED_GO_REGISTRATION and Phase 8.0 must fail.
+  // Existence inside goRegs itself is NOT evidence (that was the old tautology).
+  const goRegistrationClasses = goRegs.map((r) => {
+    const key = methodPathKey(r.method, r.canonicalPath);
+    return { key, file: r.file, category: classifyGoRegistration(key, inventoryKeys, cutoverKeys) };
   });
-  check('P8-I11', goUnclassified.length === 0, `go registrations=${goRegs.length}, unclassified=${goUnclassified.length}`);
+  const goClassifiedRegistrations = goRegistrationClasses.filter((r) => r.category !== GO_REG_CLASS.UNCLASSIFIED);
+  const goUnclassified = goRegistrationClasses.filter((r) => r.category === GO_REG_CLASS.UNCLASSIFIED);
+  const goUnroutedReads = goRegistrationClasses.filter((r) => r.category === GO_REG_CLASS.GO_NATIVE_UNROUTED);
+  const curatedUnroutedReadOnly = [...GO_NATIVE_UNROUTED_READS].every((k) => k.startsWith('GET '));
+  const goRegistrationPartitionHolds =
+    goRegistrationClasses.length === goClassifiedRegistrations.length + goUnclassified.length;
+  check(
+    'P8-I11',
+    goRegistrationPartitionHolds && curatedUnroutedReadOnly && goUnclassified.length === 0,
+    `go_registered_operations=${goRegistrationClasses.length} classified=${goClassifiedRegistrations.length} unclassified=${goUnclassified.length}`,
+  );
+
+  // ---- P8-I11-SENTINEL classification gate is falsifiable --------------------
+  // A synthetic registration that is neither an inventory operation nor an approved
+  // Go-native cutover operation MUST be classified as UNCLASSIFIED. Pure in-memory:
+  // it is never registered in the production Go router.
+  const sentinelCategory = classifyGoRegistration(GO_SENTINEL_KEY, inventoryKeys, cutoverKeys);
+  const sentinelDetected = sentinelCategory === GO_REG_CLASS.UNCLASSIFIED;
+  check(
+    'P8-I11-SENTINEL',
+    sentinelDetected,
+    `synthetic "${GO_SENTINEL_KEY}" -> ${sentinelCategory} (must be UNCLASSIFIED_GO_REGISTRATION)`,
+  );
+
+  // ---- P8-I19 runtime ownership fully classified -----------------------------
+  const runtimeCounts = { go: 0, node: 0, unreachable: 0, unknown: 0 };
+  for (const o of classified) runtimeCounts[o.runtimeOwner] += 1;
+  const runtimeTotal = runtimeCounts.go + runtimeCounts.node + runtimeCounts.unreachable + runtimeCounts.unknown;
+  check(
+    'P8-I19',
+    runtimeCounts.unknown === 0 && runtimeTotal === inventory.length,
+    `runtime_owner go=${runtimeCounts.go} node=${runtimeCounts.node} unreachable=${runtimeCounts.unreachable} unknown=${runtimeCounts.unknown}, total=${runtimeTotal}`,
+  );
+
+  // ---- P8-I20 legacy/retired runtime ownership derived from routing ----------
+  // Compatibility surfaces are selected by lifecycle, but their runtime owner is
+  // proven by invoking the production routing rule: absent from CUTOVER_TABLE and
+  // backed by an executable Node route file => runtime_owner=node. The routing
+  // function must also discriminate (resolve cutover operations to Go), otherwise
+  // the "unmatched defaults to node" rule would be vacuous evidence.
+  const compatibilitySurfaces = classified.filter(
+    (o) => o.classification === CLASS.LEGACY || o.classification === CLASS.RETIRED,
+  );
+  const routingDiscriminates = classified.some((o) => o.runtimeOwner === RUNTIME_OWNER.GO);
+  const compatibilityRuntimeDerived = compatibilitySurfaces.every(
+    (o) => !o.inCutover && o.runtimeOwner === RUNTIME_OWNER.NODE,
+  );
+  check(
+    'P8-I20',
+    routingDiscriminates && compatibilityRuntimeDerived,
+    `legacy+retired=${compatibilitySurfaces.length} runtime_owner=node via resolveRouteOwner=${compatibilityRuntimeDerived}, routing discriminates=${routingDiscriminates}`,
+  );
 
   // ---- P8-I12/I13/I14 dependency consumers classified -----------------------
   const depUnresolved = [];
@@ -490,7 +628,14 @@ async function main() {
     decision: 'MIGRATE_TO_GO',
     requiredPhase: o.goRegistered ? '8.2' : '8.1',
   }));
-  check('P8-I16', nodeRemainder.length === nodeProductionOwned.length, `NODE_PRODUCTION_REMAINDER=${nodeRemainder.length}`);
+  // NODE_PRODUCTION_OWNED=33 is the canonical lifecycle/migration bucket. It is NOT
+  // the complete count of operations whose current runtime owner is Node: legacy
+  // aliases and retired-but-reachable surfaces are also Node-routed at runtime.
+  check(
+    'P8-I16',
+    nodeRemainder.length === nodeProductionOwned.length,
+    `canonical_node_migration_remainder=${nodeRemainder.length}`,
+  );
 
   // ---- P8-I17 charging-plane boundary preserved -----------------------------
   // Charging-plane collections (ocs_sessions / ocs_reservations / ocs_usage_records)
@@ -502,10 +647,10 @@ async function main() {
 
   // ---- P8-I18 deletion readiness derived from evidence ----------------------
   const blockers = [];
-  if (nodeRemainder.length > 0) blockers.push(`NODE_PRODUCTION_REMAINDER=${nodeRemainder.length}`);
-  if (retiredSurface.length > 0) blockers.push(`RETIRED_SURFACE_PENDING_DELETION=${retiredSurface.length}`);
-  if (legacyAlias.length > 0) blockers.push(`LEGACY_ALIAS_PENDING=${legacyAlias.length}`);
-  if (retiredCallers.length > 0) blockers.push(`STALE_FRONTEND_CALLERS_TO_RETIRED_SURFACE=${retiredCallers.length}`);
+  if (nodeRemainder.length > 0) blockers.push(`CANONICAL_NODE_MIGRATION_REMAINDER=${nodeRemainder.length}`);
+  if (retiredSurface.length > 0) blockers.push(`RETIRED_SURFACES_PENDING_DELETION=${retiredSurface.length}`);
+  if (legacyAlias.length > 0) blockers.push(`LEGACY_ALIASES_PENDING_CLOSURE=${legacyAlias.length}`);
+  if (retiredCallers.length > 0) blockers.push(`STALE_CALLERS_TO_RETIRED_SURFACES=${retiredCallers.length}`);
   const backendRemovalReady =
     nodeRemainder.length === 0 &&
     retiredSurface.length === 0 &&
@@ -524,9 +669,26 @@ async function main() {
     console.log(`  ${inv.ok ? 'PASS' : 'FAIL'}  ${inv.id.padEnd(8)} ${inv.detail}`);
   }
 
-  console.log('\n-- Node production remainder --');
+  console.log('\n-- Canonical Node migration remainder (lifecycle NODE_PRODUCTION_OWNED) --');
   for (const r of nodeRemainder) {
     console.log(`  ${r.method.padEnd(7)} ${r.path}`);
+  }
+
+  console.log('\n-- Runtime ownership (derived by invoking resolveRouteOwner) --');
+  console.log(`  go=${runtimeCounts.go} node=${runtimeCounts.node} unreachable=${runtimeCounts.unreachable} unknown=${runtimeCounts.unknown} total=${runtimeTotal}`);
+  console.log('-- Legacy alias / retired surface runtime ownership --');
+  for (const o of compatibilitySurfaces) {
+    console.log(`  ${o.method.padEnd(7)} ${o.canonicalPath} lifecycle=${o.classification} runtime_owner=${o.runtimeOwner}`);
+  }
+
+  if (goUnclassified.length) {
+    console.log('\n-- UNCLASSIFIED Go registrations --');
+    for (const r of goUnclassified) console.log(`  ${r.key} (${r.file})`);
+  }
+
+  if (goUnroutedReads.length) {
+    console.log('\n-- Go-native read registrations not production-routed (tracked residue) --');
+    for (const r of goUnroutedReads) console.log(`  ${r.key} (${r.file})`);
   }
 
   if (retiredCallers.length) {
@@ -552,8 +714,8 @@ async function main() {
   console.log('Phase 8.0 Next.js Backend Removal Readiness');
   console.log(`api_route_files=${apiFiles.length}`);
   console.log(`api_operations=${inventory.length}`);
-  console.log('cutover_routes=47');
-  console.log('actually_routed=47');
+  console.log(`cutover_routes=${cutover.length}`);
+  console.log(`actually_routed=${goOwned}`);
   console.log('');
   console.log(`go_production_owned=${goProductionOwned.length}`);
   console.log(`node_production_owned=${nodeProductionOwned.length}`);
@@ -564,9 +726,21 @@ async function main() {
   console.log('');
   console.log(`frontend_api_callers_unmapped=${unmappedCallers.length}`);
   console.log(`unknown_production_owner=${unknownOwner}`);
-  console.log(`go_registered_operations=${goRegs.length}`);
-  console.log(`go_native_cutover_operations=${goNativeCutover.length}`);
   console.log('');
+  console.log(`inventory_runtime_go=${runtimeCounts.go}`);
+  console.log(`inventory_runtime_node=${runtimeCounts.node}`);
+  console.log(`inventory_runtime_unreachable=${runtimeCounts.unreachable}`);
+  console.log(`runtime_owner_unknown=${runtimeCounts.unknown}`);
+  console.log('');
+  console.log(`go_registered_operations=${goRegistrationClasses.length}`);
+  console.log(`go_registered_classified=${goClassifiedRegistrations.length}`);
+  console.log(`go_registered_unclassified=${goUnclassified.length}`);
+  console.log(`go_native_cutover_operations=${goNativeCutover.length}`);
+  console.log(`go_registered_unrouted_reads=${goUnroutedReads.length}`);
+  console.log(`go_registration_negative_sentinel=${sentinelDetected}`);
+  for (const r of goUnroutedReads) console.log(`go_registered_unrouted_read=${r.key}`);
+  console.log('');
+  console.log(`canonical_node_migration_remainder=${nodeRemainder.length}`);
   console.log(`backend_removal_ready=${backendRemovalReady}`);
   console.log(`backend_removal_blockers=${blockers.length}`);
   for (const b of blockers) console.log(`backend_removal_blocker=${b}`);
