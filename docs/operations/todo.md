@@ -10,8 +10,8 @@
 | Phase 7.0 — Platform Services Architecture Freeze | COMPLETE | Architecture freeze, contract inventory, planning validator |
 | Phase 7.1 — Platform Health & Status Contract Parity | COMPLETE | Go shadow implementation for health/status reads (33/33 tests PASS) |
 | Phase 7.2 — Alert Domain Governance & Mutations | COMPLETE | Acknowledge & workflow direct execution shadow in Go (42/42 tests PASS) |
-| Phase 7.3 — Notification Streaming (SSE) Migration | COMPLETE | Go shadow SSE handler complete and verified; Run #140 PASS; Node remains production owner; 36/36 routing freeze |
-| Phase 7.4 — System Integrity Self-Healing Mutations | COMPLETE | Go shadow controlled remediation handlers (heal & batch-heal); Node remains production owner; 36/36 routing freeze |
+| Phase 7.3 — Notification Streaming (SSE) Migration | COMPLETE / FROZEN | Go shadow SSE handler complete and verified; Run #140 PASS; Node remains production owner; 36/36 routing freeze |
+| Phase 7.4 — System Integrity Self-Healing Mutations | PARTIAL / IN PROGRESS | Acceptance corrections: 96 independent mandatory rows + five unassisted re-scans; independent review required; not frozen; Node owners and 36/36 routing unchanged |
 | Phase 7.5 — Controlled Platform Services Cutover | NOT STARTED | CUTOVER_TABLE expansion (36 -> 47) & production freeze |
 
 ## Deferred
@@ -24,7 +24,7 @@
 
 ## Blockers
 
-None currently.
+Phase 7.4 requires independent acceptance review before freezing. Phase 7.5 and Phase 8 are NOT STARTED. Residual scanner/remediation gaps are documented in `docs/backend-migration/remediation-acceptance-corrections.md`.
 
 ## Risks
 

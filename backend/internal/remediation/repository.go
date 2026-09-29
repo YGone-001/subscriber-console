@@ -531,11 +531,17 @@ func buildDefaultSlice() []any {
 								"index": 1,
 								"arp": bson.M{
 									"priority_level":            2,
-									"pre_emption_capability":    2,
-									"pre_emption_vulnerability": 2,
+									"pre_emption_capability":    1,
+									"pre_emption_vulnerability": 1,
 								},
-								"gbr": bson.M{"value": 128, "unit": 1},
-								"mbr": bson.M{"value": 128, "unit": 1},
+								"gbr": bson.M{
+									"downlink": bson.M{"value": 128, "unit": 1},
+									"uplink":   bson.M{"value": 128, "unit": 1},
+								},
+								"mbr": bson.M{
+									"downlink": bson.M{"value": 128, "unit": 1},
+									"uplink":   bson.M{"value": 128, "unit": 1},
+								},
 							},
 						},
 					},

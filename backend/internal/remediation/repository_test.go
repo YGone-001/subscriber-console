@@ -1,10 +1,33 @@
 package remediation
 
 import (
+	"reflect"
 	"testing"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 )
+
+// Regression for the persisted Node HTTP default-subscriber fixture: PCC rates
+// are directional and Node normalizes the default pre-emption flags to one.
+func TestDefaultSubscriberPCCMatchesNodePersistence(t *testing.T) {
+	doc := buildDefaultXcloudSubscriber("001010000000001", nil)
+	slice := doc["slice"].([]any)[0].(bson.M)
+	ims := slice["session"].([]any)[2].(bson.M)
+	qos := ims["pcc_rule"].([]any)[0].(bson.M)["qos"].(bson.M)
+	wantRate := bson.M{
+		"downlink": bson.M{"value": 128, "unit": 1},
+		"uplink":   bson.M{"value": 128, "unit": 1},
+	}
+	for _, key := range []string{"gbr", "mbr"} {
+		if !reflect.DeepEqual(qos[key], wantRate) {
+			t.Errorf("%s persisted shape = %#v, want %#v", key, qos[key], wantRate)
+		}
+	}
+	wantARP := bson.M{"priority_level": 2, "pre_emption_capability": 1, "pre_emption_vulnerability": 1}
+	if !reflect.DeepEqual(qos["arp"], wantARP) {
+		t.Errorf("ARP = %#v, want %#v", qos["arp"], wantARP)
+	}
+}
 
 func TestBuildDefaultXcloudSubscriber(t *testing.T) {
 	doc := buildDefaultXcloudSubscriber("417001234567890", nil)

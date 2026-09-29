@@ -205,8 +205,10 @@ Phase 6.3-B COMPLETE — Controlled Authentication Cutover (Production owner = G
 Phase 6.4   COMPLETE — Authentication & User Management UI Final Integration (UX hardening, rate limit cooldown, privacy, status lifecycle, security state)
 Phase 7.0   COMPLETE — Alerts, Notifications & Platform Services Architecture Freeze (Current-State Reconciliation, Contract Inventory, and Migration Planning)
 Phase 7.1   COMPLETE — Platform Health & Diagnostic Read Parity (Go Shadow Implementation: GET /api/alerts, GET /api/system/health, GET /api/system/mongo/health, GET /api/system/audit/status, POST /api/system/audit/scan, POST /api/analytics/init; CUTOVER_TABLE=36, ACTUALLY_ROUTED=36)
-Phase 7.3   COMPLETE — Notification Streaming SSE Shadow Parity (Go shadow implementation; full acceptance matrix closed; Run #140 green; CUTOVER_TABLE=36, ACTUALLY_ROUTED=36)
-Phase 7.4   COMPLETE — System Integrity Controlled Remediation Shadow Parity (Go shadow implementation for POST /api/system/audit/heal and POST /api/system/audit/batch-heal; CUTOVER_TABLE=36, ACTUALLY_ROUTED=36)
+Phase 7.3   COMPLETE / FROZEN — Notification Streaming SSE Shadow Parity (Go shadow implementation; full acceptance matrix closed; Run #140 green; CUTOVER_TABLE=36, ACTUALLY_ROUTED=36)
+Phase 7.4   PARTIAL / IN PROGRESS — Acceptance corrections pending independent review; not frozen. System Integrity Controlled Remediation Shadow Parity (Go shadow implementation for POST /api/system/audit/heal and POST /api/system/audit/batch-heal; CUTOVER_TABLE=36, ACTUALLY_ROUTED=36)
+Phase 7.5   NOT STARTED
+Phase 8     NOT STARTED
 ```
 
 ### 5.1 OCS 生产冻结基线 (OCS Production Freeze Baseline)

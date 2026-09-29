@@ -201,10 +201,18 @@
 
 ## Phase 7.4 — System Integrity Controlled Remediation Shadow Parity
 
-- Completed Phase 7.4: System Integrity Controlled Remediation Shadow Parity for `POST /api/system/audit/heal` and `POST /api/system/audit/batch-heal`.
+- Implemented the initial Phase 7.4 shadow foundation (acceptance remains PARTIAL; see correction below): System Integrity Controlled Remediation Shadow Parity for `POST /api/system/audit/heal` and `POST /api/system/audit/batch-heal`.
 - Implemented `backend/internal/remediation` package providing Go shadow parity for operator-initiated controlled remediation (L2; strictly NO autonomous loops, background intervals, or cron self-healing).
 - Implemented exact 1:1 parity for authentication, RBAC capability checks (`system_heal`), user-scoped fixed-window rate limiting (20/60s for heal, 10/60s for batch-heal; emitting headers only on 429), validation, profile inheritance, targeted subscriber/OCS provisioning, reservation release, idempotency, best-effort audit logging (`app_audit_logs`), and runtime error isolation.
 - Maintained strict operational invariants: `CUTOVER_TABLE = 36`, `ACTUALLY_ROUTED = 36`, zero Phase 7 production cutover (Node remains authoritative production owner), 100% pure ASCII.
 - Added comprehensive cross-engine parity test suite in `scripts/test-phase-7-system-heal-parity.mjs` (65/65 PASS).
 - Added `System integrity controlled remediation parity` step to `platform-read-parity` CI job in `.github/workflows/ci.yml`.
 - All regression suites verified green: Phase 7.1 (55/55), Phase 7.2 (93/93), Phase 7.3 (63/63), Phase 7.4 (65/65), Go unit tests, Node test suite (445/445), Next.js production build, and migration inventory validation.
+
+## Controlled remediation acceptance corrections
+
+- Replaced umbrella test accounting with 96 mandatory IDs, five independently counted real re-scan cases, and five invariant cases (106 total). Registration and execution inventories reject missing and duplicate IDs.
+- Removed fixture-side HSS repairs after heal; MongoDB command monitoring asserts zero fixture writes between heal and re-scan. Missing HSS fields and released reservations without sessions remain anomalous on both engines.
+- Added complete persisted-document parity, individual malformed-item response/state evidence, real MongoDB rejection evidence for repository/audit/limiter failures, and independent rate budgets.
+- The expanded HTTP matrix reproduced a Go default PCC persistence defect: GBR/MBR lacked directional fields and default pre-emption flags differed from Node. Corrected only those Go fields and added a focused regression test; Node production behavior is unchanged.
+- Status: Phase 7.3 COMPLETE / FROZEN; Phase 7.4 PARTIAL / IN PROGRESS, not frozen pending independent review; Phase 7.5 and Phase 8 NOT STARTED. Route ownership remains Node, CUTOVER_TABLE=36 and ACTUALLY_ROUTED=36.

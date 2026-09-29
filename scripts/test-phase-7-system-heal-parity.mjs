@@ -16,7 +16,7 @@ import http from 'http';
 import net from 'net';
 import crypto from 'crypto';
 import assert from 'assert';
-import { existsSync, readFileSync, unlinkSync } from 'fs';
+import { existsSync, readFileSync, unlinkSync, readdirSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { spawn, execSync } from 'child_process';
@@ -40,6 +40,15 @@ const appDbNode = `app_test_p74_node_${suffix}`;
 const xcloudDbGo = `xcloud_test_p74_go_${suffix}`;
 const appDbGo = `app_test_p74_go_${suffix}`;
 
+const pendingAfter = new Set();
+function runAfter(fn) {
+  if (typeof fn !== 'function') return;
+  const promise = Promise.resolve().then(fn).finally(() => pendingAfter.delete(promise));
+  pendingAfter.add(promise);
+  promise.catch(() => {});
+}
+async function drainAfter() { await Promise.allSettled([...pendingAfter]); }
+
 import { createRequire } from 'module';
 const req = createRequire(import.meta.url);
 try {
@@ -49,11 +58,7 @@ try {
     filename: resolvedAfter,
     loaded: true,
     exports: {
-      after: (fn) => {
-        if (typeof fn === 'function') {
-          Promise.resolve().then(() => fn()).catch(() => {});
-        }
-      },
+      after: runAfter,
     },
   };
   const resolvedAfterIndex = req.resolve('next/dist/server/after', { paths: [resolve(rootDir, 'frontend')] });
@@ -66,11 +71,7 @@ try {
 
 import nextServerPkg from '../frontend/node_modules/next/server.js';
 if (nextServerPkg) {
-  nextServerPkg.after = (fn) => {
-    if (typeof fn === 'function') {
-      Promise.resolve().then(() => fn()).catch(() => {});
-    }
-  };
+  nextServerPkg.after = runAfter;
 }
 
 const originalConsoleError = console.error;
@@ -88,7 +89,13 @@ console.error = (...args) => {
   originalConsoleError(...args);
 };
 
-const client = new MongoClient(uri);
+const fixtureWrites = [];
+const client = new MongoClient(uri, { monitorCommands: true });
+client.on('commandStarted', (event) => {
+  if (['insert', 'update', 'delete', 'findAndModify', 'bulkWrite', 'drop', 'dropDatabase', 'create', 'collMod'].includes(event.commandName)) {
+    fixtureWrites.push({ command: event.commandName, database: event.databaseName });
+  }
+});
 
 process.env.MONGODB_XCLOUD_DB = xcloudDbNode;
 process.env.MONGODB_APP_DB = appDbNode;
@@ -132,6 +139,21 @@ let passed = 0;
 let failed = 0;
 let totalChecks = 0;
 
+// The acceptance inventory is independent from the registered/executed cases.
+const REQUIRED_IDS = Object.entries({
+  'SH-A': 13, 'SH-V': 12, 'SH-P': 6, 'SH-T': 15, 'SH-F': 3, 'SH-R': 3,
+  'BH-A': 13, 'BH-V': 5, 'BH-I': 7, 'BH-M': 7, 'BH-P': 5, 'BH-F': 3, 'BH-R': 4,
+}).flatMap(([prefix, count]) => Array.from({ length: count }, (_, i) => `${prefix}${String(i + 1).padStart(2, '0')}`));
+const cases = [];
+const executedIds = [];
+function test(id, description, run) { cases.push({ id, description, run }); }
+function inventory(ids) {
+  return {
+    missing: REQUIRED_IDS.filter((id) => !ids.includes(id)),
+    duplicate: ids.filter((id, i) => ids.indexOf(id) !== i),
+  };
+}
+
 function verify(desc, fn) {
   totalChecks++;
   try {
@@ -162,11 +184,14 @@ async function verifyAsync(desc, fn) {
 
 async function fingerprintCollection(db, name) {
   const docs = await db.collection(name).find({}).sort({ _id: 1 }).toArray();
-  const normalized = docs.map((doc) => {
-    const copy = { ...doc };
-    delete copy._id;
-    return copy;
-  });
+  function stable(value) {
+    if (value instanceof Date) return { date: value.toISOString() };
+    if (value?._bsontype === 'ObjectId') return { objectId: value.toHexString() };
+    if (Array.isArray(value)) return value.map(stable);
+    if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort().map((key) => [key, stable(value[key])]));
+    return value;
+  }
+  const normalized = docs.map(stable);
   return {
     count: docs.length,
     digest: crypto.createHash('sha256').update(JSON.stringify(normalized)).digest('hex'),
@@ -727,874 +752,459 @@ async function main() {
 
   const adminToken = await makeToken('admin_user', 'admin', 1);
   const operatorToken = await makeToken('operator_user', 'operator', 1);
-  const viewerToken = await makeToken('viewer_user', 'viewer', 1);
-  const expiredToken = await makeToken('operator_user', 'operator', 1, -3600);
-  const invalidSvToken = await makeToken('operator_user', 'operator', 99);
-  const disabledToken = await makeToken('disabled_user', 'operator', 1);
-  const lockedToken = await makeToken('locked_user', 'operator', 1);
-  const rootToken = await makeToken('root_user', 'root', 1);
-  const opsAdminToken = await makeToken('ops_admin_user', 'ops_admin', 1);
-  const healMatrixToken = await makeToken('heal_matrix_user', 'operator', 1);
-  const valToken = await makeToken('val_user', 'operator', 1);
-  const profToken = await makeToken('prof_user', 'operator', 1);
-  const typeToken = await makeToken('type_user', 'operator', 1);
-  const idemToken = await makeToken('idem_user', 'operator', 1);
-  const batchMatrixToken = await makeToken('batch_matrix_user', 'operator', 1);
-  const batchValToken = await makeToken('batch_val_user', 'operator', 1);
-  const batchExecToken = await makeToken('batch_exec_user', 'operator', 1);
-  const batchMixToken = await makeToken('batch_mix_user', 'operator', 1);
-  const rlHealToken = await makeToken('rl_heal_user', 'operator', 1);
-  const rlBatchToken = await makeToken('rl_batch_user', 'operator', 1);
-  const repoFailToken = await makeToken('repo_fail_user', 'operator', 1);
+  const xDbs = [xcloudDbNode, xcloudDbGo].map((name) => client.db(name));
+  const aDbs = [appDbNode, appDbGo].map((name) => client.db(name));
+  const businessCollections = ['subscribers', 'ocs_subscribers', 'ocs_balances', 'ocs_reservations'];
+  const endpoints = { SH: '/api/system/audit/heal', BH: '/api/system/audit/batch-heal' };
+  let serial = 100;
+  const nextImsi = () => `001010${String(++serial).padStart(9, '0')}`;
+  const validSub = (imsi) => ({ imsi, security: { k: 'key', opc: 'opc' }, slice: [{ sst: 1 }], ambr: { downlink: 1 }, untouched: { value: 0, list: [], nullable: null } });
 
-  // Content-level snapshot of protected collections
-  const PROTECTED_COLLECTIONS = [
-    ['xcloud', 'ocs_tariff_plans'],
-    ['xcloud', 'ocs_sessions'],
-    ['xcloud', 'ocs_usage_records'],
-    ['app', 'app_profiles'],
-    ['app', 'app_profile_versions'],
-    ['app', 'app_users'],
-    ['app', 'app_alerts'],
-  ];
-
-  async function snapshotProtected(which) {
+  // Normalize only generated identities and clock values, retaining their presence
+  // and BSON type. Every business field and unknown field remains in comparison.
+  function normalize(value, key = '') {
+    if (value instanceof Date) { assert.ok(Number.isFinite(value.getTime())); return '<BSON date>'; }
+    if (value?._bsontype === 'ObjectId') return '<ObjectId>';
+    if (key === 'mme_timestamp') { assert.ok(Number.isSafeInteger(value)); return '<microsecond timestamp>'; }
+    if (Array.isArray(value)) return value.map((v) => normalize(v));
+    if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort().map((k) => [k, normalize(value[k], k)]));
+    return value;
+  }
+  async function businessState(db, imsis) {
     const out = {};
-    for (const [dbKind, name] of PROTECTED_COLLECTIONS) {
-      const dbName = which === 'Node'
-        ? (dbKind === 'xcloud' ? xcloudDbNode : appDbNode)
-        : (dbKind === 'xcloud' ? xcloudDbGo : appDbGo);
-      out[`${dbKind}.${name}`] = await fingerprintCollection(client.db(dbName), name);
+    for (const name of businessCollections) {
+      const docs = await db.collection(name).find(imsis ? { imsi: { $in: imsis } } : {}).toArray();
+      out[name] = docs.map((doc) => normalize(doc)).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
     }
     return out;
   }
+  async function stateParity(imsis) {
+    const n = await businessState(xDbs[0], imsis);
+    const g = await businessState(xDbs[1], imsis);
+    assert.deepStrictEqual(g, n, 'Complete persisted business documents must match');
+    return n;
+  }
+  async function insertBoth(collection, doc) {
+    for (const db of xDbs) await db.collection(collection).insertOne(structuredClone(doc));
+  }
+  async function clearBudgets() {
+    for (const db of aDbs) await db.collection('app_rate_limits').deleteMany({});
+  }
+  async function pair(kind, payload, status = 200, token = operatorToken) {
+    const n = await callNode(endpoints[kind], 'POST', token, payload);
+    const g = await callGo(endpoints[kind], 'POST', token, payload);
+    assert.equal(n.status, status, `Node ${kind}: ${JSON.stringify(n.body)}`);
+    assert.equal(g.status, n.status, `Go ${kind}: ${JSON.stringify(g.body)}`);
+    assert.deepStrictEqual(g.body, n.body, 'Exact HTTP response body parity');
+    return n;
+  }
+  const wrap = (kind, item, extra = {}) => kind === 'SH' ? { ...item, ...extra } : { anomalies: [item], ...extra };
 
-  const protectedBeforeNode = await snapshotProtected('Node');
-  const protectedBeforeGo = await snapshotProtected('Go');
-
-  // =========================================================================
-  // Section 2: Single Heal Authentication & Authorization Matrix
-  // =========================================================================
-  console.log('\n--- Section 2: Single Heal Authentication & Authorization Matrix ---');
-
-  const validSingleBody = { imsi: '001010000000001', type: 'SCHEMA_MISMATCH' };
-
-  await verifyAsync('SH-A01: anonymous request returns 401', async () => {
-    const n = await callNode('/api/system/audit/heal', 'POST', null, validSingleBody);
-    const g = await callGo('/api/system/audit/heal', 'POST', null, validSingleBody);
-    assert.equal(n.status, 401);
-    assert.equal(g.status, 401);
-  });
-
-  await verifyAsync('SH-A02: malformed token returns 401', async () => {
-    const n = await callNode('/api/system/audit/heal', 'POST', 'not.a.valid.jwt', validSingleBody);
-    const g = await callGo('/api/system/audit/heal', 'POST', 'not.a.valid.jwt', validSingleBody);
-    assert.equal(n.status, 401);
-    assert.equal(g.status, 401);
-  });
-
-  await verifyAsync('SH-A03: invalid secret signature returns 401', async () => {
-    const badSecretToken = await new SignJWT({ username: 'operator_user', role: 'operator', sv: 1 })
-      .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
-      .setIssuedAt(Math.floor(Date.now() / 1000))
-      .setExpirationTime(Math.floor(Date.now() / 1000) + 3600)
-      .sign(new TextEncoder().encode('wrong-secret-key-at-least-32-bytes-long!'));
-    const n = await callNode('/api/system/audit/heal', 'POST', badSecretToken, validSingleBody);
-    const g = await callGo('/api/system/audit/heal', 'POST', badSecretToken, validSingleBody);
-    assert.equal(n.status, 401);
-    assert.equal(g.status, 401);
-  });
-
-  await verifyAsync('SH-A04: expired token returns 401', async () => {
-    const n = await callNode('/api/system/audit/heal', 'POST', expiredToken, validSingleBody);
-    const g = await callGo('/api/system/audit/heal', 'POST', expiredToken, validSingleBody);
-    assert.equal(n.status, 401);
-    assert.equal(g.status, 401);
-  });
-
-  await verifyAsync('SH-A05: session version mismatch returns 401', async () => {
-    const n = await callNode('/api/system/audit/heal', 'POST', invalidSvToken, validSingleBody);
-    const g = await callGo('/api/system/audit/heal', 'POST', invalidSvToken, validSingleBody);
-    assert.equal(n.status, 401);
-    assert.equal(g.status, 401);
-  });
-
-  await verifyAsync('SH-A06: disabled account returns 401', async () => {
-    const n = await callNode('/api/system/audit/heal', 'POST', disabledToken, validSingleBody);
-    const g = await callGo('/api/system/audit/heal', 'POST', disabledToken, validSingleBody);
-    assert.equal(n.status, 401);
-    assert.equal(g.status, 401);
-  });
-
-  await verifyAsync('SH-A07: locked account returns 401', async () => {
-    const n = await callNode('/api/system/audit/heal', 'POST', lockedToken, validSingleBody);
-    const g = await callGo('/api/system/audit/heal', 'POST', lockedToken, validSingleBody);
-    assert.equal(n.status, 401);
-    assert.equal(g.status, 401);
-  });
-
-  await verifyAsync('SH-A08: viewer role denied with 403 (PERMISSION_DENIED)', async () => {
-    const n = await callNode('/api/system/audit/heal', 'POST', viewerToken, validSingleBody);
-    const g = await callGo('/api/system/audit/heal', 'POST', viewerToken, validSingleBody);
-    assert.equal(n.status, 403);
-    assert.equal(g.status, 403);
-    assert.equal(n.body.code, 'PERMISSION_DENIED');
-    assert.equal(g.body.code, 'PERMISSION_DENIED');
-  });
-
-  await verifyAsync('SH-A09: operator role allowed with 200', async () => {
-    const n = await callNode('/api/system/audit/heal', 'POST', operatorToken, validSingleBody);
-    const g = await callGo('/api/system/audit/heal', 'POST', operatorToken, validSingleBody);
-    assert.equal(n.status, 200);
-    assert.equal(g.status, 200);
-    assert.equal(n.body.message, g.body.message);
-  });
-
-  await verifyAsync('SH-A10: admin role allowed with 200', async () => {
-    const n = await callNode('/api/system/audit/heal', 'POST', adminToken, validSingleBody);
-    const g = await callGo('/api/system/audit/heal', 'POST', adminToken, validSingleBody);
-    assert.equal(n.status, 200);
-    assert.equal(g.status, 200);
-    assert.equal(n.body.message, g.body.message);
-  });
-
-  await verifyAsync('SH-A11: legacy root role allowed with 200', async () => {
-    const n = await callNode('/api/system/audit/heal', 'POST', rootToken, validSingleBody);
-    const g = await callGo('/api/system/audit/heal', 'POST', rootToken, validSingleBody);
-    assert.equal(n.status, 200);
-    assert.equal(g.status, 200);
-  });
-
-  await verifyAsync('SH-A12: legacy ops_admin role allowed with 200', async () => {
-    const n = await callNode('/api/system/audit/heal', 'POST', opsAdminToken, validSingleBody);
-    const g = await callGo('/api/system/audit/heal', 'POST', opsAdminToken, validSingleBody);
-    assert.equal(n.status, 200);
-    assert.equal(g.status, 200);
-  });
-
-  await verifyAsync('SH-A13: unknown role returns 401', async () => {
-    const unknownRoleToken = await makeToken('operator_user', 'superuser', 1);
-    const n = await callNode('/api/system/audit/heal', 'POST', unknownRoleToken, validSingleBody);
-    const g = await callGo('/api/system/audit/heal', 'POST', unknownRoleToken, validSingleBody);
-    assert.equal(n.status, 401);
-    assert.equal(g.status, 401);
-  });
-
-  // =========================================================================
-  // Section 3: Single Heal Validation Matrix
-  // =========================================================================
-  console.log('\n--- Section 3: Single Heal Validation Matrix ---');
-
-  await verifyAsync('SH-V01: malformed JSON returns 500', async () => {
-    const n = await callNode('/api/system/audit/heal', 'POST', valToken, '{bad json');
-    const g = await callGo('/api/system/audit/heal', 'POST', valToken, '{bad json');
-    assert.equal(n.status, 500);
-    assert.equal(g.status, 500);
-    assert.equal(n.body.error, 'Self-healing execution failed');
-    assert.equal(g.body.error, 'Self-healing execution failed');
-  });
-
-  await verifyAsync('SH-V02: empty JSON object returns 400', async () => {
-    const n = await callNode('/api/system/audit/heal', 'POST', valToken, {});
-    const g = await callGo('/api/system/audit/heal', 'POST', valToken, {});
-    assert.equal(n.status, 400);
-    assert.equal(g.status, 400);
-    assert.equal(n.body.error, 'imsi and type are required');
-    assert.equal(g.body.error, 'imsi and type are required');
-  });
-
-  await verifyAsync('SH-V03: missing imsi returns 400', async () => {
-    const n = await callNode('/api/system/audit/heal', 'POST', valToken, { type: 'MISSING_SLICE' });
-    const g = await callGo('/api/system/audit/heal', 'POST', valToken, { type: 'MISSING_SLICE' });
-    assert.equal(n.status, 400);
-    assert.equal(g.status, 400);
-    assert.equal(n.body.error, 'imsi and type are required');
-    assert.equal(g.body.error, 'imsi and type are required');
-  });
-
-  await verifyAsync('SH-V04: missing type returns 400', async () => {
-    const n = await callNode('/api/system/audit/heal', 'POST', valToken, { imsi: '001010000000001' });
-    const g = await callGo('/api/system/audit/heal', 'POST', valToken, { imsi: '001010000000001' });
-    assert.equal(n.status, 400);
-    assert.equal(g.status, 400);
-    assert.equal(n.body.error, 'imsi and type are required');
-    assert.equal(g.body.error, 'imsi and type are required');
-  });
-
-  await verifyAsync('SH-V05: empty string imsi returns 400', async () => {
-    const n = await callNode('/api/system/audit/heal', 'POST', valToken, { imsi: '', type: 'MISSING_SLICE' });
-    const g = await callGo('/api/system/audit/heal', 'POST', valToken, { imsi: '', type: 'MISSING_SLICE' });
-    assert.equal(n.status, 400);
-    assert.equal(g.status, 400);
-    assert.equal(n.body.error, 'imsi and type are required');
-    assert.equal(g.body.error, 'imsi and type are required');
-  });
-
-  await verifyAsync('SH-V06: empty string type returns 400', async () => {
-    const n = await callNode('/api/system/audit/heal', 'POST', valToken, { imsi: '001010000000001', type: '' });
-    const g = await callGo('/api/system/audit/heal', 'POST', valToken, { imsi: '001010000000001', type: '' });
-    assert.equal(n.status, 400);
-    assert.equal(g.status, 400);
-    assert.equal(n.body.error, 'imsi and type are required');
-    assert.equal(g.body.error, 'imsi and type are required');
-  });
-
-  await verifyAsync('SH-V07: null imsi returns 400', async () => {
-    const n = await callNode('/api/system/audit/heal', 'POST', valToken, { imsi: null, type: 'MISSING_SLICE' });
-    const g = await callGo('/api/system/audit/heal', 'POST', valToken, { imsi: null, type: 'MISSING_SLICE' });
-    assert.equal(n.status, 400);
-    assert.equal(g.status, 400);
-    assert.equal(n.body.error, 'imsi and type are required');
-    assert.equal(g.body.error, 'imsi and type are required');
-  });
-
-  await verifyAsync('SH-V08: null type returns 400', async () => {
-    const n = await callNode('/api/system/audit/heal', 'POST', valToken, { imsi: '001010000000001', type: null });
-    const g = await callGo('/api/system/audit/heal', 'POST', valToken, { imsi: '001010000000001', type: null });
-    assert.equal(n.status, 400);
-    assert.equal(g.status, 400);
-    assert.equal(n.body.error, 'imsi and type are required');
-    assert.equal(g.body.error, 'imsi and type are required');
-  });
-
-  await verifyAsync('SH-V09: 14-digit numeric IMSI returns 400', async () => {
-    const n = await callNode('/api/system/audit/heal', 'POST', valToken, { imsi: '00101000000001', type: 'MISSING_SLICE' });
-    const g = await callGo('/api/system/audit/heal', 'POST', valToken, { imsi: '00101000000001', type: 'MISSING_SLICE' });
-    assert.equal(n.status, 400);
-    assert.equal(g.status, 400);
-    assert.equal(n.body.error, 'IMSI must be exactly 15 digits or UNKNOWN');
-    assert.equal(g.body.error, 'IMSI must be exactly 15 digits or UNKNOWN');
-  });
-
-  await verifyAsync('SH-V10: 16-digit numeric IMSI returns 400', async () => {
-    const n = await callNode('/api/system/audit/heal', 'POST', valToken, { imsi: '0010100000000001', type: 'MISSING_SLICE' });
-    const g = await callGo('/api/system/audit/heal', 'POST', valToken, { imsi: '0010100000000001', type: 'MISSING_SLICE' });
-    assert.equal(n.status, 400);
-    assert.equal(g.status, 400);
-    assert.equal(n.body.error, 'IMSI must be exactly 15 digits or UNKNOWN');
-    assert.equal(g.body.error, 'IMSI must be exactly 15 digits or UNKNOWN');
-  });
-
-  await verifyAsync('SH-V11: non-numeric string IMSI returns 400', async () => {
-    const n = await callNode('/api/system/audit/heal', 'POST', valToken, { imsi: '00101abcdef0001', type: 'MISSING_SLICE' });
-    const g = await callGo('/api/system/audit/heal', 'POST', valToken, { imsi: '00101abcdef0001', type: 'MISSING_SLICE' });
-    assert.equal(n.status, 400);
-    assert.equal(g.status, 400);
-    assert.equal(n.body.error, 'IMSI must be exactly 15 digits or UNKNOWN');
-    assert.equal(g.body.error, 'IMSI must be exactly 15 digits or UNKNOWN');
-  });
-
-  await verifyAsync('SH-V12: lowercase "unknown" returns 400', async () => {
-    const n = await callNode('/api/system/audit/heal', 'POST', valToken, { imsi: 'unknown', type: 'MISSING_SLICE' });
-    const g = await callGo('/api/system/audit/heal', 'POST', valToken, { imsi: 'unknown', type: 'MISSING_SLICE' });
-    assert.equal(n.status, 400);
-    assert.equal(g.status, 400);
-    assert.equal(n.body.error, 'IMSI must be exactly 15 digits or UNKNOWN');
-    assert.equal(g.body.error, 'IMSI must be exactly 15 digits or UNKNOWN');
-  });
-
-  // =========================================================================
-  // Section 4: Single Heal Profile Handling Matrix
-  // =========================================================================
-  console.log('\n--- Section 4: Single Heal Profile Handling Matrix ---');
-
-  await verifyAsync('SH-P01: profileName omitted uses "default" for non-existent subscriber', async () => {
-    const payload = { imsi: '001010000000021', type: 'orphan_ocs' };
-    const n = await callNode('/api/system/audit/heal', 'POST', profToken, payload);
-    const g = await callGo('/api/system/audit/heal', 'POST', profToken, payload);
-    assert.equal(n.status, 200);
-    assert.equal(g.status, 200);
-    const subN = await client.db(xcloudDbNode).collection('subscribers').findOne({ imsi: '001010000000021' });
-    const subG = await client.db(xcloudDbGo).collection('subscribers').findOne({ imsi: '001010000000021' });
-    assert.ok(subN && subG);
-    assert.equal(subN.schema_version, subG.schema_version);
-    assert.equal(subN.mme_realm, subG.mme_realm);
-    assert.equal(subN.mme_host, subG.mme_host);
-  });
-
-  await verifyAsync('SH-P02: profileName null uses "default"', async () => {
-    const payload = { imsi: '001010000000022', type: 'orphan_ocs', profileName: null };
-    const n = await callNode('/api/system/audit/heal', 'POST', profToken, payload);
-    const g = await callGo('/api/system/audit/heal', 'POST', profToken, payload);
-    assert.equal(n.status, 200);
-    assert.equal(g.status, 200);
-    const subN = await client.db(xcloudDbNode).collection('subscribers').findOne({ imsi: '001010000000022' });
-    const subG = await client.db(xcloudDbGo).collection('subscribers').findOne({ imsi: '001010000000022' });
-    assert.ok(subN && subG);
-    assert.equal(subN.schema_version, subG.schema_version);
-    assert.equal(subN.mme_realm, subG.mme_realm);
-    assert.equal(subN.mme_host, subG.mme_host);
-  });
-
-  await verifyAsync('SH-P04: custom_profile applied from app_profiles', async () => {
-    const payload = { imsi: '001010000000004', type: 'dangling_profile', profileName: 'custom_profile' };
-    const n = await callNode('/api/system/audit/heal', 'POST', profToken, payload);
-    const g = await callGo('/api/system/audit/heal', 'POST', profToken, payload);
-    assert.equal(n.status, 200);
-    assert.equal(g.status, 200);
-    const subN = await client.db(xcloudDbNode).collection('subscribers').findOne({ imsi: '001010000000004' });
-    const subG = await client.db(xcloudDbGo).collection('subscribers').findOne({ imsi: '001010000000004' });
-    assert.equal(subN.profile_name, 'custom_profile');
-    assert.equal(subG.profile_name, 'custom_profile');
-    assert.equal(subN.profile, 'custom_profile');
-    assert.equal(subG.profile, 'custom_profile');
-  });
-
-  await verifyAsync('SH-P05: omitted profileName falls back to "default"', async () => {
-    const payload = { imsi: '001010000000004', type: 'dangling_profile' };
-    const n = await callNode('/api/system/audit/heal', 'POST', profToken, payload);
-    const g = await callGo('/api/system/audit/heal', 'POST', profToken, payload);
-    assert.equal(n.status, 200);
-    assert.equal(g.status, 200);
-    const subN = await client.db(xcloudDbNode).collection('subscribers').findOne({ imsi: '001010000000004' });
-    const subG = await client.db(xcloudDbGo).collection('subscribers').findOne({ imsi: '001010000000004' });
-    assert.equal(subN.profile_name, 'default');
-    assert.equal(subG.profile_name, 'default');
-    assert.equal(subN.profile, 'default');
-    assert.equal(subG.profile, 'default');
-  });
-
-  // =========================================================================
-  // Section 5: Single Heal Types & Remediations Matrix
-  // =========================================================================
-  console.log('\n--- Section 5: Single Heal Types & Remediations Matrix ---');
-
-  await verifyAsync('SH-T06 & SH-T07: missing_config provisions ocs_subscribers and ocs_balances', async () => {
-    const payload = { imsi: '001010000000005', type: 'missing_config' };
-    const n = await callNode('/api/system/audit/heal', 'POST', typeToken, payload);
-    const g = await callGo('/api/system/audit/heal', 'POST', typeToken, payload);
-    assert.equal(n.status, 200);
-    assert.equal(g.status, 200);
-    const ocsSubN = await client.db(xcloudDbNode).collection('ocs_subscribers').findOne({ imsi: '001010000000005' });
-    const ocsSubG = await client.db(xcloudDbGo).collection('ocs_subscribers').findOne({ imsi: '001010000000005' });
-    const balN = await client.db(xcloudDbNode).collection('ocs_balances').findOne({ imsi: '001010000000005' });
-    const balG = await client.db(xcloudDbGo).collection('ocs_balances').findOne({ imsi: '001010000000005' });
-    assert.ok(ocsSubN && ocsSubG);
-    assert.equal(ocsSubN.status, ocsSubG.status);
-    assert.ok(balN && balG);
-    assert.equal(balN.currentBalance, balG.currentBalance);
-    assert.equal(balN.currency, balG.currency);
-  });
-
-  await verifyAsync('SH-T08: orphan_reservation updates state to released', async () => {
-    const payload = { imsi: '001010000000006', type: 'orphan_reservation' };
-    const n = await callNode('/api/system/audit/heal', 'POST', typeToken, payload);
-    const g = await callGo('/api/system/audit/heal', 'POST', typeToken, payload);
-    assert.equal(n.status, 200);
-    assert.equal(g.status, 200);
-    const resN = await client.db(xcloudDbNode).collection('ocs_reservations').findOne({ imsi: '001010000000006' });
-    const resG = await client.db(xcloudDbGo).collection('ocs_reservations').findOne({ imsi: '001010000000006' });
-    assert.equal(resN.state, 'released');
-    assert.equal(resG.state, 'released');
-    assert.ok(resN.released_at && resG.released_at);
-  });
-
-  await verifyAsync('SH-T09: target subscriber does not exist -> creates default subscriber document', async () => {
-    const newImsi = '001010000000099';
-    const payload = { imsi: newImsi, type: 'orphan_ocs' };
-    const n = await callNode('/api/system/audit/heal', 'POST', typeToken, payload);
-    const g = await callGo('/api/system/audit/heal', 'POST', typeToken, payload);
-    assert.equal(n.status, 200);
-    assert.equal(g.status, 200);
-    const subN = await client.db(xcloudDbNode).collection('subscribers').findOne({ imsi: newImsi });
-    const subG = await client.db(xcloudDbGo).collection('subscribers').findOne({ imsi: newImsi });
-    assert.ok(subN && subG);
-    assert.equal(subN.schema_version, subG.schema_version);
-    assert.equal(subN.subscriber_status, subG.subscriber_status);
-    assert.equal(subN.access_restriction_data, subG.access_restriction_data);
-    assert.equal(subN.mme_realm, subG.mme_realm);
-    assert.equal(subN.mme_host, subG.mme_host);
-  });
-
-  await verifyAsync('SH-T11 & SH-T12: IMSI "UNKNOWN" creates document with realm mnc0NO.mccUNK', async () => {
-    const payload = { imsi: 'UNKNOWN', type: 'orphan_ocs' };
-    const n = await callNode('/api/system/audit/heal', 'POST', typeToken, payload);
-    const g = await callGo('/api/system/audit/heal', 'POST', typeToken, payload);
-    assert.equal(n.status, 200);
-    assert.equal(g.status, 200);
-    const subN = await client.db(xcloudDbNode).collection('subscribers').findOne({ imsi: 'UNKNOWN' });
-    const subG = await client.db(xcloudDbGo).collection('subscribers').findOne({ imsi: 'UNKNOWN' });
-    assert.ok(subN && subG);
-    assert.equal(subN.mme_realm, 'epc.mnc0NO.mccUNK.3gppnetwork.org');
-    assert.equal(subG.mme_realm, 'epc.mnc0NO.mccUNK.3gppnetwork.org');
-    assert.equal(subN.mme_host, 'mme.epc.mnc0NO.mccUNK.3gppnetwork.org');
-    assert.equal(subG.mme_host, 'mme.epc.mnc0NO.mccUNK.3gppnetwork.org');
-  });
-
-  await verifyAsync('SH-T14: idempotency -> repeated heal calls produce identical consistent state', async () => {
-    const payload = { imsi: '001010000000001', type: 'dangling_profile' };
-    const n1 = await callNode('/api/system/audit/heal', 'POST', idemToken, payload);
-    const n2 = await callNode('/api/system/audit/heal', 'POST', idemToken, payload);
-    const g1 = await callGo('/api/system/audit/heal', 'POST', idemToken, payload);
-    const g2 = await callGo('/api/system/audit/heal', 'POST', idemToken, payload);
-    assert.equal(n1.status, 200);
-    assert.equal(n2.status, 200);
-    assert.equal(g1.status, 200);
-    assert.equal(g2.status, 200);
-    assert.equal(n1.body.message, g1.body.message);
-    assert.equal(n2.body.message, g2.body.message);
-  });
-
-  // =========================================================================
-  // Section 6: Single Heal Rate Limiting Matrix
-  // =========================================================================
-  console.log('\n--- Section 6: Single Heal Rate Limiting Matrix ---');
-
-  await verifyAsync('SH-R01 to SH-R03: 20 req/60s permitted, 21st returns 429 with headers', async () => {
-    const payload = { imsi: '001010000000001', type: 'MISSING_SLICE' };
-    // Send 20 requests on Go
-    for (let i = 0; i < 20; i++) {
-      const g = await callGo('/api/system/audit/heal', 'POST', rlHealToken, payload);
-      assert.equal(g.status, 200, `Go request ${i + 1} should be 200`);
+  // Enable server-side evidence of rejected writes for the isolated fixture DBs.
+  // This captures actual production-driver commands, including async audit writes.
+  for (const db of [...xDbs, ...aDbs]) await db.command({ profile: 2, slowms: 0 });
+  for (const db of aDbs) {
+    for (const name of ['app_audit_logs', 'app_rate_limits', 'app_approvals']) {
+      if (!(await db.listCollections({ name }).hasNext())) await db.createCollection(name);
     }
-    const g21 = await callGo('/api/system/audit/heal', 'POST', rlHealToken, payload);
-    assert.equal(g21.status, 429);
-    assert.equal(g21.body.error, 'Too many requests');
-    assert.ok(g21.headers.get('retry-after') !== null);
-    assert.ok(g21.headers.get('x-ratelimit-limit') !== null);
-  });
-
-  // =========================================================================
-  // Section 7: Single Heal Repository Failure Matrix
-  // =========================================================================
-  console.log('\n--- Section 7: Single Heal Repository Failure Matrix ---');
-
-  await verifyAsync('SH-F01 & SH-F03: disconnected repository failure returns 500 on Go testserver', async () => {
-    const payload = { imsi: '001010000000001', type: 'MISSING_SLICE' };
-    const gFail = await callGoFail('/api/system/audit/heal', 'POST', repoFailToken, payload);
-    assert.equal(gFail.status, 500);
-    assert.equal(gFail.body.error, 'Self-healing execution failed');
-  });
-
-  // =========================================================================
-  // Section 8: Batch Heal Authentication & Authorization Matrix
-  // =========================================================================
-  console.log('\n--- Section 8: Batch Heal Authentication & Authorization Matrix ---');
-
-  const validBatchPayload = {
-    anomalies: [
-      { imsi: '001010000000001', type: 'MISSING_SLICE' },
-    ],
-  };
-
-  await verifyAsync('BH-A01: anonymous request returns 401', async () => {
-    const n = await callNode('/api/system/audit/batch-heal', 'POST', null, validBatchPayload);
-    const g = await callGo('/api/system/audit/batch-heal', 'POST', null, validBatchPayload);
-    assert.equal(n.status, 401);
-    assert.equal(g.status, 401);
-  });
-
-  await verifyAsync('BH-A08: viewer role denied with 403 (PERMISSION_DENIED)', async () => {
-    const n = await callNode('/api/system/audit/batch-heal', 'POST', viewerToken, validBatchPayload);
-    const g = await callGo('/api/system/audit/batch-heal', 'POST', viewerToken, validBatchPayload);
-    assert.equal(n.status, 403);
-    assert.equal(g.status, 403);
-    assert.equal(n.body.code, 'PERMISSION_DENIED');
-    assert.equal(g.body.code, 'PERMISSION_DENIED');
-  });
-
-  await verifyAsync('BH-A09: operator role allowed with 200', async () => {
-    const n = await callNode('/api/system/audit/batch-heal', 'POST', operatorToken, validBatchPayload);
-    const g = await callGo('/api/system/audit/batch-heal', 'POST', operatorToken, validBatchPayload);
-    assert.equal(n.status, 200);
-    assert.equal(g.status, 200);
-    assert.equal(n.body.successCount, g.body.successCount);
-    assert.equal(n.body.failedCount, g.body.failedCount);
-  });
-
-  await verifyAsync('BH-A10: admin role allowed with 200', async () => {
-    const n = await callNode('/api/system/audit/batch-heal', 'POST', adminToken, validBatchPayload);
-    const g = await callGo('/api/system/audit/batch-heal', 'POST', adminToken, validBatchPayload);
-    assert.equal(n.status, 200);
-    assert.equal(g.status, 200);
-    assert.equal(n.body.successCount, g.body.successCount);
-  });
-
-  await verifyAsync('BH-A11: legacy root role allowed with 200', async () => {
-    const n = await callNode('/api/system/audit/batch-heal', 'POST', rootToken, validBatchPayload);
-    const g = await callGo('/api/system/audit/batch-heal', 'POST', rootToken, validBatchPayload);
-    assert.equal(n.status, 200);
-    assert.equal(g.status, 200);
-  });
-
-  await verifyAsync('BH-A12: legacy ops_admin role allowed with 200', async () => {
-    const n = await callNode('/api/system/audit/batch-heal', 'POST', opsAdminToken, validBatchPayload);
-    const g = await callGo('/api/system/audit/batch-heal', 'POST', opsAdminToken, validBatchPayload);
-    assert.equal(n.status, 200);
-    assert.equal(g.status, 200);
-  });
-
-  // =========================================================================
-  // Section 9: Batch Heal Validation Matrix
-  // =========================================================================
-  console.log('\n--- Section 9: Batch Heal Validation Matrix ---');
-
-  await verifyAsync('BH-V01: malformed JSON returns 500', async () => {
-    const n = await callNode('/api/system/audit/batch-heal', 'POST', batchValToken, '{not json');
-    const g = await callGo('/api/system/audit/batch-heal', 'POST', batchValToken, '{not json');
-    assert.equal(n.status, 500);
-    assert.equal(g.status, 500);
-    assert.equal(n.body.error, 'Batch self-healing execution failed');
-    assert.equal(g.body.error, 'Batch self-healing execution failed');
-  });
-
-  await verifyAsync('BH-V02: missing anomalies returns 400', async () => {
-    const n = await callNode('/api/system/audit/batch-heal', 'POST', batchValToken, {});
-    const g = await callGo('/api/system/audit/batch-heal', 'POST', batchValToken, {});
-    assert.equal(n.status, 400);
-    assert.equal(g.status, 400);
-    assert.equal(n.body.error, 'anomalies list is required and cannot be empty');
-    assert.equal(g.body.error, 'anomalies list is required and cannot be empty');
-  });
-
-  await verifyAsync('BH-V03: anomalies null returns 400', async () => {
-    const n = await callNode('/api/system/audit/batch-heal', 'POST', batchValToken, { anomalies: null });
-    const g = await callGo('/api/system/audit/batch-heal', 'POST', batchValToken, { anomalies: null });
-    assert.equal(n.status, 400);
-    assert.equal(g.status, 400);
-    assert.equal(n.body.error, 'anomalies list is required and cannot be empty');
-    assert.equal(g.body.error, 'anomalies list is required and cannot be empty');
-  });
-
-  await verifyAsync('BH-V04: anomalies empty array returns 400', async () => {
-    const n = await callNode('/api/system/audit/batch-heal', 'POST', batchValToken, { anomalies: [] });
-    const g = await callGo('/api/system/audit/batch-heal', 'POST', batchValToken, { anomalies: [] });
-    assert.equal(n.status, 400);
-    assert.equal(g.status, 400);
-    assert.equal(n.body.error, 'anomalies list is required and cannot be empty');
-    assert.equal(g.body.error, 'anomalies list is required and cannot be empty');
-  });
-
-  await verifyAsync('BH-V05: anomalies non-array returns 400', async () => {
-    const n = await callNode('/api/system/audit/batch-heal', 'POST', batchValToken, { anomalies: 'not-array' });
-    const g = await callGo('/api/system/audit/batch-heal', 'POST', batchValToken, { anomalies: 'not-array' });
-    assert.equal(n.status, 400);
-    assert.equal(g.status, 400);
-    assert.equal(n.body.error, 'anomalies list is required and cannot be empty');
-    assert.equal(g.body.error, 'anomalies list is required and cannot be empty');
-  });
-
-  // =========================================================================
-  // Section 10: Batch Heal Item-level & Mixed Execution Matrix
-  // =========================================================================
-  console.log('\n--- Section 10: Batch Heal Item-level & Mixed Execution Matrix ---');
-
-  await verifyAsync('BH-I01: single valid anomaly returns 200 with successCount: 1', async () => {
-    const payload = {
-      anomalies: [{ imsi: '001010000000001', type: 'dangling_profile' }],
-    };
-    const n = await callNode('/api/system/audit/batch-heal', 'POST', batchExecToken, payload);
-    const g = await callGo('/api/system/audit/batch-heal', 'POST', batchExecToken, payload);
-    assert.equal(n.status, 200);
-    assert.equal(g.status, 200);
-    assert.equal(n.body.successCount, 1);
-    assert.equal(g.body.successCount, 1);
-    assert.equal(n.body.failedCount, 0);
-    assert.equal(g.body.failedCount, 0);
-    assert.deepEqual(n.body.errors, g.body.errors);
-  });
-
-  await verifyAsync('BH-I02: multiple valid anomalies executed sequentially', async () => {
-    const payload = {
-      anomalies: [
-        { imsi: '001010000000002', type: 'missing_config' },
-        { imsi: '001010000000003', type: 'dangling_profile' },
-        { imsi: '001010000000005', type: 'missing_config' },
-      ],
-    };
-    const n = await callNode('/api/system/audit/batch-heal', 'POST', batchExecToken, payload);
-    const g = await callGo('/api/system/audit/batch-heal', 'POST', batchExecToken, payload);
-    assert.equal(n.status, 200);
-    assert.equal(g.status, 200);
-    assert.equal(n.body.successCount, 3);
-    assert.equal(g.body.successCount, 3);
-    assert.equal(n.body.failedCount, 0);
-    assert.equal(g.body.failedCount, 0);
-    assert.equal(n.body.message, 'Successfully healed 3 of 3 anomalies');
-    assert.equal(g.body.message, 'Successfully healed 3 of 3 anomalies');
-  });
-
-  await verifyAsync('BH-I03: null element in anomalies causes 500 error escaping', async () => {
-    const payload = {
-      anomalies: [null],
-    };
-    const n = await callNode('/api/system/audit/batch-heal', 'POST', batchExecToken, payload);
-    const g = await callGo('/api/system/audit/batch-heal', 'POST', batchExecToken, payload);
-    assert.equal(n.status, 500);
-    assert.equal(g.status, 500);
-    assert.equal(n.body.error, 'Batch self-healing execution failed');
-    assert.equal(g.body.error, 'Batch self-healing execution failed');
-  });
-
-  await verifyAsync('BH-I04 & BH-I05: primitive or empty items recorded in errors array with failedCount', async () => {
-    const payload = {
-      anomalies: [
-        12345,
-        {},
-      ],
-    };
-    const n = await callNode('/api/system/audit/batch-heal', 'POST', batchExecToken, payload);
-    const g = await callGo('/api/system/audit/batch-heal', 'POST', batchExecToken, payload);
-    assert.equal(n.status, 200);
-    assert.equal(g.status, 200);
-    assert.equal(n.body.successCount, 0);
-    assert.equal(g.body.successCount, 0);
-    assert.equal(n.body.failedCount, 2);
-    assert.equal(g.body.failedCount, 2);
-    assert.equal(n.body.errors.length, 2);
-    assert.equal(g.body.errors.length, 2);
-  });
-
-  await verifyAsync('BH-M01: mixed batch (valid and invalid) partial success parity', async () => {
-    const payload = {
-      anomalies: [
-        { imsi: '001010000000001', type: 'dangling_profile' },
-        {},
-        { imsi: '001010000000002', type: 'missing_config' },
-      ],
-    };
-    const n = await callNode('/api/system/audit/batch-heal', 'POST', batchMixToken, payload);
-    const g = await callGo('/api/system/audit/batch-heal', 'POST', batchMixToken, payload);
-    assert.equal(n.status, 200);
-    assert.equal(g.status, 200);
-    assert.equal(n.body.successCount, 2);
-    assert.equal(g.body.successCount, 2);
-    assert.equal(n.body.failedCount, 1);
-    assert.equal(g.body.failedCount, 1);
-    assert.equal(n.body.message, 'Successfully healed 2 of 3 anomalies');
-    assert.equal(g.body.message, 'Successfully healed 2 of 3 anomalies');
-  });
-
-  await verifyAsync('BH-M03: custom profileName applied across batch items', async () => {
-    const payload = {
-      anomalies: [
-        { imsi: '001010000000004', type: 'dangling_profile' },
-      ],
-      profileName: 'custom_profile',
-    };
-    const n = await callNode('/api/system/audit/batch-heal', 'POST', batchMixToken, payload);
-    const g = await callGo('/api/system/audit/batch-heal', 'POST', batchMixToken, payload);
-    assert.equal(n.status, 200);
-    assert.equal(g.status, 200);
-    const subN = await client.db(xcloudDbNode).collection('subscribers').findOne({ imsi: '001010000000004' });
-    const subG = await client.db(xcloudDbGo).collection('subscribers').findOne({ imsi: '001010000000004' });
-    assert.equal(subN.profile_name, 'custom_profile');
-    assert.equal(subG.profile_name, 'custom_profile');
-  });
-
-  // =========================================================================
-  // Section 11: Batch Heal Rate Limiting Matrix
-  // =========================================================================
-  console.log('\n--- Section 11: Batch Heal Rate Limiting Matrix ---');
-
-  await verifyAsync('BH-R01 to BH-R04: 10 req/60s permitted, 11th returns 429 with headers', async () => {
-    const payload = {
-      anomalies: [{ imsi: '001010000000001', type: 'MISSING_SLICE' }],
-    };
-    for (let i = 0; i < 10; i++) {
-      const g = await callGo('/api/system/audit/batch-heal', 'POST', rlBatchToken, payload);
-      assert.equal(g.status, 200, `Go batch request ${i + 1} should be 200`);
+  }
+  for (const role of ['super_admin', 'auditor']) {
+    for (const db of aDbs) await db.collection('app_users').insertOne({ username: `${role}_user`, role, status: 'active', security: { sessionVersion: 1 } });
+  }
+  const protectedNames = [
+    ['xcloud', 'ocs_tariff_plans'], ['xcloud', 'ocs_sessions'], ['xcloud', 'ocs_usage_records'],
+    ['xcloud', 'ocs_events'], ['xcloud', 'ocs_config'], ['xcloud', 'ocs_balance_adjustments'],
+    ['app', 'app_users'], ['app', 'app_profiles'], ['app', 'app_profile_versions'],
+    ['app', 'app_alerts'], ['app', 'app_ratings'], ['app', 'app_approvals'],
+  ];
+  // Seed otherwise-empty protected domains to detect content edits as well as inserts.
+  for (const [kind, name] of protectedNames) {
+    for (const db of kind === 'xcloud' ? xDbs : aDbs) {
+      if (await db.collection(name).countDocuments({}) === 0 && name !== 'app_approvals') {
+        await db.collection(name).insertOne({ fixture: 'protected', nested: { count: 0, value: 'preserve' } });
+      }
     }
-    const g11 = await callGo('/api/system/audit/batch-heal', 'POST', rlBatchToken, payload);
-    assert.equal(g11.status, 429);
-    assert.equal(g11.body.error, 'Too many requests');
-    assert.ok(g11.headers.get('retry-after') !== null);
-    assert.ok(g11.headers.get('x-ratelimit-limit') !== null);
-  });
-
-  // =========================================================================
-  // Section 12: Batch Heal Repository Failure Matrix
-  // =========================================================================
-  console.log('\n--- Section 12: Batch Heal Repository Failure Matrix ---');
-
-  await verifyAsync('BH-F01 & BH-F03: item-level repository failure on disconnected DB trapped with 200 and failedCount: 1', async () => {
-    const payload = {
-      anomalies: [{ imsi: '001010000000001', type: 'MISSING_SLICE' }],
-    };
-    const gFail = await callGoFail('/api/system/audit/batch-heal', 'POST', repoFailToken, payload);
-    assert.equal(gFail.status, 200);
-    assert.equal(gFail.body.successCount, 0);
-    assert.equal(gFail.body.failedCount, 1);
-    assert.ok(gFail.body.errors && gFail.body.errors.length === 1);
-  });
-
-  await verifyAsync('BH-F01: batch-level escaping failure on Go testserver returns 500', async () => {
-    const payload = {
-      anomalies: [null],
-    };
-    const gFail = await callGoFail('/api/system/audit/batch-heal', 'POST', repoFailToken, payload);
-    assert.equal(gFail.status, 500);
-    assert.equal(gFail.body.error, 'Batch self-healing execution failed');
-  });
-
-  // =========================================================================
-  // Section 13: Best-Effort Audit Logging Evidence & Resilience
-  // =========================================================================
-  console.log('\n--- Section 13: Best-Effort Audit Logging Evidence & Resilience ---');
-
-  await verifyAsync('Verify operation logs recorded in app_audit_logs for heal', async () => {
-    await waitFor('Node HEAL audit entries', async () => {
-      const logs = await client.db(appDbNode).collection('app_audit_logs').find({ action: 'HEAL' }).toArray();
-      return logs.length > 0;
-    }, 5000);
-    await waitFor('Go HEAL audit entries', async () => {
-      const logs = await client.db(appDbGo).collection('app_audit_logs').find({ action: 'HEAL' }).toArray();
-      return logs.length > 0;
-    }, 5000);
-  });
-
-  await verifyAsync('Viewer authorization denial writes authorization.denied audit record', async () => {
-    const filter = {
-      action: 'authorization.denied',
-      $or: [{ actor: 'viewer_user' }, { 'actorContext.username': 'viewer_user' }],
-    };
-    await waitFor('Node authorization denial audit log', async () => {
-      const count = await client.db(appDbNode).collection('app_audit_logs').countDocuments(filter);
-      return count > 0;
-    }, 5000);
-    await waitFor('Go authorization denial audit log', async () => {
-      const count = await client.db(appDbGo).collection('app_audit_logs').countDocuments(filter);
-      return count > 0;
-    }, 5000);
-  });
-
-  // =========================================================================
-  // Section 14: Content-Level Mutation Guards
-  // =========================================================================
-  console.log('\n--- Section 14: Content-Level Mutation Guards ---');
-
-  await verifyAsync('Content-level fingerprints unchanged across protected collections', async () => {
-    const protectedAfterNode = await snapshotProtected('Node');
-    const protectedAfterGo = await snapshotProtected('Go');
-
-    for (const [dbKind, name] of PROTECTED_COLLECTIONS) {
-      const key = `${dbKind}.${name}`;
-      assert.deepEqual(
-        protectedAfterNode[key],
-        protectedBeforeNode[key],
-        `Node collection ${key} must not be mutated by remediation operations`
-      );
-      assert.deepEqual(
-        protectedAfterGo[key],
-        protectedBeforeGo[key],
-        `Go collection ${key} must not be mutated by remediation operations`
-      );
+  }
+  async function protectedSnapshot() {
+    const out = [];
+    for (const [kind, name] of protectedNames) {
+      for (const db of kind === 'xcloud' ? xDbs : aDbs) out.push(await fingerprintCollection(db, name));
     }
-  });
+    return out;
+  }
+  const protectedBefore = await protectedSnapshot();
 
-  // =========================================================================
-  // Section 15: Representative Re-Scan Verification (Section 73)
-  // =========================================================================
-  console.log('\n--- Section 15: Representative Re-Scan Verification ---');
+  const authCases = [
+    ['no token', null, 401], ['invalid token', 'not.a.valid.jwt', 401],
+    ['expired token', await makeToken('operator_user', 'operator', 1, -3600), 401],
+    ['revoked session', await makeToken('operator_user', 'operator', 99), 401],
+    ['disabled account', await makeToken('disabled_user', 'operator', 1), 401],
+    ['locked account', await makeToken('locked_user', 'operator', 1), 401],
+    ['admin', adminToken, 200], ['operator', operatorToken, 200],
+    ['viewer', await makeToken('viewer_user', 'viewer', 1), 403],
+    ['root', await makeToken('root_user', 'root', 1), 200],
+    ['super_admin', await makeToken('super_admin_user', 'super_admin', 1), 200],
+    ['ops_admin', await makeToken('ops_admin_user', 'ops_admin', 1), 200],
+    ['auditor', await makeToken('auditor_user', 'auditor', 1), 403],
+  ];
+  for (const kind of ['SH', 'BH']) {
+    authCases.forEach(([label, token, status], i) => test(`${kind}-A${String(i + 1).padStart(2, '0')}`, label, async () => {
+      const imsi = nextImsi();
+      const before = await stateParity([imsi]);
+      // Authentication error payloads differ at the pre-route middleware boundary;
+      // compare status and rejection state, as in the auth parity acceptance suites.
+      const payload = wrap(kind, { imsi, type: 'orphan_ocs' });
+      const n = await callNode(endpoints[kind], 'POST', token, payload);
+      const g = await callGo(endpoints[kind], 'POST', token, payload);
+      assert.equal(n.status, status); assert.equal(g.status, status);
+      if (status === 200) assert.deepStrictEqual(g.body, n.body);
+      if (status === 403) { assert.equal(n.body.code, 'PERMISSION_DENIED'); assert.equal(g.body.code, n.body.code); }
+      const after = await stateParity([imsi]);
+      if (status !== 200) assert.deepStrictEqual(after, before);
+      else assert.equal(after.subscribers.length, 1);
+    }));
+  }
 
-  await verifyAsync('Anomalous subscriber detected by scan, healed, and verified cleared on re-scan', async () => {
-    const scanImsi = '001010000000088';
-    // 1. Seed subscriber with missing_config anomaly
-    await client.db(xcloudDbNode).collection('subscribers').insertOne({
-      imsi: scanImsi,
-      msisdn: scanImsi,
-      status: 'ACTIVE',
-      // No security, no slice, no ambr -> triggers missing_config
-      createdAt: new Date(),
-      updatedAt: new Date(),
+  const validation = [
+    ['malformed JSON', '{bad json', 500], ['empty object', {}, 400],
+    ['missing imsi', { type: 'unknown_type' }, 400], ['missing type', { imsi: '001010000000001' }, 400],
+    ['imsi empty', { imsi: '', type: 'unknown_type' }, 400], ['type empty', { imsi: '001010000000001', type: '' }, 400],
+    ['14-digit IMSI', { imsi: '00101000000001', type: 'unknown_type' }, 400],
+    ['16-digit IMSI', { imsi: '0010100000000001', type: 'unknown_type' }, 400],
+    ['whitespace IMSI', { imsi: ' 001010000000001 ', type: 'unknown_type' }, 400],
+    ['lowercase unknown', { imsi: 'unknown', type: 'unknown_type' }, 400],
+    ['uppercase UNKNOWN', { imsi: 'UNKNOWN', type: 'orphan_ocs' }, 200],
+    ['numeric 15-digit IMSI', { imsi: 123456789012345, type: 'orphan_ocs' }, 200],
+  ];
+  validation.forEach(([label, payload, status], i) => test(`SH-V${String(i + 1).padStart(2, '0')}`, label, async () => {
+    const before = await stateParity();
+    await pair('SH', payload, status);
+    const after = await stateParity();
+    if (status !== 200) assert.deepStrictEqual(after, before);
+    else assert.ok(after.subscribers.some((s) => s.imsi === String(payload.imsi)));
+  }));
+  [
+    ['malformed JSON', '{bad json', 500], ['anomalies missing', {}, 400],
+    ['anomalies null', { anomalies: null }, 400], ['anomalies object', { anomalies: {} }, 400],
+    ['anomalies empty array', { anomalies: [] }, 400],
+  ].forEach(([label, payload, status], i) => test(`BH-V${String(i + 1).padStart(2, '0')}`, label, async () => {
+    const before = await stateParity();
+    await pair('BH', payload, status);
+    assert.deepStrictEqual(await stateParity(), before);
+  }));
+
+  for (const kind of ['SH', 'BH']) {
+    const profiles = kind === 'SH'
+      ? [['omitted', undefined], ['empty', ''], ['whitespace', '   '], ['valid profile', 'custom_profile'], ['non-existent profile', 'absent_profile'], ['numeric profileName', 123]]
+      : [['omitted', undefined], ['empty', ''], ['valid profile', 'custom_profile'], ['non-existent profile', 'absent_profile'], ['numeric profileName', 123]];
+    profiles.forEach(([label, profileName], i) => test(`${kind}-P${String(i + 1).padStart(2, '0')}`, label, async () => {
+      const imsis = Array.from({ length: kind === 'BH' ? 2 : 1 }, nextImsi);
+      for (const imsi of imsis) await insertBoth('subscribers', validSub(imsi));
+      const items = imsis.map((imsi) => ({ imsi, type: 'dangling_profile' }));
+      const extra = profileName === undefined ? {} : { profileName };
+      await pair(kind, kind === 'SH' ? { ...items[0], ...extra } : { anomalies: items, ...extra });
+      const state = await stateParity(imsis);
+      for (const sub of state.subscribers) {
+        assert.equal(sub.profile_name, profileName ? String(profileName) : 'default');
+        assert.equal(sub.profile, sub.profile_name);
+        assert.equal(sub.webui_meta.profile_name, sub.profile_name);
+        assert.deepStrictEqual(sub.untouched, validSub(sub.imsi).untouched);
+      }
+    }));
+  }
+
+  const typeCases = [
+    ['orphan_ocs existing', 'orphan_ocs', true], ['orphan_ocs missing', 'orphan_ocs', false],
+    ['missing_config existing', 'missing_config', true], ['missing_config missing', 'missing_config', false],
+    ['balance_mismatch existing', 'balance_mismatch', true], ['balance_mismatch missing', 'balance_mismatch', false],
+    ['invalid_tariff matching', 'invalid_tariff', true, 1], ['invalid_tariff no OCS match', 'invalid_tariff', false],
+    ['dangling_profile explicit', 'dangling_profile', true, 0, 'custom_profile'], ['dangling_profile fallback', 'dangling_profile', false],
+    ['orphan_reservation one row', 'orphan_reservation', true, 1], ['orphan_reservation multiple rows', 'orphan_reservation', true, 3],
+    ['orphan_reservation no row', 'orphan_reservation', false],
+    ['unknown type existing', 'unknown_type', true], ['unknown type missing', 'unknown_type', false],
+  ];
+  typeCases.forEach(([label, type, existing, matches = 0, profileName], i) => test(`SH-T${String(i + 1).padStart(2, '0')}`, label, async () => {
+    const imsi = nextImsi();
+    if (existing) await insertBoth('subscribers', validSub(imsi));
+    if (type === 'invalid_tariff' && matches) await insertBoth('ocs_subscribers', { imsi, plan_id: 'absent', marker: 'preserve' });
+    if (type === 'orphan_reservation') {
+      for (let j = 0; j < matches; j++) await insertBoth('ocs_reservations', { imsi, reservation_id: `${imsi}-${j}`, state: 'active' });
+    }
+    const before = await stateParity([imsi]);
+    await pair('SH', { imsi, type, ...(profileName ? { profileName } : {}) });
+    const after = await stateParity([imsi]);
+    assert.equal(after.subscribers.length, 1, 'Missing subscriber side effect must persist for every type');
+    if (!existing) { assert.equal(after.subscribers[0].schema_version, 1); assert.ok(after.subscribers[0].security.k); }
+    if (existing && type !== 'dangling_profile') assert.deepStrictEqual(after.subscribers, before.subscribers);
+    if (type === 'missing_config' || type === 'balance_mismatch') {
+      assert.equal(after.ocs_subscribers[0].plan_id, 'plan_default_10gb');
+      assert.equal(after.ocs_balances[0].data_total, 10737418240);
+      assert.equal(after.ocs_balances[0].version, 1);
+    }
+    if (type === 'invalid_tariff') {
+      assert.equal(after.ocs_subscribers.length, matches);
+      if (matches) assert.equal(after.ocs_subscribers[0].plan_id, 'plan_default_10gb');
+    }
+    if (type === 'dangling_profile') assert.equal(after.subscribers[0].profile_name, profileName || 'default');
+    if (type === 'orphan_reservation') {
+      assert.equal(after.ocs_reservations.length, matches);
+      for (const row of after.ocs_reservations) { assert.equal(row.state, 'released'); assert.equal(row.released_at, '<BSON date>'); }
+    }
+    if (type === 'unknown_type' && existing) assert.deepStrictEqual(after, before);
+  }));
+
+  [
+    ['one valid anomaly', ['dangling_profile'], 1, 0],
+    ['multiple valid anomalies', ['dangling_profile', 'dangling_profile'], 2, 0],
+    ['mixed remediation types', ['missing_config', 'invalid_tariff', 'orphan_reservation'], 3, 0],
+    ['duplicate anomalies', ['missing_config', 'missing_config'], 2, 0],
+    ['unknown type', ['unknown_type'], 1, 0],
+    ['partial item failure', ['dangling_profile', 'malformed'], 1, 1],
+    ['first success / second fail / third success', ['dangling_profile', 'malformed', 'missing_config'], 2, 1],
+  ].forEach(([label, types, successCount, failedCount], i) => test(`BH-I${String(i + 1).padStart(2, '0')}`, label, async () => {
+    const imsis = types.map(nextImsi);
+    const anomalies = types.map((type, j) => type === 'malformed' ? {} : { imsi: i === 3 ? imsis[0] : imsis[j], type });
+    if (i === 2) {
+      await insertBoth('ocs_subscribers', { imsi: imsis[1], plan_id: 'absent' });
+      await insertBoth('ocs_reservations', { imsi: imsis[2], state: 'active' });
+    }
+    const n = await pair('BH', { anomalies });
+    assert.equal(n.body.successCount, successCount); assert.equal(n.body.failedCount, failedCount);
+    assert.equal(n.body.errors.length, failedCount);
+    const state = await stateParity(imsis);
+    assert.equal(state.subscribers.length, i === 3 ? 1 : successCount);
+    if (i === 3) assert.equal(state.ocs_balances[0].version, 2, 'Duplicate input executes twice');
+    if (i === 2) { assert.equal(state.ocs_subscribers.find((s) => s.imsi === imsis[1]).plan_id, 'plan_default_10gb'); assert.equal(state.ocs_reservations[0].state, 'released'); }
+    if (i === 6) assert.ok(state.ocs_balances.some((s) => s.imsi === imsis[2]), 'Third item must commit after captured failure');
+  }));
+
+  ['empty object', 'missing imsi', 'missing type', 'null', 'string', 'numeric', 'boolean'].forEach((label, i) => test(`BH-M${String(i + 1).padStart(2, '0')}`, `${label} item`, async () => {
+    const [first, middle, last] = [nextImsi(), nextImsi(), nextImsi()];
+    const item = [{}, { type: 'unknown_type' }, { imsi: middle }, null, 'text', 123, true][i];
+    const n = await pair('BH', { anomalies: [{ imsi: first, type: 'orphan_ocs' }, item, { imsi: last, type: 'orphan_ocs' }] }, i === 3 ? 500 : 200);
+    const state = await stateParity([first, middle, last]);
+    assert.ok(state.subscribers.some((s) => s.imsi === first));
+    if (i === 3) { assert.equal(state.subscribers.length, 1, 'Escaping null error stops before third item'); }
+    else {
+      assert.equal(n.body.successCount, i === 2 ? 3 : 2); assert.equal(n.body.failedCount, i === 2 ? 0 : 1);
+      assert.equal(n.body.errors.length, n.body.failedCount);
+      assert.equal(state.subscribers.length, n.body.successCount);
+      assert.ok(state.subscribers.some((s) => s.imsi === last));
+    }
+    console.log(`[heal-parity] BH-M${String(i + 1).padStart(2, '0')} status=${n.status} body=${JSON.stringify(n.body)} committed_imsis=${JSON.stringify(state.subscribers.map((s) => s.imsi))}`);
+  }));
+
+  async function rejectWrites(dbs, name, fn) {
+    await drainAfter();
+    const start = new Date();
+    for (const db of dbs) await db.command({ collMod: name, validator: { $expr: { $eq: [1, 2] } }, validationLevel: 'strict', validationAction: 'error' });
+    try { await fn(start); await drainAfter(); }
+    finally { for (const db of dbs) await db.command({ collMod: name, validator: {} }); }
+  }
+  async function rejectedWriteEvidence(dbs, name, start) {
+    for (const db of dbs) {
+      await waitFor(`${db.databaseName}.${name} real storage rejection`, async () => {
+        return db.collection('system.profile').findOne({ ts: { $gte: start }, ns: `${db.databaseName}.${name}`, $or: [{ errCode: 121 }, { 'command.insert': name, ninserted: 0 }] });
+      });
+    }
+    console.log(`[heal-parity] storage_failure_observed=true collection=${name} Node=true Go=true`);
+  }
+  test('SH-F01', 'real business repository failure', async () => {
+    const imsi = nextImsi();
+    await insertBoth('subscribers', validSub(imsi));
+    const before = await stateParity([imsi]);
+    await rejectWrites(xDbs, 'subscribers', async (start) => {
+      await pair('SH', { imsi, type: 'dangling_profile' }, 500);
+      await rejectedWriteEvidence(xDbs, 'subscribers', start);
     });
-    await client.db(xcloudDbGo).collection('subscribers').insertOne({
-      imsi: scanImsi,
-      msisdn: scanImsi,
-      status: 'ACTIVE',
-      createdAt: new Date(),
-      updatedAt: new Date(),
+    assert.deepStrictEqual(await stateParity([imsi]), before);
+  });
+  test('BH-F01', 'batch repository helper escaping failure after committed first item', async () => {
+    // Node catches ordinary Mongo failures per item. A null item throws again in
+    // the repository catch formatter and escapes the entire helper (HTTP 500).
+    const first = nextImsi(), last = nextImsi();
+    await pair('BH', { anomalies: [{ imsi: first, type: 'missing_config' }, null, { imsi: last, type: 'orphan_ocs' }] }, 500);
+    const state = await stateParity([first, last]);
+    assert.equal(state.subscribers.length, 1); assert.equal(state.subscribers[0].imsi, first);
+    assert.equal(state.ocs_balances[0].version, 1);
+  });
+  for (const kind of ['SH', 'BH']) {
+    test(`${kind}-F02`, 'audit persistence failure remains best-effort', async () => {
+      const imsi = nextImsi();
+      await insertBoth('subscribers', validSub(imsi));
+      await rejectWrites(aDbs, 'app_audit_logs', async (start) => {
+        await pair(kind, wrap(kind, { imsi, type: 'missing_config' }));
+        await rejectedWriteEvidence(aDbs, 'app_audit_logs', start);
+        await drainAfter();
+        const state = await stateParity([imsi]);
+        assert.equal(state.ocs_balances[0].version, 1, 'One execution, no rollback or duplicate provisioning');
+        for (const db of aDbs) assert.equal(await db.collection('app_audit_logs').countDocuments({ action: 'HEAL', 'newData': { $exists: true }, $or: [{ targetId: imsi }, { 'newData.count': 1, timestamp: { $gte: start.toISOString() } }] }), 0);
+      });
     });
+    test(`${kind}-F03`, 'rate-limit storage failure preserves fail-open business execution', async () => {
+      const imsi = nextImsi();
+      await rejectWrites(aDbs, 'app_rate_limits', async (start) => {
+        await pair(kind, wrap(kind, { imsi, type: 'missing_config' }));
+        await rejectedWriteEvidence(aDbs, 'app_rate_limits', start);
+        const state = await stateParity([imsi]);
+        assert.equal(state.subscribers.length, 1); assert.equal(state.ocs_balances[0].version, 1);
+      });
+    });
+  }
 
-    // 2. Scan before healing: verify anomaly is detected on both Node and Go
-    const scanBeforeNode = await callNode('/api/system/audit/scan', 'POST', adminToken, { cursor: '0', phase: 'sub' });
-    const scanBeforeGo = await callGo('/api/system/audit/scan', 'POST', adminToken, { cursor: '0', phase: 'sub' });
-    assert.equal(scanBeforeNode.status, 200);
-    assert.equal(scanBeforeGo.status, 200);
-    const foundBeforeN = scanBeforeNode.body.anomalies.some((a) => a.imsi === scanImsi && a.type === 'missing_config');
-    const foundBeforeG = scanBeforeGo.body.anomalies.some((a) => a.imsi === scanImsi && a.type === 'missing_config');
-    assert.ok(foundBeforeN, 'Node scan must report missing_config anomaly for probe IMSI');
-    assert.ok(foundBeforeG, 'Go scan must report missing_config anomaly for probe IMSI');
-
-    // 3. Execute heal
-    const healN = await callNode('/api/system/audit/heal', 'POST', operatorToken, { imsi: scanImsi, type: 'missing_config' });
-    const healG = await callGo('/api/system/audit/heal', 'POST', operatorToken, { imsi: scanImsi, type: 'missing_config' });
-    assert.equal(healN.status, 200);
-    assert.equal(healG.status, 200);
-
-    // 4. Update security, slice, ambr so subscriber satisfies HSS invariants completely
-    await client.db(xcloudDbNode).collection('subscribers').updateOne(
-      { imsi: scanImsi },
-      { $set: { security: { k: '465B5CE8B199B49FAA5F0A2EE238A6BC', opc: 'E8ED289DEBA952E4283B54E88E6183CA' }, slice: [{ sst: 1, sd: '000001', default: true }], ambr: { maxDl: 1000000000, maxUl: 500000000 } } }
-    );
-    await client.db(xcloudDbGo).collection('subscribers').updateOne(
-      { imsi: scanImsi },
-      { $set: { security: { k: '465B5CE8B199B49FAA5F0A2EE238A6BC', opc: 'E8ED289DEBA952E4283B54E88E6183CA' }, slice: [{ sst: 1, sd: '000001', default: true }], ambr: { maxDl: 1000000000, maxUl: 500000000 } } }
-    );
-
-    // 5. Re-scan: verify anomaly is resolved
-    const scanAfterNode = await callNode('/api/system/audit/scan', 'POST', adminToken, { cursor: '0', phase: 'sub' });
-    const scanAfterGo = await callGo('/api/system/audit/scan', 'POST', adminToken, { cursor: '0', phase: 'sub' });
-    assert.equal(scanAfterNode.status, 200);
-    assert.equal(scanAfterGo.status, 200);
-    const foundAfterN = scanAfterNode.body.anomalies.some((a) => a.imsi === scanImsi);
-    const foundAfterG = scanAfterGo.body.anomalies.some((a) => a.imsi === scanImsi);
-    assert.ok(!foundAfterN, 'Probe IMSI anomaly must be cleared after healing on Node');
-    assert.ok(!foundAfterG, 'Probe IMSI anomaly must be cleared after healing on Go');
+  // Each boundary row establishes its own budget, so rows run independently.
+  for (const [kind, limit] of [['SH', 20], ['BH', 10]]) {
+    async function exhaust() {
+      // Avoid a real fixed-window rollover during this bounded HTTP sequence.
+      const left = 60000 - Date.now() % 60000;
+      if (left < 10000) await new Promise((r) => setTimeout(r, left + 20));
+      const imsi = nextImsi();
+      await insertBoth('subscribers', validSub(imsi));
+      const payload = wrap(kind, { imsi, type: 'unknown_type' });
+      const startWindow = Math.floor(Date.now() / 60000);
+      for (let i = 0; i < limit; i++) await pair(kind, payload);
+      assert.equal(Math.floor(Date.now() / 60000), startWindow, 'Boundary requests must share a fixed window');
+      for (const db of aDbs) {
+        const row = await db.collection('app_rate_limits').findOne({ key: `RATELIMIT:system:audit-${kind === 'SH' ? 'heal' : 'batch-heal'}:operator_user:${startWindow}` });
+        assert.equal(row?.count, limit);
+      }
+      return payload;
+    }
+    test(`${kind}-R01`, `${limit}/60 allowed boundary`, async () => { await exhaust(); });
+    test(`${kind}-R02`, `${limit + 1} request denied`, async () => {
+      const payload = await exhaust();
+      const n = await callNode(endpoints[kind], 'POST', operatorToken, payload);
+      const g = await callGo(endpoints[kind], 'POST', operatorToken, payload);
+      assert.equal(n.status, 429); assert.equal(g.status, 429); assert.deepStrictEqual(g.body, n.body);
+      for (const r of [n, g]) { assert.equal(r.headers.get('x-ratelimit-limit'), String(limit)); assert.equal(r.headers.get('x-ratelimit-remaining'), '0'); assert.ok(Number(r.headers.get('retry-after')) > 0); }
+      assert.equal(g.headers.get('x-ratelimit-reset'), n.headers.get('x-ratelimit-reset'));
+    });
+    test(`${kind}-R03`, 'per-user isolation', async () => {
+      const payload = await exhaust();
+      await pair(kind, payload, 429);
+      await pair(kind, payload, 200, adminToken);
+    });
+  }
+  test('BH-R04', 'single/batch limiter independence', async () => {
+    const imsi = nextImsi();
+    await insertBoth('subscribers', validSub(imsi));
+    const item = { imsi, type: 'unknown_type' };
+    const left = 60000 - Date.now() % 60000;
+    if (left < 10000) await new Promise((r) => setTimeout(r, left + 20));
+    for (let i = 0; i < 20; i++) await pair('SH', item);
+    await pair('SH', item, 429);
+    await pair('BH', { anomalies: [item] });
+    for (const db of aDbs) {
+      const rows = await db.collection('app_rate_limits').find({}).toArray();
+      assert.equal(rows.find((r) => r.key.includes('system:audit-heal:operator_user:'))?.count, 21);
+      assert.equal(rows.find((r) => r.key.includes('system:audit-batch-heal:operator_user:'))?.count, 1);
+    }
   });
 
-  // =========================================================================
-  // Section 16: Static Autonomous-Healing Guard (Section 83)
-  // =========================================================================
-  console.log('\n--- Section 16: Static Autonomous-Healing Guard ---');
+  const rescans = [['missing_config', 'sub'], ['balance_mismatch', 'ocs'], ['invalid_tariff', 'tariff'], ['dangling_profile', 'sub'], ['orphan_reservation', 'reservation']];
+  rescans.forEach(([type, phase], i) => test(`RS0${i + 1}`, type, async () => {
+    const imsi = nextImsi();
+    const sub = type === 'missing_config' ? { imsi } : validSub(imsi);
+    if (type === 'dangling_profile') { sub.profile_name = 'deleted'; sub.profile = 'deleted'; sub.webui_meta = { profile_name: 'deleted' }; }
+    await insertBoth('subscribers', sub);
+    if (type === 'balance_mismatch' || type === 'invalid_tariff') await insertBoth('ocs_subscribers', { imsi, plan_id: type === 'invalid_tariff' ? 'deleted' : 'plan_default_10gb' });
+    if (type === 'balance_mismatch') await insertBoth('ocs_balances', { imsi, data_total: 1000, data_used: 100, data_reserved: 20, data_available: 1, voice_total: 100, voice_used: 10, voice_reserved: 0, voice_available: 90, sms_total: 100, sms_used: 0, sms_available: 100 });
+    if (type === 'orphan_reservation') await insertBoth('ocs_reservations', { imsi, reservation_id: imsi, session_id: 'absent-session', state: 'active' });
+    async function scan() {
+      const n = await callNode('/api/system/audit/scan', 'POST', adminToken, { cursor: '0', phase });
+      const g = await callGo('/api/system/audit/scan', 'POST', adminToken, { cursor: '0', phase });
+      assert.equal(n.status, 200); assert.equal(g.status, 200);
+      const target = (r) => r.body.anomalies.filter((a) => a.imsi === imsi).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+      assert.deepStrictEqual(target(g), target(n), 'Post/pre-scan exact anomaly parity');
+      return target(n);
+    }
+    const before = await scan();
+    assert.ok(before.some((a) => a.type === type), 'Explicit pre-scan must observe target');
+    await pair('SH', { imsi, type });
+    const fixtureWriteCount = fixtureWrites.length;
+    const healed = await stateParity([imsi]);
+    if (type === 'missing_config') { assert.ok(!healed.subscribers[0].security); assert.equal(healed.ocs_balances[0].version, 1); }
+    if (type === 'balance_mismatch') { const b = healed.ocs_balances[0]; assert.equal(b.data_total, b.data_used + b.data_reserved + b.data_available); }
+    if (type === 'invalid_tariff') assert.equal(healed.ocs_subscribers[0].plan_id, 'plan_default_10gb');
+    if (type === 'dangling_profile') assert.equal(healed.subscribers[0].webui_meta.profile_name, 'default');
+    if (type === 'orphan_reservation') assert.equal(healed.ocs_reservations[0].state, 'released');
+    // Only read operations occur between heal completion and this real scan.
+    const after = await scan();
+    assert.equal(fixtureWrites.length, fixtureWriteCount, 'No fixture database mutation between heal and re-scan');
+    assert.deepStrictEqual(await stateParity([imsi]), healed, 'Scanner must not repair persisted state');
+    const remains = after.some((a) => a.type === type);
+    assert.equal(remains, type === 'missing_config' || type === 'orphan_reservation');
+    console.log(`[heal-parity] RS0${i + 1} ${type} manual_db_repair_between_heal_and_rescan=false post_scan_outcome=${remains ? 'target_remains' : after.length ? 'other_anomaly' : 'cleared'} Node=${JSON.stringify(after)} Go=${JSON.stringify(after)}`);
+  }));
 
-  verify('Static check: strictly zero autonomous loops or background healing', () => {
-    const remediationSource = readFileSync(resolve(backendDir, 'internal/remediation/repository.go'), 'utf8');
-    const handlerSource = readFileSync(resolve(backendDir, 'internal/remediation/handler.go'), 'utf8');
-
-    assert.ok(!remediationSource.includes('cron.'), 'No cron jobs in remediation repository');
-    assert.ok(!remediationSource.includes('time.Ticker'), 'No background ticker in remediation repository');
-    assert.ok(!handlerSource.includes('time.Ticker'), 'No background ticker in remediation handler');
-    assert.ok(!remediationSource.includes('setInterval'), 'No background timers');
+  test('INV01', 'protected content fingerprints and zero approval writes', async () => {
+    assert.deepStrictEqual(await protectedSnapshot(), protectedBefore);
+    for (const db of aDbs) assert.equal(await db.collection('app_approvals').countDocuments({}), 0);
+  });
+  test('INV02', 'operation and authorization denial audit evidence', async () => {
+    for (const db of aDbs) {
+      await waitFor('HEAL audit evidence', () => db.collection('app_audit_logs').findOne({ action: 'HEAL' }));
+      await waitFor('authorization.denied audit evidence', () => db.collection('app_audit_logs').findOne({ action: 'authorization.denied' }));
+    }
+  });
+  test('INV03', 'static explicit-execution and production fault-switch guard', async () => {
+    function sources(dir) {
+      return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => entry.isDirectory() ? sources(resolve(dir, entry.name)) : /\.(go|ts)$/.test(entry.name) && !/(_test\.go|\.test\.ts)$/.test(entry.name) ? [resolve(dir, entry.name)] : []);
+    }
+    const repoFile = resolve(rootDir, 'frontend/src/server/repositories/systemAuditRepository.ts');
+    for (const path of sources(resolve(rootDir, 'frontend/src'))) {
+      const source = readFileSync(path, 'utf8');
+      if (/\b(?:healSubscriberDocument|batchHealSubscriberDocuments)\s*\(/.test(source)) {
+        assert.ok(path === repoFile || /[\\/]api[\\/]system[\\/]audit[\\/](heal|batch-heal)[\\/]route\.ts$/.test(path), `Unexpected Node heal caller: ${path}`);
+      }
+    }
+    for (const path of sources(resolve(backendDir, 'internal'))) {
+      const source = readFileSync(path, 'utf8');
+      if (/\.(?:HealSubscriberDocument|BatchHealSubscriberDocuments)\s*\(/.test(source)) assert.ok(/[\\/]remediation[\\/](handler|repository)\.go$/.test(path), `Unexpected Go heal caller: ${path}`);
+    }
+    for (const path of [repoFile, ...sources(resolve(backendDir, 'internal/remediation'))]) {
+      const source = readFileSync(path, 'utf8');
+      assert.ok(!/cron\.|time\.(?:NewTicker|Ticker|AfterFunc)|setInterval|TEST_FAIL_|FAIL_HEAL|go\s+func\s*\(/.test(source));
+    }
+  });
+  test('INV04', 'read-only scan and idle period do not autonomously heal', async () => {
+    const imsi = nextImsi();
+    await insertBoth('subscribers', { imsi });
+    const before = await stateParity([imsi]);
+    for (const call of [callNode, callGo]) assert.equal((await call('/api/system/audit/scan', 'POST', adminToken, { phase: 'sub', cursor: '0' })).status, 200);
+    await new Promise((r) => setTimeout(r, 1100));
+    assert.deepStrictEqual(await stateParity([imsi]), before);
+  });
+  test('INV05', 'routing freeze: 36 routes, Node remediation owners, zero Phase 7 cutover', async () => {
+    assert.equal(CUTOVER_TABLE.length, 36);
+    assert.equal(CUTOVER_TABLE.filter((r) => r.owner === 'go').length, 36);
+    for (const path of ['/api/alerts', '/api/alerts/acknowledge', '/api/alerts/workflow', '/api/notifications/stream', '/api/system/health', '/api/system/mongo/health', '/api/system/audit/status', '/api/system/audit/scan', ...Object.values(endpoints), '/api/analytics/init']) {
+      assert.ok(!CUTOVER_TABLE.some((r) => r.path === path));
+    }
   });
 
-  // =========================================================================
-  // Section 17: Production Fault-Switch Guard (Section 84)
-  // =========================================================================
-  console.log('\n--- Section 17: Production Fault-Switch Guard ---');
-
-  verify('Production source exposes no remediation fault switch', () => {
-    const remediationHandler = readFileSync(resolve(backendDir, 'internal/remediation/handler.go'), 'utf8');
-    assert.ok(!remediationHandler.includes('failReads'), 'No fault-switch in remediation handler');
-    assert.ok(!remediationHandler.includes('simulated'), 'No simulation flags in remediation handler');
-  });
-
-  // =========================================================================
-  // Section 18: Routing Invariants & Freeze Verification
-  // =========================================================================
-  console.log('\n--- Section 18: Routing Invariants & Freeze Verification ---');
-
-  verify('CUTOVER_TABLE length must be exactly 36', () => {
-    assert.equal(CUTOVER_TABLE.length, 36, `CUTOVER_TABLE must contain exactly 36 routes, found ${CUTOVER_TABLE.length}`);
-  });
-
-  verify('ACTUALLY_ROUTED count must be exactly 36', () => {
-    const routed = CUTOVER_TABLE.filter((r) => r.owner === 'go');
-    assert.equal(routed.length, 36, `ACTUALLY_ROUTED must be 36, found ${routed.length}`);
-  });
-
-  verify('Phase 7 remediation endpoints must NOT be in CUTOVER_TABLE (Phase 7 cutover = 0)', () => {
-    const healMatch = CUTOVER_TABLE.find((r) => r.path === '/api/system/audit/heal');
-    assert.ok(!healMatch, 'heal must not be in CUTOVER_TABLE');
-    const batchHealMatch = CUTOVER_TABLE.find((r) => r.path === '/api/system/audit/batch-heal');
-    assert.ok(!batchHealMatch, 'batch-heal must not be in CUTOVER_TABLE');
-  });
+  const registered = inventory(cases.map((c) => c.id));
+  assert.deepStrictEqual(registered.missing, [], 'Mandatory IDs absent before execution');
+  assert.deepStrictEqual(registered.duplicate, [], 'Duplicate registered IDs');
+  assert.equal(REQUIRED_IDS.length, 96);
+  console.log('[heal-parity] mandatory_ids_expected=96');
+  for (const c of cases) {
+    await clearBudgets();
+    executedIds.push(c.id);
+    await verifyAsync(`${c.id} ${c.description}`, c.run);
+  }
+  const completed = inventory(executedIds);
+  console.log(`[heal-parity] mandatory_ids_missing=${completed.missing.length}`);
+  console.log(`[heal-parity] mandatory_ids_duplicate=${completed.duplicate.length}`);
+  assert.deepStrictEqual(completed, { missing: [], duplicate: [] });
+  assert.ok(['RS01', 'RS02', 'RS03', 'RS04', 'RS05'].every((id) => executedIds.includes(id)));
 
   console.log('\n========================================================================');
   console.log('Phase 7.4 Controlled Remediation Parity Suite Summary');
   console.log(`TOTAL: ${totalChecks}`);
   console.log(`PASS:  ${passed}`);
   console.log(`FAIL:  ${failed}`);
+  console.log('SKIP:  0');
   console.log('========================================================================\n');
 
   await cleanup();
