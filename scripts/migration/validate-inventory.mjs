@@ -21,9 +21,9 @@ const total = Object.values(counts).reduce((sum, value) => sum + value, 0);
 const nonGet = total - counts.GET;
 
 assert.equal(routes.length, 54, 'route file inventory drift');
-assert.deepEqual(counts, { GET: 32, POST: 29, PUT: 7, PATCH: 3, DELETE: 7 });
-assert.equal(total, 78);
-assert.equal(nonGet, 46);
+assert.deepEqual(counts, { GET: 32, POST: 28, PUT: 5, PATCH: 2, DELETE: 5 });
+assert.equal(total, 72);
+assert.equal(nonGet, 40);
 
 const removedPrefixes = ['/api/approvals', '/api/audit'];
 for (const route of routes) {
@@ -36,13 +36,19 @@ const baseline = readFileSync(baselinePath, 'utf8');
 for (const [method, count] of Object.entries(counts)) {
   assert.match(baseline, new RegExp(`\\|\\s*${method}\\s*\\|\\s*${count}\\s*\\|`), `${method} baseline count drift`);
 }
-assert.match(baseline, /\|\s*Total operations\s*\|\s*\*\*78\*\*\s*\|/);
-assert.match(baseline, /\*\*46 non-GET/);
+assert.match(baseline, /\|\s*Total operations\s*\|\s*\*\*72\*\*\s*\|/);
+assert.match(baseline, /\*\*40 non-GET/);
 
 const jiti = createJiti(import.meta.url);
 const { CUTOVER_TABLE } = jiti(resolve(root, 'frontend/src/lib/cutover-routing.ts'));
-assert.equal(CUTOVER_TABLE.length, 47, 'CUTOVER_TABLE must be exactly 47');
-assert.equal(CUTOVER_TABLE.filter((route) => route.owner === 'go').length, 47, 'ACTUALLY_ROUTED must be exactly 47');
+// Derived, never hard-coded: 47 Phase 7.5 baseline + 33 canonical residual
+// + 2 legacy read aliases + 2 resolved Go-native residue reads.
+const CANONICAL_RESIDUAL = 33;
+const LEGACY_ALIASES = 2;
+const GO_NATIVE_RESIDUE = 2;
+const expectedCutover = 47 + CANONICAL_RESIDUAL + LEGACY_ALIASES + GO_NATIVE_RESIDUE;
+assert.equal(CUTOVER_TABLE.length, expectedCutover, `CUTOVER_TABLE must be exactly ${expectedCutover}`);
+assert.equal(CUTOVER_TABLE.filter((route) => route.owner === 'go').length, expectedCutover, `ACTUALLY_ROUTED must be exactly ${expectedCutover}`);
 
 // Verify no duplicate METHOD+PATH entries
 const seen = new Set();
@@ -105,6 +111,43 @@ for (const key of authRoutes) {
   assert.equal(entry.owner, 'go', `cutover route ${key} must be owner=go`);
 }
 
+// Verify the two legacy read compatibility aliases moved to Go and that no
+// mutation method was reintroduced under /api/auth/users (Phase 8.2 retirement).
+const legacyAliasRoutes = ['GET /api/auth/users', 'GET /api/auth/users/{username}'];
+for (const key of legacyAliasRoutes) {
+  const [method, path] = key.split(' ');
+  const entry = CUTOVER_TABLE.find((r) => r.method === method && r.path === path);
+  assert.ok(entry, `missing legacy alias cutover route: ${key}`);
+  assert.equal(entry.owner, 'go', `legacy alias ${key} must be owner=go`);
+}
+const retiredAuthMutations = [
+  'POST /api/auth/users',
+  'PUT /api/auth/users/{username}',
+  'PATCH /api/auth/users/{username}',
+  'DELETE /api/auth/users/{username}',
+  'PUT /api/users/{username}',
+  'DELETE /api/users/{username}',
+];
+for (const key of retiredAuthMutations) {
+  const [method, path] = key.split(' ');
+  assert.equal(CUTOVER_TABLE.some((r) => r.method === method && r.path === path), false, `retired mutation must not be routed: ${key}`);
+}
+// Retired mutations must also be gone from the current operation inventory.
+// Inventory paths use the `:param` Next.js form, so canonicalize before comparing.
+const toCanonical = (p) => p.replace(/:(\w+)/g, '{$1}');
+const inventoryKeys = new Set(routes.flatMap((route) => route.methods.map((m) => `${m} ${toCanonical(route.path)}`)));
+for (const key of retiredAuthMutations) {
+  assert.equal(inventoryKeys.has(key), false, `retired mutation still exported: ${key}`);
+}
+
+// Both Phase 8.0 Go-native unrouted reads were resolved by production routing.
+for (const key of ['GET /api/tariff-plans/{planId}/operations', 'GET /api/ocs/balances/{imsi}']) {
+  const [method, path] = key.split(' ');
+  const entry = CUTOVER_TABLE.find((r) => r.method === method && r.path === path);
+  assert.ok(entry, `missing resolved Go-native residue route: ${key}`);
+  assert.equal(entry.owner, 'go', `resolved residue ${key} must be owner=go`);
+}
+
 console.log('Migration inventory validation passed.');
 console.log(`Routes=${routes.length} Operations=${total} GET=${counts.GET} POST=${counts.POST} PUT=${counts.PUT} PATCH=${counts.PATCH} DELETE=${counts.DELETE}`);
-console.log('CUTOVER_TABLE=47 ACTUALLY_ROUTED=47');
+console.log(`CUTOVER_TABLE=${expectedCutover} ACTUALLY_ROUTED=${expectedCutover}`);

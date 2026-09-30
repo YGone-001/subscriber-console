@@ -4,9 +4,63 @@ import { resolveRouteOwner, CUTOVER_TABLE } from '../src/lib/cutover-routing.ts'
 
 describe('cutover-routing', () => {
   describe('CUTOVER_TABLE', () => {
-    it('contains exactly 47 cutover routes', () => {
-      assert.equal(CUTOVER_TABLE.length, 47);
+    it('contains exactly 84 cutover routes', () => {
+      assert.equal(CUTOVER_TABLE.length, 84);
     });
+
+    it('Phase 8.2: all 84 cutover routes are owned by Go', () => {
+      assert.equal(CUTOVER_TABLE.filter((r) => r.owner === 'go').length, 84);
+    });
+
+    const phase82ResidualRoutes = [
+      { method: 'GET', path: '/api/analytics/metrics' },
+      { method: 'GET', path: '/api/analytics/sparkline' },
+      { method: 'GET', path: '/api/ocs/balances' },
+      { method: 'GET', path: '/api/ocs/sessions' },
+      { method: 'GET', path: '/api/ocs/reservations' },
+      { method: 'GET', path: '/api/ocs/usage' },
+      { method: 'GET', path: '/api/profiles' },
+      { method: 'GET', path: '/api/profiles/{name}' },
+      { method: 'GET', path: '/api/profiles/{name}/stats' },
+      { method: 'GET', path: '/api/profiles/{name}/versions' },
+      { method: 'GET', path: '/api/ratings' },
+      { method: 'POST', path: '/api/ratings' },
+      { method: 'GET', path: '/api/ratings/{id}' },
+      { method: 'PUT', path: '/api/ratings/{id}' },
+      { method: 'DELETE', path: '/api/ratings/{id}' },
+      { method: 'GET', path: '/api/search' },
+      { method: 'GET', path: '/api/subscribers' },
+      { method: 'GET', path: '/api/subscribers/{imsi}' },
+      { method: 'POST', path: '/api/subscribers/batch/precheck' },
+      { method: 'POST', path: '/api/subscribers/policy' },
+      { method: 'POST', path: '/api/subscribers/{imsi}/traffic-adjustments' },
+      { method: 'GET', path: '/api/tariff-plans' },
+      { method: 'GET', path: '/api/tariff-plans/{planId}' },
+      { method: 'GET', path: '/api/tariff-plans/{planId}/export' },
+      { method: 'GET', path: '/api/tariff-plans/{planId}/migrate' },
+      { method: 'POST', path: '/api/tariff-plans/{planId}/migrate' },
+      { method: 'GET', path: '/api/tariff-plans/{planId}/operations' },
+      { method: 'GET', path: '/api/tariff-plans/{planId}/rules' },
+      { method: 'POST', path: '/api/tariff-plans/{planId}/rules' },
+      { method: 'PUT', path: '/api/tariff-plans/{planId}/rules/{ruleId}' },
+      { method: 'PATCH', path: '/api/tariff-plans/{planId}/rules/{ruleId}' },
+      { method: 'DELETE', path: '/api/tariff-plans/{planId}/rules/{ruleId}' },
+      { method: 'GET', path: '/api/tariff-plans/{planId}/subscribers' },
+      { method: 'POST', path: '/api/tariff-plans/import' },
+      { method: 'GET', path: '/api/auth/users' },
+      { method: 'GET', path: '/api/auth/users/{username}' },
+      { method: 'GET', path: '/api/ocs/balances/{imsi}' },
+    ];
+
+    for (const route of phase82ResidualRoutes) {
+      it(`Phase 8.2 residual: ${route.method} ${route.path} is owned by Go`, () => {
+        const entry = CUTOVER_TABLE.find(
+          (r) => r.path === route.path && r.method === route.method
+        );
+        assert.ok(entry, `${route.method} ${route.path} must exist`);
+        assert.equal(entry.owner, 'go');
+      });
+    }
 
     it('Pilot A: POST /api/profiles/{name}/versions/{versionId}/restore is owned by Go', () => {
       const pilotA = CUTOVER_TABLE.find(
@@ -410,12 +464,12 @@ describe('cutover-routing', () => {
   });
 
   describe('resolveRouteOwner - METHOD isolation', () => {
-    it('routes GET /api/profiles to Node (not in cutover table)', () => {
-      assert.equal(resolveRouteOwner('GET', '/api/profiles'), 'node');
+    it('routes GET /api/profiles to Go (Phase 8.2 read cutover)', () => {
+      assert.equal(resolveRouteOwner('GET', '/api/profiles'), 'go');
     });
 
-    it('routes GET /api/profiles/MyProfile to Node (not in cutover table)', () => {
-      assert.equal(resolveRouteOwner('GET', '/api/profiles/MyProfile'), 'node');
+    it('routes GET /api/profiles/MyProfile to Go (Phase 8.2 read cutover)', () => {
+      assert.equal(resolveRouteOwner('GET', '/api/profiles/MyProfile'), 'go');
     });
 
     it('routes POST /api/profiles/MyProfile to Node (not in cutover table)', () => {
@@ -433,28 +487,28 @@ describe('cutover-routing', () => {
       );
     });
 
-    it('routes GET /api/subscribers to Node (not in cutover table)', () => {
-      assert.equal(resolveRouteOwner('GET', '/api/subscribers'), 'node');
+    it('routes GET /api/subscribers to Go (Phase 8.2 read cutover)', () => {
+      assert.equal(resolveRouteOwner('GET', '/api/subscribers'), 'go');
     });
 
-    it('routes GET /api/subscribers/208930000000001 to Node (not in cutover table)', () => {
-      assert.equal(resolveRouteOwner('GET', '/api/subscribers/208930000000001'), 'node');
+    it('routes GET /api/subscribers/208930000000001 to Go (Phase 8.2 read cutover)', () => {
+      assert.equal(resolveRouteOwner('GET', '/api/subscribers/208930000000001'), 'go');
     });
 
     it('routes PATCH /api/subscribers/208930000000001 to Node (not in cutover table)', () => {
       assert.equal(resolveRouteOwner('PATCH', '/api/subscribers/208930000000001'), 'node');
     });
 
-    it('routes GET /api/tariff-plans to Node (read not in cutover table)', () => {
-      assert.equal(resolveRouteOwner('GET', '/api/tariff-plans'), 'node');
+    it('routes GET /api/tariff-plans to Go (Phase 8.2 read cutover)', () => {
+      assert.equal(resolveRouteOwner('GET', '/api/tariff-plans'), 'go');
     });
 
-    it('routes GET /api/tariff-plans/plan_10gb to Node (read not in cutover table)', () => {
-      assert.equal(resolveRouteOwner('GET', '/api/tariff-plans/plan_10gb'), 'node');
+    it('routes GET /api/tariff-plans/plan_10gb to Go (Phase 8.2 read cutover)', () => {
+      assert.equal(resolveRouteOwner('GET', '/api/tariff-plans/plan_10gb'), 'go');
     });
 
-    it('routes GET /api/ocs/balances to Node (read not in cutover table)', () => {
-      assert.equal(resolveRouteOwner('GET', '/api/ocs/balances'), 'node');
+    it('routes GET /api/ocs/balances to Go (Phase 8.2 read cutover)', () => {
+      assert.equal(resolveRouteOwner('GET', '/api/ocs/balances'), 'go');
     });
 
     it('routes PUT /api/ocs/subscribers/208930000000001 to Node (PUT not in cutover table)', () => {
@@ -470,13 +524,13 @@ describe('cutover-routing', () => {
     });
   });
 
-  describe('resolveRouteOwner - Remaining Phase 4 Node ownership', () => {
-    it('routes GET /api/subscribers to Node (Subscriber List)', () => {
-      assert.equal(resolveRouteOwner('GET', '/api/subscribers'), 'node');
+  describe('resolveRouteOwner - Remaining Phase 4 read ownership', () => {
+    it('routes GET /api/subscribers to Go (Subscriber List)', () => {
+      assert.equal(resolveRouteOwner('GET', '/api/subscribers'), 'go');
     });
 
-    it('routes GET /api/subscribers/208930000000001 to Node (Subscriber Detail)', () => {
-      assert.equal(resolveRouteOwner('GET', '/api/subscribers/208930000000001'), 'node');
+    it('routes GET /api/subscribers/208930000000001 to Go (Subscriber Detail)', () => {
+      assert.equal(resolveRouteOwner('GET', '/api/subscribers/208930000000001'), 'go');
     });
   });
 

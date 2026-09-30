@@ -34,13 +34,7 @@ export default function OcsBalanceDetail({ imsi }: OcsBalanceDetailProps) {
     fetcher,
   );
 
-  const { data: auditData } = useSWR(
-    `/api/audit?q=${encodeURIComponent(imsi)}&limit=1`,
-    fetcher,
-  );
-
   const balance = data?.balance || data?.records?.[0];
-  const latestAudit = auditData?.logs?.[0];
 
   const formatTime = (iso?: string) => {
     if (!iso) return "—";
@@ -203,26 +197,6 @@ export default function OcsBalanceDetail({ imsi }: OcsBalanceDetailProps) {
             <div className="ocs-detail-field">
               <span className="ocs-detail-label">{t("ocs_tariff_col_updated")}</span>
               <span className="ocs-detail-value">{formatTime(balance.updated_at)}</span>
-            </div>
-            <div className="ocs-detail-field">
-              <span className="ocs-detail-label">{t("ocs_balance_last_operation")}</span>
-              <span className="ocs-detail-value">{latestAudit?.action || "—"}</span>
-            </div>
-            <div className="ocs-detail-field">
-              <span className="ocs-detail-label">{t("ocs_balance_operator")}</span>
-              <span className="ocs-detail-value">{latestAudit?.actor || "—"}</span>
-            </div>
-            <div className="ocs-detail-field">
-              <span className="ocs-detail-label">{t("ocs_balance_audit_ref")}</span>
-              <span className="ocs-detail-value">
-                {latestAudit?._id ? (
-                  <Link href={`/audit-logs?q=${encodeURIComponent(balance.imsi)}`} className="ocs-link">
-                    {latestAudit._id}
-                  </Link>
-                ) : (
-                  "—"
-                )}
-              </span>
             </div>
           </div>
         </div>

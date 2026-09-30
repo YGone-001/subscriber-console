@@ -1180,9 +1180,9 @@ async function main() {
   });
 
   await check('R01 routing-invariants-preserved', async () => {
-    assert.equal(CUTOVER_TABLE.length, 47, 'CUTOVER_TABLE must contain exactly 47 routes');
+    assert.equal(CUTOVER_TABLE.length, 84, 'CUTOVER_TABLE must contain exactly 84 routes');
     const actuallyRouted = CUTOVER_TABLE.filter((r) => r.owner === 'go');
-    assert.equal(actuallyRouted.length, 47, 'ACTUALLY_ROUTED must be exactly 47');
+    assert.equal(actuallyRouted.length, 84, 'ACTUALLY_ROUTED must be exactly 84');
     const stream = CUTOVER_TABLE.find((r) => r.path === '/api/notifications/stream');
     assert.ok(stream, 'Notification stream must be in CUTOVER_TABLE after production cutover');
     assert.equal(stream.method, 'GET', 'Notification stream must be a GET route');

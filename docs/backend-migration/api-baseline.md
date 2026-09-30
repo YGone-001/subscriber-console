@@ -40,14 +40,20 @@ Browser → Nginx → Next.js :3000
 | Metric | Count |
 |--------|------:|
 | Route files | **54** |
-| Total operations | **78** |
+| Total operations | **72** |
 | GET | 32 |
-| POST | 29 |
-| PUT | 7 |
-| PATCH | 3 |
-| DELETE | 7 |
+| POST | 28 |
+| PUT | 5 |
+| PATCH | 2 |
+| DELETE | 5 |
 
-**Stale documentation**: CLAUDE.md claims "54 API Route Handlers" — actual is **63**.
+> Counts reflect the Phase 8.2 current operation inventory: the six non-canonical
+> retired mutation surfaces (POST /api/auth/users, PUT|PATCH|DELETE
+> /api/auth/users/{username}, PUT|DELETE /api/users/{username}) were removed from
+> the route modules, reducing the surface from 78 to 72 operations. Route files are
+> unchanged at 54 because only method exports were retired.
+
+**Stale documentation**: CLAUDE.md claims "54 API Route Handlers" — actual is **54 route files** (72 operations).
 
 ---
 
@@ -57,7 +63,7 @@ Browser → Nginx → Next.js :3000
 |--------|-------:|----------:|
 | alerts | 3 | 3 |
 | analytics | 3 | 3 |
-| auth | 6 | 10 |
+| auth | 6 | 6 |
 | notifications | 1 | 1 |
 | ocs | 4 | 4 |
 | profiles | 5 | 8 |
@@ -66,7 +72,7 @@ Browser → Nginx → Next.js :3000
 | subscribers | 10 | 13 |
 | system | 6 | 6 |
 | tariff-plans | 9 | 16 |
-| users | 4 | 8 |
+| users | 4 | 6 |
 
 ---
 
@@ -81,9 +87,9 @@ Browser → Nginx → Next.js :3000
 
 ## 6. Mutation Count
 
-**46 non-GET HTTP operations** (POST + PUT + PATCH + DELETE).
+**40 non-GET HTTP operations** (POST + PUT + PATCH + DELETE).
 
-- 46 are semantic writes (actual data mutations)
+- 40 are semantic writes (actual data mutations)
 - 2 are semantic reads using POST (`batch/precheck`, `system/audit/scan`)
 - 1 is a write via GET (`tariff-plans/:planId/migrate` dry-run, no data mutation)
 

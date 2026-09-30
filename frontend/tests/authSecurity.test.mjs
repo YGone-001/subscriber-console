@@ -95,7 +95,7 @@ test('login route source code does not contain auto-admin runtime provisioning',
 });
 
 test('user update route enforces password strength policy', () => {
-  const userUpdateRoutePath = path.resolve(process.cwd(), 'src/app/api/auth/users/[username]/route.ts');
+  const userUpdateRoutePath = path.resolve(process.cwd(), 'src/app/api/users/[username]/route.ts');
   const content = fs.readFileSync(userUpdateRoutePath, 'utf8');
 
   assert.equal(

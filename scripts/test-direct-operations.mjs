@@ -53,7 +53,7 @@ for (const forbidden of ['app_approvals', 'approval_required', 'AUDIT_UNAVAILABL
 }
 
 const { CUTOVER_TABLE } = jiti(join(root, 'frontend/src/lib/cutover-routing.ts'));
-assert.equal(CUTOVER_TABLE.length, 47, 'CUTOVER_TABLE must be exactly 47');
-assert.equal(CUTOVER_TABLE.filter((route) => route.owner === 'go').length, 47, 'ACTUALLY_ROUTED must be exactly 47');
+assert.equal(CUTOVER_TABLE.length, 84, 'CUTOVER_TABLE must be exactly 84');
+assert.equal(CUTOVER_TABLE.filter((route) => route.owner === 'go').length, 84, 'ACTUALLY_ROUTED must be exactly 84');
 
-console.log('Direct operations contract passed: governance surfaces removed; CUTOVER_TABLE=47; ACTUALLY_ROUTED=47.');
+console.log('Direct operations contract passed: governance surfaces removed; CUTOVER_TABLE=84; ACTUALLY_ROUTED=84.');

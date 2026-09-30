@@ -5,7 +5,7 @@
  * Verifies:
  * 1. All six canonical User Management routes resolve to owner=go
  * 2. No duplicate METHOD+PATH entries in CUTOVER_TABLE
- * 3. CUTOVER_TABLE = 47, ACTUALLY_ROUTED = 47
+ * 3. CUTOVER_TABLE = 84, ACTUALLY_ROUTED = 84
  * 4. Frontend API client uses dedicated canonical endpoints
  * 5. Go backend registers all six canonical routes
  * 6. No frontend owner-specific branching
@@ -58,13 +58,13 @@ for (const route of userMgmtRoutes) {
   });
 }
 
-verify('CUTOVER_TABLE = 47', () => {
-  assert.equal(CUTOVER_TABLE.length, 47, `found ${CUTOVER_TABLE.length}`);
+verify('CUTOVER_TABLE = 84', () => {
+  assert.equal(CUTOVER_TABLE.length, 84, `found ${CUTOVER_TABLE.length}`);
 });
 
-verify('ACTUALLY_ROUTED = 47', () => {
+verify('ACTUALLY_ROUTED = 84', () => {
   const goRoutes = CUTOVER_TABLE.filter((r) => r.owner === 'go');
-  assert.equal(goRoutes.length, 47, `found ${goRoutes.length}`);
+  assert.equal(goRoutes.length, 84, `found ${goRoutes.length}`);
 });
 
 verify('no duplicate METHOD+PATH entries', () => {
@@ -222,4 +222,4 @@ verify('frontend API client never exposes passwordHash', () => {
 
 // ── Summary ─────────────────────────────────────────────────────────────────
 console.log(`\nAll ${passed} cutover checks passed.`);
-console.log('CUTOVER_TABLE=47 ACTUALLY_ROUTED=47');
+console.log('CUTOVER_TABLE=84 ACTUALLY_ROUTED=84');
