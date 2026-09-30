@@ -329,7 +329,10 @@ jobs:
             echo "  uwsgi_temp_path $PREFIX/temp/uwsgi;"
             echo "  scgi_temp_path $PREFIX/temp/scgi;"
             echo "  include $PREFIX/conf/mime.types;"
-            cat deploy/nginx/xcloud.conf
+            # nginx -t opens every listening socket, and the package configuration binds the
+            # privileged port 80, which an unprivileged runner cannot use. The port is
+            # remapped for validation only, exactly as the acceptance harness does.
+            sed 's/^    listen 80;/    listen 18080;/' deploy/nginx/xcloud.conf
             echo '}'
           } > "$PREFIX/conf/xcloud.conf"
           nginx -t -p "$PREFIX" -c "$PREFIX/conf/xcloud.conf"
