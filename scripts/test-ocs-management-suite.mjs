@@ -10,15 +10,14 @@
  */
 
 import assert from 'node:assert/strict';
-import http from 'node:http';
 import net from 'node:net';
 import path from 'node:path';
 import fs from 'node:fs';
 import { execSync, spawn } from 'node:child_process';
 import { MongoClient, Long } from 'mongodb';
-import { createJiti } from 'jiti';
 import nextEnv from '@next/env';
 import { SignJWT } from 'jose';
+import { deriveGoRegistrations } from './lib/go-registrations.mjs';
 
 nextEnv.loadEnvConfig(process.cwd());
 
@@ -42,19 +41,8 @@ process.env.MONGODB_APP_DB = appDbName;
 const JWT_SECRET_STRING = process.env.JWT_SECRET || 'phase5-5-a-suite-secret-at-least-32-bytes-long';
 process.env.JWT_SECRET = JWT_SECRET_STRING;
 
-const jiti = createJiti(import.meta.url, {
-  interopDefault: true,
-  alias: {
-    '@': new URL('../frontend/src/', import.meta.url).pathname,
-    'next/server': new URL('../frontend/node_modules/next/server.js', import.meta.url).pathname,
-  },
-});
-
-const { NextRequest } = jiti('next/server');
-const { proxy } = jiti('../frontend/src/proxy.ts');
-const { getJwtSecretKey } = jiti('../frontend/src/lib/security.ts');
-const { closeSessionMongoClient } = jiti('../frontend/src/lib/sessionMongo.ts');
-const { CUTOVER_TABLE } = jiti('../frontend/src/lib/cutover-routing.ts');
+// Local JWT signing key (the frontend security helper no longer exposes one).
+const jwtSecretKey = () => new TextEncoder().encode(String(process.env.JWT_SECRET || '').trim());
 
 const client = new MongoClient(uri, {
   serverSelectionTimeoutMS: Number(process.env.MONGODB_SERVER_SELECTION_TIMEOUT_MS || 5000),
@@ -84,7 +72,6 @@ function recordCheck(name) {
 
 let goProc = null;
 let binPath = null;
-let nodeServer = null;
 
 try {
   await client.connect();
@@ -122,7 +109,7 @@ try {
   );
 
   // 3. Issue signed JWT tokens
-  const secretKey = getJwtSecretKey();
+  const secretKey = jwtSecretKey();
   const now = Math.floor(Date.now() / 1000);
   const tokens = {};
 
@@ -173,54 +160,8 @@ try {
   assert(goReady, 'Go backend server failed to become ready');
   process.env.GO_BACKEND_URL = `http://127.0.0.1:${goPort}`;
 
-  // 5. Start Next.js Proxy Ingress HTTP server
-  const nodePort = await getAvailablePort();
-  nodeServer = http.createServer(async (req, res) => {
-    try {
-      const chunks = [];
-      for await (const chunk of req) chunks.push(chunk);
-      const rawBody = Buffer.concat(chunks);
-      const fullUrl = `http://127.0.0.1:${nodePort}${req.url}`;
-
-      const nextReq = new NextRequest(fullUrl, {
-        method: req.method,
-        headers: req.headers,
-        body: rawBody.length > 0 ? rawBody : undefined,
-      });
-
-      const proxyRes = await proxy(nextReq);
-      const resBody = Buffer.from(await proxyRes.arrayBuffer());
-      res.writeHead(proxyRes.status, Object.fromEntries(proxyRes.headers.entries()));
-      res.end(resBody);
-    } catch (err) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: String(err) }));
-    }
-  });
-
-  await new Promise((resolve) => nodeServer.listen(nodePort, '127.0.0.1', resolve));
-
   console.log(`\n── Phase 5.5-A OCS Management Acceptance Suite ──`);
-  console.log(`Go Port: ${goPort} | Ingress Port: ${nodePort}\n`);
-
-  async function requestViaProxy(urlPath, { method = 'GET', token, body } = {}) {
-    const headers = {};
-    if (token) headers['cookie'] = `auth_token=${token}`;
-    if (body) headers['content-type'] = 'application/json';
-
-    const res = await fetch(`http://127.0.0.1:${nodePort}${urlPath}`, {
-      method,
-      headers,
-      body: body ? JSON.stringify(body) : undefined,
-    });
-    let data;
-    try {
-      data = await res.json();
-    } catch {
-      data = null;
-    }
-    return { status: res.status, headers: res.headers, data };
-  }
+  console.log(`Go Port: ${goPort}\n`);
 
   async function requestViaGo(urlPath, { method = 'GET', token, body } = {}) {
     const headers = {};
@@ -248,7 +189,7 @@ try {
 
   // 1.1 Direct Plan Creation by super_admin
   {
-    const res = await requestViaProxy('/api/tariff-plans', {
+    const res = await requestViaGo('/api/tariff-plans', {
       method: 'POST',
       token: tokens.super_admin,
       body: {
@@ -269,7 +210,7 @@ try {
 
   // 1.2 Direct Plan Creation by operator
   {
-    const res = await requestViaProxy('/api/tariff-plans', {
+    const res = await requestViaGo('/api/tariff-plans', {
       method: 'POST',
       token: tokens.operator,
       body: {
@@ -291,7 +232,7 @@ try {
 
   // 1.2.1 Authorization boundary for viewer
   {
-    const res = await requestViaProxy('/api/tariff-plans', {
+    const res = await requestViaGo('/api/tariff-plans', {
       method: 'POST',
       token: tokens.viewer,
       body: {
@@ -305,7 +246,7 @@ try {
 
   // 1.3 Plan Update (Direct)
   {
-    const res = await requestViaProxy('/api/tariff-plans/plan_suite_direct', {
+    const res = await requestViaGo('/api/tariff-plans/plan_suite_direct', {
       method: 'PUT',
       token: tokens.super_admin,
       body: {
@@ -324,7 +265,7 @@ try {
 
   // 1.4 Plan Disable & Enable
   {
-    const disableRes = await requestViaProxy('/api/tariff-plans/plan_suite_direct/disable', {
+    const disableRes = await requestViaGo('/api/tariff-plans/plan_suite_direct/disable', {
       method: 'POST',
       token: tokens.super_admin,
     });
@@ -333,7 +274,7 @@ try {
     assert.equal(doc.status, 'disabled');
     recordCheck('tariff.disable_plan');
 
-    const enableRes = await requestViaProxy('/api/tariff-plans/plan_suite_direct/enable', {
+    const enableRes = await requestViaGo('/api/tariff-plans/plan_suite_direct/enable', {
       method: 'POST',
       token: tokens.super_admin,
     });
@@ -345,7 +286,7 @@ try {
 
   // 1.5 Plan Clone
   {
-    const cloneRes = await requestViaProxy('/api/tariff-plans/plan_suite_direct/clone', {
+    const cloneRes = await requestViaGo('/api/tariff-plans/plan_suite_direct/clone', {
       method: 'POST',
       token: tokens.super_admin,
       body: { target_plan_id: 'plan_suite_cloned' },
@@ -358,7 +299,7 @@ try {
 
   // 1.6 Plan Delete
   {
-    const delRes = await requestViaProxy('/api/tariff-plans/plan_suite_cloned', {
+    const delRes = await requestViaGo('/api/tariff-plans/plan_suite_cloned', {
       method: 'DELETE',
       token: tokens.super_admin,
     });
@@ -395,7 +336,7 @@ try {
 
   // 2.1 Direct Contract Creation by super_admin
   {
-    const res = await requestViaProxy('/api/ocs/subscribers', {
+    const res = await requestViaGo('/api/ocs/subscribers', {
       method: 'POST',
       token: tokens.super_admin,
       body: {
@@ -414,7 +355,7 @@ try {
 
   // 2.2 Direct Contract Creation by operator
   {
-    const res = await requestViaProxy('/api/ocs/subscribers', {
+    const res = await requestViaGo('/api/ocs/subscribers', {
       method: 'POST',
       token: tokens.operator,
       body: {
@@ -433,7 +374,7 @@ try {
 
   // 2.2.1 Authorization boundary for viewer
   {
-    const res = await requestViaProxy('/api/ocs/subscribers', {
+    const res = await requestViaGo('/api/ocs/subscribers', {
       method: 'POST',
       token: tokens.viewer,
       body: {
@@ -448,7 +389,7 @@ try {
 
   // 2.3 Contract Suspend and Resume
   {
-    const suspendRes = await requestViaProxy(`/api/ocs/subscribers/${imsiContract}/suspend`, {
+    const suspendRes = await requestViaGo(`/api/ocs/subscribers/${imsiContract}/suspend`, {
       method: 'POST',
       token: tokens.super_admin,
     });
@@ -457,7 +398,7 @@ try {
     assert.equal(doc.status, 'suspended');
     recordCheck('contract.suspend_contract');
 
-    const resumeRes = await requestViaProxy(`/api/ocs/subscribers/${imsiContract}/resume`, {
+    const resumeRes = await requestViaGo(`/api/ocs/subscribers/${imsiContract}/resume`, {
       method: 'POST',
       token: tokens.super_admin,
     });
@@ -469,7 +410,7 @@ try {
 
   // 2.4 Contract Change Tariff
   {
-    const patchRes = await requestViaProxy(`/api/ocs/subscribers/${imsiContract}`, {
+    const patchRes = await requestViaGo(`/api/ocs/subscribers/${imsiContract}`, {
       method: 'PATCH',
       token: tokens.super_admin,
       body: { plan_id: 'plan_suite_direct' },
@@ -480,7 +421,7 @@ try {
 
   // 2.5 Contract Subscriber Read & Boundary Validation
   {
-    const listRes = await requestViaProxy(`/api/ocs/subscribers?imsi=${imsiContract}`, {
+    const listRes = await requestViaGo(`/api/ocs/subscribers?imsi=${imsiContract}`, {
       method: 'GET',
       token: tokens.viewer,
     });
@@ -521,7 +462,7 @@ try {
 
   // 3.1 Direct Balance Adjustment (super_admin)
   {
-    const res = await requestViaProxy(`/api/ocs/balances/${imsiBalance}/adjust`, {
+    const res = await requestViaGo(`/api/ocs/balances/${imsiBalance}/adjust`, {
       method: 'POST',
       token: tokens.super_admin,
       body: {
@@ -542,7 +483,7 @@ try {
 
   // 3.2 Direct Balance Adjustment (operator)
   {
-    const res = await requestViaProxy(`/api/ocs/balances/${imsiBalance}/adjust`, {
+    const res = await requestViaGo(`/api/ocs/balances/${imsiBalance}/adjust`, {
       method: 'POST',
       token: tokens.operator,
       body: {
@@ -563,7 +504,7 @@ try {
 
   // 3.2.1 Authorization boundary for viewer
   {
-    const res = await requestViaProxy(`/api/ocs/balances/${imsiBalance}/adjust`, {
+    const res = await requestViaGo(`/api/ocs/balances/${imsiBalance}/adjust`, {
       method: 'POST',
       token: tokens.viewer,
       body: {
@@ -580,7 +521,7 @@ try {
   // 3.3 Balance Reset Disabled Across All 6 Roles
   {
     for (const role of ['root', 'super_admin', 'ops_admin', 'operator', 'auditor', 'viewer']) {
-      const res = await requestViaProxy(`/api/ocs/balances/${imsiBalance}/reset`, {
+      const res = await requestViaGo(`/api/ocs/balances/${imsiBalance}/reset`, {
         method: 'POST',
         token: tokens[role],
         body: { reason: 'Attempted reset' },
@@ -613,14 +554,18 @@ try {
   // ══════════════════════════════════════════════════════════════════
   console.log('\n4. System Invariants & Production Cutover Integrity');
 
-  // 4.1 CUTOVER_TABLE count must be strictly 84
-  assert.equal(CUTOVER_TABLE.length, 84, `CUTOVER_TABLE count must be exactly 84, found ${CUTOVER_TABLE.length}`);
-  recordCheck('invariants.actually_routed_strictly_84');
+  // 4.1 Go registration surface (single source of truth) must be strictly 84 operations
+  const { keys: goRegistrations, duplicates: duplicateRegistrations } = deriveGoRegistrations();
+  assert.equal(goRegistrations.length, 84, `Go registration surface must be exactly 84, found ${goRegistrations.length}`);
+  recordCheck('invariants.go_registration_surface_strictly_84');
 
-  // 4.2 All routes in CUTOVER_TABLE must have owner: 'go'
-  const nonGoRoutes = CUTOVER_TABLE.filter((r) => r.owner !== 'go');
-  assert.equal(nonGoRoutes.length, 0, `All cutover routes must be owned by Go`);
-  recordCheck('invariants.all_cutover_routes_owned_by_go');
+  // 4.2 Every production operation is a unique Go-owned "METHOD /path" registration
+  assert.equal(duplicateRegistrations.length, 0, `Duplicate Go registrations found: ${duplicateRegistrations.join(', ')}`);
+  assert(
+    goRegistrations.every((key) => /^(GET|POST|PUT|PATCH|DELETE) \//.test(key)),
+    'Every Go registration must be a canonical "METHOD /path" key'
+  );
+  recordCheck('invariants.all_registrations_go_owned_unique');
 
   // 4.3 Zero approval documents created in business operations
   const approvalsCount = await app.collection('app_approvals').countDocuments();
@@ -649,13 +594,9 @@ try {
   if (binPath && fs.existsSync(binPath)) {
     try { fs.unlinkSync(binPath); } catch {}
   }
-  if (nodeServer) {
-    nodeServer.close();
-  }
   try {
     await client.db(xcloudDbName).dropDatabase();
     await client.db(appDbName).dropDatabase();
     await client.close();
-    await closeSessionMongoClient();
   } catch {}
 }

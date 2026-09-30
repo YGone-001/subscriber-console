@@ -1,11 +1,10 @@
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { createJiti } from 'jiti';
+import { deriveGoRegistrations } from './lib/go-registrations.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const frontend = join(root, 'frontend', 'src');
-const jiti = createJiti(import.meta.url);
 
 const removedPaths = [
   'frontend/src/app/api/approvals',
@@ -52,8 +51,9 @@ for (const forbidden of ['app_approvals', 'approval_required', 'AUDIT_UNAVAILABL
   assert.doesNotMatch(productionSource, new RegExp(forbidden), `frontend production source contains ${forbidden}`);
 }
 
-const { CUTOVER_TABLE } = jiti(join(root, 'frontend/src/lib/cutover-routing.ts'));
-assert.equal(CUTOVER_TABLE.length, 84, 'CUTOVER_TABLE must be exactly 84');
-assert.equal(CUTOVER_TABLE.filter((route) => route.owner === 'go').length, 84, 'ACTUALLY_ROUTED must be exactly 84');
+// The Go router registration site is the authoritative API surface after cutover retirement.
+const { keys: goRegistrations, duplicates } = deriveGoRegistrations(root);
+assert.deepEqual(duplicates, [], 'Go router must not register a METHOD+PATH twice');
+assert.equal(goRegistrations.length, 84, `Go registered operations must be exactly 84, found ${goRegistrations.length}`);
 
-console.log('Direct operations contract passed: governance surfaces removed; CUTOVER_TABLE=84; ACTUALLY_ROUTED=84.');
+console.log('Direct operations contract passed: governance surfaces removed; GoRegistered=84.');

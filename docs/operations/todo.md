@@ -18,7 +18,8 @@
 | Phase 8.2 — Residual Production Cutover & Retired Surface Removal | PASS / FROZEN | 33 canonical + 2 legacy read aliases + 2 Go-native reads cut over; 6 non-canonical mutation methods retired; `CUTOVER_TABLE = 84`, `ACTUALLY_ROUTED = 84`, `node_production_operations = 0` |
 | Phase 8.3 — Next.js Business Backend Physical Removal | PASS / FROZEN | `frontend/src/app/api/**` (54 route.ts / 72 operations) and `frontend/src/server/**` (33 files) physically deleted; 7 backend-only lib helpers removed; minimal read-only proxy session account store extracted; `next_business_backend_removed = true`, `active_server_imports = 0`, `CUTOVER_TABLE = 84`; frozen boundary SHA `342589aa5c00cb8152980c77bfc73f05b82ca64a` |
 | Phase 8.4 — Frontend Dependency & Residual Node Runtime Cleanup | IMPLEMENTED / NOT SELF-FROZEN | `bcryptjs` removed (zero frontend consumers); 5 dead Node-era libs + orphaned `ChangeDiff.tsx` deleted; `mongo.ts` collapsed into read-only `sessionMongo.ts` (`app_users` only, `findOne`, readers = 1 / writers = 0); `CUTOVER_TABLE = 84`, `backend_production_changes = 0`; independent acceptance pending |
-| Phase 8.5 — Proxy / deployment simplification | NOT AUTHORIZED YET | Deferred from Phase 8.3 |
+| Phase 8.5 — Proxy / Deployment Boundary Finalization | IMPLEMENTED / NOT SELF-FROZEN | Nginx edge owns `/api` routing (Next `127.0.0.1:13333`, Go `127.0.0.1:18888`); `proxy.ts` reduced to a UI-only navigation guard; `CUTOVER_TABLE` retired, the derived 84 Go registrations are the route authority; frontend deps 19 -> 16 (`jose` / `mongodb` / `jiti`); new suite `scripts/test-phase-8-deployment-boundary.mjs` + CI job; independent acceptance pending |
+| Phase 8.6 | NOT STARTED | Not authorized |
 
 ## Deferred
 
@@ -30,7 +31,7 @@
 
 ## Blockers
 
-No open blockers. Phase 7.0-7.5 and Phase 8.0-8.3 are independently accepted and frozen at `342589aa5c00cb8152980c77bfc73f05b82ca64a`. Phase 8.4 is implemented and awaiting independent acceptance; Phase 8.5 is not authorized yet. Two known scanner/remediation residual gaps remain frozen by design in `docs/backend-migration/remediation-acceptance-corrections.md`.
+No open blockers. Phase 7.0-7.5 and Phase 8.0-8.3 are independently accepted and frozen at `342589aa5c00cb8152980c77bfc73f05b82ca64a`. Phase 8.4 and Phase 8.5 are implemented and awaiting independent acceptance; Phase 8.6 is not authorized yet. Two known scanner/remediation residual gaps remain frozen by design in `docs/backend-migration/remediation-acceptance-corrections.md`.
 
 ## Risks
 
@@ -38,4 +39,4 @@ No open blockers. Phase 7.0-7.5 and Phase 8.0-8.3 are independently accepted and
 |------|------------|
 | OCS production freeze regression | `ACTUALLY_ROUTED = 84` strictly enforced by migration validator |
 | Charging plane exposure | Frozen collections (sessions, reservations, usage, events) excluded from migration |
-| JWT_SECRET mismatch across processes | frontend/.env must share same JWT_SECRET as root/.env (verified 2026-09-23) |
+| JWT_SECRET mismatch across processes | After Phase 8.5 only Go verifies JWTs; `JWT_SECRET` must match between the Go process and the root operational scripts that bootstrap `app_users` (the Next.js runtime no longer holds a JWT secret) |

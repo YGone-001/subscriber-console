@@ -437,3 +437,47 @@
 - Evidence document: `docs/backend-migration/phase-8.4-frontend-dependency-cleanup.md`.
 - Status: IMPLEMENTED / NOT FROZEN. Not self-declared frozen; independent Phase 8.4
   acceptance is required.
+
+## Phase 8.5 — Proxy / Deployment Boundary Finalization
+
+- Moved production API routing to the edge: `deploy/nginx/xcloud.conf` uses two
+  keepalive upstreams (`xcloud_next` 127.0.0.1:13333, `xcloud_go` 127.0.0.1:18888).
+  `location = /api`, `location /api/` and the dedicated unbuffered
+  `location = /api/notifications/stream` go to Go; `location /` goes to Next.js.
+  All API locations generate `Host` / `X-Real-IP` / `X-Forwarded-For` /
+  `X-Forwarded-Proto` and strip client identity headers (`X-User` / `X-Role` /
+  `X-Permissions`); `client_max_body_size 10m` is unchanged.
+- `deploy/nginx/setup.sh [listen_port]` (default 80) substitutes the `listen`
+  directive, links the site, runs `nginx -t`, then reloads. The stale single-upstream
+  model (port 3000, per-prefix `/api/subscribers -> golang`, hard-coded developer
+  workspace paths, `sed`-patched `listen 80;`) is gone.
+- Reduced `frontend/src/proxy.ts` to a UI-only navigation guard: no JWT decode, no
+  HS256 verify, no MongoDB, no identity headers, no API forwarding. Protected pages
+  without `auth_token` redirect to `/login?from=...`; the guard consults Go
+  `GET /api/auth/me` with the incoming cookie (200 allow, 401 redirect + expire
+  cookie, 503 fail-closed `AUTH_UNAVAILABLE` / `AUTH_SERVICE_UNAVAILABLE`). Its
+  matcher excludes `api`.
+- Deleted `frontend/src/lib/cutover-routing.ts`, `accountSession.ts`,
+  `sessionAccountStore.ts`, `sessionMongo.ts` and `frontend/tests/cutoverRouting.test.mjs`;
+  `CUTOVER_TABLE` and `resolveRouteOwner` no longer exist in production source.
+- Retired the per-route ownership table as the routing authority. The authoritative
+  route set is now the frozen Go registration list (84 exact METHOD+PATH
+  registrations) derived through the new shared helper `scripts/lib/go-registrations.mjs`;
+  `scripts/migration/validate-inventory.mjs` and the migration/test scripts derive from it.
+- `frontend/src/lib/security.ts` keeps only the UI password policy
+  (`isPasswordStrong`, `PASSWORD_POLICY_MESSAGE`); `getJwtSecretKey` removed.
+- Frontend direct dependencies 19 -> 16: removed `jose`, `mongodb` and dev `jiti`;
+  `frontend/next.config.ts` drops `serverExternalPackages: ['mongodb']`. Root
+  `package.json` / `package-lock.json` are byte-identical.
+- Added the acceptance suite `scripts/test-phase-8-deployment-boundary.mjs` (real
+  Nginx + real Go + real `next build` / `next start` + real MongoDB + real TCP),
+  superseding the Phase 8.4 suite as the current production-boundary suite, plus a CI
+  job that runs it.
+- Unchanged: Go production code, the 84 Go route registrations, API paths, auth
+  semantics (401 vs 503) and the charging plane. `backend_production_changes = 0`.
+- Final invariants: `Next.js business backend removed = YES`,
+  `Go production API registrations = 84 (unchanged)`, `CUTOVER_TABLE = retired`,
+  `Next.js proxy runtime = UI navigation guard ONLY`, `nginx_api_router = true`.
+- Evidence document: `docs/backend-migration/phase-8.5-deployment-boundary-finalization.md`.
+- Status: IMPLEMENTED / NOT FROZEN. Not self-declared frozen; independent Phase 8.5
+  acceptance is required. Phase 8.6 is not started (not authorized).

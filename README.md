@@ -31,12 +31,16 @@ subscriber-console/
 ```
 
 ```
-Browser → Nginx
-           ├── /*         → Next.js :13333 (React UI)
-           └── /api/*     → Go :18888 (REST API + MongoDB)
+Browser → Nginx (only public origin)
+           ├── /, /*           → Next.js 127.0.0.1:13333 (React UI + UI navigation guard)
+           └── /api, /api/*    → Go 127.0.0.1:18888 (REST API + MongoDB)
 ```
 
-API routes are progressively migrating from Next.js to Go on a per-endpoint basis.
+The Nginx edge owns API routing and the Go backend owns every production API operation
+and API authentication (84 exact METHOD+PATH registrations). The Next.js proxy is a
+UI-only navigation guard: it does not decode JWTs, does not access MongoDB, does not
+inject identity headers and does not forward API requests. Both application services
+bind loopback and are reached only through Nginx.
 
 ## Features
 
@@ -48,7 +52,7 @@ API routes are progressively migrating from Next.js to Go on a per-endpoint basi
 - Analytics dashboard computed from MongoDB subscriber documents.
 - Direct execution operation model with RBAC, operation logging, and CAS concurrency control.
 - Audit logs, alert acknowledgment, and system document consistency checks.
-- Hardened JWT authentication with dual rate limits (IP + username), automatic lockout after 10 failed attempts, response privacy, and canonical `admin`, `operator`, and `viewer` roles (with legacy alias normalization), authoritatively governed by Go backend (`CUTOVER_TABLE = 84`, `ACTUALLY_ROUTED = 84`).
+- Hardened JWT authentication with dual rate limits (IP + username), automatic lockout after 10 failed attempts, response privacy, and canonical `admin`, `operator`, and `viewer` roles (with legacy alias normalization), authoritatively governed by the Go backend (all 84 registrations Go-owned; routed by the Nginx edge).
 - User lifecycle management: create, update, admin unlock, soft delete, password reset, session invalidation via `sessionVersion`.
 - Chinese/English UI, theme switching, command palette, and responsive dashboard layout.
 
@@ -69,13 +73,14 @@ Charging Plane remains frozen and excluded.
 - Next.js 16.2.2 App Router
 - React 19.2.4
 - TypeScript 5
-- MongoDB Node.js driver
 - SWR
 - Recharts
-- jose JWT
-- bcryptjs
 - lucide-react
 - ESLint 9
+
+The frontend is a UI-only runtime: it holds no JWT/MongoDB client (the former
+`jose` / `mongodb` / `bcryptjs` dependencies were removed at the Phase 8.5
+deployment boundary).
 
 ### Backend
 
@@ -155,7 +160,10 @@ Use Node.js 20.19.0 or newer. Install dependencies separately at the repository 
 
 ## Deployment
 
-The application runs as two services behind Nginx: Next.js on `:13333` and Go on `:18888`.
+The application runs as two loopback-internal services behind the Nginx edge:
+Next.js on `127.0.0.1:13333` and Go on `127.0.0.1:18888`. Nginx routes `/api` and
+`/api/*` to Go and everything else to Next.js; install it with
+`sudo ./deploy/nginx/setup.sh [listen_port]` (the script validates with `nginx -t`).
 
 ```bash
 # Frontend

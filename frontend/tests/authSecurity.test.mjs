@@ -1,34 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isPasswordStrong, PASSWORD_POLICY_MESSAGE, getJwtSecretKey } from '../src/lib/security.ts';
 import fs from 'node:fs';
-import { createJiti } from 'jiti';
-import { fileURLToPath } from 'node:url';
-
-const jiti = createJiti(import.meta.url, { alias: { '@': fileURLToPath(new URL('../src', import.meta.url)) } });
-const { validateAccountSnapshot } = await jiti.import('../src/lib/accountSession.ts');
-
-test('current-account validation supports legacy sessions and rejects revoked or invalid identities', () => {
-  const account = { username: 'admin', role: 'root', status: 'active' };
-  const claims = { username: 'admin', role: 'root' };
-  assert.equal(validateAccountSnapshot(claims, account).sessionVersion, 0);
-  assert.equal(validateAccountSnapshot({ ...claims, sv: 0 }, { ...account, security: { sessionVersion: 0 } }).normalizedRole, 'admin');
-  assert.equal(validateAccountSnapshot({ ...claims, role: 'super_admin' }, account).role, 'root');
-  for (const sv of [undefined, 0]) assert.throws(() => validateAccountSnapshot({ ...claims, sv }, { ...account, security: { sessionVersion: 1 } }), /SESSION_REVOKED/);
-  for (const [patch, code] of [[{ status: 'disabled' }, 'ACCOUNT_DISABLED'], [{ status: 'locked' }, 'ACCOUNT_LOCKED'], [{ locked: true }, 'ACCOUNT_LOCKED'], [{ role: 'viewer' }, 'SESSION_REVOKED']]) {
-    assert.throws(() => validateAccountSnapshot(claims, { ...account, ...patch }), new RegExp(code));
-  }
-  assert.throws(() => validateAccountSnapshot(claims, null), /ACCOUNT_NOT_FOUND/);
-  for (const patch of [{ role: 'unknown' }, { username: {} }, { sv: -1 }, { sv: '0' }, { sv: null }]) assert.throws(() => validateAccountSnapshot({ ...claims, ...patch }, account), /AUTH_INVALID_TOKEN/);
-});
-
-test('Proxy overwrites identity headers only after verified JWT and current database account validation', () => {
-  const source = fs.readFileSync('src/proxy.ts', 'utf8');
-  assert.ok(source.indexOf('await jwtVerify') < source.indexOf('await validateCurrentAccount'));
-  assert.ok(source.indexOf('await validateCurrentAccount') < source.indexOf("requestHeaders.set('x-user'"));
-  assert.match(source, /algorithms: \['HS256'\]/);
-  assert.doesNotMatch(source, /payload\.role as string/);
-});
+import { isPasswordStrong, PASSWORD_POLICY_MESSAGE } from '../src/lib/security.ts';
 
 test('isPasswordStrong validates Unicode code points, byte length, and username containment', () => {
   assert.equal(isPasswordStrong('1234567'), false);
@@ -60,19 +33,32 @@ test('isPasswordStrong validates Unicode code points, byte length, and username 
   }
 });
 
-test('getJwtSecretKey validates secret length and rejects unsafe placeholders', () => {
-  const origSecret = process.env.JWT_SECRET;
-  try {
-    process.env.JWT_SECRET = 'short_secret';
-    assert.throws(() => getJwtSecretKey(), /must be at least 32 bytes/);
+test('the UI navigation guard delegates API authentication to Go and holds no local auth runtime', () => {
+  const source = fs.readFileSync(new URL('../src/proxy.ts', import.meta.url), 'utf8');
+  // Scan executable code only: the module documents the runtime it must NOT contain.
+  const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|\s)\/\/[^\n]*/g, '');
 
-    process.env.JWT_SECRET = 'secret';
-    assert.throws(() => getJwtSecretKey(), /unsafe placeholder/);
+  // No JWT verification runtime in the frontend production path.
+  assert.doesNotMatch(code, /jose/);
+  assert.doesNotMatch(code, /jwtVerify/);
+  assert.doesNotMatch(code, /HS256/);
+  assert.doesNotMatch(code, /getJwtSecretKey/);
 
-    process.env.JWT_SECRET = '01234567890123456789012345678901';
-    const key = getJwtSecretKey();
-    assert.equal(key.byteLength, 32);
-  } finally {
-    process.env.JWT_SECRET = origSecret;
-  }
+  // No Mongo / session-store runtime in the frontend production path.
+  assert.doesNotMatch(code, /mongodb/i);
+  assert.doesNotMatch(code, /findOne/);
+
+  // No API reverse proxy, no cutover routing, no trusted identity header injection.
+  assert.doesNotMatch(code, /resolveRouteOwner/);
+  assert.doesNotMatch(code, /CUTOVER_TABLE/);
+  assert.doesNotMatch(code, /forwardToGo/);
+  assert.doesNotMatch(code, /x-user/i);
+
+  // Delegation target and fail-closed semantics.
+  assert.match(source, /\/api\/auth\/me/);
+  assert.match(source, /AUTH_SERVICE_UNAVAILABLE/);
+  assert.match(source, /AUTH_UNAVAILABLE/);
+
+  // /api must never enter the guard: the edge and Go own it.
+  assert.ok(source.includes("matcher: ['/((?!api|"), 'the guard matcher must exclude /api');
 });

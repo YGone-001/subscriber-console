@@ -13,13 +13,14 @@
  * 8. Security State Metadata Contract & Leak Prevention
  * 9. User Management Error Mapping (LAST_ACTIVE_ADMIN, etc.)
  * 10. I18n Completeness (EN & ZH parity for new UI concepts)
- * 11. API Inventory & Routing Invariants (54 routes, 72 ops, CUTOVER_TABLE=84, ACTUALLY_ROUTED=84)
+ * 11. API Inventory & Routing Invariants (GoRegistered=84, retired mutations absent)
  */
 
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { createJiti } from 'jiti';
+import { deriveGoRegistrations } from './lib/go-registrations.mjs';
 
 const jiti = createJiti(import.meta.url, {
   interopDefault: true,
@@ -40,9 +41,6 @@ const { normalizeGovernanceRole } = await jiti(
 );
 const { en } = await jiti('../frontend/src/lib/locales/en.ts');
 const { zh } = await jiti('../frontend/src/lib/locales/zh.ts');
-const { CUTOVER_TABLE, resolveRouteOwner } = await jiti(
-  '../frontend/src/lib/cutover-routing.ts'
-);
 
 let passed = 0;
 let totalChecks = 0;
@@ -835,33 +833,67 @@ for (const key of requiredKeys) {
 // ============================================================================
 // 12. API Inventory & Routing Freeze
 // ============================================================================
-console.log('\n[12] API Inventory & Routing Freeze (CUTOVER_TABLE=84, ACTUALLY_ROUTED=84)');
+console.log('\n[12] API Inventory & Routing Freeze (GoRegistered=84)');
 
-verify('CUTOVER_TABLE is exactly 84 and ACTUALLY_ROUTED is exactly 84', () => {
-  assert.equal(CUTOVER_TABLE.length, 84, `CUTOVER_TABLE entries count must be 84, got ${CUTOVER_TABLE.length}`);
-  const actuallyRouted = CUTOVER_TABLE.filter((r) => r.owner === 'go');
-  assert.equal(actuallyRouted.length, 84, `ACTUALLY_ROUTED count must be 84, got ${actuallyRouted.length}`);
+const { keys: goRegistrations, duplicates: goRegistrationDuplicates } = deriveGoRegistrations();
+
+verify('Go router registers exactly 84 METHOD+PATH operations with zero duplicates', () => {
+  assert.deepEqual(
+    goRegistrationDuplicates,
+    [],
+    `Go router must not register any METHOD+PATH twice, found: ${goRegistrationDuplicates.join(', ')}`
+  );
+  assert.equal(
+    goRegistrations.length,
+    84,
+    `Go registered operation count must be 84, got ${goRegistrations.length}`
+  );
 });
 
-verify('Authentication and User Management routes are Go-owned in CUTOVER_TABLE', () => {
+verify('Authentication routes are Go-registered', () => {
   const expectedRoutes = [
-    { method: 'POST', path: '/api/auth/login' },
-    { method: 'POST', path: '/api/auth/logout' },
-    { method: 'GET', path: '/api/auth/me' },
-    { method: 'GET', path: '/api/auth/permissions' },
-    { method: 'GET', path: '/api/users' },
-    { method: 'POST', path: '/api/users' },
-    { method: 'GET', path: '/api/users/{username}' },
-    { method: 'PATCH', path: '/api/users/{username}' },
-    { method: 'POST', path: '/api/users/{username}/disable' },
-    { method: 'POST', path: '/api/users/{username}/password-reset' },
+    'POST /api/auth/login',
+    'POST /api/auth/logout',
+    'GET /api/auth/me',
+    'GET /api/auth/permissions',
   ];
-  for (const r of expectedRoutes) {
-    const entry = CUTOVER_TABLE.find((e) => e.method === r.method && e.path === r.path);
-    assert.ok(entry, `Expected route in CUTOVER_TABLE: ${r.method} ${r.path}`);
-    assert.equal(entry.owner, 'go', `Expected route owner to be 'go': ${r.method} ${r.path}`);
-    const resolved = resolveRouteOwner(r.method, r.path.replace('{username}', 'testuser'));
-    assert.equal(resolved, 'go', `resolveRouteOwner for ${r.method} ${r.path} must return 'go'`);
+  for (const key of expectedRoutes) {
+    assert.ok(goRegistrations.includes(key), `Expected Go registration: ${key}`);
+  }
+});
+
+verify('Canonical user management routes are Go-registered', () => {
+  const expectedRoutes = [
+    'GET /api/users',
+    'POST /api/users',
+    'GET /api/users/{username}',
+    'PATCH /api/users/{username}',
+    'POST /api/users/{username}/disable',
+    'POST /api/users/{username}/password-reset',
+  ];
+  for (const key of expectedRoutes) {
+    assert.ok(goRegistrations.includes(key), `Expected Go registration: ${key}`);
+  }
+});
+
+verify('Legacy compatibility read aliases remain Go-registered', () => {
+  for (const key of ['GET /api/auth/users', 'GET /api/auth/users/{username}']) {
+    assert.ok(goRegistrations.includes(key), `Missing legacy read alias: ${key}`);
+  }
+});
+
+const retiredAuthMutations = [
+  'POST /api/auth/users',
+  'PUT /api/auth/users/{username}',
+  'PATCH /api/auth/users/{username}',
+  'DELETE /api/auth/users/{username}',
+  'PUT /api/users/{username}',
+  'DELETE /api/users/{username}',
+];
+
+verify('Retired non-canonical mutation surfaces are absent from Go registrations', () => {
+  for (const key of retiredAuthMutations) {
+    assert.equal(goRegistrations.includes(key), false, `Retired mutation must not be registered: ${key}`);
   }
 });
 

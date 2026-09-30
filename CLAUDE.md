@@ -79,8 +79,8 @@ Approval workflow removed from business execution path. Authorization and operat
 - 密码策略对齐 (Password Policy Parity): Node 与 Go 端强校验去除首尾空白字符后 Unicode 码点数 >= 8、UTF-8 编码 <= 72 字节、且不包含目标用户名（不区分大小写）。
 - 管理员解锁 (Admin Unlock): 仅管理员可通过 Go 用户管理 API (`PATCH /api/users/{username}`) 解锁，恢复 `status="active"`, `locked=false`，清空锁定元数据与重置 `failedLoginAttempts=0`，并递增 `sessionVersion` 撤销历史会话。
 - 末位管理员保护 (Last Active Admin Protection): 严禁自动锁定或手动锁定/禁用系统中最后一个处于激活状态的管理员（返回 HTTP 409 `LAST_ACTIVE_ADMIN`）。
-- 密钥与会话安全 (Secret & Cookie Hardening): Node 与 Go 启动时强校验 `JWT_SECRET`（>= 32 UTF-8 字节，禁止弱占位符，不符则拒绝启动）；Cookie 属性强绑定 `HttpOnly=true`, `SameSite=Lax`, HTTPS 下强制 `Secure=true`；敏感认证响应强制 `Cache-Control: no-store`。
-- Go 认证生产接管基线 (Phase 6.3-B Cutover): Go 后端认证接口 (`/api/auth/login`, `/api/auth/logout`, `/api/auth/me`, `/api/auth/permissions`) 全面接管生产所有权，Next.js 反向代理严格转发（当前生产路由基线 `CUTOVER_TABLE = 84`, `ACTUALLY_ROUTED = 84`）。
+- 密钥与会话安全 (Secret & Cookie Hardening): Go 启动时强校验 `JWT_SECRET`（>= 32 UTF-8 字节，禁止弱占位符，不符则拒绝启动）；Cookie 属性强绑定 `HttpOnly=true`, `SameSite=Lax`, HTTPS 下强制 `Secure=true`；敏感认证响应强制 `Cache-Control: no-store`。（Phase 6.2 曾要求 Node 与 Go 双端校验；Phase 8.5 后前端不再持有 JWT secret，仅 Go 校验。）
+- Go 认证生产接管基线 (Phase 6.3-B Cutover): Go 后端认证接口 (`/api/auth/login`, `/api/auth/logout`, `/api/auth/me`, `/api/auth/permissions`) 全面接管生产所有权。自 Phase 8.5 起由 Nginx 边缘路由直接将 `/api` 与 `/api/*` 转发至 Go；`frontend/src/proxy.ts` 不再转发任何 API 请求，`CUTOVER_TABLE` 已退役（路由权威来源 = 84 条 Go 注册）。
 
 
 长期演进：
@@ -97,13 +97,14 @@ xCloud 只是当前兼容数据层之一。
 Browser
    |
    v
-Nginx
+Nginx (唯一对外入口)
    |-----------------------------|
    v                             v
-Next.js :13333                Go :18888
-UI / Rendering                Business API (owner)
-Proxy ownership decision      Auth validation
-+ read-only session lookup    Read + write APIs
+Next.js 127.0.0.1:13333        Go 127.0.0.1:18888
+UI / Rendering                 Business API (owner)
+UI 导航守卫（不再转发 API）    Auth identity + session validation
+不解析 JWT / 不访问 Mongo       Read + write APIs
+                               (84 条 METHOD+PATH 注册)
    |                             |
    +-------------+---------------+
                  |
@@ -115,14 +116,15 @@ Proxy ownership decision      Auth validation
 
 ```text
 Browser -> Nginx
-           ├─ /*      -> Next.js :13333
-           └─ /api/*  -> Go :18888
+           ├─ /api, /api/*  -> Go :18888
+           └─ /*             -> Next.js :13333
 ```
 
-当前状态：
+当前状态（Phase 8.5 边界）：
 
-- Next.js 保留前端（UI 渲染 + `proxy.ts` ownership 决策与转发 + 只读 account/session 校验）。
-- Go Backend 位于 `backend/`，生产业务 API 全部由 Go 独占（`CUTOVER_TABLE = 84`, `ACTUALLY_ROUTED = 84`）。
+- Nginx 是唯一对外入口，负责 `/api` 与 `/api/*` 路由；`deploy/nginx/xcloud.conf` 定义两个 loopback upstream（Next.js 127.0.0.1:13333、Go 127.0.0.1:18888），并剥离客户端身份头。
+- Go Backend 位于 `backend/`，生产业务 API 全部由 Go 独占；路由权威来源 = 冻结的 84 条 Go 注册（`backend/cmd/server/main.go` + `backend/internal/remediation/handler.go`）。`CUTOVER_TABLE` 已退役。
+- Next.js 保留前端（UI 渲染 + `proxy.ts` UI 导航守卫：不解析 JWT、不访问 Mongo、不注入身份头、不转发 API 请求），并保留无 JWT/Mongo 的前端依赖集合。
 - Next.js 业务后端（`frontend/src/app/api/**` 与 `frontend/src/server/**`）已在 Phase 8.3 物理删除，不得重建。
 - API 路径保持 `/api/...` 不变。
 - 前端 SWR 不感知 Node/Go ownership。
@@ -141,7 +143,7 @@ Charging Plane remains frozen and excluded.
 - 资费计划 (`ocs_tariff_plans`, `/ocs/tariffs`)、签约合同 (`ocs_subscribers`, `/ocs/contracts`)、余额管理 (`ocs_balances`, `/ocs/balances`) 生产基线永久冻结。
 - 严禁向 OCS 管理平面添加新业务能力或重新设计架构。
 - 严禁引入或耦合运行时计费面实体（`ocs_sessions`, `ocs_reservations`, `ocs_usage_records`, `ocs_events`, `ocs_config`, Gy/Ro/CCR/CCA 协议栈）。
-- 路由表状态：`CUTOVER_TABLE = 84`, `ACTUALLY_ROUTED = 84`（OCS 历史基线为 26，用户管理基线为 32，认证基线为 36，Phase 7.5 基线为 47，Phase 8.2 后为 84）。
+- 路由权威来源：冻结的 84 条 Go 注册（历史基线：OCS 26，用户管理 32，认证 36，Phase 7.5 47，Phase 8.2 后 84）；`CUTOVER_TABLE` 已随 Phase 8.5 退役，Nginx 负责 API 路由。
 
 ## 3. 技术栈
 
@@ -154,11 +156,14 @@ Charging Plane remains frozen and excluded.
 - SWR
 - Recharts
 - Lucide React
-- MongoDB Node Driver 7.x
-- jose 6.x
-- bcryptjs
 - Node 20 (`.nvmrc`)
 - `next.config.ts` 已启用 `output: 'standalone'`
+
+Phase 8.5 边界（前端不再持有 API 认证运行时）：
+- 前端不再使用 MongoDB Node Driver、`jose`、`bcryptjs`（均已在 Phase 8.5 移除）。
+- 前端不再解析/校验 JWT，不访问 MongoDB，不注入身份头，不转发 API 请求。
+- 仅保留 UI 密码策略 `isPasswordStrong` / `PASSWORD_POLICY_MESSAGE`（`frontend/src/lib/security.ts`）。
+- `proxy.ts` 仅做 UI 导航守卫，通过 `GET /api/auth/me`（`GO_BACKEND_URL`，默认 `http://127.0.0.1:18888`）向 Go 询问会话权威结果。
 
 ### Go Backend
 
@@ -479,10 +484,10 @@ x-user-session-version
 ```
 
 当前重要语义：
-- Node `jose` token → Go verifier interoperability 已验证。
-- legacy `root` role 按当前 Node 行为规范化。
-- `app_users` 在 Phase 2 只读。
-- login/logout 未迁移前仍由 Node owns。
+- Node `jose` token → Go verifier interoperability 已验证（历史结论；Phase 8.5 后前端不再持有 JWT 运行时，仅 Go 验签）。
+- legacy `root` role 按当前行为规范化。
+- `app_users` 在 Phase 2 只读（历史 Phase 2 约束）。
+- login/logout 已由 Go 独占生产所有权（Phase 6.3-B cutover）；Phase 8.5 起 Nginx 直接将 `/api/*` 转发至 Go，Next.js 不再参与 API 认证。
 
 ## 13. Permission
 
@@ -595,7 +600,7 @@ ACTUALLY_ROUTED
 
 Go Handler 存在 != 生产已切流。
 
-禁止仅按 `/api/subscribers/` prefix 整体送 Go，因为同 prefix 下仍有写 API。
+禁止仅按 `/api/subscribers/` prefix 整体送 Go，因为同 prefix 下仍有写 API。（历史约束：Phase 8.5 后所有生产 API 均为 Go 独占，Nginx 将 `/api` 与 `/api/*` 全部转发至 Go；路由权威仍以 method + path 为准。）
 
 ## 18. Frontend / Design
 

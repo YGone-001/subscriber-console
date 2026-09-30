@@ -29,8 +29,7 @@ const nextConfig: NextConfig = {
   agentRules: false,
   reactStrictMode: true,
   poweredByHeader: false,
-  allowedDevOrigins: ['10.10.0.139'], 
-  serverExternalPackages: ['mongodb'],
+  allowedDevOrigins: ['10.10.0.139'],
   async headers() {
     return [
       {

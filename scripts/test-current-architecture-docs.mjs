@@ -42,7 +42,7 @@ const mainGo = fs.readFileSync(mainGoPath, 'utf8');
 assert.ok(!mainGo.includes('operator→APPROVAL'), 'main.go must not contain operator→APPROVAL');
 assert.ok(!mainGo.includes('super_admin/root→DIRECT'), 'main.go must not contain super_admin/root→DIRECT');
 
-// 3. AGENTS.md
+// 3. AGENTS.md - current deployment boundary (Nginx edge + Go registration authority)
 const agentsPath = path.join(ROOT, 'AGENTS.md');
 const agents = fs.readFileSync(agentsPath, 'utf8');
 
@@ -52,6 +52,10 @@ const forbiddenInAgents = [
   '## 9.1 Approval Governance',
   '## 9.2 Super Admin Direct Governance Policy',
   '`app_users` = Phase 2 read-only',
+  // Retired mechanisms must not be presented as the current architecture.
+  'Every production API operation owner = Go (CUTOVER_TABLE = 84',
+  'Proxy ownership',
+  'ownership decision + exact METHOD+PATH forwarding',
 ];
 
 for (const pattern of forbiddenInAgents) {
@@ -62,20 +66,60 @@ for (const pattern of forbiddenInAgents) {
 }
 
 assert.ok(agents.includes('Best-effort / non-business-gating operation logging'), 'AGENTS.md must document best-effort operation logging');
-assert.ok(agents.includes('ACTUALLY_ROUTED = 84'), 'AGENTS.md must document ACTUALLY_ROUTED = 84');
-assert.ok(agents.includes('CUTOVER_TABLE = 84'), 'AGENTS.md must document CUTOVER_TABLE = 84');
+assert.ok(agents.includes('Nginx'), 'AGENTS.md must describe the Nginx edge');
+assert.ok(agents.includes('127.0.0.1:18888'), 'AGENTS.md must document the Go upstream 127.0.0.1:18888');
+assert.ok(agents.includes('127.0.0.1:13333'), 'AGENTS.md must document the Next.js upstream 127.0.0.1:13333');
+assert.ok(agents.includes('84 exact METHOD+PATH registrations'), 'AGENTS.md must document the 84 Go registration authority');
+assert.ok(agents.includes('CUTOVER_TABLE = retired'), 'AGENTS.md must state that CUTOVER_TABLE is retired');
+assert.ok(agents.includes('Go route registrations'), 'AGENTS.md must document Go route registrations as the authority');
 
-// 4. CLAUDE.md
+// 4. deployment.md - final edge boundary
+const deploymentPath = path.join(ROOT, 'docs/operations/deployment.md');
+const deployment = fs.readFileSync(deploymentPath, 'utf8');
+
+const forbiddenInDeployment = [
+  'upstream nextjs',
+  'upstream golang',
+  'location /api/subscribers',
+  'CUTOVER_TABLE',
+  'still go to Next.js during migration',
+];
+
+for (const pattern of forbiddenInDeployment) {
+  assert.ok(
+    !deployment.includes(pattern),
+    `Forbidden pattern "${pattern}" found in ${deploymentPath}`
+  );
+}
+
+assert.ok(deployment.includes('127.0.0.1:18888'), 'deployment.md must document the Go upstream 127.0.0.1:18888');
+assert.ok(deployment.includes('127.0.0.1:13333'), 'deployment.md must document the Next.js upstream 127.0.0.1:13333');
+assert.ok(deployment.includes('location = /api'), 'deployment.md must document the exact /api Go location');
+assert.ok(deployment.includes('location /api/'), 'deployment.md must document the /api/ Go location');
+assert.ok(deployment.includes('/api/notifications/stream'), 'deployment.md must document the SSE location');
+assert.ok(deployment.includes('client_max_body_size 10m'), 'deployment.md must document the 10 MiB upload boundary');
+assert.ok(deployment.includes('proxy_set_header X-User ""'), 'deployment.md must document identity header stripping');
+assert.ok(deployment.includes('nginx -t'), 'deployment.md must document nginx -t validation');
+assert.ok(deployment.includes('setup.sh'), 'deployment.md must document setup.sh [listen_port] usage');
+assert.ok(deployment.includes('AUTH_UNAVAILABLE'), 'deployment.md must document Go 503 AUTH_UNAVAILABLE semantics');
+
+// 5. CLAUDE.md - no retired mechanism presented as current architecture
 const claudePath = path.join(ROOT, 'CLAUDE.md');
 const claude = fs.readFileSync(claudePath, 'utf8');
 
 assert.ok(!claude.includes('approval review/execute'), 'CLAUDE.md must not contain approval review/execute');
 assert.ok(!claude.includes('ACTUALLY_ROUTED = 26`'), 'CLAUDE.md must not contain stale ACTUALLY_ROUTED = 26 in active invariants');
+assert.ok(!claude.includes('CUTOVER_TABLE = 84'), 'CLAUDE.md must not present CUTOVER_TABLE = 84 as the current architecture');
+assert.ok(claude.includes('Nginx'), 'CLAUDE.md must describe the Nginx edge');
+assert.ok(claude.includes('CUTOVER_TABLE') && claude.includes('退役'), 'CLAUDE.md must state that CUTOVER_TABLE is retired');
 
-// 5. README.md
+// 6. README.md
 const readmePath = path.join(ROOT, 'README.md');
 const readme = fs.readFileSync(readmePath, 'utf8');
 
 assert.ok(!readme.includes('approval governance'), 'README.md must not list active approval governance in features');
+assert.ok(!readme.includes('CUTOVER_TABLE'), 'README.md must not present CUTOVER_TABLE as the current architecture');
+assert.ok(readme.includes('127.0.0.1:18888'), 'README.md must document the Go upstream 127.0.0.1:18888');
+assert.ok(readme.includes('127.0.0.1:13333'), 'README.md must document the Next.js upstream 127.0.0.1:13333');
 
 console.log('Current architecture documentation consistency: PASS');

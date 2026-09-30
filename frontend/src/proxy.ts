@@ -1,159 +1,94 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { jwtVerify } from 'jose';
-import { getJwtSecretKey } from '@/lib/security';
-import { AccountSessionError, validateCurrentAccount } from '@/lib/accountSession';
-import { resolveRouteOwner } from '@/lib/cutover-routing';
-
-const JWT_SECRET = getJwtSecretKey();
 
 /**
- * Forward an authenticated request to the Go backend.
- * The Go backend performs its own JWT verification from the auth_token cookie.
- * Cookies and body are forwarded; auth headers are set by the Node proxy.
+ * Next.js UI navigation guard.
+ *
+ * Responsibility boundary after Phase 8.5:
+ *   - Nginx owns /api and /api/* routing (every API request goes straight to Go).
+ *   - Go owns API authentication, authorization and current-account/session validation.
+ *   - This module owns protected UI *navigation* protection only.
+ *
+ * It therefore never decodes a JWT, never verifies HS256, never reads MongoDB,
+ * never constructs trusted identity headers and never forwards an API request.
+ * The only authority it consults is the Go authentication service, and it does so
+ * with nothing but the incoming auth_token cookie.
  */
-async function forwardToGo(request: NextRequest, requestHeaders: Headers): Promise<Response> {
-  const backendUrl = process.env.GO_BACKEND_URL || 'http://127.0.0.1:18888';
-  const goUrl = new URL(request.nextUrl.pathname + request.nextUrl.search, backendUrl);
 
-  const hasBody = request.method !== 'GET' && request.method !== 'HEAD';
-  const bodyBuffer = hasBody && request.body ? await request.arrayBuffer() : undefined;
+const GO_BACKEND_URL = process.env.GO_BACKEND_URL || 'http://127.0.0.1:18888';
+const AUTH_AUTHORITY_TIMEOUT_MS = 5000;
 
-  // Forward original request with cookies and body.
-  // Go middleware extracts auth_token cookie independently.
-  const goRequest = new Request(goUrl.toString(), {
-    method: request.method,
-    headers: requestHeaders,
-    body: bodyBuffer,
-  });
+/** Fail-closed page response when the authentication authority cannot answer. */
+function failClosed(code: 'AUTH_UNAVAILABLE' | 'AUTH_SERVICE_UNAVAILABLE', detail: string): NextResponse {
+  const response = NextResponse.json({ error: detail, code }, { status: 503 });
+  response.headers.set('Cache-Control', 'no-store');
+  return response;
+}
 
-  let goResponse: Response;
+/** Ask Go for the authoritative identity behind the incoming auth_token cookie. */
+async function askGoAuthMe(cookieHeader: string): Promise<number | null> {
   try {
-    goResponse = await fetch(goRequest);
-  } catch (err) {
-    // Go backend unreachable — return 502, do NOT fall back to Node.
-    // Single-writer invariant: owner=go means only Go may execute.
-    // Rollback: change owner in cutover-routing.ts to 'node'.
-    console.error('[cutover] Go backend unreachable:', request.method, request.nextUrl.pathname, err);
-    return NextResponse.json(
-      { error: 'Backend temporarily unavailable', code: 'GO_BACKEND_UNREACHABLE' },
-      { status: 502 }
-    );
+    const response = await fetch(new URL('/api/auth/me', GO_BACKEND_URL), {
+      method: 'GET',
+      headers: { cookie: cookieHeader },
+      redirect: 'manual',
+      cache: 'no-store',
+      signal: AbortSignal.timeout(AUTH_AUTHORITY_TIMEOUT_MS),
+    });
+    return response.status;
+  } catch {
+    // Transport failure: the authentication authority is unreachable.
+    return null;
   }
+}
 
-  // Build response for the browser — preserve Go's status, headers, body.
-  const responseHeaders = new Headers(goResponse.headers);
-  // Remove hop-by-hop headers that should not be forwarded
-  responseHeaders.delete('transfer-encoding');
-  responseHeaders.delete('connection');
-
-  return new Response(goResponse.body, {
-    status: goResponse.status,
-    statusText: goResponse.statusText,
-    headers: responseHeaders,
-  });
+function loginRedirect(request: NextRequest, clearCookie: boolean): NextResponse {
+  const target = new URL('/login', request.url);
+  target.searchParams.set('from', `${request.nextUrl.pathname}${request.nextUrl.search}`);
+  const response = NextResponse.redirect(target);
+  if (clearCookie) response.cookies.delete('auth_token');
+  return response;
 }
 
 export async function proxy(request: NextRequest) {
   const token = request.cookies.get('auth_token')?.value;
+  const isLoginRoute = request.nextUrl.pathname === '/login';
 
-  const isAuthRoute = request.nextUrl.pathname.startsWith('/login');
-  const isPublicApiRoute = request.nextUrl.pathname === '/api/auth/login' || request.nextUrl.pathname === '/api/auth/logout';
-  const isPublicImage = request.nextUrl.pathname.startsWith('/images/');
-
-  if (isPublicImage || request.nextUrl.pathname.startsWith('/_next')) {
-    return NextResponse.next();
-  }
-
-  if (isPublicApiRoute) {
-    const owner = resolveRouteOwner(request.method, request.nextUrl.pathname);
-    if (owner === 'go') {
-      console.log(JSON.stringify({
-        level: 'info',
-        msg: 'cutover_forward',
-        method: request.method,
-        path: request.nextUrl.pathname,
-        owner: 'go',
-        principal: 'anonymous',
-      }));
-      return await forwardToGo(request, new Headers(request.headers));
-    }
-    return NextResponse.next();
-  }
-
-  const isApiRoute = request.nextUrl.pathname.startsWith('/api/');
-
+  // No credential at all: the page guard decides without disturbing Go.
   if (!token) {
-    if (isAuthRoute) return NextResponse.next();
-    if (isApiRoute) {
-      const res = NextResponse.json({ error: 'Unauthorized', code: 'AUTH_INVALID_TOKEN' }, { status: 401 });
-      res.headers.set('Cache-Control', 'no-store');
-      return res;
-    }
-    return NextResponse.redirect(new URL('/login', request.url));
+    if (isLoginRoute) return NextResponse.next();
+    return loginRedirect(request, false);
   }
 
-  try {
-    const { payload } = await jwtVerify(token, JWT_SECRET, { algorithms: ['HS256'], requiredClaims: ['exp'] });
-    // Next 16 Proxy runs on Node.js. Validate every protected request against MongoDB.
-    const account = await validateCurrentAccount({ username: payload.username, role: payload.role, sv: payload.sv });
-    const requestHeaders = new Headers(request.headers);
-    requestHeaders.set('x-user', account.username);
-    requestHeaders.set('x-user-role', account.role);
-    requestHeaders.set('x-user-id', account.userId);
-    requestHeaders.set('x-user-session-version', String(account.sessionVersion));
+  const authorityStatus = await askGoAuthMe(request.headers.get('cookie') || `auth_token=${token}`);
 
-    // ── Controlled Single-Writer Cutover ──────────────────────────
-    // For routes owned by Go, forward the authenticated request to Go :18888.
-    // Go performs its own JWT verification; single-writer invariant is preserved.
-    // Rollback: change owner in cutover-routing.ts from 'go' to 'node'.
-    if (isApiRoute) {
-      const owner = resolveRouteOwner(request.method, request.nextUrl.pathname);
-      if (owner === 'go') {
-        console.log(JSON.stringify({
-          level: 'info',
-          msg: 'cutover_forward',
-          method: request.method,
-          path: request.nextUrl.pathname,
-          owner: 'go',
-          principal: account.username,
-        }));
-        return await forwardToGo(request, requestHeaders);
-      }
-    }
+  if (authorityStatus === 200) {
+    // Authoritative session is valid.
+    if (isLoginRoute) return NextResponse.redirect(new URL('/', request.url));
+    return NextResponse.next();
+  }
 
-    if (isAuthRoute) {
-      return NextResponse.redirect(new URL('/', request.url));
-    }
-
-    return NextResponse.next({
-        request: {
-            headers: requestHeaders,
-        }
-    });
-  } catch (error) {
-    const code = error instanceof AccountSessionError ? error.code : 'AUTH_INVALID_TOKEN';
-    const isAuthError = error instanceof AccountSessionError || (error instanceof Error && error.name.startsWith('JWT')) || (error instanceof Error && error.name.startsWith('JWS'));
-    if (!isAuthError) {
-      const res = NextResponse.json({ error: 'Authentication temporarily unavailable', code: 'AUTH_UNAVAILABLE' }, { status: 503 });
-      res.headers.set('Cache-Control', 'no-store');
-      return res;
-    }
-    if (isAuthRoute) return NextResponse.next();
-
-    if (isApiRoute) {
-      const response = NextResponse.json({ error: 'Unauthorized', code }, { status: 401 });
-      response.headers.set('Cache-Control', 'no-store');
+  if (authorityStatus === 401) {
+    // Authoritative authentication failure (invalid, revoked, disabled, locked, role mismatch).
+    if (isLoginRoute) {
+      const response = NextResponse.next();
       response.cookies.delete('auth_token');
       return response;
     }
-
-    const response = NextResponse.redirect(new URL('/login', request.url));
-    response.cookies.delete('auth_token');
-    return response;
+    return loginRedirect(request, true);
   }
+
+  if (authorityStatus === 503) {
+    // Go is alive but its session authority is temporarily unavailable.
+    // Never turn this into a successful render and never invalidate the cookie.
+    return failClosed('AUTH_UNAVAILABLE', 'Authentication temporarily unavailable');
+  }
+
+  // Unreachable or unexpected authority answer: fail closed without local fallback.
+  return failClosed('AUTH_SERVICE_UNAVAILABLE', 'Authentication service unavailable');
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|images/|favicon.ico).*)'],
-}
+  // /api is owned by the edge + Go; this guard must never see an API request.
+  matcher: ['/((?!api|_next/static|_next/image|images/|favicon.ico).*)'],
+};

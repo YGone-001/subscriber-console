@@ -32,8 +32,8 @@ Historical `app_approvals` data is not dropped. It is left untouched for retenti
 
 ## Invariants
 
-- `CUTOVER_TABLE = 84`.
-- `ACTUALLY_ROUTED = 84`; every cutover route is owned by Go.
+- Route authority is the frozen Go registration set (`84` METHOD+PATH entries); the Next.js `CUTOVER_TABLE` was retired and no longer exists in production source.
+- `ACTUALLY_ROUTED = 84`; every route is owned by Go and routed by the Nginx edge.
 - Go remains the authoritative writer for cutover operations.
 - Runtime charging-plane boundaries are unchanged.
 - Direct writes preserve validation, CAS/precondition checks, idempotency where applicable, and safe before/after operation-log snapshots.

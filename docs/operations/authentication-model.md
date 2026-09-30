@@ -171,6 +171,6 @@ Phase 6.3-A brought Go Authentication implementations into complete 1:1 parity w
 
 Production Routing Invariant (Phase 6.3-B Controlled Cutover):
 - Production authentication ownership has been cut over authoritatively to **Go backend** (`:18888`).
-- `CUTOVER_TABLE = 84`, `ACTUALLY_ROUTED = 84` (Phase 6.3-B authentication baseline was 36; the Phase 7.5 baseline was 47; the Phase 8.2 residual cutover raised it to 84).
-- The Next.js reverse proxy routes `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`, and `GET /api/auth/permissions` to Go with fail-closed semantics (HTTP 502 `GO_BACKEND_UNREACHABLE` on backend failure; zero Node fallback).
+- Route authority is the frozen Go registration set (`84` METHOD+PATH entries); the Next.js `CUTOVER_TABLE` was retired. Historical baselines: Phase 6.3-B authentication = 36, Phase 7.5 = 47, Phase 8.2 residual cutover = 84.
+- The Nginx edge routes `/api` and `/api/*` straight to Go with fail-closed semantics (no Node fallback and no second hop): a dead Go backend yields an edge-generated 502/504, and Go's own session-store outage yields HTTP 503 `AUTH_UNAVAILABLE`.
 

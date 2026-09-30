@@ -3,23 +3,21 @@
  * User Management Controlled Cutover Suite
  *
  * Verifies:
- * 1. All six canonical User Management routes resolve to owner=go
- * 2. No duplicate METHOD+PATH entries in CUTOVER_TABLE
- * 3. CUTOVER_TABLE = 84, ACTUALLY_ROUTED = 84
+ * 1. All six canonical User Management routes present in the Go registration site
+ * 2. Six retired compatibility mutation methods absent
+ * 3. Exactly 84 Go registrations with zero duplicates
  * 4. Frontend API client uses dedicated canonical endpoints
  * 5. Go backend registers all six canonical routes
  * 6. No frontend owner-specific branching
  * 7. Legacy /api/auth/users not consumed by Phase 6.1-C UI
- * 8. Go unavailable returns 502 GO_BACKEND_UNREACHABLE (proxy contract)
  */
 
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { createJiti } from 'jiti';
+import { deriveGoRegistrations } from './lib/go-registrations.mjs';
 
 const root = resolve(import.meta.dirname, '..');
-const jiti = createJiti(import.meta.url);
 
 console.log('── User Management Controlled Cutover Suite ──\n');
 
@@ -36,71 +34,51 @@ function verify(description, fn) {
   }
 }
 
-// ── 1. Cutover table routing ─────────────────────────────────────────────────
-console.log('1. Cutover Table Routing');
+// ── 1. Go registration authority ─────────────────────────────────────────────
+console.log('1. Go Registration Authority');
 
-const { CUTOVER_TABLE, resolveRouteOwner } = jiti(join(root, 'frontend/src/lib/cutover-routing.ts'));
+const { keys: goRegistrations, duplicates: goDuplicates } = deriveGoRegistrations(root);
 
 const userMgmtRoutes = [
-  { method: 'GET', path: '/api/users', expectedOwner: 'go' },
-  { method: 'POST', path: '/api/users', expectedOwner: 'go' },
-  { method: 'GET', path: '/api/users/{username}', expectedOwner: 'go' },
-  { method: 'PATCH', path: '/api/users/{username}', expectedOwner: 'go' },
-  { method: 'POST', path: '/api/users/{username}/disable', expectedOwner: 'go' },
-  { method: 'POST', path: '/api/users/{username}/password-reset', expectedOwner: 'go' },
+  'GET /api/users',
+  'POST /api/users',
+  'GET /api/users/{username}',
+  'PATCH /api/users/{username}',
+  'POST /api/users/{username}/disable',
+  'POST /api/users/{username}/password-reset',
 ];
 
 for (const route of userMgmtRoutes) {
-  verify(`${route.method} ${route.path} owner=${route.expectedOwner}`, () => {
-    const entry = CUTOVER_TABLE.find((r) => r.method === route.method && r.path === route.path);
-    assert.ok(entry, `route not found in CUTOVER_TABLE: ${route.method} ${route.path}`);
-    assert.equal(entry.owner, route.expectedOwner);
+  verify(`Go registers: ${route}`, () => {
+    assert.ok(goRegistrations.includes(route), `missing registration: ${route}`);
   });
 }
 
-verify('CUTOVER_TABLE = 84', () => {
-  assert.equal(CUTOVER_TABLE.length, 84, `found ${CUTOVER_TABLE.length}`);
-});
-
-verify('ACTUALLY_ROUTED = 84', () => {
-  const goRoutes = CUTOVER_TABLE.filter((r) => r.owner === 'go');
-  assert.equal(goRoutes.length, 84, `found ${goRoutes.length}`);
-});
-
-verify('no duplicate METHOD+PATH entries', () => {
-  const seen = new Set();
-  for (const route of CUTOVER_TABLE) {
-    const key = `${route.method} ${route.path}`;
-    assert.equal(seen.has(key), false, `duplicate: ${key}`);
-    seen.add(key);
-  }
-});
-
-// ── 2. Runtime owner resolution ─────────────────────────────────────────────
-console.log('\n2. Runtime Owner Resolution');
-
-const resolveCases = [
-  { method: 'GET', pathname: '/api/users', expected: 'go' },
-  { method: 'POST', pathname: '/api/users', expected: 'go' },
-  { method: 'GET', pathname: '/api/users/alice', expected: 'go' },
-  { method: 'PATCH', pathname: '/api/users/alice', expected: 'go' },
-  { method: 'POST', pathname: '/api/users/alice/disable', expected: 'go' },
-  { method: 'POST', pathname: '/api/users/alice/password-reset', expected: 'go' },
-  { method: 'GET', pathname: '/api/users', expected: 'go' },
-  { method: 'POST', pathname: '/api/auth/users', expected: 'node' },
-  { method: 'GET', pathname: '/api/auth/me', expected: 'go' },
-  { method: 'POST', pathname: '/api/auth/login', expected: 'go' },
+const retiredMutations = [
+  'POST /api/auth/users',
+  'PUT /api/auth/users/{username}',
+  'PATCH /api/auth/users/{username}',
+  'DELETE /api/auth/users/{username}',
+  'PUT /api/users/{username}',
+  'DELETE /api/users/{username}',
 ];
 
-for (const tc of resolveCases) {
-  verify(`resolveRouteOwner(${tc.method}, ${tc.pathname}) = ${tc.expected}`, () => {
-    const owner = resolveRouteOwner(tc.method, tc.pathname);
-    assert.equal(owner, tc.expected);
+for (const route of retiredMutations) {
+  verify(`retired mutation absent: ${route}`, () => {
+    assert.equal(goRegistrations.includes(route), false, `unexpected registration: ${route}`);
   });
 }
 
-// ── 3. Frontend API client contract ─────────────────────────────────────────
-console.log('\n3. Frontend API Client Contract');
+verify('Go registrations = 84', () => {
+  assert.equal(goRegistrations.length, 84, `found ${goRegistrations.length}`);
+});
+
+verify('no duplicate METHOD+PATH registrations', () => {
+  assert.deepEqual(goDuplicates, [], `duplicates: ${goDuplicates.join(', ')}`);
+});
+
+// ── 2. Frontend API client contract ─────────────────────────────────────────
+console.log('\n2. Frontend API Client Contract');
 
 const usersApiSource = readFileSync(join(root, 'frontend/src/lib/api/users.ts'), 'utf8');
 
@@ -141,8 +119,8 @@ verify('no backend-specific branching (backend === "go")', () => {
   assert.doesNotMatch(frontendSrc, /owner\s*===\s*["']go["']\s*\?/);
 });
 
-// ── 4. Go backend route registration ────────────────────────────────────────
-console.log('\n4. Go Backend Route Registration');
+// ── 3. Go backend route registration ────────────────────────────────────────
+console.log('\n3. Go Backend Route Registration');
 
 const goMain = readFileSync(join(root, 'backend/cmd/server/main.go'), 'utf8');
 
@@ -161,29 +139,8 @@ for (const route of goRoutes) {
   });
 }
 
-// ── 5. Go unavailable contract ──────────────────────────────────────────────
-console.log('\n5. Go Unavailable Contract');
-
-const proxySource = readFileSync(join(root, 'frontend/src/proxy.ts'), 'utf8');
-
-verify('proxy returns 502 GO_BACKEND_UNREACHABLE on Go failure', () => {
-  assert.match(proxySource, /GO_BACKEND_UNREACHABLE/);
-  assert.match(proxySource, /status:\s*502/);
-});
-
-verify('proxy does NOT fall back to Node on Go failure', () => {
-  // The forwardToGo catch block must return 502, not NextResponse.next()
-  const catchBlock = proxySource.slice(proxySource.indexOf('Go backend unreachable'));
-  assert.match(catchBlock, /GO_BACKEND_UNREACHABLE/);
-  assert.doesNotMatch(catchBlock.slice(0, 500), /NextResponse\.next/);
-});
-
-verify('proxy emits cutover_forward log for Go-owned routes', () => {
-  assert.match(proxySource, /cutover_forward/);
-});
-
-// ── 6. Legacy compatibility ─────────────────────────────────────────────────
-console.log('\n6. Legacy /api/auth/users Compatibility');
+// ── 4. Legacy compatibility ─────────────────────────────────────────────────
+console.log('\n4. Legacy /api/auth/users Compatibility');
 
 function sourceFiles(directory) {
   return readdirSync(directory).flatMap((name) => {
@@ -206,8 +163,8 @@ verify('API client does not call /api/auth/users', () => {
   assert.doesNotMatch(usersApiSource, /\/api\/auth\/users/);
 });
 
-// ── 7. Password hash non-exposure ───────────────────────────────────────────
-console.log('\n7. Security Invariants');
+// ── 5. Password hash non-exposure ───────────────────────────────────────────
+console.log('\n5. Security Invariants');
 
 verify('Go SafeUser excludes passwordHash', () => {
   const modelSrc = readFileSync(join(root, 'backend/internal/user/model.go'), 'utf8');
@@ -222,4 +179,4 @@ verify('frontend API client never exposes passwordHash', () => {
 
 // ── Summary ─────────────────────────────────────────────────────────────────
 console.log(`\nAll ${passed} cutover checks passed.`);
-console.log('CUTOVER_TABLE=84 ACTUALLY_ROUTED=84');
+console.log('GoRegistered=84 duplicates=0');

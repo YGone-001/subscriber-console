@@ -253,11 +253,11 @@ jobs:
       - name: Authentication controlled cutover
         run: node scripts/test-auth-cutover.mjs
 
-  frontend-dependency-cleanup:
-    name: Phase 8.4 frontend dependency & residual Node runtime cleanup
+  deployment-boundary:
+    name: Phase 8.5 proxy / deployment boundary finalization
     runs-on: ubuntu-latest
     env:
-      MONGODB_URI: mongodb://127.0.0.1:27017/xcloud
+      MONGODB_URI: mongodb://127.0.0.1:27017
       MONGODB_XCLOUD_DB: xcloud
       MONGODB_APP_DB: xcloud_ops
       JWT_SECRET: ci-only-placeholder-secret-with-at-least-32-bytes
@@ -298,9 +298,33 @@ jobs:
           npm ci
           cd frontend && npm ci
 
+      - name: Install Nginx
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nginx
+          sudo systemctl stop nginx || true
+          sudo pkill -x nginx || true
+          echo "PHASE85_NGINX_BIN=$(command -v nginx)" >> "$GITHUB_ENV"
+          nginx -v
+
+      - name: Validate the repository Nginx configuration
+        run: |
+          set -euo pipefail
+          PREFIX="$(mktemp -d)"
+          mkdir -p "$PREFIX/conf" "$PREFIX/logs" "$PREFIX/temp"
+          printf 'types { text/html html; text/css css; application/javascript js; }\n' > "$PREFIX/conf/mime.types"
+          {
+            echo 'events { worker_connections 128; }'
+            echo 'http {'
+            echo "  include $PREFIX/conf/mime.types;"
+            cat deploy/nginx/xcloud.conf
+            echo '}'
+          } > "$PREFIX/conf/xcloud.conf"
+          nginx -t -p "$PREFIX" -c "$PREFIX/conf/xcloud.conf"
+
       - name: Build frontend for the real Next.js production runtime proof
         working-directory: frontend
         run: npm run build
 
-      - name: Phase 8.4 frontend dependency & residual Node runtime cleanup acceptance
-        run: node scripts/test-phase-8-frontend-dependency-cleanup.mjs
+      - name: Phase 8.5 proxy / deployment boundary acceptance
+        run: node scripts/test-phase-8-deployment-boundary.mjs

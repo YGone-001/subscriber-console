@@ -11,7 +11,7 @@ Target Components: Next.js Frontend (:13333), Go Backend (:18888), MongoDB (`xcl
 The **OCS Management Plane** governs administrative operations for commercial telecommunication offerings, subscriber billing contracts, and quota balances. It operates strictly separated from the runtime **Charging Plane** (Gy/Ro/CCR/Diameter rating and session management).
 
 ### Operational Invariants
-1. **Single-Writer Production Invariant**: All mutations are executed authoritatively by Go backend (`:18888`). The Next.js reverse proxy routes requests strictly according to `CUTOVER_TABLE` (`ACTUALLY_ROUTED = 84`). Node fallback is disabled.
+1. **Single-Writer Production Invariant**: All mutations are executed authoritatively by Go backend (`:18888`). The Nginx edge routes `/api` and `/api/*` straight to Go (`ACTUALLY_ROUTED = 84`); the Next.js runtime serves UI pages only and never proxies, authenticates or routes an API request. Node fallback is disabled.
 2. **Canonical RBAC & Direct Execution**:
    - `admin`: System administration, user management, and direct business mutations.
    - `operator`: Core operational mutations (subscribers, balances, profiles, tariffs, rating) execute directly without approval. No user administration.
@@ -28,21 +28,24 @@ The **OCS Management Plane** governs administrative operations for commercial te
 ```text
 Operator / Admin Browser
            │
-           │  HTTPS / HTTP :13333
+           │  HTTPS / HTTP :80  (Nginx public origin)
            ▼
-Next.js Reverse Proxy (frontend/src/proxy.ts)
-   - Inspects auth token cookie (JWT)
-   - Matches route against CUTOVER_TABLE (ACTUALLY_ROUTED = 84)
-   - Appends X-Request-ID, X-Actor-ID, X-Actor-Role
-   - Dispatches to Go backend (:18888)
-           │
-           │  HTTP Keep-Alive :18888
-           ▼
-Go Backend Service (backend/cmd/server)
-   - Authenticates request and re-evaluates fresh database permissions
-   - Validates domain preconditions and atomic CAS version
-   - Executes mutation directly to MongoDB
-   - Appends non-gating operational log entry to app_audit_logs
+Nginx Edge Router (deploy/nginx/xcloud.conf)
+   - location /api, /api/*, = /api/notifications/stream  -> Go backend
+   - location /                                          -> Next.js UI
+   - Strips client identity headers (X-User / X-Role / X-Permissions);
+     never authenticates and never forwards to a second hop
+           │                                   │
+           │  HTTP Keep-Alive :18888           │  HTTP Keep-Alive :13333
+           ▼                                   ▼
+Go Backend Service (backend/cmd/server)     Next.js UI Runtime (frontend/src/proxy.ts)
+   - Authenticates the auth_token cookie       - UI rendering only
+     and re-evaluates fresh DB permissions     - Protected-page navigation guard only:
+   - Validates domain preconditions and          asks Go GET /api/auth/me, fails closed
+     atomic CAS version                          on 503 / unreachable, never verifies a
+   - Executes mutation directly to MongoDB        JWT and never reads MongoDB
+   - Appends non-gating operational log
+     entry to app_audit_logs
            │
            ▼
 MongoDB Infrastructure

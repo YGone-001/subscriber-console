@@ -1,39 +1,39 @@
 #!/usr/bin/env node
 /**
- * Migration Inventory Validator (Phase 8.3 current state).
+ * Migration Inventory Validator (post-cutover architecture).
  *
  * Architecture: the Next.js App Router business API tree (frontend/src/app/api) and the
- * Next.js business server layer (frontend/src/server) were PHYSICALLY REMOVED. Production
- * /api/* traffic is Go-owned through the controlled cutover table.
+ * Next.js business server layer (frontend/src/server) were PHYSICALLY REMOVED. The
+ * controlled cutover table has since been RETIRED: Nginx now owns /api and /api/* path
+ * selection at the edge and forwards straight to the Go backend, whose router
+ * registration site is the authoritative API surface.
  *
  * This validator therefore enforces, all from source:
  *   1. generated inventory == independent source scan (no drift, no faked routes);
  *   2. the empty Next.js surface (0 route files, 0 operations, removed trees absent);
  *   3. the frozen historical baseline record is preserved (history is not rewritten);
- *   4. the controlled cutover table contract (CUTOVER_TABLE = 84, every entry owner=go,
- *      retired surfaces absent, compatibility aliases and resolved residue present);
- *   5. the Go router registration site matches CUTOVER_TABLE as an EXACT METHOD+PATH set
- *      (phantom registration detection + missing-route detection);
- *   6. the Next.js side owns zero business mutations.
+ *   4. the Go router registration site is the authoritative METHOD+PATH set
+ *      (no duplicates, retired mutation surfaces absent, exact count derived);
+ *   5. the edge deployment contract: /api and /api/* -> Go upstream, everything else ->
+ *      Next.js UI upstream;
+ *   6. the retired migration routing artifact must not survive in production source.
  *
- * Usage: node scripts/migration/validate-inventory.mjs
+ * Usage: node scripts/migration/inventory-api.mjs && node scripts/migration/validate-inventory.mjs
  */
 
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createJiti } from 'jiti';
+import { classifyGoRegistrations, deriveGoRegistrations, toInventoryPath } from '../lib/go-registrations.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const apiRoot = resolve(root, 'frontend/src/app/api');
 const serverRoot = resolve(root, 'frontend/src/server');
 const inventoryPath = resolve(root, 'docs/backend-migration/generated/api-routes.json');
 const baselinePath = resolve(root, 'docs/backend-migration/api-baseline.md');
-const goRouterSources = [
-  resolve(root, 'backend/cmd/server/main.go'),
-  resolve(root, 'backend/internal/remediation/handler.go'),
-];
+const nginxConfPath = resolve(root, 'deploy/nginx/xcloud.conf');
+const retiredRoutingArtifact = resolve(root, 'frontend/src/lib/cutover-routing.ts');
 
 assert.ok(existsSync(inventoryPath), 'run scripts/migration/inventory-api.mjs first');
 
@@ -102,89 +102,13 @@ for (const [method, count] of Object.entries({ GET: 32, POST: 28, PUT: 5, PATCH:
 assert.match(baseline, /\*\*40 non-GET/);
 
 // ---------------------------------------------------------------------------
-// 4. Controlled cutover table contract
+// 4. Go router registration site is the authoritative API surface
 // ---------------------------------------------------------------------------
-const jiti = createJiti(import.meta.url);
-const { CUTOVER_TABLE } = jiti(resolve(root, 'frontend/src/lib/cutover-routing.ts'));
-// Derived, never hard-coded: 47 Phase 7.5 baseline + 33 canonical residual
-// + 2 legacy read aliases + 2 resolved Go-native residue reads.
-const CANONICAL_RESIDUAL = 33;
-const LEGACY_ALIASES = 2;
-const GO_NATIVE_RESIDUE = 2;
-const expectedCutover = 47 + CANONICAL_RESIDUAL + LEGACY_ALIASES + GO_NATIVE_RESIDUE;
-assert.equal(CUTOVER_TABLE.length, expectedCutover, `CUTOVER_TABLE must be exactly ${expectedCutover}`);
-assert.equal(
-  CUTOVER_TABLE.filter((route) => route.owner === 'go').length,
-  expectedCutover,
-  `ACTUALLY_ROUTED must be exactly ${expectedCutover}`,
-);
+const { keys: goKeys, duplicates } = deriveGoRegistrations(root);
+assert.deepEqual(duplicates, [], 'Go router must not register a METHOD+PATH twice');
+assert.equal(goKeys.length, 84, `Go registered operation count must be 84, found ${goKeys.length}`);
 
-const cutoverKeys = new Set();
-for (const route of CUTOVER_TABLE) {
-  const key = `${route.method} ${route.path}`;
-  assert.equal(cutoverKeys.has(key), false, `duplicate cutover route: ${key}`);
-  cutoverKeys.add(key);
-}
-
-// Platform Services production ownership (previously 36, now 47 baseline).
-const platformServicesRoutes = [
-  'GET /api/alerts',
-  'POST /api/alerts/acknowledge',
-  'POST /api/alerts/workflow',
-  'GET /api/notifications/stream',
-  'GET /api/system/health',
-  'GET /api/system/mongo/health',
-  'GET /api/system/audit/status',
-  'POST /api/system/audit/scan',
-  'POST /api/system/audit/heal',
-  'POST /api/system/audit/batch-heal',
-  'POST /api/analytics/init',
-];
-for (const key of platformServicesRoutes) {
-  const [method, path] = key.split(' ');
-  const entry = CUTOVER_TABLE.find((r) => r.method === method && r.path === path);
-  assert.ok(entry, `missing Platform Services cutover route: ${key}`);
-  assert.equal(entry.owner, 'go', `cutover route ${key} must be owner=go`);
-}
-
-// User Management canonical routes.
-const userMgmtRoutes = [
-  'GET /api/users',
-  'POST /api/users',
-  'GET /api/users/{username}',
-  'PATCH /api/users/{username}',
-  'POST /api/users/{username}/disable',
-  'POST /api/users/{username}/password-reset',
-];
-for (const key of userMgmtRoutes) {
-  const [method, path] = key.split(' ');
-  const entry = CUTOVER_TABLE.find((r) => r.method === method && r.path === path);
-  assert.ok(entry, `missing cutover route: ${key}`);
-  assert.equal(entry.owner, 'go', `cutover route ${key} must be owner=go`);
-}
-
-// Authentication canonical routes.
-const authRoutes = [
-  'POST /api/auth/login',
-  'POST /api/auth/logout',
-  'GET /api/auth/me',
-  'GET /api/auth/permissions',
-];
-for (const key of authRoutes) {
-  const [method, path] = key.split(' ');
-  const entry = CUTOVER_TABLE.find((r) => r.method === method && r.path === path);
-  assert.ok(entry, `missing cutover route: ${key}`);
-  assert.equal(entry.owner, 'go', `cutover route ${key} must be owner=go`);
-}
-
-// Legacy read compatibility aliases (read-only) and retired mutations.
-const legacyAliasRoutes = ['GET /api/auth/users', 'GET /api/auth/users/{username}'];
-for (const key of legacyAliasRoutes) {
-  const [method, path] = key.split(' ');
-  const entry = CUTOVER_TABLE.find((r) => r.method === method && r.path === path);
-  assert.ok(entry, `missing legacy alias cutover route: ${key}`);
-  assert.equal(entry.owner, 'go', `legacy alias ${key} must be owner=go`);
-}
+// Retired mutation surfaces must not be re-registered by Go.
 const retiredAuthMutations = [
   'POST /api/auth/users',
   'PUT /api/auth/users/{username}',
@@ -194,75 +118,62 @@ const retiredAuthMutations = [
   'DELETE /api/users/{username}',
 ];
 for (const key of retiredAuthMutations) {
-  const [method, path] = key.split(' ');
-  assert.equal(
-    CUTOVER_TABLE.some((r) => r.method === method && r.path === path),
-    false,
-    `retired mutation must not be routed: ${key}`,
-  );
+  assert.equal(goKeys.includes(key), false, `retired mutation must not be registered: ${key}`);
 }
+
+// The read-only legacy compatibility aliases remain.
+for (const key of ['GET /api/auth/users', 'GET /api/auth/users/{username}']) {
+  assert.ok(goKeys.includes(key), `missing legacy read alias: ${key}`);
+}
+
 // Retired mutations must also be gone from the current operation inventory.
-const toCanonical = (p) => p.replace(/:(\w+)/g, '{$1}');
-const inventoryKeys = new Set(routes.flatMap((route) => route.methods.map((m) => `${m} ${toCanonical(route.path)}`)));
+const inventoryKeys = new Set(routes.flatMap((route) => route.methods.map((m) => `${m} ${toInventoryPath(route.path)}`)));
 for (const key of retiredAuthMutations) {
   assert.equal(inventoryKeys.has(key), false, `retired mutation still exported: ${key}`);
 }
 
-// Both Phase 8.0 Go-native unrouted reads were resolved by production routing.
-for (const key of ['GET /api/tariff-plans/{planId}/operations', 'GET /api/ocs/balances/{imsi}']) {
-  const [method, path] = key.split(' ');
-  const entry = CUTOVER_TABLE.find((r) => r.method === method && r.path === path);
-  assert.ok(entry, `missing resolved Go-native residue route: ${key}`);
-  assert.equal(entry.owner, 'go', `resolved residue ${key} must be owner=go`);
-}
-
-// ---------------------------------------------------------------------------
-// 5. Go router <-> CUTOVER_TABLE exact METHOD+PATH set cross-check
-//    (phantom detection + missing route detection; counts are derived, never stated)
-// ---------------------------------------------------------------------------
-const goKeys = new Set();
-for (const file of goRouterSources) {
-  assert.ok(existsSync(file), `Go router source missing: ${relative(root, file)}`);
-  const content = readFileSync(file, 'utf8');
-  const re = /mux\.Handle\("(GET|POST|PUT|PATCH|DELETE)\s+([^"]+)"\s*,/g;
-  let match;
-  while ((match = re.exec(content)) !== null) {
-    const key = `${match[1]} ${match[2]}`;
-    assert.equal(goKeys.has(key), false, `duplicate Go route registration: ${key}`);
-    goKeys.add(key);
-  }
-}
-assert.deepEqual(
-  [...goKeys].filter((key) => !cutoverKeys.has(key)).sort(),
-  [],
-  'Go router registers operations absent from CUTOVER_TABLE (phantom registrations)',
-);
-assert.deepEqual(
-  [...cutoverKeys].filter((key) => !goKeys.has(key)).sort(),
-  [],
-  'CUTOVER_TABLE routes missing from the Go router registration site',
-);
-assert.equal(goKeys.size, expectedCutover, 'Go registered operation count must equal CUTOVER_TABLE size');
-
-// GET reads vs POST semantic reads classification (derived from the Go registration set).
-const SEMANTIC_READ_POST = new Set([
-  'POST /api/subscribers/batch/precheck',
-  'POST /api/system/audit/scan',
-  'POST /api/analytics/init',
-]);
-const goReads = [...goKeys].filter((key) => key.startsWith('GET ') || SEMANTIC_READ_POST.has(key));
-const goMutations = [...goKeys].filter((key) => !goReads.includes(key));
-assert.equal(goReads.length + goMutations.length, goKeys.size, 'Go read/mutation classification must partition the set');
+const { reads: goReads, mutations: goMutations } = classifyGoRegistrations(goKeys);
+assert.equal(goReads.length + goMutations.length, goKeys.length, 'Go read/mutation classification must partition the set');
 
 // The Next.js side owns zero business mutations (physical removal completed).
-const nextBusinessMutations = routes.flatMap((route) => route.methods.map((m) => `${m} ${toCanonical(route.path)}`))
+const nextBusinessMutations = routes.flatMap((route) => route.methods.map((m) => `${m} ${toInventoryPath(route.path)}`))
   .filter((key) => !key.startsWith('GET '));
 assert.equal(nextBusinessMutations.length, 0, 'Next.js business mutation count must be zero');
+
+// ---------------------------------------------------------------------------
+// 5. Edge deployment contract: Nginx splits /api/* to Go and everything else to Next.js
+// ---------------------------------------------------------------------------
+assert.ok(existsSync(nginxConfPath), 'deploy/nginx/xcloud.conf must exist');
+const nginxConf = readFileSync(nginxConfPath, 'utf8');
+
+const upstreamOf = (name) => {
+  const block = nginxConf.match(new RegExp(`upstream\\s+${name}\\s*\\{([^}]*)\\}`));
+  assert.ok(block, `nginx upstream ${name} must be declared`);
+  return block[1];
+};
+assert.match(upstreamOf('xcloud_go'), /127\.0\.0\.1:18888/, 'Go upstream must be the API service');
+assert.match(upstreamOf('xcloud_next'), /127\.0\.0\.1:13333/, 'Next upstream must be the UI service');
+
+const proxyTargetOf = (match) => {
+  const location = nginxConf.match(match);
+  assert.ok(location, `nginx location block not found for ${match}`);
+  const proxyPass = location[0].match(/proxy_pass\s+http:\/\/(\w+)\s*;/);
+  assert.ok(proxyPass, `nginx location block for ${match} must declare proxy_pass`);
+  return proxyPass[1];
+};
+assert.equal(proxyTargetOf(/location\s+=\s+\/api\s*\{[\s\S]*?\n\s{4}\}/), 'xcloud_go', 'exact /api must route to Go');
+assert.equal(proxyTargetOf(/location\s+\/api\/\s*\{[\s\S]*?\n\s{4}\}/), 'xcloud_go', '/api/* must route to Go');
+assert.equal(proxyTargetOf(/location\s+\/\s*\{[\s\S]*?\n\s{4}\}/), 'xcloud_next', 'all non-API paths must route to Next.js UI');
+
+// ---------------------------------------------------------------------------
+// 6. The retired migration routing artifact must not survive in production source
+// ---------------------------------------------------------------------------
+assert.equal(existsSync(retiredRoutingArtifact), false, 'cutover-routing.ts must be retired');
 
 console.log('Migration inventory validation passed.');
 console.log(
   `Routes=${routes.length} Operations=${total} GET=${counts.GET} POST=${counts.POST} PUT=${counts.PUT} PATCH=${counts.PATCH} DELETE=${counts.DELETE}`,
 );
-console.log(`CUTOVER_TABLE=${expectedCutover} ACTUALLY_ROUTED=${expectedCutover}`);
-console.log(`GoRegistered=${goKeys.size} GoReads=${goReads.length} GoMutations=${goMutations.length}`);
+console.log(`GoRegistered=${goKeys.length} GoReads=${goReads.length} GoMutations=${goMutations.length}`);
+console.log(`EdgeApiOwner=nginx->go EdgeUiOwner=nginx->next`);
 console.log(`NextBusinessMutations=${nextBusinessMutations.length}`);

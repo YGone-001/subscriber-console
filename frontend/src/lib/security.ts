@@ -1,29 +1,11 @@
-const COMMON_SECRET_VALUES = new Set([
-  'secret',
-  'jwt_secret',
-  'change-me',
-  'changeme',
-  'development',
-  'password',
-]);
-
-export function getJwtSecretKey(): Uint8Array {
-  const secret = process.env.JWT_SECRET;
-  if (!secret) {
-    throw new Error('FATAL: JWT_SECRET environment variable is missing');
-  }
-
-  const normalized = secret.trim();
-  if (COMMON_SECRET_VALUES.has(normalized.toLowerCase())) {
-    throw new Error('FATAL: JWT_SECRET uses an unsafe placeholder value');
-  }
-
-  if (new TextEncoder().encode(normalized).byteLength < 32) {
-    throw new Error('FATAL: JWT_SECRET must be at least 32 bytes');
-  }
-
-  return new TextEncoder().encode(normalized);
-}
+/**
+ * UI password-policy helpers.
+ *
+ * After Phase 8.5 the frontend holds no JWT secret runtime and performs no API
+ * authentication: Go owns JWT verification and session validation. What remains here is
+ * only the client-side password policy presentation contract used by the user
+ * management UI, kept byte-compatible with the canonical Go `ValidatePassword` rules.
+ */
 
 export function isPasswordStrong(password: unknown, username?: string): password is string {
   return typeof password === 'string'

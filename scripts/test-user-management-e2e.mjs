@@ -3,7 +3,8 @@
  * User Management HTTP E2E Suite
  *
  * Mongo-backed integration suite covering actual HTTP behavior.
- * Tests the proxy -> Go routing path for all six canonical User Management routes.
+ * Tests the Go API directly for all six canonical User Management routes
+ * (Nginx owns /api routing at the edge; the Next.js proxy no longer forwards API requests).
  *
  * Required sequence:
  *   admin list users
@@ -27,7 +28,6 @@ import { existsSync, unlinkSync } from 'node:fs';
 import { execSync, spawn } from 'node:child_process';
 import { SignJWT } from 'jose';
 import { MongoClient } from 'mongodb';
-import { createJiti } from 'jiti';
 import nextEnv from '@next/env';
 
 nextEnv.loadEnvConfig(process.cwd());
@@ -42,17 +42,7 @@ process.env.MONGODB_APP_DB = appDbName;
 const JWT_SECRET_STRING = process.env.JWT_SECRET || 'user-mgmt-e2e-suite-secret-at-least-32-bytes';
 process.env.JWT_SECRET = JWT_SECRET_STRING;
 
-const jiti = createJiti(import.meta.url, {
-  interopDefault: true,
-  alias: {
-    '@': new URL('../frontend/src/', import.meta.url).pathname,
-    'next/server': new URL('../frontend/node_modules/next/server.js', import.meta.url).pathname,
-  },
-});
-
-const { NextRequest } = jiti('next/server');
-const { proxy } = jiti('../frontend/src/proxy.ts');
-const { getJwtSecretKey } = jiti('../frontend/src/lib/security.ts');
+const jwtSecretKey = () => new TextEncoder().encode(String(process.env.JWT_SECRET || '').trim());
 
 const client = new MongoClient(uri, {
   serverSelectionTimeoutMS: Number(process.env.MONGODB_SERVER_SELECTION_TIMEOUT_MS || 5000),
@@ -104,19 +94,19 @@ function makeToken(username, role, sv) {
     .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
     .setIssuedAt(Math.floor(Date.now() / 1000))
     .setExpirationTime(Math.floor(Date.now() / 1000) + 3600)
-    .sign(getJwtSecretKey());
+    .sign(jwtSecretKey());
 }
 
-async function callProxy(method, path, token, body) {
-  const url = new URL(path, 'http://localhost');
+let goBaseUrl = null;
+
+async function callGo(method, path, token, body) {
   const headers = { 'content-type': 'application/json' };
   if (token) headers['cookie'] = `auth_token=${token}`;
-  const req = new NextRequest(url.toString(), {
+  const res = await fetch(new URL(path, goBaseUrl), {
     method,
     headers,
     body: body ? JSON.stringify(body) : undefined,
   });
-  const res = await proxy(req);
   let json = null;
   try { json = await res.json(); } catch { /* non-JSON response */ }
   return { status: res.status, body: json };
@@ -166,6 +156,7 @@ async function main() {
   }
   assert(goReady, 'Go backend server failed to become ready');
   process.env.GO_BACKEND_URL = `http://127.0.0.1:${goPort}`;
+  goBaseUrl = process.env.GO_BACKEND_URL;
 
   // Seed test users
   const bcrypt = await import('bcryptjs');
@@ -189,7 +180,7 @@ async function main() {
   // ── 1. Admin list users ───────────────────────────────────────────────────
   console.log('1. Admin List Users');
   await verifyAsync('admin GET /api/users returns 200 with items', async () => {
-    const res = await callProxy('GET', '/api/users', adminToken);
+    const res = await callGo('GET', '/api/users', adminToken);
     assert.equal(res.status, 200);
     assert.ok(Array.isArray(res.body.items), 'items must be array');
     assert.ok(res.body.items.length >= 3, `expected >= 3 users, got ${res.body.items.length}`);
@@ -199,7 +190,7 @@ async function main() {
   });
 
   await verifyAsync('list response has no passwordHash', async () => {
-    const res = await callProxy('GET', '/api/users', adminToken);
+    const res = await callGo('GET', '/api/users', adminToken);
     const json = JSON.stringify(res.body);
     assert.doesNotMatch(json, /passwordHash/);
     assert.doesNotMatch(json, /password_hash/);
@@ -208,7 +199,7 @@ async function main() {
   // ── 2. Admin create operator ──────────────────────────────────────────────
   console.log('\n2. Admin Create User');
   await verifyAsync('admin POST /api/users creates new user (201)', async () => {
-    const res = await callProxy('POST', '/api/users', adminToken, {
+    const res = await callGo('POST', '/api/users', adminToken, {
       username: 'operator2',
       password: 'NewPass123!',
       displayName: 'Operator Two',
@@ -219,7 +210,7 @@ async function main() {
   });
 
   await verifyAsync('create response has no passwordHash', async () => {
-    const res = await callProxy('POST', '/api/users', adminToken, {
+    const res = await callGo('POST', '/api/users', adminToken, {
       username: 'tmp_nohash', password: 'TempPass123!', role: 'viewer',
     });
     assert.equal(res.status, 201);
@@ -227,21 +218,21 @@ async function main() {
   });
 
   await verifyAsync('duplicate username returns 409', async () => {
-    const res = await callProxy('POST', '/api/users', adminToken, {
+    const res = await callGo('POST', '/api/users', adminToken, {
       username: 'operator2', password: 'AnotherPass1!', role: 'viewer',
     });
     assert.equal(res.status, 409);
   });
 
   await verifyAsync('legacy role root rejected with 400', async () => {
-    const res = await callProxy('POST', '/api/users', adminToken, {
+    const res = await callGo('POST', '/api/users', adminToken, {
       username: 'badrole1', password: 'ValidPass123!', role: 'root',
     });
     assert.equal(res.status, 400);
   });
 
   await verifyAsync('weak password rejected with 400', async () => {
-    const res = await callProxy('POST', '/api/users', adminToken, {
+    const res = await callGo('POST', '/api/users', adminToken, {
       username: 'weakpw1', password: 'short', role: 'viewer',
     });
     assert.equal(res.status, 400);
@@ -257,31 +248,31 @@ async function main() {
 
   for (const tc of roleMatrix) {
     await verifyAsync(`${tc.role} GET /api/users -> ${tc.read}`, async () => {
-      const res = await callProxy('GET', '/api/users', tc.token());
+      const res = await callGo('GET', '/api/users', tc.token());
       assert.equal(res.status, tc.read);
     });
 
     await verifyAsync(`${tc.role} POST /api/users -> ${tc.create}`, async () => {
-      const res = await callProxy('POST', '/api/users', tc.token(), {
+      const res = await callGo('POST', '/api/users', tc.token(), {
         username: `${tc.role}_create_test`, password: 'ValidPass123!', role: 'viewer',
       });
       assert.equal(res.status, tc.create);
     });
 
     await verifyAsync(`${tc.role} PATCH /api/users/{username} -> ${tc.update}`, async () => {
-      const res = await callProxy('PATCH', '/api/users/operator1', tc.token(), {
+      const res = await callGo('PATCH', '/api/users/operator1', tc.token(), {
         displayName: 'Hacked',
       });
       assert.equal(res.status, tc.update);
     });
 
     await verifyAsync(`${tc.role} POST /api/users/{username}/disable -> ${tc.disable}`, async () => {
-      const res = await callProxy('POST', '/api/users/operator1/disable', tc.token(), {});
+      const res = await callGo('POST', '/api/users/operator1/disable', tc.token(), {});
       assert.equal(res.status, tc.disable);
     });
 
     await verifyAsync(`${tc.role} POST /api/users/{username}/password-reset -> ${tc.resetPassword}`, async () => {
-      const res = await callProxy('POST', '/api/users/operator1/password-reset', tc.token(), {
+      const res = await callGo('POST', '/api/users/operator1/password-reset', tc.token(), {
         password: 'HackedPass1!',
       });
       assert.equal(res.status, tc.resetPassword);
@@ -293,17 +284,17 @@ async function main() {
 
   const operator2TokenBefore = await makeToken('operator2', 'operator', 1);
   await verifyAsync('operator2 valid before role change', async () => {
-    const res = await callProxy('GET', '/api/auth/me', operator2TokenBefore);
+    const res = await callGo('GET', '/api/auth/me', operator2TokenBefore);
     assert.equal(res.status, 200);
   });
 
   await verifyAsync('admin updates operator2 role to viewer (200)', async () => {
-    const res = await callProxy('PATCH', '/api/users/operator2', adminToken, { role: 'viewer' });
+    const res = await callGo('PATCH', '/api/users/operator2', adminToken, { role: 'viewer' });
     assert.equal(res.status, 200);
   });
 
   await verifyAsync('old operator2 session rejected after role change', async () => {
-    const res = await callProxy('GET', '/api/auth/me', operator2TokenBefore);
+    const res = await callGo('GET', '/api/auth/me', operator2TokenBefore);
     assert.equal(res.status, 401);
   });
 
@@ -312,19 +303,19 @@ async function main() {
 
   const viewer1TokenBefore = await makeToken('viewer1', 'viewer', 1);
   await verifyAsync('viewer1 valid before password reset', async () => {
-    const res = await callProxy('GET', '/api/auth/me', viewer1TokenBefore);
+    const res = await callGo('GET', '/api/auth/me', viewer1TokenBefore);
     assert.equal(res.status, 200);
   });
 
   await verifyAsync('admin resets viewer1 password (200)', async () => {
-    const res = await callProxy('POST', '/api/users/viewer1/password-reset', adminToken, {
+    const res = await callGo('POST', '/api/users/viewer1/password-reset', adminToken, {
       password: 'ResetPass456!',
     });
     assert.equal(res.status, 200);
   });
 
   await verifyAsync('old viewer1 session rejected after password reset', async () => {
-    const res = await callProxy('GET', '/api/auth/me', viewer1TokenBefore);
+    const res = await callGo('GET', '/api/auth/me', viewer1TokenBefore);
     assert.equal(res.status, 401);
   });
 
@@ -333,19 +324,19 @@ async function main() {
 
   const operator1TokenBefore = await makeToken('operator1', 'operator', 1);
   await verifyAsync('operator1 valid before disable', async () => {
-    const res = await callProxy('GET', '/api/auth/me', operator1TokenBefore);
+    const res = await callGo('GET', '/api/auth/me', operator1TokenBefore);
     assert.equal(res.status, 200);
   });
 
   await verifyAsync('admin disables operator1 (200)', async () => {
-    const res = await callProxy('POST', '/api/users/operator1/disable', adminToken, {
+    const res = await callGo('POST', '/api/users/operator1/disable', adminToken, {
       reason: 'E2E test disable',
     });
     assert.equal(res.status, 200);
   });
 
   await verifyAsync('old operator1 session rejected after disable', async () => {
-    const res = await callProxy('GET', '/api/auth/me', operator1TokenBefore);
+    const res = await callGo('GET', '/api/auth/me', operator1TokenBefore);
     assert.equal(res.status, 401);
   });
 
@@ -353,12 +344,12 @@ async function main() {
   console.log('\n7. Self-Protection');
 
   await verifyAsync('admin cannot disable self', async () => {
-    const res = await callProxy('POST', '/api/users/admin1/disable', adminToken, {});
+    const res = await callGo('POST', '/api/users/admin1/disable', adminToken, {});
     assert.equal(res.status, 400);
   });
 
   await verifyAsync('admin cannot change own role', async () => {
-    const res = await callProxy('PATCH', '/api/users/admin1', adminToken, { role: 'operator' });
+    const res = await callGo('PATCH', '/api/users/admin1', adminToken, { role: 'operator' });
     assert.equal(res.status, 400);
   });
 
@@ -366,7 +357,7 @@ async function main() {
   console.log('\n8. Detail Contract');
 
   await verifyAsync('GET /api/users/{username} returns 200 with safe user', async () => {
-    const res = await callProxy('GET', '/api/users/admin1', adminToken);
+    const res = await callGo('GET', '/api/users/admin1', adminToken);
     assert.equal(res.status, 200);
     assert.ok(res.body.user, 'user must be present');
     assert.equal(res.body.user.username, 'admin1');
@@ -376,7 +367,7 @@ async function main() {
   });
 
   await verifyAsync('GET /api/users/unknown returns 404 USER_NOT_FOUND', async () => {
-    const res = await callProxy('GET', '/api/users/nonexistent_user', adminToken);
+    const res = await callGo('GET', '/api/users/nonexistent_user', adminToken);
     assert.equal(res.status, 404);
   });
 
@@ -384,14 +375,14 @@ async function main() {
   console.log('\n9. Security Edge Cases');
 
   await verifyAsync('unknown JSON field in create rejected', async () => {
-    const res = await callProxy('POST', '/api/users', adminToken, {
+    const res = await callGo('POST', '/api/users', adminToken, {
       username: 'unknownfield1', password: 'ValidPass123!', role: 'viewer', evilField: 'x',
     });
     assert.ok(res.status === 400, `expected 400, got ${res.status}`);
   });
 
   await verifyAsync('invalid username rejected', async () => {
-    const res = await callProxy('POST', '/api/users', adminToken, {
+    const res = await callGo('POST', '/api/users', adminToken, {
       username: 'bad user!', password: 'ValidPass123!', role: 'viewer',
     });
     assert.equal(res.status, 400);
@@ -445,10 +436,6 @@ async function main() {
     try { await client.db(xcloudDbName).dropDatabase(); } catch {}
     try { await client.db(appDbName).dropDatabase(); } catch {}
     try { await client.close(); } catch {}
-    try {
-      const { closeSessionMongoClient } = jiti('../frontend/src/lib/sessionMongo.ts');
-      await closeSessionMongoClient();
-    } catch {}
     if (goProc && !goProc.killed) {
       try { goProc.kill('SIGTERM'); } catch {}
       if (process.platform === 'win32') {
