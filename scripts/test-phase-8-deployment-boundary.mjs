@@ -760,8 +760,20 @@ function stopTracked(child) {
   }
 }
 
+/** Relay owned by the current run, released on every exit path. */
+let activeRelay = null;
+
 async function stopAll() {
   for (const { child } of processes) stopTracked(child);
+  // An early return must not leave the relay listening: the next run's port preflight
+  // would then refuse to start and the leftover listener would look like a foreign process.
+  if (activeRelay) {
+    try {
+      await activeRelay.stop();
+    } catch {
+      /* best effort */
+    }
+  }
   await sleep(500);
 }
 
@@ -812,6 +824,16 @@ class MongoRelay {
     this.server.close();
     this.server = null;
     await waitForPortClosed(this.listenPort, 5000);
+  }
+
+  /** Release the listener so the port is free again. Idempotent. */
+  async stop() {
+    for (const socket of this.sockets) socket.destroy();
+    this.sockets.clear();
+    if (!this.server) return;
+    const server = this.server;
+    this.server = null;
+    await new Promise((res) => server.close(res));
   }
 }
 
@@ -1038,6 +1060,7 @@ async function main() {
 
   // Relay -> Go -> Next -> Nginx
   const relay = new MongoRelay(MONGO_TARGET_PORT, RELAY_PORT);
+  activeRelay = relay;
   await relay.start();
   check('P85-R01', await waitForPort(RELAY_PORT, 5000), `mongo_relay_listening=${RELAY_PORT}`);
 
@@ -1108,6 +1131,11 @@ async function main() {
     'http {',
     "  log_format phase85 '$http_x_phase85_marker|$upstream_addr|$upstream_status|$status|$request_method|$request_uri|$content_type';",
     `  access_log ${nginxPath(ACCESS_LOG)} phase85;`,
+    // Distribution builds compile temp paths under /var/lib/nginx, which an unprivileged
+    // run cannot write. Requests large enough to spill out of client_body_buffer_size
+    // would otherwise fail in the proxy layer instead of exercising the deployment.
+    `  client_body_temp_path ${nginxPath(join(NGINX_PREFIX, 'temp', 'client_body'))};`,
+    `  proxy_temp_path ${nginxPath(join(NGINX_PREFIX, 'temp', 'proxy'))};`,
     "  include " + nginxPath(join(NGINX_PREFIX, 'conf', 'mime.types')) + ';',
     repoConf.replace(/^    listen 80;/m, `    listen ${EDGE_PORT};`),
     '}',
@@ -1118,9 +1146,13 @@ async function main() {
 
   const nginxTest = runSync(NGINX_BIN, ['-t', '-p', nginxPath(NGINX_PREFIX), '-c', nginxPath(effectiveConfPath)], { encoding: 'utf8' });
   const nginxSyntaxOk = nginxTest.status === 0;
-  check('P85-R06', nginxSyntaxOk, `nginx_syntax=${nginxSyntaxOk} ${(nginxTest.stderr || nginxTest.stdout || '').trim().split('\n').slice(-1)[0] || ''}`);
+  // A spawn failure leaves status null with empty output, which would otherwise look
+  // identical to a rejected configuration. Name the executable so a missing or
+  // unusable nginx binary is never mistaken for a configuration defect.
+  const nginxDetail = (nginxTest.stderr || nginxTest.stdout || '').trim().split('\n').slice(-1)[0] || '';
+  check('P85-R06', nginxSyntaxOk, `nginx_syntax=${nginxSyntaxOk} nginx_bin=${NGINX_BIN} spawn_error=${nginxTest.error ? nginxTest.error.message : 'none'} ${nginxDetail}`);
   if (!nginxSyntaxOk) {
-    log(nginxTest.stderr || nginxTest.stdout || '');
+    log(nginxTest.stderr || nginxTest.stdout || nginxTest.error?.message || '');
     report();
     await stopAll();
     return;

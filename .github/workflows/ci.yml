@@ -314,13 +314,20 @@ jobs:
           mkdir -p "$PREFIX/conf" "$PREFIX/logs" "$PREFIX/temp"
           printf 'types { text/html html; text/css css; application/javascript js; }\n' > "$PREFIX/conf/mime.types"
           {
-            # The runner user cannot write the distribution's compiled-in pid path
-            # (/run/nginx.pid), so both the pid file and the error log are redirected
-            # into the sandbox prefix before the package config is included.
+            # The distribution compiles /run/nginx.pid, /var/log/nginx/access.log and
+            # /var/lib/nginx/* temp paths, none of which the runner user can write, so
+            # every runtime path is redirected into the sandbox prefix before the
+            # package configuration is included.
             echo "pid $PREFIX/logs/nginx.pid;"
             echo "error_log $PREFIX/logs/error.log notice;"
             echo 'events { worker_connections 128; }'
             echo 'http {'
+            echo "  access_log $PREFIX/logs/access.log;"
+            echo "  client_body_temp_path $PREFIX/temp/client_body;"
+            echo "  proxy_temp_path $PREFIX/temp/proxy;"
+            echo "  fastcgi_temp_path $PREFIX/temp/fastcgi;"
+            echo "  uwsgi_temp_path $PREFIX/temp/uwsgi;"
+            echo "  scgi_temp_path $PREFIX/temp/scgi;"
             echo "  include $PREFIX/conf/mime.types;"
             cat deploy/nginx/xcloud.conf
             echo '}'
