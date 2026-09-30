@@ -17,7 +17,7 @@
 | Phase 8.1 — Residual API Go Implementation & Shadow Parity | PASS / FROZEN | 33-operation canonical remainder; 11 newly implemented Go shadows; 81 parity scenarios / 122 assertions |
 | Phase 8.2 — Residual Production Cutover & Retired Surface Removal | PASS / FROZEN | 33 canonical + 2 legacy read aliases + 2 Go-native reads cut over; 6 non-canonical mutation methods retired; `CUTOVER_TABLE = 84`, `ACTUALLY_ROUTED = 84`, `node_production_operations = 0` |
 | Phase 8.3 — Next.js Business Backend Physical Removal | PASS / FROZEN | `frontend/src/app/api/**` (54 route.ts / 72 operations) and `frontend/src/server/**` (33 files) physically deleted; 7 backend-only lib helpers removed; minimal read-only proxy session account store extracted; `next_business_backend_removed = true`, `active_server_imports = 0`, `CUTOVER_TABLE = 84`; frozen boundary SHA `342589aa5c00cb8152980c77bfc73f05b82ca64a` |
-| Phase 8.4 — Dependency cleanup | AUTHORIZED / NOT STARTED | Deferred from Phase 8.3; independently authorized |
+| Phase 8.4 — Frontend Dependency & Residual Node Runtime Cleanup | IMPLEMENTED / NOT SELF-FROZEN | `bcryptjs` removed (zero frontend consumers); 5 dead Node-era libs + orphaned `ChangeDiff.tsx` deleted; `mongo.ts` collapsed into read-only `sessionMongo.ts` (`app_users` only, `findOne`, readers = 1 / writers = 0); `CUTOVER_TABLE = 84`, `backend_production_changes = 0`; independent acceptance pending |
 | Phase 8.5 — Proxy / deployment simplification | NOT AUTHORIZED YET | Deferred from Phase 8.3 |
 
 ## Deferred
@@ -30,7 +30,7 @@
 
 ## Blockers
 
-No open blockers. Phase 7.0-7.5 and Phase 8.0-8.3 are independently accepted and frozen at `342589aa5c00cb8152980c77bfc73f05b82ca64a`. Phase 8.4 is authorized and not started; Phase 8.5 is not authorized yet. Two known scanner/remediation residual gaps remain frozen by design in `docs/backend-migration/remediation-acceptance-corrections.md`.
+No open blockers. Phase 7.0-7.5 and Phase 8.0-8.3 are independently accepted and frozen at `342589aa5c00cb8152980c77bfc73f05b82ca64a`. Phase 8.4 is implemented and awaiting independent acceptance; Phase 8.5 is not authorized yet. Two known scanner/remediation residual gaps remain frozen by design in `docs/backend-migration/remediation-acceptance-corrections.md`.
 
 ## Risks
 

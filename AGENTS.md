@@ -216,7 +216,7 @@ Phase 8.0   PASS / FROZEN — Next.js Backend Removal Architecture Freeze (resid
 Phase 8.1   PASS / FROZEN — Residual API Go Implementation & Shadow Parity (33-operation canonical remainder, 11 newly implemented Go shadows; 81 parity scenarios / 122 assertions)
 Phase 8.2   PASS / FROZEN — Residual Production Cutover, Compatibility Closure & Retired Surface Removal (33 canonical residual operations + 2 legacy read aliases + 2 Go-native reads now Go production-owned; 6 non-canonical mutation methods retired; CUTOVER_TABLE = 84, ACTUALLY_ROUTED = 84, node_production_operations = 0)
 Phase 8.3   PASS / FROZEN — Next.js Business Backend Physical Removal (frontend/src/app/api/** 54 route.ts / 72 operations and frontend/src/server/** 33 files deleted; 7 backend-only lib helpers removed; minimal read-only proxy session account store extracted; CUTOVER_TABLE = 84, ACTUALLY_ROUTED = 84, next_business_backend_removed = true)
-Phase 8.4   AUTHORIZED / NOT STARTED — Dependency cleanup
+Phase 8.4   IMPLEMENTED / NOT SELF-FROZEN — Frontend Dependency & Residual Node Runtime Cleanup (bcryptjs removed; 5 dead Node-era libs deleted; mongo.ts collapsed into read-only sessionMongo.ts; CUTOVER_TABLE = 84, ACTUALLY_ROUTED = 84, backend_production_changes = 0)
 Phase 8.5   NOT AUTHORIZED YET — Proxy / deployment simplification
 ```
 
@@ -227,7 +227,7 @@ Authoritative frozen Phase 8.3 boundary SHA (independent acceptance, not HEAD):
 ```
 
 Phase 7.0-7.5 and Phase 8.0-8.3 are independently accepted and frozen at that boundary.
-Phase 8.4 is authorized but not started; Phase 8.5 is not authorized yet.
+Phase 8.4 is implemented (independent acceptance pending); Phase 8.5 is not authorized yet.
 
 ### 5.0 Phase 8.3 Boundary (Next.js Business Backend Removal)
 
@@ -238,10 +238,24 @@ All Node.js server execution removed   = NO
 
 - Deleted: `frontend/src/app/api/**` (54 `route.ts` + 6 `handler.ts`), `frontend/src/server/**` (33 files), 7 backend-only `frontend/src/lib` helpers.
 - Extracted: `frontend/src/lib/sessionAccountStore.ts` — read-only `app_users` lookup (`findOne` only, zero writes) consumed by the unchanged `frontend/src/lib/accountSession.ts`.
-- Byte-frozen and preserved: `frontend/src/proxy.ts`, `frontend/src/lib/cutover-routing.ts`, `frontend/src/lib/mongo.ts`, `frontend/src/lib/security.ts`.
+- Byte-frozen and preserved: `frontend/src/proxy.ts`, `frontend/src/lib/cutover-routing.ts`, `frontend/src/lib/security.ts`. (`frontend/src/lib/mongo.ts` was collapsed into the read-only session Mongo module in Phase 8.4.)
 - Node runtime intentionally remains: UI rendering, `proxy.ts` ownership/forwarding, read-only account/session validation.
-- Dependency cleanup deferred to Phase 8.4 (authorized, not started); proxy/deployment deferral to Phase 8.5 (not authorized yet).
+- Dependency cleanup performed in Phase 8.4 (implemented, acceptance pending); proxy/deployment deferral to Phase 8.5 (not authorized yet).
 - Evidence: `docs/backend-migration/phase-8.3-next-backend-removal.md`; suite `scripts/test-phase-8-next-backend-removal.mjs`.
+
+### 5.0.1 Phase 8.4 Post-Cleanup Statement (Frontend Dependency & Residual Node Runtime Cleanup)
+
+```text
+Next.js business backend removed = YES
+Next.js proxy/session runtime     = STILL PRESENT
+Frontend Mongo business access    = NO
+Frontend Mongo session access     = app_users READ-ONLY ONLY
+```
+
+- Removed: `bcryptjs` (zero frontend consumers) from `frontend/package.json` / `frontend/package-lock.json`; 5 dead Node-era libs (`profileAudit.ts`, `subscriberContract.ts`, `audit/sanitize.ts`, `plmnUtils.ts`, `plmn_db.ts`) plus the orphaned `governance/ChangeDiff.tsx` component.
+- Collapsed: `frontend/src/lib/mongo.ts` (generic business Mongo capability) into `frontend/src/lib/sessionMongo.ts` — exactly two exports, single collection literal `app_users`, `findOne` only; chain `proxy.ts -> accountSession.ts -> sessionAccountStore.ts -> sessionMongo.ts`; readers = 1, writers = 0.
+- Unchanged: CUTOVER_TABLE = 84, ACTUALLY_ROUTED = 84, Go production source, root `package.json` / `package-lock.json`, `proxy.ts` / `accountSession.ts` bytes.
+- Evidence: `docs/backend-migration/phase-8.4-frontend-dependency-cleanup.md`; suite `scripts/test-phase-8-frontend-dependency-cleanup.mjs` (CI job `frontend-dependency-cleanup`).
 
 ### 5.1 OCS 生产冻结基线 (OCS Production Freeze Baseline)
 

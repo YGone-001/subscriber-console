@@ -47,7 +47,7 @@ const scriptsRoot = resolve(root, 'scripts');
 const githubRoot = resolve(root, '.github');
 const inventoryPath = resolve(root, 'docs/backend-migration/generated/api-routes.json');
 const cutoverPath = resolve(root, 'frontend/src/lib/cutover-routing.ts');
-const mongoLibPath = resolve(root, 'frontend/src/lib/mongo.ts');
+const sessionLibPath = resolve(root, 'frontend/src/lib/sessionMongo.ts');
 const proxyPath = resolve(root, 'frontend/src/proxy.ts');
 const accountSessionPath = resolve(root, 'frontend/src/lib/accountSession.ts');
 const sessionStorePath = resolve(root, 'frontend/src/lib/sessionAccountStore.ts');
@@ -278,7 +278,7 @@ function isBackendPath(relFile) {
     p.includes('/app/api/') ||
     p.startsWith('frontend/src/server/') ||
     p === 'frontend/src/proxy.ts' ||
-    /\/lib\/(mongo|audit|auth|security|rateLimit)/.test(p) ||
+    /\/lib\/(mongo|session|audit|auth|security|rateLimit)/.test(p) ||
     /__tests__|\.test\.|\.spec\./.test(p)
   );
 }
@@ -460,16 +460,13 @@ const MONGO_WRITE_OPS = new Set([
   'drop',
 ]);
 
-/** Collection key -> physical name map, derived from the surviving mongo lib source. */
+/** Collection key -> physical name map, derived from the surviving session Mongo lib source. */
 function loadCollectionMap() {
   const map = new Map();
-  if (!existsSync(mongoLibPath)) return map;
-  const content = readFileSync(mongoLibPath, 'utf8');
-  const block = content.match(/mongoCollections\s*=\s*\{([\s\S]*?)\}\s*as const/);
-  if (!block) return map;
-  const re = /(\w+)\s*:\s*'([^']+)'/g;
-  let m;
-  while ((m = re.exec(block[1])) !== null) map.set(m[1], m[2]);
+  if (!existsSync(sessionLibPath)) return map;
+  const content = readFileSync(sessionLibPath, 'utf8');
+  const m = content.match(/\.collection\s*(?:<[^>]*>)?\s*\(\s*'([^']+)'\s*\)/);
+  if (m) map.set('users', m[1]);
   return map;
 }
 
@@ -505,17 +502,22 @@ function scanNextBusinessMongo() {
 
 /** Read-only verification of the surviving proxy session-validation store. */
 function scanSessionStore() {
-  if (!existsSync(sessionStorePath)) return { present: false, readOnly: false, ops: [], collections: [] };
-  const content = stripComments(readFileSync(sessionStorePath, 'utf8'));
+  if (!existsSync(sessionStorePath) || !existsSync(sessionLibPath)) {
+    return { present: false, readOnly: false, ops: [], collections: [] };
+  }
+  const storeContent = stripComments(readFileSync(sessionStorePath, 'utf8'));
+  const libContent = stripComments(readFileSync(sessionLibPath, 'utf8'));
   const ops = [];
   let m;
-  MONGO_OP_RE.lastIndex = 0;
-  while ((m = MONGO_OP_RE.exec(content)) !== null) ops.push(m[1]);
-  const collections = [...content.matchAll(/mongoCollections\.(\w+)/g)].map((x) => x[1]);
+  for (const content of [storeContent, libContent]) {
+    MONGO_OP_RE.lastIndex = 0;
+    while ((m = MONGO_OP_RE.exec(content)) !== null) ops.push(m[1]);
+  }
+  const collections = [...libContent.matchAll(/\.collection\s*(?:<[^>]*>)?\s*\(\s*'([^']+)'\s*\)/g)].map((x) => x[1]);
   const readOnly = ops.length > 0 && ops.every((op) => MONGO_READ_OPS.has(op));
-  const singleCollection = collections.length > 0 && collections.every((key) => key === 'users');
+  const usersCollectionOnly = collections.length === 1 && collections[0] === 'app_users';
   const findOneOnly = ops.length > 0 && ops.every((op) => op === 'findOne');
-  return { present: true, readOnly: readOnly && singleCollection && findOneOnly, ops, collections };
+  return { present: true, readOnly: readOnly && usersCollectionOnly && findOneOnly, ops, collections };
 }
 
 // ---------------------------------------------------------------------------

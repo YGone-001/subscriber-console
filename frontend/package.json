@@ -27,7 +27,6 @@
     "rebuild": "npm run clean && npm run build"
   },
   "dependencies": {
-    "bcryptjs": "^3.0.3",
     "jose": "^6.2.2",
     "lucide-react": "^1.7.0",
     "mongodb": "^7.4.0",

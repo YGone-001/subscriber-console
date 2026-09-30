@@ -446,9 +446,8 @@ async function main() {
     try { await client.db(appDbName).dropDatabase(); } catch {}
     try { await client.close(); } catch {}
     try {
-      const { getMongoClient } = jiti('../frontend/src/lib/mongo.ts');
-      const moduleClient = await getMongoClient().catch(() => null);
-      await moduleClient?.close().catch(() => {});
+      const { closeSessionMongoClient } = jiti('../frontend/src/lib/sessionMongo.ts');
+      await closeSessionMongoClient();
     } catch {}
     if (goProc && !goProc.killed) {
       try { goProc.kill('SIGTERM'); } catch {}

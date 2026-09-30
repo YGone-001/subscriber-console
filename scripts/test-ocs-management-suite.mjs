@@ -53,7 +53,7 @@ const jiti = createJiti(import.meta.url, {
 const { NextRequest } = jiti('next/server');
 const { proxy } = jiti('../frontend/src/proxy.ts');
 const { getJwtSecretKey } = jiti('../frontend/src/lib/security.ts');
-const { getMongoClient } = jiti('../frontend/src/lib/mongo.ts');
+const { closeSessionMongoClient } = jiti('../frontend/src/lib/sessionMongo.ts');
 const { CUTOVER_TABLE } = jiti('../frontend/src/lib/cutover-routing.ts');
 
 const client = new MongoClient(uri, {
@@ -656,7 +656,6 @@ try {
     await client.db(xcloudDbName).dropDatabase();
     await client.db(appDbName).dropDatabase();
     await client.close();
-    const moduleClient = await getMongoClient().catch(() => null);
-    await moduleClient?.close().catch(() => {});
+    await closeSessionMongoClient();
   } catch {}
 }

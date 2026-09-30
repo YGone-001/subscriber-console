@@ -377,3 +377,63 @@
 - Evidence document: `docs/backend-migration/phase-8.3-next-backend-removal.md`.
 - Status: IMPLEMENTED / NOT FROZEN. Not self-declared frozen; independent Phase 8.3
   acceptance is required.
+
+## Phase 8.4 — Frontend Dependency & Residual Node Runtime Cleanup
+
+- Derived the complete direct-dependency consumer graph for `frontend/package.json`
+  from source imports, tests, configs, package scripts and structural roles, and
+  classified every declared dependency (KEEP_RUNTIME_UI / KEEP_RUNTIME_PROXY /
+  KEEP_RUNTIME_SESSION / KEEP_TEST_TOOLING / KEEP_BUILD_TOOLING /
+  KEEP_PACKAGE_SCRIPT_TOOLING / REMOVE_UNUSED).
+- Removed `bcryptjs` (zero frontend consumers; password hashing is Go-owned) from
+  `frontend/package.json` and `frontend/package-lock.json`.
+  `frontend_dependencies_before = 20`, `frontend_dependencies_after = 19`,
+  `frontend_dependencies_removed = 1`, `frontend_dependency_unclassified = 0`,
+  `frontend_unused_direct_dependencies = 0`,
+  `retained_dependency_versions_unchanged = true`. (The Phase 8.4 specification prose
+  states "9 + 10 = 19"; the real boundary manifest has 11 devDependencies, so the
+  derived before value is 20.)
+- Collapsed the residual generic frontend Mongo runtime (`frontend/src/lib/mongo.ts`:
+  `mongoCollections` 19-key business map plus `xcloudDbName` / `getXcloudDb` /
+  `getMongoCollection` / `getAppCollection` / `getXcloudCollection`) into the minimal
+  read-only session module `frontend/src/lib/sessionMongo.ts` (exactly two exports;
+  single collection literal `app_users`; `findOne` only). Chain:
+  `proxy.ts -> accountSession.ts -> sessionAccountStore.ts -> sessionMongo.ts`;
+  `proxy_session_mongo_readers = 1`, `proxy_session_mongo_writers = 0`,
+  `frontend_business_collection_constants = 0`, `frontend_xcloud_db_helpers = 0`,
+  `frontend_generic_business_collection_helpers = 0`,
+  `next_business_mongo_readers = 0`, `next_business_mongo_writers = 0`.
+- Deleted 5 provably dead Node-era libs (`profileAudit.ts`, `subscriberContract.ts`,
+  `audit/sanitize.ts`, `plmnUtils.ts`, `plmn_db.ts`) plus the orphaned
+  `components/governance/ChangeDiff.tsx`; `residual_lib_unclassified = 0`,
+  `dead_node_era_libs_remaining = 0`.
+- Updated test teardown paths (`scripts/test-ocs-management-suite.mjs`,
+  `scripts/test-user-management-e2e.mjs`) to close through `closeSessionMongoClient()`
+  and evolved the readiness validator to derive its session evidence from
+  `sessionMongo.ts`.
+- Added the current-runtime acceptance suite
+  `scripts/test-phase-8-frontend-dependency-cleanup.mjs` (groups `P84-S/D/L/M/P/C/G/R/U/F`:
+  84-route real-stack exactly-once forwarding, fail-closed 502 `GO_BACKEND_UNREACHABLE`,
+  `AUTH_UNAVAILABLE` 503 Mongo-unavailable branch, unknown/retired API probes, five
+  non-tautological negative sentinels).
+- CI supersession (`ci_coverage_gaps = 0`): the `next-backend-removal` job was replaced
+  with `frontend-dependency-cleanup` running the Phase 8.4 suite; the Phase 8.3 suite
+  stays on disk byte-frozen as historical evidence and is no longer run by CI.
+- Final invariants: `CUTOVER_TABLE = 84`, `ACTUALLY_ROUTED = 84`,
+  `go_registered_operations = 84`, `backend_production_changes = 0`,
+  `root_package_json_changed = false`, `root_package_lock_changed = false`,
+  `next_business_backend_removed = true`, `backend_removal_ready = true`,
+  `phase84_routes_executed = 84`, `phase84_fallback_count = 0`.
+- Next.js business backend removed = YES; Next.js proxy/session runtime = STILL PRESENT;
+  Frontend Mongo business access = NO; Frontend Mongo session access = app_users
+  READ-ONLY ONLY.
+- Local acceptance run: `phase84_result = PASS`, `220/220` checks,
+  `phase84_invariants_failed = 0`, all five negative sentinels derive `true`.
+  Acceptance-suite corrections during closure: byte-exact `git show` comparison for the
+  frozen files (no trimming), generic Mongo call tolerance (`findOne<T>(`), runtime-reachable
+  consumer classification for `mongodb` (`KEEP_RUNTIME_SESSION` derived from the session
+  chain), session-chain iteration fix (`Object.keys(Set)` never iterates), and
+  `frontend/src/lib/mongo.ts` classified on the removed side of the spec inventory.
+- Evidence document: `docs/backend-migration/phase-8.4-frontend-dependency-cleanup.md`.
+- Status: IMPLEMENTED / NOT FROZEN. Not self-declared frozen; independent Phase 8.4
+  acceptance is required.

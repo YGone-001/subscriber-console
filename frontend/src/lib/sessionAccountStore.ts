@@ -1,5 +1,5 @@
 import { Document } from 'mongodb';
-import { getAppCollection, mongoCollections } from '@/lib/mongo';
+import { getSessionUsersCollection } from '@/lib/sessionMongo';
 
 /**
  * Minimal read-only account snapshot required by proxy session validation.
@@ -27,6 +27,6 @@ const SESSION_ACCOUNT_PROJECTION = {
 
 /** Read the session-validation account snapshot. Read-only: findOne with projection. */
 export async function getSessionAccount(username: string): Promise<SessionAccountDocument | null> {
-  const collection = await getAppCollection<SessionAccountDocument & Document>(mongoCollections.users);
+  const collection = await getSessionUsersCollection<SessionAccountDocument & Document>();
   return collection.findOne({ username }, { projection: SESSION_ACCOUNT_PROJECTION });
 }
