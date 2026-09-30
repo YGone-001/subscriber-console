@@ -211,11 +211,11 @@ Phase 7.1   PASS / FROZEN — Platform Health & Diagnostic Read Parity (GET /api
 Phase 7.2   PASS / FROZEN — Alert Mutation Parity (POST /api/alerts/acknowledge, POST /api/alerts/workflow)
 Phase 7.3   PASS / FROZEN — Notification Streaming SSE Parity (full acceptance matrix closed; Run #140 green)
 Phase 7.4   PASS / FROZEN — System Integrity Controlled Remediation Parity (POST /api/system/audit/heal, POST /api/system/audit/batch-heal; RS01-RS05 frozen as one continuous persistent-state sequence with 96 mandatory callbacks)
-Phase 7.5   IMPLEMENTED / NOT FROZEN — Controlled Platform Services Production Cutover (11 Phase 7 operations Go production-owned); independent acceptance pending
+Phase 7.5   PASS / FROZEN — Controlled Platform Services Production Cutover (11 Phase 7 operations Go production-owned)
 Phase 8.0   PASS / FROZEN — Next.js Backend Removal Architecture Freeze (residual API inventory + source-derived readiness validator)
-Phase 8.1   COMPLETE — Residual API Go Implementation & Shadow Parity (33-operation canonical remainder, 11 newly implemented Go shadows; 81 parity scenarios / 122 assertions)
-Phase 8.2   IMPLEMENTED / NOT FROZEN — Residual Production Cutover, Compatibility Closure & Retired Surface Removal (33 canonical residual operations + 2 legacy read aliases + 2 Go-native reads now Go production-owned; 6 non-canonical mutation methods retired; CUTOVER_TABLE = 84, ACTUALLY_ROUTED = 84, node_production_operations = 0); independent acceptance pending
-Phase 8.3   IMPLEMENTED / NOT FROZEN — Next.js Business Backend Physical Removal (frontend/src/app/api/** 54 route.ts / 72 operations and frontend/src/server/** 33 files deleted; 7 backend-only lib helpers removed; minimal read-only proxy session account store extracted; CUTOVER_TABLE = 84, ACTUALLY_ROUTED = 84, next_business_backend_removed = true); independent acceptance pending
+Phase 8.1   PASS / FROZEN — Residual API Go Implementation & Shadow Parity (33-operation canonical remainder, 11 newly implemented Go shadows; 81 parity scenarios / 122 assertions)
+Phase 8.2   PASS / FROZEN — Residual Production Cutover, Compatibility Closure & Retired Surface Removal (33 canonical residual operations + 2 legacy read aliases + 2 Go-native reads now Go production-owned; 6 non-canonical mutation methods retired; CUTOVER_TABLE = 84, ACTUALLY_ROUTED = 84, node_production_operations = 0)
+Phase 8.3   IMPLEMENTED / NOT SELF-FROZEN — Next.js Business Backend Physical Removal (frontend/src/app/api/** 54 route.ts / 72 operations and frontend/src/server/** 33 files deleted; 7 backend-only lib helpers removed; minimal read-only proxy session account store extracted; CUTOVER_TABLE = 84, ACTUALLY_ROUTED = 84, next_business_backend_removed = true); independent acceptance pending
 ```
 
 ### 5.0 Phase 8.3 Boundary (Next.js Business Backend Removal)

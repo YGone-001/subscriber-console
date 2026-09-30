@@ -337,9 +337,14 @@ method or Go registration.
 unexplained_test_coverage_loss = 0
 ```
 
+Every transition in this section is also declared as an executable manifest and
+reconciled by the Phase 8.3 suite against the real Git delta by exact path identity, so
+an undeclared change, a declared-but-untouched entry or an unresolvable evidence target
+all fail acceptance instead of being asserted away.
+
 ### 10.1 Current frontend tests (ADAPT_TO_CURRENT_RUNTIME)
 
-Seven files asserted behaviour by importing deleted Node route modules or deleted
+Nine files asserted behaviour by importing deleted Node route modules or deleted
 repositories. Each was adapted to keep its still-valid assertions and drop only the
 assertions that structurally required the deleted backend.
 
@@ -352,6 +357,8 @@ assertions that structurally required the deleted backend.
 | `frontend/tests/authSecurity.test.mjs` | deleted auth route source | ADAPT_TO_CURRENT_RUNTIME | auth security assertions kept |
 | `frontend/tests/userAccessManagement.test.mjs` | deleted user repository + Mongo fixture harness | ADAPT_TO_CURRENT_RUNTIME | access-management assertions kept |
 | `frontend/tests/realtimeNotifications.test.mjs` | deleted SSE route existence check | ADAPT_TO_CURRENT_RUNTIME | notification client assertions kept |
+| `frontend/tests/ocsDashboardAnalytics.test.mjs` | deleted analytics repository source read | ADAPT_TO_CURRENT_RUNTIME | dashboard / workbench analytics + i18n assertions kept |
+| `frontend/tests/ocsOperations.test.mjs` | deleted OCS API routes + OCS operations repository source read | ADAPT_TO_CURRENT_RUNTIME | OCS navigation group + i18n assertions kept |
 
 Result after adaptation: `npm test` -> 291 pass / 0 fail.
 
@@ -659,10 +666,33 @@ frontend_api_callers_unmapped=0
 
 backend_removal_ready=true
 next_business_backend_removed=true
+backend_production_changes=0
+
+test_supersession_actual=36
+test_supersession_manifested=36
+test_supersession_unmapped=0
+test_supersession_missing=0
+test_replacement_evidence_missing=0
+test_supersession_negative_sentinel=true
+
+ci_supersession_expected=28
+ci_supersession_reconciled=28
+ci_supersession_missing=0
+ci_supersession_unexpected=0
+ci_replacement_evidence_missing=0
+ci_supersession_negative_sentinel=true
 
 unexplained_test_coverage_loss=0
 ci_coverage_gaps=0
 ```
+
+The supersession values are not literals: the suite holds the section 10 and section 20
+matrices as executable manifests, computes `git diff --name-status <starting SHA>..HEAD`
+for `frontend/tests`, `scripts` and `.github/workflows/ci.yml`, parses the live workflow
+jobs/steps, and derives unmapped, missing, unexpected, evidence-missing and reintroduced
+sets by exact path identity. `unexplained_test_coverage_loss` and `ci_coverage_gaps` are
+the sums of those sets, and two pure in-memory negative sentinels prove the classifiers
+can actually fail (`P83-C05`-`P83-C12`).
 
 Runtime-derived values (`phase83_cutover_*`, `phase83_fail_closed_*`,
 `unknown_api_runtime_evidence`, `phase83_retired_*`, `phase83_result`,
@@ -680,11 +710,14 @@ ci_coverage_gaps = 0
 
 No CI job was removed merely because it failed after source deletion. Each affected
 job/step received exactly one explicit action, and current production behaviour
-stays covered.
+stays covered. This matrix is declared as an executable manifest inside the Phase 8.3
+suite and reconciled against the live workflow; the final zero is the derived sum of
+missing current contracts, undeclared contracts, unresolvable evidence targets and
+reintroduced retired items.
 
 | OLD JOB / STEP | NODE BACKEND DEPENDENCY | ACTION | REPLACEMENT CURRENT EVIDENCE |
 | --- | --- | --- | --- |
-| `node` job: Lint / Typecheck / Test / Build | none (frontend unit tests only) | ADAPT_TO_CURRENT_RUNTIME | Same steps; 7 test files adapted to the post-removal runtime (section 10.1) |
+| `node` job: Lint / Typecheck / Test / Build | none (frontend unit tests only) | ADAPT_TO_CURRENT_RUNTIME | Same steps; 9 test files adapted to the post-removal runtime (section 10.1) |
 | `node` job: Migration inventory | scanned Next API tree | ADAPT_TO_CURRENT_RUNTIME | `inventory-api.mjs` reports `Routes=0 Operations=0`; `validate-inventory.mjs` keeps `CUTOVER_TABLE=84 / ACTUALLY_ROUTED=84` |
 | `node` job: Phase 8 backend removal readiness | source scan of Node API/server tree | ADAPT_TO_CURRENT_RUNTIME | Validator evolved from removal *readiness* to removal *completion* (`next_business_backend_removed=true`, `phase83_acceptance=PASS`) |
 | `go` job: Format / Vet / Test(race) / Build | none | KEEP_UNCHANGED | Unchanged; fixture relocation is transparent to this job |

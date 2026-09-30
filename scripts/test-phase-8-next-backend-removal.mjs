@@ -357,22 +357,284 @@ function declaredDependencies(pkg) {
 }
 
 // ---------------------------------------------------------------------------
-// CI / retired test supersession
+// Executable test / CI supersession manifests
 // ---------------------------------------------------------------------------
-const RETIRED_SCRIPTS = [
-  'scripts/test-auth-go-parity.mjs',
-  'scripts/test-auth-security-hardening.mjs',
-  'scripts/test-phase-7-architecture-freeze.mjs',
-  'scripts/test-phase-7-read-parity.mjs',
-  'scripts/test-phase-7-alert-mutation-parity.mjs',
-  'scripts/test-phase-7-notification-stream-parity.mjs',
-  'scripts/test-phase-7-system-heal-parity.mjs',
-  'scripts/test-phase-7-platform-cutover.mjs',
-  'scripts/test-phase-8-residual-api-parity.mjs',
-  'scripts/test-phase-8-residual-cutover.mjs',
-  'scripts/instrumented-account-session.mjs',
-  'scripts/instrumented-alert-repository.mjs',
+// Phase 8.3 deliberately deleted or adapted a known set of test and CI artifacts. Those
+// transitions are declared here as data (never as prose) and reconciled below against the
+// real Git delta by exact path identity. Every current / historical evidence target
+// declared here must resolve on disk, so a stale or invented mapping fails acceptance.
+
+const SUPERSESSION_ACTIONS = {
+  ADAPT: 'ADAPT_TO_CURRENT_RUNTIME',
+  REMOVE: 'REMOVE_DELETED_NODE_IMPLEMENTATION_UNIT_TEST',
+  RETIRE: 'RETIRE_AS_HISTORICAL_PARITY',
+  REPLACE: 'REPLACE_WITH_CURRENT_RUNTIME_SUITE',
+};
+
+const CI_SUPERSESSION_ACTIONS = {
+  KEEP: 'KEEP_UNCHANGED',
+  ADAPT: 'ADAPT_TO_CURRENT_RUNTIME',
+  RETIRE: 'RETIRE_AS_HISTORICAL_PARITY',
+  REPLACE: 'REPLACE_WITH_CURRENT_RUNTIME_SUITE',
+  ADDED: 'ADDED',
+};
+
+const PHASE7_FREEZE_DOC = 'docs/architecture/phase-7-platform-services-architecture.md';
+const AUTH_MODEL_DOC = 'docs/operations/authentication-model.md';
+const AUTH_ARCH_DOC = 'docs/architecture/phase-6-auth-architecture.md';
+const PHASE81_DOC = 'docs/backend-migration/phase-8.1-residual-go-parity.md';
+const PHASE82_DOC = 'docs/backend-migration/phase-8.2-residual-production-cutover.md';
+const REMOVAL_SUITE = 'scripts/test-phase-8-next-backend-removal.mjs';
+
+// `replacement` defaults to the artifact itself for ADAPT / REPLACE: the surviving artifact
+// is the current-runtime evidence that the transition happened instead of a silent drop.
+const TEST_SUPERSESSION_MANIFEST = [
+  // Adapted frontend unit tests: assertions re-pointed at surviving sources.
+  { path: 'frontend/tests/authSecurity.test.mjs', action: SUPERSESSION_ACTIONS.ADAPT, deletedDependency: 'deleted Next.js auth route source' },
+  { path: 'frontend/tests/ocsDashboardAnalytics.test.mjs', action: SUPERSESSION_ACTIONS.ADAPT, deletedDependency: 'deleted analytics repository source read' },
+  { path: 'frontend/tests/ocsOperations.test.mjs', action: SUPERSESSION_ACTIONS.ADAPT, deletedDependency: 'deleted OCS API routes + OCS operations repository source read' },
+  { path: 'frontend/tests/profileNavigationPerformance.test.mjs', action: SUPERSESSION_ACTIONS.ADAPT, deletedDependency: 'summarizeProfiles from the deleted profile repository' },
+  { path: 'frontend/tests/realtimeNotifications.test.mjs', action: SUPERSESSION_ACTIONS.ADAPT, deletedDependency: 'deleted SSE route existence check' },
+  { path: 'frontend/tests/systemHealthDiagnostics.test.mjs', action: SUPERSESSION_ACTIONS.ADAPT, deletedDependency: 'deleted system health / audit repositories' },
+  { path: 'frontend/tests/userAccessManagement.test.mjs', action: SUPERSESSION_ACTIONS.ADAPT, deletedDependency: 'deleted user repository + Mongo fixture harness' },
+  { path: 'frontend/tests/userManagementUx.test.mjs', action: SUPERSESSION_ACTIONS.ADAPT, deletedDependency: 'deleted users/[username] route source' },
+  { path: 'frontend/tests/xcloudSubscriber.test.mjs', action: SUPERSESSION_ACTIONS.ADAPT, deletedDependency: 'prepareSubscriberLegacyUpdate from the deleted server tree' },
+  // Adapted validators: formerly proved readiness against a still-present Node backend.
+  { path: 'scripts/migration/inventory-api.mjs', action: SUPERSESSION_ACTIONS.ADAPT, deletedDependency: 'scanned the deleted Next.js API tree', replacement: 'scripts/migration/validate-inventory.mjs' },
+  { path: 'scripts/migration/validate-inventory.mjs', action: SUPERSESSION_ACTIONS.ADAPT, deletedDependency: 'cross-checked the deleted Next.js route matrix', replacement: 'scripts/test-phase-8-backend-removal-readiness.mjs' },
+  { path: 'scripts/test-phase-8-backend-removal-readiness.mjs', action: SUPERSESSION_ACTIONS.ADAPT, deletedDependency: 'proved removal readiness of an existing Node backend', replacement: REMOVAL_SUITE },
+
+  // Removed frontend unit tests: they tested the deleted Node implementation itself.
+  { path: 'frontend/tests/batchUpdateFixtures.test.mjs', action: SUPERSESSION_ACTIONS.REMOVE, deletedDependency: 'src/server/__tests__/batch-update-fixtures.ts', replacement: 'backend/internal/subscriber/handler_write_test.go' },
+  { path: 'frontend/tests/bulkDeleteFixtures.test.mjs', action: SUPERSESSION_ACTIONS.REMOVE, deletedDependency: 'src/server/__tests__/bulk-delete-fixtures.ts', replacement: 'backend/internal/subscriber/handler_write_test.go' },
+  { path: 'frontend/tests/profileRestore.test.mjs', action: SUPERSESSION_ACTIONS.REMOVE, deletedDependency: 'src/server/profileRestoreGovernance.ts', replacement: 'backend/internal/profile/restore_integration_test.go' },
+  { path: 'frontend/tests/profileRestoreFixtures.test.mjs', action: SUPERSESSION_ACTIONS.REMOVE, deletedDependency: 'src/server/profileRestoreGovernance.ts', replacement: 'backend/internal/profile/restore_integration_test.go' },
+  { path: 'frontend/tests/subscriberBatchCrossRuntime.test.mjs', action: SUPERSESSION_ACTIONS.REMOVE, deletedDependency: 'src/server/__tests__/batch-create-fixtures.ts', replacement: 'backend/internal/subscriber/batch_create_fixture_test.go' },
+  { path: 'frontend/tests/subscriberBatchExecution.test.mjs', action: SUPERSESSION_ACTIONS.REMOVE, deletedDependency: 'deleted Next.js batch route module', replacement: 'backend/internal/subscriber/handler_http_test.go' },
+  { path: 'frontend/tests/subscriberBatchUpdateCrossRuntime.test.mjs', action: SUPERSESSION_ACTIONS.REMOVE, deletedDependency: 'src/server/__tests__/batch-update-fixtures.ts', replacement: 'backend/internal/subscriber/handler_write_test.go' },
+  { path: 'frontend/tests/subscriberBatchUpdateIntegrity.test.mjs', action: SUPERSESSION_ACTIONS.REMOVE, deletedDependency: 'src/server/subscriberOperationPolicy.ts', replacement: 'backend/internal/subscriber/validation_test.go' },
+  { path: 'frontend/tests/subscriberImportFrozenInvariant.test.mjs', action: SUPERSESSION_ACTIONS.REMOVE, deletedDependency: 'deleted Next.js import route module', replacement: 'backend/internal/subscriber/import_fixture_test.go' },
+  { path: 'frontend/tests/subscriberOperationPolicy.test.mjs', action: SUPERSESSION_ACTIONS.REMOVE, deletedDependency: 'deleted Next.js subscriber operation policy', replacement: 'backend/internal/subscriber/governance_test.go' },
+  { path: 'frontend/tests/subscriberProfileApplyCrossRuntime.test.mjs', action: SUPERSESSION_ACTIONS.REMOVE, deletedDependency: 'src/server/__tests__/profile-apply-fixtures.ts', replacement: 'backend/internal/subscriber/profile_apply_test.go' },
+
+  // Retired historical parity scripts: structurally bound to deleted Node modules; their
+  // claims stay frozen in the cited phase documents and are re-proved by the removal suite.
+  { path: 'scripts/test-auth-go-parity.mjs', action: SUPERSESSION_ACTIONS.RETIRE, deletedDependency: 'deleted Next.js auth routes', historicalEvidence: AUTH_ARCH_DOC },
+  { path: 'scripts/test-auth-security-hardening.mjs', action: SUPERSESSION_ACTIONS.RETIRE, deletedDependency: 'deleted Next.js auth route source', historicalEvidence: AUTH_MODEL_DOC },
+  { path: 'scripts/test-phase-7-architecture-freeze.mjs', action: SUPERSESSION_ACTIONS.RETIRE, deletedDependency: 'deleted Next.js platform sources', historicalEvidence: PHASE7_FREEZE_DOC },
+  { path: 'scripts/test-phase-7-read-parity.mjs', action: SUPERSESSION_ACTIONS.RETIRE, deletedDependency: 'deleted Next.js platform routes', historicalEvidence: PHASE7_FREEZE_DOC },
+  { path: 'scripts/test-phase-7-alert-mutation-parity.mjs', action: SUPERSESSION_ACTIONS.RETIRE, deletedDependency: 'deleted alert repository', historicalEvidence: PHASE7_FREEZE_DOC },
+  { path: 'scripts/test-phase-7-notification-stream-parity.mjs', action: SUPERSESSION_ACTIONS.RETIRE, deletedDependency: 'deleted SSE route', historicalEvidence: PHASE7_FREEZE_DOC },
+  { path: 'scripts/test-phase-7-system-heal-parity.mjs', action: SUPERSESSION_ACTIONS.RETIRE, deletedDependency: 'deleted remediation routes', historicalEvidence: PHASE7_FREEZE_DOC },
+  { path: 'scripts/test-phase-7-platform-cutover.mjs', action: SUPERSESSION_ACTIONS.RETIRE, deletedDependency: 'deleted Next.js platform routes', historicalEvidence: PHASE7_FREEZE_DOC },
+  { path: 'scripts/test-phase-8-residual-api-parity.mjs', action: SUPERSESSION_ACTIONS.RETIRE, deletedDependency: 'deleted residual Next.js routes', historicalEvidence: PHASE81_DOC },
+  { path: 'scripts/test-phase-8-residual-cutover.mjs', action: SUPERSESSION_ACTIONS.RETIRE, deletedDependency: 'deleted residual Next.js route modules', historicalEvidence: PHASE82_DOC },
+  { path: 'scripts/instrumented-account-session.mjs', action: SUPERSESSION_ACTIONS.RETIRE, deletedDependency: 'deleted Next.js session module', historicalEvidence: AUTH_MODEL_DOC },
+  { path: 'scripts/instrumented-alert-repository.mjs', action: SUPERSESSION_ACTIONS.RETIRE, deletedDependency: 'deleted alert repository', historicalEvidence: PHASE7_FREEZE_DOC },
+
+  // Replacement current-runtime suite.
+  { path: REMOVAL_SUITE, action: SUPERSESSION_ACTIONS.REPLACE, deletedDependency: 'retired Node parity harnesses', replacement: REMOVAL_SUITE },
 ];
+
+// Steps that carry no acceptance contract (pure runner plumbing). They are classified once
+// here instead of being re-declared for every job.
+const CI_INFRA_STEPS = new Set([
+  'Checkout',
+  'Setup Node',
+  'Setup Go',
+  'Install dependencies',
+  'Install repository script dependencies',
+  'Install frontend dependencies',
+]);
+
+// Every CI job that exists in the Phase 8.3 delta, current or retired.
+const CI_JOB_MANIFEST = [
+  { job: 'node', action: CI_SUPERSESSION_ACTIONS.KEEP, evidence: 'frontend/package.json' },
+  { job: 'go', action: CI_SUPERSESSION_ACTIONS.KEEP, evidence: 'backend/go.mod' },
+  { job: 'direct-operations', action: CI_SUPERSESSION_ACTIONS.ADAPT, evidence: 'scripts/test-direct-operations.mjs' },
+  { job: 'user-management-e2e', action: CI_SUPERSESSION_ACTIONS.KEEP, evidence: 'scripts/test-user-management-e2e.mjs' },
+  { job: 'auth-cutover', action: CI_SUPERSESSION_ACTIONS.KEEP, evidence: 'scripts/test-auth-cutover.mjs' },
+  { job: 'next-backend-removal', action: CI_SUPERSESSION_ACTIONS.ADDED, evidence: REMOVAL_SUITE },
+  { job: 'auth-security', action: CI_SUPERSESSION_ACTIONS.RETIRE, historicalEvidence: AUTH_MODEL_DOC },
+  { job: 'auth-go-parity', action: CI_SUPERSESSION_ACTIONS.RETIRE, historicalEvidence: AUTH_ARCH_DOC },
+  { job: 'platform-read-parity', action: CI_SUPERSESSION_ACTIONS.RETIRE, historicalEvidence: PHASE7_FREEZE_DOC },
+  { job: 'residual-api-parity', action: CI_SUPERSESSION_ACTIONS.RETIRE, historicalEvidence: PHASE81_DOC },
+];
+
+// Every current contract step, plus every retired step that the removal deleted.
+const CI_STEP_MANIFEST = [
+  { job: 'node', step: 'Lint', action: CI_SUPERSESSION_ACTIONS.KEEP, evidence: 'frontend/package.json' },
+  { job: 'node', step: 'Typecheck', action: CI_SUPERSESSION_ACTIONS.KEEP, evidence: 'frontend/package.json' },
+  { job: 'node', step: 'Test', action: CI_SUPERSESSION_ACTIONS.ADAPT, evidence: 'frontend/tests' },
+  { job: 'node', step: 'Build', action: CI_SUPERSESSION_ACTIONS.KEEP, evidence: 'frontend/package.json' },
+  { job: 'node', step: 'Migration inventory', action: CI_SUPERSESSION_ACTIONS.ADAPT, evidence: 'scripts/migration/inventory-api.mjs' },
+  { job: 'node', step: 'Migration validator', action: CI_SUPERSESSION_ACTIONS.ADAPT, evidence: 'scripts/migration/validate-inventory.mjs' },
+  { job: 'node', step: 'Phase 8 backend removal readiness', action: CI_SUPERSESSION_ACTIONS.ADAPT, evidence: 'scripts/test-phase-8-backend-removal-readiness.mjs' },
+
+  { job: 'go', step: 'Format check', action: CI_SUPERSESSION_ACTIONS.KEEP, evidence: 'backend/go.mod' },
+  { job: 'go', step: 'Vet', action: CI_SUPERSESSION_ACTIONS.KEEP, evidence: 'backend/go.mod' },
+  { job: 'go', step: 'Test', action: CI_SUPERSESSION_ACTIONS.KEEP, evidence: 'backend/go.mod' },
+  { job: 'go', step: 'Build', action: CI_SUPERSESSION_ACTIONS.KEEP, evidence: 'backend/go.mod' },
+
+  { job: 'direct-operations', step: 'Governance surface removal contract', action: CI_SUPERSESSION_ACTIONS.KEEP, evidence: 'scripts/test-direct-operations.mjs' },
+  { job: 'direct-operations', step: 'OCS management suite', action: CI_SUPERSESSION_ACTIONS.KEEP, evidence: 'scripts/test-ocs-management-suite.mjs' },
+  { job: 'direct-operations', step: 'RBAC simplification acceptance', action: CI_SUPERSESSION_ACTIONS.KEEP, evidence: 'scripts/test-rbac-simplification.mjs' },
+  { job: 'direct-operations', step: 'RBAC role migration acceptance', action: CI_SUPERSESSION_ACTIONS.KEEP, evidence: 'scripts/test-rbac-role-migration.mjs' },
+  { job: 'direct-operations', step: 'User management controlled cutover', action: CI_SUPERSESSION_ACTIONS.KEEP, evidence: 'scripts/test-user-management-cutover.mjs' },
+  { job: 'direct-operations', step: 'Authentication controlled cutover', action: CI_SUPERSESSION_ACTIONS.KEEP, evidence: 'scripts/test-auth-cutover.mjs' },
+  { job: 'direct-operations', step: 'Authentication & User Management UI integration', action: CI_SUPERSESSION_ACTIONS.KEEP, evidence: 'scripts/test-auth-user-ui-integration.mjs' },
+
+  { job: 'user-management-e2e', step: 'User management HTTP E2E', action: CI_SUPERSESSION_ACTIONS.KEEP, evidence: 'scripts/test-user-management-e2e.mjs' },
+  { job: 'auth-cutover', step: 'Authentication controlled cutover', action: CI_SUPERSESSION_ACTIONS.KEEP, evidence: 'scripts/test-auth-cutover.mjs' },
+
+  { job: 'next-backend-removal', step: 'Build frontend for the real Next.js production runtime proof', action: CI_SUPERSESSION_ACTIONS.ADDED, evidence: 'frontend/package.json' },
+  { job: 'next-backend-removal', step: 'Phase 8.3 Next.js business backend removal acceptance', action: CI_SUPERSESSION_ACTIONS.ADDED, evidence: REMOVAL_SUITE },
+
+  // Retired steps.
+  { job: 'direct-operations', step: 'Platform services architecture freeze', action: CI_SUPERSESSION_ACTIONS.RETIRE, historicalEvidence: PHASE7_FREEZE_DOC },
+  { job: 'auth-security', step: 'Authentication security integration', action: CI_SUPERSESSION_ACTIONS.RETIRE, historicalEvidence: AUTH_MODEL_DOC },
+  { job: 'auth-go-parity', step: 'Authentication Go contract parity', action: CI_SUPERSESSION_ACTIONS.RETIRE, historicalEvidence: AUTH_ARCH_DOC },
+  { job: 'platform-read-parity', step: 'Platform services Go read parity', action: CI_SUPERSESSION_ACTIONS.RETIRE, historicalEvidence: PHASE7_FREEZE_DOC },
+  { job: 'platform-read-parity', step: 'Alert domain mutation parity', action: CI_SUPERSESSION_ACTIONS.RETIRE, historicalEvidence: PHASE7_FREEZE_DOC },
+  { job: 'platform-read-parity', step: 'Notification streaming SSE parity', action: CI_SUPERSESSION_ACTIONS.RETIRE, historicalEvidence: PHASE7_FREEZE_DOC },
+  { job: 'platform-read-parity', step: 'System integrity controlled remediation parity', action: CI_SUPERSESSION_ACTIONS.RETIRE, historicalEvidence: PHASE7_FREEZE_DOC },
+  { job: 'platform-read-parity', step: 'Controlled platform services cutover', action: CI_SUPERSESSION_ACTIONS.RETIRE, historicalEvidence: PHASE7_FREEZE_DOC },
+  { job: 'residual-api-parity', step: 'Phase 8.1 residual API parity', action: CI_SUPERSESSION_ACTIONS.RETIRE, historicalEvidence: PHASE81_DOC },
+  { job: 'residual-api-parity', step: 'Build frontend for real Next.js retired-surface HTTP runtime verification', action: CI_SUPERSESSION_ACTIONS.REPLACE, replacement: REMOVAL_SUITE },
+  { job: 'residual-api-parity', step: 'Phase 8.2 residual production cutover (real Next.js App Router HTTP evidence)', action: CI_SUPERSESSION_ACTIONS.RETIRE, historicalEvidence: PHASE82_DOC },
+];
+
+const RETIRED_SCRIPTS = TEST_SUPERSESSION_MANIFEST
+  .filter((entry) => entry.action === SUPERSESSION_ACTIONS.RETIRE)
+  .map((entry) => entry.path);
+
+const repoPath = (repoRelative) => path.join(root, ...repoRelative.split('/'));
+const repoExists = (repoRelative) => existsSync(repoPath(repoRelative));
+
+/** Parse `git diff --name-status` output into `{ status, path }` records. */
+function parseNameStatus(output) {
+  const entries = [];
+  for (const line of output.split('\n')) {
+    const m = line.trim().match(/^([A-Z])\s+(.+)$/);
+    if (m) entries.push({ status: m[1], path: m[2].trim().replaceAll('\\', '/') });
+  }
+  return entries;
+}
+
+/**
+ * Reconcile the declared test supersession manifest against the artifacts the Phase 8.3 Git
+ * delta actually touched. `exists` is injected so the negative sentinel can run purely in
+ * memory instead of fabricating files.
+ */
+function reconcileTestSupersession(actualArtifacts, manifest, { exists }) {
+  const actual = new Set(actualArtifacts);
+  const manifested = new Set(manifest.map((entry) => entry.path));
+  const unmapped = [...actual].filter((p) => !manifested.has(p)).sort();
+  const missing = [...new Set(manifest.map((entry) => entry.path))].filter((p) => !actual.has(p)).sort();
+  const replacementEvidenceMissing = [];
+  const historicalEvidenceMissing = [];
+  const reintroduced = [];
+
+  for (const entry of manifest) {
+    if (entry.action === SUPERSESSION_ACTIONS.RETIRE) {
+      if (exists(entry.path)) reintroduced.push(entry.path);
+      if (!entry.historicalEvidence) historicalEvidenceMissing.push(`${entry.path} (no historical evidence declared)`);
+      else if (!exists(entry.historicalEvidence)) historicalEvidenceMissing.push(`${entry.path} -> ${entry.historicalEvidence}`);
+      continue;
+    }
+    const target = entry.replacement || entry.path;
+    if (!exists(target)) replacementEvidenceMissing.push(`${entry.path} -> ${target}`);
+    if (entry.action !== SUPERSESSION_ACTIONS.REMOVE && !exists(entry.path)) {
+      replacementEvidenceMissing.push(`${entry.path} (adapted artifact is absent)`);
+    }
+  }
+
+  return { actual, manifested, unmapped, missing, replacementEvidenceMissing, historicalEvidenceMissing, reintroduced };
+}
+
+/** Minimal structural parser for the workflow file: jobs, job names, steps and step runs. */
+function parseCiWorkflow(source) {
+  const jobs = [];
+  let current = null;
+  let step = null;
+  let inJobs = false;
+  for (const raw of source.split('\n')) {
+    if (/^jobs:\s*$/.test(raw)) { inJobs = true; continue; }
+    if (!inJobs) continue;
+    const jobKey = raw.match(/^ {2}([A-Za-z0-9_-]+):\s*$/);
+    if (jobKey) { current = { key: jobKey[1], name: '', steps: [] }; step = null; jobs.push(current); continue; }
+    if (!current) continue;
+    const jobName = raw.match(/^ {4}name:\s*(.+?)\s*$/);
+    if (jobName) { current.name = jobName[1]; continue; }
+    const stepName = raw.match(/^ {6}- name:\s*(.+?)\s*$/);
+    if (stepName) { step = { name: stepName[1], run: '' }; current.steps.push(step); continue; }
+    const runLine = raw.match(/^ {8}run:\s*(.*)$/);
+    if (runLine && step) step.run = runLine[1].trim();
+  }
+  return jobs;
+}
+
+/**
+ * Reconcile the declared CI supersession manifest against the live workflow: every current
+ * contract must be present, every retired one must be gone, and every declared evidence
+ * target must resolve.
+ */
+function reconcileCiSupersession(jobs, jobManifest, stepManifest, { exists }) {
+  const PRESENT_ACTIONS = new Set([
+    CI_SUPERSESSION_ACTIONS.KEEP,
+    CI_SUPERSESSION_ACTIONS.ADAPT,
+    CI_SUPERSESSION_ACTIONS.ADDED,
+  ]);
+  const jobKeys = new Set(jobs.map((j) => j.key));
+  const stepKeys = new Set(jobs.flatMap((j) => j.steps.map((s) => `${j.key}/${s.name}`)));
+  const contractSteps = jobs
+    .flatMap((j) => j.steps.map((s) => ({ job: j.key, name: s.name })))
+    .filter((s) => !CI_INFRA_STEPS.has(s.name));
+
+  const expected = [
+    ...jobManifest.filter((e) => PRESENT_ACTIONS.has(e.action)).map((e) => ({ kind: 'job', id: e.job, action: e.action })),
+    ...stepManifest.filter((e) => PRESENT_ACTIONS.has(e.action)).map((e) => ({ kind: 'step', id: `${e.job}/${e.step}`, action: e.action })),
+  ];
+  const reconciled = [];
+  const missing = [];
+  for (const item of expected) {
+    const present = item.kind === 'job' ? jobKeys.has(item.id) : stepKeys.has(item.id);
+    if (present) reconciled.push(item.id); else missing.push(item.id);
+  }
+
+  const declaredJobs = new Set(jobManifest.map((e) => e.job));
+  const declaredSteps = new Set(stepManifest.map((e) => `${e.job}/${e.step}`));
+  const unexpected = [
+    ...[...jobKeys].filter((k) => !declaredJobs.has(k)).map((k) => `job:${k}`),
+    ...contractSteps.filter((s) => !declaredSteps.has(`${s.job}/${s.name}`)).map((s) => `step:${s.job}/${s.name}`),
+  ];
+
+  const replacementEvidenceMissing = [];
+  const historicalEvidenceMissing = [];
+  const reintroduced = [];
+  for (const entry of [...jobManifest, ...stepManifest]) {
+    const isJob = !('step' in entry);
+    const id = isJob ? entry.job : `${entry.job}/${entry.step}`;
+    const stillPresent = isJob ? jobKeys.has(entry.job) : stepKeys.has(id);
+    if (entry.action === CI_SUPERSESSION_ACTIONS.RETIRE) {
+      if (stillPresent) reintroduced.push(id);
+      if (!entry.historicalEvidence) historicalEvidenceMissing.push(`${id} (no historical evidence declared)`);
+      else if (!exists(entry.historicalEvidence)) historicalEvidenceMissing.push(`${id} -> ${entry.historicalEvidence}`);
+      continue;
+    }
+    if (entry.action === CI_SUPERSESSION_ACTIONS.REPLACE) {
+      if (stillPresent) reintroduced.push(id);
+      if (!entry.replacement) replacementEvidenceMissing.push(`${id} (no replacement declared)`);
+      else if (!exists(entry.replacement)) replacementEvidenceMissing.push(`${id} -> ${entry.replacement}`);
+      continue;
+    }
+    const target = entry.evidence || entry.replacement;
+    if (!target) replacementEvidenceMissing.push(`${id} (no current evidence declared)`);
+    else if (!exists(target)) replacementEvidenceMissing.push(`${id} -> ${target}`);
+  }
+
+  return { expected, reconciled, missing, unexpected, replacementEvidenceMissing, historicalEvidenceMissing, reintroduced };
+}
 
 // ---------------------------------------------------------------------------
 // Caller inventory (frontend_api_callers_unmapped)
@@ -990,8 +1252,152 @@ async function main() {
     assert.equal(PHASE83_START_API_OPERATIONS, 72, 'historical api operation count must be 72');
   });
 
-  const ciCoverageGaps = stillPresent.length + stillReferenced.length;
-  const unexplainedTestCoverageLoss = 0;
+  // ---- Derived supersession reconciliation ----------------------------------
+  // The Phase 8.3 transitions are reconciled against the real Git delta and the live
+  // workflow. Nothing below is hard-coded: unmapped / missing / evidence gaps are computed
+  // set relationships, and the negative sentinels prove the classifiers can fail.
+  const SUPERSESSION_SCOPE = ['frontend/tests', 'scripts', '.github/workflows/ci.yml'];
+  const deltaProbe = gitProbe(
+    `diff --name-status --no-renames ${BASELINE_SHA}..HEAD -- ${SUPERSESSION_SCOPE.join(' ')}`,
+  );
+  const deltaEntries = deltaProbe.ok ? parseNameStatus(deltaProbe.out) : [];
+  const changedArtifacts = deltaEntries
+    .map((e) => e.path)
+    .filter((p) => p.startsWith('frontend/tests/') || p.startsWith('scripts/'))
+    .sort();
+  const ciWorkflowChanged = deltaEntries.some((e) => e.path === '.github/workflows/ci.yml');
+
+  const testSupersession = reconcileTestSupersession(
+    changedArtifacts,
+    TEST_SUPERSESSION_MANIFEST,
+    { exists: repoExists },
+  );
+
+  const ciJobs = parseCiWorkflow(ciSource);
+  const ciSupersession = reconcileCiSupersession(
+    ciJobs,
+    CI_JOB_MANIFEST,
+    CI_STEP_MANIFEST,
+    { exists: repoExists },
+  );
+
+  let testSupersessionNegativeSentinel = false;
+  let ciSupersessionNegativeSentinel = false;
+
+  await check('P83-C05 the Phase 8.3 Git delta against the frozen predecessor is computable', () => {
+    assert.ok(
+      baselineResolved.ok && baselineResolved.out === 'commit',
+      `baseline commit ${BASELINE_SHA} must be present locally: ${baselineResolved.error}`,
+    );
+    assert.ok(deltaProbe.ok, `the supersession delta must be computable: ${deltaProbe.error}`);
+    assert.ok(changedArtifacts.length > 0, 'the delta must contain test or script artifacts');
+    assert.ok(ciWorkflowChanged, 'the CI workflow must be part of the Phase 8.3 delta');
+  });
+
+  await check('P83-C06 test supersession manifest reconciles with the real delta by exact path identity', () => {
+    assert.equal(testSupersession.unmapped.length, 0,
+      `changed test artifacts outside the manifest: ${testSupersession.unmapped.join(', ')}`);
+    assert.equal(testSupersession.missing.length, 0,
+      `manifest entries that did not participate in the delta: ${testSupersession.missing.join(', ')}`);
+    assert.equal(testSupersession.reintroduced.length, 0,
+      `retired artifacts still present on disk: ${testSupersession.reintroduced.join(', ')}`);
+  });
+
+  await check('P83-C07 every test supersession entry resolves its current or historical evidence target', () => {
+    assert.equal(testSupersession.replacementEvidenceMissing.length, 0,
+      `unresolvable current evidence: ${testSupersession.replacementEvidenceMissing.join(', ')}`);
+    assert.equal(testSupersession.historicalEvidenceMissing.length, 0,
+      `unresolvable historical evidence: ${testSupersession.historicalEvidenceMissing.join(', ')}`);
+  });
+
+  await check('P83-C08 negative sentinel: the test coverage classifier is not tautological', () => {
+    const synthetic = reconcileTestSupersession(
+      [...changedArtifacts, 'frontend/tests/p83_synthetic_unmapped.test.mjs'],
+      [
+        ...TEST_SUPERSESSION_MANIFEST,
+        { path: 'frontend/tests/p83_synthetic_manifest_only.test.mjs', action: SUPERSESSION_ACTIONS.ADAPT },
+        { path: 'frontend/tests/p83_synthetic_evidence.test.mjs', action: SUPERSESSION_ACTIONS.ADAPT, replacement: 'scripts/p83-synthetic-missing-evidence.mjs' },
+      ],
+      { exists: repoExists },
+    );
+    assert.ok(synthetic.unmapped.includes('frontend/tests/p83_synthetic_unmapped.test.mjs'),
+      'an undeclared changed artifact must be reported as unmapped');
+    assert.ok(synthetic.missing.includes('frontend/tests/p83_synthetic_manifest_only.test.mjs'),
+      'a declared artifact absent from the delta must be reported as missing');
+    assert.ok(synthetic.replacementEvidenceMissing.some((e) => e.includes('p83_synthetic_evidence')),
+      'an unresolvable evidence target must be reported');
+    testSupersessionNegativeSentinel = true;
+  });
+
+  await check('P83-C09 CI supersession manifest reconciles with the live workflow', () => {
+    assert.ok(ciSupersession.expected.length > 0, 'the CI manifest must declare current runtime contracts');
+    assert.equal(ciSupersession.missing.length, 0,
+      `declared current CI contracts absent from the workflow: ${ciSupersession.missing.join(', ')}`);
+    assert.equal(ciSupersession.unexpected.length, 0,
+      `undeclared CI contracts present in the workflow: ${ciSupersession.unexpected.join(', ')}`);
+    assert.equal(ciSupersession.reintroduced.length, 0,
+      `retired CI jobs or steps still present: ${ciSupersession.reintroduced.join(', ')}`);
+    assert.equal(ciSupersession.reconciled.length, ciSupersession.expected.length,
+      'every expected current contract must reconcile');
+  });
+
+  await check('P83-C10 every CI supersession entry resolves its current or historical evidence target', () => {
+    assert.equal(ciSupersession.replacementEvidenceMissing.length, 0,
+      `unresolvable CI replacement evidence: ${ciSupersession.replacementEvidenceMissing.join(', ')}`);
+    assert.equal(ciSupersession.historicalEvidenceMissing.length, 0,
+      `unresolvable CI historical evidence: ${ciSupersession.historicalEvidenceMissing.join(', ')}`);
+  });
+
+  await check('P83-C11 negative sentinel: the CI coverage classifier is not tautological', () => {
+    const synthetic = reconcileCiSupersession(
+      [{
+        key: 'node',
+        name: 'Node quality gates',
+        steps: [
+          { name: 'Lint', run: 'npm run lint' },
+          { name: 'Platform services architecture freeze', run: 'node scripts/test-phase-7-architecture-freeze.mjs' },
+          { name: 'Undeclared extra step', run: 'true' },
+        ],
+      }],
+      [{ job: 'node', action: CI_SUPERSESSION_ACTIONS.KEEP, evidence: 'frontend/package.json' }],
+      [
+        { job: 'node', step: 'Lint', action: CI_SUPERSESSION_ACTIONS.KEEP, evidence: 'frontend/package.json' },
+        { job: 'node', step: 'Missing current step', action: CI_SUPERSESSION_ACTIONS.ADAPT, evidence: 'frontend/package.json' },
+        { job: 'node', step: 'Platform services architecture freeze', action: CI_SUPERSESSION_ACTIONS.RETIRE },
+      ],
+      { exists: repoExists },
+    );
+    assert.deepEqual(synthetic.missing, ['node/Missing current step'],
+      'an absent declared contract must be reported as missing');
+    assert.ok(synthetic.unexpected.includes('step:node/Undeclared extra step'),
+      'an undeclared workflow step must be reported as unexpected');
+    assert.ok(synthetic.reintroduced.includes('node/Platform services architecture freeze'),
+      'a retired workflow item that is still present must be reported');
+    assert.ok(synthetic.historicalEvidenceMissing.some((e) => e.includes('Platform services architecture freeze')),
+      'a retired item without resolvable evidence must be reported');
+    ciSupersessionNegativeSentinel = true;
+  });
+
+  const unexplainedTestCoverageLoss = testSupersession.unmapped.length
+    + testSupersession.missing.length
+    + testSupersession.replacementEvidenceMissing.length
+    + testSupersession.historicalEvidenceMissing.length
+    + testSupersession.reintroduced.length;
+
+  const ciCoverageGaps = ciSupersession.missing.length
+    + ciSupersession.unexpected.length
+    + ciSupersession.replacementEvidenceMissing.length
+    + ciSupersession.historicalEvidenceMissing.length
+    + ciSupersession.reintroduced.length
+    + stillPresent.length
+    + stillReferenced.length;
+
+  await check('P83-C12 coverage losses are derived from the reconciliation and are genuinely zero', () => {
+    assert.equal(unexplainedTestCoverageLoss, 0, `unexplained_test_coverage_loss=${unexplainedTestCoverageLoss}`);
+    assert.equal(ciCoverageGaps, 0, `ci_coverage_gaps=${ciCoverageGaps}`);
+    assert.ok(testSupersessionNegativeSentinel && ciSupersessionNegativeSentinel,
+      'both negative supersession sentinels must have passed');
+  });
 
   // ---------------------------------------------------------------------------
   console.log('\n[6] Go Registration Equality (P83-G)');
@@ -1378,6 +1784,22 @@ async function main() {
   console.log(`backend_removal_ready=${backendRemovalReady}`);
   console.log(`next_business_backend_removed=${nextBusinessBackendRemoved}`);
   console.log(`backend_production_changes=${backendProductionChanges.length}`);
+  console.log(`test_supersession_actual=${testSupersession.actual.size}`);
+  console.log(`test_supersession_manifested=${testSupersession.manifested.size}`);
+  console.log(`test_supersession_unmapped=${testSupersession.unmapped.length}`);
+  console.log(`test_supersession_missing=${testSupersession.missing.length}`);
+  console.log(`test_replacement_evidence_missing=${testSupersession.replacementEvidenceMissing.length}`);
+  console.log(`test_historical_evidence_missing=${testSupersession.historicalEvidenceMissing.length}`);
+  console.log(`test_supersession_reintroduced=${testSupersession.reintroduced.length}`);
+  console.log(`test_supersession_negative_sentinel=${testSupersessionNegativeSentinel}`);
+  console.log(`ci_supersession_expected=${ciSupersession.expected.length}`);
+  console.log(`ci_supersession_reconciled=${ciSupersession.reconciled.length}`);
+  console.log(`ci_supersession_missing=${ciSupersession.missing.length}`);
+  console.log(`ci_supersession_unexpected=${ciSupersession.unexpected.length}`);
+  console.log(`ci_replacement_evidence_missing=${ciSupersession.replacementEvidenceMissing.length}`);
+  console.log(`ci_historical_evidence_missing=${ciSupersession.historicalEvidenceMissing.length}`);
+  console.log(`ci_supersession_reintroduced=${ciSupersession.reintroduced.length}`);
+  console.log(`ci_supersession_negative_sentinel=${ciSupersessionNegativeSentinel}`);
   console.log(`unexplained_test_coverage_loss=${unexplainedTestCoverageLoss}`);
   console.log(`ci_coverage_gaps=${ciCoverageGaps}`);
   console.log(`phase83_result=${failed === 0 ? 'PASS' : 'FAIL'}`);
