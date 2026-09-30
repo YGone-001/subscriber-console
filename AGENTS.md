@@ -215,8 +215,19 @@ Phase 7.5   PASS / FROZEN — Controlled Platform Services Production Cutover (1
 Phase 8.0   PASS / FROZEN — Next.js Backend Removal Architecture Freeze (residual API inventory + source-derived readiness validator)
 Phase 8.1   PASS / FROZEN — Residual API Go Implementation & Shadow Parity (33-operation canonical remainder, 11 newly implemented Go shadows; 81 parity scenarios / 122 assertions)
 Phase 8.2   PASS / FROZEN — Residual Production Cutover, Compatibility Closure & Retired Surface Removal (33 canonical residual operations + 2 legacy read aliases + 2 Go-native reads now Go production-owned; 6 non-canonical mutation methods retired; CUTOVER_TABLE = 84, ACTUALLY_ROUTED = 84, node_production_operations = 0)
-Phase 8.3   IMPLEMENTED / NOT SELF-FROZEN — Next.js Business Backend Physical Removal (frontend/src/app/api/** 54 route.ts / 72 operations and frontend/src/server/** 33 files deleted; 7 backend-only lib helpers removed; minimal read-only proxy session account store extracted; CUTOVER_TABLE = 84, ACTUALLY_ROUTED = 84, next_business_backend_removed = true); independent acceptance pending
+Phase 8.3   PASS / FROZEN — Next.js Business Backend Physical Removal (frontend/src/app/api/** 54 route.ts / 72 operations and frontend/src/server/** 33 files deleted; 7 backend-only lib helpers removed; minimal read-only proxy session account store extracted; CUTOVER_TABLE = 84, ACTUALLY_ROUTED = 84, next_business_backend_removed = true)
+Phase 8.4   AUTHORIZED / NOT STARTED — Dependency cleanup
+Phase 8.5   NOT AUTHORIZED YET — Proxy / deployment simplification
 ```
+
+Authoritative frozen Phase 8.3 boundary SHA (independent acceptance, not HEAD):
+
+```text
+342589aa5c00cb8152980c77bfc73f05b82ca64a
+```
+
+Phase 7.0-7.5 and Phase 8.0-8.3 are independently accepted and frozen at that boundary.
+Phase 8.4 is authorized but not started; Phase 8.5 is not authorized yet.
 
 ### 5.0 Phase 8.3 Boundary (Next.js Business Backend Removal)
 
@@ -229,7 +240,7 @@ All Node.js server execution removed   = NO
 - Extracted: `frontend/src/lib/sessionAccountStore.ts` — read-only `app_users` lookup (`findOne` only, zero writes) consumed by the unchanged `frontend/src/lib/accountSession.ts`.
 - Byte-frozen and preserved: `frontend/src/proxy.ts`, `frontend/src/lib/cutover-routing.ts`, `frontend/src/lib/mongo.ts`, `frontend/src/lib/security.ts`.
 - Node runtime intentionally remains: UI rendering, `proxy.ts` ownership/forwarding, read-only account/session validation.
-- Dependency cleanup deferred to Phase 8.4; proxy/deployment deferral to Phase 8.5.
+- Dependency cleanup deferred to Phase 8.4 (authorized, not started); proxy/deployment deferral to Phase 8.5 (not authorized yet).
 - Evidence: `docs/backend-migration/phase-8.3-next-backend-removal.md`; suite `scripts/test-phase-8-next-backend-removal.mjs`.
 
 ### 5.1 OCS 生产冻结基线 (OCS Production Freeze Baseline)
