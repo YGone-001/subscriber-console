@@ -2,15 +2,21 @@
 /**
  * API Route Inventory Scanner
  *
- * Scans src/app/api (recursively) for route.ts and extracts exported HTTP methods.
+ * Scans frontend/src/app/api (recursively) for route.ts and extracts exported HTTP methods.
  * Outputs a stable, sorted JSON to docs/backend-migration/generated/api-routes.json
+ *
+ * Phase 8.3 (Next.js business backend physical removal):
+ *   the App Router business API tree no longer exists, so this scanner MUST support
+ *   ZERO route files: no crash, no NaN, empty operations list. Nothing is faked and
+ *   nothing is hard-coded - the inventory is always derived from the filesystem.
  *
  * Usage: node scripts/migration/inventory-api.mjs
  *
- * Zero external dependencies — uses only Node.js built-ins.
+ * Zero external dependencies - uses only Node.js built-ins.
  */
 
 import { readdir, readFile, writeFile, mkdir } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 
 const API_ROOT = join(import.meta.dirname, '..', '..', 'frontend', 'src', 'app', 'api');
@@ -21,8 +27,11 @@ const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'
 
 /**
  * Recursively find all route.ts files under the given directory.
+ * A missing root (physically removed tree) yields an empty list instead of throwing.
  */
 async function findRouteFiles(dir) {
+  if (!existsSync(dir)) return [];
+
   const results = [];
   const entries = await readdir(dir, { withFileTypes: true });
 
@@ -71,7 +80,7 @@ async function extractMethods(filePath) {
     }
   }
 
-  // Pattern 3: export { ... } — handle named re-exports
+  // Pattern 3: export { ... } - handle named re-exports
   const reExportPattern = /export\s*\{([^}]+)\}/g;
   let reMatch;
   while ((reMatch = reExportPattern.exec(content)) !== null) {
@@ -88,7 +97,7 @@ async function extractMethods(filePath) {
 
 /**
  * Convert a filesystem path to an API route path.
- * src/app/api/subscribers/[imsi]/route.ts → /api/subscribers/:imsi
+ * src/app/api/subscribers/[imsi]/route.ts -> /api/subscribers/:imsi
  */
 function filePathToApiPath(filePath) {
   const relativePath = relative(API_ROOT, filePath);
@@ -112,9 +121,9 @@ function filePathToApiPath(filePath) {
  */
 function deriveDomain(apiPath) {
   const parts = apiPath.split('/').filter(Boolean);
-  // /api/subscribers/... → subscribers
-  // /api/auth/... → auth
-  // /api/system/audit/... → system
+  // /api/subscribers/... -> subscribers
+  // /api/auth/... -> auth
+  // /api/system/audit/... -> system
   if (parts.length >= 2) {
     return parts[1]; // first segment after "api"
   }
@@ -122,7 +131,13 @@ function deriveDomain(apiPath) {
 }
 
 async function main() {
-  console.log('Scanning API routes...');
+  const treePresent = existsSync(API_ROOT);
+  if (treePresent) {
+    console.log('Scanning API routes...');
+  } else {
+    console.log('Next.js API tree is absent (physically removed) - scanning yields zero routes.');
+  }
+
   const routeFiles = await findRouteFiles(API_ROOT);
   console.log(`Found ${routeFiles.length} route files.`);
 
@@ -159,6 +174,7 @@ async function main() {
 
   console.log(`\nAPI Route Inventory Summary`);
   console.log(`==========================`);
+  console.log(`Tree present: ${treePresent}`);
   console.log(`Route files: ${routes.length}`);
   console.log(`Total operations: ${totalOps}`);
   for (const m of HTTP_METHODS) {

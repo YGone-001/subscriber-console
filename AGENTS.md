@@ -78,9 +78,10 @@ Nginx
    |----------------------|
    v                      v
 Next.js :13333        Go :18888
-UI                     Migrating API
-Legacy writes          Auth validation
-                       Read APIs
+UI / Rendering        Business API (owner)
+Proxy ownership       Auth validation
++ read-only           Read + write APIs
+session lookup
    |                      |
    +----------+-----------+
               |
@@ -100,7 +101,9 @@ Browser -> Nginx
 Important:
 
 ```text
-Production /api/* has NOT been globally cut over to Go.
+Every production API operation owner = Go (CUTOVER_TABLE = 84, ACTUALLY_ROUTED = 84).
+The Next.js business backend (app/api + src/server) was physically removed in Phase 8.3.
+Next.js still serves the UI and runs proxy.ts (ownership decision + exact METHOD+PATH forwarding + read-only account/session validation).
 Frontend API paths remain unchanged.
 ```
 
@@ -212,8 +215,22 @@ Phase 7.5   IMPLEMENTED / NOT FROZEN — Controlled Platform Services Production
 Phase 8.0   PASS / FROZEN — Next.js Backend Removal Architecture Freeze (residual API inventory + source-derived readiness validator)
 Phase 8.1   COMPLETE — Residual API Go Implementation & Shadow Parity (33-operation canonical remainder, 11 newly implemented Go shadows; 81 parity scenarios / 122 assertions)
 Phase 8.2   IMPLEMENTED / NOT FROZEN — Residual Production Cutover, Compatibility Closure & Retired Surface Removal (33 canonical residual operations + 2 legacy read aliases + 2 Go-native reads now Go production-owned; 6 non-canonical mutation methods retired; CUTOVER_TABLE = 84, ACTUALLY_ROUTED = 84, node_production_operations = 0); independent acceptance pending
-Phase 8.3   NOT STARTED
+Phase 8.3   IMPLEMENTED / NOT FROZEN — Next.js Business Backend Physical Removal (frontend/src/app/api/** 54 route.ts / 72 operations and frontend/src/server/** 33 files deleted; 7 backend-only lib helpers removed; minimal read-only proxy session account store extracted; CUTOVER_TABLE = 84, ACTUALLY_ROUTED = 84, next_business_backend_removed = true); independent acceptance pending
 ```
+
+### 5.0 Phase 8.3 Boundary (Next.js Business Backend Removal)
+
+```text
+Next.js business backend removed       = YES
+All Node.js server execution removed   = NO
+```
+
+- Deleted: `frontend/src/app/api/**` (54 `route.ts` + 6 `handler.ts`), `frontend/src/server/**` (33 files), 7 backend-only `frontend/src/lib` helpers.
+- Extracted: `frontend/src/lib/sessionAccountStore.ts` — read-only `app_users` lookup (`findOne` only, zero writes) consumed by the unchanged `frontend/src/lib/accountSession.ts`.
+- Byte-frozen and preserved: `frontend/src/proxy.ts`, `frontend/src/lib/cutover-routing.ts`, `frontend/src/lib/mongo.ts`, `frontend/src/lib/security.ts`.
+- Node runtime intentionally remains: UI rendering, `proxy.ts` ownership/forwarding, read-only account/session validation.
+- Dependency cleanup deferred to Phase 8.4; proxy/deployment deferral to Phase 8.5.
+- Evidence: `docs/backend-migration/phase-8.3-next-backend-removal.md`; suite `scripts/test-phase-8-next-backend-removal.mjs`.
 
 ### 5.1 OCS 生产冻结基线 (OCS Production Freeze Baseline)
 
@@ -454,11 +471,11 @@ POST /api/system/audit/scan
 POST /api/analytics/init
 ```
 
-Status (final, after Phase 8.2):
+Status (final, after Phase 8.3):
 
 ```text
 Go HTTP operations = 84 (production-registered)
-Inventory operations = 72 (all Go-registered)
+Next inventory operations = 0 (Next.js API route tree removed)
 Actually Routed = 84 (CUTOVER_TABLE routes, all owner=go)
   Phase 2 historical baseline = 36
   Phase 7 Platform Services = 11
@@ -470,7 +487,8 @@ OCS writes = 13 (tariff plan + subscriber contract + balance)
 CUTOVER_TABLE = 84 routes (all ACTUALLY_ROUTED=1).
 
 Phase 7 platform service, alert mutation, notification streaming, and controlled remediation endpoints are Go production-owned after the controlled cutover (11 Phase 7 operations, CUTOVER_TABLE = 84 after the Phase 8.2 residual cutover).
-Node route files remain in place for reference; production traffic is Go-owned with no Node fallback.
+Phase 8.3 physically deleted the dormant Next.js API route tree; production traffic is Go-owned with no Node fallback and no surviving Node business handler.
+`next_business_mongo_readers = 0`, `next_business_mongo_writers = 0`; the only Next.js Mongo access is the read-only proxy session account lookup.
 
 ---
 
@@ -541,7 +559,7 @@ Platform Services scope (11 candidate endpoints):
 
 All 11 candidate endpoints are Go production-owned after the controlled cutover.
 Production routing baseline: `CUTOVER_TABLE = 84`, `ACTUALLY_ROUTED = 84`.
-Node route files remain present (deferred cleanup), production owner = Go with no Node fallback.
+Node route files were physically removed in Phase 8.3; production owner = Go with no Node fallback and no surviving Node business handler.
 
 ---
 

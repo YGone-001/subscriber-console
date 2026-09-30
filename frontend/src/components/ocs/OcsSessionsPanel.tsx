@@ -18,7 +18,7 @@ import { DataTableStateRow } from "@/components/ui/DataTableState";
 import { formatBytes } from "@/lib/unitParser";
 import OcsDetailDrawer from "./OcsDetailDrawer";
 import OcsPageShell from "./OcsPageShell";
-import type { OcsSessionRecord } from "@/server/repositories/ocsOperationsRepository";
+import type { OcsSessionRecord } from "@/types/ocs";
 
 export default function OcsSessionsPanel() {
   const { t } = useI18n();

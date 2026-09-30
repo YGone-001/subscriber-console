@@ -16,6 +16,9 @@
 | Phase 8.0 — Next.js Backend Removal Architecture Freeze | PASS / FROZEN | Residual API inventory + source-derived readiness validator |
 | Phase 8.1 — Residual API Go Implementation & Shadow Parity | COMPLETE | 33-operation canonical remainder; 11 newly implemented Go shadows; 81 parity scenarios / 122 assertions |
 | Phase 8.2 — Residual Production Cutover & Retired Surface Removal | IMPLEMENTED / NOT FROZEN | 33 canonical + 2 legacy read aliases + 2 Go-native reads cut over; 6 non-canonical mutation methods retired; `CUTOVER_TABLE = 84`, `ACTUALLY_ROUTED = 84`, `node_production_operations = 0`; independent acceptance pending |
+| Phase 8.3 — Next.js Business Backend Physical Removal | IMPLEMENTED / NOT FROZEN | `frontend/src/app/api/**` (54 route.ts / 72 operations) and `frontend/src/server/**` (33 files) physically deleted; 7 backend-only lib helpers removed; minimal read-only proxy session account store extracted; `next_business_backend_removed = true`, `active_server_imports = 0`, `CUTOVER_TABLE = 84`; independent acceptance pending |
+| Phase 8.4 — Dependency cleanup | NOT STARTED | Deferred from Phase 8.3 |
+| Phase 8.5 — Proxy / deployment simplification | NOT STARTED | Deferred from Phase 8.3 |
 
 ## Deferred
 
@@ -27,7 +30,7 @@
 
 ## Blockers
 
-Phase 7.5 is implemented and NOT FROZEN pending independent acceptance. Phase 8.2 is implemented and NOT FROZEN pending independent acceptance; Phase 8.3 is NOT STARTED. Two known scanner/remediation residual gaps remain frozen by design in `docs/backend-migration/remediation-acceptance-corrections.md`.
+Phase 7.5 is implemented and NOT FROZEN pending independent acceptance. Phase 8.2 is implemented and NOT FROZEN pending independent acceptance. Phase 8.3 is implemented and NOT FROZEN pending independent acceptance. Two known scanner/remediation residual gaps remain frozen by design in `docs/backend-migration/remediation-acceptance-corrections.md`.
 
 ## Risks
 

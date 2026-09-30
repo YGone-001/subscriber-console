@@ -309,3 +309,71 @@
 - Evidence document: `docs/backend-migration/phase-8.2-residual-production-cutover.md`.
 - Status: IMPLEMENTED / NOT FROZEN. Not self-declared frozen; independent Phase 8.2
   acceptance is required before Phase 8.3.
+
+## Phase 8.3 — Next.js Business Backend Physical Removal
+
+- Starting SHA `6a8352dc3892957e12751f14182328f054fc42ff` (Phase 8.2 boundary).
+- Deleted `frontend/src/app/api/**` in full: 60 files (54 `route.ts` modules /
+  72 operations and 6 colocated `handler.ts` modules). No proxy stub, no catch-all
+  and no replacement route module was created.
+- Deleted `frontend/src/server/**` in full: 33 files (14 repositories, 10
+  `__tests__` fixtures/wiring, 9 business governance modules).
+- Deleted 7 backend-only `frontend/src/lib` helpers: `analytics.ts`, `audit.ts`,
+  `audit/record.ts`, `authz.ts`, `rateLimit.ts`, `sentinel.ts`, `syslog.ts`.
+- Extracted the minimal read-only proxy session dependency:
+  `frontend/src/lib/sessionAccountStore.ts` exposes `getSessionAccount(username)`
+  over `xcloud_ops.app_users` with a single projected `findOne` and zero writes.
+  `frontend/src/lib/accountSession.ts` was redirected to it without changing its
+  exported surface or validation decisions.
+- Byte-frozen and preserved: `frontend/src/proxy.ts`,
+  `frontend/src/lib/cutover-routing.ts`, `frontend/src/lib/mongo.ts`,
+  `frontend/src/lib/security.ts`. `CUTOVER_TABLE = 84`, no owner changed.
+- Moved two UI-facing type modules out of the deleted repository layer into
+  `frontend/src/types/ocs.ts` and `frontend/src/types/platformHealth.ts`.
+- Adapted 7 current frontend tests to the post-removal runtime (still-valid
+  assertions kept, only the assertions that structurally required the deleted
+  backend dropped) and removed 11 Node-implementation unit tests that imported the
+  deleted `src/server/**` fixtures/governance modules or loaded deleted route
+  modules (`batchUpdateFixtures`, `bulkDeleteFixtures`, `profileRestore`,
+  `profileRestoreFixtures`, `subscriberBatchCrossRuntime`,
+  `subscriberBatchExecution`, `subscriberBatchUpdateCrossRuntime`,
+  `subscriberBatchUpdateIntegrity`, `subscriberImportFrozenInvariant`,
+  `subscriberOperationPolicy`, `subscriberProfileApplyCrossRuntime`);
+  `unexplained_test_coverage_loss = 0`. `npm test` -> 291 pass / 0 fail.
+- Relocated the Go cross-language fixture from the deleted
+  `frontend/src/server/__tests__/batch-create-fixtures.json` to
+  `backend/internal/subscriber/testdata/fixture_node_batch_create.json` (byte-identical
+  `R100` rename of frozen Node-derived expected values). This is the only
+  `backend/**` change and it is test-only; no production Go file was touched.
+- Retired 12 scripts structurally bound to the deleted Node backend as
+  historical parity (10 phase/auth parity suites plus 2 instrumentation helpers)
+  and added the current-runtime replacement
+  `scripts/test-phase-8-next-backend-removal.mjs` (groups `P83-S/A/B/P/R/F/U/D/C/G/M`).
+- Evolved `scripts/migration/inventory-api.mjs` and
+  `scripts/migration/validate-inventory.mjs` for a zero-Next-API-route world, and
+  evolved `scripts/test-phase-8-backend-removal-readiness.mjs` from removal
+  *readiness* to removal *completion*.
+- CI supersession (`ci_coverage_gaps = 0`): the `direct-operations` job lost the
+  "Platform services architecture freeze" step (RETIRE_AS_HISTORICAL_PARITY); the
+  `auth-security`, `auth-go-parity`, `platform-read-parity` and
+  `residual-api-parity` jobs were retired as historical parity or replaced by the
+  current-runtime suite; a visible new `next-backend-removal` job runs
+  `npm run build` plus the Phase 8.3 acceptance suite against a real production
+  Next.js runtime, a MongoDB service container and the real Go binary. No job was
+  dropped merely because it failed after deletion.
+- Final invariants: `next_api_route_files = 0`, `next_api_operations = 0`,
+  `node_server_tree_files = 0`, `active_server_imports = 0`,
+  `go_registered_operations = 84`, `go_registered_unclassified = 0`,
+  `go_registered_unrouted = 0`, `cutover_without_go_registration = 0`,
+  `next_business_mongo_readers = 0`, `next_business_mongo_writers = 0`,
+  `proxy_session_store_read_only = true`,
+  `proxy_session_validation_present = true`, `frontend_api_callers_unmapped = 0`,
+  `backend_removal_ready = true`, `next_business_backend_removed = true`,
+  `unexplained_test_coverage_loss = 0`, `ci_coverage_gaps = 0`.
+- Next.js business backend removed = YES; All Node.js server execution removed = NO
+  (UI rendering, `proxy.ts` and read-only session validation intentionally remain).
+- Dependencies (`mongodb` / `jose` / `bcryptjs`) and all package files unchanged;
+  dependency cleanup deferred to Phase 8.4, proxy/deployment deferral to Phase 8.5.
+- Evidence document: `docs/backend-migration/phase-8.3-next-backend-removal.md`.
+- Status: IMPLEMENTED / NOT FROZEN. Not self-declared frozen; independent Phase 8.3
+  acceptance is required.

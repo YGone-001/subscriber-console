@@ -4,7 +4,6 @@ import { readFileSync, existsSync } from 'node:fs';
 
 const analyticsCockpitSource = readFileSync(new URL('../src/components/AnalyticsCockpit.tsx', import.meta.url), 'utf8');
 const workbenchPanelSource = readFileSync(new URL('../src/components/analytics/WorkbenchPanel.tsx', import.meta.url), 'utf8');
-const analyticsRepoSource = readFileSync(new URL('../src/server/repositories/analyticsRepository.ts', import.meta.url), 'utf8');
 const zhLocale = readFileSync(new URL('../src/lib/locales/zh.ts', import.meta.url), 'utf8');
 const enLocale = readFileSync(new URL('../src/lib/locales/en.ts', import.meta.url), 'utf8');
 
@@ -30,18 +29,6 @@ test('WorkbenchPanel renders action items with score summary', () => {
   assert.match(workbenchPanelSource, /analytics-alerts-items/);
   assert.match(workbenchPanelSource, /analytics-readiness-score/);
   assert.match(workbenchPanelSource, /operationsScore/);
-});
-
-test('Analytics repository performs robust concurrent OCS aggregations', () => {
-  assert.match(analyticsRepoSource, /mongoCollections\.ocsBalances/);
-  assert.match(analyticsRepoSource, /mongoCollections\.ocsSessions/);
-  assert.match(analyticsRepoSource, /mongoCollections\.ocsReservations/);
-  assert.match(analyticsRepoSource, /mongoCollections\.ocsUsageRecords/);
-  assert.match(analyticsRepoSource, /mongoCollections\.ocsTariffPlans/);
-  assert.match(analyticsRepoSource, /dataUtilizationRate/);
-  assert.match(analyticsRepoSource, /brokenInvariantCount/);
-  assert.match(analyticsRepoSource, /activeSessions/);
-  assert.match(analyticsRepoSource, /orphanedReservations/);
 });
 
 test('Dashboard OCS and Workbench i18n keys are fully aligned across zh and en', () => {

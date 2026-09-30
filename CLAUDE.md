@@ -101,9 +101,9 @@ Nginx
    |-----------------------------|
    v                             v
 Next.js :13333                Go :18888
-UI / Rendering               Business API
-Legacy writes during         Auth validation
-migration                    Read migration
+UI / Rendering                Business API (owner)
+Proxy ownership decision      Auth validation
++ read-only session lookup    Read + write APIs
    |                             |
    +-------------+---------------+
                  |
@@ -119,12 +119,14 @@ Browser -> Nginx
            └─ /api/*  -> Go :18888
 ```
 
-当前仍是渐进迁移：
-- Next.js 保留前端。
-- Go Backend 位于 `backend/`。
+当前状态：
+
+- Next.js 保留前端（UI 渲染 + `proxy.ts` ownership 决策与转发 + 只读 account/session 校验）。
+- Go Backend 位于 `backend/`，生产业务 API 全部由 Go 独占（`CUTOVER_TABLE = 84`, `ACTUALLY_ROUTED = 84`）。
+- Next.js 业务后端（`frontend/src/app/api/**` 与 `frontend/src/server/**`）已在 Phase 8.3 物理删除，不得重建。
 - API 路径保持 `/api/...` 不变。
 - 前端 SWR 不感知 Node/Go ownership。
-- 禁止一次性将整个 `/api/*` 切到 Go。
+- 禁止在 Next.js 侧重新引入任何业务 API handler、业务 repository 或业务 Mongo 访问。
 
 ### 2.1 OCS 生产冻结规范 (OCS Management Plane Freeze)
 
@@ -143,7 +145,7 @@ Charging Plane remains frozen and excluded.
 
 ## 3. 技术栈
 
-### Frontend / Legacy Backend
+### Frontend
 
 - Next.js 16.2.2 App Router
 - React 19.2.4

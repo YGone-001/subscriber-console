@@ -2,7 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { isPasswordStrong, PASSWORD_POLICY_MESSAGE, getJwtSecretKey } from '../src/lib/security.ts';
 import fs from 'node:fs';
-import path from 'node:path';
 import { createJiti } from 'jiti';
 import { fileURLToPath } from 'node:url';
 
@@ -76,31 +75,4 @@ test('getJwtSecretKey validates secret length and rejects unsafe placeholders', 
   } finally {
     process.env.JWT_SECRET = origSecret;
   }
-});
-
-test('login route source code does not contain auto-admin runtime provisioning', () => {
-  const loginRoutePath = path.resolve(process.cwd(), 'src/app/api/auth/login/route.ts');
-  const content = fs.readFileSync(loginRoutePath, 'utf8');
-
-  assert.equal(
-    content.includes('INITIAL_ADMIN_PASSWORD'),
-    false,
-    'Login route must not read INITIAL_ADMIN_PASSWORD or auto-create admin at runtime'
-  );
-  assert.equal(
-    content.includes('createUser'),
-    false,
-    'Login route must not call createUser'
-  );
-});
-
-test('user update route enforces password strength policy', () => {
-  const userUpdateRoutePath = path.resolve(process.cwd(), 'src/app/api/users/[username]/route.ts');
-  const content = fs.readFileSync(userUpdateRoutePath, 'utf8');
-
-  assert.equal(
-    content.includes('isPasswordStrong'),
-    true,
-    'User update route must enforce isPasswordStrong on password change'
-  );
 });

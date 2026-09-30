@@ -19,7 +19,7 @@ import { DataTableStateRow } from "@/components/ui/DataTableState";
 import { formatBytes } from "@/lib/unitParser";
 import OcsDetailDrawer from "./OcsDetailDrawer";
 import OcsPageShell from "./OcsPageShell";
-import type { OcsBalanceRecord } from "@/server/repositories/ocsOperationsRepository";
+import type { OcsBalanceRecord } from "@/types/ocs";
 
 export default function OcsBalancesPanel() {
   const { t } = useI18n();

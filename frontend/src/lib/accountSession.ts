@@ -1,6 +1,6 @@
 import { normalizeGovernanceRole } from '@/lib/permissions';
-import { getUser } from '@/server/repositories/userRepository';
-import type { UserDocument } from '@/server/repositories/userRepository';
+import { getSessionAccount } from '@/lib/sessionAccountStore';
+import type { SessionAccountDocument } from '@/lib/sessionAccountStore';
 
 export class AccountSessionError extends Error {
   constructor(public readonly code: 'AUTH_INVALID_TOKEN' | 'ACCOUNT_NOT_FOUND' | 'ACCOUNT_DISABLED' | 'ACCOUNT_LOCKED' | 'SESSION_REVOKED') {
@@ -11,7 +11,7 @@ export class AccountSessionError extends Error {
 type SessionClaims = { username?: unknown; role?: unknown; sv?: unknown };
 
 /** Missing versions are the legacy version zero, never a wildcard. */
-export function validateAccountSnapshot(claims: SessionClaims, account: (UserDocument & { _id?: unknown }) | null) {
+export function validateAccountSnapshot(claims: SessionClaims, account: SessionAccountDocument | null) {
   const tokenRole = normalizeGovernanceRole(claims.role);
   const sv = claims.sv === undefined ? 0 : claims.sv;
   if (typeof claims.username !== 'string' || !claims.username || !tokenRole || !Number.isSafeInteger(sv) || (sv as number) < 0) {
@@ -31,5 +31,5 @@ export function validateAccountSnapshot(claims: SessionClaims, account: (UserDoc
 /** Only call with claims from a verified JWT (or the Proxy's overwritten claims). No cache. */
 export async function validateCurrentAccount(claims: SessionClaims) {
   if (typeof claims.username !== 'string' || claims.username.length > 100) throw new AccountSessionError('AUTH_INVALID_TOKEN');
-  return validateAccountSnapshot(claims, await getUser(claims.username));
+  return validateAccountSnapshot(claims, await getSessionAccount(claims.username));
 }

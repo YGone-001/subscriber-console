@@ -13,7 +13,7 @@ import {
   Zap,
   type LucideIcon,
 } from "lucide-react";
-import type { UserRole } from "@/lib/authz";
+import type { RoleKey as UserRole } from "@/types/iam";
 import { hasPermission, type Permission } from '@/lib/permissions';
 
 export type NavigationGroup = "ocs" | "system";

@@ -7,18 +7,6 @@ import { zh } from '../src/lib/locales/zh.ts';
 
 const rootDir = process.cwd();
 
-test('SSE real-time notification stream endpoint exists and enforces auth', () => {
-  const streamRoutePath = path.join(rootDir, 'src', 'app', 'api', 'notifications', 'stream', 'route.ts');
-  assert.ok(fs.existsSync(streamRoutePath), 'notifications/stream route must exist');
-
-  const content = fs.readFileSync(streamRoutePath, 'utf8');
-  assert.ok(content.includes('requireAuth'), 'SSE route must verify user authentication');
-  assert.ok(content.includes('text/event-stream'), 'SSE route must return text/event-stream');
-  assert.ok(content.includes('ReadableStream'), 'SSE route must use standard ReadableStream');
-  assert.ok(content.includes('sendEvent'), 'SSE route must support named events');
-  assert.ok(content.includes('request.signal.addEventListener'), 'SSE route must handle client abort without leaking');
-});
-
 test('Web Audio sound synthesizer provides pure audio synthesis', () => {
   const soundPath = path.join(rootDir, 'src', 'lib', 'soundEffects.ts');
   assert.ok(fs.existsSync(soundPath), 'soundEffects.ts must exist');

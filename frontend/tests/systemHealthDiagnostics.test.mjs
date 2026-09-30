@@ -1,45 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 
 const pageSource = readFileSync(new URL('../src/app/(dashboard)/system-health/page.tsx', import.meta.url), 'utf8');
-const repoSource = readFileSync(new URL('../src/server/repositories/systemHealthRepository.ts', import.meta.url), 'utf8');
-const auditSource = readFileSync(new URL('../src/server/repositories/systemAuditRepository.ts', import.meta.url), 'utf8');
 const enLocale = readFileSync(new URL('../src/lib/locales/en.ts', import.meta.url), 'utf8');
 const zhLocale = readFileSync(new URL('../src/lib/locales/zh.ts', import.meta.url), 'utf8');
-
-test('system health diagnostic files and routes are present', () => {
-  assert.equal(existsSync(new URL('../src/server/repositories/systemHealthRepository.ts', import.meta.url)), true);
-  assert.equal(existsSync(new URL('../src/app/api/system/health/route.ts', import.meta.url)), true);
-  assert.equal(existsSync(new URL('../src/app/api/system/audit/batch-heal/route.ts', import.meta.url)), true);
-  assert.equal(existsSync(new URL('../src/app/api/system/audit/heal/route.ts', import.meta.url)), true);
-  assert.equal(existsSync(new URL('../src/app/api/system/audit/scan/route.ts', import.meta.url)), true);
-  assert.equal(existsSync(new URL('../src/app/(dashboard)/system-health/page.tsx', import.meta.url)), true);
-});
-
-test('systemHealthRepository defines 4 core subsystems and diagnostic scoring', () => {
-  assert.match(repoSource, /DatabaseSubsystemHealth/);
-  assert.match(repoSource, /OcsSubsystemHealth/);
-  assert.match(repoSource, /HssSubsystemHealth/);
-  assert.match(repoSource, /SecuritySubsystemHealth/);
-  assert.match(repoSource, /ComprehensiveSystemHealth/);
-  assert.match(repoSource, /getComprehensiveSystemHealth/);
-  assert.match(repoSource, /brokenInvariantsCount/);
-  assert.match(repoSource, /orphanedReservations/);
-  assert.match(repoSource, /danglingProfilesCount/);
-});
-
-test('systemAuditRepository supports expanded anomaly types, phases and batch healing', () => {
-  assert.match(auditSource, /missing_config/);
-  assert.match(auditSource, /balance_mismatch/);
-  assert.match(auditSource, /orphan_ocs/);
-  assert.match(auditSource, /orphan_reservation/);
-  assert.match(auditSource, /invalid_tariff/);
-  assert.match(auditSource, /dangling_profile/);
-  assert.match(auditSource, /batchHealSubscriberDocuments/);
-  assert.match(auditSource, /phase === 'reservation'/);
-  assert.match(auditSource, /phase === 'tariff'/);
-});
 
 test('system health page UI implements subsystem matrix, category tabs and batch heal modal', () => {
   assert.match(pageSource, /health_subsystems_title/);

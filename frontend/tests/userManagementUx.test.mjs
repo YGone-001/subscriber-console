@@ -11,7 +11,6 @@ const createSource = read('../src/app/(dashboard)/users/components/UserCreateFor
 const progressSource = read('../src/app/(dashboard)/users/components/BulkProgressModal.tsx');
 const permissionsSource = read('../src/app/(dashboard)/users/components/UserPermissions.tsx');
 const rolePageSource = read('../src/app/(dashboard)/roles/page.tsx');
-const createRouteSource = read('../src/app/api/users/route.ts');
 
 test('user row actions expose only implemented contextual operations', () => {
   assert.match(tableSource, /startPasswordReset/);
@@ -55,8 +54,6 @@ test('user creation includes availability, identity, role guidance, and strength
   assert.match(createSource, /newForm\.displayName/);
   assert.match(createSource, /newForm\.email/);
   assert.match(createSource, /roles_desc_/);
-  assert.match(createRouteSource, /displayName/);
-  assert.match(createRouteSource, /email/);
 });
 
 test('bulk operations expose per-user progress and cancellation', () => {

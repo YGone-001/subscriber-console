@@ -23,7 +23,7 @@ import OcsPageShell from "./OcsPageShell";
 import type {
   OcsReservationRecord,
   OcsUsageRecord,
-} from "@/server/repositories/ocsOperationsRepository";
+} from "@/types/ocs";
 
 export default function OcsUsagePanel() {
   const { t } = useI18n();

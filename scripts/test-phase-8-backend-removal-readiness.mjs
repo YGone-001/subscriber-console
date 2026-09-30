@@ -1,31 +1,33 @@
 #!/usr/bin/env node
 /**
- * Phase 8.0 - Next.js Backend Removal Readiness (architecture freeze + residual inventory).
+ * Phase 8.3 - Next.js Business Backend Physical Removal Verification.
  *
- * READ-ONLY with respect to production behavior:
- *   - reads current API inventory (generated + independent source scan);
- *   - reads the controlled cutover table;
- *   - reads production Go route registrations (cmd/server + remediation);
- *   - scans frontend API callers;
- *   - scans Node backend dependencies (mongodb / jose / bcryptjs);
- *   - inspects proxy.ts responsibilities.
+ * READ-ONLY with respect to production behavior. Pure source analysis: no network,
+ * no MongoDB, no build step. It runs in the CI `node` job (which has no database
+ * service) and must keep doing so.
  *
- * It validates P8-I01 .. P8-I24 plus the P8-I11 negative sentinel, and emits the
- * machine-readable block required by the specification. It NEVER hard-codes
- * backend_removal_ready=true: readiness is DERIVED from evidence. After Phase 8.2
- * all residual Node production operations are cut over, so the derived value must be
- * TRUE; the validator fails otherwise (Phase 8.0/8.1 still allowed a truthful
- * backend_removal_ready=false while the architecture phase itself PASSED).
+ * The script answers ONE question truthfully, purely from source:
+ *   "has the Next.js business backend been PHYSICALLY REMOVED and is the Go backend
+ *    now the single production owner?"
  *
- * Two ownership dimensions are validated INDEPENDENTLY:
- *   - lifecycle_class: contract/migration state of an operation;
- *   - runtime_owner:   actual request owner, derived by invoking the production
- *                      routing function (locate in frontend/src/lib/cutover-routing.ts:
- *                      resolveRouteOwner) which frontend/src/proxy.ts executes.
+ * It therefore validates:
+ *   - the Next.js App Router business API tree is gone (0 route files, 0 operations);
+ *   - the Next.js business server tree is gone (frontend/src/server);
+ *   - no surviving ACTIVE executable code imports the removed tree;
+ *   - the surviving Next.js runtime owns no business MongoDB read/write data plane;
+ *   - the Go router registration site matches CUTOVER_TABLE as an EXACT METHOD+PATH set;
+ *   - every Go registration is independently classified (never tautological);
+ *   - the proxy session-validation contract still exists and stays read-only;
+ *   - frontend API callers map to Go-owned operations;
+ *   - dependency consumers (mongodb / jose / bcryptjs) are all classified.
  *
- * Acceptance for Phase 8.0 fails when any invariant fails, including:
- *   unresolved > 0 | unknown_production_owner > 0 | frontend_api_callers_unmapped > 0
- *   | runtime_owner_unknown > 0 | go_registered_unclassified > 0
+ * The P8-I11 negative synthetic-registration sentinel is preserved: a synthetic
+ * registration that is neither an inventory operation nor an approved CUTOVER_TABLE
+ * operation MUST be classified UNCLASSIFIED.
+ *
+ * The machine-readable block at the end is DERIVED from evidence; nothing is hard-coded
+ * green except the historical Phase 7.5 baseline size (47), which is used only to
+ * DERIVE the expected current CUTOVER_TABLE size.
  *
  * Usage: node scripts/test-phase-8-backend-removal-readiness.mjs
  */
@@ -36,15 +38,23 @@ import { fileURLToPath } from 'node:url';
 import { createJiti } from 'jiti';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const selfPath = resolve(root, 'scripts/test-phase-8-backend-removal-readiness.mjs');
 const apiRoot = resolve(root, 'frontend/src/app/api');
+const serverRoot = resolve(root, 'frontend/src/server');
 const srcRoot = resolve(root, 'frontend/src');
+const testsRoot = resolve(root, 'frontend/tests');
+const scriptsRoot = resolve(root, 'scripts');
+const githubRoot = resolve(root, '.github');
 const inventoryPath = resolve(root, 'docs/backend-migration/generated/api-routes.json');
 const cutoverPath = resolve(root, 'frontend/src/lib/cutover-routing.ts');
-const goServerMain = resolve(root, 'backend/cmd/server/main.go');
-const goRemediation = resolve(root, 'backend/internal/remediation/handler.go');
+const mongoLibPath = resolve(root, 'frontend/src/lib/mongo.ts');
 const proxyPath = resolve(root, 'frontend/src/proxy.ts');
+const accountSessionPath = resolve(root, 'frontend/src/lib/accountSession.ts');
+const sessionStorePath = resolve(root, 'frontend/src/lib/sessionAccountStore.ts');
+const goRouterRoots = [resolve(root, 'backend/cmd'), resolve(root, 'backend/internal')];
 
 const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'];
+const CODE_EXT = /\.(ts|tsx|js|jsx|mjs|cjs)$/;
 
 // ---------------------------------------------------------------------------
 // Invariant bookkeeping
@@ -59,6 +69,7 @@ function check(id, ok, detail) {
 // Helpers
 // ---------------------------------------------------------------------------
 function walk(dir, filter, out = []) {
+  if (!existsSync(dir)) return out;
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
     const stat = statSync(full);
@@ -89,6 +100,46 @@ function patternRegex(canonicalPath) {
 
 function methodPathKey(method, canonicalPath) {
   return `${method} ${canonicalPath}`;
+}
+
+/** Replace a canonical pattern with a concrete instance path for routing probes. */
+function concretePath(canonicalPath) {
+  return canonicalPath.replace(/\{[^}]+\}/g, '__p83__');
+}
+
+/**
+ * Blank out code comments while preserving line numbers exactly, so documentation prose
+ * inside comments is never counted as a live reference (and reported lines stay accurate).
+ */
+function stripComments(source) {
+  const out = [];
+  let inBlock = false;
+  for (const raw of source.split('\n')) {
+    let i = 0;
+    let built = '';
+    while (i < raw.length) {
+      if (inBlock) {
+        const end = raw.indexOf('*/', i);
+        if (end === -1) {
+          i = raw.length;
+          break;
+        }
+        inBlock = false;
+        i = end + 2;
+        continue;
+      }
+      if (raw.startsWith('/*', i)) {
+        inBlock = true;
+        i += 2;
+        continue;
+      }
+      if (raw.startsWith('//', i) && (i === 0 || raw[i - 1] !== ':')) break;
+      built += raw[i];
+      i += 1;
+    }
+    out.push(built);
+  }
+  return out.join('\n');
 }
 
 // ---------------------------------------------------------------------------
@@ -157,10 +208,13 @@ async function loadCutoverTable() {
 // ---------------------------------------------------------------------------
 // 4. Production Go route registrations (authoritative source)
 // ---------------------------------------------------------------------------
-function loadGoRegistrations() {
-  const sources = [goServerMain, goRemediation].filter(existsSync);
+function scanGoRouter() {
+  const files = [];
+  for (const base of goRouterRoots) {
+    files.push(...walk(base, (p) => p.endsWith('.go') && !p.endsWith('_test.go') && !p.includes('testserver')));
+  }
   const ops = [];
-  for (const file of sources) {
+  for (const file of files.sort()) {
     const content = readFileSync(file, 'utf8');
     const re = /mux\.Handle\("(GET|POST|PUT|PATCH|DELETE)\s+([^"]+)"\s*,/g;
     let m;
@@ -185,7 +239,7 @@ function scanCallers() {
   for (const dir of CALLER_DIRS) {
     const base = join(srcRoot, dir);
     if (!existsSync(base)) continue;
-    files.push(...walk(base, (p) => /\.(ts|tsx|js|jsx|mjs)$/.test(p)));
+    files.push(...walk(base, (p) => CODE_EXT.test(p)));
   }
   const callers = [];
   const literalRe = /[`'"]([^`'"\n]*\/api\/[^`'"\n]*)[`'"]/g;
@@ -231,7 +285,7 @@ function isBackendPath(relFile) {
 
 /** Reverse import graph (imported file -> set of importers) for src-internal specifiers. */
 function buildImportGraph() {
-  const files = walk(srcRoot, (p) => /\.(ts|tsx|js|jsx|mjs)$/.test(p));
+  const files = walk(srcRoot, (p) => CODE_EXT.test(p));
   const importers = new Map();
   const impRe = /(?:import\s+(?:type\s+)?[^;]*?from\s*|require\(\s*)['"]([^'"]+)['"]/g;
   for (const file of files) {
@@ -269,7 +323,7 @@ function classifyDependencyFile(relFile, importers, typeOnly) {
 }
 
 function scanDependencies() {
-  const files = walk(srcRoot, (p) => /\.(ts|tsx|js|jsx|mjs)$/.test(p));
+  const files = walk(srcRoot, (p) => CODE_EXT.test(p));
   const importers = buildImportGraph();
   const consumers = {};
   for (const mod of TRACKED_MODULES) consumers[mod] = [];
@@ -301,6 +355,7 @@ function scanDependencies() {
 // ---------------------------------------------------------------------------
 function scanProxy() {
   const content = readFileSync(proxyPath, 'utf8');
+  const accountSessionContent = existsSync(accountSessionPath) ? readFileSync(accountSessionPath, 'utf8') : '';
   const responsibilities = [
     { key: 'public_api_routes', ok: content.includes("'/api/auth/login'") && content.includes("'/api/auth/logout'") },
     { key: 'api_prefix_gate', ok: content.includes("startsWith('/api/')") },
@@ -310,7 +365,157 @@ function scanProxy() {
     { key: 'cutover_telemetry', ok: content.includes('cutover_forward') },
     { key: 'node_passthrough', ok: content.includes('NextResponse.next()') },
   ];
-  return { content, responsibilities };
+  const sessionValidationPresent =
+    existsSync(accountSessionPath) &&
+    content.includes('validateCurrentAccount') &&
+    accountSessionContent.includes('validateCurrentAccount');
+  return { content, responsibilities, sessionValidationPresent };
+}
+
+// ---------------------------------------------------------------------------
+// 8. Active executable code -> removed Next.js server tree dependencies
+// ---------------------------------------------------------------------------
+// Roots: frontend/src (removed trees excluded - they no longer exist), frontend/tests,
+// scripts and .github. Documentation (docs/**) is intentionally NOT scanned. Comments
+// inside code are blanked (line numbers preserved) so historical prose is never counted.
+//
+// A hit is an ACTIVE dependency on the removed tree: an import specifier, a dynamic
+// module load (import / require / jiti / loadModule) or a filesystem resolution
+// (readFileSync / readFile / existsSync / statSync / readdirSync / path.join /
+// path.resolve / resolve / join / new URL). Bare string literals that merely NAME the
+// removed tree - for example removal assertions that verify a path is ABSENT - are data,
+// not dependencies, and are reported separately (`literalOnly`). Counting them as live
+// imports would make the hygiene gate impossible to clear while removal verification
+// itself exists, so they are surfaced for transparency but never gate acceptance.
+const SERVER_TREE_RE = /@\/server\/|src\/server\//;
+const RESOLUTION_OP_RE =
+  /(?:\bimport\b|\brequire\s*\(|\b[Bb]ase[Jj]iti\b|\b[Jj]iti\b|\bloadModule\s*\(|\breadFileSync\b|\breadFile\b|\bexistsSync\b|\bstatSync\b|\breaddirSync\b|\bnew\s+URL\s*\(|\bpath\s*\.\s*(?:join|resolve)\s*\(|\bresolve\s*\(|\bjoin\s*\()/;
+
+function scanActiveServerImports() {
+  const roots = [srcRoot, testsRoot, scriptsRoot, githubRoot];
+  const hits = [];
+  const literalOnly = [];
+  for (const base of roots) {
+    if (!existsSync(base)) continue;
+    const files = walk(base, (p) => CODE_EXT.test(p) || /\.ya?ml$/.test(p));
+    for (const file of files) {
+      const relFile = rel(file);
+      // The scanner itself contains the pattern as a diagnostic literal.
+      if (resolve(file) === selfPath) continue;
+      stripComments(readFileSync(file, 'utf8')).split('\n').forEach((line, idx) => {
+        if (!SERVER_TREE_RE.test(line)) return;
+        const entry = { file: relFile, line: idx + 1, text: line.trim() };
+        if (RESOLUTION_OP_RE.test(line)) hits.push(entry);
+        else literalOnly.push(entry);
+      });
+    }
+  }
+  return { hits, literalOnly };
+}
+
+// ---------------------------------------------------------------------------
+// 9. Surviving Next.js business MongoDB data plane
+// ---------------------------------------------------------------------------
+// Business collections only. `app_users` is deliberately excluded: the proxy session
+// revalidation store is the single sanctioned read path against it.
+const BUSINESS_COLLECTIONS = new Set([
+  'subscribers',
+  'app_profiles',
+  'profiles',
+  'app_profile_versions',
+  'app_ratings',
+  'ratings',
+  'ocs_tariff_plans',
+  'ocs_subscribers',
+  'ocs_balances',
+  'ocs_sessions',
+  'ocs_reservations',
+  'ocs_usage',
+  'ocs_usage_records',
+  'ocs_events',
+  'ocs_config',
+  'ocs_balance_adjustments',
+  'app_alerts',
+  'alerts',
+  'app_audit_logs',
+  'app_approvals',
+]);
+
+const MONGO_OP_RE = /\.(findOneAndUpdate|findOneAndDelete|findOneAndReplace|findOne|find|insertMany|insertOne|updateMany|updateOne|replaceOne|deleteMany|deleteOne|bulkWrite|aggregate|countDocuments|distinct|estimatedDocumentCount|createIndexes|createIndex|drop)\s*\(/g;
+const MONGO_READ_OPS = new Set(['findOne', 'find', 'aggregate', 'countDocuments', 'distinct', 'estimatedDocumentCount']);
+const MONGO_WRITE_OPS = new Set([
+  'findOneAndUpdate',
+  'findOneAndDelete',
+  'findOneAndReplace',
+  'insertOne',
+  'insertMany',
+  'updateOne',
+  'updateMany',
+  'replaceOne',
+  'deleteOne',
+  'deleteMany',
+  'bulkWrite',
+  'createIndex',
+  'createIndexes',
+  'drop',
+]);
+
+/** Collection key -> physical name map, derived from the surviving mongo lib source. */
+function loadCollectionMap() {
+  const map = new Map();
+  if (!existsSync(mongoLibPath)) return map;
+  const content = readFileSync(mongoLibPath, 'utf8');
+  const block = content.match(/mongoCollections\s*=\s*\{([\s\S]*?)\}\s*as const/);
+  if (!block) return map;
+  const re = /(\w+)\s*:\s*'([^']+)'/g;
+  let m;
+  while ((m = re.exec(block[1])) !== null) map.set(m[1], m[2]);
+  return map;
+}
+
+function scanNextBusinessMongo() {
+  const collectionMap = loadCollectionMap();
+  const files = walk(srcRoot, (p) => CODE_EXT.test(p));
+  const readers = [];
+  const writers = [];
+  const COLLECTION_CALL_RE = /(?:collection|getMongoCollection|getXcloudCollection|getAppCollection)\s*(?:<[^>]*>)?\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
+
+  for (const file of files) {
+    const relFile = rel(file);
+    const content = readFileSync(file, 'utf8');
+    const names = new Set();
+    for (const m of content.matchAll(/mongoCollections\.(\w+)/g)) {
+      names.add(collectionMap.get(m[1]) ?? m[1]);
+    }
+    let cm;
+    COLLECTION_CALL_RE.lastIndex = 0;
+    while ((cm = COLLECTION_CALL_RE.exec(content)) !== null) names.add(cm[1]);
+    const business = [...names].filter((name) => BUSINESS_COLLECTIONS.has(name));
+    if (business.length === 0) continue;
+
+    const ops = new Set();
+    let om;
+    MONGO_OP_RE.lastIndex = 0;
+    while ((om = MONGO_OP_RE.exec(content)) !== null) ops.add(om[1]);
+    if ([...ops].some((op) => MONGO_READ_OPS.has(op))) readers.push({ file: relFile, collections: business });
+    if ([...ops].some((op) => MONGO_WRITE_OPS.has(op))) writers.push({ file: relFile, collections: business });
+  }
+  return { readers, writers };
+}
+
+/** Read-only verification of the surviving proxy session-validation store. */
+function scanSessionStore() {
+  if (!existsSync(sessionStorePath)) return { present: false, readOnly: false, ops: [], collections: [] };
+  const content = stripComments(readFileSync(sessionStorePath, 'utf8'));
+  const ops = [];
+  let m;
+  MONGO_OP_RE.lastIndex = 0;
+  while ((m = MONGO_OP_RE.exec(content)) !== null) ops.push(m[1]);
+  const collections = [...content.matchAll(/mongoCollections\.(\w+)/g)].map((x) => x[1]);
+  const readOnly = ops.length > 0 && ops.every((op) => MONGO_READ_OPS.has(op));
+  const singleCollection = collections.length > 0 && collections.every((key) => key === 'users');
+  const findOneOnly = ops.length > 0 && ops.every((op) => op === 'findOne');
+  return { present: true, readOnly: readOnly && singleCollection && findOneOnly, ops, collections };
 }
 
 // ---------------------------------------------------------------------------
@@ -318,8 +523,7 @@ function scanProxy() {
 // ---------------------------------------------------------------------------
 // Documented canonical contract (AGENTS.md section 7):
 //   - /api/auth/users + /api/auth/users/{username} are READ-ONLY compatibility aliases.
-//   - User mutations are canonical only on /api/users (PATCH update, POST disable,
-//     POST password-reset). PUT/DELETE /api/users/{username} are not part of the contract.
+//   - User mutations are canonical only on /api/users.
 const LEGACY_ALIAS_READS = new Set([
   'GET /api/auth/users',
   'GET /api/auth/users/{username}',
@@ -332,15 +536,12 @@ const RETIRED_SURFACES = new Set([
   'PUT /api/users/{username}',
   'DELETE /api/users/{username}',
 ]);
-// Retired legacy surfaces still referenced by stale frontend code (endpoints removed
-// from the contract during Phase 5.7-C). Callers to these are NOT "unmapped": they are
-// explicitly mapped to a retired surface and listed as a cleanup finding.
+// Retired legacy surfaces still referenced by stale frontend code (removed from the
+// contract during Phase 5.7-C). Callers to these are mapped to a retired surface and
+// reported as a cleanup finding, never as an unknown caller.
 const RETIRED_CALLER_TARGETS = ['/api/audit', '/api/approvals'];
 
 // Phase 8.2 frozen canonical residual cutover set (33 exact METHOD+PATH keys).
-// These were the Phase 8.1 canonical Node migration remainder; Phase 8.2 cuts them
-// over to their frozen Go implementations. Kept explicit so the current-state gate
-// can prove completion instead of re-deriving "0 remaining" tautologically.
 const CANONICAL_RESIDUAL_KEYS = new Set([
   'GET /api/analytics/metrics',
   'GET /api/analytics/sparkline',
@@ -378,68 +579,40 @@ const CANONICAL_RESIDUAL_KEYS = new Set([
 ]);
 
 // Frozen Phase 7.5 / Phase 8.1 production routing table size before Phase 8.2.
-// It is a historical fact, referenced only to DERIVE the current expected size:
-//   expected = 47 + 33 canonical + 2 legacy aliases + go-native residue cutover.
+// Historical fact, referenced only to DERIVE the current expected size.
 const PHASE_7_5_CUTOVER_BASELINE = 47;
-
-const CLASS = {
-  GO: 'GO_PRODUCTION_OWNED',
-  NODE: 'NODE_PRODUCTION_OWNED',
-  LEGACY: 'LEGACY_ALIAS',
-  RETIRED: 'RETIRED_SURFACE',
-  TEST: 'TEST_ONLY',
-  UNRESOLVED: 'UNRESOLVED',
-};
 
 // ---------------------------------------------------------------------------
 // Runtime ownership (independent of lifecycle classification)
 // ---------------------------------------------------------------------------
-// Derived by invoking the ACTUAL production routing function (resolveRouteOwner)
-// with a concrete instance path. proxy.ts defaults every unmatched METHOD+PATH to
-// the Next.js Node route handler (`NextResponse.next()`), so a route is only
-// `unreachable` when no Next.js route file backs it.
-const RUNTIME_OWNER = { GO: 'go', NODE: 'node', UNREACHABLE: 'unreachable', UNKNOWN: 'unknown' };
+// Derived by invoking the ACTUAL production routing function (resolveRouteOwner).
+const RUNTIME_OWNER = { GO: 'go', NODE: 'node', UNKNOWN: 'unknown' };
 
-function concretePath(canonicalPath) {
-  return canonicalPath.replace(/\{[^}]+\}/g, '__p8__');
-}
-
-function deriveRuntimeOwner(op, resolveRouteOwner) {
-  let routed;
+function deriveRuntimeOwner(method, canonicalPath, resolveRouteOwner) {
   try {
-    routed = resolveRouteOwner(op.method, concretePath(op.canonicalPath));
+    return resolveRouteOwner(method, concretePath(canonicalPath)) === 'go' ? RUNTIME_OWNER.GO : RUNTIME_OWNER.NODE;
   } catch {
     return RUNTIME_OWNER.UNKNOWN;
   }
-  if (routed === 'go') return RUNTIME_OWNER.GO;
-  if (routed !== 'node') return RUNTIME_OWNER.UNKNOWN;
-  // proxy.ts default branch: unmatched METHOD+PATH executes the Node route handler.
-  return existsSync(resolve(root, op.file)) ? RUNTIME_OWNER.NODE : RUNTIME_OWNER.UNREACHABLE;
 }
 
 // ---------------------------------------------------------------------------
 // Go registration classification (non-tautological)
 // ---------------------------------------------------------------------------
 // Every production Go registration must map to exactly one accepted category:
-//   A. exact current 72-operation inventory entry, or
-//   B. exact CUTOVER_TABLE (approved, production-routed Go-native) operation, or
-//   C. exact reviewed entry of the curated not-production-routed read residue list.
-// Anything else is UNCLASSIFIED_GO_REGISTRATION and fails Phase 8.0 acceptance.
+//   A. exact CUTOVER_TABLE (approved, production-routed Go-native) operation, or
+//   B. exact reviewed entry of the curated not-production-routed read residue list.
+// Anything else is UNCLASSIFIED_GO_REGISTRATION and fails Phase 8.3 acceptance.
 const GO_REG_CLASS = {
-  INVENTORY: 'INVENTORY_OPERATION',
   GO_NATIVE: 'GO_NATIVE_CUTOVER_OPERATION',
   GO_NATIVE_UNROUTED: 'GO_NATIVE_UNROUTED_READ',
   UNCLASSIFIED: 'UNCLASSIFIED_GO_REGISTRATION',
 };
 
-// Category C: explicit, CURATED allowlist of Go-native READ registrations that were
-// NOT production-routed in the Phase 8.0/8.1 current state. Phase 8.2 RESOLVED both
-// by adding exact METHOD+PATH production routing (KEEP_AS_PUBLIC_GO_API /
-// product-supported read), so the live allowlist is now EMPTY. The former entries are
-// retained below for provenance and are asserted to be inside CUTOVER_TABLE with
-// owner=go — resolving the architecture, not silently deleting the allowlist.
-//   GET /api/tariff-plans/{planId}/operations — rating UI caller exists; product surface.
-//   GET /api/ocs/balances/{imsi} — Go-first OCS balance read; kept as a public Go API.
+// Category B: curated allowlist of Go-native READ registrations that are NOT
+// production-routed. EMPTY after Phase 8.2 (both former entries were resolved by adding
+// exact production routing). The former entries are retained for provenance and are
+// asserted to be inside CUTOVER_TABLE with owner=go.
 const GO_NATIVE_UNROUTED_READS = new Set([
   // EMPTY after Phase 8.2. Do not add entries without an explicit architecture decision.
 ]);
@@ -449,8 +622,7 @@ const FORMER_GO_NATIVE_UNROUTED_READS = [
   'GET /api/ocs/balances/{imsi}',
 ];
 
-function classifyGoRegistration(key, inventoryKeys, cutoverKeys) {
-  if (inventoryKeys.has(key)) return GO_REG_CLASS.INVENTORY;
+function classifyGoRegistration(key, cutoverKeys) {
   if (cutoverKeys.has(key)) return GO_REG_CLASS.GO_NATIVE;
   if (GO_NATIVE_UNROUTED_READS.has(key)) return GO_REG_CLASS.GO_NATIVE_UNROUTED;
   return GO_REG_CLASS.UNCLASSIFIED;
@@ -463,7 +635,7 @@ const GO_SENTINEL_KEY = 'GET /api/__phase8_unclassified_sentinel__';
 // Main
 // ---------------------------------------------------------------------------
 async function main() {
-  console.log('-- Phase 8.0 Next.js Backend Removal Readiness --\n');
+  console.log('-- Phase 8.3 Next.js Business Backend Physical Removal --\n');
 
   const { table: cutover, resolveRouteOwner } = await loadCutoverTable();
   const cutoverKeys = new Set(cutover.map((r) => methodPathKey(r.method, r.path)));
@@ -471,41 +643,57 @@ async function main() {
 
   const { files: apiFiles, ops: sourceOps } = scanApiTree();
   const generated = loadGeneratedInventory();
-  const goRegs = loadGoRegistrations();
+  const goRegs = scanGoRouter();
   const goKeys = new Set(goRegs.map((r) => methodPathKey(r.method, r.canonicalPath)));
 
   const callers = scanCallers();
   const deps = scanDependencies();
   const proxy = scanProxy();
+  const { hits: serverImportHits, literalOnly: serverImportLiterals } = scanActiveServerImports();
+  const mongoAccess = scanNextBusinessMongo();
+  const sessionStore = scanSessionStore();
+
+  // ---- Derived removal evidence -------------------------------------------
+  const nextApiRouteFiles = apiFiles.length;
+  const nextApiOperations = sourceOps.length;
+  const nextServerTreePresent = existsSync(serverRoot);
+  const activeServerImports = serverImportHits.length;
+  const goRegisteredOperations = goRegs.length;
+  const goOwnerCount = cutover.filter((r) => r.owner === 'go').length;
+  const nextBusinessMongoReaders = mongoAccess.readers.length;
+  const nextBusinessMongoWriters = mongoAccess.writers.length;
 
   // ---- P8-I01 inventory complete ------------------------------------------
   const generatedOps = [];
-  if (generated) {
+  if (Array.isArray(generated)) {
     for (const route of generated) {
       for (const method of route.methods) {
-        generatedOps.push({ method, canonicalPath: canonicalize(route.path), nodePath: route.path, file: route.file });
+        generatedOps.push({ method, canonicalPath: canonicalize(route.path) });
       }
     }
   }
   const inventoryComplete =
-    Boolean(generated) &&
-    apiFiles.every((f) => existsSync(f)) &&
-    generatedOps.length === sourceOps.length;
+    Array.isArray(generated) && generatedOps.length === sourceOps.length && apiFiles.every((f) => existsSync(f));
   check('P8-I01', inventoryComplete, `inventory complete (generated=${generatedOps.length}, source-scan=${sourceOps.length})`);
 
-  // Use the source scan as the authoritative inventory (derived from current source).
+  // The source scan is the authoritative inventory (derived from current source).
   const inventory = sourceOps;
   const inventoryKeys = new Set(inventory.map((o) => methodPathKey(o.method, o.canonicalPath)));
 
-  // ---- P8-I02 exactly 72 current operations (six retired surfaces removed) ---
-  check('P8-I02', inventory.length === 72, `operations=${inventory.length} (expected 72)`);
+  // ---- P8-I02 Next.js API surface is physically gone -----------------------
+  // Replaces the historic "exactly 72 operations" gate, which is structurally
+  // impossible once the tree is removed. Keeps the identifier.
+  check(
+    'P8-I02',
+    nextApiRouteFiles === 0 && nextApiOperations === 0,
+    `next_api_route_files=${nextApiRouteFiles} next_api_operations=${nextApiOperations} (removal completion)`,
+  );
 
-  // ---- P8-I03 no duplicate METHOD+PATH --------------------------------------
-  check('P8-I03', inventoryKeys.size === inventory.length, `unique=${inventoryKeys.size} total=${inventory.length}`);
+  // ---- P8-I03 no duplicate METHOD+PATH -------------------------------------
+  const goRegsUnique = goKeys.size === goRegs.length;
+  check('P8-I03', goRegsUnique && inventoryKeys.size === inventory.length, `go_unique=${goKeys.size}/${goRegs.length} inventory_unique=${inventoryKeys.size}/${inventory.length}`);
 
-  // ---- P8-I04 CUTOVER_TABLE size DERIVED, never hard-coded -------------------
-  //   expected = 47 baseline + 33 canonical residual + 2 legacy aliases
-  //            + go-native residue cut over to production routing
+  // ---- P8-I04 CUTOVER_TABLE size DERIVED, never hard-coded -----------------
   const canonicalMissing = [...CANONICAL_RESIDUAL_KEYS].filter((k) => !cutoverKeys.has(k));
   const legacyMissing = [...LEGACY_ALIAS_READS].filter((k) => !cutoverKeys.has(k));
   const residueCutoverKeys = FORMER_GO_NATIVE_UNROUTED_READS.filter((k) => cutoverKeys.has(k));
@@ -520,72 +708,29 @@ async function main() {
     `CUTOVER_TABLE=${cutover.length} derived_expected=${expectedCutover} (47 baseline + ${CANONICAL_RESIDUAL_KEYS.size} canonical + ${LEGACY_ALIAS_READS.size} legacy + ${residueCutoverKeys.length} residue) canonical_missing=${canonicalMissing.length} legacy_missing=${legacyMissing.length}`,
   );
 
-  // ---- P8-I05 ACTUALLY_ROUTED == CUTOVER_TABLE and every entry owner=go ------
-  const goOwned = cutover.filter((r) => r.owner === 'go').length;
+  // ---- P8-I05 ACTUALLY_ROUTED == CUTOVER_TABLE and every entry owner=go -----
   const cutoverUniqueKeys = new Set(cutover.map((r) => methodPathKey(r.method, r.path)));
   check(
     'P8-I05',
-    goOwned === cutover.length && cutoverUniqueKeys.size === cutover.length,
-    `owner=go count=${goOwned} unique=${cutoverUniqueKeys.size} total=${cutover.length}`,
+    goOwnerCount === cutover.length && cutoverUniqueKeys.size === cutover.length,
+    `owner=go count=${goOwnerCount} unique=${cutoverUniqueKeys.size} total=${cutover.length}`,
   );
 
-  // ---- P8-I06 every cutover route exists in inventory or approved mapping ----
-  // Go-native cutover routes (registered by Go, no Node route file) are explicitly
-  // approved compatibility mappings.
-  const goNativeCutover = cutover.filter((r) => !inventoryKeys.has(methodPathKey(r.method, r.path)));
-  const goNativeApproved = goNativeCutover.every((r) => goKeys.has(methodPathKey(r.method, r.path)));
+  // ---- P8-I06 every cutover route is Go-registered (missing-route detection) --
+  const cutoverWithoutGoRegistration = [...cutoverKeys].filter((k) => !goKeys.has(k)).sort();
   check(
     'P8-I06',
-    goNativeApproved,
-    `cutover in inventory=${cutover.length - goNativeCutover.length}, go-native approved=${goNativeCutover.length}`,
+    cutoverWithoutGoRegistration.length === 0,
+    `cutover_without_go_registration=${cutoverWithoutGoRegistration.length}`,
   );
 
-  // ---- Classification of every inventory operation --------------------------
-  // Order matters: the two legacy compatibility aliases are Go-routed after
-  // Phase 8.2 but MUST keep lifecycle LEGACY_ALIAS (they are only read aliases and
-  // must never be presented as canonical Go production surfaces). The legacy set is
-  // therefore evaluated BEFORE the cutover membership test.
-  const classified = inventory.map((op) => {
-    const key = methodPathKey(op.method, op.canonicalPath);
-    let classification;
-    if (LEGACY_ALIAS_READS.has(key)) classification = CLASS.LEGACY;
-    else if (RETIRED_SURFACES.has(key)) classification = CLASS.RETIRED;
-    else if (cutoverKeys.has(key)) classification = CLASS.GO;
-    else classification = CLASS.NODE;
-
-    return {
-      method: op.method,
-      nodePath: op.nodePath,
-      canonicalPath: op.canonicalPath,
-      file: op.file,
-      key,
-      classification,
-      inCutover: cutoverKeys.has(key),
-      goRegistered: goKeys.has(key),
-      // Runtime ownership is EXECUTABLE evidence: proxy.ts resolves each request by
-      // invoking resolveRouteOwner(method, path) and defaults every unmatched
-      // METHOD+PATH to the Next.js Node handler. It is never inferred from the
-      // lifecycle label (RETIRED_SURFACE does not imply unreachable, LEGACY_ALIAS
-      // does not imply Go).
-      runtimeOwner: deriveRuntimeOwner(op, resolveRouteOwner),
-      callers: callers.filter((c) => patternRegex(op.canonicalPath).test(c.normalised)).map((c) => `${c.file}:${c.line}`),
-    };
-  });
-
-  const byClass = (cls) => classified.filter((o) => o.classification === cls);
-  const goProductionOwned = byClass(CLASS.GO);
-  const nodeProductionOwned = byClass(CLASS.NODE);
-  const legacyAlias = byClass(CLASS.LEGACY);
-  const retiredSurface = byClass(CLASS.RETIRED);
-  const testOnly = byClass(CLASS.TEST);
-  const unresolved = byClass(CLASS.UNRESOLVED);
-
-  // ---- P8-I07 every operation has a production-owner classification ---------
-  check('P8-I07', classified.every((o) => o.classification && o.classification !== CLASS.UNRESOLVED), `classified=${classified.length}`);
-
-  // ---- P8-I08 unknown production owner = 0 ----------------------------------
-  const unknownOwner = classified.filter((o) => o.classification === CLASS.UNRESOLVED).length;
-  check('P8-I08', unknownOwner === 0, `unknown_production_owner=${unknownOwner}`);
+  // ---- P8-I07 every Go registration is cutover-routed (phantom detection) ----
+  const goRegisteredUnrouted = [...goKeys].filter((k) => !cutoverKeys.has(k)).sort();
+  check(
+    'P8-I07',
+    goRegisteredUnrouted.length === 0,
+    `go_registered_unrouted=${goRegisteredUnrouted.length}`,
+  );
 
   // ---- P8-I09 every frontend API caller mapped ------------------------------
   const knowable = [...inventory.map((o) => o.canonicalPath), ...goRegs.map((r) => r.canonicalPath)];
@@ -603,18 +748,30 @@ async function main() {
   }
   check('P8-I09', unmappedCallers.length === 0, `frontend_api_callers_unmapped=${unmappedCallers.length}`);
 
-  // ---- P8-I10 every Node route classified -----------------------------------
-  check('P8-I10', classified.length === inventory.length, `node routes classified=${classified.length}/${inventory.length}`);
+  // ---- P8-I08 unknown production owner = 0 ----------------------------------
+  check(
+    'P8-I08',
+    unmappedCallers.length === 0 && goRegisteredUnrouted.length === 0,
+    `unknown_production_owner=${unmappedCallers.length + goRegisteredUnrouted.length}`,
+  );
+
+  // ---- P8-I10 no ACTIVE executable code references the removed tree ---------
+  // Roots: frontend/src/** (removed trees excluded), frontend/tests/**, scripts/**,
+  // .github/**; documentation (docs/**) is excluded and code comments are stripped.
+  // This is the "physical removal is truly complete" hygiene gate: any surviving
+  // reference is either a live import of a deleted module or a stale toolchain path.
+  check(
+    'P8-I10',
+    activeServerImports === 0,
+    `active_server_imports=${activeServerImports} (frontend/src + frontend/tests + scripts + .github)`,
+  );
 
   // ---- P8-I11 every Go production route registration classified -------------
-  // Non-tautological classification: each registration must independently map to
-  //   A. an exact current 72-operation inventory entry, or
-  //   B. an exact approved Go-native CUTOVER_TABLE operation,
-  // otherwise it is UNCLASSIFIED_GO_REGISTRATION and readiness must fail.
-  // Existence inside goRegs itself is NOT evidence (that was the old tautology).
+  // Non-tautological: each registration must independently map to an exact approved
+  // CUTOVER_TABLE operation, otherwise it is UNCLASSIFIED_GO_REGISTRATION.
   const goRegistrationClasses = goRegs.map((r) => {
     const key = methodPathKey(r.method, r.canonicalPath);
-    return { key, file: r.file, category: classifyGoRegistration(key, inventoryKeys, cutoverKeys) };
+    return { key, file: r.file, category: classifyGoRegistration(key, cutoverKeys) };
   });
   const goClassifiedRegistrations = goRegistrationClasses.filter((r) => r.category !== GO_REG_CLASS.UNCLASSIFIED);
   const goUnclassified = goRegistrationClasses.filter((r) => r.category === GO_REG_CLASS.UNCLASSIFIED);
@@ -629,47 +786,12 @@ async function main() {
   );
 
   // ---- P8-I11-SENTINEL classification gate is falsifiable --------------------
-  // A synthetic registration that is neither an inventory operation nor an approved
-  // Go-native cutover operation MUST be classified as UNCLASSIFIED. Pure in-memory:
-  // it is never registered in the production Go router.
-  const sentinelCategory = classifyGoRegistration(GO_SENTINEL_KEY, inventoryKeys, cutoverKeys);
+  const sentinelCategory = classifyGoRegistration(GO_SENTINEL_KEY, cutoverKeys);
   const sentinelDetected = sentinelCategory === GO_REG_CLASS.UNCLASSIFIED;
   check(
     'P8-I11-SENTINEL',
     sentinelDetected,
     `synthetic "${GO_SENTINEL_KEY}" -> ${sentinelCategory} (must be UNCLASSIFIED_GO_REGISTRATION)`,
-  );
-
-  // ---- P8-I19 runtime ownership fully classified -----------------------------
-  const runtimeCounts = { go: 0, node: 0, unreachable: 0, unknown: 0 };
-  for (const o of classified) runtimeCounts[o.runtimeOwner] += 1;
-  const runtimeTotal = runtimeCounts.go + runtimeCounts.node + runtimeCounts.unreachable + runtimeCounts.unknown;
-  check(
-    'P8-I19',
-    runtimeCounts.unknown === 0 && runtimeTotal === inventory.length,
-    `runtime_owner go=${runtimeCounts.go} node=${runtimeCounts.node} unreachable=${runtimeCounts.unreachable} unknown=${runtimeCounts.unknown}, total=${runtimeTotal}`,
-  );
-
-  // ---- P8-I20 legacy alias / retired surface ownership derived from routing --
-  // Phase 8.2 moved the two READ-ONLY legacy aliases onto Go production routing
-  // while keeping lifecycle LEGACY_ALIAS. Runtime ownership remains EXECUTABLE
-  // evidence: derived by invoking the production routing function
-  // (resolveRouteOwner), never inferred from the lifecycle label. Retired surfaces
-  // must be neither routed nor Go-registered.
-  const compatibilitySurfaces = classified.filter(
-    (o) => o.classification === CLASS.LEGACY || o.classification === CLASS.RETIRED,
-  );
-  const routingDiscriminates = classified.some((o) => o.runtimeOwner === RUNTIME_OWNER.GO);
-  const legacyGoOwned = classified
-    .filter((o) => o.classification === CLASS.LEGACY)
-    .every((o) => o.inCutover && o.runtimeOwner === RUNTIME_OWNER.GO);
-  const retiredSurfacesNotExecutable = classified
-    .filter((o) => o.classification === CLASS.RETIRED)
-    .every((o) => !o.inCutover && !o.goRegistered);
-  check(
-    'P8-I20',
-    routingDiscriminates && legacyGoOwned && retiredSurfacesNotExecutable,
-    `legacy+retired=${compatibilitySurfaces.length} legacy_runtime_go_via_resolveRouteOwner=${legacyGoOwned} retired_not_executable=${retiredSurfacesNotExecutable}, routing discriminates=${routingDiscriminates}`,
   );
 
   // ---- P8-I12/I13/I14 dependency consumers classified -----------------------
@@ -685,79 +807,82 @@ async function main() {
   check('P8-DEP', depUnresolved.length === 0, `dependency consumers unresolved=${depUnresolved.length}`);
 
   // ---- P8-I15 proxy runtime responsibilities classified ---------------------
-  check('P8-I15', proxy.responsibilities.every((r) => r.ok), `proxy responsibilities=${proxy.responsibilities.filter((r) => r.ok).length}/${proxy.responsibilities.length}`);
-
-  // ---- P8-I16 canonical Node migration remainder must be zero ----------------
-  // Phase 8.1 froze 33 canonical residual Node-owned operations. Phase 8.2 cuts
-  // all 33 over, so the current-state remainder derived from today's source must be
-  // empty; any surviving NODE_PRODUCTION_OWNED operation fails this gate.
-  const nodeRemainder = nodeProductionOwned.map((o) => ({
-    method: o.method,
-    path: o.canonicalPath,
-    reason: 'Operation is not production-routed through CUTOVER_TABLE; Node remains production owner',
-    goImplementation: o.goRegistered ? 'PRESENT' : 'ABSENT',
-    parity: o.goRegistered
-      ? 'SHADOW PARITY SUITE: scripts/test-phase-8-residual-api-parity.mjs'
-      : 'N/A',
-    cutoverReadiness: 'CANDIDATE',
-    decision: 'MIGRATE_TO_GO',
-    requiredPhase: '8.2',
-    goRegistered: o.goRegistered,
-    inCutover: o.inCutover,
-    runtimeOwner: o.runtimeOwner,
-  }));
   check(
-    'P8-I16',
-    nodeRemainder.length === 0,
-    `canonical_node_migration_remainder=${nodeRemainder.length}`,
+    'P8-I15',
+    proxy.responsibilities.every((r) => r.ok),
+    `proxy responsibilities=${proxy.responsibilities.filter((r) => r.ok).length}/${proxy.responsibilities.length}`,
   );
 
-  // ---- P8-I21 frozen canonical residual set is fully cut over to Go ----------
-  // Non-tautological current-state gate: the 33 exact Phase 8.1 frozen canonical
-  // METHOD+PATH operations must each independently be (a) present in CUTOVER_TABLE,
-  // (b) owner=go, (c) registered in the production Go router, and (d) resolve to
-  // the Go runtime owner through resolveRouteOwner. None may remain Node-owned.
+  // ---- P8-I16 Next.js owns no business MongoDB data plane -------------------
+  // Replaces the historic "canonical Node migration remainder == 0" gate, which is
+  // vacuously true once no Node operation exists. This is the equivalent
+  // removal-completion invariant: the surviving Next.js production source performs
+  // zero reads and zero writes against business collections.
+  check(
+    'P8-I16',
+    nextBusinessMongoReaders === 0 && nextBusinessMongoWriters === 0,
+    `next_business_mongo_readers=${nextBusinessMongoReaders} next_business_mongo_writers=${nextBusinessMongoWriters}`,
+  );
+
+  // ---- P8-I17 charging-plane boundary preserved -----------------------------
+  // Charging-plane collections may be READ over HTTP (Go-owned management reads) but no
+  // charging-plane mutation may be routed.
+  const chargingCutoverOps = [...cutoverKeys].filter((k) => /^\w+ \/api\/ocs\/(sessions|reservations|usage)$/.test(k));
+  const chargingReadOnly = chargingCutoverOps.every((k) => k.startsWith('GET '));
+  const chargingMutatingOps = [...cutoverKeys].filter(
+    (k) => /\/api\/ocs\/(sessions|reservations|usage)/.test(k) && !k.startsWith('GET '),
+  );
+  check(
+    'P8-I17',
+    chargingCutoverOps.length > 0 && chargingReadOnly && chargingMutatingOps.length === 0,
+    `charging reads=${chargingCutoverOps.length} read-only=${chargingReadOnly} charging_mutations=${chargingMutatingOps.length}`,
+  );
+
+  // ---- P8-I19 runtime ownership fully Go (derived by resolveRouteOwner) -----
+  const runtimeUnknown = cutover.filter(
+    (r) => deriveRuntimeOwner(r.method, r.path, resolveRouteOwner) !== RUNTIME_OWNER.GO,
+  );
+  const runtimeCounts = { go: 0, node: 0, unknown: 0 };
+  for (const r of cutover) runtimeCounts[deriveRuntimeOwner(r.method, r.path, resolveRouteOwner)] += 1;
+  check(
+    'P8-I19',
+    runtimeUnknown.length === 0 && runtimeCounts.unknown === 0,
+    `cutover runtime_owner go=${runtimeCounts.go} node=${runtimeCounts.node} unknown=${runtimeCounts.unknown}, non_go=${runtimeUnknown.length}`,
+  );
+
+  // ---- P8-I20 legacy alias / retired surface ownership from routing --------
+  const routingDiscriminates = cutover.some((r) => r.owner === 'go');
+  const legacyGoOwned = [...LEGACY_ALIAS_READS].every(
+    (k) => cutoverByKey.get(k)?.owner === 'go' && goKeys.has(k),
+  );
+  const retiredSurfacesNotExecutable = [...RETIRED_SURFACES].every((k) => !cutoverKeys.has(k) && !goKeys.has(k));
+  check(
+    'P8-I20',
+    routingDiscriminates && legacyGoOwned && retiredSurfacesNotExecutable,
+    `legacy_aliases=${LEGACY_ALIAS_READS.size} legacy_go_owned=${legacyGoOwned} retired_not_executable=${retiredSurfacesNotExecutable}, routing discriminates=${routingDiscriminates}`,
+  );
+
+  // ---- P8-I21 frozen canonical residual set is fully cut over to Go ---------
   const canonicalKeys = [...CANONICAL_RESIDUAL_KEYS];
   const canonicalNotCutover = canonicalKeys.filter((k) => !cutoverKeys.has(k));
   const canonicalNotGoOwned = canonicalKeys.filter((k) => cutoverByKey.get(k)?.owner !== 'go');
   const canonicalNotGoRegistered = canonicalKeys.filter((k) => !goKeys.has(k));
-  const canonicalClassified = classified.filter((o) => CANONICAL_RESIDUAL_KEYS.has(o.key));
-  const canonicalRuntimeGo = canonicalClassified.filter((o) => o.runtimeOwner === RUNTIME_OWNER.GO).length;
-  const canonicalRuntimeNode = canonicalClassified.filter((o) => o.runtimeOwner === RUNTIME_OWNER.NODE).length;
-  const residualWithGoShadow = canonicalClassified.filter((o) => o.goRegistered).length;
-  const residualMissingGo = canonicalKeys.filter((k) => !goKeys.has(k));
+  const canonicalRuntimeGo = canonicalKeys.filter(
+    (k) => {
+      const [method, path] = k.split(' ');
+      return deriveRuntimeOwner(method, path, resolveRouteOwner) === RUNTIME_OWNER.GO;
+    },
+  ).length;
   check(
     'P8-I21',
-    canonicalClassified.length === CANONICAL_RESIDUAL_KEYS.size &&
-      canonicalNotCutover.length === 0 &&
+    canonicalNotCutover.length === 0 &&
       canonicalNotGoOwned.length === 0 &&
       canonicalNotGoRegistered.length === 0 &&
-      canonicalRuntimeGo === CANONICAL_RESIDUAL_KEYS.size &&
-      canonicalRuntimeNode === 0,
-    `canonical_expected=${CANONICAL_RESIDUAL_KEYS.size} in_inventory=${canonicalClassified.length} cutover=${canonicalKeys.length - canonicalNotCutover.length} runtime_go=${canonicalRuntimeGo} runtime_node=${canonicalRuntimeNode} missing_go=${canonicalNotGoRegistered.length}`,
-  );
-
-  // ---- P8-I17 charging-plane boundary preserved -----------------------------
-  // Charging-plane collections (ocs_sessions / ocs_reservations / ocs_usage) may be
-  // READ over HTTP (now Go-owned as management/read surfaces) but must never be
-  // scheduled for charging-runtime migration, and no charging-plane mutation may
-  // exist in the current inventory.
-  const chargingOps = classified.filter((o) => /\/api\/ocs\/(sessions|reservations|usage)$/.test(o.nodePath));
-  const chargingReadOnly = chargingOps.every((o) => o.method === 'GET');
-  const chargingCutover = chargingOps.every((o) => o.inCutover);
-  const chargingRuntimeGo = chargingOps.every((o) => o.runtimeOwner === RUNTIME_OWNER.GO);
-  const chargingMutatingOps = classified.filter(
-    (o) => /\/api\/ocs\/(sessions|reservations|usage)/.test(o.nodePath) && o.method !== 'GET',
-  );
-  check(
-    'P8-I17',
-    chargingReadOnly && chargingCutover && chargingRuntimeGo && chargingMutatingOps.length === 0,
-    `charging reads=${chargingOps.length} read-only=${chargingReadOnly} cutover=${chargingCutover} runtime_go=${chargingRuntimeGo} charging_mutations=${chargingMutatingOps.length}`,
+      canonicalRuntimeGo === CANONICAL_RESIDUAL_KEYS.size,
+    `canonical_expected=${CANONICAL_RESIDUAL_KEYS.size} cutover=${canonicalKeys.length - canonicalNotCutover.length} go_registered=${canonicalKeys.length - canonicalNotGoRegistered.length} runtime_go=${canonicalRuntimeGo}`,
   );
 
   // ---- P8-I22 the six retired surfaces are no longer executable -------------
-  // Exact retired METHOD+PATH contracts must be absent from the current operation
-  // inventory, absent from CUTOVER_TABLE, and absent from the production Go router.
   const retiredKeys = [...RETIRED_SURFACES];
   const retiredStillInInventory = retiredKeys.filter((k) => inventoryKeys.has(k));
   const retiredStillRouted = retiredKeys.filter((k) => cutoverKeys.has(k));
@@ -769,9 +894,6 @@ async function main() {
   );
 
   // ---- P8-I23 both Go-native unrouted reads resolved to production routing ---
-  // The two Phase 8.0 curated residue reads must now be inside CUTOVER_TABLE with
-  // owner=go; the live unrouted allowlist must be empty. This proves the
-  // architecture was resolved, not that the allowlist entries were deleted.
   const residueNotCutover = FORMER_GO_NATIVE_UNROUTED_READS.filter((k) => !cutoverKeys.has(k));
   const residueNotGoOwned = FORMER_GO_NATIVE_UNROUTED_READS.filter((k) => cutoverByKey.get(k)?.owner !== 'go');
   check(
@@ -780,32 +902,62 @@ async function main() {
       residueNotCutover.length === 0 &&
       residueNotGoOwned.length === 0 &&
       goUnroutedReads.length === 0,
-    `go_native_unrouted_start=${FORMER_GO_NATIVE_UNROUTED_READS.length} residue_cutover=${residueCutoverKeys.length} residue_removed=0 remaining_unrouted=${goUnroutedReads.length}`,
+    `go_native_unrouted_start=${FORMER_GO_NATIVE_UNROUTED_READS.length} residue_cutover=${residueCutoverKeys.length} remaining_unrouted=${goUnroutedReads.length}`,
   );
 
   // ---- P8-I24 stale callers to retired surfaces = 0 --------------------------
   const staleCallersToRetired = retiredCallers.length;
   check('P8-I24', staleCallersToRetired === 0, `stale_callers_to_retired_surfaces=${staleCallersToRetired}`);
 
-  // ---- P8-I18 deletion readiness derived from evidence ----------------------
-  const legacyNodeDependency = classified.filter(
-    (o) => o.classification === CLASS.LEGACY && o.runtimeOwner !== RUNTIME_OWNER.GO,
-  ).length;
-  const nodeProductionOperations = runtimeCounts.node;
+  // ---- P8-I25 proxy session validation contract preserved -------------------
+  check(
+    'P8-I25',
+    proxy.sessionValidationPresent,
+    `proxy_session_validation_present=${proxy.sessionValidationPresent}`,
+  );
+
+  // ---- P8-I26 surviving session store is read-only --------------------------
+  check(
+    'P8-I26',
+    sessionStore.present && sessionStore.readOnly,
+    `session_store present=${sessionStore.present} read_only=${sessionStore.readOnly} ops=[${sessionStore.ops.join(',')}] collections=[${sessionStore.collections.join(',')}]`,
+  );
+
+  // ---- P8-I27 Next.js business backend removed ------------------------------
+  // "Business backend removed" = the App Router API tree, the server layer and the
+  // business MongoDB data plane are physically gone. Stale references from test/tooling
+  // harness code are a separate hygiene gate (P8-I10) and do not redefine this fact.
+  const nextBusinessApiOperations = inventory.length;
+  const nextBusinessBackendRemoved =
+    nextApiRouteFiles === 0 &&
+    nextApiOperations === 0 &&
+    !nextServerTreePresent &&
+    nextBusinessMongoReaders === 0 &&
+    nextBusinessMongoWriters === 0;
+  check(
+    'P8-I27',
+    nextBusinessBackendRemoved,
+    `next_business_api_operations=${nextBusinessApiOperations} next_business_backend_removed=${nextBusinessBackendRemoved}`,
+  );
+
+  // ---- P8-I18 removal readiness derived from evidence ----------------------
   const blockers = [];
-  if (nodeRemainder.length > 0) blockers.push(`CANONICAL_NODE_MIGRATION_REMAINDER=${nodeRemainder.length}`);
-  if (retiredSurface.length > 0) blockers.push(`RETIRED_SURFACES_PENDING_DELETION=${retiredSurface.length}`);
-  if (legacyNodeDependency > 0) blockers.push(`LEGACY_ALIAS_NODE_DEPENDENCY=${legacyNodeDependency}`);
+  if (nextApiRouteFiles > 0) blockers.push(`NEXT_API_ROUTE_FILES=${nextApiRouteFiles}`);
+  if (nextApiOperations > 0) blockers.push(`NEXT_API_OPERATIONS=${nextApiOperations}`);
+  if (nextServerTreePresent) blockers.push('NEXT_SERVER_TREE_PRESENT');
+  if (activeServerImports > 0) blockers.push(`ACTIVE_SERVER_IMPORTS=${activeServerImports}`);
+  if (nextBusinessMongoReaders > 0) blockers.push(`NEXT_BUSINESS_MONGO_READERS=${nextBusinessMongoReaders}`);
+  if (nextBusinessMongoWriters > 0) blockers.push(`NEXT_BUSINESS_MONGO_WRITERS=${nextBusinessMongoWriters}`);
+  if (goRegisteredUnrouted.length > 0) blockers.push(`GO_REGISTERED_UNROUTED=${goRegisteredUnrouted.length}`);
+  if (goUnclassified.length > 0) blockers.push(`GO_REGISTERED_UNCLASSIFIED=${goUnclassified.length}`);
+  if (cutoverWithoutGoRegistration.length > 0) blockers.push(`CUTOVER_WITHOUT_GO_REGISTRATION=${cutoverWithoutGoRegistration.length}`);
+  if (unmappedCallers.length > 0) blockers.push(`FRONTEND_API_CALLERS_UNMAPPED=${unmappedCallers.length}`);
   if (staleCallersToRetired > 0) blockers.push(`STALE_CALLERS_TO_RETIRED_SURFACES=${staleCallersToRetired}`);
-  if (goUnroutedReads.length > 0) blockers.push(`GO_REGISTERED_UNROUTED_READS=${goUnroutedReads.length}`);
-  if (nodeProductionOperations > 0) blockers.push(`NODE_PRODUCTION_OPERATIONS=${nodeProductionOperations}`);
+  if (depUnresolved.length > 0) blockers.push(`DEPENDENCY_CONSUMERS_UNRESOLVED=${depUnresolved.length}`);
   if (runtimeCounts.unknown > 0) blockers.push(`RUNTIME_OWNER_UNKNOWN=${runtimeCounts.unknown}`);
-  const backendRemovalReady =
-    blockers.length === 0 &&
-    unresolved.length === 0 &&
-    unknownOwner === 0 &&
-    unmappedCallers.length === 0 &&
-    depUnresolved.length === 0;
+  if (!proxy.sessionValidationPresent) blockers.push('PROXY_SESSION_VALIDATION_MISSING');
+  if (!sessionStore.present || !sessionStore.readOnly) blockers.push('SESSION_STORE_NOT_READ_ONLY');
+  const backendRemovalReady = blockers.length === 0;
   check('P8-I18', backendRemovalReady, `backend_removal_ready=${backendRemovalReady} blockers=${blockers.length}`);
 
   // ---------------------------------------------------------------------------
@@ -813,39 +965,11 @@ async function main() {
   // ---------------------------------------------------------------------------
   console.log('Invariants:');
   for (const inv of invariants) {
-    console.log(`  ${inv.ok ? 'PASS' : 'FAIL'}  ${inv.id.padEnd(8)} ${inv.detail}`);
+    console.log(`  ${inv.ok ? 'PASS' : 'FAIL'}  ${inv.id.padEnd(14)} ${inv.detail}`);
   }
 
-  console.log('\n-- Canonical Node migration remainder (lifecycle NODE_PRODUCTION_OWNED) --');
-  for (const r of nodeRemainder) {
-    console.log(`  ${r.method.padEnd(7)} ${r.path} go_shadow=${r.goRegistered ? 'yes' : 'no'} runtime_owner=${r.runtimeOwner}`);
-  }
-
-  console.log('\n-- Runtime ownership (derived by invoking resolveRouteOwner) --');
-  console.log(`  go=${runtimeCounts.go} node=${runtimeCounts.node} unreachable=${runtimeCounts.unreachable} unknown=${runtimeCounts.unknown} total=${runtimeTotal}`);
-  console.log('-- Legacy alias / retired surface runtime ownership --');
-  for (const o of compatibilitySurfaces) {
-    console.log(`  ${o.method.padEnd(7)} ${o.canonicalPath} lifecycle=${o.classification} runtime_owner=${o.runtimeOwner}`);
-  }
-
-  if (goUnclassified.length) {
-    console.log('\n-- UNCLASSIFIED Go registrations --');
-    for (const r of goUnclassified) console.log(`  ${r.key} (${r.file})`);
-  }
-
-  if (goUnroutedReads.length) {
-    console.log('\n-- Go-native read registrations not production-routed (tracked residue) --');
-    for (const r of goUnroutedReads) console.log(`  ${r.key} (${r.file})`);
-  }
-
-  if (retiredCallers.length) {
-    console.log('\n-- Stale frontend callers to retired surfaces --');
-    for (const c of retiredCallers) console.log(`  ${c.file}:${c.line} -> ${c.normalised}`);
-  }
-  if (unmappedCallers.length) {
-    console.log('\n-- UNMAPPED frontend callers --');
-    for (const c of unmappedCallers) console.log(`  ${c.file}:${c.line} -> ${c.normalised}`);
-  }
+  console.log('\n-- Runtime ownership of CUTOVER_TABLE (derived by invoking resolveRouteOwner) --');
+  console.log(`  go=${runtimeCounts.go} node=${runtimeCounts.node} unknown=${runtimeCounts.unknown} total=${cutover.length}`);
 
   console.log('\n-- Dependency consumers --');
   for (const mod of TRACKED_MODULES) {
@@ -854,69 +978,94 @@ async function main() {
     console.log(`  ${mod}: total=${deps[mod].length} ${JSON.stringify(cls)}`);
   }
 
+  if (goUnclassified.length) {
+    console.log('\n-- UNCLASSIFIED Go registrations --');
+    for (const r of goUnclassified) console.log(`  ${r.key} (${r.file})`);
+  }
+  if (cutoverWithoutGoRegistration.length) {
+    console.log('\n-- CUTOVER_TABLE routes missing from the Go router --');
+    for (const key of cutoverWithoutGoRegistration) console.log(`  ${key}`);
+  }
+  if (goRegisteredUnrouted.length) {
+    console.log('\n-- Go registrations outside CUTOVER_TABLE (phantom) --');
+    for (const key of goRegisteredUnrouted) console.log(`  ${key}`);
+  }
+  if (serverImportHits.length) {
+    console.log('\n-- ACTIVE dependencies on the removed Next.js server tree --');
+    for (const hit of serverImportHits) console.log(`  ${hit.file}:${hit.line} ${hit.text}`);
+  }
+  if (serverImportLiterals.length) {
+    console.log('\n-- INFO: bare literals naming the removed tree (not dependencies) --');
+    for (const hit of serverImportLiterals) console.log(`  ${hit.file}:${hit.line} ${hit.text}`);
+  }
+  if (retiredCallers.length) {
+    console.log('\n-- Stale frontend callers to retired surfaces --');
+    for (const c of retiredCallers) console.log(`  ${c.file}:${c.line} -> ${c.normalised}`);
+  }
+  if (unmappedCallers.length) {
+    console.log('\n-- UNMAPPED frontend callers --');
+    for (const c of unmappedCallers) console.log(`  ${c.file}:${c.line} -> ${c.normalised}`);
+  }
+  if (mongoAccess.readers.length || mongoAccess.writers.length) {
+    console.log('\n-- Surviving Next.js business MongoDB access --');
+    for (const r of mongoAccess.readers) console.log(`  READ  ${r.file} [${r.collections.join(',')}]`);
+    for (const w of mongoAccess.writers) console.log(`  WRITE ${w.file} [${w.collections.join(',')}]`);
+  }
+
   const acceptanceFailures = invariants.filter((i) => !i.ok);
-  const critical = unresolved.length + unknownOwner + unmappedCallers.length + depUnresolved.length;
 
   console.log('\n==================================================');
-  console.log('Phase 8 Next.js Backend Removal Readiness (Phase 8.2 current state)');
-  console.log(`api_route_files=${apiFiles.length}`);
-  console.log(`api_operations=${inventory.length}`);
+  console.log('Phase 8.3 Next.js Business Backend Physical Removal');
+  console.log(`next_api_route_files=${nextApiRouteFiles}`);
+  console.log(`next_api_operations=${nextApiOperations}`);
+  console.log(`next_server_tree_present=${nextServerTreePresent}`);
+  console.log(`active_server_imports=${activeServerImports}`);
+  console.log(`removal_residual_references=${activeServerImports}`);
+  console.log(`removal_reference_literals=${serverImportLiterals.length}`);
+  console.log('');
   console.log(`cutover_routes=${cutover.length}`);
-  console.log(`actually_routed=${goOwned}`);
-  console.log('');
-  console.log(`go_production_owned=${goProductionOwned.length}`);
-  console.log(`node_production_owned=${nodeProductionOwned.length}`);
-  console.log(`legacy_alias=${legacyAlias.length}`);
-  console.log(`retired_surface=${retiredSurface.length}`);
-  console.log(`test_only=${testOnly.length}`);
-  console.log(`unresolved=${unresolved.length}`);
-  console.log('');
-  console.log(`frontend_api_callers_unmapped=${unmappedCallers.length}`);
-  console.log(`stale_callers_to_retired_surfaces=${staleCallersToRetired}`);
-  console.log(`unknown_production_owner=${unknownOwner}`);
-  console.log('');
-  console.log(`inventory_runtime_go=${runtimeCounts.go}`);
-  console.log(`inventory_runtime_node=${runtimeCounts.node}`);
-  console.log(`inventory_runtime_unreachable=${runtimeCounts.unreachable}`);
-  console.log(`runtime_owner_unknown=${runtimeCounts.unknown}`);
-  console.log(`node_production_operations=${nodeProductionOperations}`);
-  console.log(`legacy_alias_node_dependency=${legacyNodeDependency}`);
-  console.log('');
-  console.log(`go_registered_operations=${goRegistrationClasses.length}`);
+  console.log(`actually_routed=${goOwnerCount}`);
+  console.log(`go_registered_operations=${goRegisteredOperations}`);
+  console.log(`go_cutover_operations=${goOwnerCount}`);
   console.log(`go_registered_classified=${goClassifiedRegistrations.length}`);
   console.log(`go_registered_unclassified=${goUnclassified.length}`);
-  console.log(`go_native_cutover_operations=${goNativeCutover.length}`);
-  console.log(`go_registered_unrouted_reads=${goUnroutedReads.length}`);
+  console.log(`go_registered_unrouted=${goRegisteredUnrouted.length}`);
+  console.log(`cutover_without_go_registration=${cutoverWithoutGoRegistration.length}`);
   console.log(`go_registration_negative_sentinel=${sentinelDetected}`);
-  for (const r of goUnroutedReads) console.log(`go_registered_unrouted_read=${r.key}`);
+  console.log('');
+  console.log(`next_business_api_operations=${nextBusinessApiOperations}`);
+  console.log(`next_business_mongo_readers=${nextBusinessMongoReaders}`);
+  console.log(`next_business_mongo_writers=${nextBusinessMongoWriters}`);
+  console.log(`frontend_api_callers_unmapped=${unmappedCallers.length}`);
+  console.log(`stale_callers_to_retired_surfaces=${staleCallersToRetired}`);
+  console.log('');
+  console.log(`proxy_session_validation_present=${proxy.sessionValidationPresent}`);
+  console.log(`proxy_session_store_read_only=${sessionStore.present && sessionStore.readOnly}`);
   console.log('');
   console.log(`canonical_residual_expected=${CANONICAL_RESIDUAL_KEYS.size}`);
-  console.log(`canonical_residual_cutover=${canonicalKeys.length - canonicalNotCutover.length}`);
   console.log(`canonical_residual_runtime_go=${canonicalRuntimeGo}`);
-  console.log(`canonical_residual_runtime_node=${canonicalRuntimeNode}`);
-  console.log(`canonical_node_migration_remainder=${nodeRemainder.length}`);
-  console.log(`canonical_node_with_go_shadow=${residualWithGoShadow}`);
-  console.log(`canonical_node_missing_go=${residualMissingGo.length}`);
-  console.log(`retired_surfaces_active=${retiredStillInInventory.length + retiredStillRouted.length + retiredInGoRouter.length}`);
+  console.log(`runtime_owner_unknown=${runtimeCounts.unknown}`);
   console.log(`go_native_unrouted_start=${FORMER_GO_NATIVE_UNROUTED_READS.length}`);
   console.log(`go_native_residue_cutover=${residueCutoverKeys.length}`);
-  console.log(`go_native_residue_removed=0`);
   console.log(`go_native_unrouted_remaining=${goUnroutedReads.length}`);
-  for (const r of residualMissingGo) console.log(`canonical_node_missing_go_operation=${r}`);
+  console.log(`retired_surfaces_active=${retiredStillInInventory.length + retiredStillRouted.length + retiredInGoRouter.length}`);
+  console.log('');
   console.log(`backend_removal_ready=${backendRemovalReady}`);
+  console.log(`next_business_backend_removed=${nextBusinessBackendRemoved}`);
   console.log(`backend_removal_blockers=${blockers.length}`);
   for (const b of blockers) console.log(`backend_removal_blocker=${b}`);
+  for (const hit of serverImportHits) console.log(`removal_residual_reference=${hit.file}:${hit.line}`);
   console.log('');
-  console.log(`phase8_acceptance=${critical === 0 && acceptanceFailures.length === 0 ? 'PASS' : 'FAIL'}`);
-  console.log(`invariants_failed=${acceptanceFailures.length}`);
+  console.log(`phase83_acceptance=${acceptanceFailures.length === 0 ? 'PASS' : 'FAIL'}`);
+  console.log(`phase83_invariants_failed=${acceptanceFailures.length}`);
   console.log('==================================================\n');
 
-  if (critical > 0 || acceptanceFailures.length > 0) {
-    console.error('Phase 8.2 backend-removal readiness FAILED (unresolved/unknown/unmapped/invariant failure).');
+  if (acceptanceFailures.length > 0) {
+    console.error('Phase 8.3 Next.js business backend removal verification FAILED.');
     process.exit(1);
   }
 
-  console.log('Phase 8.2 backend-removal readiness result: PASS' + (backendRemovalReady ? ' (backend removal READY)' : ' (backend removal BLOCKED)'));
+  console.log('Phase 8.3 Next.js business backend removal verification result: PASS');
 }
 
 main().catch((err) => {

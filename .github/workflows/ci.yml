@@ -165,9 +165,6 @@ jobs:
       - name: Authentication & User Management UI integration
         run: node scripts/test-auth-user-ui-integration.mjs
 
-      - name: Platform services architecture freeze
-        run: node scripts/test-phase-7-architecture-freeze.mjs
-
   user-management-e2e:
     name: User management HTTP integration
     runs-on: ubuntu-latest
@@ -211,94 +208,6 @@ jobs:
 
       - name: User management HTTP E2E
         run: node scripts/test-user-management-e2e.mjs
-
-  auth-security:
-    name: Authentication security integration
-    runs-on: ubuntu-latest
-    env:
-      MONGODB_URI: mongodb://127.0.0.1:27017/xcloud
-      MONGODB_XCLOUD_DB: xcloud
-      MONGODB_APP_DB: xcloud_ops
-      JWT_SECRET: ci-only-placeholder-secret-with-at-least-32-bytes
-      INITIAL_ADMIN_PASSWORD: ChangeMe@2026
-    services:
-      mongodb:
-        image: mongo:7
-        ports:
-          - 27017:27017
-        options: >-
-          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ ping: 1 })'"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version-file: frontend/.nvmrc
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: backend/go.mod
-          cache-dependency-path: backend/go.sum
-
-      - name: Install dependencies
-        run: |
-          npm ci
-          cd frontend && npm ci
-
-      - name: Authentication security integration
-        run: node scripts/test-auth-security-hardening.mjs
-
-  auth-go-parity:
-    name: Authentication Go parity integration
-    runs-on: ubuntu-latest
-    env:
-      MONGODB_URI: mongodb://127.0.0.1:27017/xcloud
-      MONGODB_XCLOUD_DB: xcloud
-      MONGODB_APP_DB: xcloud_ops
-      JWT_SECRET: ci-only-placeholder-secret-with-at-least-32-bytes
-      INITIAL_ADMIN_PASSWORD: ChangeMe@2026
-    services:
-      mongodb:
-        image: mongo:7
-        ports:
-          - 27017:27017
-        options: >-
-          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ ping: 1 })'"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version-file: frontend/.nvmrc
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: backend/go.mod
-          cache-dependency-path: backend/go.sum
-
-      - name: Install dependencies
-        run: |
-          npm ci
-          cd frontend && npm ci
-
-      - name: Authentication Go contract parity
-        run: node scripts/test-auth-go-parity.mjs
 
   auth-cutover:
     name: Authentication controlled cutover
@@ -344,8 +253,8 @@ jobs:
       - name: Authentication controlled cutover
         run: node scripts/test-auth-cutover.mjs
 
-  platform-read-parity:
-    name: Platform services Go read parity integration
+  next-backend-removal:
+    name: Phase 8.3 Next.js business backend removal
     runs-on: ubuntu-latest
     env:
       MONGODB_URI: mongodb://127.0.0.1:27017/xcloud
@@ -385,68 +294,9 @@ jobs:
           npm ci
           cd frontend && npm ci
 
-      - name: Platform services Go read parity
-        run: node scripts/test-phase-7-read-parity.mjs
-
-      - name: Alert domain mutation parity
-        run: node scripts/test-phase-7-alert-mutation-parity.mjs
-
-      - name: Notification streaming SSE parity
-        run: node scripts/test-phase-7-notification-stream-parity.mjs
-
-      - name: System integrity controlled remediation parity
-        run: node scripts/test-phase-7-system-heal-parity.mjs
-
-      - name: Controlled platform services cutover
-        run: node scripts/test-phase-7-platform-cutover.mjs
-
-  residual-api-parity:
-    name: Phase 8 residual API parity and production cutover
-    runs-on: ubuntu-latest
-    env:
-      MONGODB_URI: mongodb://127.0.0.1:27017/xcloud
-      MONGODB_XCLOUD_DB: xcloud
-      MONGODB_APP_DB: xcloud_ops
-      JWT_SECRET: ci-only-placeholder-secret-with-at-least-32-bytes
-      INITIAL_ADMIN_PASSWORD: ChangeMe@2026
-    services:
-      mongodb:
-        image: mongo:7
-        ports:
-          - 27017:27017
-        options: >-
-          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ ping: 1 })'"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version-file: frontend/.nvmrc
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: backend/go.mod
-          cache-dependency-path: backend/go.sum
-
-      - name: Install dependencies
-        run: |
-          npm ci
-          cd frontend && npm ci
-
-      - name: Phase 8.1 residual API parity
-        run: node scripts/test-phase-8-residual-api-parity.mjs
-
-      - name: Build frontend for real Next.js retired-surface HTTP runtime verification
+      - name: Build frontend for the real Next.js production runtime proof
         working-directory: frontend
         run: npm run build
 
-      - name: Phase 8.2 residual production cutover (real Next.js App Router HTTP evidence)
-        run: node scripts/test-phase-8-residual-cutover.mjs
+      - name: Phase 8.3 Next.js business backend removal acceptance
+        run: node scripts/test-phase-8-next-backend-removal.mjs
