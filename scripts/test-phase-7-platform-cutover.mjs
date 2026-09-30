@@ -27,7 +27,8 @@
  * semantics. No production fault-injection switch is introduced.
  *
  * Machine-identifiable case groups:
- *   CO-Txx  routing table invariants (47 total, previous 36 preserved)
+ *   CO-Txx  routing table invariants (84 total after Phase 8.2; the historical
+ *           36 baseline and the 11 Phase 7.5 entries are preserved as a subset)
  *   CO-Gxx  real production Go binary route registration probes
  *   CO-R01 .. CO-R11  per-route production ownership
  *   CO-F01 .. CO-F11  fail-closed / no-fallback for every cut-over route
@@ -139,6 +140,10 @@ const PHASE_7_5_KEYS = PHASE_7_5_ROUTES.map((r) => `${r.method} ${r.path}`);
 
 // Frozen Phase 7.0/7.4 production routing baseline (36 METHOD+PATH entries).
 const HISTORICAL_BASELINE_ROUTES = 36;
+
+// Phase 8.2 residual production cutover additions: 33 canonical residual
+// operations + 2 legacy read aliases + 2 Go-native residue reads.
+const PHASE_8_2_ADDITIONS = 37;
 
 const BASELINE_36 = [
   'POST /api/profiles/{name}/versions/{versionId}/restore',
@@ -548,12 +553,12 @@ async function main() {
     return !entry || entry.owner !== 'go';
   }).length;
 
-  await check('CO-T01 CUTOVER_TABLE total = 47', () => {
-    assert.equal(CUTOVER_TABLE.length, 47, `expected 47, found ${CUTOVER_TABLE.length}`);
+  await check('CO-T01 CUTOVER_TABLE total = 84 (Phase 8.2 residual cutover applied)', () => {
+    assert.equal(CUTOVER_TABLE.length, 84, `expected 84, found ${CUTOVER_TABLE.length}`);
   });
 
-  await check('CO-T02 ACTUALLY_ROUTED = 47 (all owner=go)', () => {
-    assert.equal(actuallyRoutedGo, 47, `expected 47 go-owned, found ${actuallyRoutedGo}`);
+  await check('CO-T02 ACTUALLY_ROUTED = 84 (all owner=go)', () => {
+    assert.equal(actuallyRoutedGo, 84, `expected 84 go-owned, found ${actuallyRoutedGo}`);
   });
 
   await check('CO-T03 previous 36 baseline entries unchanged and still owner=go', () => {
@@ -566,13 +571,14 @@ async function main() {
     }
   });
 
-  await check('CO-T04 Phase 7.5 additions = exactly 11 (delta 36 -> 47)', () => {
+  await check('CO-T04 Phase 7.5 additions = exactly 11 (delta now 36 -> 48 after Phase 8.2)', () => {
     const found = PHASE_7_5_KEYS.filter((key) => {
       const [method, p] = key.split(' ');
       return CUTOVER_TABLE.some((r) => r.method === method && r.path === p);
     });
     assert.equal(found.length, 11, `expected 11 Phase 7.5 entries, found ${found.length}`);
-    assert.equal(phase7CutoverDelta, 11, `cutover delta must be 11, found ${phase7CutoverDelta}`);
+    assert.equal(phase7CutoverDelta, 11 + PHASE_8_2_ADDITIONS,
+      `cutover delta must be 11 Phase 7.5 + ${PHASE_8_2_ADDITIONS} Phase 8.2 = ${11 + PHASE_8_2_ADDITIONS}, found ${phase7CutoverDelta}`);
   });
 
   await check('CO-T05 all 11 Phase 7.5 routes have owner=go (phase7_node_owned=0)', () => {
@@ -593,10 +599,10 @@ async function main() {
     }
   });
 
-  await check('CO-T07 table is exactly baseline 36 + Phase 7.5 11 (no other route added)', () => {
-    const expected = new Set([...BASELINE_36, ...PHASE_7_5_KEYS]);
+  await check('CO-T07 table still contains the full historical 36 baseline + Phase 7.5 11 subset', () => {
+    const expected = [...BASELINE_36, ...PHASE_7_5_KEYS];
     const actual = new Set(CUTOVER_TABLE.map((r) => `${r.method} ${r.path}`));
-    assert.equal(actual.size, expected.size, `unexpected table size ${actual.size}`);
+    assert.ok(actual.size >= expected.length, `unexpected table size ${actual.size}`);
     for (const key of expected) {
       assert.ok(actual.has(key), `expected entry missing: ${key}`);
     }
@@ -1141,9 +1147,9 @@ async function main() {
   const duplicateForwardCount = forwardSamples.filter((s) => s.forward !== 1).length;
 
   await check('CO-X01 required aggregate invariants are exact', () => {
-    assert.equal(CUTOVER_TABLE.length, 47, 'CUTOVER_TABLE must be 47');
-    assert.equal(actuallyRoutedGo, 47, 'ACTUALLY_ROUTED must be 47');
-    assert.equal(phase7CutoverDelta, 11, 'phase7_cutover_delta must be 11');
+    assert.equal(CUTOVER_TABLE.length, 84, 'CUTOVER_TABLE must be 84');
+    assert.equal(actuallyRoutedGo, 84, 'ACTUALLY_ROUTED must be 84');
+    assert.equal(phase7CutoverDelta, 11 + PHASE_8_2_ADDITIONS, `phase7_cutover_delta must be ${11 + PHASE_8_2_ADDITIONS}`);
     assert.equal(phase7NodeOwned, 0, 'phase7_node_owned must be 0');
     assert.equal(fallbackCount, 0, 'fallback_count must be 0');
     assert.equal(duplicateForwardCount, 0, 'go_forward_duplicate_count must be 0');

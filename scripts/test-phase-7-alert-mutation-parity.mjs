@@ -11,7 +11,7 @@
  * 5. Best-Effort Audit Log Evidence & Schema Failure Resilience
  * 6. Database Error Failure-Path Parity (HTTP 500 error messages)
  * 7. Zero Unrelated Business Domain Mutation
- * 8. Routing Invariants & Freeze Verification (CUTOVER_TABLE=47, ACTUALLY_ROUTED=47)
+ * 8. Routing Invariants & Freeze Verification (CUTOVER_TABLE=84, ACTUALLY_ROUTED=84)
  */
 
 import assert from 'node:assert/strict';
@@ -2151,13 +2151,13 @@ async function main() {
 
   console.log('\n--- Section 8: Routing Invariants & Freeze Verification ---');
 
-  verify('CUTOVER_TABLE length must be exactly 47', () => {
-    assert.equal(CUTOVER_TABLE.length, 47);
+  verify('CUTOVER_TABLE length must be exactly 84', () => {
+    assert.equal(CUTOVER_TABLE.length, 84);
   });
 
-  verify('ACTUALLY_ROUTED count must be exactly 47', () => {
+  verify('ACTUALLY_ROUTED count must be exactly 84', () => {
     const routed = CUTOVER_TABLE.filter((r) => r.owner === 'go');
-    assert.equal(routed.length, 47);
+    assert.equal(routed.length, 84);
   });
 
   verify('All 11 Phase 7 endpoints are in CUTOVER_TABLE owned by Go', () => {

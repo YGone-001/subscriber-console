@@ -208,8 +208,11 @@ Phase 7.1   PASS / FROZEN — Platform Health & Diagnostic Read Parity (GET /api
 Phase 7.2   PASS / FROZEN — Alert Mutation Parity (POST /api/alerts/acknowledge, POST /api/alerts/workflow)
 Phase 7.3   PASS / FROZEN — Notification Streaming SSE Parity (full acceptance matrix closed; Run #140 green)
 Phase 7.4   PASS / FROZEN — System Integrity Controlled Remediation Parity (POST /api/system/audit/heal, POST /api/system/audit/batch-heal; RS01-RS05 frozen as one continuous persistent-state sequence with 96 mandatory callbacks)
-Phase 7.5   IMPLEMENTED / NOT FROZEN — Controlled Platform Services Production Cutover (11 Phase 7 operations Go production-owned; CUTOVER_TABLE = 47, ACTUALLY_ROUTED = 47); independent acceptance pending
-Phase 8     NOT STARTED
+Phase 7.5   IMPLEMENTED / NOT FROZEN — Controlled Platform Services Production Cutover (11 Phase 7 operations Go production-owned); independent acceptance pending
+Phase 8.0   PASS / FROZEN — Next.js Backend Removal Architecture Freeze (residual API inventory + source-derived readiness validator)
+Phase 8.1   COMPLETE — Residual API Go Implementation & Shadow Parity (33-operation canonical remainder, 11 newly implemented Go shadows; 81 parity scenarios / 122 assertions)
+Phase 8.2   IMPLEMENTED / NOT FROZEN — Residual Production Cutover, Compatibility Closure & Retired Surface Removal (33 canonical residual operations + 2 legacy read aliases + 2 Go-native reads now Go production-owned; 6 non-canonical mutation methods retired; CUTOVER_TABLE = 84, ACTUALLY_ROUTED = 84, node_production_operations = 0); independent acceptance pending
+Phase 8.3   NOT STARTED
 ```
 
 ### 5.1 OCS 生产冻结基线 (OCS Production Freeze Baseline)
@@ -222,8 +225,8 @@ Managed domains:
 
 Charging Plane remains frozen and excluded.
 
-- 权威基线：Phase 5.6 生产冻结基准（历史基线 ACTUALLY_ROUTED = 26；当前生产路由 ACTUALLY_ROUTED = 47）。
-- 路由表状态：`CUTOVER_TABLE = 47`，`ACTUALLY_ROUTED = 47`。
+- 权威基线：Phase 5.6 生产冻结基准（历史基线 ACTUALLY_ROUTED = 26；当前生产路由 ACTUALLY_ROUTED = 84）。
+- 路由表状态：`CUTOVER_TABLE = 84`，`ACTUALLY_ROUTED = 84`。
 - 托管集合：`ocs_tariff_plans`、`ocs_subscribers`、`ocs_balances`。
 - 冻结规约文档：`docs/backend-migration/phase-5-6-ocs-production-freeze.md`。
 - 运维操作手册：`docs/operations/ocs-management-runbook.md`。
@@ -309,7 +312,7 @@ Canonical User Management routes (production owner = Go):
 - `PATCH /api/users/{username}`
 - `POST /api/users/{username}/disable`
 - `POST /api/users/{username}/password-reset`
-Legacy compatibility read aliases: `/api/auth/users`, `/api/auth/users/{username}`.
+Legacy compatibility read aliases: `/api/auth/users`, `/api/auth/users/{username}` (Go-owned read-only after Phase 8.2; mutation methods retired).
 Login/logout = Go owner (Phase 6.3-B cutover).
 
 Phase 6.2 Authentication Security Hardening:
@@ -362,14 +365,14 @@ Preserve exact Node key/limit/window/headers/messages.
 Current write invariant:
 
 ```text
-Business-domain writes by Go = subscriber/profile CRUD + batch (Direct Execution), ACTUALLY_ROUTED=47
+Business-domain writes by Go = subscriber/profile CRUD + batch (Direct Execution), ACTUALLY_ROUTED=84
 Infrastructure writes = app_rate_limits (allowed)
 Operation logging = app_audit_logs (best-effort / non-business-gating internal operation logs; authorization denial evidence)
-OCS writes = ocs_tariff_plans CRUD + enable/disable (Direct Execution), ACTUALLY_ROUTED=47
-OCS subscriber writes = ocs_subscribers create/update-tariff/suspend/resume/terminate (Direct Execution), ACTUALLY_ROUTED=47
-OCS balance writes = ocs_balances adjust (Direct Execution), reset (permanently disabled), ACTUALLY_ROUTED=47
-User Management writes = app_users CRUD + disable + password-reset (Direct Execution), ACTUALLY_ROUTED=47
-Platform Services writes = alerts acknowledge/workflow (Direct Execution), ACTUALLY_ROUTED=47
+OCS writes = ocs_tariff_plans CRUD + enable/disable (Direct Execution), ACTUALLY_ROUTED=84
+OCS subscriber writes = ocs_subscribers create/update-tariff/suspend/resume/terminate (Direct Execution), ACTUALLY_ROUTED=84
+OCS balance writes = ocs_balances adjust (Direct Execution), reset (permanently disabled), ACTUALLY_ROUTED=84
+User Management writes = app_users CRUD + disable + password-reset (Direct Execution), ACTUALLY_ROUTED=84
+Platform Services writes = alerts acknowledge/workflow (Direct Execution), ACTUALLY_ROUTED=84
 ```
 
 ---
@@ -451,27 +454,22 @@ POST /api/system/audit/scan
 POST /api/analytics/init
 ```
 
-Status:
+Status (final, after Phase 8.2):
 
 ```text
-Go HTTP operations = 67
-  Semantic reads = 37 (35 GET + 2 POST semantic read: batch/precheck, audit/scan)
-  Platform actions = 1 (POST /api/analytics/init)
-  Alert mutations = 2 (POST /api/alerts/acknowledge, POST /api/alerts/workflow)
-  Business mutations = 12 (subscriber+profile CRUD + batch)
-  Tariff mutations = 6 (create/update/delete/clone/enable/disable)
-  OCS subscriber mutations = 5 (create/update-tariff/suspend/resume/terminate)
-  OCS balance mutations = 2 (adjust/reset)
-  User Management mutations = 4 (create/update/disable/password-reset)
-  Auth public = 2 (login/logout)
-  Health = 2 (healthz/readyz)
-Actually Routed = 47 (CUTOVER_TABLE routes)
+Go HTTP operations = 84 (production-registered)
+Inventory operations = 72 (all Go-registered)
+Actually Routed = 84 (CUTOVER_TABLE routes, all owner=go)
+  Phase 2 historical baseline = 36
+  Phase 7 Platform Services = 11
+  Phase 8.2 residual cutover = 37 (33 canonical + 2 legacy read aliases + 2 Go-native reads)
+Node production operations = 0
 OCS writes = 13 (tariff plan + subscriber contract + balance)
 ```
 
-CUTOVER_TABLE = 47 routes (all ACTUALLY_ROUTED=1).
+CUTOVER_TABLE = 84 routes (all ACTUALLY_ROUTED=1).
 
-Phase 7 platform service, alert mutation, notification streaming, and controlled remediation endpoints are Go production-owned after the controlled cutover (11 Phase 7 operations, CUTOVER_TABLE = 47).
+Phase 7 platform service, alert mutation, notification streaming, and controlled remediation endpoints are Go production-owned after the controlled cutover (11 Phase 7 operations, CUTOVER_TABLE = 84 after the Phase 8.2 residual cutover).
 Node route files remain in place for reference; production traffic is Go-owned with no Node fallback.
 
 ---
@@ -542,7 +540,7 @@ Platform Services scope (11 candidate endpoints):
 - Analytics platform action: `POST /api/analytics/init` (read-only on-demand calculation)
 
 All 11 candidate endpoints are Go production-owned after the controlled cutover.
-Production routing baseline: `CUTOVER_TABLE = 47`, `ACTUALLY_ROUTED = 47`.
+Production routing baseline: `CUTOVER_TABLE = 84`, `ACTUALLY_ROUTED = 84`.
 Node route files remain present (deferred cleanup), production owner = Go with no Node fallback.
 
 ---

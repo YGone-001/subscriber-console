@@ -235,3 +235,71 @@
 - Rebuilt the Phase 7.4 RS01-RS05 continuous persistent-state correction on top of this cutover: only the routing-count assertions changed (36 -> 47) and the frozen RS sequence, the 96 mandatory callback inventory, and `rs_interstep_fixture_writes = 0` remain enforced.
 - Reconciled routing-invariant counts (36 -> 47) across the regression suites and current-state documentation. Node and Go quality gates plus all Phase 7 regression suites remain green.
 - Status: IMPLEMENTED / NOT FROZEN. Not self-declared frozen; independent acceptance is required before Phase 8.
+
+## Phase 8.0 — Residual API Inventory & Backend Removal Architecture Freeze
+
+- Froze the residual API inventory and the backend removal architecture:
+  `docs/backend-migration/phase-8-residual-api-inventory.md`,
+  `docs/architecture/phase-8-backend-removal-architecture.md`.
+- Frozen baseline SHA `3babf1c6ad9b2ebf683b9156f9d3e64a09c9321b`: 22 pre-existing Go
+  shadows plus 11 operations without a Go implementation; 33 canonical Node
+  migration remainder operations, 2 legacy read aliases, 6 non-canonical mutation
+  surfaces, 2 stale callers to the retired `/api/audit` surface, and 2 Go-native
+  unrouted reads.
+- Routing baseline unchanged: `CUTOVER_TABLE = 47`, `ACTUALLY_ROUTED = 47`.
+
+## Phase 8.1 — Residual API Go Implementation and Shadow Parity
+
+- Implemented the 11 missing Go shadow operations (rating disabled-write gates,
+  subscriber policy / traffic-adjustments, tariff import / migrate / rule write
+  gates) and froze the 33 canonical residual operations in shadow parity state.
+- `canonical_node_migration_remainder = 33`, `canonical_node_with_go_shadow = 33`,
+  `canonical_node_missing_go = 0`. Production ownership did NOT change: every
+  residual operation remained Node-runtime-owned and no route was added to
+  `CUTOVER_TABLE` (`47` / `47`).
+- Added `scripts/test-phase-8-residual-api-parity.mjs` (81 HTTP scenarios across
+  33 operations, 122 assertions PASS) proving Node <-> Go contract, security,
+  rate-limit, and persistence parity against isolated database pairs.
+- Added `scripts/test-phase-8-backend-removal-readiness.mjs` and registered it in
+  the `node` CI job.
+- Status: IMPLEMENTED / NOT SELF-FROZEN; independent Phase 8.1 acceptance pending.
+
+## Phase 8.2 — Residual Production Cutover, Compatibility Closure & Retired Surface Removal
+
+- Cut over all 33 canonical residual Node operations to the frozen Go
+  implementations by appending exact METHOD+PATH entries (`owner=go`) to
+  `frontend/src/lib/cutover-routing.ts`.
+- Closed the 2 legacy read aliases on Go (`GET /api/auth/users`,
+  `GET /api/auth/users/{username}`), keeping `LEGACY_ALIAS` lifecycle with
+  `runtime_owner=go`; no mutation method was reintroduced on those paths.
+- Retired 6 non-canonical mutation surface methods by removing only those exports
+  from their Next.js route modules (sibling methods preserved, no Go replacement,
+  no fake no-op handler): `POST /api/auth/users`,
+  `PUT|PATCH|DELETE /api/auth/users/{username}`, `PUT|DELETE /api/users/{username}`.
+- Removed the 2 stale frontend callers to the retired `/api/audit` surface
+  (`stale_callers_to_retired_surfaces = 0`); `/api/audit` was NOT recreated and no
+  new audit API was invented.
+- Resolved the 2 Go-native unrouted reads by bringing both into production Go
+  routing: `GET /api/tariff-plans/{planId}/operations` (had a frontend caller) and
+  `GET /api/ocs/balances/{imsi}` (source-backed decision `KEEP_AS_PUBLIC_GO_API`).
+- Routing delta is exactly +37: `CUTOVER_TABLE = 47 -> 84`,
+  `ACTUALLY_ROUTED = 47 -> 84`, every entry `owner=go`.
+- Final invariants: `api_operations = 72`, `go_production_owned = 70`,
+  `node_production_owned = 0`, `legacy_alias = 2`, `retired_surface = 0`,
+  `test_only = 0`, `unresolved = 0`, `inventory_runtime_go = 72`,
+  `inventory_runtime_node = 0`, `runtime_owner_unknown = 0`,
+  `canonical_node_migration_remainder = 0`, `node_production_operations = 0`,
+  `fallback_count = 0`, `go_registered_unrouted_reads = 0`,
+  `backend_removal_ready = true`, `backend_removal_blockers = 0`.
+- Added `scripts/test-phase-8-residual-cutover.mjs` (TOTAL=136 PASS=136 FAIL=0)
+  proving ownership executably: real `proxy()` + `resolveRouteOwner` routing, a
+  forwarding observer, the compiled production Go binary, and fail-closed
+  `GO_BACKEND_UNREACHABLE` with zero Node fallback. Added a visible Phase 8.2 CI
+  step to the residual parity job.
+- Flipped the Phase 8.1 parity suite ownership assertions (`cutover=true`,
+  `runtime_owner=go`) while preserving all 81 scenarios / 122 assertions, and
+  evolved the route-table regression suites to derive from the frozen baseline
+  plus the known Phase 8.2 increment without weakening any integrity check.
+- Evidence document: `docs/backend-migration/phase-8.2-residual-production-cutover.md`.
+- Status: IMPLEMENTED / NOT FROZEN. Not self-declared frozen; independent Phase 8.2
+  acceptance is required before Phase 8.3.

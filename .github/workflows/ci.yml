@@ -401,7 +401,7 @@ jobs:
         run: node scripts/test-phase-7-platform-cutover.mjs
 
   residual-api-parity:
-    name: Phase 8.1 residual API parity integration
+    name: Phase 8 residual API parity and production cutover
     runs-on: ubuntu-latest
     env:
       MONGODB_URI: mongodb://127.0.0.1:27017/xcloud
@@ -443,3 +443,6 @@ jobs:
 
       - name: Phase 8.1 residual API parity
         run: node scripts/test-phase-8-residual-api-parity.mjs
+
+      - name: Phase 8.2 residual production cutover
+        run: node scripts/test-phase-8-residual-cutover.mjs

@@ -1485,12 +1485,12 @@ async function main() {
   // 13. Routing invariants
   // ---------------------------------------------------------------------------
   console.log('\n--- 13. Routing invariants ---');
-  verify('CUTOVER_TABLE length is exactly 47', () => {
-    assert.equal(CUTOVER_TABLE.length, 47);
+  verify('CUTOVER_TABLE length is exactly 84', () => {
+    assert.equal(CUTOVER_TABLE.length, 84);
   });
-  verify('ACTUALLY_ROUTED count is exactly 47', () => {
+  verify('ACTUALLY_ROUTED count is exactly 84', () => {
     const routed = CUTOVER_TABLE.filter((r) => r.owner === 'go');
-    assert.equal(routed.length, 47);
+    assert.equal(routed.length, 84);
   });
   verify('All 11 Phase 7 Platform Services endpoints are in CUTOVER_TABLE owned by Go', () => {
     const phase7 = [

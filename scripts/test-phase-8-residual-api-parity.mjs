@@ -6,7 +6,7 @@
 //     adjustments / tariff import / migrate / rule write)
 //
 // Required invariants for every one of the 33 operations:
-//   go_registered=true  cutover=false  runtime_owner=node
+//   go_registered=true  cutover=true  runtime_owner=go
 //
 // Real HTTP topology (no handler mocks):
 //   harness --> Node test HTTP server (jiti route handlers) -> isolated Node Mongo test DBs
@@ -17,8 +17,11 @@
 // status, response contract, and persistent state are compared.
 //
 // Hard guarantees preserved:
-//   CUTOVER_TABLE=47, ACTUALLY_ROUTED=47 (nothing here is added to the table)
-//   Node remains the production runtime owner for all 33 operations.
+//   CUTOVER_TABLE=84, ACTUALLY_ROUTED=84 (the 33 canonical residuals were added
+//   to the routing table by the Phase 8.2 production cutover)
+//   Go is now the production runtime owner for all 33 operations. The Node route
+//   modules remain in place as dormant reference / rollback surfaces and are still
+//   the authoritative behavioural contract exercised by this suite.
 
 import assert from 'node:assert/strict';
 import http from 'node:http';
@@ -1203,8 +1206,8 @@ function printMachineBlock(resultOverride) {
     c.duplicate === 0 &&
     c.executed === c.expected &&
     c.goRegistered === c.expected &&
-    c.cutoverCount === 0 &&
-    c.runtimeNode === c.expected
+    c.cutoverCount === c.expected &&
+    c.runtimeNode === 0
       ? 'PASS'
       : 'FAIL');
   console.log('\n-- Phase 8.1 machine-readable summary --');
@@ -1312,8 +1315,8 @@ async function main() {
   console.log('\n--- 2. Routing / registration invariants (go_registered/cutover/runtime) ---');
   const goRegs = loadGoRegistrations();
   const cutover = await loadCutoverRouting();
-  verify('CUTOVER_TABLE integrity unchanged at 47', () => {
-    assert.equal(cutover.tableLength, 47, `CUTOVER_TABLE must remain 47, got ${cutover.tableLength}`);
+  verify('CUTOVER_TABLE integrity: 33 canonical residuals routed, table = 84', () => {
+    assert.equal(cutover.tableLength, 84, `CUTOVER_TABLE must be 84 after the Phase 8.2 cutover, got ${cutover.tableLength}`);
   });
 
   let goRegistered = 0;
@@ -1337,11 +1340,11 @@ async function main() {
 
     op.evidence = { key, isRegistered, isCutover, runtime, nodeFileExists };
 
-    verify(`${key} go_registered=true cutover=false runtime_owner=node`, () => {
+    verify(`${key} go_registered=true cutover=true runtime_owner=go`, () => {
       assert.ok(isRegistered, `${key} must be registered by the production Go source`);
-      assert.ok(!isCutover, `${key} must NOT be in CUTOVER_TABLE`);
-      assert.equal(runtime, 'node', `${key} runtime owner must be node, got ${runtime}`);
-      assert.ok(nodeFileExists, `${key} backing Node route file must exist: ${op.file}`);
+      assert.ok(isCutover, `${key} must be in CUTOVER_TABLE after the Phase 8.2 cutover`);
+      assert.equal(runtime, 'go', `${key} runtime owner must be go, got ${runtime}`);
+      assert.ok(nodeFileExists, `${key} dormant Node route file must still exist: ${op.file}`);
     });
   }
 

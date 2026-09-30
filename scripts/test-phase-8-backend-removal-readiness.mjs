@@ -10,12 +10,12 @@
  *   - scans Node backend dependencies (mongodb / jose / bcryptjs);
  *   - inspects proxy.ts responsibilities.
  *
- * It validates P8-I01 .. P8-I20 plus the P8-I11 negative sentinel, and emits the
- * machine-readable block required by the Phase 8.0 specification. It NEVER
- * hard-codes backend_removal_ready=true: readiness is DERIVED from evidence. As
- * long as residual Node production operations exist, it truthfully reports
- * backend_removal_ready=false while the Phase 8.0 architecture/inventory phase
- * itself may PASS.
+ * It validates P8-I01 .. P8-I24 plus the P8-I11 negative sentinel, and emits the
+ * machine-readable block required by the specification. It NEVER hard-codes
+ * backend_removal_ready=true: readiness is DERIVED from evidence. After Phase 8.2
+ * all residual Node production operations are cut over, so the derived value must be
+ * TRUE; the validator fails otherwise (Phase 8.0/8.1 still allowed a truthful
+ * backend_removal_ready=false while the architecture phase itself PASSED).
  *
  * Two ownership dimensions are validated INDEPENDENTLY:
  *   - lifecycle_class: contract/migration state of an operation;
@@ -337,6 +337,51 @@ const RETIRED_SURFACES = new Set([
 // explicitly mapped to a retired surface and listed as a cleanup finding.
 const RETIRED_CALLER_TARGETS = ['/api/audit', '/api/approvals'];
 
+// Phase 8.2 frozen canonical residual cutover set (33 exact METHOD+PATH keys).
+// These were the Phase 8.1 canonical Node migration remainder; Phase 8.2 cuts them
+// over to their frozen Go implementations. Kept explicit so the current-state gate
+// can prove completion instead of re-deriving "0 remaining" tautologically.
+const CANONICAL_RESIDUAL_KEYS = new Set([
+  'GET /api/analytics/metrics',
+  'GET /api/analytics/sparkline',
+  'GET /api/ocs/balances',
+  'GET /api/ocs/reservations',
+  'GET /api/ocs/sessions',
+  'GET /api/ocs/usage',
+  'GET /api/profiles',
+  'GET /api/profiles/{name}',
+  'GET /api/profiles/{name}/stats',
+  'GET /api/profiles/{name}/versions',
+  'GET /api/ratings',
+  'POST /api/ratings',
+  'GET /api/ratings/{id}',
+  'PUT /api/ratings/{id}',
+  'DELETE /api/ratings/{id}',
+  'GET /api/search',
+  'GET /api/subscribers',
+  'GET /api/subscribers/{imsi}',
+  'POST /api/subscribers/batch/precheck',
+  'POST /api/subscribers/policy',
+  'POST /api/subscribers/{imsi}/traffic-adjustments',
+  'GET /api/tariff-plans',
+  'GET /api/tariff-plans/{planId}',
+  'GET /api/tariff-plans/{planId}/export',
+  'GET /api/tariff-plans/{planId}/migrate',
+  'POST /api/tariff-plans/{planId}/migrate',
+  'GET /api/tariff-plans/{planId}/rules',
+  'POST /api/tariff-plans/{planId}/rules',
+  'PUT /api/tariff-plans/{planId}/rules/{ruleId}',
+  'PATCH /api/tariff-plans/{planId}/rules/{ruleId}',
+  'DELETE /api/tariff-plans/{planId}/rules/{ruleId}',
+  'GET /api/tariff-plans/{planId}/subscribers',
+  'POST /api/tariff-plans/import',
+]);
+
+// Frozen Phase 7.5 / Phase 8.1 production routing table size before Phase 8.2.
+// It is a historical fact, referenced only to DERIVE the current expected size:
+//   expected = 47 + 33 canonical + 2 legacy aliases + go-native residue cutover.
+const PHASE_7_5_CUTOVER_BASELINE = 47;
+
 const CLASS = {
   GO: 'GO_PRODUCTION_OWNED',
   NODE: 'NODE_PRODUCTION_OWNED',
@@ -376,7 +421,7 @@ function deriveRuntimeOwner(op, resolveRouteOwner) {
 // Go registration classification (non-tautological)
 // ---------------------------------------------------------------------------
 // Every production Go registration must map to exactly one accepted category:
-//   A. exact current 78-operation inventory entry, or
+//   A. exact current 72-operation inventory entry, or
 //   B. exact CUTOVER_TABLE (approved, production-routed Go-native) operation, or
 //   C. exact reviewed entry of the curated not-production-routed read residue list.
 // Anything else is UNCLASSIFIED_GO_REGISTRATION and fails Phase 8.0 acceptance.
@@ -387,21 +432,22 @@ const GO_REG_CLASS = {
   UNCLASSIFIED: 'UNCLASSIFIED_GO_REGISTRATION',
 };
 
-// Category C: explicit, CURATED allowlist of Go-native READ registrations that are
-// currently NOT production-routed — absent from the 78-operation inventory (no current
-// Next.js route backs them) and absent from CUTOVER_TABLE (proxy.ts resolves unmatched
-// METHOD+PATH to Node; no Node route exists, so the production request path never
-// reaches Go for these). Membership is EXACT-MATCH only and additionally asserted to
-// be read-only; any registration not matching A, B, or this reviewed list fails P8-I11.
-//   GET /api/tariff-plans/{planId}/operations — the Node counterpart route file was
-//     deleted with the retired governance surfaces; the Go read registration remains;
-//     the rating UI caller still exists and is tracked as Phase 8 cleanup residue.
-//   GET /api/ocs/balances/{imsi} — Go-first read added with OCS balance governance;
-//     no Node counterpart ever existed; no frontend caller.
+// Category C: explicit, CURATED allowlist of Go-native READ registrations that were
+// NOT production-routed in the Phase 8.0/8.1 current state. Phase 8.2 RESOLVED both
+// by adding exact METHOD+PATH production routing (KEEP_AS_PUBLIC_GO_API /
+// product-supported read), so the live allowlist is now EMPTY. The former entries are
+// retained below for provenance and are asserted to be inside CUTOVER_TABLE with
+// owner=go — resolving the architecture, not silently deleting the allowlist.
+//   GET /api/tariff-plans/{planId}/operations — rating UI caller exists; product surface.
+//   GET /api/ocs/balances/{imsi} — Go-first OCS balance read; kept as a public Go API.
 const GO_NATIVE_UNROUTED_READS = new Set([
+  // EMPTY after Phase 8.2. Do not add entries without an explicit architecture decision.
+]);
+
+const FORMER_GO_NATIVE_UNROUTED_READS = [
   'GET /api/tariff-plans/{planId}/operations',
   'GET /api/ocs/balances/{imsi}',
-]);
+];
 
 function classifyGoRegistration(key, inventoryKeys, cutoverKeys) {
   if (inventoryKeys.has(key)) return GO_REG_CLASS.INVENTORY;
@@ -451,18 +497,37 @@ async function main() {
   const inventory = sourceOps;
   const inventoryKeys = new Set(inventory.map((o) => methodPathKey(o.method, o.canonicalPath)));
 
-  // ---- P8-I02 exactly 78 current operations --------------------------------
-  check('P8-I02', inventory.length === 78, `operations=${inventory.length} (expected 78)`);
+  // ---- P8-I02 exactly 72 current operations (six retired surfaces removed) ---
+  check('P8-I02', inventory.length === 72, `operations=${inventory.length} (expected 72)`);
 
   // ---- P8-I03 no duplicate METHOD+PATH --------------------------------------
   check('P8-I03', inventoryKeys.size === inventory.length, `unique=${inventoryKeys.size} total=${inventory.length}`);
 
-  // ---- P8-I04 CUTOVER_TABLE exactly 47 --------------------------------------
-  check('P8-I04', cutover.length === 47, `CUTOVER_TABLE=${cutover.length}`);
+  // ---- P8-I04 CUTOVER_TABLE size DERIVED, never hard-coded -------------------
+  //   expected = 47 baseline + 33 canonical residual + 2 legacy aliases
+  //            + go-native residue cut over to production routing
+  const canonicalMissing = [...CANONICAL_RESIDUAL_KEYS].filter((k) => !cutoverKeys.has(k));
+  const legacyMissing = [...LEGACY_ALIAS_READS].filter((k) => !cutoverKeys.has(k));
+  const residueCutoverKeys = FORMER_GO_NATIVE_UNROUTED_READS.filter((k) => cutoverKeys.has(k));
+  const expectedCutover =
+    PHASE_7_5_CUTOVER_BASELINE +
+    CANONICAL_RESIDUAL_KEYS.size +
+    LEGACY_ALIAS_READS.size +
+    residueCutoverKeys.length;
+  check(
+    'P8-I04',
+    cutover.length === expectedCutover && canonicalMissing.length === 0 && legacyMissing.length === 0,
+    `CUTOVER_TABLE=${cutover.length} derived_expected=${expectedCutover} (47 baseline + ${CANONICAL_RESIDUAL_KEYS.size} canonical + ${LEGACY_ALIAS_READS.size} legacy + ${residueCutoverKeys.length} residue) canonical_missing=${canonicalMissing.length} legacy_missing=${legacyMissing.length}`,
+  );
 
-  // ---- P8-I05 all 47 cutover routes owner=go --------------------------------
+  // ---- P8-I05 ACTUALLY_ROUTED == CUTOVER_TABLE and every entry owner=go ------
   const goOwned = cutover.filter((r) => r.owner === 'go').length;
-  check('P8-I05', goOwned === 47, `owner=go count=${goOwned}`);
+  const cutoverUniqueKeys = new Set(cutover.map((r) => methodPathKey(r.method, r.path)));
+  check(
+    'P8-I05',
+    goOwned === cutover.length && cutoverUniqueKeys.size === cutover.length,
+    `owner=go count=${goOwned} unique=${cutoverUniqueKeys.size} total=${cutover.length}`,
+  );
 
   // ---- P8-I06 every cutover route exists in inventory or approved mapping ----
   // Go-native cutover routes (registered by Go, no Node route file) are explicitly
@@ -476,12 +541,16 @@ async function main() {
   );
 
   // ---- Classification of every inventory operation --------------------------
+  // Order matters: the two legacy compatibility aliases are Go-routed after
+  // Phase 8.2 but MUST keep lifecycle LEGACY_ALIAS (they are only read aliases and
+  // must never be presented as canonical Go production surfaces). The legacy set is
+  // therefore evaluated BEFORE the cutover membership test.
   const classified = inventory.map((op) => {
     const key = methodPathKey(op.method, op.canonicalPath);
     let classification;
-    if (cutoverKeys.has(key)) classification = CLASS.GO;
-    else if (LEGACY_ALIAS_READS.has(key)) classification = CLASS.LEGACY;
+    if (LEGACY_ALIAS_READS.has(key)) classification = CLASS.LEGACY;
     else if (RETIRED_SURFACES.has(key)) classification = CLASS.RETIRED;
+    else if (cutoverKeys.has(key)) classification = CLASS.GO;
     else classification = CLASS.NODE;
 
     return {
@@ -539,9 +608,9 @@ async function main() {
 
   // ---- P8-I11 every Go production route registration classified -------------
   // Non-tautological classification: each registration must independently map to
-  //   A. an exact current 78-operation inventory entry, or
+  //   A. an exact current 72-operation inventory entry, or
   //   B. an exact approved Go-native CUTOVER_TABLE operation,
-  // otherwise it is UNCLASSIFIED_GO_REGISTRATION and Phase 8.0 must fail.
+  // otherwise it is UNCLASSIFIED_GO_REGISTRATION and readiness must fail.
   // Existence inside goRegs itself is NOT evidence (that was the old tautology).
   const goRegistrationClasses = goRegs.map((r) => {
     const key = methodPathKey(r.method, r.canonicalPath);
@@ -581,23 +650,26 @@ async function main() {
     `runtime_owner go=${runtimeCounts.go} node=${runtimeCounts.node} unreachable=${runtimeCounts.unreachable} unknown=${runtimeCounts.unknown}, total=${runtimeTotal}`,
   );
 
-  // ---- P8-I20 legacy/retired runtime ownership derived from routing ----------
-  // Compatibility surfaces are selected by lifecycle, but their runtime owner is
-  // proven by invoking the production routing rule: absent from CUTOVER_TABLE and
-  // backed by an executable Node route file => runtime_owner=node. The routing
-  // function must also discriminate (resolve cutover operations to Go), otherwise
-  // the "unmatched defaults to node" rule would be vacuous evidence.
+  // ---- P8-I20 legacy alias / retired surface ownership derived from routing --
+  // Phase 8.2 moved the two READ-ONLY legacy aliases onto Go production routing
+  // while keeping lifecycle LEGACY_ALIAS. Runtime ownership remains EXECUTABLE
+  // evidence: derived by invoking the production routing function
+  // (resolveRouteOwner), never inferred from the lifecycle label. Retired surfaces
+  // must be neither routed nor Go-registered.
   const compatibilitySurfaces = classified.filter(
     (o) => o.classification === CLASS.LEGACY || o.classification === CLASS.RETIRED,
   );
   const routingDiscriminates = classified.some((o) => o.runtimeOwner === RUNTIME_OWNER.GO);
-  const compatibilityRuntimeDerived = compatibilitySurfaces.every(
-    (o) => !o.inCutover && o.runtimeOwner === RUNTIME_OWNER.NODE,
-  );
+  const legacyGoOwned = classified
+    .filter((o) => o.classification === CLASS.LEGACY)
+    .every((o) => o.inCutover && o.runtimeOwner === RUNTIME_OWNER.GO);
+  const retiredSurfacesNotExecutable = classified
+    .filter((o) => o.classification === CLASS.RETIRED)
+    .every((o) => !o.inCutover && !o.goRegistered);
   check(
     'P8-I20',
-    routingDiscriminates && compatibilityRuntimeDerived,
-    `legacy+retired=${compatibilitySurfaces.length} runtime_owner=node via resolveRouteOwner=${compatibilityRuntimeDerived}, routing discriminates=${routingDiscriminates}`,
+    routingDiscriminates && legacyGoOwned && retiredSurfacesNotExecutable,
+    `legacy+retired=${compatibilitySurfaces.length} legacy_runtime_go_via_resolveRouteOwner=${legacyGoOwned} retired_not_executable=${retiredSurfacesNotExecutable}, routing discriminates=${routingDiscriminates}`,
   );
 
   // ---- P8-I12/I13/I14 dependency consumers classified -----------------------
@@ -615,74 +687,126 @@ async function main() {
   // ---- P8-I15 proxy runtime responsibilities classified ---------------------
   check('P8-I15', proxy.responsibilities.every((r) => r.ok), `proxy responsibilities=${proxy.responsibilities.filter((r) => r.ok).length}/${proxy.responsibilities.length}`);
 
-  // ---- P8-I16 residual Node production operations explicitly counted --------
-  // Post-Phase-8.1 current state (see docs/backend-migration/phase-8.1-residual-go-parity.md):
-  // every canonical residual operation now has a registered, non-production-routed
-  // Go shadow. The Phase 8.0 frozen finding (22 shadows + 11 missing) is historical;
-  // this current-state view is derived from the registrations scanned today.
+  // ---- P8-I16 canonical Node migration remainder must be zero ----------------
+  // Phase 8.1 froze 33 canonical residual Node-owned operations. Phase 8.2 cuts
+  // all 33 over, so the current-state remainder derived from today's source must be
+  // empty; any surviving NODE_PRODUCTION_OWNED operation fails this gate.
   const nodeRemainder = nodeProductionOwned.map((o) => ({
     method: o.method,
     path: o.canonicalPath,
-    reason: o.goRegistered
-      ? 'Go implementation exists (shadow) but route is not production-routed through CUTOVER_TABLE'
-      : 'No Go implementation / not in CUTOVER_TABLE; Node remains production owner',
-    goImplementation: o.goRegistered ? 'PRESENT (shadow)' : 'ABSENT',
+    reason: 'Operation is not production-routed through CUTOVER_TABLE; Node remains production owner',
+    goImplementation: o.goRegistered ? 'PRESENT' : 'ABSENT',
     parity: o.goRegistered
       ? 'SHADOW PARITY SUITE: scripts/test-phase-8-residual-api-parity.mjs'
       : 'N/A',
-    cutoverReadiness: o.goRegistered ? 'CANDIDATE' : 'REQUIRES_GO_IMPLEMENTATION',
+    cutoverReadiness: 'CANDIDATE',
     decision: 'MIGRATE_TO_GO',
-    requiredPhase: o.goRegistered ? '8.2' : '8.1',
+    requiredPhase: '8.2',
     goRegistered: o.goRegistered,
     inCutover: o.inCutover,
     runtimeOwner: o.runtimeOwner,
   }));
   check(
     'P8-I16',
-    nodeRemainder.length === nodeProductionOwned.length,
+    nodeRemainder.length === 0,
     `canonical_node_migration_remainder=${nodeRemainder.length}`,
   );
 
-  // ---- P8-I21 canonical residual Go shadow coverage --------------------------
-  // Post-Phase-8.1 gate: all canonical residual operations must have an exact
-  // production Go registration (derived from the main.go/remediation scan) while
-  // remaining outside CUTOVER_TABLE, with runtime ownership still resolving to
-  // Node through the production routing function. Fails closed while any
-  // canonical residual operation lacks a Go shadow.
-  const residualWithGoShadow = nodeRemainder.filter((r) => r.goRegistered).length;
-  const residualMissingGo = nodeRemainder.filter((r) => !r.goRegistered);
-  const residualShadowsNotRouted = nodeRemainder.every(
-    (r) => !r.inCutover && r.runtimeOwner === RUNTIME_OWNER.NODE,
-  );
+  // ---- P8-I21 frozen canonical residual set is fully cut over to Go ----------
+  // Non-tautological current-state gate: the 33 exact Phase 8.1 frozen canonical
+  // METHOD+PATH operations must each independently be (a) present in CUTOVER_TABLE,
+  // (b) owner=go, (c) registered in the production Go router, and (d) resolve to
+  // the Go runtime owner through resolveRouteOwner. None may remain Node-owned.
+  const canonicalKeys = [...CANONICAL_RESIDUAL_KEYS];
+  const canonicalNotCutover = canonicalKeys.filter((k) => !cutoverKeys.has(k));
+  const canonicalNotGoOwned = canonicalKeys.filter((k) => cutoverByKey.get(k)?.owner !== 'go');
+  const canonicalNotGoRegistered = canonicalKeys.filter((k) => !goKeys.has(k));
+  const canonicalClassified = classified.filter((o) => CANONICAL_RESIDUAL_KEYS.has(o.key));
+  const canonicalRuntimeGo = canonicalClassified.filter((o) => o.runtimeOwner === RUNTIME_OWNER.GO).length;
+  const canonicalRuntimeNode = canonicalClassified.filter((o) => o.runtimeOwner === RUNTIME_OWNER.NODE).length;
+  const residualWithGoShadow = canonicalClassified.filter((o) => o.goRegistered).length;
+  const residualMissingGo = canonicalKeys.filter((k) => !goKeys.has(k));
   check(
     'P8-I21',
-    residualWithGoShadow === nodeRemainder.length && residualShadowsNotRouted,
-    `canonical_node_with_go_shadow=${residualWithGoShadow} canonical_node_missing_go=${residualMissingGo.length} residual_not_cutover_and_runtime_node=${residualShadowsNotRouted}`,
+    canonicalClassified.length === CANONICAL_RESIDUAL_KEYS.size &&
+      canonicalNotCutover.length === 0 &&
+      canonicalNotGoOwned.length === 0 &&
+      canonicalNotGoRegistered.length === 0 &&
+      canonicalRuntimeGo === CANONICAL_RESIDUAL_KEYS.size &&
+      canonicalRuntimeNode === 0,
+    `canonical_expected=${CANONICAL_RESIDUAL_KEYS.size} in_inventory=${canonicalClassified.length} cutover=${canonicalKeys.length - canonicalNotCutover.length} runtime_go=${canonicalRuntimeGo} runtime_node=${canonicalRuntimeNode} missing_go=${canonicalNotGoRegistered.length}`,
   );
 
   // ---- P8-I17 charging-plane boundary preserved -----------------------------
-  // Charging-plane collections (ocs_sessions / ocs_reservations / ocs_usage_records)
-  // may be READ over HTTP but must never be scheduled for charging-runtime migration.
-  const chargingReads = inventory.filter((o) => /\/api\/ocs\/(sessions|reservations|usage)$/.test(o.nodePath));
-  const chargingReadOnly = chargingReads.every((o) => o.method === 'GET');
-  const chargingNotCutover = chargingReads.every((o) => !o.inCutover);
-  check('P8-I17', chargingReadOnly && chargingNotCutover, `charging reads=${chargingReads.length} read-only=${chargingReadOnly} not-cutover=${chargingNotCutover}`);
+  // Charging-plane collections (ocs_sessions / ocs_reservations / ocs_usage) may be
+  // READ over HTTP (now Go-owned as management/read surfaces) but must never be
+  // scheduled for charging-runtime migration, and no charging-plane mutation may
+  // exist in the current inventory.
+  const chargingOps = classified.filter((o) => /\/api\/ocs\/(sessions|reservations|usage)$/.test(o.nodePath));
+  const chargingReadOnly = chargingOps.every((o) => o.method === 'GET');
+  const chargingCutover = chargingOps.every((o) => o.inCutover);
+  const chargingRuntimeGo = chargingOps.every((o) => o.runtimeOwner === RUNTIME_OWNER.GO);
+  const chargingMutatingOps = classified.filter(
+    (o) => /\/api\/ocs\/(sessions|reservations|usage)/.test(o.nodePath) && o.method !== 'GET',
+  );
+  check(
+    'P8-I17',
+    chargingReadOnly && chargingCutover && chargingRuntimeGo && chargingMutatingOps.length === 0,
+    `charging reads=${chargingOps.length} read-only=${chargingReadOnly} cutover=${chargingCutover} runtime_go=${chargingRuntimeGo} charging_mutations=${chargingMutatingOps.length}`,
+  );
+
+  // ---- P8-I22 the six retired surfaces are no longer executable -------------
+  // Exact retired METHOD+PATH contracts must be absent from the current operation
+  // inventory, absent from CUTOVER_TABLE, and absent from the production Go router.
+  const retiredKeys = [...RETIRED_SURFACES];
+  const retiredStillInInventory = retiredKeys.filter((k) => inventoryKeys.has(k));
+  const retiredStillRouted = retiredKeys.filter((k) => cutoverKeys.has(k));
+  const retiredInGoRouter = retiredKeys.filter((k) => goKeys.has(k));
+  check(
+    'P8-I22',
+    retiredStillInInventory.length === 0 && retiredStillRouted.length === 0 && retiredInGoRouter.length === 0,
+    `retired_expected=${retiredKeys.length} still_in_inventory=${retiredStillInInventory.length} still_routed=${retiredStillRouted.length} go_registered=${retiredInGoRouter.length}`,
+  );
+
+  // ---- P8-I23 both Go-native unrouted reads resolved to production routing ---
+  // The two Phase 8.0 curated residue reads must now be inside CUTOVER_TABLE with
+  // owner=go; the live unrouted allowlist must be empty. This proves the
+  // architecture was resolved, not that the allowlist entries were deleted.
+  const residueNotCutover = FORMER_GO_NATIVE_UNROUTED_READS.filter((k) => !cutoverKeys.has(k));
+  const residueNotGoOwned = FORMER_GO_NATIVE_UNROUTED_READS.filter((k) => cutoverByKey.get(k)?.owner !== 'go');
+  check(
+    'P8-I23',
+    FORMER_GO_NATIVE_UNROUTED_READS.length === 2 &&
+      residueNotCutover.length === 0 &&
+      residueNotGoOwned.length === 0 &&
+      goUnroutedReads.length === 0,
+    `go_native_unrouted_start=${FORMER_GO_NATIVE_UNROUTED_READS.length} residue_cutover=${residueCutoverKeys.length} residue_removed=0 remaining_unrouted=${goUnroutedReads.length}`,
+  );
+
+  // ---- P8-I24 stale callers to retired surfaces = 0 --------------------------
+  const staleCallersToRetired = retiredCallers.length;
+  check('P8-I24', staleCallersToRetired === 0, `stale_callers_to_retired_surfaces=${staleCallersToRetired}`);
 
   // ---- P8-I18 deletion readiness derived from evidence ----------------------
+  const legacyNodeDependency = classified.filter(
+    (o) => o.classification === CLASS.LEGACY && o.runtimeOwner !== RUNTIME_OWNER.GO,
+  ).length;
+  const nodeProductionOperations = runtimeCounts.node;
   const blockers = [];
   if (nodeRemainder.length > 0) blockers.push(`CANONICAL_NODE_MIGRATION_REMAINDER=${nodeRemainder.length}`);
   if (retiredSurface.length > 0) blockers.push(`RETIRED_SURFACES_PENDING_DELETION=${retiredSurface.length}`);
-  if (legacyAlias.length > 0) blockers.push(`LEGACY_ALIASES_PENDING_CLOSURE=${legacyAlias.length}`);
-  if (retiredCallers.length > 0) blockers.push(`STALE_CALLERS_TO_RETIRED_SURFACES=${retiredCallers.length}`);
+  if (legacyNodeDependency > 0) blockers.push(`LEGACY_ALIAS_NODE_DEPENDENCY=${legacyNodeDependency}`);
+  if (staleCallersToRetired > 0) blockers.push(`STALE_CALLERS_TO_RETIRED_SURFACES=${staleCallersToRetired}`);
+  if (goUnroutedReads.length > 0) blockers.push(`GO_REGISTERED_UNROUTED_READS=${goUnroutedReads.length}`);
+  if (nodeProductionOperations > 0) blockers.push(`NODE_PRODUCTION_OPERATIONS=${nodeProductionOperations}`);
+  if (runtimeCounts.unknown > 0) blockers.push(`RUNTIME_OWNER_UNKNOWN=${runtimeCounts.unknown}`);
   const backendRemovalReady =
-    nodeRemainder.length === 0 &&
-    retiredSurface.length === 0 &&
-    legacyAlias.length === 0 &&
+    blockers.length === 0 &&
     unresolved.length === 0 &&
     unknownOwner === 0 &&
     unmappedCallers.length === 0 &&
     depUnresolved.length === 0;
-  check('P8-I18', true, `backend_removal_ready=${backendRemovalReady} (derived from evidence)`);
+  check('P8-I18', backendRemovalReady, `backend_removal_ready=${backendRemovalReady} blockers=${blockers.length}`);
 
   // ---------------------------------------------------------------------------
   // Report
@@ -730,11 +854,11 @@ async function main() {
     console.log(`  ${mod}: total=${deps[mod].length} ${JSON.stringify(cls)}`);
   }
 
-  const acceptanceFailures = invariants.filter((i) => !i.ok && i.id !== 'P8-I18');
+  const acceptanceFailures = invariants.filter((i) => !i.ok);
   const critical = unresolved.length + unknownOwner + unmappedCallers.length + depUnresolved.length;
 
   console.log('\n==================================================');
-  console.log('Phase 8.0 Next.js Backend Removal Readiness');
+  console.log('Phase 8 Next.js Backend Removal Readiness (Phase 8.2 current state)');
   console.log(`api_route_files=${apiFiles.length}`);
   console.log(`api_operations=${inventory.length}`);
   console.log(`cutover_routes=${cutover.length}`);
@@ -748,12 +872,15 @@ async function main() {
   console.log(`unresolved=${unresolved.length}`);
   console.log('');
   console.log(`frontend_api_callers_unmapped=${unmappedCallers.length}`);
+  console.log(`stale_callers_to_retired_surfaces=${staleCallersToRetired}`);
   console.log(`unknown_production_owner=${unknownOwner}`);
   console.log('');
   console.log(`inventory_runtime_go=${runtimeCounts.go}`);
   console.log(`inventory_runtime_node=${runtimeCounts.node}`);
   console.log(`inventory_runtime_unreachable=${runtimeCounts.unreachable}`);
   console.log(`runtime_owner_unknown=${runtimeCounts.unknown}`);
+  console.log(`node_production_operations=${nodeProductionOperations}`);
+  console.log(`legacy_alias_node_dependency=${legacyNodeDependency}`);
   console.log('');
   console.log(`go_registered_operations=${goRegistrationClasses.length}`);
   console.log(`go_registered_classified=${goClassifiedRegistrations.length}`);
@@ -763,12 +890,19 @@ async function main() {
   console.log(`go_registration_negative_sentinel=${sentinelDetected}`);
   for (const r of goUnroutedReads) console.log(`go_registered_unrouted_read=${r.key}`);
   console.log('');
+  console.log(`canonical_residual_expected=${CANONICAL_RESIDUAL_KEYS.size}`);
+  console.log(`canonical_residual_cutover=${canonicalKeys.length - canonicalNotCutover.length}`);
+  console.log(`canonical_residual_runtime_go=${canonicalRuntimeGo}`);
+  console.log(`canonical_residual_runtime_node=${canonicalRuntimeNode}`);
   console.log(`canonical_node_migration_remainder=${nodeRemainder.length}`);
   console.log(`canonical_node_with_go_shadow=${residualWithGoShadow}`);
   console.log(`canonical_node_missing_go=${residualMissingGo.length}`);
-  console.log(`existing_go_shadow=${residualWithGoShadow}`);
-  console.log(`missing_go_implementation=${residualMissingGo.length}`);
-  for (const r of residualMissingGo) console.log(`canonical_node_missing_go_operation=${r.method} ${r.path}`);
+  console.log(`retired_surfaces_active=${retiredStillInInventory.length + retiredStillRouted.length + retiredInGoRouter.length}`);
+  console.log(`go_native_unrouted_start=${FORMER_GO_NATIVE_UNROUTED_READS.length}`);
+  console.log(`go_native_residue_cutover=${residueCutoverKeys.length}`);
+  console.log(`go_native_residue_removed=0`);
+  console.log(`go_native_unrouted_remaining=${goUnroutedReads.length}`);
+  for (const r of residualMissingGo) console.log(`canonical_node_missing_go_operation=${r}`);
   console.log(`backend_removal_ready=${backendRemovalReady}`);
   console.log(`backend_removal_blockers=${blockers.length}`);
   for (const b of blockers) console.log(`backend_removal_blocker=${b}`);
@@ -778,12 +912,11 @@ async function main() {
   console.log('==================================================\n');
 
   if (critical > 0 || acceptanceFailures.length > 0) {
-    console.error('Phase 8.0 readiness FAILED (unresolved/unknown/unmapped/invariant failure).');
+    console.error('Phase 8.2 backend-removal readiness FAILED (unresolved/unknown/unmapped/invariant failure).');
     process.exit(1);
   }
 
-  // backend_removal_ready=false is EXPECTED and does not fail Phase 8.0.
-  console.log('Phase 8.0 architecture/inventory readiness result: PASS' + (backendRemovalReady ? '' : ' (backend removal BLOCKED as expected)'));
+  console.log('Phase 8.2 backend-removal readiness result: PASS' + (backendRemovalReady ? ' (backend removal READY)' : ' (backend removal BLOCKED)'));
 }
 
 main().catch((err) => {

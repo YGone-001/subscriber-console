@@ -83,8 +83,7 @@
     "path": "/api/auth/users",
     "domain": "auth",
     "methods": [
-      "GET",
-      "POST"
+      "GET"
     ],
     "file": "frontend/src/app/api/auth/users/route.ts"
   },
@@ -92,10 +91,7 @@
     "path": "/api/auth/users/:username",
     "domain": "auth",
     "methods": [
-      "DELETE",
-      "GET",
-      "PATCH",
-      "PUT"
+      "GET"
     ],
     "file": "frontend/src/app/api/auth/users/[username]/route.ts"
   },
@@ -432,10 +428,8 @@
     "path": "/api/users/:username",
     "domain": "users",
     "methods": [
-      "DELETE",
       "GET",
-      "PATCH",
-      "PUT"
+      "PATCH"
     ],
     "file": "frontend/src/app/api/users/[username]/route.ts"
   },

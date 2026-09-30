@@ -5,8 +5,8 @@
  * Verifies production ownership cutover of Authentication APIs from Node to Go backend (:18888):
  *
  * 1. Cutover Table Routing & Inventory Checks:
- *    - CUTOVER_TABLE contains exactly 47 routes
- *    - ACTUALLY_ROUTED = 47 (all routes owned by Go)
+ *    - CUTOVER_TABLE contains exactly 84 routes
+ *    - ACTUALLY_ROUTED = 84 (all routes owned by Go)
  *    - No duplicate METHOD+PATH entries in CUTOVER_TABLE
  *    - All 4 authentication routes present with owner: 'go':
  *        POST /api/auth/login
@@ -155,13 +155,13 @@ async function main() {
   // =============================================================
   console.log('[1] Cutover Table Routing & Inventory Checks');
 
-  verify('CUTOVER_TABLE contains exactly 47 routes', () => {
-    assert.equal(CUTOVER_TABLE.length, 47, `Expected 47 routes, found ${CUTOVER_TABLE.length}`);
+  verify('CUTOVER_TABLE contains exactly 84 routes', () => {
+    assert.equal(CUTOVER_TABLE.length, 84, `Expected 84 routes, found ${CUTOVER_TABLE.length}`);
   });
 
-  verify('ACTUALLY_ROUTED = 47 (all routes owned by Go)', () => {
+  verify('ACTUALLY_ROUTED = 84 (all routes owned by Go)', () => {
     const goRoutes = CUTOVER_TABLE.filter((r) => r.owner === 'go');
-    assert.equal(goRoutes.length, 47, `Expected 47 Go-owned routes, found ${goRoutes.length}`);
+    assert.equal(goRoutes.length, 84, `Expected 84 Go-owned routes, found ${goRoutes.length}`);
   });
 
   verify('No duplicate METHOD+PATH entries in CUTOVER_TABLE', () => {
@@ -195,10 +195,10 @@ async function main() {
     assert.equal(resolveRouteOwner('GET', '/api/auth/permissions'), 'go');
   });
 
-  verify('resolveRouteOwner returns "node" for non-cutover auth routes (legacy compatibility)', () => {
+  verify('legacy /api/auth/users read aliases are Go-owned; mutation methods stay Node', () => {
     assert.equal(resolveRouteOwner('POST', '/api/auth/users'), 'node');
-    assert.equal(resolveRouteOwner('GET', '/api/auth/users'), 'node');
-    assert.equal(resolveRouteOwner('GET', '/api/auth/users/alice'), 'node');
+    assert.equal(resolveRouteOwner('GET', '/api/auth/users'), 'go');
+    assert.equal(resolveRouteOwner('GET', '/api/auth/users/alice'), 'go');
   });
 
   verify('resolveRouteOwner contrast check: canonical user management and subscriber mutations resolve to "go"', () => {
@@ -672,7 +672,7 @@ async function main() {
   console.log(`\n==================================================`);
   console.log(`Phase 6.3-B Authentication Controlled Cutover Suite Passed`);
   console.log(`Passed: ${passed} / ${totalChecks} checks`);
-  console.log(`CUTOVER_TABLE=47 ACTUALLY_ROUTED=47 Production Owner=Go`);
+  console.log(`CUTOVER_TABLE=84 ACTUALLY_ROUTED=84 Production Owner=Go`);
   console.log(`==================================================\n`);
 }
 

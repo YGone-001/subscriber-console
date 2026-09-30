@@ -1022,13 +1022,13 @@ async function main() {
   // -------------------------------------------------------------
   console.log('\n[12] Authentication Production-Path Ownership Invariant');
 
-  verify('CUTOVER_TABLE contains exactly 47 routes', () => {
-    assert.equal(CUTOVER_TABLE.length, 47);
+  verify('CUTOVER_TABLE contains exactly 84 routes', () => {
+    assert.equal(CUTOVER_TABLE.length, 84);
   });
 
-  verify('Exactly 4 authentication routes in CUTOVER_TABLE', () => {
+  verify('Exactly 6 authentication routes in CUTOVER_TABLE', () => {
     const authRoutes = CUTOVER_TABLE.filter((r) => r.path.startsWith('/api/auth'));
-    assert.equal(authRoutes.length, 4, `Expected 4 auth routes in CUTOVER_TABLE, found ${authRoutes.length}`);
+    assert.equal(authRoutes.length, 6, `Expected 6 auth routes in CUTOVER_TABLE, found ${authRoutes.length}`);
   });
 
   verify('resolveRouteOwner returns "go" for all authentication routes', () => {

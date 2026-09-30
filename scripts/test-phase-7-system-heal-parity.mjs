@@ -6,7 +6,7 @@
  *   POST /api/system/audit/batch-heal
  *
  * Invariants enforced:
- *   - CUTOVER_TABLE = 47, ACTUALLY_ROUTED = 47 (Phase 7 owned by Go)
+ *   - CUTOVER_TABLE = 84, ACTUALLY_ROUTED = 84 (Phase 7 + Phase 8.2 owned by Go)
  *   - Node remains the shadow/reference owner for the frozen parity contract
  *   - Operator-initiated controlled remediation only (no autonomous loop / cron)
  *   - Pure ASCII only
@@ -1250,9 +1250,9 @@ async function main() {
     await new Promise((r) => setTimeout(r, 1100));
     assert.deepStrictEqual(await stateParity([imsi]), before);
   });
-  test('INV05', 'routing freeze: 47 routes, Go-owned Phase 7 remediation endpoints', async () => {
-    assert.equal(CUTOVER_TABLE.length, 47);
-    assert.equal(CUTOVER_TABLE.filter((r) => r.owner === 'go').length, 47);
+  test('INV05', 'routing freeze: 84 routes, Go-owned Phase 7 remediation endpoints', async () => {
+    assert.equal(CUTOVER_TABLE.length, 84);
+    assert.equal(CUTOVER_TABLE.filter((r) => r.owner === 'go').length, 84);
     for (const path of ['/api/alerts', '/api/alerts/acknowledge', '/api/alerts/workflow', '/api/notifications/stream', '/api/system/health', '/api/system/mongo/health', '/api/system/audit/status', '/api/system/audit/scan', ...Object.values(endpoints), '/api/analytics/init']) {
       const entry = CUTOVER_TABLE.find((r) => r.path === path);
       assert.ok(entry, `${path} must be in CUTOVER_TABLE after Phase 7 cutover`);

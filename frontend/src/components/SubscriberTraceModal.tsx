@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, AlertTriangle, Clock3, DatabaseZap, History, RefreshCw, Route, ShieldCheck, Signal, X } from "lucide-react";
+import { AlertTriangle, DatabaseZap, History, RefreshCw, Route, ShieldCheck, Signal, X } from "lucide-react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
 import { formatBytes } from "@/lib/unitParser";
@@ -15,17 +15,6 @@ type SubscriberTraceModalProps = {
   t: (key: string, params?: Record<string, string | number>) => string;
 };
 
-type AuditLog = {
-  id: string;
-  timestamp: string;
-  level: "info" | "warning";
-  action: string;
-  targetId: string;
-  operatorIp: string;
-  oldData?: unknown;
-  newData?: unknown;
-};
-
 type TraceStep = {
   key: string;
   label: string;
@@ -36,7 +25,7 @@ type TraceStep = {
 type TimelineEvent = {
   id: string;
   time: string;
-  kind: "subscription" | "rating" | "balance" | "session" | "audit";
+  kind: "subscription" | "rating" | "balance" | "session";
   tone: "ok" | "warn";
   title: string;
   detail: string;
@@ -53,31 +42,15 @@ function formatSeconds(value: unknown): string {
   return `${seconds}s`;
 }
 
-function formatDate(value: unknown): string {
-  const date = new Date(String(value || ""));
-  return Number.isNaN(date.getTime()) ? "-" : date.toLocaleString();
-}
-
 function formatPercent(value: number): string {
   if (!Number.isFinite(value)) return "0%";
   return `${Math.max(0, Math.min(100, value)).toFixed(0)}%`;
 }
 
-function actionLabel(action: string, t: SubscriberTraceModalProps["t"]) {
-  if (action.includes("POLICY")) return t("trace_timeline_policy_action");
-  if (action.includes("TRAFFIC") || action.includes("BALANCE")) return t("trace_timeline_balance_action");
-  if (action.includes("UPDATE")) return t("trace_timeline_update_action");
-  if (action.includes("CREATE")) return t("trace_timeline_create_action");
-  if (action.includes("DELETE")) return t("trace_timeline_delete_action");
-  return action;
-}
-
 export default function SubscriberTraceModal({ imsi, onClose, t }: SubscriberTraceModalProps) {
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const detailUrl = imsi ? `/api/subscribers/${imsi}` : null;
-  const auditUrl = imsi ? `/api/audit?target=${encodeURIComponent(imsi)}&limit=12` : null;
   const { data: detail, error: detailError, isLoading: detailLoading, mutate: mutateDetail } = useSWR(detailUrl, fetcher);
-  const { data: auditData, isLoading: auditLoading, mutate: mutateAudit } = useSWR(auditUrl, fetcher);
 
   const sub4G = asRecord(detail?.sub4G);
   const ocsImsi = asRecord(detail?.ocsImsi);
@@ -93,7 +66,6 @@ export default function SubscriberTraceModal({ imsi, onClose, t }: SubscriberTra
   const dataRules = rules.filter((rule: any) => rule.charging_type === "data_volume").length;
   const voiceRules = rules.filter((rule: any) => rule.charging_type === "voice_time").length;
   const smsRules = rules.filter((rule: any) => rule.charging_type === "sms_event" || rule.unit === "events").length;
-  const auditLogs: AuditLog[] = auditData?.logs || [];
   const trafficTotal = Number(ocsTraffic.traffic_total || 0);
   const trafficBalance = Number(ocsTraffic.traffic_balance || 0);
   const voiceTotal = Number(ocsTraffic.voice_total || 0);
@@ -143,16 +115,7 @@ export default function SubscriberTraceModal({ imsi, onClose, t }: SubscriberTra
       meta: t("trace_timeline_session_meta"),
     },
   ];
-  const auditEvents: TimelineEvent[] = auditLogs.slice(0, 8).map((log) => ({
-    id: log.id,
-    time: formatDate(log.timestamp),
-    kind: "audit",
-    tone: log.level === "warning" ? "warn" : "ok",
-    title: actionLabel(log.action, t),
-    detail: t("trace_timeline_audit_detail", { action: log.action, target: log.targetId }),
-    meta: log.operatorIp || "-",
-  }));
-  const timelineEvents = [...currentEvents, ...auditEvents];
+  const timelineEvents = [...currentEvents];
 
   const traceSteps: TraceStep[] = [
     {
@@ -183,7 +146,6 @@ export default function SubscriberTraceModal({ imsi, onClose, t }: SubscriberTra
 
   const refresh = () => {
     mutateDetail();
-    mutateAudit();
   };
 
   return (
@@ -203,7 +165,7 @@ export default function SubscriberTraceModal({ imsi, onClose, t }: SubscriberTra
             <p className="trace-modal-subtitle">{imsi}</p>
           </div>
           <div className="trace-modal-actions">
-            <button className="btn btn-outline trace-btn-refresh" onClick={refresh} disabled={detailLoading || auditLoading}>
+            <button className="btn btn-outline trace-btn-refresh" onClick={refresh} disabled={detailLoading}>
               <RefreshCw size={15} /> {t("trace_refresh")}
             </button>
             <button ref={closeButtonRef} className="btn-icon" onClick={onClose} title={t("close")} aria-label={t("close")}><X size={22} /></button>
@@ -295,7 +257,7 @@ export default function SubscriberTraceModal({ imsi, onClose, t }: SubscriberTra
                       </span>
                       {index < timelineEvents.length - 1 ? <span className="trace-timeline-line" /> : null}
                     </div>
-                    <div className={`trace-timeline-content ${event.kind === "audit" ? "audit" : "normal"}`}>
+                    <div className="trace-timeline-content normal">
                       <div className="trace-timeline-header">
                         <strong className="trace-timeline-title">{event.title}</strong>
                         <span className="trace-timeline-time">{event.time}</span>
@@ -303,29 +265,6 @@ export default function SubscriberTraceModal({ imsi, onClose, t }: SubscriberTra
                       <div className="trace-timeline-detail">{event.detail}</div>
                       <div className="trace-timeline-meta">{event.meta}</div>
                     </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </section>
-
-          <section className="trace-section-card">
-            <div className="trace-section-header">
-              <Clock3 size={16} color="var(--primary)" /> {t("trace_audit_title")}
-            </div>
-            <div className="trace-audit-body">
-              {auditLoading ? (
-                <div className="trace-timeline-loading">{t("loading")}</div>
-              ) : auditLogs.length === 0 ? (
-                <div className="trace-timeline-loading">{t("trace_no_audit")}</div>
-              ) : (
-                auditLogs.map((log) => (
-                  <div key={log.id} className="trace-audit-item">
-                    <span className="trace-audit-time">{formatDate(log.timestamp)}</span>
-                    <span className={`trace-audit-action ${log.level === "warning" ? "danger" : "primary"}`}>{log.action}</span>
-                    <span className="trace-audit-target">
-                      <Activity size={13} className="trace-audit-target-icon" />{log.targetId} · {log.operatorIp}
-                    </span>
                   </div>
                 ))
               )}

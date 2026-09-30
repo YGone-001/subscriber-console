@@ -6,8 +6,9 @@
  * Strengthened Source-Derived Contract Validator:
  * 1. Authoritative 11 candidate endpoints exist in Next.js / Node.
  * 2. Routing ownership invariants: 36 historical baseline routes preserved,
- *    11 Phase 7 candidates now Go-owned after the controlled cutover
- *    (CUTOVER_TABLE = 47, ACTUALLY_ROUTED = 47).
+ *    11 Phase 7 candidates now Go-owned after the controlled cutover, plus the
+ *    37 Phase 8.2 residual cutover entries
+ *    (CUTOVER_TABLE = 84, ACTUALLY_ROUTED = 84).
  * 3. All 11 Phase 7 candidate endpoints are in CUTOVER_TABLE with owner = go.
  * 4. Go backend registers all 11 Phase 7 endpoints (9 directly in main.go,
  *    2 constrained remediation endpoints via the remediation package).
@@ -84,20 +85,22 @@ assert.ok(Array.isArray(CUTOVER_TABLE), 'CUTOVER_TABLE must be an array');
 const HISTORICAL_PHASE_7_0_BASELINE = 36;
 
 // Current Phase 7.5 production ownership.
-assert.equal(CUTOVER_TABLE.length, 47, `CUTOVER_TABLE must be exactly 47 (found ${CUTOVER_TABLE.length})`);
+assert.equal(CUTOVER_TABLE.length, 84, `CUTOVER_TABLE must be exactly 84 (found ${CUTOVER_TABLE.length})`);
 
 const actuallyRoutedGo = CUTOVER_TABLE.filter((r) => r.owner === 'go');
-assert.equal(actuallyRoutedGo.length, 47, `ACTUALLY_ROUTED must be exactly 47 (found ${actuallyRoutedGo.length})`);
+assert.equal(actuallyRoutedGo.length, 84, `ACTUALLY_ROUTED must be exactly 84 (found ${actuallyRoutedGo.length})`);
 
-// The only routing-table delta versus the frozen Phase 7.0 baseline is the
-// 11 Phase 7 Platform Services operations. No unrelated route may be added.
+// The routing-table delta versus the frozen Phase 7.0 baseline is the 11 Phase 7
+// Platform Services operations plus the 37 Phase 8.2 residual cutover entries
+// (33 canonical residual operations + 2 legacy read aliases + 2 Go-native reads).
+const PHASE_8_2_RESIDUAL_ADDITIONS = 37;
 const nonPhase7Count = CUTOVER_TABLE.filter(
   (r) => !PHASE_7_CANDIDATES.some((c) => c.method === r.method && c.path === r.path)
 ).length;
 assert.equal(
   nonPhase7Count,
-  HISTORICAL_PHASE_7_0_BASELINE,
-  `non-Phase-7 routes must remain exactly ${HISTORICAL_PHASE_7_0_BASELINE} (found ${nonPhase7Count})`
+  HISTORICAL_PHASE_7_0_BASELINE + PHASE_8_2_RESIDUAL_ADDITIONS,
+  `non-Phase-7 routes must remain exactly ${HISTORICAL_PHASE_7_0_BASELINE + PHASE_8_2_RESIDUAL_ADDITIONS} (found ${nonPhase7Count})`
 );
 
 // All 11 Phase 7 candidates must now be present and owned by Go.
@@ -113,9 +116,9 @@ for (const candidate of PHASE_7_CANDIDATES) {
     `Phase 7 candidate ${candidate.method} ${candidate.path} must be owned by Go after the cutover`
   );
 }
-console.log('  [PASS] CUTOVER_TABLE length is exactly 47');
-console.log('  [PASS] ACTUALLY_ROUTED count is exactly 47');
-console.log(`  [PASS] Non-Phase-7 historical baseline preserved at ${HISTORICAL_PHASE_7_0_BASELINE}`);
+console.log('  [PASS] CUTOVER_TABLE length is exactly 84');
+console.log('  [PASS] ACTUALLY_ROUTED count is exactly 84');
+console.log(`  [PASS] Non-Phase-7 historical baseline preserved at ${HISTORICAL_PHASE_7_0_BASELINE} + ${PHASE_8_2_RESIDUAL_ADDITIONS} Phase 8.2 residual additions`);
 console.log('  [PASS] All 11 Phase 7 candidates are in CUTOVER_TABLE owned by Go');
 
 // ---------------------------------------------------------------------------
@@ -994,8 +997,8 @@ const agentsContent = fs.readFileSync(agentsPath, 'utf8');
 
 assert.ok(agentsContent.includes('Phase 7.0'), 'AGENTS.md must document Phase 7.0');
 assert.ok(!agentsContent.includes('Login/logout = Node owner.'), 'AGENTS.md must not contain stale "Login/logout = Node owner."');
-assert.ok(agentsContent.includes('CUTOVER_TABLE = 47'), 'AGENTS.md must document CUTOVER_TABLE = 47');
-assert.ok(agentsContent.includes('ACTUALLY_ROUTED = 47'), 'AGENTS.md must document ACTUALLY_ROUTED = 47');
+assert.ok(agentsContent.includes('CUTOVER_TABLE = 84'), 'AGENTS.md must document CUTOVER_TABLE = 84');
+assert.ok(agentsContent.includes('ACTUALLY_ROUTED = 84'), 'AGENTS.md must document ACTUALLY_ROUTED = 84');
 console.log('  [PASS] AGENTS.md reconciled');
 
 // 12b. docs/operations/todo.md

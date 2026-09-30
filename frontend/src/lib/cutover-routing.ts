@@ -100,6 +100,59 @@ export const CUTOVER_TABLE: readonly CutoverRoute[] = [
   { method: 'POST', path: '/api/system/audit/batch-heal', owner: 'go' },
   // Analytics
   { method: 'POST', path: '/api/analytics/init', owner: 'go' },
+
+  // -- Phase 8.2: Canonical residual production cutover -----------
+  // 33 frozen canonical residual operations (Go shadows since Phase 8.1).
+  // Analytics
+  { method: 'GET', path: '/api/analytics/metrics', owner: 'go' },
+  { method: 'GET', path: '/api/analytics/sparkline', owner: 'go' },
+  // OCS management read surfaces (charging plane stays frozen)
+  { method: 'GET', path: '/api/ocs/balances', owner: 'go' },
+  { method: 'GET', path: '/api/ocs/reservations', owner: 'go' },
+  { method: 'GET', path: '/api/ocs/sessions', owner: 'go' },
+  { method: 'GET', path: '/api/ocs/usage', owner: 'go' },
+  // Profiles
+  { method: 'GET', path: '/api/profiles', owner: 'go' },
+  { method: 'GET', path: '/api/profiles/{name}', owner: 'go' },
+  { method: 'GET', path: '/api/profiles/{name}/stats', owner: 'go' },
+  { method: 'GET', path: '/api/profiles/{name}/versions', owner: 'go' },
+  // Ratings
+  { method: 'GET', path: '/api/ratings', owner: 'go' },
+  { method: 'POST', path: '/api/ratings', owner: 'go' },
+  { method: 'GET', path: '/api/ratings/{id}', owner: 'go' },
+  { method: 'PUT', path: '/api/ratings/{id}', owner: 'go' },
+  { method: 'DELETE', path: '/api/ratings/{id}', owner: 'go' },
+  // Search / subscribers
+  { method: 'GET', path: '/api/search', owner: 'go' },
+  { method: 'GET', path: '/api/subscribers', owner: 'go' },
+  { method: 'GET', path: '/api/subscribers/{imsi}', owner: 'go' },
+  { method: 'POST', path: '/api/subscribers/batch/precheck', owner: 'go' },
+  { method: 'POST', path: '/api/subscribers/policy', owner: 'go' },
+  { method: 'POST', path: '/api/subscribers/{imsi}/traffic-adjustments', owner: 'go' },
+  // Tariff plans
+  { method: 'GET', path: '/api/tariff-plans', owner: 'go' },
+  { method: 'GET', path: '/api/tariff-plans/{planId}', owner: 'go' },
+  { method: 'GET', path: '/api/tariff-plans/{planId}/export', owner: 'go' },
+  { method: 'GET', path: '/api/tariff-plans/{planId}/migrate', owner: 'go' },
+  { method: 'POST', path: '/api/tariff-plans/{planId}/migrate', owner: 'go' },
+  { method: 'GET', path: '/api/tariff-plans/{planId}/rules', owner: 'go' },
+  { method: 'POST', path: '/api/tariff-plans/{planId}/rules', owner: 'go' },
+  { method: 'PUT', path: '/api/tariff-plans/{planId}/rules/{ruleId}', owner: 'go' },
+  { method: 'PATCH', path: '/api/tariff-plans/{planId}/rules/{ruleId}', owner: 'go' },
+  { method: 'DELETE', path: '/api/tariff-plans/{planId}/rules/{ruleId}', owner: 'go' },
+  { method: 'GET', path: '/api/tariff-plans/{planId}/subscribers', owner: 'go' },
+  { method: 'POST', path: '/api/tariff-plans/import', owner: 'go' },
+
+  // -- Phase 8.2: Legacy read compatibility aliases ---------------
+  // Read-only compatibility surfaces; MUTATION methods stay retired.
+  { method: 'GET', path: '/api/auth/users', owner: 'go' },
+  { method: 'GET', path: '/api/auth/users/{username}', owner: 'go' },
+
+  // -- Phase 8.2: Go-native unrouted read residue resolution ------
+  // Tariff operations read: frontend caller exists (rating console).
+  { method: 'GET', path: '/api/tariff-plans/{planId}/operations', owner: 'go' },
+  // OCS balance detail read: kept as a public Go API (no Node counterpart).
+  { method: 'GET', path: '/api/ocs/balances/{imsi}', owner: 'go' },
 ] as const;
 
 /**

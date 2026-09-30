@@ -11,7 +11,7 @@ const createSource = read('../src/app/(dashboard)/users/components/UserCreateFor
 const progressSource = read('../src/app/(dashboard)/users/components/BulkProgressModal.tsx');
 const permissionsSource = read('../src/app/(dashboard)/users/components/UserPermissions.tsx');
 const rolePageSource = read('../src/app/(dashboard)/roles/page.tsx');
-const createRouteSource = read('../src/app/api/auth/users/route.ts');
+const createRouteSource = read('../src/app/api/users/route.ts');
 
 test('user row actions expose only implemented contextual operations', () => {
   assert.match(tableSource, /startPasswordReset/);
