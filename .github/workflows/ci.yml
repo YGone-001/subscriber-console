@@ -314,6 +314,11 @@ jobs:
           mkdir -p "$PREFIX/conf" "$PREFIX/logs" "$PREFIX/temp"
           printf 'types { text/html html; text/css css; application/javascript js; }\n' > "$PREFIX/conf/mime.types"
           {
+            # The runner user cannot write the distribution's compiled-in pid path
+            # (/run/nginx.pid), so both the pid file and the error log are redirected
+            # into the sandbox prefix before the package config is included.
+            echo "pid $PREFIX/logs/nginx.pid;"
+            echo "error_log $PREFIX/logs/error.log notice;"
             echo 'events { worker_connections 128; }'
             echo 'http {'
             echo "  include $PREFIX/conf/mime.types;"
