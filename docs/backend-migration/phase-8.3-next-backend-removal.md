@@ -396,6 +396,20 @@ is the frozen Node-derived expected value set, preserved as package `testdata` s
 Go algorithm stays locked to the pre-removal cross-language baseline. Production Go
 tree freeze remains intact for all non-test files.
 
+`P83-S06` / `P83-S07` assert exactly this: `frontend/package.json` and
+`frontend/package-lock.json` are unchanged versus the starting SHA, and every changed
+`backend/**` path is test-scoped (`*_test.go` or `testdata/**`). Any change to a
+production Go file fails the suite:
+
+```text
+backend_production_changes = 0
+```
+
+Because the assertion diffs against the starting SHA, the CI clone must contain that
+commit: the `next-backend-removal` job checks out with `fetch-depth: 0`. On a shallow
+clone the probe reports `baseline commit ... must be present locally` instead of
+aborting the suite, so every later P83 group still runs and reports.
+
 ### 10.4 Historical parity suites (RETIRE_AS_HISTORICAL_PARITY)
 
 Twelve scripts were structurally bound to the deleted Node backend (they imported
@@ -694,7 +708,7 @@ stays covered.
 | `residual-api-parity` job: Phase 8.1 residual API parity | imported deleted residual Node routes | RETIRE_AS_HISTORICAL_PARITY | Frozen in `docs/backend-migration/phase-8.1-residual-go-parity.md` |
 | `residual-api-parity` job: Build frontend for real Next.js retired-surface HTTP runtime verification | Next API tree had to exist | REPLACE_WITH_CURRENT_RUNTIME_SUITE | `next-backend-removal` builds the frontend the same way, now proving absence |
 | `residual-api-parity` job: Phase 8.2 residual production cutover | imported deleted Node route modules | REPLACE_WITH_CURRENT_RUNTIME_SUITE | `scripts/test-phase-8-next-backend-removal.mjs` (`P83-R`, `P83-F`, `P83-D`) re-proves 84/84 routing, fail-closed and retired surfaces |
-| (new) `next-backend-removal` job | none | ADDED | `Phase 8.3 Next.js business backend removal acceptance` runs `scripts/test-phase-8-next-backend-removal.mjs` on a real build with MongoDB and Go |
+| (new) `next-backend-removal` job | none | ADDED | `Phase 8.3 Next.js business backend removal acceptance` runs `scripts/test-phase-8-next-backend-removal.mjs` on a real build with MongoDB and Go (checkout uses `fetch-depth: 0` so the baseline-SHA diff is computable; package manifests unchanged, only test-scoped Go changes allowed) |
 
 The `next-backend-removal` job is a visible, first-class Phase 8.3 job: it checks out
 the exact SHA, installs the existing dependencies, runs `npm run build` in

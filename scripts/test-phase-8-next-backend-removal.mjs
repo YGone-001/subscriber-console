@@ -809,18 +809,54 @@ async function main() {
   });
 
   const BASELINE_SHA = '6a8352dc3892957e12751f14182328f054fc42ff';
-  const frontendManifestChanged = execSync(
-    `git diff --name-only ${BASELINE_SHA}..HEAD -- frontend/package.json frontend/package-lock.json`,
-    { cwd: root, encoding: 'utf8' },
-  ).trim();
-  const backendChanged = execSync(
-    `git diff --name-only ${BASELINE_SHA}..HEAD -- backend`,
-    { cwd: root, encoding: 'utf8' },
-  ).trim();
 
-  await check('P83-S06 frontend manifests and backend/** unchanged vs the Phase 8.3 baseline SHA', () => {
+  // The baseline commit must be resolvable in the local clone (CI must not use a shallow
+  // checkout). Probed without throwing so every later P83 group still runs and reports.
+  const gitProbe = (args) => {
+    try {
+      return { ok: true, out: execSync(`git ${args}`, { cwd: root, encoding: 'utf8' }).trim() };
+    } catch (err) {
+      return { ok: false, out: '', error: String(err.stderr || err.stdout || err.message).trim() };
+    }
+  };
+
+  const baselineResolved = gitProbe(`cat-file -t ${BASELINE_SHA}`);
+
+  // Only test-scoped Go paths may differ from the frozen baseline: the cross-language
+  // fixture had to move out of the removed Next.js server tree for `go test` to run.
+  const backendTestOnlyPath = (file) => file.endsWith('_test.go') || file.includes('/testdata/');
+
+  const manifestDiff = gitProbe(
+    `diff --name-only --no-renames ${BASELINE_SHA}..HEAD -- frontend/package.json frontend/package-lock.json`,
+  );
+  const backendDiff = gitProbe(`diff --name-only --no-renames ${BASELINE_SHA}..HEAD -- backend`);
+
+  const frontendManifestChanged = manifestDiff.ok ? manifestDiff.out : '';
+  const backendChangedFiles = backendDiff.ok
+    ? backendDiff.out.split('\n').map((line) => line.trim()).filter(Boolean)
+    : [];
+  const backendProductionChanges = backendChangedFiles.filter((file) => !backendTestOnlyPath(file));
+
+  await check('P83-S06 package manifests unchanged and only test-scoped Go changes vs the Phase 8.3 baseline SHA', () => {
+    assert.ok(
+      baselineResolved.ok && baselineResolved.out === 'commit',
+      `baseline commit ${BASELINE_SHA} must be present locally: ${baselineResolved.error}`,
+    );
+    assert.ok(
+      manifestDiff.ok && backendDiff.ok,
+      `baseline diff must be computable: ${manifestDiff.error || backendDiff.error}`,
+    );
     assert.equal(frontendManifestChanged, '', `frontend manifests changed vs baseline: ${frontendManifestChanged}`);
-    assert.equal(backendChanged, '', `backend tree changed vs baseline: ${backendChanged}`);
+    assert.equal(
+      backendProductionChanges.length,
+      0,
+      `production Go tree changed vs baseline: ${backendProductionChanges.join(', ')}`,
+    );
+  });
+
+  await check('P83-S07 every Go change vs the baseline is test-scoped', () => {
+    const offenders = backendChangedFiles.filter((file) => !backendTestOnlyPath(file));
+    assert.equal(offenders.length, 0, `non-test Go changes: ${offenders.join(', ')}`);
   });
 
   // ---------------------------------------------------------------------------
@@ -1341,6 +1377,7 @@ async function main() {
   console.log(`frontend_api_callers_unmapped=${frontendApiCallersUnmapped}`);
   console.log(`backend_removal_ready=${backendRemovalReady}`);
   console.log(`next_business_backend_removed=${nextBusinessBackendRemoved}`);
+  console.log(`backend_production_changes=${backendProductionChanges.length}`);
   console.log(`unexplained_test_coverage_loss=${unexplainedTestCoverageLoss}`);
   console.log(`ci_coverage_gaps=${ciCoverageGaps}`);
   console.log(`phase83_result=${failed === 0 ? 'PASS' : 'FAIL'}`);
@@ -1380,6 +1417,8 @@ main()
       await client.db(appDbName).dropDatabase();
       await client.close();
     } catch {}
-    console.log(`Phase 8.3 Next.js business backend removal acceptance result: FAIL=${failed}`);
+    if (failed > 0) {
+      console.log(`Phase 8.3 Next.js business backend removal acceptance result: FAIL=${failed}`);
+    }
     process.exit(process.exitCode || 0);
   });
