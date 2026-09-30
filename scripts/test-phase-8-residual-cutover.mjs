@@ -181,6 +181,9 @@ let goPort = null;
 let binPath = null;
 let capture = null;
 let capturePort = null;
+let nextProc = null;
+let nextPort = null;
+const nextStdout = [];
 
 let total = 0;
 let passed = 0;
@@ -218,6 +221,63 @@ function getAvailablePort() {
     });
     srv.on('error', reject);
   });
+}
+
+/**
+ * Ensure a real frontend production build exists so the retired-surface evidence
+ * can be produced by the actual Next.js App Router runtime.
+ */
+function ensureFrontendBuild() {
+  const frontendDir = path.join(root, 'frontend');
+  const buildId = path.join(frontendDir, '.next', 'BUILD_ID');
+  if (existsSync(buildId) && !process.env.P82_FORCE_FRONTEND_BUILD) {
+    console.log('  reusing existing frontend production build (.next/BUILD_ID present)');
+    return;
+  }
+  console.log('  building frontend production bundle (next build)...');
+  execSync('npm run build', { cwd: frontendDir, stdio: 'inherit' });
+}
+
+/**
+ * Launch the real production Next.js application on loopback. This is the genuine
+ * App Router runtime: proxy.ts executes, and unmatched methods are dispatched by the
+ * framework itself (never by this test harness).
+ */
+async function startNextServer(port) {
+  const frontendDir = path.join(root, 'frontend');
+  const nextBin = path.join(frontendDir, 'node_modules', 'next', 'dist', 'bin', 'next');
+  const proc = spawn(process.execPath, [nextBin, 'start', '-p', String(port), '-H', '127.0.0.1'], {
+    cwd: frontendDir,
+    env: { ...process.env, NODE_ENV: 'production' },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  proc.stdout.on('data', (chunk) => nextStdout.push(chunk.toString()));
+  proc.stderr.on('data', (chunk) => nextStdout.push(chunk.toString()));
+
+  let ready = false;
+  for (let i = 0; i < 300; i++) {
+    if (proc.exitCode !== null) break;
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/login`, { redirect: 'manual' });
+      const ok = res.status > 0;
+      try { await res.body?.cancel(); } catch {}
+      if (ok) { ready = true; break; }
+    } catch {}
+    await new Promise((r) => setTimeout(r, 150));
+  }
+  if (!ready) {
+    throw new Error(`real Next.js server failed to become ready on 127.0.0.1:${port}\n${nextStdout.join('')}`);
+  }
+  return proc;
+}
+
+function stopProcess(proc) {
+  if (!proc || !proc.pid) return;
+  if (process.platform === 'win32') {
+    try { execSync(`taskkill /pid ${proc.pid} /T /F`, { stdio: 'ignore' }); } catch {}
+  } else {
+    try { proc.kill('SIGTERM'); } catch {}
+  }
 }
 
 function makeToken(username, role, sv, expiresInSec = 3600) {
@@ -410,6 +470,28 @@ async function businessStateFingerprint() {
     ocsBalances: await xDb.collection('ocs_balances').countDocuments(),
     tariffPlans: await xDb.collection('ocs_tariff_plans').countDocuments(),
     reservations: await xDb.collection('ocs_reservations').countDocuments(),
+  };
+}
+
+/**
+ * Fingerprint of the user-management business collections that the retired
+ * mutation surfaces would have written to. Used to prove zero business mutation.
+ */
+async function userManagementFingerprint() {
+  const aDb = client.db(appDbName);
+  const users = await aDb.collection('app_users').find({}).sort({ username: 1 }).toArray();
+  return {
+    users: users.length,
+    digest: users.map((u) => [
+      u.username,
+      u.role,
+      u.status,
+      u.locked ? 1 : 0,
+      u.security?.sessionVersion ?? '',
+      u.security?.failedLoginAttempts ?? '',
+      u.passwordChangedAt ?? '',
+      u.updatedAt ?? '',
+    ].join('|')).join(';'),
   };
 }
 
@@ -774,12 +856,39 @@ async function main() {
   });
 
   // ===========================================================
-  // 8. Retired surface removal (P82-Dxx)
+  // 8. Retired surface removal (P82-Dxx) - REAL Next.js HTTP evidence
   // ===========================================================
-  console.log('\n[8] Retired Surface Removal');
+  console.log('\n[8] Retired Surface Removal (real Next.js App Router HTTP responses)');
+
+  ensureFrontendBuild();
+  nextPort = await getAvailablePort();
+  nextProc = await startNextServer(nextPort);
+  console.log(`  real Next.js production server on 127.0.0.1:${nextPort}`);
+
+  // Control probe: prove the real server + proxy.ts + controlled cutover stack is
+  // genuinely live, so the retired-surface responses below are framework responses
+  // and not the output of a broken or stub server.
+  capture.reset();
+  const controlProbe = await fetch(`http://127.0.0.1:${nextPort}${concretePath('/api/users/{username}')}`, {
+    method: 'GET',
+    headers: { cookie: `auth_token=${token}` },
+    redirect: 'manual',
+  });
+  const controlStatus = controlProbe.status;
+  try { await controlProbe.body?.cancel(); } catch {}
+  const controlForward = capture.countOf('GET', concretePath('/api/users/{username}'));
+
+  await check('P82-D00 real Next.js server control probe: an owner=go route forwards to Go exactly once', () => {
+    assert.equal(controlStatus, 200, `control probe must return 200 from the real cutover stack, got ${controlStatus}`);
+    assert.equal(controlForward, 1, `control probe must reach the Go backend exactly once, found ${controlForward}`);
+  });
+
+  const retiredHttpBefore = await userManagementFingerprint();
+  capture.reset();
+  const nextStdoutMark = nextStdout.length;
 
   for (const route of RETIRED_ROUTES) {
-    await check(`P82-${route.id} ${route.method} ${route.path} is retired (no handler export, no Go route, no mutation)`, async () => {
+    await check(`P82-${route.id} ${route.method} ${route.path} retired: no export, no Go route, real HTTP 404/405`, async () => {
       const abs = path.join(root, route.file);
       const { methods } = methodExportsOf(abs);
       assert.equal(methods.has(route.method), false, `${route.method} export must be removed from ${route.file}`);
@@ -789,25 +898,41 @@ async function main() {
       }
       assert.equal(resolveRouteOwner(route.method, concretePath(route.path)), 'node', 'retired METHOD+PATH must not be Go-owned');
 
-      // Real runtime path: the controlled proxy does not intercept the retired
-      // METHOD+PATH, so the request reaches the Next.js App Router route handler
-      // layer (NextResponse.next()). With the method export absent, the App Router
-      // answers 405 Method Not Allowed instead of executing a business handler.
-      const { res } = await callProxy(route.method, route.path, { token, body: REQUEST_BODY_FOR_METHOD[route.method] });
-      const reachedNextRouteLayer = res.headers.get('x-middleware-next') !== null;
-      assert.equal(reachedNextRouteLayer, true, 'the retired route must not be served by the Go proxy');
-      const observedStatus = methods.has(route.method) ? 200 : 405;
+      // REAL HTTP request against the real production Next.js server. The proxy is
+      // owner=node for this METHOD+PATH, so it calls NextResponse.next() and the
+      // request is dispatched by the actual App Router method dispatcher.
+      const probePath = concretePath(route.path);
+      const response = await fetch(`http://127.0.0.1:${nextPort}${probePath}`, {
+        method: route.method,
+        headers: { cookie: `auth_token=${token}`, 'content-type': 'application/json' },
+        body: REQUEST_BODY_FOR_METHOD[route.method] !== undefined ? JSON.stringify(REQUEST_BODY_FOR_METHOD[route.method]) : undefined,
+        redirect: 'manual',
+      });
+      const observedStatus = response.status;
+      let payload = '';
+      try { payload = await response.text(); } catch {}
+
+      const goForward = capture.countOf(route.method, probePath);
+      const businessSuccess = observedStatus >= 200 && observedStatus < 300;
+
+      assert.ok(observedStatus === 404 || observedStatus === 405,
+        `${route.method} ${probePath} actual HTTP status must be 404 or 405, got ${observedStatus}`);
+      assert.equal(businessSuccess, false, 'a retired method must not return business success');
+      assert.equal(payload.includes('GO_BACKEND_UNREACHABLE'), false, 'a retired method must not return GO_BACKEND_UNREACHABLE');
+      assert.equal(goForward, 0, `a retired method must never be forwarded to Go, forwards=${goForward}`);
+
       retiredEvidence.push({
         id: `P82-${route.id}`,
         method: route.method,
         path: route.path,
         nodeHandlerExport: 'ABSENT',
         goRegistration: 'ABSENT',
-        reachedNextRouteLayer: 'YES',
-        observedStatus,
+        actualHttp: observedStatus,
+        goForward,
+        businessMutation: '0',
+        businessSuccess: 'NO',
         nodeBusinessExecution: 'NO',
         goBusinessExecution: 'NO',
-        businessMutation: 'NO',
         result: 'PASS',
       });
     });
@@ -823,6 +948,14 @@ async function main() {
     for (const route of RETIRED_ROUTES) {
       assert.equal(goKeys.has(key(route.method, route.path)), false, `Go replacement must not exist for ${key(route.method, route.path)}`);
     }
+  });
+
+  await check('P82-D09 retired real HTTP evidence: zero Go forwards, zero telemetry, zero business mutation', async () => {
+    assert.equal(capture.totalRequests(), 0, `go_forward_count for the six retired requests must be 0, found ${capture.totalRequests()}`);
+    const telemetry = nextStdout.slice(nextStdoutMark).join('').split('\n').filter((line) => line.includes('cutover_forward')).length;
+    assert.equal(telemetry, 0, `retired requests must not emit cutover_forward telemetry, found ${telemetry}`);
+    const after = await userManagementFingerprint();
+    assert.deepEqual(after, retiredHttpBefore, 'retired user-management requests must not mutate the app_users business collection');
   });
 
   // ===========================================================
@@ -852,10 +985,18 @@ async function main() {
   const goNativeResidueCutover = residueInCutover.length;
   const goNativeResidueRemoved = 0;
 
-  console.log('\n-- Retired surface matrix --');
+  console.log('\n-- Retired surface matrix (real Next.js App Router HTTP responses) --');
   for (const e of retiredEvidence) {
-    console.log(`${e.id} | ${e.method.padEnd(6)} | ${e.path.padEnd(32)} | export=${e.nodeHandlerExport} | go=${e.goRegistration} | status=${e.observedStatus} | result=${e.result}`);
+    console.log(`${e.id} | ${e.method.padEnd(6)} | ${e.path.padEnd(32)} | export=${e.nodeHandlerExport} | go=${e.goRegistration} | actual_http=${e.actualHttp} | mutation=${e.businessMutation} | ${e.result}`);
   }
+
+  const retiredHttpExecuted = retiredEvidence.length;
+  const retiredHttpMissing = RETIRED_ROUTES.length - retiredHttpExecuted;
+  const retiredHttpSuccessResponses = retiredEvidence.filter((e) => e.businessSuccess === 'YES').length;
+  const retiredHttpGoForwards = retiredEvidence.reduce((sum, e) => sum + e.goForward, 0);
+  const retiredHttpMutations = retiredEvidence.reduce((sum, e) => sum + Number(e.businessMutation), 0);
+  const retiredHttpRuntimeEvidence = retiredHttpExecuted === RETIRED_ROUTES.length
+    && retiredEvidence.every((e) => e.actualHttp === 404 || e.actualHttp === 405);
 
   console.log('\n-- Forwarding summary (first 5 / last 5) --');
   for (const s of [...forwardSamples.slice(0, 5), ...forwardSamples.slice(-5)]) {
@@ -876,6 +1017,14 @@ async function main() {
   console.log('');
   console.log('phase82_retired_expected=6');
   console.log(`phase82_retired_active=${retiredActive}`);
+  console.log('');
+  console.log('phase82_retired_http_expected=6');
+  console.log(`phase82_retired_http_executed=${retiredHttpExecuted}`);
+  console.log(`phase82_retired_http_missing=${retiredHttpMissing}`);
+  console.log(`phase82_retired_http_successful_business_responses=${retiredHttpSuccessResponses}`);
+  console.log(`phase82_retired_http_go_forward_count=${retiredHttpGoForwards}`);
+  console.log(`phase82_retired_http_business_mutations=${retiredHttpMutations}`);
+  console.log(`phase82_retired_http_runtime_evidence=${retiredHttpRuntimeEvidence}`);
   console.log('');
   console.log(`stale_callers_to_retired_surfaces=${staleCallerHits.length}`);
   console.log('');
@@ -915,6 +1064,7 @@ main()
     try {
       if (capture && capture.server) await new Promise((resolve) => capture.server.close(() => resolve()));
     } catch {}
+    stopProcess(nextProc);
     if (goProc && goProc.pid) {
       if (process.platform === 'win32') {
         try { execSync(`taskkill /pid ${goProc.pid} /T /F`, { stdio: 'ignore' }); } catch {}

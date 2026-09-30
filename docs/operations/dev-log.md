@@ -291,11 +291,17 @@
   `canonical_node_migration_remainder = 0`, `node_production_operations = 0`,
   `fallback_count = 0`, `go_registered_unrouted_reads = 0`,
   `backend_removal_ready = true`, `backend_removal_blockers = 0`.
-- Added `scripts/test-phase-8-residual-cutover.mjs` (TOTAL=136 PASS=136 FAIL=0)
+- Added `scripts/test-phase-8-residual-cutover.mjs` (TOTAL=138 PASS=138 FAIL=0)
   proving ownership executably: real `proxy()` + `resolveRouteOwner` routing, a
   forwarding observer, the compiled production Go binary, and fail-closed
-  `GO_BACKEND_UNREACHABLE` with zero Node fallback. Added a visible Phase 8.2 CI
-  step to the residual parity job.
+  `GO_BACKEND_UNREACHABLE` with zero Node fallback. Added visible Phase 8.2 CI
+  steps to the residual parity job (frontend production build + cutover suite).
+- Real Next.js App Router retirement evidence: the cutover suite builds the
+  frontend and starts the real production Next.js server on loopback, then issues
+  genuine HTTP requests for the six retired METHOD+PATH values. Every observed
+  status comes from `response.status`; the synthetic `methods.has(...) ? 200 : 405`
+  derivation was removed. All six actual statuses are `405`, with zero Go
+  forwardings, zero `cutover_forward` telemetry and zero `app_users` mutation.
 - Flipped the Phase 8.1 parity suite ownership assertions (`cutover=true`,
   `runtime_owner=go`) while preserving all 81 scenarios / 122 assertions, and
   evolved the route-table regression suites to derive from the frozen baseline

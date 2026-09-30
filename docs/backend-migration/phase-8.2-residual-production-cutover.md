@@ -164,6 +164,31 @@ The suite asserts, per retired method, that the module no longer exports the
 method and that every sibling method is still exported, so the retirement is
 provable and the surviving surface is intact.
 
+### 5.1 Real Next.js App Router HTTP retirement evidence
+
+The retirement status is observed from a real HTTP response, never derived from
+source inspection. The suite builds the frontend (`next build`) and starts the
+real production Next.js application (`next start`) on loopback; `proxy.ts`
+participates exactly as in production (`owner=node` for each retired METHOD+PATH,
+so it calls `NextResponse.next()`), and the actual App Router method dispatcher
+produces the response.
+
+```text
+POST   /api/auth/users                 -> actual_http=405
+PUT    /api/auth/users/{username}      -> actual_http=405
+PATCH  /api/auth/users/{username}      -> actual_http=405
+DELETE /api/auth/users/{username}      -> actual_http=405
+PUT    /api/users/{username}           -> actual_http=405
+DELETE /api/users/{username}           -> actual_http=405
+```
+
+Each status value is assigned directly from `response.status`; no expected-status
+constant, route-source parse, inventory membership or `CUTOVER_TABLE` membership
+is used. A control probe against an `owner=go` route on the same real server first
+proves the cutover stack is live (exactly one Go forwarding, HTTP 200); the six
+retired requests then produce zero Go forwardings, zero `cutover_forward`
+telemetry and zero `app_users` mutation.
+
 ---
 
 ## 6. Stale Caller Cleanup
@@ -221,6 +246,10 @@ The suite proves ownership executably, not by inspecting handler existence:
 4. Fail-closed: the same routes are probed with `GO_BACKEND_URL` pointed at a
    closed port; every one returns HTTP 502 `GO_BACKEND_UNREACHABLE` with zero Node
    business execution (`fallback_count = 0`, `middlewareFallthroughCount = 0`).
+5. Real Next.js App Router runtime: for the six retired METHOD+PATH values the
+   suite starts the real production Next.js server (`next start` over a real
+   `next build`) and issues genuine HTTP requests. The observed status is taken
+   from `response.status` produced by the framework's method dispatcher.
 
 Note: the controlled proxy URL-encodes `{param}` placeholders before forwarding,
 so ownership probes use the concrete instance path (`concretePath()`), i.e. the
@@ -243,6 +272,14 @@ phase82_legacy_go_owned=2
 
 phase82_retired_expected=6
 phase82_retired_active=0
+
+phase82_retired_http_expected=6
+phase82_retired_http_executed=6
+phase82_retired_http_missing=0
+phase82_retired_http_successful_business_responses=0
+phase82_retired_http_go_forward_count=0
+phase82_retired_http_business_mutations=0
+phase82_retired_http_runtime_evidence=true
 
 stale_callers_to_retired_surfaces=0
 
@@ -270,7 +307,7 @@ fallback_count=0
 phase82_result=PASS
 ```
 
-Suite totals: `TOTAL=136 PASS=136 FAIL=0`.
+Suite totals: `TOTAL=138 PASS=138 FAIL=0`.
 
 Emitted by `scripts/test-phase-8-backend-removal-readiness.mjs`:
 

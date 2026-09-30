@@ -444,5 +444,9 @@ jobs:
       - name: Phase 8.1 residual API parity
         run: node scripts/test-phase-8-residual-api-parity.mjs
 
-      - name: Phase 8.2 residual production cutover
+      - name: Build frontend for real Next.js retired-surface HTTP runtime verification
+        working-directory: frontend
+        run: npm run build
+
+      - name: Phase 8.2 residual production cutover (real Next.js App Router HTTP evidence)
         run: node scripts/test-phase-8-residual-cutover.mjs
