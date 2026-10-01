@@ -521,6 +521,7 @@ function inspectProcessLinux(pid) {
   let startTime = null;
   let user = null;
   let parentProcessId = null;
+  let state = null;
   try {
     commandLine = readFileSync(join(base, 'cmdline'), 'utf8').replace(/\0/g, ' ').trim() || null;
   } catch { /* permission or race */ }
@@ -536,6 +537,7 @@ function inspectProcessLinux(pid) {
     const stat = readFileSync(join(base, 'stat'), 'utf8');
     const close = stat.lastIndexOf(')');
     const fields = stat.slice(close + 2).split(' ');
+    state = fields[0] || null;
     const ppid = Number(fields[1]);
     if (Number.isFinite(ppid)) parentProcessId = ppid;
     const startTicks = Number(fields[19]);
@@ -547,6 +549,10 @@ function inspectProcessLinux(pid) {
       startTime = new Date(epoch * 1000).toISOString();
     }
   } catch { /* permission */ }
+  // A terminated process keeps its /proc entry until the parent reaps it. While it is a
+  // zombie (or dead) it has already exited and must not be reported as a live process,
+  // otherwise "confirm the process is gone" would block until an unrelated parent reaps.
+  if (state === 'Z' || state === 'X' || state === 'x') return null;
   if (!commandLine && !executable && !name) return null;
   return { processId: Number(pid), parentProcessId, name, executable, commandLine, startTime, user };
 }
