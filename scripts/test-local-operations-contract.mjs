@@ -13,6 +13,7 @@
  *   O6  a stop that cannot confirm exit preserves the record and reports failure
  *   O7  a partial startup failure leaves no orphaned managed child
  *   O8  an arbitrary HTTP server is never accepted as the expected edge
+ *   O9  a registration failure releases the exact spawned child as an enforced operation
  *
  * Synthetic child processes are used deliberately: the canonical production ports are
  * never used for the process-safety scenarios, and every failure mode is injected
@@ -183,6 +184,9 @@ const evidence = {
   stopTimeoutReportsFailure: null,
   unmanagedLiveProcesses: null,
   foreignHttpEdgeAccepted: null,
+  registrationFailureOrphaned: null,
+  registrationFailureCleanupConfirmed: null,
+  registrationFailureExactChildOnly: null,
 };
 
 // ---------------------------------------------------------------------------
@@ -619,6 +623,96 @@ async function testForeignHttpEdgeRejected() {
 }
 
 // ---------------------------------------------------------------------------
+// O9 — registration failure must release the exact spawned child
+// ---------------------------------------------------------------------------
+async function testRegistrationFailureRelease() {
+  // The child script deliberately lives OUTSIDE the repository, so the ownership record
+  // for it can never be verified against the repository root. Registration therefore
+  // fails for real - the failure is not mocked - and the exact-child release branch runs
+  // with a genuinely unregistered, termination-resistant child.
+  const dir = join(tmpdir(), `local-ops-regfail-${Date.now()}`);
+  mkdirSync(dir, { recursive: true });
+  const script = join(dir, 'ops-regfail-resistant-child.mjs');
+  writeFileSync(script, RESISTANT_CHILD_SOURCE, 'utf8');
+
+  const stateDir = join(dir, 'state');
+  mkdirSync(stateDir, { recursive: true });
+  const env = { XCLOUD_RUNTIME_DIR: stateDir };
+
+  let child = null;
+  const events = [];
+
+  const result = await startManagedProcesses({
+    repoRoot: ROOT,
+    env,
+    entries: [
+      {
+        role: 'next',
+        command: `${process.execPath} ${script}`,
+        spawn: () => { child = spawnChild(script, [], { force: true }); return child; },
+        waitForReady: async () => true,
+      },
+    ],
+    onEvent: (event) => events.push(event),
+  });
+
+  const registered = events.some((event) => event.type === 'registered');
+  const registerFailed = events.some((event) => event.type === 'register-failed');
+  const released = events.find((event) => event.type === 'register-released') || null;
+  const releaseFailed = events.some((event) => event.type === 'register-release-failed');
+
+  check('O9-child-spawned', Boolean(child) && Number.isFinite(child.pid), `pid=${child && child.pid}`);
+  check(
+    'O9-registration-failed',
+    result.ok === false && registerFailed && !registered,
+    `ok=${result.ok} registerFailed=${registerFailed} registered=${registered}`,
+  );
+  check('O9-release-reported', Boolean(released) && !releaseFailed,
+    `released=${Boolean(released)} releaseFailed=${releaseFailed}`);
+  check('O9-no-cleanup-failure-field', result.cleanupFailure === null, JSON.stringify(result.cleanupFailure));
+
+  const exited = await waitUntil(() => !isAlive(child.pid), 8000);
+  const recordPresent = existsSync(recordPath(ROOT, 'next', env));
+  const orphaned = isAlive(child.pid) && !recordPresent;
+
+  check('O9-child-gone', exited, `alive=${isAlive(child.pid)}`);
+  check('O9-no-orphan', !orphaned, `orphaned=${orphaned}`);
+  check('O9-no-record-left', !recordPresent);
+
+  evidence.registrationFailureOrphaned = orphaned;
+  evidence.registrationFailureCleanupConfirmed = Boolean(released) && !releaseFailed && exited && !orphaned;
+  // The release acts only on the exact ChildProcess handle this process spawned: the
+  // released pid is the pid of the handle in hand, never a name/port/wildcard lookup.
+  evidence.registrationFailureExactChildOnly = Boolean(released) && Boolean(child) && released.pid === child.pid;
+
+  // A release that cannot confirm exit must be surfaced, never silently ignored. The
+  // registration still fails for real; only the release outcome is injected as a failure.
+  let stubborn = null;
+  const stubbornResult = await startManagedProcesses({
+    repoRoot: ROOT,
+    env,
+    entries: [
+      {
+        role: 'go',
+        command: `${process.execPath} ${script}`,
+        spawn: () => { stubborn = spawnChild(script, [], { force: true }); return stubborn; },
+        waitForReady: async () => true,
+      },
+    ],
+    releaseFn: async (target) => ({ ok: false, pid: target.pid, escalated: true, reason: 'injected release failure' }),
+    onEvent: () => {},
+  });
+  check(
+    'O9-failed-release-surfaced',
+    Boolean(stubbornResult.cleanupFailure) && stubbornResult.cleanupFailure.pid === stubborn.pid,
+    JSON.stringify(stubbornResult.cleanupFailure),
+  );
+  check('O9-failed-release-child-left-for-harness-cleanup', isAlive(stubborn.pid));
+
+  rmSync(dir, { recursive: true, force: true });
+}
+
+// ---------------------------------------------------------------------------
 // Driver
 // ---------------------------------------------------------------------------
 async function main() {
@@ -666,6 +760,10 @@ async function main() {
   await testForeignHttpEdgeRejected();
   console.log('');
 
+  console.log('O9 — registration failure releases the exact spawned child');
+  await testRegistrationFailureRelease();
+  console.log('');
+
   const failures = checks.filter((c) => !c.ok);
   const passed = (id) => checks.some((c) => c.id === id && c.ok);
   const observed = (value) => (value === null || value === undefined ? 'unknown' : String(value));
@@ -690,6 +788,10 @@ async function main() {
   console.log(`local_ops_unmanaged_live_processes=${observed(evidence.unmanagedLiveProcesses)}`);
   console.log('');
   console.log(`local_ops_foreign_http_edge_accepted=${observed(evidence.foreignHttpEdgeAccepted)}`);
+  console.log('');
+  console.log(`local_ops_registration_failure_orphaned=${observed(evidence.registrationFailureOrphaned)}`);
+  console.log(`local_ops_registration_failure_cleanup_confirmed=${observed(evidence.registrationFailureCleanupConfirmed)}`);
+  console.log(`local_ops_registration_failure_exact_child_only=${observed(evidence.registrationFailureExactChildOnly)}`);
   console.log('');
   console.log(`local_ops_canonical_next_port=${CANONICAL_PORTS.next}`);
   console.log(`local_ops_canonical_go_port=${CANONICAL_PORTS.go}`);

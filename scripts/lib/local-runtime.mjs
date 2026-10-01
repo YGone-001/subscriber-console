@@ -1186,7 +1186,12 @@ class StartupFailure extends Error {}
  * stop path `local:stop` uses. No arbitrary PID kill shortcut exists.
  *
  * `onEvent` receives `spawned`, `registered`, `ready-start`, `ready-ok`, `ready-fail`,
- * `ready-error`, `register-failed`, `rollback-start`, `rollback-stop` and `rollback-done`.
+ * `ready-error`, `register-failed`, `register-released`, `register-release-failed`,
+ * `rollback-start`, `rollback-stop` and `rollback-done`.
+ *
+ * A child whose ownership record could not be written is released through the exact
+ * ChildProcess handle; if that release cannot confirm the child is gone the result is
+ * surfaced as `cleanupFailure` so the caller can never report a clean unmanaged count.
  */
 export async function startManagedProcesses({
   repoRoot,
@@ -1194,8 +1199,10 @@ export async function startManagedProcesses({
   env = process.env,
   timeoutMs = stopTimeoutMs(env),
   onEvent = () => {},
+  releaseFn = releaseUnregisteredChild,
 } = {}) {
   const registered = [];
+  let cleanupFailure = null;
   try {
     for (const entry of entries) {
       const { role } = entry;
@@ -1208,7 +1215,13 @@ export async function startManagedProcesses({
       const registration = await registerManagedProcess({ repoRoot, role, pid: child.pid, command: entry.command, env });
       if (!registration.ok) {
         onEvent({ type: 'register-failed', role, reason: registration.reason });
-        await releaseUnregisteredChild(child);
+        const release = await releaseFn(child);
+        if (release.ok) {
+          onEvent({ type: 'register-released', role, pid: release.pid, escalated: release.escalated, reason: release.reason });
+        } else {
+          cleanupFailure = { role, pid: release.pid, escalated: release.escalated, reason: release.reason };
+          onEvent({ type: 'register-release-failed', role, pid: release.pid, reason: release.reason });
+        }
         throw new StartupFailure(`${role}: ownership could not be recorded (${registration.reason})`);
       }
       registered.push({ role, pid: registration.record.pid, record: registration.record });
@@ -1227,7 +1240,7 @@ export async function startManagedProcesses({
       }
       onEvent({ type: 'ready-ok', role });
     }
-    return { ok: true, registered, stopped: [], error: null };
+    return { ok: true, registered, stopped: [], error: null, cleanupFailure };
   } catch (error) {
     onEvent({ type: 'rollback-start', message: error && error.message ? error.message : String(error) });
     const stopped = [];
@@ -1237,7 +1250,7 @@ export async function startManagedProcesses({
       onEvent({ type: 'rollback-stop', role: item.role, status: outcome.status });
     }
     onEvent({ type: 'rollback-done', stopped: stopped.map((outcome) => `${outcome.role}:${outcome.status}`) });
-    return { ok: false, registered, stopped, error };
+    return { ok: false, registered, stopped, error, cleanupFailure };
   }
 }
 
@@ -1247,16 +1260,41 @@ export async function startManagedProcesses({
  *
  * This is not a PID lookup, not a port lookup and not an image-name match: it acts only
  * on the live ChildProcess handle in hand, so no unregistered detached process is left
- * behind by a failed registration.
+ * behind by a failed registration. The result is enforced, never discarded: a release
+ * that cannot confirm the child is gone is reported as a failure.
+ *
+ * Because no durable ownership record exists yet for this child, one narrowly scoped
+ * escalation is permitted after a graceful termination fails: a final `SIGKILL` sent
+ * through the same exact handle. It is still never a name/port/PID wildcard search, and
+ * it is confirmed with the same exit check before the release may be called a success.
  */
-async function releaseUnregisteredChild(child) {
-  if (!child || !Number.isFinite(Number(child.pid))) return false;
-  try {
-    child.kill();
-  } catch {
-    /* already gone */
+async function releaseUnregisteredChild(child, { timeoutMs = RELEASE_UNREGISTERED_TIMEOUT_MS } = {}) {
+  const pid = Number(child && child.pid);
+  if (!Number.isFinite(pid) || pid <= 0) {
+    return { ok: true, pid: null, escalated: false, reason: 'no spawned process to release' };
   }
-  return confirmProcessExit(child.pid, { timeoutMs: RELEASE_UNREGISTERED_TIMEOUT_MS });
+
+  const signalExactChild = (signal) => {
+    try {
+      child.kill(signal);
+      return true;
+    } catch {
+      // The handle is already gone or cannot be signalled; the exit check below decides.
+      return false;
+    }
+  };
+
+  signalExactChild('SIGTERM');
+  if (await confirmProcessExit(pid, { timeoutMs })) {
+    return { ok: true, pid, escalated: false, reason: 'the exact spawned child exited after termination' };
+  }
+
+  const escalated = signalExactChild('SIGKILL');
+  if (await confirmProcessExit(pid, { timeoutMs })) {
+    return { ok: true, pid, escalated, reason: 'the exact spawned child exited after the exact-child escalation' };
+  }
+
+  return { ok: false, pid, escalated, reason: 'the exact spawned child is still alive after release' };
 }
 
 /**

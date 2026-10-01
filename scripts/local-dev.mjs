@@ -136,6 +136,12 @@ function logStartupEvent(event) {
     case 'register-failed':
       log(`  ${event.role}: ownership record FAILED (${event.reason})`);
       break;
+    case 'register-released':
+      log(`  ${event.role}: unregistered child released (pid ${event.pid}, escalation ${event.escalated ? 'used' : 'not needed'})`);
+      break;
+    case 'register-release-failed':
+      log(`  ${event.role}: UNREGISTERED CHILD COULD NOT BE RELEASED (pid ${event.pid}): ${event.reason}`);
+      break;
     case 'rollback-start':
       log(`  rolling back registered processes: ${event.message}`);
       break;
@@ -294,7 +300,7 @@ async function run() {
     if (existsSync(nextLog)) log(tail(readFileSync(nextLog, 'utf8')));
     return {
       exitCode: 1, result: 'FULL_STACK_NOT_READY', doctorReady: false, edgeReady,
-      edgeUrl, reachedTopology: false, goLog, nextLog,
+      edgeUrl, reachedTopology: false, goLog, nextLog, cleanupFailure: startup.cleanupFailure,
     };
   }
   for (const item of startup.registered) log(`  ${item.role}.pid.json -> pid ${item.pid}`);
@@ -348,8 +354,22 @@ async function main() {
     /* best effort: the count is a safety report, not a gate on shutdown */
   }
 
+  // Forbidden state: a live child with no durable ownership record after a release that
+  // could not confirm exit. It is reported as fatal and never as a clean unmanaged count.
+  const cleanupFailure = report.cleanupFailure || null;
+  if (cleanupFailure) {
+    log('');
+    log('FATAL_UNMANAGED_CHILD_CLEANUP_FAILED');
+    log(`  ${cleanupFailure.role}: the exact child spawned by this run (pid ${cleanupFailure.pid})`);
+    log(`  could not be confirmed gone: ${cleanupFailure.reason}.`);
+    log('  A project process is alive without a durable ownership record.');
+    log('  Inspect it with `npm run local:preflight`; terminate it manually only after');
+    log('  confirming its executable and command line.');
+  }
+
   log('');
   log('==================================================');
+  if (cleanupFailure) log('local_dev_unmanaged_child_cleanup=FAILED');
   if (report.doctorReady) {
     log('FULL_STACK_READY');
     log(`Open: ${report.edgeUrl || DEFAULT_EDGE_URL}`);
@@ -366,7 +386,7 @@ async function main() {
     if (report.goLog && existsSync(report.goLog)) log(`Go log  : ${report.goLog}`);
     if (report.nextLog) log(`Next log: ${report.nextLog}`);
   }
-  log(`local_dev_unmanaged_live_processes=${unmanaged.length}`);
+  log(`local_dev_unmanaged_live_processes=${cleanupFailure ? 'UNKNOWN' : unmanaged.length}`);
   for (const result of unmanaged) {
     log(`  unmanaged canonical port ${result.port} (${result.role}) -> ${result.outcome}: ${result.reason}`);
     log('  A project process is live without a valid ownership record.');
