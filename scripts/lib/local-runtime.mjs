@@ -24,7 +24,7 @@
 import http from 'node:http';
 import net from 'node:net';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, readlinkSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, readlinkSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 // ---------------------------------------------------------------------------
@@ -313,13 +313,91 @@ ConvertTo-Json -InputObject @($rows) -Depth 4 -Compress
 function listListenersLinux() {
   const ss = run('ss', ['-ltnpH']);
   if (!ss.error && ss.status === 0 && (ss.stdout || '').trim()) {
-    return parseSsOutput(ss.stdout);
+    const rows = parseSsOutput(ss.stdout);
+    if (rows.length > 0) return rows;
   }
   const netstat = run('netstat', ['-ltnp']);
   if (!netstat.error && netstat.status === 0 && (netstat.stdout || '').trim()) {
-    return parseNetstatOutput(netstat.stdout);
+    const rows = parseNetstatOutput(netstat.stdout);
+    if (rows.length > 0) return rows;
   }
-  return [];
+  // Fail closed: when neither tool yields a usable listing, read the kernel tables
+  // directly so a bound port is never mistaken for a free one. Listening sockets are
+  // known even when the owning PID cannot be resolved.
+  return parseProcNetListeners();
+}
+
+/**
+ * Parse `/proc/net/tcp` and `/proc/net/tcp6` LISTEN sockets and best-effort resolve the
+ * owning PID through the socket inode index. A resolved listener with no PID is reported
+ * as-is; classification then fails closed instead of assuming the port is free.
+ */
+function parseProcNetListeners() {
+  const rows = [];
+  let inodeToPid = null;
+  for (const file of ['/proc/net/tcp', '/proc/net/tcp6']) {
+    let text = '';
+    try {
+      text = readFileSync(file, 'utf8');
+    } catch {
+      continue;
+    }
+    for (const line of text.split('\n').slice(1)) {
+      const parts = line.trim().split(/\s+/);
+      if (parts.length < 10) continue;
+      if (parts[3] !== '0A') continue; // TCP_LISTEN
+      const { address, port } = splitProcNetAddress(parts[1]);
+      if (port === null) continue;
+      if (!inodeToPid) inodeToPid = buildInodePidIndex();
+      const inode = Number.parseInt(parts[9], 10);
+      const processId = inodeToPid.get(inode) || null;
+      rows.push({ address, port, processId, name: null, executable: null, commandLine: null, startTime: null });
+    }
+  }
+  return rows;
+}
+
+function splitProcNetAddress(value) {
+  const [hexIp, hexPort] = String(value || '').split(':');
+  const port = Number.parseInt(hexPort, 16);
+  if (!Number.isFinite(port)) return { address: null, port: null };
+  let address = null;
+  if (hexIp && hexIp.length === 8) {
+    const bytes = hexIp.match(/../g) || [];
+    address = bytes.reverse().map((byte) => Number.parseInt(byte, 16)).join('.');
+  }
+  return { address, port };
+}
+
+function buildInodePidIndex() {
+  const index = new Map();
+  let entries = [];
+  try {
+    entries = readdirSync('/proc');
+  } catch {
+    return index;
+  }
+  for (const entry of entries) {
+    const pid = Number.parseInt(entry, 10);
+    if (!Number.isFinite(pid)) continue;
+    let fds = [];
+    try {
+      fds = readdirSync(`/proc/${pid}/fd`);
+    } catch {
+      continue;
+    }
+    for (const fd of fds) {
+      let target = '';
+      try {
+        target = readlinkSync(`/proc/${pid}/fd/${fd}`);
+      } catch {
+        continue;
+      }
+      const match = target.match(/^socket:\[(\d+)\]$/);
+      if (match) index.set(Number.parseInt(match[1], 10), pid);
+    }
+  }
+  return index;
 }
 
 function parseSsOutput(text) {
@@ -327,12 +405,21 @@ function parseSsOutput(text) {
   for (const line of text.split('\n')) {
     const trimmed = line.trim();
     if (!trimmed) continue;
-    const m = trimmed.match(/^(LISTEN|UNCONN)\s+\S+\s+\S+\s+(\S+)\s+users:\(\("([^"]+)",pid=(\d+)/);
-    if (!m) continue;
-    const [, , local, name, pid] = m;
-    const { address, port } = splitHostPort(local);
+    // `ss -ltnpH` columns: State Recv-Q Send-Q Local:Port Peer:Port [Process]
+    const parts = trimmed.split(/\s+/);
+    if (parts.length < 5) continue;
+    if (parts[0] !== 'LISTEN' && parts[0] !== 'UNCONN') continue;
+    const { address, port } = splitHostPort(parts[3]);
     if (port === null) continue;
-    rows.push({ address, port, processId: Number(pid), name, executable: null, commandLine: null, startTime: null });
+    let name = null;
+    let processId = null;
+    const proc = parts.slice(5).join(' ');
+    const m = proc.match(/\(\s*"([^"]+)"\s*,\s*pid=(\d+)/);
+    if (m) {
+      name = m[1];
+      processId = Number(m[2]);
+    }
+    rows.push({ address, port, processId, name, executable: null, commandLine: null, startTime: null });
   }
   return rows;
 }

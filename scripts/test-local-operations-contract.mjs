@@ -230,11 +230,13 @@ async function testForeignProtected() {
   const preflight = runNode(['scripts/check-local-preflight.mjs'], {
     env: { XCLOUD_PREFLIGHT_EXTRA_PORTS: String(port), XCLOUD_RUNTIME_DIR: registryDir },
   });
-  check(
-    'O2-preflight-detects-foreign',
-    preflight.status !== 0 && preflight.stdout.includes(`local_preflight_extra_${port}=FOREIGN_PROCESS`),
-    `exit=${preflight.status}`,
-  );
+  const detectedForeign = preflight.status !== 0
+    && preflight.stdout.includes(`local_preflight_extra_${port}=FOREIGN_PROCESS`);
+  check('O2-preflight-detects-foreign', detectedForeign, `exit=${preflight.status}`);
+  if (!detectedForeign) {
+    console.log(`--- preflight stdout ---\n${preflight.stdout}`);
+    console.log(`--- preflight stderr ---\n${preflight.stderr}`);
+  }
 
   const stop = runNode(['scripts/local-stop.mjs'], { env: { XCLOUD_RUNTIME_DIR: registryDir } });
   check('O2-stop-does-not-terminate-foreign', isAlive(child.pid), `alive=${isAlive(child.pid)}`);
