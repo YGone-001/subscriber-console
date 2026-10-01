@@ -116,6 +116,8 @@ function classifyPath(file) {
   if (PRODUCTION_RUNTIME_PREFIXES.some((prefix) => p.startsWith(prefix))) return 'PRODUCTION_RUNTIME';
   if (p.startsWith('.github/')) return 'CI';
   if (p.startsWith('docs/')) return 'DOCUMENTATION';
+  // Repository-root Markdown (AGENTS.md / CLAUDE.md / README.md and peers) is documentation.
+  if (!p.includes('/') && p.toLowerCase().endsWith('.md')) return 'DOCUMENTATION';
   if (p.startsWith('scripts/')) return 'CERTIFICATION_TEST';
   return 'UNEXPECTED';
 }
@@ -535,10 +537,14 @@ async function main() {
   const classifierWorks =
     classifyPath('backend/cmd/server/main.go') === 'PRODUCTION_RUNTIME' &&
     classifyPath('frontend/src/proxy.ts') === 'PRODUCTION_RUNTIME' &&
+    classifyPath('frontend/next.config.ts') === 'PRODUCTION_RUNTIME' &&
     classifyPath('deploy/nginx/xcloud.conf') === 'PRODUCTION_RUNTIME' &&
+    classifyPath('.env.example') === 'PRODUCTION_RUNTIME' &&
     classifyPath('docs/backend-migration/x.md') === 'DOCUMENTATION' &&
+    classifyPath('AGENTS.md') === 'DOCUMENTATION' &&
     classifyPath('.github/workflows/ci.yml') === 'CI' &&
-    classifyPath('scripts/test-phase-8-production-freeze.mjs') === 'CERTIFICATION_TEST';
+    classifyPath('scripts/test-phase-8-production-freeze.mjs') === 'CERTIFICATION_TEST' &&
+    classifyPath('vendor/unknown.bin') === 'UNEXPECTED';
   check(
     'P86-24',
     classifierWorks,
