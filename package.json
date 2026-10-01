@@ -13,7 +13,11 @@
     "mongo:test-core": "node scripts/test-mongo-core.mjs",
     "test:direct-operations": "node scripts/test-direct-operations.mjs",
     "mongo:perf": "node scripts/check-mongo-query-performance.mjs",
-    "local:doctor": "node scripts/check-local-stack.mjs"
+    "local:preflight": "node scripts/check-local-preflight.mjs",
+    "local:dev": "node scripts/local-dev.mjs",
+    "local:status": "node scripts/local-status.mjs",
+    "local:doctor": "node scripts/check-local-stack.mjs",
+    "local:stop": "node scripts/local-stop.mjs"
   },
   "dependencies": {
     "@next/env": "16.3.5",

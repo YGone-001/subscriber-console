@@ -402,6 +402,29 @@ jobs:
       - name: Local development edge integration
         run: node scripts/test-local-development-edge.mjs
 
+  local-operations-contract:
+    name: Local development operations contract
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install repository script dependencies
+        run: npm ci
+
+      # Process-safety contract for the local runtime tooling: no arbitrary kill, foreign
+      # listeners are detected and preserved, owned processes can be stopped, stale PID
+      # records are safe and an identity mismatch is refused. Requires no MongoDB, Go or Nginx.
+      - name: Local development operations contract
+        run: node scripts/test-local-operations-contract.mjs
+
   repository-normalization:
     name: Repository normalization gate
     runs-on: ubuntu-latest

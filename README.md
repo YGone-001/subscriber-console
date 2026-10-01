@@ -41,6 +41,11 @@ UI-only navigation guard: it does not decode JWTs, does not access MongoDB, does
 inject identity headers and does not forward API requests. Both application services
 bind loopback and are reached only through Nginx.
 
+Nginx is the only browser-facing application edge and the exclusive browser API routing
+boundary. The Next.js navigation guard may directly consult the Go authentication
+authority over loopback for `GET /api/auth/me`; that internal server-side call is not
+API ownership and not API forwarding.
+
 ## Features
 
 - Subscriber CRUD, pagination, search, single create, batch create, CSV import, and delete.
@@ -103,6 +108,15 @@ Next.js `:13333` is an internal UI service and Go `:18888` is an internal API se
 Neither internal port is a supported full-stack browser origin; they are useful for
 component-level diagnostics only.
 
+Local workflow:
+
+```text
+1. npm run local:preflight    inspect ports/process ownership (read-only)
+2. start the required services (MongoDB, Nginx edge, then the app)
+3. npm run local:doctor       verify the full topology
+4. browse http://localhost
+```
+
 ### 1. Install dependencies
 
 ```bash
@@ -126,44 +140,50 @@ Set the same strong `JWT_SECRET` and `INITIAL_ADMIN_PASSWORD` in root `.env` (an
 npm run mongo:init
 ```
 
-### 3. Start the Go backend
+### 3. Inspect the canonical ports
 
 ```bash
-cd backend
-set -a
-source ../.env
-set +a
-go run ./cmd/server
+npm run local:preflight
 ```
 
-Expected listener: `127.0.0.1:18888`.
+Read-only. It classifies the owner of ports 80, 13333, 18888 and 27017 before anything
+starts. Never resolve an occupied canonical port by changing the port; diagnose the owner.
 
-### 4. Start the Next.js UI
+### 4. Start the required services
 
-```bash
-cd frontend
-npm run dev
-```
-
-Expected listener: `127.0.0.1:13333`.
-
-### 5. Start the Nginx edge
+Start MongoDB yourself (it is never started automatically), then the Nginx edge:
 
 ```bash
 sudo ./deploy/nginx/setup.sh
 ```
 
-Expected public edge: `http://localhost`.
-
-Use `sudo ./deploy/nginx/setup.sh 8080` to listen on another port.
-
-### 6. Verify and open
+Use `sudo ./deploy/nginx/setup.sh 8080` to listen on another port. Then start the
+project-owned Go and Next.js development processes:
 
 ```bash
+npm run local:dev
+```
+
+This builds and runs Go on the production default `127.0.0.1:18888`, runs the Next.js
+development server on `127.0.0.1:13333`, and records process ownership. It never starts
+MongoDB or Nginx. If the edge is missing it reports `FULL_STACK_NOT_READY` /
+`EDGE_REQUIRED`.
+
+Starting the two services manually is also supported: run `go run ./cmd/server` from
+`backend/` with the root `.env` exported, and `npm run dev` from `frontend/`.
+
+### 5. Verify
+
+```bash
+npm run local:status
 npm run local:doctor
 ```
 
-Then open the full application at:
+`local:doctor` prints `FULL_STACK_READY` when the full topology is up.
+
+### 6. Open
+
+Open the full application at:
 
 ```text
 http://localhost
@@ -175,6 +195,15 @@ When the edge is intentionally configured on another port, open
 Do not open `http://localhost:13333` for normal application use. The login page
 renders there, but browser-relative `/api` requests are sent to Next.js, which owns no
 API routes. Start the Nginx edge and use its public URL.
+
+### 7. Stop
+
+```bash
+npm run local:stop
+```
+
+Stops only the Go and Next.js processes that `local:dev` launched, after verifying their
+ownership records. It does not stop MongoDB, the system Nginx, or foreign processes.
 
 ## Environment
 
@@ -198,7 +227,11 @@ npm run mongo:init          # Create MongoDB indexes
 npm run mongo:migrate-app-db # Move app_* collections from xcloud to the app database
 npm run mongo:test-core     # Run MongoDB core integration smoke test against a temporary DB
 npm run mongo:perf          # Explain key MongoDB queries and flag slow scans
+npm run local:preflight     # Inspect canonical port ownership before starting anything
+npm run local:dev           # Start managed Go + Next.js development processes
+npm run local:status        # Report component and topology state
 npm run local:doctor        # Diagnose the running local full-stack topology
+npm run local:stop          # Stop only the processes started by local:dev
 
 # Frontend (from frontend/)
 npm run dev                 # Start development server

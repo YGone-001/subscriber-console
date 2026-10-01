@@ -55,6 +55,9 @@ pnpm-debug.log*
 # Local bundled runtimes
 /node/
 
+# Local runtime state (managed PID registry, logs, built binaries)
+.runtime/local/
+
 # IDE and editor files
 .idea/
 .vscode/

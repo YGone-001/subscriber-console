@@ -233,7 +233,11 @@ Check/start the Nginx edge instead.
 Use:
 
 ```bash
+npm run local:preflight
+npm run local:dev
+npm run local:status
 npm run local:doctor
+npm run local:stop
 ```
 
 Development transport: Nginx remains the full-stack browser origin in development.
@@ -241,6 +245,44 @@ The Next.js development server transports its HMR WebSocket through the edge und
 the framework namespace `/_next/hmr`. This is framework development traffic, not API
 ownership: it never matches `/api` or `/api/*` and it does not relax the Next.js API
 routing prohibition above. Verified end to end by `scripts/test-local-development-edge.mjs`.
+
+Browser traffic versus internal authority traffic:
+
+```text
+Browser /api/*            -> Nginx -> Go            (the only browser API path)
+Next navigation guard     -> http://127.0.0.1:18888/api/auth/me -> Go
+```
+
+Nginx is the only browser-facing application edge and the exclusive browser API routing
+boundary. The Next.js navigation guard may directly consult the Go authentication
+authority over loopback for `GET /api/auth/me`. That server-side loopback call is not
+API ownership, not API forwarding and not a Node fallback; it does not make Nginx the
+only possible Next-to-Go communication path.
+
+Ports:
+
+```text
+80   currently active Nginx HTTP edge (deploy/nginx/xcloud.conf: listen 80)
+443  NOT active by default; it exists only in the commented HTTPS template
+```
+
+`frontend/next.config.ts` `allowedDevOrigins` is an origin-policy setting. It does not
+modify TCP binding and does not make `127.0.0.1:13333` reachable from the LAN, because
+both `next dev` and `next start` bind `-H 127.0.0.1 -p 13333`.
+
+Local development operations:
+
+```text
+Never resolve canonical port contamination by changing 13333/18888.
+Never automatically kill an arbitrary listener.
+Acceptance suites must own the processes they measure.
+Use `npm run local:preflight` to inspect contamination before debugging business behavior.
+```
+
+Canonical internal ports are not environment-overridable. `local:stop` terminates only
+processes whose ownership record verifies against the live process; identity mismatch
+refuses (`REFUSE_TO_KILL`) and a permission error reports `INSUFFICIENT_PERMISSION`
+without ever elevating or launching UAC.
 
 Forbidden workarounds (never add):
 

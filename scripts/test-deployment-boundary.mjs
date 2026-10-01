@@ -50,6 +50,7 @@ import { MongoClient, ObjectId } from 'mongodb';
 import { SignJWT } from 'jose';
 
 import { deriveGoRegistrations, classifyGoRegistrations } from './lib/go-registrations.mjs';
+import { findListener, inspectProcess } from './lib/local-runtime.mjs';
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -1115,11 +1116,25 @@ async function main() {
     // eslint-disable-next-line no-await-in-loop -- sequential probes keep the diagnostic stable
     const occupied = await isPortOpen(port);
     check(id, !occupied, `port_free_${role}=${!occupied} port=${port}`);
-    if (occupied) occupiedPorts.push(`${role}:${port}`);
+    if (occupied) {
+      occupiedPorts.push(`${role}:${port}`);
+      // eslint-disable-next-line no-await-in-loop -- sequential probes keep the diagnostic stable
+      const listener = await findListener(port, { refresh: true });
+      // eslint-disable-next-line no-await-in-loop -- sequential probes keep the diagnostic stable
+      const info = listener && listener.processId ? await inspectProcess(listener.processId, { refresh: true }) : null;
+      const owner = [
+        listener ? `pid=${listener.processId}` : 'pid=unknown',
+        listener && listener.name ? `process=${listener.name}` : null,
+        info && info.executable ? `exe=${info.executable}` : null,
+      ].filter(Boolean).join(' ');
+      log(`    occupied ${role} port ${port} -> ${owner}`);
+      if (info && info.commandLine) log(`    command = ${info.commandLine}`);
+    }
   }
   if (occupiedPorts.length > 0) {
     log(`\nRefusing to run: these ports are already held by another process -> ${occupiedPorts.join(', ')}`);
     log('The acceptance suite must own every port it measures; free them and re-run.');
+    log('Diagnose port ownership first:  npm run local:preflight');
     report();
     return;
   }

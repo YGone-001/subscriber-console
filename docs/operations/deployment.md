@@ -237,13 +237,63 @@ through the Nginx edge; the two application services are loopback-internal.
 WARNING: Do not browse directly to `:13333` for full-stack use. The page may render,
 but same-origin `/api` requests will not reach Go because Next.js owns no API routes.
 
-1. MongoDB — ensure it is reachable, then initialize when required:
+Two distinct traffic paths exist, and only one of them is browser-facing:
+
+```text
+Browser /api/*                                  -> Nginx -> Go 127.0.0.1:18888
+Next.js navigation guard (server side)          -> http://127.0.0.1:18888/api/auth/me -> Go
+```
+
+Nginx is the only browser-facing application edge and the exclusive browser API routing
+boundary. The second path is a Next-to-Go loopback authority lookup (`GET /api/auth/me`)
+performed by the UI navigation guard; it is not API ownership, not API forwarding and not
+a Node fallback. It does not make Nginx the only possible Next-to-Go communication path.
+
+Port status:
+
+```text
+80   currently active Nginx HTTP edge (`listen 80;` in deploy/nginx/xcloud.conf)
+443  NOT active by default; it exists only in the commented HTTPS template
+```
+
+If TLS is terminated by an external load balancer or reverse proxy, document that
+separately from this repository's default listener; the repository does not enable 443.
+
+`frontend/next.config.ts` sets `allowedDevOrigins = ['10.10.0.139']`. This is an
+origin-policy setting only. It does not modify TCP binding and does not make
+`127.0.0.1:13333` reachable from the LAN, because both `next dev` and `next start` bind
+`-H 127.0.0.1 -p 13333`, which keeps the listener loopback-only.
+
+Operator workflow:
+
+1. Inspect port ownership before starting anything:
+
+```bash
+npm run local:preflight
+```
+
+Read-only. It classifies ports 80, 13333, 18888 and 27017 as `FREE`, `EXPECTED_SERVICE`,
+`FOREIGN_LISTENER`, `UNKNOWN_LISTENER` or `PERMISSION_LIMITED`, and reports the owning
+PID, process name, executable and command line where the operating system allows it.
+Never resolve an occupied canonical port by changing the port; diagnose the owner.
+
+2. Ensure MongoDB is reachable, then initialize when required:
 
 ```bash
 npm run mongo:init
 ```
 
-2. Go backend (internal `127.0.0.1:18888`):
+3. Start the managed project processes (builds Go and runs it on the production default
+`127.0.0.1:18888`, runs Next.js on `127.0.0.1:13333`, writes ownership records):
+
+```bash
+npm run local:dev
+```
+
+`local:dev` never starts MongoDB or Nginx. If the edge is absent it reports
+`FULL_STACK_NOT_READY` / `EDGE_REQUIRED` and instructs `sudo ./deploy/nginx/setup.sh`.
+
+Manual alternative (Go backend internal `127.0.0.1:18888`):
 
 ```bash
 cd backend
@@ -253,22 +303,23 @@ set +a
 go run ./cmd/server
 ```
 
-3. Next.js UI (internal `127.0.0.1:13333`):
+Manual alternative (Next.js UI internal `127.0.0.1:13333`):
 
 ```bash
 cd frontend
 npm run dev    # next dev --webpack -H 127.0.0.1 -p 13333
 ```
 
-4. Nginx edge:
+4. Start the Nginx edge:
 
 ```bash
 sudo ./deploy/nginx/setup.sh
 ```
 
-5. Verify the running topology:
+5. Check component and topology state, then verify the running topology:
 
 ```bash
+npm run local:status
 npm run local:doctor
 ```
 
@@ -281,6 +332,15 @@ http://localhost
 When the edge is intentionally configured on another port
 (`sudo ./deploy/nginx/setup.sh 8080`), open `http://localhost:8080`.
 
+7. Stop the managed processes when finished:
+
+```bash
+npm run local:stop
+```
+
+`local:stop` terminates only processes whose runtime ownership record verifies against
+the live process. It does not stop MongoDB, the system Nginx, or foreign processes.
+
 Development transport note: the Nginx edge remains the full-stack browser origin in
 development too. The Next.js development HMR WebSocket (`/_next/hmr`) is transported
 through the edge by the dedicated `location /_next/hmr` block; this is framework
@@ -288,6 +348,31 @@ development traffic, not API ownership, and it does not relax the prohibition on
 API routing. The runtime acceptance suite
 (`node scripts/test-local-development-edge.mjs`) proves this transport end to end and
 also asserts the `local:doctor` `FULL_STACK_READY` and `EDGE_REQUIRED` results.
+
+### Local Troubleshooting Matrix
+
+| State | Meaning | Action |
+| --- | --- | --- |
+| `FULL_STACK_READY` | full topology ready | use the edge URL |
+| `EDGE_REQUIRED` | Go + Next ready, Nginx absent | start/install Nginx (`sudo ./deploy/nginx/setup.sh`) |
+| `GO_DOWN` | Go listener absent | start/investigate Go |
+| `NEXT_DOWN` | Next listener absent | start/investigate Next |
+| `EDGE_API_MISROUTED` | edge present but `/api` does not reach Go | inspect Nginx routing |
+| `ARCHITECTURE_VIOLATION` | Next directly responds as the auth API | remove rewrite/handler/proxy |
+| `PORT_CONTAMINATION` | canonical port owned by an unexpected process | inspect PID/owner with `npm run local:preflight` |
+| `INSUFFICIENT_PERMISSION` | process is visible but cannot be controlled | use elevated manual inspection |
+
+Reported by `npm run local:status` (component state plus topology state) and
+`npm run local:doctor` (HTTP topology). `npm run local:preflight` reports the port
+ownership classification (`FREE`, `EXPECTED_SERVICE`, `FOREIGN_LISTENER`,
+`UNKNOWN_LISTENER`, `PERMISSION_LIMITED`) and the per-port outcome (`PORT_FREE`,
+`PROJECT_MANAGED_PROCESS`, `FOREIGN_PROCESS`, `STALE_PROJECT_PROCESS`,
+`INSUFFICIENT_PERMISSION`).
+
+Runtime acceptance suites (`scripts/test-local-development-edge.mjs`,
+`scripts/test-deployment-boundary.mjs`) refuse to run while a canonical internal port is
+occupied by a process they do not own. They never reuse or kill an existing listener;
+they must own the processes they measure.
 
 ### Production
 

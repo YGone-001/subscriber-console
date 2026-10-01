@@ -43,6 +43,7 @@ import os from 'node:os';
 
 import { deriveGoRegistrations } from './lib/go-registrations.mjs';
 import { classifyDirectNextApi } from './check-local-stack.mjs';
+import { findListener, inspectProcess } from './lib/local-runtime.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const FRONTEND = join(ROOT, 'frontend');
@@ -585,10 +586,25 @@ async function main() {
     // eslint-disable-next-line no-await-in-loop -- sequential probes keep the diagnostic stable
     const busy = await isPortOpen(port);
     check(id, !busy, `port_free_${role}=${!busy} port=${port}`);
-    if (busy) occupied.push(`${role}:${port}`);
+    if (busy) {
+      occupied.push(`${role}:${port}`);
+      // eslint-disable-next-line no-await-in-loop -- sequential probes keep the diagnostic stable
+      const listener = await findListener(port, { refresh: true });
+      // eslint-disable-next-line no-await-in-loop -- sequential probes keep the diagnostic stable
+      const info = listener && listener.processId ? await inspectProcess(listener.processId, { refresh: true }) : null;
+      const owner = [
+        listener ? `pid=${listener.processId}` : 'pid=unknown',
+        listener && listener.name ? `process=${listener.name}` : null,
+        info && info.executable ? `exe=${info.executable}` : null,
+      ].filter(Boolean).join(' ');
+      log(`    occupied ${role} port ${port} -> ${owner}`);
+      if (info && info.commandLine) log(`    command = ${info.commandLine}`);
+    }
   }
   if (occupied.length > 0) {
     log(`\nRefusing to run: these ports are already held by another process -> ${occupied.join(', ')}`);
+    log('The suite never reuses or terminates a foreign listener.');
+    log('Diagnose port ownership first:  npm run local:preflight');
     printInvariants();
     report();
     return;
