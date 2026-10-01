@@ -239,6 +239,22 @@ for (const file of historicalFiles) {
   historicalPhaseMarkers += matches ? matches.length : 0;
 }
 
+// ---------------------------------------------------------------------------
+// Census by repository area (the classes named by the cleanup specification)
+// ---------------------------------------------------------------------------
+function markerArea(r) {
+  if (r.startsWith('backend/') || r.startsWith('frontend/src/') || r.startsWith('deploy/')) return 'production';
+  if (r.startsWith('scripts/') || r.startsWith('frontend/tests/')) return 'test';
+  if (r.startsWith('.github/')) return 'ci';
+  if (r === 'AGENTS.md' || r === 'CLAUDE.md') return 'agent';
+  if (r === 'README.md' || r.startsWith('docs/')) return 'docs';
+  return 'other';
+}
+const phaseMarkersByArea = { production: 0, test: 0, ci: 0, agent: 0, docs: 0, other: 0 };
+for (const marker of activePhaseMarkers) {
+  phaseMarkersByArea[markerArea(marker.file)] += 1;
+}
+
 // Phase-scoped CI job / step names.
 const ciFiles = activeFiles.filter((f) => rel(f).startsWith('.github/'));
 let oldPhaseCiNames = 0;
@@ -392,6 +408,10 @@ if (probeLiteralInProductionGo !== 0) fail(`probe literal in production Go=${pro
 if (!negativeSentinelDetected) fail('negative sentinel not detected');
 if (activePhaseNamedFileCount !== 0) fail(`active_phase_named_files=${activePhaseNamedFileCount}`);
 if (activePhaseMarkerCount !== 0) fail(`active_phase_markers=${activePhaseMarkerCount}`);
+const phaseMarkerAreaSum = Object.values(phaseMarkersByArea).reduce((a, b) => a + b, 0);
+if (phaseMarkerAreaSum !== activePhaseMarkerCount) {
+  fail(`active_phase_markers_by_area sum=${phaseMarkerAreaSum} total=${activePhaseMarkerCount}`);
+}
 if (staleArchitectureMarkerCount !== 0) fail(`stale_architecture_markers=${staleArchitectureMarkerCount}`);
 if (oldPhaseTestScriptsRemaining !== 0) fail(`old_phase_test_scripts_remaining=${oldPhaseTestScriptsRemaining}`);
 if (oldPhaseCiNames !== 0) fail(`old_phase_ci_names_remaining=${oldPhaseCiNames}`);
@@ -412,6 +432,11 @@ for (const h of activePhaseMarkers.slice(0, 40)) {
 }
 if (activePhaseMarkers.length > 40) console.log(`  ... ${activePhaseMarkers.length - 40} more`);
 if (activePhaseMarkers.length === 0) console.log('  none');
+
+section('Active phase markers by area');
+for (const [area, count] of Object.entries(phaseMarkersByArea)) {
+  console.log(`  ${area}=${count}`);
+}
 
 section('Active phase-named files (must be 0)');
 for (const f of activePhaseNamedFiles) console.log(`  ${f}`);
@@ -449,6 +474,9 @@ console.log(`  negative sentinel detected=${negativeSentinelDetected} (phase=${n
 console.log('\n==================================================');
 console.log(`active_phase_named_files=${activePhaseNamedFileCount}`);
 console.log(`active_phase_markers=${activePhaseMarkerCount}`);
+for (const [area, count] of Object.entries(phaseMarkersByArea)) {
+  console.log(`active_phase_markers_${area}=${count}`);
+}
 console.log(`stale_architecture_markers=${staleArchitectureMarkerCount}`);
 console.log(`historical_phase_files=${historicalPhaseFiles.length}`);
 console.log(`historical_phase_markers=${historicalPhaseMarkers}`);
