@@ -135,7 +135,7 @@ func main() {
 	)
 	tariffHandler := tariff.NewHandler(tariffRepo, limiter)
 	tariffWriteHandler := tariff.NewWriteHandler(tariffRepo, limiter, userRepo, auditWriter)
-	tariffResidualWriteHandler := tariff.NewResidualWriteHandler(auditWriter)
+	tariffDisabledWriteHandler := tariff.NewDisabledWriteHandler(auditWriter)
 
 	// OCS Balances
 	balanceRepo := balance.NewRepository(
@@ -148,8 +148,8 @@ func main() {
 	// OCS Subscriber Contract write handler
 	ocsSubscriberWriteHandler := ocs.NewSubscriberWriteHandler(ocsRepo, limiter, userRepo, auditWriter)
 
-	// Residual OCS management handler (policy assign + traffic adjustments)
-	ocsResidualHandler := ocs.NewResidualHandler(limiter, auditWriter)
+	// OCS management handler (plan assignment + traffic adjustments)
+	ocsManagementHandler := ocs.NewManagementHandler(limiter, auditWriter)
 
 	// Subscribers
 	subscriberRepo := subscriber.NewRepository(
@@ -252,23 +252,22 @@ func main() {
 	mux.Handle("POST /api/subscribers/import", authMiddleware(http.HandlerFunc(subscriberWriteHandler.Import)))
 	mux.Handle("POST /api/subscribers/{imsi}/profile", authMiddleware(http.HandlerFunc(subscriberWriteHandler.ProfileApply)))
 
-	// Residual write endpoints (shadow surface: registered in Go, NOT part of
-	// CUTOVER_TABLE; Node remains the production owner until an approved cutover)
+	// Governance-disabled and management write endpoints
 	//
 	// Ratings (OCS_RATING_* disabled contract)
 	mux.Handle("POST /api/ratings", authMiddleware(http.HandlerFunc(ratingWriteHandler.Create)))
 	mux.Handle("PUT /api/ratings/{id}", authMiddleware(http.HandlerFunc(ratingWriteHandler.Update)))
 	mux.Handle("DELETE /api/ratings/{id}", authMiddleware(http.HandlerFunc(ratingWriteHandler.Delete)))
 	// OCS plan assignment (disabled contract) + traffic adjustments (allow)
-	mux.Handle("POST /api/subscribers/policy", authMiddleware(http.HandlerFunc(ocsResidualHandler.AssignPolicy)))
-	mux.Handle("POST /api/subscribers/{imsi}/traffic-adjustments", authMiddleware(http.HandlerFunc(ocsResidualHandler.TrafficAdjustments)))
+	mux.Handle("POST /api/subscribers/policy", authMiddleware(http.HandlerFunc(ocsManagementHandler.AssignPolicy)))
+	mux.Handle("POST /api/subscribers/{imsi}/traffic-adjustments", authMiddleware(http.HandlerFunc(ocsManagementHandler.TrafficAdjustments)))
 	// Tariff import / migrate / rules write (OCS_TARIFF_* / OCS_PLAN_* disabled contract)
-	mux.Handle("POST /api/tariff-plans/import", authMiddleware(http.HandlerFunc(tariffResidualWriteHandler.Import)))
-	mux.Handle("POST /api/tariff-plans/{planId}/migrate", authMiddleware(http.HandlerFunc(tariffResidualWriteHandler.Migrate)))
-	mux.Handle("POST /api/tariff-plans/{planId}/rules", authMiddleware(http.HandlerFunc(tariffResidualWriteHandler.CreateRule)))
-	mux.Handle("PUT /api/tariff-plans/{planId}/rules/{ruleId}", authMiddleware(http.HandlerFunc(tariffResidualWriteHandler.UpdateRule)))
-	mux.Handle("PATCH /api/tariff-plans/{planId}/rules/{ruleId}", authMiddleware(http.HandlerFunc(tariffResidualWriteHandler.ToggleRule)))
-	mux.Handle("DELETE /api/tariff-plans/{planId}/rules/{ruleId}", authMiddleware(http.HandlerFunc(tariffResidualWriteHandler.DeleteRule)))
+	mux.Handle("POST /api/tariff-plans/import", authMiddleware(http.HandlerFunc(tariffDisabledWriteHandler.Import)))
+	mux.Handle("POST /api/tariff-plans/{planId}/migrate", authMiddleware(http.HandlerFunc(tariffDisabledWriteHandler.Migrate)))
+	mux.Handle("POST /api/tariff-plans/{planId}/rules", authMiddleware(http.HandlerFunc(tariffDisabledWriteHandler.CreateRule)))
+	mux.Handle("PUT /api/tariff-plans/{planId}/rules/{ruleId}", authMiddleware(http.HandlerFunc(tariffDisabledWriteHandler.UpdateRule)))
+	mux.Handle("PATCH /api/tariff-plans/{planId}/rules/{ruleId}", authMiddleware(http.HandlerFunc(tariffDisabledWriteHandler.ToggleRule)))
+	mux.Handle("DELETE /api/tariff-plans/{planId}/rules/{ruleId}", authMiddleware(http.HandlerFunc(tariffDisabledWriteHandler.DeleteRule)))
 
 	// Authentication (public)
 	mux.Handle("POST /api/auth/login", http.HandlerFunc(authHandler.Login))
@@ -288,7 +287,7 @@ func main() {
 	mux.Handle("POST /api/users/{username}/disable", authMiddleware(http.HandlerFunc(userHandler.DisableUser)))
 	mux.Handle("POST /api/users/{username}/password-reset", authMiddleware(http.HandlerFunc(userHandler.ResetPassword)))
 
-	// Platform Services (Phase 7.1 read & Phase 7.2 alert mutation shadow endpoints)
+	// Platform services (alerts, notification stream, analytics init, system health/diagnostics)
 	mux.Handle("GET /api/alerts", authMiddleware(http.HandlerFunc(alertHandler.List)))
 	mux.Handle("POST /api/alerts/acknowledge", authMiddleware(http.HandlerFunc(alertHandler.Acknowledge)))
 	mux.Handle("POST /api/alerts/workflow", authMiddleware(http.HandlerFunc(alertHandler.Workflow)))
@@ -300,7 +299,7 @@ func main() {
 	mux.Handle("POST /api/system/audit/scan", authMiddleware(http.HandlerFunc(systemHandler.AuditScan)))
 	remediation.RegisterRoutes(mux, authMiddleware, remediationHandler)
 
-	// Catch-all for unmigrated routes
+	// Catch-all for unknown API routes
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		response.NotFound(w)
 	})

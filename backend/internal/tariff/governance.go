@@ -12,7 +12,7 @@ const (
 )
 
 // tariffRegistry is the tariff-domain governance registry.
-// Phase 5.7-A: All authorized operations execute directly.
+// All authorized operations execute directly.
 var tariffRegistry = map[TariffOperation]governance.OperationDefinition{
 	OpCreate: {
 		Operation:         string(OpCreate),

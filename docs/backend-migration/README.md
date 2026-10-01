@@ -1,9 +1,18 @@
 # Backend Migration Documentation
 
-> **Current Phase: 5.1 COMPLETE**
-> Branch: `develop`
+> **HISTORICAL MIGRATION EVIDENCE — NOT CURRENT ARCHITECTURE AUTHORITY.**
+>
+> This directory preserves the delivery record of the Node -> Go backend
+> migration (phase numbering, intermediate ownership states, frozen baselines).
+> It describes what happened, not what the system is today.
+>
+> For current production architecture use `docs/architecture/`.
+> For current operations use `docs/operations/`.
+>
+> Authority order:
+> `docs/architecture/` > `docs/operations/` > this directory.
 
-## Target Architecture
+## Target Architecture (as of this historical record)
 
 ```
 Browser → Nginx
@@ -12,6 +21,11 @@ Browser → Nginx
 ```
 
 Progressive route-by-route cutover. Frontend SWR paths unchanged.
+
+The phase table and metrics below are a frozen snapshot taken while the
+migration was in progress. Completed phases, ownership counters and
+`CUTOVER_TABLE` values recorded here are historical and must not be read as the
+current production state.
 
 ## Phase Status
 

@@ -36,14 +36,14 @@ xCloud 是独立的电信运营与核心网运维平台，不是 xCloud 的附�
 - 系统健康
 - 运营分析
 
-### 1.1 运维操作模式 (Operation Model - Phase 5.7-A)
+### 1.1 运维操作模式 (Operation Model)
 
 Approval workflow removed from business execution path. Authorization and operation logging remain.
 - 授权用户直接执行业务变更操作，即时生效（Direct Execution）。
 - 移除阻塞式业务审批工作流，业务操作不再生成 `app_approvals` 记录。
 - 严格保留 RBAC 权限检查、操作主体重新鉴权（Fresh Actor Revalidation）、非阻塞式内部操作日志（Operation Log / `app_audit_logs`，best-effort 模式）及 CAS 并发冲突保护。
 
-### 1.2 角色权限模型 (RBAC Model - Phase 5.7-B)
+### 1.2 角色权限模型 (RBAC Model)
 
 三标准角色模型 (Canonical Three-Role Model)：
 - `admin` (管理员): 全系统与用户管理，包含用户生命周期管理、角色分配、业务直接变更。
@@ -55,32 +55,31 @@ Approval workflow removed from business execution path. Authorization and operat
 - 写入边界：用户创建与角色更新仅接受 `['admin', 'operator', 'viewer']`，写入历史角色直接返回 HTTP 400 `INVALID_ROLE`。
 - UI 下拉选项严格展示三标准角色。
 
-### 1.3 Auth & User Management Architecture (Phase 6.0 Freeze)
+### 1.3 Auth & User Management Architecture
 
-架构冻结文档：`docs/architecture/phase-6-auth-architecture.md`。
+权威文档：
+- `docs/operations/authentication-model.md`
+- `docs/operations/user-management-model.md`
+- `docs/operations/rbac-model.md`
 
 稳定边界：
 - 用户集合：`xcloud_ops.app_users` 为唯一权威用户存储，禁止复制到其他集合。
 - 新用户仅接受 `admin` / `operator` / `viewer` 三标准角色。
 - 会话失效机制：`security.sessionVersion++`（密码/角色/状态变更时强制递增）。
 - 删除策略：不硬删除用户，使用 `status=disabled`（保留操作溯源能力）。
-- 认证链：`auth_token` cookie → HS256 JWT → `app_users` 校验 → Principal；Node 与 Go 独立验签。
+- 认证链：`auth_token` cookie → HS256 JWT → `app_users` 校验 → Principal；仅 Go 后端验签，前端不持有 JWT 运行时。
 - 禁止引入：IAM 框架、OAuth、SSO、LDAP、MFA、多租户隔离、策略引擎。
 - 禁止触碰：OCS 业务逻辑、charging plane。
 
-- 运维模型文档：
-- `docs/operations/authentication-model.md`
-- `docs/operations/user-management-model.md`
-
-认证与账号安全加固规范 (Phase 6.2):
+认证与账号安全加固规范:
 - 双重限流 (Dual Rate Limiting): IP 维度请求限流（`login:<ip>`, 5 次 / 60 秒）与账号维度失败限流（`login-user:<normalized-username>`, 10 次失败 / 300 秒，密码验证前预检，仅认证失败时扣减配额，登录成功不扣减），触发时返回 HTTP 429 与 `Cache-Control: no-store`。
 - 自动锁定 (Automatic Lockout): 连续 10 次密码错误自动置为 `status="locked"`, `locked=true`, `sessionVersion+=1`, `lockedAt`, `lockReason="excessive_failed_logins"`；后续错误不重复递增 `sessionVersion`。
 - 响应隐私与状态码契约 (Response Privacy & Status Contract): 凭据与账号状态失败场景（用户不存在、密码错误、已禁用、已锁定）统一返回 HTTP 401 `{"error": "Invalid credentials"}` 与 `Cache-Control: no-store`；请求格式错误、字段缺失或密码超长（>72 字节）返回 HTTP 400。
-- 密码策略对齐 (Password Policy Parity): Node 与 Go 端强校验去除首尾空白字符后 Unicode 码点数 >= 8、UTF-8 编码 <= 72 字节、且不包含目标用户名（不区分大小写）。
+- 密码策略 (Password Policy): Go 端强校验去除首尾空白字符后 Unicode 码点数 >= 8、UTF-8 编码 <= 72 字节、且不包含目标用户名（不区分大小写）。
 - 管理员解锁 (Admin Unlock): 仅管理员可通过 Go 用户管理 API (`PATCH /api/users/{username}`) 解锁，恢复 `status="active"`, `locked=false`，清空锁定元数据与重置 `failedLoginAttempts=0`，并递增 `sessionVersion` 撤销历史会话。
 - 末位管理员保护 (Last Active Admin Protection): 严禁自动锁定或手动锁定/禁用系统中最后一个处于激活状态的管理员（返回 HTTP 409 `LAST_ACTIVE_ADMIN`）。
-- 密钥与会话安全 (Secret & Cookie Hardening): Go 启动时强校验 `JWT_SECRET`（>= 32 UTF-8 字节，禁止弱占位符，不符则拒绝启动）；Cookie 属性强绑定 `HttpOnly=true`, `SameSite=Lax`, HTTPS 下强制 `Secure=true`；敏感认证响应强制 `Cache-Control: no-store`。（Phase 6.2 曾要求 Node 与 Go 双端校验；Phase 8.5 后前端不再持有 JWT secret，仅 Go 校验。）
-- Go 认证生产接管基线 (Phase 6.3-B Cutover): Go 后端认证接口 (`/api/auth/login`, `/api/auth/logout`, `/api/auth/me`, `/api/auth/permissions`) 全面接管生产所有权。自 Phase 8.5 起由 Nginx 边缘路由直接将 `/api` 与 `/api/*` 转发至 Go；`frontend/src/proxy.ts` 不再转发任何 API 请求，`CUTOVER_TABLE` 已退役（路由权威来源 = 84 条 Go 注册）。
+- 密钥与会话安全 (Secret & Cookie Hardening): Go 启动时强校验 `JWT_SECRET`（>= 32 UTF-8 字节，禁止弱占位符，不符则拒绝启动）；Cookie 属性强绑定 `HttpOnly=true`, `SameSite=Lax`, HTTPS 下强制 `Secure=true`；敏感认证响应强制 `Cache-Control: no-store`。（前端不持有 JWT secret，仅 Go 校验。）
+- 认证 API 生产所有权：Go 后端认证接口 (`/api/auth/login`, `/api/auth/logout`, `/api/auth/me`, `/api/auth/permissions`) 为生产 owner。Nginx 边缘路由直接将 `/api` 与 `/api/*` 转发至 Go；`frontend/src/proxy.ts` 不转发任何 API 请求（路由权威来源 = 84 条 Go 注册）。
 
 
 长期演进：
@@ -120,12 +119,12 @@ Browser -> Nginx
            └─ /*             -> Next.js :13333
 ```
 
-当前状态（Phase 8.5 边界）：
+当前状态：
 
 - Nginx 是唯一对外入口，负责 `/api` 与 `/api/*` 路由；`deploy/nginx/xcloud.conf` 定义两个 loopback upstream（Next.js 127.0.0.1:13333、Go 127.0.0.1:18888），并剥离客户端身份头。
-- Go Backend 位于 `backend/`，生产业务 API 全部由 Go 独占；路由权威来源 = 冻结的 84 条 Go 注册（`backend/cmd/server/main.go` + `backend/internal/remediation/handler.go`）。`CUTOVER_TABLE` 已退役。
+- Go Backend 位于 `backend/`，生产业务 API 全部由 Go 独占；路由权威来源 = 84 条 Go 注册（`backend/cmd/server/main.go` + `backend/internal/remediation/handler.go`）。
 - Next.js 保留前端（UI 渲染 + `proxy.ts` UI 导航守卫：不解析 JWT、不访问 Mongo、不注入身份头、不转发 API 请求），并保留无 JWT/Mongo 的前端依赖集合。
-- Next.js 业务后端（`frontend/src/app/api/**` 与 `frontend/src/server/**`）已在 Phase 8.3 物理删除，不得重建。
+- Next.js 业务后端（`frontend/src/app/api/**` 与 `frontend/src/server/**`）不存在，不得重建。
 - API 路径保持 `/api/...` 不变。
 - 前端 SWR 不感知 Node/Go ownership。
 - 禁止在 Next.js 侧重新引入任何业务 API handler、业务 repository 或业务 Mongo 访问。
@@ -143,7 +142,7 @@ Charging Plane remains frozen and excluded.
 - 资费计划 (`ocs_tariff_plans`, `/ocs/tariffs`)、签约合同 (`ocs_subscribers`, `/ocs/contracts`)、余额管理 (`ocs_balances`, `/ocs/balances`) 生产基线永久冻结。
 - 严禁向 OCS 管理平面添加新业务能力或重新设计架构。
 - 严禁引入或耦合运行时计费面实体（`ocs_sessions`, `ocs_reservations`, `ocs_usage_records`, `ocs_events`, `ocs_config`, Gy/Ro/CCR/CCA 协议栈）。
-- 路由权威来源：冻结的 84 条 Go 注册（历史基线：OCS 26，用户管理 32，认证 36，Phase 7.5 47，Phase 8.2 后 84）；`CUTOVER_TABLE` 已随 Phase 8.5 退役，Nginx 负责 API 路由。
+- 路由权威来源：84 条 Go 注册（`backend/cmd/server/main.go` + `backend/internal/remediation/handler.go`）；Nginx 负责 API 路由。
 
 ## 3. 技术栈
 
@@ -160,8 +159,8 @@ Charging Plane remains frozen and excluded.
 - Next.js 生产启动模型唯一：`next start -H 127.0.0.1 -p 13333`（`npm run start`），监听地址固定为 `127.0.0.1:13333`（loopback-only）
 - `next.config.ts` 不启用 `output: 'standalone'`；仓库不再提供 standalone 部署路径
 
-Phase 8.5 边界（前端不再持有 API 认证运行时）：
-- 前端不再使用 MongoDB Node Driver、`jose`、`bcryptjs`（均已在 Phase 8.5 移除）。
+前端运行时边界（前端不持有 API 认证运行时）：
+- 前端不使用 MongoDB Node Driver、`jose`、`bcryptjs`。
 - 前端不再解析/校验 JWT，不访问 MongoDB，不注入身份头，不转发 API 请求。
 - 仅保留 UI 密码策略 `isPasswordStrong` / `PASSWORD_POLICY_MESSAGE`（`frontend/src/lib/security.ts`）。
 - `proxy.ts` 仅做 UI 导航守卫，通过 `GET /api/auth/me`（`GO_BACKEND_URL`，默认 `http://127.0.0.1:18888`）向 Go 询问会话权威结果。
@@ -238,11 +237,11 @@ git branch --show-current
 git log --oneline -10
 ```
 
-仅当任务涉及迁移时，再按需读：
+仅当需要追查历史来源时，再按需读（历史证据，非当前架构权威）：
 
 ```text
 docs/backend-migration/README.md
-docs/backend-migration/migration-routing-matrix.md
+docs/operations/dev-log.md
 ```
 
 ### 禁止无目的全库扫描
@@ -294,23 +293,23 @@ git show
 - 安全边界
 - Git 规则
 - 编码规范
-- 迁移禁止项
+- 架构禁止项
 - 测试门槛
 
 ### AGENTS.md
 只放：
 - 当前架构
-- 当前阶段
+- 当前任务
 - 当前 ownership
 - 当前关键 contract
 - 当前风险
-- 下一阶段入口
+- 任务入口
 
 必须短、准、可覆盖。
 
 ### docs/operations/dev-log.md
 只放历史增量：
-- 阶段完成
+- 里程碑完成
 - commit
 - 重要 bug / 修复
 - 关键结论
@@ -322,7 +321,7 @@ git show
 - deferred
 - 风险
 
-## 7. 迁移原则
+## 7. 演进原则
 
 必须遵循：
 
@@ -331,7 +330,7 @@ Contract First
 Read First
 Governance Before Write
 Single Writer
-Route-by-Route Cutover
+Method + Path Ownership
 Easy Rollback
 ```
 
@@ -340,14 +339,13 @@ Easy Rollback
 - 同一 mutation 两个 authoritative implementation。
 - 改 API path 来迁移。
 - 改 Mongo schema 来迁移。
-- 一次性重写全部 Next API。
+- 一次性重写全部 API。
 - 整仓吸收 CNMS。
 
 允许：
-- pure read shadow compare。
 - route-by-route parity。
-- Go read implementation 与 Node read 同时存在，但生产只有一个 owner。
-- `app_rate_limits` 作为 Phase 2 基础设施写。
+- Go read implementation 与 legacy reference 并存，但生产只有一个 owner。
+- `app_rate_limits` 作为基础设施写。
 
 ## 8. HTTP Method 不等于业务语义
 
@@ -485,14 +483,14 @@ x-user-session-version
 ```
 
 当前重要语义：
-- Node `jose` token → Go verifier interoperability 已验证（历史结论；Phase 8.5 后前端不再持有 JWT 运行时，仅 Go 验签）。
+- 仅 Go 后端验签（前端不持有 JWT 运行时）。
 - legacy `root` role 按当前行为规范化。
-- `app_users` 在 Phase 2 只读（历史 Phase 2 约束）。
-- login/logout 已由 Go 独占生产所有权（Phase 6.3-B cutover）；Phase 8.5 起 Nginx 直接将 `/api/*` 转发至 Go，Next.js 不再参与 API 认证。
+- 用户管理读路径不写 `app_users`（写仅通过 Go 用户管理写 API）。
+- login/logout 由 Go 独占生产所有权；Nginx 直接将 `/api/*` 转发至 Go，Next.js 不参与 API 认证。
 
 ## 13. Permission
 
-每个迁移接口必须检查原 Node：
+每个接口必须检查权限契约：
 
 ```text
 requireAuth
@@ -500,7 +498,7 @@ requireCapability
 requirePermission
 ```
 
-Go 必须复制 observable permission contract。
+Go 必须保持 observable permission contract。
 
 不要用 CNMS RBAC 替换 subscriber-console 规则。
 
@@ -524,14 +522,12 @@ xcloud_ops.app_rate_limits
 - X-RateLimit-Remaining
 - endpoint-specific error text
 
-Phase 2 报告必须写：
+写边界报告必须写：
 
 ```text
 Business-domain writes by Go = NONE
 Infrastructure writes = app_rate_limits
 ```
-
-不要写 `Go writes NONE`。
 
 ## 15. Governance / Write 边界
 
@@ -549,13 +545,13 @@ Executor / Repository
 Audit
 ```
 
-write migration 前禁止：
+写路径变更前禁止：
 - 提前复制半套 Governance。
 - Go 成为新 policy authority。
-- 绕过 Approval。
+- 绕过 RBAC 能力门或 Fresh Actor 重新鉴权。
 - Handler 直接写 DB。
 
-Phase 2 除 `app_rate_limits` 外不得写：
+除 `app_rate_limits` 外不得引入其他基础设施写：
 - `xcloud.subscribers`
 - `xcloud.ocs_*`
 - `xcloud_ops.app_profiles`
@@ -590,24 +586,17 @@ subscriber-console contract/session semantics 优先。
 
 ## 17. Routing
 
-必须区分：
+Nginx 将 `/api` 与 `/api/*` 全部转发至 Go；`location /` 服务 Next.js UI。
 
-```text
-IMPLEMENTED
-PARITY_PASS
-CUTOVER_READY
-ACTUALLY_ROUTED
-```
+路由权威 = Go 注册集合（method + path）。Go Handler 存在本身不等于该 route 已登记为生产注册。
 
-Go Handler 存在 != 生产已切流。
-
-禁止仅按 `/api/subscribers/` prefix 整体送 Go，因为同 prefix 下仍有写 API。（历史约束：Phase 8.5 后所有生产 API 均为 Go 独占，Nginx 将 `/api` 与 `/api/*` 全部转发至 Go；路由权威仍以 method + path 为准。）
+新增或修改 route 前，必须以 `backend/cmd/server/main.go` 与 `backend/internal/remediation/handler.go` 的 METHOD+PATH 注册为准进行核对，不得仅按 `/api/subscribers/` 之类 prefix 推断归属。
 
 ## 18. Frontend / Design
 
 - 不改 SWR API path。
 - 不让前端感知 Node/Go owner。
-- UI 优化与 backend migration 分开 commit。
+- UI 优化与后端变更分开 commit。
 - 用户可见文案同步中英文 locale。
 
 设计继续遵守现有 token：
@@ -708,13 +697,14 @@ refactor(...)
 示例：
 
 ```text
-feat(backend): migrate subscriber read APIs
+feat(backend): add subscriber read APIs
 fix(backend): correct tariff contract parity
-test(migration): verify read parity
+test(backend): verify read parity
 ```
 
-禁止在 commit message 中包含阶段编号（如 Phase 2A、Phase 1、2C.1）。
-Commit 只描述变更内容，不描述属于哪个阶段。
+禁止在 commit message 中出现任何生命周期阶段编号、阶段代号或阶段词样（大小写任意，分隔空格可有可无），亦不得将其用作 Conventional Commits 的 scope 或 subject 组成部分。
+
+Commit 只描述变更内容（what changed），不描述属于哪个生命周期阶段。
 
 禁止在 commit message 末尾添加签名行，包括但不限于：
 - `Co-Authored-By: ...`
@@ -727,7 +717,7 @@ Commit 只描述变更内容，不描述属于哪个阶段。
 - 不 rebase public history
 - 不 reset --hard
 - 不丢弃用户修改
-- 不 amend 已确认历史阶段 commit
+- 不 amend 已推送 commit
 
 每个 commit 应：
 

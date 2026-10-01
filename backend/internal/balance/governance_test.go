@@ -60,7 +60,7 @@ func TestEvaluateOperation_GovernanceRoles(t *testing.T) {
 		t.Errorf("expected super_admin to get DIRECT, got %+v", resSuperAdmin)
 	}
 
-	// Adjust: operator / ops_admin -> DIRECT (Phase 5.7-A)
+	// Adjust: operator -> DIRECT
 	resOperator := EvaluateOperation(OpAdjust, "operator")
 	if resOperator.Decision != governance.Direct {
 		t.Errorf("expected operator to get DIRECT, got %+v", resOperator)

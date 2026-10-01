@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /**
- * Migration Inventory Validator (post-cutover architecture).
+ * API Route Inventory Validator.
  *
  * Architecture: the Next.js App Router business API tree (frontend/src/app/api) and the
- * Next.js business server layer (frontend/src/server) were PHYSICALLY REMOVED. The
- * controlled cutover table has since been RETIRED: Nginx now owns /api and /api/* path
- * selection at the edge and forwards straight to the Go backend, whose router
- * registration site is the authoritative API surface.
+ * Next.js business server layer (frontend/src/server) do not exist. Route ownership is no
+ * longer resolved inside Next.js: Nginx owns /api and /api/* path selection at the edge and
+ * forwards straight to the Go backend, whose router registration site is the authoritative
+ * API surface.
  *
  * This validator therefore enforces, all from source:
  *   1. generated inventory == independent source scan (no drift, no faked routes);
@@ -16,7 +16,7 @@
  *      (no duplicates, retired mutation surfaces absent, exact count derived);
  *   5. the edge deployment contract: /api and /api/* -> Go upstream, everything else ->
  *      Next.js UI upstream;
- *   6. the retired migration routing artifact must not survive in production source.
+ *   6. the retired route-owner routing artifact must not reappear in production source.
  *
  * Usage: node scripts/migration/inventory-api.mjs && node scripts/migration/validate-inventory.mjs
  */
@@ -87,7 +87,7 @@ for (const route of routes) {
 }
 
 // ---------------------------------------------------------------------------
-// 3. Historical baseline record preserved (frozen Phase 0 evidence, not a live count)
+// 3. Historical baseline record preserved (frozen historical evidence, not a live count)
 // ---------------------------------------------------------------------------
 const baseline = readFileSync(baselinePath, 'utf8');
 assert.match(baseline, /\|\s*Route files\s*\|\s*\*\*54\*\*\s*\|/);

@@ -10,42 +10,38 @@
 - User interaction and feedback
 - Internationalization (en/zh)
 - Responsive layout and design tokens
+- UI-only navigation guard (`frontend/src/proxy.ts`)
 
-Frontend does NOT know whether API calls go to Node or Go.
-API paths remain `/api/...` regardless of backend owner.
+The frontend does not know which process answers an API call.
+API paths remain `/api/...` unchanged.
 
 Location: `frontend/src/`
 
 ## Backend Responsibility
 
-### Node (Next.js API Routes) — Legacy
+### Go Backend (API owner)
 
-- Authentication (login/logout)
-- Write endpoints not yet migrated
-- Approval execute
-- Audit export (stateful GET)
-
-Location: `frontend/src/app/api/`
-
-### Go Backend — Migrated
-
-- Authentication verification (HS256)
+- Authentication verification (HS256) and session validation
 - Authorization (capability + permission checks)
-- Read API implementations (shadow)
-- Governed write operations
+- All production read and write API operations
 - Rate limiting
 - Audit evidence writing
+- Request identity, request ID and structured logging
 
 Location: `backend/internal/`
 
-## Migration Boundary
+The Next.js business API tree (`frontend/src/app/api/`) and business server layer
+(`frontend/src/server/`) do not exist. The frontend holds no API handler, no business
+repository, no MongoDB client and no JWT runtime. No route-owner table exists in
+production source.
 
-Ownership is per method + path, not per prefix.
+## Routing Boundary
 
-```text
-ACTUALLY_ROUTED = 1  →  production traffic goes to Go
-ACTUALLY_ROUTED = 0  →  Go implements but Node serves production
-```
+Nginx is the sole public edge. It routes `/api` and `/api/*` to Go and `location /` to the
+Next.js UI, and strips client identity headers at the edge.
 
-CUTOVER_TABLE defines authoritative ownership.
-See `docs/backend-migration/migration-routing-matrix.md`.
+Route ownership is per method + path. Route authority is the Go registration set parsed from
+`backend/cmd/server/main.go` plus `backend/internal/remediation/handler.go`
+(shared helper `scripts/lib/go-registrations.mjs`).
+
+See `docs/operations/deployment.md` for the edge contract.

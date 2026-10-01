@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 /**
- * Phase 6.3-B — Controlled Authentication Cutover Acceptance Suite
+ * Authentication Runtime Integration Acceptance Suite
  *
- * Verifies production ownership cutover of Authentication APIs from Node to Go backend (:18888):
+ * Verifies the Go API service is the production owner of the Authentication APIs (:18888),
+ * routed at the Nginx edge with no Node fallback:
  *
  * 1. Go API Surface & Inventory Checks (derived from Go router source):
  *    - Go router registers exactly 84 METHOD+PATH operations
@@ -56,13 +57,13 @@ console.error = (...args) => {
 };
 
 const suffix = `${Date.now()}_${process.pid}_${Math.floor(Math.random() * 100000)}`;
-const xcloudDbName = `xcloud_auth_cutover_${suffix}`;
-const appDbName = `xcloud_ops_auth_cutover_${suffix}`;
+const xcloudDbName = `xcloud_auth_integration_${suffix}`;
+const appDbName = `xcloud_ops_auth_integration_${suffix}`;
 const uri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/xcloud';
 
 process.env.MONGODB_XCLOUD_DB = xcloudDbName;
 process.env.MONGODB_APP_DB = appDbName;
-const JWT_SECRET_STRING = process.env.JWT_SECRET || 'auth-cutover-suite-secret-at-least-32-bytes!';
+const JWT_SECRET_STRING = process.env.JWT_SECRET || 'auth-integration-suite-secret-at-least-32-bytes!';
 process.env.JWT_SECRET = JWT_SECRET_STRING;
 
 // Local JWT signing/verification key (the Next.js security helper was retired).
@@ -133,7 +134,7 @@ async function verifyAsync(description, fn) {
 }
 
 async function main() {
-  console.log('── Phase 6.3-B Authentication Controlled Cutover Suite ──\n');
+  console.log('── Authentication Runtime Integration Suite ──\n');
 
   // =============================================================
   // 1. Go API Surface & Inventory Checks (derived from Go router source)
@@ -213,7 +214,7 @@ async function main() {
   // Build and start Go backend server
   const goPort = await getAvailablePort();
   const isWin = process.platform === 'win32';
-  const binName = isWin ? `test-go-cutover-${suffix}.exe` : `test-go-cutover-${suffix}`;
+  const binName = isWin ? `test-go-auth-${suffix}.exe` : `test-go-auth-${suffix}`;
   const backendDir = path.resolve(import.meta.dirname, '..', 'backend');
   binPath = path.join(backendDir, binName);
 
@@ -527,7 +528,7 @@ async function main() {
   });
 
   console.log(`\n==================================================`);
-  console.log(`Phase 6.3-B Authentication Controlled Cutover Suite Passed`);
+  console.log(`Authentication Runtime Integration Suite Passed`);
   console.log(`Passed: ${passed} / ${totalChecks} checks`);
   console.log(`Go Registrations=${goKeys.length} Production Owner=Go`);
   console.log(`==================================================\n`);
@@ -535,7 +536,7 @@ async function main() {
 
 main()
   .catch((err) => {
-    console.error('Cutover suite failed:', err);
+    console.error('Authentication runtime integration suite failed:', err);
     process.exitCode = 1;
   })
   .finally(async () => {

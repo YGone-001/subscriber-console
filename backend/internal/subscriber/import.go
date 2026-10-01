@@ -636,7 +636,7 @@ func ExecuteFrozenImport(
 		return nil, err
 	}
 
-	// Phase 1: ALL-TARGET STATE BARRIER
+	// Stage 1: ALL-TARGET STATE BARRIER
 	// Load ALL target IMSI existence states and compare to frozen.
 	imsis := make([]string, len(frozen.Targets))
 	for i, t := range frozen.Targets {
@@ -679,7 +679,7 @@ func ExecuteFrozenImport(
 		}
 	}
 
-	// Phase 2: Execute — skip present, insert absent
+	// Stage 2: Execute — skip present, insert absent
 	result := &ImportExecutionResult{
 		Requested:                  frozen.TargetCount,
 		IntendedCreateCount:        frozen.Summary.CreateCount,
@@ -721,7 +721,7 @@ func ExecuteFrozenImport(
 		result.CreatedImsis = append(result.CreatedImsis, t.Imsi)
 	}
 
-	// Phase 3: OCS provisioning only for successfully created subscribers
+	// Stage 3: OCS provisioning only for successfully created subscribers
 	for _, imsi := range result.CreatedImsis {
 		rec := recordByImsi[imsi]
 		input := OcsProvisioningInput{

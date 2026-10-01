@@ -8,12 +8,10 @@ import (
 	"subscriber/internal/response"
 )
 
-// Disabled operation codes for the residual tariff write surfaces. The current
-// Node implementation is the authoritative contract: the OCS governance
-// registry classifies these operations as DISABLED, so after the RBAC
-// permission boundary every authorized request receives HTTP 409 with the
-// stable disabled code BEFORE body parsing, rate limiting, persistence, or
-// audit side effects.
+// Disabled operation codes for the tariff write surfaces that the governance
+// registry classifies as DISABLED. After the RBAC permission boundary every
+// authorized request receives HTTP 409 with the stable disabled code BEFORE
+// body parsing, rate limiting, persistence, or audit side effects.
 const (
 	TariffCreateDisabledCode     = "OCS_TARIFF_CREATE_NOT_SUPPORTED"
 	PlanMigrationDisabledCode    = "OCS_PLAN_MIGRATION_NOT_SUPPORTED"
@@ -23,14 +21,15 @@ const (
 	TariffRuleDeleteDisabledCode = "OCS_TARIFF_RULE_DELETE_NOT_SUPPORTED"
 )
 
-// Residual permissions matching Node requirePermission(definition.permission).
+// Permissions matching requirePermission(definition.permission) for the
+// governance registry entries covered by this handler.
 const (
-	residualTariffWritePermission = "ocs.tariff.write"
-	residualPlanAssignPermission  = "ocs.plan.assign"
+	tariffWritePermission = "ocs.tariff.write"
+	planAssignPermission  = "ocs.plan.assign"
 )
 
-// ResidualWriteHandler provides the production Go counterparts for residual
-// tariff write endpoints:
+// DisabledWriteHandler provides the Go production handlers for the tariff write
+// endpoints whose governance mode is DISABLED:
 //
 //   - POST   /api/tariff-plans/import                    (TARIFF_PLAN_CREATE)
 //   - POST   /api/tariff-plans/{planId}/migrate          (PLAN_MIGRATE)
@@ -39,61 +38,60 @@ const (
 //   - PATCH  /api/tariff-plans/{planId}/rules/{ruleId}   (TARIFF_RULE_TOGGLE)
 //   - DELETE /api/tariff-plans/{planId}/rules/{ruleId}   (TARIFF_RULE_DELETE)
 //
-// Shadow freeze: these handlers are registered by the production Go server but
-// are NOT part of CUTOVER_TABLE, so the Node runtime remains the production
-// owner until an approved cutover.
-type ResidualWriteHandler struct {
+// These handlers are registered by the Go server and are Go production-owned at
+// the Nginx edge.
+type DisabledWriteHandler struct {
 	auditWriter *audit.Writer
 }
 
-// NewResidualWriteHandler creates a new residual tariff write handler.
-func NewResidualWriteHandler(auditWriter *audit.Writer) *ResidualWriteHandler {
-	return &ResidualWriteHandler{auditWriter: auditWriter}
+// NewDisabledWriteHandler creates a new disabled tariff write handler.
+func NewDisabledWriteHandler(auditWriter *audit.Writer) *DisabledWriteHandler {
+	return &DisabledWriteHandler{auditWriter: auditWriter}
 }
 
 // Import handles POST /api/tariff-plans/import.
-func (h *ResidualWriteHandler) Import(w http.ResponseWriter, r *http.Request) {
-	if !h.authorize(w, r, residualTariffWritePermission) {
+func (h *DisabledWriteHandler) Import(w http.ResponseWriter, r *http.Request) {
+	if !h.authorize(w, r, tariffWritePermission) {
 		return
 	}
 	response.Error(w, http.StatusConflict, TariffCreateDisabledCode, TariffCreateDisabledCode)
 }
 
 // Migrate handles POST /api/tariff-plans/{planId}/migrate.
-func (h *ResidualWriteHandler) Migrate(w http.ResponseWriter, r *http.Request) {
-	if !h.authorize(w, r, residualPlanAssignPermission) {
+func (h *DisabledWriteHandler) Migrate(w http.ResponseWriter, r *http.Request) {
+	if !h.authorize(w, r, planAssignPermission) {
 		return
 	}
 	response.Error(w, http.StatusConflict, PlanMigrationDisabledCode, PlanMigrationDisabledCode)
 }
 
 // CreateRule handles POST /api/tariff-plans/{planId}/rules.
-func (h *ResidualWriteHandler) CreateRule(w http.ResponseWriter, r *http.Request) {
-	if !h.authorize(w, r, residualTariffWritePermission) {
+func (h *DisabledWriteHandler) CreateRule(w http.ResponseWriter, r *http.Request) {
+	if !h.authorize(w, r, tariffWritePermission) {
 		return
 	}
 	response.Error(w, http.StatusConflict, TariffRuleCreateDisabledCode, TariffRuleCreateDisabledCode)
 }
 
 // UpdateRule handles PUT /api/tariff-plans/{planId}/rules/{ruleId}.
-func (h *ResidualWriteHandler) UpdateRule(w http.ResponseWriter, r *http.Request) {
-	if !h.authorize(w, r, residualTariffWritePermission) {
+func (h *DisabledWriteHandler) UpdateRule(w http.ResponseWriter, r *http.Request) {
+	if !h.authorize(w, r, tariffWritePermission) {
 		return
 	}
 	response.Error(w, http.StatusConflict, TariffRuleUpdateDisabledCode, TariffRuleUpdateDisabledCode)
 }
 
 // ToggleRule handles PATCH /api/tariff-plans/{planId}/rules/{ruleId}.
-func (h *ResidualWriteHandler) ToggleRule(w http.ResponseWriter, r *http.Request) {
-	if !h.authorize(w, r, residualTariffWritePermission) {
+func (h *DisabledWriteHandler) ToggleRule(w http.ResponseWriter, r *http.Request) {
+	if !h.authorize(w, r, tariffWritePermission) {
 		return
 	}
 	response.Error(w, http.StatusConflict, TariffRuleToggleDisabledCode, TariffRuleToggleDisabledCode)
 }
 
 // DeleteRule handles DELETE /api/tariff-plans/{planId}/rules/{ruleId}.
-func (h *ResidualWriteHandler) DeleteRule(w http.ResponseWriter, r *http.Request) {
-	if !h.authorize(w, r, residualTariffWritePermission) {
+func (h *DisabledWriteHandler) DeleteRule(w http.ResponseWriter, r *http.Request) {
+	if !h.authorize(w, r, tariffWritePermission) {
 		return
 	}
 	response.Error(w, http.StatusConflict, TariffRuleDeleteDisabledCode, TariffRuleDeleteDisabledCode)
@@ -102,8 +100,8 @@ func (h *ResidualWriteHandler) DeleteRule(w http.ResponseWriter, r *http.Request
 // authorize enforces the shared authentication + permission boundary.
 // Unauthenticated requests are intercepted by the auth middleware; the
 // principal check mirrors the other Go handlers. Denials emit best-effort
-// authorization.denied evidence matching Node recordPermissionDenied().
-func (h *ResidualWriteHandler) authorize(w http.ResponseWriter, r *http.Request, permission string) bool {
+// authorization.denied evidence.
+func (h *DisabledWriteHandler) authorize(w http.ResponseWriter, r *http.Request, permission string) bool {
 	p := auth.PrincipalFromContext(r.Context())
 	if p == nil {
 		response.Error(w, http.StatusUnauthorized, "Unauthorized", "AUTH_INVALID_TOKEN")

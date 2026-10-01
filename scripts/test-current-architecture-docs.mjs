@@ -30,7 +30,7 @@ for (const pattern of forbiddenInRunbook) {
   );
 }
 
-assert.ok(runbook.includes('ACTUALLY_ROUTED = 84'), 'Runbook must document ACTUALLY_ROUTED = 84');
+assert.ok(runbook.includes('GoRegistered = 84'), 'Runbook must document GoRegistered = 84');
 assert.ok(runbook.includes('Canonical RBAC & Direct Execution'), 'Runbook must document Canonical RBAC & Direct Execution');
 assert.ok(runbook.includes('xcloud_ops.app_audit_logs'), 'Runbook must reference app_audit_logs');
 assert.ok(runbook.includes('app_approvals'), 'Runbook must mention historical app_approvals status');
@@ -51,9 +51,8 @@ const forbiddenInAgents = [
   'approval review/execute',
   '## 9.1 Approval Governance',
   '## 9.2 Super Admin Direct Governance Policy',
-  '`app_users` = Phase 2 read-only',
   // Retired mechanisms must not be presented as the current architecture.
-  'Every production API operation owner = Go (CUTOVER_TABLE = 84',
+  'Every production API operation owner = Go (route-owner table',
   'Proxy ownership',
   'ownership decision + exact METHOD+PATH forwarding',
 ];
@@ -70,8 +69,8 @@ assert.ok(agents.includes('Nginx'), 'AGENTS.md must describe the Nginx edge');
 assert.ok(agents.includes('127.0.0.1:18888'), 'AGENTS.md must document the Go upstream 127.0.0.1:18888');
 assert.ok(agents.includes('127.0.0.1:13333'), 'AGENTS.md must document the Next.js upstream 127.0.0.1:13333');
 assert.ok(agents.includes('84 exact METHOD+PATH registrations'), 'AGENTS.md must document the 84 Go registration authority');
-assert.ok(agents.includes('CUTOVER_TABLE = retired'), 'AGENTS.md must state that CUTOVER_TABLE is retired');
-assert.ok(agents.includes('Go route registrations'), 'AGENTS.md must document Go route registrations as the authority');
+assert.ok(agents.includes('Route authority'), 'AGENTS.md must document the derived Go registration authority');
+assert.ok(agents.includes('the derived Go registration set'), 'AGENTS.md must derive route authority from the Go registration set');
 
 // 4. deployment.md - final edge boundary
 const deploymentPath = path.join(ROOT, 'docs/operations/deployment.md');
@@ -81,7 +80,6 @@ const forbiddenInDeployment = [
   'upstream nextjs',
   'upstream golang',
   'location /api/subscribers',
-  'CUTOVER_TABLE',
   'still go to Next.js during migration',
 ];
 
@@ -109,16 +107,16 @@ const claude = fs.readFileSync(claudePath, 'utf8');
 
 assert.ok(!claude.includes('approval review/execute'), 'CLAUDE.md must not contain approval review/execute');
 assert.ok(!claude.includes('ACTUALLY_ROUTED = 26`'), 'CLAUDE.md must not contain stale ACTUALLY_ROUTED = 26 in active invariants');
-assert.ok(!claude.includes('CUTOVER_TABLE = 84'), 'CLAUDE.md must not present CUTOVER_TABLE = 84 as the current architecture');
+assert.ok(!/route-owner table/i.test(claude), 'CLAUDE.md must not present a route-owner table as the current architecture');
 assert.ok(claude.includes('Nginx'), 'CLAUDE.md must describe the Nginx edge');
-assert.ok(claude.includes('CUTOVER_TABLE') && claude.includes('退役'), 'CLAUDE.md must state that CUTOVER_TABLE is retired');
+assert.ok(claude.includes('84 条 Go 注册'), 'CLAUDE.md must document the 84 Go registration authority');
 
 // 6. README.md
 const readmePath = path.join(ROOT, 'README.md');
 const readme = fs.readFileSync(readmePath, 'utf8');
 
 assert.ok(!readme.includes('approval governance'), 'README.md must not list active approval governance in features');
-assert.ok(!readme.includes('CUTOVER_TABLE'), 'README.md must not present CUTOVER_TABLE as the current architecture');
+assert.ok(!/route-owner table/i.test(readme), 'README.md must not present a route-owner table as the current architecture');
 assert.ok(readme.includes('127.0.0.1:18888'), 'README.md must document the Go upstream 127.0.0.1:18888');
 assert.ok(readme.includes('127.0.0.1:13333'), 'README.md must document the Next.js upstream 127.0.0.1:13333');
 

@@ -4,7 +4,7 @@
 // OperationDefinition. This package evaluates whether an operation is disabled,
 // runtime-only, or directly executable.
 //
-// In Phase 5.7-C, all approval workflows are removed.
+// Approval workflows are fully removed from the business execution path.
 // Human-triggered mutations execute directly if permitted by RBAC.
 package governance
 

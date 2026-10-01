@@ -25,14 +25,14 @@
 2. **【接口向前兼容性】**：每次更新源码前，必须全面回顾涉及模块的上下文。绝对不能随意删除已有函数接口！如需调整，必须选择更新原接口或创建新接口。功能模块的升级必须紧密依赖现有的最新内容框架与源码结构进行，严禁“去头掐尾”导致旧功能断裂。
 3. **【前端表达规范】**：在输出修改说明、更新日志或注释时，涉及前端开发的变动，严禁使用“说明出现在网页前端展示上”这类非专业表述，必须采用规范的工程化技术术语。
 
-### 0.2 操作模式 (Operation Model - Phase 5.7-A)
+### 0.2 操作模式 (Operation Model)
 
 Approval workflow removed from business execution path. Authorization and operation logging remain.
 - Authorized users execute permitted operations directly (Direct Execution).
 - Zero approval records created on business operations (`app_approvals` count == 0).
 - Best-effort / non-business-gating operation logging to `app_audit_logs`, RBAC capability gates, fresh actor revalidation, and CAS concurrency control remain active.
 
-### 0.3 角色权限模型 (RBAC Model - Phase 5.7-B)
+### 0.3 角色权限模型 (RBAC Model)
 
 Canonical Three-Role Model:
 - `admin`: System and user administration, plus permitted business operations.
@@ -104,8 +104,7 @@ Important:
 ```text
 Nginx owns production API routing; Go owns every production API operation and API auth identity.
 Route authority = the derived Go registration set (84 exact METHOD+PATH registrations).
-CUTOVER_TABLE = retired (frontend/src/lib/cutover-routing.ts deleted).
-The Next.js business backend (app/api + src/server) was physically removed in Phase 8.3.
+The Next.js business backend (app/api + src/server) does not exist.
 Next.js renders the UI and runs a UI-only navigation guard (proxy.ts); it never decodes a JWT, never reads MongoDB, never injects identity headers and never forwards an API request.
 Frontend API paths remain unchanged.
 ```
@@ -119,7 +118,7 @@ Next.js 16.2.2
 React 19.2.4
 TypeScript 5.x
 Node 20
-UI-only dependency set (no frontend jose / mongodb / jiti after Phase 8.5)
+UI-only dependency set (no frontend jose / mongodb / jiti)
 ```
 
 Go:
@@ -159,151 +158,43 @@ One client, two handles.
 
 ---
 
-## 5. Migration Status
-
-Latest verified logical status:
+## 5. Current Production State
 
 ```text
-Phase 0     COMPLETE
-Phase 0.1   COMPLETE
-Phase 1     COMPLETE
-Phase 2A    COMPLETE
-Phase 2A.1  COMPLETE
-Phase 2B    COMPLETE
-Phase 2B.1  COMPLETE
-Phase 2C    COMPLETE
-Phase 2C.1  COMPLETE
-Phase 2D    COMPLETE
-Phase 2D.1  COMPLETE
-
-Phase 3     IN PROGRESS
-Phase 3A    COMPLETE — security audit evidence writer + authorization denial integration
-Phase 3B    COMPLETE — audit writer lifecycle closeout
-Phase 3C    COMPLETE — approval governance read foundation
-Phase 3D    COMPLETE — explicit approval decision endpoints + contract preflight
-Phase 4.1   COMPLETE — subscriber single-write final contract gate
-Phase 4.2-A COMPLETE — subscriber batch create governance
-Phase 4.3   COMPLETE — subscriber single create/update/delete cutover
-Phase 4.4   COMPLETE — subscriber profile apply cutover
-Phase 4.5   COMPLETE — profile CRUD cutover
-Phase 4.6   COMPLETE — subscriber single CRUD cutover (create/update/delete)
-Phase 4.7   COMPLETE — subscriber batch create/update/import/bulk-delete cutover
-Phase 5.0   COMPLETE — OCS management domain architecture freeze
-Phase 5.1   COMPLETE — OCS read API migration + management UI
-Phase 5.2   COMPLETE — OCS tariff plan governance (create/update/delete/clone/enable/disable)
-Phase 5.3   COMPLETE — OCS subscriber contract governance (create/update-tariff/suspend/resume/terminate)
-Phase 5.3-B-0 COMPLETE — repository structure refactor (frontend/backend separation)
-Phase 5.4   COMPLETE — OCS balance governance implementation (CAS versioning, strict audit, disabled reset)
-Phase 5.4-B COMPLETE — OCS balance controlled production cutover (ACTUALLY_ROUTED = 26)
-Phase 5.5-A COMPLETE — OCS management final alignment & UI polish
-Phase 5.6   COMPLETE — OCS production freeze & documentation closure
-Phase 5.7-A COMPLETE — Direct Execution (approval workflow removed from business execution path)
-Phase 5.7-B COMPLETE — Three-role RBAC canonicalization (admin/operator/viewer with legacy normalization)
-Phase 5.7-C COMPLETE — CI migration validator dependency installation fix
-Phase 6.0   COMPLETE — Authentication & User Management architecture freeze
-Phase 6.1-B COMPLETE — User management CRUD lifecycle (Go backend)
-Phase 6.1-C COMPLETE — User management UI (dedicated pages and API client)
-Phase 6.1-D COMPLETE — User management integration hardening and controlled Go cutover (ACTUALLY_ROUTED = 32)
-Phase 6.2   COMPLETE — Authentication security hardening (dual rate limits, auto lockout, response privacy, JWT secret validation)
-Phase 6.3-A COMPLETE — Authentication Go contract parity foundation (1:1 behavioral/security/contract/persistence parity, shadow Go candidate, CUTOVER_TABLE=32, ACTUALLY_ROUTED=32)
-Phase 6.3-B COMPLETE — Controlled Authentication Cutover (Production owner = Go backend, CUTOVER_TABLE = 36, ACTUALLY_ROUTED = 36)
-Phase 6.4   COMPLETE — Authentication & User Management UI Final Integration (UX hardening, rate limit cooldown, privacy, status lifecycle, security state)
-Phase 7.0   PASS / FROZEN — Alerts, Notifications & Platform Services Architecture Freeze (Current-State Reconciliation, Contract Inventory, and Migration Planning)
-Phase 7.1   PASS / FROZEN — Platform Health & Diagnostic Read Parity (GET /api/alerts, GET /api/system/health, GET /api/system/mongo/health, GET /api/system/audit/status, POST /api/system/audit/scan, POST /api/analytics/init)
-Phase 7.2   PASS / FROZEN — Alert Mutation Parity (POST /api/alerts/acknowledge, POST /api/alerts/workflow)
-Phase 7.3   PASS / FROZEN — Notification Streaming SSE Parity (full acceptance matrix closed; Run #140 green)
-Phase 7.4   PASS / FROZEN — System Integrity Controlled Remediation Parity (POST /api/system/audit/heal, POST /api/system/audit/batch-heal; RS01-RS05 frozen as one continuous persistent-state sequence with 96 mandatory callbacks)
-Phase 7.5   PASS / FROZEN — Controlled Platform Services Production Cutover (11 Phase 7 operations Go production-owned)
-Phase 8.0   PASS / FROZEN — Next.js Backend Removal Architecture Freeze (residual API inventory + source-derived readiness validator)
-Phase 8.1   PASS / FROZEN — Residual API Go Implementation & Shadow Parity (33-operation canonical remainder, 11 newly implemented Go shadows; 81 parity scenarios / 122 assertions)
-Phase 8.2   PASS / FROZEN — Residual Production Cutover, Compatibility Closure & Retired Surface Removal (33 canonical residual operations + 2 legacy read aliases + 2 Go-native reads now Go production-owned; 6 non-canonical mutation methods retired; CUTOVER_TABLE = 84, ACTUALLY_ROUTED = 84, node_production_operations = 0)
-Phase 8.3   PASS / FROZEN — Next.js Business Backend Physical Removal (frontend/src/app/api/** 54 route.ts / 72 operations and frontend/src/server/** 33 files deleted; 7 backend-only lib helpers removed; minimal read-only proxy session account store extracted; CUTOVER_TABLE = 84, ACTUALLY_ROUTED = 84, next_business_backend_removed = true)
-Phase 8.4   PASS / FROZEN — Frontend Dependency & Residual Node Runtime Cleanup (bcryptjs removed; 5 dead Node-era libs deleted; mongo.ts collapsed into read-only sessionMongo.ts; backend_production_changes = 0)
-Phase 8.5   PASS / FROZEN — Proxy / Deployment Boundary Finalization (Nginx edge router owns /api; UI-only navigation guard replaces the API reverse proxy; CUTOVER_TABLE retired; Go registration set = route authority; frontend deps 19 -> 16)
-Phase 8.5-C PASS / FROZEN — Internal Service Listener Boundary Correction (Next listener pinned to 127.0.0.1:13333 via the single `next start` production model; Go `HTTP_ADDR` default = 127.0.0.1:18888; standalone deployment path removed; 84 registrations unchanged)
-Phase 8.6   IMPLEMENTED / NOT SELF-FROZEN — Production Freeze & Final Certification (certification-only; 84/84 exact registration set equality vs the Phase 8.5 SHA; 0 Next business API operations; Nginx sole public edge; loopback-only Next/Go listeners; Go-only auth authority; production_runtime_changes = 0)
+Public edge                          = Nginx (deploy/nginx/xcloud.conf)
+API owner (/api, /api/*)             = Go backend, 127.0.0.1:18888
+UI owner (/*)                        = Next.js, 127.0.0.1:13333
+Go production API registrations      = 84 exact METHOD+PATH registrations
+Next.js business API operations      = 0
+Next.js MongoDB access               = 0
+Node business API execution          = 0
+Route authority                      = derived Go registration set
+Canonical API surface                = 33 operations + 2 legacy read aliases
+OCS management writes                = 13 (tariff plan + subscriber contract + balance)
 ```
 
-Authoritative frozen Phase 8.3 boundary SHA (independent acceptance, not HEAD):
+### 5.0 Deployment Boundary
 
 ```text
-342589aa5c00cb8152980c77bfc73f05b82ca64a
-```
-
-Phase 7.0-7.5 and Phase 8.0-8.5 are independently accepted and frozen.
-Phase 8.6 (Production Freeze & Final Certification) is implemented (independent acceptance
-pending) and is certification-only: production runtime changes = 0.
-
-### 5.0 Phase 8.3 Boundary (Next.js Business Backend Removal)
-
-```text
-Next.js business backend removed       = YES
-All Node.js server execution removed   = NO
-```
-
-- Deleted: `frontend/src/app/api/**` (54 `route.ts` + 6 `handler.ts`), `frontend/src/server/**` (33 files), 7 backend-only `frontend/src/lib` helpers.
-- Extracted: `frontend/src/lib/sessionAccountStore.ts` — read-only `app_users` lookup (`findOne` only, zero writes) consumed by the unchanged `frontend/src/lib/accountSession.ts`.
-- Historical (Phase 8.3 byte-frozen set): `frontend/src/proxy.ts`, `frontend/src/lib/cutover-routing.ts`, `frontend/src/lib/security.ts`. (`frontend/src/lib/mongo.ts` was collapsed into `sessionMongo.ts` in Phase 8.4; in Phase 8.5 `cutover-routing.ts` plus the session Mongo chain were deleted and `proxy.ts` became a UI-only guard. See 5.0.2.)
-- Node runtime intentionally remains: UI rendering plus the UI-only navigation guard.
-- Dependency cleanup performed in Phase 8.4; proxy/deployment finalization performed in Phase 8.5 (both implemented, acceptance pending).
-- Evidence: `docs/backend-migration/phase-8.3-next-backend-removal.md`; suite `scripts/test-phase-8-next-backend-removal.mjs` (historical).
-
-### 5.0.1 Phase 8.4 Post-Cleanup Statement (Frontend Dependency & Residual Node Runtime Cleanup)
-
-```text
-Next.js business backend removed = YES
-Next.js proxy/session runtime     = STILL PRESENT
-Frontend Mongo business access    = NO
-Frontend Mongo session access     = app_users READ-ONLY ONLY
-```
-
-- Removed: `bcryptjs` (zero frontend consumers) from `frontend/package.json` / `frontend/package-lock.json`; 5 dead Node-era libs (`profileAudit.ts`, `subscriberContract.ts`, `audit/sanitize.ts`, `plmnUtils.ts`, `plmn_db.ts`) plus the orphaned `governance/ChangeDiff.tsx` component.
-- Collapsed: `frontend/src/lib/mongo.ts` (generic business Mongo capability) into `frontend/src/lib/sessionMongo.ts` — exactly two exports, single collection literal `app_users`, `findOne` only; chain `proxy.ts -> accountSession.ts -> sessionAccountStore.ts -> sessionMongo.ts`; readers = 1, writers = 0.
-- Unchanged (as of Phase 8.4): Go production source, root `package.json` / `package-lock.json`, `proxy.ts` / `accountSession.ts` bytes. (The Phase 8.4 session Mongo chain was itself retired in Phase 8.5; see 5.0.2.)
-- Evidence: `docs/backend-migration/phase-8.4-frontend-dependency-cleanup.md`; suite `scripts/test-phase-8-frontend-dependency-cleanup.mjs` (CI job `frontend-dependency-cleanup`).
-- Superseded by 5.0.2: the Next.js proxy/session Mongo runtime described here was retired in Phase 8.5.
-
-### 5.0.2 Phase 8.5 Deployment Boundary (Proxy / Deployment Boundary Finalization)
-
-```text
-Next.js business backend removed   = YES
-Nginx edge router owns /api routing = YES
-Go owns API auth identity           = YES
-Next.js proxy runtime               = UI navigation guard ONLY
-CUTOVER_TABLE                       = retired
-Go route registrations              = 84 (unchanged, route authority)
-```
-
-- Edge: `deploy/nginx/xcloud.conf` uses two keepalive upstreams - `xcloud_next` (`127.0.0.1:13333`) and `xcloud_go` (`127.0.0.1:18888`). `location = /api`, `location /api/` and the dedicated unbuffered `location = /api/notifications/stream` go to Go; `location /` goes to Next.js UI. All API locations strip client identity headers (`X-User` / `X-Role` / `X-Permissions`) and generate `Host` / `X-Real-IP` / `X-Forwarded-For` / `X-Forwarded-Proto`; `client_max_body_size 10m` is unchanged. `deploy/nginx/setup.sh [listen_port]` validates with `nginx -t` before reload.
-- UI guard: `frontend/src/proxy.ts` is now a UI-only navigation guard - no JWT decode, no HS256 verify, no MongoDB, no identity headers, no API forwarding. Protected pages without `auth_token` redirect to `/login?from=...`; the guard consults Go `GET /api/auth/me` with the incoming cookie (200 allow, 401 redirect + expire cookie, 503 fail-closed `AUTH_UNAVAILABLE` / `AUTH_SERVICE_UNAVAILABLE`). Its `config.matcher` excludes `api`.
-- Deleted: `frontend/src/lib/cutover-routing.ts`, `frontend/src/lib/accountSession.ts`, `frontend/src/lib/sessionAccountStore.ts`, `frontend/src/lib/sessionMongo.ts`, `frontend/tests/cutoverRouting.test.mjs`. `CUTOVER_TABLE` and `resolveRouteOwner` no longer exist in production source.
-- Route authority: the derived, frozen Go registration set (84 exact METHOD+PATH registrations parsed from `backend/cmd/server/main.go` plus `backend/internal/remediation/handler.go`, shared helper `scripts/lib/go-registrations.mjs`). Migration scripts derive from it.
-- Auth/UI: `frontend/src/lib/security.ts` keeps only the UI password policy (`isPasswordStrong`, `PASSWORD_POLICY_MESSAGE`); `getJwtSecretKey` removed. `frontend/package.json` direct dependencies 19 -> 16 (`jose`, `mongodb`, dev `jiti` removed); `next.config.ts` drops `serverExternalPackages: ['mongodb']`; root `package.json` / `package-lock.json` byte-identical.
-- Unchanged: Go production code, the 84 Go registrations, auth/owning semantics (401 vs 503), charging plane, API paths. 0 business changes.
-- Evidence: `docs/backend-migration/phase-8.5-deployment-boundary-finalization.md`; acceptance suite `scripts/test-phase-8-deployment-boundary.mjs` (real Nginx + real Go + real `next build` / `next start` + real MongoDB).
-- Status: IMPLEMENTED / NOT SELF-FROZEN (independent acceptance pending); Phase 8.6 not authorized.
-- Superseded in part by 5.0.3: the Go production listener default and the Next production startup model were corrected there.
-
-### 5.0.3 Phase 8.5-C Internal Service Listener Boundary Correction
-
-```text
-Sole public edge                    = Nginx
-Next production listener            = 127.0.0.1:13333 (enforced by `next start -H 127.0.0.1`)
-Go production listener              = 127.0.0.1:18888 (HTTP_ADDR default)
+Sole public edge                     = Nginx
+Next production listener             = 127.0.0.1:13333 (`next start -H 127.0.0.1 -p 13333`)
+Go production listener               = 127.0.0.1:18888 (`HTTP_ADDR` default)
 Loopback listener enforced by service, not firewall = YES
-Standalone deployment path          = removed
-Go business production changes      = 0
-Go registration set                 = 84 (unchanged)
+Standalone deployment path           = removed
+Go business production changes       = 0
+Go registration set                  = 84
 ```
 
-- Correction: the repository declared Nginx the sole public edge but did not prove the internal listeners were loopback-bound. Both listeners are now pinned by the service's own startup configuration.
-- Next: the single supported production model is `next start -H 127.0.0.1 -p 13333` (`frontend/package.json` `start`). `output: 'standalone'` was removed from `frontend/next.config.ts` and `scripts/deploy-standalone.sh` was deleted, so no contradictory second production procedure remains. `docs/operations/deployment.md` documents the same command.
-- Go: `HTTP_ADDR` production default changed from `:18888` to `127.0.0.1:18888` in `backend/internal/config/config.go` (+ its unit test). `.env.example` and `backend/README.md` document the loopback default. Operator override remains supported; the safe default is loopback.
-- Acceptance: `scripts/test-phase-8-deployment-boundary.mjs` exercises the production startup contracts (Go with no `HTTP_ADDR` injection, Next via the documented `next start -H 127.0.0.1 -p 13333`) and proves, over real TCP against a real runner non-loopback address, that 127.0.0.1:{13333,18888} is reachable and the non-loopback address is not.
-- Classification: the only authorized backend change is the narrow listener config (`backend/internal/config/`), reported as `deployment_listener_config_changes`; business/auth/registration/charging changes remain 0.
-- Status: CORRECTED / NOT SELF-FROZEN (independent acceptance pending); Phase 8.6 not authorized.
+- Edge: `deploy/nginx/xcloud.conf` uses two keepalive upstreams - `xcloud_next` (`127.0.0.1:13333`) and `xcloud_go` (`127.0.0.1:18888`). `location = /api`, `location /api/` and the dedicated unbuffered `location = /api/notifications/stream` proxy to Go; `location /` proxies to the Next.js UI. All API locations strip client identity headers (`X-User` / `X-Role` / `X-Permissions`) and generate `Host` / `X-Real-IP` / `X-Forwarded-For` / `X-Forwarded-Proto`; `client_max_body_size 10m`. `deploy/nginx/setup.sh [listen_port]` validates with `nginx -t` before reload.
+- UI guard: `frontend/src/proxy.ts` is a UI-only navigation guard - no JWT decode, no HS256 verify, no MongoDB, no identity headers, no API forwarding. Protected pages without `auth_token` redirect to `/login?from=...`; the guard consults Go `GET /api/auth/me` with the incoming cookie (200 allow, 401 redirect + expire cookie, 503 fail-closed `AUTH_UNAVAILABLE` / `AUTH_SERVICE_UNAVAILABLE`). Its `config.matcher` excludes `api`.
+- Route authority: the derived Go registration set (84 exact METHOD+PATH registrations parsed from `backend/cmd/server/main.go` plus `backend/internal/remediation/handler.go`, shared helper `scripts/lib/go-registrations.mjs`). Migration scripts derive from it.
+- Next.js runtime: UI rendering plus the UI-only navigation guard. The Next.js business backend (`frontend/src/app/api/**`, `frontend/src/server/**`) does not exist. The frontend holds no route-owner resolver and no server-side session/Mongo runtime.
+- Frontend dependencies: UI-only set. `jose`, `mongodb` and dev `jiti` are not dependencies; `frontend/src/lib/security.ts` keeps only the UI password policy (`isPasswordStrong`, `PASSWORD_POLICY_MESSAGE`); `next.config.ts` has no `serverExternalPackages: ['mongodb']`.
+- Acceptance: `scripts/test-deployment-boundary.mjs` exercises the production topology (real Nginx + real Go + real `next build` / `next start` + real MongoDB) and proves, over real TCP against a real runner non-loopback address, that 127.0.0.1:{13333,18888} is reachable and the non-loopback address is not.
+- Certification: `scripts/test-production-architecture.mjs` re-derives the current production architecture from primary source using semantic invariants only (no chronological baseline).
+- Independent architecture suites: `scripts/test-api-ownership-invariants.mjs`, `scripts/test-next-backend-absence.mjs`, `scripts/test-frontend-runtime-dependencies.mjs`, `scripts/test-repository-normalization.mjs`.
 
-### 5.1 OCS 生产冻结基线 (OCS Production Freeze Baseline)
+### 5.1 OCS 管理平面冻结状态 (OCS Management Plane: Frozen)
 
 OCS Management Plane is frozen.
 Managed domains:
@@ -313,10 +204,10 @@ Managed domains:
 
 Charging Plane remains frozen and excluded.
 
-- 权威基线：Phase 5.6 生产冻结基准（历史基线 ACTUALLY_ROUTED = 26；当前生产路由 = Go 全部接管，共 84 条 Go 注册）。
-- 路由权威来源：冻结的 Go 注册集合（`backend/cmd/server/main.go` + `backend/internal/remediation/handler.go`，共 84 条 METHOD+PATH 精确注册）；`CUTOVER_TABLE` 已随 Phase 8.5 退役，Nginx 负责 API 路由。
+- 权威基线：OCS 管理平面生产冻结基线（当前生产路由 = Go 全部接管，共 84 条 Go 注册）。
+- 路由权威来源：Go 注册集合（`backend/cmd/server/main.go` + `backend/internal/remediation/handler.go`，共 84 条 METHOD+PATH 精确注册）；Nginx 负责 API 路由。
 - 托管集合：`ocs_tariff_plans`、`ocs_subscribers`、`ocs_balances`。
-- 冻结规约文档：`docs/backend-migration/phase-5-6-ocs-production-freeze.md`。
+- 冻结规约文档（历史证据）：`docs/backend-migration/phase-5-6-ocs-production-freeze.md`。
 - 运维操作手册：`docs/operations/ocs-management-runbook.md`。
 - 界面验收验证：通过无头浏览器 CDP 1440x900 渲染断言验证通过（本地测试截图即测即消，不入版本库）。
 
@@ -350,11 +241,11 @@ Always use Git for SHA/status.
 
 ---
 
-## 7. Auth & User Management (Phase 6.0 Frozen)
+## 7. Auth & User Management
 
-Architecture freeze: `docs/architecture/phase-6-auth-architecture.md`.
 Authentication model: `docs/operations/authentication-model.md`.
 User management model: `docs/operations/user-management-model.md`.
+RBAC model: `docs/operations/rbac-model.md`.
 
 Three canonical roles: `admin`, `operator`, `viewer`.
 Legacy normalization: `root`/`super_admin`->`admin`, `ops_admin`->`operator`, `auditor`->`viewer`.
@@ -379,8 +270,7 @@ auth_token cookie
 → Principal
 ```
 
-Real Node `jose` → Go verifier interoperability is proven (historical; the Node `jose`
-runtime was removed in Phase 8.5, so only Go performs JWT verification now).
+Only the Go backend performs JWT verification; the frontend holds no JWT runtime.
 
 Never trust:
 
@@ -401,10 +291,10 @@ Canonical User Management routes (production owner = Go):
 - `PATCH /api/users/{username}`
 - `POST /api/users/{username}/disable`
 - `POST /api/users/{username}/password-reset`
-Legacy compatibility read aliases: `/api/auth/users`, `/api/auth/users/{username}` (Go-owned read-only after Phase 8.2; mutation methods retired).
-Login/logout = Go owner (Phase 6.3-B cutover).
+Legacy compatibility read aliases: `/api/auth/users`, `/api/auth/users/{username}` (Go-owned read-only; mutation methods retired).
+Login/logout = Go owner.
 
-Phase 6.2 Authentication Security Hardening:
+Authentication security hardening:
 - Dual rate limiting: IP-scoped request limiter (`login:<ip>`, 5/60s) + Account-scoped failed-login limiter (`login-user:<normalized-username>`, 10 failed attempts / 300s, peeked pre-auth, consumed only on failed authentication; successful logins do not consume budget).
 - Automatic lockout: 10 consecutive failed password attempts transitions active unlocked user to `status="locked"`, `locked=true`, `sessionVersion+=1`, `lockedAt=now`, `lockReason="excessive_failed_logins"`. Attempt 11+ does not repeatedly increment `sessionVersion`.
 - Response privacy: uniform HTTP 401 `{"error": "Invalid credentials"}` with `Cache-Control: no-store` on all credential/account-state failures (unknown username, wrong password, disabled account, locked account). Malformed JSON or request validation failures return HTTP 400.
@@ -413,21 +303,15 @@ Phase 6.2 Authentication Security Hardening:
 - Admin unlock: canonical Go API `PATCH /api/users/{username}` with `status="active"` resets lock state, unsets lock metadata, resets `failedLoginAttempts=0`, increments `sessionVersion`.
 - Manual lock: `status="locked"` sets `locked=true`, `lockedAt`, `lockReason="manual_lock"`, increments `sessionVersion`.
 - Last active admin protection: prevent auto-lockout or manual lock/disable on last active admin (`LAST_ACTIVE_ADMIN` 409).
-- JWT secret startup validation: Node and Go fail closed on startup if `JWT_SECRET` is missing, <32 UTF-8 bytes, or matches common insecure placeholders.
+- JWT secret startup validation: the Go backend fails closed on startup if `JWT_SECRET` is missing, <32 UTF-8 bytes, or matches common insecure placeholders.
 - Cookie & header hardening: `SameSite=Lax`, `HttpOnly=true`, dynamic `Secure` over HTTPS, aligned logout cookie attributes, `Cache-Control: no-store` on sensitive auth responses.
 
-Phase 6.3-A Authentication Go Contract Parity Foundation:
-- Complete 1:1 behavioral, HTTP contract, security, and persistence parity achieved across Node and Go authentication implementations (`POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`, `GET /api/auth/permissions`).
-- Validated via 63 comprehensive cross-engine tests in `scripts/test-auth-go-parity.mjs`.
+Authentication runtime integration:
+- Go owns all authentication APIs (`POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`, `GET /api/auth/permissions`), reached through the Nginx edge at `127.0.0.1:18888`.
+- Fail closed: an unreachable Go backend returns HTTP 502 `GO_BACKEND_UNREACHABLE` with zero Node fallback.
+- Validated via `scripts/test-authentication-runtime-integration.mjs`.
 
-Phase 6.3-B Controlled Authentication Cutover:
-- Authoritative production ownership cutover of Authentication APIs (`POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`, `GET /api/auth/permissions`) to Go backend (`:18888`).
-- `CUTOVER_TABLE = 36`, `ACTUALLY_ROUTED = 36`.
-- Reverse proxy forwards all 4 routes to Go with `cutover_forward` telemetry.
-- Fail closed: Go backend unreachable returns HTTP 502 `GO_BACKEND_UNREACHABLE` with zero Node fallback.
-- Validated via comprehensive cross-engine tests in `scripts/test-auth-cutover.mjs` (41/41 PASS).
-
-Phase 6.4 Authentication & User Management UI Final Integration:
+Authentication & User Management UI integration:
 - Structured response and code mapping helper (`auth-ui.ts`) with strict privacy preserving uniform HTTP 401 presentation.
 - Resilient rate-limit cooldown with countdown seconds display, automatic button re-enablement, unmount cleanup, and ARIA live regions.
 - Session-expired vs credential alert presentation (`role="status"` vs `role="alert"`).
@@ -435,8 +319,7 @@ Phase 6.4 Authentication & User Management UI Final Integration:
 - Status lifecycle governance actions (`active`, `disabled`, `locked`) guarded by confirmation modal.
 - Security state metadata panel (`sessionVersion`, `failedLoginAttempts`, `lastLoginAt`, `lastLoginIp`, `passwordChangedAt`, and conditional `lockedAt`/`lockReason`).
 - Complete English and Chinese localization parity for all auth & user management error codes and UI concepts.
-- Strict invariant preservation: `CUTOVER_TABLE = 36`, `ACTUALLY_ROUTED = 36`, 0 backend modifications, 54 route files / 78 operations unchanged.
-- Validated via 75 acceptance tests in `scripts/test-auth-user-ui-integration.mjs`.
+- Validated via acceptance tests in `scripts/test-auth-user-ui-integration.mjs`.
 
 ---
 
@@ -449,7 +332,7 @@ MongoDB fixed window
 xcloud_ops.app_rate_limits
 ```
 
-Preserve exact Node key/limit/window/headers/messages.
+Preserve the exact rate-limit key/limit/window/headers/messages contract.
 
 Current write invariant:
 
@@ -465,7 +348,7 @@ Platform Services writes = alerts acknowledge/workflow (Direct Execution), Go-ow
 ```
 
 Route authority = the derived Go registration set (84 exact METHOD+PATH registrations).
-Every production API operation is Go-owned at the Nginx edge; `CUTOVER_TABLE` is retired.
+Every production API operation is Go-owned at the Nginx edge.
 
 ---
 
@@ -473,7 +356,7 @@ Every production API operation is Go-owned at the Nginx edge; `CUTOVER_TABLE` is
 
 30 semantic-read implementations (29 GET + 1 POST semantic read).
 
-Phase 2A — 4:
+Analytics / rating:
 
 ```text
 GET /api/analytics/metrics
@@ -482,7 +365,7 @@ GET /api/ratings
 GET /api/ratings/:id
 ```
 
-Phase 2B — 16:
+Profiles / OCS / tariff:
 
 ### Profiles
 
@@ -500,7 +383,7 @@ GET /api/ocs/balances
 GET /api/ocs/sessions
 GET /api/ocs/usage
 GET /api/ocs/reservations
-GET /api/ocs/subscribers          — Phase 5.1
+GET /api/ocs/subscribers
 ```
 
 ### Tariff
@@ -515,7 +398,7 @@ GET /api/tariff-plans/:planId/subscribers
 GET /api/tariff-plans/:planId/migrate
 ```
 
-Phase 2C — 4:
+Subscriber / search:
 
 ```text
 GET /api/subscribers
@@ -524,7 +407,7 @@ GET /api/search
 POST /api/subscribers/batch/precheck
 ```
 
-Phase 2D — 6:
+Auth / user management:
 
 ```text
 GET /api/auth/me
@@ -535,7 +418,7 @@ GET /api/users
 GET /api/users/:username
 ```
 
-Phase 7.1 — 6 (Platform Services Go Read Shadow):
+Platform services:
 
 ```text
 GET /api/alerts
@@ -546,29 +429,26 @@ POST /api/system/audit/scan
 POST /api/analytics/init
 ```
 
-Status (final, after Phase 8.5):
+Status:
 
 ```text
 Go production API registrations = 84 (route authority: backend/cmd/server/main.go + backend/internal/remediation/handler.go)
-Next inventory operations = 0 (Next.js API route tree removed)
-Actually Routed = 84 (all Go-owned; routed by Nginx at the edge)
-  Phase 2 historical baseline = 36
-  Phase 7 Platform Services = 11
-  Phase 8.2 residual cutover = 37 (33 canonical + 2 legacy read aliases + 2 Go-native reads)
+Next API route tree = absent
+Canonical API surface = 33 operations + 2 legacy read aliases
+Go-native reads = 2
 Node production operations = 0
 OCS writes = 13 (tariff plan + subscriber contract + balance)
 ```
 
-`CUTOVER_TABLE` = retired (the former Next.js ownership table no longer exists in production source);
-the route authority is the derived frozen Go registration set.
+The route authority is the derived Go registration set; no route-owner table or resolver exists in production source.
 
-Phase 7 platform service, alert mutation, notification streaming, and controlled remediation endpoints are Go production-owned after the controlled cutover (11 Phase 7 operations; all Go-owned at the edge after Phase 8.5).
-Phase 8.3 physically deleted the dormant Next.js API route tree; production traffic is Go-owned with no Node fallback and no surviving Node business handler.
-`next_business_mongo_readers = 0`, `next_business_mongo_writers = 0`; after Phase 8.5 the Next.js runtime performs no MongoDB access at all (the read-only proxy session lookup was removed with the UI-only guard).
+Platform service, alert mutation, notification streaming, and system integrity endpoints are Go production-owned.
+Production traffic is Go-owned with no Node fallback and no surviving Node business handler.
+`next_business_mongo_readers = 0`, `next_business_mongo_writers = 0`; the Next.js runtime performs no MongoDB access at all.
 
 ---
 
-## 9.1 Direct Operation Model (Phase 5.7-A / Phase 5.7-C)
+## 9.1 Direct Operation Model
 
 All business mutations execute directly after authentication, fresh actor validation, RBAC capability checks, domain validation, and concurrency checks:
 - Zero approval dependency: No approval tickets, maker-checker handoffs, or pending approvals created (`app_approvals` count == 0 for normal operations).
@@ -584,15 +464,15 @@ All business mutations execute directly after authentication, fresh actor valida
 
 ## 9.2 OCS Management Domain
 
-Phase 5.0 defined the OCS boundary:
+OCS boundary:
 
 ```text
-Management plane (active migration):
+Management plane (managed by Go):
   ocs_tariff_plans   — tariff plan definitions + rules
   ocs_subscribers    — subscriber contracts + plan assignments
   ocs_balances       — balance accounts + pools
 
-Charging plane (frozen, not migrating):
+Charging plane (frozen, excluded from the management plane):
   ocs_sessions       — active Gy/Ro sessions
   ocs_reservations   — reserved quota
   ocs_usage          — usage records
@@ -600,46 +480,45 @@ Charging plane (frozen, not migrating):
   ocs_config         — OCS engine config
 ```
 
-Phase 5.1 added:
-- `GET /api/ocs/subscribers` — Go read implementation (shadow, not production-routed)
+OCS management UI:
+- `GET /api/ocs/subscribers` — Go read implementation
 - OCS Dashboard UI (`/ocs/dashboard`) — 4 KPI cards, balance pool, tariff plans
 - OCS Subscribers UI (`/ocs/subscribers`) — paginated table, status filter, search
 
-Phase 5.2 added:
+Tariff plan writes:
 - 6 tariff plan write operations (create/update/delete/clone/enable/disable) — Go governed
 - Fresh actor revalidation before every mutation
-- CUTOVER_TABLE = 18 (was 12): 6 tariff routes ACTUALLY_ROUTED to Go
+- Tariff routes are Go-owned at the edge
 - Tariff list UI (`/ocs/tariffs`) — KPI cards, table, enable/disable/clone/delete actions
 - Rate limits: create=20/60, update=30/60, delete=20/60, clone=20/60, enable/disable=20/60
 - Capability: `ocs.tariff.write`
 - Error codes: TARIFF_PLAN_EXISTS, TARIFF_PLAN_NOT_FOUND, DEFAULT_TARIFF_PLAN_PROTECTED, TARIFF_PLAN_DISABLE_IN_USE, INVALID_PLAN_ID
 
-## 10. Removed Governance Surfaces (Phase 5.7-C)
+## 10. Removed Governance Surfaces
 
-The following governance endpoints and surfaces were retired in Phase 5.7-C:
+The following governance endpoints and surfaces are retired:
 - `/api/approvals/*` (all approval read, decision, and export routes)
 - `/api/audit/*` (user-facing audit console list, detail, export routes; note `/api/system/audit/*` remains for diagnostics and healing)
 - Approval and Audit UI console pages and navigation entries
 
 ---
 
-## 10.1 Platform Services Architecture Freeze (Phase 7.0)
+## 10.1 Platform Services
 
-Architecture freeze: `docs/architecture/phase-7-platform-services-architecture.md`.
-Platform Services scope (11 candidate endpoints):
+Platform services scope (11 endpoints):
 - Alerts: `GET /api/alerts`, `POST /api/alerts/acknowledge`, `POST /api/alerts/workflow`
 - Notification streaming: `GET /api/notifications/stream` (SSE, ping heartbeat, zero external broker)
 - System health: `GET /api/system/health`, `GET /api/system/mongo/health` (distinct from `/healthz` and `/readyz`)
 - System integrity: `GET /api/system/audit/status`, `POST /api/system/audit/scan` (read-only), `POST /api/system/audit/heal`, `POST /api/system/audit/batch-heal`
 - Analytics platform action: `POST /api/analytics/init` (read-only on-demand calculation)
 
-All 11 candidate endpoints are Go production-owned after the controlled cutover.
-Production routing: all Go-owned, routed by the Nginx edge; route authority = the derived 84-route Go registration set (`CUTOVER_TABLE` retired).
-Node route files were physically removed in Phase 8.3; production owner = Go with no Node fallback and no surviving Node business handler.
+All 11 endpoints are Go production-owned.
+Production routing: all Go-owned, routed by the Nginx edge; route authority = the derived 84-route Go registration set.
+Production owner = Go with no Node fallback and no surviving Node business handler.
 
 ---
 
-## 11. Phase 2B Contract Findings — Do Not Regress
+## 11. Contract Findings — Do Not Regress
 
 ### Tariff export
 
@@ -650,7 +529,7 @@ Content-Type: application/json
 Content-Disposition: attachment; filename="tariff-plan-{id}.json"
 ```
 
-Response includes current Node-compatible:
+Response includes:
 
 ```text
 version
@@ -669,7 +548,7 @@ Rate limit:
 ### Tariff operations
 
 Go = compatibility read view only + governed write (create/update/delete/clone/enable/disable).
-Governance authority = Go (Phase 5.2+). Node = read owner for remaining read endpoints not yet cut over.
+Governance authority = Go.
 
 ### Tariff migrate GET
 
@@ -711,9 +590,9 @@ Decimal128 scientific-notation bug was fixed.
 
 ---
 
-## 12. Migration Validator
+## 12. Route Inventory Validator
 
-Validator is source-derived and METHOD+PATH aware.
+The validator (`scripts/migration/validate-inventory.mjs`) is source-derived and METHOD+PATH aware.
 
 Must maintain:
 
@@ -721,7 +600,7 @@ Must maintain:
 - phantom detection
 - missing route detection
 - dynamic path canonicalization
-- migrated count derived from artifacts/source
+- registered route count derived from source
 - GET reads vs POST semantic reads classification
 - business mutations count (should be 0)
 
@@ -729,9 +608,9 @@ Never hard-code endpoint counts.
 
 ---
 
-## 13. Phase 2C — Complete
+## 13. Subscriber Read Endpoints
 
-All 4 endpoints migrated:
+All 4 endpoints are Go-owned:
 
 ```text
 GET /api/subscribers         — list/detail/MSISDN lookup
@@ -741,17 +620,13 @@ POST /api/subscribers/batch/precheck — semantic read, requires subscriber_writ
 ```
 
 Business writes: NONE.
-Security audit writes: NONE (authorization.denied audit not implemented).
-Production routing: still Node.
 
 ---
 
 ## 14. Subscriber List Contract
 
-Node:
-
 ```text
-frontend/src/app/api/subscribers/route.ts
+GET /api/subscribers
 ```
 
 Modes:
@@ -806,23 +681,8 @@ when not found.
 
 ## 15. Subscriber Detail
 
-Node:
-
 ```text
-frontend/src/app/api/subscribers/[imsi]/route.ts
-```
-
-Phase 2C only migrates:
-
-```text
-GET
-```
-
-Do not touch:
-
-```text
-PUT
-DELETE
+GET /api/subscribers/:imsi
 ```
 
 Detail uses:
@@ -831,14 +691,14 @@ Detail uses:
 findSubscriberLegacyState(imsi)
 ```
 
-Go must reproduce legacy API representation, not raw xCloud BSON.
+The Go implementation must reproduce the legacy API representation, not raw xCloud BSON.
 
 ---
 
-## 16. Historical Phase 2C Note: Subscriber Writes
- 
-During historical Phase 2C, subscriber writes remained with Node:
- 
+## 16. Subscriber Writes
+
+Subscriber writes are Go-owned with direct execution:
+
 ```text
 POST /api/subscribers
 PUT /api/subscribers/:imsi
@@ -848,17 +708,15 @@ bulk delete
 import
 policy mutation
 ```
- 
-In Phase 4.6 and 4.7, subscriber CRUD and batch were cut over to Go with direct execution (ACTUALLY_ROUTED = 36). Node retains no active subscriber write paths.
+
+No Node subscriber write path exists.
 
 ---
 
 ## 17. Search Contract
 
-Node:
-
 ```text
-frontend/src/app/api/search/route.ts
+GET /api/search
 ```
 
 Behavior:
@@ -921,16 +779,14 @@ Current paths:
 /profile
 ```
 
-Do not improve/re-rank during migration.
+Do not improve/re-rank.
 
 ---
 
 ## 18. Batch Precheck
 
-Node:
-
 ```text
-frontend/src/app/api/subscribers/batch/precheck/route.ts
+POST /api/subscribers/batch/precheck
 ```
 
 HTTP = POST.
@@ -946,7 +802,7 @@ Current security/contract:
 
 Even if read-only, permission remains `subscriber_write`.
 
-Must audit `precheckSubscriberRange()` before migration.
+Do not change the capability or the rate-limit key: `precheckSubscriberRange()` behavior must be preserved.
 
 ---
 
@@ -1011,7 +867,7 @@ Unknown xCloud fields:
 
 ## 21. Cross-DB Reads
 
-Phase 2C may compose:
+Reads may compose:
 
 ```text
 xcloud
@@ -1037,11 +893,11 @@ If indexes appear missing:
 PERFORMANCE_FINDING
 ```
 
-Do not create indexes during Phase 2C.
+Do not create indexes as part of a read-path change.
 
 ---
 
-## 23. Phase 2C Minimum Tests
+## 23. Subscriber Read Minimum Tests
 
 Subscriber list:
 - empty/single/multiple
@@ -1075,7 +931,7 @@ Search:
 - order
 - shape
 
-Precheck if migrated:
+Precheck:
 - valid
 - invalid IMSI
 - invalid count
@@ -1088,36 +944,19 @@ Precheck if migrated:
 
 ## 24. Routing
 
-Do NOT route entire:
+Nginx routes all of `/api` and `/api/*` to the Go backend; `location /` serves the Next.js UI.
 
-```text
-/api/subscribers/
-```
+Ownership is method + path. Route authority is the derived Go registration set; every
+registered METHOD+PATH is Go-owned and there is no Node fallback.
 
-to Go because same prefix contains write APIs.
-
-Ownership is method + path.
-
-Historical note (Phase 2C-8.4): this rule applied while the same prefix still contained
-Node write APIs. After Phase 8.5 every production API operation is Go-owned and Nginx
-routes all of `/api` and `/api/*` to Go, so the prefix caution is no longer a live
-migration constraint; the per-method+path reasoning still governs route authority.
-
-It is valid to report:
-
-```text
-Implemented = YES
-Parity = PASS
-Actually Routed = NO
-```
+Before adding or changing a route, confirm the METHOD+PATH against the Go registration
+sources (`backend/cmd/server/main.go` + `backend/internal/remediation/handler.go`).
 
 ---
 
-## 25. Phase 2D / Phase 3
+## 25. Auth / User Management Read Semantics
 
-Phase 2D complete. Phase 3 may start next.
-
-Phase 2D provides:
+Go-owned reads:
 - auth/me with permission and role normalization
 - auth/permissions with full capability map (CapabilitiesFor, supports raw `root` role)
 - User list with two modes: legacy (/api/auth/users no query) and query (strict parser)
@@ -1133,23 +972,16 @@ Phase 2D provides:
 - Mongo write guard: user package is read-only
 - CapabilitiesFor supports raw `root` role for auth/permissions endpoint
 
-Phase 3 (Historical Archive — approval workflow retired in Phase 5.7-C):
-- Governance — COMPLETE (for subscriber single-write scope)
-- Approval read foundation — COMPLETE (retired in Phase 5.7-C)
-- Audit writer lifecycle — COMPLETE (strict lifecycle, bounded close)
-- Explicit decision endpoints — COMPLETE (retired in Phase 5.7-C)
-- Contract preflight — COMPLETE (paramOrElse, ISO8601Millis, presenter bson.D)
-- ACCESS_REQUEST creation — COMPLETE (retired in Phase 5.7-C)
-- ACCESS_REQUEST handler tests — COMPLETE
-- Actor-aware governance — COMPLETE (evaluateSubscriberOperationForActor)
-- Fresh actor validation — COMPLETE (validateCurrentAccount for CREATE/UPDATE/DELETE)
-- Strict audit — COMPLETE (fresh actor in audit metadata)
-- OCS provisioning — COMPLETE (presence-aware input, no admin reservation, balance preservation)
-- Subscriber batch create — COMPLETE (frozen v2 contract, create-only atomicity, profile drift protection, 5GiB default, Node production authority aligned)
-- Approval execute — RETIRED (direct execution established in Phase 5.7-A/5.7-C)
-
-Security audit blocker:
-- RESOLVED — authorization.denied audit writer implemented (Phase 3A)
+Governance semantics (current):
+- Approval workflow is retired: business mutations execute directly (see §0.2 / §9.1).
+- Audit writer lifecycle: strict lifecycle, bounded close.
+- Contract preflight: paramOrElse, ISO8601Millis, presenter bson.D.
+- Actor-aware governance: evaluateSubscriberOperationForActor.
+- Fresh actor validation: validateCurrentAccount for CREATE/UPDATE/DELETE.
+- Strict audit: fresh actor recorded in audit metadata.
+- OCS provisioning: presence-aware input, no admin reservation, balance preservation.
+- Subscriber batch create: frozen v2 contract, create-only atomicity, profile drift protection, 5GiB default.
+- Authorization denial evidence: `authorization.denied` audit writer implemented.
 
 ---
 
@@ -1171,19 +1003,29 @@ Future integration by API/SSO/unified UI/context links, not repo absorption.
 
 ## 27. Task Start Protocol
 
-For Phase 2C start only with:
+Start from the owning entry points, then expand only by actual imports/call-chain.
+
+Read-side (Go backend):
 
 ```text
-frontend/src/app/api/subscribers/route.ts
-frontend/src/app/api/subscribers/[imsi]/route.ts
-frontend/src/app/api/search/route.ts
-frontend/src/app/api/subscribers/batch/precheck/route.ts
-frontend/src/server/repositories/subscriberRepository.ts
-frontend/src/lib/xcloudSubscriber.ts
-frontend/src/lib/subscriberValidation.ts
+backend/cmd/server/main.go
+backend/internal/remediation/handler.go
+backend/internal/subscriber/**
 ```
 
-Expand only by actual imports/call-chain.
+UI (Next.js frontend):
+
+```text
+frontend/src/proxy.ts
+frontend/src/app/subscribers/**
+frontend/src/lib/**
+```
+
+Edge:
+
+```text
+deploy/nginx/xcloud.conf
+```
 
 ---
 
@@ -1231,10 +1073,11 @@ Run Node/Go parity where environment allows.
 After one logical feature:
 - commit immediately
 - concise Conventional Commit
-- no phase/stage numbers in commit messages (describe what changed, not which phase)
+- no lifecycle phase tokens or stage codes in commit messages (any case, with or without a separating space); never use one as a Conventional Commit scope or as part of the subject
+- describe what changed, never which lifecycle stage it belongs to
 - no trailing signatures (no Co-Authored-By, Signed-off-by, etc.)
 - do not push unless explicitly requested
-- do not amend completed phase history
+- do not amend already-pushed history
 - do not reset/discard user changes
 
 Exact current SHA belongs to Git, not this file.
@@ -1246,7 +1089,7 @@ Exact current SHA belongs to Git, not this file.
 Keep active:
 
 ```text
-current phase
+current task
 current endpoint
 current call-chain
 current contract
@@ -1256,7 +1099,7 @@ current blocker
 ```
 
 Do not repeatedly reload:
-- all old phase reports
+- all historical reports
 - all commits
 - all docs
 - all routes
@@ -1299,14 +1142,14 @@ CLAUDE.md is the law.
 Never:
 - trust forwarded identity headers
 - dual-write business mutations
-- change Mongo schema during language migration
+- change the Mongo schema
 - remove unknown xCloud fields
 - change API paths/SWR paths
-- move write ownership during Phase 2
+- introduce a second write owner for a production operation
 - assume GET is pure
 - assume POST is write
-- hard-code migration counts
-- claim cutover from handler existence
+- hard-code API surface counts
+- claim route ownership from handler existence alone
 - copy CNMS auth model over subscriber-console
 
 Always:

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Phase 5.7-B — RBAC Role Migration Utility
+ * RBAC Role Migration Utility
  *
  * Optional migration script to update legacy role values in the MongoDB `app_users` collection
  * to the canonical three-role model:
@@ -33,7 +33,7 @@ const LEGACY_ROLE_MAP = {
 
 function printHelp() {
   console.log(`
-RBAC Role Migration Utility (Phase 5.7-B)
+RBAC Role Migration Utility
 
 Maps legacy role values in the application user collection (app_users) to canonical three-role names:
   root         -> admin

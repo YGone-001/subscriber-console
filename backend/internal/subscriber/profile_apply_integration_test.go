@@ -175,7 +175,7 @@ func TestProfileApplyIntegration_ExistingApplySucceeds(t *testing.T) {
 		return repo.FindProfileByName(ctx, name)
 	}
 
-	// Phase 1: Prepare
+	// Stage 1: Prepare
 	intent, err := PrepareFrozenSubscriberProfileApply(ctx, "460001234567890", "premium-5g", lookup, profileLookup)
 	if err != nil {
 		t.Fatalf("prepare: %v", err)
@@ -196,7 +196,7 @@ func TestProfileApplyIntegration_ExistingApplySucceeds(t *testing.T) {
 		t.Error("profilePreconditionHash is empty")
 	}
 
-	// Phase 2: Assert
+	// Stage 2: Assert
 	assertion, err := AssertFrozenSubscriberProfileApply(ctx, *intent, lookup, profileLookup)
 	if err != nil {
 		t.Fatalf("assert: %v", err)
@@ -205,7 +205,7 @@ func TestProfileApplyIntegration_ExistingApplySucceeds(t *testing.T) {
 		t.Fatal("assert returned nil (drift detected unexpectedly)")
 	}
 
-	// Phase 3: Execute
+	// Stage 3: Execute
 	result, err := ExecuteFrozenSubscriberProfileApply(ctx, assertion, "test-admin", repo.ReplaceSubscriberCAS)
 	if err != nil {
 		t.Fatalf("execute: %v", err)
@@ -422,13 +422,13 @@ func TestProfileApplyIntegration_SubscriberDrift(t *testing.T) {
 		return repo.FindProfileByName(ctx, name)
 	}
 
-	// Phase 1: Prepare
+	// Stage 1: Prepare
 	intent, err := PrepareFrozenSubscriberProfileApply(ctx, "460001234567890", "premium-5g", lookup, profileLookup)
 	if err != nil {
 		t.Fatalf("prepare: %v", err)
 	}
 
-	// Phase 2: Mutate subscriber directly in Mongo (simulates concurrent change)
+	// Stage 2: Mutate subscriber directly in Mongo (simulates concurrent change)
 	_, err = subColl.UpdateOne(ctx,
 		bson.M{"imsi": "460001234567890"},
 		bson.M{"$set": bson.M{"ambr.downlink.value": 999}},
@@ -437,7 +437,7 @@ func TestProfileApplyIntegration_SubscriberDrift(t *testing.T) {
 		t.Fatalf("mutate subscriber: %v", err)
 	}
 
-	// Phase 3: Assert should detect drift
+	// Stage 3: Assert should detect drift
 	assertion, err := AssertFrozenSubscriberProfileApply(ctx, *intent, lookup, profileLookup)
 	if err != nil {
 		t.Fatalf("assert: %v", err)

@@ -134,7 +134,7 @@ func (h *WriteHandler) Create(w http.ResponseWriter, r *http.Request) {
 		"rules":            body.Rules,
 	}
 
-	// Direct execution (Phase 5.7-A)
+	// Direct execution
 	if err := h.repo.CreatePlan(r.Context(), doc); err != nil {
 		if err.Error() == "TARIFF_PLAN_EXISTS" {
 			response.Error(w, http.StatusConflict, "Tariff plan already exists", "TARIFF_PLAN_EXISTS")
@@ -249,7 +249,7 @@ func (h *WriteHandler) Update(w http.ResponseWriter, r *http.Request) {
 		after["rules"] = body.Rules
 	}
 
-	// Direct execution (Phase 5.7-A)
+	// Direct execution
 	if err := h.repo.UpdatePlan(r.Context(), planID, after); err != nil {
 		if err.Error() == "TARIFF_PLAN_NOT_FOUND" {
 			response.Error(w, http.StatusNotFound, "Tariff plan not found", "NOT_FOUND")
@@ -330,7 +330,7 @@ func (h *WriteHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Direct execution (Phase 5.7-A)
+	// Direct execution
 	if err := h.repo.DeletePlan(r.Context(), planID); err != nil {
 		if err.Error() == "DEFAULT_TARIFF_PLAN_PROTECTED" {
 			response.Error(w, http.StatusConflict, "Default tariff plan cannot be deleted", "DEFAULT_TARIFF_PLAN_PROTECTED")
@@ -456,7 +456,7 @@ func (h *WriteHandler) Clone(w http.ResponseWriter, r *http.Request) {
 		"rules":            clonedRules,
 	}
 
-	// Direct execution (Phase 5.7-A)
+	// Direct execution
 	if err := h.repo.CreatePlan(r.Context(), cloned); err != nil {
 		if err.Error() == "TARIFF_PLAN_EXISTS" {
 			response.Error(w, http.StatusConflict, "Tariff plan already exists", "TARIFF_PLAN_EXISTS")
@@ -561,7 +561,7 @@ func (h *WriteHandler) setStatus(w http.ResponseWriter, r *http.Request, status 
 		return
 	}
 
-	// Direct execution (Phase 5.7-A)
+	// Direct execution
 	if err := h.repo.SetPlanStatus(r.Context(), planID, status); err != nil {
 		if err.Error() == "TARIFF_PLAN_NOT_FOUND" {
 			response.Error(w, http.StatusNotFound, "Tariff plan not found", "NOT_FOUND")

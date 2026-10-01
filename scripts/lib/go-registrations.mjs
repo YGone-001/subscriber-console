@@ -1,10 +1,9 @@
 /**
  * Canonical Go API route authority.
  *
- * After the controlled migration completed, the Go router registration site is the single
- * source of truth for which METHOD+PATH operations exist. The former Next.js
- * `CUTOVER_TABLE` was retired, so every consumer derives the production API surface from
- * Go source instead of from a migration artifact.
+ * The Go router registration site is the single source of truth for which METHOD+PATH
+ * operations exist. Every consumer derives the production API surface from Go source; no
+ * route-owner table is consulted.
  *
  * Nothing here is hard-coded: the set is always parsed out of the Go registration site.
  */
@@ -26,7 +25,7 @@ const REGISTRATION_RE = /mux\.Handle\("(GET|POST|PUT|PATCH|DELETE)\s+([^"]+)"\s*
 /**
  * Parse every `mux.Handle` registration out of a single Go router source text.
  *
- * Exposed so historical-comparison consumers (for example the production-freeze
+ * Exposed so historical-comparison consumers (for example the production-architecture
  * certification, which derives the baseline set from `git show <sha>:<file>`) share
  * exactly one registration parser instead of maintaining a second copy.
  *

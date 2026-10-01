@@ -129,7 +129,7 @@ func (h *SubscriberWriteHandler) Create(w http.ResponseWriter, r *http.Request) 
 		"status":  nonEmptyStr(body.Status, "active"),
 	}
 
-	// Direct execution (Phase 5.7-A)
+	// Direct execution
 	if err := h.repo.CreateSubscriberContract(r.Context(), doc); err != nil {
 		if err.Error() == "OCS_SUBSCRIBER_EXISTS" {
 			response.Error(w, http.StatusConflict, "OCS subscriber contract already exists", "OCS_SUBSCRIBER_EXISTS")
@@ -232,7 +232,7 @@ func (h *SubscriberWriteHandler) UpdateTariff(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// Direct execution (Phase 5.7-A)
+	// Direct execution
 	if err := h.repo.UpdateTariffBinding(r.Context(), imsi, planID); err != nil {
 		if err.Error() == "OCS_SUBSCRIBER_NOT_FOUND" {
 			response.Error(w, http.StatusNotFound, "OCS subscriber contract not found", "OCS_SUBSCRIBER_NOT_FOUND")

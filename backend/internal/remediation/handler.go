@@ -30,7 +30,7 @@ func NewHandler(repo *Repository, limiter *ratelimit.Limiter, auditWriter *audit
 	}
 }
 
-// RegisterRoutes registers controlled remediation shadow routes onto the mux.
+// RegisterRoutes registers controlled remediation routes onto the mux.
 func RegisterRoutes(mux *http.ServeMux, authMiddleware func(http.Handler) http.Handler, h *Handler) {
 	mux.Handle("POST /api/system/audit/heal", authMiddleware(http.HandlerFunc(h.Heal)))
 	mux.Handle("POST /api/system/audit/batch-heal", authMiddleware(http.HandlerFunc(h.BatchHeal)))

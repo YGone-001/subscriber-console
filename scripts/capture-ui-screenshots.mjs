@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * Capture Phase 5.6 Production Evidence Screenshots
- * Target:
+ * Capture OCS Production Evidence Screenshots
+ * Target (historical evidence directory):
  *  - docs/backend-migration/evidence/phase-5-6/tariffs.png
  *  - docs/backend-migration/evidence/phase-5-6/contracts.png
  *  - docs/backend-migration/evidence/phase-5-6/balances.png
@@ -14,7 +14,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { SignJWT } from 'jose';
 
-const JWT_SECRET = 'management-freeze-secret-token-32bytes-long';
+const JWT_SECRET = 'ocs-evidence-capture-secret-32bytes-long';
 const secretKey = new TextEncoder().encode(JWT_SECRET);
 const MONGO_URI = process.env.MONGODB_URI || 'mongodb://10.10.0.139:27017';
 const EVIDENCE_DIR = path.resolve('test-results/screenshots');

@@ -1,8 +1,8 @@
 # User Management Model
 
 > Operational user lifecycle and role management model.
-> Architecture: `docs/architecture/phase-6-auth-architecture.md`.
 > Authentication: `docs/operations/authentication-model.md`.
+> RBAC: `docs/operations/rbac-model.md`.
 > Stable rules: `CLAUDE.md`. Current state: `AGENTS.md`.
 
 ## 1. Collection Ownership
@@ -92,7 +92,7 @@ Response includes `sessionRevoked: true` when any of the above occurred.
 ### Disable User
 
 Permission: `users.disable` (admin only).
-Endpoints: `DELETE /api/users/{username}` (soft delete) or `POST /api/users/{username}/disable` (Phase 6.1).
+Endpoints: `DELETE /api/users/{username}` (soft delete) or `POST /api/users/{username}/disable`.
 
 Effect: `status = disabled`. All existing sessions invalidated.
 Message: `User disabled; account history was preserved`.
@@ -123,7 +123,7 @@ Automatic lockout (authentication plane):
 ### Password Reset
 
 Permission: `users.reset-password` (admin only).
-Endpoint: `POST /api/users/{username}/password-reset` (Phase 6.1) or `PUT` with `password` field.
+Endpoint: `POST /api/users/{username}/password-reset` or `PUT` with `password` field.
 
 Validation: `isPasswordStrong`, optional `confirmPassword` match.
 Effect: bcrypt hash updated, `security.passwordChangedAt` set, `sessionVersion++`.

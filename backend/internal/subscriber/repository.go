@@ -882,10 +882,10 @@ func xcloudToLegacyState(doc bson.M) *LegacySubscriberState {
 	}
 }
 
-// --- Node parity value helpers ---
+// --- Contract-parity value helpers ---
 //
-// The Node authority relies on JS truthiness, nullish, and Number() semantics;
-// these helpers reproduce them so shadow responses stay byte-compatible.
+// The public API relies on JS truthiness, nullish, and Number() semantics;
+// these helpers reproduce them so responses stay byte-compatible.
 
 // jsTruthy mirrors JS truthiness (!!value).
 func jsTruthy(v any) bool {

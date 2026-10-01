@@ -1,7 +1,6 @@
 # Operational Model: Direct Operation & Governance Architecture
 
 Status: PRODUCTION  
-Phase: 5.7-C
 Baseline: `develop`  
 Target Services: Next.js Frontend (:13333), Go Production Backend (:18888), MongoDB (`xcloud`, `xcloud_ops`)
 
@@ -9,9 +8,9 @@ Target Services: Next.js Frontend (:13333), Go Production Backend (:18888), Mong
 
 ## 1. Overview & Architectural Evolution
 
-In Phase 5.7-A, the operational execution model was simplified from a multi-stage approval-blocking model into a **Direct Operation Workflow** suited for internal carrier operations (CNMS internal operations model).
+The operational execution model is a **Direct Operation Workflow**, without an approval-blocking stage, suited for internal carrier operations (CNMS internal operations model). It replaced an earlier multi-stage approval workflow; that workflow is retained below only to document the difference.
 
-### Prior Workflow (Phase 5.0 - Phase 5.6)
+### Retired Approval Workflow
 ```text
 User Operation
        │
@@ -31,7 +30,7 @@ Business Mutation
 Audit Record
 ```
 
-### Simplified Operational Workflow (Phase 5.7-A)
+### Current Operational Workflow
 ```text
 User Operation
        │
@@ -119,7 +118,7 @@ In alignment with direct operation semantics:
 
 ## 5. System Invariants & Guardrails
 
-- **ACTUALLY_ROUTED = 84**: The production cutover routing inventory is strictly preserved. All 84 cutover endpoints are owned authoritatively by Go.
+- **GoRegistered = 84**: The Go registration inventory is strictly preserved. All 84 registered endpoints are owned authoritatively by Go.
 - **Single-Writer Ownership**: Go backend remains the single authoritative writer for OCS Management domains (`ocs_tariff_plans`, `ocs_subscribers`, `ocs_balances`).
 - **Charging Plane Boundary**: Runtime charging collections (`ocs_sessions`, `ocs_reservations`, `ocs_usage_records`, `ocs_events`, `ocs_config`) and Diameter interfaces remain completely frozen and isolated from console operations.
 - **Non-Gating Audit Invariant**: Operation-log persistence failures never roll back a mutation or replace its success response. `/api/system/audit/*` remains dedicated to data-integrity diagnostics and healing.

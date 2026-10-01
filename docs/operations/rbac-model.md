@@ -1,7 +1,6 @@
 # Role-Based Access Control (RBAC) Model: Canonical Three-Role Architecture
 
 Status: PRODUCTION  
-Phase: 5.7-B  
 Baseline: `develop`  
 Target Services: Next.js Frontend (:13333), Go Production Backend (:18888), MongoDB (`xcloud`, `xcloud_ops`)
 
@@ -9,7 +8,7 @@ Target Services: Next.js Frontend (:13333), Go Production Backend (:18888), Mong
 
 ## 1. Overview & Architectural Principles
 
-In **Phase 5.7-B**, the six-role RBAC model (`root`, `super_admin`, `ops_admin`, `operator`, `auditor`, `viewer`) is simplified into a **Canonical Three-Role Model** tailored for an internal Carrier Network Management System (CNMS/NMS) operating environment.
+The RBAC model is a **Canonical Three-Role Model** tailored for an internal Carrier Network Management System (CNMS/NMS) operating environment. A legacy six-role model (`root`, `super_admin`, `ops_admin`, `operator`, `auditor`, `viewer`) is normalized at runtime into the canonical three roles.
 
 ### The Canonical Three Roles
 
@@ -71,12 +70,12 @@ While existing documents may contain legacy roles, **all write operations (creat
 
 | Capability | `admin` | `operator` | `viewer` | Notes |
 | :--- | :---: | :---: | :---: | :--- |
-| `subscriber_write` | **allow** | **allow** | deny | Direct mutation (Phase 5.7-A) |
-| `policy_approve` | **allow** | **allow** | deny | Direct mutation (Phase 5.7-A) |
-| `balance_adjust` | **allow** | **allow** | deny | Direct mutation (Phase 5.7-A) |
-| `profile_rollback` | **allow** | **allow** | deny | Direct mutation (Phase 5.7-A) |
-| `rating_publish` | **allow** | **allow** | deny | Direct mutation (Phase 5.7-A) |
-| `system_heal` | **allow** | **allow** | deny | Direct mutation (Phase 5.7-A) |
+| `subscriber_write` | **allow** | **allow** | deny | Direct mutation |
+| `policy_approve` | **allow** | **allow** | deny | Direct mutation |
+| `balance_adjust` | **allow** | **allow** | deny | Direct mutation |
+| `profile_rollback` | **allow** | **allow** | deny | Direct mutation |
+| `rating_publish` | **allow** | **allow** | deny | Direct mutation |
+| `system_heal` | **allow** | **allow** | deny | Direct mutation |
 | `user_admin` | **allow** | deny | deny | Manage users & assign roles |
 
 ### Representative Permissions

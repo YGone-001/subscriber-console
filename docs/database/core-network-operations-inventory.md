@@ -1,7 +1,7 @@
-# Phase 8 — Core Network Operational Surface Inventory
+# Core Network Operational Surface Inventory
 
 **Repository:** `subscriber-console`
-**Branch baseline before this phase:** `develop` at `bd56460`
+**Branch:** `develop`
 **Inventory date:** 2026-08-31
 
 ## Conclusion
@@ -16,13 +16,13 @@ they are not evidence that this console controls the running state of AMF,
 SMF, UPF, AUSF, BSF, NRF, NSSF, PCF, SCP, SEEP, UDM, UDR,
 MME, HSS, SGWC, SGWU, PCRF, OCS, Docker, Kubernetes, or a remote host.
 
-Phase 8 therefore follows the safe **8.5 readiness** path:
+The current architecture therefore keeps the safe readiness posture:
 
 - `coreManagedTargetRegistry` is empty.
 - `coreOperationRegistry` is empty.
 - `automaticCoreOperationExecutorIds` is empty.
-- Any future `APPROVAL_GOVERNED` + `automatic` definition without a
-  server-owned executor fails with `CORE_OPERATION_EXECUTOR_MISSING`.
+- Any future automatic definition without a server-owned executor fails with
+  `CORE_OPERATION_EXECUTOR_MISSING`.
 - No SSH, shell, `systemctl`, Docker, Kubernetes, or arbitrary command path
   was added.
 
@@ -32,13 +32,14 @@ Phase 8 therefore follows the safe **8.5 readiness** path:
 | --- | --- | --- | --- | --- | --- | --- |
 | Comprehensive health read | `GET /api/system/health` | Application data health | Reads Mongo-backed database, OCS, HSS subscriber, and security health summaries | Authenticated session | `READ_ONLY` | Repository read queries only |
 | Mongo health read | `GET /api/system/mongo/health` | Mongo readiness | Reads Mongo readiness, collections, and indexes | Authenticated session | `READ_ONLY` | Repository read queries only |
-| Integrity scan | `POST /api/system/audit/scan` | Subscriber/OCS data | Scans data consistency; the POST verb does not mutate a managed target | Root or operator | `READ_ONLY` | Repository read queries only |
-| Targeted data heal | `POST /api/system/audit/heal` | Subscriber/OCS documents | Corrects subscriber, balance, tariff, profile, or reservation data | `system_heal`; operator requests approval, root/ops-admin policy may execute directly | `DIRECT_GOVERNED` / `APPROVAL_GOVERNED` data remediation | `healSubscriberDocument` |
-| Batch data heal | `POST /api/system/audit/batch-heal` | Subscriber/OCS documents | Applies bounded per-anomaly data remediation | `system_heal`; operator requests approval, root/ops-admin policy may execute directly | `DIRECT_GOVERNED` / `APPROVAL_GOVERNED` data remediation | `batchHealSubscriberDocuments` |
+| Integrity scan | `POST /api/system/audit/scan` | Subscriber/OCS data | Scans data consistency; the POST verb does not mutate a managed target | `admin` or `operator` | `READ_ONLY` | Repository read queries only |
+| Targeted data heal | `POST /api/system/audit/heal` | Subscriber/OCS documents | Corrects subscriber, balance, tariff, profile, or reservation data | `system_heal`; direct execution for `admin` and `operator` | `DIRECT_GOVERNED` data remediation | `healSubscriberDocument` |
+| Batch data heal | `POST /api/system/audit/batch-heal` | Subscriber/OCS documents | Applies bounded per-anomaly data remediation | `system_heal`; direct execution for `admin` and `operator` | `DIRECT_GOVERNED` data remediation | `batchHealSubscriberDocuments` |
 
-`SYSTEM_HEAL` remains governed by the existing approval and audit design. It
-is deliberately not registered as a Phase 8 core operational action because
-its target is stored subscriber/OCS data, not an NF runtime process.
+`SYSTEM_HEAL` remains governed by the RBAC capability gate and the
+best-effort operation log. It is deliberately not registered as a core
+operational action because its target is stored subscriber/OCS data, not an NF
+runtime process.
 
 ## Operation and target registry
 
@@ -56,7 +57,7 @@ server-owned binding and a trusted executor are introduced.
 
 ## Command and remote-operation safety
 
-The inventory searched `src/app/api`, `src/server`, `src/lib`, and `scripts`
+The inventory searched `backend/`, `frontend/src/`, `deploy/`, and `scripts`
 for `child_process`, `exec`, `execFile`, `spawn`, `systemctl`, `service`,
 Docker, Kubernetes, SSH, Supervisor, and PM2 control surfaces.
 
@@ -64,10 +65,10 @@ No OS-command or remote-execution implementation was found in application
 source. The browser has no command, service name, binary path, script path,
 host, or executor argument API.
 
-## Phase 9 readiness
+## Future configuration governance
 
-Phase 9 may introduce configuration governance only after separately defining
+Configuration governance may be introduced only after separately defining
 versioned configuration snapshots, semantic validation, redaction, staged
 application, rollback planning, and the reload/restart dependency boundary.
-It must not use this Phase 8 readiness registry as permission to add a shell
-or remote-control implementation.
+This readiness registry is not permission to add a shell or remote-control
+implementation.

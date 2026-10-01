@@ -599,7 +599,7 @@ func ExecuteFrozenSubscriberBatchUpdate(
 		return nil, err
 	}
 
-	// Phase 1: ALL-TARGET PRECONDITION BARRIER
+	// Stage 1: ALL-TARGET PRECONDITION BARRIER
 	// Load every target, recompute precondition hash, reject if ANY missing/drifted.
 	// Zero writes on visible drift.
 	for _, target := range frozen.Targets {
@@ -618,7 +618,7 @@ func ExecuteFrozenSubscriberBatchUpdate(
 		}
 	}
 
-	// Phase 2: FINAL PER-TARGET CAS (independent of preflight — race may occur)
+	// Stage 2: FINAL PER-TARGET CAS (independent of preflight — race may occur)
 	result := &BatchUpdateExecutionResult{
 		Requested:            len(frozen.Targets),
 		FieldNames:           frozen.FieldNames,

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Phase 5.7-B — RBAC Role Migration Integration Acceptance Suite
+ * RBAC Role Migration Integration Acceptance Suite
  *
  * Verifies that scripts/migrate-rbac-roles.mjs:
  * 1. Authoritatively targets `app_users` (NOT `users`) in MONGODB_APP_DB
@@ -35,7 +35,7 @@ const uri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017';
 const suffix = `${Date.now()}_${process.pid}_${Math.floor(Math.random() * 100000)}`;
 const testDbName = `xcloud_ops_role_mig_test_${suffix}`;
 
-console.log('── Phase 5.7-B RBAC Role Migration Acceptance Suite ──\n');
+console.log('── RBAC Role Migration Acceptance Suite ──\n');
 console.log(`Target Test DB: ${testDbName} @ ${uri}`);
 
 let totalAssertions = 0;

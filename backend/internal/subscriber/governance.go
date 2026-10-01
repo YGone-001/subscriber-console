@@ -17,7 +17,7 @@ const (
 )
 
 // subscriberRegistry is the subscriber-domain operation registry.
-// Under the Phase 5.7-C direct operation model, all valid subscriber operations
+// Under the direct operation model, all valid subscriber operations
 // execute directly without approval workflows.
 var subscriberRegistry = map[SubscriberOperation]governance.OperationDefinition{
 	OpCreate: {

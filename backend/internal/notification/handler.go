@@ -1,4 +1,4 @@
-// Package notification provides the shadow SSE notification stream handler.
+// Package notification provides the SSE notification stream handler.
 package notification
 
 import (

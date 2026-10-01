@@ -4,7 +4,7 @@ import type { NextRequest } from 'next/server';
 /**
  * Next.js UI navigation guard.
  *
- * Responsibility boundary after Phase 8.5:
+ * Responsibility boundary:
  *   - Nginx owns /api and /api/* routing (every API request goes straight to Go).
  *   - Go owns API authentication, authorization and current-account/session validation.
  *   - This module owns protected UI *navigation* protection only.

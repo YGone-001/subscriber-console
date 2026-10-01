@@ -93,14 +93,14 @@ test('Balance governance localization keys are complete in zh and en', () => {
   assert.match(zhLocale, /ocs_balance_adjust:\s*"调整余额"/);
   assert.match(enLocale, /ocs_balance_adjust:\s*"Adjust Balance"/);
 
-  assert.match(zhLocale, /ocs_balance_cutover_pending:\s*"余额写入割接尚未完成，当前处于只读模式"/);
-  assert.match(enLocale, /ocs_balance_cutover_pending:\s*"Balance write cutover pending; currently in read-only shadow mode"/);
+  assert.match(zhLocale, /ocs_balance_write_unavailable:\s*"余额写入当前不可用"/);
+  assert.match(enLocale, /ocs_balance_write_unavailable:\s*"Balance write is currently unavailable"/);
 
   assert.match(zhLocale, /ocs_balance_backend_unreachable/);
   assert.match(enLocale, /ocs_balance_backend_unreachable/);
 });
 
-test('OcsBalancePlaceholder operational cutover enables Adjust Balance with role gating', () => {
+test('OcsBalancePlaceholder enables Adjust Balance with role gating', () => {
   // Uses auth and capabilityDecision
   assert.match(placeholderSource, /useAuth/);
   assert.match(placeholderSource, /capabilityDecision\(.*"balance_adjust"\)/);

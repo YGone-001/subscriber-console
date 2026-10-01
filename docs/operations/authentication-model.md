@@ -1,8 +1,8 @@
 # Authentication Model
 
 > Operational authentication model for xCloud subscriber-console.
-> Architecture: `docs/architecture/phase-6-auth-architecture.md`.
 > Stable rules: `CLAUDE.md`. Current state: `AGENTS.md`.
+> Related: `docs/operations/user-management-model.md`, `docs/operations/rbac-model.md`.
 
 ## 1. Overview
 
@@ -161,16 +161,16 @@ and verify identical JWT signatures from the same `JWT_SECRET`.
 Cross-language verification is covered by `backend/internal/auth/verifier_cross_lang_test.go`
 and `scripts/test-auth-go-parity.mjs`.
 
-## 10. Go Contract Parity Foundation (Phase 6.3-A)
+## 10. Go Contract Parity Foundation
 
-Phase 6.3-A brought Go Authentication implementations into complete 1:1 parity with the frozen Node implementation:
+The Go Authentication implementation was brought into complete 1:1 parity with the reference implementation:
 - `POST /api/auth/login`: IP-scoped rate limiter (5/60s), account failed-login limiter peek (10/300s), dummy bcrypt for timing mitigation, uniform 401 response privacy, atomic lockout threshold (10 attempts, single sessionVersion bump), last-active-admin lockout protection, successful login conditional state update, and auth_token cookie issuance.
 - `POST /api/auth/logout`: IP-scoped rate limiter (30/60s), exact cookie clearance (`Max-Age=0`), Cache-Control: no-store, and `{ success: true }` body.
 - `GET /api/auth/me`: Rate limiter (60/60s), Cache-Control: no-store, exact role/capability/permission payload structure.
 - `GET /api/auth/permissions`: Exact PERMISSION_CATALOG catalog ordering across all canonical and legacy roles.
 
-Production Routing Invariant (Phase 6.3-B Controlled Cutover):
-- Production authentication ownership has been cut over authoritatively to **Go backend** (`:18888`).
-- Route authority is the frozen Go registration set (`84` METHOD+PATH entries); the Next.js `CUTOVER_TABLE` was retired. Historical baselines: Phase 6.3-B authentication = 36, Phase 7.5 = 47, Phase 8.2 residual cutover = 84.
+Production Routing Invariant:
+- Production authentication ownership belongs to the **Go backend** (`:18888`).
+- Route authority is the Go registration set (`84` METHOD+PATH entries); no route-owner table exists in production source.
 - The Nginx edge routes `/api` and `/api/*` straight to Go with fail-closed semantics (no Node fallback and no second hop): a dead Go backend yields an edge-generated 502/504, and Go's own session-store outage yields HTTP 503 `AUTH_UNAVAILABLE`.
 

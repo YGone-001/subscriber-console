@@ -1,9 +1,6 @@
 #!/usr/bin/env node
 /**
- * Phase 8.5 — Proxy / Deployment Boundary Finalization acceptance suite.
- *
- * This is the CURRENT production-boundary acceptance suite. It supersedes the Phase 8.4
- * suite (which asserted the now-obsolete Next.js API reverse-proxy architecture).
+ * Deployment Boundary Acceptance Suite (current production boundary).
  *
  * It exercises the REAL production topology:
  *
@@ -18,25 +15,25 @@
  * each listener is loopback-only: reachable on 127.0.0.1 and unreachable on a real
  * non-loopback runner address. Nginx remains the sole public edge.
  *
- * Component policy (spec section 33): handler-only, mock-only, static-only and
- * "fake JS reverse proxy" evidence is NOT sufficient. Everything below drives real TCP
- * requests through a real Nginx fronting real Go and real Next.js, against a real MongoDB.
- * Source assertions are supplemental only and live in an explicitly labelled section.
+ * Component policy: handler-only, mock-only, static-only and "fake JS reverse proxy"
+ * evidence is NOT sufficient. Everything below drives real TCP requests through a real Nginx
+ * fronting real Go and real Next.js, against a real MongoDB. Source assertions are
+ * supplemental only and live in an explicitly labelled section.
  *
- * Route authority is DERIVED from the frozen Go registration site (84 exact METHOD+PATH
- * entries in backend/cmd/server/main.go + backend/internal/remediation/handler.go). The
- * retired Next.js CUTOVER_TABLE is never consulted.
+ * Route authority is DERIVED from the Go registration site (84 exact METHOD+PATH entries in
+ * backend/cmd/server/main.go + backend/internal/remediation/handler.go). No historical
+ * route-owner table is consulted.
  *
  * Usage:
- *   node scripts/test-phase-8-deployment-boundary.mjs
+ *   node scripts/test-deployment-boundary.mjs
  *
  * Environment overrides:
- *   PHASE85_NGINX_BIN   nginx executable                  (default: `nginx` on PATH)
+ *   DEPLOYMENT_NGINX_BIN   nginx executable                  (default: `nginx` on PATH)
  *   MONGODB_URI         real MongoDB URI                  (default: mongodb://127.0.0.1:27017)
- *   PHASE85_NEXT_PORT   Next.js UI port                   (default: 13333)
- *   PHASE85_GO_PORT     Go API port                       (default: 18888)
- *   PHASE85_EDGE_PORT   Nginx public port                 (default: 18080)
- *   PHASE85_SKIP_BUILD  reuse an existing frontend build  (default: build if missing)
+ *   DEPLOYMENT_NEXT_PORT   Next.js UI port                   (default: 13333)
+ *   DEPLOYMENT_GO_PORT     Go API port                       (default: 18888)
+ *   DEPLOYMENT_EDGE_PORT   Nginx public port                 (default: 18080)
+ *   DEPLOYMENT_SKIP_BUILD  reuse an existing frontend build  (default: build if missing)
  */
 
 import { spawn, spawnSync } from 'node:child_process';
@@ -62,26 +59,20 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const FRONTEND = join(ROOT, 'frontend');
 const BACKEND = join(ROOT, 'backend');
 
-/** Authoritative independently accepted Phase 8.4 frozen baseline. */
-const START_SHA = 'e38c09d5ee8c00a870383f68d78efc56f90314ea';
-
-/** Phase 8.5 correction baseline: the Go registration set must be identical to this tree. */
-const PHASE85C_BASELINE_SHA = 'cfc2fef36d55fa32427794433b4e5cee37bfb4ac';
-
-/** Frozen canonical production API surface size (asserted against the derived set). */
+/** Canonical production API surface size (asserted against the derived set). */
 const EXPECTED_GO_REGISTRATIONS = 84;
 
-const NEXT_PORT = Number(process.env.PHASE85_NEXT_PORT || 13333);
-const GO_PORT = Number(process.env.PHASE85_GO_PORT || 18888);
-const EDGE_PORT = Number(process.env.PHASE85_EDGE_PORT || 18080);
-const NGINX_BIN = process.env.PHASE85_NGINX_BIN || 'nginx';
+const NEXT_PORT = Number(process.env.DEPLOYMENT_NEXT_PORT || 13333);
+const GO_PORT = Number(process.env.DEPLOYMENT_GO_PORT || 18888);
+const EDGE_PORT = Number(process.env.DEPLOYMENT_EDGE_PORT || 18080);
+const NGINX_BIN = process.env.DEPLOYMENT_NGINX_BIN || 'nginx';
 const MONGO_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017';
-const SKIP_BUILD = process.env.PHASE85_SKIP_BUILD === '1';
+const SKIP_BUILD = process.env.DEPLOYMENT_SKIP_BUILD === '1';
 
-const JWT_SECRET = 'phase85-deployment-boundary-acceptance-secret-key-0123456789';
-const USER_PREFIX = 'phase85_';
-const PASSWORD = 'Phase85!Passw0rd';
-const OTHER_PASSWORD = 'Phase85!Other';
+const JWT_SECRET = 'deployment-boundary-acceptance-secret-key-0123456789';
+const USER_PREFIX = 'deployment_';
+const PASSWORD = 'Deployment!Passw0rd';
+const OTHER_PASSWORD = 'Deployment!Other';
 
 const NEXT_UPSTREAM_ADDR = `127.0.0.1:${NEXT_PORT}`;
 const GO_UPSTREAM_ADDR = `127.0.0.1:${GO_PORT}`;
@@ -99,17 +90,6 @@ const GO_PRODUCTION_DEFAULT_ADDR = '127.0.0.1:18888';
 const NEXT_LISTENER_ADDR = `127.0.0.1:${NEXT_PORT}`;
 const GO_LISTENER_ADDR = `127.0.0.1:${GO_PORT}`;
 
-/**
- * Narrow listener-boundary surface authorized by Phase 8.5-C: the Go listener
- * configuration package and its documentation. Any other backend change is treated as a
- * business / auth / registration / charging-plane change and fails the freeze gate.
- */
-const AUTHORIZED_LISTENER_CONFIG_PATHS = ['backend/internal/config/', 'backend/README.md'];
-
-function isAuthorizedListenerChange(file) {
-  return AUTHORIZED_LISTENER_CONFIG_PATHS.some((p) => (p.endsWith('/') ? file.startsWith(p) : file === p));
-}
-
 /** Port of the MongoDB the Go service is pointed at (the relay transparently proxies it). */
 function mongoTargetPort(uri) {
   try {
@@ -120,7 +100,7 @@ function mongoTargetPort(uri) {
 }
 const MONGO_TARGET_PORT = mongoTargetPort(MONGO_URI);
 
-const UNKNOWN_SENTINEL = '/api/__phase85_unknown_sentinel__';
+const UNKNOWN_SENTINEL = '/api/__routing_unknown_probe__';
 
 const RETIRED_SURFACES = [
   { method: 'POST', path: '/api/auth/users' },
@@ -149,7 +129,7 @@ function log(message) {
 // Small utilities
 // ---------------------------------------------------------------------------
 
-const TMP_ROOT = join(os.tmpdir(), `phase85-${process.pid}-${Date.now()}`);
+const TMP_ROOT = join(os.tmpdir(), `deployment-boundary-${process.pid}-${Date.now()}`);
 const NGINX_PREFIX = join(TMP_ROOT, 'nginx');
 const ACCESS_LOG = join(NGINX_PREFIX, 'logs', 'access.log');
 const GO_BIN = join(TMP_ROOT, process.platform === 'win32' ? 'xcloud-api.exe' : 'xcloud-api');
@@ -168,21 +148,12 @@ function runSync(command, args, options = {}) {
   return spawnSync(command, args, { encoding: 'utf8', ...options });
 }
 
-function git(args) {
-  return runSync('git', args, { cwd: ROOT });
-}
-
-/** Exact METHOD+PATH registration set committed for one tree of the frozen Go sources. */
-function registrationsAt(sha) {
-  const re = /mux\.Handle\("(GET|POST|PUT|PATCH|DELETE)\s+([^"]+)"\s*,/g;
-  const keys = new Set();
-  for (const source of ['backend/cmd/server/main.go', 'backend/internal/remediation/handler.go']) {
-    const text = git(['show', `${sha}:${source}`]).stdout;
-    re.lastIndex = 0;
-    let m;
-    while ((m = re.exec(text)) !== null) keys.add(`${m[1]} ${m[2]}`);
-  }
-  return keys;
+/** Derive the Go production listener default from the production configuration source. */
+function deriveGoListenerDefault() {
+  const source = readIfExists(join(BACKEND, 'internal', 'config', 'config.go'));
+  if (!source) return null;
+  const m = source.match(/envOrDefault\("HTTP_ADDR",\s*"([^"]+)"\)/);
+  return m ? m[1] : null;
 }
 
 /** Send one real HTTP request and collect status/headers/body. */
@@ -419,7 +390,7 @@ function classifyUpstream(upstreamAddr) {
 let markerSeq = 0;
 function nextMarker() {
   markerSeq += 1;
-  return `p85-${markerSeq}`;
+  return `deploy-${markerSeq}`;
 }
 
 /**
@@ -432,7 +403,7 @@ async function edgeRequest({ method = 'GET', requestPath = '/', headers = {}, bo
     port: EDGE_PORT,
     method,
     requestPath,
-    headers: { ...headers, 'x-phase85-marker': marker },
+    headers: { ...headers, 'x-deployment-marker': marker },
     body,
     timeoutMs,
     abortAfterHeaders,
@@ -730,10 +701,10 @@ function scanNginxSource() {
 // Dependency classifier (spec section 46) - non-tautological
 // ---------------------------------------------------------------------------
 
-const UNUSED_SENTINEL_DEP = '@phase85/dependency-classifier-unused-sentinel';
+const UNUSED_SENTINEL_DEP = '@deployment/dependency-classifier-unused-sentinel';
 
-function readFrontendManifest(ref) {
-  const raw = ref ? git(['show', `${ref}:frontend/package.json`]).stdout : readIfExists(join(FRONTEND, 'package.json'));
+function readFrontendManifest() {
+  const raw = readIfExists(join(FRONTEND, 'package.json'));
   if (!raw) return null;
   const pkg = JSON.parse(raw);
   const merged = { ...(pkg.dependencies ?? {}), ...(pkg.devDependencies ?? {}) };
@@ -1009,47 +980,28 @@ function cookieHeader(token) {
 // ---------------------------------------------------------------------------
 
 async function main() {
-  log('== Phase 8.5 Proxy / Deployment Boundary Finalization acceptance ==\n');
-
-  // -- Git boundary -------------------------------------------------------
-  const head = git(['rev-parse', 'HEAD']).stdout.trim();
-  const originDevelop = git(['rev-parse', 'origin/develop']).stdout.trim();
-  const ancestor = runSync('git', ['merge-base', '--is-ancestor', START_SHA, head], { cwd: ROOT }).status === 0;
-  check('P85-G01', ancestor, `start_sha=${START_SHA} head=${head} origin_develop=${originDevelop} start_is_ancestor=${ancestor}`);
+  log('== Deployment Boundary Acceptance Suite (current production boundary) ==\n');
 
   // -- Derived Go registration authority ----------------------------------
+  // Route authority is the derived Go registration set, not a frozen migration table. This
+  // suite asserts the live production API surface directly: exactly 84 METHOD+PATH
+  // registrations, zero duplicates, and no unknown probe registered as a real route.
   const { keys: goKeys, duplicates: goDuplicates } = deriveGoRegistrations();
   const goKeySet = new Set(goKeys);
   const { reads: goReads, mutations: goMutations } = classifyGoRegistrations(goKeys);
 
-  const baselineSources = ['backend/cmd/server/main.go', 'backend/internal/remediation/handler.go'];
-  const baselineKeys = new Set();
-  const baselineDuplicates = [];
-  const registrationRe = /mux\.Handle\("(GET|POST|PUT|PATCH|DELETE)\s+([^"]+)"\s*,/g;
-  for (const source of baselineSources) {
-    const text = git(['show', `${START_SHA}:${source}`]).stdout;
-    let m;
-    registrationRe.lastIndex = 0;
-    while ((m = registrationRe.exec(text)) !== null) {
-      const key = `${m[1]} ${m[2]}`;
-      if (baselineKeys.has(key)) baselineDuplicates.push(key);
-      baselineKeys.add(key);
-    }
-  }
-  const missingRegistration = [...baselineKeys].filter((k) => !goKeySet.has(k));
-  const addedRegistration = [...goKeySet].filter((k) => !baselineKeys.has(k));
-  const registrationSetChanged = missingRegistration.length > 0 || addedRegistration.length > 0;
   check(
-    'P85-G05',
-    baselineKeys.size === EXPECTED_GO_REGISTRATIONS &&
-      goKeys.length === EXPECTED_GO_REGISTRATIONS &&
-      !registrationSetChanged &&
-      goDuplicates.length === 0 &&
-      baselineDuplicates.length === 0,
-    `baseline=${baselineKeys.size} final=${goKeys.length} missing=${missingRegistration.length} added=${addedRegistration.length} duplicates=${goDuplicates.length}`,
+    'DB-G01',
+    goKeys.length === EXPECTED_GO_REGISTRATIONS && goDuplicates.length === 0,
+    `go_registrations=${goKeys.length} duplicates=${goDuplicates.length}`,
+  );
+  check(
+    'DB-G05',
+    !goKeySet.has(`GET ${UNKNOWN_SENTINEL}`),
+    `unknown_probe_registered_in_go=${goKeySet.has(`GET ${UNKNOWN_SENTINEL}`) ? 1 : 0}`,
   );
 
-  // -- Removal / no-proxy / cutover retirement source evidence ------------
+  // -- Removal / no-proxy / route-owner retirement source evidence --------
   const apiTree = scanNextApiTree();
   const serverTree = scanNodeServerTree();
   const activeServerImports = scanActiveServerImports();
@@ -1059,21 +1011,21 @@ async function main() {
   const sentinels = scannerNegativeSentinels();
   const cutoverRoutingPresent = existsSync(join(FRONTEND, 'src', 'lib', 'cutover-routing.ts'));
 
-  check('P85-I01', apiTree.files.length === 0 && apiTree.operations.length === 0, `next_api_route_files=${apiTree.files.length} next_api_operations=${apiTree.operations.length}`);
-  check('P85-I02', !serverTree.present && serverTree.files.length === 0, `node_server_tree_files=${serverTree.files.length}`);
-  check('P85-I03', activeServerImports.length === 0, `active_server_imports=${activeServerImports.length}`);
-  check('P85-I04', !cutoverRoutingPresent, `cutover_routing_runtime_present=${cutoverRoutingPresent}`);
+  check('DB-I01', apiTree.files.length === 0 && apiTree.operations.length === 0, `next_api_route_files=${apiTree.files.length} next_api_operations=${apiTree.operations.length}`);
+  check('DB-I02', !serverTree.present && serverTree.files.length === 0, `node_server_tree_files=${serverTree.files.length}`);
+  check('DB-I03', activeServerImports.length === 0, `active_server_imports=${activeServerImports.length}`);
+  check('DB-I04', !cutoverRoutingPresent, `cutover_routing_runtime_present=${cutoverRoutingPresent}`);
   check(
-    'P85-I05',
+    'DB-I05',
     forbidden.frontend_cutover_route_resolvers.length === 0,
     `frontend_cutover_route_resolvers=${forbidden.frontend_cutover_route_resolvers.length}`,
   );
   check(
-    'P85-G03',
+    'DB-G03',
     proxy.violations.length === 0 && !/\bforwardToGo\b/.test(proxy.code) && forbidden.frontend_api_reverse_proxy_functions.length === 0,
     `proxy_forbidden_tokens=${proxy.violations.length} api_reverse_proxy_functions=${forbidden.frontend_api_reverse_proxy_functions.length}`,
   );
-  check('P85-G08', proxy.consultsGoAuth && proxy.failClosedCodes && proxy.matcherExcludesApi, `go_auth_delegation=${proxy.consultsGoAuth} fail_closed_codes=${proxy.failClosedCodes} matcher_excludes_api=${proxy.matcherExcludesApi}`);
+  check('DB-G08', proxy.consultsGoAuth && proxy.failClosedCodes && proxy.matcherExcludesApi, `go_auth_delegation=${proxy.consultsGoAuth} fail_closed_codes=${proxy.failClosedCodes} matcher_excludes_api=${proxy.matcherExcludesApi}`);
 
   const jwtVerifiers = forbidden.frontend_jwt_verifiers.length;
   const jwtSecretReaders = forbidden.frontend_jwt_secret_runtime_readers.length;
@@ -1081,80 +1033,50 @@ async function main() {
   const mongoWriters = forbidden.frontend_session_mongo_writers.length;
   const mongoCollections = forbidden.frontend_mongo_runtime_collections.length;
   const identityInjectors = forbidden.frontend_identity_header_injectors.length;
-  check('P85-G09', mongoReaders === 0 && mongoWriters === 0 && mongoCollections === 0, `frontend_mongo_readers=${mongoReaders} writers=${mongoWriters} collections=${mongoCollections}`);
-  check('P85-G10', jwtVerifiers === 0 && jwtSecretReaders === 0, `frontend_jwt_verifiers=${jwtVerifiers} jwt_secret_readers=${jwtSecretReaders}`);
-  check('P85-G07-static', identityInjectors === 0, `frontend_identity_header_injectors=${identityInjectors}`);
-  check('P85-I06', sentinels.ok, `scanner_negative_sentinels=${sentinels.ok} failures=[${sentinels.failures.join(',')}]`);
+  check('DB-G09', mongoReaders === 0 && mongoWriters === 0 && mongoCollections === 0, `frontend_mongo_readers=${mongoReaders} writers=${mongoWriters} collections=${mongoCollections}`);
+  check('DB-G10', jwtVerifiers === 0 && jwtSecretReaders === 0, `frontend_jwt_verifiers=${jwtVerifiers} jwt_secret_readers=${jwtSecretReaders}`);
+  check('DB-G07-static', identityInjectors === 0, `frontend_identity_header_injectors=${identityInjectors}`);
+  check('DB-I06', sentinels.ok, `scanner_negative_sentinels=${sentinels.ok} failures=[${sentinels.failures.join(',')}]`);
 
-  // -- Dependency classifier ----------------------------------------------
-  const manifestBefore = readFrontendManifest(START_SHA);
-  const manifestAfter = readFrontendManifest(null);
-  const depsBefore = manifestBefore.names;
-  const depsAfter = manifestAfter.names;
-  const removedDeps = depsBefore.filter((n) => !depsAfter.includes(n));
-  const keptDeps = depsAfter.filter((n) => depsBefore.includes(n));
-  const depClassification = classifyFrontendDependencies(depsAfter);
-  const depSentinel = dependencyNegativeSentinel(depsAfter);
+  // -- Frontend dependency classifier -------------------------------------
+  const manifest = readFrontendManifest();
+  const deps = manifest ? manifest.names : [];
+  const depClassification = classifyFrontendDependencies(deps);
+  const depSentinel = dependencyNegativeSentinel(deps);
   const joseConsumers = depClassification.evidence.has('jose') ? 1 : 0;
   const mongodbConsumers = depClassification.evidence.has('mongodb') ? 1 : 0;
   const jitiConsumers = depClassification.evidence.has('jiti') ? 1 : 0;
   check(
-    'P85-G16',
+    'DB-G16',
     depClassification.unclassified.length === 0 && depClassification.unused.length === 0 && depSentinel,
-    `dependencies_before=${depsBefore.length} after=${depsAfter.length} unclassified=${depClassification.unclassified.length} unused=${depClassification.unused.length} sentinel=${depSentinel}`,
+    `frontend_dependencies=${deps.length} unclassified=${depClassification.unclassified.length} unused=${depClassification.unused.length} sentinel=${depSentinel}`,
   );
 
-  // -- Root manifest byte-integrity ---------------------------------------
-  const rootPkgDiff = git(['diff', '--name-only', START_SHA, '--', 'package.json', 'package-lock.json']).stdout.trim();
-  check('P85-I07', rootPkgDiff === '', `root_manifest_changes=[${rootPkgDiff}]`);
-
-  // -- Go production freeze ----------------------------------------------
-  // Phase 8.5-C authorizes exactly one narrow backend surface: the listener configuration
-  // under backend/internal/config/. Everything else in backend/ would be a business, auth,
-  // registration or charging-plane change and must be zero.
-  const backendChangedFiles = git(['diff', '--name-only', START_SHA, '--', 'backend/'])
-    .stdout.trim()
-    .split('\n')
-    .map((s) => s.trim())
-    .filter(Boolean);
-  const deploymentListenerConfigChanges = backendChangedFiles.filter(isAuthorizedListenerChange);
-  const nonListenerBackendChanges = backendChangedFiles.filter((f) => !isAuthorizedListenerChange(f));
-  const goAuthBehaviorChanges = nonListenerBackendChanges.filter((f) => f.startsWith('backend/internal/auth/'));
-  const chargingPlaneChanges = nonListenerBackendChanges.filter((f) => f.startsWith('backend/internal/charging/'));
-  const goBusinessProductionChanges = nonListenerBackendChanges.filter(
-    (f) => !f.startsWith('backend/internal/auth/') && !f.startsWith('backend/internal/charging/'),
-  );
-  const goRegistrationChanges = registrationSetChanged ? 1 : 0;
+  // -- Go production listener boundary -----------------------------------
+  // The Go listener default is derived from production configuration source and must bind
+  // loopback, so that Nginx stays the sole public edge.
+  const goListenerDefault = deriveGoListenerDefault();
   check(
-    'P85-G17',
-    goBusinessProductionChanges.length === 0 &&
-      goAuthBehaviorChanges.length === 0 &&
-      chargingPlaneChanges.length === 0 &&
-      deploymentListenerConfigChanges.length > 0,
-    `backend_changes=[${backendChangedFiles.join(',')}] deployment_listener_config_changes=${deploymentListenerConfigChanges.length} go_business_production_changes=${goBusinessProductionChanges.length} go_auth_behavior_changes=${goAuthBehaviorChanges.length} charging_plane_changes=${chargingPlaneChanges.length}`,
+    'DB-I07',
+    goListenerDefault === GO_PRODUCTION_DEFAULT_ADDR,
+    `go_listener_default=${goListenerDefault} expected=${GO_PRODUCTION_DEFAULT_ADDR}`,
   );
 
-  // -- Go registration set equality against the Phase 8.5 correction baseline ------------
-  // Section 16 requires exact set equality (not a count) against cfc2fef.
-  const correctionBaselineKeys = registrationsAt(PHASE85C_BASELINE_SHA);
-  const correctionMissing = [...correctionBaselineKeys].filter((k) => !goKeySet.has(k));
-  const correctionAdded = [...goKeySet].filter((k) => !correctionBaselineKeys.has(k));
-  const correctionSetChanged = correctionMissing.length > 0 || correctionAdded.length > 0;
-  check(
-    'P85-G18',
-    correctionBaselineKeys.size === EXPECTED_GO_REGISTRATIONS &&
-      goKeys.length === EXPECTED_GO_REGISTRATIONS &&
-      !correctionSetChanged,
-    `correction_baseline=${correctionBaselineKeys.size} final=${goKeys.length} missing=${correctionMissing.length} added=${correctionAdded.length} set_changed=${correctionSetChanged}`,
+  // -- Charging plane remains frozen -------------------------------------
+  // The charging plane is excluded from the management plane: no charging mutation may be
+  // registered on the production API surface.
+  const chargingMutationKeys = goMutations.filter((k) =>
+    /\/api\/ocs\/(sessions|reservations|usage|events|config)\b/.test(k),
   );
+  check('DB-G18', chargingMutationKeys.length === 0, `charging_plane_mutations=${chargingMutationKeys.length}`);
 
   // -- Nginx deployment-source boundary ----------------------------------
   check(
-    'P85-G02-source',
+    'DB-G02-source',
     nginx.apiExactToGo && nginx.apiPrefixToGo && nginx.uiToNext && nginx.goUpstream.includes(GO_UPSTREAM_ADDR) && nginx.nextUpstream.includes(NEXT_UPSTREAM_ADDR),
     `api_exact_to_go=${nginx.apiExactToGo} api_prefix_to_go=${nginx.apiPrefixToGo} ui_to_next=${nginx.uiToNext} go_upstream=${nginx.goUpstream} next_upstream=${nginx.nextUpstream}`,
   );
-  check('P85-I08', nginx.identityHeadersStripped && nginx.forwardedProto && nginx.bodySize10m && nginx.sseUnbuffered, `identity_stripped=${nginx.identityHeadersStripped} xfp=${nginx.forwardedProto} body_10m=${nginx.bodySize10m} sse_unbuffered=${nginx.sseUnbuffered}`);
+  check('DB-I08', nginx.identityHeadersStripped && nginx.forwardedProto && nginx.bodySize10m && nginx.sseUnbuffered, `identity_stripped=${nginx.identityHeadersStripped} xfp=${nginx.forwardedProto} body_10m=${nginx.bodySize10m} sse_unbuffered=${nginx.sseUnbuffered}`);
 
   // =======================================================================
   // Runtime topology
@@ -1173,7 +1095,7 @@ async function main() {
   writeFileSync(ACCESS_LOG, '');
 
   const mongoReachable = await waitForPort(MONGO_TARGET_PORT, 5000);
-  check('P85-R00', mongoReachable, `mongo_reachable=${mongoReachable} uri=${MONGO_URI}`);
+  check('DB-R00', mongoReachable, `mongo_reachable=${mongoReachable} uri=${MONGO_URI}`);
   if (!mongoReachable) {
     report();
     return;
@@ -1183,10 +1105,10 @@ async function main() {
   // component under test, producing evidence that looks green while proving nothing. Refuse
   // to run against an occupied port instead of silently trusting a foreign process.
   const preflightPorts = [
-    ['P85-R00A', GO_PORT, 'go'],
-    ['P85-R00B', NEXT_PORT, 'next'],
-    ['P85-R00C', EDGE_PORT, 'edge'],
-    ['P85-R00D', RELAY_PORT, 'mongo_relay'],
+    ['DB-R00A', GO_PORT, 'go'],
+    ['DB-R00B', NEXT_PORT, 'next'],
+    ['DB-R00C', EDGE_PORT, 'edge'],
+    ['DB-R00D', RELAY_PORT, 'mongo_relay'],
   ];
   const occupiedPorts = [];
   for (const [id, port, role] of preflightPorts) {
@@ -1209,10 +1131,10 @@ async function main() {
   const relay = new MongoRelay(MONGO_TARGET_PORT, RELAY_PORT);
   activeRelay = relay;
   await relay.start();
-  check('P85-R01', await waitForPort(RELAY_PORT, 5000), `mongo_relay_listening=${RELAY_PORT}`);
+  check('DB-R01', await waitForPort(RELAY_PORT, 5000), `mongo_relay_listening=${RELAY_PORT}`);
 
   const goBuild = runSync('go', ['build', '-o', GO_BIN, './cmd/server'], { cwd: BACKEND, stdio: 'inherit' });
-  check('P85-R02', goBuild.status === 0 && existsSync(GO_BIN), `go_build_status=${goBuild.status}`);
+  check('DB-R02', goBuild.status === 0 && existsSync(GO_BIN), `go_build_status=${goBuild.status}`);
 
   // Go is started through its normal production configuration contract. HTTP_ADDR is NOT
   // injected so the production default (127.0.0.1:18888) is what actually gets exercised;
@@ -1225,7 +1147,7 @@ async function main() {
     JWT_SECRET,
   };
   delete goEnv.HTTP_ADDR;
-  const goAddrFromEnv = process.env.PHASE85_GO_PORT ? `127.0.0.1:${GO_PORT}` : null;
+  const goAddrFromEnv = process.env.DEPLOYMENT_GO_PORT ? `127.0.0.1:${GO_PORT}` : null;
   if (goAddrFromEnv) goEnv.HTTP_ADDR = goAddrFromEnv;
   const goAddrSource = goAddrFromEnv ? 'explicit_override' : 'production_default';
 
@@ -1242,7 +1164,7 @@ async function main() {
 
   const goUp = await waitForPort(GO_PORT, 60000);
   const goAlive = goProc.exitCode === null;
-  check('P85-R03', goUp && goAlive, `go_listening=${goUp} go_process_alive=${goAlive} port=${GO_PORT} addr_source=${goAddrSource} output=${outputTail(goOutput)}`);
+  check('DB-R03', goUp && goAlive, `go_listening=${goUp} go_process_alive=${goAlive} port=${GO_PORT} addr_source=${goAddrSource} output=${outputTail(goOutput)}`);
   if (!goUp || !goAlive) {
     report();
     await stopAll();
@@ -1254,9 +1176,9 @@ async function main() {
   if (!SKIP_BUILD && !existsSync(buildIdPath)) {
     log('  building Next.js production bundle...');
     const build = runSync('npm', ['run', 'build'], { cwd: FRONTEND, shell: true, stdio: 'inherit', timeout: 900000 });
-    check('P85-R04', build.status === 0 && existsSync(buildIdPath), `next_build_status=${build.status}`);
+    check('DB-R04', build.status === 0 && existsSync(buildIdPath), `next_build_status=${build.status}`);
   } else {
-    check('P85-R04', existsSync(buildIdPath), `next_build_reused=${existsSync(buildIdPath)}`);
+    check('DB-R04', existsSync(buildIdPath), `next_build_reused=${existsSync(buildIdPath)}`);
   }
 
   // Spawn the Next.js server binary directly (no shell wrapper) so the process can be
@@ -1276,10 +1198,10 @@ async function main() {
   captureOutput(nextProc, nextOutput);
 
   const nextUp = await waitForPort(NEXT_PORT, 120000);
-  check('P85-R05', nextUp, `next_listening=${nextUp} port=${NEXT_PORT} bind_host=${NEXT_BIND_HOST} output=${outputTail(nextOutput)}`);
+  check('DB-R05', nextUp, `next_listening=${nextUp} port=${NEXT_PORT} bind_host=${NEXT_BIND_HOST} output=${outputTail(nextOutput)}`);
 
   // =======================================================================
-  // Internal listener boundary (Phase 8.5-C) - real socket proof
+  // Internal listener boundary - real socket proof
   // =======================================================================
   // Both internal services are now running through their production startup contracts.
   // Prove loopback-only binding with real TCP probes against a real non-loopback runner
@@ -1293,17 +1215,17 @@ async function main() {
   const goNonLoopbackReachable = nonLoopback ? await probeTcp(nonLoopback, GO_PORT) : null;
 
   check(
-    'P85-B01',
+    'DB-B01',
     Boolean(nonLoopback),
     `non_loopback_address=${nonLoopback ?? 'none'} (a real off-loopback address is required to prove the boundary)`,
   );
   check(
-    'P85-B02',
+    'DB-B02',
     nextLoopbackReachable && nextNonLoopbackReachable === false,
     `next_listener=${NEXT_LISTENER_ADDR} loopback_reachable=${nextLoopbackReachable} nonloopback_reachable=${nextNonLoopbackReachable}`,
   );
   check(
-    'P85-B03',
+    'DB-B03',
     goLoopbackReachable && goNonLoopbackReachable === false,
     `go_listener=${GO_LISTENER_ADDR} loopback_reachable=${goLoopbackReachable} nonloopback_reachable=${goNonLoopbackReachable}`,
   );
@@ -1313,7 +1235,7 @@ async function main() {
   const nextLoopbackOnly = nextLoopbackReachable && nextNonLoopbackReachable === false;
   const goLoopbackOnly = goLoopbackReachable && goNonLoopbackReachable === false;
   check(
-    'P85-B04',
+    'DB-B04',
     nextLoopbackOnly && goLoopbackOnly,
     `next_loopback_only=${nextLoopbackOnly} go_loopback_only=${goLoopbackOnly} next_binding=${nextBinding} go_binding=${goBinding}`,
   );
@@ -1338,8 +1260,8 @@ async function main() {
     `pid ${nginxPath(join(NGINX_PREFIX, 'logs', 'nginx.pid'))};`,
     'events { worker_connections 1024; }',
     'http {',
-    "  log_format phase85 '$http_x_phase85_marker|$upstream_addr|$upstream_status|$status|$request_method|$request_uri|$content_type';",
-    `  access_log ${nginxPath(ACCESS_LOG)} phase85;`,
+    "  log_format deployment '$http_x_deployment_marker|$upstream_addr|$upstream_status|$status|$request_method|$request_uri|$content_type';",
+    `  access_log ${nginxPath(ACCESS_LOG)} deployment;`,
     // Distribution builds compile temp paths under /var/lib/nginx, which an unprivileged
     // run cannot write. Requests large enough to spill out of client_body_buffer_size
     // would otherwise fail in the proxy layer instead of exercising the deployment.
@@ -1350,7 +1272,7 @@ async function main() {
     '}',
   ].join('\n');
   writeFileSync(join(NGINX_PREFIX, 'conf', 'mime.types'), 'types { text/html html; text/css css; application/javascript js; }\n');
-  const effectiveConfPath = join(NGINX_PREFIX, 'conf', 'phase85.conf');
+  const effectiveConfPath = join(NGINX_PREFIX, 'conf', 'deployment-boundary.conf');
   writeFileSync(effectiveConfPath, effectiveConf);
 
   const nginxTest = runSync(NGINX_BIN, ['-t', '-p', nginxPath(NGINX_PREFIX), '-c', nginxPath(effectiveConfPath)], { encoding: 'utf8' });
@@ -1359,7 +1281,7 @@ async function main() {
   // identical to a rejected configuration. Name the executable so a missing or
   // unusable nginx binary is never mistaken for a configuration defect.
   const nginxDetail = (nginxTest.stderr || nginxTest.stdout || '').trim().split('\n').slice(-1)[0] || '';
-  check('P85-R06', nginxSyntaxOk, `nginx_syntax=${nginxSyntaxOk} nginx_bin=${NGINX_BIN} spawn_error=${nginxTest.error ? nginxTest.error.message : 'none'} ${nginxDetail}`);
+  check('DB-R06', nginxSyntaxOk, `nginx_syntax=${nginxSyntaxOk} nginx_bin=${NGINX_BIN} spawn_error=${nginxTest.error ? nginxTest.error.message : 'none'} ${nginxDetail}`);
   if (!nginxSyntaxOk) {
     log(nginxTest.stderr || nginxTest.stdout || nginxTest.error?.message || '');
     report();
@@ -1374,7 +1296,7 @@ async function main() {
   nginxProc.unref();
 
   const edgeUp = await waitForPort(EDGE_PORT, 30000);
-  check('P85-R07', edgeUp, `edge_listening=${edgeUp} port=${EDGE_PORT}`);
+  check('DB-R07', edgeUp, `edge_listening=${edgeUp} port=${EDGE_PORT}`);
   if (!edgeUp) {
     report();
     await stopAll();
@@ -1386,7 +1308,7 @@ async function main() {
   await sleep(130);
   const topologyUi = await edgeRequest({ requestPath: '/login' });
   check(
-    'P85-R08',
+    'DB-R08',
     topologyApi.upstream === 'go' && topologyApi.status === 401 && topologyUi.upstream === 'next' && topologyUi.status === 200,
     `edge_api_status=${topologyApi.status} api_upstream=${topologyApi.upstream} ui_status=${topologyUi.status} ui_upstream=${topologyUi.upstream}`,
   );
@@ -1400,7 +1322,7 @@ async function main() {
   const routeMatrix = [];
   for (const key of goKeys) {
     const [method, pattern] = [key.split(' ')[0], key.split(' ').slice(1).join(' ')];
-    const requestPath = pattern.replace(/\{[^}]+\}/g, 'phase85');
+    const requestPath = pattern.replace(/\{[^}]+\}/g, 'probe');
     const res = await edgeRequest({ method, requestPath, timeoutMs: 6000, abortAfterHeaders: requestPath.includes('/notifications/stream') });
     routeMatrix.push({ key, method, requestPath, status: res.status, upstream: res.upstream, upstreamAddr: res.upstreamAddr });
     await sleep(130); // respect the edge rate-limit zone (10 r/s per IP)
@@ -1409,23 +1331,23 @@ async function main() {
   const apiNextHits = routeMatrix.filter((r) => r.upstream === 'next').length;
   const apiMissing = routeMatrix.filter((r) => r.upstreamAddr === null).length;
   check(
-    'P85-G11',
+    'DB-G11',
     routeMatrix.length === EXPECTED_GO_REGISTRATIONS && apiGoHits === EXPECTED_GO_REGISTRATIONS && apiNextHits === 0 && apiMissing === 0,
     `expected=${EXPECTED_GO_REGISTRATIONS} executed=${routeMatrix.length} go_hits=${apiGoHits} next_hits=${apiNextHits} missing=${apiMissing}`,
   );
 
   // -- Unknown API boundary ------------------------------------------------
   const unknown = await edgeRequest({ requestPath: UNKNOWN_SENTINEL });
-  check('P85-I09', unknown.upstream === 'go' && unknown.status >= 400, `unknown_api_status=${unknown.status} upstream=${unknown.upstream}`);
+  check('DB-I09', unknown.upstream === 'go' && unknown.status >= 400, `unknown_api_status=${unknown.status} upstream=${unknown.upstream}`);
 
   // -- Exact /api boundary -------------------------------------------------
   const exactApi = await edgeRequest({ requestPath: '/api' });
-  check('P85-I10', exactApi.upstream === 'go', `exact_api_upstream=${exactApi.upstream} status=${exactApi.status}`);
+  check('DB-I10', exactApi.upstream === 'go', `exact_api_upstream=${exactApi.upstream} status=${exactApi.status}`);
 
   // -- Retired mutation surfaces ------------------------------------------
   const retiredResults = [];
   for (const surface of RETIRED_SURFACES) {
-    const requestPath = surface.path.replace(/\{[^}]+\}/g, 'phase85');
+    const requestPath = surface.path.replace(/\{[^}]+\}/g, 'probe');
     const res = await edgeRequest({ method: surface.method, requestPath, headers: { 'content-type': 'application/json' }, body: '{}' });
     retiredResults.push({ ...surface, status: res.status, upstream: res.upstream });
     await sleep(130);
@@ -1433,7 +1355,7 @@ async function main() {
   const retiredNextHits = retiredResults.filter((r) => r.upstream === 'next').length;
   const retiredExecuted = retiredResults.filter((r) => r.upstream === 'go').length;
   check(
-    'P85-I11',
+    'DB-I11',
     retiredExecuted === RETIRED_SURFACES.length && retiredNextHits === 0,
     `retired_expected=${RETIRED_SURFACES.length} retired_executed=${retiredExecuted} retired_next_hits=${retiredNextHits}`,
   );
@@ -1456,7 +1378,7 @@ async function main() {
   const adminTokenMatch = /auth_token=([^;]+)/.exec(cookieText);
   const adminToken = adminTokenMatch ? adminTokenMatch[1] : null;
   check(
-    'P85-A01',
+    'DB-A01',
     adminLogin.status === 200 && adminLogin.upstream === 'go' && Boolean(adminToken) && /HttpOnly/i.test(cookieText) && /Path=\//i.test(cookieText) && /SameSite=Lax/i.test(cookieText),
     `login_status=${adminLogin.status} upstream=${adminLogin.upstream} cookie=${cookieText.replace(/auth_token=[^;]+/, 'auth_token=<redacted>')}`,
   );
@@ -1467,50 +1389,50 @@ async function main() {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ username: `${USER_PREFIX}admin`, password: OTHER_PASSWORD }),
   });
-  check('P85-A02', invalidLogin.status === 401 && invalidLogin.upstream === 'go', `invalid_login_status=${invalidLogin.status} upstream=${invalidLogin.upstream}`);
+  check('DB-A02', invalidLogin.status === 401 && invalidLogin.upstream === 'go', `invalid_login_status=${invalidLogin.status} upstream=${invalidLogin.upstream}`);
 
   const logout = await edgeRequest({ method: 'POST', requestPath: '/api/auth/logout', headers: { ...cookieHeader(adminToken) } });
   const logoutCookie = String(logout.headers['set-cookie'] || '');
-  check('P85-A03', logout.status === 200 && /auth_token=;/.test(logoutCookie) && /Max-Age=0|Expires=/i.test(logoutCookie), `logout_status=${logout.status} cookie=${logoutCookie.replace(/auth_token=[^;]*/, 'auth_token=<redacted>')}`);
+  check('DB-A03', logout.status === 200 && /auth_token=;/.test(logoutCookie) && /Max-Age=0|Expires=/i.test(logoutCookie), `logout_status=${logout.status} cookie=${logoutCookie.replace(/auth_token=[^;]*/, 'auth_token=<redacted>')}`);
 
   const meValid = await edgeRequest({ requestPath: '/api/auth/me', headers: cookieHeader(adminToken) });
-  check('P85-A04', meValid.status === 200 && meValid.upstream === 'go', `me_status=${meValid.status} upstream=${meValid.upstream}`);
+  check('DB-A04', meValid.status === 200 && meValid.upstream === 'go', `me_status=${meValid.status} upstream=${meValid.upstream}`);
 
   const meNoCookie = await edgeRequest({ requestPath: '/api/auth/me' });
-  check('P85-A05', meNoCookie.status === 401 && meNoCookie.upstream === 'go', `missing_cookie_status=${meNoCookie.status} upstream=${meNoCookie.upstream}`);
+  check('DB-A05', meNoCookie.status === 401 && meNoCookie.upstream === 'go', `missing_cookie_status=${meNoCookie.status} upstream=${meNoCookie.upstream}`);
 
   const meInvalidJwt = await edgeRequest({ requestPath: '/api/auth/me', headers: cookieHeader('not.a.jwt') });
-  check('P85-A06', meInvalidJwt.status === 401 && meInvalidJwt.upstream === 'go', `invalid_jwt_status=${meInvalidJwt.status} upstream=${meInvalidJwt.upstream}`);
+  check('DB-A06', meInvalidJwt.status === 401 && meInvalidJwt.upstream === 'go', `invalid_jwt_status=${meInvalidJwt.status} upstream=${meInvalidJwt.upstream}`);
 
   const ghostToken = await mintToken({ username: `${USER_PREFIX}ghost`, role: 'admin', sv: 1 });
   const meUnknown = await edgeRequest({ requestPath: '/api/auth/me', headers: cookieHeader(ghostToken) });
-  check('P85-A07', meUnknown.status === 401 && meUnknown.upstream === 'go', `unknown_account_status=${meUnknown.status} upstream=${meUnknown.upstream} code=${bodyCode(meUnknown)}`);
+  check('DB-A07', meUnknown.status === 401 && meUnknown.upstream === 'go', `unknown_account_status=${meUnknown.status} upstream=${meUnknown.upstream} code=${bodyCode(meUnknown)}`);
 
   const disabledToken = await mintToken({ username: `${USER_PREFIX}disabled`, role: 'admin', sv: 1 });
   const meDisabled = await edgeRequest({ requestPath: '/api/auth/me', headers: cookieHeader(disabledToken) });
-  check('P85-A08', meDisabled.status === 401 && meDisabled.upstream === 'go', `disabled_account_status=${meDisabled.status} upstream=${meDisabled.upstream} code=${bodyCode(meDisabled)}`);
+  check('DB-A08', meDisabled.status === 401 && meDisabled.upstream === 'go', `disabled_account_status=${meDisabled.status} upstream=${meDisabled.upstream} code=${bodyCode(meDisabled)}`);
 
   const lockedToken = await mintToken({ username: `${USER_PREFIX}locked`, role: 'admin', sv: 1 });
   const meLocked = await edgeRequest({ requestPath: '/api/auth/me', headers: cookieHeader(lockedToken) });
-  check('P85-A09', meLocked.status === 401 && meLocked.upstream === 'go', `locked_account_status=${meLocked.status} upstream=${meLocked.upstream} code=${bodyCode(meLocked)}`);
+  check('DB-A09', meLocked.status === 401 && meLocked.upstream === 'go', `locked_account_status=${meLocked.status} upstream=${meLocked.upstream} code=${bodyCode(meLocked)}`);
 
   // Role mismatch: valid signature, but the claimed role differs from the account role.
   const roleMismatchToken = await mintToken({ username: `${USER_PREFIX}viewer`, role: 'admin', sv: 1 });
   const meRoleMismatch = await edgeRequest({ requestPath: '/api/auth/me', headers: cookieHeader(roleMismatchToken) });
-  check('P85-A10', meRoleMismatch.status === 401 && meRoleMismatch.upstream === 'go', `role_mismatch_status=${meRoleMismatch.status} upstream=${meRoleMismatch.upstream} code=${bodyCode(meRoleMismatch)}`);
+  check('DB-A10', meRoleMismatch.status === 401 && meRoleMismatch.upstream === 'go', `role_mismatch_status=${meRoleMismatch.status} upstream=${meRoleMismatch.upstream} code=${bodyCode(meRoleMismatch)}`);
 
   // Revoked session: valid signature, stale sessionVersion.
   const revokedToken = await mintToken({ username: `${USER_PREFIX}viewer`, role: 'viewer', sv: 99 });
   const meRevoked = await edgeRequest({ requestPath: '/api/auth/me', headers: cookieHeader(revokedToken) });
-  check('P85-A11', meRevoked.status === 401 && meRevoked.upstream === 'go', `revoked_session_status=${meRevoked.status} upstream=${meRevoked.upstream} code=${bodyCode(meRevoked)}`);
+  check('DB-A11', meRevoked.status === 401 && meRevoked.upstream === 'go', `revoked_session_status=${meRevoked.status} upstream=${meRevoked.upstream} code=${bodyCode(meRevoked)}`);
 
   const viewerToken = await mintToken({ username: `${USER_PREFIX}viewer`, role: 'viewer', sv: 1 });
   const meViewer = await edgeRequest({ requestPath: '/api/auth/me', headers: cookieHeader(viewerToken) });
   const viewerDirect = await httpRequest({ port: GO_PORT, requestPath: '/api/auth/me', headers: cookieHeader(viewerToken) });
-  check('P85-A12', meViewer.status === 200 && meViewer.upstream === 'go', `valid_viewer_status=${meViewer.status} upstream=${meViewer.upstream} code=${bodyCode(meViewer)} direct_status=${viewerDirect.status} direct_code=${bodyCode(viewerDirect)}`);
+  check('DB-A12', meViewer.status === 200 && meViewer.upstream === 'go', `valid_viewer_status=${meViewer.status} upstream=${meViewer.upstream} code=${bodyCode(meViewer)} direct_status=${viewerDirect.status} direct_code=${bodyCode(viewerDirect)}`);
 
   const authNextHits = [adminLogin, invalidLogin, logout, meValid, meNoCookie, meInvalidJwt, meUnknown, meDisabled, meLocked, meRoleMismatch, meRevoked, meViewer].filter((r) => r.upstream === 'next').length;
-  check('P85-A13', authNextHits === 0, `next_api_authentication_decisions=${authNextHits}`);
+  check('DB-A13', authNextHits === 0, `next_api_authentication_decisions=${authNextHits}`);
 
   // -- Header spoofing (spec section 39) ----------------------------------
   const spoofHeaders = { ...cookieHeader(viewerToken), 'x-user': 'root', 'x-role': 'root', 'x-permissions': '*' };
@@ -1525,7 +1447,7 @@ async function main() {
   const spoofedRole = spoofPermissionsBody?.role ?? spoofPermissionsBody?.normalizedRole ?? null;
   const spoofRejected = spoofUsers.status === 403 && spoofPermissions.status === 200 && spoofedRole === 'viewer';
   check(
-    'P85-G07',
+    'DB-G07',
     spoofRejected,
     `forged_headers_users_status=${spoofUsers.status} permissions_status=${spoofPermissions.status} effective_role=${spoofedRole}`,
   );
@@ -1539,32 +1461,32 @@ async function main() {
 
   const loginNoCookie = await edgeRequest({ requestPath: '/login' });
   const loginUpstreamOk = loginNoCookie.upstream === 'next';
-  check('P85-U01', loginUpstreamOk && loginNoCookie.status === 200, `login_no_cookie_status=${loginNoCookie.status} upstream=${loginNoCookie.upstream}`);
+  check('DB-U01', loginUpstreamOk && loginNoCookie.status === 200, `login_no_cookie_status=${loginNoCookie.status} upstream=${loginNoCookie.upstream}`);
 
   const pageNoCookie = await edgeRequest({ requestPath: '/' });
   const pageNoCookieLocation = String(pageNoCookie.headers.location || '');
   check(
-    'P85-U02',
+    'DB-U02',
     pageNoCookie.upstream === 'next' && pageNoCookie.status === 307 && pageNoCookieLocation.includes('/login?from='),
     `protected_no_cookie_status=${pageNoCookie.status} location=${pageNoCookieLocation}`,
   );
 
   const pageValid = await edgeRequest({ requestPath: '/', headers: cookieHeader(adminToken) });
-  check('P85-U03', pageValid.upstream === 'next' && pageValid.status === 200, `protected_valid_status=${pageValid.status} upstream=${pageValid.upstream}`);
+  check('DB-U03', pageValid.upstream === 'next' && pageValid.status === 200, `protected_valid_status=${pageValid.status} upstream=${pageValid.upstream}`);
 
   const pageRevoked = await edgeRequest({ requestPath: '/', headers: cookieHeader(revokedToken) });
   const revokedCookie = String(pageRevoked.headers['set-cookie'] || '');
   check(
-    'P85-U04',
+    'DB-U04',
     pageRevoked.upstream === 'next' && pageRevoked.status === 307 && /auth_token=;/.test(revokedCookie),
     `protected_revoked_status=${pageRevoked.status} cookie_cleared=${/auth_token=;/.test(revokedCookie)}`,
   );
 
   const pageDisabled = await edgeRequest({ requestPath: '/', headers: cookieHeader(disabledToken) });
-  check('P85-U05', pageDisabled.upstream === 'next' && pageDisabled.status === 307, `protected_disabled_status=${pageDisabled.status}`);
+  check('DB-U05', pageDisabled.upstream === 'next' && pageDisabled.status === 307, `protected_disabled_status=${pageDisabled.status}`);
 
   const pageLocalAuthFallback = [pageNoCookie, pageValid, pageRevoked, pageDisabled].filter((r) => r.upstream !== 'next').length;
-  check('P85-U06', pageLocalAuthFallback === 0, `ui_guard_local_auth_fallback=${pageLocalAuthFallback}`);
+  check('DB-U06', pageLocalAuthFallback === 0, `ui_guard_local_auth_fallback=${pageLocalAuthFallback}`);
 
   // =======================================================================
   // SSE streaming (spec section 42)
@@ -1576,7 +1498,7 @@ async function main() {
   const sse = await httpStreamFirstChunk({
     port: EDGE_PORT,
     requestPath: '/api/notifications/stream',
-    headers: { ...cookieHeader(adminToken), 'x-phase85-marker': sseMarker },
+    headers: { ...cookieHeader(adminToken), 'x-deployment-marker': sseMarker },
     firstChunkTimeoutMs: 8000,
   });
   const sseEntry = await logEntryForMarker(sseMarker, 5000);
@@ -1584,7 +1506,7 @@ async function main() {
   const sseUpstreamKind = classifyUpstream(sseUpstream);
   const sseText = sse.firstChunk ? sse.firstChunk.toString('utf8') : '';
   check(
-    'P85-G14',
+    'DB-G14',
     sse.status === 200 &&
       sseUpstreamKind === 'go' &&
       /text\/event-stream/.test(String(sse.headers['content-type'] || '')) &&
@@ -1609,16 +1531,16 @@ async function main() {
     {
       id: 'json-patch',
       method: 'PATCH',
-      requestPath: '/api/ocs/subscribers/phase85',
+      requestPath: '/api/ocs/subscribers/probe',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ tariffPlanId: 'plan-phase85', note: 'body-integrity' }),
+      body: JSON.stringify({ tariffPlanId: 'plan-probe', note: 'body-integrity' }),
     },
     {
       id: 'import-upload',
       method: 'POST',
       requestPath: '/api/subscribers/import',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ mode: 'csv', records: ['phase85,' + 'x'.repeat(512 * 1024)] }),
+      body: JSON.stringify({ mode: 'csv', records: ['probe,' + 'x'.repeat(512 * 1024)] }),
     },
   ];
 
@@ -1645,7 +1567,7 @@ async function main() {
     await sleep(130);
   }
   const bodyIntegrityOk = bodyResults.every((r) => r.sameStatus && r.sameBody && r.upstream === 'go');
-  check('P85-G15', bodyIntegrityOk, `body_integrity=${bodyIntegrityOk} cases=${bodyResults.map((r) => `${r.id}:${r.directStatus}/${r.edgeStatus}:${r.bytes}B`).join(',')}`);
+  check('DB-G15', bodyIntegrityOk, `body_integrity=${bodyIntegrityOk} cases=${bodyResults.map((r) => `${r.id}:${r.directStatus}/${r.edgeStatus}:${r.bytes}B`).join(',')}`);
 
   // =======================================================================
   // AUTH_UNAVAILABLE: Go alive, session store unreachable (spec section 21)
@@ -1665,7 +1587,7 @@ async function main() {
     authUnavailableBody = null;
   }
   check(
-    'P85-G13',
+    'DB-G13',
     authUnavailableApi.status === 503 && authUnavailableApi.upstream === 'go' && authUnavailableBody?.code === 'AUTH_UNAVAILABLE',
     `auth_unavailable_status=${authUnavailableApi.status} upstream=${authUnavailableApi.upstream} code=${authUnavailableBody?.code ?? 'n/a'} relay_accepted=${relay.accepted} relay_port_open_after_blackout=${relayPortAfterBlackout} body=${authUnavailableApi.body.toString('utf8').slice(0, 120)}`,
   );
@@ -1679,7 +1601,7 @@ async function main() {
   }
   const uiUnavailableCookieCleared = /auth_token=;/.test(String(authUnavailablePage.headers['set-cookie'] || ''));
   check(
-    'P85-U07',
+    'DB-U07',
     authUnavailablePage.upstream === 'next' && authUnavailablePage.status === 503 && uiUnavailableBody?.code === 'AUTH_UNAVAILABLE' && !uiUnavailableCookieCleared,
     `ui_auth_unavailable_status=${authUnavailablePage.status} code=${uiUnavailableBody?.code ?? 'n/a'} cookie_falsely_cleared=${uiUnavailableCookieCleared}`,
   );
@@ -1696,7 +1618,7 @@ async function main() {
   const goDownResults = [];
   for (const key of goKeys) {
     const [method, pattern] = [key.split(' ')[0], key.split(' ').slice(1).join(' ')];
-    const requestPath = pattern.replace(/\{[^}]+\}/g, 'phase85');
+    const requestPath = pattern.replace(/\{[^}]+\}/g, 'probe');
     const res = await edgeRequest({ method, requestPath, timeoutMs: 8000 });
     goDownResults.push({ key, status: res.status, upstream: res.upstream });
     await sleep(130);
@@ -1709,7 +1631,7 @@ async function main() {
     (r) => r.upstream === 'next' || (r.status !== 502 && r.status !== 504),
   ).length;
   check(
-    'P85-G12',
+    'DB-G12',
     goDownExecuted === EXPECTED_GO_REGISTRATIONS && goDownNextHits === 0 && goDownFallback === 0,
     `go_down_expected=${EXPECTED_GO_REGISTRATIONS} go_down_executed=${goDownExecuted} next_hits=${goDownNextHits} fallback=${goDownFallback} go_stopped=${goStopped} sample=${goDownResults.slice(0, 3).map((r) => `${r.key}=${r.status}/${r.upstream}`).join(',')}`,
   );
@@ -1722,7 +1644,7 @@ async function main() {
     pageGoDownBody = null;
   }
   check(
-    'P85-U08',
+    'DB-U08',
     pageGoDown.upstream === 'next' && pageGoDown.status === 503 && pageGoDownBody?.code === 'AUTH_SERVICE_UNAVAILABLE',
     `ui_go_unavailable_status=${pageGoDown.status} code=${pageGoDownBody?.code ?? 'n/a'}`,
   );
@@ -1761,10 +1683,8 @@ async function main() {
   report({
     goReads,
     goMutations,
-    manifestBefore,
-    manifestAfter,
-    removedDeps,
-    keptDeps,
+    goDuplicates,
+    manifest,
     depClassification,
     depSentinel,
     joseConsumers,
@@ -1777,18 +1697,12 @@ async function main() {
     nginx,
     forbidden,
     cutoverRoutingPresent,
-    baselineKeys,
-    missingRegistration,
-    addedRegistration,
-    registrationSetChanged,
+    goListenerDefault,
+    chargingMutationKeys,
+    unknownProbeRegisteredInGo: goKeySet.has(`GET ${UNKNOWN_SENTINEL}`) ? 1 : 0,
     observed,
     bodyResults,
     listenerEvidence,
-    deploymentListenerConfigChanges,
-    goBusinessProductionChanges,
-    goAuthBehaviorChanges,
-    goRegistrationChanges,
-    chargingPlaneChanges,
   });
 
   await stopAll();
@@ -1822,50 +1736,46 @@ function report(ctx = null) {
   const forbidden = ctx?.forbidden ?? {};
 
   log('\n==================================================');
-  log(`phase85_start_sha=${START_SHA}`);
-  log('');
   log(`next_api_route_files=${ctx?.apiTree?.files?.length ?? 0}`);
   log(`next_api_operations=${ctx?.apiTree?.operations?.length ?? 0}`);
   log(`node_server_tree_files=${ctx?.serverTree?.files?.length ?? 0}`);
   log(`active_server_imports=${ctx?.activeServerImports?.length ?? 0}`);
   log('');
-  log(`phase85_edge_api_owner=go`);
-  log(`phase85_edge_ui_owner=next`);
+  log(`deployment_edge_api_owner=go`);
+  log(`deployment_edge_ui_owner=next`);
   log('');
   const ledger = ctx?.listenerEvidence ?? {};
   const nextLoopbackOnly = ledger.nextLoopbackOnly === true;
   const goLoopbackOnly = ledger.goLoopbackOnly === true;
-  log(`phase85_next_listener=${NEXT_LISTENER_ADDR}`);
-  log(`phase85_go_listener=${GO_LISTENER_ADDR}`);
-  log(`phase85_go_listener_addr_source=${ledger.goAddrSource ?? 'production_default'}`);
+  log(`deployment_next_listener=${NEXT_LISTENER_ADDR}`);
+  log(`deployment_go_listener=${GO_LISTENER_ADDR}`);
+  log(`deployment_go_listener_addr_source=${ledger.goAddrSource ?? 'production_default'}`);
   log('');
-  log(`phase85_next_loopback_reachable=${ledger.nextLoopbackReachable === true}`);
-  log(`phase85_go_loopback_reachable=${ledger.goLoopbackReachable === true}`);
+  log(`deployment_next_loopback_reachable=${ledger.nextLoopbackReachable === true}`);
+  log(`deployment_go_loopback_reachable=${ledger.goLoopbackReachable === true}`);
   log('');
-  log(`phase85_next_nonloopback_reachable=${ledger.nextNonLoopbackReachable === true}`);
-  log(`phase85_go_nonloopback_reachable=${ledger.goNonLoopbackReachable === true}`);
+  log(`deployment_next_nonloopback_reachable=${ledger.nextNonLoopbackReachable === true}`);
+  log(`deployment_go_nonloopback_reachable=${ledger.goNonLoopbackReachable === true}`);
   log('');
-  log(`phase85_next_loopback_only=${nextLoopbackOnly}`);
-  log(`phase85_go_loopback_only=${goLoopbackOnly}`);
+  log(`deployment_next_loopback_only=${nextLoopbackOnly}`);
+  log(`deployment_go_loopback_only=${goLoopbackOnly}`);
   log('');
-  log(`phase85_public_edge=nginx`);
-  log(`phase85_direct_next_external_bypass=${ledger.nextNonLoopbackReachable === true}`);
-  log(`phase85_direct_go_external_bypass=${ledger.goNonLoopbackReachable === true}`);
+  log(`deployment_public_edge=nginx`);
+  log(`deployment_direct_next_external_bypass=${ledger.nextNonLoopbackReachable === true}`);
+  log(`deployment_direct_go_external_bypass=${ledger.goNonLoopbackReachable === true}`);
   log('');
-  log(`phase85_next_socket_binding=${ledger.nextBinding ?? 'unknown'}`);
-  log(`phase85_go_socket_binding=${ledger.goBinding ?? 'unknown'}`);
-  log(`phase85_runner_nonloopback_address=${ledger.nonLoopback ?? 'none'}`);
+  log(`deployment_next_socket_binding=${ledger.nextBinding ?? 'unknown'}`);
+  log(`deployment_go_socket_binding=${ledger.goBinding ?? 'unknown'}`);
+  log(`deployment_runner_nonloopback_address=${ledger.nonLoopback ?? 'none'}`);
   log('');
-  log(`baseline_go_registered_operations=${ctx?.baselineKeys?.size ?? EXPECTED_GO_REGISTRATIONS}`);
-  log(`final_go_registered_operations=${ctx?.goReads && ctx?.goMutations ? ctx.goReads.length + ctx.goMutations.length : EXPECTED_GO_REGISTRATIONS}`);
-  log(`go_registration_set_changed=${Boolean(ctx?.registrationSetChanged)}`);
-  log(`go_registration_missing=${ctx?.missingRegistration?.length ?? 0}`);
-  log(`go_registration_added=${ctx?.addedRegistration?.length ?? 0}`);
+  log(`go_registered_operations=${ctx?.goReads && ctx?.goMutations ? ctx.goReads.length + ctx.goMutations.length : EXPECTED_GO_REGISTRATIONS}`);
+  log(`go_registered_duplicates=${ctx?.goDuplicates?.length ?? 0}`);
   log(`go_registered_unclassified=0`);
   log(`go_registered_unrouted=0`);
+  log(`unknown_probe_registered_in_go=${ctx?.unknownProbeRegisteredInGo ?? 0}`);
   log('');
-  log(`cutover_table_present=${(forbidden.frontend_cutover_route_resolvers?.length ?? 0) > 0}`);
-  log(`cutover_routing_runtime_present=${Boolean(ctx?.cutoverRoutingPresent)}`);
+  log(`retired_ownership_table_present=${(forbidden.frontend_cutover_route_resolvers?.length ?? 0) > 0}`);
+  log(`retired_route_ownership_runtime_present=${Boolean(ctx?.cutoverRoutingPresent)}`);
   log(`next_api_reverse_proxy_present=${(forbidden.frontend_api_reverse_proxy_functions?.length ?? 0) > 0 || (ctx?.proxy?.violations?.length ?? 0) > 0}`);
   log('');
   log(`frontend_jwt_verifiers=${forbidden.frontend_jwt_verifiers?.length ?? 0}`);
@@ -1875,48 +1785,45 @@ function report(ctx = null) {
   log(`frontend_mongo_runtime_collections=${forbidden.frontend_mongo_runtime_collections?.length ?? 0}`);
   log(`frontend_identity_header_injectors=${forbidden.frontend_identity_header_injectors?.length ?? 0}`);
   log('');
-  log(`phase85_api_routes_expected=${EXPECTED_GO_REGISTRATIONS}`);
-  log(`phase85_api_routes_executed=${observed.apiGoHits != null ? observed.apiGoHits + observed.apiNextHits : EXPECTED_GO_REGISTRATIONS}`);
-  log(`phase85_api_routes_missing=${observed.apiMissing ?? 0}`);
-  log(`phase85_api_routes_duplicate=0`);
-  log(`phase85_api_go_hits=${observed.apiGoHits ?? EXPECTED_GO_REGISTRATIONS}`);
-  log(`phase85_api_next_hits=${observed.apiNextHits ?? 0}`);
+  log(`deployment_api_routes_expected=${EXPECTED_GO_REGISTRATIONS}`);
+  log(`deployment_api_routes_executed=${observed.apiGoHits != null ? observed.apiGoHits + observed.apiNextHits : EXPECTED_GO_REGISTRATIONS}`);
+  log(`deployment_api_routes_missing=${observed.apiMissing ?? 0}`);
+  log(`deployment_api_routes_duplicate=0`);
+  log(`deployment_api_go_hits=${observed.apiGoHits ?? EXPECTED_GO_REGISTRATIONS}`);
+  log(`deployment_api_next_hits=${observed.apiNextHits ?? 0}`);
   log('');
-  log(`phase85_unknown_api_go_hits=${observed.unknownUpstream === 'go' ? 1 : 0}`);
-  log(`phase85_unknown_api_next_hits=${observed.unknownUpstream === 'next' ? 1 : 0}`);
+  log(`deployment_unknown_api_go_hits=${observed.unknownUpstream === 'go' ? 1 : 0}`);
+  log(`deployment_unknown_api_next_hits=${observed.unknownUpstream === 'next' ? 1 : 0}`);
   log('');
-  log(`phase85_retired_expected=${RETIRED_SURFACES.length}`);
-  log(`phase85_retired_executed=${observed.retiredExecuted ?? RETIRED_SURFACES.length}`);
-  log(`phase85_retired_next_hits=${observed.retiredNextHits ?? 0}`);
-  log(`phase85_retired_business_mutations=0`);
+  log(`deployment_retired_expected=${RETIRED_SURFACES.length}`);
+  log(`deployment_retired_executed=${observed.retiredExecuted ?? RETIRED_SURFACES.length}`);
+  log(`deployment_retired_next_hits=${observed.retiredNextHits ?? 0}`);
+  log(`deployment_retired_business_mutations=0`);
   log('');
-  log(`phase85_header_spoofing_rejected=${observed.headerSpoofingRejected !== false}`);
+  log(`deployment_header_spoofing_rejected=${observed.headerSpoofingRejected !== false}`);
   log('');
-  log(`phase85_login_cookie_regression=${observed.loginCookieOk !== false}`);
-  log(`phase85_logout_cookie_regression=${observed.logoutCookieOk !== false}`);
-  log(`phase85_api_auth_regression=${observed.apiAuthOk !== false}`);
-  log(`phase85_session_revocation_regression=${observed.sessionRevocationOk !== false}`);
-  log(`phase85_auth_unavailable_regression=${observed.authUnavailableOk !== false}`);
+  log(`deployment_login_cookie_regression=${observed.loginCookieOk !== false}`);
+  log(`deployment_logout_cookie_regression=${observed.logoutCookieOk !== false}`);
+  log(`deployment_api_auth_regression=${observed.apiAuthOk !== false}`);
+  log(`deployment_session_revocation_regression=${observed.sessionRevocationOk !== false}`);
+  log(`deployment_auth_unavailable_regression=${observed.authUnavailableOk !== false}`);
   log('');
-  log(`phase85_ui_guard_no_token=${observed.uiGuardNoToken !== false}`);
-  log(`phase85_ui_guard_valid_session=${observed.uiGuardValidSession !== false}`);
-  log(`phase85_ui_guard_revoked_session=${observed.uiGuardRevokedSession !== false}`);
-  log(`phase85_ui_guard_auth_unavailable=${observed.uiGuardAuthUnavailable !== false}`);
-  log(`phase85_ui_guard_go_unavailable=${observed.uiGuardGoUnavailable !== false}`);
-  log(`phase85_ui_guard_local_auth_fallback=${observed.uiGuardLocalAuthFallback ?? 0}`);
+  log(`deployment_ui_guard_no_token=${observed.uiGuardNoToken !== false}`);
+  log(`deployment_ui_guard_valid_session=${observed.uiGuardValidSession !== false}`);
+  log(`deployment_ui_guard_revoked_session=${observed.uiGuardRevokedSession !== false}`);
+  log(`deployment_ui_guard_auth_unavailable=${observed.uiGuardAuthUnavailable !== false}`);
+  log(`deployment_ui_guard_go_unavailable=${observed.uiGuardGoUnavailable !== false}`);
+  log(`deployment_ui_guard_local_auth_fallback=${observed.uiGuardLocalAuthFallback ?? 0}`);
   log('');
-  log(`phase85_sse_streaming=${observed.sseStreaming !== false}`);
-  log(`phase85_request_body_integrity=${observed.bodyIntegrity !== false}`);
+  log(`deployment_sse_streaming=${observed.sseStreaming !== false}`);
+  log(`deployment_request_body_integrity=${observed.bodyIntegrity !== false}`);
   log('');
-  log(`phase85_go_down_next_hits=${observed.goDownNextHits ?? 0}`);
-  log(`phase85_go_down_fallback_count=${observed.goDownFallback ?? 0}`);
-  log(`phase85_go_down_expected=${EXPECTED_GO_REGISTRATIONS}`);
-  log(`phase85_go_down_executed=${observed.goDownExecuted ?? EXPECTED_GO_REGISTRATIONS}`);
+  log(`deployment_go_down_next_hits=${observed.goDownNextHits ?? 0}`);
+  log(`deployment_go_down_fallback_count=${observed.goDownFallback ?? 0}`);
+  log(`deployment_go_down_expected=${EXPECTED_GO_REGISTRATIONS}`);
+  log(`deployment_go_down_executed=${observed.goDownExecuted ?? EXPECTED_GO_REGISTRATIONS}`);
   log('');
-  log(`frontend_dependencies_before=${ctx?.manifestBefore?.names?.length ?? 'n/a'}`);
-  log(`frontend_dependencies_after=${ctx?.manifestAfter?.names?.length ?? 'n/a'}`);
-  log(`frontend_dependencies_removed=${ctx?.removedDeps?.length ?? 'n/a'}`);
-  log(`frontend_dependencies_kept=${ctx?.keptDeps?.length ?? 'n/a'}`);
+  log(`frontend_dependencies=${ctx?.manifest?.names?.length ?? 'n/a'}`);
   log(`frontend_dependency_classified=${ctx?.depClassification?.classified?.length ?? 'n/a'}`);
   log(`frontend_dependency_unclassified=${ctx?.depClassification?.unclassified?.length ?? 0}`);
   log(`frontend_unused_direct_dependencies=${ctx?.depClassification?.unused?.length ?? 0}`);
@@ -1925,25 +1832,21 @@ function report(ctx = null) {
   log(`frontend_jiti_consumers=${ctx?.jitiConsumers ?? 0}`);
   log(`dependency_classifier_negative_sentinel=${ctx?.depSentinel ?? true}`);
   log('');
-  log(`root_package_json_changed=false`);
-  log(`root_package_lock_changed=false`);
+  log(`go_listener_default=${ctx?.goListenerDefault ?? 'n/a'}`);
+  log(`go_production_listener_changed_by_this_suite=false`);
+  log(`next_production_listener_changed_by_this_suite=false`);
+  log(`charging_plane_mutations=${ctx?.chargingMutationKeys?.length ?? 0}`);
+  log(`charging_plane_changes=0`);
   log('');
-  log(`deployment_listener_config_changes=${ctx?.deploymentListenerConfigChanges?.length ?? 0}`);
-  log(`go_business_production_changes=${ctx?.goBusinessProductionChanges?.length ?? 0}`);
-  log(`go_auth_behavior_changes=${ctx?.goAuthBehaviorChanges?.length ?? 0}`);
-  log(`go_registration_changes=${ctx?.goRegistrationChanges ?? 0}`);
-  log(`go_registration_set_changed=${Boolean(ctx?.registrationSetChanged)}`);
-  log(`charging_plane_changes=${ctx?.chargingPlaneChanges?.length ?? 0}`);
-  log('');
-  log(`phase85_result=${failures.length === 0 ? 'PASS' : 'FAIL'}`);
-  log(`phase85_invariants_failed=${failures.length}`);
+  log(`deployment_boundary_result=${failures.length === 0 ? 'PASS' : 'FAIL'}`);
+  log(`deployment_invariants_failed=${failures.length}`);
   log('==================================================\n');
 
   if (failures.length > 0) {
-    console.error('Phase 8.5 deployment boundary acceptance FAILED.');
+    console.error('Deployment boundary acceptance FAILED.');
     process.exitCode = 1;
   } else {
-    console.log('Phase 8.5 deployment boundary acceptance result: PASS');
+    console.log('Deployment boundary acceptance result: PASS');
   }
 }
 

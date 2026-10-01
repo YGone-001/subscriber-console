@@ -32,8 +32,8 @@ func (f *fakeNodeParityLimiter) EnforceNodeParity(w http.ResponseWriter, r *http
 	return f.allowed
 }
 
-// residualReq builds a request with an optional authenticated principal.
-func residualReq(method, path, username, role string, withPrincipal bool) *http.Request {
+// managementReq builds a request with an optional authenticated principal.
+func managementReq(method, path, username, role string, withPrincipal bool) *http.Request {
 	r := httptest.NewRequest(method, path, nil)
 	if !withPrincipal {
 		return r
@@ -46,14 +46,14 @@ func residualReq(method, path, username, role string, withPrincipal bool) *http.
 	return r.WithContext(auth.ContextWithPrincipal(r.Context(), p))
 }
 
-// TestResidualHandler_AssignPolicy_AdminConflict verifies the disabled contract
+// TestManagementHandler_AssignPolicy_AdminConflict verifies the disabled contract
 // for POST /api/subscribers/policy (OCS_PLAN_ASSIGN is DISABLED in the OCS
 // governance registry; rate limiting is unreachable behind the disabled gate).
-func TestResidualHandler_AssignPolicy_AdminConflict(t *testing.T) {
+func TestManagementHandler_AssignPolicy_AdminConflict(t *testing.T) {
 	limiter := &fakeNodeParityLimiter{allowed: true}
-	h := NewResidualHandler(limiter, nil)
+	h := NewManagementHandler(limiter, nil)
 
-	req := residualReq("POST", "/api/subscribers/policy", "admin", "admin", true)
+	req := managementReq("POST", "/api/subscribers/policy", "admin", "admin", true)
 	w := httptest.NewRecorder()
 
 	h.AssignPolicy(w, req)
@@ -73,12 +73,12 @@ func TestResidualHandler_AssignPolicy_AdminConflict(t *testing.T) {
 	}
 }
 
-// TestResidualHandler_AssignPolicy_ViewerDenied verifies the 403 permission
+// TestManagementHandler_AssignPolicy_ViewerDenied verifies the 403 permission
 // boundary for the plan-assign permission.
-func TestResidualHandler_AssignPolicy_ViewerDenied(t *testing.T) {
-	h := NewResidualHandler(nil, nil)
+func TestManagementHandler_AssignPolicy_ViewerDenied(t *testing.T) {
+	h := NewManagementHandler(nil, nil)
 
-	req := residualReq("POST", "/api/subscribers/policy", "viewer1", "viewer", true)
+	req := managementReq("POST", "/api/subscribers/policy", "viewer1", "viewer", true)
 	w := httptest.NewRecorder()
 
 	h.AssignPolicy(w, req)
@@ -95,11 +95,11 @@ func TestResidualHandler_AssignPolicy_ViewerDenied(t *testing.T) {
 	}
 }
 
-// TestResidualHandler_AssignPolicy_Unauthenticated verifies the 401 guard.
-func TestResidualHandler_AssignPolicy_Unauthenticated(t *testing.T) {
-	h := NewResidualHandler(nil, nil)
+// TestManagementHandler_AssignPolicy_Unauthenticated verifies the 401 guard.
+func TestManagementHandler_AssignPolicy_Unauthenticated(t *testing.T) {
+	h := NewManagementHandler(nil, nil)
 
-	req := residualReq("POST", "/api/subscribers/policy", "", "", false)
+	req := managementReq("POST", "/api/subscribers/policy", "", "", false)
 	w := httptest.NewRecorder()
 
 	h.AssignPolicy(w, req)
@@ -116,13 +116,13 @@ func TestResidualHandler_AssignPolicy_Unauthenticated(t *testing.T) {
 	}
 }
 
-// TestResidualHandler_TrafficAdjustments_AdminAllowed verifies the Node
+// TestManagementHandler_TrafficAdjustments_AdminAllowed verifies the Node
 // compatible allow response and the Node-parity rate limit identity.
-func TestResidualHandler_TrafficAdjustments_AdminAllowed(t *testing.T) {
+func TestManagementHandler_TrafficAdjustments_AdminAllowed(t *testing.T) {
 	limiter := &fakeNodeParityLimiter{allowed: true}
-	h := NewResidualHandler(limiter, nil)
+	h := NewManagementHandler(limiter, nil)
 
-	req := residualReq("POST", "/api/subscribers/417010000000001/traffic-adjustments", "admin", "admin", true)
+	req := managementReq("POST", "/api/subscribers/417010000000001/traffic-adjustments", "admin", "admin", true)
 	req.SetPathValue("imsi", "417010000000001")
 	w := httptest.NewRecorder()
 
@@ -152,13 +152,13 @@ func TestResidualHandler_TrafficAdjustments_AdminAllowed(t *testing.T) {
 	}
 }
 
-// TestResidualHandler_TrafficAdjustments_ViewerDenied verifies that the
+// TestManagementHandler_TrafficAdjustments_ViewerDenied verifies that the
 // permission boundary runs before the rate limiter.
-func TestResidualHandler_TrafficAdjustments_ViewerDenied(t *testing.T) {
+func TestManagementHandler_TrafficAdjustments_ViewerDenied(t *testing.T) {
 	limiter := &fakeNodeParityLimiter{allowed: true}
-	h := NewResidualHandler(limiter, nil)
+	h := NewManagementHandler(limiter, nil)
 
-	req := residualReq("POST", "/api/subscribers/417010000000001/traffic-adjustments", "viewer1", "viewer", true)
+	req := managementReq("POST", "/api/subscribers/417010000000001/traffic-adjustments", "viewer1", "viewer", true)
 	req.SetPathValue("imsi", "417010000000001")
 	w := httptest.NewRecorder()
 
@@ -179,12 +179,12 @@ func TestResidualHandler_TrafficAdjustments_ViewerDenied(t *testing.T) {
 	}
 }
 
-// TestResidualHandler_TrafficAdjustments_RateLimited verifies the 429 stop.
-func TestResidualHandler_TrafficAdjustments_RateLimited(t *testing.T) {
+// TestManagementHandler_TrafficAdjustments_RateLimited verifies the 429 stop.
+func TestManagementHandler_TrafficAdjustments_RateLimited(t *testing.T) {
 	limiter := &fakeNodeParityLimiter{allowed: false}
-	h := NewResidualHandler(limiter, nil)
+	h := NewManagementHandler(limiter, nil)
 
-	req := residualReq("POST", "/api/subscribers/417010000000001/traffic-adjustments", "admin", "admin", true)
+	req := managementReq("POST", "/api/subscribers/417010000000001/traffic-adjustments", "admin", "admin", true)
 	req.SetPathValue("imsi", "417010000000001")
 	w := httptest.NewRecorder()
 

@@ -388,7 +388,7 @@ func TestHandler_Adjust_DirectExecution_AuditFailure_503(t *testing.T) {
 
 	h.Adjust(w, req)
 
-	// Under Phase 5.7-C, operation log failure must NOT turn committed mutation into 503 AUDIT_UNAVAILABLE
+	// Operation log failure must NOT turn committed mutation into 503 AUDIT_UNAVAILABLE
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK, got %d, body: %s", w.Code, w.Body.String())
 	}

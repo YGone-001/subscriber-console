@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Phase 6.4 - Authentication & User Management UI Integration Acceptance Suite
+ * Authentication & User Management UI Integration Acceptance Suite
  *
  * Verifies:
  * 1. Login Status & Code Mapping (401, 429, 500, 502, 503, network)
@@ -69,7 +69,7 @@ async function verifyAsync(description, fn) {
   }
 }
 
-console.log('-- Phase 6.4 Auth & User Management UI Integration Acceptance Suite --\n');
+console.log('-- Auth & User Management UI Integration Acceptance Suite --\n');
 
 // ============================================================================
 // 1. Login Status & Code Mapping Matrix
@@ -831,9 +831,9 @@ for (const key of requiredKeys) {
 }
 
 // ============================================================================
-// 12. API Inventory & Routing Freeze
+// 12. API Inventory & Route Authority
 // ============================================================================
-console.log('\n[12] API Inventory & Routing Freeze (GoRegistered=84)');
+console.log('\n[12] API Inventory & Route Authority (GoRegistered=84)');
 
 const { keys: goRegistrations, duplicates: goRegistrationDuplicates } = deriveGoRegistrations();
 
@@ -898,6 +898,6 @@ verify('Retired non-canonical mutation surfaces are absent from Go registrations
 });
 
 console.log(`\n==================================================`);
-console.log(`Phase 6.4 Auth & User UI Integration Suite Completed`);
+console.log(`Auth & User UI Integration Suite Completed`);
 console.log(`Passed: ${passed} / ${totalChecks} checks`);
 console.log(`==================================================\n`);

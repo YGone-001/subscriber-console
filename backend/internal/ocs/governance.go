@@ -14,7 +14,7 @@ const (
 )
 
 // subscriberRegistry is the OCS subscriber contract governance registry.
-// Phase 5.7-A: All authorized operations execute directly.
+// All authorized operations execute directly.
 var subscriberRegistry = map[SubscriberOperation]governance.OperationDefinition{
 	OpContractCreate: {
 		Operation:         string(OpContractCreate),

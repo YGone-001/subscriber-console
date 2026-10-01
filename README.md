@@ -78,9 +78,8 @@ Charging Plane remains frozen and excluded.
 - lucide-react
 - ESLint 9
 
-The frontend is a UI-only runtime: it holds no JWT/MongoDB client (the former
-`jose` / `mongodb` / `bcryptjs` dependencies were removed at the Phase 8.5
-deployment boundary).
+The frontend is a UI-only runtime: it holds no JWT/MongoDB client and no
+`jose` / `mongodb` / `bcryptjs` dependency.
 
 ### Backend
 
@@ -188,7 +187,7 @@ More detail is available in [Deployment](docs/operations/deployment.md).
 | Document | Location |
 | --- | --- |
 | Architecture | `docs/architecture/` |
-| Backend Migration | `docs/backend-migration/` |
+| Backend Migration (historical evidence, not current architecture) | `docs/backend-migration/` |
 | API Reference | `docs/api/` |
 | Database | `docs/database/` |
 | Operations | `docs/operations/` |

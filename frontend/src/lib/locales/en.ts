@@ -1894,7 +1894,7 @@ export const en: Record<string, string> = {
     ocs_balance_active_accounts: "Active Accounts",
     ocs_balance_pending_adjustments: "Pending Adjustments",
     ocs_balance_adjust: "Adjust Balance",
-    ocs_balance_cutover_pending: "Balance write cutover pending; currently in read-only shadow mode",
+    ocs_balance_write_unavailable: "Balance write is currently unavailable",
     ocs_balance_modal_title: "Governed Balance Adjustment",
     ocs_balance_bucket: "Bucket",
     ocs_balance_bucket_data: "Data",
@@ -2249,7 +2249,7 @@ export const en: Record<string, string> = {
     theme_switch_light: "Light Mode",
     theme_switch_dark: "Dark Mode",
 
-    // -- Phase 5.5-A OCS Alignment & Polish --
+    // -- OCS alignment & polish --
     ocs_balance_detail_title: "Balance Account Detail",
     ocs_balance_detail_desc: "Inspect data, voice, and SMS buckets with authoritative governance audit metadata",
     ocs_balance_detail_buckets: "Quota Buckets",

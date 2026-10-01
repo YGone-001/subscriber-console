@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /**
- * Phase 5.5-A — OCS Management Final Alignment & Acceptance Suite
+ * OCS Management Acceptance Suite
  *
  * Consolidated acceptance suite covering the full OCS Management Plane:
  * 1. Tariff Plan Governance (CRUD, enable, disable, clone, operations, DIRECT/APPROVAL)
  * 2. Contract Subscriber Governance (Create, change-tariff, suspend, resume, terminate, DIRECT/APPROVAL)
  * 3. Balance Governance (Direct adjustment, approval adjustment, CAS conflict, reset disabled across 6 roles, detail read)
- * 4. System Invariants (ACTUALLY_ROUTED = 84, single-writer production ownership, charging plane boundary)
+ * 4. System Invariants (GoRegistered = 84, single-writer production ownership, charging plane boundary)
  */
 
 import assert from 'node:assert/strict';
@@ -38,7 +38,7 @@ const uri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/xcloud';
 
 process.env.MONGODB_XCLOUD_DB = xcloudDbName;
 process.env.MONGODB_APP_DB = appDbName;
-const JWT_SECRET_STRING = process.env.JWT_SECRET || 'phase5-5-a-suite-secret-at-least-32-bytes-long';
+const JWT_SECRET_STRING = process.env.JWT_SECRET || 'ocs-management-suite-secret-at-least-32-bytes';
 process.env.JWT_SECRET = JWT_SECRET_STRING;
 
 // Local JWT signing key (the frontend security helper no longer exposes one).
@@ -160,7 +160,7 @@ try {
   assert(goReady, 'Go backend server failed to become ready');
   process.env.GO_BACKEND_URL = `http://127.0.0.1:${goPort}`;
 
-  console.log(`\n── Phase 5.5-A OCS Management Acceptance Suite ──`);
+  console.log(`\n── OCS Management Acceptance Suite ──`);
   console.log(`Go Port: ${goPort}\n`);
 
   async function requestViaGo(urlPath, { method = 'GET', token, body } = {}) {
@@ -552,7 +552,7 @@ try {
   // ══════════════════════════════════════════════════════════════════
   // Section 4: System & Routing Invariants
   // ══════════════════════════════════════════════════════════════════
-  console.log('\n4. System Invariants & Production Cutover Integrity');
+  console.log('\n4. System Invariants & Production Ownership Integrity');
 
   // 4.1 Go registration surface (single source of truth) must be strictly 84 operations
   const { keys: goRegistrations, duplicates: duplicateRegistrations } = deriveGoRegistrations();

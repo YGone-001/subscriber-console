@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Phase 5.7-B — RBAC Simplification Acceptance Suite
+ * RBAC Simplification Acceptance Suite
  *
  * Verifies the Canonical Three-Role Model:
  * 1. Exactly 3 canonical roles: admin, operator, viewer
@@ -50,7 +50,7 @@ const {
   UserManagementError,
 } = jiti('../frontend/src/lib/userManagementPolicy.ts');
 
-console.log('── Phase 5.7-B RBAC Simplification Acceptance Suite ──\n');
+console.log('── RBAC Simplification Acceptance Suite ──\n');
 
 let totalAssertions = 0;
 function verify(description, fn) {

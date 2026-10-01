@@ -1893,7 +1893,7 @@ export const zh: Record<string, string> = {
     ocs_balance_active_accounts: "活跃账户",
     ocs_balance_pending_adjustments: "待审批调整",
     ocs_balance_adjust: "调整余额",
-    ocs_balance_cutover_pending: "余额写入割接尚未完成，当前处于只读模式",
+    ocs_balance_write_unavailable: "余额写入当前不可用",
     ocs_balance_modal_title: "受管余额调整",
     ocs_balance_bucket: "调整桶 (Bucket)",
     ocs_balance_bucket_data: "流量 (Data)",
@@ -2248,7 +2248,7 @@ export const zh: Record<string, string> = {
     theme_switch_light: "浅色模式",
     theme_switch_dark: "深色模式",
 
-    // -- Phase 5.5-A OCS Alignment & Polish --
+    // -- OCS alignment & polish --
     ocs_balance_detail_title: "余额账户详情",
     ocs_balance_detail_desc: "查看流量、语音和短信配额桶状态及权威治理审计信息",
     ocs_balance_detail_buckets: "配额桶状态",

@@ -1,36 +1,36 @@
 #!/usr/bin/env node
 /**
- * Backend Removal Readiness Verification (final architecture).
+ * API Ownership Invariants (production architecture).
  *
  * READ-ONLY with respect to production behavior. Pure source analysis: no network,
  * no MongoDB, no build step. It runs in the CI `node` job (which has no database
  * service) and must keep doing so.
  *
  * The script answers ONE question truthfully, purely from source:
- *   "has the Next.js business backend been PHYSICALLY REMOVED and is the Go backend
- *    now the single production owner of the API surface, routed at the Nginx edge?"
+ *   "is the Go API service the single production owner of the /api surface, routed at
+ *    the Nginx edge, with the Next.js runtime owning only the UI?"
  *
  * It therefore validates:
- *   - the Next.js App Router business API tree is gone (0 route files, 0 operations);
- *   - the Next.js business server tree is gone (frontend/src/server);
- *   - no surviving ACTIVE executable code imports the removed tree;
- *   - the surviving Next.js runtime owns no business MongoDB read/write data plane;
+ *   - the Next.js App Router business API tree is absent (0 route files, 0 operations);
+ *   - the Next.js business server tree is absent (frontend/src/server);
+ *   - no surviving ACTIVE executable code imports the absent tree;
+ *   - the Next.js runtime owns no business MongoDB read/write data plane;
  *   - the Go router registration site IS the authoritative production API surface
  *     (84 exact METHOD+PATH registrations, zero duplicates), never a migration artifact;
  *   - the six retired mutation methods are absent from that surface;
  *   - Nginx owns API routing at the edge: /api and /api/* -> Go, / -> Next.js, with
  *     client-supplied identity headers stripped on the API locations;
- *   - frontend/src/proxy.ts carries no JWT verification, no Mongo access, no cutover
+ *   - frontend/src/proxy.ts carries no JWT verification, no Mongo access, no route-owner
  *     lookup and no identity-header injection (it is a UI-only navigation guard);
- *   - frontend/package.json no longer declares jose / mongodb / jiti;
+ *   - frontend/package.json declares no backend runtime dependency;
  *   - frontend API callers map to Go-owned operations;
  *   - dependency consumers (mongodb / jose / bcryptjs) are all classified.
  *
  * The machine-readable block at the end is DERIVED from evidence. The only frozen
- * constant is the final canonical production API surface size (84), used to assert the
+ * constant is the canonical production API surface size (84), used to assert the
  * derived Go registration count.
  *
- * Usage: node scripts/test-phase-8-backend-removal-readiness.mjs
+ * Usage: node scripts/test-api-ownership-invariants.mjs
  */
 
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
@@ -39,7 +39,7 @@ import { fileURLToPath } from 'node:url';
 import { deriveGoRegistrations, classifyGoRegistrations } from './lib/go-registrations.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const selfPath = resolve(root, 'scripts/test-phase-8-backend-removal-readiness.mjs');
+const selfPath = resolve(root, 'scripts/test-api-ownership-invariants.mjs');
 const apiRoot = resolve(root, 'frontend/src/app/api');
 const serverRoot = resolve(root, 'frontend/src/server');
 const srcRoot = resolve(root, 'frontend/src');
@@ -549,9 +549,9 @@ const LEGACY_ALIAS_READS = new Set([
 // mapped to a retired surface and reported as a cleanup finding, never as unknown callers.
 const RETIRED_CALLER_TARGETS = ['/api/audit', '/api/approvals'];
 
-// Phase 8.2 frozen canonical residual cutover set (33 exact METHOD+PATH keys). Every one
-// of them must be present in the derived Go registration surface.
-const CANONICAL_RESIDUAL_KEYS = new Set([
+// Canonical production API surface (33 exact METHOD+PATH keys) carried by the Go
+// registration site; every one of them must be present after normalization.
+const CANONICAL_API_KEYS = new Set([
   'GET /api/analytics/metrics',
   'GET /api/analytics/sparkline',
   'GET /api/ocs/balances',
@@ -589,13 +589,13 @@ const CANONICAL_RESIDUAL_KEYS = new Set([
 
 // Synthetic sentinel: proves the derived surface is a genuine exact enumeration and not a
 // prefix/glob match. Never registered in production.
-const GO_SENTINEL_KEY = 'GET /api/__phase8_unclassified_sentinel__';
+const GO_SENTINEL_KEY = 'GET /api/__api_ownership_unclassified_sentinel__';
 
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 async function main() {
-  console.log('-- Backend Removal Readiness (final architecture: Go API + Nginx edge) --\n');
+  console.log('-- API Ownership Invariants (Go API + Nginx edge production architecture) --\n');
 
   const { keys: goKeys, duplicates: goDuplicates } = deriveGoRegistrations();
   const goKeySet = new Set(goKeys);
@@ -622,7 +622,7 @@ async function main() {
   const nextBusinessMongoReaders = mongoAccess.readers.length;
   const nextBusinessMongoWriters = mongoAccess.writers.length;
 
-  // ---- P8-I01 inventory complete ------------------------------------------
+  // ---- AO-01 inventory complete ------------------------------------------
   const generatedOps = [];
   if (Array.isArray(generated)) {
     for (const route of generated) {
@@ -633,78 +633,78 @@ async function main() {
   }
   const inventoryComplete =
     Array.isArray(generated) && generatedOps.length === sourceOps.length && apiFiles.every((f) => existsSync(f));
-  check('P8-I01', inventoryComplete, `inventory complete (generated=${generatedOps.length}, source-scan=${sourceOps.length})`);
+  check('AO-01', inventoryComplete, `inventory complete (generated=${generatedOps.length}, source-scan=${sourceOps.length})`);
 
   // The source scan is the authoritative inventory (derived from current source).
   const inventory = sourceOps;
   const inventoryKeys = new Set(inventory.map((o) => methodPathKey(o.method, o.canonicalPath)));
 
-  // ---- P8-I02 Next.js API surface is physically gone -----------------------
+  // ---- AO-02 Next.js API surface is physically gone -----------------------
   check(
-    'P8-I02',
+    'AO-02',
     nextApiRouteFiles === 0 && nextApiOperations === 0,
     `next_api_route_files=${nextApiRouteFiles} next_api_operations=${nextApiOperations} (removal completion)`,
   );
 
-  // ---- P8-I03 the Go registration surface is a unique exact enumeration ------
+  // ---- AO-03 the Go registration surface is a unique exact enumeration ------
   const goSurfaceUnique = goDuplicates.length === 0 && goKeySet.size === goKeys.length;
   check(
-    'P8-I03',
+    'AO-03',
     goSurfaceUnique && inventoryKeys.size === inventory.length,
     `go_unique=${goKeySet.size}/${goKeys.length} go_duplicates=${goDuplicates.length} inventory_unique=${inventoryKeys.size}/${inventory.length}`,
   );
 
-  // ---- P8-I04 derived production API surface == 84 (never a migration artifact) --
+  // ---- AO-04 derived production API surface == 84 (never a migration artifact) --
   check(
-    'P8-I04',
+    'AO-04',
     goRegisteredOperations === EXPECTED_GO_REGISTRATIONS,
     `production_api_registrations=${goRegisteredOperations} expected=${EXPECTED_GO_REGISTRATIONS} (derived from the Go registration site)`,
   );
 
-  // ---- P8-I05 the six retired mutation methods are absent -------------------
+  // ---- AO-05 the six retired mutation methods are absent -------------------
   const retiredRegistered = [...RETIRED_SURFACES].filter((k) => goKeySet.has(k) || inventoryKeys.has(k));
   check(
-    'P8-I05',
+    'AO-05',
     retiredRegistered.length === 0,
     `retired_mutations_expected=${RETIRED_SURFACES.size} retired_active=${retiredRegistered.length}`,
   );
 
-  // ---- P8-I06 Nginx routes the API surface to Go ----------------------------
+  // ---- AO-06 Nginx routes the API surface to Go ----------------------------
   check(
-    'P8-I06',
+    'AO-06',
     nginx.goUpstreamOk && nginx.apiToGo,
     `nginx_go_upstream=${nginx.goUpstreamOk} nginx_api_routes_to_go=${nginx.apiToGo} api_locations=[${nginx.apiLocations.join(', ')}]`,
   );
 
-  // ---- P8-I07 Nginx routes the UI to Next.js --------------------------------
+  // ---- AO-07 Nginx routes the UI to Next.js --------------------------------
   check(
-    'P8-I07',
+    'AO-07',
     nginx.nextUpstreamOk && nginx.uiToNext,
     `nginx_next_upstream=${nginx.nextUpstreamOk} nginx_ui_routes_to_next=${nginx.uiToNext}`,
   );
 
-  // ---- P8-I08 Nginx strips client identity headers on API locations ---------
+  // ---- AO-08 Nginx strips client identity headers on API locations ---------
   check(
-    'P8-I08',
+    'AO-08',
     nginx.identityHeadersStripped,
     `nginx_api_identity_headers_stripped=${nginx.identityHeadersStripped} (X-User / X-Role / X-Permissions)`,
   );
 
-  // ---- P8-I09 proxy.ts is a UI-only guard (no JWT / Mongo / cutover / forwarding) --
+  // ---- AO-09 proxy.ts is a UI-only guard (no JWT / Mongo / cutover / forwarding) --
   check(
-    'P8-I09',
+    'AO-09',
     proxy.violations.length === 0 && proxy.consultsGoAuth,
     `proxy_forbidden_tokens=${proxy.violations.length} proxy_consults_go_auth=${proxy.consultsGoAuth}`,
   );
 
-  // ---- P8-I10 frontend/package.json carries no backend runtime dependencies --
+  // ---- AO-10 frontend/package.json carries no backend runtime dependencies --
   check(
-    'P8-I10',
+    'AO-10',
     frontendPackage.present && frontendPackage.banned.length === 0,
     `frontend_package_present=${frontendPackage.present} banned_declared=${frontendPackage.banned.length} [${frontendPackage.banned.join(',')}]`,
   );
 
-  // ---- P8-I11 every frontend API caller maps to a Go-owned operation --------
+  // ---- AO-11 every frontend API caller maps to a Go-owned operation --------
   const knowable = [...inventory.map((o) => o.canonicalPath), ...goRegistrationPaths];
   const knownRegexes = knowable.map((p) => patternRegex(p));
   const retiredRegexes = RETIRED_CALLER_TARGETS.map((p) => patternRegex(p));
@@ -718,89 +718,89 @@ async function main() {
     }
     unmappedCallers.push(c);
   }
-  check('P8-I11', unmappedCallers.length === 0, `frontend_api_callers_unmapped=${unmappedCallers.length}`);
+  check('AO-11', unmappedCallers.length === 0, `frontend_api_callers_unmapped=${unmappedCallers.length}`);
 
-  // ---- P8-I12 no ACTIVE executable code references the removed tree ---------
+  // ---- AO-12 no ACTIVE executable code references the removed tree ---------
   check(
-    'P8-I12',
+    'AO-12',
     activeServerImports === 0,
     `active_server_imports=${activeServerImports} (frontend/src + frontend/tests + scripts + .github)`,
   );
 
-  // ---- P8-I13/I14/I15 dependency consumers classified -----------------------
+  // ---- AO-13/I14/I15 dependency consumers classified -----------------------
   const depUnresolved = [];
   for (const mod of TRACKED_MODULES) {
     for (const c of deps[mod]) {
       if (c.classification === 'UNRESOLVED') depUnresolved.push(`${mod}:${c.file}`);
     }
   }
-  check('P8-I13', deps.mongodb.every((c) => c.classification !== 'UNRESOLVED'), `mongodb consumers=${deps.mongodb.length}`);
-  check('P8-I14', deps.jose.every((c) => c.classification !== 'UNRESOLVED'), `jose consumers=${deps.jose.length}`);
-  check('P8-I15', deps.bcryptjs.every((c) => c.classification !== 'UNRESOLVED'), `bcryptjs consumers=${deps.bcryptjs.length}`);
-  check('P8-DEP', depUnresolved.length === 0, `dependency consumers unresolved=${depUnresolved.length}`);
+  check('AO-13', deps.mongodb.every((c) => c.classification !== 'UNRESOLVED'), `mongodb consumers=${deps.mongodb.length}`);
+  check('AO-14', deps.jose.every((c) => c.classification !== 'UNRESOLVED'), `jose consumers=${deps.jose.length}`);
+  check('AO-15', deps.bcryptjs.every((c) => c.classification !== 'UNRESOLVED'), `bcryptjs consumers=${deps.bcryptjs.length}`);
+  check('AO-DEP', depUnresolved.length === 0, `dependency consumers unresolved=${depUnresolved.length}`);
 
-  // ---- P8-I16 Next.js owns no business MongoDB data plane -------------------
+  // ---- AO-16 Next.js owns no business MongoDB data plane -------------------
   check(
-    'P8-I16',
+    'AO-16',
     nextBusinessMongoReaders === 0 && nextBusinessMongoWriters === 0,
     `next_business_mongo_readers=${nextBusinessMongoReaders} next_business_mongo_writers=${nextBusinessMongoWriters}`,
   );
 
-  // ---- P8-I17 charging-plane boundary preserved -----------------------------
+  // ---- AO-17 charging-plane boundary preserved -----------------------------
   // Charging-plane collections may be READ over HTTP (Go-owned management reads) but no
   // charging-plane mutation may be registered.
   const chargingOps = goKeys.filter((k) => / \/api\/ocs\/(sessions|reservations|usage)$/.test(k));
   const chargingReads = chargingOps.filter((k) => k.startsWith('GET '));
   const chargingMutatingOps = chargingOps.filter((k) => !k.startsWith('GET '));
   check(
-    'P8-I17',
+    'AO-17',
     chargingReads.length > 0 && chargingMutatingOps.length === 0,
     `charging reads=${chargingReads.length} charging_mutations=${chargingMutatingOps.length}`,
   );
 
-  // ---- P8-I18 frozen canonical residual set is fully present in the Go surface --
-  const canonicalMissing = [...CANONICAL_RESIDUAL_KEYS].filter((k) => !goKeySet.has(k));
+  // ---- AO-18 canonical production API surface fully present in the Go registration site --
+  const canonicalMissing = [...CANONICAL_API_KEYS].filter((k) => !goKeySet.has(k));
   check(
-    'P8-I18',
+    'AO-18',
     canonicalMissing.length === 0,
-    `canonical_residual_expected=${CANONICAL_RESIDUAL_KEYS.size} canonical_residual_present=${CANONICAL_RESIDUAL_KEYS.size - canonicalMissing.length}`,
+    `canonical_api_expected=${CANONICAL_API_KEYS.size} canonical_api_present=${CANONICAL_API_KEYS.size - canonicalMissing.length}`,
   );
 
-  // ---- P8-I19 legacy compatibility read aliases remain Go-owned -------------
+  // ---- AO-19 legacy compatibility read aliases remain Go-owned -------------
   const legacyAliasMissing = [...LEGACY_ALIAS_READS].filter((k) => !goKeySet.has(k));
   check(
-    'P8-I19',
+    'AO-19',
     legacyAliasMissing.length === 0,
     `legacy_aliases=${LEGACY_ALIAS_READS.size} legacy_aliases_present=${LEGACY_ALIAS_READS.size - legacyAliasMissing.length}`,
   );
 
-  // ---- P8-I20 stale callers to retired surfaces = 0 --------------------------
+  // ---- AO-20 stale callers to retired surfaces = 0 --------------------------
   const staleCallersToRetired = retiredCallers.length;
-  check('P8-I20', staleCallersToRetired === 0, `stale_callers_to_retired_surfaces=${staleCallersToRetired}`);
+  check('AO-20', staleCallersToRetired === 0, `stale_callers_to_retired_surfaces=${staleCallersToRetired}`);
 
-  // ---- P8-I21 derived surface rejects a synthetic unknown key (falsifiable) --
+  // ---- AO-21 derived surface rejects a synthetic unknown key (falsifiable) --
   const sentinelDetected = !goKeySet.has(GO_SENTINEL_KEY);
   check(
-    'P8-I21',
+    'AO-21',
     sentinelDetected,
     `synthetic "${GO_SENTINEL_KEY}" absent from derived surface=${sentinelDetected}`,
   );
 
-  // ---- P8-I22 Next.js business backend removed ------------------------------
+  // ---- AO-22 Next.js business backend absent --------------------------------
   const nextBusinessApiOperations = inventory.length;
-  const nextBusinessBackendRemoved =
+  const nextBusinessBackendAbsent =
     nextApiRouteFiles === 0 &&
     nextApiOperations === 0 &&
     !nextServerTreePresent &&
     nextBusinessMongoReaders === 0 &&
     nextBusinessMongoWriters === 0;
   check(
-    'P8-I22',
-    nextBusinessBackendRemoved,
-    `next_business_api_operations=${nextBusinessApiOperations} next_business_backend_removed=${nextBusinessBackendRemoved}`,
+    'AO-22',
+    nextBusinessBackendAbsent,
+    `next_business_api_operations=${nextBusinessApiOperations} next_business_backend_absent=${nextBusinessBackendAbsent}`,
   );
 
-  // ---- P8-I23 removal readiness derived from evidence ----------------------
+  // ---- AO-23 architecture contract readiness derived from evidence ----------
   const blockers = [];
   if (nextApiRouteFiles > 0) blockers.push(`NEXT_API_ROUTE_FILES=${nextApiRouteFiles}`);
   if (nextApiOperations > 0) blockers.push(`NEXT_API_OPERATIONS=${nextApiOperations}`);
@@ -820,11 +820,11 @@ async function main() {
   if (unmappedCallers.length > 0) blockers.push(`FRONTEND_API_CALLERS_UNMAPPED=${unmappedCallers.length}`);
   if (staleCallersToRetired > 0) blockers.push(`STALE_CALLERS_TO_RETIRED_SURFACES=${staleCallersToRetired}`);
   if (depUnresolved.length > 0) blockers.push(`DEPENDENCY_CONSUMERS_UNRESOLVED=${depUnresolved.length}`);
-  if (canonicalMissing.length > 0) blockers.push(`CANONICAL_RESIDUAL_MISSING=${canonicalMissing.length}`);
+  if (canonicalMissing.length > 0) blockers.push(`CANONICAL_API_MISSING=${canonicalMissing.length}`);
   if (legacyAliasMissing.length > 0) blockers.push(`LEGACY_ALIAS_MISSING=${legacyAliasMissing.length}`);
   if (chargingMutatingOps.length > 0) blockers.push(`CHARGING_MUTATIONS=${chargingMutatingOps.length}`);
-  const backendRemovalReady = blockers.length === 0;
-  check('P8-I23', backendRemovalReady, `backend_removal_ready=${backendRemovalReady} blockers=${blockers.length}`);
+  const architectureContractReady = blockers.length === 0;
+  check('AO-23', architectureContractReady, `architecture_contract_ready=${architectureContractReady} blockers=${blockers.length}`);
 
   // ---------------------------------------------------------------------------
   // Report
@@ -849,7 +849,7 @@ async function main() {
     for (const key of retiredRegistered) console.log(`  ${key}`);
   }
   if (canonicalMissing.length) {
-    console.log('\n-- Canonical residual operations missing from the Go surface --');
+    console.log('\n-- Canonical API operations missing from the Go surface --');
     for (const key of canonicalMissing) console.log(`  ${key}`);
   }
   if (proxy.violations.length) {
@@ -881,13 +881,13 @@ async function main() {
   const acceptanceFailures = invariants.filter((i) => !i.ok);
 
   console.log('\n==================================================');
-  console.log('Backend Removal Readiness (final architecture)');
+  console.log('API Ownership Invariants (Go API + Nginx edge production architecture)');
   console.log(`next_api_route_files=${nextApiRouteFiles}`);
   console.log(`next_api_operations=${nextApiOperations}`);
   console.log(`next_server_tree_present=${nextServerTreePresent}`);
   console.log(`active_server_imports=${activeServerImports}`);
-  console.log(`removal_residual_references=${activeServerImports}`);
-  console.log(`removal_reference_literals=${serverImportLiterals.length}`);
+  console.log(`removed_tree_active_references=${activeServerImports}`);
+  console.log(`removed_tree_name_literals=${serverImportLiterals.length}`);
   console.log('');
   console.log(`production_api_registrations=${goRegisteredOperations}`);
   console.log(`go_registered_operations=${goRegisteredOperations}`);
@@ -917,28 +917,28 @@ async function main() {
   console.log(`frontend_api_callers_unmapped=${unmappedCallers.length}`);
   console.log(`stale_callers_to_retired_surfaces=${staleCallersToRetired}`);
   console.log('');
-  console.log(`canonical_residual_expected=${CANONICAL_RESIDUAL_KEYS.size}`);
-  console.log(`canonical_residual_present=${CANONICAL_RESIDUAL_KEYS.size - canonicalMissing.length}`);
+  console.log(`canonical_api_expected=${CANONICAL_API_KEYS.size}`);
+  console.log(`canonical_api_present=${CANONICAL_API_KEYS.size - canonicalMissing.length}`);
   console.log(`legacy_aliases_present=${LEGACY_ALIAS_READS.size - legacyAliasMissing.length}`);
   console.log(`charging_reads=${chargingReads.length}`);
   console.log(`charging_mutations=${chargingMutatingOps.length}`);
   console.log('');
-  console.log(`backend_removal_ready=${backendRemovalReady}`);
-  console.log(`next_business_backend_removed=${nextBusinessBackendRemoved}`);
-  console.log(`backend_removal_blockers=${blockers.length}`);
-  for (const b of blockers) console.log(`backend_removal_blocker=${b}`);
-  for (const hit of serverImportHits) console.log(`removal_residual_reference=${hit.file}:${hit.line}`);
+  console.log(`architecture_contract_ready=${architectureContractReady}`);
+  console.log(`next_business_backend_absent=${nextBusinessBackendAbsent}`);
+  console.log(`architecture_blockers=${blockers.length}`);
+  for (const b of blockers) console.log(`architecture_blocker=${b}`);
+  for (const hit of serverImportHits) console.log(`removed_tree_active_reference=${hit.file}:${hit.line}`);
   console.log('');
-  console.log(`phase8_backend_removal_acceptance=${acceptanceFailures.length === 0 ? 'PASS' : 'FAIL'}`);
-  console.log(`phase8_invariants_failed=${acceptanceFailures.length}`);
+  console.log(`api_ownership_result=${acceptanceFailures.length === 0 ? 'PASS' : 'FAIL'}`);
+  console.log(`api_ownership_invariants_failed=${acceptanceFailures.length}`);
   console.log('==================================================\n');
 
   if (acceptanceFailures.length > 0) {
-    console.error('Backend removal readiness verification FAILED.');
+    console.error('API ownership invariant verification FAILED.');
     process.exit(1);
   }
 
-  console.log('Backend removal readiness verification result: PASS');
+  console.log('API ownership invariant verification result: PASS');
 }
 
 main().catch((err) => {

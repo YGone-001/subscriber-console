@@ -1,7 +1,7 @@
 # OCS Management Plane Operations Runbook
 
 Status: PRODUCTION / FROZEN  
-Version: 2.0.0 (Phase 5.7 Direct Execution / Phase 6.1-D Production Baseline)  
+Version: 2.0.0 (Direct Execution / Production Baseline)  
 Target Components: Next.js Frontend (:13333), Go Backend (:18888), MongoDB (`xcloud`, `xcloud_ops`)
 
 ---
@@ -11,7 +11,7 @@ Target Components: Next.js Frontend (:13333), Go Backend (:18888), MongoDB (`xcl
 The **OCS Management Plane** governs administrative operations for commercial telecommunication offerings, subscriber billing contracts, and quota balances. It operates strictly separated from the runtime **Charging Plane** (Gy/Ro/CCR/Diameter rating and session management).
 
 ### Operational Invariants
-1. **Single-Writer Production Invariant**: All mutations are executed authoritatively by Go backend (`:18888`). The Nginx edge routes `/api` and `/api/*` straight to Go (`ACTUALLY_ROUTED = 84`); the Next.js runtime serves UI pages only and never proxies, authenticates or routes an API request. Node fallback is disabled.
+1. **Single-Writer Production Invariant**: All mutations are executed authoritatively by Go backend (`:18888`). The Nginx edge routes `/api` and `/api/*` straight to Go (`GoRegistered = 84`); the Next.js runtime serves UI pages only and never proxies, authenticates or routes an API request. No fallback backend exists.
 2. **Canonical RBAC & Direct Execution**:
    - `admin`: System administration, user management, and direct business mutations.
    - `operator`: Core operational mutations (subscribers, balances, profiles, tariffs, rating) execute directly without approval. No user administration.
@@ -207,11 +207,10 @@ Permission determines whether an operation executes; approval is not part of exe
   - Verifies proxy forwarding and MongoDB connectivity.
 
 ### 7.2 Routing Diagnostics
-To confirm whether a request is routed to Go:
+To confirm a request reached the Go backend:
 - Inspect HTTP response headers:
-  - `X-Cutover-Owner: go`
-  - `X-Proxied-By: next-proxy`
-  - `X-Request-ID: <uuid>`
+  - `X-Request-ID: <uuid>` (emitted by the Go request-ID middleware)
+- Inspect the Nginx access log for the `/api` location and upstream `xcloud_go`.
 
 ### 7.3 Common Error Codes & Actions
 
@@ -240,4 +239,4 @@ db.app_audit_logs.find({
 
 The OCS Management Plane is in permanent maintenance mode.  
 No further architectural modifications, new management routes, or Charging Plane couplings are permitted.  
-Production routing invariant `ACTUALLY_ROUTED = 84` is strictly maintained.
+Production routing invariant `GoRegistered = 84` is strictly maintained.

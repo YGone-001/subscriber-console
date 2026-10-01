@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * User Management Controlled Cutover Suite
+ * User Management Runtime Integration Suite
  *
  * Verifies:
  * 1. All six canonical User Management routes present in the Go registration site
@@ -9,7 +9,7 @@
  * 4. Frontend API client uses dedicated canonical endpoints
  * 5. Go backend registers all six canonical routes
  * 6. No frontend owner-specific branching
- * 7. Legacy /api/auth/users not consumed by Phase 6.1-C UI
+ * 7. Legacy /api/auth/users not consumed by the User Management UI
  */
 
 import assert from 'node:assert/strict';
@@ -19,7 +19,7 @@ import { deriveGoRegistrations } from './lib/go-registrations.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 
-console.log('── User Management Controlled Cutover Suite ──\n');
+console.log('── User Management Runtime Integration Suite ──\n');
 
 let passed = 0;
 function verify(description, fn) {
@@ -155,7 +155,7 @@ const usersPageSrc = sourceFiles(join(root, 'frontend/src/app/(dashboard)/users'
   .map((p) => readFileSync(p, 'utf8'))
   .join('\n');
 
-verify('Phase 6.1-C UI does not call /api/auth/users', () => {
+verify('User Management UI does not call /api/auth/users', () => {
   assert.doesNotMatch(usersPageSrc, /\/api\/auth\/users/);
 });
 
@@ -178,5 +178,5 @@ verify('frontend API client never exposes passwordHash', () => {
 });
 
 // ── Summary ─────────────────────────────────────────────────────────────────
-console.log(`\nAll ${passed} cutover checks passed.`);
+console.log(`\nAll ${passed} user management integration checks passed.`);
 console.log('GoRegistered=84 duplicates=0');

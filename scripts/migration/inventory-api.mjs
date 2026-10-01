@@ -5,8 +5,8 @@
  * Scans frontend/src/app/api (recursively) for route.ts and extracts exported HTTP methods.
  * Outputs a stable, sorted JSON to docs/backend-migration/generated/api-routes.json
  *
- * Phase 8.3 (Next.js business backend physical removal):
- *   the App Router business API tree no longer exists, so this scanner MUST support
+ * Current architecture:
+ *   the App Router business API tree does not exist, so this scanner MUST support
  *   ZERO route files: no crash, no NaN, empty operations list. Nothing is faked and
  *   nothing is hard-coded - the inventory is always derived from the filesystem.
  *

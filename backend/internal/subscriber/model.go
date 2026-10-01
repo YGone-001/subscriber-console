@@ -1,6 +1,6 @@
 // Package subscriber provides read-only subscriber list, detail, search, and batch precheck APIs.
 //
-// Phase 2C: Migrated from Next.js src/app/api/subscribers/ and src/app/api/search/.
+// The read models reproduce the public subscriber and search API contract.
 package subscriber
 
 import "go.mongodb.org/mongo-driver/v2/bson"

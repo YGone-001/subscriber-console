@@ -242,7 +242,7 @@ func TestLoginDisabledAccount(t *testing.T) {
 
 	h.Login(w, req)
 
-	// In Phase 6.2+, disabled accounts return uniform 401 to preserve response privacy
+	// Disabled accounts return uniform 401 to preserve response privacy
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401", w.Code)
 	}

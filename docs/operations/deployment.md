@@ -26,11 +26,10 @@ UI navigation guard only                   API authentication + authorization
 ```
 
 Ownership of every production API operation is Go. The authoritative route set is
-the frozen Go registration list: 84 exact METHOD+PATH registrations parsed from
+the Go registration list: 84 exact METHOD+PATH registrations parsed from
 `backend/cmd/server/main.go` plus `backend/internal/remediation/handler.go`
-(shared helper `scripts/lib/go-registrations.mjs`). The former Next.js per-route
-ownership table (`frontend/src/lib/cutover-routing.ts`) has been retired; Nginx now
-performs the routing and Go owns the API.
+(shared helper `scripts/lib/go-registrations.mjs`). Nginx performs the routing at the
+edge and Go owns the API; no per-route ownership table exists in production source.
 
 Frontend SWR paths remain unchanged - the edge routing is transparent to the UI.
 
@@ -194,7 +193,7 @@ The Go binary is a single static executable with no external runtime dependencie
 | listen host | Production bind address (`next start -H`) | `127.0.0.1` (`npm run start`) |
 | server port | Production server port | `13333` (`npm run start`) |
 
-After the Phase 8.5 boundary the Next.js runtime uses no MongoDB client and no JWT
+The Next.js runtime uses no MongoDB client and no JWT
 secret; it performs no API authentication. The only network dependency of the UI
 navigation guard is the Go authority above.
 

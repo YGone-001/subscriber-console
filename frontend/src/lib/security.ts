@@ -1,7 +1,7 @@
 /**
  * UI password-policy helpers.
  *
- * After Phase 8.5 the frontend holds no JWT secret runtime and performs no API
+ * The frontend holds no JWT secret runtime and performs no API
  * authentication: Go owns JWT verification and session validation. What remains here is
  * only the client-side password policy presentation contract used by the user
  * management UI, kept byte-compatible with the canonical Go `ValidatePassword` rules.

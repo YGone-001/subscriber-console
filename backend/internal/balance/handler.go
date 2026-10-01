@@ -234,7 +234,7 @@ func (h *Handler) Adjust(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Direct execution (Phase 5.7-A)
+	// Direct execution
 	res, err := h.repo.AdjustBalanceCAS(r.Context(), imsi, expectedVersion, body.Bucket, body.Operation, body.Amount)
 	if err != nil {
 		if err == ErrPreconditionChanged {
