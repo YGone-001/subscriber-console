@@ -1,7 +1,7 @@
 # AGENTS.md — xCloud subscriber-console
 
 > 当前项目快照，用于 Claude Code / MiMo / Codex 长会话续开发。
-> **稳定规则看 `CLAUDE.md`；历史看 `docs/operations/dev-log.md`；待办看 `docs/operations/todo.md`。**
+> **稳定规则看 `CLAUDE.md`；当前架构看 `docs/README.md` 与 `docs/architecture/`。**
 > 本文件可覆盖更新，不保存完整历史。
 
 ## 0. Minimal Bootstrap
@@ -207,7 +207,7 @@ Charging Plane remains frozen and excluded.
 - 权威基线：OCS 管理平面生产冻结基线（当前生产路由 = Go 全部接管，共 84 条 Go 注册）。
 - 路由权威来源：Go 注册集合（`backend/cmd/server/main.go` + `backend/internal/remediation/handler.go`，共 84 条 METHOD+PATH 精确注册）；Nginx 负责 API 路由。
 - 托管集合：`ocs_tariff_plans`、`ocs_subscribers`、`ocs_balances`。
-- 冻结规约文档（历史证据）：`docs/backend-migration/phase-5-6-ocs-production-freeze.md`。
+- 冻结规约摘要（历史）：`docs/archive/backend-migration-summary.md`。
 - 运维操作手册：`docs/operations/ocs-management-runbook.md`。
 - 界面验收验证：通过无头浏览器 CDP 1440x900 渲染断言验证通过（本地测试截图即测即消，不入版本库）。
 
@@ -590,21 +590,34 @@ Decimal128 scientific-notation bug was fixed.
 
 ---
 
-## 12. Route Inventory Validator
+## 12. Route Registration Authority
 
-The validator (`scripts/migration/validate-inventory.mjs`) is source-derived and METHOD+PATH aware.
+Route authority is the derived Go registration set, source-derived and METHOD+PATH aware.
+
+Sources:
+
+```text
+backend/cmd/server/main.go
+backend/internal/remediation/handler.go
+```
+
+Shared parse helper:
+
+```text
+scripts/lib/go-registrations.mjs
+```
 
 Must maintain:
 
-- Go router ↔ matrix cross-check (all HTTP methods)
-- phantom detection
-- missing route detection
+- Go router ↔ registration cross-check (all HTTP methods)
 - dynamic path canonicalization
 - registered route count derived from source
 - GET reads vs POST semantic reads classification
 - business mutations count (should be 0)
 
 Never hard-code endpoint counts.
+
+Enforced by the permanent gates `scripts/test-api-ownership-invariants.mjs` and `scripts/test-production-architecture.mjs`.
 
 ---
 
@@ -1057,11 +1070,16 @@ If available:
 npm run check:full
 ```
 
-Migration:
+Documentation / architecture gates:
 
 ```bash
-node scripts/migration/inventory-api.mjs
-node scripts/migration/validate-inventory.mjs
+node scripts/test-current-architecture-docs.mjs
+node scripts/test-documentation-integrity.mjs
+node scripts/test-repository-normalization.mjs
+node scripts/test-api-ownership-invariants.mjs
+node scripts/test-next-backend-absence.mjs
+node scripts/test-frontend-runtime-dependencies.mjs
+node scripts/test-production-architecture.mjs
 ```
 
 Run Node/Go parity where environment allows.
@@ -1121,10 +1139,13 @@ Persistent placement:
 
 ```text
 Architecture/current ownership → AGENTS.md
-Historical completed work      → docs/operations/dev-log.md
-Pending work                   → docs/operations/todo.md
+Current architecture + operations → docs/architecture/, docs/operations/
 Stable rules                   → CLAUDE.md
 ```
+
+Completed implementation plans and acceptance records are not maintained in HEAD;
+Git history preserves detailed historical development evidence. `docs/archive/**`
+holds concise historical summaries only.
 
 Rule:
 

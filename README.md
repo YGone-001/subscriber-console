@@ -19,12 +19,11 @@ subscriber-console/
 │   └── go.mod
 ├── docs/              # Project documentation
 │   ├── architecture/
-│   ├── backend-migration/
-│   ├── api/
 │   ├── database/
 │   ├── operations/
-│   └── archive/
-├── scripts/           # Operational and migration scripts
+│   ├── archive/
+│   └── README.md      # Documentation authority / index
+├── scripts/           # Acceptance tests and operational scripts
 ├── README.md
 ├── CLAUDE.md
 └── AGENTS.md
@@ -186,11 +185,11 @@ More detail is available in [Deployment](docs/operations/deployment.md).
 
 | Document | Location |
 | --- | --- |
+| Documentation index / authority | [docs/README.md](docs/README.md) |
 | Architecture | `docs/architecture/` |
-| Backend Migration (historical evidence, not current architecture) | `docs/backend-migration/` |
-| API Reference | `docs/api/` |
 | Database | `docs/database/` |
 | Operations | `docs/operations/` |
+| Archive (concise historical summary only) | `docs/archive/` |
 | Project Rules | `CLAUDE.md` |
 | Current State | `AGENTS.md` |
 

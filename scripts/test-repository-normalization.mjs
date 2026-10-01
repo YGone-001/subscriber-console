@@ -17,9 +17,7 @@
  *   - agent instructions       AGENTS.md, CLAUDE.md
  *
  * Historical evidence (excluded from de-phasing, counted separately):
- *   - docs/backend-migration/**, docs/archive/**
- *   - docs/architecture/phase-*.md
- *   - docs/operations/dev-log.md
+ *   - docs/archive/** (concise historical summaries only)
  *
  * Generated/foreign fixtures excluded from de-phasing:
  *   - backend/testdata/** (historical Node-jose interop fixture produced by the real
@@ -62,12 +60,7 @@ const TEXT_EXT = new Set([
 ]);
 
 function isHistoricalPath(rel) {
-  if (rel === 'docs/operations/dev-log.md') return true;
-  if (/^docs\/architecture\/phase-.*\.md$/.test(rel)) return true;
-  return rel === 'docs/backend-migration' ||
-    rel.startsWith('docs/backend-migration/') ||
-    rel === 'docs/archive' ||
-    rel.startsWith('docs/archive/');
+  return rel === 'docs/archive' || rel.startsWith('docs/archive/');
 }
 
 function isFixturePath(rel) {
@@ -119,7 +112,7 @@ function read(p) {
 const PHASE_MARKER_RE = /(?:phase|p8)[\s_.-]*[0-9]/i;
 
 /** Historical provenance path references, stripped before marker matching. */
-const HISTORICAL_PATH_RE = /docs\/(?:backend-migration|archive)\/[\w./%-]+|docs\/architecture\/phase-[\w.-]*\.md|docs\/operations\/dev-log\.md/g;
+const HISTORICAL_PATH_RE = /docs\/archive\/[\w./%-]+/g;
 
 /** Phase-scoped env / metric identifiers such as `PHASE85_NGINX_BIN` or `phase86_result`. */
 const PHASE_IDENTIFIER_RE = /\b(?:PHASE|phase)\d{1,2}_[A-Za-z0-9_]+/g;

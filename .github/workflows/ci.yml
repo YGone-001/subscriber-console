@@ -54,12 +54,6 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Migration inventory
-        run: node ../scripts/migration/inventory-api.mjs
-
-      - name: Migration validator
-        run: node ../scripts/migration/validate-inventory.mjs
-
       - name: API ownership invariants
         run: node ../scripts/test-api-ownership-invariants.mjs
 
@@ -366,6 +360,9 @@ jobs:
 
       - name: Current architecture documentation consistency
         run: node scripts/test-current-architecture-docs.mjs
+
+      - name: Documentation integrity
+        run: node scripts/test-documentation-integrity.mjs
 
       - name: Repository normalization gate
         run: node scripts/test-repository-normalization.mjs

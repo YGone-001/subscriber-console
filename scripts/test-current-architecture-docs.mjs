@@ -120,4 +120,46 @@ assert.ok(!/route-owner table/i.test(readme), 'README.md must not present a rout
 assert.ok(readme.includes('127.0.0.1:18888'), 'README.md must document the Go upstream 127.0.0.1:18888');
 assert.ok(readme.includes('127.0.0.1:13333'), 'README.md must document the Next.js upstream 127.0.0.1:13333');
 
+// 7. docs/README.md - documentation authority model
+const docsReadmePath = path.join(ROOT, 'docs/README.md');
+const docsReadme = fs.readFileSync(docsReadmePath, 'utf8');
+
+assert.ok(docsReadme.includes('# Documentation'), 'docs/README.md must be the documentation entry point');
+assert.ok(docsReadme.includes('## Authority Model'), 'docs/README.md must document the authority model');
+
+// The authority model is ordered and must name every documentation tier.
+const authorityTiers = [
+  'README.md',
+  'docs/README.md',
+  'docs/architecture/**',
+  'docs/operations/**',
+  'docs/database/**',
+  'docs/archive/**',
+];
+for (const tier of authorityTiers) {
+  assert.ok(
+    docsReadme.includes(tier),
+    `docs/README.md authority model must name the "${tier}" tier`
+  );
+}
+
+// The archive tier must be explicitly marked as non-authoritative.
+assert.ok(
+  docsReadme.includes('NOT current architecture authority'),
+  'docs/README.md must mark docs/archive/** as not current architecture authority'
+);
+
+// The authority model must point at the primary production sources, not at removed trees.
+assert.ok(docsReadme.includes('deploy/nginx/xcloud.conf'), 'docs/README.md must point to the Nginx edge configuration');
+assert.ok(docsReadme.includes('backend/cmd/server/main.go'), 'docs/README.md must point to the Go registration authority');
+assert.ok(docsReadme.includes('frontend/src/proxy.ts'), 'docs/README.md must point to the UI-only navigation guard');
+
+// The architecture tier must describe the present system only.
+const systemArchPath = path.join(ROOT, 'docs/architecture/system-architecture.md');
+const systemArch = fs.readFileSync(systemArchPath, 'utf8');
+assert.ok(systemArch.includes('Nginx'), 'system-architecture.md must describe the Nginx edge');
+assert.ok(systemArch.includes('127.0.0.1:18888'), 'system-architecture.md must document the Go upstream 127.0.0.1:18888');
+assert.ok(systemArch.includes('127.0.0.1:13333'), 'system-architecture.md must document the Next.js upstream 127.0.0.1:13333');
+assert.ok(!/route-owner table/i.test(systemArch), 'system-architecture.md must not present a route-owner table as the current architecture');
+
 console.log('Current architecture documentation consistency: PASS');

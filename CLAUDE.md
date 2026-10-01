@@ -201,10 +201,10 @@ one mongo.Client
 ```text
 1. 当前运行源码
 2. 自动化测试
-3. 冻结 API Contract / migration inventory
+3. 冻结 API Contract / Go 注册集合
 4. AGENTS.md
-5. docs/operations/deployment.md
-6. docs/operations/dev-log.md
+5. docs/README.md（文档权威模型）
+6. docs/architecture/ + docs/operations/
 7. README / 旧设计文档
 8. 注释
 ```
@@ -237,11 +237,11 @@ git branch --show-current
 git log --oneline -10
 ```
 
-仅当需要追查历史来源时，再按需读（历史证据，非当前架构权威）：
+仅当需要追查历史来源时，再按需读：
 
 ```text
-docs/backend-migration/README.md
-docs/operations/dev-log.md
+1. docs/archive/backend-migration-summary.md（简明历史摘要，非当前架构权威）
+2. Git 历史（已移除的迁移工作底稿，用 git log --all 检索）
 ```
 
 ### 禁止无目的全库扫描
@@ -281,8 +281,8 @@ git show
 上下文膨胀时：
 1. 总结已确认事实。
 2. 架构级事实更新 `AGENTS.md`。
-3. 历史写 `docs/operations/dev-log.md`。
-4. 待办写 `docs/operations/todo.md`。
+3. 当前架构与运维事实更新 `docs/architecture/` 与 `docs/operations/`。
+4. 历史细节由 Git 历史保存；`docs/archive/**` 仅保留简明历史摘要。
 5. 下一会话从 `CLAUDE.md + AGENTS.md` 重建上下文。
 
 ## 6. 文档职责
@@ -307,19 +307,13 @@ git show
 
 必须短、准、可覆盖。
 
-### docs/operations/dev-log.md
-只放历史增量：
-- 里程碑完成
-- commit
-- 重要 bug / 修复
-- 关键结论
-
-### docs/operations/todo.md
+### docs/README.md
 只放：
-- 当前任务
-- blocker
-- deferred
-- 风险
+- 文档权威模型
+- 文档索引与相对链接
+
+### docs/architecture/、docs/operations/、docs/database/
+只放当前系统事实（现在时描述），不保留生命周期编号或已完成计划。
 
 ## 7. 演进原则
 
@@ -645,30 +639,42 @@ go vet ./...
 go build ./...
 ```
 
-### Migration
+### 文档与架构门
 
 ```bash
 # Run from repo root
-node scripts/migration/inventory-api.mjs
-node scripts/migration/validate-inventory.mjs
+node scripts/test-current-architecture-docs.mjs
+node scripts/test-documentation-integrity.mjs
+node scripts/test-repository-normalization.mjs
+node scripts/test-api-ownership-invariants.mjs
+node scripts/test-next-backend-absence.mjs
+node scripts/test-frontend-runtime-dependencies.mjs
+node scripts/test-production-architecture.mjs
 ```
 
 有 Node/Go parity 环境时必须运行 compare 工具。
 
-## 21. Validator
+## 21. Route Registration Authority
 
-Migration validator 必须：
+路由注册权威必须：
 - source-derived
-- 不硬编码 migrated count
+- 不硬编码注册 count
 - 检测 phantom/missing route
-- Go router ↔ matrix cross-check
+- Go router ↔ registration cross-check
 - canonicalize dynamic paths
-- 501 placeholder 不算 migrated
+
+权威来源：
+
+```text
+backend/cmd/server/main.go
+backend/internal/remediation/handler.go
+scripts/lib/go-registrations.mjs
+```
 
 禁止：
 
 ```js
-const EXPECTED_MIGRATED = 21
+const HARDCODED_ROUTE_COUNT = 21
 ```
 
 ## 22. Git
@@ -733,16 +739,15 @@ rollbackable
 
 ```text
 AGENTS.md
-docs/operations/dev-log.md
-docs/operations/todo.md
+docs/README.md
 docs/architecture/
-docs/api/
-docs/operations/deployment.md
+docs/operations/
+docs/database/
 ```
 
 只有这些变化需要更新 `AGENTS.md`：
 - ownership 改变
-- phase 完成
+- 架构变更完成
 - 安全边界改变
 - 核心数据流改变
 - blocker 改变

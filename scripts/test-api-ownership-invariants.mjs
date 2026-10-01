@@ -46,7 +46,6 @@ const srcRoot = resolve(root, 'frontend/src');
 const testsRoot = resolve(root, 'frontend/tests');
 const scriptsRoot = resolve(root, 'scripts');
 const githubRoot = resolve(root, '.github');
-const inventoryPath = resolve(root, 'docs/backend-migration/generated/api-routes.json');
 const proxyPath = resolve(root, 'frontend/src/proxy.ts');
 const nginxPath = resolve(root, 'deploy/nginx/xcloud.conf');
 const frontendPackagePath = resolve(root, 'frontend/package.json');
@@ -186,14 +185,6 @@ function scanApiTree() {
   }
   ops.sort((a, b) => methodPathKey(a.method, a.canonicalPath).localeCompare(methodPathKey(b.method, b.canonicalPath)));
   return { files, ops };
-}
-
-// ---------------------------------------------------------------------------
-// 2. Generated inventory (produced by inventory-api.mjs)
-// ---------------------------------------------------------------------------
-function loadGeneratedInventory() {
-  if (!existsSync(inventoryPath)) return null;
-  return JSON.parse(readFileSync(inventoryPath, 'utf8'));
 }
 
 // ---------------------------------------------------------------------------
@@ -603,7 +594,6 @@ async function main() {
   const { reads: goReads, mutations: goMutations } = classifyGoRegistrations(goKeys);
 
   const { files: apiFiles, ops: sourceOps } = scanApiTree();
-  const generated = loadGeneratedInventory();
   const callers = scanCallers();
   const deps = scanDependencies();
   const proxy = scanProxy();
@@ -623,17 +613,17 @@ async function main() {
   const nextBusinessMongoWriters = mongoAccess.writers.length;
 
   // ---- AO-01 inventory complete ------------------------------------------
-  const generatedOps = [];
-  if (Array.isArray(generated)) {
-    for (const route of generated) {
-      for (const method of route.methods) {
-        generatedOps.push({ method, canonicalPath: canonicalize(route.path) });
-      }
-    }
-  }
+  // The source scan is the authoritative (and only) inventory: it is derived from
+  // the current filesystem. The former generated JSON mirror was retired with the
+  // completed migration tooling, so completeness is now asserted directly from the
+  // scan: every discovered route file exists, and every derived operation is a
+  // fully-formed, unique METHOD+PATH key.
   const inventoryComplete =
-    Array.isArray(generated) && generatedOps.length === sourceOps.length && apiFiles.every((f) => existsSync(f));
-  check('AO-01', inventoryComplete, `inventory complete (generated=${generatedOps.length}, source-scan=${sourceOps.length})`);
+    apiFiles.length === new Set(apiFiles).size &&
+    apiFiles.every((f) => existsSync(f)) &&
+    sourceOps.every((o) => Boolean(o.method) && Boolean(o.canonicalPath) && existsSync(resolve(root, o.file))) &&
+    new Set(sourceOps.map((o) => methodPathKey(o.method, o.canonicalPath))).size === sourceOps.length;
+  check('AO-01', inventoryComplete, `inventory complete (source-scan route files=${apiFiles.length}, operations=${sourceOps.length})`);
 
   // The source scan is the authoritative inventory (derived from current source).
   const inventory = sourceOps;

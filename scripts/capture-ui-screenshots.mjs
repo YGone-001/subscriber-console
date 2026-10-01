@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
  * Capture OCS Production Evidence Screenshots
- * Target (historical evidence directory):
- *  - docs/backend-migration/evidence/phase-5-6/tariffs.png
- *  - docs/backend-migration/evidence/phase-5-6/contracts.png
- *  - docs/backend-migration/evidence/phase-5-6/balances.png
+ * Output (local evidence directory, not committed):
+ *  - test-results/screenshots/tariffs.png
+ *  - test-results/screenshots/contracts.png
+ *  - test-results/screenshots/balances.png
  * Resolution: 1440x900
  */
 
