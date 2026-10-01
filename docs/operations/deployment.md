@@ -42,6 +42,20 @@ Loopback-internal     : Next.js 127.0.0.1:13333, Go 127.0.0.1:18888
 Unsupported origins   : http://127.0.0.1:13333, http://127.0.0.1:18888
 ```
 
+Listener contract:
+
+```text
+127.0.0.1:18888 = Go internal API listener  (HTTP_ADDR production default)
+127.0.0.1:13333 = Next internal UI listener (`next start -H 127.0.0.1 -p 13333`)
+80/443          = Nginx public edge
+```
+
+Both listeners are pinned to the loopback address by the service's own startup
+configuration, not by a firewall rule. The Go default `HTTP_ADDR` is
+`127.0.0.1:18888`, and the Next production command binds `-H 127.0.0.1`. A
+non-loopback interface address on either port is not reachable; a firewall is only
+defense in depth.
+
 Browsers must never be pointed at the internal ports. The UI always calls
 same-origin `/api/...` paths; only the edge is reachable from the network. The edge
 generates `Host`, `X-Real-IP`, `X-Forwarded-For` and `X-Forwarded-Proto` itself and
@@ -177,6 +191,7 @@ The Go binary is a single static executable with no external runtime dependencie
 | Variable | Description | Default |
 | --- | --- | --- |
 | `GO_BACKEND_URL` | Go authority used by the UI navigation guard (`GET /api/auth/me`) | `http://127.0.0.1:18888` |
+| listen host | Production bind address (`next start -H`) | `127.0.0.1` (`npm run start`) |
 | server port | Production server port | `13333` (`npm run start`) |
 
 After the Phase 8.5 boundary the Next.js runtime uses no MongoDB client and no JWT
@@ -187,7 +202,7 @@ navigation guard is the Go authority above.
 
 | Variable | Description | Default |
 | --- | --- | --- |
-| `HTTP_ADDR` | Go listen address | `:18888` |
+| `HTTP_ADDR` | Go listen address (loopback-only default) | `127.0.0.1:18888` |
 | `MONGODB_URI` | MongoDB connection URI | `mongodb://127.0.0.1:27017` |
 | `MONGODB_XCLOUD_DB` | xCloud data database | `xcloud` |
 | `MONGODB_APP_DB` | Application operations database | `xcloud_ops` |
@@ -219,14 +234,19 @@ go run ./cmd/server
 ```bash
 # Next.js (loopback-internal)
 cd frontend
-npm run start    # listens on :13333
+npm run start    # next start -H 127.0.0.1 -p 13333
 
 # Go backend (loopback-internal)
 cd backend
-./server         # listens on :18888 (or HTTP_ADDR)
+set -a
+source ../.env   # provides HTTP_ADDR=127.0.0.1:18888
+set +a
+./server         # listens on 127.0.0.1:18888 (HTTP_ADDR default)
 ```
 
-Both services bind loopback and are reached only through Nginx.
+Both services bind the loopback address explicitly - Next via `-H 127.0.0.1`, Go via
+the `127.0.0.1:18888` `HTTP_ADDR` default - and are reached only through Nginx.
+`HTTP_ADDR` may be overridden by an operator, but the safe default is loopback.
 
 ## Recommended Production Flow
 
@@ -235,12 +255,14 @@ Both services bind loopback and are reached only through Nginx.
 3. Install root operational dependencies with `npm ci`, then build Next.js with `cd frontend && npm ci && npm run build`.
 4. Build Go: `cd backend && go build ./cmd/server`.
 5. Run `npm run mongo:init` from the repository root to create indexes in both databases.
-6. Start Go on `:18888` and Next.js on `:13333` (loopback only).
+6. Start Go on `127.0.0.1:18888` and Next.js on `127.0.0.1:13333` (loopback only).
 7. Install the edge router: `sudo ./deploy/nginx/setup.sh [listen_port]`, then confirm `nginx -t` passes.
 8. Log in with the bootstrap `admin` account.
 9. Create named operator/viewer accounts and store credentials securely.
 
-For a standalone Linux deployment, run `./scripts/deploy-standalone.sh 13333` from the repository root after `cd frontend && npm run build`. The script resolves the application from `frontend/` and starts `frontend/.next/standalone/server.js`.
+The supported Next.js production model is the single documented `next start` command
+(`npm run start`, bound to `127.0.0.1:13333`). There is no standalone-server
+deployment path.
 
 MongoDB may remain disabled at boot on development hosts. Start it only when needed with `sudo systemctl start mongod`, and stop it with `sudo systemctl stop mongod`; do not run `systemctl enable mongod`.
 

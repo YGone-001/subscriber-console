@@ -27,7 +27,7 @@ go build -o server ./cmd/server
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `HTTP_ADDR` | `:18888` | Listen address |
+| `HTTP_ADDR` | `127.0.0.1:18888` | Listen address (loopback-only default) |
 | `HTTP_READ_TIMEOUT` | `15s` | HTTP read timeout |
 | `HTTP_WRITE_TIMEOUT` | `30s` | HTTP write timeout |
 | `HTTP_IDLE_TIMEOUT` | `120s` | HTTP idle timeout |

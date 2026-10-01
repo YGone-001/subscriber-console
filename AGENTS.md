@@ -220,6 +220,7 @@ Phase 8.2   PASS / FROZEN — Residual Production Cutover, Compatibility Closure
 Phase 8.3   PASS / FROZEN — Next.js Business Backend Physical Removal (frontend/src/app/api/** 54 route.ts / 72 operations and frontend/src/server/** 33 files deleted; 7 backend-only lib helpers removed; minimal read-only proxy session account store extracted; CUTOVER_TABLE = 84, ACTUALLY_ROUTED = 84, next_business_backend_removed = true)
 Phase 8.4   IMPLEMENTED / NOT SELF-FROZEN — Frontend Dependency & Residual Node Runtime Cleanup (bcryptjs removed; 5 dead Node-era libs deleted; mongo.ts collapsed into read-only sessionMongo.ts; backend_production_changes = 0)
 Phase 8.5   IMPLEMENTED / NOT SELF-FROZEN — Proxy / Deployment Boundary Finalization (Nginx edge router owns /api; UI-only navigation guard replaces the API reverse proxy; CUTOVER_TABLE retired; Go registration set = route authority; frontend deps 19 -> 16)
+Phase 8.5-C CORRECTED / NOT SELF-FROZEN — Internal Service Listener Boundary Correction (Next listener pinned to 127.0.0.1:13333 via the single `next start` production model; Go `HTTP_ADDR` default = 127.0.0.1:18888; standalone deployment path removed; 84 registrations unchanged)
 Phase 8.6   NOT AUTHORIZED YET
 ```
 
@@ -280,6 +281,26 @@ Go route registrations              = 84 (unchanged, route authority)
 - Unchanged: Go production code, the 84 Go registrations, auth/owning semantics (401 vs 503), charging plane, API paths. 0 business changes.
 - Evidence: `docs/backend-migration/phase-8.5-deployment-boundary-finalization.md`; acceptance suite `scripts/test-phase-8-deployment-boundary.mjs` (real Nginx + real Go + real `next build` / `next start` + real MongoDB).
 - Status: IMPLEMENTED / NOT SELF-FROZEN (independent acceptance pending); Phase 8.6 not authorized.
+- Superseded in part by 5.0.3: the Go production listener default and the Next production startup model were corrected there.
+
+### 5.0.3 Phase 8.5-C Internal Service Listener Boundary Correction
+
+```text
+Sole public edge                    = Nginx
+Next production listener            = 127.0.0.1:13333 (enforced by `next start -H 127.0.0.1`)
+Go production listener              = 127.0.0.1:18888 (HTTP_ADDR default)
+Loopback listener enforced by service, not firewall = YES
+Standalone deployment path          = removed
+Go business production changes      = 0
+Go registration set                 = 84 (unchanged)
+```
+
+- Correction: the repository declared Nginx the sole public edge but did not prove the internal listeners were loopback-bound. Both listeners are now pinned by the service's own startup configuration.
+- Next: the single supported production model is `next start -H 127.0.0.1 -p 13333` (`frontend/package.json` `start`). `output: 'standalone'` was removed from `frontend/next.config.ts` and `scripts/deploy-standalone.sh` was deleted, so no contradictory second production procedure remains. `docs/operations/deployment.md` documents the same command.
+- Go: `HTTP_ADDR` production default changed from `:18888` to `127.0.0.1:18888` in `backend/internal/config/config.go` (+ its unit test). `.env.example` and `backend/README.md` document the loopback default. Operator override remains supported; the safe default is loopback.
+- Acceptance: `scripts/test-phase-8-deployment-boundary.mjs` exercises the production startup contracts (Go with no `HTTP_ADDR` injection, Next via the documented `next start -H 127.0.0.1 -p 13333`) and proves, over real TCP against a real runner non-loopback address, that 127.0.0.1:{13333,18888} is reachable and the non-loopback address is not.
+- Classification: the only authorized backend change is the narrow listener config (`backend/internal/config/`), reported as `deployment_listener_config_changes`; business/auth/registration/charging changes remain 0.
+- Status: CORRECTED / NOT SELF-FROZEN (independent acceptance pending); Phase 8.6 not authorized.
 
 ### 5.1 OCS 生产冻结基线 (OCS Production Freeze Baseline)
 

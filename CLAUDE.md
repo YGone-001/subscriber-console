@@ -157,7 +157,8 @@ Charging Plane remains frozen and excluded.
 - Recharts
 - Lucide React
 - Node 20 (`.nvmrc`)
-- `next.config.ts` 已启用 `output: 'standalone'`
+- Next.js 生产启动模型唯一：`next start -H 127.0.0.1 -p 13333`（`npm run start`），监听地址固定为 `127.0.0.1:13333`（loopback-only）
+- `next.config.ts` 不启用 `output: 'standalone'`；仓库不再提供 standalone 部署路径
 
 Phase 8.5 边界（前端不再持有 API 认证运行时）：
 - 前端不再使用 MongoDB Node Driver、`jose`、`bcryptjs`（均已在 Phase 8.5 移除）。

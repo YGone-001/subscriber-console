@@ -24,7 +24,8 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
-  output: 'standalone',
+  // The repository has two lockfiles (root + frontend); pin the tracing root to frontend
+  // so Next does not infer a workspace root. Unrelated to standalone output.
   outputFileTracingRoot: __dirname,
   agentRules: false,
   reactStrictMode: true,

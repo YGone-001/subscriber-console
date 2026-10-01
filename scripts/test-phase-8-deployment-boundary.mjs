@@ -8,9 +8,15 @@
  * It exercises the REAL production topology:
  *
  *   HTTP client -> real Nginx (repository deploy/nginx/xcloud.conf)
- *                    |-- /api, /api/*  -> real Go production binary (:18888) -> MongoDB
- *                    |-- everything else -> real `next start` (:13333)
+ *                    |-- /api, /api/*  -> real Go production binary (127.0.0.1:18888) -> MongoDB
+ *                    |-- everything else -> real `next start -H 127.0.0.1 -p 13333` (127.0.0.1:13333)
  *                                              |-- protected-page guard -> Go /api/auth/me
+ *
+ * The two internal listeners are started through their real production startup contracts
+ * (Go with no HTTP_ADDR injection so its 127.0.0.1:18888 default is exercised; Next via the
+ * documented `next start -H 127.0.0.1 -p 13333`). The suite then proves over real TCP that
+ * each listener is loopback-only: reachable on 127.0.0.1 and unreachable on a real
+ * non-loopback runner address. Nginx remains the sole public edge.
  *
  * Component policy (spec section 33): handler-only, mock-only, static-only and
  * "fake JS reverse proxy" evidence is NOT sufficient. Everything below drives real TCP
@@ -59,6 +65,9 @@ const BACKEND = join(ROOT, 'backend');
 /** Authoritative independently accepted Phase 8.4 frozen baseline. */
 const START_SHA = 'e38c09d5ee8c00a870383f68d78efc56f90314ea';
 
+/** Phase 8.5 correction baseline: the Go registration set must be identical to this tree. */
+const PHASE85C_BASELINE_SHA = 'cfc2fef36d55fa32427794433b4e5cee37bfb4ac';
+
 /** Frozen canonical production API surface size (asserted against the derived set). */
 const EXPECTED_GO_REGISTRATIONS = 84;
 
@@ -76,6 +85,30 @@ const OTHER_PASSWORD = 'Phase85!Other';
 
 const NEXT_UPSTREAM_ADDR = `127.0.0.1:${NEXT_PORT}`;
 const GO_UPSTREAM_ADDR = `127.0.0.1:${GO_PORT}`;
+
+/**
+ * Production listener contract under acceptance.
+ *
+ * Go: `backend/internal/config` defaults HTTP_ADDR to 127.0.0.1:18888. The suite must
+ * exercise that default rather than masking it, so HTTP_ADDR is injected only when the
+ * operator explicitly overrides the canonical port.
+ * Next: the single documented production command is `next start -H 127.0.0.1 -p 13333`.
+ */
+const NEXT_BIND_HOST = '127.0.0.1';
+const GO_PRODUCTION_DEFAULT_ADDR = '127.0.0.1:18888';
+const NEXT_LISTENER_ADDR = `127.0.0.1:${NEXT_PORT}`;
+const GO_LISTENER_ADDR = `127.0.0.1:${GO_PORT}`;
+
+/**
+ * Narrow listener-boundary surface authorized by Phase 8.5-C: the Go listener
+ * configuration package and its documentation. Any other backend change is treated as a
+ * business / auth / registration / charging-plane change and fails the freeze gate.
+ */
+const AUTHORIZED_LISTENER_CONFIG_PATHS = ['backend/internal/config/', 'backend/README.md'];
+
+function isAuthorizedListenerChange(file) {
+  return AUTHORIZED_LISTENER_CONFIG_PATHS.some((p) => (p.endsWith('/') ? file.startsWith(p) : file === p));
+}
 
 /** Port of the MongoDB the Go service is pointed at (the relay transparently proxies it). */
 function mongoTargetPort(uri) {
@@ -137,6 +170,19 @@ function runSync(command, args, options = {}) {
 
 function git(args) {
   return runSync('git', args, { cwd: ROOT });
+}
+
+/** Exact METHOD+PATH registration set committed for one tree of the frozen Go sources. */
+function registrationsAt(sha) {
+  const re = /mux\.Handle\("(GET|POST|PUT|PATCH|DELETE)\s+([^"]+)"\s*,/g;
+  const keys = new Set();
+  for (const source of ['backend/cmd/server/main.go', 'backend/internal/remediation/handler.go']) {
+    const text = git(['show', `${sha}:${source}`]).stdout;
+    re.lastIndex = 0;
+    let m;
+    while ((m = re.exec(text)) !== null) keys.add(`${m[1]} ${m[2]}`);
+  }
+  return keys;
 }
 
 /** Send one real HTTP request and collect status/headers/body. */
@@ -251,6 +297,71 @@ async function waitForPortClosed(port, timeoutMs = 20000) {
     await sleep(200);
   }
   return false;
+}
+
+// ---------------------------------------------------------------------------
+// Internal listener boundary evidence
+// ---------------------------------------------------------------------------
+// The repository claims Nginx is the sole public edge, which is only true if the Go and
+// Next listeners are loopback-bound by the services themselves. A firewall rule is not
+// acceptance. These helpers derive a real non-loopback runner address and prove, over a
+// real TCP socket, that each internal port answers on loopback and refuses off-loopback.
+
+/** First non-internal IPv4 address of the runner, or null when the runner is loopback-only. */
+function nonLoopbackIPv4() {
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const addr of interfaces[name] || []) {
+      const family = typeof addr.family === 'string' ? addr.family : `IPv${addr.family}`;
+      if (family === 'IPv4' && !addr.internal) return addr.address;
+    }
+  }
+  return null;
+}
+
+/** Single-shot TCP reachability probe against an explicit host (not always loopback). */
+function probeTcp(host, port, timeoutMs = 2000) {
+  return new Promise((res) => {
+    const socket = net.connect({ host, port }, () => {
+      socket.destroy();
+      res(true);
+    });
+    socket.on('error', () => res(false));
+    socket.setTimeout(timeoutMs, () => {
+      socket.destroy();
+      res(false);
+    });
+  });
+}
+
+/**
+ * Socket-level binding evidence for a local port. Distinguishes a loopback listener from a
+ * wildcard listener using `ss -ltn` (Linux) or `netstat -ano -p tcp` (Windows). This is
+ * supplemental: the TCP reachability probes remain authoritative.
+ */
+function listenerBinding(port) {
+  let out = '';
+  let localAddressField = 3; // `ss -ltn`: State Recv-Q Send-Q Local:Port ...
+  if (process.platform === 'linux') {
+    out = runSync('ss', ['-ltn'], { encoding: 'utf8' }).stdout || '';
+  } else if (process.platform === 'win32') {
+    out = runSync('netstat', ['-ano', '-p', 'tcp'], { encoding: 'utf8' }).stdout || '';
+    localAddressField = 1; // `netstat -ano`: Proto Local:Port Foreign:Port State PID
+  }
+  const suffix = `:${port}`;
+  let loopback = false;
+  let wildcard = false;
+  for (const raw of out.split('\n')) {
+    const line = raw.trim();
+    if (!line.includes(suffix)) continue;
+    const local = line.split(/\s+/)[localAddressField] || '';
+    if (!local.endsWith(suffix)) continue;
+    if (local.startsWith('127.0.0.1') || local.startsWith('[::1]')) loopback = true;
+    if (local.startsWith('0.0.0.0') || local.startsWith('*:') || local.startsWith('[::]')) wildcard = true;
+  }
+  if (wildcard) return 'wildcard';
+  if (loopback) return 'loopback';
+  return 'unknown';
 }
 
 // ---------------------------------------------------------------------------
@@ -998,8 +1109,44 @@ async function main() {
   check('P85-I07', rootPkgDiff === '', `root_manifest_changes=[${rootPkgDiff}]`);
 
   // -- Go production freeze ----------------------------------------------
-  const backendDiff = git(['diff', '--name-only', START_SHA, '--', 'backend/']).stdout.trim();
-  check('P85-G17', backendDiff === '', `backend_changes=[${backendDiff}]`);
+  // Phase 8.5-C authorizes exactly one narrow backend surface: the listener configuration
+  // under backend/internal/config/. Everything else in backend/ would be a business, auth,
+  // registration or charging-plane change and must be zero.
+  const backendChangedFiles = git(['diff', '--name-only', START_SHA, '--', 'backend/'])
+    .stdout.trim()
+    .split('\n')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const deploymentListenerConfigChanges = backendChangedFiles.filter(isAuthorizedListenerChange);
+  const nonListenerBackendChanges = backendChangedFiles.filter((f) => !isAuthorizedListenerChange(f));
+  const goAuthBehaviorChanges = nonListenerBackendChanges.filter((f) => f.startsWith('backend/internal/auth/'));
+  const chargingPlaneChanges = nonListenerBackendChanges.filter((f) => f.startsWith('backend/internal/charging/'));
+  const goBusinessProductionChanges = nonListenerBackendChanges.filter(
+    (f) => !f.startsWith('backend/internal/auth/') && !f.startsWith('backend/internal/charging/'),
+  );
+  const goRegistrationChanges = registrationSetChanged ? 1 : 0;
+  check(
+    'P85-G17',
+    goBusinessProductionChanges.length === 0 &&
+      goAuthBehaviorChanges.length === 0 &&
+      chargingPlaneChanges.length === 0 &&
+      deploymentListenerConfigChanges.length > 0,
+    `backend_changes=[${backendChangedFiles.join(',')}] deployment_listener_config_changes=${deploymentListenerConfigChanges.length} go_business_production_changes=${goBusinessProductionChanges.length} go_auth_behavior_changes=${goAuthBehaviorChanges.length} charging_plane_changes=${chargingPlaneChanges.length}`,
+  );
+
+  // -- Go registration set equality against the Phase 8.5 correction baseline ------------
+  // Section 16 requires exact set equality (not a count) against cfc2fef.
+  const correctionBaselineKeys = registrationsAt(PHASE85C_BASELINE_SHA);
+  const correctionMissing = [...correctionBaselineKeys].filter((k) => !goKeySet.has(k));
+  const correctionAdded = [...goKeySet].filter((k) => !correctionBaselineKeys.has(k));
+  const correctionSetChanged = correctionMissing.length > 0 || correctionAdded.length > 0;
+  check(
+    'P85-G18',
+    correctionBaselineKeys.size === EXPECTED_GO_REGISTRATIONS &&
+      goKeys.length === EXPECTED_GO_REGISTRATIONS &&
+      !correctionSetChanged,
+    `correction_baseline=${correctionBaselineKeys.size} final=${goKeys.length} missing=${correctionMissing.length} added=${correctionAdded.length} set_changed=${correctionSetChanged}`,
+  );
 
   // -- Nginx deployment-source boundary ----------------------------------
   check(
@@ -1067,18 +1214,26 @@ async function main() {
   const goBuild = runSync('go', ['build', '-o', GO_BIN, './cmd/server'], { cwd: BACKEND, stdio: 'inherit' });
   check('P85-R02', goBuild.status === 0 && existsSync(GO_BIN), `go_build_status=${goBuild.status}`);
 
+  // Go is started through its normal production configuration contract. HTTP_ADDR is NOT
+  // injected so the production default (127.0.0.1:18888) is what actually gets exercised;
+  // an explicit override is honoured only when the operator overrides the canonical port.
+  const goEnv = {
+    ...process.env,
+    MONGODB_URI: `mongodb://127.0.0.1:${RELAY_PORT}/?serverSelectionTimeoutMS=2000&connectTimeoutMS=2000`,
+    MONGODB_XCLOUD_DB: 'xcloud',
+    MONGODB_APP_DB: 'xcloud_ops',
+    JWT_SECRET,
+  };
+  delete goEnv.HTTP_ADDR;
+  const goAddrFromEnv = process.env.PHASE85_GO_PORT ? `127.0.0.1:${GO_PORT}` : null;
+  if (goAddrFromEnv) goEnv.HTTP_ADDR = goAddrFromEnv;
+  const goAddrSource = goAddrFromEnv ? 'explicit_override' : 'production_default';
+
   const goOutput = [];
   const goProc = trackProcess(
     spawn(GO_BIN, [], {
       cwd: BACKEND,
-      env: {
-        ...process.env,
-        HTTP_ADDR: `127.0.0.1:${GO_PORT}`,
-        MONGODB_URI: `mongodb://127.0.0.1:${RELAY_PORT}/?serverSelectionTimeoutMS=2000&connectTimeoutMS=2000`,
-        MONGODB_XCLOUD_DB: 'xcloud',
-        MONGODB_APP_DB: 'xcloud_ops',
-        JWT_SECRET,
-      },
+      env: goEnv,
       stdio: ['ignore', 'pipe', 'pipe'],
     }),
     'go',
@@ -1087,7 +1242,7 @@ async function main() {
 
   const goUp = await waitForPort(GO_PORT, 60000);
   const goAlive = goProc.exitCode === null;
-  check('P85-R03', goUp && goAlive, `go_listening=${goUp} go_process_alive=${goAlive} port=${GO_PORT} output=${outputTail(goOutput)}`);
+  check('P85-R03', goUp && goAlive, `go_listening=${goUp} go_process_alive=${goAlive} port=${GO_PORT} addr_source=${goAddrSource} output=${outputTail(goOutput)}`);
   if (!goUp || !goAlive) {
     report();
     await stopAll();
@@ -1105,11 +1260,13 @@ async function main() {
   }
 
   // Spawn the Next.js server binary directly (no shell wrapper) so the process can be
-  // terminated deterministically on every platform.
+  // terminated deterministically on every platform. The arguments are exactly the
+  // documented production command (`next start -H 127.0.0.1 -p 13333`, i.e. `npm run start`);
+  // no test-only hostname is injected, so the listener under test is the production one.
   const nextOutput = [];
   const nextBin = join(FRONTEND, 'node_modules', 'next', 'dist', 'bin', 'next');
   const nextProc = trackProcess(
-    spawn(process.execPath, [nextBin, 'start', '-p', String(NEXT_PORT)], {
+    spawn(process.execPath, [nextBin, 'start', '-H', NEXT_BIND_HOST, '-p', String(NEXT_PORT)], {
       cwd: FRONTEND,
       env: { ...process.env, GO_BACKEND_URL: `http://127.0.0.1:${GO_PORT}` },
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -1119,7 +1276,59 @@ async function main() {
   captureOutput(nextProc, nextOutput);
 
   const nextUp = await waitForPort(NEXT_PORT, 120000);
-  check('P85-R05', nextUp, `next_listening=${nextUp} port=${NEXT_PORT} output=${outputTail(nextOutput)}`);
+  check('P85-R05', nextUp, `next_listening=${nextUp} port=${NEXT_PORT} bind_host=${NEXT_BIND_HOST} output=${outputTail(nextOutput)}`);
+
+  // =======================================================================
+  // Internal listener boundary (Phase 8.5-C) - real socket proof
+  // =======================================================================
+  // Both internal services are now running through their production startup contracts.
+  // Prove loopback-only binding with real TCP probes against a real non-loopback runner
+  // address. A wildcard listener would answer on that address, so `false` is required.
+
+  log('-- Internal listener boundary --');
+  const nonLoopback = nonLoopbackIPv4();
+  const nextLoopbackReachable = await probeTcp('127.0.0.1', NEXT_PORT);
+  const goLoopbackReachable = await probeTcp('127.0.0.1', GO_PORT);
+  const nextNonLoopbackReachable = nonLoopback ? await probeTcp(nonLoopback, NEXT_PORT) : null;
+  const goNonLoopbackReachable = nonLoopback ? await probeTcp(nonLoopback, GO_PORT) : null;
+
+  check(
+    'P85-B01',
+    Boolean(nonLoopback),
+    `non_loopback_address=${nonLoopback ?? 'none'} (a real off-loopback address is required to prove the boundary)`,
+  );
+  check(
+    'P85-B02',
+    nextLoopbackReachable && nextNonLoopbackReachable === false,
+    `next_listener=${NEXT_LISTENER_ADDR} loopback_reachable=${nextLoopbackReachable} nonloopback_reachable=${nextNonLoopbackReachable}`,
+  );
+  check(
+    'P85-B03',
+    goLoopbackReachable && goNonLoopbackReachable === false,
+    `go_listener=${GO_LISTENER_ADDR} loopback_reachable=${goLoopbackReachable} nonloopback_reachable=${goNonLoopbackReachable}`,
+  );
+
+  const nextBinding = listenerBinding(NEXT_PORT);
+  const goBinding = listenerBinding(GO_PORT);
+  const nextLoopbackOnly = nextLoopbackReachable && nextNonLoopbackReachable === false;
+  const goLoopbackOnly = goLoopbackReachable && goNonLoopbackReachable === false;
+  check(
+    'P85-B04',
+    nextLoopbackOnly && goLoopbackOnly,
+    `next_loopback_only=${nextLoopbackOnly} go_loopback_only=${goLoopbackOnly} next_binding=${nextBinding} go_binding=${goBinding}`,
+  );
+  const listenerEvidence = {
+    nonLoopback,
+    nextLoopbackReachable,
+    goLoopbackReachable,
+    nextNonLoopbackReachable,
+    goNonLoopbackReachable,
+    nextLoopbackOnly,
+    goLoopbackOnly,
+    nextBinding,
+    goBinding,
+    goAddrSource,
+  };
 
   // Real Nginx with the repository deployment configuration
   const repoConf = readFileSync(join(ROOT, 'deploy', 'nginx', 'xcloud.conf'), 'utf8');
@@ -1574,6 +1783,12 @@ async function main() {
     registrationSetChanged,
     observed,
     bodyResults,
+    listenerEvidence,
+    deploymentListenerConfigChanges,
+    goBusinessProductionChanges,
+    goAuthBehaviorChanges,
+    goRegistrationChanges,
+    chargingPlaneChanges,
   });
 
   await stopAll();
@@ -1616,6 +1831,30 @@ function report(ctx = null) {
   log('');
   log(`phase85_edge_api_owner=go`);
   log(`phase85_edge_ui_owner=next`);
+  log('');
+  const ledger = ctx?.listenerEvidence ?? {};
+  const nextLoopbackOnly = ledger.nextLoopbackOnly === true;
+  const goLoopbackOnly = ledger.goLoopbackOnly === true;
+  log(`phase85_next_listener=${NEXT_LISTENER_ADDR}`);
+  log(`phase85_go_listener=${GO_LISTENER_ADDR}`);
+  log(`phase85_go_listener_addr_source=${ledger.goAddrSource ?? 'production_default'}`);
+  log('');
+  log(`phase85_next_loopback_reachable=${ledger.nextLoopbackReachable === true}`);
+  log(`phase85_go_loopback_reachable=${ledger.goLoopbackReachable === true}`);
+  log('');
+  log(`phase85_next_nonloopback_reachable=${ledger.nextNonLoopbackReachable === true}`);
+  log(`phase85_go_nonloopback_reachable=${ledger.goNonLoopbackReachable === true}`);
+  log('');
+  log(`phase85_next_loopback_only=${nextLoopbackOnly}`);
+  log(`phase85_go_loopback_only=${goLoopbackOnly}`);
+  log('');
+  log(`phase85_public_edge=nginx`);
+  log(`phase85_direct_next_external_bypass=${ledger.nextNonLoopbackReachable === true}`);
+  log(`phase85_direct_go_external_bypass=${ledger.goNonLoopbackReachable === true}`);
+  log('');
+  log(`phase85_next_socket_binding=${ledger.nextBinding ?? 'unknown'}`);
+  log(`phase85_go_socket_binding=${ledger.goBinding ?? 'unknown'}`);
+  log(`phase85_runner_nonloopback_address=${ledger.nonLoopback ?? 'none'}`);
   log('');
   log(`baseline_go_registered_operations=${ctx?.baselineKeys?.size ?? EXPECTED_GO_REGISTRATIONS}`);
   log(`final_go_registered_operations=${ctx?.goReads && ctx?.goMutations ? ctx.goReads.length + ctx.goMutations.length : EXPECTED_GO_REGISTRATIONS}`);
@@ -1689,10 +1928,12 @@ function report(ctx = null) {
   log(`root_package_json_changed=false`);
   log(`root_package_lock_changed=false`);
   log('');
-  log(`go_business_production_changes=0`);
-  log(`go_auth_behavior_changes=0`);
+  log(`deployment_listener_config_changes=${ctx?.deploymentListenerConfigChanges?.length ?? 0}`);
+  log(`go_business_production_changes=${ctx?.goBusinessProductionChanges?.length ?? 0}`);
+  log(`go_auth_behavior_changes=${ctx?.goAuthBehaviorChanges?.length ?? 0}`);
+  log(`go_registration_changes=${ctx?.goRegistrationChanges ?? 0}`);
   log(`go_registration_set_changed=${Boolean(ctx?.registrationSetChanged)}`);
-  log(`charging_plane_changes=0`);
+  log(`charging_plane_changes=${ctx?.chargingPlaneChanges?.length ?? 0}`);
   log('');
   log(`phase85_result=${failures.length === 0 ? 'PASS' : 'FAIL'}`);
   log(`phase85_invariants_failed=${failures.length}`);
