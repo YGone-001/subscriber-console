@@ -78,7 +78,17 @@ Routing:
 | `location = /api` | `xcloud_go` | Exact `/api` must not fall through to the UI upstream |
 | `location /api/` | `xcloud_go` | All API traffic |
 | `location = /api/notifications/stream` | `xcloud_go` | Serial EventSource stream, never buffered |
+| `location /_next/hmr` | `xcloud_next` | Next.js development transport (HMR WebSocket upgrade) only |
 | `location /` | `xcloud_next` | UI pages and static assets |
+
+The `/_next/hmr` location is a development transport exception, not API routing. Next.js 16
+delivers development HMR over a WebSocket under the framework namespace `/_next/hmr`
+(named `/_next/webpack-hmr` before Next.js 16). The generic UI location clears the
+`Connection` header for upstream keepalive, so an upgrade request arrives as a plain GET
+and is answered by the UI navigation guard instead of the HMR handler. This location
+forwards `Upgrade`/`Connection` for that single framework path. It never matches `/api`
+or `/api/*`, which remain exclusive to the Go upstream, and it is inert under
+`next start`, where no HMR server is registered.
 
 Every API location applies the same contract:
 
@@ -270,6 +280,14 @@ http://localhost
 
 When the edge is intentionally configured on another port
 (`sudo ./deploy/nginx/setup.sh 8080`), open `http://localhost:8080`.
+
+Development transport note: the Nginx edge remains the full-stack browser origin in
+development too. The Next.js development HMR WebSocket (`/_next/hmr`) is transported
+through the edge by the dedicated `location /_next/hmr` block; this is framework
+development traffic, not API ownership, and it does not relax the prohibition on Next.js
+API routing. The runtime acceptance suite
+(`node scripts/test-local-development-edge.mjs`) proves this transport end to end and
+also asserts the `local:doctor` `FULL_STACK_READY` and `EDGE_REQUIRED` results.
 
 ### Production
 

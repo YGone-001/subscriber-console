@@ -236,6 +236,12 @@ Use:
 npm run local:doctor
 ```
 
+Development transport: Nginx remains the full-stack browser origin in development.
+The Next.js development server transports its HMR WebSocket through the edge under
+the framework namespace `/_next/hmr`. This is framework development traffic, not API
+ownership: it never matches `/api` or `/api/*` and it does not relax the Next.js API
+routing prohibition above. Verified end to end by `scripts/test-local-development-edge.mjs`.
+
 Forbidden workarounds (never add):
 
 ```text

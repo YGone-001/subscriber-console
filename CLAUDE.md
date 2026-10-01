@@ -154,6 +154,7 @@ Charging Plane remains frozen and excluded.
 - 浏览器相对路径 `/api` 调用依赖 Nginx 同源边缘转发至 Go。
 - 本地环境缺少 Nginx 属于拓扑不完整，不构成“把 API 转发能力重新还给 Next.js”的理由。
 - 禁止新增：Next.js `/api` rewrite、Next.js `/api` route handler、Next.js API 反向代理/转发中间件、Node API fallback、浏览器直连 Go 的硬编码 base URL。
+- 开发态 HMR 传输：Nginx 在开发态仍是全栈浏览器 origin；Next.js 开发服务器的 HMR WebSocket 经边缘 `/_next/hmr` 传输。这是框架开发流量，不是 API 归属，也不放宽上述 Next.js API 路由禁令。
 - 本地拓扑自检：`npm run local:doctor`。
 
 ## 3. 技术栈

@@ -10,12 +10,18 @@
  * pointed at them for full-stack use. Relative browser `/api` requests only reach Go
  * when they enter through the Nginx edge.
  *
+ * The direct Next.js API probe is interpreted, not merely reported: the Next.js
+ * listener must never answer `/api/auth/me` with a JSON authentication response. If it
+ * ever does, the UI runtime has started owning API behavior and the doctor reports
+ * ARCHITECTURE_VIOLATION instead of a topology state.
+ *
  * Usage:
  *   npm run local:doctor
  *   XCLOUD_EDGE_URL=http://127.0.0.1:8080 npm run local:doctor
  */
 
 import http from 'node:http';
+import { pathToFileURL } from 'node:url';
 
 const DEFAULT_EDGE_URL = 'http://127.0.0.1';
 const EDGE_URL = (process.env.XCLOUD_EDGE_URL || DEFAULT_EDGE_URL).replace(/\/+$/, '');
@@ -27,11 +33,14 @@ const EDGE_ROOT = `${EDGE_URL}/`;
 const EDGE_API = `${EDGE_URL}/api/auth/me`;
 
 const PROBE_TIMEOUT_MS = 4000;
+const MAX_BODY_BYTES = 8192;
 
 /**
  * Probe a URL. Resolves with a status when the server answers (any status code is a
  * reachability success) and with a transport error otherwise. No credentials, no
  * cookies, no request body: this is a topology check, not an authentication check.
+ * A bounded body sample and the content type are captured so the direct Next.js API
+ * answer can be interpreted instead of merely observed.
  */
 function probe(url) {
   return new Promise((resolve) => {
@@ -42,8 +51,19 @@ function probe(url) {
       resolve(result);
     };
     const req = http.get(url, { timeout: PROBE_TIMEOUT_MS }, (res) => {
-      res.resume();
-      res.on('end', () => done({ reachable: true, status: res.statusCode }));
+      const chunks = [];
+      let size = 0;
+      res.on('data', (chunk) => {
+        if (size >= MAX_BODY_BYTES) return;
+        size += chunk.length;
+        chunks.push(chunk);
+      });
+      res.on('end', () => done({
+        reachable: true,
+        status: res.statusCode,
+        contentType: String(res.headers['content-type'] || ''),
+        body: Buffer.concat(chunks).subarray(0, MAX_BODY_BYTES).toString('utf8'),
+      }));
       res.on('error', (err) => done({ reachable: false, error: err.message }));
     });
     req.on('timeout', () => {
@@ -51,6 +71,24 @@ function probe(url) {
     });
     req.on('error', (err) => done({ reachable: false, error: err.message }));
   });
+}
+
+/**
+ * Interpret a direct `GET http://127.0.0.1:13333/api/auth/me` probe.
+ *
+ * The Next.js listener owns no /api route, so the only acceptable answer is a
+ * non-JSON framework page (typically a 404 HTML document). A JSON answer on an
+ * authentication status code (200 or 401) means the Next.js listener is behaving as
+ * the authentication API authority: that is an architecture violation, never a
+ * topology quirk, and it must fail the doctor rather than pass as "expected 404".
+ */
+export function classifyDirectNextApi(result) {
+  if (!result || !result.reachable) return 'UNREACHABLE';
+  const contentType = String(result.contentType || '');
+  const isJson = /application\/json/i.test(contentType);
+  const isAuthBoundaryStatus = result.status === 401 || result.status === 200;
+  if (isJson && isAuthBoundaryStatus) return 'ARCHITECTURE_VIOLATION';
+  return 'UNSUPPORTED_BY_DESIGN';
 }
 
 function statusLine(label, url, result) {
@@ -71,9 +109,13 @@ async function main() {
   const nextReady = next.reachable;
   const edgeReady = edge.reachable;
   const edgeApiRouted = edgeApi.reachable && edgeApi.status === 401;
+  const directNextApi = classifyDirectNextApi(nextApi);
 
   let result;
-  if (!goReady) result = 'GO_DOWN';
+  // An architecture violation outranks every topology state: a Next.js listener that
+  // answers the authentication API is a contract breach, not a "Next is up" reading.
+  if (directNextApi === 'ARCHITECTURE_VIOLATION') result = 'ARCHITECTURE_VIOLATION';
+  else if (!goReady) result = 'GO_DOWN';
   else if (!nextReady) result = 'NEXT_DOWN';
   else if (!edgeReady) result = 'EDGE_REQUIRED';
   else if (!edgeApiRouted) result = 'EDGE_API_MISROUTED';
@@ -95,7 +137,15 @@ async function main() {
     console.log('\nNext.js UI is not reachable on 127.0.0.1:13333.');
   }
 
-  console.log('\nDirect Next.js API access is intentionally unsupported. Use the Nginx edge URL.');
+  if (directNextApi === 'ARCHITECTURE_VIOLATION') {
+    console.log('\nARCHITECTURE_VIOLATION');
+    console.log(`The Next.js listener at ${NEXT_API} answered with a JSON authentication`);
+    console.log(`response (HTTP ${nextApi.status}, content-type "${nextApi.contentType}").`);
+    console.log('Next.js owns no API route. Remove any Next.js /api handler, rewrite or');
+    console.log('reverse proxy so /api and /api/* remain exclusively served by Go.');
+  } else {
+    console.log('\nDirect Next.js API access is intentionally unsupported. Use the Nginx edge URL.');
+  }
 
   if (result === 'FULL_STACK_READY') {
     console.log('\nFull-stack browser access is ready.');
@@ -116,6 +166,8 @@ async function main() {
     console.log('\nFull-stack browser access is NOT ready: the Next.js UI is down.');
   } else if (result === 'GO_DOWN') {
     console.log('\nFull-stack browser access is NOT ready: the Go backend is down.');
+  } else if (result === 'ARCHITECTURE_VIOLATION') {
+    console.log('\nFull-stack browser access is NOT ready: the API ownership boundary is broken.');
   }
 
   console.log('\n==================================================');
@@ -123,14 +175,19 @@ async function main() {
   console.log(`local_stack_go=${goReady ? 'READY' : 'DOWN'}`);
   console.log(`local_stack_edge=${edgeReady ? 'READY' : 'UNAVAILABLE'}`);
   console.log(`local_stack_edge_api=${edgeApiRouted ? 'READY' : edgeReady ? 'MISROUTED' : 'UNAVAILABLE'}`);
-  console.log(`local_stack_direct_next_api=UNSUPPORTED_BY_DESIGN`);
+  console.log(`local_stack_direct_next_api=${directNextApi}`);
   console.log(`local_stack_result=${result}`);
   console.log('==================================================\n');
 
   process.exit(result === 'FULL_STACK_READY' ? 0 : 1);
 }
 
-main().catch((err) => {
-  console.error(`Local stack doctor failed: ${err.message}`);
-  process.exit(2);
-});
+// Only probe when invoked as a CLI. Importing this module (for example to reuse
+// `classifyDirectNextApi` in an acceptance suite) must not touch the network.
+const isDirectRun = Boolean(process.argv[1]) && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (isDirectRun) {
+  main().catch((err) => {
+    console.error(`Local stack doctor failed: ${err.message}`);
+    process.exit(2);
+  });
+}
