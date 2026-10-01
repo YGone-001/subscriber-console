@@ -8,11 +8,11 @@ export default function SkeletonDashboard() {
         {Array.from({ length: 6 }).map((_, index) => (
           <div className="kpi-strip-item" key={index}>
             <div className="kpi-strip-head">
-              <div className="skeleton-loader" style={{ width: 22, height: 22, borderRadius: "var(--ref-radius-compact)" }} />
-              <div className="skeleton-loader" style={{ width: "60%", height: 10, borderRadius: "var(--ref-radius-micro)" }} />
+              <div className="skeleton-loader skeleton-icon-22" />
+              <div className="skeleton-loader skeleton-line-60-10" />
             </div>
-            <div className="skeleton-loader" style={{ width: "70%", height: 20, borderRadius: "var(--ref-radius-micro)", marginTop: 4 }} />
-            <div className="skeleton-loader" style={{ width: "90%", height: 8, borderRadius: "var(--ref-radius-micro)", marginTop: 2 }} />
+            <div className="skeleton-loader skeleton-line-70-20-mt4" />
+            <div className="skeleton-loader skeleton-line-90-8-mt2" />
           </div>
         ))}
       </div>
@@ -20,28 +20,28 @@ export default function SkeletonDashboard() {
       {/* Alerts row skeleton */}
       <div className="analytics-alerts-row">
         <div className="analytics-alerts-list">
-          <div className="skeleton-loader" style={{ width: "40%", height: "20px", borderRadius: "var(--ref-radius-compact)" }} />
+          <div className="skeleton-loader skeleton-line-40-20" />
           {Array.from({ length: 3 }).map((_, index) => (
-            <div key={index} className="skeleton-loader" style={{ height: "52px", borderRadius: "var(--ref-radius-control)" }} />
+            <div key={index} className="skeleton-loader skeleton-block-52" />
           ))}
         </div>
         <div className="analytics-alerts-score">
-          <div className="skeleton-loader" style={{ width: "70px", height: "70px", borderRadius: "var(--ref-radius-circle)", margin: "0 auto" }} />
-          <div className="skeleton-loader" style={{ width: "80%", height: "18px", borderRadius: "var(--ref-radius-micro)", margin: "0.5rem auto" }} />
+          <div className="skeleton-loader skeleton-circle-70" />
+          <div className="skeleton-loader skeleton-line-80-18-mxa" />
         </div>
       </div>
 
       {/* OCS Resource Strip skeleton — 4 columns */}
       <div className="ocs-resource-strip">
         {Array.from({ length: 4 }).map((_, index) => (
-          <div className="ocs-res-cell" key={index} style={{ pointerEvents: "none" }}>
+          <div className="ocs-res-cell skeleton-static" key={index}>
             <div className="ocs-res-head">
-              <div className="skeleton-loader" style={{ width: 22, height: 22, borderRadius: "var(--ref-radius-compact)" }} />
-              <div className="skeleton-loader" style={{ width: "55%", height: 10, borderRadius: "var(--ref-radius-micro)" }} />
+              <div className="skeleton-loader skeleton-icon-22" />
+              <div className="skeleton-loader skeleton-line-55-10" />
             </div>
-            <div className="skeleton-loader" style={{ width: "60%", height: 18, borderRadius: "var(--ref-radius-micro)", marginTop: 2 }} />
-            <div className="skeleton-loader" style={{ width: "100%", height: 4, borderRadius: "var(--ref-radius-pill)", marginTop: 4 }} />
-            <div className="skeleton-loader" style={{ width: "75%", height: 8, borderRadius: "var(--ref-radius-micro)", marginTop: 2 }} />
+            <div className="skeleton-loader skeleton-line-60-18-mt2" />
+            <div className="skeleton-loader skeleton-line-100-4-mt4" />
+            <div className="skeleton-loader skeleton-line-75-8-mt2" />
           </div>
         ))}
       </div>

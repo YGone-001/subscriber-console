@@ -51,24 +51,22 @@ test('Status filter label renders 全部状态 in Chinese locale', () => {
 });
 
 test('OcsContractsPanel distinguishes LOADING, ERROR, EMPTY, and SUCCESS states', () => {
-  assert.match(contractsPanelSource, /loading\s*\?/);
-  assert.match(contractsPanelSource, /ocs-loading/);
+  assert.match(contractsPanelSource, /DataTableStateRow/);
+  assert.match(contractsPanelSource, /loading\s*\?[\s\S]*?state="loading"/);
 
-  assert.match(contractsPanelSource, /error\s*\?/);
+  assert.match(contractsPanelSource, /error\s*\?[\s\S]*?state="error"/);
   assert.match(contractsPanelSource, /errorBanner/);
-  assert.match(contractsPanelSource, /ocs-error-cell/);
   assert.match(contractsPanelSource, /error\s*\?\s*"—"\s*:\s*total/);
 
-  assert.match(contractsPanelSource, /records\.length === 0/);
+  assert.match(contractsPanelSource, /records\.length === 0[\s\S]*?state="empty"/);
 });
 
 test('OcsBalancePlaceholder distinguishes LOADING, ERROR, EMPTY, and SUCCESS states', () => {
-  assert.match(balancePlaceholderSource, /loading\s*\?/);
-  assert.match(balancePlaceholderSource, /ocs-loading/);
+  assert.match(balancePlaceholderSource, /DataTableStateRow/);
+  assert.match(balancePlaceholderSource, /loading\s*\?[\s\S]*?state="loading"/);
 
-  assert.match(balancePlaceholderSource, /error\s*\?/);
-  assert.match(balancePlaceholderSource, /ocs-error-cell/);
+  assert.match(balancePlaceholderSource, /error\s*\?[\s\S]*?state="error"/);
   assert.match(balancePlaceholderSource, /error\s*\?\s*"—"\s*:\s*total/);
 
-  assert.match(balancePlaceholderSource, /records\.length === 0/);
+  assert.match(balancePlaceholderSource, /records\.length === 0[\s\S]*?state="empty"/);
 });

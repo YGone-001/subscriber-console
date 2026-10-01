@@ -144,7 +144,7 @@ export default function AdjustBalanceModal({
         aria-labelledby="balance-modal-title"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="ocs-dialog-header" style={{ justifyContent: "space-between" }}>
+        <div className="ocs-dialog-header ocs-dialog-header-between">
           <h3 id="balance-modal-title">{t("ocs_balance_modal_title")}</h3>
           <button
             type="button"
@@ -156,11 +156,11 @@ export default function AdjustBalanceModal({
           </button>
         </div>
 
-        <div className="ocs-balance-modal-imsi" style={{ marginBottom: "1rem" }}>
-          <span style={{ fontSize: "var(--ref-font-size-data-relaxed)", color: "var(--text-secondary)" }}>
+        <div className="ocs-balance-modal-imsi">
+          <span className="ocs-balance-modal-imsi-line">
             IMSI: <strong className="ocs-mono">{imsi}</strong>
           </span>
-          <div style={{ fontSize: "var(--ref-font-size-label)", color: "var(--text-secondary)", marginTop: "0.25rem" }}>
+          <div className="ocs-balance-modal-imsi-note">
             {t("ocs_col_data_available")}: {formatBytes(dataAvailable)} |{" "}
             {t("ocs_col_voice_avail")}: {voiceAvailable}s |{" "}
             {t("ocs_col_sms_avail")}: {smsAvailable}
@@ -168,17 +168,13 @@ export default function AdjustBalanceModal({
         </div>
 
         {error && (
-          <div
-            className="ocs-feedback-error"
-            style={{ marginBottom: "1rem", display: "flex", gap: "0.5rem", alignItems: "center" }}
-          >
+          <div className="ocs-feedback-error ocs-feedback-spaced ocs-feedback-row">
             <AlertCircle size={16} />
             <span>{error}</span>
             {casConflict && (
               <button
                 type="button"
-                className="ocs-btn ocs-btn-secondary"
-                style={{ padding: "0.2rem 0.5rem", fontSize: "var(--ref-font-size-caption)", marginLeft: "auto" }}
+                className="ocs-btn ocs-btn-secondary ocs-btn-compact-auto"
                 onClick={() => {
                   onClose();
                   window.location.reload();
@@ -195,8 +191,7 @@ export default function AdjustBalanceModal({
           <div className="ocs-form-group">
             <label className="ocs-form-label">{t("ocs_balance_bucket")}</label>
             <select
-              className="ocs-select"
-              style={{ width: "100%" }}
+              className="ocs-select ocs-select-full"
               value={bucket}
               onChange={(e) => setBucket(e.target.value as "data" | "voice" | "sms")}
             >
@@ -210,8 +205,7 @@ export default function AdjustBalanceModal({
           <div className="ocs-form-group">
             <label className="ocs-form-label">{t("ocs_balance_operation")}</label>
             <select
-              className="ocs-select"
-              style={{ width: "100%" }}
+              className="ocs-select ocs-select-full"
               value={operation}
               onChange={(e) => setOperation(e.target.value as "credit" | "debit")}
             >
@@ -223,7 +217,7 @@ export default function AdjustBalanceModal({
           {/* Amount input + unit */}
           <div className="ocs-form-group">
             <label className="ocs-form-label">{t("ocs_balance_amount")}</label>
-            <div style={{ display: "flex", gap: "0.5rem" }}>
+            <div className="ocs-amount-row">
               <input
                 type="number"
                 step="any"
@@ -236,8 +230,7 @@ export default function AdjustBalanceModal({
               />
               {bucket === "data" && (
                 <select
-                  className="ocs-select"
-                  style={{ width: "110px" }}
+                  className="ocs-select ocs-select-unit"
                   value={dataUnit}
                   onChange={(e) => setDataUnit(e.target.value as "GB" | "MB" | "Bytes")}
                 >
@@ -248,8 +241,7 @@ export default function AdjustBalanceModal({
               )}
               {bucket === "voice" && (
                 <select
-                  className="ocs-select"
-                  style={{ width: "110px" }}
+                  className="ocs-select ocs-select-unit"
                   value={voiceUnit}
                   onChange={(e) => setVoiceUnit(e.target.value as "Minutes" | "Seconds")}
                 >
@@ -258,23 +250,13 @@ export default function AdjustBalanceModal({
                 </select>
               )}
               {bucket === "sms" && (
-                <span
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    padding: "0 0.75rem",
-                    background: "var(--surface-field)",
-                    border: "1px solid var(--surface-border)",
-                    borderRadius: "var(--ref-radius-compact)",
-                    fontSize: "var(--ref-font-size-data-relaxed)",
-                  }}
-                >
+                <span className="ocs-unit-suffix">
                   {t("sms_unit")}
                 </span>
               )}
             </div>
             {calculatedAmount > 0 && bucket === "data" && dataUnit !== "Bytes" && (
-              <span style={{ fontSize: "var(--ref-font-size-caption)", color: "var(--text-secondary)", marginTop: "0.25rem", display: "block" }}>
+              <span className="ocs-amount-hint">
                 = {calculatedAmount.toLocaleString()} Bytes ({formatBytes(calculatedAmount)})
               </span>
             )}
@@ -307,7 +289,7 @@ export default function AdjustBalanceModal({
           </div>
 
           {/* Actions */}
-          <div className="ocs-dialog-actions" style={{ marginTop: "1.25rem" }}>
+          <div className="ocs-dialog-actions ocs-dialog-actions-spaced">
             <button
               type="button"
               className="ocs-btn ocs-btn-secondary"

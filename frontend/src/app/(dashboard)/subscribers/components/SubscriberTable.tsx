@@ -121,7 +121,7 @@ export function SubscriberTable(props: SubscriberTableProps) {
             <SortableTableHeader label={t("col_imsi")} active={sortField === "imsi"} direction={sortDirection} icon={renderSortIcon("imsi")} onSort={() => handleSort("imsi")} />
             <SortableTableHeader priority="supplementary" label={t("col_plmn")} active={sortField === "plmn"} direction={sortDirection} icon={renderSortIcon("plmn")} onSort={() => handleSort("plmn")} />
             <SortableTableHeader priority="important" label={t("col_policy")} active={sortField === "policy"} direction={sortDirection} icon={renderSortIcon("policy")} onSort={() => handleSort("policy")} />
-            <SortableTableHeader label={t("col_traffic")} active={sortField === "usage"} direction={sortDirection} icon={renderSortIcon("usage")} onSort={() => handleSort("usage")} style={{ minWidth: "150px" }} />
+            <SortableTableHeader label={t("col_traffic")} active={sortField === "usage"} direction={sortDirection} icon={renderSortIcon("usage")} onSort={() => handleSort("usage")} className="usage-column" />
             <SortableTableHeader priority="important" label={t("col_last_active")} active={sortField === "lastActive"} direction={sortDirection} icon={renderSortIcon("lastActive")} onSort={() => handleSort("lastActive")} />
             {canEditSubscribers && <th className="actions-col" data-column-priority="essential">{t("col_actions")}</th>}
           </tr>
@@ -235,7 +235,7 @@ export function SubscriberTable(props: SubscriberTableProps) {
                          <PenLine size={18} />
                        </button>
                        <button type="button" className="action-btn action-btn-danger" onClick={(e) => handleDelete(sub.imsi, e)} title={t("action_delete")} aria-label={`${t("action_delete")}: ${sub.imsi}`} disabled={isDeletingSingle === sub.imsi || Boolean(pendingDelete)}>
-                         {isDeletingSingle === sub.imsi ? <span className="spinner" style={{ width: 18, height: 18, borderWidth: 2 }} /> : <Trash2 size={18} />}
+                         {isDeletingSingle === sub.imsi ? <span className="spinner spinner-md" /> : <Trash2 size={18} />}
                        </button>
                        <div className="dropdown-container">
                          <button type="button" className="action-btn action-btn-muted" title={t("action_more")} aria-label={`${t("action_more")}: ${sub.imsi}`} aria-expanded={activeDropdown === sub.imsi} onClick={(e) => { e.stopPropagation(); setActiveDropdown(activeDropdown === sub.imsi ? null : sub.imsi); }}>

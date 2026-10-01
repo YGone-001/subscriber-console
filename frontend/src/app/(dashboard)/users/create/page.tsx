@@ -63,7 +63,7 @@ export default function CreateUserPage() {
         </div>
       </div>
 
-      <div className={styles.drawerBody} style={{ maxWidth: 560 }}>
+      <div className={`${styles.drawerBody} ${styles.createFormNarrow}`}>
         <section className={styles.formSection}>
           <h3>{t("users_form_basic")}</h3>
           <label>
@@ -107,9 +107,9 @@ export default function CreateUserPage() {
             onEnter={handleSubmit} />
         </section>
 
-        {error ? <p style={{ color: "var(--danger)" }}>{error}</p> : null}
+        {error ? <p className={styles.formError}>{error}</p> : null}
 
-        <div style={{ display: "flex", gap: 12, marginTop: 16 }}>
+        <div className={styles.editActions}>
           <button type="button" className="btn btn-primary" disabled={saving} onClick={handleSubmit}>
             {saving ? t("saving") : t("users_create_action")}
           </button>

@@ -512,7 +512,7 @@
 }
 
 .rule-conflict-row {
-  background: var(--status-danger-soft) !important;
+  background: var(--status-danger-soft);
 }
 
 .rule-conflict-badge {
@@ -532,7 +532,7 @@
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 0.75rem;
   padding: 0.9rem;
-  background: var(--bg-secondary);
+  background: var(--background);
   border-radius: var(--ref-radius-control);
   border: 1px solid var(--surface-border);
 }
@@ -572,7 +572,6 @@
 @media (max-width: 760px) {
   .rating-page { padding: 1rem; }
   .rating-page-header { flex-direction: column; align-items: stretch; gap: 0.5rem; }
-  .rating-management-grid { grid-template-columns: 1fr !important; }
 
   .card-header-grid,
   .filters-grid {
@@ -683,6 +682,10 @@
     background: var(--surface);
   }
 
+  .rules-matrix-table tbody tr.rule-conflict-row:not([data-state]) {
+    background: var(--status-danger-soft);
+  }
+
   .rules-matrix-table tbody tr:not([data-state]) > td {
     min-width: 0;
     display: grid;
@@ -692,7 +695,7 @@
     padding: 0.65rem 0;
     border-bottom: 1px solid color-mix(in srgb, var(--surface-border) 72%, transparent);
     overflow-wrap: anywhere;
-    text-align: left !important;
+    text-align: left;
   }
 
   .rules-matrix-table tbody tr:not([data-state]) > td[data-label]::before {
@@ -723,4 +726,185 @@
   .rating-form-limits-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* Plan catalogue and rules matrix layout helpers. */
+.fields-grid.fields-grid-auto {
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+.fields-grid.fields-grid-two {
+  grid-template-columns: 1fr 1fr;
+}
+
+.conflict-alert-text {
+  margin: 0 0 0.5rem 0;
+  font-size: var(--ref-font-size-body-compact);
+  opacity: 0.9;
+}
+
+.conflict-alert-list {
+  margin: 0;
+  padding-left: 1.25rem;
+  font-size: var(--ref-font-size-data-relaxed);
+}
+
+.rules-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.rules-search {
+  flex: 1;
+  max-width: 360px;
+}
+
+.table-container.rules-matrix-shell {
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-control);
+  overflow: hidden;
+}
+
+.rules-matrix-table th.rules-col-priority {
+  width: 60px;
+}
+
+.rules-matrix-table th.rules-col-actions,
+.rules-matrix-table td.rules-col-actions {
+  text-align: right;
+}
+
+.rules-matrix-table th.rules-col-actions {
+  width: 120px;
+}
+
+.rule-id-cell {
+  font-family: monospace;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.rule-conflict-offset {
+  margin-top: 0.2rem;
+}
+
+.rule-scenario-cell {
+  text-transform: capitalize;
+  font-weight: 600;
+  font-size: var(--ref-font-size-data-relaxed);
+}
+
+.rule-apn-code {
+  font-size: var(--ref-font-size-body-compact);
+  color: var(--primary);
+}
+
+.rule-rg-si {
+  font-family: monospace;
+  font-size: var(--ref-font-size-body-compact);
+}
+
+.rule-rate-cell {
+  font-family: monospace;
+  font-weight: 700;
+}
+
+.rule-cell-relaxed {
+  font-size: var(--ref-font-size-data-relaxed);
+}
+
+.rule-row-actions {
+  display: inline-flex;
+  gap: 0.35rem;
+}
+
+.dryrun-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-muted);
+  font-size: var(--ref-font-size-body-compact);
+}
+
+.dryrun-stat-value.dryrun-stat-value-success {
+  color: var(--success);
+}
+
+.dryrun-stat-value.dryrun-stat-value-warning {
+  color: var(--warning);
+}
+
+.dryrun-stat-value.dryrun-stat-value-inline {
+  font-size: var(--ref-font-size-body);
+}
+
+/* Rating modal layout helpers. */
+.card-desc.card-desc-flush {
+  margin: 0;
+}
+
+.stat-card.stat-card-inline {
+  padding: 0.75rem 1rem;
+  background: var(--background);
+  border-radius: var(--ref-radius-control);
+}
+
+.stat-card.stat-card-preview {
+  padding: 0.75rem 1rem;
+  background: var(--background);
+  border-radius: var(--ref-radius-control);
+  border: 1px solid var(--border-color);
+}
+
+.rating-import-file-btn {
+  display: inline-flex;
+  cursor: pointer;
+  margin-bottom: 0.5rem;
+}
+
+.rating-import-file-icon {
+  margin-right: 0.5rem;
+}
+
+.rating-import-file-input {
+  display: none;
+}
+
+.form-input.rating-import-textarea {
+  font-family: monospace;
+  font-size: var(--ref-font-size-data-relaxed);
+  min-height: 140px;
+}
+
+.rating-notice-list {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.rating-preview-ready {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.4rem;
+  color: var(--success);
+  font-weight: 600;
+}
+
+.rating-preview-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem;
+  font-size: var(--ref-font-size-body-compact);
+}
+
+.rating-meta-compact {
+  font-size: var(--ref-font-size-body-compact);
+}
+
+.rating-meta-note {
+  margin-left: 0.5rem;
+  font-size: var(--ref-font-size-data);
 }

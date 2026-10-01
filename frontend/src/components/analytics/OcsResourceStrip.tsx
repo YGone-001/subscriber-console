@@ -58,7 +58,7 @@ export default function OcsResourceStrip({ ocsBalances, ocsSessions, t }: OcsRes
       {/* Data Pool */}
       <Link href="/ocs/balances" className="ocs-res-cell" role="listitem">
         <div className="ocs-res-head">
-          <div className="ocs-res-icon" style={{ color: "var(--chart-1)", background: "color-mix(in srgb, var(--chart-1) 9%, transparent)" }}>
+          <div className="ocs-res-icon ocs-res-icon-tone-1">
             <Database size={14} />
           </div>
           <span className="ocs-res-label">{t("dash_ocs_kpi_utilization")}</span>
@@ -73,7 +73,7 @@ export default function OcsResourceStrip({ ocsBalances, ocsSessions, t }: OcsRes
       {/* Voice Pool */}
       <Link href="/ocs/balances" className="ocs-res-cell" role="listitem">
         <div className="ocs-res-head">
-          <div className="ocs-res-icon" style={{ color: "var(--chart-2)", background: "color-mix(in srgb, var(--chart-2) 9%, transparent)" }}>
+          <div className="ocs-res-icon ocs-res-icon-tone-2">
             <Phone size={14} />
           </div>
           <span className="ocs-res-label">{t("dash_ocs_voice_pool")}</span>
@@ -88,7 +88,7 @@ export default function OcsResourceStrip({ ocsBalances, ocsSessions, t }: OcsRes
       {/* SMS Pool */}
       <Link href="/ocs/balances" className="ocs-res-cell" role="listitem">
         <div className="ocs-res-head">
-          <div className="ocs-res-icon" style={{ color: "var(--chart-3)", background: "color-mix(in srgb, var(--chart-3) 9%, transparent)" }}>
+          <div className="ocs-res-icon ocs-res-icon-tone-3">
             <MessageSquare size={14} />
           </div>
           <span className="ocs-res-label">{t("dash_ocs_sms_pool")}</span>
@@ -103,7 +103,7 @@ export default function OcsResourceStrip({ ocsBalances, ocsSessions, t }: OcsRes
       {/* Sessions */}
       <Link href="/ocs/sessions" className="ocs-res-cell" role="listitem">
         <div className="ocs-res-head">
-          <div className="ocs-res-icon" style={{ color: "var(--status-success)", background: "color-mix(in srgb, var(--status-success) 9%, transparent)" }}>
+          <div className="ocs-res-icon ocs-res-icon-tone-success">
             <Radio size={14} />
           </div>
           <span className="ocs-res-label">{t("dash_ocs_active_sessions")}</span>

@@ -17,6 +17,7 @@ import {
   Pencil,
 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
+import { DataTableStateRow } from "@/components/ui/DataTableState";
 import OcsPageShell from "../OcsPageShell";
 import OcsStatusBadge from "../common/OcsStatusBadge";
 import ConfirmDialog from "../common/ConfirmDialog";
@@ -138,7 +139,7 @@ export default function OcsTariffGovernancePanel() {
         onRefresh={() => refresh()}
         kpiGrid={kpiGrid}
         controls={
-          <div className="ocs-controls-bar" style={{ justifyContent: "flex-end" }}>
+          <div className="ocs-controls-bar ocs-controls-bar-end">
             <button
               type="button"
               className="ocs-btn ocs-btn-primary"
@@ -176,7 +177,7 @@ export default function OcsTariffGovernancePanel() {
                 </thead>
                 <tbody>
                   {plans.length === 0 && !loading && (
-                    <tr><td colSpan={8} className="ocs-empty">{t("no_data")}</td></tr>
+                    <DataTableStateRow colSpan={8} state="empty">{t("no_data")}</DataTableStateRow>
                   )}
                   {plans.map((plan) => (
                     <tr key={plan.plan_id}>

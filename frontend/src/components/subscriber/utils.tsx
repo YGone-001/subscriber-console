@@ -21,10 +21,10 @@ export const MaskedValue = ({ label, value, singleLine = false }: { label: strin
     setTimeout(() => setCopied(false), 2000);
   };
 
-  if (!value) return <span style={{ color: "var(--text-muted)", fontSize: "var(--ref-font-size-body-emphasis)" }}>N/A</span>;
+  if (!value) return <span className="masked-na">N/A</span>;
 
   return (
-    <div style={{ width: "100%", minWidth: 0, display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", alignItems: "start", gap: "0.5rem" }}>
+    <div className="masked-row">
       <span
         style={{
           minWidth: 0,
@@ -40,7 +40,7 @@ export const MaskedValue = ({ label, value, singleLine = false }: { label: strin
       >
         {value}
       </span>
-      <button className="copy-btn" onClick={handleCopy} title={`Copy full ${label}`} style={{ flexShrink: 0 }}>
+      <button className="copy-btn masked-copy" onClick={handleCopy} title={`Copy full ${label}`}>
         {copied ? <Check size={16} color="var(--success)" /> : <Copy size={16} />}
       </button>
     </div>

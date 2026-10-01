@@ -140,7 +140,7 @@ export default function UserDetailPage() {
           <Link href="/users" className="btn-icon" title={t("cancel")}><ArrowLeft size={18} /></Link>
           <h1>{t("users_title")}</h1>
         </div>
-        <p style={{ color: "var(--danger)" }}>{mapUserManagementError(error, t)}</p>
+        <p className={styles.errorText}>{mapUserManagementError(error, t)}</p>
       </div>
     );
   }
@@ -167,7 +167,7 @@ export default function UserDetailPage() {
           <RoleBadge role={normalizedRole} />
           <StatusBadge status={normalizedStatus} />
         </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <div className={styles.headerActions}>
           {canUpdateProfile && !editing ? (
             <button type="button" className="btn btn-ghost" onClick={startEdit}>
               <Pencil size={16} /> {t("users_edit_account")}
@@ -201,10 +201,10 @@ export default function UserDetailPage() {
         </div>
       </div>
 
-      {notice ? <p style={{ color: "var(--success)" }}>{notice}</p> : null}
-      {formError ? <p style={{ color: "var(--danger)" }}>{formError}</p> : null}
+      {notice ? <p className={styles.successText}>{notice}</p> : null}
+      {formError ? <p className={styles.errorText}>{formError}</p> : null}
 
-      <div className={styles.drawerBody} style={{ maxWidth: 640 }}>
+      <div className={`${styles.drawerBody} ${styles.detailBodyNarrow}`}>
         <section className={styles.formSection}>
           <h3>{t("users_form_basic")}</h3>
           <label>
@@ -259,7 +259,7 @@ export default function UserDetailPage() {
           <p className={styles.sectionDescription}>{t("users_security_snapshot_note")}</p>
           <label>
             <span>{t("users_status")}</span>
-            <div style={{ paddingTop: 4 }}>
+            <div className={styles.statusBadgeSlot}>
               <StatusBadge status={normalizedStatus} />
             </div>
           </label>
@@ -310,7 +310,7 @@ export default function UserDetailPage() {
         </section>
 
         {editing ? (
-          <div style={{ display: "flex", gap: 12, marginTop: 16 }}>
+          <div className={styles.editActions}>
             <button type="button" className="btn btn-primary" disabled={saving} onClick={handleSave}>
               {saving ? t("saving") : t("save")}
             </button>

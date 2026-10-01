@@ -2032,6 +2032,7 @@ export const zh: Record<string, string> = {
     ocs_invariant_broken_badge: "不变量失衡告警",
     ocs_readonly_badge: "OCS 核心只读",
     ocs_readonly_notice: "此视图由 xCloud OCS 引擎自动写入与维护，前端为严格只读以保证事务一致性与计费安全性。",
+    ocs_load_failed: "数据加载失败，请检查网络或后端服务后重试。",
 
     ocs_modal_detail_title: "OCS 实体深度审计抽屉",
     ocs_modal_copy_json: "复制原始 JSON",

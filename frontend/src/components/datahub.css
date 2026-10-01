@@ -700,8 +700,12 @@
 
 .dh-filter-btn-active {
   background: var(--primary);
-  color: var(--on-accent) !important;
+  color: var(--on-accent);
   border-color: var(--primary);
+}
+
+.dh-filter-btn-active:hover {
+  color: var(--on-accent);
 }
 
 .dh-filter-btn-err {

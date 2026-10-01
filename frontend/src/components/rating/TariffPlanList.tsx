@@ -517,7 +517,7 @@ export function TariffPlanList(props: any) {
               {/* Default Grant & Quota Limits */}
               <div className="grid-gap-0-85">
                 <h4 className="section-subtitle">{t("tariff_plan_grant_limits")}</h4>
-                <div className="fields-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
+                <div className="fields-grid fields-grid-auto">
                   <Field label={t("tariff_plan_quota_grant")}>
                     <input
                       type="number"
@@ -590,10 +590,10 @@ export function TariffPlanList(props: any) {
               {conflicts.length > 0 && (
                 <ErrorNotice icon={<AlertTriangle size={18} />}>
                   <strong>{t("tariff_rule_conflict_warning")} ({conflicts.length})</strong>
-                  <p style={{ margin: "0 0 0.5rem 0", fontSize: "var(--ref-font-size-body-compact)", opacity: 0.9 }}>
+                  <p className="conflict-alert-text">
                     {t("tariff_rule_conflict_desc")}
                   </p>
-                  <ul style={{ margin: 0, paddingLeft: "1.25rem", fontSize: "var(--ref-font-size-data-relaxed)" }}>
+                  <ul className="conflict-alert-list">
                     {conflicts.map((c, i) => (
                       <li key={i}>
                         APN: <code>{c.signature.apn}</code>, RG: <code>{c.signature.rating_group_id}</code>, SI: <code>{c.signature.service_identifier}</code> — Overlapping Rules: <strong>{c.rule_ids.join(", ")}</strong>
@@ -604,8 +604,8 @@ export function TariffPlanList(props: any) {
               )}
 
               {/* Rules Toolbar */}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
-                <div className="search-wrapper" style={{ flex: 1, maxWidth: 360 }}>
+              <div className="rules-toolbar">
+                <div className="search-wrapper rules-search">
                   <Search size={16} className="search-icon" />
                   <input
                     type="text"
@@ -624,12 +624,12 @@ export function TariffPlanList(props: any) {
               </div>
 
               {/* Rules Matrix Table */}
-              <div className="table-container" style={{ border: "1px solid var(--surface-border)", borderRadius: "var(--ref-radius-control)", overflow: "hidden" }}>
+              <div className="table-container rules-matrix-shell">
                 <table className="rules-matrix-table">
                   <caption className="sr-only">{selectedPlan?.name || selectedPlanId} · {t("tariff_plan_rules")}</caption>
                   <thead>
                     <tr>
-                      <th style={{ width: 60 }} data-column-priority="important">Priority</th>
+                      <th className="rules-col-priority" data-column-priority="important">Priority</th>
                       <th data-column-priority="essential">Rule ID</th>
                       <th data-column-priority="essential">Scenario</th>
                       <th data-column-priority="important">APN / DNN</th>
@@ -638,7 +638,7 @@ export function TariffPlanList(props: any) {
                       <th data-column-priority="important">Grant Quota</th>
                       <th data-column-priority="supplementary">Validity</th>
                       <th data-column-priority="essential">Status</th>
-                      {canEditTemplates && <th style={{ textAlign: "right", width: 120 }} data-column-priority="essential">Actions</th>}
+                      {canEditTemplates && <th className="rules-col-actions" data-column-priority="essential">Actions</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -658,37 +658,37 @@ export function TariffPlanList(props: any) {
                               <span className="rule-priority-badge">{rule.priority ?? 0}</span>
                             </td>
                             <td data-label="Rule ID" data-column-priority="essential">
-                              <div style={{ fontWeight: 700, color: "var(--text-main)", fontFamily: "monospace" }}>
+                              <div className="rule-id-cell">
                                 {rule.rule_id || `Rule #${rule.rating_group_id}`}
                               </div>
                               {isConflicted && (
-                                <span className="rule-conflict-badge" style={{ marginTop: "0.2rem" }}>
+                                <span className="rule-conflict-badge rule-conflict-offset">
                                   <AlertTriangle size={11} /> Overlap
                                 </span>
                               )}
                             </td>
                             <td data-label="Scenario" data-column-priority="essential">
-                              <span style={{ textTransform: "capitalize", fontWeight: 600, fontSize: "var(--ref-font-size-data-relaxed)" }}>
+                              <span className="rule-scenario-cell">
                                 {(rule.charging_type || "data_volume").replace("_", " ")}
                               </span>
                             </td>
                             <td data-label="APN / DNN" data-column-priority="important">
-                              <code style={{ fontSize: "var(--ref-font-size-body-compact)", color: "var(--primary)" }}>{rule.apn || "internet"}</code>
+                              <code className="rule-apn-code">{rule.apn || "internet"}</code>
                             </td>
                             <td data-label="RG / SI" data-column-priority="supplementary">
-                              <span style={{ fontFamily: "monospace", fontSize: "var(--ref-font-size-body-compact)" }}>
+                              <span className="rule-rg-si">
                                 RG:{rule.rating_group_id} / SI:{rule.service_identifier ?? 1}
                               </span>
                             </td>
                             <td data-label="Rate" data-column-priority="essential">
-                              <span style={{ fontWeight: 700, fontFamily: "monospace" }}>
+                              <span className="rule-rate-cell">
                                 {rule.rates || "0"} {rule.currency || "USD"}
                               </span>
                             </td>
-                            <td style={{ fontSize: "var(--ref-font-size-data-relaxed)" }} data-label="Grant Quota" data-column-priority="important">
+                            <td className="rule-cell-relaxed" data-label="Grant Quota" data-column-priority="important">
                               {formatGrant(t, rule.quota_per_grant, rule.unit, rule.charging_type)}
                             </td>
-                            <td style={{ fontSize: "var(--ref-font-size-data-relaxed)" }} data-label="Validity" data-column-priority="supplementary">
+                            <td className="rule-cell-relaxed" data-label="Validity" data-column-priority="supplementary">
                               {rule.validity_time ? `${rule.validity_time}s` : "Default"}
                             </td>
                             <td data-label="Status" data-column-priority="essential">
@@ -697,8 +697,8 @@ export function TariffPlanList(props: any) {
                               </StatusBadge>
                             </td>
                             {canEditTemplates && (
-                              <td style={{ textAlign: "right" }} data-label="Actions" data-column-priority="essential">
-                                <div style={{ display: "inline-flex", gap: "0.35rem" }}>
+                              <td className="rules-col-actions" data-label="Actions" data-column-priority="essential">
+                                <div className="rule-row-actions">
                                   <button
                                     type="button"
                                     className="btn-icon"
@@ -767,7 +767,7 @@ export function TariffPlanList(props: any) {
 
               {/* Dry-Run Analysis Panel */}
               {dryRunLoading && (
-                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "var(--text-muted)", fontSize: "var(--ref-font-size-body-compact)" }}>
+                <div className="dryrun-loading">
                   <RefreshCw size={15} className="animate-spin" /> Calculating migration impact...
                 </div>
               )}
@@ -776,19 +776,19 @@ export function TariffPlanList(props: any) {
                 <div className="dryrun-panel">
                   <div>
                     <div className="dryrun-stat-label">{t("tariff_plan_dryrun_active")}</div>
-                    <div className="dryrun-stat-value" style={{ color: "var(--success)" }}>
+                    <div className="dryrun-stat-value dryrun-stat-value-success">
                       {dryRunPreview.activeCount}
                     </div>
                   </div>
                   <div>
                     <div className="dryrun-stat-label">{t("tariff_plan_dryrun_suspended")}</div>
-                    <div className="dryrun-stat-value" style={{ color: "var(--warning)" }}>
+                    <div className="dryrun-stat-value dryrun-stat-value-warning">
                       {dryRunPreview.suspendedCount}
                     </div>
                   </div>
                   <div>
                     <div className="dryrun-stat-label">Target Plan Status</div>
-                    <div className="dryrun-stat-value" style={{ fontSize: "var(--ref-font-size-body)" }}>
+                    <div className="dryrun-stat-value dryrun-stat-value-inline">
                       <StatusBadge tone={dryRunPreview.isTargetActive ? "success" : "muted"}>
                         {dryRunPreview.targetPlan.status}
                       </StatusBadge>

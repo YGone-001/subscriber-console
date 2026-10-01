@@ -2,9 +2,9 @@
 #xcloud-login-form [hidden] {
   display: none !important;
 }
-@keyframes slideUpFade {
-  0% { opacity: 0; transform: translateY(20px) scale(0.98); }
-  100% { opacity: 1; transform: translateY(0) scale(1); }
+@keyframes cardFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 @keyframes spin {
   100% { transform: rotate(360deg); }
@@ -48,7 +48,7 @@
   border: 1px solid var(--login-border);
   border-radius: var(--ref-radius-soft-panel);
   box-shadow: var(--shadow-popover);
-  animation: slideUpFade 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: cardFadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .login-header {

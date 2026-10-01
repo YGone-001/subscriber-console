@@ -43,7 +43,7 @@ export default function AppHeader({ sidebarOpen, setSidebarOpen }: AppHeaderProp
             <div className="brand-mark">
               <Image src="/images/xCloud_picture.png" alt="xCloud Trademark" width={1254} height={1254} />
             </div>
-            <h1>xCloud</h1>
+            <div className="brand-name">xCloud</div>
           </div>
 
           <div className="header-divider" />

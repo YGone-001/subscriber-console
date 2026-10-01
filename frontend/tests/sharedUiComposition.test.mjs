@@ -35,6 +35,9 @@ test("OCS data tables share state rows and pagination behavior", () => {
     "src/components/ocs/OcsBalancesPanel.tsx",
     "src/components/ocs/OcsSessionsPanel.tsx",
     "src/components/ocs/OcsUsagePanel.tsx",
+    "src/components/ocs/OcsSubscribersPanel.tsx",
+    "src/components/ocs/contracts/OcsContractsPanel.tsx",
+    "src/components/ocs/balances/OcsBalancePlaceholder.tsx",
   ];
 
   for (const file of panelFiles) {
@@ -43,6 +46,21 @@ test("OCS data tables share state rows and pagination behavior", () => {
     assert.match(source, /<DataTablePagination/);
     assert.doesNotMatch(source, /className="ocs-pagination"/);
   }
+
+  const stateRowOnlyFiles = [
+    "src/components/ocs/OcsTariffsPanel.tsx",
+    "src/components/ocs/tariffs/OcsTariffGovernancePanel.tsx",
+  ];
+
+  for (const file of stateRowOnlyFiles) {
+    const source = read(file);
+    assert.match(source, /<DataTableStateRow/);
+    assert.doesNotMatch(source, /className="ocs-empty"/);
+  }
+
+  const stateRow = read("src/components/ui/DataTableState.tsx");
+  assert.match(stateRow, /role=\{state === "error" \? "alert" : "status"\}/);
+  assert.match(stateRow, /aria-live="polite"/);
 
   const pagination = read("src/components/ui/DataTablePagination.tsx");
   assert.match(pagination, /<nav/);

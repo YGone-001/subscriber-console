@@ -94,7 +94,7 @@ export function PasswordResetModal({ username, open, onClose, onSuccess, onReset
           autoComplete="new-password"
           onEnter={handleSubmit}
         />
-        {error ? <p className={styles.sectionDescription} style={{ color: "var(--danger)" }}>{error}</p> : null}
+        {error ? <p className={`${styles.sectionDescription} ${styles.formError}`}>{error}</p> : null}
       </div>
     </ConfirmActionPanel>
   );

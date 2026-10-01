@@ -467,3 +467,32 @@
 .pcc-rule-label {
   font-size: var(--ref-font-size-data);
 }
+
+/* Profile view mode layout helpers. */
+.dash-card.dash-card-spaced {
+  margin-bottom: 1.5rem;
+}
+
+.value-mono.value-mono-primary {
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.value-mono.value-mono-success {
+  color: var(--success);
+}
+
+.value-mono.value-mono-dim {
+  opacity: 0.85;
+}
+
+.label-muted.label-muted-inline {
+  margin-right: 0.5rem;
+}
+
+.profile-sample-strip {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border-color);
+  font-size: var(--ref-font-size-data-relaxed);
+}

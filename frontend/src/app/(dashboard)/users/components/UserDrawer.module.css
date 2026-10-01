@@ -179,3 +179,10 @@
   .progressList li[data-status="running"] > span { animation: none; }
   .progressTrack span { transition: none; }
 }
+
+.headerActions { display: flex; align-items: center; gap: 8px; }
+.detailBodyNarrow { max-width: 640px; }
+.statusBadgeSlot { padding-top: 4px; }
+.editActions { display: flex; gap: 12px; margin-top: 16px; }
+.createFormNarrow { max-width: 560px; }
+.formError { color: var(--danger); }

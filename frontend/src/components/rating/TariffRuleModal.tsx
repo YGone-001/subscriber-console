@@ -175,9 +175,8 @@ export function TariffRuleModal({
       open={isOpen}
       onClose={() => { if (!loading) onClose(); }}
       overlayClassName="modal-overlay animate-fade-in"
-      className="modal-content"
+      className="modal-content modal-content-wide"
       overlayStyle={{ zIndex: 1050 }}
-      style={{ maxWidth: 640 }}
       labelledBy="tariff-rule-modal-title"
       initialFocusRef={cancelButtonRef}
       closeOnOverlay={!loading}
@@ -206,7 +205,7 @@ export function TariffRuleModal({
               </InlineNotice>
             )}
 
-            <div className="fields-grid" style={{ gridTemplateColumns: "1fr 1fr" }}>
+            <div className="fields-grid fields-grid-two">
               <Field label="Rule ID">
                 <input
                   type="text"
@@ -355,7 +354,7 @@ export function TariffRuleModal({
             </div>
           </div>
 
-          <div className="modal-footer" style={{ display: "flex", justifyContent: "flex-end", gap: "0.75rem", padding: "1rem 1.5rem" }}>
+          <div className="modal-footer">
             <button ref={cancelButtonRef} type="button" className="btn btn-outline" onClick={onClose} disabled={loading}>
               {t("cancel")}
             </button>

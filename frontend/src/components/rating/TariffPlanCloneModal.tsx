@@ -74,9 +74,8 @@ export function TariffPlanCloneModal({ isOpen, onClose, sourcePlan, onSuccess }:
       open={isOpen && Boolean(sourcePlan)}
       onClose={() => { if (!loading) onClose(); }}
       overlayClassName="modal-overlay animate-fade-in"
-      className="modal-content"
+      className="modal-content modal-content-narrow"
       overlayStyle={{ zIndex: 1050 }}
-      style={{ maxWidth: 520 }}
       labelledBy="tariff-plan-clone-modal-title"
       initialFocusRef={cancelButtonRef}
       closeOnOverlay={!loading}
@@ -93,14 +92,14 @@ export function TariffPlanCloneModal({ isOpen, onClose, sourcePlan, onSuccess }:
 
         <form onSubmit={handleSubmit}>
           <div className="modal-body grid-gap-1">
-            <p className="card-desc" style={{ margin: 0 }}>
+            <p className="card-desc card-desc-flush">
               {t("tariff_plan_clone_desc")}
             </p>
 
-            <div className="stat-card" style={{ padding: "0.75rem 1rem", background: "var(--bg-secondary)", borderRadius: "var(--ref-radius-control)" }}>
-              <span className="text-muted" style={{ fontSize: "var(--ref-font-size-body-compact)" }}>Source: </span>
+            <div className="stat-card stat-card-inline">
+              <span className="text-muted rating-meta-compact">Source: </span>
               <strong>{sourcePlan.name || sourcePlan.plan_id}</strong>
-              <span className="text-muted" style={{ marginLeft: "0.5rem", fontSize: "var(--ref-font-size-data)" }}>({sourcePlan.plan_id})</span>
+              <span className="text-muted rating-meta-note">({sourcePlan.plan_id})</span>
             </div>
 
             {error && (
@@ -143,7 +142,7 @@ export function TariffPlanCloneModal({ isOpen, onClose, sourcePlan, onSuccess }:
             </Field>
           </div>
 
-          <div className="modal-footer" style={{ display: "flex", justifyContent: "flex-end", gap: "0.75rem", padding: "1rem 1.5rem" }}>
+          <div className="modal-footer">
             <button ref={cancelButtonRef} type="button" className="btn btn-outline" onClick={onClose} disabled={loading}>
               {t("cancel")}
             </button>

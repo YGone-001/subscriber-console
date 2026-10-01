@@ -279,7 +279,7 @@ export default function OcsBalancesPanel() {
                     </span>
                   )}
                 </td>
-                <td className="ocs-mono" style={{ color: "var(--text-muted)" }} data-column-priority="supplementary" data-label={t("ocs_col_version")}>v{r.version}</td>
+                <td className="ocs-mono ocs-text-muted" data-column-priority="supplementary" data-label={t("ocs_col_version")}>v{r.version}</td>
                 <td className="ocs-mono ocs-cell-timestamp" data-column-priority="supplementary" data-label={t("ocs_col_updated_at")}>
                   {r.updated_at ? new Date(r.updated_at).toLocaleString() : "-"}
                 </td>

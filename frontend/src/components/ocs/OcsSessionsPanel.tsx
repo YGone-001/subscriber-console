@@ -74,7 +74,7 @@ export default function OcsSessionsPanel() {
             <Activity size={18} />
           </div>
         </div>
-        <div className="ocs-kpi-value" style={{ color: "var(--status-success)" }}>
+        <div className="ocs-kpi-value ocs-text-success">
           {summary.activeSessions.toLocaleString()}
         </div>
         <div className="ocs-kpi-sub">Currently handling Gy/Ro traffic</div>
@@ -87,7 +87,7 @@ export default function OcsSessionsPanel() {
             <Clock size={18} />
           </div>
         </div>
-        <div className="ocs-kpi-value" style={{ color: "var(--status-warning)" }}>
+        <div className="ocs-kpi-value ocs-text-warning">
           {summary.closingSessions.toLocaleString()}
         </div>
         <div className="ocs-kpi-sub">Lifecycle cleanup scanner in progress</div>
@@ -233,7 +233,7 @@ export default function OcsSessionsPanel() {
 
             return (
               <tr key={r.id}>
-                <td className="ocs-mono ocs-cell-session-id" style={{ maxWidth: "200px" }} title={r.session_id} data-column-priority="essential" data-label={t("ocs_col_session_id")}>
+                <td className="ocs-mono ocs-cell-session-id ocs-cell-wide" title={r.session_id} data-column-priority="essential" data-label={t("ocs_col_session_id")}>
                   {r.session_id}
                 </td>
                 <td className="ocs-mono ocs-cell-imsi" data-column-priority="essential" data-label={t("ocs_col_imsi")}>
@@ -252,18 +252,18 @@ export default function OcsSessionsPanel() {
                 </td>
                 <td className="ocs-mono" data-column-priority="supplementary" data-label={t("ocs_col_cc_num")}>#{r.cc_request_number}</td>
                 <td className="ocs-mono" data-column-priority="essential" data-label={t("ocs_col_granted")}>
-                  <span style={{ color: "var(--status-success)" }}>{formatBytes(r.granted_total)}</span>
-                  <span style={{ color: "var(--text-muted)" }}> / </span>
-                  <span style={{ color: "var(--status-warning)" }}>{formatBytes(r.used_total)}</span>
+                  <span className="ocs-text-success">{formatBytes(r.granted_total)}</span>
+                  <span className="ocs-text-muted"> / </span>
+                  <span className="ocs-text-warning">{formatBytes(r.used_total)}</span>
                 </td>
-                <td className="ocs-mono" style={{ fontSize: "var(--ref-font-size-data)" }} data-column-priority="important" data-label={t("ocs_col_rg_si")}>
+                <td className="ocs-mono ocs-font-data" data-column-priority="important" data-label={t("ocs_col_rg_si")}>
                   {r.rating_group !== undefined ? `RG:${r.rating_group}` : "-"}
                   {r.service_identifier !== undefined ? ` / SI:${r.service_identifier}` : ""}
                 </td>
                 <td className="ocs-mono ocs-cell-timestamp" data-column-priority="supplementary" data-label={t("ocs_col_started_at")}>
                   {r.started_at ? new Date(r.started_at).toLocaleTimeString() : "-"}
                 </td>
-                <td className="ocs-mono" style={{ fontSize: "var(--ref-font-size-label-strong)", color: "var(--text-muted)" }} data-column-priority="important" data-label={t("ocs_col_last_update")}>
+                <td className="ocs-mono ocs-font-label-strong ocs-text-muted" data-column-priority="important" data-label={t("ocs_col_last_update")}>
                   {r.last_update_at ? new Date(r.last_update_at).toLocaleTimeString() : "-"}
                 </td>
                 <td data-column-priority="essential">

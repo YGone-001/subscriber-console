@@ -43,7 +43,7 @@ export default function OcsSessionTelemetryCard({
     <div className="analytics-ocs-card analytics-panel">
       <div className="analytics-panel-header">
         <div className="analytics-panel-title">
-          <div className="analytics-ocs-icon" style={{ color: "var(--status-success)", background: "var(--status-success-soft)" }}>
+          <div className="analytics-ocs-icon analytics-ocs-icon-success">
             <Radio size={20} />
           </div>
           <div>
@@ -144,7 +144,7 @@ export default function OcsSessionTelemetryCard({
                 <strong>{grantedGb.toFixed(2)} / {usedGb.toFixed(2)} <small>GB</small></strong>
               </div>
             </div>
-            <div className="analytics-ocs-mini-bar-track" style={{ marginTop: "0.5rem" }}>
+            <div className="analytics-ocs-mini-bar-track">
               <div
                 className="analytics-ocs-mini-bar-fill quota-fill"
                 style={{ "--bar-scale": volumeUsedPct / 100 } as React.CSSProperties}

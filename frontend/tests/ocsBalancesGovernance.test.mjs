@@ -45,12 +45,11 @@ test('OcsBalancePlaceholder satisfies canonical toolbar CSS contract and state h
   assert.match(placeholderSource, /ocs-select/);
 
   // State handling
-  assert.match(placeholderSource, /loading\s*\?/);
-  assert.match(placeholderSource, /ocs-loading/);
-  assert.match(placeholderSource, /error\s*\?/);
-  assert.match(placeholderSource, /ocs-error-cell/);
+  assert.match(placeholderSource, /DataTableStateRow/);
+  assert.match(placeholderSource, /loading\s*\?[\s\S]*?state="loading"/);
+  assert.match(placeholderSource, /error\s*\?[\s\S]*?state="error"/);
+  assert.match(placeholderSource, /records\.length === 0[\s\S]*?state="empty"/);
   assert.match(placeholderSource, /error\s*\?\s*"—"\s*:\s*total/);
-  assert.match(placeholderSource, /records\.length === 0/);
 });
 
 test('AdjustBalanceModal implements governed balance adjustment fields and flows', () => {

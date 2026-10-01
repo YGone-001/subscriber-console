@@ -7,6 +7,7 @@ import { fetcher } from "@/lib/fetcher";
 import { Search, Wallet, CheckCircle, SlidersHorizontal, Eye } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { DataTablePagination } from "@/components/ui/DataTablePagination";
+import { DataTableStateRow } from "@/components/ui/DataTableState";
 import { formatBytes } from "@/lib/unitParser";
 import OcsPageShell from "../OcsPageShell";
 import OcsStatusBadge from "../common/OcsStatusBadge";
@@ -126,15 +127,14 @@ export default function OcsBalancePlaceholder() {
     <>
       {feedback && (
         <div
-          className={feedback.type === "success" ? "ocs-feedback-success" : "ocs-feedback-error"}
-          style={{ marginBottom: "1rem" }}
+          className={`${feedback.type === "success" ? "ocs-feedback-success" : "ocs-feedback-error"} ocs-feedback-spaced`}
         >
           <span>{feedback.message}</span>
         </div>
       )}
 
       {error && (
-        <div className="ocs-feedback-error" style={{ marginBottom: "1rem" }}>
+        <div className="ocs-feedback-error ocs-feedback-spaced">
           <span>{error.message || "Failed to load balance accounts"}</span>
         </div>
       )}
@@ -150,16 +150,16 @@ export default function OcsBalancePlaceholder() {
             <th data-column-priority="essential">{t("ocs_col_status")}</th>
             <th data-column-priority="supplementary">{t("ocs_col_version")}</th>
             <th data-column-priority="supplementary">{t("ocs_tariff_col_updated")}</th>
-            <th data-column-priority="essential" style={{ textAlign: "right" }}>{t("actions")}</th>
+            <th className="ocs-col-actions" data-column-priority="essential">{t("actions")}</th>
           </tr>
         </thead>
         <tbody>
           {loading ? (
-            <tr><td colSpan={8} className="ocs-empty-cell"><div className="ocs-loading">{t("loading") || "加载中..."}</div></td></tr>
+            <DataTableStateRow colSpan={8} state="loading">{t("loading")}</DataTableStateRow>
           ) : error ? (
-            <tr><td colSpan={8} className="ocs-empty-cell ocs-error-cell"><div style={{ color: "var(--status-danger)" }}>{error?.message || "加载失败，请检查网络或后端服务"}</div></td></tr>
+            <DataTableStateRow colSpan={8} state="error">{error?.message || t("ocs_load_failed")}</DataTableStateRow>
           ) : records.length === 0 ? (
-            <tr><td colSpan={8} className="ocs-empty-cell">{t("no_data")}</td></tr>
+            <DataTableStateRow colSpan={8} state="empty">{t("no_data")}</DataTableStateRow>
           ) : (
             records.map((r) => (
               <tr key={r.id || r.imsi}>
@@ -170,8 +170,8 @@ export default function OcsBalancePlaceholder() {
                 <td data-label={t("ocs_col_status")} data-column-priority="essential"><OcsStatusBadge status={r.status} /></td>
                 <td data-label={t("ocs_col_version")} data-column-priority="supplementary" className="ocs-mono">v{r.version || 1}</td>
                 <td data-label={t("ocs_tariff_col_updated")} data-column-priority="supplementary" className="ocs-time-cell">{formatTime(r.updated_at)}</td>
-                <td data-label={t("actions")} data-column-priority="essential" style={{ textAlign: "right" }}>
-                  <div className="ocs-action-group" style={{ justifyContent: "flex-end" }}>
+                <td className="ocs-col-actions" data-label={t("actions")} data-column-priority="essential">
+                  <div className="ocs-action-group ocs-action-group-end">
                     <Link
                       className="ocs-action-btn"
                       title={t("ocs_balance_view_detail")}

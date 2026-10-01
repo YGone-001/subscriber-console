@@ -47,13 +47,13 @@ export default function OcsDetailDrawer({
       initialFocusRef={closeButtonRef}
     >
         <div className="ocs-drawer-header">
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+          <div className="ocs-drawer-title-group">
             <h2 id={titleId} className="ocs-drawer-title">{title}</h2>
-            <span id={descriptionId} style={{ fontSize: "var(--ref-font-size-label)", color: "var(--text-muted)" }}>
+            <span id={descriptionId} className="ocs-drawer-subtitle">
               {t("ocs_modal_detail_title")}
             </span>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <div className="ocs-drawer-header-actions">
             <button
               ref={closeButtonRef}
               type="button"

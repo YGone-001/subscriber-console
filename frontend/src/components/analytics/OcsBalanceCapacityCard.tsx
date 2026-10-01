@@ -40,7 +40,7 @@ export default function OcsBalanceCapacityCard({ metrics, t }: OcsBalanceCapacit
     <div className="analytics-ocs-card analytics-panel">
       <div className="analytics-panel-header">
         <div className="analytics-panel-title">
-          <div className="analytics-ocs-icon" style={{ color: "var(--chart-1)", background: "var(--selection-soft)" }}>
+          <div className="analytics-ocs-icon analytics-ocs-icon-chart-1">
             <Database size={20} />
           </div>
           <div>

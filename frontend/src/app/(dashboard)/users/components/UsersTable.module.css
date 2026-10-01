@@ -94,13 +94,13 @@
   text-transform: uppercase;
 }
 
-.selectCol {
+.table .selectCol {
   position: sticky;
   left: 0;
   z-index: 4;
   width: 48px;
   min-width: 48px;
-  text-align: center !important;
+  text-align: center;
 }
 
 .selectColumn { width: 48px; }
@@ -240,9 +240,9 @@
   .table thead { display: none; }
   .table tbody { gap: 0.75rem; }
   .table tbody tr:not(.tableStateRow) { position: relative; display: grid; padding: 0.85rem; border: 1px solid var(--surface-border); border-radius: var(--ref-radius-panel); background: var(--surface); }
-  .table tbody tr:not(.tableStateRow) > td { position: static; min-width: 0; width: auto; height: auto; display: grid; grid-template-columns: minmax(92px, 34%) minmax(0, 1fr); align-items: center; gap: 0.75rem; padding: 0.65rem 0; border-bottom: 1px solid color-mix(in srgb, var(--surface-border) 72%, transparent); box-shadow: none; background: transparent; text-align: left !important; }
+  .table tbody tr:not(.tableStateRow) > td { position: static; min-width: 0; width: auto; height: auto; display: grid; grid-template-columns: minmax(92px, 34%) minmax(0, 1fr); align-items: center; gap: 0.75rem; padding: 0.65rem 0; border-bottom: 1px solid color-mix(in srgb, var(--surface-border) 72%, transparent); box-shadow: none; background: transparent; text-align: left; }
   .table tbody tr:not(.tableStateRow) > td[data-label]::before { content: attr(data-label); color: var(--text-muted); font-size: var(--ref-font-size-label); font-weight: 750; }
-  .table tbody tr:not(.tableStateRow) > .mobileSelectCell { position: absolute; top: 0.45rem; right: 0.45rem; z-index: 2; width: 44px; height: 44px; display: grid; place-items: center; padding: 0; border: 0; }
+  .table tbody tr:not(.tableStateRow) > .mobileSelectCell { position: absolute; top: 0.45rem; right: 0.45rem; z-index: 2; width: 44px; height: 44px; display: grid; grid-template-columns: 1fr; place-items: center; padding: 0; border: 0; }
   .table tbody tr:not(.tableStateRow) > .userCol { padding-right: 3rem; }
   .table tbody tr:not(.tableStateRow) > .actionsCol { padding-bottom: 0; border-bottom: 0; }
   .rowActions { justify-content: flex-start; flex-wrap: wrap; }

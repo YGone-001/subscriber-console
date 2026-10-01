@@ -521,7 +521,7 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
                 {t("prof_version_select")}
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <div className="pm-version-diff-body">
                 <div className="pm-version-diff-header">
                   <div>
                     <div className="pm-version-diff-title">

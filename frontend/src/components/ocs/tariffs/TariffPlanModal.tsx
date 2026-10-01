@@ -138,7 +138,7 @@ export default function TariffPlanModal({
         <form onSubmit={handleSubmit}>
           <div className="ocs-modal-body">
             {error && (
-              <div className="ocs-feedback-error" style={{ marginBottom: "1rem" }}>
+              <div className="ocs-feedback-error ocs-feedback-spaced">
                 <AlertCircle size={16} />
                 <span>{error}</span>
               </div>
@@ -206,7 +206,7 @@ export default function TariffPlanModal({
               />
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+            <div className="ocs-form-grid-2">
               <div className="ocs-form-group">
                 <label htmlFor="tariff-validity" className="ocs-form-label">
                   {t("ocs_tariff_validity_time")}

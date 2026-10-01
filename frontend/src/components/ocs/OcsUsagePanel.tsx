@@ -144,7 +144,7 @@ export default function OcsUsagePanel() {
                 <CheckCircle size={18} />
               </div>
             </div>
-            <div className="ocs-kpi-value" style={{ color: "var(--status-success)" }}>
+            <div className="ocs-kpi-value ocs-text-success">
               {usageSummary.totalChargedRecords.toLocaleString()}
             </div>
             <div className="ocs-kpi-sub">Successfully billed against balances</div>
@@ -179,7 +179,7 @@ export default function OcsUsagePanel() {
                 <BarChart3 size={18} />
               </div>
             </div>
-            <div className="ocs-kpi-value" style={{ color: "var(--status-warning)" }}>
+            <div className="ocs-kpi-value ocs-text-warning">
               {formatBytes(usageSummary.totalOctets)}
             </div>
             <div className="ocs-kpi-sub">Cumulative combined volume</div>
@@ -205,7 +205,7 @@ export default function OcsUsagePanel() {
                 <Clock size={18} />
               </div>
             </div>
-            <div className="ocs-kpi-value" style={{ color: "var(--status-success)" }}>
+            <div className="ocs-kpi-value ocs-text-success">
               {reservationSummary.activeReservations.toLocaleString()}
             </div>
             <div className="ocs-kpi-sub">Currently holding active balance quota</div>
@@ -361,11 +361,11 @@ export default function OcsUsagePanel() {
               </td>
               <td className="ocs-mono" data-column-priority="supplementary" data-label={t("ocs_col_cc_num")}>#{r.cc_request_number}</td>
               <td className="ocs-mono" data-column-priority="supplementary" data-label={t("ocs_col_input")}>
-                <span style={{ color: "var(--chart-2)" }}>{formatBytes(r.input_octets)}</span>
-                <span style={{ color: "var(--text-muted)" }}> / </span>
-                <span style={{ color: "var(--chart-5)" }}>{formatBytes(r.output_octets)}</span>
+                <span className="ocs-text-chart-2">{formatBytes(r.input_octets)}</span>
+                <span className="ocs-text-muted"> / </span>
+                <span className="ocs-text-chart-5">{formatBytes(r.output_octets)}</span>
               </td>
-              <td className="ocs-mono" style={{ fontWeight: 700, color: "var(--text-main)" }} data-column-priority="essential" data-label={t("ocs_col_total_octets")}>
+              <td className="ocs-mono ocs-text-strong" data-column-priority="essential" data-label={t("ocs_col_total_octets")}>
                 {formatBytes(r.total_octets)}
               </td>
               <td data-column-priority="important" data-label={t("ocs_col_charged")}>
@@ -455,11 +455,11 @@ export default function OcsUsagePanel() {
                   </span>
                 </td>
                 <td className="ocs-mono" data-column-priority="important">
-                  <span style={{ color: "var(--chart-5)" }}>{formatBytes(r.reserved_octets)}</span>
-                  <span style={{ color: "var(--text-muted)" }}> / </span>
-                  <span style={{ color: "var(--status-warning)" }}>{formatBytes(r.used_octets)}</span>
+                  <span className="ocs-text-chart-5">{formatBytes(r.reserved_octets)}</span>
+                  <span className="ocs-text-muted"> / </span>
+                  <span className="ocs-text-warning">{formatBytes(r.used_octets)}</span>
                 </td>
-                <td className="ocs-mono" style={{ color: "var(--status-success)" }} data-column-priority="supplementary">
+                <td className="ocs-mono ocs-text-success" data-column-priority="supplementary">
                   {formatBytes(r.released_octets)}
                 </td>
                 <td className="ocs-mono" style={{ color: r.overuse_octets > 0 ? "var(--status-danger)" : "var(--text-muted)" }} data-column-priority="important">

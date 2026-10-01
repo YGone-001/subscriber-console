@@ -616,3 +616,19 @@
     width: auto;
   }
 }
+
+.usage-column {
+  min-width: 150px;
+}
+
+.spinner-sm {
+  width: 14px;
+  height: 14px;
+  border-width: 2px;
+}
+
+.spinner-md {
+  width: 18px;
+  height: 18px;
+  border-width: 2px;
+}

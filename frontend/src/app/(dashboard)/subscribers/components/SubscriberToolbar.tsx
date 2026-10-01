@@ -59,7 +59,7 @@ export function SubscriberToolbar(props: SubscriberToolbarProps) {
               </button>
               {canEditSubscribers && (
                 <button className="btn-bulk-danger" onClick={handleBulkDelete} disabled={isDeletingBulk || Boolean(pendingDelete)}>
-                  {isDeletingBulk ? <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }}/> : <Trash2 size={14}/>}
+                  {isDeletingBulk ? <span className="spinner spinner-sm"/> : <Trash2 size={14}/>}
                   {t("delete")}
                 </button>
               )}

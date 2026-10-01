@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { DataTablePagination } from "@/components/ui/DataTablePagination";
+import { DataTableStateRow } from "@/components/ui/DataTableState";
 import OcsPageShell from "../OcsPageShell";
 import OcsStatusBadge from "../common/OcsStatusBadge";
 import ConfirmDialog from "../common/ConfirmDialog";
@@ -180,7 +181,7 @@ export default function OcsContractsPanel() {
   );
 
   const errorBanner = error && (
-    <div className="ocs-feedback-error" style={{ marginBottom: "1rem" }}>
+    <div className="ocs-feedback-error ocs-feedback-spaced">
       <span>{error.message || "Failed to load contract subscribers"}</span>
     </div>
   );
@@ -212,11 +213,11 @@ export default function OcsContractsPanel() {
       </thead>
       <tbody>
         {loading ? (
-          <tr><td colSpan={7} className="ocs-empty-cell"><div className="ocs-loading">{t("loading") || "加载中..."}</div></td></tr>
+          <DataTableStateRow colSpan={7} state="loading">{t("loading")}</DataTableStateRow>
         ) : error ? (
-          <tr><td colSpan={7} className="ocs-empty-cell ocs-error-cell"><div style={{ color: "var(--status-danger)" }}>{error?.message || "加载失败，请检查网络或后端服务"}</div></td></tr>
+          <DataTableStateRow colSpan={7} state="error">{error?.message || t("ocs_load_failed")}</DataTableStateRow>
         ) : records.length === 0 ? (
-          <tr><td colSpan={7} className="ocs-empty-cell">{t("no_data")}</td></tr>
+          <DataTableStateRow colSpan={7} state="empty">{t("no_data")}</DataTableStateRow>
         ) : (
           records.map((r) => (
             <tr key={r.id}>

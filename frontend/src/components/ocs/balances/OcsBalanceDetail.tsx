@@ -89,8 +89,7 @@ export default function OcsBalanceDetail({ imsi }: OcsBalanceDetailProps) {
 
       {feedback && (
         <div
-          className={feedback.type === "success" ? "ocs-feedback-success" : "ocs-feedback-error"}
-          style={{ marginBottom: "1rem" }}
+          className={feedback.type === "success" ? "ocs-feedback-success ocs-feedback-spaced" : "ocs-feedback-error ocs-feedback-spaced"}
         >
           <span>{feedback.message}</span>
         </div>
@@ -115,7 +114,7 @@ export default function OcsBalanceDetail({ imsi }: OcsBalanceDetailProps) {
             </div>
             <div className="ocs-detail-field">
               <span className="ocs-detail-label">{t("ocs_detail_data_available")}</span>
-              <span className="ocs-detail-value ocs-mono" style={{ fontWeight: 600 }}>
+              <span className="ocs-detail-value ocs-mono ocs-detail-value-strong">
                 {formatBytes(balance.data_available)}
               </span>
             </div>
@@ -142,7 +141,7 @@ export default function OcsBalanceDetail({ imsi }: OcsBalanceDetailProps) {
             </div>
             <div className="ocs-detail-field">
               <span className="ocs-detail-label">{t("ocs_col_voice_avail")}</span>
-              <span className="ocs-detail-value ocs-mono" style={{ fontWeight: 600 }}>
+              <span className="ocs-detail-value ocs-mono ocs-detail-value-strong">
                 {balance.voice_available}s
               </span>
             </div>
@@ -169,7 +168,7 @@ export default function OcsBalanceDetail({ imsi }: OcsBalanceDetailProps) {
             </div>
             <div className="ocs-detail-field">
               <span className="ocs-detail-label">{t("ocs_col_sms_avail")}</span>
-              <span className="ocs-detail-value ocs-mono" style={{ fontWeight: 600 }}>
+              <span className="ocs-detail-value ocs-mono ocs-detail-value-strong">
                 {balance.sms_available}
               </span>
             </div>

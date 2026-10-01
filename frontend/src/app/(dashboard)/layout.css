@@ -32,6 +32,27 @@
     flex-shrink: 0;
   }
 
+  .hover-glass.lang-switcher {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: var(--surface-hover);
+    border: 1px solid var(--surface-border);
+    border-radius: var(--ref-radius-pill);
+    padding: 0.3rem 0.75rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    font-size: var(--ref-font-size-label);
+    font-weight: 600;
+    letter-spacing: 0.03em;
+  }
+
+  .hover-glass.lang-switcher:hover,
+  .hover-glass.lang-switcher:focus {
+    border-color: var(--selection-border);
+  }
+
   .brand-lockup {
     width: 220px;
     gap: 0.65rem;
@@ -55,7 +76,7 @@
     object-fit: contain;
   }
 
-  .brand-lockup h1 {
+  .brand-lockup .brand-name {
     margin: 0;
     white-space: nowrap;
     color: var(--text-main);
@@ -711,7 +732,7 @@
       width: 38px;
     }
 
-    .brand-lockup h1,
+    .brand-lockup .brand-name,
     .noc-sentinel,
     .approval-menu,
     .header-right > .hover-glass {

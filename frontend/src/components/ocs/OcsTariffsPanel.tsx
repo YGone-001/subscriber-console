@@ -13,6 +13,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
+import { DataTableStateRow } from "@/components/ui/DataTableState";
 import OcsPageShell from "./OcsPageShell";
 
 interface TariffPlan {
@@ -155,7 +156,7 @@ export default function OcsTariffsPanel() {
               </thead>
               <tbody>
                 {plans.length === 0 && !loading && (
-                  <tr><td colSpan={7} className="ocs-empty">{t("no_data")}</td></tr>
+                  <DataTableStateRow colSpan={7} state="empty">{t("no_data")}</DataTableStateRow>
                 )}
                 {plans.map((plan) => (
                   <tr key={plan.plan_id}>

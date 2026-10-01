@@ -91,9 +91,8 @@ export function TariffPlanImportModal({ isOpen, onClose, onSuccess }: Props) {
       open={isOpen}
       onClose={() => { if (!loading) onClose(); }}
       overlayClassName="modal-overlay animate-fade-in"
-      className="modal-content"
+      className="modal-content modal-content-wide"
       overlayStyle={{ zIndex: 1050 }}
-      style={{ maxWidth: 640 }}
       labelledBy="tariff-plan-import-modal-title"
       initialFocusRef={cancelButtonRef}
       closeOnOverlay={!loading}
@@ -109,22 +108,21 @@ export function TariffPlanImportModal({ isOpen, onClose, onSuccess }: Props) {
         </div>
 
         <div className="modal-body grid-gap-1">
-          <p className="card-desc" style={{ margin: 0 }}>
+          <p className="card-desc card-desc-flush">
             {t("tariff_plan_import_desc")}
           </p>
 
           <div>
-            <label className="btn btn-outline" style={{ display: "inline-flex", cursor: "pointer", marginBottom: "0.5rem" }}>
-              <FileCode size={16} style={{ marginRight: "0.5rem" }} />
+            <label className="btn btn-outline rating-import-file-btn">
+              <FileCode size={16} className="rating-import-file-icon" />
               {t("tariff_plan_import_file")}
-              <input type="file" accept=".json" onChange={handleFileUpload} style={{ display: "none" }} />
+              <input type="file" accept=".json" onChange={handleFileUpload} className="rating-import-file-input" />
             </label>
           </div>
 
           <Field label={t("tariff_plan_import_paste")}>
             <textarea
-              className="form-input"
-              style={{ fontFamily: "monospace", fontSize: "var(--ref-font-size-data-relaxed)", minHeight: 140 }}
+              className="form-input rating-import-textarea"
               value={jsonText}
               onChange={(e) => handleJsonChange(e.target.value)}
               placeholder='{\n  "plan_id": "plan_enterprise_unlimited",\n  "name": "Enterprise Unlimited",\n  "rules": [...]\n}'
@@ -139,7 +137,7 @@ export function TariffPlanImportModal({ isOpen, onClose, onSuccess }: Props) {
           {validationErrors.length > 0 && (
             <ErrorNotice icon={<AlertCircle size={15} />}>
               <strong>Validation Errors:</strong>
-              <ul style={{ margin: 0, paddingLeft: "1.2rem" }}>
+              <ul className="rating-notice-list">
                 {validationErrors.map((err, i) => (
                   <li key={i}>{err}</li>
                 ))}
@@ -150,7 +148,7 @@ export function TariffPlanImportModal({ isOpen, onClose, onSuccess }: Props) {
           {validationWarnings.length > 0 && (
             <InlineNotice tone="warning" icon={<AlertTriangle size={15} />}>
               <strong>Warnings:</strong>
-              <ul style={{ margin: 0, paddingLeft: "1.2rem" }}>
+              <ul className="rating-notice-list">
                 {validationWarnings.map((warn, i) => (
                   <li key={i}>{warn}</li>
                 ))}
@@ -159,11 +157,11 @@ export function TariffPlanImportModal({ isOpen, onClose, onSuccess }: Props) {
           )}
 
           {parsedPreview && validationErrors.length === 0 && (
-            <div className="stat-card" style={{ padding: "0.75rem 1rem", background: "var(--bg-secondary)", borderRadius: "var(--ref-radius-control)", border: "1px solid var(--border-color)" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", color: "var(--success)", fontWeight: 600, marginBottom: "0.4rem" }}>
+            <div className="stat-card stat-card-preview">
+              <div className="rating-preview-ready">
                 <CheckCircle2 size={16} /> Ready to Import
               </div>
-              <div style={{ fontSize: "var(--ref-font-size-body-compact)", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.4rem" }}>
+              <div className="rating-preview-grid">
                 <div><strong>Plan ID:</strong> {parsedPreview.plan_id}</div>
                 <div><strong>Name:</strong> {parsedPreview.name || parsedPreview.plan_id}</div>
                 <div><strong>Rules:</strong> {parsedPreview.rules?.length || 0} rules included</div>
@@ -173,7 +171,7 @@ export function TariffPlanImportModal({ isOpen, onClose, onSuccess }: Props) {
           )}
         </div>
 
-        <div className="modal-footer" style={{ display: "flex", justifyContent: "flex-end", gap: "0.75rem", padding: "1rem 1.5rem" }}>
+        <div className="modal-footer">
           <button ref={cancelButtonRef} type="button" className="btn btn-outline" onClick={onClose} disabled={loading}>
             {t("cancel")}
           </button>

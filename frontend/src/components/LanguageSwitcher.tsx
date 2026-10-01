@@ -30,22 +30,7 @@ export default function LanguageSwitcher() {
       title={`${t("lang_switch")}: ${nextLangLabel}`}
       aria-label={`${t("lang_switch")}: ${nextLangLabel}`}
       aria-live="polite"
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: "0.4rem",
-        background: "var(--surface-hover)",
-        border: "1px solid var(--surface-border)",
-        borderRadius: "var(--ref-radius-pill)",
-        padding: "0.3rem 0.75rem",
-        color: "var(--text-secondary)",
-        cursor: "pointer",
-        transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
-        fontSize: "var(--ref-font-size-label)",
-        fontWeight: 600,
-        letterSpacing: "0.03em",
-      }}
-      className="hover-glass"
+      className="hover-glass lang-switcher"
     >
       <Languages size={15} color="var(--primary)" />
       <span>{currentLang === "en" ? "EN" : "中文"}</span>

@@ -173,7 +173,11 @@
   border-radius: var(--ref-radius-soft-panel);
 }
 
-.ocs-search-group {
+.ocs-controls-bar.ocs-controls-bar-end {
+  justify-content: flex-end;
+}
+
+.ocs-kpi-card {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -515,6 +519,23 @@
   margin: 0;
 }
 
+.ocs-drawer-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.ocs-drawer-subtitle {
+  font-size: var(--ref-font-size-label);
+  color: var(--text-muted);
+}
+
+.ocs-drawer-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .ocs-drawer-body {
   flex: 1;
   overflow-y: auto;
@@ -690,7 +711,7 @@
   }
 
   .ocs-table td[data-label] > .ocs-action-group {
-    justify-content: flex-start !important;
+    justify-content: flex-start;
   }
 
   /* Hide supplementary columns on mobile */
@@ -855,14 +876,14 @@
   border: 1px solid var(--surface-border);
   border-radius: var(--ref-radius-micro);
   background: var(--surface);
-  color: var(--text-secondary, var(--text));
+  color: var(--text-secondary);
   cursor: pointer;
   transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 
 .ocs-action-btn:hover:not(:disabled) {
   background: var(--surface-hover);
-  color: var(--text);
+  color: var(--text-main);
   border-color: var(--primary);
 }
 
@@ -1054,6 +1075,10 @@
   word-break: break-all;
 }
 
+.ocs-detail-value-strong {
+  font-weight: 600;
+}
+
 .ocs-detail-pre {
   background: var(--surface-hover);
   border: 1px solid var(--surface-border);
@@ -1205,12 +1230,6 @@
   font-size: var(--ref-font-size-body-small);
 }
 
-.ocs-empty-cell {
-  text-align: center;
-  padding: 2rem;
-  color: var(--text-muted);
-}
-
 /* Header actions */
 .ocs-header-actions {
   display: flex;
@@ -1282,6 +1301,12 @@
   margin-bottom: 0.875rem;
 }
 
+.ocs-form-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
 .ocs-form-label {
   display: block;
   font-size: var(--ref-font-size-label);
@@ -1313,4 +1338,144 @@
 .ocs-form-textarea {
   resize: vertical;
   min-height: 60px;
+}
+
+/* ── Value and typography helpers ───────────────────────────── */
+
+.ocs-text-muted {
+  color: var(--text-muted);
+}
+
+.ocs-text-success {
+  color: var(--status-success);
+}
+
+.ocs-text-warning {
+  color: var(--status-warning);
+}
+
+.ocs-text-chart-2 {
+  color: var(--chart-2);
+}
+
+.ocs-text-chart-5 {
+  color: var(--chart-5);
+}
+
+.ocs-kpi-value.ocs-text-success {
+  color: var(--status-success);
+}
+
+.ocs-kpi-value.ocs-text-warning {
+  color: var(--status-warning);
+}
+
+.ocs-mono.ocs-text-success {
+  color: var(--status-success);
+}
+
+.ocs-mono.ocs-text-muted {
+  color: var(--text-muted);
+}
+
+.ocs-mono.ocs-text-strong {
+  color: var(--text-main);
+  font-weight: 700;
+}
+
+.ocs-mono.ocs-font-data {
+  font-size: var(--ref-font-size-data);
+}
+
+.ocs-mono.ocs-font-label-strong {
+  font-size: var(--ref-font-size-label-strong);
+}
+
+.ocs-cell-session-id.ocs-cell-wide {
+  max-width: 200px;
+}
+
+/* ── Table alignment helpers ────────────────────────────────── */
+
+.ocs-table th.ocs-col-actions,
+.ocs-table td.ocs-col-actions {
+  text-align: right;
+}
+
+.ocs-action-group.ocs-action-group-end {
+  justify-content: flex-end;
+}
+
+/* ── Feedback spacing helpers ───────────────────────────────── */
+
+.ocs-feedback-success.ocs-feedback-spaced,
+.ocs-feedback-error.ocs-feedback-spaced {
+  margin-bottom: 1rem;
+}
+
+.ocs-feedback-error.ocs-feedback-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* ── Balance adjust modal helpers ───────────────────────────── */
+
+.ocs-dialog-header.ocs-dialog-header-between {
+  justify-content: space-between;
+}
+
+.ocs-balance-modal-imsi {
+  margin-bottom: 1rem;
+}
+
+.ocs-balance-modal-imsi-line {
+  font-size: var(--ref-font-size-data-relaxed);
+  color: var(--text-secondary);
+}
+
+.ocs-balance-modal-imsi-note {
+  margin-top: 0.25rem;
+  font-size: var(--ref-font-size-label);
+  color: var(--text-secondary);
+}
+
+.ocs-btn-secondary.ocs-btn-compact-auto {
+  margin-left: auto;
+  padding: 0.2rem 0.5rem;
+  font-size: var(--ref-font-size-caption);
+}
+
+.ocs-select.ocs-select-full {
+  width: 100%;
+}
+
+.ocs-select.ocs-select-unit {
+  width: 110px;
+}
+
+.ocs-amount-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.ocs-unit-suffix {
+  display: flex;
+  align-items: center;
+  padding: 0 0.75rem;
+  background: var(--surface-field);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-compact);
+  font-size: var(--ref-font-size-data-relaxed);
+}
+
+.ocs-amount-hint {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: var(--ref-font-size-caption);
+  color: var(--text-secondary);
+}
+
+.ocs-dialog-actions.ocs-dialog-actions-spaced {
+  margin-top: 1.25rem;
 }

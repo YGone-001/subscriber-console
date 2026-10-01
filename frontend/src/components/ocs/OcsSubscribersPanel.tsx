@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { DataTablePagination } from "@/components/ui/DataTablePagination";
+import { DataTableStateRow } from "@/components/ui/DataTableState";
 import OcsPageShell from "./OcsPageShell";
 
 interface OcsSubscriberRecord {
@@ -195,7 +196,7 @@ export default function OcsSubscribersPanel() {
       </thead>
       <tbody>
         {records.length === 0 ? (
-          <tr><td colSpan={6} className="ocs-empty-cell">{t("no_data")}</td></tr>
+          <DataTableStateRow colSpan={6} state="empty">{t("no_data")}</DataTableStateRow>
         ) : (
           records.map((r) => (
             <tr key={r.id}>

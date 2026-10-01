@@ -8,6 +8,7 @@ interface SortableTableHeaderProps {
   icon: ReactNode;
   onSort: () => void;
   style?: CSSProperties;
+  className?: string;
   priority?: "essential" | "important" | "supplementary";
 }
 
@@ -18,11 +19,12 @@ export function SortableTableHeader({
   icon,
   onSort,
   style,
+  className,
   priority = "essential",
 }: SortableTableHeaderProps) {
   return (
     <th
-      className={`${styles.header} ${active ? styles.active : ""}`}
+      className={`${styles.header} ${active ? styles.active : ""} ${className ?? ""}`}
       aria-sort={active ? (direction === "asc" ? "ascending" : "descending") : "none"}
       style={style}
       data-column-priority={priority}

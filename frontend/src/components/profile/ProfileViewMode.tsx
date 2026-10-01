@@ -26,7 +26,7 @@ export default function ProfileViewMode({ t, authData, usimType, ocsDefaults, ta
   return (
     <div className="animate-fade-in profile-container">
       {backendStats && (
-        <div className="dash-card" id="psec-stats" style={{ marginBottom: "1.5rem" }}>
+        <div className="dash-card dash-card-spaced" id="psec-stats">
           <div className="dash-card-header">
             <Users size={20} color="var(--primary)" />
             <h3 className="card-title">{t("prof_change_impacted")} ({backendStats.totalSubscribers})</h3>
@@ -34,11 +34,11 @@ export default function ProfileViewMode({ t, authData, usimType, ocsDefaults, ta
           <div className="dash-card-body grid-3-col">
             <div>
               <div className="label-muted">{t("prof_change_impacted")}</div>
-              <div className="value-mono" style={{ fontWeight: 600, color: "var(--primary)" }}>{backendStats.totalSubscribers}</div>
+              <div className="value-mono value-mono-primary">{backendStats.totalSubscribers}</div>
             </div>
             <div>
               <div className="label-muted">{t("prof_stat_active")}</div>
-              <div className="value-mono" style={{ color: "var(--success)" }}>{backendStats.activeSubscribers}</div>
+              <div className="value-mono value-mono-success">{backendStats.activeSubscribers}</div>
             </div>
             <div>
               <div className="label-muted">{t("prof_stat_suspended")}</div>
@@ -46,9 +46,9 @@ export default function ProfileViewMode({ t, authData, usimType, ocsDefaults, ta
             </div>
           </div>
           {Array.isArray(backendStats.sampleImsis) && backendStats.sampleImsis.length > 0 && (
-            <div style={{ marginTop: "0.75rem", paddingTop: "0.75rem", borderTop: "1px solid var(--border-color)", fontSize: "var(--ref-font-size-data-relaxed)" }}>
-              <span className="label-muted" style={{ marginRight: "0.5rem" }}>{t("prof_stat_samples")}:</span>
-              <span className="value-mono" style={{ opacity: 0.85 }}>{backendStats.sampleImsis.join(", ")}</span>
+            <div className="profile-sample-strip">
+              <span className="label-muted label-muted-inline">{t("prof_stat_samples")}:</span>
+              <span className="value-mono value-mono-dim">{backendStats.sampleImsis.join(", ")}</span>
             </div>
           )}
         </div>

@@ -20,6 +20,7 @@
 .pm-version-diff { border: 1px solid var(--surface-border); border-radius: var(--ref-radius-control); padding: 1rem; min-height: 220px; background: var(--surface); }
 .pm-version-diff-empty { height: 100%; display: flex; align-items: center; justify-content: center; color: var(--text-muted); text-align: center; }
 .pm-version-diff-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; margin-bottom: 1rem; }
+.pm-version-diff-body { display: flex; flex-direction: column; gap: 0.75rem; }
 .pm-version-diff-title { display: flex; align-items: center; gap: 0.5rem; font-weight: 700; }
 .pm-version-diff-meta { margin-top: 0.35rem; color: var(--text-muted); font-size: var(--ref-font-size-data); }
 .pm-restore-btn { padding: 0.55rem 0.85rem; font-size: var(--ref-font-size-data-relaxed); white-space: nowrap; }
@@ -56,7 +57,8 @@
 .bc-header { display: flex; justify-content: space-between; align-items: center; padding: 1.5rem 2rem; border-bottom: 1px solid var(--surface-border); }
 .bc-header-title { margin: 0; font-size: var(--ref-font-size-heading-lg); font-weight: 600; color: var(--text-main); }
 .bc-body { padding: 2rem; display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
-.bc-input-error { border: 1px solid var(--danger) !important; }
+.form-input.bc-input-error,
+.form-input.bc-input-error:focus { border: 1px solid var(--danger); }
 .bc-error-text { color: var(--danger); font-size: var(--ref-font-size-data); margin-top: 0.25rem; font-weight: 500; }
 .bc-label-icon { display: flex; align-items: center; gap: 0.4rem; }
 .bc-preview-container { padding: 0 2rem 1rem 2rem; margin-top: -0.5rem; min-height: 1.5rem; }

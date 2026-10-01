@@ -1,4 +1,19 @@
 /* subscriber.css */
+.masked-na {
+  color: var(--text-muted);
+  font-size: var(--ref-font-size-body-emphasis);
+}
+.masked-row {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0.5rem;
+}
+.masked-copy {
+  flex-shrink: 0;
+}
 .summary-metric-container {
   min-width: 0;
 }

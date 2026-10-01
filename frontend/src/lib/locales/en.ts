@@ -2033,6 +2033,7 @@ export const en: Record<string, string> = {
     ocs_invariant_broken_badge: "Invariant Mismatch",
     ocs_readonly_badge: "OCS Core Read-Only",
     ocs_readonly_notice: "Managed automatically by xCloud OCS billing engine. The UI enforces strict read-only access to preserve ACID consistency.",
+    ocs_load_failed: "Failed to load data. Check the network or backend service and try again.",
 
     ocs_modal_detail_title: "OCS Entity Audit Inspector",
     ocs_modal_copy_json: "Copy Raw JSON",

@@ -35,17 +35,17 @@ function TopConsumerTooltip({
 
   return (
     <div style={{ ...CHART_TOOLTIP_STYLE, padding: "0.75rem 0.85rem", minWidth: 210 }}>
-      <div style={{ fontFamily: "monospace", fontWeight: 700, marginBottom: "0.55rem" }}>{consumer.imsi}</div>
-      <div style={{ display: "grid", gap: "0.35rem", fontSize: "var(--ref-font-size-data-relaxed)" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem" }}>
+      <div className="top-consumer-tooltip__title">{consumer.imsi}</div>
+      <div className="top-consumer-tooltip__grid">
+        <div className="top-consumer-tooltip__row">
           <span>{t("dash_chart_top5_tooltip")}</span>
           <strong>{formatGb(consumer.balance)} GB</strong>
         </div>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem" }}>
+        <div className="top-consumer-tooltip__row">
           <span>{t("dash_chart_top5_voice_tooltip")}</span>
           <strong>{formatSeconds(consumer.voiceBalance)}</strong>
         </div>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem" }}>
+        <div className="top-consumer-tooltip__row">
           <span>{t("dash_chart_top5_sms_tooltip")}</span>
           <strong>{formatEvents(consumer.smsBalance)} SMS</strong>
         </div>
