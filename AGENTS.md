@@ -211,6 +211,41 @@ Charging Plane remains frozen and excluded.
 - 运维操作手册：`docs/operations/ocs-management-runbook.md`。
 - 界面验收验证：通过无头浏览器 CDP 1440x900 渲染断言验证通过（本地测试截图即测即消，不入版本库）。
 
+### 5.2 Local Full-Stack Access Contract
+
+The full application browser origin is the Nginx edge.
+
+```text
+Default local URL:  http://localhost
+Custom edge port:   http://localhost:<edge-port>   (sudo ./deploy/nginx/setup.sh <port>)
+```
+
+- Next.js `:13333` is an internal UI component endpoint only.
+- Go `:18888` is an internal API component endpoint only.
+
+Opening `:13333` directly may render the login page, but browser-relative `/api`
+requests will correctly fail because Next.js owns no API routes.
+
+When `/api` requests fail from `:13333`:
+DO NOT add Next.js rewrites or API handlers.
+Check/start the Nginx edge instead.
+
+Use:
+
+```bash
+npm run local:doctor
+```
+
+Forbidden workarounds (never add):
+
+```text
+Next.js rewrite for /api
+Next.js /api route handler
+Next.js API reverse proxy / forwarding middleware
+Node API fallback
+browser-direct Go base URL (hardcoded http://127.0.0.1:18888/api/...)
+```
+
 Exact HEAD is intentionally not stored here.
 
 Always use Git for SHA/status.

@@ -89,7 +89,21 @@ The frontend is a UI-only runtime: it holds no JWT/MongoDB client and no
 
 ## Quick Start
 
-### Frontend
+The full application is served by the Nginx edge. Both application services are
+loopback-internal and are not browser origins.
+
+```text
+MongoDB     xcloud + xcloud_ops
+Go backend  127.0.0.1:18888   internal API service
+Next.js UI  127.0.0.1:13333   internal UI service
+Nginx edge  public browser entry, default http://localhost
+```
+
+Next.js `:13333` is an internal UI service and Go `:18888` is an internal API service.
+Neither internal port is a supported full-stack browser origin; they are useful for
+component-level diagnostics only.
+
+### 1. Install dependencies
 
 ```bash
 # From the repository root: install dependencies used by scripts/.
@@ -101,20 +115,66 @@ cp .env.example .env
 cd frontend
 npm ci
 cp ../.env .env
-npm run mongo:init
-npm run dev
+cd ..
 ```
 
-Open `http://localhost:13333`.
+Set the same strong `JWT_SECRET` and `INITIAL_ADMIN_PASSWORD` in root `.env` (and the copied `frontend/.env`) before running `npm run mongo:init`. The initialization script creates the initial `admin` account when it does not already exist.
 
-Set the same strong `JWT_SECRET` and `INITIAL_ADMIN_PASSWORD` in root `.env` and `frontend/.env` before running `npm run mongo:init`. The initialization script creates the initial `admin` account when it does not already exist.
+### 2. Initialize MongoDB
 
-### Backend
+```bash
+npm run mongo:init
+```
+
+### 3. Start the Go backend
 
 ```bash
 cd backend
+set -a
+source ../.env
+set +a
 go run ./cmd/server
 ```
+
+Expected listener: `127.0.0.1:18888`.
+
+### 4. Start the Next.js UI
+
+```bash
+cd frontend
+npm run dev
+```
+
+Expected listener: `127.0.0.1:13333`.
+
+### 5. Start the Nginx edge
+
+```bash
+sudo ./deploy/nginx/setup.sh
+```
+
+Expected public edge: `http://localhost`.
+
+Use `sudo ./deploy/nginx/setup.sh 8080` to listen on another port.
+
+### 6. Verify and open
+
+```bash
+npm run local:doctor
+```
+
+Then open the full application at:
+
+```text
+http://localhost
+```
+
+When the edge is intentionally configured on another port, open
+`http://localhost:<edge-port>` instead.
+
+Do not open `http://localhost:13333` for normal application use. The login page
+renders there, but browser-relative `/api` requests are sent to Next.js, which owns no
+API routes. Start the Nginx edge and use its public URL.
 
 ## Environment
 
@@ -138,6 +198,7 @@ npm run mongo:init          # Create MongoDB indexes
 npm run mongo:migrate-app-db # Move app_* collections from xcloud to the app database
 npm run mongo:test-core     # Run MongoDB core integration smoke test against a temporary DB
 npm run mongo:perf          # Explain key MongoDB queries and flag slow scans
+npm run local:doctor        # Diagnose the running local full-stack topology
 
 # Frontend (from frontend/)
 npm run dev                 # Start development server
@@ -162,6 +223,8 @@ The application runs as two loopback-internal services behind the Nginx edge:
 Next.js on `127.0.0.1:13333` and Go on `127.0.0.1:18888`. Nginx routes `/api` and
 `/api/*` to Go and everything else to Next.js; install it with
 `sudo ./deploy/nginx/setup.sh [listen_port]` (the script validates with `nginx -t`).
+The full-stack browser entry is the Nginx edge URL (default `http://localhost`), never
+an internal component port.
 
 ```bash
 # Frontend

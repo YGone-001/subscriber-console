@@ -142,15 +142,21 @@ sudo ./deploy/nginx/setup.sh 8080     # listens on 8080 (internal network)
 ```
 
 The script substitutes the `listen` directive, links the site into
-`sites-enabled`, then validates and reloads:
+`sites-enabled`, then validates before acting. Both service states are supported:
+an already-active Nginx is reloaded, an installed-but-inactive Nginx is started.
 
 ```bash
 nginx -t
-systemctl reload nginx
+if systemctl is-active --quiet nginx; then
+  systemctl reload nginx
+else
+  systemctl start nginx
+fi
 ```
 
-`nginx -t` must pass before the reload; the script uses `set -euo pipefail` and
-aborts on a configuration error.
+`nginx -t` must pass before either action; the script uses `set -euo pipefail` and
+aborts on a configuration error. The service is never enabled at boot and no firewall
+rule is modified.
 
 ## Environment Requirements
 
@@ -213,20 +219,57 @@ backend and by the repository-root operational scripts (for example `npm run mon
 
 ## Start Commands
 
-### Development
+### Local Full-Stack Development
+
+The full stack is MongoDB + Go + Next.js + the Nginx edge. The browser always enters
+through the Nginx edge; the two application services are loopback-internal.
+
+WARNING: Do not browse directly to `:13333` for full-stack use. The page may render,
+but same-origin `/api` requests will not reach Go because Next.js owns no API routes.
+
+1. MongoDB — ensure it is reachable, then initialize when required:
 
 ```bash
-# Terminal 1: Next.js
-cd frontend
-npm run dev
+npm run mongo:init
+```
 
-# Terminal 2: Go backend
+2. Go backend (internal `127.0.0.1:18888`):
+
+```bash
 cd backend
 set -a
 source ../.env
 set +a
 go run ./cmd/server
 ```
+
+3. Next.js UI (internal `127.0.0.1:13333`):
+
+```bash
+cd frontend
+npm run dev    # next dev --webpack -H 127.0.0.1 -p 13333
+```
+
+4. Nginx edge:
+
+```bash
+sudo ./deploy/nginx/setup.sh
+```
+
+5. Verify the running topology:
+
+```bash
+npm run local:doctor
+```
+
+6. Open the full application at the edge URL:
+
+```text
+http://localhost
+```
+
+When the edge is intentionally configured on another port
+(`sudo ./deploy/nginx/setup.sh 8080`), open `http://localhost:8080`.
 
 ### Production
 
@@ -278,6 +321,17 @@ MongoDB may remain disabled at boot on development hosts. Start it only when nee
 ### Login fails with server error
 
 Check that `JWT_SECRET` (Go) exists, is not a placeholder, and is at least 32 bytes.
+
+### Login page loads on :13333 but login returns 404 / server error
+
+The credentials may be valid. The browser is using the internal Next.js origin, so
+relative `/api` requests are sent to Next.js. Next.js intentionally has no API routes,
+so `POST /api/auth/login` returns a Next.js 404 and never reaches Go.
+
+Use/start the Nginx edge and browse through its public URL (`http://localhost`).
+Verify the running topology with `npm run local:doctor`.
+
+Do not add a Next.js `/api` rewrite or proxy to work around this.
 
 ### Admin account is not created
 

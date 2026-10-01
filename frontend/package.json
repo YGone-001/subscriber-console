@@ -6,7 +6,7 @@
     "node": ">=20.19.0"
   },
   "scripts": {
-    "dev": "next dev --webpack -p 13333",
+    "dev": "next dev --webpack -H 127.0.0.1 -p 13333",
     "build": "next build --webpack",
     "start": "next start -H 127.0.0.1 -p 13333",
     "test": "tsx --test tests",

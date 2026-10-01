@@ -144,6 +144,18 @@ Charging Plane remains frozen and excluded.
 - 严禁引入或耦合运行时计费面实体（`ocs_sessions`, `ocs_reservations`, `ocs_usage_records`, `ocs_events`, `ocs_config`, Gy/Ro/CCR/CCA 协议栈）。
 - 路由权威来源：84 条 Go 注册（`backend/cmd/server/main.go` + `backend/internal/remediation/handler.go`）；Nginx 负责 API 路由。
 
+### 2.2 本地全栈访问契约 (Local Full-Stack Access Contract)
+
+稳定规则，非临时排障记录：
+
+- 全栈浏览器访问必须始终从 Nginx 边缘进入。默认 `http://localhost`；自定义边缘端口时为 `http://localhost:<edge-port>`。
+- `localhost:13333` 不是受支持的应用访问源，它是 Next.js UI 内部监听器。
+- `localhost:18888` 不是受支持的浏览器应用访问源，它是 Go API 内部监听器。
+- 浏览器相对路径 `/api` 调用依赖 Nginx 同源边缘转发至 Go。
+- 本地环境缺少 Nginx 属于拓扑不完整，不构成“把 API 转发能力重新还给 Next.js”的理由。
+- 禁止新增：Next.js `/api` rewrite、Next.js `/api` route handler、Next.js API 反向代理/转发中间件、Node API fallback、浏览器直连 Go 的硬编码 base URL。
+- 本地拓扑自检：`npm run local:doctor`。
+
 ## 3. 技术栈
 
 ### Frontend

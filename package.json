@@ -12,7 +12,8 @@
     "mongo:migrate-app-db": "node scripts/migrate-app-collections-to-app-db.mjs",
     "mongo:test-core": "node scripts/test-mongo-core.mjs",
     "test:direct-operations": "node scripts/test-direct-operations.mjs",
-    "mongo:perf": "node scripts/check-mongo-query-performance.mjs"
+    "mongo:perf": "node scripts/check-mongo-query-performance.mjs",
+    "local:doctor": "node scripts/check-local-stack.mjs"
   },
   "dependencies": {
     "@next/env": "16.3.5",

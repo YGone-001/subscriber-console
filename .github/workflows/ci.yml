@@ -364,6 +364,9 @@ jobs:
       - name: Documentation integrity
         run: node scripts/test-documentation-integrity.mjs
 
+      - name: Local access contract
+        run: node scripts/test-local-access-contract.mjs
+
       - name: Repository normalization gate
         run: node scripts/test-repository-normalization.mjs
 

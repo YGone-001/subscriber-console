@@ -33,9 +33,16 @@ sed "s|^    listen 80;|    listen ${LISTEN_PORT};|" "$NGINX_CONF" > "$SITES_AVAI
 rm -f /etc/nginx/sites-enabled/default
 ln -sf "$SITES_AVAILABLE" "$SITES_ENABLED"
 
-# Validate and reload
+# Validate first: a configuration error must abort before any service action.
 nginx -t
-systemctl reload nginx
+
+# Support both service states: reload when Nginx is already running, start it when
+# it is installed but inactive. The service is never enabled at boot here.
+if systemctl is-active --quiet nginx; then
+  systemctl reload nginx
+else
+  systemctl start nginx
+fi
 
 echo "Nginx edge router configured for xCloud"
 echo "  Config:       $SITES_AVAILABLE"
