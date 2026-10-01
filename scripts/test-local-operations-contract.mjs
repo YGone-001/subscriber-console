@@ -13,7 +13,8 @@
  *   O6  a stop that cannot confirm exit preserves the record and reports failure
  *   O7  a partial startup failure leaves no orphaned managed child
  *   O8  an arbitrary HTTP server is never accepted as the expected edge
- *   O9  a registration failure releases the exact spawned child as an enforced operation
+ *   O9  a registration failure releases the exact spawned child as an enforced operation,
+ *       exercising the exact-child escalation when the graceful stage is resisted
  *
  * Synthetic child processes are used deliberately: the canonical production ports are
  * never used for the process-safety scenarios, and every failure mode is injected
@@ -141,7 +142,8 @@ setInterval(() => {}, 1000);
  * Used to prove that a termination request which does not end the process is never
  * reported as a completed stop.
  */
-const RESISTANT_CHILD_SOURCE = `import net from 'node:net';
+const RESISTANT_CHILD_SOURCE = `import { writeFileSync } from 'node:fs';
+import net from 'node:net';
 const port = Number(process.argv[2] || 0);
 if (port) {
   const server = net.createServer();
@@ -149,6 +151,9 @@ if (port) {
 }
 process.on('SIGTERM', () => { /* intentionally stay alive */ });
 process.on('SIGINT', () => { /* intentionally stay alive */ });
+// Readiness handshake: the marker is written only after the handlers above are
+// installed, so a waiting parent knows the child can genuinely resist SIGTERM.
+if (process.argv[3]) writeFileSync(process.argv[3], 'ready');
 setInterval(() => {}, 1000);
 `;
 
@@ -187,6 +192,7 @@ const evidence = {
   registrationFailureOrphaned: null,
   registrationFailureCleanupConfirmed: null,
   registrationFailureExactChildOnly: null,
+  registrationFailureEscalationExercised: null,
 };
 
 // ---------------------------------------------------------------------------
@@ -639,9 +645,20 @@ async function testRegistrationFailureRelease() {
   mkdirSync(stateDir, { recursive: true });
   const env = { XCLOUD_RUNTIME_DIR: stateDir };
 
-  let child = null;
-  const events = [];
+  // Deterministic readiness handshake. The child is started and observed here, and only
+  // afterwards does the lifecycle under test receive its exact live ChildProcess handle,
+  // so registration can never race the child's own signal-handler installation.
+  const marker = join(dir, 'child-ready.marker');
+  const child = spawnChild(script, ['0', marker], { force: true });
+  const startedReady = await waitUntil(() => isAlive(child.pid) && existsSync(marker), 8000);
+  check('O9-child-spawned', Boolean(child) && Number.isFinite(child.pid), `pid=${child.pid}`);
+  check('O9-resistant-child-started', startedReady, `pid=${child.pid}`);
+  check('O9-signal-handlers-installed-before-lifecycle', existsSync(marker), `markerPresent=${existsSync(marker)}`);
+  if (!startedReady) return;
+  check('O9-child-alive-before-release', isAlive(child.pid));
 
+  const events = [];
+  const lifecycleStartedAt = Date.now();
   const result = await startManagedProcesses({
     repoRoot: ROOT,
     env,
@@ -649,19 +666,20 @@ async function testRegistrationFailureRelease() {
       {
         role: 'next',
         command: `${process.execPath} ${script}`,
-        spawn: () => { child = spawnChild(script, [], { force: true }); return child; },
+        spawn: () => child,
         waitForReady: async () => true,
       },
     ],
     onEvent: (event) => events.push(event),
   });
+  const lifecycleElapsedMs = Date.now() - lifecycleStartedAt;
 
   const registered = events.some((event) => event.type === 'registered');
   const registerFailed = events.some((event) => event.type === 'register-failed');
   const released = events.find((event) => event.type === 'register-released') || null;
   const releaseFailed = events.some((event) => event.type === 'register-release-failed');
+  const escalated = Boolean(released) && released.escalated === true;
 
-  check('O9-child-spawned', Boolean(child) && Number.isFinite(child.pid), `pid=${child && child.pid}`);
   check(
     'O9-registration-failed',
     result.ok === false && registerFailed && !registered,
@@ -670,6 +688,24 @@ async function testRegistrationFailureRelease() {
   check('O9-release-reported', Boolean(released) && !releaseFailed,
     `released=${Boolean(released)} releaseFailed=${releaseFailed}`);
   check('O9-no-cleanup-failure-field', result.cleanupFailure === null, JSON.stringify(result.cleanupFailure));
+  check('O9-no-record-written', !existsSync(recordPath(ROOT, 'next', env)));
+
+  // On Unix the graceful stage must have been resisted. The escalation can only be reached
+  // after the graceful exit confirmation ran to its full timeout without confirming exit,
+  // so a completed escalation is itself the proof that graceful termination failed.
+  if (process.platform !== 'win32') {
+    check('O9-graceful-stage-timed-out', lifecycleElapsedMs >= 4500, `elapsedMs=${lifecycleElapsedMs}`);
+  }
+  check(
+    'O9-exact-child-escalation-used',
+    process.platform === 'win32' ? Boolean(released) : escalated,
+    `escalated=${released && released.escalated}`,
+  );
+  check(
+    'O9-escalated-pid-is-spawned-pid',
+    Boolean(released) && released.pid === child.pid,
+    `releasedPid=${released && released.pid} spawnedPid=${child.pid}`,
+  );
 
   const exited = await waitUntil(() => !isAlive(child.pid), 8000);
   const recordPresent = existsSync(recordPath(ROOT, 'next', env));
@@ -683,7 +719,8 @@ async function testRegistrationFailureRelease() {
   evidence.registrationFailureCleanupConfirmed = Boolean(released) && !releaseFailed && exited && !orphaned;
   // The release acts only on the exact ChildProcess handle this process spawned: the
   // released pid is the pid of the handle in hand, never a name/port/wildcard lookup.
-  evidence.registrationFailureExactChildOnly = Boolean(released) && Boolean(child) && released.pid === child.pid;
+  evidence.registrationFailureExactChildOnly = Boolean(released) && released.pid === child.pid;
+  evidence.registrationFailureEscalationExercised = escalated;
 
   // A release that cannot confirm exit must be surfaced, never silently ignored. The
   // registration still fails for real; only the release outcome is injected as a failure.
@@ -792,6 +829,7 @@ async function main() {
   console.log(`local_ops_registration_failure_orphaned=${observed(evidence.registrationFailureOrphaned)}`);
   console.log(`local_ops_registration_failure_cleanup_confirmed=${observed(evidence.registrationFailureCleanupConfirmed)}`);
   console.log(`local_ops_registration_failure_exact_child_only=${observed(evidence.registrationFailureExactChildOnly)}`);
+  console.log(`local_ops_registration_failure_escalation_exercised=${observed(evidence.registrationFailureEscalationExercised)}`);
   console.log('');
   console.log(`local_ops_canonical_next_port=${CANONICAL_PORTS.next}`);
   console.log(`local_ops_canonical_go_port=${CANONICAL_PORTS.go}`);
