@@ -591,6 +591,8 @@ export function commandReferencesRoot(processInfo, repoRoot) {
  * @param {object|null} [input.registryRecord] ownership record for this role
  * @param {string} [input.repoRoot]
  * @param {boolean|null} [input.serviceReachable] live service identity probe
+ * @param {number|null} [input.edgeApiStatus]  `GET /api/auth/me` status observed on an
+ *        `edge` listener
  * @param {boolean} [input.managedByRecord]  listener is a proven descendant of a
  *        verified managed process (a supervisor may own the socket for a child)
  * @returns {{port:number, role:string, state:string, outcome:string, reason:string,
@@ -605,6 +607,7 @@ export function classifyPort(input) {
     registryRecord = null,
     repoRoot = null,
     serviceReachable = null,
+    edgeApiStatus = null,
     managedByRecord = false,
   } = input || {};
 
@@ -644,13 +647,18 @@ export function classifyPort(input) {
 
   // Long-lived infrastructure is allowed to already be running.
   if (role === 'edge') {
-    const looksLikeEdge = serviceReachable === true || /nginx/i.test(processInfo.name || '');
+    // The edge contract is a runtime property, not a process name. An arbitrary HTTP
+    // server that answers `/` is not the xCloud edge: the root must answer AND `/api`
+    // must be routed to the Go authority (401 without credentials, or 502/503 while the
+    // Go upstream is not yet up).
+    const apiRoutedToGo = edgeApiStatus === 401 || edgeApiStatus === 502 || edgeApiStatus === 503;
+    const looksLikeEdge = serviceReachable === true && apiRoutedToGo;
     if (looksLikeEdge) {
       return {
         port, role,
         state: LISTENER_STATES.EXPECTED_SERVICE,
         outcome: PORT_OUTCOMES.EXPECTED_SERVICE,
-        reason: 'expected edge service',
+        reason: 'expected edge service (root reachable and /api routed to the Go authority)',
         listener, processInfo, ownership,
       };
     }
@@ -720,14 +728,22 @@ export async function inspectPort(port, { role = 'custom', repoRoot = null, regi
     managedByRecord = await isManagedDescendant(registryRecord, listener.processId);
   }
   let serviceReachable = null;
+  let edgeApiStatus = null;
   if (listener) {
     if (role === 'mongo') serviceReachable = await isPortOpen(port);
     else if (role === 'edge') {
-      const probe = await probeHttp(`http://127.0.0.1:${port}/`);
-      serviceReachable = probe.reachable;
+      // The edge is proven by behaviour: the UI root answers AND `/api` reaches the Go
+      // authentication boundary. Probe both so an unrelated HTTP server that merely
+      // answers `/` is never accepted as this project's edge.
+      const [rootProbe, apiProbe] = await Promise.all([
+        probeHttp(`http://127.0.0.1:${port}/`),
+        probeHttp(`http://127.0.0.1:${port}/api/auth/me`),
+      ]);
+      serviceReachable = rootProbe.reachable;
+      edgeApiStatus = apiProbe.reachable ? apiProbe.status : null;
     }
   }
-  return classifyPort({ port, role, listener, processInfo, registryRecord, repoRoot, serviceReachable, managedByRecord });
+  return classifyPort({ port, role, listener, processInfo, registryRecord, repoRoot, serviceReachable, edgeApiStatus, managedByRecord });
 }
 
 // ---------------------------------------------------------------------------
@@ -938,4 +954,320 @@ export function describeListener(listener) {
   if (listener.name) parts.push(`process=${listener.name}`);
   if (listener.address) parts.push(`address=${listener.address}`);
   return parts.join(' ');
+}
+
+// ---------------------------------------------------------------------------
+// Managed process lifecycle
+// ---------------------------------------------------------------------------
+//
+// Two rules are implemented here once so the start and stop tools cannot diverge:
+//
+//   A. a spawned managed child obtains a durable ownership record before its readiness
+//      poll can fail, so no failure path leaves a live process without a record;
+//   B. an ownership record is discarded only after the process is confirmed gone, so a
+//      stop timeout never loses the record the operator still needs.
+//
+// `terminateVerifiedProcess` above remains the only termination entry point.
+
+export const DEFAULT_STOP_TIMEOUT_MS = 8000;
+
+/** Stop timeout. Honors XCLOUD_STOP_TIMEOUT_MS for isolated test runs. */
+export function stopTimeoutMs(env = process.env) {
+  const raw = env.XCLOUD_STOP_TIMEOUT_MS;
+  if (raw === undefined || raw === null || String(raw).trim() === '') return DEFAULT_STOP_TIMEOUT_MS;
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value < 0) return DEFAULT_STOP_TIMEOUT_MS;
+  return value;
+}
+
+export const STOP_STATUSES = Object.freeze({
+  ABSENT: 'ABSENT',
+  STALE: 'STALE',
+  REFUSED: 'REFUSED',
+  STOPPED: 'STOPPED',
+  STOP_TIMEOUT: 'STOP_TIMEOUT',
+  INSUFFICIENT_PERMISSION: 'INSUFFICIENT_PERMISSION',
+  FAILED: 'FAILED',
+});
+
+/** Statuses that mean "the stop did not achieve its goal". */
+const STOP_FAILURE_STATUSES = Object.freeze([
+  STOP_STATUSES.STOP_TIMEOUT,
+  STOP_STATUSES.INSUFFICIENT_PERMISSION,
+  STOP_STATUSES.FAILED,
+]);
+
+const REGISTRATION_INSPECT_ATTEMPTS = 10;
+const REGISTRATION_INSPECT_INTERVAL_MS = 150;
+const RELEASE_UNREGISTERED_TIMEOUT_MS = 5000;
+
+/**
+ * Take durable ownership of a process this command has just spawned.
+ *
+ * The record is written only when the live process itself proves the record under the
+ * same `verifyOwnership` gate that `local:stop` later applies, so a written record can
+ * never describe a process this command does not own.
+ *
+ * @returns {{ok:boolean, reason:string, pid:(number|null), record:(object|null),
+ *            ownership:(object|null)}}
+ */
+export async function registerManagedProcess({
+  repoRoot,
+  role,
+  pid,
+  command,
+  env = process.env,
+  startedAt = new Date().toISOString(),
+}) {
+  const targetPid = Number(pid);
+  if (!Number.isFinite(targetPid) || targetPid <= 0) {
+    return { ok: false, reason: 'spawn did not yield a process id', pid: null, record: null, ownership: null };
+  }
+
+  let info = null;
+  for (let attempt = 0; attempt < REGISTRATION_INSPECT_ATTEMPTS; attempt += 1) {
+    info = await inspectProcess(targetPid, { refresh: true });
+    if (info) break;
+    await sleep(REGISTRATION_INSPECT_INTERVAL_MS);
+  }
+  if (!info) {
+    return { ok: false, reason: 'the spawned process could not be inspected', pid: targetPid, record: null, ownership: null };
+  }
+
+  const record = buildRecord({ role, pid: targetPid, command, repoRoot, processInfo: info, startedAt });
+  const ownership = verifyOwnership(record, info);
+  if (ownership.verdict !== 'OWNED') {
+    return { ok: false, reason: `ownership could not be proven (${ownership.verdict})`, pid: targetPid, record, ownership };
+  }
+
+  const written = writeRecord(repoRoot, role, record, env);
+  return { ok: true, reason: 'registered', pid: targetPid, record: written, ownership };
+}
+
+/**
+ * Wait until a process actually disappears.
+ *
+ * A requested termination is not a completed stop. Only this confirmation may precede
+ * removal of the ownership record. `timeoutMs` of 0 performs a single check.
+ */
+export async function confirmProcessExit(pid, { timeoutMs = DEFAULT_STOP_TIMEOUT_MS, pollMs = 250 } = {}) {
+  const targetPid = Number(pid);
+  if (!Number.isFinite(targetPid) || targetPid <= 0) return true;
+  const budget = Number.isFinite(Number(timeoutMs)) ? Math.max(0, Number(timeoutMs)) : DEFAULT_STOP_TIMEOUT_MS;
+  const deadline = Date.now() + budget;
+  for (;;) {
+    const info = await inspectProcess(targetPid, { refresh: true });
+    if (!info) return true;
+    if (Date.now() >= deadline) return false;
+    await sleep(pollMs);
+  }
+}
+
+/**
+ * Stop one managed process.
+ *
+ * Ownership is verified first and termination is requested only through the verified
+ * entry point. The ownership record is removed ONLY after the process is confirmed gone.
+ * A process that outlives the stop timeout keeps its record and is reported as
+ * `STOP_TIMEOUT`, so the operator can retry `npm run local:stop`.
+ */
+export async function stopManagedProcess({
+  repoRoot,
+  role,
+  env = process.env,
+  timeoutMs = stopTimeoutMs(env),
+  record = null,
+  processInfo = null,
+  terminateFn = terminateVerifiedProcess,
+  confirmExitFn = confirmProcessExit,
+} = {}) {
+  const existing = record || readRecord(repoRoot, role, env);
+  if (!existing) {
+    return {
+      role, status: STOP_STATUSES.ABSENT, pid: null,
+      recordRemoved: false, recordPresent: false, ownership: null, processInfo: null, detail: null,
+    };
+  }
+
+  const info = processInfo || (await inspectProcess(existing.pid, { refresh: true }));
+  const ownership = verifyOwnership(existing, info);
+
+  if (ownership.verdict === 'STALE') {
+    removeRecord(repoRoot, role, env);
+    return {
+      role, status: STOP_STATUSES.STALE, pid: existing.pid,
+      recordRemoved: true, recordPresent: false, ownership, processInfo: info, detail: null,
+    };
+  }
+  if (ownership.verdict === 'NOT_FOUND') {
+    removeRecord(repoRoot, role, env);
+    return {
+      role, status: STOP_STATUSES.ABSENT, pid: existing.pid,
+      recordRemoved: true, recordPresent: false, ownership, processInfo: info, detail: null,
+    };
+  }
+  if (ownership.verdict !== 'OWNED') {
+    return {
+      role, status: STOP_STATUSES.REFUSED, pid: existing.pid,
+      recordRemoved: false, recordPresent: true, ownership, processInfo: info, detail: null,
+    };
+  }
+
+  const termination = terminateFn(existing, info);
+  if (!termination || !termination.ok) {
+    const status = termination && termination.refusal === 'INSUFFICIENT_PERMISSION'
+      ? STOP_STATUSES.INSUFFICIENT_PERMISSION
+      : STOP_STATUSES.FAILED;
+    return {
+      role, status, pid: existing.pid,
+      recordRemoved: false, recordPresent: true, ownership, processInfo: info,
+      detail: termination && termination.detail ? termination.detail : null,
+    };
+  }
+
+  const exited = await confirmExitFn(existing.pid, { timeoutMs });
+  if (!exited) {
+    return {
+      role, status: STOP_STATUSES.STOP_TIMEOUT, pid: existing.pid,
+      recordRemoved: false, recordPresent: true, ownership, processInfo: info, detail: null,
+    };
+  }
+
+  removeRecord(repoRoot, role, env);
+  return {
+    role, status: STOP_STATUSES.STOPPED, pid: existing.pid,
+    recordRemoved: true, recordPresent: false, ownership, processInfo: info, detail: null,
+  };
+}
+
+/**
+ * Stop every registered role and summarize the outcome.
+ *
+ * Shared so the command and the contract test cannot diverge on the failure mapping:
+ * a timeout, an unmanageable process or a failed termination is always
+ * `NEEDS_ATTENTION` with a non-zero exit code.
+ */
+export async function stopManagedProcesses({
+  repoRoot,
+  roles = REGISTRY_ROLES,
+  env = process.env,
+  timeoutMs = stopTimeoutMs(env),
+  stopFn = stopManagedProcess,
+} = {}) {
+  const outcomes = [];
+  for (const role of roles) {
+    outcomes.push(await stopFn({ repoRoot, role, env, timeoutMs }));
+  }
+
+  const refusals = outcomes.filter((outcome) => outcome.status === STOP_STATUSES.REFUSED).length;
+  const failures = outcomes.filter((outcome) => STOP_FAILURE_STATUSES.includes(outcome.status)).length;
+  const timedOut = outcomes.filter((outcome) => outcome.status === STOP_STATUSES.STOP_TIMEOUT);
+  const recordPreservedOnTimeout = timedOut.length === 0
+    ? null
+    : timedOut.every((outcome) => existsSync(recordPath(repoRoot, outcome.role, env)));
+  const result = failures === 0 && refusals === 0 ? 'PASS' : 'NEEDS_ATTENTION';
+
+  return { outcomes, refusals, failures, recordPreservedOnTimeout, result, exitCode: result === 'PASS' ? 0 : 1 };
+}
+
+class StartupFailure extends Error {}
+
+/**
+ * Spawn, take ownership of, and await readiness for a sequence of managed children.
+ *
+ * Each child is registered durably BEFORE its readiness poll can fail, and any failure
+ * rolls the already-registered children back in reverse order through the same verified
+ * stop path `local:stop` uses. No arbitrary PID kill shortcut exists.
+ *
+ * `onEvent` receives `spawned`, `registered`, `ready-start`, `ready-ok`, `ready-fail`,
+ * `ready-error`, `register-failed`, `rollback-start`, `rollback-stop` and `rollback-done`.
+ */
+export async function startManagedProcesses({
+  repoRoot,
+  entries = [],
+  env = process.env,
+  timeoutMs = stopTimeoutMs(env),
+  onEvent = () => {},
+} = {}) {
+  const registered = [];
+  try {
+    for (const entry of entries) {
+      const { role } = entry;
+      const child = entry.spawn();
+      onEvent({ type: 'spawned', role, pid: child && child.pid });
+      if (!child || !Number.isFinite(Number(child.pid)) || Number(child.pid) <= 0) {
+        throw new StartupFailure(`${role}: spawn did not yield a process id`);
+      }
+
+      const registration = await registerManagedProcess({ repoRoot, role, pid: child.pid, command: entry.command, env });
+      if (!registration.ok) {
+        onEvent({ type: 'register-failed', role, reason: registration.reason });
+        await releaseUnregisteredChild(child);
+        throw new StartupFailure(`${role}: ownership could not be recorded (${registration.reason})`);
+      }
+      registered.push({ role, pid: registration.record.pid, record: registration.record });
+      onEvent({ type: 'registered', role, pid: registration.record.pid });
+
+      onEvent({ type: 'ready-start', role, pid: registration.record.pid });
+      let ready = false;
+      try {
+        ready = Boolean(await entry.waitForReady());
+      } catch (err) {
+        onEvent({ type: 'ready-error', role, message: err && err.message ? err.message : String(err) });
+      }
+      if (!ready) {
+        onEvent({ type: 'ready-fail', role });
+        throw new StartupFailure(`${role}: readiness failed`);
+      }
+      onEvent({ type: 'ready-ok', role });
+    }
+    return { ok: true, registered, stopped: [], error: null };
+  } catch (error) {
+    onEvent({ type: 'rollback-start', message: error && error.message ? error.message : String(error) });
+    const stopped = [];
+    for (const item of [...registered].reverse()) {
+      const outcome = await stopManagedProcess({ repoRoot, role: item.role, env, timeoutMs });
+      stopped.push(outcome);
+      onEvent({ type: 'rollback-stop', role: item.role, status: outcome.status });
+    }
+    onEvent({ type: 'rollback-done', stopped: stopped.map((outcome) => `${outcome.role}:${outcome.status}`) });
+    return { ok: false, registered, stopped, error };
+  }
+}
+
+/**
+ * Terminate the exact handle this command just spawned when ownership could not be
+ * recorded.
+ *
+ * This is not a PID lookup, not a port lookup and not an image-name match: it acts only
+ * on the live ChildProcess handle in hand, so no unregistered detached process is left
+ * behind by a failed registration.
+ */
+async function releaseUnregisteredChild(child) {
+  if (!child || !Number.isFinite(Number(child.pid))) return false;
+  try {
+    child.kill();
+  } catch {
+    /* already gone */
+  }
+  return confirmProcessExit(child.pid, { timeoutMs: RELEASE_UNREGISTERED_TIMEOUT_MS });
+}
+
+/**
+ * Count canonical internal ports owned by a project artifact that has no valid managed
+ * ownership record.
+ *
+ * That is precisely the forbidden state: a live project process with no durable
+ * ownership record. Foreign processes are reported by `local:preflight` instead.
+ */
+export async function countUnmanagedLiveProcesses({ repoRoot, env = process.env } = {}) {
+  const offenders = [];
+  for (const role of INTERNAL_PORT_ROLES) {
+    const record = readRecord(repoRoot, role, env);
+    const result = await inspectPort(CANONICAL_PORTS[role], {
+      role, repoRoot, registryRecord: record, refresh: true,
+    });
+    if (result.outcome === PORT_OUTCOMES.STALE_PROJECT_PROCESS) offenders.push(result);
+  }
+  return offenders;
 }

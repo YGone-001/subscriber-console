@@ -161,6 +161,8 @@ Charging Plane remains frozen and excluded.
 - 本地运维命令：`npm run local:preflight`（只读端口归属检查）、`npm run local:dev`（托管启动 Go + Next）、`npm run local:status`（组件与拓扑状态）、`npm run local:doctor`（全栈拓扑自检）、`npm run local:stop`（仅停止 local:dev 启动的进程）。
 - 本地运维铁律：绝不允许通过修改 `13333/18888` 端口来规避端口占用；绝不自动终止任意监听进程；验收套件必须独占其测量的进程；调试业务问题前先用 `npm run local:preflight` 检查端口污染。
 - `local:stop` 仅在归属记录与活动进程校验通过后终止进程；身份不匹配一律 `REFUSE_TO_KILL`；权限不足报 `INSUFFICIENT_PERMISSION`，绝不自动提权、绝不触发 UAC。
+- 托管进程生命周期为原子操作：`local:dev` 必须在 readiness 轮询开始之前就写入归属记录（`spawn -> inspect live process identity -> write record -> readiness`）；后续任一步失败按逆序安全回滚，每个退出路径满足“子进程不存在，或存在且带有效归属记录”（`local_dev_unmanaged_live_processes=0`）。
+- `local:stop` 以“确认进程退出”为成功判据：发送信号不等于已停止；只要进程仍存活就保留归属记录并报 `STOP_TIMEOUT` / `NEEDS_ATTENTION` 并非 0 退出，绝不丢弃记录、绝不引入任意强杀（`local_stop_record_preserved_on_timeout=true`）。
 
 ## 3. 技术栈
 

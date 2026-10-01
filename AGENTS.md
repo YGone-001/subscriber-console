@@ -284,6 +284,16 @@ processes whose ownership record verifies against the live process; identity mis
 refuses (`REFUSE_TO_KILL`) and a permission error reports `INSUFFICIENT_PERMISSION`
 without ever elevating or launching UAC.
 
+Managed process lifecycle is atomic. `local:dev` writes the ownership record before
+readiness polling can begin (`spawn -> inspect live process identity -> write record ->
+readiness`) and rolls back in reverse order on any later failure, so every exit path
+satisfies "either the child does not exist, or it exists with a valid ownership record"
+(`local_dev_unmanaged_live_processes=0`). `local:stop` treats a confirmed process exit as
+the only success: a signal is not a stop. While the process is still alive the ownership
+record is preserved and the run reports `STOP_TIMEOUT` / `NEEDS_ATTENTION` with a non-zero
+exit (`local_stop_record_preserved_on_timeout=true`); no arbitrary force kill is ever
+introduced.
+
 Forbidden workarounds (never add):
 
 ```text

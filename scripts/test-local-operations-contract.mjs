@@ -10,9 +10,13 @@
  *   O3  an owned (registered, verified) process can be stopped
  *   O4  a stale PID record is safe
  *   O5  an identity mismatch is refused (REFUSE_TO_KILL)
+ *   O6  a stop that cannot confirm exit preserves the record and reports failure
+ *   O7  a partial startup failure leaves no orphaned managed child
+ *   O8  an arbitrary HTTP server is never accepted as the expected edge
  *
  * Synthetic child processes are used deliberately: the canonical production ports are
- * never used for the process-safety scenarios.
+ * never used for the process-safety scenarios, and every failure mode is injected
+ * through the extracted lifecycle helpers instead of provoked accidentally.
  *
  * Usage:
  *   node scripts/test-local-operations-contract.mjs
@@ -20,12 +24,23 @@
 
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import http from 'node:http';
 import net from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { CANONICAL_PORTS, RUNTIME_DIR_NAME } from './lib/local-runtime.mjs';
+import {
+  CANONICAL_PORTS,
+  RUNTIME_DIR_NAME,
+  STOP_STATUSES,
+  countUnmanagedLiveProcesses,
+  recordPath,
+  registerManagedProcess,
+  startManagedProcesses,
+  stopManagedProcess,
+  stopManagedProcesses,
+} from './lib/local-runtime.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '..');
@@ -49,6 +64,37 @@ function runNode(args, { env = {}, cwd = ROOT } = {}) {
     env: { ...process.env, ...env },
   });
   return { status: res.status, stdout: res.stdout || '', stderr: res.stderr || '' };
+}
+
+/**
+ * Asynchronous variant. Required whenever the test itself must keep serving HTTP while
+ * the child runs, because `spawnSync` would block this process's event loop.
+ */
+function runNodeAsync(args, { env = {}, cwd = ROOT } = {}) {
+  return new Promise((done) => {
+    const child = spawn(process.execPath, args, {
+      cwd,
+      windowsHide: true,
+      env: { ...process.env, ...env },
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    child.on('close', (status) => done({ status, stdout, stderr }));
+  });
+}
+
+/** Raw HTTP status for a probe URL; null when unreachable. */
+function httpStatus(url) {
+  return new Promise((done) => {
+    const req = http.get(url, { timeout: 4000 }, (res) => {
+      res.resume();
+      res.on('end', () => done(res.statusCode));
+    });
+    req.on('timeout', () => req.destroy(new Error('timeout')));
+    req.on('error', () => done(null));
+  });
 }
 
 function isAlive(pid) {
@@ -89,13 +135,32 @@ if (port) {
 setInterval(() => {}, 1000);
 `;
 
+/**
+ * A child that deliberately refuses the platform's normal termination request on Unix.
+ * Used to prove that a termination request which does not end the process is never
+ * reported as a completed stop.
+ */
+const RESISTANT_CHILD_SOURCE = `import net from 'node:net';
+const port = Number(process.argv[2] || 0);
+if (port) {
+  const server = net.createServer();
+  server.listen(port, '127.0.0.1');
+}
+process.on('SIGTERM', () => { /* intentionally stay alive */ });
+process.on('SIGINT', () => { /* intentionally stay alive */ });
+setInterval(() => {}, 1000);
+`;
+
 const children = [];
-function spawnChild(scriptPath, args = []) {
+const forceChildren = new Set();
+
+function spawnChild(scriptPath, args = [], { force = false } = {}) {
   const child = spawn(process.execPath, [scriptPath, ...args], {
     stdio: 'ignore',
     windowsHide: true,
   });
   children.push(child);
+  if (force) forceChildren.add(child.pid);
   return child;
 }
 
@@ -103,7 +168,22 @@ function cleanupChildren() {
   for (const child of children) {
     try { child.kill(); } catch { /* already gone */ }
   }
+  // Only the synthetic children this harness created that refuse normal termination.
+  for (const pid of forceChildren) {
+    if (!isAlive(pid)) continue;
+    try { process.kill(pid, 'SIGKILL'); } catch { /* already gone or not permitted */ }
+  }
 }
+
+/** Recorded evidence, so the machine contract reports observations rather than check names. */
+const evidence = {
+  goOrphaned: null,
+  nextOrphaned: null,
+  stopTimeoutRecordPreserved: null,
+  stopTimeoutReportsFailure: null,
+  unmanagedLiveProcesses: null,
+  foreignHttpEdgeAccepted: null,
+};
 
 // ---------------------------------------------------------------------------
 // O1 — no arbitrary kill behavior (static)
@@ -350,6 +430,195 @@ async function testIdentityMismatch() {
 }
 
 // ---------------------------------------------------------------------------
+// O6 — a stop that cannot confirm exit must preserve the record and report failure
+// ---------------------------------------------------------------------------
+async function testStopTimeoutPreservesRecord() {
+  // Inside the repository so the ownership record can be verified exactly as the real
+  // managed children are.
+  const runtimePath = resolve(ROOT, RUNTIME_DIR_NAME);
+  mkdirSync(runtimePath, { recursive: true });
+  const stateDir = join(runtimePath, 'ops-state-timeout');
+  rmSync(stateDir, { recursive: true, force: true });
+  mkdirSync(stateDir, { recursive: true });
+  const script = join(runtimePath, 'ops-resistant-child.mjs');
+  writeFileSync(script, RESISTANT_CHILD_SOURCE, 'utf8');
+
+  const child = spawnChild(script, [], { force: true });
+  const started = await waitUntil(() => isAlive(child.pid));
+  check('O6-resistant-child-started', started, `pid=${child.pid}`);
+  if (!started) return;
+
+  const env = { XCLOUD_RUNTIME_DIR: stateDir };
+  const registration = await registerManagedProcess({
+    repoRoot: ROOT,
+    role: 'next',
+    pid: child.pid,
+    command: `${process.execPath} ${script}`,
+    env,
+  });
+  check('O6-resistant-child-registered', registration.ok, registration.reason);
+  if (!registration.ok) return;
+
+  // The termination request succeeds, but the process refuses to end. This is the
+  // injected condition: the stop must not treat the request as a completed stop.
+  const report = await stopManagedProcesses({
+    repoRoot: ROOT,
+    env,
+    stopFn: (args) => stopManagedProcess({
+      ...args,
+      terminateFn: () => ({ ok: true, pid: child.pid }),
+      confirmExitFn: async () => false,
+    }),
+  });
+
+  const outcome = report.outcomes.find((entry) => entry.role === 'next');
+  const preserved = existsSync(recordPath(ROOT, 'next', env));
+  const reportsFailure = report.result === 'NEEDS_ATTENTION' && report.exitCode !== 0;
+
+  check('O6-stop-does-not-claim-stopped', outcome && outcome.status === STOP_STATUSES.STOP_TIMEOUT, `status=${outcome && outcome.status}`);
+  check('O6-stop-reports-failure', reportsFailure, `result=${report.result} exit=${report.exitCode}`);
+  check('O6-child-still-alive', isAlive(child.pid));
+  check('O6-record-preserved', preserved);
+  check('O6-record-preserved-flag', report.recordPreservedOnTimeout === true, String(report.recordPreservedOnTimeout));
+
+  evidence.stopTimeoutRecordPreserved = preserved;
+  evidence.stopTimeoutReportsFailure = reportsFailure;
+
+  // End-to-end through the real command. Unix only: the platform's normal termination
+  // request (SIGTERM) can be refused, which is what this scenario needs. Windows routes
+  // the request through a tree force-terminate that cannot be refused.
+  if (process.platform !== 'win32') {
+    const stop = runNode(['scripts/local-stop.mjs'], {
+      env: { ...env, XCLOUD_STOP_TIMEOUT_MS: '1200' },
+    });
+    check('O6-cli-reports-stop-timeout', stop.stdout.includes('local_stop_next=STOP_TIMEOUT'), `exit=${stop.status}`);
+    check('O6-cli-exits-nonzero', stop.status !== 0, `exit=${stop.status}`);
+    check('O6-cli-result-needs-attention', stop.stdout.includes('local_stop_result=NEEDS_ATTENTION'));
+    check(
+      'O6-cli-record-preserved',
+      stop.stdout.includes('local_stop_record_preserved_on_timeout=true')
+        && existsSync(recordPath(ROOT, 'next', env)),
+    );
+    check('O6-cli-child-still-alive', isAlive(child.pid));
+  }
+
+  rmSync(stateDir, { recursive: true, force: true });
+}
+
+// ---------------------------------------------------------------------------
+// O7 — partial startup failure must not orphan a managed child
+// ---------------------------------------------------------------------------
+async function testPartialStartupRollback() {
+  const runtimePath = resolve(ROOT, RUNTIME_DIR_NAME);
+  mkdirSync(runtimePath, { recursive: true });
+  const stateDir = join(runtimePath, 'ops-state-partial');
+  rmSync(stateDir, { recursive: true, force: true });
+  mkdirSync(stateDir, { recursive: true });
+
+  // Placed inside the repository so the ownership record can be verified exactly as the
+  // real managed children are; the canonical production ports are never bound.
+  const goScript = join(runtimePath, 'ops-partial-go.mjs');
+  const nextScript = join(runtimePath, 'ops-partial-next.mjs');
+  writeFileSync(goScript, CHILD_SOURCE, 'utf8');
+  writeFileSync(nextScript, CHILD_SOURCE, 'utf8');
+
+  const env = { XCLOUD_RUNTIME_DIR: stateDir };
+  const recordAtReadiness = {};
+  let goChild = null;
+  let nextChild = null;
+
+  const result = await startManagedProcesses({
+    repoRoot: ROOT,
+    env,
+    entries: [
+      {
+        role: 'go',
+        command: `${process.execPath} ${goScript}`,
+        spawn: () => { goChild = spawnChild(goScript); return goChild; },
+        waitForReady: async () => true,
+      },
+      {
+        role: 'next',
+        command: `${process.execPath} ${nextScript}`,
+        spawn: () => { nextChild = spawnChild(nextScript); return nextChild; },
+        waitForReady: async () => false,
+      },
+    ],
+    onEvent: (event) => {
+      // The ownership record must already exist when readiness polling begins, so a
+      // readiness failure can never destroy the only record of a live child.
+      if (event.type === 'ready-start') {
+        recordAtReadiness[event.role] = existsSync(recordPath(ROOT, event.role, env));
+      }
+    },
+  });
+
+  check('O7-startup-failed', result.ok === false, `ok=${result.ok}`);
+  check('O7-go-record-existed-before-readiness', recordAtReadiness.go === true, `present=${recordAtReadiness.go}`);
+  check('O7-next-record-existed-before-readiness', recordAtReadiness.next === true, `present=${recordAtReadiness.next}`);
+
+  const rollbackOrder = result.stopped.map((entry) => `${entry.role}:${entry.status}`).join(',');
+  check('O7-rollback-reverse-order', rollbackOrder === 'next:STOPPED,go:STOPPED', `order=${rollbackOrder}`);
+
+  const goExited = await waitUntil(() => !isAlive(goChild.pid), 8000);
+  const nextExited = await waitUntil(() => !isAlive(nextChild.pid), 8000);
+  check('O7-go-child-gone', goExited, `alive=${isAlive(goChild.pid)}`);
+  check('O7-next-child-gone', nextExited, `alive=${isAlive(nextChild.pid)}`);
+
+  const goRecordPresent = existsSync(recordPath(ROOT, 'go', env));
+  const nextRecordPresent = existsSync(recordPath(ROOT, 'next', env));
+  check('O7-records-removed-after-confirmed-exit', !goRecordPresent && !nextRecordPresent);
+
+  const goOrphaned = isAlive(goChild.pid) && !goRecordPresent;
+  const nextOrphaned = isAlive(nextChild.pid) && !nextRecordPresent;
+  check('O7-no-orphan', !goOrphaned && !nextOrphaned, `go=${goOrphaned} next=${nextOrphaned}`);
+
+  evidence.goOrphaned = goOrphaned;
+  evidence.nextOrphaned = nextOrphaned;
+
+  const unmanaged = await countUnmanagedLiveProcesses({ repoRoot: ROOT, env });
+  evidence.unmanagedLiveProcesses = unmanaged.length;
+  check('O7-no-unmanaged-live-process', unmanaged.length === 0, `count=${unmanaged.length}`);
+
+  rmSync(stateDir, { recursive: true, force: true });
+}
+
+// ---------------------------------------------------------------------------
+// O8 — an arbitrary HTTP server is never accepted as the expected edge
+// ---------------------------------------------------------------------------
+async function testForeignHttpEdgeRejected() {
+  const dir = join(tmpdir(), `local-ops-edge-${Date.now()}`);
+  const stateDir = join(dir, 'state');
+  mkdirSync(stateDir, { recursive: true });
+
+  const server = http.createServer((req, res) => {
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+    res.end('<!doctype html><title>generic http server</title>');
+  });
+  const port = await new Promise((done) => server.listen(0, '127.0.0.1', () => done(server.address().port)));
+  const base = `http://127.0.0.1:${port}`;
+
+  try {
+    // The decoy answers `/` and `/api/auth/me` with 200: it must still not be accepted.
+    const [rootStatus, apiStatus] = [await httpStatus(`${base}/`), await httpStatus(`${base}/api/auth/me`)];
+    check('O8-decoy-answers-root', rootStatus === 200, `status=${rootStatus}`);
+    check('O8-decoy-answers-api', apiStatus === 200, `status=${apiStatus}`);
+
+    const preflight = await runNodeAsync(['scripts/check-local-preflight.mjs'], {
+      env: { XCLOUD_EDGE_URL: base, XCLOUD_RUNTIME_DIR: stateDir },
+    });
+    const match = preflight.stdout.match(/^local_preflight_edge=(.+)$/m);
+    const outcome = match ? match[1].trim() : 'UNKNOWN';
+    check('O8-foreign-http-edge-not-accepted', outcome !== 'EXPECTED_SERVICE', `outcome=${outcome}`);
+
+    evidence.foreignHttpEdgeAccepted = outcome === 'EXPECTED_SERVICE';
+  } finally {
+    await new Promise((done) => server.close(done));
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Driver
 // ---------------------------------------------------------------------------
 async function main() {
@@ -385,8 +654,21 @@ async function main() {
   await testIdentityMismatch();
   console.log('');
 
+  console.log('O6 — stop timeout preserves the ownership record');
+  await testStopTimeoutPreservesRecord();
+  console.log('');
+
+  console.log('O7 — partial startup failure leaves no orphan');
+  await testPartialStartupRollback();
+  console.log('');
+
+  console.log('O8 — arbitrary HTTP edge is not accepted');
+  await testForeignHttpEdgeRejected();
+  console.log('');
+
   const failures = checks.filter((c) => !c.ok);
   const passed = (id) => checks.some((c) => c.id === id && c.ok);
+  const observed = (value) => (value === null || value === undefined ? 'unknown' : String(value));
 
   console.log('==================================================');
   console.log(`local_ops_preflight_present=${passed('present-preflight')}`);
@@ -399,6 +681,15 @@ async function main() {
   console.log(`local_ops_owned_process_stopped=${passed('O3-owned-child-stopped')}`);
   console.log(`local_ops_stale_pid_safe=${passed('O4-stale-record-removed') && passed('O4-bystander-preserved')}`);
   console.log(`local_ops_identity_mismatch_refused=${passed('O5-refused')}`);
+  console.log('');
+  console.log(`local_ops_partial_go_orphaned=${observed(evidence.goOrphaned)}`);
+  console.log(`local_ops_partial_next_orphaned=${observed(evidence.nextOrphaned)}`);
+  console.log('');
+  console.log(`local_ops_stop_timeout_record_preserved=${observed(evidence.stopTimeoutRecordPreserved)}`);
+  console.log(`local_ops_stop_timeout_reports_failure=${observed(evidence.stopTimeoutReportsFailure)}`);
+  console.log(`local_ops_unmanaged_live_processes=${observed(evidence.unmanagedLiveProcesses)}`);
+  console.log('');
+  console.log(`local_ops_foreign_http_edge_accepted=${observed(evidence.foreignHttpEdgeAccepted)}`);
   console.log('');
   console.log(`local_ops_canonical_next_port=${CANONICAL_PORTS.next}`);
   console.log(`local_ops_canonical_go_port=${CANONICAL_PORTS.go}`);

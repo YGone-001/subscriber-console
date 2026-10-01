@@ -293,6 +293,14 @@ npm run local:dev
 `local:dev` never starts MongoDB or Nginx. If the edge is absent it reports
 `FULL_STACK_NOT_READY` / `EDGE_REQUIRED` and instructs `sudo ./deploy/nginx/setup.sh`.
 
+Startup is atomic per managed process: each child is spawned, its live process identity
+is inspected, and its ownership record is written before readiness polling begins
+(`spawn -> inspect live process identity -> write record -> readiness`). If a later step
+fails, the already-registered children are stopped in reverse order using the same
+verified ownership mechanism as `local:stop`. Every exit path therefore leaves the child
+either absent or present with a valid ownership record; the run reports
+`local_dev_unmanaged_live_processes=0` when that holds.
+
 Manual alternative (Go backend internal `127.0.0.1:18888`):
 
 ```bash
@@ -341,6 +349,12 @@ npm run local:stop
 `local:stop` terminates only processes whose runtime ownership record verifies against
 the live process. It does not stop MongoDB, the system Nginx, or foreign processes.
 
+A signal is not a stop: the ownership record is removed only after the process exit is
+confirmed. While a signalled process is still alive, the record is preserved and the run
+reports `STOP_TIMEOUT` (per role) with `local_stop_result=NEEDS_ATTENTION` and a non-zero
+exit code (`local_stop_record_preserved_on_timeout=true`). No arbitrary force kill is ever
+introduced; the operator is expected to inspect the still-live process and retry.
+
 Development transport note: the Nginx edge remains the full-stack browser origin in
 development too. The Next.js development HMR WebSocket (`/_next/hmr`) is transported
 through the edge by the dedicated `location /_next/hmr` block; this is framework
@@ -361,6 +375,7 @@ also asserts the `local:doctor` `FULL_STACK_READY` and `EDGE_REQUIRED` results.
 | `ARCHITECTURE_VIOLATION` | Next directly responds as the auth API | remove rewrite/handler/proxy |
 | `PORT_CONTAMINATION` | canonical port owned by an unexpected process | inspect PID/owner with `npm run local:preflight` |
 | `INSUFFICIENT_PERMISSION` | process is visible but cannot be controlled | use elevated manual inspection |
+| `STOP_TIMEOUT` | a managed process did not exit after being signalled | ownership record preserved; inspect the still-live PID and retry `npm run local:stop` |
 
 Reported by `npm run local:status` (component state plus topology state) and
 `npm run local:doctor` (HTTP topology). `npm run local:preflight` reports the port
