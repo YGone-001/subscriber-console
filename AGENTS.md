@@ -218,10 +218,10 @@ Phase 8.0   PASS / FROZEN — Next.js Backend Removal Architecture Freeze (resid
 Phase 8.1   PASS / FROZEN — Residual API Go Implementation & Shadow Parity (33-operation canonical remainder, 11 newly implemented Go shadows; 81 parity scenarios / 122 assertions)
 Phase 8.2   PASS / FROZEN — Residual Production Cutover, Compatibility Closure & Retired Surface Removal (33 canonical residual operations + 2 legacy read aliases + 2 Go-native reads now Go production-owned; 6 non-canonical mutation methods retired; CUTOVER_TABLE = 84, ACTUALLY_ROUTED = 84, node_production_operations = 0)
 Phase 8.3   PASS / FROZEN — Next.js Business Backend Physical Removal (frontend/src/app/api/** 54 route.ts / 72 operations and frontend/src/server/** 33 files deleted; 7 backend-only lib helpers removed; minimal read-only proxy session account store extracted; CUTOVER_TABLE = 84, ACTUALLY_ROUTED = 84, next_business_backend_removed = true)
-Phase 8.4   IMPLEMENTED / NOT SELF-FROZEN — Frontend Dependency & Residual Node Runtime Cleanup (bcryptjs removed; 5 dead Node-era libs deleted; mongo.ts collapsed into read-only sessionMongo.ts; backend_production_changes = 0)
-Phase 8.5   IMPLEMENTED / NOT SELF-FROZEN — Proxy / Deployment Boundary Finalization (Nginx edge router owns /api; UI-only navigation guard replaces the API reverse proxy; CUTOVER_TABLE retired; Go registration set = route authority; frontend deps 19 -> 16)
-Phase 8.5-C CORRECTED / NOT SELF-FROZEN — Internal Service Listener Boundary Correction (Next listener pinned to 127.0.0.1:13333 via the single `next start` production model; Go `HTTP_ADDR` default = 127.0.0.1:18888; standalone deployment path removed; 84 registrations unchanged)
-Phase 8.6   NOT AUTHORIZED YET
+Phase 8.4   PASS / FROZEN — Frontend Dependency & Residual Node Runtime Cleanup (bcryptjs removed; 5 dead Node-era libs deleted; mongo.ts collapsed into read-only sessionMongo.ts; backend_production_changes = 0)
+Phase 8.5   PASS / FROZEN — Proxy / Deployment Boundary Finalization (Nginx edge router owns /api; UI-only navigation guard replaces the API reverse proxy; CUTOVER_TABLE retired; Go registration set = route authority; frontend deps 19 -> 16)
+Phase 8.5-C PASS / FROZEN — Internal Service Listener Boundary Correction (Next listener pinned to 127.0.0.1:13333 via the single `next start` production model; Go `HTTP_ADDR` default = 127.0.0.1:18888; standalone deployment path removed; 84 registrations unchanged)
+Phase 8.6   IMPLEMENTED / NOT SELF-FROZEN — Production Freeze & Final Certification (certification-only; 84/84 exact registration set equality vs the Phase 8.5 SHA; 0 Next business API operations; Nginx sole public edge; loopback-only Next/Go listeners; Go-only auth authority; production_runtime_changes = 0)
 ```
 
 Authoritative frozen Phase 8.3 boundary SHA (independent acceptance, not HEAD):
@@ -230,8 +230,9 @@ Authoritative frozen Phase 8.3 boundary SHA (independent acceptance, not HEAD):
 342589aa5c00cb8152980c77bfc73f05b82ca64a
 ```
 
-Phase 7.0-7.5 and Phase 8.0-8.3 are independently accepted and frozen at that boundary.
-Phase 8.4 and Phase 8.5 are implemented (independent acceptance pending); Phase 8.6 is not authorized yet.
+Phase 7.0-7.5 and Phase 8.0-8.5 are independently accepted and frozen.
+Phase 8.6 (Production Freeze & Final Certification) is implemented (independent acceptance
+pending) and is certification-only: production runtime changes = 0.
 
 ### 5.0 Phase 8.3 Boundary (Next.js Business Backend Removal)
 

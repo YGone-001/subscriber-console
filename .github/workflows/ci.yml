@@ -343,3 +343,36 @@ jobs:
 
       - name: Phase 8.5 proxy / deployment boundary acceptance
         run: node scripts/test-phase-8-deployment-boundary.mjs
+
+  phase86-freeze:
+    name: Phase 8.6 production freeze certification
+    runs-on: ubuntu-latest
+    needs:
+      - node
+      - go
+      - direct-operations
+      - user-management-e2e
+      - auth-cutover
+      - deployment-boundary
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # The frozen baseline comparison resolves the Phase 8.5 SHA with `git show`,
+          # so the full history must be present.
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: frontend/.nvmrc
+
+      - name: Echo frozen baseline and current SHA
+        run: |
+          echo "phase86_baseline_sha=6970e929250e51fa47a09fa3f9bccb1b86f2f46e"
+          echo "phase86_head_sha=$GITHUB_SHA"
+
+      # The certification harness is pure source analysis plus `git diff`
+      # classification; it needs no database service, nginx or build step.
+      - name: Phase 8.6 production freeze certification
+        run: node scripts/test-phase-8-production-freeze.mjs

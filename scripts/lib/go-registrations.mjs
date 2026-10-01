@@ -24,6 +24,26 @@ export const GO_ROUTER_SOURCES = [
 const REGISTRATION_RE = /mux\.Handle\("(GET|POST|PUT|PATCH|DELETE)\s+([^"]+)"\s*,/g;
 
 /**
+ * Parse every `mux.Handle` registration out of a single Go router source text.
+ *
+ * Exposed so historical-comparison consumers (for example the production-freeze
+ * certification, which derives the baseline set from `git show <sha>:<file>`) share
+ * exactly one registration parser instead of maintaining a second copy.
+ *
+ * @param {string} text raw Go source
+ * @returns {string[]} `METHOD /path` keys in source order
+ */
+export function parseRegistrationKeys(text) {
+  const keys = [];
+  let match;
+  REGISTRATION_RE.lastIndex = 0;
+  while ((match = REGISTRATION_RE.exec(text)) !== null) {
+    keys.push(`${match[1]} ${match[2]}`);
+  }
+  return keys;
+}
+
+/**
  * Parse every `mux.Handle` registration out of the Go router sources.
  * @returns {{ keys: string[], perSource: Record<string, string[]>, duplicates: string[] }}
  */
@@ -38,15 +58,10 @@ export function deriveGoRegistrations(rootDir = REPO_ROOT) {
       perSource[relativePath] = [];
       continue;
     }
-    const content = readFileSync(file, 'utf8');
-    const found = [];
-    let match;
-    REGISTRATION_RE.lastIndex = 0;
-    while ((match = REGISTRATION_RE.exec(content)) !== null) {
-      const key = `${match[1]} ${match[2]}`;
+    const found = parseRegistrationKeys(readFileSync(file, 'utf8'));
+    for (const key of found) {
       if (seen.has(key)) duplicates.push(key);
       seen.add(key);
-      found.push(key);
     }
     perSource[relativePath] = found;
   }
