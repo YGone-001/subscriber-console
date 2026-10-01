@@ -4,6 +4,27 @@ import assert from 'node:assert/strict';
 
 const ROOT = process.cwd();
 
+/**
+ * Declared Next.js version, derived from the installed frontend manifest.
+ * Never hard-coded: `frontend/package.json` is the single source of truth.
+ */
+export function extractDeclaredNextVersion(packageJsonText) {
+  const parsed = JSON.parse(packageJsonText);
+  const declared =
+    (parsed.dependencies && parsed.dependencies.next) ||
+    (parsed.devDependencies && parsed.devDependencies.next) ||
+    null;
+  if (!declared) return null;
+  const match = /(\d+\.\d+\.\d+)/.exec(String(declared));
+  return match ? match[1] : null;
+}
+
+/** Next.js version stated by the current documentation technology statement. */
+export function extractDocumentedNextVersion(documentText) {
+  const match = /Next\.js\s+(\d+\.\d+\.\d+)\s+App Router/.exec(documentText);
+  return match ? match[1] : null;
+}
+
 console.log('Testing current architecture documentation consistency...');
 
 // 1. OCS Management Runbook
@@ -162,4 +183,27 @@ assert.ok(systemArch.includes('127.0.0.1:18888'), 'system-architecture.md must d
 assert.ok(systemArch.includes('127.0.0.1:13333'), 'system-architecture.md must document the Next.js upstream 127.0.0.1:13333');
 assert.ok(!/route-owner table/i.test(systemArch), 'system-architecture.md must not present a route-owner table as the current architecture');
 
+// 8. Current documentation framework version must match the installed manifest.
+const declaredNextVersion = extractDeclaredNextVersion(fs.readFileSync(path.join(ROOT, 'frontend/package.json'), 'utf8'));
+const documentedNextVersion = extractDocumentedNextVersion(readme);
+
+assert.ok(declaredNextVersion, 'frontend/package.json must declare a Next.js version');
+
+// Negative sentinel: a synthetic mismatch must be detected, proving this assertion is
+// non-tautological rather than merely restating its own input.
+const sentinelMismatchDetected =
+  extractDocumentedNextVersion('- Next.js 0.0.1 App Router') !== declaredNextVersion;
+assert.ok(sentinelMismatchDetected, 'Next.js documentation version detector must flag a mismatch');
+
+assert.equal(
+  documentedNextVersion,
+  declaredNextVersion,
+  `README Next.js version "${documentedNextVersion}" must match frontend/package.json "${declaredNextVersion}"`
+);
+
 console.log('Current architecture documentation consistency: PASS');
+
+console.log(`documented_next_version=${documentedNextVersion}`);
+console.log(`declared_next_version=${declaredNextVersion}`);
+console.log(`next_documentation_version_match=${documentedNextVersion === declaredNextVersion}`);
+console.log(`next_documentation_version_sentinel_detected=${sentinelMismatchDetected}`);

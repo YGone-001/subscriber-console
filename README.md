@@ -74,7 +74,7 @@ Charging Plane remains frozen and excluded.
 
 ### Frontend
 
-- Next.js 16.2.2 App Router
+- Next.js 16.3.8 App Router
 - React 19.2.4
 - TypeScript 5
 - SWR

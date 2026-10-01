@@ -114,7 +114,7 @@ Frontend API paths remain unchanged.
 ## 3. Stack
 
 ```text
-Next.js 16.2.2
+Next.js 16.3.8
 React 19.2.4
 TypeScript 5.x
 Node 20
