@@ -37,7 +37,7 @@ export default function OcsPageShell({
   const { t } = useI18n();
 
   return (
-    <div className="ocs-container">
+    <div className="container ocs-container">
       <PageHeader
         eyebrow={eyebrow}
         title={title}
@@ -64,7 +64,7 @@ export default function OcsPageShell({
 
       {controls}
 
-      <div className="ocs-table-card">
+      <div className="dash-card ocs-table-card">
         <div className="ocs-table-wrapper">
           {tableContent}
         </div>

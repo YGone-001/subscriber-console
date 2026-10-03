@@ -19,7 +19,7 @@ test('AnalyticsCockpit enforces platform overview and does NOT mount runtime tel
   assert.doesNotMatch(analyticsCockpitSource, /dash_ocs_kpi_active_sessions/);
   assert.match(analyticsCockpitSource, /TariffPlanDistributionChart/);
   assert.match(analyticsCockpitSource, /WorkbenchPanel/);
-  assert.match(analyticsCockpitSource, /KpiStrip/);
+  assert.match(analyticsCockpitSource, /MetricStrip/);
   assert.match(analyticsCockpitSource, /(?:analytics-ocs-grid|OcsResourceStrip)/);
   assert.match(analyticsCockpitSource, /analytics-chart-grid/);
 });
@@ -66,7 +66,7 @@ test('Option B: Spatial dimensionality reduction integrates PLMN tag and expands
   const topConsumerSource = readFileSync(new URL('../src/components/analytics/TopConsumerChart.tsx', import.meta.url), 'utf8');
   const analyticsCssSource = readFileSync(new URL('../src/components/analytics.css', import.meta.url), 'utf8');
 
-  // PLMN detail is shown in KpiStrip rather than a separate heavy chart
+  // PLMN detail is shown in MetricStrip rather than a separate heavy chart
   assert.match(analyticsCockpitSource, /plmnDist\.length > 0/);
   // Bottom grid is 2-column asymmetric (Top 5 + Tariff Plan)
   assert.match(analyticsCockpitSource, /<TopConsumerChart/);

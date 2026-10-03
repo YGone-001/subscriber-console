@@ -1,21 +1,22 @@
 import React from "react";
+import MetricStrip from "@/components/ui/MetricStrip";
 
 export default function SkeletonDashboard() {
   return (
     <div className="analytics-root">
-      {/* KPI Strip skeleton — 6 columns */}
-      <div className="kpi-strip">
-        {Array.from({ length: 6 }).map((_, index) => (
-          <div className="kpi-strip-item" key={index}>
-            <div className="kpi-strip-head">
-              <div className="skeleton-loader skeleton-icon-22" />
-              <div className="skeleton-loader skeleton-line-60-10" />
-            </div>
-            <div className="skeleton-loader skeleton-line-70-20-mt4" />
-            <div className="skeleton-loader skeleton-line-90-8-mt2" />
-          </div>
-        ))}
-      </div>
+      {/* KPI cards skeleton — 6 cards */}
+      <MetricStrip
+        variant="cards"
+        columns={6}
+        ariaLabel="Key performance indicators"
+        items={Array.from({ length: 6 }).map((_, index) => ({
+          key: `kpi-skeleton-${index}`,
+          label: <span className="skeleton-loader skeleton-line-60-10" />,
+          value: <span className="skeleton-loader skeleton-line-70-20-mt4" />,
+          detail: <span className="skeleton-loader skeleton-line-90-8-mt2" />,
+          icon: <span className="skeleton-loader skeleton-icon-22" />,
+        }))}
+      />
 
       {/* Alerts row skeleton */}
       <div className="analytics-alerts-row">

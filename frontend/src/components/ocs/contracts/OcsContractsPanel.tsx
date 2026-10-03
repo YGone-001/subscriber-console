@@ -16,6 +16,7 @@ import {
 import { useI18n } from "@/components/I18nProvider";
 import { DataTablePagination } from "@/components/ui/DataTablePagination";
 import { DataTableStateRow } from "@/components/ui/DataTableState";
+import MetricStrip from "@/components/ui/MetricStrip";
 import OcsPageShell from "../OcsPageShell";
 import OcsStatusBadge from "../common/OcsStatusBadge";
 import ConfirmDialog from "../common/ConfirmDialog";
@@ -122,29 +123,15 @@ export default function OcsContractsPanel() {
   };
 
   const kpiGrid = (
-    <div className="ocs-dashboard-grid">
-      <div className="ocs-dashboard-card">
-        <div className="ocs-dashboard-card-icon"><Users size={20} /></div>
-        <div className="ocs-dashboard-card-content">
-          <span className="ocs-dashboard-card-value">{error ? "—" : total}</span>
-          <span className="ocs-dashboard-card-label">{t("ocs_contract_total")}</span>
-        </div>
-      </div>
-      <div className="ocs-dashboard-card">
-        <div className="ocs-dashboard-card-icon"><Users size={20} /></div>
-        <div className="ocs-dashboard-card-content">
-          <span className="ocs-dashboard-card-value">{error ? "—" : activeCount}</span>
-          <span className="ocs-dashboard-card-label">{t("ocs_contract_active")}</span>
-        </div>
-      </div>
-      <div className="ocs-dashboard-card">
-        <div className="ocs-dashboard-card-icon"><Pause size={20} /></div>
-        <div className="ocs-dashboard-card-content">
-          <span className="ocs-dashboard-card-value">{error ? "—" : suspendedCount}</span>
-          <span className="ocs-dashboard-card-label">{t("ocs_contract_suspended")}</span>
-        </div>
-      </div>
-    </div>
+    <MetricStrip
+      variant="cards"
+      ariaLabel={t("ocs_contracts_title")}
+      items={[
+        { key: "total", label: t("ocs_contract_total"), value: error ? "—" : total, icon: <Users size={20} /> },
+        { key: "active", label: t("ocs_contract_active"), value: error ? "—" : activeCount, icon: <Users size={20} /> },
+        { key: "suspended", label: t("ocs_contract_suspended"), value: error ? "—" : suspendedCount, icon: <Pause size={20} /> },
+      ]}
+    />
   );
 
   const controls = (

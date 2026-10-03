@@ -40,7 +40,7 @@ function UsersConsole() {
 
   return (
     <>
-      <div className={`${styles.page} animate-fade-in`}>
+      <div className="container animate-fade-in">
         <PageHeader
           eyebrow={t("eyebrow_rbac_iam")}
           icon={<Shield size={23} />}
@@ -54,7 +54,7 @@ function UsersConsole() {
 
         <UsersSummaryPanel stats={stats} />
 
-        <section className={styles.tablePanel}>
+        <section className="dash-card">
           <UsersToolbar {...toolbarProps} />
 
 

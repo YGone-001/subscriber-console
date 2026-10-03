@@ -189,7 +189,7 @@
   background: var(--selection-soft);
 }
 
-@media (max-width: 980px) {
+@media (max-width: 768px) {
   .profile-table-card {
     border: 0;
     background: transparent;

@@ -4,9 +4,6 @@
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
-  padding: 1.5rem;
-  width: 100%;
-  box-sizing: border-box;
 }
 
 .ocs-header {
@@ -291,10 +288,6 @@
 }
 
 .ocs-table-card {
-  background: var(--surface);
-  border: 1px solid var(--surface-border);
-  border-radius: var(--ref-radius-soft-panel);
-  overflow: hidden;
   display: flex;
   flex-direction: column;
 }
@@ -632,10 +625,6 @@
 /* ── Mobile table transforms ── */
 
 @media (max-width: 980px) {
-  .ocs-container {
-    padding: 1rem;
-  }
-
   .ocs-header {
     flex-direction: column;
     align-items: stretch;
@@ -651,7 +640,9 @@
     align-items: stretch;
     gap: 0.5rem;
   }
+}
 
+@media (max-width: 768px) {
   .ocs-table-wrapper {
     overflow: visible;
     padding: 0;
@@ -713,61 +704,9 @@
   .ocs-table td[data-label] > .ocs-action-group {
     justify-content: flex-start;
   }
-
-  /* Hide supplementary columns on mobile */
-  .ocs-table td[data-column-priority="supplementary"] {
-    display: none;
-  }
 }
 
 /* ── OCS Dashboard ─────────────────────────────────────────────────────── */
-
-.ocs-dashboard-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 1rem;
-}
-
-.ocs-dashboard-card {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: 1.25rem 1.5rem;
-  background: var(--surface);
-  border: 1px solid var(--surface-border);
-  border-radius: var(--ref-radius-soft-panel);
-}
-
-.ocs-dashboard-card-icon {
-  color: var(--primary);
-  flex-shrink: 0;
-}
-
-.ocs-dashboard-card-body,
-.ocs-dashboard-card-content {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-}
-
-.ocs-dashboard-card-label {
-  font-size: var(--ref-font-size-data);
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.ocs-dashboard-card-value {
-  font-size: var(--ref-font-size-title);
-  font-weight: 700;
-  color: var(--text-main);
-  line-height: 1.2;
-}
-
-.ocs-dashboard-card-detail {
-  font-size: var(--ref-font-size-label);
-  color: var(--text-muted);
-}
 
 .ocs-dashboard-section {
   display: flex;

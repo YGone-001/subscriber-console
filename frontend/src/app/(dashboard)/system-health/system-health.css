@@ -1,15 +1,5 @@
 .health-container {
-  width: 100%;
-  padding: 1.5rem;
   padding-bottom: 120px;
-  box-sizing: border-box;
-}
-
-@media (max-width: 768px) {
-  .health-container {
-    padding: 1rem;
-    padding-bottom: 120px;
-  }
 }
 
 /* Header Actions */
@@ -96,27 +86,6 @@
 .subsystem-metric-val.warning { color: var(--status-warning); }
 .subsystem-metric-val.danger { color: var(--danger); }
 
-/* KPI Grid */
-.health-kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.25rem; margin-bottom: 2rem; }
-
-@media (max-width: 980px) {
-  .health-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
-
-@media (max-width: 560px) {
-  .health-kpi-grid { grid-template-columns: 1fr; }
-}
-.health-kpi-card { padding: 1.35rem 1.75rem; border-radius: var(--ref-radius-soft-panel); }
-.health-kpi-card-success { border-color: var(--status-success-border); }
-.health-kpi-card-danger { border-color: var(--status-danger-border); }
-.health-kpi-card-primary { border-color: var(--selection-border); }
-.health-kpi-card-warning { border-color: var(--status-warning-border); }
-.health-kpi-inner { display: flex; justify-content: space-between; align-items: center; }
-.health-kpi-label { color: var(--text-secondary); font-size: var(--ref-font-size-data); font-weight: 600; text-transform: uppercase; }
-.health-kpi-value { font-size: var(--ref-font-size-display-lg); font-weight: 800; color: var(--text-main); margin-top: 0.35rem; }
-.health-kpi-value-danger { font-size: var(--ref-font-size-display-lg); font-weight: 800; color: var(--danger); margin-top: 0.35rem; }
-.health-kpi-value-small { font-size: var(--ref-font-size-heading-sm); font-weight: 600; color: var(--text-main); margin-top: 0.5rem; white-space: nowrap; }
-
 /* Recommendations Banner */
 .health-recommendations-banner {
   background: var(--surface);
@@ -156,13 +125,6 @@
 .health-spinner { width: 15px; height: 15px; border-width: 2px; }
 
 /* Anomalies Section */
-.health-anomalies-card {
-  background: var(--surface);
-  border-radius: var(--ref-radius-soft-panel);
-  border: 1px solid var(--surface-border);
-  box-shadow: var(--shadow-panel);
-  overflow: hidden;
-}
 .health-anomalies-header {
   padding: 1.25rem 2rem;
   border-bottom: 1px solid var(--surface-border);
@@ -270,7 +232,7 @@
 .health-table-td-actions { padding: 0.9rem 1.75rem; text-align: right; }
 .health-btn-heal { padding: 0.35rem 0.9rem; font-size: var(--ref-font-size-data); border-radius: var(--ref-radius-pill); font-weight: 600; }
 
-@media (max-width: 760px) {
+@media (max-width: 768px) {
   .health-filter-tabs,
   .health-anomalies-toolbar {
     width: 100%;

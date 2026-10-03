@@ -1,15 +1,3 @@
-.subscribers-page-container {
-  width: 100%;
-  padding: 1.5rem;
-  box-sizing: border-box;
-}
-
-@media (max-width: 768px) {
-  .subscribers-page-container {
-    padding: 1rem;
-  }
-}
-
 .subscribers-page-header {
   display: flex;
   justify-content: space-between;
@@ -423,13 +411,8 @@
   background: var(--surface-hover);
 }
 
-.pagination-info {
-  font-size: var(--ref-font-size-body-compact);
-  color: var(--text-muted);
-}
 
-
-@media (max-width: 760px) {
+@media (max-width: 768px) {
   .subscribers-page { padding: 1rem; }
   .subscribers-header { flex-direction: column; align-items: stretch; gap: 0.5rem; }
   .subscribers-toolbar { flex-direction: column; align-items: stretch; }

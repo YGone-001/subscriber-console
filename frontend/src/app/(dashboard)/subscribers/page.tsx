@@ -15,7 +15,7 @@ import { useAuth } from "@/hooks/useAuth";
 import TrafficAdjustmentModal from "@/components/TrafficAdjustmentModal";
 import SubscriberTraceModal from "@/components/SubscriberTraceModal";
 import SubscriberSummaryPanel from "./components/SubscriberSummaryPanel";
-import SubscriberPagination from "./components/SubscriberPagination";
+import { DataTablePagination } from "@/components/ui/DataTablePagination";
 import "./subscribers.css";
 import { SubscriberToolbar } from "./components/SubscriberToolbar";
 import { SubscriberTable } from "./components/SubscriberTable";
@@ -23,6 +23,8 @@ import PageHeader from "@/components/ui/PageHeader";
 import { formatBytes } from "@/lib/unitParser";
 
 import { PlmnRecord, SubscriberRow, TrafficAdjustmentMode, TrafficAdjustmentTarget, FeedbackState, PendingDelete, SubscriberStatusFilter, ProfilesResponse, SubscribersResponse } from "./types";
+
+const SUBSCRIBER_PAGE_SIZES = [10, 20, 50] as const;
 
 /**
  * Subscriber Management Page
@@ -294,16 +296,9 @@ export default function SubscriberPage() {
     return sortDirection === "asc" ? <ArrowUp size={14} className="sort-icon active" /> : <ArrowDown size={14} className="sort-icon active" />;
   };
 
-  const getPageNumbers = () => {
-    const maxButtons = 5;
-    const start = Math.max(1, Math.min(displayPage - 2, totalPages - maxButtons + 1));
-    const end = Math.min(totalPages, start + maxButtons - 1);
-    return Array.from({ length: end - start + 1 }, (_, index) => start + index);
-  };
-
   return (
     <>
-    <div className="subscribers-page-container animate-fade-in" onClick={() => setActiveDropdown(null)}>
+    <div className="container animate-fade-in" onClick={() => setActiveDropdown(null)}>
 
       <PageHeader
         eyebrow={t("eyebrow_imsi_hss")}
@@ -399,15 +394,27 @@ export default function SubscriberPage() {
           handleOpenTrafficAdjustment={handleOpenTrafficAdjustment}
         />
         {!isLoading && (
-          <SubscriberPagination
-            currentPage={currentPage}
-            totalPages={totalPages}
-            displayPage={displayPage}
+          <DataTablePagination
+            page={displayPage}
             pageSize={pageSize}
-            totalSubscribers={totalSubscribers}
-            getPageNumbers={getPageNumbers}
-            setPageSize={setPageSize}
-            setCurrentPage={setCurrentPage}
+            total={totalSubscribers}
+            visibleCount={subscribers.length}
+            totalPages={totalPages}
+            pageSizes={SUBSCRIBER_PAGE_SIZES}
+            labels={{
+              showing: t("showing"),
+              to: t("to"),
+              of: t("of"),
+              entries: t("entries"),
+              previous: t("prev"),
+              next: t("next"),
+              perPage: t("per_page"),
+            }}
+            onPageChange={(next) => setCurrentPage(next)}
+            onPageSizeChange={(size) => {
+              setPageSize(size);
+              setCurrentPage(1);
+            }}
           />
         )}
       </div>

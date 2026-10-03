@@ -3,6 +3,8 @@ import styles from "./ConsolePrimitives.module.css";
 
 export type MetricTone = "primary" | "success" | "warning" | "danger" | "muted";
 
+export type MetricStripVariant = "strip" | "cards";
+
 export type MetricStripItem = {
   key: string;
   label: ReactNode;
@@ -12,15 +14,51 @@ export type MetricStripItem = {
   active?: boolean;
   onClick?: () => void;
   ariaLabel?: string;
+  detail?: ReactNode;
+  indicator?: ReactNode;
+  accent?: string;
+  compactValue?: boolean;
 };
 
 type MetricStripProps = {
   items: MetricStripItem[];
   ariaLabel: string;
   className?: string;
+  variant?: MetricStripVariant;
+  columns?: number;
 };
 
-export default function MetricStrip({ items, ariaLabel, className }: MetricStripProps) {
+export default function MetricStrip({ items, ariaLabel, className, variant = "strip", columns }: MetricStripProps) {
+  if (variant === "cards") {
+    const cardsStyle = columns ? ({ "--metric-card-count": columns } as CSSProperties) : undefined;
+
+    return (
+      <section
+        className={[styles.metricCards, className || ""].filter(Boolean).join(" ")}
+        style={cardsStyle}
+        data-columns={columns ? "true" : undefined}
+        aria-label={ariaLabel}
+      >
+        {items.map((item) => (
+          <div
+            key={item.key}
+            className={styles.metricCard}
+            data-tone={item.tone || "primary"}
+            style={item.accent ? ({ "--metric-accent": item.accent } as CSSProperties) : undefined}
+          >
+            <div className={styles.metricCardHead}>
+              <span className={styles.metricCardLabel}>{item.label}</span>
+              {item.icon ? <span className={styles.metricCardIcon}>{item.icon}</span> : null}
+            </div>
+            <div className={styles.metricCardValue} data-compact={item.compactValue ? "true" : undefined}>{item.value}</div>
+            {item.detail ? <div className={styles.metricCardDetail}>{item.detail}</div> : null}
+            {item.indicator ? <div className={styles.metricCardIndicator}>{item.indicator}</div> : null}
+          </div>
+        ))}
+      </section>
+    );
+  }
+
   const stripStyle = { "--metric-count": Math.min(items.length, 6) } as CSSProperties;
 
   return (

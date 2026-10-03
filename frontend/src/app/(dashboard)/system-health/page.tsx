@@ -29,6 +29,7 @@ import PageHeader, { type PageHeaderTone } from "@/components/ui/PageHeader";
 import SectionHeader from "@/components/ui/SectionHeader";
 import { Dialog } from "@/components/ui/Dialog";
 import SubsystemCard from "@/components/health/SubsystemCard";
+import MetricStrip from "@/components/ui/MetricStrip";
 
 type HealthNotice = {
   type: "success" | "error" | "warning";
@@ -465,53 +466,40 @@ export default function SystemHealthPage() {
         )}
 
         {/* Composite KPI Board */}
-        <div className="health-kpi-grid">
-          <div className={`dash-card shadow health-kpi-card ${displayScore < 90 ? 'health-kpi-card-danger' : 'health-kpi-card-success'}`}>
-            <div className="health-kpi-inner">
-              <div>
-                <div className="health-kpi-label">{t("health_overall_score")}</div>
-                <div className={displayScore < 90 ? "health-kpi-value-danger" : "health-kpi-value"}>
-                  {auditPhase === 'INIT' ? '--' : `${displayScore}%`}
-                </div>
-              </div>
-              <HeartPulse size={32} color="var(--icon-muted)" />
-            </div>
-          </div>
-
-          <div className="dash-card shadow health-kpi-card health-kpi-card-primary">
-            <div className="health-kpi-inner">
-              <div>
-                <div className="health-kpi-label">{t("health_active_anomalies")}</div>
-                <div className="health-kpi-value">{anomalies.length}</div>
-              </div>
-              <ShieldAlert size={32} color="var(--icon-muted)" />
-            </div>
-          </div>
-
-          <div className="dash-card shadow health-kpi-card health-kpi-card-warning">
-            <div className="health-kpi-inner">
-              <div>
-                <div className="health-kpi-label">{t("health_last_bgsave")}</div>
-                <div className="health-kpi-value-small">
-                  {lastSaveTime ? new Date(lastSaveTime * 1000).toLocaleString() : t("health_loading")}
-                </div>
-              </div>
-              <HardDrive size={32} color="var(--icon-muted)" />
-            </div>
-          </div>
-
-          <div className="dash-card shadow health-kpi-card health-kpi-card-primary">
-            <div className="health-kpi-inner">
-              <div>
-                <div className="health-kpi-label">{t("health_db_latency")}</div>
-                <div className="health-kpi-value-small">
-                  {systemHealth?.subsystems?.database?.latencyMs !== undefined ? `${systemHealth.subsystems.database.latencyMs} ms` : '--'}
-                </div>
-              </div>
-              <Activity size={32} color="var(--icon-muted)" />
-            </div>
-          </div>
-        </div>
+        <MetricStrip
+          variant="cards"
+          ariaLabel={t("nav_system_health")}
+          items={[
+            {
+              key: "score",
+              label: t("health_overall_score"),
+              value: auditPhase === 'INIT' ? '--' : `${displayScore}%`,
+              tone: displayScore < 90 ? "danger" : "success",
+              icon: <HeartPulse size={20} />,
+            },
+            {
+              key: "anomalies",
+              label: t("health_active_anomalies"),
+              value: anomalies.length,
+              icon: <ShieldAlert size={20} />,
+            },
+            {
+              key: "bgsave",
+              label: t("health_last_bgsave"),
+              value: lastSaveTime ? new Date(lastSaveTime * 1000).toLocaleString() : t("health_loading"),
+              tone: "warning",
+              compactValue: true,
+              icon: <HardDrive size={20} />,
+            },
+            {
+              key: "latency",
+              label: t("health_db_latency"),
+              value: systemHealth?.subsystems?.database?.latencyMs !== undefined ? `${systemHealth.subsystems.database.latencyMs} ms` : '--',
+              compactValue: true,
+              icon: <Activity size={20} />,
+            },
+          ]}
+        />
 
         {/* Multi-Phase Control Strip */}
         <div className="health-control-strip">
@@ -548,7 +536,7 @@ export default function SystemHealthPage() {
         </div>
 
         {/* Anomalies Table & Diagnostic Toolbar */}
-        <div className="health-anomalies-card">
+        <div className="dash-card">
           <div className="health-anomalies-header">
             <div className="health-anomalies-title-group">
               <h2 className="health-anomalies-title">{t("health_anomalies_detected")}</h2>

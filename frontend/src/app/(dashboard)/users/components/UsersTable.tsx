@@ -20,11 +20,11 @@ import { RoleBadge } from "@/components/iam/RoleBadge";
 import { StatusBadge } from "@/components/iam/StatusBadge";
 import iamStyles from "@/components/iam/iam.module.css";
 import { EmptyState, LoadingRows } from "@/components/OperationFeedback";
-import type { SortKey } from "../types";
+import { DataTablePagination } from "@/components/ui/DataTablePagination";
+import { PAGE_SIZE_OPTIONS, type SortKey } from "../types";
 import { displayValue, formatLatestLoginTime, normalizeStatus } from "../utils";
 import { BulkActionBar } from "./BulkActionBar";
 import type { UsersTableProps } from "./types";
-import { UsersPagination } from "./UsersPagination";
 import styles from "./UsersTable.module.css";
 
 const MOBILE_SORT_KEYS: SortKey[] = ["username", "status", "lastLoginAt"];
@@ -185,7 +185,25 @@ export function UsersTable(props: UsersTableProps) {
           </tbody>
         </table>
       </div>
-      <UsersPagination {...props} />
+      <DataTablePagination
+        page={props.safePage}
+        pageSize={props.pageSize}
+        total={props.total}
+        visibleCount={props.pagedUsers.length}
+        totalPages={props.pageCount}
+        pageSizes={PAGE_SIZE_OPTIONS}
+        labels={{
+          showing: t("showing"),
+          to: t("to"),
+          of: t("of"),
+          entries: t("entries"),
+          previous: t("prev"),
+          next: t("next"),
+          perPage: t("per_page"),
+        }}
+        onPageChange={(next) => props.setPage(next)}
+        onPageSizeChange={props.setPageSize}
+      />
     </>
   );
 }

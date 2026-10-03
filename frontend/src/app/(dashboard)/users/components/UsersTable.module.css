@@ -211,25 +211,10 @@
 .userIdentityCell { overflow: hidden; }
 .userPreview { display: none; }
 
-.pagination {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.85rem 1rem;
-  border-top: 1px solid var(--surface-border);
-  color: var(--text-muted);
-  font-size: var(--ref-font-size-body-compact);
-}
-
-.pagination label { display: flex; align-items: center; gap: 0.5rem; }
-.pagination :global(.form-input) { width: auto; min-width: 86px; min-height: var(--control-height); }
-
-@media (max-width: 760px) {
+@media (max-width: 768px) {
   .tableMeta { align-items: flex-start; flex-direction: column; }
   .tableMetaActions { width: 100%; justify-content: space-between; }
-  .bulkBar,
-  .pagination { align-items: stretch; flex-direction: column; }
+  .bulkBar { align-items: stretch; flex-direction: column; }
   .bulkActions { justify-content: flex-start; flex-wrap: wrap; }
   .tableScroll { overflow: visible; max-height: none; min-height: 0; padding: 0.75rem; }
   .mobileTableControls { display: grid; gap: 0.65rem; margin-bottom: 0.75rem; }

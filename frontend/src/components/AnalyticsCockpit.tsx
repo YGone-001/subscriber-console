@@ -1,9 +1,9 @@
 "use client";
 import './analytics.css';
-import './analytics/KpiStrip.css';
 
-import React from "react";
+import React, { useMemo } from "react";
 import useSWR from "swr";
+import { Area, AreaChart, ResponsiveContainer } from "recharts";
 import {
   Activity,
   AlertCircle,
@@ -16,17 +16,66 @@ import {
 } from "lucide-react";
 import { fetcher } from "@/lib/fetcher";
 import { useI18n } from "./I18nProvider";
+import MetricStrip, { type MetricStripItem } from "@/components/ui/MetricStrip";
+import uiStyles from "@/components/ui/ConsolePrimitives.module.css";
 
 import { MetricsData, SparklineData, AlertResponse, WorkItem } from "./analytics/types";
-import { BYTES_IN_GB, computeHourlyBurnGb, createDistributionSparkline, normalizeRingValue } from "./analytics/utils";
+import { BYTES_IN_GB, computeHourlyBurnGb, normalizeRingValue } from "./analytics/utils";
 import CountUpNumber from "./analytics/CountUpNumber";
-import KpiStrip from "./analytics/KpiStrip";
-import type { KpiStripItem } from "./analytics/KpiStrip";
 import SkeletonDashboard from "./analytics/SkeletonDashboard";
 import TopConsumerChart from "./analytics/TopConsumerChart";
 import WorkbenchPanel from "./analytics/WorkbenchPanel";
 import TariffPlanDistributionChart from "./analytics/TariffPlanDistributionChart";
 import OcsResourceStrip from "./analytics/OcsResourceStrip";
+
+function MetricSparkline({ data, color }: { data?: number[]; color: string }) {
+  const reactId = React.useId();
+  const chartData = useMemo(() => {
+    if (!data?.length) return [];
+    return data.map((value, index) => ({ index, value }));
+  }, [data]);
+
+  const gradientId = `metric-spark-${color.replace(/[^a-zA-Z0-9]/g, "")}-${reactId.replace(/:/g, "")}`;
+
+  if (chartData.length === 0) return null;
+
+  return (
+    <div className={uiStyles.metricSparkline} aria-hidden="true">
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={chartData} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
+          <defs>
+            <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={color} stopOpacity={0.3} />
+              <stop offset="100%" stopColor={color} stopOpacity={0.02} />
+            </linearGradient>
+          </defs>
+          <Area
+            type="monotone"
+            dataKey="value"
+            stroke={color}
+            strokeWidth={1.5}
+            fill={`url(#${gradientId})`}
+            dot={false}
+            isAnimationActive={false}
+          />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function MetricRing({ value, color }: { value: number; color: string }) {
+  const safeValue = normalizeRingValue(value);
+  return (
+    <div
+      className={uiStyles.metricRing}
+      style={{ background: `conic-gradient(${color} ${safeValue * 3.6}deg, var(--surface-border) 0deg)` }}
+      aria-hidden="true"
+    >
+      <div className={uiStyles.metricRingInner}>{Math.round(safeValue)}</div>
+    </div>
+  );
+}
 
 export default function AnalyticsCockpit() {
   const { t } = useI18n();
@@ -65,8 +114,6 @@ export default function AnalyticsCockpit() {
     : null;
 
   const trafficSparkline = sparkData?.traffic || [];
-  const subscriberSparkline = sparkData?.subscribers || [];
-  const plmnSparkline = createDistributionSparkline(plmnDist);
 
   const gbTraffic = totalTraffic / BYTES_IN_GB;
   const burnRateGbHr = computeHourlyBurnGb(trafficSparkline);
@@ -204,9 +251,10 @@ export default function AnalyticsCockpit() {
   const visibleWorkItems = workItems.slice(0, 4);
 
   // KPI Strip items
-  const kpiItems: KpiStripItem[] = [
+  const kpiItems: MetricStripItem[] = [
     {
-      color: "var(--chart-1)",
+      key: "traffic",
+      accent: "var(--chart-1)",
       icon: <TrendingUp size={16} />,
       label: t("dash_kpi_total_traffic"),
       value: (
@@ -220,38 +268,37 @@ export default function AnalyticsCockpit() {
             ? `${burnRateGbHr.toFixed(2)} GB/hr · ~${theoreticalLifeHr.toFixed(0)}h`
             : `${burnRateGbHr.toFixed(2)} GB/hr`)
         : undefined,
-      sparkline: trafficSparkline,
-      tone: exhaustionTone,
+      indicator: trafficSparkline.length > 0 ? <MetricSparkline data={trafficSparkline} color="var(--chart-1)" /> : undefined,
+      tone: exhaustionTone === "danger" ? "danger" : exhaustionTone === "warning" ? "warning" : undefined,
     },
     {
-      color: "var(--status-success)",
+      key: "subscribers",
+      accent: "var(--status-success)",
       icon: <Activity size={16} />,
       label: t("dash_kpi_active_subs"),
       value: <CountUpNumber value={subscriberCount} />,
-      sparkline: subscriberSparkline,
-      ringValue: subscriberCount > 0 ? 100 : 0,
-      tone: "normal" as const,
+      indicator: <MetricRing value={subscriberCount > 0 ? 100 : 0} color="var(--status-success)" />,
     },
     {
-      color: "var(--chart-4)",
+      key: "plmn",
+      accent: "var(--chart-4)",
       icon: <Globe size={16} />,
       label: t("dash_kpi_plmn_active"),
       value: <CountUpNumber value={plmnCount} />,
       detail: plmnDist.length > 0 ? `${plmnDist[0]?.name || "—"}${plmnDist.length > 1 ? ` +${plmnDist.length - 1}` : ""}` : undefined,
-      sparkline: plmnSparkline,
-      ringValue: plmnCoverage,
-      tone: "normal" as const,
+      indicator: <MetricRing value={plmnCoverage} color="var(--chart-4)" />,
     },
     {
-      color: "var(--chart-3)",
+      key: "contracts",
+      accent: "var(--chart-3)",
       icon: <Users size={16} />,
       label: t("nav_ocs_contracts"),
       value: contractSubscriberCount !== null ? <CountUpNumber value={contractSubscriberCount} /> : "—",
-      ringValue: contractSubscriberCount !== null && contractSubscriberCount > 0 ? 100 : 0,
-      tone: "normal" as const,
+      indicator: <MetricRing value={contractSubscriberCount !== null && contractSubscriberCount > 0 ? 100 : 0} color="var(--chart-3)" />,
     },
     {
-      color: "var(--chart-2)",
+      key: "utilization",
+      accent: "var(--chart-2)",
       icon: <Database size={16} />,
       label: t("dash_ocs_kpi_utilization"),
       value: (
@@ -260,24 +307,25 @@ export default function AnalyticsCockpit() {
           <span>%</span>
         </>
       ),
-      ringValue: utilizationRate,
-      tone: (utilizationRate >= 85 ? "danger" : utilizationRate >= 65 ? "warning" : "normal") as "normal" | "warning" | "danger",
+      indicator: <MetricRing value={utilizationRate} color="var(--chart-2)" />,
+      tone: utilizationRate >= 85 ? "danger" : utilizationRate >= 65 ? "warning" : undefined,
     },
     {
-      color: brokenInvariants === 0 ? "var(--status-success)" : "var(--status-danger)",
+      key: "invariants",
+      accent: brokenInvariants === 0 ? "var(--status-success)" : "var(--status-danger)",
       icon: brokenInvariants === 0 ? <ShieldCheck size={16} /> : <AlertTriangle size={16} />,
       label: t("dash_ocs_kpi_invariants"),
       value: healthValue,
       detail: healthDetail,
-      ringValue: healthRingValue,
-      tone: healthTone,
+      indicator: <MetricRing value={healthRingValue} color={brokenInvariants === 0 ? "var(--status-success)" : "var(--status-danger)"} />,
+      tone: healthTone === "danger" ? "danger" : healthTone === "warning" ? "warning" : undefined,
     },
   ];
 
   return (
     <div className="analytics-root">
       {/* 1. KPI Strip — core metrics at a glance */}
-      <KpiStrip items={kpiItems} />
+      <MetricStrip variant="cards" columns={6} ariaLabel="Key performance indicators" items={kpiItems} />
 
       {/* 2. Alerts & Score — only visible when issues exist, otherwise compact */}
       <WorkbenchPanel

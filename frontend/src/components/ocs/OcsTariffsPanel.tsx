@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useI18n } from "@/components/I18nProvider";
 import { DataTableStateRow } from "@/components/ui/DataTableState";
+import MetricStrip from "@/components/ui/MetricStrip";
 import OcsPageShell from "./OcsPageShell";
 
 interface TariffPlan {
@@ -92,36 +93,16 @@ export default function OcsTariffsPanel() {
   };
 
   const kpiGrid = (
-    <div className="ocs-dashboard-grid">
-      <div className="ocs-dashboard-card">
-        <div className="ocs-dashboard-card-icon"><FileText size={20} /></div>
-        <div className="ocs-dashboard-card-content">
-          <span className="ocs-dashboard-card-value">{plans.length}</span>
-          <span className="ocs-dashboard-card-label">{t("ocs_tariff_total_plans")}</span>
-        </div>
-      </div>
-      <div className="ocs-dashboard-card">
-        <div className="ocs-dashboard-card-icon"><CheckCircle size={20} /></div>
-        <div className="ocs-dashboard-card-content">
-          <span className="ocs-dashboard-card-value">{activePlans}</span>
-          <span className="ocs-dashboard-card-label">{t("ocs_tariff_active_plans")}</span>
-        </div>
-      </div>
-      <div className="ocs-dashboard-card">
-        <div className="ocs-dashboard-card-icon"><XCircle size={20} /></div>
-        <div className="ocs-dashboard-card-content">
-          <span className="ocs-dashboard-card-value">{disabledPlans}</span>
-          <span className="ocs-dashboard-card-label">{t("ocs_tariff_disabled_plans")}</span>
-        </div>
-      </div>
-      <div className="ocs-dashboard-card">
-        <div className="ocs-dashboard-card-icon"><FileText size={20} /></div>
-        <div className="ocs-dashboard-card-content">
-          <span className="ocs-dashboard-card-value">{totalSubscribers}</span>
-          <span className="ocs-dashboard-card-label">{t("ocs_tariff_total_subscribers")}</span>
-        </div>
-      </div>
-    </div>
+    <MetricStrip
+      variant="cards"
+      ariaLabel={t("ocs_tariffs_title")}
+      items={[
+        { key: "plans", label: t("ocs_tariff_total_plans"), value: plans.length, icon: <FileText size={20} /> },
+        { key: "active", label: t("ocs_tariff_active_plans"), value: activePlans, icon: <CheckCircle size={20} /> },
+        { key: "disabled", label: t("ocs_tariff_disabled_plans"), value: disabledPlans, icon: <XCircle size={20} /> },
+        { key: "subscribers", label: t("ocs_tariff_total_subscribers"), value: totalSubscribers, icon: <FileText size={20} /> },
+      ]}
+    />
   );
 
   return (

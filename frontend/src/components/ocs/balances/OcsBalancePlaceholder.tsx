@@ -8,6 +8,7 @@ import { Search, Wallet, CheckCircle, SlidersHorizontal, Eye } from "lucide-reac
 import { useI18n } from "@/components/I18nProvider";
 import { DataTablePagination } from "@/components/ui/DataTablePagination";
 import { DataTableStateRow } from "@/components/ui/DataTableState";
+import MetricStrip from "@/components/ui/MetricStrip";
 import { formatBytes } from "@/lib/unitParser";
 import OcsPageShell from "../OcsPageShell";
 import OcsStatusBadge from "../common/OcsStatusBadge";
@@ -79,22 +80,14 @@ export default function OcsBalancePlaceholder() {
   };
 
   const kpiGrid = (
-    <div className="ocs-dashboard-grid">
-      <div className="ocs-dashboard-card">
-        <div className="ocs-dashboard-card-icon"><Wallet size={20} /></div>
-        <div className="ocs-dashboard-card-content">
-          <span className="ocs-dashboard-card-value">{error ? "—" : total}</span>
-          <span className="ocs-dashboard-card-label">{t("ocs_balance_total_accounts")}</span>
-        </div>
-      </div>
-      <div className="ocs-dashboard-card">
-        <div className="ocs-dashboard-card-icon"><CheckCircle size={20} /></div>
-        <div className="ocs-dashboard-card-content">
-          <span className="ocs-dashboard-card-value">{error ? "—" : activeCount}</span>
-          <span className="ocs-dashboard-card-label">{t("ocs_balance_active_accounts")}</span>
-        </div>
-      </div>
-    </div>
+    <MetricStrip
+      variant="cards"
+      ariaLabel={t("ocs_balances_title")}
+      items={[
+        { key: "total", label: t("ocs_balance_total_accounts"), value: error ? "—" : total, icon: <Wallet size={20} /> },
+        { key: "active", label: t("ocs_balance_active_accounts"), value: error ? "—" : activeCount, icon: <CheckCircle size={20} /> },
+      ]}
+    />
   );
 
   const controls = (
