@@ -809,12 +809,37 @@
     background: var(--background);
   }
 
+  .skip-link {
+    position: fixed;
+    top: 0.75rem;
+    left: 0.75rem;
+    z-index: 120;
+    transform: translateY(-220%);
+    padding: 0.6rem 1rem;
+    border: 1px solid var(--surface-border);
+    border-radius: var(--ref-radius-control);
+    background: var(--surface);
+    color: var(--text-main);
+    font-size: var(--ref-font-size-body-small);
+    font-weight: 700;
+    box-shadow: var(--shadow-popover);
+    text-decoration: none;
+  }
+
+  .skip-link:focus {
+    transform: translateY(0);
+  }
+
   .layout-main {
     flex: 1;
     overflow-y: auto;
     position: relative;
     min-height: 0;
     background: var(--background);
+  }
+
+  .layout-main:focus {
+    outline: none;
   }
 
   /* Notification Center */

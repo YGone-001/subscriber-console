@@ -74,6 +74,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="layout-root">
+      <a className="skip-link" href="#main-content">{t("skip_to_content")}</a>
       <AppHeader sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
       <div className="layout-body">
         {sidebarOpen ? (
@@ -88,7 +89,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="layout-content-area">
           <NavigationTabBar />
           <NavigationBreadcrumbs />
-          <main className="layout-main">{children}</main>
+          <main id="main-content" tabIndex={-1} className="layout-main">{children}</main>
         </div>
       </div>
     </div>

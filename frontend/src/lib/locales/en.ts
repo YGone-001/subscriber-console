@@ -2222,6 +2222,7 @@ export const en: Record<string, string> = {
     sidebar_collapse: "Collapse Sidebar",
     sidebar_collapse_hint: "Collapse navigation sidebar (Ctrl+B)",
     sidebar_expand_hint: "Expand navigation sidebar (Ctrl+B)",
+    skip_to_content: "Skip to main content",
     nav_tab_scroll_left: "Scroll tabs left",
     nav_tab_scroll_right: "Scroll tabs right",
     nav_tab_close: "Close Tab",

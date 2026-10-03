@@ -2221,6 +2221,7 @@ export const zh: Record<string, string> = {
     sidebar_collapse: "收起侧栏",
     sidebar_collapse_hint: "收起导航侧栏 (Ctrl+B)",
     sidebar_expand_hint: "展开导航侧栏 (Ctrl+B)",
+    skip_to_content: "跳转到主内容",
     nav_tab_scroll_left: "向左滚动标签",
     nav_tab_scroll_right: "向右滚动标签",
     nav_tab_close: "关闭标签页",
