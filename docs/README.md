@@ -40,6 +40,7 @@ Next.js UI-only navigation guard  -> frontend/src/proxy.ts
 ## Architecture
 
 - [System architecture](architecture/system-architecture.md)
+- [Architecture evolution roadmap](architecture/architecture-evolution-roadmap.md) - planned architecture evolution authority; it distinguishes future targets from current production behavior.
 - [Frontend-backend boundary](architecture/frontend-backend-boundary.md)
 - [Security model](architecture/security-model.md)
 - [Governance design](architecture/governance-design.md)

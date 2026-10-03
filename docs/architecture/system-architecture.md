@@ -4,7 +4,13 @@
 > Detailed rules: `CLAUDE.md`. Current state: `AGENTS.md`.
 > Documentation authority: `docs/README.md`.
 
-## Components
+## Current Production Architecture
+
+This section describes the deployed production topology today. It remains the
+authority for current runtime behavior until a separately governed migration changes
+the implementation.
+
+### Components
 
 ```text
 Browser
@@ -28,7 +34,7 @@ UI navigation guard             Auth identity + session validation
            xcloud + xcloud_ops
 ```
 
-## Routing
+### Routing
 
 Nginx owns production API routing:
 
@@ -45,7 +51,7 @@ registrations parsed from `backend/cmd/server/main.go` plus
 `backend/internal/remediation/handler.go`, shared helper
 `scripts/lib/go-registrations.mjs`).
 
-## Frontend
+### Frontend
 
 - Next.js 16.3.8 App Router
 - React 19.2.4
@@ -61,7 +67,7 @@ The Next.js runtime renders the UI and runs a UI-only navigation guard
 (`frontend/src/proxy.ts`). It holds no business API handler, no JWT runtime, no
 MongoDB client, and injects no identity headers.
 
-## Go Backend
+### Go Backend
 
 - Go 1.24+
 - Standard library `net/http`
@@ -71,7 +77,7 @@ MongoDB client, and injects no identity headers.
 
 Location: `backend/`
 
-## Database
+### Database
 
 Same Mongo URI, two databases:
 
@@ -81,7 +87,7 @@ Same Mongo URI, two databases:
 
 Go uses one `mongo.Client` with two database handles.
 
-## Platform Services
+### Platform Services
 
 Eleven platform-service operations are Go-owned at the edge:
 
@@ -115,7 +121,7 @@ POST /api/analytics/init
   governance surfaces do not exist.
 - `POST /api/analytics/init` is a read-only on-demand analytics recomputation.
 
-## Domain Boundaries
+### Domain Boundaries
 
 ```text
 subscriber-console
@@ -126,3 +132,37 @@ CNMS (reference only)
 ```
 
 CNMS is a reference repository, not a merge target.
+
+## Short-Term Target Architecture
+
+The planned short-term target is not deployed. It consolidates the production
+application runtime behind the existing Nginx edge:
+
+```text
+Browser
+   |
+   v
+Nginx (sole public edge)
+   |
+   v
+Go 127.0.0.1:18888
+   |-- REST API and server-side security authority
+   `-- embedded static React SPA
+          |
+          v
+MongoDB: xcloud + xcloud_ops
+```
+
+The target retires the production Next.js runtime and its `:13333` listener only
+when a future migration phase implements and validates that transition. Nginx remains
+the public edge, Go remains the internal application listener on `:18888`, MongoDB
+remains the source of truth, and Go remains the authentication and authorization
+authority.
+
+## Evolution Authority
+
+[Architecture evolution roadmap](architecture-evolution-roadmap.md) is the planned
+architecture evolution authority. It defines the distinction between current,
+short-term, medium-term, long-term, and future states. It does not override current
+production deployment facts in this document or in
+[Deployment](../operations/deployment.md).

@@ -90,7 +90,7 @@ Approval workflow removed from business execution path. Authorization and operat
 
 xCloud 只是当前兼容数据层之一。
 
-## 2. 当前目标架构
+## 2. Current Production Architecture
 
 ```text
 Browser
@@ -111,15 +111,7 @@ UI 导航守卫（不再转发 API）    Auth identity + session validation
               MongoDB
 ```
 
-最终目标：
-
-```text
-Browser -> Nginx
-           ├─ /api, /api/*  -> Go :18888
-           └─ /*             -> Next.js :13333
-```
-
-当前状态：
+Current production state:
 
 - Nginx 是唯一对外入口，负责 `/api` 与 `/api/*` 路由；`deploy/nginx/xcloud.conf` 定义两个 loopback upstream（Next.js 127.0.0.1:13333、Go 127.0.0.1:18888），并剥离客户端身份头。
 - Go Backend 位于 `backend/`，生产业务 API 全部由 Go 独占；路由权威来源 = 84 条 Go 注册（`backend/cmd/server/main.go` + `backend/internal/remediation/handler.go`）。
@@ -129,7 +121,27 @@ Browser -> Nginx
 - 前端 SWR 不感知 Node/Go ownership。
 - 禁止在 Next.js 侧重新引入任何业务 API handler、业务 repository 或业务 Mongo 访问。
 
-### 2.1 OCS 生产冻结规范 (OCS Management Plane Freeze)
+### 2.1 Short-Term Planned Target
+
+The short-term target is planned, not implemented: Nginx remains the public edge and
+proxies to Go on `127.0.0.1:18888`, while Go serves both the API and an embedded
+static React SPA. The production Next.js runtime and `:13333` listener are retired
+only by a future governed migration. MongoDB `xcloud` and `xcloud_ops` remain the
+existing source of truth, and Go remains the security authority.
+
+The planned architecture evolution authority is
+`docs/architecture/architecture-evolution-roadmap.md`. It must not be treated as a
+runtime deployment instruction before its implementation phases begin.
+
+### 2.2 Long-Term Platform Direction
+
+The longer-term direction is a modular operations platform with inventory/topology,
+workflow, assurance, telemetry, and vendor-neutral adapter boundaries. Logical
+boundaries precede any deployment decomposition; independent services are introduced
+only when scale, failure isolation, operational ownership, or availability requires
+them.
+
+### 2.3 OCS 生产冻结规范 (OCS Management Plane Freeze)
 
 OCS Management Plane is frozen.
 Managed domains:
@@ -144,7 +156,7 @@ Charging Plane remains frozen and excluded.
 - 严禁引入或耦合运行时计费面实体（`ocs_sessions`, `ocs_reservations`, `ocs_usage_records`, `ocs_events`, `ocs_config`, Gy/Ro/CCR/CCA 协议栈）。
 - 路由权威来源：84 条 Go 注册（`backend/cmd/server/main.go` + `backend/internal/remediation/handler.go`）；Nginx 负责 API 路由。
 
-### 2.2 本地全栈访问契约 (Local Full-Stack Access Contract)
+### 2.4 本地全栈访问契约 (Local Full-Stack Access Contract)
 
 稳定规则，非临时排障记录：
 

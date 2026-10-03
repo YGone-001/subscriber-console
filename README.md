@@ -46,6 +46,11 @@ boundary. The Next.js navigation guard may directly consult the Go authenticatio
 authority over loopback for `GET /api/auth/me`; that internal server-side call is not
 API ownership and not API forwarding.
 
+Architecture evolution is planned separately in the
+[architecture evolution roadmap](docs/architecture/architecture-evolution-roadmap.md).
+It does not change the current Nginx, Next.js, Go, or MongoDB deployment described
+above.
+
 ## Features
 
 - Subscriber CRUD, pagination, search, single create, batch create, CSV import, and delete.

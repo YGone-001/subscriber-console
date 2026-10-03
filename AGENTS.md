@@ -91,7 +91,7 @@ UI navigation guard       Auth identity + session validation
       xcloud + xcloud_ops
 ```
 
-Target:
+Current browser routing:
 
 ```text
 Browser -> Nginx
@@ -108,6 +108,18 @@ The Next.js business backend (app/api + src/server) does not exist.
 Next.js renders the UI and runs a UI-only navigation guard (proxy.ts); it never decodes a JWT, never reads MongoDB, never injects identity headers and never forwards an API request.
 Frontend API paths remain unchanged.
 ```
+
+Architecture evolution roadmap status:
+
+```text
+Current runtime                 = unchanged
+Architecture evolution roadmap  = established
+Next implementation direction   = short-term runtime consolidation
+```
+
+The planned consolidation target is Nginx -> Go `:18888` serving API plus an embedded
+static React SPA. It is not deployed: the current production state continues to use
+Next.js on `:13333`. See `docs/architecture/architecture-evolution-roadmap.md`.
 
 ---
 
