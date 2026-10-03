@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo } from 'react';
 import useSWR from 'swr';
 import { getAuthSession } from '../auth/auth-client';
 import type { AuthUser, SessionState } from '../types/auth';
@@ -21,6 +21,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     shouldRetryOnError: false,
   });
   const refresh = useCallback(() => session.mutate(), [session]);
+  useEffect(() => {
+    const revalidate = () => { void refresh(); };
+    window.addEventListener('xcloud-session-revalidate', revalidate);
+    return () => window.removeEventListener('xcloud-session-revalidate', revalidate);
+  }, [refresh]);
   const value = useMemo<AuthContextValue>(() => ({
     state: session.isLoading ? 'checking' : (session.data?.state ?? 'unavailable'),
     user: session.data?.user ?? null,

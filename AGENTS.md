@@ -130,10 +130,11 @@ Production transition = NOT STARTED
 Vite development    = 127.0.0.1:13334 (migration-only, loopback-only)
 ```
 
-`frontend-spa/` is not production-active. Its shared providers, auth-aware shell,
-role-filtered navigation, theme and locale preferences, and all pending route
-placeholders are isolated from the production runtime. Nginx routing is unchanged,
-Next.js remains the production UI, and Go does not serve SPA assets in this phase.
+`frontend-spa/` is not production-active. Its foundation, shared providers,
+auth-aware shell, role-filtered navigation, and read-side business projections are
+isolated from the production runtime. Business mutation controls have not started.
+Nginx routing is unchanged, Next.js remains the production UI, and Go does not serve
+SPA assets.
 
 ---
 

@@ -19,6 +19,9 @@ const en = {
   nav_ocs_usage: 'OCS usage', nav_rating_plans: 'Rating plans', nav_rating_rules: 'Rating rules',
   nav_user_create: 'Create user', unavailable_title: 'Session authority unavailable',
   unavailable_body: 'The application cannot verify your session at the moment.', account: 'Account',
+  read_only_parity: 'Read-only migration parity', loading: 'Loading...', empty: 'No data is available.', refresh: 'Refresh',
+  read_table: 'Read-only results', details: 'Details', search: 'Search', records: 'records', previous: 'Previous', next: 'Next',
+  back: 'Back', export: 'Export', traffic_trend: 'Traffic trend', workbench: 'Operational priorities',
 } as const;
 
 const zh: Record<keyof typeof en, string> = {
@@ -36,6 +39,9 @@ const zh: Record<keyof typeof en, string> = {
   nav_ocs_dashboard: 'OCS 仪表盘', nav_ocs_sessions: 'OCS 会话', nav_ocs_subscribers: 'OCS 用户', nav_ocs_usage: 'OCS 用量',
   nav_rating_plans: '计费套餐', nav_rating_rules: '计费规则', nav_user_create: '创建用户',
   unavailable_title: '会话认证不可用', unavailable_body: '应用当前无法验证您的会话。', account: '账户',
+  read_only_parity: '只读迁移一致性', loading: '加载中...', empty: '暂无可用数据。', refresh: '刷新',
+  read_table: '只读结果', details: '详情', search: '搜索', records: '条记录', previous: '上一页', next: '下一页',
+  back: '返回', export: '导出', traffic_trend: '流量趋势', workbench: '运营优先事项',
 };
 
 export const dictionaries: Record<Locale, Record<string, string>> = { en, zh };

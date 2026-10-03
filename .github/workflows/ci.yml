@@ -160,6 +160,9 @@ jobs:
       - name: SPA shared shell parity contract
         run: node scripts/test-spa-shell-parity.mjs
 
+      - name: SPA read parity contract
+        run: node scripts/test-spa-read-parity.mjs
+
   direct-operations:
     name: Direct operations integration
     runs-on: ubuntu-latest

@@ -8,7 +8,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const appRoot = resolve(root, 'frontend/src/app');
 const spaRoot = resolve(root, 'frontend-spa');
 const distRoot = resolve(spaRoot, 'dist');
-const allowedStatuses = new Set(['foundation', 'pending', 'migrated']);
+const allowedStatuses = new Set(['foundation', 'pending', 'read-parity', 'migrated']);
 
 function walk(dir, predicate, files = []) {
   if (!existsSync(dir)) return files;
@@ -63,14 +63,13 @@ for (const current of currentRoutes) {
   requireCondition(inventoryBySource.has(current.sourceRoute), `missing migration entry: ${current.sourceRoute}`);
 }
 
-const foundationSources = new Set(['/login', '/']);
+const foundationSources = new Set(['/login']);
 for (const entry of inventory) {
   if (entry.status === 'foundation') requireCondition(foundationSources.has(entry.sourceRoute), `business route cannot be foundation: ${entry.sourceRoute}`);
   if (foundationSources.has(entry.sourceRoute)) assert.equal(entry.status, 'foundation', `foundation route required: ${entry.sourceRoute}`);
 }
 
 const migrated = inventory.filter((entry) => entry.status === 'migrated');
-assert.equal(migrated.length, 0, 'The foundation cannot mark any business route migrated');
 
 const packageJson = JSON.parse(readFileSync(resolve(spaRoot, 'package.json'), 'utf8'));
 const declaredDependencies = { ...packageJson.dependencies, ...packageJson.devDependencies };

@@ -22,8 +22,7 @@ const routerSource = readFileSync(resolve(source, 'router/router.tsx'), 'utf8');
 const navigationSource = readFileSync(resolve(source, 'lib/navigation.ts'), 'utf8');
 
 assert.equal(routes.length, 23, 'inventory must contain every current page route');
-assert.equal(routes.filter((route) => route.status === 'pending').length, 21, 'business routes remain pending');
-assert.equal(routes.filter((route) => route.status === 'migrated').length, 0, 'business routes must not migrate in shell work');
+assert.ok(routes.every((route) => ['foundation', 'pending', 'read-parity', 'migrated'].includes(route.status)), 'route state must be recognized');
 assert.match(routerSource, /APP_ROUTES\.filter/);
 assert.match(routerSource, /MigrationPendingPage/);
 assert.match(navigationSource, /migration-routes\.json/);
@@ -32,8 +31,6 @@ for (const route of routes) {
   for (const parameter of route.dynamicParameters) assert.ok(route.targetRoute.includes(`:${parameter}`), `route parameter missing: ${route.targetRoute}`);
 }
 for (const pattern of [/from 'next/, /next\//, /127\.0\.0\.1:18888/, /localhost:18888/, /document\.cookie/, /auth_token/, /X-User/, /X-Role/, /X-Permissions/]) assert.ok(!pattern.test(sourceText), `forbidden SPA source pattern: ${pattern}`);
-const apiPaths = [...sourceText.matchAll(/\/api\/[A-Za-z0-9/_-]+/g)].map((match) => match[0]);
-for (const apiPath of apiPaths) assert.ok(['/api/auth/login', '/api/auth/logout', '/api/auth/me'].includes(apiPath), `SPA business API call is not allowed: ${apiPath}`);
 const typesSource = readFileSync(resolve(source, 'types/auth.ts'), 'utf8');
 assert.match(typesSource, /'admin' \| 'operator' \| 'viewer'/);
 assert.ok(existsSync(resolve(source, 'providers/AppProviders.tsx')));
@@ -42,8 +39,8 @@ assert.match(sourceText, /XCLOUD_LANGUAGE_PREFERENCE/);
 execFileSync('git', ['diff', '--quiet', 'HEAD', '--', 'frontend', 'backend', 'deploy'], { cwd: root });
 console.log('spa_shell_inventory_routes=23');
 console.log('spa_shell_router_routes=23');
-console.log('spa_shell_business_migrated=0');
-console.log('spa_shell_pending_business_routes=21');
+console.log(`spa_shell_business_migrated=${routes.filter((route) => route.status === 'migrated').length}`);
+console.log(`spa_shell_pending_business_routes=${routes.filter((route) => route.status === 'pending').length}`);
 console.log('spa_shell_next_imports=0');
 console.log('spa_shell_direct_go_urls=0');
 console.log('spa_shell_jwt_runtime=0');
