@@ -5,7 +5,6 @@
   --surface-subtle: #eef3f4;
   --surface-field: #ffffff;
   --surface-border: #d8e1e3;
-  --border-color: rgba(13, 35, 43, 0.08);
   --primary: #087f8c;
   --primary-hover: #046670;
   --danger: #c83d4c;
@@ -67,10 +66,6 @@
   --shadow-panel: 0 14px 36px -32px rgba(15, 43, 52, 0.7);
   --shadow-popover: 0 20px 44px -28px rgba(15, 43, 52, 0.72);
   --shadow-drawer: -24px 0 48px -32px rgba(15, 43, 52, 0.48);
-  --space-page: 24px;
-  --space-section: 20px;
-  --control-height: 36px;
-  --table-row-height: 54px;
   --drawer-backdrop: rgba(10, 28, 34, 0.34);
   --ease-decelerate: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
@@ -168,6 +163,14 @@
   --focus-ring: 0 0 0 3px color-mix(in srgb, var(--primary) 28%, transparent);
 }
 
+/*
+ * Interaction state contract (identical roles in both themes):
+ *   hover    -> --surface-hover
+ *   selected -> --selection-soft (fill) / --selection-border (outline)
+ *   focus    -> --focus-ring
+ * Pressed states are expressed with transforms/opacity, not separate color tokens.
+ */
+
 /* Deep override for AntD specific components */
 [data-theme="dark"] .ant-table-thead > tr > th,
 [data-theme="dark"] .ant-table-cell {
@@ -246,6 +249,19 @@
   --ref-radius-soft-panel: 12px;
   --ref-radius-pill: 999px;
   --ref-radius-circle: 50%;
+
+  /* Spacing scale (4px base) - theme-independent layout rhythm tokens. */
+  --space-4: 4px;
+  --space-8: 8px;
+  --space-12: 12px;
+  --space-16: 16px;
+  --space-20: 20px;
+  --space-24: 24px;
+  --space-32: 32px;
+  --space-page: var(--space-24);
+  --space-section: var(--space-20);
+  --control-height: 36px;
+  --table-row-height: 54px;
 }
 
 html {
@@ -1464,7 +1480,7 @@ body.global-emergency-flash {
   pointer-events: auto;
   background: var(--surface);
   color: var(--text-main);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--surface-border);
   border-radius: var(--ref-radius-panel);
   box-shadow: var(--shadow-popover);
   position: relative;
