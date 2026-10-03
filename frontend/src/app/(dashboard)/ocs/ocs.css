@@ -401,9 +401,9 @@
 }
 
 .ocs-badge.interface-ro {
-  background: color-mix(in srgb, var(--chart-5) 15%, transparent);
-  color: var(--chart-5);
-  border: 1px solid color-mix(in srgb, var(--chart-5) 32%, transparent);
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+  color: var(--primary);
+  border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent);
 }
 
 .ocs-badge.result-2001 {
@@ -1293,12 +1293,12 @@
   color: var(--status-warning);
 }
 
-.ocs-text-chart-2 {
-  color: var(--chart-2);
+.ocs-text-info {
+  color: var(--status-info);
 }
 
-.ocs-text-chart-5 {
-  color: var(--chart-5);
+.ocs-text-primary {
+  color: var(--primary);
 }
 
 .ocs-kpi-value.ocs-text-success {

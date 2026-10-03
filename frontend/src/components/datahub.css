@@ -853,8 +853,8 @@
 }
 
 .dh-badge-duplicate {
-  background: color-mix(in srgb, var(--chart-5) 15%, transparent);
-  color: var(--chart-5);
+  background: var(--status-info-soft);
+  color: var(--status-info);
 }
 
 /* Footer Actions */

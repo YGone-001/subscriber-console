@@ -361,9 +361,9 @@ export default function OcsUsagePanel() {
               </td>
               <td className="ocs-mono" data-column-priority="supplementary" data-label={t("ocs_col_cc_num")}>#{r.cc_request_number}</td>
               <td className="ocs-mono" data-column-priority="supplementary" data-label={t("ocs_col_input")}>
-                <span className="ocs-text-chart-2">{formatBytes(r.input_octets)}</span>
+                <span className="ocs-text-info">{formatBytes(r.input_octets)}</span>
                 <span className="ocs-text-muted"> / </span>
-                <span className="ocs-text-chart-5">{formatBytes(r.output_octets)}</span>
+                <span className="ocs-text-primary">{formatBytes(r.output_octets)}</span>
               </td>
               <td className="ocs-mono ocs-text-strong" data-column-priority="essential" data-label={t("ocs_col_total_octets")}>
                 {formatBytes(r.total_octets)}
@@ -455,7 +455,7 @@ export default function OcsUsagePanel() {
                   </span>
                 </td>
                 <td className="ocs-mono" data-column-priority="important">
-                  <span className="ocs-text-chart-5">{formatBytes(r.reserved_octets)}</span>
+                  <span className="ocs-text-primary">{formatBytes(r.reserved_octets)}</span>
                   <span className="ocs-text-muted"> / </span>
                   <span className="ocs-text-warning">{formatBytes(r.used_octets)}</span>
                 </td>

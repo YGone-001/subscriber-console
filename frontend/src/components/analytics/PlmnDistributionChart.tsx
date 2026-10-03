@@ -34,7 +34,7 @@ export default function PlmnDistributionChart({
     <section className="analytics-panel">
       <div className="analytics-panel-header">
         <div className="analytics-panel-title">
-          <Server size={18} color="var(--chart-3)" />
+          <Server size={18} color="var(--primary)" />
           <h3 id={titleId}>{t("dash_chart_plmn_title")}</h3>
         </div>
         <span className="analytics-panel-badge">{plmnDist.length} {t("dash_unit_plmn")}</span>

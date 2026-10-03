@@ -407,7 +407,7 @@ export default function SystemHealthPage() {
             {/* 2. OCS Engine Subsystem */}
             <SubsystemCard
               status={systemHealth?.subsystems?.ocsEngine?.status || 'healthy'}
-              icon={<Zap size={20} color="var(--chart-4)" />}
+              icon={<Zap size={20} color="var(--primary)" />}
               name={t("health_subsystem_ocs")}
               description={t("health_desc_ocs")}
               statusBadge={getStatusBadge(systemHealth?.subsystems?.ocsEngine?.status)}
@@ -422,7 +422,7 @@ export default function SystemHealthPage() {
             {/* 3. HSS Core Subsystem */}
             <SubsystemCard
               status={systemHealth?.subsystems?.hssCore?.status || 'healthy'}
-              icon={<Layers size={20} color="var(--chart-3)" />}
+              icon={<Layers size={20} color="var(--primary)" />}
               name={t("health_subsystem_hss")}
               description={t("health_desc_hss")}
               statusBadge={getStatusBadge(systemHealth?.subsystems?.hssCore?.status)}
@@ -437,7 +437,7 @@ export default function SystemHealthPage() {
             {/* 4. Security Subsystem */}
             <SubsystemCard
               status={systemHealth?.subsystems?.security?.status || 'healthy'}
-              icon={<ShieldCheck size={20} color="var(--chart-5)" />}
+              icon={<ShieldCheck size={20} color="var(--primary)" />}
               name={t("health_subsystem_security")}
               description={t("health_desc_sec")}
               statusBadge={getStatusBadge(systemHealth?.subsystems?.security?.status)}
