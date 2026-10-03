@@ -69,9 +69,11 @@ Nginx configuration, or a port removal in the current phase.
 
 ### Implementation Status
 
-The parallel SPA foundation exists in `frontend-spa/`. It is not
-production-active: Next.js `:13333` remains the production UI, Nginx routing remains
-unchanged, and Go does not serve SPA assets yet. The Vite listener on
+The parallel SPA foundation in `frontend-spa/` includes the shared application shell,
+cross-cutting providers, role-aware navigation metadata, and route placeholders for
+the complete current page inventory. Business pages remain pending and no production
+runtime behavior changes. Next.js `:13333` remains the production UI, Nginx routing
+remains unchanged, and Go does not serve SPA assets yet. The Vite listener on
 `127.0.0.1:13334` is a loopback-only, migration-only development listener.
 
 ### Internal Backend Direction

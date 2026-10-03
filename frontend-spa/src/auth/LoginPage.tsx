@@ -1,7 +1,9 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { safeLocalDestination } from './auth-state';
 import type { LoginFailure } from '../types/auth';
+import { useAuth } from '../providers/AuthProvider';
+import { useI18n } from '../providers/I18nProvider';
 
 function retryAfterSeconds(value: string | null): number {
   const seconds = Number.parseInt(value ?? '', 10);
@@ -14,6 +16,16 @@ export function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [failure, setFailure] = useState<LoginFailure | null>(null);
   const [retryAfter, setRetryAfter] = useState(0);
+  const [passwordVisible, setPasswordVisible] = useState(false);
+  const { refresh } = useAuth();
+  const { t } = useI18n();
+  const sessionExpired = new URLSearchParams(location.search).get('reason') === 'session-expired';
+
+  useEffect(() => {
+    if (retryAfter <= 0) return;
+    const timeout = window.setTimeout(() => setRetryAfter((value) => Math.max(0, value - 1)), 1000);
+    return () => window.clearTimeout(timeout);
+  }, [retryAfter]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -33,6 +45,7 @@ export function LoginPage() {
         body: JSON.stringify({ username, password }),
       });
       if (response.ok) {
+        await refresh();
         const destination = safeLocalDestination(new URLSearchParams(location.search).get('from'));
         navigate(destination, { replace: true });
         return;
@@ -50,30 +63,31 @@ export function LoginPage() {
   }
 
   const message = failure === 'invalid_credentials'
-    ? 'Invalid credentials.'
+    ? t('invalid_credentials')
     : failure === 'rate_limited'
-      ? `Too many attempts. Retry after ${retryAfter || 'a short'} seconds.`
+      ? t('rate_limited', { seconds: retryAfter || 1 })
       : failure === 'service_failure'
-        ? 'Authentication service is unavailable.'
+        ? t('auth_unavailable')
         : null;
 
   return (
-    <main className="login-page">
+    <main className="login-page" aria-labelledby="login-title">
       <section className="login-card">
-        <p className="eyebrow">xCloud</p>
-        <h1>Migration foundation sign in</h1>
-        <p>Use the existing Go authentication authority to continue.</p>
+        <div className="brand-lockup"><span className="brand-mark" aria-hidden="true">x</span><span>xCloud</span></div>
+        <p className="eyebrow">{t('brand_tagline')}</p>
+        <h1 id="login-title">{t('sign_in')}</h1>
+        {sessionExpired ? <p className="session-message" role="status">{t('session_expired')}</p> : null}
         <form onSubmit={submit}>
           <label>
-            Username
+            {t('username')}
             <input name="username" autoComplete="username" required />
           </label>
           <label>
-            Password
-            <input name="password" type="password" autoComplete="current-password" required />
+            {t('password')}
+            <span className="password-field"><input name="password" type={passwordVisible ? 'text' : 'password'} autoComplete="current-password" required /><button type="button" onClick={() => setPasswordVisible((visible) => !visible)} aria-label={passwordVisible ? t('hide_password') : t('show_password')}>{passwordVisible ? 'Hide' : 'Show'}</button></span>
           </label>
           {message ? <p className="form-error" role="alert">{message}</p> : null}
-          <button type="submit" disabled={loading}>{loading ? 'Signing in...' : 'Sign in'}</button>
+          <button type="submit" disabled={loading || retryAfter > 0}>{loading ? t('signing_in') : t('sign_in')}</button>
         </form>
       </section>
     </main>

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { classifyAuthStatus, getAuthState } from '../src/auth/auth-client';
+import { classifyAuthStatus, getAuthSession, getAuthState } from '../src/auth/auth-client';
 import { safeLocalDestination } from '../src/auth/auth-state';
 
 test('classifies Go auth responses fail closed', async () => {
@@ -15,6 +15,13 @@ test('classifies Go auth responses fail closed', async () => {
 test('treats transport failure as unavailable', async () => {
   const state = await getAuthState(async () => Promise.reject(new Error('offline')));
   assert.equal(state, 'unavailable');
+});
+
+test('accepts an authenticated user only from the session authority response', async () => {
+  const result = await getAuthSession(async () => new Response(JSON.stringify({ username: 'operator-a', role: 'operator', status: 'active' }), { status: 200 }));
+  assert.deepEqual(result, { state: 'authenticated', user: { username: 'operator-a', role: 'operator', status: 'active' } });
+  const invalid = await getAuthSession(async () => new Response(JSON.stringify({ username: 'operator-a', role: 'unknown', status: 'active' }), { status: 200 }));
+  assert.equal(invalid.state, 'unavailable');
 });
 
 test('only accepts local destinations after login', () => {

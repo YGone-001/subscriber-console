@@ -125,13 +125,15 @@ Short-term continuation guidance:
 
 ```text
 Current production  = Nginx -> Next.js :13333 + Go :18888
-Migration target    = frontend-spa/ parallel static SPA foundation
+Migration target    = frontend-spa/ parallel static SPA with shared shell and navigation parity
 Production transition = NOT STARTED
 Vite development    = 127.0.0.1:13334 (migration-only, loopback-only)
 ```
 
-`frontend-spa/` is not production-active. Nginx routing is unchanged, Next.js remains
-the production UI, and Go does not serve SPA assets in this phase.
+`frontend-spa/` is not production-active. Its shared providers, auth-aware shell,
+role-filtered navigation, theme and locale preferences, and all pending route
+placeholders are isolated from the production runtime. Nginx routing is unchanged,
+Next.js remains the production UI, and Go does not serve SPA assets in this phase.
 
 ---
 

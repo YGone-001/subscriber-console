@@ -1,22 +1,11 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
-import { getAuthState } from './auth-client';
 import { AuthUnavailablePage } from './AuthUnavailablePage';
-import type { AuthState } from '../types/auth';
+import { useAuth } from '../providers/AuthProvider';
 
 export function AuthGate({ children }: { children: ReactNode }) {
   const location = useLocation();
-  const [state, setState] = useState<AuthState | 'checking'>('checking');
-
-  useEffect(() => {
-    let active = true;
-    void getAuthState().then((nextState) => {
-      if (active) setState(nextState);
-    });
-    return () => {
-      active = false;
-    };
-  }, [location.key]);
+  const { state } = useAuth();
 
   if (state === 'checking') {
     return <main className="state-page">Checking session authority...</main>;
@@ -25,8 +14,8 @@ export function AuthGate({ children }: { children: ReactNode }) {
   if (state === 'unavailable') return <AuthUnavailablePage />;
 
   if (state === 'unauthenticated') {
-    const from = `${location.pathname}${location.search}`;
-    return <Navigate to={`/login?from=${encodeURIComponent(from)}`} replace />;
+    const from = `${location.pathname}${location.search}${location.hash}`;
+    return <Navigate to={`/login?reason=session-expired&from=${encodeURIComponent(from)}`} replace />;
   }
 
   return <>{children}</>;

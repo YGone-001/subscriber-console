@@ -157,6 +157,9 @@ jobs:
       - name: SPA migration foundation contract
         run: node scripts/test-spa-migration-foundation.mjs
 
+      - name: SPA shared shell parity contract
+        run: node scripts/test-spa-shell-parity.mjs
+
   direct-operations:
     name: Direct operations integration
     runs-on: ubuntu-latest
