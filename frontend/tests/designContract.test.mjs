@@ -29,7 +29,8 @@ test('design sidecar is valid UTF-8 metadata aligned with current tokens and com
   assert.equal(sidecar.schemaVersion, 2);
   assert.equal(sidecar.title, 'Design System: xCloud');
   assert.equal(sidecar.extensions.colorMeta['operational-info-day'].canonical, '#176f91');
-  assert.equal(sidecar.extensions.breakpoints.find(item => item.name === 'dense-table-cards')?.value, '760px');
+  assert.equal(sidecar.extensions.breakpoints.find(item => item.name === 'compact-tablet')?.value, '768px');
+  assert.equal(sidecar.extensions.breakpoints.some(item => item.value === '760px'), false);
   assert.equal(sidecar.components.some(component => component.name === 'Icon Action' && component.css.includes('44px')), true);
   assert.equal(sidecar.components.some(component => component.name === 'Dense Mobile Record'), true);
   assert.equal(sidecar.narrative.rules.some(rule => rule.name === 'The Compositor Motion Rule'), true);

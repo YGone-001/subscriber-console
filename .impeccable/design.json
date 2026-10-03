@@ -52,7 +52,6 @@
     "breakpoints": [
       { "name": "shell-drawer", "value": "980px" },
       { "name": "content-stack", "value": "900px" },
-      { "name": "dense-table-cards", "value": "760px" },
       { "name": "compact-tablet", "value": "768px" },
       { "name": "phone", "value": "640px" },
       { "name": "metric-single-column", "value": "560px" }

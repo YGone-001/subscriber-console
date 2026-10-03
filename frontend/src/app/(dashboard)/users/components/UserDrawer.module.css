@@ -164,7 +164,7 @@
   .drawer { width: min(820px, 100vw); }
 }
 
-@media (max-width: 760px) {
+@media (max-width: 768px) {
   .drawer { width: 100vw; }
   .detailSection dl { grid-template-columns: 1fr; }
   .detailSection dl > div { border-right: 0; }
