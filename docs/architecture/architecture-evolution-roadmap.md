@@ -67,6 +67,13 @@ completed the transition and acceptance validation.
 This roadmap does not introduce Vite, React Router, Go SPA hosting, a single-upstream
 Nginx configuration, or a port removal in the current phase.
 
+### Implementation Status
+
+The parallel SPA foundation exists in `frontend-spa/`. It is not
+production-active: Next.js `:13333` remains the production UI, Nginx routing remains
+unchanged, and Go does not serve SPA assets yet. The Vite listener on
+`127.0.0.1:13334` is a loopback-only, migration-only development listener.
+
 ### Internal Backend Direction
 
 The intended Go modular-monolith boundaries are logical boundaries, not packages to

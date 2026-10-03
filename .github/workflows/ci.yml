@@ -116,6 +116,47 @@ jobs:
       - name: Build
         run: go build -o /dev/null ./...
 
+  spa-migration-foundation:
+    name: Static SPA migration foundation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: frontend-spa/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend-spa/package-lock.json
+
+      - name: Install SPA dependencies
+        working-directory: frontend-spa
+        run: npm ci
+
+      - name: SPA dependency security
+        working-directory: frontend-spa
+        run: npm audit --audit-level=high
+
+      - name: SPA lint
+        working-directory: frontend-spa
+        run: npm run lint
+
+      - name: SPA typecheck
+        working-directory: frontend-spa
+        run: npm run typecheck
+
+      - name: SPA tests
+        working-directory: frontend-spa
+        run: npm test
+
+      - name: SPA build
+        working-directory: frontend-spa
+        run: npm run build
+
+      - name: SPA migration foundation contract
+        run: node scripts/test-spa-migration-foundation.mjs
+
   direct-operations:
     name: Direct operations integration
     runs-on: ubuntu-latest

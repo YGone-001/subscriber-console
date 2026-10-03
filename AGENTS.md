@@ -121,6 +121,18 @@ The planned consolidation target is Nginx -> Go `:18888` serving API plus an emb
 static React SPA. It is not deployed: the current production state continues to use
 Next.js on `:13333`. See `docs/architecture/architecture-evolution-roadmap.md`.
 
+Short-term continuation guidance:
+
+```text
+Current production  = Nginx -> Next.js :13333 + Go :18888
+Migration target    = frontend-spa/ parallel static SPA foundation
+Production transition = NOT STARTED
+Vite development    = 127.0.0.1:13334 (migration-only, loopback-only)
+```
+
+`frontend-spa/` is not production-active. Nginx routing is unchanged, Next.js remains
+the production UI, and Go does not serve SPA assets in this phase.
+
 ---
 
 ## 3. Stack
