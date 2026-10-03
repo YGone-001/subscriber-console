@@ -47,6 +47,7 @@ Next.js UI-only navigation guard  -> frontend/src/proxy.ts
 - [Repository conventions](architecture/repository-conventions.md)
 - [Design tokens](architecture/design-tokens.md)
 - [Design system rules](architecture/design-system-rules.md)
+- [Page templates](architecture/page-templates.md)
 
 ## Operations
 
