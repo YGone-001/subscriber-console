@@ -53,8 +53,8 @@ test('high-density data tables switch to labelled record cards on narrow screens
   for (const source of [ocsTariffTable, ocsContractTable, ocsBalanceTable]) {
     assert.match(source, /data-column-priority=/);
   }
-  assert.match(ocsCss, /@media \(max-width:\s*980px\)[\s\S]*?content:\s*attr\(data-label\)/);
-  assert.match(profileCss, /@media \(max-width:\s*980px\)[\s\S]*?\.profile-governance-table thead\s*\{[\s\S]*?display:\s*none/);
+  assert.match(ocsCss, /@media \(max-width:\s*768px\)[\s\S]*?content:\s*attr\(data-label\)/);
+  assert.match(profileCss, /@media \(max-width:\s*768px\)[\s\S]*?\.profile-governance-table thead\s*\{[\s\S]*?display:\s*none/);
 });
 
 test('OCS status badges expose localized text', () => {

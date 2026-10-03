@@ -31,7 +31,7 @@ test("analytics charts expose a shared, keyboard-native data table view", () => 
 test("dense tables declare responsive column priorities", () => {
   const globals = read("src/app/globals.css");
   assert.match(globals, /@media \(max-width: 980px\)[\s\S]*data-column-priority="supplementary"/);
-  assert.match(globals, /@media \(max-width: 760px\)[\s\S]*data-column-priority="important"/);
+  assert.match(globals, /@media \(max-width: 768px\)[\s\S]*data-column-priority="important"/);
 
   for (const file of [
     "src/app/(dashboard)/subscribers/components/SubscriberTable.tsx",
