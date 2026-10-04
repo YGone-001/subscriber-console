@@ -7,7 +7,6 @@ import net from 'node:net';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execSync, spawn } from 'node:child_process';
-import { MongoClient } from 'mongodb';
 import { deriveGoRegistrations } from './lib/go-registrations.mjs';
 
 function rawHttpGet(host, port, rawPath) {
@@ -41,7 +40,6 @@ const JWT_SECRET_STRING = process.env.JWT_SECRET || 'spa-hosting-foundation-secr
 let goProc = null;
 let binPath = null;
 let backupDistPath = null;
-let mongoClient = null;
 
 function sha256(data) {
   return createHash('sha256').update(data).digest('hex');
@@ -119,11 +117,7 @@ async function main() {
   const goPort = await getAvailablePort();
   const baseUrl = `http://127.0.0.1:${goPort}`;
 
-  mongoClient = new MongoClient(uri, {
-    serverSelectionTimeoutMS: 5000,
-  });
-  await mongoClient.connect();
-
+  let goStderr = '';
   goProc = spawn(binPath, [], {
     cwd: backendDir,
     env: {
@@ -135,6 +129,9 @@ async function main() {
       JWT_SECRET: JWT_SECRET_STRING,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  goProc.stderr.on('data', (chunk) => {
+    goStderr += chunk.toString();
   });
 
   // Wait for server readiness
@@ -149,7 +146,7 @@ async function main() {
     } catch {}
     await new Promise((r) => setTimeout(r, 100));
   }
-  assert.ok(ready, 'Go backend server failed to become ready');
+  assert.ok(ready, `Go backend server failed to become ready: ${goStderr}`);
 
   // 8. Real HTTP requests verification
 
@@ -305,14 +302,6 @@ main()
         } else {
           renameSync(backupDistPath, distDir);
         }
-      } catch {}
-    }
-    // Clean up mongo database
-    if (mongoClient) {
-      try {
-        await mongoClient.db(xcloudDbName).dropDatabase();
-        await mongoClient.db(appDbName).dropDatabase();
-        await mongoClient.close();
       } catch {}
     }
     process.exit(process.exitCode || 0);
