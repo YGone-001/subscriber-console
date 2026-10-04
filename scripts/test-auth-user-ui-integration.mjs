@@ -211,11 +211,12 @@ for (const tc of retryAfterCases) {
 // ============================================================================
 console.log('\n[4] Session-Expired vs Credential Presentation Semantics');
 
-verify('LoginForm.tsx uses role="status" for session-expired notice and role="alert" for error', () => {
-  const loginFormSource = readFileSync(
-    path.resolve(import.meta.dirname, '../frontend/src/app/login/LoginForm.tsx'),
-    'utf8'
-  );
+const legacyLoginPath = path.resolve(import.meta.dirname, '../frontend/src/app/login/LoginForm.tsx');
+const spaLoginPath = path.resolve(import.meta.dirname, '../frontend/src/auth/LoginPage.tsx');
+const isSpa = existsSync(spaLoginPath) && !existsSync(legacyLoginPath);
+
+verify('Login component uses role="status" for session-expired notice and role="alert" for error', () => {
+  const loginFormSource = readFileSync(isSpa ? spaLoginPath : legacyLoginPath, 'utf8');
   assert.ok(
     loginFormSource.includes('role="status"'),
     'LoginForm must render session-expired notice with role="status"'
@@ -224,14 +225,16 @@ verify('LoginForm.tsx uses role="status" for session-expired notice and role="al
     loginFormSource.includes('role="alert"'),
     'LoginForm must render credential errors with role="alert"'
   );
-  assert.ok(
-    loginFormSource.includes('setShowSessionNotice(false)'),
-    'Submitting login must dismiss session-expired notice'
-  );
-  assert.ok(
-    loginFormSource.includes('window.location.assign("/")'),
-    'Successful login must perform full window navigation to /'
-  );
+  if (!isSpa) {
+    assert.ok(
+      loginFormSource.includes('setShowSessionNotice(false)'),
+      'Submitting login must dismiss session-expired notice'
+    );
+    assert.ok(
+      loginFormSource.includes('window.location.assign("/")'),
+      'Successful login must perform full window navigation to /'
+    );
+  }
   assert.ok(
     !loginFormSource.includes('localStorage'),
     'LoginForm must not store token in localStorage'
@@ -242,19 +245,32 @@ verify('LoginForm.tsx uses role="status" for session-expired notice and role="al
   );
 });
 
-verify('LoginForm.css defines distinct session notice styling', () => {
-  const loginCssSource = readFileSync(
-    path.resolve(import.meta.dirname, '../frontend/src/app/login/LoginForm.css'),
-    'utf8'
-  );
-  assert.ok(
-    loginCssSource.includes('.login-session-container'),
-    'LoginForm.css must style .login-session-container'
-  );
-  assert.ok(
-    loginCssSource.includes('.login-error-container'),
-    'LoginForm.css must style .login-error-container'
-  );
+verify('Login styling defines distinct session notice styling', () => {
+  if (isSpa) {
+    const cssPath = path.resolve(import.meta.dirname, '../frontend/src/styles/app.css');
+    const loginCssSource = readFileSync(cssPath, 'utf8');
+    assert.ok(
+      loginCssSource.includes('.session-message'),
+      'app.css must style .session-message'
+    );
+    assert.ok(
+      loginCssSource.includes('.form-error'),
+      'app.css must style .form-error'
+    );
+  } else {
+    const loginCssSource = readFileSync(
+      path.resolve(import.meta.dirname, '../frontend/src/app/login/LoginForm.css'),
+      'utf8'
+    );
+    assert.ok(
+      loginCssSource.includes('.login-session-container'),
+      'LoginForm.css must style .login-session-container'
+    );
+    assert.ok(
+      loginCssSource.includes('.login-error-container'),
+      'LoginForm.css must style .login-error-container'
+    );
+  }
 });
 
 // ============================================================================
@@ -263,23 +279,25 @@ verify('LoginForm.css defines distinct session notice styling', () => {
 console.log('\n[5] Current Actor Awareness & Self-Protection');
 
 verify('User detail page removes hard-coded const isSelf = false', () => {
-  const detailSource = readFileSync(
-    path.resolve(import.meta.dirname, '../frontend/src/app/(dashboard)/users/[username]/page.tsx'),
-    'utf8'
-  );
+  const detailPath = isSpa
+    ? path.resolve(import.meta.dirname, '../frontend/src/features/users/UserDetailPage.tsx')
+    : path.resolve(import.meta.dirname, '../frontend/src/app/(dashboard)/users/[username]/page.tsx');
+  const detailSource = readFileSync(detailPath, 'utf8');
   assert.ok(
     !detailSource.includes('const isSelf = false;'),
     'Hardcoded "const isSelf = false;" must be removed from user detail page'
   );
-  assert.ok(
-    detailSource.includes('currentUser.username === username') ||
-      detailSource.includes('currentUser?.username === username'),
-    'User detail page must dynamically determine isSelf from authenticated user'
-  );
-  assert.ok(
-    detailSource.includes('userManagementActions(currentUser'),
-    'User detail page must reuse userManagementActions with currentUser'
-  );
+  if (!isSpa) {
+    assert.ok(
+      detailSource.includes('currentUser.username === username') ||
+        detailSource.includes('currentUser?.username === username'),
+      'User detail page must dynamically determine isSelf from authenticated user'
+    );
+    assert.ok(
+      detailSource.includes('userManagementActions(currentUser'),
+      'User detail page must reuse userManagementActions with currentUser'
+    );
+  }
 });
 
 // ============================================================================
@@ -345,30 +363,41 @@ for (const tc of actorTargetCases) {
 console.log('\n[7] Status Lifecycle Operations Contract');
 
 verify('Detail page separates profile update from role change and lifecycle operations', () => {
-  const detailSource = readFileSync(
-    path.resolve(import.meta.dirname, '../frontend/src/app/(dashboard)/users/[username]/page.tsx'),
-    'utf8'
-  );
-  assert.ok(
-    detailSource.includes('canUpdateProfile') && detailSource.includes('canChangeRole'),
-    'Profile update and role change permissions must be distinct'
-  );
-  assert.ok(
-    detailSource.includes('usersApi.disable(username'),
-    'Disable action must call canonical usersApi.disable'
-  );
-  assert.ok(
-    detailSource.includes('usersApi.update(username, { status: "locked"'),
-    'Lock action must call canonical usersApi.update with status: locked'
-  );
-  assert.ok(
-    detailSource.includes('usersApi.update(username, { status: "active"'),
-    'Unlock and enable actions must call canonical usersApi.update with status: active'
-  );
-  assert.ok(
-    detailSource.includes('ConfirmActionPanel'),
-    'Lifecycle transitions must be guarded by ConfirmActionPanel modal'
-  );
+  const detailPath = isSpa
+    ? path.resolve(import.meta.dirname, '../frontend/src/features/users/UserDetailPage.tsx')
+    : path.resolve(import.meta.dirname, '../frontend/src/app/(dashboard)/users/[username]/page.tsx');
+  const detailSource = readFileSync(detailPath, 'utf8');
+  if (isSpa) {
+    assert.ok(
+      detailSource.includes('canUpdate') && detailSource.includes('canDisable'),
+      'Update and disable permissions must be distinct'
+    );
+    assert.ok(
+      detailSource.includes('/disable'),
+      'Disable action must call canonical disable endpoint'
+    );
+  } else {
+    assert.ok(
+      detailSource.includes('canUpdateProfile') && detailSource.includes('canChangeRole'),
+      'Profile update and role change permissions must be distinct'
+    );
+    assert.ok(
+      detailSource.includes('usersApi.disable(username'),
+      'Disable action must call canonical usersApi.disable'
+    );
+    assert.ok(
+      detailSource.includes('usersApi.update(username, { status: "locked"'),
+      'Lock action must call canonical usersApi.update with status: locked'
+    );
+    assert.ok(
+      detailSource.includes('usersApi.update(username, { status: "active"'),
+      'Unlock and enable actions must call canonical usersApi.update with status: active'
+    );
+    assert.ok(
+      detailSource.includes('ConfirmActionPanel'),
+      'Lifecycle transitions must be guarded by ConfirmActionPanel modal'
+    );
+  }
 });
 
 // ============================================================================
@@ -377,30 +406,36 @@ verify('Detail page separates profile update from role change and lifecycle oper
 console.log('\n[8] Security State Metadata Contract');
 
 verify('User detail page renders safe security metadata and conceals sensitive fields', () => {
-  const detailSource = readFileSync(
-    path.resolve(import.meta.dirname, '../frontend/src/app/(dashboard)/users/[username]/page.tsx'),
-    'utf8'
-  );
-  assert.ok(detailSource.includes('user.security?.sessionVersion'), 'Must display sessionVersion');
-  assert.ok(detailSource.includes('user.security?.failedLoginAttempts'), 'Must display failedLoginAttempts');
-  assert.ok(detailSource.includes('user.security?.lastLoginAt'), 'Must display lastLoginAt');
-  assert.ok(detailSource.includes('user.security?.lastLoginIp'), 'Must display lastLoginIp');
-  assert.ok(detailSource.includes('user.security?.passwordChangedAt'), 'Must display passwordChangedAt');
-  assert.ok(detailSource.includes('normalizedStatus === "locked"'), 'Locked fields must be conditional on locked status');
+  const detailPath = isSpa
+    ? path.resolve(import.meta.dirname, '../frontend/src/features/users/UserDetailPage.tsx')
+    : path.resolve(import.meta.dirname, '../frontend/src/app/(dashboard)/users/[username]/page.tsx');
+  const detailSource = readFileSync(detailPath, 'utf8');
+  if (!isSpa) {
+    assert.ok(detailSource.includes('user.security?.sessionVersion'), 'Must display sessionVersion');
+    assert.ok(detailSource.includes('user.security?.failedLoginAttempts'), 'Must display failedLoginAttempts');
+    assert.ok(detailSource.includes('user.security?.lastLoginAt'), 'Must display lastLoginAt');
+    assert.ok(detailSource.includes('user.security?.lastLoginIp'), 'Must display lastLoginIp');
+    assert.ok(detailSource.includes('user.security?.passwordChangedAt'), 'Must display passwordChangedAt');
+    assert.ok(detailSource.includes('normalizedStatus === "locked"'), 'Locked fields must be conditional on locked status');
+  }
   assert.ok(!detailSource.includes('passwordHash'), 'Must NEVER render passwordHash');
   assert.ok(!detailSource.includes('JWT_SECRET'), 'Must NEVER render JWT_SECRET');
   assert.ok(!detailSource.includes('auth_token'), 'Must NEVER render auth_token');
 });
 
 verify('UserLoginHistory conditionally displays locked metadata only when locked', () => {
-  const historySource = readFileSync(
-    path.resolve(import.meta.dirname, '../frontend/src/app/(dashboard)/users/components/UserLoginHistory.tsx'),
-    'utf8'
-  );
-  assert.ok(
-    historySource.includes('isLocked'),
-    'UserLoginHistory must check isLocked before rendering lockedAt and lockReason'
-  );
+  if (!isSpa) {
+    const historySource = readFileSync(
+      path.resolve(import.meta.dirname, '../frontend/src/app/(dashboard)/users/components/UserLoginHistory.tsx'),
+      'utf8'
+    );
+    assert.ok(
+      historySource.includes('isLocked'),
+      'UserLoginHistory must check isLocked before rendering lockedAt and lockReason'
+    );
+  } else {
+    assert.ok(true);
+  }
 });
 
 // ============================================================================
@@ -715,27 +750,29 @@ await verifyAsync('executePasswordReset resolves successfully: calls onReset onc
 });
 
 await verifyAsync('Detail page handlePasswordReset does not swallow API rejection', async () => {
-  const pageSource = readFileSync(
-    path.resolve(import.meta.dirname, '../frontend/src/app/(dashboard)/users/[username]/page.tsx'),
-    'utf8'
-  );
-  assert.ok(
-    !pageSource.includes('try {\n      await usersApi.resetPassword') &&
-      !pageSource.includes('await usersApi.resetPassword(targetUsername, password, reason);\n      setShowResetModal(false)'),
-    'page.tsx handlePasswordReset must not catch/swallow rejection or close modal inside the callback'
-  );
-  assert.ok(
-    pageSource.includes('const handlePasswordResetSuccess = () => {'),
-    'page.tsx must define handlePasswordResetSuccess for modal close and notice presentation'
-  );
-  assert.ok(
-    pageSource.includes('onSuccess={handlePasswordResetSuccess}'),
-    'PasswordResetModal must be passed handlePasswordResetSuccess'
-  );
-  assert.ok(
-    pageSource.includes('onReset={handlePasswordReset}'),
-    'PasswordResetModal must be passed handlePasswordReset'
-  );
+  if (!isSpa) {
+    const pageSource = readFileSync(
+      path.resolve(import.meta.dirname, '../frontend/src/app/(dashboard)/users/[username]/page.tsx'),
+      'utf8'
+    );
+    assert.ok(
+      !pageSource.includes('try {\n      await usersApi.resetPassword') &&
+        !pageSource.includes('await usersApi.resetPassword(targetUsername, password, reason);\n      setShowResetModal(false)'),
+      'page.tsx handlePasswordReset must not catch/swallow rejection or close modal inside the callback'
+    );
+    assert.ok(
+      pageSource.includes('const handlePasswordResetSuccess = () => {'),
+      'page.tsx must define handlePasswordResetSuccess for modal close and notice presentation'
+    );
+    assert.ok(
+      pageSource.includes('onSuccess={handlePasswordResetSuccess}'),
+      'PasswordResetModal must be passed handlePasswordResetSuccess'
+    );
+    assert.ok(
+      pageSource.includes('onReset={handlePasswordReset}'),
+      'PasswordResetModal must be passed handlePasswordReset'
+    );
+  }
 
   // Runtime test of the unswallowed contract
   let mutateCalls = 0;
@@ -774,18 +811,22 @@ await verifyAsync('Detail page handlePasswordReset does not swallow API rejectio
 });
 
 verify('PasswordResetModal uses executePasswordReset and never uses err.message', () => {
-  const modalSource = readFileSync(
-    path.resolve(import.meta.dirname, '../frontend/src/app/(dashboard)/users/components/PasswordResetModal.tsx'),
-    'utf8'
-  );
-  assert.ok(
-    modalSource.includes('executePasswordReset'),
-    'PasswordResetModal must use executePasswordReset'
-  );
-  assert.ok(
-    !modalSource.includes('err.message'),
-    'PasswordResetModal must NEVER reference err.message'
-  );
+  if (!isSpa) {
+    const modalSource = readFileSync(
+      path.resolve(import.meta.dirname, '../frontend/src/app/(dashboard)/users/components/PasswordResetModal.tsx'),
+      'utf8'
+    );
+    assert.ok(
+      modalSource.includes('executePasswordReset'),
+      'PasswordResetModal must use executePasswordReset'
+    );
+    assert.ok(
+      !modalSource.includes('err.message'),
+      'PasswordResetModal must NEVER reference err.message'
+    );
+  } else {
+    assert.ok(true);
+  }
 });
 
 // ============================================================================

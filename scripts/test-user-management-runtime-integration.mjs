@@ -13,13 +13,13 @@
  */
 
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { deriveGoRegistrations } from './lib/go-registrations.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 
-console.log('── User Management Runtime Integration Suite ──\n');
+console.log('-- User Management Runtime Integration Suite --\n');
 
 let passed = 0;
 function verify(description, fn) {
@@ -34,7 +34,7 @@ function verify(description, fn) {
   }
 }
 
-// ── 1. Go registration authority ─────────────────────────────────────────────
+// -- 1. Go registration authority ---------------------------------------------
 console.log('1. Go Registration Authority');
 
 const { keys: goRegistrations, duplicates: goDuplicates } = deriveGoRegistrations(root);
@@ -77,7 +77,7 @@ verify('no duplicate METHOD+PATH registrations', () => {
   assert.deepEqual(goDuplicates, [], `duplicates: ${goDuplicates.join(', ')}`);
 });
 
-// ── 2. Frontend API client contract ─────────────────────────────────────────
+// -- 2. Frontend API client contract -----------------------------------------
 console.log('\n2. Frontend API Client Contract');
 
 const usersApiSource = readFileSync(join(root, 'frontend/src/lib/api/users.ts'), 'utf8');
@@ -119,7 +119,7 @@ verify('no backend-specific branching (backend === "go")', () => {
   assert.doesNotMatch(frontendSrc, /owner\s*===\s*["']go["']\s*\?/);
 });
 
-// ── 3. Go backend route registration ────────────────────────────────────────
+// -- 3. Go backend route registration ----------------------------------------
 console.log('\n3. Go Backend Route Registration');
 
 const goMain = readFileSync(join(root, 'backend/cmd/server/main.go'), 'utf8');
@@ -139,7 +139,7 @@ for (const route of goRoutes) {
   });
 }
 
-// ── 4. Legacy compatibility ─────────────────────────────────────────────────
+// -- 4. Legacy compatibility -------------------------------------------------
 console.log('\n4. Legacy /api/auth/users Compatibility');
 
 function sourceFiles(directory) {
@@ -151,7 +151,11 @@ function sourceFiles(directory) {
   });
 }
 
-const usersPageSrc = sourceFiles(join(root, 'frontend/src/app/(dashboard)/users'))
+const usersPageDir = existsSync(join(root, 'frontend/src/features/users'))
+  ? join(root, 'frontend/src/features/users')
+  : join(root, 'frontend/src/app/(dashboard)/users');
+
+const usersPageSrc = sourceFiles(usersPageDir)
   .map((p) => readFileSync(p, 'utf8'))
   .join('\n');
 
@@ -163,7 +167,7 @@ verify('API client does not call /api/auth/users', () => {
   assert.doesNotMatch(usersApiSource, /\/api\/auth\/users/);
 });
 
-// ── 5. Password hash non-exposure ───────────────────────────────────────────
+// -- 5. Password hash non-exposure -------------------------------------------
 console.log('\n5. Security Invariants');
 
 verify('Go SafeUser excludes passwordHash', () => {
@@ -177,6 +181,6 @@ verify('frontend API client never exposes passwordHash', () => {
   assert.doesNotMatch(usersApiSource, /passwordHash/);
 });
 
-// ── Summary ─────────────────────────────────────────────────────────────────
+// -- Summary -----------------------------------------------------------------
 console.log(`\nAll ${passed} user management integration checks passed.`);
 console.log('GoRegistered=84 duplicates=0');

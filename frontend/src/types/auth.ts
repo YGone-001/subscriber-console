@@ -11,6 +11,7 @@ export interface AuthUser {
   status: UserStatus;
   normalizedRole?: CanonicalRole;
   permissions?: string[];
+  locked?: boolean;
 }
 
 export type LoginFailure = 'invalid_credentials' | 'rate_limited' | 'service_failure';
