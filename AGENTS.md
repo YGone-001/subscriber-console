@@ -125,14 +125,18 @@ Short-term continuation guidance:
 
 ```text
 Current production  = Nginx -> Next.js :13333 + Go :18888
-Migration target    = frontend-spa/ parallel static SPA with shared shell and navigation parity
+Migration target    = frontend-spa/ parallel static SPA with shared shell, read parity, and governed mutation parity
+Parallel SPA business read parity = implemented
+Parallel SPA governed business mutation parity = implemented
+System-health operational mutations = still deferred
 Production transition = NOT STARTED
 Vite development    = 127.0.0.1:13334 (migration-only, loopback-only)
 ```
 
 `frontend-spa/` is not production-active. Its foundation, shared providers,
-auth-aware shell, role-filtered navigation, and read-side business projections are
-isolated from the production runtime. Business mutation controls have not started.
+auth-aware shell, role-filtered navigation, read-side business projections, and
+governed business mutation controls are isolated from the production runtime.
+Operational remediation mutations for system-health remain deferred.
 Nginx routing is unchanged, Next.js remains the production UI, and Go does not serve
 SPA assets.
 

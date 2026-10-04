@@ -30,7 +30,15 @@ export async function getAuthSession(requester: typeof fetch = fetch): Promise<{
     const role = typeof candidate.role === 'string' ? normalizeRole(candidate.role) : null;
     const status = candidate.status;
     if (typeof candidate.username !== 'string' || !role || (status !== 'active' && status !== 'disabled' && status !== 'locked')) return { state: 'unavailable', user: null };
-    return { state, user: { username: candidate.username, role, status } };
+    const user: AuthUser = { username: candidate.username, role, status };
+    if (typeof candidate.normalizedRole === 'string') {
+      const normalized = normalizeRole(candidate.normalizedRole);
+      if (normalized) user.normalizedRole = normalized;
+    }
+    if (Array.isArray(candidate.permissions) && candidate.permissions.every((p) => typeof p === 'string')) {
+      user.permissions = candidate.permissions as string[];
+    }
+    return { state, user };
   } catch {
     return { state: 'unavailable', user: null };
   }

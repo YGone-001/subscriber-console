@@ -22,7 +22,7 @@ const routerSource = readFileSync(resolve(source, 'router/router.tsx'), 'utf8');
 const navigationSource = readFileSync(resolve(source, 'lib/navigation.ts'), 'utf8');
 
 assert.equal(routes.length, 23, 'inventory must contain every current page route');
-assert.ok(routes.every((route) => ['foundation', 'pending', 'read-parity', 'migrated'].includes(route.status)), 'route state must be recognized');
+assert.ok(routes.every((route) => ['foundation', 'pending', 'read-parity', 'migrated', 'mutation-parity'].includes(route.status)), 'route state must be recognized');
 assert.match(routerSource, /APP_ROUTES\.filter/);
 assert.match(routerSource, /MigrationPendingPage/);
 assert.match(navigationSource, /migration-routes\.json/);

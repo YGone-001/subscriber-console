@@ -20,6 +20,23 @@ test('treats transport failure as unavailable', async () => {
 test('accepts an authenticated user only from the session authority response', async () => {
   const result = await getAuthSession(async () => new Response(JSON.stringify({ username: 'operator-a', role: 'operator', status: 'active' }), { status: 200 }));
   assert.deepEqual(result, { state: 'authenticated', user: { username: 'operator-a', role: 'operator', status: 'active' } });
+  const withPerms = await getAuthSession(async () => new Response(JSON.stringify({
+    username: 'admin-a',
+    role: 'root',
+    normalizedRole: 'admin',
+    status: 'active',
+    permissions: ['users.read', 'subscribers.write']
+  }), { status: 200 }));
+  assert.deepEqual(withPerms, {
+    state: 'authenticated',
+    user: {
+      username: 'admin-a',
+      role: 'admin',
+      normalizedRole: 'admin',
+      status: 'active',
+      permissions: ['users.read', 'subscribers.write']
+    }
+  });
   const invalid = await getAuthSession(async () => new Response(JSON.stringify({ username: 'operator-a', role: 'unknown', status: 'active' }), { status: 200 }));
   assert.equal(invalid.state, 'unavailable');
 });

@@ -19,7 +19,7 @@ const expectedRedirects = {
   '/ocs/subscribers': '/ocs/contracts', '/rating': '/ocs/tariffs', '/rating/plans': '/ocs/tariffs', '/rating/rules': '/ocs/tariffs', '/roles': '/users',
 };
 const routeInventory = new Map(routes.map((route) => [route.targetRoute, route]));
-const expectedContractRoutes = new Set(routes.filter((route) => route.status === 'migrated' || route.status === 'read-parity').map((route) => route.targetRoute));
+const expectedContractRoutes = new Set(routes.filter((route) => route.status === 'migrated' || route.status === 'read-parity' || (route.status === 'mutation-parity' && route.targetRoute !== '/users/create')).map((route) => route.targetRoute));
 const goGetRoutes = new Set(deriveGoRegistrations(root).keys.filter((key) => key.startsWith('GET ')));
 
 const walk = (directory, files = []) => { for (const name of readdirSync(directory)) { const file = resolve(directory, name); if (statSync(file).isDirectory()) walk(file, files); else files.push(file); } return files; };
@@ -102,7 +102,7 @@ function validateContracts(entries) {
     if (typeof route === 'string') {
       const inventory = routeInventory.get(route);
       if (!inventory || !expectedContractRoutes.has(route)) result.unknownRoutes += 1;
-      else if ((inventory.status === 'read-parity' && mode !== 'read-parity') || (inventory.status === 'migrated' && route === '/' && mode !== 'migrated-read') || (inventory.status === 'migrated' && route !== '/' && mode !== 'redirect')) addSchemaError();
+      else if (((inventory.status === 'read-parity' || inventory.status === 'mutation-parity') && mode !== 'read-parity') || (inventory.status === 'migrated' && route === '/' && mode !== 'migrated-read') || (inventory.status === 'migrated' && route !== '/' && mode !== 'redirect')) addSchemaError();
     }
   }
 
@@ -134,9 +134,9 @@ const authCookieAccess = countMatches(sourceText, /document\.cookie|auth_token/g
 const trustedIdentityHeaders = countMatches(sourceText, /X-User|X-Role|X-Permissions/g);
 
 assert.equal(routes.length, 23);
-assert.equal(statusCount('foundation'), 1); assert.equal(statusCount('migrated'), 10); assert.equal(statusCount('read-parity'), 11); assert.equal(statusCount('pending'), 1);
+assert.equal(statusCount('foundation'), 1); assert.equal(statusCount('migrated'), 10); assert.equal(statusCount('read-parity'), 1); assert.equal(statusCount('mutation-parity'), 11); assert.equal(statusCount('pending'), 0);
 assert.equal(routes.find((route) => route.targetRoute === '/login')?.status, 'foundation');
-assert.equal(routes.find((route) => route.targetRoute === '/users/create')?.status, 'pending');
+assert.equal(routes.find((route) => route.targetRoute === '/users/create')?.status, 'mutation-parity');
 for (const [from, to] of Object.entries(expectedRedirects)) assert.match(redirects, new RegExp(`'${from}': '${to}'`));
 assert.equal(Object.keys(expectedRedirects).length, 9);
 assert.equal(contracts.length, 21);
