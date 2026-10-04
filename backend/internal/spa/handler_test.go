@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 	"testing/fstest"
 )
@@ -394,5 +395,145 @@ func TestSPAHandler_CachePolicies(t *testing.T) {
 		if cc := res.Header.Get("Cache-Control"); cc != "public, max-age=31536000, immutable" {
 			t.Errorf("expected immutable cache policy for hashed asset, got %s", cc)
 		}
+	}
+}
+
+func TestSPAHandler_DottedUsernameRoutes(t *testing.T) {
+	assets := newTestAssets()
+	handler := NewHandler(mockNextHandler(), assets)
+
+	dottedRoutes := []string{
+		"/users/john.doe",
+		"/users/user.js",
+		"/users/.alice",
+		"/users/john..doe",
+		"/users/a_b-c.d",
+	}
+
+	for _, route := range dottedRoutes {
+		t.Run(route, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, route, nil)
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+
+			res := rec.Result()
+			if res.StatusCode != http.StatusOK {
+				t.Fatalf("expected 200 for dotted route %s, got %d", route, res.StatusCode)
+			}
+			if ct := res.Header.Get("Content-Type"); ct != "text/html; charset=utf-8" {
+				t.Errorf("expected text/html; charset=utf-8, got %s", ct)
+			}
+			if cc := res.Header.Get("Cache-Control"); cc != "no-cache" {
+				t.Errorf("expected no-cache, got %s", cc)
+			}
+			body, _ := io.ReadAll(res.Body)
+			if string(body) != string(assets["index.html"].Data) {
+				t.Errorf("expected index.html body for dotted route %s", route)
+			}
+		})
+	}
+}
+
+func TestSPAHandler_StaticVsBrowserCollision(t *testing.T) {
+	assets := newTestAssets()
+	handler := NewHandler(mockNextHandler(), assets)
+
+	// Pair 1: /users/user.js (application route with static extension) vs /missing.js (root static file)
+	{
+		reqApp := httptest.NewRequest(http.MethodGet, "/users/user.js", nil)
+		recApp := httptest.NewRecorder()
+		handler.ServeHTTP(recApp, reqApp)
+		resApp := recApp.Result()
+		if resApp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200 for /users/user.js, got %d", resApp.StatusCode)
+		}
+		bodyApp, _ := io.ReadAll(resApp.Body)
+		if string(bodyApp) != string(assets["index.html"].Data) {
+			t.Errorf("expected index.html body for /users/user.js")
+		}
+
+		reqStatic := httptest.NewRequest(http.MethodGet, "/missing.js", nil)
+		recStatic := httptest.NewRecorder()
+		handler.ServeHTTP(recStatic, reqStatic)
+		resStatic := recStatic.Result()
+		if resStatic.StatusCode != http.StatusNotFound {
+			t.Fatalf("expected 404 for /missing.js, got %d", resStatic.StatusCode)
+		}
+	}
+
+	// Pair 2: /users/.alice (dot-prefixed username route) vs /.gitignore (dotfile)
+	{
+		reqApp := httptest.NewRequest(http.MethodGet, "/users/.alice", nil)
+		recApp := httptest.NewRecorder()
+		handler.ServeHTTP(recApp, reqApp)
+		resApp := recApp.Result()
+		if resApp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200 for /users/.alice, got %d", resApp.StatusCode)
+		}
+		bodyApp, _ := io.ReadAll(resApp.Body)
+		if string(bodyApp) != string(assets["index.html"].Data) {
+			t.Errorf("expected index.html body for /users/.alice")
+		}
+
+		reqDot := httptest.NewRequest(http.MethodGet, "/.gitignore", nil)
+		recDot := httptest.NewRecorder()
+		handler.ServeHTTP(recDot, reqDot)
+		resDot := recDot.Result()
+		if resDot.StatusCode != http.StatusNotFound {
+			t.Fatalf("expected 404 for /.gitignore, got %d", resDot.StatusCode)
+		}
+	}
+
+	// Pair 3: /users/john..doe (double-dot in username) vs /../etc/passwd (traversal)
+	{
+		reqApp := httptest.NewRequest(http.MethodGet, "/users/john..doe", nil)
+		recApp := httptest.NewRecorder()
+		handler.ServeHTTP(recApp, reqApp)
+		resApp := recApp.Result()
+		if resApp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200 for /users/john..doe, got %d", resApp.StatusCode)
+		}
+		bodyApp, _ := io.ReadAll(resApp.Body)
+		if string(bodyApp) != string(assets["index.html"].Data) {
+			t.Errorf("expected index.html body for /users/john..doe")
+		}
+
+		reqTrav := httptest.NewRequest(http.MethodGet, "/../etc/passwd", nil)
+		recTrav := httptest.NewRecorder()
+		handler.ServeHTTP(recTrav, reqTrav)
+		resTrav := recTrav.Result()
+		if resTrav.StatusCode != http.StatusBadRequest && resTrav.StatusCode != http.StatusNotFound {
+			t.Fatalf("expected 400 or 404 for /../etc/passwd, got %d", resTrav.StatusCode)
+		}
+	}
+}
+
+func TestSPAHandler_HEADOnDottedRoute(t *testing.T) {
+	assets := newTestAssets()
+	handler := NewHandler(mockNextHandler(), assets)
+
+	req := httptest.NewRequest(http.MethodHead, "/users/john.doe", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	res := rec.Result()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 for HEAD /users/john.doe, got %d", res.StatusCode)
+	}
+	if ct := res.Header.Get("Content-Type"); ct != "text/html; charset=utf-8" {
+		t.Errorf("expected text/html, got %s", ct)
+	}
+	expectedLen := len(assets["index.html"].Data)
+	if cl := res.Header.Get("Content-Length"); cl == "" || cl == "0" {
+		t.Errorf("expected positive Content-Length header on HEAD, got %s", cl)
+	} else {
+		expectedStr := strconv.Itoa(expectedLen)
+		if cl != expectedStr {
+			t.Errorf("expected Content-Length %s, got %s", expectedStr, cl)
+		}
+	}
+	body, _ := io.ReadAll(res.Body)
+	if len(body) != 0 {
+		t.Errorf("expected empty body for HEAD, got %d bytes", len(body))
 	}
 }

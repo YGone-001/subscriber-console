@@ -20,9 +20,14 @@ assert.ok(assetsGoSource.includes('func EmbeddedFS()'), 'assets.go must export E
 assert.ok(existsSync(join(spaDir, 'handler.go')), 'backend/internal/spa/handler.go must exist');
 const handlerGoSource = readFileSync(join(spaDir, 'handler.go'), 'utf8');
 assert.ok(handlerGoSource.includes('func NewHandler('), 'handler.go must export NewHandler');
+assert.ok(handlerGoSource.includes('func isApplicationRoute('), 'handler.go must implement isApplicationRoute classifier');
+assert.ok(handlerGoSource.includes('func hasPathTraversal('), 'handler.go must implement hasPathTraversal check');
 
 // 3. Verify handler tests exist
 assert.ok(existsSync(join(spaDir, 'handler_test.go')), 'backend/internal/spa/handler_test.go must exist');
+const handlerTestGoSource = readFileSync(join(spaDir, 'handler_test.go'), 'utf8');
+assert.ok(handlerTestGoSource.includes('TestSPAHandler_DottedUsernameRoutes'), 'handler_test.go must include TestSPAHandler_DottedUsernameRoutes');
+assert.ok(handlerTestGoSource.includes('TestSPAHandler_StaticVsBrowserCollision'), 'handler_test.go must include TestSPAHandler_StaticVsBrowserCollision');
 
 // 4. Verify static staging path and .gitignore exist
 const staticDir = join(spaDir, 'static');

@@ -182,6 +182,39 @@ async function main() {
   assert.equal(sha256(healthRouteText), originalIndexHash);
   console.log('go_spa_system_health_fallback_status=200');
 
+  // Dotted username route /users/john.doe -> 200 SPA HTML
+  const johnDoeRes = await fetch(`${baseUrl}/users/john.doe`);
+  assert.equal(johnDoeRes.status, 200);
+  assert.equal(johnDoeRes.headers.get('content-type'), 'text/html; charset=utf-8');
+  assert.equal(johnDoeRes.headers.get('cache-control'), 'no-cache');
+  assert.equal(sha256(await johnDoeRes.text()), originalIndexHash);
+  console.log('go_spa_dotted_username_route=PASS');
+
+  // Static extension username route /users/user.js -> 200 SPA HTML
+  const userJsRes = await fetch(`${baseUrl}/users/user.js`);
+  assert.equal(userJsRes.status, 200);
+  assert.equal(userJsRes.headers.get('content-type'), 'text/html; charset=utf-8');
+  assert.equal(userJsRes.headers.get('cache-control'), 'no-cache');
+  assert.equal(sha256(await userJsRes.text()), originalIndexHash);
+  console.log('go_spa_static_extension_username_route=PASS');
+
+  // Dot-prefixed username route /users/.alice -> 200 SPA HTML
+  const aliceRes = await fetch(`${baseUrl}/users/.alice`);
+  assert.equal(aliceRes.status, 200);
+  assert.equal(aliceRes.headers.get('content-type'), 'text/html; charset=utf-8');
+  assert.equal(aliceRes.headers.get('cache-control'), 'no-cache');
+  assert.equal(sha256(await aliceRes.text()), originalIndexHash);
+  console.log('go_spa_dot_prefixed_username_route=PASS');
+
+  // Double-dot username route /users/john..doe -> 200 SPA HTML
+  const johnDoubleDotRes = await fetch(`${baseUrl}/users/john..doe`);
+  assert.equal(johnDoubleDotRes.status, 200);
+  assert.equal(johnDoubleDotRes.headers.get('content-type'), 'text/html; charset=utf-8');
+  assert.equal(johnDoubleDotRes.headers.get('cache-control'), 'no-cache');
+  assert.equal(sha256(await johnDoubleDotRes.text()), originalIndexHash);
+  console.log('go_spa_double_dot_username_route=PASS');
+  console.log('go_spa_dynamic_parameter_classification=PASS');
+
   // Hashed JS asset -> 200 exact bytes + immutable cache
   const jsRes = await fetch(`${baseUrl}/assets/${jsFile}`);
   assert.equal(jsRes.status, 200);
@@ -207,6 +240,11 @@ async function main() {
   const missingAssetRes = await fetch(`${baseUrl}/assets/missing.js`);
   assert.equal(missingAssetRes.status, 404, 'Missing asset under /assets/ must return 404');
   console.log('go_spa_missing_asset_status=404');
+
+  // Missing root JS file -> 404
+  const missingRootJsRes = await fetch(`${baseUrl}/missing.js`);
+  assert.equal(missingRootJsRes.status, 404, 'Missing root js must return 404');
+  console.log('go_spa_missing_root_js_status=404');
 
   // Missing file with extension outside /assets -> 404
   const missingFileRes = await fetch(`${baseUrl}/favicon-does-not-exist.ico`);
