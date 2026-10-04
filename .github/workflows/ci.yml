@@ -592,7 +592,7 @@ jobs:
     needs:
       - node
       - go
-      - spa-foundation
+      - spa-migration-foundation
       - go-spa-hosting
       - direct-operations
       - user-management-e2e
