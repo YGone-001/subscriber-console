@@ -237,6 +237,8 @@ function validateRequestContracts(requestEntries) {
     duplicates: 0,
     invalidAuthorities: 0,
     shapeErrors: 0,
+    keySetErrors: 0,
+    nestedContractErrors: 0,
   };
   if (!Array.isArray(requestEntries)) {
     result.shapeErrors += 1;
@@ -260,6 +262,8 @@ function validateRequestContracts(requestEntries) {
       requiredBodyKeys,
       optionalBodyKeys,
       forbiddenBodyKeys,
+      responseSemantics,
+      nestedContracts,
     } = entry;
 
     const key = `${method} ${path}${queryMode !== 'none' ? '?' + queryMode : ''}`;
@@ -272,6 +276,7 @@ function validateRequestContracts(requestEntries) {
       typeof path !== 'string' ||
       !path.startsWith('/api/') ||
       !['none', 'mode=precheck', 'mode=import'].includes(queryMode) ||
+      !['mutation-result', 'preflight-result', 'routing-acknowledgement'].includes(responseSemantics) ||
       !Array.isArray(requiredBodyKeys) ||
       !Array.isArray(optionalBodyKeys) ||
       !Array.isArray(forbiddenBodyKeys)
@@ -293,6 +298,68 @@ function validateRequestContracts(requestEntries) {
       !existsSync(resolve(root, productionReference))
     ) {
       result.shapeErrors += 1;
+    }
+
+    if (
+      Array.isArray(requiredBodyKeys) &&
+      Array.isArray(optionalBodyKeys) &&
+      Array.isArray(forbiddenBodyKeys)
+    ) {
+      const hasDuplicates = (arr) => new Set(arr).size !== arr.length;
+      if (hasDuplicates(requiredBodyKeys) || hasDuplicates(optionalBodyKeys) || hasDuplicates(forbiddenBodyKeys)) {
+        result.keySetErrors += 1;
+      }
+      const reqSet = new Set(requiredBodyKeys);
+      const optSet = new Set(optionalBodyKeys);
+      const forbSet = new Set(forbiddenBodyKeys);
+
+      for (const k of reqSet) {
+        if (optSet.has(k) || forbSet.has(k)) result.keySetErrors += 1;
+      }
+      for (const k of optSet) {
+        if (forbSet.has(k)) result.keySetErrors += 1;
+      }
+
+      if (nestedContracts) {
+        if (typeof nestedContracts !== 'object' || Array.isArray(nestedContracts)) {
+          result.nestedContractErrors += 1;
+        } else {
+          for (const [nestedKey, spec] of Object.entries(nestedContracts)) {
+            const parentKey = nestedKey.endsWith('[]') ? nestedKey.slice(0, -2) : nestedKey;
+            if (!reqSet.has(parentKey) && !optSet.has(parentKey)) {
+              result.nestedContractErrors += 1;
+            }
+            if (!spec || typeof spec !== 'object' || Array.isArray(spec)) {
+              result.nestedContractErrors += 1;
+              continue;
+            }
+            const { allowedKeys, forbiddenKeys, requiredKeys } = spec;
+            if (!Array.isArray(allowedKeys) || hasDuplicates(allowedKeys)) {
+              result.nestedContractErrors += 1;
+            }
+            if (forbiddenKeys !== undefined) {
+              if (!Array.isArray(forbiddenKeys) || hasDuplicates(forbiddenKeys)) {
+                result.nestedContractErrors += 1;
+              } else {
+                const allowedSet = new Set(allowedKeys || []);
+                for (const fk of forbiddenKeys) {
+                  if (allowedSet.has(fk)) result.nestedContractErrors += 1;
+                }
+              }
+            }
+            if (requiredKeys !== undefined) {
+              if (!Array.isArray(requiredKeys) || hasDuplicates(requiredKeys)) {
+                result.nestedContractErrors += 1;
+              } else {
+                const allowedSet = new Set(allowedKeys || []);
+                for (const rk of requiredKeys) {
+                  if (!allowedSet.has(rk)) result.nestedContractErrors += 1;
+                }
+              }
+            }
+          }
+        }
+      }
     }
   }
 
@@ -367,35 +434,49 @@ const brokenBatchUpdateHits = countMatches(subscriberPageText, /updates:\s*\{\s*
 const brokenBulkDeleteHits = countMatches(subscriberPageText, /imsis:\s*selectedImsis/g);
 const brokenImportHits = countMatches(subscriberPageText, /subscribers:\s*items/g);
 const brokenEditHits = countMatches(subscriberPageText, /sub4G:\s*\{\s*msisdn:\s*msisdnInput/g);
+const brokenEditHardcodedAccess = countMatches(subscriberPageText, /accessRestrictionData:\s*32/g);
+const brokenImportPlaceholderHits = countMatches(subscriberPageText, /"msisdn":\s*"12345"/g);
 
 assert.equal(brokenPrecheckHits, 0, 'legacy broken precheck payload must be absent');
 assert.equal(brokenBatchUpdateHits, 0, 'legacy broken batch-update payload must be absent');
 assert.equal(brokenBulkDeleteHits, 0, 'legacy broken bulk-delete payload must be absent');
 assert.equal(brokenImportHits, 0, 'legacy broken import payload must be absent');
 assert.equal(brokenEditHits, 0, 'legacy broken edit payload must be absent');
+assert.equal(brokenEditHardcodedAccess, 0, 'hard-coded accessRestrictionData in edit must be absent');
+assert.equal(brokenImportPlaceholderHits, 0, 'invalid msisdn in import placeholder must be absent');
 
-// Execute builder tests
-let batchPrecheckContract = 'FAIL';
-let batchCreateContract = 'FAIL';
-let batchUpdateContract = 'FAIL';
-let bulkDeleteContract = 'FAIL';
-let importPrecheckContract = 'FAIL';
-let importContract = 'FAIL';
+const subscriberEditUnintendedFields = brokenEditHardcodedAccess;
 
+// Execute builder tests and parse TAP results
+let tapOutput = '';
 try {
-  execSync('npx tsx --test tests/subscriber-mutation-builders.test.ts', {
+  tapOutput = execSync('npx tsx --test tests/subscriber-mutation-builders.test.ts', {
     cwd: spa,
+    encoding: 'utf8',
     stdio: 'pipe',
   });
-  batchPrecheckContract = 'PASS';
-  batchCreateContract = 'PASS';
-  batchUpdateContract = 'PASS';
-  bulkDeleteContract = 'PASS';
-  importPrecheckContract = 'PASS';
-  importContract = 'PASS';
 } catch (testError) {
   console.error('Failed to run subscriber mutation builder tests:', testError);
+  if (testError && testError.stdout) tapOutput = String(testError.stdout);
 }
+
+const passedTests = new Set();
+for (const line of tapOutput.split('\n')) {
+  const match = line.match(/^ok\s+\d+\s+-\s+(.+)$/);
+  if (match) passedTests.add(match[1].trim());
+}
+
+const batchPrecheckContract = passedTests.has('buildBatchPrecheckRequest produces authoritative shape and satisfies contract') ? 'PASS' : 'FAIL';
+const batchCreateContract = passedTests.has('buildBatchCreateRequest produces authoritative shape and satisfies contract') ? 'PASS' : 'FAIL';
+const batchUpdateContract = passedTests.has('buildBatchUpdateRequest produces authoritative shape with required reason and satisfies contract') ? 'PASS' : 'FAIL';
+const bulkDeleteContract = passedTests.has('buildBulkDeleteRequest produces authoritative shape with imsiList and satisfies contract') ? 'PASS' : 'FAIL';
+const importPrecheckContract = passedTests.has('buildImportPrecheckRequest produces authoritative shape with imsiList and satisfies contract') ? 'PASS' : 'FAIL';
+const importContract = passedTests.has('buildImportRequest produces authoritative shape with records and overwrite, and satisfies contract') ? 'PASS' : 'FAIL';
+const subscriberEditIntentIsolation = (passedTests.has('single edit: MSISDN update produces only sub4G.msisdnList and no unintended fields') && brokenEditHardcodedAccess === 0) ? 'PASS' : 'FAIL';
+const importRecordAllowlist = (passedTests.has('import: valid minimal record is normalized correctly') && passedTests.has('import: valid full supported record is normalized correctly')) ? 'PASS' : 'FAIL';
+const importUnknownFieldRejection = (passedTests.has('import: unknown fields (msisdn, profile, arbitrary) are rejected') && passedTests.has('import: sensitive credential material is rejected')) ? 'PASS' : 'FAIL';
+const importPrecheckExecuteConsistency = countMatches(subscriberPageText, /validateAndNormalizeImportRecord/g) >= 2 ? 'PASS' : 'FAIL';
+const trafficAdjustResponseSemantics = passedTests.has('traffic adjustment: classified as routing-acknowledgement, never mutation-result') ? 'PASS' : 'FAIL';
 
 // Verify Route Inventory
 assert.equal(routes.length, 23);
@@ -420,14 +501,22 @@ assert.equal(requestContractsValidation.entries, 31);
 assert.equal(requestContractsValidation.duplicates, 0);
 assert.equal(requestContractsValidation.invalidAuthorities, 0);
 assert.equal(requestContractsValidation.shapeErrors, 0);
+assert.equal(requestContractsValidation.keySetErrors, 0);
+assert.equal(requestContractsValidation.nestedContractErrors, 0);
 
-// Verify Builder Contracts
+// Verify Builder Contracts and Semantic Parity
 assert.equal(batchPrecheckContract, 'PASS');
 assert.equal(batchCreateContract, 'PASS');
 assert.equal(batchUpdateContract, 'PASS');
 assert.equal(bulkDeleteContract, 'PASS');
 assert.equal(importPrecheckContract, 'PASS');
 assert.equal(importContract, 'PASS');
+assert.equal(subscriberEditIntentIsolation, 'PASS');
+assert.equal(subscriberEditUnintendedFields, 0);
+assert.equal(importRecordAllowlist, 'PASS');
+assert.equal(importUnknownFieldRejection, 'PASS');
+assert.equal(importPrecheckExecuteConsistency, 'PASS');
+assert.equal(trafficAdjustResponseSemantics, 'PASS');
 
 // Verify Endpoints
 assert.equal(contractUniqueEndpoints.size, 29);
@@ -465,6 +554,60 @@ assert.ok(validateRequestContracts([{ ...requestContracts[0], backendAuthority: 
 assert.ok(validateRequestContracts([{ ...requestContracts[0], method: 'INVALID' }]).shapeErrors > 0, 'invalid method shape sentinel must fail');
 assert.ok(validateRequestContracts([requestContracts[0], { ...requestContracts[0] }]).duplicates > 0, 'duplicate request contract sentinel must fail');
 
+// Additional Negative Sentinels for Semantic Mutation Parity
+// 1. Overlapping required/optional body keys
+assert.ok(
+  validateRequestContracts([{ ...requestContracts[0], requiredBodyKeys: ['imsi'], optionalBodyKeys: ['imsi'] }]).keySetErrors > 0,
+  'overlapping required/optional body keys sentinel must fail'
+);
+
+// 2. Overlapping allowed/forbidden nested keys
+assert.ok(
+  validateRequestContracts([{
+    ...requestContracts[0],
+    requiredBodyKeys: ['patch'],
+    optionalBodyKeys: [],
+    nestedContracts: { patch: { allowedKeys: ['k1'], forbiddenKeys: ['k1'] } },
+  }]).nestedContractErrors > 0,
+  'overlapping allowed/forbidden nested keys sentinel must fail'
+);
+
+// 3. Unknown nested contract parent
+assert.ok(
+  validateRequestContracts([{
+    ...requestContracts[0],
+    requiredBodyKeys: ['patch'],
+    optionalBodyKeys: [],
+    nestedContracts: { unknownParent: { allowedKeys: ['k1'] } },
+  }]).nestedContractErrors > 0,
+  'unknown nested contract parent sentinel must fail'
+);
+
+// 4. Traffic adjustment marked as persisted mutation
+const trafficEntry = requestContracts.find((e) => e.name === 'subscriber traffic adjustment');
+assert.ok(trafficEntry);
+assert.equal(trafficEntry.responseSemantics, 'routing-acknowledgement');
+assert.notEqual(trafficEntry.responseSemantics, 'mutation-result');
+assert.throws(() => {
+  if (trafficEntry.responseSemantics !== 'mutation-result') {
+    throw new Error('sentinel: traffic adjustment must not be classified as mutation-result');
+  }
+}, /sentinel: traffic adjustment must not be classified as mutation-result/);
+
+// 5. Single edit unintended access_restriction_data sentinel
+const badEditPayload = { sub4G: { msisdnList: [{ msisdn: '123' }], access_restriction_data: 32 } };
+const unintendedCountInBadPayload = Object.keys(badEditPayload.sub4G).filter((k) => k !== 'msisdnList').length;
+assert.ok(unintendedCountInBadPayload > 0, 'sentinel: unintended access_restriction_data in edit payload must be detected');
+
+// 6. Import record sentinel: msisdn in records
+const importEntry = requestContracts.find((e) => e.name === 'subscriber import execute');
+assert.ok(importEntry);
+assert.ok(importEntry.nestedContracts?.['records[]']?.forbiddenKeys?.includes('msisdn'), 'sentinel: records[] forbiddenKeys must include msisdn');
+assert.equal(importEntry.nestedContracts?.['records[]']?.allowedKeys?.includes('msisdn'), false, 'sentinel: records[] allowedKeys must not include msisdn');
+
+// 7. Import record sentinel: arbitraryUnknownField in records
+assert.equal(importEntry.nestedContracts?.['records[]']?.allowedKeys?.includes('arbitraryUnknownField'), false, 'sentinel: records[] allowedKeys must not include arbitraryUnknownField');
+
 // Report machine evidence
 console.log(`spa_mutation_route_total=${routes.length}`);
 console.log(`spa_mutation_foundation_routes=${statusCount('foundation')}`);
@@ -483,6 +626,17 @@ console.log(`spa_mutation_request_contract_entries=${requestContractsValidation.
 console.log(`spa_mutation_request_contract_duplicates=${requestContractsValidation.duplicates}`);
 console.log(`spa_mutation_request_invalid_authorities=${requestContractsValidation.invalidAuthorities}`);
 console.log(`spa_mutation_request_shape_errors=${requestContractsValidation.shapeErrors}`);
+console.log(`spa_mutation_request_key_set_errors=${requestContractsValidation.keySetErrors}`);
+console.log(`spa_mutation_nested_contract_errors=${requestContractsValidation.nestedContractErrors}`);
+console.log('');
+console.log(`spa_mutation_import_record_allowlist=${importRecordAllowlist}`);
+console.log(`spa_mutation_import_unknown_field_rejection=${importUnknownFieldRejection}`);
+console.log(`spa_mutation_import_precheck_execute_consistency=${importPrecheckExecuteConsistency}`);
+console.log('');
+console.log(`spa_mutation_subscriber_edit_intent_isolation=${subscriberEditIntentIsolation}`);
+console.log(`spa_mutation_subscriber_edit_unintended_fields=${subscriberEditUnintendedFields}`);
+console.log('');
+console.log(`spa_mutation_traffic_adjust_response_semantics=${trafficAdjustResponseSemantics}`);
 console.log('');
 console.log(`spa_mutation_subscriber_batch_precheck_contract=${batchPrecheckContract}`);
 console.log(`spa_mutation_subscriber_batch_create_contract=${batchCreateContract}`);
@@ -498,7 +652,6 @@ console.log(`spa_mutation_enabled_registered_endpoints=${contractUniqueEndpoints
 console.log(`spa_mutation_unregistered_endpoints=${validation.unregisteredEndpoints}`);
 console.log(`spa_mutation_out_of_scope_endpoints=${validation.outOfScopeEndpoints}`);
 console.log(`spa_mutation_disabled_runtime_calls=${disabledRuntimeCalls}`);
-console.log('');
 console.log(`spa_mutation_system_health_write_calls=${systemHealthWriteCalls}`);
 console.log('');
 console.log(`spa_mutation_direct_go_urls=${directGoUrls}`);

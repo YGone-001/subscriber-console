@@ -6,9 +6,15 @@
     "queryMode": "none",
     "backendAuthority": "backend/internal/subscriber/handler_write.go",
     "productionReference": "frontend/src/app/(dashboard)/subscribers/page.tsx",
-    "requiredBodyKeys": ["imsi"],
-    "optionalBodyKeys": ["msisdn", "planId"],
-    "forbiddenBodyKeys": []
+    "requiredBodyKeys": [
+      "imsi"
+    ],
+    "optionalBodyKeys": [
+      "msisdn",
+      "planId"
+    ],
+    "forbiddenBodyKeys": [],
+    "responseSemantics": "mutation-result"
   },
   {
     "name": "subscriber edit",
@@ -18,14 +24,27 @@
     "backendAuthority": "backend/internal/subscriber/handler_write.go",
     "productionReference": "frontend/src/app/(dashboard)/subscribers/page.tsx",
     "requiredBodyKeys": [],
-    "optionalBodyKeys": ["sub4G", "auth4G", "ocsTraffic"],
+    "optionalBodyKeys": [
+      "sub4G",
+      "auth4G",
+      "ocsTraffic"
+    ],
     "forbiddenBodyKeys": [],
     "nestedContracts": {
       "sub4G": {
-        "allowedKeys": ["access_restriction_data", "network_access_mode", "ambr", "msisdnList", "sliceList"],
-        "forbiddenKeys": ["msisdn"]
+        "allowedKeys": [
+          "access_restriction_data",
+          "network_access_mode",
+          "ambr",
+          "msisdnList",
+          "sliceList"
+        ],
+        "forbiddenKeys": [
+          "msisdn"
+        ]
       }
-    }
+    },
+    "responseSemantics": "mutation-result"
   },
   {
     "name": "subscriber delete",
@@ -36,7 +55,8 @@
     "productionReference": "frontend/src/app/(dashboard)/subscribers/page.tsx",
     "requiredBodyKeys": [],
     "optionalBodyKeys": [],
-    "forbiddenBodyKeys": []
+    "forbiddenBodyKeys": [],
+    "responseSemantics": "mutation-result"
   },
   {
     "name": "subscriber batch precheck",
@@ -45,9 +65,18 @@
     "queryMode": "none",
     "backendAuthority": "backend/internal/subscriber/handler.go",
     "productionReference": "frontend/src/components/BatchCreateModal.tsx",
-    "requiredBodyKeys": ["startImsi", "count"],
+    "requiredBodyKeys": [
+      "startImsi",
+      "count"
+    ],
     "optionalBodyKeys": [],
-    "forbiddenBodyKeys": ["profile", "profileName", "planId", "strategy"]
+    "forbiddenBodyKeys": [
+      "profile",
+      "profileName",
+      "planId",
+      "strategy"
+    ],
+    "responseSemantics": "preflight-result"
   },
   {
     "name": "subscriber batch create",
@@ -56,9 +85,23 @@
     "queryMode": "none",
     "backendAuthority": "backend/internal/subscriber/batch_create.go",
     "productionReference": "frontend/src/components/BatchCreateModal.tsx",
-    "requiredBodyKeys": ["startImsi", "count"],
-    "optionalBodyKeys": ["profileName", "planId", "strategy", "trafficTotal", "trafficBalance", "smsTotal", "smsBalance"],
-    "forbiddenBodyKeys": ["profile"]
+    "requiredBodyKeys": [
+      "startImsi",
+      "count"
+    ],
+    "optionalBodyKeys": [
+      "profileName",
+      "planId",
+      "strategy",
+      "trafficTotal",
+      "trafficBalance",
+      "smsTotal",
+      "smsBalance"
+    ],
+    "forbiddenBodyKeys": [
+      "profile"
+    ],
+    "responseSemantics": "mutation-result"
   },
   {
     "name": "subscriber batch update",
@@ -67,14 +110,27 @@
     "queryMode": "none",
     "backendAuthority": "backend/internal/subscriber/batch_update.go",
     "productionReference": "frontend/src/components/SubscriberBatchUpdateModal.tsx",
-    "requiredBodyKeys": ["imsis", "patch", "reason"],
-    "optionalBodyKeys": ["ticketId", "maintenanceWindow"],
-    "forbiddenBodyKeys": ["updates"],
+    "requiredBodyKeys": [
+      "imsis",
+      "patch",
+      "reason"
+    ],
+    "optionalBodyKeys": [
+      "ticketId",
+      "maintenanceWindow"
+    ],
+    "forbiddenBodyKeys": [
+      "updates"
+    ],
     "nestedContracts": {
       "patch": {
-        "allowedKeys": ["accessRestrictionData", "ambr"]
+        "allowedKeys": [
+          "accessRestrictionData",
+          "ambr"
+        ]
       }
-    }
+    },
+    "responseSemantics": "mutation-result"
   },
   {
     "name": "subscriber bulk delete",
@@ -83,9 +139,14 @@
     "queryMode": "none",
     "backendAuthority": "backend/internal/subscriber/bulk_delete.go",
     "productionReference": "frontend/src/app/(dashboard)/subscribers/page.tsx",
-    "requiredBodyKeys": ["imsiList"],
+    "requiredBodyKeys": [
+      "imsiList"
+    ],
     "optionalBodyKeys": [],
-    "forbiddenBodyKeys": ["imsis"]
+    "forbiddenBodyKeys": [
+      "imsis"
+    ],
+    "responseSemantics": "mutation-result"
   },
   {
     "name": "subscriber import precheck",
@@ -94,9 +155,15 @@
     "queryMode": "mode=precheck",
     "backendAuthority": "backend/internal/subscriber/import.go",
     "productionReference": "frontend/src/components/DataHub.tsx",
-    "requiredBodyKeys": ["imsiList"],
+    "requiredBodyKeys": [
+      "imsiList"
+    ],
     "optionalBodyKeys": [],
-    "forbiddenBodyKeys": ["subscribers", "records"]
+    "forbiddenBodyKeys": [
+      "subscribers",
+      "records"
+    ],
+    "responseSemantics": "preflight-result"
   },
   {
     "name": "subscriber import execute",
@@ -105,9 +172,40 @@
     "queryMode": "mode=import",
     "backendAuthority": "backend/internal/subscriber/import.go",
     "productionReference": "frontend/src/components/DataHub.tsx",
-    "requiredBodyKeys": ["records", "overwrite"],
+    "requiredBodyKeys": [
+      "records",
+      "overwrite"
+    ],
     "optionalBodyKeys": [],
-    "forbiddenBodyKeys": ["subscribers"]
+    "forbiddenBodyKeys": [
+      "subscribers"
+    ],
+    "responseSemantics": "mutation-result",
+    "nestedContracts": {
+      "records[]": {
+        "requiredKeys": [
+          "imsi"
+        ],
+        "allowedKeys": [
+          "imsi",
+          "access_restriction_data",
+          "traffic_total",
+          "traffic_balance",
+          "sms_total",
+          "sms_balance",
+          "plan_id"
+        ],
+        "forbiddenKeys": [
+          "msisdn",
+          "profile",
+          "k",
+          "op",
+          "opc",
+          "amf",
+          "sqn"
+        ]
+      }
+    }
   },
   {
     "name": "subscriber apply profile",
@@ -116,9 +214,14 @@
     "queryMode": "none",
     "backendAuthority": "backend/internal/subscriber/handler_write.go",
     "productionReference": "frontend/src/app/(dashboard)/subscribers/page.tsx",
-    "requiredBodyKeys": ["profileName"],
+    "requiredBodyKeys": [
+      "profileName"
+    ],
     "optionalBodyKeys": [],
-    "forbiddenBodyKeys": ["profile"]
+    "forbiddenBodyKeys": [
+      "profile"
+    ],
+    "responseSemantics": "mutation-result"
   },
   {
     "name": "subscriber traffic adjustment",
@@ -128,8 +231,13 @@
     "backendAuthority": "backend/internal/ocs/handler_management.go",
     "productionReference": "frontend/src/app/(dashboard)/subscribers/page.tsx",
     "requiredBodyKeys": [],
-    "optionalBodyKeys": ["bucket", "amount", "reason"],
-    "forbiddenBodyKeys": []
+    "optionalBodyKeys": [
+      "bucket",
+      "amount",
+      "reason"
+    ],
+    "forbiddenBodyKeys": [],
+    "responseSemantics": "routing-acknowledgement"
   },
   {
     "name": "profile create",
@@ -138,9 +246,16 @@
     "queryMode": "none",
     "backendAuthority": "backend/internal/profile/handler.go",
     "productionReference": "frontend/src/app/(dashboard)/profile/page.tsx",
-    "requiredBodyKeys": ["name"],
-    "optionalBodyKeys": ["title", "description", "data"],
-    "forbiddenBodyKeys": []
+    "requiredBodyKeys": [
+      "name"
+    ],
+    "optionalBodyKeys": [
+      "title",
+      "description",
+      "data"
+    ],
+    "forbiddenBodyKeys": [],
+    "responseSemantics": "mutation-result"
   },
   {
     "name": "profile update",
@@ -150,8 +265,13 @@
     "backendAuthority": "backend/internal/profile/handler.go",
     "productionReference": "frontend/src/app/(dashboard)/profile/page.tsx",
     "requiredBodyKeys": [],
-    "optionalBodyKeys": ["title", "description", "data"],
-    "forbiddenBodyKeys": []
+    "optionalBodyKeys": [
+      "title",
+      "description",
+      "data"
+    ],
+    "forbiddenBodyKeys": [],
+    "responseSemantics": "mutation-result"
   },
   {
     "name": "profile delete",
@@ -162,7 +282,8 @@
     "productionReference": "frontend/src/app/(dashboard)/profile/page.tsx",
     "requiredBodyKeys": [],
     "optionalBodyKeys": [],
-    "forbiddenBodyKeys": []
+    "forbiddenBodyKeys": [],
+    "responseSemantics": "mutation-result"
   },
   {
     "name": "profile restore version",
@@ -173,7 +294,8 @@
     "productionReference": "frontend/src/app/(dashboard)/profile/page.tsx",
     "requiredBodyKeys": [],
     "optionalBodyKeys": [],
-    "forbiddenBodyKeys": []
+    "forbiddenBodyKeys": [],
+    "responseSemantics": "mutation-result"
   },
   {
     "name": "balance adjust",
@@ -182,9 +304,18 @@
     "queryMode": "none",
     "backendAuthority": "backend/internal/balance/handler.go",
     "productionReference": "frontend/src/app/(dashboard)/ocs/balances/page.tsx",
-    "requiredBodyKeys": ["operation", "bucket", "amount", "reason"],
-    "optionalBodyKeys": ["ticketId", "version"],
-    "forbiddenBodyKeys": []
+    "requiredBodyKeys": [
+      "operation",
+      "bucket",
+      "amount",
+      "reason"
+    ],
+    "optionalBodyKeys": [
+      "ticketId",
+      "version"
+    ],
+    "forbiddenBodyKeys": [],
+    "responseSemantics": "mutation-result"
   },
   {
     "name": "contract create",
@@ -193,9 +324,16 @@
     "queryMode": "none",
     "backendAuthority": "backend/internal/ocs/handler_write.go",
     "productionReference": "frontend/src/app/(dashboard)/ocs/contracts/page.tsx",
-    "requiredBodyKeys": ["imsi", "plan_id"],
-    "optionalBodyKeys": ["msisdn", "status"],
-    "forbiddenBodyKeys": []
+    "requiredBodyKeys": [
+      "imsi",
+      "plan_id"
+    ],
+    "optionalBodyKeys": [
+      "msisdn",
+      "status"
+    ],
+    "forbiddenBodyKeys": [],
+    "responseSemantics": "mutation-result"
   },
   {
     "name": "contract update tariff",
@@ -204,9 +342,12 @@
     "queryMode": "none",
     "backendAuthority": "backend/internal/ocs/handler_write.go",
     "productionReference": "frontend/src/app/(dashboard)/ocs/contracts/page.tsx",
-    "requiredBodyKeys": ["plan_id"],
+    "requiredBodyKeys": [
+      "plan_id"
+    ],
     "optionalBodyKeys": [],
-    "forbiddenBodyKeys": []
+    "forbiddenBodyKeys": [],
+    "responseSemantics": "mutation-result"
   },
   {
     "name": "contract suspend",
@@ -217,7 +358,8 @@
     "productionReference": "frontend/src/app/(dashboard)/ocs/contracts/page.tsx",
     "requiredBodyKeys": [],
     "optionalBodyKeys": [],
-    "forbiddenBodyKeys": []
+    "forbiddenBodyKeys": [],
+    "responseSemantics": "mutation-result"
   },
   {
     "name": "contract resume",
@@ -228,7 +370,8 @@
     "productionReference": "frontend/src/app/(dashboard)/ocs/contracts/page.tsx",
     "requiredBodyKeys": [],
     "optionalBodyKeys": [],
-    "forbiddenBodyKeys": []
+    "forbiddenBodyKeys": [],
+    "responseSemantics": "mutation-result"
   },
   {
     "name": "contract terminate",
@@ -239,7 +382,8 @@
     "productionReference": "frontend/src/app/(dashboard)/ocs/contracts/page.tsx",
     "requiredBodyKeys": [],
     "optionalBodyKeys": [],
-    "forbiddenBodyKeys": []
+    "forbiddenBodyKeys": [],
+    "responseSemantics": "mutation-result"
   },
   {
     "name": "tariff create",
@@ -248,9 +392,17 @@
     "queryMode": "none",
     "backendAuthority": "backend/internal/tariff/handler_write.go",
     "productionReference": "frontend/src/app/(dashboard)/ocs/tariffs/page.tsx",
-    "requiredBodyKeys": ["plan_id", "name"],
-    "optionalBodyKeys": ["description", "status", "rules"],
-    "forbiddenBodyKeys": []
+    "requiredBodyKeys": [
+      "plan_id",
+      "name"
+    ],
+    "optionalBodyKeys": [
+      "description",
+      "status",
+      "rules"
+    ],
+    "forbiddenBodyKeys": [],
+    "responseSemantics": "mutation-result"
   },
   {
     "name": "tariff update",
@@ -260,8 +412,13 @@
     "backendAuthority": "backend/internal/tariff/handler_write.go",
     "productionReference": "frontend/src/app/(dashboard)/ocs/tariffs/page.tsx",
     "requiredBodyKeys": [],
-    "optionalBodyKeys": ["name", "description", "rules"],
-    "forbiddenBodyKeys": []
+    "optionalBodyKeys": [
+      "name",
+      "description",
+      "rules"
+    ],
+    "forbiddenBodyKeys": [],
+    "responseSemantics": "mutation-result"
   },
   {
     "name": "tariff delete",
@@ -272,7 +429,8 @@
     "productionReference": "frontend/src/app/(dashboard)/ocs/tariffs/page.tsx",
     "requiredBodyKeys": [],
     "optionalBodyKeys": [],
-    "forbiddenBodyKeys": []
+    "forbiddenBodyKeys": [],
+    "responseSemantics": "mutation-result"
   },
   {
     "name": "tariff clone",
@@ -281,9 +439,18 @@
     "queryMode": "none",
     "backendAuthority": "backend/internal/tariff/handler_write.go",
     "productionReference": "frontend/src/app/(dashboard)/ocs/tariffs/page.tsx",
-    "requiredBodyKeys": ["targetPlanId"],
-    "optionalBodyKeys": ["name", "description", "newPlanId", "plan_id", "target_plan_id"],
-    "forbiddenBodyKeys": []
+    "requiredBodyKeys": [
+      "targetPlanId"
+    ],
+    "optionalBodyKeys": [
+      "name",
+      "description",
+      "newPlanId",
+      "plan_id",
+      "target_plan_id"
+    ],
+    "forbiddenBodyKeys": [],
+    "responseSemantics": "mutation-result"
   },
   {
     "name": "tariff enable",
@@ -294,7 +461,8 @@
     "productionReference": "frontend/src/app/(dashboard)/ocs/tariffs/page.tsx",
     "requiredBodyKeys": [],
     "optionalBodyKeys": [],
-    "forbiddenBodyKeys": []
+    "forbiddenBodyKeys": [],
+    "responseSemantics": "mutation-result"
   },
   {
     "name": "tariff disable",
@@ -305,7 +473,8 @@
     "productionReference": "frontend/src/app/(dashboard)/ocs/tariffs/page.tsx",
     "requiredBodyKeys": [],
     "optionalBodyKeys": [],
-    "forbiddenBodyKeys": []
+    "forbiddenBodyKeys": [],
+    "responseSemantics": "mutation-result"
   },
   {
     "name": "user create",
@@ -314,9 +483,17 @@
     "queryMode": "none",
     "backendAuthority": "backend/internal/user/handler.go",
     "productionReference": "frontend/src/app/(dashboard)/users/page.tsx",
-    "requiredBodyKeys": ["username", "password", "role"],
-    "optionalBodyKeys": ["displayName", "email"],
-    "forbiddenBodyKeys": []
+    "requiredBodyKeys": [
+      "username",
+      "password",
+      "role"
+    ],
+    "optionalBodyKeys": [
+      "displayName",
+      "email"
+    ],
+    "forbiddenBodyKeys": [],
+    "responseSemantics": "mutation-result"
   },
   {
     "name": "user update",
@@ -326,8 +503,14 @@
     "backendAuthority": "backend/internal/user/handler.go",
     "productionReference": "frontend/src/app/(dashboard)/users/page.tsx",
     "requiredBodyKeys": [],
-    "optionalBodyKeys": ["displayName", "email", "role", "status"],
-    "forbiddenBodyKeys": []
+    "optionalBodyKeys": [
+      "displayName",
+      "email",
+      "role",
+      "status"
+    ],
+    "forbiddenBodyKeys": [],
+    "responseSemantics": "mutation-result"
   },
   {
     "name": "user disable",
@@ -338,7 +521,8 @@
     "productionReference": "frontend/src/app/(dashboard)/users/page.tsx",
     "requiredBodyKeys": [],
     "optionalBodyKeys": [],
-    "forbiddenBodyKeys": []
+    "forbiddenBodyKeys": [],
+    "responseSemantics": "mutation-result"
   },
   {
     "name": "user password reset",
@@ -347,8 +531,11 @@
     "queryMode": "none",
     "backendAuthority": "backend/internal/user/handler.go",
     "productionReference": "frontend/src/app/(dashboard)/users/page.tsx",
-    "requiredBodyKeys": ["newPassword"],
+    "requiredBodyKeys": [
+      "newPassword"
+    ],
     "optionalBodyKeys": [],
-    "forbiddenBodyKeys": []
+    "forbiddenBodyKeys": [],
+    "responseSemantics": "mutation-result"
   }
 ]

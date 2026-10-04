@@ -52,7 +52,90 @@ export interface ImportRecord {
   sms_total?: number;
   sms_balance?: number;
   plan_id?: string;
-  [key: string]: unknown;
+}
+
+export const ALLOWED_IMPORT_RECORD_KEYS = new Set([
+  'imsi',
+  'access_restriction_data',
+  'traffic_total',
+  'traffic_balance',
+  'sms_total',
+  'sms_balance',
+  'plan_id',
+]);
+
+export const SENSITIVE_IMPORT_KEYS = new Set([
+  'k',
+  'op',
+  'opc',
+  'amf',
+  'sqn',
+]);
+
+export function validateAndNormalizeImportRecord(raw: unknown): ImportRecord {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    throw new Error('Import record must be a JSON object');
+  }
+  const record = raw as Record<string, unknown>;
+
+  for (const key of Object.keys(record)) {
+    if (SENSITIVE_IMPORT_KEYS.has(key)) {
+      const val = record[key];
+      if (typeof val === 'string' && val.trim() !== '') {
+        throw new Error(`Sensitive credential field "${key}" is not supported in subscriber import`);
+      }
+    }
+  }
+
+  for (const key of Object.keys(record)) {
+    if (!ALLOWED_IMPORT_RECORD_KEYS.has(key)) {
+      throw new Error(
+        `Unsupported import field: "${key}". Supported fields: ${Array.from(ALLOWED_IMPORT_RECORD_KEYS).join(', ')}`,
+      );
+    }
+  }
+
+  const imsi = String(record.imsi ?? '').trim();
+  if (!imsi) {
+    throw new Error('Import record missing required field: "imsi"');
+  }
+  if (!/^\d{15}$/.test(imsi)) {
+    throw new Error(`Invalid IMSI "${imsi}": must be exactly 15 digits`);
+  }
+
+  const normalized: ImportRecord = { imsi };
+
+  if (record.access_restriction_data !== undefined) {
+    const val = Number(record.access_restriction_data);
+    if (!Number.isInteger(val) || val < 0 || val > 255) {
+      throw new Error('access_restriction_data must be an integer between 0 and 255');
+    }
+    normalized.access_restriction_data = val;
+  }
+
+  const numericFields = ['traffic_total', 'traffic_balance', 'sms_total', 'sms_balance'] as const;
+  for (const field of numericFields) {
+    if (record[field] !== undefined) {
+      const val = Number(record[field]);
+      if (!Number.isSafeInteger(val) || val < 0) {
+        throw new Error(`${field} must be a non-negative integer`);
+      }
+      normalized[field] = val;
+    }
+  }
+
+  if (record.plan_id !== undefined) {
+    const val = String(record.plan_id).trim();
+    if (!val) {
+      throw new Error('plan_id cannot be empty when provided');
+    }
+    if (!/^[A-Za-z0-9_.-]{1,64}$/.test(val)) {
+      throw new Error(`Invalid plan_id "${val}": must be 1-64 alphanumeric/dash/underscore/dot characters`);
+    }
+    normalized.plan_id = val;
+  }
+
+  return normalized;
 }
 
 export interface ImportPrecheckPayload {
@@ -222,12 +305,25 @@ export function buildImportPrecheckRequest(imsiList: string[]): ImportPrecheckPa
 }
 
 export function buildImportRequest(records: ImportRecord[], overwrite = false): ImportExecutionPayload {
+  if (overwrite) {
+    throw new Error('Subscriber import overwrite is not supported');
+  }
   if (!Array.isArray(records) || records.length === 0) {
     throw new Error('records must contain at least one record');
   }
+  const seenImsis = new Set<string>();
+  const normalizedRecords: ImportRecord[] = [];
+  for (const raw of records) {
+    const record = validateAndNormalizeImportRecord(raw);
+    if (seenImsis.has(record.imsi)) {
+      throw new Error(`Duplicate IMSI in import records: ${record.imsi}`);
+    }
+    seenImsis.add(record.imsi);
+    normalizedRecords.push(record);
+  }
   return {
-    records,
-    overwrite: Boolean(overwrite),
+    records: normalizedRecords,
+    overwrite: false,
   };
 }
 
@@ -257,8 +353,13 @@ export function buildSubscriberUpdateRequest(options: {
   ambr?: { downlink?: { value: number; unit: number }; uplink?: { value: number; unit: number } };
 }): SubscriberUpdatePayload {
   const sub4G: NonNullable<SubscriberUpdatePayload['sub4G']> = {};
-  if (options.msisdn?.trim()) {
-    sub4G.msisdnList = [{ msisdn: options.msisdn.trim() }];
+  if (options.msisdn !== undefined) {
+    const trimmed = options.msisdn.trim();
+    if (trimmed.length > 0) {
+      sub4G.msisdnList = [{ msisdn: trimmed }];
+    } else {
+      sub4G.msisdnList = [];
+    }
   }
   if (typeof options.accessRestrictionData === 'number') {
     sub4G.access_restriction_data = options.accessRestrictionData;

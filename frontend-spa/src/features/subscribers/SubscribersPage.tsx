@@ -18,6 +18,7 @@ import {
   buildSubscriberCreateRequest,
   buildSubscriberUpdateRequest,
   buildTrafficAdjustRequest,
+  validateAndNormalizeImportRecord,
   type ImportRecord,
 } from './mutation-contract';
 
@@ -87,6 +88,7 @@ export function SubscribersPage() {
   // Form states
   const [imsiInput, setImsiInput] = useState('');
   const [msisdnInput, setMsisdnInput] = useState('');
+  const [originalMsisdn, setOriginalMsisdn] = useState<string | null>(null);
   const [planIdInput, setPlanIdInput] = useState('');
   const [profileInput, setProfileInput] = useState('');
   const [batchStartImsi, setBatchStartImsi] = useState('001010000000001');
@@ -149,16 +151,22 @@ export function SubscribersPage() {
   // 2. Single Edit: PUT /api/subscribers/{imsi}
   const handleEdit = async () => {
     if (!activeImsi) return;
+    const nextMsisdn = msisdnInput.trim();
+    if (originalMsisdn !== null && nextMsisdn === originalMsisdn) {
+      setNotice({ type: 'info', message: 'No changes detected.' });
+      setIsEditOpen(false);
+      return;
+    }
     setSubmitting(true);
     setNotice(null);
     try {
       const payload = buildSubscriberUpdateRequest({
-        msisdn: msisdnInput.trim() || undefined,
-        accessRestrictionData: 32,
+        msisdn: nextMsisdn,
       });
       await putJson(`/api/subscribers/${encodeURIComponent(activeImsi)}`, payload);
       setIsEditOpen(false);
       setActiveImsi(null);
+      setOriginalMsisdn(null);
       setNotice({ type: 'success', message: 'Subscriber updated successfully.' });
       await refreshData();
     } catch (err) {
@@ -281,13 +289,21 @@ export function SubscribersPage() {
         : (parsed as { records?: unknown[]; subscribers?: unknown[] })?.records ??
           (parsed as { records?: unknown[]; subscribers?: unknown[] })?.subscribers ??
           [];
-      const imsiList = raw
-        .map((item) => (typeof item === 'string' ? item : (item as { imsi?: string })?.imsi))
-        .filter((i): i is string => Boolean(i));
-      if (!imsiList.length) {
-        setNotice({ type: 'error', message: 'No valid IMSIs found in import payload' });
+      if (!raw.length) {
+        setNotice({ type: 'error', message: 'No records found in import payload' });
         return;
       }
+      const normalizedRecords: ImportRecord[] = [];
+      const seenImsis = new Set<string>();
+      for (const item of raw) {
+        const record = validateAndNormalizeImportRecord(item);
+        if (seenImsis.has(record.imsi)) {
+          throw new Error(`Duplicate IMSI in import records: ${record.imsi}`);
+        }
+        seenImsis.add(record.imsi);
+        normalizedRecords.push(record);
+      }
+      const imsiList = normalizedRecords.map((r) => r.imsi);
       const payload = buildImportPrecheckRequest(imsiList);
       const res = await postJson<{ validCount?: number; total?: number; conflicts?: unknown[] }>(
         '/api/subscribers/import?mode=precheck',
@@ -317,13 +333,11 @@ export function SubscribersPage() {
         : (parsed as { records?: unknown[]; subscribers?: unknown[] })?.records ??
           (parsed as { records?: unknown[]; subscribers?: unknown[] })?.subscribers ??
           [];
-      const records: ImportRecord[] = raw.map((item) =>
-        typeof item === 'string' ? { imsi: item } : (item as ImportRecord),
-      );
-      if (!records.length) {
+      if (!raw.length) {
         setNotice({ type: 'error', message: 'No records to import' });
         return;
       }
+      const records: ImportRecord[] = raw.map((item) => validateAndNormalizeImportRecord(item));
       const payload = buildImportRequest(records, false);
       await postJson('/api/subscribers/import?mode=import', payload);
       setIsImportOpen(false);
@@ -370,9 +384,10 @@ export function SubscribersPage() {
       });
       await postJson(`/api/subscribers/${encodeURIComponent(activeImsi)}/traffic-adjustments`, payload);
       setIsTrafficAdjustOpen(false);
-      setActiveImsi(null);
-      setNotice({ type: 'success', message: `Traffic adjustment completed for ${activeImsi}. Routed to Go backend.` });
-      await refreshData();
+      setNotice({
+        type: 'info',
+        message: 'Traffic adjustment request was accepted by the Go routing endpoint. No balance mutation is confirmed by this response.',
+      });
     } catch (err) {
       setNotice({ type: 'error', message: err instanceof Error ? err.message : 'Traffic adjust failed' });
     } finally {
@@ -549,7 +564,10 @@ export function SubscribersPage() {
                                 title="Edit subscriber"
                                 onClick={() => {
                                   setActiveImsi(imsi);
-                                  setMsisdnInput(text(row['msisdn']));
+                                  const rawMsisdn = Array.isArray(row['msisdn']) ? (row['msisdn'][0] ?? '') : (row['msisdn'] ?? '');
+                                  const currentMsisdn = rawMsisdn === '-' ? '' : String(rawMsisdn).trim();
+                                  setMsisdnInput(currentMsisdn);
+                                  setOriginalMsisdn(currentMsisdn);
                                   setIsEditOpen(true);
                                 }}
                               >
@@ -896,7 +914,7 @@ export function SubscribersPage() {
               setImportJsonText(e.target.value);
               setImportPrecheckResult(null);
             }}
-            placeholder='[{"imsi": "001010000000001", "msisdn": "12345"}]'
+            placeholder='[{"imsi": "001010000000001", "plan_id": "plan_default_10gb", "traffic_total": 10737418240, "traffic_balance": 10737418240, "sms_total": 100, "sms_balance": 100}]'
           />
         </div>
         <p style={{ fontSize: '.8rem', color: '#666', marginTop: '.25rem' }}>
