@@ -27,6 +27,7 @@ import (
 	"subscriber/internal/rating"
 	"subscriber/internal/remediation"
 	"subscriber/internal/response"
+	"subscriber/internal/spa"
 	"subscriber/internal/subscriber"
 	"subscriber/internal/system"
 	"subscriber/internal/tariff"
@@ -304,9 +305,12 @@ func main() {
 		response.NotFound(w)
 	})
 
+	// Wrap mux with SPA static file and fallback handler
+	spaHandler := spa.NewHandler(mux, spa.EmbeddedFS())
+
 	// Apply middleware chain (without auth - auth is applied per-route)
 	finalHandler := middleware.Chain(
-		mux,
+		spaHandler,
 		middleware.RequestID,
 		middleware.Recovery(logger),
 		middleware.AccessLog(logger),

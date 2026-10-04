@@ -169,6 +169,67 @@ jobs:
       - name: SPA governed operational mutation parity contract
         run: node scripts/test-spa-operational-mutation-parity.mjs
 
+  go-spa-hosting:
+    name: Go static SPA hosting foundation
+    runs-on: ubuntu-latest
+    env:
+      MONGODB_URI: mongodb://127.0.0.1:27017/xcloud
+      MONGODB_XCLOUD_DB: xcloud
+      MONGODB_APP_DB: xcloud_ops
+      JWT_SECRET: ci-only-placeholder-secret-with-at-least-32-bytes
+      INITIAL_ADMIN_PASSWORD: ChangeMe@2026
+    services:
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ ping: 1 })'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: frontend-spa/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend-spa/package-lock.json
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: Install SPA dependencies
+        working-directory: frontend-spa
+        run: npm ci
+
+      - name: SPA build
+        working-directory: frontend-spa
+        run: npm run build
+
+      - name: Stage SPA for Go
+        run: node scripts/stage-spa-for-go.mjs
+
+      - name: Go bundled build
+        working-directory: backend
+        run: go build -o bin/server ./cmd/server
+
+      - name: Go SPA unit tests
+        working-directory: backend
+        run: go test -v ./internal/spa/...
+
+      - name: Go static SPA hosting contract
+        run: node scripts/test-go-spa-hosting-contract.mjs
+
+      - name: Real Go SPA HTTP integration
+        run: node scripts/test-go-spa-hosting-foundation.mjs
+
   direct-operations:
     name: Direct operations integration
     runs-on: ubuntu-latest

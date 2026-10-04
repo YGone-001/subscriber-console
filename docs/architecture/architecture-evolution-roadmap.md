@@ -77,10 +77,11 @@ user management, and system-health diagnostics and remediation.
 /system-health operational mutation parity completed.
 Parallel SPA business read parity is implemented; parallel SPA governed business mutation
 parity is implemented; parallel SPA governed operational mutation parity is implemented;
+embedded static SPA hosting capability is established internally in Go (a specially built Go
+binary can internally serve embedded SPA assets, but Nginx does not send UI traffic to it yet);
 frontend-spa production transition is NOT STARTED; and the Next.js production runtime
-remains active on `:13333`. Nginx routing remains unchanged, and Go does not serve SPA
-assets yet. The Vite listener on `127.0.0.1:13334` is a loopback-only, migration-only
-development listener.
+remains active on `:13333`. Nginx routing remains unchanged. The Vite listener on
+`127.0.0.1:13334` is a loopback-only, migration-only development listener.
 
 ### Internal Backend Direction
 

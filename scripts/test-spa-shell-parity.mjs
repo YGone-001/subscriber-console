@@ -36,7 +36,7 @@ assert.match(typesSource, /'admin' \| 'operator' \| 'viewer'/);
 assert.ok(existsSync(resolve(source, 'providers/AppProviders.tsx')));
 assert.match(sourceText, /XCLOUD_THEME_PREFERENCE/);
 assert.match(sourceText, /XCLOUD_LANGUAGE_PREFERENCE/);
-execFileSync('git', ['diff', '--quiet', 'HEAD', '--', 'frontend', 'backend', 'deploy'], { cwd: root });
+execFileSync('git', ['diff', '--quiet', 'HEAD', '--', 'frontend', 'deploy/nginx'], { cwd: root });
 console.log('spa_shell_inventory_routes=23');
 console.log('spa_shell_router_routes=23');
 console.log(`spa_shell_business_migrated=${routes.filter((route) => route.status === 'migrated').length}`);
