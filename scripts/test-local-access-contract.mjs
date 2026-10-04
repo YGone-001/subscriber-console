@@ -37,6 +37,9 @@ const nextAppApiRoot = resolve(root, 'frontend/src/app/api');
 const frontendSrcRoot = resolve(root, 'frontend/src');
 const nginxConfPath = resolve(root, 'deploy/nginx/xcloud.conf');
 const legacyNginxConfPath = resolve(root, 'deploy/nginx/xcloud-next-legacy.conf');
+const setupShPath = resolve(root, 'deploy/nginx/setup.sh');
+const setupLegacyShPath = resolve(root, 'deploy/nginx/setup-next-legacy.sh');
+const localDevScriptPath = resolve(root, 'scripts/local-dev.mjs');
 const readmePath = resolve(root, 'README.md');
 const deploymentPath = resolve(root, 'docs/operations/deployment.md');
 const agentsPath = resolve(root, 'AGENTS.md');
@@ -227,18 +230,38 @@ function main() {
     `legacy_conf_exists=${legacyConfExists} legacy_api_go=${legacyApiToGo} legacy_ui_next=${legacyUiToNext} legacy_hmr_next=${legacyHmrToNext}`,
   );
 
+  // L6-SETUP-PROD - Production setup script installs xcloud.conf only -------------------
+  const setupSh = existsSync(setupShPath) ? read(setupShPath) : '';
+  const prodSetupInstallsProdConf = setupSh.includes('xcloud.conf') && !setupSh.includes('xcloud-next-legacy.conf');
+  check('L6-SETUP-PROD', prodSetupInstallsProdConf, `setup_sh_installs_prod_conf_only=${prodSetupInstallsProdConf}`);
+
+  // L6-SETUP-LEGACY - Legacy development setup script installs xcloud-next-legacy.conf only
+  const setupLegacySh = existsSync(setupLegacyShPath) ? read(setupLegacyShPath) : '';
+  const legacySetupInstallsLegacyConf = setupLegacySh.includes('xcloud-next-legacy.conf') && !setupLegacySh.includes('NGINX_CONF="$SCRIPT_DIR/xcloud.conf"');
+  check('L6-SETUP-LEGACY', legacySetupInstallsLegacyConf, `setup_legacy_sh_installs_legacy_conf_only=${legacySetupInstallsLegacyConf}`);
+
+  // L6-DEV-GUIDANCE - local:dev recommends legacy setup on EDGE_REQUIRED ---------------
+  const localDevScript = existsSync(localDevScriptPath) ? read(localDevScriptPath) : '';
+  const devRecommendsLegacy = /EDGE_REQUIRED[\s\S]*?deploy\/nginx\/setup-next-legacy\.sh/i.test(localDevScript);
+  const devRecommendsProd = /EDGE_REQUIRED[\s\S]*?deploy\/nginx\/setup\.sh\b/i.test(localDevScript);
+  check('L6-DEV-GUIDANCE', devRecommendsLegacy && !devRecommendsProd,
+    `dev_recommends_legacy=${devRecommendsLegacy} dev_recommends_prod=${devRecommendsProd}`);
+
   // L7 - README full-stack URL ---------------------------------------------------------
   const readme = existsSync(readmePath) ? read(readmePath) : '';
   const readmeViolations = directNextBrowserInstructions(readme);
   const readmeIdentifiesEdge = /http:\/\/localhost/.test(readme) && /Nginx/i.test(readme);
-  check('L7', readmeViolations.length === 0 && readmeIdentifiesEdge,
-    `readme_direct_next_instructions=${readmeViolations.length} readme_identifies_edge=${readmeIdentifiesEdge}`);
+  const readmeNextWorkflowUsesLegacySetup = /setup-next-legacy\.sh/.test(readme);
+  check('L7', readmeViolations.length === 0 && readmeIdentifiesEdge && readmeNextWorkflowUsesLegacySetup,
+    `readme_direct_next_instructions=${readmeViolations.length} readme_identifies_edge=${readmeIdentifiesEdge} readme_legacy_setup=${readmeNextWorkflowUsesLegacySetup}`);
 
   // L8 - deployment development topology ----------------------------------------------
   const deployment = existsSync(deploymentPath) ? read(deploymentPath) : '';
   const deploymentRequiresEdge = deployment.includes('Local Full-Stack Development') &&
     deployment.includes('local:doctor') && /Nginx/.test(deployment);
-  check('L8', deploymentRequiresEdge, `deployment_requires_edge=${deploymentRequiresEdge}`);
+  const deploymentNextWorkflowUsesLegacySetup = deployment.includes('setup-next-legacy.sh');
+  check('L8', deploymentRequiresEdge && deploymentNextWorkflowUsesLegacySetup,
+    `deployment_requires_edge=${deploymentRequiresEdge} deployment_legacy_setup=${deploymentNextWorkflowUsesLegacySetup}`);
 
   // L9 - agent guidance ---------------------------------------------------------------
   const agents = existsSync(agentsPath) ? read(agentsPath) : '';

@@ -247,7 +247,7 @@ The full application browser origin is the Nginx edge.
 
 ```text
 Default local URL:  http://localhost
-Custom edge port:   http://localhost:<edge-port>   (sudo ./deploy/nginx/setup.sh <port>)
+Custom edge port:   http://localhost:<edge-port>   (production: sudo ./deploy/nginx/setup.sh <port>; local Next dev: sudo ./deploy/nginx/setup-next-legacy.sh <port>)
 ```
 
 - Next.js `:13333` is an internal UI component endpoint only.
@@ -272,9 +272,10 @@ npm run local:stop
 
 Development transport: Nginx remains the full-stack browser origin in development.
 The Next.js development server transports its HMR WebSocket through the edge under
-the framework namespace `/_next/hmr`. This is framework development traffic, not API
-ownership: it never matches `/api` or `/api/*` and it does not relax the Next.js API
-routing prohibition above. Verified end to end by `scripts/test-local-development-edge.mjs`.
+the framework namespace `/_next/hmr` via `deploy/nginx/xcloud-next-legacy.conf`
+(installed via `sudo ./deploy/nginx/setup-next-legacy.sh`). This is framework development
+traffic, not API ownership: it never matches `/api` or `/api/*` and it does not relax
+the Next.js API routing prohibition above. Verified end to end by `scripts/test-local-development-edge.mjs`.
 
 Browser traffic versus internal authority traffic:
 

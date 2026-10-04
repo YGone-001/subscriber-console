@@ -299,7 +299,7 @@ npm run local:dev
 ```
 
 `local:dev` never starts MongoDB or Nginx. If the edge is absent it reports
-`FULL_STACK_NOT_READY` / `EDGE_REQUIRED` and instructs `sudo ./deploy/nginx/setup.sh`.
+`FULL_STACK_NOT_READY` / `EDGE_REQUIRED` and instructs `sudo ./deploy/nginx/setup-next-legacy.sh`.
 
 Startup is atomic per managed process: each child is spawned, its live process identity
 is inspected, and its ownership record is written before readiness polling begins
@@ -329,7 +329,7 @@ npm run dev    # next dev --webpack -H 127.0.0.1 -p 13333
 4. Start the Nginx edge:
 
 ```bash
-sudo ./deploy/nginx/setup.sh
+sudo ./deploy/nginx/setup-next-legacy.sh
 ```
 
 5. Check component and topology state, then verify the running topology:
@@ -346,7 +346,7 @@ http://localhost
 ```
 
 When the edge is intentionally configured on another port
-(`sudo ./deploy/nginx/setup.sh 8080`), open `http://localhost:8080`.
+(`sudo ./deploy/nginx/setup-next-legacy.sh 8080`), open `http://localhost:8080`.
 
 7. Stop the managed processes when finished:
 
@@ -365,21 +365,23 @@ introduced; the operator is expected to inspect the still-live process and retry
 
 Development transport note: the Nginx edge remains the full-stack browser origin in
 development too. The Next.js development HMR WebSocket (`/_next/hmr`) is transported
-through the edge by the dedicated `location /_next/hmr` block; this is framework
-development traffic, not API ownership, and it does not relax the prohibition on Next.js
-API routing. The runtime acceptance suite
+through the edge by the dedicated `location /_next/hmr` block in
+`deploy/nginx/xcloud-next-legacy.conf` (installed via `setup-next-legacy.sh`); this is
+framework development traffic, not API ownership, and it does not relax the prohibition on
+Next.js API routing. The runtime acceptance suite
 (`node scripts/test-local-development-edge.mjs`) proves this transport end to end and
-also asserts the `local:doctor` `FULL_STACK_READY` and `EDGE_REQUIRED` results.
+also asserts the `local:doctor` `FULL_STACK_READY`, `EDGE_REQUIRED`, and `EDGE_UI_MISROUTED` results.
 
 ### Local Troubleshooting Matrix
 
 | State | Meaning | Action |
 | --- | --- | --- |
 | `FULL_STACK_READY` | full topology ready | use the edge URL |
-| `EDGE_REQUIRED` | Go + Next ready, Nginx absent | start/install Nginx (`sudo ./deploy/nginx/setup.sh`) |
+| `EDGE_REQUIRED` | Go + Next ready, Nginx absent | start/install Nginx (`sudo ./deploy/nginx/setup-next-legacy.sh`) |
 | `GO_DOWN` | Go listener absent | start/investigate Go |
 | `NEXT_DOWN` | Next listener absent | start/investigate Next |
 | `EDGE_API_MISROUTED` | edge present but `/api` does not reach Go | inspect Nginx routing |
+| `EDGE_UI_MISROUTED` | edge present but `/` reaches Go instead of Next dev | install legacy edge (`sudo ./deploy/nginx/setup-next-legacy.sh`) |
 | `ARCHITECTURE_VIOLATION` | Next directly responds as the auth API | remove rewrite/handler/proxy |
 | `PORT_CONTAMINATION` | canonical port owned by an unexpected process | inspect PID/owner with `npm run local:preflight` |
 | `INSUFFICIENT_PERMISSION` | process is visible but cannot be controlled | use elevated manual inspection |

@@ -25,6 +25,74 @@ export function extractDocumentedNextVersion(documentText) {
   return match ? match[1] : null;
 }
 
+/**
+ * Detect semantic equivalents of retired production topology presented as active:
+ * - production Nginx /* -> Next.js
+ * - production UI owner = Next.js
+ * - production requires next start
+ * - production application runs as Next.js + Go dual service
+ */
+export function detectStaleProductionTopology(docText) {
+  const violations = [];
+  const patterns = [
+    {
+      name: 'production_edge_routes_to_next',
+      regex: /(?:Nginx|production|edge).*(?:routes|proxies).*(?:\/\*|everything else).*Next(?:\.js)?/i,
+    },
+    {
+      name: 'production_nginx_slash_to_next',
+      regex: /production\s+Nginx\s+\/\*\s*->\s*Next(?:\.js)?/i,
+    },
+    {
+      name: 'production_ui_owner_next',
+      regex: /production\s+(?:UI\s+owner|edge\s+owner)\s*=\s*Next(?:\.js)?/i,
+    },
+    {
+      name: 'production_requires_next_start',
+      regex: /production\s+(?:requires|runs)\s+.*next\s+start/i,
+    },
+    {
+      name: 'production_dual_service',
+      regex: /production\s+application\s+runs\s+as\s+Next(?:\.js)?\s*\+\s*Go\s+dual\s+service/i,
+    },
+  ];
+  for (const p of patterns) {
+    if (p.regex.test(docText)) {
+      violations.push(p.name);
+    }
+  }
+  return violations;
+}
+
+/**
+ * Detect instructing sudo ./deploy/nginx/setup.sh for local Next.js development workflow:
+ * - EDGE_REQUIRED followed by setup.sh instead of setup-next-legacy.sh
+ * - local:dev instructions recommending setup.sh instead of setup-next-legacy.sh
+ */
+export function detectWrongDevInstaller(docText) {
+  const violations = [];
+  const patterns = [
+    {
+      name: 'edge_required_instructs_prod_setup',
+      regex: /EDGE_REQUIRED.*sudo\s+\.\/deploy\/nginx\/setup\.sh(?!\b-next-legacy)/i,
+    },
+    {
+      name: 'local_dev_workflow_uses_prod_setup',
+      regex: /sudo\s+\.\/deploy\/nginx\/setup\.sh(?!\b-next-legacy)[\s\S]{0,100}npm\s+run\s+local:dev/i,
+    },
+    {
+      name: 'local_dev_instructions_recommend_prod_setup',
+      regex: /npm\s+run\s+local:dev[\s\S]{0,150}sudo\s+\.\/deploy\/nginx\/setup\.sh(?!\b-next-legacy)/i,
+    },
+  ];
+  for (const p of patterns) {
+    if (p.regex.test(docText)) {
+      violations.push(p.name);
+    }
+  }
+  return violations;
+}
+
 console.log('Testing current architecture documentation consistency...');
 
 // 1. OCS Management Runbook
@@ -206,9 +274,75 @@ assert.equal(
   `README Next.js version "${documentedNextVersion}" must match frontend/package.json "${declaredNextVersion}"`
 );
 
+// 9. Negative assertions rejecting stale production topology and wrong installer in docs
+const readmeStaleHits = detectStaleProductionTopology(readme);
+assert.equal(
+  readmeStaleHits.length,
+  0,
+  `README.md must not present stale production topology: ${readmeStaleHits.join(', ')}`
+);
+
+const deploymentStaleHits = detectStaleProductionTopology(deployment);
+assert.equal(
+  deploymentStaleHits.length,
+  0,
+  `docs/operations/deployment.md must not present stale production topology: ${deploymentStaleHits.join(', ')}`
+);
+
+const readmeWrongInstallerHits = detectWrongDevInstaller(readme);
+assert.equal(
+  readmeWrongInstallerHits.length,
+  0,
+  `README.md must not instruct production setup.sh for local Next dev: ${readmeWrongInstallerHits.join(', ')}`
+);
+
+const deploymentWrongInstallerHits = detectWrongDevInstaller(deployment);
+assert.equal(
+  deploymentWrongInstallerHits.length,
+  0,
+  `docs/operations/deployment.md must not instruct production setup.sh for local Next dev: ${deploymentWrongInstallerHits.join(', ')}`
+);
+
+// Negative sentinels: prove detectors flag synthetic violations (falsifiability)
+const syntheticStaleExamples = [
+  'Nginx routes /api to Go and everything else to Next.js.',
+  'production Nginx /* -> Next.js',
+  'production UI owner = Next.js',
+  'production requires next start',
+  'production application runs as Next.js + Go dual service',
+];
+let sentinelStaleDetectedCount = 0;
+for (const example of syntheticStaleExamples) {
+  const detected = detectStaleProductionTopology(example);
+  assert.ok(
+    detected.length > 0,
+    `detectStaleProductionTopology must flag synthetic example: "${example}"`
+  );
+  sentinelStaleDetectedCount++;
+}
+
+const syntheticWrongInstallerExamples = [
+  'EDGE_REQUIRED and instructs sudo ./deploy/nginx/setup.sh',
+  'sudo ./deploy/nginx/setup.sh\nnpm run local:dev',
+  'npm run local:dev\nStart Nginx: sudo ./deploy/nginx/setup.sh',
+];
+let sentinelWrongInstallerDetectedCount = 0;
+for (const example of syntheticWrongInstallerExamples) {
+  const detected = detectWrongDevInstaller(example);
+  assert.ok(
+    detected.length > 0,
+    `detectWrongDevInstaller must flag synthetic example: "${example}"`
+  );
+  sentinelWrongInstallerDetectedCount++;
+}
+
 console.log('Current architecture documentation consistency: PASS');
 
 console.log(`documented_next_version=${documentedNextVersion}`);
 console.log(`declared_next_version=${declaredNextVersion}`);
 console.log(`next_documentation_version_match=${documentedNextVersion === declaredNextVersion}`);
 console.log(`next_documentation_version_sentinel_detected=${sentinelMismatchDetected}`);
+console.log(`readme_stale_production_topology=${readmeStaleHits.length}`);
+console.log(`deployment_stale_production_topology=${deploymentStaleHits.length}`);
+console.log(`local_workflow_contract=PASS`);
+console.log(`documentation_contract=PASS`);

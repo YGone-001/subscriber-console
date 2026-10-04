@@ -284,6 +284,11 @@ function testToolPresence() {
     'next-auth-authority-direct-loopback',
     proxy.includes('127.0.0.1:18888') && proxy.includes('/api/auth/me'),
   );
+
+  const localDev = readFile('scripts/local-dev.mjs');
+  const recommendsProductionSetup = /EDGE_REQUIRED[\s\S]*?deploy\/nginx\/setup\.sh\b/i.test(localDev);
+  const recommendsLegacySetup = /EDGE_REQUIRED[\s\S]*?deploy\/nginx\/setup-next-legacy\.sh\b/i.test(localDev);
+  check('local-dev-edge-required-uses-legacy-setup', recommendsLegacySetup && !recommendsProductionSetup);
 }
 
 function testDocumentation() {
@@ -840,6 +845,7 @@ async function main() {
   console.log('');
   console.log(`local_ops_active_http_edge_port=${passed('active-http-edge-port-80') ? 80 : 'UNKNOWN'}`);
   console.log(`local_ops_https_default_active=${!passed('https-not-active-by-default')}`);
+  console.log(`local_ops_dev_recommends_legacy_setup=${passed('local-dev-edge-required-uses-legacy-setup')}`);
   console.log('');
   console.log(`local_ops_failures=${failures.length}`);
   console.log(`local_ops_result=${failures.length === 0 ? 'PASS' : 'FAIL'}`);

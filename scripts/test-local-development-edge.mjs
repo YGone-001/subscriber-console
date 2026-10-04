@@ -433,6 +433,8 @@ function runDoctor(env = {}) {
     go: key('local_stack_go'),
     edge: key('local_stack_edge'),
     edgeApi: key('local_stack_edge_api'),
+    edgeUiOwner: key('local_stack_edge_ui_owner'),
+    edgeUiContract: key('local_stack_edge_ui_contract'),
     directNextApi: key('local_stack_direct_next_api'),
     result: key('local_stack_result'),
   };
@@ -496,6 +498,8 @@ const machine = {
   local_dev_doctor_ready_exit: 'unknown',
   local_dev_doctor_missing_edge_result: 'unknown',
   local_dev_doctor_missing_edge_exit_nonzero: 'false',
+  local_dev_doctor_prod_edge_result: 'unknown',
+  local_dev_doctor_prod_edge_exit_nonzero: 'false',
   local_dev_go_routes: '0',
   local_dev_next_api_routes: '0',
   local_dev_next_api_rewrites: '0',
@@ -780,8 +784,9 @@ async function main() {
   machine.local_dev_doctor_ready_exit = String(doctorReady.exit);
   check('LDE-D06',
     doctorReady.next === 'READY' && doctorReady.go === 'READY' && doctorReady.edge === 'READY' &&
-      doctorReady.edgeApi === 'READY' && doctorReady.result === 'FULL_STACK_READY' && doctorReady.exit === 0,
-    `next=${doctorReady.next} go=${doctorReady.go} edge=${doctorReady.edge} edge_api=${doctorReady.edgeApi} result=${doctorReady.result} exit=${doctorReady.exit} direct_next_api=${doctorReady.directNextApi}`);
+      doctorReady.edgeApi === 'READY' && doctorReady.edgeUiOwner === 'next' &&
+      doctorReady.result === 'FULL_STACK_READY' && doctorReady.exit === 0,
+    `next=${doctorReady.next} go=${doctorReady.go} edge=${doctorReady.edge} edge_api=${doctorReady.edgeApi} edge_ui_owner=${doctorReady.edgeUiOwner} result=${doctorReady.result} exit=${doctorReady.exit} direct_next_api=${doctorReady.directNextApi}`);
 
   log('-- local:doctor EDGE_REQUIRED negative proof --');
 
@@ -798,6 +803,46 @@ async function main() {
       doctorMissingEdge.edge === 'UNAVAILABLE' && doctorMissingEdge.edgeApi === 'UNAVAILABLE' &&
       doctorMissingEdge.result === 'EDGE_REQUIRED' && missingEdgeNonZero,
     `next=${doctorMissingEdge.next} go=${doctorMissingEdge.go} edge=${doctorMissingEdge.edge} edge_api=${doctorMissingEdge.edgeApi} result=${doctorMissingEdge.result} exit=${doctorMissingEdge.exit}`);
+
+  log('-- local:doctor EDGE_UI_MISROUTED negative proof (production Go-only edge with Next dev running) --');
+
+  const prodRepoConf = readFileSync(join(ROOT, 'deploy', 'nginx', 'xcloud.conf'), 'utf8');
+  const prodEffectiveConf = [
+    'worker_processes 1;',
+    `error_log ${nginxPath(join(NGINX_PREFIX, 'logs', 'error.log'))} warn;`,
+    `pid ${nginxPath(join(NGINX_PREFIX, 'logs', 'nginx.pid'))};`,
+    'events { worker_connections 1024; }',
+    'http {',
+    "  log_format localdev '$http_x_local_dev_marker|$upstream_addr|$upstream_status|$status|$request_method|$request_uri|$content_type';",
+    `  access_log ${nginxPath(ACCESS_LOG)} localdev;`,
+    `  client_body_temp_path ${nginxPath(join(NGINX_PREFIX, 'temp', 'client_body'))};`,
+    `  proxy_temp_path ${nginxPath(join(NGINX_PREFIX, 'temp', 'proxy'))};`,
+    "  include " + nginxPath(join(NGINX_PREFIX, 'conf', 'mime.types')) + ';',
+    prodRepoConf.replace(/^    listen 80;/m, `    listen ${EDGE_PORT};`),
+    '}',
+  ].join('\n');
+  const prodNginxConfPath = join(NGINX_PREFIX, 'conf', 'production-edge-misrouted.conf');
+  writeFileSync(prodNginxConfPath, prodEffectiveConf);
+
+  nginxConfPath = prodNginxConfPath;
+  const prodNginxProc = trackProcess(spawn(NGINX_BIN, ['-p', nginxPath(NGINX_PREFIX), '-c', nginxPath(prodNginxConfPath)], { stdio: 'ignore', detached: true }), 'nginx');
+  prodNginxProc.unref();
+  const prodEdgeUp = await waitForPort(EDGE_PORT, 30000);
+  check('LDE-D09-edge-listening', prodEdgeUp, `prod_edge_listening=${prodEdgeUp} port=${EDGE_PORT}`);
+
+  const doctorProdEdge = runDoctor();
+  const prodEdgeNonZero = typeof doctorProdEdge.exit === 'number' && doctorProdEdge.exit !== 0;
+  machine.local_dev_doctor_prod_edge_result = doctorProdEdge.result || 'unknown';
+  machine.local_dev_doctor_prod_edge_exit_nonzero = String(prodEdgeNonZero);
+  check('LDE-D09',
+    doctorProdEdge.next === 'READY' && doctorProdEdge.go === 'READY' &&
+      doctorProdEdge.edge === 'READY' && doctorProdEdge.edgeApi === 'READY' &&
+      doctorProdEdge.edgeUiOwner === 'go' && doctorProdEdge.result === 'EDGE_UI_MISROUTED' &&
+      prodEdgeNonZero,
+    `next=${doctorProdEdge.next} go=${doctorProdEdge.go} edge=${doctorProdEdge.edge} edge_api=${doctorProdEdge.edgeApi} edge_ui_owner=${doctorProdEdge.edgeUiOwner} result=${doctorProdEdge.result} exit=${doctorProdEdge.exit}`);
+
+  stopNginx();
+  await waitForPortClosed(EDGE_PORT, 20000);
 
   printInvariants();
   report();

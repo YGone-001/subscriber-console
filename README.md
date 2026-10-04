@@ -159,14 +159,21 @@ starts. Never resolve an occupied canonical port by changing the port; diagnose 
 
 ### 4. Start the required services
 
-Start MongoDB yourself (it is never started automatically), then the Nginx edge:
+Start MongoDB yourself (it is never started automatically).
+
+For local development with the retained Next.js runtime, start the temporary legacy development Nginx edge:
 
 ```bash
-sudo ./deploy/nginx/setup.sh
+sudo ./deploy/nginx/setup-next-legacy.sh
 ```
 
-Use `sudo ./deploy/nginx/setup.sh 8080` to listen on another port. Then start the
-project-owned Go and Next.js development processes:
+Use `sudo ./deploy/nginx/setup-next-legacy.sh 8080` to listen on another port.
+
+Edge helpers:
+- `setup.sh`: current production single-Go edge router (`deploy/nginx/xcloud.conf`, Browser -> Nginx -> Go :18888).
+- `setup-next-legacy.sh`: temporary legacy Next.js development and explicit rollback edge router (`deploy/nginx/xcloud-next-legacy.conf`, UI/HMR to Next.js :13333, API to Go :18888).
+
+Then start the project-owned Go and Next.js development processes:
 
 ```bash
 npm run local:dev
@@ -260,27 +267,38 @@ Use Node.js 20.19.0 or newer. Install dependencies separately at the repository 
 
 ## Deployment
 
-The application runs as two loopback-internal services behind the Nginx edge:
-Next.js on `127.0.0.1:13333` and Go on `127.0.0.1:18888`. Nginx routes `/api` and
-`/api/*` to Go and everything else to Next.js; install it with
+Production runs as a single loopback-internal Go application service behind the Nginx edge:
+Go on `127.0.0.1:18888` serving both the API and the embedded static React SPA.
+The Nginx edge routes all public traffic (`/*`, `/api`, `/api/*`) directly to Go; install it with
 `sudo ./deploy/nginx/setup.sh [listen_port]` (the script validates with `nginx -t`).
 The full-stack browser entry is the Nginx edge URL (default `http://localhost`), never
 an internal component port.
 
-```bash
-# Frontend
-npm ci
-cp .env.example .env
-cd frontend
-npm ci
-npm --prefix .. run mongo:init
-npm run build
-npm run start
+Production build and deployment pipeline:
 
-# Backend
+```bash
+# 1. Build production static SPA
+cd frontend-spa
+npm ci
+npm run build
+cd ..
+
+# 2. Stage SPA static assets for Go binary embedding
+node scripts/stage-spa-for-go.mjs
+
+# 3. Compile bundled Go server binary
 cd backend
-go build ./cmd/server
-./server
+go build -o bin/server ./cmd/server
+cd ..
+
+# 4. Initialize database indexes
+npm run mongo:init
+
+# 5. Start Go application service (loopback-internal)
+./backend/bin/server
+
+# 6. Configure and activate public Nginx edge router
+sudo ./deploy/nginx/setup.sh
 ```
 
 More detail is available in [Deployment](docs/operations/deployment.md).

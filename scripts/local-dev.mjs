@@ -34,6 +34,7 @@ import {
   DEFAULT_EDGE_URL,
   PORT_OUTCOMES,
   countUnmanagedLiveProcesses,
+  edgePortFromUrl,
   inspectPort,
   inspectProcess,
   probeHttp,
@@ -376,11 +377,20 @@ async function main() {
     log('local_dev_result=FULL_STACK_READY');
   } else {
     log('FULL_STACK_NOT_READY');
+    const port = edgePortFromUrl(report.edgeUrl);
+    const edgeHelperCmd = port && port !== 80
+      ? `sudo ./deploy/nginx/setup-next-legacy.sh ${port}`
+      : 'sudo ./deploy/nginx/setup-next-legacy.sh';
     if (report.reachedTopology && !report.edgeReady) {
       log('EDGE_REQUIRED');
       log('Go and Next are running, but the Nginx edge is missing.');
-      log('Start the edge, then re-check with `npm run local:doctor`:');
-      log('  sudo ./deploy/nginx/setup.sh');
+      log('Start the temporary legacy development edge, then re-check with `npm run local:doctor`:');
+      log(`  ${edgeHelperCmd}`);
+    } else if (report.result === 'EDGE_UI_MISROUTED') {
+      log('EDGE_UI_MISROUTED');
+      log('Go and Next are running, but the Nginx edge UI is not routed to Next.js.');
+      log('Install the temporary legacy development edge, then re-check with `npm run local:doctor`:');
+      log(`  ${edgeHelperCmd}`);
     }
     log(`local_dev_result=${report.result}`);
     if (report.goLog && existsSync(report.goLog)) log(`Go log  : ${report.goLog}`);

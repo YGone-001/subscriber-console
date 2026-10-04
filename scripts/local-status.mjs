@@ -76,7 +76,10 @@ async function main() {
     console.log('  Diagnose the owner with `npm run local:preflight`. Do not change the port.');
   } else if (topologyState === TOPOLOGY_STATES.EDGE_REQUIRED) {
     console.log('  Go and Next are up, but the Nginx edge is missing.');
-    console.log('  Run `sudo ./deploy/nginx/setup.sh`, then `npm run local:doctor`.');
+    console.log('  Run `sudo ./deploy/nginx/setup-next-legacy.sh`, then `npm run local:doctor`.');
+  } else if (topologyState === TOPOLOGY_STATES.EDGE_UI_MISROUTED) {
+    console.log('  Edge answered but UI is not routed to Next.js.');
+    console.log('  Run `sudo ./deploy/nginx/setup-next-legacy.sh`, then `npm run local:doctor`.');
   } else if (topologyState === TOPOLOGY_STATES.FULL_STACK_READY) {
     console.log(`  Open: ${edgeUrl}`);
   }

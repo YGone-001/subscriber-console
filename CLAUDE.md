@@ -159,13 +159,13 @@ Charging Plane remains frozen and excluded.
 
 稳定规则，非临时排障记录：
 
-- 全栈浏览器访问必须始终从 Nginx 边缘进入。默认 `http://localhost`；自定义边缘端口时为 `http://localhost:<edge-port>`。
+- 全栈浏览器访问必须始终从 Nginx 边缘进入。默认 `http://localhost`；自定义边缘端口时为 `http://localhost:<edge-port>`（生产环境使用 `sudo ./deploy/nginx/setup.sh <port>`；开发环境使用 `sudo ./deploy/nginx/setup-next-legacy.sh <port>`）。
 - `localhost:13333` 不是受支持的应用访问源，它是 Next.js UI 内部监听器。
 - `localhost:18888` 不是受支持的浏览器应用访问源，它是 Go API 内部监听器。
 - 浏览器相对路径 `/api` 调用依赖 Nginx 同源边缘转发至 Go。
 - 本地环境缺少 Nginx 属于拓扑不完整，不构成“把 API 转发能力重新还给 Next.js”的理由。
 - 禁止新增：Next.js `/api` rewrite、Next.js `/api` route handler、Next.js API 反向代理/转发中间件、Node API fallback、浏览器直连 Go 的硬编码 base URL。
-- 开发态 HMR 传输：Nginx 在开发态仍是全栈浏览器 origin；Next.js 开发服务器的 HMR WebSocket 经边缘 `/_next/hmr` 传输。这是框架开发流量，不是 API 归属，也不放宽上述 Next.js API 路由禁令。
+- 开发态 HMR 传输：Nginx 在 Next.js 开发态仍是全栈浏览器 origin；Next.js 开发服务器的 HMR WebSocket 经临时旧版配置（`deploy/nginx/xcloud-next-legacy.conf`，由 `deploy/nginx/setup-next-legacy.sh` 安装）边缘 `/_next/hmr` 传输。这是框架开发流量，不是 API 归属，也不放宽上述 Next.js API 路由禁令。
 - 浏览器流量与内部权威调用：浏览器 `/api/*` 只能经 Nginx 到 Go；Next.js 导航守卫可通过回环 `http://127.0.0.1:18888/api/auth/me` 直接查询 Go 认证权威。该服务端回环调用不是 API 归属、不是 API 转发、不是 Node 回退，也不否定 Nginx 之外的这条内部权威通道。
 - 端口现状：80 为当前生效的 Nginx HTTP 边缘（`deploy/nginx/xcloud.conf` 中 `listen 80;`）；443 默认不生效，仅存在于被注释的 HTTPS 模板中。
 - `frontend/next.config.ts` 的 `allowedDevOrigins` 属于来源策略设置，不改变 TCP 绑定；由于 `next dev` / `next start` 均为 `-H 127.0.0.1 -p 13333`，该监听器始终为回环专用，局域网不可达。

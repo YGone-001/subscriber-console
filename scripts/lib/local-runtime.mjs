@@ -75,6 +75,7 @@ export const TOPOLOGY_STATES = Object.freeze({
   GO_DOWN: 'GO_DOWN',
   NEXT_DOWN: 'NEXT_DOWN',
   EDGE_API_MISROUTED: 'EDGE_API_MISROUTED',
+  EDGE_UI_MISROUTED: 'EDGE_UI_MISROUTED',
   ARCHITECTURE_VIOLATION: 'ARCHITECTURE_VIOLATION',
   PORT_CONTAMINATION: 'PORT_CONTAMINATION',
 });
@@ -909,16 +910,36 @@ export function terminateVerifiedProcess(record, processInfo) {
 // ---------------------------------------------------------------------------
 
 /**
+ * Classify the observed edge UI owner based on HTML content.
+ * Next.js dev server serves HTML with `/_next/` asset paths or `__NEXT_DATA__`.
+ * Go bundled SPA serves HTML with `/assets/` or `id="root"` and no `/_next/`.
+ */
+export function classifyEdgeUiOwner({ edge, edgeLogin } = {}) {
+  const probe = (edgeLogin && edgeLogin.reachable && edgeLogin.status === 200) ? edgeLogin : edge;
+  if (!probe || !probe.reachable) return 'unknown';
+  const body = String(probe.body || '');
+  const hasNext = body.includes('/_next/') || body.includes('__NEXT_DATA__');
+  const hasGoSpa = body.includes('/assets/') || body.includes('id="root"');
+  if (hasNext && !hasGoSpa) return 'next';
+  if (hasGoSpa && !hasNext) return 'go';
+  if (hasNext) return 'next';
+  if (hasGoSpa) return 'go';
+  return 'unknown';
+}
+
+/**
  * Probe the full local topology over HTTP. Pure reachability + ownership
  * interpretation; no process management.
  */
 export async function probeTopology({ edgeUrl = resolveEdgeUrl() } = {}) {
   const edgeRootUrl = `${edgeUrl}/`;
+  const edgeLoginUrl = `${edgeUrl}/login`;
   const edgeApiUrl = `${edgeUrl}/api/auth/me`;
-  const [go, next, edge, edgeApi, nextApi] = await Promise.all([
+  const [go, next, edge, edgeLogin, edgeApi, nextApi] = await Promise.all([
     probeHttp(GO_HEALTHZ),
     probeHttp(NEXT_ROOT),
     probeHttp(edgeRootUrl),
+    probeHttp(edgeLoginUrl),
     probeHttp(edgeApiUrl),
     probeHttp(NEXT_DIRECT_API),
   ]);
@@ -928,6 +949,7 @@ export async function probeTopology({ edgeUrl = resolveEdgeUrl() } = {}) {
   const edgeReady = edge.reachable;
   const edgeApiRouted = edgeApi.reachable && edgeApi.status === 401;
   const directNextApi = classifyDirectNextApi(nextApi);
+  const edgeUiOwner = classifyEdgeUiOwner({ edge, edgeLogin });
 
   let result;
   // An architecture violation outranks every topology state: a Next.js listener that
@@ -937,12 +959,13 @@ export async function probeTopology({ edgeUrl = resolveEdgeUrl() } = {}) {
   else if (!nextReady) result = TOPOLOGY_STATES.NEXT_DOWN;
   else if (!edgeReady) result = TOPOLOGY_STATES.EDGE_REQUIRED;
   else if (!edgeApiRouted) result = TOPOLOGY_STATES.EDGE_API_MISROUTED;
+  else if (edgeUiOwner !== 'next') result = TOPOLOGY_STATES.EDGE_UI_MISROUTED;
   else result = TOPOLOGY_STATES.FULL_STACK_READY;
 
   return {
-    edgeUrl, edgeRootUrl, edgeApiUrl,
-    go, next, edge, edgeApi, nextApi,
-    goReady, nextReady, edgeReady, edgeApiRouted, directNextApi, result,
+    edgeUrl, edgeRootUrl, edgeLoginUrl, edgeApiUrl,
+    go, next, edge, edgeLogin, edgeApi, nextApi,
+    goReady, nextReady, edgeReady, edgeApiRouted, directNextApi, edgeUiOwner, result,
   };
 }
 

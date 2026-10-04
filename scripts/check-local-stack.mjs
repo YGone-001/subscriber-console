@@ -46,8 +46,8 @@ function statusLine(label, url, result) {
 async function main() {
   const topology = await probeTopology({ edgeUrl: EDGE_URL });
   const {
-    go, next, edge, edgeApi, nextApi,
-    goReady, nextReady, edgeReady, edgeApiRouted, directNextApi, result,
+    go, next, edge, edgeLogin, edgeApi, nextApi,
+    goReady, nextReady, edgeReady, edgeApiRouted, directNextApi, edgeUiOwner, result,
   } = topology;
   const EDGE_ROOT = topology.edgeRootUrl;
   const EDGE_API = topology.edgeApiUrl;
@@ -60,6 +60,7 @@ async function main() {
   console.log(statusLine('Edge UI      ', EDGE_ROOT, edge));
   console.log(statusLine('Edge API     ', EDGE_API, edgeApi));
   console.log(statusLine('Next direct API', NEXT_DIRECT_API, nextApi));
+  console.log(`  Edge UI owner: ${edgeUiOwner}`);
 
   if (!goReady) {
     console.log('\nGo backend is not reachable on 127.0.0.1:18888.');
@@ -85,8 +86,14 @@ async function main() {
     console.log('\nFull-stack browser access is NOT ready.');
     console.log('');
     console.log('Do not use http://localhost:13333.');
-    console.log('Install/start the Nginx edge and use:');
-    console.log('http://localhost');
+    console.log('Install/start the temporary legacy development Nginx edge:');
+    console.log('  sudo ./deploy/nginx/setup-next-legacy.sh');
+  } else if (result === 'EDGE_UI_MISROUTED') {
+    console.log('\nEDGE_UI_MISROUTED');
+    console.log(`The edge answered ${EDGE_ROOT} but UI is not routed to Next.js (observed owner: ${edgeUiOwner}).`);
+    console.log('For local Next.js development, install the legacy development edge:');
+    console.log('  sudo ./deploy/nginx/setup-next-legacy.sh');
+    console.log('then reload Nginx and retry.');
   } else if (result === 'EDGE_API_MISROUTED') {
     console.log('\nEDGE_API_MISROUTED');
     console.log(`The edge answered ${EDGE_ROOT} but ${EDGE_API} did not reach the Go`);
@@ -106,6 +113,8 @@ async function main() {
   console.log(`local_stack_go=${goReady ? 'READY' : 'DOWN'}`);
   console.log(`local_stack_edge=${edgeReady ? 'READY' : 'UNAVAILABLE'}`);
   console.log(`local_stack_edge_api=${edgeApiRouted ? 'READY' : edgeReady ? 'MISROUTED' : 'UNAVAILABLE'}`);
+  console.log(`local_stack_edge_ui_owner=${edgeUiOwner}`);
+  console.log(`local_stack_edge_ui_contract=${edgeUiOwner === 'next' ? 'READY' : edgeReady ? 'MISROUTED' : 'UNAVAILABLE'}`);
   console.log(`local_stack_direct_next_api=${directNextApi}`);
   console.log(`local_stack_result=${result}`);
   console.log('==================================================\n');
