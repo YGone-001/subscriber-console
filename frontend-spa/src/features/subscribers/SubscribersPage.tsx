@@ -7,6 +7,19 @@ import { useRead } from '../../lib/api/use-read';
 import { hasPermission } from '../../lib/permissions';
 import { useAuth } from '../../providers/AuthProvider';
 import { useI18n } from '../../providers/I18nProvider';
+import {
+  buildBatchCreateRequest,
+  buildBatchPrecheckRequest,
+  buildBatchUpdateRequest,
+  buildBulkDeleteRequest,
+  buildImportPrecheckRequest,
+  buildImportRequest,
+  buildProfileApplyRequest,
+  buildSubscriberCreateRequest,
+  buildSubscriberUpdateRequest,
+  buildTrafficAdjustRequest,
+  type ImportRecord,
+} from './mutation-contract';
 
 type UnknownRecord = Record<string, unknown>;
 type PlmnRecord = { mcc?: string; mnc?: string; country?: string; network?: string };
@@ -76,10 +89,13 @@ export function SubscribersPage() {
   const [msisdnInput, setMsisdnInput] = useState('');
   const [planIdInput, setPlanIdInput] = useState('');
   const [profileInput, setProfileInput] = useState('');
+  const [batchStartImsi, setBatchStartImsi] = useState('001010000000001');
   const [batchCount, setBatchCount] = useState(10);
   const [batchImsisText, setBatchImsisText] = useState('');
+  const [batchReason, setBatchReason] = useState('Operational batch adjustment');
+  const [batchAccessRestriction, setBatchAccessRestriction] = useState('32');
+  const [batchTicketId, setBatchTicketId] = useState('');
   const [importJsonText, setImportJsonText] = useState('');
-  const [importOverwrite, setImportOverwrite] = useState(false);
   const [importPrecheckResult, setImportPrecheckResult] = useState<string | null>(null);
   const [trafficBucket, setTrafficBucket] = useState<'data' | 'voice' | 'sms'>('data');
   const [trafficAmount, setTrafficAmount] = useState('100');
@@ -112,11 +128,11 @@ export function SubscribersPage() {
     setSubmitting(true);
     setNotice(null);
     try {
-      await postJson('/api/subscribers', {
-        imsi: imsiInput.trim(),
+      const payload = buildSubscriberCreateRequest(imsiInput, {
         msisdn: msisdnInput.trim() || undefined,
         planId: planIdInput.trim() || undefined,
       });
+      await postJson('/api/subscribers', payload);
       setIsCreateOpen(false);
       setImsiInput('');
       setMsisdnInput('');
@@ -136,11 +152,11 @@ export function SubscribersPage() {
     setSubmitting(true);
     setNotice(null);
     try {
-      await putJson(`/api/subscribers/${encodeURIComponent(activeImsi)}`, {
-        sub4G: { msisdn: msisdnInput.trim() },
-        auth4G: {},
-        ocsTraffic: {},
+      const payload = buildSubscriberUpdateRequest({
+        msisdn: msisdnInput.trim() || undefined,
+        accessRestrictionData: 32,
       });
+      await putJson(`/api/subscribers/${encodeURIComponent(activeImsi)}`, payload);
       setIsEditOpen(false);
       setActiveImsi(null);
       setNotice({ type: 'success', message: 'Subscriber updated successfully.' });
@@ -174,10 +190,8 @@ export function SubscribersPage() {
   const handleBatchCreatePrecheck = async () => {
     setSubmitting(true);
     try {
-      await postJson('/api/subscribers/batch/precheck', {
-        count: Number(batchCount) || 1,
-        profile: profileInput.trim() || 'default',
-      });
+      const payload = buildBatchPrecheckRequest(batchStartImsi, Number(batchCount) || 1);
+      await postJson('/api/subscribers/batch/precheck', payload);
       setNotice({ type: 'info', message: 'Batch precheck passed successfully.' });
     } catch (err) {
       setNotice({ type: 'error', message: err instanceof Error ? err.message : 'Precheck failed' });
@@ -190,10 +204,12 @@ export function SubscribersPage() {
     setSubmitting(true);
     setNotice(null);
     try {
-      await postJson('/api/subscribers/batch', {
-        count: Number(batchCount) || 1,
-        profile: profileInput.trim() || 'default',
+      const payload = buildBatchCreateRequest(batchStartImsi, Number(batchCount) || 1, {
+        profileName: profileInput.trim() || undefined,
+        planId: planIdInput.trim() || undefined,
+        strategy: 'overwrite',
       });
+      await postJson('/api/subscribers/batch', payload);
       setIsBatchCreateOpen(false);
       setNotice({ type: 'success', message: 'Batch create executed successfully.' });
       await refreshData();
@@ -214,10 +230,11 @@ export function SubscribersPage() {
     setSubmitting(true);
     setNotice(null);
     try {
-      await postJson('/api/subscribers/batch-update', {
-        imsis,
-        updates: { profile: profileInput.trim() || undefined },
+      const patch = { accessRestrictionData: Number(batchAccessRestriction) || 32 };
+      const payload = buildBatchUpdateRequest(imsis, patch, batchReason, {
+        ticketId: batchTicketId.trim() || undefined,
       });
+      await postJson('/api/subscribers/batch-update', payload);
       setIsBatchUpdateOpen(false);
       setBatchImsisText('');
       setNotice({ type: 'success', message: 'Batch update executed successfully.' });
@@ -235,9 +252,8 @@ export function SubscribersPage() {
     setSubmitting(true);
     setNotice(null);
     try {
-      await postJson('/api/subscribers/bulk-delete', {
-        imsis: selectedImsis,
-      });
+      const payload = buildBulkDeleteRequest(selectedImsis);
+      await postJson('/api/subscribers/bulk-delete', payload);
       setIsBulkDeleteOpen(false);
       setSelectedImsis([]);
       setNotice({ type: 'success', message: `Bulk delete executed for ${selectedImsis.length} subscribers.` });
@@ -260,12 +276,24 @@ export function SubscribersPage() {
     }
     setSubmitting(true);
     try {
-      const items = Array.isArray(parsed) ? parsed : (parsed as { subscribers?: unknown[] })?.subscribers ?? [];
-      const res = await postJson<{ validCount?: number; total?: number }>(
+      const raw = Array.isArray(parsed)
+        ? parsed
+        : (parsed as { records?: unknown[]; subscribers?: unknown[] })?.records ??
+          (parsed as { records?: unknown[]; subscribers?: unknown[] })?.subscribers ??
+          [];
+      const imsiList = raw
+        .map((item) => (typeof item === 'string' ? item : (item as { imsi?: string })?.imsi))
+        .filter((i): i is string => Boolean(i));
+      if (!imsiList.length) {
+        setNotice({ type: 'error', message: 'No valid IMSIs found in import payload' });
+        return;
+      }
+      const payload = buildImportPrecheckRequest(imsiList);
+      const res = await postJson<{ validCount?: number; total?: number; conflicts?: unknown[] }>(
         '/api/subscribers/import?mode=precheck',
-        { subscribers: items, overwrite: importOverwrite },
+        payload,
       );
-      setImportPrecheckResult(`Precheck passed: ${res.validCount ?? items.length} valid entries ready for import.`);
+      setImportPrecheckResult(`Precheck passed: ${res.validCount ?? imsiList.length} valid entries ready for import.`);
     } catch (err) {
       setNotice({ type: 'error', message: err instanceof Error ? err.message : 'Import precheck failed' });
     } finally {
@@ -284,11 +312,20 @@ export function SubscribersPage() {
     setSubmitting(true);
     setNotice(null);
     try {
-      const items = Array.isArray(parsed) ? parsed : (parsed as { subscribers?: unknown[] })?.subscribers ?? [];
-      await postJson('/api/subscribers/import?mode=import', {
-        subscribers: items,
-        overwrite: importOverwrite,
-      });
+      const raw = Array.isArray(parsed)
+        ? parsed
+        : (parsed as { records?: unknown[]; subscribers?: unknown[] })?.records ??
+          (parsed as { records?: unknown[]; subscribers?: unknown[] })?.subscribers ??
+          [];
+      const records: ImportRecord[] = raw.map((item) =>
+        typeof item === 'string' ? { imsi: item } : (item as ImportRecord),
+      );
+      if (!records.length) {
+        setNotice({ type: 'error', message: 'No records to import' });
+        return;
+      }
+      const payload = buildImportRequest(records, false);
+      await postJson('/api/subscribers/import?mode=import', payload);
       setIsImportOpen(false);
       setImportJsonText('');
       setImportPrecheckResult(null);
@@ -307,9 +344,8 @@ export function SubscribersPage() {
     setSubmitting(true);
     setNotice(null);
     try {
-      await postJson(`/api/subscribers/${encodeURIComponent(activeImsi)}/profile`, {
-        profileName: profileInput.trim(),
-      });
+      const payload = buildProfileApplyRequest(profileInput.trim());
+      await postJson(`/api/subscribers/${encodeURIComponent(activeImsi)}/profile`, payload);
       setIsProfileApplyOpen(false);
       setActiveImsi(null);
       setNotice({ type: 'success', message: `Profile applied to subscriber ${activeImsi}.` });
@@ -327,14 +363,15 @@ export function SubscribersPage() {
     setSubmitting(true);
     setNotice(null);
     try {
-      await postJson(`/api/subscribers/${encodeURIComponent(activeImsi)}/traffic-adjustments`, {
+      const payload = buildTrafficAdjustRequest({
         bucket: trafficBucket,
         amount: Number(trafficAmount) || 0,
         reason: trafficReason.trim(),
       });
+      await postJson(`/api/subscribers/${encodeURIComponent(activeImsi)}/traffic-adjustments`, payload);
       setIsTrafficAdjustOpen(false);
       setActiveImsi(null);
-      setNotice({ type: 'success', message: `Traffic adjustment completed for ${activeImsi}.` });
+      setNotice({ type: 'success', message: `Traffic adjustment completed for ${activeImsi}. Routed to Go backend.` });
       await refreshData();
     } catch (err) {
       setNotice({ type: 'error', message: err instanceof Error ? err.message : 'Traffic adjust failed' });
@@ -703,7 +740,18 @@ export function SubscribersPage() {
         }
       >
         <div className="form-group">
-          <label htmlFor="batch-count">Count</label>
+          <label htmlFor="batch-start-imsi">Start IMSI (15 digits) *</label>
+          <input
+            id="batch-start-imsi"
+            className="form-input"
+            value={batchStartImsi}
+            onChange={(e) => setBatchStartImsi(e.target.value)}
+            maxLength={15}
+            placeholder="001010000000001"
+          />
+        </div>
+        <div className="form-group">
+          <label htmlFor="batch-count">Count *</label>
           <input
             id="batch-count"
             type="number"
@@ -730,6 +778,16 @@ export function SubscribersPage() {
             ))}
           </select>
         </div>
+        <div className="form-group">
+          <label htmlFor="batch-plan">Tariff Plan ID</label>
+          <input
+            id="batch-plan"
+            className="form-input"
+            value={planIdInput}
+            onChange={(e) => setPlanIdInput(e.target.value)}
+            placeholder="Optional plan ID"
+          />
+        </div>
       </Modal>
 
       {/* Modal 4: Batch Update */}
@@ -754,7 +812,7 @@ export function SubscribersPage() {
         }
       >
         <div className="form-group">
-          <label htmlFor="batch-imsis">IMSIs (comma or line separated)</label>
+          <label htmlFor="batch-imsis">IMSIs (comma or line separated) *</label>
           <textarea
             id="batch-imsis"
             className="form-textarea"
@@ -764,20 +822,36 @@ export function SubscribersPage() {
           />
         </div>
         <div className="form-group">
-          <label htmlFor="batch-update-profile">Target Profile</label>
+          <label htmlFor="batch-access-restriction">Access Restriction</label>
           <select
-            id="batch-update-profile"
+            id="batch-access-restriction"
             className="form-select"
-            value={profileInput}
-            onChange={(e) => setProfileInput(e.target.value)}
+            value={batchAccessRestriction}
+            onChange={(e) => setBatchAccessRestriction(e.target.value)}
           >
-            <option value="">Select profile...</option>
-            {profileList.map((p) => (
-              <option key={text(p.name)} value={text(p.name)}>
-                {text(p.name)}
-              </option>
-            ))}
+            <option value="32">Normal Access (32)</option>
+            <option value="255">Restricted Access (255)</option>
           </select>
+        </div>
+        <div className="form-group">
+          <label htmlFor="batch-reason">Reason * (minimum 3 characters)</label>
+          <input
+            id="batch-reason"
+            className="form-input"
+            value={batchReason}
+            onChange={(e) => setBatchReason(e.target.value)}
+            placeholder="Operational batch adjustment"
+          />
+        </div>
+        <div className="form-group">
+          <label htmlFor="batch-ticket-id">Ticket ID (optional)</label>
+          <input
+            id="batch-ticket-id"
+            className="form-input"
+            value={batchTicketId}
+            onChange={(e) => setBatchTicketId(e.target.value)}
+            placeholder="CHG-20261004-001"
+          />
         </div>
       </Modal>
 
@@ -825,17 +899,9 @@ export function SubscribersPage() {
             placeholder='[{"imsi": "001010000000001", "msisdn": "12345"}]'
           />
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '.5rem' }}>
-          <input
-            type="checkbox"
-            id="import-overwrite"
-            checked={importOverwrite}
-            onChange={(e) => setImportOverwrite(e.target.checked)}
-          />
-          <label htmlFor="import-overwrite" style={{ fontSize: '.875rem' }}>
-            Overwrite existing subscriber records
-          </label>
-        </div>
+        <p style={{ fontSize: '.8rem', color: '#666', marginTop: '.25rem' }}>
+          Server import policy creates new subscribers; overwrite is unsupported.
+        </p>
         {importPrecheckResult && (
           <div className="notice-box info">
             <span>{importPrecheckResult}</span>

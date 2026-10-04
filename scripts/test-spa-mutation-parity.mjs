@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
+import { execSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,8 +11,10 @@ const spa = resolve(root, 'frontend-spa');
 const source = resolve(spa, 'src');
 const productionSource = resolve(root, 'frontend/src');
 const contractPath = resolve(spa, 'mutation-parity-contract.json');
+const requestContractPath = resolve(spa, 'mutation-request-contract.json');
 const routes = JSON.parse(readFileSync(resolve(spa, 'migration-routes.json'), 'utf8'));
 const contracts = JSON.parse(readFileSync(contractPath, 'utf8'));
+const requestContracts = JSON.parse(readFileSync(requestContractPath, 'utf8'));
 const goRegistrations = deriveGoRegistrations(root);
 const goRouteKeys = new Set(goRegistrations.keys);
 
@@ -82,6 +85,38 @@ const disabledEndpoints = new Set([
   'DELETE /api/tariff-plans/{planId}/rules/{ruleId}',
 ]);
 
+const expectedAuthorizations = {
+  'POST /api/subscribers': { kind: 'capability', value: 'subscriber_write' },
+  'PUT /api/subscribers/{imsi}': { kind: 'capability', value: 'subscriber_write' },
+  'DELETE /api/subscribers/{imsi}': { kind: 'capability', value: 'subscriber_write' },
+  'POST /api/subscribers/batch': { kind: 'capability', value: 'subscriber_write' },
+  'POST /api/subscribers/batch-update': { kind: 'capability', value: 'subscriber_write' },
+  'POST /api/subscribers/bulk-delete': { kind: 'capability', value: 'subscriber_write' },
+  'POST /api/subscribers/import': { kind: 'capability', value: 'subscriber_write' },
+  'POST /api/subscribers/{imsi}/profile': { kind: 'capability', value: 'subscriber_write' },
+  'POST /api/subscribers/{imsi}/traffic-adjustments': { kind: 'permission', value: 'ocs.balance.adjust' },
+  'POST /api/profiles': { kind: 'permission', value: 'profiles.write' },
+  'PUT /api/profiles/{name}': { kind: 'permission', value: 'profiles.write' },
+  'DELETE /api/profiles/{name}': { kind: 'permission', value: 'profiles.write' },
+  'POST /api/profiles/{name}/versions/{versionId}/restore': { kind: 'capability', value: 'profile_rollback' },
+  'POST /api/ocs/balances/{imsi}/adjust': { kind: 'permission', value: 'ocs.balance.adjust' },
+  'POST /api/ocs/subscribers': { kind: 'capability', value: 'ocs.subscriber.write' },
+  'PATCH /api/ocs/subscribers/{imsi}': { kind: 'capability', value: 'ocs.subscriber.write' },
+  'POST /api/ocs/subscribers/{imsi}/suspend': { kind: 'capability', value: 'ocs.subscriber.write' },
+  'POST /api/ocs/subscribers/{imsi}/resume': { kind: 'capability', value: 'ocs.subscriber.write' },
+  'DELETE /api/ocs/subscribers/{imsi}': { kind: 'capability', value: 'ocs.subscriber.write' },
+  'POST /api/tariff-plans': { kind: 'capability', value: 'ocs.tariff.write' },
+  'PUT /api/tariff-plans/{planId}': { kind: 'capability', value: 'ocs.tariff.write' },
+  'DELETE /api/tariff-plans/{planId}': { kind: 'capability', value: 'ocs.tariff.write' },
+  'POST /api/tariff-plans/{planId}/clone': { kind: 'capability', value: 'ocs.tariff.write' },
+  'POST /api/tariff-plans/{planId}/enable': { kind: 'capability', value: 'ocs.tariff.write' },
+  'POST /api/tariff-plans/{planId}/disable': { kind: 'capability', value: 'ocs.tariff.write' },
+  'POST /api/users': { kind: 'permission', value: 'users.create' },
+  'PATCH /api/users/{username}': { kind: 'permission', value: 'users.update' },
+  'POST /api/users/{username}/disable': { kind: 'permission', value: 'users.disable' },
+  'POST /api/users/{username}/password-reset': { kind: 'permission', value: 'users.reset-password' },
+};
+
 function validateMutationContracts(entries) {
   const result = {
     schemaErrors: 0,
@@ -93,6 +128,8 @@ function validateMutationContracts(entries) {
     outOfScopeEndpoints: 0,
     disabledEndpoints: 0,
     nonMutationEndpoints: 0,
+    authorizationSchemaErrors: 0,
+    authorizationMismatches: 0,
   };
   const routesSeen = new Map();
   const addSchemaError = () => { result.schemaErrors += 1; };
@@ -143,11 +180,26 @@ function validateMutationContracts(entries) {
           addSchemaError();
           continue;
         }
-        const { name, request, confirmation } = op;
+        const { name, request, confirmation, authorization } = op;
         if (typeof name !== 'string' || typeof confirmation !== 'boolean') addSchemaError();
         if (typeof request !== 'string') {
           addSchemaError();
           continue;
+        }
+        if (
+          !authorization ||
+          typeof authorization !== 'object' ||
+          !['capability', 'permission'].includes(authorization.kind) ||
+          typeof authorization.value !== 'string' ||
+          !authorization.value.trim()
+        ) {
+          result.authorizationSchemaErrors += 1;
+          addSchemaError();
+        } else if (expectedAuthorizations[request]) {
+          const expected = expectedAuthorizations[request];
+          if (authorization.kind !== expected.kind || authorization.value !== expected.value) {
+            result.authorizationMismatches += 1;
+          }
         }
         if (request.startsWith('GET ')) {
           result.nonMutationEndpoints += 1;
@@ -179,6 +231,80 @@ function validateMutationContracts(entries) {
   return result;
 }
 
+function validateRequestContracts(requestEntries) {
+  const result = {
+    entries: 0,
+    duplicates: 0,
+    invalidAuthorities: 0,
+    shapeErrors: 0,
+  };
+  if (!Array.isArray(requestEntries)) {
+    result.shapeErrors += 1;
+    return result;
+  }
+  result.entries = requestEntries.length;
+  const seenKeys = new Map();
+
+  for (const entry of requestEntries) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      result.shapeErrors += 1;
+      continue;
+    }
+    const {
+      name,
+      method,
+      path,
+      queryMode,
+      backendAuthority,
+      productionReference,
+      requiredBodyKeys,
+      optionalBodyKeys,
+      forbiddenBodyKeys,
+    } = entry;
+
+    const key = `${method} ${path}${queryMode !== 'none' ? '?' + queryMode : ''}`;
+    seenKeys.set(key, (seenKeys.get(key) ?? 0) + 1);
+
+    if (
+      typeof name !== 'string' ||
+      !name.trim() ||
+      !['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) ||
+      typeof path !== 'string' ||
+      !path.startsWith('/api/') ||
+      !['none', 'mode=precheck', 'mode=import'].includes(queryMode) ||
+      !Array.isArray(requiredBodyKeys) ||
+      !Array.isArray(optionalBodyKeys) ||
+      !Array.isArray(forbiddenBodyKeys)
+    ) {
+      result.shapeErrors += 1;
+    }
+
+    if (
+      typeof backendAuthority !== 'string' ||
+      !backendAuthority.startsWith('backend/') ||
+      !existsSync(resolve(root, backendAuthority))
+    ) {
+      result.invalidAuthorities += 1;
+    }
+
+    if (
+      typeof productionReference !== 'string' ||
+      !productionReference.startsWith('frontend/') ||
+      !existsSync(resolve(root, productionReference))
+    ) {
+      result.shapeErrors += 1;
+    }
+  }
+
+  for (const [, occurrences] of seenKeys) {
+    if (occurrences > 1) {
+      result.duplicates += occurrences - 1;
+    }
+  }
+
+  return result;
+}
+
 const sourceFiles = walk(source).filter((file) => /\.(ts|tsx)$/.test(file));
 const sourceText = sourceFiles.map((file) => readFileSync(file, 'utf8')).join('\n');
 const featureFiles = walk(resolve(source, 'features')).filter((file) => /\.(ts|tsx)$/.test(file));
@@ -187,6 +313,7 @@ const countMatches = (text, expression) => (text.match(expression) ?? []).length
 const statusCount = (status) => count(routes, (route) => route.status === status);
 
 const validation = validateMutationContracts(contracts);
+const requestContractsValidation = validateRequestContracts(requestContracts);
 
 // Derive unique registered enabled endpoints from contract
 const contractUniqueEndpoints = new Set();
@@ -231,6 +358,45 @@ for (const pattern of disabledRuntimePatterns) {
   disabledRuntimeCalls += countMatches(featureText, pattern);
 }
 
+// Verify subscriber mutation request builders and execution
+const subscriberPageFile = resolve(source, 'features/subscribers/SubscribersPage.tsx');
+const subscriberPageText = readFileSync(subscriberPageFile, 'utf8');
+
+const brokenPrecheckHits = countMatches(subscriberPageText, /count:\s*Number\(batchCount\)[^}]*profile:\s*profileInput/g);
+const brokenBatchUpdateHits = countMatches(subscriberPageText, /updates:\s*\{\s*profile/g);
+const brokenBulkDeleteHits = countMatches(subscriberPageText, /imsis:\s*selectedImsis/g);
+const brokenImportHits = countMatches(subscriberPageText, /subscribers:\s*items/g);
+const brokenEditHits = countMatches(subscriberPageText, /sub4G:\s*\{\s*msisdn:\s*msisdnInput/g);
+
+assert.equal(brokenPrecheckHits, 0, 'legacy broken precheck payload must be absent');
+assert.equal(brokenBatchUpdateHits, 0, 'legacy broken batch-update payload must be absent');
+assert.equal(brokenBulkDeleteHits, 0, 'legacy broken bulk-delete payload must be absent');
+assert.equal(brokenImportHits, 0, 'legacy broken import payload must be absent');
+assert.equal(brokenEditHits, 0, 'legacy broken edit payload must be absent');
+
+// Execute builder tests
+let batchPrecheckContract = 'FAIL';
+let batchCreateContract = 'FAIL';
+let batchUpdateContract = 'FAIL';
+let bulkDeleteContract = 'FAIL';
+let importPrecheckContract = 'FAIL';
+let importContract = 'FAIL';
+
+try {
+  execSync('npx tsx --test tests/subscriber-mutation-builders.test.ts', {
+    cwd: spa,
+    stdio: 'pipe',
+  });
+  batchPrecheckContract = 'PASS';
+  batchCreateContract = 'PASS';
+  batchUpdateContract = 'PASS';
+  bulkDeleteContract = 'PASS';
+  importPrecheckContract = 'PASS';
+  importContract = 'PASS';
+} catch (testError) {
+  console.error('Failed to run subscriber mutation builder tests:', testError);
+}
+
 // Verify Route Inventory
 assert.equal(routes.length, 23);
 assert.equal(statusCount('foundation'), 1);
@@ -246,6 +412,22 @@ assert.equal(validation.missingRoutes, 0);
 assert.equal(validation.unknownRoutes, 0);
 assert.equal(validation.invalidSources, 0);
 assert.equal(validation.schemaErrors, 0);
+assert.equal(validation.authorizationSchemaErrors, 0);
+assert.equal(validation.authorizationMismatches, 0);
+
+// Verify Request Contracts
+assert.equal(requestContractsValidation.entries, 31);
+assert.equal(requestContractsValidation.duplicates, 0);
+assert.equal(requestContractsValidation.invalidAuthorities, 0);
+assert.equal(requestContractsValidation.shapeErrors, 0);
+
+// Verify Builder Contracts
+assert.equal(batchPrecheckContract, 'PASS');
+assert.equal(batchCreateContract, 'PASS');
+assert.equal(batchUpdateContract, 'PASS');
+assert.equal(bulkDeleteContract, 'PASS');
+assert.equal(importPrecheckContract, 'PASS');
+assert.equal(importContract, 'PASS');
 
 // Verify Endpoints
 assert.equal(contractUniqueEndpoints.size, 29);
@@ -272,10 +454,16 @@ assert.ok(sampleValid);
 assert.ok(validateMutationContracts([{ ...sampleValid, route: '/unknown' }]).unknownRoutes > 0, 'unknown route sentinel must fail');
 assert.ok(validateMutationContracts([{ ...sampleValid, source: 'invalid/source/file.tsx' }]).invalidSources > 0, 'invalid source sentinel must fail');
 assert.ok(validateMutationContracts([sampleValid, { ...sampleValid }]).duplicateRoutes > 0, 'duplicate route sentinel must fail');
-assert.ok(validateMutationContracts([{ ...sampleValid, operations: [{ name: 'invalid', request: 'POST /api/unknown', confirmation: false }] }]).unregisteredEndpoints > 0, 'unregistered endpoint sentinel must fail');
-assert.ok(validateMutationContracts([{ ...sampleValid, operations: [{ name: 'disabled', request: 'POST /api/subscribers/policy', confirmation: false }] }]).disabledEndpoints > 0, 'disabled endpoint sentinel must fail');
-assert.ok(validateMutationContracts([{ ...sampleValid, operations: [{ name: 'get in mutation', request: 'GET /api/subscribers', confirmation: false }] }]).nonMutationEndpoints > 0, 'GET in mutation sentinel must fail');
+assert.ok(validateMutationContracts([{ ...sampleValid, operations: [{ name: 'invalid', request: 'POST /api/unknown', confirmation: false, authorization: { kind: 'capability', value: 'sub' } }] }]).unregisteredEndpoints > 0, 'unregistered endpoint sentinel must fail');
+assert.ok(validateMutationContracts([{ ...sampleValid, operations: [{ name: 'disabled', request: 'POST /api/subscribers/policy', confirmation: false, authorization: { kind: 'capability', value: 'sub' } }] }]).disabledEndpoints > 0, 'disabled endpoint sentinel must fail');
+assert.ok(validateMutationContracts([{ ...sampleValid, operations: [{ name: 'get in mutation', request: 'GET /api/subscribers', confirmation: false, authorization: { kind: 'capability', value: 'sub' } }] }]).nonMutationEndpoints > 0, 'GET in mutation sentinel must fail');
 assert.ok(validateMutationContracts([{ ...sampleValid, route: '/system-health' }]).unknownRoutes > 0, 'system-health in mutation contract sentinel must fail');
+assert.ok(validateMutationContracts([{ ...sampleValid, operations: [{ ...sampleValid.operations[0], authorization: { kind: 'invalid', value: 'foo' } }] }]).authorizationSchemaErrors > 0, 'invalid auth kind sentinel must fail');
+assert.ok(validateMutationContracts([{ ...sampleValid, operations: [{ ...sampleValid.operations[0], authorization: { kind: 'capability', value: 'wrong_value' } }] }]).authorizationMismatches > 0, 'mismatched auth value sentinel must fail');
+
+assert.ok(validateRequestContracts([{ ...requestContracts[0], backendAuthority: 'backend/nonexistent.go' }]).invalidAuthorities > 0, 'invalid authority sentinel must fail');
+assert.ok(validateRequestContracts([{ ...requestContracts[0], method: 'INVALID' }]).shapeErrors > 0, 'invalid method shape sentinel must fail');
+assert.ok(validateRequestContracts([requestContracts[0], { ...requestContracts[0] }]).duplicates > 0, 'duplicate request contract sentinel must fail');
 
 // Report machine evidence
 console.log(`spa_mutation_route_total=${routes.length}`);
@@ -290,6 +478,21 @@ console.log(`spa_mutation_contract_duplicate_routes=${validation.duplicateRoutes
 console.log(`spa_mutation_contract_missing_routes=${validation.missingRoutes}`);
 console.log(`spa_mutation_contract_unknown_routes=${validation.unknownRoutes}`);
 console.log(`spa_mutation_contract_invalid_sources=${validation.invalidSources}`);
+console.log('');
+console.log(`spa_mutation_request_contract_entries=${requestContractsValidation.entries}`);
+console.log(`spa_mutation_request_contract_duplicates=${requestContractsValidation.duplicates}`);
+console.log(`spa_mutation_request_invalid_authorities=${requestContractsValidation.invalidAuthorities}`);
+console.log(`spa_mutation_request_shape_errors=${requestContractsValidation.shapeErrors}`);
+console.log('');
+console.log(`spa_mutation_subscriber_batch_precheck_contract=${batchPrecheckContract}`);
+console.log(`spa_mutation_subscriber_batch_create_contract=${batchCreateContract}`);
+console.log(`spa_mutation_subscriber_batch_update_contract=${batchUpdateContract}`);
+console.log(`spa_mutation_subscriber_bulk_delete_contract=${bulkDeleteContract}`);
+console.log(`spa_mutation_subscriber_import_precheck_contract=${importPrecheckContract}`);
+console.log(`spa_mutation_subscriber_import_contract=${importContract}`);
+console.log('');
+console.log(`spa_mutation_authorization_schema_errors=${validation.authorizationSchemaErrors}`);
+console.log(`spa_mutation_authorization_mismatches=${validation.authorizationMismatches}`);
 console.log('');
 console.log(`spa_mutation_enabled_registered_endpoints=${contractUniqueEndpoints.size}`);
 console.log(`spa_mutation_unregistered_endpoints=${validation.unregisteredEndpoints}`);
