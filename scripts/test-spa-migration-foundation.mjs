@@ -8,7 +8,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const appRoot = resolve(root, 'frontend/src/app');
 const spaRoot = resolve(root, 'frontend-spa');
 const distRoot = resolve(spaRoot, 'dist');
-const allowedStatuses = new Set(['foundation', 'pending', 'read-parity', 'migrated', 'mutation-parity']);
+const allowedStatuses = new Set(['foundation', 'pending', 'read-parity', 'migrated', 'mutation-parity', 'operational-mutation-parity']);
 
 function walk(dir, predicate, files = []) {
   if (!existsSync(dir)) return files;

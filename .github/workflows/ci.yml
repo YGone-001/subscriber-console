@@ -166,6 +166,9 @@ jobs:
       - name: SPA governed business mutation parity contract
         run: node scripts/test-spa-mutation-parity.mjs
 
+      - name: SPA governed operational mutation parity contract
+        run: node scripts/test-spa-operational-mutation-parity.mjs
+
   direct-operations:
     name: Direct operations integration
     runs-on: ubuntu-latest

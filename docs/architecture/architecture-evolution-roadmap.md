@@ -71,14 +71,16 @@ Nginx configuration, or a port removal in the current phase.
 
 The parallel SPA foundation in `frontend-spa/` includes the shared application shell,
 cross-cutting providers, role-aware navigation metadata, compatibility redirects,
-read-side business projections, and governed business mutation parity across subscriber
-management, OCS balance adjustments, subscriber contracts, tariff plans, profiles, and
-user management. Operational mutations for system-health remediation remain deferred.
+read-side business projections, and governed mutation parity across subscriber
+management, OCS balance adjustments, subscriber contracts, tariff plans, profiles,
+user management, and system-health diagnostics and remediation.
+/system-health operational mutation parity completed.
 Parallel SPA business read parity is implemented; parallel SPA governed business mutation
-parity is implemented; frontend-spa production transition is NOT STARTED; and the Next.js
-production runtime remains active on `:13333`. Nginx routing remains unchanged, and Go does
-not serve SPA assets yet. The Vite listener on `127.0.0.1:13334` is a loopback-only,
-migration-only development listener.
+parity is implemented; parallel SPA governed operational mutation parity is implemented;
+frontend-spa production transition is NOT STARTED; and the Next.js production runtime
+remains active on `:13333`. Nginx routing remains unchanged, and Go does not serve SPA
+assets yet. The Vite listener on `127.0.0.1:13334` is a loopback-only, migration-only
+development listener.
 
 ### Internal Backend Direction
 

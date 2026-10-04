@@ -16,7 +16,8 @@ const routes = JSON.parse(readFileSync(resolve(import.meta.dirname, '../migratio
 test('foundation route inventory remains explicit and non-business', () => {
   const foundation = routes.filter((route) => route.status === 'foundation');
   assert.deepEqual(foundation.map((route) => route.sourceRoute), ['/login']);
-  assert.equal(routes.filter((route) => route.status === 'read-parity').length, 1);
+  assert.equal(routes.filter((route) => route.status === 'read-parity').length, 0);
+  assert.equal(routes.filter((route) => route.status === 'operational-mutation-parity').length, 1);
   assert.equal(routes.filter((route) => route.status === 'mutation-parity').length, 11);
   assert.equal(routes.filter((route) => route.status === 'migrated').length, 10);
   assert.equal(routes.filter((route) => route.status === 'pending').length, 0);

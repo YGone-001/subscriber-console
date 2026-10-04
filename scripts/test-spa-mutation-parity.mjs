@@ -409,6 +409,9 @@ const systemHealthText = existsSync(systemHealthFile) ? readFileSync(systemHealt
 const systemHealthWriteCalls = countMatches(systemHealthText, /postJson|putJson|patchJson|deleteJson|remediation/g);
 
 // Disabled runtime calls check across features and API clients
+const businessFeatureFiles = featureFiles.filter((file) => !file.includes('system-health'));
+const businessFeatureText = businessFeatureFiles.map((file) => readFileSync(file, 'utf8')).join('\n');
+
 const disabledRuntimePatterns = [
   /\/api\/ocs\/balances\/[^/]+\/reset/,
   /(?:postJson|putJson|patchJson|deleteJson)\(['"]\/api\/ratings/,
@@ -416,14 +419,23 @@ const disabledRuntimePatterns = [
   /(?:postJson|putJson|patchJson|deleteJson)\(['"][^'"]*\/tariff-plans[^'"]*import/,
   /(?:postJson|putJson|patchJson|deleteJson)\(['"][^'"]*\/migrate/,
   /(?:postJson|putJson|patchJson|deleteJson)\(['"][^'"]*\/rules/,
-  /(?:postJson|putJson|patchJson|deleteJson)\(['"]\/api\/system\/audit\/heal/,
-  /(?:postJson|putJson|patchJson|deleteJson)\(['"]\/api\/system\/audit\/batch-heal/,
 ];
 
 let disabledRuntimeCalls = 0;
 for (const pattern of disabledRuntimePatterns) {
   disabledRuntimeCalls += countMatches(featureText, pattern);
 }
+
+// Scoped rule: system remediation POSTs must only occur inside system-health operational feature
+const outOfScopeRemediationCalls = countMatches(
+  businessFeatureText,
+  /(?:postJson|putJson|patchJson|deleteJson)\(['"]\/api\/system\/audit\/(?:heal|batch-heal)/,
+);
+assert.equal(
+  outOfScopeRemediationCalls,
+  0,
+  'system remediation POSTs must only occur inside the system-health operational feature',
+);
 
 // Verify subscriber mutation request builders and execution
 const subscriberPageFile = resolve(source, 'features/subscribers/SubscribersPage.tsx');
@@ -483,7 +495,8 @@ assert.equal(routes.length, 23);
 assert.equal(statusCount('foundation'), 1);
 assert.equal(statusCount('migrated'), 10);
 assert.equal(statusCount('mutation-parity'), 11);
-assert.equal(statusCount('read-parity'), 1);
+assert.equal(statusCount('operational-mutation-parity'), 1);
+assert.equal(statusCount('read-parity'), 0);
 assert.equal(statusCount('pending'), 0);
 
 // Verify Contract Checks

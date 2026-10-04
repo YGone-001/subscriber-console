@@ -206,7 +206,7 @@
       "GET /api/system/audit/status",
       "GET /api/alerts"
     ],
-    "deferredMutations": ["system integrity heal", "system integrity batch heal"]
+    "deferredMutations": []
   },
   {
     "route": "/users",
