@@ -392,3 +392,10 @@ test('traffic adjustment: classified as routing-acknowledgement, never mutation-
   assert.equal(contract.responseSemantics, 'routing-acknowledgement');
   assert.notEqual(contract.responseSemantics, 'mutation-result');
 });
+
+test('import: ALLOWED_IMPORT_RECORD_KEYS and SENSITIVE_IMPORT_KEYS definitions', () => {
+  assert.equal(ALLOWED_IMPORT_RECORD_KEYS.size, 7);
+  assert.ok(ALLOWED_IMPORT_RECORD_KEYS.has('imsi'));
+  assert.equal(SENSITIVE_IMPORT_KEYS.size, 5);
+  assert.ok(SENSITIVE_IMPORT_KEYS.has('k'));
+});
