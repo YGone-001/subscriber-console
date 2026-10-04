@@ -11,17 +11,9 @@ permissions:
   contents: read
 
 jobs:
-  node:
-    name: Node quality gates
+  frontend:
+    name: Frontend quality gates
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
-    env:
-      MONGODB_URI: mongodb://127.0.0.1:27017/xcloud
-      MONGODB_XCLOUD_DB: xcloud
-      JWT_SECRET: ci-only-placeholder-secret-with-at-least-32-bytes
-      INITIAL_ADMIN_PASSWORD: ChangeMe@2026
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -36,10 +28,10 @@ jobs:
             frontend/package-lock.json
 
       - name: Install repository script dependencies
-        working-directory: .
         run: npm ci
 
       - name: Install frontend dependencies
+        working-directory: frontend
         run: npm ci
 
       # Dependency security and CI runtime maintenance gates. The audit gate is driven by
@@ -47,34 +39,117 @@ jobs:
       # service is unavailable; the runtime contract rejects obsolete Node-20 first-party
       # action majors. The maintenance contract composes their machine output.
       - name: Dependency security
-        run: node ../scripts/test-dependency-security.mjs
+        run: node scripts/test-dependency-security.mjs
 
       - name: CI runtime contract
-        run: node ../scripts/test-ci-runtime-contract.mjs
+        run: node scripts/test-ci-runtime-contract.mjs
 
       - name: Maintenance contract
-        run: node ../scripts/test-maintenance-contract.mjs
+        run: node scripts/test-maintenance-contract.mjs
 
-      - name: Lint
+      - name: Frontend lint
+        working-directory: frontend
         run: npm run lint
 
-      - name: Typecheck
+      - name: Frontend typecheck
+        working-directory: frontend
         run: npm run typecheck
 
-      - name: Test
+      - name: Frontend tests
+        working-directory: frontend
         run: npm test
 
-      - name: Build
+      - name: Frontend build
+        working-directory: frontend
         run: npm run build
 
-      - name: API ownership invariants
-        run: node ../scripts/test-api-ownership-invariants.mjs
+      - name: Frontend runtime contract
+        run: node scripts/test-frontend-runtime-contract.mjs
 
-      - name: Next backend absence
-        run: node ../scripts/test-next-backend-absence.mjs
+      - name: Frontend shared shell contract
+        run: node scripts/test-frontend-shell-contract.mjs
+
+      - name: Frontend read contract
+        run: node scripts/test-frontend-read-contract.mjs
+
+      - name: Frontend mutation contract
+        run: node scripts/test-frontend-mutation-contract.mjs
+
+      - name: Frontend operational contract
+        run: node scripts/test-frontend-operational-contract.mjs
+
+      - name: API ownership invariants
+        run: node scripts/test-api-ownership-invariants.mjs
+
+      - name: Frontend runtime boundary
+        run: node scripts/test-frontend-runtime-boundary.mjs
 
       - name: Frontend runtime dependency integrity
-        run: node ../scripts/test-frontend-runtime-dependencies.mjs
+        run: node scripts/test-frontend-runtime-dependencies.mjs
+
+  go-spa-hosting:
+    name: Go embedded SPA integration
+    runs-on: ubuntu-latest
+    env:
+      MONGODB_URI: mongodb://127.0.0.1:27017/xcloud
+      MONGODB_XCLOUD_DB: xcloud
+      MONGODB_APP_DB: xcloud_ops
+      JWT_SECRET: ci-only-placeholder-secret-with-at-least-32-bytes
+      INITIAL_ADMIN_PASSWORD: ChangeMe@2026
+    services:
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ ping: 1 })'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          cd frontend && npm ci
+
+      - name: Frontend build
+        working-directory: frontend
+        run: npm run build
+
+      - name: Stage SPA for Go
+        run: node scripts/stage-spa-for-go.mjs
+
+      - name: Go bundled build
+        working-directory: backend
+        run: go build -o bin/server ./cmd/server
+
+      - name: Go SPA unit tests
+        working-directory: backend
+        run: go test -v ./internal/spa/...
+
+      - name: Go static SPA hosting contract
+        run: node scripts/test-go-spa-hosting-contract.mjs
+
+      - name: Go static SPA hosting foundation
+        run: node scripts/test-go-spa-hosting-foundation.mjs
 
   go:
     name: Go backend quality gates
@@ -115,121 +190,6 @@ jobs:
 
       - name: Build
         run: go build -o /dev/null ./...
-
-  spa-migration-foundation:
-    name: Static SPA migration foundation
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Setup Node
-        uses: actions/setup-node@v7
-        with:
-          node-version-file: frontend-spa/.nvmrc
-          cache: npm
-          cache-dependency-path: frontend-spa/package-lock.json
-
-      - name: Install SPA dependencies
-        working-directory: frontend-spa
-        run: npm ci
-
-      - name: SPA dependency security
-        working-directory: frontend-spa
-        run: npm audit --audit-level=high
-
-      - name: SPA lint
-        working-directory: frontend-spa
-        run: npm run lint
-
-      - name: SPA typecheck
-        working-directory: frontend-spa
-        run: npm run typecheck
-
-      - name: SPA tests
-        working-directory: frontend-spa
-        run: npm test
-
-      - name: SPA build
-        working-directory: frontend-spa
-        run: npm run build
-
-      - name: SPA migration foundation contract
-        run: node scripts/test-spa-migration-foundation.mjs
-
-      - name: SPA shared shell parity contract
-        run: node scripts/test-spa-shell-parity.mjs
-
-      - name: SPA read parity contract
-        run: node scripts/test-spa-read-parity.mjs
-
-      - name: SPA governed business mutation parity contract
-        run: node scripts/test-spa-mutation-parity.mjs
-
-      - name: SPA governed operational mutation parity contract
-        run: node scripts/test-spa-operational-mutation-parity.mjs
-
-  go-spa-hosting:
-    name: Go static SPA hosting foundation
-    runs-on: ubuntu-latest
-    env:
-      MONGODB_URI: mongodb://127.0.0.1:27017/xcloud
-      MONGODB_XCLOUD_DB: xcloud
-      MONGODB_APP_DB: xcloud_ops
-      JWT_SECRET: ci-only-placeholder-secret-with-at-least-32-bytes
-      INITIAL_ADMIN_PASSWORD: ChangeMe@2026
-    services:
-      mongodb:
-        image: mongo:7
-        ports:
-          - 27017:27017
-        options: >-
-          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ ping: 1 })'"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Setup Node
-        uses: actions/setup-node@v7
-        with:
-          node-version-file: frontend-spa/.nvmrc
-          cache: npm
-          cache-dependency-path: frontend-spa/package-lock.json
-
-      - name: Setup Go
-        uses: actions/setup-go@v7
-        with:
-          go-version-file: backend/go.mod
-          cache-dependency-path: backend/go.sum
-
-      - name: Install dependencies
-        run: |
-          npm ci
-          cd frontend-spa && npm ci
-
-      - name: SPA build
-        working-directory: frontend-spa
-        run: npm run build
-
-      - name: Stage SPA for Go
-        run: node scripts/stage-spa-for-go.mjs
-
-      - name: Go bundled build
-        working-directory: backend
-        run: go build -o bin/server ./cmd/server
-
-      - name: Go SPA unit tests
-        working-directory: backend
-        run: go test -v ./internal/spa/...
-
-      - name: Go static SPA hosting contract
-        run: node scripts/test-go-spa-hosting-contract.mjs
-
-      - name: Real Go SPA HTTP integration
-        run: node scripts/test-go-spa-hosting-foundation.mjs
 
   direct-operations:
     name: Direct operations integration
@@ -409,11 +369,11 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v7
         with:
-          node-version-file: frontend-spa/.nvmrc
+          node-version-file: frontend/.nvmrc
           cache: npm
           cache-dependency-path: |
             package-lock.json
-            frontend-spa/package-lock.json
+            frontend/package-lock.json
 
       - name: Setup Go
         uses: actions/setup-go@v7
@@ -424,10 +384,10 @@ jobs:
       - name: Install dependencies
         run: |
           npm ci
-          cd frontend-spa && npm ci
+          cd frontend && npm ci
 
-      - name: SPA build
-        working-directory: frontend-spa
+      - name: Frontend build
+        working-directory: frontend
         run: npm run build
 
       - name: Stage SPA for Go
@@ -479,8 +439,8 @@ jobs:
       - name: Deployment boundary acceptance
         run: node scripts/test-deployment-boundary.mjs
 
-  local-development-edge:
-    name: Local development edge integration
+  local-development-runtime:
+    name: Local development runtime integration
     runs-on: ubuntu-latest
     env:
       MONGODB_URI: mongodb://127.0.0.1:27017
@@ -522,20 +482,8 @@ jobs:
           npm ci
           cd frontend && npm ci
 
-      - name: Install Nginx
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y nginx
-          sudo systemctl stop nginx || true
-          sudo pkill -x nginx || true
-          echo "LOCAL_DEV_NGINX_BIN=$(command -v nginx)" >> "$GITHUB_ENV"
-          nginx -v
-
-      # Real MongoDB + real Go + real `next dev` + real Nginx. Proves the development
-      # HTTP transport, the development HMR/WebSocket transport through the edge, the
-      # `local:doctor` FULL_STACK_READY result and the EDGE_REQUIRED negative result.
-      - name: Local development edge integration
-        run: node scripts/test-local-development-edge.mjs
+      - name: Local development runtime integration
+        run: node scripts/test-local-development-runtime.mjs
 
   local-operations-contract:
     name: Local development operations contract
@@ -580,8 +528,8 @@ jobs:
       - name: Documentation integrity
         run: node scripts/test-documentation-integrity.mjs
 
-      - name: Local access contract
-        run: node scripts/test-local-access-contract.mjs
+      - name: Local development contract
+        run: node scripts/test-local-development-contract.mjs
 
       - name: Repository normalization gate
         run: node scripts/test-repository-normalization.mjs
@@ -590,15 +538,15 @@ jobs:
     name: Production architecture certification
     runs-on: ubuntu-latest
     needs:
-      - node
-      - go
-      - spa-migration-foundation
+      - frontend
       - go-spa-hosting
+      - go
       - direct-operations
       - user-management-e2e
       - authentication
       - deployment-boundary
-      - local-development-edge
+      - local-development-runtime
+      - local-operations-contract
       - repository-normalization
     steps:
       - name: Checkout

@@ -1,6 +1,6 @@
 # subscriber-console
 
-xCloud subscriber operations console built with Next.js, Go, React, and MongoDB.
+xCloud subscriber operations console built with React, Vite, Go, and MongoDB.
 
 It manages IMSI subscriber records, profile templates, OCS tariff plans, subscriber contracts, balance accounts, rating policies, traffic analytics, CSV import/export, operation logs, local alerts, system health checks, and role-based access control.
 
@@ -8,12 +8,12 @@ It manages IMSI subscriber records, profile templates, OCS tariff plans, subscri
 
 ```
 subscriber-console/
-├── frontend-spa/      # Production React/Vite SPA source
-├── frontend/          # Legacy Next.js UI (retained for rollback / pending retirement)
+├── frontend/          # Canonical React + TypeScript + Vite SPA source
 ├── backend/           # Go REST API + embedded static SPA hosting
 │   ├── cmd/
 │   ├── internal/
 │   └── go.mod
+├── deploy/            # Nginx production configuration
 ├── docs/              # Project documentation
 │   ├── architecture/
 │   ├── database/
@@ -26,18 +26,27 @@ subscriber-console/
 └── AGENTS.md
 ```
 
+### Production Architecture
+
 ```
 Browser → Nginx (only public origin)
            └── /*, /api/* → Go 127.0.0.1:18888 (API + embedded static React SPA)
 ```
 
-The Nginx edge routes all public traffic to the single Go upstream (`127.0.0.1:18888`).
+The Nginx edge routes all public production traffic to the single Go upstream (`127.0.0.1:18888`).
 The Go backend owns every production API operation (84 exact METHOD+PATH registrations),
-session authentication, and embedded static React SPA hosting. The legacy Next.js runtime
-in `frontend/` (contract: `127.0.0.1:13333`) is retained for explicit operator rollback
-only, receives zero edge traffic, and will be retired upon subsequent retirement.
+session authentication, and embedded static React SPA hosting.
+Next.js and port 13333 are completely retired. Production Node.js runtime required = NO.
 
-Both application services bind loopback and are reached only through Nginx.
+### Development Architecture
+
+```
+Browser → Vite dev server 127.0.0.1:13334
+           └── /api/* → Go 127.0.0.1:18888
+```
+
+In local development, the Vite dev server runs at `127.0.0.1:13334` and proxies `/api/*` to the Go backend at `127.0.0.1:18888`.
+Local development does not require Nginx.
 
 ## Features
 
@@ -65,7 +74,7 @@ Charging Plane remains frozen and excluded.
 
 ## Tech Stack
 
-### Production Frontend (SPA)
+### Canonical Frontend (SPA)
 
 - React 19.2.4
 - Vite 8
@@ -74,7 +83,7 @@ Charging Plane remains frozen and excluded.
 - Tailwind CSS 4
 - Lucide React
 
-Static assets are built from `frontend-spa/` and embedded directly into the Go backend binary.
+Static assets are built from `frontend/` and embedded directly into the Go backend binary.
 
 ### Backend
 
@@ -88,41 +97,30 @@ Static assets are built from `frontend-spa/` and embedded directly into the Go b
 - Nginx (single public edge upstream `xcloud_go`)
 - MongoDB (databases `xcloud` + `xcloud_ops`)
 
-### Legacy Frontend (Retained for Rollback / Pending subsequent retirement and canonicalization Retirement)
+### Legacy Frontend
 
-- Next.js 16.3.8 App Router
-- React 19.2.4
-- TypeScript 5
-- SWR
-- Recharts
-- lucide-react
-- ESLint 9
-
-The legacy frontend is retained in `frontend/` (bound to `127.0.0.1:13333`) for explicit operator-initiated rollback only. It receives zero production edge traffic.
+- Retired (Next.js App Router and port 13333 retired).
 
 ## Quick Start
 
-The full application is served by the Nginx edge. Application services are
-loopback-internal and are not browser origins.
+The production application is served by the Nginx edge fronting Go `127.0.0.1:18888`.
+In local development, the application runs on Vite `127.0.0.1:13334` proxying to Go `127.0.0.1:18888`.
 
 ```text
 MongoDB     xcloud + xcloud_ops
 Go backend  127.0.0.1:18888   internal application service (API + embedded static SPA)
-Next.js UI  127.0.0.1:13333   retained legacy UI service (rollback only)
-Nginx edge  public browser entry, default http://localhost
+Vite dev    127.0.0.1:13334   local frontend development server (/api proxy to Go)
+Nginx edge  production public browser entry, default http://localhost
 ```
 
-Next.js `:13333` is a retained legacy UI service and Go `:18888` is the active application service.
-Neither internal port is a supported full-stack browser origin; they are useful for
-component-level diagnostics only.
-
-Local workflow:
+Local development workflow:
 
 ```text
 1. npm run local:preflight    inspect ports/process ownership (read-only)
-2. start the required services (MongoDB, Nginx edge, then the app)
-3. npm run local:doctor       verify the full topology
-4. browse http://localhost
+2. start MongoDB
+3. npm run local:dev          start managed Go + Vite development processes
+4. npm run local:doctor       verify the dev topology
+5. browse http://localhost:13334
 ```
 
 ### 1. Install dependencies
@@ -133,14 +131,13 @@ npm ci
 cp .env.example .env
 # Edit .env with the intended local values before continuing.
 
-# Install and configure the Next.js app.
+# Install frontend dependencies:
 cd frontend
 npm ci
-cp ../.env .env
 cd ..
 ```
 
-Set the same strong `JWT_SECRET` and `INITIAL_ADMIN_PASSWORD` in root `.env` (and the copied `frontend/.env`) before running `npm run mongo:init`. The initialization script creates the initial `admin` account when it does not already exist.
+Set the same strong `JWT_SECRET` and `INITIAL_ADMIN_PASSWORD` in root `.env` before running `npm run mongo:init`. The initialization script creates the initial `admin` account when it does not already exist.
 
 ### 2. Initialize MongoDB
 
@@ -154,38 +151,21 @@ npm run mongo:init
 npm run local:preflight
 ```
 
-Read-only. It classifies the owner of ports 80, 13333, 18888 and 27017 before anything
-starts. Never resolve an occupied canonical port by changing the port; diagnose the owner.
+Read-only. It classifies the owner of ports 13334, 18888 and 27017 before anything starts.
+Never resolve canonical port contamination by changing 13334/18888; diagnose the owner.
 
 ### 4. Start the required services
 
 Start MongoDB yourself (it is never started automatically).
 
-For local development with the retained Next.js runtime, start the temporary legacy development Nginx edge:
-
-```bash
-sudo ./deploy/nginx/setup-next-legacy.sh
-```
-
-Use `sudo ./deploy/nginx/setup-next-legacy.sh 8080` to listen on another port.
-
-Edge helpers:
-- `setup.sh`: current production single-Go edge router (`deploy/nginx/xcloud.conf`, Browser -> Nginx -> Go :18888).
-- `setup-next-legacy.sh`: temporary legacy Next.js development and explicit rollback edge router (`deploy/nginx/xcloud-next-legacy.conf`, UI/HMR to Next.js :13333, API to Go :18888).
-
-Then start the project-owned Go and Next.js development processes:
+Then start the project-owned Go and Vite development processes:
 
 ```bash
 npm run local:dev
 ```
 
-This builds and runs Go on the production default `127.0.0.1:18888`, runs the Next.js
-development server on `127.0.0.1:13333`, and records process ownership. It never starts
-MongoDB or Nginx. If the edge is missing it reports `FULL_STACK_NOT_READY` /
-`EDGE_REQUIRED`.
-
-Starting the two services manually is also supported: run `go run ./cmd/server` from
-`backend/` with the root `.env` exported, and `npm run dev` from `frontend/`.
+This builds and runs Go on `127.0.0.1:18888` and Vite on `127.0.0.1:13334`, and records process ownership.
+Local development does not require Nginx.
 
 ### 5. Verify
 
@@ -198,18 +178,11 @@ npm run local:doctor
 
 ### 6. Open
 
-Open the full application at:
+Open the local application at:
 
 ```text
-http://localhost
+http://localhost:13334
 ```
-
-When the edge is intentionally configured on another port, open
-`http://localhost:<edge-port>` instead.
-
-Do not open `http://localhost:13333` for normal application use. The login page
-renders there, but browser-relative `/api` requests are sent to Next.js, which owns no
-API routes. Start the Nginx edge and use its public URL.
 
 ### 7. Stop
 
@@ -217,7 +190,7 @@ API routes. Start the Nginx edge and use its public URL.
 npm run local:stop
 ```
 
-Stops only the Go and Next.js processes that `local:dev` launched, after verifying their
+Stops only the Go and Vite processes that `local:dev` launched, after verifying their
 ownership records. It does not stop MongoDB, the system Nginx, or foreign processes.
 
 ## Environment
@@ -243,7 +216,7 @@ npm run mongo:migrate-app-db # Move app_* collections from xcloud to the app dat
 npm run mongo:test-core     # Run MongoDB core integration smoke test against a temporary DB
 npm run mongo:perf          # Explain key MongoDB queries and flag slow scans
 npm run local:preflight     # Inspect canonical port ownership before starting anything
-npm run local:dev           # Start managed Go + Next.js development processes
+npm run local:dev           # Start managed Go + Vite development processes
 npm run local:status        # Report component and topology state
 npm run local:doctor        # Diagnose the running local full-stack topology
 npm run local:stop          # Stop only the processes started by local:dev

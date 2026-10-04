@@ -12,7 +12,7 @@
  *   scripts/test-ci-runtime-contract.mjs       first-party action runtime majors
  *   scripts/test-current-architecture-docs.mjs documented vs declared Next.js version
  *   scripts/test-production-architecture.mjs   API ownership / fallback invariants
- *   scripts/test-local-access-contract.mjs     Next.js API rewrites
+ *   scripts/test-local-development-contract.mjs Next.js API rewrites
  *
  * Usage:
  *   node scripts/test-maintenance-contract.mjs
@@ -30,7 +30,7 @@ const CHECKS = [
   { id: 'ci-runtime-contract', script: 'scripts/test-ci-runtime-contract.mjs' },
   { id: 'current-architecture-docs', script: 'scripts/test-current-architecture-docs.mjs' },
   { id: 'production-architecture', script: 'scripts/test-production-architecture.mjs' },
-  { id: 'local-access-contract', script: 'scripts/test-local-access-contract.mjs' },
+  { id: 'local-access-contract', script: 'scripts/test-local-development-contract.mjs' },
 ];
 
 /** `key=value` machine contract lines, in source order. */

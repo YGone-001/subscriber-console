@@ -33,8 +33,7 @@ configuration are authoritative:
 Nginx edge routing                -> deploy/nginx/xcloud.conf
 Go API registration authority     -> backend/cmd/server/main.go
                                      backend/internal/remediation/handler.go
-Next.js API absence               -> frontend/src/app/api
-Next.js UI-only navigation guard  -> frontend/src/proxy.ts
+Canonical frontend SPA source     -> frontend/src/
 ```
 
 ## Architecture

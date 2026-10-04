@@ -26,9 +26,9 @@ import assert from 'node:assert/strict';
 import { MongoClient } from 'mongodb';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import nextEnv from '@next/env';
+import { loadEnv } from './lib/load-env.mjs';
 
-nextEnv.loadEnvConfig(process.cwd());
+loadEnv(process.cwd());
 
 const scriptPath = fileURLToPath(new URL('./migrate-rbac-roles.mjs', import.meta.url));
 const uri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017';

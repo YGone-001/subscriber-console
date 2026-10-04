@@ -101,8 +101,8 @@ Important:
 Nginx owns production routing to the single Go upstream xcloud_go (127.0.0.1:18888).
 Go owns every production API operation, auth identity, and embedded static React SPA.
 Route authority = the derived Go registration set (84 exact METHOD+PATH registrations).
-frontend-spa/ is the current production SPA source, built to static assets and embedded into the Go binary.
-Next.js source in frontend/ (contract: 127.0.0.1:13333) is retained as a legacy/rollback contract only, pending retirement.
+frontend/ is the canonical production SPA source, built to static assets and embedded into the Go binary.
+Next.js source and port 13333 are retired.
 Next.js receives zero production edge traffic. Production Node runtime required = NO.
 The Next.js business backend (app/api + src/server) does not exist.
 Frontend API paths remain unchanged.
@@ -112,41 +112,40 @@ Architecture evolution roadmap status:
 
 ```text
 Current runtime                 = Nginx -> Go :18888 (API + embedded static SPA)
-Architecture evolution roadmap  = single-upstream consolidation completed
-Next implementation direction   = subsequent retirement and canonicalization (Next.js retirement & frontend canonicalization)
+Architecture evolution roadmap  = runtime consolidation and frontend canonicalization completed
+Next implementation direction   = complete
 ```
 
-The runtime consolidation target (Nginx -> Go `:18888` serving API plus embedded static React SPA)
-is now deployed and edge-active. Next.js `:13333` is retained for legacy rollback only.
+The runtime consolidation and canonicalization target (Nginx -> Go `:18888` serving API plus embedded static React SPA)
+is deployed and edge-active. Next.js and port 13333 are retired.
 
-Short-term continuation guidance:
+Architecture guidance:
 
 ```text
 Current production                  = Nginx -> Go :18888 (API + embedded static SPA)
 Nginx application upstreams         = single upstream (xcloud_go)
 Go SPA hosting capability           = YES
 Go SPA edge-active                  = YES
-frontend-spa production-active      = YES
-Next.js source present              = YES
-Next.js removed                     = NO
-port 13333 retired                  = NO
+frontend canonical production-active= YES
+Next.js source present              = NO
+Next.js removed                     = YES
+port 13333 retired                  = YES
 Next.js edge-active                 = NO
 production Node runtime required    = NO
-Vite development                    = 127.0.0.1:13334 (migration-only, loopback-only)
+Vite development                    = 127.0.0.1:13334 (loopback-only)
 ```
 
-`frontend-spa/` is the active production SPA source, built to static assets and embedded
-into the Go binary. The directory name remains temporary until subsequent convergence.
-Next.js source in `frontend/` and its `127.0.0.1:13333` listener contract are retained
-for rollback purposes only, pending removal upon subsequent retirement.
+`frontend/` is the canonical production SPA source, built to static assets and embedded
+into the Go binary.
 
 ---
 
 ## 3. Stack
 
 ```text
-Next.js 16.3.8
 React 19.2.4
+Vite 8
+React Router 7
 TypeScript 5.x
 Node 20
 UI-only dependency set (no frontend jose / mongodb / jiti)
@@ -195,7 +194,7 @@ One client, two handles.
 Public edge                          = Nginx (deploy/nginx/xcloud.conf)
 API owner (/api, /api/*)             = Go backend, 127.0.0.1:18888
 UI owner (/*)                        = Go backend (embedded SPA), 127.0.0.1:18888
-Retained legacy Next UI contract     = Next.js, 127.0.0.1:13333 (retained for rollback / pending retirement)
+Retained legacy Next UI contract     = retired
 Go production API registrations      = 84 exact METHOD+PATH registrations
 Next.js business API operations      = 0
 Next.js MongoDB access               = 0
@@ -210,19 +209,19 @@ OCS management writes                = 13 (tariff plan + subscriber contract + b
 ```text
 Sole public edge                     = Nginx (single upstream xcloud_go)
 Go production listener               = 127.0.0.1:18888 (`HTTP_ADDR` default)
-Retained legacy Next listener        = 127.0.0.1:13333 (`next start -H 127.0.0.1 -p 13333`, rollback only)
+Retained legacy Next listener        = retired
 Loopback listener enforced by service, not firewall = YES
 Standalone deployment path           = removed
 Go business production changes       = 0
 Go registration set                  = 84
 ```
 
-- Edge: `deploy/nginx/xcloud.conf` uses a single keepalive upstream `xcloud_go` (`127.0.0.1:18888`). `location = /api`, `location /api/`, the dedicated unbuffered `location = /api/notifications/stream`, and `location /` all proxy to Go. All locations strip client identity headers (`X-User` / `X-Role` / `X-Permissions`) and generate `Host` / `X-Real-IP` / `X-Forwarded-For` / `X-Forwarded-Proto`; `client_max_body_size 10m`. `deploy/nginx/setup.sh [listen_port]` validates with `nginx -t` before reload. The temporary legacy Next configuration `deploy/nginx/xcloud-next-legacy.conf` is isolated for explicit rollback only.
-- Legacy Next.js runtime: UI rendering plus the UI-only navigation guard (`frontend/src/proxy.ts`), retained for rollback only. Next.js receives zero production edge traffic. Production Node runtime required = NO. The Next.js business backend (`frontend/src/app/api/**`, `frontend/src/server/**`) does not exist.
-- Frontend dependencies: UI-only set. `jose`, `mongodb` and dev `jiti` are not dependencies; `frontend/src/lib/security.ts` keeps only the UI password policy (`isPasswordStrong`, `PASSWORD_POLICY_MESSAGE`); `next.config.ts` has no `serverExternalPackages: ['mongodb']`.
+- Edge: `deploy/nginx/xcloud.conf` uses a single keepalive upstream `xcloud_go` (`127.0.0.1:18888`). `location = /api`, `location /api/`, the dedicated unbuffered `location = /api/notifications/stream`, and `location /` all proxy to Go. All locations strip client identity headers (`X-User` / `X-Role` / `X-Permissions`) and generate `Host` / `X-Real-IP` / `X-Forwarded-For` / `X-Forwarded-Proto`; `client_max_body_size 10m`. `deploy/nginx/setup.sh [listen_port]` validates with `nginx -t` before reload.
+- Legacy Next.js runtime: retired. Next.js receives zero production edge traffic. Production Node runtime required = NO. The Next.js business backend does not exist.
+- Frontend dependencies: UI-only set. `jose`, `mongodb` and dev `jiti` are not dependencies; `frontend/src/lib/security.ts` keeps only the UI password policy (`isPasswordStrong`, `PASSWORD_POLICY_MESSAGE`).
 - Acceptance: `scripts/test-deployment-boundary.mjs` exercises the production topology (real Nginx + real bundled Go with embedded SPA + real MongoDB) and proves single-upstream attribution, edge asset identity, and fail-closed behavior without requiring a running Next.js process.
 - Certification: `scripts/test-production-architecture.mjs` re-derives the current production architecture from primary source using semantic invariants only (no chronological baseline).
-- Independent architecture suites: `scripts/test-api-ownership-invariants.mjs`, `scripts/test-next-backend-absence.mjs`, `scripts/test-frontend-runtime-dependencies.mjs`, `scripts/test-repository-normalization.mjs`.
+- Independent architecture suites: `scripts/test-api-ownership-invariants.mjs`, `scripts/test-frontend-runtime-boundary.mjs`, `scripts/test-frontend-runtime-dependencies.mjs`, `scripts/test-repository-normalization.mjs`.
 
 ### 5.1 OCS 管理平面冻结状态 (OCS Management Plane: Frozen)
 
@@ -243,22 +242,19 @@ Charging Plane remains frozen and excluded.
 
 ### 5.2 Local Full-Stack Access Contract
 
-The full application browser origin is the Nginx edge.
+The production browser origin is the Nginx edge.
+The local development origin is the Vite dev server (`127.0.0.1:13334`).
 
 ```text
-Default local URL:  http://localhost
-Custom edge port:   http://localhost:<edge-port>   (production: sudo ./deploy/nginx/setup.sh <port>; local Next dev: sudo ./deploy/nginx/setup-next-legacy.sh <port>)
+Default local production URL: http://localhost
+Custom edge port:             http://localhost:<edge-port>   (production: sudo ./deploy/nginx/setup.sh <port>)
+Local development URL:        http://localhost:13334
 ```
 
-- Next.js `:13333` is an internal UI component endpoint only.
+- Vite dev server `:13334` proxies `/api` calls to Go `:18888`.
 - Go `:18888` is an internal API component endpoint only.
-
-Opening `:13333` directly may render the login page, but browser-relative `/api`
-requests will correctly fail because Next.js owns no API routes.
-
-When `/api` requests fail from `:13333`:
-DO NOT add Next.js rewrites or API handlers.
-Check/start the Nginx edge instead.
+- Port 13333 is retired.
+- Local development does not require Nginx.
 
 Use:
 
@@ -270,25 +266,7 @@ npm run local:doctor
 npm run local:stop
 ```
 
-Development transport: Nginx remains the full-stack browser origin in development.
-The Next.js development server transports its HMR WebSocket through the edge under
-the framework namespace `/_next/hmr` via `deploy/nginx/xcloud-next-legacy.conf`
-(installed via `sudo ./deploy/nginx/setup-next-legacy.sh`). This is framework development
-traffic, not API ownership: it never matches `/api` or `/api/*` and it does not relax
-the Next.js API routing prohibition above. Verified end to end by `scripts/test-local-development-edge.mjs`.
-
-Browser traffic versus internal authority traffic:
-
-```text
-Browser /api/*            -> Nginx -> Go            (the only browser API path)
-Next navigation guard     -> http://127.0.0.1:18888/api/auth/me -> Go
-```
-
-Nginx is the only browser-facing application edge and the exclusive browser API routing
-boundary. The Next.js navigation guard may directly consult the Go authentication
-authority over loopback for `GET /api/auth/me`. That server-side loopback call is not
-API ownership, not API forwarding and not a Node fallback; it does not make Nginx the
-only possible Next-to-Go communication path.
+Development transport: In development, the Vite dev server (`127.0.0.1:13334`) proxies `/api/*` to Go (`127.0.0.1:18888`). Verified end to end by `scripts/test-local-development-runtime.mjs`.
 
 Ports:
 
@@ -297,14 +275,10 @@ Ports:
 443  NOT active by default; it exists only in the commented HTTPS template
 ```
 
-`frontend/next.config.ts` `allowedDevOrigins` is an origin-policy setting. It does not
-modify TCP binding and does not make `127.0.0.1:13333` reachable from the LAN, because
-both `next dev` and `next start` bind `-H 127.0.0.1 -p 13333`.
-
 Local development operations:
 
 ```text
-Never resolve canonical port contamination by changing 13333/18888.
+Never resolve canonical port contamination by changing 13334/18888.
 Never automatically kill an arbitrary listener.
 Acceptance suites must own the processes they measure.
 Use `npm run local:preflight` to inspect contamination before debugging business behavior.
@@ -1201,7 +1175,7 @@ node scripts/test-current-architecture-docs.mjs
 node scripts/test-documentation-integrity.mjs
 node scripts/test-repository-normalization.mjs
 node scripts/test-api-ownership-invariants.mjs
-node scripts/test-next-backend-absence.mjs
+node scripts/test-frontend-runtime-boundary.mjs
 node scripts/test-frontend-runtime-dependencies.mjs
 node scripts/test-production-architecture.mjs
 ```

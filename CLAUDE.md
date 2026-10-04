@@ -79,7 +79,7 @@ Approval workflow removed from business execution path. Authorization and operat
 - 管理员解锁 (Admin Unlock): 仅管理员可通过 Go 用户管理 API (`PATCH /api/users/{username}`) 解锁，恢复 `status="active"`, `locked=false`，清空锁定元数据与重置 `failedLoginAttempts=0`，并递增 `sessionVersion` 撤销历史会话。
 - 末位管理员保护 (Last Active Admin Protection): 严禁自动锁定或手动锁定/禁用系统中最后一个处于激活状态的管理员（返回 HTTP 409 `LAST_ACTIVE_ADMIN`）。
 - 密钥与会话安全 (Secret & Cookie Hardening): Go 启动时强校验 `JWT_SECRET`（>= 32 UTF-8 字节，禁止弱占位符，不符则拒绝启动）；Cookie 属性强绑定 `HttpOnly=true`, `SameSite=Lax`, HTTPS 下强制 `Secure=true`；敏感认证响应强制 `Cache-Control: no-store`。（前端不持有 JWT secret，仅 Go 校验。）
-- 认证 API 生产所有权：Go 后端认证接口 (`/api/auth/login`, `/api/auth/logout`, `/api/auth/me`, `/api/auth/permissions`) 为生产 owner。Nginx 边缘路由直接将 `/api` 与 `/api/*` 转发至 Go；`frontend/src/proxy.ts` 不转发任何 API 请求（路由权威来源 = 84 条 Go 注册）。
+- 认证 API 生产所有权：Go 后端认证接口 (`/api/auth/login`, `/api/auth/logout`, `/api/auth/me`, `/api/auth/permissions`) 为生产 owner。Nginx 边缘路由直接将 `/api` 与 `/api/*` 转发至 Go；路由权威来源 = 84 条 Go 注册。
 
 
 长期演进：
@@ -113,20 +113,21 @@ Current production state:
 
 - Nginx 是唯一对外入口，单一应用 upstream (`xcloud_go` 127.0.0.1:18888)，代理 `/api`、`/api/*`、SSE 及 `/*`（SPA shell 与静态资源），并剥离客户端身份头。
 - Go Backend 位于 `backend/`，生产业务 API 全部由 Go 独占，并内嵌托管静态 React SPA；路由权威来源 = 84 条 Go 注册（`backend/cmd/server/main.go` + `backend/internal/remediation/handler.go`）。
-- `frontend-spa/` 为当前生产 SPA 源码，构建为静态资产嵌入 Go 二进制程序中。
-- Next.js 源码保留在 `frontend/`（契约：127.0.0.1:13333），仅作为显式回滚目的保留，生产环境 edge 流量为 0。生产环境不需要 Node 运行时。将在 subsequent retirement and canonicalization 中正式退役并清理。
-- Next.js 业务后端（`frontend/src/app/api/**` 与 `frontend/src/server/**`）不存在，不得重建。
+- `frontend/` 为标准规范 React + Vite SPA 源码，构建为静态资产嵌入 Go 二进制程序中。
+- Next.js 源码与端口 13333 已完全退役，生产环境 edge 流量为 0。生产环境不需要 Node 运行时。
+- Next.js 业务后端不存在，不得重建。
 - API 路径保持 `/api/...` 不变。
-- 前端 SWR 不感知 Node/Go ownership。
-- 禁止在 Next.js 侧重新引入任何业务 API handler、业务 repository 或业务 Mongo 访问。
+- 禁止重新引入任何 Node 业务 API handler、业务 repository 或业务 Mongo 访问。
 
-### 2.1 Short-Term Planned Target
+### 2.1 Short-Term Consolidation Completed
 
-Short-term consolidation is completed: Nginx proxies to Go on `127.0.0.1:18888`,
-and Go serves both the API and the embedded static React SPA.
-The next evolutionary step (subsequent retirement and canonicalization) will retire Next.js source and port 13333, and
-canonicalize `frontend-spa/` as `frontend/`.
-MongoDB `xcloud` and `xcloud_ops` remain the source of truth, and Go remains the security authority.
+Short-term runtime consolidation and canonicalization are completed:
+- Nginx proxies to Go on `127.0.0.1:18888`.
+- Go serves both the API and the embedded static React SPA.
+- Next.js source and port 13333 are retired.
+- `frontend/` is the canonical React + TypeScript + Vite SPA.
+- Local development topology: Browser -> Vite `:13334` -> Go `:18888` (/api proxy). Nginx is not required for local development.
+- MongoDB `xcloud` and `xcloud_ops` remain the source of truth, and Go remains the security authority.
 
 The planned architecture evolution authority is
 `docs/architecture/architecture-evolution-roadmap.md`. It must not be treated as a
@@ -159,18 +160,14 @@ Charging Plane remains frozen and excluded.
 
 稳定规则，非临时排障记录：
 
-- 全栈浏览器访问必须始终从 Nginx 边缘进入。默认 `http://localhost`；自定义边缘端口时为 `http://localhost:<edge-port>`（生产环境使用 `sudo ./deploy/nginx/setup.sh <port>`；开发环境使用 `sudo ./deploy/nginx/setup-next-legacy.sh <port>`）。
-- `localhost:13333` 不是受支持的应用访问源，它是 Next.js UI 内部监听器。
-- `localhost:18888` 不是受支持的浏览器应用访问源，它是 Go API 内部监听器。
-- 浏览器相对路径 `/api` 调用依赖 Nginx 同源边缘转发至 Go。
-- 本地环境缺少 Nginx 属于拓扑不完整，不构成“把 API 转发能力重新还给 Next.js”的理由。
-- 禁止新增：Next.js `/api` rewrite、Next.js `/api` route handler、Next.js API 反向代理/转发中间件、Node API fallback、浏览器直连 Go 的硬编码 base URL。
-- 开发态 HMR 传输：Nginx 在 Next.js 开发态仍是全栈浏览器 origin；Next.js 开发服务器的 HMR WebSocket 经临时旧版配置（`deploy/nginx/xcloud-next-legacy.conf`，由 `deploy/nginx/setup-next-legacy.sh` 安装）边缘 `/_next/hmr` 传输。这是框架开发流量，不是 API 归属，也不放宽上述 Next.js API 路由禁令。
-- 浏览器流量与内部权威调用：浏览器 `/api/*` 只能经 Nginx 到 Go；Next.js 导航守卫可通过回环 `http://127.0.0.1:18888/api/auth/me` 直接查询 Go 认证权威。该服务端回环调用不是 API 归属、不是 API 转发、不是 Node 回退，也不否定 Nginx 之外的这条内部权威通道。
-- 端口现状：80 为当前生效的 Nginx HTTP 边缘（`deploy/nginx/xcloud.conf` 中 `listen 80;`）；443 默认不生效，仅存在于被注释的 HTTPS 模板中。
-- `frontend/next.config.ts` 的 `allowedDevOrigins` 属于来源策略设置，不改变 TCP 绑定；由于 `next dev` / `next start` 均为 `-H 127.0.0.1 -p 13333`，该监听器始终为回环专用，局域网不可达。
-- 本地运维命令：`npm run local:preflight`（只读端口归属检查）、`npm run local:dev`（托管启动 Go + Next）、`npm run local:status`（组件与拓扑状态）、`npm run local:doctor`（全栈拓扑自检）、`npm run local:stop`（仅停止 local:dev 启动的进程）。
-- 本地运维铁律：绝不允许通过修改 `13333/18888` 端口来规避端口占用；绝不自动终止任意监听进程；验收套件必须独占其测量的进程；调试业务问题前先用 `npm run local:preflight` 检查端口污染。
+- 生产环境浏览器访问始终从 Nginx 边缘进入。默认 `http://localhost`；自定义边缘端口时为 `http://localhost:<edge-port>`（使用 `sudo ./deploy/nginx/setup.sh <port>` 安装配置）。
+- 本地开发环境浏览器访问由 Vite 开发服务器提供：`http://localhost:13334`，通过 Vite 内部代理将 `/api/*` 转发至 Go 后端 `127.0.0.1:18888`。本地开发不需要 Nginx。
+- `localhost:18888` 是 Go API 内部监听器，不作为前端直接页面访问地址。
+- 端口 13333 已完全退役。
+- 禁止新增：Next.js `/api` rewrite、Node API fallback、浏览器直连 Go 的硬编码 base URL。
+- 端口现状：80 为生产生效的 Nginx HTTP 边缘（`deploy/nginx/xcloud.conf` 中 `listen 80;`）；443 默认不生效，仅存在于被注释的 HTTPS 模板中。
+- 本地运维命令：`npm run local:preflight`（只读端口归属检查）、`npm run local:dev`（托管启动 Go + Vite）、`npm run local:status`（组件与拓扑状态）、`npm run local:doctor`（全栈拓扑自检）、`npm run local:stop`（仅停止 local:dev 启动的进程）。
+- 本地运维铁律：绝不允许通过修改 `13334/18888` 端口来规避端口占用；绝不自动终止任意监听进程；验收套件必须独占其测量的进程；调试业务问题前先用 `npm run local:preflight` 检查端口污染。
 - `local:stop` 仅在归属记录与活动进程校验通过后终止进程；身份不匹配一律 `REFUSE_TO_KILL`；权限不足报 `INSUFFICIENT_PERMISSION`，绝不自动提权、绝不触发 UAC。
 - 托管进程生命周期为原子操作：`local:dev` 必须在 readiness 轮询开始之前就写入归属记录（`spawn -> inspect live process identity -> write record -> readiness`）；后续任一步失败按逆序安全回滚，每个退出路径满足“子进程不存在，或存在且带有效归属记录”（`local_dev_unmanaged_live_processes=0`）。
 - `local:stop` 以“确认进程退出”为成功判据：发送信号不等于已停止；只要进程仍存活就保留归属记录并报 `STOP_TIMEOUT` / `NEEDS_ATTENTION` 并非 0 退出，绝不丢弃记录、绝不引入任意强杀（`local_stop_record_preserved_on_timeout=true`）。
@@ -179,22 +176,20 @@ Charging Plane remains frozen and excluded.
 
 ### Frontend
 
-- Next.js 16.3.8 App Router
 - React 19.2.4
 - TypeScript 5.x
+- Vite 8
+- React Router 7
 - Tailwind CSS 4
-- SWR
-- Recharts
 - Lucide React
 - Node 20 (`.nvmrc`)
-- Next.js 生产启动模型唯一：`next start -H 127.0.0.1 -p 13333`（`npm run start`），监听地址固定为 `127.0.0.1:13333`（loopback-only）
-- `next.config.ts` 不启用 `output: 'standalone'`；仓库不再提供 standalone 部署路径
+- 本地开发服务器监听地址固定为 `127.0.0.1:13334`（loopback-only，strictPort: true）
+- 生产构建产物打包至静态目录，由 Go 二进制内嵌直接对外托管
 
 前端运行时边界（前端不持有 API 认证运行时）：
 - 前端不使用 MongoDB Node Driver、`jose`、`bcryptjs`。
-- 前端不再解析/校验 JWT，不访问 MongoDB，不注入身份头，不转发 API 请求。
+- 前端不再解析/校验 JWT，不访问 MongoDB，不注入身份头。
 - 仅保留 UI 密码策略 `isPasswordStrong` / `PASSWORD_POLICY_MESSAGE`（`frontend/src/lib/security.ts`）。
-- `proxy.ts` 仅做 UI 导航守卫，通过 `GET /api/auth/me`（`GO_BACKEND_URL`，默认 `http://127.0.0.1:18888`）向 Go 询问会话权威结果。
 
 ### Go Backend
 
@@ -678,7 +673,7 @@ node scripts/test-current-architecture-docs.mjs
 node scripts/test-documentation-integrity.mjs
 node scripts/test-repository-normalization.mjs
 node scripts/test-api-ownership-invariants.mjs
-node scripts/test-next-backend-absence.mjs
+node scripts/test-frontend-runtime-boundary.mjs
 node scripts/test-frontend-runtime-dependencies.mjs
 node scripts/test-production-architecture.mjs
 ```

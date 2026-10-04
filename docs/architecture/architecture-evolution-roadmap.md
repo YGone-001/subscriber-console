@@ -18,8 +18,7 @@ The roadmap preserves these present facts:
 - Nginx is the sole public browser edge (single upstream `xcloud_go`).
 - Go runs on loopback `127.0.0.1:18888` and owns every current production API
   operation, API security authority, and embedded static React SPA hosting.
-- Next.js source and loopback `127.0.0.1:13333` contract remain retained for legacy
-  rollback only, pending formal retirement and removal upon subsequent retirement.
+- Next.js source and port 13333 are retired.
 - MongoDB `xcloud` and `xcloud_ops` remain the current source of truth.
 - The OCS management plane is frozen; the charging plane remains excluded.
 - Authorized business operations use direct execution with RBAC, fresh actor
@@ -29,8 +28,7 @@ The roadmap preserves these present facts:
 
 | Stage | Runtime | Data | Primary capability |
 | --- | --- | --- | --- |
-| Current | Nginx + Go + embedded SPA | MongoDB | Consolidated single-upstream runtime (Next.js retained for rollback) |
-| Short term | Nginx + Go + canonical frontend | MongoDB | Full retirement of Next.js and frontend directory canonicalization |
+| Current | Nginx + Go + canonical frontend | MongoDB | Consolidated single-upstream runtime (Next.js retired, canonical frontend) |
 | Medium term | Modular Go platform with event and telemetry foundations | MongoDB plus workload-specific stores where justified | Inventory, adapters, workflow, and assurance |
 | Long term | Service-based and independently scalable platform where required | Multi-plane persistence | Multi-domain automation and closed-loop operations |
 | Future | Autonomous operations platform | Digital operational model | Intent, digital twin, and guarded AI agents |
@@ -58,22 +56,19 @@ Go 127.0.0.1:18888
 MongoDB: xcloud + xcloud_ops
 ```
 
-Single-upstream consolidation completed the production edge transition: Nginx now proxies all API and UI traffic
-to Go `:18888`. Next.js `:13333` receives zero production edge traffic and is retained
-only for explicit operator rollback. Port `13333` and legacy Next source in `frontend/`
-will be formally retired upon subsequent retirement, which will also rename `frontend-spa/` to `frontend/`.
+Single-upstream consolidation and frontend canonicalization are complete: Nginx proxies all production traffic
+to Go `:18888`, which serves both the REST API and the embedded static React SPA. Next.js and port `13333`
+are retired, and `frontend/` is the canonical React+Vite SPA source.
 
 ### Implementation Status
 
-The parallel SPA foundation in `frontend-spa/` includes the shared application shell,
+The canonical SPA in `frontend/` includes the shared application shell,
 cross-cutting providers, role-aware navigation metadata, compatibility redirects,
 read-side business projections, governed business mutations, and operational mutations.
 Go embedded static SPA hosting is edge-active. Nginx routes all production traffic
 to Go `:18888`.
-`frontend-spa` is the active production SPA source.
-The Next.js production runtime is edge-inactive, with source retained in `frontend/`
-for rollback only. The Vite listener on `127.0.0.1:13334` remains a loopback-only
-development listener. subsequent retirement and canonicalization will retire Next.js and canonicalize the frontend directory.
+`frontend/` is the active production SPA source.
+The Vite listener on `127.0.0.1:13334` is the loopback-only development server.
 
 ### Internal Backend Direction
 

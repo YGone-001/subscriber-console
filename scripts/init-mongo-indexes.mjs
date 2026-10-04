@@ -1,10 +1,9 @@
 import { Long, MongoClient } from 'mongodb';
 import bcrypt from 'bcryptjs';
-import nextEnv from '@next/env';
+import { loadEnv } from './lib/load-env.mjs';
 import { errorSummary, writeOpsReport } from './lib/ops-report.mjs';
 
-const { loadEnvConfig } = nextEnv;
-loadEnvConfig(process.cwd());
+loadEnv(process.cwd());
 
 const uri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/xcloud';
 const xcloudDbName = process.env.MONGODB_XCLOUD_DB || 'xcloud';

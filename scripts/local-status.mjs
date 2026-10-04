@@ -2,7 +2,7 @@
 /**
  * Local runtime status.
  *
- * Read-only. Reports both component process state (Mongo, Go, Next, Nginx) and the
+ * Read-only. Reports both component process state (Mongo, Go, Frontend) and the
  * overall topology state, reusing the shared runtime library so it cannot drift from
  * `local:preflight` or `local:doctor`.
  *
@@ -17,12 +17,12 @@ import {
   CANONICAL_PORTS,
   PORT_OUTCOMES,
   TOPOLOGY_STATES,
+  FRONTEND_ROOT,
   describeListener,
   inspectPort,
   isContaminated,
   probeTopology,
   readRegistry,
-  resolveEdgeUrl,
 } from './lib/local-runtime.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -36,35 +36,32 @@ function processLabel(portResult, topologyReady) {
 }
 
 async function main() {
-  const edgeUrl = resolveEdgeUrl();
   const registry = readRegistry(ROOT);
 
-  const [edge, next, go, mongo, topology] = await Promise.all([
-    inspectPort(CANONICAL_PORTS.edge, { role: 'edge', repoRoot: ROOT }),
-    inspectPort(CANONICAL_PORTS.next, { role: 'next', repoRoot: ROOT, registryRecord: registry.next }),
+  const [frontend, go, mongo, topology] = await Promise.all([
+    inspectPort(CANONICAL_PORTS.frontend, { role: 'frontend', repoRoot: ROOT, registryRecord: registry.frontend }),
     inspectPort(CANONICAL_PORTS.go, { role: 'go', repoRoot: ROOT, registryRecord: registry.go }),
     inspectPort(CANONICAL_PORTS.mongo, { role: 'mongo', repoRoot: ROOT }),
-    probeTopology({ edgeUrl }),
+    probeTopology(),
   ]);
 
-  const contaminated = [next, go].filter(isContaminated);
+  const contaminated = [frontend, go].filter(isContaminated);
   const topologyState = contaminated.length > 0 ? TOPOLOGY_STATES.PORT_CONTAMINATION : topology.result;
 
   console.log('Local runtime status');
   console.log(`  Repository : ${ROOT}`);
-  console.log(`  Edge URL   : ${edgeUrl}`);
+  console.log(`  Frontend URL: ${FRONTEND_ROOT}`);
   console.log('');
 
   console.log('Process state:');
-  console.log(`  MongoDB : ${processLabel(mongo, mongo.outcome === PORT_OUTCOMES.EXPECTED_SERVICE)}  (port ${CANONICAL_PORTS.mongo})`);
-  console.log(`  Go      : ${processLabel(go, topology.goReady)}  (port ${CANONICAL_PORTS.go})`);
-  console.log(`  Next    : ${processLabel(next, topology.nextReady)}  (port ${CANONICAL_PORTS.next})`);
-  console.log(`  Nginx   : ${topology.edgeReady ? 'UP' : 'DOWN'}  (port ${CANONICAL_PORTS.edge})`);
+  console.log(`  MongoDB  : ${processLabel(mongo, mongo.outcome === PORT_OUTCOMES.EXPECTED_SERVICE)}  (port ${CANONICAL_PORTS.mongo})`);
+  console.log(`  Go       : ${processLabel(go, topology.goReady)}  (port ${CANONICAL_PORTS.go})`);
+  console.log(`  Frontend : ${processLabel(frontend, topology.frontendReady)}  (port ${CANONICAL_PORTS.frontend})`);
   console.log('');
 
   console.log('Canonical port ownership:');
-  for (const [name, result] of [['edge', edge], ['next', next], ['go', go], ['mongo', mongo]]) {
-    console.log(`  ${name.padEnd(5)} ${String(result.port).padEnd(6)} ${result.outcome}${result.listener ? `  ${describeListener(result.listener)}` : ''}`);
+  for (const [name, result] of [['frontend', frontend], ['go', go], ['mongo', mongo]]) {
+    console.log(`  ${name.padEnd(8)} ${String(result.port).padEnd(6)} ${result.outcome}${result.listener ? `  ${describeListener(result.listener)}` : ''}`);
   }
   console.log('');
 
@@ -74,22 +71,21 @@ async function main() {
       console.log(`  port ${result.port} (${result.role}) -> ${result.outcome}: ${result.reason}`);
     }
     console.log('  Diagnose the owner with `npm run local:preflight`. Do not change the port.');
-  } else if (topologyState === TOPOLOGY_STATES.EDGE_REQUIRED) {
-    console.log('  Go and Next are up, but the Nginx edge is missing.');
-    console.log('  Run `sudo ./deploy/nginx/setup-next-legacy.sh`, then `npm run local:doctor`.');
-  } else if (topologyState === TOPOLOGY_STATES.EDGE_UI_MISROUTED) {
-    console.log('  Edge answered but UI is not routed to Next.js.');
-    console.log('  Run `sudo ./deploy/nginx/setup-next-legacy.sh`, then `npm run local:doctor`.');
+  } else if (topologyState === TOPOLOGY_STATES.GO_DOWN) {
+    console.log('  Go backend is down. Start with `npm run local:dev`.');
+  } else if (topologyState === TOPOLOGY_STATES.FRONTEND_DOWN) {
+    console.log('  Frontend Vite server is down. Start with `npm run local:dev`.');
+  } else if (topologyState === TOPOLOGY_STATES.FRONTEND_API_MISROUTED) {
+    console.log('  Frontend is up but /api proxy does not reach Go.');
   } else if (topologyState === TOPOLOGY_STATES.FULL_STACK_READY) {
-    console.log(`  Open: ${edgeUrl}`);
+    console.log(`  Open: ${FRONTEND_ROOT}`);
   }
 
   console.log('');
   console.log('==================================================');
   console.log(`local_status_mongo=${processLabel(mongo, mongo.outcome === PORT_OUTCOMES.EXPECTED_SERVICE)}`);
   console.log(`local_status_go=${processLabel(go, topology.goReady)}`);
-  console.log(`local_status_next=${processLabel(next, topology.nextReady)}`);
-  console.log(`local_status_nginx=${topology.edgeReady ? 'UP' : 'DOWN'}`);
+  console.log(`local_status_frontend=${processLabel(frontend, topology.frontendReady)}`);
   console.log(`local_status_topology=${topologyState}`);
   console.log('==================================================\n');
 

@@ -10,11 +10,10 @@ frontend/node_modules/
 !.yarn/versions
 
 # Build output
-.next/
-frontend/.next/
-out/
-build/
+frontend/dist/
 dist/
+build/
+out/
 
 # Next.js and TypeScript generated files
 next-env.d.ts

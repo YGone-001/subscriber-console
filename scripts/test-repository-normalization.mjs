@@ -153,6 +153,14 @@ const OLD_SCRIPT_NAMES = [
   'test-phase-8-production-freeze.mjs',
   'test-auth-cutover.mjs',
   'test-user-management-cutover.mjs',
+  'test-spa-migration-foundation.mjs',
+  'test-spa-shell-parity.mjs',
+  'test-spa-read-parity.mjs',
+  'test-spa-mutation-parity.mjs',
+  'test-spa-operational-mutation-parity.mjs',
+  'test-next-backend-absence.mjs',
+  'test-local-access-contract.mjs',
+  'test-local-development-edge.mjs',
 ];
 
 // ---------------------------------------------------------------------------

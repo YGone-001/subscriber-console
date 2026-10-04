@@ -48,8 +48,8 @@ registrations parsed from `backend/cmd/server/main.go` plus
 
 ### Frontend
 
-- **Production UI**: `frontend-spa/` (React 19, Vite 8, React Router, Tailwind CSS, Lucide React). Built to static assets and embedded directly into the Go binary.
-- **Legacy UI**: `frontend/` (Next.js 16.3.8 App Router, bound to `127.0.0.1:13333`). Retained as a legacy/rollback runtime contract only, pending formal retirement upon subsequent retirement. Next.js edge traffic is zero in production.
+- **Production UI**: `frontend/` (React 19, Vite 8, React Router, Tailwind CSS, Lucide React). Built to static assets and embedded directly into the Go binary.
+- Legacy Next.js source and port 13333 are retired.
 
 The Next.js business backend (`frontend/src/app/api/**` and `frontend/src/server/**`) does not exist.
 
@@ -119,31 +119,17 @@ CNMS (reference only)
 
 CNMS is a reference repository, not a merge target.
 
-## Short-Term Target Architecture
-
-The planned short-term target is not deployed. It consolidates the production
-application runtime behind the existing Nginx edge:
+## Development vs Production Architecture
 
 ```text
-Browser
-   |
-   v
-Nginx (sole public edge)
-   |
-   v
-Go 127.0.0.1:18888
-   |-- REST API and server-side security authority
-   `-- embedded static React SPA
-          |
-          v
-MongoDB: xcloud + xcloud_ops
+PRODUCTION
+Browser -> Nginx -> Go 127.0.0.1:18888 (API + embedded static SPA) -> MongoDB
+
+DEVELOPMENT
+Browser -> Vite 127.0.0.1:13334 -> Go 127.0.0.1:18888 (/api proxy) -> MongoDB
 ```
 
-The target retires the production Next.js runtime and its `:13333` listener only
-when a future migration phase implements and validates that transition. Nginx remains
-the public edge, Go remains the internal application listener on `:18888`, MongoDB
-remains the source of truth, and Go remains the authentication and authorization
-authority.
+In production, Nginx remains the sole public edge and Go serves both the API and the embedded static SPA. In local development, the Vite dev server on `127.0.0.1:13334` proxies `/api` calls directly to Go on `127.0.0.1:18888`, without requiring Nginx. Next.js and port 13333 are retired.
 
 ## Evolution Authority
 

@@ -444,7 +444,8 @@ const PROXY_FORBIDDEN_TOKENS = [
 ];
 
 function scanProxy() {
-  const content = existsSync(proxyPath) ? readFileSync(proxyPath, 'utf8') : '';
+  const proxyPresent = existsSync(proxyPath);
+  const content = proxyPresent ? readFileSync(proxyPath, 'utf8') : '';
   const code = stripComments(content);
   const violations = [];
   for (const token of PROXY_FORBIDDEN_TOKENS) {
@@ -452,8 +453,15 @@ function scanProxy() {
       if (token.re.test(line)) violations.push({ token: token.key, line: idx + 1, text: line.trim() });
     });
   }
-  const consultsGoAuth = /\/api\/auth\/me/.test(code) && /auth_token/.test(code);
-  return { content, violations, consultsGoAuth };
+  // Legacy proxy.ts is retired. UI navigation guard is AuthGate.tsx/AuthProvider.tsx/auth-client.ts.
+  const authProviderPath = resolve(srcRoot, 'providers/AuthProvider.tsx');
+  const authGatePath = resolve(srcRoot, 'auth/AuthGate.tsx');
+  const authClientPath = resolve(srcRoot, 'auth/auth-client.ts');
+  const guardCode = (existsSync(authProviderPath) ? readFileSync(authProviderPath, 'utf8') : '') +
+                    (existsSync(authGatePath) ? readFileSync(authGatePath, 'utf8') : '') +
+                    (existsSync(authClientPath) ? readFileSync(authClientPath, 'utf8') : '');
+  const consultsGoAuth = !proxyPresent && /\/api\/auth\/me/.test(guardCode);
+  return { content, violations, consultsGoAuth, legacyProxyAbsent: !proxyPresent };
 }
 
 // ---------------------------------------------------------------------------
@@ -680,11 +688,11 @@ async function main() {
     `nginx_api_identity_headers_stripped=${nginx.identityHeadersStripped} (X-User / X-Role / X-Permissions)`,
   );
 
-  // ---- AO-09 proxy.ts is a UI-only guard (no JWT / Mongo / cutover / forwarding) --
+  // ---- AO-09 legacy proxy.ts retired; UI navigation guard consults Go auth --
   check(
     'AO-09',
-    proxy.violations.length === 0 && proxy.consultsGoAuth,
-    `proxy_forbidden_tokens=${proxy.violations.length} proxy_consults_go_auth=${proxy.consultsGoAuth}`,
+    proxy.legacyProxyAbsent && proxy.violations.length === 0 && proxy.consultsGoAuth,
+    `legacy_proxy_absent=${proxy.legacyProxyAbsent} proxy_forbidden_tokens=${proxy.violations.length} proxy_consults_go_auth=${proxy.consultsGoAuth}`,
   );
 
   // ---- AO-10 frontend/package.json carries no backend runtime dependencies --
@@ -806,7 +814,7 @@ async function main() {
   if (nginx.nextUpstreamPresent) blockers.push('NGINX_NEXT_UPSTREAM_ACTIVE');
   if (!nginx.identityHeadersStripped) blockers.push('NGINX_API_IDENTITY_HEADERS_NOT_STRIPPED');
   if (proxy.violations.length > 0) blockers.push(`PROXY_FORBIDDEN_TOKENS=${proxy.violations.length}`);
-  if (!proxy.consultsGoAuth) blockers.push('PROXY_GO_AUTH_CONSULT_MISSING');
+  if (!proxy.legacyProxyAbsent || !proxy.consultsGoAuth) blockers.push('PROXY_GO_AUTH_CONSULT_MISSING');
   if (!frontendPackage.present || frontendPackage.banned.length > 0) blockers.push(`FRONTEND_PACKAGE_BANNED=${frontendPackage.banned.join('|')}`);
   if (unmappedCallers.length > 0) blockers.push(`FRONTEND_API_CALLERS_UNMAPPED=${unmappedCallers.length}`);
   if (staleCallersToRetired > 0) blockers.push(`STALE_CALLERS_TO_RETIRED_SURFACES=${staleCallersToRetired}`);

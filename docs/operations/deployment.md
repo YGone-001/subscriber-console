@@ -29,9 +29,8 @@ the Go registration list: 84 exact METHOD+PATH registrations parsed from
 edge and Go owns both the API and the embedded static React SPA; no per-route ownership
 table exists in production source.
 
-`frontend-spa/` is the current production SPA source, built to static assets and embedded
-into the Go binary. Next.js source in `frontend/` and its `127.0.0.1:13333` runtime contract
-are retained for legacy/rollback purposes only, pending retirement upon subsequent retirement.
+`frontend/` is the canonical production SPA source, built to static assets and embedded
+into the Go binary. Next.js source and port 13333 are retired.
 
 Frontend API paths remain `/api/...` unchanged - the edge routing is transparent to the UI.
 
@@ -40,15 +39,17 @@ Frontend API paths remain `/api/...` unchanged - the edge routing is transparent
 ```text
 Public origin         : the Nginx listener only
 Loopback-internal     : Go 127.0.0.1:18888 (API + embedded static React SPA)
-Retained legacy       : Next.js 127.0.0.1:13333 (`next start -H 127.0.0.1 -p 13333`, retained for rollback / pending retirement)
-Unsupported origins   : http://127.0.0.1:18888, http://127.0.0.1:13333
+Local dev frontend    : Vite 127.0.0.1:13334 (/api proxy to Go :18888)
+Retired runtime       : Next.js and port 13333 retired
+Unsupported origins   : http://127.0.0.1:18888
 ```
 
 Listener contract:
 
 ```text
 127.0.0.1:18888 = Go internal application listener (API + embedded static React SPA, HTTP_ADDR production default)
-127.0.0.1:13333 = Retained legacy Next listener (`next start -H 127.0.0.1 -p 13333`, retained for rollback / pending retirement)
+127.0.0.1:13334 = Vite local development listener (dev only)
+Port 13333      = retired (Next.js retired)
 80/443          = Nginx public edge
 ```
 
@@ -180,10 +181,10 @@ The production artifact is a single bundled Go binary containing embedded static
 ```bash
 # 1. From repository root: install dependencies
 npm ci
-cd frontend-spa
+cd frontend
 npm ci
 
-# 2. Build frontend-spa static assets
+# 2. Build frontend static assets
 npm run build
 cd ..
 
@@ -197,15 +198,6 @@ cd ..
 ```
 
 The Go binary is a single static executable with no external Node runtime dependencies.
-
-### Legacy Next.js (Retained for Rollback / Pending subsequent retirement and canonicalization Retirement)
-
-```bash
-cd frontend
-npm ci
-npm run build
-cd ..
-```
 
 ## Configuration
 
@@ -223,54 +215,34 @@ cd ..
 `MONGODB_*`, `JWT_SECRET` and `INITIAL_ADMIN_PASSWORD` are consumed by the Go
 backend and by the repository-root operational scripts (for example `npm run mongo:init`).
 
-### Retained Legacy Next.js Runtime (Rollback / Development Only)
+### Development Server (Vite)
 
-| Variable | Description | Default |
-| --- | --- | --- |
-| `GO_BACKEND_URL` | Go authority used by the UI navigation guard (`GET /api/auth/me`) | `http://127.0.0.1:18888` |
-| listen host | Bind address (`next start -H`) | `127.0.0.1` (`npm run start`) |
-| server port | Server port | `13333` (`npm run start`) |
+| Setting | Value |
+| --- | --- |
+| Host | `127.0.0.1` |
+| Port | `13334` |
+| Proxy | `/api` -> `http://127.0.0.1:18888` |
 
-The legacy Next.js runtime uses no MongoDB client and no JWT
-secret; it performs no API authentication. The only network dependency of the UI
-navigation guard is the Go authority above.
+Next.js runtime, port 13333, and legacy development Nginx edge configs are completely retired.
 
 ## Start Commands
 
 ### Local Full-Stack Development
 
-The full stack is MongoDB + Go + Next.js + the Nginx edge. The browser always enters
-through the Nginx edge; the two application services are loopback-internal.
-
-WARNING: Do not browse directly to `:13333` for full-stack use. The page may render,
-but same-origin `/api` requests will not reach Go because Next.js owns no API routes.
-
-Two distinct traffic paths exist, and only one of them is browser-facing:
+In local development, the Vite development server runs at `127.0.0.1:13334` and proxies `/api/*` directly to the Go backend at `127.0.0.1:18888`. Local development does not require Nginx.
 
 ```text
-Browser /api/*                                  -> Nginx -> Go 127.0.0.1:18888
-Next.js navigation guard (server side)          -> http://127.0.0.1:18888/api/auth/me -> Go
+Browser -> Vite 127.0.0.1:13334 -> Go 127.0.0.1:18888 (/api proxy)
 ```
 
-Nginx is the only browser-facing application edge and the exclusive browser API routing
-boundary. The second path is a Next-to-Go loopback authority lookup (`GET /api/auth/me`)
-performed by the UI navigation guard; it is not API ownership, not API forwarding and not
-a Node fallback. It does not make Nginx the only possible Next-to-Go communication path.
+Nginx remains the authoritative production edge, but is not required for local development.
 
 Port status:
 
 ```text
-80   currently active Nginx HTTP edge (`listen 80;` in deploy/nginx/xcloud.conf)
-443  NOT active by default; it exists only in the commented HTTPS template
+80   active Nginx HTTP edge (production only)
+443  commented HTTPS template (production only)
 ```
-
-If TLS is terminated by an external load balancer or reverse proxy, document that
-separately from this repository's default listener; the repository does not enable 443.
-
-`frontend/next.config.ts` sets `allowedDevOrigins = ['10.10.0.139']`. This is an
-origin-policy setting only. It does not modify TCP binding and does not make
-`127.0.0.1:13333` reachable from the LAN, because both `next dev` and `next start` bind
-`-H 127.0.0.1 -p 13333`, which keeps the listener loopback-only.
 
 Operator workflow:
 
@@ -280,9 +252,7 @@ Operator workflow:
 npm run local:preflight
 ```
 
-Read-only. It classifies ports 80, 13333, 18888 and 27017 as `FREE`, `EXPECTED_SERVICE`,
-`FOREIGN_LISTENER`, `UNKNOWN_LISTENER` or `PERMISSION_LIMITED`, and reports the owning
-PID, process name, executable and command line where the operating system allows it.
+Read-only. It classifies ports 13334, 18888 and 27017.
 Never resolve an occupied canonical port by changing the port; diagnose the owner.
 
 2. Ensure MongoDB is reachable, then initialize when required:
@@ -291,15 +261,13 @@ Never resolve an occupied canonical port by changing the port; diagnose the owne
 npm run mongo:init
 ```
 
-3. Start the managed project processes (builds Go and runs it on the production default
-`127.0.0.1:18888`, runs Next.js on `127.0.0.1:13333`, writes ownership records):
+3. Start the managed project processes (builds Go and runs it on `127.0.0.1:18888`, runs Vite on `127.0.0.1:13334`, writes ownership records):
 
 ```bash
 npm run local:dev
 ```
 
-`local:dev` never starts MongoDB or Nginx. If the edge is absent it reports
-`FULL_STACK_NOT_READY` / `EDGE_REQUIRED` and instructs `sudo ./deploy/nginx/setup-next-legacy.sh`.
+`local:dev` never starts MongoDB or Nginx. It starts Go and Vite and records process ownership.
 
 Startup is atomic per managed process: each child is spawned, its live process identity
 is inspected, and its ownership record is written before readiness polling begins
@@ -309,46 +277,24 @@ verified ownership mechanism as `local:stop`. Every exit path therefore leaves t
 either absent or present with a valid ownership record; the run reports
 `local_dev_unmanaged_live_processes=0` when that holds.
 
-Manual alternative (Go backend internal `127.0.0.1:18888`):
+Manual alternative:
+- Go backend internal `127.0.0.1:18888`: `cd backend && go run ./cmd/server`
+- Vite frontend dev server `127.0.0.1:13334`: `cd frontend && npm run dev`
 
-```bash
-cd backend
-set -a
-source ../.env
-set +a
-go run ./cmd/server
-```
-
-Manual alternative (Next.js UI internal `127.0.0.1:13333`):
-
-```bash
-cd frontend
-npm run dev    # next dev --webpack -H 127.0.0.1 -p 13333
-```
-
-4. Start the Nginx edge:
-
-```bash
-sudo ./deploy/nginx/setup-next-legacy.sh
-```
-
-5. Check component and topology state, then verify the running topology:
+4. Check component and topology state, then verify the running topology:
 
 ```bash
 npm run local:status
 npm run local:doctor
 ```
 
-6. Open the full application at the edge URL:
+5. Open the local application at:
 
 ```text
-http://localhost
+http://localhost:13334
 ```
 
-When the edge is intentionally configured on another port
-(`sudo ./deploy/nginx/setup-next-legacy.sh 8080`), open `http://localhost:8080`.
-
-7. Stop the managed processes when finished:
+6. Stop the managed processes when finished:
 
 ```bash
 npm run local:stop
@@ -363,26 +309,13 @@ reports `STOP_TIMEOUT` (per role) with `local_stop_result=NEEDS_ATTENTION` and a
 exit code (`local_stop_record_preserved_on_timeout=true`). No arbitrary force kill is ever
 introduced; the operator is expected to inspect the still-live process and retry.
 
-Development transport note: the Nginx edge remains the full-stack browser origin in
-development too. The Next.js development HMR WebSocket (`/_next/hmr`) is transported
-through the edge by the dedicated `location /_next/hmr` block in
-`deploy/nginx/xcloud-next-legacy.conf` (installed via `setup-next-legacy.sh`); this is
-framework development traffic, not API ownership, and it does not relax the prohibition on
-Next.js API routing. The runtime acceptance suite
-(`node scripts/test-local-development-edge.mjs`) proves this transport end to end and
-also asserts the `local:doctor` `FULL_STACK_READY`, `EDGE_REQUIRED`, and `EDGE_UI_MISROUTED` results.
-
 ### Local Troubleshooting Matrix
 
 | State | Meaning | Action |
 | --- | --- | --- |
-| `FULL_STACK_READY` | full topology ready | use the edge URL |
-| `EDGE_REQUIRED` | Go + Next ready, Nginx absent | start/install Nginx (`sudo ./deploy/nginx/setup-next-legacy.sh`) |
+| `FULL_STACK_READY` | full local topology ready | use http://localhost:13334 |
 | `GO_DOWN` | Go listener absent | start/investigate Go |
-| `NEXT_DOWN` | Next listener absent | start/investigate Next |
-| `EDGE_API_MISROUTED` | edge present but `/api` does not reach Go | inspect Nginx routing |
-| `EDGE_UI_MISROUTED` | edge present but `/` reaches Go instead of Next dev | install legacy edge (`sudo ./deploy/nginx/setup-next-legacy.sh`) |
-| `ARCHITECTURE_VIOLATION` | Next directly responds as the auth API | remove rewrite/handler/proxy |
+| `FRONTEND_DOWN` | Frontend Vite listener absent | start/investigate Vite |
 | `PORT_CONTAMINATION` | canonical port owned by an unexpected process | inspect PID/owner with `npm run local:preflight` |
 | `INSUFFICIENT_PERMISSION` | process is visible but cannot be controlled | use elevated manual inspection |
 | `STOP_TIMEOUT` | a managed process did not exit after being signalled | ownership record preserved; inspect the still-live PID and retry `npm run local:stop` |
@@ -390,11 +323,9 @@ also asserts the `local:doctor` `FULL_STACK_READY`, `EDGE_REQUIRED`, and `EDGE_U
 Reported by `npm run local:status` (component state plus topology state) and
 `npm run local:doctor` (HTTP topology). `npm run local:preflight` reports the port
 ownership classification (`FREE`, `EXPECTED_SERVICE`, `FOREIGN_LISTENER`,
-`UNKNOWN_LISTENER`, `PERMISSION_LIMITED`) and the per-port outcome (`PORT_FREE`,
-`PROJECT_MANAGED_PROCESS`, `FOREIGN_PROCESS`, `STALE_PROJECT_PROCESS`,
-`INSUFFICIENT_PERMISSION`).
+`UNKNOWN_LISTENER`, `PERMISSION_LIMITED`).
 
-Runtime acceptance suites (`scripts/test-local-development-edge.mjs`,
+Runtime acceptance suites (`scripts/test-local-development-runtime.mjs`,
 `scripts/test-deployment-boundary.mjs`) refuse to run while a canonical internal port is
 occupied by a process they do not own. They never reuse or kill an existing listener;
 they must own the processes they measure.
@@ -411,8 +342,8 @@ set +a
 ```
 
 The Go bundled binary serves both the API and the embedded static React SPA directly on
-`127.0.0.1:18888`. No production Next.js process is required or active. Next.js `:13333`
-is retained as a legacy/rollback runtime contract until subsequent retirement.
+`127.0.0.1:18888`. No production Node.js/Next.js/Vite process is required or active.
+Next.js and port 13333 are completely retired.
 
 Go binds loopback explicitly by the `127.0.0.1:18888` `HTTP_ADDR` default and is reached
 only through Nginx. `HTTP_ADDR` may be overridden by an operator, but the safe default
@@ -422,8 +353,8 @@ is loopback.
 
 1. Provision MongoDB or reuse the xCloud MongoDB host.
 2. Configure the Go backend environment variables in `.env`.
-3. Install dependencies: root dependencies with `npm ci` and SPA dependencies with `cd frontend-spa && npm ci`.
-4. Build the static SPA: `cd frontend-spa && npm run build`.
+3. Install dependencies: root dependencies with `npm ci` and frontend dependencies with `cd frontend && npm ci`.
+4. Build the static SPA: `cd frontend && npm run build`.
 5. Stage the static SPA assets for Go embedding: `node scripts/stage-spa-for-go.mjs`.
 6. Compile the Go bundled binary: `cd backend && go build -o bin/server ./cmd/server`.
 7. Initialize database indexes: `npm run mongo:init` from the repository root.
@@ -440,25 +371,12 @@ is loopback.
 13. Log in with the bootstrap `admin` account.
 14. Create named operator/viewer accounts and store credentials securely.
 
-Operators must NOT start Next.js for production operation. Next.js is retained only for
-explicit legacy rollback.
+## Next.js Retirement and Canonical Architecture
 
-## Explicit Rollback Contract
-
-Rollback to the legacy Next.js runtime is strictly manual and operator-initiated:
-
-1. Build and start legacy Next.js on `127.0.0.1:13333`:
-   ```bash
-   cd frontend
-   npm run start   # next start -H 127.0.0.1 -p 13333
-   ```
-2. Install the temporary legacy Next edge configuration:
-   ```bash
-   sudo ./deploy/nginx/setup-next-legacy.sh [listen_port]
-   ```
-3. Confirm `nginx -t` passes.
-4. Reload Nginx (`sudo systemctl reload nginx`).
-5. Verify edge UI routes to Next (:13333) and API routes to Go (:18888).
+Next.js, port 13333, and the legacy Next development Nginx configuration have been completely retired.
+Production uses exclusively Nginx fronting Go `127.0.0.1:18888` with the embedded React SPA.
+Local development uses Vite `127.0.0.1:13334` with `/api` proxying to Go.
+No production Node.js runtime is required.
 
 ### No Silent Rollback
 
@@ -483,16 +401,9 @@ MongoDB may remain disabled at boot on development hosts. Start it only when nee
 
 Check that `JWT_SECRET` (Go) exists, is not a placeholder, and is at least 32 bytes.
 
-### Login page loads on :13333 but login returns 404 / server error
+### Direct Go access on :18888 returns 404 for frontend assets in development
 
-The credentials may be valid. The browser is using the internal Next.js origin, so
-relative `/api` requests are sent to Next.js. Next.js intentionally has no API routes,
-so `POST /api/auth/login` returns a Next.js 404 and never reaches Go.
-
-Use/start the Nginx edge and browse through its public URL (`http://localhost`).
-Verify the running topology with `npm run local:doctor`.
-
-Do not add a Next.js `/api` rewrite or proxy to work around this.
+Port `18888` serves embedded static assets when built with embedded SPA, but during local development with Vite dev server, browse to `http://localhost:13334` instead (which proxies `/api/*` to Go on `:18888`). In production, access the application through the Nginx edge at `http://localhost`. Verify the running topology with `npm run local:doctor`.
 
 ### Admin account is not created
 

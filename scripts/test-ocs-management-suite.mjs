@@ -15,11 +15,11 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { execSync, spawn } from 'node:child_process';
 import { MongoClient, Long } from 'mongodb';
-import nextEnv from '@next/env';
+import { loadEnv } from './lib/load-env.mjs';
 import { SignJWT } from 'jose';
 import { deriveGoRegistrations } from './lib/go-registrations.mjs';
 
-nextEnv.loadEnvConfig(process.cwd());
+loadEnv(process.cwd());
 
 // Suppress known audit scheduling messages during test run
 const originalConsoleError = console.error;

@@ -41,11 +41,11 @@ import { existsSync, unlinkSync, readFileSync } from 'node:fs';
 import { execSync, spawn } from 'node:child_process';
 import { SignJWT, jwtVerify } from 'jose';
 import { MongoClient } from 'mongodb';
-import nextEnv from '@next/env';
+import { loadEnv } from './lib/load-env.mjs';
 import bcrypt from 'bcryptjs';
 import { deriveGoRegistrations } from './lib/go-registrations.mjs';
 
-nextEnv.loadEnvConfig(process.cwd());
+loadEnv(process.cwd());
 
 // Suppress known audit scheduling and intentional unreachable messages during test run
 const originalConsoleError = console.error;

@@ -1,0 +1,261 @@
+[
+  {
+    "route": "/",
+    "mode": "migrated-read",
+    "source": "frontend/src/features/read/ReadPages.tsx",
+    "readEndpoints": [
+      "GET /api/analytics/metrics",
+      "GET /api/analytics/sparkline",
+      "GET /api/alerts",
+      "GET /api/ocs/subscribers"
+    ],
+    "deferredMutations": []
+  },
+  {
+    "route": "/ocs",
+    "mode": "redirect",
+    "source": "frontend/src/router/redirects.ts",
+    "redirectTo": "/ocs/tariffs",
+    "readEndpoints": [],
+    "deferredMutations": []
+  },
+  {
+    "route": "/ocs/balances",
+    "mode": "read-parity",
+    "source": "frontend/src/features/ocs/balances/BalancesPage.tsx",
+    "readEndpoints": [
+      "GET /api/ocs/balances"
+    ],
+    "deferredMutations": [
+      "balance adjustment"
+    ]
+  },
+  {
+    "route": "/ocs/balances/:imsi",
+    "mode": "read-parity",
+    "source": "frontend/src/features/ocs/balances/BalanceDetailPage.tsx",
+    "readEndpoints": [
+      "GET /api/ocs/balances/{imsi}"
+    ],
+    "deferredMutations": [
+      "balance adjustment"
+    ]
+  },
+  {
+    "route": "/ocs/contracts",
+    "mode": "read-parity",
+    "source": "frontend/src/features/ocs/contracts/ContractsPage.tsx",
+    "readEndpoints": [
+      "GET /api/ocs/subscribers"
+    ],
+    "deferredMutations": [
+      "contract create",
+      "tariff assignment/update",
+      "suspend",
+      "resume",
+      "terminate"
+    ]
+  },
+  {
+    "route": "/ocs/contracts/:imsi",
+    "mode": "read-parity",
+    "source": "frontend/src/features/ocs/contracts/ContractDetailPage.tsx",
+    "readEndpoints": [
+      "GET /api/ocs/subscribers"
+    ],
+    "deferredMutations": [
+      "tariff assignment/update",
+      "suspend",
+      "resume",
+      "terminate"
+    ]
+  },
+  {
+    "route": "/ocs/dashboard",
+    "mode": "redirect",
+    "source": "frontend/src/router/redirects.ts",
+    "redirectTo": "/ocs/tariffs",
+    "readEndpoints": [],
+    "deferredMutations": []
+  },
+  {
+    "route": "/ocs/sessions",
+    "mode": "redirect",
+    "source": "frontend/src/router/redirects.ts",
+    "redirectTo": "/ocs/tariffs",
+    "readEndpoints": [],
+    "deferredMutations": []
+  },
+  {
+    "route": "/ocs/subscribers",
+    "mode": "redirect",
+    "source": "frontend/src/router/redirects.ts",
+    "redirectTo": "/ocs/contracts",
+    "readEndpoints": [],
+    "deferredMutations": []
+  },
+  {
+    "route": "/ocs/tariffs",
+    "mode": "read-parity",
+    "source": "frontend/src/features/ocs/tariffs/TariffsPage.tsx",
+    "readEndpoints": [
+      "GET /api/tariff-plans"
+    ],
+    "deferredMutations": [
+      "tariff create",
+      "tariff update",
+      "tariff clone",
+      "tariff enable",
+      "tariff disable",
+      "tariff delete"
+    ],
+    "disabledMutations": [
+      "tariff import",
+      "tariff migration",
+      "tariff rule mutation"
+    ]
+  },
+  {
+    "route": "/ocs/tariffs/:planId",
+    "mode": "read-parity",
+    "source": "frontend/src/features/ocs/tariffs/TariffDetailPage.tsx",
+    "readEndpoints": [
+      "GET /api/tariff-plans/{planId}",
+      "GET /api/tariff-plans/{planId}/rules",
+      "GET /api/tariff-plans/{planId}/subscribers",
+      "GET /api/tariff-plans/{planId}/operations",
+      "GET /api/tariff-plans/{planId}/export"
+    ],
+    "deferredMutations": [
+      "tariff update",
+      "tariff clone",
+      "tariff enable",
+      "tariff disable",
+      "tariff delete"
+    ],
+    "disabledMutations": [
+      "tariff migration",
+      "tariff rule mutation"
+    ]
+  },
+  {
+    "route": "/ocs/usage",
+    "mode": "redirect",
+    "source": "frontend/src/router/redirects.ts",
+    "redirectTo": "/ocs/tariffs",
+    "readEndpoints": [],
+    "deferredMutations": []
+  },
+  {
+    "route": "/profile",
+    "mode": "read-parity",
+    "source": "frontend/src/features/profiles/ProfilesPage.tsx",
+    "readEndpoints": [
+      "GET /api/profiles",
+      "GET /api/profiles/{name}",
+      "GET /api/profiles/{name}/stats",
+      "GET /api/profiles/{name}/versions"
+    ],
+    "deferredMutations": [
+      "profile create",
+      "profile update",
+      "profile delete",
+      "profile restore"
+    ]
+  },
+  {
+    "route": "/rating",
+    "mode": "redirect",
+    "source": "frontend/src/router/redirects.ts",
+    "redirectTo": "/ocs/tariffs",
+    "readEndpoints": [],
+    "deferredMutations": []
+  },
+  {
+    "route": "/rating/plans",
+    "mode": "redirect",
+    "source": "frontend/src/router/redirects.ts",
+    "redirectTo": "/ocs/tariffs",
+    "readEndpoints": [],
+    "deferredMutations": []
+  },
+  {
+    "route": "/rating/rules",
+    "mode": "redirect",
+    "source": "frontend/src/router/redirects.ts",
+    "redirectTo": "/ocs/tariffs",
+    "readEndpoints": [],
+    "deferredMutations": []
+  },
+  {
+    "route": "/roles",
+    "mode": "redirect",
+    "source": "frontend/src/router/redirects.ts",
+    "redirectTo": "/users",
+    "readEndpoints": [],
+    "deferredMutations": []
+  },
+  {
+    "route": "/subscribers",
+    "mode": "read-parity",
+    "source": "frontend/src/features/subscribers/SubscribersPage.tsx",
+    "readEndpoints": [
+      "GET /api/subscribers"
+    ],
+    "staticReads": [
+      "/data/mcc-mnc-table.json"
+    ],
+    "deferredMutations": [
+      "subscriber create",
+      "subscriber update",
+      "subscriber delete",
+      "batch create",
+      "batch update",
+      "bulk delete",
+      "import",
+      "profile apply",
+      "traffic adjustment"
+    ],
+    "disabledMutations": [
+      "subscriber policy assignment"
+    ]
+  },
+  {
+    "route": "/system-health",
+    "mode": "read-parity",
+    "source": "frontend/src/features/system-health/SystemHealthPage.tsx",
+    "readEndpoints": [
+      "GET /api/system/health",
+      "GET /api/system/audit/status",
+      "GET /api/alerts"
+    ],
+    "deferredMutations": []
+  },
+  {
+    "route": "/users",
+    "mode": "read-parity",
+    "source": "frontend/src/features/users/UsersPage.tsx",
+    "readEndpoints": [
+      "GET /api/users"
+    ],
+    "deferredMutations": [
+      "user create",
+      "user update",
+      "user disable",
+      "password reset"
+    ]
+  },
+  {
+    "route": "/users/:username",
+    "mode": "read-parity",
+    "source": "frontend/src/features/users/UserDetailPage.tsx",
+    "readEndpoints": [
+      "GET /api/users/{username}"
+    ],
+    "deferredMutations": [
+      "user update",
+      "user disable",
+      "password reset"
+    ]
+  }
+]

@@ -1,49 +1,37 @@
 {
-  "name": "subscriber-console",
+  "name": "subscriber-console-frontend",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "engines": {
     "node": ">=20.19.0"
   },
   "scripts": {
-    "dev": "next dev --webpack -H 127.0.0.1 -p 13333",
-    "build": "next build --webpack",
-    "start": "next start -H 127.0.0.1 -p 13333",
-    "test": "tsx --test tests",
-    "test:unit": "tsx --test tests",
-    "test:component": "tsx --test tests/userAccessRoutes.test.mjs",
-    "test:e2e": "tsx --test tests/userAccessRoutes.test.mjs",
-    "typecheck": "tsc --noEmit --incremental false --pretty false",
-    "lint": "eslint",
-    "check": "npm run lint && npm run typecheck && npm test && npm run build",
-    "check:full": "npm run lint && npm run typecheck && npm test && npm run test:component && npm run test:e2e && npm run mongo:test-core && npm run build",
-    "mongo:init": "npm --prefix .. run mongo:init",
-    "mongo:migrate-app-db": "npm --prefix .. run mongo:migrate-app-db",
-    "mongo:test-core": "npm --prefix .. run mongo:test-core",
-    "test:direct-operations": "npm --prefix .. run test:direct-operations",
-    "mongo:perf": "npm --prefix .. run mongo:perf",
-    "clean": "rimraf .next/dev .next/cache .next/types",
-    "clean:all": "rimraf .next node_modules/.cache",
-    "rebuild": "npm run clean && npm run build"
+    "dev": "vite --host 127.0.0.1 --port 13334 --strictPort",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview --host 127.0.0.1 --port 13334 --strictPort",
+    "lint": "eslint .",
+    "typecheck": "tsc -b --pretty false",
+    "test": "tsx --test tests/auth-state.test.ts tests/route-contract.test.ts tests/shell-contract.test.ts tests/read-client.test.ts tests/mutation-client.test.ts tests/user-routes.test.ts tests/disabled-operations.test.ts tests/subscriber-mutation-builders.test.ts tests/system-health-operational.test.ts",
+    "check": "npm run lint && npm run typecheck && npm test && npm run build"
   },
   "dependencies": {
-    "lucide-react": "^1.7.0",
-    "next": "16.3.8",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "react-router-dom": "7.18.3",
+    "lucide-react": "^1.7.0",
     "recharts": "^2.15.4",
     "swr": "^2.4.1"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "16.3.8",
-    "rimraf": "^6.1.3",
-    "tailwindcss": "^4",
-    "tsx": "^4.23.13",
-    "typescript": "^5"
+    "@eslint/js": "^9.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "6.1.1",
+    "eslint": "^9.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0",
+    "typescript-eslint": "^8.0.0",
+    "vite": "8.3.2"
   }
 }

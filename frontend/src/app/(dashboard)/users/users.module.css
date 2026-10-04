@@ -1,7 +1,0 @@
-.accessPanel {
-  border: 1px solid var(--surface-border);
-  border-radius: var(--ref-radius-panel);
-  background: var(--surface);
-  box-shadow: var(--shadow-panel);
-  overflow: hidden;
-}

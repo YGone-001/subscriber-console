@@ -5,25 +5,25 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const distDir = join(root, 'frontend-spa', 'dist');
+const distDir = join(root, 'frontend', 'dist');
 const staticDir = join(root, 'backend', 'internal', 'spa', 'static');
 
-// 1. Validate frontend-spa/dist/index.html exists and is non-empty
+// 1. Validate frontend/dist/index.html exists and is non-empty
 const indexHtmlPath = join(distDir, 'index.html');
-assert.ok(existsSync(indexHtmlPath), 'frontend-spa/dist/index.html must exist');
-assert.ok(statSync(indexHtmlPath).size > 0, 'frontend-spa/dist/index.html must not be empty');
+assert.ok(existsSync(indexHtmlPath), 'frontend/dist/index.html must exist');
+assert.ok(statSync(indexHtmlPath).size > 0, 'frontend/dist/index.html must not be empty');
 
 // 2. Validate assets directory exists
 const assetsDir = join(distDir, 'assets');
-assert.ok(existsSync(assetsDir) && statSync(assetsDir).isDirectory(), 'frontend-spa/dist/assets must exist and be a directory');
+assert.ok(existsSync(assetsDir) && statSync(assetsDir).isDirectory(), 'frontend/dist/assets must exist and be a directory');
 
 const assetFiles = readdirSync(assetsDir);
 
 // 3. At least one hashed JavaScript asset exists
 const jsAssets = assetFiles.filter((f) => f.endsWith('.js'));
-assert.ok(jsAssets.length > 0, 'At least one JavaScript asset must exist in frontend-spa/dist/assets');
+assert.ok(jsAssets.length > 0, 'At least one JavaScript asset must exist in frontend/dist/assets');
 const hashedJs = jsAssets.some((f) => /^.+-[A-Za-z0-9_-]+\.js$/.test(f) || /index.*\.js$/.test(f));
-assert.ok(hashedJs, 'At least one hashed JavaScript asset must exist in frontend-spa/dist/assets');
+assert.ok(hashedJs, 'At least one hashed JavaScript asset must exist in frontend/dist/assets');
 
 // 4. Hashed CSS exists when emitted
 const cssAssets = assetFiles.filter((f) => f.endsWith('.css'));

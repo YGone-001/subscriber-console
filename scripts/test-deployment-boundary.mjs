@@ -56,7 +56,6 @@ import { findListener, inspectProcess } from './lib/local-runtime.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const FRONTEND = join(ROOT, 'frontend');
-const FRONTEND_SPA = join(ROOT, 'frontend-spa');
 const BACKEND = join(ROOT, 'backend');
 
 /** Canonical production API surface size (asserted against the derived set). */
@@ -613,6 +612,7 @@ function readIfExists(p) {
 
 function scanProxySource() {
   const proxyPath = join(FRONTEND, 'src', 'proxy.ts');
+  const proxyPresent = existsSync(proxyPath);
   const code = stripComments(readIfExists(proxyPath));
   const forbidden = [
     { key: 'jose', re: /\bjose\b/ },
@@ -631,13 +631,19 @@ function scanProxySource() {
       if (token.re.test(line)) violations.push({ token: token.key, line: idx + 1, text: line.trim() });
     });
   }
+  const authFiles = [
+    join(FRONTEND, 'src', 'auth', 'auth-client.ts'),
+    join(FRONTEND, 'src', 'auth', 'AuthGate.tsx'),
+    join(FRONTEND, 'src', 'providers', 'AuthProvider.tsx'),
+  ];
+  const authCode = authFiles.map(readIfExists).join('\n');
+  const consultsGoAuth = !proxyPresent && /\/api\/auth\/me/.test(authCode);
   return {
     content: readIfExists(proxyPath),
     code,
     violations,
-    consultsGoAuth: /\/api\/auth\/me/.test(code) && /auth_token/.test(code),
-    failClosedCodes: /AUTH_UNAVAILABLE/.test(code) && /AUTH_SERVICE_UNAVAILABLE/.test(code),
-    matcherExcludesApi: /matcher:\s*\[\s*'\/\(\(\?!api\|/.test(code) || /matcher:\s*\[[^\]]*api/.test(code),
+    legacyProxyAbsent: !proxyPresent,
+    consultsGoAuth,
   };
 }
 
@@ -977,7 +983,7 @@ async function main() {
     proxy.violations.length === 0 && !/\bforwardToGo\b/.test(proxy.code) && forbidden.frontend_api_reverse_proxy_functions.length === 0,
     `proxy_forbidden_tokens=${proxy.violations.length} api_reverse_proxy_functions=${forbidden.frontend_api_reverse_proxy_functions.length}`,
   );
-  check('DB-G08', proxy.consultsGoAuth && proxy.failClosedCodes && proxy.matcherExcludesApi, `go_auth_delegation=${proxy.consultsGoAuth} fail_closed_codes=${proxy.failClosedCodes} matcher_excludes_api=${proxy.matcherExcludesApi}`);
+  check('DB-G08', proxy.legacyProxyAbsent && proxy.consultsGoAuth, `legacy_proxy_absent=${proxy.legacyProxyAbsent} go_auth_delegation=${proxy.consultsGoAuth}`);
 
   const jwtVerifiers = forbidden.frontend_jwt_verifiers.length;
   const jwtSecretReaders = forbidden.frontend_jwt_secret_runtime_readers.length;
@@ -1097,13 +1103,13 @@ async function main() {
   check('DB-R01', await waitForPort(RELAY_PORT, 5000), `mongo_relay_listening=${RELAY_PORT}`);
 
   // Stage and build SPA if needed
-  const distDir = join(FRONTEND_SPA, 'dist');
+  const distDir = join(FRONTEND, 'dist');
   const indexHtmlPath = join(distDir, 'index.html');
   if (!SKIP_BUILD && !existsSync(indexHtmlPath)) {
-    log('  building frontend-spa production bundle...');
-    const spaBuild = runSync('npm', ['run', 'build'], { cwd: FRONTEND_SPA, shell: true, stdio: 'inherit', timeout: 300000 });
+    log('  building frontend production bundle...');
+    const spaBuild = runSync('npm', ['run', 'build'], { cwd: FRONTEND, shell: true, stdio: 'inherit', timeout: 300000 });
     if (spaBuild.status !== 0) {
-      log('frontend-spa build failed');
+      log('frontend build failed');
     }
   }
 
@@ -1122,7 +1128,7 @@ async function main() {
   const realJsFile = assetFiles.find((f) => f.endsWith('.js'));
   const realCssFile = assetFiles.find((f) => f.endsWith('.css'));
   if (!realJsFile || !realCssFile) {
-    throw new Error('Expected at least one JS and one CSS asset in frontend-spa/dist/assets');
+    throw new Error('Expected at least one JS and one CSS asset in frontend/dist/assets');
   }
   const originalJsBytes = readFileSync(join(assetsDir, realJsFile));
   const originalJsHash = sha256(originalJsBytes);
@@ -1888,8 +1894,8 @@ function report(ctx = null) {
   log(`cutover_next_process_required=0`);
   log(`cutover_node_runtime_required=0`);
   log(`cutover_port_13333_production_dependency=0`);
-  log(`cutover_next_source_present=1`);
-  log(`cutover_port_13333_retired=0`);
+  log(`cutover_next_source_present=0`);
+  log(`cutover_port_13333_retired=1`);
   log('');
   log(`cutover_go_spa_edge_active=1`);
   log(`cutover_frontend_spa_production_active=1`);

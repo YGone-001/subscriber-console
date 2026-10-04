@@ -19,10 +19,10 @@
  */
 
 import { MongoClient } from 'mongodb';
-import nextEnv from '@next/env';
+import { loadEnv } from './lib/load-env.mjs';
 import { randomUUID } from 'node:crypto';
 
-nextEnv.loadEnvConfig(process.cwd());
+loadEnv(process.cwd());
 
 const LEGACY_ROLE_MAP = {
   root: 'admin',

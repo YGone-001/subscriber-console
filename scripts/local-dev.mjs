@@ -2,12 +2,12 @@
 /**
  * Managed local development startup.
  *
- * Responsibility: manage ONLY the project-owned local Go + Next development
+ * Responsibility: manage ONLY the project-owned local Go + Vite frontend development
  * processes, and record their ownership so `local:stop` can later verify them.
  *
- * It never installs, starts, or enables MongoDB or Nginx. If the Nginx edge is
- * absent it reports FULL_STACK_NOT_READY / EDGE_REQUIRED and prints the manual
- * instruction; it never fabricates a Node proxy to stand in for the edge.
+ * It never installs, starts, or enables MongoDB or Nginx. Normal local development
+ * uses the Vite dev server at 127.0.0.1:13334 which proxies /api requests directly
+ * to Go at 127.0.0.1:18888. Nginx is not required for local development.
  *
  * The Go child is started with the PRODUCTION default listen address. HTTP_ADDR is
  * explicitly removed from the child environment so the managed path genuinely
@@ -31,16 +31,13 @@ import { fileURLToPath } from 'node:url';
 
 import {
   CANONICAL_PORTS,
-  DEFAULT_EDGE_URL,
+  FRONTEND_ROOT,
   PORT_OUTCOMES,
   countUnmanagedLiveProcesses,
-  edgePortFromUrl,
   inspectPort,
   inspectProcess,
-  probeHttp,
   probeTopology,
   readRecord,
-  resolveEdgeUrl,
   runtimeDir,
   startManagedProcesses,
   verifyOwnership,
@@ -51,14 +48,14 @@ import {
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '..');
 const NODE_BIN = process.execPath;
-const NEXT_BIN = join(ROOT, 'frontend', 'node_modules', 'next', 'dist', 'bin', 'next');
+const VITE_BIN = join(ROOT, 'frontend', 'node_modules', 'vite', 'bin', 'vite.js');
 const GO_BIN_NAME = process.platform === 'win32' ? 'xcloud-server.exe' : 'xcloud-server';
 const GO_BIN = join(runtimeDir(ROOT), 'bin', GO_BIN_NAME);
-const NEXT_ARGS = ['dev', '--webpack', '-H', '127.0.0.1', '-p', String(CANONICAL_PORTS.next)];
-const NEXT_COMMAND = `${NODE_BIN} ${NEXT_BIN} ${NEXT_ARGS.join(' ')}`;
+const FRONTEND_ARGS = ['--host', '127.0.0.1', '--port', String(CANONICAL_PORTS.frontend), '--strictPort'];
+const FRONTEND_COMMAND = `${NODE_BIN} ${VITE_BIN} ${FRONTEND_ARGS.join(' ')}`;
 
 const GO_READY_TIMEOUT_MS = Number(process.env.LOCAL_DEV_TIMEOUT_MS || 90000);
-const NEXT_READY_TIMEOUT_MS = Number(process.env.LOCAL_DEV_NEXT_TIMEOUT_MS || 180000);
+const FRONTEND_READY_TIMEOUT_MS = Number(process.env.LOCAL_DEV_FRONTEND_TIMEOUT_MS || 90000);
 
 /** Minimal `.env` reader. Existing process environment always wins. */
 function loadEnvFile(root) {
@@ -156,7 +153,7 @@ function logStartupEvent(event) {
 
 async function alreadyManaged(root) {
   const existing = [];
-  for (const role of ['go', 'next']) {
+  for (const role of ['go', 'frontend']) {
     const record = readRecord(root, role);
     if (!record) continue;
     const info = await inspectProcess(record.pid);
@@ -168,18 +165,17 @@ async function alreadyManaged(root) {
 
 /** Run the startup sequence and return the exit report. Never exits by itself. */
 async function run() {
-  const edgeUrl = resolveEdgeUrl();
   log('Local managed development startup');
-  log(`  Repository : ${ROOT}`);
-  log(`  Edge URL   : ${edgeUrl}`);
+  log(`  Repository   : ${ROOT}`);
+  log(`  Frontend URL : ${FRONTEND_ROOT}`);
   log('');
 
   const bail = (result = 'FULL_STACK_NOT_READY') => ({
-    exitCode: 1, result, doctorReady: false, edgeReady: false, edgeUrl, reachedTopology: false,
+    exitCode: 1, result, doctorReady: false, reachedTopology: false,
   });
 
   // 1. Preflight (read-only port/ownership inspection).
-  log('[1/9] Preflight');
+  log('[1/8] Preflight');
   const preflight = runSync(NODE_BIN, [join('scripts', 'check-local-preflight.mjs')], { cwd: ROOT });
   process.stdout.write(preflight.stdout || '');
   if (preflight.status !== 0) {
@@ -190,7 +186,7 @@ async function run() {
     return bail();
   }
 
-  // 0. Refuse to double-start.
+  // Refuse to double-start.
   const managed = await alreadyManaged(ROOT);
   if (managed.length > 0) {
     log('');
@@ -200,7 +196,7 @@ async function run() {
   }
 
   // 2. MongoDB reachability.
-  log('[2/9] MongoDB');
+  log('[2/8] MongoDB');
   const mongoOpen = await waitForPort(CANONICAL_PORTS.mongo, { timeoutMs: 5000 });
   if (!mongoOpen) {
     log(`  MongoDB is not reachable on 127.0.0.1:${CANONICAL_PORTS.mongo}.`);
@@ -211,16 +207,9 @@ async function run() {
   }
   log(`  reachable on 127.0.0.1:${CANONICAL_PORTS.mongo}`);
 
-  // 3. Nginx edge presence (not managed here).
-  log('[3/9] Nginx edge');
-  const edgeProbe = await probeHttp(`${edgeUrl}/`);
-  const edgeReady = edgeProbe.reachable;
-  if (edgeReady) log(`  edge answered at ${edgeUrl}/`);
-  else log(`  edge is NOT available at ${edgeUrl}/ (FULL_STACK_NOT_READY until it is)`);
-
-  // 4. Canonical internal ports must be free before this command creates them.
-  log('[4/9] Canonical internal ports');
-  for (const [role, port] of [['next', CANONICAL_PORTS.next], ['go', CANONICAL_PORTS.go]]) {
+  // 3. Canonical internal ports must be free before this command creates them.
+  log('[3/8] Canonical internal ports');
+  for (const [role, port] of [['frontend', CANONICAL_PORTS.frontend], ['go', CANONICAL_PORTS.go]]) {
     const result = await inspectPort(port, { role, repoRoot: ROOT });
     if (result.outcome !== PORT_OUTCOMES.PORT_FREE) {
       log(`  ${role} port ${port} is ${result.outcome} (${result.reason}).`);
@@ -241,11 +230,11 @@ async function run() {
   mkdirSync(runtimeDir(ROOT), { recursive: true });
   mkdirSync(join(runtimeDir(ROOT), 'bin'), { recursive: true });
   const goLog = join(runtimeDir(ROOT), 'go.log');
-  const nextLog = join(runtimeDir(ROOT), 'next.log');
+  const frontendLog = join(runtimeDir(ROOT), 'frontend.log');
 
-  // 5. Go build. Performed before the transaction so a build failure cannot orphan a
+  // 4. Go build. Performed before the transaction so a build failure cannot orphan a
   //    process: nothing has been spawned yet.
-  log('[5/9] Go backend build');
+  log('[4/8] Go backend build');
   const build = runSync('go', ['build', '-o', GO_BIN, './cmd/server'], { cwd: join(ROOT, 'backend'), env });
   if (build.error || build.status !== 0) {
     log('  go build failed.');
@@ -254,17 +243,17 @@ async function run() {
   }
   log(`  built ${GO_BIN}`);
 
-  // 6. Next binary presence. Also checked before the transaction for the same reason.
-  log('[6/9] Next.js binary');
-  if (!existsSync(NEXT_BIN)) {
-    log(`  Next binary not found at ${NEXT_BIN}. Run \`npm ci\` in frontend/.`);
+  // 5. Frontend binary presence. Also checked before the transaction for the same reason.
+  log('[5/8] Frontend Vite binary');
+  if (!existsSync(VITE_BIN)) {
+    log(`  Vite binary not found at ${VITE_BIN}. Run \`npm ci\` in frontend/.`);
     return bail();
   }
-  log(`  found ${NEXT_BIN}`);
+  log(`  found ${VITE_BIN}`);
 
-  // 7. Atomic managed startup: spawn -> inspect -> write record -> THEN readiness.
+  // 6. Atomic managed startup: spawn -> inspect -> write record -> THEN readiness.
   //    Any failure rolls the registered children back in reverse order.
-  log('[7/9] Managed startup (atomic ownership)');
+  log('[6/8] Managed startup (atomic ownership)');
   const startup = await startManagedProcesses({
     repoRoot: ROOT,
     env,
@@ -279,11 +268,11 @@ async function run() {
         },
       },
       {
-        role: 'next',
-        command: NEXT_COMMAND,
-        spawn: () => startDetached(NODE_BIN, [NEXT_BIN, ...NEXT_ARGS], { cwd: join(ROOT, 'frontend'), env, logFile: nextLog }),
+        role: 'frontend',
+        command: FRONTEND_COMMAND,
+        spawn: () => startDetached(NODE_BIN, [VITE_BIN, ...FRONTEND_ARGS], { cwd: join(ROOT, 'frontend'), env, logFile: frontendLog }),
         waitForReady: async () => {
-          const ready = await waitForHttpReady(`http://127.0.0.1:${CANONICAL_PORTS.next}/`, { timeoutMs: NEXT_READY_TIMEOUT_MS });
+          const ready = await waitForHttpReady(FRONTEND_ROOT, { timeoutMs: FRONTEND_READY_TIMEOUT_MS });
           return Boolean(ready && ready.reachable);
         },
       },
@@ -298,26 +287,23 @@ async function run() {
     log('Rollback ran through the verified ownership mechanism; records were removed only');
     log('after each process was confirmed gone.');
     if (existsSync(goLog)) log(tail(readFileSync(goLog, 'utf8')));
-    if (existsSync(nextLog)) log(tail(readFileSync(nextLog, 'utf8')));
+    if (existsSync(frontendLog)) log(tail(readFileSync(frontendLog, 'utf8')));
     return {
-      exitCode: 1, result: 'FULL_STACK_NOT_READY', doctorReady: false, edgeReady,
-      edgeUrl, reachedTopology: false, goLog, nextLog, cleanupFailure: startup.cleanupFailure,
+      exitCode: 1, result: 'FULL_STACK_NOT_READY', doctorReady: false,
+      reachedTopology: false, goLog, frontendLog, cleanupFailure: startup.cleanupFailure,
     };
   }
   for (const item of startup.registered) log(`  ${item.role}.pid.json -> pid ${item.pid}`);
-  log(`  Go   ready on 127.0.0.1:${CANONICAL_PORTS.go}`);
-  log(`  Next ready on 127.0.0.1:${CANONICAL_PORTS.next}`);
+  log(`  Go       ready on 127.0.0.1:${CANONICAL_PORTS.go}`);
+  log(`  Frontend ready on 127.0.0.1:${CANONICAL_PORTS.frontend}`);
 
-  // 8. Readiness via the doctor; never claim full readiness on our own.
-  log('[8/9] Topology');
-  const topology = await probeTopology({ edgeUrl });
+  // 7. Readiness via the doctor; never claim full readiness on our own.
+  log('[7/8] Topology');
+  const topology = await probeTopology();
   log(`  ${topology.result}`);
 
-  log('[9/9] Doctor');
-  const doctor = runSync(NODE_BIN, [join('scripts', 'check-local-stack.mjs')], {
-    cwd: ROOT,
-    env: { ...process.env, XCLOUD_EDGE_URL: edgeUrl },
-  });
+  log('[8/8] Doctor');
+  const doctor = runSync(NODE_BIN, [join('scripts', 'check-local-stack.mjs')], { cwd: ROOT, env: process.env });
   process.stdout.write(doctor.stdout || '');
   const doctorReady = /^local_stack_result=FULL_STACK_READY$/m.test(doctor.stdout || '');
 
@@ -325,11 +311,9 @@ async function run() {
     exitCode: doctorReady ? 0 : 1,
     result: doctorReady ? 'FULL_STACK_READY' : topology.result,
     doctorReady,
-    edgeReady,
-    edgeUrl,
     reachedTopology: true,
     goLog,
-    nextLog,
+    frontendLog,
   };
 }
 
@@ -341,8 +325,7 @@ async function main() {
     log('');
     log(`local:dev failed: ${err && err.message ? err.message : err}`);
     report = {
-      exitCode: 2, result: 'FULL_STACK_NOT_READY', doctorReady: false,
-      edgeReady: false, edgeUrl: resolveEdgeUrl(), reachedTopology: false,
+      exitCode: 2, result: 'FULL_STACK_NOT_READY', doctorReady: false, reachedTopology: false,
     };
   }
 
@@ -355,8 +338,6 @@ async function main() {
     /* best effort: the count is a safety report, not a gate on shutdown */
   }
 
-  // Forbidden state: a live child with no durable ownership record after a release that
-  // could not confirm exit. It is reported as fatal and never as a clean unmanaged count.
   const cleanupFailure = report.cleanupFailure || null;
   if (cleanupFailure) {
     log('');
@@ -373,29 +354,17 @@ async function main() {
   if (cleanupFailure) log('local_dev_unmanaged_child_cleanup=FAILED');
   if (report.doctorReady) {
     log('FULL_STACK_READY');
-    log(`Open: ${report.edgeUrl || DEFAULT_EDGE_URL}`);
+    log(`Open: ${FRONTEND_ROOT}`);
     log('local_dev_result=FULL_STACK_READY');
   } else {
     log('FULL_STACK_NOT_READY');
-    const port = edgePortFromUrl(report.edgeUrl);
-    const edgeHelperCmd = port && port !== 80
-      ? `sudo ./deploy/nginx/setup-next-legacy.sh ${port}`
-      : 'sudo ./deploy/nginx/setup-next-legacy.sh';
-    if (report.reachedTopology && !report.edgeReady) {
-      log('EDGE_REQUIRED');
-      log('Go and Next are running, but the Nginx edge is missing.');
-      log('Start the temporary legacy development edge, then re-check with `npm run local:doctor`:');
-      log(`  ${edgeHelperCmd}`);
-    } else if (report.result === 'EDGE_UI_MISROUTED') {
-      log('EDGE_UI_MISROUTED');
-      log('Go and Next are running, but the Nginx edge UI is not routed to Next.js.');
-      log('Install the temporary legacy development edge, then re-check with `npm run local:doctor`:');
-      log(`  ${edgeHelperCmd}`);
-    }
     log(`local_dev_result=${report.result}`);
-    if (report.goLog && existsSync(report.goLog)) log(`Go log  : ${report.goLog}`);
-    if (report.nextLog) log(`Next log: ${report.nextLog}`);
+    if (report.goLog && existsSync(report.goLog)) log(`Go log       : ${report.goLog}`);
+    if (report.frontendLog) log(`Frontend log : ${report.frontendLog}`);
   }
+  log('local_dev_nginx_required=0');
+  log('local_dev_next_required=0');
+  log('local_dev_vite_required=1');
   log(`local_dev_unmanaged_live_processes=${cleanupFailure ? 'UNKNOWN' : unmanaged.length}`);
   for (const result of unmanaged) {
     log(`  unmanaged canonical port ${result.port} (${result.role}) -> ${result.outcome}: ${result.reason}`);

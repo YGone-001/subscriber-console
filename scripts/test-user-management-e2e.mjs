@@ -28,9 +28,9 @@ import { existsSync, unlinkSync } from 'node:fs';
 import { execSync, spawn } from 'node:child_process';
 import { SignJWT } from 'jose';
 import { MongoClient } from 'mongodb';
-import nextEnv from '@next/env';
+import { loadEnv } from './lib/load-env.mjs';
 
-nextEnv.loadEnvConfig(process.cwd());
+loadEnv(process.cwd());
 
 const suffix = `${Date.now()}_${process.pid}_${Math.floor(Math.random() * 100000)}`;
 const xcloudDbName = `xcloud_um_e2e_${suffix}`;

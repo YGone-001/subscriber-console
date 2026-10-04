@@ -27,7 +27,7 @@ function rawHttpGet(host, port, rawPath) {
 }
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const frontendSpaDir = join(root, 'frontend-spa');
+const frontendSpaDir = join(root, 'frontend');
 const backendDir = join(root, 'backend');
 const distDir = join(frontendSpaDir, 'dist');
 

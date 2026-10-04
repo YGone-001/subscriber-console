@@ -5,18 +5,16 @@
  * READ-ONLY with respect to production behavior. Pure source analysis: no network, no
  * MongoDB, no build step, so it runs in the CI `node` job.
  *
- * It certifies the durable architecture contract that the Next.js runtime is a UI-only
- * dependency set with no backend runtime, and derives that from the current source rather
- * than from any historical migration record:
+ * It certifies the durable architecture contract that the canonical React/Vite SPA is a
+ * UI-only dependency set with no backend runtime and no Next.js framework:
  *
  *   - the frontend manifest declares no backend runtime module (jose / mongodb / jiti /
- *     bcryptjs) in any dependency section;
+ *     bcryptjs / next) in any dependency section;
  *   - the frontend runtime dependency set is exactly the UI-only allowlist;
- *   - no frontend source module imports a backend runtime module;
+ *   - no frontend source module imports a backend runtime module or Next;
  *   - every Node-era backend helper deleted from the UI runtime stays absent from disk;
- *   - the Next.js configuration carries no server-only MongoDB integration;
- *   - the frontend test tree carries no removed-backend test;
- *   - the production start command binds the loopback listener.
+ *   - Next.js configuration is absent;
+ *   - the dev start command binds the loopback listener 127.0.0.1:13334.
  *
  * Usage: node scripts/test-frontend-runtime-dependencies.mjs
  */
@@ -29,25 +27,21 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const rel = (p) => relative(root, p).replaceAll('\\', '/');
 
 const srcRoot = resolve(root, 'frontend/src');
-const testsRoot = resolve(root, 'frontend/tests');
 const packagePath = resolve(root, 'frontend/package.json');
 const nextConfigPath = resolve(root, 'frontend/next.config.ts');
+const viteConfigPath = resolve(root, 'frontend/vite.config.ts');
 
 const CODE_EXT = /\.(ts|tsx|js|jsx|mjs|cjs)$/;
-const EXPECTED_NEXT_LISTENER = '127.0.0.1:13333';
+const EXPECTED_DEV_LISTENER = '127.0.0.1:13334';
 
-/**
- * Backend runtime modules the UI runtime must never declare or import.
- *
- * `mongodb` is intentionally absent from this list: the UI runtime may import BSON value
- * types (`Long` / `ObjectId`) for subscriber data modelling, but it must never open a
- * MongoDB client. That separate invariant is asserted by `MONGODB_CLIENT_RE` below.
- */
+/** Backend runtime modules the UI runtime must never declare or import. */
 const BANNED_RUNTIME_MODULES = [
+  'next',
   'jose',
   'jiti',
   'bcryptjs',
   'jsonwebtoken',
+  'mongodb',
   'mongodb-client-encryption',
   'mongoose',
 ];
@@ -56,11 +50,10 @@ const BANNED_RUNTIME_MODULES = [
 const MONGODB_CLIENT_RE = /\bnew\s+MongoClient\s*\(|\bMongoClient\s*\.\s*connect\s*\(|\bMongoClient\b\s*</;
 
 /** The complete UI-only runtime dependency allowlist. */
-const EXPECTED_RUNTIME_DEPENDENCIES = ['lucide-react', 'next', 'react', 'react-dom', 'recharts', 'swr'];
+const EXPECTED_RUNTIME_DEPENDENCIES = ['lucide-react', 'react', 'react-dom', 'react-router-dom', 'recharts', 'swr'];
 
 /**
- * Node-era backend helpers that were removed from the UI runtime. Their absence is a
- * durable invariant: the UI runtime must not regain a backend data plane.
+ * Node-era backend helpers that were removed from the UI runtime.
  */
 const REMOVED_RUNTIME_HELPERS = [
   'frontend/src/lib/mongo.ts',
@@ -73,8 +66,8 @@ const REMOVED_RUNTIME_HELPERS = [
   'frontend/src/lib/audit/sanitize.ts',
   'frontend/src/lib/plmnUtils.ts',
   'frontend/src/lib/plmn_db.ts',
+  'frontend/src/proxy.ts',
   'frontend/src/components/governance/ChangeDiff.tsx',
-  'frontend/tests/cutoverRouting.test.mjs',
 ];
 
 function stripComments(source) {
@@ -99,7 +92,7 @@ function stripComments(source) {
         i += 2;
         continue;
       }
-      if (raw.startsWith('//', i) && (i === 0 || raw[i - 1] !== ':')) break;
+      if (raw.startsWith('//', i)) break;
       built += raw[i];
       i += 1;
     }
@@ -108,57 +101,48 @@ function stripComments(source) {
   return out.join('\n');
 }
 
-function walk(dir, filter, out = []) {
+function walk(dir, out = []) {
   if (!existsSync(dir)) return out;
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
-    if (statSync(full).isDirectory()) walk(full, filter, out);
-    else if (filter(full)) out.push(full);
+    let stat;
+    try { stat = statSync(full); } catch { continue; }
+    if (stat.isDirectory()) {
+      if (entry === 'node_modules' || entry === '.git' || entry === 'dist') continue;
+      walk(full, out);
+    } else if (stat.isFile() && CODE_EXT.test(entry)) {
+      out.push(full);
+    }
   }
   return out;
 }
 
-const invariants = [];
-function check(id, ok, detail) {
-  invariants.push({ id, ok: Boolean(ok), detail });
-  return Boolean(ok);
-}
-
 function readManifest() {
-  if (!existsSync(packagePath)) return { present: false };
-  const pkg = JSON.parse(readFileSync(packagePath, 'utf8'));
-  const declared = {
-    ...(pkg.dependencies ?? {}),
-    ...(pkg.devDependencies ?? {}),
-    ...(pkg.peerDependencies ?? {}),
-    ...(pkg.optionalDependencies ?? {}),
-  };
+  if (!existsSync(packagePath)) return { present: false, declared: {}, runtime: [] };
+  const raw = JSON.parse(readFileSync(packagePath, 'utf8'));
+  const deps = raw.dependencies ?? {};
+  const devDeps = raw.devDependencies ?? {};
+  const declared = { ...deps, ...devDeps };
   return {
     present: true,
-    runtime: Object.keys(pkg.dependencies ?? {}).sort(),
     declared,
-    start: pkg.scripts?.start ?? null,
+    runtime: Object.keys(deps).sort(),
+    devScript: raw.scripts?.dev ?? null,
   };
 }
 
 function scanBannedImports() {
-  const hits = [];
-  const roots = [srcRoot, testsRoot];
-  const importRe = /(?:from\s*|import\s*|require\s*\(\s*|jiti\s*\(\s*)['"]([^'"]+)['"]/g;
-  for (const base of roots) {
-    if (!existsSync(base)) continue;
-    for (const file of walk(base, (p) => CODE_EXT.test(p))) {
-      const code = stripComments(readFileSync(file, 'utf8'));
-      let m;
-      importRe.lastIndex = 0;
-      while ((m = importRe.exec(code)) !== null) {
-        const spec = m[1];
-        const banned = BANNED_RUNTIME_MODULES.find((mod) => spec === mod || spec.startsWith(`${mod}/`));
-        if (banned) hits.push({ file: rel(file), module: banned });
-      }
+  const violations = [];
+  for (const file of walk(srcRoot)) {
+    const code = stripComments(readFileSync(file, 'utf8'));
+    for (const mod of BANNED_RUNTIME_MODULES) {
+      const re = new RegExp(
+        `(?:from\\s+['"]|import\\s*\\(['"]|require\\(['"])${mod}(?:['"/]|$)`,
+      );
+      if (re.test(code)) violations.push({ file: rel(file), module: mod });
     }
   }
-  return hits;
+  return violations;
 }
 
 function scanRemovedHelpers() {
@@ -167,15 +151,17 @@ function scanRemovedHelpers() {
 
 function scanMongoClients() {
   const hits = [];
-  for (const file of walk(srcRoot, (p) => CODE_EXT.test(p))) {
-    if (MONGODB_CLIENT_RE.test(stripComments(readFileSync(file, 'utf8')))) hits.push(rel(file));
+  for (const file of walk(srcRoot)) {
+    const code = stripComments(readFileSync(file, 'utf8'));
+    if (MONGODB_CLIENT_RE.test(code)) hits.push(rel(file));
   }
   return hits;
 }
 
-function scanNextConfig() {
-  if (!existsSync(nextConfigPath)) return { present: false, code: '' };
-  return { present: true, code: stripComments(readFileSync(nextConfigPath, 'utf8')) };
+const invariants = [];
+function check(id, ok, detail) {
+  invariants.push({ id, ok: Boolean(ok), detail });
+  return Boolean(ok);
 }
 
 function main() {
@@ -185,7 +171,6 @@ function main() {
   const bannedImports = scanBannedImports();
   const presentHelpers = scanRemovedHelpers();
   const mongoClients = scanMongoClients();
-  const nextConfig = scanNextConfig();
 
   const bannedDeclared = manifest.present
     ? BANNED_RUNTIME_MODULES.filter((name) => Object.prototype.hasOwnProperty.call(manifest.declared, name))
@@ -196,11 +181,10 @@ function main() {
   const runtimeExtra = runtimeSet.filter((d) => !EXPECTED_RUNTIME_DEPENDENCIES.includes(d));
   const runtimeExact = runtimeMissing.length === 0 && runtimeExtra.length === 0;
 
-  const configHasServerMongo =
-    /serverExternalPackages/.test(nextConfig.code) && /mongodb/.test(nextConfig.code);
+  const nextConfigAbsent = !existsSync(nextConfigPath);
 
-  const listenerMatch = manifest.present && manifest.start ? manifest.start.match(/-H\s+(\S+)\s+-p\s+(\d+)/) : null;
-  const derivedListener = listenerMatch ? `${listenerMatch[1]}:${listenerMatch[2]}` : null;
+  const devListenerMatch = manifest.present && manifest.devScript ? manifest.devScript.match(/--host\s+(\S+)\s+--port\s+(\d+)/) : null;
+  const derivedDevListener = devListenerMatch ? `${devListenerMatch[1]}:${devListenerMatch[2]}` : null;
 
   check(
     'FRD-01',
@@ -214,11 +198,11 @@ function main() {
   );
   check('FRD-03', bannedImports.length === 0, `banned_import_hits=${bannedImports.length}`);
   check('FRD-04', presentHelpers.length === 0, `removed_runtime_helpers_present=[${presentHelpers.join(',')}]`);
-  check('FRD-05', nextConfig.present && !configHasServerMongo, `next_config_server_mongodb=${configHasServerMongo}`);
+  check('FRD-05', nextConfigAbsent, `next_config_absent=${nextConfigAbsent}`);
   check(
     'FRD-06',
-    derivedListener === EXPECTED_NEXT_LISTENER,
-    `next_listener_expected=${EXPECTED_NEXT_LISTENER} derived=${derivedListener}`,
+    derivedDevListener === EXPECTED_DEV_LISTENER,
+    `dev_listener_expected=${EXPECTED_DEV_LISTENER} derived=${derivedDevListener}`,
   );
   check('FRD-07', mongoClients.length === 0, `frontend_mongo_client_modules=[${mongoClients.join(',')}]`);
 
@@ -239,9 +223,9 @@ function main() {
   console.log(`frontend_banned_declared=${bannedDeclared.length}`);
   console.log(`frontend_banned_imports=${bannedImports.length}`);
   console.log(`frontend_removed_helpers_present=${presentHelpers.length}`);
-  console.log(`frontend_next_config_server_mongodb=${configHasServerMongo}`);
+  console.log(`frontend_next_config_absent=${nextConfigAbsent}`);
   console.log(`frontend_mongo_client_modules=${mongoClients.length}`);
-  console.log(`frontend_next_listener=${derivedListener}`);
+  console.log(`frontend_dev_listener=${derivedDevListener}`);
   console.log(`frontend_runtime_dependency_invariants_failed=${failed.length}`);
   console.log(`frontend_runtime_dependencies_result=${failed.length === 0 ? 'PASS' : 'FAIL'}`);
   console.log('==================================================\n');

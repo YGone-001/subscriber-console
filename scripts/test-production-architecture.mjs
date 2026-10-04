@@ -46,7 +46,6 @@ const rel = (p) => relative(root, p).replaceAll('\\', '/');
 
 // --- Current production contracts ----------------------------------------------------
 const EXPECTED_GO_REGISTRATIONS = 84;
-const EXPECTED_NEXT_LISTENER = '127.0.0.1:13333';
 const EXPECTED_GO_LISTENER = '127.0.0.1:18888';
 const EXPECTED_CANONICAL_API = 33;
 const EXPECTED_LEGACY_ALIASES = 2;
@@ -117,25 +116,27 @@ function countOccurrences(source, re) {
   return count;
 }
 
-// --- Next.js production listener contract --------------------------------------------
-function deriveNextListener() {
-  const raw = readText('frontend/package.json');
-  if (!raw) return { present: false, command: null, listener: null, standalone: null };
-  let start = null;
+// --- Frontend canonical Vite contract ------------------------------------------------
+function deriveFrontendCanonical() {
+  const pkgRaw = readText('frontend/package.json');
+  let pkg = null;
   try {
-    start = JSON.parse(raw).scripts?.start ?? null;
+    pkg = pkgRaw ? JSON.parse(pkgRaw) : null;
   } catch {
-    return { present: true, command: null, listener: null, standalone: null };
+    pkg = null;
   }
-  const host = start ? (start.match(/-H\s+(\S+)/) ?? [])[1] : null;
-  const port = start ? (start.match(/-p\s+(\d+)/) ?? [])[1] : null;
-  const config = readText('frontend/next.config.ts');
-  const configCode = config ? stripJsComments(config) : '';
+  const isVite = existsSync(resolve(root, 'frontend/vite.config.ts'));
+  const isSpaAbsent = !existsSync(resolve(root, 'frontend-spa'));
+  const isNextAbsent = !existsSync(resolve(root, 'frontend/next.config.ts'));
+  const isLegacyNginxAbsent =
+    !existsSync(resolve(root, 'deploy/nginx/xcloud-next-legacy.conf')) &&
+    !existsSync(resolve(root, 'deploy/nginx/setup-next-legacy.sh'));
   return {
-    present: true,
-    command: start,
-    listener: host && port ? `${host}:${port}` : null,
-    standalone: /output\s*:\s*['"]standalone['"]/.test(configCode),
+    packageName: pkg?.name ?? null,
+    isVite,
+    isSpaAbsent,
+    isNextAbsent,
+    isLegacyNginxAbsent,
   };
 }
 
@@ -376,14 +377,16 @@ async function main() {
   );
 
   // --- Internal listener contract ------------------------------------------------
-  const nextListener = deriveNextListener();
+  const frontendCanonical = deriveFrontendCanonical();
   const nextPath = deriveNextProductionPath();
   const goListener = deriveGoListener();
-  const standaloneProductionPath = Boolean(nextListener.standalone) || nextPath.standaloneScriptPresent;
+  const standaloneProductionPath = nextPath.standaloneScriptPresent;
   check(
     'PA-15',
-    nextListener.listener === EXPECTED_NEXT_LISTENER,
-    `next_retained_listener_contract=${EXPECTED_NEXT_LISTENER} derived=${nextListener.listener} (retained legacy/rollback source/runtime contract)`,
+    frontendCanonical.isNextAbsent &&
+      frontendCanonical.isSpaAbsent &&
+      frontendCanonical.isLegacyNginxAbsent,
+    `next_source_absent=${frontendCanonical.isNextAbsent} frontend_spa_absent=${frontendCanonical.isSpaAbsent} legacy_nginx_absent=${frontendCanonical.isLegacyNginxAbsent} (Next.js and port 13333 retired)`,
   );
   check(
     'PA-16',
@@ -392,8 +395,10 @@ async function main() {
   );
   check(
     'PA-17',
-    !standaloneProductionPath,
-    `standalone_next_production_path=${standaloneProductionPath} next_config_standalone=${nextListener.standalone} standalone_script=${nextPath.standaloneScriptPresent}`,
+    frontendCanonical.isVite &&
+      frontendCanonical.packageName === 'subscriber-console-frontend' &&
+      !standaloneProductionPath,
+    `frontend_canonical_vite=${frontendCanonical.isVite} package=${frontendCanonical.packageName} standalone_next_production_path=${standaloneProductionPath}`,
   );
 
   // --- Dependency / runtime closure ---------------------------------------------
@@ -441,7 +446,12 @@ async function main() {
   if (nginx.nextHmrPresent) blockers.push('NGINX_NEXT_HMR_ACTIVE');
   if (nginx.upstreamCount !== 1) blockers.push(`NGINX_UPSTREAM_COUNT=${nginx.upstreamCount}`);
   if (!nginx.identityHeadersStripped) blockers.push('NGINX_IDENTITY_HEADERS_NOT_STRIPPED');
-  if (nextListener.listener !== EXPECTED_NEXT_LISTENER) blockers.push(`NEXT_LISTENER=${nextListener.listener}`);
+  if (!frontendCanonical.isNextAbsent || !frontendCanonical.isSpaAbsent || !frontendCanonical.isLegacyNginxAbsent) {
+    blockers.push('LEGACY_NEXT_OR_SPA_PRESENT');
+  }
+  if (!frontendCanonical.isVite || frontendCanonical.packageName !== 'subscriber-console-frontend') {
+    blockers.push('FRONTEND_NOT_CANONICAL_VITE');
+  }
   if (goListener.defaultAddr !== EXPECTED_GO_LISTENER) blockers.push(`GO_LISTENER=${goListener.defaultAddr}`);
   if (standaloneProductionPath) blockers.push('STANDALONE_NEXT_PRODUCTION_PATH');
   const architectureReady = blockers.length === 0;
@@ -486,10 +496,10 @@ async function main() {
   console.log(`production_architecture_nginx_identity_headers_stripped=${nginx.identityHeadersStripped}`);
   console.log(`production_architecture_nginx_body_limit_10m=${nginx.bodyLimitOk}`);
   console.log(`production_architecture_nginx_sse_buffering_disabled=${nginx.sseUnbuffered}`);
-  console.log('');
-  console.log(`production_architecture_retained_next_listener=${nextListener.listener} (legacy/rollback contract)`);
+  console.log('production_architecture_retained_next_listener=retired (port 13333 retired)');
   console.log('production_architecture_active_production_ui_listener=127.0.0.1:18888');
   console.log(`production_architecture_go_listener=${goListener.defaultAddr}`);
+  console.log(`production_architecture_frontend_canonical=${frontendCanonical.isVite ? 'vite_spa' : 'unknown'}`);
   console.log(`production_architecture_standalone_next_production_path=${standaloneProductionPath}`);
   console.log('');
   console.log(`production_architecture_frontend_jwt_verifiers=${ownership.frontendJwtVerifiers}`);

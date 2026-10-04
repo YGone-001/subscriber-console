@@ -2,15 +2,15 @@
 /**
  * Local runtime preflight — ports and process ownership.
  *
- * RUN BEFORE starting local Go/Next services or any runtime acceptance suite.
+ * RUN BEFORE starting local Go/Vite services or any runtime acceptance suite.
  *
  * READ-ONLY. It never starts, stops, or terminates a process. It inspects the
  * canonical local ports, classifies who owns each listener, and reports whether the
  * environment is safe to proceed.
  *
- * Canonical component ports (13333 Next, 18888 Go) must be project-managed, never
- * merely occupied. MongoDB (27017) and the HTTP edge (80) are allowed to already be
- * running, provided the expected service answers.
+ * Canonical component ports (13334 Frontend, 18888 Go) must be project-managed, never
+ * merely occupied. MongoDB (27017) is allowed to already be running, provided the
+ * expected service answers.
  *
  * Resolving an occupied canonical port by changing the port is forbidden. Diagnose
  * the owner instead.
@@ -81,8 +81,7 @@ async function main() {
   console.log('');
 
   const portSpecs = [
-    { role: 'edge', port: edgePort, label: `${PORT_ROLE_LABELS.edge} (${edgePort})` },
-    { role: 'next', port: CANONICAL_PORTS.next, label: PORT_ROLE_LABELS.next },
+    { role: 'frontend', port: CANONICAL_PORTS.frontend, label: PORT_ROLE_LABELS.frontend },
     { role: 'go', port: CANONICAL_PORTS.go, label: PORT_ROLE_LABELS.go },
     { role: 'mongo', port: CANONICAL_PORTS.mongo, label: PORT_ROLE_LABELS.mongo },
   ];

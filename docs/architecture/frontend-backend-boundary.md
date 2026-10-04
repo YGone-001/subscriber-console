@@ -11,15 +11,15 @@ REST API and internally serves the embedded static React SPA.
 
 ### Frontend Responsibility
 
-- UI rendering and state management (`frontend-spa/src/`)
-- API client (SWR hooks / Fetch client)
+- UI rendering and state management (`frontend/src/`)
+- API client (Fetch client / SWR)
 - User interaction and feedback
 - Internationalization (en/zh)
 - Responsive layout and design tokens
 - Client-side auth gate (`AuthGate`)
 
-Location: `frontend-spa/src/` (production SPA source)
-Legacy location: `frontend/` (Next.js 16.3.8, retained for rollback / pending retirement)
+Location: `frontend/src/` (canonical React + Vite SPA source)
+Legacy Next.js source and port 13333 are retired.
 
 The frontend does not know which process answers an API call.
 API paths remain `/api/...` unchanged.
@@ -54,9 +54,9 @@ Route ownership is per method + path. Route authority is the Go registration set
 
 See `docs/operations/deployment.md` for the edge contract.
 
-## Evolutionary Convergence (Subsequent Target)
-
-Single-upstream consolidation completed the runtime transition to a single Go upstream:
+## Evolutionary Convergence
+ 
+Runtime consolidation and frontend canonicalization are complete:
 
 ```text
 Browser -> Nginx -> Go 127.0.0.1:18888
@@ -64,8 +64,7 @@ Browser -> Nginx -> Go 127.0.0.1:18888
                      `-- embedded static React SPA
 ```
 
-subsequent retirement and canonicalization will perform source-tree cleanup: retiring the legacy Next.js runtime and its
-`127.0.0.1:13333` contract, removing `frontend/`, and renaming `frontend-spa/` to `frontend/`.
+The legacy Next.js runtime and its port 13333 contract are retired, and `frontend/` is the canonical React+Vite SPA source.
 
 ## Invariant Security Boundary
 

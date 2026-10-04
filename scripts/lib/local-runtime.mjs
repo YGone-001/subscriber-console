@@ -34,23 +34,23 @@ import { join } from 'node:path';
 /** Canonical component ports. Not overridable: contamination is diagnosed. */
 export const CANONICAL_PORTS = Object.freeze({
   edge: 80,
-  next: 13333,
+  frontend: 13334,
   go: 18888,
   mongo: 27017,
 });
 
 /** Inspection order and human-readable role labels. */
-export const PORT_ROLES = Object.freeze(['edge', 'next', 'go', 'mongo']);
+export const PORT_ROLES = Object.freeze(['edge', 'frontend', 'go', 'mongo']);
 
 export const PORT_ROLE_LABELS = Object.freeze({
   edge: 'Nginx edge',
-  next: 'Next.js internal listener',
+  frontend: 'Frontend Vite listener',
   go: 'Go internal listener',
   mongo: 'MongoDB',
 });
 
 /** Internal ports that must be project-managed, not merely occupied. */
-export const INTERNAL_PORT_ROLES = Object.freeze(['next', 'go']);
+export const INTERNAL_PORT_ROLES = Object.freeze(['frontend', 'go']);
 
 export const LISTENER_STATES = Object.freeze({
   FREE: 'FREE',
@@ -71,12 +71,9 @@ export const PORT_OUTCOMES = Object.freeze({
 
 export const TOPOLOGY_STATES = Object.freeze({
   FULL_STACK_READY: 'FULL_STACK_READY',
-  EDGE_REQUIRED: 'EDGE_REQUIRED',
   GO_DOWN: 'GO_DOWN',
-  NEXT_DOWN: 'NEXT_DOWN',
-  EDGE_API_MISROUTED: 'EDGE_API_MISROUTED',
-  EDGE_UI_MISROUTED: 'EDGE_UI_MISROUTED',
-  ARCHITECTURE_VIOLATION: 'ARCHITECTURE_VIOLATION',
+  FRONTEND_DOWN: 'FRONTEND_DOWN',
+  FRONTEND_API_MISROUTED: 'FRONTEND_API_MISROUTED',
   PORT_CONTAMINATION: 'PORT_CONTAMINATION',
 });
 
@@ -84,8 +81,8 @@ export const DEFAULT_EDGE_URL = 'http://127.0.0.1';
 
 export const GO_HEALTHZ = `http://127.0.0.1:${CANONICAL_PORTS.go}/healthz`;
 export const GO_READYZ = `http://127.0.0.1:${CANONICAL_PORTS.go}/readyz`;
-export const NEXT_ROOT = `http://127.0.0.1:${CANONICAL_PORTS.next}/`;
-export const NEXT_DIRECT_API = `http://127.0.0.1:${CANONICAL_PORTS.next}/api/auth/me`;
+export const FRONTEND_ROOT = `http://127.0.0.1:${CANONICAL_PORTS.frontend}/`;
+export const FRONTEND_API_PROXY = `http://127.0.0.1:${CANONICAL_PORTS.frontend}/api/auth/me`;
 
 export const PROBE_TIMEOUT_MS = 4000;
 export const MAX_BODY_BYTES = 8192;
@@ -178,23 +175,6 @@ export function probeHttp(url, { timeoutMs = PROBE_TIMEOUT_MS } = {}) {
   });
 }
 
-/**
- * Interpret a direct `GET http://127.0.0.1:13333/api/auth/me` probe.
- *
- * The Next.js listener owns no /api route, so the only acceptable answer is a
- * non-JSON framework page (typically a 404 HTML document). A JSON answer on an
- * authentication status code (200 or 401) means the Next.js listener is behaving as
- * the authentication API authority: that is an architecture violation, never a
- * topology quirk.
- */
-export function classifyDirectNextApi(result) {
-  if (!result || !result.reachable) return 'UNREACHABLE';
-  const contentType = String(result.contentType || '');
-  const isJson = /application\/json/i.test(contentType);
-  const isAuthBoundaryStatus = result.status === 401 || result.status === 200;
-  if (isJson && isAuthBoundaryStatus) return 'ARCHITECTURE_VIOLATION';
-  return 'UNSUPPORTED_BY_DESIGN';
-}
 
 /** Plain TCP reachability check (no application protocol). */
 export function isPortOpen(port, host = '127.0.0.1', timeoutMs = 1200) {
@@ -704,8 +684,8 @@ export function classifyPort(input) {
 
 /**
  * Prove that a listener is managed by a recorded process even when the recorded PID
- * is a supervisor that does not own the socket itself (Next.js `next dev` starts a
- * child server that binds the port).
+ * is a supervisor that does not own the socket itself (for example when dev servers
+ * spawn child workers that bind the port).
  *
  * The recorded process must itself verify, then the listener's ancestor chain must
  * lead back to it. Unknown or unverifiable chains prove nothing.
@@ -758,7 +738,7 @@ export async function inspectPort(port, { role = 'custom', repoRoot = null, regi
 // ---------------------------------------------------------------------------
 
 export const RUNTIME_DIR_NAME = '.runtime/local';
-export const REGISTRY_ROLES = Object.freeze(['go', 'next']);
+export const REGISTRY_ROLES = Object.freeze(['frontend', 'go']);
 
 /** Registry directory. Honors XCLOUD_RUNTIME_DIR for isolated test runs. */
 export function runtimeDir(repoRoot, env = process.env) {
@@ -909,64 +889,34 @@ export function terminateVerifiedProcess(record, processInfo) {
 // Topology
 // ---------------------------------------------------------------------------
 
-/**
- * Classify the observed edge UI owner based on HTML content.
- * Next.js dev server serves HTML with `/_next/` asset paths or `__NEXT_DATA__`.
- * Go bundled SPA serves HTML with `/assets/` or `id="root"` and no `/_next/`.
- */
-export function classifyEdgeUiOwner({ edge, edgeLogin } = {}) {
-  const probe = (edgeLogin && edgeLogin.reachable && edgeLogin.status === 200) ? edgeLogin : edge;
-  if (!probe || !probe.reachable) return 'unknown';
-  const body = String(probe.body || '');
-  const hasNext = body.includes('/_next/') || body.includes('__NEXT_DATA__');
-  const hasGoSpa = body.includes('/assets/') || body.includes('id="root"');
-  if (hasNext && !hasGoSpa) return 'next';
-  if (hasGoSpa && !hasNext) return 'go';
-  if (hasNext) return 'next';
-  if (hasGoSpa) return 'go';
-  if (probe.status === 404 && body.includes('404 page not found')) return 'go';
-  return 'unknown';
-}
 
 /**
- * Probe the full local topology over HTTP. Pure reachability + ownership
+ * Probe the development local topology over HTTP. Pure reachability + proxy
  * interpretation; no process management.
  */
-export async function probeTopology({ edgeUrl = resolveEdgeUrl() } = {}) {
-  const edgeRootUrl = `${edgeUrl}/`;
-  const edgeLoginUrl = `${edgeUrl}/login`;
-  const edgeApiUrl = `${edgeUrl}/api/auth/me`;
-  const [go, next, edge, edgeLogin, edgeApi, nextApi] = await Promise.all([
+export async function probeTopology({ frontendUrl = FRONTEND_ROOT } = {}) {
+  const [go, frontend, frontendApi] = await Promise.all([
     probeHttp(GO_HEALTHZ),
-    probeHttp(NEXT_ROOT),
-    probeHttp(edgeRootUrl),
-    probeHttp(edgeLoginUrl),
-    probeHttp(edgeApiUrl),
-    probeHttp(NEXT_DIRECT_API),
+    probeHttp(frontendUrl),
+    probeHttp(FRONTEND_API_PROXY),
   ]);
 
-  const goReady = go.reachable;
-  const nextReady = next.reachable;
-  const edgeReady = edge.reachable;
-  const edgeApiRouted = edgeApi.reachable && edgeApi.status === 401;
-  const directNextApi = classifyDirectNextApi(nextApi);
-  const edgeUiOwner = classifyEdgeUiOwner({ edge, edgeLogin });
+  const goReady = go.reachable && go.status === 200;
+  const frontendReady = frontend.reachable && frontend.status === 200;
+  const frontendApiRouted = frontendApi.reachable && frontendApi.status === 401;
 
   let result;
-  // An architecture violation outranks every topology state: a Next.js listener that
-  // answers the authentication API is a contract breach, not a "Next is up" reading.
-  if (directNextApi === 'ARCHITECTURE_VIOLATION') result = TOPOLOGY_STATES.ARCHITECTURE_VIOLATION;
-  else if (!goReady) result = TOPOLOGY_STATES.GO_DOWN;
-  else if (!nextReady) result = TOPOLOGY_STATES.NEXT_DOWN;
-  else if (!edgeReady) result = TOPOLOGY_STATES.EDGE_REQUIRED;
-  else if (!edgeApiRouted) result = TOPOLOGY_STATES.EDGE_API_MISROUTED;
-  else if (edgeUiOwner !== 'next') result = TOPOLOGY_STATES.EDGE_UI_MISROUTED;
+  if (!goReady) result = TOPOLOGY_STATES.GO_DOWN;
+  else if (!frontendReady) result = TOPOLOGY_STATES.FRONTEND_DOWN;
+  else if (!frontendApiRouted) result = TOPOLOGY_STATES.FRONTEND_API_MISROUTED;
   else result = TOPOLOGY_STATES.FULL_STACK_READY;
 
   return {
-    edgeUrl, edgeRootUrl, edgeLoginUrl, edgeApiUrl,
-    go, next, edge, edgeLogin, edgeApi, nextApi,
-    goReady, nextReady, edgeReady, edgeApiRouted, directNextApi, edgeUiOwner, result,
+    frontendUrl,
+    frontendApiUrl: FRONTEND_API_PROXY,
+    go, frontend, frontendApi,
+    goReady, frontendReady, frontendApiRouted,
+    result,
   };
 }
 

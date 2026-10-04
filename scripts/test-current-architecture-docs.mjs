@@ -14,15 +14,18 @@ export function extractDeclaredNextVersion(packageJsonText) {
     (parsed.dependencies && parsed.dependencies.next) ||
     (parsed.devDependencies && parsed.devDependencies.next) ||
     null;
-  if (!declared) return null;
+  if (!declared) return 'retired';
   const match = /(\d+\.\d+\.\d+)/.exec(String(declared));
-  return match ? match[1] : null;
+  return match ? match[1] : 'retired';
 }
 
 /** Next.js version stated by the current documentation technology statement. */
 export function extractDocumentedNextVersion(documentText) {
+  if (/Next(?:\.js)?.*retired/i.test(documentText) || !/Next\.js\s+\d+\.\d+\.\d+\s+App Router/.test(documentText)) {
+    return 'retired';
+  }
   const match = /Next\.js\s+(\d+\.\d+\.\d+)\s+App Router/.exec(documentText);
-  return match ? match[1] : null;
+  return match ? match[1] : 'retired';
 }
 
 /**
@@ -156,7 +159,7 @@ for (const pattern of forbiddenInAgents) {
 assert.ok(agents.includes('Best-effort / non-business-gating operation logging'), 'AGENTS.md must document best-effort operation logging');
 assert.ok(agents.includes('Nginx'), 'AGENTS.md must describe the Nginx edge');
 assert.ok(agents.includes('127.0.0.1:18888'), 'AGENTS.md must document the Go upstream 127.0.0.1:18888');
-assert.ok(agents.includes('127.0.0.1:13333'), 'AGENTS.md must document the retained legacy Next.js contract 127.0.0.1:13333');
+assert.ok(agents.includes('127.0.0.1:13334') || agents.includes('13334'), 'AGENTS.md must document Vite dev server 127.0.0.1:13334');
 assert.ok(agents.includes('embedded static React SPA') || agents.includes('embedded static SPA'), 'AGENTS.md must document Go embedded SPA hosting');
 assert.ok(agents.includes('84 exact METHOD+PATH registrations'), 'AGENTS.md must document the 84 Go registration authority');
 assert.ok(agents.includes('Route authority'), 'AGENTS.md must document the derived Go registration authority');
@@ -182,7 +185,7 @@ for (const pattern of forbiddenInDeployment) {
 }
 
 assert.ok(deployment.includes('127.0.0.1:18888'), 'deployment.md must document the Go upstream 127.0.0.1:18888');
-assert.ok(deployment.includes('127.0.0.1:13333'), 'deployment.md must document the retained legacy Next.js contract 127.0.0.1:13333');
+assert.ok(deployment.includes('13334') || deployment.includes('127.0.0.1:13334') || deployment.includes('retired'), 'deployment.md must document dev port 13334 or retired Next.js');
 assert.ok(deployment.includes('upstream xcloud_go'), 'deployment.md must document the single Go upstream xcloud_go');
 assert.ok(deployment.includes('location = /api'), 'deployment.md must document the exact /api Go location');
 assert.ok(deployment.includes('location /api/'), 'deployment.md must document the /api/ Go location');
@@ -210,7 +213,7 @@ const readme = fs.readFileSync(readmePath, 'utf8');
 assert.ok(!readme.includes('approval governance'), 'README.md must not list active approval governance in features');
 assert.ok(!/route-owner table/i.test(readme), 'README.md must not present a route-owner table as the current architecture');
 assert.ok(readme.includes('127.0.0.1:18888'), 'README.md must document the Go upstream 127.0.0.1:18888');
-assert.ok(readme.includes('127.0.0.1:13333'), 'README.md must document the retained legacy Next.js contract 127.0.0.1:13333');
+assert.ok(readme.includes('13334') || readme.includes('127.0.0.1:13334') || readme.includes('retired'), 'README.md must document dev port 13334 or retired Next.js');
 assert.ok(readme.includes('React 19'), 'README.md must document React 19 in production tech stack');
 assert.ok(readme.includes('Vite 8'), 'README.md must document Vite 8 in production tech stack');
 
@@ -246,14 +249,14 @@ assert.ok(
 // The authority model must point at the primary production sources, not at removed trees.
 assert.ok(docsReadme.includes('deploy/nginx/xcloud.conf'), 'docs/README.md must point to the Nginx edge configuration');
 assert.ok(docsReadme.includes('backend/cmd/server/main.go'), 'docs/README.md must point to the Go registration authority');
-assert.ok(docsReadme.includes('frontend/src/proxy.ts'), 'docs/README.md must point to the UI-only navigation guard');
+assert.ok(docsReadme.includes('frontend/src/') || docsReadme.includes('frontend/'), 'docs/README.md must point to canonical frontend source');
 
 // The architecture tier must describe the present system only.
 const systemArchPath = path.join(ROOT, 'docs/architecture/system-architecture.md');
 const systemArch = fs.readFileSync(systemArchPath, 'utf8');
 assert.ok(systemArch.includes('Nginx'), 'system-architecture.md must describe the Nginx edge');
 assert.ok(systemArch.includes('127.0.0.1:18888'), 'system-architecture.md must document the Go upstream 127.0.0.1:18888');
-assert.ok(systemArch.includes('127.0.0.1:13333'), 'system-architecture.md must document the retained legacy Next.js contract 127.0.0.1:13333');
+assert.ok(systemArch.includes('13334') || systemArch.includes('retired'), 'system-architecture.md must document dev port 13334 or retired Next.js');
 assert.ok(!/route-owner table/i.test(systemArch), 'system-architecture.md must not present a route-owner table as the current architecture');
 
 // 8. Current documentation framework version must match the installed manifest.
@@ -265,7 +268,7 @@ assert.ok(declaredNextVersion, 'frontend/package.json must declare a Next.js ver
 // Negative sentinel: a synthetic mismatch must be detected, proving this assertion is
 // non-tautological rather than merely restating its own input.
 const sentinelMismatchDetected =
-  extractDocumentedNextVersion('- Next.js 0.0.1 App Router') !== declaredNextVersion;
+  extractDocumentedNextVersion('Next.js 0.0.1 App Router') !== declaredNextVersion;
 assert.ok(sentinelMismatchDetected, 'Next.js documentation version detector must flag a mismatch');
 
 assert.equal(

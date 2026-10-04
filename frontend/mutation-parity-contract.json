@@ -1,0 +1,510 @@
+[
+  {
+    "route": "/subscribers",
+    "source": "frontend/src/features/subscribers/SubscribersPage.tsx",
+    "mode": "mutation-parity",
+    "operations": [
+      {
+        "name": "subscriber create",
+        "request": "POST /api/subscribers",
+        "authorization": {
+          "kind": "capability",
+          "value": "subscriber_write"
+        },
+        "confirmation": false
+      },
+      {
+        "name": "subscriber edit",
+        "request": "PUT /api/subscribers/{imsi}",
+        "authorization": {
+          "kind": "capability",
+          "value": "subscriber_write"
+        },
+        "confirmation": false
+      },
+      {
+        "name": "subscriber delete",
+        "request": "DELETE /api/subscribers/{imsi}",
+        "authorization": {
+          "kind": "capability",
+          "value": "subscriber_write"
+        },
+        "confirmation": true
+      },
+      {
+        "name": "batch create",
+        "request": "POST /api/subscribers/batch",
+        "authorization": {
+          "kind": "capability",
+          "value": "subscriber_write"
+        },
+        "confirmation": false
+      },
+      {
+        "name": "batch update",
+        "request": "POST /api/subscribers/batch-update",
+        "authorization": {
+          "kind": "capability",
+          "value": "subscriber_write"
+        },
+        "confirmation": false
+      },
+      {
+        "name": "bulk delete",
+        "request": "POST /api/subscribers/bulk-delete",
+        "authorization": {
+          "kind": "capability",
+          "value": "subscriber_write"
+        },
+        "confirmation": true
+      },
+      {
+        "name": "subscriber import",
+        "request": "POST /api/subscribers/import",
+        "authorization": {
+          "kind": "capability",
+          "value": "subscriber_write"
+        },
+        "confirmation": false
+      },
+      {
+        "name": "apply profile",
+        "request": "POST /api/subscribers/{imsi}/profile",
+        "authorization": {
+          "kind": "capability",
+          "value": "subscriber_write"
+        },
+        "confirmation": false
+      },
+      {
+        "name": "traffic adjustment",
+        "request": "POST /api/subscribers/{imsi}/traffic-adjustments",
+        "authorization": {
+          "kind": "permission",
+          "value": "ocs.balance.adjust"
+        },
+        "confirmation": false
+      }
+    ],
+    "preflightOperations": [
+      "POST /api/subscribers/batch/precheck",
+      "POST /api/subscribers/import?mode=precheck"
+    ],
+    "disabledOperations": [
+      "POST /api/subscribers/policy"
+    ]
+  },
+  {
+    "route": "/profile",
+    "source": "frontend/src/features/profiles/ProfilesPage.tsx",
+    "mode": "mutation-parity",
+    "operations": [
+      {
+        "name": "profile create",
+        "request": "POST /api/profiles",
+        "authorization": {
+          "kind": "permission",
+          "value": "profiles.write"
+        },
+        "confirmation": false
+      },
+      {
+        "name": "profile update",
+        "request": "PUT /api/profiles/{name}",
+        "authorization": {
+          "kind": "permission",
+          "value": "profiles.write"
+        },
+        "confirmation": false
+      },
+      {
+        "name": "profile delete",
+        "request": "DELETE /api/profiles/{name}",
+        "authorization": {
+          "kind": "permission",
+          "value": "profiles.write"
+        },
+        "confirmation": true
+      },
+      {
+        "name": "profile version restore",
+        "request": "POST /api/profiles/{name}/versions/{versionId}/restore",
+        "authorization": {
+          "kind": "capability",
+          "value": "profile_rollback"
+        },
+        "confirmation": true
+      }
+    ],
+    "preflightOperations": [],
+    "disabledOperations": []
+  },
+  {
+    "route": "/ocs/balances",
+    "source": "frontend/src/features/ocs/balances/BalancesPage.tsx",
+    "mode": "mutation-parity",
+    "operations": [
+      {
+        "name": "balance adjustment",
+        "request": "POST /api/ocs/balances/{imsi}/adjust",
+        "authorization": {
+          "kind": "permission",
+          "value": "ocs.balance.adjust"
+        },
+        "confirmation": false
+      }
+    ],
+    "preflightOperations": [],
+    "disabledOperations": [
+      "POST /api/ocs/balances/{imsi}/reset"
+    ]
+  },
+  {
+    "route": "/ocs/balances/:imsi",
+    "source": "frontend/src/features/ocs/balances/BalanceDetailPage.tsx",
+    "mode": "mutation-parity",
+    "operations": [
+      {
+        "name": "balance adjustment",
+        "request": "POST /api/ocs/balances/{imsi}/adjust",
+        "authorization": {
+          "kind": "permission",
+          "value": "ocs.balance.adjust"
+        },
+        "confirmation": false
+      }
+    ],
+    "preflightOperations": [],
+    "disabledOperations": [
+      "POST /api/ocs/balances/{imsi}/reset"
+    ]
+  },
+  {
+    "route": "/ocs/contracts",
+    "source": "frontend/src/features/ocs/contracts/ContractsPage.tsx",
+    "mode": "mutation-parity",
+    "operations": [
+      {
+        "name": "contract create",
+        "request": "POST /api/ocs/subscribers",
+        "authorization": {
+          "kind": "capability",
+          "value": "ocs.subscriber.write"
+        },
+        "confirmation": false
+      },
+      {
+        "name": "contract update tariff",
+        "request": "PATCH /api/ocs/subscribers/{imsi}",
+        "authorization": {
+          "kind": "capability",
+          "value": "ocs.subscriber.write"
+        },
+        "confirmation": false
+      },
+      {
+        "name": "contract suspend",
+        "request": "POST /api/ocs/subscribers/{imsi}/suspend",
+        "authorization": {
+          "kind": "capability",
+          "value": "ocs.subscriber.write"
+        },
+        "confirmation": true
+      },
+      {
+        "name": "contract resume",
+        "request": "POST /api/ocs/subscribers/{imsi}/resume",
+        "authorization": {
+          "kind": "capability",
+          "value": "ocs.subscriber.write"
+        },
+        "confirmation": true
+      },
+      {
+        "name": "contract terminate",
+        "request": "DELETE /api/ocs/subscribers/{imsi}",
+        "authorization": {
+          "kind": "capability",
+          "value": "ocs.subscriber.write"
+        },
+        "confirmation": true
+      }
+    ],
+    "preflightOperations": [],
+    "disabledOperations": []
+  },
+  {
+    "route": "/ocs/contracts/:imsi",
+    "source": "frontend/src/features/ocs/contracts/ContractDetailPage.tsx",
+    "mode": "mutation-parity",
+    "operations": [
+      {
+        "name": "contract update tariff",
+        "request": "PATCH /api/ocs/subscribers/{imsi}",
+        "authorization": {
+          "kind": "capability",
+          "value": "ocs.subscriber.write"
+        },
+        "confirmation": false
+      },
+      {
+        "name": "contract suspend",
+        "request": "POST /api/ocs/subscribers/{imsi}/suspend",
+        "authorization": {
+          "kind": "capability",
+          "value": "ocs.subscriber.write"
+        },
+        "confirmation": true
+      },
+      {
+        "name": "contract resume",
+        "request": "POST /api/ocs/subscribers/{imsi}/resume",
+        "authorization": {
+          "kind": "capability",
+          "value": "ocs.subscriber.write"
+        },
+        "confirmation": true
+      },
+      {
+        "name": "contract terminate",
+        "request": "DELETE /api/ocs/subscribers/{imsi}",
+        "authorization": {
+          "kind": "capability",
+          "value": "ocs.subscriber.write"
+        },
+        "confirmation": true
+      }
+    ],
+    "preflightOperations": [],
+    "disabledOperations": []
+  },
+  {
+    "route": "/ocs/tariffs",
+    "source": "frontend/src/features/ocs/tariffs/TariffsPage.tsx",
+    "mode": "mutation-parity",
+    "operations": [
+      {
+        "name": "tariff create",
+        "request": "POST /api/tariff-plans",
+        "authorization": {
+          "kind": "capability",
+          "value": "ocs.tariff.write"
+        },
+        "confirmation": false
+      },
+      {
+        "name": "tariff update",
+        "request": "PUT /api/tariff-plans/{planId}",
+        "authorization": {
+          "kind": "capability",
+          "value": "ocs.tariff.write"
+        },
+        "confirmation": false
+      },
+      {
+        "name": "tariff delete",
+        "request": "DELETE /api/tariff-plans/{planId}",
+        "authorization": {
+          "kind": "capability",
+          "value": "ocs.tariff.write"
+        },
+        "confirmation": true
+      },
+      {
+        "name": "tariff clone",
+        "request": "POST /api/tariff-plans/{planId}/clone",
+        "authorization": {
+          "kind": "capability",
+          "value": "ocs.tariff.write"
+        },
+        "confirmation": false
+      },
+      {
+        "name": "tariff enable",
+        "request": "POST /api/tariff-plans/{planId}/enable",
+        "authorization": {
+          "kind": "capability",
+          "value": "ocs.tariff.write"
+        },
+        "confirmation": true
+      },
+      {
+        "name": "tariff disable",
+        "request": "POST /api/tariff-plans/{planId}/disable",
+        "authorization": {
+          "kind": "capability",
+          "value": "ocs.tariff.write"
+        },
+        "confirmation": true
+      }
+    ],
+    "preflightOperations": [],
+    "disabledOperations": [
+      "POST /api/tariff-plans/import",
+      "POST /api/tariff-plans/{planId}/migrate",
+      "POST /api/tariff-plans/{planId}/rules",
+      "PUT /api/tariff-plans/{planId}/rules/{ruleId}",
+      "PATCH /api/tariff-plans/{planId}/rules/{ruleId}",
+      "DELETE /api/tariff-plans/{planId}/rules/{ruleId}"
+    ]
+  },
+  {
+    "route": "/ocs/tariffs/:planId",
+    "source": "frontend/src/features/ocs/tariffs/TariffDetailPage.tsx",
+    "mode": "mutation-parity",
+    "operations": [
+      {
+        "name": "tariff update",
+        "request": "PUT /api/tariff-plans/{planId}",
+        "authorization": {
+          "kind": "capability",
+          "value": "ocs.tariff.write"
+        },
+        "confirmation": false
+      },
+      {
+        "name": "tariff delete",
+        "request": "DELETE /api/tariff-plans/{planId}",
+        "authorization": {
+          "kind": "capability",
+          "value": "ocs.tariff.write"
+        },
+        "confirmation": true
+      },
+      {
+        "name": "tariff clone",
+        "request": "POST /api/tariff-plans/{planId}/clone",
+        "authorization": {
+          "kind": "capability",
+          "value": "ocs.tariff.write"
+        },
+        "confirmation": false
+      },
+      {
+        "name": "tariff enable",
+        "request": "POST /api/tariff-plans/{planId}/enable",
+        "authorization": {
+          "kind": "capability",
+          "value": "ocs.tariff.write"
+        },
+        "confirmation": true
+      },
+      {
+        "name": "tariff disable",
+        "request": "POST /api/tariff-plans/{planId}/disable",
+        "authorization": {
+          "kind": "capability",
+          "value": "ocs.tariff.write"
+        },
+        "confirmation": true
+      }
+    ],
+    "preflightOperations": [],
+    "disabledOperations": [
+      "POST /api/tariff-plans/{planId}/migrate",
+      "POST /api/tariff-plans/{planId}/rules",
+      "PUT /api/tariff-plans/{planId}/rules/{ruleId}",
+      "PATCH /api/tariff-plans/{planId}/rules/{ruleId}",
+      "DELETE /api/tariff-plans/{planId}/rules/{ruleId}"
+    ]
+  },
+  {
+    "route": "/users",
+    "source": "frontend/src/features/users/UsersPage.tsx",
+    "mode": "mutation-parity",
+    "operations": [
+      {
+        "name": "user create",
+        "request": "POST /api/users",
+        "authorization": {
+          "kind": "permission",
+          "value": "users.create"
+        },
+        "confirmation": false
+      },
+      {
+        "name": "user update",
+        "request": "PATCH /api/users/{username}",
+        "authorization": {
+          "kind": "permission",
+          "value": "users.update"
+        },
+        "confirmation": false
+      },
+      {
+        "name": "user disable",
+        "request": "POST /api/users/{username}/disable",
+        "authorization": {
+          "kind": "permission",
+          "value": "users.disable"
+        },
+        "confirmation": true
+      },
+      {
+        "name": "user password reset",
+        "request": "POST /api/users/{username}/password-reset",
+        "authorization": {
+          "kind": "permission",
+          "value": "users.reset-password"
+        },
+        "confirmation": true
+      }
+    ],
+    "preflightOperations": [],
+    "disabledOperations": []
+  },
+  {
+    "route": "/users/:username",
+    "source": "frontend/src/features/users/UserDetailPage.tsx",
+    "mode": "mutation-parity",
+    "operations": [
+      {
+        "name": "user update",
+        "request": "PATCH /api/users/{username}",
+        "authorization": {
+          "kind": "permission",
+          "value": "users.update"
+        },
+        "confirmation": false
+      },
+      {
+        "name": "user disable",
+        "request": "POST /api/users/{username}/disable",
+        "authorization": {
+          "kind": "permission",
+          "value": "users.disable"
+        },
+        "confirmation": true
+      },
+      {
+        "name": "user password reset",
+        "request": "POST /api/users/{username}/password-reset",
+        "authorization": {
+          "kind": "permission",
+          "value": "users.reset-password"
+        },
+        "confirmation": true
+      }
+    ],
+    "preflightOperations": [],
+    "disabledOperations": []
+  },
+  {
+    "route": "/users/create",
+    "source": "frontend/src/features/users/UserCreatePage.tsx",
+    "mode": "mutation-parity",
+    "operations": [
+      {
+        "name": "user create",
+        "request": "POST /api/users",
+        "authorization": {
+          "kind": "permission",
+          "value": "users.create"
+        },
+        "confirmation": false
+      }
+    ],
+    "preflightOperations": [],
+    "disabledOperations": []
+  }
+]

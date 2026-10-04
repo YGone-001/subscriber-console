@@ -20,7 +20,6 @@
     "local:stop": "node scripts/local-stop.mjs"
   },
   "dependencies": {
-    "@next/env": "16.3.5",
     "bcryptjs": "^3.0.3",
     "jiti": "^2.6.1",
     "jose": "^6.2.2",

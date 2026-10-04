@@ -2,13 +2,12 @@ import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 
-import nextEnv from '@next/env';
+import { loadEnv } from './lib/load-env.mjs';
 import { BSON, MongoClient } from 'mongodb';
 
 const { EJSON } = BSON;
 
-const { loadEnvConfig } = nextEnv;
-loadEnvConfig(process.cwd());
+loadEnv(process.cwd());
 
 function argumentValue(name) {
   const prefix = `--${name}=`;

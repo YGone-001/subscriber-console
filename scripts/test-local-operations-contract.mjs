@@ -184,7 +184,7 @@ function cleanupChildren() {
 /** Recorded evidence, so the machine contract reports observations rather than check names. */
 const evidence = {
   goOrphaned: null,
-  nextOrphaned: null,
+  frontendOrphaned: null,
   stopTimeoutRecordPreserved: null,
   stopTimeoutReportsFailure: null,
   unmanagedLiveProcesses: null,
@@ -262,11 +262,12 @@ function testToolPresence() {
   check('present-doctor', typeof scripts['local:doctor'] === 'string');
   check('present-stop', typeof scripts['local:stop'] === 'string');
 
-  check('canonical-next-port', CANONICAL_PORTS.next === 13333);
+  check('canonical-frontend-port', CANONICAL_PORTS.frontend === 13334);
+  check('canonical-next-port-absent', CANONICAL_PORTS.next === undefined);
   check('canonical-go-port', CANONICAL_PORTS.go === 18888);
 
   const lib = readFile('scripts/lib/local-runtime.mjs');
-  const bypass = /XCLOUD_(?:NEXT|GO)_PORT/.test(lib);
+  const bypass = /XCLOUD_(?:FRONTEND|VITE|NEXT|GO)_PORT/.test(lib);
   check('no-canonical-port-bypass', !bypass);
 
   const nginx = readFile('deploy/nginx/xcloud.conf');
@@ -279,25 +280,24 @@ function testToolPresence() {
     && /upstream\s+xcloud_go\s*\{[\s\S]*?127\.0\.0\.1:18888/.test(nginx);
   check('browser-api-owner-nginx-to-go', apiLocationRouted);
 
-  const proxy = readFile('frontend/src/proxy.ts');
+  const viteConfig = readFile('frontend/vite.config.ts');
   check(
-    'next-auth-authority-direct-loopback',
-    proxy.includes('127.0.0.1:18888') && proxy.includes('/api/auth/me'),
+    'vite-dev-api-proxy-target',
+    viteConfig.includes('127.0.0.1:18888') && viteConfig.includes('/api'),
   );
 
   const localDev = readFile('scripts/local-dev.mjs');
-  const recommendsProductionSetup = /EDGE_REQUIRED[\s\S]*?deploy\/nginx\/setup\.sh\b/i.test(localDev);
-  const recommendsLegacySetup = /EDGE_REQUIRED[\s\S]*?deploy\/nginx\/setup-next-legacy\.sh\b/i.test(localDev);
-  check('local-dev-edge-required-uses-legacy-setup', recommendsLegacySetup && !recommendsProductionSetup);
+  check('local-dev-no-legacy-nginx', !existsSync(resolve(ROOT, 'deploy/nginx/setup-next-legacy.sh')) && !existsSync(resolve(ROOT, 'deploy/nginx/xcloud-next-legacy.conf')));
+  check('local-dev-no-nginx-dependency', localDev.includes('local_dev_nginx_required=0'));
 }
 
 function testDocumentation() {
   const agents = readFile('AGENTS.md');
   const claude = readFile('CLAUDE.md');
-  check('agents-contamination-rule', /Never resolve canonical port contamination by changing 13333\/18888/.test(agents));
+  check('agents-contamination-rule', /Never resolve canonical port contamination by changing 13334\/18888/.test(agents));
   check('agents-preflight-rule', agents.includes('local:preflight'));
   check('agents-no-auto-kill-rule', /Never automatically kill an arbitrary listener/.test(agents));
-  check('claude-preflight-rule', claude.includes('local:preflight') && claude.includes('13333/18888'));
+  check('claude-preflight-rule', claude.includes('local:preflight') && claude.includes('13334/18888'));
 }
 
 // ---------------------------------------------------------------------------
@@ -367,7 +367,7 @@ async function testOwnedStopped() {
 
   const record = {
     pid: child.pid,
-    role: 'next',
+    role: 'frontend',
     startedAt: new Date().toISOString(),
     command: info && info.commandLine ? info.commandLine : null,
     repositoryRoot: ROOT,
@@ -375,13 +375,13 @@ async function testOwnedStopped() {
     commandLineFingerprint: info ? info.commandLine : null,
     processStartTime: info ? info.startTime : null,
   };
-  writeFileSync(join(stateDir, 'next.pid.json'), `${JSON.stringify(record, null, 2)}\n`, 'utf8');
+  writeFileSync(join(stateDir, 'frontend.pid.json'), `${JSON.stringify(record, null, 2)}\n`, 'utf8');
 
   const stop = runNode(['scripts/local-stop.mjs'], { env: { XCLOUD_RUNTIME_DIR: stateDir } });
   const stopped = await waitUntil(() => !isAlive(child.pid));
   check('O3-owned-child-stopped', stopped, `alive=${isAlive(child.pid)}`);
-  check('O3-stop-reports-stopped', stop.stdout.includes('local_stop_next=STOPPED'), `exit=${stop.status}`);
-  check('O3-record-removed', !existsSync(join(stateDir, 'next.pid.json')));
+  check('O3-stop-reports-stopped', stop.stdout.includes('local_stop_frontend=STOPPED'), `exit=${stop.status}`);
+  check('O3-record-removed', !existsSync(join(stateDir, 'frontend.pid.json')));
 }
 
 // ---------------------------------------------------------------------------
@@ -466,7 +466,7 @@ async function testStopTimeoutPreservesRecord() {
   const env = { XCLOUD_RUNTIME_DIR: stateDir };
   const registration = await registerManagedProcess({
     repoRoot: ROOT,
-    role: 'next',
+    role: 'frontend',
     pid: child.pid,
     command: `${process.execPath} ${script}`,
     env,
@@ -486,8 +486,8 @@ async function testStopTimeoutPreservesRecord() {
     }),
   });
 
-  const outcome = report.outcomes.find((entry) => entry.role === 'next');
-  const preserved = existsSync(recordPath(ROOT, 'next', env));
+  const outcome = report.outcomes.find((entry) => entry.role === 'frontend');
+  const preserved = existsSync(recordPath(ROOT, 'frontend', env));
   const reportsFailure = report.result === 'NEEDS_ATTENTION' && report.exitCode !== 0;
 
   check('O6-stop-does-not-claim-stopped', outcome && outcome.status === STOP_STATUSES.STOP_TIMEOUT, `status=${outcome && outcome.status}`);
@@ -506,13 +506,13 @@ async function testStopTimeoutPreservesRecord() {
     const stop = runNode(['scripts/local-stop.mjs'], {
       env: { ...env, XCLOUD_STOP_TIMEOUT_MS: '1200' },
     });
-    check('O6-cli-reports-stop-timeout', stop.stdout.includes('local_stop_next=STOP_TIMEOUT'), `exit=${stop.status}`);
+    check('O6-cli-reports-stop-timeout', stop.stdout.includes('local_stop_frontend=STOP_TIMEOUT'), `exit=${stop.status}`);
     check('O6-cli-exits-nonzero', stop.status !== 0, `exit=${stop.status}`);
     check('O6-cli-result-needs-attention', stop.stdout.includes('local_stop_result=NEEDS_ATTENTION'));
     check(
       'O6-cli-record-preserved',
       stop.stdout.includes('local_stop_record_preserved_on_timeout=true')
-        && existsSync(recordPath(ROOT, 'next', env)),
+        && existsSync(recordPath(ROOT, 'frontend', env)),
     );
     check('O6-cli-child-still-alive', isAlive(child.pid));
   }
@@ -533,14 +533,14 @@ async function testPartialStartupRollback() {
   // Placed inside the repository so the ownership record can be verified exactly as the
   // real managed children are; the canonical production ports are never bound.
   const goScript = join(runtimePath, 'ops-partial-go.mjs');
-  const nextScript = join(runtimePath, 'ops-partial-next.mjs');
+  const frontendScript = join(runtimePath, 'ops-partial-frontend.mjs');
   writeFileSync(goScript, CHILD_SOURCE, 'utf8');
-  writeFileSync(nextScript, CHILD_SOURCE, 'utf8');
+  writeFileSync(frontendScript, CHILD_SOURCE, 'utf8');
 
   const env = { XCLOUD_RUNTIME_DIR: stateDir };
   const recordAtReadiness = {};
   let goChild = null;
-  let nextChild = null;
+  let frontendChild = null;
 
   const result = await startManagedProcesses({
     repoRoot: ROOT,
@@ -553,9 +553,9 @@ async function testPartialStartupRollback() {
         waitForReady: async () => true,
       },
       {
-        role: 'next',
-        command: `${process.execPath} ${nextScript}`,
-        spawn: () => { nextChild = spawnChild(nextScript); return nextChild; },
+        role: 'frontend',
+        command: `${process.execPath} ${frontendScript}`,
+        spawn: () => { frontendChild = spawnChild(frontendScript); return frontendChild; },
         waitForReady: async () => false,
       },
     ],
@@ -570,26 +570,26 @@ async function testPartialStartupRollback() {
 
   check('O7-startup-failed', result.ok === false, `ok=${result.ok}`);
   check('O7-go-record-existed-before-readiness', recordAtReadiness.go === true, `present=${recordAtReadiness.go}`);
-  check('O7-next-record-existed-before-readiness', recordAtReadiness.next === true, `present=${recordAtReadiness.next}`);
+  check('O7-frontend-record-existed-before-readiness', recordAtReadiness.frontend === true, `present=${recordAtReadiness.frontend}`);
 
   const rollbackOrder = result.stopped.map((entry) => `${entry.role}:${entry.status}`).join(',');
-  check('O7-rollback-reverse-order', rollbackOrder === 'next:STOPPED,go:STOPPED', `order=${rollbackOrder}`);
+  check('O7-rollback-reverse-order', rollbackOrder === 'frontend:STOPPED,go:STOPPED', `order=${rollbackOrder}`);
 
   const goExited = await waitUntil(() => !isAlive(goChild.pid), 8000);
-  const nextExited = await waitUntil(() => !isAlive(nextChild.pid), 8000);
+  const frontendExited = await waitUntil(() => !isAlive(frontendChild.pid), 8000);
   check('O7-go-child-gone', goExited, `alive=${isAlive(goChild.pid)}`);
-  check('O7-next-child-gone', nextExited, `alive=${isAlive(nextChild.pid)}`);
+  check('O7-frontend-child-gone', frontendExited, `alive=${isAlive(frontendChild.pid)}`);
 
   const goRecordPresent = existsSync(recordPath(ROOT, 'go', env));
-  const nextRecordPresent = existsSync(recordPath(ROOT, 'next', env));
-  check('O7-records-removed-after-confirmed-exit', !goRecordPresent && !nextRecordPresent);
+  const frontendRecordPresent = existsSync(recordPath(ROOT, 'frontend', env));
+  check('O7-records-removed-after-confirmed-exit', !goRecordPresent && !frontendRecordPresent);
 
   const goOrphaned = isAlive(goChild.pid) && !goRecordPresent;
-  const nextOrphaned = isAlive(nextChild.pid) && !nextRecordPresent;
-  check('O7-no-orphan', !goOrphaned && !nextOrphaned, `go=${goOrphaned} next=${nextOrphaned}`);
+  const frontendOrphaned = isAlive(frontendChild.pid) && !frontendRecordPresent;
+  check('O7-no-orphan', !goOrphaned && !frontendOrphaned, `go=${goOrphaned} frontend=${frontendOrphaned}`);
 
   evidence.goOrphaned = goOrphaned;
-  evidence.nextOrphaned = nextOrphaned;
+  evidence.frontendOrphaned = frontendOrphaned;
 
   const unmanaged = await countUnmanagedLiveProcesses({ repoRoot: ROOT, env });
   evidence.unmanagedLiveProcesses = unmanaged.length;
@@ -669,7 +669,7 @@ async function testRegistrationFailureRelease() {
     env,
     entries: [
       {
-        role: 'next',
+        role: 'frontend',
         command: `${process.execPath} ${script}`,
         spawn: () => child,
         waitForReady: async () => true,
@@ -693,7 +693,7 @@ async function testRegistrationFailureRelease() {
   check('O9-release-reported', Boolean(released) && !releaseFailed,
     `released=${Boolean(released)} releaseFailed=${releaseFailed}`);
   check('O9-no-cleanup-failure-field', result.cleanupFailure === null, JSON.stringify(result.cleanupFailure));
-  check('O9-no-record-written', !existsSync(recordPath(ROOT, 'next', env)));
+  check('O9-no-record-written', !existsSync(recordPath(ROOT, 'frontend', env)));
 
   // On Unix the graceful stage must have been resisted. The escalation can only be reached
   // after the graceful exit confirmation ran to its full timeout without confirming exit,
@@ -713,7 +713,7 @@ async function testRegistrationFailureRelease() {
   );
 
   const exited = await waitUntil(() => !isAlive(child.pid), 8000);
-  const recordPresent = existsSync(recordPath(ROOT, 'next', env));
+  const recordPresent = existsSync(recordPath(ROOT, 'frontend', env));
   const orphaned = isAlive(child.pid) && !recordPresent;
 
   check('O9-child-gone', exited, `alive=${isAlive(child.pid)}`);
@@ -823,7 +823,7 @@ async function main() {
   console.log(`local_ops_identity_mismatch_refused=${passed('O5-refused')}`);
   console.log('');
   console.log(`local_ops_partial_go_orphaned=${observed(evidence.goOrphaned)}`);
-  console.log(`local_ops_partial_next_orphaned=${observed(evidence.nextOrphaned)}`);
+  console.log(`local_ops_partial_frontend_orphaned=${observed(evidence.frontendOrphaned)}`);
   console.log('');
   console.log(`local_ops_stop_timeout_record_preserved=${observed(evidence.stopTimeoutRecordPreserved)}`);
   console.log(`local_ops_stop_timeout_reports_failure=${observed(evidence.stopTimeoutReportsFailure)}`);
@@ -836,16 +836,16 @@ async function main() {
   console.log(`local_ops_registration_failure_exact_child_only=${observed(evidence.registrationFailureExactChildOnly)}`);
   console.log(`local_ops_registration_failure_escalation_exercised=${observed(evidence.registrationFailureEscalationExercised)}`);
   console.log('');
-  console.log(`local_ops_canonical_next_port=${CANONICAL_PORTS.next}`);
+  console.log(`local_ops_canonical_frontend_port=${CANONICAL_PORTS.frontend}`);
   console.log(`local_ops_canonical_go_port=${CANONICAL_PORTS.go}`);
   console.log(`local_ops_port_bypass_allowed=${!passed('no-canonical-port-bypass')}`);
   console.log('');
   console.log(`local_ops_browser_api_owner=${passed('browser-api-owner-nginx-to-go') ? 'nginx_to_go' : 'UNKNOWN'}`);
-  console.log(`local_ops_next_auth_authority_direct_loopback=${passed('next-auth-authority-direct-loopback')}`);
+  console.log(`local_ops_vite_api_proxy_configured=${passed('vite-dev-api-proxy-target')}`);
   console.log('');
   console.log(`local_ops_active_http_edge_port=${passed('active-http-edge-port-80') ? 80 : 'UNKNOWN'}`);
   console.log(`local_ops_https_default_active=${!passed('https-not-active-by-default')}`);
-  console.log(`local_ops_dev_recommends_legacy_setup=${passed('local-dev-edge-required-uses-legacy-setup')}`);
+  console.log(`local_ops_dev_no_nginx_requirement=${passed('local-dev-no-nginx-dependency')}`);
   console.log('');
   console.log(`local_ops_failures=${failures.length}`);
   console.log(`local_ops_result=${failures.length === 0 ? 'PASS' : 'FAIL'}`);
