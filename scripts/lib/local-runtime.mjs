@@ -924,6 +924,7 @@ export function classifyEdgeUiOwner({ edge, edgeLogin } = {}) {
   if (hasGoSpa && !hasNext) return 'go';
   if (hasNext) return 'next';
   if (hasGoSpa) return 'go';
+  if (probe.status === 404 && body.includes('404 page not found')) return 'go';
   return 'unknown';
 }
 
