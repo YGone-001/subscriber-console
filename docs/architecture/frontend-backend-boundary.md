@@ -5,31 +5,33 @@
 
 ## Current Production Boundary
 
-The following boundary describes the deployed production runtime. Nginx routes
-non-API traffic to Next.js on `127.0.0.1:13333` and all `/api` traffic to Go on
-`127.0.0.1:18888`.
+The following boundary describes the deployed production runtime. Nginx routes all
+application traffic (API and UI) to Go on `127.0.0.1:18888`. Go hosts the production
+REST API and internally serves the embedded static React SPA.
 
 ### Frontend Responsibility
 
-- UI rendering and state management
-- API client (SWR hooks)
+- UI rendering and state management (`frontend-spa/src/`)
+- API client (SWR hooks / Fetch client)
 - User interaction and feedback
 - Internationalization (en/zh)
 - Responsive layout and design tokens
-- UI-only navigation guard (`frontend/src/proxy.ts`)
+- Client-side auth gate (`AuthGate`)
+
+Location: `frontend-spa/src/` (production SPA source)
+Legacy location: `frontend/` (Next.js 16.3.8, retained for rollback / pending retirement)
 
 The frontend does not know which process answers an API call.
 API paths remain `/api/...` unchanged.
 
-Location: `frontend/src/`
-
 ### Backend Responsibility
 
-### Go Backend (API owner)
+### Go Backend (API and SPA owner)
 
 - Authentication verification (HS256) and session validation
 - Authorization (capability + permission checks)
-- All production read and write API operations
+- All production read and write API operations (84 registrations)
+- Static SPA hosting (assets, browser-history fallback, cache-control)
 - Rate limiting
 - Audit evidence writing
 - Request identity, request ID and structured logging
@@ -43,8 +45,8 @@ production source.
 
 ### Routing Boundary
 
-Nginx is the sole public edge. It routes `/api` and `/api/*` to Go and `location /` to the
-Next.js UI, and strips client identity headers at the edge.
+Nginx is the sole public edge. It routes `/api`, `/api/*`, and `location /` to Go on
+`127.0.0.1:18888`, and strips client identity headers at the edge.
 
 Route ownership is per method + path. Route authority is the Go registration set parsed from
 `backend/cmd/server/main.go` plus `backend/internal/remediation/handler.go`
@@ -52,22 +54,18 @@ Route ownership is per method + path. Route authority is the Go registration set
 
 See `docs/operations/deployment.md` for the edge contract.
 
-## Short-Term Target Boundary
+## Evolutionary Convergence (Subsequent Target)
 
-The planned target is a consolidated application runtime, not a current deployment:
+Single-upstream consolidation completed the runtime transition to a single Go upstream:
 
 ```text
 Browser -> Nginx -> Go 127.0.0.1:18888
                      |-- API
-                     `-- static React SPA
+                     `-- embedded static React SPA
 ```
 
-After a separately governed implementation and transition, Go would host the static
-SPA as well as the API, and the production Next.js runtime and port `13333` would be
-retired. Nginx would remain the public edge, and MongoDB `xcloud` plus `xcloud_ops`
-would remain the existing source of truth. This target does not authorize a Next.js
-rewrite, API handler, forwarding middleware, or browser-direct Go API base URL in
-the current runtime.
+subsequent retirement and canonicalization will perform source-tree cleanup: retiring the legacy Next.js runtime and its
+`127.0.0.1:13333` contract, removing `frontend/`, and renaming `frontend-spa/` to `frontend/`.
 
 ## Invariant Security Boundary
 

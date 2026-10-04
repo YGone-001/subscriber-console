@@ -8,12 +8,9 @@ It manages IMSI subscriber records, profile templates, OCS tariff plans, subscri
 
 ```
 subscriber-console/
-├── frontend/          # Next.js + React UI
-│   ├── src/
-│   ├── public/
-│   ├── tests/
-│   └── package.json
-├── backend/           # Go REST API
+├── frontend-spa/      # Production React/Vite SPA source
+├── frontend/          # Legacy Next.js UI (retained for rollback / pending retirement)
+├── backend/           # Go REST API + embedded static SPA hosting
 │   ├── cmd/
 │   ├── internal/
 │   └── go.mod
@@ -31,25 +28,16 @@ subscriber-console/
 
 ```
 Browser → Nginx (only public origin)
-           ├── /, /*           → Next.js 127.0.0.1:13333 (React UI + UI navigation guard)
-           └── /api, /api/*    → Go 127.0.0.1:18888 (REST API + MongoDB)
+           └── /*, /api/* → Go 127.0.0.1:18888 (API + embedded static React SPA)
 ```
 
-The Nginx edge owns API routing and the Go backend owns every production API operation
-and API authentication (84 exact METHOD+PATH registrations). The Next.js proxy is a
-UI-only navigation guard: it does not decode JWTs, does not access MongoDB, does not
-inject identity headers and does not forward API requests. Both application services
-bind loopback and are reached only through Nginx.
+The Nginx edge routes all public traffic to the single Go upstream (`127.0.0.1:18888`).
+The Go backend owns every production API operation (84 exact METHOD+PATH registrations),
+session authentication, and embedded static React SPA hosting. The legacy Next.js runtime
+in `frontend/` (contract: `127.0.0.1:13333`) is retained for explicit operator rollback
+only, receives zero edge traffic, and will be retired upon subsequent retirement.
 
-Nginx is the only browser-facing application edge and the exclusive browser API routing
-boundary. The Next.js navigation guard may directly consult the Go authentication
-authority over loopback for `GET /api/auth/me`; that internal server-side call is not
-API ownership and not API forwarding.
-
-Architecture evolution is planned separately in the
-[architecture evolution roadmap](docs/architecture/architecture-evolution-roadmap.md).
-It does not change the current Nginx, Next.js, Go, or MongoDB deployment described
-above.
+Both application services bind loopback and are reached only through Nginx.
 
 ## Features
 
@@ -77,7 +65,30 @@ Charging Plane remains frozen and excluded.
 
 ## Tech Stack
 
-### Frontend
+### Production Frontend (SPA)
+
+- React 19.2.4
+- Vite 8
+- React Router 7
+- TypeScript 5
+- Tailwind CSS 4
+- Lucide React
+
+Static assets are built from `frontend-spa/` and embedded directly into the Go backend binary.
+
+### Backend
+
+- Go 1.24+
+- Standard library `net/http`
+- `log/slog`
+- `mongo-driver/v2`
+
+### Edge & Storage
+
+- Nginx (single public edge upstream `xcloud_go`)
+- MongoDB (databases `xcloud` + `xcloud_ops`)
+
+### Legacy Frontend (Retained for Rollback / Pending subsequent retirement and canonicalization Retirement)
 
 - Next.js 16.3.8 App Router
 - React 19.2.4
@@ -87,29 +98,21 @@ Charging Plane remains frozen and excluded.
 - lucide-react
 - ESLint 9
 
-The frontend is a UI-only runtime: it holds no JWT/MongoDB client and no
-`jose` / `mongodb` / `bcryptjs` dependency.
-
-### Backend
-
-- Go 1.24+
-- Standard library `net/http`
-- `log/slog`
-- `mongo-driver/v2`
+The legacy frontend is retained in `frontend/` (bound to `127.0.0.1:13333`) for explicit operator-initiated rollback only. It receives zero production edge traffic.
 
 ## Quick Start
 
-The full application is served by the Nginx edge. Both application services are
+The full application is served by the Nginx edge. Application services are
 loopback-internal and are not browser origins.
 
 ```text
 MongoDB     xcloud + xcloud_ops
-Go backend  127.0.0.1:18888   internal API service
-Next.js UI  127.0.0.1:13333   internal UI service
+Go backend  127.0.0.1:18888   internal application service (API + embedded static SPA)
+Next.js UI  127.0.0.1:13333   retained legacy UI service (rollback only)
 Nginx edge  public browser entry, default http://localhost
 ```
 
-Next.js `:13333` is an internal UI service and Go `:18888` is an internal API service.
+Next.js `:13333` is a retained legacy UI service and Go `:18888` is the active application service.
 Neither internal port is a supported full-stack browser origin; they are useful for
 component-level diagnostics only.
 

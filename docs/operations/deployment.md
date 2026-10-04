@@ -10,92 +10,87 @@ Browser
    |
    v
 Nginx (only public origin: TLS termination, routing, rate limiting)
-   |----------------------------------------|
-   v                                        v
-Next.js 127.0.0.1:13333                    Go 127.0.0.1:18888
-UI rendering                               Business API (owner)
-UI navigation guard only                   API authentication + authorization
-(no API routing, no JWT decode,            Read + write APIs
- no MongoDB, no identity headers)          (84 METHOD+PATH registrations)
-   |                                        |
-   +--------------------+-------------------+
-                        |
-                        v
-                     MongoDB
-                xcloud + xcloud_ops
+   |
+   v
+Go 127.0.0.1:18888
+   |-- Business API (owner)
+   |-- Auth identity + session validation
+   |-- Read + write APIs (84 METHOD+PATH registrations)
+   `-- Embedded static React SPA (UI rendering, browser history routing, static assets)
+   |
+   v
+MongoDB: xcloud + xcloud_ops
 ```
 
 Ownership of every production API operation is Go. The authoritative route set is
 the Go registration list: 84 exact METHOD+PATH registrations parsed from
 `backend/cmd/server/main.go` plus `backend/internal/remediation/handler.go`
 (shared helper `scripts/lib/go-registrations.mjs`). Nginx performs the routing at the
-edge and Go owns the API; no per-route ownership table exists in production source.
+edge and Go owns both the API and the embedded static React SPA; no per-route ownership
+table exists in production source.
 
-Frontend SWR paths remain unchanged - the edge routing is transparent to the UI.
+`frontend-spa/` is the current production SPA source, built to static assets and embedded
+into the Go binary. Next.js source in `frontend/` and its `127.0.0.1:13333` runtime contract
+are retained for legacy/rollback purposes only, pending retirement upon subsequent retirement.
+
+Frontend API paths remain `/api/...` unchanged - the edge routing is transparent to the UI.
 
 ## Trust Boundary
 
 ```text
 Public origin         : the Nginx listener only
-Loopback-internal     : Next.js 127.0.0.1:13333, Go 127.0.0.1:18888
-Unsupported origins   : http://127.0.0.1:13333, http://127.0.0.1:18888
+Loopback-internal     : Go 127.0.0.1:18888 (API + embedded static React SPA)
+Retained legacy       : Next.js 127.0.0.1:13333 (`next start -H 127.0.0.1 -p 13333`, retained for rollback / pending retirement)
+Unsupported origins   : http://127.0.0.1:18888, http://127.0.0.1:13333
 ```
 
 Listener contract:
 
 ```text
-127.0.0.1:18888 = Go internal API listener  (HTTP_ADDR production default)
-127.0.0.1:13333 = Next internal UI listener (`next start -H 127.0.0.1 -p 13333`)
+127.0.0.1:18888 = Go internal application listener (API + embedded static React SPA, HTTP_ADDR production default)
+127.0.0.1:13333 = Retained legacy Next listener (`next start -H 127.0.0.1 -p 13333`, retained for rollback / pending retirement)
 80/443          = Nginx public edge
 ```
 
-Both listeners are pinned to the loopback address by the service's own startup
-configuration, not by a firewall rule. The Go default `HTTP_ADDR` is
-`127.0.0.1:18888`, and the Next production command binds `-H 127.0.0.1`. A
-non-loopback interface address on either port is not reachable; a firewall is only
-defense in depth.
+The Go application listener binds the loopback address by its startup default
+(`127.0.0.1:18888`), not by a firewall rule. The legacy Next production command
+similarly binds `-H 127.0.0.1`. A non-loopback interface address on either port is not
+reachable; a firewall is only defense in depth.
 
-Browsers must never be pointed at the internal ports. The UI always calls
-same-origin `/api/...` paths; only the edge is reachable from the network. The edge
-generates `Host`, `X-Real-IP`, `X-Forwarded-For` and `X-Forwarded-Proto` itself and
-explicitly clears any client-supplied identity headers (`X-User`, `X-Role`,
-`X-Permissions`) before forwarding to Go. Go derives the principal exclusively from
-the `auth_token` cookie and never trusts forwarded identity headers.
+Browsers must never be pointed at internal ports. The UI always calls same-origin
+`/api/...` paths; only the edge is reachable from the network. The edge generates
+`Host`, `X-Real-IP`, `X-Forwarded-For` and `X-Forwarded-Proto` itself and explicitly clears
+any client-supplied identity headers (`X-User`, `X-Role`, `X-Permissions`) before
+forwarding to Go. Go derives the principal exclusively from the `auth_token` cookie and
+never trusts forwarded identity headers.
 
 ## Nginx Edge Contract
 
-`deploy/nginx/xcloud.conf` defines two keepalive upstreams and one server block:
+`deploy/nginx/xcloud.conf` defines a single keepalive upstream and one server block:
 
 ```nginx
-upstream xcloud_next { server 127.0.0.1:13333; keepalive 16; }
-upstream xcloud_go   { server 127.0.0.1:18888; keepalive 32; }
+upstream xcloud_go { server 127.0.0.1:18888; keepalive 32; }
 ```
 
 Routing:
 
 | Location | Upstream | Notes |
 | --- | --- | --- |
-| `location = /api` | `xcloud_go` | Exact `/api` must not fall through to the UI upstream |
+| `location = /api` | `xcloud_go` | Exact `/api` |
 | `location /api/` | `xcloud_go` | All API traffic |
 | `location = /api/notifications/stream` | `xcloud_go` | Serial EventSource stream, never buffered |
-| `location /_next/hmr` | `xcloud_next` | Next.js development transport (HMR WebSocket upgrade) only |
-| `location /` | `xcloud_next` | UI pages and static assets |
+| `location /` | `xcloud_go` | Embedded React SPA shell, browser routes, and static assets |
 
-The `/_next/hmr` location is a development transport exception, not API routing. Next.js 16
-delivers development HMR over a WebSocket under the framework namespace `/_next/hmr`
-(named `/_next/webpack-hmr` before Next.js 16). The generic UI location clears the
-`Connection` header for upstream keepalive, so an upgrade request arrives as a plain GET
-and is answered by the UI navigation guard instead of the HMR handler. This location
-forwards `Upgrade`/`Connection` for that single framework path. It never matches `/api`
-or `/api/*`, which remain exclusive to the Go upstream, and it is inert under
-`next start`, where no HMR server is registered.
-
-Every API location applies the same contract:
+Every location proxies to `xcloud_go` and applies the same security boundary:
 
 - `proxy_http_version 1.1` with a cleared `Connection` header for upstream keepalive;
 - `Host`, `X-Real-IP`, `X-Forwarded-For`, `X-Forwarded-Proto` generated by Nginx;
 - `proxy_set_header X-User ""; X-Role ""; X-Permissions "";` (client identity headers are always stripped);
 - `limit_req zone=xcloud_api` (10 req/s per IP, `burst=20 nodelay`) on API, `zone=xcloud_page` (30 req/s, `burst=50 nodelay`) on the UI location.
+
+For temporary local development with Next.js HMR or explicit legacy rollback, the
+isolated `deploy/nginx/xcloud-next-legacy.conf` is available via `deploy/nginx/setup-next-legacy.sh`.
+Production `xcloud.conf` contains zero Next upstreams and zero `/_next/hmr` blocks.
 
 The SSE location additionally disables buffering and caching and extends the socket
 timeouts for long-lived streams:
@@ -178,40 +173,41 @@ rule is modified.
 
 ## Build Steps
 
-### Next.js
+### Production (Go with Embedded SPA)
+
+The production artifact is a single bundled Go binary containing embedded static SPA assets:
 
 ```bash
-# From the repository root
+# 1. From repository root: install dependencies
 npm ci
-cp .env.example .env
+cd frontend-spa
+npm ci
+
+# 2. Build frontend-spa static assets
+npm run build
+cd ..
+
+# 3. Stage SPA static assets for Go embedding
+node scripts/stage-spa-for-go.mjs
+
+# 4. Build Go binary with embedded SPA
+cd backend
+go build -o bin/server ./cmd/server
+cd ..
+```
+
+The Go binary is a single static executable with no external Node runtime dependencies.
+
+### Legacy Next.js (Retained for Rollback / Pending subsequent retirement and canonicalization Retirement)
+
+```bash
 cd frontend
 npm ci
-npm --prefix .. run mongo:init
 npm run build
+cd ..
 ```
-
-### Go Backend
-
-```bash
-cd backend
-go build ./cmd/server
-```
-
-The Go binary is a single static executable with no external runtime dependencies.
 
 ## Configuration
-
-### Next.js Runtime
-
-| Variable | Description | Default |
-| --- | --- | --- |
-| `GO_BACKEND_URL` | Go authority used by the UI navigation guard (`GET /api/auth/me`) | `http://127.0.0.1:18888` |
-| listen host | Production bind address (`next start -H`) | `127.0.0.1` (`npm run start`) |
-| server port | Production server port | `13333` (`npm run start`) |
-
-The Next.js runtime uses no MongoDB client and no JWT
-secret; it performs no API authentication. The only network dependency of the UI
-navigation guard is the Go authority above.
 
 ### Go Backend / Shared Operational
 
@@ -226,6 +222,18 @@ navigation guard is the Go authority above.
 
 `MONGODB_*`, `JWT_SECRET` and `INITIAL_ADMIN_PASSWORD` are consumed by the Go
 backend and by the repository-root operational scripts (for example `npm run mongo:init`).
+
+### Retained Legacy Next.js Runtime (Rollback / Development Only)
+
+| Variable | Description | Default |
+| --- | --- | --- |
+| `GO_BACKEND_URL` | Go authority used by the UI navigation guard (`GET /api/auth/me`) | `http://127.0.0.1:18888` |
+| listen host | Bind address (`next start -H`) | `127.0.0.1` (`npm run start`) |
+| server port | Server port | `13333` (`npm run start`) |
+
+The legacy Next.js runtime uses no MongoDB client and no JWT
+secret; it performs no API authentication. The only network dependency of the UI
+navigation guard is the Go authority above.
 
 ## Start Commands
 
@@ -392,37 +400,70 @@ they must own the processes they measure.
 ### Production
 
 ```bash
-# Next.js (loopback-internal)
-cd frontend
-npm run start    # next start -H 127.0.0.1 -p 13333
-
-# Go backend (loopback-internal)
+# Production Go service (API + embedded static React SPA)
 cd backend
 set -a
 source ../.env   # provides HTTP_ADDR=127.0.0.1:18888
 set +a
-./server         # listens on 127.0.0.1:18888 (HTTP_ADDR default)
+./bin/server     # listens on 127.0.0.1:18888 (HTTP_ADDR default)
 ```
 
-Both services bind the loopback address explicitly - Next via `-H 127.0.0.1`, Go via
-the `127.0.0.1:18888` `HTTP_ADDR` default - and are reached only through Nginx.
-`HTTP_ADDR` may be overridden by an operator, but the safe default is loopback.
+The Go bundled binary serves both the API and the embedded static React SPA directly on
+`127.0.0.1:18888`. No production Next.js process is required or active. Next.js `:13333`
+is retained as a legacy/rollback runtime contract until subsequent retirement.
+
+Go binds loopback explicitly by the `127.0.0.1:18888` `HTTP_ADDR` default and is reached
+only through Nginx. `HTTP_ADDR` may be overridden by an operator, but the safe default
+is loopback.
 
 ## Recommended Production Flow
 
 1. Provision MongoDB or reuse the xCloud MongoDB host.
-2. Configure the Go backend environment variables.
-3. Install root operational dependencies with `npm ci`, then build Next.js with `cd frontend && npm ci && npm run build`.
-4. Build Go: `cd backend && go build ./cmd/server`.
-5. Run `npm run mongo:init` from the repository root to create indexes in both databases.
-6. Start Go on `127.0.0.1:18888` and Next.js on `127.0.0.1:13333` (loopback only).
-7. Install the edge router: `sudo ./deploy/nginx/setup.sh [listen_port]`, then confirm `nginx -t` passes.
-8. Log in with the bootstrap `admin` account.
-9. Create named operator/viewer accounts and store credentials securely.
+2. Configure the Go backend environment variables in `.env`.
+3. Install dependencies: root dependencies with `npm ci` and SPA dependencies with `cd frontend-spa && npm ci`.
+4. Build the static SPA: `cd frontend-spa && npm run build`.
+5. Stage the static SPA assets for Go embedding: `node scripts/stage-spa-for-go.mjs`.
+6. Compile the Go bundled binary: `cd backend && go build -o bin/server ./cmd/server`.
+7. Initialize database indexes: `npm run mongo:init` from the repository root.
+8. Start Go on `127.0.0.1:18888`: `./bin/server`.
+9. Perform edge transition preflight checks before applying edge changes:
+   - `GET http://127.0.0.1:18888/healthz = 200`
+   - `GET http://127.0.0.1:18888/ = embedded SPA 200`
+   - `GET http://127.0.0.1:18888/login = embedded SPA 200`
+10. Validate the production edge configuration: `nginx -t`.
+11. Install and reload the edge router: `sudo ./deploy/nginx/setup.sh [listen_port]`.
+12. Verify edge operations:
+    - Edge API: `GET http://localhost/api/auth/me` (routes to Go, 401 unauthenticated)
+    - Edge SPA: `GET http://localhost/` and `GET http://localhost/login` (routes to Go, 200 embedded SPA shell)
+13. Log in with the bootstrap `admin` account.
+14. Create named operator/viewer accounts and store credentials securely.
 
-The supported Next.js production model is the single documented `next start` command
-(`npm run start`, bound to `127.0.0.1:13333`). There is no standalone-server
-deployment path.
+Operators must NOT start Next.js for production operation. Next.js is retained only for
+explicit legacy rollback.
+
+## Explicit Rollback Contract
+
+Rollback to the legacy Next.js runtime is strictly manual and operator-initiated:
+
+1. Build and start legacy Next.js on `127.0.0.1:13333`:
+   ```bash
+   cd frontend
+   npm run start   # next start -H 127.0.0.1 -p 13333
+   ```
+2. Install the temporary legacy Next edge configuration:
+   ```bash
+   sudo ./deploy/nginx/setup-next-legacy.sh [listen_port]
+   ```
+3. Confirm `nginx -t` passes.
+4. Reload Nginx (`sudo systemctl reload nginx`).
+5. Verify edge UI routes to Next (:13333) and API routes to Go (:18888).
+
+### No Silent Rollback
+
+Production `xcloud.conf` contains no automatic fallback or reverse-proxy failover to Next.js.
+When the Go backend is unavailable, Nginx fails closed with HTTP 502/503/504 for both
+UI and API paths. Automatic runtime fallback is prohibited to prevent inconsistent
+state or silent behavioral differences between UI versions.
 
 MongoDB may remain disabled at boot on development hosts. Start it only when needed with `sudo systemctl start mongod`, and stop it with `sudo systemctl stop mongod`; do not run `systemctl enable mongod`.
 

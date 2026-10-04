@@ -88,7 +88,8 @@ for (const pattern of forbiddenInAgents) {
 assert.ok(agents.includes('Best-effort / non-business-gating operation logging'), 'AGENTS.md must document best-effort operation logging');
 assert.ok(agents.includes('Nginx'), 'AGENTS.md must describe the Nginx edge');
 assert.ok(agents.includes('127.0.0.1:18888'), 'AGENTS.md must document the Go upstream 127.0.0.1:18888');
-assert.ok(agents.includes('127.0.0.1:13333'), 'AGENTS.md must document the Next.js upstream 127.0.0.1:13333');
+assert.ok(agents.includes('127.0.0.1:13333'), 'AGENTS.md must document the retained legacy Next.js contract 127.0.0.1:13333');
+assert.ok(agents.includes('embedded static React SPA') || agents.includes('embedded static SPA'), 'AGENTS.md must document Go embedded SPA hosting');
 assert.ok(agents.includes('84 exact METHOD+PATH registrations'), 'AGENTS.md must document the 84 Go registration authority');
 assert.ok(agents.includes('Route authority'), 'AGENTS.md must document the derived Go registration authority');
 assert.ok(agents.includes('the derived Go registration set'), 'AGENTS.md must derive route authority from the Go registration set');
@@ -102,6 +103,7 @@ const forbiddenInDeployment = [
   'upstream golang',
   'location /api/subscribers',
   'still go to Next.js during migration',
+  'upstream xcloud_next',
 ];
 
 for (const pattern of forbiddenInDeployment) {
@@ -112,7 +114,8 @@ for (const pattern of forbiddenInDeployment) {
 }
 
 assert.ok(deployment.includes('127.0.0.1:18888'), 'deployment.md must document the Go upstream 127.0.0.1:18888');
-assert.ok(deployment.includes('127.0.0.1:13333'), 'deployment.md must document the Next.js upstream 127.0.0.1:13333');
+assert.ok(deployment.includes('127.0.0.1:13333'), 'deployment.md must document the retained legacy Next.js contract 127.0.0.1:13333');
+assert.ok(deployment.includes('upstream xcloud_go'), 'deployment.md must document the single Go upstream xcloud_go');
 assert.ok(deployment.includes('location = /api'), 'deployment.md must document the exact /api Go location');
 assert.ok(deployment.includes('location /api/'), 'deployment.md must document the /api/ Go location');
 assert.ok(deployment.includes('/api/notifications/stream'), 'deployment.md must document the SSE location');
@@ -139,7 +142,9 @@ const readme = fs.readFileSync(readmePath, 'utf8');
 assert.ok(!readme.includes('approval governance'), 'README.md must not list active approval governance in features');
 assert.ok(!/route-owner table/i.test(readme), 'README.md must not present a route-owner table as the current architecture');
 assert.ok(readme.includes('127.0.0.1:18888'), 'README.md must document the Go upstream 127.0.0.1:18888');
-assert.ok(readme.includes('127.0.0.1:13333'), 'README.md must document the Next.js upstream 127.0.0.1:13333');
+assert.ok(readme.includes('127.0.0.1:13333'), 'README.md must document the retained legacy Next.js contract 127.0.0.1:13333');
+assert.ok(readme.includes('React 19'), 'README.md must document React 19 in production tech stack');
+assert.ok(readme.includes('Vite 8'), 'README.md must document Vite 8 in production tech stack');
 
 // 7. docs/README.md - documentation authority model
 const docsReadmePath = path.join(ROOT, 'docs/README.md');
@@ -180,7 +185,7 @@ const systemArchPath = path.join(ROOT, 'docs/architecture/system-architecture.md
 const systemArch = fs.readFileSync(systemArchPath, 'utf8');
 assert.ok(systemArch.includes('Nginx'), 'system-architecture.md must describe the Nginx edge');
 assert.ok(systemArch.includes('127.0.0.1:18888'), 'system-architecture.md must document the Go upstream 127.0.0.1:18888');
-assert.ok(systemArch.includes('127.0.0.1:13333'), 'system-architecture.md must document the Next.js upstream 127.0.0.1:13333');
+assert.ok(systemArch.includes('127.0.0.1:13333'), 'system-architecture.md must document the retained legacy Next.js contract 127.0.0.1:13333');
 assert.ok(!/route-owner table/i.test(systemArch), 'system-architecture.md must not present a route-owner table as the current architecture');
 
 // 8. Current documentation framework version must match the installed manifest.

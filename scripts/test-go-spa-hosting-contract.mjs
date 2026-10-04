@@ -72,12 +72,16 @@ for (const file of goFiles) {
   assert.ok(!content.includes('os/exec') || !content.includes('"node"'), `Backend source ${file} must not invoke node at runtime`);
 }
 
-// 9. Verify Nginx configuration is unchanged (still routes / to Next :13333 and /api to Go :18888)
+// 9. Verify Nginx configuration (single upstream xcloud_go for edge, legacy Next retained in xcloud-next-legacy.conf)
 const nginxConfPath = join(root, 'deploy', 'nginx', 'xcloud.conf');
 assert.ok(existsSync(nginxConfPath), 'deploy/nginx/xcloud.conf must exist');
 const nginxConf = readFileSync(nginxConfPath, 'utf8');
-assert.ok(nginxConf.includes('proxy_pass http://xcloud_next;'), 'Nginx must continue proxying /* to Next.js :13333');
-assert.ok(nginxConf.includes('proxy_pass http://xcloud_go;'), 'Nginx must continue proxying /api to Go :18888');
+assert.ok(nginxConf.includes('proxy_pass http://xcloud_go;'), 'Nginx must proxy to Go :18888');
+const legacyConfPath = join(root, 'deploy', 'nginx', 'xcloud-next-legacy.conf');
+if (existsSync(legacyConfPath)) {
+  const legacyConf = readFileSync(legacyConfPath, 'utf8');
+  assert.ok(legacyConf.includes('proxy_pass http://xcloud_next;'), 'Legacy Nginx config must retain Next :13333 proxy');
+}
 
 // 10. Verify Next production UI contract remains unchanged
 assert.ok(!existsSync(join(root, 'frontend', 'src', 'app', 'api')), 'Next.js business API tree must remain absent');

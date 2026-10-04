@@ -15,11 +15,11 @@ approved implementation phase changes them.
 
 The roadmap preserves these present facts:
 
-- Nginx is the sole public browser edge.
-- Next.js runs on loopback `127.0.0.1:13333` for current UI rendering and its
-  UI-only navigation guard.
+- Nginx is the sole public browser edge (single upstream `xcloud_go`).
 - Go runs on loopback `127.0.0.1:18888` and owns every current production API
-  operation and API security authority.
+  operation, API security authority, and embedded static React SPA hosting.
+- Next.js source and loopback `127.0.0.1:13333` contract remain retained for legacy
+  rollback only, pending formal retirement and removal upon subsequent retirement.
 - MongoDB `xcloud` and `xcloud_ops` remain the current source of truth.
 - The OCS management plane is frozen; the charging plane remains excluded.
 - Authorized business operations use direct execution with RBAC, fresh actor
@@ -29,8 +29,8 @@ The roadmap preserves these present facts:
 
 | Stage | Runtime | Data | Primary capability |
 | --- | --- | --- | --- |
-| Current | Nginx + Next.js + Go | MongoDB | Subscriber and OCS operations |
-| Short term | Nginx + Go + embedded SPA | MongoDB | Unified application runtime and modular control plane |
+| Current | Nginx + Go + embedded SPA | MongoDB | Consolidated single-upstream runtime (Next.js retained for rollback) |
+| Short term | Nginx + Go + canonical frontend | MongoDB | Full retirement of Next.js and frontend directory canonicalization |
 | Medium term | Modular Go platform with event and telemetry foundations | MongoDB plus workload-specific stores where justified | Inventory, adapters, workflow, and assurance |
 | Long term | Service-based and independently scalable platform where required | Multi-plane persistence | Multi-domain automation and closed-loop operations |
 | Future | Autonomous operations platform | Digital operational model | Intent, digital twin, and guarded AI agents |
@@ -58,30 +58,22 @@ Go 127.0.0.1:18888
 MongoDB: xcloud + xcloud_ops
 ```
 
-The planned change replaces the production Next.js runtime with a static React SPA
-served by Go. It retains Nginx as the public edge, Go `:18888` as the internal
-application listener, current browser-relative API paths, and MongoDB as the source
-of truth. Production port `13333` is retired only after an implementation phase has
-completed the transition and acceptance validation.
-
-This roadmap does not introduce Vite, React Router, Go SPA hosting, a single-upstream
-Nginx configuration, or a port removal in the current phase.
+Single-upstream consolidation completed the production edge transition: Nginx now proxies all API and UI traffic
+to Go `:18888`. Next.js `:13333` receives zero production edge traffic and is retained
+only for explicit operator rollback. Port `13333` and legacy Next source in `frontend/`
+will be formally retired upon subsequent retirement, which will also rename `frontend-spa/` to `frontend/`.
 
 ### Implementation Status
 
 The parallel SPA foundation in `frontend-spa/` includes the shared application shell,
 cross-cutting providers, role-aware navigation metadata, compatibility redirects,
-read-side business projections, and governed mutation parity across subscriber
-management, OCS balance adjustments, subscriber contracts, tariff plans, profiles,
-user management, and system-health diagnostics and remediation.
-/system-health operational mutation parity completed.
-Parallel SPA business read parity is implemented; parallel SPA governed business mutation
-parity is implemented; parallel SPA governed operational mutation parity is implemented;
-embedded static SPA hosting capability is established internally in Go (a specially built Go
-binary can internally serve embedded SPA assets, but Nginx does not send UI traffic to it yet);
-frontend-spa production transition is NOT STARTED; and the Next.js production runtime
-remains active on `:13333`. Nginx routing remains unchanged. The Vite listener on
-`127.0.0.1:13334` is a loopback-only, migration-only development listener.
+read-side business projections, governed business mutations, and operational mutations.
+Go embedded static SPA hosting is edge-active. Nginx routes all production traffic
+to Go `:18888`.
+`frontend-spa` is the active production SPA source.
+The Next.js production runtime is edge-inactive, with source retained in `frontend/`
+for rollback only. The Vite listener on `127.0.0.1:13334` remains a loopback-only
+development listener. subsequent retirement and canonicalization will retire Next.js and canonicalize the frontend directory.
 
 ### Internal Backend Direction
 

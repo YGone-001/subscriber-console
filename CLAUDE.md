@@ -97,25 +97,24 @@ Browser
    |
    v
 Nginx (唯一对外入口)
-   |-----------------------------|
-   v                             v
-Next.js 127.0.0.1:13333        Go 127.0.0.1:18888
-UI / Rendering                 Business API (owner)
-UI 导航守卫（不再转发 API）    Auth identity + session validation
-不解析 JWT / 不访问 Mongo       Read + write APIs
-                               (84 条 METHOD+PATH 注册)
-   |                             |
-   +-------------+---------------+
-                 |
-                 v
-              MongoDB
+   |
+   v
+Go 127.0.0.1:18888
+Business API (owner)
+Auth identity + session validation
+Read + write APIs (84 条 METHOD+PATH 注册)
+Embedded static React SPA (生产 UI)
+   |
+   v
+MongoDB
 ```
 
 Current production state:
 
-- Nginx 是唯一对外入口，负责 `/api` 与 `/api/*` 路由；`deploy/nginx/xcloud.conf` 定义两个 loopback upstream（Next.js 127.0.0.1:13333、Go 127.0.0.1:18888），并剥离客户端身份头。
-- Go Backend 位于 `backend/`，生产业务 API 全部由 Go 独占；路由权威来源 = 84 条 Go 注册（`backend/cmd/server/main.go` + `backend/internal/remediation/handler.go`）。
-- Next.js 保留前端（UI 渲染 + `proxy.ts` UI 导航守卫：不解析 JWT、不访问 Mongo、不注入身份头、不转发 API 请求），并保留无 JWT/Mongo 的前端依赖集合。
+- Nginx 是唯一对外入口，单一应用 upstream (`xcloud_go` 127.0.0.1:18888)，代理 `/api`、`/api/*`、SSE 及 `/*`（SPA shell 与静态资源），并剥离客户端身份头。
+- Go Backend 位于 `backend/`，生产业务 API 全部由 Go 独占，并内嵌托管静态 React SPA；路由权威来源 = 84 条 Go 注册（`backend/cmd/server/main.go` + `backend/internal/remediation/handler.go`）。
+- `frontend-spa/` 为当前生产 SPA 源码，构建为静态资产嵌入 Go 二进制程序中。
+- Next.js 源码保留在 `frontend/`（契约：127.0.0.1:13333），仅作为显式回滚目的保留，生产环境 edge 流量为 0。生产环境不需要 Node 运行时。将在 subsequent retirement and canonicalization 中正式退役并清理。
 - Next.js 业务后端（`frontend/src/app/api/**` 与 `frontend/src/server/**`）不存在，不得重建。
 - API 路径保持 `/api/...` 不变。
 - 前端 SWR 不感知 Node/Go ownership。
@@ -123,11 +122,11 @@ Current production state:
 
 ### 2.1 Short-Term Planned Target
 
-The short-term target is planned, not implemented: Nginx remains the public edge and
-proxies to Go on `127.0.0.1:18888`, while Go serves both the API and an embedded
-static React SPA. The production Next.js runtime and `:13333` listener are retired
-only by a future governed migration. MongoDB `xcloud` and `xcloud_ops` remain the
-existing source of truth, and Go remains the security authority.
+Short-term consolidation is completed: Nginx proxies to Go on `127.0.0.1:18888`,
+and Go serves both the API and the embedded static React SPA.
+The next evolutionary step (subsequent retirement and canonicalization) will retire Next.js source and port 13333, and
+canonicalize `frontend-spa/` as `frontend/`.
+MongoDB `xcloud` and `xcloud_ops` remain the source of truth, and Go remains the security authority.
 
 The planned architecture evolution authority is
 `docs/architecture/architecture-evolution-roadmap.md`. It must not be treated as a

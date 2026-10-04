@@ -75,73 +75,70 @@ Browser
    |
    v
 Nginx (only public origin)
-   |----------------------|
-   v                      v
-Next.js 127.0.0.1:13333   Go 127.0.0.1:18888
-UI / Rendering            Business API (owner)
-UI navigation guard       Auth identity + session validation
-(no JWT, no Mongo,        Read + write APIs
- no identity headers,     (84 METHOD+PATH registrations)
- no API forwarding)
-   |                      |
-   +----------+-----------+
-              |
-              v
-           MongoDB
-      xcloud + xcloud_ops
+   |
+   v
+Go 127.0.0.1:18888
+Business API (owner)
+Auth identity + session validation
+Read + write APIs (84 METHOD+PATH registrations)
+Embedded static React SPA (production UI)
+   |
+   v
+MongoDB
+xcloud + xcloud_ops
 ```
 
 Current browser routing:
 
 ```text
 Browser -> Nginx
-           ├─ /api, /api/*  -> Go :18888
-           └─ /*             -> Next.js :13333
+           └── /*, /api/* -> Go :18888
 ```
 
 Important:
 
 ```text
-Nginx owns production API routing; Go owns every production API operation and API auth identity.
+Nginx owns production routing to the single Go upstream xcloud_go (127.0.0.1:18888).
+Go owns every production API operation, auth identity, and embedded static React SPA.
 Route authority = the derived Go registration set (84 exact METHOD+PATH registrations).
+frontend-spa/ is the current production SPA source, built to static assets and embedded into the Go binary.
+Next.js source in frontend/ (contract: 127.0.0.1:13333) is retained as a legacy/rollback contract only, pending retirement.
+Next.js receives zero production edge traffic. Production Node runtime required = NO.
 The Next.js business backend (app/api + src/server) does not exist.
-Next.js renders the UI and runs a UI-only navigation guard (proxy.ts); it never decodes a JWT, never reads MongoDB, never injects identity headers and never forwards an API request.
 Frontend API paths remain unchanged.
 ```
 
 Architecture evolution roadmap status:
 
 ```text
-Current runtime                 = unchanged
-Architecture evolution roadmap  = established
-Next implementation direction   = short-term runtime consolidation
+Current runtime                 = Nginx -> Go :18888 (API + embedded static SPA)
+Architecture evolution roadmap  = single-upstream consolidation completed
+Next implementation direction   = subsequent retirement and canonicalization (Next.js retirement & frontend canonicalization)
 ```
 
-The planned consolidation target is Nginx -> Go `:18888` serving API plus an embedded
-static React SPA. It is not deployed: the current production state continues to use
-Next.js on `:13333`. See `docs/architecture/architecture-evolution-roadmap.md`.
+The runtime consolidation target (Nginx -> Go `:18888` serving API plus embedded static React SPA)
+is now deployed and edge-active. Next.js `:13333` is retained for legacy rollback only.
 
 Short-term continuation guidance:
 
 ```text
-Current production  = Nginx -> Next.js :13333 + Go :18888
-Migration target    = frontend-spa/ parallel static SPA with shared shell, read parity, and governed mutation parity
-Parallel SPA business read parity = implemented
-Parallel SPA governed business mutation parity = implemented
-System-health operational mutations = implemented (operational mutation parity)
-Embedded static SPA hosting = foundation established internally (Go binary embeds and serves SPA internally)
-Production transition = NOT STARTED
-Nginx UI routing = Next.js :13333 (unchanged)
-Vite development    = 127.0.0.1:13334 (migration-only, loopback-only)
+Current production                  = Nginx -> Go :18888 (API + embedded static SPA)
+Nginx application upstreams         = single upstream (xcloud_go)
+Go SPA hosting capability           = YES
+Go SPA edge-active                  = YES
+frontend-spa production-active      = YES
+Next.js source present              = YES
+Next.js removed                     = NO
+port 13333 retired                  = NO
+Next.js edge-active                 = NO
+production Node runtime required    = NO
+Vite development                    = 127.0.0.1:13334 (migration-only, loopback-only)
 ```
 
-`frontend-spa/` is not production-active. Its foundation, shared providers,
-auth-aware shell, role-filtered navigation, read-side business projections,
-governed business mutation controls, and governed operational mutations are isolated
-from the production runtime. /system-health operational mutation parity completed.
-Embedded static SPA hosting capability is established internally in Go; a specially built
-Go binary can internally serve embedded SPA assets, but Nginx does not send UI traffic to it yet.
-Next.js :13333 remains the production UI runtime.
+`frontend-spa/` is the active production SPA source, built to static assets and embedded
+into the Go binary. The directory name remains temporary until subsequent convergence.
+Next.js source in `frontend/` and its `127.0.0.1:13333` listener contract are retained
+for rollback purposes only, pending removal upon subsequent retirement.
 
 ---
 
@@ -197,7 +194,8 @@ One client, two handles.
 ```text
 Public edge                          = Nginx (deploy/nginx/xcloud.conf)
 API owner (/api, /api/*)             = Go backend, 127.0.0.1:18888
-UI owner (/*)                        = Next.js, 127.0.0.1:13333
+UI owner (/*)                        = Go backend (embedded SPA), 127.0.0.1:18888
+Retained legacy Next UI contract     = Next.js, 127.0.0.1:13333 (retained for rollback / pending retirement)
 Go production API registrations      = 84 exact METHOD+PATH registrations
 Next.js business API operations      = 0
 Next.js MongoDB access               = 0
@@ -210,21 +208,19 @@ OCS management writes                = 13 (tariff plan + subscriber contract + b
 ### 5.0 Deployment Boundary
 
 ```text
-Sole public edge                     = Nginx
-Next production listener             = 127.0.0.1:13333 (`next start -H 127.0.0.1 -p 13333`)
+Sole public edge                     = Nginx (single upstream xcloud_go)
 Go production listener               = 127.0.0.1:18888 (`HTTP_ADDR` default)
+Retained legacy Next listener        = 127.0.0.1:13333 (`next start -H 127.0.0.1 -p 13333`, rollback only)
 Loopback listener enforced by service, not firewall = YES
 Standalone deployment path           = removed
 Go business production changes       = 0
 Go registration set                  = 84
 ```
 
-- Edge: `deploy/nginx/xcloud.conf` uses two keepalive upstreams - `xcloud_next` (`127.0.0.1:13333`) and `xcloud_go` (`127.0.0.1:18888`). `location = /api`, `location /api/` and the dedicated unbuffered `location = /api/notifications/stream` proxy to Go; `location /` proxies to the Next.js UI. All API locations strip client identity headers (`X-User` / `X-Role` / `X-Permissions`) and generate `Host` / `X-Real-IP` / `X-Forwarded-For` / `X-Forwarded-Proto`; `client_max_body_size 10m`. `deploy/nginx/setup.sh [listen_port]` validates with `nginx -t` before reload.
-- UI guard: `frontend/src/proxy.ts` is a UI-only navigation guard - no JWT decode, no HS256 verify, no MongoDB, no identity headers, no API forwarding. Protected pages without `auth_token` redirect to `/login?from=...`; the guard consults Go `GET /api/auth/me` with the incoming cookie (200 allow, 401 redirect + expire cookie, 503 fail-closed `AUTH_UNAVAILABLE` / `AUTH_SERVICE_UNAVAILABLE`). Its `config.matcher` excludes `api`.
-- Route authority: the derived Go registration set (84 exact METHOD+PATH registrations parsed from `backend/cmd/server/main.go` plus `backend/internal/remediation/handler.go`, shared helper `scripts/lib/go-registrations.mjs`). Migration scripts derive from it.
-- Next.js runtime: UI rendering plus the UI-only navigation guard. The Next.js business backend (`frontend/src/app/api/**`, `frontend/src/server/**`) does not exist. The frontend holds no route-owner resolver and no server-side session/Mongo runtime.
+- Edge: `deploy/nginx/xcloud.conf` uses a single keepalive upstream `xcloud_go` (`127.0.0.1:18888`). `location = /api`, `location /api/`, the dedicated unbuffered `location = /api/notifications/stream`, and `location /` all proxy to Go. All locations strip client identity headers (`X-User` / `X-Role` / `X-Permissions`) and generate `Host` / `X-Real-IP` / `X-Forwarded-For` / `X-Forwarded-Proto`; `client_max_body_size 10m`. `deploy/nginx/setup.sh [listen_port]` validates with `nginx -t` before reload. The temporary legacy Next configuration `deploy/nginx/xcloud-next-legacy.conf` is isolated for explicit rollback only.
+- Legacy Next.js runtime: UI rendering plus the UI-only navigation guard (`frontend/src/proxy.ts`), retained for rollback only. Next.js receives zero production edge traffic. Production Node runtime required = NO. The Next.js business backend (`frontend/src/app/api/**`, `frontend/src/server/**`) does not exist.
 - Frontend dependencies: UI-only set. `jose`, `mongodb` and dev `jiti` are not dependencies; `frontend/src/lib/security.ts` keeps only the UI password policy (`isPasswordStrong`, `PASSWORD_POLICY_MESSAGE`); `next.config.ts` has no `serverExternalPackages: ['mongodb']`.
-- Acceptance: `scripts/test-deployment-boundary.mjs` exercises the production topology (real Nginx + real Go + real `next build` / `next start` + real MongoDB) and proves, over real TCP against a real runner non-loopback address, that 127.0.0.1:{13333,18888} is reachable and the non-loopback address is not.
+- Acceptance: `scripts/test-deployment-boundary.mjs` exercises the production topology (real Nginx + real bundled Go with embedded SPA + real MongoDB) and proves single-upstream attribution, edge asset identity, and fail-closed behavior without requiring a running Next.js process.
 - Certification: `scripts/test-production-architecture.mjs` re-derives the current production architecture from primary source using semantic invariants only (no chronological baseline).
 - Independent architecture suites: `scripts/test-api-ownership-invariants.mjs`, `scripts/test-next-backend-absence.mjs`, `scripts/test-frontend-runtime-dependencies.mjs`, `scripts/test-repository-normalization.mjs`.
 

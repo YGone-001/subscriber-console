@@ -17,35 +17,30 @@ Browser
    |
    v
 Nginx  (sole public edge)
-   |--------------------------------|
-   |                                |
-   v                                v
-Next.js  127.0.0.1:13333        Go  127.0.0.1:18888
-UI / rendering                  Business API (owner)
-UI navigation guard             Auth identity + session validation
-(no JWT, no MongoDB,            Read + write APIs
- no identity headers,           (84 exact METHOD+PATH registrations)
- no API forwarding)
-   |                                |
-   +---------------+----------------+
-                   |
-                   v
-                MongoDB
-           xcloud + xcloud_ops
+   |
+   v
+Go  127.0.0.1:18888
+   |-- Business API (owner)
+   |-- Auth identity + session validation
+   |-- Read + write APIs (84 exact METHOD+PATH registrations)
+   `-- Embedded static React SPA (UI rendering, browser history routing, static assets)
+   |
+   v
+MongoDB: xcloud + xcloud_ops
 ```
 
 ### Routing
 
-Nginx owns production API routing:
+Nginx owns production routing to the single application upstream:
 
 ```text
 /api                      -> Go 127.0.0.1:18888
 /api/*                    -> Go 127.0.0.1:18888
 /api/notifications/stream -> Go 127.0.0.1:18888 (unbuffered SSE)
-/* (non-API)              -> Next.js 127.0.0.1:13333
+/* (non-API)              -> Go 127.0.0.1:18888 (embedded SPA shell / static assets)
 ```
 
-Both application services bind loopback only and are reachable exclusively through
+The Go application service binds loopback only and is reachable exclusively through
 Nginx. Route authority is the derived Go registration set (84 exact METHOD+PATH
 registrations parsed from `backend/cmd/server/main.go` plus
 `backend/internal/remediation/handler.go`, shared helper
@@ -53,19 +48,10 @@ registrations parsed from `backend/cmd/server/main.go` plus
 
 ### Frontend
 
-- Next.js 16.3.8 App Router
-- React 19.2.4
-- TypeScript 5.x
-- Tailwind CSS 4
-- SWR for data fetching
-- Recharts for visualization
-- Lucide React for icons
+- **Production UI**: `frontend-spa/` (React 19, Vite 8, React Router, Tailwind CSS, Lucide React). Built to static assets and embedded directly into the Go binary.
+- **Legacy UI**: `frontend/` (Next.js 16.3.8 App Router, bound to `127.0.0.1:13333`). Retained as a legacy/rollback runtime contract only, pending formal retirement upon subsequent retirement. Next.js edge traffic is zero in production.
 
-Location: `frontend/`
-
-The Next.js runtime renders the UI and runs a UI-only navigation guard
-(`frontend/src/proxy.ts`). It holds no business API handler, no JWT runtime, no
-MongoDB client, and injects no identity headers.
+The Next.js business backend (`frontend/src/app/api/**` and `frontend/src/server/**`) does not exist.
 
 ### Go Backend
 

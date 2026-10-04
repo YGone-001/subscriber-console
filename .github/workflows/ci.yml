@@ -409,11 +409,11 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v7
         with:
-          node-version-file: frontend/.nvmrc
+          node-version-file: frontend-spa/.nvmrc
           cache: npm
           cache-dependency-path: |
             package-lock.json
-            frontend/package-lock.json
+            frontend-spa/package-lock.json
 
       - name: Setup Go
         uses: actions/setup-go@v7
@@ -424,7 +424,18 @@ jobs:
       - name: Install dependencies
         run: |
           npm ci
-          cd frontend && npm ci
+          cd frontend-spa && npm ci
+
+      - name: SPA build
+        working-directory: frontend-spa
+        run: npm run build
+
+      - name: Stage SPA for Go
+        run: node scripts/stage-spa-for-go.mjs
+
+      - name: Go bundled build
+        working-directory: backend
+        run: go build -o bin/server ./cmd/server
 
       - name: Install Nginx
         run: |
@@ -464,10 +475,6 @@ jobs:
             echo '}'
           } > "$PREFIX/conf/xcloud.conf"
           nginx -t -p "$PREFIX" -c "$PREFIX/conf/xcloud.conf"
-
-      - name: Build frontend for the real Next.js production runtime proof
-        working-directory: frontend
-        run: npm run build
 
       - name: Deployment boundary acceptance
         run: node scripts/test-deployment-boundary.mjs
@@ -585,6 +592,8 @@ jobs:
     needs:
       - node
       - go
+      - spa-foundation
+      - go-spa-hosting
       - direct-operations
       - user-management-e2e
       - authentication

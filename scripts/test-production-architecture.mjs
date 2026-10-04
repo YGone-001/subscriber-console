@@ -159,12 +159,14 @@ function scanNginx() {
   if (!raw) {
     return {
       present: false,
+      upstreamCount: 0,
       goUpstreamOk: false,
-      nextUpstreamOk: false,
       exactApiToGo: false,
       prefixApiToGo: false,
       streamToGo: false,
-      uiToNext: false,
+      uiToGo: false,
+      nextUpstreamPresent: false,
+      nextHmrPresent: false,
       identityHeadersStripped: false,
       bodyLimitOk: false,
       sseUnbuffered: false,
@@ -190,14 +192,21 @@ function scanNginx() {
   const streamApi = find('= /api/notifications/stream');
   const uiRoot = find('/');
 
+  const uiToGo = proxiesTo(uiRoot, 'xcloud_go');
+  const nextUpstreamPresent = Boolean(upstreams.xcloud_next);
+  const nextHmrPresent = Boolean(find('/_next/hmr'));
+  const upstreamCount = Object.keys(upstreams).length;
+
   return {
     present: true,
+    upstreamCount,
     goUpstreamOk: (upstreams.xcloud_go ?? '').includes(EXPECTED_GO_LISTENER),
-    nextUpstreamOk: (upstreams.xcloud_next ?? '').includes(EXPECTED_NEXT_LISTENER),
     exactApiToGo: proxiesTo(exactApi, 'xcloud_go'),
     prefixApiToGo: proxiesTo(prefixApi, 'xcloud_go'),
     streamToGo: proxiesTo(streamApi, 'xcloud_go'),
-    uiToNext: proxiesTo(uiRoot, 'xcloud_next'),
+    uiToGo,
+    nextUpstreamPresent,
+    nextHmrPresent,
     identityHeadersStripped:
       apiLocations.length > 0 &&
       apiLocations.every(
@@ -352,8 +361,8 @@ async function main() {
   );
   check(
     'PA-12',
-    nginx.nextUpstreamOk && nginx.uiToNext,
-    `next_upstream=${nginx.nextUpstreamOk} ui_to_next=${nginx.uiToNext}`,
+    nginx.uiToGo && !nginx.nextUpstreamPresent && !nginx.nextHmrPresent && nginx.upstreamCount === 1,
+    `ui_to_go=${nginx.uiToGo} next_upstream_present=${nginx.nextUpstreamPresent} next_hmr_present=${nginx.nextHmrPresent} upstream_count=${nginx.upstreamCount}`,
   );
   check(
     'PA-13',
@@ -374,7 +383,7 @@ async function main() {
   check(
     'PA-15',
     nextListener.listener === EXPECTED_NEXT_LISTENER,
-    `next_listener_expected=${EXPECTED_NEXT_LISTENER} derived=${nextListener.listener} start_command=${nextListener.command}`,
+    `next_retained_listener_contract=${EXPECTED_NEXT_LISTENER} derived=${nextListener.listener} (retained legacy/rollback source/runtime contract)`,
   );
   check(
     'PA-16',
@@ -427,7 +436,10 @@ async function main() {
   if (ownership.chargingMutations > 0) blockers.push('CHARGING_MUTATIONS');
   if (!ownership.architectureContractReady) blockers.push('API_OWNERSHIP_NOT_READY');
   if (!nginx.goUpstreamOk || !nginx.exactApiToGo || !nginx.prefixApiToGo) blockers.push('NGINX_API_NOT_ROUTED_TO_GO');
-  if (!nginx.nextUpstreamOk || !nginx.uiToNext) blockers.push('NGINX_UI_NOT_ROUTED_TO_NEXT');
+  if (!nginx.uiToGo) blockers.push('NGINX_UI_NOT_ROUTED_TO_GO');
+  if (nginx.nextUpstreamPresent) blockers.push('NGINX_NEXT_UPSTREAM_ACTIVE');
+  if (nginx.nextHmrPresent) blockers.push('NGINX_NEXT_HMR_ACTIVE');
+  if (nginx.upstreamCount !== 1) blockers.push(`NGINX_UPSTREAM_COUNT=${nginx.upstreamCount}`);
   if (!nginx.identityHeadersStripped) blockers.push('NGINX_IDENTITY_HEADERS_NOT_STRIPPED');
   if (nextListener.listener !== EXPECTED_NEXT_LISTENER) blockers.push(`NEXT_LISTENER=${nextListener.listener}`);
   if (goListener.defaultAddr !== EXPECTED_GO_LISTENER) blockers.push(`GO_LISTENER=${goListener.defaultAddr}`);
@@ -466,12 +478,17 @@ async function main() {
   console.log(`production_architecture_route_resolvers=${routeOwner.resolverHits}`);
   console.log('');
   console.log('production_architecture_edge_api_owner=nginx->go');
-  console.log('production_architecture_edge_ui_owner=nginx->next');
+  console.log('production_architecture_edge_ui_owner=nginx->go');
+  console.log(`production_architecture_nginx_single_upstream=${nginx.upstreamCount === 1 && nginx.goUpstreamOk && !nginx.nextUpstreamPresent}`);
+  console.log(`production_architecture_nginx_ui_to_go=${nginx.uiToGo}`);
+  console.log('production_architecture_nginx_production_next_upstream=false');
+  console.log('production_architecture_nginx_production_next_hmr=false');
   console.log(`production_architecture_nginx_identity_headers_stripped=${nginx.identityHeadersStripped}`);
   console.log(`production_architecture_nginx_body_limit_10m=${nginx.bodyLimitOk}`);
   console.log(`production_architecture_nginx_sse_buffering_disabled=${nginx.sseUnbuffered}`);
   console.log('');
-  console.log(`production_architecture_next_listener=${nextListener.listener}`);
+  console.log(`production_architecture_retained_next_listener=${nextListener.listener} (legacy/rollback contract)`);
+  console.log('production_architecture_active_production_ui_listener=127.0.0.1:18888');
   console.log(`production_architecture_go_listener=${goListener.defaultAddr}`);
   console.log(`production_architecture_standalone_next_production_path=${standaloneProductionPath}`);
   console.log('');

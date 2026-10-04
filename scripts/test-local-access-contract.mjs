@@ -36,6 +36,7 @@ const nextConfigPath = resolve(root, 'frontend/next.config.ts');
 const nextAppApiRoot = resolve(root, 'frontend/src/app/api');
 const frontendSrcRoot = resolve(root, 'frontend/src');
 const nginxConfPath = resolve(root, 'deploy/nginx/xcloud.conf');
+const legacyNginxConfPath = resolve(root, 'deploy/nginx/xcloud-next-legacy.conf');
 const readmePath = resolve(root, 'README.md');
 const deploymentPath = resolve(root, 'docs/operations/deployment.md');
 const agentsPath = resolve(root, 'AGENTS.md');
@@ -186,20 +187,44 @@ function main() {
   const nextApiReverseProxy = apiReverseProxyFunctions(srcSources);
   check('L5', nextApiReverseProxy === 0, `next_api_reverse_proxy=${nextApiReverseProxy}`);
 
-  // L6 - Nginx API ownership unchanged -------------------------------------------------
+  // L6 - Production Nginx edge authority (single Go upstream for API and UI) ------------
   const nginx = existsSync(nginxConfPath) ? read(nginxConfPath) : '';
   const apiExact = locationBlock(nginx, /^\s*location\s+=\s*\/api\s*\{/);
   const apiPrefix = locationBlock(nginx, /^\s*location\s+\/api\/\s*\{/);
   const uiRoot = locationBlock(nginx, /^\s*location\s+\/\s*\{/);
   const apiToGo = Boolean(apiExact && /proxy_pass\s+http:\/\/xcloud_go\b/.test(apiExact));
   const apiPrefixToGo = Boolean(apiPrefix && /proxy_pass\s+http:\/\/xcloud_go\b/.test(apiPrefix));
-  const uiToNext = Boolean(uiRoot && /proxy_pass\s+http:\/\/xcloud_next\b/.test(uiRoot));
-  const nginxUpstreams = /upstream\s+xcloud_go\s*\{\s*server\s+127\.0\.0\.1:18888\b/.test(nginx) &&
-    /upstream\s+xcloud_next\s*\{\s*server\s+127\.0\.0\.1:13333\b/.test(nginx);
+  const uiToGo = Boolean(uiRoot && /proxy_pass\s+http:\/\/xcloud_go\b/.test(uiRoot));
+  const hasGoUpstream = /upstream\s+xcloud_go\s*\{\s*server\s+127\.0\.0\.1:18888\b/.test(nginx);
+  const nextUpstreamOccurrences = (nginx.match(/xcloud_next/g) || []).length;
+  const nextPortOccurrences = (nginx.match(/13333/g) || []).length;
+  const nextHmrOccurrences = (nginx.match(/\/_next\/hmr/g) || []).length;
+
+  const prodEdgeOk = apiToGo && apiPrefixToGo && uiToGo && hasGoUpstream &&
+    nextUpstreamOccurrences === 0 && nextPortOccurrences === 0 && nextHmrOccurrences === 0;
+
   check(
     'L6',
-    apiToGo && apiPrefixToGo && uiToNext && nginxUpstreams,
-    `nginx_api_go=${apiToGo && apiPrefixToGo} nginx_ui_next=${uiToNext} nginx_upstreams=${nginxUpstreams}`,
+    prodEdgeOk,
+    `prod_nginx_api_go=${apiToGo && apiPrefixToGo} prod_nginx_ui_go=${uiToGo} prod_go_upstream=${hasGoUpstream} xcloud_next_tokens=${nextUpstreamOccurrences} port_13333_tokens=${nextPortOccurrences} hmr_tokens=${nextHmrOccurrences}`,
+  );
+
+  // L6-LEGACY - Temporary legacy Next development edge configuration -------------------
+  const legacyNginx = existsSync(legacyNginxConfPath) ? read(legacyNginxConfPath) : '';
+  const legacyApiExact = locationBlock(legacyNginx, /^\s*location\s+=\s*\/api\s*\{/);
+  const legacyApiPrefix = locationBlock(legacyNginx, /^\s*location\s+\/api\/\s*\{/);
+  const legacyUiRoot = locationBlock(legacyNginx, /^\s*location\s+\/\s*\{/);
+  const legacyHmr = locationBlock(legacyNginx, /^\s*location\s+\/_next\/hmr\s*\{/);
+  const legacyApiToGo = Boolean(legacyApiExact && /proxy_pass\s+http:\/\/xcloud_go\b/.test(legacyApiExact)) &&
+    Boolean(legacyApiPrefix && /proxy_pass\s+http:\/\/xcloud_go\b/.test(legacyApiPrefix));
+  const legacyUiToNext = Boolean(legacyUiRoot && /proxy_pass\s+http:\/\/xcloud_next\b/.test(legacyUiRoot));
+  const legacyHmrToNext = Boolean(legacyHmr && /proxy_pass\s+http:\/\/xcloud_next\b/.test(legacyHmr));
+  const legacyConfExists = existsSync(legacyNginxConfPath);
+
+  check(
+    'L6-LEGACY',
+    legacyConfExists && legacyApiToGo && legacyUiToNext && legacyHmrToNext,
+    `legacy_conf_exists=${legacyConfExists} legacy_api_go=${legacyApiToGo} legacy_ui_next=${legacyUiToNext} legacy_hmr_next=${legacyHmrToNext}`,
   );
 
   // L7 - README full-stack URL ---------------------------------------------------------
@@ -262,7 +287,8 @@ function main() {
   console.log(`local_access_next_api_reverse_proxy=${nextApiReverseProxy}`);
   console.log('');
   console.log(`local_access_nginx_api_owner=${apiToGo && apiPrefixToGo ? 'go' : 'unknown'}`);
-  console.log(`local_access_nginx_ui_owner=${uiToNext ? 'next' : 'unknown'}`);
+  console.log(`local_access_nginx_ui_owner=${uiToGo ? 'go' : 'unknown'}`);
+  console.log(`local_access_legacy_nginx_ui_owner=${legacyUiToNext ? 'next' : 'unknown'}`);
   console.log('');
   console.log(`local_access_readme_direct_next_browser_instruction=${readmeViolations.length}`);
   console.log(`local_access_deployment_requires_edge=${deploymentRequiresEdge}`);

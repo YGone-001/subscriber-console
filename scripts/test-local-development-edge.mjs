@@ -663,8 +663,8 @@ async function main() {
     return;
   }
 
-  // Real Nginx with the repository edge configuration.
-  const repoConf = readFileSync(join(ROOT, 'deploy', 'nginx', 'xcloud.conf'), 'utf8');
+  // Real Nginx with the temporary legacy Next development configuration.
+  const repoConf = readFileSync(join(ROOT, 'deploy', 'nginx', 'xcloud-next-legacy.conf'), 'utf8');
   const effectiveConf = [
     'worker_processes 1;',
     `error_log ${nginxPath(join(NGINX_PREFIX, 'logs', 'error.log'))} warn;`,

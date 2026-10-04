@@ -477,12 +477,12 @@ function scanNginx() {
 
   const apiLocations = locations.filter((l) => l.pattern.includes('/api'));
   const goUpstreamOk = (upstreams.xcloud_go ?? '').includes('127.0.0.1:18888');
-  const nextUpstreamOk = (upstreams.xcloud_next ?? '').includes('127.0.0.1:13333');
+  const nextUpstreamPresent = Boolean(upstreams.xcloud_next);
   const apiExact = find('= /api');
   const apiPrefix = find('/api/');
   const uiRoot = find('/');
   const apiToGo = proxyTo(apiExact, 'xcloud_go') && proxyTo(apiPrefix, 'xcloud_go');
-  const uiToNext = proxyTo(uiRoot, 'xcloud_next');
+  const uiToGo = proxyTo(uiRoot, 'xcloud_go');
   const identityHeadersStripped = apiLocations.length > 0 && apiLocations.every(
     (l) => headerStripped(l.body, 'X-User') && headerStripped(l.body, 'X-Role') && headerStripped(l.body, 'X-Permissions'),
   );
@@ -492,9 +492,9 @@ function scanNginx() {
     upstreams,
     apiLocations: apiLocations.map((l) => l.pattern),
     goUpstreamOk,
-    nextUpstreamOk,
+    nextUpstreamPresent,
     apiToGo,
-    uiToNext,
+    uiToGo,
     identityHeadersStripped,
   };
 }
@@ -666,11 +666,11 @@ async function main() {
     `nginx_go_upstream=${nginx.goUpstreamOk} nginx_api_routes_to_go=${nginx.apiToGo} api_locations=[${nginx.apiLocations.join(', ')}]`,
   );
 
-  // ---- AO-07 Nginx routes the UI to Next.js --------------------------------
+  // ---- AO-07 Nginx routes the UI to Go (single upstream production) ----------
   check(
     'AO-07',
-    nginx.nextUpstreamOk && nginx.uiToNext,
-    `nginx_next_upstream=${nginx.nextUpstreamOk} nginx_ui_routes_to_next=${nginx.uiToNext}`,
+    nginx.uiToGo && !nginx.nextUpstreamPresent,
+    `nginx_ui_routes_to_go=${nginx.uiToGo} nginx_next_upstream_present=${nginx.nextUpstreamPresent}`,
   );
 
   // ---- AO-08 Nginx strips client identity headers on API locations ---------
@@ -802,7 +802,8 @@ async function main() {
   if (goRegistrationDuplicates > 0) blockers.push(`GO_REGISTRATION_DUPLICATES=${goRegistrationDuplicates}`);
   if (retiredRegistered.length > 0) blockers.push(`RETIRED_SURFACES_ACTIVE=${retiredRegistered.length}`);
   if (!nginx.goUpstreamOk || !nginx.apiToGo) blockers.push('NGINX_API_NOT_ROUTED_TO_GO');
-  if (!nginx.nextUpstreamOk || !nginx.uiToNext) blockers.push('NGINX_UI_NOT_ROUTED_TO_NEXT');
+  if (!nginx.uiToGo) blockers.push('NGINX_UI_NOT_ROUTED_TO_GO');
+  if (nginx.nextUpstreamPresent) blockers.push('NGINX_NEXT_UPSTREAM_ACTIVE');
   if (!nginx.identityHeadersStripped) blockers.push('NGINX_API_IDENTITY_HEADERS_NOT_STRIPPED');
   if (proxy.violations.length > 0) blockers.push(`PROXY_FORBIDDEN_TOKENS=${proxy.violations.length}`);
   if (!proxy.consultsGoAuth) blockers.push('PROXY_GO_AUTH_CONSULT_MISSING');
@@ -889,9 +890,9 @@ async function main() {
   console.log(`go_registration_negative_sentinel=${sentinelDetected}`);
   console.log('');
   console.log(`nginx_go_upstream=${nginx.goUpstreamOk}`);
-  console.log(`nginx_next_upstream=${nginx.nextUpstreamOk}`);
+  console.log(`nginx_next_upstream_present=${nginx.nextUpstreamPresent}`);
   console.log(`nginx_api_routes_to_go=${nginx.apiToGo}`);
-  console.log(`nginx_ui_routes_to_next=${nginx.uiToNext}`);
+  console.log(`nginx_ui_routes_to_go=${nginx.uiToGo}`);
   console.log(`nginx_api_identity_headers_stripped=${nginx.identityHeadersStripped}`);
   console.log('');
   console.log(`proxy_forbidden_tokens=${proxy.violations.length}`);

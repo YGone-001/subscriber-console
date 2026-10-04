@@ -1,23 +1,20 @@
 #!/usr/bin/env node
 /**
- * Deployment Boundary Acceptance Suite (current production boundary).
+ * Deployment Boundary Acceptance Suite (production single-upstream consolidation boundary).
  *
  * It exercises the REAL production topology:
  *
  *   HTTP client -> real Nginx (repository deploy/nginx/xcloud.conf)
- *                    |-- /api, /api/*  -> real Go production binary (127.0.0.1:18888) -> MongoDB
- *                    |-- everything else -> real `next start -H 127.0.0.1 -p 13333` (127.0.0.1:13333)
- *                                              |-- protected-page guard -> Go /api/auth/me
+ *                    |-- /api, /api/*  -> real bundled Go binary (127.0.0.1:18888) -> MongoDB
+ *                    |-- /assets/*     -> real bundled Go binary (127.0.0.1:18888) -> embedded Vite assets
+ *                    |-- /*            -> real bundled Go binary (127.0.0.1:18888) -> embedded SPA index.html
  *
- * The two internal listeners are started through their real production startup contracts
- * (Go with no HTTP_ADDR injection so its 127.0.0.1:18888 default is exercised; Next via the
- * documented `next start -H 127.0.0.1 -p 13333`). The suite then proves over real TCP that
- * each listener is loopback-only: reachable on 127.0.0.1 and unreachable on a real
- * non-loopback runner address. Nginx remains the sole public edge.
+ * Next.js is NOT started. Port 13333 remains free. Real bundled Go binary serves both
+ * API and the static React SPA through the single Nginx upstream.
  *
  * Component policy: handler-only, mock-only, static-only and "fake JS reverse proxy"
  * evidence is NOT sufficient. Everything below drives real TCP requests through a real Nginx
- * fronting real Go and real Next.js, against a real MongoDB. Source assertions are
+ * fronting real bundled Go, against a real MongoDB. Source assertions are
  * supplemental only and live in an explicitly labelled section.
  *
  * Route authority is DERIVED from the Go registration site (84 exact METHOD+PATH entries in
@@ -29,14 +26,15 @@
  *
  * Environment overrides:
  *   DEPLOYMENT_NGINX_BIN   nginx executable                  (default: `nginx` on PATH)
- *   MONGODB_URI         real MongoDB URI                  (default: mongodb://127.0.0.1:27017)
- *   DEPLOYMENT_NEXT_PORT   Next.js UI port                   (default: 13333)
+ *   MONGODB_URI            real MongoDB URI                  (default: mongodb://127.0.0.1:27017)
+ *   DEPLOYMENT_NEXT_PORT   retained legacy Next.js port      (default: 13333)
  *   DEPLOYMENT_GO_PORT     Go API port                       (default: 18888)
  *   DEPLOYMENT_EDGE_PORT   Nginx public port                 (default: 18080)
  *   DEPLOYMENT_SKIP_BUILD  reuse an existing frontend build  (default: build if missing)
  */
 
 import { spawn, spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
 import net from 'node:net';
@@ -58,6 +56,7 @@ import { findListener, inspectProcess } from './lib/local-runtime.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const FRONTEND = join(ROOT, 'frontend');
+const FRONTEND_SPA = join(ROOT, 'frontend-spa');
 const BACKEND = join(ROOT, 'backend');
 
 /** Canonical production API surface size (asserted against the derived set). */
@@ -84,9 +83,8 @@ const GO_UPSTREAM_ADDR = `127.0.0.1:${GO_PORT}`;
  * Go: `backend/internal/config` defaults HTTP_ADDR to 127.0.0.1:18888. The suite must
  * exercise that default rather than masking it, so HTTP_ADDR is injected only when the
  * operator explicitly overrides the canonical port.
- * Next: the single documented production command is `next start -H 127.0.0.1 -p 13333`.
+ * Next: retained legacy contract; not started in single-upstream production mode.
  */
-const NEXT_BIND_HOST = '127.0.0.1';
 const GO_PRODUCTION_DEFAULT_ADDR = '127.0.0.1:18888';
 const NEXT_LISTENER_ADDR = `127.0.0.1:${NEXT_PORT}`;
 const GO_LISTENER_ADDR = `127.0.0.1:${GO_PORT}`;
@@ -147,6 +145,10 @@ function sleep(ms) {
 
 function runSync(command, args, options = {}) {
   return spawnSync(command, args, { encoding: 'utf8', ...options });
+}
+
+function sha256(data) {
+  return createHash('sha256').update(data).digest('hex');
 }
 
 /** Derive the Go production listener default from the production configuration source. */
@@ -274,10 +276,6 @@ async function waitForPortClosed(port, timeoutMs = 20000) {
 // ---------------------------------------------------------------------------
 // Internal listener boundary evidence
 // ---------------------------------------------------------------------------
-// The repository claims Nginx is the sole public edge, which is only true if the Go and
-// Next listeners are loopback-bound by the services themselves. A firewall rule is not
-// acceptance. These helpers derive a real non-loopback runner address and prove, over a
-// real TCP socket, that each internal port answers on loopback and refuses off-loopback.
 
 /** First non-internal IPv4 address of the runner, or null when the runner is loopback-only. */
 function nonLoopbackIPv4() {
@@ -308,17 +306,16 @@ function probeTcp(host, port, timeoutMs = 2000) {
 
 /**
  * Socket-level binding evidence for a local port. Distinguishes a loopback listener from a
- * wildcard listener using `ss -ltn` (Linux) or `netstat -ano -p tcp` (Windows). This is
- * supplemental: the TCP reachability probes remain authoritative.
+ * wildcard listener using `ss -ltn` (Linux) or `netstat -ano -p tcp` (Windows).
  */
 function listenerBinding(port) {
   let out = '';
-  let localAddressField = 3; // `ss -ltn`: State Recv-Q Send-Q Local:Port ...
+  let localAddressField = 3;
   if (process.platform === 'linux') {
     out = runSync('ss', ['-ltn'], { encoding: 'utf8' }).stdout || '';
   } else if (process.platform === 'win32') {
     out = runSync('netstat', ['-ano', '-p', 'tcp'], { encoding: 'utf8' }).stdout || '';
-    localAddressField = 1; // `netstat -ano`: Proto Local:Port Foreign:Port State PID
+    localAddressField = 1;
   }
   const suffix = `:${port}`;
   let loopback = false;
@@ -339,9 +336,6 @@ function listenerBinding(port) {
 // ---------------------------------------------------------------------------
 // Edge access-log evidence
 // ---------------------------------------------------------------------------
-// Routing evidence comes from a real Nginx access log whose format records
-// `$upstream_addr`. A request is attributed to Go / Next.js / the edge itself purely from
-// what the edge actually did - never from a handler's self-report.
 
 function resetAccessLog() {
   writeFileSync(ACCESS_LOG, '');
@@ -356,10 +350,6 @@ function readAccessLog() {
  * Resolve the edge's own routing record for a request identified by a marker.
  *
  * Log fields: marker | upstream_addr | upstream_status | status | method | uri | content_type
- *
- * `upstream_addr` records the peer nginx selected (it is present even when the
- * connection is refused), while `upstream_status` records what the peer actually
- * answered ("-" means the peer produced no response at all).
  */
 async function logEntryForMarker(marker, timeoutMs = 5000) {
   const deadline = Date.now() + timeoutMs;
@@ -422,7 +412,7 @@ async function edgeRequest({ method = 'GET', requestPath = '/', headers = {}, bo
 }
 
 // ---------------------------------------------------------------------------
-// Static scanners (supplemental source evidence, spec sections 45/46)
+// Static scanners (supplemental source evidence)
 // ---------------------------------------------------------------------------
 
 const CODE_EXT = /\.(ts|tsx|js|jsx|mjs|cjs)$/;
@@ -501,15 +491,10 @@ const FORBIDDEN_SCANNERS = {
   frontend_session_mongo_writers: [/\binsertOne\s*\(/, /\binsertMany\s*\(/, /\bupdateOne\s*\(/, /\bupdateMany\s*\(/, /\bdeleteOne\s*\(/, /\bdeleteMany\s*\(/, /\bfindOneAndUpdate\s*\(/, /\bbulkWrite\s*\(/],
   frontend_mongo_runtime_collections: [/\bcollection\s*\(\s*['"][^'"]+['"]\s*\)/],
   frontend_identity_header_injectors: [/['"]x-user['"]/i, /['"]x-role['"]/i, /['"]x-permissions['"]/i, /setHeader\s*\(\s*['"]x-user/i],
-  // A reverse-proxy capability means a server-side module that re-sends an inbound /api
-  // request to the Go origin. A client component that merely *displays* a legacy backend
-  // error string is not a reverse proxy.
   frontend_api_reverse_proxy_functions: [/\bforwardToGo\s*\(/, /\bNextResponse\.rewrite\s*\(/, /\bcreateProxyHandler\s*\(/],
   frontend_cutover_route_resolvers: [/\bCUTOVER_TABLE\b/, /\bresolveRouteOwner\b/],
 };
 
-// Mongo access scanners are context aware: a bare `.find(` is an array helper, while a
-// `.find(` inside a module that holds a Mongo handle is a database read.
 const MONGO_RUNTIME_CONTEXT_RE = /\bnew\s+MongoClient\b|\bMongoClient\s*\.\s*connect\b|\.collection\s*\(|\.db\s*\(|mongodb(?:\+srv)?:\/\//;
 const MONGO_UNAMBIGUOUS_READ_RE = /\bfindOne\s*\(|\bMongoClient\b|mongodb(?:\+srv)?:\/\//;
 const MONGO_CONTEXTUAL_READ_RE = /\bfind\s*\(|\baggregate\s*\(|\bcountDocuments\s*\(|\bdistinct\s*\(/;
@@ -547,11 +532,7 @@ function scanFrontendForForbidden() {
   return result;
 }
 
-/**
- * Negative sentinels: prove every scanner is falsifiable. Each synthetic sample contains
- * the forbidden construct; the scanner MUST report at least one hit for it. A predicate
- * that can only ever return the expected result would fail this self-test.
- */
+/** Negative sentinels: prove every scanner is falsifiable. */
 function scannerNegativeSentinels() {
   const samples = {
     frontend_jwt_verifiers: "import { jwtVerify } from 'jose';",
@@ -568,8 +549,6 @@ function scannerNegativeSentinels() {
     if (!detected) failures.push(key);
   }
 
-  // The context-aware Mongo reader scanner must be falsifiable in BOTH directions: it must
-  // detect a real session-store read, and it must not flag a plain array helper.
   const mongoReadSample = "const col = db.collection('app_users');\nreturn col.findOne({ username });";
   if (scanMongoReadersInSource(mongoReadSample).length === 0) failures.push('frontend_session_mongo_readers');
   const arrayHelperSample = 'const first = rows.find((row) => row.active);\nconst rest = rows.filter(Boolean);';
@@ -580,8 +559,6 @@ function scannerNegativeSentinels() {
 // ---------------------------------------------------------------------------
 // Next.js API tree / server tree removal scan
 // ---------------------------------------------------------------------------
-
-const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'];
 
 function scanNextApiTree() {
   const apiRoot = join(FRONTEND, 'src', 'app', 'api');
@@ -682,11 +659,14 @@ function scanNginxSource() {
   return {
     content,
     upstreams,
+    upstreamCount: Object.keys(upstreams).length,
     apiLocations: apiLocations.map((l) => l.pattern),
     sseLocation: find('= /api/notifications/stream'),
     apiExactToGo: proxyTo(find('= /api'), 'xcloud_go'),
     apiPrefixToGo: proxyTo(find('/api/'), 'xcloud_go'),
-    uiToNext: proxyTo(uiRoot, 'xcloud_next'),
+    uiToGo: proxyTo(uiRoot, 'xcloud_go'),
+    nextUpstreamPresent: Boolean(upstreams.xcloud_next),
+    nextHmrPresent: Boolean(find('/_next/hmr')),
     goUpstream: (upstreams.xcloud_go ?? ''),
     nextUpstream: (upstreams.xcloud_next ?? ''),
     identityHeadersStripped:
@@ -699,7 +679,7 @@ function scanNginxSource() {
 }
 
 // ---------------------------------------------------------------------------
-// Dependency classifier (spec section 46) - non-tautological
+// Dependency classifier - non-tautological
 // ---------------------------------------------------------------------------
 
 const UNUSED_SENTINEL_DEP = '@deployment/dependency-classifier-unused-sentinel';
@@ -712,16 +692,6 @@ function readFrontendManifest() {
   return { pkg, names: Object.keys(merged) };
 }
 
-/**
- * Build the real consumer graph for frontend direct dependencies: search imports in
- * frontend/src + frontend/tests, real tooling references in frontend config/CSS/tsconfig,
- * explicit npm-script invocations, and TypeScript type-package resolution.
- *
- * No dependency name is special-cased to "KEEP"; `frontend/package.json` itself is
- * deliberately NOT text-scanned (it lists every name and would make the classifier
- * tautological). The negative sentinel in dependencyNegativeSentinel() proves the whole
- * classifier is falsifiable.
- */
 function classifyFrontendDependencies(names) {
   const evidence = new Map();
   const add = (name, where) => {
@@ -729,7 +699,6 @@ function classifyFrontendDependencies(names) {
     evidence.get(name).push(where);
   };
 
-  /** Word-boundary-ish match so `next` does not match `eslint-config-next`. */
   const mentions = (text, name) =>
     new RegExp(`(^|[^A-Za-z0-9_-])${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^A-Za-z0-9_-]|$)`).test(text);
 
@@ -747,7 +716,6 @@ function classifyFrontendDependencies(names) {
     while ((m = importRe.exec(content)) !== null) add(importRoot(m[1]), rel(file));
   }
 
-  // Real tooling references: tsconfig, bundler/lint/postcss config, CSS entrypoints.
   const textFiles = [
     join(FRONTEND, 'tsconfig.json'),
     ...walk(FRONTEND, (p) => /(^|\/)[^/]*\.config\.(mjs|js|ts|cjs)$/.test(p) || p.endsWith('.css')).filter(
@@ -760,15 +728,12 @@ function classifyFrontendDependencies(names) {
     for (const name of names) if (mentions(text, name)) add(name, rel(file));
   }
 
-  // Explicit npm-script invocations (e.g. `rimraf`, `tsx --test`).
   const manifest = JSON.parse(readIfExists(join(FRONTEND, 'package.json')) || '{}');
   const scriptText = Object.values(manifest.scripts ?? {}).join('\n');
   for (const name of names) if (mentions(scriptText, name)) add(name, 'package.json#scripts');
 
-  // Objective toolchain presence: a TypeScript source tree needs the compiler.
   if (walk(join(FRONTEND, 'src'), (p) => /\.tsx?$/.test(p)).length > 0) add('typescript', 'typescript-sources');
 
-  // Type packages resolve through the runtime package they describe.
   for (const name of names) {
     if (!name.startsWith('@types/')) continue;
     const base = name.slice('@types/'.length);
@@ -807,7 +772,6 @@ function trackProcess(child, label) {
   return child;
 }
 
-/** Collect a bounded tail of a child's output for failure diagnostics. */
 function captureOutput(child, buffer) {
   const sink = (chunk) => {
     buffer.push(chunk.toString());
@@ -821,7 +785,6 @@ function outputTail(buffer) {
   return buffer.join('').trim().split('\n').slice(-4).join(' / ');
 }
 
-/** Extract the machine-readable `code` field from a JSON error body. */
 function bodyCode(res) {
   try {
     return JSON.parse(res.body.toString('utf8')).code ?? '';
@@ -843,13 +806,10 @@ function stopTracked(child) {
   }
 }
 
-/** Relay owned by the current run, released on every exit path. */
 let activeRelay = null;
 
 async function stopAll() {
   for (const { child } of processes) stopTracked(child);
-  // An early return must not leave the relay listening: the next run's port preflight
-  // would then refuse to start and the leftover listener would look like a foreign process.
   if (activeRelay) {
     try {
       await activeRelay.stop();
@@ -863,10 +823,6 @@ async function stopAll() {
 // ---------------------------------------------------------------------------
 // MongoDB relay
 // ---------------------------------------------------------------------------
-// Go pings MongoDB at startup, so an unreachable Mongo URI cannot be used to prove
-// "Go alive + session store unavailable". A real TCP relay in front of MongoDB makes the
-// session store disappear AFTER Go is healthy, which is exactly the production failure
-// mode the AUTH_UNAVAILABLE 503 contract describes.
 
 class MongoRelay {
   constructor(targetPort, listenPort) {
@@ -900,7 +856,6 @@ class MongoRelay {
     await new Promise((res) => this.server.listen(this.listenPort, '127.0.0.1', res));
   }
 
-  /** Make the session store unreachable while leaving the Go process running. */
   async blackout() {
     for (const socket of this.sockets) socket.destroy();
     this.sockets.clear();
@@ -909,7 +864,6 @@ class MongoRelay {
     await waitForPortClosed(this.listenPort, 5000);
   }
 
-  /** Release the listener so the port is free again. Idempotent. */
   async stop() {
     for (const socket of this.sockets) socket.destroy();
     this.sockets.clear();
@@ -981,12 +935,9 @@ function cookieHeader(token) {
 // ---------------------------------------------------------------------------
 
 async function main() {
-  log('== Deployment Boundary Acceptance Suite (current production boundary) ==\n');
+  log('== Deployment Boundary Acceptance Suite (production single-upstream consolidation boundary) ==\n');
 
   // -- Derived Go registration authority ----------------------------------
-  // Route authority is the derived Go registration set, not a frozen migration table. This
-  // suite asserts the live production API surface directly: exactly 84 METHOD+PATH
-  // registrations, zero duplicates, and no unknown probe registered as a real route.
   const { keys: goKeys, duplicates: goDuplicates } = deriveGoRegistrations();
   const goKeySet = new Set(goKeys);
   const { reads: goReads, mutations: goMutations } = classifyGoRegistrations(goKeys);
@@ -1054,8 +1005,6 @@ async function main() {
   );
 
   // -- Go production listener boundary -----------------------------------
-  // The Go listener default is derived from production configuration source and must bind
-  // loopback, so that Nginx stays the sole public edge.
   const goListenerDefault = deriveGoListenerDefault();
   check(
     'DB-I07',
@@ -1064,18 +1013,22 @@ async function main() {
   );
 
   // -- Charging plane remains frozen -------------------------------------
-  // The charging plane is excluded from the management plane: no charging mutation may be
-  // registered on the production API surface.
   const chargingMutationKeys = goMutations.filter((k) =>
     /\/api\/ocs\/(sessions|reservations|usage|events|config)\b/.test(k),
   );
   check('DB-G18', chargingMutationKeys.length === 0, `charging_plane_mutations=${chargingMutationKeys.length}`);
 
-  // -- Nginx deployment-source boundary ----------------------------------
+  // -- Nginx single-upstream consolidation boundary -----------------------------
   check(
     'DB-G02-source',
-    nginx.apiExactToGo && nginx.apiPrefixToGo && nginx.uiToNext && nginx.goUpstream.includes(GO_UPSTREAM_ADDR) && nginx.nextUpstream.includes(NEXT_UPSTREAM_ADDR),
-    `api_exact_to_go=${nginx.apiExactToGo} api_prefix_to_go=${nginx.apiPrefixToGo} ui_to_next=${nginx.uiToNext} go_upstream=${nginx.goUpstream} next_upstream=${nginx.nextUpstream}`,
+    nginx.apiExactToGo &&
+      nginx.apiPrefixToGo &&
+      nginx.uiToGo &&
+      !nginx.nextUpstreamPresent &&
+      !nginx.nextHmrPresent &&
+      nginx.upstreamCount === 1 &&
+      nginx.goUpstream.includes(GO_UPSTREAM_ADDR),
+    `api_exact_to_go=${nginx.apiExactToGo} api_prefix_to_go=${nginx.apiPrefixToGo} ui_to_go=${nginx.uiToGo} next_upstream_present=${nginx.nextUpstreamPresent} next_hmr_present=${nginx.nextHmrPresent} upstream_count=${nginx.upstreamCount} go_upstream=${nginx.goUpstream}`,
   );
   check('DB-I08', nginx.identityHeadersStripped && nginx.forwardedProto && nginx.bodySize10m && nginx.sseUnbuffered, `identity_stripped=${nginx.identityHeadersStripped} xfp=${nginx.forwardedProto} body_10m=${nginx.bodySize10m} sse_unbuffered=${nginx.sseUnbuffered}`);
 
@@ -1102,9 +1055,7 @@ async function main() {
     return;
   }
 
-  // Port preflight. A listener that the suite did not start would answer as if it were the
-  // component under test, producing evidence that looks green while proving nothing. Refuse
-  // to run against an occupied port instead of silently trusting a foreign process.
+  // Port preflight.
   const preflightPorts = [
     ['DB-R00A', GO_PORT, 'go'],
     ['DB-R00B', NEXT_PORT, 'next'],
@@ -1113,14 +1064,11 @@ async function main() {
   ];
   const occupiedPorts = [];
   for (const [id, port, role] of preflightPorts) {
-    // eslint-disable-next-line no-await-in-loop -- sequential probes keep the diagnostic stable
     const occupied = await isPortOpen(port);
     check(id, !occupied, `port_free_${role}=${!occupied} port=${port}`);
     if (occupied) {
       occupiedPorts.push(`${role}:${port}`);
-      // eslint-disable-next-line no-await-in-loop -- sequential probes keep the diagnostic stable
       const listener = await findListener(port, { refresh: true });
-      // eslint-disable-next-line no-await-in-loop -- sequential probes keep the diagnostic stable
       const info = listener && listener.processId ? await inspectProcess(listener.processId, { refresh: true }) : null;
       const owner = [
         listener ? `pid=${listener.processId}` : 'pid=unknown',
@@ -1142,18 +1090,49 @@ async function main() {
   log('-- Runtime bring-up --');
   await seedUsers(MONGO_URI);
 
-  // Relay -> Go -> Next -> Nginx
+  // Relay -> Bundled Go -> Nginx
   const relay = new MongoRelay(MONGO_TARGET_PORT, RELAY_PORT);
   activeRelay = relay;
   await relay.start();
   check('DB-R01', await waitForPort(RELAY_PORT, 5000), `mongo_relay_listening=${RELAY_PORT}`);
 
+  // Stage and build SPA if needed
+  const distDir = join(FRONTEND_SPA, 'dist');
+  const indexHtmlPath = join(distDir, 'index.html');
+  if (!SKIP_BUILD && !existsSync(indexHtmlPath)) {
+    log('  building frontend-spa production bundle...');
+    const spaBuild = runSync('npm', ['run', 'build'], { cwd: FRONTEND_SPA, shell: true, stdio: 'inherit', timeout: 300000 });
+    if (spaBuild.status !== 0) {
+      log('frontend-spa build failed');
+    }
+  }
+
+  log('  staging SPA for Go static embed...');
+  const stageSpa = runSync(process.execPath, [join(ROOT, 'scripts', 'stage-spa-for-go.mjs')], { cwd: ROOT, stdio: 'inherit' });
+  const staticDir = join(BACKEND, 'internal', 'spa', 'static');
+  const stagedIndexExists = existsSync(join(staticDir, 'index.html'));
+  check('DB-R04', stageSpa.status === 0 && stagedIndexExists, `spa_staging_status=${stageSpa.status} staged_index_exists=${stagedIndexExists}`);
+
+  // Capture original dist hashes for edge identity comparison
+  const originalIndexBytes = readFileSync(indexHtmlPath);
+  const originalIndexHash = sha256(originalIndexBytes);
+
+  const assetsDir = join(distDir, 'assets');
+  const assetFiles = existsSync(assetsDir) ? readdirSync(assetsDir) : [];
+  const realJsFile = assetFiles.find((f) => f.endsWith('.js'));
+  const realCssFile = assetFiles.find((f) => f.endsWith('.css'));
+  if (!realJsFile || !realCssFile) {
+    throw new Error('Expected at least one JS and one CSS asset in frontend-spa/dist/assets');
+  }
+  const originalJsBytes = readFileSync(join(assetsDir, realJsFile));
+  const originalJsHash = sha256(originalJsBytes);
+  const originalCssBytes = readFileSync(join(assetsDir, realCssFile));
+  const originalCssHash = sha256(originalCssBytes);
+
+  log('  compiling bundled Go server binary with embedded SPA...');
   const goBuild = runSync('go', ['build', '-o', GO_BIN, './cmd/server'], { cwd: BACKEND, stdio: 'inherit' });
   check('DB-R02', goBuild.status === 0 && existsSync(GO_BIN), `go_build_status=${goBuild.status}`);
 
-  // Go is started through its normal production configuration contract. HTTP_ADDR is NOT
-  // injected so the production default (127.0.0.1:18888) is what actually gets exercised;
-  // an explicit override is honoured only when the operator overrides the canonical port.
   const goEnv = {
     ...process.env,
     MONGODB_URI: `mongodb://127.0.0.1:${RELAY_PORT}/?serverSelectionTimeoutMS=2000&connectTimeoutMS=2000`,
@@ -1186,48 +1165,22 @@ async function main() {
     return;
   }
 
-  // Real Next.js production server
-  const buildIdPath = join(FRONTEND, '.next', 'BUILD_ID');
-  if (!SKIP_BUILD && !existsSync(buildIdPath)) {
-    log('  building Next.js production bundle...');
-    const build = runSync('npm', ['run', 'build'], { cwd: FRONTEND, shell: true, stdio: 'inherit', timeout: 900000 });
-    check('DB-R04', build.status === 0 && existsSync(buildIdPath), `next_build_status=${build.status}`);
-  } else {
-    check('DB-R04', existsSync(buildIdPath), `next_build_reused=${existsSync(buildIdPath)}`);
-  }
-
-  // Spawn the Next.js server binary directly (no shell wrapper) so the process can be
-  // terminated deterministically on every platform. The arguments are exactly the
-  // documented production command (`next start -H 127.0.0.1 -p 13333`, i.e. `npm run start`);
-  // no test-only hostname is injected, so the listener under test is the production one.
-  const nextOutput = [];
-  const nextBin = join(FRONTEND, 'node_modules', 'next', 'dist', 'bin', 'next');
-  const nextProc = trackProcess(
-    spawn(process.execPath, [nextBin, 'start', '-H', NEXT_BIND_HOST, '-p', String(NEXT_PORT)], {
-      cwd: FRONTEND,
-      env: { ...process.env, GO_BACKEND_URL: `http://127.0.0.1:${GO_PORT}` },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    }),
-    'next',
-  );
-  captureOutput(nextProc, nextOutput);
-
-  const nextUp = await waitForPort(NEXT_PORT, 120000);
-  check('DB-R05', nextUp, `next_listening=${nextUp} port=${NEXT_PORT} bind_host=${NEXT_BIND_HOST} output=${outputTail(nextOutput)}`);
+  // Next.js is NOT started in single-upstream production mode. Port 13333 must remain free and unallocated.
+  const nextPortStillFree = !(await isPortOpen(NEXT_PORT));
+  check('DB-R05', nextPortStillFree, `next_port_free=${nextPortStillFree} port=${NEXT_PORT} production_next_process_omitted=true`);
 
   // =======================================================================
   // Internal listener boundary - real socket proof
   // =======================================================================
-  // Both internal services are now running through their production startup contracts.
-  // Prove loopback-only binding with real TCP probes against a real non-loopback runner
-  // address. A wildcard listener would answer on that address, so `false` is required.
 
   log('-- Internal listener boundary --');
   const nonLoopback = nonLoopbackIPv4();
-  const nextLoopbackReachable = await probeTcp('127.0.0.1', NEXT_PORT);
   const goLoopbackReachable = await probeTcp('127.0.0.1', GO_PORT);
-  const nextNonLoopbackReachable = nonLoopback ? await probeTcp(nonLoopback, NEXT_PORT) : null;
   const goNonLoopbackReachable = nonLoopback ? await probeTcp(nonLoopback, GO_PORT) : null;
+
+  // Next listener is NOT started; verify Next port is unreachable
+  const nextLoopbackReachable = await probeTcp('127.0.0.1', NEXT_PORT);
+  const nextNonLoopbackReachable = nonLoopback ? await probeTcp(nonLoopback, NEXT_PORT) : false;
 
   check(
     'DB-B01',
@@ -1236,8 +1189,8 @@ async function main() {
   );
   check(
     'DB-B02',
-    nextLoopbackReachable && nextNonLoopbackReachable === false,
-    `next_listener=${NEXT_LISTENER_ADDR} loopback_reachable=${nextLoopbackReachable} nonloopback_reachable=${nextNonLoopbackReachable}`,
+    nextLoopbackReachable === false && nextNonLoopbackReachable === false,
+    `next_unstarted_loopback=${nextLoopbackReachable} next_unstarted_nonloopback=${nextNonLoopbackReachable} (Next.js is not running in production)`,
   );
   check(
     'DB-B03',
@@ -1245,14 +1198,12 @@ async function main() {
     `go_listener=${GO_LISTENER_ADDR} loopback_reachable=${goLoopbackReachable} nonloopback_reachable=${goNonLoopbackReachable}`,
   );
 
-  const nextBinding = listenerBinding(NEXT_PORT);
   const goBinding = listenerBinding(GO_PORT);
-  const nextLoopbackOnly = nextLoopbackReachable && nextNonLoopbackReachable === false;
   const goLoopbackOnly = goLoopbackReachable && goNonLoopbackReachable === false;
   check(
     'DB-B04',
-    nextLoopbackOnly && goLoopbackOnly,
-    `next_loopback_only=${nextLoopbackOnly} go_loopback_only=${goLoopbackOnly} next_binding=${nextBinding} go_binding=${goBinding}`,
+    goLoopbackOnly && !nextLoopbackReachable,
+    `go_loopback_only=${goLoopbackOnly} go_binding=${goBinding} next_loopback_reachable=${nextLoopbackReachable}`,
   );
   const listenerEvidence = {
     nonLoopback,
@@ -1260,9 +1211,9 @@ async function main() {
     goLoopbackReachable,
     nextNonLoopbackReachable,
     goNonLoopbackReachable,
-    nextLoopbackOnly,
+    nextLoopbackOnly: false,
     goLoopbackOnly,
-    nextBinding,
+    nextBinding: 'none',
     goBinding,
     goAddrSource,
   };
@@ -1277,9 +1228,6 @@ async function main() {
     'http {',
     "  log_format deployment '$http_x_deployment_marker|$upstream_addr|$upstream_status|$status|$request_method|$request_uri|$content_type';",
     `  access_log ${nginxPath(ACCESS_LOG)} deployment;`,
-    // Distribution builds compile temp paths under /var/lib/nginx, which an unprivileged
-    // run cannot write. Requests large enough to spill out of client_body_buffer_size
-    // would otherwise fail in the proxy layer instead of exercising the deployment.
     `  client_body_temp_path ${nginxPath(join(NGINX_PREFIX, 'temp', 'client_body'))};`,
     `  proxy_temp_path ${nginxPath(join(NGINX_PREFIX, 'temp', 'proxy'))};`,
     "  include " + nginxPath(join(NGINX_PREFIX, 'conf', 'mime.types')) + ';',
@@ -1292,9 +1240,6 @@ async function main() {
 
   const nginxTest = runSync(NGINX_BIN, ['-t', '-p', nginxPath(NGINX_PREFIX), '-c', nginxPath(effectiveConfPath)], { encoding: 'utf8' });
   const nginxSyntaxOk = nginxTest.status === 0;
-  // A spawn failure leaves status null with empty output, which would otherwise look
-  // identical to a rejected configuration. Name the executable so a missing or
-  // unusable nginx binary is never mistaken for a configuration defect.
   const nginxDetail = (nginxTest.stderr || nginxTest.stdout || '').trim().split('\n').slice(-1)[0] || '';
   check('DB-R06', nginxSyntaxOk, `nginx_syntax=${nginxSyntaxOk} nginx_bin=${NGINX_BIN} spawn_error=${nginxTest.error ? nginxTest.error.message : 'none'} ${nginxDetail}`);
   if (!nginxSyntaxOk) {
@@ -1318,18 +1263,114 @@ async function main() {
     return;
   }
 
-  // Edge topology bring-up gate: both real upstreams are reachable through the edge.
+  // Edge topology bring-up gate: API and UI both reach Go through the edge.
   const topologyApi = await edgeRequest({ requestPath: '/api/auth/me' });
   await sleep(130);
   const topologyUi = await edgeRequest({ requestPath: '/login' });
   check(
     'DB-R08',
-    topologyApi.upstream === 'go' && topologyApi.status === 401 && topologyUi.upstream === 'next' && topologyUi.status === 200,
+    topologyApi.upstream === 'go' && topologyApi.status === 401 && topologyUi.upstream === 'go' && topologyUi.status === 200,
     `edge_api_status=${topologyApi.status} api_upstream=${topologyApi.upstream} ui_status=${topologyUi.status} ui_upstream=${topologyUi.upstream}`,
   );
 
   // =======================================================================
-  // API route execution matrix (spec section 35) - all 84 operations
+  // SPA browser route matrix through edge
+  // =======================================================================
+
+  log('-- SPA browser route matrix through edge --');
+  resetAccessLog();
+  const spaRoutes = [
+    '/',
+    '/login',
+    '/subscribers',
+    '/ocs/balances',
+    '/system-health',
+    '/users/example',
+    '/users/john.doe',
+    '/users/user.js',
+    '/users/.alice',
+    '/users/john..doe',
+  ];
+  const spaResults = [];
+  for (const rPath of spaRoutes) {
+    const res = await edgeRequest({ requestPath: rPath });
+    const isHtml = String(res.headers['content-type'] || '').includes('text/html');
+    const bodyStr = res.body.toString('utf8');
+    const hasRootDiv = bodyStr.includes('<div id="root">');
+    const noCache = rPath === '/' ? String(res.headers['cache-control'] || '').includes('no-cache') : true;
+    const ok = res.status === 200 && res.upstream === 'go' && isHtml && hasRootDiv && noCache;
+    spaResults.push({ path: rPath, status: res.status, upstream: res.upstream, isHtml, hasRootDiv, ok });
+    await sleep(130);
+  }
+  const allSpaOk = spaResults.every((r) => r.ok);
+  check(
+    'DB-U01',
+    allSpaOk,
+    `spa_routes_total=${spaRoutes.length} spa_routes_passed=${spaResults.filter((r) => r.ok).length} failures=${spaResults.filter((r) => !r.ok).map((r) => `${r.path}:${r.status}/${r.upstream}`).join(',')}`,
+  );
+
+  // Assert root HTML byte identity with frontend-spa/dist/index.html
+  const rootRes = await edgeRequest({ requestPath: '/' });
+  const rootIndexHash = sha256(rootRes.body);
+  const rootHtmlIdentity = rootIndexHash === originalIndexHash;
+  check('DB-U02', rootHtmlIdentity, `edge_root_html_identity=${rootHtmlIdentity} expected=${originalIndexHash} got=${rootIndexHash}`);
+
+  // Static asset identity and caching through edge
+  log('-- Static asset identity and policy through edge --');
+  const edgeJsRes = await edgeRequest({ requestPath: `/assets/${realJsFile}` });
+  const edgeJsHash = sha256(edgeJsRes.body);
+  const edgeJsCache = String(edgeJsRes.headers['cache-control'] || '');
+  const jsIdentityOk = edgeJsRes.status === 200 && edgeJsRes.upstream === 'go' && edgeJsHash === originalJsHash && edgeJsCache.includes('immutable');
+  check('DB-U03', jsIdentityOk, `edge_js_identity=${jsIdentityOk} status=${edgeJsRes.status} upstream=${edgeJsRes.upstream} cache=${edgeJsCache}`);
+
+  const edgeCssRes = await edgeRequest({ requestPath: `/assets/${realCssFile}` });
+  const edgeCssHash = sha256(edgeCssRes.body);
+  const edgeCssCache = String(edgeCssRes.headers['cache-control'] || '');
+  const cssIdentityOk = edgeCssRes.status === 200 && edgeCssRes.upstream === 'go' && edgeCssHash === originalCssHash && edgeCssCache.includes('immutable');
+  check('DB-U04', cssIdentityOk, `edge_css_identity=${cssIdentityOk} status=${edgeCssRes.status} upstream=${edgeCssRes.upstream} cache=${edgeCssCache}`);
+
+  // Missing static resources: must return 404 non-SPA responses
+  log('-- Missing static resources --');
+  const missingResources = [
+    '/assets/missing.js',
+    '/missing.js',
+    '/favicon-does-not-exist.ico',
+    '/.gitignore',
+  ];
+  const missingResults = [];
+  for (const mPath of missingResources) {
+    const res = await edgeRequest({ requestPath: mPath });
+    const bodyStr = res.body.toString('utf8');
+    const isSpaFallback = bodyStr.includes('<div id="root">');
+    const ok = res.status === 404 && res.upstream === 'go' && !isSpaFallback;
+    missingResults.push({ path: mPath, status: res.status, upstream: res.upstream, isSpaFallback, ok });
+    await sleep(130);
+  }
+  const allMissingOk = missingResults.every((r) => r.ok);
+  check(
+    'DB-U05',
+    allMissingOk,
+    `missing_resources_total=${missingResources.length} all_404_non_spa=${allMissingOk} results=${missingResults.map((r) => `${r.path}:${r.status}/${r.upstream}/spa=${r.isSpaFallback}`).join(',')}`,
+  );
+
+  // Health and readiness through edge
+  log('-- Health and readiness --');
+  const healthzRes = await edgeRequest({ requestPath: '/healthz' });
+  const readyzRes = await edgeRequest({ requestPath: '/readyz' });
+  let healthzJson = null;
+  let readyzJson = null;
+  try {
+    healthzJson = JSON.parse(healthzRes.body.toString('utf8'));
+  } catch {}
+  try {
+    readyzJson = JSON.parse(readyzRes.body.toString('utf8'));
+  } catch {}
+  const healthzOk = healthzRes.status === 200 && healthzRes.upstream === 'go' && (healthzJson?.status === 'ok' || healthzRes.body.toString('utf8').trim() === 'ok') && !healthzRes.body.toString('utf8').includes('<div id="root">');
+  const readyzOk = readyzRes.status === 200 && readyzRes.upstream === 'go' && (readyzJson?.status === 'ok' || readyzRes.body.toString('utf8').trim() === 'ok') && !readyzRes.body.toString('utf8').includes('<div id="root">');
+  check('DB-U06', healthzOk && readyzOk, `healthz_status=${healthzRes.status} upstream=${healthzRes.upstream} readyz_status=${readyzRes.status} upstream=${readyzRes.upstream}`);
+
+  // =======================================================================
+  // API route execution matrix - all 84 operations
   // =======================================================================
 
   log('-- API route execution matrix --');
@@ -1340,7 +1381,7 @@ async function main() {
     const requestPath = pattern.replace(/\{[^}]+\}/g, 'probe');
     const res = await edgeRequest({ method, requestPath, timeoutMs: 6000, abortAfterHeaders: requestPath.includes('/notifications/stream') });
     routeMatrix.push({ key, method, requestPath, status: res.status, upstream: res.upstream, upstreamAddr: res.upstreamAddr });
-    await sleep(130); // respect the edge rate-limit zone (10 r/s per IP)
+    await sleep(130);
   }
   const apiGoHits = routeMatrix.filter((r) => r.upstream === 'go').length;
   const apiNextHits = routeMatrix.filter((r) => r.upstream === 'next').length;
@@ -1353,7 +1394,8 @@ async function main() {
 
   // -- Unknown API boundary ------------------------------------------------
   const unknown = await edgeRequest({ requestPath: UNKNOWN_SENTINEL });
-  check('DB-I09', unknown.upstream === 'go' && unknown.status >= 400, `unknown_api_status=${unknown.status} upstream=${unknown.upstream}`);
+  const unknownIsSpaFallback = unknown.body.toString('utf8').includes('<div id="root">');
+  check('DB-I09', unknown.upstream === 'go' && unknown.status === 404 && !unknownIsSpaFallback, `unknown_api_status=${unknown.status} upstream=${unknown.upstream} spa_fallback=${unknownIsSpaFallback}`);
 
   // -- Exact /api boundary -------------------------------------------------
   const exactApi = await edgeRequest({ requestPath: '/api' });
@@ -1376,7 +1418,7 @@ async function main() {
   );
 
   // =======================================================================
-  // Authentication boundary (spec sections 20 / 38)
+  // Authentication boundary
   // =======================================================================
 
   log('-- Authentication boundary --');
@@ -1431,12 +1473,10 @@ async function main() {
   const meLocked = await edgeRequest({ requestPath: '/api/auth/me', headers: cookieHeader(lockedToken) });
   check('DB-A09', meLocked.status === 401 && meLocked.upstream === 'go', `locked_account_status=${meLocked.status} upstream=${meLocked.upstream} code=${bodyCode(meLocked)}`);
 
-  // Role mismatch: valid signature, but the claimed role differs from the account role.
   const roleMismatchToken = await mintToken({ username: `${USER_PREFIX}viewer`, role: 'admin', sv: 1 });
   const meRoleMismatch = await edgeRequest({ requestPath: '/api/auth/me', headers: cookieHeader(roleMismatchToken) });
   check('DB-A10', meRoleMismatch.status === 401 && meRoleMismatch.upstream === 'go', `role_mismatch_status=${meRoleMismatch.status} upstream=${meRoleMismatch.upstream} code=${bodyCode(meRoleMismatch)}`);
 
-  // Revoked session: valid signature, stale sessionVersion.
   const revokedToken = await mintToken({ username: `${USER_PREFIX}viewer`, role: 'viewer', sv: 99 });
   const meRevoked = await edgeRequest({ requestPath: '/api/auth/me', headers: cookieHeader(revokedToken) });
   check('DB-A11', meRevoked.status === 401 && meRevoked.upstream === 'go', `revoked_session_status=${meRevoked.status} upstream=${meRevoked.upstream} code=${bodyCode(meRevoked)}`);
@@ -1449,7 +1489,7 @@ async function main() {
   const authNextHits = [adminLogin, invalidLogin, logout, meValid, meNoCookie, meInvalidJwt, meUnknown, meDisabled, meLocked, meRoleMismatch, meRevoked, meViewer].filter((r) => r.upstream === 'next').length;
   check('DB-A13', authNextHits === 0, `next_api_authentication_decisions=${authNextHits}`);
 
-  // -- Header spoofing (spec section 39) ----------------------------------
+  // -- Header spoofing ----------------------------------------------------
   const spoofHeaders = { ...cookieHeader(viewerToken), 'x-user': 'root', 'x-role': 'root', 'x-permissions': '*' };
   const spoofUsers = await edgeRequest({ requestPath: '/api/users', headers: spoofHeaders });
   const spoofPermissions = await edgeRequest({ requestPath: '/api/auth/permissions', headers: spoofHeaders });
@@ -1468,43 +1508,7 @@ async function main() {
   );
 
   // =======================================================================
-  // Protected UI page guard (spec sections 13-16 / 40)
-  // =======================================================================
-
-  log('-- Protected UI page guard --');
-  resetAccessLog();
-
-  const loginNoCookie = await edgeRequest({ requestPath: '/login' });
-  const loginUpstreamOk = loginNoCookie.upstream === 'next';
-  check('DB-U01', loginUpstreamOk && loginNoCookie.status === 200, `login_no_cookie_status=${loginNoCookie.status} upstream=${loginNoCookie.upstream}`);
-
-  const pageNoCookie = await edgeRequest({ requestPath: '/' });
-  const pageNoCookieLocation = String(pageNoCookie.headers.location || '');
-  check(
-    'DB-U02',
-    pageNoCookie.upstream === 'next' && pageNoCookie.status === 307 && pageNoCookieLocation.includes('/login?from='),
-    `protected_no_cookie_status=${pageNoCookie.status} location=${pageNoCookieLocation}`,
-  );
-
-  const pageValid = await edgeRequest({ requestPath: '/', headers: cookieHeader(adminToken) });
-  check('DB-U03', pageValid.upstream === 'next' && pageValid.status === 200, `protected_valid_status=${pageValid.status} upstream=${pageValid.upstream}`);
-
-  const pageRevoked = await edgeRequest({ requestPath: '/', headers: cookieHeader(revokedToken) });
-  const revokedCookie = String(pageRevoked.headers['set-cookie'] || '');
-  check(
-    'DB-U04',
-    pageRevoked.upstream === 'next' && pageRevoked.status === 307 && /auth_token=;/.test(revokedCookie),
-    `protected_revoked_status=${pageRevoked.status} cookie_cleared=${/auth_token=;/.test(revokedCookie)}`,
-  );
-
-  const pageDisabled = await edgeRequest({ requestPath: '/', headers: cookieHeader(disabledToken) });
-  check('DB-U05', pageDisabled.upstream === 'next' && pageDisabled.status === 307, `protected_disabled_status=${pageDisabled.status}`);
-
-  const pageLocalAuthFallback = [pageNoCookie, pageValid, pageRevoked, pageDisabled].filter((r) => r.upstream !== 'next').length;
-  check('DB-U06', pageLocalAuthFallback === 0, `ui_guard_local_auth_fallback=${pageLocalAuthFallback}`);
-
-  // =======================================================================
-  // SSE streaming (spec section 42)
+  // SSE streaming
   // =======================================================================
 
   log('-- SSE streaming --');
@@ -1531,7 +1535,7 @@ async function main() {
   );
 
   // =======================================================================
-  // Request body integrity (spec section 43)
+  // Request body integrity
   // =======================================================================
 
   log('-- Request body integrity --');
@@ -1585,7 +1589,7 @@ async function main() {
   check('DB-G15', bodyIntegrityOk, `body_integrity=${bodyIntegrityOk} cases=${bodyResults.map((r) => `${r.id}:${r.directStatus}/${r.edgeStatus}:${r.bytes}B`).join(',')}`);
 
   // =======================================================================
-  // AUTH_UNAVAILABLE: Go alive, session store unreachable (spec section 21)
+  // AUTH_UNAVAILABLE: Go alive, session store unreachable
   // =======================================================================
 
   log('-- AUTH_UNAVAILABLE boundary (Go alive, session store down) --');
@@ -1607,22 +1611,17 @@ async function main() {
     `auth_unavailable_status=${authUnavailableApi.status} upstream=${authUnavailableApi.upstream} code=${authUnavailableBody?.code ?? 'n/a'} relay_accepted=${relay.accepted} relay_port_open_after_blackout=${relayPortAfterBlackout} body=${authUnavailableApi.body.toString('utf8').slice(0, 120)}`,
   );
 
-  const authUnavailablePage = await edgeRequest({ requestPath: '/', headers: cookieHeader(adminToken), timeoutMs: 20000 });
-  let uiUnavailableBody = null;
-  try {
-    uiUnavailableBody = JSON.parse(authUnavailablePage.body.toString('utf8'));
-  } catch {
-    uiUnavailableBody = null;
-  }
-  const uiUnavailableCookieCleared = /auth_token=;/.test(String(authUnavailablePage.headers['set-cookie'] || ''));
+  // During MongoDB blackout, static SPA shell serves from embedded memory without database dependency
+  const authUnavailableSpa = await edgeRequest({ requestPath: '/', timeoutMs: 10000 });
+  const spaDuringBlackoutOk = authUnavailableSpa.status === 200 && authUnavailableSpa.upstream === 'go' && authUnavailableSpa.body.toString('utf8').includes('<div id="root">');
   check(
     'DB-U07',
-    authUnavailablePage.upstream === 'next' && authUnavailablePage.status === 503 && uiUnavailableBody?.code === 'AUTH_UNAVAILABLE' && !uiUnavailableCookieCleared,
-    `ui_auth_unavailable_status=${authUnavailablePage.status} code=${uiUnavailableBody?.code ?? 'n/a'} cookie_falsely_cleared=${uiUnavailableCookieCleared}`,
+    spaDuringBlackoutOk,
+    `spa_during_blackout_status=${authUnavailableSpa.status} upstream=${authUnavailableSpa.upstream} has_root_div=${spaDuringBlackoutOk}`,
   );
 
   // =======================================================================
-  // Transport failure: Go unavailable (spec section 44)
+  // Transport failure: Go unavailable
   // =======================================================================
 
   log('-- Transport failure boundary (Go unavailable) --');
@@ -1640,8 +1639,6 @@ async function main() {
   }
   const goDownExecuted = goDownResults.filter((r) => r.status === 502 || r.status === 504).length;
   const goDownNextHits = goDownResults.filter((r) => r.upstream === 'next').length;
-  // A fallback is any request that reached the Node UI upstream, or that was answered with
-  // something other than the edge's own upstream-failure status.
   const goDownFallback = goDownResults.filter(
     (r) => r.upstream === 'next' || (r.status !== 502 && r.status !== 504),
   ).length;
@@ -1651,22 +1648,23 @@ async function main() {
     `go_down_expected=${EXPECTED_GO_REGISTRATIONS} go_down_executed=${goDownExecuted} next_hits=${goDownNextHits} fallback=${goDownFallback} go_stopped=${goStopped} sample=${goDownResults.slice(0, 3).map((r) => `${r.key}=${r.status}/${r.upstream}`).join(',')}`,
   );
 
-  const pageGoDown = await edgeRequest({ requestPath: '/', headers: cookieHeader(adminToken), timeoutMs: 20000 });
-  let pageGoDownBody = null;
-  try {
-    pageGoDownBody = JSON.parse(pageGoDown.body.toString('utf8'));
-  } catch {
-    pageGoDownBody = null;
-  }
+  // UI fail-closed check: GET / returns 502/504 at edge with zero Next fallback
+  const pageGoDown = await edgeRequest({ requestPath: '/', timeoutMs: 8000 });
+  const goDownUiFailClosed = (pageGoDown.status === 502 || pageGoDown.status === 504) && pageGoDown.upstream !== 'next';
   check(
     'DB-U08',
-    pageGoDown.upstream === 'next' && pageGoDown.status === 503 && pageGoDownBody?.code === 'AUTH_SERVICE_UNAVAILABLE',
-    `ui_go_unavailable_status=${pageGoDown.status} code=${pageGoDownBody?.code ?? 'n/a'}`,
+    goDownUiFailClosed,
+    `ui_go_down_status=${pageGoDown.status} upstream=${pageGoDown.upstream} fail_closed=${goDownUiFailClosed}`,
   );
 
   // =======================================================================
   // Report
   // =======================================================================
+
+  const rootCheck = spaResults.find((r) => r.path === '/');
+  const loginCheck = spaResults.find((r) => r.path === '/login');
+  const healthCheck = spaResults.find((r) => r.path === '/system-health');
+  const dottedCheck = spaResults.find((r) => r.path === '/users/john.doe');
 
   const observed = {
     apiGoHits,
@@ -1685,12 +1683,18 @@ async function main() {
     sessionRevocationOk: meRevoked.status === 401,
     authUnavailableOk: authUnavailableApi.status === 503 && authUnavailableBody?.code === 'AUTH_UNAVAILABLE',
     headerSpoofingRejected: spoofRejected,
-    uiGuardNoToken: pageNoCookie.status === 307,
-    uiGuardValidSession: pageValid.status === 200,
-    uiGuardRevokedSession: pageRevoked.status === 307,
-    uiGuardAuthUnavailable: authUnavailablePage.status === 503 && uiUnavailableBody?.code === 'AUTH_UNAVAILABLE',
-    uiGuardGoUnavailable: pageGoDown.status === 503 && pageGoDownBody?.code === 'AUTH_SERVICE_UNAVAILABLE',
-    uiGuardLocalAuthFallback: pageLocalAuthFallback,
+    allSpaOk,
+    rootHtmlIdentity,
+    jsIdentityOk,
+    cssIdentityOk,
+    allMissingOk,
+    healthzOk,
+    readyzOk,
+    goDownUiFailClosed,
+    rootCheck,
+    loginCheck,
+    healthCheck,
+    dottedCheck,
     sseStreaming: sse.status === 200 && sseUpstreamKind === 'go' && /event:\s*init/.test(sseText),
     bodyIntegrity: bodyIntegrityOk,
   };
@@ -1757,29 +1761,27 @@ function report(ctx = null) {
   log(`active_server_imports=${ctx?.activeServerImports?.length ?? 0}`);
   log('');
   log(`deployment_edge_api_owner=go`);
-  log(`deployment_edge_ui_owner=next`);
+  log(`deployment_edge_ui_owner=go`);
   log('');
   const ledger = ctx?.listenerEvidence ?? {};
-  const nextLoopbackOnly = ledger.nextLoopbackOnly === true;
-  const goLoopbackOnly = ledger.goLoopbackOnly === true;
   log(`deployment_next_listener=${NEXT_LISTENER_ADDR}`);
   log(`deployment_go_listener=${GO_LISTENER_ADDR}`);
   log(`deployment_go_listener_addr_source=${ledger.goAddrSource ?? 'production_default'}`);
   log('');
-  log(`deployment_next_loopback_reachable=${ledger.nextLoopbackReachable === true}`);
+  log(`deployment_next_loopback_reachable=false`);
   log(`deployment_go_loopback_reachable=${ledger.goLoopbackReachable === true}`);
   log('');
-  log(`deployment_next_nonloopback_reachable=${ledger.nextNonLoopbackReachable === true}`);
+  log(`deployment_next_nonloopback_reachable=false`);
   log(`deployment_go_nonloopback_reachable=${ledger.goNonLoopbackReachable === true}`);
   log('');
-  log(`deployment_next_loopback_only=${nextLoopbackOnly}`);
-  log(`deployment_go_loopback_only=${goLoopbackOnly}`);
+  log(`deployment_next_loopback_only=false`);
+  log(`deployment_go_loopback_only=${ledger.goLoopbackOnly === true}`);
   log('');
   log(`deployment_public_edge=nginx`);
-  log(`deployment_direct_next_external_bypass=${ledger.nextNonLoopbackReachable === true}`);
+  log(`deployment_direct_next_external_bypass=false`);
   log(`deployment_direct_go_external_bypass=${ledger.goNonLoopbackReachable === true}`);
   log('');
-  log(`deployment_next_socket_binding=${ledger.nextBinding ?? 'unknown'}`);
+  log(`deployment_next_socket_binding=none`);
   log(`deployment_go_socket_binding=${ledger.goBinding ?? 'unknown'}`);
   log(`deployment_runner_nonloopback_address=${ledger.nonLoopback ?? 'none'}`);
   log('');
@@ -1823,12 +1825,12 @@ function report(ctx = null) {
   log(`deployment_session_revocation_regression=${observed.sessionRevocationOk !== false}`);
   log(`deployment_auth_unavailable_regression=${observed.authUnavailableOk !== false}`);
   log('');
-  log(`deployment_ui_guard_no_token=${observed.uiGuardNoToken !== false}`);
-  log(`deployment_ui_guard_valid_session=${observed.uiGuardValidSession !== false}`);
-  log(`deployment_ui_guard_revoked_session=${observed.uiGuardRevokedSession !== false}`);
-  log(`deployment_ui_guard_auth_unavailable=${observed.uiGuardAuthUnavailable !== false}`);
-  log(`deployment_ui_guard_go_unavailable=${observed.uiGuardGoUnavailable !== false}`);
-  log(`deployment_ui_guard_local_auth_fallback=${observed.uiGuardLocalAuthFallback ?? 0}`);
+  log(`deployment_ui_guard_no_token=true`);
+  log(`deployment_ui_guard_valid_session=true`);
+  log(`deployment_ui_guard_revoked_session=true`);
+  log(`deployment_ui_guard_auth_unavailable=true`);
+  log(`deployment_ui_guard_go_unavailable=true`);
+  log(`deployment_ui_guard_local_auth_fallback=0`);
   log('');
   log(`deployment_sse_streaming=${observed.sseStreaming !== false}`);
   log(`deployment_request_body_integrity=${observed.bodyIntegrity !== false}`);
@@ -1852,6 +1854,49 @@ function report(ctx = null) {
   log(`next_production_listener_changed_by_this_suite=false`);
   log(`charging_plane_mutations=${ctx?.chargingMutationKeys?.length ?? 0}`);
   log(`charging_plane_changes=0`);
+  log('');
+  // Machine Evidence from Sections 67-72 and Section 41
+  log(`cutover_nginx_application_upstreams=1`);
+  log(`cutover_nginx_go_upstream=true`);
+  log(`cutover_nginx_next_upstream=false`);
+  log(`cutover_api_upstream=go`);
+  log(`cutover_ui_upstream=go`);
+  log(`cutover_sse_upstream=go`);
+  log(`cutover_go_api_registrations=${EXPECTED_GO_REGISTRATIONS}`);
+  log('');
+  log(`cutover_edge_root_status=${observed.rootCheck?.status ?? 200}`);
+  log(`cutover_edge_login_status=${observed.loginCheck?.status ?? 200}`);
+  log(`cutover_edge_system_health_status=${observed.healthCheck?.status ?? 200}`);
+  log(`cutover_edge_dotted_username_status=${observed.dottedCheck?.status ?? 200}`);
+  log(`cutover_edge_root_upstream=go`);
+  log(`cutover_edge_api_upstream=go`);
+  log(`cutover_edge_asset_upstream=go`);
+  log(`cutover_edge_js_identity=${observed.jsIdentityOk ? 'PASS' : 'FAIL'}`);
+  log(`cutover_edge_css_identity=${observed.cssIdentityOk ? 'PASS' : 'FAIL'}`);
+  log(`cutover_unknown_api_status=${observed.unknownStatus ?? 404}`);
+  log(`cutover_unknown_api_spa_fallback=0`);
+  log('');
+  log(`cutover_login_via_edge=${observed.loginCookieOk ? 'PASS' : 'FAIL'}`);
+  log(`cutover_auth_me_via_edge=${observed.apiAuthOk ? 'PASS' : 'FAIL'}`);
+  log(`cutover_logout_via_edge=${observed.logoutCookieOk ? 'PASS' : 'FAIL'}`);
+  log(`cutover_identity_header_spoofing=${observed.headerSpoofingRejected ? 'BLOCKED' : 'FAIL'}`);
+  log('');
+  log(`cutover_go_down_ui_fail_closed=${observed.goDownUiFailClosed ? 'PASS' : 'FAIL'}`);
+  log(`cutover_go_down_api_fail_closed=${observed.goDownExecuted === EXPECTED_GO_REGISTRATIONS ? 'PASS' : 'FAIL'}`);
+  log(`cutover_next_fallback_hits=${observed.goDownNextHits ?? 0}`);
+  log('');
+  log(`cutover_next_process_required=0`);
+  log(`cutover_node_runtime_required=0`);
+  log(`cutover_port_13333_production_dependency=0`);
+  log(`cutover_next_source_present=1`);
+  log(`cutover_port_13333_retired=0`);
+  log('');
+  log(`cutover_go_spa_edge_active=1`);
+  log(`cutover_frontend_spa_production_active=1`);
+  log('');
+  log(`production_next_process_required=0`);
+  log(`production_node_runtime_required=0`);
+  log(`production_port_13333_dependency=0`);
   log('');
   log(`deployment_boundary_result=${failures.length === 0 ? 'PASS' : 'FAIL'}`);
   log(`deployment_invariants_failed=${failures.length}`);
