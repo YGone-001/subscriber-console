@@ -132,6 +132,86 @@ export function detectRetiredDocumentationArtifacts(docText) {
   return violations;
 }
 
+/**
+ * Extract declared script names from frontend/package.json.
+ */
+export function extractDeclaredFrontendScripts(packageJsonText) {
+  const parsed = typeof packageJsonText === 'string' ? JSON.parse(packageJsonText) : packageJsonText;
+  const scripts = (parsed && parsed.scripts) || {};
+  return new Set(Object.keys(scripts));
+}
+
+/**
+ * Extract documented frontend commands from markdown documentation.
+ * Specifically scans the frontend commands section in markdown.
+ */
+export function extractDocumentedFrontendScripts(docText) {
+  const match = /#\s*Frontend\s*\([^)]*frontend\/[^)]*\)[\s\S]*?(?:```|$)/i.exec(docText);
+  if (!match) return [];
+  const sectionText = match[0];
+  const commands = [];
+  const lines = sectionText.split('\n');
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('#') && !trimmed.startsWith('#!')) continue;
+    const npmRunMatch = /^npm\s+run\s+([a-zA-Z0-9_:-]+)/.exec(trimmed);
+    if (npmRunMatch) {
+      commands.push(npmRunMatch[1]);
+      continue;
+    }
+    const npmTestMatch = /^npm\s+test\b/.exec(trimmed);
+    if (npmTestMatch) {
+      commands.push('test');
+      continue;
+    }
+  }
+  return [...new Set(commands)];
+}
+
+/**
+ * Validate that all documented frontend scripts exist in declared frontend scripts.
+ * Returns array of undeclared script names.
+ */
+export function validateDocumentedFrontendScripts(documentedScripts, declaredScripts) {
+  const undeclared = [];
+  for (const script of documentedScripts) {
+    if (!declaredScripts.has(script)) {
+      undeclared.push(script);
+    }
+  }
+  return undeclared;
+}
+
+/**
+ * Reject current documentation that presents any frontend npm command
+ * or Vite/frontend server as a production server runtime.
+ */
+export function detectFrontendProductionServerDocs(docText) {
+  const violations = [];
+  const lines = docText.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const rawLine = lines[i];
+    // Allow explicit negative statements / prohibitions / guards
+    if (/(?:does not|not a|not an|never|zero|no|retire|without|neither|nor)\b/i.test(rawLine)) {
+      continue;
+    }
+    const patterns = [
+      { name: 'npm_run_start_prod_server', re: /npm\s+run\s+start\b.*(?:start\s+)?production\s+server/i },
+      { name: 'vite_production_server', re: /Vite\s+production\s+server/i },
+      { name: 'frontend_production_server', re: /(?:start\s+)?frontend\s+production\s+server/i },
+      { name: 'start_frontend_server_in_prod', re: /start\s+frontend\s+server\s+in\s+production/i },
+      { name: 'preview_as_production_runtime', re: /preview.*(?:is|as|runs?\s+as)\s+(?:the\s+)?production\s+runtime/i },
+      { name: 'npm_start_in_production', re: /npm\s+run\s+start\b/i },
+    ];
+    for (const p of patterns) {
+      if (p.re.test(rawLine)) {
+        violations.push({ line: i + 1, name: p.name, text: rawLine.trim() });
+      }
+    }
+  }
+  return violations;
+}
+
 console.log('Testing current architecture documentation consistency...');
 
 // 1. OCS Management Runbook
@@ -431,6 +511,88 @@ for (const example of syntheticRetiredDocExamples) {
   sentinelRetiredDocDetectedCount++;
 }
 
+// 11. Frontend script contract & production server documentation guard
+const frontendPackageJsonText = fs.readFileSync(path.join(ROOT, 'frontend/package.json'), 'utf8');
+const declaredFrontendScripts = extractDeclaredFrontendScripts(frontendPackageJsonText);
+const readmeFrontendScripts = extractDocumentedFrontendScripts(readme);
+
+const undeclaredReadmeScripts = validateDocumentedFrontendScripts(readmeFrontendScripts, declaredFrontendScripts);
+assert.equal(
+  undeclaredReadmeScripts.length,
+  0,
+  `README documents undeclared frontend scripts: ${undeclaredReadmeScripts.join(', ')}`
+);
+
+// Verify required production wording is present in README
+assert.ok(
+  /Production does not start a frontend server\.\s*The production SPA is built from frontend\//i.test(readme),
+  'README must include authoritative production SPA embed wording: "Production does not start a frontend server..."'
+);
+
+// Check that no active documentation presents frontend npm commands or Vite as a production server
+const prodServerDocViolations = [];
+for (const docFile of activeDocs) {
+  const content = fs.readFileSync(docFile, 'utf8');
+  const hits = detectFrontendProductionServerDocs(content);
+  for (const hit of hits) {
+    prodServerDocViolations.push({ file: path.relative(ROOT, docFile).replaceAll('\\', '/'), ...hit });
+  }
+}
+assert.equal(
+  prodServerDocViolations.length,
+  0,
+  `Active documentation presents frontend as production server: ${JSON.stringify(prodServerDocViolations)}`
+);
+
+// 12. Negative Falsifiability Sentinels for frontend scripts and production server docs
+// (a) Synthetic fixture with "npm run start # Start production server"
+const syntheticNonexistentStartFixture = `
+# Frontend (from frontend/)
+npm run start # Start production server
+`;
+const syntheticStartCommands = extractDocumentedFrontendScripts(syntheticNonexistentStartFixture);
+const syntheticStartUndeclared = validateDocumentedFrontendScripts(syntheticStartCommands, declaredFrontendScripts);
+assert.ok(
+  syntheticStartUndeclared.includes('start'),
+  'validateDocumentedFrontendScripts must detect nonexistent "start" script'
+);
+const syntheticStartProdServerHits = detectFrontendProductionServerDocs(syntheticNonexistentStartFixture);
+assert.ok(
+  syntheticStartProdServerHits.length > 0,
+  'detectFrontendProductionServerDocs must flag "npm run start # Start production server"'
+);
+
+// (b) Synthetic fixture with invented command "npm run deploy-ui"
+const syntheticInventedScriptFixture = `
+# Frontend (from frontend/)
+npm run deploy-ui
+`;
+const syntheticInventedCommands = extractDocumentedFrontendScripts(syntheticInventedScriptFixture);
+const syntheticInventedUndeclared = validateDocumentedFrontendScripts(syntheticInventedCommands, declaredFrontendScripts);
+assert.ok(
+  syntheticInventedUndeclared.includes('deploy-ui'),
+  'validateDocumentedFrontendScripts must detect invented script "deploy-ui"'
+);
+
+// (c) Synthetic production server patterns
+const syntheticProdServerExamples = [
+  'Vite production server',
+  'frontend production server',
+  'start frontend server in production',
+];
+for (const ex of syntheticProdServerExamples) {
+  const hits = detectFrontendProductionServerDocs(ex);
+  assert.ok(hits.length > 0, `detectFrontendProductionServerDocs must flag "${ex}"`);
+}
+
+// (d) Positive contract: verify all 7 canonical scripts are declared and accepted
+const EXPECTED_FRONTEND_SCRIPTS = ['dev', 'build', 'preview', 'lint', 'typecheck', 'test', 'check'];
+for (const s of EXPECTED_FRONTEND_SCRIPTS) {
+  assert.ok(declaredFrontendScripts.has(s), `frontend/package.json must declare script "${s}"`);
+}
+const positiveValidation = validateDocumentedFrontendScripts(EXPECTED_FRONTEND_SCRIPTS, declaredFrontendScripts);
+assert.equal(positiveValidation.length, 0, 'All expected frontend scripts must be declared');
+
 console.log('Current architecture documentation consistency: PASS');
 
 console.log(`documented_next_version=${documentedNextVersion}`);
@@ -442,6 +604,13 @@ console.log(`deployment_stale_production_topology=${deploymentStaleHits.length}`
 console.log(`current_docs_frontend_spa_refs=${currentDocsFrontendSpaRefs}`);
 console.log(`current_docs_legacy_next_setup_refs=${currentDocsLegacyNextSetupRefs}`);
 console.log(`current_docs_deleted_next_proxy_refs=${currentDocsDeletedNextProxyRefs}`);
+console.log(`readme_documented_frontend_scripts=${readmeFrontendScripts.join(',')}`);
+console.log(`readme_undeclared_frontend_scripts=${undeclaredReadmeScripts.length}`);
+console.log(`frontend_production_server_docs_hits=${prodServerDocViolations.length}`);
+console.log(`sentinel_nonexistent_start_detected=true`);
+console.log(`sentinel_invented_script_detected=true`);
+console.log(`sentinel_prod_server_docs_detected=true`);
+console.log(`frontend_command_contract_result=PASS`);
 console.log(`canonicalization_cleanup_result=PASS`);
 console.log(`local_workflow_contract=PASS`);
 console.log(`documentation_contract=PASS`);

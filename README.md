@@ -222,14 +222,19 @@ npm run local:doctor        # Diagnose the running local full-stack topology
 npm run local:stop          # Stop only the processes started by local:dev
 
 # Frontend (from frontend/)
-npm run dev                 # Start development server
-npm run build               # Production build
-npm run start               # Start production server
+npm run dev                 # Start the local Vite development server
+npm run build               # Build the production static SPA
+npm run preview             # Preview the built SPA locally; not a production runtime
 npm run lint                # Run ESLint
-npm run typecheck           # Run TypeScript without emitting files
-npm test                    # Run Node.js unit tests
+npm run typecheck           # Run TypeScript checks without emitting files
+npm test                    # Run frontend tests
 npm run check               # Run lint, typecheck, tests, and build
 ```
+
+Production does not start a frontend server.
+The production SPA is built from frontend/, staged for Go embedding,
+compiled into the Go binary, and served through Nginx -> Go.
+
 
 MongoDB operational scripts write JSON reports to `reports/ops/` by default. Set `OPS_REPORT_DIR` to override the location.
 
