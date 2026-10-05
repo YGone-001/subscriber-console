@@ -19,6 +19,8 @@
     "local:doctor": "node scripts/check-local-stack.mjs",
     "local:stop": "node scripts/local-stop.mjs",
     "check:agent-docs-parity": "node scripts/test-agent-docs-parity.mjs",
+    "check:ui-parity": "node scripts/test-ui-parity-contract.mjs",
+    "ui:capture": "node scripts/capture-ui-parity.mjs",
     "docs:sync-agents": "node scripts/sync-agent-docs.mjs"
   },
   "dependencies": {

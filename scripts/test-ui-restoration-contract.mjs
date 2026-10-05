@@ -148,7 +148,12 @@ check('UI-09', headerSource.includes('xCloud_picture.png') && headerSource.inclu
 check('UI-10', /NocSentinel/.test(headerSource) && /NotificationCenter/.test(headerSource) && /LanguageSwitcher/.test(headerSource) && /ThemeSwitcher/.test(headerSource) && /UserMenu/.test(headerSource), 'header_cluster=noc+notifications+language+theme+user');
 check('UI-11', sidebarSource.includes('sidebar-filter-wrap') && sidebarSource.includes('sidebar-active-bar') && sidebarSource.includes('sidebar-tooltip') && sidebarSource.includes('sidebar-subnav') && sidebarSource.includes('sidebar-toggle-btn'), 'sidebar_composition=filter+rail+tooltip+subnav+toggle');
 check('UI-12', paletteSource.includes('cp-overlay') && paletteSource.includes('cp-search-input') && /getVisibleNavigation|filterNavigation/.test(paletteSource), 'command_palette=restored+route_authority');
-check('UI-13', tabBarSource.includes('nav-tab-bar') && /getVisibleNavigation/.test(tabBarSource), 'tab_bar=restored+role_filtered');
+// The tab set must be derived from the navigation authority, never hardcoded.
+// The reference visited-tab model filters through canAccessNavigationRoute, which
+// itself derives from getVisibleNavigation; accept either entry point (same
+// alternation style as UI-12).
+check('UI-13', tabBarSource.includes('nav-tab-bar') && /getVisibleNavigation|canAccessNavigationRoute/.test(tabBarSource), 'tab_bar=restored+role_filtered');
+check('UI-13b', /XCLOUD_OPEN_TABS/.test(tabBarSource) && /nav-tab-close/.test(tabBarSource) && /nav-tab-scroll-btn/.test(tabBarSource) && /nav-tab-dropdown/.test(tabBarSource), 'tab_bar=visited_model+close+scroll+overflow');
 check('UI-14', breadcrumbSource.includes('nav-breadcrumbs-bar') && breadcrumbSource.includes('aria-current') && /getBreadcrumbs/.test(breadcrumbSource), 'breadcrumbs=restored+route_derived');
 check('UI-15', notificationSource.includes('notif-bell-button') && notificationSource.includes('notif-dropdown-panel') && /useNotifications/.test(notificationSource), 'notification_presentation=restored');
 check('UI-16', nocSource.includes('noc-header-button') && nocSource.includes('noc-panel') && /useNotifications/.test(nocSource), 'noc_sentinel=restored');
@@ -158,13 +163,17 @@ check('UI-17', /NavigationTabBar/.test(shellSource) && /NavigationBreadcrumbs/.t
 check('UI-18', /'b'/.test(shellSource) && /'k'/.test(shellSource) && /Escape/.test(shellSource) && /981/.test(shellSource) && /sidebar-mobile-backdrop/.test(shellSource) && /document\.body\.style\.overflow/.test(shellSource), 'shell_interactions=ctrl+b+ctrl+k+escape+breakpoint+overlay');
 
 // 7. Dashboard presentation.
+// The dashboard is the forward-ported AnalyticsCockpit (reference composition),
+// not a locally invented layout.
 const dashboardSource = readSource('features/read/ReadPages.tsx');
-const dashboardModelSource = readSource('features/read/dashboard-model.ts');
-check('UI-19', /KpiStrip/.test(dashboardSource) && /KpiCard/.test(dashboardSource) && /chart-card/.test(dashboardSource) && /workbench/.test(dashboardSource) && /detail-panel/.test(dashboardSource), 'dashboard_layout=kpi+charts+workbench+panels');
-check('UI-20', /SkeletonPage/.test(dashboardSource) && /ErrorState/.test(dashboardSource) && /EmptyState/.test(dashboardSource), 'dashboard_states=loading+error+empty');
-check('UI-21', /buildDashboardModel/.test(dashboardSource) && /dashboard-model/.test(dashboardSource) && /dashboard-model/.test(dashboardModelSource === '' ? '' : 'dashboard-model'), 'dashboard_view_model=extracted');
+const cockpitSource = readSource('components/AnalyticsCockpit.tsx');
+const emptyChartSource = readSource('components/analytics/EmptyChartState.tsx');
+check('UI-19', /AnalyticsCockpit/.test(dashboardSource) && /MetricStrip/.test(cockpitSource) && /WorkbenchPanel/.test(cockpitSource) && /OcsResourceStrip/.test(cockpitSource) && /TopConsumerChart/.test(cockpitSource) && /TariffPlanDistributionChart/.test(cockpitSource), 'dashboard_layout=cockpit+kpi+workbench+ocs+charts');
+check('UI-20', /SkeletonDashboard/.test(cockpitSource) && /analytics-offline/.test(cockpitSource) && /EmptyChartState/.test(emptyChartSource), 'dashboard_states=loading+error+empty');
+// The cockpit must read the accepted read contracts, never a bespoke aggregation.
+check('UI-21', ['/api/analytics/metrics', '/api/analytics/sparkline', '/api/alerts', '/api/ocs/subscribers'].every((endpoint) => cockpitSource.includes(endpoint)), 'dashboard_read_contracts=metrics+sparkline+alerts+contracts');
 const DASHBOARD_FAKE_DATA = [/\b12345\b/, /lorem ipsum/i, /mockData/, /fakeData/];
-check('UI-22', DASHBOARD_FAKE_DATA.every((pattern) => !pattern.test(dashboardSource) && !pattern.test(dashboardModelSource)), 'dashboard_fake_data=0');
+check('UI-22', DASHBOARD_FAKE_DATA.every((pattern) => !pattern.test(dashboardSource) && !pattern.test(cockpitSource)), 'dashboard_fake_data=0');
 
 // 8. Inventory visual integration.
 const inventoryPages = ['InventoryPage.tsx', 'InventoryDetailPage.tsx', 'InventoryCreatePage.tsx'];

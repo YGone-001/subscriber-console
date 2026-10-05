@@ -1,6 +1,28 @@
 # Frontend UI Restoration — Historical xCloud Presentation on the Current Runtime
 
-Status: IMPLEMENTED (Stage 1-UI, presentation restoration only).
+Status: **PARTIAL** — see the correction below.
+
+> **Correction (2026-10-06).** This document previously recorded `IMPLEMENTED (Stage 1-UI)`.
+> An evidence-based audit found that claim overstated the outcome: the shell was restored,
+> but the **page presentation layer was not**. Measured against the reference checkout:
+> CSS rules **2751 → 659** (-76%), `components/ui` primitives **23 → 6**, JSX class
+> vocabulary **1406 → 326**, and the shared design vocabulary (`dash-card`, `kpiGrid`,
+> `analytics-*`, `ocs-*`, `profile-*`) had **zero** occurrences in the markup.
+>
+> Phases 1–4 of the remediation restored the style layers, the shared primitives and the
+> main business surfaces; nine real defects were found and fixed along the way (including a
+> users page whose query parameters made every request return `400`).
+>
+> - Analysis, gap inventory and remediation plan:
+>   [`frontend-ui-parity-plan.md`](../plans/frontend-ui-parity-plan.md)
+> - Reference-driven acceptance gate: `npm run check:ui-parity`
+>   (`scripts/test-ui-parity-contract.mjs`) — compares the current tree against the
+>   reference checkout instead of asserting self-defined strings.
+> - Screenshot harness: `npm run ui:capture` (`scripts/capture-ui-parity.mjs`).
+>
+> The earlier `test-ui-restoration-contract.mjs` could never detect this divergence: it
+> asserted strings the implementation itself defines. Several of its assertions have since
+> been rewritten to express reference composition (UI-13, UI-19, UI-20, UI-21).
 
 ## 1. Dual authority
 
