@@ -39,6 +39,7 @@ Canonical frontend SPA source     -> frontend/src/
 ## Architecture
 
 - [System architecture](architecture/system-architecture.md)
+- [Inventory resource model](architecture/inventory-resource-model.md)
 - [Architecture evolution roadmap](architecture/architecture-evolution-roadmap.md) - planned architecture evolution authority; it distinguishes future targets from current production behavior.
 - [Frontend-backend boundary](architecture/frontend-backend-boundary.md)
 - [Security model](architecture/security-model.md)

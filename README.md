@@ -2,7 +2,7 @@
 
 xCloud subscriber operations console built with React, Vite, Go, and MongoDB.
 
-It manages IMSI subscriber records, profile templates, OCS tariff plans, subscriber contracts, balance accounts, rating policies, traffic analytics, CSV import/export, operation logs, local alerts, system health checks, and role-based access control.
+It manages IMSI subscriber records, profile templates, network and platform resource inventory with audited metadata lifecycle management, OCS tariff plans, subscriber contracts, balance accounts, rating policies, traffic analytics, CSV import/export, operation logs, local alerts, system health checks, and role-based access control.
 
 ## Architecture
 
@@ -34,7 +34,7 @@ Browser → Nginx (only public origin)
 ```
 
 The Nginx edge routes all public production traffic to the single Go upstream (`127.0.0.1:18888`).
-The Go backend owns every production API operation (84 exact METHOD+PATH registrations),
+The Go backend owns every production API operation (90 exact METHOD+PATH registrations),
 session authentication, and embedded static React SPA hosting.
 Next.js runtime is completely retired. Production Node.js runtime required = NO.
 

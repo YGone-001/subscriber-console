@@ -1,0 +1,41 @@
+[
+  {
+    "route": "/inventory/create",
+    "source": "frontend/src/features/inventory/InventoryCreatePage.tsx",
+    "operations": [
+      {
+        "name": "inventory resource create",
+        "request": "POST /api/inventory/resources",
+        "authorization": {
+          "kind": "permission",
+          "value": "core.configure"
+        },
+        "confirmation": false
+      }
+    ]
+  },
+  {
+    "route": "/inventory/:resourceId",
+    "source": "frontend/src/features/inventory/InventoryDetailPage.tsx",
+    "operations": [
+      {
+        "name": "inventory resource update",
+        "request": "PUT /api/inventory/resources/{resourceId}",
+        "authorization": {
+          "kind": "permission",
+          "value": "core.configure"
+        },
+        "confirmation": false
+      },
+      {
+        "name": "inventory resource retire",
+        "request": "POST /api/inventory/resources/{resourceId}/retire",
+        "authorization": {
+          "kind": "permission",
+          "value": "core.configure"
+        },
+        "confirmation": true
+      }
+    ]
+  }
+]

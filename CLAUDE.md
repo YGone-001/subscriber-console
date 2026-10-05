@@ -79,7 +79,7 @@ Approval workflow removed from business execution path. Authorization and operat
 - 管理员解锁 (Admin Unlock): 仅管理员可通过 Go 用户管理 API (`PATCH /api/users/{username}`) 解锁，恢复 `status="active"`, `locked=false`，清空锁定元数据与重置 `failedLoginAttempts=0`，并递增 `sessionVersion` 撤销历史会话。
 - 末位管理员保护 (Last Active Admin Protection): 严禁自动锁定或手动锁定/禁用系统中最后一个处于激活状态的管理员（返回 HTTP 409 `LAST_ACTIVE_ADMIN`）。
 - 密钥与会话安全 (Secret & Cookie Hardening): Go 启动时强校验 `JWT_SECRET`（>= 32 UTF-8 字节，禁止弱占位符，不符则拒绝启动）；Cookie 属性强绑定 `HttpOnly=true`, `SameSite=Lax`, HTTPS 下强制 `Secure=true`；敏感认证响应强制 `Cache-Control: no-store`。（前端不持有 JWT secret，仅 Go 校验。）
-- 认证 API 生产所有权：Go 后端认证接口 (`/api/auth/login`, `/api/auth/logout`, `/api/auth/me`, `/api/auth/permissions`) 为生产 owner。Nginx 边缘路由直接将 `/api` 与 `/api/*` 转发至 Go；路由权威来源 = 84 条 Go 注册。
+- 认证 API 生产所有权：Go 后端认证接口 (`/api/auth/login`, `/api/auth/logout`, `/api/auth/me`, `/api/auth/permissions`) 为生产 owner。Nginx 边缘路由直接将 `/api` 与 `/api/*` 转发至 Go；路由权威来源 = 90 条 Go 注册。
 
 
 长期演进：
@@ -102,7 +102,7 @@ Nginx (唯一对外入口)
 Go 127.0.0.1:18888
 Business API (owner)
 Auth identity + session validation
-Read + write APIs (84 条 METHOD+PATH 注册)
+Read + write APIs (90 条 METHOD+PATH 注册)
 Embedded static React SPA (生产 UI)
    |
    v
@@ -112,7 +112,7 @@ MongoDB
 Current production state:
 
 - Nginx 是唯一对外入口，单一应用 upstream (`xcloud_go` 127.0.0.1:18888)，代理 `/api`、`/api/*`、SSE 及 `/*`（SPA shell 与静态资源），并剥离客户端身份头。
-- Go Backend 位于 `backend/`，生产业务 API 全部由 Go 独占，并内嵌托管静态 React SPA；路由权威来源 = 84 条 Go 注册（`backend/cmd/server/main.go` + `backend/internal/remediation/handler.go`）。
+- Go Backend 位于 `backend/`，生产业务 API 全部由 Go 独占，并内嵌托管静态 React SPA；路由权威来源 = 90 条 Go 注册（`backend/cmd/server/main.go` + `backend/internal/remediation/handler.go`）。
 - `frontend/` 为标准规范 React + Vite SPA 源码，构建为静态资产嵌入 Go 二进制程序中。
 - Next.js 源码已退役，原 Next.js 端口 13333 重新分配给 Vite 本地开发；生产环境 edge 流量为 0。生产环境不需要 Node 运行时。
 - Next.js 业务后端不存在，不得重建。
@@ -133,7 +133,16 @@ The planned architecture evolution authority is
 `docs/architecture/architecture-evolution-roadmap.md`. It must not be treated as a
 runtime deployment instruction before its implementation phases begin.
 
-### 2.2 Long-Term Platform Direction
+### 2.2 Inventory 资源模型底座 (Inventory / Resource Model Foundation)
+
+- Inventory 资源模型底座已实现：权威存储集合为 `xcloud_ops.app_inventory_resources`（`xcloud` 中为 0）。
+- 6 条 Go 注册接口：`GET /api/inventory/meta`, `GET /api/inventory/resources`, `GET /api/inventory/resources/{resourceId}`, `POST /api/inventory/resources`, `PUT /api/inventory/resources/{resourceId}`, `POST /api/inventory/resources/{resourceId}/retire`。
+- 3 条前端 SPA 路由：`/inventory`, `/inventory/:resourceId`, `/inventory/create`（前端共 26 条规范路由）。
+- 权限契约：读接口需 `core.read`，写接口需 `core.configure`。
+- 并发与状态保护：单调递增 `revision` CAS 乐观锁；`retired` 为终态且不可逆不可修改。
+- 仅作为资源事实元数据源（Facts only），不执行远端网络操作；拓扑关系与网络适配器为后续阶段演进。
+
+### 2.3 Long-Term Platform Direction
 
 The longer-term direction is a modular operations platform with inventory/topology,
 workflow, assurance, telemetry, and vendor-neutral adapter boundaries. Logical
@@ -141,7 +150,7 @@ boundaries precede any deployment decomposition; independent services are introd
 only when scale, failure isolation, operational ownership, or availability requires
 them.
 
-### 2.3 OCS 生产冻结规范 (OCS Management Plane Freeze)
+### 2.4 OCS 生产冻结规范 (OCS Management Plane Freeze)
 
 OCS Management Plane is frozen.
 Managed domains:
@@ -154,7 +163,7 @@ Charging Plane remains frozen and excluded.
 - 资费计划 (`ocs_tariff_plans`, `/ocs/tariffs`)、签约合同 (`ocs_subscribers`, `/ocs/contracts`)、余额管理 (`ocs_balances`, `/ocs/balances`) 生产基线永久冻结。
 - 严禁向 OCS 管理平面添加新业务能力或重新设计架构。
 - 严禁引入或耦合运行时计费面实体（`ocs_sessions`, `ocs_reservations`, `ocs_usage_records`, `ocs_events`, `ocs_config`, Gy/Ro/CCR/CCA 协议栈）。
-- 路由权威来源：84 条 Go 注册（`backend/cmd/server/main.go` + `backend/internal/remediation/handler.go`）；Nginx 负责 API 路由。
+- 路由权威来源：90 条 Go 注册（`backend/cmd/server/main.go` + `backend/internal/remediation/handler.go`）；Nginx 负责 API 路由。
 
 ### 2.4 本地全栈访问契约 (Local Full-Stack Access Contract)
 

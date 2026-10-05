@@ -440,6 +440,20 @@ async function ensureIndexes() {
     { key: { updated_at: -1 }, name: 'metrics_updated_at_desc' },
   ])).map((name) => ({ database: appDbName, collection: 'app_metrics', name })));
 
+  createdIndexes.push(...(await appDb.collection('app_inventory_resources').createIndexes([
+    { key: { kind: 1, domain: 1, lifecycleState: 1, updatedAt: -1 }, name: 'inventory_kind_domain_lifecycle_updated' },
+    { key: { nameNormalized: 1, updatedAt: -1 }, name: 'inventory_name_normalized_updated' },
+    { key: { updatedAt: -1, _id: 1 }, name: 'inventory_updated_id' },
+    {
+      key: { 'source.system': 1, 'source.externalId': 1 },
+      unique: true,
+      partialFilterExpression: {
+        'source.externalId': { $exists: true, $type: 'string', $gt: '' },
+      },
+      name: 'uniq_inventory_source_external_id',
+    },
+  ])).map((name) => ({ database: appDbName, collection: 'app_inventory_resources', name })));
+
 async function seedRootAdminUser(appDb) {
   const users = appDb.collection('app_users');
   const existingAdmin = await users.findOne({ username: 'admin' });

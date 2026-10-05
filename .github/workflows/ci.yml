@@ -78,6 +78,9 @@ jobs:
       - name: Frontend operational contract
         run: node scripts/test-frontend-operational-contract.mjs
 
+      - name: Inventory contract and security evidence
+        run: node scripts/test-inventory-contract.mjs
+
       - name: API ownership invariants
         run: node scripts/test-api-ownership-invariants.mjs
 
@@ -534,6 +537,52 @@ jobs:
       - name: Repository normalization gate
         run: node scripts/test-repository-normalization.mjs
 
+  inventory-foundation:
+    name: Inventory foundation integration
+    runs-on: ubuntu-latest
+    env:
+      MONGODB_URI: mongodb://127.0.0.1:27017/xcloud
+      MONGODB_XCLOUD_DB: xcloud
+      MONGODB_APP_DB: xcloud_ops
+      JWT_SECRET: ci-only-placeholder-secret-with-at-least-32-bytes
+      INITIAL_ADMIN_PASSWORD: ChangeMe@2026
+    services:
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ ping: 1 })'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          cd frontend && npm ci
+
+      - name: Inventory foundation integration
+        run: node scripts/test-inventory-foundation.mjs
+
   production-architecture:
     name: Production architecture certification
     runs-on: ubuntu-latest
@@ -548,6 +597,7 @@ jobs:
       - local-development-runtime
       - local-operations-contract
       - repository-normalization
+      - inventory-foundation
     steps:
       - name: Checkout
         uses: actions/checkout@v7

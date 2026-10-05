@@ -18,6 +18,7 @@ import (
 	"subscriber/internal/balance"
 	"subscriber/internal/config"
 	"subscriber/internal/handler"
+	"subscriber/internal/inventory"
 	"subscriber/internal/middleware"
 	mongoClient "subscriber/internal/mongo"
 	"subscriber/internal/notification"
@@ -170,6 +171,10 @@ func main() {
 	authRepo := auth.NewUserRepository(mc.Ops.Collection("app_users"))
 	authHandler := auth.NewHandler(authRepo, limiter, authAuditAdapter, jwtSecretBytes, logger)
 
+	// Inventory
+	inventoryRepo := inventory.NewRepository(mc.Ops.Collection("app_inventory_resources"))
+	inventoryHandler := inventory.NewHandler(inventoryRepo, limiter, auditWriter)
+
 	// Build handler
 	mux := http.NewServeMux()
 
@@ -299,6 +304,14 @@ func main() {
 	mux.Handle("GET /api/system/audit/status", authMiddleware(http.HandlerFunc(systemHandler.AuditStatus)))
 	mux.Handle("POST /api/system/audit/scan", authMiddleware(http.HandlerFunc(systemHandler.AuditScan)))
 	remediation.RegisterRoutes(mux, authMiddleware, remediationHandler)
+
+	// Inventory
+	mux.Handle("GET /api/inventory/meta", authMiddleware(http.HandlerFunc(inventoryHandler.Meta)))
+	mux.Handle("GET /api/inventory/resources", authMiddleware(http.HandlerFunc(inventoryHandler.List)))
+	mux.Handle("GET /api/inventory/resources/{resourceId}", authMiddleware(http.HandlerFunc(inventoryHandler.Get)))
+	mux.Handle("POST /api/inventory/resources", authMiddleware(http.HandlerFunc(inventoryHandler.Create)))
+	mux.Handle("PUT /api/inventory/resources/{resourceId}", authMiddleware(http.HandlerFunc(inventoryHandler.Update)))
+	mux.Handle("POST /api/inventory/resources/{resourceId}/retire", authMiddleware(http.HandlerFunc(inventoryHandler.Retire)))
 
 	// Catch-all for unknown API routes
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {

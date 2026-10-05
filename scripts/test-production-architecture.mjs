@@ -6,7 +6,7 @@
  * architecture from primary sources and fails closed on any drift:
  *
  *   - the Go production API surface, derived from the Go registration site
- *     (84 exact METHOD+PATH registrations, zero duplicates), never compared against a
+ *     (90 exact METHOD+PATH registrations, zero duplicates), never compared against a
  *     historical commit;
  *   - absence of the Next.js business backend (no App Router API tree, no business
  *     server tree, no business MongoDB data plane);
@@ -19,7 +19,7 @@
  *   - retired-surface absence and charging-plane exclusion.
  *
  * The only frozen constants are explicit current contracts: the canonical API surface
- * size (84), the listener addresses, and the compatibility counts. Every observed value
+ * size (90), the listener addresses, and the compatibility counts. Every observed value
  * is independently derived from source; no chronology-based baseline is used.
  *
  * The real-runtime proofs (real Nginx/Next/Go/Mongo topology, routing ownership,
@@ -45,7 +45,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const rel = (p) => relative(root, p).replaceAll('\\', '/');
 
 // --- Current production contracts ----------------------------------------------------
-const EXPECTED_GO_REGISTRATIONS = 84;
+const EXPECTED_GO_REGISTRATIONS = 90;
 const EXPECTED_GO_LISTENER = '127.0.0.1:18888';
 const EXPECTED_CANONICAL_API = 33;
 const EXPECTED_LEGACY_ALIASES = 2;

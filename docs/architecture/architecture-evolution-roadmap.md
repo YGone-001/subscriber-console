@@ -70,6 +70,10 @@ to Go `:18888`.
 `frontend/` is the active production SPA source.
 The Vite listener on `127.0.0.1:13333` is the loopback-only development server.
 
+Platform Evolution Status:
+- Inventory / Resource Model Foundation = IMPLEMENTED (authoritative metadata source of truth in `xcloud_ops.app_inventory_resources`, 6 Go endpoints, 3 SPA routes, keyset cursor pagination, CAS concurrency, terminal retirement).
+- Topology relationships, discovery adapters, and remote network control remain future work.
+
 ### Internal Backend Direction
 
 The intended Go modular-monolith boundaries are logical boundaries, not packages to

@@ -1,6 +1,9 @@
 [
   { "route": "/", "dynamicParameters": [] },
   { "route": "/login", "dynamicParameters": [] },
+  { "route": "/inventory", "dynamicParameters": [] },
+  { "route": "/inventory/:resourceId", "dynamicParameters": ["resourceId"] },
+  { "route": "/inventory/create", "dynamicParameters": [] },
   { "route": "/ocs", "dynamicParameters": [] },
   { "route": "/ocs/balances", "dynamicParameters": [] },
   { "route": "/ocs/balances/:imsi", "dynamicParameters": ["imsi"] },

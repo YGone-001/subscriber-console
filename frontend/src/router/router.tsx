@@ -19,9 +19,15 @@ import { ProfilesPage } from '../features/profiles/ProfilesPage';
 import { UsersPage } from '../features/users/UsersPage';
 import { UserDetailPage } from '../features/users/UserDetailPage';
 import { UserCreatePage } from '../features/users/UserCreatePage';
+import { InventoryPage } from '../features/inventory/InventoryPage';
+import { InventoryDetailPage } from '../features/inventory/InventoryDetailPage';
+import { InventoryCreatePage } from '../features/inventory/InventoryCreatePage';
 
 const pages: Record<string, ReactNode> = {
   '/': <DashboardPage />,
+  '/inventory': <InventoryPage />,
+  '/inventory/:resourceId': <InventoryDetailPage />,
+  '/inventory/create': <InventoryCreatePage />,
   '/ocs/balances': <BalancesPage />,
   '/ocs/balances/:imsi': <BalanceDetailPage />,
   '/ocs/contracts': <ContractsPage />,

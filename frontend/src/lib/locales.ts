@@ -22,6 +22,13 @@ const en = {
   read_only_parity: 'Read-only migration parity', loading: 'Loading...', empty: 'No data is available.', refresh: 'Refresh',
   read_table: 'Read-only results', details: 'Details', search: 'Search', records: 'records', previous: 'Previous', next: 'Next',
   back: 'Back', export: 'Export', traffic_trend: 'Traffic trend', workbench: 'Operational priorities',
+  nav_inventory: 'Inventory', nav_inventory_create: 'Create resource', inventory_title: 'Inventory',
+  inventory_resource: 'Resource', inventory_kind: 'Kind', inventory_domain: 'Domain', inventory_role: 'Role',
+  inventory_lifecycle: 'Lifecycle', inventory_vendor: 'Vendor', inventory_model: 'Model', inventory_software: 'Software',
+  inventory_management_endpoint: 'Management Endpoint', inventory_capabilities: 'Capabilities',
+  inventory_labels: 'Labels', inventory_attributes: 'Attributes', inventory_source: 'Source', inventory_revision: 'Revision',
+  inventory_create_resource: 'Create Resource', inventory_edit_resource: 'Edit Resource', inventory_retire_resource: 'Retire Resource',
+  inventory_name: 'Name', inventory_updated_at: 'Updated At', saving: 'Saving...', retire: 'Retire',
 } as const;
 
 const zh: Record<keyof typeof en, string> = {
@@ -42,6 +49,13 @@ const zh: Record<keyof typeof en, string> = {
   read_only_parity: '只读迁移一致性', loading: '加载中...', empty: '暂无可用数据。', refresh: '刷新',
   read_table: '只读结果', details: '详情', search: '搜索', records: '条记录', previous: '上一页', next: '下一页',
   back: '返回', export: '导出', traffic_trend: '流量趋势', workbench: '运营优先事项',
+  nav_inventory: '资源清单', nav_inventory_create: '创建资源', inventory_title: '资源清单',
+  inventory_resource: '资源', inventory_kind: '类型', inventory_domain: '领域', inventory_role: '角色',
+  inventory_lifecycle: '生命周期', inventory_vendor: '厂商', inventory_model: '型号', inventory_software: '软件版本',
+  inventory_management_endpoint: '管理端点', inventory_capabilities: '能力集',
+  inventory_labels: '标签', inventory_attributes: '扩展属性', inventory_source: '数据来源', inventory_revision: '修订版本',
+  inventory_create_resource: '创建资源', inventory_edit_resource: '编辑资源', inventory_retire_resource: '下线资源',
+  inventory_name: '名称', inventory_updated_at: '更新时间', saving: '保存中...', retire: '下线',
 };
 
 export const dictionaries: Record<Locale, Record<string, string>> = { en, zh };

@@ -6,7 +6,7 @@
  * 1. Tariff Plan Governance (CRUD, enable, disable, clone, operations, DIRECT/APPROVAL)
  * 2. Contract Subscriber Governance (Create, change-tariff, suspend, resume, terminate, DIRECT/APPROVAL)
  * 3. Balance Governance (Direct adjustment, approval adjustment, CAS conflict, reset disabled across 6 roles, detail read)
- * 4. System Invariants (GoRegistered = 84, single-writer production ownership, charging plane boundary)
+ * 4. System Invariants (GoRegistered = 90, single-writer production ownership, charging plane boundary)
  */
 
 import assert from 'node:assert/strict';
@@ -554,10 +554,10 @@ try {
   // ══════════════════════════════════════════════════════════════════
   console.log('\n4. System Invariants & Production Ownership Integrity');
 
-  // 4.1 Go registration surface (single source of truth) must be strictly 84 operations
+  // 4.1 Go registration surface (single source of truth) must be strictly 90 operations
   const { keys: goRegistrations, duplicates: duplicateRegistrations } = deriveGoRegistrations();
-  assert.equal(goRegistrations.length, 84, `Go registration surface must be exactly 84, found ${goRegistrations.length}`);
-  recordCheck('invariants.go_registration_surface_strictly_84');
+  assert.equal(goRegistrations.length, 90, `Go registration surface must be exactly 90, found ${goRegistrations.length}`);
+  recordCheck('invariants.go_registration_surface_strictly_90');
 
   // 4.2 Every production operation is a unique Go-owned "METHOD /path" registration
   assert.equal(duplicateRegistrations.length, 0, `Duplicate Go registrations found: ${duplicateRegistrations.join(', ')}`);

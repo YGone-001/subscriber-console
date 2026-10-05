@@ -80,7 +80,7 @@ Nginx (only public origin)
 Go 127.0.0.1:18888
 Business API (owner)
 Auth identity + session validation
-Read + write APIs (84 METHOD+PATH registrations)
+Read + write APIs (90 METHOD+PATH registrations)
 Embedded static React SPA (production UI)
    |
    v
@@ -100,7 +100,7 @@ Important:
 ```text
 Nginx owns production routing to the single Go upstream xcloud_go (127.0.0.1:18888).
 Go owns every production API operation, auth identity, and embedded static React SPA.
-Route authority = the derived Go registration set (84 exact METHOD+PATH registrations).
+Route authority = the derived Go registration set (90 exact METHOD+PATH registrations).
 frontend/ is the canonical production SPA source, built to static assets and embedded into the Go binary.
 Next.js source is retired; numeric port 13333 is reassigned to Vite development.
 Next.js receives zero production edge traffic. Production Node runtime required = NO.
@@ -195,7 +195,7 @@ Public edge                          = Nginx (deploy/nginx/xcloud.conf)
 API owner (/api, /api/*)             = Go backend, 127.0.0.1:18888
 UI owner (/*)                        = Go backend (embedded SPA), 127.0.0.1:18888
 Retained legacy Next UI contract     = retired
-Go production API registrations      = 84 exact METHOD+PATH registrations
+Go production API registrations      = 90 exact METHOD+PATH registrations
 Next.js business API operations      = 0
 Next.js MongoDB access               = 0
 Node business API execution          = 0
@@ -213,7 +213,7 @@ Retained legacy Next listener        = retired
 Loopback listener enforced by service, not firewall = YES
 Standalone deployment path           = removed
 Go business production changes       = 0
-Go registration set                  = 84
+Go registration set                  = 90
 ```
 
 - Edge: `deploy/nginx/xcloud.conf` uses a single keepalive upstream `xcloud_go` (`127.0.0.1:18888`). `location = /api`, `location /api/`, the dedicated unbuffered `location = /api/notifications/stream`, and `location /` all proxy to Go. All locations strip client identity headers (`X-User` / `X-Role` / `X-Permissions`) and generate `Host` / `X-Real-IP` / `X-Forwarded-For` / `X-Forwarded-Proto`; `client_max_body_size 10m`. `deploy/nginx/setup.sh [listen_port]` validates with `nginx -t` before reload.
@@ -445,7 +445,7 @@ User Management writes = app_users CRUD + disable + password-reset (Direct Execu
 Platform Services writes = alerts acknowledge/workflow (Direct Execution), Go-owned
 ```
 
-Route authority = the derived Go registration set (84 exact METHOD+PATH registrations).
+Route authority = the derived Go registration set (90 exact METHOD+PATH registrations).
 Every production API operation is Go-owned at the Nginx edge.
 
 ---
@@ -530,7 +530,7 @@ POST /api/analytics/init
 Status:
 
 ```text
-Go production API registrations = 84 (route authority: backend/cmd/server/main.go + backend/internal/remediation/handler.go)
+Go production API registrations = 90 (route authority: backend/cmd/server/main.go + backend/internal/remediation/handler.go)
 Next API route tree = absent
 Canonical API surface = 33 operations + 2 legacy read aliases
 Go-native reads = 2
@@ -611,8 +611,21 @@ Platform services scope (11 endpoints):
 - Analytics platform action: `POST /api/analytics/init` (read-only on-demand calculation)
 
 All 11 endpoints are Go production-owned.
-Production routing: all Go-owned, routed by the Nginx edge; route authority = the derived 84-route Go registration set.
+Production routing: all Go-owned, routed by the Nginx edge; route authority = the derived 90-route Go registration set.
 Production owner = Go with no Node fallback and no surviving Node business handler.
+
+---
+
+## 10.2 Inventory Resource Model Foundation
+
+Inventory foundation is implemented:
+- Inventory data authority = `xcloud_ops.app_inventory_resources` (zero in `xcloud`).
+- 6 Go-owned API routes (`GET /api/inventory/meta`, `GET /api/inventory/resources`, `GET /api/inventory/resources/{resourceId}`, `POST /api/inventory/resources`, `PUT /api/inventory/resources/{resourceId}`, `POST /api/inventory/resources/{resourceId}/retire`).
+- 3 SPA routes (`/inventory`, `/inventory/:resourceId`, `/inventory/create`). Total SPA routes = 26.
+- Permissions: Inventory reads require `core.read`; Inventory metadata writes require `core.configure`.
+- Concurrency: Monotonic `revision` with CAS conflict rejection (HTTP 409).
+- Terminal retirement: `retired` resources are immutable and cannot be modified or re-retired.
+- Inventory facts only: Inventory does not execute network operations. Topology and adapters remain future work.
 
 ---
 

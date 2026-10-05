@@ -184,5 +184,31 @@
     "readEndpoints": [
       "GET /api/users/{username}"
     ]
+  },
+  {
+    "route": "/inventory",
+    "mode": "read",
+    "source": "frontend/src/features/inventory/InventoryPage.tsx",
+    "readEndpoints": [
+      "GET /api/inventory/meta",
+      "GET /api/inventory/resources"
+    ]
+  },
+  {
+    "route": "/inventory/:resourceId",
+    "mode": "read",
+    "source": "frontend/src/features/inventory/InventoryDetailPage.tsx",
+    "readEndpoints": [
+      "GET /api/inventory/meta",
+      "GET /api/inventory/resources/{resourceId}"
+    ]
+  },
+  {
+    "route": "/inventory/create",
+    "mode": "read",
+    "source": "frontend/src/features/inventory/InventoryCreatePage.tsx",
+    "readEndpoints": [
+      "GET /api/inventory/meta"
+    ]
   }
 ]

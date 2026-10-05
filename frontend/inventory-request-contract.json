@@ -1,0 +1,121 @@
+[
+  {
+    "name": "inventory resource create",
+    "method": "POST",
+    "path": "/api/inventory/resources",
+    "queryMode": "none",
+    "backendAuthority": "backend/internal/inventory/handler.go",
+    "productionReference": "frontend/src/features/inventory/InventoryCreatePage.tsx",
+    "requiredBodyKeys": [
+      "kind",
+      "name",
+      "domain"
+    ],
+    "optionalBodyKeys": [
+      "displayName",
+      "description",
+      "role",
+      "lifecycleState",
+      "vendor",
+      "model",
+      "software",
+      "managementEndpoints",
+      "capabilities",
+      "labels",
+      "attributes"
+    ],
+    "forbiddenBodyKeys": [
+      "resourceId",
+      "schemaVersion",
+      "source",
+      "revision",
+      "createdAt",
+      "createdBy",
+      "updatedAt",
+      "updatedBy"
+    ],
+    "responseSemantics": "mutation-result"
+  },
+  {
+    "name": "inventory resource update",
+    "method": "PUT",
+    "path": "/api/inventory/resources/{resourceId}",
+    "queryMode": "none",
+    "backendAuthority": "backend/internal/inventory/handler.go",
+    "productionReference": "frontend/src/features/inventory/InventoryDetailPage.tsx",
+    "requiredBodyKeys": [
+      "expectedRevision",
+      "resource"
+    ],
+    "optionalBodyKeys": [],
+    "forbiddenBodyKeys": [
+      "resourceId",
+      "schemaVersion",
+      "source",
+      "revision",
+      "createdAt",
+      "createdBy",
+      "updatedAt",
+      "updatedBy"
+    ],
+    "nestedContracts": {
+      "resource": {
+        "requiredKeys": [
+          "name",
+          "domain",
+          "lifecycleState"
+        ],
+        "allowedKeys": [
+          "name",
+          "domain",
+          "lifecycleState",
+          "displayName",
+          "description",
+          "role",
+          "vendor",
+          "model",
+          "software",
+          "managementEndpoints",
+          "capabilities",
+          "labels",
+          "attributes"
+        ],
+        "forbiddenKeys": [
+          "resourceId",
+          "schemaVersion",
+          "source",
+          "revision",
+          "createdAt",
+          "createdBy",
+          "updatedAt",
+          "updatedBy"
+        ]
+      }
+    },
+    "responseSemantics": "mutation-result"
+  },
+  {
+    "name": "inventory resource retire",
+    "method": "POST",
+    "path": "/api/inventory/resources/{resourceId}/retire",
+    "queryMode": "none",
+    "backendAuthority": "backend/internal/inventory/handler.go",
+    "productionReference": "frontend/src/features/inventory/InventoryDetailPage.tsx",
+    "requiredBodyKeys": [
+      "expectedRevision",
+      "reason"
+    ],
+    "optionalBodyKeys": [],
+    "forbiddenBodyKeys": [
+      "resourceId",
+      "schemaVersion",
+      "source",
+      "revision",
+      "createdAt",
+      "createdBy",
+      "updatedAt",
+      "updatedBy"
+    ],
+    "responseSemantics": "mutation-result"
+  }
+]

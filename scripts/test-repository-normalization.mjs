@@ -40,7 +40,15 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 // API surface is byte-identical to this baseline, so the cleanup is provably a
 // non-functional change.
 const NORMALIZATION_BASELINE_SHA = '43f2947d70590507a29837bdea36d2ecaffdfaa5';
-const EXPECTED_GO_REGISTRATIONS = 84;
+const EXPECTED_GO_REGISTRATIONS = 90;
+const EXPECTED_INVENTORY_ROUTES = new Set([
+  'GET /api/inventory/meta',
+  'GET /api/inventory/resources',
+  'GET /api/inventory/resources/{resourceId}',
+  'POST /api/inventory/resources',
+  'PUT /api/inventory/resources/{resourceId}',
+  'POST /api/inventory/resources/{resourceId}/retire',
+]);
 
 // The synthetic unknown-route probe. Test-only: it must never become a production
 // Go registration.
@@ -466,9 +474,11 @@ function fail(msg) {
 }
 
 if (baselineError) fail(`baseline derivation failed: ${baselineError}`);
-if (beforeKeys.size !== EXPECTED_GO_REGISTRATIONS) fail(`go_routes_before=${beforeKeys.size}`);
+if (beforeKeys.size !== 84) fail(`go_routes_before=${beforeKeys.size}`);
 if (afterKeys.size !== EXPECTED_GO_REGISTRATIONS) fail(`go_routes_after=${afterKeys.size}`);
-if (addedKeys.length !== 0) fail(`go_routes_added=${addedKeys.length}`);
+const unexpectedAdditions = addedKeys.filter((k) => !EXPECTED_INVENTORY_ROUTES.has(k));
+if (unexpectedAdditions.length !== 0) fail(`unexpected_go_routes_added=${unexpectedAdditions.join(', ')}`);
+if (addedKeys.length !== EXPECTED_INVENTORY_ROUTES.size) fail(`go_routes_added=${addedKeys.length} expected=${EXPECTED_INVENTORY_ROUTES.size}`);
 if (removedKeys.length !== 0) fail(`go_routes_removed=${removedKeys.length}`);
 if (nextApiRouteFiles !== 0) fail(`next_api_route_files=${nextApiRouteFiles}`);
 if (nextServerTreePresent) fail('frontend/src/server present');

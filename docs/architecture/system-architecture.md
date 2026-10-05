@@ -22,7 +22,7 @@ Nginx  (sole public edge)
 Go  127.0.0.1:18888
    |-- Business API (owner)
    |-- Auth identity + session validation
-   |-- Read + write APIs (84 exact METHOD+PATH registrations)
+   |-- Read + write APIs (90 exact METHOD+PATH registrations)
    `-- Embedded static React SPA (UI rendering, browser history routing, static assets)
    |
    v
@@ -41,7 +41,7 @@ Nginx owns production routing to the single application upstream:
 ```
 
 The Go application service binds loopback only and is reachable exclusively through
-Nginx. Route authority is the derived Go registration set (84 exact METHOD+PATH
+Nginx. Route authority is the derived Go registration set (90 exact METHOD+PATH
 registrations parsed from `backend/cmd/server/main.go` plus
 `backend/internal/remediation/handler.go`, shared helper
 `scripts/lib/go-registrations.mjs`).
@@ -69,9 +69,28 @@ Same Mongo URI, two databases:
 
 - `xcloud` - subscriber, profile, OCS and tariff data
 - `xcloud_ops` - operational data (`app_users`, `app_profiles`, `app_audit_logs`,
-  `app_alerts`, `app_rate_limits`, `app_metrics`)
+  `app_alerts`, `app_rate_limits`, `app_metrics`, `app_inventory_resources`)
 
 Go uses one `mongo.Client` with two database handles.
+
+### Inventory Domain
+
+Six inventory resource management operations are Go-owned at the edge:
+
+```text
+GET  /api/inventory/meta
+GET  /api/inventory/resources
+GET  /api/inventory/resources/{resourceId}
+POST /api/inventory/resources
+PUT  /api/inventory/resources/{resourceId}
+POST /api/inventory/resources/{resourceId}/retire
+```
+
+- Authoritative collection: `xcloud_ops.app_inventory_resources` (zero in `xcloud`).
+- Permissions: `core.read` for read endpoints, `core.configure` for mutations.
+- Keyset cursor pagination (`updatedAt DESC, _id ASC`) and CAS concurrency (`revision`).
+- Sensitive keys rejected recursively in attributes; server-owned fields protected.
+- Detailed model specification: [Inventory Resource Model](inventory-resource-model.md).
 
 ### Platform Services
 
