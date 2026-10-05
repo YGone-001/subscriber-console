@@ -77,7 +77,7 @@ export function UserMenu({ onLogout }: { onLogout: () => void }) {
               {helpRoute ? (
                 <button type="button" className="dropdown-item" role="menuitem" onClick={() => go(helpRoute.targetRoute)}>
                   <HelpCircle size={16} />
-                  {t('nav_health')}
+                  {t('nav_system_health')}
                 </button>
               ) : null}
               <div className="dropdown-separator" />

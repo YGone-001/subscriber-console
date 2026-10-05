@@ -1,6 +1,36 @@
+/*
+ * Translation dictionaries.
+ *
+ * Two sources are merged here:
+ *   1. The reference dictionaries (`./locales/en`, `./locales/zh`, ~2200 keys
+ *      each), forward-ported from the historical xCloud UI. These are
+ *      authoritative and supply the reference wording for shared keys.
+ *   2. `LEGACY_*` below: the keys the earlier hand-written shell/business layer
+ *      introduced that the reference dictionaries do not define. They only fill
+ *      gaps, so no existing call site regresses.
+ *
+ * Precedence: reference dictionary wins; the legacy map is a fallback.
+ */
 import type { Locale } from './preferences';
+import { en as referenceEn } from './locales/en';
+import { zh as referenceZh } from './locales/zh';
 
-const en = {
+export interface LocaleMeta {
+  code: Locale;
+  name: string;
+  nativeName: string;
+  htmlLang: string;
+  intlLocale: string;
+}
+
+export const SUPPORTED_LOCALES: LocaleMeta[] = [
+  { code: 'en', name: 'English', nativeName: 'English', htmlLang: 'en', intlLocale: 'en-US' },
+  { code: 'zh', name: 'Chinese', nativeName: '简体中文', htmlLang: 'zh-CN', intlLocale: 'zh-CN' },
+];
+
+export const DEFAULT_LOCALE: Locale = 'en';
+
+const LEGACY_EN: Record<string, string> = {
   skip_to_content: 'Skip to content', brand_tagline: 'Subscriber console', sign_in: 'Sign in',
   username: 'Username', password: 'Password', show_password: 'Show password', hide_password: 'Hide password',
   signing_in: 'Signing in...', session_expired: 'Your session has expired. Please sign in again.',
@@ -68,9 +98,9 @@ const en = {
   unit_bytes: 'B', unit_records: 'records', unit_sessions: 'sessions', unit_percent: '%',
   inventory_empty_body: 'No inventory resources match the current filters.',
   inventory_loading_body: 'Loading inventory resources...',
-} as const;
+};
 
-const zh: Record<keyof typeof en, string> = {
+const LEGACY_ZH: Record<string, string> = {
   skip_to_content: '跳至主要内容', brand_tagline: '用户控制台', sign_in: '登录', username: '用户名', password: '密码',
   show_password: '显示密码', hide_password: '隐藏密码', signing_in: '正在登录...', session_expired: '会话已过期，请重新登录。',
   invalid_credentials: '凭据无效。', rate_limited: '尝试次数过多，请在 {seconds} 秒后重试。', auth_unavailable: '认证服务暂时不可用。',
@@ -136,4 +166,9 @@ const zh: Record<keyof typeof en, string> = {
   inventory_loading_body: '正在加载资源清单...',
 };
 
-export const dictionaries: Record<Locale, Record<string, string>> = { en, zh };
+export const en: Record<string, string> = { ...LEGACY_EN, ...referenceEn };
+export const zh: Record<string, string> = { ...LEGACY_ZH, ...referenceZh };
+
+export const LOCALES: Record<Locale, Record<string, string>> = { en, zh };
+
+export const dictionaries: Record<Locale, Record<string, string>> = LOCALES;

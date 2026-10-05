@@ -55,21 +55,21 @@ export function NocSentinel() {
         <span className="noc-button-icon" aria-hidden="true">
           {tone === 'healthy' ? <ShieldCheck size={16} /> : <Activity size={16} />}
         </span>
-        <span className="noc-button-label">{t('noc_sentinel')}</span>
+        <span className="noc-button-label">NOC</span>
         {activeCount > 0 ? <span className="noc-count">{activeCount > 99 ? '99+' : activeCount}</span> : null}
       </button>
 
       {open ? (
         <>
           <div className="noc-panel-backdrop" onClick={() => setOpen(false)} />
-          <div className="noc-panel" role="dialog" aria-label={t('noc_sentinel')}>
+          <div className="noc-panel" role="dialog" aria-label={t('noc_panel_title')}>
             <div className="noc-panel-header">
               <div>
-                <h3><Activity size={16} />{t('noc_sentinel')}</h3>
+                <h3><Activity size={16} />{t('noc_panel_title')}</h3>
                 <span>{label}</span>
               </div>
               <button type="button" className="noc-ghost-button" onClick={() => { setOpen(false); navigate('/system-health'); }}>
-                {t('nav_health')}
+                {t('nav_system_health')}
               </button>
             </div>
 
