@@ -191,7 +191,7 @@ export function InventoryCreatePage() {
       <div className="flex items-center gap-3 mb-6">
         <Link to="/inventory" className="btn-ghost btn-sm inline-flex items-center gap-1.5">
           <ArrowLeft size={16} />
-          <span>Back to Inventory</span>
+          <span>{t('inventory_back_to_list', { defaultValue: 'Back to Inventory' })}</span>
         </Link>
         <h1 className="text-2xl font-bold tracking-tight text-foreground">
           {t('inventory_create_resource', { defaultValue: 'Register Inventory Resource' })}
@@ -299,11 +299,13 @@ export function InventoryCreatePage() {
                 value={lifecycleState}
                 onChange={(e) => setLifecycleState(e.target.value)}
               >
-                {meta?.lifecycleStates?.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
+                {meta?.lifecycleStates
+                  ?.filter((s) => s !== 'retired')
+                  .map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
               </select>
             </div>
           </div>

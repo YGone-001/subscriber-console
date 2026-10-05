@@ -52,7 +52,12 @@ export function buildCreateResourceRequest(input: Partial<CreateResourceRequest>
   if (input.displayName && input.displayName.trim()) req.displayName = input.displayName.trim();
   if (input.description && input.description.trim()) req.description = input.description.trim();
   if (input.role && input.role.trim()) req.role = input.role.trim();
-  if (input.lifecycleState && input.lifecycleState.trim()) req.lifecycleState = input.lifecycleState.trim();
+  if (input.lifecycleState && input.lifecycleState.trim()) {
+    if (input.lifecycleState.trim() === 'retired') {
+      throw new Error('Initial lifecycleState cannot be retired; use planned, active, or maintenance.');
+    }
+    req.lifecycleState = input.lifecycleState.trim();
+  }
   if (input.vendor && input.vendor.trim()) req.vendor = input.vendor.trim();
   if (input.model && input.model.trim()) req.model = input.model.trim();
   if (input.software) req.software = input.software;
@@ -68,8 +73,8 @@ export function buildUpdateResourceRequest(
   expectedRevision: number,
   input: Partial<MutableResource>,
 ): UpdateResourceRequest {
-  if (typeof expectedRevision !== 'number' || expectedRevision < 0 || !Number.isInteger(expectedRevision)) {
-    throw new Error('expectedRevision must be a non-negative integer.');
+  if (typeof expectedRevision !== 'number' || expectedRevision <= 0 || !Number.isInteger(expectedRevision)) {
+    throw new Error('expectedRevision must be a positive integer (>= 1).');
   }
 
   if (!input.kind || !input.kind.trim()) {
@@ -81,6 +86,12 @@ export function buildUpdateResourceRequest(
   }
   if (!input.domain || !input.domain.trim()) {
     throw new Error('Telecom domain is required.');
+  }
+  if (!input.lifecycleState || !input.lifecycleState.trim()) {
+    throw new Error('lifecycleState is required for update.');
+  }
+  if (input.lifecycleState.trim() === 'retired') {
+    throw new Error('Cannot update lifecycleState to retired via PUT; use retire operation.');
   }
 
   for (const field of FORBIDDEN_SERVER_FIELDS) {
@@ -107,12 +118,12 @@ export function buildUpdateResourceRequest(
     kind: input.kind.trim(),
     name: (input.name ?? '').trim(),
     domain: input.domain.trim(),
+    lifecycleState: input.lifecycleState.trim(),
   };
 
   if (input.displayName && input.displayName.trim()) mutable.displayName = input.displayName.trim();
   if (input.description && input.description.trim()) mutable.description = input.description.trim();
   if (input.role && input.role.trim()) mutable.role = input.role.trim();
-  if (input.lifecycleState && input.lifecycleState.trim()) mutable.lifecycleState = input.lifecycleState.trim();
   if (input.vendor && input.vendor.trim()) mutable.vendor = input.vendor.trim();
   if (input.model && input.model.trim()) mutable.model = input.model.trim();
   if (input.software) mutable.software = input.software;
@@ -131,8 +142,8 @@ export function buildRetireResourceRequest(
   expectedRevision: number,
   reason: string,
 ): RetireResourceRequest {
-  if (typeof expectedRevision !== 'number' || expectedRevision < 0 || !Number.isInteger(expectedRevision)) {
-    throw new Error('expectedRevision must be a non-negative integer.');
+  if (typeof expectedRevision !== 'number' || expectedRevision <= 0 || !Number.isInteger(expectedRevision)) {
+    throw new Error('expectedRevision must be a positive integer (>= 1).');
   }
   if (!reason || !reason.trim()) {
     throw new Error('Retirement reason is required.');

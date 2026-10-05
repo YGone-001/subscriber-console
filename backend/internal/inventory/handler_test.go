@@ -219,9 +219,10 @@ func TestHandlerAuthAndPermissions(t *testing.T) {
 	updatePayload := map[string]any{
 		"expectedRevision": 999,
 		"resource": map[string]any{
-			"kind":   res.Kind,
-			"name":   res.Name,
-			"domain": res.Domain,
+			"kind":           res.Kind,
+			"name":           res.Name,
+			"domain":         res.Domain,
+			"lifecycleState": "active",
 		},
 	}
 	upBytes, _ := json.Marshal(updatePayload)

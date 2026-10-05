@@ -127,7 +127,7 @@ export interface MutableResource {
   description?: string;
   domain: string;
   role?: string;
-  lifecycleState?: string;
+  lifecycleState: string;
   vendor?: string;
   model?: string;
   software?: SoftwareMetadata;
@@ -173,7 +173,7 @@ export interface ResourceListQueryParams {
   kind?: string;
   domain?: string;
   lifecycleState?: string;
-  search?: string;
+  q?: string;
   cursor?: string;
   limit?: number;
 }

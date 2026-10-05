@@ -23,6 +23,9 @@ export const FORBIDDEN_SERVER_FIELDS = [
   'createdBy',
   'updatedAt',
   'updatedBy',
+  'retiredAt',
+  'retiredBy',
+  'retireReason',
 ];
 
 export function validateMachineName(name: string): string | null {

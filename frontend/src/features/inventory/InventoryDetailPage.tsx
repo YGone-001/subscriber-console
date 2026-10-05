@@ -260,7 +260,7 @@ export function InventoryDetailPage() {
       <div className="flex justify-between items-center mb-6">
         <Link to="/inventory" className="btn-ghost btn-sm inline-flex items-center gap-1.5">
           <ArrowLeft size={16} />
-          <span>Back to Inventory</span>
+          <span>{t('inventory_back_to_list', { defaultValue: 'Back to Inventory' })}</span>
         </Link>
         <div className="flex gap-2">
           <button
@@ -566,18 +566,14 @@ export function InventoryDetailPage() {
 
           <div className="grid grid-cols-3 gap-4">
             <div>
-              <label className="block text-xs font-medium mb-1">Kind *</label>
-              <select
-                className="input select w-full"
+              <label className="block text-xs font-medium mb-1">Kind</label>
+              <input
+                type="text"
+                className="input w-full bg-muted cursor-not-allowed"
                 value={editKind}
-                onChange={(e) => setEditKind(e.target.value)}
-              >
-                {meta?.kinds?.map((k) => (
-                  <option key={k} value={k}>
-                    {k}
-                  </option>
-                ))}
-              </select>
+                readOnly
+                disabled
+              />
             </div>
             <div>
               <label className="block text-xs font-medium mb-1">Domain *</label>
@@ -600,11 +596,13 @@ export function InventoryDetailPage() {
                 value={editLifecycle}
                 onChange={(e) => setEditLifecycle(e.target.value)}
               >
-                {meta?.lifecycleStates?.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
+                {meta?.lifecycleStates
+                  ?.filter((s) => s !== 'retired')
+                  .map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
               </select>
             </div>
           </div>
@@ -664,7 +662,7 @@ export function InventoryDetailPage() {
       <Modal
         isOpen={isRetireOpen}
         onClose={() => !retireSubmitting && setIsRetireOpen(false)}
-        title={`Retire Resource: ${resource.name}`}
+        title={t('inventory_retirement_confirm_title', { name: resource.name, defaultValue: `Retire Resource: ${resource.name}` })}
         maxWidth="32rem"
         footer={
           <div className="flex justify-end gap-2 w-full">
@@ -689,7 +687,7 @@ export function InventoryDetailPage() {
       >
         <div className="space-y-3">
           <div className="p-3 bg-muted rounded text-xs text-muted-foreground font-medium border">
-            Retirement changes inventory lifecycle only. It does not stop, restart, delete, or reconfigure the network element.
+            {t('inventory_retirement_warning', { defaultValue: 'Retirement changes inventory lifecycle only. It does not stop, restart, delete, or reconfigure the network element.' })}
           </div>
           {retireError ? (
             <div className="notice-banner notice-error text-xs" role="alert">
@@ -698,12 +696,12 @@ export function InventoryDetailPage() {
           ) : null}
           <div>
             <label className="block text-xs font-medium mb-1 text-foreground">
-              Reason for retirement *
+              {t('inventory_retirement_reason_label', { defaultValue: 'Reason for retirement' })} *
             </label>
             <input
               type="text"
               className="input w-full"
-              placeholder="e.g. Decommissioned node replaced by unit-02"
+              placeholder={t('inventory_retirement_reason_placeholder', { defaultValue: 'e.g. Decommissioned node replaced by unit-02' })}
               value={retireReason}
               onChange={(e) => setRetireReason(e.target.value)}
               required

@@ -29,7 +29,7 @@ test('inventory validation: machine name rules', () => {
 test('inventory validation: management endpoints validation', () => {
   const valid = [
     { name: 'sbi', protocol: 'https', addressType: 'ipv4', address: '10.0.0.1', port: 443 },
-    { name: 'n2', protocol: 'sctp', addressType: 'ipv4', address: '10.0.0.1', port: 38412 },
+    { name: 'n2', protocol: 'ngap', addressType: 'ipv4', address: '10.0.0.1', port: 38412 },
   ];
   assert.equal(validateManagementEndpoints(valid), null);
 
@@ -90,6 +90,16 @@ test('inventory builders: buildCreateResourceRequest validates required and stri
   assert.equal(req.domain, 'platform');
   assert.equal(req.role, 'compute');
 
+  // Rejects initial retired state
+  assert.throws(() => {
+    buildCreateResourceRequest({
+      kind: 'host',
+      name: 'h1',
+      domain: 'cloud',
+      lifecycleState: 'retired',
+    });
+  }, /retired/);
+
   // Rejects forbidden server-owned fields
   assert.throws(() => {
     buildCreateResourceRequest({
@@ -106,9 +116,21 @@ test('inventory builders: buildUpdateResourceRequest enforces expectedRevision a
     kind: 'host',
     name: 'host-srv-01-renamed',
     domain: 'platform',
+    lifecycleState: 'active',
   });
   assert.equal(req.expectedRevision, 2);
   assert.equal(req.resource.name, 'host-srv-01-renamed');
+  assert.equal(req.resource.lifecycleState, 'active');
+
+  // Revision 0 rejection
+  assert.throws(() => {
+    buildUpdateResourceRequest(0, {
+      kind: 'host',
+      name: 'h1',
+      domain: 'cloud',
+      lifecycleState: 'active',
+    });
+  }, /positive integer/);
 
   // Negative revision rejection
   assert.throws(() => {
@@ -116,14 +138,44 @@ test('inventory builders: buildUpdateResourceRequest enforces expectedRevision a
       kind: 'host',
       name: 'h1',
       domain: 'cloud',
+      lifecycleState: 'active',
     });
-  }, /non-negative integer/);
+  }, /positive integer/);
+
+  // Missing lifecycleState rejection
+  assert.throws(() => {
+    buildUpdateResourceRequest(1, {
+      kind: 'host',
+      name: 'h1',
+      domain: 'cloud',
+    });
+  }, /lifecycleState is required/);
+
+  // Retired lifecycleState via update rejection
+  assert.throws(() => {
+    buildUpdateResourceRequest(1, {
+      kind: 'host',
+      name: 'h1',
+      domain: 'cloud',
+      lifecycleState: 'retired',
+    });
+  }, /retired/);
 });
 
 test('inventory builders: buildRetireResourceRequest enforces expectedRevision and reason', () => {
   const req = buildRetireResourceRequest(3, 'Decommissioning old compute node');
   assert.equal(req.expectedRevision, 3);
   assert.equal(req.reason, 'Decommissioning old compute node');
+
+  // Revision 0 rejection
+  assert.throws(() => {
+    buildRetireResourceRequest(0, 'Decommissioning');
+  }, /positive integer/);
+
+  // Negative revision rejection
+  assert.throws(() => {
+    buildRetireResourceRequest(-1, 'Decommissioning');
+  }, /positive integer/);
 
   // Empty reason rejection
   assert.throws(() => {
@@ -139,4 +191,9 @@ test('inventory contracts: inventory-contract.json and inventory-request-contrac
 
   const reqContract = JSON.parse(readFileSync(resolve(import.meta.dirname, '../inventory-request-contract.json'), 'utf8'));
   assert.equal(reqContract.length, 3);
+
+  const updateContract = reqContract.find((e: { name: string }) => e.name === 'inventory resource update');
+  assert.ok(updateContract);
+  assert.ok(updateContract.nestedContracts?.resource);
+  assert.deepEqual(updateContract.nestedContracts.resource.requiredKeys, ['kind', 'name', 'domain', 'lifecycleState']);
 });

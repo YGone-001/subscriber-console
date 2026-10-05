@@ -32,7 +32,10 @@
       "createdAt",
       "createdBy",
       "updatedAt",
-      "updatedBy"
+      "updatedBy",
+      "retiredAt",
+      "retiredBy",
+      "retireReason"
     ],
     "responseSemantics": "mutation-result"
   },
@@ -56,16 +59,21 @@
       "createdAt",
       "createdBy",
       "updatedAt",
-      "updatedBy"
+      "updatedBy",
+      "retiredAt",
+      "retiredBy",
+      "retireReason"
     ],
     "nestedContracts": {
       "resource": {
         "requiredKeys": [
+          "kind",
           "name",
           "domain",
           "lifecycleState"
         ],
         "allowedKeys": [
+          "kind",
           "name",
           "domain",
           "lifecycleState",
@@ -88,7 +96,10 @@
           "createdAt",
           "createdBy",
           "updatedAt",
-          "updatedBy"
+          "updatedBy",
+          "retiredAt",
+          "retiredBy",
+          "retireReason"
         ]
       }
     },
@@ -114,7 +125,10 @@
       "createdAt",
       "createdBy",
       "updatedAt",
-      "updatedBy"
+      "updatedBy",
+      "retiredAt",
+      "retiredBy",
+      "retireReason"
     ],
     "responseSemantics": "mutation-result"
   }

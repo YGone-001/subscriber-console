@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -96,6 +97,21 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	q := r.URL.Query()
+	allowedParams := map[string]bool{
+		"kind":           true,
+		"domain":         true,
+		"lifecycleState": true,
+		"q":              true,
+		"limit":          true,
+		"cursor":         true,
+	}
+	for param := range q {
+		if !allowedParams[param] {
+			response.BadRequest(w, "unsupported query parameter: "+param, "UNSUPPORTED_QUERY_PARAMETER")
+			return
+		}
+	}
+
 	kind := q.Get("kind")
 	if kind != "" {
 		if err := ValidateKind(kind); err != nil {
@@ -123,8 +139,8 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	limit := 50
 	if limitStr := q.Get("limit"); limitStr != "" {
 		parsed, err := strconv.Atoi(limitStr)
-		if err != nil || parsed <= 0 {
-			response.BadRequest(w, "limit must be a positive integer", "INVALID_LIMIT")
+		if err != nil || parsed < 1 || parsed > 200 {
+			response.BadRequest(w, "limit must be an integer between 1 and 200", "INVALID_LIMIT")
 			return
 		}
 		limit = parsed
@@ -141,7 +157,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 
 	items, nextCursor, hasMore, err := h.repo.List(r.Context(), filter)
 	if err != nil {
-		response.BadRequest(w, err.Error(), "INVALID_QUERY")
+		response.BadRequest(w, err.Error(), "INVALID_CURSOR")
 		return
 	}
 
@@ -193,6 +209,33 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, item)
 }
 
+func decodeStrictJSON(r io.Reader, maxBytes int64, dst any) error {
+	limited := io.LimitReader(r, maxBytes+1)
+	data, err := io.ReadAll(limited)
+	if err != nil {
+		return fmt.Errorf("failed to read request body: %w", err)
+	}
+	if int64(len(data)) > maxBytes {
+		return errors.New("request body too large")
+	}
+	if len(strings.TrimSpace(string(data))) == 0 {
+		return errors.New("request body is empty")
+	}
+	if err := CheckForbiddenServerFields(data); err != nil {
+		return err
+	}
+	dec := json.NewDecoder(strings.NewReader(string(data)))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(dst); err != nil {
+		return err
+	}
+	var extra json.RawMessage
+	if err := dec.Decode(&extra); err != io.EOF {
+		return errors.New("unexpected trailing content after JSON")
+	}
+	return nil
+}
+
 // Create handles POST /api/inventory/resources.
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	p := auth.PrincipalFromContext(r.Context())
@@ -210,20 +253,13 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	bodyBytes, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 128*1024))
-	if err != nil {
-		response.BadRequest(w, "request body too large or unreadable", "INVALID_PAYLOAD")
-		return
-	}
-
-	if err := CheckForbiddenServerFields(bodyBytes); err != nil {
-		response.BadRequest(w, err.Error(), "SERVER_OWNED_FIELD_FORBIDDEN")
-		return
-	}
-
 	var req CreateResourceRequest
-	if err := json.Unmarshal(bodyBytes, &req); err != nil {
-		response.BadRequest(w, "malformed JSON request body", "INVALID_JSON")
+	if err := decodeStrictJSON(r.Body, 128*1024, &req); err != nil {
+		if strings.Contains(err.Error(), "forbidden") {
+			response.BadRequest(w, err.Error(), "SERVER_OWNED_FIELD_FORBIDDEN")
+			return
+		}
+		response.BadRequest(w, err.Error(), "INVALID_JSON")
 		return
 	}
 
@@ -284,20 +320,13 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	bodyBytes, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 128*1024))
-	if err != nil {
-		response.BadRequest(w, "request body too large or unreadable", "INVALID_PAYLOAD")
-		return
-	}
-
-	if err := CheckForbiddenServerFields(bodyBytes); err != nil {
-		response.BadRequest(w, err.Error(), "SERVER_OWNED_FIELD_FORBIDDEN")
-		return
-	}
-
 	var req UpdateResourceRequest
-	if err := json.Unmarshal(bodyBytes, &req); err != nil {
-		response.BadRequest(w, "malformed JSON request body", "INVALID_JSON")
+	if err := decodeStrictJSON(r.Body, 128*1024, &req); err != nil {
+		if strings.Contains(err.Error(), "forbidden") {
+			response.BadRequest(w, err.Error(), "SERVER_OWNED_FIELD_FORBIDDEN")
+			return
+		}
+		response.BadRequest(w, err.Error(), "INVALID_JSON")
 		return
 	}
 
@@ -375,15 +404,13 @@ func (h *Handler) Retire(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	bodyBytes, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 64*1024))
-	if err != nil {
-		response.BadRequest(w, "request body too large or unreadable", "INVALID_PAYLOAD")
-		return
-	}
-
 	var req RetireResourceRequest
-	if err := json.Unmarshal(bodyBytes, &req); err != nil {
-		response.BadRequest(w, "malformed JSON request body", "INVALID_JSON")
+	if err := decodeStrictJSON(r.Body, 64*1024, &req); err != nil {
+		if strings.Contains(err.Error(), "forbidden") {
+			response.BadRequest(w, err.Error(), "SERVER_OWNED_FIELD_FORBIDDEN")
+			return
+		}
+		response.BadRequest(w, err.Error(), "INVALID_JSON")
 		return
 	}
 

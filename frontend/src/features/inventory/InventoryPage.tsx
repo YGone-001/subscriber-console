@@ -43,7 +43,7 @@ export function InventoryPage() {
     setError(null);
     try {
       const res = await fetchInventoryResources({
-        search: search.trim() || undefined,
+        q: search.trim() || undefined,
         kind: selectedKind || undefined,
         domain: selectedDomain || undefined,
         lifecycleState: selectedLifecycle || undefined,
@@ -94,7 +94,7 @@ export function InventoryPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">{t('nav_inventory', { defaultValue: 'Inventory' })}</h1>
           <p className="text-sm text-muted-foreground">
-            Authoritative source of truth for network and platform resource metadata.
+            {t('inventory_description', { defaultValue: 'Authoritative source of truth for network and platform resource metadata.' })}
           </p>
         </div>
         <div className="flex gap-2">
@@ -140,7 +140,7 @@ export function InventoryPage() {
             value={selectedKind}
             onChange={(e) => setSelectedKind(e.target.value)}
           >
-            <option value="">All Kinds</option>
+            <option value="">{t('inventory_all_kinds', { defaultValue: 'All Kinds' })}</option>
             {meta?.kinds?.map((k) => (
               <option key={k} value={k}>
                 {k}
@@ -153,7 +153,7 @@ export function InventoryPage() {
             value={selectedDomain}
             onChange={(e) => setSelectedDomain(e.target.value)}
           >
-            <option value="">All Domains</option>
+            <option value="">{t('inventory_all_domains', { defaultValue: 'All Domains' })}</option>
             {meta?.domains?.map((d) => (
               <option key={d} value={d}>
                 {d}
@@ -166,7 +166,7 @@ export function InventoryPage() {
             value={selectedLifecycle}
             onChange={(e) => setSelectedLifecycle(e.target.value)}
           >
-            <option value="">All States</option>
+            <option value="">{t('inventory_all_states', { defaultValue: 'All States' })}</option>
             {meta?.lifecycleStates?.map((s) => (
               <option key={s} value={s}>
                 {s}
@@ -268,7 +268,7 @@ export function InventoryPage() {
 
       <div className="pagination-bar flex justify-between items-center mt-4">
         <div className="text-xs text-muted-foreground">
-          Showing {resources.length} resources
+          {t('inventory_showing_resources', { count: resources.length, defaultValue: `Showing ${resources.length} resources` })}
         </div>
         <div className="flex gap-2">
           {cursorHistory.length > 0 ? (
@@ -278,7 +278,7 @@ export function InventoryPage() {
               onClick={handleResetPagination}
               disabled={loading}
             >
-              First Page
+              {t('inventory_first_page', { defaultValue: 'First Page' })}
             </button>
           ) : null}
           <button

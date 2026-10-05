@@ -43,6 +43,12 @@ var forbiddenServerFields = []string{
 	"updated_at",
 	"updatedBy",
 	"updated_by",
+	"retiredAt",
+	"retired_at",
+	"retiredBy",
+	"retired_by",
+	"retireReason",
+	"retire_reason",
 }
 
 // CheckForbiddenServerFields returns an error if any server-owned field exists in raw JSON.
@@ -54,6 +60,17 @@ func CheckForbiddenServerFields(raw []byte) error {
 	for _, forbidden := range forbiddenServerFields {
 		if _, exists := topLevel[forbidden]; exists {
 			return fmt.Errorf("server-owned field %q is forbidden in client requests", forbidden)
+		}
+	}
+	// Check inside nested "resource" object if present (for update requests)
+	if resRaw, exists := topLevel["resource"]; exists {
+		var nested map[string]json.RawMessage
+		if err := json.Unmarshal(resRaw, &nested); err == nil && nested != nil {
+			for _, forbidden := range forbiddenServerFields {
+				if _, exists := nested[forbidden]; exists {
+					return fmt.Errorf("server-owned field %q is forbidden in nested resource update", forbidden)
+				}
+			}
 		}
 	}
 	return nil
@@ -381,10 +398,11 @@ func ValidateUpdateRequest(req *UpdateResourceRequest) error {
 	if len(r.Role) > 64 {
 		return errors.New("role must not exceed 64 characters")
 	}
-	if r.LifecycleState != "" {
-		if err := ValidateLifecycleState(r.LifecycleState, false); err != nil {
-			return err
-		}
+	if strings.TrimSpace(r.LifecycleState) == "" {
+		return errors.New("lifecycleState is required for update")
+	}
+	if err := ValidateLifecycleState(r.LifecycleState, false); err != nil {
+		return err
 	}
 	if len(r.Vendor) > 128 {
 		return errors.New("vendor must not exceed 128 characters")

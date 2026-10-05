@@ -21,7 +21,7 @@ export async function fetchInventoryResources(
   if (params.kind) searchParams.set('kind', params.kind);
   if (params.domain) searchParams.set('domain', params.domain);
   if (params.lifecycleState) searchParams.set('lifecycleState', params.lifecycleState);
-  if (params.search) searchParams.set('search', params.search);
+  if (params.q) searchParams.set('q', params.q);
   if (params.cursor) searchParams.set('cursor', params.cursor);
   if (params.limit) searchParams.set('limit', String(params.limit));
 

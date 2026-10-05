@@ -42,8 +42,8 @@ The following indexes are provisioned on `xcloud_ops.app_inventory_resources`:
    Optimizes case-insensitive resource prefix searches.
 3. `inventory_updated_id`: `{ updatedAt: -1, _id: 1 }`
    Supports keyset cursor pagination with deterministic ordering.
-4. `uniq_inventory_source_external_id`: `{ "source.system": 1, "source.externalId": 1 }`, `unique: true`, `sparse: true`
-   Enforces uniqueness for external system provenance identifiers when externalId is present.
+4. `uniq_inventory_source_external_id`: `{ "source.system": 1, "source.externalId": 1 }`, `unique: true`, `partialFilterExpression: { "source.externalId": { $exists: true, $type: "string", $gt: "" } }`
+   Enforces uniqueness for external system provenance identifiers when non-empty externalId is present (not sparse).
 
 Note: `_id` stores the canonical resourceId UUID string directly; no separate `resourceId` index is maintained.
 
@@ -54,12 +54,12 @@ Note: `_id` stores the canonical resourceId UUID string directly; no separate `r
 ### 3.1 Field Taxonomy
 | Field | Type | Mutability | Constraints & Semantics |
 | :--- | :--- | :--- | :--- |
-| `resourceId` | string (UUID v4) | Immutable | Server-generated upon creation (`_id`). |
+| `resourceId` | string (UUID v4) | Immutable | Server-generated upon creation (`_id`). Strict RFC 4122 v4 regex. |
 | `schemaVersion` | int | Immutable | Constant `1`. |
-| `kind` | string | Immutable | Must be one of the 20 canonical kinds. |
+| `kind` | string | Immutable | Must be one of the 20 canonical kinds. Immutable across updates. |
 | `name` | string | Mutable | Length 1..128, matching `^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`. |
 | `nameNormalized` | string | Server-owned | Lowercase `name` for indexed prefix lookups. |
-| `displayName` | string | Mutable | Optional human-readable display name (max 128 chars). |
+| `displayName` | string | Mutable | Optional human-readable display name (max 256 chars). |
 | `description` | string | Mutable | Optional text description (max 1024 chars). |
 | `domain` | string | Mutable | Must be one of the 10 canonical telecom domains. |
 | `role` | string | Mutable | Optional role qualifier (max 64 chars). |
@@ -158,13 +158,29 @@ Every resource has server-assigned source provenance:
   }
 }
 ```
-Client attempts to inject `resourceId`, `schemaVersion`, `source`, `revision`, `createdAt`, `createdBy`, `updatedAt`, or `updatedBy` in request payloads are rejected with HTTP 400 (`SERVER_OWNED_FIELD_FORBIDDEN`).
+Client attempts to inject `resourceId`, `schemaVersion`, `source`, `revision`, `createdAt`, `createdBy`, `updatedAt`, `updatedBy`, `retiredAt`, `retiredBy`, or `retireReason` in request payloads or nested update bodies are rejected with HTTP 400 (`SERVER_OWNED_FIELD_FORBIDDEN`).
 
-### 3.8 Concurrency Control (CAS)
+### 3.8 Strict JSON Request Decoding
+All inventory mutation endpoints (`POST /api/inventory/resources`, `PUT /api/inventory/resources/{resourceId}`, `POST /api/inventory/resources/{resourceId}/retire`) enforce strict JSON decoding:
+- Reusable standard-library decoder with `DisallowUnknownFields()`.
+- Explicit EOF verification ensuring no trailing JSON values or garbage tokens.
+- Request body size bounds enforced via `http.MaxBytesReader` (1 MiB).
+- Unknown top-level fields, unknown nested struct fields, and trailing content return HTTP 400 (`MALFORMED_JSON` / `UNKNOWN_FIELD`).
+- Rejected mutations persist 0 changes in MongoDB and record 0 audit logs.
+
+### 3.9 Concurrency Control (CAS) & Update Replacement
 - Every resource document carries a monotonic `revision` integer (initialized to 1).
-- Mutations require `expectedRevision` in the request body.
+- Mutations require `expectedRevision` (integer >= 1) in the request body.
+- `PUT /api/inventory/resources/{resourceId}` is a full mutable replacement requiring `expectedRevision` and `resource` with non-empty `kind`, `name`, `domain`, and `lifecycleState` (`retired` rejected).
+- `kind` is immutable across updates; attempting to alter `kind` returns HTTP 400.
 - Updates execute atomic CAS query: `{ _id: id, revision: expectedRevision }`.
 - On revision mismatch, the server returns HTTP 409 Conflict (`INVENTORY_REVISION_CONFLICT`).
+
+### 3.10 Strict RFC 4122 UUID v4 Validation
+All resource path parameters enforce strict RFC 4122 UUID v4 format matching:
+`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$`
+- Malformed identifiers and non-v4 UUIDs return HTTP 400 (`INVALID_RESOURCE_ID`).
+- Valid UUID v4 identifiers not matching any database document return HTTP 404 (`INVENTORY_RESOURCE_NOT_FOUND`).
 
 ---
 
@@ -182,16 +198,16 @@ All 6 inventory endpoints are Go-owned and registered on `ServeMux`:
 | `PUT` | `/api/inventory/resources/{resourceId}` | `core.configure` | CAS update mutable resource state. |
 | `POST` | `/api/inventory/resources/{resourceId}/retire` | `core.configure` | Transition resource to terminal retired state. |
 
-### 4.2 Keyset Cursor Pagination
-`GET /api/inventory/resources` supports deterministic keyset pagination:
+Frontend SPA assets are built from `frontend/` and embedded directly into the Go binary at `backend/internal/spa/static`.
+
+### 4.2 Keyset Cursor Pagination & Query Parameter Allowlist
+`GET /api/inventory/resources` supports deterministic keyset pagination and strictly validated queries:
 - Default sort order: `{ updatedAt: -1, _id: 1 }`.
-- Request query parameters:
-  - `limit`: Integer (default 50, max 200).
-  - `cursor`: Opaque base64 cursor token containing `{ u: updatedAt, i: id }`.
-  - `kind`: Filter by canonical kind.
-  - `domain`: Filter by canonical domain.
-  - `lifecycleState`: Filter by lifecycle state.
-  - `q`: Search by exact UUID or case-insensitive prefix on `nameNormalized`.
+- Allowed query parameters: `kind`, `domain`, `lifecycleState`, `q`, `limit`, `cursor`.
+- Any unsupported query parameter returns HTTP 400 (`UNSUPPORTED_QUERY_PARAMETER`).
+- `limit`: Integer bounded between 1 and 200 (default 50). Out of bounds returns HTTP 400 (`INVALID_LIMIT`).
+- `cursor`: Opaque base64 cursor token containing `{ u: updatedAt, i: id }`. Malformed tokens return HTTP 400 (`INVALID_CURSOR`).
+- `q`: Search by exact UUID or case-insensitive prefix on `nameNormalized`.
 - Response format:
   ```json
   {
