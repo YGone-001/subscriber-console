@@ -89,3 +89,4 @@ backend/internal/spa/static/*
 backend/server
 backend/bin/
 *.exe
+backend/xcloud-server

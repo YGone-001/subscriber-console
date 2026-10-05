@@ -17,7 +17,9 @@
     "local:dev": "node scripts/local-dev.mjs",
     "local:status": "node scripts/local-status.mjs",
     "local:doctor": "node scripts/check-local-stack.mjs",
-    "local:stop": "node scripts/local-stop.mjs"
+    "local:stop": "node scripts/local-stop.mjs",
+    "check:agent-docs-parity": "node scripts/test-agent-docs-parity.mjs",
+    "docs:sync-agents": "node scripts/sync-agent-docs.mjs"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
