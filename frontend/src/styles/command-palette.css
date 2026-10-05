@@ -1,0 +1,280 @@
+/*
+ * Command palette layer.
+ *
+ * Forward-ported from the historical xCloud stylesheet
+ * `frontend/src/components/CommandPalette.css` (reference commit 2c40903).
+ * Overlay, search input, grouped results and keyboard hint presentation.
+ */
+
+.cp-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+  background: var(--overlay-scrim);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  animation: fadeIn 0.15s ease-out;
+}
+
+.cp-modal {
+  width: 640px;
+  max-height: 520px;
+  background: var(--surface);
+  color: var(--text-main);
+  border-radius: var(--ref-radius-soft-panel);
+  border: 1px solid var(--surface-border);
+  box-shadow: var(--shadow-popover);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  animation: slideDown 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.cp-search-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.95rem 1.25rem;
+  border-bottom: 1px solid var(--surface-border);
+  background: var(--header-bg);
+}
+
+.cp-search-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: var(--ref-font-size-heading-sm);
+  color: var(--text-main);
+  font-weight: 500;
+}
+
+.cp-kbd-shortcut {
+  padding: 0.15rem 0.5rem;
+  background: var(--surface-hover);
+  border-radius: var(--ref-radius-micro);
+  font-size: var(--ref-font-size-label);
+  color: var(--text-muted);
+  font-family: monospace;
+  border: 1px solid var(--surface-border);
+}
+
+.cp-kbd-small {
+  padding: 0.1rem 0.35rem;
+  background: var(--surface-hover);
+  border-radius: var(--ref-radius-micro);
+  font-size: var(--ref-font-size-micro);
+  font-family: monospace;
+  border: 1px solid var(--surface-border);
+  color: var(--text-secondary);
+}
+
+/* Category Filter Tabs */
+.cp-category-tabs {
+  display: flex;
+  padding: 0.4rem 1rem;
+  gap: 0.4rem;
+  border-bottom: 1px solid var(--surface-border);
+  background: var(--surface);
+}
+
+.cp-category-tab {
+  padding: 0.25rem 0.65rem;
+  border-radius: var(--ref-radius-pill);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--ref-font-size-label-strong);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-decelerate);
+}
+
+.cp-category-tab:hover {
+  color: var(--text-main);
+  background: var(--surface-hover);
+}
+
+.cp-category-tab.active {
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  color: var(--primary);
+  border-color: color-mix(in srgb, var(--primary) 25%, transparent);
+}
+
+.cp-results-container {
+  overflow-y: auto;
+  flex: 1;
+  padding: 0.5rem 0;
+  max-height: 340px;
+}
+
+.cp-group-header {
+  padding: 0.4rem 1.25rem;
+  font-size: var(--ref-font-size-caption);
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.cp-group-header-mt {
+  padding: 0.6rem 1.25rem 0.4rem;
+  font-size: var(--ref-font-size-caption);
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.cp-item-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 1.25rem;
+  cursor: pointer;
+  background: transparent;
+  transition: background var(--duration-fast) var(--ease-decelerate), color var(--duration-fast) var(--ease-decelerate);
+}
+
+.cp-item-row-selected {
+  background: var(--selection-soft);
+}
+
+.cp-item-row-selected .cp-item-label {
+  color: var(--primary);
+}
+
+.cp-item-icon-box {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--ref-radius-control);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.cp-item-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.cp-item-label {
+  font-size: var(--ref-font-size-body-small);
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.cp-item-label-mono {
+  font-family: monospace;
+}
+
+.cp-item-desc {
+  font-size: var(--ref-font-size-label);
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cp-item-badge {
+  border-radius: var(--ref-radius-micro);
+  flex-shrink: 0;
+}
+
+.cp-badge-nav {
+  font-size: var(--ref-font-size-caption);
+  color: var(--text-muted);
+}
+
+.cp-badge-action {
+  font-size: var(--ref-font-size-micro);
+  padding: 0.15rem 0.4rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.cp-badge-imsi {
+  font-size: var(--ref-font-size-micro);
+  padding: 0.15rem 0.4rem;
+  background: var(--selection-soft);
+  color: var(--primary);
+  font-weight: 600;
+  border-radius: var(--ref-radius-small);
+}
+
+.cp-badge-profile {
+  font-size: var(--ref-font-size-micro);
+  padding: 0.15rem 0.4rem;
+  background: var(--status-warning-soft);
+  color: var(--status-warning);
+  font-weight: 600;
+  border-radius: var(--ref-radius-small);
+}
+
+.cp-status-msg {
+  padding: 1.5rem 1.25rem;
+  color: var(--text-muted);
+  font-size: var(--ref-font-size-body-compact);
+  text-align: center;
+}
+
+.cp-no-results {
+  padding: 2rem;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: var(--ref-font-size-body-small);
+}
+
+.cp-footer {
+  padding: 0.6rem 1.25rem;
+  border-top: 1px solid var(--surface-border);
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  font-size: var(--ref-font-size-label);
+  color: var(--text-muted);
+  background: var(--header-bg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cp-overlay,
+  .cp-modal {
+    animation: reducedFade 120ms ease-out both;
+  }
+
+  .cp-item,
+  .cp-close {
+    transition-property: background-color, color, border-color, box-shadow, opacity;
+    transition-duration: 120ms;
+  }
+}
+
+.cp-footer-hint {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.cp-footer-branding {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: var(--ref-font-size-caption);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideDown {
+  from { transform: translateY(-10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}

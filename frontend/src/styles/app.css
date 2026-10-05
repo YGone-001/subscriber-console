@@ -3,7 +3,11 @@
  *
  * Load order matters: tokens define the design system, base resets and primitives
  * build on it, then the shell, shared components and page layers consume both.
- * Utilities come last so structural primitives win over single-purpose helpers.
+ * Utilities come last among the current layers so structural primitives win over
+ * single-purpose helpers.
+ *
+ * The reference-driven layers below are loaded AFTER every current layer so the
+ * forward-ported historical rules win for the class names they own.
  */
 @import './tokens.css';
 @import './base.css';
@@ -11,6 +15,25 @@
 @import './components.css';
 @import './pages.css';
 @import './utilities.css';
+
+/*
+ * Reference-driven layers.
+ *
+ * Forward-ported from the historical xCloud stylesheets (reference commit
+ * 2c40903). Utility class names stay owned by `utilities.css`, which is why the
+ * reference utility block is deliberately not ported.
+ */
+@import './globals.css';
+@import './analytics.css';
+@import './ocs.css';
+@import './subscribers.css';
+@import './profile.css';
+@import './system-health.css';
+@import './feedback.css';
+@import './command-palette.css';
+@import './noc-sentinel.css';
+@import './modals.css';
+@import './login.css';
 
 /*
  * Login surface notices.

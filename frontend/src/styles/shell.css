@@ -1773,3 +1773,359 @@
     transform: none !important;
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * Tab model, breadcrumb actions and recent destinations
+ *
+ * Appended from the historical xCloud shell stylesheet
+ * `frontend/src/app/(dashboard)/layout.css` (reference commit 2c40903).
+ * Covers the visited-tab model (close / pin / overflow / scroll), the breadcrumb
+ * tool actions and the recent-destination dropdown. Retired approval-queue and
+ * notification-preference selectors are intentionally not restored.
+ * ------------------------------------------------------------------------- */
+
+.hover-glass.lang-switcher {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: var(--surface-hover);
+    border: 1px solid var(--surface-border);
+    border-radius: var(--ref-radius-pill);
+    padding: 0.3rem 0.75rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    font-size: var(--ref-font-size-label);
+    font-weight: 600;
+    letter-spacing: 0.03em;
+  }
+
+.hover-glass.lang-switcher:hover,
+  .hover-glass.lang-switcher:focus {
+    border-color: var(--selection-border);
+  }
+
+.icon-button:active,
+  .avatar-button:active,
+  .dropdown-item:active {
+    transform: scale(0.96);
+  }
+
+.sidebar-parent-button:focus-visible {
+    outline: none;
+  }
+
+.app-sidebar.collapsed .sidebar-link:hover .sidebar-tooltip {
+    opacity: 1;
+    transform: translateY(-50%) translateX(0);
+  }
+
+@media (max-width: 980px) {
+  .brand-lockup .brand-name,
+    .noc-sentinel,
+    .approval-menu,
+    .header-right > .hover-glass {
+      display: none;
+    }
+  .nav-breadcrumbs-right .nav-crumb-tool-btn:not(.icon-only) {
+      display: none;
+    }
+}
+
+.skip-link {
+    position: fixed;
+    top: 0.75rem;
+    left: 0.75rem;
+    z-index: 120;
+    transform: translateY(-220%);
+    padding: 0.6rem 1rem;
+    border: 1px solid var(--surface-border);
+    border-radius: var(--ref-radius-control);
+    background: var(--surface);
+    color: var(--text-main);
+    font-size: var(--ref-font-size-body-small);
+    font-weight: 700;
+    box-shadow: var(--shadow-popover);
+    text-decoration: none;
+  }
+
+.skip-link:focus {
+    transform: translateY(0);
+  }
+
+.nav-tab-scroll-btn {
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text-muted);
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border-radius: var(--ref-radius-compact);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--duration-fast);
+  }
+
+.nav-tab-scroll-btn:hover {
+    color: var(--text-main);
+    background: var(--surface-hover);
+    border-color: var(--surface-border);
+  }
+
+.nav-tab-link.pinned {
+    padding-right: 0.65rem;
+  }
+
+.nav-tab-pin-icon {
+    opacity: 0.5;
+    margin-left: 0.15rem;
+  }
+
+.nav-tab-close {
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border-radius: var(--ref-radius-micro);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 0.15rem 0 0;
+    transition: all var(--duration-fast);
+  }
+
+.nav-tab-close:hover {
+    color: var(--danger);
+    background: color-mix(in srgb, var(--danger) 15%, transparent);
+  }
+
+.nav-tab-actions-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+.nav-tab-menu-btn {
+    border: 1px solid var(--surface-border);
+    background: var(--surface-hover);
+    color: var(--text-secondary);
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border-radius: var(--ref-radius-compact);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--duration-fast);
+  }
+
+.nav-tab-menu-btn:hover {
+    color: var(--text-main);
+    border-color: var(--primary);
+  }
+
+.nav-tab-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 0.4rem;
+    min-width: 160px;
+    background: var(--surface);
+    border: 1px solid var(--surface-border);
+    border-radius: var(--ref-radius-control);
+    box-shadow: var(--shadow-popover);
+    padding: 0.35rem;
+    z-index: 50;
+    animation: dropdownFade 0.15s ease-out;
+  }
+
+.nav-tab-dropdown-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 44px;
+    padding: 0.55rem 0.65rem;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: var(--ref-font-size-label-strong);
+    font-weight: 600;
+    border-radius: var(--ref-radius-compact);
+    cursor: pointer;
+    text-align: left;
+    transition: background var(--duration-fast);
+  }
+
+.nav-tab-dropdown-item:hover {
+    color: var(--text-main);
+    background: var(--surface-hover);
+  }
+
+.nav-recent-wrap {
+    position: relative;
+  }
+
+.nav-crumb-tool-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-height: 44px;
+    padding: 0.45rem 0.65rem;
+    border-radius: var(--ref-radius-compact);
+    border: 1px solid var(--surface-border);
+    background: var(--surface);
+    color: var(--text-secondary);
+    font-size: var(--ref-font-size-label);
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--duration-fast);
+  }
+
+.nav-crumb-tool-btn:hover {
+    color: var(--text-main);
+    border-color: var(--primary);
+    background: var(--surface-hover);
+  }
+
+.nav-crumb-tool-btn.icon-only {
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    justify-content: center;
+  }
+
+.nav-crumb-tool-btn.spin svg {
+    animation: spin 0.6s linear infinite;
+  }
+
+.nav-recent-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 0.4rem;
+    width: 240px;
+    background: var(--surface);
+    border: 1px solid var(--surface-border);
+    border-radius: var(--ref-radius-control);
+    box-shadow: var(--shadow-popover);
+    overflow: hidden;
+    z-index: 50;
+    animation: dropdownFade 0.15s ease-out;
+  }
+
+.nav-recent-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.55rem 0.75rem;
+    border-bottom: 1px solid var(--surface-border);
+    background: var(--header-bg);
+    font-size: var(--ref-font-size-label);
+  }
+
+.nav-recent-header strong {
+    color: var(--text-main);
+  }
+
+@media (prefers-reduced-motion: reduce) {
+  .notif-status-dot.connecting,
+    .stream-pulse,
+    .nav-crumb-tool-btn.spin svg {
+      animation: none !important;
+    }
+  .approval-dropdown,
+    .user-dropdown,
+    .nav-tab-context-menu,
+    .nav-recent-dropdown,
+    .command-dropdown {
+      animation: reducedFade 120ms ease-out both !important;
+    }
+  .icon-button:active,
+    .avatar-button:active,
+    .dropdown-item:active,
+    .sidebar-link:hover,
+    .nav-tab-link:hover,
+    .nav-tab-close:hover,
+    .nav-crumb-tool-btn:hover {
+      transform: none !important;
+    }
+}
+
+.nav-recent-clear {
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: var(--ref-font-size-caption);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    min-height: 44px;
+    padding: 0.35rem 0.45rem;
+    border-radius: var(--ref-radius-micro);
+  }
+
+.nav-recent-clear:hover {
+    color: var(--danger);
+    background: color-mix(in srgb, var(--danger) 10%, transparent);
+  }
+
+.nav-recent-list {
+    max-height: 220px;
+    overflow-y: auto;
+    padding: 0.25rem;
+  }
+
+.nav-recent-empty {
+    padding: 1.25rem;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: var(--ref-font-size-label);
+  }
+
+.nav-recent-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 44px;
+    padding: 0.55rem 0.65rem;
+    border-radius: var(--ref-radius-compact);
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-size: var(--ref-font-size-label);
+    font-weight: 500;
+    transition: background var(--duration-fast);
+  }
+
+.nav-recent-item:hover {
+    color: var(--text-main);
+    background: var(--surface-hover);
+  }
+
+.nav-recent-item.active {
+    color: var(--primary);
+    font-weight: 600;
+  }
+
+.nav-recent-link-icon {
+    opacity: 0.4;
+  }
+
+@media (max-width: 980px) {
+  .nav-tab-scroll-btn,
+    .nav-tab-track {
+      display: none;
+    }
+  .header-right .noc-sentinel,
+    .header-right .approval-menu,
+    .header-right > .hover-glass:not(#lang-switcher-btn) {
+      display: none;
+    }
+}
