@@ -48,7 +48,7 @@ registrations parsed from `backend/cmd/server/main.go` plus
 
 ### Frontend
 
-- **Production UI**: `frontend/` (React 19, Vite 8, React Router, Tailwind CSS, Lucide React). Built to static assets and embedded directly into the Go binary.
+- **Production UI**: `frontend/` (React 19, Vite 8, React Router, Lucide React, Recharts, SWR, plain CSS design-token layers). Built to static assets and embedded directly into the Go binary.
 - Legacy Next.js source is retired; numeric port 13333 is reassigned to Vite development.
 
 The Next.js business backend (`frontend/src/app/api/**` and `frontend/src/server/**`) does not exist.

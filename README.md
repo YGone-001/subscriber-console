@@ -61,6 +61,7 @@ Local development does not require Nginx.
 - Hardened JWT authentication with dual rate limits (IP + username), automatic lockout after 10 failed attempts, response privacy, and canonical `admin`, `operator`, and `viewer` roles (with legacy alias normalization), authoritatively governed by the Go backend (all 84 registrations Go-owned; routed by the Nginx edge).
 - User lifecycle management: create, update, admin unlock, soft delete, password reset, session invalidation via `sessionVersion`.
 - Chinese/English UI, theme switching, command palette, and responsive dashboard layout.
+- React/Vite frontend with the restored xCloud operator UI: grouped sidebar with quick filter, header NOC sentinel and notification centre, command palette, tab bar, breadcrumbs, operator dashboard cockpit, and a shared design-token system.
 
 ## OCS Management Plane Status
 
@@ -80,8 +81,10 @@ Charging Plane remains frozen and excluded.
 - Vite 8
 - React Router 7
 - TypeScript 5
-- Tailwind CSS 4
 - Lucide React
+- Recharts
+- SWR
+- Plain CSS design-token layers under `frontend/src/styles/` (tokens, base, shell, components, pages, utilities)
 
 Static assets are built from `frontend/` and embedded directly into the Go backend binary.
 

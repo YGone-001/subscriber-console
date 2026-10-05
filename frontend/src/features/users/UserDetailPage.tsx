@@ -9,6 +9,8 @@ import { hasPermission } from '../../lib/permissions';
 import { isPasswordStrong, PASSWORD_POLICY_MESSAGE } from '../../lib/security';
 import { useAuth } from '../../providers/AuthProvider';
 import { useI18n } from '../../providers/I18nProvider';
+import { EmptyState, ErrorState } from '../../components/ui/StatePanel';
+import { SkeletonTable } from '../../components/ui/LoadingSkeleton';
 import type { CanonicalRole } from '../../types/auth';
 
 type UnknownRecord = Record<string, unknown>;
@@ -178,14 +180,11 @@ export function UserDetailPage() {
       </button>
 
       {userQuery.isLoading ? (
-        <section className="read-state" role="status">{t('loading')}</section>
+        <SkeletonTable rows={6} />
       ) : userQuery.error ? (
-        <section className="read-state error" role="alert">
-          <p>{userQuery.error.message}</p>
-          <button type="button" onClick={() => void refreshData()}>{t('refresh')}</button>
-        </section>
+        <ErrorState title={t('error_title')} message={userQuery.error.message} retryLabel={t('refresh')} onRetry={() => void refreshData()} />
       ) : entries.length === 0 ? (
-        <section className="read-state">{t('empty')}</section>
+        <EmptyState title={t('empty_title')} description={t('empty_generic_body')} />
       ) : (
         <>
           <dl className="read-detail">

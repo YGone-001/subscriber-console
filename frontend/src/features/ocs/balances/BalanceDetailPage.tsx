@@ -7,6 +7,8 @@ import { useRead } from '../../../lib/api/use-read';
 import { hasPermission } from '../../../lib/permissions';
 import { useAuth } from '../../../providers/AuthProvider';
 import { useI18n } from '../../../providers/I18nProvider';
+import { EmptyState, ErrorState } from '../../../components/ui/StatePanel';
+import { SkeletonTable } from '../../../components/ui/LoadingSkeleton';
 
 type UnknownRecord = Record<string, unknown>;
 const asRecord = (v: unknown): UnknownRecord => (v && typeof v === 'object' && !Array.isArray(v) ? (v as UnknownRecord) : {});
@@ -119,14 +121,11 @@ export function BalanceDetailPage() {
       </button>
 
       {balance.isLoading ? (
-        <section className="read-state" role="status">{t('loading')}</section>
+        <SkeletonTable rows={6} />
       ) : balance.error ? (
-        <section className="read-state error" role="alert">
-          <p>{balance.error.message}</p>
-          <button type="button" onClick={() => void balance.mutate()}>{t('refresh')}</button>
-        </section>
+        <ErrorState title={t('error_title')} message={balance.error.message} retryLabel={t('refresh')} onRetry={() => void balance.mutate()} />
       ) : entries.length === 0 ? (
-        <section className="read-state">{t('empty')}</section>
+        <EmptyState title={t('empty_title')} description={t('empty_generic_body')} />
       ) : (
         <dl className="read-detail">
           {entries.map(([key, value]) => (

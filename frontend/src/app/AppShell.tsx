@@ -1,36 +1,111 @@
-import { useEffect, useMemo, useState } from 'react';
-import { ChevronRight, Command, LogOut, Menu, Moon, Search, Sun, X } from 'lucide-react';
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { getBreadcrumbs, getVisibleNavigation, matchesRoute } from '../lib/navigation';
+import { useEffect, useState } from 'react';
+import { Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../providers/AuthProvider';
 import { useI18n } from '../providers/I18nProvider';
-import { useTheme } from '../providers/ThemeProvider';
+import { ToastRegion } from '../providers/ToastProvider';
+import { AppHeader } from './components/AppHeader';
+import { AppSidebar } from './components/AppSidebar';
+import { NavigationBreadcrumbs } from './components/NavigationBreadcrumbs';
+import { NavigationTabBar } from './components/NavigationTabBar';
 
 const DESKTOP_SHELL_QUERY = '(min-width: 981px)';
-function canUseShortcut(target: EventTarget | null) { const element = target as HTMLElement | null; return !(element?.tagName === 'INPUT' || element?.tagName === 'TEXTAREA' || element?.isContentEditable); }
 
+function canUseShortcut(target: EventTarget | null) {
+  const element = target as HTMLElement | null;
+  return !(element?.tagName === 'INPUT' || element?.tagName === 'TEXTAREA' || element?.isContentEditable);
+}
+
+/**
+ * Application shell.
+ *
+ * Orchestration only: header, sidebar, navigation bars, content outlet and global
+ * overlays. Detailed controls live in dedicated shell components.
+ */
 export function AppShell() {
-  const { user, refresh } = useAuth();
-  const { t, locale, setLocale } = useI18n();
-  const { preference, setPreference } = useTheme();
-  const { pathname } = useLocation();
+  const { refresh } = useAuth();
+  const { t } = useI18n();
   const navigate = useNavigate();
   const [desktop, setDesktop] = useState(() => window.matchMedia(DESKTOP_SHELL_QUERY).matches);
   const [sidebarOpen, setSidebarOpen] = useState(() => window.matchMedia(DESKTOP_SHELL_QUERY).matches);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [query, setQuery] = useState('');
-  const routes = useMemo(() => getVisibleNavigation(user?.role), [user?.role]);
-  useEffect(() => { const media = window.matchMedia(DESKTOP_SHELL_QUERY); const update = () => { setDesktop(media.matches); setSidebarOpen(media.matches); }; media.addEventListener('change', update); return () => media.removeEventListener('change', update); }, []);
-  useEffect(() => { const onKeyDown = (event: KeyboardEvent) => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'b' && canUseShortcut(event.target)) { event.preventDefault(); setSidebarOpen((open) => !open); } if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); setPaletteOpen((open) => !open); } if (event.key === 'Escape') { setPaletteOpen(false); if (!desktop) setSidebarOpen(false); } }; window.addEventListener('keydown', onKeyDown); return () => window.removeEventListener('keydown', onKeyDown); }, [desktop]);
-  useEffect(() => { if (!desktop && sidebarOpen) { const previous = document.body.style.overflow; document.body.style.overflow = 'hidden'; return () => { document.body.style.overflow = previous; }; } }, [desktop, sidebarOpen]);
-  async function logout() { try { await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }); } finally { await refresh(); navigate('/login', { replace: true }); } }
-  const breadcrumbs = getBreadcrumbs(pathname);
-  const paletteRoutes = routes.filter((route) => t(route.labelKey).toLowerCase().includes(query.trim().toLowerCase()));
-  const navigateTo = (path: string) => { navigate(path); setPaletteOpen(false); setQuery(''); if (!desktop) setSidebarOpen(false); };
-  return <div className="shell-root">
-    <a className="skip-link" href="#main-content">{t('skip_to_content')}</a>
-    <header className="app-header"><div className="header-left"><div className="brand-lockup"><span className="brand-mark" aria-hidden="true">x</span><strong>xCloud</strong></div><button type="button" className="icon-button" onClick={() => setSidebarOpen((open) => !open)} aria-label={sidebarOpen ? t('collapse_sidebar') : t('expand_sidebar')} aria-controls="primary-sidebar" aria-expanded={sidebarOpen}><Menu size={20} /></button><button type="button" className="command-button" onClick={() => setPaletteOpen(true)}><Command size={15} /><span>{t('search_navigation')}</span><kbd>Ctrl K</kbd></button></div><div className="header-actions"><label className="select-control"><span className="sr-only">{t('language')}</span><select value={locale} onChange={(event) => setLocale(event.target.value as typeof locale)}><option value="en">EN</option><option value="zh">中文</option></select></label><label className="select-control"><span className="sr-only">{t('theme')}</span><select value={preference} onChange={(event) => setPreference(event.target.value as typeof preference)}><option value="system">{t('system')}</option><option value="light">{t('light')}</option><option value="dark">{t('dark')}</option></select></label><span className="account-label" title={user?.username}>{user?.username} · {user?.role}</span><button type="button" className="icon-button" onClick={() => void logout()} aria-label={t('logout')}><LogOut size={18} /></button></div></header>
-    <div className="shell-body">{!desktop && sidebarOpen ? <button type="button" className="sidebar-backdrop" aria-label={t('close')} onClick={() => setSidebarOpen(false)} /> : null}<aside id="primary-sidebar" className={`app-sidebar ${sidebarOpen ? 'is-open' : 'is-closed'}`} aria-label={t('navigation')}><nav>{routes.map((route) => { const Icon = route.icon; const active = matchesRoute(route.targetRoute, pathname) || (route.targetRoute !== '/' && pathname.startsWith(`${route.targetRoute}/`)); return <NavLink key={route.targetRoute} to={route.targetRoute} onClick={() => !desktop && setSidebarOpen(false)} className={active ? 'nav-link active' : 'nav-link'}><Icon size={18} /><span>{t(route.labelKey)}</span></NavLink>; })}</nav><button type="button" className="sidebar-toggle" onClick={() => setSidebarOpen((open) => !open)}>{sidebarOpen ? <X size={17} /> : <Menu size={17} />}<span>{sidebarOpen ? t('collapse_sidebar') : t('expand_sidebar')}</span><kbd>Ctrl B</kbd></button></aside><div className="shell-content"><nav className="tab-bar" aria-label={t('navigation')}>{routes.map((route) => <NavLink key={route.targetRoute} to={route.targetRoute} className={({ isActive }) => isActive ? 'tab-link active' : 'tab-link'}>{t(route.labelKey)}</NavLink>)}</nav><nav className="breadcrumbs" aria-label="Breadcrumb">{breadcrumbs.map((crumb, index) => <span key={`${crumb.path}-${index}`}>{index > 0 ? <ChevronRight size={14} aria-hidden="true" /> : null}{crumb.current || !crumb.path ? <span aria-current="page">{t(crumb.labelKey)}</span> : <NavLink to={crumb.path}>{t(crumb.labelKey)}</NavLink>}</span>)}</nav><main id="main-content" tabIndex={-1}><Outlet /></main></div></div>
-    {paletteOpen ? <div className="palette-backdrop" role="presentation" onMouseDown={() => setPaletteOpen(false)}><section className="command-palette" role="dialog" aria-modal="true" aria-label={t('command_palette')} onMouseDown={(event) => event.stopPropagation()}><header><Search size={18} /><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('search_navigation')} /><button type="button" onClick={() => setPaletteOpen(false)} aria-label={t('close')}><X size={18} /></button></header><div>{paletteRoutes.map((route) => <button type="button" key={route.targetRoute} onClick={() => navigateTo(route.targetRoute)}>{t(route.labelKey)}</button>)}<button type="button" onClick={() => { setPreference(preference === 'dark' ? 'light' : 'dark'); setPaletteOpen(false); }}>{preference === 'dark' ? <Sun size={16} /> : <Moon size={16} />}{t('theme')}</button><button type="button" onClick={() => { setLocale(locale === 'en' ? 'zh' : 'en'); setPaletteOpen(false); }}>{t('language')}</button></div></section></div> : null}
-  </div>;
+
+  useEffect(() => {
+    const media = window.matchMedia(DESKTOP_SHELL_QUERY);
+    const update = () => { setDesktop(media.matches); setSidebarOpen(media.matches); };
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const modifier = event.ctrlKey || event.metaKey;
+      if (modifier && event.key.toLowerCase() === 'b' && canUseShortcut(event.target)) {
+        event.preventDefault();
+        setSidebarOpen((open) => !open);
+        return;
+      }
+      if (modifier && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setPaletteOpen((open) => !open);
+        return;
+      }
+      if (event.key === 'Escape') {
+        setPaletteOpen(false);
+        if (!desktop) setSidebarOpen(false);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [desktop]);
+
+  useEffect(() => {
+    if (!desktop && sidebarOpen) {
+      const previous = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => { document.body.style.overflow = previous; };
+    }
+    return undefined;
+  }, [desktop, sidebarOpen]);
+
+  async function logout() {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
+    } finally {
+      await refresh();
+      navigate('/login', { replace: true });
+    }
+  }
+
+  return (
+    <div className="layout-root">
+      <a className="skip-link" href="#main-content">{t('skip_to_content')}</a>
+      <AppHeader
+        sidebarOpen={sidebarOpen}
+        onToggleSidebar={() => setSidebarOpen((open) => !open)}
+        paletteOpen={paletteOpen}
+        onOpenPalette={() => setPaletteOpen(true)}
+        onClosePalette={() => setPaletteOpen(false)}
+        onLogout={() => void logout()}
+      />
+      <div className="layout-body">
+        {!desktop && sidebarOpen ? (
+          <button
+            type="button"
+            className="sidebar-mobile-backdrop"
+            aria-label={t('close')}
+            onClick={() => setSidebarOpen(false)}
+          />
+        ) : null}
+        <AppSidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} isMobileShell={!desktop} />
+        <div className="layout-content-area">
+          <NavigationTabBar />
+          <NavigationBreadcrumbs />
+          <main id="main-content" tabIndex={-1} className="layout-main">
+            <Outlet />
+          </main>
+        </div>
+      </div>
+      <ToastRegion />
+    </div>
+  );
 }

@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronRight, Plus, RefreshCw, Search } from 'lucide-react';
 import { hasPermission } from '../../lib/permissions';
+import { EmptyState } from '../../components/ui/StatePanel';
+import { SkeletonTable } from '../../components/ui/LoadingSkeleton';
 import { useAuth } from '../../providers/AuthProvider';
 import { useI18n } from '../../providers/I18nProvider';
 import { fetchInventoryMeta, fetchInventoryResources } from './inventory-api';
@@ -197,14 +199,17 @@ export function InventoryPage() {
           <tbody>
             {loading && resources.length === 0 ? (
               <tr>
-                <td colSpan={8} className="text-center py-8 text-muted-foreground">
-                  {t('loading', { defaultValue: 'Loading...' })}
+                <td colSpan={8} className="text-center py-8">
+                  <SkeletonTable rows={5} />
                 </td>
               </tr>
             ) : resources.length === 0 ? (
               <tr>
-                <td colSpan={8} className="text-center py-8 text-muted-foreground">
-                  {t('empty', { defaultValue: 'No inventory resources found.' })}
+                <td colSpan={8}>
+                  <EmptyState
+                    title={t('empty_title', { defaultValue: 'Nothing to show' })}
+                    description={t('inventory_empty_body', { defaultValue: 'No inventory resources match the current filters.' })}
+                  />
                 </td>
               </tr>
             ) : (

@@ -90,6 +90,61 @@ jobs:
       - name: Frontend runtime dependency integrity
         run: node scripts/test-frontend-runtime-dependencies.mjs
 
+  ui-restoration:
+    name: Frontend UI restoration contract
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+
+      - name: Install repository script dependencies
+        run: npm ci
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      # Proves the historical xCloud operator presentation was forward-ported onto the
+      # current React/Vite + Go runtime: shell component structure, header and sidebar
+      # composition, command palette, tab bar, breadcrumbs, theme and language switches,
+      # user menu, notification presentation, restored brand asset, dashboard
+      # presentation, Inventory visual integration, stylesheet architecture, Next
+      # absence, frozen route count (26) and frozen Go registration count (90).
+      - name: Frontend UI restoration contract
+        run: node scripts/test-ui-restoration-contract.mjs
+
+      - name: Frontend lint
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Frontend typecheck
+        working-directory: frontend
+        run: npm run typecheck
+
+      - name: Frontend tests
+        working-directory: frontend
+        run: npm test
+
+      - name: Frontend build
+        working-directory: frontend
+        run: npm run build
+
+      # Inventory contracts must remain unchanged by a presentation-only phase.
+      - name: Inventory contract
+        run: node scripts/test-inventory-contract.mjs
+
+      - name: Frontend runtime boundary
+        run: node scripts/test-frontend-runtime-boundary.mjs
+
   go-spa-hosting:
     name: Go embedded SPA integration
     runs-on: ubuntu-latest
@@ -588,6 +643,7 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - frontend
+      - ui-restoration
       - go-spa-hosting
       - go
       - direct-operations

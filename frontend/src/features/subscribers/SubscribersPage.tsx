@@ -7,6 +7,8 @@ import { useRead } from '../../lib/api/use-read';
 import { hasPermission } from '../../lib/permissions';
 import { useAuth } from '../../providers/AuthProvider';
 import { useI18n } from '../../providers/I18nProvider';
+import { EmptyState, ErrorState } from '../../components/ui/StatePanel';
+import { SkeletonTable } from '../../components/ui/LoadingSkeleton';
 import {
   buildBatchCreateRequest,
   buildBatchPrecheckRequest,
@@ -490,18 +492,16 @@ export function SubscribersPage() {
 
       {/* Main Table */}
       {subscribers.isLoading || catalog.isLoading ? (
-        <section className="read-state" role="status">
-          {t('loading')}
-        </section>
+        <SkeletonTable rows={6} />
       ) : subscribers.error ? (
-        <section className="read-state error" role="alert">
-          <p>{subscribers.error.message}</p>
-          <button type="button" onClick={() => void refreshData()}>
-            {t('refresh')}
-          </button>
-        </section>
+        <ErrorState
+          title={t('error_title')}
+          message={subscribers.error.message}
+          retryLabel={t('refresh')}
+          onRetry={() => void refreshData()}
+        />
       ) : rows.length === 0 ? (
-        <section className="read-state">{t('empty')}</section>
+        <EmptyState title={t('empty_title')} description={t('empty_generic_body')} />
       ) : (
         <>
           <p className="read-summary">

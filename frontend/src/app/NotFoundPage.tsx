@@ -9,7 +9,7 @@ export function NotFoundPage() {
         <p className="eyebrow">404</p>
         <h1>{t('not_found_title')}</h1>
         <p>{t('not_found_body')}</p>
-        <Link to="/">{t('breadcrumbs_home')}</Link>
+        <Link to="/" className="btn btn-primary">{t('breadcrumbs_home')}</Link>
       </section>
     </main>
   );

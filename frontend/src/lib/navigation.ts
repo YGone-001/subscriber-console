@@ -1,4 +1,4 @@
-import { Activity, Boxes, CreditCard, FileText, Gauge, LayoutDashboard, Radio, UserCog, Users, Wallet, Zap, type LucideIcon } from 'lucide-react';
+import { Activity, Boxes, CreditCard, FileText, Gauge, LayoutDashboard, Radio, Settings, UserCog, Users, Wallet, Zap, type LucideIcon } from 'lucide-react';
 import type { CanonicalRole } from '../types/auth';
 import { hasNavigationPermission } from './permissions';
 
@@ -73,4 +73,69 @@ export function getBreadcrumbs(pathname: string): Array<{ labelKey: string; path
     crumbs.push({ labelKey: isDynamicValue ? segment : (found?.labelKey ?? segment), path: candidate, current: candidate === pathname });
   }
   return crumbs;
+}
+
+/** Shell geometry contract. Values mirror the restored xCloud shell CSS. */
+export const SHELL_GEOMETRY = {
+  expandedWidth: 264,
+  collapsedWidth: 72,
+  breakpoint: 981,
+} as const;
+
+export type SidebarGroup = {
+  key: string;
+  match: string;
+  target: string;
+  icon: LucideIcon;
+  children: NavigationRoute[];
+};
+
+/**
+ * Grouped sidebar model derived from the current navigation authority.
+ * A group is only produced when at least one of its routes is visible for the
+ * given role, so unauthorised groups never reach the presentation layer.
+ */
+export function getSidebarGroups(role: CanonicalRole | undefined): SidebarGroup[] {
+  const routes = getVisibleNavigation(role);
+  const find = (target: string) => routes.find((route) => route.targetRoute === target);
+  const group = (name: 'ocs' | 'system') => routes.filter((route) => route.group === name);
+  const groups: SidebarGroup[] = [];
+
+  const push = (route: NavigationRoute | undefined, match?: string) => {
+    if (!route) return;
+    groups.push({ key: route.labelKey, match: match ?? route.targetRoute, target: route.targetRoute, icon: route.icon, children: [] });
+  };
+
+  push(find('/'));
+  push(find('/subscribers'));
+
+  const ocsChildren = group('ocs');
+  if (ocsChildren.length > 0) {
+    groups.push({ key: 'nav_ocs', match: '/ocs', target: '/ocs/tariffs', icon: Zap, children: ocsChildren });
+  }
+
+  push(find('/profile'));
+  push(find('/rating'));
+
+  const systemChildren = group('system');
+  if (systemChildren.length > 0) {
+    groups.push({ key: 'nav_system_settings', match: '/users', target: systemChildren[0].targetRoute, icon: Settings, children: systemChildren });
+  }
+
+  push(find('/system-health'));
+  push(find('/inventory'));
+
+  return groups;
+}
+
+/** Case-insensitive label/route filter used by the sidebar and command palette. */
+export function filterNavigation(
+  routes: NavigationRoute[],
+  query: string,
+  resolveLabel: (labelKey: string) => string,
+): NavigationRoute[] {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return routes;
+  return routes.filter((route) =>
+    `${resolveLabel(route.labelKey)} ${route.targetRoute}`.toLowerCase().includes(needle));
 }

@@ -73,7 +73,7 @@ export function LoginPage() {
   return (
     <main className="login-page" aria-labelledby="login-title">
       <section className="login-card">
-        <div className="brand-lockup"><span className="brand-mark" aria-hidden="true">x</span><span>xCloud</span></div>
+        <div className="brand-lockup"><span className="brand-mark"><img src="/images/xCloud_picture.png" alt={t('brand_alt')} width={1254} height={1254} /></span><span className="brand-name">xCloud</span></div>
         <p className="eyebrow">{t('brand_tagline')}</p>
         <h1 id="login-title">{t('sign_in')}</h1>
         {sessionExpired ? <p className="session-message" role="status">{t('session_expired')}</p> : null}

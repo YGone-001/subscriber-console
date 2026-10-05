@@ -1,0 +1,228 @@
+/*
+ * Design tokens.
+ *
+ * Recovered from the historical xCloud operator UI design system and re-expressed
+ * against the current React/Vite theme contract (`data-theme` on <html>).
+ *
+ * The historical semantic palette is preserved: background/surface hierarchy,
+ * text hierarchy, accent, status colours, spacing rhythm, radii, shadows and
+ * motion. Legacy short aliases (--bg/--text/--muted/--line/--shadow) are kept as
+ * forward-compatible aliases so existing component stylesheets keep resolving.
+ */
+
+[data-theme='light'] {
+  --background: #f3f6f7;
+  --surface: #ffffff;
+  --surface-hover: #edf3f4;
+  --surface-subtle: #eef3f4;
+  --surface-field: #ffffff;
+  --surface-border: #d8e1e3;
+  --primary: #087f8c;
+  --primary-hover: #046670;
+  --danger: #c83d4c;
+  --danger-hover: #a82e3c;
+  --success: #127257;
+  --warning: #a65f12;
+  --success-soft: rgba(22, 133, 107, 0.12);
+  --warning-soft: rgba(185, 108, 22, 0.13);
+  --danger-soft: rgba(200, 61, 76, 0.11);
+  --neutral-soft: rgba(83, 107, 115, 0.11);
+  --status-info: #176f91;
+  --status-info-soft: rgba(23, 111, 145, 0.11);
+  --status-info-border: rgba(23, 111, 145, 0.28);
+  --status-success: var(--success);
+  --status-success-soft: var(--success-soft);
+  --status-success-border: rgba(22, 133, 107, 0.3);
+  --status-warning: var(--warning);
+  --status-warning-soft: var(--warning-soft);
+  --status-warning-border: rgba(185, 108, 22, 0.3);
+  --status-danger: var(--danger);
+  --status-danger-soft: var(--danger-soft);
+  --status-danger-border: rgba(200, 61, 76, 0.3);
+  --selection-soft: rgba(8, 127, 140, 0.09);
+  --selection-border: rgba(8, 127, 140, 0.32);
+  --diff-added: #16856b;
+  --diff-added-soft: rgba(22, 133, 107, 0.11);
+  --diff-added-border: rgba(22, 133, 107, 0.3);
+  --diff-modified: var(--status-warning);
+  --diff-modified-soft: rgba(166, 95, 18, 0.12);
+  --diff-modified-border: rgba(166, 95, 18, 0.3);
+  --diff-removed: #c83d4c;
+  --diff-removed-soft: rgba(200, 61, 76, 0.1);
+  --diff-removed-border: rgba(200, 61, 76, 0.3);
+  --chart-1: #087f8c;
+  --chart-2: #176f91;
+  --chart-3: #16856b;
+  --chart-4: #b96c16;
+  --chart-5: #7656a8;
+  --chart-6: #6f7f84;
+  --on-accent: #ffffff;
+  --icon-muted: #71868c;
+  --overlay-scrim: rgba(10, 28, 34, 0.48);
+  --login-canvas: #09191f;
+  --login-surface: #10262d;
+  --login-surface-raised: #17323a;
+  --login-border: rgba(183, 213, 216, 0.18);
+  --login-text: #eef7f7;
+  --login-text-muted: #91a9ad;
+  --login-primary: #42c3c9;
+  --login-primary-hover: #68d8dc;
+  --login-on-primary: #071b20;
+  --text-main: #102b34;
+  --text-secondary: #36545d;
+  --text-muted: #5c7178;
+  --header-bg: #eaf0f1;
+  --scrollbar-thumb: rgba(100, 116, 139, 0.4);
+  --scrollbar-thumb-hover: rgba(100, 116, 139, 0.6);
+  --shadow-panel: 0 14px 36px -32px rgba(15, 43, 52, 0.7);
+  --shadow-popover: 0 20px 44px -28px rgba(15, 43, 52, 0.72);
+  --shadow-drawer: -24px 0 48px -32px rgba(15, 43, 52, 0.48);
+  --drawer-backdrop: rgba(10, 28, 34, 0.34);
+  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--primary) 24%, transparent);
+}
+
+[data-theme='dark'] {
+  --background: #09191f;
+  --surface: #10262d;
+  --surface-hover: #17323a;
+  --surface-subtle: #152c33;
+  --surface-field: #17323a;
+  --surface-border: rgba(183, 213, 216, 0.14);
+  --primary: #42c3c9;
+  --primary-hover: #68d8dc;
+  --danger: #ff6b78;
+  --danger-hover: #ff8a94;
+  --success: #46c7a5;
+  --warning: #f2a94b;
+  --success-soft: rgba(70, 199, 165, 0.15);
+  --warning-soft: rgba(242, 169, 75, 0.15);
+  --danger-soft: rgba(255, 107, 120, 0.15);
+  --neutral-soft: rgba(170, 196, 201, 0.12);
+  --status-info: #68b6d4;
+  --status-info-soft: rgba(104, 182, 212, 0.14);
+  --status-info-border: rgba(104, 182, 212, 0.34);
+  --status-success: var(--success);
+  --status-success-soft: var(--success-soft);
+  --status-success-border: rgba(70, 199, 165, 0.36);
+  --status-warning: var(--warning);
+  --status-warning-soft: var(--warning-soft);
+  --status-warning-border: rgba(242, 169, 75, 0.36);
+  --status-danger: var(--danger);
+  --status-danger-soft: var(--danger-soft);
+  --status-danger-border: rgba(255, 107, 120, 0.36);
+  --selection-soft: rgba(66, 195, 201, 0.14);
+  --selection-border: rgba(66, 195, 201, 0.38);
+  --diff-added: #46c7a5;
+  --diff-added-soft: rgba(70, 199, 165, 0.15);
+  --diff-added-border: rgba(70, 199, 165, 0.36);
+  --diff-modified: #f2a94b;
+  --diff-modified-soft: rgba(242, 169, 75, 0.15);
+  --diff-modified-border: rgba(242, 169, 75, 0.36);
+  --diff-removed: #ff6b78;
+  --diff-removed-soft: rgba(255, 107, 120, 0.14);
+  --diff-removed-border: rgba(255, 107, 120, 0.36);
+  --chart-1: #42c3c9;
+  --chart-2: #68b6d4;
+  --chart-3: #46c7a5;
+  --chart-4: #f2a94b;
+  --chart-5: #a992e0;
+  --chart-6: #9fb3b8;
+  --on-accent: #071b20;
+  --icon-muted: #8fa6ab;
+  --overlay-scrim: rgba(3, 12, 16, 0.66);
+  --text-main: #e6f1f2;
+  --text-secondary: #b3c7ca;
+  --text-muted: #8ba0a5;
+  --header-bg: #0d2129;
+  --scrollbar-thumb: rgba(148, 163, 184, 0.35);
+  --scrollbar-thumb-hover: rgba(148, 163, 184, 0.55);
+  --shadow-panel: 0 16px 40px -30px rgba(0, 0, 0, 0.85);
+  --shadow-popover: 0 24px 52px -30px rgba(0, 0, 0, 0.9);
+  --shadow-drawer: -24px 0 48px -32px rgba(0, 0, 0, 0.7);
+  --drawer-backdrop: rgba(3, 12, 16, 0.58);
+  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--primary) 28%, transparent);
+}
+
+:root {
+  color-scheme: light;
+
+  /* Reference typography scale */
+  --font-display: 'Aptos Display', 'Segoe UI', 'PingFang SC', sans-serif;
+  --font-interface: 'Microsoft YaHei UI', 'PingFang SC', 'Segoe UI', sans-serif;
+  --font-data: 'Cascadia Mono', 'SFMono-Regular', Consolas, monospace;
+  --ref-font-size-micro: 0.625rem;
+  --ref-font-size-caption: 0.7rem;
+  --ref-font-size-label: 0.75rem;
+  --ref-font-size-label-strong: 0.78rem;
+  --ref-font-size-data: 0.8rem;
+  --ref-font-size-data-relaxed: 0.82rem;
+  --ref-font-size-body-compact: 0.85rem;
+  --ref-font-size-body-small: 0.875rem;
+  --ref-font-size-body-support: 0.9rem;
+  --ref-font-size-body-emphasis: 0.95rem;
+  --ref-font-size-body: 1rem;
+  --ref-font-size-heading-sm: 1.05rem;
+  --ref-font-size-heading: 1.125rem;
+  --ref-font-size-title-sm: 1.25rem;
+  --ref-font-size-heading-lg: 1.35rem;
+  --ref-font-size-title: 1.5rem;
+  --ref-font-size-display-sm: 1.65rem;
+  --ref-font-size-display: 1.75rem;
+  --ref-font-size-display-lg: 2rem;
+  --ref-font-size-display-xl: 2.5rem;
+  --ref-font-size-title-fluid: clamp(1.35rem, 2vw, 1.75rem);
+  --ref-font-size-display-fluid: clamp(1.65rem, 2vw, 2.2rem);
+
+  /* Reference radii */
+  --ref-radius-micro: 4px;
+  --ref-radius-compact: 6px;
+  --ref-radius-small: 7px;
+  --ref-radius-control: 8px;
+  --ref-radius-panel: 10px;
+  --ref-radius-soft-panel: 12px;
+  --ref-radius-pill: 999px;
+  --ref-radius-circle: 50%;
+
+  /* Spacing rhythm (4px base) */
+  --space-4: 4px;
+  --space-8: 8px;
+  --space-12: 12px;
+  --space-16: 16px;
+  --space-20: 20px;
+  --space-24: 24px;
+  --space-32: 32px;
+  --space-page: var(--space-24);
+  --space-section: var(--space-20);
+  --control-height: 36px;
+  --table-row-height: 54px;
+
+  /* Shell geometry */
+  --shell-header-height: 64px;
+  --shell-sidebar-expanded: 264px;
+  --shell-sidebar-collapsed: 72px;
+  --shell-mobile-sidebar: min(286px, 84vw);
+  --shell-breakpoint: 981px;
+
+  /* Motion */
+  --ease-decelerate: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+  --duration-fast: 0.15s;
+  --duration-normal: 0.2s;
+  --duration-slow: 0.35s;
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+}
+
+/*
+ * Legacy aliases. The pre-restoration shell used short token names; they are kept
+ * as aliases onto the recovered semantic tokens so no existing rule breaks.
+ */
+:root {
+  --bg: var(--background);
+  --text: var(--text-main);
+  --muted: var(--text-muted);
+  --line: var(--surface-border);
+  --shadow: var(--shadow-panel);
+}

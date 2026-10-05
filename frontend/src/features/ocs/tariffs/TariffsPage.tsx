@@ -8,6 +8,8 @@ import { useRead } from '../../../lib/api/use-read';
 import { hasPermission } from '../../../lib/permissions';
 import { useAuth } from '../../../providers/AuthProvider';
 import { useI18n } from '../../../providers/I18nProvider';
+import { EmptyState, ErrorState } from '../../../components/ui/StatePanel';
+import { SkeletonTable } from '../../../components/ui/LoadingSkeleton';
 
 type UnknownRecord = Record<string, unknown>;
 const asRecord = (v: unknown): UnknownRecord => (v && typeof v === 'object' && !Array.isArray(v) ? (v as UnknownRecord) : {});
@@ -215,14 +217,11 @@ export function TariffsPage() {
       </div>
 
       {tariffs.isLoading ? (
-        <section className="read-state" role="status">{t('loading')}</section>
+        <SkeletonTable rows={6} />
       ) : tariffs.error ? (
-        <section className="read-state error" role="alert">
-          <p>{tariffs.error.message}</p>
-          <button type="button" onClick={() => void refreshData()}>{t('refresh')}</button>
-        </section>
+        <ErrorState title={t('error_title')} message={tariffs.error.message} retryLabel={t('refresh')} onRetry={() => void refreshData()} />
       ) : rows.length === 0 ? (
-        <section className="read-state">{t('empty')}</section>
+        <EmptyState title={t('empty_title')} description={t('empty_generic_body')} />
       ) : (
         <>
           <div className="read-table-wrap">

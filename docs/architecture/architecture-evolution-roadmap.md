@@ -72,6 +72,8 @@ The Vite listener on `127.0.0.1:13333` is the loopback-only development server.
 
 Platform Evolution Status:
 - Inventory / Resource Model Foundation = IMPLEMENTED (authoritative metadata source of truth in `xcloud_ops.app_inventory_resources`, 6 Go endpoints, 3 SPA routes, keyset cursor pagination, CAS concurrency, terminal retirement).
+- Frontend Visual & Interaction Parity Restoration = IMPLEMENTED (historical xCloud operator presentation forward-ported onto the current React/Vite + Go runtime; see `docs/architecture/frontend-ui-restoration.md`). The runtime remains React/Vite + Go; Next.js is not restored.
+- Topology / Dependency Model Foundation = PLANNED (not started).
 - Topology relationships, discovery adapters, and remote network control remain future work.
 
 ### Internal Backend Direction

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft, Edit2, PowerOff, RefreshCw } from 'lucide-react';
 import { Modal } from '../../components/Modal';
+import { LoadingState } from '../../components/ui/StatePanel';
 import { hasPermission } from '../../lib/permissions';
 import { useAuth } from '../../providers/AuthProvider';
 import { useI18n } from '../../providers/I18nProvider';
@@ -233,8 +234,8 @@ export function InventoryDetailPage() {
 
   if (loading && !resource) {
     return (
-      <div className="page-container p-8 text-center text-muted-foreground">
-        {t('loading', { defaultValue: 'Loading resource details...' })}
+      <div className="page-container">
+        <LoadingState label={t('inventory_loading_body', { defaultValue: 'Loading inventory resources...' })} />
       </div>
     );
   }
