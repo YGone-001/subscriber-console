@@ -531,11 +531,6 @@
   color: var(--login-text);
 }
 
-.login-card .session-message,
-.login-card .form-error {
-  color: var(--status-warning);
-}
-
 .login-card .form-error {
   color: var(--danger);
 }

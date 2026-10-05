@@ -11,3 +11,39 @@
 @import './components.css';
 @import './pages.css';
 @import './utilities.css';
+
+/*
+ * Login surface notices.
+ *
+ * Declared at the entry layer because the login page renders before the
+ * application shell mounts, so its notice presentation must be resolvable from
+ * the stylesheet entry point alone. The session notice and the credential error
+ * keep visually distinct treatments.
+ */
+.login-card .session-message {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--status-warning-border);
+  border-radius: var(--ref-radius-control);
+  background: color-mix(in srgb, var(--warning) 14%, var(--login-surface));
+  color: var(--warning);
+  font-size: var(--ref-font-size-body-compact);
+  font-weight: 600;
+}
+
+.login-card .form-error {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--status-danger-border);
+  border-radius: var(--ref-radius-control);
+  background: color-mix(in srgb, var(--danger) 16%, var(--login-surface));
+  color: var(--danger);
+  font-size: var(--ref-font-size-body-compact);
+  font-weight: 600;
+}
