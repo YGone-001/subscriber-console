@@ -148,8 +148,8 @@ jobs:
       - name: Go static SPA hosting contract
         run: node scripts/test-go-spa-hosting-contract.mjs
 
-      - name: Go static SPA hosting foundation
-        run: node scripts/test-go-spa-hosting-foundation.mjs
+      - name: Go static SPA hosting runtime
+        run: node scripts/test-go-spa-hosting-runtime.mjs
 
   go:
     name: Go backend quality gates

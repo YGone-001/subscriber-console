@@ -96,6 +96,42 @@ export function detectWrongDevInstaller(docText) {
   return violations;
 }
 
+/**
+ * Detect active references in current-authority documentation to retired artifacts
+ * or unsupported migration-era transports:
+ * - frontend-spa
+ * - deploy/nginx/xcloud-next-legacy.conf
+ * - deploy/nginx/setup-next-legacy.sh
+ * - frontend/src/proxy.ts
+ * - temporary Next.js local development
+ * - Next.js HMR as supported current development transport
+ */
+export function detectRetiredDocumentationArtifacts(docText) {
+  const violations = [];
+  const lines = docText.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const rawLine = lines[i];
+    // Allow explicit prohibition / negative guard / historical context statements
+    if (/(?:prohibit|retired|never|not|must not|cannot|zero|deleted|absence|removed|histor)/i.test(rawLine)) {
+      continue;
+    }
+    const checks = [
+      { name: 'frontend_spa_ref', re: /\bfrontend-spa\b/ },
+      { name: 'legacy_nginx_conf_ref', re: /xcloud-next-legacy\.conf/ },
+      { name: 'legacy_nginx_setup_ref', re: /setup-next-legacy\.sh/ },
+      { name: 'deleted_proxy_guard_ref', re: /frontend\/src\/proxy\.ts/ },
+      { name: 'temporary_next_dev_ref', re: /temporary (?:local )?development with Next(?:\.js)?/i },
+      { name: 'next_hmr_supported_ref', re: /Next(?:\.js)? HMR(?: as supported| for local)/i },
+    ];
+    for (const check of checks) {
+      if (check.re.test(rawLine)) {
+        violations.push({ line: i + 1, name: check.name, text: rawLine.trim() });
+      }
+    }
+  }
+  return violations;
+}
+
 console.log('Testing current architecture documentation consistency...');
 
 // 1. OCS Management Runbook
@@ -339,6 +375,62 @@ for (const example of syntheticWrongInstallerExamples) {
   sentinelWrongInstallerDetectedCount++;
 }
 
+// 10. Scan active current-authority documentation for retired artifacts
+function walkDocs(dir, out = []) {
+  if (!fs.existsSync(dir)) return out;
+  for (const entry of fs.readdirSync(dir)) {
+    const full = path.join(dir, entry);
+    if (fs.statSync(full).isDirectory()) {
+      if (entry === 'archive' || entry === 'node_modules') continue;
+      walkDocs(full, out);
+    } else if (entry.endsWith('.md')) {
+      out.push(full);
+    }
+  }
+  return out;
+}
+
+const activeDocs = [
+  path.join(ROOT, 'README.md'),
+  path.join(ROOT, 'AGENTS.md'),
+  path.join(ROOT, 'CLAUDE.md'),
+  ...walkDocs(path.join(ROOT, 'docs')),
+];
+
+let currentDocsFrontendSpaRefs = 0;
+let currentDocsLegacyNextSetupRefs = 0;
+let currentDocsDeletedNextProxyRefs = 0;
+const retiredDocViolations = [];
+
+for (const docFile of activeDocs) {
+  const content = fs.readFileSync(docFile, 'utf8');
+  const hits = detectRetiredDocumentationArtifacts(content);
+  for (const hit of hits) {
+    retiredDocViolations.push({ file: path.relative(ROOT, docFile).replaceAll('\\', '/'), ...hit });
+    if (hit.name === 'frontend_spa_ref') currentDocsFrontendSpaRefs++;
+    if (hit.name === 'legacy_nginx_setup_ref' || hit.name === 'legacy_nginx_conf_ref') currentDocsLegacyNextSetupRefs++;
+    if (hit.name === 'deleted_proxy_guard_ref') currentDocsDeletedNextProxyRefs++;
+  }
+}
+
+assert.equal(retiredDocViolations.length, 0, `Retired documentation artifact references found: ${JSON.stringify(retiredDocViolations)}`);
+
+// Negative sentinels: prove detectors flag synthetic violations (falsifiability)
+const syntheticRetiredDocExamples = [
+  'cd frontend-spa && npm run build',
+  'run setup-next-legacy.sh to start Nginx for Next',
+  'deploy/nginx/xcloud-next-legacy.conf provides edge proxy',
+  'UI page guard in frontend/src/proxy.ts validates JWT',
+  'temporary local development with Next.js is enabled',
+  'Next.js HMR for local development server',
+];
+let sentinelRetiredDocDetectedCount = 0;
+for (const example of syntheticRetiredDocExamples) {
+  const detected = detectRetiredDocumentationArtifacts(example);
+  assert.ok(detected.length > 0, `detectRetiredDocumentationArtifacts must flag synthetic example: "${example}"`);
+  sentinelRetiredDocDetectedCount++;
+}
+
 console.log('Current architecture documentation consistency: PASS');
 
 console.log(`documented_next_version=${documentedNextVersion}`);
@@ -347,5 +439,9 @@ console.log(`next_documentation_version_match=${documentedNextVersion === declar
 console.log(`next_documentation_version_sentinel_detected=${sentinelMismatchDetected}`);
 console.log(`readme_stale_production_topology=${readmeStaleHits.length}`);
 console.log(`deployment_stale_production_topology=${deploymentStaleHits.length}`);
+console.log(`current_docs_frontend_spa_refs=${currentDocsFrontendSpaRefs}`);
+console.log(`current_docs_legacy_next_setup_refs=${currentDocsLegacyNextSetupRefs}`);
+console.log(`current_docs_deleted_next_proxy_refs=${currentDocsDeletedNextProxyRefs}`);
+console.log(`canonicalization_cleanup_result=PASS`);
 console.log(`local_workflow_contract=PASS`);
 console.log(`documentation_contract=PASS`);

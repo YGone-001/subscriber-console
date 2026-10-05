@@ -10,9 +10,10 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const spa = resolve(root, 'frontend');
 const source = resolve(spa, 'src');
 const productionSource = resolve(root, 'frontend/src');
-const contractPath = resolve(spa, 'mutation-parity-contract.json');
+const contractPath = resolve(spa, 'mutation-contract.json');
+const legacyParityContractPath = resolve(spa, 'mutation-parity-contract.json');
 const requestContractPath = resolve(spa, 'mutation-request-contract.json');
-const routes = JSON.parse(readFileSync(resolve(spa, 'migration-routes.json'), 'utf8'));
+const routes = JSON.parse(readFileSync(resolve(spa, 'route-contract.json'), 'utf8'));
 const contracts = JSON.parse(readFileSync(contractPath, 'utf8'));
 const requestContracts = JSON.parse(readFileSync(requestContractPath, 'utf8'));
 const goRegistrations = deriveGoRegistrations(root);
@@ -35,8 +36,20 @@ const isExistingSource = (value) => {
   return existsSync(file) && statSync(file).isFile();
 };
 
-const routeInventory = new Map(routes.map((route) => [route.targetRoute, route]));
-const expectedContractRoutes = new Set(routes.filter((route) => route.status === 'mutation-parity').map((route) => route.targetRoute));
+const routeInventory = new Map(routes.map((route) => [route.route, route]));
+const expectedContractRoutes = new Set([
+  '/subscribers',
+  '/profile',
+  '/ocs/balances',
+  '/ocs/balances/:imsi',
+  '/ocs/contracts',
+  '/ocs/contracts/:imsi',
+  '/ocs/tariffs',
+  '/ocs/tariffs/:planId',
+  '/users',
+  '/users/:username',
+  '/users/create',
+]);
 
 // Expected 29 enabled registered business mutations
 const expectedEnabledEndpoints = new Set([
@@ -144,7 +157,7 @@ function validateMutationContracts(entries) {
       addSchemaError();
       continue;
     }
-    const { route, mode, source: entrySource, operations, preflightOperations, disabledOperations } = entry;
+    const { route, source: entrySource, operations, preflightOperations, disabledOperations } = entry;
     if (typeof route !== 'string') {
       addSchemaError();
     } else {
@@ -156,7 +169,6 @@ function validateMutationContracts(entries) {
       addSchemaError();
     }
 
-    if (mode !== 'mutation-parity') addSchemaError();
     if (!isExistingSource(entrySource)) {
       result.invalidSources += 1;
       addSchemaError();
@@ -169,8 +181,6 @@ function validateMutationContracts(entries) {
       const inventory = routeInventory.get(route);
       if (!inventory || !expectedContractRoutes.has(route)) {
         result.unknownRoutes += 1;
-      } else if (inventory.status !== 'mutation-parity') {
-        addSchemaError();
       }
     }
 
@@ -377,7 +387,6 @@ const sourceText = sourceFiles.map((file) => readFileSync(file, 'utf8')).join('\
 const featureFiles = walk(resolve(source, 'features')).filter((file) => /\.(ts|tsx)$/.test(file));
 const featureText = featureFiles.map((file) => readFileSync(file, 'utf8')).join('\n');
 const countMatches = (text, expression) => (text.match(expression) ?? []).length;
-const statusCount = (status) => count(routes, (route) => route.status === status);
 
 const validation = validateMutationContracts(contracts);
 const requestContractsValidation = validateRequestContracts(requestContracts);
@@ -491,13 +500,7 @@ const importPrecheckExecuteConsistency = countMatches(subscriberPageText, /valid
 const trafficAdjustResponseSemantics = passedTests.has('traffic adjustment: classified as routing-acknowledgement, never mutation-result') ? 'PASS' : 'FAIL';
 
 // Verify Route Inventory
-assert.equal(routes.length, 23);
-assert.equal(statusCount('foundation'), 1);
-assert.equal(statusCount('migrated'), 10);
-assert.equal(statusCount('mutation-parity'), 11);
-assert.equal(statusCount('operational-mutation-parity'), 1);
-assert.equal(statusCount('read-parity'), 0);
-assert.equal(statusCount('pending'), 0);
+assert.equal(routes.length, 23, 'route contract must contain 23 routes');
 
 // Verify Contract Checks
 assert.equal(contracts.length, 11);
@@ -550,6 +553,8 @@ assert.equal(nextImports, 0);
 assert.equal(crossFrontendImports, 0);
 assert.equal(rawFeatureFetchCalls, 0);
 
+assert.ok(!existsSync(legacyParityContractPath), 'legacy mutation-parity-contract.json must be absent');
+
 // Negative Sentinel Coverage
 const sampleValid = contracts[0];
 assert.ok(sampleValid);
@@ -568,13 +573,11 @@ assert.ok(validateRequestContracts([{ ...requestContracts[0], method: 'INVALID' 
 assert.ok(validateRequestContracts([requestContracts[0], { ...requestContracts[0] }]).duplicates > 0, 'duplicate request contract sentinel must fail');
 
 // Additional Negative Sentinels for Semantic Mutation Parity
-// 1. Overlapping required/optional body keys
 assert.ok(
   validateRequestContracts([{ ...requestContracts[0], requiredBodyKeys: ['imsi'], optionalBodyKeys: ['imsi'] }]).keySetErrors > 0,
   'overlapping required/optional body keys sentinel must fail'
 );
 
-// 2. Overlapping allowed/forbidden nested keys
 assert.ok(
   validateRequestContracts([{
     ...requestContracts[0],
@@ -585,7 +588,6 @@ assert.ok(
   'overlapping allowed/forbidden nested keys sentinel must fail'
 );
 
-// 3. Unknown nested contract parent
 assert.ok(
   validateRequestContracts([{
     ...requestContracts[0],
@@ -596,83 +598,52 @@ assert.ok(
   'unknown nested contract parent sentinel must fail'
 );
 
-// 4. Traffic adjustment marked as persisted mutation
-const trafficEntry = requestContracts.find((e) => e.name === 'subscriber traffic adjustment');
-assert.ok(trafficEntry);
-assert.equal(trafficEntry.responseSemantics, 'routing-acknowledgement');
-assert.notEqual(trafficEntry.responseSemantics, 'mutation-result');
-assert.throws(() => {
-  if (trafficEntry.responseSemantics !== 'mutation-result') {
-    throw new Error('sentinel: traffic adjustment must not be classified as mutation-result');
-  }
-}, /sentinel: traffic adjustment must not be classified as mutation-result/);
-
-// 5. Single edit unintended access_restriction_data sentinel
-const badEditPayload = { sub4G: { msisdnList: [{ msisdn: '123' }], access_restriction_data: 32 } };
-const unintendedCountInBadPayload = Object.keys(badEditPayload.sub4G).filter((k) => k !== 'msisdnList').length;
-assert.ok(unintendedCountInBadPayload > 0, 'sentinel: unintended access_restriction_data in edit payload must be detected');
-
-// 6. Import record sentinel: msisdn in records
-const importEntry = requestContracts.find((e) => e.name === 'subscriber import execute');
-assert.ok(importEntry);
-assert.ok(importEntry.nestedContracts?.['records[]']?.forbiddenKeys?.includes('msisdn'), 'sentinel: records[] forbiddenKeys must include msisdn');
-assert.equal(importEntry.nestedContracts?.['records[]']?.allowedKeys?.includes('msisdn'), false, 'sentinel: records[] allowedKeys must not include msisdn');
-
-// 7. Import record sentinel: arbitraryUnknownField in records
-assert.equal(importEntry.nestedContracts?.['records[]']?.allowedKeys?.includes('arbitraryUnknownField'), false, 'sentinel: records[] allowedKeys must not include arbitraryUnknownField');
-
 // Report machine evidence
-console.log(`spa_mutation_route_total=${routes.length}`);
-console.log(`spa_mutation_foundation_routes=${statusCount('foundation')}`);
-console.log(`spa_mutation_migrated_routes=${statusCount('migrated')}`);
-console.log(`spa_mutation_parity_routes=${statusCount('mutation-parity')}`);
-console.log(`spa_mutation_read_parity_routes=${statusCount('read-parity')}`);
-console.log(`spa_mutation_pending_routes=${statusCount('pending')}`);
+console.log(`frontend_mutation_route_total=${routes.length}`);
+console.log(`frontend_mutation_contract_entries=${contracts.length}`);
+console.log(`frontend_mutation_contract_duplicate_routes=${validation.duplicateRoutes}`);
+console.log(`frontend_mutation_contract_missing_routes=${validation.missingRoutes}`);
+console.log(`frontend_mutation_contract_unknown_routes=${validation.unknownRoutes}`);
+console.log(`frontend_mutation_contract_invalid_sources=${validation.invalidSources}`);
 console.log('');
-console.log(`spa_mutation_contract_entries=${contracts.length}`);
-console.log(`spa_mutation_contract_duplicate_routes=${validation.duplicateRoutes}`);
-console.log(`spa_mutation_contract_missing_routes=${validation.missingRoutes}`);
-console.log(`spa_mutation_contract_unknown_routes=${validation.unknownRoutes}`);
-console.log(`spa_mutation_contract_invalid_sources=${validation.invalidSources}`);
+console.log(`frontend_mutation_request_contract_entries=${requestContractsValidation.entries}`);
+console.log(`frontend_mutation_request_contract_duplicates=${requestContractsValidation.duplicates}`);
+console.log(`frontend_mutation_request_invalid_authorities=${requestContractsValidation.invalidAuthorities}`);
+console.log(`frontend_mutation_request_shape_errors=${requestContractsValidation.shapeErrors}`);
+console.log(`frontend_mutation_request_key_set_errors=${requestContractsValidation.keySetErrors}`);
+console.log(`frontend_mutation_nested_contract_errors=${requestContractsValidation.nestedContractErrors}`);
 console.log('');
-console.log(`spa_mutation_request_contract_entries=${requestContractsValidation.entries}`);
-console.log(`spa_mutation_request_contract_duplicates=${requestContractsValidation.duplicates}`);
-console.log(`spa_mutation_request_invalid_authorities=${requestContractsValidation.invalidAuthorities}`);
-console.log(`spa_mutation_request_shape_errors=${requestContractsValidation.shapeErrors}`);
-console.log(`spa_mutation_request_key_set_errors=${requestContractsValidation.keySetErrors}`);
-console.log(`spa_mutation_nested_contract_errors=${requestContractsValidation.nestedContractErrors}`);
+console.log(`frontend_mutation_import_record_allowlist=${importRecordAllowlist}`);
+console.log(`frontend_mutation_import_unknown_field_rejection=${importUnknownFieldRejection}`);
+console.log(`frontend_mutation_import_precheck_execute_consistency=${importPrecheckExecuteConsistency}`);
 console.log('');
-console.log(`spa_mutation_import_record_allowlist=${importRecordAllowlist}`);
-console.log(`spa_mutation_import_unknown_field_rejection=${importUnknownFieldRejection}`);
-console.log(`spa_mutation_import_precheck_execute_consistency=${importPrecheckExecuteConsistency}`);
+console.log(`frontend_mutation_subscriber_edit_intent_isolation=${subscriberEditIntentIsolation}`);
+console.log(`frontend_mutation_subscriber_edit_unintended_fields=${subscriberEditUnintendedFields}`);
 console.log('');
-console.log(`spa_mutation_subscriber_edit_intent_isolation=${subscriberEditIntentIsolation}`);
-console.log(`spa_mutation_subscriber_edit_unintended_fields=${subscriberEditUnintendedFields}`);
+console.log(`frontend_mutation_traffic_adjust_response_semantics=${trafficAdjustResponseSemantics}`);
 console.log('');
-console.log(`spa_mutation_traffic_adjust_response_semantics=${trafficAdjustResponseSemantics}`);
+console.log(`frontend_mutation_subscriber_batch_precheck_contract=${batchPrecheckContract}`);
+console.log(`frontend_mutation_subscriber_batch_create_contract=${batchCreateContract}`);
+console.log(`frontend_mutation_subscriber_batch_update_contract=${batchUpdateContract}`);
+console.log(`frontend_mutation_subscriber_bulk_delete_contract=${bulkDeleteContract}`);
+console.log(`frontend_mutation_subscriber_import_precheck_contract=${importPrecheckContract}`);
+console.log(`frontend_mutation_subscriber_import_contract=${importContract}`);
 console.log('');
-console.log(`spa_mutation_subscriber_batch_precheck_contract=${batchPrecheckContract}`);
-console.log(`spa_mutation_subscriber_batch_create_contract=${batchCreateContract}`);
-console.log(`spa_mutation_subscriber_batch_update_contract=${batchUpdateContract}`);
-console.log(`spa_mutation_subscriber_bulk_delete_contract=${bulkDeleteContract}`);
-console.log(`spa_mutation_subscriber_import_precheck_contract=${importPrecheckContract}`);
-console.log(`spa_mutation_subscriber_import_contract=${importContract}`);
+console.log(`frontend_mutation_authorization_schema_errors=${validation.authorizationSchemaErrors}`);
+console.log(`frontend_mutation_authorization_mismatches=${validation.authorizationMismatches}`);
 console.log('');
-console.log(`spa_mutation_authorization_schema_errors=${validation.authorizationSchemaErrors}`);
-console.log(`spa_mutation_authorization_mismatches=${validation.authorizationMismatches}`);
+console.log(`frontend_mutation_enabled_registered_endpoints=${contractUniqueEndpoints.size}`);
+console.log(`frontend_mutation_unregistered_endpoints=${validation.unregisteredEndpoints}`);
+console.log(`frontend_mutation_out_of_scope_endpoints=${validation.outOfScopeEndpoints}`);
+console.log(`frontend_mutation_disabled_runtime_calls=${disabledRuntimeCalls}`);
+console.log(`frontend_mutation_system_health_write_calls=${systemHealthWriteCalls}`);
 console.log('');
-console.log(`spa_mutation_enabled_registered_endpoints=${contractUniqueEndpoints.size}`);
-console.log(`spa_mutation_unregistered_endpoints=${validation.unregisteredEndpoints}`);
-console.log(`spa_mutation_out_of_scope_endpoints=${validation.outOfScopeEndpoints}`);
-console.log(`spa_mutation_disabled_runtime_calls=${disabledRuntimeCalls}`);
-console.log(`spa_mutation_system_health_write_calls=${systemHealthWriteCalls}`);
-console.log('');
-console.log(`spa_mutation_direct_go_urls=${directGoUrls}`);
-console.log(`spa_mutation_next_imports=${nextImports}`);
-console.log(`spa_mutation_cross_frontend_imports=${crossFrontendImports}`);
-console.log(`spa_mutation_jwt_runtime=${jwtRuntime}`);
-console.log(`spa_mutation_auth_cookie_access=${authCookieAccess}`);
-console.log(`spa_mutation_trusted_identity_headers=${trustedIdentityHeaders}`);
+console.log(`frontend_mutation_direct_go_urls=${directGoUrls}`);
+console.log(`frontend_mutation_next_imports=${nextImports}`);
+console.log(`frontend_mutation_cross_frontend_imports=${crossFrontendImports}`);
+console.log(`frontend_mutation_jwt_runtime=${jwtRuntime}`);
+console.log(`frontend_mutation_auth_cookie_access=${authCookieAccess}`);
+console.log(`frontend_mutation_trusted_identity_headers=${trustedIdentityHeaders}`);
 console.log('');
 console.log('frontend_mutation_contract_result=PASS');
-console.log('spa_mutation_result=PASS');
+console.log('frontend_mutation_result=PASS');

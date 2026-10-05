@@ -1124,11 +1124,11 @@ backend/internal/remediation/handler.go
 backend/internal/subscriber/**
 ```
 
-UI (Next.js frontend):
+UI (canonical React SPA):
 
 ```text
-frontend/src/proxy.ts
-frontend/src/app/subscribers/**
+frontend/src/router/**
+frontend/src/features/**
 frontend/src/lib/**
 ```
 

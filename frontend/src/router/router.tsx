@@ -35,9 +35,10 @@ const pages: Record<string, ReactNode> = {
   '/users/:username': <UserDetailPage />,
   '/users/create': <UserCreatePage />,
 };
-const businessRoutes = APP_ROUTES.filter((route) => route.status !== 'foundation').map((route) => ({
-  path: route.targetRoute,
-  element: COMPATIBILITY_REDIRECTS[route.targetRoute] ? <Navigate to={COMPATIBILITY_REDIRECTS[route.targetRoute]} replace /> : pages[route.targetRoute],
+
+const businessRoutes = APP_ROUTES.filter((route) => route.route !== '/login').map((route) => ({
+  path: route.route,
+  element: COMPATIBILITY_REDIRECTS[route.route] ? <Navigate to={COMPATIBILITY_REDIRECTS[route.route]} replace /> : pages[route.route],
 }));
 
 export const router = createBrowserRouter([

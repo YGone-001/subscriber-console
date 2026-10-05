@@ -2,7 +2,6 @@
   {
     "route": "/subscribers",
     "source": "frontend/src/features/subscribers/SubscribersPage.tsx",
-    "mode": "mutation-parity",
     "operations": [
       {
         "name": "subscriber create",
@@ -97,7 +96,6 @@
   {
     "route": "/profile",
     "source": "frontend/src/features/profiles/ProfilesPage.tsx",
-    "mode": "mutation-parity",
     "operations": [
       {
         "name": "profile create",
@@ -142,7 +140,6 @@
   {
     "route": "/ocs/balances",
     "source": "frontend/src/features/ocs/balances/BalancesPage.tsx",
-    "mode": "mutation-parity",
     "operations": [
       {
         "name": "balance adjustment",
@@ -162,7 +159,6 @@
   {
     "route": "/ocs/balances/:imsi",
     "source": "frontend/src/features/ocs/balances/BalanceDetailPage.tsx",
-    "mode": "mutation-parity",
     "operations": [
       {
         "name": "balance adjustment",
@@ -182,7 +178,6 @@
   {
     "route": "/ocs/contracts",
     "source": "frontend/src/features/ocs/contracts/ContractsPage.tsx",
-    "mode": "mutation-parity",
     "operations": [
       {
         "name": "contract create",
@@ -236,7 +231,6 @@
   {
     "route": "/ocs/contracts/:imsi",
     "source": "frontend/src/features/ocs/contracts/ContractDetailPage.tsx",
-    "mode": "mutation-parity",
     "operations": [
       {
         "name": "contract update tariff",
@@ -281,7 +275,6 @@
   {
     "route": "/ocs/tariffs",
     "source": "frontend/src/features/ocs/tariffs/TariffsPage.tsx",
-    "mode": "mutation-parity",
     "operations": [
       {
         "name": "tariff create",
@@ -351,7 +344,6 @@
   {
     "route": "/ocs/tariffs/:planId",
     "source": "frontend/src/features/ocs/tariffs/TariffDetailPage.tsx",
-    "mode": "mutation-parity",
     "operations": [
       {
         "name": "tariff update",
@@ -411,7 +403,6 @@
   {
     "route": "/users",
     "source": "frontend/src/features/users/UsersPage.tsx",
-    "mode": "mutation-parity",
     "operations": [
       {
         "name": "user create",
@@ -456,7 +447,6 @@
   {
     "route": "/users/:username",
     "source": "frontend/src/features/users/UserDetailPage.tsx",
-    "mode": "mutation-parity",
     "operations": [
       {
         "name": "user update",
@@ -492,7 +482,6 @@
   {
     "route": "/users/create",
     "source": "frontend/src/features/users/UserCreatePage.tsx",
-    "mode": "mutation-parity",
     "operations": [
       {
         "name": "user create",

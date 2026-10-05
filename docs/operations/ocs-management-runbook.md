@@ -2,7 +2,7 @@
 
 Status: PRODUCTION / FROZEN  
 Version: 2.0.0 (Direct Execution / Production Baseline)  
-Target Components: Next.js Frontend (:13333), Go Backend (:18888), MongoDB (`xcloud`, `xcloud_ops`)
+Target Components: Go Backend (:18888, API + embedded static React SPA), Nginx Edge (:80), MongoDB (`xcloud`, `xcloud_ops`)
 
 ---
 
@@ -11,7 +11,7 @@ Target Components: Next.js Frontend (:13333), Go Backend (:18888), MongoDB (`xcl
 The **OCS Management Plane** governs administrative operations for commercial telecommunication offerings, subscriber billing contracts, and quota balances. It operates strictly separated from the runtime **Charging Plane** (Gy/Ro/CCR/Diameter rating and session management).
 
 ### Operational Invariants
-1. **Single-Writer Production Invariant**: All mutations are executed authoritatively by Go backend (`:18888`). The Nginx edge routes `/api` and `/api/*` straight to Go (`GoRegistered = 84`); the Next.js runtime serves UI pages only and never proxies, authenticates or routes an API request. No fallback backend exists.
+1. **Single-Writer Production Invariant**: All mutations are executed authoritatively by Go backend (`:18888`). The Nginx edge routes `/api` and `/api/*` straight to Go (`GoRegistered = 84`); Go serves UI pages via embedded static React SPA. No fallback backend exists.
 2. **Canonical RBAC & Direct Execution**:
    - `admin`: System administration, user management, and direct business mutations.
    - `operator`: Core operational mutations (subscribers, balances, profiles, tariffs, rating) execute directly without approval. No user administration.
@@ -31,19 +31,19 @@ Operator / Admin Browser
            │  HTTPS / HTTP :80  (Nginx public origin)
            ▼
 Nginx Edge Router (deploy/nginx/xcloud.conf)
-   - location /api, /api/*, = /api/notifications/stream  -> Go backend
-   - location /                                          -> Next.js UI
+   - location /*, /api, /api/*, = /api/notifications/stream  -> Go backend
    - Strips client identity headers (X-User / X-Role / X-Permissions);
      never authenticates and never forwards to a second hop
-           │                                   │
-           │  HTTP Keep-Alive :18888           │  HTTP Keep-Alive :13333
-           ▼                                   ▼
-Go Backend Service (backend/cmd/server)     Next.js UI Runtime (frontend/src/proxy.ts)
-   - Authenticates the auth_token cookie       - UI rendering only
-     and re-evaluates fresh DB permissions     - Protected-page navigation guard only:
-   - Validates domain preconditions and          asks Go GET /api/auth/me, fails closed
-     atomic CAS version                          on 503 / unreachable, never verifies a
-   - Executes mutation directly to MongoDB        JWT and never reads MongoDB
+           │
+           │  HTTP Keep-Alive :18888
+           ▼
+Go Backend Service (backend/cmd/server)
+   - Serves embedded static React SPA (production UI)
+   - Authenticates the auth_token cookie
+     and re-evaluates fresh DB permissions
+   - Validates domain preconditions and
+     atomic CAS version
+   - Executes mutation directly to MongoDB
    - Appends non-gating operational log
      entry to app_audit_logs
            │
@@ -203,8 +203,8 @@ Permission determines whether an operation executes; approval is not part of exe
 ### 7.1 Health Checks
 - Go Backend: `GET http://127.0.0.1:18888/healthz` (liveness) and `GET /readyz` (MongoDB readiness)
   - Expected: HTTP 200 `{"status":"ok"}`
-- Ingress Proxy: `GET http://127.0.0.1:13333/api/system/health`
-  - Verifies proxy forwarding and MongoDB connectivity.
+- Edge Health Check: `GET http://localhost/api/system/health`
+  - Verifies edge forwarding and MongoDB connectivity.
 
 ### 7.2 Routing Diagnostics
 To confirm a request reached the Go backend:

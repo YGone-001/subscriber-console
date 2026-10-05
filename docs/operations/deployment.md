@@ -54,9 +54,8 @@ Port 13333      = retired (Next.js retired)
 ```
 
 The Go application listener binds the loopback address by its startup default
-(`127.0.0.1:18888`), not by a firewall rule. The legacy Next production command
-similarly binds `-H 127.0.0.1`. A non-loopback interface address on either port is not
-reachable; a firewall is only defense in depth.
+(`127.0.0.1:18888`), not by a firewall rule. A non-loopback interface address on this port
+is not reachable; a firewall is only defense in depth.
 
 Browsers must never be pointed at internal ports. The UI always calls same-origin
 `/api/...` paths; only the edge is reachable from the network. The edge generates
@@ -89,9 +88,9 @@ Every location proxies to `xcloud_go` and applies the same security boundary:
 - `proxy_set_header X-User ""; X-Role ""; X-Permissions "";` (client identity headers are always stripped);
 - `limit_req zone=xcloud_api` (10 req/s per IP, `burst=20 nodelay`) on API, `zone=xcloud_page` (30 req/s, `burst=50 nodelay`) on the UI location.
 
-For temporary local development with Next.js HMR or explicit legacy rollback, the
-isolated `deploy/nginx/xcloud-next-legacy.conf` is available via `deploy/nginx/setup-next-legacy.sh`.
 Production `xcloud.conf` contains zero Next upstreams and zero `/_next/hmr` blocks.
+Local development uses the Vite development server (`127.0.0.1:13334`) directly and requires
+no Nginx setup.
 
 The SSE location additionally disables buffering and caching and extends the socket
 timeouts for long-lived streams:
@@ -133,10 +132,11 @@ expires it.
 503 AUTH_SERVICE_UNAVAILABLE Go is unreachable or answered unexpectedly (fail closed, no fallback)
 ```
 
-The UI page guard (`frontend/src/proxy.ts`) uses the same distinction: no cookie
-redirects a protected page to `/login?from=...`, a `401` from `GET /api/auth/me`
-redirects and expires `auth_token`, and an unavailable authority fails closed with
-HTTP 503 instead of rendering a protected page.
+The client authentication guard (`AuthGate`) uses the same distinction: absence of
+authenticated session redirects a protected page to `/login?from=...`, a `401` from
+`GET /api/auth/me` redirects to login, and an unavailable authority fails closed with
+an error notification instead of rendering protected pages. The Go backend remains the
+single authentication authority.
 
 ### Installing the Edge
 

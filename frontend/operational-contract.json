@@ -2,7 +2,6 @@
   {
     "route": "/system-health",
     "source": "frontend/src/features/system-health/SystemHealthPage.tsx",
-    "mode": "operational-mutation-parity",
     "operations": [
       {
         "name": "analytics init",
@@ -17,7 +16,7 @@
         "confirmation": false,
         "responseSemantics": "computed-snapshot",
         "backendAuthority": "backend/internal/analytics/handler.go",
-        "productionReference": "frontend/src/app/(dashboard)/system-health/page.tsx"
+        "productionReference": "frontend/src/features/system-health/SystemHealthPage.tsx"
       },
       {
         "name": "audit scan",
@@ -32,7 +31,7 @@
         "confirmation": false,
         "responseSemantics": "diagnostic-result",
         "backendAuthority": "backend/internal/system/handler.go",
-        "productionReference": "frontend/src/app/(dashboard)/system-health/page.tsx"
+        "productionReference": "frontend/src/features/system-health/SystemHealthPage.tsx"
       },
       {
         "name": "single heal",
@@ -44,7 +43,7 @@
         "confirmation": true,
         "responseSemantics": "mutation-result",
         "backendAuthority": "backend/internal/remediation/handler.go",
-        "productionReference": "frontend/src/app/(dashboard)/system-health/page.tsx"
+        "productionReference": "frontend/src/features/system-health/SystemHealthPage.tsx"
       },
       {
         "name": "batch heal",
@@ -56,7 +55,7 @@
         "confirmation": true,
         "responseSemantics": "batch-mutation-result",
         "backendAuthority": "backend/internal/remediation/handler.go",
-        "productionReference": "frontend/src/app/(dashboard)/system-health/page.tsx"
+        "productionReference": "frontend/src/features/system-health/SystemHealthPage.tsx"
       }
     ]
   }

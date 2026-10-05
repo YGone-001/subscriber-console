@@ -251,7 +251,7 @@ Production build and deployment pipeline:
 
 ```bash
 # 1. Build production static SPA
-cd frontend-spa
+cd frontend
 npm ci
 npm run build
 cd ..

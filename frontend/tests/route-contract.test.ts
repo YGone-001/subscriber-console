@@ -5,22 +5,26 @@ import test from 'node:test';
 import { COMPATIBILITY_REDIRECTS } from '../src/router/redirects';
 
 type RouteEntry = {
-  sourceRoute: string;
-  targetRoute: string;
+  route: string;
   dynamicParameters: string[];
-  status: string;
 };
 
-const routes = JSON.parse(readFileSync(resolve(import.meta.dirname, '../migration-routes.json'), 'utf8')) as RouteEntry[];
+const routes = JSON.parse(readFileSync(resolve(import.meta.dirname, '../route-contract.json'), 'utf8')) as RouteEntry[];
 
-test('foundation route inventory remains explicit and non-business', () => {
-  const foundation = routes.filter((route) => route.status === 'foundation');
-  assert.deepEqual(foundation.map((route) => route.sourceRoute), ['/login']);
-  assert.equal(routes.filter((route) => route.status === 'read-parity').length, 0);
-  assert.equal(routes.filter((route) => route.status === 'operational-mutation-parity').length, 1);
-  assert.equal(routes.filter((route) => route.status === 'mutation-parity').length, 11);
-  assert.equal(routes.filter((route) => route.status === 'migrated').length, 10);
-  assert.equal(routes.filter((route) => route.status === 'pending').length, 0);
+test('route contract inventory contains all 23 canonical routes', () => {
+  assert.equal(routes.length, 23);
+  const routePaths = routes.map((r) => r.route);
+  assert.ok(routePaths.includes('/'));
+  assert.ok(routePaths.includes('/login'));
+  assert.ok(routePaths.includes('/users'));
+  assert.ok(routePaths.includes('/users/:username'));
+  assert.ok(routePaths.includes('/users/create'));
+  assert.ok(routePaths.includes('/system-health'));
+  for (const entry of routes) {
+    for (const param of entry.dynamicParameters) {
+      assert.ok(entry.route.includes(`:${param}`), `dynamic parameter ${param} missing in ${entry.route}`);
+    }
+  }
 });
 
 test('compatibility aliases use the established replacement targets', () => {

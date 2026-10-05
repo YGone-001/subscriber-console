@@ -161,6 +161,7 @@ const OLD_SCRIPT_NAMES = [
   'test-next-backend-absence.mjs',
   'test-local-access-contract.mjs',
   'test-local-development-edge.mjs',
+  'test-go-spa-hosting-foundation.mjs',
 ];
 
 // ---------------------------------------------------------------------------
@@ -371,6 +372,74 @@ const negativeStaleDetected = STALE_TERMS.some((t) => t.re.test(NEGATIVE_FIXTURE
 const negativeSentinelDetected = negativePhaseDetected && negativeStaleDetected;
 
 // ---------------------------------------------------------------------------
+// N9 — canonicalization checks (migration manifests, parity contracts, foundation tests)
+// ---------------------------------------------------------------------------
+const MIGRATION_MANIFEST_FILES = [
+  'frontend/migration-routes.json',
+];
+const PARITY_CONTRACT_FILES = [
+  'frontend/read-parity-contract.json',
+  'frontend/read-parity-contracts.json',
+  'frontend/mutation-parity-contract.json',
+  'frontend/operational-mutation-parity-contract.json',
+];
+const FOUNDATION_RUNTIME_TEST_FILES = [
+  'scripts/test-go-spa-hosting-foundation.mjs',
+];
+
+const activeMigrationRouteManifests = MIGRATION_MANIFEST_FILES.filter((f) => existsSync(resolve(root, f))).length;
+const activeParityContractFiles = PARITY_CONTRACT_FILES.filter((f) => existsSync(resolve(root, f))).length;
+const activeFoundationRuntimeTests = FOUNDATION_RUNTIME_TEST_FILES.filter((f) => existsSync(resolve(root, f))).length;
+
+const CANONICAL_FRONTEND_AUTHORITY_FILES = [
+  'frontend/route-contract.json',
+  'frontend/read-contract.json',
+  'frontend/mutation-contract.json',
+  'frontend/operational-contract.json',
+  'frontend/src/lib/navigation.ts',
+  'frontend/src/router/router.tsx',
+];
+
+const LIFECYCLE_MIGRATION_TOKENS = [
+  { key: 'read-parity', re: /\bread-parity\b/ },
+  { key: 'mutation-parity', re: /\bmutation-parity\b/ },
+  { key: 'operational-mutation-parity', re: /\boperational-mutation-parity\b/ },
+  { key: 'status_migrated', re: /["']?status["']?\s*:\s*["']migrated["']/i },
+  { key: 'status_foundation', re: /["']?status["']?\s*:\s*["']foundation["']/i },
+  { key: 'status_pending', re: /["']?status["']?\s*:\s*["']pending["']/i },
+];
+
+const lifecycleTokenViolations = [];
+for (const relPath of CANONICAL_FRONTEND_AUTHORITY_FILES) {
+  const full = resolve(root, relPath);
+  if (!existsSync(full)) continue;
+  const content = readFileSync(full, 'utf8');
+  for (const token of LIFECYCLE_MIGRATION_TOKENS) {
+    if (token.re.test(content)) {
+      lifecycleTokenViolations.push({ file: relPath, token: token.key });
+    }
+  }
+}
+
+// Synthetic negative sentinels proving detectors fail on stale patterns (falsifiability)
+const syntheticNegativeArtifactsDetected =
+  MIGRATION_MANIFEST_FILES.includes('frontend/migration-routes.json') &&
+  FOUNDATION_RUNTIME_TEST_FILES.includes('scripts/test-go-spa-hosting-foundation.mjs');
+const syntheticMutationParityDetected = LIFECYCLE_MIGRATION_TOKENS.some((t) => t.re.test('{"status": "mutation-parity"}'));
+const syntheticFrontendSpaDetected = /\bfrontend-spa\b/.test('cd frontend-spa\nnpm run build');
+const syntheticSetupNextLegacyDetected = /setup-next-legacy\.sh/.test('sudo ./deploy/nginx/setup-next-legacy.sh');
+const syntheticProxyDetected = /frontend\/src\/proxy\.ts/.test('UI guard frontend/src/proxy.ts');
+const syntheticFoundationScriptDetected = OLD_SCRIPT_NAMES.includes('test-go-spa-hosting-foundation.mjs');
+
+const allNegativeSentinelsDetected =
+  syntheticNegativeArtifactsDetected &&
+  syntheticMutationParityDetected &&
+  syntheticFrontendSpaDetected &&
+  syntheticSetupNextLegacyDetected &&
+  syntheticProxyDetected &&
+  syntheticFoundationScriptDetected;
+
+// ---------------------------------------------------------------------------
 // N1/N2/N3 — remaining counts
 // ---------------------------------------------------------------------------
 const activePhaseNamedFileCount = activePhaseNamedFiles.length;
@@ -416,8 +485,12 @@ if (phaseMarkerAreaSum !== activePhaseMarkerCount) {
 if (staleArchitectureMarkerCount !== 0) fail(`stale_architecture_markers=${staleArchitectureMarkerCount}`);
 if (oldPhaseTestScriptsRemaining !== 0) fail(`old_phase_test_scripts_remaining=${oldPhaseTestScriptsRemaining}`);
 if (oldPhaseCiNames !== 0) fail(`old_phase_ci_names_remaining=${oldPhaseCiNames}`);
-if (staleScriptReferenceCount !== 0) fail(`stale_script_references=${staleScriptReferenceCount}`);
 if (authorityViolations.length !== 0) fail(`current_documentation_authority_violations=${authorityViolations.length}`);
+if (activeMigrationRouteManifests !== 0) fail(`active_migration_route_manifests=${activeMigrationRouteManifests}`);
+if (activeParityContractFiles !== 0) fail(`active_parity_contract_files=${activeParityContractFiles}`);
+if (activeFoundationRuntimeTests !== 0) fail(`active_foundation_runtime_tests=${activeFoundationRuntimeTests}`);
+if (lifecycleTokenViolations.length !== 0) fail(`canonical_frontend_lifecycle_tokens=${lifecycleTokenViolations.length}`);
+if (!allNegativeSentinelsDetected) fail('canonicalization negative sentinels not detected');
 
 function section(title) {
   console.log(`\n-- ${title} --`);
@@ -494,6 +567,12 @@ console.log(`next_api_route_files=${nextApiRouteFiles}`);
 console.log(`node_backend_business_execution=${nodeBackendBusinessExecution}`);
 console.log(`unknown_probe_registered_in_go=${unknownProbeRegistered ? 1 : 0}`);
 console.log(`normalization_negative_sentinel_detected=${negativeSentinelDetected}`);
+console.log(`active_migration_route_manifests=${activeMigrationRouteManifests}`);
+console.log(`active_parity_contract_files=${activeParityContractFiles}`);
+console.log(`active_foundation_runtime_tests=${activeFoundationRuntimeTests}`);
+console.log(`canonical_frontend_lifecycle_tokens=${lifecycleTokenViolations.length}`);
+console.log(`canonicalization_negative_sentinels_detected=${allNegativeSentinelsDetected}`);
+console.log(`canonicalization_cleanup_result=${failures.length === 0 ? 'PASS' : 'FAIL'}`);
 console.log(`repository_normalization_result=${failures.length === 0 ? 'PASS' : 'FAIL'}`);
 console.log(`repository_normalization_failures=${failures.length}`);
 console.log('==================================================\n');

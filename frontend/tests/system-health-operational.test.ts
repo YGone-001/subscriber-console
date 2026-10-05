@@ -127,7 +127,7 @@ test('batch heal malformed-entry rejection', () => {
 test('viewer presentation denied and admin/operator allowed', () => {
   const contractFile = resolve(
     import.meta.dirname,
-    '../operational-mutation-parity-contract.json',
+    '../operational-contract.json',
   );
   assert.ok(existsSync(contractFile), 'operational contract must exist');
   const contracts = JSON.parse(readFileSync(contractFile, 'utf8'));
@@ -162,7 +162,7 @@ test('batch HTTP 200 with partial failure is not treated as total success', () =
 test('traffic and business mutation contracts remain untouched', () => {
   const businessContractFile = resolve(
     import.meta.dirname,
-    '../mutation-parity-contract.json',
+    '../mutation-contract.json',
   );
   const businessRequestContractFile = resolve(
     import.meta.dirname,

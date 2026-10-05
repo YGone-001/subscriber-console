@@ -35,7 +35,7 @@ const suffix = `${Date.now()}_${process.pid}_${Math.floor(Math.random() * 100000
 const xcloudDbName = `xcloud_spa_test_${suffix}`;
 const appDbName = `xcloud_ops_spa_test_${suffix}`;
 const uri = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/xcloud';
-const JWT_SECRET_STRING = process.env.JWT_SECRET || 'spa-hosting-foundation-secret-at-least-32-bytes!';
+const JWT_SECRET_STRING = process.env.JWT_SECRET || 'spa-hosting-runtime-secret-at-least-32-bytes!';
 
 let goProc = null;
 let binPath = null;
@@ -57,7 +57,7 @@ function getAvailablePort() {
 }
 
 async function main() {
-  console.log('Starting Go static SPA hosting foundation acceptance test...');
+  console.log('Starting Go static SPA hosting runtime acceptance test...');
 
   // 1. Verify Go API registration count
   const { keys: registrations, duplicates } = deriveGoRegistrations(root);
@@ -66,9 +66,9 @@ async function main() {
   assert.equal(regCount, 84, `Expected exactly 84 registrations, got ${regCount}`);
   console.log(`go_spa_api_registration_count=${regCount}`);
 
-  // 2. Ensure frontend-spa build exists; if not, build it
+  // 2. Ensure frontend build exists; if not, build it
   if (!existsSync(join(distDir, 'index.html'))) {
-    console.log('Building frontend-spa...');
+    console.log('Building frontend...');
     execSync('npm run build', { cwd: frontendSpaDir, stdio: 'inherit' });
   }
 
@@ -107,11 +107,11 @@ async function main() {
   });
   assert.ok(existsSync(binPath), 'Bundled Go binary must exist after compilation');
 
-  // 6. Test runtime independence from frontend-spa/dist:
+  // 6. Test runtime independence from frontend/dist:
   // Temporarily rename dist to verify Go binary serves from memory/embedded FS, NOT filesystem
   backupDistPath = join(frontendSpaDir, `dist_temp_backup_${suffix}`);
   renameSync(distDir, backupDistPath);
-  assert.ok(!existsSync(distDir), 'frontend-spa/dist must be temporarily absent during runtime test');
+  assert.ok(!existsSync(distDir), 'frontend/dist must be temporarily absent during runtime test');
 
   // 7. Start real Go server with real MongoDB
   const goPort = await getAvailablePort();
@@ -311,12 +311,12 @@ async function main() {
   console.log('go_spa_production_active=0');
 
   console.log('go_spa_hosting_result=PASS');
-  console.log('Go static SPA hosting foundation integration acceptance test PASSED.');
+  console.log('Go static SPA hosting runtime integration acceptance test PASSED.');
 }
 
 main()
   .catch((err) => {
-    console.error('Go static SPA hosting foundation acceptance test FAILED:', err);
+    console.error('Go static SPA hosting runtime acceptance test FAILED:', err);
     process.exitCode = 1;
   })
   .finally(async () => {

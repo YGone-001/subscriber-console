@@ -11,9 +11,10 @@ const spa = resolve(root, 'frontend');
 const source = resolve(spa, 'src');
 const productionSource = resolve(root, 'frontend/src');
 
-const contractPath = resolve(spa, 'operational-mutation-parity-contract.json');
+const contractPath = resolve(spa, 'operational-contract.json');
+const legacyParityContractPath = resolve(spa, 'operational-mutation-parity-contract.json');
 const requestContractPath = resolve(spa, 'operational-mutation-request-contract.json');
-const routesPath = resolve(spa, 'migration-routes.json');
+const routesPath = resolve(spa, 'route-contract.json');
 
 const routes = JSON.parse(readFileSync(routesPath, 'utf8'));
 const contracts = JSON.parse(readFileSync(contractPath, 'utf8'));
@@ -31,7 +32,6 @@ const walk = (directory, files = []) => {
   return files;
 };
 
-const count = (items, predicate) => items.filter(predicate).length;
 const isStringArray = (value) => Array.isArray(value) && value.every((item) => typeof item === 'string');
 const countMatches = (text, expression) => (text.match(expression) ?? []).length;
 
@@ -41,22 +41,13 @@ const isExistingSource = (value) => {
   return existsSync(file) && statSync(file).isFile();
 };
 
-const statusCount = (status) => count(routes, (route) => route.status === status);
-
 // 1. Verify Route Inventory
-assert.equal(routes.length, 23);
-assert.equal(statusCount('foundation'), 1);
-assert.equal(statusCount('migrated'), 10);
-assert.equal(statusCount('mutation-parity'), 11);
-assert.equal(statusCount('operational-mutation-parity'), 1);
-assert.equal(statusCount('read-parity'), 0);
-assert.equal(statusCount('pending'), 0);
+assert.equal(routes.length, 23, 'route contract must contain 23 routes');
 
-const systemHealthRoute = routes.find((r) => r.targetRoute === '/system-health');
-assert.ok(systemHealthRoute);
-assert.equal(systemHealthRoute.status, 'operational-mutation-parity');
+const systemHealthRoute = routes.find((r) => r.route === '/system-health');
+assert.ok(systemHealthRoute, 'system-health route must be present in route contract');
 
-// 2. Validate Operational Parity Authority Contract
+// 2. Validate Operational Authority Contract
 function validateOperationalContracts(entries) {
   const result = {
     schemaErrors: 0,
@@ -89,10 +80,6 @@ function validateOperationalContracts(entries) {
 
     if (entry.route !== '/system-health') {
       result.unknownRoutes += 1;
-    }
-
-    if (entry.mode !== 'operational-mutation-parity') {
-      result.schemaErrors += 1;
     }
 
     if (!isExistingSource(entry.source)) {
@@ -280,7 +267,7 @@ assert.equal(countMatches(systemHealthSourceText, /jose|jsonwebtoken/g), 0, 'JWT
 assert.equal(countMatches(systemHealthSourceText, /document\.cookie|auth_token/g), 0, 'auth cookie access forbidden');
 assert.equal(countMatches(systemHealthSourceText, /X-User|X-Role|X-Permissions/g), 0, 'trusted identity headers forbidden');
 
-// Generic execution prohibitions (Section 38)
+// Generic execution prohibitions
 const genericExecutionPatterns = [
   /\bssh\b/i,
   /\bscp\b/i,
@@ -299,6 +286,8 @@ for (const pat of genericExecutionPatterns) {
   genericExecutorCalls += countMatches(systemHealthSourceText, pat);
 }
 assert.equal(genericExecutorCalls, 0, 'generic remote/system execution patterns must be absent');
+
+assert.ok(!existsSync(legacyParityContractPath), 'legacy operational-mutation-parity-contract.json must be absent');
 
 // 5. Run dedicated test suite to verify builders and partial-result semantics
 const testOutput = execSync('npx tsx --test tests/system-health-operational.test.ts', {
@@ -346,36 +335,30 @@ const validReqContract = requestContracts[0];
 assert.ok(validateOperationalRequestContracts([{ ...validReqContract, backendAuthority: 'backend/missing.go' }]).invalidAuthorities > 0, 'missing authority sentinel must fail');
 assert.ok(validateOperationalRequestContracts([{ ...validReqContract, requiredBodyKeys: ['k1'], optionalBodyKeys: ['k1'] }]).keySetErrors > 0, 'overlapping key set sentinel must fail');
 
-// 7. Output machine evidence lines (Section 36)
-console.log(`spa_operational_route_total=${routes.length}`);
-console.log(`spa_operational_foundation_routes=${statusCount('foundation')}`);
-console.log(`spa_operational_migrated_routes=${statusCount('migrated')}`);
-console.log(`spa_operational_business_mutation_routes=${statusCount('mutation-parity')}`);
-console.log(`spa_operational_parity_routes=${statusCount('operational-mutation-parity')}`);
-console.log(`spa_operational_read_parity_routes=${statusCount('read-parity')}`);
-console.log(`spa_operational_pending_routes=${statusCount('pending')}`);
+// 7. Output machine evidence lines
+console.log(`frontend_operational_route_total=${routes.length}`);
+console.log(`frontend_operational_contract_entries=${contracts.length}`);
+console.log(`frontend_operational_operation_count=${requestContracts.length}`);
+console.log(`frontend_operational_registered_endpoints=4`);
+console.log(`frontend_operational_unregistered_endpoints=0`);
+console.log(`frontend_operational_authorization_errors=${contractValidation.authorizationSchemaErrors + contractValidation.authorizationMismatches}`);
+console.log(`frontend_operational_request_contract_errors=${reqValidation.shapeErrors + reqValidation.keySetErrors}`);
+console.log(`frontend_operational_nested_contract_errors=${reqValidation.nestedContractErrors}`);
 console.log('');
-console.log(`spa_operational_contract_entries=${contracts.length}`);
-console.log(`spa_operational_operation_count=${requestContracts.length}`);
-console.log(`spa_operational_registered_endpoints=4`);
-console.log(`spa_operational_unregistered_endpoints=0`);
-console.log(`spa_operational_authorization_errors=${contractValidation.authorizationSchemaErrors + contractValidation.authorizationMismatches}`);
-console.log(`spa_operational_request_contract_errors=${reqValidation.shapeErrors + reqValidation.keySetErrors}`);
-console.log(`spa_operational_nested_contract_errors=${reqValidation.nestedContractErrors}`);
+console.log(`frontend_operational_analytics_init_contract=${analyticsInitContract}`);
+console.log(`frontend_operational_audit_scan_contract=${auditScanContract}`);
+console.log(`frontend_operational_single_heal_contract=${singleHealContract}`);
+console.log(`frontend_operational_batch_heal_contract=${batchHealContract}`);
+console.log(`frontend_operational_batch_partial_result_semantics=${batchPartialResultSemantics}`);
 console.log('');
-console.log(`spa_operational_analytics_init_contract=${analyticsInitContract}`);
-console.log(`spa_operational_audit_scan_contract=${auditScanContract}`);
-console.log(`spa_operational_single_heal_contract=${singleHealContract}`);
-console.log(`spa_operational_batch_heal_contract=${batchHealContract}`);
-console.log(`spa_operational_batch_partial_result_semantics=${batchPartialResultSemantics}`);
+console.log(`frontend_operational_raw_fetch_calls=0`);
+console.log(`frontend_operational_direct_go_urls=0`);
+console.log(`frontend_operational_next_imports=0`);
+console.log(`frontend_operational_cross_frontend_imports=0`);
+console.log(`frontend_operational_jwt_runtime=0`);
+console.log(`frontend_operational_auth_cookie_access=0`);
+console.log(`frontend_operational_trusted_identity_headers=0`);
+console.log(`frontend_operational_generic_executor_calls=${genericExecutorCalls}`);
 console.log('');
-console.log(`spa_operational_raw_fetch_calls=0`);
-console.log(`spa_operational_direct_go_urls=0`);
-console.log(`spa_operational_next_imports=0`);
-console.log(`spa_operational_cross_frontend_imports=0`);
-console.log(`spa_operational_jwt_runtime=0`);
-console.log(`spa_operational_auth_cookie_access=0`);
-console.log(`spa_operational_trusted_identity_headers=0`);
-console.log(`spa_operational_generic_executor_calls=${genericExecutorCalls}`);
-console.log('');
-console.log('spa_operational_result=PASS');
+console.log('frontend_operational_contract_result=PASS');
+console.log('frontend_operational_result=PASS');

@@ -7,7 +7,6 @@ import { fileURLToPath } from 'node:url';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const frontendRoot = resolve(root, 'frontend');
 const distRoot = resolve(frontendRoot, 'dist');
-const allowedStatuses = new Set(['foundation', 'pending', 'read-parity', 'migrated', 'mutation-parity', 'operational-mutation-parity']);
 
 function walk(dir, predicate, files = []) {
   if (!existsSync(dir)) return files;
@@ -23,27 +22,19 @@ function requireCondition(condition, message) {
   assert.ok(condition, message);
 }
 
-const inventoryPath = resolve(frontendRoot, 'migration-routes.json');
-const inventory = JSON.parse(readFileSync(inventoryPath, 'utf8'));
-const targetRoutes = new Set();
-const inventoryBySource = new Map();
+const contractPath = resolve(frontendRoot, 'route-contract.json');
+const inventory = JSON.parse(readFileSync(contractPath, 'utf8'));
+const routesSeen = new Set();
 
 for (const entry of inventory) {
   requireCondition(entry && typeof entry === 'object', 'route entry must be an object');
-  requireCondition(!inventoryBySource.has(entry.sourceRoute), `duplicate route entry: ${entry.sourceRoute}`);
-  requireCondition(!targetRoutes.has(entry.targetRoute), `duplicate target route: ${entry.targetRoute}`);
-  requireCondition(allowedStatuses.has(entry.status), `unknown route status: ${entry.status}`);
-  inventoryBySource.set(entry.sourceRoute, entry);
-  targetRoutes.add(entry.targetRoute);
+  requireCondition(typeof entry.route === 'string', 'route must be a string');
+  requireCondition(!routesSeen.has(entry.route), `duplicate route entry: ${entry.route}`);
+  requireCondition(Array.isArray(entry.dynamicParameters), 'dynamicParameters must be an array');
+  routesSeen.add(entry.route);
 }
 
-assert.equal(inventory.length, 23, 'canonical inventory must contain exactly 23 routes');
-
-const foundationSources = new Set(['/login']);
-for (const entry of inventory) {
-  if (entry.status === 'foundation') requireCondition(foundationSources.has(entry.sourceRoute), `business route cannot be foundation: ${entry.sourceRoute}`);
-  if (foundationSources.has(entry.sourceRoute)) assert.equal(entry.status, 'foundation', `foundation route required: ${entry.sourceRoute}`);
-}
+assert.equal(inventory.length, 23, 'canonical route contract must contain exactly 23 routes');
 
 const packageJson = JSON.parse(readFileSync(resolve(frontendRoot, 'package.json'), 'utf8'));
 assert.equal(packageJson.name, 'subscriber-console-frontend', 'frontend package name must be subscriber-console-frontend');
@@ -83,20 +74,11 @@ requireCondition(hashedJs, 'static artifact must include a hashed JavaScript ass
 requireCondition(hashedCss, 'static artifact must include a hashed CSS asset');
 requireCondition(serverArtifacts.length === 0, `static artifact contains server runtime files: ${serverArtifacts.join(', ')}`);
 
-const count = (status) => inventory.filter((entry) => entry.status === status).length;
 console.log('frontend_package_identity=subscriber-console-frontend');
 console.log(`frontend_route_count=${inventory.length}`);
-console.log(`spa_route_inventory_count=${inventory.length}`);
-console.log(`spa_route_foundation_count=${count('foundation')}`);
-console.log(`spa_route_pending_count=${count('pending')}`);
-console.log(`spa_route_migrated_count=${count('migrated')}`);
 console.log('frontend_static_dist_index=true');
-console.log('spa_static_dist_index=true');
 console.log(`frontend_static_hashed_js=${hashedJs}`);
-console.log(`spa_static_hashed_js=${hashedJs}`);
 console.log(`frontend_static_hashed_css=${hashedCss}`);
-console.log(`spa_static_hashed_css=${hashedCss}`);
 console.log(`frontend_static_server_artifacts=${serverArtifacts.length}`);
-console.log(`spa_static_server_artifacts=${serverArtifacts.length}`);
+console.log('frontend_route_contract_result=PASS');
 console.log('frontend_runtime_contract_result=PASS');
-console.log('spa_route_contract_result=PASS');

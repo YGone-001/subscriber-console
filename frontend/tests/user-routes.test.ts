@@ -4,17 +4,15 @@ import { resolve } from 'node:path';
 import test from 'node:test';
 
 const spaRoot = resolve(import.meta.dirname, '..');
-const routes = JSON.parse(readFileSync(resolve(spaRoot, 'migration-routes.json'), 'utf8'));
+const routes = JSON.parse(readFileSync(resolve(spaRoot, 'route-contract.json'), 'utf8'));
 const routerSource = readFileSync(resolve(spaRoot, 'src/router/router.tsx'), 'utf8');
 const userCreateSource = readFileSync(resolve(spaRoot, 'src/features/users/UserCreatePage.tsx'), 'utf8');
 
-test('users create route is active in migration inventory and router', () => {
-  const userCreateRoute = routes.find((r: { targetRoute: string }) => r.targetRoute === '/users/create');
-  assert.ok(userCreateRoute, 'users create route must be present in inventory');
-  assert.equal(userCreateRoute.status, 'mutation-parity', 'users create route status must be mutation-parity');
+test('users create route is active in route contract and router', () => {
+  const userCreateRoute = routes.find((r: { route: string }) => r.route === '/users/create');
+  assert.ok(userCreateRoute, 'users create route must be present in route contract');
 
   assert.match(routerSource, /'\/users\/create':\s*<UserCreatePage\s*\/>/, 'router must bind /users/create to UserCreatePage');
-  assert.doesNotMatch(routerSource, /'\/users\/create':\s*<MigrationPendingPage\s*\/>/, 'router must not bind /users/create to MigrationPendingPage');
 });
 
 test('users create page enforces password security invariants', () => {
