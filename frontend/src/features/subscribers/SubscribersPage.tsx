@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Edit2, FileText, Plus, RefreshCw, Sliders, Trash2, Upload, Users } from 'lucide-react';
+import { Edit2, FileText, Layers, Plus, RefreshCw, Sliders, Trash2, Upload, Users } from 'lucide-react';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Modal } from '../../components/Modal';
 import { deleteJson, postJson, putJson } from '../../lib/api/mutation-client';
@@ -9,6 +9,9 @@ import { useAuth } from '../../providers/AuthProvider';
 import { useI18n } from '../../providers/I18nProvider';
 import { EmptyState, ErrorState } from '../../components/ui/StatePanel';
 import { SkeletonTable } from '../../components/ui/LoadingSkeleton';
+import MetricStrip, { type MetricStripItem } from '../../components/ui/MetricStrip';
+import PageHeader from '../../components/ui/PageHeader';
+import { formatBytes } from '../../lib/unitParser';
 import {
   buildBatchCreateRequest,
   buildBatchPrecheckRequest,
@@ -35,6 +38,34 @@ const rowsOf = (v: unknown): UnknownRecord[] => {
 };
 const text = (v: unknown) => (v === undefined || v === null || v === '' ? '-' : String(v));
 const numberValue = (v: unknown) => (typeof v === 'number' ? v : Number(v ?? 0) || 0);
+
+/**
+ * Traffic figures for a row.
+ *
+ * The contract reports `traffic` as an object ({ total, used, balance }), so it
+ * must be read field-by-field — stringifying it renders "[object Object]".
+ */
+function trafficParts(row: UnknownRecord): { used: number; total: number; pct: number } {
+  const traffic = asRecord(row.traffic);
+  const used = numberValue(traffic.used);
+  const total = numberValue(traffic.total);
+  const pct = total > 0 ? Math.min(100, Math.max(0, (used / total) * 100)) : 0;
+  return { used, total, pct };
+}
+
+/** Relative timestamp for the last-active column. */
+function timeAgo(value: unknown, t: (key: string, values?: Record<string, string | number>) => string): string {
+  const raw = typeof value === 'string' ? value : '';
+  if (!raw) return '-';
+  const time = new Date(raw).getTime();
+  if (Number.isNaN(time)) return '-';
+  const diff = Math.floor((Date.now() - time) / 1000);
+  if (diff < 45) return t('time_just_now');
+  if (diff < 3600) return t('time_mins_ago', { count: Math.floor(diff / 60) });
+  if (diff < 86400) return t('time_hours_ago', { count: Math.floor(diff / 3600) });
+  if (diff < 86400 * 30) return t('time_days_ago', { count: Math.floor(diff / 86400) });
+  return t('time_yesterday');
+}
 
 function resolvePlmn(row: UnknownRecord, catalog: PlmnRecord[]): string {
   const explicit = typeof row.plmn === 'string' ? row.plmn : undefined;
@@ -69,6 +100,16 @@ export function SubscribersPage() {
     asRecord(subscribers.data).total ?? asRecord(asRecord(subscribers.data).pagination).total ?? rows.length,
   );
   const profileList = rowsOf(profiles.data);
+
+  /* Summary strip. The contract reports `summary` alongside the page, so the
+   * figures are authoritative rather than derived from the visible page. */
+  const summary = asRecord(asRecord(subscribers.data).summary);
+  const summaryItems: MetricStripItem[] = [
+    { key: 'total', label: t('subscriber_summary_total'), value: numberValue(summary.total ?? total), tone: 'primary' },
+    { key: 'active', label: t('subscriber_summary_active'), value: numberValue(summary.active), tone: 'success' },
+    { key: 'restricted', label: t('subscriber_summary_restricted'), value: numberValue(summary.restricted), tone: 'danger' },
+    { key: 'lowTraffic', label: t('subscriber_summary_low_traffic'), value: numberValue(summary.lowTraffic), tone: 'warning' },
+  ];
 
   // Permission flags (presentation only)
   const canWrite = hasPermission(user, 'subscribers.write');
@@ -398,17 +439,19 @@ export function SubscribersPage() {
   };
 
   return (
-    <section className="read-page">
-      <header className="read-page-header">
-        <div>
-          <p className="read-marker">Governed Subscriber Management</p>
-          <h1>{t('nav_subscribers')}</h1>
-        </div>
-        <button type="button" className="read-refresh" onClick={() => void refreshData()}>
-          <RefreshCw size={16} />
-          {t('refresh')}
-        </button>
-      </header>
+    <div className="container animate-fade-in">
+      <PageHeader
+        eyebrow={t('eyebrow_imsi_hss')}
+        icon={<Layers size={23} />}
+        title={t('subscriber_title')}
+        description={t('subscriber_subtitle')}
+        actions={
+          <button type="button" className="btn btn-secondary" onClick={() => void refreshData()}>
+            <RefreshCw size={16} />
+            {t('refresh')}
+          </button>
+        }
+      />
 
       {notice && (
         <div className={`notice-box ${notice.type}`} role="status">
@@ -504,6 +547,12 @@ export function SubscribersPage() {
         <EmptyState title={t('empty_title')} description={t('empty_generic_body')} />
       ) : (
         <>
+          <MetricStrip
+            variant="cards"
+            columns={4}
+            ariaLabel={t('nav_subscriber')}
+            items={summaryItems}
+          />
           <p className="read-summary">
             {total} {t('records')}
           </p>
@@ -521,11 +570,12 @@ export function SubscribersPage() {
                       />
                     </th>
                   )}
-                  <th>IMSI</th>
                   <th>Status</th>
-                  <th>Traffic</th>
-                  <th>Profile</th>
+                  <th>IMSI</th>
                   <th>PLMN</th>
+                  <th>Profile</th>
+                  <th>Traffic</th>
+                  <th>Last active</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -533,6 +583,7 @@ export function SubscribersPage() {
                 {rows.map((row) => {
                   const imsi = text(row['imsi']);
                   const isChecked = selectedImsis.includes(imsi);
+                  const traffic = trafficParts(row);
                   return (
                     <tr key={imsi}>
                       {canDelete && (
@@ -545,15 +596,29 @@ export function SubscribersPage() {
                           />
                         </td>
                       )}
-                      <td data-label="IMSI">{imsi}</td>
                       <td data-label="Status">
                         <span className={`badge badge-${text(row['status']).toLowerCase()}`}>
                           {text(row['status'])}
                         </span>
                       </td>
-                      <td data-label="Traffic">{text(row['traffic'])}</td>
-                      <td data-label="Profile">{text(row['profile'])}</td>
+                      <td data-label="IMSI" className="imsi-text">{imsi}</td>
                       <td data-label="PLMN">{text(row['plmn'])}</td>
+                      <td data-label="Profile">{text(row['policyName'] || row['policy'])}</td>
+                      <td data-label="Traffic">
+                        <div className="traffic-container">
+                          <div className="traffic-stats">
+                            <span>{formatBytes(traffic.used)}</span>
+                            <span>{formatBytes(traffic.total || 1)}</span>
+                          </div>
+                          <div className="traffic-bar-container">
+                            <div
+                              className={`traffic-bar ${traffic.pct > 90 ? 'high' : traffic.pct > 70 ? 'medium' : 'low'}`}
+                              style={{ '--traffic-scale': Math.min(traffic.pct, 100) / 100 } as React.CSSProperties}
+                            />
+                          </div>
+                        </div>
+                      </td>
+                      <td className="last-active-cell" data-label="Last active">{timeAgo(row['lastActive'], t)}</td>
                       <td data-label="Actions">
                         <div className="table-actions">
                           {canWrite && (
@@ -1044,6 +1109,6 @@ export function SubscribersPage() {
         isDanger={true}
         isLoading={submitting}
       />
-    </section>
+    </div>
   );
 }

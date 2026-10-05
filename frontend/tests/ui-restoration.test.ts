@@ -24,18 +24,22 @@ test('sidebar groups expose the restored navigation hierarchy for an administrat
   const groups = getSidebarGroups('admin');
   const keys = groups.map((group) => group.key);
   assert.ok(keys.includes('nav_dashboard'));
-  assert.ok(keys.includes('nav_subscribers'));
+  assert.ok(keys.includes('nav_subscriber'));
   assert.ok(keys.includes('nav_ocs'));
   assert.ok(keys.includes('nav_profile'));
   assert.ok(keys.includes('nav_system_settings'));
-  assert.ok(keys.includes('nav_health'));
+  assert.ok(keys.includes('nav_system_health'));
   assert.ok(keys.includes('nav_inventory'));
+  // The reference sidebar renders no Rating entry: the rating routes redirect to
+  // the tariff surface, so exposing them would be a dead link.
+  assert.ok(!keys.includes('nav_rating'), 'sidebar must not expose a Rating entry');
 
   const ocs = groups.find((group) => group.key === 'nav_ocs');
   assert.ok(ocs);
+  // Canonical reference order, not alphabetical.
   assert.deepEqual(
-    ocs.children.map((child) => child.targetRoute).sort(),
-    ['/ocs/balances', '/ocs/contracts', '/ocs/tariffs'],
+    ocs.children.map((child) => child.targetRoute),
+    ['/ocs/tariffs', '/ocs/contracts', '/ocs/balances'],
   );
 
   const system = groups.find((group) => group.key === 'nav_system_settings');
@@ -145,16 +149,26 @@ test('byte and chart formatting never fabricates values', () => {
   assert.deepEqual(toChartPoints([{ name: '' }]), []);
 });
 
-test('dashboard renders the restored structured presentation surfaces', () => {
-  const source = read('../src/features/read/ReadPages.tsx');
-  assert.match(source, /KpiStrip/);
-  assert.match(source, /KpiCard/);
-  assert.match(source, /workbench/);
-  assert.match(source, /SkeletonPage/);
-  assert.match(source, /ErrorState/);
-  assert.match(source, /EmptyState/);
-  assert.match(source, /chart-card/);
-  assert.match(source, /detail-panel/);
+test('dashboard renders the forward-ported analytics cockpit', () => {
+  const page = read('../src/features/read/ReadPages.tsx');
+  assert.match(page, /AnalyticsCockpit/);
+
+  // The cockpit owns the reference composition: KPI strip, workbench, OCS strip,
+  // top-consumer chart and tariff-plan distribution.
+  const cockpit = read('../src/components/AnalyticsCockpit.tsx');
+  for (const part of ['MetricStrip', 'WorkbenchPanel', 'OcsResourceStrip', 'TopConsumerChart', 'TariffPlanDistributionChart']) {
+    assert.match(cockpit, new RegExp(part), `cockpit must render ${part}`);
+  }
+
+  // It must read the accepted read contracts rather than aggregate on its own.
+  for (const endpoint of ['/api/analytics/metrics', '/api/analytics/sparkline', '/api/alerts', '/api/ocs/subscribers']) {
+    assert.ok(cockpit.includes(endpoint), `cockpit must read ${endpoint}`);
+  }
+
+  // Loading / offline / empty states are explicit, never fabricated.
+  assert.match(cockpit, /SkeletonDashboard/);
+  assert.match(cockpit, /analytics-offline/);
+  assert.match(read('../src/components/analytics/EmptyChartState.tsx'), /EmptyChartState/);
 });
 
 test('shell composition is implemented as dedicated restored components', () => {

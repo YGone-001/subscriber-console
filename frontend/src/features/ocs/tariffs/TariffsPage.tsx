@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CheckCircle, Copy, Edit2, Plus, RefreshCw, Trash2, XCircle } from 'lucide-react';
+import { CheckCircle, Copy, Edit2, FileText, Plus, Power, PowerOff, RefreshCw, Trash2, XCircle } from 'lucide-react';
 import { ConfirmDialog } from '../../../components/ConfirmDialog';
 import { Modal } from '../../../components/Modal';
 import { deleteJson, postJson, putJson } from '../../../lib/api/mutation-client';
@@ -10,6 +10,8 @@ import { useAuth } from '../../../providers/AuthProvider';
 import { useI18n } from '../../../providers/I18nProvider';
 import { EmptyState, ErrorState } from '../../../components/ui/StatePanel';
 import { SkeletonTable } from '../../../components/ui/LoadingSkeleton';
+import MetricStrip from '../../../components/ui/MetricStrip';
+import PageHeader from '../../../components/ui/PageHeader';
 
 type UnknownRecord = Record<string, unknown>;
 const asRecord = (v: unknown): UnknownRecord => (v && typeof v === 'object' && !Array.isArray(v) ? (v as UnknownRecord) : {});
@@ -19,9 +21,10 @@ const rowsOf = (v: unknown): UnknownRecord[] => {
   return listOf(r.records ?? r.items ?? r.plans ?? r.data ?? v);
 };
 const text = (v: unknown) => (v === undefined || v === null || v === '' ? '-' : String(v));
+const numberValue = (v: unknown) => (typeof v === 'number' ? v : Number(v ?? 0) || 0);
 
 export function TariffsPage() {
-  const { t } = useI18n();
+  const { t, formatDateTime } = useI18n();
   const { user } = useAuth();
   const [page, setPage] = useState(1);
   const [notice, setNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -179,17 +182,30 @@ export function TariffsPage() {
   };
 
   return (
-    <section className="read-page">
-      <header className="read-page-header">
-        <div>
-          <p className="read-marker">Governed Tariff Management</p>
-          <h1>Tariff Plans</h1>
-        </div>
-        <button type="button" className="read-refresh" onClick={() => void refreshData()}>
-          <RefreshCw size={16} />
-          {t('refresh')}
-        </button>
-      </header>
+    <div className="container animate-fade-in">
+      <PageHeader
+        eyebrow={t('nav_ocs')}
+        title={t('ocs_tariffs_title')}
+        description={t('ocs_tariffs_desc')}
+        actions={
+          <button type="button" className="btn btn-secondary" onClick={() => void refreshData()}>
+            <RefreshCw size={16} />
+            {t('refresh')}
+          </button>
+        }
+      />
+
+      <MetricStrip
+        variant="cards"
+        columns={4}
+        ariaLabel={t('ocs_tariffs_title')}
+        items={[
+          { key: 'plans', label: t('ocs_tariff_total_plans'), value: rows.length, icon: <FileText size={20} /> },
+          { key: 'active', label: t('ocs_tariff_active_plans'), value: rows.filter((row) => text(row.status).toLowerCase() === 'active').length, icon: <CheckCircle size={20} /> },
+          { key: 'disabled', label: t('ocs_tariff_disabled_plans'), value: rows.filter((row) => text(row.status).toLowerCase() === 'disabled').length, icon: <XCircle size={20} /> },
+          { key: 'subscribers', label: t('ocs_tariff_total_subscribers'), value: rows.reduce((sum, row) => sum + numberValue(row.subscriberCount), 0), icon: <FileText size={20} /> },
+        ]}
+      />
 
       {notice && (
         <div className={`notice-box ${notice.type}`} role="status">
@@ -228,13 +244,14 @@ export function TariffsPage() {
             <table className="read-table">
               <thead>
                 <tr>
-                  <th>Plan ID</th>
-                  <th>Name</th>
-                  <th>Status</th>
-                  <th>Version</th>
-                  <th>Subscribers</th>
-                  <th>Updated</th>
-                  <th>Actions</th>
+                  <th>{t('ocs_tariff_col_plan_id')}</th>
+                  <th>{t('ocs_tariff_col_name')}</th>
+                  <th>{t('ocs_tariff_col_status')}</th>
+                  <th>{t('ocs_tariff_governance_col_version')}</th>
+                  <th>{t('ocs_tariff_col_subscribers')}</th>
+                  <th>{t('ocs_tariff_governance_col_updated_by')}</th>
+                  <th>{t('ocs_tariff_col_updated')}</th>
+                  <th>{t('ocs_tariff_col_actions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -243,14 +260,19 @@ export function TariffsPage() {
                   const status = text(row.status).toLowerCase();
                   return (
                     <tr key={planId}>
-                      <td data-label="Plan ID">{planId}</td>
+                      <td data-label="Plan ID" className="ocs-mono">{planId}</td>
                       <td data-label="Name">{text(row.name)}</td>
                       <td data-label="Status">
                         <span className={`badge badge-${status}`}>{text(row.status)}</span>
                       </td>
-                      <td data-label="Version">{text(row.version)}</td>
-                      <td data-label="Subscribers">{text(row.subscriber_count)}</td>
-                      <td data-label="Updated">{text(row.updated_at)}</td>
+                      <td data-label="Version" className="ocs-mono">v{numberValue(row.version) || 1}</td>
+                      <td data-label="Subscribers">{numberValue(row.subscriberCount)}</td>
+                      <td data-label="Updated By">{row.updated_by ? String(row.updated_by) : '—'}</td>
+                      <td data-label="Updated">
+                        {row.updated_at
+                          ? formatDateTime(row.updated_at as string, { year: 'numeric', month: 'numeric', day: 'numeric' })
+                          : '—'}
+                      </td>
                       <td data-label="Actions">
                         <div className="table-actions">
                           <Link to={`/ocs/tariffs/${encodeURIComponent(planId)}`} className="btn-secondary btn-sm">
@@ -294,7 +316,7 @@ export function TariffsPage() {
                                     setIsEnableOpen(true);
                                   }}
                                 >
-                                  <CheckCircle size={14} />
+                                  <Power size={14} />
                                 </button>
                               ) : (
                                 <button
@@ -306,7 +328,7 @@ export function TariffsPage() {
                                     setIsDisableOpen(true);
                                   }}
                                 >
-                                  <XCircle size={14} />
+                                  <PowerOff size={14} />
                                 </button>
                               )}
                               <button
@@ -507,6 +529,6 @@ export function TariffsPage() {
         isDanger={true}
         isLoading={submitting}
       />
-    </section>
+    </div>
   );
 }

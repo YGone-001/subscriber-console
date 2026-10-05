@@ -1,5 +1,11 @@
+/*
+ * Profile (configuration template) governance page.
+ *
+ * Header, governance summary strip and the profile table follow the historical
+ * xCloud layout; figures come from the accepted /api/profiles contract.
+ */
 import { useState } from 'react';
-import { Edit2, Plus, RefreshCw, RotateCcw, Trash2 } from 'lucide-react';
+import { AlertTriangle, Boxes, Clock, Edit2, Plus, RefreshCw, RotateCcw, Trash2, Users } from 'lucide-react';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Modal } from '../../components/Modal';
 import { deleteJson, postJson, putJson } from '../../lib/api/mutation-client';
@@ -9,6 +15,8 @@ import { useAuth } from '../../providers/AuthProvider';
 import { useI18n } from '../../providers/I18nProvider';
 import { EmptyState, ErrorState } from '../../components/ui/StatePanel';
 import { SkeletonTable } from '../../components/ui/LoadingSkeleton';
+import MetricStrip from '../../components/ui/MetricStrip';
+import PageHeader from '../../components/ui/PageHeader';
 
 type UnknownRecord = Record<string, unknown>;
 const asRecord = (v: unknown): UnknownRecord => (v && typeof v === 'object' && !Array.isArray(v) ? (v as UnknownRecord) : {});
@@ -18,6 +26,7 @@ const rowsOf = (v: unknown): UnknownRecord[] => {
   return listOf(r.records ?? r.items ?? r.profiles ?? r.data ?? v);
 };
 const text = (v: unknown) => (v === undefined || v === null || v === '' ? '-' : String(v));
+const numberValue = (v: unknown) => (typeof v === 'number' ? v : Number(v ?? 0) || 0);
 
 export function ProfilesPage() {
   const { t } = useI18n();
@@ -28,6 +37,7 @@ export function ProfilesPage() {
 
   const profiles = useRead<unknown>('/api/profiles');
   const allRows = rowsOf(profiles.data);
+  const profileSummary = asRecord(asRecord(profiles.data).summary);
   const rows = allRows.filter((r) =>
     `${text(r.name)} ${text(r.title)}`.toLowerCase().includes(query.toLowerCase()),
   );
@@ -143,16 +153,38 @@ export function ProfilesPage() {
 
   return (
     <section className="read-page">
-      <header className="read-page-header">
-        <div>
-          <p className="read-marker">Governed Profile Management</p>
-          <h1>{t('nav_profile')}</h1>
-        </div>
-        <button type="button" className="read-refresh" onClick={() => void refreshData()}>
-          <RefreshCw size={16} />
-          {t('refresh')}
-        </button>
-      </header>
+      <PageHeader
+        eyebrow={t('eyebrow_policy_template')}
+        icon={<Boxes size={23} />}
+        title={t('prof_governance_title')}
+        description={t('prof_governance_subtitle')}
+        actions={
+          <button type="button" className="btn btn-secondary" onClick={() => void refreshData()}>
+            <RefreshCw size={16} />
+            {t('refresh')}
+          </button>
+        }
+      />
+
+      {/* Governance summary. `total` / `impacted` prefer the contract summary;
+       * `highRisk` / `recent` are derived from the profile list, as in the
+       * reference (no fabricated figures). */}
+      <MetricStrip
+        variant="cards"
+        columns={4}
+        ariaLabel={t('prof_governance_title')}
+        items={[
+          { key: 'total', icon: <Boxes size={17} />, label: t('prof_governance_total'), value: numberValue(profileSummary.totalProfiles ?? allRows.length) },
+          { key: 'impacted', icon: <Users size={17} />, label: t('prof_governance_impacted'), value: numberValue(profileSummary.totalGovernedSubscribers) },
+          { key: 'risk', icon: <AlertTriangle size={17} />, label: t('prof_governance_high_risk'), value: allRows.filter((row) => text(row.risk).toLowerCase() === 'high').length, tone: 'danger' },
+          { key: 'recent', icon: <Clock size={17} />, label: t('prof_governance_recent'), value: allRows.filter((row) => {
+            const changedAt = row.updatedAt ?? row.createdAt;
+            if (!changedAt) return false;
+            const time = new Date(String(changedAt)).getTime();
+            return !Number.isNaN(time) && Date.now() - time <= 1000 * 60 * 60 * 24 * 14;
+          }).length },
+        ]}
+      />
 
       {notice && (
         <div className={`notice-box ${notice.type}`} role="status">

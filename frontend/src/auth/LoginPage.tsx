@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { Eye, EyeOff, Lock, User } from 'lucide-react';
 import { safeLocalDestination } from './auth-state';
 import type { LoginFailure } from '../types/auth';
 import { useAuth } from '../providers/AuthProvider';
@@ -71,25 +72,82 @@ export function LoginPage() {
         : null;
 
   return (
-    <main className="login-page" aria-labelledby="login-title">
-      <section className="login-card">
-        <div className="brand-lockup"><span className="brand-mark"><img src="/images/xCloud_picture.png" alt={t('brand_alt')} width={1254} height={1254} /></span><span className="brand-name">xCloud</span></div>
-        <p className="eyebrow">{t('brand_tagline')}</p>
-        <h1 id="login-title">{t('sign_in')}</h1>
-        {sessionExpired ? <p className="session-message" role="status">{t('session_expired')}</p> : null}
-        <form onSubmit={submit}>
-          <label>
-            {t('username')}
-            <input name="username" autoComplete="username" required />
-          </label>
-          <label>
-            {t('password')}
-            <span className="password-field"><input name="password" type={passwordVisible ? 'text' : 'password'} autoComplete="current-password" required /><button type="button" onClick={() => setPasswordVisible((visible) => !visible)} aria-label={passwordVisible ? t('hide_password') : t('show_password')}>{passwordVisible ? 'Hide' : 'Show'}</button></span>
-          </label>
-          {message ? <p className="form-error" role="alert">{message}</p> : null}
-          <button type="submit" disabled={loading || retryAfter > 0}>{loading ? t('signing_in') : t('sign_in')}</button>
+    <main className="login-container" aria-labelledby="login-title">
+      <div className="login-bg-blob-1" aria-hidden="true" />
+      <div className="login-bg-blob-2" aria-hidden="true" />
+      <div className="login-card">
+        <div className="login-header">
+          <div className="login-logo-container">
+            <img className="login-logo" src="/images/xCloud_picture.png" alt={t('login_title')} width={1254} height={1254} />
+          </div>
+          <h1 className="login-title" id="login-title">{t('login_title')}</h1>
+          <p className="login-subtitle">{t('login_subtitle')}</p>
+        </div>
+
+        <form onSubmit={submit} className="login-form">
+          {sessionExpired ? (
+            <div className="login-session-container" role="status">
+              <div className="login-session-indicator" aria-hidden="true" />
+              <span>{t('login_session_expired')}</span>
+            </div>
+          ) : null}
+
+          {message ? (
+            <div className="login-error-container" role="alert" aria-live="assertive">
+              <div className="login-error-indicator" aria-hidden="true" />
+              <span>{message}</span>
+            </div>
+          ) : null}
+
+          <div className="input-container">
+            <label className="login-field-label" htmlFor="xcloud-login-username">{t('login_username')}</label>
+            <div className="input-icon" aria-hidden="true"><User size={18} /></div>
+            <input
+              id="xcloud-login-username"
+              name="username"
+              placeholder={t('login_username')}
+              autoComplete="username"
+              required
+              className="login-input"
+            />
+          </div>
+
+          <div className="input-container">
+            <label className="login-field-label" htmlFor="xcloud-login-password">{t('login_password')}</label>
+            <div className="input-icon" aria-hidden="true"><Lock size={18} /></div>
+            <input
+              id="xcloud-login-password"
+              name="password"
+              type={passwordVisible ? 'text' : 'password'}
+              placeholder={t('login_password')}
+              autoComplete="current-password"
+              required
+              className="login-input login-input-password"
+            />
+            <button
+              id="xcloud-password-toggle"
+              type="button"
+              className="password-toggle"
+              aria-label={passwordVisible ? t('login_hide_password') : t('login_show_password')}
+              aria-pressed={passwordVisible}
+              onClick={() => setPasswordVisible((visible) => !visible)}
+            >
+              {passwordVisible ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
+          </div>
+
+          <button
+            id="xcloud-login-submit"
+            type="submit"
+            className="login-submit-btn"
+            disabled={loading || retryAfter > 0}
+          >
+            {loading ? t('signing_in') : t('login_button')}
+          </button>
         </form>
-      </section>
+
+        <div className="login-footer">{t('login_protected')}</div>
+      </div>
     </main>
   );
 }

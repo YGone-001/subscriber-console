@@ -3,14 +3,19 @@ import {
   Activity,
   Clock,
   Database,
+  Layers,
   RefreshCw,
   ShieldAlert,
+  ShieldCheck,
   Wrench,
+  Zap,
 } from 'lucide-react';
 import { useAuth } from '../../providers/AuthProvider';
 import { useRead } from '../../lib/api/use-read';
 import { postJson, extractErrorMessage } from '../../lib/api/mutation-client';
 import { useI18n } from '../../providers/I18nProvider';
+import SectionHeader from '../../components/ui/SectionHeader';
+import SubsystemCard from '../../components/health/SubsystemCard';
 import {
   buildAnalyticsInitRequest,
   buildAuditScanRequest,
@@ -308,6 +313,21 @@ export function SystemHealthPage() {
   };
 
   const healthData = (health.data?.summary ?? health.data ?? {}) as Record<string, unknown>;
+
+  /* Subsystem matrix. The contract reports four subsystems under `subsystems`;
+   * each card renders a 2x2 metric grid, matching the reference layout. */
+  const subsystems = (health.data?.subsystems ?? {}) as Record<string, Record<string, unknown>>;
+  const sub = (key: string) => subsystems[key] ?? {};
+  const subStatus = (key: string) => String(sub(key).status ?? 'healthy');
+  const subValue = (key: string, field: string) => {
+    const value = sub(key)[field];
+    return value === undefined || value === null ? '--' : String(value);
+  };
+  const statusBadge = (key: string) => (
+    <span className={`subsystem-badge ${subStatus(key)}`}>{t(`health_status_${subStatus(key)}`)}</span>
+  );
+  const toneOf = (key: string, field: string, whenPositive: 'success' | 'danger' | 'warning') =>
+    Number(sub(key)[field] ?? 0) > 0 ? whenPositive : 'success';
   const auditData = (audit.data ?? {}) as Record<string, unknown>;
   const alertItems = useMemo(() => {
     if (!alerts.data) return [];
@@ -316,11 +336,12 @@ export function SystemHealthPage() {
   }, [alerts.data]);
 
   return (
-    <section className="read-page system-health-governed-page">
+    <section className="read-page">
       <header className="read-page-header">
         <div>
-          <p className="read-marker">{t('operational_governance') || 'Operational Parity'}</p>
-          <h1>{t('nav_health')}</h1>
+          <p className="read-marker">{t('eyebrow_noc_diagnostics')}</p>
+          <h1>{t('nav_system_health')}</h1>
+          <p className="read-summary">{t('health_subsystems_title')}</p>
         </div>
 
         <div className="system-health-actions" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
@@ -339,10 +360,10 @@ export function SystemHealthPage() {
             className="read-refresh operational-btn"
             onClick={() => void handleRecomputeAnalytics()}
             disabled={isViewer || isRecomputing || isScanning}
-            title={isViewer ? 'Read-only access: viewer role cannot recompute analytics' : undefined}
+            title={t('sync_tooltip')}
           >
             <Database size={16} />
-            {isRecomputing ? 'Recomputing...' : 'Recompute Analytics'}
+            {t('sync_telemetry')}
           </button>
 
           <button
@@ -350,10 +371,10 @@ export function SystemHealthPage() {
             className="read-refresh operational-btn"
             onClick={() => void handleStartScan()}
             disabled={isViewer || isScanning}
-            title={isViewer ? 'Read-only access: viewer role cannot run diagnostic scans' : undefined}
+            title={t('health_btn_run')}
           >
             <Activity size={16} />
-            {isScanning ? `Scanning (${scanPhase})...` : 'Run Audit Scan'}
+            {isScanning ? t('health_btn_scanning') : t('health_btn_run')}
           </button>
 
           {anomalies.length > 0 && (
@@ -370,6 +391,68 @@ export function SystemHealthPage() {
           )}
         </div>
       </header>
+
+      {/* Subsystem health matrix — four cards, each with a 2x2 metric grid. */}
+      <section className="health-subsystems-section">
+        <SectionHeader title={t('health_subsystems_title')} />
+
+        <div className="health-subsystems-grid">
+          <SubsystemCard
+            status={subStatus('database')}
+            icon={<Database size={20} color="var(--primary)" />}
+            name={t('health_subsystem_db')}
+            description={`${subValue('database', 'xcloudDb')} / ${subValue('database', 'appDb')}`}
+            statusBadge={statusBadge('database')}
+            metrics={[
+              { label: t('health_db_latency'), value: `${subValue('database', 'latencyMs')} ms` },
+              { label: t('health_db_collections'), value: `${subValue('database', 'existingCollections')} / ${subValue('database', 'totalCollections')}` },
+              { label: t('health_db_indexes'), value: subValue('database', 'missingIndexesCount'), tone: toneOf('database', 'missingIndexesCount', 'danger') },
+              { label: t('status'), value: sub('database').ready ? t('health_status_ready') : t('health_status_attention'), tone: sub('database').ready ? 'success' : 'danger' },
+            ]}
+          />
+
+          <SubsystemCard
+            status={subStatus('ocsEngine')}
+            icon={<Zap size={20} color="var(--primary)" />}
+            name={t('health_subsystem_ocs')}
+            description={t('health_desc_ocs')}
+            statusBadge={statusBadge('ocsEngine')}
+            metrics={[
+              { label: t('health_ocs_invariants'), value: sub('ocsEngine').invariantsOk ? t('health_status_ok') : t('health_status_broken', { count: subValue('ocsEngine', 'brokenInvariantsCount') }), tone: sub('ocsEngine').invariantsOk ? 'success' : 'danger' },
+              { label: t('health_ocs_sessions'), value: subValue('ocsEngine', 'activeSessions') },
+              { label: t('health_ocs_reservations'), value: subValue('ocsEngine', 'activeReservations') },
+              { label: t('health_ocs_tariff_plans'), value: subValue('ocsEngine', 'activeTariffPlans') },
+            ]}
+          />
+
+          <SubsystemCard
+            status={subStatus('hssCore')}
+            icon={<Layers size={20} color="var(--primary)" />}
+            name={t('health_subsystem_hss')}
+            description={t('health_desc_hss')}
+            statusBadge={statusBadge('hssCore')}
+            metrics={[
+              { label: t('health_hss_auth_credentials'), value: Number(sub('hssCore').missingCredentialsCount ?? 0) > 0 ? t('health_status_invalid', { count: subValue('hssCore', 'missingCredentialsCount') }) : t('health_status_ok'), tone: toneOf('hssCore', 'missingCredentialsCount', 'danger') },
+              { label: t('health_hss_slice_routing'), value: Number(sub('hssCore').missingSlicesCount ?? 0) > 0 ? t('health_status_missing', { count: subValue('hssCore', 'missingSlicesCount') }) : t('health_status_optimal'), tone: toneOf('hssCore', 'missingSlicesCount', 'danger') },
+              { label: t('health_hss_dangling_profiles'), value: subValue('hssCore', 'danglingProfilesCount'), tone: toneOf('hssCore', 'danglingProfilesCount', 'warning') },
+              { label: t('profiles_title'), value: subValue('hssCore', 'activeProfilesCount') },
+            ]}
+          />
+
+          <SubsystemCard
+            status={subStatus('security')}
+            icon={<ShieldCheck size={20} color="var(--primary)" />}
+            name={t('health_subsystem_security')}
+            description={t('health_desc_sec')}
+            statusBadge={statusBadge('security')}
+            metrics={[
+              { label: t('health_sec_root'), value: sub('security').rootUserConfigured ? t('health_status_active') : t('health_status_missing', { count: 1 }), tone: sub('security').rootUserConfigured ? 'success' : 'danger' },
+              { label: t('health_sec_alerts'), value: subValue('security', 'unacknowledgedAlertsCount'), tone: toneOf('security', 'criticalAlertsCount', 'danger') },
+              { label: t('users_title'), value: subValue('security', 'activeUsersCount') },
+            ]}
+          />
+        </div>
+      </section>
 
       {notice && (
         <aside

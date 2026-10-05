@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Edit2, Pause, Play, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { Edit2, Pause, Play, Plus, RefreshCw, Trash2, Users } from 'lucide-react';
 import { ConfirmDialog } from '../../../components/ConfirmDialog';
 import { Modal } from '../../../components/Modal';
 import { deleteJson, patchJson, postJson } from '../../../lib/api/mutation-client';
@@ -10,6 +10,8 @@ import { useAuth } from '../../../providers/AuthProvider';
 import { useI18n } from '../../../providers/I18nProvider';
 import { EmptyState, ErrorState } from '../../../components/ui/StatePanel';
 import { SkeletonTable } from '../../../components/ui/LoadingSkeleton';
+import MetricStrip from '../../../components/ui/MetricStrip';
+import PageHeader from '../../../components/ui/PageHeader';
 
 type UnknownRecord = Record<string, unknown>;
 const asRecord = (v: unknown): UnknownRecord => (v && typeof v === 'object' && !Array.isArray(v) ? (v as UnknownRecord) : {});
@@ -22,7 +24,7 @@ const text = (v: unknown) => (v === undefined || v === null || v === '' ? '-' : 
 const numberValue = (v: unknown) => (typeof v === 'number' ? v : Number(v ?? 0) || 0);
 
 export function ContractsPage() {
-  const { t } = useI18n();
+  const { t, formatDateTime } = useI18n();
   const { user } = useAuth();
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
@@ -162,17 +164,29 @@ export function ContractsPage() {
   };
 
   return (
-    <section className="read-page">
-      <header className="read-page-header">
-        <div>
-          <p className="read-marker">Governed OCS Contract Management</p>
-          <h1>Contracts</h1>
-        </div>
-        <button type="button" className="read-refresh" onClick={() => void refreshData()}>
-          <RefreshCw size={16} />
-          {t('refresh')}
-        </button>
-      </header>
+    <div className="container animate-fade-in">
+      <PageHeader
+        eyebrow={t('nav_ocs')}
+        title={t('ocs_contracts_title')}
+        description={t('ocs_contracts_desc')}
+        actions={
+          <button type="button" className="btn btn-secondary" onClick={() => void refreshData()}>
+            <RefreshCw size={16} />
+            {t('refresh')}
+          </button>
+        }
+      />
+
+      <MetricStrip
+        variant="cards"
+        columns={3}
+        ariaLabel={t('ocs_contracts_title')}
+        items={[
+          { key: 'total', label: t('ocs_contract_total'), value: total, icon: <Users size={20} /> },
+          { key: 'active', label: t('ocs_contract_active'), value: rows.filter((row) => text(row.status).toLowerCase() === 'active').length, icon: <Users size={20} /> },
+          { key: 'suspended', label: t('ocs_contract_suspended'), value: rows.filter((row) => text(row.status).toLowerCase() === 'suspended').length, icon: <Pause size={20} /> },
+        ]}
+      />
 
       {notice && (
         <div className={`notice-box ${notice.type}`} role="status">
@@ -224,11 +238,12 @@ export function ContractsPage() {
               <thead>
                 <tr>
                   <th>IMSI</th>
-                  <th>Plan ID</th>
-                  <th>Status</th>
-                  <th>Version</th>
-                  <th>Updated</th>
-                  <th>Actions</th>
+                  <th>{t('ocs_contract_col_msisdn')}</th>
+                  <th>{t('ocs_contract_col_tariff')}</th>
+                  <th>{t('ocs_contract_col_billing_status')}</th>
+                  <th>{t('ocs_contract_col_created')}</th>
+                  <th>{t('ocs_contract_col_last_change')}</th>
+                  <th>{t('actions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -237,13 +252,18 @@ export function ContractsPage() {
                   const status = text(row.status).toLowerCase();
                   return (
                     <tr key={imsi}>
-                      <td data-label="IMSI">{imsi}</td>
-                      <td data-label="Plan ID">{text(row.plan_id)}</td>
-                      <td data-label="Status">
+                      <td data-label="IMSI" className="ocs-imsi-cell"><code>{imsi}</code></td>
+                      <td data-label="MSISDN">{row.msisdn ? String(row.msisdn) : '—'}</td>
+                      <td data-label="Tariff Plan"><span className="ocs-plan-badge">{text(row.plan_id)}</span></td>
+                      <td data-label="Billing Status">
                         <span className={`badge badge-${status}`}>{text(row.status)}</span>
                       </td>
-                      <td data-label="Version">{text(row.version)}</td>
-                      <td data-label="Updated">{text(row.updated_at)}</td>
+                      <td data-label="Created" className="ocs-time-cell">
+                        {row.created_at ? formatDateTime(row.created_at as string) : '—'}
+                      </td>
+                      <td data-label="Last Change" className="ocs-time-cell">
+                        {row.updated_at ? formatDateTime(row.updated_at as string) : '—'}
+                      </td>
                       <td data-label="Actions">
                         <div className="table-actions">
                           <Link to={`/ocs/contracts/${encodeURIComponent(imsi)}`} className="btn-secondary btn-sm">
@@ -463,6 +483,6 @@ export function ContractsPage() {
         isDanger={true}
         isLoading={submitting}
       />
-    </section>
+    </div>
   );
 }

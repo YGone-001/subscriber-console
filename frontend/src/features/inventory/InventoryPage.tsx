@@ -91,7 +91,7 @@ export function InventoryPage() {
   };
 
   return (
-    <div className="page-container">
+    <div className="container animate-fade-in">
       <header className="page-header flex justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">{t('nav_inventory', { defaultValue: 'Inventory' })}</h1>

@@ -613,3 +613,69 @@
     text-transform: uppercase;
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * Table action columns
+ *
+ * The reference renders row actions as compact ghost icon buttons
+ * (`ocs-action-group` / `ocs-action-btn`), with destructive actions staying muted
+ * until hover (`ocs-action-danger`). The current pages express the same intent
+ * with `btn-secondary` / `btn-danger`; these rules re-express them in the
+ * recovered vocabulary.
+ *
+ * Specificity (0,2,0) deliberately beats the later-loaded `.btn-danger` /
+ * `.btn-secondary` from the global layer, so load order does not matter.
+ * ------------------------------------------------------------------------- */
+.table-actions .btn-secondary,
+.table-actions .btn-primary,
+.table-actions .btn-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 1.75rem;
+  height: 1.75rem;
+  min-width: 1.75rem;
+  padding: 0 0.5rem;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-micro);
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: var(--ref-font-size-label-strong);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--duration-fast) ease, color var(--duration-fast) ease, border-color var(--duration-fast) ease;
+}
+
+.table-actions .btn-secondary:hover:not(:disabled),
+.table-actions .btn-primary:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text-main);
+  border-color: var(--primary);
+}
+
+.table-actions .btn-secondary:disabled,
+.table-actions .btn-primary:disabled,
+.table-actions .btn-danger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Destructive: muted at rest, soft red only on hover. */
+.table-actions .btn-danger {
+  color: var(--text-secondary);
+  border-color: var(--surface-border);
+  background: var(--surface);
+}
+
+.table-actions .btn-danger:hover:not(:disabled) {
+  background: var(--status-danger-soft);
+  color: var(--status-danger);
+  border-color: var(--status-danger-border);
+}
+
+/* Toolbar primary action keeps the reference filled treatment. */
+.action-toolbar .btn-primary {
+  min-height: var(--control-height);
+  padding: 0 1rem;
+}

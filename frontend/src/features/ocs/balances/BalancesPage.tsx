@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { RefreshCw, Sliders } from 'lucide-react';
+import { CheckCircle, RefreshCw, Sliders, Wallet } from 'lucide-react';
 import { Modal } from '../../../components/Modal';
 import { postJson } from '../../../lib/api/mutation-client';
 import { useRead } from '../../../lib/api/use-read';
@@ -9,6 +9,9 @@ import { useAuth } from '../../../providers/AuthProvider';
 import { useI18n } from '../../../providers/I18nProvider';
 import { EmptyState, ErrorState } from '../../../components/ui/StatePanel';
 import { SkeletonTable } from '../../../components/ui/LoadingSkeleton';
+import MetricStrip from '../../../components/ui/MetricStrip';
+import PageHeader from '../../../components/ui/PageHeader';
+import { formatBytes } from '../../../lib/unitParser';
 
 type UnknownRecord = Record<string, unknown>;
 const asRecord = (v: unknown): UnknownRecord => (v && typeof v === 'object' && !Array.isArray(v) ? (v as UnknownRecord) : {});
@@ -21,7 +24,7 @@ const text = (v: unknown) => (v === undefined || v === null || v === '' ? '-' : 
 const numberValue = (v: unknown) => (typeof v === 'number' ? v : Number(v ?? 0) || 0);
 
 export function BalancesPage() {
-  const { t } = useI18n();
+  const { t, formatDateTime } = useI18n();
   const { user } = useAuth();
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
@@ -81,17 +84,28 @@ export function BalancesPage() {
   };
 
   return (
-    <section className="read-page">
-      <header className="read-page-header">
-        <div>
-          <p className="read-marker">Governed OCS Balance Management</p>
-          <h1>Balances</h1>
-        </div>
-        <button type="button" className="read-refresh" onClick={() => void balances.mutate()}>
-          <RefreshCw size={16} />
-          {t('refresh')}
-        </button>
-      </header>
+    <div className="container animate-fade-in">
+      <PageHeader
+        eyebrow={t('nav_ocs')}
+        title={t('ocs_balances_title')}
+        description={t('ocs_balances_desc')}
+        actions={
+          <button type="button" className="btn btn-secondary" onClick={() => void balances.mutate()}>
+            <RefreshCw size={16} />
+            {t('refresh')}
+          </button>
+        }
+      />
+
+      <MetricStrip
+        variant="cards"
+        columns={2}
+        ariaLabel={t('ocs_balances_title')}
+        items={[
+          { key: 'total', label: t('ocs_balance_total_accounts'), value: total, icon: <Wallet size={20} /> },
+          { key: 'active', label: t('ocs_balance_active_accounts'), value: rows.filter((row) => text(row.status).toLowerCase() === 'active').length, icon: <CheckCircle size={20} /> },
+        ]}
+      />
 
       {notice && (
         <div className={`notice-box ${notice.type}`} role="status">
@@ -152,12 +166,13 @@ export function BalancesPage() {
               <thead>
                 <tr>
                   <th>IMSI</th>
-                  <th>Data Available</th>
-                  <th>Voice Available</th>
-                  <th>SMS Available</th>
-                  <th>Status</th>
-                  <th>Version</th>
-                  <th>Actions</th>
+                  <th>{t('ocs_col_data_available')}</th>
+                  <th>{t('ocs_col_voice_avail')}</th>
+                  <th>{t('ocs_col_sms_avail')}</th>
+                  <th>{t('ocs_col_status')}</th>
+                  <th>{t('ocs_col_version')}</th>
+                  <th>{t('ocs_tariff_col_updated')}</th>
+                  <th>{t('actions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -165,14 +180,17 @@ export function BalancesPage() {
                   const imsi = text(row.imsi);
                   return (
                     <tr key={imsi}>
-                      <td data-label="IMSI">{imsi}</td>
-                      <td data-label="Data Available">{text(row.data_available)}</td>
-                      <td data-label="Voice Available">{text(row.voice_available)}</td>
-                      <td data-label="SMS Available">{text(row.sms_available)}</td>
+                      <td data-label="IMSI" className="ocs-mono">{imsi}</td>
+                      <td data-label="Data Available" className="ocs-mono">{formatBytes(numberValue(row.data_available))}</td>
+                      <td data-label="Voice Available" className="ocs-mono">{numberValue(row.voice_available)}s</td>
+                      <td data-label="SMS Available" className="ocs-mono">{numberValue(row.sms_available)}</td>
                       <td data-label="Status">
                         <span className={`badge badge-${text(row.status).toLowerCase()}`}>{text(row.status)}</span>
                       </td>
-                      <td data-label="Version">{text(row.version)}</td>
+                      <td data-label="Version" className="ocs-mono">v{numberValue(row.version) || 1}</td>
+                      <td data-label="Updated" className="ocs-time-cell">
+                        {row.updated_at ? formatDateTime(row.updated_at as string) : '—'}
+                      </td>
                       <td data-label="Actions">
                         <div className="table-actions">
                           <Link to={`/ocs/balances/${encodeURIComponent(imsi)}`} className="btn-secondary btn-sm">
@@ -295,6 +313,6 @@ export function BalancesPage() {
           />
         </div>
       </Modal>
-    </section>
+    </div>
   );
 }

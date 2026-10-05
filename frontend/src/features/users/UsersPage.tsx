@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Ban, Edit2, Key, Plus, RefreshCw } from 'lucide-react';
+import { Ban, Edit2, Key, Plus, RefreshCw, Shield } from 'lucide-react';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Modal } from '../../components/Modal';
 import { patchJson, postJson } from '../../lib/api/mutation-client';
@@ -10,6 +10,7 @@ import { isPasswordStrong, PASSWORD_POLICY_MESSAGE } from '../../lib/security';
 import { useAuth } from '../../providers/AuthProvider';
 import { useI18n } from '../../providers/I18nProvider';
 import { EmptyState, ErrorState } from '../../components/ui/StatePanel';
+import PageHeader from '../../components/ui/PageHeader';
 import { SkeletonTable } from '../../components/ui/LoadingSkeleton';
 import type { CanonicalRole } from '../../types/auth';
 
@@ -32,7 +33,7 @@ export function UsersPage() {
   const [page, setPage] = useState(1);
   const [notice, setNotice] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  const users = useRead<unknown>(`/api/users?page=${page}&limit=20&q=${encodeURIComponent(query)}`);
+  const users = useRead<unknown>(`/api/users?page=${page}&pageSize=20&q=${encodeURIComponent(query)}`);
   const rows = rowsOf(users.data);
   const total = numberValue(
     asRecord(users.data).total ?? asRecord(asRecord(users.data).pagination).total ?? rows.length,
@@ -128,17 +129,19 @@ export function UsersPage() {
   };
 
   return (
-    <section className="read-page">
-      <header className="read-page-header">
-        <div>
-          <p className="read-marker">Governed User Administration</p>
-          <h1>Users</h1>
-        </div>
-        <button type="button" className="read-refresh" onClick={() => void refreshData()}>
-          <RefreshCw size={16} />
-          {t('refresh')}
-        </button>
-      </header>
+    <div className="container animate-fade-in">
+      <PageHeader
+        eyebrow={t('eyebrow_rbac_iam')}
+        icon={<Shield size={23} />}
+        title={t('users_title')}
+        description={t('users_subtitle')}
+        actions={
+          <button type="button" className="btn btn-secondary" onClick={() => void refreshData()}>
+            <RefreshCw size={16} />
+            {t('refresh')}
+          </button>
+        }
+      />
 
       {notice && (
         <div className={`notice-box ${notice.type}`} role="status">
@@ -382,6 +385,6 @@ export function UsersPage() {
         isDanger={true}
         isLoading={submitting}
       />
-    </section>
+    </div>
   );
 }
