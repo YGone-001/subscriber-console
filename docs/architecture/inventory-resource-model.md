@@ -126,6 +126,8 @@ Vendor and functional identities belong in `role` or `software`, not the canonic
 - Retirement must occur through the dedicated `POST /api/inventory/resources/{resourceId}/retire` endpoint.
 - Once retired, any subsequent update or retirement attempt returns HTTP 409 Conflict.
 - Retired resources remain readable via GET queries for historical traceability. Hard deletion is not implemented.
+- Retirement persists only `lifecycleState: retired`, increments `revision`, and updates `updatedAt` and `updatedBy`. It does not persist `retiredAt`, `retiredBy`, or `retireReason` on the Resource; those names remain reserved request fields.
+- The retirement audit record holds the exact operator-supplied `reason`, authenticated actor, target, and before/after resource states.
 
 ### 3.5 Management Endpoints
 - Maximum 16 management endpoints per resource.
@@ -164,7 +166,7 @@ Client attempts to inject `resourceId`, `schemaVersion`, `source`, `revision`, `
 All inventory mutation endpoints (`POST /api/inventory/resources`, `PUT /api/inventory/resources/{resourceId}`, `POST /api/inventory/resources/{resourceId}/retire`) enforce strict JSON decoding:
 - Reusable standard-library decoder with `DisallowUnknownFields()`.
 - Explicit EOF verification ensuring no trailing JSON values or garbage tokens.
-- Request body size bounds enforced via `http.MaxBytesReader` (1 MiB).
+- Request body size bounds enforced with `io.LimitReader(..., maxBodySize + 1)` followed by bounded standard-library reading: 128 KiB for create/update and 64 KiB for retirement.
 - Unknown top-level fields, unknown nested struct fields, and trailing content return HTTP 400 (`MALFORMED_JSON` / `UNKNOWN_FIELD`).
 - Rejected mutations persist 0 changes in MongoDB and record 0 audit logs.
 

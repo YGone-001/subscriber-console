@@ -7,6 +7,7 @@ import type {
 import {
   FORBIDDEN_SERVER_FIELDS,
   validateAttributes,
+  validateLabels,
   validateMachineName,
   validateManagementEndpoints,
 } from './inventory-validation';
@@ -33,6 +34,13 @@ export function buildCreateResourceRequest(input: Partial<CreateResourceRequest>
     const attrError = validateAttributes(input.attributes);
     if (attrError) {
       throw new Error(attrError);
+    }
+  }
+
+  if (input.labels) {
+    const labelError = validateLabels(input.labels);
+    if (labelError) {
+      throw new Error(labelError);
     }
   }
 
@@ -104,6 +112,13 @@ export function buildUpdateResourceRequest(
     const attrError = validateAttributes(input.attributes);
     if (attrError) {
       throw new Error(attrError);
+    }
+  }
+
+  if (input.labels) {
+    const labelError = validateLabels(input.labels);
+    if (labelError) {
+      throw new Error(labelError);
     }
   }
 

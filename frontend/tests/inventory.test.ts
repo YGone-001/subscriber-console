@@ -10,6 +10,9 @@ import {
 import {
   findSensitiveAttributeKey,
   validateAttributes,
+  validateLabelKey,
+  validateLabels,
+  validateLabelValue,
   validateMachineName,
   validateManagementEndpoints,
 } from '../src/features/inventory/inventory-validation';
@@ -60,9 +63,25 @@ test('inventory validation: sensitive attribute key rejection', () => {
   assert.equal(findSensitiveAttributeKey({ password: '123' }), 'password');
   assert.equal(findSensitiveAttributeKey({ admin_secret: 'x' }), 'admin_secret');
   assert.equal(findSensitiveAttributeKey({ auth: { token: 'xyz' } }), 'auth.token');
-  assert.equal(findSensitiveAttributeKey({ api_key: 'abc' }), null); // apiKey vs api_key
+  assert.equal(findSensitiveAttributeKey({ api_key: 'abc' }), 'api_key');
+  assert.equal(findSensitiveAttributeKey({ 'api-key': 'abc' }), 'api-key');
   assert.equal(findSensitiveAttributeKey({ apikey: 'abc' }), 'apikey');
+  assert.equal(findSensitiveAttributeKey({ API_KEY: 'abc' }), 'API_KEY');
   assert.equal(findSensitiveAttributeKey({ credentials: {} }), 'credentials');
+});
+
+test('inventory validation: label grammar and limits match backend authority', () => {
+  for (const key of ['site', 'rack-04', 'tier_name', 'region/zone', '5gc/core']) {
+    assert.equal(validateLabelKey(key), null, `${key} must be accepted`);
+  }
+  for (const key of ['Region', 'SITE', 'cluster.id', '$site', '/site', 'a.b']) {
+    assert.notEqual(validateLabelKey(key), null, `${key} must be rejected`);
+  }
+
+  assert.equal(validateLabels(Object.fromEntries(Array.from({ length: 32 }, (_, index) => [`key${index}`, 'ok']))), null);
+  assert.match(validateLabels(Object.fromEntries(Array.from({ length: 33 }, (_, index) => [`key${index}`, 'ok']))) ?? '', /32/);
+  assert.equal(validateLabelValue('x'.repeat(128)), null);
+  assert.match(validateLabelValue('x'.repeat(129)) ?? '', /128/);
 });
 
 test('inventory validation: attribute structural constraints', () => {
@@ -109,6 +128,15 @@ test('inventory builders: buildCreateResourceRequest validates required and stri
       ...({ revision: 5 } as unknown as Record<string, unknown>),
     } as unknown as Parameters<typeof buildCreateResourceRequest>[0]);
   }, /server-owned/);
+
+  assert.throws(() => {
+    buildCreateResourceRequest({
+      kind: 'host',
+      name: 'h1',
+      domain: 'cloud',
+      labels: { 'cluster.id': 'edge' },
+    });
+  }, /Label key/);
 });
 
 test('inventory builders: buildUpdateResourceRequest enforces expectedRevision and structure', () => {
@@ -160,6 +188,16 @@ test('inventory builders: buildUpdateResourceRequest enforces expectedRevision a
       lifecycleState: 'retired',
     });
   }, /retired/);
+
+  assert.throws(() => {
+    buildUpdateResourceRequest(1, {
+      kind: 'host',
+      name: 'h1',
+      domain: 'cloud',
+      lifecycleState: 'active',
+      labels: { Region: 'cn' },
+    });
+  }, /Label key/);
 });
 
 test('inventory builders: buildRetireResourceRequest enforces expectedRevision and reason', () => {

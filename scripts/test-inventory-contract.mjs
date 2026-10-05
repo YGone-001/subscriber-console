@@ -97,134 +97,116 @@ for (const op of invOperations) {
 // 4. Inventory request contract verification
 const invReqContract = JSON.parse(readFileSync(resolve(frontend, 'inventory-request-contract.json'), 'utf8'));
 
+const forbiddenBodyKeys = [
+  'resourceId', 'schemaVersion', 'source', 'revision', 'createdAt', 'createdBy',
+  'updatedAt', 'updatedBy', 'retiredAt', 'retiredBy', 'retireReason',
+];
+const mutableResourceKeys = [
+  'kind', 'name', 'domain', 'lifecycleState', 'displayName', 'description', 'role',
+  'vendor', 'model', 'software', 'managementEndpoints', 'capabilities', 'labels', 'attributes',
+];
+const exactInventoryRequestContract = [
+  {
+    name: 'inventory resource create',
+    method: 'POST',
+    path: '/api/inventory/resources',
+    queryMode: 'none',
+    backendAuthority: 'backend/internal/inventory/handler.go',
+    productionReference: 'frontend/src/features/inventory/InventoryCreatePage.tsx',
+    requiredBodyKeys: ['kind', 'name', 'domain'],
+    optionalBodyKeys: ['displayName', 'description', 'role', 'lifecycleState', 'vendor', 'model', 'software', 'managementEndpoints', 'capabilities', 'labels', 'attributes'],
+    forbiddenBodyKeys,
+    responseSemantics: 'mutation-result',
+  },
+  {
+    name: 'inventory resource update',
+    method: 'PUT',
+    path: '/api/inventory/resources/{resourceId}',
+    queryMode: 'none',
+    backendAuthority: 'backend/internal/inventory/handler.go',
+    productionReference: 'frontend/src/features/inventory/InventoryDetailPage.tsx',
+    requiredBodyKeys: ['expectedRevision', 'resource'],
+    optionalBodyKeys: [],
+    forbiddenBodyKeys,
+    nestedContracts: {
+      resource: {
+        requiredKeys: ['kind', 'name', 'domain', 'lifecycleState'],
+        allowedKeys: mutableResourceKeys,
+        forbiddenKeys: forbiddenBodyKeys,
+      },
+    },
+    responseSemantics: 'mutation-result',
+  },
+  {
+    name: 'inventory resource retire',
+    method: 'POST',
+    path: '/api/inventory/resources/{resourceId}/retire',
+    queryMode: 'none',
+    backendAuthority: 'backend/internal/inventory/handler.go',
+    productionReference: 'frontend/src/features/inventory/InventoryDetailPage.tsx',
+    requiredBodyKeys: ['expectedRevision', 'reason'],
+    optionalBodyKeys: [],
+    forbiddenBodyKeys,
+    responseSemantics: 'mutation-result',
+  },
+];
+
+function normalize(value) {
+  if (Array.isArray(value)) return value.map(normalize).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.keys(value).sort().map((key) => [key, normalize(value[key])]));
+  }
+  return value;
+}
+
 function validateInventoryRequestContract(contractList) {
   assert.ok(Array.isArray(contractList), 'contract must be an array');
   assert.equal(contractList.length, 3, 'inventory request contract must have 3 entries');
-
-  const requiredFields = [
-    'name',
-    'method',
-    'path',
-    'queryMode',
-    'backendAuthority',
-    'productionReference',
-    'requiredBodyKeys',
-    'optionalBodyKeys',
-    'forbiddenBodyKeys',
-    'responseSemantics',
-  ];
-
-  for (const entry of contractList) {
-    for (const f of requiredFields) {
-      assert.ok(f in entry, `Entry ${entry.name || 'unknown'} missing field: ${f}`);
-    }
-    assert.ok(['POST', 'PUT', 'GET', 'DELETE'].includes(entry.method), `Invalid method ${entry.method}`);
-    assert.ok(entry.path.startsWith('/api/inventory/'), `Invalid path ${entry.path}`);
-    assert.equal(entry.queryMode, 'none', `queryMode must be 'none'`);
-    assert.equal(entry.backendAuthority, 'backend/internal/inventory/handler.go', `Invalid backendAuthority`);
-    assert.ok(
-      entry.productionReference.startsWith('frontend/src/features/inventory/'),
-      `Invalid productionReference: ${entry.productionReference}`,
-    );
-    assert.equal(entry.responseSemantics, 'mutation-result', `responseSemantics must be 'mutation-result'`);
-
-    // Forbidden keys must contain server-owned fields
-    const serverOwned = ['resourceId', 'schemaVersion', 'source', 'revision', 'createdAt', 'createdBy', 'updatedAt', 'updatedBy'];
-    for (const k of serverOwned) {
-      assert.ok(entry.forbiddenBodyKeys.includes(k), `Entry ${entry.name} must forbid server-owned field ${k}`);
-      assert.ok(!entry.requiredBodyKeys.includes(k), `Entry ${entry.name} must not require server-owned field ${k}`);
-      assert.ok(!entry.optionalBodyKeys.includes(k), `Entry ${entry.name} must not allow optional server-owned field ${k}`);
-    }
-  }
-
-  // Check create entry
-  const createEntry = contractList.find((e) => e.method === 'POST' && e.path === '/api/inventory/resources');
-  assert.ok(createEntry, 'Missing create contract entry');
-  assert.ok(createEntry.requiredBodyKeys.includes('kind'), 'create must require kind');
-  assert.ok(createEntry.requiredBodyKeys.includes('name'), 'create must require name');
-  assert.ok(createEntry.requiredBodyKeys.includes('domain'), 'create must require domain');
-
-  // Check update entry
-  const updateEntry = contractList.find((e) => e.method === 'PUT' && e.path === '/api/inventory/resources/{resourceId}');
-  assert.ok(updateEntry, 'Missing update contract entry');
-  assert.ok(updateEntry.requiredBodyKeys.includes('expectedRevision'), 'update must require expectedRevision');
-  assert.ok(updateEntry.requiredBodyKeys.includes('resource'), 'update must require resource');
-  assert.ok(updateEntry.nestedContracts?.resource, 'Update contract must have nestedContracts.resource');
-  const resNested = updateEntry.nestedContracts.resource;
-  assert.ok(resNested.requiredKeys.includes('kind'), 'nested resource must require kind');
-  assert.ok(resNested.requiredKeys.includes('name'), 'nested resource must require name');
-  assert.ok(resNested.requiredKeys.includes('domain'), 'nested resource must require domain');
-  assert.ok(resNested.requiredKeys.includes('lifecycleState'), 'nested resource must require lifecycleState');
-  assert.ok(!resNested.allowedKeys.includes('source'), 'nested resource must not allow source');
-  assert.ok(!resNested.allowedKeys.includes('revision'), 'nested resource must not allow revision');
-
-  // Check retire entry
-  const retireEntry = contractList.find((e) => e.method === 'POST' && e.path === '/api/inventory/resources/{resourceId}/retire');
-  assert.ok(retireEntry, 'Missing retire contract entry');
-  assert.ok(retireEntry.requiredBodyKeys.includes('expectedRevision'), 'retire must require expectedRevision');
-  assert.ok(retireEntry.requiredBodyKeys.includes('reason'), 'retire must require reason');
-  assert.deepEqual(retireEntry.optionalBodyKeys, [], 'Retire entry must have empty optionalBodyKeys');
+  assert.deepEqual(
+    normalize(contractList),
+    normalize(exactInventoryRequestContract),
+    'inventory request contract must exactly match the authoritative operation contracts',
+  );
 }
 
 // Validate production request contract
 validateInventoryRequestContract(invReqContract);
 
-// 4.1 Negative Contract Sentinels in Memory
-// Negative 1: update missing kind
-assert.throws(() => {
-  const bad = JSON.parse(JSON.stringify(invReqContract));
-  const u = bad.find((e) => e.method === 'PUT');
-  u.nestedContracts.resource.requiredKeys = u.nestedContracts.resource.requiredKeys.filter((k) => k !== 'kind');
-  validateInventoryRequestContract(bad);
-}, /nested resource must require kind/);
+// 4.1 Exact negative sentinels prove no set member or operation property drifts.
+function expectExactContractRejection(mutate) {
+  const bad = structuredClone(invReqContract);
+  mutate(bad);
+  assert.throws(() => validateInventoryRequestContract(bad));
+}
 
-// Negative 2: update allowing source
-assert.throws(() => {
-  const bad = JSON.parse(JSON.stringify(invReqContract));
-  const u = bad.find((e) => e.method === 'PUT');
-  u.nestedContracts.resource.allowedKeys.push('source');
-  validateInventoryRequestContract(bad);
-}, /nested resource must not allow source/);
+expectExactContractRejection((bad) => { bad[0].requiredBodyKeys = bad[0].requiredBodyKeys.filter((key) => key !== 'kind'); });
+expectExactContractRejection((bad) => { bad[0].requiredBodyKeys.push('unexpected'); });
+expectExactContractRejection((bad) => { bad[0].optionalBodyKeys.push('unexpected'); });
+expectExactContractRejection((bad) => { bad[1].nestedContracts.resource.allowedKeys.push('unexpected'); });
+expectExactContractRejection((bad) => { bad[1].nestedContracts.resource.allowedKeys = bad[1].nestedContracts.resource.allowedKeys.filter((key) => key !== 'labels'); });
+expectExactContractRejection((bad) => { bad[1].nestedContracts.resource.requiredKeys.push('unexpected'); });
+expectExactContractRejection((bad) => { bad[1].nestedContracts.resource.allowedKeys.push('source'); });
+expectExactContractRejection((bad) => { bad[1].nestedContracts.resource.forbiddenKeys = bad[1].nestedContracts.resource.forbiddenKeys.filter((key) => key !== 'source'); });
+expectExactContractRejection((bad) => { bad[0].backendAuthority = 'backend/internal/other/handler.go'; });
+expectExactContractRejection((bad) => { bad[1].productionReference = 'frontend/src/features/other/OtherPage.tsx'; });
+expectExactContractRejection((bad) => { bad[1].productionReference = 'frontend/src/features/inventory/InventoryCreatePage.tsx'; });
+expectExactContractRejection((bad) => { bad[0].method = 'PUT'; });
+expectExactContractRejection((bad) => { bad[0].path = '/api/inventory/wrong'; });
+expectExactContractRejection((bad) => { bad[0].queryMode = 'optional'; });
+expectExactContractRejection((bad) => { bad[0].responseSemantics = 'resource'; });
 
-// Negative 3: update allowing revision
-assert.throws(() => {
-  const bad = JSON.parse(JSON.stringify(invReqContract));
-  const u = bad.find((e) => e.method === 'PUT');
-  u.nestedContracts.resource.allowedKeys.push('revision');
-  validateInventoryRequestContract(bad);
-}, /nested resource must not allow revision/);
+// Authorization is separately tied to the exact method-and-path operation mapping.
+assert.deepEqual(
+  invOperations.map((op) => ({ request: op.request, authorization: op.authorization })).sort((a, b) => a.request.localeCompare(b.request)),
+  [
+    { request: 'POST /api/inventory/resources', authorization: { kind: 'permission', value: 'core.configure' } },
+    { request: 'PUT /api/inventory/resources/{resourceId}', authorization: { kind: 'permission', value: 'core.configure' } },
+    { request: 'POST /api/inventory/resources/{resourceId}/retire', authorization: { kind: 'permission', value: 'core.configure' } },
+  ].sort((a, b) => a.request.localeCompare(b.request)),
+  'inventory operations must map create, update, and retire to core.configure',
+);
 
-// Negative 4: create allowing schemaVersion
-assert.throws(() => {
-  const bad = JSON.parse(JSON.stringify(invReqContract));
-  const c = bad.find((e) => e.method === 'POST' && e.path === '/api/inventory/resources');
-  c.optionalBodyKeys.push('schemaVersion');
-  validateInventoryRequestContract(bad);
-}, /must not allow optional server-owned field schemaVersion/);
-
-// Negative 5: retire allowing invented optional key
-assert.throws(() => {
-  const bad = JSON.parse(JSON.stringify(invReqContract));
-  const r = bad.find((e) => e.method === 'POST' && e.path.endsWith('/retire'));
-  r.optionalBodyKeys.push('invented');
-  validateInventoryRequestContract(bad);
-}, /Retire entry must have empty optionalBodyKeys/);
-
-// Negative 6: wrong backendAuthority
-assert.throws(() => {
-  const bad = JSON.parse(JSON.stringify(invReqContract));
-  bad[0].backendAuthority = 'backend/internal/other/handler.go';
-  validateInventoryRequestContract(bad);
-}, /Invalid backendAuthority/);
-
-// Negative 7: wrong productionReference
-assert.throws(() => {
-  const bad = JSON.parse(JSON.stringify(invReqContract));
-  bad[0].productionReference = 'src/wrong/path.tsx';
-  validateInventoryRequestContract(bad);
-}, /Invalid productionReference/);
-
-// Negative 8: wrong authorization requirement
+// Negative authorization sentinel
 assert.throws(() => {
   const badOps = JSON.parse(JSON.stringify(invOperations));
   badOps[0].authorization = { kind: 'permission', value: 'core.read' };
@@ -232,20 +214,6 @@ assert.throws(() => {
     assert.deepEqual(op.authorization, { kind: 'permission', value: 'core.configure' });
   }
 });
-
-// Negative 9: wrong HTTP method
-assert.throws(() => {
-  const bad = JSON.parse(JSON.stringify(invReqContract));
-  bad[0].method = 'PATCH';
-  validateInventoryRequestContract(bad);
-}, /Invalid method/);
-
-// Negative 10: wrong path
-assert.throws(() => {
-  const bad = JSON.parse(JSON.stringify(invReqContract));
-  bad[0].path = '/api/subscribers/test';
-  validateInventoryRequestContract(bad);
-}, /Invalid path/);
 
 // 4.2 UI Code Invariant Assertions
 const typesSrc = readFileSync(resolve(inventoryFeatureDir, 'inventory-types.ts'), 'utf8');
@@ -271,6 +239,18 @@ assert.ok(
   detailSrc.includes('value={editKind}') && detailSrc.includes('readOnly'),
   'InventoryDetailPage must render editKind as readOnly',
 );
+
+const validationSrc = readFileSync(resolve(inventoryFeatureDir, 'inventory-validation.ts'), 'utf8');
+const buildersSrc = readFileSync(resolve(inventoryFeatureDir, 'inventory-builders.ts'), 'utf8');
+const inventoryHandlerSrc = readFileSync(resolve(root, 'backend/internal/inventory/handler.go'), 'utf8');
+const inventoryDocsSrc = readFileSync(resolve(root, 'docs/architecture/inventory-resource-model.md'), 'utf8');
+assert.ok(validationSrc.includes("replaceAll('_', '').replaceAll('-', '')"), 'Sensitive attribute normalization must remove underscores and hyphens');
+assert.ok(validationSrc.includes('^[a-z0-9][a-z0-9_/-]{0,62}$'), 'Label grammar must match the lowercase Go grammar with slash support');
+assert.equal((buildersSrc.match(/validateLabels\(input\.labels\)/g) ?? []).length, 2, 'Create and update builders must validate labels');
+assert.ok(inventoryHandlerSrc.includes('io.LimitReader(r, maxBytes+1)'), 'Inventory decoder must use bounded io.LimitReader');
+assert.ok(inventoryDocsSrc.includes('io.LimitReader(..., maxBodySize + 1)'), 'Inventory documentation must describe io.LimitReader');
+assert.ok(!inventoryDocsSrc.includes('http.MaxBytesReader'), 'Inventory documentation must not claim http.MaxBytesReader');
+assert.ok(inventoryDocsSrc.includes('does not persist `retiredAt`, `retiredBy`, or `retireReason`'), 'Inventory documentation must distinguish reserved retirement fields from persisted fields');
 
 // 5. Existing business & operational contracts unchanged
 const businessContract = JSON.parse(readFileSync(resolve(frontend, 'mutation-contract.json'), 'utf8'));
@@ -357,7 +337,17 @@ console.log('business_mutation_endpoints=29');
 console.log('business_request_contracts=31');
 console.log('operational_endpoints=4');
 console.log('inventory_hard_delete_endpoint=0');
-console.log('inventory_contract_sentinels_verified=10');
+console.log('inventory_frontend_sensitive_key_parity=PASS');
+console.log('inventory_frontend_api_key_rejection=PASS');
+console.log('inventory_frontend_label_parity=PASS');
+console.log('inventory_frontend_label_count_limit=PASS');
+console.log('inventory_frontend_label_value_limit=PASS');
+console.log('inventory_frontend_label_builder_enforcement=PASS');
+console.log('inventory_request_contract_exact=PASS');
+console.log('inventory_request_contract_exact_production_reference=PASS');
+console.log('inventory_request_contract_exact_nested_sets=PASS');
+console.log('inventory_request_contract_negative_sentinels=PASS');
+console.log('inventory_contract_sentinels_verified=16');
 console.log('inventory_ui_invariants_verified=true');
 console.log('inventory_raw_fetch=0');
 console.log('inventory_direct_go_urls=0');
@@ -366,4 +356,11 @@ console.log('inventory_auth_cookie_access=0');
 console.log('inventory_trusted_identity_headers=0');
 console.log('inventory_automatic_mutation_retries=0');
 console.log('inventory_generic_executor_calls=0');
+console.log('inventory_decoder_documentation=PASS');
+console.log('inventory_retirement_documentation=PASS');
+console.log('inventory_topology_api=0');
+console.log('inventory_topology_collection=0');
+console.log('inventory_relationship_collection=0');
+console.log('inventory_remote_executor_calls=0');
+console.log('inventory_r1_result=PASS');
 console.log('inventory_contract_result=PASS');

@@ -1,7 +1,7 @@
 import type { ManagementEndpoint } from './inventory-types';
 
 export const MACHINE_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
-export const LABEL_KEY_PATTERN = /^[A-Za-z0-9]([A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$/;
+export const LABEL_KEY_PATTERN = /^[a-z0-9][a-z0-9_/-]{0,62}$/;
 
 export const SENSITIVE_KEY_SUBSTRINGS = [
   'password',
@@ -11,7 +11,6 @@ export const SENSITIVE_KEY_SUBSTRINGS = [
   'apikey',
   'privatekey',
   'credential',
-  'credentials',
 ];
 
 export const FORBIDDEN_SERVER_FIELDS = [
@@ -39,18 +38,36 @@ export function validateMachineName(name: string): string | null {
 }
 
 export function validateLabelKey(key: string): string | null {
-  if (!key || !key.trim()) {
+  if (!key) {
     return 'Label key cannot be empty.';
   }
-  if (!LABEL_KEY_PATTERN.test(key.trim())) {
-    return 'Label key must start and end with an alphanumeric character and contain only alphanumerics, dots, underscores, or hyphens (up to 63 characters).';
+  if (!LABEL_KEY_PATTERN.test(key)) {
+    return 'Label key must start with a lowercase alphanumeric character and contain only lowercase alphanumerics, underscores, slashes, or hyphens (up to 63 characters).';
   }
   return null;
 }
 
 export function validateLabelValue(value: string): string | null {
-  if (value.length > 128) {
+  if (new TextEncoder().encode(value).length > 128) {
     return 'Label value cannot exceed 128 characters.';
+  }
+  return null;
+}
+
+export function validateLabels(labels: Record<string, string>): string | null {
+  const entries = Object.entries(labels);
+  if (entries.length > 32) {
+    return 'Labels cannot have more than 32 entries.';
+  }
+  for (const [key, value] of entries) {
+    const keyError = validateLabelKey(key);
+    if (keyError) {
+      return keyError;
+    }
+    const valueError = validateLabelValue(value);
+    if (valueError) {
+      return valueError;
+    }
   }
   return null;
 }
@@ -69,9 +86,9 @@ export function findSensitiveAttributeKey(obj: unknown, prefix = ''): string | n
 
   const record = obj as Record<string, unknown>;
   for (const [key, value] of Object.entries(record)) {
-    const lowerKey = key.toLowerCase();
+    const normalizedKey = key.toLowerCase().replaceAll('_', '').replaceAll('-', '');
     for (const forbidden of SENSITIVE_KEY_SUBSTRINGS) {
-      if (lowerKey.includes(forbidden)) {
+      if (normalizedKey.includes(forbidden)) {
         return prefix ? `${prefix}.${key}` : key;
       }
     }

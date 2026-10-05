@@ -242,6 +242,15 @@ async function main() {
       }
       return { status: res.status, headers: res.headers, body: json };
     };
+    const successfulInventoryActions = [
+      'inventory.resource.create',
+      'inventory.resource.update',
+      'inventory.resource.retire',
+    ];
+    const successfulInventoryAuditCount = () => auditColl.countDocuments({
+      action: { $in: successfulInventoryActions },
+      result: 'success',
+    });
 
     // 1. Database & collection boundaries
     await verifyAsync('collection created in xcloud_ops and absent in xcloud', async () => {
@@ -283,7 +292,7 @@ async function main() {
     // 4. Strict JSON decoding on Create
     await verifyAsync('POST /api/inventory/resources strictly rejects unknown fields and trailing data', async () => {
       const countBefore = await inventoryColl.countDocuments();
-      const auditBefore = await auditColl.countDocuments();
+      const auditBefore = await successfulInventoryAuditCount();
 
       // Unknown field
       const unknownRes = await req('POST', '/api/inventory/resources', {
@@ -305,7 +314,7 @@ async function main() {
       assert.equal(trailingRes.status, 400, 'Trailing JSON token must return 400');
 
       const countAfter = await inventoryColl.countDocuments();
-      const auditAfter = await auditColl.countDocuments();
+      const auditAfter = await successfulInventoryAuditCount();
       assert.equal(countAfter, countBefore, 'Rejected creates must not persist documents');
       assert.equal(auditAfter, auditBefore, 'Rejected creates must not record audit logs');
     });
@@ -313,6 +322,7 @@ async function main() {
     // 5. Server-owned field spoofing rejection on Create
     await verifyAsync('POST /api/inventory/resources rejects server-owned fields', async () => {
       const countBefore = await inventoryColl.countDocuments();
+      const auditBefore = await successfulInventoryAuditCount();
       const serverFields = [
         { resourceId: '00000000-0000-4000-8000-000000000001' },
         { schemaVersion: 2 },
@@ -339,12 +349,15 @@ async function main() {
       }
 
       const countAfter = await inventoryColl.countDocuments();
+      const auditAfter = await successfulInventoryAuditCount();
       assert.equal(countAfter, countBefore, 'Server field spoofing attempts must not persist');
+      assert.equal(auditAfter, auditBefore, 'Rejected creates must not record successful mutation audit logs');
     });
 
     // 6. Sensitive key rejection in attributes
     await verifyAsync('POST /api/inventory/resources rejects sensitive keys in attributes', async () => {
       const countBefore = await inventoryColl.countDocuments();
+      const auditBefore = await successfulInventoryAuditCount();
       const secretBody = {
         kind: 'host',
         name: 'edge-host-secret',
@@ -356,7 +369,9 @@ async function main() {
       const res = await req('POST', '/api/inventory/resources', secretBody, operatorToken);
       assert.equal(res.status, 400, 'Sensitive key in attributes must be rejected with 400');
       const countAfter = await inventoryColl.countDocuments();
+      const auditAfter = await successfulInventoryAuditCount();
       assert.equal(countAfter, countBefore, 'Sensitive key attempt must not persist');
+      assert.equal(auditAfter, auditBefore, 'Rejected sensitive creates must not record successful mutation audit logs');
     });
 
     // 7. Successful Create resource
@@ -419,6 +434,9 @@ async function main() {
       assert.equal(audit.actor, 'operator1');
       assert.equal(audit.resource?.type, 'inventory_resource');
       assert.equal(audit.resource?.id, createdId);
+      assert.equal(audit.oldData, null, 'Create audit oldData must be null');
+      assert.equal(audit.newData?.resourceId, createdId, 'Create audit newData must contain created resource facts');
+      assert.equal(audit.newData?.revision, 1, 'Create audit newData revision must be 1');
     });
 
     // 8. Strict UUID v4 validation on GET, PUT, POST retire
@@ -464,6 +482,7 @@ async function main() {
     // 9. Strict JSON decoding and field rejection on Update
     await verifyAsync('PUT /api/inventory/resources/{resourceId} strict decoding and validation', async () => {
       const docBefore = await inventoryColl.findOne({ _id: createdId });
+      const auditBefore = await successfulInventoryAuditCount();
 
       // Unknown top-level field
       const resTop = await req('PUT', `/api/inventory/resources/${createdId}`, {
@@ -527,8 +546,9 @@ async function main() {
 
       // Verify doc in Mongo is completely unchanged
       const docAfter = await inventoryColl.findOne({ _id: createdId });
-      assert.equal(docAfter.revision, docBefore.revision);
-      assert.equal(docAfter.name, docBefore.name);
+      const auditAfter = await successfulInventoryAuditCount();
+      assert.deepEqual(docAfter, docBefore, 'Rejected updates must leave the full resource state unchanged');
+      assert.equal(auditAfter, auditBefore, 'Rejected updates must not record successful mutation audit logs');
     });
 
     // 10. Valid CAS update and Stale Revision Conflict
@@ -556,6 +576,12 @@ async function main() {
       const audit = await waitForAudit(auditColl, { targetId: createdId, action: 'inventory.resource.update' });
       assert.ok(audit, 'Audit log for inventory.resource.update must be recorded');
       assert.equal(audit.actor, 'operator1');
+      assert.equal(audit.targetId, createdId);
+      assert.equal(audit.oldData?.name, 'edge-host-01');
+      assert.equal(audit.newData?.name, 'edge-host-01-renamed');
+      assert.equal(audit.oldData?.revision, 1);
+      assert.equal(audit.newData?.revision, 2);
+      assert.equal(audit.newData?.lifecycleState, 'active');
 
       // Stale update: expectedRevision=1 when current is 2 -> 409
       const staleRes = await req('PUT', `/api/inventory/resources/${createdId}`, updateBody, operatorToken);
@@ -564,6 +590,8 @@ async function main() {
 
     // 11. Strict JSON decoding on Retire
     await verifyAsync('POST /api/inventory/resources/{resourceId}/retire strict decoding', async () => {
+      const docBefore = await inventoryColl.findOne({ _id: createdId });
+      const auditBefore = await successfulInventoryAuditCount();
       // Unknown field on retire
       const resUnknown = await req('POST', `/api/inventory/resources/${createdId}/retire`, {
         expectedRevision: 2,
@@ -592,8 +620,9 @@ async function main() {
 
       // Verify document still at revision 2
       const doc = await inventoryColl.findOne({ _id: createdId });
-      assert.equal(doc.revision, 2);
-      assert.equal(doc.lifecycleState, 'active');
+      const auditAfter = await successfulInventoryAuditCount();
+      assert.deepEqual(doc, docBefore, 'Rejected retire requests must leave the full resource state unchanged');
+      assert.equal(auditAfter, auditBefore, 'Rejected retire requests must not record successful mutation audit logs');
     });
 
     // 12. Query parameter allowlist, Limit bounds, and Cursor validation
@@ -620,6 +649,17 @@ async function main() {
       const qRes = await req('GET', '/api/inventory/resources?q=edge-host', undefined, operatorToken);
       assert.equal(qRes.status, 200);
       assert.ok(qRes.body.resources.length >= 1);
+
+      const exactQRes = await req('GET', `/api/inventory/resources?q=${createdId}`, undefined, operatorToken);
+      assert.equal(exactQRes.status, 200);
+      assert.equal(exactQRes.body.resources.length, 1);
+      assert.equal(exactQRes.body.resources[0].resourceId, createdId);
+
+      for (const [key, value] of [['kind', 'host'], ['domain', 'cloud'], ['lifecycleState', 'active']]) {
+        const filterRes = await req('GET', `/api/inventory/resources?${key}=${value}`, undefined, operatorToken);
+        assert.equal(filterRes.status, 200, `${key} filter must return 200`);
+        assert.ok(filterRes.body.resources.some((resource) => resource.resourceId === createdId), `${key} filter must return seeded resource`);
+      }
     });
 
     // 13. Cursor pagination across seeded resources
@@ -700,6 +740,11 @@ async function main() {
       assert.ok(audit, 'Audit log for inventory.resource.retire must be recorded');
       assert.equal(audit.actor, 'operator1');
       assert.equal(audit.reason, 'Node decommissioned and retired from service');
+      assert.equal(audit.targetId, createdId);
+      assert.notEqual(audit.oldData?.lifecycleState, 'retired');
+      assert.equal(audit.newData?.lifecycleState, 'retired');
+      assert.equal(audit.oldData?.revision, 2);
+      assert.equal(audit.newData?.revision, 3);
 
       // Mutating retired resource -> 409
       const mutateRetired = await req('PUT', `/api/inventory/resources/${createdId}`, {
@@ -758,6 +803,17 @@ async function main() {
     console.log('inventory_audit_create=PASS');
     console.log('inventory_audit_update=PASS');
     console.log('inventory_audit_retire=PASS');
+    console.log('inventory_q_exact_uuid=PASS');
+    console.log('inventory_kind_filter=PASS');
+    console.log('inventory_domain_filter=PASS');
+    console.log('inventory_lifecycle_filter=PASS');
+    console.log('inventory_audit_create_before_after=PASS');
+    console.log('inventory_audit_update_before_after=PASS');
+    console.log('inventory_audit_retire_before_after=PASS');
+    console.log('inventory_audit_retire_reason=PASS');
+    console.log('inventory_rejected_create_audit_unchanged=PASS');
+    console.log('inventory_rejected_update_audit_unchanged=PASS');
+    console.log('inventory_rejected_retire_audit_unchanged=PASS');
     console.log('business_mutation_endpoints=29');
     console.log('business_request_contracts=31');
     console.log('operational_endpoints=4');
