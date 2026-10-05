@@ -19,7 +19,7 @@ REST API and internally serves the embedded static React SPA.
 - Client-side auth gate (`AuthGate`)
 
 Location: `frontend/src/` (canonical React + Vite SPA source)
-Legacy Next.js source and port 13333 are retired.
+Legacy Next.js source is retired; numeric port 13333 is reassigned to Vite development.
 
 The frontend does not know which process answers an API call.
 API paths remain `/api/...` unchanged.
@@ -64,7 +64,7 @@ Browser -> Nginx -> Go 127.0.0.1:18888
                      `-- embedded static React SPA
 ```
 
-The legacy Next.js runtime and its port 13333 contract are retired, and `frontend/` is the canonical React+Vite SPA source.
+The legacy Next.js runtime is retired (with numeric port 13333 reassigned to Vite development), and `frontend/` is the canonical React+Vite SPA source.
 
 ## Invariant Security Boundary
 

@@ -6,7 +6,7 @@
  * processes, and record their ownership so `local:stop` can later verify them.
  *
  * It never installs, starts, or enables MongoDB or Nginx. Normal local development
- * uses the Vite dev server at 127.0.0.1:13334 which proxies /api requests directly
+ * uses the Vite dev server at 127.0.0.1:13333 which proxies /api requests directly
  * to Go at 127.0.0.1:18888. Nginx is not required for local development.
  *
  * The Go child is started with the PRODUCTION default listen address. HTTP_ADDR is

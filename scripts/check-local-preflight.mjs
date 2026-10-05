@@ -8,7 +8,7 @@
  * canonical local ports, classifies who owns each listener, and reports whether the
  * environment is safe to proceed.
  *
- * Canonical component ports (13334 Frontend, 18888 Go) must be project-managed, never
+ * Canonical component ports (13333 Frontend, 18888 Go) must be project-managed, never
  * merely occupied. MongoDB (27017) is allowed to already be running, provided the
  * expected service answers.
  *

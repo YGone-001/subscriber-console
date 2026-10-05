@@ -262,7 +262,7 @@ function testToolPresence() {
   check('present-doctor', typeof scripts['local:doctor'] === 'string');
   check('present-stop', typeof scripts['local:stop'] === 'string');
 
-  check('canonical-frontend-port', CANONICAL_PORTS.frontend === 13334);
+  check('canonical-frontend-port', CANONICAL_PORTS.frontend === 13333);
   check('canonical-next-port-absent', CANONICAL_PORTS.next === undefined);
   check('canonical-go-port', CANONICAL_PORTS.go === 18888);
 
@@ -294,10 +294,10 @@ function testToolPresence() {
 function testDocumentation() {
   const agents = readFile('AGENTS.md');
   const claude = readFile('CLAUDE.md');
-  check('agents-contamination-rule', /Never resolve canonical port contamination by changing 13334\/18888/.test(agents));
+  check('agents-contamination-rule', /Never resolve canonical port contamination by changing 13333\/18888/.test(agents));
   check('agents-preflight-rule', agents.includes('local:preflight'));
   check('agents-no-auto-kill-rule', /Never automatically kill an arbitrary listener/.test(agents));
-  check('claude-preflight-rule', claude.includes('local:preflight') && claude.includes('13334/18888'));
+  check('claude-preflight-rule', claude.includes('local:preflight') && claude.includes('13333/18888'));
 }
 
 // ---------------------------------------------------------------------------

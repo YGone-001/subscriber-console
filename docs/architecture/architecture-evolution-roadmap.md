@@ -18,7 +18,7 @@ The roadmap preserves these present facts:
 - Nginx is the sole public browser edge (single upstream `xcloud_go`).
 - Go runs on loopback `127.0.0.1:18888` and owns every current production API
   operation, API security authority, and embedded static React SPA hosting.
-- Next.js source and port 13333 are retired.
+- Next.js source is retired; numeric port 13333 is reassigned to Vite development.
 - MongoDB `xcloud` and `xcloud_ops` remain the current source of truth.
 - The OCS management plane is frozen; the charging plane remains excluded.
 - Authorized business operations use direct execution with RBAC, fresh actor
@@ -57,8 +57,8 @@ MongoDB: xcloud + xcloud_ops
 ```
 
 Single-upstream consolidation and frontend canonicalization are complete: Nginx proxies all production traffic
-to Go `:18888`, which serves both the REST API and the embedded static React SPA. Next.js and port `13333`
-are retired, and `frontend/` is the canonical React+Vite SPA source.
+to Go `:18888`, which serves both the REST API and the embedded static React SPA. Next.js runtime
+is retired, and `frontend/` is the canonical React+Vite SPA source.
 
 ### Implementation Status
 
@@ -68,7 +68,7 @@ read-side business projections, governed business mutations, and operational mut
 Go embedded static SPA hosting is edge-active. Nginx routes all production traffic
 to Go `:18888`.
 `frontend/` is the active production SPA source.
-The Vite listener on `127.0.0.1:13334` is the loopback-only development server.
+The Vite listener on `127.0.0.1:13333` is the loopback-only development server.
 
 ### Internal Backend Direction
 

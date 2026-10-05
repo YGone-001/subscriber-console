@@ -5,7 +5,7 @@
  * READ-ONLY diagnostic. It never starts or stops Vite, Go, or MongoDB; it
  * only inspects the currently running local development topology and reports what is reachable.
  *
- * The supported development browser entry is the Vite dev server at http://127.0.0.1:13334.
+ * The supported development browser entry is the Vite dev server at http://127.0.0.1:13333.
  * Vite proxies browser-relative /api requests directly to Go at 127.0.0.1:18888.
  *
  * Probing and interpretation live in `scripts/lib/local-runtime.mjs` so this doctor
@@ -47,10 +47,10 @@ async function main() {
     console.log('\nGo backend is not reachable on 127.0.0.1:18888.');
   }
   if (!frontendReady) {
-    console.log('\nFrontend UI is not reachable on 127.0.0.1:13334.');
+    console.log('\nFrontend UI is not reachable on 127.0.0.1:13333.');
   }
   if (frontendReady && goReady && !frontendApiRouted) {
-    console.log('\nFrontend API proxy at 127.0.0.1:13334/api did not reach Go authentication boundary.');
+    console.log('\nFrontend API proxy at 127.0.0.1:13333/api did not reach Go authentication boundary.');
   }
 
   if (result === 'FULL_STACK_READY') {

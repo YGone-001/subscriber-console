@@ -212,6 +212,48 @@ export function detectFrontendProductionServerDocs(docText) {
   return violations;
 }
 
+/**
+ * Detect active presentation of obsolete dev port 13334 as Vite dev server:
+ * - 127.0.0.1:13334
+ * - localhost:13334
+ * - Vite ... 13334
+ * Lines marked with retirement/prohibition/historical keywords are permitted.
+ */
+export function detectObsoleteDevPort13334(docText) {
+  const violations = [];
+  const lines = docText.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const rawLine = lines[i];
+    if (/(?:prohibit|retired|退役|never|not|must not|cannot|zero|deleted|absence|removed|histor|reassign|old)/i.test(rawLine)) {
+      continue;
+    }
+    if (/(?:127\.0\.0\.1:13334|localhost:13334|Vite.*13334|\bport\s+13334\b)/i.test(rawLine)) {
+      violations.push({ line: i + 1, name: 'obsolete_port_13334', text: rawLine.trim() });
+    }
+  }
+  return violations;
+}
+
+/**
+ * Detect active presentation of Next.js running on port 13333 as current architecture.
+ * Next.js on 13333 is permanently retired.
+ * Lines marked with retirement/prohibition/reassignment keywords are permitted.
+ */
+export function detectNextOnPort13333(docText) {
+  const violations = [];
+  const lines = docText.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const rawLine = lines[i];
+    if (/(?:prohibit|retired|退役|never|not|must not|cannot|zero|deleted|absence|removed|histor|reassign|old|no longer)/i.test(rawLine)) {
+      continue;
+    }
+    if (/(?:Next(?:\.js)?.*(?:13333|:13333)|(?:13333|:13333).*Next(?:\.js)?)/i.test(rawLine)) {
+      violations.push({ line: i + 1, name: 'next_on_port_13333', text: rawLine.trim() });
+    }
+  }
+  return violations;
+}
+
 console.log('Testing current architecture documentation consistency...');
 
 // 1. OCS Management Runbook
@@ -275,7 +317,7 @@ for (const pattern of forbiddenInAgents) {
 assert.ok(agents.includes('Best-effort / non-business-gating operation logging'), 'AGENTS.md must document best-effort operation logging');
 assert.ok(agents.includes('Nginx'), 'AGENTS.md must describe the Nginx edge');
 assert.ok(agents.includes('127.0.0.1:18888'), 'AGENTS.md must document the Go upstream 127.0.0.1:18888');
-assert.ok(agents.includes('127.0.0.1:13334') || agents.includes('13334'), 'AGENTS.md must document Vite dev server 127.0.0.1:13334');
+assert.ok(agents.includes('127.0.0.1:13333') || agents.includes('13333'), 'AGENTS.md must document Vite dev server 127.0.0.1:13333');
 assert.ok(agents.includes('embedded static React SPA') || agents.includes('embedded static SPA'), 'AGENTS.md must document Go embedded SPA hosting');
 assert.ok(agents.includes('84 exact METHOD+PATH registrations'), 'AGENTS.md must document the 84 Go registration authority');
 assert.ok(agents.includes('Route authority'), 'AGENTS.md must document the derived Go registration authority');
@@ -301,7 +343,7 @@ for (const pattern of forbiddenInDeployment) {
 }
 
 assert.ok(deployment.includes('127.0.0.1:18888'), 'deployment.md must document the Go upstream 127.0.0.1:18888');
-assert.ok(deployment.includes('13334') || deployment.includes('127.0.0.1:13334') || deployment.includes('retired'), 'deployment.md must document dev port 13334 or retired Next.js');
+assert.ok(deployment.includes('13333') || deployment.includes('127.0.0.1:13333'), 'deployment.md must document dev port 13333');
 assert.ok(deployment.includes('upstream xcloud_go'), 'deployment.md must document the single Go upstream xcloud_go');
 assert.ok(deployment.includes('location = /api'), 'deployment.md must document the exact /api Go location');
 assert.ok(deployment.includes('location /api/'), 'deployment.md must document the /api/ Go location');
@@ -329,7 +371,7 @@ const readme = fs.readFileSync(readmePath, 'utf8');
 assert.ok(!readme.includes('approval governance'), 'README.md must not list active approval governance in features');
 assert.ok(!/route-owner table/i.test(readme), 'README.md must not present a route-owner table as the current architecture');
 assert.ok(readme.includes('127.0.0.1:18888'), 'README.md must document the Go upstream 127.0.0.1:18888');
-assert.ok(readme.includes('13334') || readme.includes('127.0.0.1:13334') || readme.includes('retired'), 'README.md must document dev port 13334 or retired Next.js');
+assert.ok(readme.includes('13333') || readme.includes('127.0.0.1:13333'), 'README.md must document dev port 13333');
 assert.ok(readme.includes('React 19'), 'README.md must document React 19 in production tech stack');
 assert.ok(readme.includes('Vite 8'), 'README.md must document Vite 8 in production tech stack');
 
@@ -372,7 +414,7 @@ const systemArchPath = path.join(ROOT, 'docs/architecture/system-architecture.md
 const systemArch = fs.readFileSync(systemArchPath, 'utf8');
 assert.ok(systemArch.includes('Nginx'), 'system-architecture.md must describe the Nginx edge');
 assert.ok(systemArch.includes('127.0.0.1:18888'), 'system-architecture.md must document the Go upstream 127.0.0.1:18888');
-assert.ok(systemArch.includes('13334') || systemArch.includes('retired'), 'system-architecture.md must document dev port 13334 or retired Next.js');
+assert.ok(systemArch.includes('13333') || systemArch.includes('127.0.0.1:13333'), 'system-architecture.md must document dev port 13333');
 assert.ok(!/route-owner table/i.test(systemArch), 'system-architecture.md must not present a route-owner table as the current architecture');
 
 // 8. Current documentation framework version must match the installed manifest.
@@ -593,6 +635,56 @@ for (const s of EXPECTED_FRONTEND_SCRIPTS) {
 const positiveValidation = validateDocumentedFrontendScripts(EXPECTED_FRONTEND_SCRIPTS, declaredFrontendScripts);
 assert.equal(positiveValidation.length, 0, 'All expected frontend scripts must be declared');
 
+// 13. Dev port 13333 reassignment and Next retirement guards
+const obsoletePort13334Violations = [];
+const nextOnPort13333Violations = [];
+for (const docFile of activeDocs) {
+  const content = fs.readFileSync(docFile, 'utf8');
+  const port13334Hits = detectObsoleteDevPort13334(content);
+  for (const hit of port13334Hits) {
+    obsoletePort13334Violations.push({ file: path.relative(ROOT, docFile).replaceAll('\\', '/'), ...hit });
+  }
+  const next13333Hits = detectNextOnPort13333(content);
+  for (const hit of next13333Hits) {
+    nextOnPort13333Violations.push({ file: path.relative(ROOT, docFile).replaceAll('\\', '/'), ...hit });
+  }
+}
+assert.equal(
+  obsoletePort13334Violations.length,
+  0,
+  `Active documentation presents obsolete port 13334: ${JSON.stringify(obsoletePort13334Violations)}`
+);
+assert.equal(
+  nextOnPort13333Violations.length,
+  0,
+  `Active documentation presents Next.js on port 13333: ${JSON.stringify(nextOnPort13333Violations)}`
+);
+
+// Negative sentinels: prove detectors flag synthetic violations (falsifiability)
+const syntheticObsolete13334Examples = [
+  'Vite dev server runs at 127.0.0.1:13334',
+  'Browse to http://localhost:13334 to view the app',
+  'Default Vite dev port 13334',
+];
+let sentinelObsolete13334DetectedCount = 0;
+for (const ex of syntheticObsolete13334Examples) {
+  const detected = detectObsoleteDevPort13334(ex);
+  assert.ok(detected.length > 0, `detectObsoleteDevPort13334 must flag synthetic example: "${ex}"`);
+  sentinelObsolete13334DetectedCount++;
+}
+
+const syntheticNext13333Examples = [
+  'Next.js dev server listening on 127.0.0.1:13333',
+  'production Next.js runs on port 13333',
+  'Next.js on 13333 proxies to Go',
+];
+let sentinelNext13333DetectedCount = 0;
+for (const ex of syntheticNext13333Examples) {
+  const detected = detectNextOnPort13333(ex);
+  assert.ok(detected.length > 0, `detectNextOnPort13333 must flag synthetic example: "${ex}"`);
+  sentinelNext13333DetectedCount++;
+}
+
 console.log('Current architecture documentation consistency: PASS');
 
 console.log(`documented_next_version=${documentedNextVersion}`);
@@ -610,6 +702,10 @@ console.log(`frontend_production_server_docs_hits=${prodServerDocViolations.leng
 console.log(`sentinel_nonexistent_start_detected=true`);
 console.log(`sentinel_invented_script_detected=true`);
 console.log(`sentinel_prod_server_docs_detected=true`);
+console.log(`sentinel_obsolete_port_13334_detected=true`);
+console.log(`sentinel_next_on_13333_detected=true`);
+console.log(`current_docs_obsolete_port_13334_refs=${obsoletePort13334Violations.length}`);
+console.log(`current_docs_next_on_13333_refs=${nextOnPort13333Violations.length}`);
 console.log(`frontend_command_contract_result=PASS`);
 console.log(`canonicalization_cleanup_result=PASS`);
 console.log(`local_workflow_contract=PASS`);

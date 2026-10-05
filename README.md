@@ -36,16 +36,16 @@ Browser → Nginx (only public origin)
 The Nginx edge routes all public production traffic to the single Go upstream (`127.0.0.1:18888`).
 The Go backend owns every production API operation (84 exact METHOD+PATH registrations),
 session authentication, and embedded static React SPA hosting.
-Next.js and port 13333 are completely retired. Production Node.js runtime required = NO.
+Next.js runtime is completely retired. Production Node.js runtime required = NO.
 
 ### Development Architecture
 
 ```
-Browser → Vite dev server 127.0.0.1:13334
+Browser → Vite dev server 127.0.0.1:13333
            └── /api/* → Go 127.0.0.1:18888
 ```
 
-In local development, the Vite dev server runs at `127.0.0.1:13334` and proxies `/api/*` to the Go backend at `127.0.0.1:18888`.
+In local development, the Vite dev server runs at `127.0.0.1:13333` and proxies `/api/*` to the Go backend at `127.0.0.1:18888`.
 Local development does not require Nginx.
 
 ## Features
@@ -99,17 +99,17 @@ Static assets are built from `frontend/` and embedded directly into the Go backe
 
 ### Legacy Frontend
 
-- Retired (Next.js App Router and port 13333 retired).
+- Retired (Next.js App Router retired; numeric port 13333 reassigned to Vite development).
 
 ## Quick Start
 
 The production application is served by the Nginx edge fronting Go `127.0.0.1:18888`.
-In local development, the application runs on Vite `127.0.0.1:13334` proxying to Go `127.0.0.1:18888`.
+In local development, the application runs on Vite `127.0.0.1:13333` proxying to Go `127.0.0.1:18888`.
 
 ```text
 MongoDB     xcloud + xcloud_ops
 Go backend  127.0.0.1:18888   internal application service (API + embedded static SPA)
-Vite dev    127.0.0.1:13334   local frontend development server (/api proxy to Go)
+Vite dev    127.0.0.1:13333   local frontend development server (/api proxy to Go)
 Nginx edge  production public browser entry, default http://localhost
 ```
 
@@ -120,7 +120,7 @@ Local development workflow:
 2. start MongoDB
 3. npm run local:dev          start managed Go + Vite development processes
 4. npm run local:doctor       verify the dev topology
-5. browse http://localhost:13334
+5. browse http://localhost:13333
 ```
 
 ### 1. Install dependencies
@@ -151,8 +151,8 @@ npm run mongo:init
 npm run local:preflight
 ```
 
-Read-only. It classifies the owner of ports 13334, 18888 and 27017 before anything starts.
-Never resolve canonical port contamination by changing 13334/18888; diagnose the owner.
+Read-only. It classifies the owner of ports 13333, 18888 and 27017 before anything starts.
+Never resolve canonical port contamination by changing 13333/18888; diagnose the owner.
 
 ### 4. Start the required services
 
@@ -164,7 +164,7 @@ Then start the project-owned Go and Vite development processes:
 npm run local:dev
 ```
 
-This builds and runs Go on `127.0.0.1:18888` and Vite on `127.0.0.1:13334`, and records process ownership.
+This builds and runs Go on `127.0.0.1:18888` and Vite on `127.0.0.1:13333`, and records process ownership.
 Local development does not require Nginx.
 
 ### 5. Verify
@@ -181,7 +181,7 @@ npm run local:doctor
 Open the local application at:
 
 ```text
-http://localhost:13334
+http://localhost:13333
 ```
 
 ### 7. Stop

@@ -7,9 +7,9 @@
     "node": ">=20.19.0"
   },
   "scripts": {
-    "dev": "vite --host 127.0.0.1 --port 13334 --strictPort",
+    "dev": "vite --host 127.0.0.1 --port 13333 --strictPort",
     "build": "tsc -b && vite build",
-    "preview": "vite preview --host 127.0.0.1 --port 13334 --strictPort",
+    "preview": "vite preview --host 127.0.0.1 --port 13333 --strictPort",
     "lint": "eslint .",
     "typecheck": "tsc -b --pretty false",
     "test": "tsx --test tests/auth-state.test.ts tests/route-contract.test.ts tests/shell-contract.test.ts tests/read-client.test.ts tests/mutation-client.test.ts tests/user-routes.test.ts tests/disabled-operations.test.ts tests/subscriber-mutation-builders.test.ts tests/system-health-operational.test.ts",

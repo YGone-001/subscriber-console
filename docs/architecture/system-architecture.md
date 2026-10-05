@@ -49,7 +49,7 @@ registrations parsed from `backend/cmd/server/main.go` plus
 ### Frontend
 
 - **Production UI**: `frontend/` (React 19, Vite 8, React Router, Tailwind CSS, Lucide React). Built to static assets and embedded directly into the Go binary.
-- Legacy Next.js source and port 13333 are retired.
+- Legacy Next.js source is retired; numeric port 13333 is reassigned to Vite development.
 
 The Next.js business backend (`frontend/src/app/api/**` and `frontend/src/server/**`) does not exist.
 
@@ -126,10 +126,10 @@ PRODUCTION
 Browser -> Nginx -> Go 127.0.0.1:18888 (API + embedded static SPA) -> MongoDB
 
 DEVELOPMENT
-Browser -> Vite 127.0.0.1:13334 -> Go 127.0.0.1:18888 (/api proxy) -> MongoDB
+Browser -> Vite 127.0.0.1:13333 -> Go 127.0.0.1:18888 (/api proxy) -> MongoDB
 ```
 
-In production, Nginx remains the sole public edge and Go serves both the API and the embedded static SPA. In local development, the Vite dev server on `127.0.0.1:13334` proxies `/api` calls directly to Go on `127.0.0.1:18888`, without requiring Nginx. Next.js and port 13333 are retired.
+In production, Nginx remains the sole public edge and Go serves both the API and the embedded static SPA. In local development, the Vite dev server on `127.0.0.1:13333` proxies `/api` calls directly to Go on `127.0.0.1:18888`, without requiring Nginx. The old Next.js runtime is retired, and port 13333 is reassigned to Vite development; port 13334 is retired.
 
 ## Evolution Authority
 

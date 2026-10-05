@@ -114,7 +114,7 @@ Current production state:
 - Nginx 是唯一对外入口，单一应用 upstream (`xcloud_go` 127.0.0.1:18888)，代理 `/api`、`/api/*`、SSE 及 `/*`（SPA shell 与静态资源），并剥离客户端身份头。
 - Go Backend 位于 `backend/`，生产业务 API 全部由 Go 独占，并内嵌托管静态 React SPA；路由权威来源 = 84 条 Go 注册（`backend/cmd/server/main.go` + `backend/internal/remediation/handler.go`）。
 - `frontend/` 为标准规范 React + Vite SPA 源码，构建为静态资产嵌入 Go 二进制程序中。
-- Next.js 源码与端口 13333 已完全退役，生产环境 edge 流量为 0。生产环境不需要 Node 运行时。
+- Next.js 源码已退役，原 Next.js 端口 13333 重新分配给 Vite 本地开发；生产环境 edge 流量为 0。生产环境不需要 Node 运行时。
 - Next.js 业务后端不存在，不得重建。
 - API 路径保持 `/api/...` 不变。
 - 禁止重新引入任何 Node 业务 API handler、业务 repository 或业务 Mongo 访问。
@@ -124,9 +124,9 @@ Current production state:
 Short-term runtime consolidation and canonicalization are completed:
 - Nginx proxies to Go on `127.0.0.1:18888`.
 - Go serves both the API and the embedded static React SPA.
-- Next.js source and port 13333 are retired.
+- Next.js source is retired; numeric port 13333 is reassigned to Vite development.
 - `frontend/` is the canonical React + TypeScript + Vite SPA.
-- Local development topology: Browser -> Vite `:13334` -> Go `:18888` (/api proxy). Nginx is not required for local development.
+- Local development topology: Browser -> Vite `:13333` -> Go `:18888` (/api proxy). Nginx is not required for local development.
 - MongoDB `xcloud` and `xcloud_ops` remain the source of truth, and Go remains the security authority.
 
 The planned architecture evolution authority is
@@ -161,13 +161,13 @@ Charging Plane remains frozen and excluded.
 稳定规则，非临时排障记录：
 
 - 生产环境浏览器访问始终从 Nginx 边缘进入。默认 `http://localhost`；自定义边缘端口时为 `http://localhost:<edge-port>`（使用 `sudo ./deploy/nginx/setup.sh <port>` 安装配置）。
-- 本地开发环境浏览器访问由 Vite 开发服务器提供：`http://localhost:13334`，通过 Vite 内部代理将 `/api/*` 转发至 Go 后端 `127.0.0.1:18888`。本地开发不需要 Nginx。
+- 本地开发环境浏览器访问由 Vite 开发服务器提供：`http://localhost:13333`，通过 Vite 内部代理将 `/api/*` 转发至 Go 后端 `127.0.0.1:18888`。本地开发不需要 Nginx。
 - `localhost:18888` 是 Go API 内部监听器，不作为前端直接页面访问地址。
-- 端口 13333 已完全退役。
+- 旧 Next.js 运行时已退役，端口 13333 现重新分配给 Vite 本地开发前端；旧端口 13334 已退役。
 - 禁止新增：Next.js `/api` rewrite、Node API fallback、浏览器直连 Go 的硬编码 base URL。
 - 端口现状：80 为生产生效的 Nginx HTTP 边缘（`deploy/nginx/xcloud.conf` 中 `listen 80;`）；443 默认不生效，仅存在于被注释的 HTTPS 模板中。
 - 本地运维命令：`npm run local:preflight`（只读端口归属检查）、`npm run local:dev`（托管启动 Go + Vite）、`npm run local:status`（组件与拓扑状态）、`npm run local:doctor`（全栈拓扑自检）、`npm run local:stop`（仅停止 local:dev 启动的进程）。
-- 本地运维铁律：绝不允许通过修改 `13334/18888` 端口来规避端口占用；绝不自动终止任意监听进程；验收套件必须独占其测量的进程；调试业务问题前先用 `npm run local:preflight` 检查端口污染。
+- 本地运维铁律：绝不允许通过修改 `13333/18888` 端口来规避端口占用；绝不自动终止任意监听进程；验收套件必须独占其测量的进程；调试业务问题前先用 `npm run local:preflight` 检查端口污染。
 - `local:stop` 仅在归属记录与活动进程校验通过后终止进程；身份不匹配一律 `REFUSE_TO_KILL`；权限不足报 `INSUFFICIENT_PERMISSION`，绝不自动提权、绝不触发 UAC。
 - 托管进程生命周期为原子操作：`local:dev` 必须在 readiness 轮询开始之前就写入归属记录（`spawn -> inspect live process identity -> write record -> readiness`）；后续任一步失败按逆序安全回滚，每个退出路径满足“子进程不存在，或存在且带有效归属记录”（`local_dev_unmanaged_live_processes=0`）。
 - `local:stop` 以“确认进程退出”为成功判据：发送信号不等于已停止；只要进程仍存活就保留归属记录并报 `STOP_TIMEOUT` / `NEEDS_ATTENTION` 并非 0 退出，绝不丢弃记录、绝不引入任意强杀（`local_stop_record_preserved_on_timeout=true`）。
@@ -183,7 +183,7 @@ Charging Plane remains frozen and excluded.
 - Tailwind CSS 4
 - Lucide React
 - Node 20 (`.nvmrc`)
-- 本地开发服务器监听地址固定为 `127.0.0.1:13334`（loopback-only，strictPort: true）
+- 本地开发服务器监听地址固定为 `127.0.0.1:13333`（loopback-only，strictPort: true）
 - 生产构建产物打包至静态目录，由 Go 二进制内嵌直接对外托管
 
 前端运行时边界（前端不持有 API 认证运行时）：

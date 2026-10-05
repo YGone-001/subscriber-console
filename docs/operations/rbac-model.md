@@ -2,7 +2,7 @@
 
 Status: PRODUCTION  
 Baseline: `develop`  
-Target Services: Next.js Frontend (:13333), Go Production Backend (:18888), MongoDB (`xcloud`, `xcloud_ops`)
+Target Services: Vite Dev Frontend (:13333) / Go Embedded SPA, Go Production Backend (:18888), MongoDB (`xcloud`, `xcloud_ops`)
 
 ---
 

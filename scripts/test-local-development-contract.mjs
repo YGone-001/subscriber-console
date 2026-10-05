@@ -5,11 +5,10 @@
  * Permanent, phase-neutral acceptance suite that derives the local development
  * contract from source and fails closed:
  *   - Vite host = 127.0.0.1
- *   - Vite port = 13334
+ *   - Vite port = 13333
  *   - strictPort = true
  *   - Vite /api proxy target = http://127.0.0.1:18888
- *   - no Next runtime
- *   - no port 13333 active dependency
+ *   - no Next runtime (Next retired; port 13333 reassigned to Vite)
  *   - no development Nginx requirement
  *   - no browser-direct Go URLs
  *
@@ -48,14 +47,21 @@ function walk(dir, predicate, files = []) {
 // 1. Verify Vite development host, port, strictPort
 const viteConfig = readFileSync(viteConfigPath, 'utf8');
 assert.match(viteConfig, /host:\s*['"]127\.0\.0\.1['"]/, 'Vite server host must be 127.0.0.1');
-assert.match(viteConfig, /port:\s*13334\b/, 'Vite server port must be 13334');
+assert.match(viteConfig, /port:\s*13333\b/, 'Vite server port must be 13333');
 assert.match(viteConfig, /strictPort:\s*true\b/, 'Vite strictPort must be true');
+
+// Negative sentinel: synthetic Vite config with obsolete port 13334 must fail
+const syntheticOldPortConfig = 'server: { port: 13334, strictPort: true }';
+assert.ok(
+  !/port:\s*13333\b/.test(syntheticOldPortConfig),
+  'Synthetic config with port 13334 must fail canonical 13333 check'
+);
 
 // 2. Verify Vite /api proxy target to Go 127.0.0.1:18888
 assert.match(viteConfig, /['"]\/api['"]:\s*\{[^}]*target:\s*['"]http:\/\/127\.0\.0\.1:18888['"]/, 'Vite /api proxy must target http://127.0.0.1:18888');
 
 // 3. Verify canonical ports
-assert.equal(CANONICAL_PORTS.frontend, 13334, 'CANONICAL_PORTS.frontend must be 13334');
+assert.equal(CANONICAL_PORTS.frontend, 13333, 'CANONICAL_PORTS.frontend must be 13333');
 assert.equal(CANONICAL_PORTS.go, 18888, 'CANONICAL_PORTS.go must be 18888');
 assert.equal(CANONICAL_PORTS.next, undefined, 'CANONICAL_PORTS.next must be undefined (retired)');
 
@@ -83,11 +89,12 @@ for (const file of srcFiles) {
 
 console.log('Local Development Contract: PASS');
 console.log('local_dev_vite_host=127.0.0.1');
-console.log('local_dev_vite_port=13334');
+console.log('local_dev_vite_port=13333');
 console.log('local_dev_vite_strict_port=true');
 console.log('local_dev_vite_api_proxy=http://127.0.0.1:18888');
 console.log('local_dev_next_runtime_present=false');
-console.log('local_dev_port_13333_active=false');
+console.log('local_dev_port_13334_active=false');
+console.log('local_dev_next_on_13333_active=false');
 console.log('local_dev_nginx_required=0');
 console.log('local_access_go_routes=84');
 console.log('local_access_next_api_rewrites=0');

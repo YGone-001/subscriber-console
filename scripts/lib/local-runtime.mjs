@@ -34,7 +34,7 @@ import { join } from 'node:path';
 /** Canonical component ports. Not overridable: contamination is diagnosed. */
 export const CANONICAL_PORTS = Object.freeze({
   edge: 80,
-  frontend: 13334,
+  frontend: 13333,
   go: 18888,
   mongo: 27017,
 });

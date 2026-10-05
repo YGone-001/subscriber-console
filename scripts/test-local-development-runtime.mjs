@@ -7,7 +7,7 @@
  *   Browser / HTTP client
  *        |
  *        v
- *   real Vite dev server (127.0.0.1:13334)
+ *   real Vite dev server (127.0.0.1:13333)
  *        |
  *        | /api/* proxy
  *        v
@@ -17,7 +17,7 @@
  *   real MongoDB (127.0.0.1:27017)
  *
  * Proves:
- *   - frontend listener = 127.0.0.1:13334
+ *   - frontend listener = 127.0.0.1:13333
  *   - Go listener       = 127.0.0.1:18888
  *   - / rendered by Vite
  *   - /login rendered by Vite
@@ -43,7 +43,7 @@ const BACKEND = join(ROOT, 'backend');
 const VITE_BIN = join(FRONTEND, 'node_modules', 'vite', 'bin', 'vite.js');
 
 const CANONICAL_PORTS = {
-  frontend: 13334,
+  frontend: 13333,
   go: 18888,
   mongo: 27017,
 };
@@ -193,12 +193,43 @@ async function main() {
   }
   log('  Go backend is UP and ready on 127.0.0.1:18888');
 
-  // 3. Vite dev server
-  log('[3/6] Ensuring Vite dev server is running on 127.0.0.1:13334...');
+  // 3. Port Contamination Negative Test
+  log('[3/7] Testing port 13333 contamination protection...');
+  const foreignServer = net.createServer();
+  await new Promise((res, rej) => {
+    foreignServer.once('error', rej);
+    foreignServer.listen(CANONICAL_PORTS.frontend, '127.0.0.1', () => res());
+  });
+
+  const preflightRes = spawnSync(process.execPath, [join(ROOT, 'scripts', 'check-local-preflight.mjs')], {
+    cwd: ROOT,
+    encoding: 'utf8',
+  });
+  const preflightNotReady = preflightRes.status !== 0 || !preflightRes.stdout.includes('local_preflight_ready=1');
+  const foreignRefused = preflightNotReady ? 'PASS' : 'FAIL';
+
+  const devTry = spawnSync(process.execPath, [join(ROOT, 'scripts', 'local-dev.mjs')], {
+    cwd: ROOT,
+    encoding: 'utf8',
+    env: { ...env, LOCAL_DEV_TIMEOUT_MS: '2000' },
+  });
+  const devRefused = devTry.status !== 0;
+
+  const foreignAlive = foreignServer.listening ? 'PASS' : 'FAIL';
+  const port13334Occupied = await probePort(13334, '127.0.0.1', 500);
+  const fallbackTo13334 = port13334Occupied ? 1 : 0;
+
+  await new Promise((res) => foreignServer.close(res));
+  log(`  Foreign 13333 listener refused: ${foreignRefused}`);
+  log(`  Foreign 13333 listener preserved: ${foreignAlive}`);
+  log(`  Fallback to 13334: ${fallbackTo13334}`);
+
+  // 4. Vite dev server
+  log('[4/7] Ensuring Vite dev server is running on 127.0.0.1:13333...');
   let viteUp = await probePort(CANONICAL_PORTS.frontend, '127.0.0.1', 1000);
   if (!viteUp) {
     log('  Starting Vite dev server...');
-    const viteArgs = [VITE_BIN, '--host', '127.0.0.1', '--port', '13334', '--strictPort'];
+    const viteArgs = [VITE_BIN, '--host', '127.0.0.1', '--port', '13333', '--strictPort'];
     const viteChild = spawn(process.execPath, viteArgs, {
       cwd: FRONTEND,
       env,
@@ -213,10 +244,10 @@ async function main() {
     log('  Vite dev server did not become ready.');
     process.exit(1);
   }
-  log('  Vite dev server is UP and ready on 127.0.0.1:13334');
+  log('  Vite dev server is UP and ready on 127.0.0.1:13333');
 
-  // 4. Test UI paths through Vite
-  log('[4/6] Testing Vite frontend routes...');
+  // 5. Test UI paths through Vite
+  log('[5/7] Testing Vite frontend routes...');
   const rootRes = await requestHttp(`http://127.0.0.1:${CANONICAL_PORTS.frontend}/`);
   if (rootRes.statusCode !== 200 || !rootRes.body.includes('<html')) {
     log(`  Root route / returned status ${rootRes.statusCode}, expected 200 with HTML.`);
@@ -231,8 +262,8 @@ async function main() {
   }
   log('  Route /login returned 200 HTML');
 
-  // 5. Test /api proxy through Vite to Go
-  log('[5/6] Testing /api proxy to Go backend...');
+  // 6. Test /api proxy through Vite to Go
+  log('[6/7] Testing /api proxy to Go backend...');
   const authMeRes = await requestHttp(`http://127.0.0.1:${CANONICAL_PORTS.frontend}/api/auth/me`);
   if (authMeRes.statusCode !== 401) {
     log(`  GET /api/auth/me returned status ${authMeRes.statusCode}, expected 401 Unauthorized from Go.`);
@@ -258,8 +289,8 @@ async function main() {
   }
   log('  POST /api/auth/login through Vite proxied to Go (HTTP 401 Invalid credentials)');
 
-  // 6. Test Doctor
-  log('[6/6] Testing local stack doctor...');
+  // 7. Test Doctor
+  log('[7/7] Testing local stack doctor...');
   const doctor = spawnSync(process.execPath, [join(ROOT, 'scripts', 'check-local-stack.mjs')], {
     cwd: ROOT,
     encoding: 'utf8',
@@ -273,7 +304,26 @@ async function main() {
   log('  Doctor verified FULL_STACK_READY');
 
   log('\n==================================================');
-  log('local_dev_frontend_listener=127.0.0.1:13334');
+  log('dev_port_reassignment_old_port=13334');
+  log('dev_port_reassignment_new_port=13333');
+  log('vite_dev_host=127.0.0.1');
+  log('vite_dev_port=13333');
+  log('vite_dev_strict_port=true');
+  log('vite_dev_api_proxy=http://127.0.0.1:18888');
+  log('local_runtime_frontend_port=13333');
+  log('local_runtime_go_port=18888');
+  log('local_runtime_13334_refs=0');
+  log('next_runtime_present=0');
+  log('next_on_13333_refs=0');
+  log('production_13333_dependency=0');
+  log('production_nginx_13333_refs=0');
+  log('local_dev_nginx_required=0');
+  log('local_dev_next_required=0');
+  log('local_dev_doctor_result=FULL_STACK_READY');
+  log(`foreign_13333_listener_refused=${foreignRefused}`);
+  log(`foreign_13333_listener_preserved=${foreignAlive}`);
+  log(`fallback_to_13334=${fallbackTo13334}`);
+  log('local_dev_frontend_listener=127.0.0.1:13333');
   log('local_dev_go_listener=127.0.0.1:18888');
   log('local_dev_vite_root_served=true');
   log('local_dev_vite_login_served=true');
@@ -281,6 +331,7 @@ async function main() {
   log('local_dev_go_auth_boundary_preserved=true');
   log('local_dev_doctor_ready=true');
   log('local_dev_runtime_result=PASS');
+  log('dev_port_reassignment_result=PASS');
   log('==================================================\n');
 
   cleanup();

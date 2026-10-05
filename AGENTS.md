@@ -102,7 +102,7 @@ Nginx owns production routing to the single Go upstream xcloud_go (127.0.0.1:188
 Go owns every production API operation, auth identity, and embedded static React SPA.
 Route authority = the derived Go registration set (84 exact METHOD+PATH registrations).
 frontend/ is the canonical production SPA source, built to static assets and embedded into the Go binary.
-Next.js source and port 13333 are retired.
+Next.js source is retired; numeric port 13333 is reassigned to Vite development.
 Next.js receives zero production edge traffic. Production Node runtime required = NO.
 The Next.js business backend (app/api + src/server) does not exist.
 Frontend API paths remain unchanged.
@@ -117,7 +117,7 @@ Next implementation direction   = complete
 ```
 
 The runtime consolidation and canonicalization target (Nginx -> Go `:18888` serving API plus embedded static React SPA)
-is deployed and edge-active. Next.js and port 13333 are retired.
+is deployed and edge-active. Next.js runtime is retired.
 
 Architecture guidance:
 
@@ -129,10 +129,10 @@ Go SPA edge-active                  = YES
 frontend canonical production-active= YES
 Next.js source present              = NO
 Next.js removed                     = YES
-port 13333 retired                  = YES
+Next.js runtime retired             = YES
 Next.js edge-active                 = NO
 production Node runtime required    = NO
-Vite development                    = 127.0.0.1:13334 (loopback-only)
+Vite development                    = 127.0.0.1:13333 (loopback-only)
 ```
 
 `frontend/` is the canonical production SPA source, built to static assets and embedded
@@ -243,17 +243,17 @@ Charging Plane remains frozen and excluded.
 ### 5.2 Local Full-Stack Access Contract
 
 The production browser origin is the Nginx edge.
-The local development origin is the Vite dev server (`127.0.0.1:13334`).
+The local development origin is the Vite dev server (`127.0.0.1:13333`).
 
 ```text
 Default local production URL: http://localhost
 Custom edge port:             http://localhost:<edge-port>   (production: sudo ./deploy/nginx/setup.sh <port>)
-Local development URL:        http://localhost:13334
+Local development URL:        http://localhost:13333
 ```
 
-- Vite dev server `:13334` proxies `/api` calls to Go `:18888`.
+- Vite dev server `:13333` proxies `/api` calls to Go `:18888`.
 - Go `:18888` is an internal API component endpoint only.
-- Port 13333 is retired.
+- The old Next.js runtime previously used port 13333. That runtime is retired. The numeric port has since been reassigned to Vite development; port 13334 is retired.
 - Local development does not require Nginx.
 
 Use:
@@ -266,7 +266,7 @@ npm run local:doctor
 npm run local:stop
 ```
 
-Development transport: In development, the Vite dev server (`127.0.0.1:13334`) proxies `/api/*` to Go (`127.0.0.1:18888`). Verified end to end by `scripts/test-local-development-runtime.mjs`.
+Development transport: In development, the Vite dev server (`127.0.0.1:13333`) proxies `/api/*` to Go (`127.0.0.1:18888`). Verified end to end by `scripts/test-local-development-runtime.mjs`.
 
 Ports:
 
@@ -278,7 +278,7 @@ Ports:
 Local development operations:
 
 ```text
-Never resolve canonical port contamination by changing 13334/18888.
+Never resolve canonical port contamination by changing 13333/18888.
 Never automatically kill an arbitrary listener.
 Acceptance suites must own the processes they measure.
 Use `npm run local:preflight` to inspect contamination before debugging business behavior.
