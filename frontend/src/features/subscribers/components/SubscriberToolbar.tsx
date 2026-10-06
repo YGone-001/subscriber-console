@@ -1,0 +1,141 @@
+/*
+ * Forward-ported from the historical xCloud UI (reference commit 2c40903):
+ * frontend/src/app/(dashboard)/subscribers/components/SubscriberToolbar.tsx
+ * Adaptations: "use client" dropped; `@/` aliases and CSS-module imports repointed for the Vite runtime.
+ */
+import React, { useEffect, useRef, useState } from "react";
+import { Trash2, Plus, Layers, DatabaseZap, ClipboardPenLine } from "lucide-react";
+import { useI18n } from '../../../providers/I18nProvider';
+import { requestAnalyticsSync } from '../../system-health/system-health-api';
+
+export interface SubscriberToolbarProps {
+  searchQuery: string;
+  setSearchQuery: any;
+  setCurrentPage: any;
+  setSelectedImsis: React.Dispatch<React.SetStateAction<string[]>>;
+  selectedImsis: string[];
+  canEditSubscribers: boolean;
+  setIsBatchUpdateModalOpen: any;
+  handleBulkDelete: () => void;
+  isDeletingBulk: boolean;
+  pendingDelete: any;
+  handleOpenNew: () => void;
+  setIsBatchOpen: any;
+  mutateSubscribers: () => void;
+  setFeedback: any;
+}
+
+export function SubscriberToolbar(props: SubscriberToolbarProps) {
+  const { t } = useI18n();
+  const [syncState, setSyncState] = useState<'idle' | 'scanning' | 'success' | 'error'>('idle');
+  const syncResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const {
+    searchQuery, setSearchQuery, setCurrentPage, setSelectedImsis,
+    selectedImsis, canEditSubscribers, setIsBatchUpdateModalOpen,
+    handleBulkDelete, isDeletingBulk, pendingDelete,
+    handleOpenNew, setIsBatchOpen, mutateSubscribers, setFeedback
+  } = props;
+
+  useEffect(() => () => {
+    if (syncResetTimer.current) clearTimeout(syncResetTimer.current);
+  }, []);
+
+  const resetSyncStateLater = () => {
+    if (syncResetTimer.current) clearTimeout(syncResetTimer.current);
+    syncResetTimer.current = setTimeout(() => setSyncState('idle'), 2000);
+  };
+
+  const handleTelemetrySync = async () => {
+    if (syncState === 'scanning') return;
+    setSyncState('scanning');
+    try {
+      await requestAnalyticsSync();
+      await mutateSubscribers();
+      setSyncState('success');
+      setFeedback({
+        tone: 'success',
+        title: t('success'),
+        message: `${t('sync_telemetry')} ${t('sync_ok')}`,
+      });
+    } catch (error) {
+      setSyncState('error');
+      setFeedback({
+        tone: 'danger',
+        title: t('error'),
+        message: error instanceof Error ? error.message : t('sync_error'),
+      });
+    } finally {
+      resetSyncStateLater();
+    }
+  };
+
+  return (
+    <div className="page-action-bar">
+      <div className="action-bar-left">
+        <input
+          type="search"
+          className="form-input hover-glass search-input"
+          aria-label={t("search_imsi")}
+          placeholder={t("search_imsi")}
+          value={searchQuery}
+          onChange={e => { setSearchQuery(e.target.value); setCurrentPage(1); setSelectedImsis([]); }}
+        />
+        {selectedImsis.length > 0 && (
+          <div className="bulk-actions-container animate-fade-in">
+            <span className="bulk-actions-count">{selectedImsis.length} {t("selected")}</span>
+            <div className="bulk-actions-buttons">
+              {canEditSubscribers && (
+                <button className="btn btn-bulk-outline" onClick={() => setIsBatchUpdateModalOpen(true)}>
+                  <ClipboardPenLine size={14}/> {t('sub_batch_update_action')}
+                </button>
+              )}
+              {canEditSubscribers && (
+                <button className="btn-bulk-danger" onClick={handleBulkDelete} disabled={isDeletingBulk || Boolean(pendingDelete)}>
+                  {isDeletingBulk ? <span className="spinner spinner-sm"/> : <Trash2 size={14}/>}
+                  {t("delete")}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+      <div className="page-action-buttons">
+         {canEditSubscribers && (
+           <>
+             <button
+               className="btn btn-primary btn-primary-padded"
+               onClick={handleOpenNew}
+               title={t("add_subscriber")}
+             >
+               <Plus size={16} /> {t("add_subscriber")}
+             </button>
+             <button
+               className="btn btn-outline btn-primary-padded"
+               onClick={() => setIsBatchOpen(true)}
+               title={t("batch_create")}
+             >
+               <Layers size={16} /> {t("batch_create")}
+             </button>
+           </>
+         )}
+         {/* Mini Sync Button replaces the giant banner */}
+         <button
+           onClick={() => void handleTelemetrySync()}
+           disabled={syncState === 'scanning'}
+           title={t("sync_tooltip")}
+           className={`btn-sync-telemetry ${syncState === 'scanning' ? 'radar-animating' : ''}`}
+         >
+           {syncState === 'scanning' ? (
+             <span className="text-muted">{t('sync_scanning')}</span>
+           ) : syncState === 'success' ? (
+             <span className="text-success">{t('sync_ok')}</span>
+           ) : syncState === 'error' ? (
+             <span className="text-danger">{t('sync_error')}</span>
+           ) : (
+             <><DatabaseZap size={14} color="var(--primary)" /> {t("sync_telemetry")}</>
+           )}
+         </button>
+      </div>
+    </div>
+  );
+}

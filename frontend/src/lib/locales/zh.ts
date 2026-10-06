@@ -1054,7 +1054,6 @@ export const zh: Record<string, string> = {
     approval_msg_approved: "审批已通过并执行。",
     approval_msg_rejected: "审批已拒绝。",
     approval_err_review: "审批处理失败。",
-    approval_msg_submitted: "审批单 {id} 已提交，需 Root 复核后才会执行。",
     health_data_score: "数据健康度",
     health_active_anomalies: "异常总数",
     health_last_bgsave: "上次 Mongo 检查",

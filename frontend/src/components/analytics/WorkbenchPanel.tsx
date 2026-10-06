@@ -58,7 +58,7 @@ export default function WorkbenchPanel({
       <div className="analytics-alerts-list">
         <div className="analytics-alerts-header">
           <ListChecks size={16} color="var(--primary)" />
-          <h3>{t("dash_workbench_title")}</h3>
+          <h2>{t("dash_workbench_title")}</h2>
           <span className="analytics-alerts-count">{visibleWorkItems.length}</span>
         </div>
         <div className="analytics-alerts-items">

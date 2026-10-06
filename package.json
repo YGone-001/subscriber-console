@@ -19,8 +19,15 @@
     "local:doctor": "node scripts/check-local-stack.mjs",
     "local:stop": "node scripts/local-stop.mjs",
     "check:agent-docs-parity": "node scripts/test-agent-docs-parity.mjs",
-    "check:ui-parity": "node scripts/test-ui-parity-contract.mjs",
+    "check:ui-parity": "node scripts/test-ui-parity-extractor.mjs && node scripts/test-ui-parity-contract.mjs",
+    "test:ui-parity-extractor": "node scripts/test-ui-parity-extractor.mjs",
+    "check:ui-forward-port-boundaries": "node scripts/test-ui-forward-port-boundaries.mjs",
+    "ui:port-manifest": "node scripts/generate-ui-port-manifest.mjs",
+    "ui:parity-ceiling": "node scripts/analyse-parity-ceiling.mjs",
+    "ui:scan-untranslated": "node scripts/scan-untranslated.mjs",
+    "ui:a11y": "node scripts/test-ui-accessibility.mjs",
     "ui:capture": "node scripts/capture-ui-parity.mjs",
+    "ui:capture:baseline": "node scripts/capture-ui-parity.mjs --out=.workbuddy-ai/reports/ui-parity-baseline-2026-10-06",
     "docs:sync-agents": "node scripts/sync-agent-docs.mjs"
   },
   "dependencies": {

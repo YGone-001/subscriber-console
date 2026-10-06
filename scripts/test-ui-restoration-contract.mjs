@@ -156,7 +156,13 @@ check('UI-13', tabBarSource.includes('nav-tab-bar') && /getVisibleNavigation|can
 check('UI-13b', /XCLOUD_OPEN_TABS/.test(tabBarSource) && /nav-tab-close/.test(tabBarSource) && /nav-tab-scroll-btn/.test(tabBarSource) && /nav-tab-dropdown/.test(tabBarSource), 'tab_bar=visited_model+close+scroll+overflow');
 check('UI-14', breadcrumbSource.includes('nav-breadcrumbs-bar') && breadcrumbSource.includes('aria-current') && /getBreadcrumbs/.test(breadcrumbSource), 'breadcrumbs=restored+route_derived');
 check('UI-15', notificationSource.includes('notif-bell-button') && notificationSource.includes('notif-dropdown-panel') && /useNotifications/.test(notificationSource), 'notification_presentation=restored');
-check('UI-16', nocSource.includes('noc-header-button') && nocSource.includes('noc-panel') && /useNotifications/.test(nocSource), 'noc_sentinel=restored');
+/*
+ * The invariant is that the sentinel is restored AND driven by an alert authority.
+ * Pinning the specific hook was wrong: the historical sentinel reads `/api/alerts`
+ * directly, which is the reference behaviour this port restores. Either authority is
+ * acceptable; a hardcoded list is not.
+ */
+check('UI-16', nocSource.includes('noc-header-button') && nocSource.includes('noc-panel') && /useNotifications|\/api\/alerts/.test(nocSource), 'noc_sentinel=restored+alert_authority');
 
 // 6. Shell orchestration and interaction contract.
 check('UI-17', /NavigationTabBar/.test(shellSource) && /NavigationBreadcrumbs/.test(shellSource) && /AppHeader/.test(shellSource) && /AppSidebar/.test(shellSource) && /ToastRegion/.test(shellSource), 'shell_orchestration=complete');

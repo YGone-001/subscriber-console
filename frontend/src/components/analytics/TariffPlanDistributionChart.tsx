@@ -53,7 +53,7 @@ export default function TariffPlanDistributionChart({
       <div className="analytics-panel-header">
         <div className="analytics-panel-title">
           <Layers size={18} color="var(--status-info)" />
-          <h3 id={titleId}>{t("dash_chart_tariff_plan_title")}</h3>
+          <h2 id={titleId}>{t("dash_chart_tariff_plan_title")}</h2>
         </div>
         <div className="analytics-ocs-header-actions">
           <span className="analytics-panel-badge">{tariffPlanDist.length} {t("dash_unit_plans")}</span>

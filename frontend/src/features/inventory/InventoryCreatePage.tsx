@@ -265,9 +265,7 @@ export function InventoryCreatePage() {
             </div>
 
             <div>
-              <label className="block text-xs font-medium mb-1">
-                Display Name
-              </label>
+              <label className="block text-xs font-medium mb-1">{t('inventory_display_name')}</label>
               <input
                 type="text"
                 className="input w-full"
@@ -278,9 +276,7 @@ export function InventoryCreatePage() {
             </div>
 
             <div>
-              <label className="block text-xs font-medium mb-1">
-                Role
-              </label>
+              <label className="block text-xs font-medium mb-1">{t('inventory_role')}</label>
               <input
                 type="text"
                 className="input w-full"
@@ -330,7 +326,7 @@ export function InventoryCreatePage() {
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium mb-1">Vendor</label>
+              <label className="block text-xs font-medium mb-1">{t('inventory_vendor')}</label>
               <input
                 type="text"
                 className="input w-full"
@@ -341,7 +337,7 @@ export function InventoryCreatePage() {
             </div>
 
             <div>
-              <label className="block text-xs font-medium mb-1">Model</label>
+              <label className="block text-xs font-medium mb-1">{t('inventory_model')}</label>
               <input
                 type="text"
                 className="input w-full"
@@ -352,7 +348,7 @@ export function InventoryCreatePage() {
             </div>
 
             <div>
-              <label className="block text-xs font-medium mb-1">Software Product</label>
+              <label className="block text-xs font-medium mb-1">{t('inventory_software_product')}</label>
               <input
                 type="text"
                 className="input w-full"
@@ -363,7 +359,7 @@ export function InventoryCreatePage() {
             </div>
 
             <div>
-              <label className="block text-xs font-medium mb-1">Software Version</label>
+              <label className="block text-xs font-medium mb-1">{t('inventory_software_version')}</label>
               <input
                 type="text"
                 className="input w-full"
@@ -374,7 +370,7 @@ export function InventoryCreatePage() {
             </div>
 
             <div>
-              <label className="block text-xs font-medium mb-1">Software Build</label>
+              <label className="block text-xs font-medium mb-1">{t('inventory_software_build')}</label>
               <input
                 type="text"
                 className="input w-full"
@@ -389,19 +385,19 @@ export function InventoryCreatePage() {
         {/* Management Endpoints */}
         <div className="card p-6">
           <div className="flex justify-between items-center mb-4 border-b pb-2">
-            <h2 className="text-base font-semibold text-foreground">Management Endpoints</h2>
+            <h2 className="text-base font-semibold text-foreground">{t('inventory_management_endpoints')}</h2>
             <button
               type="button"
               className="btn-secondary btn-sm flex items-center gap-1"
               onClick={handleAddEndpoint}
             >
               <Plus size={14} />
-              <span>Add Endpoint</span>
+              <span>{t('inventory_endpoint_add')}</span>
             </button>
           </div>
 
           {endpoints.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No management endpoints added.</p>
+            <p className="text-xs text-muted-foreground">{t('inventory_endpoints_empty_draft')}</p>
           ) : (
             <div className="space-y-3">
               {endpoints.map((ep, idx) => (
@@ -479,9 +475,7 @@ export function InventoryCreatePage() {
           </h2>
           <div className="space-y-4">
             <div>
-              <label className="block text-xs font-medium mb-1">
-                Capabilities (comma separated)
-              </label>
+              <label className="block text-xs font-medium mb-1">{t('inventory_capabilities_hint')}</label>
               <input
                 type="text"
                 className="input w-full font-mono text-xs"
@@ -493,7 +487,7 @@ export function InventoryCreatePage() {
 
             <div>
               <div className="flex justify-between items-center mb-2">
-                <label className="text-xs font-medium">Labels (key-value metadata)</label>
+                <label className="text-xs font-medium">{t('inventory_labels_hint')}</label>
                 <button
                   type="button"
                   className="btn-secondary btn-sm text-xs py-1"

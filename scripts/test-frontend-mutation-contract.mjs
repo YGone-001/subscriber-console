@@ -449,6 +449,7 @@ assert.equal(
 // Verify subscriber mutation request builders and execution
 const subscriberPageFile = resolve(source, 'features/subscribers/SubscribersPage.tsx');
 const subscriberPageText = readFileSync(subscriberPageFile, 'utf8');
+const subscriberMutationContractText = readFileSync(resolve(source, 'features/subscribers/mutation-contract.ts'), 'utf8');
 
 const brokenPrecheckHits = countMatches(subscriberPageText, /count:\s*Number\(batchCount\)[^}]*profile:\s*profileInput/g);
 const brokenBatchUpdateHits = countMatches(subscriberPageText, /updates:\s*\{\s*profile/g);
@@ -496,7 +497,13 @@ const importContract = passedTests.has('buildImportRequest produces authoritativ
 const subscriberEditIntentIsolation = (passedTests.has('single edit: MSISDN update produces only sub4G.msisdnList and no unintended fields') && brokenEditHardcodedAccess === 0) ? 'PASS' : 'FAIL';
 const importRecordAllowlist = (passedTests.has('import: valid minimal record is normalized correctly') && passedTests.has('import: valid full supported record is normalized correctly')) ? 'PASS' : 'FAIL';
 const importUnknownFieldRejection = (passedTests.has('import: unknown fields (msisdn, profile, arbitrary) are rejected') && passedTests.has('import: sensitive credential material is rejected')) ? 'PASS' : 'FAIL';
-const importPrecheckExecuteConsistency = countMatches(subscriberPageText, /validateAndNormalizeImportRecord/g) >= 2 ? 'PASS' : 'FAIL';
+/* Import is no longer owned by the page (the historical Data Hub is retired).
+ * Assert the invariant at the request-builder owner instead: the normalizer must
+ * remain exported and the execution builder must invoke it before sending records. */
+const importPrecheckExecuteConsistency = (
+  importPrecheckContract === 'PASS'
+  && countMatches(subscriberMutationContractText, /validateAndNormalizeImportRecord/g) >= 2
+) ? 'PASS' : 'FAIL';
 const trafficAdjustResponseSemantics = passedTests.has('traffic adjustment: classified as routing-acknowledgement, never mutation-result') ? 'PASS' : 'FAIL';
 
 // Verify Route Inventory

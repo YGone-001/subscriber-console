@@ -1,4 +1,5 @@
 /** Skeleton placeholders. They never contain fabricated content. */
+import { useI18n } from '../../providers/I18nProvider';
 
 export function SkeletonLine({ width }: { width?: string }) {
   return <div className="skeleton skeleton-line" style={width ? { width } : undefined} />;
@@ -36,9 +37,10 @@ export function SkeletonTable({ rows = 6 }: { rows?: number }) {
 }
 
 export function SkeletonPage({ kpis = 4, cards = 2, rows = 6 }: { kpis?: number; cards?: number; rows?: number }) {
+  const { t } = useI18n();
   return (
     <div className="skeleton-page" role="status" aria-live="polite">
-      <span className="sr-only">Loading</span>
+      <span className="sr-only">{t('loading')}</span>
       <div className="skeleton skeleton-page-header" />
       <SkeletonKpiStrip count={kpis} />
       <SkeletonCards count={cards} />

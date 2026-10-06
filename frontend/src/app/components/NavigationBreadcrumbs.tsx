@@ -52,7 +52,9 @@ function getRecentPagesSnapshot(): RecentPageItem[] {
       ));
       return cachedRecent;
     }
-  } catch {}
+  } catch {
+    /* Unreadable storage: fall back to the empty recent list. */
+  }
   cachedRecent = EMPTY_RECENT;
   return EMPTY_RECENT;
 }
@@ -78,7 +80,9 @@ function writeRecentPages(next: RecentPageItem[]) {
   try {
     cachedRawRecent = JSON.stringify(next);
     localStorage.setItem(RECENT_PAGES_STORAGE_KEY, cachedRawRecent);
-  } catch {}
+  } catch {
+    /* Storage is best-effort: a failed write must not break navigation. */
+  }
   for (const listener of recentListeners) {
     listener();
   }
@@ -136,7 +140,9 @@ export function NavigationBreadcrumbs() {
       await navigator.clipboard.writeText(window.location.href);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch {}
+    } catch {
+      /* Clipboard access can be denied; the copy affordance simply stays idle. */
+    }
   }, []);
 
   const handleRefresh = useCallback(() => {
@@ -228,7 +234,7 @@ export function NavigationBreadcrumbs() {
           onClick={handleCopyLink}
           title={copied ? t('nav_crumb_copied') : t('nav_crumb_copy_link')}
         >
-          {copied ? <Check size={13} aria-hidden="true" /> : <Copy size={13} aria-hidden="true" />}
+          {copied ? <Check size={13} className="text-success" aria-hidden="true" /> : <Copy size={13} aria-hidden="true" />}
           <span className="nav-crumb-btn-text">
             {copied ? t('nav_crumb_copied') : t('nav_crumb_copy_link')}
           </span>

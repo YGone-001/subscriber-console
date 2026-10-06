@@ -13,6 +13,7 @@ import { formatGb } from "./utils";
 import EmptyChartState from "./EmptyChartState";
 import { ChartDataTable } from '../ui/ChartDataTable';
 import { CHART_SERIES_COLORS, CHART_TOOLTIP_STYLE, ChartSummary } from '../ui/chartPrimitives';
+import { requestAnalyticsSync } from '../../features/system-health/system-health-api';
 
 export default function PlmnDistributionChart({
   plmnDist,
@@ -40,7 +41,7 @@ export default function PlmnDistributionChart({
       <div className="analytics-panel-header">
         <div className="analytics-panel-title">
           <Server size={18} color="var(--primary)" />
-          <h3 id={titleId}>{t("dash_chart_plmn_title")}</h3>
+          <h2 id={titleId}>{t("dash_chart_plmn_title")}</h2>
         </div>
         <span className="analytics-panel-badge">{plmnDist.length} {t("dash_unit_plmn")}</span>
       </div>
@@ -79,7 +80,7 @@ export default function PlmnDistributionChart({
             icon={<PieChartIcon size={42} />}
             title={t("dash_chart_plmn_empty")}
             action={
-              <button className="btn btn-outline analytics-empty-button" type="button" onClick={() => fetch("/api/analytics/init", { method: "POST" })}>
+              <button className="btn btn-outline analytics-empty-button" type="button" onClick={() => void requestAnalyticsSync()}>
                 <DatabaseZap size={14} />
                 {t("sync_telemetry")}
               </button>

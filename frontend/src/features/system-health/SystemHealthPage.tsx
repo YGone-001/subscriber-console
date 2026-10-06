@@ -1,836 +1,804 @@
-import { useCallback, useMemo, useState } from 'react';
+/*
+ * Forward-ported from the historical xCloud UI (reference commit 2c40903):
+ * frontend/src/app/(dashboard)/system-health/page.tsx
+ * Adaptations: `@/` aliases and CSS imports repointed; `useSWR(fetcher)` replaced by the current read client; raw `fetch` mutations replaced by the current mutation client; `@/types/platformHealth` ported alongside.
+ */
+import { useState, useRef, useMemo } from "react";
 import {
   Activity,
-  Clock,
-  Database,
-  Layers,
-  RefreshCw,
   ShieldAlert,
-  ShieldCheck,
-  Wrench,
+  HeartPulse,
+  HardDrive,
+  Database,
+  DatabaseZap,
+  Check,
+  RefreshCw,
   Zap,
-} from 'lucide-react';
-import { useAuth } from '../../providers/AuthProvider';
-import { useRead } from '../../lib/api/use-read';
-import { postJson, extractErrorMessage } from '../../lib/api/mutation-client';
+  Layers,
+  ShieldCheck,
+  Download,
+  Wrench,
+  AlertTriangle,
+  Info,
+} from "lucide-react";
+import useSWR from "swr";
+import { fetcher } from '../../lib/fetcher';
 import { useI18n } from '../../providers/I18nProvider';
-import SectionHeader from '../../components/ui/SectionHeader';
-import SubsystemCard from '../../components/health/SubsystemCard';
+import { useAuth } from '../../providers/AuthProvider';
+import { hasPermission } from '../../lib/permissions';
 import {
-  buildAnalyticsInitRequest,
-  buildAuditScanRequest,
-  buildSingleHealRequest,
-  buildBatchHealRequest,
-} from './operational-contract';
-import type {
-  AnalyticsInitResponse,
-  AuditScanResponse,
-  BatchHealResponse,
-  ScanAuditPhase,
-  ScanPhase,
-  SingleHealResponse,
-  SystemAnomaly,
-} from './operational-types';
+  batchHealErrors,
+  classifyBatchHealOutcome,
+  requestAnalyticsSync,
+  requestAuditScanStep,
+  requestBatchHeal,
+  requestSingleHeal,
+} from './system-health-api';
+import { EmptyState, LoadingRows, OperationNotice } from '../../components/ui/OperationFeedback';
+import type { ComprehensiveSystemHealth, SubsystemStatus } from '../../types/platformHealth';
+import type { SystemAnomaly, AnomalyCategory, AnomalySeverity } from '../../types/platformHealth';
+import PageHeader, { type PageHeaderTone } from '../../components/ui/PageHeader';
+import SectionHeader from '../../components/ui/SectionHeader';
+import { Dialog } from '../../components/ui/Dialog';
+import SubsystemCard from '../../components/health/SubsystemCard';
+import MetricStrip from '../../components/ui/MetricStrip';
 
-interface OperationNotice {
-  type: 'success' | 'warning' | 'error';
-  message: string;
-}
+type HealthNotice = {
+  type: "success" | "error" | "warning";
+  text: string;
+};
+
+type ScanPhase = 'IDLE' | 'INIT' | 'SCAN_SUB' | 'SCAN_OCS' | 'SCAN_TARIFF' | 'SCAN_RESERVATIONS' | 'COMPLETE' | 'ABORTED';
 
 export function SystemHealthPage() {
   const { t } = useI18n();
   const { user } = useAuth();
-  const isViewer = user?.role === 'viewer';
+  /* Remediation is offered only to accounts that hold `system_heal`. The server
+   * re-checks the capability on every call and remains the final authority. */
+  const canHeal = hasPermission(user, 'system_heal');
+  const { data: profileData } = useSWR<{ profiles?: Array<{ name: string; title?: string }> }>("/api/profiles", fetcher);
+  const profileList = profileData?.profiles || [];
 
-  // Read-side authority data
-  const health = useRead<Record<string, unknown>>('/api/system/health');
-  const audit = useRead<Record<string, unknown>>('/api/system/audit/status');
-  const alerts = useRead<Record<string, unknown>>('/api/alerts');
-  const profiles = useRead<Record<string, unknown>>('/api/profiles');
+  const { data: statusData, mutate: mutateStatus } = useSWR<{ lastSaveTime?: number }>("/api/system/audit/status", fetcher, { refreshInterval: 60000 });
+  const lastSaveTime = statusData?.lastSaveTime || null;
 
-  const profileList = useMemo(() => {
-    if (!profiles.data) return [];
-    const raw = profiles.data.profiles ?? profiles.data.items ?? profiles.data;
-    if (Array.isArray(raw)) {
-      return raw.map((item) => {
-        if (typeof item === 'object' && item !== null && 'name' in item) {
-          return String((item as Record<string, unknown>).name);
-        }
-        return '';
-      }).filter(Boolean);
-    }
-    return [];
-  }, [profiles.data]);
+  // Comprehensive Multi-Subsystem Health
+  const {
+    data: systemHealth,
+    mutate: refreshSystemHealth,
+    isLoading: isHealthLoading,
+  } = useSWR<ComprehensiveSystemHealth>("/api/system/health", fetcher, { refreshInterval: 30000 });
 
-  // Operational state
-  const [notice, setNotice] = useState<OperationNotice | null>(null);
-
-  // 1. Analytics Recompute State
-  const [isRecomputing, setIsRecomputing] = useState(false);
-
-  // 2. Audit Scan State
-  const [scanPhase, setScanPhase] = useState<ScanPhase>('IDLE');
+  // Scan states
+  const [isAuditing, setIsAuditing] = useState(false);
   const [scannedTotal, setScannedTotal] = useState(0);
   const [anomalies, setAnomalies] = useState<SystemAnomaly[]>([]);
-  const [isScanning, setIsScanning] = useState(false);
-  const [isScanStale, setIsScanStale] = useState(false);
+  const [auditPhase, setAuditPhase] = useState<ScanPhase>('IDLE');
+  const [notice, setNotice] = useState<HealthNotice | null>(null);
 
-  // 3. Single Heal Modal State
-  const [healModalAnomaly, setHealModalAnomaly] = useState<SystemAnomaly | null>(null);
-  const [healProfile, setHealProfile] = useState('');
+  // Filtering states
+  const [activeCategoryTab, setActiveCategoryTab] = useState<AnomalyCategory | 'all'>('all');
+  const [selectedSeverity, setSelectedSeverity] = useState<AnomalySeverity | 'all'>('all');
+
+  // Telemetry sync state
+  const [syncState, setSyncState] = useState<"idle" | "syncing" | "success" | "error">("idle");
+
+  const handleSync = async () => {
+    if (syncState === "syncing") return;
+    setSyncState("syncing");
+    try {
+      await requestAnalyticsSync();
+      setSyncState("success");
+      setNotice({ type: "success", text: `${t("sync_telemetry")} ${t("sync_ok")}` });
+      setTimeout(() => setSyncState("idle"), 2000);
+    } catch (error) {
+      setSyncState("error");
+      setNotice({ type: "error", text: error instanceof Error ? error.message : t("sync_error") });
+      setTimeout(() => setSyncState("idle"), 2000);
+    }
+  };
+
+  // Single Heal Modal states
+  const [healModalOpen, setHealModalOpen] = useState(false);
+  const [targetAnomaly, setTargetAnomaly] = useState<SystemAnomaly | null>(null);
+  const [healProfile, setHealProfile] = useState("");
   const [isHealConfirmed, setIsHealConfirmed] = useState(false);
   const [isHealing, setIsHealing] = useState(false);
 
-  // 4. Batch Heal Modal State
+  // Batch Heal Modal states
   const [batchModalOpen, setBatchModalOpen] = useState(false);
-  const [batchProfile, setBatchProfile] = useState('');
+  const [batchHealProfile, setBatchHealProfile] = useState("");
   const [isBatchConfirmed, setIsBatchConfirmed] = useState(false);
   const [isBatchHealing, setIsBatchHealing] = useState(false);
 
-  const refreshAllReads = useCallback(() => {
-    void health.mutate();
-    void audit.mutate();
-    void alerts.mutate();
-  }, [health, audit, alerts]);
+  // Use refs for aggressive recursion logic without stale states
+  const scanMetrics = useRef({ total: 0, anomaliesList: [] as SystemAnomaly[] });
 
-  // 1. Recompute Analytics Handler
-  const handleRecomputeAnalytics = async () => {
-    if (isViewer || isRecomputing) return;
-    setIsRecomputing(true);
-    setNotice(null);
-
-    try {
-      const res = await postJson<AnalyticsInitResponse>(
-        '/api/analytics/init',
-        buildAnalyticsInitRequest(),
-      );
-      setNotice({
-        type: 'success',
-        message:
-          res?.message ||
-          'Analytics snapshot recomputed. MongoDB analytics are computed from subscriber documents on demand.',
-      });
-      refreshAllReads();
-    } catch (error) {
-      const err = extractErrorMessage(0, error);
-      setNotice({
-        type: 'error',
-        message: err.message || 'Failed to recompute analytics snapshot.',
-      });
-    } finally {
-      setIsRecomputing(false);
-    }
-  };
-
-  // 2. Audit Scan Pipeline
-  const runScanStep = async (
-    cursor: string,
-    phase: ScanAuditPhase,
-    accumulatedCount: number,
-    accumulatedAnomalies: SystemAnomaly[],
-  ) => {
-    try {
-      if (cursor === '0') {
-        if (phase === 'sub') setScanPhase('SCAN_SUB');
-        else if (phase === 'ocs') setScanPhase('SCAN_OCS');
-        else if (phase === 'tariff') setScanPhase('SCAN_TARIFF');
-        else if (phase === 'reservation') setScanPhase('SCAN_RESERVATIONS');
-      }
-
-      const requestPayload = buildAuditScanRequest(cursor, phase);
-      const res = await postJson<AuditScanResponse>(
-        '/api/system/audit/scan',
-        requestPayload,
-      );
-
-      const newTotal = accumulatedCount + (res?.scannedCount || 0);
-      const newAnomalies = [
-        ...accumulatedAnomalies,
-        ...(res?.anomalies || []),
-      ];
-
-      setScannedTotal(newTotal);
-      setAnomalies(newAnomalies);
-
-      const nextCursor = String(res?.nextCursor ?? '0');
-
-      if (nextCursor !== '0') {
-        // Sequential recursion in same phase
-        await runScanStep(nextCursor, phase, newTotal, newAnomalies);
-      } else {
-        // Transition to next phase in order: sub -> ocs -> tariff -> reservation -> COMPLETE
-        if (phase === 'sub') {
-          await runScanStep('0', 'ocs', newTotal, newAnomalies);
-        } else if (phase === 'ocs') {
-          await runScanStep('0', 'tariff', newTotal, newAnomalies);
-        } else if (phase === 'tariff') {
-          await runScanStep('0', 'reservation', newTotal, newAnomalies);
-        } else {
-          setScanPhase('COMPLETE');
-          setIsScanning(false);
-          setIsScanStale(false);
-          setNotice({
-            type: 'success',
-            message: `Diagnostic audit scan complete. Processed ${newTotal} items across 4 audit phases. Found ${newAnomalies.length} anomalies.`,
-          });
-          refreshAllReads();
-        }
-      }
-    } catch (error) {
-      setScanPhase('ABORTED');
-      setIsScanning(false);
-      const err = extractErrorMessage(0, error);
-      setNotice({
-        type: 'error',
-        message: `Audit scan aborted during phase ${phase}: ${err.message}`,
-      });
-    }
-  };
-
-  const handleStartScan = async () => {
-    if (isViewer || isScanning) return;
-    setIsScanning(true);
+  const runFullAudit = async () => {
+    setIsAuditing(true);
     setNotice(null);
     setAnomalies([]);
     setScannedTotal(0);
-    setScanPhase('INIT');
+    setAuditPhase('INIT');
+    scanMetrics.current = { total: 0, anomaliesList: [] };
 
-    await runScanStep('0', 'sub', 0, []);
+    // Start 4-phase recursion pipeline
+    await recursiveScan('0', 'sub');
   };
 
-  // 3. Single Heal Execution
-  const handleOpenSingleHeal = (anomaly: SystemAnomaly) => {
-    if (isViewer) return;
-    setHealModalAnomaly(anomaly);
-    setHealProfile('');
+  const recursiveScan = async (cursor: string, phase: 'sub' | 'ocs' | 'tariff' | 'reservation') => {
+    try {
+      if (cursor === '0') {
+        if (phase === 'sub') setAuditPhase('SCAN_SUB');
+        else if (phase === 'ocs') setAuditPhase('SCAN_OCS');
+        else if (phase === 'tariff') setAuditPhase('SCAN_TARIFF');
+        else if (phase === 'reservation') setAuditPhase('SCAN_RESERVATIONS');
+      }
+
+      const data = await requestAuditScanStep(cursor, phase);
+
+      scanMetrics.current.total += data.scannedCount;
+      if (data.anomalies && data.anomalies.length > 0) {
+        scanMetrics.current.anomaliesList = [...scanMetrics.current.anomaliesList, ...data.anomalies];
+      }
+
+      setScannedTotal(scanMetrics.current.total);
+      setAnomalies([...scanMetrics.current.anomaliesList]);
+
+      const newNext = String(data.nextCursor);
+
+      if (newNext !== '0') {
+        // Recursive continuation in same phase
+        await recursiveScan(newNext, phase);
+      } else {
+        // Switch phase or complete
+        if (phase === 'sub') {
+          await recursiveScan('0', 'ocs');
+        } else if (phase === 'ocs') {
+          await recursiveScan('0', 'tariff');
+        } else if (phase === 'tariff') {
+          await recursiveScan('0', 'reservation');
+        } else {
+          setAuditPhase('COMPLETE');
+          setIsAuditing(false);
+          await refreshSystemHealth();
+        }
+      }
+    } catch {
+      setIsAuditing(false);
+      setAuditPhase('ABORTED');
+      setNotice({ type: "error", text: t("health_scan_abort") });
+    }
+  };
+
+  // Filtered anomalies list
+  const filteredAnomalies = useMemo(() => {
+    return anomalies.filter((a) => {
+      if (activeCategoryTab !== 'all' && a.category !== activeCategoryTab) return false;
+      if (selectedSeverity !== 'all' && a.severity !== selectedSeverity) return false;
+      return true;
+    });
+  }, [anomalies, activeCategoryTab, selectedSeverity]);
+
+  // Single Item Heal handlers
+  const handleOpenHealModal = (anomaly: SystemAnomaly) => {
+    setTargetAnomaly(anomaly);
     setIsHealConfirmed(false);
+    setHealProfile("");
     setNotice(null);
+    setHealModalOpen(true);
   };
 
-  const handleExecuteSingleHeal = async () => {
-    if (isViewer || !healModalAnomaly || !isHealConfirmed || isHealing) return;
+  const executeHeal = async () => {
+    if (!targetAnomaly || !isHealConfirmed) return;
     setIsHealing(true);
 
     try {
-      const payload = buildSingleHealRequest(
-        healModalAnomaly,
-        healProfile || undefined,
+      /* Direct execution: the server validated the capability, the rate limit and the
+       * request, and the repair has already been applied when this resolves. */
+      await requestSingleHeal(targetAnomaly, healProfile || undefined);
+
+      const updatedList = anomalies.filter(
+        (a) => a.imsi !== targetAnomaly.imsi || a.type !== targetAnomaly.type
       );
-      const res = await postJson<SingleHealResponse>(
-        '/api/system/audit/heal',
-        payload,
-      );
-
-      const targetImsi = healModalAnomaly.imsi;
-      const targetType = healModalAnomaly.type;
-
-      setAnomalies((prev) =>
-        prev.filter((a) => !(a.imsi === targetImsi && a.type === targetType)),
-      );
-
-      setNotice({
-        type: 'success',
-        message:
-          res?.message ||
-          `Successfully applied targeted remediation for subscriber ${targetImsi}.`,
-      });
-
-      setHealModalAnomaly(null);
-      refreshAllReads();
-    } catch (error) {
-      const err = extractErrorMessage(0, error);
-      setNotice({
-        type: 'error',
-        message: `Single remediation failed: ${err.message}`,
-      });
+      setAnomalies(updatedList);
+      await mutateStatus();
+      await refreshSystemHealth();
+      scanMetrics.current.anomaliesList = updatedList;
+      setNotice({ type: "success", text: t("health_msg_heal_success", { imsi: targetAnomaly.imsi }) });
+      setHealModalOpen(false);
+    } catch (failure) {
+      /* 401/403/429 and transport failures all arrive here through the mutation
+       * client; nothing is retried automatically. */
+      setNotice({ type: "error", text: failure instanceof Error && failure.message ? failure.message : t("health_err_heal_net") });
     } finally {
       setIsHealing(false);
     }
   };
 
-  // 4. Batch Heal Execution
-  const handleOpenBatchHeal = () => {
-    if (isViewer || anomalies.length === 0) return;
-    setBatchModalOpen(true);
-    setBatchProfile('');
+  // Batch Heal handlers
+  const handleOpenBatchModal = () => {
     setIsBatchConfirmed(false);
+    setBatchHealProfile("");
     setNotice(null);
+    setBatchModalOpen(true);
   };
 
-  const handleExecuteBatchHeal = async () => {
-    if (isViewer || anomalies.length === 0 || !isBatchConfirmed || isBatchHealing) {
-      return;
-    }
+  const executeBatchHeal = async () => {
+    if (filteredAnomalies.length === 0 || !isBatchConfirmed) return;
     setIsBatchHealing(true);
 
     try {
-      const payload = buildBatchHealRequest(
-        anomalies,
-        batchProfile || undefined,
-      );
-      const res = await postJson<BatchHealResponse>(
-        '/api/system/audit/batch-heal',
-        payload,
-      );
+      const response = await requestBatchHeal(filteredAnomalies, batchHealProfile || undefined);
+      const outcome = classifyBatchHealOutcome(response);
+      const errors = batchHealErrors(response);
+      const succeeded = Number(response?.successCount ?? 0);
+      const failed = Number(response?.failedCount ?? 0);
 
-      const successCount = res?.successCount ?? 0;
-      const failedCount = res?.failedCount ?? 0;
+      /* Only the targets the server actually repaired are dropped from the list; a
+       * partially failed run must keep the rest visible. */
+      const repaired = outcome === 'failed' ? [] : filteredAnomalies.slice(0, succeeded);
+      const remainingAnomalies = outcome === 'succeeded'
+        ? anomalies.filter((a) => !filteredAnomalies.some((fa) => fa.imsi === a.imsi && fa.type === a.type))
+        : anomalies.filter((a) => !repaired.some((fa) => fa.imsi === a.imsi && fa.type === a.type));
+      setAnomalies(remainingAnomalies);
+      await mutateStatus();
+      await refreshSystemHealth();
+      scanMetrics.current.anomaliesList = remainingAnomalies;
 
-      if (failedCount === 0) {
-        // Complete success: safe to clear anomalies
-        setAnomalies([]);
-        setIsScanStale(false);
-        setNotice({
-          type: 'success',
-          message:
-            res?.message ||
-            `Successfully resolved all ${successCount} batch anomalies.`,
-        });
-      } else {
-        // Partial result semantics: do not falsely claim total success!
-        setIsScanStale(true);
-        const errorDetails =
-          Array.isArray(res?.errors) && res.errors.length > 0
-            ? ` Errors: ${res.errors.slice(0, 2).join('; ')}`
-            : '';
+      if (outcome === 'succeeded') {
+        setNotice({ type: 'success', text: t('health_msg_batch_heal_success', { count: succeeded }) });
+      } else if (outcome === 'partial') {
         setNotice({
           type: 'warning',
-          message: `Batch remediation partially completed: ${successCount} succeeded, ${failedCount} failed.${errorDetails} Scan data marked stale. Please run a fresh diagnostic audit.`,
+          text: t('health_msg_batch_heal_partial', { success: succeeded, failed })
+            + (errors.length ? ` — ${errors.slice(0, 3).join('; ')}` : ''),
+        });
+      } else {
+        setNotice({
+          type: 'error',
+          text: t('health_err_batch_heal_failed', { failed })
+            + (errors.length ? ` — ${errors.slice(0, 3).join('; ')}` : ''),
         });
       }
-
-      setBatchModalOpen(false);
-      refreshAllReads();
-    } catch (error) {
-      const err = extractErrorMessage(0, error);
-      setNotice({
-        type: 'error',
-        message: `Batch remediation failed: ${err.message}`,
-      });
+      if (outcome === 'succeeded') setBatchModalOpen(false);
+    } catch (failure) {
+      setNotice({ type: 'error', text: failure instanceof Error && failure.message ? failure.message : t('health_err_heal_net') });
     } finally {
       setIsBatchHealing(false);
     }
   };
 
-  const healthData = (health.data?.summary ?? health.data ?? {}) as Record<string, unknown>;
+  // Export diagnostic report snapshot
+  const exportDiagnosticReport = () => {
+    const reportData = {
+      timestamp: new Date().toISOString(),
+      score: systemHealth?.score ?? 100,
+      status: systemHealth?.status ?? 'healthy',
+      subsystems: systemHealth?.subsystems,
+      recommendations: systemHealth?.summary?.recommendations || [],
+      auditStats: {
+        totalScanned: scannedTotal,
+        anomaliesCount: anomalies.length,
+        anomalies,
+      },
+    };
 
-  /* Subsystem matrix. The contract reports four subsystems under `subsystems`;
-   * each card renders a 2x2 metric grid, matching the reference layout. */
-  const subsystems = (health.data?.subsystems ?? {}) as Record<string, Record<string, unknown>>;
-  const sub = (key: string) => subsystems[key] ?? {};
-  const subStatus = (key: string) => String(sub(key).status ?? 'healthy');
-  const subValue = (key: string, field: string) => {
-    const value = sub(key)[field];
-    return value === undefined || value === null ? '--' : String(value);
+    const blob = new Blob([JSON.stringify(reportData, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `system-health-diagnostics-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
-  const statusBadge = (key: string) => (
-    <span className={`subsystem-badge ${subStatus(key)}`}>{t(`health_status_${subStatus(key)}`)}</span>
-  );
-  const toneOf = (key: string, field: string, whenPositive: 'success' | 'danger' | 'warning') =>
-    Number(sub(key)[field] ?? 0) > 0 ? whenPositive : 'success';
-  const auditData = (audit.data ?? {}) as Record<string, unknown>;
-  const alertItems = useMemo(() => {
-    if (!alerts.data) return [];
-    const raw = alerts.data.alerts ?? alerts.data.items ?? alerts.data;
-    return Array.isArray(raw) ? raw : [];
-  }, [alerts.data]);
+
+  // Health Score Calculation
+  const displayScore = useMemo(() => {
+    if (systemHealth?.score !== undefined) {
+      if (auditPhase === 'COMPLETE' && scannedTotal > 0) {
+        const auditImpact = Math.max(0, (1 - anomalies.length / scannedTotal) * 100);
+        return Math.min(systemHealth.score, parseFloat(auditImpact.toFixed(1)));
+      }
+      return systemHealth.score;
+    }
+    if (scannedTotal === 0) return 100;
+    const h = (1 - (anomalies.length / scannedTotal)) * 100;
+    return Math.max(0, parseFloat(h.toFixed(1)));
+  }, [systemHealth, auditPhase, scannedTotal, anomalies.length]);
+
+  const renderDetails = (details: string, type: string) => {
+    if (type === 'orphan_reservation') return t("health_err_orphan_reservation");
+    if (type === 'invalid_tariff') return t("health_err_invalid_tariff");
+    if (type === 'dangling_profile') return t("health_err_dangling_profile");
+    if (details.startsWith("Missing ")) {
+      const ratio = details.split(" ")[1];
+      return t("health_err_missing_ocs").replace("{ratio}", ratio);
+    }
+    if (details === "Balance field is null or undefined") return t("health_err_balance_null");
+    if (details === "Balance format evaluates to NaN") return t("health_err_balance_nan");
+    if (details === "Critical: Invalid JSON payload in Account table") return t("health_err_invalid_json");
+    if (details === "Found Active OCS but missing core SUB_4G definition") return t("health_err_orphan_ocs");
+    return details;
+  };
+
+  const getStatusBadge = (status: SubsystemStatus = 'healthy') => {
+    if (status === 'healthy') return <span className="subsystem-badge healthy"><Check size={12} /> {t("health_status_healthy")}</span>;
+    if (status === 'degraded') return <span className="subsystem-badge degraded"><AlertTriangle size={12} /> {t("health_status_degraded")}</span>;
+    return <span className="subsystem-badge critical"><ShieldAlert size={12} /> {t("health_status_critical")}</span>;
+  };
 
   return (
-    <section className="read-page">
-      <header className="read-page-header">
-        <div>
-          <p className="read-marker">{t('eyebrow_noc_diagnostics')}</p>
-          <h1>{t('nav_system_health')}</h1>
-          <p className="read-summary">{t('health_subsystems_title')}</p>
-        </div>
+    <>
+      <div className="container animate-fade-in health-container">
+        {notice && (
+          <OperationNotice
+            presentation="modal"
+            tone={notice.type === "success" ? "success" : notice.type === "warning" ? "warning" : "danger"}
+            title={notice.type === "success" ? t("success") : notice.type === "warning" ? t("status") : t("error")}
+            message={notice.text}
+            onClose={() => setNotice(null)}
+          />
+        )}
 
-        <div className="system-health-actions" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-          <button
-            type="button"
-            className="read-refresh"
-            onClick={refreshAllReads}
-            disabled={health.isLoading || isScanning}
-          >
-            <RefreshCw size={16} />
-            {t('refresh')}
-          </button>
-
-          <button
-            type="button"
-            className="read-refresh operational-btn"
-            onClick={() => void handleRecomputeAnalytics()}
-            disabled={isViewer || isRecomputing || isScanning}
-            title={t('sync_tooltip')}
-          >
-            <Database size={16} />
-            {t('sync_telemetry')}
-          </button>
-
-          <button
-            type="button"
-            className="read-refresh operational-btn"
-            onClick={() => void handleStartScan()}
-            disabled={isViewer || isScanning}
-            title={t('health_btn_run')}
-          >
-            <Activity size={16} />
-            {isScanning ? t('health_btn_scanning') : t('health_btn_run')}
-          </button>
-
-          {anomalies.length > 0 && (
+        <PageHeader
+          eyebrow={t("eyebrow_noc_diagnostics")}
+          icon={<HeartPulse size={23} />}
+          title={t("nav_system_health")}
+          description={t("health_subsystems_title")}
+          tone={(systemHealth?.status === "critical" ? "danger" : systemHealth?.status === "degraded" ? "warning" : "healthy") as PageHeaderTone}
+          status={getStatusBadge(systemHealth?.status)}
+          actions={<div className="health-header-actions">
             <button
-              type="button"
-              className="read-refresh operational-btn batch-heal-btn"
-              onClick={handleOpenBatchHeal}
-              disabled={isViewer || isScanning}
-              title={isViewer ? 'Read-only access: viewer role cannot execute remediation' : undefined}
+              onClick={handleSync}
+              disabled={syncState === "syncing"}
+              className={`btn btn-outline analytics-sync-btn ${syncState === "syncing" ? "radar-animating" : ""}`}
+              title={t("sync_tooltip")}
             >
-              <Wrench size={16} />
-              Batch Heal ({anomalies.length})
+              {syncState === "syncing" ? (
+                <span>{t("sync_scanning")}</span>
+              ) : syncState === "success" ? (
+                <span className="text-success">{t("sync_ok")}</span>
+              ) : syncState === "error" ? (
+                <span className="text-danger">{t("sync_error")}</span>
+              ) : (
+                <>
+                  <DatabaseZap size={15} /> {t("sync_telemetry")}
+                </>
+              )}
             </button>
-          )}
-        </div>
-      </header>
+            <button
+              className="btn btn-outline health-mongo-refresh"
+              onClick={() => refreshSystemHealth()}
+              disabled={isHealthLoading}
+            >
+              <RefreshCw size={14} className={isHealthLoading ? "spin" : ""} />
+              {t("refresh")}
+            </button>
+          </div>}
+        />
 
-      {/* Subsystem health matrix — four cards, each with a 2x2 metric grid. */}
-      <section className="health-subsystems-section">
-        <SectionHeader title={t('health_subsystems_title')} />
+        {/* Subsystems Matrix Section */}
+        <section className="health-subsystems-section">
+          <SectionHeader title={t("health_subsystems_title")} />
 
-        <div className="health-subsystems-grid">
-          <SubsystemCard
-            status={subStatus('database')}
-            icon={<Database size={20} color="var(--primary)" />}
-            name={t('health_subsystem_db')}
-            description={`${subValue('database', 'xcloudDb')} / ${subValue('database', 'appDb')}`}
-            statusBadge={statusBadge('database')}
-            metrics={[
-              { label: t('health_db_latency'), value: `${subValue('database', 'latencyMs')} ms` },
-              { label: t('health_db_collections'), value: `${subValue('database', 'existingCollections')} / ${subValue('database', 'totalCollections')}` },
-              { label: t('health_db_indexes'), value: subValue('database', 'missingIndexesCount'), tone: toneOf('database', 'missingIndexesCount', 'danger') },
-              { label: t('status'), value: sub('database').ready ? t('health_status_ready') : t('health_status_attention'), tone: sub('database').ready ? 'success' : 'danger' },
-            ]}
-          />
+          <div className="health-subsystems-grid">
+            {/* 1. Database Subsystem */}
+            <SubsystemCard
+              status={systemHealth?.subsystems?.database?.status || 'healthy'}
+              icon={<Database size={20} color="var(--primary)" />}
+              name={t("health_subsystem_db")}
+              description={`${systemHealth?.subsystems?.database?.xcloudDb || 'xcloud'} / ${systemHealth?.subsystems?.database?.appDb || 'app'}`}
+              statusBadge={getStatusBadge(systemHealth?.subsystems?.database?.status)}
+              metrics={[
+                { label: t("health_db_latency"), value: systemHealth?.subsystems?.database?.latencyMs !== undefined ? `${systemHealth.subsystems.database.latencyMs} ms` : '--' },
+                { label: t("health_db_collections"), value: systemHealth?.subsystems?.database ? `${systemHealth.subsystems.database.existingCollections} / ${systemHealth.subsystems.database.totalCollections}` : '--' },
+                { label: t("health_db_indexes"), value: systemHealth?.subsystems?.database?.missingIndexesCount ?? '--', tone: (systemHealth?.subsystems?.database?.missingIndexesCount || 0) > 0 ? 'danger' : 'success' },
+                { label: t("status"), value: systemHealth?.subsystems?.database?.ready ? t("health_status_ready") : t("health_status_attention"), tone: systemHealth?.subsystems?.database?.ready ? 'success' : 'danger' },
+              ]}
+            />
 
-          <SubsystemCard
-            status={subStatus('ocsEngine')}
-            icon={<Zap size={20} color="var(--primary)" />}
-            name={t('health_subsystem_ocs')}
-            description={t('health_desc_ocs')}
-            statusBadge={statusBadge('ocsEngine')}
-            metrics={[
-              { label: t('health_ocs_invariants'), value: sub('ocsEngine').invariantsOk ? t('health_status_ok') : t('health_status_broken', { count: subValue('ocsEngine', 'brokenInvariantsCount') }), tone: sub('ocsEngine').invariantsOk ? 'success' : 'danger' },
-              { label: t('health_ocs_sessions'), value: subValue('ocsEngine', 'activeSessions') },
-              { label: t('health_ocs_reservations'), value: subValue('ocsEngine', 'activeReservations') },
-              { label: t('health_ocs_tariff_plans'), value: subValue('ocsEngine', 'activeTariffPlans') },
-            ]}
-          />
+            {/* 2. OCS Engine Subsystem */}
+            <SubsystemCard
+              status={systemHealth?.subsystems?.ocsEngine?.status || 'healthy'}
+              icon={<Zap size={20} color="var(--primary)" />}
+              name={t("health_subsystem_ocs")}
+              description={t("health_desc_ocs")}
+              statusBadge={getStatusBadge(systemHealth?.subsystems?.ocsEngine?.status)}
+              metrics={[
+                { label: t("health_ocs_invariants"), value: systemHealth?.subsystems?.ocsEngine?.invariantsOk ? t("health_status_ok") : t("health_status_broken", { count: systemHealth?.subsystems?.ocsEngine?.brokenInvariantsCount || 0 }), tone: systemHealth?.subsystems?.ocsEngine?.invariantsOk ? 'success' : 'danger' },
+                { label: t("health_ocs_sessions"), value: systemHealth?.subsystems?.ocsEngine?.activeSessions ?? '--' },
+                { label: t("health_ocs_reservations"), value: systemHealth?.subsystems?.ocsEngine?.activeReservations ?? '--' },
+                { label: t("health_ocs_tariff_plans"), value: systemHealth?.subsystems?.ocsEngine?.activeTariffPlans ?? '--' },
+              ]}
+            />
 
-          <SubsystemCard
-            status={subStatus('hssCore')}
-            icon={<Layers size={20} color="var(--primary)" />}
-            name={t('health_subsystem_hss')}
-            description={t('health_desc_hss')}
-            statusBadge={statusBadge('hssCore')}
-            metrics={[
-              { label: t('health_hss_auth_credentials'), value: Number(sub('hssCore').missingCredentialsCount ?? 0) > 0 ? t('health_status_invalid', { count: subValue('hssCore', 'missingCredentialsCount') }) : t('health_status_ok'), tone: toneOf('hssCore', 'missingCredentialsCount', 'danger') },
-              { label: t('health_hss_slice_routing'), value: Number(sub('hssCore').missingSlicesCount ?? 0) > 0 ? t('health_status_missing', { count: subValue('hssCore', 'missingSlicesCount') }) : t('health_status_optimal'), tone: toneOf('hssCore', 'missingSlicesCount', 'danger') },
-              { label: t('health_hss_dangling_profiles'), value: subValue('hssCore', 'danglingProfilesCount'), tone: toneOf('hssCore', 'danglingProfilesCount', 'warning') },
-              { label: t('profiles_title'), value: subValue('hssCore', 'activeProfilesCount') },
-            ]}
-          />
+            {/* 3. HSS Core Subsystem */}
+            <SubsystemCard
+              status={systemHealth?.subsystems?.hssCore?.status || 'healthy'}
+              icon={<Layers size={20} color="var(--primary)" />}
+              name={t("health_subsystem_hss")}
+              description={t("health_desc_hss")}
+              statusBadge={getStatusBadge(systemHealth?.subsystems?.hssCore?.status)}
+              metrics={[
+                { label: t("health_hss_auth_credentials"), value: (systemHealth?.subsystems?.hssCore?.missingCredentialsCount || 0) > 0 ? t("health_status_invalid", { count: systemHealth?.subsystems?.hssCore?.missingCredentialsCount || 0 }) : t("health_status_ok"), tone: (systemHealth?.subsystems?.hssCore?.missingCredentialsCount || 0) > 0 ? 'danger' : 'success' },
+                { label: t("health_hss_slice_routing"), value: (systemHealth?.subsystems?.hssCore?.missingSlicesCount || 0) > 0 ? t("health_status_missing", { count: systemHealth?.subsystems?.hssCore?.missingSlicesCount || 0 }) : t("health_status_optimal"), tone: (systemHealth?.subsystems?.hssCore?.missingSlicesCount || 0) > 0 ? 'danger' : 'success' },
+                { label: t("health_hss_dangling_profiles"), value: systemHealth?.subsystems?.hssCore?.danglingProfilesCount ?? '--', tone: (systemHealth?.subsystems?.hssCore?.danglingProfilesCount || 0) > 0 ? 'warning' : 'success' },
+                { label: t("profiles_title"), value: systemHealth?.subsystems?.hssCore?.activeProfilesCount ?? '--' },
+              ]}
+            />
 
-          <SubsystemCard
-            status={subStatus('security')}
-            icon={<ShieldCheck size={20} color="var(--primary)" />}
-            name={t('health_subsystem_security')}
-            description={t('health_desc_sec')}
-            statusBadge={statusBadge('security')}
-            metrics={[
-              { label: t('health_sec_root'), value: sub('security').rootUserConfigured ? t('health_status_active') : t('health_status_missing', { count: 1 }), tone: sub('security').rootUserConfigured ? 'success' : 'danger' },
-              { label: t('health_sec_alerts'), value: subValue('security', 'unacknowledgedAlertsCount'), tone: toneOf('security', 'criticalAlertsCount', 'danger') },
-              { label: t('users_title'), value: subValue('security', 'activeUsersCount') },
-            ]}
-          />
-        </div>
-      </section>
-
-      {notice && (
-        <aside
-          role={notice.type === 'error' ? 'alert' : 'status'}
-          className={`system-health-notice notice-${notice.type}`}
-          style={{
-            padding: '0.75rem 1rem',
-            marginBottom: '1rem',
-            borderRadius: '4px',
-            backgroundColor:
-              notice.type === 'error'
-                ? '#fee2e2'
-                : notice.type === 'warning'
-                ? '#fef3c7'
-                : '#dcfce7',
-            color:
-              notice.type === 'error'
-                ? '#991b1b'
-                : notice.type === 'warning'
-                ? '#92400e'
-                : '#166534',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-          }}
-        >
-          <span>{notice.message}</span>
-          <button
-            type="button"
-            onClick={() => setNotice(null)}
-            style={{
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              fontWeight: 'bold',
-            }}
-          >
-            &times;
-          </button>
-        </aside>
-      )}
-
-      {/* Subsystem Health Cards */}
-      <section className="read-collection">
-        <h2>Subsystem Status</h2>
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-            gap: '1rem',
-            marginBottom: '1.5rem',
-          }}
-        >
-          <article className="health-card" style={{ padding: '1rem', border: '1px solid #e5e7eb', borderRadius: '6px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-              <Database size={18} color="#2563eb" />
-              <strong>Data Persistence</strong>
-            </div>
-            <p style={{ margin: 0, fontSize: '0.9rem', color: '#4b5563' }}>
-              Status: {String(healthData.mongo_status ?? healthData.database ?? 'operational')}
-            </p>
-          </article>
-
-          <article className="health-card" style={{ padding: '1rem', border: '1px solid #e5e7eb', borderRadius: '6px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-              <Activity size={18} color="#059669" />
-              <strong>Audit State</strong>
-            </div>
-            <p style={{ margin: 0, fontSize: '0.9rem', color: '#4b5563' }}>
-              Last Check: {auditData.lastSaveTime ? new Date(Number(auditData.lastSaveTime) * 1000).toLocaleTimeString() : 'N/A'}
-            </p>
-          </article>
-
-          <article className="health-card" style={{ padding: '1rem', border: '1px solid #e5e7eb', borderRadius: '6px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-              <ShieldAlert size={18} color="#d97706" />
-              <strong>Active Alerts</strong>
-            </div>
-            <p style={{ margin: 0, fontSize: '0.9rem', color: '#4b5563' }}>
-              Count: {alertItems.length}
-            </p>
-          </article>
-        </div>
-      </section>
-
-      {/* Audit Scan Progress Indicator */}
-      {isScanning && (
-        <section
-          className="scan-status-strip"
-          style={{
-            padding: '1rem',
-            marginBottom: '1.5rem',
-            backgroundColor: '#f0f9ff',
-            border: '1px solid #bae6fd',
-            borderRadius: '6px',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Clock size={16} color="#0284c7" />
-            <span>
-              Diagnostic audit running: Phase <strong>{scanPhase}</strong> (Processed: {scannedTotal} items, Anomalies found: {anomalies.length})
-            </span>
+            {/* 4. Security Subsystem */}
+            <SubsystemCard
+              status={systemHealth?.subsystems?.security?.status || 'healthy'}
+              icon={<ShieldCheck size={20} color="var(--primary)" />}
+              name={t("health_subsystem_security")}
+              description={t("health_desc_sec")}
+              statusBadge={getStatusBadge(systemHealth?.subsystems?.security?.status)}
+              metrics={[
+                { label: t("health_sec_root"), value: systemHealth?.subsystems?.security?.rootUserConfigured ? t("health_status_active") : t("health_status_missing", { count: 1 }), tone: systemHealth?.subsystems?.security?.rootUserConfigured ? 'success' : 'danger' },
+                { label: t("health_sec_alerts"), value: systemHealth?.subsystems?.security?.unacknowledgedAlertsCount ?? '--', tone: (systemHealth?.subsystems?.security?.criticalAlertsCount || 0) > 0 ? 'danger' : 'success' },
+                { label: t("users_title"), value: systemHealth?.subsystems?.security?.activeUsersCount ?? '--' },
+              ]}
+            />
           </div>
         </section>
-      )}
 
-      {/* Scan Anomalies Section */}
-      <section className="read-collection">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h2>Diagnostic Findings {anomalies.length > 0 ? `(${anomalies.length})` : ''}</h2>
-          {isScanStale && (
-            <span style={{ fontSize: '0.85rem', color: '#b45309', fontWeight: 500 }}>
-              (Scan data is stale after partial remediation)
-            </span>
-          )}
-        </div>
-
-        {anomalies.length === 0 ? (
-          <p style={{ color: '#6b7280', fontSize: '0.9rem' }}>
-            {scanPhase === 'COMPLETE'
-              ? 'No anomalies detected across all four audit scan phases.'
-              : 'Click "Run Audit Scan" above to execute sequential diagnostic scanning across subscriber, OCS, tariff, and reservation records.'}
-          </p>
-        ) : (
-          <div className="read-table-wrap">
-            <table className="read-table">
-              <caption className="sr-only">Diagnostic Anomalies</caption>
-              <thead>
-                <tr>
-                  <th>IMSI</th>
-                  <th>Anomaly Type</th>
-                  <th>Category</th>
-                  <th>Severity</th>
-                  <th>Details</th>
-                  <th>Remediation</th>
-                </tr>
-              </thead>
-              <tbody>
-                {anomalies.map((anomaly, idx) => (
-                  <tr key={`${anomaly.imsi}-${anomaly.type}-${idx}`}>
-                    <td data-label="IMSI">{anomaly.imsi}</td>
-                    <td data-label="Anomaly Type"><code>{anomaly.type}</code></td>
-                    <td data-label="Category">{anomaly.category || 'subscriber'}</td>
-                    <td data-label="Severity">
-                      <span
-                        style={{
-                          padding: '0.2rem 0.5rem',
-                          borderRadius: '3px',
-                          fontSize: '0.8rem',
-                          backgroundColor:
-                            anomaly.severity === 'critical'
-                              ? '#fee2e2'
-                              : anomaly.severity === 'warning'
-                              ? '#fef3c7'
-                              : '#e0f2fe',
-                          color:
-                            anomaly.severity === 'critical'
-                              ? '#991b1b'
-                              : anomaly.severity === 'warning'
-                              ? '#92400e'
-                              : '#0369a1',
-                        }}
-                      >
-                        {anomaly.severity || 'info'}
-                      </span>
-                    </td>
-                    <td data-label="Details">{anomaly.details || 'Detected mismatch in document state.'}</td>
-                    <td data-label="Remediation">
-                      <button
-                        type="button"
-                        className="read-refresh"
-                        style={{ padding: '0.25rem 0.5rem', fontSize: '0.85rem' }}
-                        onClick={() => handleOpenSingleHeal(anomaly)}
-                        disabled={isViewer || isHealing}
-                        title={isViewer ? 'Read-only access: viewer role cannot heal anomalies' : undefined}
-                      >
-                        <Wrench size={14} />
-                        Heal
-                      </button>
-                    </td>
-                  </tr>
+        {/* Actionable Recommendations Banner */}
+        {systemHealth?.summary?.recommendations && systemHealth.summary.recommendations.length > 0 && (
+          <div className="health-recommendations-banner">
+            <AlertTriangle className="health-rec-icon" size={22} />
+            <div className="health-rec-content">
+              <div className="health-rec-title">{t("health_recommendations_title")}</div>
+              <ul className="health-rec-list">
+                {systemHealth.summary.recommendations.map((rec, i) => (
+                  <li key={i}>{rec}</li>
                 ))}
-              </tbody>
-            </table>
+              </ul>
+            </div>
           </div>
         )}
-      </section>
 
-      {/* Single Heal Confirmation Modal */}
-      {healModalAnomaly && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="heal-modal-title"
-          style={{
-            position: 'fixed',
-            inset: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000,
-          }}
-        >
-          <div
-            style={{
-              backgroundColor: '#fff',
-              padding: '1.5rem',
-              borderRadius: '8px',
-              maxWidth: '480px',
-              width: '90%',
-              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
-            }}
-          >
-            <h3 id="heal-modal-title" style={{ margin: '0 0 1rem 0' }}>
-              Confirm Targeted Remediation
-            </h3>
-            <p style={{ fontSize: '0.9rem', color: '#4b5563', marginBottom: '1rem' }}>
-              This operation applies targeted self-healing for subscriber document state.
-            </p>
+        {/* Composite KPI Board */}
+        <MetricStrip
+          variant="cards"
+          ariaLabel={t("nav_system_health")}
+          items={[
+            {
+              key: "score",
+              label: t("health_overall_score"),
+              value: auditPhase === 'INIT' ? '--' : `${displayScore}%`,
+              tone: displayScore < 90 ? "danger" : "success",
+              icon: <HeartPulse size={20} />,
+            },
+            {
+              key: "anomalies",
+              label: t("health_active_anomalies"),
+              value: anomalies.length,
+              icon: <ShieldAlert size={20} />,
+            },
+            {
+              key: "bgsave",
+              label: t("health_last_bgsave"),
+              value: lastSaveTime ? new Date(lastSaveTime * 1000).toLocaleString() : t("health_loading"),
+              tone: "warning",
+              compactValue: true,
+              icon: <HardDrive size={20} />,
+            },
+            {
+              key: "latency",
+              label: t("health_db_latency"),
+              value: systemHealth?.subsystems?.database?.latencyMs !== undefined ? `${systemHealth.subsystems.database.latencyMs} ms` : '--',
+              compactValue: true,
+              icon: <Activity size={20} />,
+            },
+          ]}
+        />
 
-            <dl style={{ fontSize: '0.875rem', marginBottom: '1rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                <dt style={{ fontWeight: 600 }}>IMSI:</dt>
-                <dd style={{ margin: 0 }}>{healModalAnomaly.imsi}</dd>
+        {/* Multi-Phase Control Strip */}
+        <div className="health-control-strip">
+          <div className="health-control-status">
+            <div className="health-control-text">
+              <Activity size={20} color="var(--primary)" />
+              <span className={`health-control-msg ${isAuditing ? 'health-control-msg-active' : 'health-control-msg-idle'}`}>
+                {auditPhase === 'IDLE' && t("health_idle_msg")}
+                {auditPhase === 'INIT' && t("health_scan_init")}
+                {auditPhase === 'SCAN_SUB' && t("health_scan_progress", { phase: 'HSS', total: String(scannedTotal), anomalies: String(anomalies.length) })}
+                {auditPhase === 'SCAN_OCS' && t("health_scan_progress", { phase: 'OCS', total: String(scannedTotal), anomalies: String(anomalies.length) })}
+                {auditPhase === 'SCAN_TARIFF' && t("health_scan_progress", { phase: 'TARIFF', total: String(scannedTotal), anomalies: String(anomalies.length) })}
+                {auditPhase === 'SCAN_RESERVATIONS' && t("health_scan_progress", { phase: 'RESERVATION', total: String(scannedTotal), anomalies: String(anomalies.length) })}
+                {auditPhase === 'COMPLETE' && t("health_scan_complete", { total: String(scannedTotal), anomalies: String(anomalies.length) })}
+                {auditPhase === 'ABORTED' && t("health_scan_abort")}
+              </span>
+            </div>
+            {isAuditing && (
+              <div className="progress-bar-container health-progress-bar">
+                <div className="progress-bar-value" />
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                <dt style={{ fontWeight: 600 }}>Anomaly Type:</dt>
-                <dd style={{ margin: 0 }}><code>{healModalAnomaly.type}</code></dd>
-              </div>
-            </dl>
-
-            {profileList.length > 0 && (
-              <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: '1rem' }}>
-                Remediation Profile (optional):
-                <select
-                  value={healProfile}
-                  onChange={(e) => setHealProfile(e.target.value)}
-                  style={{ display: 'block', width: '100%', marginTop: '0.25rem', padding: '0.5rem', borderRadius: '4px', border: '1px solid #d1d5db' }}
-                >
-                  <option value="">(Default Profile)</option>
-                  {profileList.map((p) => (
-                    <option key={p} value={p}>{p}</option>
-                  ))}
-                </select>
-              </label>
             )}
-
-            <label
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                fontSize: '0.875rem',
-                marginBottom: '1.25rem',
-                cursor: 'pointer',
-              }}
+          </div>
+          <div className="health-control-actions">
+            <button
+              className="btn btn-primary health-btn-run"
+              onClick={runFullAudit}
+              disabled={isAuditing}
             >
-              <input
-                type="checkbox"
-                checked={isHealConfirmed}
-                onChange={(e) => setIsHealConfirmed(e.target.checked)}
-              />
-              <span>I confirm targeted remediation execution for this subscriber.</span>
-            </label>
+              {isAuditing ? <span className="spinner health-spinner" /> : <Database size={16}/>}
+              {isAuditing ? t("health_btn_scanning") : t("health_btn_run")}
+            </button>
+          </div>
+        </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+        {/* Anomalies Table & Diagnostic Toolbar */}
+        <div className="dash-card">
+          <div className="health-anomalies-header">
+            <div className="health-anomalies-title-group">
+              <h2 className="health-anomalies-title">{t("health_anomalies_detected")}</h2>
+              <span className="health-anomalies-badge-count">{filteredAnomalies.length} / {anomalies.length}</span>
+            </div>
+
+            {/* Category Filter Tabs */}
+            <div className="health-filter-tabs">
               <button
                 type="button"
-                className="read-refresh"
-                onClick={() => setHealModalAnomaly(null)}
-                disabled={isHealing}
+                className={`health-tab-btn ${activeCategoryTab === 'all' ? 'active' : ''}`}
+                onClick={() => setActiveCategoryTab('all')}
               >
-                Cancel
+                {t("health_tab_all")}
               </button>
               <button
                 type="button"
-                className="read-refresh operational-btn"
-                style={{ backgroundColor: '#dc2626', color: '#fff' }}
-                onClick={() => void handleExecuteSingleHeal()}
-                disabled={!isHealConfirmed || isHealing}
+                className={`health-tab-btn ${activeCategoryTab === 'hss' ? 'active' : ''}`}
+                onClick={() => setActiveCategoryTab('hss')}
               >
-                {isHealing ? 'Healing...' : 'Execute Remediation'}
+                {t("health_tab_hss")}
+              </button>
+              <button
+                type="button"
+                className={`health-tab-btn ${activeCategoryTab === 'ocs' ? 'active' : ''}`}
+                onClick={() => setActiveCategoryTab('ocs')}
+              >
+                {t("health_tab_ocs")}
+              </button>
+              <button
+                type="button"
+                className={`health-tab-btn ${activeCategoryTab === 'reservation' ? 'active' : ''}`}
+                onClick={() => setActiveCategoryTab('reservation')}
+              >
+                {t("health_tab_reservation")}
+              </button>
+              <button
+                type="button"
+                className={`health-tab-btn ${activeCategoryTab === 'tariff' ? 'active' : ''}`}
+                onClick={() => setActiveCategoryTab('tariff')}
+              >
+                {t("health_tab_tariff")}
+              </button>
+              <button
+                type="button"
+                className={`health-tab-btn ${activeCategoryTab === 'profile' ? 'active' : ''}`}
+                onClick={() => setActiveCategoryTab('profile')}
+              >
+                {t("health_tab_profile")}
+              </button>
+            </div>
+
+            {/* Severity and Actions Toolbar */}
+            <div className="health-anomalies-toolbar">
+              <select
+                className="health-severity-select"
+                aria-label={t("health_anomalies_detected")}
+                value={selectedSeverity}
+                onChange={(e) => setSelectedSeverity(e.target.value as any)}
+              >
+                <option value="all">{t("health_filter_all_severities")}</option>
+                <option value="critical">{t("health_severity_critical")}</option>
+                <option value="warning">{t("health_severity_warning")}</option>
+                <option value="info">{t("health_severity_info")}</option>
+              </select>
+
+              {filteredAnomalies.length > 0 && canHeal && (
+                <button
+                  type="button"
+                  className="btn btn-primary health-btn-batch"
+                  onClick={handleOpenBatchModal}
+                  disabled={isAuditing}
+                >
+                  <Wrench size={14} />
+                  {t("health_btn_batch_heal")}
+                </button>
+              )}
+
+              <button
+                type="button"
+                className="btn btn-outline health-btn-export"
+                onClick={exportDiagnosticReport}
+                title={t("health_btn_export_report")}
+              >
+                <Download size={14} />
+                {t("export")}
               </button>
             </div>
           </div>
-        </div>
-      )}
 
-      {/* Batch Heal Confirmation Modal */}
-      {batchModalOpen && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="batch-modal-title"
-          style={{
-            position: 'fixed',
-            inset: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000,
-          }}
-        >
-          <div
-            style={{
-              backgroundColor: '#fff',
-              padding: '1.5rem',
-              borderRadius: '8px',
-              maxWidth: '480px',
-              width: '90%',
-              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
-            }}
-          >
-            <h3 id="batch-modal-title" style={{ margin: '0 0 1rem 0' }}>
-              Confirm Batch Remediation ({anomalies.length} items)
-            </h3>
-            <p style={{ fontSize: '0.9rem', color: '#4b5563', marginBottom: '1rem' }}>
-              Remediation will execute sequentially across all {anomalies.length} diagnostic findings.
-            </p>
-
-            {profileList.length > 0 && (
-              <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: '1rem' }}>
-                Batch Remediation Profile (optional):
-                <select
-                  value={batchProfile}
-                  onChange={(e) => setBatchProfile(e.target.value)}
-                  style={{ display: 'block', width: '100%', marginTop: '0.25rem', padding: '0.5rem', borderRadius: '4px', border: '1px solid #d1d5db' }}
-                >
-                  <option value="">(Default Profile)</option>
-                  {profileList.map((p) => (
-                    <option key={p} value={p}>{p}</option>
+          {isAuditing && anomalies.length === 0 ? (
+            <LoadingRows columns={5} rows={4} />
+          ) : filteredAnomalies.length === 0 ? (
+            <EmptyState
+              icon={<ShieldAlert size={48} />}
+              title={t("health_no_anomalies")}
+              description={auditPhase === "IDLE" ? t("health_empty_idle_desc") : t("health_empty_complete_desc")}
+              action={
+                auditPhase === "IDLE" ? (
+                  <button type="button" className="btn btn-primary" onClick={runFullAudit}>
+                    <Database size={16} /> {t("health_btn_run")}
+                  </button>
+                ) : undefined
+              }
+            />
+          ) : (
+            <div className="health-table-wrap">
+              <table className="health-table">
+                <caption className="sr-only">{t("health_anomalies_detected")}</caption>
+                <thead className="health-table-thead">
+                  <tr>
+                    <th className="health-table-th" data-column-priority="essential">{t("health_col_imsi")}</th>
+                    <th className="health-table-th" data-column-priority="essential">{t("health_filter_severity")}</th>
+                    <th className="health-table-th" data-column-priority="supplementary">{t("health_col_type")}</th>
+                    <th className="health-table-th" data-column-priority="essential">{t("health_col_details")}</th>
+                    <th className="health-table-th-right" data-column-priority="essential">{t("health_col_action")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredAnomalies.map((a, idx) => (
+                    <tr key={`${a.imsi}-${a.type}-${idx}`} className="health-table-tr">
+                      <td className="health-table-td-imsi" data-label={t("health_col_imsi")} data-column-priority="essential">{a.imsi}</td>
+                      <td className="health-table-td" data-label={t("health_filter_severity")} data-column-priority="essential">
+                        <span className={`health-severity-tag ${a.severity || 'warning'}`}>
+                          {a.severity === 'critical' ? <ShieldAlert size={12} /> : a.severity === 'info' ? <Info size={12} /> : <AlertTriangle size={12} />}
+                          {t(`health_severity_${a.severity || 'warning'}`)}
+                        </span>
+                      </td>
+                      <td className="health-table-td" data-label={t("health_col_type")} data-column-priority="supplementary">
+                        <span className="health-category-pill">
+                          {a.type}
+                        </span>
+                      </td>
+                      <td className="health-table-td-details" data-label={t("health_col_details")} data-column-priority="essential">{renderDetails(a.details, a.type)}</td>
+                      <td className="health-table-td-actions" data-label={t("health_col_action")} data-column-priority="essential">
+                        <button
+                          hidden={!canHeal}
+                          className="btn btn-outline health-btn-heal"
+                          onClick={() => handleOpenHealModal(a)}
+                        >
+                          {t("health_btn_heal")}
+                        </button>
+                      </td>
+                    </tr>
                   ))}
-                </select>
-              </label>
-            )}
-
-            <label
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                fontSize: '0.875rem',
-                marginBottom: '1.25rem',
-                cursor: 'pointer',
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={isBatchConfirmed}
-                onChange={(e) => setIsBatchConfirmed(e.target.checked)}
-              />
-              <span>I confirm batch remediation execution for {anomalies.length} findings.</span>
-            </label>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
-              <button
-                type="button"
-                className="read-refresh"
-                onClick={() => setBatchModalOpen(false)}
-                disabled={isBatchHealing}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="read-refresh operational-btn"
-                style={{ backgroundColor: '#dc2626', color: '#fff' }}
-                onClick={() => void handleExecuteBatchHeal()}
-                disabled={!isBatchConfirmed || isBatchHealing}
-              >
-                {isBatchHealing ? 'Batch Remediation in Progress...' : 'Execute Batch Remediation'}
-              </button>
+                </tbody>
+              </table>
             </div>
-          </div>
+          )}
         </div>
+      </div>
+
+      {/* Single Item Heal Modal */}
+      {targetAnomaly && (
+        <Dialog open={healModalOpen} onClose={() => setHealModalOpen(false)} overlayClassName="modal-overlay health-modal-overlay" className="modal-content animate-fade-in health-modal-content" labelledBy="health-heal-modal-title" describedBy="health-heal-modal-description">
+            <div className="health-modal-header">
+              <h2 id="health-heal-modal-title" className="health-modal-title">{t("health_modal_title")}</h2>
+            </div>
+
+            <div className="health-modal-body">
+              <div className="health-modal-group">
+                <div className="health-modal-label">{t("health_modal_target")}</div>
+                <div className="health-modal-target">{targetAnomaly.imsi} ({targetAnomaly.type})</div>
+              </div>
+
+              <div className="health-modal-group-lg">
+                <label className="form-label health-modal-form-label" htmlFor="health-heal-profile">{t("health_modal_restore")}</label>
+                <select id="health-heal-profile" className="form-input" value={healProfile} onChange={e => setHealProfile(e.target.value)}>
+                  <option value="">{t("health_modal_default")}</option>
+                  {profileList.map((p: any) => <option key={p.name} value={p.name}>{p.title || p.name}</option>)}
+                </select>
+                <div id="health-heal-modal-description" className="health-modal-desc">
+                  {t("health_modal_desc")}
+                </div>
+              </div>
+
+              <div className="health-modal-confirm-box">
+                <label className="health-modal-checkbox-label">
+                  <input
+                    type="checkbox"
+                    className="checkbox-custom health-modal-checkbox"
+                    checked={isHealConfirmed}
+                    onChange={e => setIsHealConfirmed(e.target.checked)}
+                  />
+                  <span className="health-modal-confirm-text">
+                    {t("health_modal_confirm", { time: lastSaveTime ? new Date(lastSaveTime * 1000).toLocaleString() : t("health_unknown") })}
+                  </span>
+                </label>
+              </div>
+
+              <div className="health-modal-actions">
+                <button
+                  className="btn btn-outline"
+                  onClick={() => setHealModalOpen(false)}
+                  disabled={isHealing}
+                >
+                  {t("cancel")}
+                </button>
+                <button
+                  className="btn btn-primary health-modal-btn"
+                  onClick={executeHeal}
+                  disabled={!isHealConfirmed || isHealing}
+                >
+                  {isHealing ? <span className="spinner health-spinner" /> : <Check size={16} />}
+                  {t("health_btn_execute")}
+                </button>
+              </div>
+            </div>
+        </Dialog>
       )}
-    </section>
+
+      {/* Batch Auto-Heal Modal */}
+      <Dialog open={batchModalOpen} onClose={() => setBatchModalOpen(false)} overlayClassName="modal-overlay health-modal-overlay" className="modal-content animate-fade-in health-modal-content" labelledBy="health-batch-modal-title" describedBy="health-batch-modal-description">
+            <div className="health-modal-header">
+              <h2 id="health-batch-modal-title" className="health-modal-title">{t("health_batch_modal_title")}</h2>
+            </div>
+
+            <div className="health-modal-body">
+              <div className="health-modal-group">
+                <div className="health-modal-label">{t("health_anomalies_detected")}</div>
+                <div className="health-modal-target">{t("health_items_to_remediate", { count: filteredAnomalies.length })}</div>
+              </div>
+
+              <p id="health-batch-modal-description" className="health-modal-desc">
+                {t("health_batch_modal_desc", { count: String(filteredAnomalies.length) })}
+              </p>
+
+              <div className="health-modal-group-lg">
+                <label className="form-label health-modal-form-label" htmlFor="health-batch-profile">{t("health_modal_restore")}</label>
+                <select id="health-batch-profile" className="form-input" value={batchHealProfile} onChange={e => setBatchHealProfile(e.target.value)}>
+                  <option value="">{t("health_modal_default")}</option>
+                  {profileList.map((p: any) => <option key={p.name} value={p.name}>{p.title || p.name}</option>)}
+                </select>
+              </div>
+
+              <div className="health-modal-confirm-box">
+                <label className="health-modal-checkbox-label">
+                  <input
+                    type="checkbox"
+                    className="checkbox-custom health-modal-checkbox"
+                    checked={isBatchConfirmed}
+                    onChange={e => setIsBatchConfirmed(e.target.checked)}
+                  />
+                  <span className="health-modal-confirm-text">
+                    {t("health_batch_modal_confirm")}
+                  </span>
+                </label>
+              </div>
+
+              <div className="health-modal-actions">
+                <button
+                  className="btn btn-outline"
+                  onClick={() => setBatchModalOpen(false)}
+                  disabled={isBatchHealing}
+                >
+                  {t("cancel")}
+                </button>
+                <button
+                  className="btn btn-primary health-modal-btn"
+                  onClick={executeBatchHeal}
+                  disabled={!isBatchConfirmed || isBatchHealing}
+                >
+                  {isBatchHealing ? <span className="spinner health-spinner" /> : <Wrench size={16} />}
+                  {t("health_btn_batch_heal")}
+                </button>
+              </div>
+            </div>
+      </Dialog>
+    </>
   );
 }

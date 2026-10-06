@@ -1054,7 +1054,6 @@ export const en: Record<string, string> = {
     approval_msg_approved: "Approval executed.",
     approval_msg_rejected: "Approval rejected.",
     approval_err_review: "Failed to review approval request.",
-    approval_msg_submitted: "Approval request {id} submitted. Root review is required before execution.",
     health_data_score: "Data Health Score",
     health_active_anomalies: "Active Anomalies",
     health_last_bgsave: "Last Mongo Check",

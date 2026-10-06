@@ -49,7 +49,7 @@ export default function OcsBalanceCapacityCard({ metrics, t }: OcsBalanceCapacit
             <Database size={20} />
           </div>
           <div>
-            <h3>{t("dash_ocs_balance_pool_title")}</h3>
+            <h2>{t("dash_ocs_balance_pool_title")}</h2>
             <p className="analytics-ocs-subtitle">{t("dash_ocs_balance_pool_subtitle")}</p>
           </div>
         </div>

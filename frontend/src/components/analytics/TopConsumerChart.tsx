@@ -21,6 +21,7 @@ import {
   CHART_TOOLTIP_STYLE,
   ChartSummary,
 } from '../ui/chartPrimitives';
+import { requestAnalyticsSync } from '../../features/system-health/system-health-api';
 
 type TopConsumerTooltipPayload = {
   payload?: TopConsumer;
@@ -82,7 +83,7 @@ export default function TopConsumerChart({
       <div className="analytics-panel-header">
         <div className="analytics-panel-title">
           <Zap size={18} color="var(--primary)" />
-          <h3 id={titleId}>{t("dash_chart_top5_title")}</h3>
+          <h2 id={titleId}>{t("dash_chart_top5_title")}</h2>
         </div>
         <span className="analytics-panel-badge">
           <Signal size={13} />
@@ -131,7 +132,7 @@ export default function TopConsumerChart({
             icon={<BarChart3 size={42} />}
             title={t("dash_chart_top5_empty")}
             action={
-              <button className="btn btn-outline analytics-empty-button" type="button" onClick={() => fetch("/api/analytics/init", { method: "POST" })}>
+              <button className="btn btn-outline analytics-empty-button" type="button" onClick={() => void requestAnalyticsSync()}>
                 <DatabaseZap size={14} />
                 {t("sync_telemetry")}
               </button>

@@ -245,7 +245,7 @@ export function InventoryDetailPage() {
       <div className="page-container">
         <Link to="/inventory" className="btn-secondary btn-sm mb-4 inline-flex items-center gap-1.5">
           <ArrowLeft size={16} />
-          <span>Back to Inventory</span>
+          <span>{t('inventory_back_to_list')}</span>
         </Link>
         <div className="notice-banner notice-error" role="alert">
           {error || 'Resource not found.'}
@@ -344,8 +344,8 @@ export function InventoryDetailPage() {
             ) : null}
           </div>
           <div className="text-right text-xs text-muted-foreground">
-            <div>Revision: <span className="font-mono font-medium text-foreground">{resource.revision}</span></div>
-            <div>Schema: <span className="font-mono font-medium text-foreground">v{resource.schemaVersion}</span></div>
+            <div>{t('inventory_revision')}<span className="font-mono font-medium text-foreground">{resource.revision}</span></div>
+            <div>{t('inventory_schema')}<span className="font-mono font-medium text-foreground">v{resource.schemaVersion}</span></div>
             <div className="mt-1">ID: <span className="font-mono text-muted-foreground">{resource.resourceId}</span></div>
           </div>
         </div>
@@ -356,28 +356,28 @@ export function InventoryDetailPage() {
         <div className="card p-6">
           <h2 className="text-base font-semibold mb-4 text-foreground border-b pb-2">Classification & Identity</h2>
           <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-            <dt className="text-muted-foreground">Domain</dt>
+            <dt className="text-muted-foreground">{t('inventory_domain')}</dt>
             <dd className="font-medium text-foreground">{resource.domain}</dd>
-            <dt className="text-muted-foreground">Role</dt>
+            <dt className="text-muted-foreground">{t('inventory_role')}</dt>
             <dd className="font-medium text-foreground">{resource.role || '-'}</dd>
-            <dt className="text-muted-foreground">Vendor</dt>
+            <dt className="text-muted-foreground">{t('inventory_vendor')}</dt>
             <dd className="font-medium text-foreground">{resource.vendor || '-'}</dd>
-            <dt className="text-muted-foreground">Model</dt>
+            <dt className="text-muted-foreground">{t('inventory_model')}</dt>
             <dd className="font-medium text-foreground">{resource.model || '-'}</dd>
           </dl>
 
-          <h3 className="text-sm font-semibold mt-6 mb-3 text-foreground border-b pb-2">Software Metadata</h3>
+          <h3 className="text-sm font-semibold mt-6 mb-3 text-foreground border-b pb-2">{t('inventory_software_metadata')}</h3>
           {resource.software ? (
             <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-              <dt className="text-muted-foreground">Product</dt>
+              <dt className="text-muted-foreground">{t('inventory_software_product')}</dt>
               <dd className="font-medium text-foreground">{resource.software.product || '-'}</dd>
-              <dt className="text-muted-foreground">Version</dt>
+              <dt className="text-muted-foreground">{t('inventory_software_version')}</dt>
               <dd className="font-medium text-foreground">{resource.software.version || '-'}</dd>
-              <dt className="text-muted-foreground">Build</dt>
+              <dt className="text-muted-foreground">{t('inventory_software_build')}</dt>
               <dd className="font-medium text-foreground">{resource.software.build || '-'}</dd>
             </dl>
           ) : (
-            <p className="text-xs text-muted-foreground">No software metadata recorded.</p>
+            <p className="text-xs text-muted-foreground">{t('inventory_software_metadata_empty')}</p>
           )}
         </div>
 
@@ -385,27 +385,27 @@ export function InventoryDetailPage() {
         <div className="card p-6">
           <h2 className="text-base font-semibold mb-4 text-foreground border-b pb-2">Source & Provenance</h2>
           <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-            <dt className="text-muted-foreground">Source Kind</dt>
+            <dt className="text-muted-foreground">{t('inventory_source_kind')}</dt>
             <dd className="font-medium text-foreground">{resource.source?.kind || '-'}</dd>
-            <dt className="text-muted-foreground">Origin System</dt>
+            <dt className="text-muted-foreground">{t('inventory_origin_system')}</dt>
             <dd className="font-medium text-foreground">{resource.source?.system || '-'}</dd>
-            <dt className="text-muted-foreground">Authority</dt>
+            <dt className="text-muted-foreground">{t('inventory_authority')}</dt>
             <dd className="font-medium text-foreground">{resource.source?.authority || '-'}</dd>
-            <dt className="text-muted-foreground">External ID</dt>
+            <dt className="text-muted-foreground">{t('inventory_external_id')}</dt>
             <dd className="font-medium text-foreground font-mono">{resource.source?.externalId || '-'}</dd>
           </dl>
 
-          <h3 className="text-sm font-semibold mt-6 mb-3 text-foreground border-b pb-2">Audit History</h3>
+          <h3 className="text-sm font-semibold mt-6 mb-3 text-foreground border-b pb-2">{t('inventory_audit_history')}</h3>
           <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-            <dt className="text-muted-foreground">Created By</dt>
+            <dt className="text-muted-foreground">{t('inventory_created_by')}</dt>
             <dd className="font-medium text-foreground">{resource.createdBy}</dd>
-            <dt className="text-muted-foreground">Created At</dt>
+            <dt className="text-muted-foreground">{t('inventory_created_at')}</dt>
             <dd className="font-medium text-foreground text-xs">
               {new Date(resource.createdAt).toLocaleString()}
             </dd>
-            <dt className="text-muted-foreground">Updated By</dt>
+            <dt className="text-muted-foreground">{t('inventory_updated_by')}</dt>
             <dd className="font-medium text-foreground">{resource.updatedBy}</dd>
-            <dt className="text-muted-foreground">Updated At</dt>
+            <dt className="text-muted-foreground">{t('inventory_updated_at')}</dt>
             <dd className="font-medium text-foreground text-xs">
               {new Date(resource.updatedAt).toLocaleString()}
             </dd>
@@ -415,18 +415,18 @@ export function InventoryDetailPage() {
 
       {/* Management Endpoints */}
       <div className="card p-6 mb-6">
-        <h2 className="text-base font-semibold mb-4 text-foreground border-b pb-2">Management Endpoints</h2>
+        <h2 className="text-base font-semibold mb-4 text-foreground border-b pb-2">{t('inventory_management_endpoints')}</h2>
         {resource.managementEndpoints && resource.managementEndpoints.length > 0 ? (
           <div className="table-wrapper">
             <table className="data-table w-full">
               <thead>
                 <tr>
-                  <th>Endpoint Name</th>
-                  <th>Protocol</th>
-                  <th>Address Type</th>
-                  <th>Address</th>
-                  <th>Port</th>
-                  <th>Path</th>
+                  <th>{t('inventory_endpoint_name')}</th>
+                  <th>{t('inventory_endpoint_protocol')}</th>
+                  <th>{t('inventory_endpoint_address_type')}</th>
+                  <th>{t('inventory_endpoint_address')}</th>
+                  <th>{t('inventory_endpoint_port')}</th>
+                  <th>{t('inventory_endpoint_path')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -444,14 +444,14 @@ export function InventoryDetailPage() {
             </table>
           </div>
         ) : (
-          <p className="text-xs text-muted-foreground">No management endpoints registered.</p>
+          <p className="text-xs text-muted-foreground">{t('inventory_endpoints_empty')}</p>
         )}
       </div>
 
       {/* Capabilities & Labels */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
         <div className="card p-6">
-          <h2 className="text-base font-semibold mb-4 text-foreground border-b pb-2">Capabilities</h2>
+          <h2 className="text-base font-semibold mb-4 text-foreground border-b pb-2">{t('inventory_capabilities')}</h2>
           {resource.capabilities && resource.capabilities.length > 0 ? (
             <div className="flex flex-wrap gap-2">
               {resource.capabilities.map((cap) => (
@@ -461,12 +461,12 @@ export function InventoryDetailPage() {
               ))}
             </div>
           ) : (
-            <p className="text-xs text-muted-foreground">No capabilities specified.</p>
+            <p className="text-xs text-muted-foreground">{t('inventory_capabilities_empty')}</p>
           )}
         </div>
 
         <div className="card p-6">
-          <h2 className="text-base font-semibold mb-4 text-foreground border-b pb-2">Labels</h2>
+          <h2 className="text-base font-semibold mb-4 text-foreground border-b pb-2">{t('inventory_labels')}</h2>
           {resource.labels && Object.keys(resource.labels).length > 0 ? (
             <div className="flex flex-wrap gap-2">
               {Object.entries(resource.labels).map(([k, v]) => (
@@ -476,20 +476,20 @@ export function InventoryDetailPage() {
               ))}
             </div>
           ) : (
-            <p className="text-xs text-muted-foreground">No labels attached.</p>
+            <p className="text-xs text-muted-foreground">{t('inventory_labels_empty')}</p>
           )}
         </div>
       </div>
 
       {/* Attributes (JSON) */}
       <div className="card p-6 mb-6">
-        <h2 className="text-base font-semibold mb-4 text-foreground border-b pb-2">Attributes</h2>
+        <h2 className="text-base font-semibold mb-4 text-foreground border-b pb-2">{t('inventory_attributes')}</h2>
         {resource.attributes && Object.keys(resource.attributes).length > 0 ? (
           <pre className="bg-muted p-4 rounded text-xs font-mono overflow-auto max-h-96">
             {JSON.stringify(resource.attributes, null, 2)}
           </pre>
         ) : (
-          <p className="text-xs text-muted-foreground">No custom attributes defined.</p>
+          <p className="text-xs text-muted-foreground">{t('inventory_attributes_empty')}</p>
         )}
       </div>
 
@@ -555,7 +555,7 @@ export function InventoryDetailPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium mb-1">Display Name</label>
+              <label className="block text-xs font-medium mb-1">{t('inventory_display_name')}</label>
               <input
                 type="text"
                 className="input w-full"
@@ -567,7 +567,7 @@ export function InventoryDetailPage() {
 
           <div className="grid grid-cols-3 gap-4">
             <div>
-              <label className="block text-xs font-medium mb-1">Kind</label>
+              <label className="block text-xs font-medium mb-1">{t('inventory_kind')}</label>
               <input
                 type="text"
                 className="input w-full bg-muted cursor-not-allowed"
@@ -610,7 +610,7 @@ export function InventoryDetailPage() {
 
           <div className="grid grid-cols-3 gap-4">
             <div>
-              <label className="block text-xs font-medium mb-1">Role</label>
+              <label className="block text-xs font-medium mb-1">{t('inventory_role')}</label>
               <input
                 type="text"
                 className="input w-full"
@@ -619,7 +619,7 @@ export function InventoryDetailPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium mb-1">Vendor</label>
+              <label className="block text-xs font-medium mb-1">{t('inventory_vendor')}</label>
               <input
                 type="text"
                 className="input w-full"
@@ -628,7 +628,7 @@ export function InventoryDetailPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium mb-1">Model</label>
+              <label className="block text-xs font-medium mb-1">{t('inventory_model')}</label>
               <input
                 type="text"
                 className="input w-full"
@@ -639,7 +639,7 @@ export function InventoryDetailPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-medium mb-1">Capabilities (comma separated)</label>
+            <label className="block text-xs font-medium mb-1">{t('inventory_capabilities_hint')}</label>
             <input
               type="text"
               className="input w-full"
@@ -649,7 +649,7 @@ export function InventoryDetailPage() {
           </div>
 
           <div>
-            <label className="block text-xs font-medium mb-1">Attributes (JSON)</label>
+            <label className="block text-xs font-medium mb-1">{t('inventory_attributes_hint')}</label>
             <textarea
               className="input font-mono text-xs w-full h-32"
               value={editAttributesJson}

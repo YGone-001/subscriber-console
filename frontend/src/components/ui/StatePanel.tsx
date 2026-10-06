@@ -13,7 +13,7 @@ export function EmptyState({ title, description, icon, action }: EmptyStateProps
   return (
     <section className="state-panel" role="status">
       <span className="state-panel-icon" aria-hidden="true">{icon ?? <Inbox size={30} />}</span>
-      <h3>{title}</h3>
+      <h2>{title}</h2>
       {description ? <p>{description}</p> : null}
       {action ? <div className="state-panel-actions">{action}</div> : null}
     </section>
@@ -32,7 +32,7 @@ export function ErrorState({ title, message, retryLabel, onRetry }: ErrorStatePr
   return (
     <section className="state-panel error" role="alert">
       <span className="state-panel-icon" aria-hidden="true"><AlertTriangle size={28} /></span>
-      <h3>{title}</h3>
+      <h2>{title}</h2>
       <p>{message}</p>
       {onRetry ? (
         <div className="state-panel-actions">

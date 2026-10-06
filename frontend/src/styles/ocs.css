@@ -1426,3 +1426,137 @@
 .ocs-dialog-actions.ocs-dialog-actions-spaced {
   margin-top: 1.25rem;
 }
+
+/* ---------------------------------------------------------------------------
+ * Compatibility aliases for class hooks the reference markup uses but the
+ * reference stylesheet never defines.
+ *
+ * `OcsTariffGovernancePanel` / `TariffsPanel` mark their table with
+ * `ocs-table-wrap`, `TariffPlanModal` marks its overlay with `ocs-modal-backdrop`
+ * and its panel with `ocs-modal-container`, and `OcsTariffDetail` marks its
+ * not-found state with `ocs-empty`. None of those four selectors exist in the
+ * historical `app/(dashboard)/ocs/ocs.css`, which defines `ocs-table-wrapper`,
+ * `ocs-dialog-overlay` / `ocs-dialog` and `ocs-modal-dialog` instead.
+ *
+ * The class names are kept verbatim so the DOM stays identical to the reference;
+ * these rules supply the styling the reference markup was clearly written
+ * against. They are additive only: no reference selector is redefined.
+ * ------------------------------------------------------------------------- */
+
+.ocs-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.ocs-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: var(--overlay-scrim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ocs-modal-container {
+  background: var(--surface);
+  border-radius: var(--ref-radius-soft-panel);
+  padding: 1.5rem;
+  max-width: 480px;
+  width: 90%;
+  box-shadow: var(--shadow-popover);
+}
+
+.ocs-empty {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: var(--ref-font-size-body-small);
+}
+
+/* Modal shell hooks used by `TariffPlanModal` and undefined in the reference
+ * stylesheet. Mirrors the reference `.ocs-dialog*` geometry so the tariff modal
+ * reads as part of the same OCS dialog family. */
+.ocs-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.ocs-modal-title {
+  margin: 0;
+  font-size: var(--ref-font-size-body-emphasis);
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.ocs-modal-subtitle {
+  margin: 0.25rem 0 0;
+  font-size: var(--ref-font-size-caption);
+  color: var(--text-secondary);
+}
+
+.ocs-modal-close {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--ref-radius-compact);
+  transition: background var(--duration-fast) ease, color var(--duration-fast) ease;
+}
+
+.ocs-modal-close:hover {
+  background: var(--surface-hover);
+  color: var(--text-main);
+}
+
+.ocs-modal-body {
+  display: flex;
+  flex-direction: column;
+}
+
+.ocs-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--surface-border);
+}
+
+/* Further class hooks used by the reference contract panel but absent from the
+ * reference stylesheet: the search wrapper, the sortable header affordance and
+ * the IMSI / timestamp cell modifiers. Additive only. */
+.ocs-search-group {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1 1 18rem;
+  min-width: 0;
+}
+
+.ocs-th-sortable {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.ocs-th-sortable:hover {
+  color: var(--text-main);
+}
+
+.ocs-imsi-cell,
+.ocs-time-cell {
+  white-space: nowrap;
+}
+
+.ocs-imsi-cell code {
+  font-family: var(--font-mono, monospace);
+  font-size: var(--ref-font-size-data-relaxed);
+}

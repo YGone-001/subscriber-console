@@ -12,7 +12,7 @@
     "preview": "vite preview --host 127.0.0.1 --port 13333 --strictPort",
     "lint": "eslint .",
     "typecheck": "tsc -b --pretty false",
-    "test": "tsx --test tests/auth-state.test.ts tests/route-contract.test.ts tests/shell-contract.test.ts tests/read-client.test.ts tests/mutation-client.test.ts tests/user-routes.test.ts tests/disabled-operations.test.ts tests/subscriber-mutation-builders.test.ts tests/system-health-operational.test.ts tests/inventory.test.ts tests/ui-restoration.test.ts tests/ui-primitives.test.ts",
+    "test": "node tests/run-tests.mjs tests/auth-state.test.ts tests/route-contract.test.ts tests/shell-contract.test.ts tests/read-client.test.ts tests/mutation-client.test.ts tests/user-routes.test.ts tests/disabled-operations.test.ts tests/subscriber-mutation-builders.test.ts tests/system-health-operational.test.ts tests/inventory.test.ts tests/ui-restoration.test.ts tests/ui-primitives.test.ts tests/ui-compat.test.ts tests/ui-view-models.test.ts tests/ocs-shared-components.test.tsx tests/user-management-surfaces.test.tsx tests/user-bulk-actions.test.ts",
     "check": "npm run lint && npm run typecheck && npm test && npm run build"
   },
   "dependencies": {

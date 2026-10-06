@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, Lock, User } from 'lucide-react';
+import { Eye, EyeOff, Loader2, Lock, User } from 'lucide-react';
 import { safeLocalDestination } from './auth-state';
 import type { LoginFailure } from '../types/auth';
 import { useAuth } from '../providers/AuthProvider';
@@ -142,7 +142,10 @@ export function LoginPage() {
             className="login-submit-btn"
             disabled={loading || retryAfter > 0}
           >
-            {loading ? t('signing_in') : t('login_button')}
+            <span id="xcloud-login-spinner" hidden={!loading}>
+              <Loader2 size={20} className="login-spinner" aria-hidden="true" />
+            </span>
+            <span id="xcloud-login-submit-text" hidden={loading}>{t('login_button')}</span>
           </button>
         </form>
 

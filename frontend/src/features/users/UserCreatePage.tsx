@@ -1,238 +1,154 @@
+/*
+ * Forward-ported from the historical xCloud UI (reference commit 2c40903):
+ * frontend/src/app/(dashboard)/users/create/page.tsx
+ *
+ * Adaptations, all at the runtime boundary:
+ *   - The App Router navigation hook replaced by React Router's `useNavigate`.
+ *   - The historical link component replaced by the React Router link.
+ *   - `../components/...` and `../utils` repointed to the ported user-domain
+ *     locations.
+ *
+ * The earlier simplified surface reused the login card and carried hard-coded
+ * English copy; the reference form uses the shared password field, the strength
+ * meter and the dictionary, and is restored verbatim.
+ */
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Eye, EyeOff } from 'lucide-react';
-import { postJson } from '../../lib/api/mutation-client';
-import { isPasswordStrong, PASSWORD_POLICY_MESSAGE } from '../../lib/security';
-import type { CanonicalRole } from '../../types/auth';
-
-const VALID_ROLES: CanonicalRole[] = ['admin', 'operator', 'viewer'];
+import { Link, useNavigate } from 'react-router-dom';
+import { ArrowLeft } from 'lucide-react';
+import { useI18n } from '../../providers/I18nProvider';
+import { PasswordField } from '../../components/iam/PasswordField';
+import { UnsavedChangesDialog, useUnsavedChangesGuard } from '../../components/ui/UnsavedChangesGuard';
+import { usersApi } from '../../lib/api/users';
+import { isPasswordStrong } from '../../lib/security';
+import { VALID_ROLES, type RoleKey } from '../../types/iam';
+import { PasswordStrengthBar } from './components/PasswordStrengthBar';
+import styles from '../../styles/modules/UserDrawer.module.css';
 
 export function UserCreatePage() {
+  const { t } = useI18n();
   const navigate = useNavigate();
-
   const [username, setUsername] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
-  const [role, setRole] = useState<CanonicalRole>('operator');
+  const [role, setRole] = useState<RoleKey>('operator');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [passwordVisible, setPasswordVisible] = useState(false);
+  const [confirmVisible, setConfirmVisible] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
 
-  const isStrong = isPasswordStrong(password, username.trim() || undefined);
-  const passwordsMatch = password === confirmPassword;
+  /* Any entered field makes the form dirty; discarding clears every field. */
+  const isDirty = Boolean(username || displayName || email || password || confirmPassword);
+  const unsavedChanges = useUnsavedChangesGuard(isDirty, () => {
+    setUsername('');
+    setDisplayName('');
+    setEmail('');
+    setPassword('');
+    setConfirmPassword('');
+    setError('');
+  });
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const trimmedUser = username.trim();
-    if (!trimmedUser) {
-      setError('Username is required.');
-      return;
-    }
-    if (!displayName.trim()) {
-      setError('Display name is required.');
-      return;
-    }
-    if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      setError('Please provide a valid email address.');
-      return;
-    }
-    if (!isStrong) {
-      setError(PASSWORD_POLICY_MESSAGE);
-      return;
-    }
-    if (!passwordsMatch) {
-      setError('Passwords do not match.');
-      return;
-    }
+  const handleSubmit = async () => {
+    const trimmedUsername = username.trim();
+    if (!trimmedUsername) { setError(t('users_err_username')); return; }
+    if (!displayName.trim()) { setError(t('users_err_display_name')); return; }
+    if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) { setError(t('users_err_email')); return; }
+    if (!isPasswordStrong(password, trimmedUsername)) { setError(t('users_err_password')); return; }
+    if (password !== confirmPassword) { setError(t('users_err_password_match')); return; }
+    if (!VALID_ROLES.includes(role)) { setError(t('users_err_role')); return; }
 
-    setSubmitting(true);
-    setError(null);
+    setSaving(true);
+    setError('');
     try {
-      await postJson('/api/users', {
-        username: trimmedUser,
+      await usersApi.create({
+        username: trimmedUsername,
         password,
-        displayName: displayName.trim(),
-        email: email.trim(),
+        displayName: displayName.trim() || undefined,
+        email: email.trim() || undefined,
         role,
       });
-      // On success, navigate to the users list
       navigate('/users');
-    } catch (err) {
-      // Surface server error, preserve non-sensitive fields
-      setError(err instanceof Error ? err.message : 'User creation failed.');
-      setSubmitting(false);
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : t('users_err_create'));
+      setSaving(false);
     }
   };
 
   return (
-    <section className="read-page">
-      <header className="read-page-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '.75rem' }}>
-          <button
-            type="button"
-            className="icon-button"
-            onClick={() => navigate('/users')}
-            title="Cancel"
-            aria-label="Back to users"
-          >
+    <div className="page">
+      <div className="page-header">
+        <div className="page-title-row">
+          <Link to="/users" className="btn-icon" title={t('cancel')}>
             <ArrowLeft size={18} />
-          </button>
-          <div>
-            <p className="read-marker">Governed User Administration</p>
-            <h1>Create New User</h1>
-          </div>
+          </Link>
+          <h1>{t('users_create_action')}</h1>
         </div>
-      </header>
-
-      {error && (
-        <div className="notice-box error" role="alert">
-          <span>{error}</span>
-        </div>
-      )}
-
-      <div className="login-card" style={{ width: 'min(100%, 36rem)', margin: '0 auto' }}>
-        <form onSubmit={(e) => void handleSubmit(e)}>
-          <div className="form-group">
-            <label htmlFor="create-username">Username *</label>
-            <input
-              id="create-username"
-              className="form-input"
-              value={username}
-              onChange={(e) => {
-                setUsername(e.target.value);
-                setError(null);
-              }}
-              maxLength={100}
-              required
-              autoComplete="username"
-              placeholder="e.g. jdoe"
-            />
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="create-display-name">Display Name *</label>
-            <input
-              id="create-display-name"
-              className="form-input"
-              value={displayName}
-              onChange={(e) => {
-                setDisplayName(e.target.value);
-                setError(null);
-              }}
-              maxLength={100}
-              required
-              placeholder="e.g. John Doe"
-            />
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="create-email">Email (Optional)</label>
-            <input
-              id="create-email"
-              type="email"
-              className="form-input"
-              value={email}
-              onChange={(e) => {
-                setEmail(e.target.value);
-                setError(null);
-              }}
-              maxLength={254}
-              placeholder="e.g. jdoe@example.com"
-            />
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="create-role">Canonical Role *</label>
-            <select
-              id="create-role"
-              className="form-select"
-              value={role}
-              onChange={(e) => setRole(e.target.value as CanonicalRole)}
-            >
-              {VALID_ROLES.map((r) => (
-                <option key={r} value={r}>
-                  {r.toUpperCase()}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="create-password">Password *</label>
-            <div style={{ display: 'flex', gap: '.4rem' }}>
-              <input
-                id="create-password"
-                type={showPassword ? 'text' : 'password'}
-                className="form-input"
-                value={password}
-                onChange={(e) => {
-                  setPassword(e.target.value);
-                  setError(null);
-                }}
-                required
-                autoComplete="new-password"
-                placeholder="At least 8 characters"
-              />
-              <button
-                type="button"
-                className="icon-button"
-                onClick={() => setShowPassword(!showPassword)}
-                title={showPassword ? 'Hide password' : 'Show password'}
-              >
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
-            <div className="password-meter" aria-hidden="true">
-              <div
-                className={`password-meter-segment ${password.length >= 4 ? 'active-weak' : ''}`}
-              />
-              <div
-                className={`password-meter-segment ${password.length >= 8 ? 'active-medium' : ''}`}
-              />
-              <div
-                className={`password-meter-segment ${isStrong ? 'active-strong' : ''}`}
-              />
-            </div>
-            <p className="form-help">{PASSWORD_POLICY_MESSAGE}</p>
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="create-confirm-password">Confirm Password *</label>
-            <input
-              id="create-confirm-password"
-              type={showPassword ? 'text' : 'password'}
-              className="form-input"
-              value={confirmPassword}
-              onChange={(e) => {
-                setConfirmPassword(e.target.value);
-                setError(null);
-              }}
-              required
-              autoComplete="new-password"
-            />
-          </div>
-
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '.6rem', marginTop: '1rem' }}>
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={() => navigate('/users')}
-              disabled={submitting}
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="btn-primary"
-              disabled={submitting || !username.trim() || !displayName.trim() || !isStrong || !passwordsMatch}
-            >
-              {submitting ? 'Creating User...' : 'Create User'}
-            </button>
-          </div>
-        </form>
       </div>
-    </section>
+
+      <div className={`${styles.drawerBody} ${styles.createFormNarrow}`}>
+        <section className={styles.formSection}>
+          <h3>{t('users_form_basic')}</h3>
+          <label>
+            <span>{t('users_username')} *</span>
+            <input type="text" className="form-input" value={username} maxLength={100} required
+              onChange={(event) => { setUsername(event.target.value); setError(''); }} autoComplete="username" />
+          </label>
+          <label>
+            <span>{t('users_display_name')} *</span>
+            <input type="text" className="form-input" value={displayName} maxLength={100} required
+              onChange={(event) => { setDisplayName(event.target.value); setError(''); }} autoComplete="name" />
+          </label>
+          <label>
+            <span>{t('users_email')} <small>{t('users_optional')}</small></span>
+            <input type="email" className="form-input" value={email} maxLength={254}
+              onChange={(event) => { setEmail(event.target.value); setError(''); }} autoComplete="email" />
+          </label>
+        </section>
+
+        <section className={styles.formSection}>
+          <h3>{t('users_form_role')}</h3>
+          <label>
+            <span>{t('users_role')} *</span>
+            <select className="form-input" value={role} onChange={(event) => { setRole(event.target.value as RoleKey); setError(''); }}>
+              {VALID_ROLES.map((option) => <option key={option} value={option}>{t(`users_${option}`)}</option>)}
+            </select>
+          </label>
+        </section>
+
+        <section className={styles.formSection}>
+          <h3>{t('users_form_security')}</h3>
+          <PasswordField id="create-user-password" label={t('users_password_new')}
+            value={password} onChange={(value) => { setPassword(value); setError(''); }}
+            visible={passwordVisible} setVisible={setPasswordVisible}
+            placeholder={t('users_password_new')} autoComplete="new-password" />
+          <PasswordStrengthBar password={password} />
+          <PasswordField id="create-user-password-confirm" label={t('users_password_confirm')}
+            value={confirmPassword} onChange={(value) => { setConfirmPassword(value); setError(''); }}
+            visible={confirmVisible} setVisible={setConfirmVisible}
+            placeholder={t('users_password_confirm')} autoComplete="new-password"
+            onEnter={() => void handleSubmit()} />
+        </section>
+
+        {error ? <p className={styles.formError}>{error}</p> : null}
+
+        <div className={styles.editActions}>
+          <button type="button" className="btn btn-primary" disabled={saving} onClick={() => void handleSubmit()}>
+            {saving ? t('saving') : t('users_create_action')}
+          </button>
+          <Link to="/users" className="btn btn-ghost">{t('cancel')}</Link>
+        </div>
+      </div>
+
+      <UnsavedChangesDialog
+        open={unsavedChanges.isPromptOpen}
+        title={t('unsaved_changes_title')}
+        description={t('unsaved_changes_description')}
+        keepEditingLabel={t('unsaved_changes_keep_editing')}
+        discardLabel={t('unsaved_changes_discard')}
+        onKeepEditing={unsavedChanges.keepEditing}
+        onDiscard={unsavedChanges.discardChanges}
+      />
+    </div>
   );
 }

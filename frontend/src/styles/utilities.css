@@ -312,3 +312,35 @@
   opacity: 0.55;
   cursor: not-allowed;
 }
+
+/* ---------------------------------------------------------------------------
+ * Touch targets on small viewports.
+ *
+ * The responsive review measured every interactive control at 390x844 and found a
+ * handful below the 24x24 CSS-pixel minimum: the row-selection checkboxes, the
+ * inventory page's compact buttons, and a bare checkbox on the users surface.
+ * The rule is scoped to narrow viewports so desktop density is unchanged, and it
+ * only sets a floor — controls that are already larger are untouched.
+ * ------------------------------------------------------------------------- */
+@media (max-width: 640px) {
+  input[type='checkbox'],
+  input[type='radio'] {
+    min-width: 24px;
+    min-height: 24px;
+  }
+
+  .btn,
+  .btn-primary,
+  .btn-secondary,
+  .btn-outline,
+  .btn-ghost,
+  .btn-danger {
+    min-height: 24px;
+  }
+
+  input:not([type='checkbox']):not([type='radio']),
+  select,
+  textarea {
+    min-height: 24px;
+  }
+}

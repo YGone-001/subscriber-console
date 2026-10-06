@@ -131,7 +131,8 @@ export function InventoryPage() {
             <input
               type="text"
               className="input pl-9 w-full"
-              placeholder={t('inventory_search_placeholder', { defaultValue: 'Search by ID or name prefix...' })}
+              aria-label={t('inventory_search_placeholder')}
+              placeholder={t('inventory_search_placeholder')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -139,6 +140,7 @@ export function InventoryPage() {
 
           <select
             className="input select"
+            aria-label={t('inventory_all_kinds')}
             value={selectedKind}
             onChange={(e) => setSelectedKind(e.target.value)}
           >
@@ -152,6 +154,7 @@ export function InventoryPage() {
 
           <select
             className="input select"
+            aria-label={t('inventory_all_domains')}
             value={selectedDomain}
             onChange={(e) => setSelectedDomain(e.target.value)}
           >
@@ -165,6 +168,7 @@ export function InventoryPage() {
 
           <select
             className="input select"
+            aria-label={t('inventory_all_states')}
             value={selectedLifecycle}
             onChange={(e) => setSelectedLifecycle(e.target.value)}
           >
@@ -184,6 +188,7 @@ export function InventoryPage() {
 
       <div className="table-wrapper card overflow-hidden">
         <table className="data-table w-full">
+          <caption className="sr-only">{t('inventory_title')}</caption>
           <thead>
             <tr>
               <th>{t('inventory_name', { defaultValue: 'Name' })}</th>

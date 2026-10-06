@@ -1,129 +1,294 @@
 #!/usr/bin/env node
 /*
- * UI parity screenshot capture.
+ * UI parity screenshot capture (frozen baseline).
  *
  * Drives one headless Chrome over CDP and screenshots the same route set on both
- * the current app and (optionally) the reference app, so parity can be judged from
- * evidence rather than from source alone.
+ * the current app and the reference app, at every viewport in the baseline
+ * manifest, so parity is judged from evidence rather than from source alone.
+ *
+ * The run is FAIL-CLOSED: a route that does not render (blank document, framework
+ * error overlay, uncaught exception, or an unexpected redirect to the login page)
+ * is recorded as a failure and makes the process exit non-zero. Screenshots are
+ * still written for the routes that did render, so a failing run remains
+ * diagnosable.
  *
  * Usage:
- *   node scripts/capture-ui-parity.mjs                       # both apps, default routes
- *   UI_CAPTURE_APPS=current node scripts/capture-ui-parity.mjs
- *   UI_CAPTURE_ROUTES="dashboard:/,users:/users" node scripts/capture-ui-parity.mjs
- *   UI_CAPTURE_OUT=.workbuddy-ai/tmp/shots node scripts/capture-ui-parity.mjs
+ *   node scripts/capture-ui-parity.mjs
+ *   node scripts/capture-ui-parity.mjs --apps=current --viewports=desktop
+ *   node scripts/capture-ui-parity.mjs --routes=dashboard:/,users:/users --out=.workbuddy-ai/tmp/shots
+ *   node scripts/capture-ui-parity.mjs --allow-failures        # capture-only, always exit 0
  *
- * Auth: set UI_CAPTURE_TOKEN to the `auth_token` cookie value. Obtain it by POSTing
- * to http://127.0.0.1:18888/api/auth/login with the admin credentials and reading
- * the `auth_token` value out of the Set-Cookie response header.
+ * Environment fallbacks (kept for compatibility with earlier invocations):
+ *   UI_CAPTURE_APPS, UI_CAPTURE_ROUTES, UI_CAPTURE_OUT, UI_CAPTURE_TOKEN,
+ *   UI_CAPTURE_VIEWPORTS, UI_CAPTURE_CURRENT, UI_CAPTURE_REFERENCE,
+ *   UI_CAPTURE_CHROME, UI_CAPTURE_CDP_PORT
  *
- * Both backends share JWT_SECRET, so one token authenticates both apps.
+ * Auth: pass the `auth_token` cookie value. Obtain it by POSTing to
+ * http://127.0.0.1:18888/api/auth/login with the admin credentials and reading
+ * `auth_token` out of the Set-Cookie response header. Both backends share
+ * JWT_SECRET, so one token authenticates both apps.
  */
-import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { createCdpClient, launchChrome, sleep } from './lib/cdp.mjs';
 
-const CHROME = process.env.UI_CAPTURE_CHROME || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
-const CDP_PORT = Number(process.env.UI_CAPTURE_CDP_PORT || 9337);
-const OUT = path.resolve(process.env.UI_CAPTURE_OUT || '.workbuddy-ai/tmp/ui-parity');
-const TOKEN = process.env.UI_CAPTURE_TOKEN || '';
-const WIDTH = Number(process.env.UI_CAPTURE_WIDTH || 1440);
-const HEIGHT = Number(process.env.UI_CAPTURE_HEIGHT || 900);
+const args = new Map(
+  process.argv.slice(2).filter((arg) => arg.startsWith('--')).map((arg) => {
+    const [key, value = 'true'] = arg.replace(/^--/, '').split('=');
+    return [key, value];
+  }),
+);
+const flag = (name, envName, fallback) => args.get(name) ?? process.env[envName] ?? fallback;
+
+const CHROME = flag('chrome', 'UI_CAPTURE_CHROME', 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe');
+const CDP_PORT = Number(flag('cdp-port', 'UI_CAPTURE_CDP_PORT', 9337));
+const OUT = path.resolve(flag('out', 'UI_CAPTURE_OUT', '.workbuddy-ai/tmp/ui-parity'));
+const TOKEN = flag('token', 'UI_CAPTURE_TOKEN', '');
+const ALLOW_FAILURES = args.get('allow-failures') === 'true';
 
 const APPS = [
-  { key: 'current', base: process.env.UI_CAPTURE_CURRENT || 'http://localhost:13333' },
-  { key: 'reference', base: process.env.UI_CAPTURE_REFERENCE || 'http://localhost' },
-].filter((app) => (process.env.UI_CAPTURE_APPS || 'current,reference').split(',').includes(app.key));
+  { key: 'current', base: flag('current', 'UI_CAPTURE_CURRENT', 'http://localhost:13333') },
+  { key: 'reference', base: flag('reference', 'UI_CAPTURE_REFERENCE', 'http://localhost') },
+].filter((app) => flag('apps', 'UI_CAPTURE_APPS', 'current,reference').split(',').includes(app.key));
 
 const DEFAULT_ROUTES = [
-  'dashboard:/', 'subscribers:/subscribers', 'profile:/profile',
-  'ocs-tariffs:/ocs/tariffs', 'ocs-contracts:/ocs/contracts', 'ocs-balances:/ocs/balances',
-  'users:/users', 'system-health:/system-health', 'inventory:/inventory',
+  'login:/login',
+  'dashboard:/',
+  'subscribers:/subscribers',
+  'profile:/profile',
+  'ocs-tariffs:/ocs/tariffs',
+  'ocs-contracts:/ocs/contracts',
+  'ocs-balances:/ocs/balances',
+  'users:/users',
+  'system-health:/system-health',
+  'inventory:/inventory',
 ];
-const ROUTES = (process.env.UI_CAPTURE_ROUTES
-  ? process.env.UI_CAPTURE_ROUTES.split(',')
-  : DEFAULT_ROUTES
-).map((entry) => {
-  const index = entry.indexOf(':');
-  return [entry.slice(0, index), entry.slice(index + 1)];
-});
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+/* Baseline viewports. Order matters: the manifest is emitted in this order. */
+const VIEWPORTS = (flag('viewports', 'UI_CAPTURE_VIEWPORTS', 'desktop,tablet,mobile').split(','))
+  .map((key) => ({
+    desktop: { key: 'desktop', width: 1440, height: 900 },
+    tablet: { key: 'tablet', width: 1024, height: 768 },
+    mobile: { key: 'mobile', width: 390, height: 844 },
+  }[key]))
+  .filter(Boolean);
 
-async function waitFor(url, timeoutMs = 20000) {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    try { const res = await fetch(url); if (res.ok) return true; } catch { /* retry */ }
-    await sleep(300);
-  }
-  throw new Error(`timeout waiting for ${url}`);
-}
+/* When set, real horizontal overflow fails the run instead of only being recorded. */
+const STRICT_LAYOUT = args.get('strict-layout') === 'true' || process.env.UI_CAPTURE_STRICT_LAYOUT === '1';
 
-function cdp(wsUrl) {
-  return new Promise((resolve, reject) => {
-    const ws = new WebSocket(wsUrl);
-    let id = 1;
-    const pending = new Map();
-    ws.onmessage = (event) => {
-      const message = JSON.parse(event.data);
-      if (message.id && pending.has(message.id)) {
-        const { res, rej } = pending.get(message.id);
-        pending.delete(message.id);
-        message.error ? rej(new Error(message.error.message)) : res(message.result);
+const ROUTES = (flag('routes', 'UI_CAPTURE_ROUTES', DEFAULT_ROUTES.join(','))
+  .split(',')
+  .map((entry) => {
+    const index = entry.indexOf(':');
+    return { name: entry.slice(0, index), route: entry.slice(index + 1) };
+  }));
+
+/*
+ * In-page health AND layout probe. Runs as a plain expression so it works in any
+ * app shell.
+ *
+ * The layout half is what makes responsive parity checkable rather than a matter of
+ * opinion: it reports real horizontal overflow and the elements that cause it, plus
+ * interactive targets below the 24x24 CSS-pixel minimum. Elements inside an
+ * intentionally scrollable ancestor are not counted as overflow — a data table is
+ * allowed to scroll inside its own wrapper.
+ */
+const HEALTH_PROBE = `(() => {
+  const text = ((document.body && document.body.innerText) || '').trim();
+  const root = document.querySelector('#root');
+
+  const doc = document.documentElement;
+  const overflow = Math.max(0, doc.scrollWidth - doc.clientWidth);
+  const offenders = [];
+  if (overflow > 1) {
+    const viewportWidth = doc.clientWidth;
+    for (const el of document.querySelectorAll('body *')) {
+      const rect = el.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) continue;
+      if (rect.right <= viewportWidth + 1 && rect.left >= -1) continue;
+      let ancestor = el.parentElement;
+      let insideScroller = false;
+      while (ancestor && ancestor !== document.body) {
+        const style = getComputedStyle(ancestor);
+        if (style.overflowX === 'auto' || style.overflowX === 'scroll') { insideScroller = true; break; }
+        ancestor = ancestor.parentElement;
       }
-    };
-    ws.onerror = reject;
-    ws.onopen = () => resolve({
-      send: (method, params = {}) => new Promise((res, rej) => {
-        const requestId = id++;
-        pending.set(requestId, { res, rej });
-        ws.send(JSON.stringify({ id: requestId, method, params }));
-      }),
-      close: () => ws.close(),
+      if (insideScroller) continue;
+      offenders.push({
+        tag: el.tagName.toLowerCase(),
+        cls: String(el.className || '').slice(0, 90),
+        left: Math.round(rect.left),
+        right: Math.round(rect.right),
+      });
+      if (offenders.length >= 8) break;
+    }
+  }
+
+  const smallTargets = [];
+  for (const el of document.querySelectorAll('button, a[href], input, select, textarea, [role="button"]')) {
+    const rect = el.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) continue;
+    if (rect.width >= 24 && rect.height >= 24) continue;
+    smallTargets.push({
+      tag: el.tagName.toLowerCase(),
+      cls: String(el.className || '').slice(0, 60),
+      w: Math.round(rect.width),
+      h: Math.round(rect.height),
     });
+    if (smallTargets.length >= 12) break;
+  }
+
+  return JSON.stringify({
+    overlay: !!document.querySelector('vite-error-overlay'),
+    browserErrorPage: !!document.querySelector('#main-frame-error, .neterror'),
+    runtimeError: /Unhandled Runtime Error|Application error: a client-side exception|Cannot read propert|is not defined/i.test(text),
+    textLength: text.length,
+    rootChildren: root ? root.children.length : null,
+    pathname: location.pathname,
+    title: document.title,
+    layout: { overflow, offenders, smallTargets },
   });
+})()`;
+
+function evaluateHealth(snapshot, requestedRoute) {
+  if (snapshot.overlay) return 'framework_error_overlay';
+  if (snapshot.browserErrorPage) return 'browser_error_page';
+  if (snapshot.runtimeError) return 'runtime_error_text';
+  if (snapshot.textLength < 40) return 'empty_document';
+  if (snapshot.rootChildren === 0) return 'empty_root';
+  const wantsLogin = requestedRoute === '/login';
+  if (!wantsLogin && snapshot.pathname.replace(/\/$/, '') === '/login') return 'redirected_to_login';
+  return null;
 }
 
 let chrome = null;
 let tempDir = null;
+const manifest = { generatedAt: new Date().toISOString(), apps: [], viewports: VIEWPORTS, routes: ROUTES, entries: [] };
 
 async function main() {
   fs.mkdirSync(OUT, { recursive: true });
   tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ui-parity-'));
-  chrome = spawn(CHROME, [
-    '--headless=new', `--remote-debugging-port=${CDP_PORT}`, `--user-data-dir=${tempDir}`,
-    `--window-size=${WIDTH},${HEIGHT}`, '--hide-scrollbars', '--disable-gpu',
-    '--no-first-run', '--no-default-browser-check', '--force-device-scale-factor=1', 'about:blank',
-  ], { stdio: 'ignore' });
+  const first = VIEWPORTS[0] ?? { width: 1440, height: 900 };
+  chrome = await launchChrome({
+    chromePath: CHROME,
+    port: CDP_PORT,
+    userDataDir: tempDir,
+    width: first.width,
+    height: first.height,
+  });
 
-  await waitFor(`http://127.0.0.1:${CDP_PORT}/json/version`);
   const tab = await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/new?about:blank`, { method: 'PUT' })).json();
-  const client = await cdp(tab.webSocketDebuggerUrl);
+  const client = await createCdpClient(tab.webSocketDebuggerUrl);
+  console.log(`cdp_transport=${client.transport}`);
+
   await client.send('Page.enable');
   await client.send('Network.enable');
   await client.send('Runtime.enable');
-  await client.send('Emulation.setDeviceMetricsOverride', {
-    width: WIDTH, height: HEIGHT, deviceScaleFactor: 1, mobile: false,
+
+  /* Uncaught exceptions are collected into a per-navigation bucket. */
+  let exceptions = [];
+  client.onEvent((message) => {
+    if (message.method !== 'Runtime.exceptionThrown') return;
+    const detail = message.params?.exceptionDetails;
+    const description = detail?.exception?.description || detail?.text || 'uncaught exception';
+    exceptions.push(String(description).split('\n')[0].slice(0, 160));
   });
+
   if (TOKEN) {
     await client.send('Network.setCookie', {
       name: 'auth_token', value: TOKEN, domain: 'localhost', path: '/', httpOnly: true, sameSite: 'Lax',
     });
   }
 
+  const setAuthCookie = async (present) => {
+    if (!TOKEN) return;
+    if (present) {
+      await client.send('Network.setCookie', {
+        name: 'auth_token', value: TOKEN, domain: 'localhost', path: '/', httpOnly: true, sameSite: 'Lax',
+      });
+    } else {
+      await client.send('Network.deleteCookies', { name: 'auth_token', domain: 'localhost', path: '/' });
+    }
+  };
+
   for (const app of APPS) {
-    fs.mkdirSync(path.join(OUT, app.key), { recursive: true });
-    for (const [name, route] of ROUTES) {
-      try { await client.send('Page.navigate', { url: app.base + route }); } catch { /* redirects abort navigation */ }
-      await sleep(name === 'dashboard' ? 5000 : 3800);
-      const shot = await client.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
-      const buffer = Buffer.from(shot.data, 'base64');
-      fs.writeFileSync(path.join(OUT, app.key, `${name}.png`), buffer);
-      console.log(`[${app.key}] ${route} -> ${buffer.readUInt32BE(16)}x${buffer.readUInt32BE(20)} ${(buffer.length / 1024).toFixed(0)}KB`);
+    manifest.apps.push({ key: app.key, base: app.base });
+    for (const viewport of VIEWPORTS) {
+      await client.send('Emulation.setDeviceMetricsOverride', {
+        width: viewport.width, height: viewport.height, deviceScaleFactor: 1, mobile: viewport.key === 'mobile',
+      });
+      const dir = path.join(OUT, app.key, viewport.key);
+      fs.mkdirSync(dir, { recursive: true });
+
+      for (const { name, route } of ROUTES) {
+        exceptions = [];
+        /* The login surface must be captured signed out, every other route signed in. */
+        await setAuthCookie(route !== '/login');
+        const url = app.base + route;
+        let navigationError = null;
+        try {
+          const navigation = await client.send('Page.navigate', { url });
+          navigationError = navigation?.errorText || null;
+        } catch (error) {
+          navigationError = error.message;
+        }
+        await sleep(name === 'dashboard' ? 5000 : 3800);
+
+        const shot = await client.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+        const buffer = Buffer.from(shot.data, 'base64');
+        const file = path.join(dir, `${name}.png`);
+        fs.writeFileSync(file, buffer);
+
+        let snapshot = { textLength: -1, rootChildren: null, pathname: route, overlay: false, runtimeError: false };
+        try {
+          const probe = await client.send('Runtime.evaluate', { expression: HEALTH_PROBE, returnByValue: true });
+          snapshot = JSON.parse(probe.result.value);
+        } catch { /* probe failure is itself recorded below */ }
+
+        let reason = navigationError ? `navigation_error: ${navigationError}` : evaluateHealth(snapshot, route);
+        if (!reason && exceptions.length) reason = `uncaught_exception: ${exceptions[0]}`;
+        if (!reason && STRICT_LAYOUT && (snapshot.layout?.overflow ?? 0) > 1) {
+          const first = snapshot.layout.offenders[0];
+          reason = `layout_overflow: ${snapshot.layout.overflow}px${first ? ` via <${first.tag} class="${first.cls}">` : ''}`;
+        }
+
+        manifest.entries.push({
+          app: app.key,
+          viewport: viewport.key,
+          name,
+          route,
+          url,
+          file: path.relative(OUT, file).replace(/\\/g, '/'),
+          bytes: buffer.length,
+          width: buffer.readUInt32BE(16),
+          height: buffer.readUInt32BE(20),
+          status: reason ? 'FAIL' : 'OK',
+          reason,
+          snapshot,
+        });
+
+        console.log(`[${app.key}/${viewport.key}] ${route} -> ${buffer.readUInt32BE(16)}x${buffer.readUInt32BE(20)} ${(buffer.length / 1024).toFixed(0)}KB ${reason ? `FAIL(${reason})` : 'OK'}`);
+      }
     }
   }
+
   client.close();
-  console.log(`\ncaptured to ${OUT}`);
+
+  const failures = manifest.entries.filter((entry) => entry.status === 'FAIL');
+  manifest.failures = failures.length;
+  manifest.result = failures.length === 0 ? 'PASS' : 'FAIL';
+  fs.writeFileSync(path.join(OUT, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+
+  console.log('--------------------------------------------------');
+  console.log(`ui_capture_entries=${manifest.entries.length}`);
+  console.log(`ui_capture_failures=${failures.length}`);
+  console.log(`ui_capture_manifest=${path.relative(process.cwd(), path.join(OUT, 'manifest.json')).replace(/\\/g, '/')}`);
+  console.log(`ui_capture_result=${manifest.result}`);
+  if (failures.length) {
+    for (const entry of failures) console.log(`  FAIL ${entry.app}/${entry.viewport} ${entry.route} :: ${entry.reason}`);
+    process.exitCode = ALLOW_FAILURES ? 0 : 1;
+  }
 }
 
 async function cleanup() {

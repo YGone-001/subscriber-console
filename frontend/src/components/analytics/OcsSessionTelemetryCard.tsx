@@ -52,7 +52,7 @@ export default function OcsSessionTelemetryCard({
             <Radio size={20} />
           </div>
           <div>
-            <h3>{t("dash_ocs_session_telemetry_title")}</h3>
+            <h2>{t("dash_ocs_session_telemetry_title")}</h2>
             <p className="analytics-ocs-subtitle">{t("dash_ocs_session_telemetry_subtitle")}</p>
           </div>
         </div>

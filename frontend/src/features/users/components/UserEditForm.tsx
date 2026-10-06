@@ -1,0 +1,41 @@
+/*
+ * Forward-ported from the historical xCloud UI (reference commit 2c40903):
+ * frontend/src/app/(dashboard)/users/components/UserEditForm.tsx
+ * Adaptations: "use client" dropped; `@/` aliases and CSS-module imports repointed for the Vite runtime.
+ */
+import { useI18n } from '../../../providers/I18nProvider';
+import { normalizeGovernanceRole } from '../../../lib/permissions';
+import { VALID_STATUS, type RoleKey, type UserStatus } from '../types';
+import type { UserDrawerProps } from './types';
+import styles from '../../../styles/modules/UserDrawer.module.css';
+
+type Props = Pick<UserDrawerProps, 'selectedUser' | 'editForm' | 'setEditForm' | 'canManage' | 'assignableRoles'>;
+export function UserEditForm(props: Props) {
+  const { t } = useI18n();
+  const user = props.selectedUser;
+  if (!user) return null;
+  return <>
+    <section className={styles.formSection}>
+      <h3>{t('users_form_basic')}</h3>
+      <label><span>{t('users_username')}</span><input className="form-input" value={user.username} disabled /></label>
+      <label><span>{t('users_display_name')} *</span><input className="form-input" value={props.editForm.displayName} maxLength={100} required disabled={!props.canManage(user, 'update')} onChange={(event) => props.setEditForm((form) => ({ ...form, displayName: event.target.value }))} /></label>
+      <label><span>{t('users_email')}</span><input type="email" className="form-input" value={props.editForm.email} maxLength={254} disabled={!props.canManage(user, 'update')} onChange={(event) => props.setEditForm((form) => ({ ...form, email: event.target.value }))} /></label>
+    </section>
+    <section className={styles.formSection}>
+      <h3>{t('users_form_role')}</h3>
+      {(() => {
+        const currentRole = (normalizeGovernanceRole(props.editForm.role) || props.editForm.role) as RoleKey;
+        const options = props.assignableRoles.length > 0 ? props.assignableRoles : [currentRole];
+        return (
+          <label><span>{t('users_role')}</span><select className="form-input" value={currentRole} disabled={!props.canManage(user, 'role.change')} onChange={(event) => props.setEditForm((form) => ({ ...form, role: event.target.value as RoleKey }))}>
+            {options.map((role) => <option key={role} value={role}>{t(`users_${role}`)}</option>)}
+          </select></label>
+        );
+      })()}
+      <label><span>{t('users_status')}</span><select className="form-input" value={props.editForm.status} disabled={!props.canManage(user, 'disable')} onChange={(event) => props.setEditForm((form) => ({ ...form, status: event.target.value as UserStatus }))}>
+        {VALID_STATUS.map((status) => <option key={status} value={status}>{t(`users_${status}`)}</option>)}
+      </select></label>
+      <p className={styles.sectionDescription}>{t('users_session_impact')}</p>
+    </section>
+  </>;
+}

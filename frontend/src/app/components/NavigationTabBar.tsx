@@ -65,7 +65,9 @@ function getStoredTabsSnapshot(): TabDefinition[] {
       cachedTabs = reconstructed;
       return reconstructed;
     }
-  } catch {}
+  } catch {
+    /* Unreadable storage: fall back to the default tab set. */
+  }
   cachedTabs = DEFAULT_TABS;
   return DEFAULT_TABS;
 }
@@ -92,7 +94,9 @@ function writeTabs(newTabs: TabDefinition[]) {
     const serialized = newTabs.map((tab) => ({ path: tab.path, isPinned: tab.isPinned }));
     cachedRawTabs = JSON.stringify(serialized);
     localStorage.setItem(STORAGE_KEY, cachedRawTabs);
-  } catch {}
+  } catch {
+    /* Storage is best-effort: a failed write must not break navigation. */
+  }
   for (const listener of tabListeners) {
     listener();
   }

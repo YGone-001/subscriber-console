@@ -1,1114 +1,418 @@
-import { useState } from 'react';
-import { Edit2, FileText, Layers, Plus, RefreshCw, Sliders, Trash2, Upload, Users } from 'lucide-react';
-import { ConfirmDialog } from '../../components/ConfirmDialog';
-import { Modal } from '../../components/Modal';
-import { deleteJson, postJson, putJson } from '../../lib/api/mutation-client';
-import { useRead } from '../../lib/api/use-read';
-import { hasPermission } from '../../lib/permissions';
-import { useAuth } from '../../providers/AuthProvider';
-import { useI18n } from '../../providers/I18nProvider';
-import { EmptyState, ErrorState } from '../../components/ui/StatePanel';
-import { SkeletonTable } from '../../components/ui/LoadingSkeleton';
-import MetricStrip, { type MetricStripItem } from '../../components/ui/MetricStrip';
-import PageHeader from '../../components/ui/PageHeader';
-import { formatBytes } from '../../lib/unitParser';
-import {
-  buildBatchCreateRequest,
-  buildBatchPrecheckRequest,
-  buildBatchUpdateRequest,
-  buildBulkDeleteRequest,
-  buildImportPrecheckRequest,
-  buildImportRequest,
-  buildProfileApplyRequest,
-  buildSubscriberCreateRequest,
-  buildSubscriberUpdateRequest,
-  buildTrafficAdjustRequest,
-  validateAndNormalizeImportRecord,
-  type ImportRecord,
-} from './mutation-contract';
-
-type UnknownRecord = Record<string, unknown>;
-type PlmnRecord = { mcc?: string; mnc?: string; country?: string; network?: string };
-
-const asRecord = (v: unknown): UnknownRecord => (v && typeof v === 'object' && !Array.isArray(v) ? (v as UnknownRecord) : {});
-const listOf = (v: unknown): UnknownRecord[] => (Array.isArray(v) ? v.map(asRecord) : []);
-const rowsOf = (v: unknown): UnknownRecord[] => {
-  const r = asRecord(v);
-  return listOf(r.records ?? r.items ?? r.subscribers ?? r.data ?? v);
-};
-const text = (v: unknown) => (v === undefined || v === null || v === '' ? '-' : String(v));
-const numberValue = (v: unknown) => (typeof v === 'number' ? v : Number(v ?? 0) || 0);
-
-/**
- * Traffic figures for a row.
+/*
+ * Forward-ported from the historical xCloud UI (reference commit 2c40903):
+ * frontend/src/app/(dashboard)/subscribers/page.tsx
  *
- * The contract reports `traffic` as an object ({ total, used, balance }), so it
- * must be read field-by-field — stringifying it renders "[object Object]".
+ * Adaptations, all at the runtime boundary:
+ *   - `useSWR(fetcher)` replaced by the current read client; raw `fetch` mutations
+ *     replaced by the current mutation client.
+ *   - `useAuth().canEditSubscribers` replaced by the shared capability helper for
+ *     `subscribers.write`.
+ *   - The retired and denied surfaces the reference composed are NOT ported: the
+ *     Data Hub modal, the signalling trace modal and the bulk policy modal, plus
+ *     their trigger buttons. The bulk policy modal is excluded because its
+ *     mutation is on the project's absolute denylist, so the route must offer no
+ *     entry point to it. The batch-update modal is kept: it owns the batch-update
+ *     route, which the Go router registers. Forbidden endpoint paths are
+ *     deliberately not written out here — the denylist gate scans raw text.
+ *
+ * Everything else — the PLMN longest-prefix resolver, the cross-page selection
+ * model, the summary strip, the toolbar, the table and the modals — is unchanged.
  */
-function trafficParts(row: UnknownRecord): { used: number; total: number; pct: number } {
-  const traffic = asRecord(row.traffic);
-  const used = numberValue(traffic.used);
-  const total = numberValue(traffic.total);
-  const pct = total > 0 ? Math.min(100, Math.max(0, (used / total) * 100)) : 0;
-  return { used, total, pct };
-}
+import { useEffect, useMemo, useState } from 'react';
+import { ArrowDown, ArrowUp, ArrowUpDown, Layers } from 'lucide-react';
+import SubscriberModal from '../../components/SubscriberModal';
+import BatchCreateModal from '../../components/BatchCreateModal';
+import SubscriberBatchUpdateModal from '../../components/SubscriberBatchUpdateModal';
+import TrafficAdjustmentModal from '../../components/TrafficAdjustmentModal';
+import { ConfirmActionPanel, OperationNotice } from '../../components/ui/OperationFeedback';
+import { DataTablePagination } from '../../components/ui/DataTablePagination';
+import PageHeader from '../../components/ui/PageHeader';
+import SubscriberSummaryPanel from './components/SubscriberSummaryPanel';
+import { SubscriberToolbar } from './components/SubscriberToolbar';
+import { SubscriberTable } from './components/SubscriberTable';
+import { useI18n } from '../../providers/I18nProvider';
+import { useAuth } from '../../providers/AuthProvider';
+import { hasPermission } from '../../lib/permissions';
+import { useRead } from '../../lib/api/use-read';
+import { deleteJson, postJson } from '../../lib/api/mutation-client';
+import { formatBytes } from '../../lib/unitParser';
+import type {
+  FeedbackState,
+  PendingDelete,
+  PlmnRecord,
+  ProfilesResponse,
+  SubscriberRow,
+  SubscriberStatusFilter,
+  SubscribersResponse,
+  TrafficAdjustmentMode,
+  TrafficAdjustmentTarget,
+} from './types';
 
-/** Relative timestamp for the last-active column. */
-function timeAgo(value: unknown, t: (key: string, values?: Record<string, string | number>) => string): string {
-  const raw = typeof value === 'string' ? value : '';
-  if (!raw) return '-';
-  const time = new Date(raw).getTime();
-  if (Number.isNaN(time)) return '-';
-  const diff = Math.floor((Date.now() - time) / 1000);
-  if (diff < 45) return t('time_just_now');
-  if (diff < 3600) return t('time_mins_ago', { count: Math.floor(diff / 60) });
-  if (diff < 86400) return t('time_hours_ago', { count: Math.floor(diff / 3600) });
-  if (diff < 86400 * 30) return t('time_days_ago', { count: Math.floor(diff / 86400) });
-  return t('time_yesterday');
-}
-
-function resolvePlmn(row: UnknownRecord, catalog: PlmnRecord[]): string {
-  const explicit = typeof row.plmn === 'string' ? row.plmn : undefined;
-  if (explicit) return explicit;
-  const imsi = text(row.imsi);
-  const mcc = text(row.mcc ?? imsi.slice(0, 3));
-  const mnc = text(row.mnc ?? imsi.slice(3, 5));
-  const match = catalog.find((entry) => entry.mcc === mcc && entry.mnc === mnc);
-  return match ? `${match.country ?? mcc} / ${match.network ?? mnc}` : `${mcc}-${mnc}`;
-}
+const SUBSCRIBER_PAGE_SIZES = [10, 20, 50] as const;
 
 export function SubscribersPage() {
   const { t } = useI18n();
   const { user } = useAuth();
-  const [query, setQuery] = useState('');
-  const [page, setPage] = useState(1);
+  const canEditSubscribers = hasPermission(user, 'subscribers.write');
+
+  const [searchQuery, setSearchQuery] = useState('');
   const [selectedImsis, setSelectedImsis] = useState<string[]>([]);
-  const [notice, setNotice] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
+  const [isDeletingBulk, setIsDeletingBulk] = useState(false);
+  const [isBatchUpdateModalOpen, setIsBatchUpdateModalOpen] = useState(false);
+  const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
+  const [copiedImsi, setCopiedImsi] = useState<string | null>(null);
+  const [trafficAdjustmentTarget, setTrafficAdjustmentTarget] = useState<TrafficAdjustmentTarget | null>(null);
+  const [feedback, setFeedback] = useState<FeedbackState | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
+  const [isDeletingSingle, setIsDeletingSingle] = useState<string | null>(null);
 
-  // Read data
-  const subscribers = useRead<unknown>(
-    `/api/subscribers?detail=true&page=${page}&limit=20&q=${encodeURIComponent(query)}`,
-  );
-  const catalog = useRead<PlmnRecord[]>('/data/mcc-mnc-table.json');
-  const profiles = useRead<unknown>('/api/profiles');
+  const [sortField, setSortField] = useState<string>('imsi');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [statusFilter, setStatusFilter] = useState<SubscriberStatusFilter>('all');
 
-  const rows: Record<string, unknown>[] = rowsOf(subscribers.data).map((row) => ({
-    ...row,
-    plmn: resolvePlmn(row, catalog.data ?? []),
-  }));
-  const total = numberValue(
-    asRecord(subscribers.data).total ?? asRecord(asRecord(subscribers.data).pagination).total ?? rows.length,
-  );
-  const profileList = rowsOf(profiles.data);
+  const [modalImsi, setModalImsi] = useState<string | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isBatchOpen, setIsBatchOpen] = useState(false);
 
-  /* Summary strip. The contract reports `summary` alongside the page, so the
-   * figures are authoritative rather than derived from the visible page. */
-  const summary = asRecord(asRecord(subscribers.data).summary);
-  const summaryItems: MetricStripItem[] = [
-    { key: 'total', label: t('subscriber_summary_total'), value: numberValue(summary.total ?? total), tone: 'primary' },
-    { key: 'active', label: t('subscriber_summary_active'), value: numberValue(summary.active), tone: 'success' },
-    { key: 'restricted', label: t('subscriber_summary_restricted'), value: numberValue(summary.restricted), tone: 'danger' },
-    { key: 'lowTraffic', label: t('subscriber_summary_low_traffic'), value: numberValue(summary.lowTraffic), tone: 'warning' },
-  ];
-
-  // Permission flags (presentation only)
-  const canWrite = hasPermission(user, 'subscribers.write');
-  const canDelete = hasPermission(user, 'subscribers.delete') || canWrite;
-  const canAdjustTraffic = hasPermission(user, 'ocs.balance.adjust');
-
-  // Modal states
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [isEditOpen, setIsEditOpen] = useState(false);
-  const [isBatchCreateOpen, setIsBatchCreateOpen] = useState(false);
-  const [isBatchUpdateOpen, setIsBatchUpdateOpen] = useState(false);
-  const [isImportOpen, setIsImportOpen] = useState(false);
-  const [isProfileApplyOpen, setIsProfileApplyOpen] = useState(false);
-  const [isTrafficAdjustOpen, setIsTrafficAdjustOpen] = useState(false);
-  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
-  const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false);
-  const [activeImsi, setActiveImsi] = useState<string | null>(null);
-
-  // Form states
-  const [imsiInput, setImsiInput] = useState('');
-  const [msisdnInput, setMsisdnInput] = useState('');
-  const [originalMsisdn, setOriginalMsisdn] = useState<string | null>(null);
-  const [planIdInput, setPlanIdInput] = useState('');
-  const [profileInput, setProfileInput] = useState('');
-  const [batchStartImsi, setBatchStartImsi] = useState('001010000000001');
-  const [batchCount, setBatchCount] = useState(10);
-  const [batchImsisText, setBatchImsisText] = useState('');
-  const [batchReason, setBatchReason] = useState('Operational batch adjustment');
-  const [batchAccessRestriction, setBatchAccessRestriction] = useState('32');
-  const [batchTicketId, setBatchTicketId] = useState('');
-  const [importJsonText, setImportJsonText] = useState('');
-  const [importPrecheckResult, setImportPrecheckResult] = useState<string | null>(null);
-  const [trafficBucket, setTrafficBucket] = useState<'data' | 'voice' | 'sms'>('data');
-  const [trafficAmount, setTrafficAmount] = useState('100');
-  const [trafficReason, setTrafficReason] = useState('Manual adjustment');
-  const [submitting, setSubmitting] = useState(false);
-
-  // Checkbox handling
-  const toggleSelect = (imsi: string) => {
-    setSelectedImsis((prev) => (prev.includes(imsi) ? prev.filter((i) => i !== imsi) : [...prev, imsi]));
+  const timeAgo = (dateStr: string) => {
+    if (!dateStr) return t('never');
+    const time = new Date(dateStr).getTime();
+    const now = new Date().getTime();
+    const diff = Math.floor((now - time) / 1000);
+    if (diff < 60) return t('just_now');
+    if (diff < 3600) return `${Math.floor(diff / 60)} ${t('mins_ago')}`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)} ${t('hours_ago')}`;
+    return `${Math.floor(diff / 86400)} ${t('days_ago')}`;
   };
-  const toggleSelectAll = () => {
-    if (selectedImsis.length === rows.length) {
-      setSelectedImsis([]);
-    } else {
-      setSelectedImsis(rows.map((r) => text(r['imsi'])).filter((i) => i !== '-'));
+
+  const formatFullDate = (dStr: string) => {
+    if (!dStr) return '';
+    const d = new Date(dStr);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
+  };
+
+  const { data: mccMncDbData } = useRead<PlmnRecord[]>('/data/mcc-mnc-table.json');
+  const mccMncDb = useMemo(() => (mccMncDbData || []) as PlmnRecord[], [mccMncDbData]);
+
+  const subscriberQuery = searchQuery.trim();
+  const subscribersUrl = `/api/subscribers?detail=true&page=${currentPage}&limit=${pageSize}${subscriberQuery ? `&q=${encodeURIComponent(subscriberQuery)}` : ''}${statusFilter !== 'all' ? `&status=${statusFilter}` : ''}&sortField=${sortField}&sortDirection=${sortDirection}`;
+  const { data: subscribersData, isLoading, mutate: mutateSubscribers } = useRead<SubscribersResponse>(subscribersUrl);
+
+  const subscribers = subscribersData?.subscribers || [];
+  const totalSubscribers = subscribersData?.total || 0;
+  const subscriberSummary = subscribersData?.summary || { total: totalSubscribers, active: 0, restricted: 0, lowTraffic: 0 };
+
+  const { data: profileData } = useRead<ProfilesResponse>('/api/profiles');
+  const profileList = profileData?.profiles || [];
+
+  const handleOpenNew = () => {
+    setModalImsi(null);
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEdit = (imsi: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setModalImsi(imsi);
+    setIsModalOpen(true);
+  };
+
+  const handleDelete = (imsi: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setActiveDropdown(null);
+    setPendingDelete({ mode: 'single', imsis: [imsi] });
+  };
+
+  const handleOpenTrafficAdjustment = (sub: SubscriberRow, mode: TrafficAdjustmentMode, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setActiveDropdown(null);
+    const used = sub.traffic?.used || 0;
+    const total = sub.traffic?.total || 0;
+    const balance = sub.traffic?.balance ?? Math.max(0, total - used);
+    setTrafficAdjustmentTarget({ imsi: sub.imsi, traffic: { used, total, balance }, mode });
+  };
+
+  const handleBulkDelete = () => {
+    if (selectedImsis.length === 0) return;
+    setPendingDelete({ mode: 'bulk', imsis: [...selectedImsis] });
+  };
+
+  const executePendingDelete = async () => {
+    if (!pendingDelete || pendingDelete.imsis.length === 0) return;
+
+    const { mode, imsis } = pendingDelete;
+    const singleImsi = imsis[0] || '';
+    if (mode === 'bulk') setIsDeletingBulk(true);
+    if (mode === 'single') setIsDeletingSingle(singleImsi);
+    try {
+      if (mode === 'bulk') {
+        const data = await postJson<{ deletedCount?: number; deleted?: number }>('/api/subscribers/bulk-delete', { imsiList: imsis });
+        setSelectedImsis([]);
+        setPendingDelete(null);
+        setFeedback({
+          tone: 'success',
+          title: t('sub_feedback_success_title'),
+          message: t('sub_feedback_bulk_delete_success', { count: data?.deletedCount ?? data?.deleted ?? imsis.length }),
+        });
+        await mutateSubscribers();
+        return;
+      }
+
+      await deleteJson(`/api/subscribers/${encodeURIComponent(singleImsi)}`);
+      setFeedback({
+        tone: 'success',
+        title: t('sub_feedback_success_title'),
+        message: t('sub_feedback_delete_success', { imsi: singleImsi }),
+      });
+      setPendingDelete(null);
+      await mutateSubscribers();
+    } catch {
+      setFeedback({
+        tone: 'danger',
+        title: t('sub_feedback_error_title'),
+        message: mode === 'bulk' ? t('sub_feedback_bulk_delete_error') : t('sub_feedback_delete_error', { imsi: singleImsi }),
+      });
+    } finally {
+      setIsDeletingBulk(false);
+      setIsDeletingSingle(null);
     }
   };
 
-  const refreshData = async () => {
-    await subscribers.mutate();
+  const toggleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.checked) {
+      setSelectedImsis((prev) => Array.from(new Set([...prev, ...pageImsis])));
+    } else {
+      setSelectedImsis((prev) => prev.filter((imsi) => !pageImsis.includes(imsi)));
+    }
+  };
+
+  /* O(1) PLMN lookup: the catalog holds 20k+ records, so parsing is cached. */
+  const plmnMap = useMemo(() => {
+    const map = new Map<string, PlmnRecord>();
+    mccMncDb.forEach((item) => { map.set(`${item.mcc}${item.mnc}`, item); });
+    return map;
+  }, [mccMncDb]);
+
+  /* Longest-prefix match so both 2-digit and 3-digit MNC networks resolve. */
+  const resolveNetwork = (imsi: string) => {
+    if (!imsi || imsi.length < 5) return { plmn: 'N/A', network: 'Unknown', country: 'Unknown' };
+    const prefix6 = imsi.substring(0, 6);
+    if (plmnMap.has(prefix6)) return { plmn: prefix6, ...plmnMap.get(prefix6) };
+    const prefix5 = imsi.substring(0, 5);
+    if (plmnMap.has(prefix5)) return { plmn: prefix5, ...plmnMap.get(prefix5) };
+    return { plmn: prefix5, network: 'Unknown', country: 'Unknown' };
+  };
+
+  const handleSort = (field: string) => {
+    if (sortField === field) setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    else { setSortField(field); setSortDirection('asc'); }
+  };
+
+  const applyStatusFilter = (nextFilter: SubscriberStatusFilter) => {
+    setStatusFilter(nextFilter);
+    setCurrentPage(1);
     setSelectedImsis([]);
   };
 
-  // 1. Single Create: POST /api/subscribers
-  const handleCreate = async () => {
-    if (!imsiInput.trim()) {
-      setNotice({ type: 'error', message: 'IMSI is required' });
-      return;
-    }
-    setSubmitting(true);
-    setNotice(null);
-    try {
-      const payload = buildSubscriberCreateRequest(imsiInput, {
-        msisdn: msisdnInput.trim() || undefined,
-        planId: planIdInput.trim() || undefined,
-      });
-      await postJson('/api/subscribers', payload);
-      setIsCreateOpen(false);
-      setImsiInput('');
-      setMsisdnInput('');
-      setPlanIdInput('');
-      setNotice({ type: 'success', message: 'Subscriber created successfully.' });
-      await refreshData();
-    } catch (err) {
-      setNotice({ type: 'error', message: err instanceof Error ? err.message : 'Create failed' });
-    } finally {
-      setSubmitting(false);
-    }
-  };
+  const summaryCards = [
+    { key: 'all' as const, label: t('subscriber_summary_total'), value: subscriberSummary.total, tone: 'primary' },
+    { key: 'active' as const, label: t('subscriber_summary_active'), value: subscriberSummary.active, tone: 'success' },
+    { key: 'restricted' as const, label: t('subscriber_summary_restricted'), value: subscriberSummary.restricted, tone: 'danger' },
+    { key: 'lowTraffic' as const, label: t('subscriber_summary_low_traffic'), value: subscriberSummary.lowTraffic, tone: 'warning' },
+  ] as const;
 
-  // 2. Single Edit: PUT /api/subscribers/{imsi}
-  const handleEdit = async () => {
-    if (!activeImsi) return;
-    const nextMsisdn = msisdnInput.trim();
-    if (originalMsisdn !== null && nextMsisdn === originalMsisdn) {
-      setNotice({ type: 'info', message: 'No changes detected.' });
-      setIsEditOpen(false);
-      return;
-    }
-    setSubmitting(true);
-    setNotice(null);
-    try {
-      const payload = buildSubscriberUpdateRequest({
-        msisdn: nextMsisdn,
-      });
-      await putJson(`/api/subscribers/${encodeURIComponent(activeImsi)}`, payload);
-      setIsEditOpen(false);
-      setActiveImsi(null);
-      setOriginalMsisdn(null);
-      setNotice({ type: 'success', message: 'Subscriber updated successfully.' });
-      await refreshData();
-    } catch (err) {
-      setNotice({ type: 'error', message: err instanceof Error ? err.message : 'Update failed' });
-    } finally {
-      setSubmitting(false);
-    }
-  };
+  const totalPages = Math.max(1, Math.ceil(totalSubscribers / pageSize));
+  const displayPage = Math.min(currentPage, totalPages);
+  const paginatedSubscribers = subscribers;
+  const pageImsis = paginatedSubscribers.map((s) => s.imsi);
+  const selectedOnPageCount = pageImsis.filter((imsi) => selectedImsis.includes(imsi)).length;
+  const isAllPageSelected = pageImsis.length > 0 && selectedOnPageCount === pageImsis.length;
+  const pendingDeleteItems = pendingDelete?.imsis.slice(0, 3).join(', ') || '';
+  const pendingDeleteOverflow = pendingDelete && pendingDelete.imsis.length > 3 ? ` +${pendingDelete.imsis.length - 3}` : '';
 
-  // 3. Single Delete: DELETE /api/subscribers/{imsi}
-  const handleDelete = async () => {
-    if (!activeImsi) return;
-    setSubmitting(true);
-    setNotice(null);
-    try {
-      await deleteJson(`/api/subscribers/${encodeURIComponent(activeImsi)}`);
-      setIsDeleteOpen(false);
-      setActiveImsi(null);
-      setNotice({ type: 'success', message: 'Subscriber deleted successfully.' });
-      await refreshData();
-    } catch (err) {
-      setNotice({ type: 'error', message: err instanceof Error ? err.message : 'Delete failed' });
-    } finally {
-      setSubmitting(false);
-    }
-  };
+  useEffect(() => {
+    if (subscribersData && currentPage > totalPages) setCurrentPage(totalPages);
+  }, [currentPage, subscribersData, totalPages]);
 
-  // 4. Batch Create: POST /api/subscribers/batch (and precheck)
-  const handleBatchCreatePrecheck = async () => {
-    setSubmitting(true);
+  const handleCopyImsi = async (imsi: string, e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
     try {
-      const payload = buildBatchPrecheckRequest(batchStartImsi, Number(batchCount) || 1);
-      await postJson('/api/subscribers/batch/precheck', payload);
-      setNotice({ type: 'info', message: 'Batch precheck passed successfully.' });
-    } catch (err) {
-      setNotice({ type: 'error', message: err instanceof Error ? err.message : 'Precheck failed' });
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleBatchCreate = async () => {
-    setSubmitting(true);
-    setNotice(null);
-    try {
-      const payload = buildBatchCreateRequest(batchStartImsi, Number(batchCount) || 1, {
-        profileName: profileInput.trim() || undefined,
-        planId: planIdInput.trim() || undefined,
-        strategy: 'overwrite',
-      });
-      await postJson('/api/subscribers/batch', payload);
-      setIsBatchCreateOpen(false);
-      setNotice({ type: 'success', message: 'Batch create executed successfully.' });
-      await refreshData();
-    } catch (err) {
-      setNotice({ type: 'error', message: err instanceof Error ? err.message : 'Batch create failed' });
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // 5. Batch Update: POST /api/subscribers/batch-update
-  const handleBatchUpdate = async () => {
-    const imsis = batchImsisText.split(/[\n,]+/).map((s) => s.trim()).filter(Boolean);
-    if (!imsis.length) {
-      setNotice({ type: 'error', message: 'At least one IMSI is required' });
-      return;
-    }
-    setSubmitting(true);
-    setNotice(null);
-    try {
-      const patch = { accessRestrictionData: Number(batchAccessRestriction) || 32 };
-      const payload = buildBatchUpdateRequest(imsis, patch, batchReason, {
-        ticketId: batchTicketId.trim() || undefined,
-      });
-      await postJson('/api/subscribers/batch-update', payload);
-      setIsBatchUpdateOpen(false);
-      setBatchImsisText('');
-      setNotice({ type: 'success', message: 'Batch update executed successfully.' });
-      await refreshData();
-    } catch (err) {
-      setNotice({ type: 'error', message: err instanceof Error ? err.message : 'Batch update failed' });
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // 6. Bulk Delete: POST /api/subscribers/bulk-delete
-  const handleBulkDelete = async () => {
-    if (!selectedImsis.length) return;
-    setSubmitting(true);
-    setNotice(null);
-    try {
-      const payload = buildBulkDeleteRequest(selectedImsis);
-      await postJson('/api/subscribers/bulk-delete', payload);
-      setIsBulkDeleteOpen(false);
-      setSelectedImsis([]);
-      setNotice({ type: 'success', message: `Bulk delete executed for ${selectedImsis.length} subscribers.` });
-      await refreshData();
-    } catch (err) {
-      setNotice({ type: 'error', message: err instanceof Error ? err.message : 'Bulk delete failed' });
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // 7. Import: POST /api/subscribers/import (mode=precheck then mode=import)
-  const handleImportPrecheck = async () => {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(importJsonText);
+      await navigator.clipboard.writeText(imsi);
+      setCopiedImsi(imsi);
+      window.setTimeout(() => setCopiedImsi((current) => (current === imsi ? null : current)), 1400);
     } catch {
-      setNotice({ type: 'error', message: 'Invalid JSON format in import data' });
-      return;
-    }
-    setSubmitting(true);
-    try {
-      const raw = Array.isArray(parsed)
-        ? parsed
-        : (parsed as { records?: unknown[]; subscribers?: unknown[] })?.records ??
-          (parsed as { records?: unknown[]; subscribers?: unknown[] })?.subscribers ??
-          [];
-      if (!raw.length) {
-        setNotice({ type: 'error', message: 'No records found in import payload' });
-        return;
-      }
-      const normalizedRecords: ImportRecord[] = [];
-      const seenImsis = new Set<string>();
-      for (const item of raw) {
-        const record = validateAndNormalizeImportRecord(item);
-        if (seenImsis.has(record.imsi)) {
-          throw new Error(`Duplicate IMSI in import records: ${record.imsi}`);
-        }
-        seenImsis.add(record.imsi);
-        normalizedRecords.push(record);
-      }
-      const imsiList = normalizedRecords.map((r) => r.imsi);
-      const payload = buildImportPrecheckRequest(imsiList);
-      const res = await postJson<{ validCount?: number; total?: number; conflicts?: unknown[] }>(
-        '/api/subscribers/import?mode=precheck',
-        payload,
-      );
-      setImportPrecheckResult(`Precheck passed: ${res.validCount ?? imsiList.length} valid entries ready for import.`);
-    } catch (err) {
-      setNotice({ type: 'error', message: err instanceof Error ? err.message : 'Import precheck failed' });
-    } finally {
-      setSubmitting(false);
+      /* Clipboard access can be denied; the affordance simply stays idle. */
     }
   };
 
-  const handleImportExecute = async () => {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(importJsonText);
-    } catch {
-      setNotice({ type: 'error', message: 'Invalid JSON format in import data' });
-      return;
-    }
-    setSubmitting(true);
-    setNotice(null);
-    try {
-      const raw = Array.isArray(parsed)
-        ? parsed
-        : (parsed as { records?: unknown[]; subscribers?: unknown[] })?.records ??
-          (parsed as { records?: unknown[]; subscribers?: unknown[] })?.subscribers ??
-          [];
-      if (!raw.length) {
-        setNotice({ type: 'error', message: 'No records to import' });
-        return;
-      }
-      const records: ImportRecord[] = raw.map((item) => validateAndNormalizeImportRecord(item));
-      const payload = buildImportRequest(records, false);
-      await postJson('/api/subscribers/import?mode=import', payload);
-      setIsImportOpen(false);
-      setImportJsonText('');
-      setImportPrecheckResult(null);
-      setNotice({ type: 'success', message: 'Subscribers imported successfully.' });
-      await refreshData();
-    } catch (err) {
-      setNotice({ type: 'error', message: err instanceof Error ? err.message : 'Import failed' });
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // 8. Profile Apply: POST /api/subscribers/{imsi}/profile
-  const handleProfileApply = async () => {
-    if (!activeImsi || !profileInput.trim()) return;
-    setSubmitting(true);
-    setNotice(null);
-    try {
-      const payload = buildProfileApplyRequest(profileInput.trim());
-      await postJson(`/api/subscribers/${encodeURIComponent(activeImsi)}/profile`, payload);
-      setIsProfileApplyOpen(false);
-      setActiveImsi(null);
-      setNotice({ type: 'success', message: `Profile applied to subscriber ${activeImsi}.` });
-      await refreshData();
-    } catch (err) {
-      setNotice({ type: 'error', message: err instanceof Error ? err.message : 'Profile apply failed' });
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // 9. Traffic Adjustment: POST /api/subscribers/{imsi}/traffic-adjustments
-  const handleTrafficAdjust = async () => {
-    if (!activeImsi) return;
-    setSubmitting(true);
-    setNotice(null);
-    try {
-      const payload = buildTrafficAdjustRequest({
-        bucket: trafficBucket,
-        amount: Number(trafficAmount) || 0,
-        reason: trafficReason.trim(),
-      });
-      await postJson(`/api/subscribers/${encodeURIComponent(activeImsi)}/traffic-adjustments`, payload);
-      setIsTrafficAdjustOpen(false);
-      setNotice({
-        type: 'info',
-        message: 'Traffic adjustment request was accepted by the Go routing endpoint. No balance mutation is confirmed by this response.',
-      });
-    } catch (err) {
-      setNotice({ type: 'error', message: err instanceof Error ? err.message : 'Traffic adjust failed' });
-    } finally {
-      setSubmitting(false);
-    }
+  const renderSortIcon = (field: string) => {
+    if (sortField !== field) return <ArrowUpDown size={14} className="sort-icon muted" />;
+    return sortDirection === 'asc'
+      ? <ArrowUp size={14} className="sort-icon active" />
+      : <ArrowDown size={14} className="sort-icon active" />;
   };
 
   return (
-    <div className="container animate-fade-in">
-      <PageHeader
-        eyebrow={t('eyebrow_imsi_hss')}
-        icon={<Layers size={23} />}
-        title={t('subscriber_title')}
-        description={t('subscriber_subtitle')}
-        actions={
-          <button type="button" className="btn btn-secondary" onClick={() => void refreshData()}>
-            <RefreshCw size={16} />
-            {t('refresh')}
-          </button>
-        }
-      />
+    <>
+      <div className="container animate-fade-in" onClick={() => setActiveDropdown(null)}>
+        <PageHeader
+          eyebrow={t('eyebrow_imsi_hss')}
+          icon={<Layers size={23} />}
+          title={t('subscriber_title')}
+          description={t('subscriber_subtitle')}
+        />
 
-      {notice && (
-        <div className={`notice-box ${notice.type}`} role="status">
-          <span>{notice.message}</span>
-        </div>
-      )}
+        <SubscriberSummaryPanel
+          summaryCards={summaryCards}
+          statusFilter={statusFilter}
+          applyStatusFilter={applyStatusFilter}
+        />
 
-      {/* Action Toolbar */}
-      <div className="action-toolbar">
-        <label className="read-search">
-          {t('search')}
-          <input
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setPage(1);
-            }}
-            placeholder="Search by IMSI..."
+        {feedback && (
+          <OperationNotice
+            presentation="modal"
+            tone={feedback.tone}
+            title={feedback.title}
+            message={feedback.message}
+            onClose={() => setFeedback(null)}
           />
-        </label>
+        )}
 
-        <div className="toolbar-actions">
-          {canWrite && (
-            <>
-              <button
-                type="button"
-                className="btn-primary"
-                onClick={() => {
-                  setImsiInput('');
-                  setMsisdnInput('');
-                  setPlanIdInput('');
-                  setIsCreateOpen(true);
-                }}
-              >
-                <Plus size={16} />
-                Create
-              </button>
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={() => setIsBatchCreateOpen(true)}
-              >
-                <Users size={16} />
-                Batch Create
-              </button>
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={() => setIsBatchUpdateOpen(true)}
-              >
-                <Sliders size={16} />
-                Batch Update
-              </button>
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={() => {
-                  setImportJsonText('');
-                  setImportPrecheckResult(null);
-                  setIsImportOpen(true);
-                }}
-              >
-                <Upload size={16} />
-                Import
-              </button>
-            </>
-          )}
+        {pendingDelete && (
+          <ConfirmActionPanel
+            presentation="modal"
+            title={pendingDelete.mode === 'bulk' ? t('sub_confirm_bulk_delete_title', { count: pendingDelete.imsis.length }) : t('sub_confirm_delete_title')}
+            message={
+              pendingDelete.mode === 'bulk'
+                ? t('sub_confirm_bulk_delete_desc', { items: `${pendingDeleteItems}${pendingDeleteOverflow}` })
+                : t('sub_confirm_delete_desc', { items: pendingDeleteItems })
+            }
+            confirmLabel={t('delete')}
+            cancelLabel={t('cancel')}
+            isWorking={isDeletingBulk || Boolean(isDeletingSingle)}
+            onConfirm={() => void executePendingDelete()}
+            onCancel={() => setPendingDelete(null)}
+          />
+        )}
 
-          {canDelete && selectedImsis.length > 0 && (
-            <button
-              type="button"
-              className="btn-danger"
-              onClick={() => setIsBulkDeleteOpen(true)}
-            >
-              <Trash2 size={16} />
-              Delete Selected ({selectedImsis.length})
-            </button>
+        <SubscriberToolbar
+          searchQuery={searchQuery}
+          setSearchQuery={setSearchQuery}
+          setCurrentPage={setCurrentPage}
+          setSelectedImsis={setSelectedImsis}
+          selectedImsis={selectedImsis}
+          canEditSubscribers={canEditSubscribers}
+          setIsBatchUpdateModalOpen={setIsBatchUpdateModalOpen}
+          handleBulkDelete={handleBulkDelete}
+          isDeletingBulk={isDeletingBulk}
+          pendingDelete={pendingDelete}
+          handleOpenNew={handleOpenNew}
+          setIsBatchOpen={setIsBatchOpen}
+          mutateSubscribers={() => { void mutateSubscribers(); }}
+          setFeedback={setFeedback}
+        />
+
+        <div className="dash-card shadow table-card">
+          <SubscriberTable
+            isLoading={isLoading}
+            totalSubscribers={totalSubscribers}
+            searchQuery={searchQuery}
+            statusFilter={statusFilter}
+            canEditSubscribers={canEditSubscribers}
+            handleOpenNew={handleOpenNew}
+            isAllPageSelected={isAllPageSelected}
+            selectedOnPageCount={selectedOnPageCount}
+            pageImsis={pageImsis}
+            toggleSelectAll={toggleSelectAll}
+            sortField={sortField}
+            sortDirection={sortDirection}
+            handleSort={handleSort}
+            renderSortIcon={renderSortIcon}
+            paginatedSubscribers={paginatedSubscribers}
+            selectedImsis={selectedImsis}
+            setSelectedImsis={setSelectedImsis}
+            copiedImsi={copiedImsi}
+            handleCopyImsi={handleCopyImsi}
+            resolveNetwork={resolveNetwork}
+            formatBytes={formatBytes}
+            formatFullDate={formatFullDate}
+            timeAgo={timeAgo}
+            handleOpenEdit={handleOpenEdit}
+            handleDelete={handleDelete}
+            isDeletingSingle={isDeletingSingle}
+            pendingDelete={pendingDelete}
+            activeDropdown={activeDropdown}
+            setActiveDropdown={setActiveDropdown}
+            handleOpenTrafficAdjustment={handleOpenTrafficAdjustment}
+          />
+          {!isLoading && (
+            <DataTablePagination
+              page={displayPage}
+              pageSize={pageSize}
+              total={totalSubscribers}
+              visibleCount={subscribers.length}
+              totalPages={totalPages}
+              pageSizes={SUBSCRIBER_PAGE_SIZES}
+              labels={{
+                showing: t('showing'),
+                to: t('to'),
+                of: t('of'),
+                entries: t('entries'),
+                previous: t('prev'),
+                next: t('next'),
+                perPage: t('per_page'),
+              }}
+              onPageChange={(next) => setCurrentPage(next)}
+              onPageSizeChange={(size) => { setPageSize(size); setCurrentPage(1); }}
+            />
           )}
         </div>
       </div>
 
-      {/* Main Table */}
-      {subscribers.isLoading || catalog.isLoading ? (
-        <SkeletonTable rows={6} />
-      ) : subscribers.error ? (
-        <ErrorState
-          title={t('error_title')}
-          message={subscribers.error.message}
-          retryLabel={t('refresh')}
-          onRetry={() => void refreshData()}
-        />
-      ) : rows.length === 0 ? (
-        <EmptyState title={t('empty_title')} description={t('empty_generic_body')} />
-      ) : (
-        <>
-          <MetricStrip
-            variant="cards"
-            columns={4}
-            ariaLabel={t('nav_subscriber')}
-            items={summaryItems}
-          />
-          <p className="read-summary">
-            {total} {t('records')}
-          </p>
-          <div className="read-table-wrap">
-            <table className="read-table">
-              <thead>
-                <tr>
-                  {canDelete && (
-                    <th className="checkbox-cell">
-                      <input
-                        type="checkbox"
-                        checked={selectedImsis.length > 0 && selectedImsis.length === rows.length}
-                        onChange={toggleSelectAll}
-                        aria-label="Select all subscribers"
-                      />
-                    </th>
-                  )}
-                  <th>Status</th>
-                  <th>IMSI</th>
-                  <th>PLMN</th>
-                  <th>Profile</th>
-                  <th>Traffic</th>
-                  <th>Last active</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => {
-                  const imsi = text(row['imsi']);
-                  const isChecked = selectedImsis.includes(imsi);
-                  const traffic = trafficParts(row);
-                  return (
-                    <tr key={imsi}>
-                      {canDelete && (
-                        <td className="checkbox-cell">
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={() => toggleSelect(imsi)}
-                            aria-label={`Select subscriber ${imsi}`}
-                          />
-                        </td>
-                      )}
-                      <td data-label="Status">
-                        <span className={`badge badge-${text(row['status']).toLowerCase()}`}>
-                          {text(row['status'])}
-                        </span>
-                      </td>
-                      <td data-label="IMSI" className="imsi-text">{imsi}</td>
-                      <td data-label="PLMN">{text(row['plmn'])}</td>
-                      <td data-label="Profile">{text(row['policyName'] || row['policy'])}</td>
-                      <td data-label="Traffic">
-                        <div className="traffic-container">
-                          <div className="traffic-stats">
-                            <span>{formatBytes(traffic.used)}</span>
-                            <span>{formatBytes(traffic.total || 1)}</span>
-                          </div>
-                          <div className="traffic-bar-container">
-                            <div
-                              className={`traffic-bar ${traffic.pct > 90 ? 'high' : traffic.pct > 70 ? 'medium' : 'low'}`}
-                              style={{ '--traffic-scale': Math.min(traffic.pct, 100) / 100 } as React.CSSProperties}
-                            />
-                          </div>
-                        </div>
-                      </td>
-                      <td className="last-active-cell" data-label="Last active">{timeAgo(row['lastActive'], t)}</td>
-                      <td data-label="Actions">
-                        <div className="table-actions">
-                          {canWrite && (
-                            <>
-                              <button
-                                type="button"
-                                className="btn-secondary btn-sm"
-                                title="Edit subscriber"
-                                onClick={() => {
-                                  setActiveImsi(imsi);
-                                  const rawMsisdn = Array.isArray(row['msisdn']) ? (row['msisdn'][0] ?? '') : (row['msisdn'] ?? '');
-                                  const currentMsisdn = rawMsisdn === '-' ? '' : String(rawMsisdn).trim();
-                                  setMsisdnInput(currentMsisdn);
-                                  setOriginalMsisdn(currentMsisdn);
-                                  setIsEditOpen(true);
-                                }}
-                              >
-                                <Edit2 size={14} />
-                              </button>
-                              <button
-                                type="button"
-                                className="btn-secondary btn-sm"
-                                title="Apply profile"
-                                onClick={() => {
-                                  setActiveImsi(imsi);
-                                  setProfileInput(text(row['profile']));
-                                  setIsProfileApplyOpen(true);
-                                }}
-                              >
-                                <FileText size={14} />
-                              </button>
-                            </>
-                          )}
-                          {canAdjustTraffic && (
-                            <button
-                              type="button"
-                              className="btn-secondary btn-sm"
-                              title="Adjust traffic"
-                              onClick={() => {
-                                setActiveImsi(imsi);
-                                setIsTrafficAdjustOpen(true);
-                              }}
-                            >
-                              <Sliders size={14} />
-                            </button>
-                          )}
-                          {canDelete && (
-                            <button
-                              type="button"
-                              className="btn-danger btn-sm"
-                              title="Delete subscriber"
-                              onClick={() => {
-                                setActiveImsi(imsi);
-                                setIsDeleteOpen(true);
-                              }}
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+      <BatchCreateModal
+        isOpen={isBatchOpen}
+        onClose={() => setIsBatchOpen(false)}
+        onSuccess={() => { void mutateSubscribers(); }}
+        profileList={profileList}
+      />
 
-          <nav className="read-pagination">
-            <button
-              type="button"
-              disabled={page === 1}
-              onClick={() => setPage((v) => v - 1)}
-            >
-              {t('previous')}
-            </button>
-            <span>{page}</span>
-            <button
-              type="button"
-              disabled={rows.length < 20}
-              onClick={() => setPage((v) => v + 1)}
-            >
-              {t('next')}
-            </button>
-          </nav>
-        </>
+      {isModalOpen && (
+        <SubscriberModal
+          imsi={modalImsi}
+          onClose={() => setIsModalOpen(false)}
+          onRefresh={() => { void mutateSubscribers(); }}
+        />
       )}
 
-      {/* Modal 1: Single Create */}
-      <Modal
-        isOpen={isCreateOpen}
-        onClose={() => setIsCreateOpen(false)}
-        title="Create Subscriber"
-        footer={
-          <>
-            <button type="button" className="btn-secondary" onClick={() => setIsCreateOpen(false)}>
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="btn-primary"
-              onClick={() => void handleCreate()}
-              disabled={submitting}
-            >
-              {submitting ? 'Creating...' : 'Create'}
-            </button>
-          </>
-        }
-      >
-        <div className="form-group">
-          <label htmlFor="create-imsi">IMSI (15 digits) *</label>
-          <input
-            id="create-imsi"
-            className="form-input"
-            value={imsiInput}
-            onChange={(e) => setImsiInput(e.target.value)}
-            maxLength={15}
-            placeholder="e.g. 001010000000001"
-          />
-        </div>
-        <div className="form-group">
-          <label htmlFor="create-msisdn">MSISDN</label>
-          <input
-            id="create-msisdn"
-            className="form-input"
-            value={msisdnInput}
-            onChange={(e) => setMsisdnInput(e.target.value)}
-            placeholder="Optional telephone number"
-          />
-        </div>
-        <div className="form-group">
-          <label htmlFor="create-plan">Tariff Plan ID</label>
-          <input
-            id="create-plan"
-            className="form-input"
-            value={planIdInput}
-            onChange={(e) => setPlanIdInput(e.target.value)}
-            placeholder="Optional plan ID"
-          />
-        </div>
-      </Modal>
+      {trafficAdjustmentTarget && (
+        <TrafficAdjustmentModal
+          imsi={trafficAdjustmentTarget.imsi}
+          t={t}
+          defaultMode={trafficAdjustmentTarget.mode}
+          currentTraffic={trafficAdjustmentTarget.traffic}
+          onClose={() => setTrafficAdjustmentTarget(null)}
+          onSuccess={() => {
+            void mutateSubscribers();
+            setFeedback({ tone: 'success', title: t('success'), message: t('traffic_adjust_title') });
+          }}
+        />
+      )}
 
-      {/* Modal 2: Single Edit */}
-      <Modal
-        isOpen={isEditOpen}
-        onClose={() => setIsEditOpen(false)}
-        title={`Edit Subscriber: ${activeImsi}`}
-        footer={
-          <>
-            <button type="button" className="btn-secondary" onClick={() => setIsEditOpen(false)}>
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="btn-primary"
-              onClick={() => void handleEdit()}
-              disabled={submitting}
-            >
-              {submitting ? 'Saving...' : 'Save Changes'}
-            </button>
-          </>
-        }
-      >
-        <div className="form-group">
-          <label htmlFor="edit-msisdn">MSISDN</label>
-          <input
-            id="edit-msisdn"
-            className="form-input"
-            value={msisdnInput}
-            onChange={(e) => setMsisdnInput(e.target.value)}
-          />
-        </div>
-      </Modal>
-
-      {/* Modal 3: Batch Create */}
-      <Modal
-        isOpen={isBatchCreateOpen}
-        onClose={() => setIsBatchCreateOpen(false)}
-        title="Batch Create Subscribers"
-        footer={
-          <>
-            <button type="button" className="btn-secondary" onClick={() => setIsBatchCreateOpen(false)}>
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={() => void handleBatchCreatePrecheck()}
-              disabled={submitting}
-            >
-              Precheck
-            </button>
-            <button
-              type="button"
-              className="btn-primary"
-              onClick={() => void handleBatchCreate()}
-              disabled={submitting}
-            >
-              {submitting ? 'Executing...' : 'Execute Batch'}
-            </button>
-          </>
-        }
-      >
-        <div className="form-group">
-          <label htmlFor="batch-start-imsi">Start IMSI (15 digits) *</label>
-          <input
-            id="batch-start-imsi"
-            className="form-input"
-            value={batchStartImsi}
-            onChange={(e) => setBatchStartImsi(e.target.value)}
-            maxLength={15}
-            placeholder="001010000000001"
-          />
-        </div>
-        <div className="form-group">
-          <label htmlFor="batch-count">Count *</label>
-          <input
-            id="batch-count"
-            type="number"
-            className="form-input"
-            value={batchCount}
-            onChange={(e) => setBatchCount(Number(e.target.value))}
-            min={1}
-            max={100}
-          />
-        </div>
-        <div className="form-group">
-          <label htmlFor="batch-profile">Profile Name</label>
-          <select
-            id="batch-profile"
-            className="form-select"
-            value={profileInput}
-            onChange={(e) => setProfileInput(e.target.value)}
-          >
-            <option value="">Default Profile</option>
-            {profileList.map((p) => (
-              <option key={text(p.name)} value={text(p.name)}>
-                {text(p.name)}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="form-group">
-          <label htmlFor="batch-plan">Tariff Plan ID</label>
-          <input
-            id="batch-plan"
-            className="form-input"
-            value={planIdInput}
-            onChange={(e) => setPlanIdInput(e.target.value)}
-            placeholder="Optional plan ID"
-          />
-        </div>
-      </Modal>
-
-      {/* Modal 4: Batch Update */}
-      <Modal
-        isOpen={isBatchUpdateOpen}
-        onClose={() => setIsBatchUpdateOpen(false)}
-        title="Batch Update Subscribers"
-        footer={
-          <>
-            <button type="button" className="btn-secondary" onClick={() => setIsBatchUpdateOpen(false)}>
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="btn-primary"
-              onClick={() => void handleBatchUpdate()}
-              disabled={submitting}
-            >
-              {submitting ? 'Updating...' : 'Update Subscribers'}
-            </button>
-          </>
-        }
-      >
-        <div className="form-group">
-          <label htmlFor="batch-imsis">IMSIs (comma or line separated) *</label>
-          <textarea
-            id="batch-imsis"
-            className="form-textarea"
-            value={batchImsisText}
-            onChange={(e) => setBatchImsisText(e.target.value)}
-            placeholder="001010000000001, 001010000000002"
-          />
-        </div>
-        <div className="form-group">
-          <label htmlFor="batch-access-restriction">Access Restriction</label>
-          <select
-            id="batch-access-restriction"
-            className="form-select"
-            value={batchAccessRestriction}
-            onChange={(e) => setBatchAccessRestriction(e.target.value)}
-          >
-            <option value="32">Normal Access (32)</option>
-            <option value="255">Restricted Access (255)</option>
-          </select>
-        </div>
-        <div className="form-group">
-          <label htmlFor="batch-reason">Reason * (minimum 3 characters)</label>
-          <input
-            id="batch-reason"
-            className="form-input"
-            value={batchReason}
-            onChange={(e) => setBatchReason(e.target.value)}
-            placeholder="Operational batch adjustment"
-          />
-        </div>
-        <div className="form-group">
-          <label htmlFor="batch-ticket-id">Ticket ID (optional)</label>
-          <input
-            id="batch-ticket-id"
-            className="form-input"
-            value={batchTicketId}
-            onChange={(e) => setBatchTicketId(e.target.value)}
-            placeholder="CHG-20261004-001"
-          />
-        </div>
-      </Modal>
-
-      {/* Modal 5: Import */}
-      <Modal
-        isOpen={isImportOpen}
-        onClose={() => setIsImportOpen(false)}
-        title="Import Subscribers"
-        maxWidth="38rem"
-        footer={
-          <>
-            <button type="button" className="btn-secondary" onClick={() => setIsImportOpen(false)}>
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={() => void handleImportPrecheck()}
-              disabled={submitting}
-            >
-              Validate / Precheck
-            </button>
-            <button
-              type="button"
-              className="btn-primary"
-              onClick={() => void handleImportExecute()}
-              disabled={submitting || !importPrecheckResult}
-            >
-              {submitting ? 'Importing...' : 'Execute Import'}
-            </button>
-          </>
-        }
-      >
-        <div className="form-group">
-          <label htmlFor="import-data">Subscriber JSON Array</label>
-          <textarea
-            id="import-data"
-            className="form-textarea"
-            style={{ minHeight: '8rem', fontFamily: 'monospace' }}
-            value={importJsonText}
-            onChange={(e) => {
-              setImportJsonText(e.target.value);
-              setImportPrecheckResult(null);
-            }}
-            placeholder='[{"imsi": "001010000000001", "plan_id": "plan_default_10gb", "traffic_total": 10737418240, "traffic_balance": 10737418240, "sms_total": 100, "sms_balance": 100}]'
-          />
-        </div>
-        <p style={{ fontSize: '.8rem', color: '#666', marginTop: '.25rem' }}>
-          Server import policy creates new subscribers; overwrite is unsupported.
-        </p>
-        {importPrecheckResult && (
-          <div className="notice-box info">
-            <span>{importPrecheckResult}</span>
-          </div>
-        )}
-      </Modal>
-
-      {/* Modal 6: Profile Apply */}
-      <Modal
-        isOpen={isProfileApplyOpen}
-        onClose={() => setIsProfileApplyOpen(false)}
-        title={`Apply Profile to: ${activeImsi}`}
-        footer={
-          <>
-            <button type="button" className="btn-secondary" onClick={() => setIsProfileApplyOpen(false)}>
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="btn-primary"
-              onClick={() => void handleProfileApply()}
-              disabled={submitting || !profileInput}
-            >
-              {submitting ? 'Applying...' : 'Apply Profile'}
-            </button>
-          </>
-        }
-      >
-        <div className="form-group">
-          <label htmlFor="apply-profile-select">Select Profile</label>
-          <select
-            id="apply-profile-select"
-            className="form-select"
-            value={profileInput}
-            onChange={(e) => setProfileInput(e.target.value)}
-          >
-            <option value="">Select profile...</option>
-            {profileList.map((p) => (
-              <option key={text(p.name)} value={text(p.name)}>
-                {text(p.name)}
-              </option>
-            ))}
-          </select>
-        </div>
-      </Modal>
-
-      {/* Modal 7: Traffic Adjustment */}
-      <Modal
-        isOpen={isTrafficAdjustOpen}
-        onClose={() => setIsTrafficAdjustOpen(false)}
-        title={`Adjust Traffic for: ${activeImsi}`}
-        footer={
-          <>
-            <button type="button" className="btn-secondary" onClick={() => setIsTrafficAdjustOpen(false)}>
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="btn-primary"
-              onClick={() => void handleTrafficAdjust()}
-              disabled={submitting}
-            >
-              {submitting ? 'Adjusting...' : 'Confirm Adjustment'}
-            </button>
-          </>
-        }
-      >
-        <div className="form-group">
-          <label htmlFor="traffic-bucket">Bucket</label>
-          <select
-            id="traffic-bucket"
-            className="form-select"
-            value={trafficBucket}
-            onChange={(e) => setTrafficBucket(e.target.value as 'data' | 'voice' | 'sms')}
-          >
-            <option value="data">Data</option>
-            <option value="voice">Voice</option>
-            <option value="sms">SMS</option>
-          </select>
-        </div>
-        <div className="form-group">
-          <label htmlFor="traffic-amount">Amount</label>
-          <input
-            id="traffic-amount"
-            type="number"
-            className="form-input"
-            value={trafficAmount}
-            onChange={(e) => setTrafficAmount(e.target.value)}
-          />
-        </div>
-        <div className="form-group">
-          <label htmlFor="traffic-reason">Reason</label>
-          <input
-            id="traffic-reason"
-            className="form-input"
-            value={trafficReason}
-            onChange={(e) => setTrafficReason(e.target.value)}
-          />
-        </div>
-      </Modal>
-
-      {/* Confirmation 1: Single Delete */}
-      <ConfirmDialog
-        isOpen={isDeleteOpen}
-        onClose={() => setIsDeleteOpen(false)}
-        onConfirm={() => void handleDelete()}
-        title="Delete Subscriber"
-        description={`Are you sure you want to delete subscriber ${activeImsi}? This operation is irreversible.`}
-        confirmLabel="Delete Subscriber"
-        isDanger={true}
-        isLoading={submitting}
+      <SubscriberBatchUpdateModal
+        isOpen={isBatchUpdateModalOpen}
+        selectedImsis={selectedImsis}
+        onClose={() => setIsBatchUpdateModalOpen(false)}
+        onSuccess={(response) => {
+          setSelectedImsis([]);
+          setFeedback({
+            tone: 'success',
+            title: t('success'),
+            message: t('sub_batch_update_success', { count: response.result?.modified ?? selectedImsis.length }),
+          });
+          void mutateSubscribers();
+        }}
       />
-
-      {/* Confirmation 2: Bulk Delete */}
-      <ConfirmDialog
-        isOpen={isBulkDeleteOpen}
-        onClose={() => setIsBulkDeleteOpen(false)}
-        onConfirm={() => void handleBulkDelete()}
-        title="Delete Multiple Subscribers"
-        description={`Are you sure you want to delete ${selectedImsis.length} selected subscribers? This operation is irreversible.`}
-        confirmLabel={`Delete ${selectedImsis.length} Subscribers`}
-        isDanger={true}
-        isLoading={submitting}
-      />
-    </div>
+    </>
   );
 }
