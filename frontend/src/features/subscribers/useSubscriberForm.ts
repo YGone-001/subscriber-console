@@ -8,6 +8,7 @@ import { parseBytes, formatBytes, parseSeconds, formatSeconds, parseEvents, form
 import { sessionQosPreset } from '../../lib/imsQosPresets.js';
 import { getJson, getJsonWithSignal } from '../../lib/api/read-client';
 import { deleteJson, MutationApiError, postJson, putJson } from '../../lib/api/mutation-client';
+import { buildSubscriberCreateRequest } from './mutation-contract';
 
 type ApiRecord = Record<string, any>;
 
@@ -407,9 +408,20 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
         }),
       }));
 
+      /*
+       * Authentication material is provisioned at CREATION. It travels on the POST and must not
+       * appear on the follow-up PUT: the service refuses to change authentication material on a
+       * record that already exists, so sending it on both calls turned every create into a 422.
+       */
+      const authPayload: any = { k: auth4GData.k, sqn: Number(auth4GData.sqn), amf: auth4GData.amf };
+      authPayload[usimType] = auth4GData.opValue;
+
       if (!imsi) {
         try {
-          await postJson('/api/subscribers', { imsi: targetImsi, planId: ocsPlanId });
+          await postJson('/api/subscribers', buildSubscriberCreateRequest(targetImsi, {
+            planId: ocsPlanId,
+            auth4G: authPayload,
+          }));
           createdInThisAttempt = true;
         } catch (createError) {
           const createData = mutationErrorBody(createError);
@@ -441,9 +453,6 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
         msisdnList: [{ msisdn }],
       };
 
-      const authPayload: any = { k: auth4GData.k, sqn: Number(auth4GData.sqn), amf: auth4GData.amf };
-      authPayload[usimType] = auth4GData.opValue;
-
       const ocsTrafficPayload = {
         traffic_total: parseBytes(ocsTrafficTotalStr),
         traffic_balance: parseBytes(ocsTrafficBalanceStr),
@@ -454,9 +463,12 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
         planId: ocsPlanId
       };
 
+      /*
+       * No auth4G here. This request only applies ordinary mutable configuration; authentication
+       * material was already provisioned by the POST above and is immutable from this point on.
+       */
       const payload: any = {
         sub4G: finalSub4G,
-        auth4G: authPayload,
         ocsTraffic: ocsTrafficPayload
       };
 
@@ -471,13 +483,11 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
           setInputMsisdnExists(true);
           throw new Error(t("sub_err_msisdn_exists"));
         }
-        /* The governance rule refuses to change auth material on an EXISTING record.
-         * The create path always sends K/OPc, so on a fresh record it can trip; say so
-         * plainly instead of surfacing the raw code. */
+        /* The governance rule refuses to change auth material on an EXISTING record. This path
+         * no longer sends auth4G, so reaching it means a genuine forbidden update attempt rather
+         * than the create-time condition the old message described. */
         if (data.code === "SENSITIVE_SUBSCRIBER_CHANGE_NOT_SUPPORTED") {
-          throw new Error(createdInThisAttempt
-            ? t("sub_err_auth_not_applied")
-            : t("sub_err_auth_change_rejected"));
+          throw new Error(t("sub_err_auth_change_rejected"));
         }
 
         throw new Error(updateError instanceof Error ? updateError.message : t("sub_err_save"));

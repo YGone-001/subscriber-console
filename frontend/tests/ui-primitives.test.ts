@@ -16,7 +16,7 @@ function walk(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-/** Every primitive ported in Phase 2, with the export form it must expose. */
+/** Every ported primitive, with the export form it must expose. */
 const PRIMITIVES: Array<{ path: string; defaultExport?: string; namedExports: string[] }> = [
   { path: 'components/ui/ChartDataTable.tsx', namedExports: ['ChartDataTable'] },
   { path: 'components/ui/DataTablePagination.tsx', namedExports: ['DataTablePagination'] },

@@ -76,6 +76,14 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
     setOcsTrafficTotalStr, setOcsTrafficBalanceStr, setOcsVoiceTotalStr, setOcsVoiceBalanceStr, setOcsSmsTotalStr, setOcsSmsBalanceStr,
     setOcsPlanId, addSlice, handleSliceChange, removeSlice, setExpandedSlices
   } = actions;
+
+  /*
+   * Authentication material is write-once: it is provisioned when the subscriber is created and
+   * the service refuses to change it afterwards. `imsi` is only set when editing an existing
+   * subscriber, so it is the signal for whether these fields are editable at all.
+   */
+  const authReadOnly = Boolean(imsi);
+
   const totalTrafficInput = splitByteInput(ocsTrafficTotalStr);
   const balanceTrafficInput = splitByteInput(ocsTrafficBalanceStr, totalTrafficInput.unit);
   const totalVoiceInput = splitSecondsInput(ocsVoiceTotalStr);
@@ -181,18 +189,28 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
           <h3 className="edit-header-title">{t("sec_security_auth")}</h3>
         </div>
         <div className="dash-card-body auth-edit-grid">
+          {/*
+            Authentication material is provisioned at creation and immutable afterwards. On a new
+            subscriber the fields are editable; on an existing one they are read-only, so the form
+            cannot imply a change the service would reject with 422.
+          */}
+          {authReadOnly && (
+            <p className="auth-readonly-note auth-edit-full" role="note">
+              {t("sub_auth_provisioned_readonly")}
+            </p>
+          )}
           <div className="auth-edit-full">
-            <label className="form-label"><span className="form-asterisk">*</span>{t("sub_key_k")}</label>
-            <input type="text" className="form-input auth-input-large" value={auth4GData.k} onChange={(e) => setAuth4GData({...auth4GData, k: e.target.value})} placeholder={t("sub_ph_hex")} />
+            <label className="form-label">{!authReadOnly && <span className="form-asterisk">*</span>}{t("sub_key_k")}</label>
+            <input type="text" className="form-input auth-input-large" value={auth4GData.k} onChange={(e) => setAuth4GData({...auth4GData, k: e.target.value})} placeholder={t("sub_ph_hex")} readOnly={authReadOnly} disabled={authReadOnly} />
           </div>
           <div className="auth-edit-full">
-            <label className="form-label"><span className="form-asterisk">*</span>{t("sub_key_op")} ({usimType === "op" ? "OP" : "OPc"})</label>
+            <label className="form-label">{!authReadOnly && <span className="form-asterisk">*</span>}{t("sub_key_op")} ({usimType === "op" ? "OP" : "OPc"})</label>
             <div className="auth-op-container">
-              <select className="form-input auth-op-select" value={usimType} onChange={(e) => setUsimType(e.target.value as "opc" | "op")}>
+              <select className="form-input auth-op-select" value={usimType} onChange={(e) => setUsimType(e.target.value as "opc" | "op")} disabled={authReadOnly}>
                 <option value="opc">OPc</option>
                 <option value="op">OP</option>
               </select>
-              <input type="text" className="form-input auth-input-large auth-op-input" value={auth4GData.opValue} onChange={(e) => setAuth4GData({...auth4GData, opValue: e.target.value})} placeholder={t("sub_ph_hex")} />
+              <input type="text" className="form-input auth-input-large auth-op-input" value={auth4GData.opValue} onChange={(e) => setAuth4GData({...auth4GData, opValue: e.target.value})} placeholder={t("sub_ph_hex")} readOnly={authReadOnly} disabled={authReadOnly} />
             </div>
           </div>
           <div>
@@ -203,11 +221,13 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
               value={auth4GData.sqn ?? ""}
               onFocus={(e) => e.target.select()}
               onChange={(e) => setAuth4GData({ ...auth4GData, sqn: e.target.value === "" ? 0 : parseInt(e.target.value, 10) })}
+              readOnly={authReadOnly}
+              disabled={authReadOnly}
             />
           </div>
           <div>
-            <label className="form-label"><span className="form-asterisk">*</span>{t("sub_amf")}</label>
-            <input type="text" className="form-input input-auth" value={auth4GData.amf} onChange={(e) => setAuth4GData({...auth4GData, amf: e.target.value})} placeholder={t("sub_ph_amf")} />
+            <label className="form-label">{!authReadOnly && <span className="form-asterisk">*</span>}{t("sub_amf")}</label>
+            <input type="text" className="form-input input-auth" value={auth4GData.amf} onChange={(e) => setAuth4GData({...auth4GData, amf: e.target.value})} placeholder={t("sub_ph_amf")} readOnly={authReadOnly} disabled={authReadOnly} />
           </div>
         </div>
       </div>

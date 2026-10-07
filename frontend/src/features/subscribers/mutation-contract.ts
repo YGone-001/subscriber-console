@@ -147,10 +147,26 @@ export interface ImportExecutionPayload {
   overwrite: boolean;
 }
 
+/*
+ * Authentication material supplied at subscriber creation.
+ *
+ * Exactly one of op / opc must be present. This is a CREATE-time shape only: ordinary subscriber
+ * editing must not emit auth4G, because the service refuses to change authentication material on
+ * a record that already exists.
+ */
+export interface CreateAuth4G {
+  k: string;
+  op?: string;
+  opc?: string;
+  amf: string;
+  sqn: number;
+}
+
 export interface SubscriberCreatePayload {
   imsi: string;
   planId?: string;
   msisdn?: string;
+  auth4G?: CreateAuth4G;
 }
 
 export interface SubscriberUpdatePayload {
@@ -327,9 +343,38 @@ export function buildImportRequest(records: ImportRecord[], overwrite = false): 
   };
 }
 
+/* 32 hex characters: K, OP and OPc. */
+const HEX_32 = /^[0-9a-fA-F]{32}$/;
+/* 4 hex characters: AMF. */
+const HEX_4 = /^[0-9a-fA-F]{4}$/;
+/*
+ * SQN upper bound, matching the server's validation exactly. Without the ceiling the form would
+ * accept a value the service rejects with 400, turning a local mistake into a round trip.
+ */
+const MAX_AUTH_SQN = 9007199254740991;
+
+/*
+ * Normalizes a hexadecimal field for transport: trimmed, uppercased, validated.
+ *
+ * Case is the only transformation - the hexadecimal content itself is never altered, so an
+ * operator's value cannot be silently rewritten. The backend re-validates and remains
+ * authoritative; this exists so the form reports the problem against the right field instead of
+ * round-tripping to a server error.
+ */
+function normalizeCreateHex(value: string, pattern: RegExp, label: string): string {
+  const trimmed = String(value ?? '').trim();
+  if (!trimmed) {
+    throw new Error(`${label} is required`);
+  }
+  if (!pattern.test(trimmed)) {
+    throw new Error(`${label} has an invalid format`);
+  }
+  return trimmed.toUpperCase();
+}
+
 export function buildSubscriberCreateRequest(
   imsi: string,
-  options?: { planId?: string; msisdn?: string },
+  options?: { planId?: string; msisdn?: string; auth4G?: { k?: string; op?: string; opc?: string; amf?: string; sqn?: number } },
 ): SubscriberCreatePayload {
   const trimmedImsi = String(imsi || '').trim();
   if (!trimmedImsi) {
@@ -344,6 +389,40 @@ export function buildSubscriberCreateRequest(
   if (options?.msisdn?.trim()) {
     payload.msisdn = options.msisdn.trim();
   }
+
+  const raw = options?.auth4G;
+  if (raw) {
+    const hasOp = Boolean(String(raw.op ?? '').trim());
+    const hasOpc = Boolean(String(raw.opc ?? '').trim());
+    if (hasOp && hasOpc) {
+      throw new Error('auth4G must supply exactly one of op or opc, not both');
+    }
+    if (!hasOp && !hasOpc) {
+      throw new Error('auth4G must supply exactly one of op or opc');
+    }
+    if (
+      raw.sqn === undefined ||
+      raw.sqn === null ||
+      !Number.isInteger(raw.sqn) ||
+      raw.sqn < 0 ||
+      raw.sqn > MAX_AUTH_SQN
+    ) {
+      throw new Error(`auth4G.sqn must be an integer between 0 and ${MAX_AUTH_SQN}`);
+    }
+
+    const auth: CreateAuth4G = {
+      k: normalizeCreateHex(String(raw.k ?? ''), HEX_32, 'K'),
+      amf: normalizeCreateHex(String(raw.amf ?? ''), HEX_4, 'AMF'),
+      sqn: raw.sqn,
+    };
+    if (hasOp) {
+      auth.op = normalizeCreateHex(String(raw.op), HEX_32, 'OP');
+    } else {
+      auth.opc = normalizeCreateHex(String(raw.opc), HEX_32, 'OPc');
+    }
+    payload.auth4G = auth;
+  }
+
   return payload;
 }
 

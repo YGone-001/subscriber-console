@@ -134,6 +134,8 @@ const LEGACY_EN: Record<string, string> = {
   sub_err_create_rollback_failed: 'Creation failed AND the rollback did not succeed, so subscriber {imsi} still exists and must be removed manually. Failure: {error} Rollback failure: {rollback}',
   sub_err_auth_not_applied: 'The K/OPc you entered cannot be applied: this service refuses to change authentication material (K/OPc/AMF/SQN) on a record that already exists.',
   sub_err_auth_change_rejected: 'This service refuses to change authentication material (K/OPc/AMF/SQN) on an existing subscriber.',
+  /* Shown beside the read-only authentication fields when editing an existing subscriber. */
+  sub_auth_provisioned_readonly: 'Authentication material is provisioned at subscriber creation and cannot be changed through normal subscriber editing.',
   health_msg_batch_heal_partial: 'Repaired {success}, failed {failed}.',
   health_err_batch_heal_failed: 'No target could be repaired ({failed} failed).',
   ocs_drawer_structured_attributes: 'Structured Attributes', ocs_drawer_raw_json: 'Raw JSON Payload',
@@ -263,6 +265,8 @@ const LEGACY_ZH: Record<string, string> = {
   sub_err_create_rollback_failed: '创建失败，且回滚未成功，订阅用户 {imsi} 仍然存在，需要手动删除。失败原因：{error} 回滚失败原因：{rollback}',
   sub_err_auth_not_applied: '您填写的 K/OPc 无法写入：该服务不允许在已存在的记录上修改鉴权材料（K/OPc/AMF/SQN）。',
   sub_err_auth_change_rejected: '该服务不允许修改已有订阅用户的鉴权材料（K/OPc/AMF/SQN）。',
+  /* 编辑既有订阅用户时，显示在只读鉴权字段旁。 */
+  sub_auth_provisioned_readonly: '鉴权材料在创建订阅用户时写入，无法通过常规的用户编辑修改。',
   health_msg_batch_heal_partial: '已修复 {success} 项，失败 {failed} 项。',
   health_err_batch_heal_failed: '没有任何目标被修复（失败 {failed} 项）。',
   ocs_drawer_structured_attributes: '结构化属性', ocs_drawer_raw_json: '原始 JSON 载荷',

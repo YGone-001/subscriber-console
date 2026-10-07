@@ -11,10 +11,23 @@
     ],
     "optionalBodyKeys": [
       "msisdn",
-      "planId"
+      "planId",
+      "auth4G"
     ],
     "forbiddenBodyKeys": [],
-    "responseSemantics": "mutation-result"
+    "responseSemantics": "mutation-result",
+    "nestedContracts": {
+      "auth4G": {
+        "allowedKeys": [
+          "k",
+          "op",
+          "opc",
+          "amf",
+          "sqn"
+        ],
+        "semanticRule": "if auth4G is present: k + amf + sqn required, exactly one of op or opc required"
+      }
+    }
   },
   {
     "name": "subscriber edit",
@@ -26,7 +39,6 @@
     "requiredBodyKeys": [],
     "optionalBodyKeys": [
       "sub4G",
-      "auth4G",
       "ocsTraffic"
     ],
     "forbiddenBodyKeys": [],

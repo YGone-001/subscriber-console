@@ -1178,6 +1178,20 @@
   gap: 2rem;
 }
 .auth-edit-full { grid-column: 1 / -1; }
+/*
+ * Explains why the authentication fields below are read-only when editing an existing subscriber.
+ * Without it the disabled inputs read as a broken form rather than a deliberate constraint.
+ */
+.auth-readonly-note {
+  margin: 0;
+  padding: 0.6rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: var(--ref-radius-control);
+  background: var(--surface-subtle, var(--background));
+  color: var(--text-muted);
+  font-size: var(--ref-font-size-data-relaxed);
+  line-height: 1.5;
+}
 .auth-input-large {
   font-family: monospace;
   font-size: var(--ref-font-size-heading-sm);

@@ -372,9 +372,23 @@ verify('Detail page separates profile update from role change and lifecycle oper
       detailSource.includes('canUpdate') && detailSource.includes('canDisable'),
       'Update and disable permissions must be distinct'
     );
+    /*
+     * The disable action moved behind the users API layer: the page calls usersApi.disable() and
+     * the canonical endpoint lives in lib/api/users.ts. Asserting the URL literal in the page
+     * would pin an implementation detail that has already been refactored away, so this checks the
+     * call site AND that the endpoint it resolves to is still the canonical one.
+     */
     assert.ok(
-      detailSource.includes('/disable'),
-      'Disable action must call canonical disable endpoint'
+      detailSource.includes('usersApi.disable'),
+      'Disable action must go through the canonical users API'
+    );
+    const usersApiSource = readFileSync(
+      path.resolve(import.meta.dirname, '../frontend/src/lib/api/users.ts'),
+      'utf8',
+    );
+    assert.ok(
+      usersApiSource.includes('/disable'),
+      'The users API must target the canonical disable endpoint'
     );
   } else {
     assert.ok(

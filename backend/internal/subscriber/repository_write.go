@@ -28,7 +28,24 @@ func (r *Repository) FindSubscriberByImsi(ctx context.Context, imsi string) (bso
 // Validates MSISDN uniqueness across both subscribers and ocs_subscribers collections.
 // Provisions OCS subscriber and balance records.
 // Returns the created document.
+//
+// Authentication material is not supplied, so the document keeps the server's default security
+// block. Callers that have operator-supplied credentials use CreateSubscriberWithAuthentication.
 func (r *Repository) CreateSubscriberFromLegacy(ctx context.Context, imsi string, planId *string, msisdn *string) (bson.M, error) {
+	return r.createSubscriber(ctx, imsi, planId, msisdn, nil)
+}
+
+// CreateSubscriberWithAuthentication creates a new subscriber, provisioning operator-supplied
+// authentication material as part of the initial document.
+//
+// The material is applied between building the default document and the single InsertOne, so the
+// subscriber is never persisted with default credentials that a second write then has to replace.
+// A nil auth preserves the default-authentication behaviour exactly.
+func (r *Repository) CreateSubscriberWithAuthentication(ctx context.Context, imsi string, planId *string, msisdn *string, auth *CreateAuthenticationMaterial) (bson.M, error) {
+	return r.createSubscriber(ctx, imsi, planId, msisdn, auth)
+}
+
+func (r *Repository) createSubscriber(ctx context.Context, imsi string, planId *string, msisdn *string, auth *CreateAuthenticationMaterial) (bson.M, error) {
 	// Check if subscriber already exists
 	existing, err := r.FindSubscriberByImsi(ctx, imsi)
 	if err != nil {
@@ -72,6 +89,10 @@ func (r *Repository) CreateSubscriberFromLegacy(ctx context.Context, imsi string
 
 	// Build default Open5GS subscriber document
 	doc := buildDefaultSubscriber(imsi, msisdnList)
+
+	// Apply operator-supplied authentication material before the first and only write, so the
+	// document is correct the moment it exists. A nil receiver leaves the defaults untouched.
+	auth.ApplyTo(doc)
 
 	// Insert subscriber
 	_, err = r.subscribers.InsertOne(ctx, doc)

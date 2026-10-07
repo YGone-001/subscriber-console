@@ -237,6 +237,155 @@ test('buildSubscriberCreateRequest produces valid subscriber create payload and 
   assert.throws(() => buildSubscriberCreateRequest(''), /imsi is required/);
 });
 
+/*
+ * Authentication material travels on the CREATE request. It is provisioned when the subscriber is
+ * created and immutable afterwards, so the builder must emit it here and never on the update.
+ */
+test('buildSubscriberCreateRequest emits auth4G in OPc mode and satisfies the create contract', () => {
+  const req = buildSubscriberCreateRequest('001010000000001', {
+    planId: 'plan_1',
+    auth4G: {
+      k: '00112233445566778899aabbccddeeff',
+      opc: 'aabbccddeeff00112233445566778899',
+      amf: '8000',
+      sqn: 0,
+    },
+  });
+
+  assert.deepEqual(req, {
+    imsi: '001010000000001',
+    planId: 'plan_1',
+    auth4G: {
+      k: '00112233445566778899AABBCCDDEEFF',
+      amf: '8000',
+      sqn: 0,
+      opc: 'AABBCCDDEEFF00112233445566778899',
+    },
+  });
+  assert.ok(!('op' in (req.auth4G as object)), 'OPc mode must not emit op');
+
+  validatePayloadAgainstContract(req as unknown as Record<string, unknown>, getContract('subscriber create'));
+});
+
+test('buildSubscriberCreateRequest emits auth4G in OP mode and satisfies the create contract', () => {
+  const req = buildSubscriberCreateRequest('001010000000002', {
+    auth4G: {
+      k: '00112233445566778899aabbccddeeff',
+      op: 'ffeeddccbbaa99887766554433221100',
+      amf: '8a0b',
+      sqn: 1719756,
+    },
+  });
+
+  assert.deepEqual(req.auth4G, {
+    k: '00112233445566778899AABBCCDDEEFF',
+    amf: '8A0B',
+    sqn: 1719756,
+    op: 'FFEEDDCCBBAA99887766554433221100',
+  });
+  assert.ok(!('opc' in (req.auth4G as object)), 'OP mode must not emit opc');
+});
+
+test('buildSubscriberCreateRequest preserves SQN 0 rather than treating it as absent', () => {
+  const req = buildSubscriberCreateRequest('001010000000003', {
+    auth4G: { k: '00112233445566778899aabbccddeeff', opc: 'aabbccddeeff00112233445566778899', amf: '8000', sqn: 0 },
+  });
+  assert.equal(req.auth4G?.sqn, 0);
+});
+
+test('buildSubscriberCreateRequest omits auth4G entirely when not supplied', () => {
+  const req = buildSubscriberCreateRequest('001010000000004', { planId: 'plan_1' });
+  assert.ok(!('auth4G' in req), 'auth4G must be absent so the server keeps its defaults');
+});
+
+test('buildSubscriberCreateRequest rejects invalid authentication material', () => {
+  const valid = { k: '00112233445566778899aabbccddeeff', opc: 'aabbccddeeff00112233445566778899', amf: '8000', sqn: 0 };
+
+  assert.throws(() => buildSubscriberCreateRequest('001010000000005', { auth4G: { ...valid, k: '0011' } }), /K has an invalid format/);
+  assert.throws(() => buildSubscriberCreateRequest('001010000000006', { auth4G: { ...valid, k: 'zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz' } }), /K has an invalid format/);
+  assert.throws(() => buildSubscriberCreateRequest('001010000000007', { auth4G: { ...valid, opc: 'AABB' } }), /OPc has an invalid format/);
+  assert.throws(() => buildSubscriberCreateRequest('001010000000008', { auth4G: { ...valid, amf: '80' } }), /AMF has an invalid format/);
+  assert.throws(() => buildSubscriberCreateRequest('001010000000009', { auth4G: { ...valid, sqn: -1 } }), /sqn must be an integer between/);
+  assert.throws(() => buildSubscriberCreateRequest('001010000000010', { auth4G: { ...valid, sqn: 1.5 } }), /sqn must be an integer between/);
+  assert.throws(() => buildSubscriberCreateRequest('001010000000011', { auth4G: { ...valid, k: '' } }), /K is required/);
+});
+
+/*
+ * The frontend must enforce the same SQN ceiling the server does. Accepting a larger value would
+ * let the form submit something the service answers with 400, turning a local mistake into a
+ * round trip and an error the operator cannot act on.
+ */
+test('buildSubscriberCreateRequest enforces the SQN ceiling the backend enforces', () => {
+  const base = { k: '00112233445566778899aabbccddeeff', opc: 'aabbccddeeff00112233445566778899', amf: '8000' };
+  const MAX = 9007199254740991;
+
+  assert.equal(buildSubscriberCreateRequest('001010000000014', { auth4G: { ...base, sqn: MAX } }).auth4G?.sqn, MAX);
+  assert.equal(buildSubscriberCreateRequest('001010000000015', { auth4G: { ...base, sqn: 0 } }).auth4G?.sqn, 0);
+
+  assert.throws(() => buildSubscriberCreateRequest('001010000000016', { auth4G: { ...base, sqn: MAX + 1 } }), /sqn must be an integer between 0 and 9007199254740991/);
+  assert.throws(() => buildSubscriberCreateRequest('001010000000017', { auth4G: { ...base, sqn: Number.MAX_SAFE_INTEGER + 10 } }), /sqn must be an integer between/);
+});
+
+test('buildSubscriberCreateRequest requires exactly one of op and opc', () => {
+  const base = { k: '00112233445566778899aabbccddeeff', amf: '8000', sqn: 0 };
+  const op = 'ffeeddccbbaa99887766554433221100';
+  const opc = 'aabbccddeeff00112233445566778899';
+
+  assert.throws(
+    () => buildSubscriberCreateRequest('001010000000012', { auth4G: { ...base, op, opc } }),
+    /exactly one of op or opc, not both/,
+  );
+  assert.throws(
+    () => buildSubscriberCreateRequest('001010000000013', { auth4G: { ...base } }),
+    /exactly one of op or opc/,
+  );
+});
+
+/*
+ * The update request must never carry authentication material: the service rejects a change to it
+ * on an existing subscriber, so emitting it would turn ordinary edits into 422s.
+ */
+/*
+ * The edit form must not present authentication material as editable on an existing subscriber.
+ * There is no DOM harness here, so this asserts the contract at the source level: the fields are
+ * bound to a read-only flag derived from `imsi`, and the flag is false only for a new subscriber.
+ */
+test('subscriber edit form makes authentication fields read-only for an existing subscriber', () => {
+  const editMode = readFileSync(
+    resolve(__dirname, '../src/features/subscribers/components/subscriber/SubscriberEditMode.tsx'),
+    'utf8',
+  );
+
+  assert.match(editMode, /const authReadOnly = Boolean\(imsi\)/, 'read-only flag must derive from imsi');
+
+  /*
+   * Counted over the whole auth grid rather than per line: the inputs are written across several
+   * lines, so a per-line match would depend on formatting rather than on behaviour.
+   */
+  const gridStart = editMode.indexOf('auth-edit-grid');
+  const grid = editMode.slice(gridStart, editMode.indexOf('Global Network Configure', gridStart));
+  assert.ok(grid.length > 0, 'expected to locate the authentication section');
+
+  const readOnlyBindings = (grid.match(/readOnly=\{authReadOnly\}/g) ?? []).length;
+  const disabledBindings = (grid.match(/disabled=\{authReadOnly\}/g) ?? []).length;
+  assert.equal(readOnlyBindings, 4, 'K, OP/OPc, AMF and SQN must all be readOnly');
+  assert.equal(disabledBindings, 5, 'K, OP/OPc, the OP/OPc selector, AMF and SQN must all be disabled');
+
+  /* And the constraint must be explained, not left as an apparently broken form. */
+  assert.match(editMode, /sub_auth_provisioned_readonly/, 'a localized explanation must accompany the read-only fields');
+});
+
+test('buildSubscriberUpdateRequest never emits auth4G', () => {
+  const req = buildSubscriberUpdateRequest({ msisdn: '12345678901', accessRestrictionData: 32 });
+  assert.ok(!('auth4G' in req), 'ordinary subscriber edit must not carry auth4G');
+
+  const contract = getContract('subscriber edit');
+  assert.ok(
+    !(contract.optionalBodyKeys as string[]).includes('auth4G'),
+    'the subscriber edit contract must not advertise auth4G as a mutable field',
+  );
+});
+
 test('buildSubscriberUpdateRequest produces sub4G with msisdnList array and satisfies contract', () => {
   const req = buildSubscriberUpdateRequest({
     msisdn: '12345678901',

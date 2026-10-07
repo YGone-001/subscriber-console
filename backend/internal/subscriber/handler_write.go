@@ -87,6 +87,14 @@ func (h *WriteHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate authentication material up front. Doing this before the repository call means an
+	// invalid credential cannot insert a subscriber, provision OCS or write a success audit.
+	auth, err := ParseCreateAuthenticationMaterial(body.Auth4G)
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, err.Error(), "INVALID_AUTH_MATERIAL")
+		return
+	}
+
 	// Fresh actor validation — mandatory, fail-closed
 	fresh, httpErr := RevalidateFreshActor(r.Context(), h.userRepo, p)
 	if httpErr != nil {
@@ -109,7 +117,7 @@ func (h *WriteHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create subscriber (governance is DIRECT for CREATE for all authorized roles)
-	created, err := h.repo.CreateSubscriberFromLegacy(r.Context(), imsi, body.ResolvedPlanId(), msisdn)
+	created, err := h.repo.CreateSubscriberWithAuthentication(r.Context(), imsi, body.ResolvedPlanId(), msisdn, auth)
 	if err != nil {
 		h.handleCreateError(w, err)
 		return
@@ -123,9 +131,11 @@ func (h *WriteHandler) Create(w http.ResponseWriter, r *http.Request) {
 		After:    SubscriberSafeSnapshot(created), // Safe — no k/op/opc/amf/sqn
 		Result:   "success",
 		Metadata: map[string]interface{}{
-			"governanceMode": "DIRECT_GOVERNED",
-			"operation":      string(OpCreate),
-			"actorRole":      fresh.NormalizedRole,
+			"governanceMode":             "DIRECT_GOVERNED",
+			"operation":                  string(OpCreate),
+			"actorRole":                  fresh.NormalizedRole,
+			"authenticationProvisioning": authProvisioningSource(auth),
+			"authenticationMode":         auth.AuthenticationMode(),
 		},
 	}, fresh)
 
@@ -455,6 +465,11 @@ type CreateSubscriberBody struct {
 	PlanId  *string `json:"planId,omitempty"`
 	PlanId2 *string `json:"plan_id,omitempty"` // alias
 	Msisdn  *string `json:"msisdn,omitempty"`
+	// Auth4G carries optional operator-supplied authentication material. Absent means the server's
+	// existing default security block is used unchanged. It is intentionally decoded as a raw map
+	// and then narrowed by ParseCreateAuthenticationMaterial, so an unknown nested field is
+	// rejected rather than silently persisted.
+	Auth4G map[string]any `json:"auth4G,omitempty"`
 }
 
 // ResolvedPlanId returns planId || plan_id (Node precedence).
@@ -1645,4 +1660,14 @@ func (h *WriteHandler) handleProfileApplyError(w http.ResponseWriter, err error)
 		return
 	}
 	response.Error(w, http.StatusInternalServerError, "Internal server error", "INTERNAL_ERROR")
+}
+
+// authProvisioningSource reports, for non-secret audit metadata, whether the subscriber was
+// created with operator-supplied authentication material or the server's defaults. It never
+// reports the material itself.
+func authProvisioningSource(auth *CreateAuthenticationMaterial) string {
+	if auth == nil {
+		return "server_default"
+	}
+	return "operator_supplied"
 }

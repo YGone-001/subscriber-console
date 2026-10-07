@@ -39,7 +39,7 @@ const PROJECT_ROOT = process.cwd();
 const REF_SRC = join(REFERENCE_ROOT, 'frontend/src');
 const CUR_SRC = join(PROJECT_ROOT, 'frontend/src');
 
-/* Coverage floor. Phase 4 restored the page layers; the remaining gap is the
+/* Coverage floor. The page layers are restored; the remaining gap is the
  * not-yet-wired surfaces listed in the plan (§4.10), so the floor is set at the
  * achieved level to prevent regression rather than to claim full parity. */
 const PARITY_THRESHOLD = Number(process.env.UI_PARITY_THRESHOLD || 0.9);
