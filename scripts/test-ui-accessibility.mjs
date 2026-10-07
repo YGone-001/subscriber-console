@@ -21,6 +21,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createCdpClient, launchChrome, sleep } from './lib/cdp.mjs';
+import { obtainAuthToken } from './lib/session.mjs';
 
 const args = new Map(
   process.argv.slice(2).filter((arg) => arg.startsWith('--')).map((arg) => {
@@ -34,7 +35,12 @@ const PROJECT = 'C:/Users/YGone/Desktop/program/subscriber-console';
 const BASE = flag('base', 'UI_A11Y_BASE', 'http://localhost:13333');
 const CHROME = flag('chrome', 'UI_CAPTURE_CHROME', 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe');
 const CDP_PORT = Number(flag('cdp-port', 'UI_A11Y_CDP_PORT', 9338));
-const TOKEN = flag('token', 'UI_A11Y_TOKEN', '');
+/*
+ * Explicit token wins; otherwise the suite logs in itself. Without this fallback the run
+ * is unauthenticated, the app stays on /login, and every audit measures the login page
+ * while reporting zero violations.
+ */
+let TOKEN = flag('token', 'UI_A11Y_TOKEN', '');
 const VIEWPORT = { width: 1440, height: 900 };
 
 const ROUTES = (flag('routes', 'UI_A11Y_ROUTES', [
@@ -138,6 +144,22 @@ async function cleanup() {
 }
 
 async function main() {
+  if (!TOKEN) {
+    TOKEN = await obtainAuthToken({ api: flag('api', 'UI_A11Y_API', 'http://127.0.0.1:18888') });
+  }
+  if (!TOKEN) {
+    /* Refuse to report a result. An unauthenticated run parks on /login, so every audit
+     * would measure the login page and still report zero violations - a false pass that
+     * hides the entire authenticated console from the suite. */
+    console.log('ui_a11y_result=FAIL');
+    console.log('  reason=no_session');
+    console.log('  detail=the suite could not log in, so the audits would measure the login page instead of the console');
+    console.log('  fix=start the local stack (npm run local:dev) or pass --token=<auth_token>');
+    process.exitCode = 1;
+    return;
+  }
+  console.log('[a11y] session=established');
+
   const sourceChecks = [];
   const appCss = fs.readFileSync(path.join(PROJECT, 'frontend', 'src', 'styles', 'app.css'), 'utf8');
   const styleText = fs.readdirSync(path.join(PROJECT, 'frontend', 'src', 'styles'))

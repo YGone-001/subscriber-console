@@ -27,14 +27,15 @@ function encodeClientFrame(opcode, payload) {
 
   let header;
   if (length < 126) {
-    header = Buffer.alloc(2);
+    /* RFC 6455: client frames always carry a four-byte mask after the length. */
+    header = Buffer.alloc(2 + 4);
     header[1] = 0x80 | length;
   } else if (length < 65536) {
-    header = Buffer.alloc(4);
+    header = Buffer.alloc(4 + 4);
     header[1] = 0x80 | 126;
     header.writeUInt16BE(length, 2);
   } else {
-    header = Buffer.alloc(10);
+    header = Buffer.alloc(10 + 4);
     header[1] = 0x80 | 127;
     header.writeUInt32BE(0, 2);
     header.writeUInt32BE(length, 6);

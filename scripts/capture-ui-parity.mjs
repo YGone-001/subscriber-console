@@ -23,15 +23,19 @@
  *   UI_CAPTURE_VIEWPORTS, UI_CAPTURE_CURRENT, UI_CAPTURE_REFERENCE,
  *   UI_CAPTURE_CHROME, UI_CAPTURE_CDP_PORT
  *
- * Auth: pass the `auth_token` cookie value. Obtain it by POSTing to
- * http://127.0.0.1:18888/api/auth/login with the admin credentials and reading
- * `auth_token` out of the Set-Cookie response header. Both backends share
- * JWT_SECRET, so one token authenticates both apps.
+ * Auth: the run logs in by itself via scripts/lib/session.mjs, using
+ * INITIAL_ADMIN_PASSWORD from .env. Pass `--token=` (or UI_CAPTURE_TOKEN) to capture as a
+ * specific principal instead. Both backends share JWT_SECRET, so one token authenticates
+ * both apps.
+ *
+ * A run that cannot log in exits non-zero rather than capturing: these images are parity
+ * evidence, and the login page must never be filed as evidence for a console route.
  */
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createCdpClient, launchChrome, sleep } from './lib/cdp.mjs';
+import { obtainAuthToken } from './lib/session.mjs';
 
 const args = new Map(
   process.argv.slice(2).filter((arg) => arg.startsWith('--')).map((arg) => {
@@ -44,7 +48,12 @@ const flag = (name, envName, fallback) => args.get(name) ?? process.env[envName]
 const CHROME = flag('chrome', 'UI_CAPTURE_CHROME', 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe');
 const CDP_PORT = Number(flag('cdp-port', 'UI_CAPTURE_CDP_PORT', 9337));
 const OUT = path.resolve(flag('out', 'UI_CAPTURE_OUT', '.workbuddy-ai/tmp/ui-parity'));
-const TOKEN = flag('token', 'UI_CAPTURE_TOKEN', '');
+/*
+ * Explicit token wins; otherwise log in here. A capture run without a session records the
+ * login page, and these captures are PARITY EVIDENCE - silently storing the login screen as
+ * evidence for nine routes would corrupt the comparison it exists to support.
+ */
+let TOKEN = flag('token', 'UI_CAPTURE_TOKEN', '');
 const ALLOW_FAILURES = args.get('allow-failures') === 'true';
 
 const APPS = [
@@ -167,6 +176,19 @@ let tempDir = null;
 const manifest = { generatedAt: new Date().toISOString(), apps: [], viewports: VIEWPORTS, routes: ROUTES, entries: [] };
 
 async function main() {
+  if (!TOKEN) {
+    TOKEN = await obtainAuthToken({ api: flag('api', 'UI_CAPTURE_API', 'http://127.0.0.1:18888') });
+  }
+  if (!TOKEN) {
+    console.log('ui_capture_result=FAIL');
+    console.log('  reason=no_session');
+    console.log('  detail=the run could not log in, so the captures would show the login page and would not be usable as parity evidence');
+    console.log('  fix=start the local stack (npm run local:dev) or pass --token=<auth_token>');
+    process.exitCode = 1;
+    return;
+  }
+  console.log('ui_capture_session=established');
+
   fs.mkdirSync(OUT, { recursive: true });
   tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ui-parity-'));
   const first = VIEWPORTS[0] ?? { width: 1440, height: 900 };
@@ -195,11 +217,9 @@ async function main() {
     exceptions.push(String(description).split('\n')[0].slice(0, 160));
   });
 
-  if (TOKEN) {
-    await client.send('Network.setCookie', {
-      name: 'auth_token', value: TOKEN, domain: 'localhost', path: '/', httpOnly: true, sameSite: 'Lax',
-    });
-  }
+  await client.send('Network.setCookie', {
+    name: 'auth_token', value: TOKEN, domain: 'localhost', path: '/', httpOnly: true, sameSite: 'Lax',
+  });
 
   const setAuthCookie = async (present) => {
     if (!TOKEN) return;
