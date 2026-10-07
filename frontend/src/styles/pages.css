@@ -482,21 +482,17 @@
   color: var(--login-text-muted);
 }
 
-.login-card input {
-  width: 100%;
-  min-height: 42px;
-  padding: 0.6rem 0.8rem;
-  color: var(--login-text);
-  background: var(--login-surface-raised);
-  border: 1px solid var(--login-border);
-  border-radius: var(--ref-radius-control);
-}
-
-.login-card input:focus {
-  outline: none;
-  border-color: var(--login-primary);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--login-primary) 24%, transparent);
-}
+/*
+ * `.login-card input` and `.login-card input:focus` used to live here. They were an addition
+ * that the reference login form does not have, and because a descendant selector scores
+ * (0,1,1) against `.login-input`'s (0,1,0) they silently won over the ported rules no matter
+ * what order the sheets loaded in. The damage was visible: padding collapsed to
+ * `0.6rem 0.8rem`, so the absolutely positioned `.input-icon` (left: 1rem) landed on top of
+ * the placeholder text, and the field height dropped from 56px to 42px.
+ *
+ * `.login-input` in login.css is the canonical ported definition - it owns the field's
+ * padding, radius, colours and its :focus-visible outline. Nothing here should restate them.
+ */
 
 .login-card button[type='submit'] {
   border: 0;
