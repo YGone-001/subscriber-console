@@ -121,15 +121,18 @@ export default function SubscriberModal({ imsi, onClose, onRefresh }: Subscriber
       >
 
         {/*
-          * Rendered INLINE, not as a stacked modal. A modal notice puts a full-screen
-          * backdrop (z-index 10000) above this dialog (z-index 9999), which makes the
-          * dialog's own close button unreachable while the notice is showing - the
-          * operator clicks the X, only the notice dismisses, and the page appears
-          * impossible to close.
+          * Modal on purpose. This form is long: the operator fills it in, scrolls to the
+          * bottom and presses save. An inline notice at the top of the form is off
+          * screen at that moment, so the outcome of the save would be invisible. A
+          * modal is unmissable from anywhere in the form.
+          *
+          * It is safe here because this dialog contains no nested confirm dialog to
+          * cover - the delete confirmation lives on the page, not inside this modal.
+          * The notice is dismissed with OK, its own close button, or the backdrop.
           */}
         {toastMessage && (
           <OperationNotice
-            presentation="inline"
+            presentation="modal"
             tone="success"
             title={t("success")}
             message={toastMessage}
@@ -224,11 +227,12 @@ export default function SubscriberModal({ imsi, onClose, onRefresh }: Subscriber
           </div>
 
           <div className="workflow-content">
-            {/* Inline for the same reason as the success notice above: the error must
-              * never cover this dialog's own close button. */}
+            {/* Modal for the same reason as the success notice above: the save button is
+              * at the bottom of a long form, so the failure must be shown where the
+              * operator cannot miss it. */}
             {error && (
               <OperationNotice
-                presentation="inline"
+                presentation="modal"
                 tone="danger"
                 title={t("error")}
                 message={error}

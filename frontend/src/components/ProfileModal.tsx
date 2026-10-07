@@ -737,7 +737,13 @@ export default function ProfileModal({ profileName, onClose, onRefresh, onOperat
           </div>
 
           <div className="workflow-content">
-            {error && (
+            {/*
+              * Modal so the save outcome is visible from the bottom of a long form, but
+              * suppressed while one of this dialog's own confirmations is open: the
+              * notice portals above the confirmation and would make its buttons
+              * unreachable, which is the exact failure the confirm dialog must not have.
+              */}
+            {error && !isDeleteConfirmOpen && forceDeleteCount === null && !isSaveConfirmOpen && (
               <OperationNotice
                 presentation="modal"
                 tone="danger"

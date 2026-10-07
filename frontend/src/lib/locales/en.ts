@@ -1764,7 +1764,6 @@ export const en: Record<string, string> = {
     batch_aborted: "Batch creation aborted by user.",
     created_subscribers: "Created {count} subscribers ({start} ~ {end})",
     err_imsi_length: "Must be exactly 15 digits",
-    err_imsi_length_full: "Start IMSI must be exactly 15 digits (e.g., 460020000000001)",
     err_precheck_failed: "Pre-flight check failed",
     err_network_precheck: "Network error during pre-flight check",
     err_batch_failed: "Batch creation failed",

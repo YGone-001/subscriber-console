@@ -167,12 +167,31 @@ export function SubscribersPage() {
       });
       setPendingDelete(null);
       await mutateSubscribers();
-    } catch {
-      setFeedback({
-        tone: 'danger',
-        title: t('sub_feedback_error_title'),
-        message: mode === 'bulk' ? t('sub_feedback_bulk_delete_error') : t('sub_feedback_delete_error', { imsi: singleImsi }),
-      });
+    } catch (failure) {
+      /*
+       * Surface WHY the delete failed. Swallowing the reason left the operator with a
+       * bare "failed" on a record that can never be deleted from here: the service
+       * addresses subscribers by a 15-digit IMSI, so a malformed row (a literal
+       * "UNKNOWN" created outside the validated write path) is unreachable by every
+       * per-IMSI route. Say that plainly instead of inviting retries.
+       */
+      const code = (failure as { code?: string }).code;
+      const detail = failure instanceof Error && failure.message ? failure.message : '';
+      const base = mode === 'bulk'
+        ? t('sub_feedback_bulk_delete_error')
+        : t('sub_feedback_delete_error', { imsi: singleImsi });
+
+      let message = base;
+      if (code === 'INVALID_IMSI' || /IMSI must be exactly 15 digits/i.test(detail)) {
+        message = `${base} ${t('sub_err_imsi_not_addressable', { imsi: singleImsi })}`;
+      } else if (detail) {
+        message = `${base} (${detail})`;
+      }
+
+      setFeedback({ tone: 'danger', title: t('sub_feedback_error_title'), message });
+      /* Close the confirm dialog on failure as well. Leaving it mounted under the
+       * error notice made its buttons unreachable. */
+      setPendingDelete(null);
     } finally {
       setIsDeletingBulk(false);
       setIsDeletingSingle(null);
@@ -269,7 +288,10 @@ export function SubscribersPage() {
           applyStatusFilter={applyStatusFilter}
         />
 
-        {feedback && (
+        {/* A page-level notice is modal so a destructive action is explicitly
+          * acknowledged. It must not render while a confirm dialog is mounted, or it
+          * would portal on top of it and make the dialog's buttons unreachable. */}
+        {feedback && !pendingDelete && (
           <OperationNotice
             presentation="modal"
             tone={feedback.tone}

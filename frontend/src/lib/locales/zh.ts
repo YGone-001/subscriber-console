@@ -1763,7 +1763,6 @@ export const zh: Record<string, string> = {
     batch_aborted: "\u7528\u6237\u5df2\u4e2d\u6b62\u6279\u91cf\u521b\u5efa\u64cd\u4f5c\u3002",
     created_subscribers: "\u5df2\u521b\u5efa {count} \u4e2a\u7528\u6237 ({start} ~ {end})",
     err_imsi_length: "\u5fc5\u987b\u662f 15 \u4f4d\u6570\u5b57",
-    err_imsi_length_full: "\u8d77\u59cb IMSI \u5fc5\u987b\u662f 15 \u4f4d\u6570\u5b57 (\u4f8b\u5982 460020000000001)",
     err_precheck_failed: "\u9884\u68c0\u5931\u8d25",
     err_network_precheck: "\u9884\u68c0\u65f6\u53d1\u751f\u7f51\u7edc\u9519\u8bef",
     err_batch_failed: "\u6279\u91cf\u521b\u5efa\u5931\u8d25",

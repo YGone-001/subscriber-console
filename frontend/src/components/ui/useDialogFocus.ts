@@ -1,7 +1,10 @@
 /*
  * Forward-ported from the historical xCloud UI (reference commit 2c40903):
  * frontend/src/components/ui/useDialogFocus.ts
- * Adaptations: "use client" dropped; CSS-module import repointed to ../../styles/modules/.
+ *
+ * Adaptation: background inerting is now reference counted. See the note on
+ * `backgroundLocks` - the historical per-dialog snapshot/restore broke whenever a
+ * dialog opened on top of another one.
  */
 import { useEffect, useRef, type RefObject } from "react";
 
@@ -15,6 +18,70 @@ const FOCUSABLE_SELECTOR = [
 ].join(",");
 
 const dialogStack: HTMLDivElement[] = [];
+
+/*
+ * Background lock, reference counted.
+ *
+ * Every dialog inerts the background elements along its ancestor chain. The historical
+ * implementation snapshotted those elements PER DIALOG and restored them on unmount,
+ * which breaks with nested dialogs:
+ *
+ *   1. the subscriber dialog opens and inerts #root, snapshotting inert=false
+ *   2. the unsaved-changes prompt opens on top; #root is ALREADY inert, so its
+ *      snapshot records inert=true
+ *   3. both unmount together; if the prompt's cleanup runs after the dialog's, it
+ *      writes inert=true back onto #root
+ *
+ * The app root then stays inert and the entire page stops responding to clicks.
+ * Counting the locks makes apply and restore symmetric no matter how dialogs nest or
+ * in which order React unmounts them: an element is restored only when the last holder
+ * releases it.
+ */
+type BackgroundLock = { originalInert: boolean; originalAriaHidden: string | null; holders: number };
+const backgroundLocks = new Map<HTMLElement, BackgroundLock>();
+let overflowHolders = 0;
+let originalBodyOverflow = "";
+
+function lockBackground(elements: HTMLElement[]) {
+  for (const element of elements) {
+    const existing = backgroundLocks.get(element);
+    if (existing) {
+      existing.holders += 1;
+      continue;
+    }
+    backgroundLocks.set(element, {
+      originalInert: element.inert,
+      originalAriaHidden: element.getAttribute("aria-hidden"),
+      holders: 1,
+    });
+    element.inert = true;
+    element.setAttribute("aria-hidden", "true");
+  }
+}
+
+function releaseBackground(elements: HTMLElement[]) {
+  for (const element of elements) {
+    const entry = backgroundLocks.get(element);
+    if (!entry) continue;
+    entry.holders -= 1;
+    if (entry.holders > 0) continue;
+    backgroundLocks.delete(element);
+    element.inert = entry.originalInert;
+    if (entry.originalAriaHidden === null) element.removeAttribute("aria-hidden");
+    else element.setAttribute("aria-hidden", entry.originalAriaHidden);
+  }
+}
+
+function lockBodyOverflow() {
+  if (overflowHolders === 0) originalBodyOverflow = document.body.style.overflow;
+  overflowHolders += 1;
+  document.body.style.overflow = "hidden";
+}
+
+function releaseBodyOverflow() {
+  overflowHolders = Math.max(0, overflowHolders - 1);
+  if (overflowHolders === 0) document.body.style.overflow = originalBodyOverflow;
+}
 
 interface UseDialogFocusOptions {
   open: boolean;
@@ -38,9 +105,8 @@ export function useDialogFocus({ open, onClose, initialFocusRef }: UseDialogFocu
 
     dialogStack.push(dialog);
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const previousOverflow = document.body.style.overflow;
-    const backgroundStates: Array<{ element: HTMLElement; inert: boolean; ariaHidden: string | null }> = [];
-    document.body.style.overflow = "hidden";
+    const lockedElements: HTMLElement[] = [];
+    lockBodyOverflow();
 
     const focusFrame = window.requestAnimationFrame(() => {
       let activeBranch: HTMLElement = dialog;
@@ -48,17 +114,12 @@ export function useDialogFocus({ open, onClose, initialFocusRef }: UseDialogFocu
         const parent = activeBranch.parentElement;
         for (const sibling of Array.from(parent.children)) {
           if (!(sibling instanceof HTMLElement) || sibling === activeBranch) continue;
-          backgroundStates.push({
-            element: sibling,
-            inert: sibling.inert,
-            ariaHidden: sibling.getAttribute("aria-hidden"),
-          });
-          sibling.inert = true;
-          sibling.setAttribute("aria-hidden", "true");
+          lockedElements.push(sibling);
         }
         if (parent === document.body) break;
         activeBranch = parent;
       }
+      lockBackground(lockedElements);
 
       const firstFocusable = dialogRef.current?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR);
       (initialFocusRef?.current || firstFocusable || dialogRef.current)?.focus();
@@ -102,12 +163,8 @@ export function useDialogFocus({ open, onClose, initialFocusRef }: UseDialogFocu
       if (stackIndex >= 0) dialogStack.splice(stackIndex, 1);
       window.cancelAnimationFrame(focusFrame);
       document.removeEventListener("keydown", handleKeyDown, true);
-      document.body.style.overflow = previousOverflow;
-      for (const { element, inert, ariaHidden } of backgroundStates) {
-        element.inert = inert;
-        if (ariaHidden === null) element.removeAttribute("aria-hidden");
-        else element.setAttribute("aria-hidden", ariaHidden);
-      }
+      releaseBodyOverflow();
+      releaseBackground(lockedElements);
       previousFocus?.focus();
     };
   }, [initialFocusRef, open]);

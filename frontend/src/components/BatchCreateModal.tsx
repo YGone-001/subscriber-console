@@ -64,10 +64,6 @@ export default function BatchCreateModal({ isOpen, onClose, onSuccess, profileLi
 
   const handleBatchCreate = async () => {
     if (!batchForm.startImsi || !batchForm.count) return;
-    if (!/^\d{15}$/.test(batchForm.startImsi)) {
-      setBatchResult({ error: t("err_imsi_length_full") });
-      return;
-    }
     setBatchLoading(true);
     setBatchResult(null);
 
@@ -164,7 +160,7 @@ export default function BatchCreateModal({ isOpen, onClose, onSuccess, profileLi
               <input
                 type="text"
                 className={`form-input ${batchForm.startImsi && !/^\d{15}$/.test(batchForm.startImsi) ? 'border-danger error-shake bc-input-error' : ''}`}
-                placeholder="e.g. 460020000000001"
+                placeholder={t("sub_imsi_placeholder")}
                 value={batchForm.startImsi}
                 onChange={e => setBatchForm({...batchForm, startImsi: e.target.value.replace(/\D/g, '')})}
                 maxLength={15}

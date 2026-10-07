@@ -1142,7 +1142,20 @@
   color: var(--primary);
   background: var(--surface-hover);
 }
-.input-imsi-edit {
+/*
+ * The IMSI field renders its VALUE in a monospace, heavier face so a 15-digit number can
+ * be verified digit by digit - that is intentional and is kept.
+ *
+ * Applying it to the input unconditionally also restyled the PLACEHOLDER, which made the
+ * IMSI hint bolder and monospaced while every other field's hint (e.g. MSISDN, which uses
+ * the plain .form-input) stayed in the standard interface face.
+ *
+ * Scoping the data face to `:not(:placeholder-shown)` fixes it at the source: while the
+ * hint is visible the input keeps the standard font, and the moment a value is typed the
+ * monospace weight takes over. No ::placeholder override is needed, and nothing global is
+ * touched, so the hint stays in step with every other field automatically.
+ */
+.input-imsi-edit:not(:placeholder-shown) {
   font-family: monospace;
   font-weight: 650;
 }

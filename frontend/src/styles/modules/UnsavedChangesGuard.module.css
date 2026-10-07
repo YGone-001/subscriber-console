@@ -1,7 +1,14 @@
+/*
+ * This prompt is a BLOCKING decision that can be raised from inside any dialog, so it
+ * must outrank every dialog layer. The console stacks its dialog surfaces at 9999
+ * (.modal-overlay) and 10000 (.op-modal-backdrop*); at 1400 this prompt rendered
+ * BEHIND the dialog that invoked it, leaving the operator with a darkened page, no
+ * visible prompt, and a dialog that would not close.
+ */
 .backdrop {
   position: fixed;
   inset: 0;
-  z-index: 1400;
+  z-index: 10050;
   display: grid;
   place-items: center;
   padding: 1rem;

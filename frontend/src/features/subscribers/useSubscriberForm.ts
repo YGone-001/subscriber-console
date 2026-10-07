@@ -371,8 +371,9 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
      * report a bare validation error and invite a duplicate retry. Declared outside the
      * try so the catch can still see it. */
     let createdInThisAttempt = false;
+    /* Hoisted alongside the flag so the catch can roll the record back. */
+    const targetImsi = imsi || inputImsi;
     try {
-      const targetImsi = imsi || inputImsi;
       if (!targetImsi) throw new Error(t("sub_err_imsi_req"));
       if (!/^\d{15}$/.test(targetImsi)) throw new Error(t("sub_err_imsi_15"));
       if (!imsi && inputImsiExists) throw new Error(t("sub_err_imsi_exists"));
@@ -423,6 +424,11 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
           if (createData.error === "Tariff plan not found") throw new Error(t("tariff_plan_err_not_found"));
           if (createData.error === "Invalid plan_id format") throw new Error(t("tariff_plan_err_id"));
           if (createData.error === "Tariff plan is disabled") throw new Error(t("tariff_plan_err_disabled"));
+          /* The server inserted the primary record before OCS provisioning failed.
+           * Treat it as created so the shared rollback below reconciles it. */
+          if (createError instanceof MutationApiError && createError.code === "SUBSCRIBER_CREATE_PARTIAL_WRITE") {
+            createdInThisAttempt = true;
+          }
           throw createError;
         }
       }
@@ -474,18 +480,40 @@ export function useSubscriberForm(imsi: string | null, t: any, onClose: () => vo
             : t("sub_err_auth_change_rejected"));
         }
 
-        const baseMessage = updateError instanceof Error ? updateError.message : t("sub_err_save");
-        throw new Error(createdInThisAttempt
-          ? t("sub_err_created_then_update_failed").replace("{error}", baseMessage)
-          : baseMessage);
+        throw new Error(updateError instanceof Error ? updateError.message : t("sub_err_save"));
       }
 
       onRefresh();
       onClose();
     } catch (err: any) {
-      setError(err.message || t("sub_err_save"));
-      /* A failed follow-up still created a record; refresh so the operator sees it. */
-      if (createdInThisAttempt) onRefresh();
+      /*
+       * Creating is TWO calls: POST the record, then PUT the full configuration. If the
+       * PUT fails the record is already in the database, which is why an error could
+       * still leave a created subscriber behind.
+       *
+       * Rolling the record back makes "an error was shown" mean "nothing was created",
+       * which is what an operator expects, and it also avoids leaving a subscriber on
+       * the service's default authentication key.
+       */
+      let message = err.message || t("sub_err_save");
+      if (createdInThisAttempt) {
+        try {
+          await deleteJson(`/api/subscribers/${encodeURIComponent(targetImsi)}`);
+          message = t("sub_err_create_rolled_back", { error: message });
+        } catch (rollbackError) {
+          if (rollbackError instanceof MutationApiError && rollbackError.code === "SUBSCRIBER_DELETE_PARTIAL_WRITE") {
+            message = t("sub_err_create_rollback_partial", { imsi: targetImsi, error: message });
+          } else {
+            message = t("sub_err_create_rollback_failed", {
+              imsi: targetImsi,
+              error: message,
+              rollback: rollbackError instanceof Error ? rollbackError.message : t("sub_err_save"),
+            });
+          }
+        }
+      }
+      setError(message);
+      onRefresh();
     } finally {
       setIsSaving(false);
     }

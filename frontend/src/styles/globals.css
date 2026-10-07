@@ -201,8 +201,21 @@
 :root {
   --ref-color-white: #fff;
   --ref-color-shadow-ink: #000;
-  --font-display: var(--font-display-loaded), "Aptos Display", "Segoe UI", sans-serif;
-  --font-interface: var(--font-interface-loaded), "Microsoft YaHei UI", "PingFang SC", "Segoe UI", sans-serif;
+  /*
+   * The type stacks live in the var() FALLBACK slot, not after it.
+   *
+   * They used to read `var(--font-interface-loaded), "Microsoft YaHei UI", ...`, which made the
+   * whole declaration invalid whenever `--font-interface-loaded` was undefined - and nothing in
+   * this codebase ever defines it (there is no webfont loader, no document.fonts call, no
+   * FontFace). Every `var(--font-interface)` consumer therefore fell back to the UA font:
+   * base.css's `body`, globals.css's `body`, and the IMSI field.
+   *
+   * `var(--name, fallback)` is the correct idiom: it resolves to the intended stack when no
+   * runtime loader has set the variable, and still lets a loader override it by setting
+   * `--font-interface-loaded` on :root. Same fix for the display stack.
+   */
+  --font-display: var(--font-display-loaded, "Aptos Display", "Segoe UI", sans-serif);
+  --font-interface: var(--font-interface-loaded, "Microsoft YaHei UI", "PingFang SC", "Segoe UI", sans-serif);
   --font-data: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
   --ref-font-size-micro: 0.625rem;
   --ref-font-size-caption: 0.7rem;

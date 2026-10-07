@@ -111,7 +111,7 @@ export default function SubscriberEditMode({ t, imsi, state, actions }: Subscrib
                   <input
                     type="text"
                     className={`form-input hover-glass input-imsi-edit ${(inputImsi && !/^\d{15}$/.test(inputImsi)) || inputImsiExists ? 'border-danger error-shake' : ''}`}
-                    placeholder="460020000000001"
+                    placeholder={t("sub_imsi_placeholder")}
                     value={inputImsi}
                     onChange={e => setInputImsi(e.target.value.replace(/\D/g, ''))}
                     maxLength={15}
