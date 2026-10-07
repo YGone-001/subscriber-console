@@ -20,6 +20,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ElementType, KeyboardEvent } from 'react';
 import {
   Command,
+  CornerDownLeft,
   CreditCard,
   Download,
   FileUp,
@@ -330,7 +331,7 @@ export function CommandPalette({ isOpen, onClose, onAction }: CommandPaletteProp
           {t('cp_hint_navigate')}
         </span>
         <span className="cp-footer-hint">
-          <kbd className="cp-kbd-small">↵</kbd>
+          <kbd className="cp-kbd-small"><CornerDownLeft size={12} strokeWidth={2.25} aria-hidden="true" /></kbd>
           {t('cp_hint_select')}
         </span>
         <span className="cp-footer-branding">

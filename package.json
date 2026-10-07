@@ -19,6 +19,7 @@
     "local:doctor": "node scripts/check-local-stack.mjs",
     "local:stop": "node scripts/local-stop.mjs",
     "check:agent-docs-parity": "node scripts/test-agent-docs-parity.mjs",
+    "check:fonts": "node scripts/check-font-coverage.mjs",
     "check:ui-parity": "node scripts/test-ui-parity-extractor.mjs && node scripts/test-ui-parity-contract.mjs",
     "test:ui-parity-extractor": "node scripts/test-ui-parity-extractor.mjs",
     "check:ui-forward-port-boundaries": "node scripts/test-ui-forward-port-boundaries.mjs",

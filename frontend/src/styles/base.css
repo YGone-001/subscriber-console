@@ -36,7 +36,12 @@ body {
   min-height: 100vh;
   min-width: 320px;
   text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
+  /*
+   * `-webkit-font-smoothing: antialiased` used to sit here. The reference never sets it, and it
+   * renders every glyph thinner than the platform default - the main reason this console read
+   * lighter and less substantial than the reference. Removed so text uses the platform's normal
+   * rendering.
+   */
 }
 
 .font-mono,

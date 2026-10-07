@@ -9,6 +9,8 @@
  * The reference-driven layers below are loaded AFTER every current layer so the
  * forward-ported historical rules win for the class names they own.
  */
+/* Registered first so the face is available before any layout metrics are computed. */
+@import './fonts.css';
 @import './tokens.css';
 @import './base.css';
 @import './shell.css';

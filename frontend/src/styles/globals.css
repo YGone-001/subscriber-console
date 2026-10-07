@@ -213,9 +213,16 @@
    * `var(--name, fallback)` is the correct idiom: it resolves to the intended stack when no
    * runtime loader has set the variable, and still lets a loader override it by setting
    * `--font-interface-loaded` on :root. Same fix for the display stack.
+   *
+   * "Noto Sans SC" now leads both stacks because that is the face the reference actually
+   * renders. It loaded it through its framework font loader (`Noto_Sans_SC`, latin subset) and injected it as
+   * `--font-interface-loaded`; this app has no webfont pipeline, so every screen fell back to
+   * the system UI font and read noticeably different from the reference. Leading with Noto Sans
+   * SC uses it wherever it is installed and falls through to the previous stacks where it is
+   * not, so nothing regresses. Self-hosting the font is what would make it deterministic.
    */
-  --font-display: var(--font-display-loaded, "Aptos Display", "Segoe UI", sans-serif);
-  --font-interface: var(--font-interface-loaded, "Microsoft YaHei UI", "PingFang SC", "Segoe UI", sans-serif);
+  --font-display: var(--font-display-loaded, "Noto Sans SC", "Aptos Display", "Segoe UI", sans-serif);
+  --font-interface: var(--font-interface-loaded, "Noto Sans SC", "Microsoft YaHei UI", "PingFang SC", "Segoe UI", sans-serif);
   --font-data: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
   --ref-font-size-micro: 0.625rem;
   --ref-font-size-caption: 0.7rem;

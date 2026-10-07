@@ -1,0 +1,38 @@
+/*
+ * Self-hosted interface typeface.
+ *
+ * The reference loaded Noto Sans SC through its framework font loader, which downloads and self-hosts the
+ * face at build time and injects it as `--font-interface-loaded`. This app has no webfont
+ * pipeline, so it fell back to whatever the operator's machine happened to have - the system
+ * UI font on most machines, Noto Sans SC only where it was installed. That made the typeface
+ * non-deterministic and visibly different from the reference.
+ *
+ * The upstream variable font is 16.9MB, which is why a CJK face normally cannot be self-hosted.
+ * It does not need to be. `scripts/build-font-subset.py` subsets it to the full GB2312 character
+ * set plus the app's own text plus the ASCII range, CJK punctuation and fullwidth forms. That
+ * lands at 1.89MB - a ninth of the source - and covers essentially all modern simplified
+ * Chinese, so it is built once rather than regenerated every time someone adds a sentence.
+ *
+ * Subsetting to only today's strings would be smaller (275KB) but would need regenerating
+ * whenever unfamiliar characters appear, and would silently substitute a system font if that
+ * was forgotten. `scripts/check-font-coverage.mjs` guards the gap that remains: it fails the
+ * gate when the source contains a character the committed subset does not carry, so the
+ * degradation is loud instead of a mixed-typography page nobody can attribute to anything.
+ *
+ * Served from the app's own origin, so there is no request to Google at build or run time -
+ * which matters for an appliance that may be deployed without egress.
+ *
+ * `font-display: swap` renders immediately in the fallback stack and repaints when the face
+ * arrives, so a slow first load never blocks the login form.
+ *
+ * To regenerate after adding UI copy: npm run build:fonts
+ * (needs the Noto Sans SC variable font and `fonttools[woff]`; the committed subset is enough
+ * to build and ship the app, so that dependency only applies when regenerating)
+ */
+@font-face {
+  font-family: 'Noto Sans SC';
+  src: url('../assets/fonts/NotoSansSC-subset.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}

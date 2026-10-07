@@ -26,6 +26,12 @@
 
 /* Added content */
 .login-container {
+  /*
+   * The ported stylesheet assumes the reference's 16px base, but this app sets a 14px base on
+   * body. Without this the login page's inherited text (labels, footer, button) came out a
+   * step smaller than the reference. Scoped to the login surface so no other page changes.
+   */
+  font-size: var(--ref-font-size-body);
   min-height: 100vh;
   display: flex;
   align-items: center;

@@ -430,106 +430,28 @@
   color: var(--login-text);
 }
 
-.login-card {
-  width: min(100%, 27rem);
-  background: var(--login-surface);
-  border: 1px solid var(--login-border);
-  box-shadow: 0 30px 70px -40px rgba(0, 0, 0, 0.85);
-  border-radius: var(--ref-radius-soft-panel);
-  padding: 2rem;
-}
-
-.login-card .brand-lockup {
-  width: auto;
-  gap: 0.7rem;
-}
-
-.login-card .brand-lockup .brand-name {
-  color: var(--login-text);
-}
-
-.login-card .brand-mark {
-  height: 36px;
-  background: color-mix(in srgb, var(--login-primary) 12%, transparent);
-}
-
-.login-card .eyebrow {
-  color: var(--login-primary);
-}
-
-.login-card h1 {
-  margin: 0 0 0.35rem;
-  color: var(--login-text);
-  font-size: var(--ref-font-size-display-sm);
-}
-
-.login-card .brand-tagline {
-  color: var(--login-text-muted);
-  margin: 0;
-}
-
-.login-card form {
-  display: grid;
-  gap: 1rem;
-  margin-top: 1.5rem;
-}
-
-.login-card label {
-  display: grid;
-  gap: 0.45rem;
-  font-weight: 600;
-  font-size: var(--ref-font-size-body-compact);
-  color: var(--login-text-muted);
-}
-
 /*
- * `.login-card input` and `.login-card input:focus` used to live here. They were an addition
- * that the reference login form does not have, and because a descendant selector scores
- * (0,1,1) against `.login-input`'s (0,1,0) they silently won over the ported rules no matter
- * what order the sheets loaded in. The damage was visible: padding collapsed to
- * `0.6rem 0.8rem`, so the absolutely positioned `.input-icon` (left: 1rem) landed on top of
- * the placeholder text, and the field height dropped from 56px to 42px.
+ * The whole parallel login block used to live here: `.login-card` plus eleven descendant
+ * rules, none of which the reference login form has.
  *
- * `.login-input` in login.css is the canonical ported definition - it owns the field's
- * padding, radius, colours and its :focus-visible outline. Nothing here should restate them.
+ * They were not merely redundant. A descendant selector scores (0,1,1) against the ported
+ * class selectors in login.css at (0,1,0), so every one of them silently won:
+ *
+ *   .login-card h1                  -> font-size display-sm (26.4px) over .login-title's display (28px)
+ *   .login-card label               -> weight 600 / body-compact over .login-field-label
+ *   .login-card input               -> padding 0.6rem 0.8rem, so the absolutely positioned
+ *                                      .input-icon landed on top of the placeholder text
+ *   .login-card button[type=submit] -> its own size and padding over .login-submit-btn
+ *   .login-card                     -> 27rem wide with 2rem padding over the reference's
+ *                                      420px with 3rem 2.5rem
+ *
+ * The rest - .brand-lockup, .brand-name, .brand-mark, .eyebrow, .brand-tagline,
+ * .password-field, .form-error - were not referenced by any component at all.
+ *
+ * login.css is a faithful port of the reference stylesheet: identical selector set, identical
+ * declarations. It is the sole authority for this page; nothing here should restate or
+ * override it.
  */
-
-.login-card button[type='submit'] {
-  border: 0;
-  border-radius: var(--ref-radius-control);
-  min-height: 42px;
-  padding: 0.7rem 0.9rem;
-  background: var(--login-primary);
-  color: var(--login-on-primary);
-  font-weight: 700;
-  transition: background var(--duration-fast) ease;
-}
-
-.login-card button[type='submit']:hover:not(:disabled) {
-  background: var(--login-primary-hover);
-}
-
-.password-field {
-  display: flex;
-  gap: 0.4rem;
-}
-
-.password-field button {
-  white-space: nowrap;
-  border: 1px solid var(--login-border);
-  border-radius: var(--ref-radius-control);
-  background: var(--login-surface-raised);
-  color: var(--login-text-muted);
-  padding: 0 0.75rem;
-}
-
-.password-field button:hover {
-  color: var(--login-text);
-}
-
-.login-card .form-error {
-  color: var(--danger);
-}
 
 /* ---------------------------------------------------------------------------
  * System health / inventory / users shared surfaces
