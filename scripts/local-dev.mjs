@@ -84,6 +84,28 @@ function childEnv() {
   return merged;
 }
 
+/**
+ * Derive the MongoDB endpoint this command should probe for reachability.
+ *
+ * local:dev never starts or owns MongoDB; it only verifies that the database the Go
+ * child is about to connect to answers. The probe therefore follows MONGODB_URI
+ * instead of assuming a loopback database, so a remote MongoDB (for example
+ * 10.10.0.139:27017) is accepted. It falls back to the canonical loopback port when
+ * the URI is absent or cannot be parsed.
+ */
+function mongoProbeTarget(env) {
+  const fallback = { host: '127.0.0.1', port: CANONICAL_PORTS.mongo };
+  if (!env.MONGODB_URI) return fallback;
+  try {
+    const parsed = new URL(env.MONGODB_URI);
+    const host = parsed.hostname || fallback.host;
+    const port = Number(parsed.port) || fallback.port;
+    return { host, port };
+  } catch {
+    return fallback;
+  }
+}
+
 function runSync(command, args, options = {}) {
   return spawnSync(command, args, { encoding: 'utf8', windowsHide: true, maxBuffer: 32 * 1024 * 1024, ...options });
 }
@@ -195,17 +217,22 @@ async function run() {
     return bail();
   }
 
-  // 2. MongoDB reachability.
+  const env = childEnv();
+
+  // 2. MongoDB reachability. The probe follows MONGODB_URI: this command never owns
+  //    MongoDB, so it verifies whichever database the Go child will actually use
+  //    (loopback by default, or a remote host such as 10.10.0.139:27017).
   log('[2/8] MongoDB');
-  const mongoOpen = await waitForPort(CANONICAL_PORTS.mongo, { timeoutMs: 5000 });
+  const mongo = mongoProbeTarget(env);
+  const mongoOpen = await waitForPort(mongo.port, { host: mongo.host, timeoutMs: 5000 });
   if (!mongoOpen) {
-    log(`  MongoDB is not reachable on 127.0.0.1:${CANONICAL_PORTS.mongo}.`);
+    log(`  MongoDB is not reachable on ${mongo.host}:${mongo.port}.`);
     log('  Start MongoDB yourself; this command never starts it.');
     log('');
     log('FULL_STACK_NOT_READY');
     return bail();
   }
-  log(`  reachable on 127.0.0.1:${CANONICAL_PORTS.mongo}`);
+  log(`  reachable on ${mongo.host}:${mongo.port}`);
 
   // 3. Canonical internal ports must be free before this command creates them.
   log('[3/8] Canonical internal ports');
@@ -219,7 +246,6 @@ async function run() {
     log(`  ${role} port ${port} is free`);
   }
 
-  const env = childEnv();
   if (!env.JWT_SECRET) {
     log('');
     log('JWT_SECRET is not set. The Go backend fails closed without it.');
