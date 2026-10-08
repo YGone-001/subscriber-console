@@ -58,7 +58,7 @@ Local development does not require Nginx.
 - Analytics dashboard computed from MongoDB subscriber documents.
 - Direct execution operation model with RBAC, operation logging, and CAS concurrency control.
 - Audit logs, alert acknowledgment, and system document consistency checks.
-- Hardened JWT authentication with dual rate limits (IP + username), automatic lockout after 10 failed attempts, response privacy, and canonical `admin`, `operator`, and `viewer` roles (with legacy alias normalization), authoritatively governed by the Go backend (all 84 registrations Go-owned; routed by the Nginx edge).
+- Hardened JWT authentication with dual rate limits (IP + username), automatic lockout after 10 failed attempts, response privacy, and canonical `admin`, `operator`, and `viewer` roles (with legacy alias normalization), authoritatively governed by the Go backend (all 90 registrations Go-owned; routed by the Nginx edge).
 - User lifecycle management: create, update, admin unlock, soft delete, password reset, session invalidation via `sessionVersion`.
 - Chinese/English UI, theme switching, command palette, and responsive dashboard layout.
 - React/Vite frontend with the restored xCloud operator UI: grouped sidebar with quick filter, header NOC sentinel and notification centre, command palette, tab bar, breadcrumbs, operator dashboard cockpit, and a shared design-token system.

@@ -30,7 +30,7 @@ API paths remain `/api/...` unchanged.
 
 - Authentication verification (HS256) and session validation
 - Authorization (capability + permission checks)
-- All production read and write API operations (84 registrations)
+- All production read and write API operations (90 registrations)
 - Static SPA hosting (assets, browser-history fallback, cache-control)
 - Rate limiting
 - Audit evidence writing

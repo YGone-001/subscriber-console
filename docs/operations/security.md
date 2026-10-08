@@ -38,5 +38,5 @@ Use `.env.example` for placeholder configuration only.
 
 - `JWT_SECRET` must be unique per environment and at least 32 bytes.
 - `INITIAL_ADMIN_PASSWORD` must satisfy the configured strong password policy.
-- Production deployments should terminate TLS before the Next.js service.
+- Production deployments should terminate TLS at the Nginx public edge before traffic reaches the loopback-only Go service.
 - Review audit logs after any administrative or repair action.

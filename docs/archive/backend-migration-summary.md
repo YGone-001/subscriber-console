@@ -39,7 +39,7 @@ Browser -> Nginx  (sole public edge)
 - Nginx routes API traffic (`/api`, `/api/*`) to Go and all other traffic to the
   Next.js UI.
 
-## Current Production Invariants
+## Migration Milestone Invariants
 
 ```text
 Go exact METHOD+PATH registrations = 84
@@ -47,7 +47,7 @@ Next.js API route handlers         = 0
 Node backend business execution    = 0
 Nginx routes /api and /api/* to Go
 Go is the production API authority
-Next.js is the UI runtime only
+Next.js was the UI runtime only at this migration milestone
 ```
 
 ## Retrieving Detailed Migration Documents

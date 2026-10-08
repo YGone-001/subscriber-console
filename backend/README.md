@@ -39,19 +39,16 @@ go build -o server ./cmd/server
 
 ## Endpoints
 
+The authoritative production API surface is the 90 exact METHOD+PATH registrations
+derived from `cmd/server/main.go` and `internal/remediation/handler.go`. The tables
+below summarize selected read endpoints; they are not a separate route contract.
+
 ### Health (no auth)
 
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/healthz` | Liveness probe |
 | GET | `/readyz` | Readiness probe (pings MongoDB) |
-
-### Audit
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/audit` | List audit logs |
-| GET | `/api/audit/{id}` | Get audit log detail |
 
 ### Analytics
 

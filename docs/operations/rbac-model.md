@@ -105,7 +105,7 @@ While existing documents may contain legacy roles, **all write operations (creat
 ## 5. Operations & Migration Utility
 
 ### Authoritative Application User Collection
-The authoritative user collection across the platform (Go backend, Next.js frontend, and authentication services) is:
+The authoritative user collection across the platform (Go backend, React/Vite SPA, and authentication services) is:
 ```text
 xcloud_ops.app_users
 ```

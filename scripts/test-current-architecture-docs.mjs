@@ -280,7 +280,7 @@ for (const pattern of forbiddenInRunbook) {
   );
 }
 
-assert.ok(runbook.includes('GoRegistered = 84'), 'Runbook must document GoRegistered = 84');
+assert.ok(runbook.includes('GoRegistered = 90'), 'Runbook must document GoRegistered = 90');
 assert.ok(runbook.includes('Canonical RBAC & Direct Execution'), 'Runbook must document Canonical RBAC & Direct Execution');
 assert.ok(runbook.includes('xcloud_ops.app_audit_logs'), 'Runbook must reference app_audit_logs');
 assert.ok(runbook.includes('app_approvals'), 'Runbook must mention historical app_approvals status');
