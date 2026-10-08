@@ -24,12 +24,8 @@
           document.documentElement.setAttribute('data-theme', theme);
           var meta = document.querySelector('meta[name="theme-color"]');
           if (meta) meta.setAttribute('content', theme === 'dark' ? '#0e1216' : '#eef1f4');
-
-          var density = localStorage.getItem('XCLOUD_DENSITY_PREFERENCE');
-          document.documentElement.setAttribute('data-density', density === 'compact' ? 'compact' : 'comfortable');
         } catch (error) {
           document.documentElement.setAttribute('data-theme', 'light');
-          document.documentElement.setAttribute('data-density', 'comfortable');
         }
       })();
     </script>

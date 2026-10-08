@@ -238,36 +238,6 @@
   box-shadow: inset 0 0 0 1px var(--selection-border);
 }
 
-/* Comfortable / compact density toggle. */
-.density-switcher-btn {
-  width: 36px;
-  height: 36px;
-  min-width: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: 1px solid var(--surface-border);
-  border-radius: var(--ref-radius-circle);
-  background: var(--surface-hover);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: border-color var(--duration-normal) var(--ease-smooth),
-    color var(--duration-normal) var(--ease-smooth),
-    background var(--duration-normal) var(--ease-smooth);
-}
-
-.density-switcher-btn:hover,
-.density-switcher-btn:focus-visible {
-  border-color: var(--selection-border);
-  color: var(--text-main);
-}
-
-.density-switcher-btn[data-active="true"] {
-  color: var(--primary);
-  border-color: var(--selection-border);
-}
-
 /* ---------------------------------------------------------------------------
  * User menu
  * ------------------------------------------------------------------------- */

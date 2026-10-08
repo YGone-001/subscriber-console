@@ -132,7 +132,7 @@
   --metric-tone: var(--primary);
   position: relative;
   min-width: 0;
-  min-height: var(--metric-item-height, 88px);
+  min-height: 88px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;

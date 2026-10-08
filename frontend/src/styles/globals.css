@@ -172,33 +172,6 @@
 }
 
 /*
- * Interface density.
- *
- * `comfortable` matches the reference vertical rhythm and is the default. `compact`
- * tightens only the repeating vertical metrics so more rows fit on screen; type sizes are
- * unchanged, and touch targets in coarse-pointer environments are governed separately and
- * are never reduced here.
- *
- * `html[data-density]` carries one more specificity point than `:root`, so these values
- * win over the base scale regardless of stylesheet order.
- */
-html[data-density="comfortable"] {
-  --control-height: 36px;
-  --table-row-height: 54px;
-  --metric-item-height: 88px;
-  --space-page: var(--space-24);
-  --space-section: var(--space-20);
-}
-
-html[data-density="compact"] {
-  --control-height: 32px;
-  --table-row-height: 42px;
-  --metric-item-height: 70px;
-  --space-page: var(--space-16);
-  --space-section: var(--space-12);
-}
-
-/*
  * Interaction state contract (identical roles in both themes):
  *   hover    -> --surface-hover
  *   selected -> --selection-soft (fill) / --selection-border (outline)
