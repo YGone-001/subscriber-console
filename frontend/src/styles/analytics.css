@@ -504,6 +504,13 @@
     min-width: 0;
   }
 
+  /*
+   * Same `h3`-selector / `<h2>`-markup mismatch as the workbench header: the chart
+   * panels render `<h2>`, so their titles were falling through to the global `h2`
+   * treatment and painting at --ref-font-size-title (24px) with a 1rem bottom margin.
+   * Covered for both levels.
+   */
+  .analytics-panel-title h2,
   .analytics-panel-title h3 {
     margin: 0;
     color: var(--text-main);
@@ -1314,11 +1321,17 @@
 
   /* ── Alerts & Score Row (replaces WorkbenchPanel) ── */
 
+  /*
+   * `stretch` rather than `start`: the row is one band, so the work-item list and the
+   * readiness card must share a bottom edge. With `start` the readiness card ended 76px
+   * above the list and the two halves read as misaligned. The readiness card keeps
+   * `align-content: start` so its content still sits on the list's header baseline.
+   */
   .analytics-alerts-row {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(220px, 260px);
     gap: 1rem;
-    align-items: start;
+    align-items: stretch;
   }
 
   .analytics-alerts-list {
@@ -1337,11 +1350,21 @@
     gap: 0.5rem;
   }
 
+  /*
+   * The panel heading is rendered as `<h2>` by WorkbenchPanel; this rule was authored
+   * against `h3`, so it never applied and the title fell through to the global `h2`
+   * treatment (--ref-font-size-title with a 1rem bottom margin). The header measured
+   * 51px instead of ~20px, which pushed the work item down and left the count badge
+   * centred on the margin box rather than on the title. Both levels are covered so the
+   * rule survives either heading level.
+   */
+  .analytics-alerts-header h2,
   .analytics-alerts-header h3 {
     margin: 0;
     color: var(--text-main);
     font-size: var(--ref-font-size-body-small);
     font-weight: 700;
+    line-height: 1.25;
   }
 
   .analytics-alerts-count {

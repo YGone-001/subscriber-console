@@ -322,6 +322,27 @@ export function SystemHealthPage() {
     return details;
   };
 
+  /*
+   * Recommendation copy is produced by the Go health evaluator as canonical English
+   * sentences. Each known template is mapped onto a locale key so the banner renders in
+   * the active language without altering the API contract, mirroring `renderDetails`.
+   */
+  const renderRecommendation = (rec: string) => {
+    const patterns: Array<[RegExp, string]> = [
+      [/^Run MongoDB index initialization .* to restore (\d+) missing indexes$/, "health_rec_mongo_indexes"],
+      [/^Resolve (\d+) OCS balance invariant inconsistencies$/, "health_rec_ocs_invariants"],
+      [/^Clean up (\d+) orphaned in-flight quota reservations$/, "health_rec_orphan_reservations"],
+      [/^Fix (\d+) malformed HSS subscriber records$/, "health_rec_hss_malformed"],
+      [/^Rebind (\d+) subscribers referencing missing profile templates$/, "health_rec_dangling_profiles"],
+      [/^Acknowledge and triage (\d+) critical operational alerts in NOC$/, "health_rec_critical_alerts"],
+    ];
+    for (const [pattern, key] of patterns) {
+      const matched = rec.match(pattern);
+      if (matched) return t(key, { count: matched[1] });
+    }
+    return rec;
+  };
+
   const getStatusBadge = (status: SubsystemStatus = 'healthy') => {
     if (status === 'healthy') return <span className="subsystem-badge healthy"><Check size={12} /> {t("health_status_healthy")}</span>;
     if (status === 'degraded') return <span className="subsystem-badge degraded"><AlertTriangle size={12} /> {t("health_status_degraded")}</span>;
@@ -452,7 +473,7 @@ export function SystemHealthPage() {
               <div className="health-rec-title">{t("health_recommendations_title")}</div>
               <ul className="health-rec-list">
                 {systemHealth.summary.recommendations.map((rec, i) => (
-                  <li key={i}>{rec}</li>
+                  <li key={i}>{renderRecommendation(rec)}</li>
                 ))}
               </ul>
             </div>
