@@ -8,8 +8,8 @@
 
 ## Testing
 
-- [ ] `npm run lint`
-- [ ] `npm run build`
+- [ ] `cd frontend && npm run lint`
+- [ ] `cd frontend && npm run build`
 
 ## Security Checklist
 

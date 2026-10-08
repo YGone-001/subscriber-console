@@ -23,8 +23,6 @@ const PRIMITIVES: Array<{ path: string; defaultExport?: string; namedExports: st
   { path: 'components/ui/DataTableState.tsx', namedExports: ['DataTableStateRow'] },
   { path: 'components/ui/Dialog.tsx', namedExports: ['Dialog'] },
   { path: 'components/ui/Field.tsx', namedExports: ['Field'] },
-  { path: 'components/ui/IconButton.tsx', namedExports: ['IconButton'] },
-  { path: 'components/ui/InlineNotice.tsx', namedExports: ['InlineNotice', 'ErrorNotice'] },
   { path: 'components/ui/MetricStrip.tsx', defaultExport: 'MetricStrip', namedExports: ['MetricStripItem'] },
   { path: 'components/ui/PageHeader.tsx', defaultExport: 'ConsolePageHeader', namedExports: ['PageHeader'] },
   { path: 'components/ui/RefreshButton.tsx', defaultExport: 'RefreshButton', namedExports: [] },
@@ -44,7 +42,6 @@ const UI_MODULES = [
   'DataTablePagination.module.css',
   'DataTableState.module.css',
   'Field.module.css',
-  'InlineNotice.module.css',
   'SortableTableHeader.module.css',
   'UnsavedChangesGuard.module.css',
 ];

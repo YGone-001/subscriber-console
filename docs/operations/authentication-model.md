@@ -16,7 +16,7 @@ Username + Password
 
 ## 2. Login
 
-Endpoint: `POST /api/auth/login` (Node owner).
+Endpoint: `POST /api/auth/login` (Go owner).
 
 Dual rate limit:
 - IP-scoped: 5 requests / 60s per key `login:<ip>` (enforced upfront on all incoming requests)
@@ -71,7 +71,7 @@ On expiry: 401 `AUTH_INVALID_TOKEN` -> `handleSessionExpiry` -> redirect to `/lo
 
 ## 5. Logout
 
-Endpoint: `POST /api/auth/logout` (Node owner).
+Endpoint: `POST /api/auth/logout` (Go owner).
 
 Rate limit: 30 / 60s per IP.
 
@@ -121,9 +121,9 @@ auth_token cookie
   -> Principal { username, role, normalizedRole, sessionVersion, userId }
 ```
 
-The Node proxy (`proxy.ts`) performs this validation before forwarding to Go.
-The Go backend (`backend/internal/auth/middleware.go`) independently revalidates
-from the `auth_token` cookie. Neither side trusts forwarded identity headers.
+The Go backend (`backend/internal/auth/middleware.go`) performs this validation
+from the `auth_token` cookie. Production Nginx forwards requests to Go without a
+Node authentication hop; neither Nginx nor Go trusts forwarded identity headers.
 
 ## 8. Security Boundary
 
@@ -136,8 +136,8 @@ x-user-id
 x-user-session-version
 ```
 
-These headers are set by the Node proxy after validation and consumed only as
-convenience context. Both Node and Go independently verify the `auth_token` cookie.
+Nginx strips these client-supplied headers at the public edge. Go treats the
+`auth_token` cookie and `app_users` revalidation as the only identity authority.
 
 Password storage: bcrypt cost 10. Never exposed via API (`stripPassword` on all responses).
 `passwordHash` is never returned by any endpoint.
@@ -146,20 +146,23 @@ Password policy:
 - Minimum: 8 Unicode code points after trimming surrounding whitespace (whitespace-only or trimmed < 8 rejected; supplementary characters/emoji counted as code points, not UTF-16 code units)
 - Maximum: 72 UTF-8 bytes (bcrypt byte boundary)
 - Must not contain the target username (case-insensitive substring check)
-- Enforced identically by Node (`isPasswordStrong`) and canonical Go (`ValidatePassword`), verified by cross-language parity assertions.
+- The frontend UI guard (`frontend/src/lib/security.ts:isPasswordStrong`) mirrors the
+  canonical Go validation (`backend/internal/user/validator.go:ValidatePassword`);
+  only Go enforces the policy at the write boundary. Shared parity vectors are
+  verified by Go tests.
 
 JWT secret: shared `JWT_SECRET` environment variable (>= 32 UTF-8 bytes).
-Must be identical across Node and Go processes (mismatch causes `AUTH_INVALID_TOKEN` loops).
-Both Node (`frontend/src/lib/security.ts`) and Go (`backend/internal/auth/secret.go`) fail closed on startup
-if `JWT_SECRET` is missing, shorter than 32 bytes, or matches common insecure placeholders
+Go (`backend/internal/auth/secret.go`) fails closed on startup if `JWT_SECRET` is
+missing, shorter than 32 bytes, or matches common insecure placeholders
 (`secret`, `jwt_secret`, `change-me`, `changeme`, `development`, `password`).
+The frontend does not read, validate, or retain JWT material.
 
-## 9. Interoperability
+## 9. JWT Fixture Interoperability
 
-Node (`jose`) and Go (`golang.org/x/crypto` / custom HS256 verifier) must produce
-and verify identical JWT signatures from the same `JWT_SECRET`.
-Cross-language verification is covered by `backend/internal/auth/verifier_cross_lang_test.go`
-and `scripts/test-auth-go-parity.mjs`.
+Node `jose` is used only by `scripts/migration/generate-auth-fixture.mjs` to
+generate `backend/testdata/auth/node-jose-token.json`; it is not a production
+authentication runtime. Go verifies the generated HS256 fixture in
+`backend/internal/auth/verifier_cross_lang_test.go`.
 
 ## 10. Go Contract Parity Foundation
 

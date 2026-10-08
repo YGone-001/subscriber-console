@@ -14,7 +14,6 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { I18nProvider } from '../src/providers/I18nProvider';
 import OcsStatusBadge from '../src/components/ocs/common/OcsStatusBadge';
 import OcsConfirmDialog from '../src/components/ocs/common/ConfirmDialog';
-import OcsDetailDrawer from '../src/components/ocs/OcsDetailDrawer';
 import OcsPageShell from '../src/components/ocs/OcsPageShell';
 
 /** Render inside the i18n provider and fail the test if anything calls fetch. */
@@ -103,45 +102,6 @@ test('a loading confirm dialog disables both actions', () => {
   }));
   const disabled = markup.match(/<button[^>]*\sdisabled/g) ?? [];
   assert.equal(disabled.length, 2, 'both actions must be disabled while the operation is in flight');
-});
-
-/* -------------------------------------------------------- detail drawer -- */
-
-test('the detail drawer renders nothing without data', () => {
-  const markup = render(createElement(OcsDetailDrawer, { title: 'Balance', data: null, onClose: () => {} }));
-  assert.equal(markup, '', 'a null record must not open the drawer');
-});
-
-test('the detail drawer renders structured attributes and the raw payload', () => {
-  const markup = render(createElement(OcsDetailDrawer, {
-    title: 'Balance 417010000000001',
-    data: { imsi: '417010000000001', version: 10 },
-    fields: [{ label: 'IMSI', value: '417010000000001' }, { label: 'Version', value: 10 }],
-    onClose: () => {},
-  }));
-  assert.match(markup, /ocs-drawer-backdrop/);
-  assert.match(markup, /ocs-drawer-content/);
-  assert.match(markup, /ocs-detail-grid/);
-  assert.match(markup, /ocs-detail-item-label/);
-  assert.match(markup, /ocs-detail-item-value ocs-mono/);
-  assert.match(markup, /ocs-json-view/);
-  assert.match(markup, /417010000000001/);
-  assert.match(markup, /ocs-drawer-title/, 'the drawer keeps its titled header');
-});
-
-test('the detail drawer omits the structured section when no fields are supplied', () => {
-  const markup = render(createElement(OcsDetailDrawer, {
-    title: 'Contract', data: { imsi: '417010000000002' }, onClose: () => {},
-  }));
-  assert.doesNotMatch(markup, /ocs-detail-grid/);
-  assert.match(markup, /ocs-json-view/, 'the raw payload section is always present');
-});
-
-test('the detail drawer escapes an ObjectId-shaped value instead of stringifying an object', () => {
-  const markup = render(createElement(OcsDetailDrawer, {
-    title: 'Contract', data: { id: { $oid: '6aacfca52bb6e37e6b08346a' } }, onClose: () => {},
-  }));
-  assert.doesNotMatch(markup, /\[object Object\]/);
 });
 
 /* ---------------------------------------------------------- page shell --- */

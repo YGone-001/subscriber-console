@@ -13,7 +13,6 @@ import test from 'node:test';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { RouterProvider, createMemoryRouter } from 'react-router-dom';
-import { AppLink } from '../src/lib/ui-compat/link';
 import {
   buildLocalPath,
   createAppRouter,
@@ -144,15 +143,6 @@ test('buildLocalPath substitutes and encodes every dynamic segment once', () => 
   assert.equal(buildLocalPath('/ocs/balances/:imsi', { imsi: '310150123456789' }), '/ocs/balances/310150123456789');
   assert.equal(buildLocalPath('/users/:username', { username: 'a b' }), '/users/a%20b');
   assert.equal(buildLocalPath('/users/:username', {}), '/users/:username', 'unresolved segments are left alone');
-});
-
-test('AppLink keeps external destinations as plain anchors and internal ones as router links', () => {
-  const external = renderToString(createElement(AppLink, { to: 'https://example.com/docs' }, 'docs'));
-  assert.match(external, /href="https:\/\/example\.com\/docs"/);
-
-  const router = createMemoryRouter([{ path: '/users', element: createElement(AppLink, { href: '/users' }, 'users') }], { initialEntries: ['/users'] });
-  const internal = renderToString(createElement(RouterProvider, { router }));
-  assert.match(internal, /href="\/users"/, 'the historical href prop must still produce a router link');
 });
 
 test('no retired framework import remains in the frontend source', () => {

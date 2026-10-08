@@ -135,9 +135,10 @@ Reason: retain operation traceability and audit history.
 
 ## 5. Password Policy
 
-Enforced identically by Node (`frontend/src/lib/security.ts` via `isPasswordStrong(password, username)`)
-and Go (`backend/internal/user/validator.go` via `ValidatePassword(password, username)`),
-proven identical across both runtimes via cross-language parameterized parity tests (`scripts/fixtures/password-parity-vectors.json`):
+The frontend UI guard (`frontend/src/lib/security.ts` via `isPasswordStrong(password, username)`)
+mirrors the Go write-boundary validator (`backend/internal/user/validator.go` via
+`ValidatePassword(password, username)`). Go is authoritative; its parameterized
+tests consume `scripts/fixtures/password-parity-vectors.json`:
 
 - Minimum: 8 Unicode code points after trimming surrounding whitespace (whitespace-only or trimmed < 8 rejected; supplementary characters/emoji counted as code points, not UTF-16 code units)
 - Maximum: 72 UTF-8 bytes (bcrypt byte boundary)

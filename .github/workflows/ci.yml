@@ -37,15 +37,12 @@ jobs:
       # Dependency security and CI runtime maintenance gates. The audit gate is driven by
       # `npm audit --json` for both dependency trees and fails closed when the advisory
       # service is unavailable; the runtime contract rejects obsolete Node-20 first-party
-      # action majors. The maintenance contract composes their machine output.
+      # action majors.
       - name: Dependency security
         run: node scripts/test-dependency-security.mjs
 
       - name: CI runtime contract
         run: node scripts/test-ci-runtime-contract.mjs
-
-      - name: Maintenance contract
-        run: node scripts/test-maintenance-contract.mjs
 
       - name: Frontend lint
         working-directory: frontend
@@ -96,6 +93,7 @@ jobs:
   ui-restoration:
     name: Frontend UI restoration contract
     runs-on: ubuntu-latest
+    needs: frontend
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -124,29 +122,6 @@ jobs:
       # absence, frozen route count (26) and frozen Go registration count (90).
       - name: Frontend UI restoration contract
         run: node scripts/test-ui-restoration-contract.mjs
-
-      - name: Frontend lint
-        working-directory: frontend
-        run: npm run lint
-
-      - name: Frontend typecheck
-        working-directory: frontend
-        run: npm run typecheck
-
-      - name: Frontend tests
-        working-directory: frontend
-        run: npm test
-
-      - name: Frontend build
-        working-directory: frontend
-        run: npm run build
-
-      # Inventory contracts must remain unchanged by a presentation-only phase.
-      - name: Inventory contract
-        run: node scripts/test-inventory-contract.mjs
-
-      - name: Frontend runtime boundary
-        run: node scripts/test-frontend-runtime-boundary.mjs
 
   go-spa-hosting:
     name: Go embedded SPA integration
@@ -307,9 +282,6 @@ jobs:
 
       - name: User management runtime integration
         run: node scripts/test-user-management-runtime-integration.mjs
-
-      - name: Authentication runtime integration
-        run: node scripts/test-authentication-runtime-integration.mjs
 
       - name: Authentication & User Management UI integration
         run: node scripts/test-auth-user-ui-integration.mjs
