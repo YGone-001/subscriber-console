@@ -29,7 +29,7 @@ colors:
   operational-info-night: "#68b6d4"
 typography:
   display:
-    fontFamily: "Sora, Aptos Display, Segoe UI, sans-serif"
+    fontFamily: "Noto Sans SC, Aptos Display, Segoe UI, sans-serif"
     fontSize: "clamp(1.65rem, 2vw, 2.2rem)"
     fontWeight: 650
     lineHeight: 1.05
@@ -53,10 +53,12 @@ typography:
     lineHeight: 1.4
     letterSpacing: "normal"
 rounded:
-  small: "7px"
-  control: "8px"
-  panel: "10px"
-  soft-panel: "12px"
+  micro: "3px"
+  compact: "5px"
+  small: "6px"
+  control: "6px"
+  panel: "8px"
+  soft-panel: "10px"
   pill: "999px"
 spacing:
   compact: "8px"
@@ -167,11 +169,11 @@ xCloud 的界面像一座持续运行的电信运营舰桥：冷静、结构化�
 
 ## Typography
 
-**Display Font:** Sora（with Aptos Display, Segoe UI, sans-serif）
+**Display Font:** Noto Sans SC（自托管子集；回退 Aptos Display, Segoe UI, sans-serif）
 **Body Font:** Noto Sans SC（with Microsoft YaHei UI, PingFang SC, Segoe UI, sans-serif）
 **Label/Mono Font:** Cascadia Mono（with SFMono-Regular, Consolas, monospace）
 
-**Character:** Sora 提供精确、现代但不过度未来化的标题轮廓；Noto Sans SC 保证中英文运营界面的连续阅读；等宽字体只承担 IMSI、代码、协议字段和测量数据，不作为“技术感”装饰。
+**Character:** 标题与正文共用自托管的 Noto Sans SC 子集，保证中英文运营界面的连续阅读与确定性渲染，不依赖操作员机器上恰好安装了哪个字体。当前没有独立的 Display 字面；若需要更强的标题个性，应引入一个同样自托管、经过子集化的西文显示字面，而不是回退到系统字体。等宽字体只承担 IMSI、代码、协议字段和测量数据，不作为“技术感”装饰。
 
 ### Hierarchy
 
@@ -191,6 +193,8 @@ xCloud 使用固定 64px 顶部栏、桌面侧栏、工作区导航和可滚动�
 页面内部优先使用“页面标题 → 态势/指标条 → 工具区 → 主要数据或任务”的垂直顺序。指标条在宽屏按等分网格排列，在 900px 以下转为两列，在 560px 以下转为单列。操作组允许换行，但主要动作与其对象应保持在同一视觉区域。
 
 980px 以下，侧栏转为 off-canvas 抽屉并使用背景遮罩，内容区不再为侧栏预留宽度；桌面 workspace tabs 与 breadcrumbs 收起为单一当前页面提示，避免把三套定位系统压进移动首屏。页面级复合布局通常在 900px、768px、640px 和 560px 继续收敛；这些断点是当前系统的响应式词汇，不应为单个组件随意增加相邻断点。
+
+**界面密度（Interface Density）.** 密度是与主题正交的偏好轴，以 `data-density` 施加在 `<html>` 上，取值 `comfortable`（默认，对齐参考节奏）与 `compact`。密度只收紧重复出现的纵向节奏——控件高度（36px → 32px）、表格行高（54px → 42px）、分区间距（20px → 12px）与指标条项高（88px → 70px）；字号不变，粗指针环境下的触控目标由独立规则约束，不因密度降低。
 
 高密度数据表在 768px 以下不能依赖整表横向滚动。优先保留对象身份、状态、主要数值和行操作，并转换为带持久字段标签的记录卡；排序与全选移入表格上方的移动控制条，溢出操作使用受控菜单或底部操作面。桌面宽度恢复标准表头、行列对应和批量扫描效率。
 
@@ -213,7 +217,7 @@ xCloud 使用固定 64px 顶部栏、桌面侧栏、工作区导航和可滚动�
 
 ## Shapes
 
-形状语言紧凑而工程化。小型导航与标签使用 7px 圆角，输入与按钮使用 8px，主要面板使用 10px，少量柔和内容卡使用 12px；999px 胶囊只属于短状态、计数和紧凑切换，不用于大型按钮或容器。边框通常为 1px，并从主题的结构分隔色取得。
+形状语言紧凑而工程化。小型导航与标签使用 6px 圆角，输入与按钮使用 6px，主要面板使用 8px，少量柔和内容卡使用 10px，微型标记使用 3px、紧凑控件内元素使用 5px；999px 胶囊只属于短状态、计数和紧凑切换，不用于大型按钮或容器。边框通常为 1px，并从主题的结构分隔色取得。
 
 状态和选择可使用底部短线、图标色、背景 tint 或紧凑标记组合表达。装饰性粗侧边条不是默认容器语言；页面标题现有的分段状态轨是特殊态势标记，应避免复制到普通卡片。
 
@@ -223,7 +227,7 @@ xCloud 使用固定 64px 顶部栏、桌面侧栏、工作区导航和可滚动�
 
 ### Buttons
 
-- **Shape:** 紧凑控制圆角（8px），最小高度 36px，内边距 8px 14px。
+- **Shape:** 紧凑控制圆角（6px），最小高度 36px，内边距 8px 14px。
 - **Touch Target:** 图标按钮固定为 44×44px；在 980px 以下或 `pointer: coarse` 环境中，主要交互目标的命中区域不得小于 44×44px，图标视觉尺寸可以保持 16–20px。
 - **Primary:** 使用当前主题主信号色与白色文字，只承载页面或弹层的主要提交动作。
 - **Hover / Focus:** hover 使用同色更强状态；focus 使用主色 2px 轮廓或 3px 混色 focus ring；active 可缩放至 0.97，但不得导致布局移动。
@@ -237,7 +241,7 @@ xCloud 使用固定 64px 顶部栏、桌面侧栏、工作区导航和可滚动�
 
 ### Cards / Containers
 
-- **Corner Style:** 主要面板 10px；现有内容卡允许 12px。
+- **Corner Style:** 主要面板 8px；现有内容卡允许 10px。
 - **Background:** 使用主题 surface，与全局 canvas 形成稳定色阶。
 - **Shadow Strategy:** 默认使用低层阴影或无阴影；popover、drawer、modal 使用对应结构阴影。
 - **Border:** 1px 主题结构边界；避免同时使用强边框和强阴影。
@@ -245,7 +249,7 @@ xCloud 使用固定 64px 顶部栏、桌面侧栏、工作区导航和可滚动�
 
 ### Inputs / Fields
 
-- **Style:** 主题 surface、1px 结构边框、8px 圆角、36px 最小高度；字段名称必须持续可见或拥有等价的明确可访问名称。
+- **Style:** 主题 surface、1px 结构边框、6px 圆角、36px 最小高度；字段名称必须持续可见或拥有等价的明确可访问名称。
 - **Mobile:** 移动与粗指针环境中字段和相邻图标操作至少 44px 高；后缀图标必须扩大命中区域，不能只放大 SVG。
 - **Focus:** 边框转为主信号色，并显示统一 focus ring。
 - **Error / Disabled:** 错误使用严重故障语义并关联具体恢复说明；disabled 降低对比但保持可读。

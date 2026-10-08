@@ -73,12 +73,20 @@ export default function MetricStrip({ items, ariaLabel, className, variant = "st
       aria-label={ariaLabel}
     >
       {items.map((item) => {
+        /*
+         * The strip renders the same information as the card variant - detail line and
+         * trailing indicator included - so a surface can adopt the continuous panel without
+         * losing any data. Items are laid out on a three-track grid (copy / indicator /
+         * icon); a track collapses to zero width when the item does not use it.
+         */
         const content = (
           <>
             <span className={styles.metricCopy}>
               <span className={styles.metricLabel}>{item.label}</span>
               <strong className={styles.metricValue}>{item.value}</strong>
+              {item.detail ? <span className={styles.metricDetail}>{item.detail}</span> : null}
             </span>
+            {item.indicator ? <span className={styles.metricIndicator}>{item.indicator}</span> : null}
             {item.icon ? <span className={styles.metricIcon}>{item.icon}</span> : null}
           </>
         );

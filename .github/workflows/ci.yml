@@ -63,6 +63,9 @@ jobs:
         working-directory: frontend
         run: npm run build
 
+      - name: UI anti-AI-drift gate
+        run: npm run check:ui-anti-ai-drift
+
       - name: Frontend runtime contract
         run: node scripts/test-frontend-runtime-contract.mjs
 

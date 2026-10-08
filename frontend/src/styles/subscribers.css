@@ -298,16 +298,21 @@
   transition: transform 0.5s var(--ease-smooth);
 }
 
+/*
+ * Utilisation is a threshold indicator, not a spectrum: each band takes one semantic
+ * colour. The previous multi-hue gradient implied a continuous scale the data does not
+ * have, and mixed two status meanings inside a single bar.
+ */
 .traffic-bar.low {
-  background: linear-gradient(90deg, var(--status-info) 0%, var(--status-success) 100%);
+  background: var(--status-success);
 }
 
 .traffic-bar.medium {
-  background: linear-gradient(90deg, var(--status-success) 0%, var(--status-warning) 100%);
+  background: var(--status-warning);
 }
 
 .traffic-bar.high {
-  background: linear-gradient(90deg, var(--status-warning) 0%, var(--status-danger) 100%);
+  background: var(--status-danger);
 }
 
 .last-active-cell {

@@ -42,7 +42,34 @@ import subprocess
 import sys
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'frontend', 'src')
-SRC_FONT = os.environ.get('XCLOUD_FONT_SOURCE', r'C:/Windows/Fonts/NotoSansSC-VF.ttf')
+# Source font locations probed in order. `XCLOUD_FONT_SOURCE` overrides the search, so no
+# single platform's font directory is baked in as the only option.
+FONT_CANDIDATES = (
+    'C:/Windows/Fonts/NotoSansSC-VF.ttf',
+    os.path.expanduser('~/Library/Fonts/NotoSansSC-VF.ttf'),
+    os.path.expanduser('~/.local/share/fonts/NotoSansSC-VF.ttf'),
+    '/usr/share/fonts/opentype/noto/NotoSansSC-VF.ttf',
+    '/usr/share/fonts/truetype/noto/NotoSansSC-VF.ttf',
+    '/usr/local/share/fonts/NotoSansSC-VF.ttf',
+)
+
+
+def resolve_source_font():
+    """Explicit override wins; otherwise probe the per-platform default locations.
+
+    The font is only needed to REGENERATE the committed subset, so a miss is not fatal:
+    `main` reports it and exits without touching the shipped artefact.
+    """
+    explicit = os.environ.get('XCLOUD_FONT_SOURCE')
+    if explicit:
+        return explicit
+    for candidate in FONT_CANDIDATES:
+        if os.path.isfile(candidate):
+            return candidate
+    return FONT_CANDIDATES[0]
+
+
+SRC_FONT = resolve_source_font()
 OUT_DIR = os.path.join(ROOT, 'assets', 'fonts')
 OUT_FONT = os.path.join(OUT_DIR, 'NotoSansSC-subset.woff2')
 OUT_MANIFEST = os.path.join(OUT_DIR, 'coverage.json')

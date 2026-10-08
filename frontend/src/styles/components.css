@@ -101,13 +101,16 @@
   display: grid;
   gap: 0.4rem;
   box-shadow: var(--shadow-panel);
-  transition: transform 0.2s var(--ease-decelerate), border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: border-color var(--duration-fast) ease;
 }
 
+/*
+ * Dashboard KPI cards are persistent work surfaces, not clickable tiles: hover only
+ * reinforces the boundary. Lifting them and promoting the shadow to a popover is what
+ * made the metric row read as a generic dashboard template.
+ */
 .kpi-card:hover {
-  transform: translateY(-2px);
   border-color: color-mix(in srgb, var(--primary) 26%, var(--surface-border));
-  box-shadow: var(--shadow-popover);
 }
 
 .kpi-card-head {

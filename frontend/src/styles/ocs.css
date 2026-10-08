@@ -86,27 +86,11 @@
   background: var(--surface);
   border: 1px solid var(--surface-border);
   border-radius: var(--ref-radius-soft-panel);
-  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: border-color var(--duration-fast) ease;
 }
 
 .ocs-kpi-card:hover {
-  transform: translateY(-2px);
   border-color: var(--selection-border);
-  box-shadow: var(--shadow-panel);
-}
-
-.ocs-kpi-card::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: linear-gradient(90deg, transparent, var(--primary), transparent);
-}
-
-.ocs-kpi-card.warning::before {
-  background: linear-gradient(90deg, transparent, var(--status-danger), transparent);
 }
 
 .ocs-kpi-top {

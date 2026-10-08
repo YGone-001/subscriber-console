@@ -142,7 +142,7 @@ export default function OcsContractsPanel() {
 
   const kpiGrid = (
     <MetricStrip
-      variant="cards"
+      variant="strip"
       ariaLabel={t('ocs_contracts_title')}
       items={[
         { key: 'total', label: t('ocs_contract_total'), value: error ? '—' : total, icon: <Users size={20} /> },

@@ -15,12 +15,13 @@
  * Usage:
  *   node scripts/capture-ui-parity.mjs
  *   node scripts/capture-ui-parity.mjs --apps=current --viewports=desktop
+ *   node scripts/capture-ui-parity.mjs --theme=light,dark          # both themes
  *   node scripts/capture-ui-parity.mjs --routes=dashboard:/,users:/users --out=.workbuddy-ai/tmp/shots
  *   node scripts/capture-ui-parity.mjs --allow-failures        # capture-only, always exit 0
  *
  * Environment fallbacks (kept for compatibility with earlier invocations):
  *   UI_CAPTURE_APPS, UI_CAPTURE_ROUTES, UI_CAPTURE_OUT, UI_CAPTURE_TOKEN,
- *   UI_CAPTURE_VIEWPORTS, UI_CAPTURE_CURRENT, UI_CAPTURE_REFERENCE,
+ *   UI_CAPTURE_VIEWPORTS, UI_CAPTURE_THEMES, UI_CAPTURE_CURRENT, UI_CAPTURE_REFERENCE,
  *   UI_CAPTURE_CHROME, UI_CAPTURE_CDP_PORT
  *
  * Auth: the run logs in by itself via scripts/lib/session.mjs, using
@@ -36,6 +37,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createCdpClient, launchChrome, sleep } from './lib/cdp.mjs';
 import { obtainAuthToken } from './lib/session.mjs';
+import { requireChromeExecutable, resolveChromeExecutable } from './lib/project-paths.mjs';
 
 const args = new Map(
   process.argv.slice(2).filter((arg) => arg.startsWith('--')).map((arg) => {
@@ -45,7 +47,8 @@ const args = new Map(
 );
 const flag = (name, envName, fallback) => args.get(name) ?? process.env[envName] ?? fallback;
 
-const CHROME = flag('chrome', 'UI_CAPTURE_CHROME', 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe');
+/* Chromium-family browser: --chrome= wins, then UI_CAPTURE_CHROME, then per-platform probing. */
+const CHROME = requireChromeExecutable(resolveChromeExecutable({ argument: args.get('chrome') }));
 const CDP_PORT = Number(flag('cdp-port', 'UI_CAPTURE_CDP_PORT', 9337));
 const OUT = path.resolve(flag('out', 'UI_CAPTURE_OUT', '.workbuddy-ai/tmp/ui-parity'));
 /*
@@ -92,6 +95,21 @@ const ROUTES = (flag('routes', 'UI_CAPTURE_ROUTES', DEFAULT_ROUTES.join(','))
     const index = entry.indexOf(':');
     return { name: entry.slice(0, index), route: entry.slice(index + 1) };
   }));
+
+/*
+ * Theme dimension.
+ *
+ * The RESOLVED theme is captured, not the preference: each theme is written to
+ * localStorage before the document loads, so the first frame already carries it and the
+ * screenshot shows the real themed surface rather than a first-frame default.
+ *
+ * Output layout is unchanged for a single theme. Requesting two or more themes adds a
+ * `<theme>` path segment so the runs cannot overwrite each other.
+ */
+const THEMES = flag('theme', 'UI_CAPTURE_THEMES', 'light').split(',').map((t) => t.trim()).filter(Boolean);
+
+/* Route x theme expansion, so the capture loop keeps its original shape. */
+const SHOTS = ROUTES.flatMap((route) => THEMES.map((theme) => ({ ...route, theme })));
 
 /*
  * In-page health AND layout probe. Runs as a plain expression so it works in any
@@ -238,13 +256,18 @@ async function main() {
       await client.send('Emulation.setDeviceMetricsOverride', {
         width: viewport.width, height: viewport.height, deviceScaleFactor: 1, mobile: viewport.key === 'mobile',
       });
-      const dir = path.join(OUT, app.key, viewport.key);
-      fs.mkdirSync(dir, { recursive: true });
 
-      for (const { name, route } of ROUTES) {
+      for (const { name, route, theme } of SHOTS) {
         exceptions = [];
         /* The login surface must be captured signed out, every other route signed in. */
         await setAuthCookie(route !== '/login');
+        const themeScript = await client.send('Page.addScriptToEvaluateOnNewDocument', {
+          source: `try { localStorage.setItem('XCLOUD_THEME_PREFERENCE', ${JSON.stringify(theme)}); } catch (e) {}`,
+        });
+        const dir = THEMES.length > 1
+          ? path.join(OUT, app.key, viewport.key, theme)
+          : path.join(OUT, app.key, viewport.key);
+        fs.mkdirSync(dir, { recursive: true });
         const url = app.base + route;
         let navigationError = null;
         try {
@@ -276,6 +299,7 @@ async function main() {
         manifest.entries.push({
           app: app.key,
           viewport: viewport.key,
+          theme,
           name,
           route,
           url,
@@ -288,7 +312,9 @@ async function main() {
           snapshot,
         });
 
-        console.log(`[${app.key}/${viewport.key}] ${route} -> ${buffer.readUInt32BE(16)}x${buffer.readUInt32BE(20)} ${(buffer.length / 1024).toFixed(0)}KB ${reason ? `FAIL(${reason})` : 'OK'}`);
+        console.log(`[${app.key}/${viewport.key}/${theme}] ${route} -> ${buffer.readUInt32BE(16)}x${buffer.readUInt32BE(20)} ${(buffer.length / 1024).toFixed(0)}KB ${reason ? `FAIL(${reason})` : 'OK'}`);
+
+        await client.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: themeScript.identifier });
       }
     }
   }

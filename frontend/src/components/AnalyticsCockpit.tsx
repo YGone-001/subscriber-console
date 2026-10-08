@@ -68,16 +68,19 @@ function MetricSparkline({ data, color }: { data?: number[]; color: string }) {
   );
 }
 
-function MetricRing({ value, color }: { value: number; color: string }) {
+/*
+ * Numeric ratio readout. This slot used to be a conic-gradient ring; a ring encodes
+ * proportion with an angle, which is slower to read than the number itself and made the
+ * KPI strip look like a generic dashboard template. The value is printed directly, in the
+ * metric's tone colour.
+ */
+function MetricRatio({ value, color }: { value: number; color: string }) {
   const safeValue = normalizeRingValue(value);
   return (
-    <div
-      className={uiStyles.metricRing}
-      style={{ background: `conic-gradient(${color} ${safeValue * 3.6}deg, var(--surface-border) 0deg)` }}
-      aria-hidden="true"
-    >
-      <div className={uiStyles.metricRingInner}>{Math.round(safeValue)}</div>
-    </div>
+    <span className={uiStyles.metricRatio} style={{ color }}>
+      {Math.round(safeValue)}
+      <span className={uiStyles.metricRatioUnit}>%</span>
+    </span>
   );
 }
 
@@ -281,7 +284,7 @@ export default function AnalyticsCockpit() {
       icon: <Activity size={16} />,
       label: t("dash_kpi_active_subs"),
       value: <CountUpNumber value={subscriberCount} />,
-      indicator: <MetricRing value={subscriberCount > 0 ? 100 : 0} color="var(--status-success)" />,
+      indicator: <MetricRatio value={subscriberCount > 0 ? 100 : 0} color="var(--status-success)" />,
     },
     {
       key: "plmn",
@@ -290,7 +293,7 @@ export default function AnalyticsCockpit() {
       label: t("dash_kpi_plmn_active"),
       value: <CountUpNumber value={plmnCount} />,
       detail: plmnDist.length > 0 ? `${plmnDist[0]?.name || "—"}${plmnDist.length > 1 ? ` +${plmnDist.length - 1}` : ""}` : undefined,
-      indicator: <MetricRing value={plmnCoverage} color="var(--chart-4)" />,
+      indicator: <MetricRatio value={plmnCoverage} color="var(--chart-4)" />,
     },
     {
       key: "contracts",
@@ -298,7 +301,7 @@ export default function AnalyticsCockpit() {
       icon: <Users size={16} />,
       label: t("nav_ocs_contracts"),
       value: contractSubscriberCount !== null ? <CountUpNumber value={contractSubscriberCount} /> : "—",
-      indicator: <MetricRing value={contractSubscriberCount !== null && contractSubscriberCount > 0 ? 100 : 0} color="var(--chart-3)" />,
+      indicator: <MetricRatio value={contractSubscriberCount !== null && contractSubscriberCount > 0 ? 100 : 0} color="var(--chart-3)" />,
     },
     {
       key: "utilization",
@@ -311,7 +314,7 @@ export default function AnalyticsCockpit() {
           <span>%</span>
         </>
       ),
-      indicator: <MetricRing value={utilizationRate} color="var(--chart-2)" />,
+      indicator: <MetricRatio value={utilizationRate} color="var(--chart-2)" />,
       tone: utilizationRate >= 85 ? "danger" : utilizationRate >= 65 ? "warning" : undefined,
     },
     {
@@ -321,7 +324,7 @@ export default function AnalyticsCockpit() {
       label: t("dash_ocs_kpi_invariants"),
       value: healthValue,
       detail: healthDetail,
-      indicator: <MetricRing value={healthRingValue} color={brokenInvariants === 0 ? "var(--status-success)" : "var(--status-danger)"} />,
+      indicator: <MetricRatio value={healthRingValue} color={brokenInvariants === 0 ? "var(--status-success)" : "var(--status-danger)"} />,
       tone: healthTone === "danger" ? "danger" : healthTone === "warning" ? "warning" : undefined,
     },
   ];
@@ -329,7 +332,12 @@ export default function AnalyticsCockpit() {
   return (
     <div className="analytics-root">
       {/* 1. KPI Strip — core metrics at a glance */}
-      <MetricStrip variant="cards" columns={6} ariaLabel="Key performance indicators" items={kpiItems} />
+      {/*
+        One continuous panel with internal dividers, rather than six independently floating
+        cards. The design system names the metric strip as the signature situation display
+        for this console, and organises it with structural rules instead of card elevation.
+      */}
+      <MetricStrip variant="strip" ariaLabel="Key performance indicators" items={kpiItems} />
 
       {/* 2. Alerts & Score — only visible when issues exist, otherwise compact */}
       <WorkbenchPanel

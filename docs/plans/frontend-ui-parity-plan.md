@@ -1,8 +1,8 @@
 # 前端 UI 对等性差异分析与完整移植方案
 
 > 状态：ANALYSIS + PLAN（未实施）。
-> 目的：把参考项目 `C:\Users\YGone\Desktop\subscriber-console` 的界面**完整、正确地**移植到当前项目
-> `C:\Users\YGone\Desktop\program\subscriber-console`。
+> 目的：把参考项目（外部检出，路径由环境变量 `UI_PARITY_REFERENCE` 指定）的界面**完整、正确地**移植到当前仓库
+> （本仓库根目录，脚本中为 `PROJECT_ROOT`）。
 > 参考项目运行在 `http://localhost`，其实现是历史的 Next.js 版本；
 > 当前项目运行在 `http://localhost:13333`，实现是 React + Vite。
 > 本文档是 `docs/architecture/frontend-ui-restoration.md` 的修正与续作：该文档声明 Stage 1-UI「Done」，但实测表明迁移只完成了**壳层骨架**，页面表现层与共享原语层大面积缺失。
@@ -34,8 +34,8 @@
 
 | 角色 | 路径 | 运行时 | Git |
 |---|---|---|---|
-| **参考实现（移植来源）** | `C:\Users\YGone\Desktop\subscriber-console` | Nginx `:80` → Next.js `:13334` + Go `:18889` | 同一仓库 `origin/develop`，detached HEAD `2c40903` |
-| **目标实现（移植目的地）** | `C:\Users\YGone\Desktop\program\subscriber-console` | Vite `:13333` → Go `:18888` | `origin/develop` HEAD `df8a755` |
+| **参考实现（移植来源）** | 外部检出（`UI_PARITY_REFERENCE`，默认取本仓库的 `../../subscriber-console`） | Nginx `:80` → Next.js `:13334` + Go `:18889` | 同一仓库 `origin/develop`，detached HEAD `2c40903` |
+| **目标实现（移植目的地）** | 本仓库根目录（`PROJECT_ROOT`，由脚本位置推导） | Vite `:13333` → Go `:18888` | `origin/develop` HEAD `df8a755` |
 
 ### 1.2 关键 Git 事实（决定了参考基线）
 

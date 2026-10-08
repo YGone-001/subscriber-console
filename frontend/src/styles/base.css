@@ -164,13 +164,16 @@ h6 {
   margin-bottom: 0.5rem;
 }
 
+/*
+ * Quiet section label. Was an uppercase, letter-spaced, primary-coloured eyebrow; the
+ * design system reserves the signal colour for interaction and current state.
+ */
 .eyebrow {
   margin: 0 0 0.5rem;
-  color: var(--primary);
-  font-size: var(--ref-font-size-label-strong);
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  color: var(--text-muted);
+  font-size: var(--ref-font-size-label);
+  font-weight: 600;
+  letter-spacing: 0.01em;
 }
 
 /* ---------------------------------------------------------------------------
@@ -395,14 +398,15 @@ h6 {
 
 .dash-card {
   overflow: hidden;
-  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1),
-    border-color 0.3s ease;
+  transition: border-color var(--duration-fast) ease;
 }
 
+/*
+ * Kept aligned with the effective rule in globals.css (which loads later and wins):
+ * a panel hover must not lift the card or promote its shadow.
+ */
 .dash-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-popover);
-  border-color: var(--selection-border);
+  border-color: color-mix(in srgb, var(--primary) 22%, var(--surface-border));
 }
 
 .dash-card-header {

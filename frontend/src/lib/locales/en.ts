@@ -1309,6 +1309,9 @@ export const en: Record<string, string> = {
     users_mgmt_desc: "User Accounts & Access Management",
     theme_switch_light: "Light Mode",
     theme_switch_dark: "Dark Mode",
+    theme_switch_system: "Follow system",
+    density_comfortable: "Comfortable density",
+    density_compact: "Compact density",
 
     // -- OCS alignment & polish --
     ocs_balance_detail_desc: "Inspect data, voice, and SMS buckets with authoritative governance audit metadata",

@@ -10,8 +10,13 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { PROJECT_ROOT } from './lib/project-paths.mjs';
 
-const PROJECT = 'C:/Users/YGone/Desktop/program/subscriber-console';
+/*
+ * Derived from the repository layout, so the scan works from any checkout path and from
+ * any working directory.
+ */
+const PROJECT = PROJECT_ROOT;
 const SRC = path.join(PROJECT, 'frontend', 'src');
 const targets = process.argv.slice(2).length
   ? process.argv.slice(2).map((dir) => path.join(SRC, dir))

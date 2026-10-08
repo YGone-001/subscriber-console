@@ -461,7 +461,7 @@ export function SystemHealthPage() {
 
         {/* Composite KPI Board */}
         <MetricStrip
-          variant="cards"
+          variant="strip"
           ariaLabel={t("nav_system_health")}
           items={[
             {

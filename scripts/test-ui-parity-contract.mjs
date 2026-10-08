@@ -33,9 +33,14 @@ import {
   validateScope,
 } from './lib/ui-parity-scope.mjs';
 import { buildImportGraph, classPairsOf, classSourcesOf, classVocabularyOf, collectStylesheetClasses } from './lib/ui-parity-graph.mjs';
+import { PROJECT_ROOT, resolveReferenceRoot } from './lib/project-paths.mjs';
 
-const REFERENCE_ROOT = process.env.UI_PARITY_REFERENCE || 'C:/Users/YGone/Desktop/subscriber-console';
-const PROJECT_ROOT = process.cwd();
+/*
+ * The reference is an external checkout resolved from an override or a project-relative
+ * sibling; the project root comes from the repository layout, so the gate no longer
+ * depends on being launched from the repository root or on a machine-specific path.
+ */
+const REFERENCE_ROOT = resolveReferenceRoot({ env: 'UI_PARITY_REFERENCE' });
 const REF_SRC = join(REFERENCE_ROOT, 'frontend/src');
 const CUR_SRC = join(PROJECT_ROOT, 'frontend/src');
 

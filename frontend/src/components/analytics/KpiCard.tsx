@@ -49,19 +49,22 @@ function TrendSparkline({ data, color, height = 26 }: { data?: number[]; color: 
   );
 }
 
-function MiniRing({ value, color }: { value: number; color: string }) {
+/*
+ * Ratio readout.
+ *
+ * This slot used to be a 32px conic-gradient ring. A ring encodes proportion with an
+ * angle, which is slower to read than the number itself and made the metric row look like
+ * a generic dashboard template; the design system asks for KPI values to be shown as
+ * numbers first. The value is therefore printed directly, in the KPI's tone colour.
+ */
+function RatioReadout({ value, color }: { value: number; color: string }) {
   const safeValue = normalizeRingValue(value);
 
   return (
-    <div
-      className="analytics-ring"
-      style={{
-        background: `conic-gradient(${color} ${safeValue * 3.6}deg, var(--surface-border) 0deg)`,
-      }}
-      aria-hidden="true"
-    >
-      <div className="analytics-ring-inner">{Math.round(safeValue)}%</div>
-    </div>
+    <span className="analytics-kpi-ratio" style={{ color }}>
+      {Math.round(safeValue)}
+      <span className="analytics-kpi-ratio-unit">%</span>
+    </span>
   );
 }
 
@@ -95,7 +98,7 @@ export default function KpiCard({
           </span>
         </div>
         {ringValue !== undefined ? (
-          <MiniRing value={ringValue} color={color} />
+          <RatioReadout value={ringValue} color={color} />
         ) : sparkline && sparkline.length > 0 ? (
           <div className="analytics-kpi-mini-sparkline">
             <TrendSparkline data={sparkline} color={color} height={24} />

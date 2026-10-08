@@ -109,7 +109,7 @@ export default function OcsTariffGovernancePanel() {
 
   const kpiGrid = (
     <MetricStrip
-      variant="cards"
+      variant="strip"
       ariaLabel={t('ocs_tariffs_title')}
       items={[
         { key: 'plans', label: t('ocs_tariff_total_plans'), value: plans.length, icon: <FileText size={20} /> },

@@ -1308,6 +1308,9 @@ export const zh: Record<string, string> = {
     users_mgmt_desc: "用户账号与权限管理",
     theme_switch_light: "浅色模式",
     theme_switch_dark: "深色模式",
+    theme_switch_system: "跟随系统",
+    density_comfortable: "舒适密度",
+    density_compact: "紧凑密度",
 
     // -- OCS alignment & polish --
     ocs_balance_detail_desc: "查看流量、语音和短信配额桶状态及权威治理审计信息",

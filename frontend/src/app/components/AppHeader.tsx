@@ -5,6 +5,7 @@ import { LanguageSwitcher } from './LanguageSwitcher';
 import { NocSentinel } from './NocSentinel';
 import { NotificationCenter } from './NotificationCenter';
 import { ThemeSwitcher } from './ThemeSwitcher';
+import { DensitySwitcher } from './DensitySwitcher';
 import { UserMenu } from './UserMenu';
 
 /**
@@ -74,6 +75,7 @@ export function AppHeader({
           <NocSentinel />
           <NotificationCenter />
           <LanguageSwitcher />
+          <DensitySwitcher />
           <ThemeSwitcher />
           <div className="header-divider" aria-hidden="true" />
           <UserMenu onLogout={onLogout} />

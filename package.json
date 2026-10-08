@@ -23,6 +23,7 @@
     "check:ui-parity": "node scripts/test-ui-parity-extractor.mjs && node scripts/test-ui-parity-contract.mjs",
     "test:ui-parity-extractor": "node scripts/test-ui-parity-extractor.mjs",
     "check:ui-forward-port-boundaries": "node scripts/test-ui-forward-port-boundaries.mjs",
+    "check:ui-anti-ai-drift": "node scripts/check-ui-anti-ai-drift.mjs",
     "ui:port-manifest": "node scripts/generate-ui-port-manifest.mjs",
     "ui:parity-ceiling": "node scripts/analyse-parity-ceiling.mjs",
     "ui:scan-untranslated": "node scripts/scan-untranslated.mjs",

@@ -15,70 +15,70 @@
  */
 
 [data-theme="light"] {
-  --background: #f3f6f7;
-  --surface: #ffffff;
-  --surface-hover: #edf3f4;
-  --surface-subtle: #eef3f4;
-  --surface-field: #ffffff;
-  --surface-border: #d8e1e3;
-  --primary: #087f8c;
-  --primary-hover: #046670;
-  --danger: #c83d4c;
-  --danger-hover: #a82e3c;
-  --success: #127257;
-  --warning: #a65f12;
-  --success-soft: rgba(22, 133, 107, 0.12);
-  --warning-soft: rgba(185, 108, 22, 0.13);
-  --danger-soft: rgba(200, 61, 76, 0.11);
-  --neutral-soft: rgba(83, 107, 115, 0.11);
-  --status-info: #176f91;
-  --status-info-soft: rgba(23, 111, 145, 0.11);
-  --status-info-border: rgba(23, 111, 145, 0.28);
-  --status-success: var(--success);
+  --sys-color-surface-canvas: #eef1f4;
+  --sys-color-surface-panel: #ffffff;
+  --sys-color-surface-hover: #e7ecf0;
+  --sys-color-surface-subtle: #f5f7f9;
+  --sys-color-surface-field: #ffffff;
+  --sys-color-border-default: #d4dbe1;
+  --sys-color-action-primary: #0b6d7a;
+  --sys-color-action-primary-hover: #07535e;
+  --sys-color-action-danger: #c33b4a;
+  --sys-color-action-danger-hover: #a02f3d;
+  --sys-color-status-success: #157a5c;
+  --sys-color-status-warning: #a4620f;
+  --success-soft: color-mix(in srgb, var(--sys-color-status-success) 12%, transparent);
+  --warning-soft: color-mix(in srgb, var(--sys-color-status-warning) 13%, transparent);
+  --danger-soft: color-mix(in srgb, var(--sys-color-action-danger) 11%, transparent);
+  --neutral-soft: color-mix(in srgb, var(--sys-color-text-secondary) 11%, transparent);
+  --sys-color-status-info: #1a6a90;
+  --status-info-soft: color-mix(in srgb, var(--sys-color-status-info) 11%, transparent);
+  --status-info-border: color-mix(in srgb, var(--sys-color-status-info) 28%, transparent);
+  --status-success: var(--sys-color-status-success);
   --status-success-soft: var(--success-soft);
-  --status-success-border: rgba(22, 133, 107, 0.3);
-  --status-warning: #a65f12;
+  --status-success-border: color-mix(in srgb, var(--sys-color-status-success) 30%, transparent);
+  --status-warning: var(--sys-color-status-warning);
   --status-warning-soft: var(--warning-soft);
-  --status-warning-border: rgba(185, 108, 22, 0.3);
-  --status-danger: var(--danger);
+  --status-warning-border: color-mix(in srgb, var(--sys-color-status-warning) 30%, transparent);
+  --status-danger: var(--sys-color-action-danger);
   --status-danger-soft: var(--danger-soft);
-  --status-danger-border: rgba(200, 61, 76, 0.3);
-  --selection-soft: rgba(8, 127, 140, 0.09);
-  --selection-border: rgba(8, 127, 140, 0.32);
-  --diff-added: #16856b;
-  --diff-added-soft: rgba(22, 133, 107, 0.11);
-  --diff-added-border: rgba(22, 133, 107, 0.3);
+  --status-danger-border: color-mix(in srgb, var(--sys-color-action-danger) 30%, transparent);
+  --sys-color-selection-soft: color-mix(in srgb, var(--sys-color-action-primary) 9%, transparent);
+  --sys-color-selection-border: color-mix(in srgb, var(--sys-color-action-primary) 32%, transparent);
+  --diff-added: var(--sys-color-status-success);
+  --diff-added-soft: color-mix(in srgb, var(--sys-color-status-success) 11%, transparent);
+  --diff-added-border: color-mix(in srgb, var(--sys-color-status-success) 30%, transparent);
   --diff-modified: var(--status-warning);
-  --diff-modified-soft: rgba(166, 95, 18, 0.12);
-  --diff-modified-border: rgba(166, 95, 18, 0.3);
-  --diff-removed: #c83d4c;
-  --diff-removed-soft: rgba(200, 61, 76, 0.1);
-  --diff-removed-border: rgba(200, 61, 76, 0.3);
-  --chart-1: #087f8c;
-  --chart-2: #176f91;
-  --chart-3: #16856b;
-  --chart-4: #b96c16;
-  --chart-5: #7656a8;
-  --chart-6: #6f7f84;
-  --on-accent: #ffffff;
-  --icon-muted: #71868c;
-  --overlay-scrim: rgba(10, 28, 34, 0.48);
-  --login-canvas: #09191f;
-  --login-surface: #10262d;
-  --login-surface-raised: #17323a;
-  --login-border: rgba(183, 213, 216, 0.18);
-  --login-text: #eef7f7;
-  --login-text-muted: #91a9ad;
-  --login-primary: #42c3c9;
-  --login-primary-hover: #68d8dc;
-  --login-on-primary: #071b20;
-  --text-main: #102b34;
-  --text-secondary: #36545d;
-  --text-muted: #5c7178;
-  --header-bg: #eaf0f1;
+  --diff-modified-soft: color-mix(in srgb, var(--sys-color-status-warning) 12%, transparent);
+  --diff-modified-border: color-mix(in srgb, var(--sys-color-status-warning) 30%, transparent);
+  --diff-removed: var(--sys-color-action-danger);
+  --diff-removed-soft: color-mix(in srgb, var(--sys-color-action-danger) 10%, transparent);
+  --diff-removed-border: color-mix(in srgb, var(--sys-color-action-danger) 30%, transparent);
+  --chart-1: var(--sys-color-action-primary);
+  --chart-2: var(--sys-color-status-info);
+  --chart-3: var(--sys-color-status-success);
+  --chart-4: #a4620f;
+  --chart-5: #6f5699;
+  --chart-6: #64747a;
+  --sys-color-text-on-accent: #ffffff;
+  --icon-muted: #6b7e88;
+  --sys-color-overlay-scrim: rgba(12, 21, 25, 0.48);
+  --login-canvas: var(--sys-color-surface-canvas);
+  --login-surface: var(--sys-color-surface-panel);
+  --login-surface-raised: var(--sys-color-surface-subtle);
+  --login-border: var(--sys-color-border-default);
+  --login-text: var(--sys-color-text-primary);
+  --login-text-muted: var(--sys-color-text-muted);
+  --login-primary: var(--sys-color-action-primary);
+  --login-primary-hover: var(--sys-color-action-primary-hover);
+  --login-on-primary: var(--sys-color-text-on-accent);
+  --sys-color-text-primary: #15242b;
+  --sys-color-text-secondary: #4a5d66;
+  --sys-color-text-muted: #5b6b74;
+  --sys-color-surface-header: #e7ebef;
   --scrollbar-thumb: rgba(100, 116, 139, 0.4);
   --scrollbar-thumb-hover: rgba(100, 116, 139, 0.6);
-  --search-icon: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%235c7178' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='11' cy='11' r='8'></circle><line x1='21' y1='21' x2='16.65' y2='16.65'></line></svg>");
+  --search-icon: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%236b7e88' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='11' cy='11' r='8'></circle><line x1='21' y1='21' x2='16.65' y2='16.65'></line></svg>");
   --shadow-panel: 0 14px 36px -32px rgba(15, 43, 52, 0.7);
   --shadow-popover: 0 20px 44px -28px rgba(15, 43, 52, 0.72);
   --shadow-drawer: -24px 0 48px -32px rgba(15, 43, 52, 0.48);
@@ -88,87 +88,114 @@
   --duration-fast: 0.15s;
   --duration-normal: 0.2s;
   --duration-slow: 0.35s;
-  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--primary) 24%, transparent);
+  --sys-shadow-focus-ring: 0 0 0 3px color-mix(in srgb, var(--sys-color-action-primary) 24%, transparent);
 }
 
 
 
 
 [data-theme="dark"] {
-  --background: #09191f;
-  --surface: #10262d;
-  --surface-hover: #17323a;
-  --surface-subtle: #152c33;
-  --surface-field: #17323a;
-  --surface-border: rgba(183, 213, 216, 0.14);
-  --primary: #42c3c9;
-  --primary-hover: #68d8dc;
-  --danger: #ff6b78;
-  --danger-hover: #ff8a94;
-  --success: #46c7a5;
-  --warning: #f2a94b;
-  --success-soft: rgba(70, 199, 165, 0.15);
-  --warning-soft: rgba(242, 169, 75, 0.15);
-  --danger-soft: rgba(255, 107, 120, 0.15);
-  --neutral-soft: rgba(170, 196, 201, 0.12);
-  --status-info: #68b6d4;
-  --status-info-soft: rgba(104, 182, 212, 0.14);
-  --status-info-border: rgba(104, 182, 212, 0.34);
-  --status-success: var(--success);
+  --sys-color-surface-canvas: #0e1216;
+  --sys-color-surface-panel: #161b21;
+  --sys-color-surface-hover: #1f262e;
+  --sys-color-surface-subtle: #1a2027;
+  --sys-color-surface-field: #1a2027;
+  --sys-color-border-default: #2a323b;
+  --sys-color-action-primary: #35a9b8;
+  --sys-color-action-primary-hover: #4cc0ce;
+  --sys-color-action-danger: #f4707d;
+  --sys-color-action-danger-hover: #ff8a94;
+  --sys-color-status-success: #3fbf9a;
+  --sys-color-status-warning: #e0a044;
+  --success-soft: color-mix(in srgb, var(--sys-color-status-success) 15%, transparent);
+  --warning-soft: color-mix(in srgb, var(--sys-color-status-warning) 15%, transparent);
+  --danger-soft: color-mix(in srgb, var(--sys-color-action-danger) 15%, transparent);
+  --neutral-soft: color-mix(in srgb, var(--sys-color-text-secondary) 12%, transparent);
+  --sys-color-status-info: #5aa8cc;
+  --status-info-soft: color-mix(in srgb, var(--sys-color-status-info) 14%, transparent);
+  --status-info-border: color-mix(in srgb, var(--sys-color-status-info) 34%, transparent);
+  --status-success: var(--sys-color-status-success);
   --status-success-soft: var(--success-soft);
-  --status-success-border: rgba(70, 199, 165, 0.36);
-  --status-warning: var(--warning);
+  --status-success-border: color-mix(in srgb, var(--sys-color-status-success) 36%, transparent);
+  --status-warning: var(--sys-color-status-warning);
   --status-warning-soft: var(--warning-soft);
-  --status-warning-border: rgba(242, 169, 75, 0.36);
-  --status-danger: var(--danger);
+  --status-warning-border: color-mix(in srgb, var(--sys-color-status-warning) 36%, transparent);
+  --status-danger: var(--sys-color-action-danger);
   --status-danger-soft: var(--danger-soft);
-  --status-danger-border: rgba(255, 107, 120, 0.36);
-  --selection-soft: rgba(66, 195, 201, 0.14);
-  --selection-border: rgba(66, 195, 201, 0.38);
-  --diff-added: #46c7a5;
-  --diff-added-soft: rgba(70, 199, 165, 0.15);
-  --diff-added-border: rgba(70, 199, 165, 0.36);
-  --diff-modified: #f2a94b;
-  --diff-modified-soft: rgba(242, 169, 75, 0.15);
-  --diff-modified-border: rgba(242, 169, 75, 0.36);
-  --diff-removed: #ff6b78;
-  --diff-removed-soft: rgba(255, 107, 120, 0.14);
-  --diff-removed-border: rgba(255, 107, 120, 0.36);
-  --chart-1: #42c3c9;
-  --chart-2: #68b6d4;
-  --chart-3: #46c7a5;
-  --chart-4: #f2a94b;
-  --chart-5: #b49ad8;
-  --chart-6: #91a9ad;
-  --on-accent: #071b20;
-  --icon-muted: #91a9ad;
-  --overlay-scrim: rgba(0, 8, 11, 0.64);
-  --login-canvas: #09191f;
-  --login-surface: #10262d;
-  --login-surface-raised: #17323a;
-  --login-border: rgba(183, 213, 216, 0.18);
-  --login-text: #eef7f7;
-  --login-text-muted: #91a9ad;
-  --login-primary: #42c3c9;
-  --login-primary-hover: #68d8dc;
-  --login-on-primary: #071b20;
-  --text-main: #eef7f7;
-  --text-secondary: #bdd0d3;
-  --text-muted: #91a9ad;
+  --status-danger-border: color-mix(in srgb, var(--sys-color-action-danger) 36%, transparent);
+  --sys-color-selection-soft: color-mix(in srgb, var(--sys-color-action-primary) 14%, transparent);
+  --sys-color-selection-border: color-mix(in srgb, var(--sys-color-action-primary) 38%, transparent);
+  --diff-added: var(--sys-color-status-success);
+  --diff-added-soft: color-mix(in srgb, var(--sys-color-status-success) 15%, transparent);
+  --diff-added-border: color-mix(in srgb, var(--sys-color-status-success) 36%, transparent);
+  --diff-modified: var(--sys-color-status-warning);
+  --diff-modified-soft: color-mix(in srgb, var(--sys-color-status-warning) 15%, transparent);
+  --diff-modified-border: color-mix(in srgb, var(--sys-color-status-warning) 36%, transparent);
+  --diff-removed: var(--sys-color-action-danger);
+  --diff-removed-soft: color-mix(in srgb, var(--sys-color-action-danger) 14%, transparent);
+  --diff-removed-border: color-mix(in srgb, var(--sys-color-action-danger) 36%, transparent);
+  --chart-1: var(--sys-color-action-primary);
+  --chart-2: var(--sys-color-status-info);
+  --chart-3: var(--sys-color-status-success);
+  --chart-4: #e0a044;
+  --chart-5: #a992e0;
+  --chart-6: #8fa0a8;
+  --sys-color-text-on-accent: #071b20;
+  --icon-muted: #7d8b95;
+  --sys-color-overlay-scrim: rgba(6, 9, 12, 0.66);
+  --login-canvas: var(--sys-color-surface-canvas);
+  --login-surface: var(--sys-color-surface-panel);
+  --login-surface-raised: var(--sys-color-surface-subtle);
+  --login-border: var(--sys-color-border-default);
+  --login-text: var(--sys-color-text-primary);
+  --login-text-muted: var(--sys-color-text-muted);
+  --login-primary: var(--sys-color-action-primary);
+  --login-primary-hover: var(--sys-color-action-primary-hover);
+  --login-on-primary: var(--sys-color-text-on-accent);
+  --sys-color-text-primary: #e4e9ed;
+  --sys-color-text-secondary: #aab6bf;
+  --sys-color-text-muted: #7d8b95;
   --scrollbar-thumb: rgba(148, 163, 184, 0.3);
   --scrollbar-thumb-hover: rgba(148, 163, 184, 0.5);
-  --search-icon: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%2391a9ad' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='11' cy='11' r='8'></circle><line x1='21' y1='21' x2='16.65' y2='16.65'></line></svg>");
+  --search-icon: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%237d8b95' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='11' cy='11' r='8'></circle><line x1='21' y1='21' x2='16.65' y2='16.65'></line></svg>");
   --shadow-panel: 0 16px 38px -32px rgba(0, 0, 0, 0.9);
   --shadow-popover: 0 20px 44px -24px rgba(0, 0, 0, 0.9);
   --shadow-drawer: -24px 0 48px -32px rgba(0, 0, 0, 0.75);
   --drawer-backdrop: rgba(0, 8, 11, 0.58);
-  --header-bg: #0c2026;
+  --sys-color-surface-header: #12171c;
   --ease-decelerate: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
   --duration-fast: 0.15s;
   --duration-normal: 0.2s;
   --duration-slow: 0.35s;
-  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--primary) 28%, transparent);
+  --sys-shadow-focus-ring: 0 0 0 3px color-mix(in srgb, var(--sys-color-action-primary) 28%, transparent);
+}
+
+/*
+ * Interface density.
+ *
+ * `comfortable` matches the reference vertical rhythm and is the default. `compact`
+ * tightens only the repeating vertical metrics so more rows fit on screen; type sizes are
+ * unchanged, and touch targets in coarse-pointer environments are governed separately and
+ * are never reduced here.
+ *
+ * `html[data-density]` carries one more specificity point than `:root`, so these values
+ * win over the base scale regardless of stylesheet order.
+ */
+html[data-density="comfortable"] {
+  --control-height: 36px;
+  --table-row-height: 54px;
+  --metric-item-height: 88px;
+  --space-page: var(--space-24);
+  --space-section: var(--space-20);
+}
+
+html[data-density="compact"] {
+  --control-height: 32px;
+  --table-row-height: 42px;
+  --metric-item-height: 70px;
+  --space-page: var(--space-16);
+  --space-section: var(--space-12);
 }
 
 /*
@@ -221,7 +248,7 @@
    * SC uses it wherever it is installed and falls through to the previous stacks where it is
    * not, so nothing regresses. Self-hosting the font is what would make it deterministic.
    */
-  --font-display: var(--font-display-loaded, "Noto Sans SC", "Aptos Display", "Segoe UI", sans-serif);
+  --font-display: "Noto Sans SC", "Aptos Display", "Segoe UI", sans-serif;
   --font-interface: var(--font-interface-loaded, "Noto Sans SC", "Microsoft YaHei UI", "PingFang SC", "Segoe UI", sans-serif);
   --font-data: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
   --ref-font-size-micro: 0.625rem;
@@ -247,15 +274,6 @@
   --ref-font-size-title-fluid: clamp(1.35rem, 2vw, 1.75rem);
   --ref-font-size-display-fluid: clamp(1.65rem, 2vw, 2.2rem);
   --ref-font-size-relative-compact: 0.85em;
-  --ref-radius-micro: 4px;
-  --ref-radius-compact: 6px;
-  --ref-radius-small: 7px;
-  --ref-radius-control: 8px;
-  --ref-radius-panel: 10px;
-  --ref-radius-soft-panel: 12px;
-  --ref-radius-pill: 999px;
-  --ref-radius-circle: 50%;
-
   /* Spacing scale (4px base) - theme-independent layout rhythm tokens. */
   --space-4: 4px;
   --space-8: 8px;
@@ -342,12 +360,15 @@ textarea {
   overflow: hidden;
   margin-bottom: 24px;
   box-shadow: var(--shadow-panel);
-  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: border-color var(--duration-fast) ease;
 }
+/*
+ * Hover reinforces position only. It must not lift the panel or promote its shadow:
+ * structural depth comes from surface colour, 1px boundaries and spacing, and stronger
+ * elevation is reserved for real overlays (popover, drawer, modal).
+ */
 .dash-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-popover);
-  border-color: var(--selection-border);
+  border-color: color-mix(in srgb, var(--primary) 22%, var(--surface-border));
 }
 
 .dash-card-header {
@@ -617,29 +638,22 @@ textarea {
   margin-top: 1rem;
 }
 
-/* Radar Scan Micro-Animation for Sync Button */
-@keyframes radar-scan {
-  0% { transform: scale(1); opacity: 0.8; }
-  100% { transform: scale(2.5); opacity: 0; }
+/*
+ * Sync-in-progress affordance for the telemetry sync buttons.
+ *
+ * This used to be a pulsing radial glow ("radar scan") drawn behind the button. The
+ * design system forbids decorative glow and looping blur animation, so it is reduced to
+ * a restrained opacity pulse: the control still reads as "working" without introducing
+ * a light source or displacing anything. Opacity is an allowed compositor property, so
+ * the reduced-motion block leaves it enabled while motion-based effects are removed.
+ */
+@keyframes sync-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
 }
 
 .radar-animating {
-  position: relative;
-  overflow: hidden;
-}
-
-.radar-animating::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 100%;
-  height: 100%;
-  background: radial-gradient(circle, color-mix(in srgb, var(--primary) 60%, transparent) 0%, transparent 70%);
-  transform: translate(-50%, -50%) scale(1);
-  border-radius: var(--ref-radius-circle);
-  animation: radar-scan 1s cubic-bezier(0.1, 0.8, 0.3, 1) infinite;
-  pointer-events: none;
+  animation: sync-pulse 1.4s var(--ease-smooth) infinite;
 }
 
 .table-header-cap {
@@ -1188,9 +1202,13 @@ body.global-emergency-flash {
   align-items: center;
   gap: 1rem;
   padding: 1rem 2rem;
-  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  /*
+   * Opaque surface, not frosted glass. The design system limits backdrop blur to genuine
+   * overlay scrims at 2-8px; a sticky footer is a persistent work surface, so it separates
+   * itself with an opaque background and a 1px rule instead of a blur.
+   */
+  background: var(--surface);
   border-top: 1px solid var(--surface-border);
-  backdrop-filter: blur(12px);
   z-index: 20;
 }
 
@@ -1857,7 +1875,6 @@ body, .modal-content, .dash-card, .app-sidebar, .app-header {
   .pulse-live,
   .status-live-dot,
   .pill-active-pulse,
-  .radar-animating::after,
   body.global-emergency-flash,
   .progress-bar-value,
   .spinner,

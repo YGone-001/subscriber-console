@@ -4,6 +4,35 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="xCloud operator console - subscriber, OCS, tariff and core network operations" />
+    <!-- Kept in step with --background by the bootstrap script, then by ThemeProvider. -->
+    <meta name="theme-color" content="#eef1f4" />
+    <script>
+      /*
+       * Theme bootstrap. Resolves the operator's theme before the first paint, so a
+       * dark-theme console never flashes light on load, and aligns the browser chrome with
+       * it. ThemeProvider re-applies the same decision after mount and remains the runtime
+       * source of truth; this script only settles the first frame.
+       *
+       * The two colour literals mirror --background in [data-theme="light"|"dark"]; they
+       * apply to the first frame only, after which ThemeProvider reads the live token.
+       */
+      (function () {
+        try {
+          var preference = localStorage.getItem('XCLOUD_THEME_PREFERENCE') || 'system';
+          var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          var theme = preference === 'dark' || (preference === 'system' && prefersDark) ? 'dark' : 'light';
+          document.documentElement.setAttribute('data-theme', theme);
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute('content', theme === 'dark' ? '#0e1216' : '#eef1f4');
+
+          var density = localStorage.getItem('XCLOUD_DENSITY_PREFERENCE');
+          document.documentElement.setAttribute('data-density', density === 'compact' ? 'compact' : 'comfortable');
+        } catch (error) {
+          document.documentElement.setAttribute('data-theme', 'light');
+          document.documentElement.setAttribute('data-density', 'comfortable');
+        }
+      })();
+    </script>
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
     <link rel="apple-touch-icon" href="/images/xCloud_picture.png" />
     <title>xCloud Operator Console</title>

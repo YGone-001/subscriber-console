@@ -68,7 +68,7 @@ export default function OcsBalancePlaceholder() {
 
   const kpiGrid = (
     <MetricStrip
-      variant="cards"
+      variant="strip"
       ariaLabel={t('ocs_balances_title')}
       items={[
         { key: 'total', label: t('ocs_balance_total_accounts'), value: error ? '—' : total, icon: <Wallet size={20} /> },

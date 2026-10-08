@@ -1,5 +1,6 @@
 import { SWRConfig } from 'swr';
 import { AuthProvider } from './AuthProvider';
+import { DensityProvider } from './DensityProvider';
 import { GlobalErrorBoundary } from './GlobalErrorBoundary';
 import { I18nProvider } from './I18nProvider';
 import { NotificationProvider } from './NotificationProvider';
@@ -11,13 +12,15 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
     <GlobalErrorBoundary>
       <SWRConfig value={{ provider: () => new Map() }}>
         <ThemeProvider>
-          <I18nProvider>
-            <ToastProvider>
-              <AuthProvider>
-                <NotificationProvider>{children}</NotificationProvider>
-              </AuthProvider>
-            </ToastProvider>
-          </I18nProvider>
+          <DensityProvider>
+            <I18nProvider>
+              <ToastProvider>
+                <AuthProvider>
+                  <NotificationProvider>{children}</NotificationProvider>
+                </AuthProvider>
+              </ToastProvider>
+            </I18nProvider>
+          </DensityProvider>
         </ThemeProvider>
       </SWRConfig>
     </GlobalErrorBoundary>

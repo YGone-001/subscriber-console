@@ -352,25 +352,27 @@
     height: 15px;
   }
 
-  .analytics-ring {
-    width: 32px;
-    height: 32px;
-    border-radius: var(--ref-radius-circle);
-    padding: 3px;
+  /*
+   * Numeric ratio readout. Replaces the former conic-gradient ring: the proportion is
+   * printed as a value, which is faster to read and avoids the dashboard-template ring.
+   * The tone colour is applied inline by the component.
+   */
+  .analytics-kpi-ratio {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.1rem;
     flex-shrink: 0;
+    font-family: var(--font-data);
+    font-size: var(--ref-font-size-data);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
   }
 
-  .analytics-ring-inner {
-    width: 100%;
-    height: 100%;
-    border-radius: var(--ref-radius-circle);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--surface);
-    color: var(--text-secondary);
+  .analytics-kpi-ratio-unit {
     font-size: var(--ref-font-size-micro);
-    font-weight: 750;
+    font-weight: 600;
+    opacity: 0.75;
   }
 
   .analytics-kpi-label {
@@ -623,16 +625,21 @@
     transition: transform 0.4s var(--ease-smooth);
   }
 
+  /*
+   * Voice / SMS / quota are unrelated categories, so each series takes a single chart
+   * colour. The previous two-hue gradients invented a scale between categories that does
+   * not exist in the data.
+   */
   .analytics-ocs-mini-bar-fill.voice-fill {
-    background: linear-gradient(90deg, var(--chart-2), var(--chart-1));
+    background: var(--chart-2);
   }
 
   .analytics-ocs-mini-bar-fill.sms-fill {
-    background: linear-gradient(90deg, var(--chart-3), var(--chart-2));
+    background: var(--chart-3);
   }
 
   .analytics-ocs-mini-bar-fill.quota-fill {
-    background: linear-gradient(90deg, var(--chart-1), var(--chart-3));
+    background: var(--chart-1);
   }
 
   @media (max-width: 1440px) {

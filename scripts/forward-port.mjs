@@ -14,6 +14,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { PROJECT_ROOT, resolveReferenceRoot } from './lib/project-paths.mjs';
 
 const [specPath] = process.argv.slice(2);
 if (!specPath) {
@@ -21,8 +22,13 @@ if (!specPath) {
   process.exit(2);
 }
 
-const REFERENCE = process.env.FORWARD_PORT_REFERENCE || 'C:/Users/YGone/Desktop/subscriber-console';
-const PROJECT = process.env.FORWARD_PORT_PROJECT || 'C:/Users/YGone/Desktop/program/subscriber-console';
+/*
+ * The reference is an external checkout resolved from an override or a project-relative
+ * sibling; the project root comes from the repository layout. No absolute path is
+ * embedded, so the tool runs from any checkout on any platform.
+ */
+const REFERENCE = resolveReferenceRoot({ env: 'FORWARD_PORT_REFERENCE' });
+const PROJECT = process.env.FORWARD_PORT_PROJECT || PROJECT_ROOT;
 const REF_SRC = path.join(REFERENCE, 'frontend', 'src');
 const CUR_SRC = path.join(PROJECT, 'frontend', 'src');
 

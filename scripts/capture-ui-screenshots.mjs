@@ -13,6 +13,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { SignJWT } from 'jose';
+import { requireChromeExecutable, resolveChromeExecutable } from './lib/project-paths.mjs';
 
 const JWT_SECRET = 'ocs-evidence-capture-secret-32bytes-long';
 const secretKey = new TextEncoder().encode(JWT_SECRET);
@@ -22,7 +23,8 @@ const GO_PORT = 18888;
 const NEXT_PORT = 13333;
 const CDP_PORT = 9222;
 
-const CHROME_PATH = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+/* Probed per platform; override with UI_CAPTURE_CHROME. */
+const CHROME_PATH = requireChromeExecutable(resolveChromeExecutable());
 
 let goProcess = null;
 let nextProcess = null;

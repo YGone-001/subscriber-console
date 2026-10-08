@@ -19,7 +19,17 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     query.addEventListener('change', change);
     return () => query.removeEventListener('change', change);
   }, []);
-  useEffect(() => { document.documentElement.dataset.theme = resolvedTheme; }, [resolvedTheme]);
+  useEffect(() => {
+    document.documentElement.dataset.theme = resolvedTheme;
+    /*
+     * Keep the browser chrome in step with the resolved theme. The value is read from the
+     * live `--background` token rather than duplicated as a literal, so it follows any
+     * future palette change automatically.
+     */
+    const background = getComputedStyle(document.documentElement).getPropertyValue('--background').trim();
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta && background) meta.setAttribute('content', background);
+  }, [resolvedTheme]);
   const value = useMemo<ThemeContextValue>(() => ({
     preference, resolvedTheme,
     setPreference(next) { try { localStorage.setItem(THEME_PREFERENCE_KEY, next); } catch { /* Preference persistence is optional. */ } setPreference(next); },

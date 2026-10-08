@@ -19,9 +19,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { EXCLUSION_REASONS } from './lib/ui-parity-scope.mjs';
+import { resolveReferenceRoot } from './lib/project-paths.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const REFERENCE_ROOT = process.env.UI_PARITY_REFERENCE || 'C:/Users/YGone/Desktop/subscriber-console';
+/*
+ * External reference checkout: explicit override first, then a project-relative sibling.
+ * No absolute path is embedded, so the manifest can be generated on any machine.
+ */
+const REFERENCE_ROOT = resolveReferenceRoot({ env: 'UI_PARITY_REFERENCE' });
 const REF_SRC = path.join(REFERENCE_ROOT, 'frontend/src');
 const OUTPUT = path.join(ROOT, '.design/frontend-ui-forward-port/PORT_MANIFEST.md');
 

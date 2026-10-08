@@ -16,23 +16,6 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { WorkItem } from "./types";
-import { normalizeRingValue } from "./utils";
-
-function ScoreRing({ value, color }: { value: number; color: string }) {
-  const safeValue = normalizeRingValue(value);
-
-  return (
-    <div
-      className="analytics-ring"
-      style={{
-        background: `conic-gradient(${color} ${safeValue * 3.6}deg, var(--surface-border) 0deg)`,
-      }}
-      aria-hidden="true"
-    >
-      <div className="analytics-ring-inner">{Math.round(safeValue)}</div>
-    </div>
-  );
-}
 
 export default function WorkbenchPanel({
   visibleWorkItems,
@@ -105,8 +88,11 @@ export default function WorkbenchPanel({
 
       {/* Right: Score + Alert Summary */}
       <div className="analytics-alerts-score">
+        {/*
+          The score used to be drawn twice: once as a conic-gradient ring and once as the
+          number below. The ring carried no extra information, so only the number remains.
+        */}
         <div className="analytics-readiness-score">
-          <ScoreRing value={operationsScore} color={scoreColor} />
           <div>
             <span>{t("dash_ops_score")}</span>
             <strong style={{ color: scoreColor }}>{Math.round(operationsScore)}</strong>

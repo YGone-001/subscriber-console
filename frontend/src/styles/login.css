@@ -36,10 +36,12 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background:
-    radial-gradient(circle at 12% 16%, color-mix(in srgb, var(--login-primary) 8%, transparent) 0, transparent 32%),
-    radial-gradient(circle at 88% 82%, color-mix(in srgb, var(--status-success) 6%, transparent) 0, transparent 36%),
-    var(--login-canvas);
+  /*
+   * A single flat surface. The two corner glows that used to sit behind the card read as a
+   * product-landing flourish; the design system allows the login surface only static,
+   * low-saturation colour planes. `--login-canvas` follows the active theme.
+   */
+  background: var(--login-canvas);
   position: relative;
   overflow: hidden;
 }

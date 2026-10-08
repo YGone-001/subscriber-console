@@ -22,6 +22,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createCdpClient, launchChrome, sleep } from './lib/cdp.mjs';
 import { obtainAuthToken } from './lib/session.mjs';
+import { PROJECT_ROOT, requireChromeExecutable, resolveChromeExecutable } from './lib/project-paths.mjs';
 
 const args = new Map(
   process.argv.slice(2).filter((arg) => arg.startsWith('--')).map((arg) => {
@@ -31,9 +32,15 @@ const args = new Map(
 );
 const flag = (name, envName, fallback) => args.get(name) ?? process.env[envName] ?? fallback;
 
-const PROJECT = 'C:/Users/YGone/Desktop/program/subscriber-console';
+/*
+ * The project root is derived from the repository layout rather than from the caller's
+ * working directory or a machine-specific absolute path, so the suite runs from any
+ * checkout. The browser is probed per platform and can be overridden with --chrome= or
+ * UI_CAPTURE_CHROME.
+ */
+const PROJECT = PROJECT_ROOT;
 const BASE = flag('base', 'UI_A11Y_BASE', 'http://localhost:13333');
-const CHROME = flag('chrome', 'UI_CAPTURE_CHROME', 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe');
+const CHROME = requireChromeExecutable(resolveChromeExecutable({ argument: args.get('chrome') }));
 const CDP_PORT = Number(flag('cdp-port', 'UI_A11Y_CDP_PORT', 9338));
 /*
  * Explicit token wins; otherwise the suite logs in itself. Without this fallback the run

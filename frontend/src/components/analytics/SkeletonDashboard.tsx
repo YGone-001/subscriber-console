@@ -13,8 +13,7 @@ export default function SkeletonDashboard() {
     <div className="analytics-root">
       {/* KPI cards skeleton — 6 cards */}
       <MetricStrip
-        variant="cards"
-        columns={6}
+        variant="strip"
         ariaLabel="Key performance indicators"
         items={Array.from({ length: 6 }).map((_, index) => ({
           key: `kpi-skeleton-${index}`,
