@@ -24,7 +24,7 @@ const styles = resolve(source, 'styles');
 const shellDir = resolve(source, 'app/components');
 const rel = (p) => relative(root, p).replaceAll('\\', '/');
 
-const HISTORICAL_UI_REFERENCE_SHA = 'e054d9349b26e29b2623c8ae42c57a4a973b22dd';
+const HISTORICAL_UI_REFERENCE_SHA = '2c40903fea1e56650736ee862e3ddab33d9f64fc';
 const ARCHITECTURE_BASELINE_SHA = '11471af9d93fd4345f8d85a60f5c3fdfe821d93b';
 const BRAND_ASSET = 'frontend/public/images/xCloud_picture.png';
 const BRAND_ASSET_BLOB = 'aaaa520147353d4f20127c58d9e9a8f3baf37695';

@@ -203,7 +203,7 @@ Next implementation direction   = complete
 
 - 短期运行时整合与前端规范化已完成：Nginx → Go（API + 内嵌静态 React SPA）。
 - 前端视觉与交互一致性恢复已完成：历史 xCloud 运维界面表现层已前向移植到当前 React/Vite + Go 运行时。权威文档：`docs/architecture/frontend-ui-restoration.md`。
-- 双权威约定：历史 UI 参考 SHA = `e054d9349b26e29b2623c8ae42c57a4a973b22dd`（仅决定外观与交互）；当前架构权威 = 当前 `develop`（决定运行方式）。UI 恢复绝不恢复已退役的 Next 运行时权威。
+- 双权威约定：历史 UI 参考 SHA = `2c40903fea1e56650736ee862e3ddab33d9f64fc`（仅决定外观与交互）；当前架构权威 = 当前 `develop`（决定运行方式）。UI 恢复绝不恢复已退役的 Next 运行时权威。
 - Topology / Dependency Model Foundation = PLANNED（未开始）。
 - 长期演进权威文档：`docs/architecture/architecture-evolution-roadmap.md`；在其实施阶段开始前，不得当作运行时部署指令。
 - 长期方向：模块化运维平台（inventory / topology、workflow、assurance、telemetry、厂商中立 adapter 边界）。逻辑边界先于部署拆分；仅在规模、故障隔离、运维归属或可用性要求时才引入独立服务。

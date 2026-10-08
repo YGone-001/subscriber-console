@@ -12,7 +12,7 @@ Target: `C:/Users/YGone/Desktop/program/subscriber-console/frontend`
 | Frontend typecheck | `npm --prefix frontend run typecheck` | PASS |
 | Frontend tests | `npm --prefix frontend test` | PASS — 183 tests, 0 failures |
 | Frontend build | `npm --prefix frontend run build` | PASS |
-| Reference parity | `npm run check:ui-parity` | PASS — 100.0% comparable coverage, 0 missing |
+| Reference parity | `UI_PARITY_REFERENCE=<detached 2c40903 checkout> npm run check:ui-parity` | PASS — 100.0% reachable coverage (893/893), 0 missing |
 | Extractor contract | `npm run test:ui-parity-extractor` | PASS — 9 tests |
 | Port boundaries | `npm run check:ui-forward-port-boundaries` | PASS |
 | Agent docs parity | `npm run check:agent-docs-parity` | PASS |
@@ -34,11 +34,11 @@ Target: `C:/Users/YGone/Desktop/program/subscriber-console/frontend`
 import graph from their own entry points.
 
 ```
-historical_entry_points=15     historical_reachable_files=121   current_reachable_files=164
-comparable_reachable_classes=895   current_reachable_classes=1018
+historical_entry_points=15     historical_reachable_files=121   current_reachable_files=167
+comparable_reachable_classes=893   current_reachable_classes=1019
 missing_symmetric=0   symmetric_coverage=100.0%
 regression_floor=100.0%   acceptance_target=90%   max_missing=0
-absolute_coverage=63.1%   (diagnostic only, never scored)
+absolute_coverage=62.9%   (diagnostic only, never scored)
 ```
 
 Historical entries are the routes that still have a comparable route in the current console: login,
@@ -46,9 +46,10 @@ dashboard layout, dashboard, subscribers, profile, OCS tariffs/contracts/balance
 routes, users plus create/detail, system health. Nine redirect-only pages are recorded but are not
 entries, so anything reachable only through them falls out of the denominator by construction.
 
-## The two previously missing tokens: resolved at the source
+## Token-level parity decisions
 
-Neither was silenced, and neither was covered by adding dead code.
+Each decision is scoped to one historical source file and one class token. No current
+component carries unreachable markup or unused class strings merely to influence coverage.
 
 **`ocs-feedback-` — a genuine tokeniser artefact, fixed in the extractor.**
 `className={`ocs-feedback-${feedback.type}`}` only ever produces `ocs-feedback-success` or
@@ -80,6 +81,14 @@ excluded precisely - one file, one token, reason `unsupported-contract` - in
 `scripts/lib/ui-parity-scope.mjs`, and that exclusion participates in the scope digest. There is no
 global `success` exclusion: the same word anywhere else still counts.
 
+**`analytics-ring` and `analytics-ring-inner` — token-scoped presentation exclusions.**
+The historical `components/analytics/WorkbenchPanel.tsx` rendered the operations score as both a
+numeric label and a `conic-gradient` gauge. The current workbench retains the numeric readout, which
+communicates the same score without encoding it twice. Reintroducing the two class names would require
+unreachable markup and a forbidden decorative ring; `npm run check:ui-anti-ai-drift` explicitly guards
+against this category. Both tokens are therefore exact `unsupported-contract` exclusions for the single
+historical source file, and both participate in the reviewed scope digest.
+
 The extractor has its own fixed tests (`npm run test:ui-parity-extractor`, also run by
 `check:ui-parity`), covering both cases above plus interpolation variable names, nested braces and
 plain string literals.
@@ -104,6 +113,10 @@ These are deliberate, not gaps:
    either — its `AnalyticsCockpit` uses `MetricStrip` and `OcsResourceStrip`, its balances route
    renders `OcsBalancePlaceholder`, and its sessions/usage routes redirect to tariffs. Wiring them in
    would introduce UI the historical application never showed.
+6. **The workbench score ring is intentionally absent**: `analytics-ring` and
+   `analytics-ring-inner` rendered a redundant conic-gradient gauge around the same numeric operations
+   score. The current numeric readout is the supported, accessible presentation; the precise token
+   exclusions are review-locked in `scripts/lib/ui-parity-scope.mjs`.
 
 ## No backend, API, route or schema change
 

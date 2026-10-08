@@ -33,7 +33,7 @@ two different things, and they must never be confused.
 | Role | Commit | Authoritative for |
 |---|---|---|
 | Current architecture authority | `11471af9d93fd4345f8d85a60f5c3fdfe821d93b` | React + Vite runtime, React Router, Go backend, REST ownership, authentication, RBAC, request contracts, Inventory, MongoDB, deployment, CI, the current route set |
-| Historical UI reference authority | `e054d9349b26e29b2623c8ae42c57a4a973b22dd` | Visual language, layout, spacing, header and sidebar composition, navigation hierarchy, page composition, cards, tables, forms, modals, dashboard presentation, charts, loading/empty/error presentation, notifications, theme, language, responsive behaviour |
+| Historical UI reference authority | `2c40903fea1e56650736ee862e3ddab33d9f64fc` | Last pure-Next.js historical checkout; visual language, layout, spacing, header and sidebar composition, navigation hierarchy, page composition, cards, tables, forms, modals, dashboard presentation, charts, loading/empty/error presentation, notifications, theme, language, responsive behaviour |
 
 Rule applied throughout: the old UI decides **how it looks and feels**; the current
 architecture decides **how it works**.

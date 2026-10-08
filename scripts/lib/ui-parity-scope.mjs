@@ -157,8 +157,8 @@ export const CURRENT_ENTRY_POINTS = Object.freeze([
  * precisely - one file, one token - with a reason, and the exclusion is part of the
  * scope digest so it cannot be widened silently.
  *
- * There is no global token exclusion. `success` is excluded for exactly one file; the
- * same word appearing anywhere else still counts.
+ * There is no global token exclusion. Each excluded token is bound to exactly one
+ * historical source file; the same word appearing anywhere else still counts.
  */
 export const TOKEN_EXCLUSIONS = Object.freeze([
   {
@@ -166,6 +166,18 @@ export const TOKEN_EXCLUSIONS = Object.freeze([
     token: 'success',
     reason: UNSUPPORTED_CONTRACT,
     note: 'The historical notification centre rendered `notif-type-icon success`; the current alert authority only issues CRITICAL, WARNING and INFO, and the notification provider maps success to info. There is no SUCCESS alert contract, so the branch cannot be reached and must not be added for coverage.',
+  },
+  {
+    source: 'components/analytics/WorkbenchPanel.tsx',
+    token: 'analytics-ring',
+    reason: UNSUPPORTED_CONTRACT,
+    note: 'The historical workbench encoded the operations score as a conic-gradient ring. The current design renders the same score directly as a numeric readout because an angle adds no information and the anti-drift gate prohibits decorative conic-gradient gauges. Reintroducing this class would require unreachable markup and an invalid styling pattern.',
+  },
+  {
+    source: 'components/analytics/WorkbenchPanel.tsx',
+    token: 'analytics-ring-inner',
+    reason: UNSUPPORTED_CONTRACT,
+    note: 'This inner element only existed inside the retired analytics-ring gauge. The current numeric readout exposes the same operations score without a redundant nested gauge, so this exact historical token cannot be rendered by the current contract.',
   },
 ]);
 
@@ -182,10 +194,10 @@ export function isTokenExcluded(relativePath, token) {
  * it and why. Update both fields in the same commit as any scope edit.
  */
 export const SCOPE_REVIEW = Object.freeze({
-  revision: '6bc431ea',
-  reviewedAt: '2026-10-06',
+  revision: 'e7c46951',
+  reviewedAt: '2026-10-08',
   reviewedBy: 'forward-port review',
-  rationale: 'Frozen scope: retired surfaces, the charging plane, runtime concerns the current checkout already owns, and the one denylisted mutation. Coverage is measured symmetrically: both sides are walked through their own import graph from their own entry points. Final syntax-aware measurement is 895/895 = 100.0%, with no missing comparable classes.',
+  rationale: 'Frozen scope: retired surfaces, the charging plane, runtime concerns the current checkout already owns, and the token-level contract differences documented beside their exact historical sources. Coverage is measured symmetrically: both sides are walked through their own import graph from their own entry points. Scope changes require an explicit digest update and a human review.',
 });
 
 /**
@@ -205,10 +217,10 @@ export const ACCEPTANCE_TARGET = 0.9;
  * rendered therefore fall out of the denominator by construction rather than by a
  * hand-written exclusion.
  *
- * Final syntax-aware measurement: the comparable reachable vocabulary is 895 classes with ZERO
+ * Final syntax-aware measurement: the comparable reachable vocabulary is 893 classes with ZERO
  * missing, so the floor is 1.0 and the ceiling is 0.
  *
- * The two tokens that used to be missing were resolved at the source, not silenced:
+ * The token exclusions below are reviewed contract differences, not dead code:
  *
  *   components/ocs/contracts/OcsContractsPanel.tsx -> `ocs-feedback-`
  *       A genuine tokeniser artefact. `className={`ocs-feedback-${feedback.type}`}`
@@ -223,6 +235,12 @@ export const ACCEPTANCE_TARGET = 0.9;
  *       notification provider maps success to info. There is no SUCCESS contract, so
  *       this is a token-scoped contract exclusion (see TOKEN_EXCLUSIONS), not dead code
  *       to be added.
+ *
+ *   components/analytics/WorkbenchPanel.tsx -> `analytics-ring`, `analytics-ring-inner`
+ *       The historical score ring encoded the same number once as a conic-gradient angle and
+ *       once as text. The current workbench retains the numeric score and deliberately drops
+ *       the redundant ring. The anti-drift gate forbids adding the ring styling back, so these
+ *       two exact historical tokens are token-scoped unsupported-contract exclusions.
  */
 export const REACHABLE_REGRESSION_FLOOR = 1;
 /** Hard ceiling on missing reachable classes. */
