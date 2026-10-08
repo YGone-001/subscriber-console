@@ -13,13 +13,6 @@ Status: **PARTIAL** — see the correction below.
 > main business surfaces; nine real defects were found and fixed along the way (including a
 > users page whose query parameters made every request return `400`).
 >
-> - Analysis, gap inventory and remediation plan:
->   [`frontend-ui-parity-plan.md`](../plans/frontend-ui-parity-plan.md)
-> - Reference-driven acceptance gate: `npm run check:ui-parity`
->   (`scripts/test-ui-parity-contract.mjs`) — compares the current tree against the
->   reference checkout instead of asserting self-defined strings.
-> - Screenshot harness: `npm run ui:capture` (`scripts/capture-ui-parity.mjs`).
->
 > The earlier `test-ui-restoration-contract.mjs` could never detect this divergence: it
 > asserted strings the implementation itself defines. Several of its assertions have since
 > been rewritten to express reference composition (UI-13, UI-19, UI-20, UI-21).
