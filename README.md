@@ -381,6 +381,10 @@ npm test                    # 运行前端测试
 npm run check               # 依次运行 lint、typecheck、测试与构建
 ```
 
+Production does not start a frontend server.
+The production SPA is built from frontend/, staged for Go embedding,
+compiled into the Go binary, and served through Nginx -> Go.
+
 生产环境**不**启动前端服务器。
 生产 SPA 由 `frontend/` 构建、为 Go 内嵌做暂存、编译进 Go 二进制，并经 Nginx → Go 提供。
 
