@@ -1,0 +1,78 @@
+{
+  "routes": [
+    {
+      "route": "/discovery",
+      "source": "frontend/src/features/discovery/DiscoveryPage.tsx",
+      "operations": [
+        {
+          "name": "discovery source create",
+          "request": "POST /api/discovery/sources",
+          "authorization": { "kind": "permission", "value": "core.configure" },
+          "confirmation": false
+        },
+        {
+          "name": "discovery source scan",
+          "request": "POST /api/discovery/sources/{sourceId}/scan",
+          "authorization": { "kind": "permission", "value": "core.configure" },
+          "confirmation": false
+        },
+        {
+          "name": "discovery candidate link",
+          "request": "POST /api/discovery/candidates/{candidateId}/link",
+          "authorization": { "kind": "permission", "value": "core.configure" },
+          "confirmation": false
+        },
+        {
+          "name": "discovery candidate unlink",
+          "request": "POST /api/discovery/candidates/{candidateId}/unlink",
+          "authorization": { "kind": "permission", "value": "core.configure" },
+          "confirmation": true
+        }
+      ]
+    },
+    {
+      "route": "/discovery/sources/:sourceId",
+      "source": "frontend/src/features/discovery/DiscoverySourceDetailPage.tsx",
+      "operations": [
+        {
+          "name": "discovery source update",
+          "request": "PUT /api/discovery/sources/{sourceId}",
+          "authorization": { "kind": "permission", "value": "core.configure" },
+          "confirmation": false
+        },
+        {
+          "name": "discovery source scan",
+          "request": "POST /api/discovery/sources/{sourceId}/scan",
+          "authorization": { "kind": "permission", "value": "core.configure" },
+          "confirmation": false
+        },
+        {
+          "name": "discovery candidate link",
+          "request": "POST /api/discovery/candidates/{candidateId}/link",
+          "authorization": { "kind": "permission", "value": "core.configure" },
+          "confirmation": false
+        },
+        {
+          "name": "discovery candidate unlink",
+          "request": "POST /api/discovery/candidates/{candidateId}/unlink",
+          "authorization": { "kind": "permission", "value": "core.configure" },
+          "confirmation": true
+        }
+      ]
+    }
+  ],
+  "apis": [
+    { "method": "GET", "path": "/api/discovery/meta", "access": "read", "permission": "core.read" },
+    { "method": "GET", "path": "/api/discovery/sources", "access": "read", "permission": "core.read" },
+    { "method": "GET", "path": "/api/discovery/sources/{sourceId}", "access": "read", "permission": "core.read" },
+    { "method": "GET", "path": "/api/discovery/runs", "access": "read", "permission": "core.read" },
+    { "method": "GET", "path": "/api/discovery/runs/{runId}", "access": "read", "permission": "core.read" },
+    { "method": "GET", "path": "/api/discovery/candidates", "access": "read", "permission": "core.read" },
+    { "method": "GET", "path": "/api/discovery/candidates/{candidateId}", "access": "read", "permission": "core.read" },
+    { "method": "POST", "path": "/api/discovery/sources", "access": "write", "permission": "core.configure" },
+    { "method": "PUT", "path": "/api/discovery/sources/{sourceId}", "access": "write", "permission": "core.configure" },
+    { "method": "POST", "path": "/api/discovery/sources/{sourceId}/scan", "access": "write", "permission": "core.configure" },
+    { "method": "POST", "path": "/api/discovery/candidates/{candidateId}/link", "access": "write", "permission": "core.configure" },
+    { "method": "POST", "path": "/api/discovery/candidates/{candidateId}/unlink", "access": "write", "permission": "core.configure" }
+  ]
+}

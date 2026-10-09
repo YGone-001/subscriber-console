@@ -22,7 +22,7 @@ Nginx  (sole public edge)
 Go  127.0.0.1:18888
    |-- Business API (owner)
    |-- Auth identity + session validation
-   |-- Read + write APIs (97 exact METHOD+PATH registrations)
+   |-- Read + write APIs (109 exact METHOD+PATH registrations)
    `-- Embedded static React SPA (UI rendering, browser history routing, static assets)
    |
    v
@@ -41,7 +41,7 @@ Nginx owns production routing to the single application upstream:
 ```
 
 The Go application service binds loopback only and is reachable exclusively through
-Nginx. Route authority is the derived Go registration set (97 exact METHOD+PATH
+Nginx. Route authority is the derived Go registration set (109 exact METHOD+PATH
 registrations parsed from `backend/cmd/server/main.go` plus
 `backend/internal/remediation/handler.go`, shared helper
 `scripts/lib/go-registrations.mjs`).

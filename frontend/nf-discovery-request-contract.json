@@ -1,0 +1,114 @@
+[
+  {
+    "name": "discovery source create",
+    "method": "POST",
+    "path": "/api/discovery/sources",
+    "queryMode": "none",
+    "backendAuthority": "backend/internal/discovery/handler.go",
+    "productionBuilder": "frontend/src/features/discovery/discovery-validation.ts",
+    "productionReference": "frontend/src/features/discovery/DiscoveryPage.tsx",
+    "requiredBodyKeys": ["name", "adapterType", "baseUrl", "transportMode"],
+    "optionalBodyKeys": ["enabled"],
+    "forbiddenBodyKeys": [
+      "sourceId",
+      "schemaVersion",
+      "revision",
+      "createdAt",
+      "createdBy",
+      "updatedAt",
+      "updatedBy",
+      "lastSuccessAt",
+      "lastScanAt",
+      "lastError"
+    ],
+    "responseSemantics": "mutation-result"
+  },
+  {
+    "name": "discovery source update",
+    "method": "PUT",
+    "path": "/api/discovery/sources/{sourceId}",
+    "queryMode": "none",
+    "backendAuthority": "backend/internal/discovery/handler.go",
+    "productionBuilder": "frontend/src/features/discovery/discovery-validation.ts",
+    "productionReference": "frontend/src/features/discovery/DiscoverySourceDetailPage.tsx",
+    "requiredBodyKeys": ["expectedRevision", "source"],
+    "optionalBodyKeys": [],
+    "forbiddenBodyKeys": [
+      "sourceId",
+      "adapterType",
+      "schemaVersion",
+      "revision",
+      "createdAt",
+      "createdBy",
+      "updatedAt",
+      "updatedBy",
+      "lastSuccessAt",
+      "lastScanAt",
+      "lastError"
+    ],
+    "nestedContracts": {
+      "source": {
+        "requiredKeys": ["name", "baseUrl", "transportMode", "enabled"],
+        "allowedKeys": ["name", "baseUrl", "transportMode", "enabled"],
+        "forbiddenKeys": ["sourceId", "adapterType", "schemaVersion", "revision"]
+      }
+    },
+    "responseSemantics": "mutation-result"
+  },
+  {
+    "name": "discovery source scan",
+    "method": "POST",
+    "path": "/api/discovery/sources/{sourceId}/scan",
+    "queryMode": "none",
+    "backendAuthority": "backend/internal/discovery/handler.go",
+    "productionBuilder": "frontend/src/features/discovery/discovery-api.ts",
+    "productionReference": "frontend/src/features/discovery/DiscoveryPage.tsx",
+    "requiredBodyKeys": [],
+    "optionalBodyKeys": [],
+    "forbiddenBodyKeys": ["targetUrl", "url", "proxyUrl", "command", "script"],
+    "responseSemantics": "mutation-result"
+  },
+  {
+    "name": "discovery candidate link",
+    "method": "POST",
+    "path": "/api/discovery/candidates/{candidateId}/link",
+    "queryMode": "none",
+    "backendAuthority": "backend/internal/discovery/handler.go",
+    "productionBuilder": "frontend/src/features/discovery/discovery-builders.ts",
+    "productionReference": "frontend/src/features/discovery/DiscoverySourceDetailPage.tsx",
+    "requiredBodyKeys": ["expectedRevision", "resourceId"],
+    "optionalBodyKeys": [],
+    "forbiddenBodyKeys": [
+      "candidateId",
+      "schemaVersion",
+      "revision",
+      "observationState",
+      "nfType",
+      "nfStatus",
+      "externalNfInstanceId",
+      "createInventory",
+      "provision"
+    ],
+    "responseSemantics": "mutation-result"
+  },
+  {
+    "name": "discovery candidate unlink",
+    "method": "POST",
+    "path": "/api/discovery/candidates/{candidateId}/unlink",
+    "queryMode": "none",
+    "backendAuthority": "backend/internal/discovery/handler.go",
+    "productionBuilder": "frontend/src/features/discovery/discovery-builders.ts",
+    "productionReference": "frontend/src/features/discovery/DiscoverySourceDetailPage.tsx",
+    "requiredBodyKeys": ["expectedRevision"],
+    "optionalBodyKeys": [],
+    "forbiddenBodyKeys": [
+      "candidateId",
+      "schemaVersion",
+      "revision",
+      "observationState",
+      "deleteInventory",
+      "retireInventory"
+    ],
+    "responseSemantics": "mutation-result"
+  }
+]

@@ -781,9 +781,9 @@ async function main() {
     console.log('inventory_api_read_count=3');
     console.log('inventory_api_mutation_count=3');
     console.log('inventory_api_total_count=6');
-    console.log('inventory_go_registration_count=97');
+    console.log('inventory_go_registration_count=109');
     console.log('inventory_frontend_route_count=3');
-    console.log('frontend_total_route_count=28');
+    console.log('frontend_total_route_count=30');
     console.log('inventory_read_permission=core.read');
     console.log('inventory_write_permission=core.configure');
     console.log('inventory_hard_delete_route=0');

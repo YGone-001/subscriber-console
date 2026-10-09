@@ -24,7 +24,7 @@ func (r *Repository) FindSubscriberByImsi(ctx context.Context, imsi string) (bso
 	return doc, nil
 }
 
-// CreateSubscriberFromLegacy creates a new subscriber with default Open5GS BSON structure.
+// CreateSubscriberFromLegacy creates a new subscriber with default core subscriber BSON structure.
 // Validates MSISDN uniqueness across both subscribers and ocs_subscribers collections.
 // Provisions OCS subscriber and balance records.
 // Returns the created document.
@@ -87,7 +87,7 @@ func (r *Repository) createSubscriber(ctx context.Context, imsi string, planId *
 		msisdnList = []any{*msisdn}
 	}
 
-	// Build default Open5GS subscriber document
+	// Build default core subscriber document
 	doc := buildDefaultSubscriber(imsi, msisdnList)
 
 	// Apply operator-supplied authentication material before the first and only write, so the
@@ -718,7 +718,7 @@ func (r *Repository) deleteOcsProvisioning(ctx context.Context, imsi string) err
 	return nil
 }
 
-// buildDefaultSubscriber builds a default Open5GS subscriber document.
+// buildDefaultSubscriber builds a default core subscriber document.
 // Matches Node buildDefaultXcloudSubscriber() structure exactly.
 func buildDefaultSubscriber(imsi string, msisdnList []any) bson.M {
 	if msisdnList == nil {
@@ -898,7 +898,7 @@ func buildXcloudSubscriberFromLegacy(imsi string, payload UpdatePayload, existin
 	return result
 }
 
-// convertSlices converts legacy sliceList format to Open5GS slice format
+// convertSlices converts legacy sliceList format to core slice format
 // with ObjectIds for _id and session._id.
 func convertSlices(slices any) []any {
 	list, ok := slices.([]any)
@@ -1036,7 +1036,7 @@ func stringPtr(s string) *string {
 	return &s
 }
 
-// normalizeSessionQos normalizes session QoS from legacy format to Open5GS format.
+// normalizeSessionQos normalizes session QoS from legacy format to core format.
 // Matches Node toXcloudQos() exactly: _5qi → index, priorityLevel → priority_level.
 func normalizeSessionQos(qos any, name any) any {
 	if qos == nil {
@@ -1074,7 +1074,7 @@ func normalizeSessionQos(qos any, name any) any {
 	return result
 }
 
-// normalizeArp normalizes ARP from legacy format to Open5GS format.
+// normalizeArp normalizes ARP from legacy format to core format.
 // Matches Node toXcloudArp() exactly.
 func normalizeArp(arp any, isIms bool) any {
 	a := toMap(arp)

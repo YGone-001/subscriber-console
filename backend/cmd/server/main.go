@@ -17,6 +17,7 @@ import (
 	"subscriber/internal/auth"
 	"subscriber/internal/balance"
 	"subscriber/internal/config"
+	"subscriber/internal/discovery"
 	"subscriber/internal/handler"
 	"subscriber/internal/inventory"
 	"subscriber/internal/middleware"
@@ -183,6 +184,23 @@ func main() {
 	)
 	topologyHandler := topology.NewHandler(topologyRepo, limiter, auditWriter)
 
+	// Discovery (read-only NF observation; Inventory remains authoritative)
+	discoveryAllowlist := discovery.NewDestinationAllowlist(cfg.DiscoveryAllowedTargets)
+	discoveryClient, err := discovery.NewNRFClient(discoveryAllowlist, cfg.DiscoveryTLSCAFile)
+	if err != nil {
+		logger.Error("failed to construct discovery client", "error", err)
+		os.Exit(1)
+	}
+	discoveryAdapter := discovery.NewNRFAdapter(discoveryClient, discoveryAllowlist)
+	discoveryAdapters := discovery.NewAdapterRegistry(discoveryAdapter)
+	discoveryInventoryResolver := discovery.NewMongoInventoryResolver(mc.Ops.Collection("app_inventory_resources"))
+	discoveryRepo := discovery.NewRepository(
+		mc.Ops.Collection("app_discovery_sources"),
+		mc.Ops.Collection("app_discovery_runs"),
+		mc.Ops.Collection("app_nf_observations"),
+	)
+	discoveryHandler := discovery.NewHandler(discoveryRepo, limiter, auditWriter, discoveryAdapters, discoveryAllowlist, discoveryInventoryResolver)
+
 	// Build handler
 	mux := http.NewServeMux()
 
@@ -329,6 +347,20 @@ func main() {
 	mux.Handle("POST /api/topology/edges", authMiddleware(http.HandlerFunc(topologyHandler.Create)))
 	mux.Handle("PUT /api/topology/edges/{edgeId}", authMiddleware(http.HandlerFunc(topologyHandler.Update)))
 	mux.Handle("POST /api/topology/edges/{edgeId}/retire", authMiddleware(http.HandlerFunc(topologyHandler.Retire)))
+
+	// Discovery (seven reads, five mutations)
+	mux.Handle("GET /api/discovery/meta", authMiddleware(http.HandlerFunc(discoveryHandler.Meta)))
+	mux.Handle("GET /api/discovery/sources", authMiddleware(http.HandlerFunc(discoveryHandler.ListSources)))
+	mux.Handle("GET /api/discovery/sources/{sourceId}", authMiddleware(http.HandlerFunc(discoveryHandler.GetSource)))
+	mux.Handle("GET /api/discovery/runs", authMiddleware(http.HandlerFunc(discoveryHandler.ListRuns)))
+	mux.Handle("GET /api/discovery/runs/{runId}", authMiddleware(http.HandlerFunc(discoveryHandler.GetRun)))
+	mux.Handle("GET /api/discovery/candidates", authMiddleware(http.HandlerFunc(discoveryHandler.ListCandidates)))
+	mux.Handle("GET /api/discovery/candidates/{candidateId}", authMiddleware(http.HandlerFunc(discoveryHandler.GetCandidate)))
+	mux.Handle("POST /api/discovery/sources", authMiddleware(http.HandlerFunc(discoveryHandler.CreateSource)))
+	mux.Handle("PUT /api/discovery/sources/{sourceId}", authMiddleware(http.HandlerFunc(discoveryHandler.UpdateSource)))
+	mux.Handle("POST /api/discovery/sources/{sourceId}/scan", authMiddleware(http.HandlerFunc(discoveryHandler.ScanSource)))
+	mux.Handle("POST /api/discovery/candidates/{candidateId}/link", authMiddleware(http.HandlerFunc(discoveryHandler.LinkCandidate)))
+	mux.Handle("POST /api/discovery/candidates/{candidateId}/unlink", authMiddleware(http.HandlerFunc(discoveryHandler.UnlinkCandidate)))
 
 	// Catch-all for unknown API routes
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {

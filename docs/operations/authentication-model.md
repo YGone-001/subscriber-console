@@ -174,6 +174,6 @@ The Go Authentication implementation was brought into complete 1:1 parity with t
 
 Production Routing Invariant:
 - Production authentication ownership belongs to the **Go backend** (`:18888`).
-- Route authority is the Go registration set (`97` METHOD+PATH entries); no route-owner table exists in production source.
+- Route authority is the Go registration set (`109` METHOD+PATH entries); no route-owner table exists in production source.
 - The Nginx edge routes `/api` and `/api/*` straight to Go with fail-closed semantics (no Node fallback and no second hop): a dead Go backend yields an edge-generated 502/504, and Go's own session-store outage yields HTTP 503 `AUTH_UNAVAILABLE`.
 

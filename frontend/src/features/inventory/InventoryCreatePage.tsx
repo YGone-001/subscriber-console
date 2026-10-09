@@ -330,7 +330,7 @@ export function InventoryCreatePage() {
               <input
                 type="text"
                 className="input w-full"
-                placeholder="e.g. Dell, Cisco, Open5GS, Nokia"
+                placeholder="e.g. Dell, Cisco, Nokia, Huawei"
                 value={vendor}
                 onChange={(e) => setVendor(e.target.value)}
               />
@@ -352,7 +352,7 @@ export function InventoryCreatePage() {
               <input
                 type="text"
                 className="input w-full"
-                placeholder="e.g. open5gs-amf"
+                placeholder="e.g. core-amf-01"
                 value={softwareProduct}
                 onChange={(e) => setSoftwareProduct(e.target.value)}
               />

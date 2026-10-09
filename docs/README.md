@@ -40,6 +40,8 @@ Canonical frontend SPA source     -> frontend/src/
 
 - [System architecture](architecture/system-architecture.md)
 - [Inventory resource model](architecture/inventory-resource-model.md)
+- [Topology dependency model](architecture/topology-dependency-model.md)
+- [NF discovery foundation](architecture/nf-discovery.md)
 - [Architecture evolution roadmap](architecture/architecture-evolution-roadmap.md) - planned architecture evolution authority; it distinguishes future targets from current production behavior.
 - [Frontend-backend boundary](architecture/frontend-backend-boundary.md)
 - [Security model](architecture/security-model.md)
@@ -59,6 +61,7 @@ Canonical frontend SPA source     -> frontend/src/
 - [Operation model](operations/operation-model.md)
 - [Direct operation model](operations/direct-operation-model.md)
 - [OCS management runbook](operations/ocs-management-runbook.md)
+- [NF discovery runbook](operations/nf-discovery-runbook.md)
 - [Security](operations/security.md)
 
 ## Database

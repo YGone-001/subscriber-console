@@ -233,7 +233,7 @@ admin    = read/write
 ```
 
 The backend remains the final authorization authority. Go registration count is
-`97`; canonical frontend routes are `28`.
+`109`; canonical frontend routes are `30`.
 
 ### 6.1 Metadata
 
@@ -497,7 +497,7 @@ This capability does **not** introduce:
 ```text
 topology node collection
 NF discovery worker
-Open5GS / Kamailio / FreeSWITCH / RAN adapters
+vendor NF / IMS / RAN adapters
 SSH, NETCONF, gNMI, SNMP execution
 NF restart / reload, MML terminal, configuration push, generic command endpoint
 PCAP capture, HEP listener, Diameter / SIP / PFCP tracing

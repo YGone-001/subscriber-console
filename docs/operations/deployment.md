@@ -15,7 +15,7 @@ Nginx (only public origin: TLS termination, routing, rate limiting)
 Go 127.0.0.1:18888
    |-- Business API (owner)
    |-- Auth identity + session validation
-   |-- Read + write APIs (97 METHOD+PATH registrations)
+   |-- Read + write APIs (109 METHOD+PATH registrations)
    `-- Embedded static React SPA (UI rendering, browser history routing, static assets)
    |
    v
@@ -23,7 +23,7 @@ MongoDB: xcloud + xcloud_ops
 ```
 
 Ownership of every production API operation is Go. The authoritative route set is
-the Go registration list: 97 exact METHOD+PATH registrations parsed from
+the Go registration list: 109 exact METHOD+PATH registrations parsed from
 `backend/cmd/server/main.go` plus `backend/internal/remediation/handler.go`
 (shared helper `scripts/lib/go-registrations.mjs`). Nginx performs the routing at the
 edge and Go owns both the API and the embedded static React SPA; no per-route ownership

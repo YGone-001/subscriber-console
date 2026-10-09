@@ -245,10 +245,44 @@ export async function createCdpClient(wsUrl) {
   };
 }
 
-/** Launch Chrome headless and wait until its debugging endpoint answers. */
+/**
+ * Launch Chrome headless and wait until its debugging endpoint answers.
+ *
+ * Prefers the repository's Playwright browser bootstrap so the launcher inherits
+ * its platform-conditional process isolation settings instead of hardcoding them
+ * here. Falls back to a direct spawn when Playwright is unavailable.
+ */
 export async function launchChrome({ chromePath, port, userDataDir, width, height, extraArgs = [] }) {
+  let playwrightHandle = null;
+  try {
+    const { chromium } = await import(
+      new URL('../../frontend/node_modules/playwright/index.mjs', import.meta.url).href
+    );
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      executablePath: chromePath,
+      headless: true,
+      args: [
+        `--remote-debugging-port=${port}`,
+        `--window-size=${width},${height}`,
+        '--hide-scrollbars',
+        '--disable-gpu',
+        '--no-first-run',
+        '--no-default-browser-check',
+        '--force-device-scale-factor=1',
+        ...extraArgs,
+      ],
+    });
+    playwrightHandle = {
+      kill() { void context.close(); },
+      close() { return context.close(); },
+      pid: context.browser()?.process()?.pid,
+    };
+  } catch {
+    playwrightHandle = null;
+  }
+
   const { spawn } = await import('node:child_process');
-  const child = spawn(chromePath, [
+  const child = playwrightHandle ?? spawn(chromePath, [
     '--headless=new',
     `--remote-debugging-port=${port}`,
     `--user-data-dir=${userDataDir}`,

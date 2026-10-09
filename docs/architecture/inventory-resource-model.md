@@ -340,9 +340,9 @@ All inventory mutations record audit events to `xcloud_ops.app_audit_logs` via t
   "domain": "5gc",
   "role": "amf",
   "lifecycleState": "active",
-  "vendor": "Open5GS",
+  "vendor": "Acme Core",
   "software": {
-    "product": "Open5GS 5G Core",
+    "product": "Acme 5G Core",
     "version": "2.7.2",
     "build": "git-b49d7"
   },
@@ -400,9 +400,9 @@ All inventory mutations record audit events to `xcloud_ops.app_audit_logs` via t
   "domain": "ims",
   "role": "pcscf",
   "lifecycleState": "active",
-  "vendor": "Kamailio",
+  "vendor": "Acme IMS",
   "software": {
-    "product": "Kamailio IMS Suite",
+    "product": "Acme IMS Suite",
     "version": "5.8.1",
     "build": "release-ims"
   },

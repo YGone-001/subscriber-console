@@ -1,30 +1,136 @@
 [
-  { "route": "/", "dynamicParameters": [] },
-  { "route": "/login", "dynamicParameters": [] },
-  { "route": "/inventory", "dynamicParameters": [] },
-  { "route": "/inventory/:resourceId", "dynamicParameters": ["resourceId"] },
-  { "route": "/inventory/create", "dynamicParameters": [] },
-  { "route": "/topology", "dynamicParameters": [] },
-  { "route": "/topology/:resourceId", "dynamicParameters": ["resourceId"] },
-  { "route": "/ocs", "dynamicParameters": [] },
-  { "route": "/ocs/balances", "dynamicParameters": [] },
-  { "route": "/ocs/balances/:imsi", "dynamicParameters": ["imsi"] },
-  { "route": "/ocs/contracts", "dynamicParameters": [] },
-  { "route": "/ocs/contracts/:imsi", "dynamicParameters": ["imsi"] },
-  { "route": "/ocs/dashboard", "dynamicParameters": [] },
-  { "route": "/ocs/sessions", "dynamicParameters": [] },
-  { "route": "/ocs/subscribers", "dynamicParameters": [] },
-  { "route": "/ocs/tariffs", "dynamicParameters": [] },
-  { "route": "/ocs/tariffs/:planId", "dynamicParameters": ["planId"] },
-  { "route": "/ocs/usage", "dynamicParameters": [] },
-  { "route": "/profile", "dynamicParameters": [] },
-  { "route": "/rating", "dynamicParameters": [] },
-  { "route": "/rating/plans", "dynamicParameters": [] },
-  { "route": "/rating/rules", "dynamicParameters": [] },
-  { "route": "/roles", "dynamicParameters": [] },
-  { "route": "/subscribers", "dynamicParameters": [] },
-  { "route": "/system-health", "dynamicParameters": [] },
-  { "route": "/users", "dynamicParameters": [] },
-  { "route": "/users/:username", "dynamicParameters": ["username"] },
-  { "route": "/users/create", "dynamicParameters": [] }
+  {
+    "route": "/",
+    "dynamicParameters": []
+  },
+  {
+    "route": "/login",
+    "dynamicParameters": []
+  },
+  {
+    "route": "/inventory",
+    "dynamicParameters": []
+  },
+  {
+    "route": "/inventory/:resourceId",
+    "dynamicParameters": [
+      "resourceId"
+    ]
+  },
+  {
+    "route": "/inventory/create",
+    "dynamicParameters": []
+  },
+  {
+    "route": "/topology",
+    "dynamicParameters": []
+  },
+  {
+    "route": "/topology/:resourceId",
+    "dynamicParameters": [
+      "resourceId"
+    ]
+  },
+  {
+    "route": "/discovery",
+    "dynamicParameters": []
+  },
+  {
+    "route": "/discovery/sources/:sourceId",
+    "dynamicParameters": [
+      "sourceId"
+    ]
+  },
+  {
+    "route": "/ocs",
+    "dynamicParameters": []
+  },
+  {
+    "route": "/ocs/balances",
+    "dynamicParameters": []
+  },
+  {
+    "route": "/ocs/balances/:imsi",
+    "dynamicParameters": [
+      "imsi"
+    ]
+  },
+  {
+    "route": "/ocs/contracts",
+    "dynamicParameters": []
+  },
+  {
+    "route": "/ocs/contracts/:imsi",
+    "dynamicParameters": [
+      "imsi"
+    ]
+  },
+  {
+    "route": "/ocs/dashboard",
+    "dynamicParameters": []
+  },
+  {
+    "route": "/ocs/sessions",
+    "dynamicParameters": []
+  },
+  {
+    "route": "/ocs/subscribers",
+    "dynamicParameters": []
+  },
+  {
+    "route": "/ocs/tariffs",
+    "dynamicParameters": []
+  },
+  {
+    "route": "/ocs/tariffs/:planId",
+    "dynamicParameters": [
+      "planId"
+    ]
+  },
+  {
+    "route": "/ocs/usage",
+    "dynamicParameters": []
+  },
+  {
+    "route": "/profile",
+    "dynamicParameters": []
+  },
+  {
+    "route": "/rating",
+    "dynamicParameters": []
+  },
+  {
+    "route": "/rating/plans",
+    "dynamicParameters": []
+  },
+  {
+    "route": "/rating/rules",
+    "dynamicParameters": []
+  },
+  {
+    "route": "/roles",
+    "dynamicParameters": []
+  },
+  {
+    "route": "/subscribers",
+    "dynamicParameters": []
+  },
+  {
+    "route": "/system-health",
+    "dynamicParameters": []
+  },
+  {
+    "route": "/users",
+    "dynamicParameters": []
+  },
+  {
+    "route": "/users/:username",
+    "dynamicParameters": [
+      "username"
+    ]
+  },
+  {
+    "route": "/users/create",
+    "dynamicParameters": []
+  }
 ]

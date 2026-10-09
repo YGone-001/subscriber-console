@@ -38,7 +38,7 @@ function check(id, ok, detail) {
 const routes = JSON.parse(readFileSync(resolve(frontend, 'route-contract.json'), 'utf8'));
 const topologyRoutes = routes.filter((entry) => entry.route.startsWith('/topology'));
 check('TOP-UI-01', topologyRoutes.length === 2, `topology_routes=${topologyRoutes.length}`);
-check('TOP-UI-02', routes.length === 28, `frontend_route_count=${routes.length}`);
+check('TOP-UI-02', routes.length === 30, `frontend_route_count=${routes.length}`);
 check(
   'TOP-UI-03',
   topologyRoutes.some((r) => r.route === '/topology') && topologyRoutes.some((r) => r.route === '/topology/:resourceId'),

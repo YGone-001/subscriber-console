@@ -476,6 +476,39 @@ async function ensureIndexes() {
     { key: { updatedAt: -1, _id: 1 }, name: 'topology_updated_id' },
   ])).map((name) => ({ database: appDbName, collection: 'app_topology_edges', name })));
 
+  // ── xcloud_ops.app_discovery_sources ──
+  // Discovery source configuration. Uniqueness is on the server-generated id.
+  createdIndexes.push(...(await appDb.collection('app_discovery_sources').createIndexes([
+    { key: { updatedAt: -1, _id: 1 }, name: 'discovery_sources_updated_id' },
+    { key: { name: 1 }, name: 'discovery_sources_name' },
+    { key: { adapterType: 1, enabled: 1 }, name: 'discovery_sources_adapter_enabled' },
+  ])).map((name) => ({ database: appDbName, collection: 'app_discovery_sources', name })));
+
+  // ── xcloud_ops.app_discovery_runs ──
+  // Bounded discovery execution history. No TTL: scan evidence is retained
+  // under the documented application retention policy, not silently dropped.
+  createdIndexes.push(...(await appDb.collection('app_discovery_runs').createIndexes([
+    { key: { sourceId: 1, startedAt: -1 }, name: 'discovery_runs_source_started' },
+    { key: { status: 1, startedAt: -1 }, name: 'discovery_runs_status_started' },
+    { key: { startedAt: -1, _id: 1 }, name: 'discovery_runs_started_id' },
+  ])).map((name) => ({ database: appDbName, collection: 'app_discovery_runs', name })));
+
+  // ── xcloud_ops.app_nf_observations ──
+  // Candidate identity is stable across repeated successful discoveries and is
+  // unique per (sourceId, externalNfInstanceId). Candidate identity is never
+  // TTL-deleted.
+  createdIndexes.push(...(await appDb.collection('app_nf_observations').createIndexes([
+    {
+      key: { sourceId: 1, externalNfInstanceId: 1 },
+      unique: true,
+      name: 'uniq_nf_observation_source_instance',
+    },
+    { key: { sourceId: 1, nfType: 1, nfStatus: 1, lastSeenAt: -1 }, name: 'nf_obs_source_type_status_seen' },
+    { key: { sourceId: 1, observationState: 1, lastSeenAt: -1 }, name: 'nf_obs_source_state_seen' },
+    { key: { linkedResourceId: 1 }, name: 'nf_obs_linked_resource' },
+    { key: { lastSeenAt: -1, _id: 1 }, name: 'nf_obs_lastseen_id' },
+  ])).map((name) => ({ database: appDbName, collection: 'app_nf_observations', name })));
+
 async function seedRootAdminUser(appDb) {
   const users = appDb.collection('app_users');
   const existingAdmin = await users.findOne({ username: 'admin' });

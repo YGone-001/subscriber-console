@@ -20,6 +20,10 @@ type Config struct {
 	MongoURI      string // connection URI
 	MongoDBXCloud string // database name for HSS/OCS data
 	MongoDBOps    string // database name for xcloud_ops data
+
+	// Discovery (read-only NF observation)
+	DiscoveryAllowedTargets string // comma-separated host:port allowlist
+	DiscoveryTLSCAFile      string // optional CA bundle for h2_tls NRF
 }
 
 // Load reads configuration from environment variables with sensible defaults.
@@ -33,6 +37,9 @@ func Load() (*Config, error) {
 		MongoURI:        envOrDefault("MONGODB_URI", "mongodb://127.0.0.1:27017"),
 		MongoDBXCloud:   envOrDefault("MONGODB_XCLOUD_DB", "xcloud"),
 		MongoDBOps:      envOrDefault("MONGODB_APP_DB", "xcloud_ops"),
+
+		DiscoveryAllowedTargets: os.Getenv("DISCOVERY_ALLOWED_TARGETS"),
+		DiscoveryTLSCAFile:      os.Getenv("DISCOVERY_TLS_CA_FILE"),
 	}
 
 	if cfg.MongoURI == "" {

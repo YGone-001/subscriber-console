@@ -17,7 +17,7 @@
  * fronting real bundled Go, against a real MongoDB. Source assertions are
  * supplemental only and live in an explicitly labelled section.
  *
- * Route authority is DERIVED from the Go registration site (97 exact METHOD+PATH entries in
+ * Route authority is DERIVED from the Go registration site (109 exact METHOD+PATH entries in
  * backend/cmd/server/main.go + backend/internal/remediation/handler.go). No historical
  * route-owner table is consulted.
  *
@@ -59,7 +59,7 @@ const FRONTEND = join(ROOT, 'frontend');
 const BACKEND = join(ROOT, 'backend');
 
 /** Canonical production API surface size (asserted against the derived set). */
-const EXPECTED_GO_REGISTRATIONS = 97;
+const EXPECTED_GO_REGISTRATIONS = 109;
 
 const NEXT_PORT = Number(process.env.DEPLOYMENT_NEXT_PORT || 13333);
 const GO_PORT = Number(process.env.DEPLOYMENT_GO_PORT || 18888);
@@ -1376,7 +1376,7 @@ async function main() {
   check('DB-U06', healthzOk && readyzOk, `healthz_status=${healthzRes.status} upstream=${healthzRes.upstream} readyz_status=${readyzRes.status} upstream=${readyzRes.upstream}`);
 
   // =======================================================================
-  // API route execution matrix - all 97 operations
+  // API route execution matrix - all 109 operations
   // =======================================================================
 
   log('-- API route execution matrix --');

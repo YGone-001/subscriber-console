@@ -40,7 +40,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 // API surface is byte-identical to this baseline, so the cleanup is provably a
 // non-functional change.
 const NORMALIZATION_BASELINE_SHA = '43f2947d70590507a29837bdea36d2ecaffdfaa5';
-const EXPECTED_GO_REGISTRATIONS = 97;
+const EXPECTED_GO_REGISTRATIONS = 109;
 const EXPECTED_INVENTORY_ROUTES = new Set([
   'GET /api/inventory/meta',
   'GET /api/inventory/resources',
@@ -61,7 +61,23 @@ const EXPECTED_TOPOLOGY_ROUTES = new Set([
   'PUT /api/topology/edges/{edgeId}',
   'POST /api/topology/edges/{edgeId}/retire',
 ]);
-const EXPECTED_ADDED_ROUTE_COUNT = EXPECTED_INVENTORY_ROUTES.size + EXPECTED_TOPOLOGY_ROUTES.size;
+// Discovery adds exactly twelve read-only observation registrations.
+const EXPECTED_DISCOVERY_ROUTES = new Set([
+  'GET /api/discovery/meta',
+  'GET /api/discovery/sources',
+  'GET /api/discovery/sources/{sourceId}',
+  'GET /api/discovery/runs',
+  'GET /api/discovery/runs/{runId}',
+  'GET /api/discovery/candidates',
+  'GET /api/discovery/candidates/{candidateId}',
+  'POST /api/discovery/sources',
+  'PUT /api/discovery/sources/{sourceId}',
+  'POST /api/discovery/sources/{sourceId}/scan',
+  'POST /api/discovery/candidates/{candidateId}/link',
+  'POST /api/discovery/candidates/{candidateId}/unlink',
+]);
+const EXPECTED_ADDED_ROUTE_COUNT =
+  EXPECTED_INVENTORY_ROUTES.size + EXPECTED_TOPOLOGY_ROUTES.size + EXPECTED_DISCOVERY_ROUTES.size;
 
 // The synthetic unknown-route probe. Test-only: it must never become a production
 // Go registration.
@@ -96,6 +112,18 @@ function isTextFile(name) {
   return TEXT_EXT.has(ext);
 }
 
+// Compiled binaries are gitignored build artifacts, not active source. They are
+// skipped so random machine-code byte sequences cannot register as markers.
+function looksBinary(fullPath) {
+  try {
+    const handle = readFileSync(fullPath);
+    const slice = handle.subarray(0, 4096);
+    return slice.includes(0);
+  } catch {
+    return true;
+  }
+}
+
 function walk(dir, out = []) {
   if (!existsSync(dir)) return out;
   for (const entry of readdirSync(dir)) {
@@ -112,6 +140,7 @@ function walk(dir, out = []) {
     } else if (stat.isFile()) {
       if (SKIP_FILES.has(entry)) continue;
       if (!isTextFile(entry)) continue;
+      if (looksBinary(full)) continue;
       out.push(full);
     }
   }
@@ -490,7 +519,7 @@ if (baselineError) fail(`baseline derivation failed: ${baselineError}`);
 if (beforeKeys.size !== 84) fail(`go_routes_before=${beforeKeys.size}`);
 if (afterKeys.size !== EXPECTED_GO_REGISTRATIONS) fail(`go_routes_after=${afterKeys.size}`);
 const unexpectedAdditions = addedKeys.filter(
-  (k) => !EXPECTED_INVENTORY_ROUTES.has(k) && !EXPECTED_TOPOLOGY_ROUTES.has(k),
+  (k) => !EXPECTED_INVENTORY_ROUTES.has(k) && !EXPECTED_TOPOLOGY_ROUTES.has(k) && !EXPECTED_DISCOVERY_ROUTES.has(k),
 );
 if (unexpectedAdditions.length !== 0) fail(`unexpected_go_routes_added=${unexpectedAdditions.join(', ')}`);
 if (addedKeys.length !== EXPECTED_ADDED_ROUTE_COUNT) fail(`go_routes_added=${addedKeys.length} expected=${EXPECTED_ADDED_ROUTE_COUNT}`);

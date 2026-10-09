@@ -30,6 +30,8 @@ test('sidebar groups expose the restored navigation hierarchy for an administrat
   assert.ok(keys.includes('nav_system_settings'));
   assert.ok(keys.includes('nav_system_health'));
   assert.ok(keys.includes('nav_inventory'));
+  assert.ok(keys.includes('nav_topology'));
+  assert.ok(keys.includes('nav_discovery'));
   // The reference sidebar renders no Rating entry: the rating routes redirect to
   // the tariff surface, so exposing them would be a dead link.
   assert.ok(!keys.includes('nav_rating'), 'sidebar must not expose a Rating entry');
@@ -51,11 +53,13 @@ test('sidebar grouping is role-aware and never exposes an unauthorised group', (
   const operator = getSidebarGroups('operator').map((group) => group.key);
   assert.ok(!operator.includes('nav_system_settings'), 'operator must not see the administration group');
   assert.ok(operator.includes('nav_inventory'));
+  assert.ok(operator.includes('nav_discovery'));
 
   const viewer = getSidebarGroups('viewer').map((group) => group.key);
   assert.ok(!viewer.includes('nav_system_settings'), 'viewer must not see the administration group');
   assert.ok(viewer.includes('nav_ocs'), 'viewer retains read-only OCS navigation');
   assert.ok(viewer.includes('nav_inventory'));
+  assert.ok(viewer.includes('nav_discovery'));
 });
 
 test('role-filtered navigation hides administration routes from non-admins', () => {

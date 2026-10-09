@@ -11,6 +11,53 @@
     ]
   },
   {
+    "route": "/discovery",
+    "mode": "read",
+    "source": "frontend/src/features/discovery/DiscoveryPage.tsx",
+    "readEndpoints": [
+      "GET /api/discovery/meta",
+      "GET /api/discovery/sources",
+      "GET /api/discovery/candidates"
+    ]
+  },
+  {
+    "route": "/discovery/sources/:sourceId",
+    "mode": "read",
+    "source": "frontend/src/features/discovery/DiscoverySourceDetailPage.tsx",
+    "readEndpoints": [
+      "GET /api/discovery/sources/{sourceId}",
+      "GET /api/discovery/runs",
+      "GET /api/discovery/candidates",
+      "GET /api/inventory/resources"
+    ]
+  },
+  {
+    "route": "/inventory",
+    "mode": "read",
+    "source": "frontend/src/features/inventory/InventoryPage.tsx",
+    "readEndpoints": [
+      "GET /api/inventory/meta",
+      "GET /api/inventory/resources"
+    ]
+  },
+  {
+    "route": "/inventory/:resourceId",
+    "mode": "read",
+    "source": "frontend/src/features/inventory/InventoryDetailPage.tsx",
+    "readEndpoints": [
+      "GET /api/inventory/meta",
+      "GET /api/inventory/resources/{resourceId}"
+    ]
+  },
+  {
+    "route": "/inventory/create",
+    "mode": "read",
+    "source": "frontend/src/features/inventory/InventoryCreatePage.tsx",
+    "readEndpoints": [
+      "GET /api/inventory/meta"
+    ]
+  },
+  {
     "route": "/ocs",
     "mode": "redirect",
     "source": "frontend/src/router/redirects.ts",
@@ -170,48 +217,6 @@
     ]
   },
   {
-    "route": "/users",
-    "mode": "read",
-    "source": "frontend/src/features/users/UsersPage.tsx",
-    "readEndpoints": [
-      "GET /api/users"
-    ]
-  },
-  {
-    "route": "/users/:username",
-    "mode": "read",
-    "source": "frontend/src/features/users/UserDetailPage.tsx",
-    "readEndpoints": [
-      "GET /api/users/{username}"
-    ]
-  },
-  {
-    "route": "/inventory",
-    "mode": "read",
-    "source": "frontend/src/features/inventory/InventoryPage.tsx",
-    "readEndpoints": [
-      "GET /api/inventory/meta",
-      "GET /api/inventory/resources"
-    ]
-  },
-  {
-    "route": "/inventory/:resourceId",
-    "mode": "read",
-    "source": "frontend/src/features/inventory/InventoryDetailPage.tsx",
-    "readEndpoints": [
-      "GET /api/inventory/meta",
-      "GET /api/inventory/resources/{resourceId}"
-    ]
-  },
-  {
-    "route": "/inventory/create",
-    "mode": "read",
-    "source": "frontend/src/features/inventory/InventoryCreatePage.tsx",
-    "readEndpoints": [
-      "GET /api/inventory/meta"
-    ]
-  },
-  {
     "route": "/topology",
     "mode": "read",
     "source": "frontend/src/features/topology/TopologyPage.tsx",
@@ -228,6 +233,22 @@
     "readEndpoints": [
       "GET /api/topology/meta",
       "GET /api/topology/resources/{resourceId}/neighbors"
+    ]
+  },
+  {
+    "route": "/users",
+    "mode": "read",
+    "source": "frontend/src/features/users/UsersPage.tsx",
+    "readEndpoints": [
+      "GET /api/users"
+    ]
+  },
+  {
+    "route": "/users/:username",
+    "mode": "read",
+    "source": "frontend/src/features/users/UserDetailPage.tsx",
+    "readEndpoints": [
+      "GET /api/users/{username}"
     ]
   }
 ]

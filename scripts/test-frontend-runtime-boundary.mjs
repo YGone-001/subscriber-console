@@ -9,7 +9,7 @@
  *   - frontend MongoDB runtime = 0
  *   - frontend JWT authority = 0
  *   - no direct Go API URLs in frontend source
- *   - Go router registration site remains the authoritative production API surface (97)
+ *   - Go router registration site remains the authoritative production API surface (109)
  *
  * Usage: node scripts/test-frontend-runtime-boundary.mjs
  */
@@ -25,7 +25,7 @@ const frontendRoot = resolve(root, 'frontend');
 const srcRoot = resolve(frontendRoot, 'src');
 const packagePath = resolve(frontendRoot, 'package.json');
 
-const EXPECTED_GO_REGISTRATIONS = 97;
+const EXPECTED_GO_REGISTRATIONS = 109;
 
 function walk(dir, predicate, files = []) {
   if (!existsSync(dir)) return files;
@@ -95,7 +95,7 @@ assert.ok(!existsSync(apiRoot), 'frontend/src/app/api must not exist');
 assert.ok(!existsSync(serverRoot), 'frontend/src/server must not exist');
 assert.ok(!existsSync(proxyPath), 'legacy navigation guard frontend/src/proxy.ts must not exist');
 
-// 4. Go router registration site remains authoritative (97)
+// 4. Go router registration site remains authoritative (109)
 const goRegistrations = deriveGoRegistrations(root);
 assert.equal(goRegistrations.keys.length, EXPECTED_GO_REGISTRATIONS, `Go registrations must be ${EXPECTED_GO_REGISTRATIONS}`);
 
