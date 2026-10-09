@@ -516,13 +516,25 @@ async function main() {
 
     // 11. Listing, filters, cursor and allowlist
     await verifyAsync('list supports filters, opaque cursor pagination and a strict query allowlist', async () => {
-      for (let i = 0; i < 4; i++) {
+      // Four DISTINCT directed tuples: the partial unique index forbids reusing
+      // an active (from, to, relationshipType) combination.
+      const seedTuples = [
+        { relationshipType: 'connects_to', toResourceId: upfId },
+        { relationshipType: 'routes_to', toResourceId: pcfId },
+        { relationshipType: 'uses', toResourceId: upfId },
+        { relationshipType: 'serves', toResourceId: pcfId },
+      ];
+      for (const tuple of seedTuples) {
         const res = await req('POST', '/api/topology/edges', {
-          relationshipType: i % 2 === 0 ? 'connects_to' : 'routes_to',
+          relationshipType: tuple.relationshipType,
           fromResourceId: amfId,
-          toResourceId: i % 2 === 0 ? upfId : pcfId,
+          toResourceId: tuple.toResourceId,
         }, operatorToken);
-        assert.equal(res.status, 201, `seed create ${i} must succeed`);
+        assert.equal(
+          res.status,
+          201,
+          `seed create ${tuple.relationshipType} ${amfId} -> ${tuple.toResourceId} must succeed, got ${res.status}: ${JSON.stringify(res.body)}`,
+        );
       }
 
       const unknownParam = await req('GET', '/api/topology/edges?bogus=1', undefined, operatorToken);

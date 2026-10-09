@@ -22,15 +22,19 @@ import (
 var (
 	uuidRegex = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-4[0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$`)
 
-	ErrEdgeNotFound          = errors.New("TOPOLOGY_EDGE_NOT_FOUND")
-	ErrRevisionConflict      = errors.New("TOPOLOGY_REVISION_CONFLICT")
-	ErrEdgeRetired           = errors.New("TOPOLOGY_EDGE_RETIRED")
-	ErrDuplicateActiveEdge   = errors.New("TOPOLOGY_DUPLICATE_ACTIVE_EDGE")
-	ErrEndpointNotFound      = errors.New("TOPOLOGY_ENDPOINT_NOT_FOUND")
-	ErrEndpointRetired       = errors.New("TOPOLOGY_ENDPOINT_RETIRED")
-	ErrRootResourceNotFound  = errors.New("TOPOLOGY_ROOT_RESOURCE_NOT_FOUND")
-	ErrInvalidCursor         = errors.New("INVALID_CURSOR")
-	ErrIncompatibleCursorUse = errors.New("INVALID_CURSOR")
+	ErrEdgeNotFound         = errors.New("TOPOLOGY_EDGE_NOT_FOUND")
+	ErrRevisionConflict     = errors.New("TOPOLOGY_REVISION_CONFLICT")
+	ErrEdgeRetired          = errors.New("TOPOLOGY_EDGE_RETIRED")
+	ErrDuplicateActiveEdge  = errors.New("TOPOLOGY_DUPLICATE_ACTIVE_EDGE")
+	ErrEndpointNotFound     = errors.New("TOPOLOGY_ENDPOINT_NOT_FOUND")
+	ErrEndpointRetired      = errors.New("TOPOLOGY_ENDPOINT_RETIRED")
+	ErrRootResourceNotFound = errors.New("TOPOLOGY_ROOT_RESOURCE_NOT_FOUND")
+	ErrInvalidCursor        = errors.New("INVALID_CURSOR")
+
+	// ErrIncompatibleCursorUse wraps ErrInvalidCursor so that a cursor replayed
+	// against a different filter set is reported with the same INVALID_CURSOR
+	// error code as a malformed cursor, rather than falling through to a 500.
+	ErrIncompatibleCursorUse = fmt.Errorf("%w: cursor was produced under a different filter set", ErrInvalidCursor)
 )
 
 // InventoryResolver is the narrow read-only Inventory projection topology needs.
