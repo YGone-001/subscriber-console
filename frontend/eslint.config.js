@@ -13,11 +13,25 @@ export default tseslint.config(
     },
   },
   {
-    /* Node-side test infrastructure: the runner and the loader hooks are plain
-     * Node modules, not browser code, so they need the Node globals. */
+    /*
+     * Node-side test infrastructure: the runner and the loader hooks are plain
+     * Node modules, not browser code, so they need the Node globals.
+     *
+     * The browser acceptance harness additionally declares the browser globals
+     * it touches inside `page.evaluate` callbacks, which execute in the page
+     * context rather than in Node.
+     */
     files: ['tests/*.mjs'],
     languageOptions: {
-      globals: { process: 'readonly', console: 'readonly' },
+      globals: {
+        process: 'readonly',
+        console: 'readonly',
+        Buffer: 'readonly',
+        URL: 'readonly',
+        document: 'readonly',
+        window: 'readonly',
+        localStorage: 'readonly',
+      },
     },
   },
   {

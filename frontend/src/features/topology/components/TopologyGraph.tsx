@@ -18,9 +18,9 @@ import { RELATIONSHIP_PRESENTATION } from '../topology-types';
 import styles from '../../../styles/modules/topology.module.css';
 
 const VIEW_WIDTH = 720;
-const NODE_WIDTH = 176;
+const NODE_WIDTH = 152;
 const NODE_HEIGHT = 56;
-const COLUMN_GAP = 40;
+const COLUMN_GAP = 36;
 const ROW_GAP = 74;
 const PADDING_TOP = 56;
 const MAX_PER_SIDE = 6;
@@ -40,7 +40,7 @@ interface PlacedNode {
   side: 'inbound' | 'outbound';
 }
 
-function truncate(value: string, max = 22): string {
+function truncate(value: string, max = 18): string {
   return value.length > max ? `${value.slice(0, max - 1)}…` : value;
 }
 
@@ -168,7 +168,7 @@ export function TopologyGraph({
         >
           <rect x={rootX} y={rootY} width={NODE_WIDTH} height={NODE_HEIGHT} rx="10" className={styles.rootBox} />
           <text x={rootX + NODE_WIDTH / 2} y={rootY + 23} className={styles.nodeTitle} textAnchor="middle">
-            {truncate(rootName, 24)}
+            {truncate(rootName)}
           </text>
           <text x={rootX + NODE_WIDTH / 2} y={rootY + 41} className={styles.nodeMeta} textAnchor="middle">
             {root.kind} · {root.domain}
@@ -205,7 +205,7 @@ export function TopologyGraph({
                 className={selected ? styles.nodeBoxSelected : styles.nodeBox}
               />
               <text x={x + 12} y={y + 23} className={styles.nodeTitle} textAnchor="start">
-                {truncate(name, 24)}
+                {truncate(name)}
               </text>
               <text x={x + 12} y={y + 41} className={styles.nodeMeta} textAnchor="start">
                 {neighbor.neighborResource.kind} · {neighbor.neighborResource.domain}

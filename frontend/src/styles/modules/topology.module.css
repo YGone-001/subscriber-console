@@ -272,7 +272,7 @@
 
 .table {
   width: 100%;
-  min-width: 1180px;
+  min-width: 1080px;
   table-layout: fixed;
   border-collapse: separate;
   border-spacing: 0;
@@ -305,7 +305,7 @@
   background: var(--surface-hover);
 }
 
-.table tbody tr {
+.table tbody tr[data-activatable='true'] {
   cursor: pointer;
 }
 
@@ -313,14 +313,23 @@
   background: color-mix(in srgb, var(--primary) 10%, var(--surface));
 }
 
-.fromCol { width: 300px; }
-.relCol { width: 150px; }
-.dirCol { width: 110px; }
-.toCol { width: 300px; }
-.stateCol { width: 150px; }
-.revCol { width: 84px; }
-.updatedCol { width: 172px; }
-.actionsCol { width: 240px; }
+/*
+ * Column widths are proportional so the relationship table always fills the
+ * content column exactly and never introduces a page-level horizontal
+ * scrollbar. Below the small-screen breakpoint the table keeps a 1080px floor
+ * and scrolls inside its own container instead.
+ *
+ * The complete endpoint UUID remains reachable through the cell title and the
+ * adjacent copy control even where the fixed-width column ellipsizes it.
+ */
+.fromCol { width: 18.5%; }
+.relCol { width: 11%; }
+.dirCol { width: 7.5%; }
+.toCol { width: 18.5%; }
+.stateCol { width: 8%; }
+.revCol { width: 8%; }
+.updatedCol { width: 13.5%; }
+.actionsCol { width: 15%; }
 
 .endpoint {
   display: grid;
@@ -428,6 +437,8 @@
 
 .dateCell {
   display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--text-muted);
   font-size: var(--ref-font-size-label);
   white-space: nowrap;
@@ -581,11 +592,20 @@
   fill: var(--primary);
 }
 
+/*
+ * Edge labels sit in the horizontal gap between the root and the neighbour
+ * columns. The halo (stroke painted behind the fill) keeps the text legible
+ * where a label is wider than the gap on a dense one-hop neighbourhood.
+ */
 .edgeLabel,
 .edgeLabelSelected {
   fill: var(--text-muted);
   font-size: 11px;
   font-weight: 700;
+  paint-order: stroke;
+  stroke: var(--surface);
+  stroke-width: 3px;
+  stroke-linejoin: round;
 }
 
 .edgeLabelSelected {
@@ -747,8 +767,31 @@
 
 /* ---------------------------------------------------------------------------
  * Modal form
+ *
+ * The global `.modal-content` contract carries no height bound, so a form dialog
+ * taller than the viewport pushes its own header out of the visible area. The
+ * Topology dialogs add scoped modifiers that keep the dialog clear of the fixed
+ * shell chrome (header + tab bar + breadcrumbs) and bound its height so the body
+ * scrolls instead of the dialog overflowing. The global modal contract is
+ * deliberately left untouched.
  * ------------------------------------------------------------------------- */
+/*
+ * The global overlay declares `padding: 4vh 2rem` as a shorthand, so the scoped
+ * rule is written against the same element with a compound selector to win on
+ * specificity without touching the global stylesheet.
+ */
+:global(.modal-overlay).modalOverlay {
+  padding-top: clamp(6rem, 20vh, 12rem);
+  padding-bottom: 1.5rem;
+}
+
+.modalContent {
+  width: min(680px, 96vw);
+  max-height: calc(100vh - clamp(6rem, 20vh, 12rem) - 1.5rem);
+}
+
 .modalHeader {
+  flex: 0 0 auto;
   padding: 1rem 1.25rem;
   border-bottom: 1px solid var(--surface-border);
 }
@@ -761,6 +804,9 @@
 }
 
 .modalBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
   padding: 1rem 1.25rem 1.25rem;
 }
 

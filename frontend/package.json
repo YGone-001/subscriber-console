@@ -16,7 +16,8 @@
     "check": "npm run lint && npm run typecheck && npm test && npm run check:fonts && npm run build",
     "build:fonts": "python ../scripts/build-font-subset.py",
     "check:fonts": "node ../scripts/check-font-coverage.mjs",
-    "evidence:topology": "node tests/render-topology-evidence.mjs"
+    "evidence:topology": "node tests/render-topology-evidence.mjs",
+    "acceptance:topology-screenshots": "node tests/topology-screenshots.mjs"
   },
   "dependencies": {
     "react": "19.2.4",
@@ -32,6 +33,7 @@
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "6.1.1",
     "eslint": "^9.0.0",
+    "playwright": "1.64.0",
     "tsx": "^4.0.0",
     "typescript": "^5.0.0",
     "typescript-eslint": "^8.0.0",

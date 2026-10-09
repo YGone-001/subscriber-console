@@ -516,7 +516,47 @@ control or live monitoring has been implemented.
 | Real MongoDB + Go HTTP integration | `scripts/test-topology-foundation.mjs` |
 | Frontend UI/UX acceptance | `scripts/test-topology-ui-contract.mjs` |
 | Frontend behaviour | `frontend/tests/topology.test.ts` |
+| Browser-rendered acceptance | `frontend/tests/topology-screenshots.mjs` |
+| Supplemental rendered HTML | `frontend/tests/render-topology-evidence.mjs` |
 
 Backend unit tests live in `backend/internal/topology/`. The integration suite
 runs the production index initializer, a real Go backend and real HTTP requests
 against isolated test databases.
+
+### 11.1 Browser-rendered acceptance
+
+The built production SPA (`frontend/dist`) is served to real Chromium together
+with the deterministic, test-only API fixture adapter
+(`frontend/tests/topology-fixtures.mjs`). The harness:
+
+- captures the mandated 24-PNG matrix (Topology list and one-hop graph at
+  desktop / tablet / mobile in light and dark, the create and retire dialogs, and
+  the Inventory and System Health comparison pages);
+- asserts operator-observable behaviour (authenticated shell, fixture
+  relationships, direction representation, dialog geometry, theme application,
+  Chinese labels, read-only controls for a viewer session, completed create
+  workflow, no raw translation keys, no horizontal page overflow);
+- verifies PNG signature, dimensions and size, and records a SHA-256 checksum per
+  screenshot in `manifest.json`;
+- fails closed on browser console errors, page errors, unexpected API requests,
+  missing screenshots or layout regressions.
+
+The screenshots demonstrate frontend rendering against deterministic fixtures,
+not a live core-network deployment.
+
+### 11.2 Recorded visual corrections
+
+Two defects were found by the browser acceptance and corrected within the
+Topology-specific frontend implementation only:
+
+1. **Relationship labels overlapped the node boxes** on the one-hop graph. The
+   neighbour columns were widened (`NODE_WIDTH` 176 -> 152, `COLUMN_GAP` 40 -> 36)
+   and the labels gained a surface-coloured halo, so every label now sits fully
+   inside the horizontal gap.
+2. **A form dialog taller than the viewport pushed its own header out of view**
+   and the relationship table clipped its trailing columns at desktop. The
+   Topology dialogs now clear the fixed shell chrome and bound their height with
+   an internally scrolling body, and the table columns are proportional so the
+   full table fits the content column without a page-level scrollbar.
+
+No global design token, shared shell rule or existing module was modified.

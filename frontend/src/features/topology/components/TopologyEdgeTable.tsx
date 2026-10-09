@@ -19,6 +19,12 @@ export interface TopologyEdgeTableProps {
   rootResourceId?: string;
   selectedEdgeId?: string;
   canConfigure: boolean;
+  /**
+   * Activates the row itself. Kept separate from `onSelectEdge` so a surface that
+   * already navigates on row activation does not need to repeat a "Details"
+   * action in the actions column.
+   */
+  onActivateRow?: (edgeId: string) => void;
   onSelectEdge?: (edgeId: string) => void;
   onEdit?: (edge: TopologyEdge) => void;
   onRetire?: (edge: TopologyEdge) => void;
@@ -97,6 +103,7 @@ export function TopologyEdgeTable({
   rootResourceId,
   selectedEdgeId,
   canConfigure,
+  onActivateRow,
   onSelectEdge,
   onEdit,
   onRetire,
@@ -152,7 +159,8 @@ export function TopologyEdgeTable({
               <tr
                 key={edge.edgeId}
                 className={edge.edgeId === selectedEdgeId ? styles.rowSelected : undefined}
-                onClick={onSelectEdge ? () => onSelectEdge(edge.edgeId) : undefined}
+                data-activatable={onActivateRow ? 'true' : undefined}
+                onClick={onActivateRow ? () => onActivateRow(edge.edgeId) : undefined}
                 data-edge-id={edge.edgeId}
               >
                 <td>

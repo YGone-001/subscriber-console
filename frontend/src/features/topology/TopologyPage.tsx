@@ -387,7 +387,7 @@ export function TopologyPage() {
             directory={directory}
             caption={t('topology_table_caption')}
             canConfigure={canConfigure}
-            onSelectEdge={(edgeId) => {
+            onActivateRow={(edgeId) => {
               const edge = edges.find((item) => item.edgeId === edgeId);
               if (edge) navigate(`/topology/${encodeURIComponent(edge.fromResourceId)}`);
             }}
@@ -429,8 +429,8 @@ export function TopologyPage() {
       <Dialog
         open={createOpen}
         onClose={() => setCreateOpen(false)}
-        overlayClassName="modal-overlay"
-        className="modal-content animate-fade-in"
+        overlayClassName={`modal-overlay ${styles.modalOverlay}`}
+        className={`modal-content animate-fade-in ${styles.modalContent}`}
         labelledBy="topology-create-title"
       >
         <div className={styles.modalHeader}>
@@ -452,8 +452,8 @@ export function TopologyPage() {
       <Dialog
         open={editTarget !== null}
         onClose={() => setEditTarget(null)}
-        overlayClassName="modal-overlay"
-        className="modal-content animate-fade-in"
+        overlayClassName={`modal-overlay ${styles.modalOverlay}`}
+        className={`modal-content animate-fade-in ${styles.modalContent}`}
         labelledBy="topology-edit-title"
       >
         <div className={styles.modalHeader}>
@@ -477,8 +477,8 @@ export function TopologyPage() {
       <Dialog
         open={retireTarget !== null}
         onClose={() => setRetireTarget(null)}
-        overlayClassName="modal-overlay"
-        className="modal-content animate-fade-in"
+        overlayClassName={`modal-overlay ${styles.modalOverlay}`}
+        className={`modal-content animate-fade-in ${styles.modalContent}`}
         labelledBy="topology-retire-title"
       >
         <div className={styles.modalHeader}>

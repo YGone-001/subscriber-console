@@ -689,6 +689,13 @@ jobs:
         working-directory: frontend
         run: npm run build
 
+      # Pinned development-only browser dependency. Chromium is installed with
+      # its system libraries so the screenshot acceptance runs deterministically
+      # on the runner image.
+      - name: Install Chromium browser dependencies
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
       # Contract and security evidence: two Topology routes, seven Topology APIs,
       # 28 canonical routes, 97 Go registrations, request-contract exactness with
       # negative sentinels, and no raw fetch / absolute URL / retry / executor.
@@ -710,14 +717,30 @@ jobs:
         working-directory: frontend
         run: node tests/run-tests.mjs tests/topology.test.ts
 
-      # Rendered evidence rendered from the real components and the real design
-      # tokens. These are rendered HTML documents, not pixel screenshots; pixel
-      # capture against a live stack is a separate obligation.
-      - name: Render Topology evidence
+      # Supplemental server-rendered evidence, retained alongside the screenshots.
+      - name: Render Topology HTML evidence
         working-directory: frontend
         run: npm run evidence:topology
 
-      - name: Upload Topology evidence
+      # Mandatory browser-rendered acceptance: the built production SPA is served
+      # to real Chromium against deterministic API fixtures. Captures the 24-PNG
+      # matrix, verifies PNG integrity and SHA-256 checksums, asserts the
+      # operator-observable behaviour, and fails closed on any browser error,
+      # missing screenshot, unexpected API request or layout regression.
+      - name: Browser screenshot acceptance
+        working-directory: frontend
+        run: npm run acceptance:topology-screenshots
+
+      - name: Upload Topology screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: topology-ui-screenshots
+          path: reports/ops/topology-ui-screenshots
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Topology HTML evidence
         if: always()
         uses: actions/upload-artifact@v7
         with:

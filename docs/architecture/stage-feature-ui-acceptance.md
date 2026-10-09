@@ -142,6 +142,21 @@ data. Automated source checks alone do not prove visual consistency: a visually
 inconsistent or unusable surface must not be reported as complete even if backend
 tests pass.
 
+Screenshots must come from the built application rendered in a real browser, not
+from server-rendered markup. A pinned, development-only browser dependency is the
+accepted mechanism; it must never enter the production dependency set or the
+production SPA runtime. The capture gate must fail closed on a missing
+screenshot, an invalid image, a browser runtime error, an unexpected API request
+or a layout regression, and the resulting images must be retained as a CI
+artifact.
+
+Automated capture produces inspectable evidence; independent human or visual
+review remains necessary for final appearance approval. Pixel-perfect parity must
+never be claimed without a measured reference or a direct review.
+
+Reference implementation: `frontend/tests/topology-screenshots.mjs` with the
+deterministic fixture adapter `frontend/tests/topology-fixtures.mjs`.
+
 ### 3.11 Frontend regression tests
 
 Add behavior tests that assert operator-observable behavior rather than
