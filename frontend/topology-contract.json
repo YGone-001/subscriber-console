@@ -1,0 +1,42 @@
+{
+  "routes": [
+    {
+      "route": "/topology",
+      "source": "frontend/src/features/topology/TopologyPage.tsx",
+      "operations": [
+        {
+          "name": "topology edge create",
+          "request": "POST /api/topology/edges",
+          "authorization": { "kind": "permission", "value": "core.configure" },
+          "confirmation": false
+        },
+        {
+          "name": "topology edge update",
+          "request": "PUT /api/topology/edges/{edgeId}",
+          "authorization": { "kind": "permission", "value": "core.configure" },
+          "confirmation": false
+        },
+        {
+          "name": "topology edge retire",
+          "request": "POST /api/topology/edges/{edgeId}/retire",
+          "authorization": { "kind": "permission", "value": "core.configure" },
+          "confirmation": true
+        }
+      ]
+    },
+    {
+      "route": "/topology/:resourceId",
+      "source": "frontend/src/features/topology/ResourceTopologyPage.tsx",
+      "operations": []
+    }
+  ],
+  "apis": [
+    { "method": "GET", "path": "/api/topology/meta", "access": "read", "permission": "core.read" },
+    { "method": "GET", "path": "/api/topology/edges", "access": "read", "permission": "core.read" },
+    { "method": "GET", "path": "/api/topology/edges/{edgeId}", "access": "read", "permission": "core.read" },
+    { "method": "GET", "path": "/api/topology/resources/{resourceId}/neighbors", "access": "read", "permission": "core.read" },
+    { "method": "POST", "path": "/api/topology/edges", "access": "write", "permission": "core.configure" },
+    { "method": "PUT", "path": "/api/topology/edges/{edgeId}", "access": "write", "permission": "core.configure" },
+    { "method": "POST", "path": "/api/topology/edges/{edgeId}/retire", "access": "write", "permission": "core.configure" }
+  ]
+}

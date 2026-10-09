@@ -63,7 +63,7 @@ async function main() {
   const { keys: registrations, duplicates } = deriveGoRegistrations(root);
   assert.deepEqual(duplicates, [], 'No duplicate registrations permitted');
   const regCount = registrations.length;
-  assert.equal(regCount, 90, `Expected exactly 90 registrations, got ${regCount}`);
+  assert.equal(regCount, 97, `Expected exactly 97 registrations, got ${regCount}`);
   console.log(`go_spa_api_registration_count=${regCount}`);
 
   // 2. Ensure frontend build exists; if not, build it

@@ -73,8 +73,8 @@ The Vite listener on `127.0.0.1:13333` is the loopback-only development server.
 Platform Evolution Status:
 - Inventory / Resource Model Foundation = IMPLEMENTED (authoritative metadata source of truth in `xcloud_ops.app_inventory_resources`, 6 Go endpoints, 3 SPA routes, keyset cursor pagination, CAS concurrency, terminal retirement).
 - Frontend Visual & Interaction Parity Restoration = IMPLEMENTED (historical xCloud operator presentation forward-ported onto the current React/Vite + Go runtime; see `docs/architecture/frontend-ui-restoration.md`). The runtime remains React/Vite + Go; Next.js is not restored.
-- Topology / Dependency Model Foundation = PLANNED (not started).
-- Topology relationships, discovery adapters, and remote network control remain future work.
+- Topology / Dependency Model Foundation = IMPLEMENTED (manual authoritative relationship management in `xcloud_ops.app_topology_edges`, 7 Go endpoints, 2 SPA routes, nine directed relationship types, partial-unique active-edge deduplication, revision CAS, terminal retirement, one-hop neighbour projection; see `docs/architecture/topology-dependency-model.md`).
+- Discovery, NF adapters, telemetry, assurance and multi-hop analysis remain future work and are not implemented by the topology foundation.
 
 ### Internal Backend Direction
 
@@ -133,6 +133,31 @@ The medium-term control plane is organized around four foundations:
 
 ### Inventory and Topology
 
+Inventory is the implemented node authority and Topology is the implemented edge
+authority. The current relationship foundation covers manual authoritative
+relationship management only, and it is delivered with an integrated operator UI.
+
+The evolution of this area is explicitly staged:
+
+```text
+Stage 2 (implemented)
+    Manual authoritative relationship management.
+    Inventory owns nodes; Topology owns edges.
+    Nine directed relationship types, two lifecycle states.
+    One-hop neighbour projection only.
+    No discovery, no adapter runtime, no remote execution.
+
+Stage 3 (future)
+    Discovery and NF adapters.
+    NRF / vendor discovery feeding candidate relationships.
+    Vendor-neutral adapter and mediation boundary.
+
+Later (future)
+    Telemetry, assurance and multi-hop analysis.
+    Observed operational state alongside declared topology state.
+    Alarm correlation, RCA and blast-radius analysis.
+```
+
 A future network source of truth should model Region, Site, Cluster, Host, VM,
 Container, Pod, Network Function, Network Function Instance, Interface, IP Address,
 PLMN, DNN, Slice, Subscriber, Service, Configuration, Software Version, Alarm,
@@ -141,8 +166,11 @@ UPF, SMF -> PCF, NRF -> NF registrations, UE -> subscriber profile, UE -> IMS
 identity, P-CSCF -> I-CSCF -> S-CSCF, NF -> host or cluster, and service ->
 dependency.
 
+Only the manual, authoritative subset of that model is implemented today; the
+remaining vocabulary above is planned, not deployed.
+
 Future state concepts are Desired State, Observed State, Actual State, and Historical
-State. None are implemented by this documentation phase.
+State. None are implemented by this documentation.
 
 ### Adapter and Mediation
 

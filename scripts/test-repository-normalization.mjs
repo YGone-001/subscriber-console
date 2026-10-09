@@ -40,7 +40,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 // API surface is byte-identical to this baseline, so the cleanup is provably a
 // non-functional change.
 const NORMALIZATION_BASELINE_SHA = '43f2947d70590507a29837bdea36d2ecaffdfaa5';
-const EXPECTED_GO_REGISTRATIONS = 90;
+const EXPECTED_GO_REGISTRATIONS = 97;
 const EXPECTED_INVENTORY_ROUTES = new Set([
   'GET /api/inventory/meta',
   'GET /api/inventory/resources',
@@ -49,6 +49,19 @@ const EXPECTED_INVENTORY_ROUTES = new Set([
   'PUT /api/inventory/resources/{resourceId}',
   'POST /api/inventory/resources/{resourceId}/retire',
 ]);
+
+// Stage 2 intentionally adds exactly seven Topology registrations on top of the
+// Inventory set. Anything beyond these two sets is an unexpected route addition.
+const EXPECTED_TOPOLOGY_ROUTES = new Set([
+  'GET /api/topology/meta',
+  'GET /api/topology/edges',
+  'GET /api/topology/edges/{edgeId}',
+  'GET /api/topology/resources/{resourceId}/neighbors',
+  'POST /api/topology/edges',
+  'PUT /api/topology/edges/{edgeId}',
+  'POST /api/topology/edges/{edgeId}/retire',
+]);
+const EXPECTED_ADDED_ROUTE_COUNT = EXPECTED_INVENTORY_ROUTES.size + EXPECTED_TOPOLOGY_ROUTES.size;
 
 // The synthetic unknown-route probe. Test-only: it must never become a production
 // Go registration.
@@ -476,9 +489,11 @@ function fail(msg) {
 if (baselineError) fail(`baseline derivation failed: ${baselineError}`);
 if (beforeKeys.size !== 84) fail(`go_routes_before=${beforeKeys.size}`);
 if (afterKeys.size !== EXPECTED_GO_REGISTRATIONS) fail(`go_routes_after=${afterKeys.size}`);
-const unexpectedAdditions = addedKeys.filter((k) => !EXPECTED_INVENTORY_ROUTES.has(k));
+const unexpectedAdditions = addedKeys.filter(
+  (k) => !EXPECTED_INVENTORY_ROUTES.has(k) && !EXPECTED_TOPOLOGY_ROUTES.has(k),
+);
 if (unexpectedAdditions.length !== 0) fail(`unexpected_go_routes_added=${unexpectedAdditions.join(', ')}`);
-if (addedKeys.length !== EXPECTED_INVENTORY_ROUTES.size) fail(`go_routes_added=${addedKeys.length} expected=${EXPECTED_INVENTORY_ROUTES.size}`);
+if (addedKeys.length !== EXPECTED_ADDED_ROUTE_COUNT) fail(`go_routes_added=${addedKeys.length} expected=${EXPECTED_ADDED_ROUTE_COUNT}`);
 if (removedKeys.length !== 0) fail(`go_routes_removed=${removedKeys.length}`);
 if (nextApiRouteFiles !== 0) fail(`next_api_route_files=${nextApiRouteFiles}`);
 if (nextServerTreePresent) fail('frontend/src/server present');

@@ -1,0 +1,103 @@
+[
+  {
+    "name": "topology edge create",
+    "method": "POST",
+    "path": "/api/topology/edges",
+    "queryMode": "none",
+    "backendAuthority": "backend/internal/topology/handler.go",
+    "productionBuilder": "frontend/src/features/topology/topology-builders.ts",
+    "productionReference": "frontend/src/features/topology/components/TopologyEdgeForm.tsx",
+    "requiredBodyKeys": ["relationshipType", "fromResourceId", "toResourceId"],
+    "optionalBodyKeys": ["description", "labels", "attributes"],
+    "forbiddenBodyKeys": [
+      "edgeId",
+      "schemaVersion",
+      "source",
+      "revision",
+      "lifecycleState",
+      "createdAt",
+      "createdBy",
+      "updatedAt",
+      "updatedBy",
+      "retiredAt",
+      "retiredBy",
+      "retireReason"
+    ],
+    "responseSemantics": "mutation-result"
+  },
+  {
+    "name": "topology edge update",
+    "method": "PUT",
+    "path": "/api/topology/edges/{edgeId}",
+    "queryMode": "none",
+    "backendAuthority": "backend/internal/topology/handler.go",
+    "productionBuilder": "frontend/src/features/topology/topology-builders.ts",
+    "productionReference": "frontend/src/features/topology/components/TopologyEdgeForm.tsx",
+    "requiredBodyKeys": ["expectedRevision", "edge"],
+    "optionalBodyKeys": [],
+    "forbiddenBodyKeys": [
+      "edgeId",
+      "schemaVersion",
+      "source",
+      "revision",
+      "lifecycleState",
+      "createdAt",
+      "createdBy",
+      "updatedAt",
+      "updatedBy",
+      "retiredAt",
+      "retiredBy",
+      "retireReason"
+    ],
+    "nestedContracts": {
+      "edge": {
+        "requiredKeys": [],
+        "allowedKeys": ["description", "labels", "attributes"],
+        "forbiddenKeys": [
+          "edgeId",
+          "schemaVersion",
+          "source",
+          "revision",
+          "lifecycleState",
+          "createdAt",
+          "createdBy",
+          "updatedAt",
+          "updatedBy",
+          "retiredAt",
+          "retiredBy",
+          "retireReason",
+          "relationshipType",
+          "fromResourceId",
+          "toResourceId"
+        ]
+      }
+    },
+    "responseSemantics": "mutation-result"
+  },
+  {
+    "name": "topology edge retire",
+    "method": "POST",
+    "path": "/api/topology/edges/{edgeId}/retire",
+    "queryMode": "none",
+    "backendAuthority": "backend/internal/topology/handler.go",
+    "productionBuilder": "frontend/src/features/topology/topology-builders.ts",
+    "productionReference": "frontend/src/features/topology/TopologyPage.tsx",
+    "requiredBodyKeys": ["expectedRevision", "reason"],
+    "optionalBodyKeys": [],
+    "forbiddenBodyKeys": [
+      "edgeId",
+      "schemaVersion",
+      "source",
+      "revision",
+      "lifecycleState",
+      "createdAt",
+      "createdBy",
+      "updatedAt",
+      "updatedBy",
+      "retiredAt",
+      "retiredBy",
+      "retireReason"
+    ],
+    "responseSemantics": "mutation-result"
+  }
+]

@@ -280,7 +280,7 @@ for (const pattern of forbiddenInRunbook) {
   );
 }
 
-assert.ok(runbook.includes('GoRegistered = 90'), 'Runbook must document GoRegistered = 90');
+assert.ok(runbook.includes('GoRegistered = 97'), 'Runbook must document GoRegistered = 97');
 assert.ok(runbook.includes('Canonical RBAC & Direct Execution'), 'Runbook must document Canonical RBAC & Direct Execution');
 assert.ok(runbook.includes('xcloud_ops.app_audit_logs'), 'Runbook must reference app_audit_logs');
 assert.ok(runbook.includes('app_approvals'), 'Runbook must mention historical app_approvals status');
@@ -319,7 +319,7 @@ assert.ok(agents.includes('Nginx'), 'AGENTS.md must describe the Nginx edge');
 assert.ok(agents.includes('127.0.0.1:18888'), 'AGENTS.md must document the Go upstream 127.0.0.1:18888');
 assert.ok(agents.includes('127.0.0.1:13333') || agents.includes('13333'), 'AGENTS.md must document Vite dev server 127.0.0.1:13333');
 assert.ok(agents.includes('embedded static React SPA') || agents.includes('embedded static SPA'), 'AGENTS.md must document Go embedded SPA hosting');
-assert.ok(agents.includes('90 exact METHOD+PATH registrations'), 'AGENTS.md must document the 90 Go registration authority');
+assert.ok(agents.includes('97 exact METHOD+PATH registrations'), 'AGENTS.md must document the 97 Go registration authority');
 assert.ok(agents.includes('Route authority'), 'AGENTS.md must document the derived Go registration authority');
 assert.ok(agents.includes('the derived Go registration set'), 'AGENTS.md must derive route authority from the Go registration set');
 
@@ -362,7 +362,7 @@ assert.ok(!claude.includes('approval review/execute'), 'CLAUDE.md must not conta
 assert.ok(!claude.includes('ACTUALLY_ROUTED = 26`'), 'CLAUDE.md must not contain stale ACTUALLY_ROUTED = 26 in active invariants');
 assert.ok(!/route-owner table/i.test(claude), 'CLAUDE.md must not present a route-owner table as the current architecture');
 assert.ok(claude.includes('Nginx'), 'CLAUDE.md must describe the Nginx edge');
-assert.ok(claude.includes('90 条 Go 注册'), 'CLAUDE.md must document the 90 Go registration authority');
+assert.ok(claude.includes('97 条 Go 注册'), 'CLAUDE.md must document the 97 Go registration authority');
 
 // 6. README.md
 const readmePath = path.join(ROOT, 'README.md');

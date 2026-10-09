@@ -3,7 +3,7 @@
  * Inventory Contract Validator
  *
  * Proves:
- * - Route count = 26
+ * - Route count = 28
  * - Inventory frontend routes = 3
  * - Inventory API registrations = 6
  * - Inventory reads = 3
@@ -40,7 +40,7 @@ console.log('-- Inventory Contract & Security Evidence Suite --\n');
 
 // 1. Route contract checks
 const routes = JSON.parse(readFileSync(resolve(frontend, 'route-contract.json'), 'utf8'));
-assert.equal(routes.length, 26, `Total route count must be exactly 26, got ${routes.length}`);
+assert.equal(routes.length, 28, `Total route count must be exactly 28, got ${routes.length}`);
 
 const inventoryRoutes = routes.filter((r) => r.route.startsWith('/inventory'));
 assert.equal(inventoryRoutes.length, 3, `Inventory frontend route count must be 3, got ${inventoryRoutes.length}`);
@@ -52,7 +52,7 @@ for (const r of expectedInventoryRoutes) {
 // 2. Go API registrations checks
 const { keys: goRegistrations, duplicates: goDuplicates } = deriveGoRegistrations(root);
 assert.equal(goDuplicates.length, 0, 'Go registrations must have 0 duplicates');
-assert.equal(goRegistrations.length, 90, `Go registered operations must be exactly 90, got ${goRegistrations.length}`);
+assert.equal(goRegistrations.length, 97, `Go registered operations must be exactly 97, got ${goRegistrations.length}`);
 
 const inventoryGoRoutes = goRegistrations.filter((r) => r.includes('/api/inventory'));
 assert.equal(inventoryGoRoutes.length, 6, `Inventory Go registrations must be exactly 6, got ${inventoryGoRoutes.length}`);
@@ -328,7 +328,7 @@ assert.equal(trustedIdentityHeadersCount, 0, `inventory trusted identity headers
 assert.equal(autoRetryCount, 0, `inventory automatic mutation retries must be 0, got ${autoRetryCount}`);
 assert.equal(genericExecutorCount, 0, `inventory generic executor calls must be 0, got ${genericExecutorCount}`);
 
-console.log('route_count=26');
+console.log('route_count=28');
 console.log('inventory_frontend_routes=3');
 console.log('inventory_api_registrations=6');
 console.log('inventory_reads=3');

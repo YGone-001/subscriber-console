@@ -210,5 +210,24 @@
     "readEndpoints": [
       "GET /api/inventory/meta"
     ]
+  },
+  {
+    "route": "/topology",
+    "mode": "read",
+    "source": "frontend/src/features/topology/TopologyPage.tsx",
+    "readEndpoints": [
+      "GET /api/topology/meta",
+      "GET /api/topology/edges",
+      "GET /api/inventory/resources"
+    ]
+  },
+  {
+    "route": "/topology/:resourceId",
+    "mode": "read",
+    "source": "frontend/src/features/topology/ResourceTopologyPage.tsx",
+    "readEndpoints": [
+      "GET /api/topology/meta",
+      "GET /api/topology/resources/{resourceId}/neighbors"
+    ]
   }
 ]

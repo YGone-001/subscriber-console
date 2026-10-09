@@ -454,6 +454,28 @@ async function ensureIndexes() {
     },
   ])).map((name) => ({ database: appDbName, collection: 'app_inventory_resources', name })));
 
+  // ── xcloud_ops.app_topology_edges ──
+  // Topology owns EDGES only. The partial unique index enforces at most one
+  // active relationship per directed tuple while still allowing the same tuple
+  // to be recreated as a new edge after retirement.
+  createdIndexes.push(...(await appDb.collection('app_topology_edges').createIndexes([
+    {
+      key: { fromResourceId: 1, toResourceId: 1, relationshipType: 1 },
+      unique: true,
+      partialFilterExpression: { lifecycleState: 'active' },
+      name: 'uniq_topology_active_edge',
+    },
+    {
+      key: { fromResourceId: 1, relationshipType: 1, lifecycleState: 1, updatedAt: -1 },
+      name: 'topology_from_type_state_updated',
+    },
+    {
+      key: { toResourceId: 1, relationshipType: 1, lifecycleState: 1, updatedAt: -1 },
+      name: 'topology_to_type_state_updated',
+    },
+    { key: { updatedAt: -1, _id: 1 }, name: 'topology_updated_id' },
+  ])).map((name) => ({ database: appDbName, collection: 'app_topology_edges', name })));
+
 async function seedRootAdminUser(appDb) {
   const users = appDb.collection('app_users');
   const existingAdmin = await users.findOne({ username: 'admin' });

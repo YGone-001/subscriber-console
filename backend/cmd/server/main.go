@@ -32,6 +32,7 @@ import (
 	"subscriber/internal/subscriber"
 	"subscriber/internal/system"
 	"subscriber/internal/tariff"
+	"subscriber/internal/topology"
 	"subscriber/internal/user"
 )
 
@@ -175,6 +176,13 @@ func main() {
 	inventoryRepo := inventory.NewRepository(mc.Ops.Collection("app_inventory_resources"))
 	inventoryHandler := inventory.NewHandler(inventoryRepo, limiter, auditWriter)
 
+	// Topology (edges only; Inventory remains the sole node authority)
+	topologyRepo := topology.NewMongoRepository(
+		mc.Ops.Collection("app_topology_edges"),
+		mc.Ops.Collection("app_inventory_resources"),
+	)
+	topologyHandler := topology.NewHandler(topologyRepo, limiter, auditWriter)
+
 	// Build handler
 	mux := http.NewServeMux()
 
@@ -312,6 +320,15 @@ func main() {
 	mux.Handle("POST /api/inventory/resources", authMiddleware(http.HandlerFunc(inventoryHandler.Create)))
 	mux.Handle("PUT /api/inventory/resources/{resourceId}", authMiddleware(http.HandlerFunc(inventoryHandler.Update)))
 	mux.Handle("POST /api/inventory/resources/{resourceId}/retire", authMiddleware(http.HandlerFunc(inventoryHandler.Retire)))
+
+	// Topology (four reads, three mutations)
+	mux.Handle("GET /api/topology/meta", authMiddleware(http.HandlerFunc(topologyHandler.Meta)))
+	mux.Handle("GET /api/topology/edges", authMiddleware(http.HandlerFunc(topologyHandler.List)))
+	mux.Handle("GET /api/topology/edges/{edgeId}", authMiddleware(http.HandlerFunc(topologyHandler.Get)))
+	mux.Handle("GET /api/topology/resources/{resourceId}/neighbors", authMiddleware(http.HandlerFunc(topologyHandler.Neighbors)))
+	mux.Handle("POST /api/topology/edges", authMiddleware(http.HandlerFunc(topologyHandler.Create)))
+	mux.Handle("PUT /api/topology/edges/{edgeId}", authMiddleware(http.HandlerFunc(topologyHandler.Update)))
+	mux.Handle("POST /api/topology/edges/{edgeId}/retire", authMiddleware(http.HandlerFunc(topologyHandler.Retire)))
 
 	// Catch-all for unknown API routes
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {

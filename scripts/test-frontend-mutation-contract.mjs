@@ -507,7 +507,7 @@ const importPrecheckExecuteConsistency = (
 const trafficAdjustResponseSemantics = passedTests.has('traffic adjustment: classified as routing-acknowledgement, never mutation-result') ? 'PASS' : 'FAIL';
 
 // Verify Route Inventory
-assert.equal(routes.length, 26, 'route contract must contain 26 routes');
+assert.equal(routes.length, 28, 'route contract must contain 28 routes');
 
 // Verify Contract Checks
 assert.equal(contracts.length, 11);

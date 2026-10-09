@@ -22,12 +22,16 @@ import { UserCreatePage } from '../features/users/UserCreatePage';
 import { InventoryPage } from '../features/inventory/InventoryPage';
 import { InventoryDetailPage } from '../features/inventory/InventoryDetailPage';
 import { InventoryCreatePage } from '../features/inventory/InventoryCreatePage';
+import { TopologyPage } from '../features/topology/TopologyPage';
+import { ResourceTopologyPage } from '../features/topology/ResourceTopologyPage';
 
 const pages: Record<string, ReactNode> = {
   '/': <DashboardPage />,
   '/inventory': <InventoryPage />,
   '/inventory/:resourceId': <InventoryDetailPage />,
   '/inventory/create': <InventoryCreatePage />,
+  '/topology': <TopologyPage />,
+  '/topology/:resourceId': <ResourceTopologyPage />,
   '/ocs/balances': <BalancesPage />,
   '/ocs/balances/:imsi': <BalanceDetailPage />,
   '/ocs/contracts': <ContractsPage />,

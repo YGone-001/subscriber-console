@@ -4,6 +4,8 @@
   { "route": "/inventory", "dynamicParameters": [] },
   { "route": "/inventory/:resourceId", "dynamicParameters": ["resourceId"] },
   { "route": "/inventory/create", "dynamicParameters": [] },
+  { "route": "/topology", "dynamicParameters": [] },
+  { "route": "/topology/:resourceId", "dynamicParameters": ["resourceId"] },
   { "route": "/ocs", "dynamicParameters": [] },
   { "route": "/ocs/balances", "dynamicParameters": [] },
   { "route": "/ocs/balances/:imsi", "dynamicParameters": ["imsi"] },

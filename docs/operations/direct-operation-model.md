@@ -32,7 +32,7 @@ Historical `app_approvals` data is not dropped. It is left untouched for retenti
 
 ## Invariants
 
-- Route authority is the Go registration set (`90` METHOD+PATH entries); no route-owner table exists in production source.
+- Route authority is the Go registration set (`97` METHOD+PATH entries); no route-owner table exists in production source.
 - Every registered route is owned and served by Go and routed by the Nginx edge.
 - Go remains the authoritative writer for every production mutation.
 - Runtime charging-plane boundaries are unchanged.
