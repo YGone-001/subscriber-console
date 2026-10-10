@@ -18,7 +18,8 @@
     "check:fonts": "node ../scripts/check-font-coverage.mjs",
     "evidence:topology": "node tests/render-topology-evidence.mjs",
     "acceptance:topology-screenshots": "node tests/topology-screenshots.mjs",
-    "acceptance:discovery-screenshots": "node tests/nf-discovery-screenshots.mjs"
+    "acceptance:discovery-screenshots": "node tests/nf-discovery-screenshots.mjs",
+    "acceptance:nf-health-screenshots": "node tests/nf-health-screenshots.mjs"
   },
   "dependencies": {
     "react": "19.2.4",

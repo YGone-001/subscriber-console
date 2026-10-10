@@ -1,0 +1,573 @@
+/*
+ * NF Health monitoring surfaces.
+ *
+ * Mirrors the Discovery / Inventory module primitives (toolbar, continuous
+ * panel, identity blocks, modal forms, layered state badges) so the health
+ * plane reads as part of the same console. All colors and spacing come from the
+ * shared design-token layers; no raw hex or rgb literals.
+ */
+
+.kpiStrip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+  margin: 1rem 0;
+}
+
+.kpiCard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 1rem 1.15rem;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-panel, 12px);
+  background: var(--surface);
+}
+
+.kpiLabel {
+  color: var(--text-muted);
+  font-size: var(--ref-font-size-label);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.kpiValue {
+  color: var(--text-main);
+  font-size: var(--ref-font-size-title, 1.55rem);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.85rem;
+  padding: 1rem;
+  border-bottom: 1px solid var(--surface-border);
+  flex-wrap: wrap;
+}
+
+.search {
+  min-width: 0;
+  flex: 1 1 320px;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: var(--control-height);
+  padding: 0 0.35rem 0 0.85rem;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-pill);
+  background: var(--surface-field);
+  color: var(--text-muted);
+}
+
+.search:focus-within {
+  border-color: var(--primary);
+  box-shadow: var(--focus-ring);
+}
+
+.searchIcon {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+}
+
+.search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text-main);
+  font-size: var(--ref-font-size-body-support);
+}
+
+.search input::placeholder {
+  color: var(--text-muted);
+}
+
+.filterGroup {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.filterGroup :global(.form-input) {
+  width: auto;
+  min-width: 132px;
+  min-height: var(--control-height);
+}
+
+.sectionHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.15rem 0.35rem;
+  flex-wrap: wrap;
+}
+
+.sectionHead h2 {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0;
+  color: var(--text-main);
+  font-size: var(--ref-font-size-body-emphasis);
+  font-weight: 800;
+}
+
+.sectionNote {
+  color: var(--text-muted);
+  font-size: var(--ref-font-size-label);
+}
+
+.semanticNote {
+  margin: 0;
+  padding: 0.75rem 1.15rem;
+  color: var(--text-secondary);
+  font-size: var(--ref-font-size-body-support);
+  line-height: 1.55;
+  border-top: 1px solid var(--surface-border);
+}
+
+.stateWrap,
+.errorWrap {
+  padding: 1.25rem;
+}
+
+.tableScroll {
+  overflow-x: auto;
+  padding: 0 0 0.5rem;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--ref-font-size-body-support);
+}
+
+.table th,
+.table td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--surface-border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.table th {
+  color: var(--text-muted);
+  font-size: var(--ref-font-size-label-strong);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.table tbody tr:hover td {
+  background: var(--surface-hover);
+}
+
+.rowLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--primary);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.rowLink:hover {
+  text-decoration: underline;
+}
+
+.uuid {
+  display: block;
+  max-width: 22rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-family: var(--font-data);
+  font-size: var(--ref-font-size-label);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.12rem 0.45rem;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-pill);
+  background: var(--surface-hover);
+  color: var(--text-secondary);
+  font-family: var(--font-data);
+  font-size: var(--ref-font-size-label);
+  white-space: nowrap;
+}
+
+.badgeHealthy,
+.badgeDegraded,
+.badgeUnhealthy,
+.badgeUnknown,
+.badgeNotConfigured,
+.badgeStale,
+.badgeMuted {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.15rem 0.55rem;
+  border-radius: var(--ref-radius-pill);
+  border: 1px solid var(--surface-border);
+  font-size: var(--ref-font-size-label-strong);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.badgeHealthy {
+  color: var(--success, var(--primary));
+  border-color: color-mix(in srgb, var(--success, var(--primary)) 35%, var(--surface-border));
+  background: color-mix(in srgb, var(--success, var(--primary)) 10%, transparent);
+}
+
+.badgeDegraded,
+.badgeStale {
+  color: var(--warning, var(--text-secondary));
+  border-color: color-mix(in srgb, var(--warning, var(--text-secondary)) 35%, var(--surface-border));
+  background: color-mix(in srgb, var(--warning, var(--text-secondary)) 10%, transparent);
+}
+
+.badgeUnhealthy {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 35%, var(--surface-border));
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+}
+
+.badgeUnknown {
+  color: var(--text-secondary);
+  border-color: var(--surface-border);
+  background: var(--surface-hover);
+}
+
+.badgeNotConfigured,
+.badgeMuted {
+  color: var(--text-muted);
+  background: var(--surface-hover);
+}
+
+.stack {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.stack small {
+  color: var(--text-muted);
+  font-size: var(--ref-font-size-label);
+}
+
+.rowActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.identityGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.85rem 1.25rem;
+  margin: 0;
+  padding: 0.5rem 1.15rem 1.15rem;
+}
+
+.identityGrid dt {
+  color: var(--text-muted);
+  font-size: var(--ref-font-size-label);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.identityGrid dd {
+  margin: 0.2rem 0 0;
+  color: var(--text-main);
+  font-size: var(--ref-font-size-body-support);
+  word-break: break-all;
+}
+
+.layerGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+  padding: 0.5rem 1.15rem 1.15rem;
+}
+
+.layerPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 1rem;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-panel, 12px);
+  background: var(--surface);
+  min-width: 0;
+}
+
+.layerPanel[data-measured='false'] {
+  border-style: dashed;
+  background: var(--surface-field);
+}
+
+.layerPanelHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.layerPanelTitle {
+  margin: 0;
+  color: var(--text-main);
+  font-size: var(--ref-font-size-body-emphasis);
+  font-weight: 800;
+}
+
+.layerMeta {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+}
+
+.layerMeta div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: var(--ref-font-size-label);
+}
+
+.layerMeta dt {
+  color: var(--text-muted);
+}
+
+.layerMeta dd {
+  margin: 0;
+  color: var(--text-main);
+  text-align: right;
+  word-break: break-word;
+}
+
+.layerUnsupported {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--ref-font-size-body-support);
+  line-height: 1.5;
+}
+
+.trendControls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding: 0.75rem 1.15rem 0;
+}
+
+.trendWindowBtn {
+  min-height: var(--control-height);
+  padding: 0.35rem 0.75rem;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-pill);
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: var(--ref-font-size-label-strong);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.trendWindowBtn[aria-pressed='true'] {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+}
+
+.trendGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  padding: 0.75rem 1.15rem 1.15rem;
+}
+
+.trendCard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 1rem;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-panel, 12px);
+  background: var(--surface);
+  min-width: 0;
+}
+
+.trendCardHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.trendCardTitle {
+  margin: 0;
+  color: var(--text-main);
+  font-family: var(--font-data);
+  font-size: var(--ref-font-size-body-support);
+  font-weight: 700;
+  word-break: break-all;
+}
+
+.trendCardMeta {
+  color: var(--text-muted);
+  font-size: var(--ref-font-size-label);
+}
+
+.trendChart {
+  width: 100%;
+  height: 220px;
+  min-width: 0;
+}
+
+.metricTableWrap {
+  overflow-x: auto;
+  padding: 0 0 0.5rem;
+}
+
+/*
+ * The global `.modal-overlay` contract pads with `4vh 2rem`, so a dialog whose
+ * max-height only subtracts `2rem` can still overflow the viewport bottom on
+ * short screens. These scoped modifiers keep the dialog inside the overlay
+ * padding box and let the body scroll instead of the dialog itself.
+ */
+:global(.modal-overlay).modalOverlay {
+  align-items: center;
+  justify-content: center;
+  padding-top: clamp(1rem, 4vh, 2rem);
+  padding-bottom: clamp(1rem, 4vh, 2rem);
+}
+
+.modalContent {
+  width: min(640px, calc(100vw - 2rem));
+  max-height: calc(100vh - 2 * clamp(1rem, 4vh, 2rem));
+  overflow: auto;
+}
+
+.modalHeader {
+  padding: 1.15rem 1.25rem 0.5rem;
+}
+
+.modalHeader h2 {
+  margin: 0;
+  color: var(--text-main);
+  font-size: var(--ref-font-size-title-compact, 1.2rem);
+  font-weight: 800;
+}
+
+.modalBody {
+  padding: 0.5rem 1.25rem 1.25rem;
+  display: grid;
+  gap: 0.85rem;
+}
+
+.modalIntro {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--ref-font-size-body-support);
+  line-height: 1.55;
+}
+
+.formError {
+  margin: 0;
+  color: var(--danger);
+  font-size: var(--ref-font-size-label-strong);
+}
+
+.formRow {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.formActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.55rem;
+  padding-top: 0.35rem;
+}
+
+.spin {
+  animation: nf-health-spin 0.9s linear infinite;
+}
+
+@keyframes nf-health-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation: none;
+  }
+}
+
+@media (max-width: 1100px) {
+  .layerGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .trendGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .kpiStrip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  /*
+   * Column layout promotes flex-basis onto the vertical axis. The desktop
+   * `flex: 1 1 320px` basis would otherwise render the search pill as a
+   * 320px-tall field, so the basis becomes auto-sized here and the control
+   * keeps its normal height from --control-height.
+   */
+  .search {
+    flex: 0 0 auto;
+    width: 100%;
+  }
+
+  .filterGroup {
+    width: 100%;
+  }
+
+  .formRow {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .kpiStrip {
+    grid-template-columns: 1fr;
+  }
+
+  .rowActions {
+    justify-content: flex-start;
+  }
+}

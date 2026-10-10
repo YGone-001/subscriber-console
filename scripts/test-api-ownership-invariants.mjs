@@ -16,7 +16,7 @@
  *   - no surviving ACTIVE executable code imports the absent tree;
  *   - the Next.js runtime owns no business MongoDB read/write data plane;
  *   - the Go router registration site IS the authoritative production API surface
- *     (109 exact METHOD+PATH registrations, zero duplicates), never a migration artifact;
+ *     (119 exact METHOD+PATH registrations, zero duplicates), never a migration artifact;
  *   - the six retired mutation methods are absent from that surface;
  *   - Nginx owns API routing at the edge: /api and /api/* -> Go, / -> Next.js, with
  *     client-supplied identity headers stripped on the API locations;
@@ -27,7 +27,7 @@
  *   - dependency consumers (mongodb / jose / bcryptjs) are all classified.
  *
  * The machine-readable block at the end is DERIVED from evidence. The only frozen
- * constant is the canonical production API surface size (109), used to assert the
+ * constant is the canonical production API surface size (119), used to assert the
  * derived Go registration count.
  *
  * Usage: node scripts/test-api-ownership-invariants.mjs
@@ -55,7 +55,7 @@ const CODE_EXT = /\.(ts|tsx|js|jsx|mjs|cjs)$/;
 
 // Frozen final canonical production API surface size. The set itself is always derived
 // from the Go registration site; this number only asserts the derived total.
-const EXPECTED_GO_REGISTRATIONS = 109;
+const EXPECTED_GO_REGISTRATIONS = 119;
 
 // ---------------------------------------------------------------------------
 // Invariant bookkeeping

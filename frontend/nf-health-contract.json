@@ -1,0 +1,68 @@
+{
+  "domain": "nf-health",
+  "schemaVersion": 1,
+  "apis": [
+    { "method": "GET", "path": "/api/nf-health/meta", "access": "read", "permission": "core.read" },
+    { "method": "GET", "path": "/api/nf-health/targets", "access": "read", "permission": "core.read" },
+    { "method": "GET", "path": "/api/nf-health/targets/{targetId}", "access": "read", "permission": "core.read" },
+    { "method": "GET", "path": "/api/nf-health/targets/{targetId}/history", "access": "read", "permission": "core.read" },
+    { "method": "GET", "path": "/api/nf-health/samples", "access": "read", "permission": "core.read" },
+    { "method": "GET", "path": "/api/nf-health/runs", "access": "read", "permission": "core.read" },
+    { "method": "GET", "path": "/api/nf-health/runs/{runId}", "access": "read", "permission": "core.read" },
+    { "method": "POST", "path": "/api/nf-health/targets", "access": "write", "permission": "core.configure" },
+    { "method": "PUT", "path": "/api/nf-health/targets/{targetId}", "access": "write", "permission": "core.configure" },
+    { "method": "POST", "path": "/api/nf-health/targets/{targetId}/collect", "access": "write", "permission": "core.configure" }
+  ],
+  "routes": [
+    { "route": "/nf-health", "dynamicParameters": [], "operations": [] },
+    {
+      "route": "/nf-health/:targetId",
+      "dynamicParameters": ["targetId"],
+      "operations": [
+        {
+          "name": "nf health target update",
+          "authorization": { "kind": "permission", "value": "core.configure" }
+        },
+        {
+          "name": "nf health collection request",
+          "authorization": { "kind": "permission", "value": "core.configure" }
+        }
+      ]
+    }
+  ],
+  "collections": [
+    "xcloud_ops.app_nf_health_targets",
+    "xcloud_ops.app_nf_health_runs",
+    "xcloud_ops.app_nf_health_samples"
+  ],
+  "serverOwnedFields": [
+    "targetId",
+    "schemaVersion",
+    "revision",
+    "createdAt",
+    "createdBy",
+    "updatedAt",
+    "updatedBy",
+    "lastAttemptAt",
+    "lastSuccessAt",
+    "lastMeasuredAt",
+    "lastError",
+    "runId",
+    "sampleId",
+    "startedAt",
+    "completedAt",
+    "layersMeasured",
+    "initiatedBy",
+    "collectedAt",
+    "expiresAt"
+  ],
+  "layerStates": ["healthy", "degraded", "unhealthy", "unknown", "not_configured", "stale"],
+  "collectorProfiles": ["http_metrics"],
+  "semanticSeparations": [
+    "NRF REGISTERED is not process healthy",
+    "metrics HTTP 200 is not protocol healthy",
+    "process active is not session success",
+    "missing metrics are not zeros",
+    "failed collection does not overwrite last good measurement"
+  ]
+}

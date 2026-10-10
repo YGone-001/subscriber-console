@@ -22,6 +22,7 @@ import (
 	"subscriber/internal/inventory"
 	"subscriber/internal/middleware"
 	mongoClient "subscriber/internal/mongo"
+	"subscriber/internal/nfhealth"
 	"subscriber/internal/notification"
 	"subscriber/internal/ocs"
 	"subscriber/internal/profile"
@@ -201,6 +202,29 @@ func main() {
 	)
 	discoveryHandler := discovery.NewHandler(discoveryRepo, limiter, auditWriter, discoveryAdapters, discoveryAllowlist, discoveryInventoryResolver)
 
+	// NF Health (read-only telemetry; Discovery remains the candidate authority)
+	nfHealthDest := nfhealth.NewDestinationAllowlist(cfg.NFHealthAllowedTargets)
+	nfHealthUnits := nfhealth.NewServiceUnitAllowlist(cfg.NFHealthServiceUnits)
+	nfHealthProber := nfhealth.NewHTTPProber(nfhealth.RequestTimeoutSeconds * time.Second)
+	nfHealthInspector := nfhealth.NewUnitInspector(nfHealthUnits, "/usr/bin/systemctl")
+	nfHealthCollector := nfhealth.NewCollector(nfHealthProber, nfHealthInspector, nfHealthDest, nfHealthUnits)
+	nfHealthRepo := nfhealth.NewRepository(
+		mc.Ops.Collection("app_nf_health_targets"),
+		mc.Ops.Collection("app_nf_health_runs"),
+		mc.Ops.Collection("app_nf_health_samples"),
+	)
+	nfHealthHandler := nfhealth.NewHandler(nfHealthRepo, nfHealthCollector, limiter, auditWriter, nfHealthDest, nfHealthUnits)
+	nfHealthHandler.SetCandidateLookup(func(ctx context.Context, candidateID string) (bool, error) {
+		count, err := mc.Ops.Collection("app_nf_observations").CountDocuments(ctx, map[string]any{"_id": candidateID})
+		if err != nil {
+			return false, err
+		}
+		return count > 0, nil
+	})
+	nfHealthScheduler := nfhealth.NewScheduler(nfHealthRepo, nfHealthCollector)
+	nfHealthScheduler.Start(context.Background())
+	defer nfHealthScheduler.Stop()
+
 	// Build handler
 	mux := http.NewServeMux()
 
@@ -361,6 +385,18 @@ func main() {
 	mux.Handle("POST /api/discovery/sources/{sourceId}/scan", authMiddleware(http.HandlerFunc(discoveryHandler.ScanSource)))
 	mux.Handle("POST /api/discovery/candidates/{candidateId}/link", authMiddleware(http.HandlerFunc(discoveryHandler.LinkCandidate)))
 	mux.Handle("POST /api/discovery/candidates/{candidateId}/unlink", authMiddleware(http.HandlerFunc(discoveryHandler.UnlinkCandidate)))
+
+	// NF Health (seven reads, three mutations)
+	mux.Handle("GET /api/nf-health/meta", authMiddleware(http.HandlerFunc(nfHealthHandler.Meta)))
+	mux.Handle("GET /api/nf-health/targets", authMiddleware(http.HandlerFunc(nfHealthHandler.ListTargets)))
+	mux.Handle("GET /api/nf-health/targets/{targetId}", authMiddleware(http.HandlerFunc(nfHealthHandler.GetTarget)))
+	mux.Handle("GET /api/nf-health/targets/{targetId}/history", authMiddleware(http.HandlerFunc(nfHealthHandler.GetTargetHistory)))
+	mux.Handle("GET /api/nf-health/samples", authMiddleware(http.HandlerFunc(nfHealthHandler.ListSamples)))
+	mux.Handle("GET /api/nf-health/runs", authMiddleware(http.HandlerFunc(nfHealthHandler.ListRuns)))
+	mux.Handle("GET /api/nf-health/runs/{runId}", authMiddleware(http.HandlerFunc(nfHealthHandler.GetRun)))
+	mux.Handle("POST /api/nf-health/targets", authMiddleware(http.HandlerFunc(nfHealthHandler.CreateTarget)))
+	mux.Handle("PUT /api/nf-health/targets/{targetId}", authMiddleware(http.HandlerFunc(nfHealthHandler.UpdateTarget)))
+	mux.Handle("POST /api/nf-health/targets/{targetId}/collect", authMiddleware(http.HandlerFunc(nfHealthHandler.CollectTarget)))
 
 	// Catch-all for unknown API routes
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {

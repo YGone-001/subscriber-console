@@ -42,6 +42,16 @@
     ]
   },
   {
+    "route": "/nf-health",
+    "dynamicParameters": []
+  },
+  {
+    "route": "/nf-health/:targetId",
+    "dynamicParameters": [
+      "targetId"
+    ]
+  },
+  {
     "route": "/ocs",
     "dynamicParameters": []
   },

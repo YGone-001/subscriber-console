@@ -26,6 +26,8 @@ import { TopologyPage } from '../features/topology/TopologyPage';
 import { ResourceTopologyPage } from '../features/topology/ResourceTopologyPage';
 import { DiscoveryPage } from '../features/discovery/DiscoveryPage';
 import { DiscoverySourceDetailPage } from '../features/discovery/DiscoverySourceDetailPage';
+import { NfHealthPage } from '../features/nf-health/NfHealthPage';
+import { NfHealthDetailPage } from '../features/nf-health/NfHealthDetailPage';
 
 const pages: Record<string, ReactNode> = {
   '/': <DashboardPage />,
@@ -36,6 +38,8 @@ const pages: Record<string, ReactNode> = {
   '/topology/:resourceId': <ResourceTopologyPage />,
   '/discovery': <DiscoveryPage />,
   '/discovery/sources/:sourceId': <DiscoverySourceDetailPage />,
+  '/nf-health': <NfHealthPage />,
+  '/nf-health/:targetId': <NfHealthDetailPage />,
   '/ocs/balances': <BalancesPage />,
   '/ocs/balances/:imsi': <BalanceDetailPage />,
   '/ocs/contracts': <ContractsPage />,

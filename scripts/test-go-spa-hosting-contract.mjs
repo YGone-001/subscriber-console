@@ -44,10 +44,10 @@ assert.ok(rootGitignore.includes('backend/internal/spa/static/*'), 'root .gitign
 // 6. Verify staging script exists
 assert.ok(existsSync(join(root, 'scripts', 'stage-spa-for-go.mjs')), 'scripts/stage-spa-for-go.mjs must exist');
 
-// 7. Verify Go API registrations remain exactly 109
+// 7. Verify Go API registrations remain exactly 119
 const { keys: registrations, duplicates } = deriveGoRegistrations(root);
 assert.deepEqual(duplicates, [], 'No duplicate Go registrations permitted');
-assert.equal(registrations.length, 109, `Expected exactly 109 Go registrations, got ${registrations.length}`);
+assert.equal(registrations.length, 119, `Expected exactly 119 Go registrations, got ${registrations.length}`);
 
 // 8. Verify no runtime dist-path or Node dependency in backend Go source
 function collectGoFiles(dir) {

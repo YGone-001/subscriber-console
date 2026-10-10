@@ -74,7 +74,9 @@ Platform Evolution Status:
 - Inventory / Resource Model Foundation = IMPLEMENTED (authoritative metadata source of truth in `xcloud_ops.app_inventory_resources`, 6 Go endpoints, 3 SPA routes, keyset cursor pagination, CAS concurrency, terminal retirement).
 - Frontend Visual & Interaction Parity Restoration = IMPLEMENTED (historical xCloud operator presentation forward-ported onto the current React/Vite + Go runtime; see `docs/architecture/frontend-ui-restoration.md`). The runtime remains React/Vite + Go; Next.js is not restored.
 - Topology / Dependency Model Foundation = IMPLEMENTED (manual authoritative relationship management in `xcloud_ops.app_topology_edges`, 7 Go endpoints, 2 SPA routes, nine directed relationship types, partial-unique active-edge deduplication, revision CAS, terminal retirement, one-hop neighbour projection; see `docs/architecture/topology-dependency-model.md`).
-- Discovery, NF adapters, telemetry, assurance and multi-hop analysis remain future work and are not implemented by the topology foundation.
+- Discovery / NF Observation Foundation = IMPLEMENTED (vendor-neutral read-only NRF NFManagement observation into `xcloud_ops.app_nf_observations`, 12 Go endpoints, 2 SPA routes; see `docs/architecture/nf-discovery.md`).
+- NF Health / Telemetry Foundation = IMPLEMENTED (read-only three-layer measurement evidence in `xcloud_ops.app_nf_health_targets` + `app_nf_health_runs` + `app_nf_health_samples`, 10 Go endpoints, 2 SPA routes; see `docs/architecture/nf-health-telemetry.md`).
+- Assurance correlation, RCA, AIOps and multi-hop analysis remain future work and are not implemented by the discovery or telemetry foundations.
 
 ### Internal Backend Direction
 
@@ -145,17 +147,22 @@ Stage 2 (implemented)
     Inventory owns nodes; Topology owns edges.
     Nine directed relationship types, two lifecycle states.
     One-hop neighbour projection only.
-    No discovery, no adapter runtime, no remote execution.
+    No adapter runtime, no remote execution.
 
-Stage 3 (future)
-    Discovery and NF adapters.
-    NRF / vendor discovery feeding candidate relationships.
-    Vendor-neutral adapter and mediation boundary.
+Discovery (implemented)
+    Read-only registry observation feeding candidate identities.
+    Operator-authored Inventory associations only.
+    Observation state is not operational health.
+
+NF Health (implemented)
+    Read-only three-layer measurement evidence.
+    Process / interface / KPI layers with explicit coverage.
+    Bounded collection history and sample retention.
 
 Later (future)
-    Telemetry, assurance and multi-hop analysis.
-    Observed operational state alongside declared topology state.
+    Assurance correlation and multi-hop analysis.
     Alarm correlation, RCA and blast-radius analysis.
+    Vendor-neutral adapter and mediation boundary.
 ```
 
 A future network source of truth should model Region, Site, Cluster, Host, VM,

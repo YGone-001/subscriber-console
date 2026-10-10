@@ -34,7 +34,7 @@ for (const entry of inventory) {
   routesSeen.add(entry.route);
 }
 
-assert.equal(inventory.length, 30, 'canonical route contract must contain exactly 30 routes');
+assert.equal(inventory.length, 32, 'canonical route contract must contain exactly 30 routes');
 
 const packageJson = JSON.parse(readFileSync(resolve(frontendRoot, 'package.json'), 'utf8'));
 assert.equal(packageJson.name, 'subscriber-console-frontend', 'frontend package name must be subscriber-console-frontend');

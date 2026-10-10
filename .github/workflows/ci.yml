@@ -119,7 +119,7 @@ jobs:
       # composition, command palette, tab bar, breadcrumbs, theme and language switches,
       # user menu, notification presentation, restored brand asset, dashboard
       # presentation, Inventory visual integration, stylesheet architecture, Next
-      # absence, frozen route count (28) and frozen Go registration count (109).
+      # absence, frozen route count (28) and frozen Go registration count (119).
       - name: Frontend UI restoration contract
         run: node scripts/test-ui-restoration-contract.mjs
 
@@ -697,7 +697,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       # Contract and security evidence: two Topology routes, seven Topology APIs,
-      # 30 canonical routes, 109 Go registrations, request-contract exactness with
+      # 32 canonical routes, 119 Go registrations, request-contract exactness with
       # negative sentinels, and no raw fetch / absolute URL / retry / executor.
       - name: Topology contract and security evidence
         run: node scripts/test-topology-contract.mjs
@@ -791,7 +791,7 @@ jobs:
           cd frontend && npm ci
 
       # Deterministic contract and security evidence for the 12 discovery APIs,
-      # 2 SPA routes, 109 Go registrations, 3 collections and vendor-neutral
+      # 2 SPA routes, 119 Go registrations, 3 collections and vendor-neutral
       # adapter vocabulary. No live registry is contacted.
       - name: NF discovery contract and security evidence
         run: node scripts/test-nf-discovery-contract.mjs
@@ -854,6 +854,112 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  nf-health-integration:
+    name: NF health integration
+    runs-on: ubuntu-latest
+    env:
+      MONGODB_URI: mongodb://127.0.0.1:27017/xcloud
+      JWT_SECRET: ci-only-placeholder-secret-with-at-least-32-bytes
+      INITIAL_ADMIN_PASSWORD: ChangeMe@2026
+    services:
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ ping: 1 })'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          cd frontend && npm ci
+
+      # Deterministic contract and security evidence for the 10 NF Health APIs,
+      # 2 SPA routes, derived Go registrations, 3 collections and semantic
+      # separation rules. No live telemetry endpoint is contacted.
+      - name: NF health contract and security evidence
+        run: node scripts/test-nf-health-contract.mjs
+
+      # Real MongoDB, the production index initializer, a real Go backend, a
+      # mock metrics exporter and a read-only systemd adapter mock. Proves CAS,
+      # allowlist default-deny, freshness preservation, sample retention fields,
+      # RBAC and the protocol-semantics regressions.
+      - name: NF health integration
+        run: node scripts/test-nf-health-integration.mjs
+
+  nf-health-ui-acceptance:
+    name: NF health UI/UX acceptance
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          cd frontend && npm ci
+
+      - name: Frontend build
+        working-directory: frontend
+        run: npm run build
+
+      - name: Install Chromium browser dependencies
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      # Native-module integration: routes, navigation, shared primitives, shared
+      # token system, layered-health presentation and vendor-neutral strings.
+      - name: NF health UI/UX acceptance contract
+        run: node scripts/test-nf-health-ui-contract.mjs
+
+      # Browser-rendered acceptance: the built production SPA is served to real
+      # Chromium against deterministic API fixtures. Captures the screenshot
+      # matrix, verifies PNG integrity and SHA-256 checksums, asserts computed
+      # layout geometry, and fails closed on browser errors or unexpected API
+      # requests.
+      - name: Browser screenshot acceptance
+        working-directory: frontend
+        run: npm run acceptance:nf-health-screenshots
+
+      - name: Upload NF Health screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: nf-health-screenshots
+          path: reports/ops/nf-health-screenshots
+          if-no-files-found: error
+          retention-days: 14
+
   production-architecture:
     name: Production architecture certification
     runs-on: ubuntu-latest
@@ -874,6 +980,8 @@ jobs:
       - topology-ui-acceptance
       - nf-discovery-integration
       - discovery-ui-acceptance
+      - nf-health-integration
+      - nf-health-ui-acceptance
     steps:
       - name: Checkout
         uses: actions/checkout@v7

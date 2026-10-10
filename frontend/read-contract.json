@@ -250,5 +250,25 @@
     "readEndpoints": [
       "GET /api/users/{username}"
     ]
+  },
+  {
+    "route": "/nf-health",
+    "mode": "read",
+    "source": "frontend/src/features/nf-health/NfHealthPage.tsx",
+    "readEndpoints": [
+      "GET /api/nf-health/meta",
+      "GET /api/nf-health/targets"
+    ]
+  },
+  {
+    "route": "/nf-health/:targetId",
+    "mode": "read",
+    "source": "frontend/src/features/nf-health/NfHealthDetailPage.tsx",
+    "readEndpoints": [
+      "GET /api/nf-health/meta",
+      "GET /api/nf-health/targets/{targetId}",
+      "GET /api/nf-health/targets/{targetId}/history",
+      "GET /api/nf-health/runs"
+    ]
   }
 ]

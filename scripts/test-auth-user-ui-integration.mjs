@@ -13,7 +13,7 @@
  * 8. Security State Metadata Contract & Leak Prevention
  * 9. User Management Error Mapping (LAST_ACTIVE_ADMIN, etc.)
  * 10. I18n Completeness (EN & ZH parity for new UI concepts)
- * 11. API Inventory & Routing Invariants (GoRegistered=109, retired mutations absent)
+ * 11. API Inventory & Routing Invariants (GoRegistered=119, retired mutations absent)
  */
 
 import assert from 'node:assert/strict';
@@ -888,11 +888,11 @@ for (const key of requiredKeys) {
 // ============================================================================
 // 12. API Inventory & Route Authority
 // ============================================================================
-console.log('\n[12] API Inventory & Route Authority (GoRegistered=109)');
+console.log('\n[12] API Inventory & Route Authority (GoRegistered=119)');
 
 const { keys: goRegistrations, duplicates: goRegistrationDuplicates } = deriveGoRegistrations();
 
-verify('Go router registers exactly 109 METHOD+PATH operations with zero duplicates', () => {
+verify('Go router registers exactly 119 METHOD+PATH operations with zero duplicates', () => {
   assert.deepEqual(
     goRegistrationDuplicates,
     [],
@@ -900,8 +900,8 @@ verify('Go router registers exactly 109 METHOD+PATH operations with zero duplica
   );
   assert.equal(
     goRegistrations.length,
-    109,
-    `Go registered operation count must be 109, got ${goRegistrations.length}`
+    119,
+    `Go registered operation count must be 119, got ${goRegistrations.length}`
   );
 });
 

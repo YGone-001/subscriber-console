@@ -1,0 +1,86 @@
+[
+  {
+    "name": "nf health target create",
+    "method": "POST",
+    "path": "/api/nf-health/targets",
+    "queryMode": "none",
+    "backendAuthority": "backend/internal/nfhealth/handler.go",
+    "productionBuilder": "frontend/src/features/nf-health/nf-health-api.ts",
+    "productionReference": "frontend/src/features/nf-health/NfHealthPage.tsx",
+    "requiredBodyKeys": ["candidateId", "name", "collectorProfile", "serviceKind", "collectionMode", "intervalSeconds"],
+    "optionalBodyKeys": ["metricsEndpoint", "serviceUnit", "enabled"],
+    "forbiddenBodyKeys": [
+      "targetId",
+      "schemaVersion",
+      "revision",
+      "createdAt",
+      "createdBy",
+      "updatedAt",
+      "updatedBy",
+      "lastAttemptAt",
+      "lastSuccessAt",
+      "lastMeasuredAt",
+      "lastError",
+      "runId",
+      "sampleId",
+      "command",
+      "script",
+      "targetUrl",
+      "proxyUrl",
+      "sshHost"
+    ],
+    "responseSemantics": "mutation-result"
+  },
+  {
+    "name": "nf health target update",
+    "method": "PUT",
+    "path": "/api/nf-health/targets/{targetId}",
+    "queryMode": "none",
+    "backendAuthority": "backend/internal/nfhealth/handler.go",
+    "productionBuilder": "frontend/src/features/nf-health/nf-health-api.ts",
+    "productionReference": "frontend/src/features/nf-health/NfHealthDetailPage.tsx",
+    "requiredBodyKeys": ["expectedRevision", "target"],
+    "optionalBodyKeys": [],
+    "forbiddenBodyKeys": [
+      "targetId",
+      "candidateId",
+      "collectorProfile",
+      "schemaVersion",
+      "revision",
+      "createdAt",
+      "createdBy",
+      "updatedAt",
+      "updatedBy",
+      "lastAttemptAt",
+      "lastSuccessAt",
+      "lastMeasuredAt",
+      "lastError",
+      "command",
+      "script",
+      "targetUrl",
+      "proxyUrl",
+      "sshHost"
+    ],
+    "nestedContracts": {
+      "target": {
+        "requiredKeys": ["name", "serviceKind", "collectionMode", "intervalSeconds", "enabled"],
+        "allowedKeys": ["name", "metricsEndpoint", "serviceUnit", "serviceKind", "collectionMode", "intervalSeconds", "enabled"],
+        "forbiddenKeys": ["targetId", "candidateId", "collectorProfile", "schemaVersion", "revision"]
+      }
+    },
+    "responseSemantics": "mutation-result"
+  },
+  {
+    "name": "nf health collection request",
+    "method": "POST",
+    "path": "/api/nf-health/targets/{targetId}/collect",
+    "queryMode": "none",
+    "backendAuthority": "backend/internal/nfhealth/handler.go",
+    "productionBuilder": "frontend/src/features/nf-health/nf-health-api.ts",
+    "productionReference": "frontend/src/features/nf-health/NfHealthDetailPage.tsx",
+    "requiredBodyKeys": [],
+    "optionalBodyKeys": [],
+    "forbiddenBodyKeys": ["command", "script", "targetUrl", "proxyUrl", "sshHost", "restart", "reload"],
+    "responseSemantics": "mutation-result"
+  }
+]

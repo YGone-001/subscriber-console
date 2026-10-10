@@ -36,7 +36,7 @@ function check(id, ok, detail) {
 const routes = JSON.parse(readFileSync(resolve(frontend, 'route-contract.json'), 'utf8'));
 const discoveryRoutes = routes.filter((entry) => entry.route.startsWith('/discovery'));
 check('DISC-UI-01', discoveryRoutes.length === 2, `discovery_routes=${discoveryRoutes.length}`);
-check('DISC-UI-02', routes.length === 30, `frontend_route_count=${routes.length}`);
+check('DISC-UI-02', routes.length === 32, `frontend_route_count=${routes.length}`);
 check(
   'DISC-UI-03',
   discoveryRoutes.some((r) => r.route === '/discovery') && discoveryRoutes.some((r) => r.route === '/discovery/sources/:sourceId'),

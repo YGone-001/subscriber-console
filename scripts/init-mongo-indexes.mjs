@@ -509,6 +509,42 @@ async function ensureIndexes() {
     { key: { lastSeenAt: -1, _id: 1 }, name: 'nf_obs_lastseen_id' },
   ])).map((name) => ({ database: appDbName, collection: 'app_nf_observations', name })));
 
+  // ── xcloud_ops.app_nf_health_targets ──
+  // Operator-authored monitoring configuration. Identity references an existing
+  // Discovery candidate and never becomes an independent NF identity.
+  createdIndexes.push(...(await appDb.collection('app_nf_health_targets').createIndexes([
+    {
+      key: { candidateId: 1 },
+      unique: true,
+      name: 'uniq_nf_health_target_candidate',
+    },
+    { key: { updatedAt: -1, _id: 1 }, name: 'nf_health_targets_updated_id' },
+    { key: { enabled: 1, collectionMode: 1, lastAttemptAt: 1 }, name: 'nf_health_targets_schedule' },
+    { key: { name: 1 }, name: 'nf_health_targets_name' },
+  ])).map((name) => ({ database: appDbName, collection: 'app_nf_health_targets', name })));
+
+  // ── xcloud_ops.app_nf_health_runs ──
+  // Collection execution outcomes. No TTL: run history is retained so operators
+  // can explain collection failures and configuration changes.
+  createdIndexes.push(...(await appDb.collection('app_nf_health_runs').createIndexes([
+    { key: { targetId: 1, startedAt: -1 }, name: 'nf_health_runs_target_started' },
+    { key: { status: 1, startedAt: -1 }, name: 'nf_health_runs_status_started' },
+    { key: { startedAt: -1, _id: 1 }, name: 'nf_health_runs_started_id' },
+  ])).map((name) => ({ database: appDbName, collection: 'app_nf_health_runs', name })));
+
+  // ── xcloud_ops.app_nf_health_samples ──
+  // Bounded time-series measurement evidence. TTL expires samples only; target
+  // identities, runs and audit records are never TTL-deleted.
+  createdIndexes.push(...(await appDb.collection('app_nf_health_samples').createIndexes([
+    { key: { targetId: 1, collectedAt: -1 }, name: 'nf_health_samples_target_collected' },
+    { key: { collectedAt: -1, _id: 1 }, name: 'nf_health_samples_collected_id' },
+    {
+      key: { expiresAt: 1 },
+      expireAfterSeconds: 0,
+      name: 'nf_health_samples_ttl',
+    },
+  ])).map((name) => ({ database: appDbName, collection: 'app_nf_health_samples', name })));
+
 async function seedRootAdminUser(appDb) {
   const users = appDb.collection('app_users');
   const existingAdmin = await users.findOne({ username: 'admin' });

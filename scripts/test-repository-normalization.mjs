@@ -40,7 +40,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 // API surface is byte-identical to this baseline, so the cleanup is provably a
 // non-functional change.
 const NORMALIZATION_BASELINE_SHA = '43f2947d70590507a29837bdea36d2ecaffdfaa5';
-const EXPECTED_GO_REGISTRATIONS = 109;
+const EXPECTED_GO_REGISTRATIONS = 119;
 const EXPECTED_INVENTORY_ROUTES = new Set([
   'GET /api/inventory/meta',
   'GET /api/inventory/resources',
@@ -76,8 +76,22 @@ const EXPECTED_DISCOVERY_ROUTES = new Set([
   'POST /api/discovery/candidates/{candidateId}/link',
   'POST /api/discovery/candidates/{candidateId}/unlink',
 ]);
+// NF Health adds exactly ten read-only measurement registrations plus governed
+// target create/update and manual collection triggers.
+const EXPECTED_NF_HEALTH_ROUTES = new Set([
+  'GET /api/nf-health/meta',
+  'GET /api/nf-health/targets',
+  'GET /api/nf-health/targets/{targetId}',
+  'GET /api/nf-health/targets/{targetId}/history',
+  'GET /api/nf-health/samples',
+  'GET /api/nf-health/runs',
+  'GET /api/nf-health/runs/{runId}',
+  'POST /api/nf-health/targets',
+  'PUT /api/nf-health/targets/{targetId}',
+  'POST /api/nf-health/targets/{targetId}/collect',
+]);
 const EXPECTED_ADDED_ROUTE_COUNT =
-  EXPECTED_INVENTORY_ROUTES.size + EXPECTED_TOPOLOGY_ROUTES.size + EXPECTED_DISCOVERY_ROUTES.size;
+  EXPECTED_INVENTORY_ROUTES.size + EXPECTED_TOPOLOGY_ROUTES.size + EXPECTED_DISCOVERY_ROUTES.size + EXPECTED_NF_HEALTH_ROUTES.size;
 
 // The synthetic unknown-route probe. Test-only: it must never become a production
 // Go registration.
@@ -519,7 +533,7 @@ if (baselineError) fail(`baseline derivation failed: ${baselineError}`);
 if (beforeKeys.size !== 84) fail(`go_routes_before=${beforeKeys.size}`);
 if (afterKeys.size !== EXPECTED_GO_REGISTRATIONS) fail(`go_routes_after=${afterKeys.size}`);
 const unexpectedAdditions = addedKeys.filter(
-  (k) => !EXPECTED_INVENTORY_ROUTES.has(k) && !EXPECTED_TOPOLOGY_ROUTES.has(k) && !EXPECTED_DISCOVERY_ROUTES.has(k),
+  (k) => !EXPECTED_INVENTORY_ROUTES.has(k) && !EXPECTED_TOPOLOGY_ROUTES.has(k) && !EXPECTED_DISCOVERY_ROUTES.has(k) && !EXPECTED_NF_HEALTH_ROUTES.has(k),
 );
 if (unexpectedAdditions.length !== 0) fail(`unexpected_go_routes_added=${unexpectedAdditions.join(', ')}`);
 if (addedKeys.length !== EXPECTED_ADDED_ROUTE_COUNT) fail(`go_routes_added=${addedKeys.length} expected=${EXPECTED_ADDED_ROUTE_COUNT}`);

@@ -1,4 +1,4 @@
-import { Activity, Boxes, CreditCard, FileText, Gauge, LayoutDashboard, Network, Radar, Radio, Settings, UserCog, Users, Wallet, Zap, type LucideIcon } from 'lucide-react';
+import { Activity, Boxes, CreditCard, FileText, Gauge, HeartPulse, LayoutDashboard, Network, Radar, Radio, Settings, UserCog, Users, Wallet, Zap, type LucideIcon } from 'lucide-react';
 import type { CanonicalRole } from '../types/auth';
 import { hasNavigationPermission } from './permissions';
 
@@ -23,6 +23,8 @@ export const APP_ROUTES: NavigationRoute[] = [
   { route: '/topology/:resourceId', targetRoute: '/topology/:resourceId', dynamicParameters: ['resourceId'], labelKey: 'nav_dashboard', icon: FileText },
   { route: '/discovery', targetRoute: '/discovery', dynamicParameters: [], labelKey: 'nav_discovery', icon: Radar, visible: true },
   { route: '/discovery/sources/:sourceId', targetRoute: '/discovery/sources/:sourceId', dynamicParameters: ['sourceId'], labelKey: 'nav_discovery', icon: FileText },
+  { route: '/nf-health', targetRoute: '/nf-health', dynamicParameters: [], labelKey: 'nav_nf_health', icon: HeartPulse, visible: true },
+  { route: '/nf-health/:targetId', targetRoute: '/nf-health/:targetId', dynamicParameters: ['targetId'], labelKey: 'nav_nf_health', icon: FileText },
   { route: '/ocs', targetRoute: '/ocs', dynamicParameters: [], labelKey: 'nav_ocs', icon: Zap },
   { route: '/ocs/balances', targetRoute: '/ocs/balances', dynamicParameters: [], labelKey: 'nav_ocs_balances', icon: Wallet, group: 'ocs', visible: true },
   { route: '/ocs/balances/:imsi', targetRoute: '/ocs/balances/:imsi', dynamicParameters: ['imsi'], labelKey: 'nav_dashboard', icon: FileText },
@@ -166,6 +168,7 @@ export function getSidebarGroups(role: CanonicalRole | undefined): SidebarGroup[
   push(find('/inventory'));
   push(find('/topology'));
   push(find('/discovery'));
+  push(find('/nf-health'));
 
   return groups;
 }
