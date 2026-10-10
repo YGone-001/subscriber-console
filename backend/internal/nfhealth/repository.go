@@ -281,7 +281,17 @@ func (r *Repository) ListSamples(ctx context.Context, filter SampleListFilter) (
 }
 
 // RecordCollection persists the run and, when present, the sample, then updates
-// target freshness. Failed collection never overwrites lastMeasuredAt.
+// target freshness.
+//
+// Authoritative semantics:
+//   - lastAttemptAt  = time of the last completed collection attempt
+//   - lastSuccessAt  = time of the last fully successful collection
+//   - lastMeasuredAt = time of the last accepted valid measurement
+//
+// A failed collection preserves the previous valid measurement state. A sample
+// emitted during a failed run is stored as historical evidence but never
+// advances lastMeasuredAt. A partial run only advances lastMeasuredAt when it
+// carries at least one measured layer.
 func (r *Repository) RecordCollection(ctx context.Context, target *HealthTarget, result *CollectionResult) error {
 	if result == nil {
 		return nil
@@ -305,14 +315,29 @@ func (r *Repository) RecordCollection(ctx context.Context, target *HealthTarget,
 	} else {
 		set["lastError"] = result.Run.ErrorSummary
 	}
-	if result.Sample != nil {
+	// Only an accepted valid measurement advances lastMeasuredAt. A failed
+	// run never overwrites the previous valid measurement, even when the
+	// collector emitted a partially measured sample during that run.
+	if result.Sample != nil && result.Run.Status != RunStatusFailed && measurementAccepted(result.Sample) {
 		set["lastMeasuredAt"] = result.Sample.CollectedAt
 	}
 	_, err := r.targets.UpdateOne(ctx, bson.M{"_id": target.TargetID}, bson.M{"$set": set})
 	return err
 }
 
+// measurementAccepted reports whether a sample carries at least one measured
+// layer and therefore represents an accepted valid measurement.
+func measurementAccepted(sample *HealthSample) bool {
+	if sample == nil {
+		return false
+	}
+	return sample.Layers.Process.Measured || sample.Layers.Interface.Measured || sample.Layers.Service.Measured
+}
+
 // ListScheduledTargets returns enabled scheduled targets for the scheduler.
+// Disabled and manual targets are excluded so they are never auto-scheduled.
+// Sorting is least-recently-attempted first to keep cadence fair across a due
+// set larger than one batch limit.
 func (r *Repository) ListScheduledTargets(ctx context.Context, limit int) ([]HealthTarget, error) {
 	if limit <= 0 {
 		limit = 8

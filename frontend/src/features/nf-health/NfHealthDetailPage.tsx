@@ -578,13 +578,25 @@ export function NfHealthDetailPage() {
               <div>
                 <dt>{t('nf_health_evidence_freshness')}</dt>
                 <dd>
-                  {target.lastError ? (
-                    <span className={styles.badgeUnhealthy}>{t('nf_health_status_failed')}</span>
-                  ) : target.lastMeasuredAt ? (
-                    <span className={styles.badgeHealthy}>{t('nf_health_layer_measured')}</span>
-                  ) : (
-                    <span className={styles.badgeUnknown}>{t('nf_health_state_unknown')}</span>
-                  )}
+                  {(() => {
+                    // Server-derived freshness keeps the detail projection
+                    // consistent with the overview: a stale measurement is
+                    // labelled stale, and a recent failed run stays visible.
+                    const freshness = detail?.freshness?.state ?? target.freshness?.state;
+                    if (target.lastError) {
+                      return <span className={styles.badgeUnhealthy}>{t('nf_health_status_failed')}</span>;
+                    }
+                    if (freshness === 'fresh') {
+                      return <span className={styles.badgeHealthy}>{t('nf_health_state_healthy')}</span>;
+                    }
+                    if (freshness === 'stale') {
+                      return <span className={styles.badgeStale}>{t('nf_health_state_stale')}</span>;
+                    }
+                    if (freshness === 'not_monitored') {
+                      return <span className={styles.badgeNotConfigured}>{t('nf_health_state_not_configured')}</span>;
+                    }
+                    return <span className={styles.badgeUnknown}>{t('nf_health_state_unknown')}</span>;
+                  })()}
                 </dd>
               </div>
               <div>

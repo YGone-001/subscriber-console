@@ -43,7 +43,6 @@ import { NfHealthTargetDialog } from './NfHealthTargetDialog';
 import styles from '../../styles/modules/nf-health.module.css';
 
 const PAGE_LIMIT = 20;
-const FRESH_WINDOW_MS = 30 * 60_000;
 
 type Feedback = { tone: 'success' | 'danger' | 'warning' | 'info'; message: string } | null;
 
@@ -145,16 +144,17 @@ export function NfHealthPage() {
   }, [candidates]);
 
   const kpis = useMemo(() => {
-    const now = Date.now();
     let fresh = 0;
     let degraded = 0;
     let staleUnknown = 0;
     for (const target of targets) {
-      const measuredAt = target.lastMeasuredAt ? Date.parse(target.lastMeasuredAt) : NaN;
-      const isFresh = Number.isFinite(measuredAt) && now - measuredAt <= FRESH_WINDOW_MS && !target.lastError;
+      // Freshness is server-derived so the overview agrees with the detail
+      // projection: stale measurements never count as current evidence, and a
+      // recent failed run remains visible as degraded.
+      const freshness = target.freshness?.state;
       const isDegraded = Boolean(target.lastError);
       if (isDegraded) degraded += 1;
-      else if (isFresh) fresh += 1;
+      else if (freshness === 'fresh') fresh += 1;
       else staleUnknown += 1;
     }
     return { configured: targets.length, fresh, degraded, staleUnknown };
@@ -301,6 +301,7 @@ export function NfHealthPage() {
                   <th scope="col">{t('nf_health_col_l2')}</th>
                   <th scope="col">{t('nf_health_col_l3')}</th>
                   <th scope="col">{t('nf_health_col_last_measured')}</th>
+                  <th scope="col">{t('nf_health_evidence_freshness')}</th>
                   <th scope="col">{t('nf_health_col_collection_status')}</th>
                   <th scope="col">{t('nf_health_col_actions')}</th>
                 </tr>
@@ -368,6 +369,21 @@ export function NfHealthPage() {
                         )}
                       </td>
                       <td>{formatTimestamp(target.lastMeasuredAt)}</td>
+                      <td>
+                        {(() => {
+                          const freshness = target.freshness?.state;
+                          if (freshness === 'fresh') {
+                            return <span className={styles.badgeHealthy}>{t('nf_health_state_healthy')}</span>;
+                          }
+                          if (freshness === 'stale') {
+                            return <span className={styles.badgeStale}>{t('nf_health_state_stale')}</span>;
+                          }
+                          if (freshness === 'not_monitored') {
+                            return <span className={styles.badgeNotConfigured}>{t('nf_health_state_not_configured')}</span>;
+                          }
+                          return <span className={styles.badgeUnknown}>{t('nf_health_state_unknown')}</span>;
+                        })()}
+                      </td>
                       <td>
                         {target.lastError ? (
                           <span className={styles.badgeUnhealthy}>{t('nf_health_status_failed')}</span>

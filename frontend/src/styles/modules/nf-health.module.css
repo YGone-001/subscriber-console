@@ -445,26 +445,31 @@
 }
 
 /*
- * The global `.modal-overlay` contract pads with `4vh 2rem`, so a dialog whose
- * max-height only subtracts `2rem` can still overflow the viewport bottom on
- * short screens. These scoped modifiers keep the dialog inside the overlay
- * padding box and let the body scroll instead of the dialog itself.
+ * The application shell occupies the top of the viewport (header + navigation
+ * chrome). Centering a dialog in the full viewport lets the shell region
+ * obscure the dialog heading. These scoped modifiers push the dialog below the
+ * shell chrome, keep the header visible, and let the body scroll independently.
+ * Global shell geometry is intentionally left unchanged.
  */
 :global(.modal-overlay).modalOverlay {
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  padding-top: clamp(1rem, 4vh, 2rem);
-  padding-bottom: clamp(1rem, 4vh, 2rem);
+  padding-top: clamp(6rem, 20vh, 12rem);
+  padding-bottom: 1.5rem;
 }
 
 .modalContent {
-  width: min(640px, calc(100vw - 2rem));
-  max-height: calc(100vh - 2 * clamp(1rem, 4vh, 2rem));
-  overflow: auto;
+  width: min(640px, 96vw);
+  max-height: calc(100vh - clamp(6rem, 20vh, 12rem) - 1.5rem);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .modalHeader {
+  flex: 0 0 auto;
   padding: 1.15rem 1.25rem 0.5rem;
+  border-bottom: 1px solid var(--surface-border);
 }
 
 .modalHeader h2 {
@@ -475,9 +480,21 @@
 }
 
 .modalBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
   padding: 0.5rem 1.25rem 1.25rem;
   display: grid;
   gap: 0.85rem;
+}
+
+.formActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.55rem;
+  padding: 0.85rem 1.25rem 1.15rem;
+  border-top: 1px solid var(--surface-border);
+  flex: 0 0 auto;
 }
 
 .modalIntro {
@@ -497,13 +514,6 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.85rem;
-}
-
-.formActions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.55rem;
-  padding-top: 0.35rem;
 }
 
 .spin {

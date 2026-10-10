@@ -303,6 +303,80 @@ expectReject(() => {
   if (!derived.has('POST /api/nf-health/targets/{targetId}/restart')) throw new Error('phantom restart route');
 }, 'phantom process-control route must be rejected');
 
+// 11. Correction invariants: retention data type, scheduling, freshness,
+//     egress safety and dialog integrity. These are source-level contracts
+//     that must hold without widening the frozen product surface.
+const nfhealthDir = resolve(root, 'backend/internal/nfhealth');
+const timestampSource = readFileSync(resolve(nfhealthDir, 'timestamp.go'), 'utf8');
+const modelSourceFull = readFileSync(resolve(nfhealthDir, 'model.go'), 'utf8');
+const migrateSource = readFileSync(resolve(nfhealthDir, 'migrate.go'), 'utf8');
+const schedulerSource = readFileSync(resolve(nfhealthDir, 'scheduler.go'), 'utf8');
+const gateSource = readFileSync(resolve(nfhealthDir, 'gate.go'), 'utf8');
+const repositorySource = readFileSync(resolve(nfhealthDir, 'repository.go'), 'utf8');
+const freshnessSource = readFileSync(resolve(nfhealthDir, 'freshness.go'), 'utf8');
+const mainSourceFull = readFileSync(resolve(root, 'backend/cmd/server/main.go'), 'utf8');
+
+// Correction A: expiresAt is a BSON Date with ISO 8601 JSON compatibility.
+assert.ok(timestampSource.includes('MarshalBSONValue'), 'BSONTime must marshal to a BSON value');
+assert.ok(timestampSource.includes('UnmarshalBSONValue'), 'BSONTime must accept legacy BSON types');
+assert.ok(timestampSource.includes('MarshalJSON'), 'BSONTime must keep ISO 8601 JSON compatibility');
+assert.ok(modelSourceFull.includes('ExpiresAt     BSONTime'), 'sample expiresAt must use BSONTime');
+assert.ok(modelSourceFull.includes('MaxRetentionDays'), 'retention day bound must remain declared');
+assert.ok(migrateSource.includes('DryRun'), 'migration must support dry-run');
+assert.ok(migrateSource.includes('Limit'), 'migration must be bounded');
+assert.ok(migrateSource.includes('"$type": "string"'), 'migration must target only legacy string values');
+assert.ok(
+  !mainSourceFull.includes('MigrateSampleExpiresToBSONDate'),
+  'migration must never run automatically at service startup',
+);
+assert.ok(!migrateSource.includes('DeleteMany'), 'migration must never delete stored samples');
+
+// Correction B: per-target scheduling with one shared global concurrency gate.
+assert.ok(schedulerSource.includes('IsDue') || /func IsDue\(/.test(schedulerSource), 'scheduler must expose due calculation');
+assert.ok(schedulerSource.includes('IntervalSeconds'), 'scheduler must honor the per-target interval');
+assert.ok(gateSource.includes('MaxGlobalConcurrent'), 'collection gate must use the global concurrency bound');
+assert.ok(collectorSource.includes('gate.TryAcquire'), 'collector must admit through the shared gate');
+assert.ok(collectorSource.includes('MaxGlobalConcurrent'), 'collector must document the shared bound');
+for (const banned of ['cron.', 'robfig/cron', 'redigo', 'redis.New', 'kafka', 'segmentio/kafka', 'nats.go']) {
+  assert.ok(!collectorSource.includes(banned) && !schedulerSource.includes(banned),
+    `scheduler/collector must not introduce ${banned}`);
+}
+
+// Correction C: freshness is server-derived and gates lastMeasuredAt.
+assert.ok(freshnessSource.includes('EvaluateFreshness'), 'freshness must be evaluated server-side');
+assert.ok(freshnessSource.includes('FreshnessStale'), 'stale must be a first-class freshness state');
+assert.ok(freshnessSource.includes('ManualFreshnessWindowSeconds'), 'manual targets need an age-based window');
+assert.ok(repositorySource.includes('measurementAccepted'), 'measurement acceptance must gate lastMeasuredAt');
+assert.ok(repositorySource.includes('RunStatusFailed'), 'failed runs must not advance lastMeasuredAt');
+assert.ok(modelSourceFull.includes('CanonicalFreshnessStates'), 'freshness vocabulary must be canonical');
+
+// Correction D: egress safety is default-deny with no proxy or redirect bypass.
+assert.ok(proberSource.includes('Proxy: nil') || proberSource.includes('Proxy = nil'),
+  'HTTP prober must not honor proxy environment variables');
+assert.ok(proberSource.includes('DisableKeepAlives'), 'HTTP prober must avoid connection reuse surprises');
+assert.ok(proberSource.includes('ErrUseLastResponse') || proberSource.includes('CheckRedirect'),
+  'HTTP prober must refuse redirects');
+assert.ok(proberSource.includes('AuthorizeDialDestination'), 'dialed destinations must be authorized before use');
+assert.ok(!/InsecureSkipVerify:\s*true/.test(proberSource), 'TLS verification must remain enabled');
+
+// Correction E: the create dialog pins actions outside the scrolling body.
+const dialogSource = readFileSync(
+  resolve(root, 'frontend/src/features/nf-health/NfHealthTargetDialog.tsx'),
+  'utf8',
+);
+const bodyStart = dialogSource.indexOf('modalBody');
+const actionsIdx = dialogSource.indexOf('formActions');
+assert.ok(bodyStart >= 0 && actionsIdx >= 0, 'dialog must declare both body and action regions');
+const bodyClose = dialogSource.indexOf('</div>', dialogSource.indexOf('formError'));
+assert.ok(actionsIdx > bodyClose, 'action row must live outside the scrolling modal body');
+
+console.log('nf_health_retention_bson_date=1');
+console.log('nf_health_migration_bounded_idempotent=1');
+console.log('nf_health_shared_concurrency_gate=1');
+console.log('nf_health_freshness_projection=1');
+console.log('nf_health_egress_default_deny=1');
+console.log('nf_health_dialog_actions_pinned=1');
+
 console.log('nf_health_frontend_routes=2');
 console.log('nf_health_go_registrations=10');
 console.log('go_registration_count=119');

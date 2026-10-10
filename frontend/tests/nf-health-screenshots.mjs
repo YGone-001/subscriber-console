@@ -29,7 +29,7 @@ const repoRoot = resolve(frontendRoot, '..');
 const distDir = resolve(frontendRoot, 'dist');
 const outDir = resolve(repoRoot, 'reports', 'ops', 'nf-health-screenshots');
 
-const EXPECTED_SCREENSHOT_COUNT = 24;
+const EXPECTED_SCREENSHOT_COUNT = 26;
 const MIN_PNG_BYTES = 8192;
 
 const VIEWPORTS = {
@@ -253,10 +253,17 @@ async function main() {
     }
 
     /* ========================= C. interactive dialogs ====================== */
+    /*
+     * Required acceptance matrix for the create dialog: Desktop light,
+     * Desktop dark, Mobile light, Mobile dark, Tablet light. Geometry checks
+     * assert the actual dialog heading, not only the outer container.
+     */
     const dialogCases = [
       { name: 'create', sizeName: 'desktop', viewport: VIEWPORTS.desktop, theme: 'light', route: listRoute, trigger: /Add Monitoring Target/i },
       { name: 'create', sizeName: 'desktop', viewport: VIEWPORTS.desktop, theme: 'dark', route: listRoute, trigger: /Add Monitoring Target/i },
       { name: 'create', sizeName: 'mobile', viewport: VIEWPORTS.mobile, theme: 'light', route: listRoute, trigger: /Add Monitoring Target/i },
+      { name: 'create', sizeName: 'mobile', viewport: VIEWPORTS.mobile, theme: 'dark', route: listRoute, trigger: /Add Monitoring Target/i },
+      { name: 'create', sizeName: 'tablet', viewport: VIEWPORTS.tablet, theme: 'light', route: listRoute, trigger: /Add Monitoring Target/i },
       { name: 'collect', sizeName: 'desktop', viewport: VIEWPORTS.desktop, theme: 'light', route: detailRoute, trigger: /Collect Now/i },
       { name: 'collect', sizeName: 'desktop', viewport: VIEWPORTS.desktop, theme: 'dark', route: detailRoute, trigger: /Collect Now/i },
       { name: 'collect', sizeName: 'mobile', viewport: VIEWPORTS.mobile, theme: 'light', route: detailRoute, trigger: /Collect Now/i },
@@ -288,22 +295,61 @@ async function main() {
           'target references an existing candidate only',
         );
 
+        /*
+         * Heading-level geometry: the actual dialog heading must start below
+         * the shell chrome region, remain fully inside the viewport, and the
+         * dialog description must stay reachable below it.
+         */
         const geometry = await page.evaluate(() => {
-          const chrome = document.querySelector('.nav-breadcrumbs-bar');
-          const content = document.querySelector('.modal-content') || document.querySelector('[role="dialog"]');
+          const chrome = document.querySelector('.nav-breadcrumbs-bar') || document.querySelector('.app-header');
+          const dialog = document.querySelector('.modal-content') || document.querySelector('[role="dialog"]');
+          const heading = dialog ? dialog.querySelector('h2, [role="heading"]') : null;
+          const intro = dialog ? dialog.querySelector('p') : null;
+          const actions = dialog ? Array.from(dialog.querySelectorAll('button')) : [];
           const rect = (el) => (el ? el.getBoundingClientRect() : null);
-          const contentRect = rect(content);
+          const headingRect = rect(heading);
+          const dialogRect = rect(dialog);
+          const introRect = rect(intro);
+          const actionRects = actions.map((el) => el.getBoundingClientRect());
           return {
             chromeBottom: chrome ? Math.round(chrome.getBoundingClientRect().bottom) : 0,
-            contentTop: contentRect ? Math.round(contentRect.top) : null,
-            contentBottom: contentRect ? Math.round(contentRect.bottom) : null,
+            headingTop: headingRect ? Math.round(headingRect.top) : null,
+            headingBottom: headingRect ? Math.round(headingRect.bottom) : null,
+            headingText: heading ? heading.textContent.trim() : '',
+            introTop: introRect ? Math.round(introRect.top) : null,
+            dialogTop: dialogRect ? Math.round(dialogRect.top) : null,
+            dialogBottom: dialogRect ? Math.round(dialogRect.bottom) : null,
+            actionReachable: actionRects.some((r) => r.bottom > 0 && r.top < window.innerHeight),
+            docScroll: document.documentElement.scrollWidth,
+            bodyScroll: document.body.scrollWidth,
+            inner: window.innerWidth,
             viewport: window.innerHeight,
           };
         });
 
         check(
+          `dialog_heading_visible:${testCase.sizeName}-${testCase.theme}`,
+          geometry.headingTop !== null && geometry.headingText.length > 0 && geometry.headingTop >= geometry.chromeBottom - 1,
+          JSON.stringify(geometry),
+        );
+        check(
           `dialog_fits_viewport:${testCase.name}-${testCase.sizeName}-${testCase.theme}`,
-          geometry.contentTop !== null && geometry.contentTop >= 0 && geometry.contentBottom <= geometry.viewport + 1,
+          geometry.dialogTop !== null && geometry.dialogTop >= 0 && geometry.dialogBottom <= geometry.viewport + 1 && geometry.headingBottom <= geometry.viewport + 1,
+          JSON.stringify(geometry),
+        );
+        check(
+          `dialog_description_accessible:${testCase.sizeName}-${testCase.theme}`,
+          geometry.introTop !== null && geometry.introTop >= geometry.chromeBottom - 1,
+          JSON.stringify(geometry),
+        );
+        check(
+          `dialog_actions_reachable:${testCase.sizeName}-${testCase.theme}`,
+          geometry.actionReachable === true,
+          JSON.stringify(geometry),
+        );
+        check(
+          `dialog_no_horizontal_overflow:${testCase.sizeName}-${testCase.theme}`,
+          geometry.docScroll <= geometry.inner + 1 && geometry.bodyScroll <= geometry.inner + 1,
           JSON.stringify(geometry),
         );
       } else {

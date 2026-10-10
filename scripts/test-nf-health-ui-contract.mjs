@@ -152,6 +152,47 @@ check(
   'nf_health_css=search_no_pixel_basis_in_column_layout',
 );
 
+// 8. Dialog integrity: actions stay reachable while the body scrolls.
+const dialogSource = read('features/nf-health/NfHealthTargetDialog.tsx');
+const modalBodyIdx = dialogSource.indexOf('styles.modalBody');
+const formActionsIdx = dialogSource.indexOf('styles.formActions');
+check(
+  'NFH-UI-37',
+  modalBodyIdx >= 0 && formActionsIdx > modalBodyIdx,
+  'dialog_actions_outside_scrolling_body=true',
+);
+const bodyRegion = dialogSource.slice(modalBodyIdx, formActionsIdx);
+const bodyClosesBeforeActions = bodyRegion.lastIndexOf('</div>') >= 0;
+check('NFH-UI-38', bodyClosesBeforeActions, 'dialog_body_closes_before_action_row=true');
+check(
+  'NFH-UI-39',
+  /max-height/.test(cssModule) && /overflow-y:\s*auto/.test(cssModule),
+  'dialog_body_scrolls_independently=true',
+);
+check(
+  'NFH-UI-40',
+  /\.formActions\s*\{[^}]*flex:\s*0\s+0\s+auto/.test(cssModule),
+  'dialog_action_row_pinned=true',
+);
+
+// 9. Freshness is server-derived and surfaced consistently.
+const listSource = read('features/nf-health/NfHealthPage.tsx');
+const detailSource = read('features/nf-health/NfHealthDetailPage.tsx');
+const typesSource = read('features/nf-health/nf-health-types.ts');
+check('NFH-UI-41', /freshness/.test(typesSource) && /FreshnessState/.test(typesSource), 'freshness_types_declared=true');
+check('NFH-UI-42', /target\.freshness/.test(listSource) || /freshness\?\.state/.test(listSource), 'overview_uses_server_freshness=true');
+check('NFH-UI-43', /freshness/.test(detailSource), 'detail_uses_server_freshness=true');
+check(
+  'NFH-UI-44',
+  !/FRESH_WINDOW_MS|Date\.now\(\)\s*-\s*\d{4,}/.test(listSource),
+  'freshness_not_computed_client_side=true',
+);
+check(
+  'NFH-UI-45',
+  /nf_health_state_stale/.test(listSource) || /badgeStale/.test(listSource),
+  'stale_is_visibly_labeled=true',
+);
+
 let failed = 0;
 for (const item of invariants) {
   const status = item.ok ? 'PASS' : 'FAIL';

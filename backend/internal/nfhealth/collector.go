@@ -14,6 +14,8 @@ type Collector struct {
 	inspector *UnitInspector
 	dest      *DestinationAllowlist
 	units     *ServiceUnitAllowlist
+	gate      *CollectionGate
+	clock     Clock
 
 	mu        sync.Mutex
 	active    map[string]struct{}
@@ -21,14 +23,42 @@ type Collector struct {
 }
 
 // NewCollector constructs the collection orchestrator.
+//
+// The gate is shared with the scheduler and the manual collection endpoint so
+// MaxGlobalConcurrent applies to manual and scheduled collections combined.
 func NewCollector(prober *HTTPProber, inspector *UnitInspector, dest *DestinationAllowlist, units *ServiceUnitAllowlist) *Collector {
 	return &Collector{
 		prober:    prober,
 		inspector: inspector,
 		dest:      dest,
 		units:     units,
+		gate:      NewCollectionGate(),
+		clock:     SystemClock{},
 		active:    map[string]struct{}{},
 		lastRunAt: map[string]time.Time{},
+	}
+}
+
+// NewCollectorWithGate constructs a collector with an explicit shared gate and
+// clock. Used by the scheduler wiring and by tests.
+func NewCollectorWithGate(prober *HTTPProber, inspector *UnitInspector, dest *DestinationAllowlist, units *ServiceUnitAllowlist, gate *CollectionGate, clock Clock) *Collector {
+	c := NewCollector(prober, inspector, dest, units)
+	if gate != nil {
+		c.gate = gate
+	}
+	if clock != nil {
+		c.clock = clock
+	}
+	return c
+}
+
+// Gate exposes the shared admission gate for scheduling tests.
+func (c *Collector) Gate() *CollectionGate { return c.gate }
+
+// SetClock replaces the collector clock. Intended for tests.
+func (c *Collector) SetClock(clock Clock) {
+	if clock != nil {
+		c.clock = clock
 	}
 }
 
@@ -40,10 +70,16 @@ type CollectionResult struct {
 
 // Collect performs one bounded collection. It never mutates the network and
 // never overwrites a previous valid measurement on failure.
+//
+// Admission is shared across manual and scheduled collection: the per-target
+// slot rejects overlapping work on the same target, and the global gate bounds
+// total concurrent collections to MaxGlobalConcurrent.
 func (c *Collector) Collect(ctx context.Context, target *HealthTarget, initiatedBy string, scheduled bool) (*CollectionResult, error) {
 	if target == nil {
 		return nil, ErrNotFound
 	}
+
+	now := c.now()
 
 	c.mu.Lock()
 	if _, busy := c.active[target.TargetID]; busy {
@@ -51,7 +87,7 @@ func (c *Collector) Collect(ctx context.Context, target *HealthTarget, initiated
 		return nil, ErrInProgress
 	}
 	if last, ok := c.lastRunAt[target.TargetID]; ok {
-		elapsed := time.Since(last)
+		elapsed := now.Sub(last)
 		if elapsed < MinIntervalSeconds*time.Second {
 			c.mu.Unlock()
 			return nil, ErrRateLimited
@@ -60,13 +96,24 @@ func (c *Collector) Collect(ctx context.Context, target *HealthTarget, initiated
 	c.active[target.TargetID] = struct{}{}
 	c.mu.Unlock()
 
+	// Shared global admission for manual and scheduled collections combined.
+	// Both paths fail fast when the global bound is saturated so a manual
+	// collection can never bypass the shared limit by blocking past it.
+	if !c.gate.TryAcquire() {
+		c.mu.Lock()
+		delete(c.active, target.TargetID)
+		c.mu.Unlock()
+		return nil, ErrInProgress
+	}
+
 	defer func() {
+		c.gate.Release()
 		c.mu.Lock()
 		delete(c.active, target.TargetID)
 		c.mu.Unlock()
 	}()
 
-	started := time.Now().UTC()
+	started := c.now().UTC()
 	run := HealthRun{
 		RunID:         newUUID(),
 		SchemaVersion: SchemaVersion,
@@ -197,7 +244,7 @@ func (c *Collector) Collect(ctx context.Context, target *HealthTarget, initiated
 		}
 	}
 
-	completed := time.Now().UTC()
+	completed := c.now().UTC()
 	run.CompletedAt = completed.Format(time.RFC3339Nano)
 	run.Status = status
 	run.LayersMeasured = measured
@@ -205,7 +252,8 @@ func (c *Collector) Collect(ctx context.Context, target *HealthTarget, initiated
 	run.ErrorSummary = errSummary
 
 	// A fully failed collection still records the run, but a sample is only
-	// persisted when at least one layer produced real evidence.
+	// persisted when at least one layer produced real evidence. The sample
+	// expiration is a BSON Date so the MongoDB TTL index can consume it.
 	var sample *HealthSample
 	if measured > 0 {
 		sample = &HealthSample{
@@ -215,7 +263,7 @@ func (c *Collector) Collect(ctx context.Context, target *HealthTarget, initiated
 			RunID:         run.RunID,
 			CandidateID:   target.CandidateID,
 			CollectedAt:   started.Format(time.RFC3339Nano),
-			ExpiresAt:     started.AddDate(0, 0, DefaultRetentionDays).Format(time.RFC3339Nano),
+			ExpiresAt:     NewBSONTime(started.AddDate(0, 0, DefaultRetentionDays)),
 			Layers:        layers,
 			Metrics:       metrics,
 		}
@@ -226,7 +274,7 @@ func (c *Collector) Collect(ctx context.Context, target *HealthTarget, initiated
 	}
 
 	c.mu.Lock()
-	c.lastRunAt[target.TargetID] = time.Now()
+	c.lastRunAt[target.TargetID] = c.now()
 	c.mu.Unlock()
 
 	return &CollectionResult{Run: run, Sample: sample}, nil
@@ -238,4 +286,11 @@ func (c *Collector) InProgress(targetID string) bool {
 	defer c.mu.Unlock()
 	_, ok := c.active[targetID]
 	return ok
+}
+
+func (c *Collector) now() time.Time {
+	if c.clock == nil {
+		return time.Now().UTC()
+	}
+	return c.clock.Now().UTC()
 }

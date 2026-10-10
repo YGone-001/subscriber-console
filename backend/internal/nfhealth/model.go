@@ -112,6 +112,30 @@ const (
 	MaxRetentionDays     = 30
 )
 
+// Freshness policy. Measurement freshness is evaluated from collection mode,
+// the configured interval, the last accepted measurement and a configured
+// staleness grace. Manual targets use an explicit age-based window so manual
+// monitoring is never presented as continuously current.
+const (
+	// StalenessGraceSeconds is added to the target interval before a scheduled
+	// measurement is reported stale.
+	StalenessGraceSeconds = 90
+	// ManualFreshnessWindowSeconds is the age-based freshness window for
+	// manually collected targets.
+	ManualFreshnessWindowSeconds = 3600
+)
+
+// Freshness states projected alongside layer health.
+const (
+	FreshnessFresh        = "fresh"
+	FreshnessStale        = "stale"
+	FreshnessUnknown      = "unknown"
+	FreshnessNotMonitored = "not_monitored"
+)
+
+// Canonical freshness vocabulary exposed by GET /api/nf-health/meta.
+var CanonicalFreshnessStates = []string{FreshnessFresh, FreshnessStale, FreshnessUnknown, FreshnessNotMonitored}
+
 // LayerEvidence records one health layer with explicit provenance.
 type LayerEvidence struct {
 	State        string `json:"state" bson:"state"`
@@ -189,6 +213,10 @@ type HealthRun struct {
 }
 
 // HealthSample is bounded time-series measurement evidence.
+//
+// ExpiresAt is persisted as a BSON Date so the MongoDB TTL index can expire
+// documents from that field, while remaining ISO 8601 in JSON. Legacy
+// string-typed stored values stay readable through BSONTime unmarshalling.
 type HealthSample struct {
 	SampleID      string         `json:"sampleId" bson:"_id"`
 	SchemaVersion int            `json:"schemaVersion" bson:"schemaVersion"`
@@ -196,9 +224,19 @@ type HealthSample struct {
 	RunID         string         `json:"runId" bson:"runId"`
 	CandidateID   string         `json:"candidateId,omitempty" bson:"candidateId,omitempty"`
 	CollectedAt   string         `json:"collectedAt" bson:"collectedAt"`
-	ExpiresAt     string         `json:"expiresAt,omitempty" bson:"expiresAt,omitempty"`
+	ExpiresAt     BSONTime       `json:"expiresAt" bson:"expiresAt"`
 	Layers        LayerSet       `json:"layers" bson:"layers"`
 	Metrics       []MetricSample `json:"metrics" bson:"metrics"`
+}
+
+// FreshnessProjection is the server-derived measurement freshness for a target.
+type FreshnessProjection struct {
+	State         string `json:"state"`
+	AgeSeconds    *int64 `json:"ageSeconds,omitempty"`
+	PolicySeconds int    `json:"policySeconds"`
+	Basis         string `json:"basis"`
+	EvaluatedAt   string `json:"evaluatedAt"`
+	Reason        string `json:"reason,omitempty"`
 }
 
 // CreateTargetRequest is the body for POST /api/nf-health/targets.
@@ -256,10 +294,12 @@ type SampleListFilter struct {
 	Cursor   string
 }
 
-// HealthTargetSummary is the read projection with coverage counters.
+// HealthTargetSummary is the read projection with coverage counters and
+// server-derived measurement freshness so overview and detail agree.
 type HealthTargetSummary struct {
 	HealthTarget
-	Coverage CoverageSummary `json:"coverage" bson:"coverage"`
+	Coverage  CoverageSummary     `json:"coverage" bson:"coverage"`
+	Freshness FreshnessProjection `json:"freshness" bson:"freshness"`
 }
 
 // CoverageSummary exposes which layers are currently measured.

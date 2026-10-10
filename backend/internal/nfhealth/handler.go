@@ -195,6 +195,7 @@ type MetaResponse struct {
 	CollectionModes        []string           `json:"collectionModes"`
 	RunStatuses            []string           `json:"runStatuses"`
 	LayerStates            []string           `json:"layerStates"`
+	FreshnessStates        []string           `json:"freshnessStates"`
 	EvidenceKinds          []string           `json:"evidenceKinds"`
 	ProcessOutcomes        []string           `json:"processOutcomes"`
 	InterfaceOutcomes      []string           `json:"interfaceOutcomes"`
@@ -205,6 +206,8 @@ type MetaResponse struct {
 	RequestTimeoutSeconds  int                `json:"requestTimeoutSeconds"`
 	TotalDeadlineSeconds   int                `json:"totalDeadlineSeconds"`
 	MaxGlobalConcurrent    int                `json:"maxGlobalConcurrent"`
+	StalenessGraceSeconds  int                `json:"stalenessGraceSeconds"`
+	ManualFreshnessSeconds int                `json:"manualFreshnessWindowSeconds"`
 	RetentionDays          int                `json:"retentionDays"`
 	MaxRetentionDays       int                `json:"maxRetentionDays"`
 	SupportedMetrics       []MetricDefinition `json:"supportedMetrics"`
@@ -227,6 +230,7 @@ func (h *Handler) Meta(w http.ResponseWriter, r *http.Request) {
 		CollectionModes:        CanonicalCollectionModes,
 		RunStatuses:            CanonicalRunStatuses,
 		LayerStates:            CanonicalLayerStates,
+		FreshnessStates:        CanonicalFreshnessStates,
 		EvidenceKinds:          CanonicalEvidenceKinds,
 		ProcessOutcomes:        CanonicalProcessOutcomes,
 		InterfaceOutcomes:      CanonicalInterfaceOutcomes,
@@ -237,6 +241,8 @@ func (h *Handler) Meta(w http.ResponseWriter, r *http.Request) {
 		RequestTimeoutSeconds:  RequestTimeoutSeconds,
 		TotalDeadlineSeconds:   TotalDeadlineSeconds,
 		MaxGlobalConcurrent:    MaxGlobalConcurrent,
+		StalenessGraceSeconds:  StalenessGraceSeconds,
+		ManualFreshnessSeconds: ManualFreshnessWindowSeconds,
 		RetentionDays:          DefaultRetentionDays,
 		MaxRetentionDays:       MaxRetentionDays,
 		SupportedMetrics:       SupportedMetrics(),
@@ -307,6 +313,7 @@ func (h *Handler) ListTargets(w http.ResponseWriter, r *http.Request) {
 		summaries = append(summaries, HealthTargetSummary{
 			HealthTarget: target,
 			Coverage:     CoverageSummary{},
+			Freshness:    EvaluateFreshness(&target, time.Now().UTC()),
 		})
 	}
 	response.JSON(w, http.StatusOK, ListTargetsResponse{
@@ -316,11 +323,16 @@ func (h *Handler) ListTargets(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetTargetResponse is the GET /api/nf-health/targets/{targetId} payload.
+//
+// OverallState is server-derived from layer evidence plus measurement
+// freshness. A stale or unknown measurement never presents as healthy, and the
+// latest sample is retained as historical evidence rather than current proof.
 type GetTargetResponse struct {
-	Target  HealthTargetSummary `json:"target"`
-	Latest  *HealthSample       `json:"latestSample,omitempty"`
-	LastRun *HealthRun          `json:"lastRun,omitempty"`
-	Overall string              `json:"overallState"`
+	Target    HealthTargetSummary `json:"target"`
+	Latest    *HealthSample       `json:"latestSample,omitempty"`
+	LastRun   *HealthRun          `json:"lastRun,omitempty"`
+	Overall   string              `json:"overallState"`
+	Freshness FreshnessProjection `json:"freshness"`
 }
 
 // GetTarget handles GET /api/nf-health/targets/{targetId}.
@@ -348,14 +360,20 @@ func (h *Handler) GetTarget(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := GetTargetResponse{Target: HealthTargetSummary{HealthTarget: *target}}
+	resp.Freshness = EvaluateFreshness(target, time.Now().UTC())
+	// The nested target summary carries the same projection the overview uses,
+	// so detail and list views cannot disagree about measurement freshness.
+	resp.Target.Freshness = resp.Freshness
 	samples, _, _, serr := h.repo.ListSamples(r.Context(), SampleListFilter{TargetID: targetID, Limit: 1})
 	if serr == nil && len(samples) > 0 {
 		latest := samples[0]
 		resp.Latest = &latest
 		resp.Target.Coverage = CoverageFromLayers(latest.Layers)
-		resp.Overall = OverallState(latest.Layers)
+		// Historical samples remain readable, but current evidence is gated
+		// by freshness so an old sample is never presented as live health.
+		resp.Overall = ProjectOverallState(resp.Freshness, &latest.Layers)
 	} else {
-		resp.Overall = StateUnknown
+		resp.Overall = ProjectOverallState(resp.Freshness, nil)
 	}
 	runs, _, _, rerr := h.repo.ListRuns(r.Context(), RunListFilter{TargetID: targetID, Limit: 1})
 	if rerr == nil && len(runs) > 0 {

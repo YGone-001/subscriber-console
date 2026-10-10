@@ -49,6 +49,17 @@ export interface CoverageSummary {
   l3Available: boolean;
 }
 
+export type FreshnessState = 'fresh' | 'stale' | 'unknown' | 'not_monitored';
+
+export interface FreshnessProjection {
+  state: FreshnessState;
+  ageSeconds?: number;
+  policySeconds: number;
+  basis: string;
+  evaluatedAt: string;
+  reason?: string;
+}
+
 export interface HealthTarget {
   targetId: string;
   schemaVersion: number;
@@ -74,6 +85,7 @@ export interface HealthTarget {
 
 export interface HealthTargetSummary extends HealthTarget {
   coverage: CoverageSummary;
+  freshness: FreshnessProjection;
 }
 
 export interface HealthRun {
@@ -119,6 +131,7 @@ export interface NfHealthMeta {
   collectionModes: CollectionMode[];
   runStatuses: RunStatus[];
   layerStates: LayerState[];
+  freshnessStates?: FreshnessState[];
   evidenceKinds: EvidenceKind[];
   processOutcomes: string[];
   interfaceOutcomes: string[];
@@ -129,6 +142,8 @@ export interface NfHealthMeta {
   requestTimeoutSeconds: number;
   totalDeadlineSeconds: number;
   maxGlobalConcurrent: number;
+  stalenessGraceSeconds?: number;
+  manualFreshnessWindowSeconds?: number;
   retentionDays: number;
   maxRetentionDays: number;
   supportedMetrics: MetricDefinition[];
@@ -152,6 +167,7 @@ export interface GetTargetResponse {
   latestSample?: HealthSample;
   lastRun?: HealthRun;
   overallState: LayerState;
+  freshness: FreshnessProjection;
 }
 
 export interface ListSamplesResponse {

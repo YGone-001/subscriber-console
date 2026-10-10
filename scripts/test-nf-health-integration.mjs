@@ -92,6 +92,7 @@ const CANDIDATE_ID = '9b2d3c40-0011-4b11-9d11-000000000011';
 // collection scenario can run without hitting the per-target cooldown.
 const CANDIDATE_EMPTY = '9b2d3c40-0022-4b22-9d22-000000000022';
 const CANDIDATE_FAIL = '9b2d3c40-0033-4b33-9d33-000000000033';
+const CANDIDATE_STALE = '9b2d3c40-0055-4b55-9d55-000000000055';
 const CANDIDATE_DOWN = '9b2d3c40-0044-4b44-9d44-000000000044';
 
 const METRICS_BODY = [
@@ -224,6 +225,7 @@ async function main() {
       candidateDoc(CANDIDATE_EMPTY, '3301e63a-c3b7-41f1-a512-9f6322e6f4c3'),
       candidateDoc(CANDIDATE_FAIL, '3301e63a-c3b7-41f1-a512-9f6322e6f4c4'),
       candidateDoc(CANDIDATE_DOWN, '3301e63a-c3b7-41f1-a512-9f6322e6f4c5'),
+      candidateDoc(CANDIDATE_STALE, '3301e63a-c3b7-41f1-a512-9f6322e6f4c6'),
     ]);
 
     await verifyAsync('production indexes cover exactly the three NF Health collections', async () => {
@@ -580,6 +582,132 @@ async function main() {
         const res = await api(base, 'POST', probe, adminToken, {});
         assert.ok(res.status === 404 || res.status === 405, `${probe} must not exist, got ${res.status}`);
       }
+    });
+
+    // ---- Correction evidence: retention data type and migration ----
+
+    await verifyAsync('stored samples persist expiresAt as a BSON Date', async () => {
+      const samples = await samplesColl.find({ targetId }).sort({ collectedAt: -1 }).limit(5).toArray();
+      assert.ok(samples.length >= 1, 'at least one sample must exist for the BSON Date check');
+      for (const doc of samples) {
+        assert.ok(doc.expiresAt instanceof Date, `expiresAt must be a BSON Date, got ${typeof doc.expiresAt}`);
+      }
+    });
+
+    await verifyAsync('sample JSON projection keeps ISO 8601 expiresAt', async () => {
+      const res = await api(base, 'GET', `/api/nf-health/samples?targetId=${targetId}`, operatorToken);
+      assert.equal(res.status, 200, res.text);
+      const rows = res.json.samples || [];
+      assert.ok(rows.length >= 1, 'samples must be listable');
+      for (const row of rows) {
+        if (row.expiresAt === undefined || row.expiresAt === null) continue;
+        assert.equal(typeof row.expiresAt, 'string', 'expiresAt must stay ISO 8601 in JSON');
+        assert.match(row.expiresAt, /^\d{4}-\d{2}-\d{2}T/, 'expiresAt must be an ISO 8601 instant');
+      }
+    });
+
+    await verifyAsync('legacy string expiresAt samples remain readable and preserved', async () => {
+      const legacyId = `sample-legacy-${suffix}`;
+      const legacyExpiry = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString();
+      await samplesColl.insertOne({
+        _id: legacyId,
+        schemaVersion: 1,
+        targetId,
+        runId: `run-legacy-${suffix}`,
+        collectedAt: new Date().toISOString(),
+        expiresAt: legacyExpiry,
+        layers: {
+          process: { state: 'healthy', evidenceKind: 'process', measured: true },
+          interface: { state: 'not_configured', evidenceKind: 'none', measured: false },
+          service: { state: 'not_configured', evidenceKind: 'none', measured: false },
+        },
+        metrics: [],
+      });
+
+      // The typed read path must accept the legacy string without rewriting it.
+      const res = await api(base, 'GET', `/api/nf-health/samples?targetId=${targetId}`, operatorToken);
+      assert.equal(res.status, 200, res.text);
+      const found = (res.json.samples || []).some((s) => s.sampleId === legacyId);
+      assert.ok(found, 'legacy sample must remain visible through the read API');
+
+      const stillLegacy = await samplesColl.findOne({ _id: legacyId });
+      assert.equal(typeof stillLegacy.expiresAt, 'string', 'reads must not rewrite legacy expiresAt');
+    });
+
+    await verifyAsync('sample TTL index is scoped to app_nf_health_samples only', async () => {
+      const sampleIndexes = await samplesColl.indexes();
+      const ttl = sampleIndexes.find((i) => i.name === 'nf_health_samples_ttl');
+      assert.ok(ttl, 'nf_health_samples_ttl must exist');
+      assert.equal(ttl.expireAfterSeconds, 0, 'TTL must use expireAfterSeconds 0');
+      const key = JSON.stringify(ttl.key);
+      assert.ok(key.includes('expiresAt'), 'TTL must key on expiresAt');
+
+      const targetIndexes = await targetsColl.indexes();
+      const runIndexes = await runsColl.indexes();
+      assert.ok(!targetIndexes.some((i) => i.expireAfterSeconds !== undefined && i.name.includes('ttl')),
+        'targets must never be TTL-deleted');
+      assert.ok(!runIndexes.some((i) => i.expireAfterSeconds !== undefined && i.name.includes('ttl')),
+        'runs must never be TTL-deleted');
+    });
+
+    // ---- Correction evidence: freshness projection ----
+
+    await verifyAsync('meta exposes the freshness vocabulary and policy bounds', async () => {
+      const res = await api(base, 'GET', '/api/nf-health/meta', operatorToken);
+      assert.equal(res.status, 200, res.text);
+      assert.ok(Array.isArray(res.json.freshnessStates), 'meta must declare freshnessStates');
+      for (const state of ['fresh', 'stale', 'unknown', 'not_monitored']) {
+        assert.ok(res.json.freshnessStates.includes(state), `meta must declare freshness state ${state}`);
+      }
+      assert.equal(typeof res.json.stalenessGraceSeconds, 'number', 'stalenessGraceSeconds must be numeric');
+      assert.equal(typeof res.json.manualFreshnessWindowSeconds, 'number', 'manualFreshnessWindowSeconds must be numeric');
+      assert.ok(res.json.stalenessGraceSeconds > 0, 'staleness grace must be positive');
+      assert.ok(res.json.manualFreshnessWindowSeconds > 0, 'manual freshness window must be positive');
+    });
+
+    await verifyAsync('target detail carries a server-derived freshness projection', async () => {
+      const res = await api(base, 'GET', `/api/nf-health/targets/${targetId}`, operatorToken);
+      assert.equal(res.status, 200, res.text);
+      const freshness = res.json.freshness;
+      assert.ok(freshness, 'detail must include a freshness projection');
+      assert.ok(['fresh', 'stale', 'unknown', 'not_monitored'].includes(freshness.state),
+        `unexpected freshness state ${freshness.state}`);
+      assert.equal(typeof freshness.policySeconds, 'number', 'freshness must state its policy window');
+      assert.ok(freshness.evaluatedAt, 'freshness must record when it was evaluated');
+      assert.equal(freshness.state, res.json.target.freshness?.state,
+        'overview and detail freshness must agree');
+    });
+
+    await verifyAsync('stale measurements never project as healthy', async () => {
+      const staleId = await createTarget(CANDIDATE_STALE, 'stale projection guard');
+      await targetsColl.updateOne(
+        { _id: staleId },
+        {
+          $set: {
+            lastMeasuredAt: '2020-01-01T00:00:00.000Z',
+            collectionMode: 'scheduled',
+            intervalSeconds: 60,
+            enabled: true,
+          },
+        },
+      );
+      const res = await api(base, 'GET', `/api/nf-health/targets/${staleId}`, operatorToken);
+      assert.equal(res.status, 200, res.text);
+      assert.equal(res.json.freshness.state, 'stale', 'an ancient measurement must be stale');
+      assert.notEqual(res.json.overallState, 'healthy', 'stale evidence must never project healthy');
+    });
+
+    // ---- Correction evidence: ownership boundaries ----
+
+    await verifyAsync('NF Health writes no Inventory, Topology or Discovery fields', async () => {
+      const inventory = await client.db(appDbName).collection('app_inventory_resources').countDocuments({});
+      const topology = await client.db(appDbName).collection('app_topology_edges').countDocuments({});
+      assert.equal(inventory, 0, 'NF Health must not create Inventory resources');
+      assert.equal(topology, 0, 'NF Health must not create Topology edges');
+
+      const obs = await obsColl.findOne({ _id: CANDIDATE_ID });
+      assert.equal(obs.observationState, 'seen', 'Discovery observation state must be untouched');
+      assert.equal(obs.revision, 1, 'Discovery candidate revision must be untouched');
     });
 
     console.log(`\nNF Health integration: ${passed}/${totalChecks} checks passed`);

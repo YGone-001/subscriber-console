@@ -380,20 +380,23 @@ export function NfHealthTargetDialog({
             {formError}
           </p>
         ) : null}
-
-        <div className={styles.formActions}>
-          <button type="button" className="btn btn-secondary" onClick={onClose} disabled={submitting}>
-            {t('cancel')}
-          </button>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => void handleSubmit()}
-            disabled={submitting}
-          >
-            {submitting ? t('nf_health_submitting') : mode === 'edit' ? t('save') : t('nf_health_create_confirm')}
-          </button>
-        </div>
+      </div>
+      {/*
+       * Action row lives outside the scrolling body so Close / Cancel / Create
+       * remain reachable while the form content scrolls independently.
+       */}
+      <div className={styles.formActions}>
+        <button type="button" className="btn btn-secondary" onClick={onClose} disabled={submitting}>
+          {t('cancel')}
+        </button>
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={() => void handleSubmit()}
+          disabled={submitting}
+        >
+          {submitting ? t('nf_health_submitting') : mode === 'edit' ? t('save') : t('nf_health_create_confirm')}
+        </button>
       </div>
     </Dialog>
   );
