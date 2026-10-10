@@ -838,7 +838,7 @@ jobs:
         run: node scripts/test-nf-discovery-ui-contract.mjs
 
       # Browser-rendered acceptance: the built production SPA is served to real
-      # Chromium against deterministic API fixtures. Captures the 19-PNG matrix,
+      # Chromium against deterministic API fixtures. Captures the 20-PNG matrix,
       # verifies PNG integrity and SHA-256 checksums, asserts operator-observable
       # behaviour, and fails closed on browser errors or unexpected API requests.
       - name: Browser screenshot acceptance

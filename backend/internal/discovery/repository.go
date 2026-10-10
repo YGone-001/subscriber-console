@@ -326,6 +326,12 @@ func (r *Repository) UpsertObservation(ctx context.Context, sourceID, adapterTyp
 
 // MarkMissing marks previously seen candidates as missing after a complete scan.
 // Only call this when the scan completed successfully and was not truncated.
+//
+// lastSeenAt is preserved verbatim: it records the last real observation and is
+// never overwritten with the scan timestamp of an inferred absence. Candidate
+// identity (candidateId) and Inventory associations (linkedResourceId) are left
+// untouched. The now argument is retained for call-site compatibility and is
+// deliberately not persisted on this path.
 func (r *Repository) MarkMissing(ctx context.Context, sourceID string, seenIDs map[string]struct{}, now string) (int, error) {
 	filter := bson.M{
 		"sourceId":         sourceID,
@@ -339,9 +345,9 @@ func (r *Repository) MarkMissing(ctx context.Context, sourceID string, seenIDs m
 		filter["externalNfInstanceId"] = bson.M{"$nin": notIn}
 	}
 
+	_ = now // intentionally unused: absence is not an observation event
 	res, err := r.observations.UpdateMany(ctx, filter, bson.M{"$set": bson.M{
 		"observationState": ObservationMissing,
-		"lastSeenAt":       now,
 	}})
 	if err != nil {
 		return 0, fmt.Errorf("failed to mark missing nf observations: %w", err)
@@ -431,6 +437,12 @@ func (r *Repository) SetCandidateLink(ctx context.Context, candidateID string, e
 }
 
 // UpdateSourceScanMeta records scan outcome metadata on a source document.
+//
+// Contract: lastScanAt always moves to completedAt for every attempted scan.
+// lastSuccessAt moves only when lastError is empty, which the caller reserves
+// for a complete, untruncated successful scan. Partial and failed attempts pass
+// a non-empty lastError and therefore leave lastSuccessAt unchanged while
+// remaining distinguishable through lastError and through the run status.
 func (r *Repository) UpdateSourceScanMeta(ctx context.Context, sourceID, completedAt, lastError string) error {
 	setFields := bson.M{"lastScanAt": completedAt}
 	if lastError == "" {

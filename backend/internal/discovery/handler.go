@@ -436,6 +436,7 @@ func (h *Handler) ScanSource(w http.ResponseWriter, r *http.Request) {
 			run.Status = RunStatusFailed
 			run.ErrorCode = "DISCOVERY_RESPONSE_INVALID"
 			run.ErrorSummary = SanitizeSummary(upsertErr.Error())
+			_ = h.repo.UpdateSourceScanMeta(context.Background(), sourceID, completedAt, run.ErrorSummary)
 			_ = h.repo.CompleteRun(context.Background(), run)
 			response.InternalError(w)
 			return
@@ -451,19 +452,22 @@ func (h *Handler) ScanSource(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Missing is inferred only from a complete, untruncated successful scan.
+	// lastSuccessAt likewise moves only on that path: partial and failed attempts
+	// refresh lastScanAt and record lastError without claiming a success time.
 	if batch.Complete {
 		missing, missErr := h.repo.MarkMissing(context.Background(), sourceID, seen, completedAt)
 		if missErr == nil {
 			run.MissingCount = missing
 		}
 		run.Status = RunStatusSuccess
+		_ = h.repo.UpdateSourceScanMeta(context.Background(), sourceID, completedAt, "")
 	} else {
 		run.Status = RunStatusPartial
 		run.ErrorCode = "DISCOVERY_RESPONSE_LIMIT_EXCEEDED"
 		run.ErrorSummary = "scan truncated; absence not inferred"
+		_ = h.repo.UpdateSourceScanMeta(context.Background(), sourceID, completedAt, run.ErrorSummary)
 	}
 
-	_ = h.repo.UpdateSourceScanMeta(context.Background(), sourceID, completedAt, "")
 	_ = h.repo.CompleteRun(context.Background(), run)
 	h.auditWrite(p, "discovery.scan.complete", sourceID, nil, map[string]any{
 		"runId":      run.RunID,

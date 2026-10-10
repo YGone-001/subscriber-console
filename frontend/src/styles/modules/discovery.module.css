@@ -374,4 +374,19 @@
     flex-direction: column;
     align-items: stretch;
   }
+
+  /*
+   * Column layout promotes flex-basis onto the vertical axis. The desktop
+   * `flex: 1 1 320px` basis would otherwise render the search pill as a
+   * 320px-tall field, so the basis becomes auto-sized here and the control
+   * keeps its normal height from --control-height.
+   */
+  .search {
+    flex: 0 0 auto;
+    width: 100%;
+  }
+
+  .filterGroup {
+    width: 100%;
+  }
 }

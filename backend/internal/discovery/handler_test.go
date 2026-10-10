@@ -13,15 +13,22 @@ import (
 	"subscriber/internal/auth"
 )
 
+type scanMetaCall struct {
+	sourceID    string
+	completedAt string
+	lastError   string
+}
+
 type mockRepo struct {
-	sources      map[string]*DiscoverySource
-	runs         map[string]*DiscoveryRun
-	candidates   map[string]*NFObservation
-	scanErr      error
-	profiles     []*NormalizedProfile
-	complete     bool
-	linkCalls    int
-	inventoryMut int
+	sources       map[string]*DiscoverySource
+	runs          map[string]*DiscoveryRun
+	candidates    map[string]*NFObservation
+	scanErr       error
+	profiles      []*NormalizedProfile
+	complete      bool
+	linkCalls     int
+	inventoryMut  int
+	scanMetaCalls []scanMetaCall
 }
 
 func newMockRepo() *mockRepo {
@@ -165,6 +172,7 @@ func (m *mockRepo) SetCandidateLink(ctx context.Context, id string, rev int64, r
 }
 
 func (m *mockRepo) UpdateSourceScanMeta(ctx context.Context, sourceID, completedAt, lastError string) error {
+	m.scanMetaCalls = append(m.scanMetaCalls, scanMetaCall{sourceID: sourceID, completedAt: completedAt, lastError: lastError})
 	return nil
 }
 
@@ -617,5 +625,102 @@ func TestUpdateSourceCAS(t *testing.T) {
 	_ = json.Unmarshal(w.Body.Bytes(), &payload)
 	if payload["code"] != "DISCOVERY_REVISION_CONFLICT" {
 		t.Fatalf("code = %q", payload["code"])
+	}
+}
+
+// runScanForMeta drives one scan and returns the recorded scan-meta calls.
+func runScanForMeta(t *testing.T, repo *mockRepo, h *Handler, sourceID string) []scanMetaCall {
+	t.Helper()
+	repo.scanMetaCalls = nil
+	req := withPrincipal(httptest.NewRequest(http.MethodPost, "/api/discovery/sources/"+sourceID+"/scan", nil), "operator")
+	req.SetPathValue("sourceId", sourceID)
+	w := httptest.NewRecorder()
+	h.ScanSource(w, req)
+	return repo.scanMetaCalls
+}
+
+// TestCompleteScanMovesLastSuccessAt verifies that only a complete successful
+// scan reports an empty lastError, which is the repository signal that moves
+// lastSuccessAt.
+func TestCompleteScanMovesLastSuccessAt(t *testing.T) {
+	repo := newMockRepo()
+	src, _ := repo.CreateSource(context.Background(), &CreateSourceRequest{
+		Name: "nrf", AdapterType: AdapterNRF, BaseURL: "http://127.0.0.10:7777", TransportMode: TransportH2C,
+	}, "tester")
+	h, _ := newTestHandler(repo, &mockAdapter{batch: &ObservationBatch{Complete: true}}, &mockResolver{})
+
+	calls := runScanForMeta(t, repo, h, src.SourceID)
+	if len(calls) != 1 {
+		t.Fatalf("scan meta calls = %d, want 1", len(calls))
+	}
+	if calls[0].lastError != "" {
+		t.Fatalf("complete scan lastError = %q, want empty so lastSuccessAt moves", calls[0].lastError)
+	}
+	if calls[0].completedAt == "" {
+		t.Fatal("complete scan must record an actual completion time")
+	}
+}
+
+// TestPartialScanDoesNotMoveLastSuccessAt verifies truncated scans record a
+// non-empty lastError and therefore leave lastSuccessAt untouched.
+func TestPartialScanDoesNotMoveLastSuccessAt(t *testing.T) {
+	repo := newMockRepo()
+	src, _ := repo.CreateSource(context.Background(), &CreateSourceRequest{
+		Name: "nrf", AdapterType: AdapterNRF, BaseURL: "http://127.0.0.10:7777", TransportMode: TransportH2C,
+	}, "tester")
+	h, _ := newTestHandler(repo, &mockAdapter{batch: &ObservationBatch{Complete: false, Truncated: true}}, &mockResolver{})
+
+	calls := runScanForMeta(t, repo, h, src.SourceID)
+	if len(calls) != 1 {
+		t.Fatalf("scan meta calls = %d, want 1", len(calls))
+	}
+	if calls[0].lastError == "" {
+		t.Fatal("partial scan must not report an empty lastError")
+	}
+	if calls[0].completedAt == "" {
+		t.Fatal("partial scan must still record lastScanAt with its completion time")
+	}
+}
+
+// TestFailedScanDoesNotMoveLastSuccessAt verifies failed scans record a
+// non-empty lastError and never claim a success time.
+func TestFailedScanDoesNotMoveLastSuccessAt(t *testing.T) {
+	repo := newMockRepo()
+	src, _ := repo.CreateSource(context.Background(), &CreateSourceRequest{
+		Name: "nrf", AdapterType: AdapterNRF, BaseURL: "http://127.0.0.10:7777", TransportMode: TransportH2C,
+	}, "tester")
+	h, _ := newTestHandler(repo, &mockAdapter{err: ErrProtocol}, &mockResolver{})
+
+	calls := runScanForMeta(t, repo, h, src.SourceID)
+	if len(calls) != 1 {
+		t.Fatalf("scan meta calls = %d, want 1", len(calls))
+	}
+	if calls[0].lastError == "" {
+		t.Fatal("failed scan must not report an empty lastError")
+	}
+	if calls[0].completedAt == "" {
+		t.Fatal("failed scan must still record lastScanAt with its completion time")
+	}
+}
+
+// TestPartialAndFailedScansRemainDistinguishable verifies the two non-success
+// outcomes do not collapse into one representation.
+func TestPartialAndFailedScansRemainDistinguishable(t *testing.T) {
+	repo := newMockRepo()
+	src, _ := repo.CreateSource(context.Background(), &CreateSourceRequest{
+		Name: "nrf", AdapterType: AdapterNRF, BaseURL: "http://127.0.0.10:7777", TransportMode: TransportH2C,
+	}, "tester")
+
+	partialHandler, _ := newTestHandler(repo, &mockAdapter{batch: &ObservationBatch{Complete: false, Truncated: true}}, &mockResolver{})
+	partialCalls := runScanForMeta(t, repo, partialHandler, src.SourceID)
+
+	failedHandler, _ := newTestHandler(repo, &mockAdapter{err: ErrProtocol}, &mockResolver{})
+	failedCalls := runScanForMeta(t, repo, failedHandler, src.SourceID)
+
+	if len(partialCalls) != 1 || len(failedCalls) != 1 {
+		t.Fatalf("calls partial=%d failed=%d", len(partialCalls), len(failedCalls))
+	}
+	if partialCalls[0].lastError == failedCalls[0].lastError {
+		t.Fatalf("partial and failed lastError collapsed: %q", partialCalls[0].lastError)
 	}
 }

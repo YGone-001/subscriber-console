@@ -5,9 +5,11 @@ import (
 	"strings"
 )
 
-// rawNFProfile is a tolerant decoder for 3GPP NFProfile documents observed from
-// either Nnrf_NFManagement or Nnrf_NFDiscovery. Field spellings differ between
-// the two APIs and across vendor stacks, so both shapes are accepted.
+// rawNFProfile is a tolerant decoder for 3GPP NFProfile documents. Field
+// spellings differ across service families and vendor stacks, so both the
+// nfServiceList object form and the nfServices array form are accepted.
+// Decoding tolerance is not a protocol claim: the adapter only issues
+// Nnrf_NFManagement reads (see NRFAdapter).
 type rawNFProfile struct {
 	NfInstanceID   string   `json:"nfInstanceId"`
 	NfType         string   `json:"nfType"`
@@ -23,7 +25,7 @@ type rawNFProfile struct {
 	SNssaiList     []SNssai `json:"sNssaiList"`
 	// Nnrf_NFManagement returns nfServiceList as an object keyed by service id.
 	NfServiceList json.RawMessage `json:"nfServiceList"`
-	// Nnrf_NFDiscovery returns nfServices as an array.
+	// Some stacks return nfServices as an array instead.
 	NfServices json.RawMessage `json:"nfServices"`
 }
 
@@ -169,8 +171,10 @@ func decodeServices(listRaw, arrayRaw json.RawMessage) ([]rawNFService, error) {
 	return nil, nil
 }
 
-// ParseDiscoveryResponse parses an Nnrf_NFDiscovery search result.
-// Observed live registry shape: {"validityPeriod":30,"nfInstances":[...]}.
+// ParseDiscoveryResponse parses an NF profile search-result envelope of the form
+// {"validityPeriod":30,"nfInstances":[...]}. It is a wire-format helper only:
+// the NRF adapter does not issue Nnrf_NFDiscovery requests in this build, so no
+// call path currently fetches such an envelope from a live registry.
 func ParseDiscoveryResponse(raw []byte) ([]*NormalizedProfile, error) {
 	var envelope struct {
 		NfInstances []json.RawMessage `json:"nfInstances"`

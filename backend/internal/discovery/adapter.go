@@ -16,7 +16,9 @@ type ObservationBatch struct {
 	Complete  bool
 	Truncated bool
 	SourceURL string
-	APIFamily string // "nnrf-nfm" or "nnrf-disc"
+	// APIFamily identifies the 3GPP service family that produced this batch.
+	// This adapter only issues Nnrf_NFManagement reads, so the value is "nnrf-nfm".
+	APIFamily string
 }
 
 // Adapter is the vendor-neutral, read-only discovery contract. Future EPC and IMS
@@ -34,9 +36,15 @@ var ErrUnsupportedAdapter = errors.New("unsupported discovery adapter type")
 // ErrSourceDisabled is returned when a scan is requested for a disabled source.
 var ErrSourceDisabled = errors.New("discovery source disabled")
 
-// NRFAdapter reads NF candidates from a 3GPP NRF using only
-// 3GPP read operations (Nnrf_NFManagement collection and Nnrf_NFDiscovery).
-// It never issues PUT, PATCH, DELETE, or subscription-create requests.
+// NRFAdapter reads NF candidates from a 3GPP NRF using only bounded, read-only
+// Nnrf_NFManagement collection operations: GET of the nf-instances collection
+// and GET of each linked NF profile. It never issues PUT, PATCH, DELETE, or
+// subscription-create requests, and it does not query Nnrf_NFDiscovery.
+//
+// API support boundary for this build:
+//
+//	implemented : Nnrf_NFManagement GET collection + GET NF profile
+//	not issued  : Nnrf_NFDiscovery search, subscriptions, any write verb
 type NRFAdapter struct {
 	client    *NRFClient
 	allowlist *DestinationAllowlist
@@ -118,28 +126,21 @@ func (a *NRFAdapter) Discover(ctx context.Context, src DiscoverySource) (*Observ
 		batch.Profiles = append(batch.Profiles, profile)
 	}
 
-	// Enrich with Nnrf_NFDiscovery search results when the NRF supports it.
-	// Discovery is read-only and supplementary; a discovery failure does not
-	// invalidate the NFManagement observation.
+	// Reserved extension point only. It performs no network I/O in this build.
 	a.enrichFromDiscovery(ctx, src, batch)
 
 	return batch, nil
 }
 
-// enrichFromDiscovery performs a bounded standards-conformant discovery query and
-// merges any additional detail. Failures are non-fatal to the primary read.
-func (a *NRFAdapter) enrichFromDiscovery(ctx context.Context, src DiscoverySource, batch *ObservationBatch) {
-	base, err := ValidateTarget(src.BaseURL, a.allowlist)
-	if err != nil {
-		return
-	}
-	baseURL := strings.TrimRight(base.String(), "/")
-	// A generic read of the discovery collection without speculative parameters
-	// is intentionally not sent. Discovery enrichment uses only the documented
-	// identity already observed, so no speculative 3GPP query parameters are issued.
-	_ = baseURL
-	_ = ctx
-	_ = src
+// enrichFromDiscovery is a reserved extension point for a future supplementary
+// search pass. It intentionally performs no network I/O and issues no request of
+// any kind.
+//
+// This build does not implement Nnrf_NFDiscovery querying. Observation batches
+// are built exclusively from the verified read-only Nnrf_NFManagement collection
+// and per-profile GET operations in Discover. No speculative 3GPP query
+// parameters and no generic collection read are sent from here.
+func (a *NRFAdapter) enrichFromDiscovery(_ context.Context, _ DiscoverySource, _ *ObservationBatch) {
 }
 
 // AdapterRegistry maps adapter type identifiers to implementations.

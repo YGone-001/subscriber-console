@@ -137,6 +137,29 @@ const contract = JSON.parse(readFileSync(resolve(frontend, 'nf-discovery-contrac
 check('DISC-UI-30', contract.routes.length === 2, `contract_routes=${contract.routes.length}`);
 check('DISC-UI-31', contract.apis.length === 12, `contract_apis=${contract.apis.length}`);
 
+// 7. Responsive search toolbar geometry
+// The desktop `.search { flex: 1 1 320px }` basis becomes a vertical extent in
+// column layout and renders a 320px-tall pill. The column breakpoint must
+// override it with an auto-sized basis and keep the normal control height.
+const columnBreakpoint = cssModule.match(/@media \(max-width: 900px\) \{([\s\S]*?)\n\}/);
+check('DISC-UI-32', Boolean(columnBreakpoint), 'discovery_css=column_breakpoint_present');
+const columnRules = columnBreakpoint ? columnBreakpoint[1] : '';
+check(
+  'DISC-UI-33',
+  /\.search\s*\{[^}]*flex:\s*0 0 auto/.test(columnRules) || /\.search\s*\{[^}]*flex:\s*1 1 auto/.test(columnRules),
+  'discovery_css=search_auto_flex_basis_in_column_layout',
+);
+check(
+  'DISC-UI-34',
+  !/\.search\s*\{[^}]*flex:\s*\d+\s+\d+\s+\d+px/.test(columnRules),
+  'discovery_css=search_no_pixel_basis_in_column_layout',
+);
+check(
+  'DISC-UI-35',
+  /\.search\s*\{[^}]*min-height:\s*var\(--control-height\)/.test(cssModule),
+  'discovery_css=search_preserves_control_height',
+);
+
 let failed = 0;
 for (const item of invariants) {
   const status = item.ok ? 'PASS' : 'FAIL';

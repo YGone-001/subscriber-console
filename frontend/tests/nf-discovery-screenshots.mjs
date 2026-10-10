@@ -138,6 +138,72 @@ async function assertNoRawKeys(page, label) {
   );
 }
 
+/*
+ * Search toolbar geometry contract.
+ *
+ * The desktop rule `flex: 1 1 320px` becomes a vertical extent once the
+ * toolbar stacks, which rendered the search pill as a 320px-tall field.
+ * The regression asserts the computed bounding box of the search form, not
+ * merely the absence of horizontal scrolling.
+ */
+const SEARCH_HEIGHT_MAX = 72; // 2x --control-height (36px)
+const SEARCH_HEIGHT_MIN = 28;
+
+async function assertSearchToolbarGeometry(page, label, viewportWidth) {
+  const form = page.locator('form[role="search"]');
+  await form.waitFor({ state: 'visible', timeout: 15000 });
+  const box = await form.boundingBox();
+  check(
+    `search_form_present:${label}`,
+    Boolean(box),
+    box ? `x=${Math.round(box.x)} y=${Math.round(box.y)} w=${Math.round(box.width)} h=${Math.round(box.height)}` : 'missing',
+  );
+  if (!box) return;
+
+  check(
+    `search_form_height:${label}`,
+    box.height >= SEARCH_HEIGHT_MIN && box.height <= SEARCH_HEIGHT_MAX,
+    `height=${Math.round(box.height)} min=${SEARCH_HEIGHT_MIN} max=${SEARCH_HEIGHT_MAX}`,
+  );
+  check(
+    `search_form_width:${label}`,
+    box.width >= 120 && box.width <= viewportWidth,
+    `width=${Math.round(box.width)} viewport=${viewportWidth}`,
+  );
+  check(
+    `search_form_within_viewport:${label}`,
+    box.x >= -1 && box.x + box.width <= viewportWidth + 1,
+    `left=${Math.round(box.x)} right=${Math.round(box.x + box.width)}`,
+  );
+
+  const inputBox = await page.locator('form[role="search"] input').boundingBox();
+  check(
+    `search_input_usable:${label}`,
+    Boolean(inputBox) && inputBox.height >= 16 && inputBox.height <= SEARCH_HEIGHT_MAX && inputBox.width >= 80,
+    inputBox ? `w=${Math.round(inputBox.width)} h=${Math.round(inputBox.height)}` : 'missing',
+  );
+
+  const submitBox = await page.locator('form[role="search"] button').boundingBox();
+  check(
+    `search_submit_usable:${label}`,
+    Boolean(submitBox) && submitBox.height >= 16 && submitBox.height <= SEARCH_HEIGHT_MAX && submitBox.width >= 40,
+    submitBox ? `w=${Math.round(submitBox.width)} h=${Math.round(submitBox.height)}` : 'missing',
+  );
+
+  const controlsInside =
+    inputBox && submitBox &&
+    inputBox.y >= box.y - 1 && inputBox.y + inputBox.height <= box.y + box.height + 1 &&
+    submitBox.y >= box.y - 1 && submitBox.y + submitBox.height <= box.y + box.height + 1;
+  check(
+    `search_controls_inside_form:${label}`,
+    Boolean(controlsInside),
+    controlsInside ? 'input and submit sit inside the form box' : 'input/submit clipped out of the form box',
+  );
+
+  const filterVisible = await page.locator('select').first().isVisible();
+  check(`filter_controls_visible:${label}`, filterVisible, 'observation / nfType filter');
+}
+
 async function capture(page, filename, meta) {
   const path = join(outDir, filename);
   await page.screenshot({ path, animations: 'disabled', caret: 'hide', scale: 'css' });
@@ -191,6 +257,9 @@ async function main() {
         check(`theme_applied:${sizeName}-${theme}`, (await page.evaluate(() => document.documentElement.dataset.theme)) === theme, theme);
         await assertNoRawKeys(page, `${sizeName}-${theme}`);
         await assertNoHorizontalOverflow(page, `${sizeName}-${theme}`);
+        // Mandated bounding-box regression: 768px and 390px must keep the
+        // search form at normal control height with usable controls.
+        await assertSearchToolbarGeometry(page, `${sizeName}-${theme}`, viewport.width);
 
         await capture(page, `discovery-list-${sizeName}-${theme}.png`, {
           route: listRoute,

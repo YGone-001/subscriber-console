@@ -77,6 +77,26 @@ No other discovery collection is created. Candidate identity is unique per
 The adapter type identifier is the neutral value `nrf`. Source code, API
 payloads, locale keys and fixtures use vendor-neutral vocabulary only.
 
+### 2.2 NRF API support boundary
+
+The NRF adapter performs bounded, read-only observation. Its precise 3GPP
+service support is:
+
+```text
+implemented : Nnrf_NFManagement GET  /nnrf-nfm/v1/nf-instances        (collection)
+implemented : Nnrf_NFManagement GET  /nnrf-nfm/v1/nf-instances/{id}   (NF profile)
+not issued  : Nnrf_NFDiscovery search queries
+not issued  : NF subscription create / delete
+not issued  : PUT / PATCH / DELETE on any NF registration resource
+```
+
+`enrichFromDiscovery()` is a reserved extension point that performs no network
+I/O in this build. Observation batches are assembled exclusively from the
+verified NFManagement collection and per-profile GET operations. No speculative
+3GPP query parameters and no generic collection read are issued. Wire-format
+helpers that understand alternate NFProfile spellings are decoding tolerance
+only and do not imply a second protocol path.
+
 ## 3. API Surface
 
 Exactly 12 Go registrations (7 read + 5 mutation), 2 SPA routes, and no
@@ -127,6 +147,38 @@ POST   /api/discovery/candidates/{candidateId}/unlink
 - `MarkMissing` runs only when the scan batch is complete.
 - Truncated scans record `partial` and explicitly state that absence was not
   inferred.
+
+### 5.1 Observation and scan timestamps
+
+```text
+lastSeenAt     moves only when an NF is actually observed again
+firstSeenAt    set once at first observation, never rewritten
+MarkMissing    sets observationState=missing and preserves lastSeenAt
+lastScanAt     moves on every attempted scan with its actual completion time
+lastSuccessAt  moves only on a complete, untruncated successful scan
+```
+
+Absence is not an observation event: marking a candidate missing never
+fabricates an observation timestamp. Candidate identity (`candidateId`,
+`externalNfInstanceId`) and Inventory associations (`linkedResourceId`) are
+preserved across the absence transition.
+
+Partial and failed attempts never move `lastSuccessAt`. They stay
+distinguishable through the run status (`partial` versus `failed`) and through
+the source `lastError` value (`scan truncated; absence not inferred` versus the
+classified failure summary).
+
+### 5.2 Build toolchain
+
+The discovery backend is verified on Linux with the module-declared toolchain:
+
+```text
+go version      go1.24.0 linux/amd64
+GOTOOLCHAIN     auto
+go.mod          module subscriber / go 1.24.0
+```
+
+The module Go version is authoritative and is not downgraded.
 
 ## 6. UI Integration
 
