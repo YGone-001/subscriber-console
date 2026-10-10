@@ -39,7 +39,7 @@ Frontend API paths remain `/api/...` unchanged - the edge routing is transparent
 ```text
 Public origin         : the Nginx listener only
 Loopback-internal     : Go 127.0.0.1:18888 (API + embedded static React SPA)
-Local dev frontend    : Vite 127.0.0.1:13333 (/api proxy to Go :18888)
+Local dev frontend    : Vite 0.0.0.0:13333 (/api proxy to Go :18888)
 Retired runtime       : Next.js retired; port 13334 retired
 Unsupported origins   : http://127.0.0.1:18888
 ```
@@ -48,7 +48,7 @@ Listener contract:
 
 ```text
 127.0.0.1:18888 = Go internal application listener (API + embedded static React SPA, HTTP_ADDR production default)
-127.0.0.1:13333 = Vite local development listener (dev only)
+0.0.0.0:13333 = Vite local development listener (dev only, LAN-reachable)
 Port 13334      = retired (Next.js retired; port 13333 reassigned to Vite)
 80/443          = Nginx public edge
 ```
@@ -89,7 +89,7 @@ Every location proxies to `xcloud_go` and applies the same security boundary:
 - `limit_req zone=xcloud_api` (10 req/s per IP, `burst=20 nodelay`) on API, `zone=xcloud_page` (30 req/s, `burst=50 nodelay`) on the UI location.
 
 Production `xcloud.conf` contains zero Next upstreams and zero `/_next/hmr` blocks.
-Local development uses the Vite development server (`127.0.0.1:13333`) directly and requires
+Local development uses the Vite development server (`0.0.0.0:13333`) directly and requires
 no Nginx setup.
 
 The SSE location additionally disables buffering and caching and extends the socket
@@ -229,10 +229,10 @@ Next.js runtime is retired, port 13333 is reassigned to Vite development, and le
 
 ### Local Full-Stack Development
 
-In local development, the Vite development server runs at `127.0.0.1:13333` and proxies `/api/*` directly to the Go backend at `127.0.0.1:18888`. Local development does not require Nginx.
+In local development, the Vite development server runs at `0.0.0.0:13333` and proxies `/api/*` directly to the Go backend at `127.0.0.1:18888`. Local development does not require Nginx.
 
 ```text
-Browser -> Vite 127.0.0.1:13333 -> Go 127.0.0.1:18888 (/api proxy)
+Browser -> Vite 0.0.0.0:13333 -> Go 127.0.0.1:18888 (/api proxy)
 ```
 
 Nginx remains the authoritative production edge, but is not required for local development.
@@ -261,7 +261,7 @@ Never resolve an occupied canonical port by changing the port; diagnose the owne
 npm run mongo:init
 ```
 
-3. Start the managed project processes (builds Go and runs it on `127.0.0.1:18888`, runs Vite on `127.0.0.1:13333`, writes ownership records):
+3. Start the managed project processes (builds Go and runs it on `127.0.0.1:18888`, runs Vite on `0.0.0.0:13333`, writes ownership records):
 
 ```bash
 npm run local:dev
@@ -279,7 +279,7 @@ either absent or present with a valid ownership record; the run reports
 
 Manual alternative:
 - Go backend internal `127.0.0.1:18888`: `cd backend && go run ./cmd/server`
-- Vite frontend dev server `127.0.0.1:13333`: `cd frontend && npm run dev`
+- Vite frontend dev server `0.0.0.0:13333`: `cd frontend && npm run dev`
 
 4. Check component and topology state, then verify the running topology:
 
@@ -375,7 +375,7 @@ is loopback.
 
 Next.js is retired; numeric port 13333 is reassigned to Vite local development. Legacy Next development Nginx configuration has been completely retired.
 Production uses exclusively Nginx fronting Go `127.0.0.1:18888` with the embedded React SPA.
-Local development uses Vite `127.0.0.1:13333` with `/api` proxying to Go.
+Local development uses Vite `0.0.0.0:13333` with `/api` proxying to Go.
 No production Node.js runtime is required.
 
 ### No Silent Rollback

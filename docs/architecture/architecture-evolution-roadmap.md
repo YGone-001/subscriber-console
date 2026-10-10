@@ -68,7 +68,7 @@ read-side business projections, governed business mutations, and operational mut
 Go embedded static SPA hosting is edge-active. Nginx routes all production traffic
 to Go `:18888`.
 `frontend/` is the active production SPA source.
-The Vite listener on `127.0.0.1:13333` is the loopback-only development server.
+The Vite listener on `0.0.0.0:13333` is the LAN-reachable development server; Go remains loopback-only.
 
 Platform Evolution Status:
 - Inventory / Resource Model Foundation = IMPLEMENTED (authoritative metadata source of truth in `xcloud_ops.app_inventory_resources`, 6 Go endpoints, 3 SPA routes, keyset cursor pagination, CAS concurrency, terminal retirement).

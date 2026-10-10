@@ -14,7 +14,7 @@
  *   - no frontend source module imports a backend runtime module or Next;
  *   - every Node-era backend helper deleted from the UI runtime stays absent from disk;
  *   - Next.js configuration is absent;
- *   - the dev start command binds the loopback listener 127.0.0.1:13333.
+ *   - the dev start command binds the LAN-reachable listener 0.0.0.0:13333.
  *
  * Usage: node scripts/test-frontend-runtime-dependencies.mjs
  */
@@ -32,7 +32,7 @@ const nextConfigPath = resolve(root, 'frontend/next.config.ts');
 const viteConfigPath = resolve(root, 'frontend/vite.config.ts');
 
 const CODE_EXT = /\.(ts|tsx|js|jsx|mjs|cjs)$/;
-const EXPECTED_DEV_LISTENER = '127.0.0.1:13333';
+const EXPECTED_DEV_LISTENER = '0.0.0.0:13333';
 
 /** Backend runtime modules the UI runtime must never declare or import. */
 const BANNED_RUNTIME_MODULES = [

@@ -4,7 +4,7 @@
  *
  * Permanent, phase-neutral acceptance suite that derives the local development
  * contract from source and fails closed:
- *   - Vite host = 127.0.0.1
+ *   - Vite host = 0.0.0.0 (same-subnet LAN reachability)
  *   - Vite port = 13333
  *   - strictPort = true
  *   - Vite /api proxy target = http://127.0.0.1:18888
@@ -46,7 +46,7 @@ function walk(dir, predicate, files = []) {
 
 // 1. Verify Vite development host, port, strictPort
 const viteConfig = readFileSync(viteConfigPath, 'utf8');
-assert.match(viteConfig, /host:\s*['"]127\.0\.0\.1['"]/, 'Vite server host must be 127.0.0.1');
+assert.match(viteConfig, /host:\s*['"]0\.0\.0\.0['"]/, 'Vite server host must be 0.0.0.0');
 assert.match(viteConfig, /port:\s*13333\b/, 'Vite server port must be 13333');
 assert.match(viteConfig, /strictPort:\s*true\b/, 'Vite strictPort must be true');
 
@@ -88,7 +88,7 @@ for (const file of srcFiles) {
 }
 
 console.log('Local Development Contract: PASS');
-console.log('local_dev_vite_host=127.0.0.1');
+console.log('local_dev_vite_host=0.0.0.0');
 console.log('local_dev_vite_port=13333');
 console.log('local_dev_vite_strict_port=true');
 console.log('local_dev_vite_api_proxy=http://127.0.0.1:18888');

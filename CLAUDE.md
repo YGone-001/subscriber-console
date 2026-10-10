@@ -173,7 +173,7 @@ Browser -> Nginx
 - Nginx 是唯一对外入口，单一应用 upstream（`xcloud_go` → `127.0.0.1:18888`），代理 `/api`、`/api/*`、SSE 及 `/*`。
 - Go 独占全部生产 API，并内嵌托管静态 React SPA（embedded static React SPA）。
 - `frontend/` 是规范 React + Vite SPA 源码，构建为静态资产后嵌入 Go 二进制。
-- Next.js 源码已退役，原 Next.js 端口重新分配给 Vite 本地开发（`127.0.0.1:13333`）；生产 edge 流量为 0，生产环境不需要 Node 运行时。
+- Next.js 源码已退役，原 Next.js 端口重新分配给 Vite 本地开发（`0.0.0.0:13333`）；生产 edge 流量为 0，生产环境不需要 Node 运行时。
 - Next.js 业务后端不存在，不得重建。
 - API 路径保持 `/api/...` 不变。
 
@@ -216,10 +216,12 @@ Next implementation direction   = complete
 Default local production URL: http://localhost
 Custom edge port:             http://localhost:<edge-port>   (production: sudo ./deploy/nginx/setup.sh <port>)
 Local development URL:        http://localhost:13333
+LAN development URL:          http://<host-lan-ip>:13333     (same-subnet client)
 ```
 
-- Vite 开发服务器 `127.0.0.1:13333`（loopback-only，strictPort）将 `/api/*` 代理至 Go `127.0.0.1:18888`。
-- Go `127.0.0.1:18888` 仅为内部 API 端点，不作为浏览器直接页面访问地址。
+- Vite 开发服务器 `0.0.0.0:13333`（LAN-reachable，strictPort）将 `/api/*` 代理至 Go `127.0.0.1:18888`。
+- Vite 绑定 `0.0.0.0` 仅影响开发传输层：同网段客户端可经主机局域网地址访问开发服务及其 `/api` 反代。
+- Go `127.0.0.1:18888` 仍为 loopback-only 内部 API 端点，不作为浏览器直接页面访问地址，也不对局域网暴露。
 - 本地开发不需要 Nginx。
 - 端口现状：80 为生产生效的 Nginx HTTP 边缘（`deploy/nginx/xcloud.conf` 中 `listen 80;`）；443 默认不生效，仅存在于被注释的 HTTPS 模板中。
 

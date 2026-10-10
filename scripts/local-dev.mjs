@@ -6,8 +6,10 @@
  * processes, and record their ownership so `local:stop` can later verify them.
  *
  * It never installs, starts, or enables MongoDB or Nginx. Normal local development
- * uses the Vite dev server at 127.0.0.1:13333 which proxies /api requests directly
- * to Go at 127.0.0.1:18888. Nginx is not required for local development.
+ * uses the Vite dev server at 0.0.0.0:13333 which proxies /api requests directly
+ * to Go at 127.0.0.1:18888. Nginx is not required for local development. The Vite
+ * bind is deliberately 0.0.0.0 so a same-subnet client can open the host LAN
+ * address; Go remains loopback-only and is still never a browser entry point.
  *
  * The Go child is started with the PRODUCTION default listen address. HTTP_ADDR is
  * explicitly removed from the child environment so the managed path genuinely
@@ -51,7 +53,7 @@ const NODE_BIN = process.execPath;
 const VITE_BIN = join(ROOT, 'frontend', 'node_modules', 'vite', 'bin', 'vite.js');
 const GO_BIN_NAME = process.platform === 'win32' ? 'xcloud-server.exe' : 'xcloud-server';
 const GO_BIN = join(runtimeDir(ROOT), 'bin', GO_BIN_NAME);
-const FRONTEND_ARGS = ['--host', '127.0.0.1', '--port', String(CANONICAL_PORTS.frontend), '--strictPort'];
+const FRONTEND_ARGS = ['--host', '0.0.0.0', '--port', String(CANONICAL_PORTS.frontend), '--strictPort'];
 const FRONTEND_COMMAND = `${NODE_BIN} ${VITE_BIN} ${FRONTEND_ARGS.join(' ')}`;
 
 const GO_READY_TIMEOUT_MS = Number(process.env.LOCAL_DEV_TIMEOUT_MS || 90000);
@@ -321,7 +323,7 @@ async function run() {
   }
   for (const item of startup.registered) log(`  ${item.role}.pid.json -> pid ${item.pid}`);
   log(`  Go       ready on 127.0.0.1:${CANONICAL_PORTS.go}`);
-  log(`  Frontend ready on 127.0.0.1:${CANONICAL_PORTS.frontend}`);
+  log(`  Frontend ready on 0.0.0.0:${CANONICAL_PORTS.frontend}`);
 
   // 7. Readiness via the doctor; never claim full readiness on our own.
   log('[7/8] Topology');

@@ -5,7 +5,8 @@
  * READ-ONLY diagnostic. It never starts or stops Vite, Go, or MongoDB; it
  * only inspects the currently running local development topology and reports what is reachable.
  *
- * The supported development browser entry is the Vite dev server at http://127.0.0.1:13333.
+ * The supported development browser entry is the Vite dev server at http://127.0.0.1:13333
+ * (bound to 0.0.0.0:13333, so a same-subnet client may use the host LAN address).
  * Vite proxies browser-relative /api requests directly to Go at 127.0.0.1:18888.
  *
  * Probing and interpretation live in `scripts/lib/local-runtime.mjs` so this doctor

@@ -7,7 +7,7 @@
  *   Browser / HTTP client
  *        |
  *        v
- *   real Vite dev server (127.0.0.1:13333)
+ *   real Vite dev server (0.0.0.0:13333)
  *        |
  *        | /api/* proxy
  *        v
@@ -17,8 +17,8 @@
  *   real MongoDB (127.0.0.1:27017)
  *
  * Proves:
- *   - frontend listener = 127.0.0.1:13333
- *   - Go listener       = 127.0.0.1:18888
+ *   - frontend listener = 0.0.0.0:13333 (same-subnet reachable)
+ *   - Go listener       = 127.0.0.1:18888 (loopback-only)
  *   - / rendered by Vite
  *   - /login rendered by Vite
  *   - frontend assets served by Vite
@@ -33,6 +33,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import http from 'node:http';
 import net from 'node:net';
+import os from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -68,6 +69,18 @@ function probePort(port, host = '127.0.0.1', timeoutMs = 2000) {
     socket.once('error', () => finish(false));
     socket.connect(port, host);
   });
+}
+
+/** First non-internal IPv4 of the runner, or null when the runner is loopback-only. */
+function nonLoopbackIPv4() {
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const addr of interfaces[name] || []) {
+      const family = typeof addr.family === 'string' ? addr.family : `IPv${addr.family}`;
+      if (family === 'IPv4' && !addr.internal) return addr.address;
+    }
+  }
+  return null;
 }
 
 function requestHttp(url, options = {}) {
@@ -225,11 +238,11 @@ async function main() {
   log(`  Fallback to 13334: ${fallbackTo13334}`);
 
   // 4. Vite dev server
-  log('[4/7] Ensuring Vite dev server is running on 127.0.0.1:13333...');
+  log('[4/7] Ensuring Vite dev server is running on 0.0.0.0:13333...');
   let viteUp = await probePort(CANONICAL_PORTS.frontend, '127.0.0.1', 1000);
   if (!viteUp) {
     log('  Starting Vite dev server...');
-    const viteArgs = [VITE_BIN, '--host', '127.0.0.1', '--port', '13333', '--strictPort'];
+    const viteArgs = [VITE_BIN, '--host', '0.0.0.0', '--port', '13333', '--strictPort'];
     const viteChild = spawn(process.execPath, viteArgs, {
       cwd: FRONTEND,
       env,
@@ -244,7 +257,24 @@ async function main() {
     log('  Vite dev server did not become ready.');
     process.exit(1);
   }
-  log('  Vite dev server is UP and ready on 127.0.0.1:13333');
+  log('  Vite dev server is UP and ready on 0.0.0.0:13333');
+
+  // The 0.0.0.0 bind is only meaningful if a same-subnet address actually answers.
+  // On a loopback-only runner there is no LAN address to prove, so that case is reported
+  // as skipped rather than silently passing.
+  const lanAddress = nonLoopbackIPv4();
+  let lanReachable = 'skipped';
+  if (lanAddress) {
+    const lanUp = await probePort(CANONICAL_PORTS.frontend, lanAddress, 2000);
+    lanReachable = lanUp ? '1' : '0';
+    log(`  LAN reachability via ${lanAddress}:${CANONICAL_PORTS.frontend} -> ${lanUp ? 'reachable' : 'NOT reachable'}`);
+    if (!lanUp) {
+      log('  Vite is bound to 0.0.0.0 but the host LAN address does not answer.');
+      process.exit(1);
+    }
+  } else {
+    log('  No non-loopback IPv4 on this runner; LAN reachability not measurable.');
+  }
 
   // 5. Test UI paths through Vite
   log('[5/7] Testing Vite frontend routes...');
@@ -306,7 +336,7 @@ async function main() {
   log('\n==================================================');
   log('dev_port_reassignment_old_port=13334');
   log('dev_port_reassignment_new_port=13333');
-  log('vite_dev_host=127.0.0.1');
+  log('vite_dev_host=0.0.0.0');
   log('vite_dev_port=13333');
   log('vite_dev_strict_port=true');
   log('vite_dev_api_proxy=http://127.0.0.1:18888');
@@ -323,8 +353,10 @@ async function main() {
   log(`foreign_13333_listener_refused=${foreignRefused}`);
   log(`foreign_13333_listener_preserved=${foreignAlive}`);
   log(`fallback_to_13334=${fallbackTo13334}`);
-  log('local_dev_frontend_listener=127.0.0.1:13333');
+  log('local_dev_frontend_listener=0.0.0.0:13333');
   log('local_dev_go_listener=127.0.0.1:18888');
+  log(`local_dev_frontend_lan_address=${lanAddress ?? 'none'}`);
+  log(`local_dev_frontend_lan_reachable=${lanReachable}`);
   log('local_dev_vite_root_served=true');
   log('local_dev_vite_login_served=true');
   log('local_dev_api_proxy_active=true');

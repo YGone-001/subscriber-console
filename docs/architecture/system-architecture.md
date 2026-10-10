@@ -145,10 +145,10 @@ PRODUCTION
 Browser -> Nginx -> Go 127.0.0.1:18888 (API + embedded static SPA) -> MongoDB
 
 DEVELOPMENT
-Browser -> Vite 127.0.0.1:13333 -> Go 127.0.0.1:18888 (/api proxy) -> MongoDB
+Browser -> Vite 0.0.0.0:13333 -> Go 127.0.0.1:18888 (/api proxy) -> MongoDB
 ```
 
-In production, Nginx remains the sole public edge and Go serves both the API and the embedded static SPA. In local development, the Vite dev server on `127.0.0.1:13333` proxies `/api` calls directly to Go on `127.0.0.1:18888`, without requiring Nginx. The old Next.js runtime is retired, and port 13333 is reassigned to Vite development; port 13334 is retired.
+In production, Nginx remains the sole public edge and Go serves both the API and the embedded static SPA. In local development, the Vite dev server on `0.0.0.0:13333` proxies `/api` calls directly to Go on `127.0.0.1:18888`, without requiring Nginx. The old Next.js runtime is retired, and port 13333 is reassigned to Vite development; port 13334 is retired.
 
 ## Evolution Authority
 
