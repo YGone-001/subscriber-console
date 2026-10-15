@@ -308,7 +308,11 @@ export function NfHealthPage() {
               </thead>
               <tbody>
                 {targets.map((target) => {
-                  const candidate = candidateIndex.get(target.candidateId);
+                  const candidate = candidateIndex.get(target.candidateId ?? '');
+                  const legacyIdentity =
+                    !target.resourceId ||
+                    target.identityState === 'legacy_unbound' ||
+                    target.identityState === 'legacy_unresolved';
                   return (
                     <tr key={target.targetId}>
                       <td>
@@ -324,7 +328,20 @@ export function NfHealthPage() {
                       </td>
                       <td>
                         <div className={styles.stack}>
-                          <strong>{candidate?.nfType ?? target.name}</strong>
+                          <strong>{target.nfType ?? candidate?.nfType ?? target.name}</strong>
+                          {target.domain ? (
+                            <span className={styles.chip}>{target.domain}</span>
+                          ) : null}
+                          {target.resourceId ? (
+                            <Link
+                              to={`/inventory/${encodeURIComponent(target.resourceId)}`}
+                              className={styles.rowLink}
+                              title={t('nf_health_link_resource')}
+                            >
+                              <Link2 size={12} aria-hidden="true" />
+                              {t('nf_health_link_resource')}
+                            </Link>
+                          ) : null}
                           {candidate ? (
                             <Link to="/discovery" className={styles.rowLink} title={t('nf_health_link_candidate')}>
                               <Boxes size={12} aria-hidden="true" />
@@ -340,6 +357,11 @@ export function NfHealthPage() {
                               <Link2 size={12} aria-hidden="true" />
                               {t('nf_health_link_inventory')}
                             </Link>
+                          ) : null}
+                          {legacyIdentity ? (
+                            <span className={styles.badgeUnknown} title={t('nf_health_identity_legacy_hint')}>
+                              {t('nf_health_identity_legacy')}
+                            </span>
                           ) : null}
                         </div>
                       </td>
@@ -484,6 +506,24 @@ function describeMutationError(
         return t('nf_health_err_destination_not_allowed');
       case 'NF_HEALTH_SERVICE_UNIT_NOT_ALLOWED':
         return t('nf_health_err_service_unit_not_allowed');
+      case 'NF_HEALTH_PROCESS_BINDING_MISSING':
+        return t('nf_health_err_process_binding_missing');
+      case 'NF_HEALTH_PROCESS_BINDING_MISMATCH':
+        return t('nf_health_err_process_binding_mismatch');
+      case 'NF_HEALTH_RESOURCE_NOT_FOUND':
+        return t('nf_health_err_resource_not_found');
+      case 'NF_HEALTH_RESOURCE_KIND_UNSUPPORTED':
+        return t('nf_health_err_resource_kind_unsupported');
+      case 'NF_HEALTH_RESOURCE_DOMAIN_UNSUPPORTED':
+        return t('nf_health_err_resource_domain_unsupported');
+      case 'NF_HEALTH_RESOURCE_RETIRED':
+        return t('nf_health_err_resource_retired');
+      case 'NF_HEALTH_NF_TYPE_UNRESOLVED':
+        return t('nf_health_err_nf_type_unresolved');
+      case 'NF_HEALTH_CANDIDATE_RESOURCE_MISMATCH':
+        return t('nf_health_err_candidate_resource_mismatch');
+      case 'NF_HEALTH_CANDIDATE_TYPE_MISMATCH':
+        return t('nf_health_err_candidate_type_mismatch');
       case 'NF_HEALTH_REVISION_CONFLICT':
         return t('nf_health_err_revision_conflict');
       case 'NF_HEALTH_TARGET_NOT_FOUND':

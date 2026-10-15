@@ -193,6 +193,68 @@ check(
   'stale_is_visibly_labeled=true',
 );
 
+// 10. Unified Inventory-authoritative identity
+const dialogFullSource = read('features/nf-health/NfHealthTargetDialog.tsx');
+const typesFullSource = read('features/nf-health/nf-health-types.ts');
+const buildersSource = read('features/nf-health/nf-health-builders.ts');
+const validationFullSource = read('features/nf-health/nf-health-validation.ts');
+check(
+  'NFH-UI-46',
+  /nf-health-resource/.test(dialogFullSource) && /fetchInventoryResources/.test(dialogFullSource),
+  'nf_health_inventory_selection=present',
+);
+check(
+  'NFH-UI-47',
+  /lifecycleState:\s*'active'/.test(dialogFullSource) && /RESOURCE_PAGE_LIMIT|limit:\s*\d+/.test(dialogFullSource),
+  'nf_health_inventory_selection=respects_pagination_and_active_filter',
+);
+check(
+  'NFH-UI-48',
+  /process_only/.test(typesFullSource) && /process_only/.test(buildersSource) && /process_only/.test(dialogFullSource),
+  'nf_health_process_only_profile=wired',
+);
+check(
+  'NFH-UI-49',
+  /metricsEndpoint,\s*undefined/.test(buildersSource) || /processOnly \? undefined/.test(buildersSource),
+  'nf_health_process_only=never_configures_http_endpoint',
+);
+check(
+  'NFH-UI-50',
+  /resourceId\?:\s*string/.test(typesFullSource) &&
+    /domain\?:\s*string/.test(typesFullSource) &&
+    /nfType\?:\s*string/.test(typesFullSource) &&
+    /identityState\?:/.test(typesFullSource),
+  'nf_health_identity_fields=declared',
+);
+check(
+  'NFH-UI-51',
+  /identityState/.test(listSource) && /identityState/.test(detailSource),
+  'nf_health_identity_state=surfaced_honestly',
+);
+check(
+  'NFH-UI-52',
+  /legacy/.test(listSource) && /legacy/.test(detailSource) && /legacy/.test(localeEn) && /legacy/.test(localeZh),
+  'nf_health_legacy_identity=honestly_labeled',
+);
+check(
+  'NFH-UI-53',
+  /validateResourceId/.test(validationFullSource) &&
+    /nf_health_validation_resource_required/.test(validationFullSource),
+  'nf_health_resource_validation=required',
+);
+check(
+  'NFH-UI-54',
+  /candidateId\?:/.test(typesFullSource) &&
+    /candidateId:\s*form\.candidateId\.trim\(\)\s*\|\|\s*undefined/.test(buildersSource),
+  'nf_health_candidate=optional',
+);
+check(
+  'NFH-UI-55',
+  /NF_HEALTH_RESOURCE_RETIRED|resource_retired/.test(listSource) &&
+    /NF_HEALTH_PROCESS_BINDING/.test(listSource),
+  'nf_health_identity_errors=mapped',
+);
+
 let failed = 0;
 for (const item of invariants) {
   const status = item.ok ? 'PASS' : 'FAIL';

@@ -1,9 +1,11 @@
 /*
  * NF Health monitoring target form dialog.
  *
- * Covers add and edit paths for an approved monitoring target. Destinations,
- * collector profiles and service units are constrained to the server-owned
- * metadata allowlists; free-form shell commands are never accepted.
+ * Covers add and edit paths for an approved monitoring target. The Inventory
+ * resource is the authoritative identity; the Discovery candidate is an
+ * optional association. Destinations, collector profiles and service units are
+ * constrained to the server-owned metadata allowlists; free-form shell
+ * commands are never accepted.
  */
 import { useEffect, useMemo, useState } from 'react';
 import { Dialog } from '../../components/ui/Dialog';
@@ -11,6 +13,8 @@ import { Field } from '../../components/ui/Field';
 import { useI18n } from '../../providers/I18nProvider';
 import { fetchDiscoveryCandidates } from '../discovery/discovery-api';
 import type { NfObservation } from '../discovery/discovery-types';
+import { fetchInventoryResources } from '../inventory/inventory-api';
+import type { Resource } from '../inventory/inventory-types';
 import { createNfHealthTarget, updateNfHealthTarget } from './nf-health-api';
 import {
   buildCreateTargetRequest,
@@ -39,6 +43,7 @@ type Props = {
 };
 
 const CANDIDATE_LIMIT = 50;
+const RESOURCE_PAGE_LIMIT = 20;
 
 export function NfHealthTargetDialog({
   open,
@@ -55,16 +60,23 @@ export function NfHealthTargetDialog({
   );
   const [candidates, setCandidates] = useState<NfObservation[]>([]);
   const [candidatesLoading, setCandidatesLoading] = useState(false);
+  const [resources, setResources] = useState<Resource[]>([]);
+  const [resourcesLoading, setResourcesLoading] = useState(false);
+  const [resourcesHasMore, setResourcesHasMore] = useState(false);
+  const [resourcesCursor, setResourcesCursor] = useState<string | null>(null);
+  const [resourceQuery, setResourceQuery] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setFormError(null);
+    setResourceQuery('');
     if (mode === 'edit' && existing) {
       const split = splitMetricsEndpoint(existing.metricsEndpoint);
       setForm({
-        candidateId: existing.candidateId,
+        resourceId: existing.resourceId ?? '',
+        candidateId: existing.candidateId ?? '',
         name: existing.name,
         collectorProfile: existing.collectorProfile,
         metricsDestination: split.destination,
@@ -99,10 +111,60 @@ export function NfHealthTargetDialog({
     };
   }, [open, mode]);
 
+  // The Inventory resource listing is paginated server-side: the picker never
+  // assumes every resource fits in one response page. Only active resources
+  // are offered; the server enforces the monitored resource kinds and the
+  // derived domain / NF type.
+  const MONITORED_KINDS = new Set(['network_function', 'network_function_instance']);
+  const loadResources = (query: string, cursor?: string, append = false) => {
+    let cancelled = false;
+    setResourcesLoading(true);
+    void fetchInventoryResources({
+      lifecycleState: 'active',
+      q: query || undefined,
+      cursor,
+      limit: RESOURCE_PAGE_LIMIT,
+    })
+      .then((response) => {
+        if (cancelled) return;
+        const rows = (response.resources ?? []).filter((item) => MONITORED_KINDS.has(item.kind));
+        setResources((current) => (append ? [...current, ...rows] : rows));
+        setResourcesHasMore(Boolean(response.page?.hasMore && response.page?.nextCursor));
+        setResourcesCursor(response.page?.nextCursor ?? null);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        if (!append) setResources([]);
+        setResourcesHasMore(false);
+      })
+      .finally(() => {
+        if (!cancelled) setResourcesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  };
+
+  useEffect(() => {
+    if (!open || mode !== 'create') return;
+    const cancel = loadResources(resourceQuery);
+    return cancel;
+    // loadResources is stable; resourceQuery drives the first page reload.
+  }, [open, mode, resourceQuery]);
+
+  const selectedResource = useMemo(
+    () =>
+      resources.find((item) => item.resourceId === form.resourceId) ??
+      (existing && existing.resourceId === form.resourceId ? null : null),
+    [resources, form.resourceId, existing],
+  );
+
   const selectedCandidate = useMemo(
     () => candidates.find((item) => item.candidateId === form.candidateId) ?? null,
     [candidates, form.candidateId],
   );
+
+  const isProcessOnly = form.collectorProfile === 'process_only';
 
   const patch = (next: Partial<NfHealthTargetForm>) => {
     setForm((current) => ({ ...current, ...next }));
@@ -157,45 +219,117 @@ export function NfHealthTargetDialog({
 
         {mode === 'create' ? (
           <Field
-            htmlFor="nf-health-candidate"
-            label={t('nf_health_field_candidate')}
-            description={t('nf_health_field_candidate_hint')}
+            htmlFor="nf-health-resource"
+            label={t('nf_health_field_resource')}
+            description={t('nf_health_field_resource_hint')}
           >
-            <select
-              id="nf-health-candidate"
+            <input
+              id="nf-health-resource-search"
               className="form-input"
-              value={form.candidateId}
+              type="search"
+              value={resourceQuery}
+              onChange={(event) => setResourceQuery(event.target.value)}
+              placeholder={t('nf_health_field_resource_search')}
+              aria-label={t('nf_health_field_resource_search')}
+              disabled={submitting}
+            />
+            <select
+              id="nf-health-resource"
+              className="form-input"
+              value={form.resourceId}
               onChange={(event) => {
                 const nextId = event.target.value;
-                const candidate = candidates.find((item) => item.candidateId === nextId);
+                const resource = resources.find((item) => item.resourceId === nextId);
                 patch({
-                  candidateId: nextId,
-                  name: candidate ? `${candidate.nfType} ${candidate.externalNfInstanceId}`.trim() : form.name,
+                  resourceId: nextId,
+                  name: resource && !form.name.trim() ? resource.displayName || resource.name : form.name,
+                  serviceUnit: resource ? resource.role || form.serviceUnit : form.serviceUnit,
                 });
               }}
-              disabled={submitting || candidatesLoading}
+              disabled={submitting || resourcesLoading}
             >
               <option value="">
-                {candidatesLoading ? t('loading') : t('nf_health_field_candidate_placeholder')}
+                {resourcesLoading ? t('loading') : t('nf_health_field_resource_placeholder')}
               </option>
-              {candidates.map((candidate) => (
-                <option key={candidate.candidateId} value={candidate.candidateId}>
-                  {candidate.nfType} - {candidate.externalNfInstanceId}
+              {resources.map((resource) => (
+                <option key={resource.resourceId} value={resource.resourceId}>
+                  {resource.displayName || resource.name} - {resource.domain}
+                  {resource.role ? ` - ${resource.role}` : ''}
                 </option>
               ))}
             </select>
+            {resourcesHasMore && resourcesCursor ? (
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => loadResources(resourceQuery, resourcesCursor, true)}
+                disabled={submitting || resourcesLoading}
+              >
+                {t('nf_health_field_resource_load_more')}
+              </button>
+            ) : null}
           </Field>
         ) : (
-          <Field htmlFor="nf-health-candidate-view" label={t('nf_health_field_candidate')}>
+          <Field htmlFor="nf-health-resource-view" label={t('nf_health_field_resource')}>
             <input
-              id="nf-health-candidate-view"
+              id="nf-health-resource-view"
               className="form-input"
-              value={existing?.candidateId ?? ''}
+              value={existing?.resourceId ?? ''}
               readOnly
               disabled
             />
+            {existing?.domain || existing?.nfType ? (
+              <p className={styles.modalIntro}>
+                {t('nf_health_field_resource_selected', {
+                  domain: existing.domain ?? '-',
+                  nfType: existing.nfType ?? '-',
+                })}
+              </p>
+            ) : null}
+            {existing && !existing.resourceId ? (
+              <p className={styles.modalIntro}>{t('nf_health_identity_legacy_hint')}</p>
+            ) : null}
           </Field>
         )}
+
+        {selectedResource ? (
+          <p className={styles.modalIntro}>
+            {t('nf_health_field_resource_selected', {
+              domain: selectedResource.domain,
+              nfType: selectedResource.role || '-',
+            })}
+          </p>
+        ) : null}
+
+        <Field
+          htmlFor="nf-health-candidate"
+          label={t('nf_health_field_candidate')}
+          description={t('nf_health_field_candidate_optional_hint')}
+        >
+          <select
+            id="nf-health-candidate"
+            className="form-input"
+            value={form.candidateId}
+            onChange={(event) => {
+              const nextId = event.target.value;
+              const candidate = candidates.find((item) => item.candidateId === nextId);
+              patch({
+                candidateId: nextId,
+                name: candidate && !form.name.trim() ? `${candidate.nfType} ${candidate.externalNfInstanceId}`.trim() : form.name,
+              });
+            }}
+            disabled={submitting || candidatesLoading}
+          >
+            <option value="">
+              {candidatesLoading ? t('loading') : t('nf_health_field_candidate_none')}
+            </option>
+            {candidates.map((candidate) => (
+              <option key={candidate.candidateId} value={candidate.candidateId}>
+                {candidate.nfType} - {candidate.externalNfInstanceId}
+              </option>
+            ))}
+          </select>
+        </Field>
 
         {selectedCandidate ? (
           <p className={styles.modalIntro}>
@@ -226,12 +360,14 @@ export function NfHealthTargetDialog({
               id="nf-health-profile"
               className="form-input"
               value={form.collectorProfile}
-              onChange={(event) => patch({ collectorProfile: event.target.value })}
+              onChange={(event) => patch({ collectorProfile: event.target.value as typeof form.collectorProfile })}
               disabled={submitting || mode === 'edit'}
             >
               {(meta?.collectorProfiles ?? ['http_metrics']).map((value) => (
                 <option key={value} value={value}>
-                  {value}
+                  {value === 'process_only'
+                    ? t('nf_health_profile_process_only')
+                    : t('nf_health_profile_http_metrics')}
                 </option>
               ))}
             </select>
@@ -261,43 +397,47 @@ export function NfHealthTargetDialog({
           </Field>
         </div>
 
-        <div className={styles.formRow}>
-          <Field
-            htmlFor="nf-health-destination"
-            label={t('nf_health_field_destination')}
-            description={t('nf_health_field_destination_hint')}
-          >
-            <select
-              id="nf-health-destination"
-              className="form-input"
-              value={form.metricsDestination}
-              onChange={(event) => patch({ metricsDestination: event.target.value })}
-              disabled={submitting}
+        {isProcessOnly ? (
+          <p className={styles.modalIntro}>{t('nf_health_profile_process_only_note')}</p>
+        ) : (
+          <div className={styles.formRow}>
+            <Field
+              htmlFor="nf-health-destination"
+              label={t('nf_health_field_destination')}
+              description={t('nf_health_field_destination_hint')}
             >
-              <option value="">{t('nf_health_field_destination_placeholder')}</option>
-              {(meta?.allowedDestinations ?? []).map((value) => (
-                <option key={value} value={value}>
-                  {value}
-                </option>
-              ))}
-            </select>
-          </Field>
+              <select
+                id="nf-health-destination"
+                className="form-input"
+                value={form.metricsDestination}
+                onChange={(event) => patch({ metricsDestination: event.target.value })}
+                disabled={submitting}
+              >
+                <option value="">{t('nf_health_field_destination_placeholder')}</option>
+                {(meta?.allowedDestinations ?? []).map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </select>
+            </Field>
 
-          <Field
-            htmlFor="nf-health-path"
-            label={t('nf_health_field_path')}
-            description={t('nf_health_field_path_hint')}
-          >
-            <input
-              id="nf-health-path"
-              className="form-input"
-              value={form.metricsPath}
-              onChange={(event) => patch({ metricsPath: event.target.value })}
-              disabled={submitting}
-              placeholder="/metrics"
-            />
-          </Field>
-        </div>
+            <Field
+              htmlFor="nf-health-path"
+              label={t('nf_health_field_path')}
+              description={t('nf_health_field_path_hint')}
+            >
+              <input
+                id="nf-health-path"
+                className="form-input"
+                value={form.metricsPath}
+                onChange={(event) => patch({ metricsPath: event.target.value })}
+                disabled={submitting}
+                placeholder="/metrics"
+              />
+            </Field>
+          </div>
+        )}
 
         <div className={styles.formRow}>
           <Field
@@ -338,7 +478,7 @@ export function NfHealthTargetDialog({
             >
               <option value="process">process</option>
               <option value="systemd">systemd</option>
-              <option value="none">none</option>
+              {!isProcessOnly ? <option value="none">none</option> : null}
             </select>
           </Field>
         </div>

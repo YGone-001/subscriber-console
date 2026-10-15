@@ -17,6 +17,7 @@ type ProcessEvidence struct {
 	ActiveState  string
 	SubState     string
 	MainPID      int
+	ExePath      string
 	Found        bool
 	ErrorMessage string
 	EvidenceKind string
@@ -170,8 +171,16 @@ func (u *UnitInspector) inspectSystemd(ctx context.Context, unit string) Process
 	return ev
 }
 
-// inspectProcess performs a bounded read-only /proc scan for an allowlisted
+// inspectProcess performs a bounded read-only /proc scan for an approved
 // process name. It never signals or terminates any process.
+//
+// Identity is strict: the /proc/<pid>/comm value must equal the approved
+// process name exactly, and the executable identity behind /proc/<pid>/exe
+// must resolve to the same approved name. Prefix or suffix variants such as
+// "pcscfd-test", "pcscfd2" or "mmed-helper" never match, and an unrelated
+// executable masquerading under the approved process name is never classified
+// as a healthy match. When executable identity cannot be verified, the outcome
+// is explicitly unavailable rather than a manufactured positive match.
 func (u *UnitInspector) inspectProcess(name string) ProcessEvidence {
 	procRoot := u.procRoot
 	if procRoot == "" {
@@ -194,6 +203,7 @@ func (u *UnitInspector) inspectProcess(name string) ProcessEvidence {
 		}
 	}
 
+	unverifiedPID := 0
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
@@ -208,13 +218,39 @@ func (u *UnitInspector) inspectProcess(name string) ProcessEvidence {
 			continue
 		}
 		comm := strings.TrimSpace(string(raw))
-		if comm == want || strings.HasPrefix(comm, want) {
-			return ProcessEvidence{
-				Outcome:      ProcessRunning,
-				EvidenceKind: EvidenceProcess,
-				MainPID:      pid,
-				Found:        true,
+		if comm != want {
+			// Prefix or suffix variants are never identity matches.
+			continue
+		}
+		exePath, exeErr := os.Readlink(filepath.Join(procRoot, entry.Name(), "exe"))
+		if exeErr != nil {
+			// The process name matched, but executable identity could not be
+			// verified. Keep scanning for a verifiable match; if none exists
+			// the outcome stays explicitly unavailable.
+			if unverifiedPID == 0 {
+				unverifiedPID = pid
 			}
+			continue
+		}
+		if filepath.Base(exePath) != want {
+			// An unrelated executable masquerading under the approved name.
+			continue
+		}
+		return ProcessEvidence{
+			Outcome:      ProcessRunning,
+			EvidenceKind: EvidenceProcess,
+			MainPID:      pid,
+			ExePath:      exePath,
+			Found:        true,
+		}
+	}
+	if unverifiedPID > 0 {
+		return ProcessEvidence{
+			Outcome:      ProcessUnverified,
+			EvidenceKind: EvidenceProcess,
+			MainPID:      unverifiedPID,
+			Found:        true,
+			ErrorMessage: "process executable identity could not be verified",
 		}
 	}
 	return ProcessEvidence{
@@ -242,6 +278,9 @@ func parseSystemdShow(out string) map[string]string {
 }
 
 // MapProcessEvidenceToState converts a process outcome into a layer state.
+//
+// An unverifiable process identity is never definitively healthy: it maps to
+// the unknown state.
 func MapProcessEvidenceToState(ev ProcessEvidence) string {
 	switch ev.Outcome {
 	case ProcessActive, ProcessRunning:
@@ -252,7 +291,7 @@ func MapProcessEvidenceToState(ev ProcessEvidence) string {
 		return StateUnhealthy
 	case ProcessUnitNotFound, ProcessNotConfigured:
 		return StateNotConfigured
-	case ProcessPermission:
+	case ProcessPermission, ProcessUnverified:
 		return StateUnknown
 	default:
 		return StateUnknown

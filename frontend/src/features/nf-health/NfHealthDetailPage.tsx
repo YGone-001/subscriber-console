@@ -254,24 +254,52 @@ export function NfHealthDetailPage() {
                 <dd><code className={styles.uuid}>{target.targetId}</code></dd>
               </div>
               <div>
-                <dt>{t('nf_health_field_candidate')}</dt>
+                <dt>{t('nf_health_field_resource')}</dt>
                 <dd>
-                  <div className={styles.stack}>
-                    <code className={styles.uuid}>{target.candidateId}</code>
-                    <Link to="/discovery" className={styles.rowLink}>
-                      <Boxes size={12} aria-hidden="true" />
-                      {t('nf_health_link_candidate')}
-                    </Link>
-                    {candidate?.linkedResourceId ? (
+                  {target.resourceId && target.identityState !== 'legacy_unbound' ? (
+                    <div className={styles.stack}>
+                      <code className={styles.uuid}>{target.resourceId}</code>
+                      {target.domain ? <span className={styles.chip}>{target.domain}</span> : null}
+                      {target.nfType ? <span className={styles.chip}>{target.nfType}</span> : null}
                       <Link
-                        to={`/inventory/${encodeURIComponent(candidate.linkedResourceId)}`}
+                        to={`/inventory/${encodeURIComponent(target.resourceId)}`}
                         className={styles.rowLink}
                       >
                         <Link2 size={12} aria-hidden="true" />
-                        {t('nf_health_link_inventory')}
+                        {t('nf_health_link_resource')}
                       </Link>
-                    ) : null}
-                  </div>
+                    </div>
+                  ) : (
+                    <div className={styles.stack}>
+                      <span className={styles.badgeUnknown}>{t('nf_health_identity_legacy')}</span>
+                      <span>{t('nf_health_identity_legacy_hint')}</span>
+                    </div>
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt>{t('nf_health_field_candidate')}</dt>
+                <dd>
+                  {target.candidateId ? (
+                    <div className={styles.stack}>
+                      <code className={styles.uuid}>{target.candidateId}</code>
+                      <Link to="/discovery" className={styles.rowLink}>
+                        <Boxes size={12} aria-hidden="true" />
+                        {t('nf_health_link_candidate')}
+                      </Link>
+                      {candidate?.linkedResourceId ? (
+                        <Link
+                          to={`/inventory/${encodeURIComponent(candidate.linkedResourceId)}`}
+                          className={styles.rowLink}
+                        >
+                          <Link2 size={12} aria-hidden="true" />
+                          {t('nf_health_link_inventory')}
+                        </Link>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <span>{t('nf_health_field_candidate_none')}</span>
+                  )}
                 </dd>
               </div>
               <div>
@@ -384,6 +412,9 @@ export function NfHealthDetailPage() {
                 unsupportedNote={t('nf_health_layer_l3_unsupported')}
               />
             </div>
+            {target.collectorProfile === 'process_only' ? (
+              <p className={styles.semanticNote}>{t('nf_health_profile_process_only_note')}</p>
+            ) : null}
           </section>
 
           <section className="dash-card">

@@ -32,7 +32,17 @@ type CursorData struct {
 }
 
 // CreateTarget inserts a new monitoring target with a server-generated identity.
+//
+// Resource identity: resourceId references a canonical Inventory resource that
+// the handler resolved server-side; candidateId references an optional
+// Discovery observation. Neither identifier is fabricated here: an absent
+// candidate stays absent for Inventory-only targets.
 func (r *Repository) CreateTarget(ctx context.Context, req *CreateTargetRequest, actor string) (*HealthTarget, error) {
+	resourceID := strings.TrimSpace(req.ResourceID)
+	candidateID := strings.TrimSpace(req.CandidateID)
+	if resourceID == "" && candidateID == "" {
+		return nil, validationError("INVALID_TARGET", "resourceId or candidateId is required")
+	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	enabled := true
 	if req.Enabled != nil {
@@ -42,10 +52,15 @@ func (r *Repository) CreateTarget(ctx context.Context, req *CreateTargetRequest,
 	if interval == 0 {
 		interval = DefaultIntervalSeconds
 	}
+	identityState := IdentityLegacyUnbound
+	if resourceID != "" {
+		identityState = IdentityInventoryAuthoritative
+	}
 	doc := HealthTarget{
 		TargetID:         newUUID(),
 		SchemaVersion:    SchemaVersion,
-		CandidateID:      req.CandidateID,
+		ResourceID:       resourceID,
+		CandidateID:      candidateID,
 		Name:             strings.TrimSpace(req.Name),
 		CollectorProfile: req.CollectorProfile,
 		MetricsEndpoint:  strings.TrimSpace(req.MetricsEndpoint),
@@ -54,6 +69,9 @@ func (r *Repository) CreateTarget(ctx context.Context, req *CreateTargetRequest,
 		CollectionMode:   req.CollectionMode,
 		IntervalSeconds:  interval,
 		Enabled:          enabled,
+		Domain:           strings.TrimSpace(req.ResolvedDomain),
+		NFType:           strings.TrimSpace(req.ResolvedNFType),
+		IdentityState:    identityState,
 		Revision:         1,
 		CreatedAt:        now,
 		CreatedBy:        actor,
@@ -79,6 +97,7 @@ func (r *Repository) GetTarget(ctx context.Context, targetID string) (*HealthTar
 		}
 		return nil, err
 	}
+	ProjectIdentityState(&doc)
 	return &doc, nil
 }
 
@@ -93,6 +112,7 @@ func (r *Repository) ListTargets(ctx context.Context, filter TargetListFilter) (
 		q = bson.M{"$or": []bson.M{
 			{"name": bson.M{"$regex": escapeRegex(filter.Query), "$options": "i"}},
 			{"candidateId": bson.M{"$regex": escapeRegex(filter.Query), "$options": "i"}},
+			{"resourceId": filter.Query},
 			{"targetId": filter.Query},
 		}}
 	}
@@ -123,6 +143,9 @@ func (r *Repository) ListTargets(ctx context.Context, filter TargetListFilter) (
 	var items []HealthTarget
 	if err := cur.All(ctx, &items); err != nil {
 		return nil, nil, false, err
+	}
+	for i := range items {
+		ProjectIdentityState(&items[i])
 	}
 	return paginateTargets(items, limit)
 }

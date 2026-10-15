@@ -33,6 +33,10 @@ var (
 	ErrInProgress       = errors.New("NF_HEALTH_COLLECTION_IN_PROGRESS")
 	ErrRateLimited      = errors.New("NF_HEALTH_COLLECTION_RATE_LIMITED")
 	ErrDisabled         = errors.New("NF_HEALTH_TARGET_DISABLED")
+	// ErrResourceRetired blocks collection against a retired Inventory
+	// resource. Historical evidence is preserved; only new measurement is
+	// refused.
+	ErrResourceRetired = errors.New("NF_HEALTH_RESOURCE_RETIRED")
 )
 
 // ValidateUUIDv4 checks an identifier is a canonical UUID v4.
@@ -265,9 +269,14 @@ func MustAllowlistServiceUnit(unit string, allowlist *ServiceUnitAllowlist) erro
 }
 
 // ValidateCreateTargetRequest validates POST /api/nf-health/targets.
-func ValidateCreateTargetRequest(req *CreateTargetRequest, dest *DestinationAllowlist, units *ServiceUnitAllowlist) error {
-	if err := ValidateUUIDv4(req.CandidateID); err != nil {
-		return err
+//
+// Identity rules: at least one of resourceId or candidateId must be supplied.
+// The process_only collector profile requires an Inventory resource
+// association, an actual local inspection source and a server-authorized
+// local process binding; it never configures an HTTP metrics endpoint.
+func ValidateCreateTargetRequest(req *CreateTargetRequest, dest *DestinationAllowlist, units *ServiceUnitAllowlist, bindings *ProcessBindingRegistry) error {
+	if strings.TrimSpace(req.ResourceID) == "" && strings.TrimSpace(req.CandidateID) == "" {
+		return validationError("INVALID_TARGET", "resourceId or candidateId is required")
 	}
 	if err := ValidateTargetName(req.Name); err != nil {
 		return err
@@ -293,8 +302,27 @@ func ValidateCreateTargetRequest(req *CreateTargetRequest, dest *DestinationAllo
 	if err := MustAllowlistServiceUnit(req.ServiceUnit, units); err != nil {
 		return err
 	}
-	if req.CollectorProfile == CollectorHTTPMetrics && strings.TrimSpace(req.MetricsEndpoint) == "" {
-		return validationError("INVALID_TARGET", "metricsEndpoint is required for the http_metrics collector profile")
+	switch req.CollectorProfile {
+	case CollectorHTTPMetrics:
+		if strings.TrimSpace(req.MetricsEndpoint) == "" {
+			return validationError("INVALID_TARGET", "metricsEndpoint is required for the http_metrics collector profile")
+		}
+	case CollectorProcessOnly:
+		if strings.TrimSpace(req.ResourceID) == "" {
+			return validationError("NF_HEALTH_RESOURCE_REQUIRED", "process_only requires an Inventory resource association")
+		}
+		if strings.TrimSpace(req.MetricsEndpoint) != "" {
+			return validationError("INVALID_TARGET", "process_only must not configure an HTTP metrics endpoint")
+		}
+		if req.ServiceKind != "process" && req.ServiceKind != "systemd" {
+			return validationError("INVALID_SERVICE_KIND", "process_only requires a local process or systemd inspection source")
+		}
+		if strings.TrimSpace(req.ServiceUnit) == "" {
+			return validationError("INVALID_TARGET", "serviceUnit is required for the process_only collector profile")
+		}
+		if err := bindings.CheckBinding(req.ResourceID, req.ServiceUnit); err != nil {
+			return err
+		}
 	}
 	return nil
 }

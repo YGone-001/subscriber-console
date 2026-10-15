@@ -36,6 +36,9 @@ import (
 	"subscriber/internal/tariff"
 	"subscriber/internal/topology"
 	"subscriber/internal/user"
+
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
 func main() {
@@ -202,9 +205,11 @@ func main() {
 	)
 	discoveryHandler := discovery.NewHandler(discoveryRepo, limiter, auditWriter, discoveryAdapters, discoveryAllowlist, discoveryInventoryResolver)
 
-	// NF Health (read-only telemetry; Discovery remains the candidate authority)
+	// NF Health (read-only telemetry; Inventory remains the sole canonical
+	// resource authority and Discovery remains read-only observation)
 	nfHealthDest := nfhealth.NewDestinationAllowlist(cfg.NFHealthAllowedTargets)
 	nfHealthUnits := nfhealth.NewServiceUnitAllowlist(cfg.NFHealthServiceUnits)
+	nfHealthBindings := nfhealth.NewProcessBindingRegistry(cfg.NFHealthLocalProcessBindings)
 	nfHealthProber := nfhealth.NewHTTPProber(nfhealth.RequestTimeoutSeconds * time.Second)
 	nfHealthInspector := nfhealth.NewUnitInspector(nfHealthUnits, "/usr/bin/systemctl")
 	nfHealthCollector := nfhealth.NewCollector(nfHealthProber, nfHealthInspector, nfHealthDest, nfHealthUnits)
@@ -213,13 +218,59 @@ func main() {
 		mc.Ops.Collection("app_nf_health_runs"),
 		mc.Ops.Collection("app_nf_health_samples"),
 	)
-	nfHealthHandler := nfhealth.NewHandler(nfHealthRepo, nfHealthCollector, limiter, auditWriter, nfHealthDest, nfHealthUnits)
-	nfHealthHandler.SetCandidateLookup(func(ctx context.Context, candidateID string) (bool, error) {
-		count, err := mc.Ops.Collection("app_nf_observations").CountDocuments(ctx, map[string]any{"_id": candidateID})
+	nfHealthHandler := nfhealth.NewHandler(nfHealthRepo, nfHealthCollector, limiter, auditWriter, nfHealthDest, nfHealthUnits, nfHealthBindings)
+	nfHealthObservations := mc.Ops.Collection("app_nf_observations")
+	nfHealthHandler.SetIdentityResolvers(nfhealth.IdentityResolvers{
+		Resource: func(ctx context.Context, resourceID string) (*nfhealth.ResourceProjection, error) {
+			resource, err := inventoryRepo.GetByID(ctx, resourceID)
+			if err != nil {
+				if errors.Is(err, inventory.ErrNotFound) {
+					return nil, nil
+				}
+				return nil, err
+			}
+			return &nfhealth.ResourceProjection{
+				ResourceID:     resource.ResourceID,
+				Kind:           resource.Kind,
+				Domain:         resource.Domain,
+				Role:           resource.Role,
+				LifecycleState: resource.LifecycleState,
+			}, nil
+		},
+		Candidate: func(ctx context.Context, candidateID string) (*nfhealth.CandidateProjection, error) {
+			var candidate struct {
+				NFType           string  `bson:"nfType"`
+				LinkedResourceID *string `bson:"linkedResourceId"`
+			}
+			err := nfHealthObservations.FindOne(ctx, bson.M{"_id": candidateID}).Decode(&candidate)
+			if err != nil {
+				if errors.Is(err, mongo.ErrNoDocuments) {
+					return &nfhealth.CandidateProjection{CandidateID: candidateID}, nil
+				}
+				return nil, err
+			}
+			projection := &nfhealth.CandidateProjection{
+				CandidateID: candidateID,
+				NFType:      candidate.NFType,
+				Exists:      true,
+			}
+			if candidate.LinkedResourceID != nil {
+				projection.LinkedResourceID = *candidate.LinkedResourceID
+			}
+			return projection, nil
+		},
+	})
+	// Retired Inventory resources block new collection while historical runs
+	// and samples remain readable evidence.
+	nfHealthCollector.SetRetiredResourceCheck(func(ctx context.Context, resourceID string) (bool, error) {
+		resource, err := inventoryRepo.GetByID(ctx, resourceID)
 		if err != nil {
+			if errors.Is(err, inventory.ErrNotFound) {
+				return false, nil
+			}
 			return false, err
 		}
-		return count > 0, nil
+		return resource.LifecycleState == inventory.LifecycleRetired, nil
 	})
 	nfHealthScheduler := nfhealth.NewScheduler(nfHealthRepo, nfHealthCollector)
 	nfHealthScheduler.Start(context.Background())

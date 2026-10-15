@@ -141,6 +141,39 @@ func LookupMetric(name string) (MetricDefinition, bool) {
 	return def, ok
 }
 
+// LookupMetricForNFType resolves a metric family for an identity-resolved
+// target NF type.
+//
+// Rules:
+//   - generic process metric families (wildcard nfTypes) remain permitted for
+//     every target;
+//   - an empty nfType denotes a legacy target without an authoritative NF
+//     type; registry families stay permitted without inventing type-specific
+//     attribution;
+//   - otherwise the family must explicitly permit the normalized target NF
+//     type. A foreign NF's metric is never relabelled as belonging to the
+//     selected Inventory resource.
+func LookupMetricForNFType(name, nfType string) (MetricDefinition, bool) {
+	def, ok := registryIndex[name]
+	if !ok {
+		return MetricDefinition{}, false
+	}
+	for _, permitted := range def.NFTypes {
+		if permitted == "*" {
+			return def, true
+		}
+	}
+	if normalizeNFToken(nfType) == "" {
+		return def, true
+	}
+	for _, permitted := range def.NFTypes {
+		if normalizeNFToken(permitted) == normalizeNFToken(nfType) {
+			return def, true
+		}
+	}
+	return MetricDefinition{}, false
+}
+
 // safeLabelNames is the server-owned allowlist of label keys that may survive
 // parsing. Identity and session-specific labels are dropped.
 var safeLabelNames = map[string]struct{}{

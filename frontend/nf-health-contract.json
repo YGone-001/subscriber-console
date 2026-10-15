@@ -54,15 +54,21 @@
     "layersMeasured",
     "initiatedBy",
     "collectedAt",
-    "expiresAt"
+    "expiresAt",
+    "resourceId",
+    "domain",
+    "nfType",
+    "identityState"
   ],
   "layerStates": ["healthy", "degraded", "unhealthy", "unknown", "not_configured", "stale"],
-  "collectorProfiles": ["http_metrics"],
+  "collectorProfiles": ["http_metrics", "process_only"],
   "semanticSeparations": [
     "NRF REGISTERED is not process healthy",
     "metrics HTTP 200 is not protocol healthy",
     "process active is not session success",
     "missing metrics are not zeros",
-    "failed collection does not overwrite last good measurement"
+    "failed collection does not overwrite last good measurement",
+    "process_only L1 evidence is not full service health",
+    "domain and nfType are server-derived from Inventory and never client-supplied"
   ]
 }

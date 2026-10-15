@@ -95,7 +95,7 @@ func TestValidateCreateTargetRequestRequiresMetricsEndpointForHTTPProfile(t *tes
 		ServiceKind:      "none",
 		CollectionMode:   CollectionManual,
 	}
-	err := ValidateCreateTargetRequest(req, NewDestinationAllowlist(""), NewServiceUnitAllowlist(""))
+	err := ValidateCreateTargetRequest(req, NewDestinationAllowlist(""), NewServiceUnitAllowlist(""), nil)
 	if err == nil {
 		t.Fatal("expected metricsEndpoint requirement")
 	}
@@ -109,7 +109,7 @@ func TestValidateCreateTargetRequestRejectsUnknownProfile(t *testing.T) {
 		ServiceKind:      "none",
 		CollectionMode:   CollectionManual,
 	}
-	if err := ValidateCreateTargetRequest(req, nil, nil); err == nil {
+	if err := ValidateCreateTargetRequest(req, nil, nil, nil); err == nil {
 		t.Fatal("expected unknown collector profile rejection")
 	}
 }

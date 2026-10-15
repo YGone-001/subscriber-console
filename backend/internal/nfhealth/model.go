@@ -6,6 +6,7 @@ const SchemaVersion = 1
 // Collector profiles supported by the server-owned collector registry.
 const (
 	CollectorHTTPMetrics = "http_metrics"
+	CollectorProcessOnly = "process_only"
 )
 
 // Collection modes.
@@ -51,6 +52,21 @@ const (
 	ProcessNotConfigured = "not_configured"
 	ProcessRunning       = "running"
 	ProcessNotRunning    = "not_running"
+	// ProcessUnverified reports a name-matching process whose executable
+	// identity could not be verified. It is never a healthy match.
+	ProcessUnverified = "unverified"
+)
+
+// Identity states for monitoring targets. A resource-native target carries an
+// authoritative Inventory association. A candidate-only target created after
+// the unified identity foundation is transitional and is never presented as
+// having an authoritative Inventory resource. Pre-phase candidate-only targets
+// decode with an absent identity state and are projected as legacy_unresolved
+// on read.
+const (
+	IdentityInventoryAuthoritative = "inventory_authoritative"
+	IdentityLegacyUnbound          = "legacy_unbound"
+	IdentityLegacyUnresolved       = "legacy_unresolved"
 )
 
 // Interface probe outcomes.
@@ -75,13 +91,14 @@ const (
 
 // Canonical vocabularies exposed by GET /api/nf-health/meta.
 var (
-	CanonicalCollectorProfiles = []string{CollectorHTTPMetrics}
+	CanonicalCollectorProfiles = []string{CollectorHTTPMetrics, CollectorProcessOnly}
 	CanonicalCollectionModes   = []string{CollectionManual, CollectionScheduled}
 	CanonicalRunStatuses       = []string{RunStatusSuccess, RunStatusPartial, RunStatusFailed}
 	CanonicalLayerStates       = []string{StateHealthy, StateDegraded, StateUnhealthy, StateUnknown, StateNotConfigured, StateStale}
 	CanonicalEvidenceKinds     = []string{EvidenceSystemd, EvidenceProcess, EvidenceHTTP, EvidenceMetric, EvidenceNone}
-	CanonicalProcessOutcomes   = []string{ProcessActive, ProcessInactive, ProcessFailed, ProcessUnitNotFound, ProcessPermission, ProcessNotConfigured, ProcessRunning, ProcessNotRunning}
+	CanonicalProcessOutcomes   = []string{ProcessActive, ProcessInactive, ProcessFailed, ProcessUnitNotFound, ProcessPermission, ProcessNotConfigured, ProcessRunning, ProcessNotRunning, ProcessUnverified}
 	CanonicalInterfaceOutcomes = []string{InterfaceValid, InterfaceRefused, InterfaceTimeout, InterfaceInvalid, InterfaceHTTP4xx, InterfaceHTTP5xx, InterfaceError, InterfaceNotConfig}
+	CanonicalIdentityStates    = []string{IdentityInventoryAuthoritative, IdentityLegacyUnbound, IdentityLegacyUnresolved}
 )
 
 // Execution bounds for collection.
@@ -170,12 +187,22 @@ type LayerSet struct {
 	Service   LayerEvidence `json:"service" bson:"service"`
 }
 
-// HealthTarget is an operator-authored monitoring configuration. It references
-// an existing Discovery candidate and never creates its own NF identity.
+// HealthTarget is an operator-authored monitoring configuration.
+//
+// Identity separation is preserved across three authorities:
+//   - resourceId references the canonical Inventory resource (may be absent
+//     for legacy candidate-only targets).
+//   - candidateId references an optional Discovery observation and is never
+//     fabricated by NF Health.
+//   - targetId is the server-generated monitoring identity.
+//
+// Domain and NFType are server-derived projections of validated Inventory
+// metadata. They are never client-controlled copies of Inventory data.
 type HealthTarget struct {
 	TargetID         string `json:"targetId" bson:"_id"`
 	SchemaVersion    int    `json:"schemaVersion" bson:"schemaVersion"`
-	CandidateID      string `json:"candidateId" bson:"candidateId"`
+	ResourceID       string `json:"resourceId,omitempty" bson:"resourceId,omitempty"`
+	CandidateID      string `json:"candidateId,omitempty" bson:"candidateId,omitempty"`
 	Name             string `json:"name" bson:"name"`
 	CollectorProfile string `json:"collectorProfile" bson:"collectorProfile"`
 	MetricsEndpoint  string `json:"metricsEndpoint,omitempty" bson:"metricsEndpoint,omitempty"`
@@ -184,6 +211,9 @@ type HealthTarget struct {
 	CollectionMode   string `json:"collectionMode" bson:"collectionMode"`
 	IntervalSeconds  int    `json:"intervalSeconds" bson:"intervalSeconds"`
 	Enabled          bool   `json:"enabled" bson:"enabled"`
+	Domain           string `json:"domain,omitempty" bson:"domain,omitempty"`
+	NFType           string `json:"nfType,omitempty" bson:"nfType,omitempty"`
+	IdentityState    string `json:"identityState" bson:"identityState,omitempty"`
 	Revision         int64  `json:"revision" bson:"revision"`
 	CreatedAt        string `json:"createdAt" bson:"createdAt"`
 	CreatedBy        string `json:"createdBy" bson:"createdBy"`
@@ -196,11 +226,14 @@ type HealthTarget struct {
 	LastError      string `json:"lastError,omitempty" bson:"lastError,omitempty"`
 }
 
-// HealthRun records one bounded collection execution.
+// HealthRun records one bounded collection execution. ResourceID retains the
+// canonical Inventory association needed to identify which Inventory resource
+// was measured; historical runs without it stay readable.
 type HealthRun struct {
 	RunID          string `json:"runId" bson:"_id"`
 	SchemaVersion  int    `json:"schemaVersion" bson:"schemaVersion"`
 	TargetID       string `json:"targetId" bson:"targetId"`
+	ResourceID     string `json:"resourceId,omitempty" bson:"resourceId,omitempty"`
 	CandidateID    string `json:"candidateId,omitempty" bson:"candidateId,omitempty"`
 	StartedAt      string `json:"startedAt" bson:"startedAt"`
 	CompletedAt    string `json:"completedAt,omitempty" bson:"completedAt,omitempty"`
@@ -222,6 +255,7 @@ type HealthSample struct {
 	SchemaVersion int            `json:"schemaVersion" bson:"schemaVersion"`
 	TargetID      string         `json:"targetId" bson:"targetId"`
 	RunID         string         `json:"runId" bson:"runId"`
+	ResourceID    string         `json:"resourceId,omitempty" bson:"resourceId,omitempty"`
 	CandidateID   string         `json:"candidateId,omitempty" bson:"candidateId,omitempty"`
 	CollectedAt   string         `json:"collectedAt" bson:"collectedAt"`
 	ExpiresAt     BSONTime       `json:"expiresAt" bson:"expiresAt"`
@@ -240,7 +274,13 @@ type FreshnessProjection struct {
 }
 
 // CreateTargetRequest is the body for POST /api/nf-health/targets.
+//
+// At least one of resourceId or candidateId must reference an existing
+// authoritative document. A resource-native target prefers an Inventory
+// resource; the optional Discovery candidate is accepted only when it is
+// explicitly linked to the same Inventory resource.
 type CreateTargetRequest struct {
+	ResourceID       string `json:"resourceId"`
 	CandidateID      string `json:"candidateId"`
 	Name             string `json:"name"`
 	CollectorProfile string `json:"collectorProfile"`
@@ -250,6 +290,11 @@ type CreateTargetRequest struct {
 	CollectionMode   string `json:"collectionMode"`
 	IntervalSeconds  int    `json:"intervalSeconds"`
 	Enabled          *bool  `json:"enabled,omitempty"`
+	// ResolvedDomain and ResolvedNFType are server-derived identity
+	// projections. They are never client-controlled: strict JSON decoding
+	// rejects any request that carries domain or nfType fields.
+	ResolvedDomain string `json:"-"`
+	ResolvedNFType string `json:"-"`
 }
 
 // UpdateTargetRequest is the body for PUT /api/nf-health/targets/{targetId}.

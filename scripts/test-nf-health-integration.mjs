@@ -24,6 +24,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import net from 'node:net';
 import http from 'node:http';
+import os from 'node:os';
 import path from 'node:path';
 import { execSync, spawn } from 'node:child_process';
 import { SignJWT } from 'jose';
@@ -73,6 +74,10 @@ let binPath = null;
 let mockServer = null;
 let passed = 0;
 let totalChecks = 0;
+let epcTargetId = null;
+let imsTargetId = null;
+let fiveGcTargetId = null;
+let processOnlyTargetId = null;
 
 async function verifyAsync(description, fn) {
   totalChecks++;
@@ -94,6 +99,45 @@ const CANDIDATE_EMPTY = '9b2d3c40-0022-4b22-9d22-000000000022';
 const CANDIDATE_FAIL = '9b2d3c40-0033-4b33-9d33-000000000033';
 const CANDIDATE_STALE = '9b2d3c40-0055-4b55-9d55-000000000055';
 const CANDIDATE_DOWN = '9b2d3c40-0044-4b44-9d44-000000000044';
+// Unified-identity candidates: explicitly linked to Inventory resources.
+const CANDIDATE_LINKED_5GC = '9b2d3c40-0066-4b66-9d66-000000000066';
+const CANDIDATE_TYPE_MISMATCH = '9b2d3c40-0077-4b77-9d77-000000000077';
+// Unlinked candidate reserved for the legacy candidate-only compatibility path.
+const CANDIDATE_LEGACY = '9b2d3c40-0088-4b88-9d88-000000000088';
+
+// Inventory resources backing resource-native monitoring targets. NF Health
+// only reads these documents; the suite owns their lifecycle.
+const RESOURCE_EPC = '1a2b3c40-0001-4a01-8c01-0000000000e1';
+const RESOURCE_IMS = '1a2b3c40-0002-4a02-8c02-0000000000e2';
+const RESOURCE_5GC = '1a2b3c40-0003-4a03-8c03-0000000000e3';
+const RESOURCE_RETIRED = '1a2b3c40-0004-4a04-8c04-0000000000e4';
+const RESOURCE_HOST = '1a2b3c40-0005-4a05-8c05-0000000000e5';
+const RESOURCE_PLATFORM = '1a2b3c40-0006-4a06-8c06-0000000000e6';
+const RESOURCE_NOROLE = '1a2b3c40-0007-4a07-8c07-0000000000e7';
+const RESOURCE_MISSING = '1a2b3c40-0008-4a08-8c08-0000000000e8';
+// 5GC resource whose NRF Discovery candidate is explicitly linked to it.
+const RESOURCE_5GC_LINKED = '1a2b3c40-0009-4a09-8c09-0000000000e9';
+// IMS resource authorized for local process-only monitoring.
+const RESOURCE_IMS_PROC = '1a2b3c40-000a-4a0a-8c0a-0000000000ea';
+
+const resourceDoc = (id, kind, domain, role, lifecycleState = 'active') => ({
+  _id: id,
+  schemaVersion: 1,
+  kind,
+  name: `${domain}-${role || 'unknown'}-${id.slice(-4)}`,
+  domain,
+  role,
+  lifecycleState,
+  revision: 1,
+  createdAt: '2026-01-01T00:00:00Z',
+  createdBy: 'seed',
+  updatedAt: '2026-01-01T00:00:00Z',
+  updatedBy: 'seed',
+});
+
+// Local process supervision for the process_only scenarios. The acceptance
+// suite owns these processes and terminates them in its finally block.
+let localProcesses = [];
 
 const METRICS_BODY = [
   '# HELP amf_session Access-management sessions currently tracked',
@@ -226,7 +270,36 @@ async function main() {
       candidateDoc(CANDIDATE_FAIL, '3301e63a-c3b7-41f1-a512-9f6322e6f4c4'),
       candidateDoc(CANDIDATE_DOWN, '3301e63a-c3b7-41f1-a512-9f6322e6f4c5'),
       candidateDoc(CANDIDATE_STALE, '3301e63a-c3b7-41f1-a512-9f6322e6f4c6'),
+      candidateDoc(CANDIDATE_LEGACY, '3301e63a-c3b7-41f1-a512-9f6322e6f4c9'),
     ]);
+
+    // Unified-identity candidates: explicitly linked to Inventory resources.
+    await obsColl.insertMany([
+      {
+        ...candidateDoc(CANDIDATE_LINKED_5GC, '3301e63a-c3b7-41f1-a512-9f6322e6f4c7'),
+        nfType: 'AMF',
+        linkedResourceId: RESOURCE_5GC_LINKED,
+      },
+      {
+        ...candidateDoc(CANDIDATE_TYPE_MISMATCH, '3301e63a-c3b7-41f1-a512-9f6322e6f4c8'),
+        nfType: 'SMF',
+        linkedResourceId: RESOURCE_5GC_LINKED,
+      },
+    ]);
+
+    // Inventory resources referenced by resource-native monitoring targets.
+    await client.db(appDbName).collection('app_inventory_resources').insertMany([
+      resourceDoc(RESOURCE_EPC, 'network_function_instance', 'epc', 'mme'),
+      resourceDoc(RESOURCE_IMS, 'network_function', 'ims', 'pcscf'),
+      resourceDoc(RESOURCE_5GC, 'network_function_instance', '5gc', 'amf'),
+      resourceDoc(RESOURCE_RETIRED, 'network_function', 'ims', 'pcscf', 'retired'),
+      resourceDoc(RESOURCE_HOST, 'host', 'epc', 'mme'),
+      resourceDoc(RESOURCE_PLATFORM, 'network_function', 'platform', 'amf'),
+      resourceDoc(RESOURCE_NOROLE, 'network_function', 'ims', ''),
+      resourceDoc(RESOURCE_5GC_LINKED, 'network_function_instance', '5gc', 'amf'),
+      resourceDoc(RESOURCE_IMS_PROC, 'network_function_instance', 'ims', 'pcscf'),
+    ]);
+    const inventoryBaseline = await client.db(appDbName).collection('app_inventory_resources').countDocuments({});
 
     await verifyAsync('production indexes cover exactly the three NF Health collections', async () => {
       const targetIndexes = await targetsColl.indexes();
@@ -266,6 +339,9 @@ async function main() {
         JWT_SECRET: JWT_SECRET_STRING,
         NF_HEALTH_ALLOWED_TARGETS: `127.0.0.1:${mockPort}`,
         NF_HEALTH_SERVICE_UNITS: 'mockd,amfd',
+        // Server-owned local bindings: only the IMS resources may monitor the
+        // local mockd process.
+        NF_HEALTH_LOCAL_PROCESS_BINDINGS: `${RESOURCE_IMS}=mockd,${RESOURCE_IMS_PROC}=mockd`,
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -293,11 +369,14 @@ async function main() {
     await verifyAsync('meta exposes the vendor-neutral collector vocabulary', async () => {
       const res = await api(base, 'GET', '/api/nf-health/meta', operatorToken);
       assert.equal(res.status, 200);
-      assert.deepEqual(res.json.collectorProfiles, ['http_metrics']);
+      assert.deepEqual(res.json.collectorProfiles, ['http_metrics', 'process_only']);
       assert.ok(res.json.layerStates.includes('not_configured'));
       assert.ok(Array.isArray(res.json.supportedMetrics));
       assert.equal(res.json.retentionDays, 7);
       assert.equal(res.json.maxRetentionDays, 30);
+      assert.deepEqual(res.json.supportedResourceDomains, ['epc', '5gc', 'ims', 'charging']);
+      assert.ok(res.json.identityStates.includes('inventory_authoritative'));
+      assert.ok(res.json.identityStates.includes('legacy_unresolved'));
     });
 
     await verifyAsync('destination allowlist defaults to deny', async () => {
@@ -427,6 +506,349 @@ async function main() {
       for (const metric of sample.metrics) {
         assert.ok(!metric.labels || !('imsi' in metric.labels), 'sensitive labels dropped');
       }
+    });
+
+    // ---- Unified EPC/5GC/IMS resource identity foundation ----
+
+    await verifyAsync('Inventory-only EPC target creation', async () => {
+      const res = await api(base, 'POST', '/api/nf-health/targets', operatorToken, {
+        resourceId: RESOURCE_EPC,
+        name: 'MME node-01 metrics',
+        collectorProfile: 'http_metrics',
+        metricsEndpoint: `http://127.0.0.1:${mockPort}/metrics`,
+        serviceKind: 'process',
+        serviceUnit: 'mockd',
+        collectionMode: 'manual',
+        intervalSeconds: 120,
+        enabled: true,
+      });
+      assert.equal(res.status, 201, res.text);
+      assert.equal(res.json.resourceId, RESOURCE_EPC);
+      assert.equal(res.json.domain, 'epc');
+      assert.equal(res.json.nfType, 'MME');
+      assert.equal(res.json.identityState, 'inventory_authoritative');
+      assert.ok(!res.json.candidateId, 'candidateId must stay absent for an Inventory-only target');
+      epcTargetId = res.json.targetId;
+    });
+
+    await verifyAsync('Inventory-only IMS target creation', async () => {
+      const res = await api(base, 'POST', '/api/nf-health/targets', operatorToken, {
+        resourceId: RESOURCE_IMS,
+        name: 'P-CSCF node-01 metrics',
+        collectorProfile: 'http_metrics',
+        metricsEndpoint: `http://127.0.0.1:${mockPort}/metrics`,
+        serviceKind: 'none',
+        collectionMode: 'manual',
+        intervalSeconds: 120,
+        enabled: true,
+      });
+      assert.equal(res.status, 201, res.text);
+      assert.equal(res.json.resourceId, RESOURCE_IMS);
+      assert.equal(res.json.domain, 'ims');
+      assert.equal(res.json.nfType, 'P-CSCF');
+      imsTargetId = res.json.targetId;
+    });
+
+    await verifyAsync('Inventory-only 5GC target creation', async () => {
+      const res = await api(base, 'POST', '/api/nf-health/targets', operatorToken, {
+        resourceId: RESOURCE_5GC,
+        name: 'AMF node-01 metrics',
+        collectorProfile: 'http_metrics',
+        metricsEndpoint: `http://127.0.0.1:${mockPort}/metrics`,
+        serviceKind: 'none',
+        collectionMode: 'manual',
+        intervalSeconds: 120,
+        enabled: true,
+      });
+      assert.equal(res.status, 201, res.text);
+      assert.equal(res.json.resourceId, RESOURCE_5GC);
+      assert.equal(res.json.domain, '5gc');
+      assert.equal(res.json.nfType, 'AMF');
+      fiveGcTargetId = res.json.targetId;
+    });
+
+    await verifyAsync('Inventory plus matching linked Discovery candidate is accepted', async () => {
+      const res = await api(base, 'POST', '/api/nf-health/targets', operatorToken, {
+        resourceId: RESOURCE_5GC_LINKED,
+        candidateId: CANDIDATE_LINKED_5GC,
+        name: 'AMF node-02 NRF-linked',
+        collectorProfile: 'http_metrics',
+        metricsEndpoint: `http://127.0.0.1:${mockPort}/metrics`,
+        serviceKind: 'none',
+        collectionMode: 'manual',
+        intervalSeconds: 120,
+        enabled: true,
+      });
+      assert.equal(res.status, 201, res.text);
+      assert.equal(res.json.candidateId, CANDIDATE_LINKED_5GC);
+      assert.equal(res.json.resourceId, RESOURCE_5GC_LINKED);
+    });
+
+    await verifyAsync('candidate linked to another resource is rejected', async () => {
+      const res = await api(base, 'POST', '/api/nf-health/targets', adminToken, {
+        resourceId: RESOURCE_EPC,
+        candidateId: CANDIDATE_LINKED_5GC,
+        name: 'mismatched association',
+        collectorProfile: 'http_metrics',
+        metricsEndpoint: `http://127.0.0.1:${mockPort}/metrics`,
+        serviceKind: 'none',
+        collectionMode: 'manual',
+        intervalSeconds: 120,
+        enabled: true,
+      });
+      assert.equal(res.status, 400, res.text);
+      assert.equal(res.json.code, 'NF_HEALTH_CANDIDATE_RESOURCE_MISMATCH');
+    });
+
+    await verifyAsync('candidate NF type mismatch is rejected', async () => {
+      const res = await api(base, 'POST', '/api/nf-health/targets', adminToken, {
+        resourceId: RESOURCE_5GC_LINKED,
+        candidateId: CANDIDATE_TYPE_MISMATCH,
+        name: 'type mismatch',
+        collectorProfile: 'http_metrics',
+        metricsEndpoint: `http://127.0.0.1:${mockPort}/metrics`,
+        serviceKind: 'none',
+        collectionMode: 'manual',
+        intervalSeconds: 120,
+        enabled: true,
+      });
+      assert.equal(res.status, 400, res.text);
+      assert.equal(res.json.code, 'NF_HEALTH_CANDIDATE_TYPE_MISMATCH');
+    });
+
+    await verifyAsync('missing Inventory resource is rejected', async () => {
+      const res = await api(base, 'POST', '/api/nf-health/targets', adminToken, {
+        resourceId: RESOURCE_MISSING,
+        name: 'missing resource',
+        collectorProfile: 'http_metrics',
+        metricsEndpoint: `http://127.0.0.1:${mockPort}/metrics`,
+        serviceKind: 'none',
+        collectionMode: 'manual',
+        intervalSeconds: 120,
+        enabled: true,
+      });
+      assert.equal(res.status, 400, res.text);
+      assert.equal(res.json.code, 'NF_HEALTH_RESOURCE_NOT_FOUND');
+    });
+
+    await verifyAsync('retired Inventory resource is rejected', async () => {
+      const res = await api(base, 'POST', '/api/nf-health/targets', adminToken, {
+        resourceId: RESOURCE_RETIRED,
+        name: 'retired resource',
+        collectorProfile: 'http_metrics',
+        metricsEndpoint: `http://127.0.0.1:${mockPort}/metrics`,
+        serviceKind: 'none',
+        collectionMode: 'manual',
+        intervalSeconds: 120,
+        enabled: true,
+      });
+      assert.equal(res.status, 409, res.text);
+      assert.equal(res.json.code, 'NF_HEALTH_RESOURCE_RETIRED');
+    });
+
+    await verifyAsync('non-NF Inventory kind is rejected', async () => {
+      const res = await api(base, 'POST', '/api/nf-health/targets', adminToken, {
+        resourceId: RESOURCE_HOST,
+        name: 'host resource',
+        collectorProfile: 'http_metrics',
+        metricsEndpoint: `http://127.0.0.1:${mockPort}/metrics`,
+        serviceKind: 'none',
+        collectionMode: 'manual',
+        intervalSeconds: 120,
+        enabled: true,
+      });
+      assert.equal(res.status, 400, res.text);
+      assert.equal(res.json.code, 'NF_HEALTH_RESOURCE_KIND_UNSUPPORTED');
+    });
+
+    await verifyAsync('unsupported Inventory domain is rejected', async () => {
+      const res = await api(base, 'POST', '/api/nf-health/targets', adminToken, {
+        resourceId: RESOURCE_PLATFORM,
+        name: 'platform resource',
+        collectorProfile: 'http_metrics',
+        metricsEndpoint: `http://127.0.0.1:${mockPort}/metrics`,
+        serviceKind: 'none',
+        collectionMode: 'manual',
+        intervalSeconds: 120,
+        enabled: true,
+      });
+      assert.equal(res.status, 400, res.text);
+      assert.equal(res.json.code, 'NF_HEALTH_RESOURCE_DOMAIN_UNSUPPORTED');
+    });
+
+    await verifyAsync('unresolved Inventory NF type is rejected', async () => {
+      const res = await api(base, 'POST', '/api/nf-health/targets', adminToken, {
+        resourceId: RESOURCE_NOROLE,
+        name: 'roleless resource',
+        collectorProfile: 'http_metrics',
+        metricsEndpoint: `http://127.0.0.1:${mockPort}/metrics`,
+        serviceKind: 'none',
+        collectionMode: 'manual',
+        intervalSeconds: 120,
+        enabled: true,
+      });
+      assert.equal(res.status, 400, res.text);
+      assert.equal(res.json.code, 'NF_HEALTH_NF_TYPE_UNRESOLVED');
+    });
+
+    await verifyAsync('client-supplied domain or nfType is rejected', async () => {
+      for (const spoof of [{ domain: '5gc' }, { nfType: 'AMF' }]) {
+        const res = await api(base, 'POST', '/api/nf-health/targets', adminToken, {
+          resourceId: RESOURCE_EPC,
+          name: 'spoofed identity',
+          collectorProfile: 'http_metrics',
+          metricsEndpoint: `http://127.0.0.1:${mockPort}/metrics`,
+          serviceKind: 'none',
+          collectionMode: 'manual',
+          intervalSeconds: 120,
+          enabled: true,
+          ...spoof,
+        });
+        assert.equal(res.status, 400, `${JSON.stringify(spoof)} must be rejected by strict decoding`);
+      }
+    });
+
+    await verifyAsync('duplicate logical target on the same Inventory resource is rejected', async () => {
+      const res = await api(base, 'POST', '/api/nf-health/targets', adminToken, {
+        resourceId: RESOURCE_IMS,
+        name: 'P-CSCF duplicate',
+        collectorProfile: 'http_metrics',
+        metricsEndpoint: `http://127.0.0.1:${mockPort}/metrics`,
+        serviceKind: 'none',
+        collectionMode: 'manual',
+        intervalSeconds: 120,
+        enabled: true,
+      });
+      assert.equal(res.status, 409, res.text);
+      assert.equal(res.json.code, 'NF_HEALTH_TARGET_CONFLICT');
+    });
+
+    await verifyAsync('multiple Inventory-only targets coexist without candidateId collisions', async () => {
+      const res = await api(base, 'GET', '/api/nf-health/targets?q=P-CSCF', operatorToken);
+      assert.equal(res.status, 200, res.text);
+      const names = (res.json.targets || []).map((t) => t.name);
+      assert.ok(names.includes('P-CSCF node-01 metrics'), 'Inventory-only target must be listable');
+      const anyCandidate = (res.json.targets || []).some((t) => t.candidateId);
+      assert.equal(anyCandidate, false, 'Inventory-only targets must not gain a candidate');
+    });
+
+    await verifyAsync('legacy candidate-only creation remains available and transitional', async () => {
+      const res = await api(base, 'POST', '/api/nf-health/targets', operatorToken, {
+        candidateId: CANDIDATE_LEGACY,
+        name: 'legacy candidate-only',
+        collectorProfile: 'http_metrics',
+        metricsEndpoint: `http://127.0.0.1:${mockPort}/metrics`,
+        serviceKind: 'none',
+        collectionMode: 'manual',
+        intervalSeconds: 120,
+        enabled: true,
+      });
+      assert.equal(res.status, 201, res.text);
+      assert.ok(!res.json.resourceId, 'no Inventory resource may be fabricated');
+      assert.equal(res.json.identityState, 'legacy_unbound', 'new legacy-unbound targets are transitional');
+    });
+
+    await verifyAsync('process_only requires a server-authorized local process binding', async () => {
+      const missing = await api(base, 'POST', '/api/nf-health/targets', operatorToken, {
+        resourceId: RESOURCE_EPC,
+        name: 'unbound process target',
+        collectorProfile: 'process_only',
+        serviceKind: 'process',
+        serviceUnit: 'mockd',
+        collectionMode: 'manual',
+        intervalSeconds: 120,
+        enabled: true,
+      });
+      assert.equal(missing.status, 403, missing.text);
+      assert.equal(missing.json.code, 'NF_HEALTH_PROCESS_BINDING_MISSING');
+
+      const mismatched = await api(base, 'POST', '/api/nf-health/targets', operatorToken, {
+        resourceId: RESOURCE_IMS,
+        name: 'mismatched process target',
+        collectorProfile: 'process_only',
+        serviceKind: 'process',
+        serviceUnit: 'amfd',
+        collectionMode: 'manual',
+        intervalSeconds: 120,
+        enabled: true,
+      });
+      assert.equal(mismatched.status, 403, mismatched.text);
+      assert.equal(mismatched.json.code, 'NF_HEALTH_PROCESS_BINDING_MISMATCH');
+
+      const withEndpoint = await api(base, 'POST', '/api/nf-health/targets', operatorToken, {
+        resourceId: RESOURCE_IMS,
+        name: 'process target with endpoint',
+        collectorProfile: 'process_only',
+        metricsEndpoint: `http://127.0.0.1:${mockPort}/metrics`,
+        serviceKind: 'process',
+        serviceUnit: 'mockd',
+        collectionMode: 'manual',
+        intervalSeconds: 120,
+        enabled: true,
+      });
+      assert.equal(withEndpoint.status, 400, withEndpoint.text);
+    });
+
+    await verifyAsync('process_only target creation and truthful L1 evidence', async () => {
+      // A real local process whose exact comm and executable identity match
+      // the approved unit; the suite owns and terminates it.
+      const procDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nf-health-process-'));
+      const approvedBin = path.join(procDir, 'mockd');
+      fs.copyFileSync('/bin/sleep', approvedBin);
+      fs.chmodSync(approvedBin, 0o755);
+      const approved = spawn(approvedBin, ['120'], { stdio: 'ignore', detached: true });
+      localProcesses.push(approved);
+      // A lookalike process that must never satisfy strict identity.
+      const lookalikeBin = path.join(procDir, 'mockd-test');
+      fs.copyFileSync('/bin/sleep', lookalikeBin);
+      fs.chmodSync(lookalikeBin, 0o755);
+      const lookalike = spawn(lookalikeBin, ['120'], { stdio: 'ignore', detached: true });
+      localProcesses.push(lookalike);
+
+      const created = await api(base, 'POST', '/api/nf-health/targets', operatorToken, {
+        resourceId: RESOURCE_IMS_PROC,
+        name: 'P-CSCF local process',
+        collectorProfile: 'process_only',
+        serviceKind: 'process',
+        serviceUnit: 'mockd',
+        collectionMode: 'manual',
+        intervalSeconds: 120,
+        enabled: true,
+      });
+      assert.equal(created.status, 201, created.text);
+      assert.equal(created.json.collectorProfile, 'process_only');
+      processOnlyTargetId = created.json.targetId;
+
+      const res = await api(base, 'POST', `/api/nf-health/targets/${processOnlyTargetId}/collect`, operatorToken);
+      assert.equal(res.status, 200, res.text);
+      assert.equal(res.json.run.status, 'success');
+      assert.equal(res.json.run.layersMeasured, 1, 'only L1 is measured');
+      const sample = res.json.sample;
+      assert.ok(sample, 'L1 evidence must be recorded');
+      assert.equal(sample.layers.process.measured, true);
+      assert.equal(sample.layers.process.state, 'healthy');
+      assert.equal(sample.layers.interface.measured, false);
+      assert.equal(sample.layers.interface.state, 'not_configured');
+      assert.equal(sample.layers.service.measured, false);
+      assert.equal(sample.layers.service.state, 'not_configured');
+      assert.equal(sample.resourceId, RESOURCE_IMS_PROC, 'samples retain the canonical resource association');
+      assert.equal(sample.metrics.length, 0, 'process_only synthesizes no metrics');
+    });
+
+    await verifyAsync('collection against a retired Inventory resource is blocked explicitly', async () => {
+      await client.db(appDbName).collection('app_inventory_resources').updateOne(
+        { _id: RESOURCE_EPC },
+        { $set: { lifecycleState: 'retired' } },
+      );
+      const res = await api(base, 'POST', `/api/nf-health/targets/${epcTargetId}/collect`, operatorToken);
+      assert.equal(res.status, 409, res.text);
+      assert.equal(res.json.code, 'NF_HEALTH_RESOURCE_RETIRED');
+      // Historical evidence stays readable.
+      const detail = await api(base, 'GET', `/api/nf-health/targets/${epcTargetId}`, operatorToken);
+      assert.equal(detail.status, 200, detail.text);
+      const history = await api(base, 'GET', `/api/nf-health/targets/${epcTargetId}/history`, operatorToken);
+      assert.equal(history.status, 200, history.text);
+      assert.ok(Array.isArray(history.json.samples));
     });
 
     // Each remaining scenario uses its own target so the per-target collection
@@ -702,7 +1124,7 @@ async function main() {
     await verifyAsync('NF Health writes no Inventory, Topology or Discovery fields', async () => {
       const inventory = await client.db(appDbName).collection('app_inventory_resources').countDocuments({});
       const topology = await client.db(appDbName).collection('app_topology_edges').countDocuments({});
-      assert.equal(inventory, 0, 'NF Health must not create Inventory resources');
+      assert.equal(inventory, inventoryBaseline, 'NF Health must not create Inventory resources');
       assert.equal(topology, 0, 'NF Health must not create Topology edges');
 
       const obs = await obsColl.findOne({ _id: CANDIDATE_ID });
@@ -713,6 +1135,14 @@ async function main() {
     console.log(`\nNF Health integration: ${passed}/${totalChecks} checks passed`);
     if (passed !== totalChecks) process.exitCode = 1;
   } finally {
+    for (const proc of localProcesses) {
+      try {
+        proc.kill('SIGKILL');
+      } catch {
+        /* best-effort cleanup of test-owned processes */
+      }
+    }
+    localProcesses = [];
     if (goProc) {
       goProc.kill('SIGTERM');
       await new Promise((r) => setTimeout(r, 300));

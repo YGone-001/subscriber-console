@@ -122,7 +122,7 @@ assert.deepEqual(
 );
 
 assert.ok(Array.isArray(healthContract.collectorProfiles), 'collectorProfiles must be declared');
-assert.deepEqual(healthContract.collectorProfiles, ['http_metrics'], 'collector profile vocabulary must be http_metrics');
+assert.deepEqual(healthContract.collectorProfiles, ['http_metrics', 'process_only'], 'collector profile vocabulary must be http_metrics and process_only');
 assert.ok(!/open5gs|kamailio|freeswitch|asterisk/i.test(JSON.stringify(healthContract)), 'contract must stay vendor-neutral');
 
 const healthOperations = healthContract.routes.flatMap((entry) => entry.operations ?? []);
@@ -161,16 +161,22 @@ for (const entry of requestContract) {
 const createEntry = requestContract.find((entry) => entry.name === 'nf health target create');
 assert.deepEqual(
   createEntry.requiredBodyKeys.sort(),
-  ['candidateId', 'name', 'collectorProfile', 'serviceKind', 'collectionMode', 'intervalSeconds'].sort(),
+  ['resourceId', 'name', 'collectorProfile', 'serviceKind', 'collectionMode', 'intervalSeconds'].sort(),
 );
+assert.ok(createEntry.optionalBodyKeys.includes('candidateId'), 'candidateId is optional for Inventory-only targets');
 assert.ok(createEntry.forbiddenBodyKeys.includes('revision'), 'create must forbid server-owned revision');
 assert.ok(createEntry.forbiddenBodyKeys.includes('targetId'), 'create must forbid server-owned targetId');
+assert.ok(createEntry.forbiddenBodyKeys.includes('domain'), 'create must forbid client-supplied domain');
+assert.ok(createEntry.forbiddenBodyKeys.includes('nfType'), 'create must forbid client-supplied nfType');
+assert.ok(createEntry.forbiddenBodyKeys.includes('resourceId') === false, 'resourceId is the authoritative client-supplied association');
 assert.ok(!createEntry.requiredBodyKeys.includes('metricsEndpoint'), 'metricsEndpoint is optional');
 
 const updateEntry = requestContract.find((entry) => entry.name === 'nf health target update');
 assert.deepEqual(updateEntry.requiredBodyKeys.sort(), ['expectedRevision', 'target'].sort());
 assert.ok(updateEntry.nestedContracts?.target, 'update must declare nested target contract');
 assert.ok(updateEntry.forbiddenBodyKeys.includes('candidateId'), 'update must not rebind the Discovery candidate');
+assert.ok(updateEntry.forbiddenBodyKeys.includes('resourceId'), 'update must not rebind the Inventory resource');
+assert.ok(updateEntry.nestedContracts.target.forbiddenKeys.includes('resourceId'), 'update must not rebind the Inventory resource in the nested target');
 
 const collectEntry = requestContract.find((entry) => entry.name === 'nf health collection request');
 assert.deepEqual(collectEntry.requiredBodyKeys, []);
@@ -203,6 +209,10 @@ for (const file of goFiles) {
 }
 const modelSource = readFileSync(resolve(root, 'backend/internal/nfhealth/model.go'), 'utf8');
 assert.ok(modelSource.includes('CollectorHTTPMetrics = "http_metrics"'), 'collector profile must be the neutral value http_metrics');
+assert.ok(modelSource.includes('CollectorProcessOnly = "process_only"'), 'process_only collector profile must be declared');
+assert.ok(modelSource.includes('ResourceID       string `json:"resourceId,omitempty" bson:"resourceId,omitempty"`'), 'target resource identity must be optional and additive');
+assert.ok(modelSource.includes('IdentityInventoryAuthoritative'), 'authoritative identity state must be declared');
+assert.ok(modelSource.includes('IdentityLegacyUnresolved'), 'legacy identity state must be declared honestly');
 assert.ok(!modelSource.includes('open5gs'), 'collector profile must not embed product names');
 
 const collectorSource = readFileSync(resolve(root, 'backend/internal/nfhealth/collector.go'), 'utf8');

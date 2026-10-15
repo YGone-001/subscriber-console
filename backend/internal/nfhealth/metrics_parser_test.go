@@ -17,7 +17,7 @@ amf_session 12
 # TYPE process_resident_memory_bytes gauge
 process_resident_memory_bytes 1048576
 `)
-	out, err := ParsePrometheusText(body, "2026-01-01T00:00:00Z", nil)
+	out, err := ParsePrometheusText(body, "2026-01-01T00:00:00Z", nil, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -38,7 +38,7 @@ process_resident_memory_bytes 1048576
 
 func TestParsePrometheusTextDropsUnregisteredFamilies(t *testing.T) {
 	body := []byte("# TYPE unknown_family counter\nunknown_family 1\ngnb 2\n")
-	out, err := ParsePrometheusText(body, "2026-01-01T00:00:00Z", nil)
+	out, err := ParsePrometheusText(body, "2026-01-01T00:00:00Z", nil, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -52,7 +52,7 @@ func TestParsePrometheusTextDropsUnregisteredFamilies(t *testing.T) {
 
 func TestParsePrometheusTextRejectsNaNAndInfinity(t *testing.T) {
 	body := []byte("gnb NaN\namf_session +Inf\nran_ue 4\n")
-	out, err := ParsePrometheusText(body, "2026-01-01T00:00:00Z", nil)
+	out, err := ParsePrometheusText(body, "2026-01-01T00:00:00Z", nil, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -69,7 +69,7 @@ func TestParsePrometheusTextRejectsNaNAndInfinity(t *testing.T) {
 func TestParsePrometheusTextDropsSensitiveLabels(t *testing.T) {
 	body := []byte(`gnb{imsi="001010000000001",nf="amf"} 2
 `)
-	out, err := ParsePrometheusText(body, "2026-01-01T00:00:00Z", nil)
+	out, err := ParsePrometheusText(body, "2026-01-01T00:00:00Z", nil, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -92,7 +92,7 @@ func TestParsePrometheusTextDetectsCounterReset(t *testing.T) {
 	body := []byte("fivegs_amffunction_rm_reginitreq 5\n")
 	out, err := ParsePrometheusText(body, "2026-01-01T00:00:00Z", map[string]float64{
 		"fivegs_amffunction_rm_reginitreq": 10,
-	})
+	}, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -111,21 +111,21 @@ func TestDetectCounterReset(t *testing.T) {
 }
 
 func TestParsePrometheusTextRejectsEmptyBody(t *testing.T) {
-	if _, err := ParsePrometheusText(nil, "t", nil); err == nil {
+	if _, err := ParsePrometheusText(nil, "t", nil, ""); err == nil {
 		t.Fatal("expected error for empty body")
 	}
 }
 
 func TestParsePrometheusTextRejectsOversizedBody(t *testing.T) {
 	big := []byte(strings.Repeat("gnb 1\n", MaxResponseBytes))
-	if _, err := ParsePrometheusText(big, "t", nil); err == nil {
+	if _, err := ParsePrometheusText(big, "t", nil, ""); err == nil {
 		t.Fatal("expected error for oversized body")
 	}
 }
 
 func TestParsePrometheusTextCounterNeverPresentedAsRate(t *testing.T) {
 	body := []byte("fivegs_amffunction_rm_reginitreq 42\n")
-	out, err := ParsePrometheusText(body, "t", nil)
+	out, err := ParsePrometheusText(body, "t", nil, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

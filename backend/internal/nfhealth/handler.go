@@ -49,8 +49,10 @@ type Handler struct {
 	auditWriter AuditWriter
 	dest        *DestinationAllowlist
 	units       *ServiceUnitAllowlist
-	// candidateLookup optionally verifies Discovery candidate references.
-	candidateLookup func(ctx context.Context, candidateID string) (bool, error)
+	bindings    *ProcessBindingRegistry
+	// identity provides read-only Inventory and Discovery resolution. NF
+	// Health never writes Inventory or Discovery through these resolvers.
+	identity IdentityResolvers
 }
 
 // NewHandler constructs the NF Health HTTP handler.
@@ -61,6 +63,7 @@ func NewHandler(
 	auditWriter AuditWriter,
 	dest *DestinationAllowlist,
 	units *ServiceUnitAllowlist,
+	bindings *ProcessBindingRegistry,
 ) *Handler {
 	return &Handler{
 		repo:        repo,
@@ -69,12 +72,14 @@ func NewHandler(
 		auditWriter: auditWriter,
 		dest:        dest,
 		units:       units,
+		bindings:    bindings,
 	}
 }
 
-// SetCandidateLookup installs an optional Discovery candidate existence check.
-func (h *Handler) SetCandidateLookup(fn func(ctx context.Context, candidateID string) (bool, error)) {
-	h.candidateLookup = fn
+// SetIdentityResolvers installs the read-only Inventory and Discovery
+// resolvers used to derive canonical target identity server-side.
+func (h *Handler) SetIdentityResolvers(resolvers IdentityResolvers) {
+	h.identity = resolvers
 }
 
 const maxBodyBytes = 64 << 10
@@ -154,9 +159,12 @@ func writeValidation(w http.ResponseWriter, err error) {
 	code, message := MapValidationError(err)
 	status := http.StatusBadRequest
 	switch code {
-	case "NF_HEALTH_DESTINATION_NOT_ALLOWED", "NF_HEALTH_SERVICE_UNIT_NOT_ALLOWED":
+	case "NF_HEALTH_DESTINATION_NOT_ALLOWED", "NF_HEALTH_SERVICE_UNIT_NOT_ALLOWED",
+		"NF_HEALTH_PROCESS_BINDING_MISSING", "NF_HEALTH_PROCESS_BINDING_MISMATCH":
 		status = http.StatusForbidden
 	case "NF_HEALTH_REVISION_CONFLICT":
+		status = http.StatusConflict
+	case "NF_HEALTH_RESOURCE_RETIRED":
 		status = http.StatusConflict
 	}
 	response.Error(w, status, message, code)
@@ -190,29 +198,31 @@ func (h *Handler) auditWrite(p *auth.Principal, action, targetID string, revisio
 
 // MetaResponse is the GET /api/nf-health/meta payload.
 type MetaResponse struct {
-	SchemaVersion          int                `json:"schemaVersion"`
-	CollectorProfiles      []string           `json:"collectorProfiles"`
-	CollectionModes        []string           `json:"collectionModes"`
-	RunStatuses            []string           `json:"runStatuses"`
-	LayerStates            []string           `json:"layerStates"`
-	FreshnessStates        []string           `json:"freshnessStates"`
-	EvidenceKinds          []string           `json:"evidenceKinds"`
-	ProcessOutcomes        []string           `json:"processOutcomes"`
-	InterfaceOutcomes      []string           `json:"interfaceOutcomes"`
-	ServiceKinds           []string           `json:"serviceKinds"`
-	MinIntervalSeconds     int                `json:"minIntervalSeconds"`
-	MaxIntervalSeconds     int                `json:"maxIntervalSeconds"`
-	DefaultIntervalSeconds int                `json:"defaultIntervalSeconds"`
-	RequestTimeoutSeconds  int                `json:"requestTimeoutSeconds"`
-	TotalDeadlineSeconds   int                `json:"totalDeadlineSeconds"`
-	MaxGlobalConcurrent    int                `json:"maxGlobalConcurrent"`
-	StalenessGraceSeconds  int                `json:"stalenessGraceSeconds"`
-	ManualFreshnessSeconds int                `json:"manualFreshnessWindowSeconds"`
-	RetentionDays          int                `json:"retentionDays"`
-	MaxRetentionDays       int                `json:"maxRetentionDays"`
-	SupportedMetrics       []MetricDefinition `json:"supportedMetrics"`
-	AllowedDestinations    []string           `json:"allowedDestinations"`
-	AllowedServiceUnits    []string           `json:"allowedServiceUnits"`
+	SchemaVersion            int                `json:"schemaVersion"`
+	CollectorProfiles        []string           `json:"collectorProfiles"`
+	CollectionModes          []string           `json:"collectionModes"`
+	RunStatuses              []string           `json:"runStatuses"`
+	LayerStates              []string           `json:"layerStates"`
+	FreshnessStates          []string           `json:"freshnessStates"`
+	EvidenceKinds            []string           `json:"evidenceKinds"`
+	ProcessOutcomes          []string           `json:"processOutcomes"`
+	InterfaceOutcomes        []string           `json:"interfaceOutcomes"`
+	ServiceKinds             []string           `json:"serviceKinds"`
+	IdentityStates           []string           `json:"identityStates"`
+	SupportedResourceDomains []string           `json:"supportedResourceDomains"`
+	MinIntervalSeconds       int                `json:"minIntervalSeconds"`
+	MaxIntervalSeconds       int                `json:"maxIntervalSeconds"`
+	DefaultIntervalSeconds   int                `json:"defaultIntervalSeconds"`
+	RequestTimeoutSeconds    int                `json:"requestTimeoutSeconds"`
+	TotalDeadlineSeconds     int                `json:"totalDeadlineSeconds"`
+	MaxGlobalConcurrent      int                `json:"maxGlobalConcurrent"`
+	StalenessGraceSeconds    int                `json:"stalenessGraceSeconds"`
+	ManualFreshnessSeconds   int                `json:"manualFreshnessWindowSeconds"`
+	RetentionDays            int                `json:"retentionDays"`
+	MaxRetentionDays         int                `json:"maxRetentionDays"`
+	SupportedMetrics         []MetricDefinition `json:"supportedMetrics"`
+	AllowedDestinations      []string           `json:"allowedDestinations"`
+	AllowedServiceUnits      []string           `json:"allowedServiceUnits"`
 }
 
 // Meta handles GET /api/nf-health/meta.
@@ -225,29 +235,31 @@ func (h *Handler) Meta(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	response.JSON(w, http.StatusOK, MetaResponse{
-		SchemaVersion:          SchemaVersion,
-		CollectorProfiles:      CanonicalCollectorProfiles,
-		CollectionModes:        CanonicalCollectionModes,
-		RunStatuses:            CanonicalRunStatuses,
-		LayerStates:            CanonicalLayerStates,
-		FreshnessStates:        CanonicalFreshnessStates,
-		EvidenceKinds:          CanonicalEvidenceKinds,
-		ProcessOutcomes:        CanonicalProcessOutcomes,
-		InterfaceOutcomes:      CanonicalInterfaceOutcomes,
-		ServiceKinds:           []string{"systemd", "process", "none"},
-		MinIntervalSeconds:     MinIntervalSeconds,
-		MaxIntervalSeconds:     MaxIntervalSeconds,
-		DefaultIntervalSeconds: DefaultIntervalSeconds,
-		RequestTimeoutSeconds:  RequestTimeoutSeconds,
-		TotalDeadlineSeconds:   TotalDeadlineSeconds,
-		MaxGlobalConcurrent:    MaxGlobalConcurrent,
-		StalenessGraceSeconds:  StalenessGraceSeconds,
-		ManualFreshnessSeconds: ManualFreshnessWindowSeconds,
-		RetentionDays:          DefaultRetentionDays,
-		MaxRetentionDays:       MaxRetentionDays,
-		SupportedMetrics:       SupportedMetrics(),
-		AllowedDestinations:    h.destEntries(),
-		AllowedServiceUnits:    h.unitEntries(),
+		SchemaVersion:            SchemaVersion,
+		CollectorProfiles:        CanonicalCollectorProfiles,
+		CollectionModes:          CanonicalCollectionModes,
+		RunStatuses:              CanonicalRunStatuses,
+		LayerStates:              CanonicalLayerStates,
+		FreshnessStates:          CanonicalFreshnessStates,
+		EvidenceKinds:            CanonicalEvidenceKinds,
+		ProcessOutcomes:          CanonicalProcessOutcomes,
+		InterfaceOutcomes:        CanonicalInterfaceOutcomes,
+		ServiceKinds:             []string{"systemd", "process", "none"},
+		IdentityStates:           CanonicalIdentityStates,
+		SupportedResourceDomains: SupportedResourceDomains,
+		MinIntervalSeconds:       MinIntervalSeconds,
+		MaxIntervalSeconds:       MaxIntervalSeconds,
+		DefaultIntervalSeconds:   DefaultIntervalSeconds,
+		RequestTimeoutSeconds:    RequestTimeoutSeconds,
+		TotalDeadlineSeconds:     TotalDeadlineSeconds,
+		MaxGlobalConcurrent:      MaxGlobalConcurrent,
+		StalenessGraceSeconds:    StalenessGraceSeconds,
+		ManualFreshnessSeconds:   ManualFreshnessWindowSeconds,
+		RetentionDays:            DefaultRetentionDays,
+		MaxRetentionDays:         MaxRetentionDays,
+		SupportedMetrics:         SupportedMetrics(),
+		AllowedDestinations:      h.destEntries(),
+		AllowedServiceUnits:      h.unitEntries(),
 	})
 }
 
@@ -592,25 +604,26 @@ func (h *Handler) CreateTarget(w http.ResponseWriter, r *http.Request) {
 		response.BadRequest(w, err.Error(), "INVALID_REQUEST")
 		return
 	}
-	if err := ValidateCreateTargetRequest(&req, h.dest, h.units); err != nil {
+	if err := ValidateCreateTargetRequest(&req, h.dest, h.units, h.bindings); err != nil {
 		writeValidation(w, err)
 		return
 	}
-	if h.candidateLookup != nil {
-		ok, err := h.candidateLookup(r.Context(), req.CandidateID)
-		if err != nil {
-			response.InternalError(w)
-			return
-		}
-		if !ok {
-			response.Error(w, http.StatusBadRequest, "Discovery candidate not found", "NF_HEALTH_TARGET_NOT_FOUND")
-			return
-		}
+	// Canonical identity is resolved server-side from authoritative Inventory
+	// and Discovery documents. A client-supplied domain or NF type is never
+	// accepted: the request struct has no such fields.
+	resolved, err := ResolveTargetIdentity(&req, h.identity)
+	if err != nil {
+		writeValidation(w, err)
+		return
 	}
+	req.ResourceID = resolved.ResourceID
+	req.CandidateID = resolved.CandidateID
+	req.ResolvedDomain = resolved.Domain
+	req.ResolvedNFType = resolved.NFType
 	target, err := h.repo.CreateTarget(r.Context(), &req, p.Username)
 	if err != nil {
 		if errors.Is(err, ErrDuplicate) {
-			response.Error(w, http.StatusConflict, "NF Health target already exists for this candidate", "NF_HEALTH_TARGET_CONFLICT")
+			response.Error(w, http.StatusConflict, "NF Health target already exists for this identity", "NF_HEALTH_TARGET_CONFLICT")
 			return
 		}
 		response.InternalError(w)
@@ -618,8 +631,10 @@ func (h *Handler) CreateTarget(w http.ResponseWriter, r *http.Request) {
 	}
 	rev := target.Revision
 	h.auditWrite(p, "nf_health.target.create", target.TargetID, &rev, map[string]any{
-		"candidateId": target.CandidateID,
-		"name":        target.Name,
+		"resourceId":    target.ResourceID,
+		"candidateId":   target.CandidateID,
+		"name":          target.Name,
+		"identityState": target.IdentityState,
 	})
 	response.JSON(w, http.StatusCreated, target)
 }
@@ -661,6 +676,7 @@ func (h *Handler) UpdateTarget(w http.ResponseWriter, r *http.Request) {
 	}
 	rev := updated.Revision
 	h.auditWrite(p, "nf_health.target.update", targetID, &rev, map[string]any{
+		"resourceId":     updated.ResourceID,
 		"name":           updated.Name,
 		"previousName":   before.Name,
 		"collectionMode": updated.CollectionMode,
@@ -705,6 +721,8 @@ func (h *Handler) CollectTarget(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, ErrRateLimited):
 			w.Header().Set("Retry-After", strconv.Itoa(MinIntervalSeconds))
 			response.Error(w, http.StatusTooManyRequests, "collection rate limited", "NF_HEALTH_COLLECTION_RATE_LIMITED")
+		case errors.Is(err, ErrResourceRetired):
+			response.Error(w, http.StatusConflict, "Inventory resource is retired; monitoring history is preserved", "NF_HEALTH_RESOURCE_RETIRED")
 		default:
 			response.InternalError(w)
 		}

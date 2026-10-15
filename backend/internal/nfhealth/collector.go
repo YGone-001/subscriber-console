@@ -16,6 +16,10 @@ type Collector struct {
 	units     *ServiceUnitAllowlist
 	gate      *CollectionGate
 	clock     Clock
+	// retiredCheck reports whether the Inventory resource backing a target is
+	// retired. Collection against a retired resource is blocked explicitly;
+	// historical evidence is preserved.
+	retiredCheck func(ctx context.Context, resourceID string) (bool, error)
 
 	mu        sync.Mutex
 	active    map[string]struct{}
@@ -62,6 +66,13 @@ func (c *Collector) SetClock(clock Clock) {
 	}
 }
 
+// SetRetiredResourceCheck installs the Inventory lifecycle check consulted
+// before any collection against a resource-native target. Intended for
+// production wiring; when unset the check is skipped.
+func (c *Collector) SetRetiredResourceCheck(fn func(ctx context.Context, resourceID string) (bool, error)) {
+	c.retiredCheck = fn
+}
+
 // CollectionResult is the outcome of one bounded collection execution.
 type CollectionResult struct {
 	Run    HealthRun
@@ -77,6 +88,18 @@ type CollectionResult struct {
 func (c *Collector) Collect(ctx context.Context, target *HealthTarget, initiatedBy string, scheduled bool) (*CollectionResult, error) {
 	if target == nil {
 		return nil, ErrNotFound
+	}
+
+	// Explicit lifecycle governance: collection against a retired Inventory
+	// resource is refused. Historical runs and samples stay untouched.
+	if strings.TrimSpace(target.ResourceID) != "" && c.retiredCheck != nil {
+		retired, err := c.retiredCheck(ctx, target.ResourceID)
+		if err != nil {
+			return nil, err
+		}
+		if retired {
+			return nil, ErrResourceRetired
+		}
 	}
 
 	now := c.now()
@@ -118,6 +141,7 @@ func (c *Collector) Collect(ctx context.Context, target *HealthTarget, initiated
 		RunID:         newUUID(),
 		SchemaVersion: SchemaVersion,
 		TargetID:      target.TargetID,
+		ResourceID:    target.ResourceID,
 		CandidateID:   target.CandidateID,
 		StartedAt:     started.Format(time.RFC3339Nano),
 		InitiatedBy:   initiatedBy,
@@ -170,8 +194,11 @@ func (c *Collector) Collect(ctx context.Context, target *HealthTarget, initiated
 	}
 
 	// L2 interface + L3 service evidence through the bounded metrics probe.
+	//
+	// The process_only collector profile never initiates an HTTP request: L2
+	// and L3 remain explicitly not_configured and no success is synthesized.
 	var probe *ProbeResult
-	if strings.TrimSpace(target.MetricsEndpoint) != "" {
+	if target.CollectorProfile != CollectorProcessOnly && strings.TrimSpace(target.MetricsEndpoint) != "" {
 		p, perr := c.prober.Probe(collectCtx, target.MetricsEndpoint, c.dest)
 		if perr != nil {
 			layers.Interface = LayerEvidence{
@@ -188,7 +215,7 @@ func (c *Collector) Collect(ctx context.Context, target *HealthTarget, initiated
 			var parseErr error
 			parsedCount := 0
 			if probe.Outcome == InterfaceValid {
-				outcome, perr2 := ParsePrometheusText(probe.Body, started.Format(time.RFC3339Nano), nil)
+				outcome, perr2 := ParsePrometheusText(probe.Body, started.Format(time.RFC3339Nano), nil, target.NFType)
 				if perr2 != nil {
 					parseErr = perr2
 					layers.Interface = EvaluateInterfaceLayer(probe, parseErr, 0)
@@ -261,6 +288,7 @@ func (c *Collector) Collect(ctx context.Context, target *HealthTarget, initiated
 			SchemaVersion: SchemaVersion,
 			TargetID:      target.TargetID,
 			RunID:         run.RunID,
+			ResourceID:    target.ResourceID,
 			CandidateID:   target.CandidateID,
 			CollectedAt:   started.Format(time.RFC3339Nano),
 			ExpiresAt:     NewBSONTime(started.AddDate(0, 0, DefaultRetentionDays)),

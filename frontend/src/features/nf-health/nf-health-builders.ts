@@ -1,5 +1,6 @@
 import type {
   CollectionMode,
+  CollectorProfile,
   CreateNfHealthTargetRequest,
   LayerState,
   ServiceKind,
@@ -7,9 +8,10 @@ import type {
 } from './nf-health-types';
 
 export type NfHealthTargetForm = {
+  resourceId: string;
   candidateId: string;
   name: string;
-  collectorProfile: string;
+  collectorProfile: CollectorProfile;
   metricsDestination: string;
   metricsPath: string;
   serviceUnit: string;
@@ -21,6 +23,7 @@ export type NfHealthTargetForm = {
 
 export function createEmptyTargetForm(defaultIntervalSeconds: number): NfHealthTargetForm {
   return {
+    resourceId: '',
     candidateId: '',
     name: '',
     collectorProfile: 'http_metrics',
@@ -55,9 +58,11 @@ export function splitMetricsEndpoint(endpoint?: string): { destination: string; 
 }
 
 export function buildCreateTargetRequest(form: NfHealthTargetForm): CreateNfHealthTargetRequest {
-  const metricsEndpoint = buildMetricsEndpoint(form.metricsDestination, form.metricsPath);
+  const processOnly = form.collectorProfile === 'process_only';
+  const metricsEndpoint = processOnly ? undefined : buildMetricsEndpoint(form.metricsDestination, form.metricsPath);
   return {
-    candidateId: form.candidateId.trim(),
+    resourceId: form.resourceId.trim() || undefined,
+    candidateId: form.candidateId.trim() || undefined,
     name: form.name.trim(),
     collectorProfile: form.collectorProfile,
     metricsEndpoint,

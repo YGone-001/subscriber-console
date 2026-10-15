@@ -14,6 +14,10 @@ export type RunStatus = 'success' | 'partial' | 'failed';
 
 export type ServiceKind = 'systemd' | 'process' | 'none';
 
+export type CollectorProfile = 'http_metrics' | 'process_only';
+
+export type TargetIdentityState = 'inventory_authoritative' | 'legacy_unbound' | 'legacy_unresolved';
+
 export interface LayerEvidence {
   state: LayerState;
   evidenceKind: EvidenceKind;
@@ -63,15 +67,19 @@ export interface FreshnessProjection {
 export interface HealthTarget {
   targetId: string;
   schemaVersion: number;
-  candidateId: string;
+  resourceId?: string;
+  candidateId?: string;
   name: string;
-  collectorProfile: string;
+  collectorProfile: CollectorProfile;
   metricsEndpoint?: string;
   serviceUnit?: string;
   serviceKind: ServiceKind;
   collectionMode: CollectionMode;
   intervalSeconds: number;
   enabled: boolean;
+  domain?: string;
+  nfType?: string;
+  identityState?: TargetIdentityState;
   revision: number;
   createdAt: string;
   createdBy: string;
@@ -92,6 +100,7 @@ export interface HealthRun {
   runId: string;
   schemaVersion: number;
   targetId: string;
+  resourceId?: string;
   candidateId?: string;
   startedAt: string;
   completedAt?: string;
@@ -108,6 +117,7 @@ export interface HealthSample {
   schemaVersion: number;
   targetId: string;
   runId: string;
+  resourceId?: string;
   candidateId?: string;
   collectedAt: string;
   expiresAt?: string;
@@ -186,9 +196,10 @@ export interface CollectResult {
 }
 
 export interface CreateNfHealthTargetRequest {
-  candidateId: string;
+  resourceId?: string;
+  candidateId?: string;
   name: string;
-  collectorProfile: string;
+  collectorProfile: CollectorProfile;
   metricsEndpoint?: string;
   serviceUnit?: string;
   serviceKind: ServiceKind;

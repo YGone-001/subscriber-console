@@ -7,8 +7,8 @@
     "backendAuthority": "backend/internal/nfhealth/handler.go",
     "productionBuilder": "frontend/src/features/nf-health/nf-health-api.ts",
     "productionReference": "frontend/src/features/nf-health/NfHealthPage.tsx",
-    "requiredBodyKeys": ["candidateId", "name", "collectorProfile", "serviceKind", "collectionMode", "intervalSeconds"],
-    "optionalBodyKeys": ["metricsEndpoint", "serviceUnit", "enabled"],
+    "requiredBodyKeys": ["resourceId", "name", "collectorProfile", "serviceKind", "collectionMode", "intervalSeconds"],
+    "optionalBodyKeys": ["candidateId", "metricsEndpoint", "serviceUnit", "enabled"],
     "forbiddenBodyKeys": [
       "targetId",
       "schemaVersion",
@@ -23,6 +23,9 @@
       "lastError",
       "runId",
       "sampleId",
+      "domain",
+      "nfType",
+      "identityState",
       "command",
       "script",
       "targetUrl",
@@ -44,6 +47,9 @@
     "forbiddenBodyKeys": [
       "targetId",
       "candidateId",
+      "resourceId",
+      "domain",
+      "nfType",
       "collectorProfile",
       "schemaVersion",
       "revision",
@@ -65,7 +71,7 @@
       "target": {
         "requiredKeys": ["name", "serviceKind", "collectionMode", "intervalSeconds", "enabled"],
         "allowedKeys": ["name", "metricsEndpoint", "serviceUnit", "serviceKind", "collectionMode", "intervalSeconds", "enabled"],
-        "forbiddenKeys": ["targetId", "candidateId", "collectorProfile", "schemaVersion", "revision"]
+        "forbiddenKeys": ["targetId", "candidateId", "resourceId", "collectorProfile", "schemaVersion", "revision", "domain", "nfType", "identityState"]
       }
     },
     "responseSemantics": "mutation-result"

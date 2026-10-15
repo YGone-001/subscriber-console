@@ -27,7 +27,13 @@ type ParseOutcome struct {
 // It recognizes HELP/TYPE metadata, sample syntax with optional labels, and
 // rejects NaN and infinity. Only registry-supported families are emitted.
 // A counter value is never presented as a rate.
-func ParsePrometheusText(body []byte, collectedAt string, previous map[string]float64) (*ParseOutcome, error) {
+//
+// When nfType is non-empty (an identity-resolved target), metric families must
+// explicitly permit that NF type; generic wildcard families remain permitted.
+// When nfType is empty (legacy target without an authoritative NF type) the
+// registry check stays compatible with previously accepted behavior without
+// inventing type-specific attribution.
+func ParsePrometheusText(body []byte, collectedAt string, previous map[string]float64, nfType string) (*ParseOutcome, error) {
 	if len(body) == 0 {
 		return nil, errors.New("empty metrics body")
 	}
@@ -81,7 +87,7 @@ func ParsePrometheusText(body []byte, collectedAt string, previous map[string]fl
 
 		family := familyName(name)
 		out.FamiliesSeen[family] = types[family]
-		def, supported := LookupMetric(family)
+		def, supported := LookupMetricForNFType(family, nfType)
 		if !supported {
 			out.Dropped++
 			continue

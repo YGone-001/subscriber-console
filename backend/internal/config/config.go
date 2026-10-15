@@ -26,9 +26,10 @@ type Config struct {
 	DiscoveryTLSCAFile      string // optional CA bundle for h2_tls NRF
 
 	// NF Health (read-only telemetry collection)
-	NFHealthAllowedTargets string // comma-separated host:port metrics destinations
-	NFHealthServiceUnits   string // comma-separated approved service units / process names
-	NFHealthTLSCAFile      string // optional CA bundle for https metrics endpoints
+	NFHealthAllowedTargets       string // comma-separated host:port metrics destinations
+	NFHealthServiceUnits         string // comma-separated approved service units / process names
+	NFHealthTLSCAFile            string // optional CA bundle for https metrics endpoints
+	NFHealthLocalProcessBindings string // comma-separated resourceId=unit local bindings
 }
 
 // Load reads configuration from environment variables with sensible defaults.
@@ -49,6 +50,8 @@ func Load() (*Config, error) {
 		NFHealthAllowedTargets: os.Getenv("NF_HEALTH_ALLOWED_TARGETS"),
 		NFHealthServiceUnits:   os.Getenv("NF_HEALTH_SERVICE_UNITS"),
 		NFHealthTLSCAFile:      os.Getenv("NF_HEALTH_TLS_CA_FILE"),
+
+		NFHealthLocalProcessBindings: os.Getenv("NF_HEALTH_LOCAL_PROCESS_BINDINGS"),
 	}
 
 	if cfg.MongoURI == "" {

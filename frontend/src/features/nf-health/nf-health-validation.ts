@@ -10,8 +10,17 @@ export function validateTargetName(name: string): ValidationMessageKey | null {
   return null;
 }
 
+export function validateResourceId(resourceId: string): ValidationMessageKey | null {
+  // The Inventory resource is the authoritative identity: every new target
+  // references an existing Inventory resource server-side.
+  if (!resourceId.trim()) return 'nf_health_validation_resource_required';
+  return null;
+}
+
 export function validateCandidateId(candidateId: string): ValidationMessageKey | null {
-  if (!candidateId.trim()) return 'nf_health_validation_candidate_required';
+  // The Discovery candidate association is optional. EPC, IMS and
+  // Inventory-only 5GC targets must be creatable without any NRF candidate.
+  if (!candidateId.trim()) return null;
   return null;
 }
 
@@ -23,7 +32,14 @@ export function validateCollectorProfile(profile: string, meta: NfHealthMeta | n
   return null;
 }
 
-export function validateDestination(destination: string, meta: NfHealthMeta | null): ValidationMessageKey | null {
+export function validateDestination(
+  destination: string,
+  meta: NfHealthMeta | null,
+  processOnly = false,
+): ValidationMessageKey | null {
+  // process_only never performs an HTTP probe: no metrics endpoint is required
+  // and none is accepted.
+  if (processOnly) return null;
   const trimmed = destination.trim();
   if (!trimmed) return 'nf_health_validation_destination_required';
   if (meta && meta.allowedDestinations.length > 0 && !meta.allowedDestinations.includes(trimmed)) {
@@ -36,9 +52,12 @@ export function validateServiceUnit(
   serviceUnit: string,
   serviceKind: ServiceKind,
   meta: NfHealthMeta | null,
+  processOnly = false,
 ): ValidationMessageKey | null {
   const trimmed = serviceUnit.trim();
-  if (serviceKind === 'none') return null;
+  if (serviceKind === 'none') {
+    return processOnly ? 'nf_health_validation_process_only_inspection_required' : null;
+  }
   if (!trimmed) return 'nf_health_validation_service_unit_required';
   if (meta && meta.allowedServiceUnits.length > 0 && !meta.allowedServiceUnits.includes(trimmed)) {
     return 'nf_health_validation_service_unit_unauthorized';
@@ -69,14 +88,16 @@ export function validateTargetForm(
   form: NfHealthTargetForm,
   meta: NfHealthMeta | null,
 ): ValidationMessageKey | null {
+  const processOnly = form.collectorProfile === 'process_only';
   return (
-    validateCandidateId(form.candidateId) ??
+    validateResourceId(form.resourceId) ??
     validateTargetName(form.name) ??
     validateCollectorProfile(form.collectorProfile, meta) ??
-    validateDestination(form.metricsDestination, meta) ??
-    validateServiceUnit(form.serviceUnit, form.serviceKind, meta) ??
+    validateDestination(form.metricsDestination, meta, processOnly) ??
+    validateServiceUnit(form.serviceUnit, form.serviceKind, meta, processOnly) ??
     validateCollectionMode(form.collectionMode, meta) ??
-    validateInterval(form.intervalSeconds, meta)
+    validateInterval(form.intervalSeconds, meta) ??
+    validateCandidateId(form.candidateId)
   );
 }
 

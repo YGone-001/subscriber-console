@@ -50,6 +50,77 @@ function asString(value, fallback = '') {
   return String(value);
 }
 
+// listIndexesSafe returns the index list for a collection that may not exist
+// yet. A missing namespace simply has no indexes.
+async function listIndexesSafe(collection) {
+  try {
+    return await collection.indexes();
+  } catch (error) {
+    if (error?.code === 26 || error?.codeName === 'NamespaceNotFound') {
+      return [];
+    }
+    throw error;
+  }
+}
+
+// applyPartialUniqueTargetIndexes applies the NF Health target uniqueness
+// policy: a candidate-scoped and a resource-scoped partial unique index so
+// absent identifiers never collide. When the initializer meets the legacy
+// full candidate index, it is rebuilt only after validating that every stored
+// target carries a string candidateId (the invariant the pre-phase API
+// enforced). Any violation fails closed instead of silently degrading
+// uniqueness or dropping documents.
+async function applyPartialUniqueTargetIndexes(appDb) {
+  const targets = appDb.collection('app_nf_health_targets');
+  const desired = [
+    {
+      key: { candidateId: 1 },
+      unique: true,
+      partialFilterExpression: { candidateId: { $type: 'string' } },
+      name: 'uniq_nf_health_target_candidate',
+    },
+    {
+      key: { resourceId: 1 },
+      unique: true,
+      partialFilterExpression: { resourceId: { $type: 'string' } },
+      name: 'uniq_nf_health_target_resource',
+    },
+  ];
+  const existing = await listIndexesSafe(targets);
+  for (const spec of desired) {
+    const found = existing.find((index) => index.name === spec.name);
+    if (!found) continue;
+    const sameShape =
+      JSON.stringify(found.key) === JSON.stringify(spec.key) &&
+      Boolean(found.unique) === Boolean(spec.unique) &&
+      JSON.stringify(found.partialFilterExpression ?? null) === JSON.stringify(spec.partialFilterExpression ?? null);
+    if (sameShape) continue;
+    const invalidCount = await targets.countDocuments({
+      $or: [
+        { candidateId: { $exists: false } },
+        { candidateId: { $not: { $type: 'string' } } },
+        { candidateId: '' },
+      ],
+    });
+    if (invalidCount > 0) {
+      throw new Error(
+        `NF_HEALTH_TARGET_INDEX_INCOMPATIBLE: ${invalidCount} stored target(s) lack a string candidateId; ` +
+          'resolve legacy target identity before applying the partial unique index policy',
+      );
+    }
+    await targets.dropIndex(spec.name);
+    maintenanceActions.push({
+      database: appDbName,
+      collection: 'app_nf_health_targets',
+      action: 'rebuild_partial_unique_index',
+      index: spec.name,
+    });
+  }
+  createdIndexes.push(
+    ...(await targets.createIndexes(desired)).map((name) => ({ database: appDbName, collection: 'app_nf_health_targets', name })),
+  );
+}
+
 function defaultInternetRule() {
   return {
     rule_id: 'internet_rg1001_si1',
@@ -510,17 +581,21 @@ async function ensureIndexes() {
   ])).map((name) => ({ database: appDbName, collection: 'app_nf_observations', name })));
 
   // ── xcloud_ops.app_nf_health_targets ──
-  // Operator-authored monitoring configuration. Identity references an existing
-  // Discovery candidate and never becomes an independent NF identity.
+  // Operator-authored monitoring configuration. Identity separation is
+  // authoritative:
+  //   - resourceId references the canonical Inventory resource (may be absent
+  //     for legacy candidate-only targets);
+  //   - candidateId references an optional Discovery observation and is never
+  //     fabricated by NF Health.
+  // Both unique indexes are partial so absent identifiers never collide:
+  // multiple Inventory-only targets coexist without a candidateId, and
+  // multiple candidate references never collide on a missing resourceId.
+  await applyPartialUniqueTargetIndexes(appDb);
   createdIndexes.push(...(await appDb.collection('app_nf_health_targets').createIndexes([
-    {
-      key: { candidateId: 1 },
-      unique: true,
-      name: 'uniq_nf_health_target_candidate',
-    },
     { key: { updatedAt: -1, _id: 1 }, name: 'nf_health_targets_updated_id' },
     { key: { enabled: 1, collectionMode: 1, lastAttemptAt: 1 }, name: 'nf_health_targets_schedule' },
     { key: { name: 1 }, name: 'nf_health_targets_name' },
+    { key: { domain: 1, nfType: 1, updatedAt: -1 }, name: 'nf_health_targets_domain_type' },
   ])).map((name) => ({ database: appDbName, collection: 'app_nf_health_targets', name })));
 
   // ── xcloud_ops.app_nf_health_runs ──
