@@ -143,8 +143,10 @@ type LegacyLinkMigrationResult struct {
 	Unmatched       int      `json:"unmatched"`
 	Invalid         int      `json:"invalid"`
 	Skipped         int      `json:"skipped"`
+	Conflicts       int      `json:"conflicts"`
 	DryRun          bool     `json:"dryRun"`
 	ResolvedTargets []string `json:"resolvedTargetIds,omitempty"`
+	ConflictTargets []string `json:"conflictTargetIds,omitempty"`
 }
 
 // MigrateLegacyTargetResourceLinks backfills the canonical Inventory
@@ -159,8 +161,16 @@ type LegacyLinkMigrationResult struct {
 //   - non-destructive: unmatched targets are reported and never deleted
 //   - never fabricates an Inventory resource and never rewrites unrelated
 //     Inventory or Discovery documents
-//   - revision-safe: the operator revision counter is preserved so in-flight
-//     CAS edits are not disturbed
+//   - applies the same validated relationship as target creation: the linked
+//     resource must validate AND the candidate's observed NF type must be
+//     explicitly compatible, otherwise the target is left untouched
+//   - revision-safe: the conditional update is bound to the observed revision
+//     and the operator revision counter is preserved, so a target modified
+//     concurrently is never overwritten
+//   - reports the actual conditional-update result: an unmatched update is
+//     never counted as a successful migration
+//   - historical runs and samples are never rewritten to claim a newly
+//     established resource identity
 func MigrateLegacyTargetResourceLinks(
 	ctx context.Context,
 	targets *mongo.Collection,
@@ -197,7 +207,7 @@ func MigrateLegacyTargetResourceLinks(
 	opts := options.Find().
 		SetLimit(int64(limit)).
 		SetSort(bson.D{{Key: "createdAt", Value: 1}}).
-		SetProjection(bson.M{"_id": 1, "candidateId": 1})
+		SetProjection(bson.M{"_id": 1, "candidateId": 1, "revision": 1})
 
 	cursor, err := targets.Find(ctx, filter, opts)
 	if err != nil {
@@ -206,6 +216,7 @@ func MigrateLegacyTargetResourceLinks(
 	var rows []struct {
 		TargetID    string `bson:"_id"`
 		CandidateID string `bson:"candidateId"`
+		Revision    int64  `bson:"revision"`
 	}
 	if err := cursor.All(ctx, &rows); err != nil {
 		return nil, err
@@ -250,6 +261,14 @@ func MigrateLegacyTargetResourceLinks(
 			result.Invalid++
 			continue
 		}
+		// The observed candidate NF type must be explicitly compatible with the
+		// linked resource. A missing or mismatched type is never adopted and the
+		// Discovery link is never silently repaired.
+		if strings.TrimSpace(observation.NFType) == "" ||
+			!CompatibleNFTypes(observation.NFType, identity.NFType) {
+			result.Invalid++
+			continue
+		}
 
 		if scope.DryRun {
 			result.Resolved++
@@ -258,11 +277,19 @@ func MigrateLegacyTargetResourceLinks(
 			}
 			continue
 		}
-		_, uerr := targets.UpdateOne(ctx,
-			bson.M{"_id": row.TargetID, "$or": []bson.M{
-				{"resourceId": bson.M{"$exists": false}},
-				{"resourceId": ""},
-			}},
+		// Revision-bound conditional update: the target is only migrated while
+		// it still carries the revision observed above and still has no
+		// Inventory association. A concurrently modified target is left
+		// untouched and never reported as migrated.
+		res, uerr := targets.UpdateOne(ctx,
+			bson.M{
+				"_id":      row.TargetID,
+				"revision": row.Revision,
+				"$or": []bson.M{
+					{"resourceId": bson.M{"$exists": false}},
+					{"resourceId": ""},
+				},
+			},
 			bson.M{"$set": bson.M{
 				"resourceId":    identity.ResourceID,
 				"domain":        identity.Domain,
@@ -271,11 +298,21 @@ func MigrateLegacyTargetResourceLinks(
 			}},
 		)
 		if uerr != nil {
-			if uerr == mongo.ErrNoDocuments {
-				result.Skipped++
+			if mongo.IsDuplicateKeyError(uerr) {
+				// Another target already holds this Inventory association. The
+				// collision is reported and the target is left untouched: no
+				// silent identity reassignment and no silent resource merge.
+				result.Conflicts++
+				if len(result.ConflictTargets) < 32 {
+					result.ConflictTargets = append(result.ConflictTargets, row.TargetID)
+				}
 				continue
 			}
 			return nil, uerr
+		}
+		if res == nil || res.MatchedCount == 0 {
+			result.Skipped++
+			continue
 		}
 		result.Resolved++
 		if len(result.ResolvedTargets) < 32 {

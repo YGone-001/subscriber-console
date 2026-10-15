@@ -220,6 +220,56 @@ const proberSource = readFileSync(resolve(root, 'backend/internal/nfhealth/http_
 const inspectorSource = readFileSync(resolve(root, 'backend/internal/nfhealth/systemd_reader.go'), 'utf8');
 const validationSource = readFileSync(resolve(root, 'backend/internal/nfhealth/validation.go'), 'utf8');
 
+// Identity integrity corrections: the Go backend must enforce the contract
+// independently of client behaviour, on every operation.
+const identitySource = readFileSync(resolve(root, 'backend/internal/nfhealth/identity.go'), 'utf8');
+const migrationIntegritySource = readFileSync(resolve(root, 'backend/internal/nfhealth/migrate.go'), 'utf8');
+assert.ok(
+  identitySource.includes('func ResolveTargetIdentity(ctx context.Context'),
+  'identity resolution must accept and propagate the request context',
+);
+assert.ok(
+  !identitySource.includes('context.Background()'),
+  'identity resolution must never detach from the request context',
+);
+assert.ok(
+  identitySource.includes('func ValidateProcessNFTCompatibility('),
+  'process/NF type compatibility must be enforced server-side',
+);
+assert.ok(
+  identitySource.includes('func ValidateCollectionIdentity('),
+  'collection must revalidate the authoritative identity',
+);
+assert.ok(
+  identitySource.includes('NF_HEALTH_TARGET_IDENTITY_MISMATCH'),
+  'a stale stored identity must fail closed deterministically',
+);
+assert.ok(
+  migrationIntegritySource.includes('CompatibleNFTypes(observation.NFType, identity.NFType)'),
+  'legacy backfill must verify the observed candidate NF type',
+);
+assert.ok(
+  migrationIntegritySource.includes('"revision": row.Revision'),
+  'legacy backfill must be revision-bound',
+);
+assert.ok(
+  migrationIntegritySource.includes('res.MatchedCount == 0'),
+  'legacy backfill must verify the actual conditional update result',
+);
+assert.ok(
+  migrationIntegritySource.includes('mongo.IsDuplicateKeyError'),
+  'association collisions must be reported, never silently reassigned',
+);
+
+assert.ok(
+  validationSource.includes('func ValidateEffectiveTargetUpdate('),
+  'the update path must validate the effective target configuration',
+);
+assert.ok(
+  validationSource.includes('func ValidateResolvedTargetCompatibility('),
+  'resolved identity compatibility must be validated on creation',
+);
+
 assert.ok(proberSource.includes('http.ErrUseLastResponse') || proberSource.includes('CheckRedirect'), 'HTTP prober must reject redirects');
 assert.ok(proberSource.includes('MaxResponseBytes') || proberSource.includes('LimitReader') || proberSource.includes('maxBody'), 'HTTP prober must bound response size');
 const execSource = readFileSync(resolve(root, 'backend/internal/nfhealth/exec_command.go'), 'utf8');

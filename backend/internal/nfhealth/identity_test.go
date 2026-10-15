@@ -28,7 +28,7 @@ func TestResolveTargetIdentityAcceptsInventoryOnly(t *testing.T) {
 		{"charging ocs", "charging", "ocs", NFTypeOCS, testResourceOCS},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			resolved, err := ResolveTargetIdentity(&CreateTargetRequest{
+			resolved, err := ResolveTargetIdentity(context.Background(), &CreateTargetRequest{
 				ResourceID: tc.resource,
 			}, IdentityResolvers{
 				Resource: func(_ context.Context, id string) (*ResourceProjection, error) {
@@ -55,14 +55,14 @@ func TestResolveTargetIdentityAcceptsInventoryOnly(t *testing.T) {
 }
 
 func TestResolveTargetIdentityRejectsMissingResource(t *testing.T) {
-	_, err := ResolveTargetIdentity(&CreateTargetRequest{ResourceID: testResourceEPC}, IdentityResolvers{
+	_, err := ResolveTargetIdentity(context.Background(), &CreateTargetRequest{ResourceID: testResourceEPC}, IdentityResolvers{
 		Resource: func(_ context.Context, _ string) (*ResourceProjection, error) { return nil, nil },
 	})
 	assertCode(t, err, "NF_HEALTH_RESOURCE_NOT_FOUND")
 }
 
 func TestResolveTargetIdentityRejectsRetiredResource(t *testing.T) {
-	_, err := ResolveTargetIdentity(&CreateTargetRequest{ResourceID: testResourceEPC}, IdentityResolvers{
+	_, err := ResolveTargetIdentity(context.Background(), &CreateTargetRequest{ResourceID: testResourceEPC}, IdentityResolvers{
 		Resource: func(_ context.Context, id string) (*ResourceProjection, error) {
 			return &ResourceProjection{
 				ResourceID: id, Kind: "network_function", Domain: "epc",
@@ -74,7 +74,7 @@ func TestResolveTargetIdentityRejectsRetiredResource(t *testing.T) {
 }
 
 func TestResolveTargetIdentityRejectsNonNFKind(t *testing.T) {
-	_, err := ResolveTargetIdentity(&CreateTargetRequest{ResourceID: testResourceEPC}, IdentityResolvers{
+	_, err := ResolveTargetIdentity(context.Background(), &CreateTargetRequest{ResourceID: testResourceEPC}, IdentityResolvers{
 		Resource: func(_ context.Context, id string) (*ResourceProjection, error) {
 			return &ResourceProjection{
 				ResourceID: id, Kind: "host", Domain: "epc",
@@ -86,7 +86,7 @@ func TestResolveTargetIdentityRejectsNonNFKind(t *testing.T) {
 }
 
 func TestResolveTargetIdentityRejectsUnsupportedDomain(t *testing.T) {
-	_, err := ResolveTargetIdentity(&CreateTargetRequest{ResourceID: testResourceEPC}, IdentityResolvers{
+	_, err := ResolveTargetIdentity(context.Background(), &CreateTargetRequest{ResourceID: testResourceEPC}, IdentityResolvers{
 		Resource: func(_ context.Context, id string) (*ResourceProjection, error) {
 			return &ResourceProjection{
 				ResourceID: id, Kind: "network_function", Domain: "platform",
@@ -98,7 +98,7 @@ func TestResolveTargetIdentityRejectsUnsupportedDomain(t *testing.T) {
 }
 
 func TestResolveTargetIdentityRejectsDomainTypeMismatch(t *testing.T) {
-	_, err := ResolveTargetIdentity(&CreateTargetRequest{ResourceID: testResourceEPC}, IdentityResolvers{
+	_, err := ResolveTargetIdentity(context.Background(), &CreateTargetRequest{ResourceID: testResourceEPC}, IdentityResolvers{
 		Resource: func(_ context.Context, id string) (*ResourceProjection, error) {
 			return &ResourceProjection{
 				ResourceID: id, Kind: "network_function", Domain: "epc",
@@ -111,7 +111,7 @@ func TestResolveTargetIdentityRejectsDomainTypeMismatch(t *testing.T) {
 
 func TestResolveTargetIdentityRejectsUnresolvedNFType(t *testing.T) {
 	for _, role := range []string{"", "router", "vendor-x", "some gnb thing"} {
-		_, err := ResolveTargetIdentity(&CreateTargetRequest{ResourceID: testResourceEPC}, IdentityResolvers{
+		_, err := ResolveTargetIdentity(context.Background(), &CreateTargetRequest{ResourceID: testResourceEPC}, IdentityResolvers{
 			Resource: func(_ context.Context, id string) (*ResourceProjection, error) {
 				return &ResourceProjection{
 					ResourceID: id, Kind: "network_function", Domain: "epc",
@@ -124,13 +124,13 @@ func TestResolveTargetIdentityRejectsUnresolvedNFType(t *testing.T) {
 }
 
 func TestResolveTargetIdentityRequiresOneIdentity(t *testing.T) {
-	_, err := ResolveTargetIdentity(&CreateTargetRequest{}, IdentityResolvers{})
+	_, err := ResolveTargetIdentity(context.Background(), &CreateTargetRequest{}, IdentityResolvers{})
 	assertCode(t, err, "INVALID_TARGET")
 }
 
 // Group B: Discovery compatibility.
 func TestResolveTargetIdentityAcceptsMatchingLinkedCandidate(t *testing.T) {
-	resolved, err := ResolveTargetIdentity(&CreateTargetRequest{
+	resolved, err := ResolveTargetIdentity(context.Background(), &CreateTargetRequest{
 		ResourceID:  testResource5GC,
 		CandidateID: "55555555-5555-4555-8555-555555555555",
 	}, IdentityResolvers{
@@ -156,7 +156,7 @@ func TestResolveTargetIdentityAcceptsMatchingLinkedCandidate(t *testing.T) {
 }
 
 func TestResolveTargetIdentityRejectsCandidateResourceMismatch(t *testing.T) {
-	_, err := ResolveTargetIdentity(&CreateTargetRequest{
+	_, err := ResolveTargetIdentity(context.Background(), &CreateTargetRequest{
 		ResourceID:  testResource5GC,
 		CandidateID: "55555555-5555-4555-8555-555555555555",
 	}, IdentityResolvers{
@@ -177,7 +177,7 @@ func TestResolveTargetIdentityRejectsCandidateResourceMismatch(t *testing.T) {
 }
 
 func TestResolveTargetIdentityRejectsCandidateTypeMismatch(t *testing.T) {
-	_, err := ResolveTargetIdentity(&CreateTargetRequest{
+	_, err := ResolveTargetIdentity(context.Background(), &CreateTargetRequest{
 		ResourceID:  testResource5GC,
 		CandidateID: "55555555-5555-4555-8555-555555555555",
 	}, IdentityResolvers{
@@ -198,7 +198,7 @@ func TestResolveTargetIdentityRejectsCandidateTypeMismatch(t *testing.T) {
 }
 
 func TestResolveTargetIdentityRejectsMissingCandidate(t *testing.T) {
-	_, err := ResolveTargetIdentity(&CreateTargetRequest{
+	_, err := ResolveTargetIdentity(context.Background(), &CreateTargetRequest{
 		CandidateID: "55555555-5555-4555-8555-555555555555",
 	}, IdentityResolvers{
 		Candidate: func(_ context.Context, id string) (*CandidateProjection, error) {
@@ -209,7 +209,7 @@ func TestResolveTargetIdentityRejectsMissingCandidate(t *testing.T) {
 }
 
 func TestResolveTargetIdentityCandidateOnlyAdoptsExplicitLink(t *testing.T) {
-	resolved, err := ResolveTargetIdentity(&CreateTargetRequest{
+	resolved, err := ResolveTargetIdentity(context.Background(), &CreateTargetRequest{
 		CandidateID: "55555555-5555-4555-8555-555555555555",
 	}, IdentityResolvers{
 		Resource: func(_ context.Context, id string) (*ResourceProjection, error) {
@@ -234,7 +234,7 @@ func TestResolveTargetIdentityCandidateOnlyAdoptsExplicitLink(t *testing.T) {
 }
 
 func TestResolveTargetIdentityCandidateOnlyWithoutLinkIsTransitional(t *testing.T) {
-	resolved, err := ResolveTargetIdentity(&CreateTargetRequest{
+	resolved, err := ResolveTargetIdentity(context.Background(), &CreateTargetRequest{
 		CandidateID: "55555555-5555-4555-8555-555555555555",
 	}, IdentityResolvers{
 		Candidate: func(_ context.Context, id string) (*CandidateProjection, error) {
@@ -250,7 +250,7 @@ func TestResolveTargetIdentityCandidateOnlyWithoutLinkIsTransitional(t *testing.
 }
 
 func TestResolveTargetIdentityCandidateOnlyWithInvalidLinkStaysLegacy(t *testing.T) {
-	resolved, err := ResolveTargetIdentity(&CreateTargetRequest{
+	resolved, err := ResolveTargetIdentity(context.Background(), &CreateTargetRequest{
 		CandidateID: "55555555-5555-4555-8555-555555555555",
 	}, IdentityResolvers{
 		Resource: func(_ context.Context, id string) (*ResourceProjection, error) {

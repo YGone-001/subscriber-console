@@ -307,6 +307,14 @@ func ValidateCreateTargetRequest(req *CreateTargetRequest, dest *DestinationAllo
 		if strings.TrimSpace(req.MetricsEndpoint) == "" {
 			return validationError("INVALID_TARGET", "metricsEndpoint is required for the http_metrics collector profile")
 		}
+		// A resource-native target that also collects local L1 process evidence
+		// must prove that evidence belongs to the same Inventory resource: an
+		// allowlisted process name alone never establishes resource ownership.
+		if strings.TrimSpace(req.ResourceID) != "" && requiresLocalProcessInspection(req.ServiceKind, req.ServiceUnit) {
+			if err := bindings.CheckBinding(req.ResourceID, req.ServiceUnit); err != nil {
+				return err
+			}
+		}
 	case CollectorProcessOnly:
 		if strings.TrimSpace(req.ResourceID) == "" {
 			return validationError("NF_HEALTH_RESOURCE_REQUIRED", "process_only requires an Inventory resource association")
@@ -325,6 +333,37 @@ func ValidateCreateTargetRequest(req *CreateTargetRequest, dest *DestinationAllo
 		}
 	}
 	return nil
+}
+
+// requiresLocalProcessInspection reports whether a configuration collects local
+// process evidence and therefore needs a server-authorized binding.
+func requiresLocalProcessInspection(serviceKind, serviceUnit string) bool {
+	if serviceKind != "process" && serviceKind != "systemd" {
+		return false
+	}
+	return strings.TrimSpace(serviceUnit) != ""
+}
+
+// ValidateResolvedTargetCompatibility verifies, after authoritative identity
+// resolution, that a configured local process inspection source corresponds to
+// the resolved Inventory resource domain and NF type.
+//
+// Legacy targets without an established Inventory association keep their
+// documented behavior and never acquire a fabricated L1 identity.
+func ValidateResolvedTargetCompatibility(req *CreateTargetRequest, resolved *ResolvedIdentity, bindings *ProcessBindingRegistry) error {
+	if req == nil || resolved == nil {
+		return nil
+	}
+	if !requiresLocalProcessInspection(req.ServiceKind, req.ServiceUnit) {
+		return nil
+	}
+	if strings.TrimSpace(resolved.ResourceID) == "" {
+		return nil
+	}
+	if err := bindings.CheckBinding(resolved.ResourceID, req.ServiceUnit); err != nil {
+		return err
+	}
+	return ValidateProcessNFTCompatibility(req.ServiceUnit, resolved.Domain, resolved.NFType)
 }
 
 // ValidateUpdateTargetRequest validates PUT /api/nf-health/targets/{targetId}.
@@ -354,6 +393,71 @@ func ValidateUpdateTargetRequest(req *UpdateTargetRequest, dest *DestinationAllo
 		return err
 	}
 	return nil
+}
+
+// ValidateEffectiveTargetUpdate validates the proposed configuration of an
+// existing monitoring target.
+//
+// Immutable identity (resourceId, candidateId, collectorProfile) comes from the
+// stored target; the mutable fields come from the request. The stored collector
+// profile governs which rules apply, so an update can never escape the
+// validation that creation enforced — in particular an existing process_only
+// target cannot lose, disable or repoint its authorized inspection source.
+//
+// All checks run before any write, so a rejected update performs zero database
+// mutations.
+func ValidateEffectiveTargetUpdate(
+	existing *HealthTarget,
+	req *UpdateTargetRequest,
+	dest *DestinationAllowlist,
+	units *ServiceUnitAllowlist,
+	bindings *ProcessBindingRegistry,
+) error {
+	if existing == nil {
+		return ErrNotFound
+	}
+	if req == nil {
+		return validationError("INVALID_TARGET", "target update body is required")
+	}
+	if err := ValidateUpdateTargetRequest(req, dest, units); err != nil {
+		return err
+	}
+	mut := req.Target
+	switch existing.CollectorProfile {
+	case CollectorProcessOnly:
+		if strings.TrimSpace(mut.MetricsEndpoint) != "" {
+			return validationError("INVALID_TARGET", "process_only must not configure an HTTP metrics endpoint")
+		}
+		if mut.ServiceKind != "process" && mut.ServiceKind != "systemd" {
+			return validationError("INVALID_SERVICE_KIND", "process_only requires a local process or systemd inspection source")
+		}
+		if strings.TrimSpace(mut.ServiceUnit) == "" {
+			return validationError("INVALID_TARGET", "serviceUnit is required for the process_only collector profile")
+		}
+		// The authorized binding is resolved against the stored, immutable
+		// resource association: a verified process can never be replaced by a
+		// different allowlisted but unrelated process.
+		if err := bindings.CheckBinding(existing.ResourceID, mut.ServiceUnit); err != nil {
+			return err
+		}
+		return ValidateProcessNFTCompatibility(mut.ServiceUnit, existing.Domain, existing.NFType)
+	case CollectorHTTPMetrics:
+		// An http_metrics target may keep or drop its metrics endpoint, but any
+		// local L1 evidence it still collects must belong to the same Inventory
+		// resource.
+		if !requiresLocalProcessInspection(mut.ServiceKind, mut.ServiceUnit) {
+			return nil
+		}
+		if strings.TrimSpace(existing.ResourceID) == "" {
+			return nil
+		}
+		if err := bindings.CheckBinding(existing.ResourceID, mut.ServiceUnit); err != nil {
+			return err
+		}
+		return ValidateProcessNFTCompatibility(mut.ServiceUnit, existing.Domain, existing.NFType)
+	default:
+		return nil
+	}
 }
 
 // ValidateLimit bounds a pagination limit query value.

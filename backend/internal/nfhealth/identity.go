@@ -202,6 +202,45 @@ func CompatibleNFTypes(a, b string) bool {
 	return na == nb
 }
 
+// ValidateProcessNFTCompatibility verifies that an approved local process
+// identity is compatible with the canonical network domain and NF type of the
+// Inventory resource it is bound to.
+//
+// A server-configured binding is not sufficient on its own: a bound process
+// must also match the resource's domain and NF type. An EPC MME resource may
+// bind to "mmed"; an IMS P-CSCF resource may bind to "pcscfd"; an MME resource
+// must never become associated with "pcscfd" and a P-CSCF resource must never
+// become associated with "amfd".
+//
+// Processes outside the bounded registry (for example an operator-authorized
+// local agent process) carry no derivable NF type: their explicit server
+// binding remains the authorization boundary and no type claim is invented.
+// Suffix stripping is used only for the documented ".service" normalization,
+// never to infer an NF type.
+func ValidateProcessNFTCompatibility(processName, domain, nfType string) error {
+	name := normalizeUnitName(processName)
+	if name == "" {
+		return validationError("NF_HEALTH_PROCESS_UNIT_REQUIRED", "a local process or service unit is required for local process inspection")
+	}
+	entry, ok := LookupNFProcessIdentity(name)
+	if !ok {
+		return nil
+	}
+	if strings.TrimSpace(domain) != "" && !NFTypePermittedInDomain(entry.NFType, domain) {
+		return validationError(
+			"NF_HEALTH_PROCESS_DOMAIN_INCOMPATIBLE",
+			"the bound local process is not permitted in the inventory resource network domain",
+		)
+	}
+	if strings.TrimSpace(nfType) != "" && !CompatibleNFTypes(entry.NFType, nfType) {
+		return validationError(
+			"NF_HEALTH_PROCESS_NF_TYPE_INCOMPATIBLE",
+			"the bound local process does not correspond to the inventory resource network function type",
+		)
+	}
+	return nil
+}
+
 // ResourceProjection is the read-only Inventory view NF Health consumes.
 // NF Health never writes Inventory documents through this projection.
 type ResourceProjection struct {
@@ -245,9 +284,13 @@ type IdentityResolvers struct {
 //   - candidateId, when supplied, must exist; when both identifiers are
 //     supplied the candidate must be explicitly linked to the same resource
 //     and its observed NF type must be compatible.
-//   - candidate-only requests adopt the candidate link when it resolves to a
-//     valid resource; otherwise they are transitional legacy_unbound targets.
-func ResolveTargetIdentity(req *CreateTargetRequest, resolvers IdentityResolvers) (*ResolvedIdentity, error) {
+//   - candidate-only requests adopt the candidate link only when the linked
+//     resource validates AND the observed candidate NF type is compatible;
+//     otherwise they stay transitional legacy_unbound targets.
+//
+// The supplied context reaches every Inventory and Discovery lookup, so request
+// cancellation stops pending resolution work.
+func ResolveTargetIdentity(ctx context.Context, req *CreateTargetRequest, resolvers IdentityResolvers) (*ResolvedIdentity, error) {
 	if req == nil {
 		return nil, validationError("INVALID_TARGET", "target request is required")
 	}
@@ -273,31 +316,19 @@ func ResolveTargetIdentity(req *CreateTargetRequest, resolvers IdentityResolvers
 		if resolvers.Resource == nil {
 			return nil, validationError("NF_HEALTH_RESOURCE_UNAVAILABLE", "inventory resolution is unavailable")
 		}
-		resource, err := resolvers.Resource(context.Background(), resourceID)
+		resource, err := resolvers.Resource(ctx, resourceID)
 		if err != nil {
 			return nil, err
 		}
 		if resource == nil {
 			return nil, validationError("NF_HEALTH_RESOURCE_NOT_FOUND", "inventory resource not found")
 		}
-		if !isMonitoredResourceKind(resource.Kind) {
-			return nil, validationError("NF_HEALTH_RESOURCE_KIND_UNSUPPORTED", "inventory resource kind does not support monitoring association")
+		identity, ierr := validateResourceIdentity(resource)
+		if ierr != nil {
+			return nil, ierr
 		}
-		if resource.LifecycleState == inventory.LifecycleRetired {
-			return nil, validationError("NF_HEALTH_RESOURCE_RETIRED", "inventory resource is retired")
-		}
-		if !isSupportedResourceDomain(resource.Domain) {
-			return nil, validationError("NF_HEALTH_RESOURCE_DOMAIN_UNSUPPORTED", "inventory resource domain does not support monitoring association")
-		}
-		nfType, ok := ResolveNFTypeFromRole(resource.Role)
-		if !ok {
-			return nil, validationError("NF_HEALTH_NF_TYPE_UNRESOLVED", "inventory resource role must declare an explicit supported network function type")
-		}
-		if !NFTypePermittedInDomain(nfType, resource.Domain) {
-			return nil, validationError("NF_HEALTH_DOMAIN_TYPE_MISMATCH", "resolved network function type is not valid for the inventory resource domain")
-		}
-		resolved.Domain = resource.Domain
-		resolved.NFType = nfType
+		resolved.Domain = identity.Domain
+		resolved.NFType = identity.NFType
 		resolved.IdentityState = IdentityInventoryAuthoritative
 	}
 
@@ -305,7 +336,7 @@ func ResolveTargetIdentity(req *CreateTargetRequest, resolvers IdentityResolvers
 		if resolvers.Candidate == nil {
 			return nil, validationError("NF_HEALTH_CANDIDATE_UNAVAILABLE", "discovery candidate resolution is unavailable")
 		}
-		candidate, err := resolvers.Candidate(context.Background(), candidateID)
+		candidate, err := resolvers.Candidate(ctx, candidateID)
 		if err != nil {
 			return nil, err
 		}
@@ -321,28 +352,37 @@ func ResolveTargetIdentity(req *CreateTargetRequest, resolvers IdentityResolvers
 			}
 		} else if linked := strings.TrimSpace(candidate.LinkedResourceID); linked != "" {
 			// Deterministic resolution through the explicit Discovery link.
-			// Never a name-, address- or type-based guess.
+			// Never a name-, address- or vendor-based guess. The linked
+			// resource must validate AND the observed candidate NF type must be
+			// explicitly compatible; a missing or mismatched observed type can
+			// never be elevated into inventory_authoritative.
 			if resolvers.Resource == nil {
 				return nil, validationError("NF_HEALTH_RESOURCE_UNAVAILABLE", "inventory resolution is unavailable")
 			}
-			resource, rerr := resolvers.Resource(context.Background(), linked)
+			resource, rerr := resolvers.Resource(ctx, linked)
 			if rerr != nil {
 				return nil, rerr
 			}
-			if resource == nil || !isMonitoredResourceKind(resource.Kind) ||
-				resource.LifecycleState == inventory.LifecycleRetired ||
-				!isSupportedResourceDomain(resource.Domain) {
+			if resource == nil {
 				resolved.IdentityState = IdentityLegacyUnbound
 				return resolved, nil
 			}
-			nfType, ok := ResolveNFTypeFromRole(resource.Role)
-			if !ok || !NFTypePermittedInDomain(nfType, resource.Domain) {
+			identity, ierr := validateResourceIdentity(resource)
+			if ierr != nil {
+				resolved.IdentityState = IdentityLegacyUnbound
+				return resolved, nil
+			}
+			if strings.TrimSpace(candidate.NFType) == "" ||
+				!CompatibleNFTypes(candidate.NFType, identity.NFType) {
+				// The association exists but its type cannot be verified as
+				// compatible. Report it as unresolved rather than adopting it,
+				// and never silently repair or unlink the Discovery record.
 				resolved.IdentityState = IdentityLegacyUnbound
 				return resolved, nil
 			}
 			resolved.ResourceID = linked
-			resolved.Domain = resource.Domain
-			resolved.NFType = nfType
+			resolved.Domain = identity.Domain
+			resolved.NFType = identity.NFType
 			resolved.IdentityState = IdentityInventoryAuthoritative
 		} else {
 			resolved.IdentityState = IdentityLegacyUnbound
@@ -350,6 +390,109 @@ func ResolveTargetIdentity(req *CreateTargetRequest, resolvers IdentityResolvers
 	}
 
 	return resolved, nil
+}
+
+// validateResourceIdentity applies the authoritative Inventory identity rules
+// shared by target creation, candidate-link adoption, legacy backfill and
+// collection-time revalidation.
+func validateResourceIdentity(resource *ResourceProjection) (*ResolvedIdentity, error) {
+	if resource == nil {
+		return nil, validationError("NF_HEALTH_RESOURCE_NOT_FOUND", "inventory resource not found")
+	}
+	if !isMonitoredResourceKind(resource.Kind) {
+		return nil, validationError("NF_HEALTH_RESOURCE_KIND_UNSUPPORTED", "inventory resource kind does not support monitoring association")
+	}
+	if resource.LifecycleState == inventory.LifecycleRetired {
+		return nil, validationError("NF_HEALTH_RESOURCE_RETIRED", "inventory resource is retired")
+	}
+	if !isSupportedResourceDomain(resource.Domain) {
+		return nil, validationError("NF_HEALTH_RESOURCE_DOMAIN_UNSUPPORTED", "inventory resource domain does not support monitoring association")
+	}
+	nfType, ok := ResolveNFTypeFromRole(resource.Role)
+	if !ok {
+		return nil, validationError("NF_HEALTH_NF_TYPE_UNRESOLVED", "inventory resource role must declare an explicit supported network function type")
+	}
+	if !NFTypePermittedInDomain(nfType, resource.Domain) {
+		return nil, validationError("NF_HEALTH_DOMAIN_TYPE_MISMATCH", "resolved network function type is not valid for the inventory resource domain")
+	}
+	return &ResolvedIdentity{
+		ResourceID:    resource.ResourceID,
+		Domain:        resource.Domain,
+		NFType:        nfType,
+		IdentityState: IdentityInventoryAuthoritative,
+	}, nil
+}
+
+// ValidateCollectionIdentity revalidates a stored target's authoritative
+// identity immediately before collection begins.
+//
+// Configuration checks performed at creation time are not sufficient: the
+// authoritative Inventory document can change afterwards (domain, role or
+// lifecycle). Collection therefore fails closed with a deterministic error
+// instead of measuring against a stale or no longer valid association.
+//
+// Properties:
+//   - read-only and bounded: at most one Inventory lookup and no scans
+//   - legacy candidate-only targets without an established Inventory resource
+//     keep their documented compatibility and are not assigned an identity
+//   - historical runs and samples are never modified, and the stored target is
+//     never silently reassigned to another resource
+func ValidateCollectionIdentity(
+	ctx context.Context,
+	target *HealthTarget,
+	resolver func(ctx context.Context, resourceID string) (*ResourceProjection, error),
+	bindings *ProcessBindingRegistry,
+) error {
+	if target == nil {
+		return ErrNotFound
+	}
+	resourceID := strings.TrimSpace(target.ResourceID)
+	if resourceID == "" {
+		// No authoritative Inventory association was ever established.
+		return nil
+	}
+	if resolver == nil {
+		return validationError("NF_HEALTH_RESOURCE_UNAVAILABLE", "inventory resolution is unavailable")
+	}
+	resource, err := resolver(ctx, resourceID)
+	if err != nil {
+		return err
+	}
+	identity, ierr := validateResourceIdentity(resource)
+	if ierr != nil {
+		return ierr
+	}
+	// The stored target must still agree with the authoritative identity.
+	if stored := strings.TrimSpace(target.Domain); stored != "" && stored != identity.Domain {
+		return validationError("NF_HEALTH_TARGET_IDENTITY_MISMATCH", "stored target network domain no longer matches the inventory resource")
+	}
+	if stored := strings.TrimSpace(target.NFType); stored != "" && !CompatibleNFTypes(stored, identity.NFType) {
+		return validationError("NF_HEALTH_TARGET_IDENTITY_MISMATCH", "stored target network function type no longer matches the inventory resource")
+	}
+
+	// A configured local inspection source must remain authorized and
+	// compatible with the authoritative resource identity.
+	if requiresLocalProcessBinding(target) {
+		if err := bindings.CheckBinding(resourceID, target.ServiceUnit); err != nil {
+			return err
+		}
+		if err := ValidateProcessNFTCompatibility(target.ServiceUnit, identity.Domain, identity.NFType); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// requiresLocalProcessBinding reports whether a target configuration collects
+// local process evidence and therefore needs a server-authorized binding.
+func requiresLocalProcessBinding(target *HealthTarget) bool {
+	if target == nil {
+		return false
+	}
+	if target.ServiceKind != "process" && target.ServiceKind != "systemd" {
+		return false
+	}
+	return strings.TrimSpace(target.ServiceUnit) != ""
 }
 
 func isMonitoredResourceKind(kind string) bool {

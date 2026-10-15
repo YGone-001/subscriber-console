@@ -254,6 +254,21 @@ check(
     /NF_HEALTH_PROCESS_BINDING/.test(listSource),
   'nf_health_identity_errors=mapped',
 );
+check(
+  'NFH-UI-56',
+  /NF_HEALTH_TARGET_IDENTITY_MISMATCH/.test(listSource) &&
+    /nf_health_err_target_identity_mismatch/.test(localeEn) &&
+    /nf_health_err_target_identity_mismatch/.test(localeZh),
+  'nf_health_identity_conflict_errors=localized',
+);
+check(
+  'NFH-UI-57',
+  /NF_HEALTH_PROCESS_NF_TYPE_INCOMPATIBLE/.test(listSource) &&
+    /NF_HEALTH_PROCESS_DOMAIN_INCOMPATIBLE/.test(listSource) &&
+    /nf_health_err_process_nf_type_incompatible/.test(localeEn) &&
+    /nf_health_err_process_domain_incompatible/.test(localeZh),
+  'nf_health_process_compatibility_errors=localized',
+);
 
 let failed = 0;
 for (const item of invariants) {

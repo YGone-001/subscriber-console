@@ -524,6 +524,12 @@ function describeMutationError(
         return t('nf_health_err_candidate_resource_mismatch');
       case 'NF_HEALTH_CANDIDATE_TYPE_MISMATCH':
         return t('nf_health_err_candidate_type_mismatch');
+      case 'NF_HEALTH_TARGET_IDENTITY_MISMATCH':
+        return t('nf_health_err_target_identity_mismatch');
+      case 'NF_HEALTH_PROCESS_NF_TYPE_INCOMPATIBLE':
+        return t('nf_health_err_process_nf_type_incompatible');
+      case 'NF_HEALTH_PROCESS_DOMAIN_INCOMPATIBLE':
+        return t('nf_health_err_process_domain_incompatible');
       case 'NF_HEALTH_REVISION_CONFLICT':
         return t('nf_health_err_revision_conflict');
       case 'NF_HEALTH_TARGET_NOT_FOUND':

@@ -166,8 +166,29 @@ func writeValidation(w http.ResponseWriter, err error) {
 		status = http.StatusConflict
 	case "NF_HEALTH_RESOURCE_RETIRED":
 		status = http.StatusConflict
+	case "NF_HEALTH_TARGET_IDENTITY_MISMATCH":
+		status = http.StatusConflict
+	case "NF_HEALTH_RESOURCE_UNAVAILABLE":
+		status = http.StatusServiceUnavailable
 	}
 	response.Error(w, status, message, code)
+}
+
+// writeCollectionIdentityError maps a collection-time identity revalidation
+// failure. A stored target whose authoritative Inventory association is gone,
+// retired or no longer matching is an identity conflict (HTTP 409); a withdrawn
+// or mismatched local process binding keeps its 403 semantics.
+func writeCollectionIdentityError(w http.ResponseWriter, ve *ErrValidation) {
+	switch ve.Code {
+	case "NF_HEALTH_RESOURCE_NOT_FOUND", "NF_HEALTH_RESOURCE_RETIRED",
+		"NF_HEALTH_RESOURCE_KIND_UNSUPPORTED", "NF_HEALTH_RESOURCE_DOMAIN_UNSUPPORTED",
+		"NF_HEALTH_NF_TYPE_UNRESOLVED", "NF_HEALTH_DOMAIN_TYPE_MISMATCH",
+		"NF_HEALTH_TARGET_IDENTITY_MISMATCH":
+		response.Error(w, http.StatusConflict, ve.Message, ve.Code)
+	default:
+		// Binding and availability codes keep their contract statuses.
+		writeValidation(w, ve)
+	}
 }
 
 func (h *Handler) auditWrite(p *auth.Principal, action, targetID string, revision *int64, meta map[string]any) {
@@ -609,10 +630,17 @@ func (h *Handler) CreateTarget(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Canonical identity is resolved server-side from authoritative Inventory
-	// and Discovery documents. A client-supplied domain or NF type is never
+	// and Discovery documents using the request context, so cancellation stops
+	// pending resolution work. A client-supplied domain or NF type is never
 	// accepted: the request struct has no such fields.
-	resolved, err := ResolveTargetIdentity(&req, h.identity)
+	resolved, err := ResolveTargetIdentity(r.Context(), &req, h.identity)
 	if err != nil {
+		writeValidation(w, err)
+		return
+	}
+	// A configured local inspection source must correspond to the resolved
+	// authoritative Inventory identity.
+	if err := ValidateResolvedTargetCompatibility(&req, resolved, h.bindings); err != nil {
 		writeValidation(w, err)
 		return
 	}
@@ -658,7 +686,19 @@ func (h *Handler) UpdateTarget(w http.ResponseWriter, r *http.Request) {
 		response.BadRequest(w, err.Error(), "INVALID_REQUEST")
 		return
 	}
-	if err := ValidateUpdateTargetRequest(&req, h.dest, h.units); err != nil {
+	// The effective configuration is validated against the stored target: the
+	// immutable identity comes from storage and the stored collector profile
+	// governs which rules apply. A rejected update performs no write.
+	existing, err := h.repo.GetTarget(r.Context(), targetID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			response.Error(w, http.StatusNotFound, "NF Health target not found", "NF_HEALTH_TARGET_NOT_FOUND")
+			return
+		}
+		response.InternalError(w)
+		return
+	}
+	if err := ValidateEffectiveTargetUpdate(existing, &req, h.dest, h.units, h.bindings); err != nil {
 		writeValidation(w, err)
 		return
 	}
@@ -724,6 +764,13 @@ func (h *Handler) CollectTarget(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, ErrResourceRetired):
 			response.Error(w, http.StatusConflict, "Inventory resource is retired; monitoring history is preserved", "NF_HEALTH_RESOURCE_RETIRED")
 		default:
+			// Identity revalidation failures are deterministic contract errors,
+			// never server errors.
+			var ve *ErrValidation
+			if errors.As(err, &ve) {
+				writeCollectionIdentityError(w, ve)
+				return
+			}
 			response.InternalError(w)
 		}
 		return

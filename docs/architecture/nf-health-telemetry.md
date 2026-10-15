@@ -223,11 +223,13 @@ Identity rules:
   candidate must be explicitly linked to the same Inventory resource and its
   observed NF type must be compatible. Discovery remains read-only from NF
   Health: unlinking is never performed silently.
-- A candidate-only request adopts the candidate's explicit link when it
-  resolves to a valid resource; otherwise the created target is transitional
-  (`legacy_unbound`) and is never presented as having an authoritative
-  Inventory resource. Pre-phase candidate-only targets decode with an absent
-  identity state and are projected on read as `legacy_unresolved`.
+- A candidate-only request adopts the candidate's explicit link only when the
+  linked resource validates *and* the observed candidate NF type is explicitly
+  compatible. A missing or mismatched observed type is never elevated into
+  `inventory_authoritative`: the created target stays transitional
+  (`legacy_unbound`) and reports the association as unresolved. Pre-phase
+  candidate-only targets decode with an absent identity state and are projected
+  on read as `legacy_unresolved`.
 
 Identity states:
 
@@ -271,14 +273,38 @@ authoritative; a missing or mismatched binding fails closed
 (`NF_HEALTH_PROCESS_BINDING_MISSING` / `NF_HEALTH_PROCESS_BINDING_MISMATCH`,
 HTTP 403). Remote monitoring is reserved for a subsequent phase.
 
+A binding is necessary but not sufficient: the bound process must also be
+compatible with the Inventory resource's canonical domain and NF type
+(`NF_HEALTH_PROCESS_NF_TYPE_INCOMPATIBLE` /
+`NF_HEALTH_PROCESS_DOMAIN_INCOMPATIBLE`). An EPC MME resource may bind to
+`mmed`; an IMS P-CSCF resource may bind to `pcscfd`; an MME resource must never
+become associated with `pcscfd` and a P-CSCF resource must never become
+associated with `amfd`. Compatibility is enforced on creation, update and
+collection. A process outside the bounded registry carries no derivable NF type:
+its explicit server binding remains the authorization boundary and no type claim
+is invented. The documented `.service` normalization is preserved; suffix
+stripping is never used to infer an NF type.
+
+The same rule protects resource-native HTTP Metrics targets that also collect
+local L1 evidence: an allowlisted process name alone never establishes resource
+ownership, so such a target must hold a matching binding for its own Inventory
+resource. A pure HTTP-only target (no local inspection source) is unaffected.
+
 ### 3.1.3 Legacy association backfill
 
 `MigrateLegacyTargetResourceLinks` backfills the canonical association for
 legacy candidate-only targets whose Discovery candidate carries an explicitly
-linked, valid Inventory resource. It is explicitly invoked (never at startup),
-bounded (default 500 records), dry-run capable, idempotent, revision-safe and
-non-destructive: unmatched targets are reported and never deleted, no Inventory
-resources are fabricated, and unrelated documents are never rewritten.
+linked, valid Inventory resource. It applies the same validated relationship as
+target creation: the linked resource must validate *and* the observed candidate
+NF type must be explicitly compatible, otherwise the target is counted invalid
+and left untouched. It is explicitly invoked (never at startup), bounded
+(default 500 records), dry-run capable, idempotent, revision-safe and
+non-destructive: the conditional update is bound to the observed revision and
+must actually match before a migration is counted, unmatched targets are
+reported and never deleted, association collisions are reported as conflicts
+instead of silently reassigning identity, no Inventory resources are
+fabricated, no unrelated documents are rewritten, and historical runs and
+samples are never rewritten to claim a newly established resource identity.
 
 ### 3.2 Freshness fields
 
@@ -487,22 +513,59 @@ Unified identity error codes (all additive; creation, update and collection
 paths only):
 
 ```text
-NF_HEALTH_RESOURCE_NOT_FOUND           HTTP 400  Inventory resource missing
-NF_HEALTH_RESOURCE_KIND_UNSUPPORTED    HTTP 400  kind is not network_function(_instance)
-NF_HEALTH_RESOURCE_DOMAIN_UNSUPPORTED  HTTP 400  domain outside epc/5gc/ims/charging
-NF_HEALTH_RESOURCE_RETIRED             HTTP 409  retired resource; also blocks collection
-NF_HEALTH_NF_TYPE_UNRESOLVED           HTTP 400  Inventory role not an explicit NF type
-NF_HEALTH_DOMAIN_TYPE_MISMATCH         HTTP 400  NF type not permitted in the domain
-NF_HEALTH_CANDIDATE_RESOURCE_MISMATCH  HTTP 400  candidate linked to another resource
-NF_HEALTH_CANDIDATE_TYPE_MISMATCH      HTTP 400  candidate NF type incompatible
-NF_HEALTH_RESOURCE_REQUIRED            HTTP 400  process_only without a resource
-NF_HEALTH_PROCESS_BINDING_MISSING      HTTP 403  no server-authorized local binding
-NF_HEALTH_PROCESS_BINDING_MISMATCH     HTTP 403  unit differs from the binding
+NF_HEALTH_RESOURCE_NOT_FOUND           HTTP 400 create/update | 409 collection
+NF_HEALTH_RESOURCE_KIND_UNSUPPORTED    HTTP 400 create/update | 409 collection
+NF_HEALTH_RESOURCE_DOMAIN_UNSUPPORTED  HTTP 400 create/update | 409 collection
+NF_HEALTH_RESOURCE_RETIRED             HTTP 409 all identity paths
+NF_HEALTH_NF_TYPE_UNRESOLVED           HTTP 400 create/update | 409 collection
+NF_HEALTH_DOMAIN_TYPE_MISMATCH         HTTP 400 create/update | 409 collection
+NF_HEALTH_TARGET_IDENTITY_MISMATCH     HTTP 409 stored identity no longer matches Inventory
+NF_HEALTH_CANDIDATE_RESOURCE_MISMATCH  HTTP 400 candidate linked to another resource
+NF_HEALTH_CANDIDATE_TYPE_MISMATCH      HTTP 400 candidate NF type incompatible
+NF_HEALTH_RESOURCE_REQUIRED            HTTP 400 process_only without a resource
+NF_HEALTH_PROCESS_BINDING_MISSING      HTTP 403 no server-authorized local binding
+NF_HEALTH_PROCESS_BINDING_MISMATCH     HTTP 403 unit differs from the binding
+NF_HEALTH_PROCESS_NF_TYPE_INCOMPATIBLE HTTP 400 bound process is not the resource NF type
+NF_HEALTH_PROCESS_DOMAIN_INCOMPATIBLE  HTTP 400 bound process is not in the resource domain
+NF_HEALTH_PROCESS_UNIT_REQUIRED        HTTP 400 local inspection without a unit
+NF_HEALTH_RESOURCE_UNAVAILABLE         HTTP 503 identity resolution unavailable
 ```
 
 Expected validation failures never map to HTTP 500.
 
-### 8.2 Inventory retirement behavior
+### 8.2 Identity enforcement on every operation
+
+Authoritative resource attribution is enforced on create, update, collection
+and legacy migration, independently of client behaviour:
+
+- **Create**: strict JSON rejects `domain`, `nfType` and `identityState`; the
+  server derives them from validated Inventory metadata. A resource-native
+  target that also configures local L1 process evidence must hold a matching,
+  NF-type-compatible server binding.
+- **Update**: the stored target is loaded first and the *effective*
+  configuration is validated — immutable identity (`resourceId`, `candidateId`,
+  `collectorProfile`) comes from storage, mutable fields from the request, and
+  the stored collector profile governs the rules. An existing `process_only`
+  target can never lose, disable, repoint or mis-type its authorized inspection
+  source, and can never gain a metrics endpoint. A rejected update performs
+  zero writes.
+- **Collection**: the stored target's identity is revalidated against the
+  current authoritative Inventory resource before any measurement, on both the
+  manual and scheduled paths. Missing, retired, unsupported, re-domained,
+  re-roled or otherwise mismatching resources fail closed with a deterministic
+  error; no sample is written and no health claim is produced. A missing
+  Inventory resource is never treated as evidence that the resource is valid.
+  Legacy candidate-only targets without an established association keep their
+  documented behavior.
+- **Migration**: the backfill applies the same validated relationship as
+  creation (linked resource must validate *and* the observed candidate NF type
+  must be compatible), is revision-bound, verifies the actual conditional
+  update result, and reports association collisions instead of silently
+  reassigning identity.
+- **Read**: an identity conflict is reported, never rewritten: the stored
+  target keeps its recorded association and the history stays readable.
+
+### 8.3 Inventory retirement behavior
 
 When an Inventory resource is retired:
 

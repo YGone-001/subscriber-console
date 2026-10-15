@@ -260,17 +260,26 @@ func main() {
 			return projection, nil
 		},
 	})
-	// Retired Inventory resources block new collection while historical runs
-	// and samples remain readable evidence.
-	nfHealthCollector.SetRetiredResourceCheck(func(ctx context.Context, resourceID string) (bool, error) {
-		resource, err := inventoryRepo.GetByID(ctx, resourceID)
-		if err != nil {
-			if errors.Is(err, inventory.ErrNotFound) {
-				return false, nil
+	// Collection-time authoritative identity revalidation: missing, retired,
+	// unsupported or no-longer-matching Inventory resources fail closed, while
+	// historical runs and samples remain readable evidence.
+	nfHealthCollector.SetCollectionIdentityCheck(func(ctx context.Context, target *nfhealth.HealthTarget) error {
+		return nfhealth.ValidateCollectionIdentity(ctx, target, func(ctx context.Context, resourceID string) (*nfhealth.ResourceProjection, error) {
+			resource, err := inventoryRepo.GetByID(ctx, resourceID)
+			if err != nil {
+				if errors.Is(err, inventory.ErrNotFound) {
+					return nil, nil
+				}
+				return nil, err
 			}
-			return false, err
-		}
-		return resource.LifecycleState == inventory.LifecycleRetired, nil
+			return &nfhealth.ResourceProjection{
+				ResourceID:     resource.ResourceID,
+				Kind:           resource.Kind,
+				Domain:         resource.Domain,
+				Role:           resource.Role,
+				LifecycleState: resource.LifecycleState,
+			}, nil
+		}, nfHealthBindings)
 	})
 	nfHealthScheduler := nfhealth.NewScheduler(nfHealthRepo, nfHealthCollector)
 	nfHealthScheduler.Start(context.Background())

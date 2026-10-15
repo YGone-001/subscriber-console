@@ -42,6 +42,7 @@ func TestProcessOnlyCollectorPerformsNoHTTPRequest(t *testing.T) {
 	inspector.procRoot = root
 	// A nil prober fails the test if any HTTP request is attempted.
 	collector := NewCollector(nil, inspector, NewDestinationAllowlist(""), NewServiceUnitAllowlist("pcscfd"))
+	installPermissiveIdentityCheck(collector)
 
 	target := processOnlyTarget("80111111-1111-4111-8111-111111111111", testResourceIMS, "pcscfd")
 	result, err := collector.Collect(context.Background(), target, "operator1", false)
@@ -88,6 +89,7 @@ func TestProcessOnlyCollectorWithoutProcessIsNotHealthy(t *testing.T) {
 	inspector := NewUnitInspector(NewServiceUnitAllowlist("pcscfd"), "")
 	inspector.procRoot = root
 	collector := NewCollector(nil, inspector, NewDestinationAllowlist(""), NewServiceUnitAllowlist("pcscfd"))
+	installPermissiveIdentityCheck(collector)
 
 	target := processOnlyTarget("80222222-2222-4222-8222-222222222222", testResourceIMS, "pcscfd")
 	result, err := collector.Collect(context.Background(), target, "operator1", false)
@@ -120,6 +122,7 @@ func TestProcessOnlyWithEndpointConfiguredNeverProbes(t *testing.T) {
 	inspector := NewUnitInspector(NewServiceUnitAllowlist("pcscfd"), "")
 	inspector.procRoot = root
 	collector := NewCollector(nil, inspector, NewDestinationAllowlist(""), NewServiceUnitAllowlist("pcscfd"))
+	installPermissiveIdentityCheck(collector)
 
 	// Validation rejects this combination at the API boundary; the collector
 	// must still never open an HTTP connection if it somehow reaches here.
@@ -139,15 +142,26 @@ func TestCollectorBlocksRetiredResource(t *testing.T) {
 	inspector := NewUnitInspector(NewServiceUnitAllowlist("pcscfd"), "")
 	inspector.procRoot = root
 	collector := NewCollector(nil, inspector, NewDestinationAllowlist(""), NewServiceUnitAllowlist("pcscfd"))
-	retired := testResourceIMS
-	collector.SetRetiredResourceCheck(func(_ context.Context, resourceID string) (bool, error) {
-		return resourceID == retired, nil
+	collector.SetCollectionIdentityCheck(func(ctx context.Context, target *HealthTarget) error {
+		return ValidateCollectionIdentity(ctx, target, func(_ context.Context, resourceID string) (*ResourceProjection, error) {
+			return &ResourceProjection{
+				ResourceID: resourceID, Kind: "network_function", Domain: "ims",
+				Role: "pcscf", LifecycleState: "retired",
+			}, nil
+		}, NewProcessBindingRegistry(""))
 	})
 
 	target := processOnlyTarget("80444444-4444-4444-8444-444444444444", testResourceIMS, "pcscfd")
-	if _, err := collector.Collect(context.Background(), target, "operator1", false); err != ErrResourceRetired {
-		t.Fatalf("expected ErrResourceRetired, got %v", err)
-	}
+	_, err := collector.Collect(context.Background(), target, "operator1", false)
+	assertCode(t, err, "NF_HEALTH_RESOURCE_RETIRED")
+}
+
+// installPermissiveIdentityCheck installs a collection identity check that
+// approves the target, so collector-focused tests exercise measurement
+// behaviour rather than identity wiring. The check itself is covered by the
+// dedicated collection-identity tests.
+func installPermissiveIdentityCheck(collector *Collector) {
+	collector.SetCollectionIdentityCheck(func(_ context.Context, _ *HealthTarget) error { return nil })
 }
 
 func TestProcessOnlyValidationRules(t *testing.T) {

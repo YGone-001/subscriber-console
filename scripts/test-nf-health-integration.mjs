@@ -119,6 +119,8 @@ const RESOURCE_MISSING = '1a2b3c40-0008-4a08-8c08-0000000000e8';
 const RESOURCE_5GC_LINKED = '1a2b3c40-0009-4a09-8c09-0000000000e9';
 // IMS resource authorized for local process-only monitoring.
 const RESOURCE_IMS_PROC = '1a2b3c40-000a-4a0a-8c0a-0000000000ea';
+// Active resource with no server-authorized local process binding.
+const RESOURCE_UNBOUND = '1a2b3c40-000b-4a0b-8c0b-0000000000eb';
 
 const resourceDoc = (id, kind, domain, role, lifecycleState = 'active') => ({
   _id: id,
@@ -298,6 +300,7 @@ async function main() {
       resourceDoc(RESOURCE_NOROLE, 'network_function', 'ims', ''),
       resourceDoc(RESOURCE_5GC_LINKED, 'network_function_instance', '5gc', 'amf'),
       resourceDoc(RESOURCE_IMS_PROC, 'network_function_instance', 'ims', 'pcscf'),
+      resourceDoc(RESOURCE_UNBOUND, 'network_function_instance', '5gc', 'amf'),
     ]);
     const inventoryBaseline = await client.db(appDbName).collection('app_inventory_resources').countDocuments({});
 
@@ -339,9 +342,9 @@ async function main() {
         JWT_SECRET: JWT_SECRET_STRING,
         NF_HEALTH_ALLOWED_TARGETS: `127.0.0.1:${mockPort}`,
         NF_HEALTH_SERVICE_UNITS: 'mockd,amfd',
-        // Server-owned local bindings: only the IMS resources may monitor the
-        // local mockd process.
-        NF_HEALTH_LOCAL_PROCESS_BINDINGS: `${RESOURCE_IMS}=mockd,${RESOURCE_IMS_PROC}=mockd`,
+        // Server-owned local bindings: only these Inventory resources may
+        // monitor the local mockd process.
+        NF_HEALTH_LOCAL_PROCESS_BINDINGS: `${RESOURCE_IMS}=mockd,${RESOURCE_IMS_PROC}=mockd,${RESOURCE_EPC}=mockd`,
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -750,7 +753,7 @@ async function main() {
 
     await verifyAsync('process_only requires a server-authorized local process binding', async () => {
       const missing = await api(base, 'POST', '/api/nf-health/targets', operatorToken, {
-        resourceId: RESOURCE_EPC,
+        resourceId: RESOURCE_UNBOUND,
         name: 'unbound process target',
         collectorProfile: 'process_only',
         serviceKind: 'process',
@@ -849,6 +852,190 @@ async function main() {
       const history = await api(base, 'GET', `/api/nf-health/targets/${epcTargetId}/history`, operatorToken);
       assert.equal(history.status, 200, history.text);
       assert.ok(Array.isArray(history.json.samples));
+    });
+
+    // ---- Correction A/C/D: identity integrity across update and collection ----
+
+    await verifyAsync('resource-native HTTP target with local L1 evidence requires a binding', async () => {
+      const res = await api(base, 'POST', '/api/nf-health/targets', adminToken, {
+        resourceId: RESOURCE_5GC,
+        name: 'unbound local evidence',
+        collectorProfile: 'http_metrics',
+        metricsEndpoint: `http://127.0.0.1:${mockPort}/metrics`,
+        serviceKind: 'process',
+        serviceUnit: 'mockd',
+        collectionMode: 'manual',
+        intervalSeconds: 120,
+        enabled: true,
+      });
+      assert.equal(res.status, 403, res.text);
+      assert.equal(res.json.code, 'NF_HEALTH_PROCESS_BINDING_MISSING');
+    });
+
+    await verifyAsync('process_only update cannot repoint to an unrelated allowlisted process', async () => {
+      const detail = await api(base, 'GET', `/api/nf-health/targets/${processOnlyTargetId}`, operatorToken);
+      const revision = detail.json.target.revision;
+      const res = await api(base, 'PUT', `/api/nf-health/targets/${processOnlyTargetId}`, operatorToken, {
+        expectedRevision: revision,
+        target: {
+          name: 'P-CSCF local process',
+          serviceUnit: 'amfd',
+          serviceKind: 'process',
+          collectionMode: 'manual',
+          intervalSeconds: 120,
+          enabled: true,
+        },
+      });
+      assert.equal(res.status, 403, res.text);
+      assert.equal(res.json.code, 'NF_HEALTH_PROCESS_BINDING_MISMATCH');
+
+      // Failed validation performs zero writes.
+      const after = await api(base, 'GET', `/api/nf-health/targets/${processOnlyTargetId}`, operatorToken);
+      assert.equal(after.json.target.revision, revision, 'a rejected update must not change the revision');
+      assert.equal(after.json.target.serviceUnit, 'mockd', 'a rejected update must not change the service unit');
+    });
+
+    await verifyAsync('process_only update cannot disable its inspection source', async () => {
+      const detail = await api(base, 'GET', `/api/nf-health/targets/${processOnlyTargetId}`, operatorToken);
+      const revision = detail.json.target.revision;
+      const res = await api(base, 'PUT', `/api/nf-health/targets/${processOnlyTargetId}`, operatorToken, {
+        expectedRevision: revision,
+        target: {
+          name: 'P-CSCF local process',
+          serviceUnit: '',
+          serviceKind: 'none',
+          collectionMode: 'manual',
+          intervalSeconds: 120,
+          enabled: true,
+        },
+      });
+      assert.equal(res.status, 400, res.text);
+      assert.equal(res.json.code, 'INVALID_SERVICE_KIND');
+      const after = await api(base, 'GET', `/api/nf-health/targets/${processOnlyTargetId}`, operatorToken);
+      assert.equal(after.json.target.revision, revision);
+      assert.equal(after.json.target.serviceKind, 'process');
+    });
+
+    await verifyAsync('process_only update cannot introduce a metrics endpoint', async () => {
+      const detail = await api(base, 'GET', `/api/nf-health/targets/${processOnlyTargetId}`, operatorToken);
+      const revision = detail.json.target.revision;
+      const res = await api(base, 'PUT', `/api/nf-health/targets/${processOnlyTargetId}`, operatorToken, {
+        expectedRevision: revision,
+        target: {
+          name: 'P-CSCF local process',
+          metricsEndpoint: `http://127.0.0.1:${mockPort}/metrics`,
+          serviceUnit: 'mockd',
+          serviceKind: 'process',
+          collectionMode: 'manual',
+          intervalSeconds: 120,
+          enabled: true,
+        },
+      });
+      assert.equal(res.status, 400, res.text);
+      assert.equal(res.json.code, 'INVALID_TARGET');
+      const after = await api(base, 'GET', `/api/nf-health/targets/${processOnlyTargetId}`, operatorToken);
+      assert.equal(after.json.target.revision, revision);
+      assert.equal(after.json.target.metricsEndpoint ?? '', '');
+    });
+
+    await verifyAsync('valid process_only update keeps its authorized identity', async () => {
+      const detail = await api(base, 'GET', `/api/nf-health/targets/${processOnlyTargetId}`, operatorToken);
+      const revision = detail.json.target.revision;
+      const res = await api(base, 'PUT', `/api/nf-health/targets/${processOnlyTargetId}`, operatorToken, {
+        expectedRevision: revision,
+        target: {
+          name: 'P-CSCF local process (renamed)',
+          serviceUnit: 'mockd',
+          serviceKind: 'process',
+          collectionMode: 'manual',
+          intervalSeconds: 180,
+          enabled: true,
+        },
+      });
+      assert.equal(res.status, 200, res.text);
+      assert.equal(res.json.revision, revision + 1);
+      assert.equal(res.json.serviceUnit, 'mockd');
+      assert.equal(res.json.resourceId, RESOURCE_IMS_PROC, 'the Inventory association stays immutable');
+      assert.equal(res.json.collectorProfile, 'process_only');
+    });
+
+    await verifyAsync('identity fields are immutable through the update contract', async () => {
+      const detail = await api(base, 'GET', `/api/nf-health/targets/${processOnlyTargetId}`, operatorToken);
+      const revision = detail.json.target.revision;
+      for (const spoof of [
+        { resourceId: RESOURCE_EPC },
+        { candidateId: CANDIDATE_LINKED_5GC },
+        { collectorProfile: 'http_metrics' },
+        { domain: 'epc' },
+        { nfType: 'MME' },
+      ]) {
+        const res = await api(base, 'PUT', `/api/nf-health/targets/${processOnlyTargetId}`, operatorToken, {
+          expectedRevision: revision,
+          target: {
+            name: 'identity spoof',
+            serviceUnit: 'mockd',
+            serviceKind: 'process',
+            collectionMode: 'manual',
+            intervalSeconds: 120,
+            enabled: true,
+            ...spoof,
+          },
+        });
+        assert.equal(res.status, 400, `${JSON.stringify(spoof)} must be rejected: ${res.text}`);
+      }
+      const after = await api(base, 'GET', `/api/nf-health/targets/${processOnlyTargetId}`, operatorToken);
+      assert.equal(after.json.target.revision, revision);
+      assert.equal(after.json.target.resourceId, RESOURCE_IMS_PROC);
+      assert.equal(after.json.target.collectorProfile, 'process_only');
+    });
+
+    await verifyAsync('collection rejects a deleted Inventory resource', async () => {
+      await client.db(appDbName).collection('app_inventory_resources').deleteOne({ _id: RESOURCE_5GC });
+      const res = await api(base, 'POST', `/api/nf-health/targets/${fiveGcTargetId}/collect`, operatorToken);
+      assert.equal(res.status, 409, res.text);
+      assert.equal(res.json.code, 'NF_HEALTH_RESOURCE_NOT_FOUND');
+      const detail = await api(base, 'GET', `/api/nf-health/targets/${fiveGcTargetId}`, operatorToken);
+      assert.equal(detail.status, 200, 'the target stays readable with its history');
+      assert.equal(detail.json.target.resourceId, RESOURCE_5GC, 'identity is never silently reassigned');
+      // Restore the fixture resource so the ownership count stays meaningful.
+      await client.db(appDbName).collection('app_inventory_resources').insertOne(
+        resourceDoc(RESOURCE_5GC, 'network_function_instance', '5gc', 'amf'),
+      );
+    });
+
+    await verifyAsync('collection fails closed when the authoritative identity changed', async () => {
+      // The earlier retirement scenario left the resource retired; restore an
+      // active lifecycle and move the authoritative role so the stored NF type
+      // no longer matches.
+      await client.db(appDbName).collection('app_inventory_resources').updateOne(
+        { _id: RESOURCE_EPC },
+        { $set: { role: 'sgwc', lifecycleState: 'active' } },
+      );
+      const res = await api(base, 'POST', `/api/nf-health/targets/${epcTargetId}/collect`, operatorToken);
+      assert.equal(res.status, 409, res.text);
+      assert.equal(res.json.code, 'NF_HEALTH_TARGET_IDENTITY_MISMATCH');
+      const detail = await api(base, 'GET', `/api/nf-health/targets/${epcTargetId}`, operatorToken);
+      assert.equal(detail.json.target.nfType, 'MME', 'the stored identity is preserved, never rewritten');
+      // Restore the authoritative role.
+      await client.db(appDbName).collection('app_inventory_resources').updateOne(
+        { _id: RESOURCE_EPC },
+        { $set: { role: 'mme' } },
+      );
+    });
+
+    await verifyAsync('rejected collection never produces a falsely healthy sample', async () => {
+      await client.db(appDbName).collection('app_inventory_resources').updateOne(
+        { _id: RESOURCE_EPC },
+        { $set: { lifecycleState: 'retired' } },
+      );
+      const res = await api(base, 'POST', `/api/nf-health/targets/${epcTargetId}/collect`, operatorToken);
+      assert.equal(res.status, 409, res.text);
+      const samples = await samplesColl.find({ targetId: epcTargetId }).toArray();
+      assert.equal(samples.length, 0, 'a rejected collection must not persist any sample');
+      await client.db(appDbName).collection('app_inventory_resources').updateOne(
+        { _id: RESOURCE_EPC },
+        { $set: { lifecycleState: 'active' } },
+      );
     });
 
     // Each remaining scenario uses its own target so the per-target collection

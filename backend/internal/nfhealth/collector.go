@@ -16,10 +16,11 @@ type Collector struct {
 	units     *ServiceUnitAllowlist
 	gate      *CollectionGate
 	clock     Clock
-	// retiredCheck reports whether the Inventory resource backing a target is
-	// retired. Collection against a retired resource is blocked explicitly;
-	// historical evidence is preserved.
-	retiredCheck func(ctx context.Context, resourceID string) (bool, error)
+	// identityCheck revalidates the target's authoritative Inventory identity
+	// immediately before collection. Configuration checks performed at creation
+	// time are not sufficient: the Inventory document can change afterwards.
+	// A nil check is treated as fail-closed for resource-native targets.
+	identityCheck func(ctx context.Context, target *HealthTarget) error
 
 	mu        sync.Mutex
 	active    map[string]struct{}
@@ -66,11 +67,11 @@ func (c *Collector) SetClock(clock Clock) {
 	}
 }
 
-// SetRetiredResourceCheck installs the Inventory lifecycle check consulted
-// before any collection against a resource-native target. Intended for
-// production wiring; when unset the check is skipped.
-func (c *Collector) SetRetiredResourceCheck(fn func(ctx context.Context, resourceID string) (bool, error)) {
-	c.retiredCheck = fn
+// SetCollectionIdentityCheck installs the authoritative identity revalidation
+// consulted before any collection. It is invoked for every collection path
+// (manual and scheduled) and must fail closed on any identity inconsistency.
+func (c *Collector) SetCollectionIdentityCheck(fn func(ctx context.Context, target *HealthTarget) error) {
+	c.identityCheck = fn
 }
 
 // CollectionResult is the outcome of one bounded collection execution.
@@ -90,16 +91,15 @@ func (c *Collector) Collect(ctx context.Context, target *HealthTarget, initiated
 		return nil, ErrNotFound
 	}
 
-	// Explicit lifecycle governance: collection against a retired Inventory
-	// resource is refused. Historical runs and samples stay untouched.
-	if strings.TrimSpace(target.ResourceID) != "" && c.retiredCheck != nil {
-		retired, err := c.retiredCheck(ctx, target.ResourceID)
-		if err != nil {
+	// Fail-closed authoritative identity revalidation. Collection against a
+	// missing, retired, unsupported or no-longer-matching Inventory resource is
+	// refused before any measurement; historical evidence is preserved.
+	if c.identityCheck != nil {
+		if err := c.identityCheck(ctx, target); err != nil {
 			return nil, err
 		}
-		if retired {
-			return nil, ErrResourceRetired
-		}
+	} else if strings.TrimSpace(target.ResourceID) != "" {
+		return nil, validationError("NF_HEALTH_RESOURCE_UNAVAILABLE", "inventory identity revalidation is unavailable")
 	}
 
 	now := c.now()
