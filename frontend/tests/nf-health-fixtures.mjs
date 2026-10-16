@@ -36,6 +36,10 @@ const TS = {
 };
 
 export const RESOURCE_IDS = {
+  // Organizational parents: valid managed resources that are not network
+  // functions, used to exercise the declared hierarchy and NF population rules.
+  region: '1a2b3c40-0000-4a00-8c00-00000000f000',
+  host: '1a2b3c40-0000-4a00-8c00-00000000f00a',
   amf: '1a2b3c40-0001-4a01-8c01-00000000f001',
   smf: '1a2b3c40-0002-4a02-8c02-00000000f002',
   upf: '1a2b3c40-0003-4a03-8c03-00000000f003',
@@ -46,6 +50,36 @@ export const RESOURCE_IDS = {
 // Inventory resources backing resource-native monitoring targets. The fixture
 // serves the same shape the production Inventory read API returns.
 export const INVENTORY_RESOURCES = [
+  {
+    resourceId: RESOURCE_IDS.region,
+    schemaVersion: 1,
+    kind: 'region',
+    name: 'region-core',
+    displayName: 'Core region',
+    domain: '5gc',
+    role: '',
+    lifecycleState: 'active',
+    revision: 1,
+    createdAt: TS.t1,
+    createdBy: 'operator1',
+    updatedAt: TS.t1,
+    updatedBy: 'operator1',
+  },
+  {
+    resourceId: RESOURCE_IDS.host,
+    schemaVersion: 1,
+    kind: 'host',
+    name: 'host-core-01',
+    displayName: 'Core host 01',
+    domain: '5gc',
+    role: '',
+    lifecycleState: 'active',
+    revision: 1,
+    createdAt: TS.t1,
+    createdBy: 'operator1',
+    updatedAt: TS.t1,
+    updatedBy: 'operator1',
+  },
   {
     resourceId: RESOURCE_IDS.amf,
     schemaVersion: 1,
@@ -851,7 +885,37 @@ function handleApi(req, res, url, context) {
       lifecycleStates: ['active', 'retired'],
     },
     '/api/topology/edges': {
-      edges: [],
+      // Declared containment only: `contains` edges define the hierarchy; the
+      // dependency edge below must never be treated as containment.
+      edges: [
+        {
+          edgeId: '5e0d0000-0001-4e01-8e01-000000000001',
+          schemaVersion: 1,
+          relationshipType: 'contains',
+          fromResourceId: RESOURCE_IDS.region,
+          toResourceId: RESOURCE_IDS.host,
+          lifecycleState: 'active',
+          revision: 1,
+        },
+        {
+          edgeId: '5e0d0000-0002-4e02-8e02-000000000002',
+          schemaVersion: 1,
+          relationshipType: 'contains',
+          fromResourceId: RESOURCE_IDS.host,
+          toResourceId: RESOURCE_IDS.amf,
+          lifecycleState: 'active',
+          revision: 1,
+        },
+        {
+          edgeId: '5e0d0000-0003-4e03-8e03-000000000003',
+          schemaVersion: 1,
+          relationshipType: 'depends_on',
+          fromResourceId: RESOURCE_IDS.host,
+          toResourceId: RESOURCE_IDS.smf,
+          lifecycleState: 'active',
+          revision: 1,
+        },
+      ],
       page: page(20),
     },
   };

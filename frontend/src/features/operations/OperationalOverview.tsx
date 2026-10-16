@@ -6,12 +6,16 @@
  * projection for the loaded page. It never replaces the business analytics
  * cockpit: it is an additional section on the existing dashboard route.
  *
- * Honesty rules enforced here:
- *   - counts carry an explicit completeness marker (complete vs partial page)
- *   - a measured layer is never rendered as a healthy service
- *   - an unmonitored resource is never rendered as stopped
- *   - missing values are rendered as unavailable, never as zero
- *   - no subscriber or online-user count is derived from this data
+ * Integrity rules enforced here:
+ *   - monitoring associations are resolved by an authoritative bounded batch
+ *     lookup for exactly the loaded resource identifiers, never inferred from an
+ *     unrelated NF Health cursor page;
+ *   - an unresolved association is reported as unresolved, never as unmonitored;
+ *   - completeness is reported per source (Inventory, monitoring, telemetry);
+ *   - a measured layer is never rendered as a healthy service;
+ *   - an unmonitored resource is never rendered as stopped;
+ *   - missing values are rendered as unavailable, never as zero;
+ *   - no subscriber or online-user count is derived from this data.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -22,11 +26,14 @@ import { EmptyState, LoadingRows } from '../../components/ui/OperationFeedback';
 import {
   applyResolvedNFTypes,
   buildOperationalResources,
+  combineCompleteness,
   formatBytes,
   groupByDomain,
   memoryView,
   OPERATIONAL_DOMAINS,
   summarizeOperational,
+  type CompletenessReport,
+  type DimensionCompleteness,
   type OperationalResource,
 } from './operational-model';
 import styles from '../../styles/modules/operations.module.css';
@@ -59,14 +66,19 @@ function stateTone(state: string): string {
 function stateLabel(state: string, t: (key: string) => string): string {
   const known = [
     'healthy', 'degraded', 'unhealthy', 'unknown', 'stale',
-    'not_configured', 'not_monitored', 'fresh',
+    'not_configured', 'not_monitored', 'fresh', 'unresolved',
   ];
   if (!state) return t('ops_state_unknown');
   return known.includes(state) ? t(`ops_state_${state}`) : state;
 }
 
+function completenessLabel(value: DimensionCompleteness, t: (key: string) => string): string {
+  return t(`ops_completeness_${value}`);
+}
+
 function layerCoverage(resource: OperationalResource, t: (key: string) => string): string {
   const monitoring = resource.monitoring;
+  if (resource.association === 'unresolved') return t('ops_assoc_unresolved');
   if (!monitoring) return t('ops_layer_unmonitored');
   const parts = [
     `${t('ops_layer_l1')} ${monitoring.coverage.l1Measured ? t('ops_layer_measured') : t('ops_layer_not_configured')}`,
@@ -80,7 +92,11 @@ function ResourceRow({ resource }: { resource: OperationalResource }) {
   const { t } = useI18n();
   const monitoring = resource.monitoring;
   const memory = memoryView(monitoring);
-  const overall = monitoring ? monitoring.overallState : 'not_monitored';
+  const overall = resource.association === 'unresolved'
+    ? 'unresolved'
+    : monitoring
+      ? monitoring.overallState
+      : 'not_monitored';
 
   return (
     <li className={styles.nfRow}>
@@ -88,6 +104,7 @@ function ResourceRow({ resource }: { resource: OperationalResource }) {
         <span className={styles.nfName}>{resource.name}</span>
         <span className={styles.nfType}>{resource.typeLabel}</span>
         {resource.retired ? <span className={styles.chipRetired}>{t('ops_lifecycle_retired')}</span> : null}
+        {!resource.isNetworkFunction ? <span className={styles.chipMuted}>{t('ops_kind_non_nf')}</span> : null}
       </div>
       <div className={styles.nfRowMeta}>
         <span className={`${styles.stateBadge} ${stateTone(overall)}`} title={stateLabel(overall, t)}>
@@ -111,38 +128,84 @@ function ResourceRow({ resource }: { resource: OperationalResource }) {
 export default function OperationalOverview() {
   const { t } = useI18n();
   const resourcesRead = useRead<ResourceListPayload>(`/api/inventory/resources?limit=${OVERVIEW_LIMIT}`);
-  const targetsRead = useRead<TargetListPayload>(`/api/nf-health/targets?limit=${OVERVIEW_LIMIT}`);
+
+  // Authoritative bounded association lookup for exactly the loaded resources.
+  const resourceIds = useMemo(() => {
+    const ids = (resourcesRead.data?.resources ?? [])
+      .map((resource) => {
+        const record = (resource ?? {}) as Record<string, unknown>;
+        const value = record._id ?? record.resourceId;
+        return typeof value === 'string' ? value : '';
+      })
+      .filter(Boolean);
+    return ids;
+  }, [resourcesRead.data]);
+
+  const associationPath = resourceIds.length > 0
+    ? `/api/nf-health/targets?resourceIds=${encodeURIComponent(resourceIds.join(','))}`
+    : null;
+  const associationsRead = useRead<TargetListPayload>(associationPath);
+
   const [expanded, setExpanded] = useState<Record<string, boolean>>({ epc: true, '5gc': true });
 
   const refresh = useCallback(() => {
     void resourcesRead.mutate();
-    void targetsRead.mutate();
-  }, [resourcesRead, targetsRead]);
+    if (associationPath) void associationsRead.mutate();
+  }, [resourcesRead, associationsRead, associationPath]);
 
   // Bounded, cancellation-aware refresh: one timer, cleared on unmount, and it
   // never fires while a previous request is still in flight.
   useEffect(() => {
     const timer = window.setInterval(() => {
-      if (!resourcesRead.isValidating && !targetsRead.isValidating) refresh();
+      if (!resourcesRead.isValidating && !associationsRead.isValidating) refresh();
     }, REFRESH_INTERVAL_MS);
     return () => window.clearInterval(timer);
-  }, [refresh, resourcesRead.isValidating, targetsRead.isValidating]);
+  }, [refresh, resourcesRead.isValidating, associationsRead.isValidating]);
 
-  const sourcesComplete = !resourcesRead.error && !targetsRead.error;
-  const hasMore = Boolean(resourcesRead.data?.page?.hasMore) || Boolean(targetsRead.data?.page?.hasMore);
+  const completeness: CompletenessReport = useMemo(() => {
+    const inventory: DimensionCompleteness = resourcesRead.error
+      ? 'unavailable'
+      : resourcesRead.data
+        ? (resourcesRead.data.page?.hasMore ? 'partial' : 'complete')
+        : 'partial';
+    const monitoring: DimensionCompleteness = !resourceIds.length
+      ? (resourcesRead.error ? 'unavailable' : 'partial')
+      : associationsRead.error
+        ? 'unavailable'
+        : associationsRead.data
+          ? 'complete'
+          : 'partial';
+    const targets = associationsRead.data?.targets ?? [];
+    const telemetryFailed = targets.some((target) => {
+      const record = (target ?? {}) as Record<string, unknown>;
+      return record.statusComplete === false;
+    });
+    const telemetry: DimensionCompleteness = monitoring !== 'complete'
+      ? monitoring
+      : telemetryFailed
+        ? 'partial'
+        : 'complete';
+    // The overview renders no hierarchy, so it makes no topology claim.
+    return combineCompleteness({ inventory, monitoring, telemetry, topology: 'complete' });
+  }, [resourcesRead.data, resourcesRead.error, associationsRead.data, associationsRead.error, resourceIds.length]);
 
   const { items, groups, summary } = useMemo(() => {
-    const joined = buildOperationalResources(resourcesRead.data?.resources, targetsRead.data?.targets);
-    const enriched = applyResolvedNFTypes(joined.items, targetsRead.data?.targets);
+    const associationResolved = !associationsRead.error && Boolean(associationsRead.data);
+    const joined = buildOperationalResources(
+      resourcesRead.data?.resources,
+      associationsRead.data?.targets,
+      associationResolved,
+    );
+    const enriched = applyResolvedNFTypes(joined.items, associationsRead.data?.targets);
     return {
       items: enriched,
-      groups: groupByDomain(enriched, hasMore, sourcesComplete),
-      summary: summarizeOperational(enriched, hasMore, sourcesComplete),
+      groups: groupByDomain(enriched, completeness),
+      summary: summarizeOperational(enriched, completeness),
     };
-  }, [resourcesRead.data, targetsRead.data, hasMore, sourcesComplete]);
+  }, [resourcesRead.data, associationsRead.data, associationsRead.error, completeness]);
 
-  const loading = (resourcesRead.isLoading || targetsRead.isLoading) && items.length === 0;
-  const failed = Boolean(resourcesRead.error) && Boolean(targetsRead.error);
+  const loading = (resourcesRead.isLoading || associationsRead.isLoading) && items.length === 0;
+  const failed = Boolean(resourcesRead.error);
 
   const toggle = (domain: string) => setExpanded((current) => ({ ...current, [domain]: !current[domain] }));
 
@@ -156,8 +219,8 @@ export default function OperationalOverview() {
           <p className={styles.sectionNote}>{t('ops_overview_note')}</p>
         </div>
         <div className={styles.sectionActions}>
-          <span className={`${styles.completeness} ${summary.completeness === 'complete' ? styles.toneHealthy : styles.toneWarning}`}>
-            {summary.completeness === 'complete' ? t('ops_complete') : t('ops_partial')}
+          <span className={`${styles.completeness} ${summary.completeness.overall === 'complete' ? styles.toneHealthy : summary.completeness.overall === 'unavailable' ? styles.toneDanger : styles.toneWarning}`}>
+            {completenessLabel(summary.completeness.overall, t)}
           </span>
           <button type="button" className={styles.refresh} onClick={refresh} aria-label={t('ops_refresh')}>
             <RefreshCw size={15} /> {t('ops_refresh')}
@@ -177,7 +240,9 @@ export default function OperationalOverview() {
             <article className={styles.card}>
               <h3 className={styles.cardTitle}>{t('ops_card_population')}</h3>
               <p className={styles.cardValue}>{summary.registered}</p>
-              <p className={styles.cardHint}>{t('ops_card_population_hint')}</p>
+              <p className={styles.cardHint}>
+                {t('ops_card_population_hint', { logical: summary.logicalFunctions, instances: summary.instances })}
+              </p>
             </article>
             <article className={styles.card}>
               <h3 className={styles.cardTitle}>{t('ops_card_monitored')}</h3>
@@ -191,6 +256,11 @@ export default function OperationalOverview() {
               <h3 className={styles.cardTitle}>{t('ops_card_unmonitored')}</h3>
               <p className={styles.cardValue}>{summary.unmonitored}</p>
               <p className={styles.cardHint}>{t('ops_card_unmonitored_hint')}</p>
+            </article>
+            <article className={styles.card}>
+              <h3 className={styles.cardTitle}>{t('ops_card_unresolved')}</h3>
+              <p className={styles.cardValue}>{summary.unresolved}</p>
+              <p className={styles.cardHint}>{t('ops_card_unresolved_hint')}</p>
             </article>
             <article className={styles.card}>
               <h3 className={styles.cardTitle}>{t('ops_card_fresh')}</h3>
@@ -210,6 +280,14 @@ export default function OperationalOverview() {
               </p>
               <p className={styles.cardHint}>{t('ops_card_degraded_hint')}</p>
             </article>
+          </div>
+
+          <div className={styles.completenessStrip} role="list">
+            {(['inventory', 'monitoring', 'telemetry'] as const).map((dimension) => (
+              <span key={dimension} className={styles.completenessItem} role="listitem">
+                {t(`ops_dimension_${dimension}`)}: {completenessLabel(summary.completeness[dimension], t)}
+              </span>
+            ))}
           </div>
 
           <div className={styles.domainStrip} role="list">

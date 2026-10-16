@@ -109,54 +109,108 @@ response is never rendered as service health.
 - A resource that exists only as a Discovery candidate is not an operational
   resource and is not counted.
 
-## 7. Aggregation denominators
+## 7. Aggregation denominators and NF populations
 
 Every published count states its denominator:
 
 ```text
-registered   non-retired Inventory network resources on the loaded page
-monitored    resources with an established NF Health monitoring association
-unmonitored  managed resources without a monitoring target
-fresh        monitored resources whose latest measurement is inside the policy
-stale        monitored resources whose latest measurement is outside the policy
-unknown      monitored resources whose overall state is not a positive or
-             negative claim (unknown, stale, not_configured, unprojected)
+registered   non-retired network-function resources on the loaded page
+             (kind network_function or network_function_instance only)
+monitored    network functions with a confirmed monitoring association
+unmonitored  network functions where an authoritative lookup confirmed absence
+unresolved   network functions whose association could not be resolved
+fresh        monitored network functions whose latest measurement is inside the policy
+stale        monitored network functions whose latest measurement is outside the policy
+unknown      monitored network functions whose overall state is not a positive
+             or negative claim (unknown, stale, not_configured, unprojected)
 degraded     measured degraded evidence only
 unhealthy    measured unhealthy evidence only
 ```
 
-Freshness and overall state are orthogonal dimensions: a resource is counted once
-per dimension, so a fresh measurement with an undetermined service outcome counts
-as fresh **and** unknown, never healthy. Retired resources are excluded from
-operational counts and remain visible in the list.
+**Network-function population.** Only `network_function` and
+`network_function_instance` are network functions. `region`, `site`, `host`,
+`cluster`, `virtual_machine`, `interface`, `ip_address`, `network_slice` and every
+other Inventory kind are valid managed resources but are counted separately as
+`nonNfResources` and never inflate an NF total. Organizational parents may still
+appear in the hierarchy.
 
-## 8. Pagination and completeness
+**Logical NF versus instance.** `logicalFunctions` and `instances` are reported
+separately; the combined `registered` value is a count of managed NF records, not
+a count of running instances. Instance presence is never inferred from process
+names.
 
-Both surfaces read one bounded page per source (Inventory resources, NF Health
-targets, Topology edges). The completeness marker is explicit:
+**Unresolved versus unmonitored.** A resource may only be reported as unmonitored
+when an authoritative association lookup for that resource completed and returned
+no target. When the lookup fails, the resource is reported as `unresolved`, is
+never counted as unmonitored, and keeps its Inventory row visible.
 
-- `complete` — the loaded page is the whole filtered population and every source
-  answered;
-- `partial` — more pages exist or a source failed.
+Freshness and overall state remain orthogonal dimensions: a resource is counted
+once per dimension, so a fresh measurement with an undetermined service outcome
+counts as fresh **and** unknown, never healthy. Retired resources are excluded
+from operational counts and remain visible in the list.
 
-A partial page is never presented as a platform total, an API failure is never
-replaced by zero counters, and the table caption states the completeness of the
-rows it shows.
+## 8. Association resolution and completeness
 
-## 9. Bounded status projection
+### 8.1 Authoritative bounded association lookup
+
+`GET /api/nf-health/targets` accepts one additive, strictly validated filter:
+
+```text
+resourceIds=<uuid1>,<uuid2>,...
+```
+
+- comma-separated canonical Inventory resource UUID v4 values;
+- at least one and at most 50 identifiers (`MaxTargetResourceFilterIDs`);
+- empty entries, malformed values and oversized lists are rejected with
+  `INVALID_RESOURCE_ID` / `RESOURCE_ID_FILTER_TOO_LARGE` (HTTP 400) and are never
+  silently truncated;
+- repeated identifiers are deduplicated while preserving request order;
+- the filter is exclusive: combining it with `cursor`, `q`, `enabled` or `limit`
+  is rejected with `UNSUPPORTED_QUERY_COMBINATION` (HTTP 400), because a filter
+  that could hide a target would turn a hidden target into a false confirmed
+  absence;
+- the response is a single bounded page (`hasMore=false`, no cursor) that
+  authoritatively answers "which of these resources have a monitoring target?";
+- the lookup performs one indexed `$in` query over the existing partial unique
+  `resourceId` index — never one query per resource;
+- authentication (`core.read`), rate limiting and the response envelope are
+  unchanged, and existing callers that omit the parameter keep the previous
+  paginated behavior.
+
+A page of at most 50 Inventory resources is therefore resolvable with exactly one
+NF Health request.
+
+### 8.2 Completeness per source
+
+Completeness is tracked independently for four sources and combined only for
+display:
+
+| Dimension | Meaning |
+|---|---|
+| `inventory` | all resources of the queried population are loaded |
+| `monitoring` | every visible resource has an authoritative association result, including confirmed absence |
+| `telemetry` | every associated target has a successful latest-evidence projection |
+| `topology` | every relationship needed for the claimed hierarchy was evaluated |
+
+`complete` is declared only when every required dimension is complete;
+`unavailable` in any dimension dominates; otherwise the combined state is
+`partial`. A partial Inventory page is never presented as a platform-wide total,
+and an unavailable monitoring read is never converted into a zero monitored
+count.
+
+## 9. Bounded status projection and empty-history semantics
 
 `GET /api/nf-health/targets` previously returned an empty coverage summary, which
 would have made "nothing was measured" indistinguishable from "no evidence
 available". The list projection now carries the same latest-evidence projection
-the detail endpoint uses, computed with exactly two aggregations per page
-(one for samples, one for runs) served by the existing
-`(targetId, collectedAt)` / `(targetId, startedAt)` indexes — never one request
-or one query per target.
+the detail endpoint uses, computed with exactly two aggregations per page (one for
+samples, one for runs) served by the existing `(targetId, collectedAt)` /
+`(targetId, startedAt)` indexes — never one request or one query per target.
 
 Additive summary fields:
 
 ```text
-statusComplete     whether the latest-evidence projection was readable
+statusComplete     whether the latest-evidence projection succeeded
 overallState       server-derived, identical to the detail projection
 latestSampleAt     observation timestamp of the latest accepted sample
 layers             the latest sample's layer evidence (L1/L2/L3 states)
@@ -166,9 +220,35 @@ lastRunAt          most recent collection attempt time
 coverage           measured layers derived from the stored sample
 ```
 
-A target without a stored sample reports `coverage` all-false with an overall
-state that is never `healthy`. The response is additive: existing fields, cursor
-contracts, rate limits and authorization are unchanged.
+**Completeness describes the read, not the evidence.** A successful projection
+reports `statusComplete=true` even when the target has no stored sample yet:
+
+```text
+successful projection, no sample   statusComplete=true, coverage all-false,
+                                   overallState never healthy, latestSampleAt absent
+successful projection, sample      authoritative sample-derived state with
+                                   freshness gating
+failed projection                  statusComplete=false; coverage is unavailable
+                                   rather than falsely confirmed unmeasured
+```
+
+A newly configured target without collection history is therefore a configured,
+unmeasured target, not an infrastructure read failure. The list and detail
+endpoints agree field by field, and freshness, last successful measurement, last
+attempt, latest failed run and historical samples are preserved unchanged.
+
+### 9.1 Pagination and filter-state integrity
+
+- Changing a server-side filter (`q`, `domain`, `kind`) resets the cursor, the
+  cursor history and any tree selection that belonged to the previous query.
+- Pagination controls never navigate with a cursor from another query.
+- The client-side monitoring filter reads only the authoritative association
+  projection of the current page; it never reuses a stale projection.
+- Read requests are keyed by their full query (including the resolved resource
+  identifiers), so a stale response cannot overwrite a newer query result, and
+  the bounded Topology read is abortable on unmount or query change.
+- Manual refresh works, errors stay visible, and no unbounded retry or polling
+  loop exists.
 
 ## 10. CPU and memory measurement limits
 
@@ -188,13 +268,41 @@ contracts, rate limits and authorization are unchanged.
 - Membership uses canonical `resourceId`; process names are never tree ids.
 - Only declared Topology `contains` edges define containment. `depends_on` and
   `connects_to` are ignored for hierarchy.
+- Edges are read with bounded cursor pagination (`relationshipType=contains`,
+  200 per page, at most 3 pages). The loaded edges are kept, and the Topology
+  dimension is marked `partial` when the bound is reached, so a missing edge from
+  an incomplete page never proves that containment does not exist.
+- A failed edge read marks Topology `unavailable`; it never becomes an empty
+  authoritative graph.
 - Retired edges and edges whose endpoints are not on the loaded page are ignored.
 - Cycles are broken defensively: every resource appears at most once.
 - Resources without a parent remain visible as roots; a child whose parent is
   missing is preserved as an orphan rather than dropped.
-- When no `contains` edge exists, the surface renders a clearly labelled virtual
-  grouping by canonical domain. That grouping is a UI categorisation only and
-  never claims a physical location or a Topology edge.
+- When no `contains` edge is present, the surface renders a virtual grouping by
+  canonical domain with a label that matches the actual certainty:
+
+```text
+declared                 hierarchy from declared contains relationships
+virtual_no_containment   no declared containment exists (complete edge read)
+virtual_partial          topology read incomplete; containment may exist beyond
+                         the loaded pages
+virtual_unavailable      topology unavailable; absence of containment is not
+                         established
+```
+
+  A virtual grouping is a UI categorisation only and never claims a physical
+  location or a Topology edge.
+
+## 11.1 Monitoring read failures
+
+- A failed Inventory read keeps the error visible and renders no zero counts.
+- A failed association lookup keeps every Inventory row visible, marks the
+  monitoring dimension `unavailable`, reports the affected resources as
+  `unresolved` and preserves retry.
+- A failed latest-evidence projection marks the telemetry dimension `partial`
+  and the affected rows `statusComplete=false`, never "nothing measured".
+- A failed Topology read keeps the resources loaded so far and labels the
+  hierarchy `virtual_unavailable`.
 
 ## 12. Permission boundaries
 

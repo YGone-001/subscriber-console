@@ -82,6 +82,21 @@ export type MonitoringView = {
   resourceMetrics: MetricView[];
 };
 
+/**
+ * Inventory kinds that are themselves network functions. Every other kind is a
+ * valid managed resource but never inflates a network-function total.
+ */
+export const NETWORK_FUNCTION_KINDS = ['network_function', 'network_function_instance'] as const;
+
+/** Association resolution state for one Inventory resource. */
+export type AssociationState =
+  /** An authoritative lookup succeeded and a monitoring target exists. */
+  | 'confirmed'
+  /** An authoritative lookup succeeded and no monitoring target exists. */
+  | 'absent'
+  /** The authoritative lookup did not succeed: absence is NOT established. */
+  | 'unresolved';
+
 export type OperationalResource = {
   resourceId: string;
   name: string;
@@ -94,7 +109,13 @@ export type OperationalResource = {
   typeLabel: string;
   lifecycleState: string;
   retired: boolean;
+  /** True for network_function and network_function_instance only. */
+  isNetworkFunction: boolean;
+  /** True for network_function_instance only. */
+  isInstance: boolean;
   monitoring: MonitoringView | null;
+  /** Authoritative association state; never inferred from a cursor page. */
+  association: AssociationState;
 };
 
 function layerView(value: unknown): LayerView | null {
@@ -158,14 +179,21 @@ export function monitoringFromTarget(target: unknown): MonitoringView {
 /**
  * Joins Inventory resources with NF Health targets by canonical resourceId.
  *
- * One entry per Inventory resource. Multiple targets for one resource cannot
- * occur under the accepted uniqueness policy; if a page ever contains them the
- * enabled target wins and the entry is flagged rather than duplicated, so no NF
- * is ever counted twice.
+ * `associationResolved` states whether the authoritative association lookup for
+ * exactly these resources succeeded:
+ *   - true  -> a resource without a returned target is a *confirmed* absence;
+ *   - false -> every association is *unresolved*, because absence was never
+ *              established. An unresolved association is never reported as
+ *              unmonitored.
+ *
+ * The caller must pass the targets resolved for the same resource identifiers it
+ * passes here; a target list from an unrelated cursor page can never establish
+ * absence.
  */
 export function buildOperationalResources(
   resources: unknown,
   targets: unknown,
+  associationResolved = false,
 ): { items: OperationalResource[]; duplicateTargetResources: string[] } {
   const byResource = new Map<string, MonitoringView>();
   const duplicates = new Set<string>();
@@ -188,12 +216,18 @@ export function buildOperationalResources(
     const resourceId = str(resource._id ?? resource.resourceId);
     const monitoring = byResource.get(resourceId) ?? null;
     const lifecycleState = str(resource.lifecycleState);
+    const kind = str(resource.kind);
     const role = str(resource.role);
+    const association: AssociationState = monitoring
+      ? 'confirmed'
+      : associationResolved
+        ? 'absent'
+        : 'unresolved';
     return {
       resourceId,
       name: str(resource.name) || resourceId,
       domain: normalizeDomain(resource.domain),
-      kind: str(resource.kind),
+      kind,
       role,
       // The NF type is server-derived and applied by applyResolvedNFTypes from
       // the monitoring target; the UI never infers it from a process name.
@@ -201,7 +235,10 @@ export function buildOperationalResources(
       typeLabel: role || '-',
       lifecycleState,
       retired: lifecycleState === 'retired',
+      isNetworkFunction: (NETWORK_FUNCTION_KINDS as readonly string[]).includes(kind),
+      isInstance: kind === 'network_function_instance',
       monitoring,
+      association,
     } satisfies OperationalResource;
   });
 
@@ -223,9 +260,20 @@ export function applyResolvedNFTypes(items: OperationalResource[], targets: unkn
 }
 
 export type OperationalCounts = {
+  /** Non-retired network-function resources (logical + instance). */
   registered: number;
+  /** Of which logical network_function resources. */
+  logicalFunctions: number;
+  /** Of which network_function_instance resources. */
+  instances: number;
+  /** Non-retired managed resources that are not network functions. */
+  nonNfResources: number;
+  /** Resources with a confirmed monitoring association. */
   monitored: number;
+  /** Resources where an authoritative lookup confirmed no association. */
   unmonitored: number;
+  /** Resources whose association could not be resolved (never "unmonitored"). */
+  unresolved: number;
   fresh: number;
   stale: number;
   unknown: number;
@@ -238,11 +286,43 @@ export type OperationalCounts = {
   disabledTargets: number;
   failedLastRun: number;
   legacyUnresolved: number;
+  /** Monitored resources whose latest-evidence projection failed. */
+  telemetryUnavailable: number;
 };
 
+/** Completeness of one independent data source. */
+export type DimensionCompleteness = 'complete' | 'partial' | 'unavailable';
+
+/**
+ * Completeness is reported per source. A single boolean cannot represent several
+ * independently incomplete sources, and a partial page must never be presented
+ * as an authoritative platform total.
+ */
+export type CompletenessReport = {
+  /** All resources of the queried population are loaded. */
+  inventory: DimensionCompleteness;
+  /** Every visible resource has an authoritative association result. */
+  monitoring: DimensionCompleteness;
+  /** Every associated target has a successful latest-evidence projection. */
+  telemetry: DimensionCompleteness;
+  /** Every relationship needed for the claimed hierarchy was evaluated. */
+  topology: DimensionCompleteness;
+  /** Complete only when every required dimension is complete. */
+  overall: DimensionCompleteness;
+};
+
+export function combineCompleteness(report: Omit<CompletenessReport, 'overall'>): CompletenessReport {
+  const dimensions = [report.inventory, report.monitoring, report.telemetry, report.topology];
+  const overall: DimensionCompleteness = dimensions.includes('unavailable')
+    ? 'unavailable'
+    : dimensions.includes('partial')
+      ? 'partial'
+      : 'complete';
+  return { ...report, overall };
+}
+
 export type OperationalSummary = OperationalCounts & {
-  /** complete = the loaded page is the whole population; partial otherwise. */
-  completeness: 'complete' | 'partial';
+  completeness: CompletenessReport;
   /** Explicit denominator documentation for every ratio a caller may render. */
   denominators: {
     population: string;
@@ -255,21 +335,27 @@ export type OperationalSummary = OperationalCounts & {
  * Summarizes one loaded page of resources.
  *
  * Denominators are explicit:
- *   - population: registered, non-retired Inventory resources on the page.
- *   - monitoring: resources with an established NF Health association.
- *   - freshness: monitored resources with readable latest evidence.
- * Retired resources are excluded from operational counts and reported
- * separately, because Inventory lifecycle is not operational health.
+ *   - population: registered, non-retired network-function resources on the page
+ *     (network_function + network_function_instance); other Inventory kinds are
+ *     reported separately and never inflate the NF total.
+ *   - monitoring: network functions with a confirmed monitoring association;
+ *     unresolved associations are counted separately and are never reported as
+ *     unmonitored.
+ *   - freshness: monitored network functions whose latest evidence was read.
+ * Retired resources are excluded from operational counts.
  */
 export function summarizeOperational(
   items: OperationalResource[],
-  hasMore: boolean,
-  sourcesComplete: boolean,
+  completeness: CompletenessReport,
 ): OperationalSummary {
   const counts: OperationalCounts = {
     registered: 0,
+    logicalFunctions: 0,
+    instances: 0,
+    nonNfResources: 0,
     monitored: 0,
     unmonitored: 0,
+    unresolved: 0,
     fresh: 0,
     stale: 0,
     unknown: 0,
@@ -281,21 +367,38 @@ export function summarizeOperational(
     disabledTargets: 0,
     failedLastRun: 0,
     legacyUnresolved: 0,
+    telemetryUnavailable: 0,
   };
 
   for (const item of items) {
     if (item.retired) continue;
+    if (!item.isNetworkFunction) {
+      counts.nonNfResources += 1;
+      continue;
+    }
     counts.registered += 1;
+    if (item.isInstance) {
+      counts.instances += 1;
+    } else {
+      counts.logicalFunctions += 1;
+    }
+
     const monitoring = item.monitoring;
-    if (!monitoring) {
+    if (item.association === 'unresolved') {
+      counts.unresolved += 1;
+      continue;
+    }
+    if (item.association === 'absent' || !monitoring) {
       counts.unmonitored += 1;
       counts.notMonitored += 1;
       continue;
     }
+
     counts.monitored += 1;
     if (!monitoring.enabled) counts.disabledTargets += 1;
     if (monitoring.lastRunStatus === 'failed') counts.failedLastRun += 1;
     if (item.lifecycleState === 'legacy_unresolved') counts.legacyUnresolved += 1;
+    if (!monitoring.statusComplete) counts.telemetryUnavailable += 1;
 
     switch (monitoring.freshnessState) {
       case 'fresh':
@@ -333,11 +436,11 @@ export function summarizeOperational(
 
   return {
     ...counts,
-    completeness: hasMore || !sourcesComplete ? 'partial' : 'complete',
+    completeness,
     denominators: {
-      population: 'registered non-retired Inventory resources on the loaded page',
-      monitoring: 'resources with an established NF Health monitoring association',
-      freshness: 'monitored resources whose latest evidence could be read',
+      population: 'registered non-retired network-function resources on the loaded page',
+      monitoring: 'network functions with a confirmed monitoring association',
+      freshness: 'monitored network functions whose latest evidence was read',
     },
   };
 }
@@ -349,7 +452,7 @@ export type DomainGroupView = {
 };
 
 /** Groups resources by canonical Inventory domain (presentation grouping only). */
-export function groupByDomain(items: OperationalResource[], hasMore: boolean, sourcesComplete: boolean): DomainGroupView[] {
+export function groupByDomain(items: OperationalResource[], completeness: CompletenessReport): DomainGroupView[] {
   const groups = new Map<DomainKey, OperationalResource[]>();
   for (const item of items) {
     const bucket = groups.get(item.domain) ?? [];
@@ -362,7 +465,7 @@ export function groupByDomain(items: OperationalResource[], hasMore: boolean, so
     .map((domain) => ({
       domain,
       resources: groups.get(domain) ?? [],
-      counts: summarizeOperational(groups.get(domain) ?? [], hasMore, sourcesComplete),
+      counts: summarizeOperational(groups.get(domain) ?? [], completeness),
     }));
 }
 
@@ -395,6 +498,20 @@ export function memoryView(monitoring: MonitoringView | null): MetricView | null
   return resourceMetric(monitoring, 'process_resident_memory_bytes');
 }
 
+/** Topology relationship coverage for the hierarchy that is being rendered. */
+export type TopologyCoverage = 'complete' | 'partial' | 'unavailable';
+
+/**
+ * How the rendered hierarchy was derived. The three virtual modes are distinct
+ * because they carry different certainty: only `virtual_no_containment` may
+ * state that no declared containment exists.
+ */
+export type TreeMode =
+  | 'declared'
+  | 'virtual_no_containment'
+  | 'virtual_partial'
+  | 'virtual_unavailable';
+
 export type TreeNode = {
   id: string;
   label: string;
@@ -420,7 +537,11 @@ export type TreeNode = {
  *   - when no `contains` edge exists, a clearly labelled virtual domain grouping
  *     is returned instead of a fabricated location tree
  */
-export function buildResourceTree(items: OperationalResource[], edges: unknown): { nodes: TreeNode[]; virtual: boolean } {
+export function buildResourceTree(
+  items: OperationalResource[],
+  edges: unknown,
+  topology: TopologyCoverage = 'complete',
+): { nodes: TreeNode[]; mode: TreeMode } {
   const byId = new Map(items.map((item) => [item.resourceId, item]));
   const childrenOf = new Map<string, string[]>();
   let containsCount = 0;
@@ -440,7 +561,14 @@ export function buildResourceTree(items: OperationalResource[], edges: unknown):
   }
 
   if (containsCount === 0) {
-    return { nodes: virtualDomainNodes(items), virtual: true };
+    // Absence of containment may only be claimed when the edge read completed.
+    const mode: TreeMode =
+      topology === 'unavailable'
+        ? 'virtual_unavailable'
+        : topology === 'partial'
+          ? 'virtual_partial'
+          : 'virtual_no_containment';
+    return { nodes: virtualDomainNodes(items), mode };
   }
 
   const childIds = new Set<string>();
@@ -484,11 +612,20 @@ export function buildResourceTree(items: OperationalResource[], edges: unknown):
     const node = build(item.resourceId, new Set());
     if (node) nodes.push(node);
   }
-  return { nodes, virtual: false };
+  return { nodes, mode: 'declared' };
 }
 
 function virtualDomainNodes(items: OperationalResource[]): TreeNode[] {
-  return groupByDomain(items, false, true).map((group) => ({
+  // The virtual grouping carries no data claim of its own, so the grouping
+  // counts are computed against a complete report and only the mode label
+  // communicates the certainty of the underlying relationship read.
+  const neutral = combineCompleteness({
+    inventory: 'complete',
+    monitoring: 'complete',
+    telemetry: 'complete',
+    topology: 'complete',
+  });
+  return groupByDomain(items, neutral).map((group) => ({
     id: `virtual:${group.domain}`,
     label: group.domain,
     kind: 'domain_group',

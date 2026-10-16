@@ -11,13 +11,22 @@
  *   - NF Health  -> monitoring association, coverage, layers, freshness, metrics
  *   - Topology   -> declared `contains` relationships for the hierarchy
  *
- * Every unavailable value is rendered as an explicit unavailable state; an
- * active Inventory lifecycle is never rendered as a running process, and a
- * missing monitoring association is never rendered as stopped.
+ * Integrity rules enforced here:
+ *   - monitoring associations are resolved by an authoritative bounded batch
+ *     lookup for exactly the loaded resource identifiers;
+ *   - an unresolved association is reported as unresolved, never unmonitored;
+ *   - completeness is tracked separately for Inventory, monitoring, telemetry
+ *     and Topology;
+ *   - Topology edges are read with bounded cursor pagination, and a missing edge
+ *     on an incomplete page never claims that containment does not exist;
+ *   - server-side filter changes reset the cursor, the cursor history and any
+ *     tree selection that belonged to the previous query;
+ *   - every unavailable value is rendered as an unavailable state.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronDown, ChevronRight, RefreshCw, Search, Server, X } from 'lucide-react';
+import { getJsonWithSignal } from '../../lib/api/read-client';
 import { useRead } from '../../lib/api/use-read';
 import { useI18n } from '../../providers/I18nProvider';
 import { EmptyState, LoadingRows } from '../../components/ui/OperationFeedback';
@@ -25,28 +34,34 @@ import {
   applyResolvedNFTypes,
   buildOperationalResources,
   buildResourceTree,
+  combineCompleteness,
   cpuView,
   formatBytes,
   memoryView,
   OPERATIONAL_DOMAINS,
   treeResourceIds,
+  type CompletenessReport,
+  type DimensionCompleteness,
+  type TopologyCoverage,
   type TreeNode,
+  type TreeMode,
 } from './operational-model';
 import styles from '../../styles/modules/operations.module.css';
 
 const PAGE_LIMIT = 20;
-const EDGE_LIMIT = 200;
+const TOPOLOGY_PAGE_LIMIT = 200;
+const TOPOLOGY_MAX_PAGES = 3;
 
 type ResourceListPayload = { resources?: unknown[]; page?: { nextCursor?: string | null; hasMore?: boolean } };
 type TargetListPayload = { targets?: unknown[]; page?: { hasMore?: boolean } };
-type EdgeListPayload = { edges?: unknown[] };
+type EdgeListPayload = { edges?: unknown[]; page?: { nextCursor?: string | null; hasMore?: boolean } };
 
-type MonitoringFilter = '' | 'monitored' | 'unmonitored' | 'degraded' | 'unknown' | 'stale';
+type MonitoringFilter = '' | 'monitored' | 'unmonitored' | 'unresolved' | 'degraded' | 'unknown' | 'stale';
 
 function stateLabel(state: string, t: (key: string) => string): string {
   const known = [
     'healthy', 'degraded', 'unhealthy', 'unknown', 'stale',
-    'not_configured', 'not_monitored', 'fresh',
+    'not_configured', 'not_monitored', 'fresh', 'unresolved',
   ];
   if (!state) return t('ops_state_unknown');
   return known.includes(state) ? t(`ops_state_${state}`) : state;
@@ -65,6 +80,81 @@ function stateTone(state: string): string {
     default:
       return styles.toneUnknown;
   }
+}
+
+function completenessLabel(value: DimensionCompleteness, t: (key: string) => string): string {
+  return t(`ops_completeness_${value}`);
+}
+
+function treeModeLabel(mode: TreeMode, t: (key: string) => string): string {
+  return t(`ops_tree_mode_${mode}`);
+}
+
+/**
+ * Reads the declared `contains` relationships with bounded cursor pagination.
+ *
+ * A partial read keeps the edges it loaded, marks the coverage partial and never
+ * claims that containment does not exist. A failed read marks the coverage
+ * unavailable rather than presenting an empty authoritative graph.
+ */
+function useDeclaredContainmentEdges(enabled: boolean): {
+  edges: unknown[];
+  coverage: TopologyCoverage;
+  refresh: () => void;
+} {
+  const [edges, setEdges] = useState<unknown[]>([]);
+  const [coverage, setCoverage] = useState<TopologyCoverage>('partial');
+  const [nonce, setNonce] = useState(0);
+  const runIdRef = useRef(0);
+
+  useEffect(() => {
+    if (!enabled) return;
+    const runId = runIdRef.current + 1;
+    runIdRef.current = runId;
+    const controller = new AbortController();
+    let cancelled = false;
+
+    const load = async () => {
+      const collected: unknown[] = [];
+      let cursor: string | null = null;
+      let pages = 0;
+      let hasMore = false;
+      try {
+        do {
+          const params = new URLSearchParams();
+          params.set('relationshipType', 'contains');
+          params.set('limit', String(TOPOLOGY_PAGE_LIMIT));
+          if (cursor) params.set('cursor', cursor);
+          const payload = await getJsonWithSignal<EdgeListPayload>(
+            `/api/topology/edges?${params.toString()}`,
+            controller.signal,
+          );
+          if (cancelled || runIdRef.current !== runId) return;
+          collected.push(...(payload.edges ?? []));
+          hasMore = Boolean(payload.page?.hasMore);
+          cursor = payload.page?.nextCursor ?? null;
+          pages += 1;
+        } while (hasMore && cursor && pages < TOPOLOGY_MAX_PAGES);
+        if (cancelled || runIdRef.current !== runId) return;
+        setEdges(collected);
+        setCoverage(hasMore ? 'partial' : 'complete');
+      } catch {
+        if (cancelled || runIdRef.current !== runId) return;
+        // Keep whatever was loaded; the graph is not authoritative.
+        setEdges(collected);
+        setCoverage(collected.length > 0 ? 'partial' : 'unavailable');
+      }
+    };
+
+    void load();
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [enabled, nonce]);
+
+  const refresh = useCallback(() => setNonce((value) => value + 1), []);
+  return { edges, coverage, refresh };
 }
 
 function TreeBranch({
@@ -149,33 +239,87 @@ export default function NetworkElementView() {
   }, [search, domain, kind, cursor]);
 
   const resourcesRead = useRead<ResourceListPayload>(`/api/inventory/resources?${query}`);
-  const targetsRead = useRead<TargetListPayload>(`/api/nf-health/targets?limit=${PAGE_LIMIT}`);
-  const edgesRead = useRead<EdgeListPayload>(`/api/topology/edges?limit=${EDGE_LIMIT}`);
+
+  // Authoritative bounded association lookup for exactly the loaded resources.
+  const resourceIds = useMemo(() => {
+    const ids = (resourcesRead.data?.resources ?? [])
+      .map((resource) => {
+        const record = (resource ?? {}) as Record<string, unknown>;
+        const value = record._id ?? record.resourceId;
+        return typeof value === 'string' ? value : '';
+      })
+      .filter(Boolean);
+    return ids;
+  }, [resourcesRead.data]);
+
+  const associationPath = resourceIds.length > 0
+    ? `/api/nf-health/targets?resourceIds=${encodeURIComponent(resourceIds.join(','))}`
+    : null;
+  const associationsRead = useRead<TargetListPayload>(associationPath);
+
+  const containment = useDeclaredContainmentEdges(true);
 
   const refresh = useCallback(() => {
     void resourcesRead.mutate();
-    void targetsRead.mutate();
-    void edgesRead.mutate();
-  }, [resourcesRead, targetsRead, edgesRead]);
+    if (associationPath) void associationsRead.mutate();
+    containment.refresh();
+  }, [resourcesRead, associationsRead, associationPath, containment]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
-      if (!resourcesRead.isValidating && !targetsRead.isValidating) refresh();
+      if (!resourcesRead.isValidating && !associationsRead.isValidating) refresh();
     }, 30000);
     return () => window.clearInterval(timer);
-  }, [refresh, resourcesRead.isValidating, targetsRead.isValidating]);
+  }, [refresh, resourcesRead.isValidating, associationsRead.isValidating]);
 
-  const sourcesComplete = !resourcesRead.error && !targetsRead.error;
-  const hasMore = Boolean(resourcesRead.data?.page?.hasMore);
+  const completeness: CompletenessReport = useMemo(() => {
+    const inventory: DimensionCompleteness = resourcesRead.error
+      ? 'unavailable'
+      : resourcesRead.data
+        ? (resourcesRead.data.page?.hasMore ? 'partial' : 'complete')
+        : 'partial';
+    const monitoringDim: DimensionCompleteness = !resourceIds.length
+      ? (resourcesRead.error ? 'unavailable' : 'partial')
+      : associationsRead.error
+        ? 'unavailable'
+        : associationsRead.data
+          ? 'complete'
+          : 'partial';
+    const targets = associationsRead.data?.targets ?? [];
+    const telemetryFailed = targets.some((target) => {
+      const record = (target ?? {}) as Record<string, unknown>;
+      return record.statusComplete === false;
+    });
+    const telemetry: DimensionCompleteness = monitoringDim !== 'complete'
+      ? monitoringDim
+      : telemetryFailed
+        ? 'partial'
+        : 'complete';
+    return combineCompleteness({
+      inventory,
+      monitoring: monitoringDim,
+      telemetry,
+      topology: containment.coverage,
+    });
+  }, [
+    resourcesRead.data, resourcesRead.error,
+    associationsRead.data, associationsRead.error,
+    resourceIds.length, containment.coverage,
+  ]);
 
   const { items, tree } = useMemo(() => {
-    const joined = buildOperationalResources(resourcesRead.data?.resources, targetsRead.data?.targets);
-    const enriched = applyResolvedNFTypes(joined.items, targetsRead.data?.targets);
+    const associationResolved = !associationsRead.error && Boolean(associationsRead.data);
+    const joined = buildOperationalResources(
+      resourcesRead.data?.resources,
+      associationsRead.data?.targets,
+      associationResolved,
+    );
+    const enriched = applyResolvedNFTypes(joined.items, associationsRead.data?.targets);
     return {
       items: enriched,
-      tree: buildResourceTree(enriched, edgesRead.data?.edges),
+      tree: buildResourceTree(enriched, containment.edges, containment.coverage),
     };
-  }, [resourcesRead.data, targetsRead.data, edgesRead.data]);
+  }, [resourcesRead.data, associationsRead.data, associationsRead.error, containment.edges, containment.coverage]);
 
   const filtered = useMemo(() => {
     return items.filter((item) => {
@@ -190,8 +334,9 @@ export default function NetworkElementView() {
       if (monitoring) {
         const state = item.monitoring?.overallState ?? 'not_monitored';
         const freshness = item.monitoring?.freshnessState ?? 'not_monitored';
-        if (monitoring === 'monitored' && !item.monitoring) return false;
-        if (monitoring === 'unmonitored' && item.monitoring) return false;
+        if (monitoring === 'monitored' && item.association !== 'confirmed') return false;
+        if (monitoring === 'unmonitored' && item.association !== 'absent') return false;
+        if (monitoring === 'unresolved' && item.association !== 'unresolved') return false;
         if (monitoring === 'degraded' && state !== 'degraded' && state !== 'unhealthy') return false;
         if (monitoring === 'stale' && freshness !== 'stale') return false;
         if (monitoring === 'unknown' && !['unknown', 'stale', ''].includes(state)) return false;
@@ -201,8 +346,18 @@ export default function NetworkElementView() {
   }, [items, selectedResourceIds, kind, domain, search, monitoring]);
 
   const kinds = useMemo(() => Array.from(new Set(items.map((item) => item.kind).filter(Boolean))).sort(), [items]);
+
   const loading = resourcesRead.isLoading && items.length === 0;
   const failed = Boolean(resourcesRead.error);
+  const hasMore = Boolean(resourcesRead.data?.page?.hasMore);
+
+  /** Server-side filter changes must reset the cursor and the tree selection. */
+  const resetQueryState = useCallback(() => {
+    setCursor(undefined);
+    setCursorHistory([]);
+    setSelectedNodeId('');
+    setSelectedResourceIds(null);
+  }, []);
 
   const selectNode = (node: TreeNode) => {
     setSelectedNodeId(node.id);
@@ -240,12 +395,19 @@ export default function NetworkElementView() {
             value={search}
             placeholder={t('ops_search_placeholder')}
             onChange={(event) => {
-              setCursor(undefined);
+              resetQueryState();
               setSearch(event.target.value);
             }}
           />
           {search ? (
-            <button type="button" aria-label={t('ops_clear_search')} onClick={() => setSearch('')}>
+            <button
+              type="button"
+              aria-label={t('ops_clear_search')}
+              onClick={() => {
+                resetQueryState();
+                setSearch('');
+              }}
+            >
               <X size={14} />
             </button>
           ) : null}
@@ -253,7 +415,13 @@ export default function NetworkElementView() {
 
         <label className={styles.neFilter}>
           <span>{t('ops_filter_domain')}</span>
-          <select value={domain} onChange={(event) => { setCursor(undefined); setDomain(event.target.value); }}>
+          <select
+            value={domain}
+            onChange={(event) => {
+              resetQueryState();
+              setDomain(event.target.value);
+            }}
+          >
             <option value="">{t('ops_filter_all')}</option>
             {OPERATIONAL_DOMAINS.map((value) => (
               <option key={value} value={value}>{t(`ops_domain_${value}`)}</option>
@@ -263,7 +431,13 @@ export default function NetworkElementView() {
 
         <label className={styles.neFilter}>
           <span>{t('ops_filter_kind')}</span>
-          <select value={kind} onChange={(event) => { setCursor(undefined); setKind(event.target.value); }}>
+          <select
+            value={kind}
+            onChange={(event) => {
+              resetQueryState();
+              setKind(event.target.value);
+            }}
+          >
             <option value="">{t('ops_filter_all')}</option>
             {kinds.map((value) => (
               <option key={value} value={value}>{value}</option>
@@ -277,6 +451,7 @@ export default function NetworkElementView() {
             <option value="">{t('ops_filter_all')}</option>
             <option value="monitored">{t('ops_filter_monitored')}</option>
             <option value="unmonitored">{t('ops_filter_unmonitored')}</option>
+            <option value="unresolved">{t('ops_filter_unresolved')}</option>
             <option value="degraded">{t('ops_filter_degraded')}</option>
             <option value="stale">{t('ops_filter_stale')}</option>
             <option value="unknown">{t('ops_filter_unknown')}</option>
@@ -288,11 +463,17 @@ export default function NetworkElementView() {
         </button>
       </div>
 
+      <div className={styles.completenessStrip} role="list">
+        {(['inventory', 'monitoring', 'telemetry', 'topology'] as const).map((dimension) => (
+          <span key={dimension} className={styles.completenessItem} role="listitem">
+            {t(`ops_dimension_${dimension}`)}: {completenessLabel(completeness[dimension], t)}
+          </span>
+        ))}
+      </div>
+
       <div className={styles.neBody}>
         <nav className={styles.treePanel} aria-label={t('ops_tree_label')}>
-          <p className={styles.treeCaption}>
-            {tree.virtual ? t('ops_tree_virtual') : t('ops_tree_declared')}
-          </p>
+          <p className={styles.treeCaption}>{treeModeLabel(tree.mode, t)}</p>
           {tree.nodes.length === 0 ? (
             <p className={styles.treeEmpty}>{t('ops_tree_empty')}</p>
           ) : (
@@ -326,7 +507,7 @@ export default function NetworkElementView() {
             <div className={styles.tableScroll}>
               <table className={styles.neTable}>
                 <caption className={styles.tableCaption}>
-                  {t('ops_table_caption')} · {sourcesComplete ? t('ops_complete') : t('ops_partial')}
+                  {t('ops_table_caption')} · {completenessLabel(completeness.overall, t)}
                 </caption>
                 <thead>
                   <tr>
@@ -351,6 +532,11 @@ export default function NetworkElementView() {
                     const monitoringView = item.monitoring;
                     const cpu = cpuView(monitoringView);
                     const memory = memoryView(monitoringView);
+                    const associationState = item.association === 'unresolved'
+                      ? 'unresolved'
+                      : monitoringView
+                        ? monitoringView.overallState
+                        : 'not_monitored';
                     return (
                       <tr key={item.resourceId}>
                         <th scope="row" className={styles.cellName}>
@@ -358,11 +544,14 @@ export default function NetworkElementView() {
                         </th>
                         <td>{item.domain === 'unknown' ? t('ops_state_unknown') : t(`ops_domain_${item.domain}`)}</td>
                         <td>{item.typeLabel}</td>
-                        <td><code className={styles.chip}>{item.kind || '-'}</code></td>
+                        <td>
+                          <code className={styles.chip}>{item.kind || '-'}</code>
+                          {!item.isNetworkFunction ? <span className={styles.chipMuted}>{t('ops_kind_non_nf')}</span> : null}
+                        </td>
                         <td>{item.lifecycleState || '-'}</td>
                         <td>
-                          <span className={`${styles.stateBadge} ${stateTone(monitoringView?.overallState ?? 'not_monitored')}`}>
-                            {stateLabel(monitoringView?.overallState ?? 'not_monitored', t)}
+                          <span className={`${styles.stateBadge} ${stateTone(associationState)}`}>
+                            {stateLabel(associationState, t)}
                           </span>
                         </td>
                         <td>{monitoringView ? (monitoringView.coverage.l1Measured ? t('ops_layer_measured') : t('ops_layer_not_configured')) : t('ops_metric_unavailable')}</td>
@@ -399,9 +588,7 @@ export default function NetworkElementView() {
             </button>
           </div>
 
-          <p className={styles.footnote}>
-            {t('ops_ne_footnote')}
-          </p>
+          <p className={styles.footnote}>{t('ops_ne_footnote')}</p>
         </div>
       </div>
     </div>

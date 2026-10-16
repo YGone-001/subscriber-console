@@ -11,15 +11,33 @@ import {
   applyResolvedNFTypes,
   buildOperationalResources,
   buildResourceTree,
+  combineCompleteness,
   cpuView,
   formatBytes,
   groupByDomain,
   layerLabel,
   memoryView,
+  NETWORK_FUNCTION_KINDS,
   normalizeDomain,
   summarizeOperational,
   treeResourceIds,
+  type CompletenessReport,
+  type TopologyCoverage,
 } from '../src/features/operations/operational-model';
+
+const COMPLETE: CompletenessReport = combineCompleteness({
+  inventory: 'complete',
+  monitoring: 'complete',
+  telemetry: 'complete',
+  topology: 'complete',
+});
+
+const completeness = (
+  inventory: CompletenessReport['inventory'] = 'complete',
+  monitoring: CompletenessReport['monitoring'] = 'complete',
+  telemetry: CompletenessReport['telemetry'] = 'complete',
+  topology: CompletenessReport['topology'] = 'complete',
+): CompletenessReport => combineCompleteness({ inventory, monitoring, telemetry, topology });
 
 const resource = (
   resourceId: string,
@@ -84,9 +102,9 @@ test('operations: resources join monitoring by canonical resourceId only', () =>
 
 test('operations: a resource without monitoring stays a valid managed resource', () => {
   const resources = [resource('aaaaaaaa-0003-4a03-8c03-000000000003')];
-  const { items } = buildOperationalResources(resources, []);
+  const { items } = buildOperationalResources(resources, [], true);
   assert.equal(items[0].monitoring, null);
-  const summary = summarizeOperational(items, false, true);
+  const summary = summarizeOperational(items, COMPLETE);
   assert.equal(summary.registered, 1);
   assert.equal(summary.monitored, 0);
   assert.equal(summary.unmonitored, 1);
@@ -105,7 +123,7 @@ test('operations: duplicate targets for one resource never double-count the NF',
   assert.equal(items.length, 1, 'one entry per Inventory resource');
   assert.equal(items[0].monitoring?.targetId, 'target-enabled', 'the enabled target wins');
   assert.deepEqual(duplicateTargetResources, ['aaaaaaaa-0004-4a04-8c04-000000000004']);
-  const summary = summarizeOperational(items, false, true);
+  const summary = summarizeOperational(items, COMPLETE);
   assert.equal(summary.monitored, 1);
 });
 
@@ -115,7 +133,7 @@ test('operations: retired resources are excluded from operational counts', () =>
     resource('aaaaaaaa-0006-4a06-8c06-000000000006', { lifecycleState: 'retired' }),
   ];
   const { items } = buildOperationalResources(resources, []);
-  const summary = summarizeOperational(items, false, true);
+  const summary = summarizeOperational(items, COMPLETE);
   assert.equal(summary.registered, 1, 'retired resources are not operational population');
   assert.equal(items.filter((item) => item.retired).length, 1, 'retired resources stay visible in the list');
 });
@@ -128,7 +146,7 @@ test('operations: multiple instances are never collapsed into one NF', () => {
   ];
   const { items } = buildOperationalResources(resources, []);
   assert.equal(items.length, 3, 'logical NF and both instances stay separate');
-  const summary = summarizeOperational(items, false, true);
+  const summary = summarizeOperational(items, COMPLETE);
   assert.equal(summary.registered, 3);
 });
 
@@ -150,7 +168,7 @@ test('operations: activity-only service evidence never becomes healthy', () => {
   const resources = [resource('aaaaaaaa-000e-4a0e-8c0e-00000000000e')];
   const targets = [target('aaaaaaaa-000e-4a0e-8c0e-00000000000e')];
   const { items } = buildOperationalResources(resources, targets);
-  const summary = summarizeOperational(items, false, true);
+  const summary = summarizeOperational(items, COMPLETE);
   assert.equal(summary.healthy, 0, 'unknown overall state is not counted healthy');
   assert.equal(summary.unknown, 1);
   assert.equal(items[0].monitoring?.service?.reason, 'activity_observed');
@@ -171,7 +189,7 @@ test('operations: stale and unknown freshness are counted separately from fresh'
     target('aaaaaaaa-0011-4a11-8c11-000000000011', { freshness: { state: 'unknown', reason: 'no_accepted_measurement' } }),
   ];
   const { items } = buildOperationalResources(resources, targets);
-  const summary = summarizeOperational(items, false, true);
+  const summary = summarizeOperational(items, COMPLETE);
   // Freshness and overall state are orthogonal dimensions: each resource is
   // counted once per dimension, never conflated.
   assert.equal(summary.fresh, 1);
@@ -193,7 +211,7 @@ test('operations: disabled targets and failed runs are surfaced without claiming
     target('aaaaaaaa-0013-4a13-8c13-000000000013', { lastRunStatus: 'failed' }),
   ];
   const { items } = buildOperationalResources(resources, targets);
-  const summary = summarizeOperational(items, false, true);
+  const summary = summarizeOperational(items, COMPLETE);
   assert.equal(summary.disabledTargets, 1);
   assert.equal(summary.failedLastRun, 1);
   assert.equal(summary.degraded, 0);
@@ -203,10 +221,14 @@ test('operations: disabled targets and failed runs are surfaced without claiming
 test('operations: partial data is reported as partial, never as a platform total', () => {
   const resources = [resource('aaaaaaaa-0014-4a14-8c14-000000000014')];
   const { items } = buildOperationalResources(resources, []);
-  assert.equal(summarizeOperational(items, true, true).completeness, 'partial');
-  assert.equal(summarizeOperational(items, false, false).completeness, 'partial');
-  assert.equal(summarizeOperational(items, false, true).completeness, 'complete');
-  const summary = summarizeOperational(items, false, true);
+  assert.equal(summarizeOperational(items, completeness('partial')).completeness.overall, 'partial');
+  assert.equal(
+    summarizeOperational(items, completeness('complete', 'unavailable')).completeness.overall,
+    'unavailable',
+    'an unavailable source dominates the combined completeness',
+  );
+  assert.equal(summarizeOperational(items, COMPLETE).completeness.overall, 'complete');
+  const summary = summarizeOperational(items, COMPLETE);
   assert.ok(summary.denominators.population.includes('non-retired'));
 });
 
@@ -264,7 +286,7 @@ test('operations: hierarchy uses declared contains edges only', () => {
     { relationshipType: 'depends_on', fromResourceId: 'host-0001', toResourceId: 'nfi-0002', lifecycleState: 'active' },
   ];
   const tree = buildResourceTree(operationalItems(resources), edges);
-  assert.equal(tree.virtual, false);
+  assert.equal(tree.mode, 'declared');
   assert.equal(tree.nodes.length, 2, 'the host and the non-contained instance stay roots');
   const host = tree.nodes.find((node) => node.id === 'host-0001');
   assert.ok(host);
@@ -296,8 +318,8 @@ test('operations: no containment falls back to a labelled virtual domain groupin
     resource('aaaaaaaa-0019-4a19-8c19-000000000019'),
     resource('aaaaaaaa-001a-4a1a-8c1a-00000000001a', { domain: 'ims', role: 'pcscf' }),
   ];
-  const tree = buildResourceTree(operationalItems(resources), []);
-  assert.equal(tree.virtual, true);
+  const tree = buildResourceTree(operationalItems(resources), [], 'complete');
+  assert.equal(tree.mode, 'virtual_no_containment');
   assert.ok(tree.nodes.every((node) => node.virtual));
   assert.deepEqual(tree.nodes.map((node) => node.id).sort(), ['virtual:5gc', 'virtual:ims']);
 });
@@ -309,6 +331,120 @@ test('operations: retired edges and retired resources are ignored for containmen
   ];
   const tree = buildResourceTree(operationalItems(resources), [
     { relationshipType: 'contains', fromResourceId: 'host-0002', toResourceId: 'nfi-0003', lifecycleState: 'retired' },
-  ]);
-  assert.equal(tree.virtual, true, 'a retired edge must not establish containment');
+  ], 'complete');
+  assert.equal(tree.mode, 'virtual_no_containment', 'a retired edge must not establish containment');
+});
+
+// ---------------------------------------------------------------------------
+// Correction A/C — authoritative association and NF population.
+// ---------------------------------------------------------------------------
+
+test('operations: unresolved associations are never reported as unmonitored', () => {
+  const resources = [
+    resource('aaaaaaaa-0100-4a00-8c00-000000000100'),
+    resource('aaaaaaaa-0101-4a01-8c01-000000000101'),
+  ];
+  // The authoritative lookup failed: absence is not established for either.
+  const unresolved = buildOperationalResources(resources, [], false);
+  const unresolvedSummary = summarizeOperational(unresolved.items, completeness('complete', 'unavailable'));
+  assert.equal(unresolvedSummary.unresolved, 2);
+  assert.equal(unresolvedSummary.unmonitored, 0, 'unresolved must never become unmonitored');
+  assert.equal(unresolvedSummary.monitored, 0);
+  assert.equal(unresolved.items[0].association, 'unresolved');
+
+  // The authoritative lookup succeeded and returned nothing: absence is proven.
+  const absent = buildOperationalResources(resources, [], true);
+  const absentSummary = summarizeOperational(absent.items, COMPLETE);
+  assert.equal(absentSummary.unmonitored, 2);
+  assert.equal(absentSummary.unresolved, 0);
+  assert.equal(absent.items[0].association, 'absent');
+});
+
+test('operations: a target on another page is not needed to prove association', () => {
+  // The batch lookup returns exactly the associations for the requested ids.
+  const resources = [
+    resource('aaaaaaaa-0102-4a02-8c02-000000000102'),
+    resource('aaaaaaaa-0103-4a03-8c03-000000000103'),
+  ];
+  const targets = [target('aaaaaaaa-0102-4a02-8c02-000000000102')];
+  const { items } = buildOperationalResources(resources, targets, true);
+  const summary = summarizeOperational(items, COMPLETE);
+  assert.equal(summary.monitored, 1);
+  assert.equal(summary.unmonitored, 1, 'the resource without a returned target is a confirmed absence');
+  assert.equal(summary.unresolved, 0);
+});
+
+test('operations: only network-function kinds enter the NF population', () => {
+  const resources = [
+    resource('aaaaaaaa-0104-4a04-8c04-000000000104', { kind: 'region', role: '' }),
+    resource('aaaaaaaa-0105-4a05-8c05-000000000105', { kind: 'site', role: '' }),
+    resource('aaaaaaaa-0106-4a06-8c06-000000000106', { kind: 'host', role: '' }),
+    resource('aaaaaaaa-0107-4a07-8c07-000000000107', { kind: 'interface', role: '' }),
+    resource('aaaaaaaa-0108-4a08-8c08-000000000108', { kind: 'network_function', role: 'amf' }),
+    resource('aaaaaaaa-0109-4a09-8c09-000000000109', { kind: 'network_function_instance', role: 'amf' }),
+    resource('aaaaaaaa-010a-4a0a-8c0a-00000000010a', { kind: 'network_function_instance', role: 'amf' }),
+  ];
+  const { items } = buildOperationalResources(resources, [], true);
+  const summary = summarizeOperational(items, COMPLETE);
+  assert.equal(summary.registered, 3, 'only network_function and network_function_instance are NFs');
+  assert.equal(summary.logicalFunctions, 1);
+  assert.equal(summary.instances, 2);
+  assert.equal(summary.nonNfResources, 4, 'region, site, host and interface are reported separately');
+  assert.deepEqual([...NETWORK_FUNCTION_KINDS], ['network_function', 'network_function_instance']);
+});
+
+// ---------------------------------------------------------------------------
+// Correction B — per-source completeness.
+// ---------------------------------------------------------------------------
+
+test('operations: completeness is tracked per source and never collapsed', () => {
+  const combined = completeness('partial', 'complete', 'complete', 'partial');
+  assert.equal(combined.overall, 'partial');
+  const unavailable = completeness('complete', 'unavailable', 'complete', 'complete');
+  assert.equal(unavailable.overall, 'unavailable', 'an unavailable source dominates');
+  const all = COMPLETE;
+  assert.equal(all.overall, 'complete');
+  // Each dimension stays independently readable.
+  assert.equal(combined.inventory, 'partial');
+  assert.equal(combined.topology, 'partial');
+  assert.equal(combined.monitoring, 'complete');
+});
+
+test('operations: a failed telemetry projection is reported, not hidden', () => {
+  const resources = [resource('aaaaaaaa-010b-4a0b-8c0b-00000000010b')];
+  const targets = [target('aaaaaaaa-010b-4a0b-8c0b-00000000010b', { statusComplete: false })];
+  const { items } = buildOperationalResources(resources, targets, true);
+  const summary = summarizeOperational(items, completeness('complete', 'complete', 'partial'));
+  assert.equal(summary.telemetryUnavailable, 1);
+  assert.equal(summary.monitored, 1, 'the association itself is confirmed');
+  assert.equal(summary.completeness.overall, 'partial');
+});
+
+// ---------------------------------------------------------------------------
+// Correction D — topology completeness drives the hierarchy mode.
+// ---------------------------------------------------------------------------
+
+test('operations: topology coverage selects the correct hierarchy mode', () => {
+  const resources = [resource('aaaaaaaa-010c-4a0c-8c0c-00000000010c')];
+  const items = operationalItems(resources);
+  const cases: Array<{ coverage: TopologyCoverage; mode: string }> = [
+    { coverage: 'complete', mode: 'virtual_no_containment' },
+    { coverage: 'partial', mode: 'virtual_partial' },
+    { coverage: 'unavailable', mode: 'virtual_unavailable' },
+  ];
+  for (const entry of cases) {
+    const tree = buildResourceTree(items, [], entry.coverage);
+    assert.equal(tree.mode, entry.mode, `coverage ${entry.coverage} must map to ${entry.mode}`);
+    assert.ok(tree.nodes.every((node) => node.virtual), 'virtual nodes never claim containment');
+  }
+  // A declared edge always wins over the virtual modes.
+  const declared = buildResourceTree(
+    operationalItems([
+      resource('parent-0001', { kind: 'host' }),
+      resource('child-0001', { kind: 'network_function_instance' }),
+    ]),
+    [{ relationshipType: 'contains', fromResourceId: 'parent-0001', toResourceId: 'child-0001', lifecycleState: 'active' }],
+    'partial',
+  );
+  assert.equal(declared.mode, 'declared');
 });

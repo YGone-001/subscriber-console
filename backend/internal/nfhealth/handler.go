@@ -324,7 +324,7 @@ func (h *Handler) ListTargets(w http.ResponseWriter, r *http.Request) {
 	}
 	q := r.URL.Query()
 	for param := range q {
-		if param != "q" && param != "limit" && param != "cursor" && param != "enabled" {
+		if param != "q" && param != "limit" && param != "cursor" && param != "enabled" && param != "resourceIds" {
 			response.BadRequest(w, "unsupported query parameter: "+param, "UNSUPPORTED_QUERY_PARAMETER")
 			return
 		}
@@ -339,11 +339,38 @@ func (h *Handler) ListTargets(w http.ResponseWriter, r *http.Request) {
 		response.BadRequest(w, "enabled must be true or false", "INVALID_QUERY_PARAMETER")
 		return
 	}
+
+	// Bounded authoritative association lookup. The resource filter answers
+	// "which of these Inventory resources have a monitoring target?" and must
+	// therefore never be paginated or combined with filters that could hide a
+	// target: a hidden target would look like a confirmed absence.
+	_, resourceFilterPresent := q["resourceIds"]
+	resourceIDs, filtered, ferr := parseResourceIDFilter(q.Get("resourceIds"), resourceFilterPresent)
+	if ferr != nil {
+		writeValidation(w, ferr)
+		return
+	}
+	if filtered {
+		if q.Get("cursor") != "" || strings.TrimSpace(q.Get("q")) != "" || enabled != "" {
+			response.BadRequest(w,
+				"resourceIds cannot be combined with cursor, q or enabled",
+				"UNSUPPORTED_QUERY_COMBINATION")
+			return
+		}
+		if q.Get("limit") != "" {
+			response.BadRequest(w,
+				"resourceIds resolves the requested set in one bounded response; limit is not accepted",
+				"UNSUPPORTED_QUERY_COMBINATION")
+			return
+		}
+	}
+
 	items, next, hasMore, err := h.repo.ListTargets(r.Context(), TargetListFilter{
-		Query:   strings.TrimSpace(q.Get("q")),
-		Enabled: enabled,
-		Limit:   limit,
-		Cursor:  strings.TrimSpace(q.Get("cursor")),
+		Query:       strings.TrimSpace(q.Get("q")),
+		Enabled:     enabled,
+		Limit:       limit,
+		Cursor:      strings.TrimSpace(q.Get("cursor")),
+		ResourceIDs: resourceIDs,
 	})
 	if err != nil {
 		response.BadRequest(w, err.Error(), "INVALID_CURSOR")
@@ -370,13 +397,18 @@ func (h *Handler) ListTargets(w http.ResponseWriter, r *http.Request) {
 		}
 		if statusErr != nil {
 			// The projection failed: the page is still returned, but the
-			// status fields are explicitly incomplete.
+			// status fields are explicitly incomplete and never look like
+			// "nothing was measured".
 			summary.Coverage = CoverageSummary{}
+			summary.StatusComplete = false
 			summaries = append(summaries, summary)
 			continue
 		}
+		// The projection succeeded: a target without a stored sample is a
+		// configured target with no accepted measurement yet, not a read
+		// failure. Completeness therefore describes the read, not the evidence.
 		status, ok := statuses[target.TargetID]
-		summary.StatusComplete = ok
+		summary.StatusComplete = true
 		var layers *LayerSet
 		if ok && status.Sample != nil {
 			sample := status.Sample
@@ -400,6 +432,54 @@ func (h *Handler) ListTargets(w http.ResponseWriter, r *http.Request) {
 		Targets: summaries,
 		Page:    PageInfo{Limit: limit, NextCursor: next, HasMore: hasMore},
 	})
+}
+
+// parseResourceIDFilter validates the bounded resourceIds association lookup.
+//
+// Contract:
+//   - comma-separated canonical Inventory resource UUID v4 values;
+//   - at least one and at most MaxTargetResourceFilterIDs identifiers;
+//   - empty entries, malformed values and oversized lists are rejected (never
+//     silently truncated);
+//   - repeated identifiers are deduplicated while preserving request order.
+func parseResourceIDFilter(raw string, present bool) ([]string, bool, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		if present {
+			// An explicitly supplied empty filter is malformed, not "no filter".
+			return nil, true, validationError("INVALID_RESOURCE_ID",
+				"resourceIds must contain at least one identifier")
+		}
+		return nil, false, nil
+	}
+	parts := strings.Split(raw, ",")
+	if len(parts) > MaxTargetResourceFilterIDs {
+		return nil, true, validationError("RESOURCE_ID_FILTER_TOO_LARGE",
+			fmt.Sprintf("resourceIds accepts at most %d identifiers", MaxTargetResourceFilterIDs))
+	}
+	seen := make(map[string]struct{}, len(parts))
+	ids := make([]string, 0, len(parts))
+	for _, part := range parts {
+		id := strings.TrimSpace(part)
+		if id == "" {
+			return nil, true, validationError("INVALID_RESOURCE_ID",
+				"resourceIds must not contain empty identifiers")
+		}
+		if err := ValidateUUIDv4(id); err != nil {
+			return nil, true, validationError("INVALID_RESOURCE_ID",
+				"resourceIds must contain canonical Inventory resource UUID v4 values")
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	if len(ids) == 0 {
+		return nil, true, validationError("INVALID_RESOURCE_ID",
+			"resourceIds must contain at least one identifier")
+	}
+	return ids, true, nil
 }
 
 // resourceCategoryMetrics keeps only exporter-process measurements so a resource
@@ -463,7 +543,9 @@ func (h *Handler) GetTarget(w http.ResponseWriter, r *http.Request) {
 	// so detail and list views cannot disagree about measurement freshness.
 	resp.Target.Freshness = resp.Freshness
 	samples, _, _, serr := h.repo.ListSamples(r.Context(), SampleListFilter{TargetID: targetID, Limit: 1})
-	resp.Target.StatusComplete = true
+	// Completeness describes the read: a target with no sample history is a
+	// configured, unmeasured target, not a failed projection.
+	resp.Target.StatusComplete = serr == nil
 	if serr == nil && len(samples) > 0 {
 		latest := samples[0]
 		resp.Latest = &latest

@@ -132,6 +132,8 @@ const RESOURCE_IMS_HTTP = '1a2b3c40-000f-4a0f-8c0f-0000000000ef';
 const RESOURCE_HSS_DEGRADED = '1a2b3c40-0010-4a10-8c10-0000000000f0';
 const RESOURCE_5GC_RESOURCE_ONLY = '1a2b3c40-0011-4a11-8c11-0000000000f1';
 const RESOURCE_5GC_CORRUPT = '1a2b3c40-0012-4a12-8c12-0000000000f2';
+// Resource used for the configured-target-without-history scenario.
+const RESOURCE_5GC_NO_HISTORY = '1a2b3c40-0013-4a13-8c13-0000000000f3';
 
 const resourceDoc = (id, kind, domain, role, lifecycleState = 'active') => ({
   _id: id,
@@ -404,6 +406,7 @@ async function main() {
       resourceDoc(RESOURCE_HSS_DEGRADED, 'network_function_instance', 'epc', 'hss'),
       resourceDoc(RESOURCE_5GC_RESOURCE_ONLY, 'network_function_instance', '5gc', 'amf'),
       resourceDoc(RESOURCE_5GC_CORRUPT, 'network_function_instance', '5gc', 'smf'),
+      resourceDoc(RESOURCE_5GC_NO_HISTORY, 'network_function_instance', '5gc', 'amf'),
     ]);
     const inventoryBaseline = await client.db(appDbName).collection('app_inventory_resources').countDocuments({});
 
@@ -1311,6 +1314,100 @@ async function main() {
         assert.equal(row.coverage.l3Measured, false);
         assert.notEqual(row.overallState, 'healthy', 'an absent sample is never healthy');
       }
+    });
+
+    // ---- Authoritative bounded association lookup (resourceIds filter) ----
+
+    await verifyAsync('resourceIds resolves associations without pagination', async () => {
+      // Two resources with targets and one without: the batch lookup must return
+      // only the associated ones, and the absence of the third is authoritative.
+      const unboundResource = RESOURCE_UNBOUND;
+      const res = await api(
+        base,
+        'GET',
+        `/api/nf-health/targets?resourceIds=${RESOURCE_MME},${RESOURCE_HSS},${unboundResource}`,
+        adminToken,
+      );
+      assert.equal(res.status, 200, res.text);
+      const returned = (res.json.targets ?? []).map((row) => row.resourceId).sort();
+      assert.deepEqual(returned, [RESOURCE_MME, RESOURCE_HSS].sort(), 'only requested resources with targets are returned');
+      for (const row of res.json.targets ?? []) {
+        assert.equal(row.statusComplete, true, 'a successful projection is complete regardless of evidence');
+      }
+      assert.equal(res.json.page?.hasMore, false, 'the bounded lookup is never paginated');
+      assert.equal(res.json.page?.nextCursor ?? null, null);
+
+      // Duplicate identifiers are deduplicated, not rejected.
+      const deduped = await api(base, 'GET', `/api/nf-health/targets?resourceIds=${RESOURCE_MME},${RESOURCE_MME}`, adminToken);
+      assert.equal(deduped.status, 200, deduped.text);
+      assert.equal((deduped.json.targets ?? []).length, 1, 'a repeated identifier must not duplicate the result');
+    });
+
+    await verifyAsync('a target outside an unrelated cursor page is still resolved', async () => {
+      // Page one of the general target list does not necessarily contain the MME
+      // target; the bounded association lookup still resolves it.
+      const firstPage = await api(base, 'GET', '/api/nf-health/targets?limit=1', adminToken);
+      assert.equal(firstPage.status, 200, firstPage.text);
+      const firstPageIds = (firstPage.json.targets ?? []).map((row) => row.targetId);
+      assert.ok(!firstPageIds.includes(mmeTargetId), 'the unrelated first page must not contain the MME target');
+
+      const res = await api(base, 'GET', `/api/nf-health/targets?resourceIds=${RESOURCE_MME}`, adminToken);
+      assert.equal(res.status, 200, res.text);
+      assert.equal((res.json.targets ?? []).length, 1, 'the association is resolved by resourceId');
+      assert.equal(res.json.targets[0].targetId, mmeTargetId);
+    });
+
+    await verifyAsync('a configured target without history is not a read failure', async () => {
+      const created = await api(base, 'POST', '/api/nf-health/targets', adminToken, {
+        resourceId: RESOURCE_5GC_NO_HISTORY,
+        name: 'no history yet',
+        collectorProfile: 'http_metrics',
+        metricsEndpoint: `http://127.0.0.1:${mockPort}/resource-only`,
+        serviceKind: 'none',
+        collectionMode: 'manual',
+        intervalSeconds: 120,
+        enabled: true,
+      });
+      assert.equal(created.status, 201, created.text);
+      const res = await api(base, 'GET', `/api/nf-health/targets?resourceIds=${RESOURCE_5GC_NO_HISTORY}`, adminToken);
+      assert.equal(res.status, 200, res.text);
+      const row = (res.json.targets ?? [])[0];
+      assert.ok(row, 'the newly created target is returned');
+      assert.equal(row.statusComplete, true, 'a successful projection is complete without sample history');
+      assert.equal(row.latestSampleAt ?? '', '', 'no accepted measurement exists yet');
+      assert.equal(row.coverage.l1Measured, false, 'no layer is measured yet');
+      assert.notEqual(row.overallState, 'healthy', 'an unmeasured target is never healthy');
+
+      const detail = await api(base, 'GET', `/api/nf-health/targets/${row.targetId}`, adminToken);
+      assert.equal(detail.json.target.statusComplete, true, 'detail agrees with the list projection');
+      assert.equal(detail.json.target.coverage.l1Measured, false);
+    });
+
+    await verifyAsync('resourceIds rejects malformed, oversized and combined filters', async () => {
+      const cases = [
+        { query: 'resourceIds=not-a-uuid', code: 'INVALID_RESOURCE_ID' },
+        { query: 'resourceIds=', code: 'INVALID_RESOURCE_ID' },
+        { query: `resourceIds=${RESOURCE_MME},,${RESOURCE_HSS}`, code: 'INVALID_RESOURCE_ID' },
+        {
+          query: `resourceIds=${Array.from({ length: 51 }, (_, i) => `1a2b3c40-${String(i).padStart(4, '0')}-4a01-8c01-0000000000ff`).join(',')}`,
+          code: 'RESOURCE_ID_FILTER_TOO_LARGE',
+        },
+        { query: `resourceIds=${RESOURCE_MME}&limit=5`, code: 'UNSUPPORTED_QUERY_COMBINATION' },
+        { query: `resourceIds=${RESOURCE_MME}&cursor=abc`, code: 'UNSUPPORTED_QUERY_COMBINATION' },
+        { query: `resourceIds=${RESOURCE_MME}&q=mme`, code: 'UNSUPPORTED_QUERY_COMBINATION' },
+        { query: `resourceIds=${RESOURCE_MME}&enabled=true`, code: 'UNSUPPORTED_QUERY_COMBINATION' },
+      ];
+      for (const entry of cases) {
+        const res = await api(base, 'GET', `/api/nf-health/targets?${entry.query}`, adminToken);
+        assert.equal(res.status, 400, `${entry.query} must be rejected: ${res.text}`);
+        assert.equal(res.json.code, entry.code, `${entry.query} must report ${entry.code}`);
+      }
+      // The viewer role keeps its read permission, and an unauthenticated call
+      // stays unauthorized.
+      const anonymous = await fetch(`${base}/api/nf-health/targets?resourceIds=${RESOURCE_MME}`);
+      assert.equal(anonymous.status, 401, 'the batch lookup stays authenticated');
+      const viewer = await api(base, 'GET', `/api/nf-health/targets?resourceIds=${RESOURCE_MME}`, viewerToken);
+      assert.equal(viewer.status, 200, 'core.read still allows the bounded lookup');
     });
 
     // Each remaining scenario uses its own target so the per-target collection

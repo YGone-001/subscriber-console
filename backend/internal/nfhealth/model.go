@@ -368,7 +368,16 @@ type TargetListFilter struct {
 	Enabled string // "", "true", "false"
 	Limit   int
 	Cursor  string
+	// ResourceIDs is the bounded authoritative association lookup: when set,
+	// only targets associated with those canonical Inventory resource
+	// identifiers are returned, without pagination. The caller (the handler) is
+	// responsible for validating, deduplicating and bounding the list.
+	ResourceIDs []string
 }
+
+// MaxTargetResourceFilterIDs bounds the resourceIds association lookup. One page
+// of Inventory resources is resolvable with a single bounded request.
+const MaxTargetResourceFilterIDs = 50
 
 // RunListFilter filters collection run listings.
 type RunListFilter struct {

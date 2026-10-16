@@ -371,11 +371,15 @@ check(
 );
 check(
   'OPS-UI-06',
+  // Completeness is reported per source and stated in the UI; a partial page is
+  // never presented as an authoritative total.
   /completeness/.test(modelSource) &&
-    /ops_partial/.test(overviewSource) &&
+    /ops_completeness_/.test(overviewSource) &&
     /ops_page_partial/.test(networkSource) &&
     /ops_page_partial/.test(localeEn) &&
-    /ops_page_partial/.test(localeZh),
+    /ops_page_partial/.test(localeZh) &&
+    /ops_completeness_partial/.test(localeEn) &&
+    /ops_completeness_partial/.test(localeZh),
   'ops_pagination=honest_completeness',
 );
 check(
@@ -412,6 +416,61 @@ check(
     /clearInterval/.test(networkSource) &&
     !/WebSocket|EventSource/.test(overviewSource + networkSource),
   'ops_refresh=bounded_cancellation_aware_no_socket',
+);
+
+check(
+  'OPS-UI-11',
+  // Authoritative bounded association lookup: both surfaces resolve monitoring
+  // for exactly the loaded resources and never paginate the target list.
+  /resourceIds=\$\{encodeURIComponent/.test(overviewSource) &&
+    /resourceIds=\$\{encodeURIComponent/.test(networkSource) &&
+    !/nf-health\/targets\?[^`]*cursor=/.test(overviewSource + networkSource),
+  'ops_association=bounded_resource_id_lookup',
+);
+check(
+  'OPS-UI-12',
+  /completeness\.inventory/.test(overviewSource) === false &&
+    /completeness\[dimension\]/.test(overviewSource) &&
+    /completeness\[dimension\]/.test(networkSource) &&
+    /ops_dimension_monitoring/.test(localeEn) &&
+    /ops_dimension_topology/.test(localeZh) &&
+    /combineCompleteness/.test(modelSource),
+  'ops_completeness=per_source_dimensions',
+);
+check(
+  'OPS-UI-13',
+  // An unresolved association is a distinct state and is never counted as
+  // unmonitored.
+  /association === 'unresolved'/.test(modelSource) &&
+    /counts\.unresolved \+= 1/.test(modelSource) &&
+    /ops_card_unresolved/.test(overviewSource) &&
+    /ops_state_unresolved/.test(localeEn) &&
+    /ops_state_unresolved/.test(localeZh) &&
+    /ops_filter_unresolved/.test(networkSource),
+  'ops_unresolved=distinct_from_unmonitored',
+);
+check(
+  'OPS-UI-14',
+  // Topology is consumed with bounded cursor pagination and the three virtual
+  // modes carry distinct certainty.
+  /TOPOLOGY_MAX_PAGES/.test(networkSource) &&
+    /relationshipType', 'contains'/.test(networkSource) &&
+    /virtual_no_containment/.test(modelSource) &&
+    /virtual_partial/.test(modelSource) &&
+    /virtual_unavailable/.test(modelSource) &&
+    /ops_tree_mode_virtual_partial/.test(localeEn) &&
+    /ops_tree_mode_virtual_unavailable/.test(localeZh),
+  'ops_topology=bounded_pagination_with_distinct_modes',
+);
+check(
+  'OPS-UI-15',
+  // Server-side filter changes reset the cursor, its history and the tree
+  // selection, so a cursor from another query is never reused.
+  /resetQueryState/.test(networkSource) &&
+    /setCursorHistory\(\[\]\)/.test(networkSource) &&
+    /setSelectedNodeId\(''\)/.test(networkSource) &&
+    /getJsonWithSignal/.test(networkSource),
+  'ops_filter_state=cursor_and_selection_reset',
 );
 
 let failed = 0;

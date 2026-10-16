@@ -121,6 +121,11 @@ func (r *Repository) ListTargets(ctx context.Context, filter TargetListFilter) (
 	} else if filter.Enabled == "false" {
 		q["enabled"] = false
 	}
+	// Bounded association lookup: one indexed $in query over canonical resource
+	// identifiers, never one query per resource. The handler bounds the list.
+	if len(filter.ResourceIDs) > 0 {
+		q["resourceId"] = bson.M{"$in": filter.ResourceIDs}
+	}
 
 	cursorQuery := bson.M{"_id": 1, "updatedAt": 1}
 	opts := options.Find().SetSort(bson.D{{Key: "updatedAt", Value: -1}, {Key: "_id", Value: -1}}).SetLimit(int64(limit) + 1)
