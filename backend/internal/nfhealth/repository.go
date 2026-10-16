@@ -303,6 +303,120 @@ func (r *Repository) ListSamples(ctx context.Context, filter SampleListFilter) (
 	return paginateSamples(items, limit)
 }
 
+// BatchTargetStatus is the bounded latest-evidence projection for one page of
+// monitoring targets.
+//
+// It exists so read projections (the operational overview, the network-element
+// view) can report measured coverage and overall state for the targets they
+// display without issuing one request per target. Every field is derived from
+// the same authoritative evidence the detail projection uses, so list and detail
+// views cannot disagree.
+type BatchTargetStatus struct {
+	// Sample is the most recent accepted measurement sample, when one exists.
+	Sample *HealthSample
+	// Run is the most recent collection attempt, when one exists.
+	Run *HealthRun
+}
+
+// LatestSamplesForTargets returns the most recent sample per target for a
+// bounded set of target identifiers.
+//
+// It performs a single aggregation that is served by the
+// (targetId, collectedAt) index: no per-target query and no unbounded scan. The
+// caller is responsible for bounding len(targetIDs) to one page of results.
+func (r *Repository) LatestSamplesForTargets(ctx context.Context, targetIDs []string) (map[string]HealthSample, error) {
+	out := map[string]HealthSample{}
+	if len(targetIDs) == 0 {
+		return out, nil
+	}
+	if len(targetIDs) > MaxPageLimit {
+		targetIDs = targetIDs[:MaxPageLimit]
+	}
+	pipeline := mongo.Pipeline{
+		{{Key: "$match", Value: bson.M{"targetId": bson.M{"$in": targetIDs}}}},
+		{{Key: "$sort", Value: bson.D{{Key: "targetId", Value: 1}, {Key: "collectedAt", Value: -1}, {Key: "_id", Value: -1}}}},
+		{{Key: "$group", Value: bson.M{"_id": "$targetId", "doc": bson.M{"$first": "$$ROOT"}}}},
+	}
+	cursor, err := r.samples.Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, err
+	}
+	var rows []struct {
+		TargetID string       `bson:"_id"`
+		Doc      HealthSample `bson:"doc"`
+	}
+	if err := cursor.All(ctx, &rows); err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		out[row.TargetID] = row.Doc
+	}
+	return out, nil
+}
+
+// LatestRunsForTargets returns the most recent collection run per target for a
+// bounded set of target identifiers, using the same single-aggregation strategy
+// as LatestSamplesForTargets.
+func (r *Repository) LatestRunsForTargets(ctx context.Context, targetIDs []string) (map[string]HealthRun, error) {
+	out := map[string]HealthRun{}
+	if len(targetIDs) == 0 {
+		return out, nil
+	}
+	if len(targetIDs) > MaxPageLimit {
+		targetIDs = targetIDs[:MaxPageLimit]
+	}
+	pipeline := mongo.Pipeline{
+		{{Key: "$match", Value: bson.M{"targetId": bson.M{"$in": targetIDs}}}},
+		{{Key: "$sort", Value: bson.D{{Key: "targetId", Value: 1}, {Key: "startedAt", Value: -1}, {Key: "_id", Value: -1}}}},
+		{{Key: "$group", Value: bson.M{"_id": "$targetId", "doc": bson.M{"$first": "$$ROOT"}}}},
+	}
+	cursor, err := r.runs.Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, err
+	}
+	var rows []struct {
+		TargetID string    `bson:"_id"`
+		Doc      HealthRun `bson:"doc"`
+	}
+	if err := cursor.All(ctx, &rows); err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		out[row.TargetID] = row.Doc
+	}
+	return out, nil
+}
+
+// LatestStatusForTargets loads the bounded latest-evidence projection for one
+// page of targets with exactly two aggregations regardless of page size.
+func (r *Repository) LatestStatusForTargets(ctx context.Context, targetIDs []string) (map[string]BatchTargetStatus, error) {
+	out := map[string]BatchTargetStatus{}
+	if len(targetIDs) == 0 {
+		return out, nil
+	}
+	samples, err := r.LatestSamplesForTargets(ctx, targetIDs)
+	if err != nil {
+		return nil, err
+	}
+	runs, err := r.LatestRunsForTargets(ctx, targetIDs)
+	if err != nil {
+		return nil, err
+	}
+	for targetID, sample := range samples {
+		entry := out[targetID]
+		copied := sample
+		entry.Sample = &copied
+		out[targetID] = entry
+	}
+	for targetID, run := range runs {
+		entry := out[targetID]
+		copied := run
+		entry.Run = &copied
+		out[targetID] = entry
+	}
+	return out, nil
+}
+
 // RecordCollection persists the run and, when present, the sample, then updates
 // target freshness.
 //

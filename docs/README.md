@@ -42,6 +42,7 @@ Canonical frontend SPA source     -> frontend/src/
 - [Inventory resource model](architecture/inventory-resource-model.md)
 - [Topology dependency model](architecture/topology-dependency-model.md)
 - [NF discovery foundation](architecture/nf-discovery.md)
+- [Operational overview and network element management](architecture/operational-overview.md) - current operational surfaces: authorities, projection, denominators and boundaries.
 - [Architecture evolution roadmap](architecture/architecture-evolution-roadmap.md) - planned architecture evolution authority; it distinguishes future targets from current production behavior.
 - [Frontend-backend boundary](architecture/frontend-backend-boundary.md)
 - [Security model](architecture/security-model.md)

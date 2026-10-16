@@ -393,6 +393,30 @@ type HealthTargetSummary struct {
 	HealthTarget
 	Coverage  CoverageSummary     `json:"coverage" bson:"coverage"`
 	Freshness FreshnessProjection `json:"freshness" bson:"freshness"`
+	// OverallState is the server-derived projection of the latest evidence plus
+	// freshness. It is additive and identical to the detail projection, so list
+	// and detail views cannot disagree.
+	OverallState string `json:"overallState,omitempty" bson:"-"`
+	// LatestSampleAt is the observation timestamp of the latest accepted
+	// measurement sample, when one exists.
+	LatestSampleAt string `json:"latestSampleAt,omitempty" bson:"-"`
+	// Layers carries the latest sample's layer evidence so a read projection can
+	// report L1/L2/L3 without one request per target. Absent when no sample
+	// exists; a missing layer is never reported as measured.
+	Layers *LayerSet `json:"layers,omitempty" bson:"-"`
+	// ResourceMetrics carries the latest sample's exporter-process measurements
+	// (category=resource) only, so a resource view can display validated
+	// CPU/memory evidence without loading full metric sets.
+	ResourceMetrics []MetricSample `json:"resourceMetrics,omitempty" bson:"-"`
+	// LastRunStatus and LastRunAt describe the most recent collection attempt, so
+	// a failed collection is distinguishable from a successful one that produced
+	// no service measurement.
+	LastRunStatus string `json:"lastRunStatus,omitempty" bson:"-"`
+	LastRunAt     string `json:"lastRunAt,omitempty" bson:"-"`
+	// StatusComplete reports whether the latest-evidence projection was
+	// available for this summary. False means the projection could not be read
+	// and the fields above are unknown rather than empty measurements.
+	StatusComplete bool `json:"statusComplete" bson:"-"`
 }
 
 // CoverageSummary exposes which layers are currently measured.

@@ -1,0 +1,646 @@
+/*
+ * Operations surfaces: the dashboard operational overview and the
+ * network-element view inside the Inventory route.
+ *
+ * Built on the existing design tokens so both surfaces read as part of the same
+ * console. Status is never conveyed by colour alone: every badge also carries its
+ * localized text, and coverage uses explicit measured / not_configured wording.
+ */
+
+/* ---------------------------------------------------------------------------
+ * Shared
+ * ------------------------------------------------------------------------- */
+.sectionHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-16);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-16);
+}
+
+.sectionTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary, inherit);
+}
+
+.sectionNote {
+  margin: var(--space-4) 0 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.sectionActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  flex-wrap: wrap;
+}
+
+.refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-height: var(--control-height);
+  padding: 0 var(--space-12);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-control);
+  background: var(--surface-field);
+  color: var(--text-primary, inherit);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.refresh:hover {
+  background: var(--surface-hover);
+}
+
+.refresh:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.completeness {
+  padding: 2px var(--space-8);
+  border-radius: var(--ref-radius-pill);
+  font-size: 0.72rem;
+  border: 1px solid currentColor;
+}
+
+.chip,
+.chipRetired {
+  padding: 1px var(--space-8);
+  border-radius: var(--ref-radius-micro);
+  border: 1px solid var(--surface-border);
+  font-family: var(--font-data);
+  font-size: 0.72rem;
+}
+
+.chipRetired {
+  color: var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 40%, var(--surface-border));
+}
+
+.stateBadge {
+  display: inline-block;
+  padding: 2px var(--space-8);
+  border-radius: var(--ref-radius-pill);
+  border: 1px solid currentColor;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.toneHealthy {
+  color: var(--success);
+}
+
+.toneWarning {
+  color: var(--warning);
+}
+
+.toneDanger {
+  color: var(--danger);
+}
+
+.toneStale {
+  color: var(--status-info);
+}
+
+.toneMuted {
+  color: var(--text-muted);
+}
+
+.toneUnknown {
+  color: var(--text-muted);
+  border-style: dashed;
+}
+
+.footnote {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  flex-wrap: wrap;
+  margin: var(--space-12) 0 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* ---------------------------------------------------------------------------
+ * Operational overview (dashboard section)
+ * ------------------------------------------------------------------------- */
+.overview {
+  margin-top: var(--space-section);
+  padding: var(--space-16);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-soft-panel);
+  background: var(--surface);
+}
+
+.cardGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-12);
+}
+
+.card {
+  padding: var(--space-12);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-panel);
+  background: var(--surface-field);
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.cardValue {
+  margin: var(--space-4) 0 0;
+  font-family: var(--font-data);
+  font-size: 1.35rem;
+  font-weight: 600;
+}
+
+.cardValueSuffix {
+  margin-inline-start: var(--space-8);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.cardHint {
+  margin: var(--space-4) 0 0;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.domainStrip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--space-12);
+  margin-top: var(--space-16);
+}
+
+.domainCard {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-12);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-panel);
+  background: var(--surface-field);
+}
+
+.domainName {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.domainValue {
+  font-family: var(--font-data);
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+.domainMeta {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.groupList {
+  margin-top: var(--space-16);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.group {
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-panel);
+  overflow: hidden;
+}
+
+.groupToggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  width: 100%;
+  padding: var(--space-8) var(--space-12);
+  border: 0;
+  background: var(--surface-field);
+  color: var(--text-primary, inherit);
+  cursor: pointer;
+  text-align: start;
+  font-size: 0.85rem;
+}
+
+.groupToggle:hover {
+  background: var(--surface-hover);
+}
+
+.groupToggle:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.groupName {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.78rem;
+}
+
+.groupCount {
+  margin-inline-start: auto;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.nfList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.nfRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-12);
+  flex-wrap: wrap;
+  padding: var(--space-8) var(--space-12);
+  border-top: 1px solid var(--surface-border);
+}
+
+.nfRowMain {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  min-width: 200px;
+}
+
+.nfName {
+  font-weight: 500;
+}
+
+.nfType {
+  font-family: var(--font-data);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.nfRowMeta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  flex-wrap: wrap;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.nfCoverage,
+.nfMemory {
+  font-family: var(--font-data);
+  font-size: 0.72rem;
+}
+
+.nfLinks {
+  display: flex;
+  gap: var(--space-12);
+}
+
+.nfLinks a {
+  color: var(--primary);
+  text-decoration: none;
+}
+
+.nfLinks a:hover {
+  text-decoration: underline;
+}
+
+/* ---------------------------------------------------------------------------
+ * Network element view (inventory route)
+ * ------------------------------------------------------------------------- */
+.neView {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+}
+
+.neToolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  flex-wrap: wrap;
+  padding: var(--space-12);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-panel);
+  background: var(--surface-field);
+}
+
+.neSearch {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  flex: 1 1 260px;
+  min-height: var(--control-height);
+  padding: 0 var(--space-8);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-pill);
+  background: var(--surface);
+}
+
+.neSearch:focus-within {
+  border-color: var(--primary);
+  box-shadow: var(--focus-ring);
+}
+
+.neSearch input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 0.85rem;
+  outline: none;
+}
+
+.neSearch button {
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.neFilter {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.neFilter select {
+  min-height: var(--control-height);
+  padding: 0 var(--space-8);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-control);
+  background: var(--surface);
+  color: inherit;
+  font-size: 0.8rem;
+}
+
+.neBody {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) 1fr;
+  gap: var(--space-12);
+  align-items: start;
+}
+
+.treePanel {
+  padding: var(--space-12);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-panel);
+  background: var(--surface-field);
+}
+
+.treeCaption {
+  margin: 0 0 var(--space-8);
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.treeEmpty {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.treeList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.treeItem {
+  margin: 0;
+}
+
+.treeRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.treeToggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.treeToggle:focus-visible,
+.treeButton:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--ref-radius-micro);
+}
+
+.treeSpacer {
+  width: 20px;
+}
+
+.treeButton {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-4) var(--space-8);
+  border: 1px solid transparent;
+  border-radius: var(--ref-radius-control);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: start;
+  font-size: 0.82rem;
+}
+
+.treeButton:hover {
+  background: var(--surface-hover);
+}
+
+.treeButtonSelected {
+  border-color: color-mix(in srgb, var(--primary) 40%, var(--surface-border));
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+}
+
+.treeLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.treeVirtual {
+  padding: 0 var(--space-4);
+  border: 1px dashed var(--surface-border);
+  border-radius: var(--ref-radius-micro);
+  font-size: 0.66rem;
+  color: var(--text-muted);
+}
+
+.treeCount {
+  margin-inline-start: auto;
+  font-family: var(--font-data);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.treeClear {
+  margin-top: var(--space-8);
+  padding: var(--space-4) var(--space-8);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-control);
+  background: var(--surface);
+  color: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.neTablePanel {
+  padding: var(--space-12);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-panel);
+  background: var(--surface);
+  min-width: 0;
+}
+
+.tableScroll {
+  overflow-x: auto;
+}
+
+.neTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.neTable th,
+.neTable td {
+  padding: var(--space-8);
+  border-bottom: 1px solid var(--surface-border);
+  text-align: start;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.neTable thead th {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.cellName {
+  font-weight: 500;
+}
+
+.cellName a {
+  color: var(--primary);
+  text-decoration: none;
+}
+
+.cellLinks a {
+  color: var(--primary);
+  text-decoration: none;
+}
+
+.tableCaption {
+  caption-side: top;
+  text-align: start;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  padding-bottom: var(--space-8);
+}
+
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8);
+  margin-top: var(--space-12);
+}
+
+.pager button {
+  min-height: var(--control-height);
+  padding: 0 var(--space-12);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-control);
+  background: var(--surface-field);
+  color: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.pager button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pagerInfo {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+/* ---------------------------------------------------------------------------
+ * Responsive
+ * ------------------------------------------------------------------------- */
+@media (max-width: 1024px) {
+  .neBody {
+    grid-template-columns: 1fr;
+  }
+
+  .treePanel {
+    max-height: 320px;
+    overflow-y: auto;
+  }
+}
+
+@media (max-width: 640px) {
+  .overview,
+  .neToolbar,
+  .neTablePanel,
+  .treePanel {
+    padding: var(--space-12);
+  }
+
+  .nfRow {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .nfRowMeta {
+    gap: var(--space-8);
+  }
+
+  .neFilter {
+    flex: 1 1 100%;
+    justify-content: space-between;
+  }
+
+  .neFilter select {
+    flex: 1;
+  }
+}

@@ -1143,6 +1143,8 @@ async function main() {
 
     // ---- Cross-domain metrics adaptation (verified exporter evidence) ----
 
+    let mmeTargetId = '';
+
     async function createResourceTarget(resourceId, name, path, extra = {}) {
       const res = await api(base, 'POST', '/api/nf-health/targets', adminToken, {
         resourceId,
@@ -1161,6 +1163,7 @@ async function main() {
 
     await verifyAsync('EPC MME metrics are attributed to the EPC resource', async () => {
       const targetId = await createResourceTarget(RESOURCE_MME, 'MME epc-01 metrics', '/mme');
+      mmeTargetId = targetId;
       const res = await api(base, 'POST', `/api/nf-health/targets/${targetId}/collect`, adminToken);
       assert.equal(res.status, 200, res.text);
       assert.equal(res.json.run.layersMeasured, 2, 'L2 and L3 are measured for an HTTP target');
@@ -1261,6 +1264,53 @@ async function main() {
       assert.ok(epcFamilies.length > 0, 'verified EPC families are registered');
       assert.ok(meta.json.metricCategories.includes('service'));
       assert.ok(meta.json.serviceReasons.includes('resource_metrics_only'));
+    });
+
+    // ---- Bounded status projection (operational overview support) ----
+
+    await verifyAsync('target list projection matches the detail projection', async () => {
+      const list = await api(base, 'GET', '/api/nf-health/targets?limit=200', adminToken);
+      assert.equal(list.status, 200, list.text);
+      const rows = list.json.targets ?? [];
+      assert.ok(rows.length > 0, 'the list must return the created targets');
+
+      // The MME target has a stored sample: list and detail must agree.
+      const row = rows.find((entry) => entry.targetId === mmeTargetId);
+      assert.ok(row, 'the EPC MME target must appear in the list projection');
+      const detail = await api(base, 'GET', `/api/nf-health/targets/${mmeTargetId}`, adminToken);
+      assert.equal(detail.status, 200, detail.text);
+
+      assert.equal(row.statusComplete, true, 'the bounded projection must be reported as complete');
+      assert.equal(row.overallState, detail.json.overallState, 'overall state must match the detail projection');
+      assert.deepEqual(row.coverage, detail.json.target.coverage, 'coverage must match the detail projection');
+      assert.equal(row.latestSampleAt, detail.json.target.latestSampleAt, 'latest measurement must match');
+      assert.equal(row.freshness.state, detail.json.freshness.state, 'freshness must match');
+      assert.equal(row.lastRunStatus, detail.json.target.lastRunStatus, 'last run status must match');
+
+      // A layer that was not measured is never reported as measured.
+      const service = detail.json.latestSample.layers.service;
+      assert.equal(row.coverage.l3Measured, service.measured, 'L3 coverage must reflect the stored layer');
+      assert.equal(row.layers.service.measured, service.measured);
+      assert.equal(row.layers.service.state, service.state);
+    });
+
+    await verifyAsync('target list projection keeps resource and service evidence separate', async () => {
+      const list = await api(base, 'GET', '/api/nf-health/targets?limit=200', adminToken);
+      const rows = list.json.targets ?? [];
+      const withSample = rows.filter((row) => row.latestSampleAt);
+      assert.ok(withSample.length > 0, 'at least one target carries a sample');
+      for (const row of withSample) {
+        for (const metric of row.resourceMetrics ?? []) {
+          assert.equal(metric.category, 'resource', 'only exporter-process metrics are projected as resource evidence');
+        }
+      }
+      // A target without any sample reports an honest empty projection.
+      const withoutSample = rows.filter((row) => !row.latestSampleAt);
+      for (const row of withoutSample) {
+        assert.equal(row.coverage.l1Measured, false, 'an absent sample must not report measured layers');
+        assert.equal(row.coverage.l3Measured, false);
+        assert.notEqual(row.overallState, 'healthy', 'an absent sample is never healthy');
+      }
     });
 
     // Each remaining scenario uses its own target so the per-target collection

@@ -22,6 +22,7 @@ import PageHeader from '../../components/ui/PageHeader';
 import { useAuth } from '../../providers/AuthProvider';
 import { useI18n } from '../../providers/I18nProvider';
 import { fetchInventoryMeta, fetchInventoryResources } from './inventory-api';
+import NetworkElementView from '../operations/NetworkElementView';
 import type { MetaResponse, Resource } from './inventory-types';
 import styles from '../../styles/modules/inventory.module.css';
 
@@ -37,6 +38,11 @@ export function InventoryPage() {
   const [error, setError] = useState<string | null>(null);
 
   // Filters
+  /* View mode: the general Inventory listing stays the default surface; the
+   * network-element view is an additional presentation over the same resource
+   * authority and never replaces it. */
+  const [viewMode, setViewMode] = useState<'list' | 'network'>('list');
+
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedKind, setSelectedKind] = useState('');
@@ -181,6 +187,26 @@ export function InventoryPage() {
         description={t('inventory_description')}
         actions={(
           <>
+            <div className={styles.viewToggle} role="group" aria-label={t('ops_view_mode')}>
+              <button
+                type="button"
+                data-view-mode="list"
+                className={viewMode === 'list' ? styles.viewToggleActive : undefined}
+                aria-pressed={viewMode === 'list'}
+                onClick={() => setViewMode('list')}
+              >
+                {t('ops_view_list')}
+              </button>
+              <button
+                type="button"
+                data-view-mode="network"
+                className={viewMode === 'network' ? styles.viewToggleActive : undefined}
+                aria-pressed={viewMode === 'network'}
+                onClick={() => setViewMode('network')}
+              >
+                {t('ops_view_network')}
+              </button>
+            </div>
             <button
               type="button"
               className="btn btn-secondary"
@@ -200,6 +226,9 @@ export function InventoryPage() {
         )}
       />
 
+      {viewMode === 'network' ? (
+        <NetworkElementView />
+      ) : (
       <section className="dash-card">
         <div className={styles.toolbar}>
           <form className={styles.search} role="search" onSubmit={handleSearchSubmit}>
@@ -408,6 +437,7 @@ export function InventoryPage() {
           </nav>
         ) : null}
       </section>
+      )}
     </div>
   );
 }

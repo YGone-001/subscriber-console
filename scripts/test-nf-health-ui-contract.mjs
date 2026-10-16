@@ -313,6 +313,107 @@ check(
   'nf_health_metric_metadata=typed',
 );
 
+// ---------------------------------------------------------------------------
+// Operational surfaces (dashboard overview and network element view)
+//
+// The overview and the network-element view are xCloud-native: they must reuse
+// the accepted data authorities, must not import any CNMS transport or mutation
+// endpoint, and must never present an unmeasured layer as healthy.
+// ---------------------------------------------------------------------------
+const overviewSource = readFileSync(resolve(root, 'frontend/src/features/operations/OperationalOverview.tsx'), 'utf8');
+const networkSource = readFileSync(resolve(root, 'frontend/src/features/operations/NetworkElementView.tsx'), 'utf8');
+const modelSource = readFileSync(resolve(root, 'frontend/src/features/operations/operational-model.ts'), 'utf8');
+const dashboardSource = readFileSync(resolve(root, 'frontend/src/features/read/ReadPages.tsx'), 'utf8');
+const inventoryPageSource = readFileSync(resolve(root, 'frontend/src/features/inventory/InventoryPage.tsx'), 'utf8');
+
+check(
+  'OPS-UI-01',
+  /OperationalOverview/.test(dashboardSource) &&
+    /AnalyticsCockpit/.test(dashboardSource) &&
+    /analytics\/metrics/.test(readFileSync(resolve(root, 'frontend/src/components/AnalyticsCockpit.tsx'), 'utf8')),
+  'ops_dashboard=overview_added_analytics_preserved',
+);
+check(
+  'OPS-UI-02',
+  /\/api\/inventory\/resources/.test(overviewSource) &&
+    /\/api\/nf-health\/targets/.test(overviewSource) &&
+    !/\/api\/nf-health\/targets\/\$\{/.test(overviewSource),
+  'ops_overview=existing_read_endpoints_only',
+);
+check(
+  'OPS-UI-03',
+  /NetworkElementView/.test(inventoryPageSource) &&
+    /viewMode/.test(inventoryPageSource) &&
+    /ops_view_network/.test(inventoryPageSource),
+  'ops_network_view=integrated_into_inventory_route',
+);
+check(
+  'OPS-UI-04',
+  /relationshipType/.test(modelSource) &&
+    /'contains'/.test(modelSource) &&
+    /virtualDomainNodes/.test(modelSource) &&
+    /treeResourceIds/.test(modelSource),
+  'ops_hierarchy=declared_contains_with_virtual_fallback',
+);
+// Comments are stripped before the code-level assertions so documentation that
+// explains the limitation cannot satisfy or break them.
+const modelCode = modelSource.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+check(
+  'OPS-UI-05',
+  // CPU stays a cumulative counter: no percentage property exists in the view
+  // model and no percentage conversion is performed anywhere in its code.
+  /cumulative: type === 'counter'/.test(modelCode) &&
+    /process_cpu_seconds_total/.test(modelCode) &&
+    /process_resident_memory_bytes/.test(modelCode) &&
+    !/percent(age)?\s*[:=]/i.test(modelCode) &&
+    !/\*\s*100\b/.test(modelCode),
+  'ops_cpu_memory=correct_measurement_semantics',
+);
+check(
+  'OPS-UI-06',
+  /completeness/.test(modelSource) &&
+    /ops_partial/.test(overviewSource) &&
+    /ops_page_partial/.test(networkSource) &&
+    /ops_page_partial/.test(localeEn) &&
+    /ops_page_partial/.test(localeZh),
+  'ops_pagination=honest_completeness',
+);
+check(
+  'OPS-UI-07',
+  // No CNMS transport, mutation or legacy monitor surface may be imported.
+  !/api\/v1\/(deployment|mml|nf\/logs|business-metrics|sites)/.test(overviewSource + networkSource + modelSource) &&
+    !/useUnifiedSocket|MonitorContext|FALLBACK_LOCATION_TREE/.test(overviewSource + networkSource + modelSource) &&
+    !/restart|\/stop|\/start\b/.test(overviewSource + networkSource),
+  'ops_no_cnms_backend_or_mutation_controls',
+);
+check(
+  'OPS-UI-08',
+  /ops_overview_title/.test(localeEn) &&
+    /ops_overview_title/.test(localeZh) &&
+    /ops_col_memory/.test(localeEn) &&
+    /ops_col_memory/.test(localeZh) &&
+    /ops_filter_monitoring/.test(localeEn) &&
+    /ops_filter_monitoring/.test(localeZh),
+  'ops_localization=en_zh',
+);
+check(
+  'OPS-UI-09',
+  /aria-expanded/.test(overviewSource) &&
+    /aria-pressed/.test(networkSource) &&
+    /scope="col"/.test(networkSource) &&
+    /scope="row"/.test(networkSource) &&
+    /aria-label/.test(networkSource),
+  'ops_accessibility=semantic_and_keyboard_operable',
+);
+check(
+  'OPS-UI-10',
+  /isValidating/.test(overviewSource) &&
+    /clearInterval/.test(overviewSource) &&
+    /clearInterval/.test(networkSource) &&
+    !/WebSocket|EventSource/.test(overviewSource + networkSource),
+  'ops_refresh=bounded_cancellation_aware_no_socket',
+);
+
 let failed = 0;
 for (const item of invariants) {
   const status = item.ok ? 'PASS' : 'FAIL';

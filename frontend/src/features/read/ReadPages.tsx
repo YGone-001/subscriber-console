@@ -12,6 +12,7 @@
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { RadioTower } from 'lucide-react';
 import AnalyticsCockpit from '../../components/AnalyticsCockpit';
+import OperationalOverview from '../operations/OperationalOverview';
 import PageHeader from '../../components/ui/PageHeader';
 import { useI18n } from '../../providers/I18nProvider';
 import { text, toChartPoints, type UnknownRecord } from './dashboard-model';
@@ -24,6 +25,11 @@ import { text, toChartPoints, type UnknownRecord } from './dashboard-model';
  * - workbench panel (prioritised action items + operations readiness score)
  * - OCS resource strip (balance capacity, session telemetry)
  * - charts (top consumers, tariff plan distribution)
+ *
+ * The operational network overview (Inventory resources joined with NF Health
+ * monitoring evidence) renders below the cockpit. It is an additional section:
+ * no existing business analytic is removed, renamed or repurposed, and no
+ * subscriber or online-user count is derived from it.
  */
 export function DashboardPage() {
   const { t } = useI18n();
@@ -37,6 +43,7 @@ export function DashboardPage() {
         description={t('dash_workbench_subtitle')}
       />
       <AnalyticsCockpit />
+      <OperationalOverview />
     </div>
   );
 }

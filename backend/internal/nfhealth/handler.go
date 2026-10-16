@@ -38,6 +38,9 @@ type RepositoryAPI interface {
 	InsertSample(ctx context.Context, sample *HealthSample) error
 	GetSample(ctx context.Context, sampleID string) (*HealthSample, error)
 	ListSamples(ctx context.Context, filter SampleListFilter) ([]HealthSample, *string, bool, error)
+	// LatestStatusForTargets is the bounded latest-evidence projection used by
+	// read surfaces so they never issue one query per target.
+	LatestStatusForTargets(ctx context.Context, targetIDs []string) (map[string]BatchTargetStatus, error)
 	RecordCollection(ctx context.Context, target *HealthTarget, result *CollectionResult) error
 }
 
@@ -347,18 +350,74 @@ func (h *Handler) ListTargets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	summaries := make([]HealthTargetSummary, 0, len(items))
+	now := time.Now().UTC()
+
+	// Bounded batch projection: one aggregation per collection for the whole
+	// page, never one request (or one query) per target. When the projection
+	// cannot be read, the summaries report statusComplete=false instead of an
+	// empty coverage that would look like "nothing was measured".
+	targetIDs := make([]string, 0, len(items))
+	for i := range items {
+		targetIDs = append(targetIDs, items[i].TargetID)
+	}
+	statuses, statusErr := h.repo.LatestStatusForTargets(r.Context(), targetIDs)
+
 	for i := range items {
 		target := items[i]
-		summaries = append(summaries, HealthTargetSummary{
+		summary := HealthTargetSummary{
 			HealthTarget: target,
-			Coverage:     CoverageSummary{},
-			Freshness:    EvaluateFreshness(&target, time.Now().UTC()),
-		})
+			Freshness:    EvaluateFreshness(&target, now),
+		}
+		if statusErr != nil {
+			// The projection failed: the page is still returned, but the
+			// status fields are explicitly incomplete.
+			summary.Coverage = CoverageSummary{}
+			summaries = append(summaries, summary)
+			continue
+		}
+		status, ok := statuses[target.TargetID]
+		summary.StatusComplete = ok
+		var layers *LayerSet
+		if ok && status.Sample != nil {
+			sample := status.Sample
+			summary.LatestSampleAt = sample.CollectedAt
+			summary.Coverage = CoverageFromLayers(sample.Layers)
+			sampleLayers := sample.Layers
+			layers = &sampleLayers
+			summary.Layers = layers
+			summary.ResourceMetrics = resourceCategoryMetrics(sample.Metrics)
+		}
+		if ok && status.Run != nil {
+			summary.LastRunStatus = status.Run.Status
+			summary.LastRunAt = status.Run.StartedAt
+		}
+		// The same freshness-gated projection the detail endpoint uses: a stale
+		// or missing measurement is never presented as current health.
+		summary.OverallState = ProjectOverallState(summary.Freshness, layers)
+		summaries = append(summaries, summary)
 	}
 	response.JSON(w, http.StatusOK, ListTargetsResponse{
 		Targets: summaries,
 		Page:    PageInfo{Limit: limit, NextCursor: next, HasMore: hasMore},
 	})
+}
+
+// resourceCategoryMetrics keeps only exporter-process measurements so a resource
+// view can show validated CPU/memory evidence without loading full metric sets.
+func resourceCategoryMetrics(samples []MetricSample) []MetricSample {
+	if len(samples) == 0 {
+		return nil
+	}
+	out := make([]MetricSample, 0, 8)
+	for _, sample := range samples {
+		if sample.Category == CategoryResource {
+			out = append(out, sample)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // GetTargetResponse is the GET /api/nf-health/targets/{targetId} payload.
@@ -404,20 +463,29 @@ func (h *Handler) GetTarget(w http.ResponseWriter, r *http.Request) {
 	// so detail and list views cannot disagree about measurement freshness.
 	resp.Target.Freshness = resp.Freshness
 	samples, _, _, serr := h.repo.ListSamples(r.Context(), SampleListFilter{TargetID: targetID, Limit: 1})
+	resp.Target.StatusComplete = true
 	if serr == nil && len(samples) > 0 {
 		latest := samples[0]
 		resp.Latest = &latest
 		resp.Target.Coverage = CoverageFromLayers(latest.Layers)
+		resp.Target.LatestSampleAt = latest.CollectedAt
+		layers := latest.Layers
+		resp.Target.Layers = &layers
+		resp.Target.ResourceMetrics = resourceCategoryMetrics(latest.Metrics)
 		// Historical samples remain readable, but current evidence is gated
 		// by freshness so an old sample is never presented as live health.
 		resp.Overall = ProjectOverallState(resp.Freshness, &latest.Layers)
 	} else {
 		resp.Overall = ProjectOverallState(resp.Freshness, nil)
 	}
+	// The summary carries the same overall projection the list projection uses.
+	resp.Target.OverallState = resp.Overall
 	runs, _, _, rerr := h.repo.ListRuns(r.Context(), RunListFilter{TargetID: targetID, Limit: 1})
 	if rerr == nil && len(runs) > 0 {
 		last := runs[0]
 		resp.LastRun = &last
+		resp.Target.LastRunStatus = last.Status
+		resp.Target.LastRunAt = last.StartedAt
 	}
 	response.JSON(w, http.StatusOK, resp)
 }

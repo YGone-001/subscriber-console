@@ -803,6 +803,10 @@ function handleApi(req, res, url, context) {
 
   const BENIGN_EMPTY = {
     '/api/alerts': { alerts: [] },
+    // Bounded contract-subscriber projection the dashboard already reads. The
+    // fixture serves a fixed test value; the product never derives a subscriber
+    // count from the operational overview.
+    '/api/ocs/subscribers': { total: 128, pagination: { total: 128 } },
     '/api/profiles': { profiles: [] },
     '/api/analytics/metrics': { metrics: {} },
     '/api/analytics/sparkline': { points: [] },

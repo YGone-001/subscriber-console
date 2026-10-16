@@ -29,7 +29,7 @@ const repoRoot = resolve(frontendRoot, '..');
 const distDir = resolve(frontendRoot, 'dist');
 const outDir = resolve(repoRoot, 'reports', 'ops', 'nf-health-screenshots');
 
-const EXPECTED_SCREENSHOT_COUNT = 26;
+const EXPECTED_SCREENSHOT_COUNT = 32;
 const MIN_PNG_BYTES = 8192;
 
 const VIEWPORTS = {
@@ -500,6 +500,67 @@ async function main() {
     }
 
     /* ============================ F. integrity ============================ */
+    /* ============ F. operational overview and network-element view ======== */
+    const operationalCases = [
+      { route: '/', slug: 'dashboard-operations', scenario: 'dashboard-operations', sizeName: 'desktop', viewport: VIEWPORTS.desktop, theme: 'light', locale: 'en', networkView: false },
+      { route: '/', slug: 'dashboard-operations', scenario: 'dashboard-operations', sizeName: 'tablet', viewport: VIEWPORTS.tablet, theme: 'dark', locale: 'en', networkView: false },
+      { route: '/', slug: 'dashboard-operations', scenario: 'dashboard-operations', sizeName: 'mobile', viewport: VIEWPORTS.mobile, theme: 'light', locale: 'zh', networkView: false },
+      { route: '/inventory', slug: 'inventory-network-elements', scenario: 'inventory-network-elements', sizeName: 'desktop', viewport: VIEWPORTS.desktop, theme: 'light', locale: 'en', networkView: true },
+      { route: '/inventory', slug: 'inventory-network-elements', scenario: 'inventory-network-elements', sizeName: 'tablet', viewport: VIEWPORTS.tablet, theme: 'dark', locale: 'en', networkView: true },
+      { route: '/inventory', slug: 'inventory-network-elements', scenario: 'inventory-network-elements', sizeName: 'mobile', viewport: VIEWPORTS.mobile, theme: 'dark', locale: 'zh', networkView: true },
+    ];
+
+    for (const operational of operationalCases) {
+      const { context, page } = await newSession(browser, {
+        ...operational.viewport,
+        theme: operational.theme,
+        locale: operational.locale,
+        session: 'operator',
+      });
+      await page.goto(`${origin}${operational.route}`, { waitUntil: 'domcontentloaded' });
+      await settle(page);
+
+      if (operational.networkView) {
+        // Located through the stable view-mode hook so the step is
+        // locale-independent and cannot match unrelated control groups.
+        await page.locator('[data-view-mode="network"]').click();
+        await settle(page);
+      }
+
+      const label = `${operational.slug}-${operational.sizeName}-${operational.theme}-${operational.locale}`;
+      check(
+        `operational_surface_rendered:${label}`,
+        (await page.locator('.layout-root').isVisible()) && !page.url().includes('/login'),
+        operational.route,
+      );
+      if (operational.networkView) {
+        check(
+          `operational_network_view_active:${label}`,
+          (await page.locator('[data-view-mode="network"][aria-pressed="true"]').count()) === 1,
+          operational.route,
+        );
+      } else {
+        check(
+          `operational_overview_visible:${label}`,
+          await page.locator('#operational-overview-title').isVisible(),
+          operational.route,
+        );
+      }
+      await assertNoRawKeys(page, label);
+      await assertNoHorizontalOverflow(page, label);
+
+      await capture(page, `${label}.png`, {
+        route: operational.route,
+        viewportWidth: operational.viewport.width,
+        viewportHeight: operational.viewport.height,
+        theme: operational.theme,
+        locale: operational.locale,
+        fixtureScenario: operational.scenario,
+        session: 'operator',
+      });
+      await context.close();
+    }
+
     check('screenshot_count', screenshots.length === EXPECTED_SCREENSHOT_COUNT, `generated=${screenshots.length}`);
 
     const seen = new Set();
