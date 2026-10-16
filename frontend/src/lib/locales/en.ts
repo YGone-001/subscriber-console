@@ -1738,6 +1738,7 @@ export const en: Record<string, string> = {
     nf_health_reason_service_health_undetermined: "Service measurements were observed, but no registered interpretation rule applies, so no health claim is made.",
     nf_health_reason_service_health_confirmed: "A registered, evidence-backed rule evaluated positively.",
     nf_health_reason_service_failures_observed: "A registered rule observed failures. The service layer is degraded, never silently healthy.",
+    nf_health_reason_activity_observed: "Service activity or state occupancy was observed. Activity is real measurement evidence, but it does not prove that every required service operation is functioning.",
     nf_health_metrics_evidence_section: "Measured Evidence",
     nf_health_metrics_evidence_note: "Every accepted measurement with its category, type, value and interpretation",
     nf_health_evidence_caption: "Measured metric evidence for the latest collection",

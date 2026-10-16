@@ -119,15 +119,19 @@ func TestEvaluateServiceLayerMissingStaysNotAvailable(t *testing.T) {
 	}
 }
 
-// Service samples carrying a registered rule produce a positive reading; the
-// rule that produced it is reported in the reason field.
-func TestEvaluateServiceLayerRuleBackedServiceSampleIsHealthy(t *testing.T) {
+// A registered activity rule reports observed activity, never confirmed health.
+// Regression: this sample previously produced a healthy L3 layer purely because
+// a positive activity gauge was treated as service-health confirmation.
+func TestEvaluateServiceLayerActivitySampleIsNotHealthy(t *testing.T) {
 	got := EvaluateServiceLayer([]MetricSample{{Key: "gnb", Value: 1, Category: CategoryService}}, nil)
-	if got.State != StateHealthy || !got.Measured {
-		t.Fatalf("expected healthy measured service layer, got %+v", got)
+	if got.State == StateHealthy {
+		t.Fatalf("activity alone must not establish service health, got %+v", got)
 	}
-	if got.Reason != ReasonServiceHealthConfirmed {
-		t.Fatalf("expected the confirming rule to be reported, got %+v", got)
+	if !got.Measured || got.State != StateUnknown {
+		t.Fatalf("expected measured unknown service layer, got %+v", got)
+	}
+	if got.Reason != ReasonActivityObserved {
+		t.Fatalf("expected activity_observed, got %+v", got)
 	}
 }
 

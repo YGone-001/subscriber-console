@@ -293,11 +293,15 @@ check(
   // source carries the token while the locales carry the localized text.
   /resource_metrics_only/.test(detailSource) &&
     /service_failures_observed/.test(detailSource) &&
+    /activity_observed/.test(detailSource) &&
     /resource_metrics_only/.test(fixtureSource) &&
+    /activity_observed/.test(fixtureSource) &&
     /nf_health_reason_resource_metrics_only/.test(localeEn) &&
     /nf_health_reason_resource_metrics_only/.test(localeZh) &&
     /nf_health_reason_service_failures_observed/.test(localeEn) &&
-    /nf_health_reason_service_failures_observed/.test(localeZh),
+    /nf_health_reason_service_failures_observed/.test(localeZh) &&
+    /nf_health_reason_activity_observed/.test(localeEn) &&
+    /nf_health_reason_activity_observed/.test(localeZh),
   'nf_health_service_reasons=localized',
 );
 check(

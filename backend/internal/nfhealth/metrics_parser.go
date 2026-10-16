@@ -13,10 +13,14 @@ type ParseOutcome struct {
 	// FamiliesSeen records every metric family name encountered, whether or not
 	// it is registry-supported. Used only for diagnostics.
 	FamiliesSeen map[string]string
-	// Dropped counts series that were rejected by the registry or bounds.
+	// Dropped counts series that were rejected by the registry, bounds or type
+	// integrity checks.
 	Dropped int
 	// Malformed counts lines that could not be parsed.
 	Malformed int
+	// TypeMismatches counts series whose Prometheus TYPE declaration contradicts
+	// the registered metric type. Such samples are dropped, never reclassified.
+	TypeMismatches int
 	// CounterResets records counter families whose value decreased relative to
 	// a previously observed baseline supplied by the caller.
 	CounterResets []string
@@ -115,9 +119,19 @@ func ParsePrometheusText(body []byte, collectedAt string, previous map[string]fl
 			safe = nil
 		}
 
+		// The server-owned registry is authoritative for accepted metric
+		// semantics. A Prometheus TYPE declaration is verified against the
+		// registered type; an incompatible declaration is dropped
+		// deterministically instead of silently reclassifying a counter as a
+		// gauge or a gauge as a counter. When no declaration exists the
+		// registered definition is used.
 		metricType := def.Type
-		if t, ok := types[family]; ok && (t == "counter" || t == "gauge") {
-			metricType = t
+		if declared, ok := types[family]; ok {
+			if declared != def.Type {
+				out.TypeMismatches++
+				out.Dropped++
+				continue
+			}
 		}
 
 		out.Samples = append(out.Samples, MetricSample{

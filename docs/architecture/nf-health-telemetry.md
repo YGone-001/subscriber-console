@@ -163,20 +163,33 @@ Registered interpretation rules (no arbitrary thresholds):
 
 ```text
 none                   resource metrics and families without a defensible
-                       service-health interpretation
-failure_counter_zero   a registered failure counter: zero with observed traffic
-                       is positive evidence, a positive value is degraded evidence
+                       service-health interpretation -> undetermined
+failure_counter_zero   a cumulative failure counter -> interval evidence required
 success_ratio_pair     a success counter paired with its request counter on the
-                       same event population: equality with a non-zero request
-                       count is positive, a shortfall is degraded, a zero request
-                       count yields no evidence
-activity_gauge         a gauge counting active service objects: a positive value
-                       is evidence of live service activity, zero yields none
+                       same event population -> interval evidence required
+activity_gauge         a gauge counting active service objects -> activity_observed
 ```
 
-A zero failure counter with no observed traffic proves nothing and stays
-undetermined. An incomplete pair (a success counter without its request counter)
-never becomes a percentage.
+Cumulative counters are historical totals: they can never establish the current
+measurement window's outcome. A request/success pair (whether equal or short), a
+non-zero historical failure count, and a zero historical failure count all yield
+an undetermined interpretation while the raw counts stay visible. A counter that
+previously recorded a failure therefore never degrades the service forever, and
+a zero historical failure counter never proves current success.
+
+If an interval rule is ever implemented it must require two valid observations of
+the same series with the same `targetId`, the same metric family, the same
+verified series scope, a consistent exporter identity, increasing timestamps, no
+unsupported counter reset, compatible numerator/denominator semantics, no missing
+or corrupted values and a documented interpretation. A counter reset invalidates
+the affected interval instead of manufacturing a negative rate. No derived-rate
+field is stored.
+
+Activity is not complete service health. A positive activity gauge (active
+sessions, registered subscribers, active PFCP sessions, connected access nodes)
+establishes that service objects exist; it is reported as `activity_observed`
+with L3 `unknown`. A zero activity gauge is not a failure. If no proven
+operational-health signal exists, L3 stays `unknown` with a meaningful reason.
 
 ### 2.4 Canonical layer states
 
@@ -186,14 +199,25 @@ healthy | degraded | unhealthy | unknown | not_configured | stale
 
 Every state carries an evidence source or a reason for its absence.
 
-Aggregation is deterministic and conservative:
+Aggregation is deterministic, order-independent and conservative. Measured
+layers are ranked and the strongest state wins, so a measured `unknown` or
+`stale` layer can never disappear behind a healthy layer:
 
-- any measured `unhealthy` layer forces overall `unhealthy`
-- any measured `degraded` layer forces overall `degraded` unless unhealthy wins
-- if every measured layer is `healthy` and at least one layer is measured, the
-  overall state is `healthy`
-- if no layer is measured, the overall state is `unknown`
-- unsupported layers never contribute a healthy claim
+```text
+any measured unhealthy            -> unhealthy
+else any measured degraded        -> degraded
+else any measured stale           -> stale
+else any measured unknown         -> unknown
+else all measured layers healthy  -> healthy
+else no measured layer            -> unknown
+```
+
+- unsupported and not-configured layers are excluded, never assumed healthy
+- an unrecognized layer state is treated as `unknown`
+- the aggregate describes the measured layers only; it is never a claim of
+  complete end-to-end service availability
+- freshness governs the projection: a `stale`, `unknown` or `not_monitored`
+  freshness state never presents as `healthy`
 
 Coverage is exposed alongside status (`l1Measured`, `l2Measured`, `l3Measured`,
 `l3Available`).
@@ -459,6 +483,10 @@ healthPair     the paired request counter for success_ratio_pair
 nonNegative    count-like families reject negative values
 ```
 
+Rule metadata is descriptive, not a health claim: `failure_counter_zero` and
+`success_ratio_pair` mark families that would need verified interval evidence,
+and `activity_gauge` marks families that establish activity only.
+
 ### 6.1 Telemetry capability matrix (22 reference process types)
 
 The matrix records what the reference deployment actually exposes. `Exporter`
@@ -549,6 +577,14 @@ Prometheus text exposition parsing:
 - recognizes `# HELP` and `# TYPE` metadata
 - parses permitted sample syntax with labels
 - rejects NaN, infinity and malformed numbers
+- treats the registry as authoritative for metric type: a `# TYPE` declaration is
+  verified against the registered type and an incompatible declaration is
+  dropped deterministically (counted as a type mismatch) instead of silently
+  reclassifying a counter as a gauge or a gauge as a counter. When no
+  declaration exists the registered definition is used. Observed example: the
+  deployed exporter declares `process_cpu_seconds_total` as a gauge while the
+  registry defines it as a counter, so that family is not accepted from that
+  exporter and the remaining resource metrics still provide resource evidence
 - rejects negative values for count-like families (an observed negative session
   count is corrupted evidence, not a measurement)
 - preserves counter/gauge semantics; a counter value is never presented as a rate
@@ -572,16 +608,27 @@ Label policy: only `nf`, `nftype`, `nf_type`, `function` and `instance` survive.
 Subscriber, session, peer-address and slice identifiers (including `plmnid` and
 `snssai`) are dropped, which is why per-peer families are not registered.
 
+Series scope discipline: a rule that compares two families is evaluated only when
+both families expose exactly one verified series — one sanitized scope carrying
+exactly one sample — and both carry the same scope signature. Multiple scopes, or
+several samples collapsed into one sanitized scope (for example series that
+differed only by a dropped sensitive label), disable the paired interpretation
+and the raw measurements are retained. Removing sensitive labels never causes
+unrelated measurements to be combined, and sensitive labels are never persisted
+to make matching possible.
+
 ### 6.4 Counter and derived-KPI limits
 
-- A cumulative counter is never presented as a per-second rate; deriving a rate
-  would require at least two valid observations with real timestamps.
-- Counter resets are detected against a supplied baseline and never produce a
-  manufactured delta.
+- A cumulative counter is never presented as a per-second rate, and a cumulative
+  total is never interpreted as a current interval outcome; deriving either would
+  require at least two valid observations with real timestamps.
+- Counter resets are detected against a supplied baseline, invalidate the
+  affected interval and never produce a manufactured delta.
 - Success-ratio rules compare a success counter with its own request counter on
-  the same event population; unrelated counters are never combined.
-- An incomplete interval or a missing numerator/denominator never produces a
-  percentage.
+  the same verified series scope; unrelated counters, unrelated scopes and
+  unrelated Inventory resources are never combined.
+- An incomplete interval, a missing numerator or denominator, or an unverifiable
+  series scope never produces a percentage or a health claim.
 - No derived KPI is persisted, and no database field was added for rate
   calculation.
 

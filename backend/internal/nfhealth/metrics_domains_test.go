@@ -268,40 +268,47 @@ func TestServiceSemanticsRequestCounterAloneIsNotHealthy(t *testing.T) {
 	}
 }
 
-func TestServiceSemanticsSuccessRatioPair(t *testing.T) {
-	// All requests succeeded and no failure counter moved: confirmed.
-	got := EvaluateServiceLayer([]MetricSample{
+// Regression: a cumulative request/success pair was previously treated as
+// confirmed health or observed degradation. Cumulative totals cannot establish
+// the current window's outcome, so the rule now reports missing interval
+// evidence while the raw counters stay available.
+func TestServiceSemanticsCumulativePairRequiresInterval(t *testing.T) {
+	// Equal totals: not confirmed.
+	summary := SummarizeServiceEvidence([]MetricSample{
 		sampleOf("fivegs_amffunction_rm_reginitreq", 10),
 		sampleOf("fivegs_amffunction_rm_reginitsucc", 10),
-		sampleOf("fivegs_amffunction_rm_reginitfail", 0),
-	}, nil)
-	if got.State != StateHealthy || got.Reason != ReasonServiceHealthConfirmed {
-		t.Fatalf("expected confirmed healthy, got %+v", got)
+	})
+	if summary.Confirmed != 0 || summary.Degraded != 0 {
+		t.Fatalf("cumulative totals must not confirm or degrade: %+v", summary)
+	}
+	if summary.IntervalRequired != 1 {
+		t.Fatalf("the pair must report missing interval evidence: %+v", summary)
 	}
 
-	// A shortfall between requests and successes is observed failure evidence.
-	got = EvaluateServiceLayer([]MetricSample{
+	// Shortfall: historical, not a current failure.
+	summary = SummarizeServiceEvidence([]MetricSample{
 		sampleOf("fivegs_amffunction_rm_reginitreq", 10),
 		sampleOf("fivegs_amffunction_rm_reginitsucc", 8),
-	}, nil)
-	if got.State != StateDegraded || got.Reason != ReasonServiceFailuresObserved {
-		t.Fatalf("expected degraded on observed failures, got %+v", got)
+	})
+	if summary.Degraded != 0 {
+		t.Fatalf("a historical shortfall must not degrade the service: %+v", summary)
 	}
 
-	// A non-zero failure counter is degraded even when the success counter
-	// equals the request counter (the counters are cumulative and independent).
-	got = EvaluateServiceLayer([]MetricSample{
+	// A non-zero cumulative failure counter is historical evidence as well.
+	summary = SummarizeServiceEvidence([]MetricSample{
 		sampleOf("fivegs_amffunction_rm_reginitreq", 10),
 		sampleOf("fivegs_amffunction_rm_reginitsucc", 10),
 		sampleOf("fivegs_amffunction_rm_reginitfail", 2),
-	}, nil)
-	if got.State != StateDegraded {
-		t.Fatalf("a non-zero failure counter must degrade the service layer, got %+v", got)
+	})
+	if summary.Degraded != 0 {
+		t.Fatalf("a cumulative failure counter must not degrade the service: %+v", summary)
+	}
+	if summary.IntervalRequired != 2 {
+		t.Fatalf("both interval-requiring families must be reported: %+v", summary)
 	}
 }
 
 func TestServiceSemanticsIdleFailureCounterProvesNothing(t *testing.T) {
-	// A zero failure counter with no observed traffic is not positive evidence.
 	got := EvaluateServiceLayer([]MetricSample{
 		sampleOf("s6a_rx_unknown", 0),
 		sampleOf("cx_rx_mar_error", 0),
@@ -311,13 +318,13 @@ func TestServiceSemanticsIdleFailureCounterProvesNothing(t *testing.T) {
 	}
 }
 
-func TestServiceSemanticsFailureCounterWithTrafficConfirms(t *testing.T) {
+func TestServiceSemanticsFailureCounterWithTrafficIsStillUndetermined(t *testing.T) {
 	got := EvaluateServiceLayer([]MetricSample{
 		sampleOf("s6a_rx_ulr", 25),
 		sampleOf("s6a_rx_ulr_error", 0),
 	}, nil)
-	if got.State != StateHealthy || got.Reason != ReasonServiceHealthConfirmed {
-		t.Fatalf("traffic without failures is positive evidence, got %+v", got)
+	if got.State != StateUnknown || got.Reason != ReasonServiceHealthUndetermined {
+		t.Fatalf("cumulative counters must stay undetermined, got %+v", got)
 	}
 }
 
@@ -331,10 +338,10 @@ func TestServiceSemanticsZeroActivityGaugeIsNotHealthy(t *testing.T) {
 	}
 }
 
-func TestServiceSemanticsPositiveActivityGaugeConfirms(t *testing.T) {
+func TestServiceSemanticsPositiveActivityGaugeIsActivityOnly(t *testing.T) {
 	got := EvaluateServiceLayer([]MetricSample{sampleOf("mme_session", 3)}, nil)
-	if got.State != StateHealthy || got.Reason != ReasonServiceHealthConfirmed {
-		t.Fatalf("active sessions are positive service evidence, got %+v", got)
+	if got.State != StateUnknown || got.Reason != ReasonActivityObserved {
+		t.Fatalf("activity is observed activity, not confirmed health: %+v", got)
 	}
 }
 
@@ -356,7 +363,10 @@ func TestServiceSemanticsSummaryCountsCategories(t *testing.T) {
 	if summary.ResourceSamples != 1 || summary.ServiceSamples != 2 {
 		t.Fatalf("category counts must be reported: %+v", summary)
 	}
-	if summary.Positive != 1 || summary.Undetermined != 1 {
+	if summary.ActivityObserved != 1 || summary.Undetermined != 1 {
 		t.Fatalf("rule outcomes must be reported: %+v", summary)
+	}
+	if summary.Confirmed != 0 || summary.Degraded != 0 {
+		t.Fatalf("no rule may confirm or degrade from these families: %+v", summary)
 	}
 }

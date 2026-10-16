@@ -763,6 +763,7 @@ function reasonLabel(reason: string, t: (key: string) => string): string {
     'service_health_undetermined',
     'service_health_confirmed',
     'service_failures_observed',
+    'activity_observed',
   ];
   return known.includes(reason) ? t(`nf_health_reason_${reason}`) : reason;
 }

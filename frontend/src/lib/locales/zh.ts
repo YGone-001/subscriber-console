@@ -1737,6 +1737,7 @@ export const zh: Record<string, string> = {
     nf_health_reason_service_health_undetermined: "已观测到服务测量值，但没有适用的登记解读规则，因此不作健康判定。",
     nf_health_reason_service_health_confirmed: "已登记的、有证据支撑的规则判定为正向。",
     nf_health_reason_service_failures_observed: "已登记规则观测到失败。服务层判定为降级，绝不静默标记为健康。",
+    nf_health_reason_activity_observed: "已观测到服务活动或状态占用。活动是真实测量证据，但不能证明所有必需的服务操作均正常。",
     nf_health_metrics_evidence_section: "实测证据",
     nf_health_metrics_evidence_note: "每一条被接受的测量值及其类别、类型、数值与解读",
     nf_health_evidence_caption: "最近一次采集的实测指标证据",

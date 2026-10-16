@@ -1168,8 +1168,11 @@ async function main() {
       const detail = await api(base, 'GET', `/api/nf-health/targets/${targetId}`, adminToken);
       assert.equal(detail.json.target.domain, 'epc', 'the server-derived domain is the EPC domain');
       assert.equal(detail.json.target.nfType, 'MME');
-      assert.equal(sample.layers.service.state, 'healthy');
-      assert.equal(sample.layers.service.reason, 'service_health_confirmed');
+      // Active sessions are service-category activity evidence: recorded, but
+      // never presented as confirmed service health.
+      assert.equal(sample.layers.service.state, 'unknown');
+      assert.equal(sample.layers.service.reason, 'activity_observed');
+      assert.equal(sample.layers.service.measured, true);
       const categories = Object.fromEntries(sample.metrics.map((m) => [m.key, m.category]));
       assert.equal(categories.mme_session, 'service', 'MME session gauge is service evidence');
       assert.equal(categories.enb, 'service');
@@ -1185,8 +1188,8 @@ async function main() {
       assert.ok(keys.includes('s6a_rx_ulr'), 'S6a request counter is collected');
       assert.ok(keys.includes('hss_imsi'), 'subscriber aggregate gauge is collected');
       assert.ok(!keys.includes('amf_session'), 'a foreign-domain family is dropped, never relabelled');
-      assert.equal(sample.layers.service.state, 'healthy');
-      assert.equal(sample.layers.service.reason, 'service_health_confirmed');
+      assert.equal(sample.layers.service.state, 'unknown');
+      assert.equal(sample.layers.service.reason, 'activity_observed');
     });
 
     await verifyAsync('observed Diameter failures degrade the service layer', async () => {
@@ -1194,10 +1197,14 @@ async function main() {
       const res = await api(base, 'POST', `/api/nf-health/targets/${targetId}/collect`, adminToken);
       assert.equal(res.status, 200, res.text);
       const sample = res.json.sample;
-      assert.equal(sample.layers.service.state, 'degraded');
-      assert.equal(sample.layers.service.reason, 'service_failures_observed');
+      // Cumulative counters cannot establish a current-window failure, so no
+      // degradation is claimed and the raw counts remain visible.
+      assert.equal(sample.layers.service.state, 'unknown');
+      assert.equal(sample.layers.service.reason, 'service_health_undetermined');
+      assert.ok(sample.metrics.some((m) => m.key === 's6a_rx_air_error'), 'the raw failure counter stays visible');
       const detail = await api(base, 'GET', `/api/nf-health/targets/${targetId}`, adminToken);
-      assert.equal(detail.json.overallState, 'degraded', 'a degraded service layer is never reported healthy');
+      assert.notEqual(detail.json.overallState, 'healthy', 'an undetermined service layer is never reported healthy');
+      assert.notEqual(detail.json.overallState, 'degraded', 'no degradation may be claimed from cumulative totals');
     });
 
     await verifyAsync('process-only telemetry never establishes service health', async () => {
@@ -1230,7 +1237,8 @@ async function main() {
       const keys = sample.metrics.map((m) => m.key);
       assert.ok(keys.includes('ocs_sessions_active'), 'verified OCS gauge is collected');
       assert.ok(keys.includes('ocs_ccr_initial_total'), 'verified OCS counter is collected');
-      assert.equal(sample.layers.service.state, 'healthy');
+      assert.equal(sample.layers.service.state, 'unknown');
+      assert.equal(sample.layers.service.reason, 'activity_observed');
       const meta = await api(base, 'GET', '/api/nf-health/meta', adminToken);
       const ocs = meta.json.supportedMetrics.find((m) => m.name === 'ocs_sessions_active');
       assert.ok(ocs, 'the registry exposes the OCS family');

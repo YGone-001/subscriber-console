@@ -100,6 +100,11 @@ const (
 	// ReasonServiceFailuresObserved reports that a registered failure rule
 	// observed failures. The service is degraded, never silently healthy.
 	ReasonServiceFailuresObserved = "service_failures_observed"
+	// ReasonActivityObserved reports that service activity or state occupancy was
+	// observed (for example active sessions or registered subscribers). Activity
+	// is real measurement evidence, but it never proves that every required
+	// service operation is functioning correctly.
+	ReasonActivityObserved = "activity_observed"
 )
 
 // Canonical service-layer reasons exposed by GET /api/nf-health/meta.
@@ -112,6 +117,7 @@ var CanonicalServiceReasons = []string{
 	ReasonServiceHealthUndetermined,
 	ReasonServiceHealthConfirmed,
 	ReasonServiceFailuresObserved,
+	ReasonActivityObserved,
 }
 
 // CanonicalMetricCategories and CanonicalMetricEvidenceClasses are exposed by

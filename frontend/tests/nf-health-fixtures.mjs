@@ -405,7 +405,7 @@ export const SAMPLES = [
     layers: {
       process: layerProcess('active', 'healthy', 2411),
       interface: layerInterface(200, 18),
-      service: layerService('healthy', undefined),
+      service: layerService('unknown', 'activity_observed'),
     },
     metrics: METRICS_AMF,
   },
@@ -420,7 +420,7 @@ export const SAMPLES = [
     layers: {
       process: layerProcess('active', 'healthy', 2522),
       interface: layerInterface(200, 24),
-      service: layerService('healthy', undefined),
+      service: layerService('unknown', 'activity_observed'),
     },
     metrics: METRICS_SMF,
   },
@@ -628,6 +628,7 @@ function handleNfHealth(req, res, url, context) {
         'service_health_undetermined',
         'service_health_confirmed',
         'service_failures_observed',
+        'activity_observed',
       ],
       allowedDestinations: ['127.0.0.5:9090', '127.0.0.4:9090', '127.0.0.7:9090'],
       allowedServiceUnits: ['amfd', 'smfd', 'upfd'],
@@ -697,7 +698,7 @@ function handleNfHealth(req, res, url, context) {
         layers: {
           process: layerProcess('active', 'healthy', 2411),
           interface: layerInterface(200, 16),
-          service: layerService('healthy', undefined),
+          service: layerService('unknown', 'activity_observed'),
         },
         metrics: METRICS_AMF,
       },
