@@ -179,6 +179,7 @@ check(
 const listSource = read('features/nf-health/NfHealthPage.tsx');
 const detailSource = read('features/nf-health/NfHealthDetailPage.tsx');
 const typesSource = read('features/nf-health/nf-health-types.ts');
+const fixtureSource = readFileSync(resolve(root, 'frontend/tests/nf-health-fixtures.mjs'), 'utf8');
 check('NFH-UI-41', /freshness/.test(typesSource) && /FreshnessState/.test(typesSource), 'freshness_types_declared=true');
 check('NFH-UI-42', /target\.freshness/.test(listSource) || /freshness\?\.state/.test(listSource), 'overview_uses_server_freshness=true');
 check('NFH-UI-43', /freshness/.test(detailSource), 'detail_uses_server_freshness=true');
@@ -268,6 +269,44 @@ check(
     /nf_health_err_process_nf_type_incompatible/.test(localeEn) &&
     /nf_health_err_process_domain_incompatible/.test(localeZh),
   'nf_health_process_compatibility_errors=localized',
+);
+check(
+  'NFH-UI-58',
+  /nf_health_metrics_evidence_section/.test(detailSource) &&
+    /nf_health_category_service/.test(detailSource) &&
+    /nf_health_category_resource/.test(detailSource) &&
+    /nf_health_metrics_evidence_section/.test(localeEn) &&
+    /nf_health_metrics_evidence_section/.test(localeZh),
+  'nf_health_measured_evidence=present_and_localized',
+);
+check(
+  'NFH-UI-59',
+  /MAX_TREND_CHARTS/.test(detailSource) &&
+    /nf_health_trends_truncated/.test(detailSource) &&
+    /nf_health_trends_truncated/.test(localeEn) &&
+    /nf_health_trends_truncated/.test(localeZh),
+  'nf_health_trend_charts=bounded_with_explicit_count',
+);
+check(
+  'NFH-UI-60',
+  // The reason tokens are localized through a known-reason map, so the detail
+  // source carries the token while the locales carry the localized text.
+  /resource_metrics_only/.test(detailSource) &&
+    /service_failures_observed/.test(detailSource) &&
+    /resource_metrics_only/.test(fixtureSource) &&
+    /nf_health_reason_resource_metrics_only/.test(localeEn) &&
+    /nf_health_reason_resource_metrics_only/.test(localeZh) &&
+    /nf_health_reason_service_failures_observed/.test(localeEn) &&
+    /nf_health_reason_service_failures_observed/.test(localeZh),
+  'nf_health_service_reasons=localized',
+);
+check(
+  'NFH-UI-61',
+  /MetricCategory/.test(typesSource) &&
+    /MetricEvidenceClass/.test(typesSource) &&
+    /MetricHealthRule/.test(typesSource) &&
+    /category\?: MetricCategory/.test(typesSource),
+  'nf_health_metric_metadata=typed',
 );
 
 let failed = 0;

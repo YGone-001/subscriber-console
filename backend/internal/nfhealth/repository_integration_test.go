@@ -108,6 +108,77 @@ func nfhealthTestSample(targetID, runID, sampleID, collectedAt string, expires t
 // TestSampleExpiresAtPersistsAsBSONDate verifies the TTL data type correction:
 // a stored sample keeps expiresAt as a BSON Date so the MongoDB TTL index with
 // expireAfterSeconds 0 can consume it, while the JSON projection stays ISO 8601.
+// TestSampleCategoryRoundTripsAndLegacySamplesStayReadable proves the additive
+// metric category is persisted, and that samples stored before the field
+// existed remain readable with an empty category (the conservative reading).
+func TestSampleCategoryRoundTripsAndLegacySamplesStayReadable(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires MongoDB")
+	}
+	repo, db, cleanup := nfhealthTestRepo(t)
+	defer cleanup()
+
+	target := nfhealthTestTarget(t, repo, "category-target")
+	expires := time.Now().UTC().AddDate(0, 0, DefaultRetentionDays)
+	sample := nfhealthTestSample(target.TargetID, "run-cat-1", "sample-cat-1",
+		time.Now().UTC().Format(time.RFC3339Nano), expires)
+	sample.Metrics = []MetricSample{
+		{Key: "mme_session", Value: 4, Unit: "count", Type: "gauge",
+			Source: "metrics_endpoint", CollectedAt: sample.CollectedAt,
+			Interpretation: "session_count", Category: CategoryService},
+		{Key: "process_cpu_seconds_total", Value: 12, Unit: "seconds", Type: "counter",
+			Source: "metrics_endpoint", CollectedAt: sample.CollectedAt,
+			Interpretation: "resource_usage", Category: CategoryResource},
+	}
+	if err := repo.InsertSample(context.Background(), sample); err != nil {
+		t.Fatalf("insert sample: %v", err)
+	}
+	stored, err := repo.GetSample(context.Background(), "sample-cat-1")
+	if err != nil {
+		t.Fatalf("get sample: %v", err)
+	}
+	categories := map[string]string{}
+	for _, metric := range stored.Metrics {
+		categories[metric.Key] = metric.Category
+	}
+	if categories["mme_session"] != CategoryService {
+		t.Fatalf("service category must round-trip: %+v", categories)
+	}
+	if categories["process_cpu_seconds_total"] != CategoryResource {
+		t.Fatalf("resource category must round-trip: %+v", categories)
+	}
+
+	// A sample written before the additive field existed stays readable.
+	_, err = db.Collection("app_nf_health_samples").InsertOne(context.Background(), bson.M{
+		"_id":           "sample-legacy-category",
+		"schemaVersion": 1,
+		"targetId":      target.TargetID,
+		"runId":         "run-legacy-cat",
+		"collectedAt":   time.Now().UTC().Format(time.RFC3339Nano),
+		"expiresAt":     NewBSONTime(expires),
+		"layers":        bson.M{},
+		"metrics": []bson.M{{
+			"key": "amf_session", "value": 3, "unit": "count", "type": "gauge",
+			"source": "metrics_endpoint",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("insert legacy sample: %v", err)
+	}
+	legacy, err := repo.GetSample(context.Background(), "sample-legacy-category")
+	if err != nil {
+		t.Fatalf("legacy sample must stay readable: %v", err)
+	}
+	if len(legacy.Metrics) != 1 || legacy.Metrics[0].Category != "" {
+		t.Fatalf("legacy samples decode with an empty category: %+v", legacy.Metrics)
+	}
+	// An empty category is read as resource evidence, never as a service claim.
+	evidence := EvaluateServiceLayer(legacy.Metrics, nil)
+	if evidence.State == StateHealthy {
+		t.Fatalf("legacy unattributed samples must not claim service health: %+v", evidence)
+	}
+}
+
 func TestSampleExpiresAtPersistsAsBSONDate(t *testing.T) {
 	if testing.Short() {
 		t.Skip("requires MongoDB")

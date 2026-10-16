@@ -119,10 +119,46 @@ func TestEvaluateServiceLayerMissingStaysNotAvailable(t *testing.T) {
 	}
 }
 
-func TestEvaluateServiceLayerSamplesAreHealthy(t *testing.T) {
-	got := EvaluateServiceLayer([]MetricSample{{Key: "gnb", Value: 1}}, nil)
+// Service samples carrying a registered rule produce a positive reading; the
+// rule that produced it is reported in the reason field.
+func TestEvaluateServiceLayerRuleBackedServiceSampleIsHealthy(t *testing.T) {
+	got := EvaluateServiceLayer([]MetricSample{{Key: "gnb", Value: 1, Category: CategoryService}}, nil)
 	if got.State != StateHealthy || !got.Measured {
 		t.Fatalf("expected healthy measured service layer, got %+v", got)
+	}
+	if got.Reason != ReasonServiceHealthConfirmed {
+		t.Fatalf("expected the confirming rule to be reported, got %+v", got)
+	}
+}
+
+// Process/resource telemetry is genuine measured evidence but can never
+// establish L3 service health.
+func TestEvaluateServiceLayerResourceOnlySamplesAreUnknown(t *testing.T) {
+	samples := []MetricSample{
+		{Key: "process_cpu_seconds_total", Value: 128.5, Category: CategoryResource},
+		{Key: "process_resident_memory_bytes", Value: 4096, Category: CategoryResource},
+	}
+	got := EvaluateServiceLayer(samples, nil)
+	if got.State != StateUnknown {
+		t.Fatalf("resource-only telemetry must not claim service health, got %+v", got)
+	}
+	if !got.Measured {
+		t.Fatal("observed evidence must still be reported as measured")
+	}
+	if got.Reason != ReasonResourceMetricsOnly {
+		t.Fatalf("expected resource_metrics_only, got %+v", got)
+	}
+}
+
+// A sample with no category (legacy or unattributed) is read conservatively as
+// resource evidence rather than as a service-health claim.
+func TestEvaluateServiceLayerUncategorizedSampleIsNotHealthy(t *testing.T) {
+	got := EvaluateServiceLayer([]MetricSample{{Key: "gnb", Value: 1}}, nil)
+	if got.State == StateHealthy {
+		t.Fatalf("an unattributed sample must not claim service health, got %+v", got)
+	}
+	if !got.Measured {
+		t.Fatal("observed evidence must still be reported as measured")
 	}
 }
 

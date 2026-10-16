@@ -215,7 +215,7 @@ func (c *Collector) Collect(ctx context.Context, target *HealthTarget, initiated
 			var parseErr error
 			parsedCount := 0
 			if probe.Outcome == InterfaceValid {
-				outcome, perr2 := ParsePrometheusText(probe.Body, started.Format(time.RFC3339Nano), nil, target.NFType)
+				outcome, perr2 := ParsePrometheusText(probe.Body, started.Format(time.RFC3339Nano), nil, target.Domain, target.NFType)
 				if perr2 != nil {
 					parseErr = perr2
 					layers.Interface = EvaluateInterfaceLayer(probe, parseErr, 0)

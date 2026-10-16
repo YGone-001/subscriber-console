@@ -29,6 +29,21 @@ export interface LayerEvidence {
   measured: boolean;
 }
 
+export type MetricCategory = 'resource' | 'service';
+
+export type MetricEvidenceClass =
+  | 'live_verified'
+  | 'source_verified'
+  | 'fixture_tested'
+  | 'not_verified'
+  | 'not_exported';
+
+export type MetricHealthRule =
+  | 'none'
+  | 'failure_counter_zero'
+  | 'success_ratio_pair'
+  | 'activity_gauge';
+
 export interface MetricSample {
   key: string;
   value: number;
@@ -38,6 +53,9 @@ export interface MetricSample {
   collectedAt: string;
   interpretation?: string;
   labels?: Record<string, string>;
+  // Category is additive: samples stored before it existed decode as undefined
+  // and are presented as resource evidence, never as a service-health claim.
+  category?: MetricCategory;
 }
 
 export interface LayerSet {
@@ -127,12 +145,19 @@ export interface HealthSample {
 
 export interface MetricDefinition {
   name: string;
+  domain: string;
   nfTypes: string[];
+  category: MetricCategory;
   type: 'counter' | 'gauge';
   unit: string;
   description: string;
   safeLabels: string[];
   interpretation: string;
+  source: string;
+  evidence: MetricEvidenceClass;
+  healthRule: MetricHealthRule;
+  healthPair?: string;
+  nonNegative: boolean;
 }
 
 export interface NfHealthMeta {
@@ -157,6 +182,9 @@ export interface NfHealthMeta {
   retentionDays: number;
   maxRetentionDays: number;
   supportedMetrics: MetricDefinition[];
+  metricCategories?: MetricCategory[];
+  metricEvidenceClasses?: MetricEvidenceClass[];
+  serviceReasons?: string[];
   allowedDestinations: string[];
   allowedServiceUnits: string[];
 }

@@ -44,7 +44,7 @@ func TestLookupMetricForNFTypeFiltersByPermittedType(t *testing.T) {
 }
 
 func TestParsePrometheusTextFiltersForeignNFFamilies(t *testing.T) {
-	out, err := ParsePrometheusText([]byte(nfTypeMetricsBody), "2026-01-01T00:00:00Z", nil, "AMF")
+	out, err := ParsePrometheusText([]byte(nfTypeMetricsBody), "2026-01-01T00:00:00Z", nil, "5gc", "AMF")
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
@@ -70,7 +70,7 @@ func TestParsePrometheusTextFiltersForeignNFFamilies(t *testing.T) {
 }
 
 func TestParsePrometheusTextLegacyTargetKeepsRegistryCompatibility(t *testing.T) {
-	out, err := ParsePrometheusText([]byte(nfTypeMetricsBody), "2026-01-01T00:00:00Z", nil, "")
+	out, err := ParsePrometheusText([]byte(nfTypeMetricsBody), "2026-01-01T00:00:00Z", nil, "", "")
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
@@ -87,7 +87,7 @@ func TestParsePrometheusTextLegacyTargetKeepsRegistryCompatibility(t *testing.T)
 }
 
 func TestParsePrometheusTextNeverZeroFillsDroppedFamilies(t *testing.T) {
-	out, err := ParsePrometheusText([]byte(nfTypeMetricsBody), "2026-01-01T00:00:00Z", nil, "AMF")
+	out, err := ParsePrometheusText([]byte(nfTypeMetricsBody), "2026-01-01T00:00:00Z", nil, "5gc", "AMF")
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
@@ -103,7 +103,7 @@ func TestParsePrometheusTextKeepsSafeLabelsForResolvedNFType(t *testing.T) {
 # TYPE amf_session gauge
 amf_session{imsi="001010000000001",nf="amf-01"} 7
 `)
-	out, err := ParsePrometheusText([]byte(body), "2026-01-01T00:00:00Z", nil, "AMF")
+	out, err := ParsePrometheusText([]byte(body), "2026-01-01T00:00:00Z", nil, "5gc", "AMF")
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}

@@ -87,6 +87,44 @@ const (
 	ReasonMetricMissing  = "metric_not_exported"
 	ReasonMetricInvalid  = "metric_invalid"
 	ReasonNotConfigured  = "not_configured"
+	// ReasonResourceMetricsOnly reports that accepted metrics describe the
+	// exporter process only: measured resource evidence exists, but it can never
+	// establish L3 service health.
+	ReasonResourceMetricsOnly = "resource_metrics_only"
+	// ReasonServiceHealthUndetermined reports that service measurements were
+	// observed but no registered health rule applies, so no health claim is made.
+	ReasonServiceHealthUndetermined = "service_health_undetermined"
+	// ReasonServiceHealthConfirmed reports that a registered, evidence-backed
+	// rule evaluated positively.
+	ReasonServiceHealthConfirmed = "service_health_confirmed"
+	// ReasonServiceFailuresObserved reports that a registered failure rule
+	// observed failures. The service is degraded, never silently healthy.
+	ReasonServiceFailuresObserved = "service_failures_observed"
+)
+
+// Canonical service-layer reasons exposed by GET /api/nf-health/meta.
+var CanonicalServiceReasons = []string{
+	ReasonNoSupportedKPI,
+	ReasonMetricMissing,
+	ReasonMetricInvalid,
+	ReasonNotConfigured,
+	ReasonResourceMetricsOnly,
+	ReasonServiceHealthUndetermined,
+	ReasonServiceHealthConfirmed,
+	ReasonServiceFailuresObserved,
+}
+
+// CanonicalMetricCategories and CanonicalMetricEvidenceClasses are exposed by
+// GET /api/nf-health/meta so the UI can present measured evidence honestly.
+var (
+	CanonicalMetricCategories      = []string{CategoryResource, CategoryService}
+	CanonicalMetricEvidenceClasses = []string{
+		EvidenceLiveVerified,
+		EvidenceSourceVerified,
+		EvidenceFixtureTested,
+		EvidenceNotVerified,
+		EvidenceNotExported,
+	}
 )
 
 // Canonical vocabularies exposed by GET /api/nf-health/meta.
@@ -178,6 +216,10 @@ type MetricSample struct {
 	CollectedAt    string            `json:"collectedAt" bson:"collectedAt"`
 	Interpretation string            `json:"interpretation,omitempty" bson:"interpretation,omitempty"`
 	Labels         map[string]string `json:"labels,omitempty" bson:"labels,omitempty"`
+	// Category is resource or service. It is additive: samples persisted before
+	// this field existed decode with an empty category and are read as resource
+	// evidence, which is the conservative reading (no service-health claim).
+	Category string `json:"category,omitempty" bson:"category,omitempty"`
 }
 
 // LayerSet is the three-layer observation carried by every sample.

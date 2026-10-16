@@ -231,6 +231,9 @@ type MetaResponse struct {
 	ServiceKinds             []string           `json:"serviceKinds"`
 	IdentityStates           []string           `json:"identityStates"`
 	SupportedResourceDomains []string           `json:"supportedResourceDomains"`
+	MetricCategories         []string           `json:"metricCategories"`
+	MetricEvidenceClasses    []string           `json:"metricEvidenceClasses"`
+	ServiceReasons           []string           `json:"serviceReasons"`
 	MinIntervalSeconds       int                `json:"minIntervalSeconds"`
 	MaxIntervalSeconds       int                `json:"maxIntervalSeconds"`
 	DefaultIntervalSeconds   int                `json:"defaultIntervalSeconds"`
@@ -268,6 +271,9 @@ func (h *Handler) Meta(w http.ResponseWriter, r *http.Request) {
 		ServiceKinds:             []string{"systemd", "process", "none"},
 		IdentityStates:           CanonicalIdentityStates,
 		SupportedResourceDomains: SupportedResourceDomains,
+		MetricCategories:         CanonicalMetricCategories,
+		MetricEvidenceClasses:    CanonicalMetricEvidenceClasses,
+		ServiceReasons:           CanonicalServiceReasons,
 		MinIntervalSeconds:       MinIntervalSeconds,
 		MaxIntervalSeconds:       MaxIntervalSeconds,
 		DefaultIntervalSeconds:   DefaultIntervalSeconds,

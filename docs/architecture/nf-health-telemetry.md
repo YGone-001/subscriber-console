@@ -137,6 +137,47 @@ Unsupported KPI families stay `not_available` / `not_configured` with reason
 `no_supported_service_kpi` or `metric_not_exported`. Missing metrics are never zero-filled.
 A zero measurement is valid only when the exporter reports zero.
 
+**Resource metrics and service KPIs are distinct.** Every accepted sample
+carries a category:
+
+```text
+resource   exporter-process telemetry (process_cpu_seconds_total,
+           process_resident_memory_bytes, process_open_fds, ...)
+service    NF-domain measurement attributed to the monitored resource
+```
+
+L3 service health is never inferred from the existence of samples:
+
+- exporter-process telemetry can never establish service health; when only
+  resource evidence is observed, L3 is `unknown` with reason
+  `resource_metrics_only` and the measurement coverage is preserved;
+- a measured service counter does not prove the service is healthy: a
+  recognized counter may simply report how many failures occurred;
+- only explicit, registered interpretation rules produce a positive or degraded
+  reading (`service_health_confirmed` / `service_failures_observed`);
+- when service evidence exists but no rule applies, L3 is `unknown` with reason
+  `service_health_undetermined`;
+- unsupported families stay unmeasured, and absence is never turned into zero.
+
+Registered interpretation rules (no arbitrary thresholds):
+
+```text
+none                   resource metrics and families without a defensible
+                       service-health interpretation
+failure_counter_zero   a registered failure counter: zero with observed traffic
+                       is positive evidence, a positive value is degraded evidence
+success_ratio_pair     a success counter paired with its request counter on the
+                       same event population: equality with a non-zero request
+                       count is positive, a shortfall is degraded, a zero request
+                       count yields no evidence
+activity_gauge         a gauge counting active service objects: a positive value
+                       is evidence of live service activity, zero yields none
+```
+
+A zero failure counter with no observed traffic proves nothing and stays
+undetermined. An incomplete pair (a success counter without its request counter)
+never becomes a percentage.
+
 ### 2.4 Canonical layer states
 
 ```text
@@ -406,26 +447,143 @@ interpretation. The registry is deliberately conservative: only families
 verified against the deployed exporter are listed. Unlisted families are
 dropped and never zero-filled.
 
+Every definition additionally carries:
+
+```text
+domain         canonical Inventory domain (epc | 5gc | ims | charging | *)
+category       resource | service
+source         vendor-neutral exporter identity (nf_metrics_exporter)
+evidence       live_verified | source_verified | fixture_tested | not_verified | not_exported
+healthRule     none | failure_counter_zero | success_ratio_pair | activity_gauge
+healthPair     the paired request counter for success_ratio_pair
+nonNegative    count-like families reject negative values
+```
+
+### 6.1 Telemetry capability matrix (22 reference process types)
+
+The matrix records what the reference deployment actually exposes. `Exporter`
+means a metrics implementation exists in the deployed exporter; `Enabled` means
+the reference deployment configures a metrics listener. No family is registered
+for an NF type whose exporter does not implement one.
+
+| Domain | NF type | Process | Exporter | Enabled | Registered families | Evidence class |
+|---|---|---|---|---|---|---|
+| 5gc | AMF | `amfd` | yes | yes (live) | 24 | live_verified |
+| 5gc | SMF | `smfd` | yes | yes (live) | 14 | live_verified |
+| 5gc | UPF | `upfd` | yes | yes (live) | 8 | live_verified |
+| 5gc | PCF | `pcfd` | yes | yes (metadata only) | 5 | live_verified (families declared; values appear only with policy associations) |
+| 5gc | NRF | `nrfd` | no | no | 0 | not_exported |
+| 5gc | AUSF | `ausfd` | no | no | 0 | not_exported |
+| 5gc | UDM | `udmd` | no | no | 0 | not_exported |
+| 5gc | UDR | `udrd` | no | no | 0 | not_exported |
+| 5gc | BSF | `bsfd` | no | no | 0 | not_exported |
+| 5gc | NSSF | `nssfd` | no | no | 0 | not_exported |
+| 5gc | SCP | `scpd` | no | no | 0 | not_exported |
+| 5gc | SEPP | `seppd` | no | no | 0 | not_exported |
+| epc | MME | `mmed` | yes | yes (live) | 3 | live_verified |
+| epc | SGW-C | `sgwcd` | no | no | 0 | not_exported |
+| epc | SGW-U | `sgwud` | no | no | 0 | not_exported |
+| epc | HSS | `hssd` | yes | yes (live) | 39 | live_verified |
+| epc | PCRF | `pcrfd` | yes | yes (live) | 16 | live_verified |
+| charging | OCS | `ocsd` | yes | no | 21 | source_verified |
+| ims | P-CSCF | `pcscfd` | no | no | 0 | not_exported |
+| ims | S-CSCF | `scscfd` | no | no | 0 | not_exported |
+| ims | I-CSCF | `icscfd` | no | no | 0 | not_exported |
+| ims | SMSC | `smscd` | no | no | 0 | not_exported |
+
+Reading the matrix:
+
+- `live_verified` families were observed on the declared metrics endpoints
+  (`amf` 127.0.0.5, `smf` 127.0.0.4, `upf` 127.0.0.7, `mme` 127.0.0.2,
+  `hss` 127.0.0.8, `pcrf` 127.0.0.9, `pcf` 127.0.0.13 — all `:9090`) through
+  bounded, read-only GET requests, and cross-checked against the exporter
+  implementation.
+- `source_verified` (charging) means the exporter implementation declares the
+  families but the reference deployment does not enable the OCS metrics
+  listener: no live evidence exists and none is claimed.
+- `not_exported` means the exporter implements no metrics for that NF type.
+  These NF types keep L1 (and, where an endpoint is configured, L2) monitoring
+  with L3 explicitly unavailable. This is an evidence-backed capability result,
+  not a monitoring failure.
+- The IMS deployment (P-CSCF / I-CSCF / S-CSCF / SMSC) exposes no Prometheus
+  metrics through the authorized HTTP collection path. The SMSC HTTP listener is
+  an SMS submission endpoint, never a metrics source. IMS therefore keeps L1
+  process monitoring only.
+
+### 6.2 Metric families by NF type
+
+```text
+generic resource (domain *, nfTypes *)  7 families
+  process_resident_memory_bytes, process_cpu_seconds_total,
+  process_start_time_seconds, process_open_fds, process_max_fds,
+  process_virtual_memory_bytes, process_virtual_memory_max_bytes
+
+5gc AMF   24  session/registration/auth/paging/configuration-update gauges and counters
+5gc SMF   14  session, bearer, PFCP, N4 and PDU-session families
+5gc UPF    8  session, QoS-flow, N3 packet and N4 families
+5gc PCF    5  AM/SM policy association counters and active sessions
+epc MME    3  mme_session, enb_ue, enb
+epc HSS   39  S6a/Cx/SWx Diameter counters plus IMSI/IMPI/IMPU aggregate gauges
+epc PCRF  16  Gx/Rx policy counters
+charging OCS 21  session/reservation/subscriber gauges, Gy/Ro counters,
+                 reconciliation and processing-latency gauges
+```
+
+Previously certified AMF/SMF/UPF families are preserved unchanged. The
+deployed SMF exporter additionally emits EPC-side GTP families (`gn_*`, `s5c_*`,
+`gtp1_pdpctxs_active`, `gtp_node_*`); they are deliberately not registered
+because the SMF resource is attributed to the 5GC domain and the per-peer
+`gtp_node_*` families lose their peer identity under the label policy below.
+
+### 6.3 Endpoint trust boundary
+
+The collection path proves that the configured, allowlisted endpoint answered
+and produced parseable metrics. It does not prove that the remote process is
+cryptographically authenticated as the claimed network function: attribution
+comes from the operator-approved Inventory association and the destination
+allowlist, not from the transport. This boundary is unchanged from the previous
+phase and is stated here explicitly.
+
 Prometheus text exposition parsing:
 
 - recognizes `# HELP` and `# TYPE` metadata
 - parses permitted sample syntax with labels
 - rejects NaN, infinity and malformed numbers
+- rejects negative values for count-like families (an observed negative session
+  count is corrupted evidence, not a measurement)
 - preserves counter/gauge semantics; a counter value is never presented as a rate
 - detects counter resets when a caller supplies a previous baseline
 - drops unregistered families rather than inventing them
 - drops or redacts labels involving IMSI, SUPI, MSISDN, IMEI, IMPU, IMPI,
   authentication material, subscriber identity and session-specific identifiers
 
-Metric attribution is bound to the validated target NF type:
+Metric attribution is bound to the validated target domain and NF type:
 
-- generic process metric families (wildcard `nfTypes`) remain permitted for
+- generic resource families (wildcard domain and `nfTypes`) remain permitted for
   every target;
-- for an identity-resolved target, a family must explicitly permit that NF type:
-  a foreign NF's metric is never relabelled as belonging to the selected
-  Inventory resource;
-- a legacy target without an authoritative NF type keeps registry
-  compatibility without inventing type-specific attribution.
+- for an identity-resolved target, a family must explicitly permit that
+  canonical domain and NF type: a foreign NF's or foreign domain's metric is
+  never relabelled as belonging to the selected Inventory resource;
+- a legacy target without an authoritative identity keeps registry
+  compatibility without inventing type-specific attribution;
+- the metric's own `nfType` label is never an authority for resource identity.
+
+Label policy: only `nf`, `nftype`, `nf_type`, `function` and `instance` survive.
+Subscriber, session, peer-address and slice identifiers (including `plmnid` and
+`snssai`) are dropped, which is why per-peer families are not registered.
+
+### 6.4 Counter and derived-KPI limits
+
+- A cumulative counter is never presented as a per-second rate; deriving a rate
+  would require at least two valid observations with real timestamps.
+- Counter resets are detected against a supplied baseline and never produce a
+  manufactured delta.
+- Success-ratio rules compare a success counter with its own request counter on
+  the same event population; unrelated counters are never combined.
+- An incomplete interval or a missing numerator/denominator never produces a
+  percentage.
+- No derived KPI is persisted, and no database field was added for rate
+  calculation.
 
 Raw metrics exports are never stored in MongoDB.
 
@@ -490,7 +648,10 @@ POST   /api/nf-health/targets/{targetId}/collect
 - Historical sample queries accept `targetId`, `from`, `to`, `cursor` and
   `limit`. Time ranges are bounded. There is no unrestricted aggregation API.
 - `GET /api/nf-health/meta` additionally exposes `identityStates`,
-  `supportedResourceDomains` and the `process_only` collector profile.
+  `supportedResourceDomains`, the `process_only` collector profile,
+  `metricCategories`, `metricEvidenceClasses`, `serviceReasons` and the full
+  `supportedMetrics` registry with its domain, category, evidence class and
+  health rule.
 
 ### 8.1 Stable error codes
 
@@ -615,6 +776,17 @@ NF Health is a native xCloud module:
   collector host and never displays unmeasured layers as healthy
 - legacy candidate-only targets remain visible and are labeled honestly as
   lacking an authoritative Inventory resource association
+- a measured-evidence table lists every accepted metric with its category
+  (resource or service), type, value and interpretation, so process telemetry is
+  never confused with service measurements
+- the trend grid is bounded (12 charts) and states how many further measured
+  series are listed in the evidence table instead of charting them
+- layer reasons are localized (`resource_metrics_only`,
+  `service_health_undetermined`, `service_health_confirmed`,
+  `service_failures_observed`, ...); an unrecognized reason is shown verbatim
+  rather than being explained away
+- a missing metric is never displayed as `0`, and unsupported KPI categories are
+  never shown as healthy
 
 ## 11. Explicit Non-Goals
 
@@ -631,3 +803,19 @@ metric adapters are intentionally deferred to a subsequent controlled phase.
 The 22-process registry and the `process_only` profile establish the identity
 and collection foundation only; they do not claim operational support for every
 mapped process.
+
+Remaining gaps recorded by the capability audit:
+
+- Charging (OCS) metrics are source-verified only: the reference deployment does
+  not enable the OCS metrics listener, so no live evidence exists and no
+  delivered service-KPI monitoring is claimed for the charging domain.
+- 5GC NRF/AUSF/UDM/UDR/BSF/NSSF/SCP/SEPP, EPC SGW-C/SGW-U and all four IMS NF
+  types export no metrics through the authorized HTTP collection path; they keep
+  L1 (and configured L2) monitoring with L3 explicitly unavailable.
+- The PCF exporter declares its policy families but emits values only when
+  policy associations exist; until then the families stay unmeasured.
+- Live verification is restricted to bounded, read-only GET requests against
+  metrics endpoints declared in the deployment configuration. Port scanning,
+  endpoint guessing, configuration changes, service restarts, signaling probes
+  and packet capture are prohibited, and the gated live suite refuses to run
+  without an explicit read-only authorization flag.

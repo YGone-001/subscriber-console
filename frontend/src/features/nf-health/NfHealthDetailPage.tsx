@@ -180,6 +180,25 @@ export function NfHealthDetailPage() {
   const target = detail?.target;
   const latestSample = detail?.latestSample;
 
+  // Measured evidence is fully listed in the evidence table; the chart grid is
+  // bounded so a fully populated registry cannot degrade the page, and the
+  // number of series that are not charted is stated explicitly.
+  const MAX_TREND_CHARTS = 12;
+  const chartedSeries = trendSeries.slice(0, MAX_TREND_CHARTS);
+  const unchartedSeriesCount = Math.max(0, trendSeries.length - chartedSeries.length);
+
+  const measuredEvidence = useMemo(() => {
+    const metrics = latestSample?.metrics ?? [];
+    return metrics.map((metric) => ({
+      key: metric.key,
+      value: metric.value,
+      unit: metric.unit,
+      type: metric.type,
+      interpretation: metric.interpretation ?? '-',
+      category: metric.category ?? 'resource',
+    }));
+  }, [latestSample]);
+
   return (
     <div className="container animate-fade-in">
       <PageHeader
@@ -447,7 +466,7 @@ export function NfHealthDetailPage() {
               </div>
             ) : (
               <div className={styles.trendGrid}>
-                {trendSeries.map((series) => {
+                {chartedSeries.map((series) => {
                   const latestPoint = series.points[series.points.length - 1];
                   return (
                     <article key={series.key} className={styles.trendCard}>
@@ -483,6 +502,65 @@ export function NfHealthDetailPage() {
                     </article>
                   );
                 })}
+              </div>
+            )}
+            {unchartedSeriesCount > 0 ? (
+              <p className={styles.semanticNote}>
+                {t('nf_health_trends_truncated', { count: unchartedSeriesCount })}
+              </p>
+            ) : null}
+          </section>
+
+          <section className="dash-card">
+            <div className={styles.sectionHead}>
+              <h2>{t('nf_health_metrics_evidence_section')}</h2>
+              <span className={styles.sectionNote}>{t('nf_health_metrics_evidence_note')}</span>
+            </div>
+            {measuredEvidence.length === 0 ? (
+              <div className={styles.stateWrap}>
+                <EmptyState
+                  icon={<Activity size={44} />}
+                  title={t('nf_health_empty_evidence_title')}
+                  description={t('nf_health_empty_evidence_body')}
+                />
+              </div>
+            ) : (
+              <div className={styles.tableScroll}>
+                <table className={styles.table}>
+                  <caption className="sr-only">{t('nf_health_evidence_caption')}</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">{t('nf_health_evidence_col_metric')}</th>
+                      <th scope="col">{t('nf_health_evidence_col_category')}</th>
+                      <th scope="col">{t('nf_health_evidence_col_type')}</th>
+                      <th scope="col">{t('nf_health_evidence_col_value')}</th>
+                      <th scope="col">{t('nf_health_evidence_col_interpretation')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {measuredEvidence.map((metric) => (
+                      <tr key={metric.key}>
+                        <td><code className={styles.uuid}>{metric.key}</code></td>
+                        <td>
+                          <span
+                            className={
+                              metric.category === 'service'
+                                ? styles.badgeHealthy
+                                : styles.badgeNotConfigured
+                            }
+                          >
+                            {metric.category === 'service'
+                              ? t('nf_health_category_service')
+                              : t('nf_health_category_resource')}
+                          </span>
+                        </td>
+                        <td><code className={styles.chip}>{metric.type}</code></td>
+                        <td>{`${metric.value} ${metric.unit}`}</td>
+                        <td>{metric.interpretation}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </section>
@@ -586,8 +664,8 @@ export function NfHealthDetailPage() {
 
           <section className="dash-card">
             <div className={styles.sectionHead}>
-              <h2>{t('nf_health_evidence_section')}</h2>
-              <span className={styles.sectionNote}>{t('nf_health_evidence_note')}</span>
+              <h2>{t('nf_health_metrics_evidence_section')}</h2>
+              <span className={styles.sectionNote}>{t('nf_health_metrics_evidence_note')}</span>
             </div>
             <dl className={styles.identityGrid}>
               <div>
@@ -673,6 +751,22 @@ export function NfHealthDetailPage() {
   );
 }
 
+// Known evidence reasons are localized; an unrecognized reason is displayed
+// verbatim so no explanation is invented.
+function reasonLabel(reason: string, t: (key: string) => string): string {
+  const known = [
+    'not_configured',
+    'metric_not_exported',
+    'metric_invalid',
+    'no_supported_service_kpi',
+    'resource_metrics_only',
+    'service_health_undetermined',
+    'service_health_confirmed',
+    'service_failures_observed',
+  ];
+  return known.includes(reason) ? t(`nf_health_reason_${reason}`) : reason;
+}
+
 function LayerPanel({
   title,
   evidence,
@@ -709,7 +803,7 @@ function LayerPanel({
           {evidence?.reason ? (
             <div>
               <dt>{t('nf_health_reason')}</dt>
-              <dd>{evidence.reason}</dd>
+              <dd>{reasonLabel(evidence.reason, t)}</dd>
             </div>
           ) : null}
         </dl>

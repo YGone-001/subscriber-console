@@ -121,6 +121,17 @@ const RESOURCE_5GC_LINKED = '1a2b3c40-0009-4a09-8c09-0000000000e9';
 const RESOURCE_IMS_PROC = '1a2b3c40-000a-4a0a-8c0a-0000000000ea';
 // Active resource with no server-authorized local process binding.
 const RESOURCE_UNBOUND = '1a2b3c40-000b-4a0b-8c0b-0000000000eb';
+// EPC and charging resources with verified metrics exporters.
+const RESOURCE_MME = '1a2b3c40-000c-4a0c-8c0c-0000000000ec';
+const RESOURCE_HSS = '1a2b3c40-000d-4a0d-8c0d-0000000000ed';
+const RESOURCE_OCS = '1a2b3c40-000e-4a0e-8c0e-0000000000ee';
+// IMS resource used for the HTTP metrics capability check.
+const RESOURCE_IMS_HTTP = '1a2b3c40-000f-4a0f-8c0f-0000000000ef';
+// One active target per Inventory resource is the uniqueness policy, so each
+// additional scenario uses its own resource.
+const RESOURCE_HSS_DEGRADED = '1a2b3c40-0010-4a10-8c10-0000000000f0';
+const RESOURCE_5GC_RESOURCE_ONLY = '1a2b3c40-0011-4a11-8c11-0000000000f1';
+const RESOURCE_5GC_CORRUPT = '1a2b3c40-0012-4a12-8c12-0000000000f2';
 
 const resourceDoc = (id, kind, domain, role, lifecycleState = 'active') => ({
   _id: id,
@@ -161,13 +172,98 @@ const EMPTY_BODY = '# no supported families\n';
 
 const mockMode = { body: METRICS_BODY, status: 200, fail: false };
 
+// Domain-specific metric bodies. Every family below was verified against the
+// reference exporter implementation (source) and, where the reference
+// deployment serves it, against the live endpoint. Fixtures never invent a
+// family that the exporter does not declare.
+const MME_BODY = [
+  '# HELP mme_session MME Sessions',
+  '# TYPE mme_session gauge',
+  'mme_session 3',
+  '# HELP enb eNodeBs',
+  '# TYPE enb gauge',
+  'enb 1',
+  '# HELP process_cpu_seconds_total Cumulative process CPU seconds',
+  '# TYPE process_cpu_seconds_total counter',
+  'process_cpu_seconds_total 42',
+  '',
+].join('\n');
+
+const HSS_BODY = [
+  '# HELP s6a_rx_ulr Transmitted S6a ULR messages',
+  '# TYPE s6a_rx_ulr counter',
+  's6a_rx_ulr 25',
+  '# HELP s6a_rx_ulr_error Transmitted S6a ULR messages failed',
+  '# TYPE s6a_rx_ulr_error counter',
+  's6a_rx_ulr_error 0',
+  '# HELP hss_imsi Number of IMSIs attached to HSS',
+  '# TYPE hss_imsi gauge',
+  'hss_imsi 4',
+  '# HELP amf_session Foreign-domain family that must be dropped',
+  '# TYPE amf_session gauge',
+  'amf_session 9',
+  '',
+].join('\n');
+
+const HSS_DEGRADED_BODY = [
+  '# HELP s6a_rx_air Received S6a AIR messages',
+  '# TYPE s6a_rx_air counter',
+  's6a_rx_air 10',
+  '# HELP s6a_rx_air_error Received S6a AIR messages failed',
+  '# TYPE s6a_rx_air_error counter',
+  's6a_rx_air_error 3',
+  '',
+].join('\n');
+
+const RESOURCE_ONLY_BODY = [
+  '# HELP process_cpu_seconds_total Cumulative process CPU seconds',
+  '# TYPE process_cpu_seconds_total counter',
+  'process_cpu_seconds_total 7',
+  '# HELP process_resident_memory_bytes Resident memory',
+  '# TYPE process_resident_memory_bytes gauge',
+  'process_resident_memory_bytes 2048',
+  '',
+].join('\n');
+
+// The reference SMF exporter can report a corrupted negative session gauge;
+// count-like values must be rejected instead of persisted as evidence.
+const CORRUPTED_COUNT_BODY = [
+  '# HELP fivegs_smffunction_sm_sessionnbr Active Sessions',
+  '# TYPE fivegs_smffunction_sm_sessionnbr gauge',
+  'fivegs_smffunction_sm_sessionnbr -445',
+  '',
+].join('\n');
+
+const OCS_BODY = [
+  '# HELP ocs_sessions_active Number of active OCS sessions',
+  '# TYPE ocs_sessions_active gauge',
+  'ocs_sessions_active 2',
+  '# HELP ocs_ccr_initial_total Total CCR-Initial requests received',
+  '# TYPE ocs_ccr_initial_total counter',
+  'ocs_ccr_initial_total 17',
+  '# HELP ocs_ro_credit_limit_reached_total Total Ro credit limit rejections',
+  '# TYPE ocs_ro_credit_limit_reached_total counter',
+  'ocs_ro_credit_limit_reached_total 0',
+  '',
+].join('\n');
+
+const PATH_BODIES = {
+  '/mme': MME_BODY,
+  '/hss': HSS_BODY,
+  '/hss-degraded': HSS_DEGRADED_BODY,
+  '/resource-only': RESOURCE_ONLY_BODY,
+  '/corrupted': CORRUPTED_COUNT_BODY,
+  '/ocs': OCS_BODY,
+};
+
 function buildMockMetrics() {
   return http.createServer((req, res) => {
     if (mockMode.fail) {
       res.destroy();
       return;
     }
-    const body = mockMode.body;
+    const pathname = (req.url || '').split('?')[0];
+    const body = PATH_BODIES[pathname] ?? mockMode.body;
     res.writeHead(mockMode.status, {
       'Content-Type': 'text/plain; version=0.0.4',
       'Content-Length': Buffer.byteLength(body),
@@ -301,6 +397,13 @@ async function main() {
       resourceDoc(RESOURCE_5GC_LINKED, 'network_function_instance', '5gc', 'amf'),
       resourceDoc(RESOURCE_IMS_PROC, 'network_function_instance', 'ims', 'pcscf'),
       resourceDoc(RESOURCE_UNBOUND, 'network_function_instance', '5gc', 'amf'),
+      resourceDoc(RESOURCE_MME, 'network_function_instance', 'epc', 'mme'),
+      resourceDoc(RESOURCE_HSS, 'network_function_instance', 'epc', 'hss'),
+      resourceDoc(RESOURCE_OCS, 'network_function_instance', 'charging', 'ocs'),
+      resourceDoc(RESOURCE_IMS_HTTP, 'network_function_instance', 'ims', 'pcscf'),
+      resourceDoc(RESOURCE_HSS_DEGRADED, 'network_function_instance', 'epc', 'hss'),
+      resourceDoc(RESOURCE_5GC_RESOURCE_ONLY, 'network_function_instance', '5gc', 'amf'),
+      resourceDoc(RESOURCE_5GC_CORRUPT, 'network_function_instance', '5gc', 'smf'),
     ]);
     const inventoryBaseline = await client.db(appDbName).collection('app_inventory_resources').countDocuments({});
 
@@ -1036,6 +1139,120 @@ async function main() {
         { _id: RESOURCE_EPC },
         { $set: { lifecycleState: 'active' } },
       );
+    });
+
+    // ---- Cross-domain metrics adaptation (verified exporter evidence) ----
+
+    async function createResourceTarget(resourceId, name, path, extra = {}) {
+      const res = await api(base, 'POST', '/api/nf-health/targets', adminToken, {
+        resourceId,
+        name,
+        collectorProfile: 'http_metrics',
+        metricsEndpoint: `http://127.0.0.1:${mockPort}${path}`,
+        serviceKind: 'none',
+        collectionMode: 'manual',
+        intervalSeconds: 120,
+        enabled: true,
+        ...extra,
+      });
+      assert.equal(res.status, 201, res.text);
+      return res.json.targetId;
+    }
+
+    await verifyAsync('EPC MME metrics are attributed to the EPC resource', async () => {
+      const targetId = await createResourceTarget(RESOURCE_MME, 'MME epc-01 metrics', '/mme');
+      const res = await api(base, 'POST', `/api/nf-health/targets/${targetId}/collect`, adminToken);
+      assert.equal(res.status, 200, res.text);
+      assert.equal(res.json.run.layersMeasured, 2, 'L2 and L3 are measured for an HTTP target');
+      const sample = res.json.sample;
+      const detail = await api(base, 'GET', `/api/nf-health/targets/${targetId}`, adminToken);
+      assert.equal(detail.json.target.domain, 'epc', 'the server-derived domain is the EPC domain');
+      assert.equal(detail.json.target.nfType, 'MME');
+      assert.equal(sample.layers.service.state, 'healthy');
+      assert.equal(sample.layers.service.reason, 'service_health_confirmed');
+      const categories = Object.fromEntries(sample.metrics.map((m) => [m.key, m.category]));
+      assert.equal(categories.mme_session, 'service', 'MME session gauge is service evidence');
+      assert.equal(categories.enb, 'service');
+      assert.equal(categories.process_cpu_seconds_total, 'resource', 'exporter telemetry stays resource evidence');
+    });
+
+    await verifyAsync('EPC HSS Diameter counters drive service evidence', async () => {
+      const targetId = await createResourceTarget(RESOURCE_HSS, 'HSS epc-01 metrics', '/hss');
+      const res = await api(base, 'POST', `/api/nf-health/targets/${targetId}/collect`, adminToken);
+      assert.equal(res.status, 200, res.text);
+      const sample = res.json.sample;
+      const keys = sample.metrics.map((m) => m.key);
+      assert.ok(keys.includes('s6a_rx_ulr'), 'S6a request counter is collected');
+      assert.ok(keys.includes('hss_imsi'), 'subscriber aggregate gauge is collected');
+      assert.ok(!keys.includes('amf_session'), 'a foreign-domain family is dropped, never relabelled');
+      assert.equal(sample.layers.service.state, 'healthy');
+      assert.equal(sample.layers.service.reason, 'service_health_confirmed');
+    });
+
+    await verifyAsync('observed Diameter failures degrade the service layer', async () => {
+      const targetId = await createResourceTarget(RESOURCE_HSS_DEGRADED, 'HSS epc-01 degraded', '/hss-degraded');
+      const res = await api(base, 'POST', `/api/nf-health/targets/${targetId}/collect`, adminToken);
+      assert.equal(res.status, 200, res.text);
+      const sample = res.json.sample;
+      assert.equal(sample.layers.service.state, 'degraded');
+      assert.equal(sample.layers.service.reason, 'service_failures_observed');
+      const detail = await api(base, 'GET', `/api/nf-health/targets/${targetId}`, adminToken);
+      assert.equal(detail.json.overallState, 'degraded', 'a degraded service layer is never reported healthy');
+    });
+
+    await verifyAsync('process-only telemetry never establishes service health', async () => {
+      const targetId = await createResourceTarget(RESOURCE_5GC_RESOURCE_ONLY, 'AMF resource telemetry only', '/resource-only');
+      const res = await api(base, 'POST', `/api/nf-health/targets/${targetId}/collect`, adminToken);
+      assert.equal(res.status, 200, res.text);
+      const sample = res.json.sample;
+      assert.equal(sample.layers.service.measured, true, 'observed evidence keeps its coverage');
+      assert.equal(sample.layers.service.state, 'unknown');
+      assert.equal(sample.layers.service.reason, 'resource_metrics_only');
+      assert.notEqual(sample.layers.service.state, 'healthy');
+    });
+
+    await verifyAsync('corrupted negative count values are rejected', async () => {
+      const targetId = await createResourceTarget(RESOURCE_5GC_CORRUPT, 'SMF corrupted counter', '/corrupted');
+      const res = await api(base, 'POST', `/api/nf-health/targets/${targetId}/collect`, adminToken);
+      assert.equal(res.status, 200, res.text);
+      const sample = res.json.sample;
+      assert.equal(sample.metrics.length, 0, 'a negative count-like value must not be persisted as evidence');
+      assert.notEqual(sample.layers.service.state, 'healthy');
+    });
+
+    await verifyAsync('charging OCS metrics are accepted as source-verified evidence', async () => {
+      const targetId = await createResourceTarget(RESOURCE_OCS, 'OCS charging metrics', '/ocs');
+      const res = await api(base, 'POST', `/api/nf-health/targets/${targetId}/collect`, adminToken);
+      assert.equal(res.status, 200, res.text);
+      const sample = res.json.sample;
+      const detail = await api(base, 'GET', `/api/nf-health/targets/${targetId}`, adminToken);
+      assert.equal(detail.json.target.domain, 'charging');
+      const keys = sample.metrics.map((m) => m.key);
+      assert.ok(keys.includes('ocs_sessions_active'), 'verified OCS gauge is collected');
+      assert.ok(keys.includes('ocs_ccr_initial_total'), 'verified OCS counter is collected');
+      assert.equal(sample.layers.service.state, 'healthy');
+      const meta = await api(base, 'GET', '/api/nf-health/meta', adminToken);
+      const ocs = meta.json.supportedMetrics.find((m) => m.name === 'ocs_sessions_active');
+      assert.ok(ocs, 'the registry exposes the OCS family');
+      assert.equal(ocs.evidence, 'source_verified', 'OCS families stay source-verified, never live-verified');
+      assert.equal(ocs.domain, 'charging');
+      assert.equal(ocs.category, 'service');
+    });
+
+    await verifyAsync('IMS has no verified HTTP metrics exporter', async () => {
+      const targetId = await createResourceTarget(RESOURCE_IMS_HTTP, 'P-CSCF IMS metrics', '/resource-only');
+      const res = await api(base, 'POST', `/api/nf-health/targets/${targetId}/collect`, adminToken);
+      assert.equal(res.status, 200, res.text);
+      const sample = res.json.sample;
+      assert.equal(sample.layers.service.state, 'unknown');
+      assert.equal(sample.layers.service.reason, 'resource_metrics_only');
+      const meta = await api(base, 'GET', '/api/nf-health/meta', adminToken);
+      const imsFamilies = meta.json.supportedMetrics.filter((m) => m.domain === 'ims');
+      assert.equal(imsFamilies.length, 0, 'no IMS family may be claimed without exporter evidence');
+      const epcFamilies = meta.json.supportedMetrics.filter((m) => m.domain === 'epc');
+      assert.ok(epcFamilies.length > 0, 'verified EPC families are registered');
+      assert.ok(meta.json.metricCategories.includes('service'));
+      assert.ok(meta.json.serviceReasons.includes('resource_metrics_only'));
     });
 
     // Each remaining scenario uses its own target so the per-target collection

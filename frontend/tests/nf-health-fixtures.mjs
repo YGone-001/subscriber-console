@@ -181,7 +181,8 @@ const METRICS_AMF = [
     source: 'http_metrics',
     collectedAt: TS.t6,
     interpretation: 'current active sessions reported by the exporter',
-    labels: {},
+    labels: {  category: 'service',
+  },
   },
   {
     key: 'ran_ue_active',
@@ -191,7 +192,8 @@ const METRICS_AMF = [
     source: 'http_metrics',
     collectedAt: TS.t6,
     interpretation: 'current connected UEs reported by the exporter',
-    labels: {},
+    labels: {  category: 'service',
+  },
   },
   {
     key: 'process_cpu_seconds_total',
@@ -201,7 +203,8 @@ const METRICS_AMF = [
     source: 'http_metrics',
     collectedAt: TS.t6,
     interpretation: 'cumulative CPU seconds; never presented as a rate',
-    labels: {},
+    labels: {  category: 'resource',
+  },
   },
 ];
 
@@ -214,7 +217,8 @@ const METRICS_SMF = [
     source: 'http_metrics',
     collectedAt: TS.t6,
     interpretation: 'active PFCP sessions reported by the exporter',
-    labels: {},
+    labels: {  category: 'service',
+  },
   },
   {
     key: 'pfcp_peers_active',
@@ -224,7 +228,8 @@ const METRICS_SMF = [
     source: 'http_metrics',
     collectedAt: TS.t6,
     interpretation: 'active PFCP peers reported by the exporter',
-    labels: {},
+    labels: {  category: 'service',
+  },
   },
 ];
 
@@ -602,13 +607,27 @@ function handleNfHealth(req, res, url, context) {
       maxGlobalConcurrent: 2,
       retentionDays: 7,
       maxRetentionDays: 30,
+      // Fixture registry entries mirror the server-owned definition shape,
+      // including the domain, category, evidence class and health rule.
       supportedMetrics: [
-        { name: 'amf_session_active', nfTypes: ['AMF'], type: 'gauge', unit: 'sessions', description: 'Active AMF sessions reported by the exporter', safeLabels: [], interpretation: 'current active sessions; never inferred from NRF registration' },
-        { name: 'ran_ue_active', nfTypes: ['AMF', 'RAN'], type: 'gauge', unit: 'ues', description: 'Active RAN UEs reported by the exporter', safeLabels: [], interpretation: 'current connected UEs reported by the exporter' },
-        { name: 'pfcp_sessions_active', nfTypes: ['SMF'], type: 'gauge', unit: 'sessions', description: 'Active PFCP sessions reported by the exporter', safeLabels: [], interpretation: 'exporter-reported PFCP session count; not an association oracle' },
-        { name: 'pfcp_peers_active', nfTypes: ['SMF'], type: 'gauge', unit: 'peers', description: 'Active PFCP peers reported by the exporter', safeLabels: [], interpretation: 'exporter-reported peer count' },
-        { name: 'bearers_active', nfTypes: ['UPF'], type: 'gauge', unit: 'bearers', description: 'Active bearers reported by the exporter', safeLabels: [], interpretation: 'exporter-reported bearer count' },
-        { name: 'process_cpu_seconds_total', nfTypes: [], type: 'counter', unit: 'seconds', description: 'Cumulative process CPU seconds', safeLabels: [], interpretation: 'cumulative counter; never presented as a rate' },
+        { name: 'amf_session_active', domain: '5gc', nfTypes: ['AMF'], category: 'service', type: 'gauge', unit: 'sessions', description: 'Active AMF sessions reported by the exporter', safeLabels: [], interpretation: 'current active sessions; never inferred from NRF registration', source: 'nf_metrics_exporter', evidence: 'live_verified', healthRule: 'activity_gauge', nonNegative: true },
+        { name: 'ran_ue_active', domain: '5gc', nfTypes: ['AMF'], category: 'service', type: 'gauge', unit: 'ues', description: 'Active RAN UEs reported by the exporter', safeLabels: [], interpretation: 'current connected UEs reported by the exporter', source: 'nf_metrics_exporter', evidence: 'live_verified', healthRule: 'activity_gauge', nonNegative: true },
+        { name: 'pfcp_sessions_active', domain: '5gc', nfTypes: ['SMF', 'UPF'], category: 'service', type: 'gauge', unit: 'sessions', description: 'Active PFCP sessions reported by the exporter', safeLabels: [], interpretation: 'exporter-reported PFCP session count; not an association oracle', source: 'nf_metrics_exporter', evidence: 'live_verified', healthRule: 'activity_gauge', nonNegative: true },
+        { name: 'pfcp_peers_active', domain: '5gc', nfTypes: ['SMF', 'UPF'], category: 'service', type: 'gauge', unit: 'peers', description: 'Active PFCP peers reported by the exporter', safeLabels: [], interpretation: 'exporter-reported peer count', source: 'nf_metrics_exporter', evidence: 'live_verified', healthRule: 'activity_gauge', nonNegative: true },
+        { name: 'bearers_active', domain: '5gc', nfTypes: ['SMF'], category: 'service', type: 'gauge', unit: 'bearers', description: 'Active bearers reported by the exporter', safeLabels: [], interpretation: 'exporter-reported bearer count', source: 'nf_metrics_exporter', evidence: 'live_verified', healthRule: 'activity_gauge', nonNegative: true },
+        { name: 'process_cpu_seconds_total', domain: '*', nfTypes: ['*'], category: 'resource', type: 'counter', unit: 'seconds', description: 'Cumulative process CPU seconds', safeLabels: [], interpretation: 'cumulative counter; never presented as a rate', source: 'nf_metrics_exporter', evidence: 'live_verified', healthRule: 'none', nonNegative: true },
+      ],
+      metricCategories: ['resource', 'service'],
+      metricEvidenceClasses: ['live_verified', 'source_verified', 'fixture_tested', 'not_verified', 'not_exported'],
+      serviceReasons: [
+        'no_supported_service_kpi',
+        'metric_not_exported',
+        'metric_invalid',
+        'not_configured',
+        'resource_metrics_only',
+        'service_health_undetermined',
+        'service_health_confirmed',
+        'service_failures_observed',
       ],
       allowedDestinations: ['127.0.0.5:9090', '127.0.0.4:9090', '127.0.0.7:9090'],
       allowedServiceUnits: ['amfd', 'smfd', 'upfd'],
