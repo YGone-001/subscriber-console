@@ -27,6 +27,11 @@ import { Dialog } from '../../components/ui/Dialog';
 import { Field } from '../../components/ui/Field';
 import PageHeader from '../../components/ui/PageHeader';
 import { OperationsNav } from '../operations/OperationsNav';
+import {
+  discoveryKpisFromSummary,
+  fetchOperationsSummary,
+  type DiscoverySummarySection,
+} from '../operations/operations-summary';
 import { SkeletonKpiStrip } from '../../components/ui/LoadingSkeleton';
 import { useAuth } from '../../providers/AuthProvider';
 import { useI18n } from '../../providers/I18nProvider';
@@ -58,6 +63,7 @@ import type {
   DiscoverySource,
   DiscoveryTransportMode,
   NfObservation,
+  PageInfo,
 } from './discovery-types';
 import styles from '../../styles/modules/discovery.module.css';
 
@@ -77,7 +83,14 @@ export function DiscoveryPage() {
   const [sources, setSources] = useState<DiscoverySource[]>([]);
   const [candidates, setCandidates] = useState<NfObservation[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [sourcesError, setSourcesError] = useState<string | null>(null);
+  const [candidatesError, setCandidatesError] = useState<string | null>(null);
+  const [sourcesPage, setSourcesPage] = useState<PageInfo | null>(null);
+  const [candidatesPage, setCandidatesPage] = useState<PageInfo | null>(null);
+  const [sourcesCursorHistory, setSourcesCursorHistory] = useState<string[]>([]);
+  const [candidatesCursorHistory, setCandidatesCursorHistory] = useState<string[]>([]);
+  const [summary, setSummary] = useState<DiscoverySummarySection | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(true);
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [busyCandidateId, setBusyCandidateId] = useState<string | null>(null);
   const [scanningSourceId, setScanningSourceId] = useState<string | null>(null);
@@ -147,37 +160,138 @@ export function DiscoveryPage() {
 
   const loadAll = useCallback(async () => {
     setLoading(true);
-    setError(null);
-    try {
-      const [metaRes, sourcesRes, candidatesRes] = await Promise.all([
-        fetchDiscoveryMeta().catch(() => null),
-        fetchDiscoverySources({ q: searchQuery || undefined, limit: PAGE_LIMIT }),
-        fetchDiscoveryCandidates({
-          nfType: nfTypeFilter || undefined,
-          observationState: (observationFilter as NfObservation['observationState'] | '') || undefined,
-          limit: PAGE_LIMIT,
-        }),
-      ]);
-      setMeta(metaRes);
-      setSources(sourcesRes.sources ?? []);
-      setCandidates(candidatesRes.candidates ?? []);
-    } catch (err) {
-      setError(err instanceof Error && err.message ? err.message : t('discovery_err_load'));
+    setSourcesError(null);
+    setCandidatesError(null);
+    setSummaryLoading(true);
+    setSourcesCursorHistory([]);
+    setCandidatesCursorHistory([]);
+    // Section-split error boundaries: one failing list never blanks the
+    // other, and a failed summary section only degrades the KPI strip to
+    // explicit unavailable labels, never to page-scoped counts.
+    const [metaRes, sourcesRes, candidatesRes, summaryRes] = await Promise.allSettled([
+      fetchDiscoveryMeta(),
+      fetchDiscoverySources({ q: searchQuery || undefined, limit: PAGE_LIMIT }),
+      fetchDiscoveryCandidates({
+        nfType: nfTypeFilter || undefined,
+        observationState: (observationFilter as NfObservation['observationState'] | '') || undefined,
+        limit: PAGE_LIMIT,
+      }),
+      fetchOperationsSummary(['discovery']),
+    ]);
+    setMeta(metaRes.status === 'fulfilled' ? metaRes.value : null);
+    if (sourcesRes.status === 'fulfilled') {
+      setSources(sourcesRes.value.sources ?? []);
+      setSourcesPage(sourcesRes.value.page ?? null);
+    } else {
       setSources([]);
+      setSourcesPage(null);
+      setSourcesError(describeLoadError(sourcesRes.reason, t));
+    }
+    if (candidatesRes.status === 'fulfilled') {
+      setCandidates(candidatesRes.value.candidates ?? []);
+      setCandidatesPage(candidatesRes.value.page ?? null);
+    } else {
       setCandidates([]);
+      setCandidatesPage(null);
+      setCandidatesError(describeLoadError(candidatesRes.reason, t));
+    }
+    setSummary(summaryRes.status === 'fulfilled' ? (summaryRes.value.discovery ?? null) : null);
+    setSummaryLoading(false);
+    setLoading(false);
+  }, [searchQuery, observationFilter, nfTypeFilter, t]);
+
+  // Cursor pager loads refresh exactly one bounded list; the other list and
+  // the full-collection summary stay untouched.
+  const loadSourcesPage = useCallback(async (cursor: string | undefined) => {
+    setLoading(true);
+    setSourcesError(null);
+    try {
+      const res = await fetchDiscoverySources({ q: searchQuery || undefined, cursor, limit: PAGE_LIMIT });
+      setSources(res.sources ?? []);
+      setSourcesPage(res.page ?? null);
+    } catch (err) {
+      setSources([]);
+      setSourcesPage(null);
+      setSourcesError(describeLoadError(err, t));
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, observationFilter, nfTypeFilter, t]);
+  }, [searchQuery, t]);
+
+  const loadCandidatesPage = useCallback(async (cursor: string | undefined) => {
+    setLoading(true);
+    setCandidatesError(null);
+    try {
+      const res = await fetchDiscoveryCandidates({
+        nfType: nfTypeFilter || undefined,
+        observationState: (observationFilter as NfObservation['observationState'] | '') || undefined,
+        cursor,
+        limit: PAGE_LIMIT,
+      });
+      setCandidates(res.candidates ?? []);
+      setCandidatesPage(res.page ?? null);
+    } catch (err) {
+      setCandidates([]);
+      setCandidatesPage(null);
+      setCandidatesError(describeLoadError(err, t));
+    } finally {
+      setLoading(false);
+    }
+  }, [observationFilter, nfTypeFilter, t]);
 
   useEffect(() => {
     if (!canRead) {
       setLoading(false);
-      setError(t('discovery_err_forbidden'));
+      setSummaryLoading(false);
+      setSourcesError(t('discovery_err_forbidden'));
+      setCandidatesError(t('discovery_err_forbidden'));
       return;
     }
     void loadAll();
   }, [canRead, loadAll]);
+
+  const handleSourcesFirstPage = () => {
+    setSourcesCursorHistory([]);
+    void loadSourcesPage(undefined);
+  };
+
+  const handleSourcesPrevPage = () => {
+    if (sourcesCursorHistory.length === 0) return;
+    const nextHistory = sourcesCursorHistory.slice(0, -1);
+    setSourcesCursorHistory(nextHistory);
+    const prevCursor = nextHistory.length > 0 ? nextHistory[nextHistory.length - 1] : undefined;
+    void loadSourcesPage(prevCursor);
+  };
+
+  const handleSourcesNextPage = () => {
+    const nextCursor = sourcesPage?.nextCursor;
+    if (!nextCursor || !sourcesPage?.hasMore) return;
+    setSourcesCursorHistory((history) => [...history, nextCursor]);
+    void loadSourcesPage(nextCursor);
+  };
+
+  const handleCandidatesFirstPage = () => {
+    setCandidatesCursorHistory([]);
+    void loadCandidatesPage(undefined);
+  };
+
+  const handleCandidatesPrevPage = () => {
+    if (candidatesCursorHistory.length === 0) return;
+    const nextHistory = candidatesCursorHistory.slice(0, -1);
+    setCandidatesCursorHistory(nextHistory);
+    const prevCursor = nextHistory.length > 0 ? nextHistory[nextHistory.length - 1] : undefined;
+    void loadCandidatesPage(prevCursor);
+  };
+
+  const handleCandidatesNextPage = () => {
+    const nextCursor = candidatesPage?.nextCursor;
+    if (!nextCursor || !candidatesPage?.hasMore) return;
+    setCandidatesCursorHistory((history) => [...history, nextCursor]);
+    void loadCandidatesPage(nextCursor);
+  };
+
+  const sourcesPageIndex = sourcesCursorHistory.length + 1;
+  const candidatesPageIndex = candidatesCursorHistory.length + 1;
 
   const handleSearchSubmit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -272,12 +386,10 @@ export function DiscoveryPage() {
     }
   };
 
-  const kpis = useMemo(() => {
-    const seen = candidates.filter((item) => item.observationState === 'seen').length;
-    const missing = candidates.filter((item) => item.observationState === 'missing').length;
-    const linked = candidates.filter((item) => item.linkedResourceId).length;
-    return { sources: sources.length, seen, missing, linked };
-  }, [sources, candidates]);
+  // KPIs come from the full-collection summary section, never from the
+  // current page arrays. A page-scoped count must never be presented as a
+  // platform total (UX-0 scope/completeness contract).
+  const kpis = useMemo(() => discoveryKpisFromSummary(summary ?? undefined), [summary]);
 
   const observationLabel = (state: string) => {
     switch (state) {
@@ -333,25 +445,53 @@ export function DiscoveryPage() {
 
       <OperationsNav />
 
-      {loading && sources.length === 0 ? (
+      {summaryLoading && kpis.sources === null ? (
         <SkeletonKpiStrip count={4} />
       ) : (
         <section className={styles.kpiStrip} aria-label={t('discovery_kpi_label')}>
           <article className={styles.kpiCard}>
             <span className={styles.kpiLabel}>{t('discovery_kpi_sources')}</span>
-            <strong className={styles.kpiValue}>{kpis.sources}</strong>
+            <strong className={styles.kpiValue}>{kpis.sources ?? '-'}</strong>
+            <span className={styles.kpiMeta}>
+              {kpis.sources === null ? (
+                <span className={styles.kpiUnavailable}>{t('ops_kpi_unavailable')}</span>
+              ) : (
+                <span className={styles.kpiScope} title={t('ops_kpi_scope_note')}>{t('ops_kpi_scope_full_collection')}</span>
+              )}
+            </span>
           </article>
           <article className={styles.kpiCard}>
             <span className={styles.kpiLabel}>{t('discovery_kpi_seen')}</span>
-            <strong className={styles.kpiValue}>{kpis.seen}</strong>
+            <strong className={styles.kpiValue}>{kpis.seen ?? '-'}</strong>
+            <span className={styles.kpiMeta}>
+              {kpis.seen === null ? (
+                <span className={styles.kpiUnavailable}>{t('ops_kpi_unavailable')}</span>
+              ) : (
+                <span className={styles.kpiScope} title={t('ops_kpi_scope_note')}>{t('ops_kpi_scope_full_collection')}</span>
+              )}
+            </span>
           </article>
           <article className={styles.kpiCard}>
             <span className={styles.kpiLabel}>{t('discovery_kpi_missing')}</span>
-            <strong className={styles.kpiValue}>{kpis.missing}</strong>
+            <strong className={styles.kpiValue}>{kpis.missing ?? '-'}</strong>
+            <span className={styles.kpiMeta}>
+              {kpis.missing === null ? (
+                <span className={styles.kpiUnavailable}>{t('ops_kpi_unavailable')}</span>
+              ) : (
+                <span className={styles.kpiScope} title={t('ops_kpi_scope_note')}>{t('ops_kpi_scope_full_collection')}</span>
+              )}
+            </span>
           </article>
           <article className={styles.kpiCard}>
             <span className={styles.kpiLabel}>{t('discovery_kpi_linked')}</span>
-            <strong className={styles.kpiValue}>{kpis.linked}</strong>
+            <strong className={styles.kpiValue}>{kpis.linked ?? '-'}</strong>
+            <span className={styles.kpiMeta}>
+              {kpis.linked === null ? (
+                <span className={styles.kpiUnavailable}>{t('ops_kpi_unavailable')}</span>
+              ) : (
+                <span className={styles.kpiScope} title={t('ops_kpi_scope_note')}>{t('ops_kpi_scope_full_collection')}</span>
+              )}
+            </span>
           </article>
         </section>
       )}
@@ -418,9 +558,9 @@ export function DiscoveryPage() {
           <span className={styles.sectionNote}>{t('discovery_sources_note')}</span>
         </div>
 
-        {error ? (
+        {sourcesError ? (
           <div className={styles.errorWrap}>
-            <ErrorState title={t('error')} message={error} retryLabel={t('retry')} onRetry={() => void loadAll()} />
+            <ErrorState title={t('error')} message={sourcesError} retryLabel={t('retry')} onRetry={() => void loadAll()} />
           </div>
         ) : loading && sources.length === 0 ? (
           <LoadingRows columns={6} rows={4} />
@@ -497,6 +637,37 @@ export function DiscoveryPage() {
             </table>
           </div>
         )}
+        {sourcesError ? null : sources.length > 0 || sourcesPage?.hasMore ? (
+          <nav className={styles.pager} aria-label={t('discovery_sources_section')}>
+            <span className={styles.pagerSummary} aria-live="polite">
+              {t('discovery_pager_sources', { count: sources.length })}
+            </span>
+            <div className={styles.pagerControls}>
+              <button
+                type="button"
+                onClick={handleSourcesFirstPage}
+                disabled={sourcesPageIndex === 1 || loading}
+              >
+                {t('ops_pager_first')}
+              </button>
+              <button
+                type="button"
+                onClick={handleSourcesPrevPage}
+                disabled={sourcesPageIndex === 1 || loading}
+              >
+                {t('ops_pager_prev')}
+              </button>
+              <span className={styles.pageNumber}>{t('ops_pager_page', { page: sourcesPageIndex })}</span>
+              <button
+                type="button"
+                onClick={handleSourcesNextPage}
+                disabled={!sourcesPage?.hasMore || !sourcesPage?.nextCursor || loading}
+              >
+                {t('ops_pager_next')}
+              </button>
+            </div>
+          </nav>
+        ) : null}
       </section>
 
       <section className="dash-card">
@@ -508,7 +679,11 @@ export function DiscoveryPage() {
           <span className={styles.sectionNote}>{t('discovery_candidates_note')}</span>
         </div>
 
-        {loading && candidates.length === 0 ? (
+        {candidatesError ? (
+          <div className={styles.errorWrap}>
+            <ErrorState title={t('error')} message={candidatesError} retryLabel={t('retry')} onRetry={() => void loadAll()} />
+          </div>
+        ) : loading && candidates.length === 0 ? (
           <LoadingRows columns={7} rows={4} />
         ) : candidates.length === 0 ? (
           <div className={styles.stateWrap}>
@@ -621,6 +796,37 @@ export function DiscoveryPage() {
             </table>
           </div>
         )}
+        {candidatesError ? null : candidates.length > 0 || candidatesPage?.hasMore ? (
+          <nav className={styles.pager} aria-label={t('discovery_candidates_section')}>
+            <span className={styles.pagerSummary} aria-live="polite">
+              {t('discovery_pager_candidates', { count: candidates.length })}
+            </span>
+            <div className={styles.pagerControls}>
+              <button
+                type="button"
+                onClick={handleCandidatesFirstPage}
+                disabled={candidatesPageIndex === 1 || loading}
+              >
+                {t('ops_pager_first')}
+              </button>
+              <button
+                type="button"
+                onClick={handleCandidatesPrevPage}
+                disabled={candidatesPageIndex === 1 || loading}
+              >
+                {t('ops_pager_prev')}
+              </button>
+              <span className={styles.pageNumber}>{t('ops_pager_page', { page: candidatesPageIndex })}</span>
+              <button
+                type="button"
+                onClick={handleCandidatesNextPage}
+                disabled={!candidatesPage?.hasMore || !candidatesPage?.nextCursor || loading}
+              >
+                {t('ops_pager_next')}
+              </button>
+            </div>
+          </nav>
+        ) : null}
       </section>
 
       <Dialog
@@ -781,6 +987,13 @@ function formatTimestamp(value?: string): string {
   if (!value) return '-';
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+}
+
+function describeLoadError(
+  err: unknown,
+  t: (key: string, params?: Record<string, string | number>) => string,
+): string {
+  return err instanceof Error && err.message ? err.message : t('discovery_err_load');
 }
 
 function describeMutationError(

@@ -40,7 +40,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 // API surface is byte-identical to this baseline, so the cleanup is provably a
 // non-functional change.
 const NORMALIZATION_BASELINE_SHA = '43f2947d70590507a29837bdea36d2ecaffdfaa5';
-const EXPECTED_GO_REGISTRATIONS = 134;
+const EXPECTED_GO_REGISTRATIONS = 135;
 const EXPECTED_INVENTORY_ROUTES = new Set([
   'GET /api/inventory/meta',
   'GET /api/inventory/resources',
@@ -113,13 +113,19 @@ const EXPECTED_NF_ALERT_ROUTES = new Set([
   'POST /api/nf-alerts/{alertId}/acknowledge',
   'POST /api/nf-alerts/{alertId}/resolve',
 ]);
+// Operations summary adds exactly one read registration: full-collection
+// per-section statistics aggregated from the domain repositories.
+const EXPECTED_OPERATIONS_ROUTES = new Set([
+  'GET /api/operations/summary',
+]);
 const EXPECTED_ADDED_ROUTE_COUNT =
   EXPECTED_INVENTORY_ROUTES.size +
   EXPECTED_TOPOLOGY_ROUTES.size +
   EXPECTED_DISCOVERY_ROUTES.size +
   EXPECTED_NF_HEALTH_ROUTES.size +
   EXPECTED_RUNTIME_ROUTES.size +
-  EXPECTED_NF_ALERT_ROUTES.size;
+  EXPECTED_NF_ALERT_ROUTES.size +
+  EXPECTED_OPERATIONS_ROUTES.size;
 
 // The synthetic unknown-route probe. Test-only: it must never become a production
 // Go registration.
@@ -561,7 +567,7 @@ if (baselineError) fail(`baseline derivation failed: ${baselineError}`);
 if (beforeKeys.size !== 84) fail(`go_routes_before=${beforeKeys.size}`);
 if (afterKeys.size !== EXPECTED_GO_REGISTRATIONS) fail(`go_routes_after=${afterKeys.size}`);
 const unexpectedAdditions = addedKeys.filter(
-  (k) => !EXPECTED_INVENTORY_ROUTES.has(k) && !EXPECTED_TOPOLOGY_ROUTES.has(k) && !EXPECTED_DISCOVERY_ROUTES.has(k) && !EXPECTED_NF_HEALTH_ROUTES.has(k) && !EXPECTED_RUNTIME_ROUTES.has(k) && !EXPECTED_NF_ALERT_ROUTES.has(k),
+  (k) => !EXPECTED_INVENTORY_ROUTES.has(k) && !EXPECTED_TOPOLOGY_ROUTES.has(k) && !EXPECTED_DISCOVERY_ROUTES.has(k) && !EXPECTED_NF_HEALTH_ROUTES.has(k) && !EXPECTED_RUNTIME_ROUTES.has(k) && !EXPECTED_NF_ALERT_ROUTES.has(k) && !EXPECTED_OPERATIONS_ROUTES.has(k),
 );
 if (unexpectedAdditions.length !== 0) fail(`unexpected_go_routes_added=${unexpectedAdditions.join(', ')}`);
 if (addedKeys.length !== EXPECTED_ADDED_ROUTE_COUNT) fail(`go_routes_added=${addedKeys.length} expected=${EXPECTED_ADDED_ROUTE_COUNT}`);

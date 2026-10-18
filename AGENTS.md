@@ -153,7 +153,7 @@ Nginx (only public origin)
 Go 127.0.0.1:18888
 Business API (owner)
 Auth identity + session validation
-Read + write APIs (134 exact METHOD+PATH registrations)
+Read + write APIs (135 exact METHOD+PATH registrations)
 Embedded static React SPA (production UI)
    |
    v
@@ -186,7 +186,7 @@ Retained legacy Next listener        = retired
 Loopback listener enforced by service, not firewall = YES
 Standalone deployment path           = removed
 Go business production changes       = 0
-Go registration set                  = 134
+Go registration set                  = 135
 ```
 
 - 边缘配置为 `deploy/nginx/xcloud.conf`。`location = /api`、`location /api/`、专用非缓冲 `location = /api/notifications/stream` 与 `location /` **全部代理至 Go**；UI 由 Go 内嵌 SPA 提供。
@@ -530,8 +530,8 @@ Charging plane (frozen, excluded from the management plane):
   ocs_config         — OCS engine config
 ```
 
-- 权威基线：OCS 管理平面生产冻结基线；当前生产路由 = Go 全部接管，**共 134 条 Go 注册**。
-- 路由权威来源：Go 注册集合（`backend/cmd/server/main.go` + `backend/internal/remediation/handler.go`，134 条 METHOD+PATH 精确注册）；Nginx 负责 API 路由。
+- 权威基线：OCS 管理平面生产冻结基线；当前生产路由 = Go 全部接管，**共 135 条 Go 注册**。
+- 路由权威来源：Go 注册集合（`backend/cmd/server/main.go` + `backend/internal/remediation/handler.go`，135 条 METHOD+PATH 精确注册）；Nginx 负责 API 路由。
 - 冻结规约摘要（历史）：`docs/archive/backend-migration-summary.md`。
 - 运维操作手册：`docs/operations/ocs-management-runbook.md`。
 
@@ -557,7 +557,7 @@ OCS 管理 UI：
 ### 7.1 路由注册权威
 
 ```text
-Route authority = the derived Go registration set (134 exact METHOD+PATH registrations).
+Route authority = the derived Go registration set (135 exact METHOD+PATH registrations).
 ```
 
 权威来源：
@@ -606,7 +606,7 @@ xcloud_ops.app_rate_limits
 
 ### 7.5 生产注册路由清单
 
-路由权威为源码派生的 Go 注册集合，共 **134 条** METHOD+PATH 精确注册（GET 63 / POST 51 / PUT 10 / DELETE 7 / PATCH 3）：
+路由权威为源码派生的 Go 注册集合，共 **135 条** METHOD+PATH 精确注册（GET 64 / POST 51 / PUT 10 / DELETE 7 / PATCH 3）：
 
 ```text
 GET    /api/analytics/metrics
@@ -743,12 +743,13 @@ PUT    /api/nf-alerts/rules/{ruleId}
 DELETE /api/nf-alerts/rules/{ruleId}
 POST   /api/nf-alerts/{alertId}/acknowledge
 POST   /api/nf-alerts/{alertId}/resolve
+GET    /api/operations/summary
 ```
 
 状态：
 
 ```text
-Go production API registrations = 134 (route authority: backend/cmd/server/main.go + backend/internal/remediation/handler.go)
+Go production API registrations = 135 (route authority: backend/cmd/server/main.go + backend/internal/remediation/handler.go)
 Canonical API surface = 33 operations + 2 legacy read aliases
 Go-native reads = 2
 Node production operations = 0
@@ -756,6 +757,8 @@ OCS writes = 13 (tariff plan + subscriber contract + balance)
 ```
 
 平台服务（11 个端点，全部 Go-owned）：Alerts（`GET /api/alerts`、`POST /api/alerts/acknowledge`、`POST /api/alerts/workflow`）、Notification streaming（`GET /api/notifications/stream`，SSE + ping 心跳 + 零外部 broker）、System health（`GET /api/system/health`、`GET /api/system/mongo/health`，区别于 `/healthz` 与 `/readyz`）、System integrity（`GET /api/system/audit/status`、`POST /api/system/audit/scan`、`POST /api/system/audit/heal`、`POST /api/system/audit/batch-heal`）、Analytics（`POST /api/analytics/init`）。
+
+运维总览统计端点：`GET /api/operations/summary`（Go-owned，读需 `core.read`，限流 120/60s per user）。`sections` 参数按需选择 `inventory`/`discovery`/`health`/`alerts`/`topology`（逗号分隔，缺省全部；未知或重复 section 返回 400 `INVALID_SECTION`）；未请求的分区不查询。每个分区返回全量集合统计（`scope=full_collection`，绝不受列表 limit/cursor 影响）与 `completeness`（`complete`/`unavailable`）；单一来源失败仅将对应分区标为 `unavailable`（错误码 `SECTION_UNAVAILABLE`），其余分区正常返回，绝不整体失败。统计落在各域 repository 的有界聚合查询（inventory 按种类/生命周期/域分组、discovery 观测状态与关联分布、health 目标 freshness/overall/层状态分布（与列表投影同语义）、alerts 状态/严重度分布与启用规则数、topology 声明边按生命周期与关系类型分布），不新建集合、无业务写。健康分区中"已配置未测量"的目标计入 `unknown`，绝不假定为健康；累计计数器绝不显示为百分比；缺失统计显示为不可用而非 0。
 
 Inventory 资源模型底座：权威存储 `xcloud_ops.app_inventory_resources`（`xcloud` 中为 0）；6 条 Go 路由；3 条前端 SPA 路由（`/inventory`、`/inventory/{resourceId}`、`/inventory/create`，前端共 33 条规范路由）；读需 `core.read`，写需 `core.configure`；单调递增 `revision` CAS 乐观锁，`retired` 为不可逆终态；仅作资源事实元数据源，不执行远端网络操作。
 

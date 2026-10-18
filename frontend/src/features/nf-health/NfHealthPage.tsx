@@ -24,6 +24,11 @@ import { EmptyState, LoadingRows, OperationFeedback } from '../../components/ui/
 import { ErrorState } from '../../components/ui/StatePanel';
 import PageHeader from '../../components/ui/PageHeader';
 import { OperationsNav } from '../operations/OperationsNav';
+import {
+  fetchOperationsSummary,
+  healthKpisFromSummary,
+  type HealthSummarySection,
+} from '../operations/operations-summary';
 import { SkeletonKpiStrip } from '../../components/ui/LoadingSkeleton';
 import { useAuth } from '../../providers/AuthProvider';
 import { useI18n } from '../../providers/I18nProvider';
@@ -42,6 +47,7 @@ import type {
   HealthTargetSummary,
   LayerState,
   NfHealthMeta,
+  PageInfo,
 } from './nf-health-types';
 import { NfHealthTargetDialog } from './NfHealthTargetDialog';
 import { NfHealthTargetDrawer } from './NfHealthTargetDrawer';
@@ -63,7 +69,11 @@ export function NfHealthPage() {
   const [targets, setTargets] = useState<HealthTargetSummary[]>([]);
   const [candidates, setCandidates] = useState<NfObservation[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [targetsError, setTargetsError] = useState<string | null>(null);
+  const [targetsPage, setTargetsPage] = useState<PageInfo | null>(null);
+  const [targetsCursorHistory, setTargetsCursorHistory] = useState<string[]>([]);
+  const [summary, setSummary] = useState<HealthSummarySection | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(true);
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [collectingId, setCollectingId] = useState<string | null>(null);
 
@@ -80,23 +90,57 @@ export function NfHealthPage() {
 
   const loadAll = useCallback(async () => {
     setLoading(true);
-    setError(null);
-    try {
-      const [metaRes, targetsRes, candidatesRes] = await Promise.all([
-        fetchNfHealthMeta().catch(() => null),
-        fetchNfHealthTargets({
-          q: searchQuery || undefined,
-          enabled: enabledFilter || undefined,
-          limit: PAGE_LIMIT,
-        }),
-        fetchDiscoveryCandidates({ limit: PAGE_LIMIT }).catch(() => ({ candidates: [] as NfObservation[], page: { limit: PAGE_LIMIT, nextCursor: null, hasMore: false } })),
-      ]);
-      setMeta(metaRes);
-      setTargets(targetsRes.targets ?? []);
-      setCandidates(candidatesRes.candidates ?? []);
-    } catch (err) {
-      setError(err instanceof Error && err.message ? err.message : t('nf_health_err_load'));
+    setTargetsError(null);
+    setSummaryLoading(true);
+    setTargetsCursorHistory([]);
+    // Section-split error boundaries: a failed targets load never blanks the
+    // full-collection KPI strip, and a failed summary section only degrades
+    // the KPI strip to explicit unavailable labels, never to page-scoped
+    // counts. Discovery candidates are auxiliary row enrichment; their
+    // failure degrades enrichment only and never blanks the target table.
+    const [metaRes, targetsRes, candidatesRes, summaryRes] = await Promise.allSettled([
+      fetchNfHealthMeta(),
+      fetchNfHealthTargets({
+        q: searchQuery || undefined,
+        enabled: enabledFilter || undefined,
+        limit: PAGE_LIMIT,
+      }),
+      fetchDiscoveryCandidates({ limit: PAGE_LIMIT }),
+      fetchOperationsSummary(['health']),
+    ]);
+    setMeta(metaRes.status === 'fulfilled' ? metaRes.value : null);
+    if (targetsRes.status === 'fulfilled') {
+      setTargets(targetsRes.value.targets ?? []);
+      setTargetsPage(targetsRes.value.page ?? null);
+    } else {
       setTargets([]);
+      setTargetsPage(null);
+      setTargetsError(describeLoadError(targetsRes.reason, t));
+    }
+    setCandidates(candidatesRes.status === 'fulfilled' ? (candidatesRes.value.candidates ?? []) : []);
+    setSummary(summaryRes.status === 'fulfilled' ? (summaryRes.value.health ?? null) : null);
+    setSummaryLoading(false);
+    setLoading(false);
+  }, [searchQuery, enabledFilter, t]);
+
+  // Cursor pager loads refresh exactly one bounded list; the full-collection
+  // summary and enrichment candidates stay untouched.
+  const loadTargetsPage = useCallback(async (cursor: string | undefined) => {
+    setLoading(true);
+    setTargetsError(null);
+    try {
+      const res = await fetchNfHealthTargets({
+        q: searchQuery || undefined,
+        enabled: enabledFilter || undefined,
+        cursor,
+        limit: PAGE_LIMIT,
+      });
+      setTargets(res.targets ?? []);
+      setTargetsPage(res.page ?? null);
+    } catch (err) {
+      setTargets([]);
+      setTargetsPage(null);
+      setTargetsError(describeLoadError(err, t));
     } finally {
       setLoading(false);
     }
@@ -105,11 +149,34 @@ export function NfHealthPage() {
   useEffect(() => {
     if (!canRead) {
       setLoading(false);
-      setError(t('nf_health_err_forbidden'));
+      setSummaryLoading(false);
+      setTargetsError(t('nf_health_err_forbidden'));
       return;
     }
     void loadAll();
   }, [canRead, loadAll]);
+
+  const handleTargetsFirstPage = () => {
+    setTargetsCursorHistory([]);
+    void loadTargetsPage(undefined);
+  };
+
+  const handleTargetsPrevPage = () => {
+    if (targetsCursorHistory.length === 0) return;
+    const nextHistory = targetsCursorHistory.slice(0, -1);
+    setTargetsCursorHistory(nextHistory);
+    const prevCursor = nextHistory.length > 0 ? nextHistory[nextHistory.length - 1] : undefined;
+    void loadTargetsPage(prevCursor);
+  };
+
+  const handleTargetsNextPage = () => {
+    const nextCursor = targetsPage?.nextCursor;
+    if (!nextCursor || !targetsPage?.hasMore) return;
+    setTargetsCursorHistory((history) => [...history, nextCursor]);
+    void loadTargetsPage(nextCursor);
+  };
+
+  const targetsPageIndex = targetsCursorHistory.length + 1;
 
   const handleSearchSubmit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -206,22 +273,10 @@ export function NfHealthPage() {
       }));
   }, [targets, t]);
 
-  const kpis = useMemo(() => {
-    let fresh = 0;
-    let degraded = 0;
-    let staleUnknown = 0;
-    for (const target of targets) {
-      // Freshness is server-derived so the overview agrees with the detail
-      // projection: stale measurements never count as current evidence, and a
-      // recent failed run remains visible as degraded.
-      const freshness = target.freshness?.state;
-      const isDegraded = Boolean(target.lastError);
-      if (isDegraded) degraded += 1;
-      else if (freshness === 'fresh') fresh += 1;
-      else staleUnknown += 1;
-    }
-    return { configured: targets.length, fresh, degraded, staleUnknown };
-  }, [targets]);
+  // KPIs come from the full-collection summary section, never from the
+  // current page arrays. A page-scoped count must never be presented as a
+  // platform total (UX-0 scope/completeness contract).
+  const kpis = useMemo(() => healthKpisFromSummary(summary ?? undefined), [summary]);
 
   return (
     <div className="container animate-fade-in">
@@ -257,25 +312,53 @@ export function NfHealthPage() {
 
       <OperationsNav />
 
-      {loading && targets.length === 0 ? (
+      {loading && summaryLoading && targets.length === 0 ? (
         <SkeletonKpiStrip count={4} />
       ) : (
         <section className={styles.kpiStrip} aria-label={t('nf_health_kpi_label')}>
           <article className={styles.kpiCard}>
             <span className={styles.kpiLabel}>{t('nf_health_kpi_configured')}</span>
-            <strong className={styles.kpiValue}>{kpis.configured}</strong>
+            <strong className={styles.kpiValue}>{kpis.configured ?? '-'}</strong>
+            <span className={styles.kpiMeta}>
+              {kpis.configured === null ? (
+                <span className={styles.kpiUnavailable}>{t('ops_kpi_unavailable')}</span>
+              ) : (
+                <span className={styles.kpiScope} title={t('ops_kpi_scope_note')}>{t('ops_kpi_scope_full_collection')}</span>
+              )}
+            </span>
           </article>
           <article className={styles.kpiCard}>
             <span className={styles.kpiLabel}>{t('nf_health_kpi_fresh')}</span>
-            <strong className={styles.kpiValue}>{kpis.fresh}</strong>
+            <strong className={styles.kpiValue}>{kpis.fresh ?? '-'}</strong>
+            <span className={styles.kpiMeta}>
+              {kpis.fresh === null ? (
+                <span className={styles.kpiUnavailable}>{t('ops_kpi_unavailable')}</span>
+              ) : (
+                <span className={styles.kpiScope} title={t('ops_kpi_scope_note')}>{t('ops_kpi_scope_full_collection')}</span>
+              )}
+            </span>
           </article>
           <article className={styles.kpiCard}>
             <span className={styles.kpiLabel}>{t('nf_health_kpi_degraded')}</span>
-            <strong className={styles.kpiValue}>{kpis.degraded}</strong>
+            <strong className={styles.kpiValue}>{kpis.failed ?? '-'}</strong>
+            <span className={styles.kpiMeta}>
+              {kpis.failed === null ? (
+                <span className={styles.kpiUnavailable}>{t('ops_kpi_unavailable')}</span>
+              ) : (
+                <span className={styles.kpiScope} title={t('ops_kpi_scope_note')}>{t('ops_kpi_scope_full_collection')}</span>
+              )}
+            </span>
           </article>
           <article className={styles.kpiCard}>
             <span className={styles.kpiLabel}>{t('nf_health_kpi_stale')}</span>
-            <strong className={styles.kpiValue}>{kpis.staleUnknown}</strong>
+            <strong className={styles.kpiValue}>{kpis.staleUnknown ?? '-'}</strong>
+            <span className={styles.kpiMeta}>
+              {kpis.staleUnknown === null ? (
+                <span className={styles.kpiUnavailable}>{t('ops_kpi_unavailable')}</span>
+              ) : (
+                <span className={styles.kpiScope} title={t('ops_kpi_scope_note')}>{t('ops_kpi_scope_full_collection')}</span>
+              )}
+            </span>
           </article>
         </section>
       )}
@@ -331,9 +414,9 @@ export function NfHealthPage() {
         </div>
         <p className={styles.semanticNote}>{t('nf_health_semantic_separation')}</p>
 
-        {error ? (
+        {targetsError ? (
           <div className={styles.errorWrap}>
-            <ErrorState title={t('error')} message={error} retryLabel={t('nf_health_retry')} onRetry={() => void loadAll()} />
+            <ErrorState title={t('error')} message={targetsError} retryLabel={t('nf_health_retry')} onRetry={() => void loadAll()} />
           </div>
         ) : loading && targets.length === 0 ? (
           <LoadingRows columns={9} rows={4} />
@@ -508,6 +591,37 @@ export function NfHealthPage() {
             </table>
           </div>
         )}
+        {targetsError ? null : targets.length > 0 || targetsPage?.hasMore ? (
+          <nav className={styles.pager} aria-label={t('nf_health_targets_section')}>
+            <span className={styles.pagerSummary} aria-live="polite">
+              {t('nf_health_pager_targets', { count: targets.length })}
+            </span>
+            <div className={styles.pagerControls}>
+              <button
+                type="button"
+                onClick={handleTargetsFirstPage}
+                disabled={targetsPageIndex === 1 || loading}
+              >
+                {t('ops_pager_first')}
+              </button>
+              <button
+                type="button"
+                onClick={handleTargetsPrevPage}
+                disabled={targetsPageIndex === 1 || loading}
+              >
+                {t('ops_pager_prev')}
+              </button>
+              <span className={styles.pageNumber}>{t('ops_pager_page', { page: targetsPageIndex })}</span>
+              <button
+                type="button"
+                onClick={handleTargetsNextPage}
+                disabled={!targetsPage?.hasMore || !targetsPage?.nextCursor || loading}
+              >
+                {t('ops_pager_next')}
+              </button>
+            </div>
+          </nav>
+        ) : null}
       </section>
 
       <section className="dash-card" aria-label={t('nf_health_card_wall_section')}>
@@ -518,7 +632,7 @@ export function NfHealthPage() {
           </h2>
           <span className={styles.sectionNote}>{t('nf_health_card_wall_note')}</span>
         </div>
-        {error ? (
+        {targetsError ? (
           <p className={styles.semanticNote}>{t('ops_metric_unavailable')}</p>
         ) : domainGroups.length === 0 ? (
           <p className={styles.semanticNote}>{t('nf_health_empty_targets_body')}</p>
@@ -696,6 +810,13 @@ function formatTimestamp(value?: string): string {
   if (!value) return '-';
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+}
+
+function describeLoadError(
+  err: unknown,
+  t: (key: string, params?: Record<string, string | number>) => string,
+): string {
+  return err instanceof Error && err.message ? err.message : t('nf_health_err_load');
 }
 
 function describeMutationError(

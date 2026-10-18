@@ -6,7 +6,7 @@
  * - Route count = 28 (26 -> 28 intentional Stage 2 transition)
  * - Topology frontend routes = 2
  * - Topology Go registrations = 7 (4 reads, 3 mutations)
- * - Go registrations = 134 (97 -> 119 -> 134 intentional extensions)
+ * - Go registrations = 135 (97 -> 119 -> 135 intentional extensions)
  * - Topology reads use core.read, mutations use core.configure
  * - Topology hard-delete endpoint = 0
  * - No generic command execution endpoint exists
@@ -50,7 +50,7 @@ for (const expected of ['/topology', '/topology/:resourceId']) {
 // 2. Go API registrations
 const { keys: goRegistrations, duplicates: goDuplicates } = deriveGoRegistrations(root);
 assert.equal(goDuplicates.length, 0, 'Go registrations must have 0 duplicates');
-assert.equal(goRegistrations.length, 134, `Go registered operations must be exactly 134, got ${goRegistrations.length}`);
+assert.equal(goRegistrations.length, 135, `Go registered operations must be exactly 135, got ${goRegistrations.length}`);
 
 const topologyGoRoutes = goRegistrations.filter((r) => r.includes('/api/topology'));
 assert.equal(topologyGoRoutes.length, 7, `Topology Go registrations must be exactly 7, got ${topologyGoRoutes.length}`);
@@ -315,7 +315,7 @@ console.log('topology_frontend_routes=2');
 console.log('topology_api_registrations=7');
 console.log('topology_reads=4');
 console.log('topology_mutations=3');
-console.log('go_registration_count=134');
+console.log('go_registration_count=135');
 console.log('topology_contract_apis=7');
 console.log('topology_request_contract_exact=PASS');
 console.log('topology_request_contract_negative_sentinels=PASS');

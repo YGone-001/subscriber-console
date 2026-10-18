@@ -17,7 +17,8 @@
     "readEndpoints": [
       "GET /api/discovery/meta",
       "GET /api/discovery/sources",
-      "GET /api/discovery/candidates"
+      "GET /api/discovery/candidates",
+      "GET /api/operations/summary?sections=discovery"
     ]
   },
   {
@@ -257,7 +258,8 @@
     "source": "frontend/src/features/nf-health/NfHealthPage.tsx",
     "readEndpoints": [
       "GET /api/nf-health/meta",
-      "GET /api/nf-health/targets"
+      "GET /api/nf-health/targets",
+      "GET /api/operations/summary?sections=health"
     ]
   },
   {
@@ -279,7 +281,8 @@
       "GET /api/nf-alerts/meta",
       "GET /api/nf-alerts/rules",
       "GET /api/nf-alerts/rules/{ruleId}",
-      "GET /api/nf-alerts"
+      "GET /api/nf-alerts",
+      "GET /api/operations/summary?sections=alerts"
     ]
   }
 ]

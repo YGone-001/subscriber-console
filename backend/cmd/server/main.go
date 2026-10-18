@@ -27,6 +27,7 @@ import (
 	"subscriber/internal/nfhealth"
 	"subscriber/internal/notification"
 	"subscriber/internal/ocs"
+	"subscriber/internal/operationsview"
 	"subscriber/internal/profile"
 	"subscriber/internal/ratelimit"
 	"subscriber/internal/rating"
@@ -322,6 +323,15 @@ func main() {
 	nfAlertHandler := nfalert.NewHandler(nfAlertRepo, limiter, auditWriter)
 	nfHealthScheduler.SetCollectionHook(nfalert.NewSchedulerHook(nfAlertEvaluator, logger))
 
+	// Operations summary: full-collection statistics aggregated from the
+	// domain repositories. Sections are computed independently so one
+	// failing source degrades only its own section.
+	operationsSummaryHandler := operationsview.NewHandler(
+		operationsview.NewService(inventoryRepo, discoveryRepo, nfHealthRepo, nfAlertRepo, topologyRepo, nil),
+		limiter,
+		auditWriter,
+	)
+
 	// Runtime discovery lifecycle. The startup scan runs immediately so the
 	// operational surfaces are populated without any Inventory record.
 	runtimeService := runtimeinv.NewService(
@@ -540,6 +550,9 @@ func main() {
 
 	// Runtime snapshot SSE stream (single shared sample broadcast)
 	mux.Handle("GET /api/runtime/stream", authMiddleware(runtimeStreamHandler))
+
+	// Operations summary (single read, per-section full-collection statistics)
+	mux.Handle("GET /api/operations/summary", authMiddleware(http.HandlerFunc(operationsSummaryHandler.Summary)))
 
 	// Catch-all for unknown API routes
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {

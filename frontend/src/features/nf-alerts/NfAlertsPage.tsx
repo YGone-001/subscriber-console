@@ -14,6 +14,11 @@ import { EmptyState, LoadingRows, OperationFeedback } from '../../components/ui/
 import { ErrorState } from '../../components/ui/StatePanel';
 import PageHeader from '../../components/ui/PageHeader';
 import { OperationsNav } from '../operations/OperationsNav';
+import {
+  alertsKpisFromSummary,
+  fetchOperationsSummary,
+  type AlertsSummarySection,
+} from '../operations/operations-summary';
 import { SkeletonKpiStrip } from '../../components/ui/LoadingSkeleton';
 import { useAuth } from '../../providers/AuthProvider';
 import { useI18n } from '../../providers/I18nProvider';
@@ -31,6 +36,7 @@ import type {
   AlertRule,
   AlertSeverity,
   NfAlertsMeta,
+  PageInfo,
   RuleCondition,
 } from './nf-alerts-types';
 import { NfAlertRuleDialog } from './NfAlertRuleDialog';
@@ -51,7 +57,14 @@ export function NfAlertsPage() {
   const [rules, setRules] = useState<AlertRule[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [alertsError, setAlertsError] = useState<string | null>(null);
+  const [rulesError, setRulesError] = useState<string | null>(null);
+  const [alertsPage, setAlertsPage] = useState<PageInfo | null>(null);
+  const [rulesPage, setRulesPage] = useState<PageInfo | null>(null);
+  const [alertsCursorHistory, setAlertsCursorHistory] = useState<string[]>([]);
+  const [rulesCursorHistory, setRulesCursorHistory] = useState<string[]>([]);
+  const [summary, setSummary] = useState<AlertsSummarySection | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(true);
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -66,41 +79,147 @@ export function NfAlertsPage() {
 
   const loadAll = useCallback(async () => {
     setLoading(true);
-    setError(null);
-    try {
-      const [metaRes, rulesRes, alertsRes] = await Promise.all([
-        fetchNfAlertsMeta().catch(() => null),
-        fetchNfAlertRules({
-          q: ruleSearchQuery || undefined,
-          enabled: ruleEnabledFilter || undefined,
-          limit: PAGE_LIMIT,
-        }),
-        fetchNfAlerts({
-          state: alertStateFilter || undefined,
-          severity: alertSeverityFilter || undefined,
-          limit: PAGE_LIMIT,
-        }),
-      ]);
-      setMeta(metaRes);
-      setRules(rulesRes.rules ?? []);
-      setAlerts(alertsRes.alerts ?? []);
-    } catch (err) {
-      setError(err instanceof Error && err.message ? err.message : t('nf_alerts_err_load'));
+    setAlertsError(null);
+    setRulesError(null);
+    setSummaryLoading(true);
+    setAlertsCursorHistory([]);
+    setRulesCursorHistory([]);
+    // Section-split error boundaries: one failing list never blanks the
+    // other, and a failed summary section only degrades the KPI strip to
+    // explicit unavailable labels, never to page-scoped counts.
+    const [metaRes, rulesRes, alertsRes, summaryRes] = await Promise.allSettled([
+      fetchNfAlertsMeta(),
+      fetchNfAlertRules({
+        q: ruleSearchQuery || undefined,
+        enabled: ruleEnabledFilter || undefined,
+        limit: PAGE_LIMIT,
+      }),
+      fetchNfAlerts({
+        state: alertStateFilter || undefined,
+        severity: alertSeverityFilter || undefined,
+        limit: PAGE_LIMIT,
+      }),
+      fetchOperationsSummary(['alerts']),
+    ]);
+    setMeta(metaRes.status === 'fulfilled' ? metaRes.value : null);
+    if (rulesRes.status === 'fulfilled') {
+      setRules(rulesRes.value.rules ?? []);
+      setRulesPage(rulesRes.value.page ?? null);
+    } else {
       setRules([]);
+      setRulesPage(null);
+      setRulesError(describeLoadError(rulesRes.reason, t));
+    }
+    if (alertsRes.status === 'fulfilled') {
+      setAlerts(alertsRes.value.alerts ?? []);
+      setAlertsPage(alertsRes.value.page ?? null);
+    } else {
       setAlerts([]);
+      setAlertsPage(null);
+      setAlertsError(describeLoadError(alertsRes.reason, t));
+    }
+    setSummary(summaryRes.status === 'fulfilled' ? (summaryRes.value.alerts ?? null) : null);
+    setSummaryLoading(false);
+    setLoading(false);
+  }, [ruleSearchQuery, ruleEnabledFilter, alertStateFilter, alertSeverityFilter, t]);
+
+  // Cursor pager loads refresh exactly one bounded list; the other list and
+  // the full-collection summary stay untouched.
+  const loadRulesPage = useCallback(async (cursor: string | undefined) => {
+    setLoading(true);
+    setRulesError(null);
+    try {
+      const res = await fetchNfAlertRules({
+        q: ruleSearchQuery || undefined,
+        enabled: ruleEnabledFilter || undefined,
+        cursor,
+        limit: PAGE_LIMIT,
+      });
+      setRules(res.rules ?? []);
+      setRulesPage(res.page ?? null);
+    } catch (err) {
+      setRules([]);
+      setRulesPage(null);
+      setRulesError(describeLoadError(err, t));
     } finally {
       setLoading(false);
     }
-  }, [ruleSearchQuery, ruleEnabledFilter, alertStateFilter, alertSeverityFilter, t]);
+  }, [ruleSearchQuery, ruleEnabledFilter, t]);
+
+  const loadAlertsPage = useCallback(async (cursor: string | undefined) => {
+    setLoading(true);
+    setAlertsError(null);
+    try {
+      const res = await fetchNfAlerts({
+        state: alertStateFilter || undefined,
+        severity: alertSeverityFilter || undefined,
+        cursor,
+        limit: PAGE_LIMIT,
+      });
+      setAlerts(res.alerts ?? []);
+      setAlertsPage(res.page ?? null);
+    } catch (err) {
+      setAlerts([]);
+      setAlertsPage(null);
+      setAlertsError(describeLoadError(err, t));
+    } finally {
+      setLoading(false);
+    }
+  }, [alertStateFilter, alertSeverityFilter, t]);
 
   useEffect(() => {
     if (!canRead) {
       setLoading(false);
-      setError(t('nf_alerts_err_forbidden'));
+      setSummaryLoading(false);
+      setAlertsError(t('nf_alerts_err_forbidden'));
+      setRulesError(t('nf_alerts_err_forbidden'));
       return;
     }
     void loadAll();
   }, [canRead, loadAll]);
+
+  const handleAlertsFirstPage = () => {
+    setAlertsCursorHistory([]);
+    void loadAlertsPage(undefined);
+  };
+
+  const handleAlertsPrevPage = () => {
+    if (alertsCursorHistory.length === 0) return;
+    const nextHistory = alertsCursorHistory.slice(0, -1);
+    setAlertsCursorHistory(nextHistory);
+    const prevCursor = nextHistory.length > 0 ? nextHistory[nextHistory.length - 1] : undefined;
+    void loadAlertsPage(prevCursor);
+  };
+
+  const handleAlertsNextPage = () => {
+    const nextCursor = alertsPage?.nextCursor;
+    if (!nextCursor || !alertsPage?.hasMore) return;
+    setAlertsCursorHistory((history) => [...history, nextCursor]);
+    void loadAlertsPage(nextCursor);
+  };
+
+  const handleRulesFirstPage = () => {
+    setRulesCursorHistory([]);
+    void loadRulesPage(undefined);
+  };
+
+  const handleRulesPrevPage = () => {
+    if (rulesCursorHistory.length === 0) return;
+    const nextHistory = rulesCursorHistory.slice(0, -1);
+    setRulesCursorHistory(nextHistory);
+    const prevCursor = nextHistory.length > 0 ? nextHistory[nextHistory.length - 1] : undefined;
+    void loadRulesPage(prevCursor);
+  };
+
+  const handleRulesNextPage = () => {
+    const nextCursor = rulesPage?.nextCursor;
+    if (!nextCursor || !rulesPage?.hasMore) return;
+    setRulesCursorHistory((history) => [...history, nextCursor]);
+    void loadRulesPage(nextCursor);
+  };
+
+  const alertsPageIndex = alertsCursorHistory.length + 1;
+  const rulesPageIndex = rulesCursorHistory.length + 1;
 
   const handleRuleSearchSubmit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -168,17 +287,10 @@ export function NfAlertsPage() {
     }
   };
 
-  const kpis = useMemo(() => {
-    let active = 0;
-    let acknowledged = 0;
-    let critical = 0;
-    for (const alert of alerts) {
-      if (alert.state === 'active') active += 1;
-      else if (alert.state === 'acknowledged') acknowledged += 1;
-      if (alert.severity === 'critical' && alert.state !== 'resolved') critical += 1;
-    }
-    return { rules: rules.length, active, acknowledged, critical };
-  }, [rules, alerts]);
+  // KPIs come from the full-collection summary section, never from the
+  // current page arrays. A page-scoped count must never be presented as a
+  // platform total (UX-0 scope/completeness contract).
+  const kpis = useMemo(() => alertsKpisFromSummary(summary ?? undefined), [summary]);
 
   return (
     <div className="container animate-fade-in">
@@ -214,25 +326,53 @@ export function NfAlertsPage() {
 
       <OperationsNav />
 
-      {loading && alerts.length === 0 && rules.length === 0 ? (
+      {loading && summaryLoading && alerts.length === 0 && rules.length === 0 ? (
         <SkeletonKpiStrip count={4} />
       ) : (
         <section className={styles.kpiStrip} aria-label={t('nf_alerts_kpi_label')}>
           <article className={styles.kpiCard}>
             <span className={styles.kpiLabel}>{t('nf_alerts_kpi_rules')}</span>
-            <strong className={styles.kpiValue}>{kpis.rules}</strong>
+            <strong className={styles.kpiValue}>{kpis.rules ?? '-'}</strong>
+            <span className={styles.kpiMeta}>
+              {kpis.rules === null ? (
+                <span className={styles.kpiUnavailable}>{t('ops_kpi_unavailable')}</span>
+              ) : (
+                <span className={styles.kpiScope} title={t('ops_kpi_scope_note')}>{t('ops_kpi_scope_full_collection')}</span>
+              )}
+            </span>
           </article>
           <article className={styles.kpiCard}>
             <span className={styles.kpiLabel}>{t('nf_alerts_kpi_active')}</span>
-            <strong className={styles.kpiValue}>{kpis.active}</strong>
+            <strong className={styles.kpiValue}>{kpis.active ?? '-'}</strong>
+            <span className={styles.kpiMeta}>
+              {kpis.active === null ? (
+                <span className={styles.kpiUnavailable}>{t('ops_kpi_unavailable')}</span>
+              ) : (
+                <span className={styles.kpiScope} title={t('ops_kpi_scope_note')}>{t('ops_kpi_scope_full_collection')}</span>
+              )}
+            </span>
           </article>
           <article className={styles.kpiCard}>
             <span className={styles.kpiLabel}>{t('nf_alerts_kpi_acknowledged')}</span>
-            <strong className={styles.kpiValue}>{kpis.acknowledged}</strong>
+            <strong className={styles.kpiValue}>{kpis.acknowledged ?? '-'}</strong>
+            <span className={styles.kpiMeta}>
+              {kpis.acknowledged === null ? (
+                <span className={styles.kpiUnavailable}>{t('ops_kpi_unavailable')}</span>
+              ) : (
+                <span className={styles.kpiScope} title={t('ops_kpi_scope_note')}>{t('ops_kpi_scope_full_collection')}</span>
+              )}
+            </span>
           </article>
           <article className={styles.kpiCard}>
             <span className={styles.kpiLabel}>{t('nf_alerts_kpi_critical_open')}</span>
-            <strong className={styles.kpiValue}>{kpis.critical}</strong>
+            <strong className={styles.kpiValue}>{kpis.criticalOpen ?? '-'}</strong>
+            <span className={styles.kpiMeta}>
+              {kpis.criticalOpen === null ? (
+                <span className={styles.kpiUnavailable}>{t('ops_kpi_unavailable')}</span>
+              ) : (
+                <span className={styles.kpiScope} title={t('ops_kpi_scope_note')}>{t('ops_kpi_scope_full_collection')}</span>
+              )}
+            </span>
           </article>
         </section>
       )}
@@ -284,9 +424,9 @@ export function NfAlertsPage() {
           </div>
         </div>
 
-        {error ? (
+        {alertsError ? (
           <div className={styles.errorWrap}>
-            <ErrorState title={t('error')} message={error} retryLabel={t('nf_alerts_retry')} onRetry={() => void loadAll()} />
+            <ErrorState title={t('error')} message={alertsError} retryLabel={t('nf_alerts_retry')} onRetry={() => void loadAll()} />
           </div>
         ) : loading && alerts.length === 0 ? (
           <LoadingRows columns={7} rows={4} />
@@ -372,6 +512,37 @@ export function NfAlertsPage() {
             </table>
           </div>
         )}
+        {alertsError ? null : alerts.length > 0 || alertsPage?.hasMore ? (
+          <nav className={styles.pager} aria-label={t('nf_alerts_instances_section')}>
+            <span className={styles.pagerSummary} aria-live="polite">
+              {t('nf_alerts_pager_alerts', { count: alerts.length })}
+            </span>
+            <div className={styles.pagerControls}>
+              <button
+                type="button"
+                onClick={handleAlertsFirstPage}
+                disabled={alertsPageIndex === 1 || loading}
+              >
+                {t('ops_pager_first')}
+              </button>
+              <button
+                type="button"
+                onClick={handleAlertsPrevPage}
+                disabled={alertsPageIndex === 1 || loading}
+              >
+                {t('ops_pager_prev')}
+              </button>
+              <span className={styles.pageNumber}>{t('ops_pager_page', { page: alertsPageIndex })}</span>
+              <button
+                type="button"
+                onClick={handleAlertsNextPage}
+                disabled={!alertsPage?.hasMore || !alertsPage?.nextCursor || loading}
+              >
+                {t('ops_pager_next')}
+              </button>
+            </div>
+          </nav>
+        ) : null}
       </section>
 
       <section className="dash-card">
@@ -424,9 +595,9 @@ export function NfAlertsPage() {
         </div>
         <p className={styles.semanticNote}>{t('nf_alerts_semantic_note')}</p>
 
-        {error ? (
+        {rulesError ? (
           <div className={styles.errorWrap}>
-            <ErrorState title={t('error')} message={error} retryLabel={t('nf_alerts_retry')} onRetry={() => void loadAll()} />
+            <ErrorState title={t('error')} message={rulesError} retryLabel={t('nf_alerts_retry')} onRetry={() => void loadAll()} />
           </div>
         ) : loading && rules.length === 0 ? (
           <LoadingRows columns={6} rows={4} />
@@ -526,6 +697,37 @@ export function NfAlertsPage() {
             </table>
           </div>
         )}
+        {rulesError ? null : rules.length > 0 || rulesPage?.hasMore ? (
+          <nav className={styles.pager} aria-label={t('nf_alerts_rules_section')}>
+            <span className={styles.pagerSummary} aria-live="polite">
+              {t('nf_alerts_pager_rules', { count: rules.length })}
+            </span>
+            <div className={styles.pagerControls}>
+              <button
+                type="button"
+                onClick={handleRulesFirstPage}
+                disabled={rulesPageIndex === 1 || loading}
+              >
+                {t('ops_pager_first')}
+              </button>
+              <button
+                type="button"
+                onClick={handleRulesPrevPage}
+                disabled={rulesPageIndex === 1 || loading}
+              >
+                {t('ops_pager_prev')}
+              </button>
+              <span className={styles.pageNumber}>{t('ops_pager_page', { page: rulesPageIndex })}</span>
+              <button
+                type="button"
+                onClick={handleRulesNextPage}
+                disabled={!rulesPage?.hasMore || !rulesPage?.nextCursor || loading}
+              >
+                {t('ops_pager_next')}
+              </button>
+            </div>
+          </nav>
+        ) : null}
       </section>
 
       <NfAlertRuleDialog
@@ -585,6 +787,13 @@ function formatTimestamp(value?: string): string {
   if (!value) return '-';
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+}
+
+function describeLoadError(
+  err: unknown,
+  t: (key: string, params?: Record<string, string | number>) => string,
+): string {
+  return err instanceof Error && err.message ? err.message : t('nf_alerts_err_load');
 }
 
 function describeMutationError(

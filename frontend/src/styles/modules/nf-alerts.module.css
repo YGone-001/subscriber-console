@@ -352,3 +352,108 @@
   padding: 1rem 1.25rem;
   border-top: 1px solid var(--surface-border);
 }
+
+/* ---------------------------------------------------------------------------
+ * KPI scope and completeness labels.
+ *
+ * Summary KPIs are full-collection counts; the scope tag makes that explicit
+ * and the unavailable tag replaces the number when the summary section could
+ * not be read. A page-scoped count must never be presented as a total.
+ * ------------------------------------------------------------------------- */
+.kpiMeta {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.kpiScope {
+  padding: 0.1rem 0.45rem;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-pill);
+  color: var(--text-muted);
+  font-size: var(--ref-font-size-label);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.kpiUnavailable {
+  padding: 0.1rem 0.45rem;
+  border: 1px solid color-mix(in srgb, var(--warning, var(--text-secondary)) 35%, var(--surface-border));
+  border-radius: var(--ref-radius-pill);
+  color: var(--warning, var(--text-secondary));
+  background: color-mix(in srgb, var(--warning, var(--text-secondary)) 10%, transparent);
+  font-size: var(--ref-font-size-label);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.kpiValueUnavailable {
+  color: var(--text-muted);
+}
+
+/* ---------------------------------------------------------------------------
+ * Cursor pager. Mirrors the Inventory pager primitives so every bounded list
+ * in the operations plane pages with the same controls and tokens.
+ * ------------------------------------------------------------------------- */
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 1.25rem;
+  border-top: 1px solid var(--surface-border);
+  color: var(--text-muted);
+  font-size: var(--ref-font-size-data);
+}
+
+.pagerSummary {
+  min-width: 0;
+}
+
+.pagerControls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pagerControls button {
+  min-height: 36px;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-control);
+  background: var(--surface);
+  color: var(--text-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.pagerControls button:hover:not(:disabled) {
+  border-color: var(--selection-border);
+  background: var(--surface-hover);
+  color: var(--primary);
+}
+
+.pagerControls button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.pagerControls button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.pageNumber {
+  min-width: 4.5rem;
+  padding: 0 0.5rem;
+  color: var(--text-main);
+  font-family: var(--font-data);
+  text-align: center;
+}
+
+@media (max-width: 640px) {
+  .pager { align-items: stretch; flex-direction: column; }
+  .pagerControls { justify-content: space-between; }
+}
