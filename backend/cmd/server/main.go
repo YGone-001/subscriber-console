@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -30,6 +31,8 @@ import (
 	"subscriber/internal/rating"
 	"subscriber/internal/remediation"
 	"subscriber/internal/response"
+	"subscriber/internal/runtimeinv"
+	"subscriber/internal/runtimewire"
 	"subscriber/internal/spa"
 	"subscriber/internal/subscriber"
 	"subscriber/internal/system"
@@ -220,7 +223,7 @@ func main() {
 	)
 	nfHealthHandler := nfhealth.NewHandler(nfHealthRepo, nfHealthCollector, limiter, auditWriter, nfHealthDest, nfHealthUnits, nfHealthBindings)
 	nfHealthObservations := mc.Ops.Collection("app_nf_observations")
-	nfHealthHandler.SetIdentityResolvers(nfhealth.IdentityResolvers{
+	nfHealthResolvers := nfhealth.IdentityResolvers{
 		Resource: func(ctx context.Context, resourceID string) (*nfhealth.ResourceProjection, error) {
 			resource, err := inventoryRepo.GetByID(ctx, resourceID)
 			if err != nil {
@@ -259,7 +262,29 @@ func main() {
 			}
 			return projection, nil
 		},
-	})
+	}
+	nfHealthHandler.SetIdentityResolvers(nfHealthResolvers)
+
+	// Runtime discovery: one shared local process scanner per backend instance.
+	// The recognition registry is the single process-identity authority; the
+	// server-owned registry identities extend the local inspection allowlist
+	// because they are compile-time constants, never client input.
+	runtimeRegistry := runtimeinv.DefaultRegistry()
+	nfHealthUnits.AddServerOwned(runtimeRegistry.MonitoredProcessNames()...)
+
+	// Governed persistent bindings: static configuration always wins, and a
+	// contradictory dynamic binding is rejected at load time.
+	bindingStore := nfhealth.NewBindingStore(mc.Ops.Collection("app_nf_health_bindings"))
+	if loaded, loadErr := bindingStore.LoadAll(ctx); loadErr != nil {
+		logger.Warn("nf health dynamic binding load failed", "error", loadErr)
+	} else {
+		for _, binding := range loaded {
+			if installErr := nfHealthBindings.InstallDynamic(binding.ResourceID, binding.Unit); installErr != nil {
+				logger.Warn("nf health dynamic binding rejected", "resourceId", binding.ResourceID, "error", installErr)
+			}
+		}
+		logger.Info("nf health dynamic bindings loaded", "count", len(loaded))
+	}
 	// Collection-time authoritative identity revalidation: missing, retired,
 	// unsupported or no-longer-matching Inventory resources fail closed, while
 	// historical runs and samples remain readable evidence.
@@ -284,6 +309,29 @@ func main() {
 	nfHealthScheduler := nfhealth.NewScheduler(nfHealthRepo, nfHealthCollector)
 	nfHealthScheduler.Start(context.Background())
 	defer nfHealthScheduler.Stop()
+
+	// Runtime discovery lifecycle. The startup scan runs immediately so the
+	// operational surfaces are populated without any Inventory record.
+	runtimeService := runtimeinv.NewService(
+		runtimeinv.NewScanner(runtimeRegistry, runtimeinv.ScannerOptions{
+			ProcRoot: cfg.LocalNFDiscoveryProcRoot,
+			Expected: splitList(cfg.LocalNFDiscoveryExpected),
+		}),
+		runtimeinv.NewMongoStateStore(mc.Ops.Collection("app_runtime_component_state")),
+		runtimeinv.ServiceOptions{
+			Enabled:  cfg.LocalNFDiscoveryEnabled,
+			Interval: time.Duration(cfg.LocalNFDiscoveryIntervalSeconds) * time.Second,
+			Logger:   logger,
+		},
+	)
+	runtimeService.Start(context.Background())
+	defer runtimeService.Stop()
+
+	runtimeInventoryGateway := runtimewire.NewInventoryGateway(inventoryRepo)
+	runtimeTargetGateway := runtimewire.NewTargetGateway(nfHealthRepo, nfHealthDest, nfHealthUnits, nfHealthBindings, nfHealthResolvers)
+	runtimeBindingGateway := runtimewire.NewBindingGateway(bindingStore, nfHealthBindings)
+	runtimeBootstrapper := runtimeinv.NewBootstrapper(runtimeService, runtimeInventoryGateway, runtimeTargetGateway, runtimeBindingGateway)
+	runtimeHandler := runtimeinv.NewHandler(runtimeService, runtimeBootstrapper, limiter, auditWriter, runtimeInventoryGateway, runtimeTargetGateway)
 
 	// Build handler
 	mux := http.NewServeMux()
@@ -458,6 +506,13 @@ func main() {
 	mux.Handle("PUT /api/nf-health/targets/{targetId}", authMiddleware(http.HandlerFunc(nfHealthHandler.UpdateTarget)))
 	mux.Handle("POST /api/nf-health/targets/{targetId}/collect", authMiddleware(http.HandlerFunc(nfHealthHandler.CollectTarget)))
 
+	// Runtime discovery (two reads, three governed mutations)
+	mux.Handle("GET /api/runtime/meta", authMiddleware(http.HandlerFunc(runtimeHandler.Meta)))
+	mux.Handle("GET /api/runtime/observations", authMiddleware(http.HandlerFunc(runtimeHandler.Observations)))
+	mux.Handle("POST /api/runtime/scan", authMiddleware(http.HandlerFunc(runtimeHandler.Scan)))
+	mux.Handle("POST /api/runtime/bootstrap/preview", authMiddleware(http.HandlerFunc(runtimeHandler.Preview)))
+	mux.Handle("POST /api/runtime/bootstrap/apply", authMiddleware(http.HandlerFunc(runtimeHandler.Apply)))
+
 	// Catch-all for unknown API routes
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		response.NotFound(w)
@@ -518,6 +573,19 @@ func main() {
 	<-done
 	logger.Info("server stopped")
 	time.Sleep(100 * time.Millisecond)
+}
+
+// splitList splits a comma-separated configuration value, dropping empties.
+func splitList(raw string) []string {
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out
 }
 
 type authAuditRecorder struct {

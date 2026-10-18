@@ -620,6 +620,24 @@ async function ensureIndexes() {
     },
   ])).map((name) => ({ database: appDbName, collection: 'app_nf_health_samples', name })));
 
+  // ── xcloud_ops.app_nf_health_bindings ──
+  // Bootstrap-installed local process bindings. `_id` is the canonical
+  // Inventory resource id, so at most one binding exists per resource. The
+  // unique bindingKey prevents two resources from claiming the same
+  // (host, process identity, NF type) on one host.
+  createdIndexes.push(...(await appDb.collection('app_nf_health_bindings').createIndexes([
+    { key: { bindingKey: 1 }, unique: true, name: 'uniq_nf_health_binding_key' },
+    { key: { hostId: 1, processName: 1 }, name: 'nf_health_bindings_host_process' },
+  ])).map((name) => ({ database: appDbName, collection: 'app_nf_health_bindings', name })));
+
+  // ── xcloud_ops.app_runtime_component_state ──
+  // Bounded observation memory: one document per (host, component). It is
+  // what lets a complete scan after a restart distinguish a previously
+  // observed service from one that was never installed.
+  createdIndexes.push(...(await appDb.collection('app_runtime_component_state').createIndexes([
+    { key: { hostId: 1, componentId: 1 }, unique: true, name: 'uniq_runtime_component_state' },
+  ])).map((name) => ({ database: appDbName, collection: 'app_runtime_component_state', name })));
+
 async function seedRootAdminUser(appDb) {
   const users = appDb.collection('app_users');
   const existingAdmin = await users.findOne({ username: 'admin' });

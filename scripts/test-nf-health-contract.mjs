@@ -6,7 +6,7 @@
  * - Total SPA route count = 32
  * - NF Health frontend routes = 2
  * - NF Health Go registrations = 10 (7 reads, 3 mutations)
- * - Go registrations = 119 (109 -> 119 intentional extension)
+ * - Go registrations = 124 (109 -> 119 -> 124 intentional extensions)
  * - NF Health reads use core.read, mutations use core.configure
  * - NF Health hard-delete endpoint = 0
  * - No generic URL-fetch, remote-shell, process-control or NF control endpoint exists
@@ -52,7 +52,7 @@ assert.deepEqual(detailRoute.dynamicParameters, ['targetId'], 'detail dynamic pa
 // 2. Go API registrations
 const { keys: goRegistrations, duplicates: goDuplicates } = deriveGoRegistrations(root);
 assert.equal(goDuplicates.length, 0, 'Go registrations must have 0 duplicates');
-assert.equal(goRegistrations.length, 119, `Go registered operations must be exactly 119, got ${goRegistrations.length}`);
+assert.equal(goRegistrations.length, 124, `Go registered operations must be exactly 124, got ${goRegistrations.length}`);
 
 const healthGoRoutes = goRegistrations.filter((r) => r.includes('/api/nf-health'));
 assert.equal(healthGoRoutes.length, 10, `NF Health Go registrations must be exactly 10, got ${healthGoRoutes.length}`);
@@ -185,15 +185,27 @@ assert.ok(collectEntry.forbiddenBodyKeys.includes('command'), 'collect must forb
 // 5. Collections boundary
 const mainSource = readFileSync(resolve(root, 'backend/cmd/server/main.go'), 'utf8');
 const indexSource = readFileSync(resolve(root, 'scripts/init-mongo-indexes.mjs'), 'utf8');
-const requiredCollections = ['app_nf_health_targets', 'app_nf_health_runs', 'app_nf_health_samples'];
+// The bootstrap-installed process binding collection is part of the NF Health
+// persistence surface: it is what makes scheduled L1 collection survive a
+// backend restart without bypassing the static binding authority.
+const requiredCollections = [
+  'app_nf_health_targets',
+  'app_nf_health_runs',
+  'app_nf_health_samples',
+  'app_nf_health_bindings',
+];
 for (const required of requiredCollections) {
   assert.ok(mainSource.includes(`"${required}"`), `main.go must bind collection ${required}`);
   assert.ok(indexSource.includes(required), `init-mongo-indexes.mjs must index ${required}`);
 }
 const indexCollections = [...indexSource.matchAll(/collection\('([^']+)'\)/g)].map((m) => m[1]);
 const healthCollections = [...new Set(indexCollections.filter((name) => name.startsWith('app_nf_health')))];
-assert.equal(healthCollections.length, 3,
-  `nf health must persist exactly 3 collections, got ${healthCollections.join(',')}`);
+assert.deepEqual(healthCollections.sort(), [
+  'app_nf_health_bindings',
+  'app_nf_health_runs',
+  'app_nf_health_samples',
+  'app_nf_health_targets',
+], `nf health must persist exactly the canonical collection set, got ${healthCollections.join(',')}`);
 
 assert.ok(indexSource.includes('nf_health_samples_ttl'), 'sample TTL index must exist');
 assert.ok(/expireAfterSeconds:\s*0/.test(indexSource), 'TTL must use expireAfterSeconds 0 with expiresAt');
@@ -439,8 +451,8 @@ console.log('nf_health_dialog_actions_pinned=1');
 
 console.log('nf_health_frontend_routes=2');
 console.log('nf_health_go_registrations=10');
-console.log('go_registration_count=119');
-console.log('nf_health_collections=3');
+console.log('go_registration_count=124');
+console.log('nf_health_collections=4');
 console.log('nf_health_security_findings=0');
 console.log('nf_health_product_name_tokens=0');
 console.log('\nNF Health contract suite: PASS');

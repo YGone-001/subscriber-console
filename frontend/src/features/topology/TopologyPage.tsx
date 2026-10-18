@@ -39,6 +39,7 @@ import { TopologyEdgeForm } from './components/TopologyEdgeForm';
 import { TopologyResourcePicker } from './components/TopologyResourcePicker';
 import type { Resource } from '../inventory/inventory-types';
 import styles from '../../styles/modules/topology.module.css';
+import { RuntimeHierarchy } from '../runtime/RuntimeHierarchy';
 
 const PAGE_LIMIT = 20;
 
@@ -540,6 +541,11 @@ export function TopologyPage() {
           ) : null}
         </div>
       </Dialog>
+
+      {/* Observed local runtime hierarchy. Read-only evidence derived from the
+          backend host and verified process membership. It never creates,
+          suggests or persists a protocol relationship. */}
+      <RuntimeHierarchy />
     </div>
   );
 }

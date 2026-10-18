@@ -81,6 +81,9 @@ jobs:
       - name: Inventory contract and security evidence
         run: node scripts/test-inventory-contract.mjs
 
+      - name: Runtime discovery contract and security evidence
+        run: node scripts/test-runtime-discovery-contract.mjs
+
       - name: API ownership invariants
         run: node scripts/test-api-ownership-invariants.mjs
 

@@ -4,6 +4,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 )
 
@@ -30,6 +31,12 @@ type Config struct {
 	NFHealthServiceUnits         string // comma-separated approved service units / process names
 	NFHealthTLSCAFile            string // optional CA bundle for https metrics endpoints
 	NFHealthLocalProcessBindings string // comma-separated resourceId=unit local bindings
+
+	// Runtime discovery (read-only local process recognition)
+	LocalNFDiscoveryEnabled         bool   // background scanner enabled
+	LocalNFDiscoveryIntervalSeconds int    // scan interval in seconds
+	LocalNFDiscoveryProcRoot        string // procfs root (default /proc)
+	LocalNFDiscoveryExpected        string // comma-separated component ids explicitly expected
 }
 
 // Load reads configuration from environment variables with sensible defaults.
@@ -52,6 +59,11 @@ func Load() (*Config, error) {
 		NFHealthTLSCAFile:      os.Getenv("NF_HEALTH_TLS_CA_FILE"),
 
 		NFHealthLocalProcessBindings: os.Getenv("NF_HEALTH_LOCAL_PROCESS_BINDINGS"),
+
+		LocalNFDiscoveryEnabled:         envBoolOrDefault("LOCAL_NF_DISCOVERY_ENABLED", true),
+		LocalNFDiscoveryIntervalSeconds: envIntOrDefault("LOCAL_NF_DISCOVERY_INTERVAL_SECONDS", 10),
+		LocalNFDiscoveryProcRoot:        envOrDefault("LOCAL_NF_DISCOVERY_PROC_ROOT", "/proc"),
+		LocalNFDiscoveryExpected:        os.Getenv("LOCAL_NF_DISCOVERY_EXPECTED"),
 	}
 
 	if cfg.MongoURI == "" {
@@ -78,4 +90,30 @@ func envDurationOrDefault(key string, fallback time.Duration) time.Duration {
 		return fallback
 	}
 	return d
+}
+
+// envIntOrDefault reads a positive integer, falling back on any invalid value.
+func envIntOrDefault(key string, fallback int) int {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	parsed, err := strconv.Atoi(v)
+	if err != nil || parsed <= 0 {
+		return fallback
+	}
+	return parsed
+}
+
+// envBoolOrDefault reads a boolean flag, falling back on any invalid value.
+func envBoolOrDefault(key string, fallback bool) bool {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseBool(v)
+	if err != nil {
+		return fallback
+	}
+	return parsed
 }

@@ -287,13 +287,14 @@ func TestNFProcessRegistryCoversAllReferenceMappings(t *testing.T) {
 		{"udrd", NFTypeUDR, "5gc"}, {"pcfd", NFTypePCF, "5gc"}, {"bsfd", NFTypeBSF, "5gc"},
 		{"nssfd", NFTypeNSSF, "5gc"}, {"scpd", NFTypeSCP, "5gc"}, {"seppd", NFTypeSEPP, "5gc"},
 		{"mmed", NFTypeMME, "epc"}, {"sgwcd", NFTypeSGWC, "epc"}, {"sgwud", NFTypeSGWU, "epc"},
+		{"pgwcd", NFTypePGWC, "epc"}, {"pgwud", NFTypePGWU, "epc"},
 		{"hssd", NFTypeHSS, "epc"}, {"pcrfd", NFTypePCRF, "epc"},
 		{"ocsd", NFTypeOCS, "charging"},
 		{"pcscfd", NFTypePCSCF, "ims"}, {"scscfd", NFTypeSCSCF, "ims"},
 		{"icscfd", NFTypeICSCF, "ims"}, {"smscd", NFTypeSMSC, "ims"},
 	}
-	if len(expected) != 22 {
-		t.Fatalf("reference mapping must declare 22 processes, got %d", len(expected))
+	if len(expected) != 24 {
+		t.Fatalf("reference mapping must declare 24 processes, got %d", len(expected))
 	}
 	for _, tc := range expected {
 		entry, ok := LookupNFProcessIdentity(tc.process)
@@ -307,8 +308,8 @@ func TestNFProcessRegistryCoversAllReferenceMappings(t *testing.T) {
 			t.Fatalf("process %s must be permitted in domain %s", tc.process, tc.domain)
 		}
 	}
-	if len(nfProcessRegistry) != 22 {
-		t.Fatalf("registry must contain exactly 22 entries, got %d", len(nfProcessRegistry))
+	if len(nfProcessRegistry) != 24 {
+		t.Fatalf("registry must contain exactly 24 entries, got %d", len(nfProcessRegistry))
 	}
 }
 

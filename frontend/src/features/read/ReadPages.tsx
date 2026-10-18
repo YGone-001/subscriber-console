@@ -13,6 +13,7 @@ import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recha
 import { RadioTower } from 'lucide-react';
 import AnalyticsCockpit from '../../components/AnalyticsCockpit';
 import OperationalOverview from '../operations/OperationalOverview';
+import { RuntimeDiscoveryPanel } from '../runtime/RuntimeDiscovery';
 import PageHeader from '../../components/ui/PageHeader';
 import { useI18n } from '../../providers/I18nProvider';
 import { text, toChartPoints, type UnknownRecord } from './dashboard-model';
@@ -30,6 +31,10 @@ import { text, toChartPoints, type UnknownRecord } from './dashboard-model';
  * monitoring evidence) renders below the cockpit. It is an additional section:
  * no existing business analytic is removed, renamed or repurposed, and no
  * subscriber or online-user count is derived from it.
+ *
+ * The local runtime discovery panel renders last. It reports recognized local
+ * processes from the backend scanner, so the surface is useful before any
+ * Inventory, Discovery, Topology or NF Health record exists.
  */
 export function DashboardPage() {
   const { t } = useI18n();
@@ -44,6 +49,7 @@ export function DashboardPage() {
       />
       <AnalyticsCockpit />
       <OperationalOverview />
+      <RuntimeDiscoveryPanel />
     </div>
   );
 }

@@ -43,6 +43,7 @@ Canonical frontend SPA source     -> frontend/src/
 - [Topology dependency model](architecture/topology-dependency-model.md)
 - [NF discovery foundation](architecture/nf-discovery.md)
 - [Operational overview and network element management](architecture/operational-overview.md) - current operational surfaces: authorities, projection, denominators and boundaries.
+- [Runtime discovery](architecture/runtime-discovery.md) - CNMS-compatible local process recognition, runtime status semantics and the governed monitoring bootstrap.
 - [Architecture evolution roadmap](architecture/architecture-evolution-roadmap.md) - planned architecture evolution authority; it distinguishes future targets from current production behavior.
 - [Frontend-backend boundary](architecture/frontend-backend-boundary.md)
 - [Security model](architecture/security-model.md)

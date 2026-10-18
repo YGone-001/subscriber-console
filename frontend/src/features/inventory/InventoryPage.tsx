@@ -23,6 +23,7 @@ import { useAuth } from '../../providers/AuthProvider';
 import { useI18n } from '../../providers/I18nProvider';
 import { fetchInventoryMeta, fetchInventoryResources } from './inventory-api';
 import NetworkElementView from '../operations/NetworkElementView';
+import { RuntimeDiscoveryView } from '../runtime/RuntimeDiscovery';
 import type { MetaResponse, Resource } from './inventory-types';
 import styles from '../../styles/modules/inventory.module.css';
 
@@ -41,7 +42,7 @@ export function InventoryPage() {
   /* View mode: the general Inventory listing stays the default surface; the
    * network-element view is an additional presentation over the same resource
    * authority and never replaces it. */
-  const [viewMode, setViewMode] = useState<'list' | 'network'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'network' | 'runtime'>('list');
 
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -206,6 +207,15 @@ export function InventoryPage() {
               >
                 {t('ops_view_network')}
               </button>
+              <button
+                type="button"
+                data-view-mode="runtime"
+                className={viewMode === 'runtime' ? styles.viewToggleActive : undefined}
+                aria-pressed={viewMode === 'runtime'}
+                onClick={() => setViewMode('runtime')}
+              >
+                {t('runtime_view_mode')}
+              </button>
             </div>
             <button
               type="button"
@@ -226,7 +236,9 @@ export function InventoryPage() {
         )}
       />
 
-      {viewMode === 'network' ? (
+      {viewMode === 'runtime' ? (
+        <RuntimeDiscoveryView />
+      ) : viewMode === 'network' ? (
         <NetworkElementView />
       ) : (
       <section className="dash-card">

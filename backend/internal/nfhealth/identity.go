@@ -26,6 +26,8 @@ const (
 	NFTypeMME   = "MME"
 	NFTypeSGWC  = "SGW-C"
 	NFTypeSGWU  = "SGW-U"
+	NFTypePGWC  = "PGW-C"
+	NFTypePGWU  = "PGW-U"
 	NFTypeHSS   = "HSS"
 	NFTypePCRF  = "PCRF"
 	NFTypeOCS   = "OCS"
@@ -39,7 +41,7 @@ const (
 var CanonicalNFTypes = []string{
 	NFTypeAMF, NFTypeSMF, NFTypeUPF, NFTypeNRF, NFTypeAUSF, NFTypeUDM,
 	NFTypeUDR, NFTypePCF, NFTypeBSF, NFTypeNSSF, NFTypeSCP, NFTypeSEPP,
-	NFTypeMME, NFTypeSGWC, NFTypeSGWU, NFTypeHSS, NFTypePCRF, NFTypeOCS,
+	NFTypeMME, NFTypeSGWC, NFTypeSGWU, NFTypePGWC, NFTypePGWU, NFTypeHSS, NFTypePCRF, NFTypeOCS,
 	NFTypePCSCF, NFTypeSCSCF, NFTypeICSCF, NFTypeSMSC,
 }
 
@@ -78,7 +80,11 @@ type NFProcessIdentity struct {
 }
 
 // nfProcessRegistry is the bounded, server-owned process-to-NF mapping.
-// Total reference mapping: 22 processes across 5GC, EPC, charging and IMS.
+// Total reference mapping: 24 processes across 5GC, EPC, charging and IMS.
+//
+// The CNMS compatibility profile adds the two EPC gateways (pgwcd, pgwud) that
+// xCloud did not previously recognise. Every pre-existing identity is preserved
+// unchanged, including the xCloud-only seppd and smscd entries.
 var nfProcessRegistry = []NFProcessIdentity{
 	// 5GC (12 processes).
 	{ProcessName: "amfd", NFType: NFTypeAMF, Domains: []string{inventory.Domain5GC}},
@@ -93,10 +99,12 @@ var nfProcessRegistry = []NFProcessIdentity{
 	{ProcessName: "nssfd", NFType: NFTypeNSSF, Domains: []string{inventory.Domain5GC}},
 	{ProcessName: "scpd", NFType: NFTypeSCP, Domains: []string{inventory.Domain5GC}},
 	{ProcessName: "seppd", NFType: NFTypeSEPP, Domains: []string{inventory.Domain5GC}},
-	// EPC (5 processes).
+	// EPC (7 processes).
 	{ProcessName: "mmed", NFType: NFTypeMME, Domains: []string{inventory.DomainEPC}},
 	{ProcessName: "sgwcd", NFType: NFTypeSGWC, Domains: []string{inventory.DomainEPC}},
 	{ProcessName: "sgwud", NFType: NFTypeSGWU, Domains: []string{inventory.DomainEPC}},
+	{ProcessName: "pgwcd", NFType: NFTypePGWC, Domains: []string{inventory.DomainEPC}},
+	{ProcessName: "pgwud", NFType: NFTypePGWU, Domains: []string{inventory.DomainEPC}},
 	{ProcessName: "hssd", NFType: NFTypeHSS, Domains: []string{inventory.DomainEPC}},
 	{ProcessName: "pcrfd", NFType: NFTypePCRF, Domains: []string{inventory.DomainEPC}},
 	// Charging (1 process). OCS belongs to the canonical charging domain.
@@ -133,6 +141,7 @@ var roleToNFType = map[string]string{
 	"ausf": NFTypeAUSF, "udm": NFTypeUDM, "udr": NFTypeUDR, "pcf": NFTypePCF,
 	"bsf": NFTypeBSF, "nssf": NFTypeNSSF, "scp": NFTypeSCP, "sepp": NFTypeSEPP,
 	"mme": NFTypeMME, "sgwc": NFTypeSGWC, "sgwu": NFTypeSGWU, "hss": NFTypeHSS,
+	"pgwc": NFTypePGWC, "pgwu": NFTypePGWU,
 	"pcrf": NFTypePCRF, "ocs": NFTypeOCS,
 	"pcscf": NFTypePCSCF, "scscf": NFTypeSCSCF, "icscf": NFTypeICSCF,
 	"smsc": NFTypeSMSC,
