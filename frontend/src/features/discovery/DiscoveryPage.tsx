@@ -25,6 +25,7 @@ import { ErrorState } from '../../components/ui/StatePanel';
 import { Dialog } from '../../components/ui/Dialog';
 import { Field } from '../../components/ui/Field';
 import PageHeader from '../../components/ui/PageHeader';
+import { OperationsNav } from '../operations/OperationsNav';
 import { SkeletonKpiStrip } from '../../components/ui/LoadingSkeleton';
 import { useAuth } from '../../providers/AuthProvider';
 import { useI18n } from '../../providers/I18nProvider';
@@ -277,6 +278,8 @@ export function DiscoveryPage() {
           onDismiss={() => setFeedback(null)}
         />
       ) : null}
+
+      <OperationsNav />
 
       {loading && sources.length === 0 ? (
         <SkeletonKpiStrip count={4} />

@@ -23,6 +23,7 @@ import { hasPermission } from '../../lib/permissions';
 import { EmptyState, LoadingRows, OperationFeedback } from '../../components/ui/OperationFeedback';
 import { ErrorState } from '../../components/ui/StatePanel';
 import PageHeader from '../../components/ui/PageHeader';
+import { OperationsNav } from '../operations/OperationsNav';
 import { SkeletonKpiStrip } from '../../components/ui/LoadingSkeleton';
 import { useAuth } from '../../providers/AuthProvider';
 import { useI18n } from '../../providers/I18nProvider';
@@ -191,6 +192,8 @@ export function NfHealthPage() {
           onDismiss={() => setFeedback(null)}
         />
       ) : null}
+
+      <OperationsNav />
 
       {loading && targets.length === 0 ? (
         <SkeletonKpiStrip count={4} />

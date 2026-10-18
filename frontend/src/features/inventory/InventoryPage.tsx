@@ -23,6 +23,7 @@ import { useAuth } from '../../providers/AuthProvider';
 import { useI18n } from '../../providers/I18nProvider';
 import { fetchInventoryMeta, fetchInventoryResources } from './inventory-api';
 import NetworkElementView from '../operations/NetworkElementView';
+import { OperationsNav } from '../operations/OperationsNav';
 import { RuntimeDiscoveryView } from '../runtime/RuntimeDiscovery';
 import type { MetaResponse, Resource } from './inventory-types';
 import styles from '../../styles/modules/inventory.module.css';
@@ -39,10 +40,15 @@ export function InventoryPage() {
   const [error, setError] = useState<string | null>(null);
 
   // Filters
-  /* View mode: the general Inventory listing stays the default surface; the
-   * network-element view is an additional presentation over the same resource
-   * authority and never replaces it. */
-  const [viewMode, setViewMode] = useState<'list' | 'network' | 'runtime'>('list');
+  /* View mode: the network-element view is the default surface because the
+   * operational question is "what do I run", not "what is registered". The
+   * general listing remains available as the audit surface, and a `view` query
+   * parameter makes a specific presentation linkable. */
+  const [viewMode, setViewMode] = useState<'list' | 'network' | 'runtime'>(() => {
+    if (typeof window === 'undefined') return 'network';
+    const requested = new URLSearchParams(window.location.search).get('view');
+    return requested === 'list' || requested === 'runtime' ? requested : 'network';
+  });
 
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -191,21 +197,21 @@ export function InventoryPage() {
             <div className={styles.viewToggle} role="group" aria-label={t('ops_view_mode')}>
               <button
                 type="button"
-                data-view-mode="list"
-                className={viewMode === 'list' ? styles.viewToggleActive : undefined}
-                aria-pressed={viewMode === 'list'}
-                onClick={() => setViewMode('list')}
-              >
-                {t('ops_view_list')}
-              </button>
-              <button
-                type="button"
                 data-view-mode="network"
                 className={viewMode === 'network' ? styles.viewToggleActive : undefined}
                 aria-pressed={viewMode === 'network'}
                 onClick={() => setViewMode('network')}
               >
                 {t('ops_view_network')}
+              </button>
+              <button
+                type="button"
+                data-view-mode="list"
+                className={viewMode === 'list' ? styles.viewToggleActive : undefined}
+                aria-pressed={viewMode === 'list'}
+                onClick={() => setViewMode('list')}
+              >
+                {t('ops_view_list')}
               </button>
               <button
                 type="button"
@@ -235,6 +241,8 @@ export function InventoryPage() {
           </>
         )}
       />
+
+      <OperationsNav />
 
       {viewMode === 'runtime' ? (
         <RuntimeDiscoveryView />

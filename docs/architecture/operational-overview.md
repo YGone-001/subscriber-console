@@ -335,3 +335,27 @@ Not implemented in this phase, and each requires its own authorization:
 - remote process collection and new exporter integrations;
 - any physical site/region hierarchy (requires authoritative Inventory kinds and
   declared Topology containment, not a fabricated tree).
+
+## 15. Presentation surfaces
+
+Three presentation additions keep the read-only projection semantics of this
+document intact. None of them adds an endpoint, mutates data or derives a count
+that the projection model does not already define.
+
+- **Operations workbench navigation** (`OperationsNav`): one tab strip rendered
+  by the four operational routes (`/inventory`, `/topology`, `/discovery`,
+  `/nf-health`). It adds no route and no destination; nested detail routes keep
+  the owning tab active.
+- **Network-element card wall** (`NetworkElementCards`): the scannable view of
+  the same projection the table renders, grouped by canonical Inventory domain,
+  with the monitoring state, the three layer-coverage marks and resident memory.
+  The table remains the audit surface; its semantics are unchanged.
+- **Unmanaged-process strip** (`UnmanagedProcesses`): verified running processes
+  whose runtime inventory association is `absent`. They are visible, explicitly
+  not monitored, and never counted as faults; management happens only through
+  the governed runtime bootstrap in the runtime view.
+
+`/inventory` accepts a `view` query parameter (`network` as default, `list`,
+`runtime`) so a specific presentation is linkable. Every unavailable value on
+these surfaces remains an explicit unavailable state, never a zero and never a
+positive health claim.

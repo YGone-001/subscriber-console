@@ -40,6 +40,8 @@ import { TopologyResourcePicker } from './components/TopologyResourcePicker';
 import type { Resource } from '../inventory/inventory-types';
 import styles from '../../styles/modules/topology.module.css';
 import { RuntimeHierarchy } from '../runtime/RuntimeHierarchy';
+import { OperationsNav } from '../operations/OperationsNav';
+import { ArchitectureView } from './ArchitectureView';
 
 const PAGE_LIMIT = 20;
 
@@ -274,6 +276,10 @@ export function TopologyPage() {
           </>
         )}
       />
+
+      <OperationsNav />
+
+      <ArchitectureView />
 
       {conflictNotice ? (
         <div className={styles.conflictBanner} role="alert">

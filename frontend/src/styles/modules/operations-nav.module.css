@@ -1,0 +1,60 @@
+/*
+ * Operational workspace tab strip.
+ *
+ * A quiet horizontal navigation that sits directly under the page header of the
+ * four network-operation surfaces. It uses the shared border, surface and text
+ * tokens so it reads as part of the console chrome rather than a new component
+ * family.
+ */
+
+.nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-bottom: var(--space-16);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--surface-border);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.nav::-webkit-scrollbar {
+  display: none;
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-8) var(--space-12);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tab:hover {
+  color: var(--text-primary, inherit);
+  background: var(--surface-hover);
+}
+
+.tab:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--ref-radius-small);
+}
+
+.tabActive {
+  color: var(--sys-color-action-primary);
+  border-bottom-color: var(--sys-color-action-primary);
+  font-weight: 600;
+}
+
+.tabActive:hover {
+  color: var(--sys-color-action-primary);
+  background: transparent;
+}

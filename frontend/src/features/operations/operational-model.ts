@@ -469,6 +469,19 @@ export function groupByDomain(items: OperationalResource[], completeness: Comple
     }));
 }
 
+/**
+ * Presentation token for one resource.
+ *
+ * `unresolved` is never collapsed into `not_monitored`, and a resource without a
+ * monitoring target is never reported as healthy. An unprojected overall state
+ * becomes `unknown`, never a positive claim.
+ */
+export function operationalStateToken(item: OperationalResource): string {
+  if (item.association === 'unresolved') return 'unresolved';
+  if (!item.monitoring) return 'not_monitored';
+  return item.monitoring.overallState || 'unknown';
+}
+
 /** Compact per-layer coverage label. Measured is not healthy. */
 export function layerLabel(coverage: { l1Measured: boolean; l2Measured: boolean; l3Measured: boolean }, layer: 'l1' | 'l2' | 'l3'): string {
   if (layer === 'l1') return coverage.l1Measured ? 'measured' : 'not_configured';

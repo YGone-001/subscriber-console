@@ -1,0 +1,288 @@
+/*
+ * Network-element card wall and unmanaged-process strip.
+ *
+ * A scannable complement to the audit table. Cards reuse the shared surface,
+ * border and status tokens; the three coverage marks keep measured and not
+ * configured visually distinct, and no card ever shows a fabricated zero.
+ */
+
+.groups {
+  display: grid;
+  gap: var(--space-16);
+}
+
+.group {
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-panel);
+  background: var(--sys-color-surface-panel);
+  overflow: hidden;
+}
+
+.groupHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-8);
+  padding: var(--space-8) var(--space-16);
+  border-bottom: 1px solid var(--surface-border);
+  background: var(--sys-color-surface-subtle);
+}
+
+.groupTitle {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary, inherit);
+}
+
+.groupMeta {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.grid {
+  list-style: none;
+  margin: 0;
+  padding: var(--space-12);
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(272px, 1fr));
+  gap: var(--space-12);
+}
+
+.card {
+  display: grid;
+  gap: var(--space-8);
+  padding: var(--space-12);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-control);
+  background: var(--sys-color-surface-panel);
+}
+
+.card:hover {
+  background: var(--surface-hover);
+}
+
+.cardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8);
+}
+
+.cardName {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary, inherit);
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cardName:hover {
+  text-decoration: underline;
+}
+
+.stateBadge {
+  flex: 0 0 auto;
+  padding: 1px var(--space-8);
+  border-radius: var(--ref-radius-pill);
+  border: 1px solid currentColor;
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+
+.cardMeta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.cardType {
+  font-family: var(--font-data);
+  color: var(--text-secondary, var(--text-muted));
+}
+
+.cardLifecycle {
+  padding: 0 5px;
+  border-radius: var(--ref-radius-micro);
+  border: 1px solid var(--surface-border);
+  font-size: 0.66rem;
+}
+
+.layerRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.layerOn,
+.layerOff {
+  padding: 1px 5px;
+  border-radius: var(--ref-radius-micro);
+  border: 1px solid currentColor;
+  font-size: 0.66rem;
+  white-space: nowrap;
+}
+
+.layerOn {
+  color: var(--sys-color-status-success);
+}
+
+.layerOff {
+  color: var(--text-muted);
+}
+
+.cardFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--surface-border);
+  font-size: 0.7rem;
+}
+
+.cardMetric {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.cardLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--sys-color-action-primary);
+  text-decoration: none;
+  font-size: 0.7rem;
+}
+
+.cardLink:hover {
+  text-decoration: underline;
+}
+
+.cardMuted {
+  color: var(--text-muted);
+}
+
+/* -------------------------------------------------------------- unmanaged */
+.unmanaged {
+  margin-bottom: var(--space-16);
+  padding: var(--space-12) var(--space-16);
+  border: 1px solid var(--sys-color-status-warning);
+  border-radius: var(--ref-radius-panel);
+  background: var(--sys-color-surface-panel);
+}
+
+.unmanagedHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.unmanagedTitle {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary, inherit);
+}
+
+.unmanagedCount {
+  padding: 0 var(--space-8);
+  border-radius: var(--ref-radius-pill);
+  border: 1px solid var(--sys-color-status-warning);
+  color: var(--sys-color-status-warning);
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.unmanagedHead .cardLink {
+  margin-inline-start: auto;
+}
+
+.unmanagedNote {
+  margin: var(--space-4) 0 var(--space-8);
+  font-size: 0.72rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.unmanagedList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.unmanagedItem {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) 88px 96px;
+  gap: var(--space-8);
+  align-items: center;
+  padding: var(--space-4) var(--space-8);
+  border-radius: var(--ref-radius-small);
+  font-size: 0.72rem;
+}
+
+.unmanagedItem:nth-child(odd) {
+  background: var(--sys-color-surface-subtle);
+}
+
+.unmanagedName {
+  color: var(--text-primary, inherit);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.unmanagedProcess {
+  font-family: var(--font-data);
+  color: var(--text-muted);
+}
+
+.unmanagedMeta {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+
+/* ------------------------------------------------------------------ tones */
+.toneHealthy {
+  color: var(--sys-color-status-success);
+}
+
+.toneWarning {
+  color: var(--sys-color-status-warning);
+}
+
+.toneDanger {
+  color: var(--sys-color-action-danger);
+}
+
+.toneStale {
+  color: var(--sys-color-status-info);
+}
+
+.toneMuted {
+  color: var(--text-muted);
+}
+
+.toneUnknown {
+  color: var(--text-secondary, var(--text-muted));
+}
+
+@media (max-width: 720px) {
+  .unmanagedItem {
+    grid-template-columns: minmax(0, 1fr) 72px;
+  }
+
+  .unmanagedProcess,
+  .unmanagedMeta:last-child {
+    display: none;
+  }
+}

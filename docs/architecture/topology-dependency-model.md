@@ -400,6 +400,8 @@ authority.
 
 ```text
 PageHeader (title, description, refresh, create for authorized users)
+Operations workbench navigation (shared tab strip)
+Reference architecture canvas (see 9.5)
 Filter toolbar (from resource, to resource, relationship type, lifecycle state, clear)
 Relationship table (from, relationship, direction, to, lifecycle, revision, updated, actions)
 Cursor pagination
@@ -474,9 +476,8 @@ borrowed:
 What was deliberately **not** ported:
 
 ```text
-CNMS static NF_NODES as data
-CNMS static NF_LINKS as data
 CNMS hardcoded NF identity
+CNMS process-state-driven link colouring
 CNMS direct restart action
 /api/v1 runtime
 JWT implementation
@@ -486,9 +487,51 @@ NRF discovery execution
 AIOps RCA execution
 ```
 
-All rendered nodes and edges originate from current xCloud Inventory and Topology
-APIs. No 3GPP interface label is presented as a validated fact: the model carries
-no stored interface data, so none is displayed.
+All rendered resource bindings originate from current xCloud Inventory, NF Health
+and Topology APIs. An interface label is architecture knowledge, never a validated
+fact; the canvas legend and footnote state this explicitly.
+
+### 9.5 Reference architecture canvas
+
+The `/topology` route additionally renders a deterministic 3GPP reference canvas
+(`ArchitectureView`). It is a three-layer projection, and the layers never merge:
+
+```text
+layer 1  reference skeleton    static, versioned frontend reference data
+                               (20 roles, 33 reference points, view filters)
+layer 2  authoritative binding Inventory resources matched to roles; an
+                               authoritative runtime association outranks name
+                               matching; an equal-ranked duplicate is reported
+                               as ambiguous instead of silently chosen
+layer 3  observed state        NF Health association, coverage and metrics;
+                               runtime process evidence for roles with no
+                               resource
+```
+
+Rules enforced by the projection model:
+
+- a role without a resource is `unregistered`, never `stopped`;
+- a role without a monitoring target is `unmonitored`, never `healthy`;
+- an unresolved association lookup is `unresolved`, never `unmonitored`;
+- a verified running process on an unregistered role is `observed`, which is
+  process evidence only and never a health claim;
+- a reference point is rendered as `declared` only when a connectivity
+  relationship for the two bound resources exists in the Topology authority;
+  otherwise it is `reference` and makes no claim about the deployment;
+- the reference skeleton is never persisted to the topology collection and is
+  never presented as topology data;
+- label anchors are chosen deterministically so the canvas can be verified by
+  counting nodes, links and label placements.
+
+Components:
+
+```text
+features/topology/ArchitectureView.tsx
+features/topology/components/ArchitectureCanvas.tsx
+features/topology/architecture-model.ts
+features/topology/reference-architecture.ts
+styles/modules/architecture.module.css
+```
 
 ## 10. Explicit Exclusions
 

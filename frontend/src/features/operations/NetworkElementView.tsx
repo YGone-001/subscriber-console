@@ -23,10 +23,9 @@
  *     tree selection that belonged to the previous query;
  *   - every unavailable value is rendered as an unavailable state.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronDown, ChevronRight, RefreshCw, Search, Server, X } from 'lucide-react';
-import { getJsonWithSignal } from '../../lib/api/read-client';
+import { ChevronDown, ChevronRight, LayoutGrid, RefreshCw, Search, Server, Table2, X } from 'lucide-react';
 import { useRead } from '../../lib/api/use-read';
 import { useI18n } from '../../providers/I18nProvider';
 import { EmptyState, LoadingRows } from '../../components/ui/OperationFeedback';
@@ -39,22 +38,22 @@ import {
   formatBytes,
   memoryView,
   OPERATIONAL_DOMAINS,
+  operationalStateToken,
   treeResourceIds,
   type CompletenessReport,
   type DimensionCompleteness,
-  type TopologyCoverage,
   type TreeNode,
   type TreeMode,
 } from './operational-model';
+import { useBoundedEdges } from './use-bounded-edges';
+import { NetworkElementCards, UnmanagedProcesses } from './NetworkElementCards';
+import type { RuntimeObservations } from '../runtime/runtime-types';
 import styles from '../../styles/modules/operations.module.css';
 
 const PAGE_LIMIT = 20;
-const TOPOLOGY_PAGE_LIMIT = 200;
-const TOPOLOGY_MAX_PAGES = 3;
 
 type ResourceListPayload = { resources?: unknown[]; page?: { nextCursor?: string | null; hasMore?: boolean } };
 type TargetListPayload = { targets?: unknown[]; page?: { hasMore?: boolean } };
-type EdgeListPayload = { edges?: unknown[]; page?: { nextCursor?: string | null; hasMore?: boolean } };
 
 type MonitoringFilter = '' | 'monitored' | 'unmonitored' | 'unresolved' | 'degraded' | 'unknown' | 'stale';
 
@@ -88,73 +87,6 @@ function completenessLabel(value: DimensionCompleteness, t: (key: string) => str
 
 function treeModeLabel(mode: TreeMode, t: (key: string) => string): string {
   return t(`ops_tree_mode_${mode}`);
-}
-
-/**
- * Reads the declared `contains` relationships with bounded cursor pagination.
- *
- * A partial read keeps the edges it loaded, marks the coverage partial and never
- * claims that containment does not exist. A failed read marks the coverage
- * unavailable rather than presenting an empty authoritative graph.
- */
-function useDeclaredContainmentEdges(enabled: boolean): {
-  edges: unknown[];
-  coverage: TopologyCoverage;
-  refresh: () => void;
-} {
-  const [edges, setEdges] = useState<unknown[]>([]);
-  const [coverage, setCoverage] = useState<TopologyCoverage>('partial');
-  const [nonce, setNonce] = useState(0);
-  const runIdRef = useRef(0);
-
-  useEffect(() => {
-    if (!enabled) return;
-    const runId = runIdRef.current + 1;
-    runIdRef.current = runId;
-    const controller = new AbortController();
-    let cancelled = false;
-
-    const load = async () => {
-      const collected: unknown[] = [];
-      let cursor: string | null = null;
-      let pages = 0;
-      let hasMore = false;
-      try {
-        do {
-          const params = new URLSearchParams();
-          params.set('relationshipType', 'contains');
-          params.set('limit', String(TOPOLOGY_PAGE_LIMIT));
-          if (cursor) params.set('cursor', cursor);
-          const payload = await getJsonWithSignal<EdgeListPayload>(
-            `/api/topology/edges?${params.toString()}`,
-            controller.signal,
-          );
-          if (cancelled || runIdRef.current !== runId) return;
-          collected.push(...(payload.edges ?? []));
-          hasMore = Boolean(payload.page?.hasMore);
-          cursor = payload.page?.nextCursor ?? null;
-          pages += 1;
-        } while (hasMore && cursor && pages < TOPOLOGY_MAX_PAGES);
-        if (cancelled || runIdRef.current !== runId) return;
-        setEdges(collected);
-        setCoverage(hasMore ? 'partial' : 'complete');
-      } catch {
-        if (cancelled || runIdRef.current !== runId) return;
-        // Keep whatever was loaded; the graph is not authoritative.
-        setEdges(collected);
-        setCoverage(collected.length > 0 ? 'partial' : 'unavailable');
-      }
-    };
-
-    void load();
-    return () => {
-      cancelled = true;
-      controller.abort();
-    };
-  }, [enabled, nonce]);
-
-  const refresh = useCallback(() => setNonce((value) => value + 1), []);
-  return { edges, coverage, refresh };
 }
 
 function TreeBranch({
@@ -227,6 +159,7 @@ export default function NetworkElementView() {
   const [cursorHistory, setCursorHistory] = useState<string[]>([]);
   const [selectedNodeId, setSelectedNodeId] = useState('');
   const [selectedResourceIds, setSelectedResourceIds] = useState<string[] | null>(null);
+  const [presentation, setPresentation] = useState<'cards' | 'table'>('cards');
 
   const query = useMemo(() => {
     const params = new URLSearchParams();
@@ -257,13 +190,15 @@ export default function NetworkElementView() {
     : null;
   const associationsRead = useRead<TargetListPayload>(associationPath);
 
-  const containment = useDeclaredContainmentEdges(true);
+  const containment = useBoundedEdges({ relationshipType: 'contains' });
+  const runtimeRead = useRead<RuntimeObservations>('/api/runtime/observations');
 
   const refresh = useCallback(() => {
     void resourcesRead.mutate();
     if (associationPath) void associationsRead.mutate();
+    void runtimeRead.mutate();
     containment.refresh();
-  }, [resourcesRead, associationsRead, associationPath, containment]);
+  }, [resourcesRead, associationsRead, runtimeRead, associationPath, containment]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -461,6 +396,25 @@ export default function NetworkElementView() {
         <button type="button" className={styles.refresh} onClick={refresh} aria-label={t('ops_refresh')}>
           <RefreshCw size={15} /> {t('ops_refresh')}
         </button>
+
+        <div className={styles.nePresentation} role="group" aria-label={t('ops_presentation_label')}>
+          <button
+            type="button"
+            aria-pressed={presentation === 'cards'}
+            className={presentation === 'cards' ? styles.nePresentationActive : undefined}
+            onClick={() => setPresentation('cards')}
+          >
+            <LayoutGrid size={14} aria-hidden="true" /> {t('ops_presentation_cards')}
+          </button>
+          <button
+            type="button"
+            aria-pressed={presentation === 'table'}
+            className={presentation === 'table' ? styles.nePresentationActive : undefined}
+            onClick={() => setPresentation('table')}
+          >
+            <Table2 size={14} aria-hidden="true" /> {t('ops_presentation_table')}
+          </button>
+        </div>
       </div>
 
       <div className={styles.completenessStrip} role="list">
@@ -470,6 +424,8 @@ export default function NetworkElementView() {
           </span>
         ))}
       </div>
+
+      <UnmanagedProcesses components={runtimeRead.data?.snapshot?.components ?? []} />
 
       <div className={styles.neBody}>
         <nav className={styles.treePanel} aria-label={t('ops_tree_label')}>
@@ -503,6 +459,8 @@ export default function NetworkElementView() {
             <EmptyState icon={<Server size={40} />} title={t('ops_error_title')} description={t('ops_error_body')} />
           ) : filtered.length === 0 ? (
             <EmptyState icon={<Server size={40} />} title={t('ops_empty_title')} description={t('ops_empty_body')} />
+          ) : presentation === 'cards' ? (
+            <NetworkElementCards items={filtered} />
           ) : (
             <div className={styles.tableScroll}>
               <table className={styles.neTable}>
@@ -532,11 +490,7 @@ export default function NetworkElementView() {
                     const monitoringView = item.monitoring;
                     const cpu = cpuView(monitoringView);
                     const memory = memoryView(monitoringView);
-                    const associationState = item.association === 'unresolved'
-                      ? 'unresolved'
-                      : monitoringView
-                        ? monitoringView.overallState
-                        : 'not_monitored';
+                    const associationState = operationalStateToken(item);
                     return (
                       <tr key={item.resourceId}>
                         <th scope="row" className={styles.cellName}>
