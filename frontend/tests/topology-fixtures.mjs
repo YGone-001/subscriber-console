@@ -10,6 +10,7 @@
  * rendering against fixtures, not a live core-network deployment.
  */
 import { createServer } from 'node:http';
+import { serveRuntimeFixture } from './runtime-fixtures.mjs';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { extname, join, normalize, resolve } from 'node:path';
 
@@ -522,6 +523,11 @@ function handleApi(req, res, url, context) {
       page: { limit, nextCursor: null, hasMore: false },
     });
   }
+
+  // The runtime discovery panel is mounted on the dashboard, the Inventory
+  // route and the Topology route. Its reads are part of the accepted request
+  // set; anything else still fails the run.
+  if (serveRuntimeFixture(pathname, sendJson, res)) return;
 
   context.unexpected.push(`${req.method} ${pathname}`);
   return sendJson(res, 404, { error: 'unexpected fixture request', code: 'FIXTURE_UNEXPECTED' });
