@@ -270,5 +270,16 @@
       "GET /api/nf-health/targets/{targetId}/history",
       "GET /api/nf-health/runs"
     ]
+  },
+  {
+    "route": "/nf-alerts",
+    "mode": "read",
+    "source": "frontend/src/features/nf-alerts/NfAlertsPage.tsx",
+    "readEndpoints": [
+      "GET /api/nf-alerts/meta",
+      "GET /api/nf-alerts/rules",
+      "GET /api/nf-alerts/rules/{ruleId}",
+      "GET /api/nf-alerts"
+    ]
   }
 ]

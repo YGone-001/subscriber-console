@@ -7,7 +7,7 @@
  * and nested detail routes keep their owning tab active.
  */
 import { NavLink } from 'react-router-dom';
-import { Boxes, HeartPulse, Network, Radar } from 'lucide-react';
+import { BellRing, Boxes, HeartPulse, Network, Radar } from 'lucide-react';
 import { useI18n } from '../../providers/I18nProvider';
 import styles from '../../styles/modules/operations-nav.module.css';
 
@@ -16,6 +16,7 @@ const TABS = [
   { to: '/topology', labelKey: 'nav_topology', icon: Network },
   { to: '/discovery', labelKey: 'nav_discovery', icon: Radar },
   { to: '/nf-health', labelKey: 'nav_nf_health', icon: HeartPulse },
+  { to: '/nf-alerts', labelKey: 'nav_nf_alerts', icon: BellRing },
 ];
 
 export function OperationsNav() {

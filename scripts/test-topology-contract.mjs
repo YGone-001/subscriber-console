@@ -6,7 +6,7 @@
  * - Route count = 28 (26 -> 28 intentional Stage 2 transition)
  * - Topology frontend routes = 2
  * - Topology Go registrations = 7 (4 reads, 3 mutations)
- * - Go registrations = 125 (97 -> 119 -> 125 intentional extensions)
+ * - Go registrations = 134 (97 -> 119 -> 134 intentional extensions)
  * - Topology reads use core.read, mutations use core.configure
  * - Topology hard-delete endpoint = 0
  * - No generic command execution endpoint exists
@@ -39,7 +39,7 @@ console.log('-- Topology Contract & Security Evidence Suite --\n');
 
 // 1. Route contract
 const routes = JSON.parse(readFileSync(resolve(frontend, 'route-contract.json'), 'utf8'));
-assert.equal(routes.length, 32, `Total route count must be exactly 32, got ${routes.length}`);
+assert.equal(routes.length, 33, `Total route count must be exactly 33, got ${routes.length}`);
 
 const topologyRoutes = routes.filter((r) => r.route.startsWith('/topology'));
 assert.equal(topologyRoutes.length, 2, `Topology frontend route count must be 2, got ${topologyRoutes.length}`);
@@ -50,7 +50,7 @@ for (const expected of ['/topology', '/topology/:resourceId']) {
 // 2. Go API registrations
 const { keys: goRegistrations, duplicates: goDuplicates } = deriveGoRegistrations(root);
 assert.equal(goDuplicates.length, 0, 'Go registrations must have 0 duplicates');
-assert.equal(goRegistrations.length, 125, `Go registered operations must be exactly 125, got ${goRegistrations.length}`);
+assert.equal(goRegistrations.length, 134, `Go registered operations must be exactly 134, got ${goRegistrations.length}`);
 
 const topologyGoRoutes = goRegistrations.filter((r) => r.includes('/api/topology'));
 assert.equal(topologyGoRoutes.length, 7, `Topology Go registrations must be exactly 7, got ${topologyGoRoutes.length}`);
@@ -302,7 +302,7 @@ const businessUniqueEndpoints = new Set(businessContract.flatMap((entry) => entr
 assert.equal(businessUniqueEndpoints.size, 29, `business mutation endpoints must remain 29, got ${businessUniqueEndpoints.size}`);
 assert.equal(businessReqContract.length, 31, `business request contracts must remain 31, got ${businessReqContract.length}`);
 const operationalUniqueEndpoints = new Set(operationalContract.flatMap((entry) => entry.operations).map((op) => op.request));
-assert.equal(operationalUniqueEndpoints.size, 4, `operational endpoints must remain 4, got ${operationalUniqueEndpoints.size}`);
+assert.equal(operationalUniqueEndpoints.size, 9, `operational endpoints must remain 9, got ${operationalUniqueEndpoints.size}`);
 
 // 7. Inventory authority is untouched by topology.
 const inventoryContract = JSON.parse(readFileSync(resolve(frontend, 'inventory-contract.json'), 'utf8'));
@@ -310,12 +310,12 @@ assert.equal(inventoryContract.flatMap((entry) => entry.operations).length, 3, '
 const inventoryGoRoutes = goRegistrations.filter((r) => r.includes('/api/inventory'));
 assert.equal(inventoryGoRoutes.length, 6, `inventory Go registrations must remain 6, got ${inventoryGoRoutes.length}`);
 
-console.log('route_count=32');
+console.log('route_count=33');
 console.log('topology_frontend_routes=2');
 console.log('topology_api_registrations=7');
 console.log('topology_reads=4');
 console.log('topology_mutations=3');
-console.log('go_registration_count=125');
+console.log('go_registration_count=134');
 console.log('topology_contract_apis=7');
 console.log('topology_request_contract_exact=PASS');
 console.log('topology_request_contract_negative_sentinels=PASS');

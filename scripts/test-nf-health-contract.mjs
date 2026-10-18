@@ -3,10 +3,10 @@
  * NF Health Contract & Security Evidence Suite
  *
  * Proves:
- * - Total SPA route count = 32
+ * - Total SPA route count = 33
  * - NF Health frontend routes = 2
  * - NF Health Go registrations = 10 (7 reads, 3 mutations)
- * - Go registrations = 125 (109 -> 119 -> 125 intentional extensions)
+ * - Go registrations = 134 (109 -> 119 -> 134 intentional extensions)
  * - NF Health reads use core.read, mutations use core.configure
  * - NF Health hard-delete endpoint = 0
  * - No generic URL-fetch, remote-shell, process-control or NF control endpoint exists
@@ -39,7 +39,7 @@ console.log('-- NF Health Contract & Security Evidence Suite --\n');
 
 // 1. Route contract
 const routes = JSON.parse(readFileSync(resolve(frontend, 'route-contract.json'), 'utf8'));
-assert.equal(routes.length, 32, `Total route count must be exactly 32, got ${routes.length}`);
+assert.equal(routes.length, 33, `Total route count must be exactly 33, got ${routes.length}`);
 
 const healthRoutes = routes.filter((r) => r.route.startsWith('/nf-health'));
 assert.equal(healthRoutes.length, 2, `NF Health frontend route count must be 2, got ${healthRoutes.length}`);
@@ -52,7 +52,7 @@ assert.deepEqual(detailRoute.dynamicParameters, ['targetId'], 'detail dynamic pa
 // 2. Go API registrations
 const { keys: goRegistrations, duplicates: goDuplicates } = deriveGoRegistrations(root);
 assert.equal(goDuplicates.length, 0, 'Go registrations must have 0 duplicates');
-assert.equal(goRegistrations.length, 125, `Go registered operations must be exactly 125, got ${goRegistrations.length}`);
+assert.equal(goRegistrations.length, 134, `Go registered operations must be exactly 134, got ${goRegistrations.length}`);
 
 const healthGoRoutes = goRegistrations.filter((r) => r.includes('/api/nf-health'));
 assert.equal(healthGoRoutes.length, 10, `NF Health Go registrations must be exactly 10, got ${healthGoRoutes.length}`);
@@ -451,7 +451,7 @@ console.log('nf_health_dialog_actions_pinned=1');
 
 console.log('nf_health_frontend_routes=2');
 console.log('nf_health_go_registrations=10');
-console.log('go_registration_count=125');
+console.log('go_registration_count=134');
 console.log('nf_health_collections=4');
 console.log('nf_health_security_findings=0');
 console.log('nf_health_product_name_tokens=0');

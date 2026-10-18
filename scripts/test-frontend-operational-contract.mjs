@@ -23,6 +23,12 @@ const requestContracts = JSON.parse(readFileSync(requestContractPath, 'utf8'));
 const goRegistrations = deriveGoRegistrations(root);
 const goRouteKeys = new Set(goRegistrations.keys);
 
+const operationalRoutes = new Set(['/system-health', '/nf-alerts']);
+const expectedOperationsByRoute = new Map([
+  ['/system-health', 4],
+  ['/nf-alerts', 5],
+]);
+
 const walk = (directory, files = []) => {
   for (const name of readdirSync(directory)) {
     const file = resolve(directory, name);
@@ -42,7 +48,7 @@ const isExistingSource = (value) => {
 };
 
 // 1. Verify Route Inventory
-assert.equal(routes.length, 32, 'route contract must contain 32 routes');
+assert.equal(routes.length, 33, 'route contract must contain 33 routes');
 
 const systemHealthRoute = routes.find((r) => r.route === '/system-health');
 assert.ok(systemHealthRoute, 'system-health route must be present in route contract');
@@ -78,7 +84,7 @@ function validateOperationalContracts(entries) {
     }
     routesSeen.add(entry.route);
 
-    if (entry.route !== '/system-health') {
+    if (!operationalRoutes.has(entry.route)) {
       result.unknownRoutes += 1;
     }
 
@@ -90,7 +96,7 @@ function validateOperationalContracts(entries) {
       result.schemaErrors += 1;
       continue;
     }
-    if (entry.operations.length !== 4) {
+    if (entry.operations.length !== expectedOperationsByRoute.get(entry.route)) {
       result.schemaErrors += 1;
     }
 
@@ -100,7 +106,7 @@ function validateOperationalContracts(entries) {
         continue;
       }
 
-      if (typeof op.request !== 'string' || !op.request.startsWith('POST ')) {
+      if (typeof op.request !== 'string' || !/^(POST|PUT|DELETE) /.test(op.request)) {
         result.schemaErrors += 1;
       } else if (!goRouteKeys.has(op.request)) {
         result.unregisteredEndpoints += 1;
@@ -140,8 +146,10 @@ function validateOperationalContracts(entries) {
     }
   }
 
-  if (!routesSeen.has('/system-health')) {
-    result.missingRoutes += 1;
+  for (const expectedRoute of operationalRoutes) {
+    if (!routesSeen.has(expectedRoute)) {
+      result.missingRoutes += 1;
+    }
   }
 
   return result;
@@ -163,6 +171,11 @@ const expectedOperationalEndpoints = new Set([
   'POST /api/system/audit/scan',
   'POST /api/system/audit/heal',
   'POST /api/system/audit/batch-heal',
+  'POST /api/nf-alerts/rules',
+  'PUT /api/nf-alerts/rules/{ruleId}',
+  'DELETE /api/nf-alerts/rules/{ruleId}',
+  'POST /api/nf-alerts/{alertId}/acknowledge',
+  'POST /api/nf-alerts/{alertId}/resolve',
 ]);
 
 function validateOperationalRequestContracts(entries) {
@@ -242,7 +255,7 @@ function validateOperationalRequestContracts(entries) {
 }
 
 const reqValidation = validateOperationalRequestContracts(requestContracts);
-assert.equal(reqValidation.entries, 4);
+assert.equal(reqValidation.entries, expectedOperationalEndpoints.size);
 assert.equal(reqValidation.duplicates, 0);
 assert.equal(reqValidation.invalidAuthorities, 0);
 assert.equal(reqValidation.shapeErrors, 0);
@@ -339,7 +352,7 @@ assert.ok(validateOperationalRequestContracts([{ ...validReqContract, requiredBo
 console.log(`frontend_operational_route_total=${routes.length}`);
 console.log(`frontend_operational_contract_entries=${contracts.length}`);
 console.log(`frontend_operational_operation_count=${requestContracts.length}`);
-console.log(`frontend_operational_registered_endpoints=4`);
+console.log(`frontend_operational_registered_endpoints=${expectedOperationalEndpoints.size}`);
 console.log(`frontend_operational_unregistered_endpoints=0`);
 console.log(`frontend_operational_authorization_errors=${contractValidation.authorizationSchemaErrors + contractValidation.authorizationMismatches}`);
 console.log(`frontend_operational_request_contract_errors=${reqValidation.shapeErrors + reqValidation.keySetErrors}`);

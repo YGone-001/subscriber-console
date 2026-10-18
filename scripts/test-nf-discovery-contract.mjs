@@ -3,10 +3,10 @@
  * NF Discovery Contract & Security Evidence Suite
  *
  * Proves:
- * - Total SPA route count = 32
+ * - Total SPA route count = 33
  * - Discovery frontend routes = 2
  * - Discovery Go registrations = 12 (7 reads, 5 mutations)
- * - Go registrations = 125 (97 -> 119 -> 125 intentional extensions)
+ * - Go registrations = 134 (97 -> 119 -> 134 intentional extensions)
  * - Discovery reads use core.read, mutations use core.configure
  * - Discovery hard-delete endpoint = 0
  * - No generic URL-fetch, remote-shell or NF control endpoint exists
@@ -39,7 +39,7 @@ console.log('-- NF Discovery Contract & Security Evidence Suite --\n');
 
 // 1. Route contract
 const routes = JSON.parse(readFileSync(resolve(frontend, 'route-contract.json'), 'utf8'));
-assert.equal(routes.length, 32, `Total route count must be exactly 32, got ${routes.length}`);
+assert.equal(routes.length, 33, `Total route count must be exactly 33, got ${routes.length}`);
 
 const discoveryRoutes = routes.filter((r) => r.route.startsWith('/discovery'));
 assert.equal(discoveryRoutes.length, 2, `Discovery frontend route count must be 2, got ${discoveryRoutes.length}`);
@@ -52,7 +52,7 @@ assert.deepEqual(detailRoute.dynamicParameters, ['sourceId'], 'discovery detail 
 // 2. Go API registrations
 const { keys: goRegistrations, duplicates: goDuplicates } = deriveGoRegistrations(root);
 assert.equal(goDuplicates.length, 0, 'Go registrations must have 0 duplicates');
-assert.equal(goRegistrations.length, 125, `Go registered operations must be exactly 125, got ${goRegistrations.length}`);
+assert.equal(goRegistrations.length, 134, `Go registered operations must be exactly 134, got ${goRegistrations.length}`);
 
 const discoveryGoRoutes = goRegistrations.filter((r) => r.includes('/api/discovery'));
 assert.equal(discoveryGoRoutes.length, 12, `Discovery Go registrations must be exactly 12, got ${discoveryGoRoutes.length}`);
@@ -257,7 +257,7 @@ expectReject(() => {
 
 console.log('discovery_frontend_routes=2');
 console.log('discovery_go_registrations=12');
-console.log('go_registration_count=125');
+console.log('go_registration_count=134');
 console.log('discovery_collections=3');
 console.log('discovery_security_findings=0');
 console.log('discovery_product_name_tokens=0');

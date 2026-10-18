@@ -23,6 +23,7 @@ import (
 	"subscriber/internal/inventory"
 	"subscriber/internal/middleware"
 	mongoClient "subscriber/internal/mongo"
+	"subscriber/internal/nfalert"
 	"subscriber/internal/nfhealth"
 	"subscriber/internal/notification"
 	"subscriber/internal/ocs"
@@ -310,6 +311,17 @@ func main() {
 	nfHealthScheduler.Start(context.Background())
 	defer nfHealthScheduler.Stop()
 
+	// NF alerting: a pure observer over recorded NF Health evidence. The
+	// evaluator runs after every scheduled collection; it never issues
+	// collections of its own and never modifies NF Health documents.
+	nfAlertRepo := nfalert.NewRepository(
+		mc.Ops.Collection("app_nf_alert_rules"),
+		mc.Ops.Collection("app_nf_alerts"),
+	)
+	nfAlertEvaluator := nfalert.NewEvaluator(nfalert.NewMongoEvaluatorRepository(nfAlertRepo))
+	nfAlertHandler := nfalert.NewHandler(nfAlertRepo, limiter, auditWriter)
+	nfHealthScheduler.SetCollectionHook(nfalert.NewSchedulerHook(nfAlertEvaluator, logger))
+
 	// Runtime discovery lifecycle. The startup scan runs immediately so the
 	// operational surfaces are populated without any Inventory record.
 	runtimeService := runtimeinv.NewService(
@@ -507,6 +519,17 @@ func main() {
 	mux.Handle("POST /api/nf-health/targets", authMiddleware(http.HandlerFunc(nfHealthHandler.CreateTarget)))
 	mux.Handle("PUT /api/nf-health/targets/{targetId}", authMiddleware(http.HandlerFunc(nfHealthHandler.UpdateTarget)))
 	mux.Handle("POST /api/nf-health/targets/{targetId}/collect", authMiddleware(http.HandlerFunc(nfHealthHandler.CollectTarget)))
+
+	// NF alerts (four reads, five governed mutations)
+	mux.Handle("GET /api/nf-alerts", authMiddleware(http.HandlerFunc(nfAlertHandler.ListAlerts)))
+	mux.Handle("GET /api/nf-alerts/meta", authMiddleware(http.HandlerFunc(nfAlertHandler.Meta)))
+	mux.Handle("GET /api/nf-alerts/rules", authMiddleware(http.HandlerFunc(nfAlertHandler.ListRules)))
+	mux.Handle("POST /api/nf-alerts/rules", authMiddleware(http.HandlerFunc(nfAlertHandler.CreateRule)))
+	mux.Handle("GET /api/nf-alerts/rules/{ruleId}", authMiddleware(http.HandlerFunc(nfAlertHandler.GetRule)))
+	mux.Handle("PUT /api/nf-alerts/rules/{ruleId}", authMiddleware(http.HandlerFunc(nfAlertHandler.UpdateRule)))
+	mux.Handle("DELETE /api/nf-alerts/rules/{ruleId}", authMiddleware(http.HandlerFunc(nfAlertHandler.DeleteRule)))
+	mux.Handle("POST /api/nf-alerts/{alertId}/acknowledge", authMiddleware(http.HandlerFunc(nfAlertHandler.AcknowledgeAlert)))
+	mux.Handle("POST /api/nf-alerts/{alertId}/resolve", authMiddleware(http.HandlerFunc(nfAlertHandler.ResolveAlert)))
 
 	// Runtime discovery (three reads, three governed mutations)
 	mux.Handle("GET /api/runtime/meta", authMiddleware(http.HandlerFunc(runtimeHandler.Meta)))

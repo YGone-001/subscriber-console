@@ -131,11 +131,11 @@ const jwtRuntime = countMatches(sourceText, /jose|jsonwebtoken/g);
 const authCookieAccess = countMatches(sourceText, /document\.cookie|auth_token/g);
 const trustedIdentityHeaders = countMatches(sourceText, /X-User|X-Role|X-Permissions/g);
 
-assert.equal(routes.length, 32, 'route contract must contain 32 routes');
+assert.equal(routes.length, 33, 'route contract must contain 33 routes');
 for (const [from, to] of Object.entries(expectedRedirects)) assert.match(redirects, new RegExp(`'${from}': '${to}'`));
 assert.equal(Object.keys(expectedRedirects).length, 9);
-assert.equal(contracts.length, 30);
-assert.equal(modeCount('read'), 21);
+assert.equal(contracts.length, 31);
+assert.equal(modeCount('read'), 22);
 assert.equal(modeCount('redirect'), 9);
 for (const [key, value] of Object.entries(validation)) assert.equal(value, 0, `contract validation failed: ${key}=${value}`);
 assert.equal(legacyParityContractPresent, 0, 'legacy parity contract must be absent');

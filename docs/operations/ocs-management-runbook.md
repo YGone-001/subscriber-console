@@ -239,4 +239,4 @@ db.app_audit_logs.find({
 
 The OCS Management Plane is in permanent maintenance mode.  
 No further architectural modifications, new management routes, or Charging Plane couplings are permitted.  
-Production routing invariant `GoRegistered = 125` is strictly maintained.
+Production routing invariant `GoRegistered = 134` is strictly maintained.

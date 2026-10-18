@@ -114,5 +114,162 @@
       }
     },
     "responseSemantics": "batch-mutation-result"
+  },
+  {
+    "name": "nf alert rule create",
+    "method": "POST",
+    "path": "/api/nf-alerts/rules",
+    "queryMode": "none",
+    "backendAuthority": "backend/internal/nfalert/handler.go",
+    "productionReference": "frontend/src/features/nf-alerts/NfAlertRuleDialog.tsx",
+    "requiredBodyKeys": [
+      "name",
+      "conditionType",
+      "severity",
+      "cooldownSeconds"
+    ],
+    "optionalBodyKeys": [
+      "description",
+      "enabled",
+      "targetId",
+      "resourceId",
+      "condition"
+    ],
+    "forbiddenBodyKeys": [
+      "ruleId",
+      "revision",
+      "state",
+      "alertId",
+      "command",
+      "shell",
+      "action",
+      "script",
+      "approval",
+      "executor"
+    ],
+    "responseSemantics": "mutation-result"
+  },
+  {
+    "name": "nf alert rule update",
+    "method": "PUT",
+    "path": "/api/nf-alerts/rules/{ruleId}",
+    "queryMode": "none",
+    "backendAuthority": "backend/internal/nfalert/handler.go",
+    "productionReference": "frontend/src/features/nf-alerts/NfAlertRuleDialog.tsx",
+    "requiredBodyKeys": [
+      "expectedRevision",
+      "rule"
+    ],
+    "optionalBodyKeys": [],
+    "forbiddenBodyKeys": [
+      "ruleId",
+      "targetId",
+      "resourceId",
+      "state",
+      "alertId",
+      "command",
+      "shell",
+      "action",
+      "script",
+      "approval",
+      "executor"
+    ],
+    "nestedContracts": {
+      "rule": {
+        "requiredKeys": [
+          "name",
+          "enabled",
+          "conditionType",
+          "severity",
+          "cooldownSeconds"
+        ],
+        "allowedKeys": [
+          "name",
+          "description",
+          "enabled",
+          "conditionType",
+          "condition",
+          "severity",
+          "cooldownSeconds"
+        ],
+        "forbiddenKeys": [
+          "ruleId",
+          "targetId",
+          "resourceId",
+          "revision",
+          "state",
+          "alertId"
+        ]
+      }
+    },
+    "responseSemantics": "mutation-result"
+  },
+  {
+    "name": "nf alert rule delete",
+    "method": "DELETE",
+    "path": "/api/nf-alerts/rules/{ruleId}",
+    "queryMode": "none",
+    "backendAuthority": "backend/internal/nfalert/handler.go",
+    "productionReference": "frontend/src/features/nf-alerts/NfAlertsPage.tsx",
+    "requiredBodyKeys": [],
+    "optionalBodyKeys": [],
+    "forbiddenBodyKeys": [
+      "ruleId",
+      "state",
+      "alertId",
+      "command",
+      "shell",
+      "action",
+      "script",
+      "approval",
+      "executor"
+    ],
+    "responseSemantics": "mutation-result"
+  },
+  {
+    "name": "nf alert acknowledge",
+    "method": "POST",
+    "path": "/api/nf-alerts/{alertId}/acknowledge",
+    "queryMode": "none",
+    "backendAuthority": "backend/internal/nfalert/handler.go",
+    "productionReference": "frontend/src/features/nf-alerts/NfAlertsPage.tsx",
+    "requiredBodyKeys": [],
+    "optionalBodyKeys": [],
+    "forbiddenBodyKeys": [
+      "alertId",
+      "state",
+      "severity",
+      "triggerCount",
+      "command",
+      "shell",
+      "action",
+      "script",
+      "approval",
+      "executor"
+    ],
+    "responseSemantics": "mutation-result"
+  },
+  {
+    "name": "nf alert resolve",
+    "method": "POST",
+    "path": "/api/nf-alerts/{alertId}/resolve",
+    "queryMode": "none",
+    "backendAuthority": "backend/internal/nfalert/handler.go",
+    "productionReference": "frontend/src/features/nf-alerts/NfAlertsPage.tsx",
+    "requiredBodyKeys": [],
+    "optionalBodyKeys": [],
+    "forbiddenBodyKeys": [
+      "alertId",
+      "state",
+      "severity",
+      "triggerCount",
+      "command",
+      "shell",
+      "action",
+      "script",
+      "approval",
+      "executor"
+    ],
+    "responseSemantics": "mutation-result"
   }
 ]

@@ -17,6 +17,10 @@ type Scheduler struct {
 	repo      SchedulerRepository
 	collector *Collector
 	clock     Clock
+	// hook is an optional post-collection observer invoked after
+	// RecordCollection. It is best-effort: hook errors never block the
+	// already-recorded measurement.
+	hook CollectionHook
 
 	mu       sync.Mutex
 	running  bool
@@ -26,6 +30,14 @@ type Scheduler struct {
 	// cursor rotates the fetch window so targets beyond one batch limit are
 	// not starved when the due set is larger than the batch.
 	cursor int
+}
+
+// CollectionHook observes completed scheduled collections. It receives the
+// collected target and its recorded result. Implementations must be
+// non-blocking or bounded: the scheduler waits for the hook before finishing
+// the collection goroutine.
+type CollectionHook interface {
+	OnCollectionRecorded(ctx context.Context, target *HealthTarget, result *CollectionResult)
 }
 
 // SchedulerRepository is the read surface the scheduler needs.
@@ -58,6 +70,16 @@ func (s *Scheduler) SetInterval(d time.Duration) {
 	if d > 0 {
 		s.interval = d
 	}
+}
+
+// SetCollectionHook installs an optional post-collection observer. The hook
+// runs after RecordCollection for every successfully collected target; a nil
+// hook removes the observer. Hook failures are logged best-effort by the
+// hook implementation itself and never affect the recorded measurement.
+func (s *Scheduler) SetCollectionHook(hook CollectionHook) {
+	s.mu.Lock()
+	s.hook = hook
+	s.mu.Unlock()
 }
 
 // Start begins scheduled collection. Only explicitly enabled scheduled targets
@@ -154,7 +176,15 @@ func (s *Scheduler) tick(ctx context.Context) {
 			if err != nil {
 				return
 			}
-			_ = s.repo.RecordCollection(ctx, &target, result)
+			if err := s.repo.RecordCollection(ctx, &target, result); err != nil {
+				return
+			}
+			s.mu.Lock()
+			hook := s.hook
+			s.mu.Unlock()
+			if hook != nil {
+				hook.OnCollectionRecorded(ctx, &target, result)
+			}
 		}()
 	}
 	wg.Wait()

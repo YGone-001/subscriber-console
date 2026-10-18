@@ -52,6 +52,10 @@
     ]
   },
   {
+    "route": "/nf-alerts",
+    "dynamicParameters": []
+  },
+  {
     "route": "/ocs",
     "dynamicParameters": []
   },

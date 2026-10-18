@@ -40,7 +40,7 @@ console.log('-- Inventory Contract & Security Evidence Suite --\n');
 
 // 1. Route contract checks
 const routes = JSON.parse(readFileSync(resolve(frontend, 'route-contract.json'), 'utf8'));
-assert.equal(routes.length, 32, `Total route count must be exactly 32, got ${routes.length}`);
+assert.equal(routes.length, 33, `Total route count must be exactly 33, got ${routes.length}`);
 
 const inventoryRoutes = routes.filter((r) => r.route.startsWith('/inventory'));
 assert.equal(inventoryRoutes.length, 3, `Inventory frontend route count must be 3, got ${inventoryRoutes.length}`);
@@ -52,7 +52,7 @@ for (const r of expectedInventoryRoutes) {
 // 2. Go API registrations checks
 const { keys: goRegistrations, duplicates: goDuplicates } = deriveGoRegistrations(root);
 assert.equal(goDuplicates.length, 0, 'Go registrations must have 0 duplicates');
-assert.equal(goRegistrations.length, 125, `Go registered operations must be exactly 125, got ${goRegistrations.length}`);
+assert.equal(goRegistrations.length, 134, `Go registered operations must be exactly 134, got ${goRegistrations.length}`);
 
 const inventoryGoRoutes = goRegistrations.filter((r) => r.includes('/api/inventory'));
 assert.equal(inventoryGoRoutes.length, 6, `Inventory Go registrations must be exactly 6, got ${inventoryGoRoutes.length}`);
@@ -264,7 +264,7 @@ assert.equal(businessReqContract.length, 31, `business request contracts must re
 
 const operationalOps = operationalContract.flatMap((entry) => entry.operations);
 const operationalUniqueEndpoints = new Set(operationalOps.map((op) => op.request));
-assert.equal(operationalUniqueEndpoints.size, 4, `operational endpoints must remain 4, got ${operationalUniqueEndpoints.size}`);
+assert.equal(operationalUniqueEndpoints.size, 9, `operational endpoints must remain 9, got ${operationalUniqueEndpoints.size}`);
 
 // 6. Security evidence in inventory feature
 function walk(dir, files = []) {
@@ -328,7 +328,7 @@ assert.equal(trustedIdentityHeadersCount, 0, `inventory trusted identity headers
 assert.equal(autoRetryCount, 0, `inventory automatic mutation retries must be 0, got ${autoRetryCount}`);
 assert.equal(genericExecutorCount, 0, `inventory generic executor calls must be 0, got ${genericExecutorCount}`);
 
-console.log('route_count=32');
+console.log('route_count=33');
 console.log('inventory_frontend_routes=3');
 console.log('inventory_api_registrations=6');
 console.log('inventory_reads=3');

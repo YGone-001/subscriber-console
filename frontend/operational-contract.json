@@ -58,5 +58,86 @@
         "productionReference": "frontend/src/features/system-health/SystemHealthPage.tsx"
       }
     ]
+  },
+  {
+    "route": "/nf-alerts",
+    "source": "frontend/src/features/nf-alerts/NfAlertsPage.tsx",
+    "operations": [
+      {
+        "name": "nf alert rule create",
+        "request": "POST /api/nf-alerts/rules",
+        "authorization": {
+          "kind": "role",
+          "values": [
+            "admin",
+            "operator"
+          ]
+        },
+        "confirmation": false,
+        "responseSemantics": "mutation-result",
+        "backendAuthority": "backend/internal/nfalert/handler.go",
+        "productionReference": "frontend/src/features/nf-alerts/NfAlertRuleDialog.tsx"
+      },
+      {
+        "name": "nf alert rule update",
+        "request": "PUT /api/nf-alerts/rules/{ruleId}",
+        "authorization": {
+          "kind": "role",
+          "values": [
+            "admin",
+            "operator"
+          ]
+        },
+        "confirmation": false,
+        "responseSemantics": "mutation-result",
+        "backendAuthority": "backend/internal/nfalert/handler.go",
+        "productionReference": "frontend/src/features/nf-alerts/NfAlertRuleDialog.tsx"
+      },
+      {
+        "name": "nf alert rule delete",
+        "request": "DELETE /api/nf-alerts/rules/{ruleId}",
+        "authorization": {
+          "kind": "role",
+          "values": [
+            "admin",
+            "operator"
+          ]
+        },
+        "confirmation": true,
+        "responseSemantics": "mutation-result",
+        "backendAuthority": "backend/internal/nfalert/handler.go",
+        "productionReference": "frontend/src/features/nf-alerts/NfAlertsPage.tsx"
+      },
+      {
+        "name": "nf alert acknowledge",
+        "request": "POST /api/nf-alerts/{alertId}/acknowledge",
+        "authorization": {
+          "kind": "role",
+          "values": [
+            "admin",
+            "operator"
+          ]
+        },
+        "confirmation": false,
+        "responseSemantics": "mutation-result",
+        "backendAuthority": "backend/internal/nfalert/handler.go",
+        "productionReference": "frontend/src/features/nf-alerts/NfAlertsPage.tsx"
+      },
+      {
+        "name": "nf alert resolve",
+        "request": "POST /api/nf-alerts/{alertId}/resolve",
+        "authorization": {
+          "kind": "role",
+          "values": [
+            "admin",
+            "operator"
+          ]
+        },
+        "confirmation": true,
+        "responseSemantics": "mutation-result",
+        "backendAuthority": "backend/internal/nfalert/handler.go",
+        "productionReference": "frontend/src/features/nf-alerts/NfAlertsPage.tsx"
+      }
+    ]
   }
 ]

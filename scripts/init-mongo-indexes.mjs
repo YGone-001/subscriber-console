@@ -638,6 +638,35 @@ async function ensureIndexes() {
     { key: { hostId: 1, componentId: 1 }, unique: true, name: 'uniq_runtime_component_state' },
   ])).map((name) => ({ database: appDbName, collection: 'app_runtime_component_state', name })));
 
+  // ── xcloud_ops.app_nf_alert_rules ──
+  // Operator-authored alert rules evaluated after each recorded NF Health
+  // collection. Rules are pure observers of measurement evidence. No TTL:
+  // rule history is retained under the documented retention policy.
+  createdIndexes.push(...(await appDb.collection('app_nf_alert_rules').createIndexes([
+    { key: { updatedAt: -1, _id: 1 }, name: 'nf_alert_rules_updated_id' },
+    { key: { enabled: 1, updatedAt: -1 }, name: 'nf_alert_rules_enabled_updated' },
+    { key: { targetId: 1 }, name: 'nf_alert_rules_target' },
+    { key: { resourceId: 1 }, name: 'nf_alert_rules_resource' },
+  ])).map((name) => ({ database: appDbName, collection: 'app_nf_alert_rules', name })));
+
+  // ── xcloud_ops.app_nf_alerts ──
+  // Alert instances produced by rule evaluation. At most one open
+  // (active/acknowledged) instance exists per (ruleId, targetId); the
+  // partial unique index enforces it at the storage layer. No TTL: alert
+  // history is retained so operators can explain past incidents.
+  createdIndexes.push(...(await appDb.collection('app_nf_alerts').createIndexes([
+    {
+      key: { ruleId: 1, targetId: 1 },
+      unique: true,
+      partialFilterExpression: { state: { $in: ['active', 'acknowledged'] } },
+      name: 'uniq_nf_alert_open_instance',
+    },
+    { key: { state: 1, severity: 1, updatedAt: -1 }, name: 'nf_alerts_state_severity_updated' },
+    { key: { targetId: 1, updatedAt: -1 }, name: 'nf_alerts_target_updated' },
+    { key: { ruleId: 1, updatedAt: -1 }, name: 'nf_alerts_rule_updated' },
+    { key: { updatedAt: -1, _id: 1 }, name: 'nf_alerts_updated_id' },
+  ])).map((name) => ({ database: appDbName, collection: 'app_nf_alerts', name })));
+
 async function seedRootAdminUser(appDb) {
   const users = appDb.collection('app_users');
   const existingAdmin = await users.findOne({ username: 'admin' });
