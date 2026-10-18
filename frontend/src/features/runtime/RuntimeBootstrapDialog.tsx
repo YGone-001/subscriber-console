@@ -18,6 +18,14 @@ import styles from '../../styles/modules/runtime.module.css';
 
 type Props = {
   template: string;
+  /**
+   * Optional bounded component selection. When provided the preview and the
+   * apply are both restricted to this server-recognized component set, which
+   * lets discovery surfaces scope the governed flow to the components that
+   * match a single observed NF candidate. Omitted by default so the whole
+   * template remains the scope (existing callers are unaffected).
+   */
+  componentIds?: string[];
   onClose: () => void;
   onApplied: () => void;
 };
@@ -34,7 +42,7 @@ function actionTone(entry: BootstrapPlanEntry): string {
   }
 }
 
-export function RuntimeBootstrapDialog({ template, onClose, onApplied }: Props) {
+export function RuntimeBootstrapDialog({ template, componentIds, onClose, onApplied }: Props) {
   const { t } = useI18n();
   const [plan, setPlan] = useState<BootstrapPlan | null>(null);
   const [result, setResult] = useState<BootstrapApplyResult | null>(null);
@@ -47,13 +55,13 @@ export function RuntimeBootstrapDialog({ template, onClose, onApplied }: Props) 
     setError(null);
     setResult(null);
     try {
-      setPlan(await previewBootstrap(template));
+      setPlan(await previewBootstrap(template, componentIds));
     } catch (previewError) {
       setError(previewError instanceof Error ? previewError.message : t('runtime_bootstrap_preview_failed'));
     } finally {
       setLoading(false);
     }
-  }, [template, t]);
+  }, [template, componentIds, t]);
 
   useEffect(() => {
     void loadPreview();
@@ -73,7 +81,7 @@ export function RuntimeBootstrapDialog({ template, onClose, onApplied }: Props) 
     setApplying(true);
     setError(null);
     try {
-      const applied = await applyBootstrap(plan.planId, template);
+      const applied = await applyBootstrap(plan.planId, template, componentIds);
       setResult(applied);
       onApplied();
     } catch (applyError) {

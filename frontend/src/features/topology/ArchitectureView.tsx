@@ -35,6 +35,7 @@ import {
 import { ARCHITECTURE_VIEW_MODES, type ArchitectureViewMode } from './reference-architecture';
 import { ArchitectureCanvas } from './components/ArchitectureCanvas';
 import type { RuntimeObservations } from '../runtime/runtime-types';
+import { resolveRuntimeObservations, useRuntimeStream } from '../runtime/use-runtime-stream';
 import styles from '../../styles/modules/architecture.module.css';
 
 const RESOURCE_LIMIT = 50;
@@ -172,7 +173,12 @@ function DetailPanel({ node, onClear }: { node: ArchitectureNodeView | null; onC
             ) : (
               <div>
                 <dt>{t('arch_detail_monitoring')}</dt>
-                <dd className={styles.detailMuted}>{t('arch_detail_no_monitoring')}</dd>
+                <dd>
+                  <span className={styles.detailMuted}>{t('arch_detail_no_monitoring')}</span>
+                  <Link className={styles.detailAction} to="/nf-health">
+                    {t('arch_detail_configure_monitoring')}
+                  </Link>
+                </dd>
               </div>
             )}
           </>
@@ -214,6 +220,8 @@ export function ArchitectureView() {
 
   const resourcesRead = useRead<ResourceListPayload>(`/api/inventory/resources?limit=${RESOURCE_LIMIT}`);
   const runtimeRead = useRead<RuntimeObservations>('/api/runtime/observations');
+  const runtimeStream = useRuntimeStream();
+  const runtimeData = resolveRuntimeObservations(runtimeStream, runtimeRead.data);
   const edges = useBoundedEdges();
 
   const resourceIds = useMemo(() => {
@@ -259,10 +267,10 @@ export function ArchitectureView() {
   const projection = useMemo(
     () => resolveArchitecture({
       resources: items,
-      runtimeComponents: runtimeRead.data?.snapshot?.components,
+      runtimeComponents: runtimeData?.snapshot?.components,
       edges: edges.edges,
     }),
-    [items, runtimeRead.data, edges.edges],
+    [items, runtimeData, edges.edges],
   );
 
   const visible = useMemo(() => filterArchitecture(projection, view), [projection, view]);

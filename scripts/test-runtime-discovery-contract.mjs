@@ -38,7 +38,7 @@ function readAll(dir) {
 // 1. Route surface -----------------------------------------------------------
 const registrations = deriveGoRegistrations(root);
 assert.equal(registrations.duplicates.length, 0, `duplicate registrations: ${registrations.duplicates}`);
-assert.equal(registrations.keys.length, 124, `Go registrations must be 124, got ${registrations.keys.length}`);
+assert.equal(registrations.keys.length, 125, `Go registrations must be 125, got ${registrations.keys.length}`);
 
 const runtimeRoutes = registrations.keys.filter((key) => key.includes('/api/runtime'));
 assert.deepEqual(
@@ -46,14 +46,15 @@ assert.deepEqual(
   [
     'GET /api/runtime/meta',
     'GET /api/runtime/observations',
+    'GET /api/runtime/stream',
     'POST /api/runtime/bootstrap/apply',
     'POST /api/runtime/bootstrap/preview',
     'POST /api/runtime/scan',
   ].sort(),
   `unexpected runtime route set: ${runtimeRoutes.join(', ')}`,
 );
-console.log('runtime_registrations=5');
-console.log('go_registration_count=124');
+console.log('runtime_registrations=6');
+console.log('go_registration_count=125');
 
 // 2. SPA routes unchanged ----------------------------------------------------
 const routeContract = JSON.parse(read(join(root, 'frontend/route-contract.json')));
@@ -175,8 +176,8 @@ for (const topic of ['24', '26', 'stopped', 'permission_denied', 'not_detected',
 }
 const agents = read(join(root, 'AGENTS.md'));
 const claude = read(join(root, 'CLAUDE.md'));
-assert.ok(agents.includes('124'), 'AGENTS.md must document the 124 registration authority');
-assert.ok(claude.includes('124'), 'CLAUDE.md must document the 124 registration authority');
+assert.ok(agents.includes('125'), 'AGENTS.md must document the 125 registration authority');
+assert.ok(claude.includes('125'), 'CLAUDE.md must document the 125 registration authority');
 assert.ok(
   agents.includes('docs/architecture/runtime-discovery.md'),
   'AGENTS.md must reference the runtime discovery document',

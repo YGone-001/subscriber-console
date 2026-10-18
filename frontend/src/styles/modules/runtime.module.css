@@ -158,6 +158,18 @@
   color: var(--warning);
 }
 
+.liveNote {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  margin: var(--space-8) 0;
+  padding: var(--space-8) var(--space-12);
+  border-radius: var(--ref-radius-panel);
+  border: 1px solid color-mix(in srgb, var(--success) 40%, var(--surface-border));
+  color: var(--success);
+  font-size: 0.78rem;
+}
+
 .summary {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));

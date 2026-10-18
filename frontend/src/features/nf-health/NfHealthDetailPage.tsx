@@ -44,6 +44,7 @@ import {
 } from './nf-health-api';
 import {
   TREND_WINDOWS,
+  buildMetricTrendSeries,
   windowStartIso,
   type TrendWindowKey,
 } from './nf-health-builders';
@@ -63,12 +64,6 @@ const PAGE_LIMIT = 20;
 const HISTORY_LIMIT = 100;
 
 type Feedback = { tone: 'success' | 'danger' | 'warning' | 'info'; message: string } | null;
-
-type TrendPoint = {
-  t: number;
-  label: string;
-  value: number | null;
-};
 
 export function NfHealthDetailPage() {
   const { targetId = '' } = useParams<{ targetId: string }>();
@@ -149,33 +144,10 @@ export function NfHealthDetailPage() {
     }
   };
 
-  const trendSeries = useMemo(() => {
-    const from = Date.parse(windowStartIso(trendWindow));
-    const buckets = new Map<string, TrendPoint[]>();
-    const units = new Map<string, string>();
-    const ordered = [...samples].sort(
-      (left, right) => Date.parse(left.collectedAt) - Date.parse(right.collectedAt),
-    );
-    for (const sample of ordered) {
-      const collectedAt = Date.parse(sample.collectedAt);
-      if (!Number.isFinite(collectedAt) || collectedAt < from) continue;
-      for (const metric of sample.metrics ?? []) {
-        const points = buckets.get(metric.key) ?? [];
-        points.push({
-          t: collectedAt,
-          label: new Date(collectedAt).toLocaleTimeString(),
-          value: metric.value,
-        });
-        buckets.set(metric.key, points);
-        units.set(metric.key, metric.unit);
-      }
-    }
-    return Array.from(buckets.entries()).map(([key, points]) => ({
-      key,
-      unit: units.get(key) ?? '',
-      points,
-    }));
-  }, [samples, trendWindow]);
+  const trendSeries = useMemo(
+    () => buildMetricTrendSeries(samples, Date.parse(windowStartIso(trendWindow))),
+    [samples, trendWindow],
+  );
 
   const target = detail?.target;
   const latestSample = detail?.latestSample;

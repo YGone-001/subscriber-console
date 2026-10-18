@@ -526,9 +526,283 @@
   }
 }
 
+/*
+ * Card wall: domain-grouped target cards opened from the summary table.
+ * Cards are interactive (open the snapshot drawer) but stay semantic: badges
+ * report measured layer coverage only and utilization bars never render a
+ * missing measurement as zero.
+ */
+.cardWall {
+  display: grid;
+  gap: 1.15rem;
+  padding: 0.85rem 1.15rem 1.15rem;
+}
+
+.cardGroup {
+  display: grid;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.cardGroupTitle {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--ref-font-size-label);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.cardGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 0.85rem;
+}
+
+.targetCard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-panel, 12px);
+  background: var(--surface);
+  cursor: pointer;
+  text-align: start;
+  transition: border-color 120ms ease, transform 120ms ease;
+}
+
+.targetCard:hover,
+.targetCard:focus-visible {
+  border-color: var(--primary);
+  transform: translateY(-1px);
+}
+
+.targetCardHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.targetCardName {
+  color: var(--text-main);
+  font-size: var(--ref-font-size-body-strong);
+  font-weight: 800;
+  word-break: break-word;
+}
+
+.targetCardType {
+  color: var(--text-muted);
+  font-family: var(--font-data);
+  font-size: var(--ref-font-size-label);
+}
+
+.targetCardBadges {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.targetCardFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: auto;
+  padding-top: 0.35rem;
+  border-top: 1px solid var(--surface-border);
+}
+
+.targetCardMeta {
+  color: var(--text-muted);
+  font-size: var(--ref-font-size-label);
+  font-variant-numeric: tabular-nums;
+}
+
+.utilRow {
+  display: grid;
+  grid-template-columns: 3.5rem 1fr 2.75rem;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.utilLabel {
+  color: var(--text-muted);
+  font-size: var(--ref-font-size-label);
+  font-weight: 700;
+}
+
+.utilTrack {
+  height: 6px;
+  border-radius: var(--ref-radius-pill);
+  background: var(--surface-border);
+  overflow: hidden;
+}
+
+.utilBar {
+  display: block;
+  height: 100%;
+  border-radius: var(--ref-radius-pill);
+}
+
+.utilBarOk {
+  background: var(--primary);
+}
+
+.utilBarWarn {
+  background: var(--warning);
+}
+
+.utilBarDanger {
+  background: var(--danger);
+}
+
+.utilValue {
+  color: var(--text-secondary);
+  font-size: var(--ref-font-size-label);
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+
+/*
+ * Snapshot drawer: same layer geometry as the UserDrawer pattern (fixed
+ * layer, right-anchored panel, independent body scroll). The drawer is page
+ * scoped, so the shell chrome stays reachable and no global shell geometry
+ * changes.
+ */
+.drawerLayer {
+  position: fixed;
+  inset: 0;
+  z-index: 2100;
+  display: flex;
+  justify-content: flex-end;
+  background: color-mix(in srgb, var(--background) 55%, transparent);
+}
+
+.drawer {
+  width: min(820px, 100vw);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--surface-border);
+  background: var(--surface);
+  box-shadow: -12px 0 32px color-mix(in srgb, var(--background) 45%, transparent);
+}
+
+.drawerHead {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.85rem;
+  padding: 1.15rem 1.35rem;
+  border-bottom: 1px solid var(--surface-border);
+}
+
+.drawerTitle {
+  margin: 0;
+  color: var(--text-main);
+  font-size: var(--ref-font-size-title-compact, 1.2rem);
+  font-weight: 800;
+  word-break: break-word;
+}
+
+.drawerSub {
+  margin: 0.25rem 0 0;
+}
+
+.drawerHeadActions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.drawerBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0.85rem 1.35rem 1.35rem;
+  display: grid;
+  gap: 1.15rem;
+  align-content: start;
+}
+
+.drawerSection {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.drawerLoading {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.drawerMuted {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--ref-font-size-body-support);
+}
+
+.drawerOverall {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.drawerOverallNote {
+  color: var(--danger);
+  font-size: var(--ref-font-size-body-support);
+}
+
+.drawerLinks {
+  display: flex;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.semanticList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.semanticRow {
+  display: grid;
+  grid-template-columns: minmax(7rem, auto) auto 1fr;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.semanticLabel {
+  color: var(--text-secondary);
+  font-size: var(--ref-font-size-body-support);
+  font-weight: 700;
+}
+
+.semanticNoteText {
+  color: var(--text-muted);
+  font-size: var(--ref-font-size-label);
+}
+
+.errorWrap {
+  padding: 1rem 0;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .spin {
     animation: none;
+  }
+
+  .targetCard {
+    transition: none;
   }
 }
 
@@ -540,6 +814,10 @@
   .trendGrid {
     grid-template-columns: 1fr;
   }
+
+  .drawer {
+    width: min(680px, 100vw);
+  }
 }
 
 @media (max-width: 900px) {
@@ -550,6 +828,12 @@
   .toolbar {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .semanticRow {
+    grid-template-columns: 1fr;
+    justify-items: start;
+    gap: 0.25rem;
   }
 
   /*

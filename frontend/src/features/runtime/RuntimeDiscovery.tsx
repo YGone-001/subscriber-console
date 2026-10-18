@@ -46,6 +46,7 @@ import {
 } from './runtime-model';
 import type { RuntimeComponent, RuntimeMeta, RuntimeObservations, RuntimeStatus } from './runtime-types';
 import { RuntimeBootstrapDialog } from './RuntimeBootstrapDialog';
+import { resolveRuntimeObservations, useRuntimeStream } from './use-runtime-stream';
 import styles from '../../styles/modules/runtime.module.css';
 
 const REFRESH_INTERVAL_MS = 15000;
@@ -161,6 +162,12 @@ function RuntimeSurface({ variant }: SurfaceProps) {
 
   const observations = useRead<RuntimeObservations>('/api/runtime/observations');
   const meta = useRead<RuntimeMeta>('/api/runtime/meta');
+  const stream = useRuntimeStream();
+
+  // The shared stream pushes the same freshness-projected snapshot the polled
+  // endpoint serves; the polled read only covers the gap while the stream is
+  // not connected.
+  const observationsData = resolveRuntimeObservations(stream, observations.data);
 
   const [template, setTemplate] = useState('auto');
   const [status, setStatus] = useState<StatusFilter>('');
@@ -176,13 +183,15 @@ function RuntimeSurface({ variant }: SurfaceProps) {
     void meta.mutate();
   }, [observations, meta]);
 
-  // Bounded auto-refresh of the cached snapshot. It never triggers a scan.
+  // Bounded auto-refresh of the cached snapshot. It never triggers a scan and
+  // is only needed while the live stream is not connected.
   useEffect(() => {
+    if (stream.status === 'connected') return undefined;
     const timer = window.setInterval(() => {
       if (!observations.isValidating) void observations.mutate();
     }, REFRESH_INTERVAL_MS);
     return () => window.clearInterval(timer);
-  }, [observations]);
+  }, [observations, stream.status]);
 
   const rescan = async () => {
     setScanning(true);
@@ -197,10 +206,10 @@ function RuntimeSurface({ variant }: SurfaceProps) {
     }
   };
 
-  const components = observations.data?.snapshot.components ?? [];
-  const scan = observations.data?.snapshot.scan;
-  const host = observations.data?.snapshot.host ?? meta.data?.host;
-  const registry = observations.data?.snapshot.registry ?? meta.data?.registry;
+  const components = observationsData?.snapshot.components ?? [];
+  const scan = observationsData?.snapshot.scan;
+  const host = observationsData?.snapshot.host ?? meta.data?.host;
+  const registry = observationsData?.snapshot.registry ?? meta.data?.registry;
 
   const filtered = useMemo(
     () => filterComponents(components, { template, status, query, category }),
@@ -281,6 +290,11 @@ function RuntimeSurface({ variant }: SurfaceProps) {
       </div>
 
       {scanError ? <p className={styles.error} role="alert">{scanError}</p> : null}
+      {stream.status === 'connected' ? (
+        <p className={styles.liveNote} role="status">
+          <Activity size={14} aria-hidden="true" /> {t('runtime_stream_live')}
+        </p>
+      ) : null}
       {scan && scan.status === 'incomplete' ? (
         <p className={styles.warning} role="status">
           {t('runtime_scan_incomplete_detail', { count: scan.entriesUnreadable })}
@@ -289,7 +303,7 @@ function RuntimeSurface({ variant }: SurfaceProps) {
       {scan && scan.status === 'failed' ? (
         <p className={styles.error} role="alert">{t('runtime_scan_failed_detail', { reason: scan.errorSummary ?? '' })}</p>
       ) : null}
-      {observations.data && !observations.data.associationsComplete ? (
+      {observationsData && !observationsData.associationsComplete ? (
         <p className={styles.warning} role="status">{t('runtime_assoc_incomplete')}</p>
       ) : null}
 

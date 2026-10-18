@@ -48,6 +48,7 @@ import {
 import { useBoundedEdges } from './use-bounded-edges';
 import { NetworkElementCards, UnmanagedProcesses } from './NetworkElementCards';
 import type { RuntimeObservations } from '../runtime/runtime-types';
+import { resolveRuntimeObservations, useRuntimeStream } from '../runtime/use-runtime-stream';
 import styles from '../../styles/modules/operations.module.css';
 
 const PAGE_LIMIT = 20;
@@ -192,6 +193,8 @@ export default function NetworkElementView() {
 
   const containment = useBoundedEdges({ relationshipType: 'contains' });
   const runtimeRead = useRead<RuntimeObservations>('/api/runtime/observations');
+  const runtimeStream = useRuntimeStream();
+  const runtimeData = resolveRuntimeObservations(runtimeStream, runtimeRead.data);
 
   const refresh = useCallback(() => {
     void resourcesRead.mutate();
@@ -425,7 +428,7 @@ export default function NetworkElementView() {
         ))}
       </div>
 
-      <UnmanagedProcesses components={runtimeRead.data?.snapshot?.components ?? []} />
+      <UnmanagedProcesses components={runtimeData?.snapshot?.components ?? []} />
 
       <div className={styles.neBody}>
         <nav className={styles.treePanel} aria-label={t('ops_tree_label')}>

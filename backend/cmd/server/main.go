@@ -332,6 +332,8 @@ func main() {
 	runtimeBindingGateway := runtimewire.NewBindingGateway(bindingStore, nfHealthBindings)
 	runtimeBootstrapper := runtimeinv.NewBootstrapper(runtimeService, runtimeInventoryGateway, runtimeTargetGateway, runtimeBindingGateway)
 	runtimeHandler := runtimeinv.NewHandler(runtimeService, runtimeBootstrapper, limiter, auditWriter, runtimeInventoryGateway, runtimeTargetGateway)
+	runtimeStreamHandler := runtimeinv.NewStreamHandler(runtimeService, sessionValidator, runtimeInventoryGateway, runtimeTargetGateway)
+	runtimeStreamHandler.Start(context.Background())
 
 	// Build handler
 	mux := http.NewServeMux()
@@ -506,12 +508,15 @@ func main() {
 	mux.Handle("PUT /api/nf-health/targets/{targetId}", authMiddleware(http.HandlerFunc(nfHealthHandler.UpdateTarget)))
 	mux.Handle("POST /api/nf-health/targets/{targetId}/collect", authMiddleware(http.HandlerFunc(nfHealthHandler.CollectTarget)))
 
-	// Runtime discovery (two reads, three governed mutations)
+	// Runtime discovery (three reads, three governed mutations)
 	mux.Handle("GET /api/runtime/meta", authMiddleware(http.HandlerFunc(runtimeHandler.Meta)))
 	mux.Handle("GET /api/runtime/observations", authMiddleware(http.HandlerFunc(runtimeHandler.Observations)))
 	mux.Handle("POST /api/runtime/scan", authMiddleware(http.HandlerFunc(runtimeHandler.Scan)))
 	mux.Handle("POST /api/runtime/bootstrap/preview", authMiddleware(http.HandlerFunc(runtimeHandler.Preview)))
 	mux.Handle("POST /api/runtime/bootstrap/apply", authMiddleware(http.HandlerFunc(runtimeHandler.Apply)))
+
+	// Runtime snapshot SSE stream (single shared sample broadcast)
+	mux.Handle("GET /api/runtime/stream", authMiddleware(runtimeStreamHandler))
 
 	// Catch-all for unknown API routes
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {

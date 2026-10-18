@@ -40,7 +40,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 // API surface is byte-identical to this baseline, so the cleanup is provably a
 // non-functional change.
 const NORMALIZATION_BASELINE_SHA = '43f2947d70590507a29837bdea36d2ecaffdfaa5';
-const EXPECTED_GO_REGISTRATIONS = 124;
+const EXPECTED_GO_REGISTRATIONS = 125;
 const EXPECTED_INVENTORY_ROUTES = new Set([
   'GET /api/inventory/meta',
   'GET /api/inventory/resources',
@@ -95,6 +95,7 @@ const EXPECTED_NF_HEALTH_ROUTES = new Set([
 const EXPECTED_RUNTIME_ROUTES = new Set([
   'GET /api/runtime/meta',
   'GET /api/runtime/observations',
+  'GET /api/runtime/stream',
   'POST /api/runtime/scan',
   'POST /api/runtime/bootstrap/preview',
   'POST /api/runtime/bootstrap/apply',

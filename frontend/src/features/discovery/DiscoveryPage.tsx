@@ -17,6 +17,7 @@ import {
   RefreshCw,
   Search,
   Server,
+  ShieldCheck,
   X,
 } from 'lucide-react';
 import { hasPermission } from '../../lib/permissions';
@@ -40,6 +41,12 @@ import {
   unlinkDiscoveryCandidate,
 } from './discovery-api';
 import { buildLinkCandidateRequest, buildUnlinkCandidateRequest } from './discovery-builders';
+import { RuntimeBootstrapDialog } from '../runtime/RuntimeBootstrapDialog';
+import {
+  fetchRuntimeObservations,
+} from '../runtime/runtime-api';
+import type { RuntimeComponent } from '../runtime/runtime-types';
+import { resolveRuntimeObservations, useRuntimeStream } from '../runtime/use-runtime-stream';
 import {
   buildCreateSourceRequest,
   CANONICAL_ADAPTER_TYPES,
@@ -92,6 +99,51 @@ export function DiscoveryPage() {
   const [linkTarget, setLinkTarget] = useState<NfObservation | null>(null);
   const [linkResourceId, setLinkResourceId] = useState('');
   const [linkError, setLinkError] = useState<string | null>(null);
+
+  // Runtime onboarding closure: candidates themselves are read-only
+  // observations, but the local runtime plane can map an observed NF type to
+  // recognized local components. The bootstrap dialog is the only write path
+  // and stays governed (preview -> apply); this page never writes discovery
+  // or inventory data itself.
+  const [runtimeComponents, setRuntimeComponents] = useState<RuntimeComponent[]>([]);
+  const [bootstrapTarget, setBootstrapTarget] = useState<{ template: string; componentIds: string[] } | null>(null);
+
+  const runtimeStream = useRuntimeStream();
+
+  useEffect(() => {
+    if (!canRead) return;
+    let cancelled = false;
+    const loadRuntime = async () => {
+      try {
+        const observations = await fetchRuntimeObservations();
+        if (!cancelled) setRuntimeComponents(observations.snapshot.components ?? []);
+      } catch {
+        // The runtime plane is optional context for onboarding; candidates
+        // must render even when it is unavailable.
+        if (!cancelled) setRuntimeComponents([]);
+      }
+    };
+    void loadRuntime();
+    return () => {
+      cancelled = true;
+    };
+  }, [canRead]);
+
+  // Server-recognized components indexed by canonical NF type. The live SSE
+  // snapshot wins once the shared stream is connected; the one-shot fetch only
+  // covers the gap while the stream is not connected.
+  const runtimeObservations = resolveRuntimeObservations(runtimeStream, undefined);
+  const effectiveRuntimeComponents = runtimeObservations?.snapshot.components ?? runtimeComponents;
+  const runtimeByNfType = useMemo(() => {
+    const index = new Map<string, RuntimeComponent[]>();
+    for (const component of effectiveRuntimeComponents) {
+      if (!component.nfType) continue;
+      const list = index.get(component.nfType);
+      if (list) list.push(component);
+      else index.set(component.nfType, [component]);
+    }
+    return index;
+  }, [effectiveRuntimeComponents]);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -481,7 +533,9 @@ export function DiscoveryPage() {
                 </tr>
               </thead>
               <tbody>
-                {candidates.map((candidate) => (
+                {candidates.map((candidate) => {
+                  const matchedRuntimeComponents = runtimeByNfType.get(candidate.nfType) ?? [];
+                  return (
                   <tr key={candidate.candidateId}>
                     <td><strong>{candidate.nfType}</strong></td>
                     <td>
@@ -538,10 +592,31 @@ export function DiscoveryPage() {
                             {t('discovery_link_action')}
                           </button>
                         )}
+                        {matchedRuntimeComponents.length > 0 ? (
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            onClick={() => {
+                              setBootstrapTarget({
+                                template: 'auto',
+                                componentIds: matchedRuntimeComponents.map((component) => component.componentId),
+                              });
+                            }}
+                            disabled={!canConfigure}
+                            title={t('discovery_bootstrap_hint', {
+                              count: matchedRuntimeComponents.length,
+                              nfType: candidate.nfType,
+                            })}
+                          >
+                            <ShieldCheck size={14} />
+                            {t('discovery_bootstrap_action')}
+                          </button>
+                        ) : null}
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -675,6 +750,19 @@ export function DiscoveryPage() {
           </div>
         </div>
       </Dialog>
+
+      {bootstrapTarget ? (
+        <RuntimeBootstrapDialog
+          template={bootstrapTarget.template}
+          componentIds={bootstrapTarget.componentIds}
+          onClose={() => setBootstrapTarget(null)}
+          onApplied={() => {
+            setFeedback({ tone: 'success', message: t('discovery_bootstrap_applied') });
+            // Refresh candidates so newly onboarded resources can be linked.
+            void loadAll();
+          }}
+        />
+      ) : null}
     </div>
   );
 }

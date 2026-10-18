@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   buildCreateTargetRequest,
+  buildMetricTrendSeries,
   buildUpdateTargetRequest,
   createEmptyTargetForm,
   splitMetricsEndpoint,
@@ -11,6 +12,7 @@ import {
   validateResourceId,
   validateTargetForm,
 } from '../src/features/nf-health/nf-health-validation';
+import type { HealthSample } from '../src/features/nf-health/nf-health-types';
 
 const RESOURCE_ID = '1a2b3c40-0005-4a05-8c05-00000000f005';
 const CANDIDATE_ID = '9b2d3c40-0011-4b11-9d11-000000000011';
@@ -112,4 +114,73 @@ test('nf health target form: metrics endpoint splitting stays compatible', () =>
     path: '/metrics',
   });
   assert.deepEqual(splitMetricsEndpoint(undefined), { destination: '', path: '/metrics' });
+});
+
+test('nf health trend series: samples are sorted, windowed and never interpolated', () => {
+  const now = Date.parse('2026-10-18T12:00:00.000Z');
+  const unmeasuredLayer = () => ({
+    state: 'not_configured' as const,
+    evidenceKind: 'none' as const,
+    measured: false,
+  });
+  const sample = (
+    collectedAt: string,
+    metrics: Array<{ key: string; value: number; unit?: string }>,
+  ): HealthSample => ({
+    sampleId: `sample-${collectedAt}`,
+    schemaVersion: 1,
+    targetId: 'target-1',
+    runId: `run-${collectedAt}`,
+    collectedAt,
+    layers: { process: unmeasuredLayer(), interface: unmeasuredLayer(), service: unmeasuredLayer() },
+    metrics: metrics.map((metric) => ({
+      key: metric.key,
+      value: metric.value,
+      unit: metric.unit ?? 'bytes',
+      type: 'gauge' as const,
+      source: 'nf_metrics_exporter',
+      collectedAt,
+    })),
+  });
+
+  const series = buildMetricTrendSeries(
+    [
+      // Deliberately out of chronological order and with one sample that
+      // falls before the window and must be dropped entirely.
+      sample('2026-10-18T11:59:00.000Z', [{ key: 'process_resident_memory_bytes', value: 3 }]),
+      sample('2026-10-18T11:30:00.000Z', [{ key: 'process_resident_memory_bytes', value: 1 }]),
+      sample('2026-10-18T11:45:00.000Z', [
+        { key: 'process_resident_memory_bytes', value: 2 },
+        { key: 'up', value: 1 },
+      ]),
+    ],
+    now - 20 * 60 * 1000,
+  );
+
+  const memory = series.find((entry) => entry.key === 'process_resident_memory_bytes');
+  assert.ok(memory, 'the memory family is charted');
+  assert.deepEqual(
+    memory.points.map((point) => point.value),
+    [2, 3],
+    'points are sorted ascending and the pre-window sample is dropped',
+  );
+  assert.equal(memory.unit, 'bytes');
+
+  const up = series.find((entry) => entry.key === 'up');
+  assert.ok(up, 'a second family forms its own series');
+  assert.deepEqual(up.points.map((point) => point.value), [1]);
+
+  // A family that only exists before the window disappears instead of
+  // being backfilled with zeros.
+  const droppedOnly = buildMetricTrendSeries(
+    [sample('2026-10-18T11:30:00.000Z', [{ key: 'process_cpu_seconds_total', value: 9 }])],
+    now - 20 * 60 * 1000,
+  );
+  assert.equal(
+    droppedOnly.find((entry) => entry.key === 'process_cpu_seconds_total'),
+    undefined,
+    'families with no in-window points are not fabricated',
+  );
+
+  assert.deepEqual(buildMetricTrendSeries([], now), [], 'no samples yield no series');
 });

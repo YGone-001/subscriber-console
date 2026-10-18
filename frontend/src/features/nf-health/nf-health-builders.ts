@@ -2,6 +2,7 @@ import type {
   CollectionMode,
   CollectorProfile,
   CreateNfHealthTargetRequest,
+  HealthSample,
   LayerState,
   ServiceKind,
   UpdateNfHealthTargetRequest,
@@ -108,6 +109,53 @@ export const TREND_WINDOW_MINUTES: Record<TrendWindowKey, number> = {
   '6h': 360,
   '24h': 1440,
 };
+
+export type TrendPoint = {
+  t: number;
+  label: string;
+  value: number | null;
+};
+
+export type MetricTrendSeries = {
+  key: string;
+  unit: string;
+  points: TrendPoint[];
+};
+
+/*
+ * Build per-metric trend series from collected samples. Points are plotted
+ * only where a measurement exists and gaps are never interpolated; samples
+ * older than the window start are excluded before bucketing.
+ */
+export function buildMetricTrendSeries(
+  samples: HealthSample[],
+  fromMs: number,
+): MetricTrendSeries[] {
+  const buckets = new Map<string, TrendPoint[]>();
+  const units = new Map<string, string>();
+  const ordered = [...samples].sort(
+    (left, right) => Date.parse(left.collectedAt) - Date.parse(right.collectedAt),
+  );
+  for (const sample of ordered) {
+    const collectedAt = Date.parse(sample.collectedAt);
+    if (!Number.isFinite(collectedAt) || collectedAt < fromMs) continue;
+    for (const metric of sample.metrics ?? []) {
+      const points = buckets.get(metric.key) ?? [];
+      points.push({
+        t: collectedAt,
+        label: new Date(collectedAt).toLocaleTimeString(),
+        value: metric.value,
+      });
+      buckets.set(metric.key, points);
+      units.set(metric.key, metric.unit);
+    }
+  }
+  return Array.from(buckets.entries()).map(([key, points]) => ({
+    key,
+    unit: units.get(key) ?? '',
+    points,
+  }));
+}
 
 export function layerStateTone(state: LayerState): 'healthy' | 'degraded' | 'unhealthy' | 'muted' | 'unknown' {
   switch (state) {

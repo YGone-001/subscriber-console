@@ -20,14 +20,16 @@ import { useRead } from '../../lib/api/use-read';
 import { useI18n } from '../../providers/I18nProvider';
 import { groupByCategory, statusLabelKey } from './runtime-model';
 import type { RuntimeObservations } from './runtime-types';
+import { resolveRuntimeObservations, useRuntimeStream } from './use-runtime-stream';
 import styles from '../../styles/modules/runtime.module.css';
 
 export function RuntimeHierarchy() {
   const { t } = useI18n();
   const observations = useRead<RuntimeObservations>('/api/runtime/observations');
+  const stream = useRuntimeStream();
   const [open, setOpen] = useState<Record<string, boolean>>({});
 
-  const snapshot = observations.data?.snapshot;
+  const snapshot = resolveRuntimeObservations(stream, observations.data)?.snapshot;
   const groups = groupByCategory(snapshot?.components ?? []);
   const visible = groups
     .map((group) => ({

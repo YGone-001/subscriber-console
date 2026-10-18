@@ -27,9 +27,12 @@ import { OperationsNav } from '../operations/OperationsNav';
 import { SkeletonKpiStrip } from '../../components/ui/LoadingSkeleton';
 import { useAuth } from '../../providers/AuthProvider';
 import { useI18n } from '../../providers/I18nProvider';
+import { useRead } from '../../lib/api/use-read';
 import { MutationApiError } from '../../lib/api/mutation-client';
 import { fetchDiscoveryCandidates } from '../discovery/discovery-api';
 import type { NfObservation } from '../discovery/discovery-types';
+import type { RuntimeComponent, RuntimeObservations } from '../runtime/runtime-types';
+import { resolveRuntimeObservations, useRuntimeStream } from '../runtime/use-runtime-stream';
 import {
   collectNfHealthTarget,
   fetchNfHealthMeta,
@@ -41,6 +44,7 @@ import type {
   NfHealthMeta,
 } from './nf-health-types';
 import { NfHealthTargetDialog } from './NfHealthTargetDialog';
+import { NfHealthTargetDrawer } from './NfHealthTargetDrawer';
 import styles from '../../styles/modules/nf-health.module.css';
 
 const PAGE_LIMIT = 20;
@@ -68,6 +72,11 @@ export function NfHealthPage() {
   const [enabledFilter, setEnabledFilter] = useState('');
 
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [drawerTarget, setDrawerTarget] = useState<HealthTargetSummary | null>(null);
+
+  const runtimeRead = useRead<RuntimeObservations>('/api/runtime/observations');
+  const runtimeStream = useRuntimeStream();
+  const runtimeData = resolveRuntimeObservations(runtimeStream, runtimeRead.data);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -143,6 +152,59 @@ export function NfHealthPage() {
     }
     return map;
   }, [candidates]);
+
+  // Runtime components supply process evidence (CPU sample deltas, RSS) for
+  // bound targets. Unavailable measurements stay unavailable and are never
+  // rendered as zeros.
+  const runtimeByRole = useMemo(() => {
+    const map = new Map<string, RuntimeComponent>();
+    for (const component of runtimeData?.snapshot?.components ?? []) {
+      if (component.role) map.set(component.role, component);
+    }
+    return map;
+  }, [runtimeData]);
+
+  const runtimeByNfType = useMemo(() => {
+    const map = new Map<string, RuntimeComponent>();
+    for (const component of runtimeData?.snapshot?.components ?? []) {
+      if (component.nfType) map.set(component.nfType, component);
+    }
+    return map;
+  }, [runtimeData]);
+
+  const resolveRuntimeComponent = useCallback(
+    (target: HealthTargetSummary, candidate?: NfObservation): RuntimeComponent | undefined => {
+      const role = target.resourceId
+        ? undefined
+        : candidate?.nfType;
+      if (role) {
+        const byRole = runtimeByRole.get(role);
+        if (byRole) return byRole;
+      }
+      const nfType = target.nfType ?? candidate?.nfType;
+      return nfType ? runtimeByNfType.get(nfType) : undefined;
+    },
+    [runtimeByRole, runtimeByNfType],
+  );
+
+  const domainGroups = useMemo(() => {
+    const groups = new Map<string, HealthTargetSummary[]>();
+    for (const target of targets) {
+      // Domain is a server-derived projection over the authoritative
+      // Inventory identity. It is never inferred from candidate data here.
+      const key = target.domain ?? 'unknown';
+      const list = groups.get(key) ?? [];
+      list.push(target);
+      groups.set(key, list);
+    }
+    return Array.from(groups.entries())
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([domain, list]) => ({
+        domain,
+        label: domain === 'unknown' ? t('nf_health_domain_unknown') : domain.toUpperCase(),
+        targets: list,
+      }));
+  }, [targets, t]);
 
   const kpis = useMemo(() => {
     let fresh = 0;
@@ -448,6 +510,104 @@ export function NfHealthPage() {
         )}
       </section>
 
+      <section className="dash-card" aria-label={t('nf_health_card_wall_section')}>
+        <div className={styles.sectionHead}>
+          <h2>
+            <Server size={16} aria-hidden="true" />
+            {t('nf_health_card_wall_section')}
+          </h2>
+          <span className={styles.sectionNote}>{t('nf_health_card_wall_note')}</span>
+        </div>
+        {error ? (
+          <p className={styles.semanticNote}>{t('ops_metric_unavailable')}</p>
+        ) : domainGroups.length === 0 ? (
+          <p className={styles.semanticNote}>{t('nf_health_empty_targets_body')}</p>
+        ) : (
+          <div className={styles.cardWall}>
+            {domainGroups.map((group) => (
+              <div key={group.domain} className={styles.cardGroup}>
+                <h3 className={styles.cardGroupTitle}>{group.label}</h3>
+                <div className={styles.cardGrid}>
+                  {group.targets.map((target) => {
+                    const candidate = candidateIndex.get(target.candidateId ?? '');
+                    const runtimeComponent = resolveRuntimeComponent(target, candidate);
+                    return (
+                      <article
+                        key={target.targetId}
+                        className={styles.targetCard}
+                        onClick={() => setDrawerTarget(target)}
+                      >
+                        <header className={styles.targetCardHead}>
+                          <strong className={styles.targetCardName}>{target.name}</strong>
+                          <span className={styles.targetCardType}>
+                            {target.nfType ?? candidate?.nfType ?? '-'}
+                          </span>
+                        </header>
+                        <div className={styles.targetCardBadges}>
+                          {layerBadge(
+                            target.coverage.l1Measured ? 'healthy' : 'unknown',
+                            t,
+                            styles,
+                            target.coverage.l1Measured,
+                            'L1',
+                          )}
+                          {layerBadge(
+                            target.coverage.l2Measured ? 'healthy' : 'unknown',
+                            t,
+                            styles,
+                            target.coverage.l2Measured,
+                            'L2',
+                          )}
+                          {layerBadge(
+                            target.coverage.l3Available
+                              ? target.coverage.l3Measured
+                                ? 'healthy'
+                                : 'unknown'
+                              : 'not_configured',
+                            t,
+                            styles,
+                            target.coverage.l3Measured,
+                            'L3',
+                          )}
+                        </div>
+                        <UtilizationBar
+                          label={t('nf_health_card_memory')}
+                          available={Boolean(runtimeComponent?.memoryAvailable)}
+                          percent={runtimeComponent?.memoryPercent ?? null}
+                        />
+                        <UtilizationBar
+                          label={t('nf_health_card_cpu')}
+                          available={Boolean(runtimeComponent?.cpuAvailable)}
+                          percent={runtimeComponent?.cpuPercent ?? null}
+                        />
+                        <footer className={styles.targetCardFoot}>
+                          <span className={styles.targetCardMeta}>
+                            {formatTimestamp(target.lastMeasuredAt)}
+                          </span>
+                          <Link
+                            to={`/nf-health/${encodeURIComponent(target.targetId)}`}
+                            className={styles.rowLink}
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            {t('nf_health_open_detail')}
+                          </Link>
+                        </footer>
+                      </article>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <NfHealthTargetDrawer
+        target={drawerTarget}
+        onClose={() => setDrawerTarget(null)}
+        onCollected={() => void loadAll()}
+      />
+
       <NfHealthTargetDialog
         open={dialogOpen}
         mode="create"
@@ -468,6 +628,7 @@ function layerBadge(
   t: (key: string) => string,
   stylesRecord: Record<string, string>,
   measured: boolean,
+  labelPrefix?: string,
 ): React.ReactElement {
   const className =
     state === 'healthy'
@@ -490,7 +651,45 @@ function layerBadge(
       ? 'nf_health_state_not_configured'
       : 'nf_health_state_unknown';
 
-  return <span className={className}>{t(labelKey)}</span>;
+  return <span className={className}>{labelPrefix ? `${labelPrefix} · ${t(labelKey)}` : t(labelKey)}</span>;
+}
+
+function UtilizationBar({
+  label,
+  available,
+  percent,
+}: {
+  label: string;
+  available: boolean;
+  percent: number | null;
+}): React.ReactElement {
+  const { t } = useI18n();
+  if (!available || percent == null || !Number.isFinite(percent)) {
+    return (
+      <div className={styles.utilRow}>
+        <span className={styles.utilLabel}>{label}</span>
+        <span className={styles.utilValue}>{t('ops_metric_unavailable')}</span>
+      </div>
+    );
+  }
+  const clamped = Math.max(0, Math.min(100, percent));
+  const tone = clamped >= 90 ? styles.utilBarDanger : clamped >= 75 ? styles.utilBarWarn : styles.utilBarOk;
+  return (
+    <div className={styles.utilRow}>
+      <span className={styles.utilLabel}>{label}</span>
+      <div
+        className={styles.utilTrack}
+        role="meter"
+        aria-valuenow={Math.round(clamped)}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label={label}
+      >
+        <span className={`${styles.utilBar} ${tone}`} style={{ width: `${clamped}%` }} />
+      </div>
+      <span className={styles.utilValue}>{`${Math.round(clamped)}%`}</span>
+    </div>
+  );
 }
 
 function formatTimestamp(value?: string): string {
