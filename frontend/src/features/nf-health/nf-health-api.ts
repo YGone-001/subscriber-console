@@ -37,6 +37,10 @@ export async function fetchNfHealthTargets(
     withQuery('/api/nf-health/targets', {
       q: params.q,
       enabled: params.enabled,
+      domain: params.domain,
+      state: params.state,
+      layers: params.layers,
+      sort: params.sort,
       cursor: params.cursor,
       limit: params.limit,
     }),

@@ -10,7 +10,8 @@
  * rendering against fixtures, not a live core-network deployment.
  */
 import { createServer } from 'node:http';
-import { serveRuntimeFixture } from './runtime-fixtures.mjs';
+import { RUNTIME_OBSERVATIONS, serveRuntimeFixture } from './runtime-fixtures.mjs';
+import { projectOperationsResources } from './nf-discovery-fixtures.mjs';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { extname, join, normalize } from 'node:path';
 
@@ -929,6 +930,62 @@ function handleApi(req, res, url, context) {
     const candidate = DISCOVERY_CANDIDATES.find((item) => item.candidateId === candidateMatch[1]);
     if (candidate) return sendJson(res, 200, candidate);
     return sendJson(res, 404, { error: 'not found', code: 'NOT_FOUND' });
+  }
+
+  if (pathname === '/api/operations/summary' && req.method === 'GET') {
+    const requested = (url.searchParams.get('sections') ?? '')
+      .split(',')
+      .map((token) => token.trim())
+      .filter(Boolean);
+    const sections = requested.length
+      ? ['inventory', 'discovery', 'health', 'alerts', 'topology'].filter((name) => requested.includes(name))
+      : ['inventory', 'discovery', 'health', 'alerts', 'topology'];
+    const body = { generatedAt: '2026-10-05T12:00:00Z', sections };
+    if (sections.includes('health')) {
+      const summaries = TARGETS.map(summarize);
+      const freshnessByState = {};
+      const overallByState = {};
+      for (const summary of summaries) {
+        const freshness = summary.freshness?.state ?? 'unknown';
+        freshnessByState[freshness] = (freshnessByState[freshness] ?? 0) + 1;
+        const overall = summary.overallState ?? 'unknown';
+        overallByState[overall] = (overallByState[overall] ?? 0) + 1;
+      }
+      body.health = {
+        completeness: 'complete',
+        scope: 'full_collection',
+        targets: {
+          configured: summaries.length,
+          enabled: summaries.filter((summary) => summary.enabled).length,
+          failed: summaries.filter((summary) => summary.lastError).length,
+          freshnessByState,
+          overallByState,
+          layersByState: {},
+        },
+      };
+    }
+    return sendJson(res, 200, body);
+  }
+
+  if (pathname === '/api/runtime/stream') {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+    res.write('retry: 600000\n\n');
+    res.write(`event: snapshot\ndata: ${JSON.stringify({
+      timestamp: RUNTIME_OBSERVATIONS.snapshot.generatedAt,
+      ...RUNTIME_OBSERVATIONS,
+    })}\n\n`);
+    context.openStreams.add(res);
+    req.on('close', () => context.openStreams.delete(res));
+    return undefined;
+  }
+
+  if (pathname === '/api/operations/resources' && req.method === 'GET') {
+    return sendJson(res, 200, projectOperationsResources(url));
   }
 
   if (pathname.startsWith('/api/nf-health/')) {

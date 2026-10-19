@@ -159,7 +159,11 @@ export interface RuleListQueryParams {
 
 export interface AlertListQueryParams {
   state?: string;
+  /* "open" selects active + acknowledged, "history" selects resolved. */
+  scope?: string;
   severity?: string;
+  /* "risk" orders the duty queue, "updated" keeps recency order. */
+  sort?: string;
   q?: string;
   cursor?: string;
   limit?: number;

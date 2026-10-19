@@ -29,6 +29,10 @@ func NewRepository(targets, runs, samples *mongo.Collection) *Repository {
 type CursorData struct {
 	At string `json:"at"`
 	ID string `json:"id"`
+	// Rank is present only for the risk ordering. Its absence on a risk cursor
+	// (and its presence on a recency cursor) is rejected rather than silently
+	// reinterpreted, so a cursor can never be replayed against another order.
+	Rank *int `json:"rk,omitempty"`
 }
 
 // CreateTarget inserts a new monitoring target with a server-generated identity.
@@ -77,6 +81,7 @@ func (r *Repository) CreateTarget(ctx context.Context, req *CreateTargetRequest,
 		CreatedBy:        actor,
 		UpdatedAt:        now,
 		UpdatedBy:        actor,
+		LastProjection:   UnknownTargetProjection(time.Now().UTC()),
 	}
 	if _, err := r.targets.InsertOne(ctx, doc); err != nil {
 		if mongo.IsDuplicateKeyError(err) {
@@ -107,39 +112,26 @@ func (r *Repository) ListTargets(ctx context.Context, filter TargetListFilter) (
 	if limit <= 0 {
 		limit = DefaultPageLimit
 	}
-	q := bson.M{}
-	if filter.Query != "" {
-		q = bson.M{"$or": []bson.M{
-			{"name": bson.M{"$regex": escapeRegex(filter.Query), "$options": "i"}},
-			{"candidateId": bson.M{"$regex": escapeRegex(filter.Query), "$options": "i"}},
-			{"resourceId": filter.Query},
-			{"targetId": filter.Query},
-		}}
-	}
-	if filter.Enabled == "true" {
-		q["enabled"] = true
-	} else if filter.Enabled == "false" {
-		q["enabled"] = false
-	}
-	// Bounded association lookup: one indexed $in query over canonical resource
-	// identifiers, never one query per resource. The handler bounds the list.
-	if len(filter.ResourceIDs) > 0 {
-		q["resourceId"] = bson.M{"$in": filter.ResourceIDs}
+	q := targetQuery(filter)
+
+	if filter.Sort == TargetSortRisk {
+		return r.listTargetsByRisk(ctx, q, filter.Cursor, limit)
 	}
 
-	cursorQuery := bson.M{"_id": 1, "updatedAt": 1}
 	opts := options.Find().SetSort(bson.D{{Key: "updatedAt", Value: -1}, {Key: "_id", Value: -1}}).SetLimit(int64(limit) + 1)
 	if filter.Cursor != "" {
 		var cur CursorData
 		if err := decodeCursor(filter.Cursor, &cur); err != nil {
 			return nil, nil, false, err
 		}
+		if cur.Rank != nil {
+			return nil, nil, false, errors.New("cursor belongs to a different sort order")
+		}
 		q = bson.M{"$and": []bson.M{q, {"$or": []bson.M{
 			{"updatedAt": bson.M{"$lt": cur.At}},
 			{"updatedAt": cur.At, "_id": bson.M{"$lt": cur.ID}},
 		}}}}
 	}
-	_ = cursorQuery
 
 	cur, err := r.targets.Find(ctx, q, opts)
 	if err != nil {
@@ -153,6 +145,109 @@ func (r *Repository) ListTargets(ctx context.Context, filter TargetListFilter) (
 		ProjectIdentityState(&items[i])
 	}
 	return paginateTargets(items, limit)
+}
+
+// targetQuery compiles the stored-field predicates of a target list read.
+//
+// Only fields the server owns are evaluated here. Derived facts that depend on
+// the current clock or on sample evidence are read from the persisted
+// projection, so this stays one indexed query with no per-row work.
+func targetQuery(filter TargetListFilter) bson.M {
+	conditions := make([]bson.M, 0, 5)
+	if filter.Query != "" {
+		conditions = append(conditions, bson.M{"$or": []bson.M{
+			{"name": bson.M{"$regex": escapeRegex(filter.Query), "$options": "i"}},
+			{"candidateId": bson.M{"$regex": escapeRegex(filter.Query), "$options": "i"}},
+			{"resourceId": filter.Query},
+			{"targetId": filter.Query},
+		}})
+	}
+	if filter.Enabled == "true" {
+		conditions = append(conditions, bson.M{"enabled": true})
+	} else if filter.Enabled == "false" {
+		conditions = append(conditions, bson.M{"enabled": false})
+	}
+	// Bounded association lookup: one indexed $in query over canonical resource
+	// identifiers, never one query per resource. The handler bounds the list.
+	if len(filter.ResourceIDs) > 0 {
+		conditions = append(conditions, bson.M{"resourceId": bson.M{"$in": filter.ResourceIDs}})
+	}
+	if filter.Domain != "" {
+		conditions = append(conditions, bson.M{"domain": filter.Domain})
+	}
+	if filter.Overall != "" {
+		if filter.Overall == StateUnknown {
+			// A target written before the projection existed carries no overall
+			// state; that is unknown, not healthy and not a missing row.
+			conditions = append(conditions, bson.M{"$or": []bson.M{
+				{"lastProjection.overallState": StateUnknown},
+				{"lastProjection": bson.M{"$exists": false}},
+			}})
+		} else {
+			conditions = append(conditions, bson.M{"lastProjection.overallState": filter.Overall})
+		}
+	}
+	for _, layer := range filter.Layers {
+		conditions = append(conditions, bson.M{"lastProjection." + layer + "Measured": true})
+	}
+	switch len(conditions) {
+	case 0:
+		return bson.M{}
+	case 1:
+		return conditions[0]
+	default:
+		return bson.M{"$and": conditions}
+	}
+}
+
+// listTargetsByRisk orders the duty queue by persisted risk rank.
+//
+// Rank is resolved with $ifNull so a target without a projection sorts as
+// unknown instead of jumping ahead of a failing target. Ties fall back to
+// recency and then identity, which keeps the order total and the cursor
+// stable.
+func (r *Repository) listTargetsByRisk(ctx context.Context, base bson.M, rawCursor string, limit int) ([]HealthTarget, *string, bool, error) {
+	pipeline := mongo.Pipeline{
+		bson.D{{Key: "$match", Value: base}},
+		bson.D{{Key: "$addFields", Value: bson.M{
+			"riskSortRank": bson.M{"$ifNull": bson.A{"$lastProjection.riskRank", RiskUnknown}},
+		}}},
+	}
+	if rawCursor != "" {
+		var cur CursorData
+		if err := decodeCursor(rawCursor, &cur); err != nil {
+			return nil, nil, false, err
+		}
+		if cur.Rank == nil {
+			return nil, nil, false, errors.New("cursor does not carry a risk sort key")
+		}
+		pipeline = append(pipeline, bson.D{{Key: "$match", Value: bson.M{"$or": []bson.M{
+			{"riskSortRank": bson.M{"$lt": *cur.Rank}},
+			{"riskSortRank": *cur.Rank, "updatedAt": bson.M{"$lt": cur.At}},
+			{"riskSortRank": *cur.Rank, "updatedAt": cur.At, "_id": bson.M{"$lt": cur.ID}},
+		}}}})
+	}
+	pipeline = append(pipeline,
+		bson.D{{Key: "$sort", Value: bson.D{
+			{Key: "riskSortRank", Value: -1},
+			{Key: "updatedAt", Value: -1},
+			{Key: "_id", Value: -1},
+		}}},
+		bson.D{{Key: "$limit", Value: int64(limit + 1)}},
+	)
+
+	cursor, err := r.targets.Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, nil, false, err
+	}
+	var items []HealthTarget
+	if err := cursor.All(ctx, &items); err != nil {
+		return nil, nil, false, err
+	}
+	for i := range items {
+		ProjectIdentityState(&items[i])
+	}
+	return paginateTargetsByRisk(items, limit)
 }
 
 // UpdateTarget applies a revision-bound mutation.
@@ -447,22 +542,37 @@ func (r *Repository) RecordCollection(ctx context.Context, target *HealthTarget,
 		}
 	}
 
-	now := time.Now().UTC().Format(time.RFC3339Nano)
+	now := time.Now().UTC()
 	set := bson.M{
-		"lastAttemptAt": now,
+		"lastAttemptAt": now.Format(time.RFC3339Nano),
 	}
+	// The projection is computed from the exact target state this write
+	// persists, so the ordering fields can never disagree with the stored
+	// timestamps.
+	updated := *target
+	updated.LastAttemptAt = now.Format(time.RFC3339Nano)
 	if result.Run.Status == RunStatusSuccess {
-		set["lastSuccessAt"] = now
+		set["lastSuccessAt"] = updated.LastAttemptAt
 		set["lastError"] = ""
+		updated.LastSuccessAt = updated.LastAttemptAt
+		updated.LastError = ""
 	} else {
 		set["lastError"] = result.Run.ErrorSummary
+		updated.LastError = result.Run.ErrorSummary
 	}
 	// Only an accepted valid measurement advances lastMeasuredAt. A failed
 	// run never overwrites the previous valid measurement, even when the
 	// collector emitted a partially measured sample during that run.
-	if result.Sample != nil && result.Run.Status != RunStatusFailed && measurementAccepted(result.Sample) {
-		set["lastMeasuredAt"] = result.Sample.CollectedAt
+	var layers *LayerSet
+	if result.Sample != nil {
+		sampleLayers := result.Sample.Layers
+		layers = &sampleLayers
+		if result.Run.Status != RunStatusFailed && measurementAccepted(result.Sample) {
+			set["lastMeasuredAt"] = result.Sample.CollectedAt
+			updated.LastMeasuredAt = result.Sample.CollectedAt
+		}
 	}
+	set["lastProjection"] = BuildTargetProjection(&updated, layers, now)
 	_, err := r.targets.UpdateOne(ctx, bson.M{"_id": target.TargetID}, bson.M{"$set": set})
 	return err
 }
@@ -540,6 +650,13 @@ func encodeCursor(at, id string) string {
 	return base64.URLEncoding.EncodeToString(b)
 }
 
+// encodeRiskCursor carries the risk rank alongside the recency keys so the next
+// page continues inside the same rank band.
+func encodeRiskCursor(rank int, at, id string) string {
+	b, _ := json.Marshal(CursorData{At: at, ID: id, Rank: &rank})
+	return base64.URLEncoding.EncodeToString(b)
+}
+
 func decodeCursor(raw string, out *CursorData) error {
 	data, err := base64.URLEncoding.DecodeString(raw)
 	if err != nil {
@@ -559,6 +676,26 @@ func paginateTargets(items []HealthTarget, limit int) ([]HealthTarget, *string, 
 		items = items[:limit]
 		last := items[limit-1]
 		enc := encodeCursor(last.UpdatedAt, last.TargetID)
+		next = &enc
+	}
+	if items == nil {
+		items = []HealthTarget{}
+	}
+	return items, next, hasMore, nil
+}
+
+func paginateTargetsByRisk(items []HealthTarget, limit int) ([]HealthTarget, *string, bool, error) {
+	hasMore := false
+	var next *string
+	if len(items) > limit {
+		hasMore = true
+		items = items[:limit]
+		last := items[limit-1]
+		rank := RiskUnknown
+		if last.LastProjection != nil {
+			rank = last.LastProjection.RiskRank
+		}
+		enc := encodeRiskCursor(rank, last.UpdatedAt, last.TargetID)
 		next = &enc
 	}
 	if items == nil {

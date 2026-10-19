@@ -51,6 +51,9 @@ func newUUID() string {
 type CursorData struct {
 	At string `json:"at"`
 	ID string `json:"id"`
+	// Rank is present only for the risk ordering. A risk cursor without it (or
+	// a recency cursor carrying it) is rejected rather than reinterpreted.
+	Rank *int `json:"rk,omitempty"`
 }
 
 func encodeCursor(at, id string) *string {
@@ -58,6 +61,17 @@ func encodeCursor(at, id string) *string {
 		return nil
 	}
 	raw, _ := json.Marshal(CursorData{At: at, ID: id})
+	s := base64.RawURLEncoding.EncodeToString(raw)
+	return &s
+}
+
+// encodeRiskCursor carries the risk rank with the trigger instant so the next
+// page continues inside the same rank band.
+func encodeRiskCursor(rank int, at, id string) *string {
+	if at == "" || id == "" {
+		return nil
+	}
+	raw, _ := json.Marshal(CursorData{At: at, ID: id, Rank: &rank})
 	s := base64.RawURLEncoding.EncodeToString(raw)
 	return &s
 }
@@ -316,13 +330,30 @@ func (r *Repository) GetAlert(ctx context.Context, alertID string) (*Alert, erro
 // ListAlerts returns a keyset-paginated alert listing.
 func (r *Repository) ListAlerts(ctx context.Context, filter AlertListFilter) ([]Alert, *string, bool, error) {
 	query := bson.M{}
-	switch filter.State {
-	case "", AlertStateActive, AlertStateAcknowledged, AlertStateResolved:
-		if filter.State != "" {
-			query["state"] = filter.State
+	if filter.Scope != "" && filter.State != "" {
+		return nil, nil, false, validationError("NF_ALERT_INVALID_SCOPE", "scope cannot be combined with state")
+	}
+	switch filter.Scope {
+	case "":
+		switch filter.State {
+		case "", AlertStateActive, AlertStateAcknowledged, AlertStateResolved:
+			if filter.State != "" {
+				query["state"] = filter.State
+			}
+		default:
+			return nil, nil, false, validationError("NF_ALERT_INVALID_STATE_FILTER", "state must be active, acknowledged or resolved")
 		}
+	case AlertScopeOpen:
+		// The duty queue is everything still demanding attention. The two
+		// states stay distinct in the payload; this filter only selects them.
+		query["state"] = bson.M{"$in": bson.A{AlertStateActive, AlertStateAcknowledged}}
+	case AlertScopeHistory:
+		query["state"] = AlertStateResolved
 	default:
-		return nil, nil, false, validationError("NF_ALERT_INVALID_STATE_FILTER", "state must be active, acknowledged or resolved")
+		return nil, nil, false, validationError("NF_ALERT_INVALID_SCOPE", "scope must be open or history")
+	}
+	if filter.Sort != "" && filter.Sort != AlertSortUpdated && filter.Sort != AlertSortRisk {
+		return nil, nil, false, validationError("NF_ALERT_INVALID_SORT", "sort must be updated or risk")
 	}
 	if filter.Severity != "" {
 		switch filter.Severity {
@@ -343,10 +374,23 @@ func (r *Repository) ListAlerts(ctx context.Context, filter AlertListFilter) ([]
 	if limit <= 0 {
 		limit = DefaultPageLimit
 	}
+	if filter.Sort == AlertSortRisk {
+		return r.listAlertsByRisk(ctx, query, filter.Cursor, limit)
+	}
 	findOpts := options.Find().SetSort(bson.D{
 		{Key: "updatedAt", Value: -1},
 		{Key: "_id", Value: -1},
 	}).SetLimit(int64(limit + 1))
+
+	if filter.Cursor != "" {
+		decoded, decodeErr := decodeCursor(filter.Cursor)
+		if decodeErr != nil {
+			return nil, nil, false, decodeErr
+		}
+		if decoded.Rank != nil {
+			return nil, nil, false, validationError("NF_ALERT_INVALID_CURSOR", "cursor belongs to a different sort order")
+		}
+	}
 
 	cursor, err := r.alerts.Find(ctx, query, findOpts)
 	if err != nil {
@@ -366,6 +410,114 @@ func (r *Repository) ListAlerts(ctx context.Context, filter AlertListFilter) ([]
 	if hasMore && len(docs) > 0 {
 		last := docs[len(docs)-1]
 		next = encodeCursor(last.UpdatedAt, last.AlertID)
+	}
+	return docs, next, hasMore, nil
+}
+
+// alertRiskRank orders the duty queue: open critical work first, resolved
+// informational work last. Rank is a sort key only; it is never returned as a
+// health or severity claim.
+func alertRiskRank(state, severity string) int {
+	return alertStateRank(state)*10 + alertSeverityRank(severity)
+}
+
+func alertStateRank(state string) int {
+	switch state {
+	case AlertStateActive:
+		return 0
+	case AlertStateAcknowledged:
+		return 1
+	case AlertStateResolved:
+		return 2
+	default:
+		return 9
+	}
+}
+
+func alertSeverityRank(severity string) int {
+	switch severity {
+	case SeverityCritical:
+		return 0
+	case SeverityWarning:
+		return 1
+	case SeverityInfo:
+		return 2
+	default:
+		return 9
+	}
+}
+
+// listAlertsByRisk orders by the compound duty rank.
+//
+// The rank is computed inside the pipeline so the ordering needs no extra
+// stored field, and ties fall back to the trigger instant and identity, which
+// keeps the keyset cursor total and stable.
+func (r *Repository) listAlertsByRisk(ctx context.Context, query bson.M, rawCursor string, limit int) ([]Alert, *string, bool, error) {
+	pipeline := mongo.Pipeline{
+		bson.D{{Key: "$match", Value: query}},
+		bson.D{{Key: "$addFields", Value: bson.M{"riskSortRank": bson.M{"$add": bson.A{
+			bson.M{"$multiply": bson.A{bson.M{"$switch": bson.M{
+				"branches": bson.A{
+					bson.M{"case": bson.M{"$eq": bson.A{"$state", AlertStateActive}}, "then": 0},
+					bson.M{"case": bson.M{"$eq": bson.A{"$state", AlertStateAcknowledged}}, "then": 1},
+					bson.M{"case": bson.M{"$eq": bson.A{"$state", AlertStateResolved}}, "then": 2},
+				},
+				"default": 9,
+			}}, 10}},
+			bson.M{"$switch": bson.M{
+				"branches": bson.A{
+					bson.M{"case": bson.M{"$eq": bson.A{"$severity", SeverityCritical}}, "then": 0},
+					bson.M{"case": bson.M{"$eq": bson.A{"$severity", SeverityWarning}}, "then": 1},
+					bson.M{"case": bson.M{"$eq": bson.A{"$severity", SeverityInfo}}, "then": 2},
+				},
+				"default": 9,
+			}},
+		}}}}},
+	}
+	if rawCursor != "" {
+		cur, err := decodeCursor(rawCursor)
+		if err != nil {
+			return nil, nil, false, err
+		}
+		if cur.Rank == nil {
+			return nil, nil, false, validationError("NF_ALERT_INVALID_CURSOR", "cursor does not carry a risk sort key")
+		}
+		pipeline = append(pipeline, bson.D{{Key: "$match", Value: bson.M{"$or": []bson.M{
+			{"riskSortRank": bson.M{"$gt": *cur.Rank}},
+			{"riskSortRank": *cur.Rank, "lastTriggeredAt": bson.M{"$lt": cur.At}},
+			{"riskSortRank": *cur.Rank, "lastTriggeredAt": cur.At, "_id": bson.M{"$lt": cur.ID}},
+		}}}})
+	}
+	pipeline = append(pipeline,
+		bson.D{{Key: "$sort", Value: bson.D{
+			{Key: "riskSortRank", Value: 1},
+			{Key: "lastTriggeredAt", Value: -1},
+			{Key: "_id", Value: -1},
+		}}},
+		bson.D{{Key: "$limit", Value: int64(limit + 1)}},
+	)
+
+	cursor, err := r.alerts.Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, nil, false, err
+	}
+	defer cursor.Close(ctx)
+
+	var docs []Alert
+	if err := cursor.All(ctx, &docs); err != nil {
+		return nil, nil, false, err
+	}
+	hasMore := len(docs) > limit
+	if hasMore {
+		docs = docs[:limit]
+	}
+	var next *string
+	if hasMore && len(docs) > 0 {
+		last := docs[len(docs)-1]
+		next = encodeRiskCursor(alertRiskRank(last.State, last.Severity), last.LastTriggeredAt, last.AlertID)
+	}
+	if docs == nil {
+		docs = []Alert{}
 	}
 	return docs, next, hasMore, nil
 }

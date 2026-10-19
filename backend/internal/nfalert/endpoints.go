@@ -265,7 +265,9 @@ func (h *Handler) ListAlerts(w http.ResponseWriter, r *http.Request) {
 	}
 	q := r.URL.Query()
 	for param := range q {
-		if param != "state" && param != "severity" && param != "q" && param != "limit" && param != "cursor" {
+		switch param {
+		case "state", "scope", "severity", "sort", "q", "limit", "cursor":
+		default:
 			response.BadRequest(w, "unsupported query parameter: "+param, "UNSUPPORTED_QUERY_PARAMETER")
 			return
 		}
@@ -276,13 +278,31 @@ func (h *Handler) ListAlerts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	state := strings.TrimSpace(q.Get("state"))
+	scope := strings.TrimSpace(q.Get("scope"))
 	severity := strings.TrimSpace(q.Get("severity"))
+	sortOrder := strings.TrimSpace(q.Get("sort"))
 	if err := ValidateAlertStateFilter(state); err != nil {
 		writeValidation(w, err)
 		return
 	}
 	if err := ValidateAlertSeverityFilter(severity); err != nil {
 		writeValidation(w, err)
+		return
+	}
+	if scope != "" && scope != AlertScopeOpen && scope != AlertScopeHistory {
+		response.BadRequest(w, "scope must be open or history", "INVALID_QUERY_PARAMETER")
+		return
+	}
+	// "open, but only resolved" is a contradiction, not a filter.
+	if scope != "" && state != "" {
+		response.BadRequest(w, "scope cannot be combined with state", "UNSUPPORTED_QUERY_COMBINATION")
+		return
+	}
+	if sortOrder == "" {
+		sortOrder = AlertSortUpdated
+	}
+	if sortOrder != AlertSortUpdated && sortOrder != AlertSortRisk {
+		response.BadRequest(w, "sort must be updated or risk", "INVALID_QUERY_PARAMETER")
 		return
 	}
 	cursor, err := decodeCursor(q.Get("cursor"))
@@ -300,7 +320,9 @@ func (h *Handler) ListAlerts(w http.ResponseWriter, r *http.Request) {
 
 	alerts, next, hasMore, err := h.repo.ListAlerts(r.Context(), AlertListFilter{
 		State:    state,
+		Scope:    scope,
 		Severity: severity,
+		Sort:     sortOrder,
 		Query:    strings.TrimSpace(q.Get("q")),
 		Limit:    limit,
 		Cursor:   strings.TrimSpace(q.Get("cursor")),

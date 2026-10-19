@@ -970,3 +970,70 @@
   .pager { align-items: stretch; flex-direction: column; }
   .pagerControls { justify-content: space-between; }
 }
+
+/* In-page view switch. One representation at a time: the duty view and the
+ * audit view are never rendered together. */
+.viewToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-control);
+  background: var(--surface-field);
+}
+
+.viewToggle button {
+  min-height: calc(var(--control-height) - 6px);
+  padding: 0 0.75rem;
+  border: 0;
+  border-radius: var(--ref-radius-small);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.viewToggle button:hover {
+  color: inherit;
+}
+
+.viewToggle button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.viewToggleActive {
+  background: var(--surface);
+  color: var(--text-primary, inherit);
+  font-weight: 600;
+}
+
+/* The whole card is the affordance: a real button so Enter and Space open the
+ * drawer, with the detail link kept outside it to avoid nested controls. */
+.targetCardMain {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.targetCardMain:focus-visible {
+  outline: none;
+  border-radius: var(--ref-radius-small);
+  box-shadow: var(--focus-ring);
+}
+
+.targetCardStatus {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}

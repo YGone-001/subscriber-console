@@ -203,8 +203,23 @@ async function main() {
         check(`nf_health_title_visible:${sizeName}-${theme}`, await page.locator('h1').first().isVisible(), 'page title');
         const bodyText = await page.locator('body').innerText();
         check(`fixture_targets_render:${sizeName}-${theme}`, /AMF core-01 metrics/.test(bodyText) && /SMF core-01 metrics/.test(bodyText), 'target names');
-        check(`collection_mode_render:${sizeName}-${theme}`, /scheduled/i.test(bodyText) && /manual/i.test(bodyText), 'collection modes');
-        check(`freshness_render:${sizeName}-${theme}`, /last measured|Last measured/i.test(bodyText), 'freshness column');
+        // The default view is the card queue: one representation at a time.
+        check(
+          `card_queue_is_default:${sizeName}-${theme}`,
+          (await page.locator('[data-nf-health-panel="cards"]').count()) === 1 &&
+            (await page.locator('[data-nf-health-panel="table"]').count()) === 0,
+          'cards render, the audit table does not',
+        );
+        check(
+          `card_overall_state:${sizeName}-${theme}`,
+          /healthy|degraded|unhealthy|stale|unknown/i.test(bodyText),
+          'the card reports the server-projected state',
+        );
+        check(
+          `risk_order_disclosed:${sizeName}-${theme}`,
+          /Risk first/i.test(bodyText),
+          'the scan order is a server contract and is stated in the toolbar',
+        );
         check(`theme_applied:${sizeName}-${theme}`, (await page.evaluate(() => document.documentElement.dataset.theme)) === theme, theme);
         await assertNoRawKeys(page, `${sizeName}-${theme}`);
         await assertNoHorizontalOverflow(page, `${sizeName}-${theme}`);
@@ -221,6 +236,37 @@ async function main() {
         });
         await context.close();
       }
+    }
+
+    /* Cards and the audit table are exclusive: asking for the table must
+     * replace the queue rather than append a second representation. */
+    {
+      const { context, page } = await newSession(browser, {
+        ...VIEWPORTS.desktop,
+        theme: 'light',
+        locale: 'en',
+        session: 'operator',
+      });
+      await page.goto(`${origin}${listRoute}?view=table`, { waitUntil: 'domcontentloaded' });
+      await settle(page, 'Add Monitoring Target');
+      const tableText = await page.locator('body').innerText();
+      check(
+        'table_view_renders_audit_columns',
+        /Last measured/i.test(tableText) && /Collection Mode/i.test(tableText),
+        'audit columns stay available',
+      );
+      check(
+        'table_view_hides_cards',
+        (await page.locator('[data-nf-health-panel="cards"]').count()) === 0,
+        'only one representation at a time',
+      );
+      check(
+        'table_view_keeps_the_server_order',
+        /Risk first/i.test(tableText),
+        'the table keeps the same scan order as the queue',
+      );
+      await assertNoHorizontalOverflow(page, 'table-view');
+      await context.close();
     }
 
     /* ===================== B. NF Health target detail ====================== */

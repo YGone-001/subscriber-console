@@ -272,6 +272,15 @@ type HealthTarget struct {
 	LastSuccessAt  string `json:"lastSuccessAt,omitempty" bson:"lastSuccessAt,omitempty"`
 	LastMeasuredAt string `json:"lastMeasuredAt,omitempty" bson:"lastMeasuredAt,omitempty"`
 	LastError      string `json:"lastError,omitempty" bson:"lastError,omitempty"`
+	// LastProjection is the persisted projection of the latest accepted
+	// measurement: overall state, duty-queue rank and layer coverage.
+	//
+	// It is internal bookkeeping, not a second health model: the collector
+	// rewrites it from the same helpers the read projection uses, and a target
+	// written before the field existed decodes with no projection and is read
+	// as unknown, never as healthy. It stays out of the JSON surface because
+	// the read projection already reports the same facts.
+	LastProjection *TargetProjection `json:"-" bson:"lastProjection,omitempty"`
 }
 
 // HealthRun records one bounded collection execution. ResourceID retains the
@@ -366,8 +375,16 @@ type MutableTarget struct {
 type TargetListFilter struct {
 	Query   string
 	Enabled string // "", "true", "false"
-	Limit   int
-	Cursor  string
+	// Domain and Overall are exact predicates over server-owned stored fields.
+	// Overall reads the persisted projection; a target without one is unknown.
+	Domain  string
+	Overall string
+	// Layers requires every listed layer (l1, l2, l3) to be measured.
+	Layers []string
+	// Sort selects the ordering: "" / "updated" recency, "risk" duty queue.
+	Sort   string
+	Limit  int
+	Cursor string
 	// ResourceIDs is the bounded authoritative association lookup: when set,
 	// only targets associated with those canonical Inventory resource
 	// identifiers are returned, without pagination. The caller (the handler) is

@@ -331,9 +331,13 @@ for (const [label, pattern] of securityChecks) {
 const pageFiles = featureFiles.filter((f) => /Page\.tsx$/.test(f));
 for (const page of pageFiles) {
   const text = readFileSync(page, 'utf8');
-  for (const primitive of ['PageHeader']) {
-    assert.ok(text.includes(primitive), `${page} must reuse ${primitive}`);
-  }
+  // The operations surfaces share one page chrome: OperationsPageFrame renders
+  // PageHeader, the workbench tabs and the single refresh entry. A page is
+  // compliant when it composes the frame; direct PageHeader use still counts.
+  assert.ok(
+    text.includes('OperationsPageFrame') || text.includes('PageHeader'),
+    `${page} must reuse the shared page chrome`,
+  );
 }
 
 // 9. Semantic separation evidence in docs and source

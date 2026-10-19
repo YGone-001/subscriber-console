@@ -174,12 +174,30 @@ type RuleListFilter struct {
 
 // AlertListFilter filters alert listings.
 type AlertListFilter struct {
+	// State selects exactly one lifecycle state. Scope selects the duty queue
+	// (open) or the resolved history, and the two are mutually exclusive so a
+	// request can never ask for "open, but only resolved".
 	State    string // "", active, acknowledged, resolved
+	Scope    string // "", open, history
 	Severity string
 	Query    string
-	Limit    int
-	Cursor   string
+	// Sort selects the ordering: "" / "updated" recency, "risk" duty queue.
+	Sort   string
+	Limit  int
+	Cursor string
 }
+
+// Alert list scope vocabulary.
+const (
+	AlertScopeOpen    = "open"
+	AlertScopeHistory = "history"
+)
+
+// Alert list sort vocabulary.
+const (
+	AlertSortUpdated = "updated"
+	AlertSortRisk    = "risk"
+)
 
 // PageInfo mirrors the operations-domain pagination envelope.
 type PageInfo struct {

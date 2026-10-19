@@ -112,6 +112,14 @@ export interface HealthTarget {
 export interface HealthTargetSummary extends HealthTarget {
   coverage: CoverageSummary;
   freshness: FreshnessProjection;
+  // Server-derived projection of the latest accepted measurement. overallState
+  // is the same value the detail endpoint reports; a target without evidence
+  // reports "unknown" rather than an implied healthy.
+  overallState?: string;
+  statusComplete?: boolean;
+  layers?: LayerSet;
+  lastRunStatus?: RunStatus;
+  lastRunAt?: string;
 }
 
 export interface HealthRun {
@@ -252,6 +260,14 @@ export interface UpdateNfHealthTargetRequest {
 export interface NfHealthTargetQueryParams {
   q?: string;
   enabled?: string;
+  /* Exact domain predicate (epc, 5gc, ims, charging). */
+  domain?: string;
+  /* Canonical overall state predicate, read from the server projection. */
+  state?: string;
+  /* Comma-separated layer coverage requirement (l1, l2, l3). */
+  layers?: string;
+  /* "risk" orders the duty queue, "updated" keeps recency order. */
+  sort?: string;
   cursor?: string;
   limit?: number;
 }

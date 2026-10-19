@@ -324,7 +324,9 @@ func (h *Handler) ListTargets(w http.ResponseWriter, r *http.Request) {
 	}
 	q := r.URL.Query()
 	for param := range q {
-		if param != "q" && param != "limit" && param != "cursor" && param != "enabled" && param != "resourceIds" {
+		switch param {
+		case "q", "limit", "cursor", "enabled", "resourceIds", "domain", "state", "layers", "sort":
+		default:
 			response.BadRequest(w, "unsupported query parameter: "+param, "UNSUPPORTED_QUERY_PARAMETER")
 			return
 		}
@@ -339,6 +341,31 @@ func (h *Handler) ListTargets(w http.ResponseWriter, r *http.Request) {
 		response.BadRequest(w, "enabled must be true or false", "INVALID_QUERY_PARAMETER")
 		return
 	}
+	domain := strings.TrimSpace(q.Get("domain"))
+	if len(domain) > 64 {
+		response.BadRequest(w, "domain is too long", "INVALID_QUERY_PARAMETER")
+		return
+	}
+	overall := strings.TrimSpace(q.Get("state"))
+	if overall != "" && !isCanonicalOverallState(overall) {
+		response.BadRequest(w,
+			"state must be healthy, degraded, unhealthy, stale, unknown or not_configured",
+			"INVALID_QUERY_PARAMETER")
+		return
+	}
+	layers, layerErr := parseLayerFilter(q.Get("layers"))
+	if layerErr != nil {
+		writeValidation(w, layerErr)
+		return
+	}
+	sortOrder := strings.TrimSpace(q.Get("sort"))
+	if sortOrder == "" {
+		sortOrder = TargetSortUpdated
+	}
+	if sortOrder != TargetSortUpdated && sortOrder != TargetSortRisk {
+		response.BadRequest(w, "sort must be updated or risk", "INVALID_QUERY_PARAMETER")
+		return
+	}
 
 	// Bounded authoritative association lookup. The resource filter answers
 	// "which of these Inventory resources have a monitoring target?" and must
@@ -351,9 +378,14 @@ func (h *Handler) ListTargets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if filtered {
-		if q.Get("cursor") != "" || strings.TrimSpace(q.Get("q")) != "" || enabled != "" {
+		// The association lookup answers "which of these resources have a
+		// target" and must return the whole requested set. Any narrowing or
+		// ordering parameter could hide a target and turn a confirmed
+		// association into an apparent absence.
+		if q.Get("cursor") != "" || strings.TrimSpace(q.Get("q")) != "" || enabled != "" ||
+			domain != "" || overall != "" || len(layers) > 0 || q.Get("sort") != "" {
 			response.BadRequest(w,
-				"resourceIds cannot be combined with cursor, q or enabled",
+				"resourceIds cannot be combined with cursor, q, enabled, domain, state, layers or sort",
 				"UNSUPPORTED_QUERY_COMBINATION")
 			return
 		}
@@ -368,6 +400,10 @@ func (h *Handler) ListTargets(w http.ResponseWriter, r *http.Request) {
 	items, next, hasMore, err := h.repo.ListTargets(r.Context(), TargetListFilter{
 		Query:       strings.TrimSpace(q.Get("q")),
 		Enabled:     enabled,
+		Domain:      domain,
+		Overall:     overall,
+		Layers:      layers,
+		Sort:        sortOrder,
 		Limit:       limit,
 		Cursor:      strings.TrimSpace(q.Get("cursor")),
 		ResourceIDs: resourceIDs,
@@ -432,6 +468,51 @@ func (h *Handler) ListTargets(w http.ResponseWriter, r *http.Request) {
 		Targets: summaries,
 		Page:    PageInfo{Limit: limit, NextCursor: next, HasMore: hasMore},
 	})
+}
+
+// isCanonicalOverallState reports whether a state token is one this platform
+// publishes. A non-canonical token is rejected instead of returning an empty
+// page that would look like "nothing matches".
+func isCanonicalOverallState(state string) bool {
+	switch state {
+	case StateHealthy, StateDegraded, StateUnhealthy, StateStale, StateUnknown, StateNotConfigured:
+		return true
+	default:
+		return false
+	}
+}
+
+// parseLayerFilter validates the layer coverage filter.
+//
+// Contract: comma-separated l1/l2/l3 tokens, deduplicated, at most three, and
+// every token must be canonical. A filter value is never silently dropped.
+func parseLayerFilter(raw string) ([]string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+	parts := strings.Split(raw, ",")
+	// Duplicates are collapsed below. The raw token count stays bounded so a
+	// pasted list cannot turn into an unbounded parse.
+	if len(parts) > 12 {
+		return nil, validationError("INVALID_LAYER_FILTER", "layers accepts at most l1, l2 and l3")
+	}
+	seen := make(map[string]struct{}, len(parts))
+	layers := make([]string, 0, len(parts))
+	for _, part := range parts {
+		layer := strings.ToLower(strings.TrimSpace(part))
+		switch layer {
+		case "l1", "l2", "l3":
+		default:
+			return nil, validationError("INVALID_LAYER_FILTER", "layers must contain l1, l2 or l3")
+		}
+		if _, ok := seen[layer]; ok {
+			continue
+		}
+		seen[layer] = struct{}{}
+		layers = append(layers, layer)
+	}
+	return layers, nil
 }
 
 // parseResourceIDFilter validates the bounded resourceIds association lookup.

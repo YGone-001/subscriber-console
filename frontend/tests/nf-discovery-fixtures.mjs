@@ -343,7 +343,7 @@ const MONITORING_FILTERS = {
  * by the Inventory read, the monitoring predicate is page-scoped, and the
  * cursor envelope is always present.
  */
-function projectOperationsResources(url) {
+export function projectOperationsResources(url) {
   const limit = Number(url.searchParams.get('limit') ?? 20) || 20;
   const q = (url.searchParams.get('q') ?? '').trim().toLowerCase();
   const domain = url.searchParams.get('domain') ?? '';

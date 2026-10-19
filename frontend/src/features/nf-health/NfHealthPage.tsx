@@ -1,10 +1,15 @@
 /*
- * NF Health monitoring dashboard.
+ * NF Health duty view.
  *
- * Surfaces configured monitoring targets with layered collection coverage.
- * Layer state is never collapsed into a single global health percentage, and
- * unsupported layers stay visibly distinct from measured healthy layers.
- * Registry observation, process state and metrics coverage remain separate.
+ * The page answers one question first: which monitoring targets need attention
+ * right now. Cards and the audit table are exclusive in-page views, the default
+ * order is the server-defined risk order, and every filter lives in the URL so a
+ * reload, a back/forward step or a shared link restores the same queue.
+ *
+ * Layer state is never collapsed into one global health percentage, and an
+ * unsupported layer stays visibly distinct from a measured healthy one.
+ * Registry observation, process state and metric coverage remain separate
+ * facts.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -33,8 +38,7 @@ import { useAuth } from '../../providers/AuthProvider';
 import { useI18n } from '../../providers/I18nProvider';
 import { useRead } from '../../lib/api/use-read';
 import { MutationApiError } from '../../lib/api/mutation-client';
-import { fetchDiscoveryCandidates } from '../discovery/discovery-api';
-import type { NfObservation } from '../discovery/discovery-types';
+import { OPERATIONAL_DOMAINS } from '../operations/operational-model';
 import type { RuntimeComponent, RuntimeObservations } from '../runtime/runtime-types';
 import { resolveRuntimeObservations, useRuntimeStream } from '../runtime/use-runtime-stream';
 import {
@@ -42,6 +46,18 @@ import {
   fetchNfHealthMeta,
   fetchNfHealthTargets,
 } from './nf-health-api';
+import {
+  DEFAULT_HEALTH_SORT,
+  HEALTH_LAYER_FILTERS,
+  HEALTH_OVERALL_STATES,
+  HEALTH_SORTS,
+  HEALTH_URL_KEYS,
+  HEALTH_VIEWS,
+  hasHealthFilters,
+  healthTargetQuery,
+  healthView,
+  readHealthFilters,
+} from './nf-health-filters';
 import type {
   HealthTargetSummary,
   LayerState,
@@ -66,7 +82,6 @@ export function NfHealthPage() {
 
   const [meta, setMeta] = useState<NfHealthMeta | null>(null);
   const [targets, setTargets] = useState<HealthTargetSummary[]>([]);
-  const [candidates, setCandidates] = useState<NfObservation[]>([]);
   const [loading, setLoading] = useState(true);
   const [targetsError, setTargetsError] = useState<string | null>(null);
   const [targetsPage, setTargetsPage] = useState<PageInfo | null>(null);
@@ -76,18 +91,22 @@ export function NfHealthPage() {
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [collectingId, setCollectingId] = useState<string | null>(null);
 
-  /* UX-1: the query, the enabled filter and the page cursor live in the URL, so
-   * reload, back/forward and a shared link restore the same target list. */
-  const url = useOperationsUrlState({ keys: ['q', 'state'] });
-  const searchQuery = url.filters.q ?? '';
-  const enabledFilter =
-    url.filters.state === 'enabled' ? 'true' : url.filters.state === 'disabled' ? 'false' : '';
-  const [searchInput, setSearchInput] = useState(searchQuery);
+  /* The view, every filter and the page cursor live in the URL. A filter change
+   * drops the cursor through the shared contract, so page N of a discarded
+   * filter set can never be requested. */
+  const url = useOperationsUrlState({
+    keys: HEALTH_URL_KEYS,
+    views: HEALTH_VIEWS,
+    defaultView: 'cards',
+  });
+  const view = healthView(url.view);
+  const filters = useMemo(() => readHealthFilters(url.filters), [url.filters]);
+  const [searchInput, setSearchInput] = useState(filters.q);
 
   // Keep the visible query in step with the URL (back/forward, shared link).
   useEffect(() => {
-    setSearchInput(searchQuery);
-  }, [searchQuery]);
+    setSearchInput(filters.q);
+  }, [filters.q]);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [drawerTarget, setDrawerTarget] = useState<HealthTargetSummary | null>(null);
@@ -102,19 +121,11 @@ export function NfHealthPage() {
     setSummaryLoading(true);
     setTargetsCursorHistory([]);
     // Section-split error boundaries: a failed targets load never blanks the
-    // full-collection KPI strip, and a failed summary section only degrades
-    // the KPI strip to explicit unavailable labels, never to page-scoped
-    // counts. Discovery candidates are auxiliary row enrichment; their
-    // failure degrades enrichment only and never blanks the target table.
-    const [metaRes, targetsRes, candidatesRes, summaryRes] = await Promise.allSettled([
+    // full-collection KPI strip, and a failed summary section only degrades the
+    // KPI strip to explicit unavailable labels, never to page-scoped counts.
+    const [metaRes, targetsRes, summaryRes] = await Promise.allSettled([
       fetchNfHealthMeta(),
-      fetchNfHealthTargets({
-        q: searchQuery || undefined,
-        enabled: enabledFilter || undefined,
-        cursor: activeCursor,
-        limit: PAGE_LIMIT,
-      }),
-      fetchDiscoveryCandidates({ limit: PAGE_LIMIT }),
+      fetchNfHealthTargets(healthTargetQuery(filters, activeCursor, PAGE_LIMIT)),
       fetchOperationsSummary(['health']),
     ]);
     setMeta(metaRes.status === 'fulfilled' ? metaRes.value : null);
@@ -126,24 +137,18 @@ export function NfHealthPage() {
       setTargetsPage(null);
       setTargetsError(describeLoadError(targetsRes.reason, t));
     }
-    setCandidates(candidatesRes.status === 'fulfilled' ? (candidatesRes.value.candidates ?? []) : []);
     setSummary(summaryRes.status === 'fulfilled' ? (summaryRes.value.health ?? null) : null);
     setSummaryLoading(false);
     setLoading(false);
-  }, [searchQuery, enabledFilter, t]);
+  }, [filters, t]);
 
   // Cursor pager loads refresh exactly one bounded list; the full-collection
-  // summary and enrichment candidates stay untouched.
+  // summary stays untouched, so a page step never changes the KPI strip.
   const loadTargetsPage = useCallback(async (cursor: string | undefined) => {
     setLoading(true);
     setTargetsError(null);
     try {
-      const res = await fetchNfHealthTargets({
-        q: searchQuery || undefined,
-        enabled: enabledFilter || undefined,
-        cursor,
-        limit: PAGE_LIMIT,
-      });
+      const res = await fetchNfHealthTargets(healthTargetQuery(filters, cursor, PAGE_LIMIT));
       setTargets(res.targets ?? []);
       setTargetsPage(res.page ?? null);
     } catch (err) {
@@ -153,7 +158,7 @@ export function NfHealthPage() {
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, enabledFilter, t]);
+  }, [filters, t]);
 
   /* Deep links and browser back/forward load the page named by the URL cursor.
    * A pager click already fetched that page and is skipped through the ref, so a
@@ -208,11 +213,16 @@ export function NfHealthPage() {
   const handleSearchSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     const next = searchInput.trim();
-    if (next === searchQuery) {
+    if (next === filters.q) {
       void loadAll(url.cursor);
       return;
     }
     url.setFilter('q', next);
+  };
+
+  const handleClearFilters = () => {
+    setSearchInput('');
+    url.setFilters({ q: null, enabled: null, domain: null, state: null, layers: null, sort: null });
   };
 
   const handleCollect = async (target: HealthTargetSummary) => {
@@ -239,14 +249,6 @@ export function NfHealthPage() {
     }
   };
 
-  const candidateIndex = useMemo(() => {
-    const map = new Map<string, NfObservation>();
-    for (const candidate of candidates) {
-      map.set(candidate.candidateId, candidate);
-    }
-    return map;
-  }, [candidates]);
-
   // Runtime components supply process evidence (CPU sample deltas, RSS) for
   // bound targets. Unavailable measurements stay unavailable and are never
   // rendered as zeros.
@@ -267,16 +269,9 @@ export function NfHealthPage() {
   }, [runtimeData]);
 
   const resolveRuntimeComponent = useCallback(
-    (target: HealthTargetSummary, candidate?: NfObservation): RuntimeComponent | undefined => {
-      const role = target.resourceId
-        ? undefined
-        : candidate?.nfType;
-      if (role) {
-        const byRole = runtimeByRole.get(role);
-        if (byRole) return byRole;
-      }
-      const nfType = target.nfType ?? candidate?.nfType;
-      return nfType ? runtimeByNfType.get(nfType) : undefined;
+    (target: HealthTargetSummary): RuntimeComponent | undefined => {
+      const nfType = target.nfType;
+      return nfType ? runtimeByNfType.get(nfType) ?? runtimeByRole.get(nfType) : undefined;
     },
     [runtimeByRole, runtimeByNfType],
   );
@@ -284,8 +279,8 @@ export function NfHealthPage() {
   const domainGroups = useMemo(() => {
     const groups = new Map<string, HealthTargetSummary[]>();
     for (const target of targets) {
-      // Domain is a server-derived projection over the authoritative
-      // Inventory identity. It is never inferred from candidate data here.
+      // Domain is a server-derived projection over the authoritative Inventory
+      // identity. It is never inferred here.
       const key = target.domain ?? 'unknown';
       const list = groups.get(key) ?? [];
       list.push(target);
@@ -300,16 +295,34 @@ export function NfHealthPage() {
       }));
   }, [targets, t]);
 
-  // KPIs come from the full-collection summary section, never from the
-  // current page arrays. A page-scoped count must never be presented as a
-  // platform total (UX-0 scope/completeness contract).
+  // KPIs come from the full-collection summary section, never from the current
+  // page arrays. A page-scoped count must never be presented as a platform
+  // total (scope/completeness contract).
   const kpis = useMemo(() => healthKpisFromSummary(summary ?? undefined), [summary]);
+
+  const filtersActive = hasHealthFilters(filters);
 
   return (
     <OperationsPageFrame
       title={t('nf_health_title')}
       description={t('nf_health_description')}
       icon={<Activity size={23} />}
+      viewSwitch={(
+        <div className={styles.viewToggle} role="group" aria-label={t('nf_health_view_label')}>
+          {HEALTH_VIEWS.map((option) => (
+            <button
+              key={option}
+              type="button"
+              data-nf-health-view={option}
+              className={view === option ? styles.viewToggleActive : undefined}
+              aria-pressed={view === option}
+              onClick={() => url.setView(option)}
+            >
+              {option === 'cards' ? t('nf_health_view_cards') : t('nf_health_view_table')}
+            </button>
+          ))}
+        </div>
+      )}
       onRefresh={() => loadAll(url.cursor)}
       actions={
         canConfigure ? (
@@ -320,7 +333,6 @@ export function NfHealthPage() {
         ) : undefined
       }
     >
-
       {feedback ? (
         <OperationFeedback
           tone={feedback.tone}
@@ -381,7 +393,7 @@ export function NfHealthPage() {
         </section>
       )}
 
-      <section className="dash-card">
+      <section className="dash-card" data-nf-health-panel={view}>
         <div className={styles.toolbar}>
           <form className={styles.search} onSubmit={handleSearchSubmit} role="search">
             <Search size={16} className={styles.searchIcon} aria-hidden="true" />
@@ -400,21 +412,69 @@ export function NfHealthPage() {
             <select
               className="form-input"
               aria-label={t('nf_health_filter_enabled')}
-              value={url.filters.state ?? ''}
-              onChange={(event) => url.setFilter('state', event.target.value)}
+              value={filters.enabled}
+              onChange={(event) => url.setFilter('enabled', event.target.value)}
             >
               <option value="">{t('nf_health_filter_all_states')}</option>
-              <option value="enabled">{t('nf_health_enabled')}</option>
-              <option value="disabled">{t('nf_health_disabled')}</option>
+              <option value="true">{t('nf_health_enabled')}</option>
+              <option value="false">{t('nf_health_disabled')}</option>
+            </select>
+            <select
+              className="form-input"
+              aria-label={t('nf_health_filter_domain')}
+              value={filters.domain}
+              onChange={(event) => url.setFilter('domain', event.target.value)}
+            >
+              <option value="">{t('nf_health_filter_all_domains')}</option>
+              {OPERATIONAL_DOMAINS.map((domain) => (
+                <option key={domain} value={domain}>
+                  {t(`ops_domain_${domain}`)}
+                </option>
+              ))}
+            </select>
+            <select
+              className="form-input"
+              aria-label={t('nf_health_filter_overall')}
+              value={filters.overall}
+              onChange={(event) => url.setFilter('state', event.target.value)}
+            >
+              <option value="">{t('nf_health_filter_all_overall')}</option>
+              {HEALTH_OVERALL_STATES.map((state) => (
+                <option key={state} value={state}>
+                  {t(`nf_health_state_${state}`)}
+                </option>
+              ))}
+            </select>
+            <select
+              className="form-input"
+              aria-label={t('nf_health_filter_layers')}
+              value={filters.layer}
+              onChange={(event) => url.setFilter('layers', event.target.value)}
+            >
+              <option value="">{t('nf_health_filter_all_layers')}</option>
+              {HEALTH_LAYER_FILTERS.map((layer) => (
+                <option key={layer} value={layer}>
+                  {t(`nf_health_layer_${layer}_measured_filter`)}
+                </option>
+              ))}
+            </select>
+            <select
+              className="form-input"
+              aria-label={t('nf_health_filter_sort')}
+              value={filters.sort}
+              onChange={(event) => url.setFilter('sort', event.target.value)}
+            >
+              {HEALTH_SORTS.map((sort) => (
+                <option key={sort} value={sort}>
+                  {sort === 'risk' ? t('nf_health_sort_risk') : t('nf_health_sort_updated')}
+                </option>
+              ))}
             </select>
             <button
               type="button"
               className="btn btn-ghost"
-              onClick={() => {
-                setSearchInput('');
-                url.clearFilters();
-              }}
-              disabled={loading}
+              onClick={handleClearFilters}
+              disabled={loading || !filtersActive}
             >
               <X size={14} aria-hidden="true" />
               {t('nf_health_clear_filters')}
@@ -425,9 +485,11 @@ export function NfHealthPage() {
         <div className={styles.sectionHead}>
           <h2>
             <Server size={16} aria-hidden="true" />
-            {t('nf_health_targets_section')}
+            {view === 'cards' ? t('nf_health_card_wall_section') : t('nf_health_targets_section')}
           </h2>
-          <span className={styles.sectionNote}>{t('nf_health_targets_note')}</span>
+          <span className={styles.sectionNote}>
+            {filters.sort === DEFAULT_HEALTH_SORT ? t('nf_health_sort_risk_note') : t('nf_health_targets_note')}
+          </span>
         </div>
         <p className={styles.semanticNote}>{t('nf_health_semantic_separation')}</p>
 
@@ -436,15 +498,15 @@ export function NfHealthPage() {
             <ErrorState title={t('error')} message={targetsError} retryLabel={t('nf_health_retry')} onRetry={() => void loadAll(url.cursor)} />
           </div>
         ) : loading && targets.length === 0 ? (
-          <LoadingRows columns={9} rows={4} />
+          <LoadingRows columns={view === 'cards' ? 4 : 9} rows={4} />
         ) : targets.length === 0 ? (
           <div className={styles.stateWrap}>
             <EmptyState
               icon={<Activity size={44} />}
-              title={t('nf_health_empty_targets_title')}
-              description={t('nf_health_empty_targets_body')}
+              title={filtersActive ? t('nf_health_empty_filtered_title') : t('nf_health_empty_targets_title')}
+              description={filtersActive ? t('nf_health_empty_filtered_body') : t('nf_health_empty_targets_body')}
               action={
-                canConfigure ? (
+                canConfigure && !filtersActive ? (
                   <button type="button" className="btn btn-primary" onClick={() => setDialogOpen(true)}>
                     <Plus size={16} />
                     {t('nf_health_add_target')}
@@ -452,6 +514,86 @@ export function NfHealthPage() {
                 ) : undefined
               }
             />
+          </div>
+        ) : view === 'cards' ? (
+          <div className={styles.cardWall}>
+            {domainGroups.map((group) => (
+              <div key={group.domain} className={styles.cardGroup}>
+                <h3 className={styles.cardGroupTitle}>{group.label}</h3>
+                <div className={styles.cardGrid}>
+                  {group.targets.map((target) => {
+                    const runtimeComponent = resolveRuntimeComponent(target);
+                    return (
+                      <article key={target.targetId} className={styles.targetCard}>
+                        <button
+                          type="button"
+                          className={styles.targetCardMain}
+                          data-nf-health-card={target.targetId}
+                          onClick={() => setDrawerTarget(target)}
+                          aria-label={t('nf_health_open_drawer', { name: target.name })}
+                        >
+                          <header className={styles.targetCardHead}>
+                            <strong className={styles.targetCardName}>{target.name}</strong>
+                            <span className={styles.targetCardType}>{target.nfType ?? '-'}</span>
+                          </header>
+                          <div className={styles.targetCardStatus}>
+                            {overallBadge(target, t)}
+                          </div>
+                          <div className={styles.targetCardBadges}>
+                            {layerBadge(
+                              target.coverage.l1Measured ? 'healthy' : 'unknown',
+                              t,
+                              styles,
+                              target.coverage.l1Measured,
+                              'L1',
+                            )}
+                            {layerBadge(
+                              target.coverage.l2Measured ? 'healthy' : 'unknown',
+                              t,
+                              styles,
+                              target.coverage.l2Measured,
+                              'L2',
+                            )}
+                            {layerBadge(
+                              target.coverage.l3Available
+                                ? target.coverage.l3Measured
+                                  ? 'healthy'
+                                  : 'unknown'
+                                : 'not_configured',
+                              t,
+                              styles,
+                              target.coverage.l3Measured,
+                              'L3',
+                            )}
+                          </div>
+                          <UtilizationBar
+                            label={t('nf_health_card_memory')}
+                            available={Boolean(runtimeComponent?.memoryAvailable)}
+                            percent={runtimeComponent?.memoryPercent ?? null}
+                          />
+                          <UtilizationBar
+                            label={t('nf_health_card_cpu')}
+                            available={Boolean(runtimeComponent?.cpuAvailable)}
+                            percent={runtimeComponent?.cpuPercent ?? null}
+                          />
+                        </button>
+                        <footer className={styles.targetCardFoot}>
+                          <span className={styles.targetCardMeta}>
+                            {formatTimestamp(target.lastMeasuredAt)}
+                          </span>
+                          <Link
+                            to={`/nf-health/${encodeURIComponent(target.targetId)}`}
+                            className={styles.rowLink}
+                          >
+                            {t('nf_health_open_detail')}
+                          </Link>
+                        </footer>
+                      </article>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
         ) : (
           <div className={styles.tableScroll}>
@@ -473,7 +615,6 @@ export function NfHealthPage() {
               </thead>
               <tbody>
                 {targets.map((target) => {
-                  const candidate = candidateIndex.get(target.candidateId ?? '');
                   const legacyIdentity =
                     !target.resourceId ||
                     target.identityState === 'legacy_unbound' ||
@@ -493,7 +634,7 @@ export function NfHealthPage() {
                       </td>
                       <td>
                         <div className={styles.stack}>
-                          <strong>{target.nfType ?? candidate?.nfType ?? target.name}</strong>
+                          <strong>{target.nfType ?? target.name}</strong>
                           {target.domain ? (
                             <span className={styles.chip}>{target.domain}</span>
                           ) : null}
@@ -507,20 +648,10 @@ export function NfHealthPage() {
                               {t('nf_health_link_resource')}
                             </Link>
                           ) : null}
-                          {candidate ? (
+                          {target.candidateId ? (
                             <Link to="/discovery" className={styles.rowLink} title={t('nf_health_link_candidate')}>
                               <Boxes size={12} aria-hidden="true" />
                               {t('nf_health_link_candidate')}
-                            </Link>
-                          ) : null}
-                          {candidate?.linkedResourceId ? (
-                            <Link
-                              to={`/inventory/${encodeURIComponent(candidate.linkedResourceId)}`}
-                              className={styles.rowLink}
-                              title={t('nf_health_link_inventory')}
-                            >
-                              <Link2 size={12} aria-hidden="true" />
-                              {t('nf_health_link_inventory')}
                             </Link>
                           ) : null}
                           {legacyIdentity ? (
@@ -556,21 +687,7 @@ export function NfHealthPage() {
                         )}
                       </td>
                       <td>{formatTimestamp(target.lastMeasuredAt)}</td>
-                      <td>
-                        {(() => {
-                          const freshness = target.freshness?.state;
-                          if (freshness === 'fresh') {
-                            return <span className={styles.badgeHealthy}>{t('nf_health_state_healthy')}</span>;
-                          }
-                          if (freshness === 'stale') {
-                            return <span className={styles.badgeStale}>{t('nf_health_state_stale')}</span>;
-                          }
-                          if (freshness === 'not_monitored') {
-                            return <span className={styles.badgeNotConfigured}>{t('nf_health_state_not_configured')}</span>;
-                          }
-                          return <span className={styles.badgeUnknown}>{t('nf_health_state_unknown')}</span>;
-                        })()}
-                      </td>
+                      <td>{freshnessBadge(target, t)}</td>
                       <td>
                         {target.lastError ? (
                           <span className={styles.badgeUnhealthy}>{t('nf_health_status_failed')}</span>
@@ -608,6 +725,7 @@ export function NfHealthPage() {
             </table>
           </div>
         )}
+
         {targetsError ? null : targets.length > 0 || targetsPage?.hasMore ? (
           <nav className={styles.pager} aria-label={t('nf_health_targets_section')}>
             <span className={styles.pagerSummary} aria-live="polite">
@@ -641,98 +759,6 @@ export function NfHealthPage() {
         ) : null}
       </section>
 
-      <section className="dash-card" aria-label={t('nf_health_card_wall_section')}>
-        <div className={styles.sectionHead}>
-          <h2>
-            <Server size={16} aria-hidden="true" />
-            {t('nf_health_card_wall_section')}
-          </h2>
-          <span className={styles.sectionNote}>{t('nf_health_card_wall_note')}</span>
-        </div>
-        {targetsError ? (
-          <p className={styles.semanticNote}>{t('ops_metric_unavailable')}</p>
-        ) : domainGroups.length === 0 ? (
-          <p className={styles.semanticNote}>{t('nf_health_empty_targets_body')}</p>
-        ) : (
-          <div className={styles.cardWall}>
-            {domainGroups.map((group) => (
-              <div key={group.domain} className={styles.cardGroup}>
-                <h3 className={styles.cardGroupTitle}>{group.label}</h3>
-                <div className={styles.cardGrid}>
-                  {group.targets.map((target) => {
-                    const candidate = candidateIndex.get(target.candidateId ?? '');
-                    const runtimeComponent = resolveRuntimeComponent(target, candidate);
-                    return (
-                      <article
-                        key={target.targetId}
-                        className={styles.targetCard}
-                        onClick={() => setDrawerTarget(target)}
-                      >
-                        <header className={styles.targetCardHead}>
-                          <strong className={styles.targetCardName}>{target.name}</strong>
-                          <span className={styles.targetCardType}>
-                            {target.nfType ?? candidate?.nfType ?? '-'}
-                          </span>
-                        </header>
-                        <div className={styles.targetCardBadges}>
-                          {layerBadge(
-                            target.coverage.l1Measured ? 'healthy' : 'unknown',
-                            t,
-                            styles,
-                            target.coverage.l1Measured,
-                            'L1',
-                          )}
-                          {layerBadge(
-                            target.coverage.l2Measured ? 'healthy' : 'unknown',
-                            t,
-                            styles,
-                            target.coverage.l2Measured,
-                            'L2',
-                          )}
-                          {layerBadge(
-                            target.coverage.l3Available
-                              ? target.coverage.l3Measured
-                                ? 'healthy'
-                                : 'unknown'
-                              : 'not_configured',
-                            t,
-                            styles,
-                            target.coverage.l3Measured,
-                            'L3',
-                          )}
-                        </div>
-                        <UtilizationBar
-                          label={t('nf_health_card_memory')}
-                          available={Boolean(runtimeComponent?.memoryAvailable)}
-                          percent={runtimeComponent?.memoryPercent ?? null}
-                        />
-                        <UtilizationBar
-                          label={t('nf_health_card_cpu')}
-                          available={Boolean(runtimeComponent?.cpuAvailable)}
-                          percent={runtimeComponent?.cpuPercent ?? null}
-                        />
-                        <footer className={styles.targetCardFoot}>
-                          <span className={styles.targetCardMeta}>
-                            {formatTimestamp(target.lastMeasuredAt)}
-                          </span>
-                          <Link
-                            to={`/nf-health/${encodeURIComponent(target.targetId)}`}
-                            className={styles.rowLink}
-                            onClick={(event) => event.stopPropagation()}
-                          >
-                            {t('nf_health_open_detail')}
-                          </Link>
-                        </footer>
-                      </article>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
       <NfHealthTargetDrawer
         target={drawerTarget}
         onClose={() => setDrawerTarget(null)}
@@ -752,6 +778,49 @@ export function NfHealthPage() {
       />
     </OperationsPageFrame>
   );
+}
+
+/* The main status of a target: the server projection, never a client guess.
+ * A target whose projection is unknown says so instead of implying health. */
+function overallBadge(
+  target: HealthTargetSummary,
+  t: (key: string) => string,
+): React.ReactElement {
+  const state = target.overallState ?? 'unknown';
+  const className =
+    state === 'healthy'
+      ? styles.badgeHealthy
+      : state === 'degraded'
+        ? styles.badgeDegraded
+        : state === 'unhealthy'
+          ? styles.badgeUnhealthy
+          : state === 'stale'
+            ? styles.badgeStale
+            : state === 'not_configured'
+              ? styles.badgeNotConfigured
+              : styles.badgeUnknown;
+  const key = state === 'healthy' || state === 'degraded' || state === 'unhealthy' ||
+    state === 'stale' || state === 'not_configured'
+    ? `nf_health_state_${state}`
+    : 'nf_health_state_unknown';
+  return <span className={className}>{t(key)}</span>;
+}
+
+function freshnessBadge(
+  target: HealthTargetSummary,
+  t: (key: string) => string,
+): React.ReactElement {
+  const freshness = target.freshness?.state;
+  if (freshness === 'fresh') {
+    return <span className={styles.badgeHealthy}>{t('nf_health_state_healthy')}</span>;
+  }
+  if (freshness === 'stale') {
+    return <span className={styles.badgeStale}>{t('nf_health_state_stale')}</span>;
+  }
+  if (freshness === 'not_monitored') {
+    return <span className={styles.badgeNotConfigured}>{t('nf_health_state_not_configured')}</span>;
+  }
+  return <span className={styles.badgeUnknown}>{t('nf_health_state_unknown')}</span>;
 }
 
 function layerBadge(

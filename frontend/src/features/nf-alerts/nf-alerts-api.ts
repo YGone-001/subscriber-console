@@ -65,7 +65,9 @@ export async function fetchNfAlerts(
   return getJson<ListAlertsResponse>(
     withQuery('/api/nf-alerts', {
       state: params.state,
+      scope: params.scope,
       severity: params.severity,
+      sort: params.sort,
       q: params.q,
       cursor: params.cursor,
       limit: params.limit,

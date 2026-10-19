@@ -457,3 +457,195 @@
   .pager { align-items: stretch; flex-direction: column; }
   .pagerControls { justify-content: space-between; }
 }
+
+/* In-page view switch. One representation at a time: the duty view and the
+ * audit view are never rendered together. */
+.viewToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-control);
+  background: var(--surface-field);
+}
+
+.viewToggle button {
+  min-height: calc(var(--control-height) - 6px);
+  padding: 0 0.75rem;
+  border: 0;
+  border-radius: var(--ref-radius-small);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.viewToggle button:hover {
+  color: inherit;
+}
+
+.viewToggle button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.viewToggleActive {
+  background: var(--surface);
+  color: var(--text-primary, inherit);
+  font-weight: 600;
+}
+
+.rowButton {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.rowButton:hover {
+  text-decoration: underline;
+}
+
+.rowButton:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--ref-radius-small);
+}
+
+/* Evidence drawer. The snapshot is read-only; the actions live in the header. */
+.drawerLayer {
+  position: fixed;
+  inset: 0;
+  z-index: 2100;
+  display: flex;
+  justify-content: flex-end;
+  background: color-mix(in srgb, var(--background) 55%, transparent);
+}
+
+.drawer {
+  width: min(720px, 100vw);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--surface-border);
+  background: var(--surface);
+  box-shadow: -12px 0 32px color-mix(in srgb, var(--background) 45%, transparent);
+}
+
+.drawerHead {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.85rem;
+  padding: 1.15rem 1.35rem;
+  border-bottom: 1px solid var(--surface-border);
+}
+
+.drawerTitle {
+  margin: 0;
+  color: var(--text-main);
+  font-size: var(--ref-font-size-title-compact, 1.2rem);
+  font-weight: 800;
+  word-break: break-word;
+}
+
+.drawerSub {
+  margin: 0.35rem 0 0;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.drawerHeadActions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.drawerBody {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 1.1rem 1.35rem 1.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}
+
+.drawerSection {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.drawerSectionTitle {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.detailGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.detailRow {
+  display: grid;
+  grid-template-columns: minmax(9rem, 32%) 1fr;
+  gap: 0.75rem;
+  align-items: start;
+}
+
+.detailLabel {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.detailValue {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  color: var(--text-main);
+  font-size: 0.88rem;
+  word-break: break-word;
+}
+
+.layerRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-right: 0.75rem;
+}
+
+.layerName {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.uuid {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.78rem;
+  word-break: break-all;
+}
+
+.badgeMuted {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.12rem 0.45rem;
+  border: 1px solid var(--surface-border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 0.74rem;
+}

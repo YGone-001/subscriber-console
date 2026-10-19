@@ -10,6 +10,7 @@
  * is fabricated here.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import {
   Activity,
@@ -170,7 +171,7 @@ export function NfHealthTargetDrawer({ target, onClose, onCollected }: Props) {
   const latestSample = detail?.latestSample;
   const overallState = detail?.overallState;
 
-  return (
+  const content = (
     <div className={styles.drawerLayer} role="dialog" aria-modal="true" aria-label={t('nf_health_drawer_title')}>
       <div className={styles.drawer}>
         <header className={styles.drawerHead}>
@@ -414,6 +415,8 @@ export function NfHealthTargetDrawer({ target, onClose, onCollected }: Props) {
       </div>
     </div>
   );
+
+  return typeof document === 'undefined' ? content : createPortal(content, document.body);
 }
 
 function SemanticRow({
