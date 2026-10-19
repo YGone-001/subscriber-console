@@ -72,3 +72,127 @@
   font-size: var(--ref-font-size-body-compact);
   font-weight: 600;
 }
+
+/*
+ * Compact desktop density.
+ *
+ * The operator console carries a broad information surface.  At normal browser
+ * zoom the prior geometry consumed more screen estate than the data hierarchy
+ * requires, so the desktop shell now uses a denser, token-driven scale.  This
+ * intentionally does not change the root font size or apply CSS zoom: those
+ * approaches make text less accessible and leave fixed-size controls out of
+ * proportion.  Mobile and coarse-pointer targets keep their existing geometry.
+ */
+@media (min-width: 981px) {
+  :root {
+    --space-8: 7px;
+    --space-12: 10px;
+    --space-16: 14px;
+    --space-20: 16px;
+    --space-24: 20px;
+    --space-32: 28px;
+    --space-page: var(--space-24);
+    --space-section: var(--space-20);
+    --control-height: 32px;
+    --table-row-height: 46px;
+    --shell-header-height: 56px;
+    --shell-sidebar-expanded: 232px;
+    --shell-sidebar-collapsed: 64px;
+  }
+}
+
+@media (min-width: 981px) and (pointer: fine) {
+  .app-header {
+    gap: 0.75rem;
+    padding-inline: 1rem;
+  }
+
+  .header-left,
+  .header-right {
+    gap: 0.75rem;
+  }
+
+  .brand-lockup {
+    width: 196px;
+  }
+
+  .brand-mark {
+    height: 28px;
+  }
+
+  .icon-button {
+    width: 36px;
+    height: 36px;
+    flex-basis: 36px;
+  }
+
+  .command-button {
+    min-width: 190px;
+    min-height: 36px;
+    padding-block: 0.3rem;
+  }
+
+  .avatar-circle {
+    width: 32px;
+    height: 32px;
+  }
+
+  .sidebar-filter-wrap {
+    margin: 0.4rem 0.5rem 0.2rem;
+    padding: 0.4rem 0.5rem 0.3rem;
+  }
+
+  .sidebar-filter-clear {
+    width: 36px;
+    height: 36px;
+  }
+
+  .sidebar-nav {
+    padding: 0.6rem 0.5rem;
+    gap: 0.2rem;
+  }
+
+  .sidebar-link,
+  .sidebar-link.child {
+    min-height: 38px;
+  }
+
+  .sidebar-link {
+    gap: 0.65rem;
+    padding-inline: 0.6rem;
+  }
+
+  .sidebar-icon {
+    width: 28px;
+    height: 28px;
+  }
+
+  .sidebar-link.child .sidebar-icon {
+    width: 24px;
+    height: 24px;
+  }
+
+  .sidebar-footer-wrap {
+    padding: 0.4rem 0.5rem;
+  }
+
+  .sidebar-toggle-btn {
+    min-height: 38px;
+    padding-block: 0.3rem;
+  }
+
+  .nav-tab-link {
+    min-height: 36px;
+    padding-block: 0.25rem;
+  }
+
+  .nav-breadcrumbs-bar {
+    padding-block: 0.2rem;
+    padding-inline: 1rem;
+  }
+
+  .nav-breadcrumb-home {
+    width: 36px;
+    height: 36px;
+  }
+}

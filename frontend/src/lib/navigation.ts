@@ -104,10 +104,10 @@ export function getBreadcrumbs(pathname: string): Array<{ labelKey: string; path
   return crumbs;
 }
 
-/** Shell geometry contract. Values mirror the restored xCloud shell CSS. */
+/** Shell geometry contract. Values mirror the compact desktop shell CSS. */
 export const SHELL_GEOMETRY = {
-  expandedWidth: 264,
-  collapsedWidth: 72,
+  expandedWidth: 232,
+  collapsedWidth: 64,
   breakpoint: 981,
 } as const;
 
