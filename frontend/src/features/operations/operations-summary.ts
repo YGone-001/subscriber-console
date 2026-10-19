@@ -102,7 +102,7 @@ export async function fetchOperationsSummary(
 
 // KPI projections below are pure functions so tests can assert that page KPIs
 // come from the summary section (full collection) instead of the current page
-// array (see docs/analysis/cnms-port-assessment-2026-10-18.md UX-0).
+// array (see docs/analyze/cnms-port-assessment-2026-10-18.md UX-0).
 
 export interface DiscoveryKpis {
   sources: number | null;
