@@ -13,7 +13,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Layers, Network, RefreshCw } from 'lucide-react';
+import { Layers, Network } from 'lucide-react';
 import { useRead } from '../../lib/api/use-read';
 import { useI18n } from '../../providers/I18nProvider';
 import { EmptyState, LoadingRows } from '../../components/ui/OperationFeedback';
@@ -24,6 +24,7 @@ import {
   type DimensionCompleteness,
 } from '../operations/operational-model';
 import { useBoundedEdges } from '../operations/use-bounded-edges';
+import { useRegisterOperationsRefresh } from '../operations/operations-refresh';
 import {
   bindingLabelKey,
   domainLabelKey,
@@ -247,6 +248,10 @@ export function ArchitectureView() {
     edges.refresh();
   }, [resourcesRead, associationsRead, runtimeRead, edges, associationPath]);
 
+  // UX-1: the page frame owns the only visible refresh entry. The canvas
+  // registers its own loaders so one click revalidates the whole page.
+  useRegisterOperationsRefresh('topology:architecture', refresh);
+
   useEffect(() => {
     const timer = window.setInterval(() => {
       if (!resourcesRead.isValidating && !associationsRead.isValidating) refresh();
@@ -301,9 +306,6 @@ export function ArchitectureView() {
           <span className={`${styles.completeness} ${inventoryCompleteness === 'complete' ? styles.toneHealthy : inventoryCompleteness === 'unavailable' ? styles.toneUnhealthy : styles.toneStale}`}>
             {t(`ops_completeness_${inventoryCompleteness}`)}
           </span>
-          <button type="button" className={styles.refresh} onClick={refresh} aria-label={t('ops_refresh')}>
-            <RefreshCw size={15} /> {t('ops_refresh')}
-          </button>
         </div>
       </div>
 

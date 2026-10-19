@@ -46,6 +46,7 @@ import {
 } from './runtime-model';
 import type { RuntimeComponent, RuntimeMeta, RuntimeObservations, RuntimeStatus } from './runtime-types';
 import { RuntimeBootstrapDialog } from './RuntimeBootstrapDialog';
+import { useRegisterOperationsRefresh } from '../operations/operations-refresh';
 import { resolveRuntimeObservations, useRuntimeStream } from './use-runtime-stream';
 import styles from '../../styles/modules/runtime.module.css';
 
@@ -183,6 +184,11 @@ function RuntimeSurface({ variant }: SurfaceProps) {
     void meta.mutate();
   }, [observations, meta]);
 
+  // UX-1: when the surface is an Inventory view mode the page frame owns the
+  // only visible refresh entry; the dashboard panel keeps its own control
+  // because it renders outside a frame (no provider, so this is a no-op).
+  useRegisterOperationsRefresh('inventory:runtime', refresh);
+
   // Bounded auto-refresh of the cached snapshot. It never triggers a scan and
   // is only needed while the live stream is not connected.
   useEffect(() => {
@@ -267,9 +273,11 @@ function RuntimeSurface({ variant }: SurfaceProps) {
               {scan.completedAt ? <span className={styles.scanTime}>{formatDateTime(scan.completedAt)}</span> : null}
             </span>
           ) : null}
-          <button type="button" className={styles.button} onClick={refresh} aria-label={t('runtime_refresh')}>
-            <RefreshCw size={15} /> {t('runtime_refresh')}
-          </button>
+          {variant === 'panel' ? (
+            <button type="button" className={styles.button} onClick={refresh} aria-label={t('runtime_refresh')}>
+              <RefreshCw size={15} /> {t('runtime_refresh')}
+            </button>
+          ) : null}
           {canConfigure ? (
             <button
               type="button"

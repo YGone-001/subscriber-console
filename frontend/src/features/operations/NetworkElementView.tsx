@@ -25,7 +25,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronDown, ChevronRight, LayoutGrid, RefreshCw, Search, Server, Table2, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, LayoutGrid, Search, Server, Table2, X } from 'lucide-react';
 import { useRead } from '../../lib/api/use-read';
 import { useI18n } from '../../providers/I18nProvider';
 import { EmptyState, LoadingRows } from '../../components/ui/OperationFeedback';
@@ -46,6 +46,7 @@ import {
   type TreeMode,
 } from './operational-model';
 import { useBoundedEdges } from './use-bounded-edges';
+import { useRegisterOperationsRefresh } from './operations-refresh';
 import { NetworkElementCards, UnmanagedProcesses } from './NetworkElementCards';
 import type { RuntimeObservations } from '../runtime/runtime-types';
 import { resolveRuntimeObservations, useRuntimeStream } from '../runtime/use-runtime-stream';
@@ -202,6 +203,10 @@ export default function NetworkElementView() {
     void runtimeRead.mutate();
     containment.refresh();
   }, [resourcesRead, associationsRead, runtimeRead, associationPath, containment]);
+
+  // UX-1: the page frame owns the only visible refresh entry. This section
+  // registers the exact loaders it displays instead of drawing its own button.
+  useRegisterOperationsRefresh('inventory:network', refresh);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -395,10 +400,6 @@ export default function NetworkElementView() {
             <option value="unknown">{t('ops_filter_unknown')}</option>
           </select>
         </label>
-
-        <button type="button" className={styles.refresh} onClick={refresh} aria-label={t('ops_refresh')}>
-          <RefreshCw size={15} /> {t('ops_refresh')}
-        </button>
 
         <div className={styles.nePresentation} role="group" aria-label={t('ops_presentation_label')}>
           <button

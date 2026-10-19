@@ -1,0 +1,51 @@
+/*
+ * Shared operations page frame.
+ *
+ * Only layout. Colour, type and spacing come from the console tokens so the
+ * frame reads as chrome rather than as a new component family, and no
+ * decorative surface (gradient, glow, blur) is introduced.
+ */
+
+.contextStrip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-12);
+  margin-bottom: var(--space-8);
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--surface-border);
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+.filterBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-8);
+  margin-bottom: var(--space-8);
+}
+
+.workspace {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  min-width: 0;
+}
+
+.spin {
+  animation: frameSpin 1s linear infinite;
+}
+
+@keyframes frameSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation: none;
+  }
+}

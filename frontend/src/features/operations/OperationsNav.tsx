@@ -1,10 +1,14 @@
 /*
  * Operational workspace navigation.
  *
- * One tab strip shared by the four network-operation surfaces, so the operator
- * reads them as one workbench instead of four unrelated tables. It adds no route
+ * One tab strip shared by the five network-operation surfaces, so the operator
+ * reads them as one workbench instead of five unrelated tables. It adds no route
  * and changes no destination: every tab points at the existing canonical route,
  * and nested detail routes keep their owning tab active.
+ *
+ * The strip scrolls horizontally on narrow viewports; the active tab keeps a
+ * visible focus ring and an `aria-current` marker so the current surface is never
+ * only implied by colour.
  */
 import { NavLink } from 'react-router-dom';
 import { BellRing, Boxes, HeartPulse, Network, Radar } from 'lucide-react';
@@ -22,7 +26,7 @@ const TABS = [
 export function OperationsNav() {
   const { t } = useI18n();
   return (
-    <nav className={styles.nav} aria-label={t('ops_nav_label')}>
+    <nav className={styles.nav} aria-label={t('ops_nav_label')} data-operations-nav="workbench">
       {TABS.map(({ to, labelKey, icon: Icon }) => (
         <NavLink
           key={to}

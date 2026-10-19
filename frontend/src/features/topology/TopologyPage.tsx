@@ -2,20 +2,24 @@
  * Topology relationship explorer (/topology).
  *
  * The operator-facing relationship management workspace. It renders inside the
- * shared AppShell, uses the shared PageHeader / dialog / state primitives, and
- * reads only from the seven Topology APIs plus the Inventory read authority for
- * resource selection. No totals or KPI values are fabricated: the panel reports
- * exactly what the server returned.
+ * shared operations page frame (one title, one refresh entry), uses the shared
+ * dialog / state primitives, and reads only from the seven Topology APIs plus the
+ * Inventory read authority for resource selection. No totals or KPI values are
+ * fabricated: the panel reports exactly what the server returned.
+ *
+ * UX-1: `state`, `relationship`, `from`, `to` and `cursor` live in the URL, so a
+ * filtered relationship ledger survives reload, back/forward and a copied link.
+ * A filter change drops the cursor through the shared URL contract, which means
+ * page N of a discarded filter set can never be requested.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { GitBranch, Plus, RefreshCw, Search, X } from 'lucide-react';
+import { GitBranch, Plus, Search, X } from 'lucide-react';
 import { hasPermission } from '../../lib/permissions';
 import { MutationApiError } from '../../lib/api/mutation-client';
 import { EmptyState, LoadingRows } from '../../components/ui/OperationFeedback';
 import { ErrorState } from '../../components/ui/StatePanel';
 import { Dialog } from '../../components/ui/Dialog';
-import PageHeader from '../../components/ui/PageHeader';
 import { Field } from '../../components/ui/Field';
 import { useAuth } from '../../providers/AuthProvider';
 import { useI18n } from '../../providers/I18nProvider';
@@ -37,10 +41,10 @@ import { useResourceDirectory } from './use-resource-directory';
 import { TopologyEdgeTable } from './components/TopologyEdgeTable';
 import { TopologyEdgeForm } from './components/TopologyEdgeForm';
 import { TopologyResourcePicker } from './components/TopologyResourcePicker';
-import type { Resource } from '../inventory/inventory-types';
 import styles from '../../styles/modules/topology.module.css';
 import { RuntimeHierarchy } from '../runtime/RuntimeHierarchy';
-import { OperationsNav } from '../operations/OperationsNav';
+import { OperationsPageFrame } from '../operations/OperationsPageFrame';
+import { useOperationsUrlState } from '../operations/use-operations-url-state';
 import { ArchitectureView } from './ArchitectureView';
 
 const PAGE_LIMIT = 20;
@@ -55,15 +59,19 @@ export function TopologyPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [fromFilter, setFromFilter] = useState<Resource | null>(null);
-  const [toFilter, setToFilter] = useState<Resource | null>(null);
-  const [relationshipType, setRelationshipType] = useState('');
-  const [lifecycleState, setLifecycleState] = useState('active');
+  const url = useOperationsUrlState({ keys: ['state', 'relationship', 'from', 'to'] });
 
-  const [cursor, setCursor] = useState<string | undefined>(undefined);
+  /* `active` stays the effective default without being written into the URL, so
+   * an untouched page keeps a clean, shareable address. */
+  const lifecycleState = url.filters.state || 'active';
+  const relationshipType = url.filters.relationship || '';
+  const fromResourceId = url.filters.from || '';
+  const toResourceId = url.filters.to || '';
+
   const [cursorHistory, setCursorHistory] = useState<string[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
+  const queryKeyRef = useRef('');
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<TopologyEdge | null>(null);
@@ -89,8 +97,8 @@ export function TopologyPage() {
       setError(null);
       try {
         const res = await fetchTopologyEdges({
-          fromResourceId: fromFilter?.resourceId,
-          toResourceId: toFilter?.resourceId,
+          fromResourceId: fromResourceId || undefined,
+          toResourceId: toResourceId || undefined,
           relationshipType: relationshipType || undefined,
           lifecycleState: lifecycleState || undefined,
           cursor: activeCursor,
@@ -106,20 +114,37 @@ export function TopologyPage() {
         setLoading(false);
       }
     },
-    [fromFilter, toFilter, relationshipType, lifecycleState, t],
+    [fromResourceId, toResourceId, relationshipType, lifecycleState, t],
   );
 
   useEffect(() => {
-    setCursor(undefined);
-    setCursorHistory([]);
-    void loadEdges(undefined);
-  }, [loadEdges]);
+    const queryKey = `${lifecycleState}|${relationshipType}|${fromResourceId}|${toResourceId}`;
+    if (queryKeyRef.current !== queryKey) {
+      queryKeyRef.current = queryKey;
+      setCursorHistory([]);
+    }
+    void loadEdges(url.cursor);
+  }, [loadEdges, url.cursor, lifecycleState, relationshipType, fromResourceId, toResourceId]);
 
   const endpointIds = useMemo(
-    () => edges.flatMap((edge) => [edge.fromResourceId, edge.toResourceId]),
-    [edges],
+    () => [
+      ...edges.flatMap((edge) => [edge.fromResourceId, edge.toResourceId]),
+      fromResourceId,
+      toResourceId,
+    ].filter(Boolean),
+    [edges, fromResourceId, toResourceId],
   );
   const directory = useResourceDirectory(endpointIds);
+
+  /* Filter endpoints are resolved through the Inventory directory. An
+   * unresolved endpoint shows its identifier rather than a guessed name. */
+  const endpointLabel = useCallback(
+    (resourceId: string) => {
+      const resolved = directory[resourceId];
+      return resolved?.displayName || resolved?.name || resourceId;
+    },
+    [directory],
+  );
 
   const relationshipLabel = useCallback(
     (value: string) => {
@@ -130,45 +155,40 @@ export function TopologyPage() {
   );
 
   const clearFilters = () => {
-    setFromFilter(null);
-    setToFilter(null);
-    setRelationshipType('');
-    setLifecycleState('active');
-    setCursor(undefined);
+    url.clearFilters();
     setCursorHistory([]);
   };
 
   const activeFilters = useMemo(() => {
     const chips: Array<{ key: string; label: string; clear: () => void }> = [];
-    if (fromFilter) {
+    if (fromResourceId) {
       chips.push({
         key: 'from',
-        label: `${t('topology_from_resource')}: ${fromFilter.displayName || fromFilter.name}`,
-        clear: () => setFromFilter(null),
+        label: `${t('topology_from_resource')}: ${endpointLabel(fromResourceId)}`,
+        clear: () => url.setFilter('from', ''),
       });
     }
-    if (toFilter) {
+    if (toResourceId) {
       chips.push({
         key: 'to',
-        label: `${t('topology_to_resource')}: ${toFilter.displayName || toFilter.name}`,
-        clear: () => setToFilter(null),
+        label: `${t('topology_to_resource')}: ${endpointLabel(toResourceId)}`,
+        clear: () => url.setFilter('to', ''),
       });
     }
     if (relationshipType) {
       chips.push({
         key: 'rel',
         label: `${t('topology_relationship')}: ${relationshipLabel(relationshipType)}`,
-        clear: () => setRelationshipType(''),
+        clear: () => url.setFilter('relationship', ''),
       });
     }
     return chips;
-  }, [fromFilter, toFilter, relationshipType, relationshipLabel, t]);
+  }, [fromResourceId, toResourceId, relationshipType, relationshipLabel, endpointLabel, t, url]);
 
   const handleNextPage = () => {
     if (!nextCursor) return;
-    setCursorHistory((prev) => [...prev, cursor ?? '']);
-    setCursor(nextCursor);
-    void loadEdges(nextCursor);
+    setCursorHistory((prev) => [...prev, url.cursor ?? '']);
+    url.setCursor(nextCursor);
   };
 
   const handlePrevPage = () => {
@@ -176,8 +196,7 @@ export function TopologyPage() {
     const history = [...cursorHistory];
     const previous = history.pop() ?? '';
     setCursorHistory(history);
-    setCursor(previous || undefined);
-    void loadEdges(previous || undefined);
+    url.setCursor(previous || undefined);
   };
 
   const handleCreate = async (req: CreateEdgeRequest) => {
@@ -187,7 +206,7 @@ export function TopologyPage() {
     try {
       const created = await createTopologyEdge(req);
       setCreateOpen(false);
-      await loadEdges(cursor);
+      await loadEdges(url.cursor);
       navigate(`/topology/${encodeURIComponent(created.fromResourceId)}`);
     } catch (err) {
       setFormError(describeMutationError(err, t));
@@ -203,7 +222,7 @@ export function TopologyPage() {
     try {
       await updateTopologyEdge(editTarget.edgeId, req);
       setEditTarget(null);
-      await loadEdges(cursor);
+      await loadEdges(url.cursor);
     } catch (err) {
       if (err instanceof MutationApiError && err.status === 409) {
         setFormError(t('topology_stale_revision_body'));
@@ -227,7 +246,7 @@ export function TopologyPage() {
       });
       setRetireTarget(null);
       setRetireReason('');
-      await loadEdges(cursor);
+      await loadEdges(url.cursor);
     } catch (err) {
       if (err instanceof MutationApiError && err.status === 409) {
         setFormError(t('topology_stale_revision_body'));
@@ -239,46 +258,31 @@ export function TopologyPage() {
     }
   };
 
-  const hasFilters = Boolean(fromFilter || toFilter || relationshipType);
+  const hasFilters = Boolean(fromResourceId || toResourceId || relationshipType);
   const pageIndex = cursorHistory.length + 1;
 
   return (
-    <div className="container animate-fade-in">
-      <PageHeader
-        eyebrow={t('eyebrow_topology')}
-        icon={<GitBranch size={23} />}
-        title={t('topology_title')}
-        description={t('topology_description')}
-        actions={(
-          <>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() => loadEdges(cursor)}
-              disabled={loading}
-            >
-              <RefreshCw size={16} className={loading ? styles.spin : undefined} />
-              {t('refresh')}
-            </button>
-            {canConfigure ? (
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={() => {
-                  setFormError(null);
-                  setCreateOpen(true);
-                }}
-              >
-                <Plus size={16} />
-                {t('topology_create_relationship')}
-              </button>
-            ) : null}
-          </>
-        )}
-      />
-
-      <OperationsNav />
-
+    <OperationsPageFrame
+      title={t('topology_title')}
+      description={t('topology_description')}
+      icon={<GitBranch size={23} />}
+      onRefresh={() => loadEdges(url.cursor)}
+      actions={
+        canConfigure ? (
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => {
+              setFormError(null);
+              setCreateOpen(true);
+            }}
+          >
+            <Plus size={16} />
+            {t('topology_create_relationship')}
+          </button>
+        ) : undefined
+      }
+    >
       <ArchitectureView />
 
       {conflictNotice ? (
@@ -289,7 +293,7 @@ export function TopologyPage() {
             className="btn btn-secondary"
             onClick={() => {
               setConflictNotice(null);
-              void loadEdges(cursor);
+              void loadEdges(url.cursor);
             }}
           >
             {t('topology_reload')}
@@ -304,7 +308,7 @@ export function TopologyPage() {
               className="form-input"
               aria-label={t('topology_relationship')}
               value={relationshipType}
-              onChange={(event) => setRelationshipType(event.target.value)}
+              onChange={(event) => url.setFilter('relationship', event.target.value)}
             >
               <option value="">{t('topology_all_relationships')}</option>
               {(meta?.relationshipTypes ?? []).map((value) => (
@@ -317,7 +321,7 @@ export function TopologyPage() {
               className="form-input"
               aria-label={t('topology_lifecycle')}
               value={lifecycleState}
-              onChange={(event) => setLifecycleState(event.target.value)}
+              onChange={(event) => url.setFilter('state', event.target.value === 'active' ? '' : event.target.value)}
             >
               {(meta?.lifecycleStates ?? ['active', 'retired']).map((value) => (
                 <option key={value} value={value}>
@@ -336,16 +340,16 @@ export function TopologyPage() {
           <TopologyResourcePicker
             id="topology-filter-from"
             label={t('topology_filter_from')}
-            value={fromFilter?.resourceId ?? ''}
-            onChange={setFromFilter}
-            excludeResourceId={toFilter?.resourceId}
+            value={fromResourceId}
+            onChange={(resource) => url.setFilter('from', resource?.resourceId ?? '')}
+            excludeResourceId={toResourceId || undefined}
           />
           <TopologyResourcePicker
             id="topology-filter-to"
             label={t('topology_filter_to')}
-            value={toFilter?.resourceId ?? ''}
-            onChange={setToFilter}
-            excludeResourceId={fromFilter?.resourceId}
+            value={toResourceId}
+            onChange={(resource) => url.setFilter('to', resource?.resourceId ?? '')}
+            excludeResourceId={fromResourceId || undefined}
           />
         </div>
 
@@ -367,7 +371,7 @@ export function TopologyPage() {
               title={t('error')}
               message={error}
               retryLabel={t('retry')}
-              onRetry={() => loadEdges(cursor)}
+              onRetry={() => void loadEdges(url.cursor)}
             />
           </div>
         ) : loading && edges.length === 0 ? (
@@ -552,7 +556,7 @@ export function TopologyPage() {
           backend host and verified process membership. It never creates,
           suggests or persists a protocol relationship. */}
       <RuntimeHierarchy />
-    </div>
+    </OperationsPageFrame>
   );
 }
 

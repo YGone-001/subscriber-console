@@ -6,7 +6,7 @@
  * unsupported layers stay visibly distinct from measured healthy layers.
  * Registry observation, process state and metrics coverage remain separate.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Activity,
@@ -14,7 +14,6 @@ import {
   Link2,
   Play,
   Plus,
-  RefreshCw,
   Search,
   Server,
   X,
@@ -22,8 +21,8 @@ import {
 import { hasPermission } from '../../lib/permissions';
 import { EmptyState, LoadingRows, OperationFeedback } from '../../components/ui/OperationFeedback';
 import { ErrorState } from '../../components/ui/StatePanel';
-import PageHeader from '../../components/ui/PageHeader';
-import { OperationsNav } from '../operations/OperationsNav';
+import { OperationsPageFrame } from '../operations/OperationsPageFrame';
+import { useOperationsUrlState } from '../operations/use-operations-url-state';
 import {
   fetchOperationsSummary,
   healthKpisFromSummary,
@@ -77,9 +76,18 @@ export function NfHealthPage() {
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [collectingId, setCollectingId] = useState<string | null>(null);
 
-  const [searchInput, setSearchInput] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [enabledFilter, setEnabledFilter] = useState('');
+  /* UX-1: the query, the enabled filter and the page cursor live in the URL, so
+   * reload, back/forward and a shared link restore the same target list. */
+  const url = useOperationsUrlState({ keys: ['q', 'state'] });
+  const searchQuery = url.filters.q ?? '';
+  const enabledFilter =
+    url.filters.state === 'enabled' ? 'true' : url.filters.state === 'disabled' ? 'false' : '';
+  const [searchInput, setSearchInput] = useState(searchQuery);
+
+  // Keep the visible query in step with the URL (back/forward, shared link).
+  useEffect(() => {
+    setSearchInput(searchQuery);
+  }, [searchQuery]);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [drawerTarget, setDrawerTarget] = useState<HealthTargetSummary | null>(null);
@@ -88,7 +96,7 @@ export function NfHealthPage() {
   const runtimeStream = useRuntimeStream();
   const runtimeData = resolveRuntimeObservations(runtimeStream, runtimeRead.data);
 
-  const loadAll = useCallback(async () => {
+  const loadAll = useCallback(async (activeCursor?: string) => {
     setLoading(true);
     setTargetsError(null);
     setSummaryLoading(true);
@@ -103,6 +111,7 @@ export function NfHealthPage() {
       fetchNfHealthTargets({
         q: searchQuery || undefined,
         enabled: enabledFilter || undefined,
+        cursor: activeCursor,
         limit: PAGE_LIMIT,
       }),
       fetchDiscoveryCandidates({ limit: PAGE_LIMIT }),
@@ -146,6 +155,11 @@ export function NfHealthPage() {
     }
   }, [searchQuery, enabledFilter, t]);
 
+  /* Deep links and browser back/forward load the page named by the URL cursor.
+   * A pager click already fetched that page and is skipped through the ref, so a
+   * page step still revalidates only the bounded target list. */
+  const internalCursorRef = useRef<string | undefined>(undefined);
+  const internalCursorNavigationRef = useRef(false);
   useEffect(() => {
     if (!canRead) {
       setLoading(false);
@@ -153,11 +167,18 @@ export function NfHealthPage() {
       setTargetsError(t('nf_health_err_forbidden'));
       return;
     }
-    void loadAll();
-  }, [canRead, loadAll]);
+    if (internalCursorNavigationRef.current && url.cursor === internalCursorRef.current) {
+      internalCursorNavigationRef.current = false;
+      return;
+    }
+    void loadAll(url.cursor);
+  }, [canRead, loadAll, url.cursor]);
 
   const handleTargetsFirstPage = () => {
     setTargetsCursorHistory([]);
+    internalCursorRef.current = undefined;
+    internalCursorNavigationRef.current = url.cursor !== undefined;
+    url.setCursor(undefined);
     void loadTargetsPage(undefined);
   };
 
@@ -166,6 +187,9 @@ export function NfHealthPage() {
     const nextHistory = targetsCursorHistory.slice(0, -1);
     setTargetsCursorHistory(nextHistory);
     const prevCursor = nextHistory.length > 0 ? nextHistory[nextHistory.length - 1] : undefined;
+    internalCursorRef.current = prevCursor;
+    internalCursorNavigationRef.current = url.cursor !== prevCursor;
+    url.setCursor(prevCursor);
     void loadTargetsPage(prevCursor);
   };
 
@@ -173,6 +197,9 @@ export function NfHealthPage() {
     const nextCursor = targetsPage?.nextCursor;
     if (!nextCursor || !targetsPage?.hasMore) return;
     setTargetsCursorHistory((history) => [...history, nextCursor]);
+    internalCursorRef.current = nextCursor;
+    internalCursorNavigationRef.current = url.cursor !== nextCursor;
+    url.setCursor(nextCursor);
     void loadTargetsPage(nextCursor);
   };
 
@@ -182,10 +209,10 @@ export function NfHealthPage() {
     event.preventDefault();
     const next = searchInput.trim();
     if (next === searchQuery) {
-      void loadAll();
+      void loadAll(url.cursor);
       return;
     }
-    setSearchQuery(next);
+    url.setFilter('q', next);
   };
 
   const handleCollect = async (target: HealthTargetSummary) => {
@@ -204,7 +231,7 @@ export function NfHealthPage() {
           message: run.errorSummary || t('nf_health_feedback_collect_failed'),
         });
       }
-      await loadAll();
+      await loadAll(url.cursor);
     } catch (err) {
       setFeedback({ tone: 'danger', message: describeMutationError(err, t) });
     } finally {
@@ -279,27 +306,20 @@ export function NfHealthPage() {
   const kpis = useMemo(() => healthKpisFromSummary(summary ?? undefined), [summary]);
 
   return (
-    <div className="container animate-fade-in">
-      <PageHeader
-        eyebrow={t('eyebrow_nf_health')}
-        icon={<Activity size={23} />}
-        title={t('nf_health_title')}
-        description={t('nf_health_description')}
-        actions={(
-          <>
-            <button type="button" className="btn btn-secondary" onClick={() => void loadAll()} disabled={loading}>
-              <RefreshCw size={16} className={loading ? styles.spin : undefined} />
-              {t('refresh')}
-            </button>
-            {canConfigure ? (
-              <button type="button" className="btn btn-primary" onClick={() => setDialogOpen(true)}>
-                <Plus size={16} />
-                {t('nf_health_add_target')}
-              </button>
-            ) : null}
-          </>
-        )}
-      />
+    <OperationsPageFrame
+      title={t('nf_health_title')}
+      description={t('nf_health_description')}
+      icon={<Activity size={23} />}
+      onRefresh={() => loadAll(url.cursor)}
+      actions={
+        canConfigure ? (
+          <button type="button" className="btn btn-primary" onClick={() => setDialogOpen(true)}>
+            <Plus size={16} />
+            {t('nf_health_add_target')}
+          </button>
+        ) : undefined
+      }
+    >
 
       {feedback ? (
         <OperationFeedback
@@ -309,8 +329,6 @@ export function NfHealthPage() {
           onDismiss={() => setFeedback(null)}
         />
       ) : null}
-
-      <OperationsNav />
 
       {loading && summaryLoading && targets.length === 0 ? (
         <SkeletonKpiStrip count={4} />
@@ -382,20 +400,19 @@ export function NfHealthPage() {
             <select
               className="form-input"
               aria-label={t('nf_health_filter_enabled')}
-              value={enabledFilter}
-              onChange={(event) => setEnabledFilter(event.target.value)}
+              value={url.filters.state ?? ''}
+              onChange={(event) => url.setFilter('state', event.target.value)}
             >
               <option value="">{t('nf_health_filter_all_states')}</option>
-              <option value="true">{t('nf_health_enabled')}</option>
-              <option value="false">{t('nf_health_disabled')}</option>
+              <option value="enabled">{t('nf_health_enabled')}</option>
+              <option value="disabled">{t('nf_health_disabled')}</option>
             </select>
             <button
               type="button"
               className="btn btn-ghost"
               onClick={() => {
                 setSearchInput('');
-                setSearchQuery('');
-                setEnabledFilter('');
+                url.clearFilters();
               }}
               disabled={loading}
             >
@@ -416,7 +433,7 @@ export function NfHealthPage() {
 
         {targetsError ? (
           <div className={styles.errorWrap}>
-            <ErrorState title={t('error')} message={targetsError} retryLabel={t('nf_health_retry')} onRetry={() => void loadAll()} />
+            <ErrorState title={t('error')} message={targetsError} retryLabel={t('nf_health_retry')} onRetry={() => void loadAll(url.cursor)} />
           </div>
         ) : loading && targets.length === 0 ? (
           <LoadingRows columns={9} rows={4} />
@@ -719,7 +736,7 @@ export function NfHealthPage() {
       <NfHealthTargetDrawer
         target={drawerTarget}
         onClose={() => setDrawerTarget(null)}
-        onCollected={() => void loadAll()}
+        onCollected={() => void loadAll(url.cursor)}
       />
 
       <NfHealthTargetDialog
@@ -729,11 +746,11 @@ export function NfHealthPage() {
         onClose={() => setDialogOpen(false)}
         onSaved={(message) => {
           setFeedback({ tone: 'success', message });
-          void loadAll();
+          void loadAll(url.cursor);
         }}
         onFormError={(message) => setFeedback({ tone: 'danger', message })}
       />
-    </div>
+    </OperationsPageFrame>
   );
 }
 

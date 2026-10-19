@@ -6,14 +6,14 @@
  * and recovery-driven clearing are enforced by the evaluation engine; this
  * page only reads results and performs governed mutations.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Bell, BellRing, Check, CheckCheck, Pencil, Plus, RefreshCw, Search, Trash2, X } from 'lucide-react';
+import { Bell, BellRing, Check, CheckCheck, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
 import { hasPermission } from '../../lib/permissions';
 import { EmptyState, LoadingRows, OperationFeedback } from '../../components/ui/OperationFeedback';
 import { ErrorState } from '../../components/ui/StatePanel';
-import PageHeader from '../../components/ui/PageHeader';
-import { OperationsNav } from '../operations/OperationsNav';
+import { OperationsPageFrame } from '../operations/OperationsPageFrame';
+import { useOperationsUrlState } from '../operations/use-operations-url-state';
 import {
   alertsKpisFromSummary,
   fetchOperationsSummary,
@@ -68,16 +68,25 @@ export function NfAlertsPage() {
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  const [ruleSearchInput, setRuleSearchInput] = useState('');
-  const [ruleSearchQuery, setRuleSearchQuery] = useState('');
-  const [ruleEnabledFilter, setRuleEnabledFilter] = useState('');
-  const [alertStateFilter, setAlertStateFilter] = useState('');
-  const [alertSeverityFilter, setAlertSeverityFilter] = useState('');
+  /* UX-1: alert state/severity, the rule query, the rule enabled filter and the
+   * alert cursor live in the URL. The rule list keeps its own session cursor
+   * until UX-5 splits the queue and the rules into exclusive views. */
+  const url = useOperationsUrlState({ keys: ['q', 'state', 'severity', 'enabled'] });
+  const ruleSearchQuery = url.filters.q ?? '';
+  const ruleEnabledFilter = url.filters.enabled ?? '';
+  const alertStateFilter = url.filters.state ?? '';
+  const alertSeverityFilter = url.filters.severity ?? '';
+  const [ruleSearchInput, setRuleSearchInput] = useState(ruleSearchQuery);
+
+  // Keep the visible rule query in step with the URL (back/forward, shared link).
+  useEffect(() => {
+    setRuleSearchInput(ruleSearchQuery);
+  }, [ruleSearchQuery]);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingRule, setEditingRule] = useState<AlertRule | null>(null);
 
-  const loadAll = useCallback(async () => {
+  const loadAll = useCallback(async (activeCursor?: string) => {
     setLoading(true);
     setAlertsError(null);
     setRulesError(null);
@@ -97,6 +106,7 @@ export function NfAlertsPage() {
       fetchNfAlerts({
         state: alertStateFilter || undefined,
         severity: alertSeverityFilter || undefined,
+        cursor: activeCursor,
         limit: PAGE_LIMIT,
       }),
       fetchOperationsSummary(['alerts']),
@@ -167,6 +177,11 @@ export function NfAlertsPage() {
     }
   }, [alertStateFilter, alertSeverityFilter, t]);
 
+  /* Deep links and browser back/forward load the alert page named by the URL
+   * cursor. A pager click already fetched that page and is skipped through the
+   * ref, so a page step still revalidates only the bounded alert list. */
+  const internalCursorRef = useRef<string | undefined>(undefined);
+  const internalCursorNavigationRef = useRef(false);
   useEffect(() => {
     if (!canRead) {
       setLoading(false);
@@ -175,11 +190,18 @@ export function NfAlertsPage() {
       setRulesError(t('nf_alerts_err_forbidden'));
       return;
     }
-    void loadAll();
-  }, [canRead, loadAll]);
+    if (internalCursorNavigationRef.current && url.cursor === internalCursorRef.current) {
+      internalCursorNavigationRef.current = false;
+      return;
+    }
+    void loadAll(url.cursor);
+  }, [canRead, loadAll, url.cursor]);
 
   const handleAlertsFirstPage = () => {
     setAlertsCursorHistory([]);
+    internalCursorRef.current = undefined;
+    internalCursorNavigationRef.current = url.cursor !== undefined;
+    url.setCursor(undefined);
     void loadAlertsPage(undefined);
   };
 
@@ -188,6 +210,9 @@ export function NfAlertsPage() {
     const nextHistory = alertsCursorHistory.slice(0, -1);
     setAlertsCursorHistory(nextHistory);
     const prevCursor = nextHistory.length > 0 ? nextHistory[nextHistory.length - 1] : undefined;
+    internalCursorRef.current = prevCursor;
+    internalCursorNavigationRef.current = url.cursor !== prevCursor;
+    url.setCursor(prevCursor);
     void loadAlertsPage(prevCursor);
   };
 
@@ -195,6 +220,9 @@ export function NfAlertsPage() {
     const nextCursor = alertsPage?.nextCursor;
     if (!nextCursor || !alertsPage?.hasMore) return;
     setAlertsCursorHistory((history) => [...history, nextCursor]);
+    internalCursorRef.current = nextCursor;
+    internalCursorNavigationRef.current = url.cursor !== nextCursor;
+    url.setCursor(nextCursor);
     void loadAlertsPage(nextCursor);
   };
 
@@ -225,10 +253,10 @@ export function NfAlertsPage() {
     event.preventDefault();
     const next = ruleSearchInput.trim();
     if (next === ruleSearchQuery) {
-      void loadAll();
+      void loadAll(url.cursor);
       return;
     }
-    setRuleSearchQuery(next);
+    url.setFilter('q', next);
   };
 
   const openCreate = () => {
@@ -251,7 +279,7 @@ export function NfAlertsPage() {
         tone: 'success',
         message: t('nf_alerts_feedback_rule_deleted', { count: result.resolvedAlerts }),
       });
-      await loadAll();
+      await loadAll(url.cursor);
     } catch (err) {
       setFeedback({ tone: 'danger', message: describeMutationError(err, t) });
     } finally {
@@ -265,7 +293,7 @@ export function NfAlertsPage() {
     try {
       await acknowledgeNfAlert(alert.alertId);
       setFeedback({ tone: 'success', message: t('nf_alerts_feedback_acknowledged') });
-      await loadAll();
+      await loadAll(url.cursor);
     } catch (err) {
       setFeedback({ tone: 'danger', message: describeMutationError(err, t) });
     } finally {
@@ -279,7 +307,7 @@ export function NfAlertsPage() {
     try {
       await resolveNfAlert(alert.alertId);
       setFeedback({ tone: 'success', message: t('nf_alerts_feedback_resolved') });
-      await loadAll();
+      await loadAll(url.cursor);
     } catch (err) {
       setFeedback({ tone: 'danger', message: describeMutationError(err, t) });
     } finally {
@@ -293,27 +321,20 @@ export function NfAlertsPage() {
   const kpis = useMemo(() => alertsKpisFromSummary(summary ?? undefined), [summary]);
 
   return (
-    <div className="container animate-fade-in">
-      <PageHeader
-        eyebrow={t('eyebrow_nf_alerts')}
-        icon={<BellRing size={23} />}
-        title={t('nf_alerts_title')}
-        description={t('nf_alerts_description')}
-        actions={(
-          <>
-            <button type="button" className="btn btn-secondary" onClick={() => void loadAll()} disabled={loading}>
-              <RefreshCw size={16} className={loading ? styles.spin : undefined} />
-              {t('refresh')}
-            </button>
-            {canConfigure ? (
-              <button type="button" className="btn btn-primary" onClick={openCreate}>
-                <Plus size={16} />
-                {t('nf_alerts_add_rule')}
-              </button>
-            ) : null}
-          </>
-        )}
-      />
+    <OperationsPageFrame
+      title={t('nf_alerts_title')}
+      description={t('nf_alerts_description')}
+      icon={<BellRing size={23} />}
+      onRefresh={() => loadAll(url.cursor)}
+      actions={
+        canConfigure ? (
+          <button type="button" className="btn btn-primary" onClick={openCreate}>
+            <Plus size={16} />
+            {t('nf_alerts_add_rule')}
+          </button>
+        ) : undefined
+      }
+    >
 
       {feedback ? (
         <OperationFeedback
@@ -323,8 +344,6 @@ export function NfAlertsPage() {
           onDismiss={() => setFeedback(null)}
         />
       ) : null}
-
-      <OperationsNav />
 
       {loading && summaryLoading && alerts.length === 0 && rules.length === 0 ? (
         <SkeletonKpiStrip count={4} />
@@ -391,7 +410,7 @@ export function NfAlertsPage() {
               className="form-input"
               aria-label={t('nf_alerts_filter_state')}
               value={alertStateFilter}
-              onChange={(event) => setAlertStateFilter(event.target.value)}
+              onChange={(event) => url.setFilter('state', event.target.value)}
             >
               <option value="">{t('nf_alerts_filter_all_states')}</option>
               <option value="active">{t('nf_alerts_state_active')}</option>
@@ -402,7 +421,7 @@ export function NfAlertsPage() {
               className="form-input"
               aria-label={t('nf_alerts_filter_severity')}
               value={alertSeverityFilter}
-              onChange={(event) => setAlertSeverityFilter(event.target.value)}
+              onChange={(event) => url.setFilter('severity', event.target.value)}
             >
               <option value="">{t('nf_alerts_filter_all_severities')}</option>
               <option value="critical">{t('nf_alerts_severity_critical')}</option>
@@ -413,8 +432,7 @@ export function NfAlertsPage() {
               type="button"
               className="btn btn-ghost"
               onClick={() => {
-                setAlertStateFilter('');
-                setAlertSeverityFilter('');
+                url.clearFilters();
               }}
               disabled={loading}
             >
@@ -426,7 +444,7 @@ export function NfAlertsPage() {
 
         {alertsError ? (
           <div className={styles.errorWrap}>
-            <ErrorState title={t('error')} message={alertsError} retryLabel={t('nf_alerts_retry')} onRetry={() => void loadAll()} />
+            <ErrorState title={t('error')} message={alertsError} retryLabel={t('nf_alerts_retry')} onRetry={() => void loadAll(url.cursor)} />
           </div>
         ) : loading && alerts.length === 0 ? (
           <LoadingRows columns={7} rows={4} />
@@ -572,7 +590,7 @@ export function NfAlertsPage() {
               className="form-input"
               aria-label={t('nf_alerts_filter_enabled')}
               value={ruleEnabledFilter}
-              onChange={(event) => setRuleEnabledFilter(event.target.value)}
+              onChange={(event) => url.setFilter('enabled', event.target.value)}
             >
               <option value="">{t('nf_alerts_filter_all_states')}</option>
               <option value="true">{t('nf_alerts_rule_enabled')}</option>
@@ -583,8 +601,7 @@ export function NfAlertsPage() {
               className="btn btn-ghost"
               onClick={() => {
                 setRuleSearchInput('');
-                setRuleSearchQuery('');
-                setRuleEnabledFilter('');
+                url.clearFilters();
               }}
               disabled={loading}
             >
@@ -597,7 +614,7 @@ export function NfAlertsPage() {
 
         {rulesError ? (
           <div className={styles.errorWrap}>
-            <ErrorState title={t('error')} message={rulesError} retryLabel={t('nf_alerts_retry')} onRetry={() => void loadAll()} />
+            <ErrorState title={t('error')} message={rulesError} retryLabel={t('nf_alerts_retry')} onRetry={() => void loadAll(url.cursor)} />
           </div>
         ) : loading && rules.length === 0 ? (
           <LoadingRows columns={6} rows={4} />
@@ -737,11 +754,11 @@ export function NfAlertsPage() {
         onClose={() => setDialogOpen(false)}
         onSaved={(message) => {
           setFeedback({ tone: 'success', message });
-          void loadAll();
+          void loadAll(url.cursor);
         }}
         onFormError={(message) => setFeedback({ tone: 'danger', message })}
       />
-    </div>
+    </OperationsPageFrame>
   );
 }
 

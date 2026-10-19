@@ -6,7 +6,7 @@
  * registry status and never collapsed into an operational health flag.
  * Link and unlink only write discovery metadata; Inventory stays authoritative.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Boxes,
@@ -14,7 +14,6 @@ import {
   Link2Off,
   Plus,
   Radar,
-  RefreshCw,
   Search,
   Server,
   ShieldCheck,
@@ -25,8 +24,8 @@ import { EmptyState, LoadingRows, OperationFeedback } from '../../components/ui/
 import { ErrorState } from '../../components/ui/StatePanel';
 import { Dialog } from '../../components/ui/Dialog';
 import { Field } from '../../components/ui/Field';
-import PageHeader from '../../components/ui/PageHeader';
-import { OperationsNav } from '../operations/OperationsNav';
+import { OperationsPageFrame } from '../operations/OperationsPageFrame';
+import { useOperationsUrlState } from '../operations/use-operations-url-state';
 import {
   discoveryKpisFromSummary,
   fetchOperationsSummary,
@@ -95,10 +94,19 @@ export function DiscoveryPage() {
   const [busyCandidateId, setBusyCandidateId] = useState<string | null>(null);
   const [scanningSourceId, setScanningSourceId] = useState<string | null>(null);
 
-  const [searchInput, setSearchInput] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [observationFilter, setObservationFilter] = useState('');
-  const [nfTypeFilter, setNfTypeFilter] = useState('');
+  /* UX-1: the source query, the candidate filters and the candidate cursor live
+   * in the URL. The source list keeps its own session cursor until UX-4 splits
+   * the two lists into exclusive views. */
+  const url = useOperationsUrlState({ keys: ['q', 'state', 'nfType'] });
+  const searchQuery = url.filters.q ?? '';
+  const observationFilter = url.filters.state ?? '';
+  const nfTypeFilter = url.filters.nfType ?? '';
+  const [searchInput, setSearchInput] = useState(searchQuery);
+
+  // Keep the visible query in step with the URL (back/forward, shared link).
+  useEffect(() => {
+    setSearchInput(searchQuery);
+  }, [searchQuery]);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -158,7 +166,7 @@ export function DiscoveryPage() {
     return index;
   }, [effectiveRuntimeComponents]);
 
-  const loadAll = useCallback(async () => {
+  const loadAll = useCallback(async (activeCursor?: string) => {
     setLoading(true);
     setSourcesError(null);
     setCandidatesError(null);
@@ -174,6 +182,7 @@ export function DiscoveryPage() {
       fetchDiscoveryCandidates({
         nfType: nfTypeFilter || undefined,
         observationState: (observationFilter as NfObservation['observationState'] | '') || undefined,
+        cursor: activeCursor,
         limit: PAGE_LIMIT,
       }),
       fetchOperationsSummary(['discovery']),
@@ -239,6 +248,11 @@ export function DiscoveryPage() {
     }
   }, [observationFilter, nfTypeFilter, t]);
 
+  /* Deep links and browser back/forward load the candidate page named by the
+   * URL cursor. A pager click already fetched that page and is skipped through
+   * the ref, so a page step still revalidates only the bounded candidate list. */
+  const internalCursorRef = useRef<string | undefined>(undefined);
+  const internalCursorNavigationRef = useRef(false);
   useEffect(() => {
     if (!canRead) {
       setLoading(false);
@@ -247,8 +261,12 @@ export function DiscoveryPage() {
       setCandidatesError(t('discovery_err_forbidden'));
       return;
     }
-    void loadAll();
-  }, [canRead, loadAll]);
+    if (internalCursorNavigationRef.current && url.cursor === internalCursorRef.current) {
+      internalCursorNavigationRef.current = false;
+      return;
+    }
+    void loadAll(url.cursor);
+  }, [canRead, loadAll, url.cursor]);
 
   const handleSourcesFirstPage = () => {
     setSourcesCursorHistory([]);
@@ -272,6 +290,9 @@ export function DiscoveryPage() {
 
   const handleCandidatesFirstPage = () => {
     setCandidatesCursorHistory([]);
+    internalCursorRef.current = undefined;
+    internalCursorNavigationRef.current = url.cursor !== undefined;
+    url.setCursor(undefined);
     void loadCandidatesPage(undefined);
   };
 
@@ -280,6 +301,9 @@ export function DiscoveryPage() {
     const nextHistory = candidatesCursorHistory.slice(0, -1);
     setCandidatesCursorHistory(nextHistory);
     const prevCursor = nextHistory.length > 0 ? nextHistory[nextHistory.length - 1] : undefined;
+    internalCursorRef.current = prevCursor;
+    internalCursorNavigationRef.current = url.cursor !== prevCursor;
+    url.setCursor(prevCursor);
     void loadCandidatesPage(prevCursor);
   };
 
@@ -287,6 +311,9 @@ export function DiscoveryPage() {
     const nextCursor = candidatesPage?.nextCursor;
     if (!nextCursor || !candidatesPage?.hasMore) return;
     setCandidatesCursorHistory((history) => [...history, nextCursor]);
+    internalCursorRef.current = nextCursor;
+    internalCursorNavigationRef.current = url.cursor !== nextCursor;
+    url.setCursor(nextCursor);
     void loadCandidatesPage(nextCursor);
   };
 
@@ -297,10 +324,10 @@ export function DiscoveryPage() {
     event.preventDefault();
     const next = searchInput.trim();
     if (next === searchQuery) {
-      void loadAll();
+      void loadAll(url.cursor);
       return;
     }
-    setSearchQuery(next);
+    url.setFilter('q', next);
   };
 
   const handleCreate = async () => {
@@ -320,7 +347,7 @@ export function DiscoveryPage() {
       setFormBaseUrl('');
       setFormEnabled(true);
       setFeedback({ tone: 'success', message: t('discovery_feedback_created') });
-      await loadAll();
+      await loadAll(url.cursor);
     } catch (err) {
       setFormError(describeMutationError(err, t));
     } finally {
@@ -344,7 +371,7 @@ export function DiscoveryPage() {
           message: run.errorSummary || t('discovery_feedback_scan_failed'),
         });
       }
-      await loadAll();
+      await loadAll(url.cursor);
     } catch (err) {
       setFeedback({ tone: 'danger', message: describeMutationError(err, t) });
     } finally {
@@ -363,7 +390,7 @@ export function DiscoveryPage() {
       setLinkTarget(null);
       setLinkResourceId('');
       setFeedback({ tone: 'success', message: t('discovery_feedback_linked') });
-      await loadAll();
+      await loadAll(url.cursor);
     } catch (err) {
       setLinkError(describeMutationError(err, t));
     } finally {
@@ -378,7 +405,7 @@ export function DiscoveryPage() {
       const payload = buildUnlinkCandidateRequest(candidate);
       await unlinkDiscoveryCandidate(candidate.candidateId, payload);
       setFeedback({ tone: 'success', message: t('discovery_feedback_unlinked') });
-      await loadAll();
+      await loadAll(url.cursor);
     } catch (err) {
       setFeedback({ tone: 'danger', message: describeMutationError(err, t) });
     } finally {
@@ -405,34 +432,27 @@ export function DiscoveryPage() {
   };
 
   return (
-    <div className="container animate-fade-in">
-      <PageHeader
-        eyebrow={t('eyebrow_discovery')}
-        icon={<Radar size={23} />}
-        title={t('discovery_title')}
-        description={t('discovery_description')}
-        actions={(
-          <>
-            <button type="button" className="btn btn-secondary" onClick={() => void loadAll()} disabled={loading}>
-              <RefreshCw size={16} className={loading ? styles.spin : undefined} />
-              {t('refresh')}
-            </button>
-            {canConfigure ? (
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={() => {
-                  setFormError(null);
-                  setCreateOpen(true);
-                }}
-              >
-                <Plus size={16} />
-                {t('discovery_create_source')}
-              </button>
-            ) : null}
-          </>
-        )}
-      />
+    <OperationsPageFrame
+      title={t('discovery_title')}
+      description={t('discovery_description')}
+      icon={<Radar size={23} />}
+      onRefresh={() => loadAll(url.cursor)}
+      actions={
+        canConfigure ? (
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => {
+              setFormError(null);
+              setCreateOpen(true);
+            }}
+          >
+            <Plus size={16} />
+            {t('discovery_create_source')}
+          </button>
+        ) : undefined
+      }
+    >
 
       {feedback ? (
         <OperationFeedback
@@ -442,8 +462,6 @@ export function DiscoveryPage() {
           onDismiss={() => setFeedback(null)}
         />
       ) : null}
-
-      <OperationsNav />
 
       {summaryLoading && kpis.sources === null ? (
         <SkeletonKpiStrip count={4} />
@@ -516,7 +534,7 @@ export function DiscoveryPage() {
               className="form-input"
               aria-label={t('discovery_filter_observation')}
               value={observationFilter}
-              onChange={(event) => setObservationFilter(event.target.value)}
+              onChange={(event) => url.setFilter('state', event.target.value)}
             >
               <option value="">{t('discovery_filter_all_states')}</option>
               {(meta?.observationStates ?? ['seen', 'missing', 'stale']).map((value) => (
@@ -531,16 +549,14 @@ export function DiscoveryPage() {
               aria-label={t('discovery_filter_nf_type')}
               placeholder={t('discovery_filter_nf_type')}
               value={nfTypeFilter}
-              onChange={(event) => setNfTypeFilter(event.target.value)}
+              onChange={(event) => url.setFilter('nfType', event.target.value)}
             />
             <button
               type="button"
               className="btn btn-ghost"
               onClick={() => {
                 setSearchInput('');
-                setSearchQuery('');
-                setObservationFilter('');
-                setNfTypeFilter('');
+                url.clearFilters();
               }}
               disabled={loading}
             >
@@ -560,7 +576,7 @@ export function DiscoveryPage() {
 
         {sourcesError ? (
           <div className={styles.errorWrap}>
-            <ErrorState title={t('error')} message={sourcesError} retryLabel={t('retry')} onRetry={() => void loadAll()} />
+            <ErrorState title={t('error')} message={sourcesError} retryLabel={t('retry')} onRetry={() => void loadAll(url.cursor)} />
           </div>
         ) : loading && sources.length === 0 ? (
           <LoadingRows columns={6} rows={4} />
@@ -681,7 +697,7 @@ export function DiscoveryPage() {
 
         {candidatesError ? (
           <div className={styles.errorWrap}>
-            <ErrorState title={t('error')} message={candidatesError} retryLabel={t('retry')} onRetry={() => void loadAll()} />
+            <ErrorState title={t('error')} message={candidatesError} retryLabel={t('retry')} onRetry={() => void loadAll(url.cursor)} />
           </div>
         ) : loading && candidates.length === 0 ? (
           <LoadingRows columns={7} rows={4} />
@@ -965,11 +981,11 @@ export function DiscoveryPage() {
           onApplied={() => {
             setFeedback({ tone: 'success', message: t('discovery_bootstrap_applied') });
             // Refresh candidates so newly onboarded resources can be linked.
-            void loadAll();
+            void loadAll(url.cursor);
           }}
         />
       ) : null}
-    </div>
+    </OperationsPageFrame>
   );
 }
 

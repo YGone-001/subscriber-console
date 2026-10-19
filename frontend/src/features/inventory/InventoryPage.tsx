@@ -2,33 +2,41 @@
  * Inventory list route.
  *
  * The surface now follows the composition the other operational modules already use:
- * a page header (eyebrow / icon / description / actions), one continuous panel that
- * carries the toolbar, the table and the cursor pager, and dedicated state panels
- * instead of states rendered inside a table cell.
+ * one page frame that carries the title, the view switch and the single refresh
+ * entry, followed by one continuous panel that carries the toolbar, the table and
+ * the cursor pager, and dedicated state panels instead of states rendered inside a
+ * table cell.
  *
  * Behaviour is unchanged. The cursor contract of GET /api/inventory/resources remains
  * the only pagination source, and the four filters still map one-to-one onto the query
- * parameters the endpoint accepts. The only functional addition is the previous-page
- * affordance: the cursor history the page already recorded is now consumable, so an
- * operator can step back without restarting from the first page.
+ * parameters the endpoint accepts. The previous-page affordance stays: the cursor
+ * history the page already recorded is consumable, so an operator can step back
+ * without restarting from the first page.
+ *
+ * UX-1: the three views and the list filters live in the URL (`view`, `q`, `kind`,
+ * `domain`, `state`, `cursor`), so reload, back/forward and a shared link restore the
+ * same workspace. The network-element and runtime views register their own loaders
+ * with the frame instead of drawing a second refresh button.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Boxes, ChevronRight, Plus, RefreshCw, Search, X } from 'lucide-react';
+import { Boxes, ChevronRight, Plus, Search, X } from 'lucide-react';
 import { hasPermission } from '../../lib/permissions';
 import { EmptyState, LoadingRows } from '../../components/ui/OperationFeedback';
 import { ErrorState } from '../../components/ui/StatePanel';
-import PageHeader from '../../components/ui/PageHeader';
 import { useAuth } from '../../providers/AuthProvider';
 import { useI18n } from '../../providers/I18nProvider';
 import { fetchInventoryMeta, fetchInventoryResources } from './inventory-api';
 import NetworkElementView from '../operations/NetworkElementView';
-import { OperationsNav } from '../operations/OperationsNav';
+import { OperationsPageFrame } from '../operations/OperationsPageFrame';
+import { useOperationsUrlState } from '../operations/use-operations-url-state';
 import { RuntimeDiscoveryView } from '../runtime/RuntimeDiscovery';
 import type { MetaResponse, Resource } from './inventory-types';
 import styles from '../../styles/modules/inventory.module.css';
 
 const PAGE_LIMIT = 20;
+
+const INVENTORY_VIEWS = ['network', 'list', 'runtime'] as const;
 
 export function InventoryPage() {
   const { t } = useI18n();
@@ -39,28 +47,30 @@ export function InventoryPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Filters
-  /* View mode: the network-element view is the default surface because the
-   * operational question is "what do I run", not "what is registered". The
-   * general listing remains available as the audit surface, and a `view` query
-   * parameter makes a specific presentation linkable. */
-  const [viewMode, setViewMode] = useState<'list' | 'network' | 'runtime'>(() => {
-    if (typeof window === 'undefined') return 'network';
-    const requested = new URLSearchParams(window.location.search).get('view');
-    return requested === 'list' || requested === 'runtime' ? requested : 'network';
+  /* View and filters are URL state: `view=network|list|runtime` plus the four
+   * server-side filters. The network-element view stays the default surface
+   * because the operational question is "what do I run", not "what is
+   * registered"; the general listing remains the audit surface. */
+  const url = useOperationsUrlState({
+    keys: ['q', 'kind', 'domain', 'state'],
+    views: INVENTORY_VIEWS,
+    defaultView: 'network',
   });
+  const viewMode = url.view as (typeof INVENTORY_VIEWS)[number];
 
-  const [searchInput, setSearchInput] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedKind, setSelectedKind] = useState('');
-  const [selectedDomain, setSelectedDomain] = useState('');
-  const [selectedLifecycle, setSelectedLifecycle] = useState('');
+  const searchQuery = url.filters.q ?? '';
+  const selectedKind = url.filters.kind ?? '';
+  const selectedDomain = url.filters.domain ?? '';
+  const selectedLifecycle = url.filters.state ?? '';
 
-  // Pagination cursor history
-  const [cursor, setCursor] = useState<string | undefined>(undefined);
+  const [searchInput, setSearchInput] = useState(searchQuery);
+
+  // Pagination cursor history for the previous-page affordance. The cursor that
+  // produced the visible page lives in the URL; this trail is session-scoped.
   const [cursorHistory, setCursorHistory] = useState<string[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
+  const queryKeyRef = useRef('');
 
   const canConfigure = hasPermission(user, 'core.configure');
 
@@ -71,6 +81,12 @@ export function InventoryPage() {
         // Fallback or ignore meta fetch error
       });
   }, []);
+
+  /* Browser back/forward and a pasted link must restore the query box too, not
+   * only the request. */
+  useEffect(() => {
+    setSearchInput(searchQuery);
+  }, [searchQuery]);
 
   const loadResources = async (activeCursor?: string) => {
     setLoading(true);
@@ -95,30 +111,34 @@ export function InventoryPage() {
     }
   };
 
+  /* One effect for both dimensions: a changed filter set starts a new trail and
+   * loads its first page, while a changed cursor only advances the trail. The
+   * URL contract already dropped the cursor on any filter change. */
   useEffect(() => {
-    setCursor(undefined);
-    setCursorHistory([]);
-    loadResources(undefined);
+    if (viewMode !== 'list') return;
+    const queryKey = `${searchQuery}|${selectedKind}|${selectedDomain}|${selectedLifecycle}`;
+    if (queryKeyRef.current !== queryKey) {
+      queryKeyRef.current = queryKey;
+      setCursorHistory([]);
+    }
+    void loadResources(url.cursor);
     // Select filters apply immediately; the free-text query applies only after submit.
-  }, [searchQuery, selectedKind, selectedDomain, selectedLifecycle]);
+  }, [viewMode, searchQuery, selectedKind, selectedDomain, selectedLifecycle, url.cursor]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setCursor(undefined);
-    setCursorHistory([]);
     const nextQuery = searchInput.trim();
     if (nextQuery === searchQuery) {
-      loadResources(undefined);
+      void loadResources(url.cursor);
       return;
     }
-    setSearchQuery(nextQuery);
+    url.setFilter('q', nextQuery);
   };
 
   const handleNextPage = () => {
     if (!nextCursor) return;
-    setCursorHistory((prev) => [...prev, cursor ?? '']);
-    setCursor(nextCursor);
-    loadResources(nextCursor);
+    setCursorHistory((prev) => [...prev, url.cursor ?? '']);
+    url.setCursor(nextCursor);
   };
 
   const handlePrevPage = () => {
@@ -126,14 +146,12 @@ export function InventoryPage() {
     const history = [...cursorHistory];
     const previous = history.pop() ?? '';
     setCursorHistory(history);
-    setCursor(previous || undefined);
-    loadResources(previous || undefined);
+    url.setCursor(previous || undefined);
   };
 
   const handleFirstPage = () => {
-    setCursor(undefined);
     setCursorHistory([]);
-    loadResources(undefined);
+    url.setCursor(undefined);
   };
 
   /* Active filters are surfaced as removable chips so the operator can see, and undo,
@@ -146,33 +164,29 @@ export function InventoryPage() {
         label: `${t('inventory_search_short')}: ${searchQuery}`,
         clear: () => {
           setSearchInput('');
-          setSearchQuery('');
+          url.setFilter('q', '');
         },
       });
     }
     if (selectedKind) {
-      chips.push({ key: 'kind', label: `${t('inventory_kind')}: ${selectedKind}`, clear: () => setSelectedKind('') });
+      chips.push({ key: 'kind', label: `${t('inventory_kind')}: ${selectedKind}`, clear: () => url.setFilter('kind', '') });
     }
     if (selectedDomain) {
-      chips.push({ key: 'domain', label: `${t('inventory_domain')}: ${selectedDomain}`, clear: () => setSelectedDomain('') });
+      chips.push({ key: 'domain', label: `${t('inventory_domain')}: ${selectedDomain}`, clear: () => url.setFilter('domain', '') });
     }
     if (selectedLifecycle) {
       chips.push({
         key: 'lifecycle',
         label: `${t('inventory_lifecycle')}: ${selectedLifecycle}`,
-        clear: () => setSelectedLifecycle(''),
+        clear: () => url.setFilter('state', ''),
       });
     }
     return chips;
-  }, [searchQuery, selectedKind, selectedDomain, selectedLifecycle, t]);
+  }, [searchQuery, selectedKind, selectedDomain, selectedLifecycle, t, url]);
 
   const clearAllFilters = () => {
     setSearchInput('');
-    setSearchQuery('');
-    setSelectedKind('');
-    setSelectedDomain('');
-    setSelectedLifecycle('');
-    setCursor(undefined);
+    url.clearFilters();
     setCursorHistory([]);
   };
 
@@ -186,64 +200,51 @@ export function InventoryPage() {
   };
 
   return (
-    <div className="container animate-fade-in">
-      <PageHeader
-        eyebrow={t('eyebrow_inventory_topology')}
-        icon={<Boxes size={23} />}
-        title={t('inventory_title')}
-        description={t('inventory_description')}
-        actions={(
-          <>
-            <div className={styles.viewToggle} role="group" aria-label={t('ops_view_mode')}>
-              <button
-                type="button"
-                data-view-mode="network"
-                className={viewMode === 'network' ? styles.viewToggleActive : undefined}
-                aria-pressed={viewMode === 'network'}
-                onClick={() => setViewMode('network')}
-              >
-                {t('ops_view_network')}
-              </button>
-              <button
-                type="button"
-                data-view-mode="list"
-                className={viewMode === 'list' ? styles.viewToggleActive : undefined}
-                aria-pressed={viewMode === 'list'}
-                onClick={() => setViewMode('list')}
-              >
-                {t('ops_view_list')}
-              </button>
-              <button
-                type="button"
-                data-view-mode="runtime"
-                className={viewMode === 'runtime' ? styles.viewToggleActive : undefined}
-                aria-pressed={viewMode === 'runtime'}
-                onClick={() => setViewMode('runtime')}
-              >
-                {t('runtime_view_mode')}
-              </button>
-            </div>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() => loadResources(cursor)}
-              disabled={loading}
-            >
-              <RefreshCw size={16} className={loading ? styles.spin : undefined} />
-              {t('refresh')}
-            </button>
-            {canConfigure ? (
-              <Link to="/inventory/create" className="btn btn-primary">
-                <Plus size={16} />
-                {t('inventory_create_resource')}
-              </Link>
-            ) : null}
-          </>
-        )}
-      />
-
-      <OperationsNav />
-
+    <OperationsPageFrame
+      title={t('inventory_title')}
+      description={t('inventory_description')}
+      icon={<Boxes size={23} />}
+      viewSwitch={(
+        <div className={styles.viewToggle} role="group" aria-label={t('ops_view_mode')}>
+          <button
+            type="button"
+            data-view-mode="network"
+            className={viewMode === 'network' ? styles.viewToggleActive : undefined}
+            aria-pressed={viewMode === 'network'}
+            onClick={() => url.setView('network')}
+          >
+            {t('ops_view_network')}
+          </button>
+          <button
+            type="button"
+            data-view-mode="list"
+            className={viewMode === 'list' ? styles.viewToggleActive : undefined}
+            aria-pressed={viewMode === 'list'}
+            onClick={() => url.setView('list')}
+          >
+            {t('ops_view_list')}
+          </button>
+          <button
+            type="button"
+            data-view-mode="runtime"
+            className={viewMode === 'runtime' ? styles.viewToggleActive : undefined}
+            aria-pressed={viewMode === 'runtime'}
+            onClick={() => url.setView('runtime')}
+          >
+            {t('runtime_view_mode')}
+          </button>
+        </div>
+      )}
+      onRefresh={viewMode === 'list' ? () => loadResources(url.cursor) : undefined}
+      actions={
+        canConfigure ? (
+          <Link to="/inventory/create" className="btn btn-primary">
+            <Plus size={16} />
+            {t('inventory_create_resource')}
+          </Link>
+        ) : undefined
+      }
+    >
       {viewMode === 'runtime' ? (
         <RuntimeDiscoveryView />
       ) : viewMode === 'network' ? (
@@ -270,7 +271,7 @@ export function InventoryPage() {
               className="form-input"
               aria-label={t('inventory_all_kinds')}
               value={selectedKind}
-              onChange={(e) => setSelectedKind(e.target.value)}
+              onChange={(e) => url.setFilter('kind', e.target.value)}
             >
               <option value="">{t('inventory_all_kinds')}</option>
               {meta?.kinds?.map((k) => (
@@ -284,7 +285,7 @@ export function InventoryPage() {
               className="form-input"
               aria-label={t('inventory_all_domains')}
               value={selectedDomain}
-              onChange={(e) => setSelectedDomain(e.target.value)}
+              onChange={(e) => url.setFilter('domain', e.target.value)}
             >
               <option value="">{t('inventory_all_domains')}</option>
               {meta?.domains?.map((d) => (
@@ -298,7 +299,7 @@ export function InventoryPage() {
               className="form-input"
               aria-label={t('inventory_all_states')}
               value={selectedLifecycle}
-              onChange={(e) => setSelectedLifecycle(e.target.value)}
+              onChange={(e) => url.setFilter('state', e.target.value)}
             >
               <option value="">{t('inventory_all_states')}</option>
               {meta?.lifecycleStates?.map((s) => (
@@ -331,7 +332,7 @@ export function InventoryPage() {
               title={t('error')}
               message={error}
               retryLabel={t('retry')}
-              onRetry={() => loadResources(cursor)}
+              onRetry={() => void loadResources(url.cursor)}
             />
           </div>
         ) : loading && resources.length === 0 ? (
@@ -458,6 +459,6 @@ export function InventoryPage() {
         ) : null}
       </section>
       )}
-    </div>
+    </OperationsPageFrame>
   );
 }
