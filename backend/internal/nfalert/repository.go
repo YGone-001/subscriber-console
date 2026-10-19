@@ -23,11 +23,30 @@ import (
 type Repository struct {
 	rules  *mongo.Collection
 	alerts *mongo.Collection
+	sink   AlertEventSink
 }
 
 // NewRepository constructs the NF alert persistence adapter.
 func NewRepository(rules, alerts *mongo.Collection) *Repository {
 	return &Repository{rules: rules, alerts: alerts}
+}
+
+// SetAlertEventSink installs the notification sink. It is optional and must
+// be wired before evaluation starts; emissions are best-effort and never block
+// an alert write.
+func (r *Repository) SetAlertEventSink(sink AlertEventSink) {
+	r.sink = sink
+}
+
+// emitAlertEvent forwards one transition to the notification sink.
+func (r *Repository) emitAlertEvent(ctx context.Context, event AlertEvent) {
+	if r.sink == nil {
+		return
+	}
+	if event.OccurredAt == "" {
+		event.OccurredAt = time.Now().UTC().Format(time.RFC3339Nano)
+	}
+	r.sink.NotifyAlert(ctx, event)
 }
 
 // Collections reports the backing collection names, for diagnostics.
@@ -294,6 +313,7 @@ func (r *Repository) resolveRuleAlerts(ctx context.Context, ruleID, now, actor s
 		open[i].ResolvedAt = now
 		open[i].ResolvedReason = ResolveReasonRuleDeleted
 		open[i].UpdatedAt = now
+		r.emitAlertEvent(ctx, buildAlertEvent(AlertEventResolved, &open[i], now))
 	}
 	return open, nil
 }
@@ -548,6 +568,7 @@ func (r *Repository) AcknowledgeAlert(ctx context.Context, alertID, actor string
 		}
 		return nil, err
 	}
+	r.emitAlertEvent(ctx, buildAlertEvent(AlertEventAcknowledged, &doc, doc.UpdatedAt))
 	return &doc, nil
 }
 
@@ -574,6 +595,7 @@ func (r *Repository) ResolveAlert(ctx context.Context, alertID, actor string) (*
 		}
 		return nil, err
 	}
+	r.emitAlertEvent(ctx, buildAlertEvent(AlertEventResolved, &doc, doc.UpdatedAt))
 	return &doc, nil
 }
 

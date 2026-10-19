@@ -27,6 +27,7 @@ import (
 	"subscriber/internal/nfhealth"
 	"subscriber/internal/nflogs"
 	"subscriber/internal/notification"
+	"subscriber/internal/notify"
 	"subscriber/internal/ocs"
 	"subscriber/internal/operationsview"
 	"subscriber/internal/profile"
@@ -334,6 +335,26 @@ func main() {
 	nfAlertEvaluator := nfalert.NewEvaluator(nfalert.NewMongoEvaluatorRepository(nfAlertRepo))
 	nfAlertHandler := nfalert.NewHandler(nfAlertRepo, limiter, auditWriter)
 
+	// Notification channels, escalation rules and the delivery ledger are a
+	// separate out-of-band surface. Alert writes only enqueue a delivery intent;
+	// the worker is the single component that talks to a webhook.
+	notifyRepo := notify.NewRepository(
+		mc.Ops.Collection("app_nf_notification_channels"),
+		mc.Ops.Collection("app_nf_notification_escalations"),
+		mc.Ops.Collection("app_nf_notification_deliveries"),
+		logger,
+	)
+	notifyWorker := notify.NewWorker(
+		notifyRepo,
+		notify.NewWebhookSender(nil),
+		notify.NewAlertStateReader(nfAlertRepo),
+		logger,
+	)
+	notifyHandler := notify.NewHandler(notifyRepo, limiter, auditWriter)
+	nfAlertRepo.SetAlertEventSink(notifyRepo)
+	notifyWorker.Start(context.Background())
+	defer notifyWorker.Stop()
+
 	// The log workspace reads only the files an operator declared. A malformed
 	// declaration is reported and leaves the surface empty instead of taking the
 	// whole process down.
@@ -561,6 +582,17 @@ func main() {
 	mux.Handle("POST /api/nf-health/targets", authMiddleware(http.HandlerFunc(nfHealthHandler.CreateTarget)))
 	mux.Handle("PUT /api/nf-health/targets/{targetId}", authMiddleware(http.HandlerFunc(nfHealthHandler.UpdateTarget)))
 	mux.Handle("POST /api/nf-health/targets/{targetId}/collect", authMiddleware(http.HandlerFunc(nfHealthHandler.CollectTarget)))
+
+	// Notification configuration and delivery ledger.
+	mux.Handle("GET /api/nf-notifications/channels", authMiddleware(http.HandlerFunc(notifyHandler.ListChannels)))
+	mux.Handle("POST /api/nf-notifications/channels", authMiddleware(http.HandlerFunc(notifyHandler.CreateChannel)))
+	mux.Handle("PUT /api/nf-notifications/channels/{channelId}", authMiddleware(http.HandlerFunc(notifyHandler.UpdateChannel)))
+	mux.Handle("DELETE /api/nf-notifications/channels/{channelId}", authMiddleware(http.HandlerFunc(notifyHandler.DeleteChannel)))
+	mux.Handle("GET /api/nf-notifications/escalations", authMiddleware(http.HandlerFunc(notifyHandler.ListEscalations)))
+	mux.Handle("POST /api/nf-notifications/escalations", authMiddleware(http.HandlerFunc(notifyHandler.CreateEscalation)))
+	mux.Handle("PUT /api/nf-notifications/escalations/{escalationId}", authMiddleware(http.HandlerFunc(notifyHandler.UpdateEscalation)))
+	mux.Handle("DELETE /api/nf-notifications/escalations/{escalationId}", authMiddleware(http.HandlerFunc(notifyHandler.DeleteEscalation)))
+	mux.Handle("GET /api/nf-notifications/deliveries", authMiddleware(http.HandlerFunc(notifyHandler.ListDeliveries)))
 
 	// NF alerts (four reads, five governed mutations)
 	mux.Handle("GET /api/nf-logs/sources", authMiddleware(http.HandlerFunc(nfLogHandler.ListSources)))

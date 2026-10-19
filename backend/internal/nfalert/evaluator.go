@@ -274,6 +274,7 @@ var errInvalidTimestamp error = timestampError{}
 
 // MongoEvaluatorRepository is the production EvaluationRepository.
 type MongoEvaluatorRepository struct {
+	repo   *Repository
 	rules  *mongo.Collection
 	alerts *mongo.Collection
 }
@@ -281,6 +282,7 @@ type MongoEvaluatorRepository struct {
 // NewMongoEvaluatorRepository constructs the production evaluation repository.
 func NewMongoEvaluatorRepository(repo *Repository) *MongoEvaluatorRepository {
 	return &MongoEvaluatorRepository{
+		repo:   repo,
 		rules:  repo.rulesCollection(),
 		alerts: repo.alertsCollection(),
 	}
@@ -288,6 +290,14 @@ func NewMongoEvaluatorRepository(repo *Repository) *MongoEvaluatorRepository {
 
 func (r *Repository) rulesCollection() *mongo.Collection  { return r.rules }
 func (r *Repository) alertsCollection() *mongo.Collection { return r.alerts }
+
+// emit forwards an alert transition to the notification sink best-effort.
+func (m *MongoEvaluatorRepository) emit(ctx context.Context, event AlertEvent) {
+	if m.repo == nil {
+		return
+	}
+	m.repo.emitAlertEvent(ctx, event)
+}
 
 // ListRulesForEvaluation loads every enabled rule.
 func (m *MongoEvaluatorRepository) ListRulesForEvaluation(ctx context.Context) ([]AlertRule, error) {
@@ -325,10 +335,14 @@ func (m *MongoEvaluatorRepository) FindOpenAlert(ctx context.Context, ruleID, ta
 // is accepted because the counter semantics are preserved by the winner.
 func (m *MongoEvaluatorRepository) InsertAlert(ctx context.Context, alert *Alert) error {
 	_, err := m.alerts.InsertOne(ctx, alert)
-	if err != nil && mongo.IsDuplicateKeyError(err) {
-		return nil
+	if err != nil {
+		if mongo.IsDuplicateKeyError(err) {
+			return nil
+		}
+		return err
 	}
-	return err
+	m.emit(ctx, buildAlertEvent(AlertEventOpened, alert, alert.UpdatedAt))
+	return nil
 }
 
 // RecountAlert refreshes the trigger counter and evidence inside cooldown.
@@ -373,5 +387,6 @@ func (m *MongoEvaluatorRepository) ResolveAlertByRecovery(ctx context.Context, a
 		}
 		return err
 	}
+	m.emit(ctx, buildAlertEvent(AlertEventRecovered, &doc, resolvedAt))
 	return nil
 }

@@ -47,7 +47,7 @@ func (r *Repository) AlertSummary(ctx context.Context) (AlertSummary, error) {
 		return AlertSummary{}, err
 	}
 	var rows []struct {
-		ByState       []alertCountRow `bson:"byState"`
+		ByState        []alertCountRow `bson:"byState"`
 		OpenBySeverity []alertCountRow `bson:"openBySeverity"`
 	}
 	if err := cursor.All(ctx, &rows); err != nil {

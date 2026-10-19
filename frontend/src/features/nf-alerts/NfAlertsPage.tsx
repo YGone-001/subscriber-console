@@ -62,6 +62,7 @@ import type {
 } from './nf-alerts-types';
 import { NfAlertEvidenceDrawer } from './NfAlertEvidenceDrawer';
 import { NfAlertRuleDialog } from './NfAlertRuleDialog';
+import { NotificationSettingsDialog } from './NotificationSettingsDialog';
 import styles from '../../styles/modules/nf-alerts.module.css';
 
 const PAGE_LIMIT = 20;
@@ -113,6 +114,7 @@ export function NfAlertsPage() {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingRule, setEditingRule] = useState<AlertRule | null>(null);
+  const [notifyOpen, setNotifyOpen] = useState(false);
 
   const loadSummary = useCallback(async () => {
     setSummaryLoading(true);
@@ -344,10 +346,21 @@ export function NfAlertsPage() {
       onRefresh={handleRefresh}
       actions={
         view === 'rules' && canConfigure ? (
-          <button type="button" className="btn btn-primary" onClick={openCreate}>
-            <Plus size={16} />
-            {t('nf_alerts_add_rule')}
-          </button>
+          <>
+            <button type="button" className="btn btn-primary" onClick={openCreate}>
+              <Plus size={16} />
+              {t('nf_alerts_add_rule')}
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setNotifyOpen(true)}
+              data-nf-notify-open="true"
+            >
+              <Bell size={16} />
+              {t('nf_notify_title')}
+            </button>
+          </>
         ) : undefined
       }
     >
@@ -786,6 +799,11 @@ export function NfAlertsPage() {
           void loadSummary();
         }}
         onFormError={(message) => setFeedback({ tone: 'danger', message })}
+      />
+      <NotificationSettingsDialog
+        open={notifyOpen}
+        onClose={() => setNotifyOpen(false)}
+        onChanged={() => void loadSummary()}
       />
     </OperationsPageFrame>
   );

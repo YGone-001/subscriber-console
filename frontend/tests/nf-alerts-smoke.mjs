@@ -130,6 +130,18 @@ const RULES = [
   },
 ];
 
+const NOTIFY_CHANNELS = [
+  { id: 'ch-1', name: 'Ops webhook', kind: 'webhook', enabled: true, url: 'https://hooks.example.com/alert', revision: 1, createdAt: TS.first, updatedAt: TS.first },
+];
+
+const NOTIFY_ESCALATIONS = [
+  { id: 'esc-1', name: 'Critical to ops', enabled: true, severities: ['critical'], channelIds: ['ch-1'], escalateAfterSeconds: 300, escalateChannelIds: ['ch-1'], revision: 1, createdAt: TS.first, updatedAt: TS.first },
+];
+
+const NOTIFY_DELIVERIES = [
+  { id: 'd-1', deliveryKey: 'alert-critical-active:opened:ch-1', event: 'opened', alertId: 'alert-critical-active', ruleId: 'rule-1', ruleName: 'AMF process unhealthy', targetId: 'target-amf', targetName: 'amf-01', severity: 'critical', triggerCount: 1, occurredAt: TS.first, channelId: 'ch-1', status: 'sent', attempts: 1, createdAt: TS.first, completedAt: TS.first },
+];
+
 const META = {
   schemaVersion: 1,
   alertStates: ['active', 'acknowledged', 'resolved'],
@@ -344,6 +356,16 @@ function handleApi(req, res, url, context) {
     return sendJson(res, 200, { rules: RULES, page: page(20) });
   }
 
+  if (pathname === '/api/nf-notifications/channels' && req.method === 'GET') {
+    return sendJson(res, 200, { channels: NOTIFY_CHANNELS });
+  }
+  if (pathname === '/api/nf-notifications/escalations' && req.method === 'GET') {
+    return sendJson(res, 200, { escalations: NOTIFY_ESCALATIONS });
+  }
+  if (pathname === '/api/nf-notifications/deliveries' && req.method === 'GET') {
+    return sendJson(res, 200, { deliveries: NOTIFY_DELIVERIES, page: { limit: 20, nextCursor: null, hasMore: false } });
+  }
+
   context.unexpected.push(`${req.method} ${pathname}`);
   return sendJson(res, 404, { error: 'unexpected fixture request', code: 'FIXTURE_UNEXPECTED' });
 }
@@ -460,6 +482,25 @@ async function main() {
       check('viewer_reads_evidence', drawer.includes('sample-critical'), 'evidence stays readable');
     });
     await viewerServer.close();
+
+    /* 7. Notification settings live in the rules view and never echo a secret. */
+    const notifyServer = await startServer();
+    servers.push(notifyServer);
+    await withPage(browser, notifyServer.origin, async (page) => {
+      await page.getByText('AMF process unhealthy').first().waitFor({ timeout: 30000 });
+      await page.getByRole('button', { name: 'Rules' }).click();
+      await page.locator('[data-nf-alert-panel="rules"]').waitFor({ state: 'visible', timeout: 20000 });
+      await page.locator('[data-nf-notify-open="true"]').click();
+      await page.locator('[data-notify-tab="channels"]').waitFor({ state: 'visible', timeout: 20000 });
+      const channelText = await page.getByRole('dialog').first().innerText();
+      check('notify_settings_show_channels', channelText.includes('Ops webhook'), 'channel row');
+      check('notify_settings_never_echo_secret', !channelText.includes('s3cr3t'), 'the secret is write-only');
+      await page.locator('[data-notify-tab="deliveries"]').click();
+      await page.locator('[data-notify-deliveries="true"]').waitFor({ state: 'visible', timeout: 20000 });
+      const deliveryText = await page.getByRole('dialog').first().innerText();
+      check('notify_delivery_health_visible', /sent/i.test(deliveryText), 'delivery rows render');
+    });
+    await notifyServer.close();
     servers.length = 0;
   } finally {
     await browser.close();
