@@ -226,7 +226,8 @@
     "readEndpoints": [
       "GET /api/topology/meta",
       "GET /api/topology/edges",
-      "GET /api/inventory/resources"
+      "GET /api/inventory/resources",
+      "GET /api/operations/resources"
     ]
   },
   {

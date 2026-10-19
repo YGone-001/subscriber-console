@@ -20,6 +20,7 @@ import { useRead } from '../../lib/api/use-read';
 import { useI18n } from '../../providers/I18nProvider';
 import { groupByCategory, statusLabelKey } from './runtime-model';
 import type { RuntimeObservations } from './runtime-types';
+import { useRegisterOperationsRefresh } from '../operations/operations-refresh';
 import { resolveRuntimeObservations, useRuntimeStream } from './use-runtime-stream';
 import styles from '../../styles/modules/runtime.module.css';
 
@@ -27,6 +28,12 @@ export function RuntimeHierarchy() {
   const { t } = useI18n();
   const observations = useRead<RuntimeObservations>('/api/runtime/observations');
   const stream = useRuntimeStream();
+
+  // UX-3: the runtime view is a peer of the canvas and the ledger, so its
+  // loader joins the page frame's single refresh entry.
+  useRegisterOperationsRefresh('topology:runtime', () => {
+    void observations.mutate();
+  });
   const [open, setOpen] = useState<Record<string, boolean>>({});
 
   const snapshot = resolveRuntimeObservations(stream, observations.data)?.snapshot;

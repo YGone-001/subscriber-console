@@ -294,9 +294,18 @@ test('the relationship presentation covers exactly the nine canonical types', ()
 
 /* ------------------------------------------------------------------ pages -- */
 
-test('the topology list page renders inside the shell providers without network access', () => {
+test('the topology page defaults to the architecture view and still renders', () => {
   const markup = renderPage(createElement(TopologyPage));
   assert.ok(markup.includes('Topology'), 'the page title must render');
+  assert.ok(markup.includes('data-topology-view="architecture"'), 'the view switch must render');
+  // UX-3: the relationship ledger and the runtime tree are exclusive views, so
+  // neither is rendered behind the canvas.
+  assert.ok(!markup.includes('topology-filter-from'), 'the ledger must not render on the architecture view');
+  assert.ok(!markup.includes('data-testid="runtime-discovery"'), 'the runtime surface must not render behind the canvas');
+});
+
+test('the relationship ledger renders on its own view', () => {
+  const markup = renderPage(createElement(TopologyPage), '/topology?view=relationships');
   assert.ok(markup.includes('topology-filter-from'), 'the from-resource filter must render');
   assert.ok(markup.includes('topology-filter-to'), 'the to-resource filter must render');
 });

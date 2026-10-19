@@ -49,6 +49,17 @@ import { ArchitectureView } from './ArchitectureView';
 
 const PAGE_LIMIT = 20;
 
+/* UX-3: three exclusive in-page views. No SPA route is added: the workbench
+ * keeps one canonical `/topology` route and one tab. */
+const TOPOLOGY_VIEWS = ['architecture', 'relationships', 'runtime'] as const;
+type TopologyView = (typeof TOPOLOGY_VIEWS)[number];
+
+const TOPOLOGY_VIEW_LABEL: Record<TopologyView, string> = {
+  architecture: 'topology_view_architecture',
+  relationships: 'topology_view_relationships',
+  runtime: 'topology_view_runtime',
+};
+
 export function TopologyPage() {
   const { t } = useI18n();
   const { user } = useAuth();
@@ -59,7 +70,12 @@ export function TopologyPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const url = useOperationsUrlState({ keys: ['state', 'relationship', 'from', 'to'] });
+  const url = useOperationsUrlState({
+    keys: ['state', 'relationship', 'from', 'to'],
+    views: TOPOLOGY_VIEWS,
+    defaultView: 'architecture',
+  });
+  const topologyView = url.view as TopologyView;
 
   /* `active` stays the effective default without being written into the URL, so
    * an untouched page keeps a clean, shareable address. */
@@ -117,14 +133,17 @@ export function TopologyPage() {
     [fromResourceId, toResourceId, relationshipType, lifecycleState, t],
   );
 
+  /* The relationship ledger is only read on its own view: the architecture
+   * canvas and the runtime hierarchy must not pay for a query they do not show. */
   useEffect(() => {
+    if (topologyView !== 'relationships') return;
     const queryKey = `${lifecycleState}|${relationshipType}|${fromResourceId}|${toResourceId}`;
     if (queryKeyRef.current !== queryKey) {
       queryKeyRef.current = queryKey;
       setCursorHistory([]);
     }
     void loadEdges(url.cursor);
-  }, [loadEdges, url.cursor, lifecycleState, relationshipType, fromResourceId, toResourceId]);
+  }, [topologyView, loadEdges, url.cursor, lifecycleState, relationshipType, fromResourceId, toResourceId]);
 
   const endpointIds = useMemo(
     () => [
@@ -266,9 +285,25 @@ export function TopologyPage() {
       title={t('topology_title')}
       description={t('topology_description')}
       icon={<GitBranch size={23} />}
-      onRefresh={() => loadEdges(url.cursor)}
+      viewSwitch={(
+        <div className={styles.viewToggle} role="group" aria-label={t('topology_view_label')}>
+          {TOPOLOGY_VIEWS.map((view) => (
+            <button
+              key={view}
+              type="button"
+              data-topology-view={view}
+              className={topologyView === view ? styles.viewToggleActive : undefined}
+              aria-pressed={topologyView === view}
+              onClick={() => url.setView(view)}
+            >
+              {t(TOPOLOGY_VIEW_LABEL[view])}
+            </button>
+          ))}
+        </div>
+      )}
+      onRefresh={topologyView === 'relationships' ? () => loadEdges(url.cursor) : undefined}
       actions={
-        canConfigure ? (
+        canConfigure && topologyView === 'relationships' ? (
           <button
             type="button"
             className="btn btn-primary"
@@ -283,8 +318,17 @@ export function TopologyPage() {
         ) : undefined
       }
     >
-      <ArchitectureView />
+      {topologyView === 'architecture' ? <ArchitectureView /> : null}
 
+      {topologyView === 'runtime' ? (
+        <section className="dash-card" aria-label={t('topology_view_runtime')}>
+          <p className={styles.viewNote}>{t('topology_runtime_note')}</p>
+          <RuntimeHierarchy />
+        </section>
+      ) : null}
+
+      {topologyView === 'relationships' ? (
+        <>
       {conflictNotice ? (
         <div className={styles.conflictBanner} role="alert">
           <span>{conflictNotice}</span>
@@ -551,11 +595,8 @@ export function TopologyPage() {
           ) : null}
         </div>
       </Dialog>
-
-      {/* Observed local runtime hierarchy. Read-only evidence derived from the
-          backend host and verified process membership. It never creates,
-          suggests or persists a protocol relationship. */}
-      <RuntimeHierarchy />
+        </>
+      ) : null}
     </OperationsPageFrame>
   );
 }

@@ -13,6 +13,7 @@ import { createElement, type ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { I18nProvider } from '../src/providers/I18nProvider';
+import { en } from '../src/lib/locales/en';
 import { OperationsNav } from '../src/features/operations/OperationsNav';
 import { ArchitectureCanvas, placeLinkLabel } from '../src/features/topology/components/ArchitectureCanvas';
 import {
@@ -136,36 +137,80 @@ test('an explicit Inventory role binds a role token', () => {
   assert.equal(sgwc.bindingSource, 'inventory');
 });
 
-test('a normalized resource-name prefix binds when no role is set', () => {
+test('a name-only match is a migration suggestion, never a binding', () => {
   const projection = resolveArchitecture({ resources: items([resource({ role: '', name: 'AMF-01' })]) });
   const amf = projection.nodes.find((node) => node.role === 'amf');
-  assert.equal(amf?.binding, 'bound');
-  assert.equal(amf?.resourceName, 'AMF-01');
+  // Naming habits are not identity: the resource is surfaced for migration, but
+  // it may not claim the role, a target, a tone or a declared link.
+  assert.equal(amf?.binding, 'unbound');
+  assert.equal(amf?.resourceId, null);
+  assert.equal(amf?.targetId, null);
+  assert.equal(amf?.suggestions.length, 1);
+  assert.equal(amf?.suggestions[0].resourceId, AMF);
+  assert.equal(amf?.suggestions[0].reason, 'name_prefix');
+  assert.equal(amf?.tone, 'unregistered');
+});
+
+test('a suggestion never carries a health projection', () => {
+  const projection = resolveArchitecture({
+    resources: items([resource({ role: '', name: 'amf-01' })], [target()]),
+  });
+  const amf = projection.nodes.find((node) => node.role === 'amf');
+  assert.equal(amf?.binding, 'unbound');
+  assert.equal(amf?.tone, 'unregistered');
+  assert.equal(amf?.coverage, null);
+  assert.equal(amf?.memory, null);
+  assert.equal(amf?.cpu, null);
+  assert.equal(amf?.suggestions.length, 1);
+  // The suggestion type has no tone or target field at all.
+  assert.deepEqual(Object.keys(amf?.suggestions[0] ?? {}).sort(), ['lifecycleState', 'name', 'reason', 'resourceId']);
 });
 
 test('an equal-ranked duplicate is reported as ambiguous, not silently chosen', () => {
   const projection = resolveArchitecture({
     resources: items([
-      resource({ _id: AMF, name: 'smf-01', role: '', domain: '5gc' }),
-      resource({ _id: SMF, name: 'smf-02', role: '', domain: '5gc' }),
+      resource({ _id: AMF, name: 'smf-01', role: 'smf', domain: '5gc' }),
+      resource({ _id: SMF, name: 'smf-02', role: 'smf', domain: '5gc' }),
     ]),
   });
   const smf = projection.nodes.find((node) => node.role === 'smf');
   assert.equal(smf?.binding, 'ambiguous');
   assert.equal(smf?.candidateCount, 2);
-  assert.ok(smf?.resourceId, 'the deterministic first candidate is still rendered');
+  // UX-3: an ambiguous role claims no identity. Binding the first candidate
+  // would present one resource's health as the role's health.
+  assert.equal(smf?.resourceId, null, 'no candidate may be silently bound');
+  assert.equal(smf?.tone, 'ambiguous');
+  assert.equal(smf?.candidates.length, 2, 'every candidate must stay inspectable');
+  assert.equal(smf?.targetId, null, 'no monitoring target may be claimed');
 });
 
-test('the expected Inventory domain breaks a name tie', () => {
+test('the expected Inventory domain breaks an explicit-role tie', () => {
   const projection = resolveArchitecture({
     resources: items([
-      resource({ _id: HSS_IMS, name: 'hss-ims', role: '', domain: 'ims' }),
-      resource({ _id: HSS_EPC, name: 'hss-epc', role: '', domain: 'epc' }),
+      resource({ _id: HSS_IMS, name: 'hss-ims', role: 'hss', domain: 'ims' }),
+      resource({ _id: HSS_EPC, name: 'hss-epc', role: 'hss', domain: 'epc' }),
     ]),
   });
   const hss = projection.nodes.find((node) => node.role === 'hss');
   assert.equal(hss?.binding, 'bound');
   assert.equal(hss?.resourceId, HSS_EPC);
+});
+
+test('an explicit role always wins over a conflicting name', () => {
+  // A resource whose canonical role is AMF but whose name looks like an SMF.
+  const projection = resolveArchitecture({
+    resources: items([resource({ _id: AMF, name: 'smf-01', role: 'amf', domain: '5gc' })]),
+  });
+  const amf = projection.nodes.find((node) => node.role === 'amf');
+  const smf = projection.nodes.find((node) => node.role === 'smf');
+  assert.equal(amf?.binding, 'bound');
+  assert.equal(amf?.resourceId, AMF);
+  // The name is reported for migration only; it must never steal the SMF role.
+  assert.equal(smf?.binding, 'unbound');
+  assert.equal(smf?.resourceId, null);
+  assert.equal(smf?.targetId, null);
+  assert.equal(smf?.suggestions.length, 1);
+  assert.equal(smf?.suggestions[0].resourceId, AMF);
 });
 
 test('retired and non-network-function resources never bind', () => {
@@ -410,7 +455,8 @@ test('the canvas renders role labels, states and keyboard-reachable nodes', () =
   assert.ok(markup.includes('tabindex="0"'), 'nodes must be keyboard reachable');
   assert.ok(markup.includes('role="button"'), 'nodes must be operable');
   assert.ok(markup.includes('Healthy') || markup.includes('healthy'), 'the measured state must be labelled');
-  assert.ok(markup.includes('Not registered'), 'unregistered roles must say so');
+  // Copy comes from the locale so a wording change cannot silently break the canvas contract.
+  assert.ok(markup.includes(en.arch_state_unregistered), 'a role without an explicit binding must say so');
 });
 
 test('the operational navigation renders the four canonical destinations', () => {

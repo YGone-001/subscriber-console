@@ -133,6 +133,17 @@ const SA_ROLES = new Set([
 const NSA_ROLES = new Set(['amf', 'mme', 'smf', 'pgw-c', 'pgw-u', 'upf', 'hss', 'udm']);
 
 /** Roles visible in a view. A role absent from the view is not a fault. */
+/**
+ * Every canonical role token the skeleton can bind to.
+ *
+ * The architecture canvas reads `/api/operations/resources?roles=` with exactly
+ * this set, so the projection returns the resources relevant to the reference
+ * layout instead of an arbitrary first page of Inventory.
+ */
+export const ARCHITECTURE_ROLE_TOKENS: string[] = Array.from(
+  new Set(ARCHITECTURE_NODES.flatMap((node) => [node.role, ...node.roleTokens])),
+).sort();
+
 export function rolesForView(view: ArchitectureViewMode): Set<string> | null {
   if (view === 'epc') return EPC_ROLES;
   if (view === '5gc-sa') return SA_ROLES;

@@ -29,6 +29,7 @@ import styles from '../../../styles/modules/architecture.module.css';
 const TONE_CLASS: Record<NodeTone, string> = {
   unregistered: styles.toneUnregistered,
   observed: styles.toneObserved,
+  ambiguous: styles.toneAmbiguous,
   unmonitored: styles.toneUnmonitored,
   unresolved: styles.toneUnresolved,
   healthy: styles.toneHealthy,
@@ -171,6 +172,8 @@ export function ArchitectureCanvas({
               tabIndex={0}
               aria-label={ariaLabel}
               aria-pressed={selected}
+              data-binding={node.binding}
+              data-role={node.role}
               className={`${styles.node} ${TONE_CLASS[node.tone]} ${DOMAIN_CLASS[node.domain]} ${selected ? styles.nodeSelected : ''}`}
               onClick={activate}
               onKeyDown={(event) => {

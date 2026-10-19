@@ -14,9 +14,10 @@ import (
 const (
 	ResourceDefaultLimit = 20
 	ResourceMaxLimit     = 200
-	// ResourceMaxRoles bounds the `roles` filter. A caller asking for more
-	// canonical roles than this is building a query, not selecting a view.
-	ResourceMaxRoles = 8
+	// ResourceMaxRoles bounds the `roles` filter. The bound is sized for the
+	// largest legitimate caller (the reference architecture asks for every role
+	// token of its skeleton) while still refusing an unbounded query.
+	ResourceMaxRoles = 64
 )
 
 // Association states for one Inventory resource.

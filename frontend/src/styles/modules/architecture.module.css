@@ -535,3 +535,194 @@
     max-height: none;
   }
 }
+
+/* ---------------------------------------------------------------- UX-3 ---- */
+/* One primary canvas, a collapsed legend and an overlay detail drawer. */
+
+.toneAmbiguous {
+  --tone: var(--sys-color-status-warning, #b45309);
+}
+
+.canvasWrapFull {
+  min-height: clamp(420px, calc(100vh - 320px), 720px);
+}
+
+.canvasWrapFull .canvas {
+  height: 100%;
+  min-height: inherit;
+}
+
+.legendCompact {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  flex-wrap: wrap;
+  padding: var(--space-4) 0;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.legendCompactGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.legendToggle {
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-pill);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  padding: 2px var(--space-8);
+  cursor: pointer;
+}
+
+.legendToggle:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.legendDialog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  max-height: min(70vh, 520px);
+  overflow-y: auto;
+}
+
+.legendDialogGroup {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+}
+
+/* Overlay drawer: the canvas is never permanently squeezed by a side panel. */
+
+.drawerLayer {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(15, 23, 42, 0.28);
+}
+
+.drawer {
+  display: flex;
+  flex-direction: column;
+  width: min(440px, 100%);
+  height: 100%;
+  overflow-y: auto;
+  border-inline-start: 1px solid var(--surface-border);
+  background: var(--surface);
+}
+
+.drawer:focus-visible {
+  outline: none;
+}
+
+.drawerHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-8);
+  padding: var(--space-16);
+  border-bottom: 1px solid var(--surface-border);
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+}
+
+.drawerBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+  padding: var(--space-16);
+}
+
+.drawerSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.drawerSectionTitle {
+  margin: 0;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.candidateList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.candidateItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8);
+  padding: var(--space-4) 0;
+  border-bottom: 1px dashed var(--surface-border);
+  font-size: 0.8rem;
+}
+
+.entryList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+}
+
+.entryDisabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.viewNote {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+@media (max-width: 900px) {
+  .canvasWrapFull {
+    min-height: 360px;
+  }
+}
+
+/* Equivalent list representation of the canvas. */
+.nodeTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.nodeTable th,
+.nodeTable td {
+  padding: var(--space-4) var(--space-8);
+  border-bottom: 1px solid var(--surface-border);
+  text-align: start;
+}
+
+.nodeTable thead th {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.nodeTableCaption {
+  caption-side: top;
+  text-align: start;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  padding-bottom: var(--space-4);
+}

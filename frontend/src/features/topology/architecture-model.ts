@@ -36,6 +36,7 @@ import {
 export type NodeTone =
   | 'unregistered'
   | 'observed'
+  | 'ambiguous'
   | 'unmonitored'
   | 'unresolved'
   | 'healthy'
@@ -43,6 +44,36 @@ export type NodeTone =
   | 'unhealthy'
   | 'stale'
   | 'unknown';
+
+/**
+ * One equally-ranked Inventory candidate for a reference role.
+ *
+ * An ambiguous role lists every candidate instead of silently binding the first
+ * one, so the operator can see what the console refused to choose.
+ */
+export type ArchitectureCandidate = {
+  resourceId: string;
+  name: string;
+  lifecycleState: string;
+  tone: NodeTone;
+  targetId: string | null;
+};
+
+/**
+ * A name-based lookalike for a role that has no explicit binding.
+ *
+ * This is a migration diagnostic, not an identity claim. It deliberately carries
+ * no tone and no monitoring target: a suggestion can never project health, count
+ * as bound or monitored, or declare a topology relationship. The operator must
+ * confirm the real role and write it through the Inventory governance path.
+ */
+export type ArchitectureSuggestion = {
+  resourceId: string;
+  name: string;
+  lifecycleState: string;
+  /** Why the resource was suggested: exact normalized name, or a name prefix. */
+  reason: 'name' | 'name_prefix';
+};
 
 export type BindingState = 'bound' | 'ambiguous' | 'unbound';
 export type BindingSource = 'runtime' | 'inventory' | 'none';
@@ -67,6 +98,16 @@ export type ArchitectureNodeView = {
   lifecycleState: string;
   /** Number of equally-ranked Inventory candidates; 1 for a clean binding. */
   candidateCount: number;
+  /**
+   * Equally-ranked candidates, bounded to a small list. Populated only when the
+   * binding is ambiguous: a single candidate is already named by resourceId.
+   */
+  candidates: ArchitectureCandidate[];
+  /**
+   * Name-based lookalikes for an unbound role. Diagnostic only: they never set
+   * resourceId, targetId or a tone.
+   */
+  suggestions: ArchitectureSuggestion[];
   observed: ObservedProcess | null;
   tone: NodeTone;
   targetId: string | null;
@@ -160,6 +201,18 @@ function matchRuntimeComponent(
 
 type Candidate = { resource: OperationalResource; tier: number; domainMatch: boolean };
 
+/** Upper bound on the candidates listed in the drawer for one ambiguous role. */
+const MAX_LISTED_CANDIDATES = 5;
+
+/**
+ * The only tier that may establish a binding.
+ *
+ * Tier 4 is an explicit canonical `role` match on the Inventory resource. Tiers
+ * 3 (exact name) and 2 (name prefix) are naming habits, not identity, so they
+ * are reported as migration suggestions and never bind.
+ */
+const AUTHORITATIVE_TIER = 4;
+
 function rankCandidates(node: ArchitectureNode, resources: OperationalResource[]): Candidate[] {
   const tokens = new Set([normalizeToken(node.role), ...node.roleTokens.map(normalizeToken)]);
   const candidates: Candidate[] = [];
@@ -215,6 +268,8 @@ function viewForNode(
 ): ArchitectureNodeView {
   const runtime = matchRuntimeComponent(node, components);
   const candidates = rankCandidates(node, resources);
+  const authoritative = candidates.filter((candidate) => candidate.tier === AUTHORITATIVE_TIER);
+  const diagnostic = candidates.filter((candidate) => candidate.tier < AUTHORITATIVE_TIER);
   const base = {
     role: node.role,
     label: node.label,
@@ -229,7 +284,13 @@ function viewForNode(
   const runtimeBound = runtime?.associatedResourceId
     ? resources.find((resource) => resource.resourceId === runtime.associatedResourceId)
     : undefined;
-  const chosen = runtimeBound ?? candidates[0]?.resource;
+  const chosen = runtimeBound ?? authoritative[0]?.resource;
+
+  // A runtime association outranks everything, so only a pure explicit-role tie
+  // is ambiguous. An ambiguous role is never bound to the first candidate: the
+  // console cannot tell which resource the role actually runs.
+  const ambiguous = !runtimeBound && authoritative.length > 1
+    && authoritative[1].domainMatch === authoritative[0].domainMatch;
 
   if (!chosen) {
     const observed = runtime && runtime.verified && runtime.status === 'running' ? runtime : null;
@@ -241,6 +302,13 @@ function viewForNode(
       resourceName: '',
       lifecycleState: '',
       candidateCount: 0,
+      candidates: [],
+      suggestions: diagnostic.slice(0, MAX_LISTED_CANDIDATES).map((candidate) => ({
+        resourceId: candidate.resource.resourceId,
+        name: candidate.resource.name,
+        lifecycleState: candidate.resource.lifecycleState,
+        reason: candidate.tier === 3 ? 'name' : 'name_prefix',
+      })),
       observed: observed
         ? { processName: observed.processName, status: observed.status, verified: observed.verified }
         : null,
@@ -254,8 +322,38 @@ function viewForNode(
     };
   }
 
-  const ambiguous = !runtimeBound && candidates.length > 1 && candidates[1].tier === candidates[0].tier
-    && candidates[1].domainMatch === candidates[0].domainMatch;
+  if (ambiguous) {
+    const observed = runtime && runtime.verified && runtime.status === 'running' ? runtime : null;
+    return {
+      ...base,
+      binding: 'ambiguous',
+      bindingSource: 'inventory',
+      // No identity is claimed: the role has several equally-ranked resources.
+      resourceId: null,
+      resourceName: '',
+      lifecycleState: '',
+      candidateCount: authoritative.length,
+      candidates: authoritative.slice(0, MAX_LISTED_CANDIDATES).map((candidate) => ({
+        resourceId: candidate.resource.resourceId,
+        name: candidate.resource.name,
+        lifecycleState: candidate.resource.lifecycleState,
+        tone: toneForResource(candidate.resource),
+        targetId: candidate.resource.monitoring?.targetId ?? null,
+      })),
+      suggestions: [],
+      observed: observed
+        ? { processName: observed.processName, status: observed.status, verified: observed.verified }
+        : null,
+      tone: 'ambiguous',
+      targetId: null,
+      coverage: null,
+      memory: null,
+      cpu: null,
+      freshness: '',
+      overallState: '',
+    };
+  }
+
   const monitoring = chosen.monitoring;
 
   return {
@@ -265,7 +363,9 @@ function viewForNode(
     resourceId: chosen.resourceId,
     resourceName: chosen.name,
     lifecycleState: chosen.lifecycleState,
-    candidateCount: runtimeBound ? 1 : candidates.length,
+    candidateCount: runtimeBound ? 1 : authoritative.length,
+    candidates: [],
+    suggestions: [],
     observed: runtime
       ? { processName: runtime.processName, status: runtime.status, verified: runtime.verified }
       : null,
@@ -352,8 +452,8 @@ export function summarizeArchitecture(nodes: ArchitectureNodeView[]): Architectu
   };
   for (const node of nodes) {
     if (node.binding === 'ambiguous') summary.ambiguous += 1;
-    if (node.resourceId) summary.bound += 1;
-    else summary.unbound += 1;
+    if (node.binding === 'bound') summary.bound += 1;
+    if (node.binding === 'unbound') summary.unbound += 1;
     if (node.tone === 'observed') summary.observedUnmanaged += 1;
     if (node.targetId) summary.monitored += 1;
     if (node.tone === 'degraded') summary.degraded += 1;
@@ -383,6 +483,7 @@ export function filterArchitecture(
 export function stateLabelKey(tone: NodeTone): string {
   if (tone === 'unregistered') return 'arch_state_unregistered';
   if (tone === 'observed') return 'arch_state_observed';
+  if (tone === 'ambiguous') return 'arch_state_ambiguous';
   if (tone === 'unmonitored') return 'arch_state_unmonitored';
   if (tone === 'unresolved') return 'ops_state_unresolved';
   return `ops_state_${tone}`;

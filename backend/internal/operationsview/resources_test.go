@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -421,11 +422,36 @@ func TestParseRolesDeduplicatesAndBounds(t *testing.T) {
 	if _, err := parseRoles("smf,,pcf"); err == nil {
 		t.Fatalf("an empty role value must be rejected")
 	}
-	if _, err := parseRoles("a,b,c,d,e,f,g,h,i"); err == nil {
-		t.Fatalf("more than %d roles must be rejected", ResourceMaxRoles)
-	}
 	if _, err := parseRoles(""); err != nil {
 		t.Fatalf("an absent roles parameter is valid: %v", err)
+	}
+}
+
+func TestParseRolesAcceptsTheReferenceSkeletonAndRefusesUnboundedQueries(t *testing.T) {
+	// The architecture canvas asks for every role token of its skeleton. The
+	// filter must accept that legitimate bound and still refuse an unbounded one.
+	skeleton := []string{
+		"amf", "mme", "smf", "sgw-c", "sgwc", "pgw-c", "pgwc", "nrf", "nssf", "bsf",
+		"scp", "udm", "udr", "ausf", "pcf", "hss", "ocs", "dra", "pcrf", "upf",
+		"sgw-u", "sgwu", "pgw-u", "pgwu",
+	}
+	if len(skeleton) > ResourceMaxRoles {
+		t.Fatalf("the reference skeleton must fit inside the bound")
+	}
+	roles, err := parseRoles(strings.Join(skeleton, ","))
+	if err != nil {
+		t.Fatalf("the reference skeleton must be accepted: %v", err)
+	}
+	if len(roles) != len(skeleton) {
+		t.Fatalf("every skeleton role must survive: got %d", len(roles))
+	}
+
+	over := make([]string, 0, ResourceMaxRoles+1)
+	for i := 0; i <= ResourceMaxRoles; i++ {
+		over = append(over, "role-"+itoa(i))
+	}
+	if _, err := parseRoles(strings.Join(over, ",")); err == nil {
+		t.Fatalf("more than %d roles must be rejected", ResourceMaxRoles)
 	}
 }
 

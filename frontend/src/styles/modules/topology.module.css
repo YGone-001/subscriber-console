@@ -945,3 +945,48 @@
   .labelRow { grid-template-columns: minmax(0, 1fr); }
   .modalBody { padding: 0.85rem; }
 }
+
+/* ---------------------------------------------------------------- UX-3 ---- */
+/* In-page view switch for architecture / relationships / runtime. */
+
+.viewToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-control);
+  background: var(--surface-field);
+}
+
+.viewToggle button {
+  min-height: calc(var(--control-height) - 6px);
+  padding: 0 0.75rem;
+  border: 0;
+  border-radius: var(--ref-radius-small);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.viewToggle button:hover {
+  color: inherit;
+}
+
+.viewToggle button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.viewToggleActive {
+  background: var(--surface);
+  color: var(--text-primary, inherit);
+  font-weight: 600;
+}
+
+.viewNote {
+  margin: 0 0 var(--space-8);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
