@@ -30,7 +30,11 @@ const repoRoot = resolve(frontendRoot, '..');
 const distDir = process.env.XCLOUD_DISCOVERY_DIST_DIR
   ? resolve(process.env.XCLOUD_DISCOVERY_DIST_DIR)
   : resolve(frontendRoot, 'dist');
-const outDir = resolve(repoRoot, 'reports', 'ops', 'nf-discovery-screenshots');
+/* The report directory is overridable so the matrix can be captured where the
+ * checkout is not writable by the invoking account (shared and CI checkouts).*/
+const outDir = process.env.XCLOUD_DISCOVERY_REPORT_DIR
+  ? resolve(process.env.XCLOUD_DISCOVERY_REPORT_DIR)
+  : resolve(repoRoot, 'reports', 'ops', 'nf-discovery-screenshots');
 
 const EXPECTED_SCREENSHOT_COUNT = 22;
 const MIN_PNG_BYTES = 8192;

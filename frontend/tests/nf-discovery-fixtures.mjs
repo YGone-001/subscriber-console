@@ -210,6 +210,13 @@ export const CANDIDATES = [
   },
 ];
 
+/*
+ * Inventory identity authority for the comparison pages.
+ *
+ * "role" carries the canonical architecture role token, not a generic "nf"
+ * bucket: the reference architecture binds its skeleton by role, so a
+ * deployment can only be projected when the token matches exactly.
+ */
 const INVENTORY_RESOURCES = [
   {
     resourceId: RESOURCE_IDS.amf,
@@ -219,7 +226,7 @@ const INVENTORY_RESOURCES = [
     nameNormalized: 'amf-01',
     displayName: 'AMF-01',
     domain: '5gc',
-    role: 'nf',
+    role: 'amf',
     lifecycleState: 'active',
     source: { kind: 'manual', system: 'xcloud', authority: 'authoritative' },
     revision: 1,
@@ -236,7 +243,7 @@ const INVENTORY_RESOURCES = [
     nameNormalized: 'smf-01',
     displayName: 'SMF-01',
     domain: '5gc',
-    role: 'nf',
+    role: 'smf',
     lifecycleState: 'active',
     source: { kind: 'manual', system: 'xcloud', authority: 'authoritative' },
     revision: 1,
@@ -246,6 +253,197 @@ const INVENTORY_RESOURCES = [
     updatedBy: 'fixture',
   },
 ];
+
+export const TARGET_IDS = {
+  amf: '7c3e1d50-0031-4d31-9f31-000000000031',
+};
+
+/*
+ * GET /api/operations/resources projection.
+ *
+ * The server owns the authoritative Inventory -> NF Health association join.
+ * The fixture mirrors both accepted association outcomes so the rendering
+ * states stay distinguishable:
+ *   amf-01 -> confirmed (a target exists and the latest evidence is fresh)
+ *   smf-01 -> absent    (the bounded lookup succeeded and returned no target)
+ * "absent" is the only state the UI may render as "not monitored". The fixture
+ * never produces "unresolved" because its lookup always succeeds.
+ */
+export const OPERATIONS_RESOURCES = [
+  {
+    resourceId: RESOURCE_IDS.amf,
+    name: 'amf-01',
+    displayName: 'AMF-01',
+    domain: '5gc',
+    kind: 'network_function',
+    role: 'amf',
+    lifecycleState: 'active',
+    isNetworkFunction: true,
+    association: 'confirmed',
+    monitoring: {
+      targetId: TARGET_IDS.amf,
+      enabled: true,
+      nfType: 'AMF',
+      overallState: 'healthy',
+      statusComplete: true,
+      coverage: { l1Measured: true, l2Measured: true, l3Measured: false, l3Available: false },
+      freshness: { state: 'fresh', ageSeconds: 24, policySeconds: 300 },
+      latestSampleAt: TS.t4,
+      lastRunStatus: 'success',
+      lastRunAt: TS.t4,
+      resourceMetrics: [
+        {
+          key: 'resource_memory_resident_bytes',
+          value: 402653184,
+          unit: 'bytes',
+          type: 'gauge',
+          source: 'proc',
+          collectedAt: TS.t4,
+          category: 'resource',
+        },
+      ],
+    },
+    runtimeBinding: { state: 'bound', unit: 'xcloud-amfd.service' },
+  },
+  {
+    resourceId: RESOURCE_IDS.smf,
+    name: 'smf-01',
+    displayName: 'SMF-01',
+    domain: '5gc',
+    kind: 'network_function',
+    role: 'smf',
+    lifecycleState: 'active',
+    isNetworkFunction: true,
+    association: 'absent',
+    runtimeBinding: { state: 'unbound' },
+  },
+];
+
+/*
+ * Page-scoped monitoring predicates. Every value is evaluated against the
+ * loaded page only, which is why a filtered response declares filterScope.
+ */
+const MONITORING_FILTERS = {
+  monitored: (entry) => entry.association === 'confirmed',
+  unmonitored: (entry) => entry.association === 'absent',
+  unresolved: (entry) => entry.association === 'unresolved',
+  degraded: (entry) =>
+    entry.association === 'confirmed' &&
+    (entry.monitoring?.overallState === 'degraded' || entry.monitoring?.overallState === 'unhealthy'),
+  stale: (entry) =>
+    entry.association === 'confirmed' &&
+    (entry.monitoring?.overallState === 'stale' || entry.monitoring?.freshness?.state === 'stale'),
+  unknown: (entry) =>
+    entry.association === 'confirmed' &&
+    ['', 'unknown', 'not_configured'].includes(entry.monitoring?.overallState ?? ''),
+};
+
+/*
+ * Mirrors the accepted projection query semantics: identity filters are applied
+ * by the Inventory read, the monitoring predicate is page-scoped, and the
+ * cursor envelope is always present.
+ */
+function projectOperationsResources(url) {
+  const limit = Number(url.searchParams.get('limit') ?? 20) || 20;
+  const q = (url.searchParams.get('q') ?? '').trim().toLowerCase();
+  const domain = url.searchParams.get('domain') ?? '';
+  const kind = url.searchParams.get('kind') ?? '';
+  const monitoring = url.searchParams.get('monitoring') ?? '';
+  const roles = (url.searchParams.get('roles') ?? '')
+    .split(',')
+    .map((token) => token.trim())
+    .filter(Boolean);
+
+  let items = OPERATIONS_RESOURCES;
+  if (roles.length) items = items.filter((entry) => roles.includes(entry.role));
+  if (domain) items = items.filter((entry) => entry.domain === domain);
+  if (kind) items = items.filter((entry) => entry.kind === kind);
+  if (q) {
+    items = items.filter((entry) =>
+      entry.name.toLowerCase().includes(q) ||
+      (entry.displayName ?? '').toLowerCase().includes(q) ||
+      entry.resourceId.toLowerCase().includes(q));
+  }
+
+  const page = { limit, hasMore: false, nextCursor: null };
+  if (monitoring) {
+    const predicate = MONITORING_FILTERS[monitoring];
+    items = predicate ? items.filter(predicate) : items;
+    page.filterScope = 'page';
+    page.filteredCount = items.length;
+  }
+
+  return {
+    generatedAt: TS.t5,
+    completeness: { inventory: 'complete', monitoring: 'complete', telemetry: 'complete', overall: 'complete' },
+    page,
+    resources: items.slice(0, limit),
+  };
+}
+
+const SUMMARY_SECTIONS = ['inventory', 'discovery', 'health', 'alerts', 'topology'];
+
+/*
+ * Section-aware operations summary. Requested sections are the only ones
+ * computed and returned, matching the production contract.
+ */
+function buildOperationsSummary(url) {
+  const requested = (url.searchParams.get('sections') ?? '')
+    .split(',')
+    .map((token) => token.trim())
+    .filter(Boolean);
+  const sections = requested.length
+    ? SUMMARY_SECTIONS.filter((name) => requested.includes(name))
+    : SUMMARY_SECTIONS;
+  const body = { generatedAt: TS.t5, sections };
+
+  if (sections.includes('inventory')) {
+    body.inventory = {
+      completeness: 'complete',
+      scope: 'full_collection',
+      counts: {
+        total: OPERATIONS_RESOURCES.length,
+        byKind: { network_function: OPERATIONS_RESOURCES.length },
+        byLifecycleState: { active: OPERATIONS_RESOURCES.length },
+        byDomain: { '5gc': OPERATIONS_RESOURCES.length },
+      },
+    };
+  }
+
+  if (sections.includes('health')) {
+    const monitored = OPERATIONS_RESOURCES.filter((entry) => entry.association === 'confirmed');
+    body.health = {
+      completeness: 'complete',
+      scope: 'full_collection',
+      targets: {
+        configured: monitored.length,
+        enabled: monitored.length,
+        failed: 0,
+        freshnessByState: { fresh: monitored.length },
+        overallByState: { healthy: monitored.length },
+        layersByState: {},
+      },
+    };
+  }
+
+  if (sections.includes('discovery')) {
+    const stateCount = (state) => CANDIDATES.filter((item) => item.observationState === state).length;
+    body.discovery = {
+      completeness: 'complete',
+      scope: 'full_collection',
+      sources: SOURCES.length,
+      candidates: {
+        seen: stateCount('seen'),
+        missing: stateCount('missing'),
+        stale: stateCount('stale'),
+        linked: CANDIDATES.filter((item) => item.linkedResourceId).length,
+        unlinked: CANDIDATES.filter((item) => !item.linkedResourceId).length,
+      },
+    };
+  }
+
+  return body;
+}
 
 const TOPOLOGY_EDGES = [
   {
@@ -325,10 +523,47 @@ function page(limit) {
   return { limit, nextCursor: null, hasMore: false };
 }
 
-export async function startFixtureServer({ distDir, sessionKey = 'operator' }) {
+/*
+ * Deliberate fault injection.
+ *
+ * The resilience acceptance suite needs every auxiliary read to fail in
+ * isolation. Failures are opt-in per server instance so the screenshot matrix
+ * keeps running against the healthy fixture.
+ */
+const FAILURE_ROUTES = {
+  summary: (method, pathname) => pathname === '/api/operations/summary',
+  sources: (method, pathname) => pathname === '/api/discovery/sources' && method === 'GET',
+  candidates: (method, pathname) =>
+    pathname === '/api/discovery/candidates' ||
+    (/^\/api\/discovery\/candidates\/[^/]+$/.test(pathname) && method === 'GET'),
+  runs: (method, pathname) => pathname === '/api/discovery/runs',
+  runtime: (method, pathname) => pathname === '/api/runtime/observations',
+  'runtime-stream': (method, pathname) => pathname === '/api/runtime/stream',
+};
+
+/*
+ * Rewrites the monitoring association projection for linked candidates.
+ *
+ * "unresolved" is the state an authoritative association lookup produces when
+ * it does not succeed. It must never render as "not monitored".
+ */
+function projectCandidate(item, monitoringVariant) {
+  if (monitoringVariant !== 'unresolved' || !item.linkedResourceId) return item;
+  return { ...item, monitoringAssociation: { state: 'unresolved' } };
+}
+
+export async function startFixtureServer({
+  distDir,
+  sessionKey = 'operator',
+  /* Endpoint families this instance fails, e.g. ['summary', 'candidates']. */
+  fail = [],
+  /* Monitoring association variant: 'normal' | 'unresolved'. */
+  monitoringVariant = 'normal',
+}) {
   const unexpected = [];
   const requestLog = [];
   const openStreams = new Set();
+  const failures = new Set(fail);
 
   const server = createServer((req, res) => {
     const url = new URL(req.url, 'http://127.0.0.1');
@@ -336,7 +571,7 @@ export async function startFixtureServer({ distDir, sessionKey = 'operator' }) {
 
     if (pathname.startsWith('/api/')) {
       requestLog.push(`${req.method} ${pathname}`);
-      return handleApi(req, res, url, { sessionKey, unexpected, openStreams });
+      return handleApi(req, res, url, { sessionKey, unexpected, openStreams, failures, monitoringVariant });
     }
 
     if (req.method !== 'GET' && req.method !== 'HEAD') {
@@ -382,6 +617,15 @@ export async function startFixtureServer({ distDir, sessionKey = 'operator' }) {
 function handleApi(req, res, url, context) {
   const pathname = url.pathname;
   const session = SESSIONS[context.sessionKey] ?? SESSIONS.operator;
+
+  /* Injected faults answer exactly like a failing service would, so the UI
+   * exercises its real error boundary instead of a test-only branch. */
+  for (const token of context.failures ?? []) {
+    const matches = FAILURE_ROUTES[token];
+    if (matches && matches(req.method, pathname)) {
+      return sendJson(res, 503, { error: 'fixture injected failure', code: 'FIXTURE_INJECTED_FAILURE' });
+    }
+  }
 
   if (pathname === '/api/auth/me') return sendJson(res, 200, session);
   if (pathname === '/api/auth/permissions') return sendJson(res, 200, { permissions: session.permissions });
@@ -464,26 +708,17 @@ function handleApi(req, res, url, context) {
     return sendJson(res, 200, { edges: TOPOLOGY_EDGES.slice(0, limit), page: page(limit) });
   }
 
-  /* ----------------------------------------------------------- discovery -- */
-  if (pathname === '/api/operations/summary') {
-    const stateCount = (state) => CANDIDATES.filter((item) => item.observationState === state).length;
-    return sendJson(res, 200, {
-      generatedAt: TS.t5,
-      sections: ['discovery'],
-      discovery: {
-        completeness: 'complete',
-        scope: 'full_collection',
-        sources: SOURCES.length,
-        candidates: {
-          seen: stateCount('seen'),
-          missing: stateCount('missing'),
-          stale: stateCount('stale'),
-          linked: CANDIDATES.filter((item) => item.linkedResourceId).length,
-          unlinked: CANDIDATES.filter((item) => !item.linkedResourceId).length,
-        },
-      },
-    });
+  /* -------------------------------------------------- operations summary -- */
+  if (pathname === '/api/operations/summary' && req.method === 'GET') {
+    return sendJson(res, 200, buildOperationsSummary(url));
   }
+
+  /* ------------------------------------------------ operations resources -- */
+  if (pathname === '/api/operations/resources' && req.method === 'GET') {
+    return sendJson(res, 200, projectOperationsResources(url));
+  }
+
+  /* ----------------------------------------------------------- discovery -- */
 
   if (pathname === '/api/discovery/meta') {
     return sendJson(res, 200, {
@@ -578,18 +813,21 @@ function handleApi(req, res, url, context) {
     if (sourceId) items = items.filter((item) => item.sourceId === sourceId);
     if (nfType) items = items.filter((item) => item.nfType === nfType);
     if (observationState) items = items.filter((item) => item.observationState === observationState);
-    return sendJson(res, 200, { candidates: items.slice(0, limit), page: page(limit) });
+    const projected = items
+      .slice(0, limit)
+      .map((item) => projectCandidate(item, context.monitoringVariant));
+    return sendJson(res, 200, { candidates: projected, page: page(limit) });
   }
 
   const candidateLink = /^\/api\/discovery\/candidates\/([^/]+)\/link$/.exec(pathname);
   if (candidateLink && req.method === 'POST') {
     return readBody(req, (payload) => {
       const candidate = CANDIDATES.find((item) => item.candidateId === candidateLink[1]) ?? CANDIDATES[0];
-      return sendJson(res, 200, {
+      return sendJson(res, 200, projectCandidate({
         ...candidate,
         linkedResourceId: payload?.resourceId ?? RESOURCE_IDS.amf,
         revision: candidate.revision + 1,
-      });
+      }, context.monitoringVariant));
     });
   }
   const candidateUnlink = /^\/api\/discovery\/candidates\/([^/]+)\/unlink$/.exec(pathname);
@@ -603,7 +841,7 @@ function handleApi(req, res, url, context) {
   if (candidateMatch && req.method === 'GET') {
     const candidate = CANDIDATES.find((item) => item.candidateId === candidateMatch[1]);
     if (!candidate) return sendJson(res, 404, { error: 'not found', code: 'DISCOVERY_CANDIDATE_NOT_FOUND' });
-    return sendJson(res, 200, candidate);
+    return sendJson(res, 200, projectCandidate(candidate, context.monitoringVariant));
   }
 
   // The runtime discovery panel is mounted on the dashboard, the Inventory

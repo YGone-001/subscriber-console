@@ -19,6 +19,7 @@
     "evidence:topology": "node tests/render-topology-evidence.mjs",
     "acceptance:topology-screenshots": "node tests/topology-screenshots.mjs",
     "acceptance:discovery-screenshots": "node tests/nf-discovery-screenshots.mjs",
+    "acceptance:discovery-resilience": "node tests/discovery-resilience.mjs",
     "acceptance:nf-health-screenshots": "node tests/nf-health-screenshots.mjs"
   },
   "dependencies": {

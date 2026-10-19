@@ -19,6 +19,13 @@ import { ErrorState } from '../../components/ui/StatePanel';
 import { useI18n } from '../../providers/I18nProvider';
 import { useRegisterOperationsRefresh } from '../operations/operations-refresh';
 import { fetchDiscoveryCandidates, fetchDiscoveryMeta, fetchDiscoverySources } from './discovery-api';
+import {
+  canAdvance,
+  firstScroll,
+  nextScroll,
+  pageIndexFor,
+  previousScroll,
+} from './discovery-pager';
 import type { DiscoverySource, NfObservation, PageInfo } from './discovery-types';
 import {
   describeLoadError,
@@ -141,26 +148,26 @@ export function DiscoveryCandidatesView({
   useRegisterOperationsRefresh('discovery:candidates:selector', loadSelector);
   useRegisterOperationsRefresh('discovery:candidates', () => loadCandidates(cursor));
 
-  const pageIndex = cursorHistory.length + 1;
+  const pageIndex = pageIndexFor(cursorHistory);
 
   const handleFirstPage = () => {
-    setCursorHistory([]);
-    onCursorChange(undefined);
+    const next = firstScroll();
+    setCursorHistory(next.history);
+    onCursorChange(next.cursor);
   };
 
   const handlePrevPage = () => {
-    if (cursorHistory.length === 0) return;
-    const nextHistory = cursorHistory.slice(0, -1);
-    setCursorHistory(nextHistory);
-    const prevCursor = nextHistory.length > 0 ? nextHistory[nextHistory.length - 1] : undefined;
-    onCursorChange(prevCursor);
+    const next = previousScroll(cursorHistory);
+    if (next.history.length === cursorHistory.length) return;
+    setCursorHistory(next.history);
+    onCursorChange(next.cursor);
   };
 
   const handleNextPage = () => {
-    const nextCursor = page?.nextCursor;
-    if (!nextCursor || !page?.hasMore) return;
-    setCursorHistory((history) => [...history, nextCursor]);
-    onCursorChange(nextCursor);
+    const next = nextScroll(cursorHistory, page);
+    if (!next) return;
+    setCursorHistory(next.history);
+    onCursorChange(next.cursor);
   };
 
   return (
@@ -324,7 +331,7 @@ export function DiscoveryCandidatesView({
             <button
               type="button"
               onClick={handleNextPage}
-              disabled={!page?.hasMore || !page?.nextCursor || loading}
+              disabled={!canAdvance(page) || loading}
             >
               {t('ops_pager_next')}
             </button>

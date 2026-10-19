@@ -23,7 +23,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronDown, ChevronRight, Search, Server, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, Search, Server, X } from 'lucide-react';
 import { useRead } from '../../lib/api/use-read';
 import { useI18n } from '../../providers/I18nProvider';
 import { EmptyState, LoadingRows } from '../../components/ui/OperationFeedback';
@@ -667,8 +667,19 @@ export default function NetworkElementView({ presentation = 'table' }: { present
 }
 
 function layerMark(measured: boolean | undefined, t: (key: string) => string): React.ReactElement {
+  // The measured mark is an icon, not a text glyph: the self-hosted font subset
+  // carries the UI text plus GB2312 only, and a check mark outside that range
+  // would silently fall back to a system face. The accessible name travels on
+  // aria-label so the state is never encoded by colour alone.
   return measured ? (
-    <span className={styles.layerOn} title={t('ops_layer_measured')}>✓</span>
+    <span
+      className={styles.layerOn}
+      title={t('ops_layer_measured')}
+      role="img"
+      aria-label={t('ops_layer_measured')}
+    >
+      <Check size={12} aria-hidden="true" />
+    </span>
   ) : (
     <span className={styles.layerOff} title={t('ops_layer_not_configured')}>–</span>
   );

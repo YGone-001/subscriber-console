@@ -29,6 +29,23 @@ import type { NfObservation } from '../src/features/discovery/discovery-types';
 import type { RuntimeComponent } from '../src/features/runtime/runtime-types';
 import { en } from '../src/lib/locales/en';
 import { zh } from '../src/lib/locales/zh';
+import {
+  applyOperationsPatch,
+  OPERATIONS_CURSOR_PARAM,
+  OPERATIONS_VIEW_PARAM,
+  readOperationsParams,
+  resolveOperationsView,
+} from '../src/features/operations/operations-url-state';
+import {
+  canAdvance,
+  firstScroll,
+  nextScroll,
+  pageIndexFor,
+  previousScroll,
+} from '../src/features/discovery/discovery-pager';
+import { fetchDiscoveryCandidates } from '../src/features/discovery/discovery-api';
+import { discoveryKpisFromSummary } from '../src/features/operations/operations-summary';
+import type { PageInfo } from '../src/features/discovery/discovery-types';
 
 const read = (relative: string) => readFileSync(new URL(relative, import.meta.url), 'utf8');
 
@@ -350,6 +367,244 @@ test('runtime unavailability disables onboarding without touching the queue data
 });
 
 /* -------------------------------------------------- queue view render -- */
+
+/* ================================================================
+ * Behavioural URL and cursor contract.
+ *
+ * These tests exercise the real helpers the page is built on: a reading of the
+ * query string that a reload or a shared link produces, the same patch function
+ * the hook calls on every filter or cursor change, and the same cursor scroll
+ * the pager derives from a page envelope. No source-string assertions.
+ * ================================================================ */
+
+const DISCOVERY_VIEWS = ['candidates', 'sources', 'runs'] as const;
+const URL_KEYS = ['q', 'sourceId', 'state', 'nfType', 'runStatus'];
+
+/* The allow list the hook builds: page filter keys plus view and cursor. */
+const DISCOVERY_ALLOW_LIST = [
+  ...URL_KEYS,
+  OPERATIONS_VIEW_PARAM,
+  OPERATIONS_CURSOR_PARAM,
+];
+
+function searchOf(search: string): URLSearchParams {
+  return new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
+}
+
+test('a shared link restores view, every filter and the cursor', () => {
+  const parsed = readOperationsParams(
+    '?view=runs&q=lab&sourceId=8a1c2b30-0001&state=stale&nfType=AMF&runStatus=partial&cursor=cur-2',
+    DISCOVERY_ALLOW_LIST,
+  );
+  assert.deepEqual(parsed, {
+    view: 'runs',
+    q: 'lab',
+    sourceId: '8a1c2b30-0001',
+    state: 'stale',
+    nfType: 'AMF',
+    runStatus: 'partial',
+    cursor: 'cur-2',
+  });
+  assert.equal(resolveOperationsView(parsed.view, DISCOVERY_VIEWS, 'candidates'), 'runs');
+});
+
+test('an unknown or malformed view degrades to the default candidates queue', () => {
+  assert.equal(resolveOperationsView('history', DISCOVERY_VIEWS, 'candidates'), 'candidates');
+  assert.equal(resolveOperationsView(null, DISCOVERY_VIEWS, 'candidates'), 'candidates');
+  /* A control character is rejected rather than forwarded to a loader. */
+  assert.equal(resolveOperationsView('runs\u0000', DISCOVERY_VIEWS, 'candidates'), 'candidates');
+});
+
+/* A tiny history stack: each successful patch is one entry, exactly what
+ * useSearchParams pushes. Back and forward only re-read an entry. */
+function browserHistory(start = '') {
+  let params = searchOf(start);
+  const entries = [params.toString()];
+  let index = 0;
+  return {
+    navigate(patch: Record<string, string | null>) {
+      const result = applyOperationsPatch(params, patch, DISCOVERY_ALLOW_LIST);
+      if (!result.changed) return;
+      params = searchOf(result.search);
+      entries.splice(index + 1);
+      entries.push(params.toString());
+      index = entries.length - 1;
+    },
+    back() {
+      if (index === 0) return;
+      index -= 1;
+      params = searchOf(entries[index]);
+    },
+    forward() {
+      if (index >= entries.length - 1) return;
+      index += 1;
+      params = searchOf(entries[index]);
+    },
+    read() {
+      return readOperationsParams(params.toString(), DISCOVERY_ALLOW_LIST);
+    },
+    entries() {
+      return entries;
+    },
+  };
+}
+
+test('back and forward restore the previous filter set and cursor', () => {
+  const session = browserHistory('?view=candidates');
+  session.navigate({ sourceId: 'src-1' });
+  session.navigate({ cursor: 'cur-1' });
+
+  assert.equal(session.read().sourceId, 'src-1', 'the filter survives the page change');
+  assert.equal(session.read().cursor, 'cur-1', 'the cursor is addressable');
+
+  session.back();
+  assert.equal(session.read().sourceId, 'src-1', 'back keeps the filter set');
+  assert.equal(session.read().cursor, undefined, 'back leaves the cursor page');
+
+  session.back();
+  assert.equal(session.read().sourceId, undefined, 'a second back clears the filter');
+
+  session.forward();
+  assert.equal(session.read().sourceId, 'src-1', 'forward restores the filter set');
+  session.forward();
+  assert.equal(session.read().cursor, 'cur-1', 'forward restores the cursor page');
+});
+
+test('changing a filter drops the cursor in the same write', () => {
+  const result = applyOperationsPatch('?view=candidates&sourceId=src-1&cursor=cur-1', {
+    state: 'missing',
+  }, DISCOVERY_ALLOW_LIST);
+
+  assert.equal(result.cursorReset, true, 'a filter change must invalidate the cursor');
+  const next = readOperationsParams(result.search, DISCOVERY_ALLOW_LIST);
+  assert.equal(next.state, 'missing');
+  assert.equal(next.sourceId, 'src-1', 'unrelated filters survive');
+  assert.equal(next.cursor, undefined, 'page N of a discarded filter set is never requested');
+});
+
+test('switching view keeps filters but never keeps the cursor', () => {
+  const result = applyOperationsPatch('?sourceId=src-1&cursor=cur-1', {
+    view: 'sources',
+  }, DISCOVERY_ALLOW_LIST);
+
+  assert.equal(result.cursorReset, true);
+  const next = readOperationsParams(result.search, DISCOVERY_ALLOW_LIST);
+  assert.equal(next.view, 'sources');
+  assert.equal(next.sourceId, 'src-1');
+  assert.equal(next.cursor, undefined);
+});
+
+test('a cursor-only change does not reset itself', () => {
+  const result = applyOperationsPatch('?view=candidates&sourceId=src-1', {
+    cursor: 'cur-2',
+  }, DISCOVERY_ALLOW_LIST);
+
+  assert.equal(result.cursorReset, false);
+  assert.equal(readOperationsParams(result.search, DISCOVERY_ALLOW_LIST).cursor, 'cur-2');
+});
+
+/* ------------------------------------------------ cursor paging -- */
+
+/* 60 observed candidates behind a 20-row page: three reachable pages. */
+const SIXTY = Array.from({ length: 60 }, (_unused, index) => index + 1);
+const PAGE_SIZE = 20;
+const PAGES: PageInfo[] = [0, 1, 2].map((page) => {
+  const start = page * PAGE_SIZE;
+  const hasMore = start + PAGE_SIZE < SIXTY.length;
+  return {
+    limit: PAGE_SIZE,
+    nextCursor: hasMore ? 'cur-' + (start + PAGE_SIZE) : null,
+    hasMore,
+  };
+});
+
+test('every page of a 60-candidate queue is reachable by cursor', () => {
+  let scroll = firstScroll();
+  const visited: Array<{ page: number; cursor: string | undefined }> = [];
+
+  for (;;) {
+    const page = PAGES[scroll.history.length];
+    assert.ok(page, 'the walk must never request a page beyond the last one');
+    const rows = SIXTY.slice(scroll.history.length * PAGE_SIZE, scroll.history.length * PAGE_SIZE + PAGE_SIZE);
+    assert.equal(rows.length, PAGE_SIZE, 'each page is a full bounded page until the last');
+    visited.push({ page: pageIndexFor(scroll.history), cursor: scroll.cursor });
+
+    const next = nextScroll(scroll.history, page);
+    if (!next) break;
+    scroll = next;
+  }
+
+  assert.deepEqual(visited, [
+    { page: 1, cursor: undefined },
+    { page: 2, cursor: 'cur-20' },
+    { page: 3, cursor: 'cur-40' },
+  ], 'no page is skipped and no phantom page is requested');
+  assert.equal(canAdvance(PAGES[2]), false, 'the last page cannot advance');
+});
+
+test('previous and first walk back to the same cursors', () => {
+  const atThird = { history: ['cur-20', 'cur-40'], cursor: 'cur-40' };
+  assert.equal(pageIndexFor(atThird.history), 3);
+
+  const atSecond = previousScroll(atThird.history);
+  assert.deepEqual(atSecond, { history: ['cur-20'], cursor: 'cur-20' }, 'previous lands on page 2');
+
+  const atFirst = previousScroll(atSecond.history);
+  assert.deepEqual(atFirst, { history: [], cursor: undefined }, 'previous from page 2 requests page 1');
+
+  const alreadyFirst = previousScroll([]);
+  assert.deepEqual(alreadyFirst, { history: [], cursor: undefined }, 'previous on page 1 is a no-op');
+
+  assert.deepEqual(firstScroll(), { history: [], cursor: undefined }, 'first always clears the scroll');
+});
+
+test('each cursor produces the exact request path the loader sends', async () => {
+  const originalFetch = globalThis.fetch;
+  const requested: string[] = [];
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    requested.push(String(input));
+    return new Response(
+      JSON.stringify({ candidates: [], page: { limit: PAGE_SIZE, nextCursor: null, hasMore: false } }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    );
+  }) as typeof fetch;
+
+  try {
+    await fetchDiscoveryCandidates({ limit: PAGE_SIZE });
+    await fetchDiscoveryCandidates({ limit: PAGE_SIZE, cursor: 'cur-20' });
+    await fetchDiscoveryCandidates({ limit: PAGE_SIZE, cursor: 'cur-40', sourceId: 'src-1', observationState: 'seen' });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.deepEqual(requested, [
+    '/api/discovery/candidates?limit=20',
+    '/api/discovery/candidates?cursor=cur-20&limit=20',
+    '/api/discovery/candidates?sourceId=src-1&observationState=seen&cursor=cur-40&limit=20',
+  ], 'the cursor is the only page selector; no offset is ever sent');
+});
+
+test('KPIs are indifferent to which page is displayed', () => {
+  const fullCollection = discoveryKpisFromSummary({
+    completeness: 'complete',
+    scope: 'full_collection',
+    sources: 4,
+    candidates: { seen: 41, missing: 12, stale: 7, linked: 33, unlinked: 27 },
+  });
+
+  assert.deepEqual(fullCollection, { sources: 4, seen: 41, missing: 12, linked: 33 });
+
+  /* The projection takes only the summary section, so a 20-row page cannot
+   * influence it. An unavailable section yields explicit nulls. */
+  const unavailable = discoveryKpisFromSummary(undefined);
+  assert.deepEqual(unavailable, { sources: null, seen: null, missing: null, linked: null });
+  const partial = discoveryKpisFromSummary({
+    completeness: 'unavailable',
+    scope: 'full_collection',
+    candidates: { seen: 41, missing: 12, stale: 7, linked: 33, unlinked: 27 },
+  });
+  assert.deepEqual(partial, { sources: null, seen: null, missing: null, linked: null });
+});
 
 test('the candidates view renders its toolbar and bounded pager chrome', () => {
   const markup = renderToStaticMarkup(
