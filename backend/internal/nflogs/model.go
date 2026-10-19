@@ -6,8 +6,10 @@
  *   - A request never names a file. It names a source id that the server built
  *     from operator configuration at startup; the mapping id -> absolute path
  *     lives only in this process.
- *   - Sources are files ("kind":"file"). Reading a systemd unit would need a
- *     different capability, so it is left out rather than faked.
+ *   - Sources are files ("kind":"file") or systemd units ("kind":"unit"). A
+ *     unit is read through journalctl, so the host account needs the usual
+ *     systemd-journal read access; an unreadable journal says so instead of
+ *     pretending the unit is silent.
  *   - Every line leaves through one sanitizer. IMSI, IMPI, MSISDN, IPv4
  *     addresses and credential-looking pairs are masked before serialization.
  *   - Reads are bounded: line length, tail size, line rate and concurrent
@@ -17,10 +19,12 @@ package nflogs
 
 import "time"
 
-// Source kinds. Only files are implemented; the token exists so a future
-// capability can be added without changing the wire contract.
+// Source kinds. A file source is read from the path an operator declared; a
+// unit source is read from the systemd journal by the account this process
+// runs as.
 const (
 	SourceKindFile = "file"
+	SourceKindUnit = "unit"
 )
 
 // Bounds. They are part of the contract: the UI reads them from /sources.

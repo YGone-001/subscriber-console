@@ -32,9 +32,10 @@ type Config struct {
 	NFHealthTLSCAFile            string // optional CA bundle for https metrics endpoints
 	NFHealthLocalProcessBindings string // comma-separated resourceId=unit local bindings
 
-	// Log workspace (read-only file sources)
+	// Log workspace (read-only file and systemd unit sources)
 	NFLogDir            string // directory scanned for *.log sources
 	NFLogSources        string // comma-separated sourceId=/absolute/path overrides
+	NFLogUnits          string // comma-separated sourceId=systemd-unit declarations
 	NFLogSourceBindings string // comma-separated sourceId=resourceId|resourceId
 
 	// Runtime discovery (read-only local process recognition)
@@ -67,6 +68,7 @@ func Load() (*Config, error) {
 
 		NFLogDir:            envOrDefault("NF_LOG_DIR", "/var/log/xcloud"),
 		NFLogSources:        os.Getenv("NF_LOG_SOURCES"),
+		NFLogUnits:          os.Getenv("NF_LOG_UNITS"),
 		NFLogSourceBindings: os.Getenv("NF_LOG_SOURCE_BINDINGS"),
 
 		LocalNFDiscoveryEnabled:         envBoolOrDefault("LOCAL_NF_DISCOVERY_ENABLED", true),

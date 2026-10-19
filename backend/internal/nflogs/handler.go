@@ -1,6 +1,7 @@
 package nflogs
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -34,6 +35,7 @@ type Handler struct {
 	registry    *Registry
 	limiter     RateLimiter
 	auditWriter AuditWriter
+	units       UnitReader
 
 	slots *streamSlots
 
@@ -48,6 +50,7 @@ func NewHandler(registry *Registry, limiter RateLimiter, auditWriter AuditWriter
 		registry:    registry,
 		limiter:     limiter,
 		auditWriter: auditWriter,
+		units:       newJournalctlReader(),
 		slots:       &streamSlots{perUser: map[string]int{}},
 		tick:        StreamTickInterval,
 		heartbeat:   StreamHeartbeat,
@@ -137,12 +140,24 @@ func (h *Handler) Stream(w http.ResponseWriter, r *http.Request) {
 	}
 	defer h.slots.release(p.Username)
 
-	file, err := os.Open(item.Path)
-	if err != nil {
-		response.Error(w, http.StatusConflict, "log source is not readable", "NF_LOG_SOURCE_UNREADABLE")
-		return
+	// A file source is opened here, so an unreadable file is still an HTTP
+	// error. A unit source cannot be checked by opening it; its state is
+	// reported before the stream starts and again if the read fails.
+	var file *os.File
+	if item.Kind == SourceKindUnit {
+		if ok, note := h.units.Available(); !ok {
+			response.Error(w, http.StatusConflict, note, "NF_LOG_SOURCE_UNREADABLE")
+			return
+		}
+	} else {
+		opened, err := os.Open(item.Path)
+		if err != nil {
+			response.Error(w, http.StatusConflict, "log source is not readable", "NF_LOG_SOURCE_UNREADABLE")
+			return
+		}
+		defer opened.Close()
+		file = opened
 	}
-	defer file.Close()
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -170,14 +185,23 @@ func (h *Handler) Stream(w http.ResponseWriter, r *http.Request) {
 	})
 
 	seq := int64(0)
-	send := func(raw string) {
+	send := func(raw, level string) {
 		text := SanitizeLine(raw)
-		level := DetectLevel(text)
+		if level == "" {
+			// A file line carries its severity in the text, if at all. A
+			// journal entry already knows its syslog priority.
+			level = DetectLevel(text)
+		}
 		if !LevelAllowed(options.level, level) || !MatchesKeyword(options.keyword, text) {
 			return
 		}
 		seq++
 		_ = encoder.event("line", StreamLine{Seq: seq, Level: level, Text: text})
+	}
+
+	if item.Kind == SourceKindUnit {
+		h.streamUnit(r.Context(), encoder, item, options, send)
+		return
 	}
 
 	lines, endOffset, err := TailFile(file, options.tailLines, MaxScanBytes)
@@ -186,7 +210,7 @@ func (h *Handler) Stream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, line := range lines {
-		send(line)
+		send(line, "")
 	}
 	encoder.flush()
 
@@ -204,7 +228,7 @@ func (h *Handler) follow(
 	file *os.File,
 	item entry,
 	offset int64,
-	send func(string),
+	send func(string, string),
 ) {
 	openInfo, _ := file.Stat()
 	ticker := time.NewTicker(h.tick)
@@ -257,7 +281,7 @@ func (h *Handler) follow(
 					// A single line has a hard ceiling; the remainder is
 					// emitted truncated rather than buffered forever.
 					if len(pending) > MaxLineBytes*2 {
-						h.emit(&send, string(pending), &dropped, &sentThisSecond, &second)
+						h.emit(&send, string(pending), "", &dropped, &sentThisSecond, &second)
 						pending = pending[:0]
 						encoder.flush()
 					}
@@ -265,7 +289,7 @@ func (h *Handler) follow(
 				}
 				line := string(pending[:index])
 				pending = pending[index+1:]
-				h.emit(&send, line, &dropped, &sentThisSecond, &second)
+				h.emit(&send, line, "", &dropped, &sentThisSecond, &second)
 			}
 			if dropped > 0 {
 				_ = encoder.event("dropped", StreamDropped{Count: dropped})
@@ -278,7 +302,7 @@ func (h *Handler) follow(
 
 // emit applies the per-stream line rate. Lines above the ceiling are dropped
 // and reported in a single frame, so a noisy source cannot flood the browser.
-func (h *Handler) emit(send *func(string), line string, dropped, sent *int, second *time.Time) {
+func (h *Handler) emit(send *func(string, string), text, level string, dropped, sent *int, second *time.Time) {
 	now := h.now()
 	if now.Sub(*second) >= time.Second {
 		*second = now
@@ -289,7 +313,7 @@ func (h *Handler) emit(send *func(string), line string, dropped, sent *int, seco
 		return
 	}
 	*sent++
-	(*send)(line)
+	(*send)(text, level)
 }
 
 func indexByte(data []byte, target byte) int {
@@ -299,6 +323,99 @@ func indexByte(data []byte, target byte) int {
 		}
 	}
 	return -1
+}
+
+// streamUnit reads one systemd unit's journal.
+//
+// journalctl is the only reader: this process never opens the journal itself,
+// so the account running the server needs the same access a human running
+// journalctl needs. Tail and follow are one child process, which is why no
+// entry can be lost between the two.
+func (h *Handler) streamUnit(
+	ctx context.Context,
+	encoder *streamWriter,
+	item entry,
+	options streamOptions,
+	send func(string, string),
+) {
+	stream, err := h.units.Open(ctx, item.Unit, options.tailLines, options.follow)
+	if err != nil {
+		_ = encoder.event("notice", StreamNotice{Reason: "unreadable", Detail: err.Error()})
+		encoder.flush()
+		return
+	}
+	defer stream.Close()
+
+	type journalLine struct {
+		text  string
+		level string
+	}
+	lines := make(chan journalLine, 64)
+	failures := make(chan error, 1)
+	go func() {
+		defer close(lines)
+		reader := bufio.NewReaderSize(stream, 64*1024)
+		for {
+			entry, err := readJournalEntry(reader)
+			if err != nil {
+				if !errors.Is(err, io.EOF) {
+					select {
+					case failures <- err:
+					default:
+					}
+				}
+				return
+			}
+			select {
+			case lines <- journalLine{text: entry.line(), level: entry.level()}:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	heartbeat := time.NewTicker(h.heartbeat)
+	defer heartbeat.Stop()
+
+	dropped := 0
+	sent := 0
+	second := h.now()
+	lastDropReport := h.now()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-heartbeat.C:
+			_ = encoder.event("heartbeat", map[string]string{"at": h.now().Format(time.RFC3339)})
+			encoder.flush()
+		case err := <-failures:
+			_ = encoder.event("notice", StreamNotice{Reason: "unreadable", Detail: err.Error()})
+			encoder.flush()
+			return
+		case line, ok := <-lines:
+			if !ok {
+				if !options.follow {
+					return
+				}
+				// The child stopped following. Say so instead of leaving a
+				// stream that looks live but shows nothing.
+				_ = encoder.event("notice", StreamNotice{Reason: "ended", Detail: streamFailure(stream)})
+				encoder.flush()
+				return
+			}
+			h.emit(&send, line.text, line.level, &dropped, &sent, &second)
+			// A journal read is event driven, so flush each line: waiting for
+			// the heartbeat would make a live stream look frozen.
+			encoder.flush()
+			if dropped > 0 && h.now().Sub(lastDropReport) >= time.Second {
+				_ = encoder.event("dropped", StreamDropped{Count: dropped})
+				dropped = 0
+				lastDropReport = h.now()
+				encoder.flush()
+			}
+		}
+	}
 }
 
 /* ------------------------------------------------------------------ plumbing -- */

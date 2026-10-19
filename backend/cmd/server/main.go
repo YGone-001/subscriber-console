@@ -337,10 +337,10 @@ func main() {
 	// The log workspace reads only the files an operator declared. A malformed
 	// declaration is reported and leaves the surface empty instead of taking the
 	// whole process down.
-	nfLogRegistry, nfLogErr := nflogs.NewRegistry(cfg.NFLogDir, cfg.NFLogSources, cfg.NFLogSourceBindings)
+	nfLogRegistry, nfLogErr := nflogs.NewRegistry(cfg.NFLogDir, cfg.NFLogSources, cfg.NFLogUnits, cfg.NFLogSourceBindings)
 	if nfLogErr != nil {
 		logger.Error("log source configuration rejected", "error", nfLogErr)
-		nfLogRegistry, _ = nflogs.NewRegistry("", "", "")
+		nfLogRegistry, _ = nflogs.NewRegistry("", "", "", "")
 	}
 	nfLogHandler := nflogs.NewHandler(nfLogRegistry, limiter, auditWriter)
 	nfHealthScheduler.SetCollectionHook(nfalert.NewSchedulerHook(nfAlertEvaluator, logger))

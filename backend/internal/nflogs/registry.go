@@ -15,38 +15,46 @@ import (
 // rejected before a lookup happens.
 var sourceIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
 
-// entry is one resolved source. Path never leaves the process.
+// entry is one resolved source. Path and Unit never leave the process.
 type entry struct {
 	ID          string
 	Name        string
+	Kind        string
 	Path        string
+	Unit        string
 	ResourceIDs []string
 }
 
-// Registry is the fixed id -> file table.
+// Registry is the fixed id -> source table.
 //
 // The table is built from operator configuration, rescanned on every listing so
 // a newly rotated file appears and a deleted one turns unreadable, and never
-// accepts a path from a request.
+// accepts a path or a unit name from a request. A declared source wins over a
+// scanned file with the same id; scanning only fills the gaps.
 type Registry struct {
 	dir      string
 	mu       sync.RWMutex
 	entries  map[string]entry
 	explicit map[string]string
+	units    map[string]string
 	bindings map[string][]string
+	journal  UnitReader
 }
 
 // NewRegistry builds the source table.
 //
 //	dir       directory scanned for regular *.log files (may be empty)
 //	explicit  comma-separated "sourceId=/absolute/path" pairs
+//	units     comma-separated "sourceId=systemd-unit" pairs
 //	bindings  comma-separated "sourceId=resourceId|resourceId" mappings
-func NewRegistry(dir, explicit, bindings string) (*Registry, error) {
+func NewRegistry(dir, explicit, units, bindings string) (*Registry, error) {
 	registry := &Registry{
 		dir:      strings.TrimSpace(dir),
 		entries:  map[string]entry{},
 		explicit: map[string]string{},
+		units:    map[string]string{},
 		bindings: map[string][]string{},
+		journal:  newJournalctlReader(),
 	}
 
 	for _, pair := range splitList(explicit) {
@@ -60,6 +68,22 @@ func NewRegistry(dir, explicit, bindings string) (*Registry, error) {
 			return nil, fmt.Errorf("duplicate log source id %q", id)
 		}
 		registry.explicit[id] = path
+	}
+
+	for _, pair := range splitList(units) {
+		id, unit, ok := strings.Cut(pair, "=")
+		id = strings.TrimSpace(id)
+		unit = strings.TrimSpace(unit)
+		if !ok || !sourceIDPattern.MatchString(id) || !unitNamePattern.MatchString(unit) {
+			return nil, fmt.Errorf("invalid unit log source %q: want sourceId=unit-name", pair)
+		}
+		if _, exists := registry.explicit[id]; exists {
+			return nil, fmt.Errorf("duplicate log source id %q", id)
+		}
+		if _, exists := registry.units[id]; exists {
+			return nil, fmt.Errorf("duplicate log source id %q", id)
+		}
+		registry.units[id] = unit
 	}
 
 	for _, pair := range splitList(bindings) {
@@ -109,16 +133,18 @@ func (r *Registry) Refresh() {
 					// link could point anywhere the process can read.
 					continue
 				}
-				entries[id] = entry{ID: id, Name: name, Path: path}
+				entries[id] = entry{ID: id, Name: name, Kind: SourceKindFile, Path: path}
 			}
 		}
 	}
 
+	// Declared sources win over scanned files: an operator who names an id
+	// means that source, even when a file with the same base name exists.
 	for id, path := range r.explicit {
-		if _, taken := entries[id]; taken {
-			continue
-		}
-		entries[id] = entry{ID: id, Name: filepath.Base(path), Path: path}
+		entries[id] = entry{ID: id, Name: filepath.Base(path), Kind: SourceKindFile, Path: path}
+	}
+	for id, unit := range r.units {
+		entries[id] = entry{ID: id, Name: unit, Kind: SourceKindUnit, Unit: unit}
 	}
 
 	for id := range entries {
@@ -142,7 +168,7 @@ func (r *Registry) List() []Source {
 
 	sources := make([]Source, 0, len(r.entries))
 	for _, item := range r.entries {
-		sources = append(sources, describe(item))
+		sources = append(sources, r.describe(item))
 	}
 	sort.Slice(sources, func(i, j int) bool {
 		if sources[i].Name == sources[j].Name {
@@ -187,7 +213,7 @@ func (r *Registry) SourcesForResource(resourceID string) []Source {
 	for _, item := range r.entries {
 		for _, bound := range item.ResourceIDs {
 			if bound == resourceID {
-				matched = append(matched, describe(item))
+				matched = append(matched, r.describe(item))
 				break
 			}
 		}
@@ -196,13 +222,21 @@ func (r *Registry) SourcesForResource(resourceID string) []Source {
 	return matched
 }
 
-func describe(item entry) Source {
+func (r *Registry) describe(item entry) Source {
 	source := Source{
 		SourceID:    item.ID,
 		Name:        item.Name,
-		Kind:        SourceKindFile,
+		Kind:        item.Kind,
 		Readable:    false,
 		ResourceIDs: item.ResourceIDs,
+	}
+	if item.Kind == SourceKindUnit {
+		if ok, note := r.journal.Available(); ok {
+			source.Readable = true
+		} else {
+			source.Note = note
+		}
+		return source
 	}
 	info, err := os.Stat(item.Path)
 	if err != nil {

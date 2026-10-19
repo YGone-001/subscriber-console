@@ -9,7 +9,7 @@
 export type LogSource = {
   sourceId: string;
   name: string;
-  kind: 'file';
+  kind: 'file' | 'unit';
   sizeBytes: number;
   updatedAt?: string;
   readable: boolean;

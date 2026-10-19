@@ -25,7 +25,7 @@ func newLogHandler(t *testing.T, logLines []string) (*Handler, string) {
 	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatalf("write log: %v", err)
 	}
-	registry, err := NewRegistry("", "amf="+path, "amf=resource-1")
+	registry, err := NewRegistry("", "amf="+path, "", "amf=resource-1")
 	if err != nil {
 		t.Fatalf("registry: %v", err)
 	}

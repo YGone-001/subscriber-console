@@ -30,7 +30,7 @@ func TestRegistryScansOnlyRegularLogFiles(t *testing.T) {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
 
-	registry, err := NewRegistry(dir, "", "")
+	registry, err := NewRegistry(dir, "", "", "")
 	if err != nil {
 		t.Fatalf("registry: %v", err)
 	}
@@ -52,7 +52,7 @@ func TestRegistryResolvesExplicitSourcesAndBindings(t *testing.T) {
 		t.Fatalf("write: %v", err)
 	}
 
-	registry, err := NewRegistry("", "amf="+path, "amf=resource-1|resource-2")
+	registry, err := NewRegistry("", "amf="+path, "", "amf=resource-1|resource-2")
 	if err != nil {
 		t.Fatalf("registry: %v", err)
 	}
@@ -91,7 +91,7 @@ func TestRegistryRejectsMalformedConfiguration(t *testing.T) {
 		"bad binding":    {"amf=" + path, "amf"},
 	}
 	for name, fixture := range cases {
-		if _, err := NewRegistry(fixture[0], fixture[1], ""); err == nil {
+		if _, err := NewRegistry(fixture[0], fixture[1], "", ""); err == nil {
 			t.Fatalf("%s must be rejected", name)
 		}
 	}
@@ -99,7 +99,7 @@ func TestRegistryRejectsMalformedConfiguration(t *testing.T) {
 
 func TestRegistryReportsUnreadableSources(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "gone.log")
-	registry, err := NewRegistry("", "gone="+missing, "")
+	registry, err := NewRegistry("", "gone="+missing, "", "")
 	if err != nil {
 		t.Fatalf("registry: %v", err)
 	}
