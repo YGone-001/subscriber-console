@@ -97,6 +97,18 @@ export type AssociationState =
   /** The authoritative lookup did not succeed: absence is NOT established. */
   | 'unresolved';
 
+/**
+ * Approved local runtime binding summary.
+ *
+ * A binding is evidence that the runtime plane holds an approved deployment
+ * mapping for this resource. It is never evidence of connectivity or health, and
+ * it never carries a command line, a log path or a credential.
+ */
+export type RuntimeBindingSummary = {
+  state: 'bound' | 'unbound' | 'unknown';
+  unit?: string;
+};
+
 export type OperationalResource = {
   resourceId: string;
   name: string;
@@ -116,6 +128,8 @@ export type OperationalResource = {
   monitoring: MonitoringView | null;
   /** Authoritative association state; never inferred from a cursor page. */
   association: AssociationState;
+  /** Approved local binding summary; absent when the source does not project it. */
+  runtimeBinding?: RuntimeBindingSummary;
 };
 
 function layerView(value: unknown): LayerView | null {

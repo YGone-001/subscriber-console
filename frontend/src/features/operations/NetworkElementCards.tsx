@@ -6,6 +6,10 @@
  * the three layer-coverage marks and the resident memory. It answers "what do I
  * run, and what is wrong" at a glance; the table remains the audit view.
  *
+ * Unmanaged processes are not rendered here: they have no Inventory resource,
+ * so they appear as a separate virtual tree group and as separate table rows in
+ * the master-detail view, where they never enter a health or fault denominator.
+ *
  * Integrity rules:
  *   - an unresolved association is never rendered as unmonitored;
  *   - a layer that was not measured is rendered as not configured, never as
@@ -13,7 +17,7 @@
  *   - memory is rendered only when the server returned a sample.
  */
 import { Link } from 'react-router-dom';
-import { ArrowUpRight, Boxes } from 'lucide-react';
+import { Boxes } from 'lucide-react';
 import { useI18n } from '../../providers/I18nProvider';
 import { EmptyState } from '../../components/ui/OperationFeedback';
 import {
@@ -24,7 +28,6 @@ import {
   type DomainKey,
   type OperationalResource,
 } from './operational-model';
-import type { RuntimeComponent } from '../runtime/runtime-types';
 import styles from '../../styles/modules/network-cards.module.css';
 
 function stateTone(state: string): string {
@@ -129,52 +132,6 @@ export function NetworkElementCards({ items }: { items: OperationalResource[] })
         );
       })}
     </div>
-  );
-}
-
-/**
- * Observed processes with no Inventory resource.
- *
- * A verified running process that is not associated with a resource is real
- * operational evidence and must be visible, but it is neither monitored nor a
- * fault. Managing it happens through the runtime view's governed bootstrap.
- */
-export function UnmanagedProcesses({ components }: { components: RuntimeComponent[] }) {
-  const { t } = useI18n();
-  const unmanaged = components.filter(
-    (component) => component.verified
-      && component.runtimeStatus === 'running'
-      && component.inventoryAssociation.state === 'absent',
-  );
-
-  if (unmanaged.length === 0) return null;
-
-  return (
-    <section className={styles.unmanaged} aria-label={t('ops_unmanaged_title')}>
-      <header className={styles.unmanagedHead}>
-        <h3 className={styles.unmanagedTitle}>{t('ops_unmanaged_title')}</h3>
-        <span className={styles.unmanagedCount}>{unmanaged.length}</span>
-        <Link className={styles.cardLink} to="/inventory?view=runtime">
-          {t('ops_unmanaged_open')}
-          <ArrowUpRight size={13} aria-hidden="true" />
-        </Link>
-      </header>
-      <p className={styles.unmanagedNote}>{t('ops_unmanaged_note')}</p>
-      <ul className={styles.unmanagedList}>
-        {unmanaged.map((component) => (
-          <li key={component.componentId} className={styles.unmanagedItem}>
-            <span className={styles.unmanagedName}>{component.displayName}</span>
-            <code className={styles.unmanagedProcess}>{component.processName}</code>
-            <span className={styles.unmanagedMeta}>
-              {t('ops_unmanaged_pid')} {component.primaryPid || '-'}
-            </span>
-            <span className={styles.unmanagedMeta}>
-              {component.memoryRssBytes != null ? formatBytes(component.memoryRssBytes) : t('ops_metric_unavailable')}
-            </span>
-          </li>
-        ))}
-      </ul>
-    </section>
   );
 }
 

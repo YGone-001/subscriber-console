@@ -27,9 +27,11 @@ var AllSections = []string{
 	SectionTopology,
 }
 
-// Completeness values.
+// Completeness values. `partial` describes a bounded read that is not the whole
+// population; it never means "unknown".
 const (
-	CompletenessComplete   = "complete"
+	CompletenessComplete    = "complete"
+	CompletenessPartial     = "partial"
 	CompletenessUnavailable = "unavailable"
 )
 

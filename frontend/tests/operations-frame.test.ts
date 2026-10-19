@@ -307,7 +307,7 @@ test('a rendered inventory page honours the view from the URL', () => {
         null,
         createElement(
           MemoryRouter,
-          { initialEntries: ['/inventory?view=list'] },
+          { initialEntries: ['/inventory?view=assets'] },
           createElement(
             AuthProvider,
             null,
@@ -317,8 +317,8 @@ test('a rendered inventory page honours the view from the URL', () => {
       ),
     );
     assert.ok(markup.includes('aria-pressed="true"'), 'the active view switch must be pressed');
-    assert.ok(markup.includes('data-view-mode="list"'), 'the list view switch must render');
-    assert.ok(markup.includes('type="search"'), 'the list view workspace must render for view=list');
+    assert.ok(markup.includes('data-view-mode="assets"'), 'the ledger view switch must render');
+    assert.ok(markup.includes('type="search"'), 'the ledger workspace must render for view=assets');
   } finally {
     globalThis.fetch = originalFetch;
   }

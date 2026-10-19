@@ -31,12 +31,15 @@ import NetworkElementView from '../operations/NetworkElementView';
 import { OperationsPageFrame } from '../operations/OperationsPageFrame';
 import { useOperationsUrlState } from '../operations/use-operations-url-state';
 import { RuntimeDiscoveryView } from '../runtime/RuntimeDiscovery';
+import { INVENTORY_URL_KEYS } from '../operations/inventory-url-keys';
 import type { MetaResponse, Resource } from './inventory-types';
 import styles from '../../styles/modules/inventory.module.css';
 
 const PAGE_LIMIT = 20;
 
-const INVENTORY_VIEWS = ['network', 'list', 'runtime'] as const;
+/* `cards` is the mutually exclusive card wall; `assets` is the ledger and
+ * `list` stays as a compatible alias for links created before UX-2. */
+const INVENTORY_VIEWS = ['network', 'cards', 'assets', 'list', 'runtime'] as const;
 
 export function InventoryPage() {
   const { t } = useI18n();
@@ -52,11 +55,12 @@ export function InventoryPage() {
    * because the operational question is "what do I run", not "what is
    * registered"; the general listing remains the audit surface. */
   const url = useOperationsUrlState({
-    keys: ['q', 'kind', 'domain', 'state'],
+    keys: INVENTORY_URL_KEYS,
     views: INVENTORY_VIEWS,
     defaultView: 'network',
   });
   const viewMode = url.view as (typeof INVENTORY_VIEWS)[number];
+  const assetsView = viewMode === 'assets' || viewMode === 'list';
 
   const searchQuery = url.filters.q ?? '';
   const selectedKind = url.filters.kind ?? '';
@@ -115,7 +119,7 @@ export function InventoryPage() {
    * loads its first page, while a changed cursor only advances the trail. The
    * URL contract already dropped the cursor on any filter change. */
   useEffect(() => {
-    if (viewMode !== 'list') return;
+    if (!assetsView) return;
     const queryKey = `${searchQuery}|${selectedKind}|${selectedDomain}|${selectedLifecycle}`;
     if (queryKeyRef.current !== queryKey) {
       queryKeyRef.current = queryKey;
@@ -123,7 +127,7 @@ export function InventoryPage() {
     }
     void loadResources(url.cursor);
     // Select filters apply immediately; the free-text query applies only after submit.
-  }, [viewMode, searchQuery, selectedKind, selectedDomain, selectedLifecycle, url.cursor]);
+  }, [assetsView, searchQuery, selectedKind, selectedDomain, selectedLifecycle, url.cursor]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -217,12 +221,21 @@ export function InventoryPage() {
           </button>
           <button
             type="button"
-            data-view-mode="list"
-            className={viewMode === 'list' ? styles.viewToggleActive : undefined}
-            aria-pressed={viewMode === 'list'}
-            onClick={() => url.setView('list')}
+            data-view-mode="cards"
+            className={viewMode === 'cards' ? styles.viewToggleActive : undefined}
+            aria-pressed={viewMode === 'cards'}
+            onClick={() => url.setView('cards')}
           >
-            {t('ops_view_list')}
+            {t('ops_view_cards')}
+          </button>
+          <button
+            type="button"
+            data-view-mode="assets"
+            className={assetsView ? styles.viewToggleActive : undefined}
+            aria-pressed={assetsView}
+            onClick={() => url.setView('assets')}
+          >
+            {t('ops_view_assets')}
           </button>
           <button
             type="button"
@@ -235,7 +248,7 @@ export function InventoryPage() {
           </button>
         </div>
       )}
-      onRefresh={viewMode === 'list' ? () => loadResources(url.cursor) : undefined}
+      onRefresh={assetsView ? () => loadResources(url.cursor) : undefined}
       actions={
         canConfigure ? (
           <Link to="/inventory/create" className="btn btn-primary">
@@ -247,6 +260,8 @@ export function InventoryPage() {
     >
       {viewMode === 'runtime' ? (
         <RuntimeDiscoveryView />
+      ) : viewMode === 'cards' ? (
+        <NetworkElementView presentation="cards" />
       ) : viewMode === 'network' ? (
         <NetworkElementView />
       ) : (

@@ -1,39 +1,34 @@
 /*
- * Network element view.
+ * Network element view (default `/inventory` view).
  *
- * A CNMS-inspired, network-function-oriented view over the existing Inventory
- * route. It is a view mode inside `/inventory`: the general Inventory listing,
- * its CRUD workflows and its governance remain untouched, and no resource is
- * ever created, mutated or retired from this surface.
+ * Master-detail layout: the declared containment hierarchy on the left, one
+ * compact network-element table on the right, and the detail drawer on demand.
+ * The card wall is a mutually exclusive presentation (`view=cards`), never a
+ * second copy of the same rows below the table.
  *
  * Data authorities:
- *   - Inventory  -> resources, domain, kind, role, lifecycle
- *   - NF Health  -> monitoring association, coverage, layers, freshness, metrics
- *   - Topology   -> declared `contains` relationships for the hierarchy
+ *   - `GET /api/operations/resources` resolves Inventory identity and the
+ *     authoritative monitoring association for exactly the loaded page. The
+ *     browser never joins an unrelated target page.
+ *   - `GET /api/operations/summary?sections=inventory,health` supplies the KPI
+ *     strip, so a KPI never counts the current page.
+ *   - Topology still owns `contains`; a capped read is reported as partial and
+ *     never claims that containment does not exist.
+ *   - Runtime observations supply unmanaged processes, which are rendered in a
+ *     separate virtual group and never enter a health or fault denominator.
  *
- * Integrity rules enforced here:
- *   - monitoring associations are resolved by an authoritative bounded batch
- *     lookup for exactly the loaded resource identifiers;
- *   - an unresolved association is reported as unresolved, never unmonitored;
- *   - completeness is tracked separately for Inventory, monitoring, telemetry
- *     and Topology;
- *   - Topology edges are read with bounded cursor pagination, and a missing edge
- *     on an incomplete page never claims that containment does not exist;
- *   - server-side filter changes reset the cursor, the cursor history and any
- *     tree selection that belonged to the previous query;
- *   - every unavailable value is rendered as an unavailable state.
+ * Integrity rules: unresolved is never unmonitored; a missing measurement is
+ * rendered as "-", never as zero; CPU time is a cumulative counter and is never
+ * turned into a percentage.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronDown, ChevronRight, LayoutGrid, Search, Server, Table2, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Search, Server, X } from 'lucide-react';
 import { useRead } from '../../lib/api/use-read';
 import { useI18n } from '../../providers/I18nProvider';
 import { EmptyState, LoadingRows } from '../../components/ui/OperationFeedback';
 import {
-  applyResolvedNFTypes,
-  buildOperationalResources,
   buildResourceTree,
-  combineCompleteness,
   cpuView,
   formatBytes,
   memoryView,
@@ -42,20 +37,44 @@ import {
   treeResourceIds,
   type CompletenessReport,
   type DimensionCompleteness,
+  type DomainKey,
   type TreeNode,
   type TreeMode,
 } from './operational-model';
 import { useBoundedEdges } from './use-bounded-edges';
 import { useRegisterOperationsRefresh } from './operations-refresh';
-import { NetworkElementCards, UnmanagedProcesses } from './NetworkElementCards';
-import type { RuntimeObservations } from '../runtime/runtime-types';
+import { useOperationsUrlState } from './use-operations-url-state';
+import { INVENTORY_URL_KEYS } from './inventory-url-keys';
+import {
+  adaptCompleteness,
+  adaptOperationsResources,
+  operationsResourcesPath,
+  OPERATIONS_RESOURCE_LIMIT,
+  type OperationsResourcesResponse,
+} from './operations-resources';
+import type { OperationsSummaryResponse } from './operations-summary';
+import { NetworkElementCards } from './NetworkElementCards';
+import { ResourceDetailDrawer } from './ResourceDetailDrawer';
+import type { RuntimeComponent, RuntimeObservations } from '../runtime/runtime-types';
 import { resolveRuntimeObservations, useRuntimeStream } from '../runtime/use-runtime-stream';
 import styles from '../../styles/modules/operations.module.css';
 
-const PAGE_LIMIT = 20;
+const UNMANAGED_GROUP_ID = 'virtual:unmanaged';
 
-type ResourceListPayload = { resources?: unknown[]; page?: { nextCursor?: string | null; hasMore?: boolean } };
-type TargetListPayload = { targets?: unknown[]; page?: { hasMore?: boolean } };
+/* Inventory kinds offered in the kind filter. The list is a presentation
+ * vocabulary only: the server validates the value against its own authority. */
+const KIND_OPTIONS = [
+  'network_function',
+  'network_function_instance',
+  'network_element',
+  'host',
+  'virtual_machine',
+  'container',
+  'pod',
+  'interface',
+  'ip_address',
+  'service',
+];
 
 type MonitoringFilter = '' | 'monitored' | 'unmonitored' | 'unresolved' | 'degraded' | 'unknown' | 'stale';
 
@@ -91,20 +110,45 @@ function treeModeLabel(mode: TreeMode, t: (key: string) => string): string {
   return t(`ops_tree_mode_${mode}`);
 }
 
+function findNode(nodes: TreeNode[], id: string): TreeNode | null {
+  for (const node of nodes) {
+    if (node.id === id) return node;
+    const child = findNode(node.children, id);
+    if (child) return child;
+  }
+  return null;
+}
+
+/** Unmanaged processes: verified, running, and with no Inventory resource. */
+export function unmanagedComponents(components: RuntimeComponent[]): RuntimeComponent[] {
+  return components.filter(
+    (component) => component.verified
+      && component.runtimeStatus === 'running'
+      && component.inventoryAssociation.state === 'absent',
+  );
+}
+
 function TreeBranch({
   node,
   depth,
   selectedId,
+  completeness,
   onSelect,
 }: {
   node: TreeNode;
   depth: number;
   selectedId: string;
+  completeness: DimensionCompleteness;
   onSelect: (node: TreeNode) => void;
 }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(depth < 2);
   const hasChildren = node.children.length > 0;
   const selected = selectedId === node.id;
+  // "N loaded · partial": a bounded page count is never presented as a total.
+  const loaded = node.children.length > 0
+    ? node.children.reduce((sum, child) => sum + Math.max(treeResourceIds(child).length, 1), 0)
+    : Math.max(treeResourceIds(node).length, 1);
 
   return (
     <li className={styles.treeItem}>
@@ -130,7 +174,9 @@ function TreeBranch({
         >
           <span className={styles.treeLabel}>{node.label}</span>
           {node.virtual ? <span className={styles.treeVirtual}>{node.kind === 'domain_group' ? node.domain : node.kind}</span> : null}
-          <span className={styles.treeCount}>{treeResourceIds(node).length}</span>
+          <span className={styles.treeCount}>
+            {t('ops_tree_loaded', { count: loaded })} · {completenessLabel(completeness, t)}
+          </span>
         </button>
       </div>
       {hasChildren && open ? (
@@ -141,6 +187,7 @@ function TreeBranch({
               node={child}
               depth={depth + 1}
               selectedId={selectedId}
+              completeness={completeness}
               onSelect={onSelect}
             />
           ))}
@@ -150,48 +197,63 @@ function TreeBranch({
   );
 }
 
-export default function NetworkElementView() {
+function KpiCard({
+  label,
+  value,
+  unavailableLabel,
+  scopeLabel,
+}: {
+  label: string;
+  value: number | null;
+  unavailableLabel: string;
+  scopeLabel: string;
+}) {
+  return (
+    <article className={styles.kpiCard}>
+      <span className={styles.kpiLabel}>{label}</span>
+      <strong className={styles.kpiValue}>{value ?? '-'}</strong>
+      <span className={styles.kpiMeta}>
+        {value === null
+          ? <span className={styles.kpiUnavailable}>{unavailableLabel}</span>
+          : <span className={styles.kpiScope}>{scopeLabel}</span>}
+      </span>
+    </article>
+  );
+}
+
+export default function NetworkElementView({ presentation = 'table' }: { presentation?: 'table' | 'cards' }) {
   const { t } = useI18n();
 
-  const [search, setSearch] = useState('');
-  const [domain, setDomain] = useState('');
-  const [kind, setKind] = useState('');
-  const [monitoring, setMonitoring] = useState<MonitoringFilter>('');
-  const [cursor, setCursor] = useState<string | undefined>(undefined);
-  const [cursorHistory, setCursorHistory] = useState<string[]>([]);
-  const [selectedNodeId, setSelectedNodeId] = useState('');
-  const [selectedResourceIds, setSelectedResourceIds] = useState<string[] | null>(null);
-  const [presentation, setPresentation] = useState<'cards' | 'table'>('cards');
+  const url = useOperationsUrlState({ keys: INVENTORY_URL_KEYS });
+  const searchQuery = url.filters.q ?? '';
+  const domain = url.filters.domain ?? '';
+  const kind = url.filters.kind ?? '';
+  const monitoring = (url.filters.monitoring ?? '') as MonitoringFilter;
+  const selectedNodeId = url.filters.node ?? '';
 
-  const query = useMemo(() => {
-    const params = new URLSearchParams();
-    params.set('limit', String(PAGE_LIMIT));
-    if (search.trim()) params.set('q', search.trim());
-    if (domain) params.set('domain', domain);
-    if (kind) params.set('kind', kind);
-    if (cursor) params.set('cursor', cursor);
-    return params.toString();
-  }, [search, domain, kind, cursor]);
+  const [searchInput, setSearchInput] = useState(searchQuery);
+  const [drawerResourceId, setDrawerResourceId] = useState<string | null>(null);
+  const [cursorTrail, setCursorTrail] = useState<string[]>([]);
+  const queryKeyRef = useRef<string | null>(null);
 
-  const resourcesRead = useRead<ResourceListPayload>(`/api/inventory/resources?${query}`);
+  useEffect(() => {
+    setSearchInput(searchQuery);
+  }, [searchQuery]);
 
-  // Authoritative bounded association lookup for exactly the loaded resources.
-  const resourceIds = useMemo(() => {
-    const ids = (resourcesRead.data?.resources ?? [])
-      .map((resource) => {
-        const record = (resource ?? {}) as Record<string, unknown>;
-        const value = record._id ?? record.resourceId;
-        return typeof value === 'string' ? value : '';
-      })
-      .filter(Boolean);
-    return ids;
-  }, [resourcesRead.data]);
+  const query = useMemo(
+    () => operationsResourcesPath({
+      q: searchQuery || undefined,
+      domain: domain || undefined,
+      kind: kind || undefined,
+      monitoring: monitoring || undefined,
+      cursor: url.cursor,
+      limit: OPERATIONS_RESOURCE_LIMIT,
+    }),
+    [searchQuery, domain, kind, monitoring, url.cursor],
+  );
 
-  const associationPath = resourceIds.length > 0
-    ? `/api/nf-health/targets?resourceIds=${encodeURIComponent(resourceIds.join(','))}`
-    : null;
-  const associationsRead = useRead<TargetListPayload>(associationPath);
-
+  const resourcesRead = useRead<OperationsResourcesResponse>(query);
+  const summaryRead = useRead<OperationsSummaryResponse>('/api/operations/summary?sections=inventory,health');
   const containment = useBoundedEdges({ relationshipType: 'contains' });
   const runtimeRead = useRead<RuntimeObservations>('/api/runtime/observations');
   const runtimeStream = useRuntimeStream();
@@ -199,172 +261,195 @@ export default function NetworkElementView() {
 
   const refresh = useCallback(() => {
     void resourcesRead.mutate();
-    if (associationPath) void associationsRead.mutate();
+    void summaryRead.mutate();
     void runtimeRead.mutate();
     containment.refresh();
-  }, [resourcesRead, associationsRead, runtimeRead, associationPath, containment]);
+  }, [resourcesRead, summaryRead, runtimeRead, containment]);
 
-  // UX-1: the page frame owns the only visible refresh entry. This section
-  // registers the exact loaders it displays instead of drawing its own button.
+  // UX-1: the page frame owns the only visible refresh entry.
   useRegisterOperationsRefresh('inventory:network', refresh);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
-      if (!resourcesRead.isValidating && !associationsRead.isValidating) refresh();
+      if (!resourcesRead.isValidating) refresh();
     }, 30000);
     return () => window.clearInterval(timer);
-  }, [refresh, resourcesRead.isValidating, associationsRead.isValidating]);
+  }, [refresh, resourcesRead.isValidating]);
 
-  const completeness: CompletenessReport = useMemo(() => {
-    const inventory: DimensionCompleteness = resourcesRead.error
-      ? 'unavailable'
-      : resourcesRead.data
-        ? (resourcesRead.data.page?.hasMore ? 'partial' : 'complete')
-        : 'partial';
-    const monitoringDim: DimensionCompleteness = !resourceIds.length
-      ? (resourcesRead.error ? 'unavailable' : 'partial')
-      : associationsRead.error
-        ? 'unavailable'
-        : associationsRead.data
-          ? 'complete'
-          : 'partial';
-    const targets = associationsRead.data?.targets ?? [];
-    const telemetryFailed = targets.some((target) => {
-      const record = (target ?? {}) as Record<string, unknown>;
-      return record.statusComplete === false;
-    });
-    const telemetry: DimensionCompleteness = monitoringDim !== 'complete'
-      ? monitoringDim
-      : telemetryFailed
-        ? 'partial'
-        : 'complete';
-    return combineCompleteness({
-      inventory,
-      monitoring: monitoringDim,
-      telemetry,
-      topology: containment.coverage,
-    });
-  }, [
-    resourcesRead.data, resourcesRead.error,
-    associationsRead.data, associationsRead.error,
-    resourceIds.length, containment.coverage,
-  ]);
+  const items = useMemo(() => adaptOperationsResources(resourcesRead.data), [resourcesRead.data]);
 
-  const { items, tree } = useMemo(() => {
-    const associationResolved = !associationsRead.error && Boolean(associationsRead.data);
-    const joined = buildOperationalResources(
-      resourcesRead.data?.resources,
-      associationsRead.data?.targets,
-      associationResolved,
-    );
-    const enriched = applyResolvedNFTypes(joined.items, associationsRead.data?.targets);
-    return {
-      items: enriched,
-      tree: buildResourceTree(enriched, containment.edges, containment.coverage),
+  const serverCompleteness = resourcesRead.data?.completeness;
+  const completeness: CompletenessReport = useMemo(
+    () => adaptCompleteness(serverCompleteness, containment.coverage, Boolean(resourcesRead.error)),
+    [serverCompleteness, containment.coverage, resourcesRead.error],
+  );
+
+  const tree = useMemo(
+    () => buildResourceTree(items, containment.edges, containment.coverage),
+    [items, containment.edges, containment.coverage],
+  );
+
+  const unmanaged = useMemo(
+    () => unmanagedComponents(runtimeData?.snapshot?.components ?? []),
+    [runtimeData],
+  );
+
+  const treeNodes = useMemo(() => {
+    if (unmanaged.length === 0) return tree.nodes;
+    const group: TreeNode = {
+      id: UNMANAGED_GROUP_ID,
+      label: t('ops_unmanaged_title'),
+      kind: 'unmanaged_group',
+      domain: 'unknown' as DomainKey,
+      resourceId: null,
+      virtual: true,
+      children: unmanaged.map((component) => ({
+        id: `unmanaged:${component.componentId}`,
+        label: component.displayName,
+        kind: 'process',
+        domain: 'unknown' as DomainKey,
+        resourceId: null,
+        virtual: true,
+        children: [],
+      })),
     };
-  }, [resourcesRead.data, associationsRead.data, associationsRead.error, containment.edges, containment.coverage]);
+    return [...tree.nodes, group];
+  }, [tree.nodes, unmanaged, t]);
 
-  const filtered = useMemo(() => {
-    return items.filter((item) => {
-      if (selectedResourceIds && !selectedResourceIds.includes(item.resourceId)) return false;
-      if (kind && item.kind !== kind) return false;
-      if (domain && item.domain !== domain) return false;
-      if (search.trim()) {
-        const needle = search.trim().toLowerCase();
-        const haystack = `${item.name} ${item.resourceId} ${item.role} ${item.nfType} ${item.kind}`.toLowerCase();
-        if (!haystack.includes(needle)) return false;
-      }
-      if (monitoring) {
-        const state = item.monitoring?.overallState ?? 'not_monitored';
-        const freshness = item.monitoring?.freshnessState ?? 'not_monitored';
-        if (monitoring === 'monitored' && item.association !== 'confirmed') return false;
-        if (monitoring === 'unmonitored' && item.association !== 'absent') return false;
-        if (monitoring === 'unresolved' && item.association !== 'unresolved') return false;
-        if (monitoring === 'degraded' && state !== 'degraded' && state !== 'unhealthy') return false;
-        if (monitoring === 'stale' && freshness !== 'stale') return false;
-        if (monitoring === 'unknown' && !['unknown', 'stale', ''].includes(state)) return false;
-      }
-      return true;
-    });
-  }, [items, selectedResourceIds, kind, domain, search, monitoring]);
+  const selectedNode = useMemo(
+    () => (selectedNodeId ? findNode(treeNodes, selectedNodeId) : null),
+    [treeNodes, selectedNodeId],
+  );
 
-  const kinds = useMemo(() => Array.from(new Set(items.map((item) => item.kind).filter(Boolean))).sort(), [items]);
+  const unmanagedSelection = selectedNodeId.startsWith(UNMANAGED_GROUP_ID) || selectedNodeId.startsWith('unmanaged:');
+  const unmanagedComponentId = selectedNodeId.startsWith('unmanaged:')
+    ? selectedNodeId.slice('unmanaged:'.length)
+    : null;
+
+  const selectedResourceIds = useMemo(
+    () => (selectedNode && !unmanagedSelection ? treeResourceIds(selectedNode) : null),
+    [selectedNode, unmanagedSelection],
+  );
+
+  const visibleItems = useMemo(() => {
+    if (!selectedResourceIds) return items;
+    const allowed = new Set(selectedResourceIds);
+    return items.filter((item) => allowed.has(item.resourceId));
+  }, [items, selectedResourceIds]);
+
+  const visibleUnmanaged = useMemo(() => {
+    if (!unmanagedComponentId) return unmanaged;
+    return unmanaged.filter((component) => component.componentId === unmanagedComponentId);
+  }, [unmanaged, unmanagedComponentId]);
+
+  const drawerResource = useMemo(
+    () => items.find((item) => item.resourceId === drawerResourceId) ?? null,
+    [items, drawerResourceId],
+  );
+
+  /* A filter change invalidates the tree selection that belonged to the previous
+   * query, so a node from another result set can never keep filtering the table. */
+  const setFilterNode = url.setFilter;
+  useEffect(() => {
+    const queryKey = `${searchQuery}|${domain}|${kind}|${monitoring}`;
+    if (queryKeyRef.current === null) {
+      queryKeyRef.current = queryKey;
+      return;
+    }
+    if (queryKeyRef.current === queryKey) return;
+    queryKeyRef.current = queryKey;
+    if (selectedNodeId) setFilterNode('node', '');
+    setCursorTrail([]);
+  }, [searchQuery, domain, kind, monitoring, selectedNodeId, setFilterNode]);
+
+  const selectNode = (node: TreeNode) => {
+    url.setFilter('node', node.id === selectedNodeId ? '' : node.id);
+  };
+
+  const setNetworkFilter = (key: 'q' | 'domain' | 'kind' | 'monitoring', value: string) => {
+    // Keep the filter, tree selection and cursor transition atomic. A previous
+    // tree node is scoped to the old filter set and must not survive in history.
+    url.setFilters({ [key]: value, node: null });
+  };
+
+  const submitSearch = (event: React.FormEvent) => {
+    event.preventDefault();
+    setNetworkFilter('q', searchInput.trim());
+  };
+
+  /* Cursor trail for the pager. The active cursor lives in the URL; this trail
+   * only supplies the previous-page step for the current session. */
+  const goFirstPage = () => {
+    setCursorTrail([]);
+    url.setCursor(undefined);
+  };
+  const goPreviousPage = () => {
+    if (cursorTrail.length === 0) return;
+    const trail = [...cursorTrail];
+    const previous = trail.pop() ?? '';
+    setCursorTrail(trail);
+    url.setCursor(previous || undefined);
+  };
+  const goNextPage = () => {
+    if (!nextCursor) return;
+    setCursorTrail((trail) => [...trail, url.cursor ?? '']);
+    url.setCursor(nextCursor);
+  };
+
+  const clearFilters = () => {
+    setSearchInput('');
+    url.clearFilters();
+  };
 
   const loading = resourcesRead.isLoading && items.length === 0;
   const failed = Boolean(resourcesRead.error);
   const hasMore = Boolean(resourcesRead.data?.page?.hasMore);
+  const nextCursor = resourcesRead.data?.page?.nextCursor ?? null;
+  const filterScopePage = resourcesRead.data?.page?.filterScope === 'page';
+  const activeFilterCount = [searchQuery, domain, kind, monitoring].filter(Boolean).length;
 
-  /** Server-side filter changes must reset the cursor and the tree selection. */
-  const resetQueryState = useCallback(() => {
-    setCursor(undefined);
-    setCursorHistory([]);
-    setSelectedNodeId('');
-    setSelectedResourceIds(null);
-  }, []);
-
-  const selectNode = (node: TreeNode) => {
-    setSelectedNodeId(node.id);
-    setSelectedResourceIds(treeResourceIds(node));
-  };
-  const clearTreeSelection = () => {
-    setSelectedNodeId('');
-    setSelectedResourceIds(null);
-  };
-
-  const nextPage = () => {
-    const next = resourcesRead.data?.page?.nextCursor ?? null;
-    if (!next) return;
-    setCursorHistory((history) => [...history, cursor ?? '']);
-    setCursor(next);
-  };
-  const previousPage = () => {
-    setCursorHistory((history) => {
-      if (history.length === 0) return history;
-      const copy = [...history];
-      const previous = copy.pop() ?? '';
-      setCursor(previous || undefined);
-      return copy;
-    });
-  };
+  /* KPIs come from the full-collection summary, never from the loaded page. */
+  const inventorySection = summaryRead.data?.inventory;
+  const healthSection = summaryRead.data?.health;
+  const inventoryCounts = inventorySection?.completeness === 'complete' ? inventorySection.counts : undefined;
+  const totalResources = inventoryCounts ? inventoryCounts.total : null;
+  const networkFunctions = inventoryCounts
+    ? (inventoryCounts.byKind?.network_function ?? 0) + (inventoryCounts.byKind?.network_function_instance ?? 0)
+    : null;
+  const configuredTargets = healthSection?.completeness === 'complete' ? (healthSection.targets?.configured ?? null) : null;
+  const failedTargets = healthSection?.completeness === 'complete' ? (healthSection.targets?.failed ?? null) : null;
+  const scopeLabel = t('ops_kpi_scope_full_collection');
 
   return (
     <div className={styles.neView}>
+      <div className={styles.kpiStrip} aria-label={t('ops_overview_title')}>
+        <KpiCard label={t('ops_kpi_resources')} value={totalResources} unavailableLabel={t('ops_kpi_unavailable')} scopeLabel={scopeLabel} />
+        <KpiCard label={t('ops_kpi_network_functions')} value={networkFunctions} unavailableLabel={t('ops_kpi_unavailable')} scopeLabel={scopeLabel} />
+        <KpiCard label={t('ops_kpi_monitored')} value={configuredTargets} unavailableLabel={t('ops_kpi_unavailable')} scopeLabel={scopeLabel} />
+        <KpiCard label={t('ops_kpi_failed')} value={failedTargets} unavailableLabel={t('ops_kpi_unavailable')} scopeLabel={scopeLabel} />
+      </div>
+
       <div className={styles.neToolbar}>
-        <label className={styles.neSearch}>
+        <form className={styles.neSearch} onSubmit={submitSearch} role="search">
           <span className="sr-only">{t('ops_search_label')}</span>
           <Search size={15} aria-hidden="true" />
           <input
             type="search"
-            value={search}
+            value={searchInput}
             placeholder={t('ops_search_placeholder')}
-            onChange={(event) => {
-              resetQueryState();
-              setSearch(event.target.value);
-            }}
+            aria-label={t('ops_search_label')}
+            onChange={(event) => setSearchInput(event.target.value)}
           />
-          {search ? (
-            <button
-              type="button"
-              aria-label={t('ops_clear_search')}
-              onClick={() => {
-                resetQueryState();
-                setSearch('');
-              }}
-            >
+          {searchInput ? (
+            <button type="button" aria-label={t('ops_clear_search')} onClick={() => { setSearchInput(''); setNetworkFilter('q', ''); }}>
               <X size={14} />
             </button>
           ) : null}
-        </label>
+        </form>
 
         <label className={styles.neFilter}>
           <span>{t('ops_filter_domain')}</span>
-          <select
-            value={domain}
-            onChange={(event) => {
-              resetQueryState();
-              setDomain(event.target.value);
-            }}
-          >
+          <select value={domain} onChange={(event) => setNetworkFilter('domain', event.target.value)}>
             <option value="">{t('ops_filter_all')}</option>
             {OPERATIONAL_DOMAINS.map((value) => (
               <option key={value} value={value}>{t(`ops_domain_${value}`)}</option>
@@ -374,15 +459,9 @@ export default function NetworkElementView() {
 
         <label className={styles.neFilter}>
           <span>{t('ops_filter_kind')}</span>
-          <select
-            value={kind}
-            onChange={(event) => {
-              resetQueryState();
-              setKind(event.target.value);
-            }}
-          >
+          <select value={kind} onChange={(event) => setNetworkFilter('kind', event.target.value)}>
             <option value="">{t('ops_filter_all')}</option>
-            {kinds.map((value) => (
+            {KIND_OPTIONS.map((value) => (
               <option key={value} value={value}>{value}</option>
             ))}
           </select>
@@ -390,7 +469,7 @@ export default function NetworkElementView() {
 
         <label className={styles.neFilter}>
           <span>{t('ops_filter_monitoring')}</span>
-          <select value={monitoring} onChange={(event) => setMonitoring(event.target.value as MonitoringFilter)}>
+          <select value={monitoring} onChange={(event) => setNetworkFilter('monitoring', event.target.value)}>
             <option value="">{t('ops_filter_all')}</option>
             <option value="monitored">{t('ops_filter_monitored')}</option>
             <option value="unmonitored">{t('ops_filter_unmonitored')}</option>
@@ -401,24 +480,18 @@ export default function NetworkElementView() {
           </select>
         </label>
 
-        <div className={styles.nePresentation} role="group" aria-label={t('ops_presentation_label')}>
-          <button
-            type="button"
-            aria-pressed={presentation === 'cards'}
-            className={presentation === 'cards' ? styles.nePresentationActive : undefined}
-            onClick={() => setPresentation('cards')}
-          >
-            <LayoutGrid size={14} aria-hidden="true" /> {t('ops_presentation_cards')}
+        {activeFilterCount > 0 ? (
+          <button type="button" className="btn btn-ghost" onClick={clearFilters}>
+            <X size={14} aria-hidden="true" />
+            {t('ops_filter_all')}
           </button>
-          <button
-            type="button"
-            aria-pressed={presentation === 'table'}
-            className={presentation === 'table' ? styles.nePresentationActive : undefined}
-            onClick={() => setPresentation('table')}
-          >
-            <Table2 size={14} aria-hidden="true" /> {t('ops_presentation_table')}
-          </button>
-        </div>
+        ) : null}
+
+        {filterScopePage ? (
+          <span className={styles.filterScope} title={t('ops_page_partial')}>
+            {t('ops_filter_scope_page')}
+          </span>
+        ) : null}
       </div>
 
       <div className={styles.completenessStrip} role="list">
@@ -429,28 +502,27 @@ export default function NetworkElementView() {
         ))}
       </div>
 
-      <UnmanagedProcesses components={runtimeData?.snapshot?.components ?? []} />
-
       <div className={styles.neBody}>
         <nav className={styles.treePanel} aria-label={t('ops_tree_label')}>
           <p className={styles.treeCaption}>{treeModeLabel(tree.mode, t)}</p>
-          {tree.nodes.length === 0 ? (
+          {treeNodes.length === 0 ? (
             <p className={styles.treeEmpty}>{t('ops_tree_empty')}</p>
           ) : (
             <ul className={styles.treeList}>
-              {tree.nodes.map((node) => (
+              {treeNodes.map((node) => (
                 <TreeBranch
                   key={node.id}
                   node={node}
                   depth={0}
                   selectedId={selectedNodeId}
+                  completeness={completeness.overall}
                   onSelect={selectNode}
                 />
               ))}
             </ul>
           )}
           {selectedNodeId ? (
-            <button type="button" className={styles.treeClear} onClick={clearTreeSelection}>
+            <button type="button" className={styles.treeClear} onClick={() => url.setFilter('node', '')}>
               {t('ops_tree_clear')}
             </button>
           ) : null}
@@ -458,13 +530,17 @@ export default function NetworkElementView() {
 
         <div className={styles.neTablePanel}>
           {loading ? (
-            <LoadingRows rows={4} />
+            <LoadingRows rows={6} />
           ) : failed ? (
             <EmptyState icon={<Server size={40} />} title={t('ops_error_title')} description={t('ops_error_body')} />
-          ) : filtered.length === 0 ? (
-            <EmptyState icon={<Server size={40} />} title={t('ops_empty_title')} description={t('ops_empty_body')} />
           ) : presentation === 'cards' ? (
-            <NetworkElementCards items={filtered} />
+            visibleItems.length === 0 && !unmanagedSelection ? (
+              <EmptyState icon={<Server size={40} />} title={t('ops_empty_title')} description={t('ops_empty_body')} />
+            ) : (
+              <NetworkElementCards items={visibleItems} />
+            )
+          ) : visibleItems.length === 0 && !unmanagedSelection ? (
+            <EmptyState icon={<Server size={40} />} title={t('ops_empty_title')} description={t('ops_empty_body')} />
           ) : (
             <div className={styles.tableScroll}>
               <table className={styles.neTable}>
@@ -474,81 +550,126 @@ export default function NetworkElementView() {
                 <thead>
                   <tr>
                     <th scope="col">{t('ops_col_name')}</th>
-                    <th scope="col">{t('ops_col_domain')}</th>
-                    <th scope="col">{t('ops_col_type')}</th>
-                    <th scope="col">{t('ops_col_kind')}</th>
-                    <th scope="col">{t('ops_col_lifecycle')}</th>
-                    <th scope="col">{t('ops_col_monitoring')}</th>
-                    <th scope="col">{t('ops_col_l1')}</th>
-                    <th scope="col">{t('ops_col_l2')}</th>
-                    <th scope="col">{t('ops_col_l3')}</th>
-                    <th scope="col">{t('ops_col_freshness')}</th>
-                    <th scope="col">{t('ops_col_last_measurement')}</th>
+                    <th scope="col">{t('ops_col_status')}</th>
+                    <th scope="col">{t('ops_layer_l1')}</th>
+                    <th scope="col">{t('ops_layer_l2')}</th>
+                    <th scope="col">{t('ops_layer_l3')}</th>
                     <th scope="col">{t('ops_col_cpu')}</th>
                     <th scope="col">{t('ops_col_memory')}</th>
                     <th scope="col">{t('ops_col_links')}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((item) => {
-                    const monitoringView = item.monitoring;
-                    const cpu = cpuView(monitoringView);
-                    const memory = memoryView(monitoringView);
-                    const associationState = operationalStateToken(item);
+                  {visibleItems.map((item) => {
+                    const state = operationalStateToken(item);
+                    const coverage = item.monitoring?.coverage ?? null;
+                    const cpu = cpuView(item.monitoring);
+                    const memory = memoryView(item.monitoring);
                     return (
                       <tr key={item.resourceId}>
                         <th scope="row" className={styles.cellName}>
-                          <Link to={`/inventory/${item.resourceId}`}>{item.name}</Link>
+                          <button
+                            type="button"
+                            className={styles.rowButton}
+                            onClick={() => setDrawerResourceId(item.resourceId)}
+                          >
+                            <span className={styles.rowName}>{item.name}</span>
+                            <span className={styles.rowMeta}>
+                              {item.typeLabel}
+                              {item.lifecycleState ? <span className={styles.chip}>{item.lifecycleState}</span> : null}
+                            </span>
+                          </button>
                         </th>
-                        <td>{item.domain === 'unknown' ? t('ops_state_unknown') : t(`ops_domain_${item.domain}`)}</td>
-                        <td>{item.typeLabel}</td>
                         <td>
-                          <code className={styles.chip}>{item.kind || '-'}</code>
-                          {!item.isNetworkFunction ? <span className={styles.chipMuted}>{t('ops_kind_non_nf')}</span> : null}
+                          <span className={`${styles.stateBadge} ${stateTone(state)}`}>{stateLabel(state, t)}</span>
                         </td>
-                        <td>{item.lifecycleState || '-'}</td>
+                        <td>{layerMark(coverage?.l1Measured, t)}</td>
+                        <td>{layerMark(coverage?.l2Measured, t)}</td>
+                        <td>{layerMark(coverage?.l3Measured, t)}</td>
+                        <td title={t('ops_ne_footnote')}>
+                          {cpu ? `${cpu.value} ${cpu.unit}${cpu.fresh ? '' : ` (${t('ops_historical')})`}` : '-'}
+                        </td>
                         <td>
-                          <span className={`${styles.stateBadge} ${stateTone(associationState)}`}>
-                            {stateLabel(associationState, t)}
-                          </span>
+                          {memory ? `${formatBytes(memory.value)}${memory.fresh ? '' : ` (${t('ops_historical')})`}` : '-'}
                         </td>
-                        <td>{monitoringView ? (monitoringView.coverage.l1Measured ? t('ops_layer_measured') : t('ops_layer_not_configured')) : t('ops_metric_unavailable')}</td>
-                        <td>{monitoringView ? (monitoringView.coverage.l2Measured ? t('ops_layer_measured') : t('ops_layer_not_configured')) : t('ops_metric_unavailable')}</td>
-                        <td>{monitoringView ? (monitoringView.coverage.l3Measured ? t('ops_layer_measured') : t('ops_layer_not_configured')) : t('ops_metric_unavailable')}</td>
-                        <td>{monitoringView ? stateLabel(monitoringView.freshnessState, t) : t('ops_state_not_monitored')}</td>
-                        <td>{monitoringView?.latestSampleAt || '-'}</td>
-                        <td>
-                          {cpu
-                            ? `${cpu.value} ${cpu.unit}${cpu.fresh ? '' : ` (${t('ops_historical')})`}`
-                            : t('ops_metric_unavailable')}
-                        </td>
-                        <td>{memory ? `${formatBytes(memory.value)}${memory.fresh ? '' : ` (${t('ops_historical')})`}` : t('ops_metric_unavailable')}</td>
                         <td className={styles.cellLinks}>
-                          {monitoringView ? <Link to={`/nf-health/${monitoringView.targetId}`}>{t('ops_open_monitoring')}</Link> : '-'}
+                          {item.monitoring ? (
+                            <Link className={styles.rowLink} to={`/nf-health/${encodeURIComponent(item.monitoring.targetId)}`}>
+                              {t('ops_open_monitoring')}
+                            </Link>
+                          ) : item.association === 'unresolved' ? (
+                            <span className={styles.chipMuted} title={t('ops_filter_unresolved')}>
+                              {t('ops_association_unresolved')}
+                            </span>
+                          ) : (
+                            <span className={styles.chipMuted}>{t('ops_association_absent')}</span>
+                          )}
                         </td>
                       </tr>
                     );
                   })}
+                  {unmanagedSelection
+                    ? visibleUnmanaged.map((component) => (
+                      <tr key={component.componentId} className={styles.unmanagedRow}>
+                        <th scope="row" className={styles.cellName}>
+                          <span className={styles.rowName}>{component.displayName}</span>
+                          <span className={styles.rowMeta}>
+                            <code className={styles.chip}>{component.processName}</code>
+                          </span>
+                        </th>
+                        <td>
+                          <span className={`${styles.stateBadge} ${styles.toneMuted}`}>{t('ops_unmanaged_state')}</span>
+                        </td>
+                        <td>-</td>
+                        <td>-</td>
+                        <td>-</td>
+                        <td title={t('ops_unmanaged_note')}>-</td>
+                        <td>{component.memoryRssBytes != null ? formatBytes(component.memoryRssBytes) : '-'}</td>
+                        <td className={styles.cellLinks}>
+                          <Link className={styles.rowLink} to="/inventory?view=runtime">{t('ops_unmanaged_open')}</Link>
+                        </td>
+                      </tr>
+                    ))
+                    : null}
                 </tbody>
               </table>
             </div>
           )}
 
-          <div className={styles.pager}>
-            <button type="button" onClick={previousPage} disabled={cursorHistory.length === 0}>
-              {t('ops_prev_page')}
-            </button>
-            <span className={styles.pagerInfo}>
-              {hasMore ? t('ops_page_partial') : t('ops_page_complete')}
-            </span>
-            <button type="button" onClick={nextPage} disabled={!hasMore}>
-              {t('ops_next_page')}
-            </button>
-          </div>
+          <p className={styles.footnote}>{t('ops_table_note')}</p>
 
-          <p className={styles.footnote}>{t('ops_ne_footnote')}</p>
+          {presentation === 'table' ? (
+            <div className={styles.pager}>
+              <button type="button" onClick={goFirstPage} disabled={!url.cursor}>
+                {t('ops_pager_first')}
+              </button>
+              <button type="button" onClick={goPreviousPage} disabled={cursorTrail.length === 0}>
+                {t('ops_prev_page')}
+              </button>
+              <span className={styles.pagerInfo}>
+                {hasMore ? t('ops_page_partial') : t('ops_page_complete')}
+              </span>
+              <button
+                type="button"
+                onClick={goNextPage}
+                disabled={!hasMore || !nextCursor}
+              >
+                {t('ops_next_page')}
+              </button>
+            </div>
+          ) : null}
         </div>
       </div>
+
+      <ResourceDetailDrawer resource={drawerResource} onClose={() => setDrawerResourceId(null)} />
     </div>
+  );
+}
+
+function layerMark(measured: boolean | undefined, t: (key: string) => string): React.ReactElement {
+  return measured ? (
+    <span className={styles.layerOn} title={t('ops_layer_measured')}>✓</span>
+  ) : (
+    <span className={styles.layerOff} title={t('ops_layer_not_configured')}>–</span>
   );
 }

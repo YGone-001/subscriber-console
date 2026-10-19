@@ -323,6 +323,8 @@ check(
 const overviewSource = readFileSync(resolve(root, 'frontend/src/features/operations/OperationalOverview.tsx'), 'utf8');
 const networkSource = readFileSync(resolve(root, 'frontend/src/features/operations/NetworkElementView.tsx'), 'utf8');
 const boundedEdgesSource = readFileSync(resolve(root, 'frontend/src/features/operations/use-bounded-edges.ts'), 'utf8');
+const urlStateSource = readFileSync(resolve(root, 'frontend/src/features/operations/operations-url-state.ts'), 'utf8');
+const resourceProjectionSource = readFileSync(resolve(root, 'frontend/src/features/operations/operations-resources.ts'), 'utf8');
 const modelSource = readFileSync(resolve(root, 'frontend/src/features/operations/operational-model.ts'), 'utf8');
 const dashboardSource = readFileSync(resolve(root, 'frontend/src/features/read/ReadPages.tsx'), 'utf8');
 const inventoryPageSource = readFileSync(resolve(root, 'frontend/src/features/inventory/InventoryPage.tsx'), 'utf8');
@@ -421,11 +423,16 @@ check(
 
 check(
   'OPS-UI-11',
-  // Authoritative bounded association lookup: both surfaces resolve monitoring
-  // for exactly the loaded resources and never paginate the target list.
+  // Authoritative bounded association lookup. The overview resolves its own
+  // bounded batch; the network-element view consumes the server projection,
+  // which performs the same bounded lookup for exactly one page of resources.
+  // Neither surface paginates a target list, and neither assembles the join
+  // from an unrelated cursor page.
   /resourceIds=\$\{encodeURIComponent/.test(overviewSource) &&
-    /resourceIds=\$\{encodeURIComponent/.test(networkSource) &&
-    !/nf-health\/targets\?[^`]*cursor=/.test(overviewSource + networkSource),
+    /operationsResourcesPath\(/.test(networkSource) &&
+    /operationsResourcesPath\(/.test(resourceProjectionSource) &&
+    !/nf-health\/targets\?[^`]*cursor=/.test(overviewSource + networkSource) &&
+    !/nf-health\/targets\?resourceIds=/.test(networkSource),
   'ops_association=bounded_resource_id_lookup',
 );
 check(
@@ -466,11 +473,12 @@ check(
 );
 check(
   'OPS-UI-15',
-  // Server-side filter changes reset the cursor, its history and the tree
-  // selection, so a cursor from another query is never reused.
-  /resetQueryState/.test(networkSource) &&
-    /setCursorHistory\(\[\]\)/.test(networkSource) &&
-    /setSelectedNodeId\(''\)/.test(networkSource) &&
+  // A filter change invalidates the cursor and the tree selection, so a cursor
+  // or node from another query is never reused. The cursor is dropped by the
+  // shared URL contract in the same write that applies the filter.
+  /applyOperationsPatch/.test(urlStateSource) &&
+    /cursorReset/.test(urlStateSource) &&
+    /setFilterNode\('node', ''\)/.test(networkSource) &&
     /useBoundedEdges/.test(networkSource) &&
     /getJsonWithSignal/.test(boundedEdgesSource),
   'ops_filter_state=cursor_and_selection_reset',

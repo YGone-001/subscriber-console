@@ -39,6 +39,9 @@ type ListFilter struct {
 	Query          string
 	Limit          int
 	Cursor         string
+	// Roles restricts the query to a bounded set of canonical role values. It is
+	// additive: an empty slice keeps the previous behaviour exactly.
+	Roles []string
 }
 
 // Repository handles persistence of inventory resources in xcloud_ops.app_inventory_resources.
@@ -138,6 +141,9 @@ func (r *Repository) List(ctx context.Context, filter ListFilter) ([]Resource, *
 	}
 	if filter.LifecycleState != "" {
 		filterDoc["lifecycleState"] = filter.LifecycleState
+	}
+	if len(filter.Roles) > 0 {
+		filterDoc["role"] = bson.M{"$in": filter.Roles}
 	}
 
 	if filter.Query != "" {

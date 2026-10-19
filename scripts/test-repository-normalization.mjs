@@ -40,7 +40,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 // API surface is byte-identical to this baseline, so the cleanup is provably a
 // non-functional change.
 const NORMALIZATION_BASELINE_SHA = '43f2947d70590507a29837bdea36d2ecaffdfaa5';
-const EXPECTED_GO_REGISTRATIONS = 135;
+const EXPECTED_GO_REGISTRATIONS = 136;
 const EXPECTED_INVENTORY_ROUTES = new Set([
   'GET /api/inventory/meta',
   'GET /api/inventory/resources',
@@ -113,10 +113,13 @@ const EXPECTED_NF_ALERT_ROUTES = new Set([
   'POST /api/nf-alerts/{alertId}/acknowledge',
   'POST /api/nf-alerts/{alertId}/resolve',
 ]);
-// Operations summary adds exactly one read registration: full-collection
-// per-section statistics aggregated from the domain repositories.
+// The operations projection adds exactly two read registrations:
+//   - summary: full-collection per-section statistics;
+//   - resources: one Inventory page joined with its authoritative monitoring
+//     association. Neither owns a write.
 const EXPECTED_OPERATIONS_ROUTES = new Set([
   'GET /api/operations/summary',
+  'GET /api/operations/resources',
 ]);
 const EXPECTED_ADDED_ROUTE_COUNT =
   EXPECTED_INVENTORY_ROUTES.size +

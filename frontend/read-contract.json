@@ -38,7 +38,9 @@
     "source": "frontend/src/features/inventory/InventoryPage.tsx",
     "readEndpoints": [
       "GET /api/inventory/meta",
-      "GET /api/inventory/resources"
+      "GET /api/inventory/resources",
+      "GET /api/operations/resources",
+      "GET /api/operations/summary?sections=inventory,health"
     ]
   },
   {

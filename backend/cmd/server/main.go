@@ -332,6 +332,15 @@ func main() {
 		auditWriter,
 	)
 
+	// Operations resource projection: one Inventory page joined with the
+	// authoritative monitoring association for exactly those resources. Read
+	// only; it owns no write and performs no remote network action.
+	operationsResourceHandler := operationsview.NewResourceHandler(
+		operationsview.NewResourceService(inventoryRepo, nfHealthRepo, nfHealthBindings, nil),
+		limiter,
+		auditWriter,
+	)
+
 	// Runtime discovery lifecycle. The startup scan runs immediately so the
 	// operational surfaces are populated without any Inventory record.
 	runtimeService := runtimeinv.NewService(
@@ -553,6 +562,9 @@ func main() {
 
 	// Operations summary (single read, per-section full-collection statistics)
 	mux.Handle("GET /api/operations/summary", authMiddleware(http.HandlerFunc(operationsSummaryHandler.Summary)))
+
+	// Operations resource projection (single read, one bounded Inventory page)
+	mux.Handle("GET /api/operations/resources", authMiddleware(http.HandlerFunc(operationsResourceHandler.Resources)))
 
 	// Catch-all for unknown API routes
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {

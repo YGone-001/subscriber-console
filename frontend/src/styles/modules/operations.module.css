@@ -712,3 +712,263 @@
   color: inherit;
   box-shadow: inset 0 0 0 1px var(--surface-border);
 }
+
+/* ---------------------------------------------------------------- UX-2 ---- */
+/* Master-detail inventory surface: KPI strip, compact table, detail drawer. */
+
+.kpiStrip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--space-8);
+}
+
+.kpiCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-8) var(--space-12);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-panel);
+  background: var(--surface-field);
+}
+
+.kpiLabel {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.kpiValue {
+  font-size: 1.15rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.kpiMeta {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
+.kpiScope {
+  opacity: 0.85;
+}
+
+.kpiUnavailable {
+  color: var(--sys-color-status-warning, var(--text-muted));
+}
+
+.filterScope {
+  padding: 0 var(--space-8);
+  border: 1px dashed var(--surface-border);
+  border-radius: var(--ref-radius-pill);
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  line-height: calc(var(--control-height) - 2px);
+}
+
+.rowButton {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.rowButton:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--ref-radius-small);
+}
+
+.rowName {
+  font-weight: 600;
+  font-size: 0.84rem;
+}
+
+.rowMeta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.rowLink {
+  color: var(--sys-color-action-primary);
+  text-decoration: none;
+  font-size: 0.78rem;
+}
+
+.rowLink:hover {
+  text-decoration: underline;
+}
+
+.layerOn,
+.layerOff {
+  display: inline-block;
+  min-width: 1.1em;
+  text-align: center;
+  font-size: 0.8rem;
+}
+
+.layerOn {
+  color: var(--sys-color-status-success, var(--text-primary));
+}
+
+.layerOff {
+  color: var(--text-muted);
+}
+
+.unmanagedRow {
+  background: var(--surface-field);
+}
+
+.uuid {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  word-break: break-all;
+}
+
+/* Detail drawer: an overlay over the workspace, never a permanent third column. */
+
+.drawerLayer {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(15, 23, 42, 0.28);
+}
+
+.drawer {
+  display: flex;
+  flex-direction: column;
+  width: min(460px, 100%);
+  height: 100%;
+  border-inline-start: 1px solid var(--surface-border);
+  background: var(--surface);
+  box-shadow: var(--sys-shadow-overlay, 0 12px 32px rgba(15, 23, 42, 0.18));
+  overflow-y: auto;
+}
+
+.drawer:focus-visible {
+  outline: none;
+}
+
+.drawerHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-8);
+  padding: var(--space-16);
+  border-bottom: 1px solid var(--surface-border);
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+}
+
+.drawerHeadCopy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.drawerTitle {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.drawerBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
+  padding: var(--space-16);
+}
+
+.drawerActions {
+  display: flex;
+  gap: var(--space-8);
+  flex-wrap: wrap;
+}
+
+.detailSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.detailTitle {
+  margin: 0;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.detailGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--space-8);
+  margin: 0;
+}
+
+.detailGrid dt {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
+.detailGrid dd {
+  margin: 2px 0 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  font-size: 0.8rem;
+}
+
+.detailNote {
+  margin: 0;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.layerList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.layerItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8);
+  padding: var(--space-4) 0;
+  border-bottom: 1px dashed var(--surface-border);
+  font-size: 0.8rem;
+}
+
+.layerName {
+  font-weight: 600;
+}
+
+.layerMeasured {
+  color: var(--sys-color-status-success, var(--text-primary));
+}
+
+.layerMissing {
+  color: var(--text-muted);
+}
+
+@media (max-width: 900px) {
+  .neBody {
+    grid-template-columns: 1fr;
+  }
+}
