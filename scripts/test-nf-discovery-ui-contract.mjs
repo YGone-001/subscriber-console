@@ -70,6 +70,11 @@ check('DISC-UI-12', /getVisibleNavigation|filterNavigation/.test(paletteSource),
 const discoveryFiles = [
   'features/discovery/DiscoveryPage.tsx',
   'features/discovery/DiscoverySourceDetailPage.tsx',
+  'features/discovery/DiscoveryCandidatesView.tsx',
+  'features/discovery/DiscoverySourcesView.tsx',
+  'features/discovery/DiscoveryRunsView.tsx',
+  'features/discovery/CandidateDetailDrawer.tsx',
+  'features/discovery/discovery-view-model.ts',
   'features/discovery/discovery-api.ts',
   'features/discovery/discovery-types.ts',
   'features/discovery/discovery-builders.ts',
@@ -158,6 +163,40 @@ check(
   'DISC-UI-35',
   /\.search\s*\{[^}]*min-height:\s*var\(--control-height\)/.test(cssModule),
   'discovery_css=search_preserves_control_height',
+);
+
+// 8. Discovery workflow rearrangement invariants
+const discoveryPage = read('features/discovery/DiscoveryPage.tsx');
+check('DISC-UI-36', /defaultView: 'candidates'/.test(discoveryPage), 'discovery_default_view=candidates');
+check(
+  'DISC-UI-37',
+  /DISCOVERY_VIEWS = \['candidates', 'sources', 'runs'\]/.test(discoveryPage),
+  'discovery_view_vocabulary=candidates_sources_runs',
+);
+check(
+  'DISC-UI-38',
+  /discoveryView === 'candidates' \?[\s\S]*<DiscoveryCandidatesView/.test(discoveryPage)
+    && /discoveryView === 'sources' \?[\s\S]*<DiscoverySourcesView/.test(discoveryPage)
+    && /<DiscoveryRunsView/.test(discoveryPage),
+  'discovery_views=mutually_exclusive_branches',
+);
+check(
+  'DISC-UI-39',
+  /discoveryKpisFromSummary/.test(discoveryPage)
+    && !/candidates\.length|sources\.length/.test(discoveryPage),
+  'discovery_kpi_source=full_collection_summary',
+);
+const drawerSource = read('features/discovery/CandidateDetailDrawer.tsx');
+check(
+  'DISC-UI-40',
+  /monitoring\.state === 'supported'/.test(drawerSource) && /onBootstrap\(selected\)/.test(drawerSource),
+  'discovery_onboarding=explicit_selection_only',
+);
+check(
+  'DISC-UI-41',
+  /monitoringAssociation/.test(read('features/discovery/discovery-types.ts'))
+    && /CandidateMonitoringState/.test(read('features/discovery/discovery-types.ts')),
+  'discovery_monitoring_association=typed_contract',
 );
 
 let failed = 0;

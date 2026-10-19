@@ -27,10 +27,12 @@ import {
 const here = dirname(fileURLToPath(import.meta.url));
 const frontendRoot = resolve(here, '..');
 const repoRoot = resolve(frontendRoot, '..');
-const distDir = resolve(frontendRoot, 'dist');
+const distDir = process.env.XCLOUD_DISCOVERY_DIST_DIR
+  ? resolve(process.env.XCLOUD_DISCOVERY_DIST_DIR)
+  : resolve(frontendRoot, 'dist');
 const outDir = resolve(repoRoot, 'reports', 'ops', 'nf-discovery-screenshots');
 
-const EXPECTED_SCREENSHOT_COUNT = 20;
+const EXPECTED_SCREENSHOT_COUNT = 22;
 const MIN_PNG_BYTES = 8192;
 
 const VIEWPORTS = {
@@ -200,8 +202,6 @@ async function assertSearchToolbarGeometry(page, label, viewportWidth) {
     controlsInside ? 'input and submit sit inside the form box' : 'input/submit clipped out of the form box',
   );
 
-  const filterVisible = await page.locator('select').first().isVisible();
-  check(`filter_controls_visible:${label}`, filterVisible, 'observation / nfType filter');
 }
 
 async function capture(page, filename, meta) {
@@ -240,15 +240,18 @@ async function main() {
       for (const theme of ['light', 'dark']) {
         const { context, page } = await newSession(browser, { ...viewport, theme, locale: 'en', session: 'operator' });
         await page.goto(`${origin}${listRoute}`, { waitUntil: 'domcontentloaded' });
-        await settle(page, 'Add Source');
+        await settle(page, 'AMF');
 
         check(`auth_gate_allows_session:${sizeName}-${theme}`, !page.url().includes('/login'), `url=${page.url()}`);
         check(`app_shell_visible:${sizeName}-${theme}`, await page.locator('#xcloud-primary-sidebar').isVisible(), 'sidebar');
         check(`discovery_title_visible:${sizeName}-${theme}`, await page.locator('h1').first().isVisible(), 'page title');
         const bodyText = await page.locator('body').innerText();
-        check(`fixture_sources_render:${sizeName}-${theme}`, /lab-registry/.test(bodyText), 'lab-registry');
+        check(`default_view_offers_queue:${sizeName}-${theme}`, /Candidate queue/i.test(bodyText), 'the queue is the default view');
         check(`fixture_candidates_render:${sizeName}-${theme}`, /AMF/.test(bodyText) && /UDM/.test(bodyText), 'nf types');
+        check(`funnel_columns_render:${sizeName}-${theme}`, /Observed/i.test(bodyText) && /Linked/i.test(bodyText) && /Monitored/i.test(bodyText), 'three independent funnel columns');
+        check(`monitoring_association_render:${sizeName}-${theme}`, /Monitored/i.test(bodyText), 'the linked candidate reports monitored');
         check(`observation_state_rendered:${sizeName}-${theme}`, /Missing/i.test(bodyText), 'observation state');
+        check(`kpi_scope_label:${sizeName}-${theme}`, /full collection/i.test(bodyText), 'the KPI strip declares its scope');
         check(
           `observation_not_health_disclosed:${sizeName}-${theme}`,
           /not operational health|不等于运行健康/i.test(bodyText) || true,
@@ -257,9 +260,11 @@ async function main() {
         check(`theme_applied:${sizeName}-${theme}`, (await page.evaluate(() => document.documentElement.dataset.theme)) === theme, theme);
         await assertNoRawKeys(page, `${sizeName}-${theme}`);
         await assertNoHorizontalOverflow(page, `${sizeName}-${theme}`);
-        // Mandated bounding-box regression: 768px and 390px must keep the
-        // search form at normal control height with usable controls.
-        await assertSearchToolbarGeometry(page, `${sizeName}-${theme}`, viewport.width);
+        check(
+          `filter_controls_visible:${sizeName}-${theme}`,
+          await page.locator('[data-discovery-source-selector="true"]').isVisible(),
+          'bounded source selector',
+        );
 
         await capture(page, `discovery-list-${sizeName}-${theme}.png`, {
           route: listRoute,
@@ -270,6 +275,28 @@ async function main() {
           fixtureScenario: 'discovery-list-overview',
           session: 'operator',
         });
+        await context.close();
+      }
+    }
+
+    /* ============ A2. Sources view: search geometry and queue =========== */
+    for (const [sizeName, viewport] of Object.entries(VIEWPORTS)) {
+      for (const theme of ['light', 'dark']) {
+        const { context, page } = await newSession(browser, { ...viewport, theme, locale: 'en', session: 'operator' });
+        await page.goto(`${origin}${listRoute}?view=sources`, { waitUntil: 'domcontentloaded' });
+        await settle(page, 'Add Source');
+        const text = await page.locator('body').innerText();
+        check(`sources_view_renders:${sizeName}-${theme}`, /lab-registry/.test(text), 'source rows');
+        check(
+          `sources_view_hides_queue:${sizeName}-${theme}`,
+          (await page.locator('section[data-discovery-view="candidates"]').count()) === 0,
+          'the queue stays behind its own view',
+        );
+        await assertNoRawKeys(page, `sources-${sizeName}-${theme}`);
+        await assertNoHorizontalOverflow(page, `sources-${sizeName}-${theme}`);
+        // Mandated bounding-box regression: 768px and 390px must keep the
+        // search form at normal control height with usable controls.
+        await assertSearchToolbarGeometry(page, `sources-${sizeName}-${theme}`, viewport.width);
         await context.close();
       }
     }
@@ -306,11 +333,62 @@ async function main() {
       }
     }
 
+    /* ============== B2. runs view and candidate detail drawer ============= */
+    {
+      const { context, page } = await newSession(browser, { ...VIEWPORTS.desktop, theme: 'dark', locale: 'en', session: 'operator' });
+      await page.goto(`${origin}${listRoute}?view=runs`, { waitUntil: 'domcontentloaded' });
+      await settle(page, 'Scan history');
+      const text = await page.locator('body').innerText();
+      check('runs_view_renders:desktop-dark', /Success/i.test(text) && /Partial/i.test(text), 'run statuses');
+      check(
+        'runs_view_hides_queue:desktop-dark',
+        (await page.locator('section[data-discovery-view="candidates"]').count()) === 0,
+        'the queue stays behind its own view',
+      );
+      await assertNoRawKeys(page, 'runs-desktop-dark');
+      await assertNoHorizontalOverflow(page, 'runs-desktop-dark');
+      await capture(page, 'discovery-runs-desktop-dark.png', {
+        route: `${listRoute}?view=runs`,
+        viewportWidth: VIEWPORTS.desktop.width,
+        viewportHeight: VIEWPORTS.desktop.height,
+        theme: 'dark',
+        locale: 'en',
+        fixtureScenario: 'discovery-runs-view',
+        session: 'operator',
+      });
+      await context.close();
+    }
+
+    {
+      const { context, page } = await newSession(browser, { ...VIEWPORTS.desktop, theme: 'light', locale: 'en', session: 'operator' });
+      await page.goto(`${origin}${listRoute}`, { waitUntil: 'domcontentloaded' });
+      await settle(page, 'AMF');
+      await page.getByRole('button', { name: 'AMF' }).first().click();
+      await page.locator('#candidate-detail-title').waitFor({ state: 'visible', timeout: 15000 });
+      const drawerText = await page.locator('body').innerText();
+      check('candidate_drawer_opens:desktop-light', await page.locator('#candidate-detail-title').isVisible(), 'drawer title');
+      check('candidate_drawer_identity:desktop-light', /Candidate identity/i.test(drawerText), 'identity section');
+      check('candidate_drawer_monitoring:desktop-light', /Monitoring association/i.test(drawerText), 'monitoring association section');
+      check('candidate_drawer_onboarding:desktop-light', /Local runtime onboarding/i.test(drawerText), 'onboarding requires an explicit selection');
+      await assertNoRawKeys(page, 'drawer-desktop-light');
+      await assertNoHorizontalOverflow(page, 'drawer-desktop-light');
+      await capture(page, 'discovery-drawer-desktop-light.png', {
+        route: listRoute,
+        viewportWidth: VIEWPORTS.desktop.width,
+        viewportHeight: VIEWPORTS.desktop.height,
+        theme: 'light',
+        locale: 'en',
+        fixtureScenario: 'candidate-detail-drawer',
+        session: 'operator',
+      });
+      await context.close();
+    }
+
     /* ========================= C. interactive dialogs ====================== */
     const dialogCases = [
-      { name: 'create', sizeName: 'desktop', viewport: VIEWPORTS.desktop, theme: 'light', route: listRoute, titleId: 'discovery-create-title', trigger: /Add Source/i },
-      { name: 'create', sizeName: 'desktop', viewport: VIEWPORTS.desktop, theme: 'dark', route: listRoute, titleId: 'discovery-create-title', trigger: /Add Source/i },
-      { name: 'create', sizeName: 'mobile', viewport: VIEWPORTS.mobile, theme: 'light', route: listRoute, titleId: 'discovery-create-title', trigger: /Add Source/i },
+      { name: 'create', sizeName: 'desktop', viewport: VIEWPORTS.desktop, theme: 'light', route: `${listRoute}?view=sources`, titleId: 'discovery-create-title', trigger: /Add Source/i },
+      { name: 'create', sizeName: 'desktop', viewport: VIEWPORTS.desktop, theme: 'dark', route: `${listRoute}?view=sources`, titleId: 'discovery-create-title', trigger: /Add Source/i },
+      { name: 'create', sizeName: 'mobile', viewport: VIEWPORTS.mobile, theme: 'light', route: `${listRoute}?view=sources`, titleId: 'discovery-create-title', trigger: /Add Source/i },
       { name: 'link', sizeName: 'desktop', viewport: VIEWPORTS.desktop, theme: 'light', route: detailRoute, titleId: 'discovery-link-title', trigger: /^Link$/i },
       { name: 'link', sizeName: 'desktop', viewport: VIEWPORTS.desktop, theme: 'dark', route: detailRoute, titleId: 'discovery-link-title', trigger: /^Link$/i },
       { name: 'link', sizeName: 'mobile', viewport: VIEWPORTS.mobile, theme: 'light', route: detailRoute, titleId: 'discovery-link-title', trigger: /^Link$/i },
@@ -433,7 +511,7 @@ async function main() {
       await settle(page);
       await page.locator('#xcloud-primary-sidebar').getByRole('link', { name: /Discovery/i }).first().click();
       await page.waitForURL(/\/discovery$/, { timeout: 15000 });
-      await settle(page, 'Add Source');
+      await settle(page, 'AMF');
       check('sidebar_discovery_navigation', page.url().endsWith('/discovery'), `url=${page.url()}`);
       await context.close();
     }
@@ -442,7 +520,7 @@ async function main() {
     {
       const { context, page } = await newSession(browser, { ...VIEWPORTS.desktop, theme: 'light', locale: 'zh', session: 'operator' });
       await page.goto(`${origin}${listRoute}`, { waitUntil: 'domcontentloaded' });
-      await settle(page, '新增数据源');
+      await settle(page, '网元发现');
       const text = await page.locator('body').innerText();
       check('chinese_locale_labels', /[一-鿿]/.test(text) && /网元发现|新增数据源/.test(text), 'zh labels');
       check('chinese_locale_html_lang', (await page.evaluate(() => document.documentElement.lang)) === 'zh-CN', 'html lang');
@@ -456,8 +534,9 @@ async function main() {
       await page.goto(`${viewerServer.origin}${listRoute}`, { waitUntil: 'domcontentloaded' });
       await settle(page);
       const text = await page.locator('body').innerText();
-      check('viewer_read_only_controls', !/Add Source/.test(text), 'no mutation controls');
+      check('viewer_read_only_controls', !/Add Source/.test(text), 'no mutation controls on the queue');
       check('viewer_sees_candidates', /AMF/.test(text), 'readable candidates');
+      check('viewer_sees_funnel', /Observed/i.test(text) && /Linked/i.test(text), 'the funnel is read-only data');
       await context.close();
     }
 

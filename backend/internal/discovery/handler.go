@@ -57,6 +57,11 @@ type Handler struct {
 	adapters    *AdapterRegistry
 	allowlist   *DestinationAllowlist
 	resolver    InventoryResolver
+	// monitoringResolver projects the candidate-resource-target chain onto
+	// bounded candidate pages. It is optional late wiring (see
+	// SetMonitoringResolver); an unwired handler serves unprojected pages
+	// instead of guessing an association.
+	monitoringResolver MonitoringAssociationResolver
 
 	scanMu      sync.Mutex
 	activeScans map[string]string // sourceId -> runId
@@ -76,6 +81,14 @@ func NewHandler(repo RepositoryAPI, limiter RateLimiter, auditWriter AuditWriter
 		activeScans: map[string]string{},
 		lastScanAt:  map[string]time.Time{},
 	}
+}
+
+// SetMonitoringResolver wires the read-only monitoring association
+// projection. The resolver is optional: an unwired handler returns
+// unprojected candidate pages. The constructor signature is unchanged so
+// existing callers keep compiling.
+func (h *Handler) SetMonitoringResolver(resolver MonitoringAssociationResolver) {
+	h.monitoringResolver = resolver
 }
 
 const maxBodyBytes = 64 << 10
@@ -628,6 +641,7 @@ func (h *Handler) ListCandidates(w http.ResponseWriter, r *http.Request) {
 		response.BadRequest(w, err.Error(), "INVALID_CURSOR")
 		return
 	}
+	enrichMonitoringAssociation(r.Context(), h.monitoringResolver, items)
 	response.JSON(w, http.StatusOK, ListCandidatesResponse{
 		Candidates: items,
 		Page:       PageInfo{Limit: limit, NextCursor: next, HasMore: hasMore},
@@ -657,7 +671,9 @@ func (h *Handler) GetCandidate(w http.ResponseWriter, r *http.Request) {
 		response.InternalError(w)
 		return
 	}
-	response.JSON(w, http.StatusOK, item)
+	projected := []NFObservation{*item}
+	enrichMonitoringAssociation(r.Context(), h.monitoringResolver, projected)
+	response.JSON(w, http.StatusOK, projected[0])
 }
 
 // LinkCandidate handles POST /api/discovery/candidates/{candidateId}/link.
@@ -715,7 +731,9 @@ func (h *Handler) LinkCandidate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.auditWrite(p, "discovery.candidate.link", candidateID, candidate, after)
-	response.JSON(w, http.StatusOK, after)
+	projected := []NFObservation{*after}
+	enrichMonitoringAssociation(r.Context(), h.monitoringResolver, projected)
+	response.JSON(w, http.StatusOK, projected[0])
 }
 
 // UnlinkCandidate handles POST /api/discovery/candidates/{candidateId}/unlink.

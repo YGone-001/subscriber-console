@@ -104,6 +104,27 @@ export interface NfObservation {
   observationState: DiscoveryObservationState;
   linkedResourceId: string | null;
   revision: number;
+  /**
+   * Read-only projection of the candidate-resource-target chain. Response-only
+   * (the backend never persists it); absent for unlinked candidates.
+   */
+  monitoringAssociation?: CandidateMonitoringAssociation;
+}
+
+/**
+ * Monitoring association states of one candidate.
+ *
+ *   monitored   - the linked Inventory resource has an NF Health target
+ *   unmonitored - the linked resource exists and has no target (absence proven)
+ *   unresolved  - the association lookup failed; absence is NOT established
+ *
+ * An unlinked candidate carries no association summary at all.
+ */
+export type CandidateMonitoringState = 'monitored' | 'unmonitored' | 'unresolved';
+
+export interface CandidateMonitoringAssociation {
+  state: CandidateMonitoringState;
+  targetId?: string;
 }
 
 export interface PageInfo {

@@ -32,6 +32,31 @@ const (
 	ObservationStale   = "stale"
 )
 
+// CandidateMonitoringAssociation is the monitoring association summary of one
+// observed candidate, projected from the existing candidate-resource-target
+// chain. It is derived from an authoritative NF Health lookup and is never
+// persisted with the observation document.
+//
+//	monitored   - the linked resource has an NF Health target
+//	unmonitored - the linked resource exists and has no target (absence proven)
+//	unresolved  - the association lookup did not succeed; absence is NOT proven
+//
+// An unlinked candidate carries no association summary at all: the link column
+// already states that fact, and a missing projection must never be read as
+// "unmonitored".
+type CandidateMonitoringAssociation struct {
+	State    string `json:"state"`
+	TargetID string `json:"targetId,omitempty"`
+}
+
+// Monitoring association state vocabulary. Mirrors the association family used
+// by the operations resource projection.
+const (
+	CandidateMonitored   = "monitored"
+	CandidateUnmonitored = "unmonitored"
+	CandidateUnresolved  = "unresolved"
+)
+
 // Canonical adapter types and transport modes exposed by GET /api/discovery/meta.
 var CanonicalAdapterTypes = []string{AdapterNRF}
 var CanonicalTransportModes = []string{TransportH2C, TransportH2TLS}
@@ -56,6 +81,11 @@ const (
 	DefaultPageLimit = 50
 	MaxPageLimit     = 200
 )
+
+// CandidateMonitoringBound bounds one association batch lookup. It matches the
+// largest bounded candidate page the list endpoint can return, so one response
+// enrichment never issues an unbounded identifier query.
+const CandidateMonitoringBound = MaxPageLimit
 
 // ObservedEndpoint is a normalized SBI endpoint observed on an NF profile.
 type ObservedEndpoint struct {
@@ -157,6 +187,11 @@ type NFObservation struct {
 	ObservationState     string             `json:"observationState" bson:"observationState"`
 	LinkedResourceID     *string            `json:"linkedResourceId" bson:"linkedResourceId"`
 	Revision             int64              `json:"revision" bson:"revision"`
+	// MonitoringAssociation is the read-only projection of the
+	// candidate-resource-target chain, populated by the list handler from a
+	// bounded batch lookup. bson:"-" keeps the derived value out of the
+	// observation document: it is evidence about the link, never stored state.
+	MonitoringAssociation *CandidateMonitoringAssociation `json:"monitoringAssociation,omitempty" bson:"-"`
 }
 
 // PlmnID is a normalized PLMN identifier.

@@ -480,6 +480,9 @@ func TestLinkCandidateUpdatesDiscoveryMetadataOnly(t *testing.T) {
 		candidateID = id
 	}
 	h, aud := newTestHandler(repo, &mockAdapter{}, &mockResolver{exists: true, linkable: true})
+	h.SetMonitoringResolver(&mockMonitoringResolver{
+		targets: map[string]string{"22222222-2222-4222-8222-222222222222": "target-1"},
+	})
 
 	body := []byte(`{"expectedRevision":1,"resourceId":"22222222-2222-4222-8222-222222222222"}`)
 	req := withPrincipal(httptest.NewRequest(http.MethodPost, "/api/discovery/candidates/"+candidateID+"/link", bytes.NewReader(body)), "operator")
@@ -491,6 +494,13 @@ func TestLinkCandidateUpdatesDiscoveryMetadataOnly(t *testing.T) {
 	}
 	if repo.linkCalls != 1 {
 		t.Fatalf("linkCalls = %d", repo.linkCalls)
+	}
+	var linked NFObservation
+	if err := json.Unmarshal(w.Body.Bytes(), &linked); err != nil {
+		t.Fatalf("decode link response: %v", err)
+	}
+	if linked.MonitoringAssociation == nil || linked.MonitoringAssociation.State != CandidateMonitored || linked.MonitoringAssociation.TargetID != "target-1" {
+		t.Fatalf("link response association = %+v, want monitored/target-1", linked.MonitoringAssociation)
 	}
 	found := false
 	for _, a := range aud.actions {

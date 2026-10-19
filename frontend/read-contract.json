@@ -15,10 +15,12 @@
     "mode": "read",
     "source": "frontend/src/features/discovery/DiscoveryPage.tsx",
     "readEndpoints": [
-      "GET /api/discovery/meta",
-      "GET /api/discovery/sources",
       "GET /api/discovery/candidates",
-      "GET /api/operations/summary?sections=discovery"
+      "GET /api/discovery/meta",
+      "GET /api/discovery/runs",
+      "GET /api/discovery/sources",
+      "GET /api/operations/summary?sections=discovery",
+      "GET /api/runtime/observations"
     ]
   },
   {

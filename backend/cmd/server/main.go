@@ -224,6 +224,17 @@ func main() {
 		mc.Ops.Collection("app_nf_health_samples"),
 	)
 	nfHealthHandler := nfhealth.NewHandler(nfHealthRepo, nfHealthCollector, limiter, auditWriter, nfHealthDest, nfHealthUnits, nfHealthBindings)
+
+	// Discovery candidate pages carry a forward-compatible monitoring
+	// association summary. The projection reuses the authoritative NF Health
+	// batch lookup (one bounded query per candidate page, never per row); it
+	// reads only and owns no write. Discovery never learns NF Health internals:
+	// the wiring stays in main.
+	discoveryHandler.SetMonitoringResolver(
+		discovery.MonitoringAssociationResolverFunc(func(ctx context.Context, resourceIDs []string) (map[string]string, error) {
+			return nfHealthRepo.ListTargetsByResourceIDs(ctx, resourceIDs)
+		}),
+	)
 	nfHealthObservations := mc.Ops.Collection("app_nf_observations")
 	nfHealthResolvers := nfhealth.IdentityResolvers{
 		Resource: func(ctx context.Context, resourceID string) (*nfhealth.ResourceProjection, error) {

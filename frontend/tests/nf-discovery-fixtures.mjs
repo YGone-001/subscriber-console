@@ -10,7 +10,7 @@
  * rendering against fixtures, not a live core-network deployment.
  */
 import { createServer } from 'node:http';
-import { serveRuntimeFixture } from './runtime-fixtures.mjs';
+import { RUNTIME_OBSERVATIONS, serveRuntimeFixture } from './runtime-fixtures.mjs';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { extname, join, normalize } from 'node:path';
 
@@ -152,6 +152,7 @@ export const CANDIDATES = [
     observationState: 'seen',
     linkedResourceId: RESOURCE_IDS.amf,
     revision: 4,
+    monitoringAssociation: { state: 'monitored', targetId: '7c3e1d50-0031-4d31-9f31-000000000031' },
   },
   {
     candidateId: CANDIDATE_IDS.udm,
@@ -401,6 +402,23 @@ function handleApi(req, res, url, context) {
     return undefined;
   }
 
+  if (pathname === '/api/runtime/stream') {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+    res.write('retry: 600000\n\n');
+    res.write(`event: snapshot\ndata: ${JSON.stringify({
+      timestamp: RUNTIME_OBSERVATIONS.snapshot.generatedAt,
+      ...RUNTIME_OBSERVATIONS,
+    })}\n\n`);
+    context.openStreams.add(res);
+    req.on('close', () => context.openStreams.delete(res));
+    return undefined;
+  }
+
   const BENIGN_EMPTY = {
     '/api/alerts': { alerts: [] },
     '/api/profiles': { profiles: [] },
@@ -447,6 +465,26 @@ function handleApi(req, res, url, context) {
   }
 
   /* ----------------------------------------------------------- discovery -- */
+  if (pathname === '/api/operations/summary') {
+    const stateCount = (state) => CANDIDATES.filter((item) => item.observationState === state).length;
+    return sendJson(res, 200, {
+      generatedAt: TS.t5,
+      sections: ['discovery'],
+      discovery: {
+        completeness: 'complete',
+        scope: 'full_collection',
+        sources: SOURCES.length,
+        candidates: {
+          seen: stateCount('seen'),
+          missing: stateCount('missing'),
+          stale: stateCount('stale'),
+          linked: CANDIDATES.filter((item) => item.linkedResourceId).length,
+          unlinked: CANDIDATES.filter((item) => !item.linkedResourceId).length,
+        },
+      },
+    });
+  }
+
   if (pathname === '/api/discovery/meta') {
     return sendJson(res, 200, {
       schemaVersion: 1,
