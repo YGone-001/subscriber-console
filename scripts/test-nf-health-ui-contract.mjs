@@ -322,6 +322,7 @@ check(
 // ---------------------------------------------------------------------------
 const overviewSource = readFileSync(resolve(root, 'frontend/src/features/operations/OperationalOverview.tsx'), 'utf8');
 const networkSource = readFileSync(resolve(root, 'frontend/src/features/operations/NetworkElementView.tsx'), 'utf8');
+const boundedEdgesSource = readFileSync(resolve(root, 'frontend/src/features/operations/use-bounded-edges.ts'), 'utf8');
 const modelSource = readFileSync(resolve(root, 'frontend/src/features/operations/operational-model.ts'), 'utf8');
 const dashboardSource = readFileSync(resolve(root, 'frontend/src/features/read/ReadPages.tsx'), 'utf8');
 const inventoryPageSource = readFileSync(resolve(root, 'frontend/src/features/inventory/InventoryPage.tsx'), 'utf8');
@@ -451,10 +452,11 @@ check(
 );
 check(
   'OPS-UI-14',
-  // Topology is consumed with bounded cursor pagination and the three virtual
-  // modes carry distinct certainty.
-  /TOPOLOGY_MAX_PAGES/.test(networkSource) &&
-    /relationshipType', 'contains'/.test(networkSource) &&
+  // The network view requests declared containment; the shared edge reader
+  // owns bounded cursor pagination and cancellation for every consumer.
+  /useBoundedEdges\(\{ relationshipType: 'contains' \}\)/.test(networkSource) &&
+    /maxPages = 3/.test(boundedEdgesSource) &&
+    /getJsonWithSignal/.test(boundedEdgesSource) &&
     /virtual_no_containment/.test(modelSource) &&
     /virtual_partial/.test(modelSource) &&
     /virtual_unavailable/.test(modelSource) &&
@@ -469,7 +471,8 @@ check(
   /resetQueryState/.test(networkSource) &&
     /setCursorHistory\(\[\]\)/.test(networkSource) &&
     /setSelectedNodeId\(''\)/.test(networkSource) &&
-    /getJsonWithSignal/.test(networkSource),
+    /useBoundedEdges/.test(networkSource) &&
+    /getJsonWithSignal/.test(boundedEdgesSource),
   'ops_filter_state=cursor_and_selection_reset',
 );
 

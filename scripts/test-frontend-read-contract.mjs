@@ -42,6 +42,14 @@ const isExistingSource = (value) => {
   const file = resolve(root, value);
   return existsSync(file) && statSync(file).isFile();
 };
+const registrationKey = (endpoint) => {
+  const separator = endpoint.indexOf(' ');
+  const method = endpoint.slice(0, separator);
+  const requestTarget = endpoint.slice(separator + 1);
+  const queryStart = requestTarget.indexOf('?');
+  const path = queryStart === -1 ? requestTarget : requestTarget.slice(0, queryStart);
+  return `${method} ${path}`;
+};
 
 function validateContracts(entries) {
   const result = {
@@ -93,7 +101,7 @@ function validateContracts(entries) {
           addSchemaError();
           continue;
         }
-        if (!goGetRoutes.has(endpoint)) result.unregisteredGetEndpoints += 1;
+        if (!goGetRoutes.has(registrationKey(endpoint))) result.unregisteredGetEndpoints += 1;
       }
     }
 
@@ -145,6 +153,11 @@ const validDashboard = contracts.find((contract) => contract.route === '/');
 assert.ok(validDashboard);
 assert.ok(validateContracts([{ ...validDashboard, source: undefined }]).schemaErrors > 0, 'missing source sentinel must fail');
 assert.ok(validateContracts([{ ...validDashboard, readEndpoints: ['POST /api/analytics/metrics'] }]).nonGetEndpoints > 0, 'non-GET endpoint sentinel must fail');
+assert.equal(
+  validateContracts([{ ...validDashboard, readEndpoints: ['GET /api/operations/summary?sections=alerts'] }]).unregisteredGetEndpoints,
+  0,
+  'registered paths retain valid query-string contract detail',
+);
 assert.ok(validateContracts([validDashboard, { ...validDashboard }]).duplicateRoutes > 0, 'duplicate route sentinel must fail');
 assert.ok(validateContracts([{ ...validDashboard, route: '/unknown' }]).unknownRoutes > 0, 'unknown route sentinel must fail');
 const redirectContract = contracts.find((contract) => contract.mode === 'redirect');
