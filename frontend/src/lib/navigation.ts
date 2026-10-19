@@ -106,8 +106,8 @@ export function getBreadcrumbs(pathname: string): Array<{ labelKey: string; path
 
 /** Shell geometry contract. Values mirror the compact desktop shell CSS. */
 export const SHELL_GEOMETRY = {
-  expandedWidth: 232,
-  collapsedWidth: 64,
+  expandedWidth: 212,
+  collapsedWidth: 58,
   breakpoint: 981,
 } as const;
 

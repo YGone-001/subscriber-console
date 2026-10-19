@@ -15,18 +15,19 @@ const read = (relative: string) => readFileSync(new URL(relative, import.meta.ur
 const identity = (key: string) => key;
 
 test('shell geometry matches the compact desktop contract', () => {
-  assert.equal(SHELL_GEOMETRY.expandedWidth, 232);
-  assert.equal(SHELL_GEOMETRY.collapsedWidth, 64);
+  assert.equal(SHELL_GEOMETRY.expandedWidth, 212);
+  assert.equal(SHELL_GEOMETRY.collapsedWidth, 58);
   assert.equal(SHELL_GEOMETRY.breakpoint, 981);
 });
 
 test('compact desktop density preserves the mobile interaction baseline', () => {
   const styles = read('../src/styles/app.css');
   assert.match(styles, /@media \(min-width: 981px\)/);
-  assert.match(styles, /--shell-header-height: 56px/);
-  assert.match(styles, /--shell-sidebar-expanded: 232px/);
-  assert.match(styles, /--shell-sidebar-collapsed: 64px/);
-  assert.match(styles, /--table-row-height: 46px/);
+  assert.match(styles, /html\s*\{\s*font-size: 80%;/);
+  assert.match(styles, /--shell-header-height: 52px/);
+  assert.match(styles, /--shell-sidebar-expanded: 212px/);
+  assert.match(styles, /--shell-sidebar-collapsed: 58px/);
+  assert.match(styles, /--table-row-height: 43px/);
   assert.match(styles, /@media \(min-width: 981px\) and \(pointer: fine\)/);
 });
 
