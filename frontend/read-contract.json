@@ -289,5 +289,14 @@
       "GET /api/nf-alerts",
       "GET /api/operations/summary?sections=alerts"
     ]
+  },
+  {
+    "route": "/logs",
+    "mode": "read",
+    "source": "frontend/src/features/logs/LogCenterPage.tsx",
+    "readEndpoints": [
+      "GET /api/nf-logs/sources?resourceId=",
+      "GET /api/nf-logs/stream?sourceId=&tailLines=&level=&keyword=&follow="
+    ]
   }
 ]

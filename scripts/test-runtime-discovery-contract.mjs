@@ -38,7 +38,7 @@ function readAll(dir) {
 // 1. Route surface -----------------------------------------------------------
 const registrations = deriveGoRegistrations(root);
 assert.equal(registrations.duplicates.length, 0, `duplicate registrations: ${registrations.duplicates}`);
-assert.equal(registrations.keys.length, 136, `Go registrations must be 136, got ${registrations.keys.length}`);
+assert.equal(registrations.keys.length, 138, `Go registrations must be 138, got ${registrations.keys.length}`);
 
 const runtimeRoutes = registrations.keys.filter((key) => key.includes('/api/runtime'));
 assert.deepEqual(
@@ -54,17 +54,17 @@ assert.deepEqual(
   `unexpected runtime route set: ${runtimeRoutes.join(', ')}`,
 );
 console.log('runtime_registrations=6');
-console.log('go_registration_count=136');
+console.log('go_registration_count=138');
 
 // 2. SPA routes unchanged ----------------------------------------------------
 const routeContract = JSON.parse(read(join(root, 'frontend/route-contract.json')));
-assert.equal(routeContract.length, 33, `SPA route count must stay 33, got ${routeContract.length}`);
+assert.equal(routeContract.length, 34, `SPA route count must stay 34, got ${routeContract.length}`);
 assert.equal(
   routeContract.filter((entry) => entry.route.startsWith('/nf-health')).length,
   2,
   'NF Health SPA routes must stay 2',
 );
-console.log('spa_route_count=33');
+console.log('spa_route_count=34');
 
 // 3. NF Health API surface unchanged ----------------------------------------
 const nfHealthRoutes = registrations.keys.filter((key) => key.includes('/api/nf-health'));
@@ -176,8 +176,8 @@ for (const topic of ['24', '26', 'stopped', 'permission_denied', 'not_detected',
 }
 const agents = read(join(root, 'AGENTS.md'));
 const claude = read(join(root, 'CLAUDE.md'));
-assert.ok(agents.includes('136'), 'AGENTS.md must document the 136 registration authority');
-assert.ok(claude.includes('136'), 'CLAUDE.md must document the 136 registration authority');
+assert.ok(agents.includes('138'), 'AGENTS.md must document the 138 registration authority');
+assert.ok(claude.includes('138'), 'CLAUDE.md must document the 138 registration authority');
 assert.ok(
   agents.includes('docs/architecture/runtime-discovery.md'),
   'AGENTS.md must reference the runtime discovery document',

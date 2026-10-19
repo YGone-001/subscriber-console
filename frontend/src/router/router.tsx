@@ -29,6 +29,7 @@ import { DiscoverySourceDetailPage } from '../features/discovery/DiscoverySource
 import { NfHealthPage } from '../features/nf-health/NfHealthPage';
 import { NfHealthDetailPage } from '../features/nf-health/NfHealthDetailPage';
 import { NfAlertsPage } from '../features/nf-alerts/NfAlertsPage';
+import { LogCenterPage } from '../features/logs/LogCenterPage';
 
 const pages: Record<string, ReactNode> = {
   '/': <DashboardPage />,
@@ -42,6 +43,7 @@ const pages: Record<string, ReactNode> = {
   '/nf-health': <NfHealthPage />,
   '/nf-health/:targetId': <NfHealthDetailPage />,
   '/nf-alerts': <NfAlertsPage />,
+  '/logs': <LogCenterPage />,
   '/ocs/balances': <BalancesPage />,
   '/ocs/balances/:imsi': <BalanceDetailPage />,
   '/ocs/contracts': <ContractsPage />,

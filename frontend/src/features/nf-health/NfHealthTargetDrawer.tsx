@@ -182,6 +182,14 @@ export function NfHealthTargetDrawer({ target, onClose, onCollected }: Props) {
             </p>
           </div>
           <div className={styles.drawerHeadActions}>
+            {target.resourceId ? (
+              <Link
+                to={`/logs?resourceId=${encodeURIComponent(target.resourceId)}`}
+                className="btn btn-ghost"
+              >
+                {t('logs_view_for_resource')}
+              </Link>
+            ) : null}
             <button type="button" className="btn btn-secondary" onClick={() => void loadAll()} disabled={loading}>
               <RefreshCw size={15} className={loading ? styles.spin : undefined} />
               {t('refresh')}

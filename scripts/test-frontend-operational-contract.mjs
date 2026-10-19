@@ -48,7 +48,7 @@ const isExistingSource = (value) => {
 };
 
 // 1. Verify Route Inventory
-assert.equal(routes.length, 33, 'route contract must contain 33 routes');
+assert.equal(routes.length, 34, 'route contract must contain 34 routes');
 
 const systemHealthRoute = routes.find((r) => r.route === '/system-health');
 assert.ok(systemHealthRoute, 'system-health route must be present in route contract');

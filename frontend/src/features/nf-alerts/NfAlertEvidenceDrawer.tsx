@@ -48,6 +48,14 @@ export function NfAlertEvidenceDrawer({
             </p>
           </div>
           <div className={styles.drawerHeadActions}>
+            {alert.resourceId ? (
+              <Link
+                to={`/logs?resourceId=${encodeURIComponent(alert.resourceId)}`}
+                className="btn btn-ghost"
+              >
+                {t('logs_view_for_resource')}
+              </Link>
+            ) : null}
             {alert.state === 'active' && canConfigure ? (
               <button
                 type="button"

@@ -25,6 +25,7 @@ import (
 	mongoClient "subscriber/internal/mongo"
 	"subscriber/internal/nfalert"
 	"subscriber/internal/nfhealth"
+	"subscriber/internal/nflogs"
 	"subscriber/internal/notification"
 	"subscriber/internal/ocs"
 	"subscriber/internal/operationsview"
@@ -332,6 +333,16 @@ func main() {
 	)
 	nfAlertEvaluator := nfalert.NewEvaluator(nfalert.NewMongoEvaluatorRepository(nfAlertRepo))
 	nfAlertHandler := nfalert.NewHandler(nfAlertRepo, limiter, auditWriter)
+
+	// The log workspace reads only the files an operator declared. A malformed
+	// declaration is reported and leaves the surface empty instead of taking the
+	// whole process down.
+	nfLogRegistry, nfLogErr := nflogs.NewRegistry(cfg.NFLogDir, cfg.NFLogSources, cfg.NFLogSourceBindings)
+	if nfLogErr != nil {
+		logger.Error("log source configuration rejected", "error", nfLogErr)
+		nfLogRegistry, _ = nflogs.NewRegistry("", "", "")
+	}
+	nfLogHandler := nflogs.NewHandler(nfLogRegistry, limiter, auditWriter)
 	nfHealthScheduler.SetCollectionHook(nfalert.NewSchedulerHook(nfAlertEvaluator, logger))
 
 	// Operations summary: full-collection statistics aggregated from the
@@ -551,6 +562,9 @@ func main() {
 	mux.Handle("POST /api/nf-health/targets/{targetId}/collect", authMiddleware(http.HandlerFunc(nfHealthHandler.CollectTarget)))
 
 	// NF alerts (four reads, five governed mutations)
+	mux.Handle("GET /api/nf-logs/sources", authMiddleware(http.HandlerFunc(nfLogHandler.ListSources)))
+	mux.Handle("GET /api/nf-logs/stream", authMiddleware(http.HandlerFunc(nfLogHandler.Stream)))
+
 	mux.Handle("GET /api/nf-alerts", authMiddleware(http.HandlerFunc(nfAlertHandler.ListAlerts)))
 	mux.Handle("GET /api/nf-alerts/meta", authMiddleware(http.HandlerFunc(nfAlertHandler.Meta)))
 	mux.Handle("GET /api/nf-alerts/rules", authMiddleware(http.HandlerFunc(nfAlertHandler.ListRules)))

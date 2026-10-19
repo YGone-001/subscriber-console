@@ -32,6 +32,11 @@ type Config struct {
 	NFHealthTLSCAFile            string // optional CA bundle for https metrics endpoints
 	NFHealthLocalProcessBindings string // comma-separated resourceId=unit local bindings
 
+	// Log workspace (read-only file sources)
+	NFLogDir            string // directory scanned for *.log sources
+	NFLogSources        string // comma-separated sourceId=/absolute/path overrides
+	NFLogSourceBindings string // comma-separated sourceId=resourceId|resourceId
+
 	// Runtime discovery (read-only local process recognition)
 	LocalNFDiscoveryEnabled         bool   // background scanner enabled
 	LocalNFDiscoveryIntervalSeconds int    // scan interval in seconds
@@ -59,6 +64,10 @@ func Load() (*Config, error) {
 		NFHealthTLSCAFile:      os.Getenv("NF_HEALTH_TLS_CA_FILE"),
 
 		NFHealthLocalProcessBindings: os.Getenv("NF_HEALTH_LOCAL_PROCESS_BINDINGS"),
+
+		NFLogDir:            envOrDefault("NF_LOG_DIR", "/var/log/xcloud"),
+		NFLogSources:        os.Getenv("NF_LOG_SOURCES"),
+		NFLogSourceBindings: os.Getenv("NF_LOG_SOURCE_BINDINGS"),
 
 		LocalNFDiscoveryEnabled:         envBoolOrDefault("LOCAL_NF_DISCOVERY_ENABLED", true),
 		LocalNFDiscoveryIntervalSeconds: envIntOrDefault("LOCAL_NF_DISCOVERY_INTERVAL_SECONDS", 10),
