@@ -254,19 +254,23 @@ type HealthTarget struct {
 	Name             string `json:"name" bson:"name"`
 	CollectorProfile string `json:"collectorProfile" bson:"collectorProfile"`
 	MetricsEndpoint  string `json:"metricsEndpoint,omitempty" bson:"metricsEndpoint,omitempty"`
-	ServiceUnit      string `json:"serviceUnit,omitempty" bson:"serviceUnit,omitempty"`
-	ServiceKind      string `json:"serviceKind" bson:"serviceKind"`
-	CollectionMode   string `json:"collectionMode" bson:"collectionMode"`
-	IntervalSeconds  int    `json:"intervalSeconds" bson:"intervalSeconds"`
-	Enabled          bool   `json:"enabled" bson:"enabled"`
-	Domain           string `json:"domain,omitempty" bson:"domain,omitempty"`
-	NFType           string `json:"nfType,omitempty" bson:"nfType,omitempty"`
-	IdentityState    string `json:"identityState" bson:"identityState,omitempty"`
-	Revision         int64  `json:"revision" bson:"revision"`
-	CreatedAt        string `json:"createdAt" bson:"createdAt"`
-	CreatedBy        string `json:"createdBy" bson:"createdBy"`
-	UpdatedAt        string `json:"updatedAt" bson:"updatedAt"`
-	UpdatedBy        string `json:"updatedBy" bson:"updatedBy"`
+	// Probes are additional interface endpoints beyond the metrics endpoint.
+	// Families are unique and the metrics family is implicit, so this list can
+	// never duplicate the L2 endpoint that drives the health model.
+	Probes          []InterfaceProbe `json:"probes,omitempty" bson:"probes,omitempty"`
+	ServiceUnit     string           `json:"serviceUnit,omitempty" bson:"serviceUnit,omitempty"`
+	ServiceKind     string           `json:"serviceKind" bson:"serviceKind"`
+	CollectionMode  string           `json:"collectionMode" bson:"collectionMode"`
+	IntervalSeconds int              `json:"intervalSeconds" bson:"intervalSeconds"`
+	Enabled         bool             `json:"enabled" bson:"enabled"`
+	Domain          string           `json:"domain,omitempty" bson:"domain,omitempty"`
+	NFType          string           `json:"nfType,omitempty" bson:"nfType,omitempty"`
+	IdentityState   string           `json:"identityState" bson:"identityState,omitempty"`
+	Revision        int64            `json:"revision" bson:"revision"`
+	CreatedAt       string           `json:"createdAt" bson:"createdAt"`
+	CreatedBy       string           `json:"createdBy" bson:"createdBy"`
+	UpdatedAt       string           `json:"updatedAt" bson:"updatedAt"`
+	UpdatedBy       string           `json:"updatedBy" bson:"updatedBy"`
 	// Freshness fields. Failed collection must not overwrite lastMeasuredAt.
 	LastAttemptAt  string `json:"lastAttemptAt,omitempty" bson:"lastAttemptAt,omitempty"`
 	LastSuccessAt  string `json:"lastSuccessAt,omitempty" bson:"lastSuccessAt,omitempty"`
@@ -308,16 +312,20 @@ type HealthRun struct {
 // documents from that field, while remaining ISO 8601 in JSON. Legacy
 // string-typed stored values stay readable through BSONTime unmarshalling.
 type HealthSample struct {
-	SampleID      string         `json:"sampleId" bson:"_id"`
-	SchemaVersion int            `json:"schemaVersion" bson:"schemaVersion"`
-	TargetID      string         `json:"targetId" bson:"targetId"`
-	RunID         string         `json:"runId" bson:"runId"`
-	ResourceID    string         `json:"resourceId,omitempty" bson:"resourceId,omitempty"`
-	CandidateID   string         `json:"candidateId,omitempty" bson:"candidateId,omitempty"`
-	CollectedAt   string         `json:"collectedAt" bson:"collectedAt"`
-	ExpiresAt     BSONTime       `json:"expiresAt" bson:"expiresAt"`
-	Layers        LayerSet       `json:"layers" bson:"layers"`
-	Metrics       []MetricSample `json:"metrics" bson:"metrics"`
+	SampleID      string   `json:"sampleId" bson:"_id"`
+	SchemaVersion int      `json:"schemaVersion" bson:"schemaVersion"`
+	TargetID      string   `json:"targetId" bson:"targetId"`
+	RunID         string   `json:"runId" bson:"runId"`
+	ResourceID    string   `json:"resourceId,omitempty" bson:"resourceId,omitempty"`
+	CandidateID   string   `json:"candidateId,omitempty" bson:"candidateId,omitempty"`
+	CollectedAt   string   `json:"collectedAt" bson:"collectedAt"`
+	ExpiresAt     BSONTime `json:"expiresAt" bson:"expiresAt"`
+	Layers        LayerSet `json:"layers" bson:"layers"`
+	// Probes is the per-family interface evidence measured in this run. A
+	// family absent here was not measured, which the matrix reports as unknown
+	// rather than healthy.
+	Probes  []ProbeEvidence `json:"probes,omitempty" bson:"probes,omitempty"`
+	Metrics []MetricSample  `json:"metrics" bson:"metrics"`
 }
 
 // FreshnessProjection is the server-derived measurement freshness for a target.
@@ -337,16 +345,17 @@ type FreshnessProjection struct {
 // resource; the optional Discovery candidate is accepted only when it is
 // explicitly linked to the same Inventory resource.
 type CreateTargetRequest struct {
-	ResourceID       string `json:"resourceId"`
-	CandidateID      string `json:"candidateId"`
-	Name             string `json:"name"`
-	CollectorProfile string `json:"collectorProfile"`
-	MetricsEndpoint  string `json:"metricsEndpoint,omitempty"`
-	ServiceUnit      string `json:"serviceUnit,omitempty"`
-	ServiceKind      string `json:"serviceKind"`
-	CollectionMode   string `json:"collectionMode"`
-	IntervalSeconds  int    `json:"intervalSeconds"`
-	Enabled          *bool  `json:"enabled,omitempty"`
+	ResourceID       string           `json:"resourceId"`
+	CandidateID      string           `json:"candidateId"`
+	Name             string           `json:"name"`
+	CollectorProfile string           `json:"collectorProfile"`
+	MetricsEndpoint  string           `json:"metricsEndpoint,omitempty"`
+	Probes           []InterfaceProbe `json:"probes,omitempty"`
+	ServiceUnit      string           `json:"serviceUnit,omitempty"`
+	ServiceKind      string           `json:"serviceKind"`
+	CollectionMode   string           `json:"collectionMode"`
+	IntervalSeconds  int              `json:"intervalSeconds"`
+	Enabled          *bool            `json:"enabled,omitempty"`
 	// ResolvedDomain and ResolvedNFType are server-derived identity
 	// projections. They are never client-controlled: strict JSON decoding
 	// rejects any request that carries domain or nfType fields.
@@ -362,13 +371,14 @@ type UpdateTargetRequest struct {
 
 // MutableTarget is the operator-mutable projection of a monitoring target.
 type MutableTarget struct {
-	Name            string `json:"name"`
-	MetricsEndpoint string `json:"metricsEndpoint,omitempty"`
-	ServiceUnit     string `json:"serviceUnit,omitempty"`
-	ServiceKind     string `json:"serviceKind"`
-	CollectionMode  string `json:"collectionMode"`
-	IntervalSeconds int    `json:"intervalSeconds"`
-	Enabled         bool   `json:"enabled"`
+	Name            string           `json:"name"`
+	MetricsEndpoint string           `json:"metricsEndpoint,omitempty"`
+	Probes          []InterfaceProbe `json:"probes,omitempty"`
+	ServiceUnit     string           `json:"serviceUnit,omitempty"`
+	ServiceKind     string           `json:"serviceKind"`
+	CollectionMode  string           `json:"collectionMode"`
+	IntervalSeconds int              `json:"intervalSeconds"`
+	Enabled         bool             `json:"enabled"`
 }
 
 // TargetListFilter filters monitoring target listings.

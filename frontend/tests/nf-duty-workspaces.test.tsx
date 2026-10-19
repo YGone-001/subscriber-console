@@ -21,10 +21,16 @@ import {
   DEFAULT_HEALTH_VIEW,
   HEALTH_URL_KEYS,
   hasHealthFilters,
+  healthInterfaceQuery,
   healthTargetQuery,
   healthView,
   readHealthFilters,
 } from '../src/features/nf-health/nf-health-filters';
+import {
+  buildCreateTargetRequest,
+  createEmptyTargetForm,
+} from '../src/features/nf-health/nf-health-builders';
+import { validateProbes } from '../src/features/nf-health/nf-health-validation';
 import {
   alertListQuery,
   alertScope,
@@ -159,6 +165,60 @@ test('the legacy collection filter still works and bad values are dropped', () =
 
 test('the health URL vocabulary is the one the page reads', () => {
   assert.deepEqual([...HEALTH_URL_KEYS], ['q', 'enabled', 'domain', 'state', 'layers', 'sort']);
+});
+
+/* -------------------------------------------- health interface matrix -- */
+
+test('the interface matrix is a third view and never stacks on the other two', () => {
+  assert.equal(healthView('interfaces'), 'interfaces');
+  const markup = renderHealth('/nf-health?view=interfaces');
+  assert.ok(markup.includes('data-nf-health-view="interfaces"'), 'the view control is present');
+  assert.ok(!markup.includes('data-nf-health-panel="cards"'), 'the card queue must not render behind the matrix');
+  assert.ok(!markup.includes('data-nf-health-panel="table"'), 'the audit table must not render behind the matrix');
+});
+
+test('the matrix query keeps the duty filters and drops list-only ones', () => {
+  const filters = readHealthFilters({
+    q: 'amf',
+    domain: '5gc',
+    state: 'unhealthy',
+    layers: 'l2',
+    sort: 'risk',
+  });
+  assert.deepEqual(healthInterfaceQuery(filters, 'cursor-1', 20), {
+    q: 'amf',
+    domain: '5gc',
+    sort: 'risk',
+    cursor: 'cursor-1',
+    limit: 20,
+  });
+});
+
+test('declared interface probes round-trip through the target form', () => {
+  const form = createEmptyTargetForm(120);
+  form.resourceId = 'resource-1';
+  form.name = 'amf-01';
+  form.metricsDestination = '127.0.0.1:9090';
+  form.probes = [
+    { family: 'sbi', destination: '127.0.0.1:9091', path: '/sbi' },
+    { family: 'oam', destination: '', path: '/oam' },
+  ];
+  const request = buildCreateTargetRequest(form);
+  assert.deepEqual(request.probes, [{ family: 'sbi', url: 'http://127.0.0.1:9091/sbi' }]);
+});
+
+test('probe validation rejects a duplicate family and a missing destination', () => {
+  const valid = [{ family: 'sbi' as const, destination: '127.0.0.1:9091', path: '/sbi' }];
+  assert.equal(validateProbes(valid, null), null);
+  assert.equal(
+    validateProbes([...valid, { family: 'sbi' as const, destination: '127.0.0.1:9092', path: '/sbi' }], null),
+    'nf_health_validation_probe_duplicate',
+  );
+  assert.equal(
+    validateProbes([{ family: 'oam' as const, destination: ' ', path: '/oam' }], null),
+    'nf_health_validation_probe_destination_required',
+  );
+  assert.equal(validateProbes(valid, null, true), 'nf_health_validation_probes_process_only');
 });
 
 /* ------------------------------------------------ alert page views -- */

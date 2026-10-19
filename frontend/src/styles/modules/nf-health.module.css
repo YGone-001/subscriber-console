@@ -170,6 +170,77 @@
   background: var(--surface-hover);
 }
 
+.matrix {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: var(--ref-font-size-body-support);
+}
+
+.matrix th,
+.matrix td {
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--surface-border);
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.matrix thead th {
+  color: var(--text-muted);
+  font-size: var(--ref-font-size-label-strong);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.matrix tbody th {
+  font-weight: 600;
+  white-space: normal;
+}
+
+.matrix tbody tr:hover td,
+.matrix tbody tr:hover th {
+  background: var(--surface-hover);
+}
+
+.probeEditor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--ref-radius-panel, 12px);
+  background: var(--surface-hover);
+}
+
+.probeEditorHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.probeEditorHint,
+.probeEditorEmpty {
+  margin: 0.2rem 0 0;
+  color: var(--text-muted);
+  font-size: var(--ref-font-size-body-support);
+}
+
+.probeRow {
+  display: grid;
+  grid-template-columns: minmax(8rem, 0.8fr) minmax(10rem, 1.2fr) minmax(8rem, 1fr) auto;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+@media (max-width: 720px) {
+  .probeRow {
+    grid-template-columns: 1fr;
+  }
+}
+
 .rowLink {
   display: inline-flex;
   align-items: center;

@@ -68,6 +68,7 @@ func (r *Repository) CreateTarget(ctx context.Context, req *CreateTargetRequest,
 		Name:             strings.TrimSpace(req.Name),
 		CollectorProfile: req.CollectorProfile,
 		MetricsEndpoint:  strings.TrimSpace(req.MetricsEndpoint),
+		Probes:           NormalizeProbes(req.Probes),
 		ServiceUnit:      strings.TrimSpace(req.ServiceUnit),
 		ServiceKind:      req.ServiceKind,
 		CollectionMode:   req.CollectionMode,
@@ -266,6 +267,7 @@ func (r *Repository) UpdateTarget(ctx context.Context, targetID string, req *Upd
 	}, bson.M{"$set": bson.M{
 		"name":            strings.TrimSpace(req.Target.Name),
 		"metricsEndpoint": strings.TrimSpace(req.Target.MetricsEndpoint),
+		"probes":          NormalizeProbes(req.Target.Probes),
 		"serviceUnit":     strings.TrimSpace(req.Target.ServiceUnit),
 		"serviceKind":     req.Target.ServiceKind,
 		"collectionMode":  req.Target.CollectionMode,
@@ -564,15 +566,17 @@ func (r *Repository) RecordCollection(ctx context.Context, target *HealthTarget,
 	// run never overwrites the previous valid measurement, even when the
 	// collector emitted a partially measured sample during that run.
 	var layers *LayerSet
+	var probes []ProbeEvidence
 	if result.Sample != nil {
 		sampleLayers := result.Sample.Layers
 		layers = &sampleLayers
+		probes = result.Sample.Probes
 		if result.Run.Status != RunStatusFailed && measurementAccepted(result.Sample) {
 			set["lastMeasuredAt"] = result.Sample.CollectedAt
 			updated.LastMeasuredAt = result.Sample.CollectedAt
 		}
 	}
-	set["lastProjection"] = BuildTargetProjection(&updated, layers, now)
+	set["lastProjection"] = BuildTargetProjection(&updated, layers, probes, now)
 	_, err := r.targets.UpdateOne(ctx, bson.M{"_id": target.TargetID}, bson.M{"$set": set})
 	return err
 }

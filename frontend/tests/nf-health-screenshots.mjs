@@ -29,7 +29,7 @@ const repoRoot = resolve(frontendRoot, '..');
 const distDir = resolve(frontendRoot, 'dist');
 const outDir = resolve(repoRoot, 'reports', 'ops', 'nf-health-screenshots');
 
-const EXPECTED_SCREENSHOT_COUNT = 32;
+const EXPECTED_SCREENSHOT_COUNT = 38;
 const MIN_PNG_BYTES = 8192;
 
 const VIEWPORTS = {
@@ -267,6 +267,73 @@ async function main() {
       );
       await assertNoHorizontalOverflow(page, 'table-view');
       await context.close();
+    }
+
+    /* The interface matrix is a third in-page view: rows are targets, columns
+     * are the registered families. A family that was never configured stays
+     * neutral; a configured family without a measurement is unknown. */
+    for (const [sizeName, viewport] of Object.entries(VIEWPORTS)) {
+      for (const theme of ['light', 'dark']) {
+        const { context, page } = await newSession(browser, { ...viewport, theme, locale: 'en', session: 'operator' });
+        await page.goto(origin + listRoute + '?view=interfaces', { waitUntil: 'domcontentloaded' });
+        await settle(page, 'Add Monitoring Target');
+
+        const matrixText = await page.locator('body').innerText();
+        check(
+          'matrix_columns_rendered:' + sizeName + '-' + theme,
+          /metrics/i.test(matrixText) && /sbi/i.test(matrixText) && /oam/i.test(matrixText) && /health/i.test(matrixText),
+          'every registered family is a column',
+        );
+        check(
+          'matrix_rows_rendered:' + sizeName + '-' + theme,
+          /AMF core-01 metrics/.test(matrixText) && /SMF core-01 metrics/.test(matrixText),
+          'targets are rows',
+        );
+        check(
+          'matrix_is_the_only_representation:' + sizeName + '-' + theme,
+          (await page.locator('[data-nf-health-panel="cards"]').count()) === 0 &&
+            (await page.locator('[data-nf-health-matrix="true"]').count()) === 1,
+          'one representation at a time',
+        );
+
+        const unconfigured = await page
+          .locator('[data-nf-health-cell="' + TARGET_IDS.amf + ':health"]')
+          .innerText();
+        check(
+          'matrix_unconfigured_is_neutral:' + sizeName + '-' + theme,
+          /not configured/i.test(unconfigured),
+          'label=' + unconfigured.trim(),
+        );
+        const failing = await page
+          .locator('[data-nf-health-cell="' + TARGET_IDS.smf + ':sbi"]')
+          .innerText();
+        check(
+          'matrix_measured_failure_is_visible:' + sizeName + '-' + theme,
+          /unhealthy/i.test(failing),
+          'label=' + failing.trim(),
+        );
+        const unknown = await page
+          .locator('[data-nf-health-cell="' + TARGET_IDS.smf + ':oam"]')
+          .innerText();
+        check(
+          'matrix_configured_without_evidence_is_unknown:' + sizeName + '-' + theme,
+          /unknown/i.test(unknown),
+          'label=' + unknown.trim(),
+        );
+
+        await assertNoRawKeys(page, 'matrix-' + sizeName + '-' + theme);
+        await assertNoHorizontalOverflow(page, 'matrix-' + sizeName + '-' + theme);
+        await capture(page, 'nf-health-matrix-' + sizeName + '-' + theme + '.png', {
+          route: listRoute + '?view=interfaces',
+          viewportWidth: viewport.width,
+          viewportHeight: viewport.height,
+          theme,
+          locale: 'en',
+          fixtureScenario: 'nf-health-interface-matrix',
+          session: 'operator',
+        });
+        await context.close();
+      }
     }
 
     /* ===================== B. NF Health target detail ====================== */

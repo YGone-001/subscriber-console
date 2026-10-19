@@ -153,7 +153,7 @@ Nginx (only public origin)
 Go 127.0.0.1:18888
 Business API (owner)
 Auth identity + session validation
-Read + write APIs (138 exact METHOD+PATH registrations)
+Read + write APIs (139 exact METHOD+PATH registrations)
 Embedded static React SPA (production UI)
    |
    v
@@ -186,7 +186,7 @@ Retained legacy Next listener        = retired
 Loopback listener enforced by service, not firewall = YES
 Standalone deployment path           = removed
 Go business production changes       = 0
-Go registration set                  = 138
+Go registration set                  = 139
 ```
 
 - 边缘配置为 `deploy/nginx/xcloud.conf`。`location = /api`、`location /api/`、专用非缓冲 `location = /api/notifications/stream` 与 `location /` **全部代理至 Go**；UI 由 Go 内嵌 SPA 提供。
@@ -530,8 +530,8 @@ Charging plane (frozen, excluded from the management plane):
   ocs_config         — OCS engine config
 ```
 
-- 权威基线：OCS 管理平面生产冻结基线；当前生产路由 = Go 全部接管，**共 138 条 Go 注册**。
-- 路由权威来源：Go 注册集合（`backend/cmd/server/main.go` + `backend/internal/remediation/handler.go`，138 条 METHOD+PATH 精确注册）；Nginx 负责 API 路由。
+- 权威基线：OCS 管理平面生产冻结基线；当前生产路由 = Go 全部接管，**共 139 条 Go 注册**。
+- 路由权威来源：Go 注册集合（`backend/cmd/server/main.go` + `backend/internal/remediation/handler.go`，139 条 METHOD+PATH 精确注册）；Nginx 负责 API 路由。
 - 冻结规约摘要（历史）：`docs/archive/backend-migration-summary.md`。
 - 运维操作手册：`docs/operations/ocs-management-runbook.md`。
 
@@ -557,7 +557,7 @@ OCS 管理 UI：
 ### 7.1 路由注册权威
 
 ```text
-Route authority = the derived Go registration set (138 exact METHOD+PATH registrations).
+Route authority = the derived Go registration set (139 exact METHOD+PATH registrations).
 ```
 
 权威来源：
@@ -606,7 +606,7 @@ xcloud_ops.app_rate_limits
 
 ### 7.5 生产注册路由清单
 
-路由权威为源码派生的 Go 注册集合，共 **138 条** METHOD+PATH 精确注册（GET 67 / POST 51 / PUT 10 / DELETE 7 / PATCH 3）：
+路由权威为源码派生的 Go 注册集合，共 **139 条** METHOD+PATH 精确注册（GET 68 / POST 51 / PUT 10 / DELETE 7 / PATCH 3）：
 
 ```text
 GET    /api/analytics/metrics
@@ -749,7 +749,7 @@ GET    /api/operations/summary
 状态：
 
 ```text
-Go production API registrations = 138 (route authority: backend/cmd/server/main.go + backend/internal/remediation/handler.go)
+Go production API registrations = 139 (route authority: backend/cmd/server/main.go + backend/internal/remediation/handler.go)
 Canonical API surface = 33 operations + 2 legacy read aliases
 Go-native reads = 2
 Node production operations = 0

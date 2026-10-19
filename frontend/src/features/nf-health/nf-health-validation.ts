@@ -1,5 +1,5 @@
 import type { CollectionMode, NfHealthMeta, ServiceKind } from './nf-health-types';
-import type { NfHealthTargetForm } from './nf-health-builders';
+import type { NfHealthTargetForm, TargetProbeForm } from './nf-health-builders';
 
 export type ValidationMessageKey = string;
 
@@ -84,6 +84,27 @@ export function validateInterval(intervalSeconds: number, meta: NfHealthMeta | n
   return null;
 }
 
+/* Probe rows are validated before submission: a bounded list, one declaration
+ * per family and an allowlisted destination. process_only has no HTTP probe. */
+export function validateProbes(
+  probes: TargetProbeForm[],
+  meta: NfHealthMeta | null,
+  processOnly = false,
+): ValidationMessageKey | null {
+  if (processOnly) {
+    return probes.length > 0 ? 'nf_health_validation_probes_process_only' : null;
+  }
+  const max = meta?.maxInterfaceProbes ?? 4;
+  if (probes.length > max) return 'nf_health_validation_probes_too_many';
+  const families = new Set<string>();
+  for (const probe of probes) {
+    if (!probe.destination.trim()) return 'nf_health_validation_probe_destination_required';
+    if (families.has(probe.family)) return 'nf_health_validation_probe_duplicate';
+    families.add(probe.family);
+  }
+  return null;
+}
+
 export function validateTargetForm(
   form: NfHealthTargetForm,
   meta: NfHealthMeta | null,
@@ -94,6 +115,7 @@ export function validateTargetForm(
     validateTargetName(form.name) ??
     validateCollectorProfile(form.collectorProfile, meta) ??
     validateDestination(form.metricsDestination, meta, processOnly) ??
+    validateProbes(form.probes, meta, processOnly) ??
     validateServiceUnit(form.serviceUnit, form.serviceKind, meta, processOnly) ??
     validateCollectionMode(form.collectionMode, meta) ??
     validateInterval(form.intervalSeconds, meta) ??

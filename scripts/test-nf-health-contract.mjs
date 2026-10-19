@@ -52,14 +52,15 @@ assert.deepEqual(detailRoute.dynamicParameters, ['targetId'], 'detail dynamic pa
 // 2. Go API registrations
 const { keys: goRegistrations, duplicates: goDuplicates } = deriveGoRegistrations(root);
 assert.equal(goDuplicates.length, 0, 'Go registrations must have 0 duplicates');
-assert.equal(goRegistrations.length, 138, `Go registered operations must be exactly 138, got ${goRegistrations.length}`);
+assert.equal(goRegistrations.length, 139, `Go registered operations must be exactly 139, got ${goRegistrations.length}`);
 
 const healthGoRoutes = goRegistrations.filter((r) => r.includes('/api/nf-health'));
-assert.equal(healthGoRoutes.length, 10, `NF Health Go registrations must be exactly 10, got ${healthGoRoutes.length}`);
+assert.equal(healthGoRoutes.length, 11, `NF Health Go registrations must be exactly 11, got ${healthGoRoutes.length}`);
 
 const expectedHealthGo = [
   'GET /api/nf-health/meta',
   'GET /api/nf-health/targets',
+  'GET /api/nf-health/interfaces',
   'GET /api/nf-health/targets/{targetId}',
   'GET /api/nf-health/targets/{targetId}/history',
   'GET /api/nf-health/samples',
@@ -75,7 +76,7 @@ for (const expected of expectedHealthGo) {
 
 const healthReads = healthGoRoutes.filter((r) => r.startsWith('GET '));
 const healthMutations = healthGoRoutes.filter((r) => !r.startsWith('GET '));
-assert.equal(healthReads.length, 7, `NF Health read count must be 7, got ${healthReads.length}`);
+assert.equal(healthReads.length, 8, `NF Health read count must be 8, got ${healthReads.length}`);
 assert.equal(healthMutations.length, 3, `NF Health mutation count must be 3, got ${healthMutations.length}`);
 
 assert.equal(healthGoRoutes.filter((r) => r.startsWith('DELETE ')).length, 0, 'NF Health hard-delete endpoint must be 0');
@@ -92,11 +93,11 @@ const healthContract = JSON.parse(readFileSync(resolve(frontend, 'nf-health-cont
 assert.ok(Array.isArray(healthContract.routes), 'nf-health-contract.json must declare routes');
 assert.equal(healthContract.routes.length, 2, 'nf-health-contract.json must declare 2 routes');
 assert.ok(Array.isArray(healthContract.apis), 'nf-health-contract.json must declare apis');
-assert.equal(healthContract.apis.length, 10, 'nf-health-contract.json must declare 10 APIs');
+assert.equal(healthContract.apis.length, 11, 'nf-health-contract.json must declare 11 APIs');
 
 const declaredReads = healthContract.apis.filter((api) => api.access === 'read');
 const declaredWrites = healthContract.apis.filter((api) => api.access === 'write');
-assert.equal(declaredReads.length, 7, 'nf-health-contract.json must declare 7 reads');
+assert.equal(declaredReads.length, 8, 'nf-health-contract.json must declare 8 reads');
 assert.equal(declaredWrites.length, 3, 'nf-health-contract.json must declare 3 writes');
 for (const api of declaredReads) {
   assert.equal(api.permission, 'core.read', `${api.method} ${api.path} read permission must be core.read`);

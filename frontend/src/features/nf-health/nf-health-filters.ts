@@ -9,9 +9,9 @@
  *
  * Everything here is pure so the URL contract can be asserted without a DOM.
  */
-import type { NfHealthTargetQueryParams } from './nf-health-types';
+import type { NfHealthInterfaceQueryParams, NfHealthTargetQueryParams } from './nf-health-types';
 
-export const HEALTH_VIEWS = ['cards', 'table'] as const;
+export const HEALTH_VIEWS = ['cards', 'table', 'interfaces'] as const;
 export type HealthView = (typeof HEALTH_VIEWS)[number];
 export const DEFAULT_HEALTH_VIEW: HealthView = 'cards';
 
@@ -101,6 +101,26 @@ export function healthTargetQuery(
     domain: filters.domain || undefined,
     state: filters.overall || undefined,
     layers: filters.layer || undefined,
+    sort: filters.sort,
+    cursor,
+    limit,
+  };
+}
+
+/**
+ * Builds the interface matrix query.
+ *
+ * The matrix answers the same filters as the list, but its columns come from
+ * the server vocabulary and its page from the matrix projection.
+ */
+export function healthInterfaceQuery(
+  filters: HealthFilters,
+  cursor: string | undefined,
+  limit: number,
+): NfHealthInterfaceQueryParams {
+  return {
+    q: filters.q || undefined,
+    domain: filters.domain || undefined,
     sort: filters.sort,
     cursor,
     limit,

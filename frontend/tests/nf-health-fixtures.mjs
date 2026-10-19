@@ -374,6 +374,62 @@ export const TARGETS = [
   },
 ];
 
+/*
+ * The interface matrix projection the server would return for these targets.
+ * Every canonical state appears: healthy, degraded, unhealthy, unknown, stale
+ * and not_configured. A family that was never declared stays not_configured and
+ * must never render as a failure.
+ */
+const INTERFACE_MATRIX_ROWS = [
+  {
+    targetId: TARGET_IDS.amf,
+    resourceId: RESOURCE_IDS.amf,
+    name: 'AMF core-01 metrics',
+    nfType: 'AMF',
+    domain: '5gc',
+    overallState: 'healthy',
+    freshness: 'fresh',
+    lastMeasuredAt: TS.t6,
+    cells: {
+      metrics: { state: 'healthy', httpStatus: 200, responseMs: 12, measuredAt: TS.t6 },
+      sbi: { state: 'healthy', httpStatus: 404, responseMs: 4, reason: 'http_4xx', measuredAt: TS.t6 },
+      oam: { state: 'not_configured' },
+      health: { state: 'not_configured' },
+    },
+  },
+  {
+    targetId: TARGET_IDS.smf,
+    resourceId: RESOURCE_IDS.smf,
+    name: 'SMF core-01 metrics',
+    nfType: 'SMF',
+    domain: '5gc',
+    overallState: 'degraded',
+    freshness: 'fresh',
+    lastMeasuredAt: TS.t5,
+    cells: {
+      metrics: { state: 'degraded', httpStatus: 200, responseMs: 41, reason: 'metric_not_exported', measuredAt: TS.t5 },
+      sbi: { state: 'unhealthy', httpStatus: 503, responseMs: 8, reason: 'http_5xx', measuredAt: TS.t5 },
+      oam: { state: 'unknown' },
+      health: { state: 'not_configured' },
+    },
+  },
+  {
+    targetId: TARGET_IDS.upf,
+    name: 'UPF core-01 metrics',
+    nfType: 'UPF',
+    domain: '5gc',
+    overallState: 'stale',
+    freshness: 'stale',
+    lastMeasuredAt: TS.t2,
+    cells: {
+      metrics: { state: 'stale', httpStatus: 200, responseMs: 19, measuredAt: TS.t2 },
+      sbi: { state: 'not_configured' },
+      oam: { state: 'not_configured' },
+      health: { state: 'not_configured' },
+    },
+  },
+];
+
 export const RUNS = [
   {
     runId: 'aa3e4f50-0031-4c31-9e31-000000000031',
@@ -680,6 +736,21 @@ function handleNfHealth(req, res, url, context) {
     if (enabled === 'true') items = items.filter((item) => item.enabled);
     if (enabled === 'false') items = items.filter((item) => !item.enabled);
     return sendJson(res, 200, { targets: items.slice(0, limit), page: page(limit) });
+  }
+
+  if (pathname === '/api/nf-health/interfaces' && req.method === 'GET') {
+    const limit = Number(url.searchParams.get('limit') ?? 20) || 20;
+    const q = (url.searchParams.get('q') ?? '').trim().toLowerCase();
+    const domain = (url.searchParams.get('domain') ?? '').trim();
+    let rows = INTERFACE_MATRIX_ROWS;
+    if (q) rows = rows.filter((row) => row.name.toLowerCase().includes(q));
+    if (domain) rows = rows.filter((row) => row.domain === domain);
+    return sendJson(res, 200, {
+      generatedAt: TS.t7,
+      columns: ['metrics', 'sbi', 'oam', 'health'],
+      rows: rows.slice(0, limit),
+      page: page(limit),
+    });
   }
 
   if (pathname === '/api/nf-health/targets' && req.method === 'POST') {

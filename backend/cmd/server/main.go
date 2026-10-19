@@ -552,6 +552,7 @@ func main() {
 	// NF Health (seven reads, three mutations)
 	mux.Handle("GET /api/nf-health/meta", authMiddleware(http.HandlerFunc(nfHealthHandler.Meta)))
 	mux.Handle("GET /api/nf-health/targets", authMiddleware(http.HandlerFunc(nfHealthHandler.ListTargets)))
+	mux.Handle("GET /api/nf-health/interfaces", authMiddleware(http.HandlerFunc(nfHealthHandler.InterfaceMatrix)))
 	mux.Handle("GET /api/nf-health/targets/{targetId}", authMiddleware(http.HandlerFunc(nfHealthHandler.GetTarget)))
 	mux.Handle("GET /api/nf-health/targets/{targetId}/history", authMiddleware(http.HandlerFunc(nfHealthHandler.GetTargetHistory)))
 	mux.Handle("GET /api/nf-health/samples", authMiddleware(http.HandlerFunc(nfHealthHandler.ListSamples)))

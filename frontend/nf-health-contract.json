@@ -4,6 +4,7 @@
   "apis": [
     { "method": "GET", "path": "/api/nf-health/meta", "access": "read", "permission": "core.read" },
     { "method": "GET", "path": "/api/nf-health/targets", "access": "read", "permission": "core.read" },
+    { "method": "GET", "path": "/api/nf-health/interfaces", "access": "read", "permission": "core.read" },
     { "method": "GET", "path": "/api/nf-health/targets/{targetId}", "access": "read", "permission": "core.read" },
     { "method": "GET", "path": "/api/nf-health/targets/{targetId}/history", "access": "read", "permission": "core.read" },
     { "method": "GET", "path": "/api/nf-health/samples", "access": "read", "permission": "core.read" },

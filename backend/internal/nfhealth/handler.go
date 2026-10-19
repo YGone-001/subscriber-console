@@ -231,6 +231,8 @@ type MetaResponse struct {
 	EvidenceKinds            []string           `json:"evidenceKinds"`
 	ProcessOutcomes          []string           `json:"processOutcomes"`
 	InterfaceOutcomes        []string           `json:"interfaceOutcomes"`
+	ProbeFamilies            []string           `json:"probeFamilies"`
+	MaxInterfaceProbes       int                `json:"maxInterfaceProbes"`
 	ServiceKinds             []string           `json:"serviceKinds"`
 	IdentityStates           []string           `json:"identityStates"`
 	SupportedResourceDomains []string           `json:"supportedResourceDomains"`
@@ -271,6 +273,8 @@ func (h *Handler) Meta(w http.ResponseWriter, r *http.Request) {
 		EvidenceKinds:            CanonicalEvidenceKinds,
 		ProcessOutcomes:          CanonicalProcessOutcomes,
 		InterfaceOutcomes:        CanonicalInterfaceOutcomes,
+		ProbeFamilies:            CanonicalProbeFamilies,
+		MaxInterfaceProbes:       MaxExtraProbes,
 		ServiceKinds:             []string{"systemd", "process", "none"},
 		IdentityStates:           CanonicalIdentityStates,
 		SupportedResourceDomains: SupportedResourceDomains,
@@ -467,6 +471,73 @@ func (h *Handler) ListTargets(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, ListTargetsResponse{
 		Targets: summaries,
 		Page:    PageInfo{Limit: limit, NextCursor: next, HasMore: hasMore},
+	})
+}
+
+// InterfaceMatrix handles GET /api/nf-health/interfaces.
+//
+// The response is one bounded page of target rows projected from the persisted
+// per-family evidence. Columns are the server-owned family list, so a family an
+// operator never configured is reported as not_configured instead of being
+// inferred from the reference architecture.
+func (h *Handler) InterfaceMatrix(w http.ResponseWriter, r *http.Request) {
+	p := h.requireRead(w, r, "GET", "/api/nf-health/interfaces")
+	if p == nil {
+		return
+	}
+	if h.limiter != nil && !h.limiter.Enforce(w, r, "nf-health:interfaces:"+p.Username, 120, 60) {
+		return
+	}
+	q := r.URL.Query()
+	for param := range q {
+		switch param {
+		case "q", "limit", "cursor", "domain", "sort":
+		default:
+			response.BadRequest(w, "unsupported query parameter: "+param, "UNSUPPORTED_QUERY_PARAMETER")
+			return
+		}
+	}
+	limit, err := ValidateLimit(q.Get("limit"))
+	if err != nil {
+		writeValidation(w, err)
+		return
+	}
+	domain := strings.TrimSpace(q.Get("domain"))
+	if len(domain) > 64 {
+		response.BadRequest(w, "domain is too long", "INVALID_QUERY_PARAMETER")
+		return
+	}
+	sortOrder := strings.TrimSpace(q.Get("sort"))
+	if sortOrder == "" {
+		sortOrder = TargetSortRisk
+	}
+	if sortOrder != TargetSortUpdated && sortOrder != TargetSortRisk {
+		response.BadRequest(w, "sort must be updated or risk", "INVALID_QUERY_PARAMETER")
+		return
+	}
+
+	items, next, hasMore, err := h.repo.ListTargets(r.Context(), TargetListFilter{
+		Query:  strings.TrimSpace(q.Get("q")),
+		Domain: domain,
+		Sort:   sortOrder,
+		Limit:  limit,
+		Cursor: strings.TrimSpace(q.Get("cursor")),
+	})
+	if err != nil {
+		response.BadRequest(w, err.Error(), "INVALID_CURSOR")
+		return
+	}
+
+	now := time.Now().UTC()
+	rows := make([]InterfaceMatrixRow, 0, len(items))
+	for i := range items {
+		rows = append(rows, BuildInterfaceMatrixRow(&items[i], now))
+	}
+	response.JSON(w, http.StatusOK, InterfaceMatrixResponse{
+		GeneratedAt: now.Format(time.RFC3339),
+		Columns:     CanonicalProbeFamilies,
+		Rows:        rows,
+		Page:        PageInfo{Limit: limit, NextCursor: next, HasMore: hasMore},
 	})
 }
 

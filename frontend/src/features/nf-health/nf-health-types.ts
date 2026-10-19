@@ -73,6 +73,14 @@ export interface CoverageSummary {
 
 export type FreshnessState = 'fresh' | 'stale' | 'unknown' | 'not_monitored';
 
+/* Interface probe vocabulary. The server owns the list; the UI renders it. */
+export type ProbeFamily = 'metrics' | 'sbi' | 'oam' | 'health';
+
+export interface InterfaceProbe {
+  family: ProbeFamily;
+  url: string;
+}
+
 export interface FreshnessProjection {
   state: FreshnessState;
   ageSeconds?: number;
@@ -90,6 +98,7 @@ export interface HealthTarget {
   name: string;
   collectorProfile: CollectorProfile;
   metricsEndpoint?: string;
+  probes?: InterfaceProbe[];
   serviceUnit?: string;
   serviceKind: ServiceKind;
   collectionMode: CollectionMode;
@@ -178,6 +187,8 @@ export interface NfHealthMeta {
   evidenceKinds: EvidenceKind[];
   processOutcomes: string[];
   interfaceOutcomes: string[];
+  probeFamilies?: ProbeFamily[];
+  maxInterfaceProbes?: number;
   serviceKinds: ServiceKind[];
   minIntervalSeconds: number;
   maxIntervalSeconds: number;
@@ -201,6 +212,41 @@ export interface PageInfo {
   limit: number;
   nextCursor?: string | null;
   hasMore: boolean;
+}
+
+export interface InterfaceCell {
+  state: LayerState;
+  reason?: string;
+  httpStatus?: number;
+  responseMs?: number;
+  measuredAt?: string;
+}
+
+export interface InterfaceMatrixRow {
+  targetId: string;
+  resourceId?: string;
+  name: string;
+  nfType?: string;
+  domain?: string;
+  overallState: string;
+  freshness: FreshnessState;
+  lastMeasuredAt?: string;
+  cells: Record<string, InterfaceCell>;
+}
+
+export interface InterfaceMatrixResponse {
+  generatedAt: string;
+  columns: ProbeFamily[];
+  rows: InterfaceMatrixRow[];
+  page: PageInfo;
+}
+
+export interface NfHealthInterfaceQueryParams {
+  q?: string;
+  domain?: string;
+  sort?: string;
+  cursor?: string;
+  limit?: number;
 }
 
 export interface ListTargetsResponse {
@@ -237,6 +283,7 @@ export interface CreateNfHealthTargetRequest {
   name: string;
   collectorProfile: CollectorProfile;
   metricsEndpoint?: string;
+  probes?: InterfaceProbe[];
   serviceUnit?: string;
   serviceKind: ServiceKind;
   collectionMode: CollectionMode;
@@ -249,6 +296,7 @@ export interface UpdateNfHealthTargetRequest {
   target: {
     name: string;
     metricsEndpoint?: string;
+    probes?: InterfaceProbe[];
     serviceUnit?: string;
     serviceKind: ServiceKind;
     collectionMode: CollectionMode;

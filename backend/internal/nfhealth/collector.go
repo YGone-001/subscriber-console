@@ -264,6 +264,22 @@ func (c *Collector) Collect(ctx context.Context, target *HealthTarget, initiated
 		}
 	}
 
+	// Per-interface evidence. The metrics family is the L2 result the block
+	// above produced; declared extra probes are reachability probes and never
+	// rewrite the run status or the L3 service reading.
+	collectedAt := started.Format(time.RFC3339Nano)
+	var probeEvidence []ProbeEvidence
+	if target.CollectorProfile != CollectorProcessOnly {
+		if probe != nil {
+			probeEvidence = append(probeEvidence, ProbeEvidenceFromLayer(
+				ProbeFamilyMetrics, target.MetricsEndpoint, layers.Interface, collectedAt))
+		}
+		probeEvidence = append(probeEvidence, c.probeExtraInterfaces(collectCtx, target, collectedAt)...)
+		if len(probeEvidence) > 0 {
+			layers.Interface = AggregateInterfaceEvidence(probeEvidence)
+		}
+	}
+
 	measured := 0
 	for _, m := range []bool{layers.Process.Measured, layers.Interface.Measured, layers.Service.Measured} {
 		if m {
@@ -282,7 +298,7 @@ func (c *Collector) Collect(ctx context.Context, target *HealthTarget, initiated
 	// persisted when at least one layer produced real evidence. The sample
 	// expiration is a BSON Date so the MongoDB TTL index can consume it.
 	var sample *HealthSample
-	if measured > 0 {
+	if measured > 0 || anyProbeMeasured(probeEvidence) {
 		sample = &HealthSample{
 			SampleID:      newUUID(),
 			SchemaVersion: SchemaVersion,
@@ -293,6 +309,7 @@ func (c *Collector) Collect(ctx context.Context, target *HealthTarget, initiated
 			CollectedAt:   started.Format(time.RFC3339Nano),
 			ExpiresAt:     NewBSONTime(started.AddDate(0, 0, DefaultRetentionDays)),
 			Layers:        layers,
+			Probes:        probeEvidence,
 			Metrics:       metrics,
 		}
 		if sample.Metrics == nil {
@@ -306,6 +323,62 @@ func (c *Collector) Collect(ctx context.Context, target *HealthTarget, initiated
 	c.mu.Unlock()
 
 	return &CollectionResult{Run: run, Sample: sample}, nil
+}
+
+// probeExtraInterfaces runs the declared non-metrics probes concurrently.
+//
+// A probe answers one question: did the endpoint respond? Any HTTP response
+// below 500 proves the interface is served, so a 4xx is recorded as reachable
+// with its status kept in the evidence; a refused, timed out or 5xx endpoint is
+// unhealthy. The probe set is bounded by MaxExtraProbes and every request still
+// passes the destination allowlist inside the prober.
+func (c *Collector) probeExtraInterfaces(ctx context.Context, target *HealthTarget, collectedAt string) []ProbeEvidence {
+	extra := make([]InterfaceProbe, 0, MaxExtraProbes)
+	for _, probe := range EffectiveProbes(target) {
+		if probe.Family == ProbeFamilyMetrics {
+			continue
+		}
+		extra = append(extra, probe)
+	}
+	if len(extra) == 0 || c.prober == nil {
+		return nil
+	}
+
+	evidence := make([]ProbeEvidence, len(extra))
+	var wg sync.WaitGroup
+	for i := range extra {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+			item := extra[index]
+			result, err := c.prober.Probe(ctx, item.URL, c.dest)
+			if err != nil {
+				// The endpoint was rejected before a socket opened: this is a
+				// configuration problem, never a network claim.
+				evidence[index] = ProbeEvidence{
+					Family:   item.Family,
+					Endpoint: item.URL,
+					State:    StateNotConfigured,
+					Reason:   "invalid_endpoint",
+					Measured: false,
+				}
+				return
+			}
+			layer := EvaluateReachabilityLayer(result)
+			evidence[index] = ProbeEvidenceFromLayer(item.Family, item.URL, layer, collectedAt)
+		}(i)
+	}
+	wg.Wait()
+	return evidence
+}
+
+func anyProbeMeasured(probes []ProbeEvidence) bool {
+	for _, probe := range probes {
+		if probe.Measured {
+			return true
+		}
+	}
+	return false
 }
 
 // InProgress reports whether a collection is currently running for the target.

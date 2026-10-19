@@ -99,28 +99,79 @@ func ValidateIntervalSeconds(v int) error {
 // ValidateMetricsEndpoint performs structural URL validation. Allowlist
 // enforcement is a separate, server-owned step.
 func ValidateMetricsEndpoint(raw string) error {
+	return ValidateEndpointURL(raw, "metricsEndpoint")
+}
+
+// ValidateEndpointURL validates one HTTP(S) endpoint field. The field name is
+// part of every error so a rejected probe names the field that failed instead
+// of reporting a metrics endpoint the request never mentioned.
+func ValidateEndpointURL(raw, field string) error {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return nil
 	}
 	u, err := url.Parse(raw)
 	if err != nil {
-		return validationError("INVALID_URL", "metricsEndpoint is malformed")
+		return validationError("INVALID_URL", field+" is malformed")
 	}
 	if u.Scheme != "http" && u.Scheme != "https" {
-		return validationError("INVALID_URL_SCHEME", "metricsEndpoint scheme must be http or https")
+		return validationError("INVALID_URL_SCHEME", field+" scheme must be http or https")
 	}
 	if u.User != nil {
-		return validationError("INVALID_URL", "metricsEndpoint must not embed credentials")
+		return validationError("INVALID_URL", field+" must not embed credentials")
 	}
 	if u.Fragment != "" {
-		return validationError("INVALID_URL", "metricsEndpoint must not contain a fragment")
+		return validationError("INVALID_URL", field+" must not contain a fragment")
 	}
 	if u.Hostname() == "" {
-		return validationError("INVALID_URL", "metricsEndpoint must contain a host")
+		return validationError("INVALID_URL", field+" must contain a host")
 	}
 	if u.RawQuery != "" {
-		return validationError("INVALID_URL", "metricsEndpoint must not contain a query string")
+		return validationError("INVALID_URL", field+" must not contain a query string")
+	}
+	return nil
+}
+
+// ValidateTargetProbes validates the additional interface probes of a target.
+//
+// The list is bounded, family names come from the server vocabulary, the
+// metrics family is reserved for metricsEndpoint, and every URL passes the same
+// shape and allowlist rules as the metrics endpoint.
+func ValidateTargetProbes(probes []InterfaceProbe, dest *DestinationAllowlist) error {
+	if len(probes) > MaxExtraProbes {
+		return validationError("INVALID_TARGET_PROBES",
+			fmt.Sprintf("at most %d additional interface probes are allowed", MaxExtraProbes))
+	}
+	seen := make(map[string]struct{}, len(probes))
+	for _, probe := range probes {
+		family := strings.TrimSpace(probe.Family)
+		if family == ProbeFamilyMetrics {
+			return validationError("INVALID_TARGET_PROBES",
+				"the metrics family is defined by metricsEndpoint and cannot be declared again")
+		}
+		canonical := false
+		for _, allowed := range CanonicalProbeFamilies {
+			if family == allowed {
+				canonical = true
+				break
+			}
+		}
+		if !canonical {
+			return validationError("INVALID_TARGET_PROBES", "probe family must be sbi, oam or health")
+		}
+		if _, duplicate := seen[family]; duplicate {
+			return validationError("INVALID_TARGET_PROBES", "probe families must be unique")
+		}
+		seen[family] = struct{}{}
+		if strings.TrimSpace(probe.URL) == "" {
+			return validationError("INVALID_TARGET_PROBES", "probes[].url is required")
+		}
+		if err := ValidateEndpointURL(probe.URL, "probes[].url"); err != nil {
+			return err
+		}
+		if err := MustAllowlistEndpointField(probe.URL, dest, "probes[].url"); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -233,13 +284,18 @@ func (d *DestinationAllowlist) Entries() []string {
 
 // MustAllowlistEndpoint enforces the metrics destination allowlist.
 func MustAllowlistEndpoint(raw string, allowlist *DestinationAllowlist) error {
+	return MustAllowlistEndpointField(raw, allowlist, "metricsEndpoint")
+}
+
+// MustAllowlistEndpointField enforces the destination allowlist for one field.
+func MustAllowlistEndpointField(raw string, allowlist *DestinationAllowlist, field string) error {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return nil
 	}
 	u, err := url.Parse(raw)
 	if err != nil {
-		return validationError("NF_HEALTH_DESTINATION_NOT_ALLOWED", "metricsEndpoint destination is not allowlisted")
+		return validationError("NF_HEALTH_DESTINATION_NOT_ALLOWED", field+" destination is not allowlisted")
 	}
 	host := u.Hostname()
 	port := u.Port()
@@ -251,7 +307,7 @@ func MustAllowlistEndpoint(raw string, allowlist *DestinationAllowlist) error {
 		}
 	}
 	if allowlist == nil || !allowlist.Allows(net.JoinHostPort(host, port)) {
-		return validationError("NF_HEALTH_DESTINATION_NOT_ALLOWED", "metricsEndpoint destination is not allowlisted")
+		return validationError("NF_HEALTH_DESTINATION_NOT_ALLOWED", field+" destination is not allowlisted")
 	}
 	return nil
 }
@@ -302,6 +358,9 @@ func ValidateCreateTargetRequest(req *CreateTargetRequest, dest *DestinationAllo
 	if err := MustAllowlistServiceUnit(req.ServiceUnit, units); err != nil {
 		return err
 	}
+	if err := ValidateTargetProbes(req.Probes, dest); err != nil {
+		return err
+	}
 	switch req.CollectorProfile {
 	case CollectorHTTPMetrics:
 		if strings.TrimSpace(req.MetricsEndpoint) == "" {
@@ -318,6 +377,9 @@ func ValidateCreateTargetRequest(req *CreateTargetRequest, dest *DestinationAllo
 	case CollectorProcessOnly:
 		if strings.TrimSpace(req.ResourceID) == "" {
 			return validationError("NF_HEALTH_RESOURCE_REQUIRED", "process_only requires an Inventory resource association")
+		}
+		if len(req.Probes) > 0 {
+			return validationError("INVALID_TARGET", "process_only must not configure HTTP interface probes")
 		}
 		if strings.TrimSpace(req.MetricsEndpoint) != "" {
 			return validationError("INVALID_TARGET", "process_only must not configure an HTTP metrics endpoint")
@@ -392,7 +454,7 @@ func ValidateUpdateTargetRequest(req *UpdateTargetRequest, dest *DestinationAllo
 	if err := MustAllowlistServiceUnit(req.Target.ServiceUnit, units); err != nil {
 		return err
 	}
-	return nil
+	return ValidateTargetProbes(req.Target.Probes, dest)
 }
 
 // ValidateEffectiveTargetUpdate validates the proposed configuration of an
@@ -427,6 +489,9 @@ func ValidateEffectiveTargetUpdate(
 	case CollectorProcessOnly:
 		if strings.TrimSpace(mut.MetricsEndpoint) != "" {
 			return validationError("INVALID_TARGET", "process_only must not configure an HTTP metrics endpoint")
+		}
+		if len(mut.Probes) > 0 {
+			return validationError("INVALID_TARGET", "process_only must not configure HTTP interface probes")
 		}
 		if mut.ServiceKind != "process" && mut.ServiceKind != "systemd" {
 			return validationError("INVALID_SERVICE_KIND", "process_only requires a local process or systemd inspection source")

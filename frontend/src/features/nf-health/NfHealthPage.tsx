@@ -43,6 +43,7 @@ import type { RuntimeComponent, RuntimeObservations } from '../runtime/runtime-t
 import { resolveRuntimeObservations, useRuntimeStream } from '../runtime/use-runtime-stream';
 import {
   collectNfHealthTarget,
+  fetchNfHealthInterfaces,
   fetchNfHealthMeta,
   fetchNfHealthTargets,
 } from './nf-health-api';
@@ -54,13 +55,17 @@ import {
   HEALTH_URL_KEYS,
   HEALTH_VIEWS,
   hasHealthFilters,
+  healthInterfaceQuery,
   healthTargetQuery,
   healthView,
   readHealthFilters,
 } from './nf-health-filters';
 import type {
   HealthTargetSummary,
+  InterfaceCell,
+  InterfaceMatrixResponse,
   LayerState,
+  ListTargetsResponse,
   NfHealthMeta,
   PageInfo,
 } from './nf-health-types';
@@ -86,6 +91,9 @@ export function NfHealthPage() {
   const [targetsError, setTargetsError] = useState<string | null>(null);
   const [targetsPage, setTargetsPage] = useState<PageInfo | null>(null);
   const [targetsCursorHistory, setTargetsCursorHistory] = useState<string[]>([]);
+  const [matrix, setMatrix] = useState<InterfaceMatrixResponse | null>(null);
+  const [matrixPage, setMatrixPage] = useState<PageInfo | null>(null);
+  const [matrixError, setMatrixError] = useState<string | null>(null);
   const [summary, setSummary] = useState<HealthSummarySection | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(true);
   const [feedback, setFeedback] = useState<Feedback>(null);
@@ -118,47 +126,75 @@ export function NfHealthPage() {
   const loadAll = useCallback(async (activeCursor?: string) => {
     setLoading(true);
     setTargetsError(null);
+    setMatrixError(null);
     setSummaryLoading(true);
     setTargetsCursorHistory([]);
-    // Section-split error boundaries: a failed targets load never blanks the
+    // Section-split error boundaries: a failed list load never blanks the
     // full-collection KPI strip, and a failed summary section only degrades the
     // KPI strip to explicit unavailable labels, never to page-scoped counts.
-    const [metaRes, targetsRes, summaryRes] = await Promise.allSettled([
+    const matrixView = view === 'interfaces';
+    const [metaRes, listRes, summaryRes] = await Promise.allSettled([
       fetchNfHealthMeta(),
-      fetchNfHealthTargets(healthTargetQuery(filters, activeCursor, PAGE_LIMIT)),
+      matrixView
+        ? fetchNfHealthInterfaces(healthInterfaceQuery(filters, activeCursor, PAGE_LIMIT))
+        : fetchNfHealthTargets(healthTargetQuery(filters, activeCursor, PAGE_LIMIT)),
       fetchOperationsSummary(['health']),
     ]);
     setMeta(metaRes.status === 'fulfilled' ? metaRes.value : null);
-    if (targetsRes.status === 'fulfilled') {
-      setTargets(targetsRes.value.targets ?? []);
-      setTargetsPage(targetsRes.value.page ?? null);
+    if (matrixView) {
+      if (listRes.status === 'fulfilled') {
+        const payload = listRes.value as InterfaceMatrixResponse;
+        setMatrix(payload);
+        setMatrixPage(payload.page ?? null);
+      } else {
+        setMatrix(null);
+        setMatrixPage(null);
+        setMatrixError(describeLoadError(listRes.reason, t));
+      }
+    } else if (listRes.status === 'fulfilled') {
+      const payload = listRes.value as ListTargetsResponse;
+      setTargets(payload.targets ?? []);
+      setTargetsPage(payload.page ?? null);
     } else {
       setTargets([]);
       setTargetsPage(null);
-      setTargetsError(describeLoadError(targetsRes.reason, t));
+      setTargetsError(describeLoadError(listRes.reason, t));
     }
     setSummary(summaryRes.status === 'fulfilled' ? (summaryRes.value.health ?? null) : null);
     setSummaryLoading(false);
     setLoading(false);
-  }, [filters, t]);
+  }, [filters, view, t]);
 
   // Cursor pager loads refresh exactly one bounded list; the full-collection
   // summary stays untouched, so a page step never changes the KPI strip.
   const loadTargetsPage = useCallback(async (cursor: string | undefined) => {
     setLoading(true);
     setTargetsError(null);
+    setMatrixError(null);
     try {
-      const res = await fetchNfHealthTargets(healthTargetQuery(filters, cursor, PAGE_LIMIT));
-      setTargets(res.targets ?? []);
-      setTargetsPage(res.page ?? null);
+      if (view === 'interfaces') {
+        const res = await fetchNfHealthInterfaces(healthInterfaceQuery(filters, cursor, PAGE_LIMIT));
+        setMatrix(res);
+        setMatrixPage(res.page ?? null);
+      } else {
+        const res = await fetchNfHealthTargets(healthTargetQuery(filters, cursor, PAGE_LIMIT));
+        setTargets(res.targets ?? []);
+        setTargetsPage(res.page ?? null);
+      }
     } catch (err) {
-      setTargets([]);
-      setTargetsPage(null);
-      setTargetsError(describeLoadError(err, t));
+      if (view === 'interfaces') {
+        setMatrix(null);
+        setMatrixPage(null);
+        setMatrixError(describeLoadError(err, t));
+      } else {
+        setTargets([]);
+        setTargetsPage(null);
+        setTargetsError(describeLoadError(err, t));
+      }
     } finally {
       setLoading(false);
     }
-  }, [filters, t]);
+  }, [filters, view, t]);
 
   /* Deep links and browser back/forward load the page named by the URL cursor.
    * A pager click already fetched that page and is skipped through the ref, so a
@@ -209,6 +245,11 @@ export function NfHealthPage() {
   };
 
   const targetsPageIndex = targetsCursorHistory.length + 1;
+  const activePage = view === 'interfaces' ? matrixPage : targetsPage;
+  const activeError = view === 'interfaces' ? matrixError : targetsError;
+  const activeCount = view === 'interfaces' ? matrix?.rows.length ?? 0 : targets.length;
+  const matrixColumns = matrix?.columns ?? [];
+  const matrixRows = matrix?.rows ?? [];
 
   const handleSearchSubmit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -318,7 +359,11 @@ export function NfHealthPage() {
               aria-pressed={view === option}
               onClick={() => url.setView(option)}
             >
-              {option === 'cards' ? t('nf_health_view_cards') : t('nf_health_view_table')}
+              {option === 'cards'
+                ? t('nf_health_view_cards')
+                : option === 'table'
+                  ? t('nf_health_view_table')
+                  : t('nf_health_view_interfaces')}
             </button>
           ))}
         </div>
@@ -485,21 +530,29 @@ export function NfHealthPage() {
         <div className={styles.sectionHead}>
           <h2>
             <Server size={16} aria-hidden="true" />
-            {view === 'cards' ? t('nf_health_card_wall_section') : t('nf_health_targets_section')}
+            {view === 'cards'
+              ? t('nf_health_card_wall_section')
+              : view === 'table'
+                ? t('nf_health_targets_section')
+                : t('nf_health_matrix_section')}
           </h2>
           <span className={styles.sectionNote}>
-            {filters.sort === DEFAULT_HEALTH_SORT ? t('nf_health_sort_risk_note') : t('nf_health_targets_note')}
+            {view === 'interfaces'
+              ? t('nf_health_matrix_note')
+              : filters.sort === DEFAULT_HEALTH_SORT
+                ? t('nf_health_sort_risk_note')
+                : t('nf_health_targets_note')}
           </span>
         </div>
         <p className={styles.semanticNote}>{t('nf_health_semantic_separation')}</p>
 
-        {targetsError ? (
+        {activeError ? (
           <div className={styles.errorWrap}>
-            <ErrorState title={t('error')} message={targetsError} retryLabel={t('nf_health_retry')} onRetry={() => void loadAll(url.cursor)} />
+            <ErrorState title={t('error')} message={activeError} retryLabel={t('nf_health_retry')} onRetry={() => void loadAll(url.cursor)} />
           </div>
-        ) : loading && targets.length === 0 ? (
-          <LoadingRows columns={view === 'cards' ? 4 : 9} rows={4} />
-        ) : targets.length === 0 ? (
+        ) : loading && activeCount === 0 ? (
+          <LoadingRows columns={view === 'cards' ? 4 : view === 'table' ? 9 : 6} rows={4} />
+        ) : activeCount === 0 ? (
           <div className={styles.stateWrap}>
             <EmptyState
               icon={<Activity size={44} />}
@@ -595,7 +648,7 @@ export function NfHealthPage() {
               </div>
             ))}
           </div>
-        ) : (
+        ) : view === 'table' ? (
           <div className={styles.tableScroll}>
             <table className={styles.table}>
               <caption className="sr-only">{t('nf_health_targets_caption')}</caption>
@@ -724,12 +777,57 @@ export function NfHealthPage() {
               </tbody>
             </table>
           </div>
+        ) : (
+          <div className={styles.tableScroll}>
+            <table className={styles.matrix} data-nf-health-matrix="true">
+              <caption className="sr-only">{t('nf_health_matrix_caption')}</caption>
+              <thead>
+                <tr>
+                  <th scope="col">{t('nf_health_col_name')}</th>
+                  {matrixColumns.map((family) => (
+                    <th key={family} scope="col">
+                      {t(`nf_health_probe_family_${family}`)}
+                    </th>
+                  ))}
+                  <th scope="col">{t('nf_health_col_overall')}</th>
+                  <th scope="col">{t('nf_health_evidence_freshness')}</th>
+                  <th scope="col">{t('nf_health_col_last_measured')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {matrixRows.map((row) => (
+                  <tr key={row.targetId} data-nf-health-matrix-row={row.targetId}>
+                    <th scope="row">
+                      <Link
+                        to={`/nf-health/${encodeURIComponent(row.targetId)}`}
+                        className={styles.rowLink}
+                      >
+                        {row.name}
+                      </Link>
+                      <div className={styles.stack}>
+                        <span className={styles.chip}>{row.nfType ?? '-'}</span>
+                        {row.domain ? <span className={styles.chip}>{row.domain}</span> : null}
+                      </div>
+                    </th>
+                    {matrixColumns.map((family) => (
+                      <td key={family} data-nf-health-cell={`${row.targetId}:${family}`}>
+                        {matrixCell(row.cells[family] ?? { state: 'not_configured' as LayerState }, t)}
+                      </td>
+                    ))}
+                    <td>{stateBadge(row.overallState, t)}</td>
+                    <td>{freshnessStateBadge(row.freshness, t)}</td>
+                    <td>{formatTimestamp(row.lastMeasuredAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
 
-        {targetsError ? null : targets.length > 0 || targetsPage?.hasMore ? (
+        {activeError ? null : activeCount > 0 || activePage?.hasMore ? (
           <nav className={styles.pager} aria-label={t('nf_health_targets_section')}>
             <span className={styles.pagerSummary} aria-live="polite">
-              {t('nf_health_pager_targets', { count: targets.length })}
+              {t('nf_health_pager_targets', { count: activeCount })}
             </span>
             <div className={styles.pagerControls}>
               <button
@@ -750,7 +848,7 @@ export function NfHealthPage() {
               <button
                 type="button"
                 onClick={handleTargetsNextPage}
-                disabled={!targetsPage?.hasMore || !targetsPage?.nextCursor || loading}
+                disabled={!activePage?.hasMore || !activePage?.nextCursor || loading}
               >
                 {t('ops_pager_next')}
               </button>
@@ -786,7 +884,10 @@ function overallBadge(
   target: HealthTargetSummary,
   t: (key: string) => string,
 ): React.ReactElement {
-  const state = target.overallState ?? 'unknown';
+  return stateBadge(target.overallState ?? 'unknown', t);
+}
+
+function stateBadge(state: string, t: (key: string) => string): React.ReactElement {
   const className =
     state === 'healthy'
       ? styles.badgeHealthy
@@ -810,17 +911,37 @@ function freshnessBadge(
   target: HealthTargetSummary,
   t: (key: string) => string,
 ): React.ReactElement {
-  const freshness = target.freshness?.state;
-  if (freshness === 'fresh') {
+  return freshnessStateBadge(target.freshness?.state ?? 'unknown', t);
+}
+
+function freshnessStateBadge(state: string, t: (key: string) => string): React.ReactElement {
+  if (state === 'fresh') {
     return <span className={styles.badgeHealthy}>{t('nf_health_state_healthy')}</span>;
   }
-  if (freshness === 'stale') {
+  if (state === 'stale') {
     return <span className={styles.badgeStale}>{t('nf_health_state_stale')}</span>;
   }
-  if (freshness === 'not_monitored') {
+  if (state === 'not_monitored') {
     return <span className={styles.badgeNotConfigured}>{t('nf_health_state_not_configured')}</span>;
   }
   return <span className={styles.badgeUnknown}>{t('nf_health_state_unknown')}</span>;
+}
+
+/* A matrix cell renders the measured state and keeps the evidence one hover
+ * away. not_configured stays neutral: an interface that was never declared is
+ * not a failure. */
+function matrixCell(cell: InterfaceCell, t: (key: string) => string): React.ReactElement {
+  const measured = cell.state !== 'not_configured' && cell.state !== 'unknown';
+  const detail = [
+    cell.httpStatus ? `HTTP ${cell.httpStatus}` : null,
+    cell.responseMs != null ? `${cell.responseMs} ms` : null,
+    cell.reason ?? null,
+    cell.measuredAt ? formatTimestamp(cell.measuredAt) : null,
+  ]
+    .filter(Boolean)
+    .join(' - ');
+  const badge = layerBadge(cell.state, t, styles, measured);
+  return detail ? <span title={detail}>{badge}</span> : badge;
 }
 
 function layerBadge(

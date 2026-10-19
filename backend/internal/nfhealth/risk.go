@@ -38,7 +38,10 @@ type TargetProjection struct {
 	L2Measured   bool   `json:"l2Measured" bson:"l2Measured"`
 	L3Measured   bool   `json:"l3Measured" bson:"l3Measured"`
 	L3Available  bool   `json:"l3Available" bson:"l3Available"`
-	ProjectedAt  string `json:"projectedAt" bson:"projectedAt"`
+	// Probes is the per-family interface evidence of the latest collection, so
+	// the matrix reads one bounded row per target instead of loading samples.
+	Probes      []ProbeProjection `json:"probes,omitempty" bson:"probes,omitempty"`
+	ProjectedAt string            `json:"projectedAt" bson:"projectedAt"`
 }
 
 // ProjectTargetRisk maps evidence onto the duty-queue ordering.
@@ -72,7 +75,7 @@ func ProjectTargetRisk(freshness FreshnessProjection, layers *LayerSet, collecti
 // BuildTargetProjection computes the persisted projection for one target with
 // the same helpers the read projection uses, so ordering can never disagree
 // with the state the page renders.
-func BuildTargetProjection(target *HealthTarget, layers *LayerSet, now time.Time) TargetProjection {
+func BuildTargetProjection(target *HealthTarget, layers *LayerSet, probes []ProbeEvidence, now time.Time) TargetProjection {
 	projected := *target
 	projected.LastProjection = nil
 	coverage := CoverageSummary{}
@@ -87,6 +90,7 @@ func BuildTargetProjection(target *HealthTarget, layers *LayerSet, now time.Time
 		L2Measured:   coverage.L2Measured,
 		L3Measured:   coverage.L3Measured,
 		L3Available:  coverage.L3Available,
+		Probes:       ProjectProbes(probes),
 		ProjectedAt:  now.UTC().Format(time.RFC3339Nano),
 	}
 }

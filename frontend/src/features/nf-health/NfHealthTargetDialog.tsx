@@ -8,6 +8,7 @@
  * commands are never accepted.
  */
 import { useEffect, useMemo, useState } from 'react';
+import { Plus, X } from 'lucide-react';
 import { Dialog } from '../../components/ui/Dialog';
 import { Field } from '../../components/ui/Field';
 import { useI18n } from '../../providers/I18nProvider';
@@ -20,14 +21,17 @@ import {
   buildCreateTargetRequest,
   buildUpdateTargetRequest,
   createEmptyTargetForm,
+  probeFormRows,
   splitMetricsEndpoint,
   type NfHealthTargetForm,
+  type TargetProbeForm,
 } from './nf-health-builders';
 import { isCollectionMode, isServiceKind, validateTargetForm } from './nf-health-validation';
 import type {
   CollectionMode,
   HealthTarget,
   NfHealthMeta,
+  ProbeFamily,
   ServiceKind,
 } from './nf-health-types';
 import styles from '../../styles/modules/nf-health.module.css';
@@ -44,6 +48,12 @@ type Props = {
 
 const CANDIDATE_LIMIT = 50;
 const RESOURCE_PAGE_LIMIT = 20;
+
+function defaultProbePath(family: ProbeFamily): string {
+  if (family === 'oam') return '/oam';
+  if (family === 'health') return '/healthz';
+  return '/sbi';
+}
 
 export function NfHealthTargetDialog({
   open,
@@ -81,6 +91,7 @@ export function NfHealthTargetDialog({
         collectorProfile: existing.collectorProfile,
         metricsDestination: split.destination,
         metricsPath: split.path,
+        probes: probeFormRows(existing.probes),
         serviceUnit: existing.serviceUnit ?? '',
         serviceKind: existing.serviceKind,
         collectionMode: existing.collectionMode,
@@ -169,6 +180,42 @@ export function NfHealthTargetDialog({
   const patch = (next: Partial<NfHealthTargetForm>) => {
     setForm((current) => ({ ...current, ...next }));
     setFormError(null);
+  };
+
+  const maxProbes = meta?.maxInterfaceProbes ?? 4;
+  const availableFamilies = useMemo(
+    () => (meta?.probeFamilies ?? ['metrics', 'sbi', 'oam', 'health']).filter((family) => family !== 'metrics'),
+    [meta],
+  );
+
+  const addProbe = () => {
+    setFormError(null);
+    setForm((current) => {
+      if (current.probes.length >= maxProbes) return current;
+      const used = new Set(current.probes.map((probe) => probe.family));
+      const family = availableFamilies.find((option) => !used.has(option)) ?? availableFamilies[0];
+      if (!family) return current;
+      return {
+        ...current,
+        probes: [...current.probes, { family, destination: '', path: defaultProbePath(family) }],
+      };
+    });
+  };
+
+  const updateProbe = (index: number, next: Partial<TargetProbeForm>) => {
+    setFormError(null);
+    setForm((current) => ({
+      ...current,
+      probes: current.probes.map((probe, position) => (position === index ? { ...probe, ...next } : probe)),
+    }));
+  };
+
+  const removeProbe = (index: number) => {
+    setFormError(null);
+    setForm((current) => ({
+      ...current,
+      probes: current.probes.filter((_, position) => position !== index),
+    }));
   };
 
   const handleSubmit = async () => {
@@ -437,6 +484,80 @@ export function NfHealthTargetDialog({
               />
             </Field>
           </div>
+        )}
+
+        {isProcessOnly ? null : (
+          <section className={styles.probeEditor} aria-label={t('nf_health_probes_label')}>
+            <div className={styles.probeEditorHead}>
+              <div>
+                <strong>{t('nf_health_probes_label')}</strong>
+                <p className={styles.probeEditorHint}>{t('nf_health_probes_hint')}</p>
+              </div>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={addProbe}
+                disabled={submitting || form.probes.length >= maxProbes}
+              >
+                <Plus size={14} aria-hidden="true" />
+                {t('nf_health_probes_add')}
+              </button>
+            </div>
+            {form.probes.length === 0 ? (
+              <p className={styles.probeEditorEmpty}>{t('nf_health_probes_empty')}</p>
+            ) : (
+              form.probes.map((probe, index) => (
+                <div key={probe.family} className={styles.probeRow}>
+                  <select
+                    className="form-input"
+                    aria-label={t('nf_health_probes_family')}
+                    value={probe.family}
+                    onChange={(event) =>
+                      updateProbe(index, { family: event.target.value as ProbeFamily })
+                    }
+                    disabled={submitting}
+                  >
+                    {availableFamilies.map((family) => (
+                      <option key={family} value={family}>
+                        {t('nf_health_probe_family_' + family)}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    className="form-input"
+                    aria-label={t('nf_health_field_destination')}
+                    value={probe.destination}
+                    onChange={(event) => updateProbe(index, { destination: event.target.value })}
+                    disabled={submitting}
+                  >
+                    <option value="">{t('nf_health_field_destination_placeholder')}</option>
+                    {(meta?.allowedDestinations ?? []).map((value) => (
+                      <option key={value} value={value}>
+                        {value}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    className="form-input"
+                    aria-label={t('nf_health_field_path')}
+                    value={probe.path}
+                    onChange={(event) => updateProbe(index, { path: event.target.value })}
+                    disabled={submitting}
+                    placeholder={defaultProbePath(probe.family)}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={() => removeProbe(index)}
+                    disabled={submitting}
+                    aria-label={t('nf_health_probes_remove')}
+                  >
+                    <X size={14} aria-hidden="true" />
+                  </button>
+                </div>
+              ))
+            )}
+          </section>
         )}
 
         <div className={styles.formRow}>

@@ -141,8 +141,10 @@ check(
 // 6. Contract JSON present
 const contract = JSON.parse(readFileSync(resolve(frontend, 'nf-health-contract.json'), 'utf8'));
 check('NFH-UI-32', contract.routes.length === 2, `contract_routes=${contract.routes.length}`);
-check('NFH-UI-33', contract.apis.length === 10, `contract_apis=${contract.apis.length}`);
+check('NFH-UI-33', contract.apis.length === 11, `contract_apis=${contract.apis.length}`);
 check('NFH-UI-34', contract.collectorProfiles?.[0] === 'http_metrics', 'collector_profile=http_metrics');
+check('NFH-UI-62', /data-nf-health-matrix/.test(read('features/nf-health/NfHealthPage.tsx')), 'matrix_view_source=present');
+check('NFH-UI-63', localeEn.includes('nf_health_probe_family_sbi') && localeZh.includes('nf_health_probe_family_sbi'), 'matrix_locale=bilingual');
 
 // 7. Responsive layout guardrails
 check('NFH-UI-35', Boolean(cssModule.match(/@media \(max-width: 900px\)/)), 'nf_health_css=column_breakpoint_present');

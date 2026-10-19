@@ -8,7 +8,9 @@ import type {
   HealthTarget,
   ListRunsResponse,
   ListSamplesResponse,
+  InterfaceMatrixResponse,
   ListTargetsResponse,
+  NfHealthInterfaceQueryParams,
   NfHealthMeta,
   NfHealthRunQueryParams,
   NfHealthSampleQueryParams,
@@ -40,6 +42,20 @@ export async function fetchNfHealthTargets(
       domain: params.domain,
       state: params.state,
       layers: params.layers,
+      sort: params.sort,
+      cursor: params.cursor,
+      limit: params.limit,
+    }),
+  );
+}
+
+export async function fetchNfHealthInterfaces(
+  params: NfHealthInterfaceQueryParams = {},
+): Promise<InterfaceMatrixResponse> {
+  return getJson<InterfaceMatrixResponse>(
+    withQuery('/api/nf-health/interfaces', {
+      q: params.q,
+      domain: params.domain,
       sort: params.sort,
       cursor: params.cursor,
       limit: params.limit,

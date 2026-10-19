@@ -72,7 +72,7 @@ func TestBuildTargetProjectionCachesEvidence(t *testing.T) {
 	now := time.Date(2026, 10, 19, 12, 0, 0, 0, time.UTC)
 	target := freshTarget(now)
 
-	projection := BuildTargetProjection(target, measuredLayers(StateHealthy), now)
+	projection := BuildTargetProjection(target, measuredLayers(StateHealthy), nil, now)
 	if projection.OverallState != StateHealthy || projection.RiskRank != RiskHealthy {
 		t.Fatalf("healthy evidence must project healthy: %+v", projection)
 	}
@@ -85,7 +85,7 @@ func TestBuildTargetProjectionCachesEvidence(t *testing.T) {
 
 	failed := freshTarget(now)
 	failed.LastError = "http probe timed out"
-	projection = BuildTargetProjection(failed, measuredLayers(StateHealthy), now)
+	projection = BuildTargetProjection(failed, measuredLayers(StateHealthy), nil, now)
 	if projection.RiskRank != RiskFailed {
 		t.Fatalf("a failed collection must rank failed: %+v", projection)
 	}
@@ -94,7 +94,7 @@ func TestBuildTargetProjectionCachesEvidence(t *testing.T) {
 	stale.LastMeasuredAt = now.Add(-2 * time.Hour).Format(time.RFC3339Nano)
 	stale.LastSuccessAt = now.Add(-2 * time.Hour).Format(time.RFC3339Nano)
 	stale.LastAttemptAt = now.Add(-2 * time.Hour).Format(time.RFC3339Nano)
-	projection = BuildTargetProjection(stale, measuredLayers(StateHealthy), now)
+	projection = BuildTargetProjection(stale, measuredLayers(StateHealthy), nil, now)
 	if projection.OverallState != StateStale || projection.RiskRank != RiskStale {
 		t.Fatalf("aged evidence must project stale: %+v", projection)
 	}
@@ -103,7 +103,7 @@ func TestBuildTargetProjectionCachesEvidence(t *testing.T) {
 	never.LastMeasuredAt = ""
 	never.LastSuccessAt = ""
 	never.LastAttemptAt = ""
-	projection = BuildTargetProjection(never, nil, now)
+	projection = BuildTargetProjection(never, nil, nil, now)
 	if projection.RiskRank != RiskUnknown {
 		t.Fatalf("a target without a measurement must rank unknown: %+v", projection)
 	}

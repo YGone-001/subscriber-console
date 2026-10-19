@@ -59,7 +59,7 @@ const FRONTEND = join(ROOT, 'frontend');
 const BACKEND = join(ROOT, 'backend');
 
 /** Canonical production API surface size (asserted against the derived set). */
-const EXPECTED_GO_REGISTRATIONS = 138;
+const EXPECTED_GO_REGISTRATIONS = 139;
 
 const NEXT_PORT = Number(process.env.DEPLOYMENT_NEXT_PORT || 13333);
 const GO_PORT = Number(process.env.DEPLOYMENT_GO_PORT || 18888);
@@ -1376,7 +1376,7 @@ async function main() {
   check('DB-U06', healthzOk && readyzOk, `healthz_status=${healthzRes.status} upstream=${healthzRes.upstream} readyz_status=${readyzRes.status} upstream=${readyzRes.upstream}`);
 
   // =======================================================================
-  // API route execution matrix - all 138 operations
+  // API route execution matrix - all 139 operations
   // =======================================================================
 
   log('-- API route execution matrix --');

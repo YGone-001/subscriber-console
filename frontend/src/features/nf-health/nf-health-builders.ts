@@ -3,10 +3,21 @@ import type {
   CollectorProfile,
   CreateNfHealthTargetRequest,
   HealthSample,
+  InterfaceProbe,
   LayerState,
+  ProbeFamily,
   ServiceKind,
   UpdateNfHealthTargetRequest,
 } from './nf-health-types';
+
+/* One editable extra probe row. Destination and path are kept apart so the
+ * dialog can reuse the same allowlisted destination picker as the metrics
+ * endpoint; the request is built from both. */
+export type TargetProbeForm = {
+  family: ProbeFamily;
+  destination: string;
+  path: string;
+};
 
 export type NfHealthTargetForm = {
   resourceId: string;
@@ -15,6 +26,7 @@ export type NfHealthTargetForm = {
   collectorProfile: CollectorProfile;
   metricsDestination: string;
   metricsPath: string;
+  probes: TargetProbeForm[];
   serviceUnit: string;
   serviceKind: ServiceKind;
   collectionMode: CollectionMode;
@@ -30,6 +42,7 @@ export function createEmptyTargetForm(defaultIntervalSeconds: number): NfHealthT
     collectorProfile: 'http_metrics',
     metricsDestination: '',
     metricsPath: '/metrics',
+    probes: [],
     serviceUnit: '',
     serviceKind: 'process',
     collectionMode: 'manual',
@@ -58,6 +71,25 @@ export function splitMetricsEndpoint(endpoint?: string): { destination: string; 
   }
 }
 
+/** Converts declared probes into editable rows. */
+export function probeFormRows(probes?: InterfaceProbe[]): TargetProbeForm[] {
+  return (probes ?? []).map((probe) => ({
+    family: probe.family,
+    ...splitMetricsEndpoint(probe.url),
+  }));
+}
+
+/** Builds the request probes, dropping rows without a destination. */
+export function buildProbes(rows: TargetProbeForm[]): InterfaceProbe[] {
+  const probes: InterfaceProbe[] = [];
+  for (const row of rows) {
+    const url = buildMetricsEndpoint(row.destination, row.path);
+    if (!url) continue;
+    probes.push({ family: row.family, url });
+  }
+  return probes;
+}
+
 export function buildCreateTargetRequest(form: NfHealthTargetForm): CreateNfHealthTargetRequest {
   const processOnly = form.collectorProfile === 'process_only';
   const metricsEndpoint = processOnly ? undefined : buildMetricsEndpoint(form.metricsDestination, form.metricsPath);
@@ -67,6 +99,7 @@ export function buildCreateTargetRequest(form: NfHealthTargetForm): CreateNfHeal
     name: form.name.trim(),
     collectorProfile: form.collectorProfile,
     metricsEndpoint,
+    probes: processOnly ? undefined : buildProbes(form.probes),
     serviceUnit: form.serviceUnit.trim() || undefined,
     serviceKind: form.serviceKind,
     collectionMode: form.collectionMode,
@@ -85,6 +118,7 @@ export function buildUpdateTargetRequest(
     target: {
       name: form.name.trim(),
       metricsEndpoint,
+      probes: buildProbes(form.probes),
       serviceUnit: form.serviceUnit.trim() || undefined,
       serviceKind: form.serviceKind,
       collectionMode: form.collectionMode,
