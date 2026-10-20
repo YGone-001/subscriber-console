@@ -49,6 +49,7 @@ import { SignJWT } from 'jose';
 
 import { deriveGoRegistrations, classifyGoRegistrations } from './lib/go-registrations.mjs';
 import { findListener, inspectProcess } from './lib/local-runtime.mjs';
+import { resolveGoToolchain } from './lib/project-paths.mjs';
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -1136,7 +1137,12 @@ async function main() {
   const originalCssHash = sha256(originalCssBytes);
 
   log('  compiling bundled Go server binary with embedded SPA...');
-  const goBuild = runSync('go', ['build', '-o', GO_BIN, './cmd/server'], { cwd: BACKEND, stdio: 'inherit' });
+  const goExe = resolveGoToolchain();
+  if (!goExe) {
+    check('DB-R02', false, 'no_go_toolchain=backend/go.mod version floor unmet');
+    throw new Error('No Go toolchain satisfies backend/go.mod. Install one or set GO_EXECUTABLE.');
+  }
+  const goBuild = runSync(goExe, ['build', '-o', GO_BIN, './cmd/server'], { cwd: BACKEND, stdio: 'inherit' });
   check('DB-R02', goBuild.status === 0 && existsSync(GO_BIN), `go_build_status=${goBuild.status}`);
 
   const goEnv = {

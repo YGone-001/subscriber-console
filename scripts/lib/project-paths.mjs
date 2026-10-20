@@ -13,10 +13,14 @@
  *      are expected to detect that and skip rather than fail.
  *   3. `resolveChromeExecutable()` - a Chromium-family browser, probed per platform
  *      (Windows / macOS / Linux) and finally on PATH.
+ *   4. `resolveGoToolchain()` - the Go compiler, chosen by the version `backend/go.mod`
+ *      requires rather than by PATH order, so an older distro Go cannot shadow a newer
+ *      SDK that happens to be installed outside the default PATH.
  *
  * All Windows-style paths below are written with forward slashes: Node normalises them,
  * and it keeps the module readable and free of escape sequences.
  */
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -169,4 +173,101 @@ export function requireChromeExecutable(executable, env = 'UI_CAPTURE_CHROME') {
   console.error(`  fix=install Google Chrome, or set ${env} to the browser executable path`);
   process.exit(1);
   return null;
+}
+
+/** Conventional Go SDK install roots, probed (never assumed to exist). */
+const GO_SDK_CANDIDATES = {
+  linux: ['/usr/local/go', '/usr/lib/go'],
+  darwin: ['/usr/local/go', '/opt/homebrew/opt/go/libexec', '/usr/local/opt/go/libexec'],
+  win32: ['C:/Go', 'C:/Program Files/Go'],
+};
+
+/** Parse a Go release string such as `go1.24.4` into a comparable numeric array. */
+function parseGoVersion(text) {
+  const match = /go(\d+)\.(\d+)(?:\.(\d+))?/.exec(String(text || ''));
+  return match ? [Number(match[1]), Number(match[2]), Number(match[3] || 0)] : null;
+}
+
+/** Compare two parsed versions. Returns -1, 0 or 1. */
+function compareVersions(left, right) {
+  for (let i = 0; i < 3; i += 1) {
+    const a = left[i] || 0;
+    const b = right[i] || 0;
+    if (a !== b) return a < b ? -1 : 1;
+  }
+  return 0;
+}
+
+/** Read the minimum Go version this repository's `backend/go.mod` requires. */
+export function requiredGoVersion(root = PROJECT_ROOT) {
+  const file = path.join(root, 'backend', 'go.mod');
+  try {
+    const text = fs.readFileSync(file, 'utf8');
+    const match = /^\s*go\s+(\d+)\.(\d+)(?:\.(\d+))?/m.exec(text);
+    return match ? [Number(match[1]), Number(match[2]), Number(match[3] || 0)] : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolve the Go compiler for this repository.
+ *
+ * PATH order alone is not authoritative: a distro Go (for example Ubuntu's `/usr/bin/go`)
+ * can shadow a newer SDK installed at `/usr/local/go` and break `go.mod`'s version floor.
+ * Every candidate is therefore probed and `go version` is asked what it actually is, and
+ * the newest toolchain that satisfies `backend/go.mod` wins. An explicit argument or the
+ * `GO_EXECUTABLE` override always wins, so a caller can pin a toolchain.
+ *
+ * @param {object} [options]
+ * @param {string|null} [options.argument] Explicit path to a go binary.
+ * @param {string} [options.env] Environment variable holding an override.
+ * @param {string} [options.root] Repository root whose `backend/go.mod` sets the floor.
+ * @returns {string|null} Absolute path to the go executable, or null when none qualifies.
+ */
+export function resolveGoToolchain({ argument = null, env = 'GO_EXECUTABLE', root = PROJECT_ROOT } = {}) {
+  const explicit = argument || process.env[env];
+  if (explicit && isFile(explicit)) return explicit;
+
+  const floor = requiredGoVersion(root);
+  const seen = new Set();
+  const candidates = [];
+  const offer = (file) => {
+    const resolved = path.resolve(file);
+    if (!seen.has(resolved) && isFile(resolved)) {
+      seen.add(resolved);
+      candidates.push(resolved);
+    }
+  };
+
+  // PATH first, then conventional SDK roots. Order only breaks ties among equals.
+  for (const directory of (process.env.PATH || '').split(path.delimiter).filter(Boolean)) {
+    offer(path.join(directory, 'go'));
+    if (process.platform === 'win32') offer(path.join(directory, 'go.exe'));
+  }
+  for (const sdk of (GO_SDK_CANDIDATES[process.platform] || [])) {
+    offer(path.join(sdk, 'bin', 'go'));
+    if (process.platform === 'win32') offer(path.join(sdk, 'bin', 'go.exe'));
+  }
+
+  let best = null;
+  let bestVersion = null;
+  for (const candidate of candidates) {
+    let reported;
+    try {
+      reported = spawnSync(candidate, ['version'], { encoding: 'utf8', windowsHide: true, timeout: 15000 });
+    } catch {
+      continue;
+    }
+    if (reported.status !== 0) continue;
+    const version = parseGoVersion(reported.stdout || reported.stderr);
+    if (!version) continue;
+    // Reject toolchains that cannot satisfy go.mod; otherwise keep the newest seen.
+    if (floor && compareVersions(version, floor) < 0) continue;
+    if (!bestVersion || compareVersions(version, bestVersion) > 0) {
+      best = candidate;
+      bestVersion = version;
+    }
+  }
+  return best;
 }

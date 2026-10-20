@@ -37,6 +37,8 @@ import os from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { resolveGoToolchain } from './lib/project-paths.mjs';
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '..');
 const FRONTEND = join(ROOT, 'frontend');
@@ -185,7 +187,13 @@ async function main() {
     const goBinName = process.platform === 'win32' ? 'xcloud-server-test.exe' : 'xcloud-server-test';
     const goBin = join(ROOT, '.runtime', 'bin', goBinName);
     mkdirSync(join(ROOT, '.runtime', 'bin'), { recursive: true });
-    const buildRes = spawnSync('go', ['build', '-o', goBin, './cmd/server'], { cwd: BACKEND, env });
+    const goExe = resolveGoToolchain({ root: ROOT });
+    if (!goExe) {
+      log('  No Go toolchain satisfies backend/go.mod.');
+      log('  Install a Go SDK that meets the version floor, or set GO_EXECUTABLE to it.');
+      process.exit(1);
+    }
+    const buildRes = spawnSync(goExe, ['build', '-o', goBin, './cmd/server'], { cwd: BACKEND, env });
     if (buildRes.status !== 0) {
       log('  Failed to build Go server: ' + (buildRes.stderr || buildRes.stdout));
       process.exit(1);

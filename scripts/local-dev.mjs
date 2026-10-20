@@ -46,6 +46,7 @@ import {
   waitForHttpReady,
   waitForPort,
 } from './lib/local-runtime.mjs';
+import { resolveGoToolchain } from './lib/project-paths.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '..');
@@ -263,7 +264,16 @@ async function run() {
   // 4. Go build. Performed before the transaction so a build failure cannot orphan a
   //    process: nothing has been spawned yet.
   log('[4/8] Go backend build');
-  const build = runSync('go', ['build', '-o', GO_BIN, './cmd/server'], { cwd: join(ROOT, 'backend'), env });
+  // Resolve the toolchain by the version backend/go.mod requires, not by PATH order: a
+  // distro Go can shadow a newer SDK and fail the build with a version-floor error.
+  const goExe = resolveGoToolchain({ root: ROOT });
+  if (!goExe) {
+    log('  no Go toolchain satisfies backend/go.mod.');
+    log('  Install a Go SDK that meets the version floor, or set GO_EXECUTABLE to it.');
+    return bail();
+  }
+  log(`  toolchain ${goExe}`);
+  const build = runSync(goExe, ['build', '-o', GO_BIN, './cmd/server'], { cwd: join(ROOT, 'backend'), env });
   if (build.error || build.status !== 0) {
     log('  go build failed.');
     log(tail(build.stderr || build.stdout || (build.error && build.error.message)));
