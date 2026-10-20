@@ -493,7 +493,7 @@
   border-radius: var(--ref-radius-control);
   color: var(--text-secondary);
   text-decoration: none;
-  font-size: var(--ref-font-size-body-emphasis);
+  font-size: var(--ref-font-size-body-compact);
   font-weight: 600;
   position: relative;
   white-space: nowrap;

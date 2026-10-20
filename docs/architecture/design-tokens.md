@@ -42,13 +42,13 @@ typography:
     letterSpacing: "normal"
   label:
     fontFamily: "Noto Sans SC, Microsoft YaHei UI, PingFang SC, Segoe UI, sans-serif"
-    fontSize: "0.78rem"
+    fontSize: "0.85rem"
     fontWeight: 750
     lineHeight: 1.25
     letterSpacing: "0.035em"
   data:
     fontFamily: "Cascadia Mono, SFMono-Regular, Consolas, monospace"
-    fontSize: "0.8rem"
+    fontSize: "0.85rem"
     fontWeight: 600
     lineHeight: 1.4
     letterSpacing: "normal"
@@ -175,14 +175,16 @@ xCloud 的界面像一座持续运行的电信运营舰桥：冷静、结构化�
 
 **Character:** 标题与正文共用自托管的 Noto Sans SC 子集，保证中英文运营界面的连续阅读与确定性渲染，不依赖操作员机器上恰好安装了哪个字体。当前没有独立的 Display 字面；若需要更强的标题个性，应引入一个同样自托管、经过子集化的西文显示字面，而不是回退到系统字体。等宽字体只承担 IMSI、代码、协议字段和测量数据，不作为“技术感”装饰。
 
+桌面紧凑密度只收敛间距与壳层几何，根字号保持 100%（16px）；表格正文使用 14px、表头使用 12px，禁止通过缩小根字号来换取信息密度。
+
 ### Hierarchy
 
 - **Display** (650, 1.65–2.2rem, line-height 1.05): 页面主标题与关键态势名称，使用紧凑字距强化指挥层级。
 - **Headline** (650, 1rem, line-height 1.2): 分区标题和紧凑面板标题。
 - **Title** (650, 1.18rem, line-height 1.2): 品牌锁定区、弹层标题和重要对象名称。
 - **Body** (400, 1rem, line-height 1.55): 表单、说明和任务文案；长说明控制在约 65–75ch。
-- **Label** (750, 0.72–0.78rem, letter-spacing 0.035em): 指标标签、状态与短操作提示；只在短标签中使用大写。
-- **Data** (600, 0.8rem, line-height 1.4): IMSI、数值、单位、接口字段与结构化标识，使用表格数字和禁用连字。
+- **Label** (750, 0.75–0.85rem, letter-spacing 0.035em): 指标标签、状态与短操作提示；只在短标签中使用大写。
+- **Data** (600, 0.85rem, line-height 1.4): IMSI、数值、单位、接口字段与结构化标识，使用表格数字和禁用连字。
 
 **The Data Earns Mono Rule.** 只有机器标识、代码、协议、测量和对齐数字使用等宽字体；导航、标题与普通说明始终使用界面字体。
 

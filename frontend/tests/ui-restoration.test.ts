@@ -23,7 +23,7 @@ test('shell geometry matches the compact desktop contract', () => {
 test('compact desktop density preserves the mobile interaction baseline', () => {
   const styles = read('../src/styles/app.css');
   assert.match(styles, /@media \(min-width: 981px\)/);
-  assert.match(styles, /html\s*\{\s*font-size: 80%;/);
+  assert.match(styles, /html\s*\{\s*font-size: 100%;/);
   assert.match(styles, /--shell-header-height: 52px/);
   assert.match(styles, /--shell-sidebar-expanded: 212px/);
   assert.match(styles, /--shell-sidebar-collapsed: 58px/);

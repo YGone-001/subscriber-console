@@ -76,16 +76,18 @@
 /*
  * Compact desktop density.
  *
- * The operator console carries a broad information surface.  At normal browser
+ * The operator console carries a broad information surface. At normal browser
  * zoom the prior geometry consumed more screen estate than the data hierarchy
- * requires, so the desktop shell now uses the same 80% scale as that accepted
- * operator baseline.  This is a token-driven layout scale rather than CSS zoom,
- * so fixed-pixel shell geometry is reduced alongside rem-based typography and
- * spacing.  Mobile and coarse-pointer targets keep their existing geometry.
+ * requires, so desktop spacing and shell geometry are compacted.
+ *
+ * Typography is deliberately excluded from this scale: the root font size stays
+ * at 100% so the documented 16px body scale and 14px table text remain legible.
+ * Earlier revisions also shrank the root to 80%, which reduced table text to
+ * roughly 10px and made light and dark themes equally hard to read.
  */
 @media (min-width: 981px) and (pointer: fine) {
   html {
-    font-size: 80%;
+    font-size: 100%;
   }
 
   :root {

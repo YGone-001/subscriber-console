@@ -31,7 +31,7 @@
 
 .sectionNote {
   margin: var(--space-4) 0 0;
-  font-size: 0.8rem;
+  font-size: var(--ref-font-size-body-compact);
   color: var(--text-muted);
 }
 
@@ -52,7 +52,7 @@
   border-radius: var(--ref-radius-control);
   background: var(--surface-field);
   color: var(--text-primary, inherit);
-  font-size: 0.8rem;
+  font-size: var(--ref-font-size-body-compact);
   cursor: pointer;
 }
 
@@ -68,7 +68,7 @@
 .completeness {
   padding: 2px var(--space-8);
   border-radius: var(--ref-radius-pill);
-  font-size: 0.72rem;
+  font-size: var(--ref-font-size-caption);
   border: 1px solid currentColor;
 }
 
@@ -78,7 +78,7 @@
   border-radius: var(--ref-radius-micro);
   border: 1px solid var(--surface-border);
   font-family: var(--font-data);
-  font-size: 0.72rem;
+  font-size: var(--ref-font-size-caption);
 }
 
 .chipRetired {
@@ -91,7 +91,8 @@
   padding: 2px var(--space-8);
   border-radius: var(--ref-radius-pill);
   border: 1px solid currentColor;
-  font-size: 0.72rem;
+  font-size: var(--ref-font-size-caption);
+  font-weight: 600;
   white-space: nowrap;
 }
 
@@ -204,7 +205,7 @@
 .statusPanelNote {
   margin: var(--space-4) 0 0;
   max-width: 72ch;
-  font-size: 0.8rem;
+  font-size: var(--ref-font-size-body-compact);
   color: var(--text-muted);
 }
 
@@ -219,7 +220,7 @@
   padding: 2px var(--space-8);
   border: 1px solid var(--surface-border);
   border-radius: var(--ref-radius-pill);
-  font-size: 0.72rem;
+  font-size: var(--ref-font-size-caption);
   color: var(--text-muted);
   white-space: nowrap;
 }
@@ -244,7 +245,7 @@
   border-radius: var(--ref-radius-small);
   background: transparent;
   color: var(--text-muted);
-  font-size: 0.78rem;
+  font-size: var(--ref-font-size-data);
   white-space: nowrap;
   cursor: pointer;
 }
@@ -277,7 +278,7 @@
 }
 
 .distributionTitle {
-  font-size: 0.72rem;
+  font-size: var(--ref-font-size-caption);
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -308,7 +309,7 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-4);
-  font-size: 0.75rem;
+  font-size: var(--ref-font-size-label);
   color: var(--text-muted);
 }
 
@@ -327,7 +328,7 @@
 
 .distributionEmpty {
   margin: 0;
-  font-size: 0.75rem;
+  font-size: var(--ref-font-size-label);
   color: var(--text-muted);
 }
 
@@ -346,7 +347,7 @@
 
 .cardTitle {
   margin: 0;
-  font-size: 0.78rem;
+  font-size: var(--ref-font-size-label-strong);
   font-weight: 500;
   color: var(--text-muted);
 }
@@ -360,13 +361,13 @@
 
 .cardValueSuffix {
   margin-inline-start: var(--space-8);
-  font-size: 0.75rem;
+  font-size: var(--ref-font-size-label);
   color: var(--text-muted);
 }
 
 .cardHint {
   margin: var(--space-4) 0 0;
-  font-size: 0.72rem;
+  font-size: var(--ref-font-size-caption);
   color: var(--text-muted);
 }
 
@@ -388,7 +389,7 @@
 }
 
 .domainName {
-  font-size: 0.78rem;
+  font-size: var(--ref-font-size-label-strong);
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -401,7 +402,7 @@
 }
 
 .domainMeta {
-  font-size: 0.72rem;
+  font-size: var(--ref-font-size-caption);
   color: var(--text-muted);
 }
 
@@ -429,7 +430,7 @@
   color: var(--text-primary, inherit);
   cursor: pointer;
   text-align: start;
-  font-size: 0.85rem;
+  font-size: var(--ref-font-size-body-compact);
 }
 
 .groupToggle:hover {
@@ -445,12 +446,12 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  font-size: 0.78rem;
+  font-size: var(--ref-font-size-label-strong);
 }
 
 .groupCount {
   margin-inline-start: auto;
-  font-size: 0.72rem;
+  font-size: var(--ref-font-size-caption);
   color: var(--text-muted);
 }
 
@@ -468,6 +469,7 @@
   flex-wrap: wrap;
   padding: var(--space-8) var(--space-12);
   border-top: 1px solid var(--surface-border);
+  font-size: var(--ref-font-size-body-compact);
 }
 
 .nfRowMain {
@@ -492,14 +494,14 @@
   align-items: center;
   gap: var(--space-12);
   flex-wrap: wrap;
-  font-size: 0.75rem;
+  font-size: var(--ref-font-size-label);
   color: var(--text-muted);
 }
 
 .nfCoverage,
 .nfMemory {
   font-family: var(--font-data);
-  font-size: 0.72rem;
+  font-size: var(--ref-font-size-caption);
 }
 
 .nfLinks {
@@ -574,7 +576,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-4);
-  font-size: 0.75rem;
+  font-size: var(--ref-font-size-label);
   color: var(--text-muted);
 }
 
@@ -585,7 +587,7 @@
   border-radius: var(--ref-radius-control);
   background: var(--surface);
   color: inherit;
-  font-size: 0.8rem;
+  font-size: var(--ref-font-size-data);
 }
 
 .neBody {
@@ -725,21 +727,22 @@
 .neTable {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.8rem;
+  font-size: var(--ref-font-size-body-compact);
 }
 
 .neTable th,
 .neTable td {
-  padding: var(--space-8);
+  padding: var(--space-8) var(--space-12);
   border-bottom: 1px solid var(--surface-border);
+  line-height: 1.45;
   text-align: start;
   vertical-align: middle;
   white-space: nowrap;
 }
 
 .neTable thead th {
-  font-size: 0.72rem;
-  font-weight: 500;
+  font-size: var(--ref-font-size-caption);
+  font-weight: 600;
   color: var(--text-muted);
 }
 
@@ -760,7 +763,7 @@
 .tableCaption {
   caption-side: top;
   text-align: start;
-  font-size: 0.72rem;
+  font-size: var(--ref-font-size-caption);
   color: var(--text-muted);
   padding-bottom: var(--space-8);
 }
