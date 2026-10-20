@@ -145,3 +145,73 @@ func TestValidateSubscriberUpdatePayload_EmptyPayload(t *testing.T) {
 		t.Fatalf("unexpected error for empty payload: %v", err)
 	}
 }
+
+func TestValidateSubscriberUpdatePayload_LegacySessionQosIndexPlaceholder(t *testing.T) {
+	payload := UpdatePayload{
+		Sub4G: map[string]any{
+			"sliceList": []any{
+				map[string]any{
+					"sst": 1,
+					"session_list": []any{
+						map[string]any{
+							"name": "internet",
+							"type": 1,
+							"qos": map[string]any{
+								"_5qi":  9,
+								"index": 0,
+								"arp":   map[string]any{"priorityLevel": 9},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	if err := ValidateSubscriberUpdatePayload(payload); err != nil {
+		t.Fatalf("legacy qos.index placeholder must be accepted when _5qi is set: %v", err)
+	}
+}
+
+func TestValidateSubscriberUpdatePayload_SessionQosIndexWithout5qi(t *testing.T) {
+	payload := UpdatePayload{
+		Sub4G: map[string]any{
+			"sliceList": []any{
+				map[string]any{
+					"sst": 1,
+					"session_list": []any{
+						map[string]any{
+							"name": "internet",
+							"type": 1,
+							"qos":  map[string]any{"index": 0},
+						},
+					},
+				},
+			},
+		},
+	}
+	if err := ValidateSubscriberUpdatePayload(payload); err == nil {
+		t.Fatal("expected error for qos.index without a valid _5qi")
+	}
+}
+
+func TestValidateSubscriberUpdatePayload_InvalidSession5qi(t *testing.T) {
+	payload := UpdatePayload{
+		Sub4G: map[string]any{
+			"sliceList": []any{
+				map[string]any{
+					"sst": 1,
+					"session_list": []any{
+						map[string]any{
+							"name": "internet",
+							"type": 1,
+							"qos":  map[string]any{"_5qi": 300, "index": 0},
+						},
+					},
+				},
+			},
+		},
+	}
+	if err := ValidateSubscriberUpdatePayload(payload); err == nil {
+		t.Fatal("expected error for out-of-range _5qi")
+	}
+}

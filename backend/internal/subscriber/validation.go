@@ -290,11 +290,15 @@ func validateQos(session map[string]any, sliceIndex, sessionIndex int) error {
 	if !ok {
 		return nil
 	}
-	// _5qi or index
-	for _, key := range []string{"_5qi", "index"} {
-		if err := validateOptionalInteger(qosMap, key, 1, 255); err != nil {
+	// normalizeSessionQos() treats _5qi as authoritative and only falls back to
+	// index, while the legacy read projection fills the unused index with 0.
+	// Validating index unconditionally rejects every read-modify-write payload.
+	if v, ok := qosMap["_5qi"]; ok && v != nil {
+		if err := validateOptionalInteger(qosMap, "_5qi", 1, 255); err != nil {
 			return fmt.Errorf("session %d.%d.qos.%w", sliceIndex+1, sessionIndex+1, err)
 		}
+	} else if err := validateOptionalInteger(qosMap, "index", 1, 255); err != nil {
+		return fmt.Errorf("session %d.%d.qos.%w", sliceIndex+1, sessionIndex+1, err)
 	}
 	arp, ok := qosMap["arp"]
 	if !ok || arp == nil {

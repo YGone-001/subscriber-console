@@ -324,6 +324,44 @@ func TestXcloudToLegacyState(t *testing.T) {
 	}
 }
 
+// TestLegacyStateRoundTripsIntoUpdateValidation pins the invariant that the
+// legacy read projection can be submitted back on PUT unchanged. The projection
+// emits qos.index=0 for sessions while the real QCI travels in _5qi, so update
+// validation must follow the same precedence as normalizeSessionQos().
+func TestLegacyStateRoundTripsIntoUpdateValidation(t *testing.T) {
+	doc := bson.M{
+		"imsi": "460001234567890",
+		"slice": []any{
+			bson.M{
+				"sst": 1,
+				"session": []any{
+					bson.M{
+						"name": "internet",
+						"type": 1,
+						"qos": bson.M{
+							"index": 9,
+							"arp":   bson.M{"priority_level": 9},
+						},
+						"ambr": bson.M{
+							"downlink": bson.M{"value": 1, "unit": 3},
+							"uplink":   bson.M{"value": 1, "unit": 3},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	state := xcloudToLegacyState(doc)
+	if state == nil {
+		t.Fatal("xcloudToLegacyState should not return nil")
+	}
+
+	if err := ValidateSubscriberUpdatePayload(UpdatePayload{Sub4G: state.Sub4G}); err != nil {
+		t.Fatalf("legacy read projection must be accepted by update validation: %v", err)
+	}
+}
+
 // TestSummaryPreFilter verifies that summary is computed from ALL matching rows
 // before status filtering, while total is the post-filter count.
 // This matches Node behavior: summary = pre-filter, total = post-filter.
