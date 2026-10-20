@@ -74,8 +74,8 @@ classification. No asset is left unreviewed.
 
 | Historical Asset | Historical Path | Current Target | Classification | Status | Reason / Adaptation |
 |---|---|---|---|---|---|
-| Dashboard page | `frontend/src/app/(dashboard)/page.tsx` | `frontend/src/features/read/ReadPages.tsx` | ADAPT | Done | Restored as an operator cockpit driven by the current read contracts. |
-| Analytics cockpit | `frontend/src/components/AnalyticsCockpit.tsx` | `frontend/src/features/read/ReadPages.tsx` | ADAPT | Done | Composition retained (KPI strip, charts, OCS panels, workbench); data sources replaced by the current endpoints. |
+| Dashboard page | `frontend/src/app/(dashboard)/page.tsx` | `frontend/src/features/operations/OperationsOverviewPage.tsx` | ADAPT | Done | Restored as an operations-first overview; the business analytics cockpit is a secondary view mounted on demand. |
+| Analytics cockpit | `frontend/src/components/AnalyticsCockpit.tsx` | `frontend/src/components/AnalyticsCockpit.tsx` | ADAPT | Done | Composition retained (KPI strip, charts, OCS panels, workbench); data sources replaced by the current endpoints and the cockpit mounts only in the business view. |
 | Analytics stylesheet | `frontend/src/components/analytics.css` | `frontend/src/styles/pages.css` | ADAPT | Done | Card, work item, semantic badge and responsive patterns ported; unreferenced selectors dropped. |
 | KPI card | `frontend/src/components/analytics/KpiCard.tsx` | `frontend/src/components/ui/KpiCard.tsx` | PORT | Done | Presentation ported onto current tokens. |
 | Skeleton dashboard | `frontend/src/components/analytics/SkeletonDashboard.tsx` | `frontend/src/components/ui/LoadingSkeleton.tsx` | PORT | Done | Skeleton primitives generalised for pages, KPI strips, cards and tables. |

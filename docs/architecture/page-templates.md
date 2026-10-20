@@ -23,7 +23,7 @@ main#main-content（tabIndex=-1，路由内容挂载点）
 
 ## 1. 概览型（仪表盘 / KPI）
 
-用于回答“当前状态如何”：平台总览（`/` 的 AnalyticsCockpit）、系统健康（`/system-health`）、OCS 总览（`/ocs/dashboard`）等。
+用于回答“当前状态如何”：平台总览（`/` 的 OperationsOverviewPage）、系统健康（`/system-health`）、OCS 总览（`/ocs/dashboard`）等。
 
 结构顺序：
 
@@ -42,7 +42,7 @@ container
   - `indicator`、`detail`、`compactValue` 用于趋势指示、辅助说明和大数值压缩。
 - 图表必须经可视化层实现：调色板与网格/tooltip 令牌来自 `src/components/ui/chartPrimitives.tsx`；每张图提供 `ChartDataTable` 等价数据表。分类色板 `--chart-*` 只允许出现在图表标记上，不得用于图标、徽章、药丸或文本（见 [design-system-rules.md](design-system-rules.md) 第 4 节）。
 - 状态契约：加载时保留区块结构并使用骨架；空数据不绘制零值假图，数值缺失显示 `—`；错误态保留页头并提供重试。
-- 代表页：`/`（AnalyticsCockpit 组合 KPI 条、工作台、OCS 卡片与图表）、`/system-health`（MetricStrip cards + 子系统卡片）、`/ocs/dashboard`。
+- 代表页：`/`（运维总览：全量口径态势 KPI、状态分布、本地运行时/纳管网元双视图；业务驾驶舱作为次级视图按需挂载）、`/system-health`（MetricStrip cards + 子系统卡片）、`/ocs/dashboard`。
 
 ## 2. 列表型（数据表格）
 

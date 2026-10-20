@@ -20,8 +20,8 @@ xCloud presents two operational surfaces derived from the reference operations
 console:
 
 ```text
-/            Operational Network Overview (additional section below the
-             existing business analytics cockpit)
+/            Operations Overview (primary surface: full-collection posture
+             KPIs, status distribution, local-runtime and managed-NF views)
 /inventory   Network element view (additional view mode inside the existing
              Inventory route)
 ```
@@ -36,8 +36,8 @@ adopted concept is rebuilt natively against xCloud authorities.
 
 | Reference capability | Original backend dependency | Reused concept | xCloud authority | Status |
 |---|---|---|---|---|
-| Operational summary cards | `/api/v1/deployment/status` | summary cards over real populations | Inventory + NF Health | Implemented |
-| Component status distribution | deployment status payload | status distribution with explicit denominators | NF Health evidence | Implemented |
+| Operational summary cards | `/api/v1/deployment/status` | summary cards over real populations | NF Health + NF Alerts, from the full-collection operations summary; Inventory is read by the managed-NF view | Implemented |
+| Component status distribution | deployment status payload | status distribution with explicit denominators | local runtime snapshot or NF Health overall states, depending on the active view | Implemented |
 | Domain-grouped NF table | process list keyed by process name | collapsible domain groups, compact NF rows | Inventory domain/kind + NF Health status | Implemented |
 | Location tree | `/api/v1/sites` plus a hardcoded fallback tree | expand/collapse tree driving table filtering | Inventory resources + Topology `contains` edges, with a labelled virtual fallback | Implemented |
 | Search and status filtering | process-name substring match | text search plus domain/kind/monitoring filters | Inventory query parameters + bounded client filters | Implemented |
@@ -338,10 +338,16 @@ Not implemented in this phase, and each requires its own authorization:
 
 ## 15. Presentation surfaces
 
-Three presentation additions keep the read-only projection semantics of this
+Four presentation additions keep the read-only projection semantics of this
 document intact. None of them adds an endpoint, mutates data or derives a count
 that the projection model does not already define.
 
+- **Operations overview page** (`OperationsOverviewPage`): the default `/`
+  surface. Four posture KPIs read the full-collection operations summary and the
+  local runtime snapshot; the network-status panel keeps local runtime processes
+  and managed NF health in separate views. The business analytics cockpit is a
+  sibling view mounted only while selected. No API path, route or collection is
+  added.
 - **Operations workbench navigation** (`OperationsNav`): one tab strip rendered
   by the four operational routes (`/inventory`, `/topology`, `/discovery`,
   `/nf-health`). It adds no route and no destination; nested detail routes keep
