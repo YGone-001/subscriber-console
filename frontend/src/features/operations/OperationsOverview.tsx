@@ -10,7 +10,7 @@
  * OperationsOverviewPage so this surface never runs its polling in the background.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Activity, BellRing, HeartPulse, RefreshCw, Server } from 'lucide-react';
+import { Activity, BellRing, RefreshCw, Server, Smartphone, Users } from 'lucide-react';
 import { useRead } from '../../lib/api/use-read';
 import { useI18n } from '../../providers/I18nProvider';
 import MetricStrip, { type MetricStripItem, type MetricTone } from '../../components/ui/MetricStrip';
@@ -18,6 +18,7 @@ import OperationalOverview from './OperationalOverview';
 import { RuntimeDiscoveryEmbedded } from '../runtime/RuntimeDiscovery';
 import { resolveRuntimeObservations, useRuntimeStream } from '../runtime/use-runtime-stream';
 import type { RuntimeCounts, RuntimeObservations } from '../runtime/runtime-types';
+import type { UEInfoResponse } from '../ue-info/types';
 import {
   buildOperationsPosture,
   healthStatusDistribution,
@@ -30,27 +31,13 @@ import styles from '../../styles/modules/operations.module.css';
 
 const SUMMARY_SECTIONS = 'health,alerts';
 const SUMMARY_REFRESH_MS = 30000;
+const UE_SUMMARY_PATH = '/api/ue-info?summary=1';
 
 function runtimeTone(value: OperationsPosture['runtime']): MetricTone {
   if (value.running === null) return 'muted';
   if ((value.stopped ?? 0) > 0) return 'danger';
   if ((value.attention ?? 0) > 0) return 'warning';
   if ((value.total ?? 0) === 0) return 'muted';
-  return 'success';
-}
-
-function monitoredTone(value: OperationsPosture['monitored']): MetricTone {
-  if (value.enabled === null) return 'muted';
-  if (value.enabled === 0) return 'muted';
-  if ((value.failed ?? 0) > 0) return 'warning';
-  return 'primary';
-}
-
-function freshTone(value: OperationsPosture['fresh']): MetricTone {
-  if (value.fresh === null) return 'muted';
-  if ((value.enabled ?? 0) === 0) return 'muted';
-  if ((value.failed ?? 0) > 0) return 'danger';
-  if ((value.staleUnknown ?? 0) > 0) return 'warning';
   return 'success';
 }
 
@@ -91,6 +78,7 @@ export default function OperationsOverview() {
     `/api/operations/summary?sections=${SUMMARY_SECTIONS}`,
   );
   const runtimeRead = useRead<RuntimeObservations>('/api/runtime/observations');
+  const ueRead = useRead<UEInfoResponse>(UE_SUMMARY_PATH);
   const stream = useRuntimeStream();
   const runtimeData = resolveRuntimeObservations(stream, runtimeRead.data);
   const counts: RuntimeCounts | undefined = runtimeData?.snapshot.counts;
@@ -103,20 +91,26 @@ export default function OperationsOverview() {
   useEffect(() => {
     const timer = window.setInterval(() => {
       if (!summaryRead.isValidating) void summaryRead.mutate();
+      if (!ueRead.isValidating) void ueRead.mutate();
     }, SUMMARY_REFRESH_MS);
     return () => window.clearInterval(timer);
-  }, [summaryRead.isValidating, summaryRead.mutate]);
+  }, [summaryRead.isValidating, summaryRead.mutate, ueRead.isValidating, ueRead.mutate]);
 
   const refresh = useCallback(() => {
     void summaryRead.mutate();
+    void ueRead.mutate();
     setRefreshSignal((value) => value + 1);
-  }, [summaryRead]);
+  }, [summaryRead, ueRead]);
 
   const runtimeLoading = runtimeRead.isLoading && !counts;
   const summaryLoading = summaryRead.isLoading;
+  const ueLoading = ueRead.isLoading && !ueRead.data;
   const distributionLoading = tab === 'runtime' ? runtimeLoading : summaryLoading;
   const unavailable = t('ops_kpi_unavailable');
   const loading = t('loading');
+  const epcOnlineUsers = ueRead.data?.summary.epc5gcOnlineUsers ?? null;
+  const imsOnlineUsers = ueRead.data?.summary.imsOnlineUsers ?? null;
+  const totalSubscribers = ueRead.data?.summary.totalSubscribers ?? null;
 
   const kpiItems: MetricStripItem[] = [
     {
@@ -140,41 +134,24 @@ export default function OperationsOverview() {
       tone: runtimeTone(posture.runtime),
     },
     {
-      key: 'monitored',
-      icon: <HeartPulse size={16} />,
-      label: t('ops_posture_monitored'),
-      value: posture.monitored.enabled === null
-        ? '—'
-        : (
-          <>
-            {posture.monitored.enabled}
-            <span className={styles.kpiUnit}>/ {posture.monitored.configured ?? '—'}</span>
-          </>
-        ),
-      detail: posture.monitored.enabled === null
-        ? (summaryLoading ? loading : unavailable)
-        : t('ops_posture_monitored_detail', {
-          configured: posture.monitored.configured ?? '—',
-          failed: posture.monitored.failed ?? '—',
-        }),
-      tone: monitoredTone(posture.monitored),
+      key: 'epc-online',
+      icon: <Users size={16} />,
+      label: t('ops_kpi_epc_online'),
+      value: epcOnlineUsers === null ? '—' : epcOnlineUsers,
+      detail: epcOnlineUsers === null
+        ? (ueLoading ? loading : unavailable)
+        : (totalSubscribers !== null
+          ? t('ops_kpi_epc_online_detail', { count: totalSubscribers })
+          : undefined),
+      tone: epcOnlineUsers === null ? 'muted' : 'success',
     },
     {
-      key: 'fresh',
-      icon: <Activity size={16} />,
-      label: t('ops_kpi_fresh'),
-      value: posture.fresh.fresh === null
-        ? '—'
-        : (
-          <>
-            {posture.fresh.fresh}
-            <span className={styles.kpiUnit}>/ {posture.fresh.enabled ?? '—'}</span>
-          </>
-        ),
-      detail: posture.fresh.fresh === null
-        ? (summaryLoading ? loading : unavailable)
-        : t('ops_kpi_fresh_detail', { stale: posture.fresh.staleUnknown ?? '—' }),
-      tone: freshTone(posture.fresh),
+      key: 'ims-online',
+      icon: <Smartphone size={16} />,
+      label: t('ops_kpi_ims_online'),
+      value: imsOnlineUsers === null ? '—' : imsOnlineUsers,
+      detail: imsOnlineUsers === null ? t('ops_kpi_ims_pending') : undefined,
+      tone: imsOnlineUsers === null ? 'muted' : 'success',
     },
     {
       key: 'alerts',

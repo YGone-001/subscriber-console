@@ -3,7 +3,7 @@
  * NF Health Contract & Security Evidence Suite
  *
  * Proves:
- * - Total SPA route count = 33
+ * - Total SPA route count = 35
  * - NF Health frontend routes = 2
  * - NF Health Go registrations = 10 (7 reads, 3 mutations)
  * - Go registrations = 136 (109 -> 119 -> 136 intentional extensions)
@@ -39,7 +39,7 @@ console.log('-- NF Health Contract & Security Evidence Suite --\n');
 
 // 1. Route contract
 const routes = JSON.parse(readFileSync(resolve(frontend, 'route-contract.json'), 'utf8'));
-assert.equal(routes.length, 34, `Total route count must be exactly 34, got ${routes.length}`);
+assert.equal(routes.length, 35, `Total route count must be exactly 35, got ${routes.length}`);
 
 const healthRoutes = routes.filter((r) => r.route.startsWith('/nf-health'));
 assert.equal(healthRoutes.length, 2, `NF Health frontend route count must be 2, got ${healthRoutes.length}`);
@@ -52,7 +52,7 @@ assert.deepEqual(detailRoute.dynamicParameters, ['targetId'], 'detail dynamic pa
 // 2. Go API registrations
 const { keys: goRegistrations, duplicates: goDuplicates } = deriveGoRegistrations(root);
 assert.equal(goDuplicates.length, 0, 'Go registrations must have 0 duplicates');
-assert.equal(goRegistrations.length, 148, `Go registered operations must be exactly 148, got ${goRegistrations.length}`);
+assert.equal(goRegistrations.length, 149, `Go registered operations must be exactly 149, got ${goRegistrations.length}`);
 
 const healthGoRoutes = goRegistrations.filter((r) => r.includes('/api/nf-health'));
 assert.equal(healthGoRoutes.length, 11, `NF Health Go registrations must be exactly 11, got ${healthGoRoutes.length}`);

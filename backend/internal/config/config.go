@@ -43,6 +43,9 @@ type Config struct {
 	LocalNFDiscoveryIntervalSeconds int    // scan interval in seconds
 	LocalNFDiscoveryProcRoot        string // procfs root (default /proc)
 	LocalNFDiscoveryExpected        string // comma-separated component ids explicitly expected
+
+	// UE information (read-only EPC/5GC endpoint allowlist)
+	UEInfoSources string // comma-separated role=host:port (mme, amf, smf)
 }
 
 // Load reads configuration from environment variables with sensible defaults.
@@ -75,6 +78,8 @@ func Load() (*Config, error) {
 		LocalNFDiscoveryIntervalSeconds: envIntOrDefault("LOCAL_NF_DISCOVERY_INTERVAL_SECONDS", 10),
 		LocalNFDiscoveryProcRoot:        envOrDefault("LOCAL_NF_DISCOVERY_PROC_ROOT", "/proc"),
 		LocalNFDiscoveryExpected:        os.Getenv("LOCAL_NF_DISCOVERY_EXPECTED"),
+
+		UEInfoSources: os.Getenv("UE_INFO_SOURCES"),
 	}
 
 	if cfg.MongoURI == "" {

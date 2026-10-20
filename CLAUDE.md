@@ -153,7 +153,7 @@ Nginx (only public origin)
 Go 127.0.0.1:18888
 Business API (owner)
 Auth identity + session validation
-Read + write APIs (148 exact METHOD+PATH registrations)
+Read + write APIs (149 exact METHOD+PATH registrations)
 Embedded static React SPA (production UI)
    |
    v
@@ -186,7 +186,7 @@ Retained legacy Next listener        = retired
 Loopback listener enforced by service, not firewall = YES
 Standalone deployment path           = removed
 Go business production changes       = 0
-Go registration set                  = 148
+Go registration set                  = 149
 ```
 
 - 边缘配置为 `deploy/nginx/xcloud.conf`。`location = /api`、`location /api/`、专用非缓冲 `location = /api/notifications/stream` 与 `location /` **全部代理至 Go**；UI 由 Go 内嵌 SPA 提供。
@@ -206,6 +206,7 @@ Next implementation direction   = complete
 - 双权威约定：历史 UI 参考 SHA = `2c40903fea1e56650736ee862e3ddab33d9f64fc`（仅决定外观与交互）；当前架构权威 = 当前 `develop`（决定运行方式）。UI 恢复绝不恢复已退役的 Next 运行时权威。
 - Topology / Dependency Model Foundation = IMPLEMENTED（Inventory 独占节点权威，Topology 仅持久化关系边）。
 - Operational Overview / Network Element Management = IMPLEMENTED（CNMS 启发、xCloud 原生：仪表盘新增运维总览区段（域分组、资源汇总、L1/L2/L3 覆盖、诚实的完整性标记），`/inventory` 新增网元视图（域/种类/监测状态筛选、搜索、游标分页、层级树与虚拟域分组回退）；身份仅用规范 `resourceId` 连接，绝不使用进程名/主机名/IP 推断；CNMS 的部署模板、MML/重启、日志流、业务指标与站点 CRUD 一律排除；CPU 累计计数器绝不显示为百分比，缺失指标显示为不可用而非 0；关联完整性铁律：监测关联仅由 `GET /api/nf-health/targets?resourceIds=`（≤50 个规范 UUID，去重、拒绝空/畸形/超限、禁止与 cursor/q/enabled/limit 组合，单次有界索引查询）权威解析，绝不从未相关游标页推断缺失，未解析（unresolved）绝不计入未纳管（unmonitored）；完整性按来源分维度（inventory/monitoring/telemetry/topology）独立报告，任一不可用即整体不可用，部分页绝不作为平台总量；NF 人口仅含 `network_function`/`network_function_instance`（其余种类单列 nonNfResources，绝不抬高 NF 计数），逻辑网元与实例分母分开；拓扑关系仅用 `contains` 边并有界游标分页（超界标 partial，读取失败标 unavailable），虚拟分组按确定性区分三种文案，绝不宣称不存在包含关系；`statusComplete` 描述读取成功而非证据存在（无历史样本的新目标是已配置未测量，不是读取失败）；服务端筛选变更重置游标/历史/树选择。权威文档：`docs/architecture/operational-overview.md`）。
+- UE 信息 / EPC-5GC 在线用户 = IMPLEMENTED（只读 `GET /api/ue-info` + `/ue-info` 页面；源清单 `UE_INFO_SOURCES` 仅接受 mme/amf/smf host:port，固定 GET 路径、禁止重定向、超时与响应体有界；MME/AMF UE 列表与 SMF PDU 会话按 SUPI 合并、PDN 去重，MSISDN 由 xCloud subscribers 单次有界查询补充；SMF `ues_active` 经 NF Health 注册表/解析器读取，缺失/失败为 null 绝不补零；来源状态 ok/unavailable/not_configured/invalid_config 与 complete 显式返回；IMS 在线用户与 HSS SIP 本期未接入并显式不可用；读需 core.read，限流 120/60s，无写、无任意 URL/SQL；前端 `/ue-info` 为规范路由，运维总览使用 `?summary=1`。权威文档：`docs/architecture/ue-info.md`）。
 - Discovery / NF Observation Foundation = IMPLEMENTED（只读 NRF 观测，绝不推断缺失，绝不自动写 Inventory/Topology）。
 - NF Health / Telemetry Foundation = IMPLEMENTED（只读三层测量证据，采集器固定类型 + 默认拒绝白名单，样本 TTL 仅作用于样本集合；Inventory 权威身份统一，支持 EPC/5GC/IMS/charging 资源原生目标与可选 Discovery 候选关联；跨域指标适配为证据驱动：EPC/5GC 已实测核验、charging 仅源码核验、IMS 无指标导出器，L3 服务健康仅由登记规则判定且进程遥测永不建立服务健康）。
 - Runtime discovery / CNMS process compatibility = IMPLEMENTED（只读本地 /proc 扫描，24 个 CNMS 兼容组件 + 2 个 xCloud 专有身份（seppd/smscd）共 26 条识别项，由单一中央识别权威定义并被扫描器、API 投影与前端状态模型共同复用；状态语义以证据为准：仅正向验证的进程报告 running，`comm` 精确匹配 + `/proc/<pid>/exe` 身份校验 + 进程启动标识防 PID 复用，扫描不完整时缺失只报告 unknown 而绝不报告 stopped，从未观测的组件报告 not_detected；CPU 仅由真实采样区间差值计算（累计 CPU 时间绝不显示为百分比），内存为已验证进程组聚合且缺失测量不显示为 0；Java IMS HSS 采用「可执行文件校验 + 已批准启动标识位置」双重判定，歧义候选保持 unverified，原始命令行永不返回或持久化；纳管走受控预览/批准流程（`POST /api/runtime/bootstrap/preview`、`apply`），资源以 `source.kind=discovered` 的服务器权威来源创建、生命周期为 planned（PID 存在不等于 active），动态进程绑定持久化于 `xcloud_ops.app_nf_health_bindings`（静态配置优先、冲突拒绝、重启后继续调度 L1 采集）；DRA 与歧义 IMS HSS 不建立 NF Health 目标（monitoring_not_supported）；观测层级（主机/域/组件）不落拓扑边，绝不伪造 SIP/Diameter/PFCP/SBI 连接。权威文档：`docs/architecture/runtime-discovery.md`）。
@@ -530,8 +531,8 @@ Charging plane (frozen, excluded from the management plane):
   ocs_config         — OCS engine config
 ```
 
-- 权威基线：OCS 管理平面生产冻结基线；当前生产路由 = Go 全部接管，**共 148 条 Go 注册**。
-- 路由权威来源：Go 注册集合（`backend/cmd/server/main.go` + `backend/internal/remediation/handler.go`，148 条 METHOD+PATH 精确注册）；Nginx 负责 API 路由。
+- 权威基线：OCS 管理平面生产冻结基线；当前生产路由 = Go 全部接管，**共 149 条 Go 注册**。
+- 路由权威来源：Go 注册集合（`backend/cmd/server/main.go` + `backend/internal/remediation/handler.go`，149 条 METHOD+PATH 精确注册）；Nginx 负责 API 路由。
 - 冻结规约摘要（历史）：`docs/archive/backend-migration-summary.md`。
 - 运维操作手册：`docs/operations/ocs-management-runbook.md`。
 
@@ -557,7 +558,7 @@ OCS 管理 UI：
 ### 7.1 路由注册权威
 
 ```text
-Route authority = the derived Go registration set (148 exact METHOD+PATH registrations).
+Route authority = the derived Go registration set (149 exact METHOD+PATH registrations).
 ```
 
 权威来源：
@@ -606,7 +607,7 @@ xcloud_ops.app_rate_limits
 
 ### 7.5 生产注册路由清单
 
-路由权威为源码派生的 Go 注册集合，共 **148 条** METHOD+PATH 精确注册（GET 71 / POST 53 / PUT 12 / DELETE 9 / PATCH 3）：
+路由权威为源码派生的 Go 注册集合，共 **149 条** METHOD+PATH 精确注册（GET 72 / POST 53 / PUT 12 / DELETE 9 / PATCH 3）：
 
 ```text
 GET    /api/analytics/metrics
@@ -744,12 +745,13 @@ DELETE /api/nf-alerts/rules/{ruleId}
 POST   /api/nf-alerts/{alertId}/acknowledge
 POST   /api/nf-alerts/{alertId}/resolve
 GET    /api/operations/summary
+GET    /api/ue-info
 ```
 
 状态：
 
 ```text
-Go production API registrations = 148 (route authority: backend/cmd/server/main.go + backend/internal/remediation/handler.go)
+Go production API registrations = 149 (route authority: backend/cmd/server/main.go + backend/internal/remediation/handler.go)
 Canonical API surface = 33 operations + 2 legacy read aliases
 Go-native reads = 2
 Node production operations = 0
@@ -760,11 +762,11 @@ OCS writes = 13 (tariff plan + subscriber contract + balance)
 
 运维总览统计端点：`GET /api/operations/summary`（Go-owned，读需 `core.read`，限流 120/60s per user）。`sections` 参数按需选择 `inventory`/`discovery`/`health`/`alerts`/`topology`（逗号分隔，缺省全部；未知或重复 section 返回 400 `INVALID_SECTION`）；未请求的分区不查询。每个分区返回全量集合统计（`scope=full_collection`，绝不受列表 limit/cursor 影响）与 `completeness`（`complete`/`unavailable`）；单一来源失败仅将对应分区标为 `unavailable`（错误码 `SECTION_UNAVAILABLE`），其余分区正常返回，绝不整体失败。统计落在各域 repository 的有界聚合查询（inventory 按种类/生命周期/域分组、discovery 观测状态与关联分布、health 目标 freshness/overall/层状态分布（与列表投影同语义）、alerts 状态/严重度分布与启用规则数、topology 声明边按生命周期与关系类型分布），不新建集合、无业务写。健康分区中"已配置未测量"的目标计入 `unknown`，绝不假定为健康；累计计数器绝不显示为百分比；缺失统计显示为不可用而非 0。
 
-Inventory 资源模型底座：权威存储 `xcloud_ops.app_inventory_resources`（`xcloud` 中为 0）；6 条 Go 路由；3 条前端 SPA 路由（`/inventory`、`/inventory/{resourceId}`、`/inventory/create`，前端共 33 条规范路由）；读需 `core.read`，写需 `core.configure`；单调递增 `revision` CAS 乐观锁，`retired` 为不可逆终态；仅作资源事实元数据源，不执行远端网络操作。
+Inventory 资源模型底座：权威存储 `xcloud_ops.app_inventory_resources`（`xcloud` 中为 0）；6 条 Go 路由；3 条前端 SPA 路由（`/inventory`、`/inventory/{resourceId}`、`/inventory/create`，前端共 35 条规范路由）；读需 `core.read`，写需 `core.configure`；单调递增 `revision` CAS 乐观锁，`retired` 为不可逆终态；仅作资源事实元数据源，不执行远端网络操作。
 
 NF 发现观测底座（只读）：权威存储 `xcloud_ops.app_discovery_sources` + `xcloud_ops.app_discovery_runs` + `xcloud_ops.app_nf_observations`（共 3 个集合，`xcloud` 中为 0）；12 条 Go 路由（7 读 + 5 写）；2 条前端 SPA 路由（`/discovery`、`/discovery/sources/{sourceId}`）；适配器类型权威值为 `nrf`，目标必须命中后端默认拒绝白名单 `DISCOVERY_ALLOWED_TARGETS`，仅允许有界只读 GET；观测状态 `seen`/`missing`/`stale` 与注册状态、运行健康、Inventory 生命周期严格分离，失败或截断扫描绝不推断缺失；link/unlink 仅写发现侧元数据，绝不创建或修改 Inventory 资源，绝不自动生成 Topology 边；读需 `core.read`，写需 `core.configure`。权威文档：`docs/architecture/nf-discovery.md`。
 
-NF 健康遥测底座（只读）：权威存储 `xcloud_ops.app_nf_health_targets` + `xcloud_ops.app_nf_health_runs` + `xcloud_ops.app_nf_health_samples`（共 3 个集合，`xcloud` 中为 0）；10 条 Go 路由（7 读 + 3 写）；2 条前端 SPA 路由（`/nf-health`、`/nf-health/{targetId}`，前端共 33 条规范路由）；三层测量证据（L1 进程/实例、L2 接口/端点、L3 服务 KPI），状态 `healthy`/`degraded`/`unhealthy`/`unknown`/`not_configured`/`stale`，NRF REGISTERED 不等于进程健康、metrics HTTP 200 不等于 SBI/PFCP/NGAP/Diameter/SIP 健康、进程 active 不等于会话成功、缺失指标绝不补零、采集失败绝不覆盖最后一次有效测量；Inventory 为唯一权威资源来源：目标通过 `resourceId` 引用 Inventory `network_function`/`network_function_instance`（不得退役），`domain`/`nfType` 为服务端推导投影，客户端 `domain`/`nfType` 字段一律拒绝；网络域支持 `epc`/`5gc`/`ims`/`charging`，NF 类型由显式 Inventory `role` 解析；Discovery `candidateId` 为可选关联，双 id 时候选必须显式链接同一资源且类型兼容，绝不伪造候选、绝不静默链接；身份态 `inventory_authoritative`/`legacy_unbound`/`legacy_unresolved`；目标唯一性为候选/资源双部分唯一索引（`uniq_nf_health_target_candidate`、`uniq_nf_health_target_resource`），同缺失候选不碰撞、同一资源一个逻辑目标；采集器类型 `http_metrics` + `process_only`（仅本地 L1，不发 HTTP，L2/L3 恒 `not_configured`，本地归属需服务端绑定 `NF_HEALTH_LOCAL_PROCESS_BINDINGS`，缺失/不匹配即失败关闭）；目标命中默认拒绝白名单 `NF_HEALTH_ALLOWED_TARGETS`，服务单元命中 `NF_HEALTH_SERVICE_UNITS`，仅 `systemctl show` 或只读 `/proc` 巡检（精确进程名 + `/proc/<pid>/exe` 身份校验，不可验证即 `unverified`→`unknown`），禁止 sudo、禁止任意命令执行；22 个受控进程→NF 类型映射（5GC 12 / EPC 5 / charging 1 / IMS 4）；绝不自动创建目标、绝不写 Inventory/Topology/Discovery 字段；退役资源拒绝新建目标并阻断采集但保留历史证据；身份完整性在创建、更新、采集、遗留迁移全路径强制：更新路径以"存储身份不可变 + 存储采集配置生效"校验有效目标（process_only 不得失去/停用/改指/改型其授权检查源，不得引入指标端点，校验失败零写入），采集前对当前权威 Inventory 资源复验（缺失/退役/类型不支持/域变更/角色变更/绑定失效一律失败关闭并返回确定性错误，不落样本、不宣称健康、不改写身份），进程绑定还须与资源网络域及网元类型兼容（`NF_HEALTH_PROCESS_NF_TYPE_INCOMPATIBLE`/`NF_HEALTH_PROCESS_DOMAIN_INCOMPATIBLE`），遗留回填同样校验候选观测类型且为 revision 绑定条件更新、冲突显式上报；跨域指标适配（证据驱动）：注册表为服务端独占，每条指标族携带 `domain`/`category`(resource|service)/`source`(厂商中立 `nf_metrics_exporter`)/`evidence`(live_verified|source_verified|fixture_tested|not_verified|not_exported)/`healthRule`/`nonNegative`；域与 NF 类型双重过滤，异构域/异构网元指标绝不改标签归属，指标自带 `nfType` 标签绝不作为身份权威；通用进程遥测（`process_*`，category=resource）永不建立 L3 服务健康，仅资源指标时 L3 为 `unknown`+`resource_metrics_only` 且保留实测覆盖；服务健康判定以证据强度为界（无任意阈值、无区间证据不判定）：累计计数器（`failure_counter_zero`/`success_ratio_pair`）为历史累计总量，绝不解释为当前区间结果 → 一律 `unknown`+`service_health_undetermined` 且原始计数保留（历史失败不再永久降级、历史零失败不证明当前成功）；活动类 gauge（`activity_gauge`，如活动会话/注册用户/PFCP 会话/接入节点）只证明活动存在 → `unknown`+`activity_observed`，零值不等于故障；确认/降级（`service_health_confirmed`/`service_failures_observed`）保留给未来经显式验证的区间规则；序列配对须同族单序列且清洗后 scope 签名一致，跨 scope/跨资源/标签被清洗后塌缩的序列一律禁止配对；解析器以注册表为类型权威，`# TYPE` 与注册类型不符即确定性丢弃（计数为 type mismatch，绝不把 counter 当 gauge 或反之）；总体状态为顺序无关的强度优先级（unhealthy > degraded > stale > unknown > healthy，未测量层不参与且不假定健康），陈旧/未知新鲜度绝不投影为健康；计数类指标拒绝负值（实测发现导出器可返回负会话数），缺失指标绝不补零、绝不合成百分比或速率；22 进程遥测能力矩阵：5GC AMF/SMF/UPF/PCF 与 EPC MME/HSS/PCRF 为 live_verified（实测端点 127.0.0.2/4/5/7/8/9/13:9090），charging OCS 为 source_verified（参考部署未启用其指标监听），5GC NRF/AUSF/UDM/UDR/BSF/NSSF/SCP/SEPP、EPC SGW-C/SGW-U 与全部 IMS 网元 not_exported（无 HTTP 指标导出器，保持 L1/L2 且 L3 显式不可用）；标签策略仅保留 `nf`/`nftype`/`nf_type`/`function`/`instance`，丢弃订阅者/会话/对端地址/切片标识（含 `plmnid`/`snssai`），故不注册逐对端族；端点信任边界：允许清单与 Inventory 归属提供归属证明，传输层不提供网元密码学认证；样本 TTL 仅作用于 `app_nf_health_samples`（默认 7 天、上限 30 天）；读需 `core.read`，写需 `core.configure`。权威文档：`docs/architecture/nf-health-telemetry.md`。
+NF 健康遥测底座（只读）：权威存储 `xcloud_ops.app_nf_health_targets` + `xcloud_ops.app_nf_health_runs` + `xcloud_ops.app_nf_health_samples`（共 3 个集合，`xcloud` 中为 0）；10 条 Go 路由（7 读 + 3 写）；2 条前端 SPA 路由（`/nf-health`、`/nf-health/{targetId}`，前端共 35 条规范路由）；三层测量证据（L1 进程/实例、L2 接口/端点、L3 服务 KPI），状态 `healthy`/`degraded`/`unhealthy`/`unknown`/`not_configured`/`stale`，NRF REGISTERED 不等于进程健康、metrics HTTP 200 不等于 SBI/PFCP/NGAP/Diameter/SIP 健康、进程 active 不等于会话成功、缺失指标绝不补零、采集失败绝不覆盖最后一次有效测量；Inventory 为唯一权威资源来源：目标通过 `resourceId` 引用 Inventory `network_function`/`network_function_instance`（不得退役），`domain`/`nfType` 为服务端推导投影，客户端 `domain`/`nfType` 字段一律拒绝；网络域支持 `epc`/`5gc`/`ims`/`charging`，NF 类型由显式 Inventory `role` 解析；Discovery `candidateId` 为可选关联，双 id 时候选必须显式链接同一资源且类型兼容，绝不伪造候选、绝不静默链接；身份态 `inventory_authoritative`/`legacy_unbound`/`legacy_unresolved`；目标唯一性为候选/资源双部分唯一索引（`uniq_nf_health_target_candidate`、`uniq_nf_health_target_resource`），同缺失候选不碰撞、同一资源一个逻辑目标；采集器类型 `http_metrics` + `process_only`（仅本地 L1，不发 HTTP，L2/L3 恒 `not_configured`，本地归属需服务端绑定 `NF_HEALTH_LOCAL_PROCESS_BINDINGS`，缺失/不匹配即失败关闭）；目标命中默认拒绝白名单 `NF_HEALTH_ALLOWED_TARGETS`，服务单元命中 `NF_HEALTH_SERVICE_UNITS`，仅 `systemctl show` 或只读 `/proc` 巡检（精确进程名 + `/proc/<pid>/exe` 身份校验，不可验证即 `unverified`→`unknown`），禁止 sudo、禁止任意命令执行；22 个受控进程→NF 类型映射（5GC 12 / EPC 5 / charging 1 / IMS 4）；绝不自动创建目标、绝不写 Inventory/Topology/Discovery 字段；退役资源拒绝新建目标并阻断采集但保留历史证据；身份完整性在创建、更新、采集、遗留迁移全路径强制：更新路径以"存储身份不可变 + 存储采集配置生效"校验有效目标（process_only 不得失去/停用/改指/改型其授权检查源，不得引入指标端点，校验失败零写入），采集前对当前权威 Inventory 资源复验（缺失/退役/类型不支持/域变更/角色变更/绑定失效一律失败关闭并返回确定性错误，不落样本、不宣称健康、不改写身份），进程绑定还须与资源网络域及网元类型兼容（`NF_HEALTH_PROCESS_NF_TYPE_INCOMPATIBLE`/`NF_HEALTH_PROCESS_DOMAIN_INCOMPATIBLE`），遗留回填同样校验候选观测类型且为 revision 绑定条件更新、冲突显式上报；跨域指标适配（证据驱动）：注册表为服务端独占，每条指标族携带 `domain`/`category`(resource|service)/`source`(厂商中立 `nf_metrics_exporter`)/`evidence`(live_verified|source_verified|fixture_tested|not_verified|not_exported)/`healthRule`/`nonNegative`；域与 NF 类型双重过滤，异构域/异构网元指标绝不改标签归属，指标自带 `nfType` 标签绝不作为身份权威；通用进程遥测（`process_*`，category=resource）永不建立 L3 服务健康，仅资源指标时 L3 为 `unknown`+`resource_metrics_only` 且保留实测覆盖；服务健康判定以证据强度为界（无任意阈值、无区间证据不判定）：累计计数器（`failure_counter_zero`/`success_ratio_pair`）为历史累计总量，绝不解释为当前区间结果 → 一律 `unknown`+`service_health_undetermined` 且原始计数保留（历史失败不再永久降级、历史零失败不证明当前成功）；活动类 gauge（`activity_gauge`，如活动会话/注册用户/PFCP 会话/接入节点）只证明活动存在 → `unknown`+`activity_observed`，零值不等于故障；确认/降级（`service_health_confirmed`/`service_failures_observed`）保留给未来经显式验证的区间规则；序列配对须同族单序列且清洗后 scope 签名一致，跨 scope/跨资源/标签被清洗后塌缩的序列一律禁止配对；解析器以注册表为类型权威，`# TYPE` 与注册类型不符即确定性丢弃（计数为 type mismatch，绝不把 counter 当 gauge 或反之）；总体状态为顺序无关的强度优先级（unhealthy > degraded > stale > unknown > healthy，未测量层不参与且不假定健康），陈旧/未知新鲜度绝不投影为健康；计数类指标拒绝负值（实测发现导出器可返回负会话数），缺失指标绝不补零、绝不合成百分比或速率；22 进程遥测能力矩阵：5GC AMF/SMF/UPF/PCF 与 EPC MME/HSS/PCRF 为 live_verified（实测端点 127.0.0.2/4/5/7/8/9/13:9090），charging OCS 为 source_verified（参考部署未启用其指标监听），5GC NRF/AUSF/UDM/UDR/BSF/NSSF/SCP/SEPP、EPC SGW-C/SGW-U 与全部 IMS 网元 not_exported（无 HTTP 指标导出器，保持 L1/L2 且 L3 显式不可用）；标签策略仅保留 `nf`/`nftype`/`nf_type`/`function`/`instance`，丢弃订阅者/会话/对端地址/切片标识（含 `plmnid`/`snssai`），故不注册逐对端族；端点信任边界：允许清单与 Inventory 归属提供归属证明，传输层不提供网元密码学认证；样本 TTL 仅作用于 `app_nf_health_samples`（默认 7 天、上限 30 天）；读需 `core.read`，写需 `core.configure`。权威文档：`docs/architecture/nf-health-telemetry.md`。
 
 Topology 依赖模型底座（Stage 2）：权威存储 `xcloud_ops.app_topology_edges`（`xcloud` 中为 0，且不创建 `app_topology_nodes` / `app_topology_vertices` / `app_topology_resources` 任何节点集合）；7 条 Go 路由（4 读 + 3 写）；2 条前端 SPA 路由（`/topology`、`/topology/{resourceId}`）；9 种有向关系类型（`contains`、`runs_on`、`depends_on`、`connects_to`、`routes_to`、`registers_with`、`serves`、`uses`、`exposes`）与 2 种生命周期（`active`、`retired`），由 `GET /api/topology/meta` 权威下发；Inventory 独占节点权威，Topology 仅持久化资源间关系边，端点必须引用已存在且未退役的 Inventory UUID；活动边按 `(fromResourceId, toResourceId, relationshipType)` 部分唯一索引去重，重复创建返回 409，退役后可用新 `edgeId` 重建同一有向组合；`revision` CAS 乐观锁，`retired` 为不可逆终态；仅一跳邻域查询（`inbound` / `outbound` / `both`），不含多跳、自动发现或远端执行能力；读需 `core.read`，写需 `core.configure`。声明式拓扑关系不代表接口真实连通、注册成功或服务健康。权威文档：`docs/architecture/topology-dependency-model.md`；面向未来阶段的 Feature + UI/UX 完成门见 `docs/architecture/stage-feature-ui-acceptance.md`。
 

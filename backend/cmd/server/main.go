@@ -42,6 +42,7 @@ import (
 	"subscriber/internal/system"
 	"subscriber/internal/tariff"
 	"subscriber/internal/topology"
+	"subscriber/internal/ueinfo"
 	"subscriber/internal/user"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -384,6 +385,15 @@ func main() {
 		auditWriter,
 	)
 
+	// UE information: read-only EPC/5GC source allowlist merged with xCloud
+	// subscriber MSISDNs. No write, no network action beyond fixed GET paths.
+	ueSources, ueSourceErr := ueinfo.ParseSources(cfg.UEInfoSources)
+	if ueSourceErr != nil {
+		logger.Warn("ue-info source configuration rejected; feature disabled", "error", ueSourceErr)
+	}
+	ueService := ueinfo.NewService(ueSources, ueSourceErr, nil, ueinfo.NewMongoSubscriberLookup(mc.XCloud.Collection("subscribers")))
+	ueHandler := ueinfo.NewHandler(ueService, limiter)
+
 	// Runtime discovery lifecycle. The startup scan runs immediately so the
 	// operational surfaces are populated without any Inventory record.
 	runtimeService := runtimeinv.NewService(
@@ -620,6 +630,9 @@ func main() {
 
 	// Operations summary (single read, per-section full-collection statistics)
 	mux.Handle("GET /api/operations/summary", authMiddleware(http.HandlerFunc(operationsSummaryHandler.Summary)))
+
+	// UE information (read-only EPC/5GC projection)
+	mux.Handle("GET /api/ue-info", authMiddleware(http.HandlerFunc(ueHandler.Get)))
 
 	// Operations resource projection (single read, one bounded Inventory page)
 	mux.Handle("GET /api/operations/resources", authMiddleware(http.HandlerFunc(operationsResourceHandler.Resources)))

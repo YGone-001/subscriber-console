@@ -643,7 +643,7 @@ async function main() {
     console.log('topology_api_mutation_count=3');
     console.log('topology_api_total_count=7');
     console.log('go_registration_count=136');
-    console.log('frontend_route_count=33');
+    console.log('frontend_route_count=35');
     console.log('topology_read_permission=core.read');
     console.log('topology_write_permission=core.configure');
     console.log('inventory_node_authority=PASS');

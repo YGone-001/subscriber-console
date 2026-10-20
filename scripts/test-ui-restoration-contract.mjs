@@ -28,8 +28,8 @@ const HISTORICAL_UI_REFERENCE_SHA = '2c40903fea1e56650736ee862e3ddab33d9f64fc';
 const ARCHITECTURE_BASELINE_SHA = '11471af9d93fd4345f8d85a60f5c3fdfe821d93b';
 const BRAND_ASSET = 'frontend/public/images/xCloud_picture.png';
 const BRAND_ASSET_BLOB = 'aaaa520147353d4f20127c58d9e9a8f3baf37695';
-const EXPECTED_ROUTES = 34;
-const EXPECTED_GO_REGISTRATIONS = 148;
+const EXPECTED_ROUTES = 35;
+const EXPECTED_GO_REGISTRATIONS = 149;
 const MANIFEST = 'docs/architecture/frontend-ui-restoration.md';
 
 function walk(dir, predicate, files = []) {
@@ -171,10 +171,11 @@ check('UI-18', /'b'/.test(shellSource) && /'k'/.test(shellSource) && /Escape/.te
 // 7. Dashboard presentation.
 // The dashboard is the forward-ported AnalyticsCockpit (reference composition),
 // not a locally invented layout.
-const dashboardSource = readSource('features/read/ReadPages.tsx');
+const dashboardSource = readSource('features/operations/OperationsOverviewPage.tsx');
+const dashboardEntrySource = readSource('features/read/ReadPages.tsx');
 const cockpitSource = readSource('components/AnalyticsCockpit.tsx');
 const emptyChartSource = readSource('components/analytics/EmptyChartState.tsx');
-check('UI-19', /AnalyticsCockpit/.test(dashboardSource) && /MetricStrip/.test(cockpitSource) && /WorkbenchPanel/.test(cockpitSource) && /OcsResourceStrip/.test(cockpitSource) && /TopConsumerChart/.test(cockpitSource) && /TariffPlanDistributionChart/.test(cockpitSource), 'dashboard_layout=cockpit+kpi+workbench+ocs+charts');
+check('UI-19', /OperationsOverviewPage/.test(dashboardEntrySource) && /AnalyticsCockpit/.test(dashboardSource) && /OperationsOverview/.test(dashboardSource) && /MetricStrip/.test(cockpitSource) && /WorkbenchPanel/.test(cockpitSource) && /OcsResourceStrip/.test(cockpitSource) && /TopConsumerChart/.test(cockpitSource) && /TariffPlanDistributionChart/.test(cockpitSource), 'dashboard_layout=operations-first+secondary-cockpit');
 check('UI-20', /SkeletonDashboard/.test(cockpitSource) && /analytics-offline/.test(cockpitSource) && /EmptyChartState/.test(emptyChartSource), 'dashboard_states=loading+error+empty');
 // The cockpit must read the accepted read contracts, never a bespoke aggregation.
 check('UI-21', ['/api/analytics/metrics', '/api/analytics/sparkline', '/api/alerts', '/api/ocs/subscribers'].every((endpoint) => cockpitSource.includes(endpoint)), 'dashboard_read_contracts=metrics+sparkline+alerts+contracts');

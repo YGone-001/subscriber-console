@@ -7,7 +7,10 @@
       "GET /api/analytics/metrics",
       "GET /api/analytics/sparkline",
       "GET /api/alerts",
-      "GET /api/ocs/subscribers"
+      "GET /api/ocs/subscribers",
+      "GET /api/operations/summary?sections=health,alerts",
+      "GET /api/runtime/observations",
+      "GET /api/ue-info?summary=1"
     ]
   },
   {
@@ -288,6 +291,14 @@
       "GET /api/nf-alerts/rules/{ruleId}",
       "GET /api/nf-alerts",
       "GET /api/operations/summary?sections=alerts"
+    ]
+  },
+  {
+    "route": "/ue-info",
+    "mode": "read",
+    "source": "frontend/src/features/ue-info/UEInfoPage.tsx",
+    "readEndpoints": [
+      "GET /api/ue-info"
     ]
   },
   {

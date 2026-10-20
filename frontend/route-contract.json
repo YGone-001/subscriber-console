@@ -56,6 +56,10 @@
     "dynamicParameters": []
   },
   {
+    "route": "/ue-info",
+    "dynamicParameters": []
+  },
+  {
     "route": "/logs",
     "dynamicParameters": []
   },

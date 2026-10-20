@@ -211,6 +211,7 @@ The Go binary is a single static executable with no external Node runtime depend
 | `MONGODB_APP_DB` | Application operations database | `xcloud_ops` |
 | `JWT_SECRET` | JWT signing secret (>= 32 bytes) | - |
 | `INITIAL_ADMIN_PASSWORD` | Bootstrap admin password (>= 8 chars) | - |
+| `UE_INFO_SOURCES` | Read-only EPC/5GC UE sources: `mme=host:port,amf=host:port,smf=host:port` | empty (UE feature unavailable) |
 
 `MONGODB_*`, `JWT_SECRET` and `INITIAL_ADMIN_PASSWORD` are consumed by the Go
 backend and by the repository-root operational scripts (for example `npm run mongo:init`).

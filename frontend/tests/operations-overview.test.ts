@@ -147,6 +147,14 @@ test('the business cockpit is a sibling lazy view', () => {
   assert.match(page, /business \? <AnalyticsCockpit \/> : <OperationsOverview \/>/);
 });
 
+test('the overview reads the UE summary for the online-user KPIs', () => {
+  const source = read('../src/features/operations/OperationsOverview.tsx');
+  assert.match(source, /UE_SUMMARY_PATH = '\/api\/ue-info\?summary=1'/);
+  assert.match(source, /ops_kpi_epc_online/);
+  assert.match(source, /ops_kpi_ims_online/);
+  assert.doesNotMatch(source, /ops_posture_monitored/);
+});
+
 test('runtime tables expose responsive column priorities and labels', () => {
   const source = read('../src/features/runtime/RuntimeDiscovery.tsx');
   assert.match(source, /data-column-priority="essential"/);
