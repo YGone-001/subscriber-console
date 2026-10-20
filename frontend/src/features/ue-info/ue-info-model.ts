@@ -22,7 +22,15 @@ export function formatBandwidth(bps: number | null | undefined): string {
 
 export function formatUETimestamp(timestamp: number | null | undefined): string {
   if (!timestamp || !Number.isFinite(timestamp)) return '—';
-  const date = new Date(timestamp * 1000);
+  const milliseconds = timestamp > 1_000_000_000_000_000
+    ? timestamp / 1_000
+    : timestamp > 1_000_000_000_000
+      ? timestamp
+      : timestamp > 1_000_000_000
+        ? timestamp * 1_000
+        : 0;
+  if (!milliseconds) return '—';
+  const date = new Date(milliseconds);
   return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString();
 }
 
