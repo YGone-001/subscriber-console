@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -124,8 +123,4 @@ func sourceReason(err error) string {
 		return fetchErr.Reason
 	}
 	return ReasonNetworkError
-}
-
-func formatSourceError(role string, err error) string {
-	return fmt.Sprintf("%s: %s", role, sourceReason(err))
 }

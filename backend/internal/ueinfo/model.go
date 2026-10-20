@@ -1,7 +1,5 @@
 package ueinfo
 
-import "time"
-
 // Source states are stable presentation tokens.
 const (
 	SourceOK            = "ok"
@@ -185,6 +183,3 @@ type upstreamQoS struct {
 type upstreamResponse struct {
 	Items []upstreamUE `json:"items"`
 }
-
-// clock is injectable for deterministic tests.
-type clock func() time.Time
