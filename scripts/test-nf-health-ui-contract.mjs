@@ -329,14 +329,16 @@ const urlStateSource = readFileSync(resolve(root, 'frontend/src/features/operati
 const resourceProjectionSource = readFileSync(resolve(root, 'frontend/src/features/operations/operations-resources.ts'), 'utf8');
 const modelSource = readFileSync(resolve(root, 'frontend/src/features/operations/operational-model.ts'), 'utf8');
 const dashboardSource = readFileSync(resolve(root, 'frontend/src/features/read/ReadPages.tsx'), 'utf8');
+const dashboardPageSource = readFileSync(resolve(root, 'frontend/src/features/operations/OperationsOverviewPage.tsx'), 'utf8');
 const inventoryPageSource = readFileSync(resolve(root, 'frontend/src/features/inventory/InventoryPage.tsx'), 'utf8');
 
 check(
   'OPS-UI-01',
-  /OperationalOverview/.test(dashboardSource) &&
-    /AnalyticsCockpit/.test(dashboardSource) &&
+  /OperationsOverviewPage/.test(dashboardSource) &&
+    /OperationsOverview/.test(dashboardPageSource) &&
+    /AnalyticsCockpit/.test(dashboardPageSource) &&
     /analytics\/metrics/.test(readFileSync(resolve(root, 'frontend/src/components/AnalyticsCockpit.tsx'), 'utf8')),
-  'ops_dashboard=overview_added_analytics_preserved',
+  'ops_dashboard=operations_first_analytics_preserved',
 );
 check(
   'OPS-UI-02',

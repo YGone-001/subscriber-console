@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { ChevronRight, Search, SidebarClose, SidebarOpen, X } from 'lucide-react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { getSidebarGroups, matchesRoute, type SidebarGroup } from '../../lib/navigation';
@@ -7,12 +7,25 @@ import { useI18n } from '../../providers/I18nProvider';
 
 type SidebarEntry = SidebarGroup;
 
+const SIDEBAR_GROUP_KEY = 'XCLOUD_SIDEBAR_GROUP';
+
+function readStoredGroup(): string | null {
+  try {
+    return localStorage.getItem(SIDEBAR_GROUP_KEY) || null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Restored grouped sidebar.
  *
- * Groups and entries are resolved from the current navigation authority, so a
- * role that cannot reach a route never sees the corresponding entry. Grouping is
- * presentation only; the backend remains the security authority.
+ * Four first-level entries: the dashboard plus three domain groups. Each domain
+ * keeps a single expansion level, with non-interactive section captions for the
+ * OCS and observability children. Groups and entries are resolved from the
+ * current navigation authority, so a role that cannot reach a route never sees
+ * the corresponding entry. Grouping is presentation only; the backend remains
+ * the security authority.
  */
 export function AppSidebar({
   sidebarOpen,
@@ -27,10 +40,25 @@ export function AppSidebar({
   const { user } = useAuth();
   const { pathname } = useLocation();
   const [filterQuery, setFilterQuery] = useState('');
-  const [ocsExpanded, setOcsExpanded] = useState(true);
-  const [systemExpanded, setSystemExpanded] = useState(true);
+  const [expandedGroup, setExpandedGroup] = useState<string | null>(readStoredGroup);
 
   const entries = useMemo<SidebarEntry[]>(() => getSidebarGroups(user?.role), [user?.role]);
+
+  const isActivePath = (match: string) => matchesRoute(match, pathname) || (match !== '/' && pathname.startsWith(`${match}/`));
+
+  const activeGroupKey = entries.find((entry) =>
+    entry.children.some((child) => isActivePath(child.targetRoute)),
+  )?.key ?? null;
+
+  useEffect(() => {
+    if (!activeGroupKey) return;
+    setExpandedGroup(activeGroupKey);
+    try {
+      localStorage.setItem(SIDEBAR_GROUP_KEY, activeGroupKey);
+    } catch {
+      /* preference persistence is optional */
+    }
+  }, [activeGroupKey, pathname]);
 
   const filteredEntries = useMemo(() => {
     const needle = filterQuery.trim().toLowerCase();
@@ -47,7 +75,23 @@ export function AppSidebar({
   }, [entries, filterQuery, t]);
 
   const closeOnMobile = () => { if (isMobileShell) setSidebarOpen(false); };
-  const isActivePath = (match: string) => matchesRoute(match, pathname) || (match !== '/' && pathname.startsWith(`${match}/`));
+
+  const toggleGroup = (key: string) => {
+    if (!sidebarOpen) {
+      setSidebarOpen(true);
+      return;
+    }
+    setExpandedGroup((current) => {
+      const next = current === key ? null : key;
+      try {
+        if (next) localStorage.setItem(SIDEBAR_GROUP_KEY, next);
+        else localStorage.removeItem(SIDEBAR_GROUP_KEY);
+      } catch {
+        /* preference persistence is optional */
+      }
+      return next;
+    });
+  };
 
   return (
     <aside
@@ -81,7 +125,7 @@ export function AppSidebar({
           const childActive = children.some((child) => isActivePath(child.targetRoute));
           const active = childActive || isActivePath(entry.match);
           const expandable = children.length > 0;
-          const expanded = entry.key === 'nav_ocs' ? (ocsExpanded || isActivePath('/ocs')) : (systemExpanded || isActivePath('/users'));
+          const expanded = expandable && (filterQuery.trim() !== '' || expandedGroup === entry.key);
           const Icon = entry.icon;
 
           return (
@@ -90,13 +134,11 @@ export function AppSidebar({
                 <>
                   <button
                     type="button"
-                    className={`sidebar-link sidebar-parent-button${active ? ' active' : ''}`}
-                    onClick={() => {
-                      if (!sidebarOpen) { setSidebarOpen(true); return; }
-                      if (entry.key === 'nav_ocs') setOcsExpanded((value) => !value);
-                      else setSystemExpanded((value) => !value);
-                    }}
+                    className={`sidebar-link sidebar-parent-button${childActive ? ' child-active' : ''}`}
+                    onClick={() => toggleGroup(entry.key)}
                     aria-expanded={expanded}
+                    aria-controls={`sidebar-subnav-${entry.key}`}
+                    data-group-key={entry.key}
                   >
                     <span className="sidebar-active-bar" aria-hidden="true" />
                     <span className="sidebar-icon" aria-hidden="true"><Icon size={20} /></span>
@@ -105,23 +147,28 @@ export function AppSidebar({
                     {sidebarOpen ? <ChevronRight size={16} className={expanded ? 'sidebar-chevron open' : 'sidebar-chevron'} aria-hidden="true" /> : null}
                   </button>
                   {sidebarOpen && expanded ? (
-                    <div className="sidebar-subnav">
-                      {children.map((child) => {
-                        const ChildIcon = child.icon;
+                    <div className="sidebar-subnav" id={`sidebar-subnav-${entry.key}`} role="group" aria-label={t(entry.key)}>
+                      {children.map((child, index) => {
+                        const previous = children[index - 1];
+                        const showCaption = Boolean(child.sidebarSection) && child.sidebarSection !== previous?.sidebarSection;
                         const childIsActive = isActivePath(child.targetRoute);
                         return (
-                          <NavLink
-                            key={child.targetRoute}
-                            to={child.targetRoute}
-                            className={`sidebar-link child${childIsActive ? ' active' : ''}`}
-                            aria-current={childIsActive ? 'page' : undefined}
-                            onClick={closeOnMobile}
-                          >
-                            <span className="sidebar-active-bar" aria-hidden="true" />
-                            <span className="sidebar-icon" aria-hidden="true"><ChildIcon size={18} /></span>
-                            <span className="sidebar-label">{t(child.labelKey)}</span>
-                            <span className="sidebar-tooltip" role="tooltip">{t(child.labelKey)}</span>
-                          </NavLink>
+                          <Fragment key={child.targetRoute}>
+                            {showCaption ? (
+                              <div className="sidebar-group-caption">{t(`nav_section_${child.sidebarSection}`)}</div>
+                            ) : null}
+                            <NavLink
+                              to={child.targetRoute}
+                              className={`sidebar-link child${childIsActive ? ' active' : ''}`}
+                              aria-current={childIsActive ? 'page' : undefined}
+                              onClick={closeOnMobile}
+                            >
+                              <span className="sidebar-active-bar" aria-hidden="true" />
+                              <span className="sidebar-rail-node" aria-hidden="true" />
+                              <span className="sidebar-label">{t(child.labelKey)}</span>
+                              <span className="sidebar-tooltip" role="tooltip">{t(child.labelKey)}</span>
+                            </NavLink>
+                          </Fragment>
                         );
                       })}
                     </div>

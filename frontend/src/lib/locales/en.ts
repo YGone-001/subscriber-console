@@ -232,7 +232,7 @@ export const en: Record<string, string> = {
     prof_empty_list: "No profiles created yet. Click the + button to create one.",
     prof_empty_desc: "Create reusable subscriber templates for billing defaults, authentication, access restrictions, and slice topology.",
     prof_empty_filtered_desc: "Adjust the search text or governance domain filter to view matching templates.",
-    prof_governance_title: "Configuration Governance",
+    prof_governance_title: "User templates",
     prof_governance_subtitle: "Classify subscriber templates by business domain, impact scope, risk level, and expected change effect.",
     prof_governance_total: "Templates",
     prof_governance_impacted: "Linked Users",
@@ -796,13 +796,18 @@ export const en: Record<string, string> = {
     audit_refresh: "Refresh",
     // -- Sidebar / Navigation --
     nav_dashboard: "Operations Overview",
-    nav_subscriber: "Subscriber",
-    nav_profile: "Profile",
+    nav_business: "Business operations",
+    nav_network_ops: "Network operations",
+    nav_platform: "Platform management",
+    nav_section_charging: "Charging and tariffs",
+    nav_section_observability: "Monitoring and alerts",
+    nav_subscriber: "Subscribers",
+    nav_profile: "User templates",
     nav_rating: "Rating",
     nav_rating_plans: "Tariff Plans",
     nav_rating_rules: "Rating Rules",
     nav_system_settings: "System Settings",
-    nav_system_users: "User Management",
+    nav_system_users: "System users",
     nav_roles: "Role Management",
     nav_system_health: "System Health",
     collapse_sidebar: "Collapse",
@@ -916,7 +921,7 @@ export const en: Record<string, string> = {
     dash_work_open_rating: "Rating",
 
     // -- Subscriber Page --
-    subscriber_title: "Subscriber Management",
+    subscriber_title: "Subscribers",
     subscriber_subtitle: "Manage IMSI provisioning, traffic allocation and subscriber lifecycle.",
     subscriber_summary_label: "Subscriber status summary",
     subscriber_summary_total: "Current Users",
@@ -1200,7 +1205,7 @@ export const en: Record<string, string> = {
     ocs_modal_copied: "Copied to clipboard",
 
     // -- OCS Governance UI Refactor --
-    nav_ocs_contracts: "Contract Subscribers",
+    nav_ocs_contracts: "Charging contracts",
 
     // Overview
 
@@ -1223,7 +1228,7 @@ export const en: Record<string, string> = {
     ocs_tariff_detail_created: "Created",
 
     // Contracts
-    ocs_contracts_title: "Contract Subscribers",
+    ocs_contracts_title: "Charging contracts",
     ocs_contracts_desc: "Manage contract subscribers with governance workflow",
     ocs_contract_total: "Total Contracts",
     ocs_contract_active: "Active",

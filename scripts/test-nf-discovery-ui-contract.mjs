@@ -55,7 +55,7 @@ check('DISC-UI-06', routerSource.includes("'/discovery'") && routerSource.includ
 // 2. Navigation
 const navigationSource = read('lib/navigation.ts');
 check('DISC-UI-07', navigationSource.includes("route: '/discovery'") && navigationSource.includes("route: '/discovery/sources/:sourceId'"), 'navigation_authority=discovery_registered');
-check('DISC-UI-08', navigationSource.includes("labelKey: 'nav_discovery'") && navigationSource.includes('visible: true') && navigationSource.includes("push(find('/discovery'))"), 'discovery_navigation_visible=true');
+check('DISC-UI-08', navigationSource.includes("labelKey: 'nav_discovery'") && navigationSource.includes('visible: true') && /NETWORK_CHILD_ORDER\s*=\s*\[[^\]]*'\/discovery'/.test(navigationSource), 'discovery_navigation_visible=true');
 
 const sidebarSource = read('app/components/AppSidebar.tsx');
 const tabBarSource = read('app/components/NavigationTabBar.tsx');

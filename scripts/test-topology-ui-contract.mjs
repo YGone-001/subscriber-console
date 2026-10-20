@@ -58,8 +58,8 @@ check('TOP-UI-06', routerSource.includes("'/topology'") && routerSource.includes
 const navigationSource = read('lib/navigation.ts');
 check('TOP-UI-07', navigationSource.includes("route: '/topology'") && navigationSource.includes("route: '/topology/:resourceId'"), 'navigation_authority=topology_registered');
 check('TOP-UI-08', navigationSource.includes("labelKey: 'nav_topology'") && navigationSource.includes('visible: true'), 'topology_navigation_visible=true');
-check('TOP-UI-09', /push\(find\('\/topology'\)\)/.test(navigationSource), 'sidebar_group=topology_entry_present');
-check('TOP-UI-10', navigationSource.includes("push(find('/inventory'));"), 'sidebar_order=adjacent_to_inventory');
+check('TOP-UI-09', navigationSource.includes("route: '/topology'") && navigationSource.includes("group: 'network'"), 'sidebar_group=topology_entry_present');
+check('TOP-UI-10', /NETWORK_CHILD_ORDER\s*=\s*\[[^\]]*'\/inventory'[^\]]*'\/topology'/.test(navigationSource), 'sidebar_order=adjacent_to_inventory');
 
 // The sidebar, tab bar, breadcrumbs and palette all derive from the shared authority,
 // so no per-surface registration is required or permitted.

@@ -62,7 +62,7 @@ test('reference dictionary wins on overlap and the legacy fallback survives', ()
   assert.equal(en.nav_ocs, 'Charging Management');
   assert.equal(zh.nav_ocs, '计费管理');
   assert.equal(en.nav_ocs_tariffs, 'Tariff Plans');
-  assert.equal(zh.nav_ocs_contracts, '签约用户');
+  assert.equal(zh.nav_ocs_contracts, '计费合约');
 
   // Legacy-only keys the earlier shell introduced must not be lost.
   assert.equal(typeof en.nav_inventory, 'string');
@@ -78,7 +78,7 @@ test('reference dictionary wins on overlap and the legacy fallback survives', ()
 
 test('the shell surface exposes the reference route label keys', () => {
   const navigation = read('../src/lib/navigation.ts');
-  for (const key of ['nav_subscriber', 'nav_ocs_tariffs', 'nav_ocs_contracts', 'nav_ocs_balances', 'nav_system_users', 'nav_system_health']) {
+  for (const key of ['nav_subscriber', 'nav_ocs_tariffs', 'nav_ocs_contracts', 'nav_ocs_balances', 'nav_system_users', 'nav_system_health', 'nav_business', 'nav_network_ops', 'nav_platform']) {
     assert.ok(navigation.includes(`'${key}'`), `navigation authority must use ${key}`);
   }
   assert.ok(!navigation.includes("labelKey: 'nav_tariffs'"), 'legacy nav_tariffs label must be gone');

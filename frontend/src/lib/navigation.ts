@@ -1,4 +1,4 @@
-import { Activity, BellRing, Boxes, CreditCard, FileText, Gauge, HeartPulse, LayoutDashboard, Network, Radar, Radio, ScrollText, Settings, Smartphone, UserCog, Users, Wallet, Zap, type LucideIcon } from 'lucide-react';
+import { Activity, BellRing, Boxes, Briefcase, CreditCard, FileText, Gauge, HeartPulse, LayoutDashboard, Network, Radar, Radio, ScrollText, Settings, Smartphone, UserCog, Users, Wallet, Zap, type LucideIcon } from 'lucide-react';
 import type { CanonicalRole } from '../types/auth';
 import { hasNavigationPermission } from './permissions';
 
@@ -8,7 +8,8 @@ export type NavigationRoute = {
   targetRoute: string;
   labelKey: string;
   icon: LucideIcon;
-  group?: 'ocs' | 'system';
+  group?: 'business' | 'network' | 'platform';
+  sidebarSection?: 'charging' | 'observability';
   visible?: boolean;
   permission?: 'users.read';
 };
@@ -16,37 +17,37 @@ export type NavigationRoute = {
 export const APP_ROUTES: NavigationRoute[] = [
   { route: '/', targetRoute: '/', dynamicParameters: [], labelKey: 'nav_dashboard', icon: LayoutDashboard, visible: true },
   { route: '/login', targetRoute: '/login', dynamicParameters: [], labelKey: 'nav_dashboard', icon: FileText },
-  { route: '/inventory', targetRoute: '/inventory', dynamicParameters: [], labelKey: 'nav_inventory', icon: Boxes, visible: true },
+  { route: '/inventory', targetRoute: '/inventory', dynamicParameters: [], labelKey: 'nav_inventory', icon: Boxes, group: 'network', visible: true },
   { route: '/inventory/:resourceId', targetRoute: '/inventory/:resourceId', dynamicParameters: ['resourceId'], labelKey: 'nav_dashboard', icon: FileText },
   { route: '/inventory/create', targetRoute: '/inventory/create', dynamicParameters: [], labelKey: 'nav_inventory_create', icon: Boxes },
-  { route: '/topology', targetRoute: '/topology', dynamicParameters: [], labelKey: 'nav_topology', icon: Network, visible: true },
+  { route: '/topology', targetRoute: '/topology', dynamicParameters: [], labelKey: 'nav_topology', icon: Network, group: 'network', visible: true },
   { route: '/topology/:resourceId', targetRoute: '/topology/:resourceId', dynamicParameters: ['resourceId'], labelKey: 'nav_dashboard', icon: FileText },
-  { route: '/discovery', targetRoute: '/discovery', dynamicParameters: [], labelKey: 'nav_discovery', icon: Radar, visible: true },
+  { route: '/discovery', targetRoute: '/discovery', dynamicParameters: [], labelKey: 'nav_discovery', icon: Radar, group: 'network', visible: true },
   { route: '/discovery/sources/:sourceId', targetRoute: '/discovery/sources/:sourceId', dynamicParameters: ['sourceId'], labelKey: 'nav_discovery', icon: FileText },
-  { route: '/nf-health', targetRoute: '/nf-health', dynamicParameters: [], labelKey: 'nav_nf_health', icon: HeartPulse, visible: true },
+  { route: '/nf-health', targetRoute: '/nf-health', dynamicParameters: [], labelKey: 'nav_nf_health', icon: HeartPulse, group: 'network', sidebarSection: 'observability', visible: true },
   { route: '/nf-health/:targetId', targetRoute: '/nf-health/:targetId', dynamicParameters: ['targetId'], labelKey: 'nav_nf_health', icon: FileText },
-  { route: '/nf-alerts', targetRoute: '/nf-alerts', dynamicParameters: [], labelKey: 'nav_nf_alerts', icon: BellRing, visible: true },
-  { route: '/ue-info', targetRoute: '/ue-info', dynamicParameters: [], labelKey: 'nav_ue_info', icon: Smartphone, visible: true },
-  { route: '/logs', targetRoute: '/logs', dynamicParameters: [], labelKey: 'nav_logs', icon: ScrollText, visible: true },
+  { route: '/nf-alerts', targetRoute: '/nf-alerts', dynamicParameters: [], labelKey: 'nav_nf_alerts', icon: BellRing, group: 'network', sidebarSection: 'observability', visible: true },
+  { route: '/ue-info', targetRoute: '/ue-info', dynamicParameters: [], labelKey: 'nav_ue_info', icon: Smartphone, group: 'network', sidebarSection: 'observability', visible: true },
+  { route: '/logs', targetRoute: '/logs', dynamicParameters: [], labelKey: 'nav_logs', icon: ScrollText, group: 'platform', visible: true },
   { route: '/ocs', targetRoute: '/ocs', dynamicParameters: [], labelKey: 'nav_ocs', icon: Zap },
-  { route: '/ocs/balances', targetRoute: '/ocs/balances', dynamicParameters: [], labelKey: 'nav_ocs_balances', icon: Wallet, group: 'ocs', visible: true },
+  { route: '/ocs/balances', targetRoute: '/ocs/balances', dynamicParameters: [], labelKey: 'nav_ocs_balances', icon: Wallet, group: 'business', sidebarSection: 'charging', visible: true },
   { route: '/ocs/balances/:imsi', targetRoute: '/ocs/balances/:imsi', dynamicParameters: ['imsi'], labelKey: 'nav_dashboard', icon: FileText },
-  { route: '/ocs/contracts', targetRoute: '/ocs/contracts', dynamicParameters: [], labelKey: 'nav_ocs_contracts', icon: Users, group: 'ocs', visible: true },
+  { route: '/ocs/contracts', targetRoute: '/ocs/contracts', dynamicParameters: [], labelKey: 'nav_ocs_contracts', icon: Users, group: 'business', sidebarSection: 'charging', visible: true },
   { route: '/ocs/contracts/:imsi', targetRoute: '/ocs/contracts/:imsi', dynamicParameters: ['imsi'], labelKey: 'nav_dashboard', icon: FileText },
   { route: '/ocs/dashboard', targetRoute: '/ocs/dashboard', dynamicParameters: [], labelKey: 'nav_ocs_dashboard', icon: LayoutDashboard },
   { route: '/ocs/sessions', targetRoute: '/ocs/sessions', dynamicParameters: [], labelKey: 'nav_ocs_sessions', icon: Activity },
   { route: '/ocs/subscribers', targetRoute: '/ocs/subscribers', dynamicParameters: [], labelKey: 'nav_ocs_subscribers', icon: Users },
-  { route: '/ocs/tariffs', targetRoute: '/ocs/tariffs', dynamicParameters: [], labelKey: 'nav_ocs_tariffs', icon: CreditCard, group: 'ocs', visible: true },
+  { route: '/ocs/tariffs', targetRoute: '/ocs/tariffs', dynamicParameters: [], labelKey: 'nav_ocs_tariffs', icon: CreditCard, group: 'business', sidebarSection: 'charging', visible: true },
   { route: '/ocs/tariffs/:planId', targetRoute: '/ocs/tariffs/:planId', dynamicParameters: ['planId'], labelKey: 'nav_dashboard', icon: FileText },
   { route: '/ocs/usage', targetRoute: '/ocs/usage', dynamicParameters: [], labelKey: 'nav_ocs_usage', icon: Gauge },
-  { route: '/profile', targetRoute: '/profile', dynamicParameters: [], labelKey: 'nav_profile', icon: FileText, visible: true },
+  { route: '/profile', targetRoute: '/profile', dynamicParameters: [], labelKey: 'nav_profile', icon: FileText, group: 'business', visible: true },
   { route: '/rating', targetRoute: '/rating', dynamicParameters: [], labelKey: 'nav_rating', icon: Radio, visible: true },
   { route: '/rating/plans', targetRoute: '/rating/plans', dynamicParameters: [], labelKey: 'nav_rating_plans', icon: CreditCard },
   { route: '/rating/rules', targetRoute: '/rating/rules', dynamicParameters: [], labelKey: 'nav_rating_rules', icon: FileText },
   { route: '/roles', targetRoute: '/roles', dynamicParameters: [], labelKey: 'nav_roles', icon: UserCog },
-  { route: '/subscribers', targetRoute: '/subscribers', dynamicParameters: [], labelKey: 'nav_subscriber', icon: Users, visible: true },
-  { route: '/system-health', targetRoute: '/system-health', dynamicParameters: [], labelKey: 'nav_system_health', icon: Activity, visible: true },
-  { route: '/users', targetRoute: '/users', dynamicParameters: [], labelKey: 'nav_system_users', icon: UserCog, group: 'system', visible: true, permission: 'users.read' },
+  { route: '/subscribers', targetRoute: '/subscribers', dynamicParameters: [], labelKey: 'nav_subscriber', icon: Users, group: 'business', visible: true },
+  { route: '/system-health', targetRoute: '/system-health', dynamicParameters: [], labelKey: 'nav_system_health', icon: Activity, group: 'platform', visible: true },
+  { route: '/users', targetRoute: '/users', dynamicParameters: [], labelKey: 'nav_system_users', icon: UserCog, group: 'platform', visible: true, permission: 'users.read' },
   { route: '/users/:username', targetRoute: '/users/:username', dynamicParameters: ['username'], labelKey: 'nav_dashboard', icon: FileText },
   { route: '/users/create', targetRoute: '/users/create', dynamicParameters: [], labelKey: 'nav_user_create', icon: UserCog, permission: 'users.read' },
 ];
@@ -122,59 +123,83 @@ export type SidebarGroup = {
 };
 
 /**
- * Canonical OCS sub-navigation order, matching the reference sidebar
- * (tariff plans -> contracts -> balances). Routes outside this list sort last
- * so a newly added OCS surface never displaces a canonical entry.
+ * Canonical child order for the three sidebar domains. Routes outside an order
+ * list sort last so a newly added surface never displaces a canonical entry.
  */
-const OCS_CHILD_ORDER = ['/ocs/tariffs', '/ocs/contracts', '/ocs/balances'];
+const BUSINESS_CHILD_ORDER = ['/subscribers', '/profile', '/ocs/tariffs', '/ocs/contracts', '/ocs/balances'];
+const NETWORK_CHILD_ORDER = ['/inventory', '/topology', '/discovery', '/nf-health', '/nf-alerts', '/ue-info'];
+const PLATFORM_CHILD_ORDER = ['/system-health', '/users', '/logs'];
 
 /**
  * Grouped sidebar model derived from the current navigation authority.
- * A group is only produced when at least one of its routes is visible for the
- * given role, so unauthorised groups never reach the presentation layer.
  *
- * The reference sidebar renders no Rating entry: the rating routes redirect to
- * the tariff surface, so exposing them as a destination would be a dead link.
- * Inventory has no reference equivalent and is appended after System health.
+ * Four first-level entries: the dashboard plus business, network and platform
+ * domains. Domain groups keep one expansion level; their children carry an
+ * optional section token so the sidebar can render the OCS and observability
+ * captions without introducing a second collapsible level.
+ *
+ * A group is only produced when at least one of its routes is visible for the
+ * given role, so unauthorised groups never reach the presentation layer. The
+ * reference sidebar renders no Rating entry because those routes redirect to
+ * the tariff surface.
  */
 export function getSidebarGroups(role: CanonicalRole | undefined): SidebarGroup[] {
   const routes = getVisibleNavigation(role);
   const find = (target: string) => routes.find((route) => route.targetRoute === target);
-  const group = (name: 'ocs' | 'system') => routes.filter((route) => route.group === name);
+  const childrenFor = (name: 'business' | 'network' | 'platform', order: string[]) => {
+    const rank = (route: NavigationRoute) => {
+      const index = order.indexOf(route.targetRoute);
+      return index === -1 ? order.length : index;
+    };
+    return routes
+      .filter((route) => route.group === name)
+      .sort((left, right) => rank(left) - rank(right) || left.targetRoute.localeCompare(right.targetRoute));
+  };
   const groups: SidebarGroup[] = [];
 
-  const push = (route: NavigationRoute | undefined, match?: string) => {
-    if (!route) return;
-    groups.push({ key: route.labelKey, match: match ?? route.targetRoute, target: route.targetRoute, icon: route.icon, children: [] });
-  };
-
-  push(find('/'));
-  push(find('/subscribers'));
-
-  const rank = (route: NavigationRoute) => {
-    const index = OCS_CHILD_ORDER.indexOf(route.targetRoute);
-    return index === -1 ? OCS_CHILD_ORDER.length : index;
-  };
-  const ocsChildren = group('ocs').sort((left, right) => rank(left) - rank(right));
-  if (ocsChildren.length > 0) {
-    groups.push({ key: 'nav_ocs', match: '/ocs', target: '/ocs/tariffs', icon: Zap, children: ocsChildren });
+  const dashboard = find('/');
+  if (dashboard) {
+    groups.push({
+      key: dashboard.labelKey,
+      match: dashboard.targetRoute,
+      target: dashboard.targetRoute,
+      icon: dashboard.icon,
+      children: [],
+    });
   }
 
-  push(find('/profile'));
-
-  const systemChildren = group('system');
-  if (systemChildren.length > 0) {
-    groups.push({ key: 'nav_system_settings', match: '/users', target: systemChildren[0].targetRoute, icon: Settings, children: systemChildren });
+  const businessChildren = childrenFor('business', BUSINESS_CHILD_ORDER);
+  if (businessChildren.length > 0) {
+    groups.push({
+      key: 'nav_business',
+      match: businessChildren[0].targetRoute,
+      target: businessChildren[0].targetRoute,
+      icon: Briefcase,
+      children: businessChildren,
+    });
   }
 
-  push(find('/system-health'));
-  push(find('/inventory'));
-  push(find('/topology'));
-  push(find('/discovery'));
-  push(find('/nf-health'));
-  push(find('/nf-alerts'));
-  push(find('/ue-info'));
-  push(find('/logs'));
+  const networkChildren = childrenFor('network', NETWORK_CHILD_ORDER);
+  if (networkChildren.length > 0) {
+    groups.push({
+      key: 'nav_network_ops',
+      match: networkChildren[0].targetRoute,
+      target: networkChildren[0].targetRoute,
+      icon: Network,
+      children: networkChildren,
+    });
+  }
+
+  const platformChildren = childrenFor('platform', PLATFORM_CHILD_ORDER);
+  if (platformChildren.length > 0) {
+    groups.push({
+      key: 'nav_platform',
+      match: platformChildren[0].targetRoute,
+      target: platformChildren[0].targetRoute,
+      icon: Settings,
+      children: platformChildren,
+    });
+  }
 
   return groups;
 }

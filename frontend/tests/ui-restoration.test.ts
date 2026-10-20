@@ -34,43 +34,46 @@ test('compact desktop density preserves the mobile interaction baseline', () => 
 test('sidebar groups expose the restored navigation hierarchy for an administrator', () => {
   const groups = getSidebarGroups('admin');
   const keys = groups.map((group) => group.key);
-  assert.ok(keys.includes('nav_dashboard'));
-  assert.ok(keys.includes('nav_subscriber'));
-  assert.ok(keys.includes('nav_ocs'));
-  assert.ok(keys.includes('nav_profile'));
-  assert.ok(keys.includes('nav_system_settings'));
-  assert.ok(keys.includes('nav_system_health'));
-  assert.ok(keys.includes('nav_inventory'));
-  assert.ok(keys.includes('nav_topology'));
-  assert.ok(keys.includes('nav_discovery'));
+  assert.deepEqual(keys, ['nav_dashboard', 'nav_business', 'nav_network_ops', 'nav_platform']);
+
+  const business = groups.find((group) => group.key === 'nav_business');
+  assert.ok(business);
+  assert.deepEqual(
+    business.children.map((child) => child.targetRoute),
+    ['/subscribers', '/profile', '/ocs/tariffs', '/ocs/contracts', '/ocs/balances'],
+  );
+  assert.equal(business.children.find((child) => child.targetRoute === '/ocs/tariffs')?.sidebarSection, 'charging');
+
+  const network = groups.find((group) => group.key === 'nav_network_ops');
+  assert.ok(network);
+  assert.deepEqual(
+    network.children.map((child) => child.targetRoute),
+    ['/inventory', '/topology', '/discovery', '/nf-health', '/nf-alerts', '/ue-info'],
+  );
+  assert.equal(network.children.find((child) => child.targetRoute === '/nf-health')?.sidebarSection, 'observability');
+
+  const platform = groups.find((group) => group.key === 'nav_platform');
+  assert.ok(platform);
+  assert.deepEqual(platform.children.map((child) => child.targetRoute), ['/system-health', '/users', '/logs']);
+
   // The reference sidebar renders no Rating entry: the rating routes redirect to
   // the tariff surface, so exposing them would be a dead link.
   assert.ok(!keys.includes('nav_rating'), 'sidebar must not expose a Rating entry');
-
-  const ocs = groups.find((group) => group.key === 'nav_ocs');
-  assert.ok(ocs);
-  // Canonical reference order, not alphabetical.
-  assert.deepEqual(
-    ocs.children.map((child) => child.targetRoute),
-    ['/ocs/tariffs', '/ocs/contracts', '/ocs/balances'],
-  );
-
-  const system = groups.find((group) => group.key === 'nav_system_settings');
-  assert.ok(system);
-  assert.deepEqual(system.children.map((child) => child.targetRoute), ['/users']);
 });
 
 test('sidebar grouping is role-aware and never exposes an unauthorised group', () => {
-  const operator = getSidebarGroups('operator').map((group) => group.key);
-  assert.ok(!operator.includes('nav_system_settings'), 'operator must not see the administration group');
-  assert.ok(operator.includes('nav_inventory'));
-  assert.ok(operator.includes('nav_discovery'));
+  const operatorGroups = getSidebarGroups('operator');
+  assert.ok(operatorGroups.some((group) => group.key === 'nav_network_ops'));
+  const operatorPlatform = operatorGroups.find((group) => group.key === 'nav_platform');
+  assert.ok(operatorPlatform);
+  assert.deepEqual(operatorPlatform.children.map((child) => child.targetRoute), ['/system-health', '/logs']);
 
-  const viewer = getSidebarGroups('viewer').map((group) => group.key);
-  assert.ok(!viewer.includes('nav_system_settings'), 'viewer must not see the administration group');
-  assert.ok(viewer.includes('nav_ocs'), 'viewer retains read-only OCS navigation');
-  assert.ok(viewer.includes('nav_inventory'));
-  assert.ok(viewer.includes('nav_discovery'));
+  const viewerGroups = getSidebarGroups('viewer');
+  assert.ok(viewerGroups.some((group) => group.key === 'nav_business'));
+  assert.ok(viewerGroups.some((group) => group.key === 'nav_network_ops'));
+  const viewerPlatform = viewerGroups.find((group) => group.key === 'nav_platform');
+  assert.ok(viewerPlatform);
+  assert.deepEqual(viewerPlatform.children.map((child) => child.targetRoute), ['/system-health', '/logs']);
 });
 
 test('role-filtered navigation hides administration routes from non-admins', () => {

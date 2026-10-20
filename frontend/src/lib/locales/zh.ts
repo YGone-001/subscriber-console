@@ -232,7 +232,7 @@ export const zh: Record<string, string> = {
     prof_empty_list: "当前尚未创建任何配置模板。点击 + 按钮开始创建。",
     prof_empty_desc: "创建可复用的用户签约模板，用于沉淀计费默认值、鉴权、接入限制和切片拓扑。",
     prof_empty_filtered_desc: "调整搜索内容或治理域筛选后再查看匹配模板。",
-    prof_governance_title: "配置治理",
+    prof_governance_title: "用户模板",
     prof_governance_subtitle: "按业务域、影响范围、风险等级和预期变更效果管理用户签约模板。",
     prof_governance_total: "模板数",
     prof_governance_impacted: "关联用户",
@@ -796,13 +796,18 @@ export const zh: Record<string, string> = {
     audit_refresh: "刷新",
     // -- Sidebar / Navigation --
     nav_dashboard: "\u8fd0\u7ef4\u603b\u89c8",
-    nav_subscriber: "\u7528\u6237\u7ba1\u7406",
-    nav_profile: "\u914d\u7f6e\u7ba1\u7406",
+    nav_business: "业务运营",
+    nav_network_ops: "网络运维",
+    nav_platform: "平台管理",
+    nav_section_charging: "计费与资费",
+    nav_section_observability: "监控与告警",
+    nav_subscriber: "订阅用户",
+    nav_profile: "用户模板",
     nav_rating: "\u8d44\u8d39\u7ba1\u7406",
     nav_rating_plans: "\u8d44\u8d39\u5957\u9910",
     nav_rating_rules: "\u8d44\u8d39\u89c4\u5219",
     nav_system_settings: "系统设置",
-    nav_system_users: "用户管理",
+    nav_system_users: "系统用户",
     nav_roles: "角色管理",
     nav_system_health: "\u7cfb\u7edf\u5065\u5eb7",
     collapse_sidebar: "\u6536\u8d77",
@@ -916,7 +921,7 @@ export const zh: Record<string, string> = {
     dash_work_open_rating: "资费",
 
     // -- Subscriber Page --
-    subscriber_title: "\u7528\u6237\u7ba1\u7406",
+    subscriber_title: "订阅用户",
     subscriber_subtitle: "\u7ba1\u7406 IMSI \u914d\u7f6e\u3001\u6d41\u91cf\u5206\u914d\u4e0e\u7528\u6237\u751f\u547d\u5468\u671f\u3002",
     subscriber_summary_label: "\u7528\u6237\u72b6\u6001\u6982\u89c8",
     subscriber_summary_total: "\u5f53\u524d\u7528\u6237\u603b\u6570",
@@ -1199,7 +1204,7 @@ export const zh: Record<string, string> = {
     ocs_modal_copied: "已复制到剪贴板",
 
     // -- OCS Governance UI Refactor --
-    nav_ocs_contracts: "签约用户",
+    nav_ocs_contracts: "计费合约",
 
     // Overview
 
@@ -1222,7 +1227,7 @@ export const zh: Record<string, string> = {
     ocs_tariff_detail_created: "创建时间",
 
     // Contracts
-    ocs_contracts_title: "签约用户",
+    ocs_contracts_title: "计费合约",
     ocs_contracts_desc: "管理资费签约用户及治理流程",
     ocs_contract_total: "合同总数",
     ocs_contract_active: "活跃",
