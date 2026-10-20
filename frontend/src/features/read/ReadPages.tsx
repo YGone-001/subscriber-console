@@ -1,8 +1,9 @@
 /*
  * Read/dashboard entry module.
  *
- * The dashboard itself is the forward-ported AnalyticsCockpit
- * (reference commit 2c40903: `app/(dashboard)/page.tsx` + `components/AnalyticsCockpit.tsx`).
+ * The default landing page is now the operations overview
+ * (`features/operations/OperationsOverviewPage`). It owns the operations posture,
+ * the unified network-status panel and the secondary business analytics view.
  *
  * The remaining exports are kept for backward compatibility with the earlier
  * module contract: the business pages are owned by their own feature modules and
@@ -10,48 +11,19 @@
  * caller.
  */
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { RadioTower } from 'lucide-react';
-import AnalyticsCockpit from '../../components/AnalyticsCockpit';
-import OperationalOverview from '../operations/OperationalOverview';
-import { RuntimeDiscoveryPanel } from '../runtime/RuntimeDiscovery';
-import PageHeader from '../../components/ui/PageHeader';
-import { useI18n } from '../../providers/I18nProvider';
+import { OperationsOverviewPage } from '../operations/OperationsOverviewPage';
 import { text, toChartPoints, type UnknownRecord } from './dashboard-model';
 
 /**
  * Dashboard (overview) page — the default landing page after sign-in.
  *
- * It renders the AnalyticsCockpit, which owns:
- * - KPI strip (traffic, subscribers, PLMN regions, contracts, utilization, invariants)
- * - workbench panel (prioritised action items + operations readiness score)
- * - OCS resource strip (balance capacity, session telemetry)
- * - charts (top consumers, tariff plan distribution)
- *
- * The operational network overview (Inventory resources joined with NF Health
- * monitoring evidence) renders below the cockpit. It is an additional section:
- * no existing business analytic is removed, renamed or repurposed, and no
- * subscriber or online-user count is derived from it.
- *
- * The local runtime discovery panel renders last. It reports recognized local
- * processes from the backend scanner, so the surface is useful before any
- * Inventory, Discovery, Topology or NF Health record exists.
+ * The page previously stacked the analytics cockpit, the operational overview
+ * and the local runtime panel as three independent sections. The consolidated
+ * surface keeps those authorities but presents operations first and mounts the
+ * business cockpit only when its view is selected.
  */
 export function DashboardPage() {
-  const { t } = useI18n();
-
-  return (
-    <div className="container animate-fade-in">
-      <PageHeader
-        eyebrow={t('dash_live')}
-        icon={<RadioTower size={24} />}
-        title={t('dashboard_title')}
-        description={t('dash_workbench_subtitle')}
-      />
-      <AnalyticsCockpit />
-      <OperationalOverview />
-      <RuntimeDiscoveryPanel />
-    </div>
-  );
+  return <OperationsOverviewPage />;
 }
 
 /* Backward-compatible exports. These surfaces are owned by their feature modules;

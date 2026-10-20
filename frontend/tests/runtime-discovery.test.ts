@@ -13,7 +13,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { I18nProvider } from '../src/providers/I18nProvider';
 import { AuthProvider } from '../src/providers/AuthProvider';
-import { RuntimeDiscoveryPanel } from '../src/features/runtime/RuntimeDiscovery';
+import { RuntimeDiscoveryEmbedded, RuntimeDiscoveryPanel } from '../src/features/runtime/RuntimeDiscovery';
 import {
   RUNTIME_CATEGORIES,
   filterComponents,
@@ -202,4 +202,20 @@ test('the runtime surface renders its localized shell without network access', (
   );
   assert.ok(html.includes('data-testid="runtime-discovery"'), 'runtime surface must render');
   assert.ok(html.includes('Local runtime discovery'), 'the surface must carry its localized title');
+});
+
+test('the embedded runtime surface leaves the panel title to its parent', () => {
+  const html = renderToStaticMarkup(
+    createElement(
+      MemoryRouter,
+      null,
+      createElement(
+        I18nProvider,
+        null,
+        createElement(AuthProvider, null, createElement(RuntimeDiscoveryEmbedded)),
+      ),
+    ),
+  );
+  assert.ok(html.includes('data-testid="runtime-discovery-embedded"'), 'embedded surface must render');
+  assert.ok(!html.includes('Local runtime discovery'), 'embedded surface must not repeat the panel title');
 });

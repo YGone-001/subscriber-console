@@ -19,6 +19,38 @@
   margin-top: 0;
 }
 
+.embedded {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+}
+
+.embeddedHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-12);
+  flex-wrap: wrap;
+}
+
+.embeddedMeta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  flex-wrap: wrap;
+}
+
+.embeddedMeta .hostLine {
+  margin: 0;
+}
+
+.statusCell {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  flex-wrap: wrap;
+}
+
 .head {
   display: flex;
   align-items: flex-start;
@@ -552,6 +584,61 @@
 @media (max-width: 1024px) {
   .table {
     font-size: 0.76rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .tableScroll {
+    overflow-x: visible;
+  }
+
+  .table,
+  .table tbody,
+  .table tr {
+    display: block;
+    width: 100%;
+  }
+
+  .table thead {
+    display: none;
+  }
+
+  .table tr {
+    padding: var(--space-8) var(--space-12);
+    border-bottom: 1px solid var(--surface-border);
+  }
+
+  .table th,
+  .table td {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-8);
+    width: 100%;
+    padding: var(--space-4) 0;
+    border: 0;
+    white-space: normal;
+  }
+
+  .table th.nameCell {
+    display: block;
+    padding-bottom: var(--space-8);
+  }
+
+  .table th[data-label]::before,
+  .table td[data-label]::before {
+    content: attr(data-label);
+    color: var(--text-muted);
+    font-size: 0.7rem;
+    font-weight: 500;
+  }
+
+  .table th.nameCell::before {
+    content: none;
+  }
+
+  .caption {
+    display: none;
   }
 }
 

@@ -165,8 +165,16 @@ test('byte and chart formatting never fabricates values', () => {
 });
 
 test('dashboard renders the forward-ported analytics cockpit', () => {
-  const page = read('../src/features/read/ReadPages.tsx');
+  const entry = read('../src/features/read/ReadPages.tsx');
+  assert.match(entry, /OperationsOverviewPage/);
+
+  const page = read('../src/features/operations/OperationsOverviewPage.tsx');
   assert.match(page, /AnalyticsCockpit/);
+  assert.match(page, /OperationsOverview/);
+  assert.match(page, /ops_view_operations/);
+  assert.match(page, /ops_view_business/);
+  // The business cockpit is mounted only while its view is selected.
+  assert.match(page, /business \? <AnalyticsCockpit \/> : <OperationsOverview \/>/);
 
   // The cockpit owns the reference composition: KPI strip, workbench, OCS strip,
   // top-consumer chart and tariff-plan distribution.

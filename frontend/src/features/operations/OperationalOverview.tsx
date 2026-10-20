@@ -3,8 +3,8 @@
  *
  * A CNMS-inspired operational network overview adapted to xCloud's authorities.
  * It renders the Inventory resource population and the NF Health monitoring
- * projection for the loaded page. It never replaces the business analytics
- * cockpit: it is an additional section on the existing dashboard route.
+ * projection for the loaded page. It is embedded in the operations-overview
+ * network status panel, and never replaces the business analytics cockpit.
  *
  * Integrity rules enforced here:
  *   - monitoring associations are resolved by an authoritative bounded batch
@@ -17,7 +17,7 @@
  *   - missing values are rendered as unavailable, never as zero;
  *   - no subscriber or online-user count is derived from this data.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Activity, ChevronDown, ChevronRight, Layers, RefreshCw, Server, ShieldCheck } from 'lucide-react';
 import { useRead } from '../../lib/api/use-read';
@@ -125,8 +125,15 @@ function ResourceRow({ resource }: { resource: OperationalResource }) {
   );
 }
 
-export default function OperationalOverview() {
+export default function OperationalOverview({
+  variant = 'overview',
+  refreshSignal = 0,
+}: {
+  variant?: 'overview' | 'embedded';
+  refreshSignal?: number;
+} = {}) {
   const { t } = useI18n();
+  const embedded = variant === 'embedded';
   const resourcesRead = useRead<ResourceListPayload>(`/api/inventory/resources?limit=${OVERVIEW_LIMIT}`);
 
   // Authoritative bounded association lookup for exactly the loaded resources.
@@ -152,6 +159,13 @@ export default function OperationalOverview() {
     void resourcesRead.mutate();
     if (associationPath) void associationsRead.mutate();
   }, [resourcesRead, associationsRead, associationPath]);
+
+  const refreshSignalRef = useRef(refreshSignal);
+  useEffect(() => {
+    if (refreshSignalRef.current === refreshSignal) return;
+    refreshSignalRef.current = refreshSignal;
+    refresh();
+  }, [refresh, refreshSignal]);
 
   // Bounded, cancellation-aware refresh: one timer, cleared on unmount, and it
   // never fires while a previous request is still in flight.
@@ -210,23 +224,30 @@ export default function OperationalOverview() {
   const toggle = (domain: string) => setExpanded((current) => ({ ...current, [domain]: !current[domain] }));
 
   return (
-    <section className={styles.overview} aria-labelledby="operational-overview-title">
-      <div className={styles.sectionHead}>
-        <div>
-          <h2 id="operational-overview-title" className={styles.sectionTitle}>
-            <Activity size={18} /> {t('ops_overview_title')}
-          </h2>
-          <p className={styles.sectionNote}>{t('ops_overview_note')}</p>
+    <section
+      className={embedded ? styles.overviewEmbedded : styles.overview}
+      aria-labelledby={embedded ? undefined : 'operational-overview-title'}
+      aria-label={embedded ? t('ops_tab_inventory') : undefined}
+      data-testid="operational-overview"
+    >
+      {!embedded ? (
+        <div className={styles.sectionHead}>
+          <div>
+            <h2 id="operational-overview-title" className={styles.sectionTitle}>
+              <Activity size={18} /> {t('ops_overview_title')}
+            </h2>
+            <p className={styles.sectionNote}>{t('ops_overview_note')}</p>
+          </div>
+          <div className={styles.sectionActions}>
+            <span className={`${styles.completeness} ${summary.completeness.overall === 'complete' ? styles.toneHealthy : summary.completeness.overall === 'unavailable' ? styles.toneDanger : styles.toneWarning}`}>
+              {completenessLabel(summary.completeness.overall, t)}
+            </span>
+            <button type="button" className={styles.refresh} onClick={refresh} aria-label={t('ops_refresh')}>
+              <RefreshCw size={15} /> {t('ops_refresh')}
+            </button>
+          </div>
         </div>
-        <div className={styles.sectionActions}>
-          <span className={`${styles.completeness} ${summary.completeness.overall === 'complete' ? styles.toneHealthy : summary.completeness.overall === 'unavailable' ? styles.toneDanger : styles.toneWarning}`}>
-            {completenessLabel(summary.completeness.overall, t)}
-          </span>
-          <button type="button" className={styles.refresh} onClick={refresh} aria-label={t('ops_refresh')}>
-            <RefreshCw size={15} /> {t('ops_refresh')}
-          </button>
-        </div>
-      </div>
+      ) : null}
 
       {loading ? (
         <LoadingRows rows={3} />
@@ -236,51 +257,53 @@ export default function OperationalOverview() {
         <EmptyState icon={<Server size={40} />} title={t('ops_empty_title')} description={t('ops_empty_body')} />
       ) : (
         <>
-          <div className={styles.cardGrid}>
-            <article className={styles.card}>
-              <h3 className={styles.cardTitle}>{t('ops_card_population')}</h3>
-              <p className={styles.cardValue}>{summary.registered}</p>
-              <p className={styles.cardHint}>
-                {t('ops_card_population_hint', { logical: summary.logicalFunctions, instances: summary.instances })}
-              </p>
-            </article>
-            <article className={styles.card}>
-              <h3 className={styles.cardTitle}>{t('ops_card_monitored')}</h3>
-              <p className={styles.cardValue}>
-                {summary.monitored}
-                <span className={styles.cardValueSuffix}>/ {summary.registered}</span>
-              </p>
-              <p className={styles.cardHint}>{t('ops_card_monitored_hint')}</p>
-            </article>
-            <article className={styles.card}>
-              <h3 className={styles.cardTitle}>{t('ops_card_unmonitored')}</h3>
-              <p className={styles.cardValue}>{summary.unmonitored}</p>
-              <p className={styles.cardHint}>{t('ops_card_unmonitored_hint')}</p>
-            </article>
-            <article className={styles.card}>
-              <h3 className={styles.cardTitle}>{t('ops_card_unresolved')}</h3>
-              <p className={styles.cardValue}>{summary.unresolved}</p>
-              <p className={styles.cardHint}>{t('ops_card_unresolved_hint')}</p>
-            </article>
-            <article className={styles.card}>
-              <h3 className={styles.cardTitle}>{t('ops_card_fresh')}</h3>
-              <p className={styles.cardValue}>{summary.fresh}</p>
-              <p className={styles.cardHint}>{t('ops_card_fresh_hint')}</p>
-            </article>
-            <article className={styles.card}>
-              <h3 className={styles.cardTitle}>{t('ops_card_stale')}</h3>
-              <p className={styles.cardValue}>{summary.stale}</p>
-              <p className={styles.cardHint}>{t('ops_card_stale_hint')}</p>
-            </article>
-            <article className={styles.card}>
-              <h3 className={styles.cardTitle}>{t('ops_card_degraded')}</h3>
-              <p className={styles.cardValue}>
-                {summary.degraded}
-                <span className={styles.cardValueSuffix}>/ {summary.unhealthy} {t('ops_card_unhealthy_suffix')}</span>
-              </p>
-              <p className={styles.cardHint}>{t('ops_card_degraded_hint')}</p>
-            </article>
-          </div>
+          {!embedded ? (
+            <div className={styles.cardGrid}>
+              <article className={styles.card}>
+                <h3 className={styles.cardTitle}>{t('ops_card_population')}</h3>
+                <p className={styles.cardValue}>{summary.registered}</p>
+                <p className={styles.cardHint}>
+                  {t('ops_card_population_hint', { logical: summary.logicalFunctions, instances: summary.instances })}
+                </p>
+              </article>
+              <article className={styles.card}>
+                <h3 className={styles.cardTitle}>{t('ops_card_monitored')}</h3>
+                <p className={styles.cardValue}>
+                  {summary.monitored}
+                  <span className={styles.cardValueSuffix}>/ {summary.registered}</span>
+                </p>
+                <p className={styles.cardHint}>{t('ops_card_monitored_hint')}</p>
+              </article>
+              <article className={styles.card}>
+                <h3 className={styles.cardTitle}>{t('ops_card_unmonitored')}</h3>
+                <p className={styles.cardValue}>{summary.unmonitored}</p>
+                <p className={styles.cardHint}>{t('ops_card_unmonitored_hint')}</p>
+              </article>
+              <article className={styles.card}>
+                <h3 className={styles.cardTitle}>{t('ops_card_unresolved')}</h3>
+                <p className={styles.cardValue}>{summary.unresolved}</p>
+                <p className={styles.cardHint}>{t('ops_card_unresolved_hint')}</p>
+              </article>
+              <article className={styles.card}>
+                <h3 className={styles.cardTitle}>{t('ops_card_fresh')}</h3>
+                <p className={styles.cardValue}>{summary.fresh}</p>
+                <p className={styles.cardHint}>{t('ops_card_fresh_hint')}</p>
+              </article>
+              <article className={styles.card}>
+                <h3 className={styles.cardTitle}>{t('ops_card_stale')}</h3>
+                <p className={styles.cardValue}>{summary.stale}</p>
+                <p className={styles.cardHint}>{t('ops_card_stale_hint')}</p>
+              </article>
+              <article className={styles.card}>
+                <h3 className={styles.cardTitle}>{t('ops_card_degraded')}</h3>
+                <p className={styles.cardValue}>
+                  {summary.degraded}
+                  <span className={styles.cardValueSuffix}>/ {summary.unhealthy} {t('ops_card_unhealthy_suffix')}</span>
+                </p>
+                <p className={styles.cardHint}>{t('ops_card_degraded_hint')}</p>
+              </article>
+            </div>
+          ) : null}
 
           <div className={styles.completenessStrip} role="list">
             {(['inventory', 'monitoring', 'telemetry'] as const).map((dimension) => (
@@ -290,22 +313,24 @@ export default function OperationalOverview() {
             ))}
           </div>
 
-          <div className={styles.domainStrip} role="list">
-            {OPERATIONAL_DOMAINS.map((domain) => {
-              const group = groups.find((entry) => entry.domain === domain);
-              return (
-                <div key={domain} className={styles.domainCard} role="listitem">
-                  <span className={styles.domainName}>{t(`ops_domain_${domain}`)}</span>
-                  <span className={styles.domainValue}>{group ? group.resources.length : 0}</span>
-                  <span className={styles.domainMeta}>
-                    {group
-                      ? `${group.counts.monitored} ${t('ops_domain_monitored')} · ${group.counts.fresh} ${t('ops_domain_fresh')}`
-                      : t('ops_domain_absent')}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
+          {!embedded ? (
+            <div className={styles.domainStrip} role="list">
+              {OPERATIONAL_DOMAINS.map((domain) => {
+                const group = groups.find((entry) => entry.domain === domain);
+                return (
+                  <div key={domain} className={styles.domainCard} role="listitem">
+                    <span className={styles.domainName}>{t(`ops_domain_${domain}`)}</span>
+                    <span className={styles.domainValue}>{group ? group.resources.length : 0}</span>
+                    <span className={styles.domainMeta}>
+                      {group
+                        ? `${group.counts.monitored} ${t('ops_domain_monitored')} · ${group.counts.fresh} ${t('ops_domain_fresh')}`
+                        : t('ops_domain_absent')}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
 
           <div className={styles.groupList}>
             {groups.map((group) => {

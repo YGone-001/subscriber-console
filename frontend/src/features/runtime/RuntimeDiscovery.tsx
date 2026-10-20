@@ -2,8 +2,9 @@
  * Runtime discovery surface.
  *
  * Renders the bounded local process snapshot produced by the backend scanner.
- * The same component serves two placements:
- *   - `panel`: an additional section on the operational dashboard;
+ * The same component serves three placements:
+ *   - `embedded`: inside the operations-overview network status panel;
+ *   - `panel`: a legacy standalone dashboard section;
  *   - `full`: an additional view mode inside the Inventory route.
  *
  * The surface works with zero Inventory, Discovery, Topology or NF Health
@@ -11,7 +12,7 @@
  * that is merely recognized is rendered as such, and is visually distinct from a
  * verified running process.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Activity,
@@ -44,7 +45,7 @@ import {
   summarize,
   type StatusFilter,
 } from './runtime-model';
-import type { RuntimeComponent, RuntimeMeta, RuntimeObservations, RuntimeStatus } from './runtime-types';
+import type { RuntimeComponent, RuntimeHost, RuntimeMeta, RuntimeObservations, RuntimeStatus } from './runtime-types';
 import { RuntimeBootstrapDialog } from './RuntimeBootstrapDialog';
 import { useRegisterOperationsRefresh } from '../operations/operations-refresh';
 import { resolveRuntimeObservations, useRuntimeStream } from './use-runtime-stream';
@@ -114,32 +115,79 @@ function AssociationCell({ component }: { component: RuntimeComponent }) {
   );
 }
 
-function ComponentRow({ component }: { component: RuntimeComponent }) {
+function HostLine({ host, scannerEnabled }: { host?: RuntimeHost; scannerEnabled: boolean }) {
+  const { t } = useI18n();
+  if (!host) return null;
+  const visibility = host.visibility ?? 'host';
+  return (
+    <p className={styles.hostLine}>
+      <Server size={14} aria-hidden="true" />
+      <span>{host.hostName}</span>
+      <code className={styles.hostId}>{host.hostId}</code>
+      {visibility !== 'host' ? (
+        <span className={styles.visibility}>
+          <AlertTriangle size={13} aria-hidden="true" />
+          {t(`runtime_visibility_${visibility}`)}
+        </span>
+      ) : null}
+      {!scannerEnabled ? <span className={styles.disabled}>{t('runtime_scanner_disabled')}</span> : null}
+    </p>
+  );
+}
+
+function ComponentRow({ component, variant }: { component: RuntimeComponent; variant: 'panel' | 'full' | 'embedded' }) {
   const { t, formatDateTime } = useI18n();
   const cpu = formatPercent(component.cpuPercent);
   const rss = formatBytes(component.memoryRssBytes);
   const vms = formatBytes(component.memoryVmsBytes);
+  const compact = variant === 'embedded';
 
   return (
     <tr data-component-id={component.componentId} data-status={component.runtimeStatus}>
-      <th scope="row" className={styles.nameCell}>
+      <th
+        scope="row"
+        className={styles.nameCell}
+        data-column-priority="essential"
+        data-label={t('runtime_col_component')}
+      >
         <span className={styles.componentName}>{component.displayName}</span>
         <code className={styles.processName}>{component.processName}</code>
         {!component.cnmsCompatible ? <span className={styles.xcloudOnly}>{t('runtime_xcloud_only')}</span> : null}
       </th>
-      <td>
-        <StatusBadge status={component.runtimeStatus} reason={component.statusReason} />
+      <td data-column-priority="essential" data-label={t('runtime_col_status')}>
+        <span className={styles.statusCell}>
+          <StatusBadge status={component.runtimeStatus} reason={component.statusReason} />
+          {compact ? <EvidenceChip component={component} /> : null}
+        </span>
       </td>
-      <td><EvidenceChip component={component} /></td>
-      <td className={styles.mono}>{component.primaryPid > 0 ? component.primaryPid : '-'}</td>
-      <td className={styles.mono}>
-        {component.workerCount}
-        {component.workersTruncated ? <span className={styles.truncated}>{t('runtime_workers_truncated')}</span> : null}
+      {!compact ? (
+        <td data-column-priority="important" data-label={t('runtime_col_evidence')}>
+          <EvidenceChip component={component} />
+        </td>
+      ) : null}
+      {!compact ? (
+        <td className={styles.mono} data-column-priority="supplementary" data-label={t('runtime_col_pid')}>
+          {component.primaryPid > 0 ? component.primaryPid : '-'}
+        </td>
+      ) : null}
+      {!compact ? (
+        <td className={styles.mono} data-column-priority="supplementary" data-label={t('runtime_col_workers')}>
+          {component.workerCount}
+          {component.workersTruncated ? <span className={styles.truncated}>{t('runtime_workers_truncated')}</span> : null}
+        </td>
+      ) : null}
+      <td className={styles.mono} data-column-priority="essential" data-label={t('runtime_col_cpu')}>
+        {cpu || t('runtime_unavailable')}
       </td>
-      <td className={styles.mono}>{cpu || t('runtime_unavailable')}</td>
-      <td className={styles.mono}>{rss || t('runtime_unavailable')}</td>
-      <td className={styles.mono}>{vms || t('runtime_unavailable')}</td>
-      <td>
+      <td className={styles.mono} data-column-priority="essential" data-label={t('runtime_col_rss')}>
+        {rss || t('runtime_unavailable')}
+      </td>
+      {!compact ? (
+        <td className={styles.mono} data-column-priority="supplementary" data-label={t('runtime_col_vms')}>
+          {vms || t('runtime_unavailable')}
+        </td>
+      ) : null}
+      <td data-column-priority="important" data-label={t('runtime_col_monitoring')}>
         {component.monitoring.state === 'supported' ? (
           <span className={styles.monitoringSupported}>{t('runtime_monitoring_supported')}</span>
         ) : (
@@ -148,15 +196,19 @@ function ComponentRow({ component }: { component: RuntimeComponent }) {
           </span>
         )}
       </td>
-      <td><AssociationCell component={component} /></td>
-      <td className={styles.mono}>{component.lastScannedAt ? formatDateTime(component.lastScannedAt) : '-'}</td>
+      <td data-column-priority="important" data-label={t('runtime_col_associations')}>
+        <AssociationCell component={component} />
+      </td>
+      <td className={styles.mono} data-column-priority="supplementary" data-label={t('runtime_col_scanned')}>
+        {component.lastScannedAt ? formatDateTime(component.lastScannedAt) : '-'}
+      </td>
     </tr>
   );
 }
 
-type SurfaceProps = { variant: 'panel' | 'full' };
+type SurfaceProps = { variant: 'panel' | 'full' | 'embedded'; refreshSignal?: number };
 
-function RuntimeSurface({ variant }: SurfaceProps) {
+function RuntimeSurface({ variant, refreshSignal = 0 }: SurfaceProps) {
   const { t, formatDateTime } = useI18n();
   const { user } = useAuth();
   const canConfigure = hasPermission(user, 'core.configure');
@@ -183,6 +235,13 @@ function RuntimeSurface({ variant }: SurfaceProps) {
     void observations.mutate();
     void meta.mutate();
   }, [observations, meta]);
+
+  const refreshSignalRef = useRef(refreshSignal);
+  useEffect(() => {
+    if (refreshSignalRef.current === refreshSignal) return;
+    refreshSignalRef.current = refreshSignal;
+    refresh();
+  }, [refresh, refreshSignal]);
 
   // UX-1: when the surface is an Inventory view mode the page frame owns the
   // only visible refresh entry; the dashboard panel keeps its own control
@@ -227,75 +286,103 @@ function RuntimeSurface({ variant }: SurfaceProps) {
   const loading = observations.isLoading && components.length === 0;
   const failed = Boolean(observations.error);
   const scannerEnabled = meta.data?.scannerEnabled ?? true;
-  const visibility = host?.visibility ?? 'host';
+  const embedded = variant === 'embedded';
 
   const toggle = (key: string) => setCollapsed((current) => ({ ...current, [key]: !current[key] }));
 
   return (
     <section
-      className={variant === 'panel' ? styles.panel : styles.view}
-      aria-labelledby={`runtime-title-${variant}`}
-      data-testid="runtime-discovery"
+      className={embedded ? styles.embedded : variant === 'panel' ? styles.panel : styles.view}
+      aria-labelledby={embedded ? undefined : `runtime-title-${variant}`}
+      aria-label={embedded ? t('ops_tab_runtime') : undefined}
+      data-testid={embedded ? 'runtime-discovery-embedded' : 'runtime-discovery'}
     >
-      <div className={styles.head}>
-        <div>
-          <h2 id={`runtime-title-${variant}`} className={styles.title}>
-            <ScanLine size={18} /> {t('runtime_title')}
-          </h2>
-          <p className={styles.note}>{t('runtime_note')}</p>
-          {host ? (
-            <p className={styles.hostLine}>
-              <Server size={14} aria-hidden="true" />
-              <span>{host.hostName}</span>
-              <code className={styles.hostId}>{host.hostId}</code>
-              {visibility !== 'host' ? (
-                <span className={styles.visibility}>
-                  <AlertTriangle size={13} aria-hidden="true" />
-                  {t(`runtime_visibility_${visibility}`)}
-                </span>
-              ) : null}
-              {!scannerEnabled ? <span className={styles.disabled}>{t('runtime_scanner_disabled')}</span> : null}
-            </p>
-          ) : null}
+      {embedded ? (
+        <div className={styles.embeddedHead}>
+          <div className={styles.embeddedMeta}>
+            <HostLine host={host} scannerEnabled={scannerEnabled} />
+            {registry ? (
+              <span className={styles.registryChip}>
+                {t('runtime_registry_summary', {
+                  cnms: registry.cnmsComponents,
+                  total: registry.effectiveEntries,
+                })}
+              </span>
+            ) : null}
+            {scan?.status && scan.status !== 'not_scanned' ? (
+              <span className={styles.scanChip} data-scan-status={scan.status}>
+                {t('runtime_scan_status', { status: t(`runtime_scan_state_${scan.status}`) })}
+                {scan.completedAt ? <span className={styles.scanTime}>{formatDateTime(scan.completedAt)}</span> : null}
+              </span>
+            ) : null}
+          </div>
+          <div className={styles.actions}>
+            {canConfigure ? (
+              <button
+                type="button"
+                className={styles.button}
+                onClick={rescan}
+                disabled={scanning || !scannerEnabled}
+                aria-label={t('runtime_rescan')}
+              >
+                <ScanLine size={15} /> {scanning ? t('runtime_scanning') : t('runtime_rescan')}
+              </button>
+            ) : null}
+            {canConfigure && meta.data?.bootstrapEnabled ? (
+              <button type="button" className={styles.primaryButton} onClick={() => setBootstrapOpen(true)}>
+                <ShieldCheck size={15} /> {t('runtime_bootstrap_open')}
+              </button>
+            ) : null}
+          </div>
         </div>
-        <div className={styles.actions}>
-          {registry ? (
-            <span className={styles.registryChip}>
-              {t('runtime_registry_summary', {
-                cnms: registry.cnmsComponents,
-                total: registry.effectiveEntries,
-              })}
-            </span>
-          ) : null}
-          {scan?.status && scan.status !== 'not_scanned' ? (
-            <span className={styles.scanChip} data-scan-status={scan.status}>
-              {t('runtime_scan_status', { status: t(`runtime_scan_state_${scan.status}`) })}
-              {scan.completedAt ? <span className={styles.scanTime}>{formatDateTime(scan.completedAt)}</span> : null}
-            </span>
-          ) : null}
-          {variant === 'panel' ? (
-            <button type="button" className={styles.button} onClick={refresh} aria-label={t('runtime_refresh')}>
-              <RefreshCw size={15} /> {t('runtime_refresh')}
-            </button>
-          ) : null}
-          {canConfigure ? (
-            <button
-              type="button"
-              className={styles.button}
-              onClick={rescan}
-              disabled={scanning || !scannerEnabled}
-              aria-label={t('runtime_rescan')}
-            >
-              <ScanLine size={15} /> {scanning ? t('runtime_scanning') : t('runtime_rescan')}
-            </button>
-          ) : null}
-          {canConfigure && meta.data?.bootstrapEnabled ? (
-            <button type="button" className={styles.primaryButton} onClick={() => setBootstrapOpen(true)}>
-              <ShieldCheck size={15} /> {t('runtime_bootstrap_open')}
-            </button>
-          ) : null}
+      ) : (
+        <div className={styles.head}>
+          <div>
+            <h2 id={`runtime-title-${variant}`} className={styles.title}>
+              <ScanLine size={18} /> {t('runtime_title')}
+            </h2>
+            <p className={styles.note}>{t('runtime_note')}</p>
+            <HostLine host={host} scannerEnabled={scannerEnabled} />
+          </div>
+          <div className={styles.actions}>
+            {registry ? (
+              <span className={styles.registryChip}>
+                {t('runtime_registry_summary', {
+                  cnms: registry.cnmsComponents,
+                  total: registry.effectiveEntries,
+                })}
+              </span>
+            ) : null}
+            {scan?.status && scan.status !== 'not_scanned' ? (
+              <span className={styles.scanChip} data-scan-status={scan.status}>
+                {t('runtime_scan_status', { status: t(`runtime_scan_state_${scan.status}`) })}
+                {scan.completedAt ? <span className={styles.scanTime}>{formatDateTime(scan.completedAt)}</span> : null}
+              </span>
+            ) : null}
+            {variant === 'panel' ? (
+              <button type="button" className={styles.button} onClick={refresh} aria-label={t('runtime_refresh')}>
+                <RefreshCw size={15} /> {t('runtime_refresh')}
+              </button>
+            ) : null}
+            {canConfigure ? (
+              <button
+                type="button"
+                className={styles.button}
+                onClick={rescan}
+                disabled={scanning || !scannerEnabled}
+                aria-label={t('runtime_rescan')}
+              >
+                <ScanLine size={15} /> {scanning ? t('runtime_scanning') : t('runtime_rescan')}
+              </button>
+            ) : null}
+            {canConfigure && meta.data?.bootstrapEnabled ? (
+              <button type="button" className={styles.primaryButton} onClick={() => setBootstrapOpen(true)}>
+                <ShieldCheck size={15} /> {t('runtime_bootstrap_open')}
+              </button>
+            ) : null}
+          </div>
         </div>
-      </div>
+      )}
 
       {scanError ? <p className={styles.error} role="alert">{scanError}</p> : null}
       {stream.status === 'connected' ? (
@@ -323,21 +410,23 @@ function RuntimeSurface({ variant }: SurfaceProps) {
         <EmptyState icon={<Server size={40} />} title={t('runtime_empty_title')} description={t('runtime_empty_body')} />
       ) : (
         <>
-          <div className={styles.summary} role="list">
-            {[
-              { key: 'running', value: summary.running, tone: styles.toneHealthy },
-              { key: 'stopped', value: summary.stopped, tone: styles.toneDanger },
-              { key: 'attention', value: summary.attention, tone: styles.toneWarning },
-              { key: 'not_detected', value: summary.notDetected, tone: styles.toneMuted },
-              { key: 'expected', value: summary.expected, tone: styles.toneStale },
-              { key: 'monitored', value: summary.monitored, tone: styles.toneHealthy },
-            ].map((item) => (
-              <div key={item.key} className={styles.summaryCard} role="listitem">
-                <span className={styles.summaryValue}>{item.value}</span>
-                <span className={`${styles.summaryLabel} ${item.tone}`}>{t(`runtime_summary_${item.key}`)}</span>
-              </div>
-            ))}
-          </div>
+          {!embedded ? (
+            <div className={styles.summary} role="list">
+              {[
+                { key: 'running', value: summary.running, tone: styles.toneHealthy },
+                { key: 'stopped', value: summary.stopped, tone: styles.toneDanger },
+                { key: 'attention', value: summary.attention, tone: styles.toneWarning },
+                { key: 'not_detected', value: summary.notDetected, tone: styles.toneMuted },
+                { key: 'expected', value: summary.expected, tone: styles.toneStale },
+                { key: 'monitored', value: summary.monitored, tone: styles.toneHealthy },
+              ].map((item) => (
+                <div key={item.key} className={styles.summaryCard} role="listitem">
+                  <span className={styles.summaryValue}>{item.value}</span>
+                  <span className={`${styles.summaryLabel} ${item.tone}`}>{t(`runtime_summary_${item.key}`)}</span>
+                </div>
+              ))}
+            </div>
+          ) : null}
 
           <div className={styles.toolbar}>
             <label className={styles.field}>
@@ -413,22 +502,22 @@ function RuntimeSurface({ variant }: SurfaceProps) {
                           <caption className={styles.caption}>{t('runtime_table_caption')}</caption>
                           <thead>
                             <tr>
-                              <th scope="col">{t('runtime_col_component')}</th>
-                              <th scope="col">{t('runtime_col_status')}</th>
-                              <th scope="col">{t('runtime_col_evidence')}</th>
-                              <th scope="col">{t('runtime_col_pid')}</th>
-                              <th scope="col">{t('runtime_col_workers')}</th>
-                              <th scope="col">{t('runtime_col_cpu')}</th>
-                              <th scope="col">{t('runtime_col_rss')}</th>
-                              <th scope="col">{t('runtime_col_vms')}</th>
-                              <th scope="col">{t('runtime_col_monitoring')}</th>
-                              <th scope="col">{t('runtime_col_associations')}</th>
-                              <th scope="col">{t('runtime_col_scanned')}</th>
+                              <th scope="col" data-column-priority="essential">{t('runtime_col_component')}</th>
+                              <th scope="col" data-column-priority="essential">{t('runtime_col_status')}</th>
+                              {!embedded ? <th scope="col" data-column-priority="important">{t('runtime_col_evidence')}</th> : null}
+                              {!embedded ? <th scope="col" data-column-priority="supplementary">{t('runtime_col_pid')}</th> : null}
+                              {!embedded ? <th scope="col" data-column-priority="supplementary">{t('runtime_col_workers')}</th> : null}
+                              <th scope="col" data-column-priority="essential">{t('runtime_col_cpu')}</th>
+                              <th scope="col" data-column-priority="essential">{t('runtime_col_rss')}</th>
+                              {!embedded ? <th scope="col" data-column-priority="supplementary">{t('runtime_col_vms')}</th> : null}
+                              <th scope="col" data-column-priority="important">{t('runtime_col_monitoring')}</th>
+                              <th scope="col" data-column-priority="important">{t('runtime_col_associations')}</th>
+                              <th scope="col" data-column-priority="supplementary">{t('runtime_col_scanned')}</th>
                             </tr>
                           </thead>
                           <tbody>
                             {group.components.map((component) => (
-                              <ComponentRow key={component.componentId} component={component} />
+                              <ComponentRow key={component.componentId} component={component} variant={variant} />
                             ))}
                           </tbody>
                         </table>
@@ -459,9 +548,14 @@ function RuntimeSurface({ variant }: SurfaceProps) {
   );
 }
 
-/** Dashboard placement: an additional section below the operational overview. */
-export function RuntimeDiscoveryPanel() {
-  return <RuntimeSurface variant="panel" />;
+/** Legacy standalone panel placement; the dashboard uses the embedded variant. */
+export function RuntimeDiscoveryPanel({ refreshSignal = 0 }: { refreshSignal?: number } = {}) {
+  return <RuntimeSurface variant="panel" refreshSignal={refreshSignal} />;
+}
+
+/** Embedded placement: rendered inside the dashboard network status panel. */
+export function RuntimeDiscoveryEmbedded({ refreshSignal = 0 }: { refreshSignal?: number } = {}) {
+  return <RuntimeSurface variant="embedded" refreshSignal={refreshSignal} />;
 }
 
 /** Inventory placement: an additional view mode over the same resource authority. */
