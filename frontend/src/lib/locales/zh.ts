@@ -2257,7 +2257,6 @@ export const zh: Record<string, string> = {
     runtime_assoc_unresolved: "未解析",
     runtime_unavailable: "不可用",
     runtime_workers_truncated: "（已截断）",
-    runtime_xcloud_only: "xCloud 专有",
     runtime_visibility_container_limited: "容器受限的进程视图",
     runtime_visibility_unavailable: "进程视图不可用",
     runtime_footnote_evidence: "仅正向验证通过的进程会被报告为运行中。",

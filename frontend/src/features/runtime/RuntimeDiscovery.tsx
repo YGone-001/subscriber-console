@@ -152,7 +152,6 @@ function ComponentRow({ component, variant }: { component: RuntimeComponent; var
       >
         <span className={styles.componentName}>{component.displayName}</span>
         <code className={styles.processName}>{component.processName}</code>
-        {!component.cnmsCompatible ? <span className={styles.xcloudOnly}>{t('runtime_xcloud_only')}</span> : null}
       </th>
       <td data-column-priority="essential" data-label={t('runtime_col_status')}>
         <span className={styles.statusCell}>

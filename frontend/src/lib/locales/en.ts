@@ -2258,7 +2258,6 @@ export const en: Record<string, string> = {
     runtime_assoc_unresolved: "unresolved",
     runtime_unavailable: "unavailable",
     runtime_workers_truncated: " (bounded)",
-    runtime_xcloud_only: "xCloud only",
     runtime_visibility_container_limited: "container-limited process view",
     runtime_visibility_unavailable: "process view unavailable",
     runtime_footnote_evidence: "Only positively verified processes are reported as running.",
