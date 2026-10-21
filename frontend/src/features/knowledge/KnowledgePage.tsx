@@ -60,6 +60,13 @@ export function KnowledgePage() {
 
   const entries = data?.entries ?? [];
   const total = data?.total ?? 0;
+  const hasFilters = Boolean(q || protocol || tag);
+
+  const clearFilters = () => {
+    setSearchInput('');
+    setCursorHistory([]);
+    setSearchParams(new URLSearchParams());
+  };
 
   const kpi: MetricStripItem[] = [
     { key: 'total', icon: <BookOpen size={16} />, label: t('kb_kpi_total'), value: meta ? meta.total : (isLoading ? t('loading') : '—'), tone: 'primary' },
@@ -159,7 +166,16 @@ export function KnowledgePage() {
         ) : error && !data ? (
           <EmptyState icon={<BookOpen size={40} />} title={t('kb_error_title')} description={t('kb_error_body')} />
         ) : entries.length === 0 ? (
-          <EmptyState icon={<BookOpen size={40} />} title={t('kb_empty_title')} description={t('kb_empty_body')} />
+          <EmptyState
+            icon={hasFilters ? <Search size={40} /> : <BookOpen size={40} />}
+            title={hasFilters ? t('kb_no_match_title') : t('kb_empty_title')}
+            description={hasFilters ? t('kb_no_match_body') : t('kb_empty_body')}
+            action={hasFilters ? (
+              <button type="button" className={styles.searchButton} onClick={clearFilters}>
+                {t('kb_clear_filters')}
+              </button>
+            ) : undefined}
+          />
         ) : (
           <ul className={styles.list}>
             {entries.map((entry) => (

@@ -17,6 +17,17 @@ export type EntryQuery = {
   limit?: number;
 };
 
+/** Whether an SWR key identifies a knowledge entry list query. */
+export function isKnowledgeListKey(key: unknown): boolean {
+  return typeof key === 'string'
+    && (key === '/api/knowledge/entries' || key.startsWith('/api/knowledge/entries?'));
+}
+
+/** Whether an SWR key identifies any knowledge entry read (list or detail). */
+export function isKnowledgeEntryKey(key: unknown): boolean {
+  return typeof key === 'string' && key.startsWith('/api/knowledge/entries');
+}
+
 export function buildEntriesPath(query: EntryQuery = {}): string {
   const params = new URLSearchParams();
   if (query.q) params.set('q', query.q);

@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useSWRConfig } from 'swr';
 import { ArrowLeft, CheckCircle2, Copy, Download, Edit, FileText, Trash2, TriangleAlert } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import { EmptyState } from '../../components/ui/OperationFeedback';
@@ -8,41 +9,83 @@ import { useI18n } from '../../providers/I18nProvider';
 import { useAuth } from '../../providers/AuthProvider';
 import { hasPermission } from '../../lib/permissions';
 import { MarkdownContent } from './components/MarkdownContent';
-import { attachmentUrl, deleteEntry } from './knowledge-api';
+import { attachmentUrl, deleteEntry, isKnowledgeListKey } from './knowledge-api';
 import { fileKindLabel, formatFileSize, isImage } from './knowledge-format';
 import type { KnowledgeEntry } from './types';
 import styles from '../../styles/modules/knowledge.module.css';
+
+/** Copy without the Clipboard API, which is unavailable on plain-HTTP origins. */
+function copyWithSelection(text: string): void {
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.setAttribute('readonly', '');
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copied = document.execCommand('copy');
+  document.body.removeChild(textarea);
+  if (!copied) throw new Error('copy failed');
+}
 
 export function KnowledgeDetailPage() {
   const { entryId } = useParams<{ entryId: string }>();
   const navigate = useNavigate();
   const { t, formatDateTime } = useI18n();
   const { user } = useAuth();
+  const { mutate } = useSWRConfig();
   const canConfigure = hasPermission(user, 'core.configure');
-  const [copied, setCopied] = useState(false);
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const [deleting, setDeleting] = useState(false);
+  const copyTimer = useRef<number | null>(null);
 
   const { data, error, isLoading } = useRead<KnowledgeEntry>(entryId ? `/api/knowledge/entries/${entryId}` : null);
+
+  useEffect(() => () => {
+    if (copyTimer.current !== null) window.clearTimeout(copyTimer.current);
+  }, []);
 
   const handleDelete = async () => {
     if (!data || !window.confirm(t('kb_delete_confirm'))) return;
     setDeleting(true);
     try {
       await deleteEntry(data.id, data.revision);
+      // Revalidate the cached list before returning so the deleted row cannot
+      // reappear from SWR's dedupe window.
+      try {
+        await mutate(isKnowledgeListKey, undefined, { revalidate: true });
+      } catch {
+        /* The list still revalidates when it mounts. */
+      }
       navigate('/knowledge');
     } catch {
       setDeleting(false);
     }
   };
 
+  const flashCopyState = (next: 'copied' | 'failed') => {
+    setCopyState(next);
+    if (copyTimer.current !== null) window.clearTimeout(copyTimer.current);
+    copyTimer.current = window.setTimeout(() => setCopyState('idle'), 2000);
+  };
+
   const copySolution = async () => {
     if (!data) return;
+    const text = data.solution ?? '';
     try {
-      await navigator.clipboard.writeText(data.solution ?? '');
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        copyWithSelection(text);
+      }
+      flashCopyState('copied');
     } catch {
-      /* clipboard unavailable */
+      try {
+        copyWithSelection(text);
+        flashCopyState('copied');
+      } catch {
+        flashCopyState('failed');
+      }
     }
   };
 
@@ -95,8 +138,8 @@ export function KnowledgeDetailPage() {
       <section className={styles.card}>
         <div className={styles.cardHead}>
           <h2 className={styles.cardTitle}>{t('kb_solution')}</h2>
-          <button type="button" className={styles.copyButton} onClick={copySolution}>
-            <Copy size={14} /> {copied ? t('kb_copy_done') : t('kb_copy')}
+          <button type="button" className={styles.copyButton} onClick={copySolution} aria-live="polite">
+            <Copy size={14} /> {copyState === 'copied' ? t('kb_copy_done') : copyState === 'failed' ? t('kb_copy_failed') : t('kb_copy')}
           </button>
         </div>
         <MarkdownContent content={data.solution ?? ''} />

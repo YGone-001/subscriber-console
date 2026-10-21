@@ -13,18 +13,48 @@ type Tool = {
   prefix?: string;
 };
 
-function applyTool(value: string, start: number, end: number, tool: Tool): { text: string; cursor: number } {
+type ToolShape = Pick<Tool, 'key' | 'wrap' | 'prefix'>;
+
+export type MarkdownEditResult = {
+  text: string;
+  selectionStart: number;
+  selectionEnd: number;
+};
+
+export function applyTool(
+  value: string,
+  start: number,
+  end: number,
+  tool: ToolShape,
+  linkLabel = 'Link text',
+): MarkdownEditResult {
   const selected = value.slice(start, end);
+  if (tool.key === 'link') {
+    const label = selected || linkLabel;
+    const url = 'https://';
+    const text = `${value.slice(0, start)}[${label}](${url})${value.slice(end)}`;
+    const labelStart = start + 1;
+    const labelEnd = labelStart + label.length;
+    const urlStart = labelEnd + 2; // skip "]("
+    if (!selected) {
+      return { text, selectionStart: labelStart, selectionEnd: labelEnd };
+    }
+    return { text, selectionStart: urlStart, selectionEnd: urlStart + url.length };
+  }
   if (tool.prefix) {
     const lineStart = value.lastIndexOf('\n', start - 1) + 1;
     const text = value.slice(0, lineStart) + tool.prefix + value.slice(lineStart);
-    return { text, cursor: start + tool.prefix.length };
+    const cursor = start + tool.prefix.length;
+    return { text, selectionStart: cursor, selectionEnd: cursor };
   }
   if (tool.wrap) {
     const text = value.slice(0, start) + tool.wrap + selected + tool.wrap + value.slice(end);
-    return { text, cursor: start + tool.wrap.length + selected.length + tool.wrap.length };
+    const cursor = selected
+      ? start + tool.wrap.length + selected.length + tool.wrap.length
+      : start + tool.wrap.length;
+    return { text, selectionStart: cursor, selectionEnd: cursor };
   }
-  return { text: value, cursor: start };
+  return { text: value, selectionStart: start, selectionEnd: end };
 }
 
 export function MarkdownEditor({ value, onChange }: { value: string; onChange: (value: string) => void }) {
@@ -40,17 +70,17 @@ export function MarkdownEditor({ value, onChange }: { value: string; onChange: (
     { key: 'code', icon: <Code size={15} />, title: t('kb_tool_code'), wrap: '`' },
     { key: 'list', icon: <List size={15} />, title: t('kb_tool_list'), prefix: '- ' },
     { key: 'quote', icon: <Quote size={15} />, title: t('kb_tool_quote'), prefix: '> ' },
-    { key: 'link', icon: <Link size={15} />, title: t('kb_tool_link'), wrap: '[' },
+    { key: 'link', icon: <Link size={15} />, title: t('kb_tool_link') },
   ];
 
   const runTool = (tool: Tool) => {
     const ta = textareaRef.current;
     if (!ta) return;
-    const { text, cursor } = applyTool(value, ta.selectionStart, ta.selectionEnd, tool);
-    onChange(text);
+    const result = applyTool(value, ta.selectionStart, ta.selectionEnd, tool, t('kb_link_text'));
+    onChange(result.text);
     window.setTimeout(() => {
       ta.focus();
-      ta.setSelectionRange(cursor, cursor);
+      ta.setSelectionRange(result.selectionStart, result.selectionEnd);
     }, 0);
   };
 

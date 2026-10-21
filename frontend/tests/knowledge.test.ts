@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildEntriesPath } from '../src/features/knowledge/knowledge-api';
+import { buildEntriesPath, isKnowledgeEntryKey, isKnowledgeListKey } from '../src/features/knowledge/knowledge-api';
+import { applyTool } from '../src/features/knowledge/components/MarkdownEditor';
 import { fileKindLabel, formatFileSize, isImage, isKnowledgeImageUrl } from '../src/features/knowledge/knowledge-format';
 
 test('the knowledge entries path carries only requested query values', () => {
@@ -28,6 +29,45 @@ test('file kinds map to stable labels and image detection', () => {
   assert.equal(fileKindLabel('text'), 'TXT');
   assert.equal(isImage('image'), true);
   assert.equal(isImage('pdf'), false);
+});
+
+test('the Markdown link tool inserts a complete link and selects the URL', () => {
+  const linked = applyTool('hello', 0, 5, { key: 'link' }, 'Link text');
+  assert.equal(linked.text, '[hello](https://)');
+  assert.equal(linked.text.slice(linked.selectionStart, linked.selectionEnd), 'https://');
+
+  const empty = applyTool('', 0, 0, { key: 'link' }, 'Link text');
+  assert.equal(empty.text, '[Link text](https://)');
+  assert.equal(empty.text.slice(empty.selectionStart, empty.selectionEnd), 'Link text');
+});
+
+test('the Markdown wrap tool keeps the cursor between empty markers', () => {
+  const bold = applyTool('abc', 1, 2, { key: 'bold', wrap: '**' });
+  assert.equal(bold.text, 'a**b**c');
+  assert.equal(bold.selectionStart, 6);
+
+  const empty = applyTool('abc', 1, 1, { key: 'bold', wrap: '**' });
+  assert.equal(empty.text, 'a****bc');
+  assert.equal(empty.selectionStart, 3);
+  assert.equal(empty.selectionEnd, 3);
+});
+
+test('the Markdown prefix tool inserts at the current line start', () => {
+  const heading = applyTool('abc', 1, 1, { key: 'h1', prefix: '# ' });
+  assert.equal(heading.text, '# abc');
+  assert.equal(heading.selectionStart, 3);
+});
+
+test('only list keys are invalidated after a knowledge mutation', () => {
+  assert.equal(isKnowledgeListKey('/api/knowledge/entries'), true);
+  assert.equal(isKnowledgeListKey('/api/knowledge/entries?limit=20'), true);
+  assert.equal(isKnowledgeListKey('/api/knowledge/entries/00000000-0000-4000-8000-000000000000'), false);
+  assert.equal(isKnowledgeListKey('/api/knowledge/files/00000000-0000-4000-8000-000000000000'), false);
+  assert.equal(isKnowledgeListKey(null), false);
+
+  assert.equal(isKnowledgeEntryKey('/api/knowledge/entries?limit=20'), true);
+  assert.equal(isKnowledgeEntryKey('/api/knowledge/entries/00000000-0000-4000-8000-000000000000'), true);
+  assert.equal(isKnowledgeEntryKey('/api/knowledge/files/00000000-0000-4000-8000-000000000000'), false);
 });
 
 test('inline Markdown images are restricted to knowledge attachments', () => {

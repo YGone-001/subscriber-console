@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useSWRConfig } from 'swr';
 import { ArrowLeft, FileText, Paperclip, Save, X } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
 import { OperationNotice } from '../../components/ui/OperationFeedback';
+import { UnsavedChangesDialog, useUnsavedChangesGuard } from '../../components/ui/UnsavedChangesGuard';
 import { useI18n } from '../../providers/I18nProvider';
 import { MutationApiError } from '../../lib/api/mutation-client';
 import { MarkdownEditor } from './components/MarkdownEditor';
-import { createEntry, fetchEntry, fetchKnowledgeMeta, updateEntry, uploadKnowledgeFile } from './knowledge-api';
+import { createEntry, fetchEntry, fetchKnowledgeMeta, isKnowledgeEntryKey, updateEntry, uploadKnowledgeFile } from './knowledge-api';
 import { fileKindLabel, formatFileSize } from './knowledge-format';
 import type { Attachment, KnowledgeMeta } from './types';
 import styles from '../../styles/modules/knowledge.module.css';
@@ -16,6 +18,7 @@ type AttachmentDraft = Attachment;
 export function KnowledgeEditorPage() {
   const { entryId } = useParams<{ entryId: string }>();
   const navigate = useNavigate();
+  const { mutate } = useSWRConfig();
   const { t } = useI18n();
   const isEdit = Boolean(entryId);
 
@@ -60,15 +63,7 @@ export function KnowledgeEditorPage() {
     setDirty(true);
   };
 
-  useEffect(() => {
-    if (!dirty) return;
-    const handler = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue = '';
-    };
-    window.addEventListener('beforeunload', handler);
-    return () => window.removeEventListener('beforeunload', handler);
-  }, [dirty]);
+  const unsavedChanges = useUnsavedChangesGuard(dirty, () => setDirty(false));
 
   const protocols = useMemo(() => (meta?.protocols?.length ? meta.protocols : ['General']), [meta]);
 
@@ -109,6 +104,14 @@ export function KnowledgeEditorPage() {
         await updateEntry(entryId, { ...payload, expectedRevision: revision });
       } else {
         await createEntry(payload);
+      }
+      setDirty(false);
+      // Invalidate cached list and detail reads so a new or changed entry is
+      // visible when the destination mounts inside SWR's dedupe window.
+      try {
+        await mutate(isKnowledgeEntryKey, undefined, { revalidate: true });
+      } catch {
+        /* Routes still revalidate when they mount. */
       }
       navigate('/knowledge');
     } catch (err) {
@@ -244,6 +247,16 @@ export function KnowledgeEditorPage() {
           </div>
         </div>
       )}
+
+      <UnsavedChangesDialog
+        open={unsavedChanges.isPromptOpen}
+        title={t('unsaved_changes_title')}
+        description={t('unsaved_changes_description')}
+        keepEditingLabel={t('unsaved_changes_keep_editing')}
+        discardLabel={t('unsaved_changes_discard')}
+        onKeepEditing={unsavedChanges.keepEditing}
+        onDiscard={unsavedChanges.discardChanges}
+      />
     </div>
   );
 }
