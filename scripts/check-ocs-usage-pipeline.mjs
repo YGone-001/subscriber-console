@@ -23,6 +23,13 @@ const windowHours = Number(process.env.OCS_USAGE_WINDOW_HOURS || 24);
 const since = new Date(Date.now() - Math.max(1, windowHours) * 3600 * 1000);
 const ocsBaseUrl = (process.env.OCS_METRICS_URL || 'http://127.0.0.17:9090').replace(/\/+$/, '');
 
+// OCS writes created_at as an ISO string, while legacy fixtures store a BSON
+// Date. Always normalize before sorting or filtering; a raw sort compares BSON
+// type first and can hide current string records behind old Date records.
+const dateExpr = {
+  $convert: { input: '$created_at', to: 'date', onError: null, onNull: null },
+};
+
 const numberValue = (value) => (Long.isLong(value) ? value.toNumber() : Number(value ?? 0));
 
 async function fetchText(path, timeoutMs = 5000) {
@@ -125,10 +132,20 @@ try {
   const usage = db.collection('ocs_usage_records');
   const sessions = db.collection('ocs_sessions');
 
-  const [total, latestRows, recent, activeRows, topRows] = await Promise.all([
+  const [total, latestRows, recent, createdTypes, activeRows, topRows] = await Promise.all([
     usage.countDocuments({}),
-    usage.find({ created_at: { $exists: true } }).sort({ created_at: -1 }).limit(1).toArray(),
-    usage.countDocuments({ created_at: { $gte: since } }),
+    usage.aggregate([
+      { $match: { $expr: { $ne: [dateExpr, null] } } },
+      { $addFields: { _usage_at: dateExpr } },
+      { $sort: { _usage_at: -1 } },
+      { $limit: 1 },
+      { $project: { _usage_at: 1 } },
+    ]).toArray(),
+    usage.countDocuments({ $expr: { $gte: [dateExpr, since] } }),
+    usage.aggregate([
+      { $group: { _id: { $type: '$created_at' }, count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+    ]).toArray(),
     sessions.aggregate([
       { $match: { state: 'active' } },
       { $group: { _id: null, sessions: { $sum: 1 }, used: { $sum: '$used_total' } } },
@@ -141,7 +158,7 @@ try {
     ]).toArray(),
   ]);
 
-  const latest = latestRows[0]?.created_at;
+  const latest = latestRows[0]?._usage_at;
   const latestIso = latest instanceof Date ? latest.toISOString() : (latest ? String(latest) : '');
   const active = activeRows[0] ?? { sessions: 0, used: 0 };
   const activeSessions = numberValue(active.sessions);
@@ -153,6 +170,7 @@ try {
   console.log('OCS usage pipeline check');
   console.log(`database=${dbName}`);
   console.log(`usage_records_total=${total}`);
+  console.log(`usage_records_created_at_types=${createdTypes.map((row) => `${row._id ?? 'null'}:${row.count}`).join(',') || '(none)'}`);
   console.log(`usage_records_latest=${latestIso || '(none)'}`);
   console.log(`usage_records_last_${windowHours}h=${recent}`);
   console.log(`active_sessions=${activeSessions}`);
