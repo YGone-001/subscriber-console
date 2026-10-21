@@ -36,6 +36,10 @@ test('static routes win over dynamic route patterns', () => {
   assert.equal(getNavigationRoute('/knowledge/new')?.targetRoute, '/knowledge/new');
   assert.equal(getBreadcrumbs('/knowledge/new').at(-1)?.labelKey, 'nav_knowledge_new');
   assert.equal(getNavigationRoute('/knowledge/entry-id')?.targetRoute, '/knowledge/:entryId');
+  assert.equal(
+    getBreadcrumbs('/knowledge/00000000-0000-4000-8000-000000000000').at(-1)?.labelKey,
+    'breadcrumbs_detail',
+  );
 });
 
 test('keeps theme and language preferences bounded', () => {

@@ -116,7 +116,6 @@ export function KnowledgeDetailPage() {
         eyebrow={data.protocol || t('kb_protocol_general')}
         icon={<FileText size={24} />}
         title={data.title}
-        description={t('kb_detail_updated', { time: formatDateTime(data.updatedAt), by: data.updatedBy })}
         actions={
           <div className={styles.headerActions}>
             <Link to="/knowledge" className={styles.backButton}><ArrowLeft size={15} /> {t('kb_back')}</Link>
@@ -139,9 +138,19 @@ export function KnowledgeDetailPage() {
         <OperationNotice tone="danger" message={actionError} onClose={() => setActionError(null)} />
       )}
 
+      <div className={styles.detailMeta}>
+        <span>{t('kb_detail_created', { time: formatDateTime(data.createdAt), by: data.createdBy || '—' })}</span>
+        <span aria-hidden="true">·</span>
+        <span>{t('kb_detail_updated', { time: formatDateTime(data.updatedAt), by: data.updatedBy || '—' })}</span>
+      </div>
+
       {data.tags.length > 0 && (
-        <div className={styles.tagStrip} role="list">
-          {data.tags.map((tag) => <span key={tag} className={styles.tagChip}>{tag}</span>)}
+        <div className={styles.tagStrip}>
+          {data.tags.map((tag) => (
+            <Link key={tag} to={`/knowledge?tag=${encodeURIComponent(tag)}`} className={styles.tagChip}>
+              {tag}
+            </Link>
+          ))}
         </div>
       )}
 

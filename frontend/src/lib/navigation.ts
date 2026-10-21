@@ -72,6 +72,8 @@ export function matchesRoute(pattern: string, pathname: string): boolean {
   return expression.test(pathname);
 }
 
+const UUID_SEGMENT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
  * Resolve a live pathname to its navigation route.
  *
@@ -109,7 +111,10 @@ export function getBreadcrumbs(pathname: string): Array<{ labelKey: string; path
     const candidate = `/${accumulated.join('/')}`;
     const found = getNavigationRoute(candidate);
     const isDynamicValue = Boolean(found?.route.split('/').at(-1)?.startsWith(':'));
-    crumbs.push({ labelKey: isDynamicValue ? segment : (found?.labelKey ?? segment), path: candidate, current: candidate === pathname });
+    const labelKey = isDynamicValue
+      ? (UUID_SEGMENT.test(segment) ? 'breadcrumbs_detail' : segment)
+      : (found?.labelKey ?? segment);
+    crumbs.push({ labelKey, path: candidate, current: candidate === pathname });
   }
   return crumbs;
 }

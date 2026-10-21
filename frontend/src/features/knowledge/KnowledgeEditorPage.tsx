@@ -7,7 +7,8 @@ import { OperationNotice } from '../../components/ui/OperationFeedback';
 import { UnsavedChangesDialog, useUnsavedChangesGuard } from '../../components/ui/UnsavedChangesGuard';
 import { useI18n } from '../../providers/I18nProvider';
 import { MarkdownEditor } from './components/MarkdownEditor';
-import { createEntry, fetchEntry, fetchKnowledgeMeta, isKnowledgeEntryKey, updateEntry, uploadKnowledgeFile } from './knowledge-api';
+import { TagInput } from './components/TagInput';
+import { attachmentUrl, createEntry, fetchEntry, fetchKnowledgeMeta, isKnowledgeEntryKey, updateEntry, uploadKnowledgeFile } from './knowledge-api';
 import { knowledgeErrorMessage } from './knowledge-errors';
 import { fileKindLabel, formatFileSize } from './knowledge-format';
 import type { Attachment, KnowledgeMeta } from './types';
@@ -27,7 +28,7 @@ export function KnowledgeEditorPage() {
 
   const [title, setTitle] = useState('');
   const [protocol, setProtocol] = useState('General');
-  const [tagsText, setTagsText] = useState('');
+  const [tags, setTags] = useState<string[]>([]);
   const [phenomenon, setPhenomenon] = useState('');
   const [rootCause, setRootCause] = useState('');
   const [solution, setSolution] = useState('');
@@ -50,7 +51,7 @@ export function KnowledgeEditorPage() {
       .then((entry) => {
         setTitle(entry.title);
         setProtocol(entry.protocol);
-        setTagsText(entry.tags.join(', '));
+        setTags(entry.tags);
         setPhenomenon(entry.phenomenon);
         setRootCause(entry.rootCause);
         setSolution(entry.solution);
@@ -89,6 +90,21 @@ export function KnowledgeEditorPage() {
     }
   };
 
+  const handleInlineImage = async (file: File): Promise<{ url: string; name: string } | null> => {
+    setError(null);
+    if (file.size > maxFileBytes) {
+      setError(t('kb_file_too_large', { size: formatFileSize(maxFileBytes) }));
+      return null;
+    }
+    try {
+      const uploaded = await uploadKnowledgeFile(file);
+      return { url: attachmentUrl(uploaded.fileId), name: uploaded.originalName };
+    } catch (err) {
+      setError(knowledgeErrorMessage(err, t, 'kb_upload_failed'));
+      return null;
+    }
+  };
+
   const removeAttachment = (index: number) => {
     setAttachments((prev) => prev.filter((_, i) => i !== index));
     setDirty(true);
@@ -104,7 +120,7 @@ export function KnowledgeEditorPage() {
       phenomenon,
       rootCause,
       solution,
-      tags: tagsText.split(',').map((t) => t.trim()).filter(Boolean),
+      tags,
       attachmentFileIds: attachments.map((a) => a.fileId),
     };
     try {
@@ -127,7 +143,7 @@ export function KnowledgeEditorPage() {
   };
 
   return (
-    <div className="container animate-fade-in">
+    <div className={`container animate-fade-in ${dirty ? styles.editorDirty : ''}`}>
       <PageHeader
         eyebrow={t('kb_page_eyebrow')}
         icon={<FileText size={24} />}
@@ -192,7 +208,11 @@ export function KnowledgeEditorPage() {
 
             <section className={styles.card}>
               <span className={styles.fieldLabel}>{t('kb_field_solution')}</span>
-              <MarkdownEditor value={solution} onChange={(value) => markDirty(() => setSolution(value))} />
+              <MarkdownEditor
+                value={solution}
+                onChange={(value) => markDirty(() => setSolution(value))}
+                onUploadImage={handleInlineImage}
+              />
             </section>
           </div>
 
@@ -204,15 +224,18 @@ export function KnowledgeEditorPage() {
                   {protocols.map((p) => <option key={p} value={p}>{p}</option>)}
                 </select>
               </label>
-              <label className={styles.field}>
+              <div className={styles.field}>
                 <span className={styles.fieldLabel}>{t('kb_field_tags')}</span>
-                <input
-                  className={styles.input}
-                  value={tagsText}
-                  onChange={(event) => markDirty(() => setTagsText(event.target.value))}
+                <TagInput
+                  value={tags}
+                  onChange={(next) => markDirty(() => setTags(next))}
+                  suggestions={meta?.topTags.map((item) => item.tag) ?? []}
+                  maxTags={meta?.maxTags ?? 20}
+                  maxTagLength={meta?.maxTagLength ?? 32}
+                  ariaLabel={t('kb_field_tags')}
                   placeholder={t('kb_tag_placeholder')}
                 />
-              </label>
+              </div>
             </section>
 
             <section className={styles.card}>
@@ -252,6 +275,15 @@ export function KnowledgeEditorPage() {
               <p className={styles.attachHint}>{t('kb_attachment_hint', { size: formatFileSize(maxFileBytes) })}</p>
             </section>
           </div>
+        </div>
+      )}
+
+      {dirty && (
+        <div className={styles.floatingSave} role="region" aria-label={t('kb_unsaved_changes')}>
+          <span className={styles.floatingSaveText}>{t('kb_unsaved_changes')}</span>
+          <button type="button" className={styles.newButton} onClick={handleSave} disabled={saving || !title.trim()}>
+            <Save size={15} /> {saving ? t('saving') : t('save')}
+          </button>
         </div>
       )}
 

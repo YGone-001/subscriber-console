@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { buildEntriesPath, isKnowledgeEntryKey, isKnowledgeListKey } from '../src/features/knowledge/knowledge-api';
-import { applyTool } from '../src/features/knowledge/components/MarkdownEditor';
+import { applyTool, insertImage } from '../src/features/knowledge/components/MarkdownEditor';
+import { mergeTags, splitTagInput } from '../src/features/knowledge/knowledge-tags';
 import { knowledgeErrorMessage } from '../src/features/knowledge/knowledge-errors';
 import { fileKindLabel, formatFileSize, isImage, isKnowledgeImageUrl } from '../src/features/knowledge/knowledge-format';
 import { MutationApiError } from '../src/lib/api/mutation-client';
@@ -70,6 +71,29 @@ test('only list keys are invalidated after a knowledge mutation', () => {
   assert.equal(isKnowledgeEntryKey('/api/knowledge/entries?limit=20'), true);
   assert.equal(isKnowledgeEntryKey('/api/knowledge/entries/00000000-0000-4000-8000-000000000000'), true);
   assert.equal(isKnowledgeEntryKey('/api/knowledge/files/00000000-0000-4000-8000-000000000000'), false);
+});
+
+test('tag input accepts both comma forms and de-duplicates by case', () => {
+  assert.deepEqual(splitTagInput('sip, volte\uFF0C attach, '), ['sip', 'volte', 'attach']);
+  assert.deepEqual(mergeTags(['SIP'], ['sip', 'VoLTE'], 20, 32), ['SIP', 'VoLTE']);
+  assert.deepEqual(mergeTags(['a'], ['b', 'c', 'd'], 3, 32), ['a', 'b', 'c']);
+  assert.deepEqual(mergeTags([], ['ok', 'toolong'], 20, 3), ['ok']);
+});
+
+test('image insertion replaces the selection with a knowledge attachment image', () => {
+  const result = insertImage('before after', 7, 12, '/api/knowledge/files/x', 'shot');
+  assert.equal(result.text, 'before \n\n![shot](/api/knowledge/files/x)');
+  assert.equal(result.selectionStart, result.text.length);
+  assert.equal(
+    insertImage('', 0, 0, '/api/knowledge/files/x', '').text,
+    '![image](/api/knowledge/files/x)',
+  );
+  const beforeHeading = insertImage('## Heading', 0, 0, '/api/knowledge/files/x', 'shot');
+  assert.equal(beforeHeading.text, '![shot](/api/knowledge/files/x)\n\n## Heading');
+  assert.equal(
+    beforeHeading.text.slice(beforeHeading.selectionStart, beforeHeading.selectionEnd),
+    '',
+  );
 });
 
 test('knowledge mutation errors map to localized message keys', () => {

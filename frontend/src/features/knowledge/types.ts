@@ -52,6 +52,8 @@ export type KnowledgeMeta = {
   maxFileBytes: number;
   maxAttachments: number;
   maxInlineImages: number;
+  maxTags: number;
+  maxTagLength: number;
 };
 
 export type KnowledgePageInfo = {

@@ -15,7 +15,7 @@ import styles from '../../styles/modules/knowledge.module.css';
 const PAGE_LIMIT = 20;
 
 export function KnowledgePage() {
-  const { t, formatDateTime } = useI18n();
+  const { t, formatDateTime, formatRelativeTime } = useI18n();
   const { user } = useAuth();
   const canConfigure = hasPermission(user, 'core.configure');
 
@@ -195,7 +195,7 @@ export function KnowledgePage() {
                     )}
                   </div>
                   <div className={styles.rowMeta}>
-                    <span>{formatDateTime(entry.updatedAt)}</span>
+                    <span title={formatDateTime(entry.updatedAt)}>{formatRelativeTime(entry.updatedAt)}</span>
                     <ChevronRight size={16} />
                   </div>
                 </Link>

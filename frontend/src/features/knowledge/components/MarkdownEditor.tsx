@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { Bold, Code, Heading1, Heading2, Italic, Link, List, Quote, Eye, Pencil } from 'lucide-react';
+import { Bold, Code, Heading1, Heading2, Image as ImageIcon, Italic, Link, List, Quote, Eye, Pencil } from 'lucide-react';
 import { useI18n } from '../../../providers/I18nProvider';
 import { MarkdownContent } from './MarkdownContent';
 import styles from '../../../styles/modules/knowledge.module.css';
@@ -57,10 +57,38 @@ export function applyTool(
   return { text: value, selectionStart: start, selectionEnd: end };
 }
 
-export function MarkdownEditor({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+export function insertImage(
+  value: string,
+  start: number,
+  end: number,
+  url: string,
+  alt: string,
+): MarkdownEditResult {
+  const label = alt.replace(/[[\]\r\n]/g, ' ').trim() || 'image';
+  const before = value.slice(0, start);
+  const after = value.slice(end);
+  // Images are block-level in practice; isolate them so adjacent headings and
+  // paragraphs keep their Markdown meaning.
+  const lead = before === '' || before.endsWith('\n') ? '' : '\n\n';
+  const trail = after === '' || after.startsWith('\n') ? '' : '\n\n';
+  const image = `![${label}](${url})`;
+  const text = before + lead + image + trail + after;
+  const cursor = start + lead.length + image.length;
+  return { text, selectionStart: cursor, selectionEnd: cursor };
+}
+
+type MarkdownEditorProps = {
+  value: string;
+  onChange: (value: string) => void;
+  onUploadImage?: (file: File) => Promise<{ url: string; name: string } | null>;
+};
+
+export function MarkdownEditor({ value, onChange, onUploadImage }: MarkdownEditorProps) {
   const { t } = useI18n();
   const [preview, setPreview] = useState(false);
+  const [imageUploading, setImageUploading] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   const tools: Tool[] = [
     { key: 'h1', icon: <Heading1 size={15} />, title: t('kb_tool_h1'), prefix: '# ' },
@@ -84,6 +112,27 @@ export function MarkdownEditor({ value, onChange }: { value: string; onChange: (
     }, 0);
   };
 
+  const uploadImage = async (file: File) => {
+    const ta = textareaRef.current;
+    if (!onUploadImage || !ta) return;
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    const selected = ta.value.slice(start, end);
+    setImageUploading(true);
+    try {
+      const uploaded = await onUploadImage(file);
+      if (!uploaded) return;
+      const result = insertImage(ta.value, start, end, uploaded.url, selected || uploaded.name);
+      onChange(result.text);
+      window.setTimeout(() => {
+        ta.focus();
+        ta.setSelectionRange(result.selectionStart, result.selectionEnd);
+      }, 0);
+    } finally {
+      setImageUploading(false);
+    }
+  };
+
   return (
     <div className={styles.editor}>
       <div className={styles.editorToolbar} role="toolbar" aria-label={t('kb_editor_toolbar')}>
@@ -99,6 +148,32 @@ export function MarkdownEditor({ value, onChange }: { value: string; onChange: (
             {tool.icon}
           </button>
         ))}
+        {onUploadImage && (
+          <>
+            <button
+              type="button"
+              title={t('kb_tool_image')}
+              aria-label={t('kb_tool_image')}
+              className={styles.editorTool}
+              disabled={imageUploading || preview}
+              aria-busy={imageUploading}
+              onClick={() => imageInputRef.current?.click()}
+            >
+              <ImageIcon size={15} />
+            </button>
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept=".png,.jpg,.jpeg,.gif,.webp"
+              className={styles.hiddenInput}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = '';
+                if (file) void uploadImage(file);
+              }}
+            />
+          </>
+        )}
         <button
           type="button"
           className={styles.editorToggle}
