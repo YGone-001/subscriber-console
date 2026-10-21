@@ -647,6 +647,18 @@ type usageBucket struct {
 	Records int
 }
 
+// usageDateExpr accepts both the BSON Date written by the test fixtures and the
+// ISO-8601 string documented for the OCS charging engine. Invalid or missing
+// timestamps become null and are excluded from the window.
+func usageDateExpr() bson.M {
+	return bson.M{"$convert": bson.M{
+		"input":   "$created_at",
+		"to":      "date",
+		"onError": nil,
+		"onNull":  nil,
+	}}
+}
+
 // buildUsageTrend expands sparse hourly aggregation rows into a complete,
 // ordered window. Missing hours carry explicit zero values; the caller already
 // knows whether the window contained any records at all.
@@ -671,12 +683,13 @@ func buildUsageTrend(start time.Time, hours int, buckets map[string]usageBucket)
 }
 
 func (r *Repository) usageBuckets(ctx context.Context, start time.Time) (map[string]usageBucket, error) {
+	dateExpr := usageDateExpr()
 	pipeline := mongo.Pipeline{
-		{{Key: "$match", Value: bson.M{"created_at": bson.M{"$gte": start}}}},
+		{{Key: "$match", Value: bson.M{"$expr": bson.M{"$gte": bson.A{dateExpr, start}}}}},
 		{{Key: "$group", Value: bson.M{
 			"_id": bson.M{"$dateToString": bson.M{
 				"format":   "%Y-%m-%dT%H:00:00Z",
-				"date":     "$created_at",
+				"date":     dateExpr,
 				"timezone": "UTC",
 			}},
 			"octets":  bson.M{"$sum": "$total_octets"},
@@ -712,11 +725,13 @@ func (r *Repository) topUsage(ctx context.Context, start time.Time, windowTotal 
 		return []TopUsageEntry{}, nil
 	}
 
+	dateExpr := usageDateExpr()
+	matchExpr := bson.M{"$expr": bson.M{"$and": bson.A{
+		bson.M{"$gte": bson.A{dateExpr, start}},
+		bson.M{"$gt": bson.A{"$total_octets", 0}},
+	}}}
 	pipeline := mongo.Pipeline{
-		{{Key: "$match", Value: bson.M{
-			"created_at":   bson.M{"$gte": start},
-			"total_octets": bson.M{"$gt": 0},
-		}}},
+		{{Key: "$match", Value: matchExpr}},
 		{{Key: "$group", Value: bson.M{
 			"_id":  "$imsi",
 			"used": bson.M{"$sum": "$total_octets"},
@@ -766,26 +781,30 @@ func topUsageEntries(rows []imsiUsageRow, total int64) []TopUsageEntry {
 }
 
 func (r *Repository) latestUsageAt(ctx context.Context) (string, error) {
-	var doc struct {
-		CreatedAt time.Time `bson:"created_at"`
+	dateExpr := usageDateExpr()
+	pipeline := mongo.Pipeline{
+		{{Key: "$match", Value: bson.M{"$expr": bson.M{"$ne": bson.A{dateExpr, nil}}}}},
+		{{Key: "$addFields", Value: bson.M{"_usage_at": dateExpr}}},
+		{{Key: "$sort", Value: bson.D{{Key: "_usage_at", Value: -1}}}},
+		{{Key: "$limit", Value: 1}},
+		{{Key: "$project", Value: bson.M{"_usage_at": 1}}},
 	}
-	err := r.usageRecords.FindOne(
-		ctx,
-		bson.M{"created_at": bson.M{"$exists": true}},
-		options.FindOne().
-			SetSort(bson.D{{Key: "created_at", Value: -1}}).
-			SetProjection(bson.M{"created_at": 1}),
-	).Decode(&doc)
-	if err == mongo.ErrNoDocuments {
-		return "", nil
-	}
+	cursor, err := r.usageRecords.Aggregate(ctx, pipeline)
 	if err != nil {
 		return "", fmt.Errorf("latest usage: %w", err)
 	}
-	if doc.CreatedAt.IsZero() {
+	defer cursor.Close(ctx)
+
+	var rows []struct {
+		UsageAt time.Time `bson:"_usage_at"`
+	}
+	if err := cursor.All(ctx, &rows); err != nil {
+		return "", fmt.Errorf("decode latest usage: %w", err)
+	}
+	if len(rows) == 0 || rows[0].UsageAt.IsZero() {
 		return "", nil
 	}
-	return doc.CreatedAt.UTC().Format(time.RFC3339), nil
+	return rows[0].UsageAt.UTC().Format(time.RFC3339), nil
 }
 
 func (r *Repository) computeTariffPlanDist(ctx context.Context) ([]TariffPlanDistItem, error) {

@@ -31,7 +31,7 @@ collection: ocs_usage_records
 
 | Field | Type | Required | Semantics |
 |---|---|---|---|
-| `created_at` | BSON Date (UTC) | yes | Observation/event time used for bucketing and window filters |
+| `created_at` | BSON Date (UTC) or ISO-8601 string | yes | Observation/event time used for bucketing and window filters; the analytics projection normalizes both forms |
 | `imsi` | string | yes | Subscriber identity |
 | `session_id` | string | yes | Charging session identity |
 | `apn` | string | no | APN for session distribution |
@@ -46,6 +46,10 @@ collection: ocs_usage_records
 
 `total_octets` must be the volume associated with the individual CCR, not the
 session's cumulative total. Cumulative values belong on `ocs_sessions`.
+
+The OCS engine documentation describes `created_at` as an ISO-8601 string while
+the existing test fixtures store a BSON Date. The analytics projection accepts
+both and excludes null or unparseable timestamps from the trailing window.
 
 ## 4. Write semantics
 
@@ -76,11 +80,19 @@ scan.
 
 ## 6. Verification
 
-Run the read-only diagnostic from the repository root:
+Run the read-only diagnostic from the repository root on the Linux host:
 
 ```bash
 node scripts/check-ocs-usage-pipeline.mjs
 ```
+
+The script checks both authorities:
+
+- OCS Metrics HTTP at `OCS_METRICS_URL` (default `http://127.0.0.17:9090`):
+  `/ocs-info`, `/usage-info?interface_type=gy|ro` (pager and latest record on
+  the page), per-active-IMSI `/usage-info` samples, and usage/CCR metric lines;
+- MongoDB `xcloud.ocs_usage_records` and `xcloud.ocs_sessions`, including the
+  latest record, trailing-window count, active-session usage and Top 5.
 
 Healthy output:
 
