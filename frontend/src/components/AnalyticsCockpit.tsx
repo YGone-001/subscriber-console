@@ -49,6 +49,9 @@ export default function AnalyticsCockpit() {
     if (!data) return [];
     const balances = data.ocsBalances;
     const reservations = data.ocsReservations;
+    const sessions = data.ocsSessions;
+    const activeSessionTotal = sessions?.activeUsedOctets ?? 0;
+    const sessionFallback = (data.usageWindowRecords ?? 0) === 0 && activeSessionTotal > 0;
     const usageRecords = data.usageWindowRecords ?? 0;
     const usageTotal = data.usageWindowTotalOctets ?? 0;
     const usageHours = data.usageWindowHours ?? 24;
@@ -63,7 +66,7 @@ export default function AnalyticsCockpit() {
       ? remainingGb / averageHourlyGb
       : null;
     const balancesAvailable = Boolean(balances && (balances.totalSubscribers > 0 || balances.totalDataAllocated > 0));
-    const top = data.topUsage?.[0];
+    const top = usageRecords > 0 ? data.topUsage?.[0] : sessions?.activeUsageTop?.[0];
     const result: BusinessRisk[] = [];
 
     if (!balancesAvailable) {
@@ -76,16 +79,30 @@ export default function AnalyticsCockpit() {
         action: t('nav_ocs_balances'),
       });
     } else if (usageRecords === 0) {
-      result.push({
-        id: 'usage-stale',
-        tone: 'warning',
-        title: t('dash_biz_risk_usage_stale_title'),
-        detail: latestText
-          ? t('dash_biz_risk_usage_stale_detail', { time: latestText })
-          : t('dash_biz_risk_usage_none'),
-        href: '/ocs/usage',
-        action: t('nav_ocs_usage'),
-      });
+      if (sessionFallback && sessions) {
+        result.push({
+          id: 'usage-not-recorded',
+          tone: 'warning',
+          title: t('dash_biz_risk_usage_not_recorded_title'),
+          detail: t('dash_biz_risk_usage_not_recorded_detail', {
+            sessions: formatNumber(sessions.activeSessions),
+            total: formatNumber(activeSessionTotal / BYTES_IN_GB, { maximumFractionDigits: 2 }),
+          }),
+          href: '/ocs/sessions',
+          action: t('nav_ocs_sessions'),
+        });
+      } else {
+        result.push({
+          id: 'usage-stale',
+          tone: 'warning',
+          title: t('dash_biz_risk_usage_stale_title'),
+          detail: latestText
+            ? t('dash_biz_risk_usage_stale_detail', { time: latestText })
+            : t('dash_biz_risk_usage_none'),
+          href: '/ocs/usage',
+          action: t('nav_ocs_usage'),
+        });
+      }
     } else if (runwayHours !== null && runwayHours < 72) {
       result.push({
         id: 'quota-exhaustion',
@@ -125,11 +142,14 @@ export default function AnalyticsCockpit() {
     }
 
     if (top && top.share >= 35) {
+      const sessionMode = usageRecords === 0 && sessionFallback;
       result.push({
         id: 'usage-concentration',
         tone: top.share >= 50 ? 'danger' : 'warning',
-        title: t('dash_biz_risk_concentration_title', { imsi: top.imsi }),
-        detail: t('dash_biz_risk_concentration_detail', {
+        title: t(sessionMode ? 'dash_biz_risk_session_concentration_title' : 'dash_biz_risk_concentration_title', {
+          imsi: top.imsi,
+        }),
+        detail: t(sessionMode ? 'dash_biz_risk_session_concentration_detail' : 'dash_biz_risk_concentration_detail', {
           share: formatNumber(top.share, { maximumFractionDigits: 1 }),
         }),
         href: '/subscribers',
@@ -176,6 +196,13 @@ export default function AnalyticsCockpit() {
   const usageWindowTotalOctets = data.usageWindowTotalOctets ?? 0;
   const latestUsageAt = data.latestUsageAt ?? '';
   const totalUsageGb = usageWindowTotalOctets / BYTES_IN_GB;
+  const activeSessionTotalOctets = sessions?.activeUsedOctets ?? 0;
+  const activeSessionTop = sessions?.activeUsageTop ?? [];
+  const sessionFallback = usageWindowRecords === 0 && activeSessionTotalOctets > 0;
+  const sessionUsageGb = activeSessionTotalOctets / BYTES_IN_GB;
+  const sessionUsageDetail = sessions
+    ? t('dash_biz_kpi_session_usage_detail', { sessions: formatNumber(sessions.activeSessions) })
+    : undefined;
 
   const totalSubscribers = ue.data?.summary.totalSubscribers ?? null;
   const onlineUsers = ue.data?.summary.epc5gcOnlineUsers ?? null;
@@ -237,7 +264,7 @@ export default function AnalyticsCockpit() {
     {
       key: 'usage',
       icon: <TrendingUp size={16} />,
-      label: t('dash_biz_kpi_usage'),
+      label: sessionFallback ? t('dash_biz_kpi_session_usage') : t('dash_biz_kpi_usage'),
       value: usageWindowRecords > 0
         ? (
           <>
@@ -245,9 +272,20 @@ export default function AnalyticsCockpit() {
             <span>GB</span>
           </>
         )
-        : '—',
-      detail: usageDetail,
-      tone: usageWindowRecords > 0 ? undefined : (latestUsageText ? 'warning' : 'muted'),
+        : sessionFallback
+          ? (
+            <>
+              <CountUpNumber value={sessionUsageGb} decimals={2} />
+              <span>GB</span>
+            </>
+          )
+          : '—',
+      detail: usageWindowRecords > 0
+        ? usageDetail
+        : sessionFallback
+          ? sessionUsageDetail
+          : usageDetail,
+      tone: usageWindowRecords > 0 || sessionFallback ? undefined : (latestUsageText ? 'warning' : 'muted'),
     },
     {
       key: 'data-pool',
@@ -324,6 +362,13 @@ export default function AnalyticsCockpit() {
           totalOctets={usageWindowTotalOctets}
           records={usageWindowRecords}
           latestUsageAt={latestUsageAt}
+          emptyTitle={sessionFallback ? t('dash_biz_usage_no_series_title') : undefined}
+          emptyDescription={sessionFallback
+            ? t('dash_biz_usage_no_series_detail', {
+              sessions: formatNumber(sessions?.activeSessions ?? 0),
+              total: formatNumber(sessionUsageGb, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+            })
+            : undefined}
         />
         <TariffPlanDistributionChart tariffPlanDist={tariffPlans} />
       </div>
@@ -335,12 +380,22 @@ export default function AnalyticsCockpit() {
         usage={usage}
       />
 
-      <TopUsageChart
-        entries={topUsage}
-        totalOctets={usageWindowTotalOctets}
-        records={usageWindowRecords}
-        latestUsageAt={latestUsageAt}
-      />
+      {sessionFallback ? (
+        <TopUsageChart
+          entries={activeSessionTop}
+          totalOctets={activeSessionTotalOctets}
+          records={sessions?.activeSessions ?? 0}
+          latestUsageAt=""
+          mode="session"
+        />
+      ) : (
+        <TopUsageChart
+          entries={topUsage}
+          totalOctets={usageWindowTotalOctets}
+          records={usageWindowRecords}
+          latestUsageAt={latestUsageAt}
+        />
+      )}
     </div>
   );
 }

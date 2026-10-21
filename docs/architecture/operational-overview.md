@@ -355,9 +355,13 @@ that the projection model does not already define.
   stated explicitly. The business analysis sibling view (`?view=business`) is
   mounted only while selected and reads `/api/analytics/metrics` plus
   `/api/ue-info?summary=1` for real 24-hour usage, top usage, tariff adoption,
-  OCS resource health and a business risk queue. It never renders a generated
-  trend or a synthetic readiness score, and the page H1 remains the Operations
-  Overview title. No API path, route or collection is added.
+  OCS resource health and a business risk queue. When the charging engine has
+  not written a 24-hour usage series, the page falls back to the live active
+  session authority (`ocsSessions.activeUsedOctets` / `activeUsageTop`), labels
+  it as current-session usage, and explicitly marks the 24-hour trend
+  unavailable. It never renders a generated trend or a synthetic readiness
+  score, and the page H1 remains the Operations Overview title. No API path,
+  route or collection is added.
 - **Operations workbench navigation** (`OperationsNav`): one tab strip rendered
   by the four operational routes (`/inventory`, `/topology`, `/discovery`,
   `/nf-health`). It adds no route and no destination; nested detail routes keep

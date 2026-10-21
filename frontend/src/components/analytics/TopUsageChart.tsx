@@ -58,11 +58,13 @@ export default function TopUsageChart({
   totalOctets,
   records,
   latestUsageAt,
+  mode = 'window',
 }: {
   entries: TopUsageEntry[];
   totalOctets: number;
   records: number;
   latestUsageAt: string;
+  mode?: 'window' | 'session';
 }) {
   const { t, formatNumber, formatDateTime } = useI18n();
   const titleId = React.useId();
@@ -77,36 +79,47 @@ export default function TopUsageChart({
     gb: entry.usedOctets / BYTES_IN_GB,
     share: entry.share,
   }));
-  const hasData = records > 0 && entries.length > 0 && totalOctets > 0;
+  const hasData = entries.length > 0 && totalOctets > 0 && (mode === 'session' || records > 0);
   const summary = leading
-    ? t('dash_biz_top_summary', {
+    ? t(mode === 'session' ? 'dash_biz_top_session_summary' : 'dash_biz_top_summary', {
+      total: formatNumber(totalOctets / BYTES_IN_GB, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
       share: formatNumber(topShare, { maximumFractionDigits: 1 }),
       imsi: leading.imsi,
       value: formatNumber(leading.usedOctets / BYTES_IN_GB, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
     })
     : '';
+  const title = t(mode === 'session' ? 'dash_biz_top_session_title' : 'dash_biz_top_title');
 
   return (
     <section className="analytics-panel" aria-labelledby={titleId}>
       <div className="analytics-panel-header">
         <div className="analytics-panel-title">
           <Users size={18} color="var(--chart-3)" />
-          <h2 id={titleId}>{t('dash_biz_top_title')}</h2>
+          <h2 id={titleId}>{title}</h2>
         </div>
-        <span className="analytics-panel-badge">{t('dash_biz_usage_window')}</span>
+        <span className="analytics-panel-badge">
+          {t(mode === 'session' ? 'dash_biz_top_session_badge' : 'dash_biz_usage_window')}
+        </span>
       </div>
 
       <div className="analytics-panel-body">
         {!hasData ? (
           <EmptyChartState
             icon={<Users size={42} />}
-            title={t('dash_biz_usage_empty_title')}
-            description={latestText
-              ? t('dash_biz_usage_empty_latest', { time: latestText })
-              : t('dash_biz_usage_empty_none')}
+            title={mode === 'session'
+              ? t('dash_biz_top_session_empty_title')
+              : t('dash_biz_usage_empty_title')}
+            description={mode === 'session'
+              ? t('dash_biz_top_session_empty_detail')
+              : (latestText
+                ? t('dash_biz_usage_empty_latest', { time: latestText })
+                : t('dash_biz_usage_empty_none'))}
             action={(
-              <Link to="/ocs/usage" className="btn btn-outline analytics-empty-button">
-                {t('nav_ocs_usage')}
+              <Link
+                to={mode === 'session' ? '/ocs/sessions' : '/ocs/usage'}
+                className="btn btn-outline analytics-empty-button"
+              >
+                {t(mode === 'session' ? 'nav_ocs_sessions' : 'nav_ocs_usage')}
               </Link>
             )}
           />
@@ -157,7 +170,7 @@ export default function TopUsageChart({
       {hasData ? (
         <ChartDataTable
           label={t('chart_data_table')}
-          caption={t('dash_biz_top_title')}
+          caption={title}
           columns={[
             { key: 'imsi', label: t('chart_col_subscriber') },
             { key: 'usage', label: t('dash_biz_usage_series'), numeric: true },

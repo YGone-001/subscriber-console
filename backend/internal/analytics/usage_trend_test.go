@@ -47,6 +47,24 @@ func TestBuildUsageTrendRejectsEmptyWindow(t *testing.T) {
 	}
 }
 
+func TestTopUsageEntriesComputesShareAndSkipsEmptyIdentity(t *testing.T) {
+	rows := []imsiUsageRow{
+		{IMSI: "460020000000001", Used: 600},
+		{IMSI: "", Used: 10},
+		{IMSI: "460020000000002", Used: 400},
+	}
+	top := topUsageEntries(rows, 1000)
+	if len(top) != 2 {
+		t.Fatalf("expected 2 non-empty entries, got %d", len(top))
+	}
+	if top[0].Share != 60 || top[1].Share != 40 {
+		t.Fatalf("unexpected shares: %+v", top)
+	}
+	if empty := topUsageEntries(rows, 0); len(empty) != 0 {
+		t.Fatalf("zero total must yield an empty list, got %+v", empty)
+	}
+}
+
 func TestAnalyticsMetricsSerializesBusinessFields(t *testing.T) {
 	payload := AnalyticsMetrics{
 		UsageWindowHours:       24,
@@ -68,6 +86,14 @@ func TestAnalyticsMetricsSerializesBusinessFields(t *testing.T) {
 			InvariantScope:           "data_balance",
 			VoiceAllocationDefaulted: 8,
 			SmsAllocationDefaulted:   3,
+		},
+		OcsSessions: OcsSessionMetrics{
+			ActiveUsedOctets: 2048,
+			ActiveUsageTop: []TopUsageEntry{{
+				IMSI:       "460020000000001",
+				UsedOctets: 1024,
+				Share:      50,
+			}},
 		},
 	}
 
@@ -103,5 +129,15 @@ func TestAnalyticsMetricsSerializesBusinessFields(t *testing.T) {
 	}
 	if balances["invariantSampleLimit"] != float64(500) {
 		t.Errorf("invariantSampleLimit = %v", balances["invariantSampleLimit"])
+	}
+	sessions, ok := raw["ocsSessions"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("ocsSessions missing")
+	}
+	if sessions["activeUsedOctets"] != float64(2048) {
+		t.Errorf("activeUsedOctets = %v", sessions["activeUsedOctets"])
+	}
+	if topActive, ok := sessions["activeUsageTop"].([]interface{}); !ok || len(topActive) != 1 {
+		t.Errorf("activeUsageTop missing or empty: %v", sessions["activeUsageTop"])
 	}
 }

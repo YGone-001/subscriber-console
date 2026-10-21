@@ -65,6 +65,7 @@ Canonical frontend SPA source     -> frontend/src/
 - [Operation model](operations/operation-model.md)
 - [Direct operation model](operations/direct-operation-model.md)
 - [OCS management runbook](operations/ocs-management-runbook.md)
+- [OCS usage record write contract](operations/ocs-usage-record-contract.md)
 - [NF discovery runbook](operations/nf-discovery-runbook.md)
 - [Security](operations/security.md)
 

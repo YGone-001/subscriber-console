@@ -56,11 +56,15 @@ export default function UsageTrendChart({
   totalOctets,
   records,
   latestUsageAt,
+  emptyTitle,
+  emptyDescription,
 }: {
   points: UsageTrendPoint[];
   totalOctets: number;
   records: number;
   latestUsageAt: string;
+  emptyTitle?: string;
+  emptyDescription?: string;
 }) {
   const { t, formatNumber, formatDateTime } = useI18n();
   const titleId = React.useId();
@@ -95,10 +99,11 @@ export default function UsageTrendChart({
         {records === 0 ? (
           <EmptyChartState
             icon={<Activity size={42} />}
-            title={t('dash_biz_usage_empty_title')}
-            description={latestText
-              ? t('dash_biz_usage_empty_latest', { time: latestText })
-              : t('dash_biz_usage_empty_none')}
+            title={emptyTitle ?? t('dash_biz_usage_empty_title')}
+            description={emptyDescription
+              ?? (latestText
+                ? t('dash_biz_usage_empty_latest', { time: latestText })
+                : t('dash_biz_usage_empty_none'))}
             action={(
               <Link to="/ocs/usage" className="btn btn-outline analytics-empty-button">
                 {t('nav_ocs_usage')}

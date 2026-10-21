@@ -442,15 +442,16 @@ func (r *Repository) computeBalanceMetrics(ctx context.Context) (*OcsBalanceMetr
 func (r *Repository) computeSessionMetrics(ctx context.Context) (*OcsSessionMetrics, error) {
 	pipeline := mongo.Pipeline{
 		{{Key: "$group", Value: bson.M{
-			"_id":     nil,
-			"total":   bson.M{"$sum": 1},
-			"active":  bson.M{"$sum": bson.M{"$cond": bson.A{bson.M{"$eq": bson.A{"$state", "active"}}, 1, 0}}},
-			"closing": bson.M{"$sum": bson.M{"$cond": bson.A{bson.M{"$eq": bson.A{"$state", "closing"}}, 1, 0}}},
-			"closed":  bson.M{"$sum": bson.M{"$cond": bson.A{bson.M{"$eq": bson.A{"$state", "closed"}}, 1, 0}}},
-			"granted": bson.M{"$sum": "$granted_total"},
-			"used":    bson.M{"$sum": "$used_total"},
-			"gy":      bson.M{"$sum": bson.M{"$cond": bson.A{bson.M{"$eq": bson.A{"$interface_type", "gy"}}, 1, 0}}},
-			"ro":      bson.M{"$sum": bson.M{"$cond": bson.A{bson.M{"$eq": bson.A{"$interface_type", "ro"}}, 1, 0}}},
+			"_id":        nil,
+			"total":      bson.M{"$sum": 1},
+			"active":     bson.M{"$sum": bson.M{"$cond": bson.A{bson.M{"$eq": bson.A{"$state", "active"}}, 1, 0}}},
+			"closing":    bson.M{"$sum": bson.M{"$cond": bson.A{bson.M{"$eq": bson.A{"$state", "closing"}}, 1, 0}}},
+			"closed":     bson.M{"$sum": bson.M{"$cond": bson.A{bson.M{"$eq": bson.A{"$state", "closed"}}, 1, 0}}},
+			"granted":    bson.M{"$sum": "$granted_total"},
+			"used":       bson.M{"$sum": "$used_total"},
+			"activeUsed": bson.M{"$sum": bson.M{"$cond": bson.A{bson.M{"$eq": bson.A{"$state", "active"}}, "$used_total", 0}}},
+			"gy":         bson.M{"$sum": bson.M{"$cond": bson.A{bson.M{"$eq": bson.A{"$interface_type", "gy"}}, 1, 0}}},
+			"ro":         bson.M{"$sum": bson.M{"$cond": bson.A{bson.M{"$eq": bson.A{"$interface_type", "ro"}}, 1, 0}}},
 		}}},
 	}
 
@@ -501,6 +502,31 @@ func (r *Repository) computeSessionMetrics(ctx context.Context) (*OcsSessionMetr
 		apnDist = []ApnCount{}
 	}
 
+	activeTotal := numericInt64(sSum["activeUsed"])
+	activeTop := []TopUsageEntry{}
+	if activeTotal > 0 {
+		activePipeline := mongo.Pipeline{
+			{{Key: "$match", Value: bson.M{"state": "active"}}},
+			{{Key: "$group", Value: bson.M{
+				"_id":  "$imsi",
+				"used": bson.M{"$sum": "$used_total"},
+			}}},
+			{{Key: "$sort", Value: bson.D{{Key: "used", Value: -1}}}},
+			{{Key: "$limit", Value: 5}},
+		}
+		activeCursor, err := r.sessions.Aggregate(ctx, activePipeline)
+		if err != nil {
+			return nil, fmt.Errorf("active session usage aggregate: %w", err)
+		}
+		defer activeCursor.Close(ctx)
+
+		var activeRows []imsiUsageRow
+		if err := activeCursor.All(ctx, &activeRows); err != nil {
+			return nil, fmt.Errorf("decode active session usage: %w", err)
+		}
+		activeTop = topUsageEntries(activeRows, activeTotal)
+	}
+
 	return &OcsSessionMetrics{
 		TotalSessions:      numericInt(sSum["total"]),
 		ActiveSessions:     numericInt(sSum["active"]),
@@ -511,6 +537,8 @@ func (r *Repository) computeSessionMetrics(ctx context.Context) (*OcsSessionMetr
 		InterfaceGyCount:   numericInt(sSum["gy"]),
 		InterfaceRoCount:   numericInt(sSum["ro"]),
 		ApnDistribution:    apnDist,
+		ActiveUsedOctets:   activeTotal,
+		ActiveUsageTop:     activeTop,
 	}, nil
 }
 
@@ -703,15 +731,27 @@ func (r *Repository) topUsage(ctx context.Context, start time.Time, windowTotal 
 	}
 	defer cursor.Close(ctx)
 
-	var rows []struct {
-		IMSI string `bson:"_id"`
-		Used int64  `bson:"used"`
-	}
+	var rows []imsiUsageRow
 	if err := cursor.All(ctx, &rows); err != nil {
 		return nil, fmt.Errorf("decode top usage: %w", err)
 	}
 
+	return topUsageEntries(rows, windowTotal), nil
+}
+
+type imsiUsageRow struct {
+	IMSI string `bson:"_id"`
+	Used int64  `bson:"used"`
+}
+
+// topUsageEntries converts already-ranked IMSI rows into the shared response
+// shape and computes each row's share of the stated total. Empty identities are
+// skipped; an empty total yields an empty list rather than a division by zero.
+func topUsageEntries(rows []imsiUsageRow, total int64) []TopUsageEntry {
 	top := make([]TopUsageEntry, 0, len(rows))
+	if total <= 0 {
+		return top
+	}
 	for _, row := range rows {
 		if row.IMSI == "" {
 			continue
@@ -719,10 +759,10 @@ func (r *Repository) topUsage(ctx context.Context, start time.Time, windowTotal 
 		top = append(top, TopUsageEntry{
 			IMSI:       row.IMSI,
 			UsedOctets: row.Used,
-			Share:      math.Round(float64(row.Used)/float64(windowTotal)*1000) / 10,
+			Share:      math.Round(float64(row.Used)/float64(total)*1000) / 10,
 		})
 	}
-	return top, nil
+	return top
 }
 
 func (r *Repository) latestUsageAt(ctx context.Context) (string, error) {

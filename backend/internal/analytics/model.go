@@ -89,6 +89,13 @@ type OcsSessionMetrics struct {
 	InterfaceGyCount   int        `json:"interfaceGyCount"`
 	InterfaceRoCount   int        `json:"interfaceRoCount"`
 	ApnDistribution    []ApnCount `json:"apnDistribution"`
+
+	// ActiveUsedOctets and ActiveUsageTop describe the live session authority.
+	// They are a current-session fallback when the charging plane does not write
+	// per-request usage records into ocs_usage_records. They are never labelled
+	// as a 24-hour window.
+	ActiveUsedOctets int64           `json:"activeUsedOctets"`
+	ActiveUsageTop   []TopUsageEntry `json:"activeUsageTop"`
 }
 
 type ApnCount struct {

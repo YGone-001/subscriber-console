@@ -51,6 +51,8 @@ export type OcsSessionMetrics = {
   interfaceGyCount: number;
   interfaceRoCount: number;
   apnDistribution: Array<{ apn: string; count: number }>;
+  activeUsedOctets: number;
+  activeUsageTop: TopUsageEntry[];
 };
 
 export type OcsReservationMetrics = {
