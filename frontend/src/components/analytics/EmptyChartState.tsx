@@ -7,11 +7,12 @@
  */
 import React from "react";
 
-export default function EmptyChartState({ icon, title, action }: { icon: React.ReactNode; title: string; action?: React.ReactNode }) {
+export default function EmptyChartState({ icon, title, description, action }: { icon: React.ReactNode; title: string; description?: string; action?: React.ReactNode }) {
   return (
     <div className="analytics-empty-state">
       <div className="analytics-empty-visual">{icon}</div>
       <div className="analytics-empty-title">{title}</div>
+      {description ? <p className="analytics-empty-description">{description}</p> : null}
       {action ? <div className="analytics-empty-action">{action}</div> : null}
     </div>
   );

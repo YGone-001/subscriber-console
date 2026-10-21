@@ -352,9 +352,12 @@ that the projection model does not already define.
   components from the full runtime snapshot; `not_detected` (never observed and
   not expected) never enters the queue. Two paired summaries keep local runtime
   and managed NF health separate, with page scope and per-source completeness
-  stated explicitly. The business cockpit is a URL-addressable sibling view
-  (`?view=business`) mounted only while selected, and the page H1 remains the
-  Operations Overview title. No API path, route or collection is added.
+  stated explicitly. The business analysis sibling view (`?view=business`) is
+  mounted only while selected and reads `/api/analytics/metrics` plus
+  `/api/ue-info?summary=1` for real 24-hour usage, top usage, tariff adoption,
+  OCS resource health and a business risk queue. It never renders a generated
+  trend or a synthetic readiness score, and the page H1 remains the Operations
+  Overview title. No API path, route or collection is added.
 - **Operations workbench navigation** (`OperationsNav`): one tab strip rendered
   by the four operational routes (`/inventory`, `/topology`, `/discovery`,
   `/nf-health`). It adds no route and no destination; nested detail routes keep

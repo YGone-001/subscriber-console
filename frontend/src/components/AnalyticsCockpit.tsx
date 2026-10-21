@@ -1,360 +1,346 @@
 /*
- * Forward-ported from the historical xCloud UI (reference commit 2c40903):
- * frontend/src/components/AnalyticsCockpit.tsx
- * Adaptations: "use client" and the local analytics.css import dropped (the layer
- * is imported from app.css); Next.js Link replaced by react-router Link; @/ path
- * aliases rewritten to relative paths.
+ * Business analysis cockpit.
+ *
+ * Every headline metric comes from an explicit authority:
+ *   - subscribers and online users: UE Info summary;
+ *   - contracts and tariff adoption: OCS contract / tariff plan reads;
+ *   - usage: accepted OCS usage records over the trailing 24-hour window;
+ *   - pools, sessions, reservations and invariants: OCS analytics.
+ *
+ * The page never turns a missing measurement into zero and never derives a
+ * trend or a readiness score from generated data.
  */
-import React, { useMemo } from "react";
-import useSWR from "swr";
-import { Area, AreaChart, ResponsiveContainer } from "recharts";
+import { useMemo } from 'react';
+import useSWR from 'swr';
 import {
   Activity,
   AlertCircle,
-  Globe,
-  TrendingUp,
+  CreditCard,
   Database,
-  ShieldCheck,
-  AlertTriangle,
+  Layers,
+  Network,
+  RefreshCw,
+  TrendingUp,
   Users,
-} from "lucide-react";
+} from 'lucide-react';
 import { fetcher } from '../lib/fetcher';
 import { useI18n } from '../providers/I18nProvider';
 import MetricStrip, { type MetricStripItem } from './ui/MetricStrip';
-import uiStyles from '../styles/modules/ConsolePrimitives.module.css';
+import CountUpNumber from './analytics/CountUpNumber';
+import SkeletonDashboard from './analytics/SkeletonDashboard';
+import BusinessRiskPanel from './analytics/BusinessRiskPanel';
+import UsageTrendChart from './analytics/UsageTrendChart';
+import TariffPlanDistributionChart from './analytics/TariffPlanDistributionChart';
+import OcsHealthPanel from './analytics/OcsHealthPanel';
+import TopUsageChart from './analytics/TopUsageChart';
+import { BYTES_IN_GB } from './analytics/utils';
+import type { BusinessRisk, MetricsData } from './analytics/types';
+import type { UEInfoResponse } from '../features/ue-info/types';
 
-import { MetricsData, SparklineData, AlertResponse, WorkItem } from "./analytics/types";
-import { BYTES_IN_GB, computeHourlyBurnGb, normalizeRingValue } from "./analytics/utils";
-import CountUpNumber from "./analytics/CountUpNumber";
-import SkeletonDashboard from "./analytics/SkeletonDashboard";
-import TopConsumerChart from "./analytics/TopConsumerChart";
-import WorkbenchPanel from "./analytics/WorkbenchPanel";
-import TariffPlanDistributionChart from "./analytics/TariffPlanDistributionChart";
-import OcsResourceStrip from "./analytics/OcsResourceStrip";
-
-function MetricSparkline({ data, color }: { data?: number[]; color: string }) {
-  const reactId = React.useId();
-  const chartData = useMemo(() => {
-    if (!data?.length) return [];
-    return data.map((value, index) => ({ index, value }));
-  }, [data]);
-
-  const gradientId = `metric-spark-${color.replace(/[^a-zA-Z0-9]/g, "")}-${reactId.replace(/:/g, "")}`;
-
-  if (chartData.length === 0) return null;
-
-  return (
-    <div className={uiStyles.metricSparkline} aria-hidden="true">
-      <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={chartData} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
-          <defs>
-            <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={color} stopOpacity={0.3} />
-              <stop offset="100%" stopColor={color} stopOpacity={0.02} />
-            </linearGradient>
-          </defs>
-          <Area
-            type="monotone"
-            dataKey="value"
-            stroke={color}
-            strokeWidth={1.5}
-            fill={`url(#${gradientId})`}
-            dot={false}
-            isAnimationActive={false}
-          />
-        </AreaChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
-
-/*
- * Numeric ratio readout. This slot used to be a conic-gradient ring; a ring encodes
- * proportion with an angle, which is slower to read than the number itself and made the
- * KPI strip look like a generic dashboard template. The value is printed directly, in the
- * metric's tone colour.
- */
-function MetricRatio({ value, color }: { value: number; color: string }) {
-  const safeValue = normalizeRingValue(value);
-  return (
-    <span className={uiStyles.metricRatio} style={{ color }}>
-      {Math.round(safeValue)}
-      <span className={uiStyles.metricRatioUnit}>%</span>
-    </span>
-  );
-}
+const RISK_RANK: Record<BusinessRisk['tone'], number> = { danger: 0, warning: 1, info: 2 };
 
 export default function AnalyticsCockpit() {
-  const { t } = useI18n();
+  const { t, formatNumber, formatDateTime } = useI18n();
+  const metrics = useSWR<MetricsData>('/api/analytics/metrics', fetcher, { refreshInterval: 30000 });
+  const ue = useSWR<UEInfoResponse>('/api/ue-info?summary=1', fetcher, { refreshInterval: 30000 });
 
-  const { data, error, isLoading } = useSWR<MetricsData>("/api/analytics/metrics", fetcher, { refreshInterval: 5000 });
-  const { data: sparkData } = useSWR<SparklineData>("/api/analytics/sparkline", fetcher, { refreshInterval: 30000 });
-  const { data: alertData } = useSWR<AlertResponse>("/api/alerts", fetcher, { refreshInterval: 5000 });
-  const { data: ocsSubData, error: ocsSubError, isLoading: ocsSubLoading } = useSWR<{ total?: number; pagination?: { total?: number } }>("/api/ocs/subscribers?limit=1", fetcher, { refreshInterval: 10000 });
+  const risks = useMemo<BusinessRisk[]>(() => {
+    const data = metrics.data;
+    if (!data) return [];
+    const balances = data.ocsBalances;
+    const reservations = data.ocsReservations;
+    const usageRecords = data.usageWindowRecords ?? 0;
+    const usageTotal = data.usageWindowTotalOctets ?? 0;
+    const usageHours = data.usageWindowHours ?? 24;
+    const latest = data.latestUsageAt ?? '';
+    const latestText = latest
+      ? formatDateTime(latest, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+      : '';
+    const remainingGb = balances ? balances.totalDataAvailable / BYTES_IN_GB : null;
+    const usageGb = usageTotal / BYTES_IN_GB;
+    const averageHourlyGb = usageHours > 0 ? usageGb / usageHours : null;
+    const runwayHours = usageRecords > 0 && averageHourlyGb !== null && averageHourlyGb > 0 && remainingGb !== null
+      ? remainingGb / averageHourlyGb
+      : null;
+    const balancesAvailable = Boolean(balances && (balances.totalSubscribers > 0 || balances.totalDataAllocated > 0));
+    const top = data.topUsage?.[0];
+    const result: BusinessRisk[] = [];
 
-  if (isLoading) {
+    if (!balancesAvailable) {
+      result.push({
+        id: 'ocs-empty',
+        tone: 'warning',
+        title: t('dash_biz_risk_ocs_empty_title'),
+        detail: t('dash_biz_risk_ocs_empty_detail'),
+        href: '/ocs/balances',
+        action: t('nav_ocs_balances'),
+      });
+    } else if (usageRecords === 0) {
+      result.push({
+        id: 'usage-stale',
+        tone: 'warning',
+        title: t('dash_biz_risk_usage_stale_title'),
+        detail: latestText
+          ? t('dash_biz_risk_usage_stale_detail', { time: latestText })
+          : t('dash_biz_risk_usage_none'),
+        href: '/ocs/usage',
+        action: t('nav_ocs_usage'),
+      });
+    } else if (runwayHours !== null && runwayHours < 72) {
+      result.push({
+        id: 'quota-exhaustion',
+        tone: runwayHours < 24 ? 'danger' : 'warning',
+        title: t('dash_biz_risk_quota_title'),
+        detail: t('dash_biz_risk_quota_detail', {
+          hours: formatNumber(runwayHours, { maximumFractionDigits: 1 }),
+        }),
+        href: '/ocs/balances',
+        action: t('nav_ocs_balances'),
+      });
+    }
+
+    if (balances && balances.brokenInvariantCount > 0) {
+      result.push({
+        id: 'balance-invariant',
+        tone: 'danger',
+        title: t('dash_biz_risk_invariant_title', { count: formatNumber(balances.brokenInvariantCount) }),
+        detail: t('dash_biz_risk_invariant_detail', {
+          checked: formatNumber(balances.invariantChecked),
+          scope: t('dash_biz_ocs_scope_data'),
+        }),
+        href: '/ocs/balances',
+        action: t('nav_ocs_balances'),
+      });
+    }
+
+    if (reservations && reservations.orphanedReservations > 0) {
+      result.push({
+        id: 'orphaned-reservations',
+        tone: 'warning',
+        title: t('dash_biz_risk_orphan_title', { count: formatNumber(reservations.orphanedReservations) }),
+        detail: t('dash_biz_risk_orphan_detail'),
+        href: '/ocs/usage',
+        action: t('nav_ocs_usage'),
+      });
+    }
+
+    if (top && top.share >= 35) {
+      result.push({
+        id: 'usage-concentration',
+        tone: top.share >= 50 ? 'danger' : 'warning',
+        title: t('dash_biz_risk_concentration_title', { imsi: top.imsi }),
+        detail: t('dash_biz_risk_concentration_detail', {
+          share: formatNumber(top.share, { maximumFractionDigits: 1 }),
+        }),
+        href: '/subscribers',
+        action: t('nav_subscriber'),
+      });
+    }
+
+    if ((data.tariffPlanDist ?? []).length === 0) {
+      result.push({
+        id: 'tariff-empty',
+        tone: 'warning',
+        title: t('dash_biz_kpi_plans_empty'),
+        detail: t('dash_biz_risk_tariff_empty_detail'),
+        href: '/ocs/tariffs',
+        action: t('nav_ocs_tariffs'),
+      });
+    }
+
+    return result.sort((left, right) => RISK_RANK[left.tone] - RISK_RANK[right.tone]);
+  }, [metrics.data, t, formatNumber, formatDateTime]);
+
+  if (metrics.isLoading) {
     return <SkeletonDashboard />;
   }
 
-  if (error || data?.error) {
+  if (metrics.error || metrics.data?.error || !metrics.data) {
     return (
       <div className="analytics-offline">
         <AlertCircle size={34} />
-        <span>{t("dash_offline")}</span>
+        <span>{t('dash_biz_offline')}</span>
       </div>
     );
   }
 
-  const totalTraffic = data?.totalTraffic || 0;
-  const plmnDist = data?.plmnDist || [];
-  const ratesDist = data?.ratesDist || [];
-  const top5 = data?.top5 || [];
+  const data = metrics.data;
+  const balances = data.ocsBalances;
+  const sessions = data.ocsSessions;
+  const reservations = data.ocsReservations;
+  const usage = data.ocsUsage;
+  const tariffPlans = data.tariffPlanDist ?? [];
+  const usageTrend = data.usageTrend ?? [];
+  const topUsage = data.topUsage ?? [];
+  const usageWindowRecords = data.usageWindowRecords ?? 0;
+  const usageWindowTotalOctets = data.usageWindowTotalOctets ?? 0;
+  const latestUsageAt = data.latestUsageAt ?? '';
+  const totalUsageGb = usageWindowTotalOctets / BYTES_IN_GB;
 
-  const ocsBalances = data?.ocsBalances;
-  const ocsSessions = data?.ocsSessions;
-  const tariffPlanDist = data?.tariffPlanDist || [];
+  const totalSubscribers = ue.data?.summary.totalSubscribers ?? null;
+  const onlineUsers = ue.data?.summary.epc5gcOnlineUsers ?? null;
+  const epcSources = (ue.data?.sources ?? []).filter((source) =>
+    ['mme', 'amf', 'smf', 'smf_metrics'].includes(source.id));
+  const configuredSources = epcSources.filter((source) => source.state !== 'not_configured');
+  const okSources = configuredSources.filter((source) => source.state === 'ok').length;
+  const sourcesIncomplete = configuredSources.some((source) =>
+    source.state === 'unavailable' || source.state === 'invalid_config');
 
-  // Contract Subscribers metric state
-  const isContractSubscribersUnavailable = Boolean(ocsSubError || (!ocsSubData && ocsSubLoading));
-  const contractSubscriberCount = !isContractSubscribersUnavailable && ocsSubData != null
-    ? (typeof ocsSubData.total === "number" ? ocsSubData.total : (ocsSubData.pagination?.total ?? 0))
-    : null;
+  const contractCount = tariffPlans.reduce((sum, plan) => sum + plan.subscriberCount, 0);
+  const adoptedPlans = tariffPlans.filter((plan) => plan.subscriberCount > 0).length;
+  const totalPlans = tariffPlans.length;
+  const dataPercent = balances && balances.totalDataAllocated > 0 ? balances.dataUtilizationRate : null;
+  const dataUsedGb = balances ? balances.totalDataUsed / BYTES_IN_GB : 0;
+  const dataAllocatedGb = balances ? balances.totalDataAllocated / BYTES_IN_GB : 0;
+  const latestUsageText = latestUsageAt
+    ? formatDateTime(latestUsageAt, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+    : '';
 
-  const trafficSparkline = sparkData?.traffic || [];
+  const usageDetail = usageWindowRecords > 0
+    ? t('dash_biz_kpi_usage_detail', {
+      records: formatNumber(usageWindowRecords),
+      time: latestUsageText || '—',
+    })
+    : latestUsageText
+      ? t('dash_biz_kpi_usage_empty', { time: latestUsageText })
+      : t('dash_biz_kpi_usage_none');
 
-  const gbTraffic = totalTraffic / BYTES_IN_GB;
-  const burnRateGbHr = computeHourlyBurnGb(trafficSparkline);
-  const theoreticalLifeHr = burnRateGbHr > 0 ? gbTraffic / burnRateGbHr : 0;
-  const subscriberCount = sparkData?.currentSubCount || ocsBalances?.totalSubscribers || 0;
-  const plmnCount = plmnDist.length;
-  const ratingGroupCount = ratesDist.length;
-  const topConsumerShare = totalTraffic > 0 && top5[0]?.balance ? (top5[0].balance / totalTraffic) * 100 : 0;
-  const plmnCoverage = normalizeRingValue((plmnCount / 8) * 100);
-  const exhaustionTone = theoreticalLifeHr > 0 && theoreticalLifeHr < 24 ? "danger" : theoreticalLifeHr > 0 && theoreticalLifeHr < 72 ? "warning" : "normal";
-  const activeAlerts = (alertData?.alerts || []).filter((alert) => !alert.is_acknowledged);
-  const activeCriticalCount = alertData?.activeCriticalCount || activeAlerts.filter((alert) => alert.level === "CRITICAL").length;
-  const activeWarningCount = alertData?.activeWarningCount || activeAlerts.filter((alert) => alert.level === "WARNING").length;
-
-  const brokenInvariants = ocsBalances?.brokenInvariantCount || 0;
-  const utilizationRate = ocsBalances?.dataUtilizationRate || 0;
-
-  const operationsScore = normalizeRingValue(
-    100 -
-    activeCriticalCount * 20 -
-    activeWarningCount * 8 -
-    (brokenInvariants > 0 ? 15 : 0) -
-    (exhaustionTone === "danger" ? 15 : exhaustionTone === "warning" ? 8 : 0)
-  );
-
-  const topImsi = top5[0]?.imsi || "--";
-
-  // Health indicator for KPI strip rightmost column
-  const healthTone = brokenInvariants > 0 ? "danger" : activeCriticalCount > 0 ? "warning" : "normal";
-  const healthValue = brokenInvariants === 0 ? "100%" : `${brokenInvariants}!`;
-  const healthDetail = brokenInvariants === 0 ? t("dash_ocs_kpi_invariants_ok") : t("dash_ocs_kpi_invariants_broken", { count: brokenInvariants });
-  const healthRingValue = brokenInvariants === 0 ? 100 : Math.max(0, 100 - brokenInvariants * 10);
-
-  // Work Items generation
-  const workItems: WorkItem[] = [];
-  if (activeCriticalCount > 0) {
-    workItems.push({
-      id: "critical-alerts",
-      tone: "danger",
-      priority: "P0",
-      title: t("dash_work_critical_title", { count: activeCriticalCount }),
-      detail: t("dash_work_critical_detail"),
-      href: "/system-health",
-      action: t("dash_work_open_health"),
-    });
-  }
-  if (brokenInvariants > 0) {
-    workItems.push({
-      id: "broken-invariants",
-      tone: "danger",
-      priority: "P0",
-      title: t("dash_work_invariant_title", { count: brokenInvariants }),
-      detail: t("dash_work_invariant_detail"),
-      href: "/ocs/balances",
-      action: t("dash_work_open_ocs"),
-    });
-  }
-  if (exhaustionTone === "danger") {
-    workItems.push({
-      id: "exhaustion",
-      tone: "danger",
-      priority: "P0",
-      title: t("dash_work_exhaustion_title"),
-      detail: theoreticalLifeHr > 0 ? t("dash_work_exhaustion_detail", { hours: theoreticalLifeHr.toFixed(1) }) : t("dash_work_exhaustion_unknown"),
-      href: "/subscribers",
-      action: t("dash_work_open_subscribers"),
-    });
-  }
-  if (topConsumerShare >= 50 && topImsi !== "--") {
-    workItems.push({
-      id: "top-consumer-danger",
-      tone: "danger",
-      priority: "P0",
-      title: t("dash_work_top_consumer_title"),
-      detail: t("dash_work_top_consumer_detail", { imsi: topImsi, share: topConsumerShare.toFixed(0) }),
-      href: "/subscribers",
-      action: t("dash_work_open_subscribers"),
-    });
-  }
-  if (activeWarningCount > 0) {
-    workItems.push({
-      id: "warning-alerts",
-      tone: "warning",
-      priority: "P1",
-      title: t("dash_work_warning_title", { count: activeWarningCount }),
-      detail: t("dash_work_warning_detail"),
-      href: "/system-health",
-      action: t("dash_work_open_health"),
-    });
-  }
-  if (exhaustionTone === "warning") {
-    workItems.push({
-      id: "exhaustion",
-      tone: "warning",
-      priority: "P1",
-      title: t("dash_work_exhaustion_title"),
-      detail: theoreticalLifeHr > 0 ? t("dash_work_exhaustion_detail", { hours: theoreticalLifeHr.toFixed(1) }) : t("dash_work_exhaustion_unknown"),
-      href: "/subscribers",
-      action: t("dash_work_open_subscribers"),
-    });
-  }
-  if (topConsumerShare >= 35 && topConsumerShare < 50 && topImsi !== "--") {
-    workItems.push({
-      id: "top-consumer",
-      tone: "warning",
-      priority: "P1",
-      title: t("dash_work_top_consumer_title"),
-      detail: t("dash_work_top_consumer_detail", { imsi: topImsi, share: topConsumerShare.toFixed(0) }),
-      href: "/subscribers",
-      action: t("dash_work_open_subscribers"),
-    });
-  }
-  if (ratingGroupCount === 0) {
-    workItems.push({
-      id: "rating",
-      tone: "warning",
-      priority: "P1",
-      title: t("dash_work_rating_title"),
-      detail: t("dash_work_rating_detail"),
-      href: "/ocs/tariffs",
-      action: t("dash_work_open_rating"),
-    });
-  }
-  if (workItems.length === 0) {
-    workItems.push({
-      id: "healthy",
-      tone: "normal",
-      title: t("dash_work_healthy_title"),
-      detail: t("dash_work_healthy_detail"),
-      href: "/system-health",
-      action: t("dash_work_open_health"),
-    });
-  }
-
-  const visibleWorkItems = workItems.slice(0, 4);
-
-  // KPI Strip items
   const kpiItems: MetricStripItem[] = [
     {
-      key: "traffic",
-      accent: "var(--chart-1)",
-      icon: <TrendingUp size={16} />,
-      label: t("dash_kpi_total_traffic"),
-      value: (
-        <>
-          <CountUpNumber value={gbTraffic} decimals={2} />
-          <span>GB</span>
-        </>
-      ),
-      detail: burnRateGbHr > 0
-        ? (theoreticalLifeHr > 0
-            ? `${burnRateGbHr.toFixed(2)} GB/hr · ~${theoreticalLifeHr.toFixed(0)}h`
-            : `${burnRateGbHr.toFixed(2)} GB/hr`)
-        : undefined,
-      indicator: trafficSparkline.length > 0 ? <MetricSparkline data={trafficSparkline} color="var(--chart-1)" /> : undefined,
-      tone: exhaustionTone === "danger" ? "danger" : exhaustionTone === "warning" ? "warning" : undefined,
-    },
-    {
-      key: "subscribers",
-      accent: "var(--status-success)",
-      icon: <Activity size={16} />,
-      label: t("dash_kpi_active_subs"),
-      value: <CountUpNumber value={subscriberCount} />,
-      indicator: <MetricRatio value={subscriberCount > 0 ? 100 : 0} color="var(--status-success)" />,
-    },
-    {
-      key: "plmn",
-      accent: "var(--chart-4)",
-      icon: <Globe size={16} />,
-      label: t("dash_kpi_plmn_active"),
-      value: <CountUpNumber value={plmnCount} />,
-      detail: plmnDist.length > 0 ? `${plmnDist[0]?.name || "—"}${plmnDist.length > 1 ? ` +${plmnDist.length - 1}` : ""}` : undefined,
-      indicator: <MetricRatio value={plmnCoverage} color="var(--chart-4)" />,
-    },
-    {
-      key: "contracts",
-      accent: "var(--chart-3)",
+      key: 'subscribers',
       icon: <Users size={16} />,
-      label: t("nav_ocs_contracts"),
-      value: contractSubscriberCount !== null ? <CountUpNumber value={contractSubscriberCount} /> : "—",
-      indicator: <MetricRatio value={contractSubscriberCount !== null && contractSubscriberCount > 0 ? 100 : 0} color="var(--chart-3)" />,
+      label: t('dash_biz_kpi_subscribers'),
+      value: totalSubscribers !== null ? <CountUpNumber value={totalSubscribers} /> : '—',
+      detail: totalSubscribers !== null
+        ? t('dash_biz_kpi_subscribers_detail')
+        : (ue.isLoading ? t('loading') : t('ops_kpi_unavailable')),
     },
     {
-      key: "utilization",
-      accent: "var(--chart-2)",
+      key: 'online',
+      icon: <Network size={16} />,
+      label: t('dash_biz_kpi_online'),
+      value: onlineUsers !== null ? <CountUpNumber value={onlineUsers} /> : '—',
+      detail: onlineUsers !== null
+        ? (configuredSources.length > 0
+          ? t('dash_biz_kpi_online_detail', { ok: formatNumber(okSources), total: formatNumber(configuredSources.length) })
+          : undefined)
+        : (ue.isLoading ? t('loading') : t('dash_biz_kpi_online_unavailable')),
+      tone: onlineUsers === null ? 'muted' : sourcesIncomplete ? 'warning' : undefined,
+    },
+    {
+      key: 'contracts',
+      icon: <CreditCard size={16} />,
+      label: t('nav_ocs_contracts'),
+      value: <CountUpNumber value={contractCount} />,
+      detail: t('dash_biz_kpi_contracts_detail', { count: formatNumber(totalPlans) }),
+    },
+    {
+      key: 'usage',
+      icon: <TrendingUp size={16} />,
+      label: t('dash_biz_kpi_usage'),
+      value: usageWindowRecords > 0
+        ? (
+          <>
+            <CountUpNumber value={totalUsageGb} decimals={2} />
+            <span>GB</span>
+          </>
+        )
+        : '—',
+      detail: usageDetail,
+      tone: usageWindowRecords > 0 ? undefined : (latestUsageText ? 'warning' : 'muted'),
+    },
+    {
+      key: 'data-pool',
       icon: <Database size={16} />,
-      label: t("dash_ocs_kpi_utilization"),
-      value: (
-        <>
-          <CountUpNumber value={utilizationRate} decimals={1} />
-          <span>%</span>
-        </>
-      ),
-      indicator: <MetricRatio value={utilizationRate} color="var(--chart-2)" />,
-      tone: utilizationRate >= 85 ? "danger" : utilizationRate >= 65 ? "warning" : undefined,
+      label: t('dash_ocs_kpi_utilization'),
+      value: dataPercent !== null
+        ? (
+          <>
+            <CountUpNumber value={dataPercent} decimals={1} />
+            <span>%</span>
+          </>
+        )
+        : '—',
+      detail: dataPercent !== null
+        ? t('dash_biz_kpi_pool_detail', {
+          used: formatNumber(dataUsedGb, { maximumFractionDigits: 1 }),
+          total: formatNumber(dataAllocatedGb, { maximumFractionDigits: 1 }),
+        })
+        : t('dash_biz_kpi_pool_empty'),
+      tone: dataPercent === null ? 'muted' : dataPercent >= 85 ? 'danger' : dataPercent >= 65 ? 'warning' : undefined,
     },
     {
-      key: "invariants",
-      accent: brokenInvariants === 0 ? "var(--status-success)" : "var(--status-danger)",
-      icon: brokenInvariants === 0 ? <ShieldCheck size={16} /> : <AlertTriangle size={16} />,
-      label: t("dash_ocs_kpi_invariants"),
-      value: healthValue,
-      detail: healthDetail,
-      indicator: <MetricRatio value={healthRingValue} color={brokenInvariants === 0 ? "var(--status-success)" : "var(--status-danger)"} />,
-      tone: healthTone === "danger" ? "danger" : healthTone === "warning" ? "warning" : undefined,
+      key: 'tariff-coverage',
+      icon: <Layers size={16} />,
+      label: t('dash_biz_kpi_plans'),
+      value: totalPlans > 0
+        ? (
+          <>
+            {formatNumber(adoptedPlans)}
+            <span>/ {formatNumber(totalPlans)}</span>
+          </>
+        )
+        : '—',
+      detail: totalPlans > 0
+        ? t('dash_biz_kpi_plans_detail', {
+          adopted: formatNumber(adoptedPlans),
+          total: formatNumber(totalPlans),
+        })
+        : t('dash_biz_kpi_plans_empty'),
+      tone: totalPlans > 0 ? undefined : 'muted',
     },
   ];
 
   return (
     <div className="analytics-root">
-      {/* 1. KPI Strip — core metrics at a glance */}
-      {/*
-        One continuous panel with internal dividers, rather than six independently floating
-        cards. The design system names the metric strip as the signature situation display
-        for this console, and organises it with structural rules instead of card elevation.
-      */}
-      <MetricStrip variant="strip" ariaLabel="Key performance indicators" items={kpiItems} />
+      <div className="analytics-business-toolbar">
+        <span className="analytics-business-snapshot">
+          <Activity size={14} aria-hidden="true" />
+          {t('dash_biz_snapshot', {
+            time: data.timestamp ? formatDateTime(data.timestamp) : '—',
+          })}
+        </span>
+        <button
+          type="button"
+          className="btn btn-outline analytics-refresh"
+          onClick={() => {
+            void metrics.mutate();
+            void ue.mutate();
+          }}
+          disabled={metrics.isValidating || ue.isValidating}
+        >
+          <RefreshCw size={14} />
+          {t('ops_refresh')}
+        </button>
+      </div>
 
-      {/* 2. Alerts & Score — only visible when issues exist, otherwise compact */}
-      <WorkbenchPanel
-        visibleWorkItems={visibleWorkItems}
-        operationsScore={operationsScore}
-        activeAlertCount={activeAlerts.length}
-        t={t}
+      <MetricStrip variant="strip" ariaLabel={t('dash_biz_kpi_aria')} items={kpiItems} />
+
+      <BusinessRiskPanel risks={risks} total={risks.length} />
+
+      <div className="analytics-chart-grid">
+        <UsageTrendChart
+          points={usageTrend}
+          totalOctets={usageWindowTotalOctets}
+          records={usageWindowRecords}
+          latestUsageAt={latestUsageAt}
+        />
+        <TariffPlanDistributionChart tariffPlanDist={tariffPlans} />
+      </div>
+
+      <OcsHealthPanel
+        balances={balances}
+        sessions={sessions}
+        reservations={reservations}
+        usage={usage}
       />
 
-      {/* 3. OCS Resource Health — compact utilization overview */}
-      <OcsResourceStrip ocsBalances={ocsBalances} ocsSessions={ocsSessions} t={t} />
-
-      {/* 4. Charts — distribution and top consumers */}
-      <div className="analytics-chart-grid">
-        <TopConsumerChart top5={top5} t={t} />
-        <TariffPlanDistributionChart tariffPlanDist={tariffPlanDist} t={t} />
-      </div>
+      <TopUsageChart
+        entries={topUsage}
+        totalOctets={usageWindowTotalOctets}
+        records={usageWindowRecords}
+        latestUsageAt={latestUsageAt}
+      />
     </div>
   );
 }

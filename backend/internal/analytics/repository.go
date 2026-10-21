@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"math/rand"
 	"sort"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 // Repository provides read-only access to analytics data.
@@ -40,6 +40,14 @@ func NewRepository(
 
 const defaultPlanID = "plan_default_10gb"
 
+// usageWindowHours is the fixed trailing window for usage trend and top usage.
+const usageWindowHours = 24
+
+// invariantSampleLimit bounds the balance invariant scan. The response states
+// how many accounts were actually checked so a sample is never reported as a
+// platform-wide 100% claim.
+const invariantSampleLimit = 500
+
 // ComputeMetrics computes the full analytics metrics.
 // Matches the Node.js computeAnalyticsMetrics() aggregation pipeline.
 func (r *Repository) ComputeMetrics(ctx context.Context) (*AnalyticsMetrics, error) {
@@ -59,8 +67,13 @@ func (r *Repository) ComputeMetrics(ctx context.Context) (*AnalyticsMetrics, err
 		err  error
 	}
 	type usageResult struct {
-		data *OcsUsageMetrics
-		err  error
+		data          *OcsUsageMetrics
+		trend         []UsageTrendPoint
+		top           []TopUsageEntry
+		latest        string
+		windowRecords int
+		windowTotal   int64
+		err           error
 	}
 	type tariffResult struct {
 		data []TariffPlanDistItem
@@ -92,8 +105,16 @@ func (r *Repository) ComputeMetrics(ctx context.Context) (*AnalyticsMetrics, err
 		resCh <- reservationResult{d, err}
 	}()
 	go func() {
-		d, err := r.computeUsageMetrics(ctx)
-		useCh <- usageResult{d, err}
+		d, trend, top, latest, windowRecords, windowTotal, err := r.computeUsageMetrics(ctx)
+		useCh <- usageResult{
+			data:          d,
+			trend:         trend,
+			top:           top,
+			latest:        latest,
+			windowRecords: windowRecords,
+			windowTotal:   windowTotal,
+			err:           err,
+		}
 	}()
 	go func() {
 		d, err := r.computeTariffPlanDist(ctx)
@@ -140,6 +161,7 @@ func (r *Repository) ComputeMetrics(ctx context.Context) (*AnalyticsMetrics, err
 	}
 
 	return &AnalyticsMetrics{
+		// Legacy field: remaining data available, not consumed traffic.
 		TotalTraffic:    int(bal.data.TotalDataAvailable),
 		PlmnDist:        bal.plmn,
 		RatesDist:       ratesDist,
@@ -150,6 +172,13 @@ func (r *Repository) ComputeMetrics(ctx context.Context) (*AnalyticsMetrics, err
 		OcsReservations: *res.data,
 		TariffPlanDist:  tar.data,
 		OcsUsage:        *use.data,
+
+		UsageWindowHours:       usageWindowHours,
+		UsageWindowRecords:     use.windowRecords,
+		UsageWindowTotalOctets: use.windowTotal,
+		UsageTrend:             use.trend,
+		TopUsage:               use.top,
+		LatestUsageAt:          use.latest,
 	}, nil
 }
 
@@ -206,67 +235,38 @@ func isActiveStatus(v interface{}) bool {
 	return s == "" || s == "active"
 }
 
-// ComputeSparkline computes the sparkline basis.
+// ComputeSparkline returns the current subscriber count and the real hourly
+// usage series for the same trailing window as ComputeMetrics.
+//
+// The previous implementation generated a random walk anchored at the current
+// balance. That produced plausible-looking trends that were not measurements;
+// the endpoint now returns real usage buckets and an explicitly empty
+// subscriber history (no authoritative subscriber time series exists).
 func (r *Repository) ComputeSparkline(ctx context.Context) (*SparklineResponse, error) {
 	subCount, err := r.subscribers.CountDocuments(ctx, bson.M{})
 	if err != nil {
 		return nil, fmt.Errorf("count subscribers: %w", err)
 	}
 
-	// Get total data available for traffic
-	pipeline := mongo.Pipeline{
-		{{Key: "$group", Value: bson.M{
-			"_id":            nil,
-			"totalDataAvail": bson.M{"$sum": "$data_available"},
-		}}},
-	}
-	cursor, err := r.balances.Aggregate(ctx, pipeline)
+	now := time.Now().UTC()
+	start := now.Truncate(time.Hour).Add(-time.Duration(usageWindowHours-1) * time.Hour)
+	buckets, err := r.usageBuckets(ctx, start)
 	if err != nil {
-		return nil, fmt.Errorf("aggregate balances: %w", err)
-	}
-	defer cursor.Close(ctx)
-
-	var results []struct {
-		TotalDataAvail int64 `bson:"totalDataAvail"`
-	}
-	if err := cursor.All(ctx, &results); err != nil {
-		return nil, fmt.Errorf("decode: %w", err)
+		return nil, err
 	}
 
-	var traffic int64
-	if len(results) > 0 {
-		traffic = results[0].TotalDataAvail
+	trend, _, total := buildUsageTrend(start, usageWindowHours, buckets)
+	traffic := make([]int64, 0, len(trend))
+	for _, point := range trend {
+		traffic = append(traffic, point.Octets)
 	}
 
 	return &SparklineResponse{
-		Subscribers:     generateTrend(int64(subCount), 24, 0.03),
-		Traffic:         generateTrend(traffic, 24, 0.05),
+		Subscribers:     []int64{},
+		Traffic:         traffic,
 		CurrentSubCount: int(subCount),
-		CurrentTraffic:  traffic,
+		CurrentTraffic:  total,
 	}, nil
-}
-
-// generateTrend mirrors the Node.js generateTrend() helper: a deterministic
-// anchor at the current value with random jitter across the series. The final
-// point always equals the current value.
-func generateTrend(current int64, points int, variance float64) []int64 {
-	result := make([]int64, 0, points)
-	if current == 0 {
-		for i := 0; i < points; i++ {
-			result = append(result, int64(rand.Intn(3)))
-		}
-		return result
-	}
-
-	startVal := float64(current) * (1 - variance*float64(points)*0.3)
-	for i := 0; i < points; i++ {
-		progress := float64(i) / float64(points-1)
-		baseVal := startVal + (float64(current)-startVal)*progress
-		jitter := baseVal * variance * (rand.Float64() - 0.4)
-		result = append(result, int64(math.Max(0, math.Round(baseVal+jitter))))
-	}
-	result[points-1] = current
-	return result
 }
 
 func (r *Repository) computeBalanceMetrics(ctx context.Context) (*OcsBalanceMetrics, []Top5Entry, []NameValue, error) {
@@ -286,6 +286,20 @@ func (r *Repository) computeBalanceMetrics(ctx context.Context) (*OcsBalanceMetr
 			"totalSmsAllocated":   bson.M{"$sum": bson.M{"$ifNull": bson.A{"$sms_total", 100}}},
 			"totalSmsUsed":        bson.M{"$sum": bson.M{"$ifNull": bson.A{"$sms_used", 0}}},
 			"totalSmsAvailable":   bson.M{"$sum": bson.M{"$ifNull": bson.A{"$sms_available", 100}}},
+			"voiceDefaulted": bson.M{"$sum": bson.M{"$cond": bson.A{
+				bson.M{"$or": bson.A{
+					bson.M{"$eq": bson.A{bson.M{"$type": "$voice_total"}, "missing"}},
+					bson.M{"$eq": bson.A{"$voice_total", nil}},
+				}},
+				1, 0,
+			}}},
+			"smsDefaulted": bson.M{"$sum": bson.M{"$cond": bson.A{
+				bson.M{"$or": bson.A{
+					bson.M{"$eq": bson.A{bson.M{"$type": "$sms_total"}, "missing"}},
+					bson.M{"$eq": bson.A{"$sms_total", nil}},
+				}},
+				1, 0,
+			}}},
 		}}},
 	}
 
@@ -316,13 +330,16 @@ func (r *Repository) computeBalanceMetrics(ctx context.Context) (*OcsBalanceMetr
 		utilRate = math.Round(float64(totalDataUsed)/float64(totalDataAlloc)*10000) / 100
 	}
 
-	// Balance invariant check (sample 500)
+	// Balance invariant check. The scan is bounded and the response states the
+	// exact number of accounts checked; an empty or failed scan never becomes a
+	// platform-wide "all invariants OK" claim.
 	brokenCount := 0
-	sampleCursor, err := r.balances.Find(ctx, bson.M{}, nil)
+	invariantChecked := 0
+	invariantScanComplete := false
+	sampleCursor, err := r.balances.Find(ctx, bson.M{}, options.Find().SetLimit(invariantSampleLimit))
 	if err == nil {
 		defer sampleCursor.Close(ctx)
-		count := 0
-		for sampleCursor.Next(ctx) && count < 500 {
+		for sampleCursor.Next(ctx) {
 			var doc bson.M
 			if err := sampleCursor.Decode(&doc); err != nil {
 				continue
@@ -334,27 +351,33 @@ func (r *Repository) computeBalanceMetrics(ctx context.Context) (*OcsBalanceMetr
 			if dTot != (dUsed + dRes + dAvail) {
 				brokenCount++
 			}
-			count++
+			invariantChecked++
 		}
+		invariantScanComplete = sampleCursor.Err() == nil
 	}
 
 	metrics := &OcsBalanceMetrics{
-		TotalSubscribers:     totalSubs,
-		TotalDataAllocated:   totalDataAlloc,
-		TotalDataUsed:        totalDataUsed,
-		TotalDataReserved:    totalDataReserved,
-		TotalDataAvailable:   totalDataAvail,
-		DataUtilizationRate:  utilRate,
-		TotalVoiceAllocated:  numericInt64(bSum["totalVoiceAllocated"]),
-		TotalVoiceUsed:       numericInt64(bSum["totalVoiceUsed"]),
-		TotalVoiceReserved:   numericInt64(bSum["totalVoiceReserved"]),
-		TotalVoiceAvailable:  numericInt64(bSum["totalVoiceAvailable"]),
-		TotalSmsAllocated:    numericInt64(bSum["totalSmsAllocated"]),
-		TotalSmsUsed:         numericInt64(bSum["totalSmsUsed"]),
-		TotalSmsAvailable:    numericInt64(bSum["totalSmsAvailable"]),
-		ValidInvariantCount:  int(math.Max(0, float64(totalSubs-brokenCount))),
-		BrokenInvariantCount: brokenCount,
-		AllInvariantsOk:      brokenCount == 0,
+		TotalSubscribers:         totalSubs,
+		TotalDataAllocated:       totalDataAlloc,
+		TotalDataUsed:            totalDataUsed,
+		TotalDataReserved:        totalDataReserved,
+		TotalDataAvailable:       totalDataAvail,
+		DataUtilizationRate:      utilRate,
+		TotalVoiceAllocated:      numericInt64(bSum["totalVoiceAllocated"]),
+		TotalVoiceUsed:           numericInt64(bSum["totalVoiceUsed"]),
+		TotalVoiceReserved:       numericInt64(bSum["totalVoiceReserved"]),
+		TotalVoiceAvailable:      numericInt64(bSum["totalVoiceAvailable"]),
+		TotalSmsAllocated:        numericInt64(bSum["totalSmsAllocated"]),
+		TotalSmsUsed:             numericInt64(bSum["totalSmsUsed"]),
+		TotalSmsAvailable:        numericInt64(bSum["totalSmsAvailable"]),
+		ValidInvariantCount:      int(math.Max(0, float64(invariantChecked-brokenCount))),
+		BrokenInvariantCount:     brokenCount,
+		AllInvariantsOk:          invariantScanComplete && invariantChecked > 0 && brokenCount == 0,
+		InvariantChecked:         invariantChecked,
+		InvariantSampleLimit:     invariantSampleLimit,
+		InvariantScope:           "data_balance",
+		VoiceAllocationDefaulted: numericInt(bSum["voiceDefaulted"]),
+		SmsAllocationDefaulted:   numericInt(bSum["smsDefaulted"]),
 	}
 
 	// Top 5
@@ -534,7 +557,7 @@ func (r *Repository) computeReservationMetrics(ctx context.Context) (*OcsReserva
 	}, nil
 }
 
-func (r *Repository) computeUsageMetrics(ctx context.Context) (*OcsUsageMetrics, error) {
+func (r *Repository) computeUsageMetrics(ctx context.Context) (*OcsUsageMetrics, []UsageTrendPoint, []TopUsageEntry, string, int, int64, error) {
 	pipeline := mongo.Pipeline{
 		{{Key: "$group", Value: bson.M{
 			"_id":               nil,
@@ -548,18 +571,38 @@ func (r *Repository) computeUsageMetrics(ctx context.Context) (*OcsUsageMetrics,
 
 	cursor, err := r.usageRecords.Aggregate(ctx, pipeline)
 	if err != nil {
-		return nil, fmt.Errorf("usage aggregate: %w", err)
+		return nil, nil, nil, "", 0, 0, fmt.Errorf("usage aggregate: %w", err)
 	}
 	defer cursor.Close(ctx)
 
 	var results []bson.M
 	if err := cursor.All(ctx, &results); err != nil {
-		return nil, fmt.Errorf("decode: %w", err)
+		return nil, nil, nil, "", 0, 0, fmt.Errorf("decode: %w", err)
 	}
 
 	uSum := bson.M{}
 	if len(results) > 0 {
 		uSum = results[0]
+	}
+
+	latest, err := r.latestUsageAt(ctx)
+	if err != nil {
+		return nil, nil, nil, "", 0, 0, err
+	}
+
+	now := time.Now().UTC()
+	end := now.Truncate(time.Hour)
+	start := end.Add(-time.Duration(usageWindowHours-1) * time.Hour)
+	buckets, err := r.usageBuckets(ctx, start)
+	if err != nil {
+		return nil, nil, nil, "", 0, 0, err
+	}
+
+	trend, windowRecords, windowTotal := buildUsageTrend(start, usageWindowHours, buckets)
+
+	top, err := r.topUsage(ctx, start, windowTotal)
+	if err != nil {
+		return nil, nil, nil, "", 0, 0, err
 	}
 
 	return &OcsUsageMetrics{
@@ -568,7 +611,141 @@ func (r *Repository) computeUsageMetrics(ctx context.Context) (*OcsUsageMetrics,
 		TotalInputOctets:  numericInt64(uSum["totalInputOctets"]),
 		TotalOutputOctets: numericInt64(uSum["totalOutputOctets"]),
 		TotalOctets:       numericInt64(uSum["totalOctets"]),
-	}, nil
+	}, trend, top, latest, windowRecords, windowTotal, nil
+}
+
+type usageBucket struct {
+	Octets  int64
+	Records int
+}
+
+// buildUsageTrend expands sparse hourly aggregation rows into a complete,
+// ordered window. Missing hours carry explicit zero values; the caller already
+// knows whether the window contained any records at all.
+func buildUsageTrend(start time.Time, hours int, buckets map[string]usageBucket) ([]UsageTrendPoint, int, int64) {
+	if hours <= 0 {
+		return []UsageTrendPoint{}, 0, 0
+	}
+	trend := make([]UsageTrendPoint, 0, hours)
+	var windowTotal int64
+	var windowRecords int
+	for i := 0; i < hours; i++ {
+		at := start.Add(time.Duration(i) * time.Hour)
+		bucket := buckets[at.Format("2006-01-02T15:00:00Z")]
+		trend = append(trend, UsageTrendPoint{
+			Hour:   at.Format(time.RFC3339),
+			Octets: bucket.Octets,
+		})
+		windowTotal += bucket.Octets
+		windowRecords += bucket.Records
+	}
+	return trend, windowRecords, windowTotal
+}
+
+func (r *Repository) usageBuckets(ctx context.Context, start time.Time) (map[string]usageBucket, error) {
+	pipeline := mongo.Pipeline{
+		{{Key: "$match", Value: bson.M{"created_at": bson.M{"$gte": start}}}},
+		{{Key: "$group", Value: bson.M{
+			"_id": bson.M{"$dateToString": bson.M{
+				"format":   "%Y-%m-%dT%H:00:00Z",
+				"date":     "$created_at",
+				"timezone": "UTC",
+			}},
+			"octets":  bson.M{"$sum": "$total_octets"},
+			"records": bson.M{"$sum": 1},
+		}}},
+		{{Key: "$sort", Value: bson.D{{Key: "_id", Value: 1}}}},
+	}
+
+	cursor, err := r.usageRecords.Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, fmt.Errorf("usage trend aggregate: %w", err)
+	}
+	defer cursor.Close(ctx)
+
+	var rows []struct {
+		Hour    string `bson:"_id"`
+		Octets  int64  `bson:"octets"`
+		Records int    `bson:"records"`
+	}
+	if err := cursor.All(ctx, &rows); err != nil {
+		return nil, fmt.Errorf("decode usage trend: %w", err)
+	}
+
+	buckets := make(map[string]usageBucket, len(rows))
+	for _, row := range rows {
+		buckets[row.Hour] = usageBucket{Octets: row.Octets, Records: row.Records}
+	}
+	return buckets, nil
+}
+
+func (r *Repository) topUsage(ctx context.Context, start time.Time, windowTotal int64) ([]TopUsageEntry, error) {
+	if windowTotal <= 0 {
+		return []TopUsageEntry{}, nil
+	}
+
+	pipeline := mongo.Pipeline{
+		{{Key: "$match", Value: bson.M{
+			"created_at":   bson.M{"$gte": start},
+			"total_octets": bson.M{"$gt": 0},
+		}}},
+		{{Key: "$group", Value: bson.M{
+			"_id":  "$imsi",
+			"used": bson.M{"$sum": "$total_octets"},
+		}}},
+		{{Key: "$sort", Value: bson.D{{Key: "used", Value: -1}}}},
+		{{Key: "$limit", Value: 5}},
+	}
+
+	cursor, err := r.usageRecords.Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, fmt.Errorf("top usage aggregate: %w", err)
+	}
+	defer cursor.Close(ctx)
+
+	var rows []struct {
+		IMSI string `bson:"_id"`
+		Used int64  `bson:"used"`
+	}
+	if err := cursor.All(ctx, &rows); err != nil {
+		return nil, fmt.Errorf("decode top usage: %w", err)
+	}
+
+	top := make([]TopUsageEntry, 0, len(rows))
+	for _, row := range rows {
+		if row.IMSI == "" {
+			continue
+		}
+		top = append(top, TopUsageEntry{
+			IMSI:       row.IMSI,
+			UsedOctets: row.Used,
+			Share:      math.Round(float64(row.Used)/float64(windowTotal)*1000) / 10,
+		})
+	}
+	return top, nil
+}
+
+func (r *Repository) latestUsageAt(ctx context.Context) (string, error) {
+	var doc struct {
+		CreatedAt time.Time `bson:"created_at"`
+	}
+	err := r.usageRecords.FindOne(
+		ctx,
+		bson.M{"created_at": bson.M{"$exists": true}},
+		options.FindOne().
+			SetSort(bson.D{{Key: "created_at", Value: -1}}).
+			SetProjection(bson.M{"created_at": 1}),
+	).Decode(&doc)
+	if err == mongo.ErrNoDocuments {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("latest usage: %w", err)
+	}
+	if doc.CreatedAt.IsZero() {
+		return "", nil
+	}
+	return doc.CreatedAt.UTC().Format(time.RFC3339), nil
 }
 
 func (r *Repository) computeTariffPlanDist(ctx context.Context) ([]TariffPlanDistItem, error) {

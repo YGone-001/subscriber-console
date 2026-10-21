@@ -5,8 +5,6 @@
  * is imported from app.css); Next.js Link replaced by react-router Link; @/ path
  * aliases rewritten to relative paths.
  */
-import React from "react";
-
 export type DistributionPoint = {
   name: string;
   value: number;
@@ -36,6 +34,11 @@ export type OcsBalanceMetrics = {
   validInvariantCount: number;
   brokenInvariantCount: number;
   allInvariantsOk: boolean;
+  invariantChecked: number;
+  invariantSampleLimit: number;
+  invariantScope: string;
+  voiceAllocationDefaulted: number;
+  smsAllocationDefaulted: number;
 };
 
 export type OcsSessionMetrics = {
@@ -77,7 +80,19 @@ export type OcsUsageMetrics = {
   totalOctets: number;
 };
 
+export type UsageTrendPoint = {
+  hour: string;
+  octets: number;
+};
+
+export type TopUsageEntry = {
+  imsi: string;
+  usedOctets: number;
+  share: number;
+};
+
 export type MetricsData = {
+  /** Legacy: remaining data available, not consumed traffic. */
   totalTraffic: number;
   plmnDist?: DistributionPoint[];
   ratesDist?: DistributionPoint[];
@@ -89,63 +104,19 @@ export type MetricsData = {
   ocsReservations?: OcsReservationMetrics;
   tariffPlanDist?: TariffPlanDistItem[];
   ocsUsage?: OcsUsageMetrics;
+  usageWindowHours?: number;
+  usageWindowRecords?: number;
+  usageWindowTotalOctets?: number;
+  usageTrend?: UsageTrendPoint[];
+  topUsage?: TopUsageEntry[];
+  latestUsageAt?: string;
 };
 
-export type SparklineData = {
-  subscribers?: number[];
-  traffic?: number[];
-  currentSubCount?: number;
-  currentTraffic?: number;
-};
-
-export type AlertItem = {
+export type BusinessRisk = {
   id: string;
-  timestamp: string;
-  level: "CRITICAL" | "WARNING" | string;
-  imsi?: string;
-  reason: string;
-  is_acknowledged?: boolean;
-};
-
-export type AlertResponse = {
-  alerts?: AlertItem[];
-  activeCriticalCount?: number;
-  activeWarningCount?: number;
-  activeCount?: number;
-};
-
-export type KpiCardProps = {
-  color: string;
-  icon: React.ReactNode;
-  label: string;
-  value: React.ReactNode;
-  detail: string;
-  sparkline?: number[];
-  ringValue?: number;
-  tone?: "normal" | "warning" | "danger";
-  badge?: React.ReactNode;
-  tag?: React.ReactNode;
-  onClick?: () => void;
-};
-
-export type WorkItem = {
-  id: string;
-  tone: "danger" | "warning" | "normal";
-  priority?: "P0" | "P1" | "P2";
+  tone: 'danger' | 'warning' | 'info';
   title: string;
   detail: string;
   href: string;
   action: string;
-};
-
-export type ChangeTask = {
-  id: string;
-  tone: "danger" | "warning" | "normal";
-  title: string;
-  scope: string;
-  phase: string;
-  canary: number;
-  owner: string;
-  href: string;
-  rollbackHref: string;
 };

@@ -180,15 +180,15 @@ test('dashboard renders the forward-ported analytics cockpit', () => {
   assert.match(page, /t\('dashboard_title'\)/);
   assert.match(page, /searchParams\.get\('view'\) === 'business'/);
 
-  // The cockpit owns the reference composition: KPI strip, workbench, OCS strip,
-  // top-consumer chart and tariff-plan distribution.
+  // The cockpit owns the business-analysis composition: KPI strip, real usage
+  // trend, business risks, OCS health, top usage and tariff-plan distribution.
   const cockpit = read('../src/components/AnalyticsCockpit.tsx');
-  for (const part of ['MetricStrip', 'WorkbenchPanel', 'OcsResourceStrip', 'TopConsumerChart', 'TariffPlanDistributionChart']) {
+  for (const part of ['MetricStrip', 'BusinessRiskPanel', 'UsageTrendChart', 'TariffPlanDistributionChart', 'OcsHealthPanel', 'TopUsageChart']) {
     assert.match(cockpit, new RegExp(part), `cockpit must render ${part}`);
   }
 
   // It must read the accepted read contracts rather than aggregate on its own.
-  for (const endpoint of ['/api/analytics/metrics', '/api/analytics/sparkline', '/api/alerts', '/api/ocs/subscribers']) {
+  for (const endpoint of ['/api/analytics/metrics', '/api/ue-info?summary=1']) {
     assert.ok(cockpit.includes(endpoint), `cockpit must read ${endpoint}`);
   }
 

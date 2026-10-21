@@ -6,8 +6,10 @@
  * aliases rewritten to relative paths.
  */
 import { useEffect, useRef, useState } from "react";
+import { useI18n } from '../../providers/I18nProvider';
 
 export default function CountUpNumber({ value, decimals = 0, suffix = "" }: { value: number; decimals?: number; suffix?: string }) {
+  const { formatNumber } = useI18n();
   const [displayValue, setDisplayValue] = useState(value);
   const previousValue = useRef(value);
 
@@ -37,7 +39,10 @@ export default function CountUpNumber({ value, decimals = 0, suffix = "" }: { va
 
   return (
     <>
-      {displayValue.toFixed(decimals)}
+      {formatNumber(displayValue, {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals,
+      })}
       {suffix}
     </>
   );

@@ -1,7 +1,11 @@
 // Package analytics provides read-only analytics API handlers.
 package analytics
 
-// AnalyticsMetrics matches the existing API response shape exactly.
+// AnalyticsMetrics is the business-analysis read projection.
+//
+// TotalTraffic and Top5 are retained for compatibility with the legacy
+// cockpit. They describe remaining data balances, not consumption; new
+// consumers must use OcsBalances and the explicit usage fields below.
 type AnalyticsMetrics struct {
 	TotalTraffic    int                   `json:"totalTraffic"`
 	PlmnDist        []NameValue           `json:"plmnDist"`
@@ -13,6 +17,26 @@ type AnalyticsMetrics struct {
 	OcsReservations OcsReservationMetrics `json:"ocsReservations"`
 	TariffPlanDist  []TariffPlanDistItem  `json:"tariffPlanDist"`
 	OcsUsage        OcsUsageMetrics       `json:"ocsUsage"`
+
+	UsageWindowHours       int               `json:"usageWindowHours"`
+	UsageWindowRecords     int               `json:"usageWindowRecords"`
+	UsageWindowTotalOctets int64             `json:"usageWindowTotalOctets"`
+	UsageTrend             []UsageTrendPoint `json:"usageTrend"`
+	TopUsage               []TopUsageEntry   `json:"topUsage"`
+	LatestUsageAt          string            `json:"latestUsageAt"`
+}
+
+// UsageTrendPoint is one hourly bucket of accepted OCS usage records.
+type UsageTrendPoint struct {
+	Hour   string `json:"hour"`
+	Octets int64  `json:"octets"`
+}
+
+// TopUsageEntry is one subscriber's usage inside the analysis window.
+type TopUsageEntry struct {
+	IMSI       string  `json:"imsi"`
+	UsedOctets int64   `json:"usedOctets"`
+	Share      float64 `json:"share"`
 }
 
 type NameValue struct {
@@ -44,6 +68,15 @@ type OcsBalanceMetrics struct {
 	ValidInvariantCount  int     `json:"validInvariantCount"`
 	BrokenInvariantCount int     `json:"brokenInvariantCount"`
 	AllInvariantsOk      bool    `json:"allInvariantsOk"`
+
+	// InvariantChecked is the number of balance documents actually evaluated.
+	// InvariantSampleLimit documents the bounded scan; a result is never a
+	// platform-wide claim when checked is below the target population.
+	InvariantChecked         int    `json:"invariantChecked"`
+	InvariantSampleLimit     int    `json:"invariantSampleLimit"`
+	InvariantScope           string `json:"invariantScope"`
+	VoiceAllocationDefaulted int    `json:"voiceAllocationDefaulted"`
+	SmsAllocationDefaulted   int    `json:"smsAllocationDefaulted"`
 }
 
 type OcsSessionMetrics struct {
