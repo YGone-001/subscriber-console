@@ -44,6 +44,22 @@ func knowledgeTestRepo(t *testing.T) (*Repository, func()) {
 	return repo, cleanup
 }
 
+func TestStatsReportsTagLimits(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires MongoDB")
+	}
+	repo, cleanup := knowledgeTestRepo(t)
+	defer cleanup()
+
+	meta, err := repo.Stats(context.Background())
+	if err != nil {
+		t.Fatalf("stats: %v", err)
+	}
+	if meta.MaxTags != MaxTags || meta.MaxTagLength != MaxTagLength {
+		t.Fatalf("tag limits = %d/%d, want %d/%d", meta.MaxTags, meta.MaxTagLength, MaxTags, MaxTagLength)
+	}
+}
+
 // TestListTotalRemainsStableAcrossPages guards the contract that total describes
 // the filtered set rather than the remainder after the cursor.
 func TestListTotalRemainsStableAcrossPages(t *testing.T) {

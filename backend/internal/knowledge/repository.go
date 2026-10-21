@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -176,7 +177,7 @@ func buildListFilter(filter ListFilter) (bson.M, error) {
 		doc["tags"] = filter.Tag
 	}
 	if q := strings.TrimSpace(filter.Query); q != "" {
-		if len(q) > MaxSearchQueryLength {
+		if utf8.RuneCountInString(q) > MaxSearchQueryLength {
 			return nil, fmt.Errorf("search query must not exceed %d characters", MaxSearchQueryLength)
 		}
 		pattern := regexp.QuoteMeta(q)
@@ -311,6 +312,8 @@ func (r *Repository) Stats(ctx context.Context) (*MetaResponse, error) {
 		MaxFileBytes:    MaxFileBytes,
 		MaxAttachments:  MaxAttachments,
 		MaxInlineImages: MaxInlineImages,
+		MaxTags:         MaxTags,
+		MaxTagLength:    MaxTagLength,
 	}, nil
 }
 

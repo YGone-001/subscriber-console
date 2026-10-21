@@ -168,6 +168,8 @@ type MetaResponse struct {
 	MaxFileBytes    int64           `json:"maxFileBytes"`
 	MaxAttachments  int             `json:"maxAttachments"`
 	MaxInlineImages int             `json:"maxInlineImages"`
+	MaxTags         int             `json:"maxTags"`
+	MaxTagLength    int             `json:"maxTagLength"`
 }
 
 // PageInfo mirrors the cursor-pagination shape used across the console.

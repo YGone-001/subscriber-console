@@ -206,3 +206,12 @@ func TestBuildListFilterRejectsLongQuery(t *testing.T) {
 		t.Fatalf("expected over-length query to be rejected")
 	}
 }
+
+func TestBuildListFilterCountsQueryByRunes(t *testing.T) {
+	if _, err := buildListFilter(ListFilter{Query: strings.Repeat("\u4e2d", MaxSearchQueryLength)}); err != nil {
+		t.Fatalf("expected %d CJK characters to be accepted: %v", MaxSearchQueryLength, err)
+	}
+	if _, err := buildListFilter(ListFilter{Query: strings.Repeat("\u4e2d", MaxSearchQueryLength+1)}); err == nil {
+		t.Fatalf("expected over-length CJK query to be rejected")
+	}
+}
