@@ -5,7 +5,7 @@
  * snapshot to the dashboard posture. Every value is nullable so an unavailable
  * section is rendered as unavailable instead of a fabricated zero.
  */
-import type { RuntimeCounts } from '../runtime/runtime-types';
+import type { RuntimeCategory, RuntimeComponent, RuntimeCounts } from '../runtime/runtime-types';
 import type { OperationsSummaryResponse } from './operations-summary';
 
 export type OperationsPosture = {
@@ -15,11 +15,16 @@ export type OperationsPosture = {
     expected: number | null;
     stopped: number | null;
     attention: number | null;
+    notDetected: number | null;
   };
   monitored: {
     enabled: number | null;
     configured: number | null;
     failed: number | null;
+    healthy: number | null;
+    degraded: number | null;
+    unhealthy: number | null;
+    stale: number | null;
   };
   fresh: {
     fresh: number | null;
@@ -29,6 +34,8 @@ export type OperationsPosture = {
   };
   alerts: {
     active: number | null;
+    acknowledged: number | null;
+    open: number | null;
     critical: number | null;
   };
 };
@@ -44,11 +51,20 @@ export function buildOperationsPosture(
 ): OperationsPosture {
   const health = summary?.health?.completeness === 'complete' ? summary.health.targets : undefined;
   const alerts = summary?.alerts?.completeness === 'complete' ? summary.alerts.alerts : undefined;
+  const overall = health?.overallByState;
 
   const enabled = health ? health.enabled : null;
   const fresh = health ? (health.freshnessByState?.fresh ?? 0) : null;
   const failed = health ? health.failed : null;
   const staleUnknown = health ? Math.max(health.enabled - (health.freshnessByState?.fresh ?? 0) - health.failed, 0) : null;
+
+  const active = alerts ? (alerts.alertsByState?.active ?? 0) : null;
+  const acknowledged = alerts ? (alerts.alertsByState?.acknowledged ?? 0) : null;
+  const open = alerts
+    ? alerts.openBySeverity
+      ? Object.values(alerts.openBySeverity).reduce((sum, value) => sum + value, 0)
+      : (active ?? 0) + (acknowledged ?? 0)
+    : null;
 
   return {
     runtime: {
@@ -57,11 +73,16 @@ export function buildOperationsPosture(
       expected: counts ? counts.expected : null,
       stopped: counts ? counts.stopped : null,
       attention: counts ? counts.unverified + counts.permissionDenied + counts.unknown + counts.stale : null,
+      notDetected: counts ? counts.notDetected : null,
     },
     monitored: {
       enabled,
       configured: health ? health.configured : null,
       failed,
+      healthy: health ? (overall?.healthy ?? 0) : null,
+      degraded: health ? (overall?.degraded ?? 0) : null,
+      unhealthy: health ? (overall?.unhealthy ?? 0) : null,
+      stale: health ? (overall?.stale ?? 0) : null,
     },
     fresh: {
       fresh,
@@ -70,9 +91,68 @@ export function buildOperationsPosture(
       failed,
     },
     alerts: {
-      active: alerts ? (alerts.alertsByState?.active ?? 0) : null,
+      active,
+      acknowledged,
+      open,
       critical: alerts ? (alerts.openBySeverity?.critical ?? 0) : null,
     },
+  };
+}
+
+const ATTENTION_STATUS_ORDER: Partial<Record<RuntimeComponent['runtimeStatus'], number>> = {
+  stopped: 0,
+  unverified: 1,
+  permission_denied: 2,
+  unknown: 3,
+  stale: 4,
+};
+
+export type RuntimeAttentionItem = {
+  componentId: string;
+  displayName: string;
+  processName: string;
+  category: RuntimeCategory;
+  status: RuntimeComponent['runtimeStatus'];
+  statusReason: string;
+};
+
+export type RuntimeAttentionProjection = {
+  items: RuntimeAttentionItem[];
+  total: number;
+};
+
+/**
+ * Runtime attention queue projection.
+ *
+ * Only runtime components that carry a negative or indeterminate observation
+ * enter the queue. `not_detected` stays out: under the scanner contract it means
+ * "never observed and not expected", which is not an incident. Expected-but-absent
+ * components are already reported as `stopped`, so they never need a second rule.
+ */
+export function runtimeAttentionItems(
+  components: RuntimeComponent[] | undefined,
+  limit = 5,
+): RuntimeAttentionProjection {
+  if (!components || components.length === 0) return { items: [], total: 0 };
+  const boundedLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 5;
+  const attention = components
+    .filter((component) => ATTENTION_STATUS_ORDER[component.runtimeStatus] !== undefined)
+    .sort((left, right) => {
+      const rankDiff = (ATTENTION_STATUS_ORDER[left.runtimeStatus] ?? 99)
+        - (ATTENTION_STATUS_ORDER[right.runtimeStatus] ?? 99);
+      return rankDiff !== 0 ? rankDiff : left.displayName.localeCompare(right.displayName);
+    });
+
+  return {
+    total: attention.length,
+    items: attention.slice(0, boundedLimit).map((component) => ({
+      componentId: component.componentId,
+      displayName: component.displayName,
+      processName: component.processName,
+      category: component.category,
+      status: component.runtimeStatus,
+      statusReason: component.statusReason,
+    })),
   };
 }
 

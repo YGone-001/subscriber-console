@@ -44,22 +44,46 @@ export default function MetricStrip({ items, ariaLabel, className, variant = "st
         data-columns={columns ? "true" : undefined}
         aria-label={ariaLabel}
       >
-        {items.map((item) => (
-          <div
-            key={item.key}
-            className={styles.metricCard}
-            data-tone={item.tone || "primary"}
-            style={item.accent ? ({ "--metric-accent": item.accent } as CSSProperties) : undefined}
-          >
-            <div className={styles.metricCardHead}>
-              <span className={styles.metricCardLabel}>{item.label}</span>
-              {item.icon ? <span className={styles.metricCardIcon}>{item.icon}</span> : null}
+        {items.map((item) => {
+          const content = (
+            <>
+              <span className={styles.metricCardHead}>
+                <span className={styles.metricCardLabel}>{item.label}</span>
+                {item.icon ? <span className={styles.metricCardIcon}>{item.icon}</span> : null}
+              </span>
+              <span className={styles.metricCardValue} data-compact={item.compactValue ? "true" : undefined}>{item.value}</span>
+              {item.detail ? <span className={styles.metricCardDetail}>{item.detail}</span> : null}
+              {item.indicator ? <span className={styles.metricCardIndicator}>{item.indicator}</span> : null}
+            </>
+          );
+
+          if (item.onClick) {
+            return (
+              <button
+                key={item.key}
+                type="button"
+                className={`${styles.metricCard} ${styles.metricCardButton}`}
+                data-tone={item.tone || "primary"}
+                style={item.accent ? ({ "--metric-accent": item.accent } as CSSProperties) : undefined}
+                onClick={item.onClick}
+                aria-label={item.ariaLabel}
+              >
+                {content}
+              </button>
+            );
+          }
+
+          return (
+            <div
+              key={item.key}
+              className={styles.metricCard}
+              data-tone={item.tone || "primary"}
+              style={item.accent ? ({ "--metric-accent": item.accent } as CSSProperties) : undefined}
+            >
+              {content}
             </div>
-            <div className={styles.metricCardValue} data-compact={item.compactValue ? "true" : undefined}>{item.value}</div>
-            {item.detail ? <div className={styles.metricCardDetail}>{item.detail}</div> : null}
-            {item.indicator ? <div className={styles.metricCardIndicator}>{item.indicator}</div> : null}
-          </div>
-        ))}
+          );
+        })}
       </section>
     );
   }

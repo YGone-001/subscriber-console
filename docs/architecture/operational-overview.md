@@ -21,7 +21,8 @@ console:
 
 ```text
 /            Operations Overview (primary surface: full-collection posture
-             KPIs, status distribution, local-runtime and managed-NF views)
+             KPIs, runtime attention queue, paired local-runtime and
+             managed-NF summaries)
 /inventory   Network element view (additional view mode inside the existing
              Inventory route)
 ```
@@ -37,7 +38,7 @@ adopted concept is rebuilt natively against xCloud authorities.
 | Reference capability | Original backend dependency | Reused concept | xCloud authority | Status |
 |---|---|---|---|---|
 | Operational summary cards | `/api/v1/deployment/status` | summary cards over real populations | NF Health + NF Alerts, from the full-collection operations summary; Inventory is read by the managed-NF view | Implemented |
-| Component status distribution | deployment status payload | status distribution with explicit denominators | local runtime snapshot or NF Health overall states, depending on the active view | Implemented |
+| Component status distribution | deployment status payload | status distribution with explicit denominators | local runtime snapshot and NF Health overall states, each in its own summary panel | Implemented |
 | Domain-grouped NF table | process list keyed by process name | collapsible domain groups, compact NF rows | Inventory domain/kind + NF Health status | Implemented |
 | Location tree | `/api/v1/sites` plus a hardcoded fallback tree | expand/collapse tree driving table filtering | Inventory resources + Topology `contains` edges, with a labelled virtual fallback | Implemented |
 | Search and status filtering | process-name substring match | text search plus domain/kind/monitoring filters | Inventory query parameters + bounded client filters | Implemented |
@@ -319,8 +320,9 @@ The following are intentionally absent and rendered as unavailable or unknown:
 
 - CPU utilization percentage (no verified interval calculation);
 - host-level aggregate utilization (no host capacity authority);
-- subscriber or online-user counts from the operational overview (the existing
-  business analytics keep their own authoritative sources);
+- subscriber or online-user counts derived from the Inventory/NF Health
+  projection (the overview's EPC/5GC online KPI reads the separate UE Info
+  source and publishes its source coverage);
 - IMS L2/L3 measurements (no metrics exporter exists for IMS functions);
 - service health for activity-only or cumulative-counter evidence (the Phase
   5-B-C semantics keep L3 `unknown`).
@@ -343,11 +345,16 @@ document intact. None of them adds an endpoint, mutates data or derives a count
 that the projection model does not already define.
 
 - **Operations overview page** (`OperationsOverviewPage`): the default `/`
-  surface. Four posture KPIs read the full-collection operations summary and the
-  local runtime snapshot; the network-status panel keeps local runtime processes
-  and managed NF health in separate views. The business analytics cockpit is a
-  sibling view mounted only while selected. No API path, route or collection is
-  added.
+  surface. Four full-collection posture KPIs (running/expected runtime
+  components, EPC/5GC online users with source coverage, managed NFs with
+  health/freshness, unresolved NF alerts) deep-link to their owning surfaces. A
+  runtime attention queue lists stopped, unverified, unknown and stale local
+  components from the full runtime snapshot; `not_detected` (never observed and
+  not expected) never enters the queue. Two paired summaries keep local runtime
+  and managed NF health separate, with page scope and per-source completeness
+  stated explicitly. The business cockpit is a URL-addressable sibling view
+  (`?view=business`) mounted only while selected, and the page H1 remains the
+  Operations Overview title. No API path, route or collection is added.
 - **Operations workbench navigation** (`OperationsNav`): one tab strip rendered
   by the four operational routes (`/inventory`, `/topology`, `/discovery`,
   `/nf-health`). It adds no route and no destination; nested detail routes keep

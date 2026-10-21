@@ -176,8 +176,9 @@ test('dashboard renders the forward-ported analytics cockpit', () => {
   assert.match(page, /OperationsOverview/);
   assert.match(page, /ops_view_operations/);
   assert.match(page, /ops_view_business/);
-  // The business cockpit is mounted only while its view is selected.
-  assert.match(page, /business \? <AnalyticsCockpit \/> : <OperationsOverview \/>/);
+  // The page title is stable; the business cockpit is mounted only while selected.
+  assert.match(page, /t\('dashboard_title'\)/);
+  assert.match(page, /searchParams\.get\('view'\) === 'business'/);
 
   // The cockpit owns the reference composition: KPI strip, workbench, OCS strip,
   // top-consumer chart and tariff-plan distribution.

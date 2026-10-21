@@ -263,6 +263,23 @@ button.metricItem:focus-visible {
   background: var(--surface);
 }
 
+.metricCardButton {
+  width: 100%;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.metricCardButton:hover {
+  background: var(--surface-hover);
+}
+
+.metricCardButton:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
 .metricCard[data-tone="success"] {
   --metric-tone: var(--success);
   border-color: var(--status-success-border);
@@ -309,6 +326,7 @@ button.metricItem:focus-visible {
 }
 
 .metricCardValue {
+  display: block;
   color: var(--metric-tone);
   font-family: var(--font-display);
   font-size: var(--ref-font-size-title-fluid);
@@ -333,6 +351,7 @@ button.metricItem:focus-visible {
 }
 
 .metricCardDetail {
+  display: block;
   overflow: hidden;
   color: var(--text-muted);
   font-size: var(--ref-font-size-caption);

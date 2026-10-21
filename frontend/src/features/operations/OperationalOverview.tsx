@@ -17,32 +17,23 @@
  *   - missing values are rendered as unavailable, never as zero;
  *   - no subscriber or online-user count is derived from this data.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Activity, ChevronDown, ChevronRight, Layers, RefreshCw, Server, ShieldCheck } from 'lucide-react';
-import { useRead } from '../../lib/api/use-read';
 import { useI18n } from '../../providers/I18nProvider';
 import { EmptyState, LoadingRows } from '../../components/ui/OperationFeedback';
 import {
-  applyResolvedNFTypes,
-  buildOperationalResources,
-  combineCompleteness,
   formatBytes,
-  groupByDomain,
   memoryView,
   OPERATIONAL_DOMAINS,
-  summarizeOperational,
-  type CompletenessReport,
   type DimensionCompleteness,
   type OperationalResource,
 } from './operational-model';
+import { useOperationalOverviewData } from './use-operational-overview-data';
 import styles from '../../styles/modules/operations.module.css';
 
 const OVERVIEW_LIMIT = 50;
 const REFRESH_INTERVAL_MS = 30000;
-
-type TargetListPayload = { targets?: unknown[]; page?: { hasMore?: boolean } };
-type ResourceListPayload = { resources?: unknown[]; page?: { hasMore?: boolean } };
 
 function stateTone(state: string): string {
   switch (state) {
@@ -134,38 +125,15 @@ export default function OperationalOverview({
 } = {}) {
   const { t } = useI18n();
   const embedded = variant === 'embedded';
-  const resourcesRead = useRead<ResourceListPayload>(`/api/inventory/resources?limit=${OVERVIEW_LIMIT}`);
-
-  // Authoritative bounded association lookup for exactly the loaded resources.
-  const resourceIds = useMemo(() => {
-    const ids = (resourcesRead.data?.resources ?? [])
-      .map((resource) => {
-        const record = (resource ?? {}) as Record<string, unknown>;
-        const value = record._id ?? record.resourceId;
-        return typeof value === 'string' ? value : '';
-      })
-      .filter(Boolean);
-    return ids;
-  }, [resourcesRead.data]);
-
-  const associationPath = resourceIds.length > 0
-    ? `/api/nf-health/targets?resourceIds=${encodeURIComponent(resourceIds.join(','))}`
-    : null;
-  const associationsRead = useRead<TargetListPayload>(associationPath);
-
   const [expanded, setExpanded] = useState<Record<string, boolean>>({ epc: true, '5gc': true });
-
-  const refresh = useCallback(() => {
-    void resourcesRead.mutate();
-    if (associationPath) void associationsRead.mutate();
-  }, [resourcesRead, associationsRead, associationPath]);
-
-  const refreshSignalRef = useRef(refreshSignal);
-  useEffect(() => {
-    if (refreshSignalRef.current === refreshSignal) return;
-    refreshSignalRef.current = refreshSignal;
-    refresh();
-  }, [refresh, refreshSignal]);
+  const {
+    resourcesRead,
+    associationsRead,
+    refresh,
+    items,
+    groups,
+    summary,
+  } = useOperationalOverviewData(OVERVIEW_LIMIT, refreshSignal);
 
   // Bounded, cancellation-aware refresh: one timer, cleared on unmount, and it
   // never fires while a previous request is still in flight.
@@ -175,48 +143,6 @@ export default function OperationalOverview({
     }, REFRESH_INTERVAL_MS);
     return () => window.clearInterval(timer);
   }, [refresh, resourcesRead.isValidating, associationsRead.isValidating]);
-
-  const completeness: CompletenessReport = useMemo(() => {
-    const inventory: DimensionCompleteness = resourcesRead.error
-      ? 'unavailable'
-      : resourcesRead.data
-        ? (resourcesRead.data.page?.hasMore ? 'partial' : 'complete')
-        : 'partial';
-    const monitoring: DimensionCompleteness = !resourceIds.length
-      ? (resourcesRead.error ? 'unavailable' : 'partial')
-      : associationsRead.error
-        ? 'unavailable'
-        : associationsRead.data
-          ? 'complete'
-          : 'partial';
-    const targets = associationsRead.data?.targets ?? [];
-    const telemetryFailed = targets.some((target) => {
-      const record = (target ?? {}) as Record<string, unknown>;
-      return record.statusComplete === false;
-    });
-    const telemetry: DimensionCompleteness = monitoring !== 'complete'
-      ? monitoring
-      : telemetryFailed
-        ? 'partial'
-        : 'complete';
-    // The overview renders no hierarchy, so it makes no topology claim.
-    return combineCompleteness({ inventory, monitoring, telemetry, topology: 'complete' });
-  }, [resourcesRead.data, resourcesRead.error, associationsRead.data, associationsRead.error, resourceIds.length]);
-
-  const { items, groups, summary } = useMemo(() => {
-    const associationResolved = !associationsRead.error && Boolean(associationsRead.data);
-    const joined = buildOperationalResources(
-      resourcesRead.data?.resources,
-      associationsRead.data?.targets,
-      associationResolved,
-    );
-    const enriched = applyResolvedNFTypes(joined.items, associationsRead.data?.targets);
-    return {
-      items: enriched,
-      groups: groupByDomain(enriched, completeness),
-      summary: summarizeOperational(enriched, completeness),
-    };
-  }, [resourcesRead.data, associationsRead.data, associationsRead.error, completeness]);
 
   const loading = (resourcesRead.isLoading || associationsRead.isLoading) && items.length === 0;
   const failed = Boolean(resourcesRead.error);
