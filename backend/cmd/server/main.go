@@ -21,6 +21,7 @@ import (
 	"subscriber/internal/discovery"
 	"subscriber/internal/handler"
 	"subscriber/internal/inventory"
+	"subscriber/internal/knowledge"
 	"subscriber/internal/middleware"
 	mongoClient "subscriber/internal/mongo"
 	"subscriber/internal/nfalert"
@@ -419,6 +420,22 @@ func main() {
 	runtimeStreamHandler := runtimeinv.NewStreamHandler(runtimeService, sessionValidator, runtimeInventoryGateway, runtimeTargetGateway)
 	runtimeStreamHandler.Start(context.Background())
 
+	// Knowledge base: fault/root-cause/resolution entries with secure attachment
+	// storage on the local filesystem (uploads + trash); metadata in xcloud_ops.
+	knowledgeStore, knowledgeStoreErr := knowledge.NewFileStore(cfg.KnowledgeUploadDir, cfg.KnowledgeTrashDir)
+	if knowledgeStoreErr != nil {
+		logger.Error("failed to initialize knowledge attachment store", "error", knowledgeStoreErr)
+		os.Exit(1)
+	}
+	knowledgeRepo := knowledge.NewRepository(
+		mc.Ops.Collection("app_knowledge_entries"),
+		mc.Ops.Collection("app_knowledge_files"),
+	)
+	knowledgeHandler := knowledge.NewHandler(knowledgeRepo, knowledgeStore, limiter, auditWriter)
+	knowledgeJanitor := knowledge.NewJanitor(knowledgeRepo, knowledgeStore, logger)
+	knowledgeJanitor.Start(ctx)
+	defer knowledgeJanitor.Stop()
+
 	// Build handler
 	mux := http.NewServeMux()
 
@@ -633,6 +650,16 @@ func main() {
 
 	// UE information (read-only EPC/5GC projection)
 	mux.Handle("GET /api/ue-info", authMiddleware(http.HandlerFunc(ueHandler.Get)))
+
+	// Knowledge base (five reads, three mutations)
+	mux.Handle("GET /api/knowledge/meta", authMiddleware(http.HandlerFunc(knowledgeHandler.Meta)))
+	mux.Handle("GET /api/knowledge/entries", authMiddleware(http.HandlerFunc(knowledgeHandler.List)))
+	mux.Handle("GET /api/knowledge/entries/{entryId}", authMiddleware(http.HandlerFunc(knowledgeHandler.Get)))
+	mux.Handle("POST /api/knowledge/entries", authMiddleware(http.HandlerFunc(knowledgeHandler.Create)))
+	mux.Handle("PUT /api/knowledge/entries/{entryId}", authMiddleware(http.HandlerFunc(knowledgeHandler.Update)))
+	mux.Handle("DELETE /api/knowledge/entries/{entryId}", authMiddleware(http.HandlerFunc(knowledgeHandler.Delete)))
+	mux.Handle("POST /api/knowledge/files", authMiddleware(http.HandlerFunc(knowledgeHandler.Upload)))
+	mux.Handle("GET /api/knowledge/files/{fileId}", authMiddleware(http.HandlerFunc(knowledgeHandler.Download)))
 
 	// Operations resource projection (single read, one bounded Inventory page)
 	mux.Handle("GET /api/operations/resources", authMiddleware(http.HandlerFunc(operationsResourceHandler.Resources)))

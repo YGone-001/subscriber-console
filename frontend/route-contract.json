@@ -154,5 +154,25 @@
   {
     "route": "/users/create",
     "dynamicParameters": []
+  },
+  {
+    "route": "/knowledge",
+    "dynamicParameters": []
+  },
+  {
+    "route": "/knowledge/new",
+    "dynamicParameters": []
+  },
+  {
+    "route": "/knowledge/:entryId",
+    "dynamicParameters": [
+      "entryId"
+    ]
+  },
+  {
+    "route": "/knowledge/:entryId/edit",
+    "dynamicParameters": [
+      "entryId"
+    ]
   }
 ]

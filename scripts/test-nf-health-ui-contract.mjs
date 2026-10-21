@@ -36,7 +36,7 @@ function check(id, ok, detail) {
 const routes = JSON.parse(readFileSync(resolve(frontend, 'route-contract.json'), 'utf8'));
 const healthRoutes = routes.filter((entry) => entry.route.startsWith('/nf-health'));
 check('NFH-UI-01', healthRoutes.length === 2, `nf_health_routes=${healthRoutes.length}`);
-check('NFH-UI-02', routes.length === 35, `frontend_route_count=${routes.length}`);
+check('NFH-UI-02', routes.length === 39, `frontend_route_count=${routes.length}`);
 check(
   'NFH-UI-03',
   healthRoutes.some((r) => r.route === '/nf-health') && healthRoutes.some((r) => r.route === '/nf-health/:targetId'),

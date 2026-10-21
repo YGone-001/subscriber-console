@@ -46,6 +46,10 @@ type Config struct {
 
 	// UE information (read-only EPC/5GC endpoint allowlist)
 	UEInfoSources string // comma-separated role=host:port (mme, amf, smf)
+
+	// Knowledge base attachment storage (local filesystem, never client-visible)
+	KnowledgeUploadDir string // attachment bytes root
+	KnowledgeTrashDir  string // soft-delete recovery root
 }
 
 // Load reads configuration from environment variables with sensible defaults.
@@ -80,6 +84,9 @@ func Load() (*Config, error) {
 		LocalNFDiscoveryExpected:        os.Getenv("LOCAL_NF_DISCOVERY_EXPECTED"),
 
 		UEInfoSources: os.Getenv("UE_INFO_SOURCES"),
+
+		KnowledgeUploadDir: envOrDefault("KNOWLEDGE_UPLOAD_DIR", "/srv/internal-resource-server/uploads"),
+		KnowledgeTrashDir:  envOrDefault("KNOWLEDGE_TRASH_DIR", "/srv/internal-resource-server/.trash"),
 	}
 
 	if cfg.MongoURI == "" {

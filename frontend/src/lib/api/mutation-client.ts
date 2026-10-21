@@ -139,3 +139,57 @@ export async function deleteJson<T = unknown>(
 ): Promise<T> {
   return executeMutation<T>('DELETE', path, undefined, requester);
 }
+
+export async function postForm<T = unknown>(
+  path: string,
+  formData: FormData,
+  requester?: (path: string, init: RequestInit) => Promise<Response>,
+): Promise<T> {
+  assertSafeApiPath(path);
+
+  // Content-Type is intentionally omitted: the browser sets the multipart boundary.
+  const init: RequestInit = {
+    method: 'POST',
+    credentials: 'same-origin',
+    cache: 'no-store',
+    body: formData,
+  };
+
+  let response: Response;
+  const doFetch = requester ?? fetch;
+  try {
+    response = await doFetch(path, init);
+  } catch (cause) {
+    const message = cause instanceof Error ? cause.message : 'Network failure';
+    throw new MutationApiError(0, message);
+  }
+
+  if (response.status === 401 && typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('xcloud-session-revalidate'));
+  }
+
+  let responseBody: unknown;
+  const contentType = response.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    try {
+      responseBody = await response.json();
+    } catch {
+      responseBody = undefined;
+    }
+  } else {
+    try {
+      const text = await response.text();
+      responseBody = text ? { message: text } : undefined;
+    } catch {
+      responseBody = undefined;
+    }
+  }
+
+  if (!response.ok) {
+    const { message, code } = extractErrorMessage(response.status, responseBody);
+    const retryAfter = parseRetryAfter(response);
+    throw new MutationApiError(response.status, message, responseBody, code, retryAfter);
+  }
+
+  return responseBody as T;
+}

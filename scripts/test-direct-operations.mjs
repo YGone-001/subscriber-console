@@ -54,6 +54,6 @@ for (const forbidden of ['app_approvals', 'approval_required', 'AUDIT_UNAVAILABL
 // The Go router registration site is the authoritative API surface.
 const { keys: goRegistrations, duplicates } = deriveGoRegistrations(root);
 assert.deepEqual(duplicates, [], 'Go router must not register a METHOD+PATH twice');
-assert.equal(goRegistrations.length, 149, `Go registered operations must be exactly 149, found ${goRegistrations.length}`);
+assert.equal(goRegistrations.length, 157, `Go registered operations must be exactly 157, found ${goRegistrations.length}`);
 
-console.log('Direct operations contract passed: governance surfaces removed; GoRegistered=149.');
+console.log('Direct operations contract passed: governance surfaces removed; GoRegistered=157.');

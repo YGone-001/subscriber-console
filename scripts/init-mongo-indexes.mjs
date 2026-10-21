@@ -667,6 +667,23 @@ async function ensureIndexes() {
     { key: { updatedAt: -1, _id: 1 }, name: 'nf_alerts_updated_id' },
   ])).map((name) => ({ database: appDbName, collection: 'app_nf_alerts', name })));
 
+  // ── xcloud_ops.app_knowledge_entries ──
+  // Knowledge base articles. List pagination walks updatedAt DESC + _id, the
+  // protocol filter and the tag filter each get a supporting index.
+  createdIndexes.push(...(await appDb.collection('app_knowledge_entries').createIndexes([
+    { key: { updatedAt: -1, _id: 1 }, name: 'knowledge_entries_updated_id' },
+    { key: { protocol: 1, updatedAt: -1 }, name: 'knowledge_entries_protocol_updated' },
+    { key: { tags: 1 }, name: 'knowledge_entries_tags' },
+  ])).map((name) => ({ database: appDbName, collection: 'app_knowledge_entries', name })));
+
+  // ── xcloud_ops.app_knowledge_files ──
+  // Attachment metadata. The janitor reclaims unclaimed uploads by creation
+  // time and resolves orphan files by their owning entry id.
+  createdIndexes.push(...(await appDb.collection('app_knowledge_files').createIndexes([
+    { key: { entryId: 1, createdAt: 1 }, name: 'knowledge_files_entry_created' },
+    { key: { createdAt: 1 }, name: 'knowledge_files_created' },
+  ])).map((name) => ({ database: appDbName, collection: 'app_knowledge_files', name })));
+
 async function seedRootAdminUser(appDb) {
   const users = appDb.collection('app_users');
   const existingAdmin = await users.findOne({ username: 'admin' });

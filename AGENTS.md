@@ -153,7 +153,7 @@ Nginx (only public origin)
 Go 127.0.0.1:18888
 Business API (owner)
 Auth identity + session validation
-Read + write APIs (149 exact METHOD+PATH registrations)
+Read + write APIs (157 exact METHOD+PATH registrations)
 Embedded static React SPA (production UI)
    |
    v
@@ -186,7 +186,7 @@ Retained legacy Next listener        = retired
 Loopback listener enforced by service, not firewall = YES
 Standalone deployment path           = removed
 Go business production changes       = 0
-Go registration set                  = 149
+Go registration set                  = 157
 ```
 
 - 边缘配置为 `deploy/nginx/xcloud.conf`。`location = /api`、`location /api/`、专用非缓冲 `location = /api/notifications/stream` 与 `location /` **全部代理至 Go**；UI 由 Go 内嵌 SPA 提供。
@@ -207,6 +207,7 @@ Next implementation direction   = complete
 - Topology / Dependency Model Foundation = IMPLEMENTED（Inventory 独占节点权威，Topology 仅持久化关系边）。
 - Operational Overview / Network Element Management = IMPLEMENTED（CNMS 启发、xCloud 原生：仪表盘新增运维总览区段（域分组、资源汇总、L1/L2/L3 覆盖、诚实的完整性标记），`/inventory` 新增网元视图（域/种类/监测状态筛选、搜索、游标分页、层级树与虚拟域分组回退）；身份仅用规范 `resourceId` 连接，绝不使用进程名/主机名/IP 推断；CNMS 的部署模板、MML/重启、日志流、业务指标与站点 CRUD 一律排除；CPU 累计计数器绝不显示为百分比，缺失指标显示为不可用而非 0；关联完整性铁律：监测关联仅由 `GET /api/nf-health/targets?resourceIds=`（≤50 个规范 UUID，去重、拒绝空/畸形/超限、禁止与 cursor/q/enabled/limit 组合，单次有界索引查询）权威解析，绝不从未相关游标页推断缺失，未解析（unresolved）绝不计入未纳管（unmonitored）；完整性按来源分维度（inventory/monitoring/telemetry/topology）独立报告，任一不可用即整体不可用，部分页绝不作为平台总量；NF 人口仅含 `network_function`/`network_function_instance`（其余种类单列 nonNfResources，绝不抬高 NF 计数），逻辑网元与实例分母分开；拓扑关系仅用 `contains` 边并有界游标分页（超界标 partial，读取失败标 unavailable），虚拟分组按确定性区分三种文案，绝不宣称不存在包含关系；`statusComplete` 描述读取成功而非证据存在（无历史样本的新目标是已配置未测量，不是读取失败）；服务端筛选变更重置游标/历史/树选择。权威文档：`docs/architecture/operational-overview.md`）。
 - UE 信息 / EPC-5GC 在线用户 = IMPLEMENTED（只读 `GET /api/ue-info` + `/ue-info` 页面；源清单 `UE_INFO_SOURCES` 仅接受 mme/amf/smf host:port，固定 GET 路径、禁止重定向、超时与响应体有界；MME/AMF UE 列表与 SMF PDU 会话按 SUPI 合并、PDN 去重，MSISDN 由 xCloud subscribers 单次有界查询补充；SMF `ues_active` 经 NF Health 注册表/解析器读取，缺失/失败为 null 绝不补零；来源状态 ok/unavailable/not_configured/invalid_config 与 complete 显式返回；IMS 在线用户与 HSS SIP 本期未接入并显式不可用；读需 core.read，限流 120/60s，无写、无任意 URL/SQL；前端 `/ue-info` 为规范路由，运维总览使用 `?summary=1`。权威文档：`docs/architecture/ue-info.md`）。
+- 知识库 Knowledge Base = IMPLEMENTED（故障现象、根因与处置方案的沉淀/检索/编辑；条目存于 `xcloud_ops.app_knowledge_entries`，附件元数据存于 `app_knowledge_files`，附件字节落本地磁盘（`KNOWLEDGE_UPLOAD_DIR` + `.trash` 软删）；搜索转义 + 有界输入、游标分页、CAS revision、`core.read`/`core.configure` 权限门、端点级限流与 best-effort 审计；附件魔数+扩展名双重校验，拒绝 SVG/HTML/可执行，下载带 nosniff/ETag/private；Markdown 不渲染原始 HTML，链接/图片白名单。权威文档：`docs/architecture/knowledge-base.md`）。
 - Discovery / NF Observation Foundation = IMPLEMENTED（只读 NRF 观测，绝不推断缺失，绝不自动写 Inventory/Topology）。
 - NF Health / Telemetry Foundation = IMPLEMENTED（只读三层测量证据，采集器固定类型 + 默认拒绝白名单，样本 TTL 仅作用于样本集合；Inventory 权威身份统一，支持 EPC/5GC/IMS/charging 资源原生目标与可选 Discovery 候选关联；跨域指标适配为证据驱动：EPC/5GC 已实测核验、charging 仅源码核验、IMS 无指标导出器，L3 服务健康仅由登记规则判定且进程遥测永不建立服务健康）。
 - Runtime discovery / CNMS process compatibility = IMPLEMENTED（只读本地 /proc 扫描，24 个 CNMS 兼容组件 + 2 个 xCloud 专有身份（seppd/smscd）共 26 条识别项，由单一中央识别权威定义并被扫描器、API 投影与前端状态模型共同复用；状态语义以证据为准：仅正向验证的进程报告 running，`comm` 精确匹配 + `/proc/<pid>/exe` 身份校验 + 进程启动标识防 PID 复用，扫描不完整时缺失只报告 unknown 而绝不报告 stopped，从未观测的组件报告 not_detected；CPU 仅由真实采样区间差值计算（累计 CPU 时间绝不显示为百分比），内存为已验证进程组聚合且缺失测量不显示为 0；Java IMS HSS 采用「可执行文件校验 + 已批准启动标识位置」双重判定，歧义候选保持 unverified，原始命令行永不返回或持久化；纳管走受控预览/批准流程（`POST /api/runtime/bootstrap/preview`、`apply`），资源以 `source.kind=discovered` 的服务器权威来源创建、生命周期为 planned（PID 存在不等于 active），动态进程绑定持久化于 `xcloud_ops.app_nf_health_bindings`（静态配置优先、冲突拒绝、重启后继续调度 L1 采集）；DRA 与歧义 IMS HSS 不建立 NF Health 目标（monitoring_not_supported）；观测层级（主机/域/组件）不落拓扑边，绝不伪造 SIP/Diameter/PFCP/SBI 连接。权威文档：`docs/architecture/runtime-discovery.md`）。
@@ -531,8 +532,8 @@ Charging plane (frozen, excluded from the management plane):
   ocs_config         — OCS engine config
 ```
 
-- 权威基线：OCS 管理平面生产冻结基线；当前生产路由 = Go 全部接管，**共 149 条 Go 注册**。
-- 路由权威来源：Go 注册集合（`backend/cmd/server/main.go` + `backend/internal/remediation/handler.go`，149 条 METHOD+PATH 精确注册）；Nginx 负责 API 路由。
+- 权威基线：OCS 管理平面生产冻结基线；当前生产路由 = Go 全部接管，**共 157 条 Go 注册**。
+- 路由权威来源：Go 注册集合（`backend/cmd/server/main.go` + `backend/internal/remediation/handler.go`，157 条 METHOD+PATH 精确注册）；Nginx 负责 API 路由。
 - 冻结规约摘要（历史）：`docs/archive/backend-migration-summary.md`。
 - 运维操作手册：`docs/operations/ocs-management-runbook.md`。
 
@@ -558,7 +559,7 @@ OCS 管理 UI：
 ### 7.1 路由注册权威
 
 ```text
-Route authority = the derived Go registration set (149 exact METHOD+PATH registrations).
+Route authority = the derived Go registration set (157 exact METHOD+PATH registrations).
 ```
 
 权威来源：
@@ -607,7 +608,7 @@ xcloud_ops.app_rate_limits
 
 ### 7.5 生产注册路由清单
 
-路由权威为源码派生的 Go 注册集合，共 **149 条** METHOD+PATH 精确注册（GET 72 / POST 53 / PUT 12 / DELETE 9 / PATCH 3）：
+路由权威为源码派生的 Go 注册集合，共 **157 条** METHOD+PATH 精确注册（GET 76 / POST 55 / PUT 13 / DELETE 10 / PATCH 3）：
 
 ```text
 GET    /api/analytics/metrics
@@ -751,7 +752,7 @@ GET    /api/ue-info
 状态：
 
 ```text
-Go production API registrations = 149 (route authority: backend/cmd/server/main.go + backend/internal/remediation/handler.go)
+Go production API registrations = 157 (route authority: backend/cmd/server/main.go + backend/internal/remediation/handler.go)
 Canonical API surface = 33 operations + 2 legacy read aliases
 Go-native reads = 2
 Node production operations = 0

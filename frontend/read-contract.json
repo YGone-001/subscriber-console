@@ -309,5 +309,40 @@
       "GET /api/nf-logs/sources?resourceId=",
       "GET /api/nf-logs/stream?sourceId=&tailLines=&level=&keyword=&follow="
     ]
+  },
+  {
+    "route": "/knowledge",
+    "mode": "read",
+    "source": "frontend/src/features/knowledge/KnowledgePage.tsx",
+    "readEndpoints": [
+      "GET /api/knowledge/meta",
+      "GET /api/knowledge/entries"
+    ]
+  },
+  {
+    "route": "/knowledge/new",
+    "mode": "read",
+    "source": "frontend/src/features/knowledge/KnowledgeEditorPage.tsx",
+    "readEndpoints": [
+      "GET /api/knowledge/meta"
+    ]
+  },
+  {
+    "route": "/knowledge/:entryId",
+    "mode": "read",
+    "source": "frontend/src/features/knowledge/KnowledgeDetailPage.tsx",
+    "readEndpoints": [
+      "GET /api/knowledge/entries/{entryId}",
+      "GET /api/knowledge/files/{fileId}"
+    ]
+  },
+  {
+    "route": "/knowledge/:entryId/edit",
+    "mode": "read",
+    "source": "frontend/src/features/knowledge/KnowledgeEditorPage.tsx",
+    "readEndpoints": [
+      "GET /api/knowledge/meta",
+      "GET /api/knowledge/entries/{entryId}"
+    ]
   }
 ]

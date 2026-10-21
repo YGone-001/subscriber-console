@@ -1,4 +1,4 @@
-import { Activity, BellRing, Boxes, Briefcase, CreditCard, FileText, Gauge, HeartPulse, LayoutDashboard, Network, Radar, Radio, ScrollText, Settings, Smartphone, UserCog, Users, Wallet, Zap, type LucideIcon } from 'lucide-react';
+import { Activity, BellRing, BookOpen, Boxes, Briefcase, CreditCard, FileText, Gauge, HeartPulse, LayoutDashboard, Network, Radar, Radio, ScrollText, Settings, Smartphone, UserCog, Users, Wallet, Zap, type LucideIcon } from 'lucide-react';
 import type { CanonicalRole } from '../types/auth';
 import { hasNavigationPermission } from './permissions';
 
@@ -29,6 +29,10 @@ export const APP_ROUTES: NavigationRoute[] = [
   { route: '/nf-alerts', targetRoute: '/nf-alerts', dynamicParameters: [], labelKey: 'nav_nf_alerts', icon: BellRing, group: 'network', sidebarSection: 'observability', visible: true },
   { route: '/ue-info', targetRoute: '/ue-info', dynamicParameters: [], labelKey: 'nav_ue_info', icon: Smartphone, group: 'network', sidebarSection: 'observability', visible: true },
   { route: '/logs', targetRoute: '/logs', dynamicParameters: [], labelKey: 'nav_logs', icon: ScrollText, group: 'platform', visible: true },
+  { route: '/knowledge', targetRoute: '/knowledge', dynamicParameters: [], labelKey: 'nav_knowledge', icon: BookOpen, group: 'platform', visible: true },
+  { route: '/knowledge/new', targetRoute: '/knowledge/new', dynamicParameters: [], labelKey: 'nav_knowledge_new', icon: BookOpen },
+  { route: '/knowledge/:entryId', targetRoute: '/knowledge/:entryId', dynamicParameters: ['entryId'], labelKey: 'nav_knowledge', icon: BookOpen },
+  { route: '/knowledge/:entryId/edit', targetRoute: '/knowledge/:entryId/edit', dynamicParameters: ['entryId'], labelKey: 'nav_knowledge_edit', icon: BookOpen },
   { route: '/ocs', targetRoute: '/ocs', dynamicParameters: [], labelKey: 'nav_ocs', icon: Zap },
   { route: '/ocs/balances', targetRoute: '/ocs/balances', dynamicParameters: [], labelKey: 'nav_ocs_balances', icon: Wallet, group: 'business', sidebarSection: 'charging', visible: true },
   { route: '/ocs/balances/:imsi', targetRoute: '/ocs/balances/:imsi', dynamicParameters: ['imsi'], labelKey: 'nav_dashboard', icon: FileText },
@@ -128,7 +132,7 @@ export type SidebarGroup = {
  */
 const BUSINESS_CHILD_ORDER = ['/subscribers', '/profile', '/ocs/tariffs', '/ocs/contracts', '/ocs/balances'];
 const NETWORK_CHILD_ORDER = ['/inventory', '/topology', '/discovery', '/nf-health', '/nf-alerts', '/ue-info'];
-const PLATFORM_CHILD_ORDER = ['/system-health', '/users', '/logs'];
+const PLATFORM_CHILD_ORDER = ['/system-health', '/users', '/logs', '/knowledge'];
 
 /**
  * Grouped sidebar model derived from the current navigation authority.

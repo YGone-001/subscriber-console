@@ -31,6 +31,9 @@ import { NfHealthDetailPage } from '../features/nf-health/NfHealthDetailPage';
 import { NfAlertsPage } from '../features/nf-alerts/NfAlertsPage';
 import { LogCenterPage } from '../features/logs/LogCenterPage';
 import { UEInfoPage } from '../features/ue-info/UEInfoPage';
+import { KnowledgePage } from '../features/knowledge/KnowledgePage';
+import { KnowledgeDetailPage } from '../features/knowledge/KnowledgeDetailPage';
+import { KnowledgeEditorPage } from '../features/knowledge/KnowledgeEditorPage';
 
 const pages: Record<string, ReactNode> = {
   '/': <DashboardPage />,
@@ -46,6 +49,10 @@ const pages: Record<string, ReactNode> = {
   '/nf-alerts': <NfAlertsPage />,
   '/ue-info': <UEInfoPage />,
   '/logs': <LogCenterPage />,
+  '/knowledge': <KnowledgePage />,
+  '/knowledge/new': <KnowledgeEditorPage />,
+  '/knowledge/:entryId': <KnowledgeDetailPage />,
+  '/knowledge/:entryId/edit': <KnowledgeEditorPage />,
   '/ocs/balances': <BalancesPage />,
   '/ocs/balances/:imsi': <BalanceDetailPage />,
   '/ocs/contracts': <ContractsPage />,

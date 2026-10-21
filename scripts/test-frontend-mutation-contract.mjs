@@ -49,9 +49,10 @@ const expectedContractRoutes = new Set([
   '/users',
   '/users/:username',
   '/users/create',
+  '/knowledge',
 ]);
 
-// Expected 29 enabled registered business mutations
+// Expected 33 enabled registered business mutations
 const expectedEnabledEndpoints = new Set([
   'POST /api/subscribers',
   'PUT /api/subscribers/{imsi}',
@@ -82,6 +83,10 @@ const expectedEnabledEndpoints = new Set([
   'PATCH /api/users/{username}',
   'POST /api/users/{username}/disable',
   'POST /api/users/{username}/password-reset',
+  'POST /api/knowledge/entries',
+  'PUT /api/knowledge/entries/{entryId}',
+  'DELETE /api/knowledge/entries/{entryId}',
+  'POST /api/knowledge/files',
 ]);
 
 const disabledEndpoints = new Set([
@@ -128,6 +133,10 @@ const expectedAuthorizations = {
   'PATCH /api/users/{username}': { kind: 'permission', value: 'users.update' },
   'POST /api/users/{username}/disable': { kind: 'permission', value: 'users.disable' },
   'POST /api/users/{username}/password-reset': { kind: 'permission', value: 'users.reset-password' },
+  'POST /api/knowledge/entries': { kind: 'permission', value: 'core.configure' },
+  'PUT /api/knowledge/entries/{entryId}': { kind: 'permission', value: 'core.configure' },
+  'DELETE /api/knowledge/entries/{entryId}': { kind: 'permission', value: 'core.configure' },
+  'POST /api/knowledge/files': { kind: 'permission', value: 'core.configure' },
 };
 
 function validateMutationContracts(entries) {
@@ -507,10 +516,10 @@ const importPrecheckExecuteConsistency = (
 const trafficAdjustResponseSemantics = passedTests.has('traffic adjustment: classified as routing-acknowledgement, never mutation-result') ? 'PASS' : 'FAIL';
 
 // Verify Route Inventory
-assert.equal(routes.length, 35, 'route contract must contain 35 routes');
+assert.equal(routes.length, 39, 'route contract must contain 39 routes');
 
 // Verify Contract Checks
-assert.equal(contracts.length, 11);
+assert.equal(contracts.length, 12);
 assert.equal(validation.duplicateRoutes, 0);
 assert.equal(validation.missingRoutes, 0);
 assert.equal(validation.unknownRoutes, 0);
@@ -542,7 +551,7 @@ assert.equal(importPrecheckExecuteConsistency, 'PASS');
 assert.equal(trafficAdjustResponseSemantics, 'PASS');
 
 // Verify Endpoints
-assert.equal(contractUniqueEndpoints.size, 29);
+assert.equal(contractUniqueEndpoints.size, 33);
 assert.equal(validation.unregisteredEndpoints, 0);
 assert.equal(validation.outOfScopeEndpoints, 0);
 assert.equal(validation.disabledEndpoints, 0);

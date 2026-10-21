@@ -495,5 +495,49 @@
     ],
     "preflightOperations": [],
     "disabledOperations": []
+  },
+  {
+    "route": "/knowledge",
+    "source": "frontend/src/features/knowledge/KnowledgePage.tsx",
+    "operations": [
+      {
+        "name": "knowledge entry create",
+        "request": "POST /api/knowledge/entries",
+        "authorization": {
+          "kind": "permission",
+          "value": "core.configure"
+        },
+        "confirmation": false
+      },
+      {
+        "name": "knowledge entry update",
+        "request": "PUT /api/knowledge/entries/{entryId}",
+        "authorization": {
+          "kind": "permission",
+          "value": "core.configure"
+        },
+        "confirmation": false
+      },
+      {
+        "name": "knowledge entry delete",
+        "request": "DELETE /api/knowledge/entries/{entryId}",
+        "authorization": {
+          "kind": "permission",
+          "value": "core.configure"
+        },
+        "confirmation": true
+      },
+      {
+        "name": "knowledge file upload",
+        "request": "POST /api/knowledge/files",
+        "authorization": {
+          "kind": "permission",
+          "value": "core.configure"
+        },
+        "confirmation": false
+      }
+    ],
+    "preflightOperations": [],
+    "disabledOperations": []
   }
 ]
