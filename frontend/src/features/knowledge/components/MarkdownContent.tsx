@@ -1,6 +1,7 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { isKnowledgeImageUrl } from '../knowledge-format';
+import styles from '../../../styles/modules/knowledge.module.css';
 
 const SAFE_LINK = /^(https?:\/\/|mailto:|\/|#)/i;
 
@@ -14,7 +15,7 @@ const SAFE_LINK = /^(https?:\/\/|mailto:|\/|#)/i;
  */
 export function MarkdownContent({ content }: { content: string }) {
   return (
-    <div className="kb-markdown">
+    <div className={styles.markdown}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{

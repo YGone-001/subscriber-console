@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { Bold, Code, Heading1, Heading2, Italic, Link, List, Quote, Eye, Pencil } from 'lucide-react';
 import { useI18n } from '../../../providers/I18nProvider';
 import { MarkdownContent } from './MarkdownContent';
+import styles from '../../../styles/modules/knowledge.module.css';
 
 type Tool = {
   key: string;
@@ -54,15 +55,15 @@ export function MarkdownEditor({ value, onChange }: { value: string; onChange: (
   };
 
   return (
-    <div className="kb-editor">
-      <div className="kb-editor-toolbar" role="toolbar" aria-label={t('kb_editor_toolbar')}>
+    <div className={styles.editor}>
+      <div className={styles.editorToolbar} role="toolbar" aria-label={t('kb_editor_toolbar')}>
         {tools.map((tool) => (
           <button
             key={tool.key}
             type="button"
             title={tool.title}
             aria-label={tool.title}
-            className="kb-editor-tool"
+            className={styles.editorTool}
             onClick={() => runTool(tool)}
           >
             {tool.icon}
@@ -70,7 +71,7 @@ export function MarkdownEditor({ value, onChange }: { value: string; onChange: (
         ))}
         <button
           type="button"
-          className="kb-editor-toggle"
+          className={styles.editorToggle}
           onClick={() => setPreview((v) => !v)}
           aria-pressed={preview}
         >
@@ -79,13 +80,13 @@ export function MarkdownEditor({ value, onChange }: { value: string; onChange: (
         </button>
       </div>
       {preview ? (
-        <div className="kb-editor-preview">
+        <div className={styles.editorPreview}>
           <MarkdownContent content={value} />
         </div>
       ) : (
         <textarea
           ref={textareaRef}
-          className="kb-editor-textarea"
+          className={styles.editorTextarea}
           value={value}
           onChange={(event) => onChange(event.target.value)}
           placeholder={t('kb_solution_placeholder')}

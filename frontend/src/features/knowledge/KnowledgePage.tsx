@@ -105,7 +105,8 @@ export function KnowledgePage() {
         <div className={styles.toolbar}>
           <div className={styles.search} role="search">
             <Search size={16} aria-hidden="true" />
-            <input
+            <div className={styles.searchField}>
+              <input
               type="search"
               value={searchInput}
               placeholder={t('kb_search_placeholder')}
@@ -119,7 +120,8 @@ export function KnowledgePage() {
               <button type="button" className={styles.searchClear} aria-label={t('kb_clear_search')} onClick={() => applySearch('')}>
                 <X size={15} />
               </button>
-            )}
+              )}
+            </div>
             <button type="button" className={styles.searchButton} onClick={() => applySearch(searchInput)}>{t('search')}</button>
           </div>
           <label className={styles.filter}>
