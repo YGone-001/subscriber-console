@@ -114,7 +114,15 @@ func (r *Repository) List(ctx context.Context, filter ListFilter) ([]EntrySummar
 		return nil, 0, nil, false, err
 	}
 
-	total, err := r.entries.CountDocuments(ctx, filterDoc)
+	// The total describes the whole filtered set, not the page remaining after
+	// the cursor. Counting with the cursor would shrink the total on every page.
+	countFilter := filter
+	countFilter.Cursor = ""
+	countFilterDoc, err := buildListFilter(countFilter)
+	if err != nil {
+		return nil, 0, nil, false, err
+	}
+	total, err := r.entries.CountDocuments(ctx, countFilterDoc)
 	if err != nil {
 		return nil, 0, nil, false, fmt.Errorf("failed to count knowledge entries: %w", err)
 	}
