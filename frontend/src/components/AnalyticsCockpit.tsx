@@ -53,6 +53,11 @@ export default function AnalyticsCockpit() {
     const activeSessionTotal = sessions?.activeUsedOctets ?? 0;
     const sessionFallback = (data.usageWindowRecords ?? 0) === 0 && activeSessionTotal > 0;
     const usageRecords = data.usageWindowRecords ?? 0;
+    const usageTopList = usageRecords > 0
+      ? (data.topUsage ?? [])
+      : sessionFallback
+        ? (sessions?.activeUsageTop ?? [])
+        : [];
     const usageTotal = data.usageWindowTotalOctets ?? 0;
     const usageHours = data.usageWindowHours ?? 24;
     const latest = data.latestUsageAt ?? '';
@@ -66,7 +71,11 @@ export default function AnalyticsCockpit() {
       ? remainingGb / averageHourlyGb
       : null;
     const balancesAvailable = Boolean(balances && (balances.totalSubscribers > 0 || balances.totalDataAllocated > 0));
-    const top = usageRecords > 0 ? data.topUsage?.[0] : sessions?.activeUsageTop?.[0];
+    const top = usageTopList[0];
+    const riskTotalOctets = usageRecords > 0 ? usageTotal : activeSessionTotal;
+    const hasAtLeastFiveUsers = usageTopList.length >= 5;
+    const totalOverTenGb = riskTotalOctets > 10 * BYTES_IN_GB;
+    const singleOverFiveGb = top ? top.usedOctets > 5 * BYTES_IN_GB : false;
     const result: BusinessRisk[] = [];
 
     if (!balancesAvailable) {
@@ -141,7 +150,7 @@ export default function AnalyticsCockpit() {
       });
     }
 
-    if (top && top.share >= 35) {
+    if (top && ((hasAtLeastFiveUsers && totalOverTenGb) || singleOverFiveGb)) {
       const sessionMode = usageRecords === 0 && sessionFallback;
       result.push({
         id: 'usage-concentration',
@@ -151,6 +160,7 @@ export default function AnalyticsCockpit() {
         }),
         detail: t(sessionMode ? 'dash_biz_risk_session_concentration_detail' : 'dash_biz_risk_concentration_detail', {
           share: formatNumber(top.share, { maximumFractionDigits: 1 }),
+          value: formatNumber(top.usedOctets / BYTES_IN_GB, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
         }),
         href: '/subscribers',
         action: t('nav_subscriber'),
