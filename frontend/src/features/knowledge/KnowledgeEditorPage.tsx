@@ -6,14 +6,17 @@ import PageHeader from '../../components/ui/PageHeader';
 import { OperationNotice } from '../../components/ui/OperationFeedback';
 import { UnsavedChangesDialog, useUnsavedChangesGuard } from '../../components/ui/UnsavedChangesGuard';
 import { useI18n } from '../../providers/I18nProvider';
-import { MutationApiError } from '../../lib/api/mutation-client';
 import { MarkdownEditor } from './components/MarkdownEditor';
 import { createEntry, fetchEntry, fetchKnowledgeMeta, isKnowledgeEntryKey, updateEntry, uploadKnowledgeFile } from './knowledge-api';
+import { knowledgeErrorMessage } from './knowledge-errors';
 import { fileKindLabel, formatFileSize } from './knowledge-format';
 import type { Attachment, KnowledgeMeta } from './types';
 import styles from '../../styles/modules/knowledge.module.css';
 
 type AttachmentDraft = Attachment;
+
+const ATTACHMENT_ACCEPT = '.png,.jpg,.jpeg,.gif,.webp,.pdf,.txt,.log,.pcap,.pcapng';
+const DEFAULT_MAX_FILE_BYTES = 8 * 1024 * 1024;
 
 export function KnowledgeEditorPage() {
   const { entryId } = useParams<{ entryId: string }>();
@@ -66,16 +69,21 @@ export function KnowledgeEditorPage() {
   const unsavedChanges = useUnsavedChangesGuard(dirty, () => setDirty(false));
 
   const protocols = useMemo(() => (meta?.protocols?.length ? meta.protocols : ['General']), [meta]);
+  const maxFileBytes = meta?.maxFileBytes ?? DEFAULT_MAX_FILE_BYTES;
 
   const handleUpload = async (file: File) => {
-    setUploading(true);
     setError(null);
+    if (file.size > maxFileBytes) {
+      setError(t('kb_file_too_large', { size: formatFileSize(maxFileBytes) }));
+      return;
+    }
+    setUploading(true);
     try {
       const uploaded = await uploadKnowledgeFile(file);
       setAttachments((prev) => [...prev, { ...uploaded }]);
       setDirty(true);
     } catch (err) {
-      setError(err instanceof MutationApiError ? err.message : t('kb_upload_failed'));
+      setError(knowledgeErrorMessage(err, t, 'kb_upload_failed'));
     } finally {
       setUploading(false);
     }
@@ -100,11 +108,9 @@ export function KnowledgeEditorPage() {
       attachmentFileIds: attachments.map((a) => a.fileId),
     };
     try {
-      if (isEdit && entryId) {
-        await updateEntry(entryId, { ...payload, expectedRevision: revision });
-      } else {
-        await createEntry(payload);
-      }
+      const saved = isEdit && entryId
+        ? await updateEntry(entryId, { ...payload, expectedRevision: revision })
+        : await createEntry(payload);
       setDirty(false);
       // Invalidate cached list and detail reads so a new or changed entry is
       // visible when the destination mounts inside SWR's dedupe window.
@@ -113,15 +119,9 @@ export function KnowledgeEditorPage() {
       } catch {
         /* Routes still revalidate when they mount. */
       }
-      navigate('/knowledge');
+      navigate(`/knowledge/${saved.id}`, { state: { knowledgeSaved: true } });
     } catch (err) {
-      if (err instanceof MutationApiError && err.status === 409) {
-        setError(t('kb_revision_conflict'));
-      } else if (err instanceof MutationApiError) {
-        setError(err.message);
-      } else {
-        setError(t('kb_save_failed'));
-      }
+      setError(knowledgeErrorMessage(err, t));
       setSaving(false);
     }
   };
@@ -219,12 +219,18 @@ export function KnowledgeEditorPage() {
               <div className={styles.cardHead}>
                 <span className={styles.fieldLabel}>{t('kb_attachments')}</span>
                 <label className={styles.attachButton}>
-                  <Paperclip size={13} /> {uploading ? t('saving') : t('kb_attachment_add')}
-                  <input type="file" className={styles.hiddenInput} onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (file) void handleUpload(file);
-                    event.target.value = '';
-                  }} />
+                  <Paperclip size={13} /> {uploading ? t('kb_uploading') : t('kb_attachment_add')}
+                  <input
+                    type="file"
+                    accept={ATTACHMENT_ACCEPT}
+                    className={styles.hiddenInput}
+                    disabled={uploading}
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) void handleUpload(file);
+                      event.target.value = '';
+                    }}
+                  />
                 </label>
               </div>
               {attachments.length === 0 ? (
@@ -243,6 +249,7 @@ export function KnowledgeEditorPage() {
                   ))}
                 </ul>
               )}
+              <p className={styles.attachHint}>{t('kb_attachment_hint', { size: formatFileSize(maxFileBytes) })}</p>
             </section>
           </div>
         </div>

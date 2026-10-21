@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { buildEntriesPath, isKnowledgeEntryKey, isKnowledgeListKey } from '../src/features/knowledge/knowledge-api';
 import { applyTool } from '../src/features/knowledge/components/MarkdownEditor';
+import { knowledgeErrorMessage } from '../src/features/knowledge/knowledge-errors';
 import { fileKindLabel, formatFileSize, isImage, isKnowledgeImageUrl } from '../src/features/knowledge/knowledge-format';
+import { MutationApiError } from '../src/lib/api/mutation-client';
 
 test('the knowledge entries path carries only requested query values', () => {
   assert.equal(buildEntriesPath(), '/api/knowledge/entries');
@@ -68,6 +70,24 @@ test('only list keys are invalidated after a knowledge mutation', () => {
   assert.equal(isKnowledgeEntryKey('/api/knowledge/entries?limit=20'), true);
   assert.equal(isKnowledgeEntryKey('/api/knowledge/entries/00000000-0000-4000-8000-000000000000'), true);
   assert.equal(isKnowledgeEntryKey('/api/knowledge/files/00000000-0000-4000-8000-000000000000'), false);
+});
+
+test('knowledge mutation errors map to localized message keys', () => {
+  const t = (key: string) => key;
+  assert.equal(
+    knowledgeErrorMessage(new MutationApiError(400, 'rejected', undefined, 'KNOWLEDGE_FILE_TYPE_REJECTED'), t),
+    'kb_error_file_type',
+  );
+  assert.equal(
+    knowledgeErrorMessage(new MutationApiError(413, 'too large', undefined, 'KNOWLEDGE_FILE_TOO_LARGE'), t),
+    'kb_error_file_too_large',
+  );
+  assert.equal(knowledgeErrorMessage(new MutationApiError(409, 'conflict'), t), 'kb_revision_conflict');
+  assert.equal(knowledgeErrorMessage(new MutationApiError(403, 'forbidden'), t), 'kb_error_forbidden');
+  assert.equal(knowledgeErrorMessage(new MutationApiError(404, 'missing'), t), 'kb_error_not_found');
+  assert.equal(knowledgeErrorMessage(new MutationApiError(500, 'boom'), t), 'kb_error_internal');
+  assert.equal(knowledgeErrorMessage(new Error('network'), t), 'kb_save_failed');
+  assert.equal(knowledgeErrorMessage(new Error('network'), t, 'kb_upload_failed'), 'kb_upload_failed');
 });
 
 test('inline Markdown images are restricted to knowledge attachments', () => {

@@ -30,6 +30,14 @@ test('matches dynamic inventory routes and builds raw-parameter breadcrumbs', ()
   assert.equal(breadcrumbs.at(-1)?.labelKey, '001010123456789');
 });
 
+test('static routes win over dynamic route patterns', () => {
+  assert.equal(getNavigationRoute('/inventory/create')?.targetRoute, '/inventory/create');
+  assert.equal(getNavigationRoute('/users/create')?.targetRoute, '/users/create');
+  assert.equal(getNavigationRoute('/knowledge/new')?.targetRoute, '/knowledge/new');
+  assert.equal(getBreadcrumbs('/knowledge/new').at(-1)?.labelKey, 'nav_knowledge_new');
+  assert.equal(getNavigationRoute('/knowledge/entry-id')?.targetRoute, '/knowledge/:entryId');
+});
+
 test('keeps theme and language preferences bounded', () => {
   assert.equal(resolveTheme('system', true), 'dark');
   assert.equal(resolveTheme('light', true), 'light');

@@ -33,6 +33,11 @@ export function MarkdownContent({ content }: { content: string }) {
             if (!isKnowledgeImageUrl(target)) return null;
             return <img src={target} alt={typeof alt === 'string' ? alt : ''} loading="lazy" />;
           },
+          table: ({ children }) => (
+            <div className={styles.tableWrap}>
+              <table>{children}</table>
+            </div>
+          ),
         }}
       >
         {content ?? ''}

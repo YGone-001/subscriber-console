@@ -59,7 +59,10 @@ export const APP_ROUTES: NavigationRoute[] = [
 export const SPA_ROUTE_PATTERNS = APP_ROUTES.map((route) => route.route);
 
 export function getNavigationRoute(pathname: string): NavigationRoute | undefined {
+  const exact = APP_ROUTES.find((route) => route.route === pathname);
+  if (exact) return exact;
   return [...APP_ROUTES]
+    .filter((route) => route.route.includes(':'))
     .sort((left, right) => right.route.length - left.route.length)
     .find((route) => matchesRoute(route.route, pathname));
 }

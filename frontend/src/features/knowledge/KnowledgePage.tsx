@@ -106,7 +106,7 @@ export function KnowledgePage() {
         ) : undefined}
       />
 
-      <MetricStrip variant="cards" columns={2} className={styles.kpi} ariaLabel={t('kb_page_title')} items={kpi} />
+      <MetricStrip variant="strip" className={styles.kpi} ariaLabel={t('kb_page_title')} items={kpi} />
 
       <section className={styles.panel} aria-labelledby="kb-list-title">
         <div className={styles.toolbar}>
@@ -129,7 +129,7 @@ export function KnowledgePage() {
               </button>
               )}
             </div>
-            <button type="button" className={styles.searchButton} onClick={() => applySearch(searchInput)}>{t('search')}</button>
+            <button type="button" className={styles.searchButton} onClick={() => applySearch(searchInput)}>{t('kb_search_action')}</button>
           </div>
           <label className={styles.filter}>
             <span>{t('kb_filter_protocol')}</span>
@@ -181,10 +181,10 @@ export function KnowledgePage() {
             {entries.map((entry) => (
               <li key={entry.id}>
                 <Link to={`/knowledge/${entry.id}`} className={styles.row}>
-                  <div className={styles.rowBadge}>{(entry.protocol || 'KB').slice(0, 3).toUpperCase()}</div>
+                  <div className={styles.rowBadge} aria-hidden="true"><BookOpen size={16} /></div>
                   <div className={styles.rowBody}>
                     <div className={styles.rowTitle}>
-                      {entry.title}
+                      <span className={styles.rowTitleText}>{entry.title}</span>
                       <span className={styles.rowProtocol}>{entry.protocol || t('kb_protocol_general')}</span>
                     </div>
                     <p className={styles.rowPhenomenon}>{entry.phenomenon || t('kb_no_phenomenon')}</p>

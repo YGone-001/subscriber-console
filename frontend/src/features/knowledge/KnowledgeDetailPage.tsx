@@ -1,15 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useSWRConfig } from 'swr';
-import { ArrowLeft, CheckCircle2, Copy, Download, Edit, FileText, Trash2, TriangleAlert } from 'lucide-react';
+import { Activity, ArrowLeft, Copy, Download, Edit, FileText, Trash2, TriangleAlert } from 'lucide-react';
 import PageHeader from '../../components/ui/PageHeader';
-import { EmptyState } from '../../components/ui/OperationFeedback';
+import { ConfirmActionPanel, EmptyState, OperationNotice } from '../../components/ui/OperationFeedback';
 import { useRead } from '../../lib/api/use-read';
 import { useI18n } from '../../providers/I18nProvider';
 import { useAuth } from '../../providers/AuthProvider';
 import { hasPermission } from '../../lib/permissions';
 import { MarkdownContent } from './components/MarkdownContent';
 import { attachmentUrl, deleteEntry, isKnowledgeListKey } from './knowledge-api';
+import { knowledgeErrorMessage } from './knowledge-errors';
 import { fileKindLabel, formatFileSize, isImage } from './knowledge-format';
 import type { KnowledgeEntry } from './types';
 import styles from '../../styles/modules/knowledge.module.css';
@@ -31,12 +32,18 @@ function copyWithSelection(text: string): void {
 export function KnowledgeDetailPage() {
   const { entryId } = useParams<{ entryId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { t, formatDateTime } = useI18n();
   const { user } = useAuth();
   const { mutate } = useSWRConfig();
   const canConfigure = hasPermission(user, 'core.configure');
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const [deleting, setDeleting] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [savedNotice, setSavedNotice] = useState(
+    Boolean((location.state as { knowledgeSaved?: boolean } | null)?.knowledgeSaved),
+  );
   const copyTimer = useRef<number | null>(null);
 
   const { data, error, isLoading } = useRead<KnowledgeEntry>(entryId ? `/api/knowledge/entries/${entryId}` : null);
@@ -45,9 +52,14 @@ export function KnowledgeDetailPage() {
     if (copyTimer.current !== null) window.clearTimeout(copyTimer.current);
   }, []);
 
-  const handleDelete = async () => {
-    if (!data || !window.confirm(t('kb_delete_confirm'))) return;
+  useEffect(() => {
+    if (savedNotice) navigate(location.pathname, { replace: true, state: null });
+  }, [savedNotice, navigate, location.pathname]);
+
+  const confirmDelete = async () => {
+    if (!data) return;
     setDeleting(true);
+    setActionError(null);
     try {
       await deleteEntry(data.id, data.revision);
       // Revalidate the cached list before returning so the deleted row cannot
@@ -58,8 +70,10 @@ export function KnowledgeDetailPage() {
         /* The list still revalidates when it mounts. */
       }
       navigate('/knowledge');
-    } catch {
+    } catch (err) {
       setDeleting(false);
+      setDeleteOpen(false);
+      setActionError(knowledgeErrorMessage(err, t, 'kb_delete_failed'));
     }
   };
 
@@ -109,7 +123,7 @@ export function KnowledgeDetailPage() {
             {canConfigure && (
               <>
                 <Link to={`/knowledge/${data.id}/edit`} className={styles.secondaryButton}><Edit size={15} /> {t('edit')}</Link>
-                <button type="button" className={styles.dangerButton} onClick={handleDelete} disabled={deleting}>
+                <button type="button" className={styles.dangerButton} onClick={() => setDeleteOpen(true)}>
                   <Trash2 size={15} /> {t('delete')}
                 </button>
               </>
@@ -117,6 +131,13 @@ export function KnowledgeDetailPage() {
           </div>
         }
       />
+
+      {savedNotice && (
+        <OperationNotice tone="success" message={t('kb_save_success')} onClose={() => setSavedNotice(false)} />
+      )}
+      {actionError && (
+        <OperationNotice tone="danger" message={actionError} onClose={() => setActionError(null)} />
+      )}
 
       {data.tags.length > 0 && (
         <div className={styles.tagStrip} role="list">
@@ -130,7 +151,7 @@ export function KnowledgeDetailPage() {
           <p className={styles.cardBody}>{data.phenomenon || t('kb_no_phenomenon')}</p>
         </section>
         <section className={styles.card} data-tone="warning">
-          <h2 className={styles.cardTitle}><CheckCircle2 size={15} /> {t('kb_root_cause')}</h2>
+          <h2 className={styles.cardTitle}><Activity size={15} /> {t('kb_root_cause')}</h2>
           <p className={styles.cardBody}>{data.rootCause || t('kb_no_root_cause')}</p>
         </section>
       </div>
@@ -169,6 +190,20 @@ export function KnowledgeDetailPage() {
             ))}
           </div>
         </section>
+      )}
+
+      {deleteOpen && (
+        <ConfirmActionPanel
+          presentation="modal"
+          tone="danger"
+          title={t('delete')}
+          message={t('kb_delete_confirm')}
+          confirmLabel={t('delete')}
+          cancelLabel={t('cancel')}
+          isWorking={deleting}
+          onConfirm={confirmDelete}
+          onCancel={() => { if (!deleting) setDeleteOpen(false); }}
+        />
       )}
     </div>
   );
