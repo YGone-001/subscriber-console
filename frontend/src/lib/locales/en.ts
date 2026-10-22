@@ -1000,6 +1000,7 @@ export const en: Record<string, string> = {
     dash_biz_ocs_interfaces: "Gy {gy} · Ro {ro}",
     dash_biz_ocs_reservations: "Reservations",
     dash_biz_ocs_reservations_detail: "Active {active} · Orphaned {orphaned} · Total {total}",
+    dash_biz_ocs_orphan_history_note: "Orphaned reservations are retained as reconciled metadata and excluded from the business risk queue.",
     dash_biz_ocs_invariants: "Balance checks",
     dash_biz_ocs_invariants_detail: "Checked {checked} · Failed {broken} · Scope {scope}",
     dash_biz_ocs_invariants_empty: "Not checked",

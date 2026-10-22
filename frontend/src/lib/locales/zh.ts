@@ -1000,6 +1000,7 @@ export const zh: Record<string, string> = {
     dash_biz_ocs_interfaces: "Gy {gy} · Ro {ro}",
     dash_biz_ocs_reservations: "预留",
     dash_biz_ocs_reservations_detail: "活跃 {active} · 孤儿 {orphaned} · 总计 {total}",
+    dash_biz_ocs_orphan_history_note: "孤儿预留在 OCS 对账后保留为历史元数据，不计入业务风险队列。",
     dash_biz_ocs_invariants: "余额校验",
     dash_biz_ocs_invariants_detail: "已校验 {checked} · 异常 {broken} · 范围 {scope}",
     dash_biz_ocs_invariants_empty: "尚未校验",

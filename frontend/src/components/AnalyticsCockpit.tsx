@@ -38,6 +38,17 @@ import type { BusinessRisk, MetricsData, OrphanReservationRecord } from './analy
 import type { UEInfoResponse } from '../features/ue-info/types';
 
 const RISK_RANK: Record<BusinessRisk['tone'], number> = { danger: 0, warning: 1, info: 2 };
+const ORPHAN_RISK_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
+function isRecentOrphan(record: OrphanReservationRecord | undefined): boolean {
+  if (!record) return false;
+  const timestamp = record.orphaned_at || record.updated_at || record.created_at;
+  if (!timestamp) return false;
+  const time = Date.parse(timestamp);
+  if (!Number.isFinite(time)) return false;
+  const age = Date.now() - time;
+  return age >= 0 && age <= ORPHAN_RISK_WINDOW_MS;
+}
 
 function orphanReasonLabel(reason: string | undefined, t: (key: string) => string): string {
   if (reason === 'NOT_REFLECTED_IN_BALANCE') return t('dash_biz_risk_orphan_reason_not_reflected');
@@ -170,7 +181,7 @@ export default function AnalyticsCockpit() {
       });
     }
 
-    if (reservations && reservations.orphanedReservations > 0) {
+    if (reservations && reservations.orphanedReservations > 0 && isRecentOrphan(orphanRecord)) {
       const orphanDetail = orphanRecord
         ? `${reservations.orphanedReservations > 1 ? t('dash_biz_risk_orphan_latest') : ''}${t('dash_biz_risk_orphan_detail_record', {
           imsi: orphanRecord.imsi || '—',

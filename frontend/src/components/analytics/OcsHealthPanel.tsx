@@ -187,6 +187,9 @@ export default function OcsHealthPanel({
                 total: formatNumber(reservations.totalReservations),
               })
               : t('dash_biz_ocs_no_data')}</strong>
+            {hasReservations && reservations && reservations.orphanedReservations > 0 ? (
+              <small>{t('dash_biz_ocs_orphan_history_note')}</small>
+            ) : null}
           </div>
 
           <div className={`analytics-ocs-check ${invariantBroken > 0 ? 'analytics-ocs-check-alert' : ''}`}>

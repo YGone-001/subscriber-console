@@ -134,4 +134,7 @@ export type OrphanReservationRecord = {
   reserved_octets: number;
   used_octets: number;
   released_octets: number;
+  created_at?: string;
+  updated_at?: string;
+  orphaned_at?: string;
 };
