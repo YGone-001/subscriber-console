@@ -957,6 +957,7 @@ export const en: Record<string, string> = {
     dash_biz_risk_orphan_title: "Reconciled orphaned reservations: {count}",
     dash_biz_risk_orphan_detail: "Marked orphaned by OCS reconciliation; no current balance impact.",
     dash_biz_risk_orphan_detail_record: "IMSI {imsi} · APN {apn} · Reserved {reserved} · Used {used} · Reason {reason}",
+    dash_biz_risk_orphan_reason_not_reflected: "Reservation not reflected in balance",
     dash_biz_risk_orphan_latest: "Latest: ",
     dash_biz_risk_info: "Reconciled",
     dash_biz_risk_concentration_title: "Usage concentration: {imsi}",

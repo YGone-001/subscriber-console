@@ -39,6 +39,11 @@ import type { UEInfoResponse } from '../features/ue-info/types';
 
 const RISK_RANK: Record<BusinessRisk['tone'], number> = { danger: 0, warning: 1, info: 2 };
 
+function orphanReasonLabel(reason: string | undefined, t: (key: string) => string): string {
+  if (reason === 'NOT_REFLECTED_IN_BALANCE') return t('dash_biz_risk_orphan_reason_not_reflected');
+  return reason || '—';
+}
+
 function formatDataSize(
   bytes: number,
   formatNumber: (value: number, options?: Intl.NumberFormatOptions) => string,
@@ -172,7 +177,7 @@ export default function AnalyticsCockpit() {
           apn: orphanRecord.apn || '—',
           reserved: formatDataSize(orphanRecord.reserved_octets, formatNumber),
           used: formatDataSize(orphanRecord.used_octets, formatNumber),
-          reason: orphanRecord.orphan_reason || '—',
+          reason: orphanReasonLabel(orphanRecord.orphan_reason, t),
         })}`
         : t('dash_biz_risk_orphan_detail');
       result.push({

@@ -957,6 +957,7 @@ export const zh: Record<string, string> = {
     dash_biz_risk_orphan_title: "已对账孤儿预留 {count} 个",
     dash_biz_risk_orphan_detail: "已在 OCS 对账中标记为 orphaned，不影响当前余额。",
     dash_biz_risk_orphan_detail_record: "IMSI {imsi} · APN {apn} · 预留 {reserved} · 已用 {used} · 原因 {reason}",
+    dash_biz_risk_orphan_reason_not_reflected: "预留未反映在余额中",
     dash_biz_risk_orphan_latest: "最近一条：",
     dash_biz_risk_info: "已对账",
     dash_biz_risk_concentration_title: "用量集中在 {imsi}",
